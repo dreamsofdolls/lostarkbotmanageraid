@@ -1,4 +1,7 @@
 const User = require("./schema/user");
+const { RAID_REQUIREMENTS } = require("./models/Raid");
+
+const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
 
 function getWeekKey(date = new Date()) {
   const utcDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -21,57 +24,48 @@ async function resetWeekly(now = new Date()) {
 
   const resetKey = getWeekKey(now);
 
-  const result = await User.updateMany(
-    { weeklyResetKey: { $ne: resetKey } },
-    [
-      {
-        $set: {
-          weeklyResetKey: resetKey,
-          accounts: {
-            $map: {
-              input: { $ifNull: ["$accounts", []] },
-              as: "account",
-              in: {
-                $mergeObjects: [
-                  "$$account",
-                  {
-                    characters: {
-                      $map: {
-                        input: { $ifNull: ["$$account.characters", []] },
-                        as: "character",
-                        in: {
-                          $mergeObjects: [
-                            "$$character",
-                            {
-                              raids: {
-                                $map: {
-                                  input: { $ifNull: ["$$character.raids", []] },
-                                  as: "raid",
-                                  in: {
-                                    $mergeObjects: ["$$raid", { isCompleted: false }],
-                                  },
-                                },
-                              },
-                            },
-                          ],
-                        },
-                      },
-                    },
-                  },
-                ],
-              },
-            },
-          },
-        },
-      },
-    ]
-  );
+  const users = await User.find({ weeklyResetKey: { $ne: resetKey } });
+  let modifiedCount = 0;
+
+  for (const user of users) {
+    const accounts = Array.isArray(user.accounts) ? user.accounts : [];
+
+    for (const account of accounts) {
+      const characters = Array.isArray(account.characters) ? account.characters : [];
+
+      for (const character of characters) {
+        const assignedRaids = character.assignedRaids || {};
+        for (const raidKey of RAID_GROUP_KEYS) {
+          if (!assignedRaids[raidKey]) continue;
+
+          const gateKeys = Object.keys(assignedRaids[raidKey] || {}).filter((gate) => /^G\d+$/i.test(gate));
+          for (const gate of gateKeys) {
+            if (!assignedRaids[raidKey][gate]) continue;
+            assignedRaids[raidKey][gate].completedDate = null;
+          }
+        }
+
+        const tasks = Array.isArray(character.tasks) ? character.tasks : [];
+        for (const task of tasks) {
+          task.completions = 0;
+          task.completionDate = null;
+        }
+
+        character.assignedRaids = assignedRaids;
+        character.tasks = tasks;
+      }
+    }
+
+    user.weeklyResetKey = resetKey;
+    await user.save();
+    modifiedCount += 1;
+  }
 
   return {
     skipped: false,
     resetKey,
-    matchedCount: result.matchedCount,
-    modifiedCount: result.modifiedCount,
+    matchedCount: users.length,
+    modifiedCount,
   };
 }
 

@@ -3,6 +3,7 @@ const { JSDOM } = require("jsdom");
 const User = require("./schema/user");
 const { getClassName } = require("./models/Class");
 const {
+  RAID_REQUIREMENTS,
   getRaidRequirementChoices,
   getRaidRequirementList,
   getRaidRequirementMap,
@@ -12,6 +13,7 @@ const MAX_CHARACTERS_PER_ACCOUNT = 6;
 const RAID_LEADER_ROLE_NAME = "raid leader";
 const RAID_CHOICES = getRaidRequirementChoices();
 const RAID_REQUIREMENT_MAP = getRaidRequirementMap();
+const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
 
 function normalizeName(value) {
   return String(value || "").trim().toLowerCase();
@@ -31,6 +33,138 @@ function parseCombatScore(rawValue) {
     .replace(/[^\d.-]/g, "");
   const parsed = parseFloat(sanitized);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function toModeLabel(modeKey) {
+  const lower = normalizeName(modeKey);
+  if (lower === "hard") return "Hard";
+  if (lower === "nightmare") return "Nightmare";
+  return "Normal";
+}
+
+function toModeKey(modeLabel) {
+  const lower = normalizeName(modeLabel);
+  if (lower === "hard") return "hard";
+  if (lower === "nightmare") return "nightmare";
+  return "normal";
+}
+
+function getCharacterName(character) {
+  return character?.name || character?.charName || "";
+}
+
+function getCharacterClass(character) {
+  return character?.class || character?.className || "Unknown";
+}
+
+function getRequirementFor(raidKey, modeKey) {
+  const value = `${raidKey}_${modeKey}`;
+  return RAID_REQUIREMENT_MAP[value] || null;
+}
+
+function getBestEligibleModeKey(raidKey, itemLevel) {
+  const modes = Object.entries(RAID_REQUIREMENTS[raidKey]?.modes || {})
+    .map(([modeKey, mode]) => ({ modeKey, minItemLevel: Number(mode.minItemLevel) || 0 }))
+    .filter((item) => Number(itemLevel) >= item.minItemLevel)
+    .sort((a, b) => b.minItemLevel - a.minItemLevel);
+
+  return modes[0]?.modeKey || null;
+}
+
+function sanitizeTasks(tasks) {
+  if (!Array.isArray(tasks)) return [];
+  return tasks
+    .filter((task) => task && task.id)
+    .map((task) => ({
+      id: String(task.id),
+      completions: Number(task.completions) || 0,
+      completionDate: Number(task.completionDate) || undefined,
+    }));
+}
+
+function getGateKeys(assignedRaid) {
+  return Object.keys(assignedRaid || {})
+    .filter((key) => /^G\d+$/i.test(key))
+    .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+}
+
+function normalizeAssignedRaid(assignedRaid, fallbackDifficulty) {
+  const gateKeys = getGateKeys(assignedRaid);
+  const keys = gateKeys.length > 0 ? gateKeys : ["G1", "G2"];
+
+  const normalized = {};
+  for (const gate of keys) {
+    const source = assignedRaid?.[gate] || {};
+    normalized[gate] = {
+      difficulty: source.difficulty || assignedRaid?.G1?.difficulty || fallbackDifficulty,
+      completedDate: Number(source.completedDate) || undefined,
+    };
+  }
+
+  return normalized;
+}
+
+function getCompletedGateKeys(assignedRaid) {
+  return getGateKeys(assignedRaid).filter((gate) => Number(assignedRaid?.[gate]?.completedDate) > 0);
+}
+
+function buildAssignedRaidFromLegacy(legacyRaid) {
+  const requirement = getRaidRequirementList().find(
+    (raid) => normalizeName(raid.label) === normalizeName(legacyRaid?.raidName)
+  );
+  if (!requirement) return null;
+
+  const modeLabel = toModeLabel(requirement.modeKey);
+  const completedDate = legacyRaid?.isCompleted ? Date.now() : undefined;
+  return {
+    raidKey: requirement.raidKey,
+    data: {
+      G1: { difficulty: modeLabel, completedDate },
+      G2: { difficulty: modeLabel, completedDate },
+    },
+  };
+}
+
+function ensureAssignedRaids(character) {
+  const itemLevel = Number(character?.itemLevel) || 0;
+  const existing = character?.assignedRaids || {};
+  const legacyRaids = Array.isArray(character?.raids) ? character.raids : [];
+  const assigned = {};
+
+  for (const raidKey of RAID_GROUP_KEYS) {
+    const bestModeKey = getBestEligibleModeKey(raidKey, itemLevel) || "normal";
+    const fallbackDifficulty = toModeLabel(bestModeKey);
+    const sourceRaid = existing[raidKey] || {};
+
+    assigned[raidKey] = normalizeAssignedRaid(sourceRaid, fallbackDifficulty);
+  }
+
+  for (const legacyRaid of legacyRaids) {
+    const converted = buildAssignedRaidFromLegacy(legacyRaid);
+    if (!converted) continue;
+    assigned[converted.raidKey] = converted.data;
+  }
+
+  return assigned;
+}
+
+function isAssignedRaidCompleted(assignedRaid) {
+  const gates = getGateKeys(assignedRaid);
+  if (gates.length === 0) return false;
+  return gates.every((gate) => Number(assignedRaid?.[gate]?.completedDate) > 0);
+}
+
+function buildCharacterRecord(source, fallbackId) {
+  return {
+    id: String(source?.id || fallbackId),
+    name: getCharacterName(source),
+    class: getCharacterClass(source),
+    itemLevel: Number(source?.itemLevel) || 0,
+    isGoldEarner: Boolean(source?.isGoldEarner),
+    combatScore: String(source?.combatScore || ""),
+    assignedRaids: ensureAssignedRaids(source),
+    tasks: sanitizeTasks(source?.tasks),
+  };
 }
 
 function extractRosterClassMapFromHtml(html) {
@@ -95,63 +229,49 @@ async function fetchRosterCharacters(seedCharacterName) {
 }
 
 function ensureRaidEntries(character) {
-  const existingRaids = Array.isArray(character.raids) ? character.raids : [];
-  const requirementList = getRaidRequirementList();
-  const requirementMetaByName = new Map(
-    requirementList.map((raid) => [normalizeName(raid.label), raid])
-  );
-  const raidMap = new Map();
-  for (const raid of existingRaids) {
-    if (!raid || !raid.raidName) continue;
-    raidMap.set(normalizeName(raid.raidName), {
-      isJail: Boolean(raid.isJail),
-      isCompleted: Boolean(raid.isCompleted ?? raid.isComplete),
+  const assignedRaids = ensureAssignedRaids(character);
+  const raids = [];
+
+  for (const raidKey of RAID_GROUP_KEYS) {
+    const assignedRaid = assignedRaids[raidKey];
+    const difficulty = assignedRaid?.G1?.difficulty || assignedRaid?.G2?.difficulty || "Normal";
+    const modeKey = toModeKey(difficulty);
+    const requirement = getRequirementFor(raidKey, modeKey) || getRequirementFor(raidKey, "normal");
+    if (!requirement) continue;
+
+    raids.push({
+      raidName: requirement.label,
+      raidKey,
+      modeKey,
+      minItemLevel: requirement.minItemLevel,
+      completedGateKeys: getCompletedGateKeys(assignedRaid),
+      isCompleted: isAssignedRaidCompleted(assignedRaid),
     });
   }
 
-  return requirementList.map((raid) => ({
-    raidName: raid.label,
-    raidKey: requirementMetaByName.get(normalizeName(raid.label))?.raidKey || "",
-    modeKey: requirementMetaByName.get(normalizeName(raid.label))?.modeKey || "",
-    minItemLevel: requirementMetaByName.get(normalizeName(raid.label))?.minItemLevel || 0,
-    isJail: raidMap.get(normalizeName(raid.label))?.isJail ?? false,
-    isCompleted: raidMap.get(normalizeName(raid.label))?.isCompleted ?? false,
-  }));
+  return raids;
 }
 
 function getStatusRaidsForCharacter(character) {
   const itemLevel = Number(character?.itemLevel) || 0;
-  const eligibleRaids = ensureRaidEntries(character)
-    .filter((raid) => itemLevel >= (Number(raid.minItemLevel) || 0));
-
-  if (eligibleRaids.length === 0) return [];
-
-  const groupedByRaidKey = new Map();
-  for (const raid of eligibleRaids) {
-    if (!groupedByRaidKey.has(raid.raidKey)) groupedByRaidKey.set(raid.raidKey, []);
-    groupedByRaidKey.get(raid.raidKey).push(raid);
-  }
-
+  const assignedRaids = ensureAssignedRaids(character);
   const selected = [];
-  for (const [raidKey, raids] of groupedByRaidKey.entries()) {
-    const sortedRaids = [...raids].sort((a, b) => {
-      const minDiff = (Number(b.minItemLevel) || 0) - (Number(a.minItemLevel) || 0);
-      if (minDiff !== 0) return minDiff;
-      return a.raidName.localeCompare(b.raidName);
+
+  for (const raidKey of RAID_GROUP_KEYS) {
+    const assignedRaid = assignedRaids[raidKey];
+    const selectedDifficulty = assignedRaid?.G1?.difficulty || assignedRaid?.G2?.difficulty || "Normal";
+    const modeKey = toModeKey(selectedDifficulty);
+    const requirement = getRequirementFor(raidKey, modeKey);
+    if (!requirement || itemLevel < requirement.minItemLevel) continue;
+
+    selected.push({
+      raidName: requirement.label,
+      raidKey,
+      modeKey,
+      minItemLevel: requirement.minItemLevel,
+      completedGateKeys: getCompletedGateKeys(assignedRaid),
+      isCompleted: isAssignedRaidCompleted(assignedRaid),
     });
-
-    if (raidKey === "serca") {
-      const nightmare = sortedRaids.find((raid) => raid.modeKey === "nightmare");
-      const hard = sortedRaids.find((raid) => raid.modeKey === "hard");
-      if (nightmare && hard) {
-        selected.push(nightmare, hard);
-        continue;
-      }
-    }
-
-    if (sortedRaids[0]) {
-      selected.push(sortedRaids[0]);
-    }
   }
 
   return selected.sort((a, b) => {
@@ -202,7 +322,7 @@ const raidCheckCommand = new SlashCommandBuilder()
 
 const raidSetCommand = new SlashCommandBuilder()
   .setName("raid-set")
-  .setDescription("Set complete or jail status for a character raid")
+  .setDescription("Set complete status for a character raid (full raid or specific gate)")
   .addStringOption((option) =>
     option
       .setName("character")
@@ -223,11 +343,22 @@ const raidSetCommand = new SlashCommandBuilder()
   .addStringOption((option) =>
     option
       .setName("status")
-      .setDescription("Which status to update")
+      .setDescription("Which action to update")
       .setRequired(true)
       .addChoices(
         { name: "Complete", value: "complete" },
-        { name: "Jail", value: "jail" }
+        { name: "Reset", value: "reset" }
+      )
+  )
+  .addStringOption((option) =>
+    option
+      .setName("gate")
+      .setDescription("Optional: update only one gate")
+      .setRequired(false)
+      .addChoices(
+        { name: "G1", value: "G1" },
+        { name: "G2", value: "G2" },
+        { name: "G3", value: "G3" }
       )
   );
 
@@ -248,7 +379,7 @@ async function handleAddRosterCommand(interaction) {
     const matchedAccount = userDoc.accounts.find(
       (account) =>
         normalizeName(account.accountName) === normalizedSeed ||
-        account.characters.some((character) => normalizeName(character.charName) === normalizedSeed)
+        account.characters.some((character) => normalizeName(getCharacterName(character)) === normalizedSeed)
     );
 
     if (matchedAccount) {
@@ -294,7 +425,7 @@ async function handleAddRosterCommand(interaction) {
   const rosterNameSet = new Set(topCharacters.map((character) => normalizeName(character.charName)));
 
   let account = userDoc.accounts.find((item) =>
-    item.characters.some((character) => rosterNameSet.has(normalizeName(character.charName)))
+    item.characters.some((character) => rosterNameSet.has(normalizeName(getCharacterName(character))))
   );
 
   if (!account) {
@@ -307,26 +438,28 @@ async function handleAddRosterCommand(interaction) {
   }
 
   const existingMap = new Map(
-    account.characters.map((character) => [normalizeName(character.charName), character])
+    account.characters.map((character) => [normalizeName(getCharacterName(character)), character])
   );
 
   account.characters = topCharacters.map((character) => {
     const existing = existingMap.get(normalizeName(character.charName));
-    return {
-      charName: character.charName,
-      className: character.className,
-      itemLevel: character.itemLevel,
-      combatScore: character.combatScore,
-      isGoldEarner: existing?.isGoldEarner ?? false,
-      raids: ensureRaidEntries(existing || { raids: [] }),
-    };
+    return buildCharacterRecord(
+      {
+        ...existing,
+        name: character.charName,
+        class: character.className,
+        itemLevel: character.itemLevel,
+        combatScore: character.combatScore,
+      },
+      existing?.id || String(account.characters.length + 1)
+    );
   });
 
   await userDoc.save();
 
   const summaryLines = account.characters.map(
     (character, index) => {
-      return `${index + 1}. ${character.charName} · ${character.className || "Unknown"} · \`${character.itemLevel}\` · \`${character.combatScore || "?"}\``;
+      return `${index + 1}. ${getCharacterName(character)} · ${getCharacterClass(character)} · \`${character.itemLevel}\` · \`${character.combatScore || "?"}\``;
     }
   );
 
@@ -391,15 +524,19 @@ async function handleRaidCheckCommand(interaction) {
       for (const character of characters) {
         if (!character || Number(character.itemLevel) < raidMeta.minItemLevel) continue;
 
-        const raids = ensureRaidEntries(character);
-        const targetRaid = raids.find(
-          (raid) => normalizeName(raid.raidName) === normalizeName(raidMeta.label)
+        const assignedRaids = ensureAssignedRaids(character);
+        const assigned = assignedRaids[raidMeta.raidKey];
+        const selectedDifficulty = toModeLabel(raidMeta.modeKey);
+        const gateKeys = getGateKeys(assigned);
+        const sameDifficulty = gateKeys.every(
+          (gate) => normalizeName(assigned?.[gate]?.difficulty) === normalizeName(selectedDifficulty)
         );
+        const completed = sameDifficulty && isAssignedRaidCompleted(assigned);
 
-        if (targetRaid && targetRaid.isCompleted === false) {
+        if (!completed) {
           matchedCharacters.push({
             discordId: userDoc.discordId,
-            charName: character.charName,
+            charName: getCharacterName(character),
             itemLevel: character.itemLevel,
           });
         }
@@ -475,7 +612,7 @@ async function handleStatusCommand(interaction) {
     .setDescription(
       [
         `Characters: **${totalCharacters}**`,
-        "Status: ❌ Jail | ✅ Done | ❓ Pending",
+        "Status: ✅ Done all gates | G1/G2(/G3) = partial progress | ❓ Pending",
       ].join("\n")
     )
     .setColor(0x5865f2)
@@ -495,16 +632,19 @@ async function handleStatusCommand(interaction) {
     const lines = characters.map((character) => {
       const raids = getStatusRaidsForCharacter(character);
       if (raids.length === 0) {
-        return `• ${character.charName}: No eligible raids for current iLvl`;
+        return `• ${getCharacterName(character)}: No eligible raids for current iLvl`;
       }
 
       const raidSummary = raids
         .map((raid) => {
-          if (raid.isJail) return `${raid.raidName} ❌`;
-          return `${raid.raidName} ${raid.isCompleted ? "✅" : "❓"}`;
+          if (raid.isCompleted) return `${raid.raidName} ✅`;
+          if (Array.isArray(raid.completedGateKeys) && raid.completedGateKeys.length > 0) {
+            return `${raid.raidName} ${raid.completedGateKeys.join("/")}`;
+          }
+          return `${raid.raidName} ❓`;
         })
         .join(", ");
-      return `• ${character.charName} (${character.className || "Unknown"}): ${raidSummary}`;
+      return `• ${getCharacterName(character)} (${getCharacterClass(character)}): ${raidSummary}`;
     });
 
     const value = lines.join("\n");
@@ -523,6 +663,7 @@ async function handleRaidSetCommand(interaction) {
   const characterName = interaction.options.getString("character", true).trim();
   const raidKey = interaction.options.getString("raid", true);
   const statusType = interaction.options.getString("status", true);
+  const targetGate = interaction.options.getString("gate") || "";
   const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
 
   if (!raidMeta) {
@@ -533,9 +674,9 @@ async function handleRaidSetCommand(interaction) {
     return;
   }
 
-  if (!["complete", "jail"].includes(statusType)) {
+  if (!["complete", "reset"].includes(statusType)) {
     await interaction.reply({
-      content: "Status type is invalid. Use complete or jail.",
+      content: "Status type is invalid. Use complete or reset.",
       ephemeral: true,
     });
     return;
@@ -551,29 +692,36 @@ async function handleRaidSetCommand(interaction) {
   }
 
   const targetName = normalizeName(characterName);
+  const now = Date.now();
+  const selectedDifficulty = toModeLabel(raidMeta.modeKey);
   let updatedCount = 0;
   for (const account of userDoc.accounts) {
     const characters = Array.isArray(account.characters) ? account.characters : [];
     for (const character of characters) {
-      if (normalizeName(character.charName) !== targetName) continue;
+      if (normalizeName(getCharacterName(character)) !== targetName) continue;
 
-      const normalizedRaids = ensureRaidEntries(character).map((raid) => {
-        if (normalizeName(raid.raidName) !== normalizeName(raidMeta.label)) {
-          return {
-            raidName: raid.raidName,
-            isCompleted: raid.isCompleted,
-            isJail: raid.isJail,
-          };
-        }
+      const assignedRaids = ensureAssignedRaids(character);
+      const raidData = normalizeAssignedRaid(assignedRaids[raidMeta.raidKey] || {
+        G1: { difficulty: selectedDifficulty },
+        G2: { difficulty: selectedDifficulty },
+      }, selectedDifficulty);
 
-        return {
-          raidName: raid.raidName,
-          isCompleted: statusType === "complete" ? true : raid.isCompleted,
-          isJail: statusType === "complete" ? false : true,
+      const gateKeys = targetGate ? [targetGate] : getGateKeys(raidData);
+      for (const gate of gateKeys) {
+        raidData[gate] = {
+          difficulty: selectedDifficulty,
+          completedDate: statusType === "complete" ? now : null,
         };
-      });
+      }
 
-      character.raids = normalizedRaids;
+      assignedRaids[raidMeta.raidKey] = raidData;
+      character.assignedRaids = assignedRaids;
+
+      // Keep basic shape updated when old documents are edited.
+      if (!character.name) character.name = getCharacterName(character);
+      if (!character.class) character.class = getCharacterClass(character);
+      if (!character.id) character.id = String(updatedCount + 1);
+
       updatedCount += 1;
     }
   }
@@ -590,7 +738,9 @@ async function handleRaidSetCommand(interaction) {
 
   await interaction.reply({
     content:
-      `Updated **${raidMeta.label}** for **${characterName}**. `,
+      `Updated **${raidMeta.label}** for **${characterName}**. ` +
+      `${statusType === "complete" ? "Completed" : "Reset"}` +
+      `${targetGate ? ` ${targetGate}` : " all gates"}.`,
     ephemeral: true,
   });
 }

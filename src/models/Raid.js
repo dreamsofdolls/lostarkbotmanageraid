@@ -1,5 +1,5 @@
 const RAID_REQUIREMENTS = {
-  act4: {
+  armoche: {
     label: "Act 4",
     modes: {
       normal: { label: "Normal", minItemLevel: 1700 },
