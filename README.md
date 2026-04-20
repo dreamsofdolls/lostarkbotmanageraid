@@ -62,7 +62,11 @@ Ví dụ: `/raid-set character:Clauseduk raid:kazeros_hard status:complete gate:
 
 **Chỉ dành cho role `raid leader`** (case-insensitive). Scan tất cả characters đủ item level nhưng chưa hoàn thành raid ở difficulty được chọn.
 
-Output được paginate tự động thành các chunks ≤ 1900 ký tự để tránh vượt limit Discord.
+Output là **embed ephemeral** với:
+- Color động theo difficulty: đỏ = Nightmare, vàng = Hard, blurple = Normal
+- Grouped by Discord user — nhiều char pending nhất hiển thị trên cùng; trong mỗi user, char sắp theo iLvl desc
+- Multi-embed pagination khi > 25 fields hoặc > 5500 chars — follow-up messages ephemeral
+- Empty state (mọi người đã xong): embed xanh lá `✅ All eligible characters have completed...`
 
 ### `/laraidhelp`
 
