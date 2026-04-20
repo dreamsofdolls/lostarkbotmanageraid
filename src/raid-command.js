@@ -7,12 +7,14 @@ const {
 const { randomUUID } = require("node:crypto");
 const { JSDOM } = require("jsdom");
 const User = require("./schema/user");
+const { saveWithRetry } = require("./schema/user");
 const { getClassName } = require("./models/Class");
 const {
   RAID_REQUIREMENTS,
   getRaidRequirementChoices,
   getRaidRequirementList,
   getRaidRequirementMap,
+  getGatesForRaid,
 } = require("./models/Raid");
 
 const MAX_CHARACTERS_PER_ACCOUNT = 6;
@@ -120,9 +122,9 @@ function getGateKeys(assignedRaid) {
     .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
 }
 
-function normalizeAssignedRaid(assignedRaid, fallbackDifficulty) {
+function normalizeAssignedRaid(assignedRaid, fallbackDifficulty, raidKey) {
   const gateKeys = getGateKeys(assignedRaid);
-  const keys = gateKeys.length > 0 ? gateKeys : ["G1", "G2"];
+  const keys = gateKeys.length > 0 ? gateKeys : getGatesForRaid(raidKey);
 
   const normalized = {};
   for (const gate of keys) {
@@ -148,13 +150,11 @@ function buildAssignedRaidFromLegacy(legacyRaid) {
 
   const modeLabel = toModeLabel(requirement.modeKey);
   const completedDate = legacyRaid?.isCompleted ? Date.now() : undefined;
-  return {
-    raidKey: requirement.raidKey,
-    data: {
-      G1: { difficulty: modeLabel, completedDate },
-      G2: { difficulty: modeLabel, completedDate },
-    },
-  };
+  const data = {};
+  for (const gate of getGatesForRaid(requirement.raidKey)) {
+    data[gate] = { difficulty: modeLabel, completedDate };
+  }
+  return { raidKey: requirement.raidKey, data };
 }
 
 function ensureAssignedRaids(character) {
@@ -168,7 +168,7 @@ function ensureAssignedRaids(character) {
     const fallbackDifficulty = toModeLabel(bestModeKey);
     const sourceRaid = existing[raidKey] || {};
 
-    assigned[raidKey] = normalizeAssignedRaid(sourceRaid, fallbackDifficulty);
+    assigned[raidKey] = normalizeAssignedRaid(sourceRaid, fallbackDifficulty, raidKey);
   }
 
   for (const legacyRaid of legacyRaids) {
@@ -199,13 +199,27 @@ function buildCharacterRecord(source, fallbackId) {
   };
 }
 
+function unescapeJsonLike(value) {
+  return String(value || "").replace(/\\(["\\/bfnrt])/g, (_, ch) => {
+    switch (ch) {
+      case "b": return "\b";
+      case "f": return "\f";
+      case "n": return "\n";
+      case "r": return "\r";
+      case "t": return "\t";
+      default: return ch;
+    }
+  });
+}
+
 function extractRosterClassMapFromHtml(html) {
   const rosterClassMap = new Map();
-  const regex = /name:\"([^\"]+)\",class:\"([^\"]+)\"/g;
+  const regex = /name:\s*"((?:[^"\\]|\\.)*)"\s*,\s*class:\s*"((?:[^"\\]|\\.)*)"/g;
 
   let match;
   while ((match = regex.exec(html)) !== null) {
-    const [, charName, className] = match;
+    const charName = unescapeJsonLike(match[1]);
+    const className = unescapeJsonLike(match[2]);
     if (!charName || !className) continue;
     rosterClassMap.set(charName, className);
   }
@@ -297,7 +311,8 @@ function getStatusRaidsForCharacter(character) {
 
     // At 1740+, surface both Serca Hard and Nightmare as selectable options
     // (Hard alone still eligible from 1730 via the generic branch below).
-    const allGateKeys = getGateKeys(assignedRaid);
+    const rawGateKeys = getGateKeys(assignedRaid);
+    const allGateKeys = rawGateKeys.length > 0 ? rawGateKeys : getGatesForRaid(raidKey);
 
     if (raidKey === "serca" && itemLevel >= 1740) {
       for (const sercaModeKey of ["hard", "nightmare"]) {
@@ -342,7 +357,7 @@ function getStatusRaidsForCharacter(character) {
 function formatRaidStatusLine(raid) {
   const gates = Array.isArray(raid.allGateKeys) && raid.allGateKeys.length > 0
     ? raid.allGateKeys
-    : ["G1", "G2"];
+    : getGatesForRaid(raid.raidKey);
   const done = new Set(raid.completedGateKeys || []).size;
   const total = gates.length;
 
@@ -465,24 +480,6 @@ async function handleAddRosterCommand(interaction) {
   const seedCharName = interaction.options.getString("name", true).trim();
   const topCount = interaction.options.getInteger("total") ?? MAX_CHARACTERS_PER_ACCOUNT;
 
-  let userDoc = await User.findOne({ discordId });
-  if (userDoc) {
-    const normalizedSeed = normalizeName(seedCharName);
-    const matchedAccount = userDoc.accounts.find(
-      (account) =>
-        normalizeName(account.accountName) === normalizedSeed ||
-        account.characters.some((character) => normalizeName(getCharacterName(character)) === normalizedSeed)
-    );
-
-    if (matchedAccount) {
-      await interaction.reply({
-        content: `Roster already exists in account **${matchedAccount.accountName}**.`,
-        ephemeral: true,
-      });
-      return;
-    }
-  }
-
   await interaction.deferReply();
 
   let rosterCharacters;
@@ -507,51 +504,57 @@ async function handleAddRosterCommand(interaction) {
     })
     .slice(0, topCount);
 
-  if (!userDoc) {
-    userDoc = new User({
-      discordId,
-      accounts: [],
-    });
-  }
-
   const rosterNameSet = new Set(topCharacters.map((character) => normalizeName(character.charName)));
 
-  let account = userDoc.accounts.find((item) =>
-    item.characters.some((character) => rosterNameSet.has(normalizeName(getCharacterName(character))))
-  );
+  let savedAccount;
+  await saveWithRetry(async () => {
+    let userDoc = await User.findOne({ discordId });
+    if (!userDoc) {
+      userDoc = new User({ discordId, accounts: [] });
+    }
 
-  if (!account) {
-    account = {
-      accountName: seedCharName,
-      characters: [],
-    };
-    userDoc.accounts.push(account);
-    account = userDoc.accounts[userDoc.accounts.length - 1];
-  }
-
-  const existingMap = new Map(
-    account.characters.map((character) => [normalizeName(getCharacterName(character)), character])
-  );
-
-  account.characters = topCharacters.map((character) => {
-    const existing = existingMap.get(normalizeName(character.charName));
-    return buildCharacterRecord(
-      {
-        ...existing,
-        name: character.charName,
-        class: character.className,
-        itemLevel: character.itemLevel,
-        combatScore: character.combatScore,
-      },
-      existing?.id || createCharacterId()
+    let account = userDoc.accounts.find((item) =>
+      item.characters.some((character) => rosterNameSet.has(normalizeName(getCharacterName(character))))
     );
+
+    if (!account) {
+      userDoc.accounts.push({ accountName: seedCharName, characters: [] });
+      account = userDoc.accounts[userDoc.accounts.length - 1];
+    }
+
+    const existingMap = new Map(
+      account.characters.map((character) => [normalizeName(getCharacterName(character)), character])
+    );
+
+    account.characters = topCharacters.map((character) => {
+      const existing = existingMap.get(normalizeName(character.charName));
+      return buildCharacterRecord(
+        {
+          ...(existing ? existing.toObject?.() ?? existing : {}),
+          name: character.charName,
+          class: character.className,
+          itemLevel: character.itemLevel,
+          combatScore: character.combatScore,
+        },
+        existing?.id || createCharacterId()
+      );
+    });
+
+    await userDoc.save();
+    savedAccount = {
+      accountName: account.accountName,
+      characters: account.characters.map((character) => ({
+        name: getCharacterName(character),
+        class: getCharacterClass(character),
+        itemLevel: Number(character.itemLevel) || 0,
+        combatScore: character.combatScore || "",
+      })),
+    };
   });
 
-  await userDoc.save();
-
-  const summaryLines = account.characters.map(
+  const summaryLines = savedAccount.characters.map(
     (character, index) => {
-      return `${index + 1}. ${getCharacterName(character)} · ${getCharacterClass(character)} · \`${character.itemLevel}\` · \`${character.combatScore || "?"}\``;
+      return `${index + 1}. ${character.name} · ${character.class} · \`${character.itemLevel}\` · \`${character.combatScore || "?"}\``;
     }
   );
 
@@ -561,12 +564,12 @@ async function handleAddRosterCommand(interaction) {
     .setTitle("Roster Sync Completed")
     .setDescription(
       [
-        `Roster name: [**${account.accountName}**](${seedRosterLink})`,
+        `Roster name: [**${savedAccount.accountName}**](${seedRosterLink})`,
         `Saved characters: **Top ${topCount}** by combat power`,
       ].join("\n")
     )
     .addFields({
-      name: `Top ${account.characters.length} Characters`,
+      name: `Top ${savedAccount.characters.length} Characters`,
       value: summaryLines.join("\n").slice(0, 1024),
       inline: false,
     })
@@ -711,47 +714,67 @@ async function handleStatusCommand(interaction) {
         ? UI.icons.partial
         : UI.icons.pending;
 
-  const embed = new EmbedBuilder()
-    .setTitle(`${titleIcon} Raid Status`)
-    .setDescription(
-      progress.total === 0
-        ? `**${totalCharacters}** characters · no eligible raids yet`
-        : `**${totalCharacters}** characters · **${progress.completed}/${progress.total}** raids done · ${progress.partial} in progress`
-    )
-    .setColor(progress.color)
-    .setFooter({ text: `${UI.icons.done} done · ${UI.icons.partial} partial · ${UI.icons.pending} pending` })
-    .setTimestamp();
+  const description = progress.total === 0
+    ? `**${totalCharacters}** characters · no eligible raids yet`
+    : `**${totalCharacters}** characters · **${progress.completed}/${progress.total}** raids done · ${progress.partial} in progress`;
+  const footerText = `${UI.icons.done} done · ${UI.icons.partial} partial · ${UI.icons.pending} pending`;
+
+  const makeStatusEmbed = (isFirst) => {
+    const e = new EmbedBuilder().setColor(progress.color).setFooter({ text: footerText });
+    if (isFirst) {
+      e.setTitle(`${titleIcon} Raid Status`).setDescription(description).setTimestamp();
+    } else {
+      e.setTitle(`${titleIcon} Raid Status (continued)`);
+    }
+    return e;
+  };
+
+  const embeds = [makeStatusEmbed(true)];
+  const baseSize = (`${titleIcon} Raid Status`).length + description.length + footerText.length + 50;
+  let currentSize = baseSize;
 
   for (const account of userDoc.accounts.slice(0, 25)) {
     const characters = Array.isArray(account.characters) ? account.characters : [];
+    const fieldName = `📁 ${account.accountName}`;
+    let fieldValue;
+
     if (characters.length === 0) {
-      embed.addFields({
-        name: `📁 ${account.accountName}`,
-        value: "_No characters saved._",
-        inline: false,
+      fieldValue = "_No characters saved._";
+    } else {
+      const lines = characters.map((character) => {
+        const raids = getStatusRaidsForCharacter(character);
+        const header = `**${getCharacterName(character)}** · ${getCharacterClass(character)} · \`${Number(character.itemLevel) || 0}\``;
+        if (raids.length === 0) {
+          return `${header}\n  ${UI.icons.lock} _Not eligible for any raid yet_`;
+        }
+        const raidLines = raids.map((raid) => `  ${formatRaidStatusLine(raid)}`).join("\n");
+        return `${header}\n${raidLines}`;
       });
-      continue;
+      const combined = lines.join("\n\n");
+      fieldValue = combined.length > 1024 ? `${combined.slice(0, 1020)}...` : combined;
     }
 
-    const lines = characters.map((character) => {
-      const raids = getStatusRaidsForCharacter(character);
-      const header = `**${getCharacterName(character)}** · ${getCharacterClass(character)} · \`${Number(character.itemLevel) || 0}\``;
-      if (raids.length === 0) {
-        return `${header}\n  ${UI.icons.lock} _Not eligible for any raid yet_`;
-      }
-      const raidLines = raids.map((raid) => `  ${formatRaidStatusLine(raid)}`).join("\n");
-      return `${header}\n${raidLines}`;
-    });
+    const fieldSize = fieldName.length + fieldValue.length;
+    const current = embeds[embeds.length - 1];
+    const fieldCount = current.data.fields?.length ?? 0;
 
-    const value = lines.join("\n\n");
-    embed.addFields({
-      name: `📁 ${account.accountName}`,
-      value: value.length > 1024 ? `${value.slice(0, 1020)}...` : value,
+    if (fieldCount >= 25 || currentSize + fieldSize > 5500) {
+      embeds.push(makeStatusEmbed(false));
+      currentSize = 50;
+    }
+
+    embeds[embeds.length - 1].addFields({
+      name: fieldName,
+      value: fieldValue,
       inline: false,
     });
+    currentSize += fieldSize;
   }
 
-  await interaction.reply({ embeds: [embed] });
+  await interaction.reply({ embeds: [embeds[0]] });
+  for (let i = 1; i < embeds.length; i += 1) {
+    await interaction.followUp({ embeds: [embeds[i]] });
+  }
 }
 
 async function handleRaidSetCommand(interaction) {
@@ -778,8 +801,11 @@ async function handleRaidSetCommand(interaction) {
     return;
   }
 
-  const userDoc = await User.findOne({ discordId });
-  if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+  const targetName = normalizeName(characterName);
+  const selectedDifficulty = toModeLabel(raidMeta.modeKey);
+
+  const existing = await User.findOne({ discordId });
+  if (!existing || !Array.isArray(existing.accounts) || existing.accounts.length === 0) {
     await interaction.reply({
       content: "You do not have any saved roster yet. Use /add-roster first.",
       ephemeral: true,
@@ -787,40 +813,48 @@ async function handleRaidSetCommand(interaction) {
     return;
   }
 
-  const targetName = normalizeName(characterName);
-  const now = Date.now();
-  const selectedDifficulty = toModeLabel(raidMeta.modeKey);
   let updatedCount = 0;
-  for (const account of userDoc.accounts) {
-    const characters = Array.isArray(account.characters) ? account.characters : [];
-    for (const character of characters) {
-      if (normalizeName(getCharacterName(character)) !== targetName) continue;
+  await saveWithRetry(async () => {
+    const userDoc = await User.findOne({ discordId });
+    if (!userDoc) throw new Error("User document disappeared during /raid-set");
 
-      const assignedRaids = ensureAssignedRaids(character);
-      const raidData = normalizeAssignedRaid(assignedRaids[raidMeta.raidKey] || {
-        G1: { difficulty: selectedDifficulty },
-        G2: { difficulty: selectedDifficulty },
-      }, selectedDifficulty);
+    updatedCount = 0;
+    const now = Date.now();
 
-      const gateKeys = targetGate ? [targetGate] : getGateKeys(raidData);
-      for (const gate of gateKeys) {
-        raidData[gate] = {
-          difficulty: selectedDifficulty,
-          completedDate: statusType === "complete" ? now : null,
-        };
+    for (const account of userDoc.accounts) {
+      const characters = Array.isArray(account.characters) ? account.characters : [];
+      for (const character of characters) {
+        if (normalizeName(getCharacterName(character)) !== targetName) continue;
+
+        const assignedRaids = ensureAssignedRaids(character);
+        const raidData = normalizeAssignedRaid(
+          assignedRaids[raidMeta.raidKey] || {},
+          selectedDifficulty,
+          raidMeta.raidKey
+        );
+
+        const gateKeys = targetGate ? [targetGate] : getGateKeys(raidData);
+        for (const gate of gateKeys) {
+          raidData[gate] = {
+            difficulty: selectedDifficulty,
+            completedDate: statusType === "complete" ? now : null,
+          };
+        }
+
+        assignedRaids[raidMeta.raidKey] = raidData;
+        character.assignedRaids = assignedRaids;
+
+        if (!character.name) character.name = getCharacterName(character);
+        if (!character.class) character.class = getCharacterClass(character);
+        if (!character.id) character.id = createCharacterId();
+
+        updatedCount += 1;
       }
-
-      assignedRaids[raidMeta.raidKey] = raidData;
-      character.assignedRaids = assignedRaids;
-
-      // Keep basic shape updated when old documents are edited.
-      if (!character.name) character.name = getCharacterName(character);
-      if (!character.class) character.class = getCharacterClass(character);
-      if (!character.id) character.id = createCharacterId();
-
-      updatedCount += 1;
     }
-  }
+
+    if (updatedCount === 0) return;
+    await userDoc.save();
+  });
 
   if (updatedCount === 0) {
     await interaction.reply({
@@ -829,8 +863,6 @@ async function handleRaidSetCommand(interaction) {
     });
     return;
   }
-
-  await userDoc.save();
 
   const isComplete = statusType === "complete";
   const resultEmbed = new EmbedBuilder()
