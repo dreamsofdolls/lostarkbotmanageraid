@@ -39,7 +39,7 @@ const UI = {
     muted: 0x99aab5,
   },
   icons: {
-    done: "✅",
+    done: "🟢",
     partial: "🟡",
     pending: "⚪",
     reset: "🔄",
