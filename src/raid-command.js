@@ -21,6 +21,44 @@ const { saveWithRetry } = require("./schema/user");
 const { ensureFreshWeek } = require("./weekly-reset");
 
 /**
+ * Minimal concurrency limiter: tasks queue up and run at most `max` in
+ * parallel. Used to keep lostark.bible fetches from fanning out into an
+ * unthrottled burst when several users hit /add-roster or /raid-status
+ * close together, which would be the most likely way to get throttled or
+ * temporarily blocked upstream.
+ */
+class ConcurrencyLimiter {
+  constructor(max) {
+    this.max = Math.max(1, max);
+    this.active = 0;
+    this.queue = [];
+  }
+
+  run(fn) {
+    return new Promise((resolve, reject) => {
+      this.queue.push({ fn, resolve, reject });
+      this._dispatch();
+    });
+  }
+
+  _dispatch() {
+    while (this.active < this.max && this.queue.length > 0) {
+      const { fn, resolve, reject } = this.queue.shift();
+      this.active += 1;
+      Promise.resolve()
+        .then(fn)
+        .then(resolve, reject)
+        .finally(() => {
+          this.active -= 1;
+          this._dispatch();
+        });
+    }
+  }
+}
+
+const bibleLimiter = new ConcurrencyLimiter(2);
+
+/**
  * In-flight dedup loader for autocomplete paths. Rapid keystrokes for the
  * same discordId collapse into a single Mongo read — all concurrent handlers
  * await the same promise and the map entry clears once it settles.
@@ -262,6 +300,10 @@ function extractRosterClassMapFromHtml(html) {
 }
 
 async function fetchRosterCharacters(seedCharacterName) {
+  return bibleLimiter.run(() => fetchRosterCharactersRaw(seedCharacterName));
+}
+
+async function fetchRosterCharactersRaw(seedCharacterName) {
   const targetUrl = `https://lostark.bible/character/NA/${encodeURIComponent(seedCharacterName)}/roster`;
   const response = await fetch(targetUrl, {
     headers: {
