@@ -367,12 +367,13 @@ function getStatusRaidsForCharacter(character) {
 
   // Display order: Act 4 → Kazeros (Final) → Serca, top-to-bottom per
   // character card. Within the same raid (Serca Hard vs Nightmare at 1740+),
-  // surface the higher difficulty tier first.
+  // the lower difficulty tier comes first because it is the lower iLvl gate —
+  // e.g. Serca Hard (1730) appears above Serca Nightmare (1740).
   const raidDisplayOrder = { armoche: 0, kazeros: 1, serca: 2 };
   return selected.sort((a, b) => {
     const orderDiff = (raidDisplayOrder[a.raidKey] ?? 99) - (raidDisplayOrder[b.raidKey] ?? 99);
     if (orderDiff !== 0) return orderDiff;
-    return (Number(b.minItemLevel) || 0) - (Number(a.minItemLevel) || 0);
+    return (Number(a.minItemLevel) || 0) - (Number(b.minItemLevel) || 0);
   });
 }
 
