@@ -499,6 +499,27 @@ async function handleAddRosterCommand(interaction) {
   const seedCharName = interaction.options.getString("name", true).trim();
   const topCount = interaction.options.getInteger("total") ?? MAX_CHARACTERS_PER_ACCOUNT;
 
+  // Reject if this roster is already saved under this Discord user.
+  // Seed name matches either an existing account name or any stored
+  // character name → block the add. Users who want to refresh a saved
+  // roster should remove it first, per Traine's explicit preference.
+  const existingUser = await User.findOne({ discordId }).lean();
+  if (existingUser && Array.isArray(existingUser.accounts)) {
+    const normalizedSeed = normalizeName(seedCharName);
+    const matched = existingUser.accounts.find((account) => {
+      if (normalizeName(account.accountName) === normalizedSeed) return true;
+      const chars = Array.isArray(account.characters) ? account.characters : [];
+      return chars.some((c) => normalizeName(getCharacterName(c)) === normalizedSeed);
+    });
+    if (matched) {
+      await interaction.reply({
+        content: `${UI.icons.warn} Roster đã tồn tại ở account **${matched.accountName}**. Không thể add trùng.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+  }
+
   await interaction.deferReply();
 
   let rosterCharacters;
