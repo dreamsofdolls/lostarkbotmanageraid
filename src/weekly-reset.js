@@ -118,9 +118,36 @@ function startWeeklyResetJob() {
   return setInterval(run, 30 * 60 * 1000);
 }
 
+/**
+ * Freshen a hydrated User document to the current target reset key.
+ * If the user's weeklyResetKey lags the current target (i.e. last-passed
+ * Wed 06:00 UTC), clear every character's gate-completedDate and task
+ * counters and bump the key. Idempotent: when the key already matches
+ * the target, this is a no-op and returns false.
+ *
+ * Call this at the start of every write path (/raid-set, /add-roster)
+ * so a command cannot silently set data that the weekly reset job is
+ * about to wipe on its next 30-minute tick.
+ */
+function ensureFreshWeek(user, now = new Date()) {
+  if (!user) return false;
+  const targetKey = getTargetResetKey(now);
+  if (user.weeklyResetKey === targetKey) return false;
+
+  for (const account of user.accounts || []) {
+    for (const character of account.characters || []) {
+      clearCharacterProgress(character);
+    }
+  }
+  user.weeklyResetKey = targetKey;
+  return true;
+}
+
 module.exports = {
   resetWeekly,
   startWeeklyResetJob,
   getWeekKey,
   getTargetResetKey,
+  ensureFreshWeek,
+  clearCharacterProgress,
 };
