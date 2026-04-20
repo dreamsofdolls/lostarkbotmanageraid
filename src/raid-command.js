@@ -15,6 +15,7 @@ jsdomVirtualConsole.on("jsdomError", (err) => {
 });
 const User = require("./schema/user");
 const { saveWithRetry } = require("./schema/user");
+const { ensureFreshWeek } = require("./weekly-reset");
 const { getClassName } = require("./models/Class");
 const {
   RAID_REQUIREMENTS,
@@ -523,6 +524,8 @@ async function handleAddRosterCommand(interaction) {
       userDoc = new User({ discordId, accounts: [] });
     }
 
+    ensureFreshWeek(userDoc);
+
     const normalizedSeed = normalizeName(seedCharName);
     let account = userDoc.accounts.find((item) => {
       if (normalizeName(item.accountName) === normalizedSeed) return true;
@@ -956,6 +959,8 @@ async function handleRaidSetCommand(interaction) {
   await saveWithRetry(async () => {
     const userDoc = await User.findOne({ discordId });
     if (!userDoc) throw new Error("User document disappeared during /raid-set");
+
+    ensureFreshWeek(userDoc);
 
     updatedCount = 0;
     const now = Date.now();
