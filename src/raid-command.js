@@ -3,9 +3,16 @@ const {
   SlashCommandBuilder,
   StringSelectMenuBuilder,
   ActionRowBuilder,
+  MessageFlags,
 } = require("discord.js");
 const { randomUUID } = require("node:crypto");
-const { JSDOM } = require("jsdom");
+const { JSDOM, VirtualConsole } = require("jsdom");
+
+const jsdomVirtualConsole = new VirtualConsole();
+jsdomVirtualConsole.on("jsdomError", (err) => {
+  if (err?.message?.includes("Could not parse CSS stylesheet")) return;
+  console.error("[jsdom]", err);
+});
 const User = require("./schema/user");
 const { saveWithRetry } = require("./schema/user");
 const { getClassName } = require("./models/Class");
@@ -243,7 +250,7 @@ async function fetchRosterCharacters(seedCharacterName) {
   }
 
   const html = await response.text();
-  const { document } = new JSDOM(html).window;
+  const { document } = new JSDOM(html, { virtualConsole: jsdomVirtualConsole }).window;
   const rosterClassMap = extractRosterClassMapFromHtml(html);
   const links = document.querySelectorAll('a[href^="/character/NA/"]');
 
@@ -431,8 +438,9 @@ const raidSetCommand = new SlashCommandBuilder()
   .addStringOption((option) =>
     option
       .setName("character")
-      .setDescription("Character name to update")
+      .setDescription("Character name (autocomplete from your saved roster)")
       .setRequired(true)
+      .setAutocomplete(true)
   )
   .addStringOption((option) => {
     option
@@ -599,7 +607,7 @@ async function handleRaidCheckCommand(interaction) {
   if (!isRaidLeader(interaction)) {
     await interaction.reply({
       content: `${UI.icons.lock} Chỉ Raid Leader mới được dùng \`/raid-check\`.`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -609,12 +617,12 @@ async function handleRaidCheckCommand(interaction) {
   if (!raidMeta) {
     await interaction.reply({
       content: `${UI.icons.warn} Raid option không hợp lệ. Vui lòng thử lại.`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const users = await User.find({}).lean();
   const matchedCharacters = [];
@@ -742,7 +750,7 @@ async function handleRaidCheckCommand(interaction) {
 
   await interaction.editReply({ embeds: [embeds[0]] });
   for (let i = 1; i < embeds.length; i += 1) {
-    await interaction.followUp({ embeds: [embeds[i]], ephemeral: true });
+    await interaction.followUp({ embeds: [embeds[i]], flags: MessageFlags.Ephemeral });
   }
 }
 
@@ -753,7 +761,7 @@ async function handleStatusCommand(interaction) {
   if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
     await interaction.reply({
       content: `${UI.icons.info} Cậu chưa có roster nào. Dùng \`/add-roster\` để thêm trước nhé.`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -845,6 +853,58 @@ async function handleStatusCommand(interaction) {
   }
 }
 
+async function handleRaidSetAutocomplete(interaction) {
+  try {
+    const focused = interaction.options.getFocused(true);
+    if (focused?.name !== "character") {
+      await interaction.respond([]).catch(() => {});
+      return;
+    }
+
+    const needle = normalizeName(focused.value || "");
+    const discordId = interaction.user.id;
+    const userDoc = await User.findOne({ discordId }).lean();
+    if (!userDoc || !Array.isArray(userDoc.accounts)) {
+      await interaction.respond([]).catch(() => {});
+      return;
+    }
+
+    const entries = [];
+    const seen = new Set();
+    for (const account of userDoc.accounts) {
+      const chars = Array.isArray(account.characters) ? account.characters : [];
+      for (const character of chars) {
+        const name = getCharacterName(character);
+        const normalized = normalizeName(name);
+        if (!name || seen.has(normalized)) continue;
+        if (needle && !normalized.includes(needle)) continue;
+        seen.add(normalized);
+        entries.push({
+          name,
+          className: getCharacterClass(character),
+          itemLevel: Number(character.itemLevel) || 0,
+          accountName: account.accountName || "",
+        });
+      }
+    }
+
+    entries.sort((a, b) => b.itemLevel - a.itemLevel || a.name.localeCompare(b.name));
+
+    const choices = entries.slice(0, 25).map((entry) => {
+      const label = `${entry.name} · ${entry.className} · ${entry.itemLevel}`;
+      return {
+        name: label.length > 100 ? `${label.slice(0, 97)}...` : label,
+        value: entry.name.length > 100 ? entry.name.slice(0, 100) : entry.name,
+      };
+    });
+
+    await interaction.respond(choices).catch(() => {});
+  } catch (error) {
+    console.error("[autocomplete] raid-set error:", error?.message || error);
+    await interaction.respond([]).catch(() => {});
+  }
+}
+
 async function handleRaidSetCommand(interaction) {
   const discordId = interaction.user.id;
   const characterName = interaction.options.getString("character", true).trim();
@@ -856,7 +916,7 @@ async function handleRaidSetCommand(interaction) {
   if (!raidMeta) {
     await interaction.reply({
       content: `${UI.icons.warn} Raid option không hợp lệ. Vui lòng thử lại.`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -864,7 +924,7 @@ async function handleRaidSetCommand(interaction) {
   if (!["complete", "reset"].includes(statusType)) {
     await interaction.reply({
       content: `${UI.icons.warn} Status không hợp lệ. Dùng \`complete\` hoặc \`reset\`.`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -874,7 +934,7 @@ async function handleRaidSetCommand(interaction) {
     if (!validGates.includes(targetGate)) {
       await interaction.reply({
         content: `${UI.icons.warn} Gate **${targetGate}** không tồn tại cho **${raidMeta.label}**. Gates hợp lệ: ${validGates.map((g) => `\`${g}\``).join(", ")}.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -887,7 +947,7 @@ async function handleRaidSetCommand(interaction) {
   if (!existing || !Array.isArray(existing.accounts) || existing.accounts.length === 0) {
     await interaction.reply({
       content: `${UI.icons.info} Cậu chưa có roster nào. Dùng \`/add-roster\` để thêm trước nhé.`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -938,7 +998,7 @@ async function handleRaidSetCommand(interaction) {
   if (updatedCount === 0) {
     await interaction.reply({
       content: `${UI.icons.warn} Không tìm thấy character **${characterName}** trong roster.`,
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -954,7 +1014,7 @@ async function handleRaidSetCommand(interaction) {
     )
     .setTimestamp();
 
-  await interaction.reply({ embeds: [resultEmbed], ephemeral: true });
+  await interaction.reply({ embeds: [resultEmbed], flags: MessageFlags.Ephemeral });
 }
 
 const HELP_SECTIONS = [
@@ -997,7 +1057,7 @@ const HELP_SECTIONS = [
     short: "Update raid completion per character",
     shortVn: "Cập nhật tiến độ raid cho character",
     options: [
-      { name: "character", required: true, desc: "Tên character / Character name" },
+      { name: "character", required: true, desc: "Tên character — có autocomplete từ roster đã lưu / autocomplete from saved roster" },
       { name: "raid", required: true, desc: "Raid + difficulty (ví dụ: kazeros_hard, serca_nightmare)" },
       { name: "status", required: true, desc: "complete | reset" },
       { name: "gate", required: false, desc: "G1 | G2 | G3 — bỏ trống để update tất cả / blank = all gates" },
@@ -1095,7 +1155,7 @@ async function handleRaidHelpCommand(interaction) {
   await interaction.reply({
     embeds: [buildHelpOverviewEmbed()],
     components: [buildHelpDropdown()],
-    ephemeral: true,
+    flags: MessageFlags.Ephemeral,
   });
 }
 
@@ -1137,4 +1197,5 @@ module.exports = {
   commands,
   handleRaidManagementCommand,
   handleRaidHelpSelect,
+  handleRaidSetAutocomplete,
 };

@@ -51,7 +51,7 @@ Update trạng thái raid cho 1 character cụ thể.
 
 | Option | Required | Choices |
 |--------|----------|---------|
-| `character` | ✅ | Tên character trong roster |
+| `character` | ✅ | Tên character — **autocomplete** từ roster đã lưu (top 25, sort theo iLvl desc, format `name · class · iLvl`) |
 | `raid` | ✅ | `armoche_normal`, `armoche_hard`, `kazeros_normal`, `kazeros_hard`, `serca_normal`, `serca_hard`, `serca_nightmare` |
 | `status` | ✅ | `complete` hoặc `reset` |
 | `gate` | ❌ | `G1`, `G2`, `G3` — bỏ trống để update mọi gate |
