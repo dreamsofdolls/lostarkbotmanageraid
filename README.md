@@ -8,7 +8,7 @@ Discord bot quản lý tiến độ raid cho roster Lost Ark, sử dụng slash 
 - Theo dõi tiến độ raid theo từng gate (`G1`, `G2`, có thể mở rộng `G3`)
 - Gán difficulty (Normal/Hard/Nightmare) độc lập per-raid per-character
 - Raid Leader có thể scan roster để tìm character chưa hoàn thành raid
-- Weekly reset tự động vào thứ 4 sau 06:00 (server local time)
+- Weekly reset tự động vào thứ 4 sau 06:00 UTC (với catch-up nếu bot offline qua reset window)
 - Hỗ trợ 3 raid: Act 4, Kazeros, Serca (với Nightmare mode cho Serca 1740+)
 - Embed UI với dynamic color theo tiến độ + per-gate visualization (`{icon} {raid} · done/total`)
 - Bilingual help command (`/laraidhelp`) với dropdown drill-down
@@ -72,13 +72,15 @@ Dùng khi: cần tra cú pháp nhanh, onboard member mới, hoặc forget option
 
 ## Raid Catalog
 
-| Raid Key | Hiển thị | Normal | Hard | Nightmare |
-|----------|----------|--------|------|-----------|
-| `armoche` | Act 4 | 1700 | 1720 | — |
-| `kazeros` | Kazeros | 1710 | 1730 | — |
-| `serca` | Serca | 1710 | 1730 | 1740 |
+| Raid Key | Hiển thị | Normal | Hard | Nightmare | Gates |
+|----------|----------|--------|------|-----------|-------|
+| `armoche` | Act 4 | 1700 | 1720 | — | G1, G2 |
+| `kazeros` | Kazeros | 1710 | 1730 | — | G1, G2 |
+| `serca` | Serca | 1710 | 1730 | 1740 | G1, G2, G3 |
 
-Thêm raid mới: sửa `RAID_REQUIREMENTS` trong `src/models/Raid.js` và chạy lại `npm run deploy:commands`.
+Gate count được lấy từ `RAID_REQUIREMENTS[raidKey].gates` trong `src/models/Raid.js`. Helper `getGatesForRaid(raidKey)` dùng ở mọi chỗ cần list gates — không còn hardcode `["G1", "G2"]` ở đâu.
+
+Thêm raid mới: sửa `RAID_REQUIREMENTS` trong `src/models/Raid.js` (kèm `gates` array), chạy lại `npm run deploy:commands`.
 
 ## Data Model
 
@@ -164,7 +166,11 @@ LostArk_RaidManage/
 - Mỗi user chỉ reset 1 lần/tuần thông qua `weeklyResetKey` (ISO week string, ví dụ `2026-W16`).
 - Reset: mọi gate `completedDate = null`; mọi task `completions = 0` + `completionDate = null`.
 
-⚠️ `getDay()` / `getHours()` dùng **local time** của Node process. Trên Railway (mặc định UTC) → reset diễn ra Wed 06:00 UTC. Container khác timezone sẽ reset theo giờ tương ứng.
+✅ Timing hoàn toàn UTC-based: trigger dùng `getUTCDay()` / `getUTCHours()`, cursor `weeklyResetKey` là ISO week key (cũng UTC). Reset happen Wed 06:00 UTC bất kể server timezone.
+
+✅ Catch-up: nếu bot offline qua Wed 06:00, tick tiếp theo (bất kỳ ngày nào) sẽ so stored `weeklyResetKey` với `getTargetResetKey()` hiện tại — nếu stale, chạy reset ngay.
+
+✅ Race-safe: mỗi user được reset trong `saveWithRetry()` wrapper, nên nếu `/raid-set` commit giữa lúc reset đang process, reset sẽ re-fetch doc fresh và retry thay vì silently overwrite.
 
 ### Data Ingestion (`/add-roster`)
 
@@ -214,7 +220,7 @@ Lần đầu deploy, chạy `deploy:commands` một lần để register slash c
 
 - `/raid-check` chỉ nhận role có tên **exactly** `raid leader` (case-insensitive). Role name khác sẽ bị từ chối.
 - `/add-roster` phụ thuộc HTML/inline-JS structure của `lostark.bible`. Nếu site thay layout, regex + DOM selectors cần update.
-- Weekly reset dùng local time → cần đảm bảo Railway container ở UTC (mặc định đã là vậy).
+- Weekly reset dùng UTC cho cả trigger và week-key — không còn phụ thuộc container timezone.
 - Slash commands register theo **guild-scoped**, không phải global. Muốn enable ở nhiều server → cần chạy `deploy-commands.js` riêng cho mỗi `GUILD_ID`.
 
 ## Legacy Files (Safe to Ignore)

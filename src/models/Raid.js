@@ -1,6 +1,7 @@
 const RAID_REQUIREMENTS = {
   armoche: {
     label: "Act 4",
+    gates: ["G1", "G2"],
     modes: {
       normal: { label: "Normal", minItemLevel: 1700 },
       hard: { label: "Hard", minItemLevel: 1720 },
@@ -8,6 +9,7 @@ const RAID_REQUIREMENTS = {
   },
   kazeros: {
     label: "Kazeros",
+    gates: ["G1", "G2"],
     modes: {
       normal: { label: "Normal", minItemLevel: 1710 },
       hard: { label: "Hard", minItemLevel: 1730 },
@@ -15,6 +17,7 @@ const RAID_REQUIREMENTS = {
   },
   serca: {
     label: "Serca",
+    gates: ["G1", "G2", "G3"],
     modes: {
       normal: { label: "Normal", minItemLevel: 1710 },
       hard: { label: "Hard", minItemLevel: 1730 },
@@ -22,6 +25,12 @@ const RAID_REQUIREMENTS = {
     },
   },
 };
+
+function getGatesForRaid(raidKey) {
+  const raid = RAID_REQUIREMENTS[raidKey];
+  if (!raid || !Array.isArray(raid.gates) || raid.gates.length === 0) return ["G1", "G2"];
+  return [...raid.gates];
+}
 
 function buildRaidRequirementList() {
   const list = [];
@@ -66,4 +75,5 @@ module.exports = {
   getRaidRequirementChoices,
   getRaidRequirementList,
   getRaidRequirementMap,
+  getGatesForRaid,
 };

@@ -1,8 +1,14 @@
 const User = require("./schema/user");
+const { saveWithRetry } = require("./schema/user");
 const { RAID_REQUIREMENTS } = require("./models/Raid");
 
 const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
 
+/**
+ * ISO-week string for a given moment, computed in UTC.
+ * Used both as the reset cursor ("has this week been processed?") and as the
+ * trigger comparison ("is the stored cursor behind the current target week?").
+ */
 function getWeekKey(date = new Date()) {
   const utcDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   const dayNumber = utcDate.getUTCDay() || 7;
@@ -13,58 +19,82 @@ function getWeekKey(date = new Date()) {
   return `${utcDate.getUTCFullYear()}-W${String(weekNumber).padStart(2, "0")}`;
 }
 
-function isWednesdayMorning(date = new Date()) {
-  return date.getDay() === 3 && date.getHours() >= 6;
+/**
+ * Target week key for reset purposes. The "reset moment" is Wednesday 06:00 UTC.
+ * Before that moment in a given ISO week, the target is the PREVIOUS ISO week
+ * (so users stay on last week's key). At or after that moment, the target is
+ * the current ISO week. This lets catch-up runs on non-Wednesdays still pick
+ * up any users whose cursor lags the current target — the window missing bug.
+ */
+function getTargetResetKey(now = new Date()) {
+  const utcDay = now.getUTCDay();
+  const utcHour = now.getUTCHours();
+  // Sunday (0) is ISO day 7 — part of the same ISO week as the preceding
+  // Wednesday, so treat it as "after this week's reset moment".
+  const passedResetMoment =
+    utcDay === 0 ||
+    utcDay > 3 ||
+    (utcDay === 3 && utcHour >= 6);
+
+  if (passedResetMoment) return getWeekKey(now);
+
+  const earlier = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  return getWeekKey(earlier);
+}
+
+function clearCharacterProgress(character) {
+  const assignedRaids = character.assignedRaids || {};
+  for (const raidKey of RAID_GROUP_KEYS) {
+    if (!assignedRaids[raidKey]) continue;
+    const gateKeys = Object.keys(assignedRaids[raidKey] || {}).filter((gate) => /^G\d+$/i.test(gate));
+    for (const gate of gateKeys) {
+      if (!assignedRaids[raidKey][gate]) continue;
+      assignedRaids[raidKey][gate].completedDate = null;
+    }
+  }
+
+  const tasks = Array.isArray(character.tasks) ? character.tasks : [];
+  for (const task of tasks) {
+    task.completions = 0;
+    task.completionDate = null;
+  }
+
+  character.assignedRaids = assignedRaids;
+  character.tasks = tasks;
 }
 
 async function resetWeekly(now = new Date()) {
-  if (!isWednesdayMorning(now)) {
-    return { skipped: true, reason: "Not Wednesday morning yet" };
-  }
+  const targetKey = getTargetResetKey(now);
 
-  const resetKey = getWeekKey(now);
-
-  const users = await User.find({ weeklyResetKey: { $ne: resetKey } });
+  const staleUsers = await User.find({ weeklyResetKey: { $ne: targetKey } }).select("_id discordId").lean();
   let modifiedCount = 0;
 
-  for (const user of users) {
-    const accounts = Array.isArray(user.accounts) ? user.accounts : [];
+  for (const { discordId } of staleUsers) {
+    try {
+      await saveWithRetry(async () => {
+        const user = await User.findOne({ discordId });
+        if (!user || user.weeklyResetKey === targetKey) return;
 
-    for (const account of accounts) {
-      const characters = Array.isArray(account.characters) ? account.characters : [];
-
-      for (const character of characters) {
-        const assignedRaids = character.assignedRaids || {};
-        for (const raidKey of RAID_GROUP_KEYS) {
-          if (!assignedRaids[raidKey]) continue;
-
-          const gateKeys = Object.keys(assignedRaids[raidKey] || {}).filter((gate) => /^G\d+$/i.test(gate));
-          for (const gate of gateKeys) {
-            if (!assignedRaids[raidKey][gate]) continue;
-            assignedRaids[raidKey][gate].completedDate = null;
+        for (const account of user.accounts || []) {
+          for (const character of account.characters || []) {
+            clearCharacterProgress(character);
           }
         }
-
-        const tasks = Array.isArray(character.tasks) ? character.tasks : [];
-        for (const task of tasks) {
-          task.completions = 0;
-          task.completionDate = null;
-        }
-
-        character.assignedRaids = assignedRaids;
-        character.tasks = tasks;
-      }
+        user.weeklyResetKey = targetKey;
+        await user.save();
+      });
+      modifiedCount += 1;
+    } catch (error) {
+      console.error(
+        `[weekly-reset] Failed to reset discordId=${discordId}: ${error.message}`
+      );
     }
-
-    user.weeklyResetKey = resetKey;
-    await user.save();
-    modifiedCount += 1;
   }
 
   return {
     skipped: false,
-    resetKey,
-    matchedCount: users.length,
+    resetKey: targetKey,
+    matchedCount: staleUsers.length,
     modifiedCount,
   };
 }
@@ -73,7 +103,7 @@ function startWeeklyResetJob() {
   const run = async () => {
     try {
       const result = await resetWeekly();
-      if (!result.skipped) {
+      if (result.matchedCount > 0) {
         console.log(
           `[weekly-reset] resetKey=${result.resetKey} matched=${result.matchedCount} modified=${result.modifiedCount}`
         );
@@ -90,4 +120,6 @@ function startWeeklyResetJob() {
 module.exports = {
   resetWeekly,
   startWeeklyResetJob,
+  getWeekKey,
+  getTargetResetKey,
 };

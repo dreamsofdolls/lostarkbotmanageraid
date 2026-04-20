@@ -67,8 +67,35 @@ const userSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-    versionKey: false,
+    optimisticConcurrency: true,
   }
 );
 
-module.exports = mongoose.model("User", userSchema);
+const User = mongoose.model("User", userSchema);
+
+/**
+ * Execute an operation that reads a User document, mutates it, and saves,
+ * retrying on VersionError (concurrent save) or E11000 (duplicate key on
+ * first-time upsert race). The operation receives nothing and must perform
+ * its own findOne + mutation + save each attempt because the document must
+ * be re-fetched fresh on retry to avoid re-writing stale state.
+ */
+async function saveWithRetry(operation, maxAttempts = 5) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      const isVersion = error?.name === "VersionError";
+      const isDupKey = error?.code === 11000;
+      if (!isVersion && !isDupKey) throw error;
+      if (attempt === maxAttempts) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 40 * attempt));
+    }
+  }
+  throw lastError;
+}
+
+module.exports = User;
+module.exports.saveWithRetry = saveWithRetry;
