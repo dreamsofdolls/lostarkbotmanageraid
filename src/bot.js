@@ -6,6 +6,7 @@ const {
   handleRaidManagementCommand,
   handleRaidHelpSelect,
   handleRaidSetAutocomplete,
+  handleRemoveRosterAutocomplete,
 } = require("./raid-command");
 const { startWeeklyResetJob } = require("./weekly-reset");
 
@@ -31,7 +32,7 @@ async function startBot() {
   client.on(Events.InteractionCreate, async (interaction) => {
     try {
       if (interaction.isChatInputCommand()) {
-        const allowed = ["add-roster", "raid-check", "raid-set", "raid-status", "raid-help"];
+        const allowed = ["add-roster", "raid-check", "raid-set", "raid-status", "raid-help", "remove-roster"];
         if (!allowed.includes(interaction.commandName)) return;
         await handleRaidManagementCommand(interaction);
         return;
@@ -40,6 +41,8 @@ async function startBot() {
       if (interaction.isAutocomplete()) {
         if (interaction.commandName === "raid-set") {
           await handleRaidSetAutocomplete(interaction);
+        } else if (interaction.commandName === "remove-roster") {
+          await handleRemoveRosterAutocomplete(interaction);
         } else {
           await interaction.respond([]).catch(() => {});
         }

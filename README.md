@@ -68,6 +68,22 @@ Output là **embed ephemeral** với:
 - Multi-embed pagination khi > 25 fields hoặc > 5500 chars — follow-up messages ephemeral
 - Empty state (mọi người đã xong): embed xanh lá `✅ All eligible characters have completed...`
 
+### `/remove-roster`
+
+Xóa 1 roster (account) đã lưu hoặc 1 character cụ thể trong roster.
+
+| Option | Required | Description |
+|--------|----------|-------------|
+| `roster` | ✅ | Roster (account) cần xóa — **autocomplete** từ roster đã lưu |
+| `action` | ✅ | `Remove entire roster` hoặc `Remove a single character` |
+| `character` | ❌ (required nếu action = remove char) | Character cần xóa — **autocomplete** theo roster đã chọn |
+
+Ví dụ:
+- Xóa cả roster: `/remove-roster roster:Qiylyn action:Remove entire roster`
+- Xóa 1 char: `/remove-roster roster:Qiylyn action:Remove a single character character:Zywang`
+
+Reply là ephemeral embed confirm xoá. Muốn refresh roster → `/remove-roster` rồi `/add-roster` lại.
+
 ### `/raid-help`
 
 Bilingual (EN + VN) help command. Gửi 1 overview embed liệt kê cả 4 command raid-management, kèm dropdown để xem chi tiết từng command (options, example, notes). Reply là ephemeral — chỉ mình cậu thấy.
