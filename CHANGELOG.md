@@ -34,6 +34,10 @@ All notable changes to this project will be documented in this file. Dates use t
   - `/raid-status` groups characters under `📁 {accountName}` headers and each character line leads with `**name** · class · iLvl` for quick context.
   - `/raid-set` response replaced its plain-text string with a mini embed (Character / Raid / Gates fields) and uses green for `complete` vs muted grey for `reset`.
 - Error fallback in `src/bot.js` restored full Vietnamese diacritics ("Có lỗi xảy ra khi xử lý lệnh. Vui lòng thử lại." instead of the accent-stripped form).
+- UI polish sweep across all commands (consistency pass):
+  - `/add-roster` success embed: title now `📥 Roster Synced` with a source footer, color switched from magic hex `0x57f287` to `UI.colors.success`, character-list header renamed to `Characters (N)` for symmetry with other commands.
+  - Added `UI.icons.info` (`ℹ️`) and `UI.icons.roster` (`📥`) to the centralized icon set.
+  - All plain-text error / info interaction responses now lead with a status icon (`⚠️` for validation errors, `ℹ️` for "no roster yet", `🔒` for role gates) and carry full Vietnamese diacritics. Covers: `/add-roster` fetch failure + empty-roster, `/raid-check` + `/raid-set` invalid raid option, `/raid-set` invalid status, `/raid-set` character-not-found, `/raid-status` + `/raid-set` no-roster-yet.
 - `/raid-check` upgraded from plain-text chunks to a proper embed:
   - Dynamic color by difficulty: red for Nightmare, yellow for Hard, blurple for Normal.
   - Results grouped by Discord user (most pending characters first, characters sorted by item level within each user).
