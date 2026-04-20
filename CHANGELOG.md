@@ -30,6 +30,8 @@ All notable changes to this project will be documented in this file.
 - Fixed option-name mismatches between slash command definitions and handlers.
 - Fixed command routing and interaction handling for renamed commands.
 - Fixed parsing and sorting behavior for combat score values containing symbols.
+- Fixed `/raid-check` item-level filter: characters with missing or non-numeric `itemLevel` were slipping past the minimum requirement because `Number(undefined) < n` evaluates to `false`. Now coerced via `Number() || 0` before comparison.
+- Clarified the `1740+` Serca branch in `/raid-status` with a comment explaining that it surfaces both Hard and Nightmare as dual options (Hard alone remains eligible from `1730` via the generic branch).
 
 ### Deployment
 

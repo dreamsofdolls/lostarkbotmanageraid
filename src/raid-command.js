@@ -272,6 +272,8 @@ function getStatusRaidsForCharacter(character) {
     const modeKey = toModeKey(selectedDifficulty);
     const completedGateKeys = getCompletedGateKeys(assignedRaid);
 
+    // At 1740+, surface both Serca Hard and Nightmare as selectable options
+    // (Hard alone still eligible from 1730 via the generic branch below).
     if (raidKey === "serca" && itemLevel >= 1740) {
       for (const sercaModeKey of ["hard", "nightmare"]) {
         const sercaRequirement = getRequirementFor(raidKey, sercaModeKey);
@@ -551,7 +553,9 @@ async function handleRaidCheckCommand(interaction) {
     for (const account of accounts) {
       const characters = Array.isArray(account.characters) ? account.characters : [];
       for (const character of characters) {
-        if (!character || Number(character.itemLevel) < raidMeta.minItemLevel) continue;
+        if (!character) continue;
+        const characterItemLevel = Number(character.itemLevel) || 0;
+        if (characterItemLevel < raidMeta.minItemLevel) continue;
 
         const assignedRaids = ensureAssignedRaids(character);
         const assigned = assignedRaids[raidMeta.raidKey];
