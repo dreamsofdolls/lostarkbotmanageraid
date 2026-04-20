@@ -52,7 +52,7 @@ Update trạng thái raid cho 1 character cụ thể.
 | Option | Required | Choices |
 |--------|----------|---------|
 | `character` | ✅ | Tên character — **autocomplete** từ roster đã lưu (top 25, sort theo iLvl desc, format `name · class · iLvl`) |
-| `raid` | ✅ | `armoche_normal`, `armoche_hard`, `kazeros_normal`, `kazeros_hard`, `serca_normal`, `serca_hard`, `serca_nightmare` |
+| `raid` | ✅ | Raid + difficulty — **autocomplete** filter theo character đã chọn: chỉ show raids đủ iLvl, kèm icon tiến độ (`🟢 done · 🟡 partial · ⚪ pending · x/y`). Values: `armoche_normal`, `armoche_hard`, `kazeros_normal`, `kazeros_hard`, `serca_normal`, `serca_hard`, `serca_nightmare`. |
 | `status` | ✅ | `complete` hoặc `reset` |
 | `gate` | ❌ | `G1`, `G2`, `G3` — bỏ trống để update mọi gate |
 
@@ -80,7 +80,7 @@ Dùng khi: cần tra cú pháp nhanh, onboard member mới, hoặc forget option
 |----------|----------|--------|------|-----------|-------|
 | `armoche` | Act 4 | 1700 | 1720 | — | G1, G2 |
 | `kazeros` | Kazeros | 1710 | 1730 | — | G1, G2 |
-| `serca` | Serca | 1710 | 1730 | 1740 | G1, G2, G3 |
+| `serca` | Serca | 1710 | 1730 | 1740 | G1, G2 |
 
 Gate count được lấy từ `RAID_REQUIREMENTS[raidKey].gates` trong `src/models/Raid.js`. Helper `getGatesForRaid(raidKey)` dùng ở mọi chỗ cần list gates — không còn hardcode `["G1", "G2"]` ở đâu.
 

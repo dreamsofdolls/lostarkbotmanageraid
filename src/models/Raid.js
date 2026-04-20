@@ -17,7 +17,7 @@ const RAID_REQUIREMENTS = {
   },
   serca: {
     label: "Serca",
-    gates: ["G1", "G2", "G3"],
+    gates: ["G1", "G2"],
     modes: {
       normal: { label: "Normal", minItemLevel: 1710 },
       hard: { label: "Hard", minItemLevel: 1730 },
