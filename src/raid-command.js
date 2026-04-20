@@ -38,6 +38,8 @@ const UI = {
     reset: "🔄",
     lock: "🔒",
     warn: "⚠️",
+    info: "ℹ️",
+    roster: "📥",
   },
 };
 
@@ -486,12 +488,12 @@ async function handleAddRosterCommand(interaction) {
   try {
     rosterCharacters = await fetchRosterCharacters(seedCharName);
   } catch (error) {
-    await interaction.editReply(`Failed to fetch roster from LostArk Bible: ${error.message}`);
+    await interaction.editReply(`${UI.icons.warn} Không fetch được roster từ lostark.bible: ${error.message}`);
     return;
   }
 
   if (rosterCharacters.length === 0) {
-    await interaction.editReply("No valid roster was found. Please verify the character name.");
+    await interaction.editReply(`${UI.icons.warn} Không tìm thấy roster hợp lệ. Kiểm tra lại tên character nhé.`);
     return;
   }
   const topCharacters = rosterCharacters
@@ -561,19 +563,20 @@ async function handleAddRosterCommand(interaction) {
   const seedRosterLink = `https://lostark.bible/character/NA/${encodeURIComponent(seedCharName)}/roster`;
 
   const embed = new EmbedBuilder()
-    .setTitle("Roster Sync Completed")
+    .setTitle(`${UI.icons.roster} Roster Synced`)
     .setDescription(
       [
-        `Roster name: [**${savedAccount.accountName}**](${seedRosterLink})`,
-        `Saved characters: **Top ${topCount}** by combat power`,
+        `Roster: [**${savedAccount.accountName}**](${seedRosterLink})`,
+        `Saved: **Top ${savedAccount.characters.length}** characters by combat power`,
       ].join("\n")
     )
     .addFields({
-      name: `Top ${savedAccount.characters.length} Characters`,
+      name: `Characters (${savedAccount.characters.length})`,
       value: summaryLines.join("\n").slice(0, 1024),
       inline: false,
     })
-    .setColor(0x57f287)
+    .setColor(UI.colors.success)
+    .setFooter({ text: "Source: lostark.bible" })
     .setTimestamp();
 
   await interaction.editReply({ embeds: [embed] });
@@ -601,7 +604,7 @@ async function handleRaidCheckCommand(interaction) {
   const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
   if (!raidMeta) {
     await interaction.reply({
-      content: "Raid option is invalid. Please try again.",
+      content: `${UI.icons.warn} Raid option không hợp lệ. Vui lòng thử lại.`,
       ephemeral: true,
     });
     return;
@@ -745,7 +748,7 @@ async function handleStatusCommand(interaction) {
 
   if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
     await interaction.reply({
-      content: "You do not have any saved roster yet. Use /add-roster first.",
+      content: `${UI.icons.info} Cậu chưa có roster nào. Dùng \`/add-roster\` để thêm trước nhé.`,
       ephemeral: true,
     });
     return;
@@ -848,7 +851,7 @@ async function handleRaidSetCommand(interaction) {
 
   if (!raidMeta) {
     await interaction.reply({
-      content: "Raid option is invalid. Please try again.",
+      content: `${UI.icons.warn} Raid option không hợp lệ. Vui lòng thử lại.`,
       ephemeral: true,
     });
     return;
@@ -856,7 +859,7 @@ async function handleRaidSetCommand(interaction) {
 
   if (!["complete", "reset"].includes(statusType)) {
     await interaction.reply({
-      content: "Status type is invalid. Use complete or reset.",
+      content: `${UI.icons.warn} Status không hợp lệ. Dùng \`complete\` hoặc \`reset\`.`,
       ephemeral: true,
     });
     return;
@@ -868,7 +871,7 @@ async function handleRaidSetCommand(interaction) {
   const existing = await User.findOne({ discordId });
   if (!existing || !Array.isArray(existing.accounts) || existing.accounts.length === 0) {
     await interaction.reply({
-      content: "You do not have any saved roster yet. Use /add-roster first.",
+      content: `${UI.icons.info} Cậu chưa có roster nào. Dùng \`/add-roster\` để thêm trước nhé.`,
       ephemeral: true,
     });
     return;
@@ -919,7 +922,7 @@ async function handleRaidSetCommand(interaction) {
 
   if (updatedCount === 0) {
     await interaction.reply({
-      content: `Character **${characterName}** was not found in your roster.`,
+      content: `${UI.icons.warn} Không tìm thấy character **${characterName}** trong roster.`,
       ephemeral: true,
     });
     return;
