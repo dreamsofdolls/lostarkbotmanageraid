@@ -622,6 +622,10 @@ async function handleAddRosterCommand(interaction) {
       );
     });
 
+    // Stamp the refresh timestamp so /raid-status lazy-refresh treats this
+    // account as fresh for the cooldown window and skips a redundant fetch.
+    account.lastRefreshedAt = Date.now();
+
     await userDoc.save();
     savedAccount = {
       accountName: account.accountName,
@@ -825,6 +829,69 @@ async function handleRaidCheckCommand(interaction) {
 const STATUS_SESSION_MS = 2 * 60 * 1000;
 const STATUS_FOOTER_LEGEND = `${UI.icons.done} done · ${UI.icons.partial} partial · ${UI.icons.pending} pending`;
 
+// Lostark.bible updates each character roughly every 2 hours. We match that
+// cadence to avoid wasted fetches: any account refreshed within this window
+// is treated as fresh enough.
+const ROSTER_REFRESH_COOLDOWN_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * Lazy-refresh every stale account inside a hydrated User doc in place,
+ * updating only the roster-shape fields (item level, combat score, class)
+ * and stamping `lastRefreshedAt`. Raid progress (`assignedRaids`) and
+ * tasks are deliberately preserved.
+ *
+ * Returns true if at least one account was refreshed so the caller knows
+ * it needs to save. Individual account fetch failures are logged and
+ * skipped; one failure does not block the others.
+ */
+async function refreshStaleAccounts(userDoc) {
+  if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+    return false;
+  }
+
+  const now = Date.now();
+  const staleAccounts = userDoc.accounts.filter((account) => {
+    const last = Number(account?.lastRefreshedAt) || 0;
+    return (now - last) > ROSTER_REFRESH_COOLDOWN_MS;
+  });
+  if (staleAccounts.length === 0) return false;
+
+  const results = await Promise.allSettled(
+    staleAccounts.map(async (account) => {
+      const seed = account.accountName
+        || getCharacterName(account.characters?.[0] || {});
+      if (!seed) return { account, fetched: null };
+      const fetched = await fetchRosterCharacters(seed);
+      return { account, fetched };
+    })
+  );
+
+  let didUpdate = false;
+  for (const r of results) {
+    if (r.status === "rejected") {
+      console.warn(`[refresh] account fetch failed: ${r.reason?.message || r.reason}`);
+      continue;
+    }
+    const { account, fetched } = r.value || {};
+    if (!account || !Array.isArray(fetched) || fetched.length === 0) continue;
+
+    const fetchedByName = new Map(
+      fetched.map((c) => [normalizeName(c.charName), c])
+    );
+    for (const character of (account.characters || [])) {
+      const match = fetchedByName.get(normalizeName(getCharacterName(character)));
+      if (!match) continue;
+      character.itemLevel = Number(match.itemLevel) || character.itemLevel;
+      character.combatScore = String(match.combatScore || character.combatScore || "");
+      if (match.className) character.class = match.className;
+    }
+    account.lastRefreshedAt = Date.now();
+    didUpdate = true;
+  }
+
+  return didUpdate;
+}
+
 function truncateText(s, max) {
   return s.length > max ? `${s.slice(0, max - 3)}...` : s;
 }
@@ -918,12 +985,40 @@ function buildStatusPaginationRow(currentPage, totalPages, disabled) {
 
 async function handleStatusCommand(interaction) {
   const discordId = interaction.user.id;
-  const userDoc = await User.findOne({ discordId }).lean();
 
-  if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+  // Fast path: no roster at all → ephemeral reply, skip defer entirely.
+  const preCheck = await User.findOne({ discordId }).lean();
+  if (!preCheck || !Array.isArray(preCheck.accounts) || preCheck.accounts.length === 0) {
     await interaction.reply({
       content: `${UI.icons.info} Cậu chưa có roster nào. Dùng \`/add-roster\` để thêm trước nhé.`,
       flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // Defer because the lazy refresh may fetch lostark.bible (up to ~15s per
+  // account). If no refresh is needed the overhead is just the defer round-trip.
+  await interaction.deferReply();
+
+  // Lazy refresh stale accounts inside saveWithRetry for concurrency safety.
+  // Failures here are non-fatal: fall through to rendering whatever is in DB.
+  try {
+    await saveWithRetry(async () => {
+      const doc = await User.findOne({ discordId });
+      if (!doc) return;
+      if (await refreshStaleAccounts(doc)) {
+        await doc.save();
+      }
+    });
+  } catch (err) {
+    console.error("[raid-status] lazy refresh failed:", err?.message || err);
+  }
+
+  // Re-read fresh data for rendering.
+  const userDoc = await User.findOne({ discordId }).lean();
+  if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+    await interaction.editReply({
+      content: `${UI.icons.info} Cậu chưa có roster nào. Dùng \`/add-roster\` để thêm trước nhé.`,
     });
     return;
   }
@@ -947,12 +1042,12 @@ async function handleStatusCommand(interaction) {
   );
 
   if (pages.length === 1) {
-    await interaction.reply({ embeds: [pages[0]] });
+    await interaction.editReply({ embeds: [pages[0]] });
     return;
   }
 
   let currentPage = 0;
-  await interaction.reply({
+  await interaction.editReply({
     embeds: [pages[currentPage]],
     components: [buildStatusPaginationRow(currentPage, pages.length, false)],
   });
