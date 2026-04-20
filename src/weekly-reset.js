@@ -71,9 +71,9 @@ async function resetWeekly(now = new Date()) {
 
   for (const { discordId } of staleUsers) {
     try {
-      await saveWithRetry(async () => {
+      const didModify = await saveWithRetry(async () => {
         const user = await User.findOne({ discordId });
-        if (!user || user.weeklyResetKey === targetKey) return;
+        if (!user || user.weeklyResetKey === targetKey) return false;
 
         for (const account of user.accounts || []) {
           for (const character of account.characters || []) {
@@ -82,8 +82,9 @@ async function resetWeekly(now = new Date()) {
         }
         user.weeklyResetKey = targetKey;
         await user.save();
+        return true;
       });
-      modifiedCount += 1;
+      if (didModify) modifiedCount += 1;
     } catch (error) {
       console.error(
         `[weekly-reset] Failed to reset discordId=${discordId}: ${error.message}`
