@@ -443,17 +443,13 @@ const raidSetCommand = new SlashCommandBuilder()
       .setRequired(true)
       .setAutocomplete(true)
   )
-  .addStringOption((option) => {
+  .addStringOption((option) =>
     option
       .setName("raid")
-      .setDescription("Raid to update")
-      .setRequired(true);
-
-    for (const choice of RAID_CHOICES) {
-      option.addChoices(choice);
-    }
-    return option;
-  })
+      .setDescription("Raid to update (auto-filtered by selected character's eligibility + progress)")
+      .setRequired(true)
+      .setAutocomplete(true)
+  )
   .addStringOption((option) =>
     option
       .setName("status")
@@ -856,52 +852,145 @@ async function handleStatusCommand(interaction) {
   }
 }
 
+function findCharacterInUser(userDoc, characterName) {
+  if (!userDoc || !Array.isArray(userDoc.accounts)) return null;
+  const target = normalizeName(characterName);
+  for (const account of userDoc.accounts) {
+    const chars = Array.isArray(account.characters) ? account.characters : [];
+    for (const character of chars) {
+      if (normalizeName(getCharacterName(character)) === target) return character;
+    }
+  }
+  return null;
+}
+
+async function autocompleteRaidSetCharacter(interaction, focused) {
+  const needle = normalizeName(focused.value || "");
+  const discordId = interaction.user.id;
+  const userDoc = await User.findOne({ discordId }).lean();
+  if (!userDoc || !Array.isArray(userDoc.accounts)) {
+    await interaction.respond([]).catch(() => {});
+    return;
+  }
+
+  const entries = [];
+  const seen = new Set();
+  for (const account of userDoc.accounts) {
+    const chars = Array.isArray(account.characters) ? account.characters : [];
+    for (const character of chars) {
+      const name = getCharacterName(character);
+      const normalized = normalizeName(name);
+      if (!name || seen.has(normalized)) continue;
+      if (needle && !normalized.includes(needle)) continue;
+      seen.add(normalized);
+      entries.push({
+        name,
+        className: getCharacterClass(character),
+        itemLevel: Number(character.itemLevel) || 0,
+      });
+    }
+  }
+
+  entries.sort((a, b) => b.itemLevel - a.itemLevel || a.name.localeCompare(b.name));
+
+  const choices = entries.slice(0, 25).map((entry) => {
+    const label = `${entry.name} · ${entry.className} · ${entry.itemLevel}`;
+    return {
+      name: label.length > 100 ? `${label.slice(0, 97)}...` : label,
+      value: entry.name.length > 100 ? entry.name.slice(0, 100) : entry.name,
+    };
+  });
+
+  await interaction.respond(choices).catch(() => {});
+}
+
+async function autocompleteRaidSetRaid(interaction, focused) {
+  const characterInput = interaction.options.getString("character") || "";
+  const needle = normalizeName(focused.value || "");
+  const discordId = interaction.user.id;
+
+  const allRaids = getRaidRequirementList();
+
+  const renderPlain = () =>
+    allRaids
+      .filter((req) => !needle || normalizeName(req.label).includes(needle))
+      .slice(0, 25)
+      .map((req) => ({
+        name: `${req.label} · ${req.minItemLevel}+`,
+        value: `${req.raidKey}_${req.modeKey}`,
+      }));
+
+  if (!characterInput) {
+    await interaction.respond(renderPlain()).catch(() => {});
+    return;
+  }
+
+  const userDoc = await User.findOne({ discordId }).lean();
+  const character = findCharacterInUser(userDoc, characterInput);
+  if (!character) {
+    await interaction.respond(renderPlain()).catch(() => {});
+    return;
+  }
+
+  const itemLevel = Number(character.itemLevel) || 0;
+  const assignedRaids = ensureAssignedRaids(character);
+
+  const entries = [];
+  for (const req of allRaids) {
+    if (itemLevel < req.minItemLevel) continue;
+    if (needle && !normalizeName(req.label).includes(needle)) continue;
+
+    const assigned = assignedRaids[req.raidKey] || {};
+    const rawGates = getGateKeys(assigned);
+    const allGates = rawGates.length > 0 ? rawGates : getGatesForRaid(req.raidKey);
+    const total = allGates.length;
+
+    const storedDifficulty = assigned?.G1?.difficulty || assigned?.G2?.difficulty || "Normal";
+    const sameDifficulty = normalizeName(storedDifficulty) === normalizeName(toModeLabel(req.modeKey));
+    const done = sameDifficulty
+      ? allGates.filter((g) => Number(assigned?.[g]?.completedDate) > 0).length
+      : 0;
+
+    let icon;
+    let rank;
+    if (done === total && total > 0) { icon = UI.icons.done; rank = 3; }
+    else if (done > 0) { icon = UI.icons.partial; rank = 2; }
+    else { icon = UI.icons.pending; rank = 1; }
+
+    entries.push({
+      raidKey: req.raidKey,
+      modeKey: req.modeKey,
+      label: req.label,
+      minItemLevel: req.minItemLevel,
+      done,
+      total,
+      icon,
+      rank,
+    });
+  }
+
+  entries.sort((a, b) => a.rank - b.rank || b.minItemLevel - a.minItemLevel || a.label.localeCompare(b.label));
+
+  const choices = entries.slice(0, 25).map((e) => ({
+    name: `${e.icon} ${e.label} · ${e.done}/${e.total}`,
+    value: `${e.raidKey}_${e.modeKey}`,
+  }));
+
+  await interaction.respond(choices).catch(() => {});
+}
+
 async function handleRaidSetAutocomplete(interaction) {
   try {
     const focused = interaction.options.getFocused(true);
-    if (focused?.name !== "character") {
-      await interaction.respond([]).catch(() => {});
+    if (focused?.name === "character") {
+      await autocompleteRaidSetCharacter(interaction, focused);
       return;
     }
-
-    const needle = normalizeName(focused.value || "");
-    const discordId = interaction.user.id;
-    const userDoc = await User.findOne({ discordId }).lean();
-    if (!userDoc || !Array.isArray(userDoc.accounts)) {
-      await interaction.respond([]).catch(() => {});
+    if (focused?.name === "raid") {
+      await autocompleteRaidSetRaid(interaction, focused);
       return;
     }
-
-    const entries = [];
-    const seen = new Set();
-    for (const account of userDoc.accounts) {
-      const chars = Array.isArray(account.characters) ? account.characters : [];
-      for (const character of chars) {
-        const name = getCharacterName(character);
-        const normalized = normalizeName(name);
-        if (!name || seen.has(normalized)) continue;
-        if (needle && !normalized.includes(needle)) continue;
-        seen.add(normalized);
-        entries.push({
-          name,
-          className: getCharacterClass(character),
-          itemLevel: Number(character.itemLevel) || 0,
-          accountName: account.accountName || "",
-        });
-      }
-    }
-
-    entries.sort((a, b) => b.itemLevel - a.itemLevel || a.name.localeCompare(b.name));
-
-    const choices = entries.slice(0, 25).map((entry) => {
-      const label = `${entry.name} · ${entry.className} · ${entry.itemLevel}`;
-      return {
-        name: label.length > 100 ? `${label.slice(0, 97)}...` : label,
-        value: entry.name.length > 100 ? entry.name.slice(0, 100) : entry.name,
-      };
-    });
-
-    await interaction.respond(choices).catch(() => {});
+    await interaction.respond([]).catch(() => {});
   } catch (error) {
     console.error("[autocomplete] raid-set error:", error?.message || error);
     await interaction.respond([]).catch(() => {});
@@ -1063,7 +1152,7 @@ const HELP_SECTIONS = [
     shortVn: "Cập nhật tiến độ raid cho character",
     options: [
       { name: "character", required: true, desc: "Tên character — có autocomplete từ roster đã lưu / autocomplete from saved roster" },
-      { name: "raid", required: true, desc: "Raid + difficulty (ví dụ: kazeros_hard, serca_nightmare)" },
+      { name: "raid", required: true, desc: "Raid + difficulty — autocomplete filter theo character đã chọn, kèm icon tiến độ (🟢/🟡/⚪)" },
       { name: "status", required: true, desc: "complete | reset" },
       { name: "gate", required: false, desc: "G1 | G2 | G3 — bỏ trống để update tất cả / blank = all gates" },
     ],
