@@ -471,11 +471,11 @@ const statusCommand = new SlashCommandBuilder()
   .setName("raid-status")
   .setDescription("View your raid completion status by account and character");
 
-const laraidHelpCommand = new SlashCommandBuilder()
-  .setName("laraidhelp")
+const raidHelpCommand = new SlashCommandBuilder()
+  .setName("raid-help")
   .setDescription("Show help for the raid management bot (bilingual EN + VN)");
 
-const commands = [addRosterCommand, raidCheckCommand, raidSetCommand, statusCommand, laraidHelpCommand];
+const commands = [addRosterCommand, raidCheckCommand, raidSetCommand, statusCommand, raidHelpCommand];
 
 async function handleAddRosterCommand(interaction) {
   const discordId = interaction.user.id;
@@ -1022,7 +1022,7 @@ function buildHelpOverviewEmbed() {
       ].join("\n")
     )
     .setColor(UI.colors.neutral)
-    .setFooter({ text: "Type /laraidhelp anytime · Soạn /laraidhelp bất cứ lúc nào" })
+    .setFooter({ text: "Type /raid-help anytime · Soạn /raid-help bất cứ lúc nào" })
     .setTimestamp();
 
   for (const section of HELP_SECTIONS) {
@@ -1063,7 +1063,7 @@ function buildHelpDetailEmbed(sectionKey) {
 
 function buildHelpDropdown() {
   const menu = new StringSelectMenuBuilder()
-    .setCustomId("laraidhelp:select")
+    .setCustomId("raid-help:select")
     .setPlaceholder("📖 Pick a command for details... / Chọn command để xem chi tiết...")
     .addOptions(
       HELP_SECTIONS.map((section) => ({
@@ -1076,7 +1076,7 @@ function buildHelpDropdown() {
   return new ActionRowBuilder().addComponents(menu);
 }
 
-async function handleLaraidHelpCommand(interaction) {
+async function handleRaidHelpCommand(interaction) {
   await interaction.reply({
     embeds: [buildHelpOverviewEmbed()],
     components: [buildHelpDropdown()],
@@ -1084,7 +1084,7 @@ async function handleLaraidHelpCommand(interaction) {
   });
 }
 
-async function handleLaraidHelpSelect(interaction) {
+async function handleRaidHelpSelect(interaction) {
   const sectionKey = interaction.values?.[0];
   await interaction.update({
     embeds: [buildHelpDetailEmbed(sectionKey)],
@@ -1113,13 +1113,13 @@ async function handleRaidManagementCommand(interaction) {
     return;
   }
 
-  if (interaction.commandName === "laraidhelp") {
-    await handleLaraidHelpCommand(interaction);
+  if (interaction.commandName === "raid-help") {
+    await handleRaidHelpCommand(interaction);
   }
 }
 
 module.exports = {
   commands,
   handleRaidManagementCommand,
-  handleLaraidHelpSelect,
+  handleRaidHelpSelect,
 };

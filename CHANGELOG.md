@@ -17,7 +17,7 @@ All notable changes to this project will be documented in this file. Dates use t
 - 30+ Lost Ark class mappings from `lostark.bible` internal class IDs to display names (`src/models/Class.js`), with title-case fallback for unknown IDs.
 - MongoDB DNS fallback in `db.js`: on Atlas SRV `ECONNREFUSED`, automatically retries `mongoose.connect` with configurable DNS servers (default `8.8.8.8,1.1.1.1`).
 - `/deploy-commands` hardening: auto-extracts Client ID from a full OAuth2 URL if the user accidentally pastes one into `CLIENT_ID`.
-- `/laraidhelp` — bilingual (EN + VN) help command. Shows an overview embed listing all four raid commands, plus a dropdown to drill into per-command detail (options, example, notes). Reply is ephemeral so the help doesn't spam the channel.
+- `/raid-help` — bilingual (EN + VN) help command (originally registered as `/laraidhelp`, renamed before public release). Shows an overview embed listing all four raid commands, plus a dropdown to drill into per-command detail (options, example, notes). Reply is ephemeral so the help doesn't spam the channel.
 
 ### Changed
 

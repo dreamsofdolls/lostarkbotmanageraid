@@ -2,7 +2,7 @@ require("dotenv").config();
 
 const { Client, GatewayIntentBits, Events } = require("discord.js");
 const { connectDB } = require("../db");
-const { handleRaidManagementCommand, handleLaraidHelpSelect } = require("./raid-command");
+const { handleRaidManagementCommand, handleRaidHelpSelect } = require("./raid-command");
 const { startWeeklyResetJob } = require("./weekly-reset");
 
 const { DISCORD_TOKEN } = process.env;
@@ -27,14 +27,14 @@ async function startBot() {
   client.on(Events.InteractionCreate, async (interaction) => {
     try {
       if (interaction.isChatInputCommand()) {
-        const allowed = ["add-roster", "raid-check", "raid-set", "raid-status", "laraidhelp"];
+        const allowed = ["add-roster", "raid-check", "raid-set", "raid-status", "raid-help"];
         if (!allowed.includes(interaction.commandName)) return;
         await handleRaidManagementCommand(interaction);
         return;
       }
 
-      if (interaction.isStringSelectMenu() && interaction.customId === "laraidhelp:select") {
-        await handleLaraidHelpSelect(interaction);
+      if (interaction.isStringSelectMenu() && interaction.customId === "raid-help:select") {
+        await handleRaidHelpSelect(interaction);
         return;
       }
     } catch (error) {

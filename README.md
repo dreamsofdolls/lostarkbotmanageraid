@@ -11,7 +11,7 @@ Discord bot quản lý tiến độ raid cho roster Lost Ark, sử dụng slash 
 - Weekly reset tự động vào thứ 4 sau 06:00 UTC (với catch-up nếu bot offline qua reset window)
 - Hỗ trợ 3 raid: Act 4, Kazeros, Serca (với Nightmare mode cho Serca 1740+)
 - Embed UI với dynamic color theo tiến độ + per-gate visualization (`{icon} {raid} · done/total`)
-- Bilingual help command (`/laraidhelp`) với dropdown drill-down
+- Bilingual help command (`/raid-help`) với dropdown drill-down
 
 ## Commands
 
@@ -68,7 +68,7 @@ Output là **embed ephemeral** với:
 - Multi-embed pagination khi > 25 fields hoặc > 5500 chars — follow-up messages ephemeral
 - Empty state (mọi người đã xong): embed xanh lá `✅ All eligible characters have completed...`
 
-### `/laraidhelp`
+### `/raid-help`
 
 Bilingual (EN + VN) help command. Gửi 1 overview embed liệt kê cả 4 command raid-management, kèm dropdown để xem chi tiết từng command (options, example, notes). Reply là ephemeral — chỉ mình cậu thấy.
 
