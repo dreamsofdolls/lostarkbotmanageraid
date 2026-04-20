@@ -44,6 +44,10 @@ const accountSchema = new mongoose.Schema(
   {
     accountName: { type: String, required: true },
     characters: { type: [characterSchema], default: [] },
+    // Unix ms timestamp of the last successful lostark.bible fetch for this
+    // account. Used by /raid-status lazy-refresh to skip API calls when the
+    // cached data is still within the upstream Bible cadence (~2 hours).
+    lastRefreshedAt: { type: Number, default: null },
   },
   { _id: false }
 );
