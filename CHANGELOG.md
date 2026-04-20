@@ -34,6 +34,7 @@ All notable changes to this project will be documented in this file. Dates use t
   - `/raid-status` groups characters under `📁 {accountName}` headers and each character line leads with `**name** · class · iLvl` for quick context.
   - `/raid-set` response replaced its plain-text string with a mini embed (Character / Raid / Gates fields) and uses green for `complete` vs muted grey for `reset`.
 - Error fallback in `src/bot.js` restored full Vietnamese diacritics ("Có lỗi xảy ra khi xử lý lệnh. Vui lòng thử lại." instead of the accent-stripped form).
+- Slash command raid-choice labels changed from `Act 4 Normal (>= 1700)` to `Act 4 Normal · 1700+`. The `·` middle dot separator and `+` suffix are shorter, easier to scan in the Discord dropdown, and drop the awkward `(>=` glyph. Touches `getRaidRequirementChoices()` in `src/models/Raid.js`.
 - UI polish sweep across all commands (consistency pass):
   - `/add-roster` success embed: title now `📥 Roster Synced` with a source footer, color switched from magic hex `0x57f287` to `UI.colors.success`, character-list header renamed to `Characters (N)` for symmetry with other commands.
   - Added `UI.icons.info` (`ℹ️`) and `UI.icons.roster` (`📥`) to the centralized icon set.
