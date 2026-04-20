@@ -2,7 +2,7 @@ require("dotenv").config();
 
 const { Client, GatewayIntentBits, Events } = require("discord.js");
 const { connectDB } = require("../db");
-const { handleRaidManagementCommand } = require("./raid-command");
+const { handleRaidManagementCommand, handleLaraidHelpSelect } = require("./raid-command");
 const { startWeeklyResetJob } = require("./weekly-reset");
 
 const { DISCORD_TOKEN } = process.env;
@@ -25,22 +25,29 @@ async function startBot() {
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
-    if (!["add-roster", "raid-check", "raid-set", "raid-status"].includes(interaction.commandName)) return;
-
     try {
-      await handleRaidManagementCommand(interaction);
+      if (interaction.isChatInputCommand()) {
+        const allowed = ["add-roster", "raid-check", "raid-set", "raid-status", "laraidhelp"];
+        if (!allowed.includes(interaction.commandName)) return;
+        await handleRaidManagementCommand(interaction);
+        return;
+      }
+
+      if (interaction.isStringSelectMenu() && interaction.customId === "laraidhelp:select") {
+        await handleLaraidHelpSelect(interaction);
+        return;
+      }
     } catch (error) {
       console.error("[bot] interaction error:", error);
 
       const payload = {
-        content: "Co loi xay ra khi xu ly lenh. Vui long thu lai.",
+        content: "Có lỗi xảy ra khi xử lý lệnh. Vui lòng thử lại.",
         ephemeral: true,
       };
 
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp(payload).catch(() => {});
-      } else {
+      } else if (interaction.isRepliable?.()) {
         await interaction.reply(payload).catch(() => {});
       }
     }

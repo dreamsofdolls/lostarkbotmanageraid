@@ -17,6 +17,7 @@ All notable changes to this project will be documented in this file. Dates use t
 - 30+ Lost Ark class mappings from `lostark.bible` internal class IDs to display names (`src/models/Class.js`), with title-case fallback for unknown IDs.
 - MongoDB DNS fallback in `db.js`: on Atlas SRV `ECONNREFUSED`, automatically retries `mongoose.connect` with configurable DNS servers (default `8.8.8.8,1.1.1.1`).
 - `/deploy-commands` hardening: auto-extracts Client ID from a full OAuth2 URL if the user accidentally pastes one into `CLIENT_ID`.
+- `/laraidhelp` — bilingual (EN + VN) help command. Shows an overview embed listing all four raid commands, plus a dropdown to drill into per-command detail (options, example, notes). Reply is ephemeral so the help doesn't spam the channel.
 
 ### Changed
 
@@ -26,6 +27,14 @@ All notable changes to this project will be documented in this file. Dates use t
 - `/raid-check` completion semantics: now evaluates both difficulty match **and** full-gate completion, not just raid-level boolean.
 - `/raid-status` rendering updated with the `✅` / `G1/G2` / `❓` / no-eligible-raids states described above.
 - Weekly reset now clears per-gate `completedDate` instead of a raid-level boolean, matching the gate-based progress model.
+- UI redesign for `/raid-status` and `/raid-set`:
+  - Introduced a module-level `UI` constants block for the bot's color palette (`success` / `progress` / `neutral` / `danger` / `muted`) and status icons (`done` / `partial` / `pending` / `reset` / `lock` / `warn`) so embed styling is centralized.
+  - `/raid-status` embed color is now dynamic: green when every eligible raid is done, yellow when anything is in progress, blurple when nothing has started yet.
+  - Each raid line in `/raid-status` now renders as `{icon} {raid name} · {done}/{total}` — replacing the previous `{raid name} G1/G2` / `✅` / `❓` formats — so users can see both total gate count and current progress at a glance.
+  - `/raid-status` groups characters under `📁 {accountName}` headers and each character line leads with `**name** · class · iLvl` for quick context.
+  - `/raid-set` response replaced its plain-text string with a mini embed (Character / Raid / Gates fields) and uses green for `complete` vs muted grey for `reset`.
+- Error fallback in `src/bot.js` restored full Vietnamese diacritics ("Có lỗi xảy ra khi xử lý lệnh. Vui lòng thử lại." instead of the accent-stripped form).
+- `getStatusRaidsForCharacter` now also exposes `allGateKeys` (derived from the character's stored `assignedRaids` sub-document) so the UI layer can render an accurate `done/total` ratio instead of guessing gate totals.
 
 ### Fixed
 

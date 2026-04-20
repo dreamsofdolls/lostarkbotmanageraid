@@ -1,4 +1,9 @@
-const { EmbedBuilder, SlashCommandBuilder } = require("discord.js");
+const {
+  EmbedBuilder,
+  SlashCommandBuilder,
+  StringSelectMenuBuilder,
+  ActionRowBuilder,
+} = require("discord.js");
 const { randomUUID } = require("node:crypto");
 const { JSDOM } = require("jsdom");
 const User = require("./schema/user");
@@ -15,6 +20,24 @@ const RAID_LEADER_ROLE_NAME = "raid leader";
 const RAID_CHOICES = getRaidRequirementChoices();
 const RAID_REQUIREMENT_MAP = getRaidRequirementMap();
 const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
+
+const UI = {
+  colors: {
+    success: 0x57f287,
+    progress: 0xfee75c,
+    neutral: 0x5865f2,
+    danger: 0xed4245,
+    muted: 0x99aab5,
+  },
+  icons: {
+    done: "✅",
+    partial: "🟡",
+    pending: "⚪",
+    reset: "🔄",
+    lock: "🔒",
+    warn: "⚠️",
+  },
+};
 
 function normalizeName(value) {
   return String(value || "").trim().toLowerCase();
@@ -274,6 +297,8 @@ function getStatusRaidsForCharacter(character) {
 
     // At 1740+, surface both Serca Hard and Nightmare as selectable options
     // (Hard alone still eligible from 1730 via the generic branch below).
+    const allGateKeys = getGateKeys(assignedRaid);
+
     if (raidKey === "serca" && itemLevel >= 1740) {
       for (const sercaModeKey of ["hard", "nightmare"]) {
         const sercaRequirement = getRequirementFor(raidKey, sercaModeKey);
@@ -285,6 +310,7 @@ function getStatusRaidsForCharacter(character) {
           raidKey,
           modeKey: sercaModeKey,
           minItemLevel: sercaRequirement.minItemLevel,
+          allGateKeys,
           completedGateKeys: isSameMode ? completedGateKeys : [],
           isCompleted: isSameMode && isAssignedRaidCompleted(assignedRaid),
         });
@@ -300,6 +326,7 @@ function getStatusRaidsForCharacter(character) {
       raidKey,
       modeKey,
       minItemLevel: requirement.minItemLevel,
+      allGateKeys,
       completedGateKeys,
       isCompleted: isAssignedRaidCompleted(assignedRaid),
     });
@@ -310,6 +337,36 @@ function getStatusRaidsForCharacter(character) {
     if (minDiff !== 0) return minDiff;
     return a.raidName.localeCompare(b.raidName);
   });
+}
+
+function formatRaidStatusLine(raid) {
+  const gates = Array.isArray(raid.allGateKeys) && raid.allGateKeys.length > 0
+    ? raid.allGateKeys
+    : ["G1", "G2"];
+  const done = new Set(raid.completedGateKeys || []).size;
+  const total = gates.length;
+
+  if (raid.isCompleted) return `${UI.icons.done} ${raid.raidName} · ${done}/${total}`;
+  if (done > 0) return `${UI.icons.partial} ${raid.raidName} · ${done}/${total}`;
+  return `${UI.icons.pending} ${raid.raidName} · ${done}/${total}`;
+}
+
+function summarizeRaidProgress(allRaids) {
+  const total = allRaids.length;
+  if (total === 0) return { color: UI.colors.muted, completed: 0, partial: 0, total: 0 };
+
+  let completed = 0;
+  let partial = 0;
+  for (const raid of allRaids) {
+    if (raid.isCompleted) completed += 1;
+    else if ((raid.completedGateKeys || []).length > 0) partial += 1;
+  }
+
+  let color = UI.colors.neutral;
+  if (completed === total) color = UI.colors.success;
+  else if (completed > 0 || partial > 0) color = UI.colors.progress;
+
+  return { color, completed, partial, total };
 }
 
 function isRaidLeader(interaction) {
@@ -397,7 +454,11 @@ const statusCommand = new SlashCommandBuilder()
   .setName("raid-status")
   .setDescription("View your raid completion status by account and character");
 
-const commands = [addRosterCommand, raidCheckCommand, raidSetCommand, statusCommand];
+const laraidHelpCommand = new SlashCommandBuilder()
+  .setName("laraidhelp")
+  .setDescription("Show help for the raid management bot (bilingual EN + VN)");
+
+const commands = [addRosterCommand, raidCheckCommand, raidSetCommand, statusCommand, laraidHelpCommand];
 
 async function handleAddRosterCommand(interaction) {
   const discordId = interaction.user.id;
@@ -631,32 +692,42 @@ async function handleStatusCommand(interaction) {
     0
   );
 
-  const totalPendingCharacters = userDoc.accounts.reduce((sum, account) => {
+  const allRaidEntries = [];
+  for (const account of userDoc.accounts) {
     const characters = Array.isArray(account.characters) ? account.characters : [];
-    const pending = characters.filter((character) => {
-      const raids = ensureRaidEntries(character);
-      return raids.some((raid) => !raid.isCompleted);
-    }).length;
-    return sum + pending;
-  }, 0);
+    for (const character of characters) {
+      for (const raid of getStatusRaidsForCharacter(character)) {
+        allRaidEntries.push(raid);
+      }
+    }
+  }
+
+  const progress = summarizeRaidProgress(allRaidEntries);
+  const titleIcon = progress.total === 0
+    ? UI.icons.lock
+    : progress.completed === progress.total
+      ? UI.icons.done
+      : progress.completed + progress.partial > 0
+        ? UI.icons.partial
+        : UI.icons.pending;
 
   const embed = new EmbedBuilder()
-    .setTitle("Raid Status")
+    .setTitle(`${titleIcon} Raid Status`)
     .setDescription(
-      [
-        `Characters: **${totalCharacters}**`,
-        "Status: ✅ Done all gates | G1/G2(/G3) = partial progress | ❓ Pending",
-      ].join("\n")
+      progress.total === 0
+        ? `**${totalCharacters}** characters · no eligible raids yet`
+        : `**${totalCharacters}** characters · **${progress.completed}/${progress.total}** raids done · ${progress.partial} in progress`
     )
-    .setColor(0x5865f2)
+    .setColor(progress.color)
+    .setFooter({ text: `${UI.icons.done} done · ${UI.icons.partial} partial · ${UI.icons.pending} pending` })
     .setTimestamp();
 
   for (const account of userDoc.accounts.slice(0, 25)) {
     const characters = Array.isArray(account.characters) ? account.characters : [];
     if (characters.length === 0) {
       embed.addFields({
-        name: `Account: ${account.accountName}`,
-        value: "No characters saved.",
+        name: `📁 ${account.accountName}`,
+        value: "_No characters saved._",
         inline: false,
       });
       continue;
@@ -664,25 +735,17 @@ async function handleStatusCommand(interaction) {
 
     const lines = characters.map((character) => {
       const raids = getStatusRaidsForCharacter(character);
+      const header = `**${getCharacterName(character)}** · ${getCharacterClass(character)} · \`${Number(character.itemLevel) || 0}\``;
       if (raids.length === 0) {
-        return `• ${getCharacterName(character)}: No eligible raids for current iLvl`;
+        return `${header}\n  ${UI.icons.lock} _Not eligible for any raid yet_`;
       }
-
-      const raidSummary = raids
-        .map((raid) => {
-          if (raid.isCompleted) return `${raid.raidName} ✅`;
-          if (Array.isArray(raid.completedGateKeys) && raid.completedGateKeys.length > 0) {
-            return `${raid.raidName} ${raid.completedGateKeys.join("/")}`;
-          }
-          return `${raid.raidName} ❓`;
-        })
-        .join(", ");
-      return `• ${getCharacterName(character)} (${getCharacterClass(character)}): ${raidSummary}`;
+      const raidLines = raids.map((raid) => `  ${formatRaidStatusLine(raid)}`).join("\n");
+      return `${header}\n${raidLines}`;
     });
 
-    const value = lines.join("\n");
+    const value = lines.join("\n\n");
     embed.addFields({
-      name: `Account: ${account.accountName}`,
+      name: `📁 ${account.accountName}`,
       value: value.length > 1024 ? `${value.slice(0, 1020)}...` : value,
       inline: false,
     });
@@ -769,12 +832,167 @@ async function handleRaidSetCommand(interaction) {
 
   await userDoc.save();
 
+  const isComplete = statusType === "complete";
+  const resultEmbed = new EmbedBuilder()
+    .setTitle(`${isComplete ? UI.icons.done : UI.icons.reset} Raid ${isComplete ? "Completed" : "Reset"}`)
+    .setColor(isComplete ? UI.colors.success : UI.colors.muted)
+    .addFields(
+      { name: "Character", value: `**${characterName}**`, inline: true },
+      { name: "Raid", value: `**${raidMeta.label}**`, inline: true },
+      { name: "Gates", value: targetGate || "All gates", inline: true },
+    )
+    .setTimestamp();
+
+  await interaction.reply({ embeds: [resultEmbed], ephemeral: true });
+}
+
+const HELP_SECTIONS = [
+  {
+    key: "add-roster",
+    label: "/add-roster",
+    icon: "📥",
+    short: "Sync roster from lostark.bible",
+    shortVn: "Đồng bộ roster từ lostark.bible",
+    options: [
+      { name: "name", required: true, desc: "Tên 1 character trong roster / Name of a character in the roster" },
+      { name: "total", required: false, desc: "Số characters muốn lưu (1-6, default 6) / Number of characters to save" },
+    ],
+    example: "/add-roster name:Clauseduk total:6",
+    notes: [
+      "EN: Saves top-N characters ranked by combat score; falls back to item level for ties.",
+      "VN: Lưu top-N nhân vật theo combat score; nếu bằng điểm thì xếp theo item level.",
+      "• Nếu roster/character đã tồn tại trong account khác của cùng Discord user, bot sẽ từ chối.",
+    ],
+  },
+  {
+    key: "raid-status",
+    label: "/raid-status",
+    icon: "📊",
+    short: "View your raid completion status",
+    shortVn: "Xem tiến độ raid của mình",
+    options: [],
+    example: "/raid-status",
+    notes: [
+      `EN: ${UI.icons.done} done all gates · ${UI.icons.partial} partial · ${UI.icons.pending} pending · ${UI.icons.lock} not eligible.`,
+      "VN: Hiển thị per-account per-character, mỗi raid có count `done/total`.",
+      "• Embed color động: xanh lá = xong hết, vàng = đang tiến triển, xanh dương = chưa bắt đầu.",
+      "• Ở iLvl 1740+: Serca Hard VÀ Nightmare hiển thị riêng biệt để cậu chọn mode.",
+    ],
+  },
+  {
+    key: "raid-set",
+    label: "/raid-set",
+    icon: "✏️",
+    short: "Update raid completion per character",
+    shortVn: "Cập nhật tiến độ raid cho character",
+    options: [
+      { name: "character", required: true, desc: "Tên character / Character name" },
+      { name: "raid", required: true, desc: "Raid + difficulty (ví dụ: kazeros_hard, serca_nightmare)" },
+      { name: "status", required: true, desc: "complete | reset" },
+      { name: "gate", required: false, desc: "G1 | G2 | G3 — bỏ trống để update tất cả / blank = all gates" },
+    ],
+    example: "/raid-set character:Clauseduk raid:kazeros_hard status:complete gate:G1",
+    notes: [
+      "EN: Update a single gate, or omit `gate` to update every discovered gate.",
+      "VN: Bỏ trống `gate` để update mọi gate của raid; chọn G1/G2/G3 để chỉ update gate đó.",
+      "• Nếu 2 account cùng user có character trùng tên, cả 2 đều bị update.",
+    ],
+  },
+  {
+    key: "raid-check",
+    label: "/raid-check",
+    icon: "🔍",
+    short: "[Raid Leader] Scan uncompleted characters",
+    shortVn: "[Raid Leader] Scan nhân vật chưa hoàn thành",
+    options: [
+      { name: "raid", required: true, desc: "Raid + difficulty to scan / Raid + difficulty cần scan" },
+    ],
+    example: "/raid-check raid:kazeros_hard",
+    notes: [
+      "EN: Requires role named exactly `raid leader` (case-insensitive).",
+      "VN: Role name phải là `raid leader` (không phân biệt hoa thường).",
+      "• Output auto-paginate thành chunks ≤ 1900 chars — follow-up messages ephemeral.",
+    ],
+  },
+];
+
+function buildHelpOverviewEmbed() {
+  const embed = new EmbedBuilder()
+    .setTitle("🎯 Raid Management Bot — Help")
+    .setDescription(
+      [
+        "**EN:** Lost Ark raid progress tracker for Discord. Pick a command below for details.",
+        "**VN:** Bot quản lý tiến độ raid Lost Ark. Chọn command ở dropdown để xem chi tiết.",
+      ].join("\n")
+    )
+    .setColor(UI.colors.neutral)
+    .setFooter({ text: "Type /laraidhelp anytime · Soạn /laraidhelp bất cứ lúc nào" })
+    .setTimestamp();
+
+  for (const section of HELP_SECTIONS) {
+    embed.addFields({
+      name: `${section.icon} ${section.label}`,
+      value: `${section.short}\n_${section.shortVn}_`,
+      inline: false,
+    });
+  }
+
+  return embed;
+}
+
+function buildHelpDetailEmbed(sectionKey) {
+  const section = HELP_SECTIONS.find((item) => item.key === sectionKey);
+  if (!section) return buildHelpOverviewEmbed();
+
+  const embed = new EmbedBuilder()
+    .setTitle(`${section.icon} ${section.label}`)
+    .setDescription(`**EN:** ${section.short}\n**VN:** ${section.shortVn}`)
+    .setColor(UI.colors.neutral);
+
+  if (section.options.length > 0) {
+    const optionLines = section.options.map((opt) => {
+      const req = opt.required ? "✅" : "⚪";
+      return `${req} \`${opt.name}\` — ${opt.desc}`;
+    });
+    embed.addFields({ name: "Options", value: optionLines.join("\n"), inline: false });
+  } else {
+    embed.addFields({ name: "Options", value: "_No options_", inline: false });
+  }
+
+  embed.addFields({ name: "Example", value: `\`${section.example}\``, inline: false });
+  embed.addFields({ name: "Notes", value: section.notes.join("\n"), inline: false });
+
+  return embed;
+}
+
+function buildHelpDropdown() {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId("laraidhelp:select")
+    .setPlaceholder("📖 Pick a command for details... / Chọn command để xem chi tiết...")
+    .addOptions(
+      HELP_SECTIONS.map((section) => ({
+        label: section.label,
+        value: section.key,
+        description: section.short.slice(0, 100),
+        emoji: section.icon,
+      }))
+    );
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+async function handleLaraidHelpCommand(interaction) {
   await interaction.reply({
-    content:
-      `Updated **${raidMeta.label}** for **${characterName}**. ` +
-      `${statusType === "complete" ? "Completed" : "Reset"}` +
-      `${targetGate ? ` ${targetGate}` : " all gates"}.`,
+    embeds: [buildHelpOverviewEmbed()],
+    components: [buildHelpDropdown()],
     ephemeral: true,
+  });
+}
+
+async function handleLaraidHelpSelect(interaction) {
+  const sectionKey = interaction.values?.[0];
+  await interaction.update({
+    embeds: [buildHelpDetailEmbed(sectionKey)],
+    components: [buildHelpDropdown()],
   });
 }
 
@@ -796,10 +1014,16 @@ async function handleRaidManagementCommand(interaction) {
 
   if (interaction.commandName === "raid-status") {
     await handleStatusCommand(interaction);
+    return;
+  }
+
+  if (interaction.commandName === "laraidhelp") {
+    await handleLaraidHelpCommand(interaction);
   }
 }
 
 module.exports = {
   commands,
   handleRaidManagementCommand,
+  handleLaraidHelpSelect,
 };
