@@ -10,6 +10,8 @@ Discord bot quản lý tiến độ raid cho roster Lost Ark, sử dụng slash 
 - Raid Leader có thể scan roster để tìm character chưa hoàn thành raid
 - Weekly reset tự động vào thứ 4 sau 06:00 (server local time)
 - Hỗ trợ 3 raid: Act 4, Kazeros, Serca (với Nightmare mode cho Serca 1740+)
+- Embed UI với dynamic color theo tiến độ + per-gate visualization (`{icon} {raid} · done/total`)
+- Bilingual help command (`/laraidhelp`) với dropdown drill-down
 
 ## Commands
 
@@ -32,12 +34,16 @@ Hiển thị tiến độ raid của tất cả characters, nhóm theo account.
 
 Ký hiệu trong output:
 
-- `✅` — Raid hoàn thành tất cả gates
-- `G1` hoặc `G1/G2` — Partial progress (chỉ xong các gate được liệt kê)
-- `❓` — Chưa xong gate nào
-- `No eligible raids for current iLvl` — Character chưa đủ item level cho raid nào
+- `✅` — Raid hoàn thành tất cả gates (`done/total` khớp)
+- `🟡` — Partial progress (ít nhất 1 gate đã xong, nhưng chưa full)
+- `⚪` — Chưa xong gate nào
+- `🔒` — Character chưa đủ item level cho raid nào
 
-Đặc biệt Serca: Characters ở item level 1740+ sẽ thấy Serca Hard **và** Nightmare là hai lựa chọn riêng biệt trong cùng status line.
+Mỗi dòng raid hiển thị dạng `{icon} {raid name} · {done}/{total}` — ví dụ `✅ Kazeros Hard · 2/2` hoặc `🟡 Serca Hard · 1/2`.
+
+Embed color động theo tổng thể: **xanh lá** nếu tất cả raid đã xong, **vàng** nếu đang có tiến triển, **blurple** nếu chưa bắt đầu gì.
+
+Đặc biệt Serca: Characters ở item level 1740+ sẽ thấy Serca Hard **và** Nightmare là hai lựa chọn riêng biệt.
 
 ### `/raid-set`
 
@@ -57,6 +63,12 @@ Ví dụ: `/raid-set character:Clauseduk raid:kazeros_hard status:complete gate:
 **Chỉ dành cho role `raid leader`** (case-insensitive). Scan tất cả characters đủ item level nhưng chưa hoàn thành raid ở difficulty được chọn.
 
 Output được paginate tự động thành các chunks ≤ 1900 ký tự để tránh vượt limit Discord.
+
+### `/laraidhelp`
+
+Bilingual (EN + VN) help command. Gửi 1 overview embed liệt kê cả 4 command raid-management, kèm dropdown để xem chi tiết từng command (options, example, notes). Reply là ephemeral — chỉ mình cậu thấy.
+
+Dùng khi: cần tra cú pháp nhanh, onboard member mới, hoặc forget option name.
 
 ## Raid Catalog
 
