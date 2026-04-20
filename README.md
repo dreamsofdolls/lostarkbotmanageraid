@@ -11,6 +11,9 @@ Discord bot quản lý tiến độ raid cho roster Lost Ark, sử dụng slash 
 - Weekly reset tự động vào thứ 4 sau 06:00 UTC (với catch-up nếu bot offline qua reset window)
 - Hỗ trợ 3 raid: Act 4, Kazeros, Serca (với Nightmare mode cho Serca 1740+)
 - Embed UI với dynamic color theo tiến độ + per-gate visualization (`{icon} {raid} · done/total`)
+- `/raid-status` lazy auto-refresh iLvl/combatScore từ lostark.bible (2h cooldown, preserve raid progress)
+- `/raid-status` pagination 1 roster = 1 page, 2 chars/row, session 2 phút
+- `/remove-roster` xóa roster hoặc 1 char riêng (autocomplete chained)
 - Bilingual help command (`/raid-help`) với dropdown drill-down
 
 ## Commands
@@ -30,18 +33,28 @@ Lưu ý: Nếu character/account đã tồn tại trong roster khác của cùng
 
 ### `/raid-status`
 
-Hiển thị tiến độ raid của tất cả characters, nhóm theo account.
+Hiển thị tiến độ raid của tất cả characters, **paginated 1 roster = 1 page**, 2 characters per row.
 
-Ký hiệu trong output:
+**Ký hiệu trong output:**
 
-- `✅` — Raid hoàn thành tất cả gates (`done/total` khớp)
+- `🟢` — Raid hoàn thành tất cả gates (`done/total` khớp)
 - `🟡` — Partial progress (ít nhất 1 gate đã xong, nhưng chưa full)
 - `⚪` — Chưa xong gate nào
 - `🔒` — Character chưa đủ item level cho raid nào
 
-Mỗi dòng raid hiển thị dạng `{icon} {raid name} · {done}/{total}` — ví dụ `✅ Kazeros Hard · 2/2` hoặc `🟡 Serca Hard · 1/2`.
+Mỗi dòng raid hiển thị dạng `{icon} {raid name} · {done}/{total}` — ví dụ `🟢 Kazeros Hard · 2/2` hoặc `🟡 Serca Hard · 1/2`. Raid order per character: **Act 4 → Kazeros → Serca**, top-to-bottom (Serca Hard trước Serca Nightmare).
 
-Embed color động theo tổng thể: **xanh lá** nếu tất cả raid đã xong, **vàng** nếu đang có tiến triển, **blurple** nếu chưa bắt đầu gì.
+**Embed color động** theo tổng thể per-account: **xanh lá** nếu tất cả raid đã xong, **vàng** nếu đang có tiến triển, **blurple** nếu chưa bắt đầu gì.
+
+**Pagination:** Nếu có nhiều hơn 1 roster, xuất hiện `◀ Previous` / `Next ▶` buttons (Secondary style). Chỉ người chạy command mới điều khiển được. Session timeout **2 phút** — hết hạn thì buttons disable + footer đổi thành `⏱️ Session đã hết hạn (120s) · Dùng /raid-status để xem lại`.
+
+**Lazy auto-refresh iLvl từ lostark.bible:**
+- Mỗi account có `lastRefreshedAt` timestamp.
+- Khi `/raid-status` chạy: account nào có `lastRefreshedAt` > **2 tiếng** (hoặc chưa bao giờ) → background fetch lostark.bible, update `itemLevel` + `combatScore` + `class` cho các char match theo name.
+- Trong window 2h → zero API calls, dùng cache.
+- Raid progress (`assignedRaids`), `weeklyResetKey`, `tasks` **được bảo toàn** — refresh chỉ đụng roster-shape fields.
+- Cooldown 2h align với upstream cadence của lostark.bible (họ cũng update mỗi char ~2h).
+- Fetch failure (Bible down, rate limit) → log warning + skip account đó, command vẫn render cached data.
 
 Đặc biệt Serca: Characters ở item level 1740+ sẽ thấy Serca Hard **và** Nightmare là hai lựa chọn riêng biệt.
 
@@ -113,6 +126,7 @@ Thêm raid mới: sửa `RAID_REQUIREMENTS` trong `src/models/Raid.js` (kèm `ga
   "accounts": [
     {
       "accountName": "string",
+      "lastRefreshedAt": 1775977000000,
       "characters": [
         {
           "id": "uuid",
