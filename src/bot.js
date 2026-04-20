@@ -1,8 +1,12 @@
 require("dotenv").config();
 
-const { Client, GatewayIntentBits, Events } = require("discord.js");
+const { Client, GatewayIntentBits, Events, MessageFlags } = require("discord.js");
 const { connectDB } = require("../db");
-const { handleRaidManagementCommand, handleRaidHelpSelect } = require("./raid-command");
+const {
+  handleRaidManagementCommand,
+  handleRaidHelpSelect,
+  handleRaidSetAutocomplete,
+} = require("./raid-command");
 const { startWeeklyResetJob } = require("./weekly-reset");
 
 const { DISCORD_TOKEN } = process.env;
@@ -33,6 +37,15 @@ async function startBot() {
         return;
       }
 
+      if (interaction.isAutocomplete()) {
+        if (interaction.commandName === "raid-set") {
+          await handleRaidSetAutocomplete(interaction);
+        } else {
+          await interaction.respond([]).catch(() => {});
+        }
+        return;
+      }
+
       if (interaction.isStringSelectMenu() && interaction.customId === "raid-help:select") {
         await handleRaidHelpSelect(interaction);
         return;
@@ -42,7 +55,7 @@ async function startBot() {
 
       const payload = {
         content: "Có lỗi xảy ra khi xử lý lệnh. Vui lòng thử lại.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       };
 
       if (interaction.replied || interaction.deferred) {
