@@ -1,4 +1,5 @@
 const { EmbedBuilder, SlashCommandBuilder } = require("discord.js");
+const { randomUUID } = require("node:crypto");
 const { JSDOM } = require("jsdom");
 const User = require("./schema/user");
 const { getClassName } = require("./models/Class");
@@ -17,6 +18,14 @@ const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
 
 function normalizeName(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function createCharacterId() {
+  try {
+    return randomUUID();
+  } catch {
+    return `char_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  }
 }
 
 function parseItemLevel(rawValue) {
@@ -156,7 +165,7 @@ function isAssignedRaidCompleted(assignedRaid) {
 
 function buildCharacterRecord(source, fallbackId) {
   return {
-    id: String(source?.id || fallbackId),
+    id: String(source?.id || fallbackId || createCharacterId()),
     name: getCharacterName(source),
     class: getCharacterClass(source),
     itemLevel: Number(source?.itemLevel) || 0,
@@ -261,6 +270,26 @@ function getStatusRaidsForCharacter(character) {
     const assignedRaid = assignedRaids[raidKey];
     const selectedDifficulty = assignedRaid?.G1?.difficulty || assignedRaid?.G2?.difficulty || "Normal";
     const modeKey = toModeKey(selectedDifficulty);
+    const completedGateKeys = getCompletedGateKeys(assignedRaid);
+
+    if (raidKey === "serca" && itemLevel >= 1740) {
+      for (const sercaModeKey of ["hard", "nightmare"]) {
+        const sercaRequirement = getRequirementFor(raidKey, sercaModeKey);
+        if (!sercaRequirement || itemLevel < sercaRequirement.minItemLevel) continue;
+
+        const isSameMode = modeKey === sercaModeKey;
+        selected.push({
+          raidName: sercaRequirement.label,
+          raidKey,
+          modeKey: sercaModeKey,
+          minItemLevel: sercaRequirement.minItemLevel,
+          completedGateKeys: isSameMode ? completedGateKeys : [],
+          isCompleted: isSameMode && isAssignedRaidCompleted(assignedRaid),
+        });
+      }
+      continue;
+    }
+
     const requirement = getRequirementFor(raidKey, modeKey);
     if (!requirement || itemLevel < requirement.minItemLevel) continue;
 
@@ -269,7 +298,7 @@ function getStatusRaidsForCharacter(character) {
       raidKey,
       modeKey,
       minItemLevel: requirement.minItemLevel,
-      completedGateKeys: getCompletedGateKeys(assignedRaid),
+      completedGateKeys,
       isCompleted: isAssignedRaidCompleted(assignedRaid),
     });
   }
@@ -451,7 +480,7 @@ async function handleAddRosterCommand(interaction) {
         itemLevel: character.itemLevel,
         combatScore: character.combatScore,
       },
-      existing?.id || String(account.characters.length + 1)
+      existing?.id || createCharacterId()
     );
   });
 
@@ -720,7 +749,7 @@ async function handleRaidSetCommand(interaction) {
       // Keep basic shape updated when old documents are edited.
       if (!character.name) character.name = getCharacterName(character);
       if (!character.class) character.class = getCharacterClass(character);
-      if (!character.id) character.id = String(updatedCount + 1);
+      if (!character.id) character.id = createCharacterId();
 
       updatedCount += 1;
     }
