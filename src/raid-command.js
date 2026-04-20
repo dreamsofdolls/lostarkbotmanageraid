@@ -365,10 +365,14 @@ function getStatusRaidsForCharacter(character) {
     });
   }
 
+  // Display order: Act 4 → Kazeros (Final) → Serca, top-to-bottom per
+  // character card. Within the same raid (Serca Hard vs Nightmare at 1740+),
+  // surface the higher difficulty tier first.
+  const raidDisplayOrder = { armoche: 0, kazeros: 1, serca: 2 };
   return selected.sort((a, b) => {
-    const minDiff = (Number(b.minItemLevel) || 0) - (Number(a.minItemLevel) || 0);
-    if (minDiff !== 0) return minDiff;
-    return a.raidName.localeCompare(b.raidName);
+    const orderDiff = (raidDisplayOrder[a.raidKey] ?? 99) - (raidDisplayOrder[b.raidKey] ?? 99);
+    if (orderDiff !== 0) return orderDiff;
+    return (Number(b.minItemLevel) || 0) - (Number(a.minItemLevel) || 0);
   });
 }
 
@@ -825,20 +829,16 @@ function buildAccountPageEmbed(account, pageIndex, totalPages, globalTotals) {
     return embed;
   }
 
-  // Two characters per row: pair each character with an invisible ZWS spacer
-  // placeholder in the 3rd inline column so Discord lays out the row as
-  // [char] [char] [invisible], visually 2 per row instead of the default 3.
-  // An inline:false ZWS field between pairs adds a small breathing row so
-  // adjacent character cards do not feel cramped against each other.
+  // Two characters per row with a horizontal gap between them.
+  // Layout per row: [char-left] [ZWS spacer = gap] [char-right].
+  // Discord inline fields split row width evenly into thirds, so putting
+  // the spacer in the MIDDLE column (not the right) gives visible horizontal
+  // breathing room between the two character cards.
   const inlineSpacer = { name: "\u200B", value: "\u200B", inline: true };
-  const rowBreak = { name: "\u200B", value: "\u200B", inline: false };
   for (let i = 0; i < characters.length; i += 2) {
     embed.addFields(buildCharacterField(characters[i]));
-    embed.addFields(characters[i + 1] ? buildCharacterField(characters[i + 1]) : inlineSpacer);
     embed.addFields(inlineSpacer);
-    if (i + 2 < characters.length) {
-      embed.addFields(rowBreak);
-    }
+    embed.addFields(characters[i + 1] ? buildCharacterField(characters[i + 1]) : inlineSpacer);
   }
 
   return embed;
