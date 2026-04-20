@@ -848,17 +848,12 @@ function buildStatusPaginationRow(currentPage, totalPages, disabled) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("status:prev")
-      .setEmoji("◀️")
+      .setLabel("◀ Previous")
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(disabled || currentPage === 0),
     new ButtonBuilder()
-      .setCustomId("status:counter")
-      .setLabel(`${currentPage + 1} / ${totalPages}`)
-      .setStyle(disabled ? ButtonStyle.Secondary : ButtonStyle.Primary)
-      .setDisabled(true),
-    new ButtonBuilder()
       .setCustomId("status:next")
-      .setEmoji("▶️")
+      .setLabel("Next ▶")
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(disabled || currentPage === totalPages - 1),
   );
