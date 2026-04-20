@@ -808,42 +808,49 @@ async function handleStatusCommand(interaction) {
   const baseSize = (`${titleIcon} Raid Status`).length + description.length + footerText.length + 50;
   let currentSize = baseSize;
 
-  for (const account of userDoc.accounts.slice(0, 25)) {
-    const characters = Array.isArray(account.characters) ? account.characters : [];
-    const fieldName = `📁 ${account.accountName}`;
-    let fieldValue;
-
-    if (characters.length === 0) {
-      fieldValue = "_No characters saved._";
-    } else {
-      const lines = characters.map((character) => {
-        const raids = getStatusRaidsForCharacter(character);
-        const header = `**${getCharacterName(character)}** · ${getCharacterClass(character)} · \`${Number(character.itemLevel) || 0}\``;
-        if (raids.length === 0) {
-          return `${header}\n  ${UI.icons.lock} _Not eligible for any raid yet_`;
-        }
-        const raidLines = raids.map((raid) => `  ${formatRaidStatusLine(raid)}`).join("\n");
-        return `${header}\n${raidLines}`;
-      });
-      const combined = lines.join("\n\n");
-      fieldValue = combined.length > 1024 ? `${combined.slice(0, 1020)}...` : combined;
-    }
-
-    const fieldSize = fieldName.length + fieldValue.length;
+  const pushField = (field) => {
+    const fieldSize = (field.name?.length || 0) + (field.value?.length || 0);
     const current = embeds[embeds.length - 1];
     const fieldCount = current.data.fields?.length ?? 0;
-
     if (fieldCount >= 25 || currentSize + fieldSize > 5500) {
       embeds.push(makeStatusEmbed(false));
       currentSize = 50;
     }
+    embeds[embeds.length - 1].addFields(field);
+    currentSize += fieldSize;
+  };
 
-    embeds[embeds.length - 1].addFields({
-      name: fieldName,
-      value: fieldValue,
+  const truncate = (s, max) => (s.length > max ? `${s.slice(0, max - 3)}...` : s);
+
+  for (const account of userDoc.accounts) {
+    const characters = Array.isArray(account.characters) ? account.characters : [];
+    const charCount = characters.length;
+
+    // Account divider (inline: false) — forces a new row before the character cards.
+    pushField({
+      name: `📁 ${account.accountName}`,
+      value: charCount === 0 ? "_No characters saved._" : `**${charCount}** character${charCount === 1 ? "" : "s"}`,
       inline: false,
     });
-    currentSize += fieldSize;
+
+    // One inline field per character — Discord arranges up to 3 per row on desktop.
+    for (const character of characters) {
+      const name = getCharacterName(character);
+      const cls = getCharacterClass(character);
+      const iLvl = Number(character.itemLevel) || 0;
+      const fieldName = truncate(`${name} · ${cls} · ${iLvl}`, 256);
+
+      const raids = getStatusRaidsForCharacter(character);
+      let fieldValue;
+      if (raids.length === 0) {
+        fieldValue = `${UI.icons.lock} _Not eligible yet_`;
+      } else {
+        fieldValue = raids.map((raid) => formatRaidStatusLine(raid)).join("\n");
+      }
+      fieldValue = truncate(fieldValue, 1024);
+
+      pushField({ name: fieldName, value: fieldValue, inline: true });
+    }
   }
 
   await interaction.reply({ embeds: [embeds[0]] });
