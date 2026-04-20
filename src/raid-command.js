@@ -3,6 +3,9 @@ const {
   SlashCommandBuilder,
   StringSelectMenuBuilder,
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ComponentType,
   MessageFlags,
 } = require("discord.js");
 const { randomUUID } = require("node:crypto");
@@ -753,6 +756,104 @@ async function handleRaidCheckCommand(interaction) {
   }
 }
 
+const STATUS_SESSION_MS = 2 * 60 * 1000;
+const STATUS_FOOTER_LEGEND = `${UI.icons.done} done · ${UI.icons.partial} partial · ${UI.icons.pending} pending`;
+
+function truncateText(s, max) {
+  return s.length > max ? `${s.slice(0, max - 3)}...` : s;
+}
+
+function buildCharacterField(character) {
+  const name = getCharacterName(character);
+  const cls = getCharacterClass(character);
+  const iLvl = Number(character.itemLevel) || 0;
+  const fieldName = truncateText(`${name} · ${cls} · ${iLvl}`, 256);
+
+  const raids = getStatusRaidsForCharacter(character);
+  const fieldValue = raids.length === 0
+    ? `${UI.icons.lock} _Not eligible yet_`
+    : raids.map((raid) => formatRaidStatusLine(raid)).join("\n");
+
+  return {
+    name: fieldName,
+    value: truncateText(fieldValue, 1024),
+    inline: true,
+  };
+}
+
+function buildAccountPageEmbed(account, pageIndex, totalPages, globalTotals) {
+  const characters = Array.isArray(account.characters) ? account.characters : [];
+
+  const accountRaids = [];
+  for (const character of characters) {
+    accountRaids.push(...getStatusRaidsForCharacter(character));
+  }
+  const accountProgress = summarizeRaidProgress(accountRaids);
+
+  const titleIcon = accountProgress.total === 0
+    ? UI.icons.lock
+    : accountProgress.completed === accountProgress.total
+      ? UI.icons.done
+      : accountProgress.completed + accountProgress.partial > 0
+        ? UI.icons.partial
+        : UI.icons.pending;
+
+  const pageSuffix = totalPages > 1 ? ` · Page ${pageIndex + 1}/${totalPages}` : "";
+  const title = `${titleIcon} 📁 ${account.accountName}${pageSuffix}`;
+
+  const description = accountProgress.total === 0
+    ? `**${characters.length}** character${characters.length === 1 ? "" : "s"} · no eligible raids yet`
+    : `**${characters.length}** character${characters.length === 1 ? "" : "s"} · **${accountProgress.completed}/${accountProgress.total}** raids done · ${accountProgress.partial} in progress`;
+
+  const globalSummary = totalPages > 1
+    ? `\n🌐 All accounts: **${globalTotals.characters}** chars · **${globalTotals.progress.completed}/${globalTotals.progress.total}** raids done`
+    : "";
+
+  const embed = new EmbedBuilder()
+    .setTitle(title)
+    .setDescription(description + globalSummary)
+    .setColor(accountProgress.color)
+    .setFooter({ text: STATUS_FOOTER_LEGEND })
+    .setTimestamp();
+
+  if (characters.length === 0) {
+    embed.addFields({ name: "\u200B", value: "_No characters saved._", inline: false });
+    return embed;
+  }
+
+  // Two characters per row: pair each character with an invisible ZWS spacer
+  // placeholder in the 3rd inline column so Discord lays out the row as
+  // [char] [char] [invisible], visually 2 per row instead of the default 3.
+  const spacer = { name: "\u200B", value: "\u200B", inline: true };
+  for (let i = 0; i < characters.length; i += 2) {
+    embed.addFields(buildCharacterField(characters[i]));
+    embed.addFields(characters[i + 1] ? buildCharacterField(characters[i + 1]) : spacer);
+    embed.addFields(spacer);
+  }
+
+  return embed;
+}
+
+function buildStatusPaginationRow(currentPage, totalPages, disabled) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("status:prev")
+      .setEmoji("◀️")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled || currentPage === 0),
+    new ButtonBuilder()
+      .setCustomId("status:counter")
+      .setLabel(`${currentPage + 1} / ${totalPages}`)
+      .setStyle(disabled ? ButtonStyle.Secondary : ButtonStyle.Primary)
+      .setDisabled(true),
+    new ButtonBuilder()
+      .setCustomId("status:next")
+      .setEmoji("▶️")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled || currentPage === totalPages - 1),
+  );
+}
+
 async function handleStatusCommand(interaction) {
   const discordId = interaction.user.id;
   const userDoc = await User.findOne({ discordId }).lean();
@@ -765,98 +866,71 @@ async function handleStatusCommand(interaction) {
     return;
   }
 
-  const totalCharacters = userDoc.accounts.reduce(
+  const accounts = userDoc.accounts;
+  const totalCharacters = accounts.reduce(
     (sum, account) => sum + (Array.isArray(account.characters) ? account.characters.length : 0),
     0
   );
-
   const allRaidEntries = [];
-  for (const account of userDoc.accounts) {
-    const characters = Array.isArray(account.characters) ? account.characters : [];
-    for (const character of characters) {
-      for (const raid of getStatusRaidsForCharacter(character)) {
-        allRaidEntries.push(raid);
-      }
+  for (const account of accounts) {
+    for (const character of (account.characters || [])) {
+      allRaidEntries.push(...getStatusRaidsForCharacter(character));
     }
   }
+  const globalProgress = summarizeRaidProgress(allRaidEntries);
+  const globalTotals = { characters: totalCharacters, progress: globalProgress };
 
-  const progress = summarizeRaidProgress(allRaidEntries);
-  const titleIcon = progress.total === 0
-    ? UI.icons.lock
-    : progress.completed === progress.total
-      ? UI.icons.done
-      : progress.completed + progress.partial > 0
-        ? UI.icons.partial
-        : UI.icons.pending;
+  const pages = accounts.map((account, idx) =>
+    buildAccountPageEmbed(account, idx, accounts.length, globalTotals)
+  );
 
-  const description = progress.total === 0
-    ? `**${totalCharacters}** characters · no eligible raids yet`
-    : `**${totalCharacters}** characters · **${progress.completed}/${progress.total}** raids done · ${progress.partial} in progress`;
-  const footerText = `${UI.icons.done} done · ${UI.icons.partial} partial · ${UI.icons.pending} pending`;
-
-  const makeStatusEmbed = (isFirst) => {
-    const e = new EmbedBuilder().setColor(progress.color).setFooter({ text: footerText });
-    if (isFirst) {
-      e.setTitle(`${titleIcon} Raid Status`).setDescription(description).setTimestamp();
-    } else {
-      e.setTitle(`${titleIcon} Raid Status (continued)`);
-    }
-    return e;
-  };
-
-  const embeds = [makeStatusEmbed(true)];
-  const baseSize = (`${titleIcon} Raid Status`).length + description.length + footerText.length + 50;
-  let currentSize = baseSize;
-
-  const pushField = (field) => {
-    const fieldSize = (field.name?.length || 0) + (field.value?.length || 0);
-    const current = embeds[embeds.length - 1];
-    const fieldCount = current.data.fields?.length ?? 0;
-    if (fieldCount >= 25 || currentSize + fieldSize > 5500) {
-      embeds.push(makeStatusEmbed(false));
-      currentSize = 50;
-    }
-    embeds[embeds.length - 1].addFields(field);
-    currentSize += fieldSize;
-  };
-
-  const truncate = (s, max) => (s.length > max ? `${s.slice(0, max - 3)}...` : s);
-
-  for (const account of userDoc.accounts) {
-    const characters = Array.isArray(account.characters) ? account.characters : [];
-    const charCount = characters.length;
-
-    // Account divider (inline: false) — forces a new row before the character cards.
-    pushField({
-      name: `📁 ${account.accountName}`,
-      value: charCount === 0 ? "_No characters saved._" : `**${charCount}** character${charCount === 1 ? "" : "s"}`,
-      inline: false,
-    });
-
-    // One inline field per character — Discord arranges up to 3 per row on desktop.
-    for (const character of characters) {
-      const name = getCharacterName(character);
-      const cls = getCharacterClass(character);
-      const iLvl = Number(character.itemLevel) || 0;
-      const fieldName = truncate(`${name} · ${cls} · ${iLvl}`, 256);
-
-      const raids = getStatusRaidsForCharacter(character);
-      let fieldValue;
-      if (raids.length === 0) {
-        fieldValue = `${UI.icons.lock} _Not eligible yet_`;
-      } else {
-        fieldValue = raids.map((raid) => formatRaidStatusLine(raid)).join("\n");
-      }
-      fieldValue = truncate(fieldValue, 1024);
-
-      pushField({ name: fieldName, value: fieldValue, inline: true });
-    }
+  if (pages.length === 1) {
+    await interaction.reply({ embeds: [pages[0]] });
+    return;
   }
 
-  await interaction.reply({ embeds: [embeds[0]] });
-  for (let i = 1; i < embeds.length; i += 1) {
-    await interaction.followUp({ embeds: [embeds[i]] });
-  }
+  let currentPage = 0;
+  await interaction.reply({
+    embeds: [pages[currentPage]],
+    components: [buildStatusPaginationRow(currentPage, pages.length, false)],
+  });
+  const message = await interaction.fetchReply();
+
+  const collector = message.createMessageComponentCollector({
+    componentType: ComponentType.Button,
+    time: STATUS_SESSION_MS,
+  });
+
+  collector.on("collect", async (btn) => {
+    if (btn.user.id !== interaction.user.id) {
+      await btn.reply({
+        content: `${UI.icons.lock} Chỉ người chạy \`/raid-status\` mới điều khiển được pagination.`,
+        flags: MessageFlags.Ephemeral,
+      }).catch(() => {});
+      return;
+    }
+    if (btn.customId === "status:prev") currentPage = Math.max(0, currentPage - 1);
+    else if (btn.customId === "status:next") currentPage = Math.min(pages.length - 1, currentPage + 1);
+    else return;
+
+    await btn.update({
+      embeds: [pages[currentPage]],
+      components: [buildStatusPaginationRow(currentPage, pages.length, false)],
+    }).catch(() => {});
+  });
+
+  collector.on("end", async () => {
+    try {
+      const expiredFooter = `⏱️ Session đã hết hạn (${STATUS_SESSION_MS / 1000}s) · Dùng /raid-status để xem lại`;
+      const expiredEmbed = EmbedBuilder.from(pages[currentPage]).setFooter({ text: expiredFooter });
+      await interaction.editReply({
+        embeds: [expiredEmbed],
+        components: [buildStatusPaginationRow(currentPage, pages.length, true)],
+      });
+    } catch {
+      // Interaction token may have expired — ignore.
+    }
+  });
 }
 
 function findCharacterInUser(userDoc, characterName) {

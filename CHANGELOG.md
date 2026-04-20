@@ -35,6 +35,16 @@ All notable changes to this project will be documented in this file. Dates use t
   - `/raid-set` response replaced its plain-text string with a mini embed (Character / Raid / Gates fields) and uses green for `complete` vs muted grey for `reset`.
 - Error fallback in `src/bot.js` restored full Vietnamese diacritics ("Có lỗi xảy ra khi xử lý lệnh. Vui lòng thử lại." instead of the accent-stripped form).
 - **[Defensive] `deploy-commands.js` now explicitly exits with code 0 after a successful registration.** The discord.js REST client keeps a keep-alive HTTP agent alive internally, so natural event-loop drain never happens after `rest.put(...)` completes. Without an explicit `process.exit(0)` the script hangs forever when run non-interactively (e.g. as a `docker exec` one-off or in a chained startup command). Now exits cleanly. `src/deploy-commands.js`.
+- **`/raid-status` rewritten as per-account paginated session, 2 characters per row.**
+  - Each saved roster (account) becomes its own page. Navigate with `◀️ / ▶️` buttons; the middle button is a disabled page indicator `(N/M)`.
+  - Characters lay out **2 per row** — achieved with an invisible Zero-Width-Space spacer field in the 3rd inline column, forcing the row to wrap after 2 character cards.
+  - Page title dynamically reflects that account's aggregate progress (`🟢/🟡/⚪ 📁 {accountName} · Page N/M`), colored green/yellow/blurple accordingly.
+  - Description carries per-account progress plus a global summary line across all accounts when more than one page exists.
+  - Session timeout = **2 minutes**. Only the invoking user can click the buttons; other users get an ephemeral `🔒 Chỉ người chạy /raid-status...` rejection.
+  - On expiry the buttons are disabled and the footer changes to `⏱️ Session đã hết hạn (120s) · Dùng /raid-status để xem lại`.
+  - Single-account rosters skip the buttons entirely — direct embed reply, no pagination noise.
+  - Multi-embed split code removed since per-page content stays well under Discord limits (max 6 chars × 3 fields = 18 fields per page).
+  `src/raid-command.js` (handleStatusCommand, new helpers `buildAccountPageEmbed`, `buildCharacterField`, `buildStatusPaginationRow`).
 - **`/raid-status` now lays characters out horizontally, 3 per row on desktop.** Replaced the single-field-per-account stacked list with one *inline* embed field per character. Discord auto-arranges up to three inline fields per row, so a 6-character roster fits in 2 rows instead of scrolling for 6 text blocks. Each character card is `{name} · {class} · {iLvl}` as field name with the raid progress list (`🟢 / 🟡 / ⚪ · done/total`) as the value. The `📁 {accountName}` header stays as a non-inline divider so multi-account rosters keep their grouping. Multi-embed pagination + 1024-char value truncation still applied. `src/raid-command.js` (handleStatusCommand).
 - **Corrected Serca gate count from 3 to 2.** `RAID_REQUIREMENTS.serca.gates` now matches the actual in-game layout (`["G1", "G2"]`). Serca-related status counts and `/raid-set` gate validation follow automatically through `getGatesForRaid()`. `src/models/Raid.js`.
 - **`/raid-set` `raid` option is now an autocomplete field that filters by the selected character's eligibility AND shows live progress per raid.** When a `character` is already typed or selected:
