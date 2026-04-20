@@ -47,6 +47,11 @@ const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
       body: slashCommands,
     });
     console.log("Slash commands registered successfully.");
+    // Force clean exit: discord.js REST client keeps a keep-alive HTTP agent
+    // alive which prevents natural event-loop drain. Without explicit exit(0)
+    // the Railway `&& node src/bot.js` chain hangs forever and the bot never
+    // starts — leaving DB disconnected and the bot offline.
+    process.exit(0);
   } catch (error) {
     if (error?.status === 404) {
       console.error(
