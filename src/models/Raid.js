@@ -50,7 +50,7 @@ function buildRaidRequirementList() {
 
 function getRaidRequirementChoices() {
   return buildRaidRequirementList().map((raid) => ({
-    name: `${raid.label} (>= ${raid.minItemLevel})`,
+    name: `${raid.label} · ${raid.minItemLevel}+`,
     value: raid.value,
   }));
 }
