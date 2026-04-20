@@ -3,6 +3,10 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "node src/bot.js"
+# Register slash command schema on every Railway boot so schema stays in
+# sync with the deployed code. `&&` ensures bot only starts after a
+# successful register — a registration failure surfaces in Railway logs
+# instead of silently leaving stale commands on Discord.
+startCommand = "node src/deploy-commands.js && node src/bot.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
