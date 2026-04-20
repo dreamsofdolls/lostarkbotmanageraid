@@ -591,7 +591,7 @@ async function resolveDiscordDisplay(client, discordId) {
 async function handleRaidCheckCommand(interaction) {
   if (!isRaidLeader(interaction)) {
     await interaction.reply({
-      content: "Chi Raid Leader moi duoc dung /raid-check.",
+      content: `${UI.icons.lock} Chỉ Raid Leader mới được dùng \`/raid-check\`.`,
       ephemeral: true,
     });
     return;
@@ -641,10 +641,21 @@ async function handleRaidCheckCommand(interaction) {
     }
   }
 
+  const modeKey = normalizeName(raidMeta.modeKey);
+  const difficultyColor =
+    modeKey === "nightmare" ? UI.colors.danger
+      : modeKey === "hard" ? UI.colors.progress
+      : UI.colors.neutral;
+
   if (matchedCharacters.length === 0) {
-    await interaction.editReply(
-      `Khong co nhan vat nao dat iLvl >= ${raidMeta.minItemLevel} ma chua hoan thanh **${raidMeta.label}**.`
-    );
+    const emptyEmbed = new EmbedBuilder()
+      .setTitle(`${UI.icons.done} Raid Check · ${raidMeta.label}`)
+      .setColor(UI.colors.success)
+      .setDescription(
+        `Không có nhân vật nào đạt iLvl ≥ **${raidMeta.minItemLevel}** mà chưa hoàn thành **${raidMeta.label}**.\nAll eligible characters have completed this raid.`
+      )
+      .setTimestamp();
+    await interaction.editReply({ embeds: [emptyEmbed] });
     return;
   }
 
@@ -657,24 +668,74 @@ async function handleRaidCheckCommand(interaction) {
     })
   );
 
-  const lines = matchedCharacters
-    .sort((a, b) => b.itemLevel - a.itemLevel)
-    .map((item) => `${displayMap.get(item.discordId)} - ${item.charName} (${item.itemLevel})`);
-
-  const chunks = [];
-  let currentChunk = `Raid: **${raidMeta.label}** (>= ${raidMeta.minItemLevel})\n\n`;
-  for (const line of lines) {
-    if (currentChunk.length + line.length + 1 > 1900) {
-      chunks.push(currentChunk);
-      currentChunk = "";
-    }
-    currentChunk += `${line}\n`;
+  const byUser = new Map();
+  for (const item of matchedCharacters) {
+    if (!byUser.has(item.discordId)) byUser.set(item.discordId, []);
+    byUser.get(item.discordId).push(item);
   }
-  if (currentChunk.trim()) chunks.push(currentChunk);
+  for (const chars of byUser.values()) {
+    chars.sort((a, b) => (Number(b.itemLevel) || 0) - (Number(a.itemLevel) || 0));
+  }
 
-  await interaction.editReply(chunks[0]);
-  for (let index = 1; index < chunks.length; index += 1) {
-    await interaction.followUp({ content: chunks[index], ephemeral: true });
+  const userGroups = [...byUser.entries()]
+    .map(([discordId, chars]) => ({
+      discordId,
+      displayName: displayMap.get(discordId) || discordId,
+      chars,
+    }))
+    .sort((a, b) => {
+      const countDiff = b.chars.length - a.chars.length;
+      if (countDiff !== 0) return countDiff;
+      return a.displayName.localeCompare(b.displayName);
+    });
+
+  const headerTitle = `${UI.icons.warn} Raid Check · ${raidMeta.label}`;
+  const headerDescription =
+    `**${matchedCharacters.length}** characters · **${userGroups.length}** rosters · iLvl ≥ **${raidMeta.minItemLevel}**`;
+  const footerText = `Pending raid: ${raidMeta.label} · Raid Leader scan`;
+
+  const makeCheckEmbed = (isFirst) => {
+    const e = new EmbedBuilder().setColor(difficultyColor).setFooter({ text: footerText });
+    if (isFirst) {
+      e.setTitle(headerTitle).setDescription(headerDescription).setTimestamp();
+    } else {
+      e.setTitle(`${headerTitle} (continued)`);
+    }
+    return e;
+  };
+
+  const embeds = [makeCheckEmbed(true)];
+  const baseSize = headerTitle.length + headerDescription.length + footerText.length + 50;
+  let currentSize = baseSize;
+
+  for (const group of userGroups) {
+    const rawLines = group.chars.map(
+      (item) => `• **${item.charName}** · \`${Number(item.itemLevel) || 0}\``
+    );
+    let fieldValue = rawLines.join("\n");
+    if (fieldValue.length > 1024) fieldValue = `${fieldValue.slice(0, 1020)}...`;
+
+    const fieldName = `👤 ${group.displayName} · ${group.chars.length}`;
+    const fieldSize = fieldName.length + fieldValue.length;
+    const current = embeds[embeds.length - 1];
+    const fieldCount = current.data.fields?.length ?? 0;
+
+    if (fieldCount >= 25 || currentSize + fieldSize > 5500) {
+      embeds.push(makeCheckEmbed(false));
+      currentSize = 50;
+    }
+
+    embeds[embeds.length - 1].addFields({
+      name: fieldName,
+      value: fieldValue,
+      inline: false,
+    });
+    currentSize += fieldSize;
+  }
+
+  await interaction.editReply({ embeds: [embeds[0]] });
+  for (let i = 1; i < embeds.length; i += 1) {
+    await interaction.followUp({ embeds: [embeds[i]], ephemeral: true });
   }
 }
 

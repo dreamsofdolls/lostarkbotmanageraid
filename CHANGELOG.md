@@ -34,6 +34,12 @@ All notable changes to this project will be documented in this file. Dates use t
   - `/raid-status` groups characters under `📁 {accountName}` headers and each character line leads with `**name** · class · iLvl` for quick context.
   - `/raid-set` response replaced its plain-text string with a mini embed (Character / Raid / Gates fields) and uses green for `complete` vs muted grey for `reset`.
 - Error fallback in `src/bot.js` restored full Vietnamese diacritics ("Có lỗi xảy ra khi xử lý lệnh. Vui lòng thử lại." instead of the accent-stripped form).
+- `/raid-check` upgraded from plain-text chunks to a proper embed:
+  - Dynamic color by difficulty: red for Nightmare, yellow for Hard, blurple for Normal.
+  - Results grouped by Discord user (most pending characters first, characters sorted by item level within each user).
+  - Multi-embed pagination when results exceed 25 fields or 5500 chars total — first via `editReply`, subsequent via ephemeral `followUp`.
+  - Empty state (everyone has completed the raid) now renders a green success embed instead of a plain sentence.
+  - Role-gate rejection (`Chỉ Raid Leader mới được dùng /raid-check`) restored full Vietnamese diacritics.
 - `getStatusRaidsForCharacter` now also exposes `allGateKeys` (derived from the character's stored `assignedRaids` sub-document) so the UI layer can render an accurate `done/total` ratio instead of guessing gate totals.
 
 ### Fixed
