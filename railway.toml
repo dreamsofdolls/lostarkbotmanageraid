@@ -3,18 +3,6 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-# Register slash command schema on every Railway boot so schema stays
-# in sync with the deployed code, THEN start the bot independently.
-#
-# `;` (sequential, independent exit codes) is deliberately chosen over
-# `&&`. If the register step fails or hangs for any reason (rate limit,
-# Discord API outage, bad token, script bug) the bot must still start:
-# users keep their existing commands and the stale-schema annoyance is
-# strictly better than the bot being offline.
-#
-# deploy-commands.js exits 0 on success / 1 on failure, so registration
-# errors still surface clearly in Railway logs; they just do not block
-# bot startup.
-startCommand = "node src/deploy-commands.js; node src/bot.js"
+startCommand = "node src/bot.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
