@@ -515,9 +515,13 @@ async function handleAddRosterCommand(interaction) {
       userDoc = new User({ discordId, accounts: [] });
     }
 
-    let account = userDoc.accounts.find((item) =>
-      item.characters.some((character) => rosterNameSet.has(normalizeName(getCharacterName(character))))
-    );
+    const normalizedSeed = normalizeName(seedCharName);
+    let account = userDoc.accounts.find((item) => {
+      if (normalizeName(item.accountName) === normalizedSeed) return true;
+      const chars = Array.isArray(item.characters) ? item.characters : [];
+      if (chars.some((character) => normalizeName(getCharacterName(character)) === normalizedSeed)) return true;
+      return chars.some((character) => rosterNameSet.has(normalizeName(getCharacterName(character))));
+    });
 
     if (!account) {
       userDoc.accounts.push({ accountName: seedCharName, characters: [] });
@@ -863,6 +867,17 @@ async function handleRaidSetCommand(interaction) {
       ephemeral: true,
     });
     return;
+  }
+
+  if (targetGate) {
+    const validGates = getGatesForRaid(raidMeta.raidKey);
+    if (!validGates.includes(targetGate)) {
+      await interaction.reply({
+        content: `${UI.icons.warn} Gate **${targetGate}** không tồn tại cho **${raidMeta.label}**. Gates hợp lệ: ${validGates.map((g) => `\`${g}\``).join(", ")}.`,
+        ephemeral: true,
+      });
+      return;
+    }
   }
 
   const targetName = normalizeName(characterName);
