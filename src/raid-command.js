@@ -136,8 +136,13 @@ function getGateKeys(assignedRaid) {
 }
 
 function normalizeAssignedRaid(assignedRaid, fallbackDifficulty, raidKey) {
-  const gateKeys = getGateKeys(assignedRaid);
-  const keys = gateKeys.length > 0 ? gateKeys : getGatesForRaid(raidKey);
+  // Drop any gate keys that are not part of the raid's current official
+  // gate list (e.g. legacy Serca G3 stored before the metadata correction).
+  // This ensures status counts match reality and lets DB self-heal on next
+  // save, since callers reassign `character.assignedRaids = <normalized>`.
+  const officialGates = getGatesForRaid(raidKey);
+  const rawGateKeys = getGateKeys(assignedRaid).filter((k) => officialGates.includes(k));
+  const keys = rawGateKeys.length > 0 ? rawGateKeys : officialGates;
 
   const normalized = {};
   for (const gate of keys) {
@@ -765,9 +770,8 @@ function truncateText(s, max) {
 
 function buildCharacterField(character) {
   const name = getCharacterName(character);
-  const cls = getCharacterClass(character);
   const iLvl = Number(character.itemLevel) || 0;
-  const fieldName = truncateText(`${name} · ${cls} · ${iLvl}`, 256);
+  const fieldName = truncateText(`${name} · ${iLvl}`, 256);
 
   const raids = getStatusRaidsForCharacter(character);
   const fieldValue = raids.length === 0
@@ -824,11 +828,17 @@ function buildAccountPageEmbed(account, pageIndex, totalPages, globalTotals) {
   // Two characters per row: pair each character with an invisible ZWS spacer
   // placeholder in the 3rd inline column so Discord lays out the row as
   // [char] [char] [invisible], visually 2 per row instead of the default 3.
-  const spacer = { name: "\u200B", value: "\u200B", inline: true };
+  // An inline:false ZWS field between pairs adds a small breathing row so
+  // adjacent character cards do not feel cramped against each other.
+  const inlineSpacer = { name: "\u200B", value: "\u200B", inline: true };
+  const rowBreak = { name: "\u200B", value: "\u200B", inline: false };
   for (let i = 0; i < characters.length; i += 2) {
     embed.addFields(buildCharacterField(characters[i]));
-    embed.addFields(characters[i + 1] ? buildCharacterField(characters[i + 1]) : spacer);
-    embed.addFields(spacer);
+    embed.addFields(characters[i + 1] ? buildCharacterField(characters[i + 1]) : inlineSpacer);
+    embed.addFields(inlineSpacer);
+    if (i + 2 < characters.length) {
+      embed.addFields(rowBreak);
+    }
   }
 
   return embed;
