@@ -19,6 +19,22 @@ jsdomVirtualConsole.on("jsdomError", (err) => {
 const User = require("./schema/user");
 const { saveWithRetry } = require("./schema/user");
 const { ensureFreshWeek } = require("./weekly-reset");
+
+/**
+ * In-flight dedup loader for autocomplete paths. Rapid keystrokes for the
+ * same discordId collapse into a single Mongo read — all concurrent handlers
+ * await the same promise and the map entry clears once it settles.
+ */
+const autocompleteUserInFlight = new Map();
+function loadUserForAutocomplete(discordId) {
+  if (!autocompleteUserInFlight.has(discordId)) {
+    const promise = User.findOne({ discordId })
+      .lean()
+      .finally(() => autocompleteUserInFlight.delete(discordId));
+    autocompleteUserInFlight.set(discordId, promise);
+  }
+  return autocompleteUserInFlight.get(discordId);
+}
 const { getClassName } = require("./models/Class");
 const {
   RAID_REQUIREMENTS,
@@ -896,12 +912,12 @@ function truncateText(s, max) {
   return s.length > max ? `${s.slice(0, max - 3)}...` : s;
 }
 
-function buildCharacterField(character) {
+function buildCharacterField(character, getRaidsFor) {
   const name = getCharacterName(character);
   const iLvl = Number(character.itemLevel) || 0;
   const fieldName = truncateText(`${name} · ${iLvl}`, 256);
 
-  const raids = getStatusRaidsForCharacter(character);
+  const raids = getRaidsFor(character);
   const fieldValue = raids.length === 0
     ? `${UI.icons.lock} _Not eligible yet_`
     : raids.map((raid) => formatRaidStatusLine(raid)).join("\n");
@@ -913,12 +929,12 @@ function buildCharacterField(character) {
   };
 }
 
-function buildAccountPageEmbed(account, pageIndex, totalPages, globalTotals) {
+function buildAccountPageEmbed(account, pageIndex, totalPages, globalTotals, getRaidsFor) {
   const characters = Array.isArray(account.characters) ? account.characters : [];
 
   const accountRaids = [];
   for (const character of characters) {
-    accountRaids.push(...getStatusRaidsForCharacter(character));
+    accountRaids.push(...getRaidsFor(character));
   }
   const accountProgress = summarizeRaidProgress(accountRaids);
 
@@ -960,9 +976,9 @@ function buildAccountPageEmbed(account, pageIndex, totalPages, globalTotals) {
   // breathing room between the two character cards.
   const inlineSpacer = { name: "\u200B", value: "\u200B", inline: true };
   for (let i = 0; i < characters.length; i += 2) {
-    embed.addFields(buildCharacterField(characters[i]));
+    embed.addFields(buildCharacterField(characters[i], getRaidsFor));
     embed.addFields(inlineSpacer);
-    embed.addFields(characters[i + 1] ? buildCharacterField(characters[i + 1]) : inlineSpacer);
+    embed.addFields(characters[i + 1] ? buildCharacterField(characters[i + 1], getRaidsFor) : inlineSpacer);
   }
 
   return embed;
@@ -1000,28 +1016,45 @@ async function handleStatusCommand(interaction) {
   // account). If no refresh is needed the overhead is just the defer round-trip.
   await interaction.deferReply();
 
-  // Lazy refresh stale accounts inside saveWithRetry for concurrency safety.
-  // Failures here are non-fatal: fall through to rendering whatever is in DB.
+  // Lazy refresh stale accounts inside saveWithRetry for concurrency safety,
+  // and return the hydrated-to-plain snapshot so we do not have to re-read
+  // the document a third time on the fast path.
+  let userDoc = null;
   try {
-    await saveWithRetry(async () => {
+    userDoc = await saveWithRetry(async () => {
       const doc = await User.findOne({ discordId });
-      if (!doc) return;
-      if (await refreshStaleAccounts(doc)) {
-        await doc.save();
-      }
+      if (!doc) return null;
+      const didRefresh = await refreshStaleAccounts(doc);
+      if (didRefresh) await doc.save();
+      return doc.toObject();
     });
   } catch (err) {
     console.error("[raid-status] lazy refresh failed:", err?.message || err);
+    userDoc = await User.findOne({ discordId }).lean();
   }
 
-  // Re-read fresh data for rendering.
-  const userDoc = await User.findOne({ discordId }).lean();
   if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
     await interaction.editReply({
       content: `${UI.icons.info} Cậu chưa có roster nào. Dùng \`/add-roster\` để thêm trước nhé.`,
     });
     return;
   }
+
+  // Memoize per-character raid status for the lifetime of this one render.
+  // getStatusRaidsForCharacter is pure for a given character snapshot, so
+  // a simple Map keyed by character id (or normalized name fallback) lets
+  // global totals, per-account totals, and per-card rendering share one
+  // computation instead of repeating it three times per character.
+  const raidsCache = new Map();
+  const getRaidsFor = (character) => {
+    const key = character.id || normalizeName(getCharacterName(character));
+    let result = raidsCache.get(key);
+    if (!result) {
+      result = getStatusRaidsForCharacter(character);
+      raidsCache.set(key, result);
+    }
+    return result;
+  };
 
   const accounts = userDoc.accounts;
   const totalCharacters = accounts.reduce(
@@ -1031,14 +1064,14 @@ async function handleStatusCommand(interaction) {
   const allRaidEntries = [];
   for (const account of accounts) {
     for (const character of (account.characters || [])) {
-      allRaidEntries.push(...getStatusRaidsForCharacter(character));
+      allRaidEntries.push(...getRaidsFor(character));
     }
   }
   const globalProgress = summarizeRaidProgress(allRaidEntries);
   const globalTotals = { characters: totalCharacters, progress: globalProgress };
 
   const pages = accounts.map((account, idx) =>
-    buildAccountPageEmbed(account, idx, accounts.length, globalTotals)
+    buildAccountPageEmbed(account, idx, accounts.length, globalTotals, getRaidsFor)
   );
 
   if (pages.length === 1) {
@@ -1105,7 +1138,7 @@ function findCharacterInUser(userDoc, characterName) {
 async function autocompleteRaidSetCharacter(interaction, focused) {
   const needle = normalizeName(focused.value || "");
   const discordId = interaction.user.id;
-  const userDoc = await User.findOne({ discordId }).lean();
+  const userDoc = await loadUserForAutocomplete(discordId);
   if (!userDoc || !Array.isArray(userDoc.accounts)) {
     await interaction.respond([]).catch(() => {});
     return;
@@ -1163,7 +1196,7 @@ async function autocompleteRaidSetRaid(interaction, focused) {
     return;
   }
 
-  const userDoc = await User.findOne({ discordId }).lean();
+  const userDoc = await loadUserForAutocomplete(discordId);
   const character = findCharacterInUser(userDoc, characterInput);
   if (!character) {
     await interaction.respond(renderPlain()).catch(() => {});
@@ -1520,7 +1553,7 @@ async function handleRaidHelpSelect(interaction) {
 async function autocompleteRemoveRosterRoster(interaction, focused) {
   const needle = normalizeName(focused.value || "");
   const discordId = interaction.user.id;
-  const userDoc = await User.findOne({ discordId }).lean();
+  const userDoc = await loadUserForAutocomplete(discordId);
   if (!userDoc || !Array.isArray(userDoc.accounts)) {
     await interaction.respond([]).catch(() => {});
     return;
@@ -1549,7 +1582,7 @@ async function autocompleteRemoveRosterCharacter(interaction, focused) {
   }
   const needle = normalizeName(focused.value || "");
   const discordId = interaction.user.id;
-  const userDoc = await User.findOne({ discordId }).lean();
+  const userDoc = await loadUserForAutocomplete(discordId);
   if (!userDoc || !Array.isArray(userDoc.accounts)) {
     await interaction.respond([]).catch(() => {});
     return;
