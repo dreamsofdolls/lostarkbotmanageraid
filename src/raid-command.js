@@ -2896,10 +2896,10 @@ async function postRaidChannelWelcome(channel, botUserId, guildId) {
       await sent.pin();
       outcome.pinned = true;
       // Only persist the new welcome ID after BOTH post AND pin succeed.
-      // Persist failure below does NOT unwind the pin (rollback is messy
-      // and could itself fail), but it DOES skip the old-unpin step so
-      // that the old welcome stays pinned + findable by the next repin —
-      // avoids "DB points at new, stale pin still in channel" drift.
+      // Persist failure rolls back the fresh pin (best-effort unpin) so
+      // the DB and channel state stay coherent — otherwise we'd end up
+      // with a pinned-in-channel-but-not-tracked-in-DB welcome that the
+      // next repin can't find, letting stale pins accumulate over time.
       if (guildId) {
         try {
           await GuildConfig.findOneAndUpdate(
@@ -2910,6 +2910,12 @@ async function postRaidChannelWelcome(channel, botUserId, guildId) {
           outcome.persisted = true;
         } catch (err) {
           console.warn("[raid-channel] persist welcomeMessageId failed:", err?.message || err);
+          try {
+            await sent.unpin();
+          } catch (unpinErr) {
+            console.warn("[raid-channel] rollback-unpin after persist fail also failed:", unpinErr?.message || unpinErr);
+          }
+          outcome.pinned = false;
         }
       } else {
         // No guildId was passed — we can't persist, so treat as
