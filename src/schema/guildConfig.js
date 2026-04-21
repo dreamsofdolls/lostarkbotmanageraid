@@ -16,9 +16,9 @@ const guildConfigSchema = new mongoose.Schema(
     // next tick regardless of day of week.
     lastAutoCleanupKey: { type: String, default: null },
     // Discord message ID of the pinned welcome embed this bot posted in
-    // the monitor channel. Stored so `/raid-channel repin` can unpin the
-    // exact stored message instead of scanning every bot-authored pin
-    // (which would remove unrelated bot pins).
+    // the monitor channel. Stored so `/raid-channel config action:repin`
+    // can unpin the exact stored message instead of scanning every
+    // bot-authored pin (which would remove unrelated bot pins).
     welcomeMessageId: { type: String, default: null },
   },
   {
