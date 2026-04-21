@@ -909,11 +909,26 @@ async function refreshStaleAccounts(userDoc) {
 
   const results = await Promise.allSettled(
     staleAccounts.map(async (account) => {
-      const seed = account.accountName
-        || getCharacterName(account.characters?.[0] || {});
-      if (!seed) return { account, fetched: null };
-      const fetched = await fetchRosterCharacters(seed);
-      return { account, fetched };
+      const seeds = [];
+      if (account.accountName) seeds.push(account.accountName);
+      for (const c of (account.characters || [])) {
+        const n = getCharacterName(c);
+        if (n && !seeds.includes(n)) seeds.push(n);
+      }
+      if (seeds.length === 0) return { account, fetched: null };
+
+      for (const seed of seeds) {
+        try {
+          const fetched = await fetchRosterCharacters(seed);
+          if (Array.isArray(fetched) && fetched.length > 0) {
+            if (account.accountName !== seed) account.accountName = seed;
+            return { account, fetched };
+          }
+        } catch (err) {
+          console.warn(`[refresh] seed "${seed}" failed: ${err?.message || err}`);
+        }
+      }
+      return { account, fetched: null };
     })
   );
 
@@ -1421,7 +1436,12 @@ async function handleRaidSetCommand(interaction) {
     return;
   }
 
+  const effectiveGate = statusType === "process" ? targetGate : "";
+
   let updatedCount = 0;
+  let matchedCount = 0;
+  let ineligibleMaxItemLevel = 0;
+  let modeResetCount = 0;
   await saveWithRetry(async () => {
     const userDoc = await User.findOne({ discordId });
     if (!userDoc) throw new Error("User document disappeared during /raid-set");
@@ -1429,12 +1449,24 @@ async function handleRaidSetCommand(interaction) {
     ensureFreshWeek(userDoc);
 
     updatedCount = 0;
+    matchedCount = 0;
+    ineligibleMaxItemLevel = 0;
+    modeResetCount = 0;
     const now = Date.now();
+    const normalizedSelectedDiff = normalizeName(selectedDifficulty);
+    const officialGateList = getGatesForRaid(raidMeta.raidKey);
 
     for (const account of userDoc.accounts) {
       const characters = Array.isArray(account.characters) ? account.characters : [];
       for (const character of characters) {
         if (normalizeName(getCharacterName(character)) !== targetName) continue;
+
+        matchedCount += 1;
+        const charItemLevel = Number(character.itemLevel) || 0;
+        if (charItemLevel < raidMeta.minItemLevel) {
+          if (charItemLevel > ineligibleMaxItemLevel) ineligibleMaxItemLevel = charItemLevel;
+          continue;
+        }
 
         const assignedRaids = ensureAssignedRaids(character);
         const raidData = normalizeAssignedRaid(
@@ -1443,7 +1475,22 @@ async function handleRaidSetCommand(interaction) {
           raidMeta.raidKey
         );
 
-        const gateKeys = targetGate ? [targetGate] : getGateKeys(raidData);
+        let modeChangeDetected = false;
+        for (const g of officialGateList) {
+          const existingDiff = raidData[g]?.difficulty;
+          if (existingDiff && normalizeName(existingDiff) !== normalizedSelectedDiff) {
+            modeChangeDetected = true;
+            break;
+          }
+        }
+        if (modeChangeDetected) {
+          for (const g of officialGateList) {
+            raidData[g] = { difficulty: selectedDifficulty, completedDate: undefined };
+          }
+          modeResetCount += 1;
+        }
+
+        const gateKeys = effectiveGate ? [effectiveGate] : getGateKeys(raidData);
         const shouldMarkDone = statusType === "complete" || statusType === "process";
         for (const gate of gateKeys) {
           raidData[gate] = {
@@ -1467,9 +1514,17 @@ async function handleRaidSetCommand(interaction) {
     await userDoc.save();
   });
 
-  if (updatedCount === 0) {
+  if (matchedCount === 0) {
     await interaction.reply({
       content: `${UI.icons.warn} Không tìm thấy character **${characterName}** trong roster.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (updatedCount === 0) {
+    await interaction.reply({
+      content: `${UI.icons.warn} Character **${characterName}** đang ở iLvl **${ineligibleMaxItemLevel}**, chưa đủ **${raidMeta.minItemLevel}+** để thao tác **${raidMeta.label}**.`,
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -1486,9 +1541,14 @@ async function handleRaidSetCommand(interaction) {
     .addFields(
       { name: "Character", value: `**${characterName}**`, inline: true },
       { name: "Raid", value: `**${raidMeta.label}**`, inline: true },
-      { name: "Gates", value: targetGate || "All gates", inline: true },
+      { name: "Gates", value: effectiveGate || "All gates", inline: true },
     )
     .setTimestamp();
+  if (modeResetCount > 0) {
+    resultEmbed.setFooter({
+      text: `Switched difficulty to ${selectedDifficulty} — previous mode progress cleared for a consistent state.`,
+    });
+  }
 
   await interaction.reply({ embeds: [resultEmbed], flags: MessageFlags.Ephemeral });
 }
@@ -1821,9 +1881,20 @@ async function handleRemoveRosterCommand(interaction) {
         .setDescription(`Không tìm thấy character **${characterName}** trong roster **${account.accountName}**.`);
       return;
     }
+    const wasSeed = normalizeName(account.accountName) === normalizedChar;
     account.characters.splice(charIndex, 1);
+
+    let reseededTo = null;
+    if (wasSeed && account.characters.length > 0) {
+      const fallbackName = getCharacterName(account.characters[0]);
+      if (fallbackName) {
+        account.accountName = fallbackName;
+        reseededTo = fallbackName;
+      }
+    }
+
     await userDoc.save();
-    replyEmbed = new EmbedBuilder()
+    const embed = new EmbedBuilder()
       .setColor(UI.colors.muted)
       .setTitle(`🗑️ Character Removed`)
       .addFields(
@@ -1832,6 +1903,12 @@ async function handleRemoveRosterCommand(interaction) {
         { name: "Remaining", value: `${account.characters.length} character${account.characters.length === 1 ? "" : "s"}`, inline: true },
       )
       .setTimestamp();
+    if (reseededTo) {
+      embed.setFooter({
+        text: `Roster seed re-pointed to "${reseededTo}" so /raid-status refresh keeps working.`,
+      });
+    }
+    replyEmbed = embed;
   });
 
   if (replyEmbed) {
