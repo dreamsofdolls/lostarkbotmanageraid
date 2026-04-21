@@ -2726,8 +2726,8 @@ function buildRaidChannelWelcomeEmbed() {
       {
         name: "🤖 Lười post? Bật `/raid-auto-manage` nhé",
         value: [
-          "Artist có thể tự kéo log clear từ **lostark.bible** để update raid progress — không cần post thủ công. Bật bằng `/raid-auto-manage action:on` (chạy 1 initial sync luôn), sync thủ công bất cứ lúc nào bằng `action:sync`.",
-          "**Lưu ý quan trọng:** bible mặc định ẩn log của mỗi char. Muốn Artist đọc được thì phải vào <https://lostark.bible/me/logs> và bật `Show on Profile` cho từng char cậu muốn sync. Char nào tắt sẽ bị Artist skip vào bucket **Fail** với lỗi `403 Logs not enabled`.",
+          "Gõ `/raid-auto-manage action:on` để Artist tự update raid progress cho cậu, không cần post thủ công.",
+          "Nhớ bật **Public Log** cho từng char muốn sync tại <https://lostark.bible/me/logs> trước nha.",
         ].join("\n"),
       }
     )
