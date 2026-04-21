@@ -788,6 +788,9 @@ async function handleRaidCheckCommand(interaction) {
   const matchedCharacters = [];
 
   for (const userDoc of users) {
+    // Read-only freshness: don't let previous-week completions hide pending
+    // characters before the 30-minute background reset tick persists them.
+    ensureFreshWeek(userDoc);
     const accounts = Array.isArray(userDoc.accounts) ? userDoc.accounts : [];
     for (const account of accounts) {
       const characters = Array.isArray(account.characters) ? account.characters : [];
@@ -1161,8 +1164,9 @@ async function handleStatusCommand(interaction) {
     userDoc = await saveWithRetry(async () => {
       const doc = await User.findOne({ discordId });
       if (!doc) return null;
+      const didFreshenWeek = ensureFreshWeek(doc);
       const didRefresh = await refreshStaleAccounts(doc);
-      if (didRefresh) await doc.save();
+      if (didFreshenWeek || didRefresh) await doc.save();
       return doc.toObject();
     });
   } catch (err) {
