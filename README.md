@@ -124,8 +124,9 @@ Sau khi đăng ký, bất kỳ ai post message vào channel đó dạng `<raid> 
 - **Clear subcommand**: tắt monitor ngay, luôn write-through Mongo bất kể cache state.
 
 **Format:**
-- `Serca Nightmare Clauseduk` → mark Serca Nightmare của Clauseduk là DONE (cả raid)
-- `Serca Nor Soulrano G1` → mark Serca Normal G1 của Soulrano là done (single gate, status=process)
+- `Serca Nightmare Clauseduk` → mark Serca Nightmare của Clauseduk là DONE (tất cả gate)
+- `Kazeros Hard Soulrano G1` → mark G1 của Kazeros Hard (chưa clear tới G2)
+- `Serca Nor Soulrano G2` → **cumulative**: mark cả G1 lẫn G2 của Serca Normal (Lost Ark sequential: đi tới G2 ⇒ G1 đã qua)
 
 **Aliases** (case-insensitive):
 - Raid: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca` (accept typo `secra`)

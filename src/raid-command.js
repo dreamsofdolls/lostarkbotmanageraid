@@ -1528,8 +1528,9 @@ async function applyRaidSetForDiscordId({
   characterName,
   raidMeta,
   statusType,
-  effectiveGate,
+  effectiveGates,
 }) {
+  const gateList = Array.isArray(effectiveGates) ? effectiveGates.filter(Boolean) : [];
   const selectedDifficulty = toModeLabel(raidMeta.modeKey);
 
   let noRoster = false;
@@ -1598,7 +1599,7 @@ async function applyRaidSetForDiscordId({
       modeResetCount = 1;
     }
 
-    const gateKeys = effectiveGate ? [effectiveGate] : getGateKeys(raidData);
+    const gateKeys = gateList.length > 0 ? gateList : getGateKeys(raidData);
     const shouldMarkDone = statusType === "complete" || statusType === "process";
 
     // Short-circuit if the requested mark-done is a complete no-op: every
@@ -1695,12 +1696,15 @@ async function handleRaidSetCommand(interaction) {
     }
   }
 
+  // /raid-set slash command keeps explicit single-gate semantics — admin
+  // power-user surface needs the ability to mark exactly one gate without
+  // cascading to earlier ones (edge cases like fixing a bad record).
   const result = await applyRaidSetForDiscordId({
     discordId,
     characterName,
     raidMeta,
     statusType,
-    effectiveGate,
+    effectiveGates: effectiveGate ? [effectiveGate] : [],
   });
 
   if (result.noRoster) {
@@ -1874,7 +1878,7 @@ const HELP_SECTIONS = [
       "EN: Users post short messages like `Serca Nightmare Clauseduk` or `Serca Nor Soulrano G1`; bot parses, deletes the source message, and DMs the author a private confirmation embed.",
       "VN: Post message dạng `<raid> <difficulty> <character> [gate]` vào channel đã config — bot tự update raid, xóa message, và DM xác nhận riêng cho chính người post.",
       "• **Aliases**: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca` (accept typo `secra`) · `normal` / `nor` · `hard` · `nightmare` / `nm` · gates `G1` / `G2`.",
-      "• Không có gate = đánh dấu cả raid done (complete). Có gate = chỉ gate đó done (process).",
+      "• Không có gate = đánh dấu cả raid done (complete). Có gate `G_N` = **cumulative: mark G1 đến G_N đều done** (Lost Ark sequential progression — đi tới G2 nghĩa là G1 đã qua).",
       "• Chỉ poster tự update char của mình (cần có roster đã đăng ký qua `/add-roster`).",
       "• **Set**: kiểm tra bot permission trong channel đích, **post + pin welcome fresh trước**, rồi mới unpin welcome cũ (safe-order — partial failure giữ welcome cũ để channel không mất guidance).",
       "• **Show**: hiển thị channel + health check permissions + deploy-flag warnings.",
@@ -2365,7 +2369,11 @@ const GATE_TOKEN_RE = /^g([1-9])$/;
  *
  * Accepted patterns:
  *   "{raid} {difficulty} {character}"            → complete (all gates)
- *   "{raid} {difficulty} {character} G1"         → process (single gate)
+ *   "{raid} {difficulty} {character} G_N"        → process, handler
+ *                                                  cumulatively expands to
+ *                                                  gates G1..G_N so one
+ *                                                  post captures the full
+ *                                                  progression
  *
  * Raid aliases: act 4 / act4 / armoche · kazeros / kaz · serca
  * Difficulty aliases: normal / nor · hard · nightmare / nm
@@ -2449,12 +2457,13 @@ function parseRaidMessage(content) {
 function buildRaidChannelAlreadyCompleteEmbed({
   charName,
   raidMeta,
-  gate,
+  gates,
   statusType,
   guildName,
 }) {
-  const isSingleGate = statusType === "process" && gate;
-  const scopeLabel = isSingleGate ? `${raidMeta.label} · ${gate}` : raidMeta.label;
+  const gatesText = Array.isArray(gates) && gates.length > 0 ? gates.join(", ") : "All gates";
+  const isSingleOrPartial = statusType === "process" && Array.isArray(gates) && gates.length > 0;
+  const scopeLabel = isSingleOrPartial ? `${raidMeta.label} · ${gatesText}` : raidMeta.label;
 
   const embed = new EmbedBuilder()
     .setColor(UI.colors.progress)
@@ -2465,7 +2474,7 @@ function buildRaidChannelAlreadyCompleteEmbed({
     .addFields(
       { name: "Character", value: `**${charName}**`, inline: true },
       { name: "Raid", value: `**${raidMeta.label}**`, inline: true },
-      { name: "Gate", value: gate || "All gates", inline: true },
+      { name: "Gates", value: gatesText, inline: true },
       {
         name: "Muốn reset?",
         value: "Dùng `/raid-set character:<name> raid:<raid> status:reset` nếu cậu thật sự muốn mark-chưa-done cái này (ví dụ bị write nhầm).",
@@ -2480,7 +2489,7 @@ function buildRaidChannelAlreadyCompleteEmbed({
 function buildRaidChannelSuccessEmbed({
   charName,
   raidMeta,
-  gate,
+  gates,
   statusType,
   selectedDifficulty,
   modeResetCount,
@@ -2488,8 +2497,9 @@ function buildRaidChannelSuccessEmbed({
 }) {
   const isProcess = statusType === "process";
   const title = isProcess
-    ? `${UI.icons.done} Gate Completed`
+    ? `${UI.icons.done} Gate${Array.isArray(gates) && gates.length > 1 ? "s" : ""} Completed`
     : `${UI.icons.done} Raid Completed`;
+  const gatesText = Array.isArray(gates) && gates.length > 0 ? gates.join(", ") : "All gates";
 
   const embed = new EmbedBuilder()
     .setColor(UI.colors.success)
@@ -2498,7 +2508,7 @@ function buildRaidChannelSuccessEmbed({
     .addFields(
       { name: "Character", value: `**${charName}**`, inline: true },
       { name: "Raid", value: `**${raidMeta.label}**`, inline: true },
-      { name: "Gates", value: gate || "All gates", inline: true }
+      { name: "Gates", value: gatesText, inline: true }
     )
     .setTimestamp();
 
@@ -2529,9 +2539,9 @@ function buildRaidChannelWelcomeEmbed() {
       {
         name: "📌 Ví dụ cho dễ hình dung",
         value: [
-          "`Serca Nightmare Clauseduk` → mark cả Serca Nightmare là DONE",
-          "`Kazeros Hard Soulrano` → mark cả Kazeros Hard là DONE",
-          "`Serca Nor Soulrano G1` → chỉ mark G1 của Serca Normal thôi (khi chưa clear hết)",
+          "`Serca Nightmare Clauseduk` → mark cả Serca Nightmare là DONE (tất cả gate)",
+          "`Kazeros Hard Soulrano G1` → mark G1 của Kazeros Hard (chưa clear tới G2)",
+          "`Serca Nor Soulrano G2` → mark **G1 + G2** của Serca Normal (cumulative — đi tới G2 nghĩa là G1 cũng đã qua)",
         ].join("\n"),
       },
       {
@@ -2828,6 +2838,19 @@ async function handleRaidChannelMessage(message) {
 
   const statusType = gate ? "process" : "complete";
 
+  // Cumulative gate expansion for the text channel: posting `G2` means
+  // "cleared up to G2" in Lost Ark sequential progression (G1 is a prereq
+  // for G2 in-game, so you can't reach G2 without G1). Expand the single
+  // parsed gate into the full prefix [G1..G_N] so one post captures the
+  // whole progress. Slash command stays single-gate explicit for admin
+  // correction of individual gate records.
+  let effectiveGates = [];
+  if (gate) {
+    const allGates = getGatesForRaid(raidMeta.raidKey);
+    const gateIndex = allGates.indexOf(gate);
+    effectiveGates = gateIndex >= 0 ? allGates.slice(0, gateIndex + 1) : [gate];
+  }
+
   let result;
   try {
     result = await applyRaidSetForDiscordId({
@@ -2835,7 +2858,7 @@ async function handleRaidChannelMessage(message) {
       characterName: charName,
       raidMeta,
       statusType,
-      effectiveGate: gate || "",
+      effectiveGates,
     });
   } catch (err) {
     console.error("[raid-channel] write failed:", err?.message || err);
@@ -2862,7 +2885,7 @@ async function handleRaidChannelMessage(message) {
     const noticeEmbed = buildRaidChannelAlreadyCompleteEmbed({
       charName,
       raidMeta,
-      gate,
+      gates: effectiveGates,
       statusType,
       guildName: message.guild?.name,
     });
@@ -2886,7 +2909,7 @@ async function handleRaidChannelMessage(message) {
     ];
 
     if (!dmSucceeded) {
-      const scope = gate ? `${raidMeta.label} · ${gate}` : raidMeta.label;
+      const scope = effectiveGates.length > 0 ? `${raidMeta.label} · ${effectiveGates.join(", ")}` : raidMeta.label;
       const fallbackText = `${UI.icons.info} <@${message.author.id}> **${charName}** đã clear **${scope}** tuần này rồi — Artist không update lại. _(DM bị tắt — enable "Allow DMs from server members" để nhận notice private.)_`;
       ops.push(
         (async () => {
@@ -2926,7 +2949,7 @@ async function handleRaidChannelMessage(message) {
   const confirmEmbed = buildRaidChannelSuccessEmbed({
     charName,
     raidMeta,
-    gate,
+    gates: effectiveGates,
     statusType,
     selectedDifficulty: result.selectedDifficulty,
     modeResetCount: result.modeResetCount,
@@ -2955,8 +2978,8 @@ async function handleRaidChannelMessage(message) {
     // Public fallback: channel.send (not message.reply, because the source
     // message is about to be deleted in parallel). Auto-cleans after 15s so
     // the channel doesn't accumulate confirms.
-    const fallbackText = gate
-      ? `${UI.icons.done} <@${message.author.id}> đã mark **${raidMeta.label} · ${gate}** done cho **${charName}**. _(DM bị tắt — enable "Allow DMs from server members" để nhận confirm private.)_`
+    const fallbackText = effectiveGates.length > 0
+      ? `${UI.icons.done} <@${message.author.id}> đã mark **${raidMeta.label} · ${effectiveGates.join(", ")}** done cho **${charName}**. _(DM bị tắt — enable "Allow DMs from server members" để nhận confirm private.)_`
       : `${UI.icons.done} <@${message.author.id}> đã mark **${raidMeta.label}** done cho **${charName}**. _(DM bị tắt — enable "Allow DMs from server members" để nhận confirm private.)_`;
     ops.push(
       (async () => {
