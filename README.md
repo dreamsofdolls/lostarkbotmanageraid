@@ -138,7 +138,7 @@ Sau khi đăng ký, bất kỳ ai post message vào channel đó dạng `<raid> 
 | Internal error (DB/Discord fail) | Reply transient tự xóa 10s |
 | Success | DM user embed xác nhận + xóa message gốc + dọn hint cũ của user đó (nếu có) |
 
-**DM confirmation**: Discord chỉ hỗ trợ ephemeral (chỉ tác giả thấy) cho interactions — không có trên `MessageCreate`. Workaround là DM. Nếu user tắt "Allow direct messages from server members" → DM fail (log warn), raid progress vẫn được update đúng, chỉ missing notification private.
+**DM confirmation**: Discord chỉ hỗ trợ ephemeral (chỉ tác giả thấy) cho interactions — không có trên `MessageCreate`. Workaround là DM. Nếu user tắt "Allow direct messages from server members" → DM fail, bot **fallback post 1 tin nhắn công khai ngắn** mention user + raid + char, tự xóa sau 15 giây, để user vẫn biết update đã thành công thay vì thấy message biến mất không phản hồi. Log warn chỉ ở server, user được thông báo cách bật lại DM để nhận confirm private lần sau.
 
 **Prerequisites deploy:**
 1. Bật `MESSAGE CONTENT INTENT` trong Discord Developer Portal → Bot → Privileged Gateway Intents. Nếu không bật, bot **sẽ không start được** (Discord reject login với "Used disallowed intents") — dùng env `TEXT_MONITOR_ENABLED=false` để deploy slash-command-only mà không cần privileged intent.

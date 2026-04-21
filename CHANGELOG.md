@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. Dates use t
 
 ## 2026-04-21
 
+### Fixed (round 11 Codex review)
+
+- **[LOW] Monitor cache is now loaded unconditionally at boot, regardless of `TEXT_MONITOR_ENABLED`.** Round 10 guarded the `loadMonitorChannelCache()` call behind the deploy flag. That left `/raid-channel show` blind to any `raidChannelId` already persisted in Mongo when the monitor was deploy-disabled — the cache was empty, so show reported "chưa config channel nào" even when stale config existed. Cache-load is pure DB I/O with zero Discord dependency, so loading it always is cheap and keeps `show` coherent with reality. `src/bot.js` (startBot cache-load condition removed).
+- **[LOW] `/raid-channel show` now appends deploy notes in both config branches.** Previously the `deployNotes` list (monitor-disabled warning, cache-unhealthy warning) was only concatenated into the "no channel configured" branch of the description. When a channel WAS configured, admins would not see the deploy-level warnings at all — defeating the diagnostic purpose. Both branches now append deployNotes after the channel/permission status so flags stay visible regardless of config state. `src/raid-command.js` (handleRaidChannelCommand show branch).
+- **[LOW] README DM-confirmation paragraph synced with the public fallback behavior.** The paragraph still said "DM fail → chỉ missing notification private", which contradicted the error-UX table above it (and the round-10 code). Updated to describe the public 15s transient fallback + the DM privacy toggle hint. `README.md`.
+
 ### Fixed (round 10 Codex review)
 
 - **[MEDIUM] `/raid-channel set` refuses to save when `TEXT_MONITOR_ENABLED=false`.** Previously admin could set a channel + get a success embed + trigger the pinned welcome even when the bot process had `MessageContent` intent turned off at the deploy layer — members would then see the welcome, post raid-clears, and watch the bot silently ignore them. `set` now short-circuits with a warning when the deploy flag is off and leaves config unchanged. `show` surfaces the same flag state as a deploy note alongside channel info so admins can spot mismatches without digging through logs. `src/raid-command.js` (new `isTextMonitorEnabled`, `/raid-channel set` + `show` branches).
