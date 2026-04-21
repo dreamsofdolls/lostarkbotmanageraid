@@ -161,8 +161,8 @@ Config lưu trong collection `guildconfigs` của MongoDB, per-guild.
 
 Kéo clear logs từ `lostark.bible/api/character/logs` và reconcile tự động vào `assignedRaids`. Phase 1 chỉ hỗ trợ **manual sync** trigger; phase 2 sẽ hook vào `/raid-status` để auto-run khi opt-in.
 
-Subcommands (option `action`):
-- `on` — set `User.autoManageEnabled = true` **và kickstart 1 initial sync ngay** để populate raid đã clear tuần này. Tiện UX "bật là có data liền" thay vì phải chạy `action:sync` thủ công lần đầu.
+Subcommands (option `action`, **dynamic autocomplete** — dropdown chỉ show action khả dụng theo state hiện tại, ví dụ đang ON thì ẩn `on`):
+- `on` — **probe-before-enable flow**: Artist chạy 1 lần sync in-memory (không save) để phân loại char, nếu có char private → hiện warn embed với nút `Vẫn bật` / `Huỷ` (timeout 60s = default Huỷ). Confirm thì re-run sync trên fresh doc + flip `User.autoManageEnabled = true` + save. Cancel/timeout thì flag giữ OFF, không save gì. Không có char private → commit trực tiếp + render sync report.
 - `off` — tắt flag (không đụng raid data đã sync)
 - `sync` — pull logs NGAY cho tất cả char trong roster, reconcile raid progress của tuần này
 - `status` — hiển thị opt-in flag + **Last success** (timestamp lần sync có ≥1 char thành công) + **Last attempt** (timestamp lần chạy gần nhất; khi `= last success` thì lần gần nhất đã thành công, khi hiện `— fail` thì các attempt sau đó đều fail)
@@ -187,7 +187,8 @@ Subcommands (option `action`):
 - Share `bibleLimiter` (max 2 concurrent) với `/raid-status` refresh để không overwhelm bible.
 - Nếu bible 403 (Cloudflare block) → phase 2 sẽ port ScraperAPI fallback từ LoaLogs.
 - **Private logs (`403 Logs not enabled`)**: bible trả 403 cho char có `Show on Profile` UNCHECKED trong [lostark.bible/me/logs](https://lostark.bible/me/logs). Session cookie của owner thì thấy được, nhưng cookie là HTTP-only + upload token (Generate Token ở `/me/upload`) đã test là write-only — bot không có cách auth thay user. User muốn sync char hidden phải tự bật `Show on Profile` trên bible, hoặc chấp nhận char đó skip (report hiện bucket "Fail").
-- **Per-user throttle (5-min cooldown + in-flight guard)**: dựa trên `User.lastAutoManageAttemptAt` + in-memory `Set` theo `discordId`. `action:sync` spam trong 5 phút → ephemeral reject với remaining time. In-flight song song cùng user → reject ngay. `action:on` có logic mềm hơn: in-flight thì reject hard, nhưng cooldown thì vẫn flip flag (UX: "bật" không bao giờ fail), chỉ skip initial sync và báo user chờ X phút. Cần guard vì mỗi sync chạy scrape+paginate cho toàn roster (N-char × HTTP calls) — `bibleLimiter` chỉ cap concurrency, không chặn total queue.
+- **Per-user throttle (5-min cooldown + in-flight guard)**: dựa trên `User.lastAutoManageAttemptAt` + in-memory `Set` theo `discordId`. `action:sync` spam trong 5 phút → ephemeral reject với remaining time. In-flight song song cùng user → reject ngay. `action:on` có logic mềm hơn: in-flight thì reject hard, nhưng cooldown thì vẫn flip flag (UX: "bật" không bao giờ fail), chỉ skip cả probe lẫn sync và báo user chờ X phút. Cần guard vì mỗi sync chạy scrape+paginate cho toàn roster (N-char × HTTP calls) — `bibleLimiter` chỉ cap concurrency, không chặn total queue.
+- **Redundant-state reject**: typed `action:on` khi đang ON, hoặc `action:off` khi đang OFF → ephemeral reject (autocomplete đã hide rồi, nhưng paste-value bypass được). Save a pointless DB write + không tạo nhiễu "đã bật rồi" trong log.
 
 ## Raid Catalog
 
