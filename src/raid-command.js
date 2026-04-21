@@ -514,17 +514,17 @@ function isRaidLeader(interaction) {
 
 const addRosterCommand = new SlashCommandBuilder()
   .setName("add-roster")
-  .setDescription("Sync a roster from one character and save the top item levels")
+  .setDescription("Sync a roster from lostark.bible")
   .addStringOption((option) =>
     option
       .setName("name")
-      .setDescription("A character name that belongs to the target roster")
+      .setDescription("Any character name in the roster")
       .setRequired(true)
   )
   .addIntegerOption((option) =>
     option
       .setName("total")
-      .setDescription("How many characters to save (1-6, default: 6)")
+      .setDescription("How many characters to save (1-6)")
       .setRequired(false)
       .setMinValue(1)
       .setMaxValue(6)
@@ -547,51 +547,51 @@ const raidCheckCommand = new SlashCommandBuilder()
 
 const raidSetCommand = new SlashCommandBuilder()
   .setName("raid-set")
-  .setDescription("Set complete status for a character raid (full raid or specific gate)")
+  .setDescription("Mark raid progress for a character")
   .addStringOption((option) =>
     option
       .setName("character")
-      .setDescription("Character name (autocomplete from your saved roster)")
+      .setDescription("Character to update")
       .setRequired(true)
       .setAutocomplete(true)
   )
   .addStringOption((option) =>
     option
       .setName("raid")
-      .setDescription("Raid to update (auto-filtered by selected character's eligibility + progress)")
+      .setDescription("Raid to update for this character")
       .setRequired(true)
       .setAutocomplete(true)
   )
   .addStringOption((option) =>
     option
       .setName("status")
-      .setDescription("complete | reset — auto-filtered by raid progress")
+      .setDescription("complete or reset")
       .setRequired(true)
       .setAutocomplete(true)
   )
   .addStringOption((option) =>
     option
       .setName("gate")
-      .setDescription("Specific gate — only active when status = Process")
+      .setDescription("Specific gate (optional)")
       .setRequired(false)
       .setAutocomplete(true)
   );
 
 const statusCommand = new SlashCommandBuilder()
   .setName("raid-status")
-  .setDescription("View your raid completion status by account and character");
+  .setDescription("View your raid progress");
 
 const raidHelpCommand = new SlashCommandBuilder()
   .setName("raid-help")
-  .setDescription("Show help for the raid management bot (bilingual EN + VN)");
+  .setDescription("Show help for all raid commands");
 
 const removeRosterCommand = new SlashCommandBuilder()
   .setName("remove-roster")
-  .setDescription("Remove a saved roster or a specific character from your data")
+  .setDescription("Remove a roster or a character")
   .addStringOption((option) =>
     option
       .setName("roster")
-      .setDescription("Roster (account) to target — autocomplete from your saved data")
+      .setDescription("Roster to target")
       .setRequired(true)
       .setAutocomplete(true)
   )
@@ -608,7 +608,7 @@ const removeRosterCommand = new SlashCommandBuilder()
   .addStringOption((option) =>
     option
       .setName("character")
-      .setDescription("Character to remove (required if action = Remove a single character)")
+      .setDescription("Character to remove (if removing one char)")
       .setRequired(false)
       .setAutocomplete(true)
   );
@@ -629,13 +629,13 @@ const RAID_CHANNEL_ACTION_CHOICES = [
 
 const raidChannelCommand = new SlashCommandBuilder()
   .setName("raid-channel")
-  .setDescription("Configure the raid monitor channel (admin only)")
+  .setDescription("Configure the raid monitor channel")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .setDMPermission(false)
   .addSubcommand((sub) =>
     sub
       .setName("config")
-      .setDescription("Run a config action on the raid monitor")
+      .setDescription("Config action to run")
       .addStringOption((opt) =>
         opt
           .setName("action")
@@ -646,7 +646,7 @@ const raidChannelCommand = new SlashCommandBuilder()
       .addChannelOption((opt) =>
         opt
           .setName("channel")
-          .setDescription("Target text channel (only used when action=set)")
+          .setDescription("Target text channel (for action=set)")
           .setRequired(false)
           .addChannelTypes(ChannelType.GuildText)
       )
@@ -654,19 +654,17 @@ const raidChannelCommand = new SlashCommandBuilder()
 
 const raidAutoManageCommand = new SlashCommandBuilder()
   .setName("raid-auto-manage")
-  .setDescription("Auto-sync raid progress from lostark.bible clear logs")
+  .setDescription("Auto-sync raid progress from lostark.bible")
   .setDMPermission(false)
   .addStringOption((opt) =>
     opt
       .setName("action")
-      .setDescription("Pick what to do")
+      .setDescription("on · off · sync · status")
       .setRequired(true)
-      .addChoices(
-        { name: "on — enable auto-sync + run an initial sync now", value: "on" },
-        { name: "off — disable auto-sync", value: "off" },
-        { name: "sync — pull bible logs now and reconcile raid progress", value: "sync" },
-        { name: "status — show current opt-in + last sync time", value: "status" }
-      )
+      // Autocomplete (not static choices) so we can hide `on` while already
+      // enabled and hide `off` while already disabled — the redundant action
+      // in each state shouldn't even appear in the dropdown.
+      .setAutocomplete(true)
   );
 
 const commands = [
@@ -1937,7 +1935,7 @@ const HELP_SECTIONS = [
     short: "Auto-sync raid progress from lostark.bible",
     shortVn: "Tự động sync tiến độ raid từ lostark.bible logs",
     options: [
-      { name: "action:on", required: false, desc: "Bật auto-sync + **kickstart 1 lần sync ngay** để populate raid đã clear tuần này" },
+      { name: "action:on", required: false, desc: "Bật auto-sync + **probe roster trước** → nếu có char chưa bật Public Log, Artist hiện warning với nút `Vẫn bật` / `Huỷ` (60s timeout). Pass thì kickstart 1 lần sync ngay." },
       { name: "action:off", required: false, desc: "Tắt auto-sync" },
       { name: "action:sync", required: false, desc: "Manual sync — pull logs từ bible ngay và reconcile vào DB" },
       { name: "action:status", required: false, desc: "Xem state on/off + **Last success** (lần sync có ≥1 char thành công) + **Last attempt** (lần gọi gần nhất — hiện `— fail` khi các attempt sau success đều lỗi)" },
@@ -1956,7 +1954,9 @@ const HELP_SECTIONS = [
       "• **Rate limit**: share `bibleLimiter` (max 2 request concurrent) với `/raid-status` refresh — không blast bible.",
       "• **Last success vs Last attempt**: nếu Cloudflare block hoặc bible trả `Logs not enabled` cho TẤT CẢ char, `lastAutoManageSyncAt` không được stamp (chỉ `lastAutoManageAttemptAt`). `action:status` surface cả 2 để admin thấy rõ khi sync đang fail liên tục.",
       "• **Private logs → 403 Logs not enabled**: char có `Show on Profile` tắt trên `lostark.bible/me/logs` sẽ bị skip và hiện ở bucket Fail. Bot không auth thay user được (cookie HTTP-only, upload token write-only — đã test 2026-04-21). User phải tự bật `Show on Profile` cho chars muốn sync, hoặc chấp nhận skip.",
-      "• **Per-user sync throttle**: 5 phút cooldown + in-flight guard. `action:sync` spam → reject ephemeral với remaining time (tránh N-roster × M-char HTTP calls dội bible). `action:on` đang in-flight thì reject; đang cooldown thì vẫn flip flag nhưng skip initial sync, báo user chờ X phút rồi gõ `sync` sau.",
+      "• **Probe-before-enable**: khi gõ `action:on`, Artist chạy 1 lần sync **in memory** (không save) để phân loại char visible vs private. Nếu có char private → hiện warn embed với 2 nút `Vẫn bật` / `Huỷ`, timeout 60s = default Huỷ. Confirm thì re-run sync trên fresh doc rồi save; Cancel/timeout thì flag giữ OFF, không save gì.",
+      "• **Per-user sync throttle**: 5 phút cooldown + in-flight guard. `action:sync` spam → reject ephemeral với remaining time (tránh N-roster × M-char HTTP calls dội bible). `action:on` đang in-flight thì reject; đang cooldown thì vẫn flip flag nhưng skip cả probe lẫn sync, báo user chờ X phút rồi gõ `sync` sau.",
+      "• **Dynamic action dropdown**: dropdown autocomplete hide option dư thừa theo state — đang ON thì không show `on`, đang OFF thì không show `off`. Typed-paste `on`/`off` khi redundant → ephemeral reject.",
       "• **Chưa hook vào `/raid-status`** (phase 1 chỉ manual `action:sync`). Phase sau: opt-in flag sẽ trigger sync tự động.",
     ],
   },
@@ -3668,6 +3668,31 @@ async function handleRaidAutoManageCommand(interaction) {
   const discordId = interaction.user.id;
   const action = interaction.options.getString("action", true);
 
+  // Redundant-state reject for manually-typed `on`/`off` (autocomplete
+  // already hides the redundant option, but users can paste the full
+  // option value). Cheap lean read gates both branches with one query.
+  if (action === "on" || action === "off") {
+    const stateUser = await User.findOne(
+      { discordId },
+      { autoManageEnabled: 1 }
+    ).lean();
+    const enabled = !!stateUser?.autoManageEnabled;
+    if (action === "on" && enabled) {
+      await interaction.reply({
+        content: `${UI.icons.info} Auto-manage đang bật rồi. Dùng \`/raid-auto-manage action:sync\` để sync ngay, hoặc \`action:status\` để xem trạng thái.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (action === "off" && !enabled) {
+      await interaction.reply({
+        content: `${UI.icons.info} Auto-manage đang tắt sẵn rồi — không có gì để disable nữa.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+  }
+
   if (action === "off") {
     await User.findOneAndUpdate(
       { discordId },
@@ -3686,23 +3711,21 @@ async function handleRaidAutoManageCommand(interaction) {
   }
 
   if (action === "on") {
-    // Enabling = set flag + run an initial sync immediately so the user
-    // sees the feature working right away instead of waiting for the
-    // next /raid-status (phase 2) or running /sync manually. Admin UX:
-    // flipping the switch should "just do the thing".
+    // Two-phase enable flow:
+    //   Phase A (probe): fetch user, run sync in-memory WITHOUT saving.
+    //     Tell us which chars return "403 / logs not enabled" before we
+    //     flip anything.
+    //   Phase B (commit): re-run sync on a fresh doc inside saveWithRetry
+    //     and persist. Runs either immediately (no hidden chars) or after
+    //     the user clicks "Vẫn bật" on the warning.
     //
-    // Guard semantics for `on` differ from `sync`:
-    //   - in-flight   → reject hard (a sync is already running for this
-    //                   user; firing `on` now would double-run).
-    //   - cooldown    → still flip the flag so "on" always succeeds at the
-    //                   UX level, but SKIP the initial sync and tell the
-    //                   user they can run /sync in X minutes. Prevents a
-    //                   user who did /sync → on → on … from triggering
-    //                   piles of scrape work.
-    // acquireAutoManageSyncSlot reserves synchronously if possible →
-    // TOCTOU-safe. When `acquired === true`, we own the slot and MUST
-    // release in finally. When cooldown, helper already released — just
-    // track `cooldownSkip` so we don't release something we don't hold.
+    // If phase A finds any hidden-log chars → show a warning with confirm
+    // / cancel buttons. 60s collector, invoker-scoped. Cancel or timeout →
+    // flag stays OFF, nothing saved.
+    //
+    // Guard semantics for `on` (preserved from earlier rounds):
+    //   - in-flight  → reject hard.
+    //   - cooldown   → flip flag only, skip both probe and sync.
     const guard = await acquireAutoManageSyncSlot(discordId);
     if (!guard.acquired && guard.reason === "in-flight") {
       await interaction.reply({
@@ -3714,46 +3737,21 @@ async function handleRaidAutoManageCommand(interaction) {
     const cooldownSkip = !guard.acquired && guard.reason === "cooldown";
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     try {
-      const weekResetStart = weekResetStartMs();
-      let report;
-      let hadRoster = true;
-      await saveWithRetry(async () => {
-        const userDoc = await User.findOne({ discordId });
-        if (!userDoc) {
-          // Still flip the flag so turning on for a future roster "sticks".
-          await User.findOneAndUpdate(
-            { discordId },
-            { $set: { autoManageEnabled: true } },
-            { upsert: true, setDefaultsOnInsert: true }
-          );
-          hadRoster = false;
-          return;
-        }
-        userDoc.autoManageEnabled = true;
-        if (!Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
-          hadRoster = false;
-          await userDoc.save();
-          return;
-        }
-        if (cooldownSkip) {
-          // Persist the flag flip only — no sync this run.
-          await userDoc.save();
-          return;
-        }
-        ensureFreshWeek(userDoc);
-        report = await syncAutoManageForUserDoc(userDoc, weekResetStart);
-        const now = Date.now();
-        userDoc.lastAutoManageAttemptAt = now;
-        // Only stamp "last success" if at least one char actually
-        // fetched+reconciled without throwing. Otherwise status would
-        // falsely claim fresh data after a wall of 403s.
-        if (report.perChar.some((c) => !c.error)) {
-          userDoc.lastAutoManageSyncAt = now;
-        }
-        await userDoc.save();
-      });
-
+      // --- Cooldown path: flip flag only, skip sync ---
       if (cooldownSkip) {
+        await saveWithRetry(async () => {
+          const userDoc = await User.findOne({ discordId });
+          if (!userDoc) {
+            await User.findOneAndUpdate(
+              { discordId },
+              { $set: { autoManageEnabled: true } },
+              { upsert: true, setDefaultsOnInsert: true }
+            );
+            return;
+          }
+          userDoc.autoManageEnabled = true;
+          await userDoc.save();
+        });
         const embed = new EmbedBuilder()
           .setColor(UI.colors.success)
           .setTitle(`${UI.icons.done} Auto-manage enabled (sync skipped)`)
@@ -3767,7 +3765,17 @@ async function handleRaidAutoManageCommand(interaction) {
         return;
       }
 
-      if (!hadRoster) {
+      // --- Phase A: probe (no save) ---
+      const weekResetStart = weekResetStartMs();
+      const probeDoc = await User.findOne({ discordId });
+
+      // No user doc at all — flag flip only, show no-roster embed.
+      if (!probeDoc) {
+        await User.findOneAndUpdate(
+          { discordId },
+          { $set: { autoManageEnabled: true } },
+          { upsert: true, setDefaultsOnInsert: true }
+        );
         const embed = new EmbedBuilder()
           .setColor(UI.colors.success)
           .setTitle(`${UI.icons.done} Auto-manage enabled`)
@@ -3779,25 +3787,104 @@ async function handleRaidAutoManageCommand(interaction) {
         return;
       }
 
-      // Reuse the sync-report embed but tweak title so admin knows the
-      // flag flip also happened in this run.
-      const syncEmbed = buildAutoManageSyncReportEmbed(report);
-      syncEmbed.setTitle(
-        `${UI.icons.done} Auto-manage enabled · initial sync ${
-          (report?.appliedTotal || 0) > 0 ? "complete" : "nothing to apply"
-        }`
+      // Roster empty — flag flip only.
+      if (!Array.isArray(probeDoc.accounts) || probeDoc.accounts.length === 0) {
+        probeDoc.autoManageEnabled = true;
+        await probeDoc.save();
+        const embed = new EmbedBuilder()
+          .setColor(UI.colors.success)
+          .setTitle(`${UI.icons.done} Auto-manage enabled`)
+          .setDescription(
+            "Đã bật auto-manage. Chưa có roster nên Artist chưa sync được gì — chạy `/add-roster` trước rồi gọi `/raid-auto-manage action:sync` để pull logs."
+          )
+          .setTimestamp();
+        await interaction.editReply({ embeds: [embed] });
+        return;
+      }
+
+      // Run sync in memory — DO NOT save probeDoc. We just want the
+      // perChar report to inspect hidden chars.
+      ensureFreshWeek(probeDoc);
+      const probeReport = await syncAutoManageForUserDoc(probeDoc, weekResetStart);
+      const hiddenChars = (probeReport?.perChar || []).filter((c) =>
+        isPublicLogDisabledError(c?.error)
       );
-      await interaction.editReply({ embeds: [syncEmbed] });
+
+      // --- Direct commit path: no hidden chars found ---
+      if (hiddenChars.length === 0) {
+        const finalReport = await commitAutoManageOn(discordId, weekResetStart);
+        const syncEmbed = buildAutoManageSyncReportEmbed(finalReport);
+        syncEmbed.setTitle(
+          `${UI.icons.done} Auto-manage enabled · initial sync ${
+            (finalReport?.appliedTotal || 0) > 0 ? "complete" : "nothing to apply"
+          }`
+        );
+        await interaction.editReply({ embeds: [syncEmbed] });
+        return;
+      }
+
+      // --- Warn + confirm path: hidden chars detected ---
+      const warnEmbed = buildAutoManageHiddenCharsWarningEmbed(
+        hiddenChars,
+        probeReport
+      );
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("auto-manage:confirm-on")
+          .setLabel("Vẫn bật")
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId("auto-manage:cancel-on")
+          .setLabel("Huỷ")
+          .setStyle(ButtonStyle.Secondary)
+      );
+      await interaction.editReply({ embeds: [warnEmbed], components: [row] });
+
+      const replyMsg = await interaction.fetchReply();
+      let decision = null;
+      try {
+        const btn = await replyMsg.awaitMessageComponent({
+          filter: (i) =>
+            i.user.id === discordId && i.customId.startsWith("auto-manage:"),
+          componentType: ComponentType.Button,
+          time: 60_000,
+        });
+        decision = btn.customId === "auto-manage:confirm-on" ? "confirm" : "cancel";
+        await btn.deferUpdate().catch(() => {});
+      } catch {
+        decision = "timeout";
+      }
+
+      if (decision === "confirm") {
+        const finalReport = await commitAutoManageOn(discordId, weekResetStart);
+        const syncEmbed = buildAutoManageSyncReportEmbed(finalReport);
+        syncEmbed.setTitle(
+          `${UI.icons.done} Auto-manage enabled · initial sync ${
+            (finalReport?.appliedTotal || 0) > 0 ? "complete" : "nothing to apply"
+          }`
+        );
+        await interaction.editReply({ embeds: [syncEmbed], components: [] });
+      } else {
+        const title =
+          decision === "timeout"
+            ? "Auto-manage giữ OFF (timeout)"
+            : "Auto-manage giữ OFF";
+        const cancelEmbed = new EmbedBuilder()
+          .setColor(UI.colors.muted)
+          .setTitle(`${UI.icons.reset} ${title}`)
+          .setDescription(
+            "Không có gì thay đổi. Bật **Public Log** cho char trên <https://lostark.bible/me/logs> rồi gõ `/raid-auto-manage action:on` lại nhé."
+          )
+          .setTimestamp();
+        await interaction.editReply({ embeds: [cancelEmbed], components: [] });
+      }
     } catch (err) {
       console.error("[auto-manage] enable-with-sync failed:", err?.message || err);
-      // Flag flip already persisted in the try block (or upsert above) —
-      // surface the sync error but tell the user auto-manage is still ON.
       await interaction.editReply({
-        content: `${UI.icons.warn} Auto-manage đã bật, nhưng initial sync fail: ${err?.message || err}. Thử lại qua \`/raid-auto-manage action:sync\` nhé.`,
-      });
+        content: `${UI.icons.warn} Probe/sync fail: ${err?.message || err}. Auto-manage GIỮ OFF — thử lại sau.`,
+        components: [],
+      }).catch(() => {});
     } finally {
-      // Only release if we actually held the slot. cooldownSkip path
-      // bypassed acquisition (helper released internally).
       if (!cooldownSkip) releaseAutoManageSyncSlot(discordId);
     }
     return;
@@ -3895,6 +3982,88 @@ async function handleRaidAutoManageCommand(interaction) {
       releaseAutoManageSyncSlot(discordId);
     }
   }
+}
+
+function isPublicLogDisabledError(err) {
+  if (!err) return false;
+  const msg = String(err);
+  return /\b403\b/.test(msg) || /logs\s*not\s*enabled/i.test(msg);
+}
+
+/**
+ * Commit the "auto-manage on" transition: flip the flag, re-run a fresh
+ * sync against a re-fetched User doc, stamp lastAutoManageAttemptAt (and
+ * lastAutoManageSyncAt if any char actually fetched without error), save.
+ *
+ * Returns the sync report so the caller can render it. Safe to call under
+ * an acquired sync slot — it only does one findOne/save cycle inside
+ * saveWithRetry and does not re-acquire the slot.
+ */
+async function commitAutoManageOn(discordId, weekResetStart) {
+  let finalReport;
+  await saveWithRetry(async () => {
+    const fresh = await User.findOne({ discordId });
+    if (!fresh) return;
+    fresh.autoManageEnabled = true;
+    if (!Array.isArray(fresh.accounts) || fresh.accounts.length === 0) {
+      await fresh.save();
+      return;
+    }
+    ensureFreshWeek(fresh);
+    finalReport = await syncAutoManageForUserDoc(fresh, weekResetStart);
+    const now = Date.now();
+    fresh.lastAutoManageAttemptAt = now;
+    if (finalReport.perChar.some((c) => !c.error)) {
+      fresh.lastAutoManageSyncAt = now;
+    }
+    await fresh.save();
+  });
+  return finalReport;
+}
+
+function buildAutoManageHiddenCharsWarningEmbed(hiddenChars, probeReport) {
+  const visibleApplied = (probeReport?.perChar || []).filter(
+    (c) => !c.error && Array.isArray(c.applied) && c.applied.length > 0
+  );
+  const lines = hiddenChars.slice(0, 20).map((c) => `• **${c.charName || "?"}**`);
+  const extra = hiddenChars.length > 20 ? `\n• …và ${hiddenChars.length - 20} char khác` : "";
+
+  const description = [
+    `**${hiddenChars.length}/${(probeReport?.perChar || []).length}** char chưa bật **Public Log** trên <https://lostark.bible/me/logs>. Artist sẽ **bỏ qua** các char đó khi sync.`,
+    "",
+    "**Char bị skip:**",
+    `${lines.join("\n")}${extra}`,
+  ].join("\n");
+
+  const embed = new EmbedBuilder()
+    .setColor(UI.colors.progress)
+    .setTitle(`${UI.icons.warn} Một vài char chưa bật Public Log`)
+    .setDescription(description)
+    .setTimestamp();
+
+  if (visibleApplied.length > 0) {
+    embed.addFields({
+      name: "🟢 Các char sẽ sync được",
+      value: visibleApplied
+        .slice(0, 10)
+        .map((c) => `• **${c.charName}** · ${c.applied.length} raid/gate`)
+        .join("\n") +
+        (visibleApplied.length > 10 ? `\n• …và ${visibleApplied.length - 10} char khác` : ""),
+      inline: false,
+    });
+  }
+
+  embed.addFields({
+    name: "Lựa chọn",
+    value: [
+      "**Vẫn bật** — Artist bật auto-manage và sync các char visible (bỏ qua char private).",
+      "**Huỷ** — giữ OFF. Bật Public Log cho chars cần sync rồi quay lại.",
+      "_60s không bấm → mặc định Huỷ._",
+    ].join("\n"),
+    inline: false,
+  });
+
+  return embed;
 }
 
 function buildAutoManageSyncReportEmbed(report) {
@@ -4027,6 +4196,52 @@ async function handleRaidChannelAutocomplete(interaction) {
     await interaction.respond(choices).catch(() => {});
   } catch (err) {
     console.error("[autocomplete] raid-channel error:", err?.message || err);
+    await interaction.respond([]).catch(() => {});
+  }
+}
+
+// /raid-auto-manage `action` autocomplete — filters the four actions by the
+// user's current autoManageEnabled state so the dropdown never shows the
+// redundant option (e.g. `on` while already ON).
+const AUTO_MANAGE_ACTION_CHOICES = [
+  { name: "on — enable auto-sync + run an initial sync now", value: "on", showWhenOn: false, showWhenOff: true },
+  { name: "off — disable auto-sync", value: "off", showWhenOn: true, showWhenOff: false },
+  { name: "sync — pull bible logs now and reconcile raid progress", value: "sync", showWhenOn: true, showWhenOff: true },
+  { name: "status — show current opt-in + last sync time", value: "status", showWhenOn: true, showWhenOff: true },
+];
+
+async function handleRaidAutoManageAutocomplete(interaction) {
+  try {
+    const focused = interaction.options.getFocused(true);
+    if (focused?.name !== "action") {
+      await interaction.respond([]).catch(() => {});
+      return;
+    }
+
+    let enabled = false;
+    try {
+      const user = await User.findOne(
+        { discordId: interaction.user.id },
+        { autoManageEnabled: 1 }
+      ).lean();
+      enabled = !!user?.autoManageEnabled;
+    } catch (err) {
+      console.warn("[autocomplete] auto-manage state load failed:", err?.message || err);
+    }
+
+    const needle = normalizeName(focused.value || "");
+    const choices = AUTO_MANAGE_ACTION_CHOICES
+      .filter((c) => (enabled ? c.showWhenOn : c.showWhenOff))
+      .filter((c) => {
+        if (!needle) return true;
+        return normalizeName(c.name).includes(needle) || normalizeName(c.value).includes(needle);
+      })
+      .map(({ name, value }) => ({ name, value }))
+      .slice(0, 25);
+
+    await interaction.respond(choices).catch(() => {});
+  } catch (err) {
+    console.error("[autocomplete] raid-auto-manage error:", err?.message || err);
     await interaction.respond([]).catch(() => {});
   }
 }
@@ -4415,6 +4630,7 @@ module.exports = {
   handleRaidSetAutocomplete,
   handleRemoveRosterAutocomplete,
   handleRaidChannelAutocomplete,
+  handleRaidAutoManageAutocomplete,
   handleRaidChannelMessage,
   loadMonitorChannelCache,
   startRaidChannelScheduler,
