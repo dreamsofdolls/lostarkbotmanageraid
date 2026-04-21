@@ -2300,10 +2300,10 @@ function parseRaidMessage(content) {
 function buildRaidChannelWelcomeEmbed() {
   return new EmbedBuilder()
     .setColor(UI.colors.neutral)
-    .setTitle(`${UI.icons.roster} Chào các bạn~ Artist ngồi trông channel này nhé`)
+    .setTitle(`🦊 Chào các bạn~ Artist ngồi trông channel này nhé`)
     .setDescription(
       [
-        "Mỗi lần clear raid xong, cứ post 1 tin nhắn ngắn dạng `<raid> <difficulty> <character> [gate]` vào đây là Artist sẽ tự động đánh dấu progress giúp — xong Artist dọn luôn tin nhắn cho channel khỏi rối nha~",
+        "🦊 Mỗi lần clear raid xong, cứ post 1 tin nhắn ngắn dạng `<raid> <difficulty> <character> [gate]` vào đây là Artist sẽ tự động đánh dấu progress giúp — xong Artist dọn luôn tin nhắn cho channel khỏi rối nha~",
         "",
         "**Artist chỉ update được character trong roster của chính bạn thôi đấy.** Chưa có roster? Chạy `/add-roster` trước rồi hẵng post clear nhé. Muốn xem lại tiến độ của mình, dùng `/raid-status`.",
       ].join("\n")
