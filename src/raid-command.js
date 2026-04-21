@@ -2612,6 +2612,12 @@ async function handleRaidChannelMessage(message) {
   const cooldown = recordUserMonitorActivity(message);
   if (!cooldown.accepted) {
     if (cooldown.warn) await postSpamWarning(message);
+    // Delete the throttled parse-success message too. Otherwise the
+    // spammer's clear-attempts accumulate in the channel as visible text
+    // even though Artist ignored them — a soft surface leak that keeps
+    // the channel dirty despite the cooldown working correctly at the
+    // work-layer. Best-effort; swallow errors (permission / already gone).
+    message.delete().catch(() => {});
     return;
   }
 
@@ -2811,9 +2817,11 @@ async function cleanupRaidChannelMessages(channel) {
 async function postRaidChannelWelcome(channel, botUserId, guildId) {
   const outcome = { posted: false, pinned: false, unpinnedCount: 0 };
 
-  // Look up the previously-stored welcome ID so we unpin the exact
-  // bot-posted welcome instead of scanning author-based, which would
-  // remove unrelated bot pins in the same channel.
+  // Look up the previously-stored welcome ID but DO NOT unpin it yet.
+  // Safe-order: if the fresh post/pin fails, we want to keep the old
+  // pinned welcome in place rather than leaving the channel with zero
+  // pinned guidance. Only unpin the old one after the new one is
+  // posted AND pinned successfully.
   let previousWelcomeId = null;
   if (guildId) {
     try {
@@ -2821,16 +2829,6 @@ async function postRaidChannelWelcome(channel, botUserId, guildId) {
       previousWelcomeId = cfg?.welcomeMessageId || null;
     } catch (err) {
       console.warn("[raid-channel] GuildConfig read for welcomeMessageId failed:", err?.message || err);
-    }
-  }
-
-  if (previousWelcomeId) {
-    try {
-      const oldMsg = await channel.messages.fetch(previousWelcomeId);
-      if (oldMsg?.pinned) await oldMsg.unpin();
-      outcome.unpinnedCount = 1;
-    } catch {
-      // Old welcome message is already gone (deleted manually) — nothing to unpin.
     }
   }
 
@@ -2859,6 +2857,19 @@ async function postRaidChannelWelcome(channel, botUserId, guildId) {
     }
   } catch (err) {
     console.warn("[raid-channel] post welcome failed:", err?.message || err);
+  }
+
+  // Now that the new welcome is safely in place (or we gave up on it),
+  // remove the old one. If the new post/pin failed entirely, leave the
+  // old pinned welcome alone so the channel still has guidance visible.
+  if (outcome.posted && outcome.pinned && previousWelcomeId) {
+    try {
+      const oldMsg = await channel.messages.fetch(previousWelcomeId);
+      if (oldMsg?.pinned) await oldMsg.unpin();
+      outcome.unpinnedCount = 1;
+    } catch {
+      // Old welcome message is already gone (deleted manually) — nothing to unpin.
+    }
   }
 
   return outcome;
@@ -3110,9 +3121,17 @@ async function handleRaidChannelCommand(interaction) {
       return;
     }
 
+    // When enabling mid-day, stamp today's VN day key so the next
+    // 30-minute tick doesn't immediately run a "catch-up" cleanup — we
+    // want the first real auto-run to happen after the NEXT 00:00 VN
+    // boundary. Disabling doesn't touch the key so re-enabling later
+    // keeps missed-day catch-up behavior intact.
+    const update = enabled
+      ? { $set: { autoCleanupEnabled: true, lastAutoCleanupKey: getTargetCleanupDayKey() } }
+      : { $set: { autoCleanupEnabled: false } };
     await GuildConfig.findOneAndUpdate(
       { guildId },
-      { $set: { autoCleanupEnabled: enabled } },
+      update,
       { upsert: true, setDefaultsOnInsert: true }
     );
     const embed = new EmbedBuilder()
