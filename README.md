@@ -108,9 +108,12 @@ Dùng khi: cần tra cú pháp nhanh, onboard member mới, hoặc forget option
 
 Admin-only command (`Manage Server` permission) để đăng ký 1 text channel làm **raid-clear monitor channel**. Subcommands:
 
-- `/raid-channel set channel:#raid-clears` — đăng ký channel
-- `/raid-channel show` — xem channel đang monitor
+- `/raid-channel set channel:#raid-clears` — đăng ký channel + post/pin welcome
+- `/raid-channel show` — xem channel + health check permissions + deploy-flag warnings
 - `/raid-channel clear` — tắt monitor
+- `/raid-channel cleanup` — xóa thủ công non-pinned messages (giữ welcome)
+- `/raid-channel repin` — refresh welcome (unpin cũ + post+pin mới)
+- `/raid-channel schedule action:on|off` — bật/tắt auto-cleanup mỗi 00:00 VN
 
 Sau khi đăng ký, bất kỳ ai post message vào channel đó dạng `<raid> <difficulty> <character> [gate]` sẽ được bot parse và update raid cho char của **chính người post**. Thành công → bot DM user embed xác nhận + xóa message gốc. Lỗi phục hồi được (char không có, iLvl thiếu, v.v.) → bot ping user persistent hint, tự dọn khi user post lại hoặc sau 5 phút.
 

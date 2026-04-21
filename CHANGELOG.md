@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file. Dates use t
 
 ## 2026-04-21
 
+### Added
+
+- **`/raid-channel` gets three new subcommands: `cleanup`, `repin`, `schedule`.**
+  - `cleanup` — manual trigger that deletes every non-pinned message in the monitor channel via `channel.bulkDelete(messages, true)`. Pinned welcome survives. Messages older than 14 days are reported as "Skipped (>14 ngày)" because Discord rejects them from the bulk API. Ephemeral reply with count.
+  - `repin` — unpins every bot-authored pinned message in the channel, then posts + pins a fresh welcome embed. Fixes the "welcome text is stale after a code change" case and the accumulated-pin case. Uses shared `postRaidChannelWelcome(channel, botUserId)` helper (the same path `/raid-channel set` now uses, so set and repin never drift).
+  - `schedule action:on|off` — toggles per-guild daily auto-cleanup. When on, a 30-minute background tick checks each VN-midnight boundary; once per VN day per guild it runs the same cleanup logic above and stamps `lastAutoCleanupKey = "YYYY-MM-DD"` so ticks within the same VN day short-circuit. Bot offline across midnight catches up on first tick after restart.
+
+  New `GuildConfig` fields `autoCleanupEnabled` (Boolean, default false) + `lastAutoCleanupKey` (String, default null). Scheduler lives in `startRaidChannelScheduler(client)` exported from `src/raid-command.js` and wired into `ClientReady` in `src/bot.js`. The scheduler runs always (not gated by `TEXT_MONITOR_ENABLED`) because auto-cleanup is a useful housekeeping action even when the text monitor itself is deploy-disabled.
+
+### Fixed
+
+- **Pending hint cleanup now also deletes the user's original failed message.** Previously the pending-hint entry stored only the bot's hint id, so on successful retry the hint vanished but the user's typo message stayed behind as orphan chat. `pendingChannelHints` entries now carry `originalId` alongside `hintId`, and `clearPendingHint` deletes both in `Promise.allSettled` best-effort — retry success, replacement hint, and 5-minute TTL all leave the channel clean. `src/raid-command.js` (pendingChannelHints entry shape, postPersistentHint, clearPendingHint). Motivation: real-user test showed the failed "Serca Nightmare Nothinghere" message + bot hint both sitting after a successful retry.
+
 ### Fixed (round 11 Codex review)
 
 - **[LOW] Monitor cache is now loaded unconditionally at boot, regardless of `TEXT_MONITOR_ENABLED`.** Round 10 guarded the `loadMonitorChannelCache()` call behind the deploy flag. That left `/raid-channel show` blind to any `raidChannelId` already persisted in Mongo when the monitor was deploy-disabled — the cache was empty, so show reported "chưa config channel nào" even when stale config existed. Cache-load is pure DB I/O with zero Discord dependency, so loading it always is cheap and keeps `show` coherent with reality. `src/bot.js` (startBot cache-load condition removed).

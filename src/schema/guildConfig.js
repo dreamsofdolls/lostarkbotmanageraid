@@ -6,6 +6,15 @@ const guildConfigSchema = new mongoose.Schema(
     // Channel ID the bot monitors for short-text raid-clear messages.
     // null/empty = monitor disabled for this guild.
     raidChannelId: { type: String, default: null },
+    // Toggle for the daily auto-cleanup job. When true, the scheduler
+    // deletes every non-pinned message in `raidChannelId` right after
+    // the VN-day boundary (00:00 Asia/Ho_Chi_Minh = 17:00 UTC).
+    autoCleanupEnabled: { type: Boolean, default: false },
+    // Idempotency cursor — "YYYY-MM-DD" in VN calendar. Set to the target
+    // day's key after a successful cleanup so the next tick in the same
+    // VN day short-circuits. Missed days (bot offline) catch up on the
+    // next tick regardless of day of week.
+    lastAutoCleanupKey: { type: String, default: null },
   },
   {
     timestamps: true,
