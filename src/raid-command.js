@@ -1537,6 +1537,7 @@ async function applyRaidSetForDiscordId({
   let matchedCount = 0;
   let ineligibleItemLevel = 0;
   let modeResetCount = 0;
+  let alreadyComplete = false;
 
   await saveWithRetry(async () => {
     // Reset outer counters on each retry attempt so VersionError retries
@@ -1546,6 +1547,7 @@ async function applyRaidSetForDiscordId({
     matchedCount = 0;
     ineligibleItemLevel = 0;
     modeResetCount = 0;
+    alreadyComplete = false;
 
     const userDoc = await User.findOne({ discordId });
     if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
@@ -1598,6 +1600,28 @@ async function applyRaidSetForDiscordId({
 
     const gateKeys = effectiveGate ? [effectiveGate] : getGateKeys(raidData);
     const shouldMarkDone = statusType === "complete" || statusType === "process";
+
+    // Short-circuit if the requested mark-done is a complete no-op: every
+    // target gate already has completedDate > 0 for the selected difficulty,
+    // and there's no mode-switch in play. Without this check the caller
+    // would silently re-stamp timestamps and surface a fresh "Raid
+    // Completed" DM — confusing the user into thinking a fresh clear was
+    // recorded. Skip the write and let the handler surface a specific
+    // "already DONE" notice.
+    if (shouldMarkDone && !modeChangeDetected) {
+      const everyTargetAlreadyDone = gateKeys.length > 0 && gateKeys.every((g) => {
+        const entry = raidData[g];
+        if (!entry) return false;
+        if (!(Number(entry.completedDate) > 0)) return false;
+        const entryDiff = normalizeName(entry.difficulty || "");
+        return !entryDiff || entryDiff === normalizedSelectedDiff;
+      });
+      if (everyTargetAlreadyDone) {
+        alreadyComplete = true;
+        return;
+      }
+    }
+
     for (const gate of gateKeys) {
       raidData[gate] = {
         difficulty: selectedDifficulty,
@@ -1620,6 +1644,7 @@ async function applyRaidSetForDiscordId({
     noRoster,
     matched: matchedCount > 0,
     updated: updatedCount > 0,
+    alreadyComplete,
     ineligibleItemLevel,
     modeResetCount,
     selectedDifficulty,
@@ -1691,6 +1716,22 @@ async function handleRaidSetCommand(interaction) {
       content: `${UI.icons.warn} Không tìm thấy character **${characterName}** trong roster.`,
       flags: MessageFlags.Ephemeral,
     });
+    return;
+  }
+
+  if (result.alreadyComplete) {
+    const scope = effectiveGate ? `${raidMeta.label} · ${effectiveGate}` : raidMeta.label;
+    const alreadyEmbed = new EmbedBuilder()
+      .setColor(UI.colors.progress)
+      .setTitle(`${UI.icons.info} Đã DONE từ trước rồi`)
+      .setDescription(`**${characterName}** đã clear **${scope}** tuần này rồi — không update lại. Nếu cậu muốn reset, đổi \`status\` sang \`reset\` và chạy lại nhé.`)
+      .addFields(
+        { name: "Character", value: `**${characterName}**`, inline: true },
+        { name: "Raid", value: `**${raidMeta.label}**`, inline: true },
+        { name: "Gate", value: effectiveGate || "All gates", inline: true },
+      )
+      .setTimestamp();
+    await interaction.reply({ embeds: [alreadyEmbed], flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -1843,6 +1884,7 @@ const HELP_SECTIONS = [
       "• **Schedule on/off**: toggle auto-cleanup daily. Bật → mỗi 00:00 VN time, bot tự xóa non-pinned trong channel. Enable stamp today's key ngay nên tick đầu tiên sau enable chờ đến 00:00 kế, không catch-up ngay. Bot-offline catch-up chỉ hoạt động khi schedule đã enable continuous. Tắt → chỉ cleanup thủ công.",
       "• Parse fail (không phải raid intent) → bot im lặng.",
       "• Lỗi phục hồi được (char không có, iLvl thiếu, combo sai, nhiều raid/difficulty/gate) → bot ping user reply persistent, tự dọn khi user post lại hoặc sau 5 phút TTL. Hint và message gốc của user cùng bị dọn để channel heal về clean state.",
+      "• **Raid đã clear từ trước** → bot DM user embed `Raid đã DONE rồi~` thay vì re-stamp timestamp + fresh success DM. Không update DB, tránh nhầm lẫn. Muốn reset thì chạy `/raid-set status:reset`.",
       "• **Per-user cooldown 2 giây** content-aware: duplicate content trong cooldown → drop + delete message. Different content khi có pending hint (đang fix lỗi) → **1 exception duy nhất/cooldown window** (không spam-bypass). Spam ≥3 hit trong 10s → kitsune warning, dedup 60s.",
       "• Deploy: bật `Message Content Intent` ở Discord Developer Portal, hoặc set `TEXT_MONITOR_ENABLED=false` để chạy slash-command-only.",
       "• **Permissions bot cần trong channel đích**: `View Channel`, `Send Messages`, `Manage Messages`, `Read Message History`, `Embed Links`. Thiếu 1 trong 5 là `/raid-channel config action:set` reject.",
@@ -2404,6 +2446,37 @@ function parseRaidMessage(content) {
   };
 }
 
+function buildRaidChannelAlreadyCompleteEmbed({
+  charName,
+  raidMeta,
+  gate,
+  statusType,
+  guildName,
+}) {
+  const isSingleGate = statusType === "process" && gate;
+  const scopeLabel = isSingleGate ? `${raidMeta.label} · ${gate}` : raidMeta.label;
+
+  const embed = new EmbedBuilder()
+    .setColor(UI.colors.progress)
+    .setTitle(`${UI.icons.info} Raid đã DONE từ trước rồi~`)
+    .setDescription(
+      `**${charName}** đã clear **${scopeLabel}** tuần này rồi nhé 🦊 Artist không update lại đâu — để tránh overwriting progress cậu đã có.`
+    )
+    .addFields(
+      { name: "Character", value: `**${charName}**`, inline: true },
+      { name: "Raid", value: `**${raidMeta.label}**`, inline: true },
+      { name: "Gate", value: gate || "All gates", inline: true },
+      {
+        name: "Muốn reset?",
+        value: "Dùng `/raid-set character:<name> raid:<raid> status:reset` nếu cậu thật sự muốn mark-chưa-done cái này (ví dụ bị write nhầm).",
+      }
+    )
+    .setTimestamp();
+
+  if (guildName) embed.setFooter({ text: `Server: ${guildName}` });
+  return embed;
+}
+
 function buildRaidChannelSuccessEmbed({
   charName,
   raidMeta,
@@ -2477,6 +2550,7 @@ function buildRaidChannelWelcomeEmbed() {
           "• Gõ tin nhắn không giống format → Artist im lặng, không spam channel đâu.",
           "• Gõ đúng nhưng có lỗi (không tìm thấy char, iLvl thiếu, nhiều raid/difficulty/gate lẫn lộn) → Artist ping nhẹ nhàng; tin nhắn đó sẽ tự dọn khi bạn post lại, hoặc sau 5 phút nếu quên.",
           "• Post đúng → Artist DM bạn embed confirm riêng. Nếu DM bị tắt, Artist sẽ ping public ngắn rồi tự xóa sau 15 giây.",
+          "• Post 1 raid đã clear từ trước → Artist DM notice riêng báo đã DONE rồi, không update lại. Tránh overwrite progress tuần này. Muốn reset thật sự thì dùng `/raid-set` với `status:reset`.",
           "• Post cách nhau ít nhất **2 giây** nha~ Spam nhanh quá Artist sẽ im lặng bỏ qua và nhắc khéo 1 lần.",
         ].join("\n"),
       }
@@ -2778,6 +2852,58 @@ async function handleRaidChannelMessage(message) {
   }
   if (!result.matched) {
     await postPersistentHint(message, `${UI.icons.warn} Không tìm thấy character \`${charName}\` trong roster của cậu. Check lại tên rồi post lại nha.`);
+    return;
+  }
+  if (result.alreadyComplete) {
+    // Same DM + delete pattern as success path — user gets private notice
+    // that the clear was already recorded and the channel stays clean.
+    // Different embed tone (progress color + info icon) so they don't
+    // mistake it for a fresh clear that just happened.
+    const noticeEmbed = buildRaidChannelAlreadyCompleteEmbed({
+      charName,
+      raidMeta,
+      gate,
+      statusType,
+      guildName: message.guild?.name,
+    });
+
+    let dmSucceeded = true;
+    try {
+      await message.author.send({ embeds: [noticeEmbed] });
+    } catch (err) {
+      dmSucceeded = false;
+      console.warn(
+        `[raid-channel] DM already-complete notice to ${message.author.tag || message.author.id} failed (DMs disabled?):`,
+        err?.message || err
+      );
+    }
+
+    const ops = [
+      clearPendingHint(message.channel, userHintKey),
+      message.delete().catch((err) => {
+        console.warn("[raid-channel] delete failed (missing Manage Messages?):", err?.message || err);
+      }),
+    ];
+
+    if (!dmSucceeded) {
+      const scope = gate ? `${raidMeta.label} · ${gate}` : raidMeta.label;
+      const fallbackText = `${UI.icons.info} <@${message.author.id}> **${charName}** đã clear **${scope}** tuần này rồi — Artist không update lại. _(DM bị tắt — enable "Allow DMs from server members" để nhận notice private.)_`;
+      ops.push(
+        (async () => {
+          try {
+            const fallback = await message.channel.send({
+              content: fallbackText,
+              allowedMentions: { users: [message.author.id] },
+            });
+            setTimeout(() => fallback.delete().catch(() => {}), 15_000);
+          } catch (err) {
+            console.warn("[raid-channel] already-complete fallback post failed:", err?.message || err);
+          }
+        })()
+      );
+    }
+
+    await Promise.allSettled(ops);
     return;
   }
   if (!result.updated) {
