@@ -2872,7 +2872,7 @@ async function cleanupRaidChannelMessages(channel) {
  * decide whether to surface a warning to the admin.
  */
 async function postRaidChannelWelcome(channel, botUserId, guildId) {
-  const outcome = { posted: false, pinned: false, persisted: false, unpinnedCount: 0 };
+  const outcome = { posted: false, pinned: false, persisted: false, removedOldCount: 0 };
 
   // Look up the previously-stored welcome ID but DO NOT unpin it yet.
   // Safe-order: keep the old pinned welcome in place through every
@@ -2930,17 +2930,23 @@ async function postRaidChannelWelcome(channel, botUserId, guildId) {
     console.warn("[raid-channel] post welcome failed:", err?.message || err);
   }
 
-  // Unpin the old welcome only after the new one is post + pin + persist
+  // Remove the old welcome only after the new one is post + pin + persist
   // confirmed. Any partial failure on the fresh-welcome side leaves the
-  // old welcome pinned so the channel still has guidance AND the next
-  // repin can still find the correct pinned message to remove.
+  // old welcome pinned + visible so the channel still has guidance AND the
+  // next repin can still find the correct pinned message to clean up.
+  //
+  // `message.delete()` is used instead of just `unpin()` because the old
+  // welcome is a bot-authored onboarding embed — leaving it as a regular
+  // (unpinned) message would clutter the channel with two welcomes, which
+  // is exactly what "repin" is supposed to prevent. Delete also
+  // automatically removes it from the pin list.
   if (outcome.posted && outcome.pinned && outcome.persisted && previousWelcomeId) {
     try {
       const oldMsg = await channel.messages.fetch(previousWelcomeId);
-      if (oldMsg?.pinned) await oldMsg.unpin();
-      outcome.unpinnedCount = 1;
+      await oldMsg.delete();
+      outcome.removedOldCount = 1;
     } catch {
-      // Old welcome message is already gone (deleted manually) — nothing to unpin.
+      // Old welcome message is already gone (deleted manually) — nothing to clean.
     }
   }
 
@@ -3175,7 +3181,7 @@ async function handleRaidChannelCommand(interaction) {
       .setTitle(`${UI.icons.roster} Welcome Repinned`)
       .setDescription(`<#${channel.id}>`)
       .addFields(
-        { name: "Unpinned old", value: `${welcome.unpinnedCount}`, inline: true },
+        { name: "Removed old welcome", value: `${welcome.removedOldCount}`, inline: true },
         { name: "New welcome", value: welcome.posted ? (welcome.pinned ? "posted & pinned" : "posted (pin failed)") : "NOT posted", inline: true },
       )
       .setTimestamp();

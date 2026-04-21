@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Dates use t
 
 ## 2026-04-21
 
+### Fixed
+
+- **`/raid-channel repin` now deletes the old welcome instead of just unpinning it.** Real-user test showed: running repin produced a fresh welcome + pinned it, but the old welcome stayed visible in the channel as a regular (unpinned) message — exactly the clutter that repin was supposed to clear. `postRaidChannelWelcome()` now calls `oldMsg.delete()` on the previously-stored welcome after the new one is post+pin+persist confirmed (delete auto-removes from pin list, so no separate unpin call needed). Safe-order preserved: partial failure on the fresh-welcome path still leaves the old welcome pinned + visible as a fallback so the channel never loses guidance. Outcome field renamed `unpinnedCount` → `removedOldCount` to match reality; repin's reply embed label updated accordingly. `src/raid-command.js` (postRaidChannelWelcome, repin reply).
+
 ### Fixed (round 17 Codex review)
 
 - **[LOW] `postRaidChannelWelcome()` rolls back the fresh pin on `welcomeMessageId` persist failure.** Round 16 added `outcome.persisted` so the unpin-old step would skip when the Mongo write failed, keeping the previous welcome pinned as a fallback. But the fresh welcome itself was still pinned in the channel — and because the DB never got the new ID, subsequent `/raid-channel repin` would unpin the OLD welcome (the one still tracked in DB) and leave the orphaned fresh pin behind as a stale ghost. The persist-failure path now calls `sent.unpin()` as a best-effort rollback so the channel state matches what the DB knows, and `outcome.pinned` flips to false so the `set` reply surfaces the failure to admin honestly. `src/raid-command.js` (postRaidChannelWelcome persist catch branch). (Codex round 17, Low.)
