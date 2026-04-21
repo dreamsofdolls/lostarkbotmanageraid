@@ -198,12 +198,49 @@ function normalizeAssignedRaid(assignedRaid, fallbackDifficulty, raidKey) {
   const rawGateKeys = getGateKeys(assignedRaid).filter((k) => officialGates.includes(k));
   const keys = rawGateKeys.length > 0 ? rawGateKeys : officialGates;
 
+  // Self-heal legacy mixed-mode records (e.g. G1=Nightmare + G2=Hard created
+  // before the write-path mode-coherence fix). Pick one canonical difficulty
+  // so downstream reads — /raid-status, /raid-set autocomplete — all agree
+  // on the raid's mode and count completions correctly.
+  //
+  // Rule: prefer the difficulty that carries the most `completedDate > 0`
+  // gates (conservation of progress), then G1's stored difficulty, then the
+  // caller's fallback. Non-canonical completions are dropped because Lost
+  // Ark weekly entries are mode-scoped — progress on a "minority" mode is
+  // a corrupted claim from the old process bug.
+  const diffTally = new Map();
+  for (const gate of keys) {
+    const source = assignedRaid?.[gate];
+    if (!source?.difficulty) continue;
+    if (!(Number(source.completedDate) > 0)) continue;
+    const key = normalizeName(source.difficulty);
+    const entry = diffTally.get(key) || { count: 0, raw: source.difficulty };
+    entry.count += 1;
+    diffTally.set(key, entry);
+  }
+
+  let canonicalDifficulty;
+  if (diffTally.size === 0) {
+    canonicalDifficulty =
+      assignedRaid?.G1?.difficulty || assignedRaid?.G2?.difficulty || fallbackDifficulty;
+  } else {
+    let best = null;
+    for (const entry of diffTally.values()) {
+      if (!best || entry.count > best.count) best = entry;
+    }
+    canonicalDifficulty = best.raw;
+  }
+  const canonicalNorm = normalizeName(canonicalDifficulty);
+
   const normalized = {};
   for (const gate of keys) {
     const source = assignedRaid?.[gate] || {};
+    const sourceDiff = source.difficulty;
+    const sourceMatchesCanonical =
+      !sourceDiff || normalizeName(sourceDiff) === canonicalNorm;
     normalized[gate] = {
-      difficulty: source.difficulty || assignedRaid?.G1?.difficulty || fallbackDifficulty,
-      completedDate: Number(source.completedDate) || undefined,
+      difficulty: canonicalDifficulty,
+      completedDate: sourceMatchesCanonical ? (Number(source.completedDate) || undefined) : undefined,
     };
   }
 
