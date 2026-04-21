@@ -614,46 +614,34 @@ const removeRosterCommand = new SlashCommandBuilder()
 
 const raidChannelCommand = new SlashCommandBuilder()
   .setName("raid-channel")
-  .setDescription("Configure the channel the bot monitors for short raid-clear messages")
+  .setDescription("Configure the raid monitor channel (admin only)")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .setDMPermission(false)
   .addSubcommand((sub) =>
     sub
-      .setName("set")
-      .setDescription("Set the raid monitor channel")
-      .addChannelOption((opt) =>
-        opt
-          .setName("channel")
-          .setDescription("Text channel to monitor")
-          .setRequired(true)
-          .addChannelTypes(ChannelType.GuildText)
-      )
-  )
-  .addSubcommand((sub) => sub.setName("show").setDescription("Show the currently configured channel + health status"))
-  .addSubcommand((sub) => sub.setName("clear").setDescription("Disable the raid monitor channel"))
-  .addSubcommand((sub) =>
-    sub
-      .setName("cleanup")
-      .setDescription("Delete all non-pinned messages in the monitor channel")
-  )
-  .addSubcommand((sub) =>
-    sub
-      .setName("repin")
-      .setDescription("Unpin stale bot welcomes and post + pin a fresh welcome embed")
-  )
-  .addSubcommand((sub) =>
-    sub
-      .setName("schedule")
-      .setDescription("Toggle daily auto-cleanup at 00:00 Vietnam time")
+      .setName("config")
+      .setDescription("Run a config action on the raid monitor")
       .addStringOption((opt) =>
         opt
           .setName("action")
-          .setDescription("Turn the daily auto-cleanup on or off")
+          .setDescription("Which action to run")
           .setRequired(true)
           .addChoices(
-            { name: "on", value: "on" },
-            { name: "off", value: "off" }
+            { name: "show — view current config + health check", value: "show" },
+            { name: "set — register the monitor channel (needs `channel` option)", value: "set" },
+            { name: "clear — disable monitor + reset schedule", value: "clear" },
+            { name: "cleanup — delete all non-pinned messages now", value: "cleanup" },
+            { name: "repin — refresh the pinned welcome embed", value: "repin" },
+            { name: "schedule-on — enable daily 00:00 VN auto-cleanup", value: "schedule-on" },
+            { name: "schedule-off — disable daily auto-cleanup", value: "schedule-off" }
           )
+      )
+      .addChannelOption((opt) =>
+        opt
+          .setName("channel")
+          .setDescription("Target text channel (only used when action=set)")
+          .setRequired(false)
+          .addChannelTypes(ChannelType.GuildText)
       )
   );
 
@@ -1831,14 +1819,16 @@ const HELP_SECTIONS = [
     short: "[Admin] Configure the raid-clear monitor channel",
     shortVn: "[Admin] Config channel để bot tự parse text → update raid",
     options: [
-      { name: "set channel:<channel>", required: false, desc: "Đăng ký 1 text channel làm monitor + post & pin welcome embed" },
-      { name: "show", required: false, desc: "Hiển thị channel + health check permissions + deploy-flag warnings" },
-      { name: "clear", required: false, desc: "Tắt monitor (bot sẽ bỏ qua mọi message text)" },
-      { name: "cleanup", required: false, desc: "Xóa thủ công mọi message không pin trong channel (giữ welcome)" },
-      { name: "repin", required: false, desc: "Unpin stale welcome + post + pin 1 welcome mới" },
-      { name: "schedule action:<on|off>", required: false, desc: "Bật/tắt auto-cleanup mỗi 00:00 giờ VN" },
+      { name: "config action:<x> [channel:<y>]", required: true, desc: "Single subcommand `config` — all admin actions dispatched via the `action` option" },
+      { name: "action:show", required: false, desc: "Hiển thị channel + health check permissions + deploy-flag warnings" },
+      { name: "action:set channel:<channel>", required: false, desc: "Đăng ký 1 text channel làm monitor + post & pin welcome embed" },
+      { name: "action:clear", required: false, desc: "Tắt monitor + reset schedule" },
+      { name: "action:cleanup", required: false, desc: "Xóa thủ công mọi message không pin (giữ welcome pinned)" },
+      { name: "action:repin", required: false, desc: "Delete stale welcomes + post & pin 1 welcome mới" },
+      { name: "action:schedule-on", required: false, desc: "Bật auto-cleanup mỗi 00:00 giờ VN" },
+      { name: "action:schedule-off", required: false, desc: "Tắt auto-cleanup daily" },
     ],
-    example: "/raid-channel set channel:#raid-clears",
+    example: "/raid-channel config action:set channel:#raid-clears",
     notes: [
       "EN: Users post short messages like `Serca Nightmare Clauseduk` or `Serca Nor Soulrano G1`; bot parses, deletes the source message, and DMs the author a private confirmation embed.",
       "VN: Post message dạng `<raid> <difficulty> <character> [gate]` vào channel đã config — bot tự update raid, xóa message, và DM xác nhận riêng cho chính người post.",
@@ -2993,7 +2983,6 @@ async function resolveRaidMonitorChannel(interaction, channelId) {
 }
 
 async function handleRaidChannelCommand(interaction) {
-  const sub = interaction.options.getSubcommand();
   const guildId = interaction.guildId;
   if (!guildId) {
     await interaction.reply({
@@ -3003,15 +2992,29 @@ async function handleRaidChannelCommand(interaction) {
     return;
   }
 
-  if (sub === "set") {
-    const channel = interaction.options.getChannel("channel", true);
+  // Single subcommand `config` — dispatch by the `action` option value.
+  // Merged from six separate subcommands so the autocomplete dropdown at
+  // `/raid-channel` shows one entry (discoverable + less visually cluttered)
+  // and the admin picks the concrete action from the required `action`
+  // choice list.
+  const action = interaction.options.getString("action", true);
+
+  if (action === "set") {
+    const channel = interaction.options.getChannel("channel");
+    if (!channel) {
+      await interaction.reply({
+        content: `${UI.icons.warn} Action \`set\` yêu cầu option \`channel\`. Ví dụ: \`/raid-channel config action:set channel:#raid-clears\`.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
     // Refuse to set if the text monitor is disabled at the deploy layer —
     // saving config + posting a pinned welcome would mislead members into
     // thinking the channel is active when MessageCreate is silently dropped.
     if (!isTextMonitorEnabled()) {
       await interaction.reply({
-        content: `${UI.icons.warn} Text monitor hiện đang tắt ở deploy layer (\`TEXT_MONITOR_ENABLED=false\`). Bật env var đó (+ enable Message Content Intent ở Developer Portal nếu chưa) rồi redeploy, xong mới \`/raid-channel set\` nhé — không config sẽ không có effect.`,
+        content: `${UI.icons.warn} Text monitor hiện đang tắt ở deploy layer (\`TEXT_MONITOR_ENABLED=false\`). Bật env var đó (+ enable Message Content Intent ở Developer Portal nếu chưa) rồi redeploy, xong mới \`/raid-channel config action:set\` nhé — không config sẽ không có effect.`,
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -3025,7 +3028,7 @@ async function handleRaidChannelCommand(interaction) {
     const missing = getMissingBotChannelPermissions(channel, botMember);
     if (missing.length > 0) {
       await interaction.reply({
-        content: `${UI.icons.warn} Bot thiếu permission trong <#${channel.id}>: **${missing.join(", ")}**. Grant cho bot rồi chạy lại \`/raid-channel set\` nhé.`,
+        content: `${UI.icons.warn} Bot thiếu permission trong <#${channel.id}>: **${missing.join(", ")}**. Grant cho bot rồi chạy lại \`/raid-channel config action:set\` nhé.`,
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -3063,7 +3066,7 @@ async function handleRaidChannelCommand(interaction) {
     return;
   }
 
-  if (sub === "show") {
+  if (action === "show") {
     const channelId = getCachedMonitorChannelId(guildId);
     const embed = new EmbedBuilder()
       .setColor(UI.colors.neutral)
@@ -3084,7 +3087,7 @@ async function handleRaidChannelCommand(interaction) {
     }
 
     if (!channelId) {
-      const lines = ["Chưa config channel nào. Dùng `/raid-channel set` để bật."];
+      const lines = ["Chưa config channel nào. Dùng `/raid-channel config action:set channel:#<channel>` để bật."];
       if (deployNotes.length > 0) lines.push("", ...deployNotes);
       embed.setDescription(lines.join("\n"));
     } else {
@@ -3118,7 +3121,7 @@ async function handleRaidChannelCommand(interaction) {
     return;
   }
 
-  if (sub === "clear") {
+  if (action === "clear") {
     // Always write-through Mongo regardless of cache state. Cache is a
     // mirror, not the source of truth — if loadMonitorChannelCache had
     // failed at boot the cache is empty, but Mongo might still have a
@@ -3138,16 +3141,16 @@ async function handleRaidChannelCommand(interaction) {
     const embed = new EmbedBuilder()
       .setColor(UI.colors.muted)
       .setTitle(`${UI.icons.reset} Raid Channel Cleared`)
-      .setDescription("Monitor đã được tắt và auto-cleanup schedule cũng bị reset. Bot sẽ không xử lý message text nữa. Dùng `/raid-channel set` + `/raid-channel schedule action:on` để bật lại.");
+      .setDescription("Monitor đã được tắt và auto-cleanup schedule cũng bị reset. Bot sẽ không xử lý message text nữa. Dùng `/raid-channel config action:set channel:#<channel>` + `action:schedule-on` để bật lại.");
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     return;
   }
 
-  if (sub === "cleanup") {
+  if (action === "cleanup") {
     const channelId = getCachedMonitorChannelId(guildId);
     if (!channelId) {
       await interaction.reply({
-        content: `${UI.icons.warn} Chưa config channel nào. Dùng \`/raid-channel set\` trước.`,
+        content: `${UI.icons.warn} Chưa config channel nào. Dùng \`/raid-channel config action:set\` trước.`,
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -3183,11 +3186,11 @@ async function handleRaidChannelCommand(interaction) {
     return;
   }
 
-  if (sub === "repin") {
+  if (action === "repin") {
     const channelId = getCachedMonitorChannelId(guildId);
     if (!channelId) {
       await interaction.reply({
-        content: `${UI.icons.warn} Chưa config channel nào. Dùng \`/raid-channel set\` trước.`,
+        content: `${UI.icons.warn} Chưa config channel nào. Dùng \`/raid-channel config action:set\` trước.`,
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -3216,16 +3219,15 @@ async function handleRaidChannelCommand(interaction) {
     return;
   }
 
-  if (sub === "schedule") {
-    const action = interaction.options.getString("action", true);
-    const enabled = action === "on";
+  if (action === "schedule-on" || action === "schedule-off") {
+    const enabled = action === "schedule-on";
 
     // Refuse to enable schedule without a configured monitor channel —
     // the scheduler filters on `raidChannelId != null`, so enabling now
     // would give admin a success embed for a job that never runs.
     if (enabled && !getCachedMonitorChannelId(guildId)) {
       await interaction.reply({
-        content: `${UI.icons.warn} Chưa config channel nào. Chạy \`/raid-channel set channel:#<channel>\` trước rồi mới enable schedule nhé — không scheduler sẽ không có gì để dọn.`,
+        content: `${UI.icons.warn} Chưa config channel nào. Chạy \`/raid-channel config action:set channel:#<channel>\` trước rồi mới enable schedule nhé — không scheduler sẽ không có gì để dọn.`,
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -3254,7 +3256,7 @@ async function handleRaidChannelCommand(interaction) {
       .setDescription(
         enabled
           ? "Mỗi 00:00 giờ Việt Nam (UTC+7), Artist sẽ tự xóa toàn bộ message không được pin trong monitor channel. Welcome pin giữ nguyên. Nếu bot offline qua midnight, tick tiếp theo sau khi online sẽ catch-up."
-          : "Auto-cleanup đã tắt. Admin vẫn có thể chạy thủ công qua `/raid-channel cleanup` bất cứ lúc nào."
+          : "Auto-cleanup đã tắt. Admin vẫn có thể chạy thủ công qua `/raid-channel config action:cleanup` bất cứ lúc nào."
       )
       .setTimestamp();
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
