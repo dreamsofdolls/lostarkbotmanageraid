@@ -66,8 +66,8 @@ Update trạng thái raid cho 1 character cụ thể.
 |--------|----------|---------|
 | `character` | ✅ | Tên character — **autocomplete** từ roster đã lưu (top 25, sort theo iLvl desc, format `name · class · iLvl`) |
 | `raid` | ✅ | Raid + difficulty — **autocomplete** filter theo character đã chọn: chỉ show raids đủ iLvl, kèm icon tiến độ (`🟢 done · 🟡 partial · ⚪ pending · x/y`). Thứ tự luôn `Act 4 → Kazeros → Serca`, và trong từng raid thì `Normal → Hard → Nightmare` (khớp thứ tự card trong `/raid-status`). Raid đã hoàn thành hiển thị thêm suffix ` · DONE` để nổi bật. Values: `armoche_normal`, `armoche_hard`, `kazeros_normal`, `kazeros_hard`, `serca_normal`, `serca_hard`, `serca_nightmare`. |
-| `status` | ✅ | **autocomplete** — mặc định hiện `Complete` + `Reset`. Khi raid đã `done/done` cho character đã chọn thì dropdown chỉ còn `Reset (raid đã hoàn thành — chỉ có thể reset)` để tránh click nhầm. |
-| `gate` | ❌ | `G1`, `G2`, `G3` — bỏ trống để update mọi gate |
+| `status` | ✅ | **autocomplete** — mặc định hiện `Complete` (cả raid xong), `Process` (1 gate xong), `Reset` (xoá về 0). Khi raid đã `done/done` cho character đã chọn thì dropdown chỉ còn `Reset (raid đã hoàn thành — chỉ có thể reset)` để tránh click nhầm. |
+| `gate` | ❌ | **autocomplete**, chỉ active khi `status = Process`. Dropdown đọc `getGatesForRaid(raidKey)` từ `src/models/Raid.js` nên luôn khớp đúng số gate thực tế của raid (Act 4/Kazeros/Serca hiện tại = G1, G2). Với `Complete`/`Reset` thì gate trả empty để tín hiệu "không cần chọn" — hai action này luôn tác động lên toàn bộ gate. `Process` bắt buộc phải có `gate`, nếu thiếu thì bot reject. |
 
 Ví dụ: `/raid-set character:Clauseduk raid:kazeros_hard status:complete gate:G1`
 
