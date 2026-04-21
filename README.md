@@ -145,7 +145,7 @@ Sau khi đăng ký, bất kỳ ai post message vào channel đó dạng `<raid> 
 
 **Prerequisites deploy:**
 1. Bật `MESSAGE CONTENT INTENT` trong Discord Developer Portal → Bot → Privileged Gateway Intents. Nếu không bật, bot **sẽ không start được** (Discord reject login với "Used disallowed intents") — dùng env `TEXT_MONITOR_ENABLED=false` để deploy slash-command-only mà không cần privileged intent.
-2. Invite bot với scope `bot applications.commands` + permissions `View Channel`, `Send Messages`, `Manage Messages` trong channel đã config. `/raid-channel set` giờ tự check và từ chối nếu thiếu quyền.
+2. Invite bot với scope `bot applications.commands` + permissions trong channel đã config: `View Channel`, `Send Messages`, `Manage Messages`, `Read Message History`, `Embed Links`. `/raid-channel set` giờ tự check và từ chối nếu thiếu bất kỳ quyền nào. (`Read Message History` cần cho `clearPendingHint` fetch/delete tin cũ; `Embed Links` cần cho welcome + DM confirm embeds — thiếu là Discord strip embed).
 3. Intents trong `src/bot.js`: `Guilds` luôn có; `GuildMessages` + `MessageContent` chỉ add khi `TEXT_MONITOR_ENABLED !== "false"`.
 
 **Cache behavior:** monitor channel ID được cache in-memory per-guild, load on boot từ `guildconfigs` Mongo collection. `/raid-channel set|clear` update cache in-place — không có Mongo round-trip cho mỗi message đi qua channel. Single-process bot nên không cần invalidation cross-instance.
