@@ -2297,6 +2297,47 @@ function parseRaidMessage(content) {
   };
 }
 
+function buildRaidChannelWelcomeEmbed() {
+  return new EmbedBuilder()
+    .setColor(UI.colors.neutral)
+    .setTitle(`${UI.icons.roster} Chào các bạn~ Artist ngồi trông channel này nhé`)
+    .setDescription(
+      [
+        "Mỗi lần clear raid xong, cứ post 1 tin nhắn ngắn dạng `<raid> <difficulty> <character> [gate]` vào đây là Artist sẽ tự động đánh dấu progress giúp — xong Artist dọn luôn tin nhắn cho channel khỏi rối nha~",
+        "",
+        "**Artist chỉ update được character trong roster của chính bạn thôi đấy.** Chưa có roster? Chạy `/add-roster` trước rồi hẵng post clear nhé. Muốn xem lại tiến độ của mình, dùng `/raid-status`.",
+      ].join("\n")
+    )
+    .addFields(
+      {
+        name: "📌 Ví dụ cho dễ hình dung",
+        value: [
+          "`Serca Nightmare Clauseduk` → mark cả Serca Nightmare là DONE",
+          "`Kazeros Hard Soulrano` → mark cả Kazeros Hard là DONE",
+          "`Serca Nor Soulrano G1` → chỉ mark G1 của Serca Normal thôi (khi chưa clear hết)",
+        ].join("\n"),
+      },
+      {
+        name: "🏷️ Alias Artist nhận (không phân biệt hoa thường)",
+        value: [
+          "**Raid**: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca`",
+          "**Difficulty**: `normal` / `nor` · `hard` · `nightmare` / `nm`",
+          "**Gate**: `G1`, `G2` — chỉ dùng khi muốn đánh dấu đúng 1 gate",
+          "**Separator**: space, `+`, hay `,` đều xài được hết",
+        ].join("\n"),
+      },
+      {
+        name: "⚠️ Vài chuyện Artist muốn nhắc nhỏ",
+        value: [
+          "• Character phải đủ iLvl cho raid đó, không Artist sẽ nhắc khẽ~",
+          "• Gõ tin nhắn không giống format → Artist im lặng, không spam channel đâu.",
+          "• Gõ đúng nhưng có lỗi (không tìm thấy char, iLvl thiếu, nhiều raid/difficulty/gate lẫn lộn) → Artist reply 1 dòng nhẹ nhàng rồi tự dọn sau 10 giây.",
+        ].join("\n"),
+      }
+    )
+    .setFooter({ text: "Muốn xem full hướng dẫn tất cả commands? Gõ /raid-help nhé~" });
+}
+
 async function postTransientReply(message, content) {
   try {
     const reply = await message.reply({ content, allowedMentions: { repliedUser: false } });
@@ -2442,6 +2483,26 @@ async function handleRaidChannelCommand(interaction) {
     );
     setCachedMonitorChannelId(guildId, channel.id);
 
+    // Post a public onboarding message in the monitor channel so members
+    // see the format without having to run /raid-help. Pin it so the
+    // instructions stay at the top of the channel. Best-effort: if pin
+    // fails (unlikely since we already verified Manage Messages above),
+    // the message stays un-pinned and admin gets a heads-up.
+    let welcomeStatus = "posted";
+    try {
+      const welcomeEmbed = buildRaidChannelWelcomeEmbed();
+      const sent = await channel.send({ embeds: [welcomeEmbed] });
+      try {
+        await sent.pin();
+      } catch (pinErr) {
+        welcomeStatus = "posted (pin failed)";
+        console.warn("[raid-channel] pin failed:", pinErr?.message || pinErr);
+      }
+    } catch (sendErr) {
+      welcomeStatus = "NOT posted";
+      console.warn("[raid-channel] welcome post failed:", sendErr?.message || sendErr);
+    }
+
     const embed = new EmbedBuilder()
       .setColor(UI.colors.success)
       .setTitle(`${UI.icons.done} Raid Channel Set`)
@@ -2450,6 +2511,8 @@ async function handleRaidChannelCommand(interaction) {
       )
       .addFields(
         { name: "Examples", value: "`Serca Nightmare Clauseduk` → mark raid as DONE\n`Serca Nor Soulrano G1` → mark G1 as done" },
+        { name: "Welcome message", value: `${welcomeStatus === "posted" ? UI.icons.done : UI.icons.warn} ${welcomeStatus} in <#${channel.id}>.` },
+        { name: "Nếu cậu đổi channel trước đó", value: "Remember to unpin/delete welcome message ở channel cũ để members không nhầm." },
       )
       .setTimestamp();
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });

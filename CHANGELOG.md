@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Dates use t
 
 ## 2026-04-21
 
+### Added
+
+- **`/raid-channel set` now posts a pinned welcome embed in the target channel.** Previously only the invoking admin saw the success ephemeral; guild members who stumbled into the channel had no onboarding and would have to run `/raid-help` separately. After the permission check passes and the config is saved, the bot now sends a public embed (`buildRaidChannelWelcomeEmbed`) into the channel documenting the message format, every raid/difficulty/gate alias, and the "self-roster only" rule — then auto-pins it so the guidance stays at the top. The embed uses a warm, lightly-personified Vietnamese voice and refers to the bot as **Artist** (the public-facing persona) so members have a consistent name to reference. Pin and send failures are surfaced back to the admin in the ephemeral reply (`posted` / `posted (pin failed)` / `NOT posted`). When admin re-runs `set` for a different channel, the admin reply reminds them to unpin/delete the old welcome message manually. `src/raid-command.js` (new `buildRaidChannelWelcomeEmbed`, `handleRaidChannelCommand` set branch).
+
 ### Fixed (round 9 Codex review)
 
 - **[MEDIUM] Monitor channel cache now loads BEFORE `client.login()` instead of inside `ClientReady`.** Round 8 placed `loadMonitorChannelCache()` in the `ClientReady` handler, which runs after the `MessageCreate` listener is already registered. In the async window between `client.login()` resolving and `ClientReady` finishing, incoming messages would hit an empty cache and get dropped as "no monitor configured." Cache loading is pure DB I/O with no Discord dependency, so moving the call above `client.login()` removes the race window entirely. `src/bot.js` (startBot sequence reorder). (Codex round 9, Medium.)
