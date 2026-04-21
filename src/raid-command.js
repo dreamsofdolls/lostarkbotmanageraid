@@ -954,23 +954,42 @@ async function refreshStaleAccounts(userDoc) {
       }
       if (seeds.length === 0) return { account, fetched: null };
 
+      const savedNames = (account.characters || [])
+        .map((c) => normalizeName(getCharacterName(c)))
+        .filter(Boolean);
+
       for (const seed of seeds) {
         try {
           const fetched = await fetchRosterCharacters(seed);
-          if (Array.isArray(fetched) && fetched.length > 0) {
-            if (account.accountName !== seed) {
-              // Don't rewrite accountName to a seed that already belongs to
-              // another account for the same user — /remove-roster and
-              // autocomplete key off accountName as a unique-per-user id,
-              // so convergence would make the colliding roster unaddressable.
-              const normalizedSeed = normalizeName(seed);
-              const collides = userDoc.accounts.some(
-                (other) => other !== account && normalizeName(other.accountName) === normalizedSeed
-              );
-              if (!collides) account.accountName = seed;
-            }
-            return { account, fetched };
+          if (!Array.isArray(fetched) || fetched.length === 0) continue;
+
+          // Require actual overlap with saved characters before accepting
+          // this seed. A non-empty fetch alone is not enough: a wrong
+          // fallback seed can pull someone else's roster. If overlap is
+          // zero, try the next seed instead of returning early — otherwise
+          // the account would keep hitting the same bad first seed and
+          // never self-heal on subsequent /raid-status calls.
+          const fetchedNames = new Set(fetched.map((c) => normalizeName(c.charName)));
+          const hasOverlap = savedNames.some((n) => fetchedNames.has(n));
+          if (!hasOverlap) {
+            console.warn(
+              `[refresh] seed "${seed}" returned ${fetched.length} chars but zero overlap with saved roster — trying next seed.`
+            );
+            continue;
           }
+
+          if (account.accountName !== seed) {
+            // Don't rewrite accountName to a seed that already belongs to
+            // another account for the same user — /remove-roster and
+            // autocomplete key off accountName as a unique-per-user id,
+            // so convergence would make the colliding roster unaddressable.
+            const normalizedSeed = normalizeName(seed);
+            const collides = userDoc.accounts.some(
+              (other) => other !== account && normalizeName(other.accountName) === normalizedSeed
+            );
+            if (!collides) account.accountName = seed;
+          }
+          return { account, fetched };
         } catch (err) {
           console.warn(`[refresh] seed "${seed}" failed: ${err?.message || err}`);
         }
@@ -1661,11 +1680,12 @@ const HELP_SECTIONS = [
       { name: "status", required: true, desc: "complete | process | reset — autocomplete. `process` đánh dấu 1 gate cụ thể; khi raid đã DONE thì dropdown tự thu còn `reset` thôi." },
       { name: "gate", required: false, desc: "Gate cụ thể — autocomplete **chỉ active khi status = Process**, dropdown đọc số gate thực tế của raid (G1/G2 cho Act 4/Kazeros/Serca hiện tại)" },
     ],
-    example: "/raid-set character:Clauseduk raid:kazeros_hard status:complete gate:G1",
+    example: "/raid-set character:Clauseduk raid:kazeros_hard status:process gate:G1",
     notes: [
-      "EN: Update a single gate, or omit `gate` to update every discovered gate.",
-      "VN: Bỏ trống `gate` để update mọi gate của raid; chọn G1/G2/G3 để chỉ update gate đó.",
-      "• Nếu 2 account cùng user có character trùng tên, cả 2 đều bị update.",
+      "EN: `complete` / `reset` act on every gate. Use `process` + `gate` to touch a single gate.",
+      "VN: `complete`/`reset` luôn tác động toàn bộ gate; dùng `process` + `gate` để chỉ update 1 gate.",
+      "• Nếu 2 account cùng user có character trùng tên, chỉ character đầu tiên (theo thứ tự roster) được update — giống autocomplete hiển thị.",
+      "• Đổi mode (ví dụ Serca Nightmare → Hard) sẽ wipe progress cũ vì raid weekly entry là mode-scoped.",
     ],
   },
   {
