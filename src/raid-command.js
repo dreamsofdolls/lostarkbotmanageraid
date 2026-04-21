@@ -2162,6 +2162,12 @@ async function handleRaidManagementCommand(interaction) {
 // Single-process bot → no multi-instance invalidation needed.
 const monitorChannelCache = new Map(); // guildId -> channelId | null
 
+// `false` until `loadMonitorChannelCache` completes successfully at least
+// once. Callers (/raid-channel show) can surface this so admins know a
+// silent monitor failure is a cache-load issue, not just missing config.
+let monitorCacheHealthy = false;
+let monitorCacheLoadError = null;
+
 async function loadMonitorChannelCache() {
   try {
     const configs = await GuildConfig.find({}).lean();
@@ -2169,10 +2175,20 @@ async function loadMonitorChannelCache() {
     for (const c of configs) {
       monitorChannelCache.set(c.guildId, c.raidChannelId || null);
     }
+    monitorCacheHealthy = true;
+    monitorCacheLoadError = null;
     console.log(`[raid-channel] loaded ${configs.length} guild config(s) into cache.`);
   } catch (err) {
-    console.error("[raid-channel] cache load failed:", err?.message || err);
+    monitorCacheHealthy = false;
+    monitorCacheLoadError = err?.message || String(err);
+    // Elevate to error (not warn): this silently disables the monitor until
+    // the next successful load, so operators need it to be noisy in logs.
+    console.error("[raid-channel] cache load FAILED — monitor inactive until reload:", monitorCacheLoadError);
   }
+}
+
+function getMonitorCacheHealth() {
+  return { healthy: monitorCacheHealthy, error: monitorCacheLoadError };
 }
 
 function getCachedMonitorChannelId(guildId) {
@@ -2183,10 +2199,25 @@ function setCachedMonitorChannelId(guildId, channelId) {
   monitorChannelCache.set(guildId, channelId);
 }
 
+// Mirror of bot.js's TEXT_MONITOR_ENABLED gate so `/raid-channel` can refuse
+// to save / surface a warning in `show` when the feature is disabled at the
+// deploy layer. raid-command.js reads process.env directly to keep bot.js as
+// the single registration surface without having to plumb a shared config.
+function isTextMonitorEnabled() {
+  return process.env.TEXT_MONITOR_ENABLED !== "false";
+}
+
 const BOT_CHANNEL_PERMS = [
   { flag: PermissionFlagsBits.ViewChannel, label: "View Channel" },
   { flag: PermissionFlagsBits.SendMessages, label: "Send Messages" },
   { flag: PermissionFlagsBits.ManageMessages, label: "Manage Messages" },
+  // ReadMessageHistory is required by clearPendingHint's `channel.messages.fetch(id)`
+  // — without it, the fetch throws and persistent hints never auto-clean.
+  { flag: PermissionFlagsBits.ReadMessageHistory, label: "Read Message History" },
+  // EmbedLinks is required for welcome + success embeds to render. Discord
+  // silently strips embeds from bots that lack this permission, leaving
+  // users with an empty or text-only message.
+  { flag: PermissionFlagsBits.EmbedLinks, label: "Embed Links" },
 ];
 
 function getMissingBotChannelPermissions(channel, botMember) {
@@ -2377,7 +2408,8 @@ function buildRaidChannelWelcomeEmbed() {
         value: [
           "• Character phải đủ iLvl cho raid đó, không Artist sẽ nhắc khẽ~",
           "• Gõ tin nhắn không giống format → Artist im lặng, không spam channel đâu.",
-          "• Gõ đúng nhưng có lỗi (không tìm thấy char, iLvl thiếu, nhiều raid/difficulty/gate lẫn lộn) → Artist reply 1 dòng nhẹ nhàng rồi tự dọn sau 10 giây.",
+          "• Gõ đúng nhưng có lỗi (không tìm thấy char, iLvl thiếu, nhiều raid/difficulty/gate lẫn lộn) → Artist ping nhẹ nhàng; tin nhắn đó sẽ tự dọn khi bạn post lại, hoặc sau 5 phút nếu quên.",
+          "• Post đúng → Artist DM bạn embed confirm riêng. Nếu DM bị tắt, Artist sẽ ping public ngắn rồi tự xóa sau 15 giây.",
         ].join("\n"),
       }
     )
@@ -2535,7 +2567,9 @@ async function handleRaidChannelMessage(message) {
   // Success path:
   //   1. DM the user a private confirmation (Discord's only "only you see it"
   //      surface outside of interactions). If DM fails (user disabled DMs
-  //      from server members), log and continue — data is already saved.
+  //      from server members), fall back to a short public ping so they
+  //      still see that the update landed — otherwise they'd just see their
+  //      message disappear with no feedback at all.
   //   2. Clear any stale hint reply that may still be sitting in the channel.
   //   3. Delete the original announcement so the channel stays tidy.
   const confirmEmbed = buildRaidChannelSuccessEmbed({
@@ -2548,18 +2582,47 @@ async function handleRaidChannelMessage(message) {
     guildName: message.guild?.name,
   });
 
-  await Promise.allSettled([
-    message.author.send({ embeds: [confirmEmbed] }).catch((err) => {
-      console.warn(
-        `[raid-channel] DM confirm to ${message.author.tag || message.author.id} failed (DMs disabled?):`,
-        err?.message || err
-      );
-    }),
+  let dmSucceeded = true;
+  try {
+    await message.author.send({ embeds: [confirmEmbed] });
+  } catch (err) {
+    dmSucceeded = false;
+    console.warn(
+      `[raid-channel] DM confirm to ${message.author.tag || message.author.id} failed (DMs disabled?):`,
+      err?.message || err
+    );
+  }
+
+  const ops = [
     clearPendingHint(message.channel, userHintKey),
     message.delete().catch((err) => {
       console.warn("[raid-channel] delete failed (missing Manage Messages?):", err?.message || err);
     }),
-  ]);
+  ];
+
+  if (!dmSucceeded) {
+    // Public fallback: channel.send (not message.reply, because the source
+    // message is about to be deleted in parallel). Auto-cleans after 15s so
+    // the channel doesn't accumulate confirms.
+    const fallbackText = gate
+      ? `${UI.icons.done} <@${message.author.id}> đã mark **${raidMeta.label} · ${gate}** done cho **${charName}**. _(DM bị tắt — enable "Allow DMs from server members" để nhận confirm private.)_`
+      : `${UI.icons.done} <@${message.author.id}> đã mark **${raidMeta.label}** done cho **${charName}**. _(DM bị tắt — enable "Allow DMs from server members" để nhận confirm private.)_`;
+    ops.push(
+      (async () => {
+        try {
+          const fallback = await message.channel.send({
+            content: fallbackText,
+            allowedMentions: { users: [message.author.id] },
+          });
+          setTimeout(() => fallback.delete().catch(() => {}), 15_000);
+        } catch (err) {
+          console.warn("[raid-channel] DM fallback post failed:", err?.message || err);
+        }
+      })()
+    );
+  }
+
+  await Promise.allSettled(ops);
 }
 
 async function handleRaidChannelCommand(interaction) {
@@ -2575,6 +2638,17 @@ async function handleRaidChannelCommand(interaction) {
 
   if (sub === "set") {
     const channel = interaction.options.getChannel("channel", true);
+
+    // Refuse to set if the text monitor is disabled at the deploy layer —
+    // saving config + posting a pinned welcome would mislead members into
+    // thinking the channel is active when MessageCreate is silently dropped.
+    if (!isTextMonitorEnabled()) {
+      await interaction.reply({
+        content: `${UI.icons.warn} Text monitor hiện đang tắt ở deploy layer (\`TEXT_MONITOR_ENABLED=false\`). Bật env var đó (+ enable Message Content Intent ở Developer Portal nếu chưa) rồi redeploy, xong mới \`/raid-channel set\` nhé — không config sẽ không có effect.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
     // Verify the bot has the channel-level permissions this feature needs
     // BEFORE persisting — otherwise admin gets a success embed for a
@@ -2639,8 +2713,24 @@ async function handleRaidChannelCommand(interaction) {
       .setColor(UI.colors.neutral)
       .setTitle(`${UI.icons.info} Raid Channel`);
 
+    // Deploy-level state warnings regardless of config state.
+    const deployNotes = [];
+    if (!isTextMonitorEnabled()) {
+      deployNotes.push(
+        `${UI.icons.warn} Text monitor đang bị tắt ở deploy layer (\`TEXT_MONITOR_ENABLED=false\`). Bot bỏ qua mọi message đến.`
+      );
+    }
+    const { healthy, error } = getMonitorCacheHealth();
+    if (!healthy) {
+      deployNotes.push(
+        `${UI.icons.warn} Cache config chưa load được ở boot${error ? ` (\`${error}\`)` : ""}. Monitor inactive cho đến khi load lại. Bot cần redeploy hoặc fix kết nối Mongo.`
+      );
+    }
+
     if (!channelId) {
-      embed.setDescription("Chưa config channel nào. Dùng `/raid-channel set` để bật.");
+      const lines = ["Chưa config channel nào. Dùng `/raid-channel set` để bật."];
+      if (deployNotes.length > 0) lines.push("", ...deployNotes);
+      embed.setDescription(lines.join("\n"));
     } else {
       // Channel cache can be cold right after bot restart — fall back to
       // an API fetch so we don't false-positive "inaccessible" on a
