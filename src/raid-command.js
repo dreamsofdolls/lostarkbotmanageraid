@@ -7,7 +7,10 @@ const {
   ButtonStyle,
   ComponentType,
   MessageFlags,
+  PermissionFlagsBits,
+  ChannelType,
 } = require("discord.js");
+const GuildConfig = require("./schema/guildConfig");
 const { randomUUID } = require("node:crypto");
 const { JSDOM, VirtualConsole } = require("jsdom");
 
@@ -609,6 +612,26 @@ const removeRosterCommand = new SlashCommandBuilder()
       .setAutocomplete(true)
   );
 
+const raidChannelCommand = new SlashCommandBuilder()
+  .setName("raid-channel")
+  .setDescription("Configure the channel the bot monitors for short raid-clear messages")
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .setDMPermission(false)
+  .addSubcommand((sub) =>
+    sub
+      .setName("set")
+      .setDescription("Set the raid monitor channel")
+      .addChannelOption((opt) =>
+        opt
+          .setName("channel")
+          .setDescription("Text channel to monitor")
+          .setRequired(true)
+          .addChannelTypes(ChannelType.GuildText)
+      )
+  )
+  .addSubcommand((sub) => sub.setName("show").setDescription("Show the currently configured channel"))
+  .addSubcommand((sub) => sub.setName("clear").setDescription("Disable the raid monitor channel"));
+
 const commands = [
   addRosterCommand,
   raidCheckCommand,
@@ -616,6 +639,7 @@ const commands = [
   statusCommand,
   raidHelpCommand,
   removeRosterCommand,
+  raidChannelCommand,
 ];
 
 async function handleAddRosterCommand(interaction) {
@@ -1475,83 +1499,54 @@ async function handleRaidSetAutocomplete(interaction) {
   }
 }
 
-async function handleRaidSetCommand(interaction) {
-  const discordId = interaction.user.id;
-  const characterName = interaction.options.getString("character", true).trim();
-  const raidKey = interaction.options.getString("raid", true);
-  const statusType = interaction.options.getString("status", true);
-  const targetGate = interaction.options.getString("gate") || "";
-  const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
-
-  if (!raidMeta) {
-    await interaction.reply({
-      content: `${UI.icons.warn} Raid option không hợp lệ. Vui lòng thử lại.`,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  if (!["complete", "reset", "process"].includes(statusType)) {
-    await interaction.reply({
-      content: `${UI.icons.warn} Status không hợp lệ. Dùng \`complete\`, \`process\`, hoặc \`reset\`.`,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const effectiveGate = statusType === "process" ? targetGate : "";
-
-  if (statusType === "process") {
-    if (!targetGate) {
-      await interaction.reply({
-        content: `${UI.icons.warn} Status \`process\` yêu cầu chọn \`gate\` cụ thể (ví dụ G1 hoặc G2). Nếu muốn đánh dấu cả raid, dùng \`complete\`.`,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-    const validGates = getGatesForRaid(raidMeta.raidKey);
-    if (!validGates.includes(targetGate)) {
-      await interaction.reply({
-        content: `${UI.icons.warn} Gate **${targetGate}** không tồn tại cho **${raidMeta.label}**. Gates hợp lệ: ${validGates.map((g) => `\`${g}\``).join(", ")}.`,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-  }
-
+/**
+ * Core raid-set write path shared by `/raid-set` and the channel-monitor
+ * text handler. Given a Discord user id and a raid/gate target, load the
+ * user doc, find the single first-by-iteration character match, enforce
+ * iLvl eligibility, wipe the raid on difficulty switch, and write the
+ * gate(s). Returns a status object the caller can render into whatever
+ * surface it owns (slash-command embed, message reaction, log line).
+ *
+ * Returns:
+ *   { noRoster?, matched, updated, ineligibleItemLevel, modeResetCount }
+ */
+async function applyRaidSetForDiscordId({
+  discordId,
+  characterName,
+  raidMeta,
+  statusType,
+  effectiveGate,
+}) {
   const selectedDifficulty = toModeLabel(raidMeta.modeKey);
 
-  const existing = await User.findOne({ discordId });
-  if (!existing || !Array.isArray(existing.accounts) || existing.accounts.length === 0) {
-    await interaction.reply({
-      content: `${UI.icons.info} Cậu chưa có roster nào. Dùng \`/add-roster\` để thêm trước nhé.`,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
+  let noRoster = false;
   let updatedCount = 0;
   let matchedCount = 0;
   let ineligibleItemLevel = 0;
   let modeResetCount = 0;
+
   await saveWithRetry(async () => {
-    const userDoc = await User.findOne({ discordId });
-    if (!userDoc) throw new Error("User document disappeared during /raid-set");
-
-    ensureFreshWeek(userDoc);
-
+    // Reset outer counters on each retry attempt so VersionError retries
+    // start from a clean slate of status flags.
+    noRoster = false;
     updatedCount = 0;
     matchedCount = 0;
     ineligibleItemLevel = 0;
     modeResetCount = 0;
 
+    const userDoc = await User.findOne({ discordId });
+    if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+      // No roster at all — single-read detection inside retry, so we
+      // avoid a duplicate pre-check findOne and stay consistent if the
+      // document is created concurrently.
+      noRoster = true;
+      return;
+    }
+
+    ensureFreshWeek(userDoc);
+
     // Resolve exactly ONE character — the same first-by-iteration record
-    // that autocompleteRaidSetCharacter de-duplicates to. If a user happens
-    // to have two characters sharing a name across rosters, /raid-set
-    // operates on the one the autocomplete displayed (the copy whose data
-    // drove eligibility + progress icons), not on all copies. Duplicate
-    // names across rosters are rare and not a first-class feature; pinning
-    // the write to a single target keeps view and write consistent.
+    // that autocompleteRaidSetCharacter de-duplicates to.
     const character = findCharacterInUser(userDoc, characterName);
     if (!character) return;
 
@@ -1608,7 +1603,77 @@ async function handleRaidSetCommand(interaction) {
     await userDoc.save();
   });
 
-  if (matchedCount === 0) {
+  return {
+    noRoster,
+    matched: matchedCount > 0,
+    updated: updatedCount > 0,
+    ineligibleItemLevel,
+    modeResetCount,
+    selectedDifficulty,
+  };
+}
+
+async function handleRaidSetCommand(interaction) {
+  const discordId = interaction.user.id;
+  const characterName = interaction.options.getString("character", true).trim();
+  const raidKey = interaction.options.getString("raid", true);
+  const statusType = interaction.options.getString("status", true);
+  const targetGate = interaction.options.getString("gate") || "";
+  const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
+
+  if (!raidMeta) {
+    await interaction.reply({
+      content: `${UI.icons.warn} Raid option không hợp lệ. Vui lòng thử lại.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (!["complete", "reset", "process"].includes(statusType)) {
+    await interaction.reply({
+      content: `${UI.icons.warn} Status không hợp lệ. Dùng \`complete\`, \`process\`, hoặc \`reset\`.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const effectiveGate = statusType === "process" ? targetGate : "";
+
+  if (statusType === "process") {
+    if (!targetGate) {
+      await interaction.reply({
+        content: `${UI.icons.warn} Status \`process\` yêu cầu chọn \`gate\` cụ thể (ví dụ G1 hoặc G2). Nếu muốn đánh dấu cả raid, dùng \`complete\`.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const validGates = getGatesForRaid(raidMeta.raidKey);
+    if (!validGates.includes(targetGate)) {
+      await interaction.reply({
+        content: `${UI.icons.warn} Gate **${targetGate}** không tồn tại cho **${raidMeta.label}**. Gates hợp lệ: ${validGates.map((g) => `\`${g}\``).join(", ")}.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+  }
+
+  const result = await applyRaidSetForDiscordId({
+    discordId,
+    characterName,
+    raidMeta,
+    statusType,
+    effectiveGate,
+  });
+
+  if (result.noRoster) {
+    await interaction.reply({
+      content: `${UI.icons.info} Cậu chưa có roster nào. Dùng \`/add-roster\` để thêm trước nhé.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (!result.matched) {
     await interaction.reply({
       content: `${UI.icons.warn} Không tìm thấy character **${characterName}** trong roster.`,
       flags: MessageFlags.Ephemeral,
@@ -1616,9 +1681,9 @@ async function handleRaidSetCommand(interaction) {
     return;
   }
 
-  if (updatedCount === 0) {
+  if (!result.updated) {
     await interaction.reply({
-      content: `${UI.icons.warn} Character **${characterName}** đang ở iLvl **${ineligibleItemLevel}**, chưa đủ **${raidMeta.minItemLevel}+** để thao tác **${raidMeta.label}**.`,
+      content: `${UI.icons.warn} Character **${characterName}** đang ở iLvl **${result.ineligibleItemLevel}**, chưa đủ **${raidMeta.minItemLevel}+** để thao tác **${raidMeta.label}**.`,
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -1638,9 +1703,9 @@ async function handleRaidSetCommand(interaction) {
       { name: "Gates", value: effectiveGate || "All gates", inline: true },
     )
     .setTimestamp();
-  if (modeResetCount > 0) {
+  if (result.modeResetCount > 0) {
     resultEmbed.setFooter({
-      text: `Switched difficulty to ${selectedDifficulty} — previous mode progress cleared for a consistent state.`,
+      text: `Switched difficulty to ${result.selectedDifficulty} — previous mode progress cleared for a consistent state.`,
     });
   }
 
@@ -1732,6 +1797,28 @@ const HELP_SECTIONS = [
       "EN: Delete an entire account, or just one character from it. The account stays even if all characters are removed.",
       "VN: Xóa cả account roster, hoặc chỉ 1 character trong đó. Account vẫn giữ lại dù không còn character nào.",
       "• Dùng kết hợp với `/add-roster`: muốn refresh 1 roster → `/remove-roster` rồi `/add-roster` lại.",
+    ],
+  },
+  {
+    key: "raid-channel",
+    label: "/raid-channel",
+    icon: "📢",
+    short: "[Admin] Configure the raid-clear monitor channel",
+    shortVn: "[Admin] Config channel để bot tự parse text → update raid",
+    options: [
+      { name: "set channel:<channel>", required: false, desc: "Đăng ký 1 text channel làm monitor channel" },
+      { name: "show", required: false, desc: "Hiển thị channel đang được monitor" },
+      { name: "clear", required: false, desc: "Tắt monitor (bot sẽ bỏ qua mọi message text)" },
+    ],
+    example: "/raid-channel set channel:#raid-clears",
+    notes: [
+      "EN: Users post short messages like `Serca Nightmare Clauseduk` or `Serca Nor Soulrano G1`; bot parses, updates raid, and deletes the message on success.",
+      "VN: Post message dạng `<raid> <difficulty> <character> [gate]` vào channel đã config — bot tự update raid và xóa message khi thành công.",
+      "• Aliases: `act 4`/`armoche`, `kazeros`/`kaz`, `serca` · `normal`/`nor`, `hard`, `nightmare`/`nm` · gate `G1`/`G2`.",
+      "• Không có gate = đánh dấu cả raid done (complete). Có gate = chỉ gate đó done (process).",
+      "• Chỉ poster tự update char của mình; parse fail → bot im lặng; lỗi biết được → bot reply ngắn rồi xóa sau 10s.",
+      "• **Cần bật MESSAGE_CONTENT intent** ở Discord Developer Portal trước khi deploy, và grant bot permission `Manage Messages` trong channel.",
+      "• Admin-only command (yêu cầu `Manage Server` permission).",
     ],
   },
 ];
@@ -2050,6 +2137,380 @@ async function handleRaidManagementCommand(interaction) {
 
   if (interaction.commandName === "remove-roster") {
     await handleRemoveRosterCommand(interaction);
+    return;
+  }
+
+  if (interaction.commandName === "raid-channel") {
+    await handleRaidChannelCommand(interaction);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Raid channel monitor (text-driven raid-set)
+// ---------------------------------------------------------------------------
+
+// In-memory per-guild cache of the monitor channel ID. The MessageCreate
+// handler fires for every message the bot can see — hitting Mongo on each
+// one would turn normal chat traffic into a DB read. The cache is loaded
+// once at boot (loadMonitorChannelCache) and updated in-place by
+// /raid-channel set|clear, so the hot path can filter with a Map lookup.
+// Single-process bot → no multi-instance invalidation needed.
+const monitorChannelCache = new Map(); // guildId -> channelId | null
+
+async function loadMonitorChannelCache() {
+  try {
+    const configs = await GuildConfig.find({}).lean();
+    monitorChannelCache.clear();
+    for (const c of configs) {
+      monitorChannelCache.set(c.guildId, c.raidChannelId || null);
+    }
+    console.log(`[raid-channel] loaded ${configs.length} guild config(s) into cache.`);
+  } catch (err) {
+    console.error("[raid-channel] cache load failed:", err?.message || err);
+  }
+}
+
+function getCachedMonitorChannelId(guildId) {
+  return monitorChannelCache.get(guildId) ?? null;
+}
+
+function setCachedMonitorChannelId(guildId, channelId) {
+  monitorChannelCache.set(guildId, channelId);
+}
+
+const BOT_CHANNEL_PERMS = [
+  { flag: PermissionFlagsBits.ViewChannel, label: "View Channel" },
+  { flag: PermissionFlagsBits.SendMessages, label: "Send Messages" },
+  { flag: PermissionFlagsBits.ManageMessages, label: "Manage Messages" },
+];
+
+function getMissingBotChannelPermissions(channel, botMember) {
+  if (!channel || !botMember) return BOT_CHANNEL_PERMS.map((p) => p.label);
+  const perms = channel.permissionsFor(botMember);
+  if (!perms) return BOT_CHANNEL_PERMS.map((p) => p.label);
+  return BOT_CHANNEL_PERMS.filter((p) => !perms.has(p.flag)).map((p) => p.label);
+}
+
+const RAID_ALIASES = new Map([
+  ["armoche", "armoche"],
+  ["act4",    "armoche"],
+  ["kazeros", "kazeros"],
+  ["kaz",     "kazeros"],
+  ["serca",   "serca"],
+]);
+
+const DIFFICULTY_ALIASES = new Map([
+  ["nightmare", "nightmare"],
+  ["nm",        "nightmare"],
+  ["hard",      "hard"],
+  ["normal",    "normal"],
+  ["nor",       "normal"],
+]);
+
+const GATE_TOKEN_RE = /^g([1-9])$/;
+
+/**
+ * Parse a short message posted in the guild's configured raid channel into a
+ * raid-set intent. Format is liberal: whitespace, `+`, or `,` as separators;
+ * case-insensitive; tokens can appear in any order.
+ *
+ * Accepted patterns:
+ *   "{raid} {difficulty} {character}"            → complete (all gates)
+ *   "{raid} {difficulty} {character} G1"         → process (single gate)
+ *
+ * Raid aliases: act 4 / act4 / armoche · kazeros / kaz · serca
+ * Difficulty aliases: normal / nor · hard · nightmare / nm
+ * Gate pattern: G1..G9 (validated downstream against raid's gate list)
+ *
+ * Returns:
+ *   - null if the message is not a raid update at all (silent ignore)
+ *   - { error: "multi-gate", gates: [...] } if raid+diff+char parse but
+ *     multiple distinct gates appear (ambiguous intent — should reply)
+ *   - { raidKey, modeKey, charName, gate } on success
+ *
+ * The parser tokenizes by separators and matches each token against an exact
+ * alias map. That avoids the non-ASCII word-boundary traps of `\b` regexes
+ * and makes character names safe even if they contain substring of an alias
+ * (e.g. "Normalize", "Hardman", "Kazan" all remain intact as char names).
+ */
+function parseRaidMessage(content) {
+  const raw = String(content || "").trim();
+  if (!raw) return null;
+
+  // Collapse "act 4" / "act  4" into a single "act4" token so it survives
+  // whitespace-based tokenization. Done before separator normalization.
+  const normalized = raw
+    .replace(/act\s+4/gi, "act4")
+    .replace(/[+,]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return null;
+
+  const tokens = normalized.toLowerCase().split(" ").filter(Boolean);
+  if (tokens.length < 3) return null; // need at least raid + diff + char
+
+  const raidSet = new Set();
+  const diffSet = new Set();
+  const gateSet = new Set();
+  const leftover = [];
+
+  for (const tok of tokens) {
+    if (RAID_ALIASES.has(tok)) {
+      raidSet.add(RAID_ALIASES.get(tok));
+      continue;
+    }
+    if (DIFFICULTY_ALIASES.has(tok)) {
+      diffSet.add(DIFFICULTY_ALIASES.get(tok));
+      continue;
+    }
+    const gateMatch = tok.match(GATE_TOKEN_RE);
+    if (gateMatch) {
+      gateSet.add(`G${gateMatch[1]}`);
+      continue;
+    }
+    leftover.push(tok);
+  }
+
+  // Need raid + diff + char tokens for this to look like a raid-update intent.
+  if (raidSet.size === 0 || diffSet.size === 0) return null;
+  if (leftover.length === 0) return null;
+
+  // Ambiguous intent — user named two different raids or difficulties in the
+  // same message. Surface as an explicit parse error so the handler can tell
+  // them, instead of letting the second alias fall through to `charName` and
+  // produce a misleading "character not found" reply.
+  if (raidSet.size > 1) {
+    return { error: "multi-raid", raids: [...raidSet] };
+  }
+  if (diffSet.size > 1) {
+    return { error: "multi-difficulty", difficulties: [...diffSet] };
+  }
+  if (gateSet.size > 1) {
+    return { error: "multi-gate", gates: [...gateSet] };
+  }
+
+  return {
+    raidKey: [...raidSet][0],
+    modeKey: [...diffSet][0],
+    charName: leftover.join(" "),
+    gate: [...gateSet][0] || null,
+  };
+}
+
+async function postTransientReply(message, content) {
+  try {
+    const reply = await message.reply({ content, allowedMentions: { repliedUser: false } });
+    setTimeout(() => {
+      reply.delete().catch(() => {});
+    }, 10_000);
+  } catch (err) {
+    console.warn("[raid-channel] reply failed:", err?.message || err);
+  }
+}
+
+async function handleRaidChannelMessage(message) {
+  // Cheap filters BEFORE touching the cache: skip DMs, system messages,
+  // webhooks, bot authors, and empty content. MessageCreate fires for all
+  // of these and most of them will never map to a raid intent anyway.
+  if (!message) return;
+  if (!message.guildId) return;
+  if (message.author?.bot) return;
+  if (message.system) return;
+  if (message.webhookId) return;
+  if (!message.content || !message.content.trim()) return;
+
+  // Cache lookup — no Mongo hit on the hot path. Miss means no config or
+  // this channel isn't the configured monitor.
+  const cachedChannelId = getCachedMonitorChannelId(message.guildId);
+  if (!cachedChannelId || cachedChannelId !== message.channelId) return;
+
+  const parsed = parseRaidMessage(message.content);
+  if (!parsed) return; // Silent ignore: not a raid-update message.
+
+  if (parsed.error === "multi-gate") {
+    await postTransientReply(
+      message,
+      `${UI.icons.warn} Có nhiều gate (${parsed.gates.join(", ")}) trong message. Mỗi lần chỉ update 1 gate — post riêng từng cái hoặc bỏ gate để đánh DONE cả raid.`
+    );
+    return;
+  }
+  if (parsed.error === "multi-raid") {
+    await postTransientReply(
+      message,
+      `${UI.icons.warn} Message chứa nhiều raid khác nhau (${parsed.raids.join(", ")}). Mỗi message chỉ update 1 raid — post riêng từng raid nhé.`
+    );
+    return;
+  }
+  if (parsed.error === "multi-difficulty") {
+    await postTransientReply(
+      message,
+      `${UI.icons.warn} Message chứa nhiều difficulty khác nhau (${parsed.difficulties.join(", ")}). Chọn 1 difficulty duy nhất mỗi message.`
+    );
+    return;
+  }
+
+  const { raidKey, modeKey, charName, gate } = parsed;
+  const raidValue = `${raidKey}_${modeKey}`;
+  const raidMeta = RAID_REQUIREMENT_MAP[raidValue];
+  if (!raidMeta) {
+    await postTransientReply(message, `${UI.icons.warn} Combo \`${raidKey} ${modeKey}\` không hợp lệ.`);
+    return;
+  }
+
+  if (gate) {
+    const validGates = getGatesForRaid(raidMeta.raidKey);
+    if (!validGates.includes(gate)) {
+      await postTransientReply(
+        message,
+        `${UI.icons.warn} Gate **${gate}** không có cho **${raidMeta.label}**. Gates: ${validGates.map((g) => `\`${g}\``).join(", ")}.`
+      );
+      return;
+    }
+  }
+
+  const statusType = gate ? "process" : "complete";
+
+  let result;
+  try {
+    result = await applyRaidSetForDiscordId({
+      discordId: message.author.id,
+      characterName: charName,
+      raidMeta,
+      statusType,
+      effectiveGate: gate || "",
+    });
+  } catch (err) {
+    console.error("[raid-channel] write failed:", err?.message || err);
+    await postTransientReply(message, `${UI.icons.warn} Có lỗi khi update raid, thử lại sau nhé.`);
+    return;
+  }
+
+  if (result.noRoster) {
+    await postTransientReply(message, `${UI.icons.info} Cậu chưa có roster. Dùng \`/add-roster\` trước nhé.`);
+    return;
+  }
+  if (!result.matched) {
+    await postTransientReply(message, `${UI.icons.warn} Không tìm thấy character \`${charName}\` trong roster của cậu.`);
+    return;
+  }
+  if (!result.updated) {
+    await postTransientReply(
+      message,
+      `${UI.icons.warn} **${charName}** iLvl ${result.ineligibleItemLevel}, chưa đủ **${raidMeta.minItemLevel}+** cho **${raidMeta.label}**.`
+    );
+    return;
+  }
+
+  // Success — delete the original announcement so the channel stays tidy.
+  await message.delete().catch((err) => {
+    console.warn("[raid-channel] delete failed (missing Manage Messages?):", err?.message || err);
+  });
+}
+
+async function handleRaidChannelCommand(interaction) {
+  const sub = interaction.options.getSubcommand();
+  const guildId = interaction.guildId;
+  if (!guildId) {
+    await interaction.reply({
+      content: `${UI.icons.warn} Command này chỉ dùng trong server.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (sub === "set") {
+    const channel = interaction.options.getChannel("channel", true);
+
+    // Verify the bot has the channel-level permissions this feature needs
+    // BEFORE persisting — otherwise admin gets a success embed for a
+    // channel where the monitor will silently fail (can't read messages,
+    // can't reply to errors, or can't delete on success).
+    const botMember = interaction.guild?.members?.me;
+    const missing = getMissingBotChannelPermissions(channel, botMember);
+    if (missing.length > 0) {
+      await interaction.reply({
+        content: `${UI.icons.warn} Bot thiếu permission trong <#${channel.id}>: **${missing.join(", ")}**. Grant cho bot rồi chạy lại \`/raid-channel set\` nhé.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    await GuildConfig.findOneAndUpdate(
+      { guildId },
+      { guildId, raidChannelId: channel.id },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    setCachedMonitorChannelId(guildId, channel.id);
+
+    const embed = new EmbedBuilder()
+      .setColor(UI.colors.success)
+      .setTitle(`${UI.icons.done} Raid Channel Set`)
+      .setDescription(
+        `Bot sẽ monitor <#${channel.id}> và parse message dạng \`<raid> <difficulty> <character> [gate]\`.`
+      )
+      .addFields(
+        { name: "Examples", value: "`Serca Nightmare Clauseduk` → mark raid as DONE\n`Serca Nor Soulrano G1` → mark G1 as done" },
+      )
+      .setTimestamp();
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (sub === "show") {
+    const channelId = getCachedMonitorChannelId(guildId);
+    const embed = new EmbedBuilder()
+      .setColor(UI.colors.neutral)
+      .setTitle(`${UI.icons.info} Raid Channel`);
+
+    if (!channelId) {
+      embed.setDescription("Chưa config channel nào. Dùng `/raid-channel set` để bật.");
+    } else {
+      // Channel cache can be cold right after bot restart — fall back to
+      // an API fetch so we don't false-positive "inaccessible" on a
+      // channel the bot actually has access to.
+      let channel = interaction.guild?.channels?.cache?.get(channelId) || null;
+      if (!channel && interaction.guild?.channels?.fetch) {
+        try {
+          channel = await interaction.guild.channels.fetch(channelId);
+        } catch {
+          channel = null;
+        }
+      }
+
+      const botMember = interaction.guild?.members?.me;
+      const missing = channel ? getMissingBotChannelPermissions(channel, botMember) : null;
+
+      const lines = [`Monitoring <#${channelId}>.`];
+      if (!channel) {
+        lines.push(`${UI.icons.warn} Channel không truy cập được (bị xóa hoặc bot không có access).`);
+      } else if (missing && missing.length > 0) {
+        lines.push(`${UI.icons.warn} Bot thiếu permission: **${missing.join(", ")}**. Feature có thể fail im lặng.`);
+      } else {
+        lines.push(`${UI.icons.done} Permissions OK.`);
+      }
+      embed.setDescription(lines.join("\n"));
+    }
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (sub === "clear") {
+    // Always write-through Mongo regardless of cache state. Cache is a
+    // mirror, not the source of truth — if loadMonitorChannelCache had
+    // failed at boot the cache is empty, but Mongo might still have a
+    // non-null raidChannelId that `clear` needs to actually clear.
+    // findOneAndUpdate without upsert is a no-op when no doc exists.
+    await GuildConfig.findOneAndUpdate(
+      { guildId },
+      { $set: { raidChannelId: null } }
+    );
+    setCachedMonitorChannelId(guildId, null);
+
+    const embed = new EmbedBuilder()
+      .setColor(UI.colors.muted)
+      .setTitle(`${UI.icons.reset} Raid Channel Cleared`)
+      .setDescription("Monitor đã được tắt. Bot sẽ không xử lý message text nữa.");
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
   }
 }
 
@@ -2059,4 +2520,7 @@ module.exports = {
   handleRaidHelpSelect,
   handleRaidSetAutocomplete,
   handleRemoveRosterAutocomplete,
+  handleRaidChannelMessage,
+  loadMonitorChannelCache,
+  parseRaidMessage,
 };

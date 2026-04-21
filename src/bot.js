@@ -15,10 +15,18 @@ const {
   handleRaidHelpSelect,
   handleRaidSetAutocomplete,
   handleRemoveRosterAutocomplete,
+  handleRaidChannelMessage,
+  loadMonitorChannelCache,
 } = require("./raid-command");
 const { startWeeklyResetJob } = require("./weekly-reset");
 
 const { DISCORD_TOKEN, GUILD_ID } = process.env;
+
+// Deploy gate for the text-monitor feature. `MessageContent` is a privileged
+// intent — if it's not enabled in the Discord Developer Portal, Discord
+// rejects the login and the bot process exits. Setting TEXT_MONITOR_ENABLED=false
+// lets a deployment run slash-command-only without the privileged intent.
+const TEXT_MONITOR_ENABLED = process.env.TEXT_MONITOR_ENABLED !== "false";
 
 if (!DISCORD_TOKEN) {
   console.error("Missing DISCORD_TOKEN in .env");
@@ -60,19 +68,47 @@ async function startBot() {
   await connectDB();
   startWeeklyResetJob();
 
-  const client = new Client({
-    intents: [GatewayIntentBits.Guilds],
-  });
+  // Warm the monitor channel cache BEFORE Discord login. The cache is pure
+  // DB data — no client dependency — and loading it inside `ClientReady`
+  // creates a race: `MessageCreate` fires on the first message after login,
+  // potentially before the ready handler finishes, and an empty cache on
+  // the hot path drops that message as "no monitor configured."
+  if (TEXT_MONITOR_ENABLED) {
+    await loadMonitorChannelCache();
+  }
+
+  const intents = [GatewayIntentBits.Guilds];
+  if (TEXT_MONITOR_ENABLED) {
+    // GuildMessages + MessageContent power the raid-channel text monitor.
+    // MessageContent is a privileged intent — it must be enabled in the
+    // Discord Developer Portal (Bot → Privileged Gateway Intents) or the
+    // login will fail with "Used disallowed intents".
+    intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
+  } else {
+    console.log("[bot] TEXT_MONITOR_ENABLED=false — skipping MessageContent intent and MessageCreate listener.");
+  }
+
+  const client = new Client({ intents });
 
   client.once(Events.ClientReady, async (readyClient) => {
     console.log(`Logged in as ${readyClient.user.tag}`);
     await registerSlashCommandsOnBoot(readyClient);
   });
 
+  if (TEXT_MONITOR_ENABLED) {
+    client.on(Events.MessageCreate, async (message) => {
+      try {
+        await handleRaidChannelMessage(message);
+      } catch (error) {
+        console.error("[bot] raid-channel message handler error:", error);
+      }
+    });
+  }
+
   client.on(Events.InteractionCreate, async (interaction) => {
     try {
       if (interaction.isChatInputCommand()) {
-        const allowed = ["add-roster", "raid-check", "raid-set", "raid-status", "raid-help", "remove-roster"];
+        const allowed = ["add-roster", "raid-check", "raid-set", "raid-status", "raid-help", "remove-roster", "raid-channel"];
         if (!allowed.includes(interaction.commandName)) return;
         await handleRaidManagementCommand(interaction);
         return;
