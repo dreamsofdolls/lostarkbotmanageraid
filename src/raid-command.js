@@ -2197,6 +2197,10 @@ const RAID_ALIASES = new Map([
   ["kazeros", "kazeros"],
   ["kaz",     "kazeros"],
   ["serca",   "serca"],
+  // Common letter-swap typo of "Serca" — Lost Ark SEA/VN players hit this
+  // frequently. Accept as an alias so /raid-channel monitor doesn't silent-
+  // ignore the whole message.
+  ["secra",   "serca"],
 ]);
 
 const DIFFICULTY_ALIASES = new Map([
