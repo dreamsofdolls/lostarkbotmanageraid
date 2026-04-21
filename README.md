@@ -112,18 +112,33 @@ Admin-only command (`Manage Server` permission) để đăng ký 1 text channel 
 - `/raid-channel show` — xem channel đang monitor
 - `/raid-channel clear` — tắt monitor
 
-Sau khi đăng ký, bất kỳ ai post message vào channel đó dạng `<raid> <difficulty> <character> [gate]` sẽ được bot parse và update raid cho char của **chính người post**. Message thành công sẽ được bot auto-delete để channel không bị noise. Lỗi parse được → bot reply 1 tin ngắn rồi xóa sau 10s.
+Sau khi đăng ký, bất kỳ ai post message vào channel đó dạng `<raid> <difficulty> <character> [gate]` sẽ được bot parse và update raid cho char của **chính người post**. Thành công → bot DM user embed xác nhận + xóa message gốc. Lỗi phục hồi được (char không có, iLvl thiếu, v.v.) → bot ping user persistent hint, tự dọn khi user post lại hoặc sau 5 phút.
+
+**Flow chi tiết:**
+- **Set subcommand**: bot kiểm tra permission trong channel đích, nếu OK thì save config + post welcome embed công khai + pin luôn. Thiếu quyền → reply lỗi, config không đổi.
+- **Show subcommand**: hiển thị channel đang monitor + health check bot's permissions real-time (fallback `channels.fetch` nếu cache cold).
+- **Clear subcommand**: tắt monitor ngay, luôn write-through Mongo bất kể cache state.
 
 **Format:**
 - `Serca Nightmare Clauseduk` → mark Serca Nightmare của Clauseduk là DONE (cả raid)
 - `Serca Nor Soulrano G1` → mark Serca Normal G1 của Soulrano là done (single gate, status=process)
 
 **Aliases** (case-insensitive):
-- Raid: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca`
+- Raid: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca` (accept typo `secra`)
 - Difficulty: `normal` / `nor` · `hard` · `nightmare` / `nm`
 - Gate: `G1`, `G2`, ... (validate theo raid's actual gate list)
 
-**Separator**: space hoặc `+` đều được (`Serca + Nor + Soulrano + G1`).
+**Separator**: space, `+`, hoặc `,` đều được (`Serca + Nor + Soulrano + G1`).
+
+**Error UX:**
+| Trường hợp | Bot action |
+|-----------|-----------|
+| Parse fail (không phải raid intent) | Silent ignore |
+| Lỗi phục hồi được (char not found, iLvl thấp, combo sai, multi-raid/diff/gate) | Ping user persistent hint — auto-dọn khi user post lại hoặc sau 5 phút TTL |
+| Internal error (DB/Discord fail) | Reply transient tự xóa 10s |
+| Success | DM user embed xác nhận + xóa message gốc + dọn hint cũ của user đó (nếu có) |
+
+**DM confirmation**: Discord chỉ hỗ trợ ephemeral (chỉ tác giả thấy) cho interactions — không có trên `MessageCreate`. Workaround là DM. Nếu user tắt "Allow direct messages from server members" → DM fail (log warn), raid progress vẫn được update đúng, chỉ missing notification private.
 
 **Prerequisites deploy:**
 1. Bật `MESSAGE CONTENT INTENT` trong Discord Developer Portal → Bot → Privileged Gateway Intents. Nếu không bật, bot **sẽ không start được** (Discord reject login với "Used disallowed intents") — dùng env `TEXT_MONITOR_ENABLED=false` để deploy slash-command-only mà không cần privileged intent.
