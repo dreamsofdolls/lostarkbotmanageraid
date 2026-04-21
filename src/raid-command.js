@@ -83,6 +83,7 @@ const {
   getRaidRequirementList,
   getRaidRequirementMap,
   getGatesForRaid,
+  getRaidGateForBoss,
 } = require("./models/Raid");
 
 const MAX_CHARACTERS_PER_ACCOUNT = 6;
@@ -612,6 +613,20 @@ const removeRosterCommand = new SlashCommandBuilder()
       .setAutocomplete(true)
   );
 
+// Full action catalog for /raid-channel config. Autocomplete handler
+// filters out whichever of schedule-on/schedule-off is redundant given
+// the guild's current autoCleanupEnabled state — admin sees only the
+// toggle that actually changes something.
+const RAID_CHANNEL_ACTION_CHOICES = [
+  { name: "show — view current config + health check", value: "show" },
+  { name: "set — register the monitor channel (needs `channel` option)", value: "set" },
+  { name: "clear — disable monitor + reset schedule", value: "clear" },
+  { name: "cleanup — delete all non-pinned messages now", value: "cleanup" },
+  { name: "repin — refresh the pinned welcome embed", value: "repin" },
+  { name: "schedule-on — enable daily 00:00 VN auto-cleanup", value: "schedule-on" },
+  { name: "schedule-off — disable daily auto-cleanup", value: "schedule-off" },
+];
+
 const raidChannelCommand = new SlashCommandBuilder()
   .setName("raid-channel")
   .setDescription("Configure the raid monitor channel (admin only)")
@@ -626,15 +641,7 @@ const raidChannelCommand = new SlashCommandBuilder()
           .setName("action")
           .setDescription("Which action to run")
           .setRequired(true)
-          .addChoices(
-            { name: "show — view current config + health check", value: "show" },
-            { name: "set — register the monitor channel (needs `channel` option)", value: "set" },
-            { name: "clear — disable monitor + reset schedule", value: "clear" },
-            { name: "cleanup — delete all non-pinned messages now", value: "cleanup" },
-            { name: "repin — refresh the pinned welcome embed", value: "repin" },
-            { name: "schedule-on — enable daily 00:00 VN auto-cleanup", value: "schedule-on" },
-            { name: "schedule-off — disable daily auto-cleanup", value: "schedule-off" }
-          )
+          .setAutocomplete(true)
       )
       .addChannelOption((opt) =>
         opt
@@ -642,6 +649,23 @@ const raidChannelCommand = new SlashCommandBuilder()
           .setDescription("Target text channel (only used when action=set)")
           .setRequired(false)
           .addChannelTypes(ChannelType.GuildText)
+      )
+  );
+
+const raidAutoManageCommand = new SlashCommandBuilder()
+  .setName("raid-auto-manage")
+  .setDescription("Auto-sync raid progress from lostark.bible clear logs")
+  .setDMPermission(false)
+  .addStringOption((opt) =>
+    opt
+      .setName("action")
+      .setDescription("Pick what to do")
+      .setRequired(true)
+      .addChoices(
+        { name: "on — enable auto-sync + run an initial sync now", value: "on" },
+        { name: "off — disable auto-sync", value: "off" },
+        { name: "sync — pull bible logs now and reconcile raid progress", value: "sync" },
+        { name: "status — show current opt-in + last sync time", value: "status" }
       )
   );
 
@@ -653,6 +677,7 @@ const commands = [
   raidHelpCommand,
   removeRosterCommand,
   raidChannelCommand,
+  raidAutoManageCommand,
 ];
 
 async function handleAddRosterCommand(interaction) {
@@ -1539,6 +1564,11 @@ async function applyRaidSetForDiscordId({
   let ineligibleItemLevel = 0;
   let modeResetCount = 0;
   let alreadyComplete = false;
+  // The properly-cased character name from the roster — user's input may
+  // be lowercase (especially from the text-channel parser which lowercases
+  // for alias matching), but the embed should show the name the way the
+  // owner registered it.
+  let displayName = "";
 
   await saveWithRetry(async () => {
     // Reset outer counters on each retry attempt so VersionError retries
@@ -1549,6 +1579,7 @@ async function applyRaidSetForDiscordId({
     ineligibleItemLevel = 0;
     modeResetCount = 0;
     alreadyComplete = false;
+    displayName = "";
 
     const userDoc = await User.findOne({ discordId });
     if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
@@ -1567,6 +1598,7 @@ async function applyRaidSetForDiscordId({
     if (!character) return;
 
     matchedCount = 1;
+    displayName = getCharacterName(character);
     const charItemLevel = Number(character.itemLevel) || 0;
     if (charItemLevel < raidMeta.minItemLevel) {
       ineligibleItemLevel = charItemLevel;
@@ -1649,6 +1681,7 @@ async function applyRaidSetForDiscordId({
     ineligibleItemLevel,
     modeResetCount,
     selectedDifficulty,
+    displayName,
   };
 }
 
@@ -1880,6 +1913,8 @@ const HELP_SECTIONS = [
       "• **Aliases**: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca` (accept typo `secra`) · `normal` / `nor` · `hard` · `nightmare` / `nm` · gates `G1` / `G2`.",
       "• Không có gate = đánh dấu cả raid done (complete). Có gate `G_N` = **cumulative: mark G1 đến G_N đều done** (Lost Ark sequential progression — đi tới G2 nghĩa là G1 đã qua).",
       "• Chỉ poster tự update char của mình (cần có roster đã đăng ký qua `/add-roster`).",
+      "• **Multi-char trong 1 post**: liệt kê nhiều tên cách nhau bằng space/comma/+ — ví dụ `Act4 Hard Priscilladuk, Nailaduk`. Bot apply raid update cho từng char, DM 1 embed aggregated (done/already-done/not-found/iLvl-thiếu grouped).",
+      "• Nếu trong post có char gõ sai, Artist sẽ ping user trong channel với tên char không tìm thấy — các char hợp lệ khác vẫn được update bình thường.",
       "• **Set**: kiểm tra bot permission trong channel đích, **post + pin welcome fresh trước**, rồi mới unpin welcome cũ (safe-order — partial failure giữ welcome cũ để channel không mất guidance).",
       "• **Show**: hiển thị channel + health check permissions + deploy-flag warnings.",
       "• **Clear**: tắt monitor ngay, luôn write-through Mongo; cũng reset `autoCleanupEnabled` để schedule không tự kích lại khi admin `/set` channel mới.",
@@ -1893,6 +1928,36 @@ const HELP_SECTIONS = [
       "• Deploy: bật `Message Content Intent` ở Discord Developer Portal, hoặc set `TEXT_MONITOR_ENABLED=false` để chạy slash-command-only.",
       "• **Permissions bot cần trong channel đích**: `View Channel`, `Send Messages`, `Manage Messages`, `Read Message History`, `Embed Links`. Thiếu 1 trong 5 là `/raid-channel config action:set` reject.",
       "• Admin-only command (yêu cầu `Manage Server` permission).",
+    ],
+  },
+  {
+    key: "raid-auto-manage",
+    label: "/raid-auto-manage",
+    icon: "🤖",
+    short: "Auto-sync raid progress from lostark.bible",
+    shortVn: "Tự động sync tiến độ raid từ lostark.bible logs",
+    options: [
+      { name: "action:on", required: false, desc: "Bật auto-sync + **kickstart 1 lần sync ngay** để populate raid đã clear tuần này" },
+      { name: "action:off", required: false, desc: "Tắt auto-sync" },
+      { name: "action:sync", required: false, desc: "Manual sync — pull logs từ bible ngay và reconcile vào DB" },
+      { name: "action:status", required: false, desc: "Xem state on/off + **Last success** (lần sync có ≥1 char thành công) + **Last attempt** (lần gọi gần nhất — hiện `— fail` khi các attempt sau success đều lỗi)" },
+    ],
+    example: "/raid-auto-manage action:sync",
+    notes: [
+      "EN: Pulls clear logs from `lostark.bible/api/character/logs` for every character in your roster, maps each boss → raid/gate, and updates `assignedRaids` for this week (filtering by weekly-reset boundary).",
+      "VN: Kéo clear logs từ lostark.bible cho tất cả char trong roster, map boss → raid/gate rồi update progress tuần này.",
+      "• **Boss mapping**: Armoche G1 = Brelshaza Ember / G2 = Armoche Sentinel · Kazeros G1 = Abyss Lord / G2 = Archdemon (Normal) hoặc Death Incarnate (Hard) · Serca G1 = Witch of Agony / G2 = Corvus Tul Rak.",
+      "• **Bus clears** (`isBus: true`) vẫn được count làm clear — theo decision của chủ git.",
+      "• **Filter theo weekly reset**: chỉ logs `timestamp >= 5h chiều thứ 4 (17:00 VN = 10:00 UTC)` gần nhất mới được apply, cũ hơn skip.",
+      "• **Pagination**: logs API được gọi lặp `page: 1, 2, …` (25 entries/page) cho tới khi gặp entry ra khỏi tuần HOẶC page partial HOẶC cap `maxPages=10` (=250 entries safety). Char nhiều clear trong tuần (practice, bus) không bị miss.",
+      "• **Sort ASC trước reconcile**: bible trả newest-first nhưng Artist sort oldest→newest để latest-mode luôn thắng khi có mode-switch wipe.",
+      "• **Mode-switch**: nếu bible log báo clear Serca NM nhưng DB đang track Serca Hard cho char đó, bible-wins — Artist wipe raid progress cũ rồi ghi theo mode mới.",
+      "• **Cached meta**: lần đầu sync phải scrape HTML page `/roster` để lấy `characterSerial + cid + rid`; các lần sau dùng cache trong DB → chỉ tốn 1 API call per char.",
+      "• **Rate limit**: share `bibleLimiter` (max 2 request concurrent) với `/raid-status` refresh — không blast bible.",
+      "• **Last success vs Last attempt**: nếu Cloudflare block hoặc bible trả `Logs not enabled` cho TẤT CẢ char, `lastAutoManageSyncAt` không được stamp (chỉ `lastAutoManageAttemptAt`). `action:status` surface cả 2 để admin thấy rõ khi sync đang fail liên tục.",
+      "• **Private logs → 403 Logs not enabled**: char có `Show on Profile` tắt trên `lostark.bible/me/logs` sẽ bị skip và hiện ở bucket Fail. Bot không auth thay user được (cookie HTTP-only, upload token write-only — đã test 2026-04-21). User phải tự bật `Show on Profile` cho chars muốn sync, hoặc chấp nhận skip.",
+      "• **Per-user sync throttle**: 5 phút cooldown + in-flight guard. `action:sync` spam → reject ephemeral với remaining time (tránh N-roster × M-char HTTP calls dội bible). `action:on` đang in-flight thì reject; đang cooldown thì vẫn flip flag nhưng skip initial sync, báo user chờ X phút rồi gõ `sync` sau.",
+      "• **Chưa hook vào `/raid-status`** (phase 1 chỉ manual `action:sync`). Phase sau: opt-in flag sẽ trigger sync tự động.",
     ],
   },
 ];
@@ -2259,6 +2324,11 @@ async function handleRaidManagementCommand(interaction) {
 
   if (interaction.commandName === "raid-channel") {
     await handleRaidChannelCommand(interaction);
+    return;
+  }
+
+  if (interaction.commandName === "raid-auto-manage") {
+    await handleRaidAutoManageCommand(interaction);
   }
 }
 
@@ -2446,12 +2516,100 @@ function parseRaidMessage(content) {
     return { error: "multi-gate", gates: [...gateSet] };
   }
 
+  // Multi-character support: each leftover token is treated as its own
+  // character name. Lost Ark NA/SEA names are always single-word so
+  // token boundaries map cleanly to character boundaries. Dedup via Set
+  // so "Priscilladuk, Priscilladuk, Nailaduk" collapses to 2 unique
+  // targets and the write is idempotent.
+  const charNames = [...new Set(leftover.filter(Boolean))];
+
   return {
     raidKey: [...raidSet][0],
     modeKey: [...diffSet][0],
-    charName: leftover.join(" "),
+    charNames,
     gate: [...gateSet][0] || null,
   };
+}
+
+/**
+ * Build a single aggregated embed summarizing the outcome of applying one
+ * raid update across multiple characters in one channel message. Buckets
+ * results by status (done / already complete / not found / ineligible /
+ * errored) so the user reads one tidy card instead of N separate DMs —
+ * works equally well when N === 1 (single-char) since buckets collapse.
+ */
+function buildRaidChannelMultiResultEmbed({
+  results,
+  raidMeta,
+  gates,
+  statusType,
+  guildName,
+}) {
+  const gatesText = Array.isArray(gates) && gates.length > 0 ? gates.join(", ") : "All gates";
+  const scopeLabel =
+    statusType === "process" && Array.isArray(gates) && gates.length > 0
+      ? `${raidMeta.label} · ${gatesText}`
+      : raidMeta.label;
+
+  const done = [];
+  const already = [];
+  const notFound = [];
+  const ineligible = [];
+  const errored = [];
+
+  for (const r of results) {
+    const display = r.displayName || r.charName;
+    if (r.error) errored.push(r.charName);
+    else if (r.updated) done.push(display);
+    else if (r.alreadyComplete) already.push(display);
+    else if (!r.matched) notFound.push(r.charName);
+    else ineligible.push(`${display} (iLvl ${r.ineligibleItemLevel})`);
+  }
+
+  const hasProgress = done.length > 0 || already.length > 0;
+  const anyError = notFound.length > 0 || ineligible.length > 0 || errored.length > 0;
+  const color = hasProgress && !anyError ? UI.colors.success : UI.colors.progress;
+  const titleIcon = hasProgress ? UI.icons.done : UI.icons.info;
+
+  const embed = new EmbedBuilder()
+    .setColor(color)
+    .setTitle(`${titleIcon} Raid Update · ${scopeLabel}`)
+    .setDescription(`Artist đã xử lý raid cho ${results.length} character~ 🦊`)
+    .setTimestamp();
+
+  if (done.length > 0) {
+    embed.addFields({
+      name: `${UI.icons.done} Updated (${done.length})`,
+      value: done.map((n) => `**${n}**`).join(", "),
+    });
+  }
+  if (already.length > 0) {
+    embed.addFields({
+      name: `${UI.icons.info} Đã DONE từ trước (${already.length})`,
+      value: already.map((n) => `**${n}**`).join(", "),
+    });
+  }
+  if (notFound.length > 0) {
+    embed.addFields({
+      name: `${UI.icons.warn} Không tìm thấy trong roster (${notFound.length})`,
+      value: notFound.map((n) => `\`${n}\``).join(", "),
+    });
+  }
+  if (ineligible.length > 0) {
+    embed.addFields({
+      name: `${UI.icons.warn} Chưa đủ iLvl cho ${raidMeta.label} (cần ${raidMeta.minItemLevel}+)`,
+      value: ineligible.join("\n"),
+    });
+  }
+  if (errored.length > 0) {
+    embed.addFields({
+      name: `${UI.icons.warn} Lỗi hệ thống`,
+      value: errored.map((n) => `\`${n}\``).join(", "),
+    });
+  }
+
+  if (guildName) embed.setFooter({ text: `Server: ${guildName}` });
+  return embed;
 }
 
 function buildRaidChannelAlreadyCompleteEmbed({
@@ -2530,7 +2688,7 @@ function buildRaidChannelWelcomeEmbed() {
     .setTitle(`🦊 Chào các bạn~ Artist ngồi trông channel này nhé`)
     .setDescription(
       [
-        "🦊 Mỗi lần clear raid xong, cứ post 1 tin nhắn ngắn dạng `<raid> <difficulty> <character> [gate]` vào đây là Artist sẽ tự động đánh dấu progress giúp, xong Artist dọn luôn tin nhắn cho channel khỏi rối nha~",
+        "🦊 Mỗi lần clear raid xong, cứ post 1 tin nhắn ngắn dạng `<raid> <difficulty> <character[, character2, ...]> [gate]` vào đây là Artist sẽ tự động đánh dấu progress giúp, xong Artist dọn luôn tin nhắn cho channel khỏi rối nha~",
         "",
         "**Artist chỉ update được character trong roster của chính bạn thôi đấy.** Chưa có roster? Chạy `/add-roster` trước rồi hẵng post clear nhé. Muốn xem lại tiến độ của mình, dùng `/raid-status`.",
       ].join("\n")
@@ -2542,6 +2700,7 @@ function buildRaidChannelWelcomeEmbed() {
           "`Serca Nightmare Clauseduk` → mark cả Serca Nightmare là DONE (tất cả gate)",
           "`Kazeros Hard Soulrano G1` → mark G1 của Kazeros Hard (chưa clear tới G2)",
           "`Serca Nor Soulrano G2` → mark **G1 + G2** của Serca Normal (cumulative — đi tới G2 nghĩa là G1 cũng đã qua)",
+          "`Act4 Hard Priscilladuk, Nailaduk` → mark Act 4 Hard done cho **cả 2 character** trong 1 post (multi-char; dedup tự động)",
         ].join("\n"),
       },
       {
@@ -2562,6 +2721,13 @@ function buildRaidChannelWelcomeEmbed() {
           "• Post đúng → Artist DM bạn embed confirm riêng. Nếu DM bị tắt, Artist sẽ ping public ngắn rồi tự xóa sau 15 giây.",
           "• Post 1 raid đã clear từ trước → Artist DM notice riêng báo đã DONE rồi, không update lại. Tránh overwrite progress tuần này. Muốn reset thật sự thì dùng `/raid-set` với `status:reset`.",
           "• Post cách nhau ít nhất **2 giây** nha~ Spam nhanh quá Artist sẽ im lặng bỏ qua và nhắc khéo 1 lần.",
+        ].join("\n"),
+      },
+      {
+        name: "🤖 Lười post? Bật `/raid-auto-manage` nhé",
+        value: [
+          "Artist có thể tự kéo log clear từ **lostark.bible** để update raid progress — không cần post thủ công. Bật bằng `/raid-auto-manage action:on` (chạy 1 initial sync luôn), sync thủ công bất cứ lúc nào bằng `action:sync`.",
+          "**Lưu ý quan trọng:** bible mặc định ẩn log của mỗi char. Muốn Artist đọc được thì phải vào <https://lostark.bible/me/logs> và bật `Show on Profile` cho từng char cậu muốn sync. Char nào tắt sẽ bị Artist skip vào bucket **Fail** với lỗi `403 Logs not enabled`.",
         ].join("\n"),
       }
     )
@@ -2817,7 +2983,7 @@ async function handleRaidChannelMessage(message) {
     return;
   }
 
-  const { raidKey, modeKey, charName, gate } = parsed;
+  const { raidKey, modeKey, charNames, gate } = parsed;
   const raidValue = `${raidKey}_${modeKey}`;
   const raidMeta = RAID_REQUIREMENT_MAP[raidValue];
   if (!raidMeta) {
@@ -2836,14 +3002,17 @@ async function handleRaidChannelMessage(message) {
     }
   }
 
+  if (!Array.isArray(charNames) || charNames.length === 0) {
+    // Defensive — parser should have returned null in this case.
+    return;
+  }
+
   const statusType = gate ? "process" : "complete";
 
-  // Cumulative gate expansion for the text channel: posting `G2` means
-  // "cleared up to G2" in Lost Ark sequential progression (G1 is a prereq
-  // for G2 in-game, so you can't reach G2 without G1). Expand the single
-  // parsed gate into the full prefix [G1..G_N] so one post captures the
-  // whole progress. Slash command stays single-gate explicit for admin
-  // correction of individual gate records.
+  // Cumulative gate expansion: posting `G2` means "cleared up to G2" in
+  // Lost Ark sequential progression (G1 is a prereq for G2 in-game, so
+  // you can't reach G2 without G1). Expand the single parsed gate into
+  // the full prefix [G1..G_N] so one post captures the whole progress.
   let effectiveGates = [];
   if (gate) {
     const allGates = getGatesForRaid(raidMeta.raidKey);
@@ -2851,136 +3020,154 @@ async function handleRaidChannelMessage(message) {
     effectiveGates = gateIndex >= 0 ? allGates.slice(0, gateIndex + 1) : [gate];
   }
 
-  let result;
-  try {
-    result = await applyRaidSetForDiscordId({
-      discordId: message.author.id,
-      characterName: charName,
-      raidMeta,
-      statusType,
-      effectiveGates,
-    });
-  } catch (err) {
-    console.error("[raid-channel] write failed:", err?.message || err);
-    // Internal/transient error — short auto-delete reply instead of a
-    // persistent hint, since retyping the same message won't necessarily fix
-    // a downstream DB/Discord failure.
-    await postTransientReply(message, `${UI.icons.warn} Có lỗi khi update raid, thử lại sau nhé.`);
-    return;
-  }
-
-  if (result.noRoster) {
-    await postPersistentHint(message, `${UI.icons.info} Cậu chưa có roster. Dùng \`/add-roster\` trước rồi quay lại post clear nha.`);
-    return;
-  }
-  if (!result.matched) {
-    await postPersistentHint(message, `${UI.icons.warn} Không tìm thấy character \`${charName}\` trong roster của cậu. Check lại tên rồi post lại nha.`);
-    return;
-  }
-  if (result.alreadyComplete) {
-    // Same DM + delete pattern as success path — user gets private notice
-    // that the clear was already recorded and the channel stays clean.
-    // Different embed tone (progress color + info icon) so they don't
-    // mistake it for a fresh clear that just happened.
-    const noticeEmbed = buildRaidChannelAlreadyCompleteEmbed({
-      charName,
-      raidMeta,
-      gates: effectiveGates,
-      statusType,
-      guildName: message.guild?.name,
-    });
-
-    let dmSucceeded = true;
+  // Process each character in the message. One message → one cooldown
+  // slot regardless of how many chars the user lists; write path runs
+  // per character with shared raid+gate target.
+  const results = [];
+  let hadNoRoster = false;
+  for (const charName of charNames) {
     try {
-      await message.author.send({ embeds: [noticeEmbed] });
+      const r = await applyRaidSetForDiscordId({
+        discordId: message.author.id,
+        characterName: charName,
+        raidMeta,
+        statusType,
+        effectiveGates,
+      });
+      results.push({ charName, ...r });
+      if (r.noRoster) {
+        hadNoRoster = true;
+        break; // no point checking more chars when the user has no roster at all
+      }
     } catch (err) {
-      dmSucceeded = false;
-      console.warn(
-        `[raid-channel] DM already-complete notice to ${message.author.tag || message.author.id} failed (DMs disabled?):`,
-        err?.message || err
-      );
+      console.error(`[raid-channel] write for "${charName}" failed:`, err?.message || err);
+      results.push({
+        charName,
+        error: err?.message || String(err),
+        matched: false,
+        updated: false,
+        alreadyComplete: false,
+      });
     }
-
-    const ops = [
-      clearPendingHint(message.channel, userHintKey),
-      message.delete().catch((err) => {
-        console.warn("[raid-channel] delete failed (missing Manage Messages?):", err?.message || err);
-      }),
-    ];
-
-    if (!dmSucceeded) {
-      const scope = effectiveGates.length > 0 ? `${raidMeta.label} · ${effectiveGates.join(", ")}` : raidMeta.label;
-      const fallbackText = `${UI.icons.info} <@${message.author.id}> **${charName}** đã clear **${scope}** tuần này rồi — Artist không update lại. _(DM bị tắt — enable "Allow DMs from server members" để nhận notice private.)_`;
-      ops.push(
-        (async () => {
-          try {
-            const fallback = await message.channel.send({
-              content: fallbackText,
-              allowedMentions: { users: [message.author.id] },
-            });
-            setTimeout(() => fallback.delete().catch(() => {}), 15_000);
-          } catch (err) {
-            console.warn("[raid-channel] already-complete fallback post failed:", err?.message || err);
-          }
-        })()
-      );
-    }
-
-    await Promise.allSettled(ops);
-    return;
   }
-  if (!result.updated) {
+
+  if (hadNoRoster) {
     await postPersistentHint(
       message,
-      `${UI.icons.warn} **${charName}** iLvl ${result.ineligibleItemLevel}, chưa đủ **${raidMeta.minItemLevel}+** cho **${raidMeta.label}**.`
+      `${UI.icons.info} Cậu chưa có roster. Dùng \`/add-roster\` trước rồi quay lại post clear nha.`
     );
     return;
   }
 
-  // Success path — the raid write actually landed. Cooldown was already
-  // committed at the top of the handler right after the check passed.
-  //   1. DM the user a private confirmation (Discord's only "only you see it"
-  //      surface outside of interactions). If DM fails (user disabled DMs
-  //      from server members), fall back to a short public ping so they
-  //      still see that the update landed — otherwise they'd just see their
-  //      message disappear with no feedback at all.
-  //   2. Clear any stale hint reply that may still be sitting in the channel.
-  //   3. Delete the original announcement so the channel stays tidy.
-  const confirmEmbed = buildRaidChannelSuccessEmbed({
-    charName,
+  const successCount = results.filter((r) => r.updated).length;
+  const alreadyCount = results.filter((r) => r.alreadyComplete).length;
+  const notFoundResults = results.filter((r) => !r.matched && !r.error);
+  const ineligibleResults = results.filter((r) => r.matched && !r.updated && !r.alreadyComplete);
+  const errorResults = results.filter((r) => r.error);
+  const hasProgress = successCount > 0 || alreadyCount > 0;
+  const hasErrors =
+    notFoundResults.length > 0 || ineligibleResults.length > 0 || errorResults.length > 0;
+
+  // Build an aggregated embed for DM — covers both single-char and multi-char
+  // cases, and groups results by status so the user sees one tidy card.
+  const aggregateEmbed = buildRaidChannelMultiResultEmbed({
+    results,
     raidMeta,
     gates: effectiveGates,
     statusType,
-    selectedDifficulty: result.selectedDifficulty,
-    modeResetCount: result.modeResetCount,
     guildName: message.guild?.name,
   });
 
-  let dmSucceeded = true;
-  try {
-    await message.author.send({ embeds: [confirmEmbed] });
-  } catch (err) {
-    dmSucceeded = false;
-    console.warn(
-      `[raid-channel] DM confirm to ${message.author.tag || message.author.id} failed (DMs disabled?):`,
-      err?.message || err
-    );
+  // DM the aggregate for a private record. Public fallback when DM is
+  // disabled. Only attempted if we actually processed something useful
+  // (some progress OR enough info to be worth surfacing).
+  let dmSucceeded = false;
+  if (hasProgress || hasErrors) {
+    try {
+      await message.author.send({ embeds: [aggregateEmbed] });
+      dmSucceeded = true;
+    } catch (err) {
+      console.warn(
+        `[raid-channel] DM to ${message.author.tag || message.author.id} failed (DMs disabled?):`,
+        err?.message || err
+      );
+    }
   }
 
-  const ops = [
-    clearPendingHint(message.channel, userHintKey),
-    message.delete().catch((err) => {
-      console.warn("[raid-channel] delete failed (missing Manage Messages?):", err?.message || err);
-    }),
-  ];
+  const ops = [];
 
-  if (!dmSucceeded) {
-    // Public fallback: channel.send (not message.reply, because the source
-    // message is about to be deleted in parallel). Auto-cleans after 15s so
-    // the channel doesn't accumulate confirms.
-    const fallbackText = effectiveGates.length > 0
-      ? `${UI.icons.done} <@${message.author.id}> đã mark **${raidMeta.label} · ${effectiveGates.join(", ")}** done cho **${charName}**. _(DM bị tắt — enable "Allow DMs from server members" để nhận confirm private.)_`
-      : `${UI.icons.done} <@${message.author.id}> đã mark **${raidMeta.label}** done cho **${charName}**. _(DM bị tắt — enable "Allow DMs from server members" để nhận confirm private.)_`;
+  // When ANY error is present, post a persistent hint in the channel so
+  // the user visibly gets pinged about the specific bad names — even if
+  // some other names succeeded. Traine: "gõ đầu user nếu gõ sai".
+  if (hasErrors) {
+    const hintLines = [];
+    if (notFoundResults.length > 0) {
+      hintLines.push(
+        `${UI.icons.warn} Không tìm thấy trong roster: ${notFoundResults
+          .map((r) => `\`${r.charName}\``)
+          .join(", ")}`
+      );
+    }
+    if (ineligibleResults.length > 0) {
+      hintLines.push(
+        `${UI.icons.warn} Chưa đủ iLvl cho **${raidMeta.label}** (cần **${raidMeta.minItemLevel}+**): ${ineligibleResults
+          .map((r) => `**${r.displayName || r.charName}** (iLvl ${r.ineligibleItemLevel})`)
+          .join(", ")}`
+      );
+    }
+    if (errorResults.length > 0) {
+      hintLines.push(
+        `${UI.icons.warn} Lỗi hệ thống khi update: ${errorResults
+          .map((r) => `\`${r.charName}\``)
+          .join(", ")}`
+      );
+    }
+    if (hasProgress) {
+      hintLines.push(
+        `_(Các character hợp lệ khác trong post của bạn đã được update rồi — check DM cho chi tiết.)_`
+      );
+    } else {
+      hintLines.push(`_(Sửa lại rồi post lại nhé, Artist sẽ tự dọn hint cũ.)_`);
+    }
+    ops.push(postPersistentHint(message, hintLines.join("\n")));
+  }
+
+  // Delete the source message only when there's actual progress to record.
+  // If everything failed, keep the message so the user can see what they
+  // posted + the hint next to it, easier to retype correctly.
+  if (hasProgress) {
+    ops.push(
+      message.delete().catch((err) => {
+        console.warn("[raid-channel] delete failed (missing Manage Messages?):", err?.message || err);
+      })
+    );
+    // Also clear any stale pending hint from a previous bad post, now that
+    // a real write landed.
+    if (!hasErrors) {
+      ops.push(clearPendingHint(message.channel, userHintKey));
+    }
+  }
+
+  // Public fallback when DM failed AND there's progress to announce. Uses
+  // channel.send with @mention so user still sees the update status when
+  // their DMs are disabled. Only needed for success-path; errors already
+  // post a public persistent hint above.
+  if (hasProgress && !dmSucceeded) {
+    const scope = effectiveGates.length > 0
+      ? `${raidMeta.label} · ${effectiveGates.join(", ")}`
+      : raidMeta.label;
+    const doneNames = results
+      .filter((r) => r.updated)
+      .map((r) => `**${r.displayName || r.charName}**`)
+      .join(", ");
+    const alreadyNames = results
+      .filter((r) => r.alreadyComplete)
+      .map((r) => `**${r.displayName || r.charName}**`)
+      .join(", ");
+    const parts = [];
+    if (doneNames) parts.push(`mark **${scope}** done cho ${doneNames}`);
+    if (alreadyNames) parts.push(`${alreadyNames} đã clear **${scope}** từ trước`);
+    const fallbackText = `${UI.icons.done} <@${message.author.id}> ${parts.join("; ")}. _(DM bị tắt — enable "Allow DMs from server members" để nhận confirm private.)_`;
     ops.push(
       (async () => {
         try {
@@ -3174,6 +3361,674 @@ async function resolveRaidMonitorChannel(interaction, channelId) {
     }
   }
   return channel;
+}
+
+// ---------------------------------------------------------------------------
+// /raid-auto-manage — lostark.bible clear-log sync
+// ---------------------------------------------------------------------------
+
+// Per-user throttle for /raid-auto-manage sync runs. bibleLimiter already
+// caps concurrency across the whole process, but a single user spamming
+// action:sync still queues N-roster × M-char HTTP calls each time. Two
+// guards combine: in-flight Set rejects parallel runs, cooldown rejects
+// rapid-sequential runs within 5 min based on User.lastAutoManageAttemptAt
+// (which is already stamped on every sync attempt, success or not).
+const AUTO_MANAGE_SYNC_COOLDOWN_MS = 5 * 60 * 1000;
+const inFlightAutoManageSyncs = new Set(); // discordId
+
+/**
+ * Atomically claim a sync slot for this user. The slot is reserved
+ * BEFORE any `await` so two concurrent interactions racing into this
+ * function can't both observe an empty Set — exactly one gets in-flight
+ * acquired, the other gets `in-flight` reject. If the DB cooldown check
+ * rejects, the slot is released before returning so `on`'s "flip flag
+ * only" path doesn't block future sync attempts.
+ *
+ * Caller contract:
+ *   - `acquired: true`  → caller MUST releaseAutoManageSyncSlot() in finally.
+ *   - `acquired: false` → slot is NOT held; caller must not release.
+ */
+async function acquireAutoManageSyncSlot(discordId) {
+  if (inFlightAutoManageSyncs.has(discordId)) {
+    return { acquired: false, reason: "in-flight" };
+  }
+  // Reserve synchronously — this is the TOCTOU-safe step. Any second
+  // caller that reaches this function before we release will see the
+  // Set populated and reject.
+  inFlightAutoManageSyncs.add(discordId);
+  try {
+    const user = await User.findOne(
+      { discordId },
+      { lastAutoManageAttemptAt: 1 }
+    ).lean();
+    const lastAttempt = user?.lastAutoManageAttemptAt || 0;
+    const elapsed = Date.now() - lastAttempt;
+    if (lastAttempt && elapsed < AUTO_MANAGE_SYNC_COOLDOWN_MS) {
+      inFlightAutoManageSyncs.delete(discordId);
+      return {
+        acquired: false,
+        reason: "cooldown",
+        remainingMs: AUTO_MANAGE_SYNC_COOLDOWN_MS - elapsed,
+      };
+    }
+    return { acquired: true };
+  } catch (err) {
+    // DB blip — release so the user isn't permanently stuck in the Set.
+    inFlightAutoManageSyncs.delete(discordId);
+    throw err;
+  }
+}
+
+function releaseAutoManageSyncSlot(discordId) {
+  inFlightAutoManageSyncs.delete(discordId);
+}
+
+function formatAutoManageCooldownRemaining(remainingMs) {
+  const secs = Math.max(1, Math.ceil(remainingMs / 1000));
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  const rem = secs - mins * 60;
+  return rem > 0 ? `${mins}m${rem}s` : `${mins}m`;
+}
+
+/**
+ * Fetch a character's lostark.bible identifiers (serial / cid / rid) by
+ * loading their roster page and regex-extracting the SSR SvelteKit bootstrap
+ * data. These IDs are required to call the logs API but only need to be
+ * fetched once per character — caller caches them on the character doc.
+ */
+async function fetchBibleCharacterMeta(charName) {
+  const url = `https://lostark.bible/character/NA/${encodeURIComponent(charName)}/roster`;
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (compatible; LostArkRaidManageBot/1.0)",
+      Accept: "text/html",
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`Bible roster page returned HTTP ${res.status} for "${charName}"`);
+  }
+  const html = await res.text();
+  // SSR SvelteKit bootstrap data: {header:{id:<cid>,sn:"<serial>",rid:<rid>,...}}
+  const match = html.match(/header:\{id:(\d+),sn:"([^"]+)",rid:(\d+)/);
+  if (!match) {
+    throw new Error(`Could not parse bible metadata for "${charName}" (page shape changed?)`);
+  }
+  return { cid: Number(match[1]), sn: match[2], rid: Number(match[3]) };
+}
+
+/**
+ * Call lostark.bible's logs REST API. Returns the raw array of log entries
+ * (max 25 per page). Each entry shape: { id, name, boss, difficulty, dps,
+ * class, spec, gearScore, combatPower, percentile, duration, timestamp,
+ * isBus, isDead }.
+ */
+async function fetchBibleCharacterLogs({ serial, cid, rid, className, page = 1 }) {
+  const url = "https://lostark.bible/api/character/logs";
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "User-Agent": "Mozilla/5.0 (compatible; LostArkRaidManageBot/1.0)",
+    },
+    body: JSON.stringify({
+      region: "NA",
+      characterSerial: serial,
+      className,
+      cid,
+      rid,
+      page,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Bible logs API returned HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+async function fetchBibleLogsWithLimiter({ serial, cid, rid, className, page = 1 }) {
+  return bibleLimiter.run(() => fetchBibleCharacterLogs({ serial, cid, rid, className, page }));
+}
+
+/**
+ * Paginate bible's logs API until we see an entry older than
+ * `weekResetStart`, get an empty page, or hit `maxPages`. Bible returns
+ * newest-first with 25 entries per page, so one pre-reset entry in a
+ * page means every deeper page is irrelevant. Keeps us from missing
+ * clears when a char has > 25 weekly-relevant log rows (practice runs,
+ * multi-account sharing etc).
+ */
+async function fetchBibleLogsSinceWeekReset({ serial, cid, rid, className, weekResetStart, maxPages = 10 }) {
+  const all = [];
+  for (let page = 1; page <= maxPages; page += 1) {
+    const logs = await fetchBibleLogsWithLimiter({ serial, cid, rid, className, page });
+    if (!Array.isArray(logs) || logs.length === 0) break;
+    all.push(...logs);
+    // If any log in this page is before the reset boundary, deeper
+    // pages only contain older entries — stop early.
+    const hasPreReset = logs.some((l) => Number(l?.timestamp) < weekResetStart);
+    if (hasPreReset) break;
+    // Partial page = last page bible has.
+    if (logs.length < 25) break;
+  }
+  return all;
+}
+
+function normalizeDifficultyToModeKey(difficulty) {
+  const normalized = normalizeName(difficulty || "");
+  if (normalized === "nightmare") return "nightmare";
+  if (normalized === "hard") return "hard";
+  if (normalized === "normal") return "normal";
+  return null;
+}
+
+/**
+ * Given a character doc + array of bible log entries + the current week's
+ * reset boundary, mutate `character.assignedRaids` in place to reflect
+ * every clear that: (a) belongs to a raid in RAID_REQUIREMENTS, (b)
+ * happened at-or-after the week-reset, (c) maps to a known boss via
+ * `getRaidGateForBoss`. Returns an array of applied updates for the
+ * caller to build a confirmation embed.
+ */
+function reconcileCharacterFromLogs(character, logs, weekResetStart) {
+  const applied = [];
+  if (!Array.isArray(logs) || logs.length === 0) return applied;
+
+  const assignedRaids = ensureAssignedRaids(character);
+
+  // Bible returns newest-first. Process oldest-first so mode-switch
+  // wipes always use the *latest* mode as source of truth. Without this,
+  // an older Serca Hard clear could wipe a newer Nightmare clear simply
+  // because it appears later in the API's newest-first stream.
+  const sortedLogs = [...logs].sort(
+    (a, b) => (Number(a?.timestamp) || 0) - (Number(b?.timestamp) || 0)
+  );
+
+  for (const log of sortedLogs) {
+    const ts = Number(log?.timestamp);
+    if (!(ts >= weekResetStart)) continue;
+
+    const mapping = getRaidGateForBoss(log.boss);
+    if (!mapping) continue;
+
+    const modeKey = normalizeDifficultyToModeKey(log.difficulty);
+    if (!modeKey) continue;
+
+    const raidMeta = RAID_REQUIREMENT_MAP[`${mapping.raidKey}_${modeKey}`];
+    if (!raidMeta) continue; // e.g. Kazeros Nightmare if we ever see it but don't track it
+
+    const difficultyLabel = toModeLabel(modeKey);
+    const normalizedSelectedDiff = normalizeName(difficultyLabel);
+
+    // Normalize existing raid data + detect mode mismatch (if user cleared
+    // Serca Hard earlier but bible also logs a Nightmare clear this week,
+    // bible is the source of truth — let the latest-mode win by wiping
+    // the raid before writing the new gate).
+    const existingRaid = normalizeAssignedRaid(
+      assignedRaids[mapping.raidKey] || {},
+      difficultyLabel,
+      mapping.raidKey
+    );
+
+    let modeChange = false;
+    for (const g of getGatesForRaid(mapping.raidKey)) {
+      const existingDiff = existingRaid[g]?.difficulty;
+      if (existingDiff && normalizeName(existingDiff) !== normalizedSelectedDiff) {
+        modeChange = true;
+        break;
+      }
+    }
+    if (modeChange) {
+      for (const g of getGatesForRaid(mapping.raidKey)) {
+        existingRaid[g] = { difficulty: difficultyLabel, completedDate: undefined };
+      }
+    }
+
+    // Only advance completedDate if we don't already have a later clear
+    // for this gate. Bible sometimes shows multiple clears per week on
+    // the same boss (e.g. practice runs) — latest-ts wins.
+    const priorTs = Number(existingRaid[mapping.gate]?.completedDate) || 0;
+    if (ts > priorTs) {
+      existingRaid[mapping.gate] = {
+        difficulty: difficultyLabel,
+        completedDate: ts,
+      };
+      applied.push({
+        raidKey: mapping.raidKey,
+        raidLabel: raidMeta.label,
+        gate: mapping.gate,
+        modeKey,
+        difficulty: difficultyLabel,
+        timestamp: ts,
+        boss: log.boss,
+      });
+    }
+
+    assignedRaids[mapping.raidKey] = existingRaid;
+  }
+
+  character.assignedRaids = assignedRaids;
+  return applied;
+}
+
+/**
+ * Run auto-manage sync for one user doc: for every character whose bible
+ * meta we can load (or have cached), fetch fresh logs and reconcile.
+ * Returns a per-character report plus the total applied count.
+ */
+async function syncAutoManageForUserDoc(userDoc, weekResetStart) {
+  const report = { appliedTotal: 0, perChar: [] };
+
+  for (const account of userDoc.accounts || []) {
+    for (const character of account.characters || []) {
+      const entry = {
+        accountName: account.accountName,
+        charName: getCharacterName(character),
+        className: getCharacterClass(character),
+        applied: [],
+        error: null,
+      };
+      try {
+        // Cache bible meta on the character doc the first time we see it —
+        // subsequent syncs skip the HTML scrape.
+        if (!character.bibleSerial || !character.bibleCid || !character.bibleRid) {
+          const meta = await fetchBibleCharacterMeta(entry.charName);
+          character.bibleSerial = meta.sn;
+          character.bibleCid = meta.cid;
+          character.bibleRid = meta.rid;
+        }
+
+        const logs = await fetchBibleLogsSinceWeekReset({
+          serial: character.bibleSerial,
+          cid: character.bibleCid,
+          rid: character.bibleRid,
+          className: entry.className,
+          weekResetStart,
+        });
+
+        const applied = reconcileCharacterFromLogs(character, logs, weekResetStart);
+        entry.applied = applied;
+        report.appliedTotal += applied.length;
+      } catch (err) {
+        entry.error = err?.message || String(err);
+        console.warn(
+          `[auto-manage] sync for ${entry.charName} failed:`,
+          err?.message || err
+        );
+      }
+      report.perChar.push(entry);
+    }
+  }
+
+  return report;
+}
+
+async function handleRaidAutoManageCommand(interaction) {
+  const discordId = interaction.user.id;
+  const action = interaction.options.getString("action", true);
+
+  if (action === "off") {
+    await User.findOneAndUpdate(
+      { discordId },
+      { $set: { autoManageEnabled: false } },
+      { upsert: true, setDefaultsOnInsert: true }
+    );
+    const embed = new EmbedBuilder()
+      .setColor(UI.colors.muted)
+      .setTitle(`${UI.icons.reset} Auto-manage disabled`)
+      .setDescription(
+        "Auto-manage đã tắt. Cậu vẫn có thể trigger sync thủ công qua `/raid-auto-manage action:sync` bất cứ lúc nào."
+      )
+      .setTimestamp();
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (action === "on") {
+    // Enabling = set flag + run an initial sync immediately so the user
+    // sees the feature working right away instead of waiting for the
+    // next /raid-status (phase 2) or running /sync manually. Admin UX:
+    // flipping the switch should "just do the thing".
+    //
+    // Guard semantics for `on` differ from `sync`:
+    //   - in-flight   → reject hard (a sync is already running for this
+    //                   user; firing `on` now would double-run).
+    //   - cooldown    → still flip the flag so "on" always succeeds at the
+    //                   UX level, but SKIP the initial sync and tell the
+    //                   user they can run /sync in X minutes. Prevents a
+    //                   user who did /sync → on → on … from triggering
+    //                   piles of scrape work.
+    // acquireAutoManageSyncSlot reserves synchronously if possible →
+    // TOCTOU-safe. When `acquired === true`, we own the slot and MUST
+    // release in finally. When cooldown, helper already released — just
+    // track `cooldownSkip` so we don't release something we don't hold.
+    const guard = await acquireAutoManageSyncSlot(discordId);
+    if (!guard.acquired && guard.reason === "in-flight") {
+      await interaction.reply({
+        content: `${UI.icons.info} Một sync khác đang chạy cho cậu rồi — đợi nó xong rồi mới bật nhé.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const cooldownSkip = !guard.acquired && guard.reason === "cooldown";
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try {
+      const weekResetStart = weekResetStartMs();
+      let report;
+      let hadRoster = true;
+      await saveWithRetry(async () => {
+        const userDoc = await User.findOne({ discordId });
+        if (!userDoc) {
+          // Still flip the flag so turning on for a future roster "sticks".
+          await User.findOneAndUpdate(
+            { discordId },
+            { $set: { autoManageEnabled: true } },
+            { upsert: true, setDefaultsOnInsert: true }
+          );
+          hadRoster = false;
+          return;
+        }
+        userDoc.autoManageEnabled = true;
+        if (!Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+          hadRoster = false;
+          await userDoc.save();
+          return;
+        }
+        if (cooldownSkip) {
+          // Persist the flag flip only — no sync this run.
+          await userDoc.save();
+          return;
+        }
+        ensureFreshWeek(userDoc);
+        report = await syncAutoManageForUserDoc(userDoc, weekResetStart);
+        const now = Date.now();
+        userDoc.lastAutoManageAttemptAt = now;
+        // Only stamp "last success" if at least one char actually
+        // fetched+reconciled without throwing. Otherwise status would
+        // falsely claim fresh data after a wall of 403s.
+        if (report.perChar.some((c) => !c.error)) {
+          userDoc.lastAutoManageSyncAt = now;
+        }
+        await userDoc.save();
+      });
+
+      if (cooldownSkip) {
+        const embed = new EmbedBuilder()
+          .setColor(UI.colors.success)
+          .setTitle(`${UI.icons.done} Auto-manage enabled (sync skipped)`)
+          .setDescription(
+            `Flag đã bật. Sync vừa chạy gần đây nên Artist bỏ qua initial sync lần này — đợi **${formatAutoManageCooldownRemaining(
+              guard.remainingMs
+            )}** rồi gõ \`/raid-auto-manage action:sync\` để pull log mới nhất.`
+          )
+          .setTimestamp();
+        await interaction.editReply({ embeds: [embed] });
+        return;
+      }
+
+      if (!hadRoster) {
+        const embed = new EmbedBuilder()
+          .setColor(UI.colors.success)
+          .setTitle(`${UI.icons.done} Auto-manage enabled`)
+          .setDescription(
+            "Đã bật auto-manage. Chưa có roster nên Artist chưa sync được gì — chạy `/add-roster` trước rồi gọi `/raid-auto-manage action:sync` để pull logs."
+          )
+          .setTimestamp();
+        await interaction.editReply({ embeds: [embed] });
+        return;
+      }
+
+      // Reuse the sync-report embed but tweak title so admin knows the
+      // flag flip also happened in this run.
+      const syncEmbed = buildAutoManageSyncReportEmbed(report);
+      syncEmbed.setTitle(
+        `${UI.icons.done} Auto-manage enabled · initial sync ${
+          (report?.appliedTotal || 0) > 0 ? "complete" : "nothing to apply"
+        }`
+      );
+      await interaction.editReply({ embeds: [syncEmbed] });
+    } catch (err) {
+      console.error("[auto-manage] enable-with-sync failed:", err?.message || err);
+      // Flag flip already persisted in the try block (or upsert above) —
+      // surface the sync error but tell the user auto-manage is still ON.
+      await interaction.editReply({
+        content: `${UI.icons.warn} Auto-manage đã bật, nhưng initial sync fail: ${err?.message || err}. Thử lại qua \`/raid-auto-manage action:sync\` nhé.`,
+      });
+    } finally {
+      // Only release if we actually held the slot. cooldownSkip path
+      // bypassed acquisition (helper released internally).
+      if (!cooldownSkip) releaseAutoManageSyncSlot(discordId);
+    }
+    return;
+  }
+
+  if (action === "status") {
+    const user = await User.findOne({ discordId }).lean();
+    const enabled = !!user?.autoManageEnabled;
+    const lastSync = user?.lastAutoManageSyncAt || 0;
+    const lastAttempt = user?.lastAutoManageAttemptAt || 0;
+    const embed = new EmbedBuilder()
+      .setColor(UI.colors.neutral)
+      .setTitle(`${UI.icons.info} Auto-manage Status`)
+      .addFields(
+        { name: "Opt-in", value: enabled ? `${UI.icons.done} ON` : `${UI.icons.reset} OFF`, inline: true },
+        {
+          name: "Last success",
+          value: lastSync ? `<t:${Math.floor(lastSync / 1000)}:R>` : "Chưa có lần nào thành công",
+          inline: true,
+        },
+        {
+          name: "Last attempt",
+          value: lastAttempt
+            ? (lastAttempt === lastSync
+                ? "(= last success)"
+                : `<t:${Math.floor(lastAttempt / 1000)}:R> — fail`)
+            : "Chưa chạy bao giờ",
+          inline: true,
+        }
+      )
+      .setTimestamp();
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (action === "sync") {
+    // Acquire slot BEFORE deferReply so reply-reject is a normal reply (not editReply).
+    // acquireAutoManageSyncSlot reserves the slot synchronously → no TOCTOU race between check and set.
+    const guard = await acquireAutoManageSyncSlot(discordId);
+    if (!guard.acquired) {
+      if (guard.reason === "in-flight") {
+        await interaction.reply({
+          content: `${UI.icons.info} Một sync khác của cậu đang chạy rồi — đợi kết quả trước nhé, đừng gõ spam~`,
+          flags: MessageFlags.Ephemeral,
+        });
+      } else {
+        await interaction.reply({
+          content: `${UI.icons.info} Sync vừa chạy gần đây. Đợi thêm **${formatAutoManageCooldownRemaining(
+            guard.remainingMs
+          )}** rồi sync tiếp nhé (cooldown 5 phút để tránh gõ bible liên tục).`,
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+      return;
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try {
+      const weekResetStart = weekResetStartMs();
+      let report;
+      await saveWithRetry(async () => {
+        const userDoc = await User.findOne({ discordId });
+        if (!userDoc) {
+          report = { noRoster: true };
+          return;
+        }
+        if (!Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+          report = { noRoster: true };
+          return;
+        }
+        ensureFreshWeek(userDoc);
+        report = await syncAutoManageForUserDoc(userDoc, weekResetStart);
+        const now = Date.now();
+        userDoc.lastAutoManageAttemptAt = now;
+        if (report.perChar.some((c) => !c.error)) {
+          userDoc.lastAutoManageSyncAt = now;
+        }
+        await userDoc.save();
+      });
+
+      if (report?.noRoster) {
+        await interaction.editReply({
+          content: `${UI.icons.info} Cậu chưa có roster nào. Dùng \`/add-roster\` để thêm trước nhé.`,
+        });
+        return;
+      }
+
+      const embed = buildAutoManageSyncReportEmbed(report);
+      await interaction.editReply({ embeds: [embed] });
+    } catch (err) {
+      console.error("[auto-manage] sync failed:", err?.message || err);
+      await interaction.editReply({
+        content: `${UI.icons.warn} Sync fail: ${err?.message || err}. Check lostark.bible có block (Cloudflare) hoặc char names có đúng không.`,
+      });
+    } finally {
+      releaseAutoManageSyncSlot(discordId);
+    }
+  }
+}
+
+function buildAutoManageSyncReportEmbed(report) {
+  const appliedTotal = report?.appliedTotal || 0;
+  const perChar = Array.isArray(report?.perChar) ? report.perChar : [];
+  const errored = perChar.filter((c) => c.error);
+  const withApplied = perChar.filter((c) => c.applied.length > 0);
+  const allFailed = perChar.length > 0 && errored.length === perChar.length;
+
+  // Three-state description so the user never sees "DB đã match" stapled
+  // to a Fail field — ambiguous and looked like a bug in Codex review.
+  let description;
+  if (appliedTotal > 0) {
+    description = `Đã update **${appliedTotal}** gate clear từ lostark.bible logs nha~ 🦊`;
+    if (errored.length > 0) {
+      description += `\n${UI.icons.warn} ${errored.length} char fail sync — chi tiết bên dưới.`;
+    }
+  } else if (allFailed) {
+    description = `Không apply được gate nào vì **tất cả ${errored.length} char fail** sync. Check Cloudflare / "Logs not enabled" / char name bên dưới.`;
+  } else if (errored.length > 0) {
+    description = `Không có gate clear mới nào để apply. ${UI.icons.warn} ${errored.length}/${perChar.length} char fail — các char còn lại đã match DB.`;
+  } else {
+    description = `Không có gate clear mới nào để sync. Data DB đã match với bible logs tuần này.`;
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(
+      appliedTotal > 0
+        ? UI.colors.success
+        : allFailed
+          ? UI.colors.progress
+          : UI.colors.neutral
+    )
+    .setTitle(`${appliedTotal > 0 ? UI.icons.done : UI.icons.info} Auto-manage Sync`)
+    .setDescription(description)
+    .setTimestamp();
+
+  for (const c of withApplied.slice(0, 10)) {
+    const lines = c.applied.map(
+      (a) => `• **${a.raidLabel}** \`${a.gate}\` (${a.difficulty})`
+    );
+    embed.addFields({
+      name: `${UI.icons.done} ${c.charName} (${c.accountName})`,
+      value: lines.join("\n"),
+      inline: false,
+    });
+  }
+  if (withApplied.length > 10) {
+    embed.addFields({
+      name: "… và thêm nhiều char khác",
+      value: `${withApplied.length - 10} char khác cũng có update — xem \`/raid-status\` để thấy đủ.`,
+    });
+  }
+
+  if (errored.length > 0) {
+    embed.addFields({
+      name: `${UI.icons.warn} Fail (${errored.length})`,
+      value: errored
+        .slice(0, 5)
+        .map((c) => `\`${c.charName}\`: ${c.error}`)
+        .join("\n"),
+    });
+  }
+
+  return embed;
+}
+
+function weekResetStartMs(now = new Date()) {
+  // Inverse of getTargetCleanupDayKey-ish logic: find the most recent
+  // weekly-reset boundary that has passed — **5h chiều thứ 4 giờ Việt Nam**
+  // (17:00 VN = 10:00 UTC, UTC+7). Matches the weekly-reset module so
+  // "this week" means "after the last weekly-reset moment."
+  const cursor = new Date(now.getTime());
+  // Walk backwards day-by-day up to 7 days until we find the last
+  // passed Wed 10:00 UTC moment (= 5h chiều thứ 4 VN).
+  for (let i = 0; i < 8; i += 1) {
+    const day = cursor.getUTCDay(); // 0=Sun .. 6=Sat
+    if (day === 3 && cursor.getUTCHours() >= 10) {
+      // Snap to the 10:00 UTC boundary of this Wednesday.
+      return Date.UTC(
+        cursor.getUTCFullYear(),
+        cursor.getUTCMonth(),
+        cursor.getUTCDate(),
+        10, 0, 0, 0
+      );
+    }
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+    cursor.setUTCHours(23, 59, 59, 999); // roll to end-of-prev-day before next check
+  }
+  // Fallback: 7 days ago at the current moment.
+  return now.getTime() - 7 * 24 * 60 * 60 * 1000;
+}
+
+/**
+ * Autocomplete for `/raid-channel config action:*`. Returns the full action
+ * catalog filtered by the user's typed prefix AND by the guild's current
+ * `autoCleanupEnabled` state — hides `schedule-on` when already enabled
+ * and `schedule-off` when already disabled, so admin never sees an option
+ * that would be a no-op. Read-only best-effort; any DB error falls back
+ * to showing both schedule options so admin can still try to run them.
+ */
+async function handleRaidChannelAutocomplete(interaction) {
+  try {
+    const focused = interaction.options.getFocused(true);
+    if (focused?.name !== "action") {
+      await interaction.respond([]).catch(() => {});
+      return;
+    }
+
+    let autoCleanupEnabled = false;
+    if (interaction.guildId) {
+      try {
+        const cfg = await GuildConfig.findOne({ guildId: interaction.guildId }).lean();
+        autoCleanupEnabled = !!cfg?.autoCleanupEnabled;
+      } catch (err) {
+        console.warn("[autocomplete] raid-channel config load failed:", err?.message || err);
+      }
+    }
+
+    const needle = normalizeName(focused.value || "");
+    const choices = RAID_CHANNEL_ACTION_CHOICES
+      .filter((c) => {
+        if (autoCleanupEnabled && c.value === "schedule-on") return false;
+        if (!autoCleanupEnabled && c.value === "schedule-off") return false;
+        if (!needle) return true;
+        return normalizeName(c.name).includes(needle) || normalizeName(c.value).includes(needle);
+      })
+      .slice(0, 25);
+
+    await interaction.respond(choices).catch(() => {});
+  } catch (err) {
+    console.error("[autocomplete] raid-channel error:", err?.message || err);
+    await interaction.respond([]).catch(() => {});
+  }
 }
 
 async function handleRaidChannelCommand(interaction) {
@@ -3416,6 +4271,25 @@ async function handleRaidChannelCommand(interaction) {
   if (action === "schedule-on" || action === "schedule-off") {
     const enabled = action === "schedule-on";
 
+    // Defend against autocomplete bypass: autocomplete hides the
+    // redundant option, but a user can still type + submit the
+    // same-state action. Surface a specific no-op notice instead of
+    // running a misleading success embed on an idempotent DB write.
+    try {
+      const cfg = await GuildConfig.findOne({ guildId }).lean();
+      if (cfg && !!cfg.autoCleanupEnabled === enabled) {
+        await interaction.reply({
+          content: `${UI.icons.info} Schedule đang ở state \`${enabled ? "on" : "off"}\` rồi — không có gì để đổi.`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+    } catch (err) {
+      // Tolerate DB read error — fall through to the normal toggle path
+      // so admin still has a way to flip the flag.
+      console.warn("[raid-channel] schedule no-op check failed:", err?.message || err);
+    }
+
     // Refuse to enable schedule without a configured monitor channel —
     // the scheduler filters on `raidChannelId != null`, so enabling now
     // would give admin a success embed for a job that never runs.
@@ -3540,6 +4414,7 @@ module.exports = {
   handleRaidHelpSelect,
   handleRaidSetAutocomplete,
   handleRemoveRosterAutocomplete,
+  handleRaidChannelAutocomplete,
   handleRaidChannelMessage,
   loadMonitorChannelCache,
   startRaidChannelScheduler,

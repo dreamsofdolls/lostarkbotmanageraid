@@ -70,10 +70,38 @@ function getRaidRequirementMap() {
   );
 }
 
+// Boss name → (raidKey, gate) map used by the `/raid-auto-manage` sync
+// flow. lostark.bible logs API returns each clear with a `boss` field
+// (e.g. "Armoche, Sentinel of the Abyss"); this table says which raid
+// and gate that boss represents. Difficulty comes from the log entry's
+// `difficulty` field directly, so one boss can map to the same gate
+// across modes (e.g. Kazeros G2 is "Archdemon Kazeros" on Normal and
+// "Death Incarnate Kazeros" on Hard/Nightmare — both → kazeros G2).
+const BOSS_TO_RAID_GATE = new Map([
+  // Armoche (Act 4)
+  ["Brelshaza, Ember in the Ashes", { raidKey: "armoche", gate: "G1" }],
+  ["Armoche, Sentinel of the Abyss", { raidKey: "armoche", gate: "G2" }],
+
+  // Kazeros — G2 has two boss names depending on difficulty
+  ["Abyss Lord Kazeros", { raidKey: "kazeros", gate: "G1" }],
+  ["Archdemon Kazeros", { raidKey: "kazeros", gate: "G2" }],
+  ["Death Incarnate Kazeros", { raidKey: "kazeros", gate: "G2" }],
+
+  // Serca
+  ["Witch of Agony, Serca", { raidKey: "serca", gate: "G1" }],
+  ["Corvus Tul Rak", { raidKey: "serca", gate: "G2" }],
+]);
+
+function getRaidGateForBoss(bossName) {
+  return BOSS_TO_RAID_GATE.get(bossName) || null;
+}
+
 module.exports = {
   RAID_REQUIREMENTS,
   getRaidRequirementChoices,
   getRaidRequirementList,
   getRaidRequirementMap,
   getGatesForRaid,
+  getRaidGateForBoss,
+  BOSS_TO_RAID_GATE,
 };

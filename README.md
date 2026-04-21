@@ -127,6 +127,7 @@ Sau khi đăng ký, bất kỳ ai post message vào channel đó dạng `<raid> 
 - `Serca Nightmare Clauseduk` → mark Serca Nightmare của Clauseduk là DONE (tất cả gate)
 - `Kazeros Hard Soulrano G1` → mark G1 của Kazeros Hard (chưa clear tới G2)
 - `Serca Nor Soulrano G2` → **cumulative**: mark cả G1 lẫn G2 của Serca Normal (Lost Ark sequential: đi tới G2 ⇒ G1 đã qua)
+- `Act4 Hard Priscilladuk, Nailaduk` → **multi-char**: mark Act 4 Hard done cho cả Priscilladuk và Nailaduk trong 1 post. Bot xử lý từng char, DM 1 embed aggregated (done/already-done/not-found/iLvl-thiếu grouped). Nếu có char gõ sai, Artist vẫn update các char hợp lệ khác và ping user trong channel với tên bị sai.
 
 **Aliases** (case-insensitive):
 - Raid: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca` (accept typo `secra`)
@@ -155,6 +156,38 @@ Sau khi đăng ký, bất kỳ ai post message vào channel đó dạng `<raid> 
 **Cache behavior:** monitor channel ID được cache in-memory per-guild, load on boot từ `guildconfigs` Mongo collection. `/raid-channel config action:set|clear` update cache in-place — không có Mongo round-trip cho mỗi message đi qua channel. Single-process bot nên không cần invalidation cross-instance.
 
 Config lưu trong collection `guildconfigs` của MongoDB, per-guild.
+
+### `/raid-auto-manage` (Phase 1 MVP — manual sync)
+
+Kéo clear logs từ `lostark.bible/api/character/logs` và reconcile tự động vào `assignedRaids`. Phase 1 chỉ hỗ trợ **manual sync** trigger; phase 2 sẽ hook vào `/raid-status` để auto-run khi opt-in.
+
+Subcommands (option `action`):
+- `on` — set `User.autoManageEnabled = true` **và kickstart 1 initial sync ngay** để populate raid đã clear tuần này. Tiện UX "bật là có data liền" thay vì phải chạy `action:sync` thủ công lần đầu.
+- `off` — tắt flag (không đụng raid data đã sync)
+- `sync` — pull logs NGAY cho tất cả char trong roster, reconcile raid progress của tuần này
+- `status` — hiển thị opt-in flag + **Last success** (timestamp lần sync có ≥1 char thành công) + **Last attempt** (timestamp lần chạy gần nhất; khi `= last success` thì lần gần nhất đã thành công, khi hiện `— fail` thì các attempt sau đó đều fail)
+
+**Flow sync:**
+1. Với mỗi char chưa có bible meta cache (`bibleSerial/bibleCid/bibleRid`): scrape HTML page `lostark.bible/character/NA/<name>/roster`, extract SSR data qua regex.
+2. `POST https://lostark.bible/api/character/logs` được gọi lặp qua `page: 1, 2, …` (mỗi page 25 entries) cho tới khi gặp entry `timestamp < weekResetStart` (deeper pages chỉ toàn log cũ hơn), hoặc page partial (<25), hoặc chạm cap `maxPages=10` (=250 entries safety).
+3. Sort logs theo `timestamp` ASC trước reconcile — bible trả newest-first nhưng mode-switch wipe cần oldest→newest để latest mode luôn thắng (tránh log Serca Hard cũ ghi đè log Serca NM mới trong tuần).
+4. Filter entries có `timestamp >= 5h chiều thứ 4 giờ Việt Nam` (17:00 VN = 10:00 UTC) gần nhất — weekly reset boundary. Chỉ apply clears thuộc tuần raid hiện tại, cũ hơn skip.
+5. Map `log.boss` → `{raidKey, gate}` qua `BOSS_TO_RAID_GATE`; `log.difficulty` → modeKey.
+6. Reconcile: latest-timestamp-per-gate wins. Mode-switch (Serca Hard → NM) wipe old progress theo bible-wins semantics.
+7. Stamp `lastAutoManageAttemptAt` luôn; `lastAutoManageSyncAt` chỉ stamp khi có ≥1 char fetch+reconcile thành công (không phải tất cả đều throw) — `action:status` hiển thị cả hai nên admin thấy rõ khi sync đang fail liên tục.
+
+**Boss mapping table:**
+- Armoche G1 = `Brelshaza, Ember in the Ashes` · G2 = `Armoche, Sentinel of the Abyss`
+- Kazeros G1 = `Abyss Lord Kazeros` · G2 = `Archdemon Kazeros` (Normal) hoặc `Death Incarnate Kazeros` (Hard+)
+- Serca G1 = `Witch of Agony, Serca` · G2 = `Corvus Tul Rak`
+
+**Đặc biệt:**
+- **Bus clears** (`isBus: true`) vẫn count làm clear (theo git owner decision).
+- Bible meta cache trên `character` subdoc — sync lần 2+ chỉ tốn 1 API call per char, không phải HTML scrape + API.
+- Share `bibleLimiter` (max 2 concurrent) với `/raid-status` refresh để không overwhelm bible.
+- Nếu bible 403 (Cloudflare block) → phase 2 sẽ port ScraperAPI fallback từ LoaLogs.
+- **Private logs (`403 Logs not enabled`)**: bible trả 403 cho char có `Show on Profile` UNCHECKED trong [lostark.bible/me/logs](https://lostark.bible/me/logs). Session cookie của owner thì thấy được, nhưng cookie là HTTP-only + upload token (Generate Token ở `/me/upload`) đã test là write-only — bot không có cách auth thay user. User muốn sync char hidden phải tự bật `Show on Profile` trên bible, hoặc chấp nhận char đó skip (report hiện bucket "Fail").
+- **Per-user throttle (5-min cooldown + in-flight guard)**: dựa trên `User.lastAutoManageAttemptAt` + in-memory `Set` theo `discordId`. `action:sync` spam trong 5 phút → ephemeral reject với remaining time. In-flight song song cùng user → reject ngay. `action:on` có logic mềm hơn: in-flight thì reject hard, nhưng cooldown thì vẫn flip flag (UX: "bật" không bao giờ fail), chỉ skip initial sync và báo user chờ X phút. Cần guard vì mỗi sync chạy scrape+paginate cho toàn roster (N-char × HTTP calls) — `bibleLimiter` chỉ cap concurrency, không chặn total queue.
 
 ## Raid Catalog
 
