@@ -524,12 +524,9 @@ const raidSetCommand = new SlashCommandBuilder()
   .addStringOption((option) =>
     option
       .setName("status")
-      .setDescription("Which action to update")
+      .setDescription("complete | reset — auto-filtered by raid progress")
       .setRequired(true)
-      .addChoices(
-        { name: "Complete", value: "complete" },
-        { name: "Reset", value: "reset" }
-      )
+      .setAutocomplete(true)
   )
   .addStringOption((option) =>
     option
@@ -1217,6 +1214,28 @@ async function autocompleteRaidSetCharacter(interaction, focused) {
   await interaction.respond(choices).catch(() => {});
 }
 
+function computeRaidProgress(character, req) {
+  const assignedRaids = ensureAssignedRaids(character);
+  const assigned = assignedRaids[req.raidKey] || {};
+  const rawGates = getGateKeys(assigned);
+  const allGates = rawGates.length > 0 ? rawGates : getGatesForRaid(req.raidKey);
+  const total = allGates.length;
+
+  const storedDifficulty = assigned?.G1?.difficulty || assigned?.G2?.difficulty || "Normal";
+  const sameDifficulty = normalizeName(storedDifficulty) === normalizeName(toModeLabel(req.modeKey));
+  const done = sameDifficulty
+    ? allGates.filter((g) => Number(assigned?.[g]?.completedDate) > 0).length
+    : 0;
+
+  const isComplete = total > 0 && done === total;
+  let icon;
+  if (isComplete) icon = UI.icons.done;
+  else if (done > 0) icon = UI.icons.partial;
+  else icon = UI.icons.pending;
+
+  return { done, total, isComplete, icon };
+}
+
 async function autocompleteRaidSetRaid(interaction, focused) {
   const characterInput = interaction.options.getString("character") || "";
   const needle = normalizeName(focused.value || "");
@@ -1246,50 +1265,58 @@ async function autocompleteRaidSetRaid(interaction, focused) {
   }
 
   const itemLevel = Number(character.itemLevel) || 0;
-  const assignedRaids = ensureAssignedRaids(character);
 
-  const entries = [];
+  const choices = [];
   for (const req of allRaids) {
     if (itemLevel < req.minItemLevel) continue;
     if (needle && !normalizeName(req.label).includes(needle)) continue;
 
-    const assigned = assignedRaids[req.raidKey] || {};
-    const rawGates = getGateKeys(assigned);
-    const allGates = rawGates.length > 0 ? rawGates : getGatesForRaid(req.raidKey);
-    const total = allGates.length;
-
-    const storedDifficulty = assigned?.G1?.difficulty || assigned?.G2?.difficulty || "Normal";
-    const sameDifficulty = normalizeName(storedDifficulty) === normalizeName(toModeLabel(req.modeKey));
-    const done = sameDifficulty
-      ? allGates.filter((g) => Number(assigned?.[g]?.completedDate) > 0).length
-      : 0;
-
-    let icon;
-    let rank;
-    if (done === total && total > 0) { icon = UI.icons.done; rank = 3; }
-    else if (done > 0) { icon = UI.icons.partial; rank = 2; }
-    else { icon = UI.icons.pending; rank = 1; }
-
-    entries.push({
-      raidKey: req.raidKey,
-      modeKey: req.modeKey,
-      label: req.label,
-      minItemLevel: req.minItemLevel,
-      done,
-      total,
-      icon,
-      rank,
+    const { done, total, isComplete, icon } = computeRaidProgress(character, req);
+    const base = `${icon} ${req.label} · ${done}/${total}`;
+    choices.push({
+      name: isComplete ? `${base} · DONE` : base,
+      value: `${req.raidKey}_${req.modeKey}`,
     });
+
+    if (choices.length >= 25) break;
   }
 
-  entries.sort((a, b) => a.rank - b.rank || b.minItemLevel - a.minItemLevel || a.label.localeCompare(b.label));
-
-  const choices = entries.slice(0, 25).map((e) => ({
-    name: `${e.icon} ${e.label} · ${e.done}/${e.total}`,
-    value: `${e.raidKey}_${e.modeKey}`,
-  }));
-
   await interaction.respond(choices).catch(() => {});
+}
+
+async function autocompleteRaidSetStatus(interaction, focused) {
+  const characterInput = interaction.options.getString("character") || "";
+  const raidValue = interaction.options.getString("raid") || "";
+  const needle = normalizeName(focused.value || "");
+  const discordId = interaction.user.id;
+
+  const baseChoices = [
+    { name: "Complete", value: "complete" },
+    { name: "Reset", value: "reset" },
+  ];
+
+  const applyFilter = (list) =>
+    list.filter((c) => !needle || normalizeName(c.name).includes(needle));
+
+  const raidMeta = RAID_REQUIREMENT_MAP[raidValue];
+  if (!characterInput || !raidMeta) {
+    await interaction.respond(applyFilter(baseChoices)).catch(() => {});
+    return;
+  }
+
+  const userDoc = await loadUserForAutocomplete(discordId);
+  const character = findCharacterInUser(userDoc, characterInput);
+  if (!character) {
+    await interaction.respond(applyFilter(baseChoices)).catch(() => {});
+    return;
+  }
+
+  const { isComplete } = computeRaidProgress(character, raidMeta);
+  const choices = isComplete
+    ? [{ name: "Reset (raid đã hoàn thành — chỉ có thể reset)", value: "reset" }]
+    : baseChoices;
+
+  await interaction.respond(applyFilter(choices)).catch(() => {});
 }
 
 async function handleRaidSetAutocomplete(interaction) {
@@ -1301,6 +1328,10 @@ async function handleRaidSetAutocomplete(interaction) {
     }
     if (focused?.name === "raid") {
       await autocompleteRaidSetRaid(interaction, focused);
+      return;
+    }
+    if (focused?.name === "status") {
+      await autocompleteRaidSetStatus(interaction, focused);
       return;
     }
     await interaction.respond([]).catch(() => {});
@@ -1465,8 +1496,8 @@ const HELP_SECTIONS = [
     shortVn: "Cập nhật tiến độ raid cho character",
     options: [
       { name: "character", required: true, desc: "Tên character — có autocomplete từ roster đã lưu / autocomplete from saved roster" },
-      { name: "raid", required: true, desc: "Raid + difficulty — autocomplete filter theo character đã chọn, kèm icon tiến độ (🟢/🟡/⚪)" },
-      { name: "status", required: true, desc: "complete | reset" },
+      { name: "raid", required: true, desc: "Raid + difficulty — autocomplete filter theo character đã chọn, kèm icon tiến độ (🟢/🟡/⚪). Raid đã hoàn thành hiển thị suffix DONE." },
+      { name: "status", required: true, desc: "complete | reset — tự động chỉ còn `reset` khi raid đã DONE" },
       { name: "gate", required: false, desc: "G1 | G2 | G3 — bỏ trống để update tất cả / blank = all gates" },
     ],
     example: "/raid-set character:Clauseduk raid:kazeros_hard status:complete gate:G1",
