@@ -1,6 +1,6 @@
 # Lost Ark Raid Management Bot
 
-Discord bot quản lý tiến độ raid cho roster Lost Ark, sử dụng slash commands và MongoDB. Tự động sync roster từ `lostark.bible`, theo dõi progress theo từng gate, và reset weekly vào thứ 4.
+Discord bot quản lý tiến độ raid cho roster Lost Ark, sử dụng slash commands và MongoDB. Tự động sync roster từ `lostark.bible`, theo dõi progress theo từng gate, và reset weekly vào thứ 4 lúc 17:00 giờ Việt Nam (UTC+7).
 
 ## Tính Năng Chính
 
@@ -8,7 +8,7 @@ Discord bot quản lý tiến độ raid cho roster Lost Ark, sử dụng slash 
 - Theo dõi tiến độ raid theo từng gate (`G1`, `G2`, có thể mở rộng `G3`)
 - Gán difficulty (Normal/Hard/Nightmare) độc lập per-raid per-character
 - Raid Leader có thể scan roster để tìm character chưa hoàn thành raid
-- Weekly reset tự động vào thứ 4 sau 06:00 UTC (với catch-up nếu bot offline qua reset window)
+- Weekly reset tự động vào thứ 4 lúc 17:00 giờ Việt Nam = 10:00 UTC thứ 4 (với catch-up nếu bot offline qua reset window)
 - Hỗ trợ 3 raid: Act 4, Kazeros, Serca (với Nightmare mode cho Serca 1740+)
 - Embed UI với dynamic color theo tiến độ + per-gate visualization (`{icon} {raid} · done/total`)
 - `/raid-status` lazy auto-refresh iLvl/combatScore từ lostark.bible (2h cooldown, preserve raid progress)
@@ -200,9 +200,9 @@ LostArk_RaidManage/
 - Mỗi user chỉ reset 1 lần/tuần thông qua `weeklyResetKey` (ISO week string, ví dụ `2026-W16`).
 - Reset: mọi gate `completedDate = null`; mọi task `completions = 0` + `completionDate = null`.
 
-✅ Timing hoàn toàn UTC-based: trigger dùng `getUTCDay()` / `getUTCHours()`, cursor `weeklyResetKey` là ISO week key (cũng UTC). Reset happen Wed 06:00 UTC bất kể server timezone.
+✅ Timing hoàn toàn UTC-based: trigger dùng `getUTCDay()` / `getUTCHours()`, cursor `weeklyResetKey` là ISO week key (cũng UTC). Reset happen Wed 10:00 UTC (= Wed 17:00 giờ Việt Nam, UTC+7) bất kể server timezone.
 
-✅ Catch-up: nếu bot offline qua Wed 06:00, tick tiếp theo (bất kỳ ngày nào) sẽ so stored `weeklyResetKey` với `getTargetResetKey()` hiện tại — nếu stale, chạy reset ngay.
+✅ Catch-up: nếu bot offline qua Wed 10:00 UTC, tick tiếp theo (bất kỳ ngày nào) sẽ so stored `weeklyResetKey` với `getTargetResetKey()` hiện tại — nếu stale, chạy reset ngay.
 
 ✅ Race-safe: mỗi user được reset trong `saveWithRetry()` wrapper, nên nếu `/raid-set` commit giữa lúc reset đang process, reset sẽ re-fetch doc fresh và retry thay vì silently overwrite.
 

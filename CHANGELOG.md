@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Dates use t
 
 ## 2026-04-21
 
+### Changed
+
+- **Weekly reset moment moved from Wednesday 06:00 UTC to Wednesday 10:00 UTC (= Wednesday 17:00 Vietnam time, UTC+7).** Traine operates the bot on Vietnamese player time and wanted the reset aligned with an early-evening moment for Vietnamese players. The earlier `06:00 UTC` was an initial-scaffold default that translated to 13:00 VN — mid-afternoon, awkward for anyone planning Wednesday-night raid resumption. Shifted the boundary in `getTargetResetKey()` so `passedResetMoment` becomes `utcDay === 0 || utcDay > 3 || (utcDay === 3 && utcHour >= 10)` — Sunday (ISO day 7 post-reset), Thu/Fri/Sat (all after Wed reset), and Wed itself after 10:00 UTC. ISO week boundary (Mon 00:00 UTC) is unchanged; between Mon 00:00 UTC and Wed 10:00 UTC the target key falls back to the previous ISO week via the existing `now - 7 days` branch. Same UTC-only computation, same catch-up semantics, same 30-minute tick cadence — just shifted by 4 hours. README + JSDoc comments on `getTargetResetKey` and `ensureFreshWeek` updated to match. `src/weekly-reset.js` (getTargetResetKey), `README.md`.
+
 ### Fixed
 
 - **[MEDIUM] `/raid-status` and `/raid-check` no longer show previous-week completions during the reset catch-up window.** The weekly reset job runs immediately on boot and then every 30 minutes, so a bot that stays online across Wednesday 06:00 UTC can have a short window before the next tick where read-only commands still see the old `weeklyResetKey`. Write paths already call `ensureFreshWeek()`, but `/raid-status` and `/raid-check` did not. `/raid-status` now freshens and saves the user doc inside its existing `saveWithRetry()` render load before lazy roster refresh, and `/raid-check` freshens each lean user snapshot in memory before scanning, so reads align with the current reset target even before the background job persists every user. `src/raid-command.js` (handleStatusCommand, handleRaidCheckCommand). (Codex review round 7, Medium.)

@@ -20,11 +20,12 @@ function getWeekKey(date = new Date()) {
 }
 
 /**
- * Target week key for reset purposes. The "reset moment" is Wednesday 06:00 UTC.
- * Before that moment in a given ISO week, the target is the PREVIOUS ISO week
- * (so users stay on last week's key). At or after that moment, the target is
- * the current ISO week. This lets catch-up runs on non-Wednesdays still pick
- * up any users whose cursor lags the current target — the window missing bug.
+ * Target week key for reset purposes. The "reset moment" is Wednesday 10:00 UTC,
+ * which is Wednesday 17:00 Vietnam time (UTC+7). Before that moment in a given
+ * ISO week, the target is the PREVIOUS ISO week (so users stay on last week's
+ * key). At or after that moment, the target is the current ISO week. This lets
+ * catch-up runs on non-Wednesdays still pick up any users whose cursor lags the
+ * current target — the window missing bug.
  */
 function getTargetResetKey(now = new Date()) {
   const utcDay = now.getUTCDay();
@@ -34,7 +35,7 @@ function getTargetResetKey(now = new Date()) {
   const passedResetMoment =
     utcDay === 0 ||
     utcDay > 3 ||
-    (utcDay === 3 && utcHour >= 6);
+    (utcDay === 3 && utcHour >= 10);
 
   if (passedResetMoment) return getWeekKey(now);
 
@@ -121,9 +122,9 @@ function startWeeklyResetJob() {
 /**
  * Freshen a hydrated User document to the current target reset key.
  * If the user's weeklyResetKey lags the current target (i.e. last-passed
- * Wed 06:00 UTC), clear every character's gate-completedDate and task
- * counters and bump the key. Idempotent: when the key already matches
- * the target, this is a no-op and returns false.
+ * Wed 10:00 UTC = Wed 17:00 Vietnam time), clear every character's
+ * gate-completedDate and task counters and bump the key. Idempotent:
+ * when the key already matches the target, this is a no-op and returns false.
  *
  * Call this at the start of every write path (/raid-set, /add-roster)
  * so a command cannot silently set data that the weekly reset job is
