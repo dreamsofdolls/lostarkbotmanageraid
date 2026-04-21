@@ -2353,6 +2353,46 @@ async function postTransientReply(message, content) {
   }
 }
 
+// Persistent per-user hint tracker: when a user posts a recoverable-error
+// message, the bot pings them (reply with default repliedUser mention) and
+// keeps the hint visible until they retype. On the next message from the
+// same user in the same channel — success or a fresh error — the previous
+// hint is cleaned up. TTL auto-cleanup runs 5 minutes after post in case
+// the user never retries.
+const pendingChannelHints = new Map(); // "guildId:channelId:userId" -> { hintId, timerId }
+const HINT_TTL_MS = 5 * 60 * 1000;
+
+function hintKey(guildId, channelId, userId) {
+  return `${guildId}:${channelId}:${userId}`;
+}
+
+async function clearPendingHint(channel, key) {
+  const entry = pendingChannelHints.get(key);
+  if (!entry) return;
+  pendingChannelHints.delete(key);
+  if (entry.timerId) clearTimeout(entry.timerId);
+  try {
+    const hint = await channel.messages.fetch(entry.hintId);
+    await hint.delete();
+  } catch {
+    // Already deleted or no longer fetchable — nothing to clean.
+  }
+}
+
+async function postPersistentHint(message, content) {
+  const key = hintKey(message.guildId, message.channelId, message.author.id);
+  await clearPendingHint(message.channel, key);
+  try {
+    const hint = await message.reply({ content });
+    const timerId = setTimeout(() => {
+      clearPendingHint(message.channel, key).catch(() => {});
+    }, HINT_TTL_MS);
+    pendingChannelHints.set(key, { hintId: hint.id, timerId });
+  } catch (err) {
+    console.warn("[raid-channel] persistent hint failed:", err?.message || err);
+  }
+}
+
 async function handleRaidChannelMessage(message) {
   // Cheap filters BEFORE touching the cache: skip DMs, system messages,
   // webhooks, bot authors, and empty content. MessageCreate fires for all
@@ -2369,27 +2409,28 @@ async function handleRaidChannelMessage(message) {
   const cachedChannelId = getCachedMonitorChannelId(message.guildId);
   if (!cachedChannelId || cachedChannelId !== message.channelId) return;
 
+  const userHintKey = hintKey(message.guildId, message.channelId, message.author.id);
   const parsed = parseRaidMessage(message.content);
   if (!parsed) return; // Silent ignore: not a raid-update message.
 
   if (parsed.error === "multi-gate") {
-    await postTransientReply(
+    await postPersistentHint(
       message,
-      `${UI.icons.warn} Có nhiều gate (${parsed.gates.join(", ")}) trong message. Mỗi lần chỉ update 1 gate — post riêng từng cái hoặc bỏ gate để đánh DONE cả raid.`
+      `${UI.icons.warn} Có nhiều gate (${parsed.gates.join(", ")}) trong message. Mỗi lần chỉ update 1 gate — post lại với 1 gate hoặc bỏ gate để đánh DONE cả raid nha.`
     );
     return;
   }
   if (parsed.error === "multi-raid") {
-    await postTransientReply(
+    await postPersistentHint(
       message,
-      `${UI.icons.warn} Message chứa nhiều raid khác nhau (${parsed.raids.join(", ")}). Mỗi message chỉ update 1 raid — post riêng từng raid nhé.`
+      `${UI.icons.warn} Message chứa nhiều raid khác nhau (${parsed.raids.join(", ")}). Chọn đúng 1 raid rồi post lại nha.`
     );
     return;
   }
   if (parsed.error === "multi-difficulty") {
-    await postTransientReply(
+    await postPersistentHint(
       message,
-      `${UI.icons.warn} Message chứa nhiều difficulty khác nhau (${parsed.difficulties.join(", ")}). Chọn 1 difficulty duy nhất mỗi message.`
+      `${UI.icons.warn} Message chứa nhiều difficulty khác nhau (${parsed.difficulties.join(", ")}). Chọn đúng 1 difficulty rồi post lại nha.`
     );
     return;
   }
@@ -2398,16 +2439,16 @@ async function handleRaidChannelMessage(message) {
   const raidValue = `${raidKey}_${modeKey}`;
   const raidMeta = RAID_REQUIREMENT_MAP[raidValue];
   if (!raidMeta) {
-    await postTransientReply(message, `${UI.icons.warn} Combo \`${raidKey} ${modeKey}\` không hợp lệ.`);
+    await postPersistentHint(message, `${UI.icons.warn} Combo \`${raidKey} ${modeKey}\` không tồn tại. Check lại raid + difficulty rồi post lại nha.`);
     return;
   }
 
   if (gate) {
     const validGates = getGatesForRaid(raidMeta.raidKey);
     if (!validGates.includes(gate)) {
-      await postTransientReply(
+      await postPersistentHint(
         message,
-        `${UI.icons.warn} Gate **${gate}** không có cho **${raidMeta.label}**. Gates: ${validGates.map((g) => `\`${g}\``).join(", ")}.`
+        `${UI.icons.warn} Gate **${gate}** không có cho **${raidMeta.label}**. Gates hợp lệ: ${validGates.map((g) => `\`${g}\``).join(", ")}. Post lại với gate đúng nha.`
       );
       return;
     }
@@ -2426,27 +2467,32 @@ async function handleRaidChannelMessage(message) {
     });
   } catch (err) {
     console.error("[raid-channel] write failed:", err?.message || err);
+    // Internal/transient error — short auto-delete reply instead of a
+    // persistent hint, since retyping the same message won't necessarily fix
+    // a downstream DB/Discord failure.
     await postTransientReply(message, `${UI.icons.warn} Có lỗi khi update raid, thử lại sau nhé.`);
     return;
   }
 
   if (result.noRoster) {
-    await postTransientReply(message, `${UI.icons.info} Cậu chưa có roster. Dùng \`/add-roster\` trước nhé.`);
+    await postPersistentHint(message, `${UI.icons.info} Cậu chưa có roster. Dùng \`/add-roster\` trước rồi quay lại post clear nha.`);
     return;
   }
   if (!result.matched) {
-    await postTransientReply(message, `${UI.icons.warn} Không tìm thấy character \`${charName}\` trong roster của cậu.`);
+    await postPersistentHint(message, `${UI.icons.warn} Không tìm thấy character \`${charName}\` trong roster của cậu. Check lại tên rồi post lại nha.`);
     return;
   }
   if (!result.updated) {
-    await postTransientReply(
+    await postPersistentHint(
       message,
       `${UI.icons.warn} **${charName}** iLvl ${result.ineligibleItemLevel}, chưa đủ **${raidMeta.minItemLevel}+** cho **${raidMeta.label}**.`
     );
     return;
   }
 
-  // Success — delete the original announcement so the channel stays tidy.
+  // Success — cleanup the user's previous hint (if any) and delete the
+  // original announcement so the channel stays tidy.
+  await clearPendingHint(message.channel, userHintKey);
   await message.delete().catch((err) => {
     console.warn("[raid-channel] delete failed (missing Manage Messages?):", err?.message || err);
   });
