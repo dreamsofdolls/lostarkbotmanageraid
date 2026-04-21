@@ -1442,15 +1442,16 @@ async function handleRaidSetCommand(interaction) {
     return;
   }
 
-  if (statusType === "process" && !targetGate) {
-    await interaction.reply({
-      content: `${UI.icons.warn} Status \`process\` yêu cầu chọn \`gate\` cụ thể (ví dụ G1 hoặc G2). Nếu muốn đánh dấu cả raid, dùng \`complete\`.`,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
+  const effectiveGate = statusType === "process" ? targetGate : "";
 
-  if (targetGate) {
+  if (statusType === "process") {
+    if (!targetGate) {
+      await interaction.reply({
+        content: `${UI.icons.warn} Status \`process\` yêu cầu chọn \`gate\` cụ thể (ví dụ G1 hoặc G2). Nếu muốn đánh dấu cả raid, dùng \`complete\`.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
     const validGates = getGatesForRaid(raidMeta.raidKey);
     if (!validGates.includes(targetGate)) {
       await interaction.reply({
@@ -1461,7 +1462,6 @@ async function handleRaidSetCommand(interaction) {
     }
   }
 
-  const targetName = normalizeName(characterName);
   const selectedDifficulty = toModeLabel(raidMeta.modeKey);
 
   const existing = await User.findOne({ discordId });
@@ -1473,11 +1473,9 @@ async function handleRaidSetCommand(interaction) {
     return;
   }
 
-  const effectiveGate = statusType === "process" ? targetGate : "";
-
   let updatedCount = 0;
   let matchedCount = 0;
-  let ineligibleMaxItemLevel = 0;
+  let ineligibleItemLevel = 0;
   let modeResetCount = 0;
   await saveWithRetry(async () => {
     const userDoc = await User.findOne({ discordId });
@@ -1487,67 +1485,69 @@ async function handleRaidSetCommand(interaction) {
 
     updatedCount = 0;
     matchedCount = 0;
-    ineligibleMaxItemLevel = 0;
+    ineligibleItemLevel = 0;
     modeResetCount = 0;
+
+    // Resolve exactly ONE character — the same first-by-iteration record
+    // that autocompleteRaidSetCharacter de-duplicates to. If a user happens
+    // to have two characters sharing a name across rosters, /raid-set
+    // operates on the one the autocomplete displayed (the copy whose data
+    // drove eligibility + progress icons), not on all copies. Duplicate
+    // names across rosters are rare and not a first-class feature; pinning
+    // the write to a single target keeps view and write consistent.
+    const character = findCharacterInUser(userDoc, characterName);
+    if (!character) return;
+
+    matchedCount = 1;
+    const charItemLevel = Number(character.itemLevel) || 0;
+    if (charItemLevel < raidMeta.minItemLevel) {
+      ineligibleItemLevel = charItemLevel;
+      return;
+    }
+
     const now = Date.now();
     const normalizedSelectedDiff = normalizeName(selectedDifficulty);
     const officialGateList = getGatesForRaid(raidMeta.raidKey);
 
-    for (const account of userDoc.accounts) {
-      const characters = Array.isArray(account.characters) ? account.characters : [];
-      for (const character of characters) {
-        if (normalizeName(getCharacterName(character)) !== targetName) continue;
+    const assignedRaids = ensureAssignedRaids(character);
+    const raidData = normalizeAssignedRaid(
+      assignedRaids[raidMeta.raidKey] || {},
+      selectedDifficulty,
+      raidMeta.raidKey
+    );
 
-        matchedCount += 1;
-        const charItemLevel = Number(character.itemLevel) || 0;
-        if (charItemLevel < raidMeta.minItemLevel) {
-          if (charItemLevel > ineligibleMaxItemLevel) ineligibleMaxItemLevel = charItemLevel;
-          continue;
-        }
-
-        const assignedRaids = ensureAssignedRaids(character);
-        const raidData = normalizeAssignedRaid(
-          assignedRaids[raidMeta.raidKey] || {},
-          selectedDifficulty,
-          raidMeta.raidKey
-        );
-
-        let modeChangeDetected = false;
-        for (const g of officialGateList) {
-          const existingDiff = raidData[g]?.difficulty;
-          if (existingDiff && normalizeName(existingDiff) !== normalizedSelectedDiff) {
-            modeChangeDetected = true;
-            break;
-          }
-        }
-        if (modeChangeDetected) {
-          for (const g of officialGateList) {
-            raidData[g] = { difficulty: selectedDifficulty, completedDate: undefined };
-          }
-          modeResetCount += 1;
-        }
-
-        const gateKeys = effectiveGate ? [effectiveGate] : getGateKeys(raidData);
-        const shouldMarkDone = statusType === "complete" || statusType === "process";
-        for (const gate of gateKeys) {
-          raidData[gate] = {
-            difficulty: selectedDifficulty,
-            completedDate: shouldMarkDone ? now : null,
-          };
-        }
-
-        assignedRaids[raidMeta.raidKey] = raidData;
-        character.assignedRaids = assignedRaids;
-
-        if (!character.name) character.name = getCharacterName(character);
-        if (!character.class) character.class = getCharacterClass(character);
-        if (!character.id) character.id = createCharacterId();
-
-        updatedCount += 1;
+    let modeChangeDetected = false;
+    for (const g of officialGateList) {
+      const existingDiff = raidData[g]?.difficulty;
+      if (existingDiff && normalizeName(existingDiff) !== normalizedSelectedDiff) {
+        modeChangeDetected = true;
+        break;
       }
     }
+    if (modeChangeDetected) {
+      for (const g of officialGateList) {
+        raidData[g] = { difficulty: selectedDifficulty, completedDate: undefined };
+      }
+      modeResetCount = 1;
+    }
 
-    if (updatedCount === 0) return;
+    const gateKeys = effectiveGate ? [effectiveGate] : getGateKeys(raidData);
+    const shouldMarkDone = statusType === "complete" || statusType === "process";
+    for (const gate of gateKeys) {
+      raidData[gate] = {
+        difficulty: selectedDifficulty,
+        completedDate: shouldMarkDone ? now : null,
+      };
+    }
+
+    assignedRaids[raidMeta.raidKey] = raidData;
+    character.assignedRaids = assignedRaids;
+
+    if (!character.name) character.name = getCharacterName(character);
+    if (!character.class) character.class = getCharacterClass(character);
+    if (!character.id) character.id = createCharacterId();
+
+    updatedCount = 1;
     await userDoc.save();
   });
 
@@ -1561,7 +1561,7 @@ async function handleRaidSetCommand(interaction) {
 
   if (updatedCount === 0) {
     await interaction.reply({
-      content: `${UI.icons.warn} Character **${characterName}** đang ở iLvl **${ineligibleMaxItemLevel}**, chưa đủ **${raidMeta.minItemLevel}+** để thao tác **${raidMeta.label}**.`,
+      content: `${UI.icons.warn} Character **${characterName}** đang ở iLvl **${ineligibleItemLevel}**, chưa đủ **${raidMeta.minItemLevel}+** để thao tác **${raidMeta.label}**.`,
       flags: MessageFlags.Ephemeral,
     });
     return;
