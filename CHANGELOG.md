@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Dates use t
 
 ## 2026-04-21
 
+### Added
+
+- **Per-user spam guard on the raid channel monitor.** Sustained spam of parse-success messages (e.g. 20 `Serca Nightmare <someone>` in 2 seconds) would previously fan out to fetch + delete + reply + DM + DB write per message, risking Discord rate limits and wasting cycles. Added `recordUserMonitorActivity(message)` gate: minimum **2 seconds** between processed messages per user, silent-drop on cooldown. A sliding 10-second window counts cooldown hits; ≥3 hits within the window triggers a single **kitsune-style warning** ("🦊💢 Này ơi, Artist theo không kịp đâu~ Mỗi tin cách nhau ít nhất 2 giây thôi nhé…") auto-deleting after 15s, deduped per-user for 60s so Artist doesn't pile-on. Parse-null messages (normal chat) remain unaffected since they already no-op at the silent-ignore branch. Welcome embed, help notes, and README error-UX table all document the 2-second rule. `src/raid-command.js` (new `userMonitorCooldowns`, `recordUserMonitorActivity`, `postSpamWarning`; `handleRaidChannelMessage` gate insertion). Motivation: Traine flagged that spam wasn't handled and Artist should "nổi quạo lên" instead of silently absorbing it.
+
 ### Fixed (round 12 Codex review)
 
 - **[MEDIUM] `cleanupRaidChannelMessages()` now paginates instead of capping at 100.** Both `/raid-channel cleanup` and the daily auto-cleanup scheduler were fetching a single 100-message batch. Channels with more history would leave older orphan messages behind and miss-count `skippedOld`. The helper now iterates with Discord's `before` cursor, bulk-deleting non-pinned messages batch by batch, and stops when a short batch signals end-of-history or after 20 iterations (2000-message safety cap). `src/raid-command.js` (cleanupRaidChannelMessages). (Codex round 12, Medium.)
