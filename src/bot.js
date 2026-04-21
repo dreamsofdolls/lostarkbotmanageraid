@@ -73,9 +73,12 @@ async function startBot() {
   // creates a race: `MessageCreate` fires on the first message after login,
   // potentially before the ready handler finishes, and an empty cache on
   // the hot path drops that message as "no monitor configured."
-  if (TEXT_MONITOR_ENABLED) {
-    await loadMonitorChannelCache();
-  }
+  //
+  // Load regardless of TEXT_MONITOR_ENABLED — even when the monitor is
+  // deploy-disabled, /raid-channel show needs to reflect any persisted
+  // raidChannelId so admins see stale config clearly instead of an
+  // empty-looking cache that masquerades as "chưa config channel nào".
+  await loadMonitorChannelCache();
 
   const intents = [GatewayIntentBits.Guilds];
   if (TEXT_MONITOR_ENABLED) {

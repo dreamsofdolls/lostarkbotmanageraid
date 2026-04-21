@@ -2755,6 +2755,7 @@ async function handleRaidChannelCommand(interaction) {
       } else {
         lines.push(`${UI.icons.done} Permissions OK.`);
       }
+      if (deployNotes.length > 0) lines.push("", ...deployNotes);
       embed.setDescription(lines.join("\n"));
     }
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
