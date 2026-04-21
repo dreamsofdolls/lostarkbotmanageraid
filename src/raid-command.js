@@ -2301,6 +2301,43 @@ function parseRaidMessage(content) {
   };
 }
 
+function buildRaidChannelSuccessEmbed({
+  charName,
+  raidMeta,
+  gate,
+  statusType,
+  selectedDifficulty,
+  modeResetCount,
+  guildName,
+}) {
+  const isProcess = statusType === "process";
+  const title = isProcess
+    ? `${UI.icons.done} Gate Completed`
+    : `${UI.icons.done} Raid Completed`;
+
+  const embed = new EmbedBuilder()
+    .setColor(UI.colors.success)
+    .setTitle(title)
+    .setDescription(`Artist đã update progress cho **${charName}** rồi nha~ 🦊`)
+    .addFields(
+      { name: "Character", value: `**${charName}**`, inline: true },
+      { name: "Raid", value: `**${raidMeta.label}**`, inline: true },
+      { name: "Gates", value: gate || "All gates", inline: true }
+    )
+    .setTimestamp();
+
+  if (guildName) embed.setFooter({ text: `Server: ${guildName}` });
+
+  if (modeResetCount > 0) {
+    embed.addFields({
+      name: `${UI.icons.reset} Note`,
+      value: `Đã chuyển mode sang **${selectedDifficulty}** — progress mode cũ được clear cho state consistent.`,
+    });
+  }
+
+  return embed;
+}
+
 function buildRaidChannelWelcomeEmbed() {
   return new EmbedBuilder()
     .setColor(UI.colors.neutral)
@@ -2490,12 +2527,34 @@ async function handleRaidChannelMessage(message) {
     return;
   }
 
-  // Success — cleanup the user's previous hint (if any) and delete the
-  // original announcement so the channel stays tidy.
-  await clearPendingHint(message.channel, userHintKey);
-  await message.delete().catch((err) => {
-    console.warn("[raid-channel] delete failed (missing Manage Messages?):", err?.message || err);
+  // Success path:
+  //   1. DM the user a private confirmation (Discord's only "only you see it"
+  //      surface outside of interactions). If DM fails (user disabled DMs
+  //      from server members), log and continue — data is already saved.
+  //   2. Clear any stale hint reply that may still be sitting in the channel.
+  //   3. Delete the original announcement so the channel stays tidy.
+  const confirmEmbed = buildRaidChannelSuccessEmbed({
+    charName,
+    raidMeta,
+    gate,
+    statusType,
+    selectedDifficulty: result.selectedDifficulty,
+    modeResetCount: result.modeResetCount,
+    guildName: message.guild?.name,
   });
+
+  await Promise.allSettled([
+    message.author.send({ embeds: [confirmEmbed] }).catch((err) => {
+      console.warn(
+        `[raid-channel] DM confirm to ${message.author.tag || message.author.id} failed (DMs disabled?):`,
+        err?.message || err
+      );
+    }),
+    clearPendingHint(message.channel, userHintKey),
+    message.delete().catch((err) => {
+      console.warn("[raid-channel] delete failed (missing Manage Messages?):", err?.message || err);
+    }),
+  ]);
 }
 
 async function handleRaidChannelCommand(interaction) {
