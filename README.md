@@ -15,6 +15,7 @@ Discord bot quản lý tiến độ raid cho roster Lost Ark, sử dụng slash 
 - `/raid-status` pagination 1 roster = 1 page, 2 chars/row, session 2 phút
 - `/remove-roster` xóa roster hoặc 1 char riêng (autocomplete chained)
 - Bilingual help command (`/raid-help`) với dropdown drill-down
+- `/raid-channel` + text monitor: post message ngắn `<raid> <difficulty> <character> [gate]` vào channel đã config — bot tự parse, update raid, xóa message
 
 ## Commands
 
@@ -102,6 +103,36 @@ Reply là ephemeral embed confirm xoá. Muốn refresh roster → `/remove-roste
 Bilingual (EN + VN) help command. Gửi 1 overview embed liệt kê cả 4 command raid-management, kèm dropdown để xem chi tiết từng command (options, example, notes). Reply là ephemeral — chỉ mình cậu thấy.
 
 Dùng khi: cần tra cú pháp nhanh, onboard member mới, hoặc forget option name.
+
+### `/raid-channel` + text monitor
+
+Admin-only command (`Manage Server` permission) để đăng ký 1 text channel làm **raid-clear monitor channel**. Subcommands:
+
+- `/raid-channel set channel:#raid-clears` — đăng ký channel
+- `/raid-channel show` — xem channel đang monitor
+- `/raid-channel clear` — tắt monitor
+
+Sau khi đăng ký, bất kỳ ai post message vào channel đó dạng `<raid> <difficulty> <character> [gate]` sẽ được bot parse và update raid cho char của **chính người post**. Message thành công sẽ được bot auto-delete để channel không bị noise. Lỗi parse được → bot reply 1 tin ngắn rồi xóa sau 10s.
+
+**Format:**
+- `Serca Nightmare Clauseduk` → mark Serca Nightmare của Clauseduk là DONE (cả raid)
+- `Serca Nor Soulrano G1` → mark Serca Normal G1 của Soulrano là done (single gate, status=process)
+
+**Aliases** (case-insensitive):
+- Raid: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca`
+- Difficulty: `normal` / `nor` · `hard` · `nightmare` / `nm`
+- Gate: `G1`, `G2`, ... (validate theo raid's actual gate list)
+
+**Separator**: space hoặc `+` đều được (`Serca + Nor + Soulrano + G1`).
+
+**Prerequisites deploy:**
+1. Bật `MESSAGE CONTENT INTENT` trong Discord Developer Portal → Bot → Privileged Gateway Intents. Nếu không bật, bot **sẽ không start được** (Discord reject login với "Used disallowed intents") — dùng env `TEXT_MONITOR_ENABLED=false` để deploy slash-command-only mà không cần privileged intent.
+2. Invite bot với scope `bot applications.commands` + permissions `View Channel`, `Send Messages`, `Manage Messages` trong channel đã config. `/raid-channel set` giờ tự check và từ chối nếu thiếu quyền.
+3. Intents trong `src/bot.js`: `Guilds` luôn có; `GuildMessages` + `MessageContent` chỉ add khi `TEXT_MONITOR_ENABLED !== "false"`.
+
+**Cache behavior:** monitor channel ID được cache in-memory per-guild, load on boot từ `guildconfigs` Mongo collection. `/raid-channel set|clear` update cache in-place — không có Mongo round-trip cho mỗi message đi qua channel. Single-process bot nên không cần invalidation cross-instance.
+
+Config lưu trong collection `guildconfigs` của MongoDB, per-guild.
 
 ## Raid Catalog
 
