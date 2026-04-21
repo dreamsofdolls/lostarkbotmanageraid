@@ -1853,7 +1853,8 @@ const HELP_SECTIONS = [
       "• **Schedule on/off**: toggle auto-cleanup daily. Bật → mỗi 00:00 VN time, bot tự xóa non-pinned trong channel (catch-up nếu bot offline qua midnight). Tắt → chỉ cleanup thủ công.",
       "• Parse fail (không phải raid intent) → bot im lặng.",
       "• Lỗi phục hồi được (char không có, iLvl thiếu, combo sai, nhiều raid/difficulty/gate) → bot ping user reply persistent, tự dọn khi user post lại hoặc sau 5 phút.",
-      "• Deploy: bật `Message Content Intent` ở Discord Developer Portal, hoặc set `TEXT_MONITOR_ENABLED=false` để chạy slash-command-only. Bot cần `Manage Messages` trong channel để xóa message + pin welcome.",
+      "• Deploy: bật `Message Content Intent` ở Discord Developer Portal, hoặc set `TEXT_MONITOR_ENABLED=false` để chạy slash-command-only.",
+      "• **Permissions bot cần trong channel đích**: `View Channel`, `Send Messages`, `Manage Messages`, `Read Message History`, `Embed Links`. Thiếu 1 trong 5 là `/raid-channel set` reject.",
       "• Admin-only command (yêu cầu `Manage Server` permission).",
     ],
   },
@@ -2674,50 +2675,84 @@ async function handleRaidChannelMessage(message) {
 }
 
 /**
- * Delete every non-pinned message in the raid monitor channel. Uses
- * Discord's `bulkDelete(messages, true)` — the `true` filters out messages
- * older than 14 days (Discord API limit) and reports them as skipped
- * instead of failing the whole batch.
+ * Delete every non-pinned message in the raid monitor channel. Paginates
+ * through channel history via the `before` cursor in 100-message batches
+ * (Discord's per-fetch cap) so busy channels with more than 100 messages
+ * get cleaned all the way back. Uses `bulkDelete(messages, true)` so
+ * messages older than 14 days are silently filtered out and counted as
+ * `skippedOld` instead of failing the batch.
  *
- * Caller must verify the bot has Manage Messages + Read Message History in
- * the channel. Returns { deleted, skippedOld } for display. If the fetch
- * or delete throws, the error propagates so the caller can surface it.
+ * Caller must verify the bot has Manage Messages + Read Message History
+ * in the channel. Safety cap of 20 iterations (max 2000 messages per run)
+ * prevents a runaway if history is unexpectedly huge — for a raid-clear
+ * channel that's well above any realistic size.
  */
 async function cleanupRaidChannelMessages(channel) {
-  const fetched = await channel.messages.fetch({ limit: 100 });
-  const toDelete = fetched.filter((m) => !m.pinned);
-  if (toDelete.size === 0) return { deleted: 0, skippedOld: 0 };
-  const deleted = await channel.bulkDelete(toDelete, true);
-  const skippedOld = toDelete.size - deleted.size;
-  return { deleted: deleted.size, skippedOld };
+  const MAX_ITERATIONS = 20;
+  let totalDeleted = 0;
+  let totalSkippedOld = 0;
+  let before;
+
+  for (let iter = 0; iter < MAX_ITERATIONS; iter += 1) {
+    const fetchOpts = { limit: 100 };
+    if (before) fetchOpts.before = before;
+    const fetched = await channel.messages.fetch(fetchOpts);
+    if (fetched.size === 0) break;
+
+    // Advance the pagination cursor to the oldest message in this batch,
+    // regardless of whether we can delete any of it — this prevents an
+    // infinite loop when a batch is all pinned.
+    before = fetched.last()?.id;
+
+    const toDelete = fetched.filter((m) => !m.pinned);
+    if (toDelete.size > 0) {
+      const deleted = await channel.bulkDelete(toDelete, true);
+      totalDeleted += deleted.size;
+      totalSkippedOld += toDelete.size - deleted.size;
+    }
+
+    // Less than a full batch means we reached the end of channel history.
+    if (fetched.size < 100) break;
+  }
+
+  return { deleted: totalDeleted, skippedOld: totalSkippedOld };
 }
 
 /**
- * Unpin any existing bot-authored pinned messages in the target channel,
- * then post + pin a fresh welcome embed. Used by both `/raid-channel set`
- * (initial welcome) and `/raid-channel repin` (manual refresh), so
- * repeated invocations never accumulate duplicate welcome pins.
+ * Unpin the stored welcome message (if any), then post + pin a fresh
+ * welcome embed. Used by both `/raid-channel set` (initial welcome) and
+ * `/raid-channel repin` (manual refresh). The new welcome's message ID
+ * is persisted to `GuildConfig.welcomeMessageId` so the next invocation
+ * can identify the exact pin to remove instead of scanning every
+ * bot-authored pin (which would also tear down unrelated bot pins).
  *
  * Returns an object reporting which steps succeeded so the caller can
  * decide whether to surface a warning to the admin.
  */
-async function postRaidChannelWelcome(channel, botUserId) {
+async function postRaidChannelWelcome(channel, botUserId, guildId) {
   const outcome = { posted: false, pinned: false, unpinnedCount: 0 };
 
-  try {
-    const pinned = await channel.messages.fetchPinned();
-    for (const [, msg] of pinned) {
-      if (msg.author?.id === botUserId) {
-        try {
-          await msg.unpin();
-          outcome.unpinnedCount += 1;
-        } catch (err) {
-          console.warn("[raid-channel] unpin stale welcome failed:", err?.message || err);
-        }
-      }
+  // Look up the previously-stored welcome ID so we unpin the exact
+  // bot-posted welcome instead of scanning author-based, which would
+  // remove unrelated bot pins in the same channel.
+  let previousWelcomeId = null;
+  if (guildId) {
+    try {
+      const cfg = await GuildConfig.findOne({ guildId }).lean();
+      previousWelcomeId = cfg?.welcomeMessageId || null;
+    } catch (err) {
+      console.warn("[raid-channel] GuildConfig read for welcomeMessageId failed:", err?.message || err);
     }
-  } catch (err) {
-    console.warn("[raid-channel] fetchPinned failed:", err?.message || err);
+  }
+
+  if (previousWelcomeId) {
+    try {
+      const oldMsg = await channel.messages.fetch(previousWelcomeId);
+      if (oldMsg?.pinned) await oldMsg.unpin();
+      outcome.unpinnedCount = 1;
+    } catch {
+      // Old welcome message is already gone (deleted manually) — nothing to unpin.
+    }
   }
 
   const embed = buildRaidChannelWelcomeEmbed();
@@ -2729,6 +2764,19 @@ async function postRaidChannelWelcome(channel, botUserId) {
       outcome.pinned = true;
     } catch (err) {
       console.warn("[raid-channel] pin fresh welcome failed:", err?.message || err);
+    }
+    // Persist the new welcome's message ID so the next repin/set can
+    // target this exact pin for removal.
+    if (guildId) {
+      try {
+        await GuildConfig.findOneAndUpdate(
+          { guildId },
+          { $set: { welcomeMessageId: sent.id } },
+          { upsert: true, setDefaultsOnInsert: true }
+        );
+      } catch (err) {
+        console.warn("[raid-channel] persist welcomeMessageId failed:", err?.message || err);
+      }
     }
   } catch (err) {
     console.warn("[raid-channel] post welcome failed:", err?.message || err);
@@ -2795,10 +2843,11 @@ async function handleRaidChannelCommand(interaction) {
     );
     setCachedMonitorChannelId(guildId, channel.id);
 
-    // Post + pin a fresh welcome via the shared helper. It also unpins any
-    // stale bot-authored welcomes in the channel so repeated `set` calls on
-    // the same channel don't accumulate duplicate pins.
-    const welcome = await postRaidChannelWelcome(channel, interaction.client.user.id);
+    // Post + pin a fresh welcome via the shared helper. It unpins the
+    // previously-stored welcome (if any) using GuildConfig.welcomeMessageId
+    // and persists the new pin's ID there so repeated `set` or `repin`
+    // invocations target the exact bot welcome instead of all bot pins.
+    const welcome = await postRaidChannelWelcome(channel, interaction.client.user.id, guildId);
     const welcomeStatus = welcome.posted
       ? welcome.pinned ? "posted & pinned" : "posted (pin failed)"
       : "NOT posted";
@@ -2953,7 +3002,7 @@ async function handleRaidChannelCommand(interaction) {
     }
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const welcome = await postRaidChannelWelcome(channel, interaction.client.user.id);
+    const welcome = await postRaidChannelWelcome(channel, interaction.client.user.id, guildId);
     const embed = new EmbedBuilder()
       .setColor(welcome.posted && welcome.pinned ? UI.colors.success : UI.colors.progress)
       .setTitle(`${UI.icons.roster} Welcome Repinned`)
@@ -2970,6 +3019,18 @@ async function handleRaidChannelCommand(interaction) {
   if (sub === "schedule") {
     const action = interaction.options.getString("action", true);
     const enabled = action === "on";
+
+    // Refuse to enable schedule without a configured monitor channel —
+    // the scheduler filters on `raidChannelId != null`, so enabling now
+    // would give admin a success embed for a job that never runs.
+    if (enabled && !getCachedMonitorChannelId(guildId)) {
+      await interaction.reply({
+        content: `${UI.icons.warn} Chưa config channel nào. Chạy \`/raid-channel set channel:#<channel>\` trước rồi mới enable schedule nhé — không scheduler sẽ không có gì để dọn.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
     await GuildConfig.findOneAndUpdate(
       { guildId },
       { $set: { autoCleanupEnabled: enabled } },

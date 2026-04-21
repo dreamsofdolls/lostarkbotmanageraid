@@ -15,6 +15,11 @@ const guildConfigSchema = new mongoose.Schema(
     // VN day short-circuits. Missed days (bot offline) catch up on the
     // next tick regardless of day of week.
     lastAutoCleanupKey: { type: String, default: null },
+    // Discord message ID of the pinned welcome embed this bot posted in
+    // the monitor channel. Stored so `/raid-channel repin` can unpin the
+    // exact stored message instead of scanning every bot-authored pin
+    // (which would remove unrelated bot pins).
+    welcomeMessageId: { type: String, default: null },
   },
   {
     timestamps: true,

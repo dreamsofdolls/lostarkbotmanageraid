@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file. Dates use t
 
 ## 2026-04-21
 
+### Fixed (round 12 Codex review)
+
+- **[MEDIUM] `cleanupRaidChannelMessages()` now paginates instead of capping at 100.** Both `/raid-channel cleanup` and the daily auto-cleanup scheduler were fetching a single 100-message batch. Channels with more history would leave older orphan messages behind and miss-count `skippedOld`. The helper now iterates with Discord's `before` cursor, bulk-deleting non-pinned messages batch by batch, and stops when a short batch signals end-of-history or after 20 iterations (2000-message safety cap). `src/raid-command.js` (cleanupRaidChannelMessages). (Codex round 12, Medium.)
+- **[MEDIUM] `/raid-channel repin` now unpins the exact stored welcome instead of every bot-authored pin.** Previous implementation walked `channel.messages.fetchPinned()` and unpinned any message authored by the bot — which would tear down unrelated bot pins sitting in the same channel. Added `welcomeMessageId: String` to `GuildConfig`; `postRaidChannelWelcome` reads the previous ID, fetches + unpins that specific message, then persists the new welcome's ID. `set` uses the same helper so both code paths stay coherent. `src/schema/guildConfig.js`, `src/raid-command.js` (postRaidChannelWelcome signature + persistence). (Codex round 12, Medium.)
+- **[MEDIUM] `/raid-channel schedule action:on` rejects when no channel is configured.** The scheduler filters configs on `raidChannelId != null`, so enabling the schedule on a guild without a channel silently produced a success embed for a job that never runs. The schedule handler now checks the monitor channel cache before flipping `autoCleanupEnabled` to true and returns an error reply asking admin to run `set` first. Disabling with `action:off` remains unconditional. `src/raid-command.js` (handleRaidChannelCommand schedule branch). (Codex round 12, Medium.)
+- **[LOW] README + HELP_SECTIONS list all five required channel permissions.** Permission gate was extended in round 10 to include `Read Message History` (for hint-cleanup `fetch`) and `Embed Links` (for welcome + DM embeds), but deploy docs still listed only the original three. Admins inviting with the old minimal set would hit `/raid-channel set` rejections. README prerequisites + HELP_SECTIONS `/raid-channel` notes now enumerate all five with short rationale per perm. `README.md`, `src/raid-command.js` (HELP_SECTIONS). (Codex round 12, Low.)
+
 ### Added
 
 - **`/raid-channel` gets three new subcommands: `cleanup`, `repin`, `schedule`.**
