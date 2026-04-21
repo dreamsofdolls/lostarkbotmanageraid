@@ -50,11 +50,14 @@ Mỗi dòng raid hiển thị dạng `{icon} {raid name} · {done}/{total}` — 
 **Pagination:** Nếu có nhiều hơn 1 roster, xuất hiện `◀ Previous` / `Next ▶` buttons (Secondary style). Chỉ người chạy command mới điều khiển được. Session timeout **2 phút** — hết hạn thì buttons disable + footer đổi thành `⏱️ Session đã hết hạn (120s) · Dùng /raid-status để xem lại`.
 
 **Lazy auto-refresh iLvl từ lostark.bible:**
-- Mỗi account có `lastRefreshedAt` timestamp.
+- Mỗi account có 2 timestamp: `lastRefreshedAt` (success) + `lastRefreshAttemptAt` (attempt — success OR all-seeds-failed).
 - Khi `/raid-status` chạy: account nào có `lastRefreshedAt` > **2 tiếng** (hoặc chưa bao giờ) → background fetch lostark.bible, update `itemLevel` + `combatScore` + `class` cho các char match theo name.
 - Trong window 2h → zero API calls, dùng cache.
 - Raid progress (`assignedRaids`), `weeklyResetKey`, `tasks` **được bảo toàn** — refresh chỉ đụng roster-shape fields.
 - Cooldown 2h align với upstream cadence của lostark.bible (họ cũng update mỗi char ~2h).
+- **Failure cooldown 5 phút**: nếu seed list (accountName + mọi char name) đều fail hoặc no-overlap với saved roster, stamp `lastRefreshAttemptAt` để skip account đó **5 phút** trước khi retry. Không stamp thì spam `/raid-status` trong lúc failing sẽ queue N seed × bible fetch mỗi lần. Tự heal khi hết cooldown hoặc user sửa roster qua `/add-roster` (re-stamp success).
+- **Timeout 15s per fetch**: mỗi HTTP call gắn `AbortSignal.timeout(15000)` — bible treo connection sẽ auto-abort thay vì giữ `bibleLimiter` slot vô hạn.
+- **Gather/apply split**: phase A (read seed doc + bible fetches) chạy OUTSIDE `saveWithRetry`; phase B (apply vào fresh doc + save) trong retry loop là pure in-memory mutation. VersionError retry KHÔNG re-fire bible HTTP call nữa — tiết kiệm được full roster scrape khi có concurrent save race với `/raid-set`.
 - Fetch failure (Bible down, rate limit) → log warning + skip account đó, command vẫn render cached data.
 
 Đặc biệt Serca: Characters ở item level 1740+ sẽ thấy Serca Hard **và** Nightmare là hai lựa chọn riêng biệt.
@@ -81,6 +84,7 @@ Output là **embed ephemeral** với:
 - Grouped by Discord user — nhiều char pending nhất hiển thị trên cùng; trong mỗi user, char sắp theo iLvl desc
 - Multi-embed pagination khi > 25 fields hoặc > 5500 chars — follow-up messages ephemeral
 - Empty state (mọi người đã xong): embed xanh lá `✅ All eligible characters have completed...`
+- **Discord username resolution**: cache-first (`client.users.cache.get`) — phần lớn user có trong cache từ các gateway events trước đó, không cần REST round-trip. Cache miss đi qua `discordUserLimiter` (max 5 in-flight) thay vì `Promise.all` unbounded — server đông không burst `client.users.fetch` parallel, tránh trip Discord global 50 req/s ceiling.
 
 ### `/remove-roster`
 
@@ -162,7 +166,7 @@ Config lưu trong collection `guildconfigs` của MongoDB, per-guild.
 Kéo clear logs từ `lostark.bible/api/character/logs` và reconcile tự động vào `assignedRaids`. Phase 1 chỉ hỗ trợ **manual sync** trigger; phase 2 sẽ hook vào `/raid-status` để auto-run khi opt-in.
 
 Subcommands (option `action`, **dynamic autocomplete** — dropdown chỉ show action khả dụng theo state hiện tại, ví dụ đang ON thì ẩn `on`):
-- `on` — **probe-before-enable flow**: Artist chạy 1 lần sync in-memory (không save) để phân loại char, nếu có char private → hiện warn embed với nút `Vẫn bật` / `Huỷ` (timeout 60s = default Huỷ). Confirm thì re-run sync trên fresh doc + flip `User.autoManageEnabled = true` + save. Cancel/timeout thì flag giữ OFF, không save gì. Không có char private → commit trực tiếp + render sync report.
+- `on` — **probe-before-enable flow**: Artist chạy 1 lần sync in-memory (không save) để phân loại char, nếu có char private → hiện warn embed với nút `Vẫn bật` / `Huỷ` (timeout 60s = default Huỷ). Confirm thì re-run sync trên fresh doc + flip `User.autoManageEnabled = true` + save. Cancel/timeout thì flag giữ OFF, không save gì — nhưng **`lastAutoManageAttemptAt` vẫn được stamp** (probe đã tốn bible quota, cooldown phải kick in để chặn spam-cancel bypass). Không có char private → commit trực tiếp + render sync report.
 - `off` — tắt flag (không đụng raid data đã sync)
 - `sync` — pull logs NGAY cho tất cả char trong roster, reconcile raid progress của tuần này
 - `status` — hiển thị opt-in flag + **Last success** (timestamp lần sync có ≥1 char thành công) + **Last attempt** (timestamp lần chạy gần nhất; khi `= last success` thì lần gần nhất đã thành công, khi hiện `— fail` thì các attempt sau đó đều fail)
@@ -184,11 +188,12 @@ Subcommands (option `action`, **dynamic autocomplete** — dropdown chỉ show a
 **Đặc biệt:**
 - **Bus clears** (`isBus: true`) vẫn count làm clear (theo git owner decision).
 - Bible meta cache trên `character` subdoc — sync lần 2+ chỉ tốn 1 API call per char, không phải HTML scrape + API.
-- Share `bibleLimiter` (max 2 concurrent) với `/raid-status` refresh để không overwhelm bible.
-- Nếu bible 403 (Cloudflare block) → phase 2 sẽ port ScraperAPI fallback từ LoaLogs.
-- **Private logs (`403 Logs not enabled`)**: bible trả 403 cho char có `Show on Profile` UNCHECKED trong [lostark.bible/me/logs](https://lostark.bible/me/logs). Session cookie của owner thì thấy được, nhưng cookie là HTTP-only + upload token (Generate Token ở `/me/upload`) đã test là write-only — bot không có cách auth thay user. User muốn sync char hidden phải tự bật `Show on Profile` trên bible, hoặc chấp nhận char đó skip (report hiện bucket "Fail").
-- **Per-user throttle (5-min cooldown + in-flight guard)**: dựa trên `User.lastAutoManageAttemptAt` + in-memory `Set` theo `discordId`. `action:sync` spam trong 5 phút → ephemeral reject với remaining time. In-flight song song cùng user → reject ngay. `action:on` có logic mềm hơn: in-flight thì reject hard, nhưng cooldown thì vẫn flip flag (UX: "bật" không bao giờ fail), chỉ skip cả probe lẫn sync và báo user chờ X phút. Cần guard vì mỗi sync chạy scrape+paginate cho toàn roster (N-char × HTTP calls) — `bibleLimiter` chỉ cap concurrency, không chặn total queue.
-- **Redundant-state reject**: typed `action:on` khi đang ON, hoặc `action:off` khi đang OFF → ephemeral reject (autocomplete đã hide rồi, nhưng paste-value bypass được). Save a pointless DB write + không tạo nhiễu "đã bật rồi" trong log.
+- Share `bibleLimiter` (max 2 concurrent) với `/raid-status` refresh để không overwhelm bible. **Cả meta scrape (HTML `/roster` page) lẫn logs API đều đi qua cùng limiter** — cold-cache sync không bypass được cap 2-in-flight khi roster mới cần meta+logs cho N char. Mỗi HTTP call gắn `AbortSignal.timeout(15s)` — bible treo connection sẽ auto-abort, không giữ limiter slot + `inFlightAutoManageSyncs` guard vô hạn.
+- **Gather/apply split**: bible HTTP chạy trong **gather phase OUTSIDE `saveWithRetry`**, rồi apply phase trong retry loop chỉ là pure in-memory mutation. VersionError retry KHÔNG re-fire bible call — tiết kiệm N×M HTTP khi concurrent write (e.g. `/raid-set` đồng thời) gây race. Probe (action:on) + commit share cùng `probeCollected` array → chi phí giảm từ 2× bible run xuống 1×.
+- Nếu bible 403 do Cloudflare block (body KHÔNG chứa `Logs not enabled`) → char hiện ở bucket Fail với raw error message, KHÔNG bị misclassify thành private. Phase 2 sẽ port ScraperAPI fallback từ LoaLogs để auto-retry những case này.
+- **Private logs (body `"Logs not enabled"`)**: bible trả `403 {"error":"Logs not enabled"}` cho char có `Show on Profile` UNCHECKED trong [lostark.bible/me/logs](https://lostark.bible/me/logs). Phân loại private **chỉ dựa vào body message**, không dựa vào raw status 403 (Cloudflare/rate-limit cũng trả 403 nhưng bật Public Log không cứu được). Session cookie của owner thì thấy được, nhưng cookie là HTTP-only + upload token (Generate Token ở `/me/upload`) đã test là write-only — bot không có cách auth thay user. User muốn sync char hidden phải tự bật `Show on Profile` trên bible, hoặc chấp nhận char đó skip (report hiện bucket "Fail").
+- **Per-user throttle (5-min cooldown + in-flight guard)**: dựa trên `User.lastAutoManageAttemptAt` + in-memory `Set` theo `discordId`. `action:sync` spam trong 5 phút → ephemeral reject với remaining time. In-flight song song cùng user → reject ngay. `action:on` có logic mềm hơn: in-flight thì reject hard, nhưng cooldown thì vẫn flip flag (UX: "bật" không bao giờ fail), chỉ skip cả probe lẫn sync và báo user chờ X phút. Cần guard vì mỗi sync chạy scrape+paginate cho toàn roster (N-char × HTTP calls) — `bibleLimiter` chỉ cap concurrency, không chặn total queue. **Probe cancel/timeout/error cũng stamp `lastAutoManageAttemptAt`** — không thì user spam `action:on` + bấm Huỷ liên tục sẽ bypass được cooldown (probe HTTP vẫn tốn quota).
+- **Redundant-state + invalid-action reject**: typed `action:on` khi đang ON, hoặc `action:off` khi đang OFF → ephemeral reject (autocomplete đã hide rồi, nhưng paste-value bypass được). Action lạ (paste string không thuộc `on/off/sync/status`) → ephemeral reject ngay đầu handler để interaction không fall-through rồi Discord timeout. Save a pointless DB write + không tạo nhiễu "đã bật rồi" trong log.
 
 ## Raid Catalog
 

@@ -56,6 +56,13 @@ const accountSchema = new mongoose.Schema(
     // account. Used by /raid-status lazy-refresh to skip API calls when the
     // cached data is still within the upstream Bible cadence (~2 hours).
     lastRefreshedAt: { type: Number, default: null },
+    // Unix ms timestamp of the last refresh ATTEMPT (success or all-seeds-
+    // failed). Used by /raid-status lazy-refresh to apply a shorter
+    // failure-cooldown so repeated /raid-status calls don't re-queue the
+    // full seed list against bible after every invocation when a roster is
+    // unresolvable (wrong accountName + stale char names → every seed fails
+    // or returns zero-overlap).
+    lastRefreshAttemptAt: { type: Number, default: null },
   },
   { _id: false }
 );
