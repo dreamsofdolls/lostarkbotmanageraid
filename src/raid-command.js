@@ -2874,18 +2874,42 @@ async function cleanupRaidChannelMessages(channel) {
 async function postRaidChannelWelcome(channel, botUserId, guildId) {
   const outcome = { posted: false, pinned: false, persisted: false, removedOldCount: 0 };
 
-  // Look up the previously-stored welcome ID but DO NOT unpin it yet.
-  // Safe-order: keep the old pinned welcome in place through every
-  // partial-failure in the fresh-welcome path; only unpin after the
-  // new welcome is post + pin + persist confirmed.
-  let previousWelcomeId = null;
+  // Collect every STALE welcome we should delete when the fresh welcome
+  // is safely in place. Two sources combined into a Set to dedupe:
+  //   1. The DB-tracked `welcomeMessageId` — primary, explicit reference.
+  //   2. Signature-match scan of currently-pinned bot messages whose
+  //      embed title matches the welcome signature — catches orphans
+  //      from earlier versions that pinned without DB tracking (exactly
+  //      the case where real-user saw 2 pinned welcomes after round 17
+  //      fix didn't clean up the pre-fix orphan).
+  // Both collected BEFORE post/pin/persist of the new one, so the
+  // fresh welcome's id (generated after this block) is guaranteed NOT
+  // in the stale set.
+  const staleIds = new Set();
+
   if (guildId) {
     try {
       const cfg = await GuildConfig.findOne({ guildId }).lean();
-      previousWelcomeId = cfg?.welcomeMessageId || null;
+      if (cfg?.welcomeMessageId) staleIds.add(cfg.welcomeMessageId);
     } catch (err) {
       console.warn("[raid-channel] GuildConfig read for welcomeMessageId failed:", err?.message || err);
     }
+  }
+
+  try {
+    const pinned = await channel.messages.fetchPinned();
+    for (const [, msg] of pinned) {
+      if (msg.author?.id !== botUserId) continue;
+      const title = msg.embeds?.[0]?.title || "";
+      // Welcome title signature is stable across versions (kitsune +
+      // "Artist ngồi trông channel này"). Match loose enough to survive
+      // minor wording tweaks but specific enough to miss other bot pins.
+      if (title.includes("Artist ngồi trông channel này")) {
+        staleIds.add(msg.id);
+      }
+    }
+  } catch (err) {
+    console.warn("[raid-channel] fetchPinned for stale-welcome scan failed:", err?.message || err);
   }
 
   const embed = buildRaidChannelWelcomeEmbed();
@@ -2930,23 +2954,26 @@ async function postRaidChannelWelcome(channel, botUserId, guildId) {
     console.warn("[raid-channel] post welcome failed:", err?.message || err);
   }
 
-  // Remove the old welcome only after the new one is post + pin + persist
-  // confirmed. Any partial failure on the fresh-welcome side leaves the
-  // old welcome pinned + visible so the channel still has guidance AND the
-  // next repin can still find the correct pinned message to clean up.
+  // Remove every stale welcome only after the new one is post + pin +
+  // persist confirmed. Any partial failure on the fresh-welcome side
+  // leaves the stale set alone so the channel still has guidance AND
+  // the next repin can retry cleanup.
   //
-  // `message.delete()` is used instead of just `unpin()` because the old
-  // welcome is a bot-authored onboarding embed — leaving it as a regular
-  // (unpinned) message would clutter the channel with two welcomes, which
-  // is exactly what "repin" is supposed to prevent. Delete also
-  // automatically removes it from the pin list.
-  if (outcome.posted && outcome.pinned && outcome.persisted && previousWelcomeId) {
-    try {
-      const oldMsg = await channel.messages.fetch(previousWelcomeId);
-      await oldMsg.delete();
-      outcome.removedOldCount = 1;
-    } catch {
-      // Old welcome message is already gone (deleted manually) — nothing to clean.
+  // `message.delete()` is used instead of just `unpin()` because each
+  // stale welcome is a bot-authored onboarding embed — leaving them as
+  // regular (unpinned) messages would clutter the channel with multiple
+  // welcomes, which is exactly what repin is supposed to prevent. Delete
+  // also automatically removes from the pin list.
+  if (outcome.posted && outcome.pinned && outcome.persisted && staleIds.size > 0) {
+    for (const id of staleIds) {
+      try {
+        const oldMsg = await channel.messages.fetch(id);
+        await oldMsg.delete();
+        outcome.removedOldCount += 1;
+      } catch {
+        // Stale welcome is already gone (deleted manually, channel
+        // cleanup, etc.) — skip.
+      }
     }
   }
 
