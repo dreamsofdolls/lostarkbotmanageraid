@@ -1845,15 +1845,15 @@ const HELP_SECTIONS = [
       "• **Aliases**: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca` (accept typo `secra`) · `normal` / `nor` · `hard` · `nightmare` / `nm` · gates `G1` / `G2`.",
       "• Không có gate = đánh dấu cả raid done (complete). Có gate = chỉ gate đó done (process).",
       "• Chỉ poster tự update char của mình (cần có roster đã đăng ký qua `/add-roster`).",
-      "• **Set**: kiểm tra bot permission trong channel đích, unpin welcome cũ của bot (nếu có), post welcome + pin fresh.",
+      "• **Set**: kiểm tra bot permission trong channel đích, **post + pin welcome fresh trước**, rồi mới unpin welcome cũ (safe-order — partial failure giữ welcome cũ để channel không mất guidance).",
       "• **Show**: hiển thị channel + health check permissions + deploy-flag warnings.",
-      "• **Clear**: tắt monitor ngay, luôn write-through Mongo.",
-      "• **Cleanup**: xóa thủ công mọi message không pin trong monitor channel (giữ welcome pinned). Messages > 14 ngày Discord không cho bulk-delete, bot sẽ report `skipped (>14 ngày)` để admin xóa tay nếu cần.",
-      "• **Repin**: unpin welcome cũ + post welcome mới + pin. Dùng khi cần refresh text welcome sau code change hoặc khi pin bị user tháo nhầm.",
-      "• **Schedule on/off**: toggle auto-cleanup daily. Bật → mỗi 00:00 VN time, bot tự xóa non-pinned trong channel (catch-up nếu bot offline qua midnight). Tắt → chỉ cleanup thủ công.",
+      "• **Clear**: tắt monitor ngay, luôn write-through Mongo; cũng reset `autoCleanupEnabled` để schedule không tự kích lại khi admin `/set` channel mới.",
+      "• **Cleanup**: xóa thủ công mọi message không pin trong monitor channel (giữ welcome pinned). Paginate đến hết channel. Messages > 14 ngày Discord không cho bulk-delete, bot sẽ report `skipped (>14 ngày)` để admin xóa tay nếu cần.",
+      "• **Repin**: safe-order như Set — post + pin fresh trước, unpin stale sau. `welcomeMessageId` tracked trong DB để unpin đúng message cũ, không ảnh hưởng bot pins khác trong channel.",
+      "• **Schedule on/off**: toggle auto-cleanup daily. Bật → mỗi 00:00 VN time, bot tự xóa non-pinned trong channel. Enable stamp today's key ngay nên tick đầu tiên sau enable chờ đến 00:00 kế, không catch-up ngay. Bot-offline catch-up chỉ hoạt động khi schedule đã enable continuous. Tắt → chỉ cleanup thủ công.",
       "• Parse fail (không phải raid intent) → bot im lặng.",
-      "• Lỗi phục hồi được (char không có, iLvl thiếu, combo sai, nhiều raid/difficulty/gate) → bot ping user reply persistent, tự dọn khi user post lại hoặc sau 5 phút.",
-      "• **Per-user cooldown 2 giây** giữa các parse-success message. Spam trên threshold (3 hit trong 10s) → bot post 1 warning kitsune-style rồi dedup im lặng trong 60s.",
+      "• Lỗi phục hồi được (char không có, iLvl thiếu, combo sai, nhiều raid/difficulty/gate) → bot ping user reply persistent, tự dọn khi user post lại hoặc sau 5 phút TTL. Hint và message gốc của user cùng bị dọn để channel heal về clean state.",
+      "• **Per-user cooldown 2 giây** content-aware: duplicate content trong cooldown → drop + delete message. Different content khi có pending hint (đang fix lỗi) → **1 exception duy nhất/cooldown window** (không spam-bypass). Spam ≥3 hit trong 10s → kitsune warning, dedup 60s.",
       "• Deploy: bật `Message Content Intent` ở Discord Developer Portal, hoặc set `TEXT_MONITOR_ENABLED=false` để chạy slash-command-only.",
       "• **Permissions bot cần trong channel đích**: `View Channel`, `Send Messages`, `Manage Messages`, `Read Message History`, `Embed Links`. Thiếu 1 trong 5 là `/raid-channel set` reject.",
       "• Admin-only command (yêu cầu `Manage Server` permission).",
@@ -2511,23 +2511,24 @@ const MONITOR_SPAM_WARN_CD_MS = 60000;// dedup: one warning per user per minute
 
 /**
  * Check whether a user's message should be accepted under the per-user
- * cooldown. The cooldown is content-aware with a pending-hint exception:
+ * cooldown. Content-aware with a pending-hint exception that is LIMITED
+ * to one quick retry per cooldown window (otherwise the exception would
+ * let a user vary content indefinitely while cooldown still theoretically
+ * applies, since each failed attempt replaces the pending hint and looks
+ * like a "fresh" correction flow):
  *
- *   - within cooldown + same content as last accepted → DROP (duplicate spam)
- *   - within cooldown + different content + user has a pending hint → ACCEPT
- *     (the user is clearly iterating on a recoverable error; blocking would
- *     break the round-14 fix for typo-then-correct flows)
+ *   - within cooldown + same content → DROP (duplicate spam)
+ *   - within cooldown + different content + pending hint + no recent
+ *     exception yet → ACCEPT via one-shot exception (round 14 typo-fix)
+ *   - within cooldown + different content + exception already consumed
+ *     in this window → DROP (caught by round 16 Codex as a bypass)
  *   - within cooldown + different content + no pending hint → DROP (fresh
- *     post right after a successful write; hard limit to prevent burst DB
- *     writes)
+ *     post right after a successful write; hard throttle)
  *   - outside cooldown → ACCEPT
  *
- * Spam-tracking counters increment on every DROP so the caller can post
- * the kitsune warning once per minute per user.
- *
- * Returns { accepted, warn }. commitUserMonitorActivity(message) must be
- * called right after an accept so the next check sees the right lastContent
- * and timestamp.
+ * Returns { accepted, warn, viaException }. commitUserMonitorActivity
+ * must be called right after an accept, passing `viaException` so
+ * `lastExceptionAt` is bumped (or reset to 0 on a normal fresh accept).
  */
 function checkUserMonitorCooldown(message) {
   const key = hintKey(message.guildId, message.channelId, message.author.id);
@@ -2536,6 +2537,7 @@ function checkUserMonitorCooldown(message) {
   const entry = userMonitorCooldowns.get(key) || {
     lastProcessedAt: 0,
     lastContent: "",
+    lastExceptionAt: 0,
     spamHits: 0,
     spamWindowStart: 0,
     warnedAt: 0,
@@ -2545,11 +2547,13 @@ function checkUserMonitorCooldown(message) {
   if (withinCooldown) {
     const sameContent = contentKey && contentKey === entry.lastContent;
     const hasPendingHint = pendingChannelHints.has(key);
+    const recentException = now - (entry.lastExceptionAt || 0) < MONITOR_COOLDOWN_MS;
 
-    // Correction-flow exception — let the user fix a just-seen hint with
-    // new content even though they're still inside the 2-second window.
-    if (hasPendingHint && !sameContent) {
-      return { accepted: true, warn: false };
+    // Correction-flow exception — ONE retry per cooldown window, not
+    // per hint (hint churn from repeated failures kept resetting the
+    // per-hint flag, letting a user vary content forever).
+    if (hasPendingHint && !sameContent && !recentException) {
+      return { accepted: true, warn: false, viaException: true };
     }
 
     // Otherwise drop. Bump spam tracking and maybe emit a warning.
@@ -2564,25 +2568,29 @@ function checkUserMonitorCooldown(message) {
       now - entry.warnedAt > MONITOR_SPAM_WARN_CD_MS;
     if (shouldWarn) entry.warnedAt = now;
     userMonitorCooldowns.set(key, entry);
-    return { accepted: false, warn: shouldWarn };
+    return { accepted: false, warn: shouldWarn, viaException: false };
   }
 
-  return { accepted: true, warn: false };
+  return { accepted: true, warn: false, viaException: false };
 }
 
-function commitUserMonitorActivity(message) {
+function commitUserMonitorActivity(message, viaException = false) {
   const key = hintKey(message.guildId, message.channelId, message.author.id);
   const now = Date.now();
   const contentKey = normalizeName(message.content);
   const entry = userMonitorCooldowns.get(key) || {
     lastProcessedAt: 0,
     lastContent: "",
+    lastExceptionAt: 0,
     spamHits: 0,
     spamWindowStart: 0,
     warnedAt: 0,
   };
   entry.lastProcessedAt = now;
   entry.lastContent = contentKey;
+  // Track exception use. Fresh cooldown passes (non-exception) reset the
+  // exception slot to 0 so the next hint-triggered retry gets its one shot.
+  entry.lastExceptionAt = viaException ? now : 0;
   entry.spamHits = 0;
   entry.spamWindowStart = 0;
   userMonitorCooldowns.set(key, entry);
@@ -2667,7 +2675,7 @@ async function handleRaidChannelMessage(message) {
     message.delete().catch(() => {});
     return;
   }
-  commitUserMonitorActivity(message);
+  commitUserMonitorActivity(message, cooldown.viaException);
 
   if (parsed.error === "multi-gate") {
     await postPersistentHint(
@@ -2864,13 +2872,12 @@ async function cleanupRaidChannelMessages(channel) {
  * decide whether to surface a warning to the admin.
  */
 async function postRaidChannelWelcome(channel, botUserId, guildId) {
-  const outcome = { posted: false, pinned: false, unpinnedCount: 0 };
+  const outcome = { posted: false, pinned: false, persisted: false, unpinnedCount: 0 };
 
   // Look up the previously-stored welcome ID but DO NOT unpin it yet.
-  // Safe-order: if the fresh post/pin fails, we want to keep the old
-  // pinned welcome in place rather than leaving the channel with zero
-  // pinned guidance. Only unpin the old one after the new one is
-  // posted AND pinned successfully.
+  // Safe-order: keep the old pinned welcome in place through every
+  // partial-failure in the fresh-welcome path; only unpin after the
+  // new welcome is post + pin + persist confirmed.
   let previousWelcomeId = null;
   if (guildId) {
     try {
@@ -2889,10 +2896,10 @@ async function postRaidChannelWelcome(channel, botUserId, guildId) {
       await sent.pin();
       outcome.pinned = true;
       // Only persist the new welcome ID after BOTH post AND pin succeed.
-      // If we persisted on post-only, a pin failure would leave the DB
-      // pointing at an unpinned new welcome while the old welcome stays
-      // pinned — next repin would lose track of the actual pinned one
-      // and couldn't unpin it anymore.
+      // Persist failure below does NOT unwind the pin (rollback is messy
+      // and could itself fail), but it DOES skip the old-unpin step so
+      // that the old welcome stays pinned + findable by the next repin —
+      // avoids "DB points at new, stale pin still in channel" drift.
       if (guildId) {
         try {
           await GuildConfig.findOneAndUpdate(
@@ -2900,9 +2907,15 @@ async function postRaidChannelWelcome(channel, botUserId, guildId) {
             { $set: { welcomeMessageId: sent.id } },
             { upsert: true, setDefaultsOnInsert: true }
           );
+          outcome.persisted = true;
         } catch (err) {
           console.warn("[raid-channel] persist welcomeMessageId failed:", err?.message || err);
         }
+      } else {
+        // No guildId was passed — we can't persist, so treat as
+        // persist-succeeded for unpin purposes (caller opted out of
+        // tracking).
+        outcome.persisted = true;
       }
     } catch (err) {
       console.warn("[raid-channel] pin fresh welcome failed:", err?.message || err);
@@ -2911,10 +2924,11 @@ async function postRaidChannelWelcome(channel, botUserId, guildId) {
     console.warn("[raid-channel] post welcome failed:", err?.message || err);
   }
 
-  // Now that the new welcome is safely in place (or we gave up on it),
-  // remove the old one. If the new post/pin failed entirely, leave the
-  // old pinned welcome alone so the channel still has guidance visible.
-  if (outcome.posted && outcome.pinned && previousWelcomeId) {
+  // Unpin the old welcome only after the new one is post + pin + persist
+  // confirmed. Any partial failure on the fresh-welcome side leaves the
+  // old welcome pinned so the channel still has guidance AND the next
+  // repin can still find the correct pinned message to remove.
+  if (outcome.posted && outcome.pinned && outcome.persisted && previousWelcomeId) {
     try {
       const oldMsg = await channel.messages.fetch(previousWelcomeId);
       if (oldMsg?.pinned) await oldMsg.unpin();
