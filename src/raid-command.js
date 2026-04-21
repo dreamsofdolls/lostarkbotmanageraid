@@ -2510,14 +2510,21 @@ const MONITOR_SPAM_THRESHOLD = 3;     // cooldown-hits within window → trigger
 const MONITOR_SPAM_WARN_CD_MS = 60000;// dedup: one warning per user per minute
 
 /**
- * Gate a user's message against the per-user cooldown. Returns:
+ * Check whether a user's message should be accepted under the per-user
+ * cooldown. Updates spam-tracking counters on cooldown hits so the caller
+ * can post a warning. Does NOT bump `lastProcessedAt` — that happens in
+ * `commitUserMonitorActivity` only after the write path actually succeeds,
+ * so error paths (typo → hint → user corrects within <2s) don't lock the
+ * user out of their own correction.
+ *
+ * Returns:
  *   { accepted: true  } — OK to process this message
  *   { accepted: false, warn: false } — in cooldown, silently drop
  *   { accepted: false, warn: true  } — in cooldown AND spam threshold hit
  *                                      AND not recently warned → caller
  *                                      should post a quạo'd-up reply
  */
-function recordUserMonitorActivity(message) {
+function checkUserMonitorCooldown(message) {
   const key = hintKey(message.guildId, message.channelId, message.author.id);
   const now = Date.now();
   const entry = userMonitorCooldowns.get(key) || {
@@ -2528,7 +2535,6 @@ function recordUserMonitorActivity(message) {
   };
 
   if (now - entry.lastProcessedAt < MONITOR_COOLDOWN_MS) {
-    // Inside cooldown — this is a spam hit.
     if (now - entry.spamWindowStart > MONITOR_SPAM_WINDOW_MS) {
       entry.spamHits = 1;
       entry.spamWindowStart = now;
@@ -2543,12 +2549,26 @@ function recordUserMonitorActivity(message) {
     return { accepted: false, warn: shouldWarn };
   }
 
-  // Accept and reset spam tracking.
+  // Cooldown passes — do NOT bump lastProcessedAt yet. The caller bumps
+  // via commitUserMonitorActivity only on true success (raid write landed).
+  // That keeps error-path retries (wrong char, iLvl too low, etc.) from
+  // locking the user out of their own quick correction.
+  return { accepted: true, warn: false };
+}
+
+function commitUserMonitorActivity(message) {
+  const key = hintKey(message.guildId, message.channelId, message.author.id);
+  const now = Date.now();
+  const entry = userMonitorCooldowns.get(key) || {
+    lastProcessedAt: 0,
+    spamHits: 0,
+    spamWindowStart: 0,
+    warnedAt: 0,
+  };
   entry.lastProcessedAt = now;
   entry.spamHits = 0;
   entry.spamWindowStart = 0;
   userMonitorCooldowns.set(key, entry);
-  return { accepted: true, warn: false };
 }
 
 async function postSpamWarning(message) {
@@ -2609,7 +2629,13 @@ async function handleRaidChannelMessage(message) {
   // postPersistentHint / DM / delete cycles. Chat noise (parse-null) is
   // already silent so unaffected. Sustained spam above threshold trips a
   // one-shot annoyed-kitsune warning, deduped per minute per user.
-  const cooldown = recordUserMonitorActivity(message);
+  //
+  // IMPORTANT: checkUserMonitorCooldown only reads + updates spam-tracking;
+  // it does NOT bump lastProcessedAt. commitUserMonitorActivity is called
+  // at the end of a successful write path. Parse-error / char-not-found /
+  // iLvl-low retries don't consume a cooldown slot, so a user who typos
+  // and fixes within 2 seconds still lands their fix correctly.
+  const cooldown = checkUserMonitorCooldown(message);
   if (!cooldown.accepted) {
     if (cooldown.warn) await postSpamWarning(message);
     // Delete the throttled parse-success message too. Otherwise the
@@ -2698,14 +2724,18 @@ async function handleRaidChannelMessage(message) {
     return;
   }
 
-  // Success path:
-  //   1. DM the user a private confirmation (Discord's only "only you see it"
+  // Success path — the raid write actually landed:
+  //   1. Commit the cooldown so subsequent messages from this user within
+  //      2 seconds are dropped (real spam protection). Error paths above
+  //      skipped this commit so retries after hints remain fast.
+  //   2. DM the user a private confirmation (Discord's only "only you see it"
   //      surface outside of interactions). If DM fails (user disabled DMs
   //      from server members), fall back to a short public ping so they
   //      still see that the update landed — otherwise they'd just see their
   //      message disappear with no feedback at all.
-  //   2. Clear any stale hint reply that may still be sitting in the channel.
-  //   3. Delete the original announcement so the channel stays tidy.
+  //   3. Clear any stale hint reply that may still be sitting in the channel.
+  //   4. Delete the original announcement so the channel stays tidy.
+  commitUserMonitorActivity(message);
   const confirmEmbed = buildRaidChannelSuccessEmbed({
     charName,
     raidMeta,
@@ -2839,21 +2869,24 @@ async function postRaidChannelWelcome(channel, botUserId, guildId) {
     try {
       await sent.pin();
       outcome.pinned = true;
+      // Only persist the new welcome ID after BOTH post AND pin succeed.
+      // If we persisted on post-only, a pin failure would leave the DB
+      // pointing at an unpinned new welcome while the old welcome stays
+      // pinned — next repin would lose track of the actual pinned one
+      // and couldn't unpin it anymore.
+      if (guildId) {
+        try {
+          await GuildConfig.findOneAndUpdate(
+            { guildId },
+            { $set: { welcomeMessageId: sent.id } },
+            { upsert: true, setDefaultsOnInsert: true }
+          );
+        } catch (err) {
+          console.warn("[raid-channel] persist welcomeMessageId failed:", err?.message || err);
+        }
+      }
     } catch (err) {
       console.warn("[raid-channel] pin fresh welcome failed:", err?.message || err);
-    }
-    // Persist the new welcome's message ID so the next repin/set can
-    // target this exact pin for removal.
-    if (guildId) {
-      try {
-        await GuildConfig.findOneAndUpdate(
-          { guildId },
-          { $set: { welcomeMessageId: sent.id } },
-          { upsert: true, setDefaultsOnInsert: true }
-        );
-      } catch (err) {
-        console.warn("[raid-channel] persist welcomeMessageId failed:", err?.message || err);
-      }
     }
   } catch (err) {
     console.warn("[raid-channel] post welcome failed:", err?.message || err);
@@ -3019,16 +3052,21 @@ async function handleRaidChannelCommand(interaction) {
     // failed at boot the cache is empty, but Mongo might still have a
     // non-null raidChannelId that `clear` needs to actually clear.
     // findOneAndUpdate without upsert is a no-op when no doc exists.
+    //
+    // Also cascade `autoCleanupEnabled` to false so a previously-scheduled
+    // auto-cleanup doesn't reactivate the moment admin /sets a fresh
+    // channel later — that would silently purge the new channel before
+    // admin has a chance to opt back in.
     await GuildConfig.findOneAndUpdate(
       { guildId },
-      { $set: { raidChannelId: null } }
+      { $set: { raidChannelId: null, autoCleanupEnabled: false } }
     );
     setCachedMonitorChannelId(guildId, null);
 
     const embed = new EmbedBuilder()
       .setColor(UI.colors.muted)
       .setTitle(`${UI.icons.reset} Raid Channel Cleared`)
-      .setDescription("Monitor đã được tắt. Bot sẽ không xử lý message text nữa.");
+      .setDescription("Monitor đã được tắt và auto-cleanup schedule cũng bị reset. Bot sẽ không xử lý message text nữa. Dùng `/raid-channel set` + `/raid-channel schedule action:on` để bật lại.");
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     return;
   }
