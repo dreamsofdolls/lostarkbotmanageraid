@@ -60,6 +60,12 @@ class ConcurrencyLimiter {
 }
 
 const bibleLimiter = new ConcurrencyLimiter(2);
+// Discord REST fan-out limiter: caps parallel `client.users.fetch` bursts in
+// /raid-check (which resolves display names for every unique discordId with
+// matching chars). discord.js serializes per-bucket internally, but a large
+// raiding server could queue up dozens of fetches at once and trip the
+// global 50-req/s ceiling — 5 in flight is a safe middle ground.
+const discordUserLimiter = new ConcurrencyLimiter(5);
 
 /**
  * In-flight dedup loader for autocomplete paths. Rapid keystrokes for the
@@ -565,14 +571,14 @@ const raidSetCommand = new SlashCommandBuilder()
   .addStringOption((option) =>
     option
       .setName("status")
-      .setDescription("complete or reset")
+      .setDescription("complete | process | reset (process marks one gate)")
       .setRequired(true)
       .setAutocomplete(true)
   )
   .addStringOption((option) =>
     option
       .setName("gate")
-      .setDescription("Specific gate (optional)")
+      .setDescription("Specific gate (required when status=process)")
       .setRequired(false)
       .setAutocomplete(true)
   );
@@ -815,8 +821,13 @@ async function handleAddRosterCommand(interaction) {
 }
 
 async function resolveDiscordDisplay(client, discordId) {
+  // Cache-first: discord.js populates users cache during normal gateway
+  // events so most IDs are resolvable without a REST round-trip. Only miss
+  // paths go through the limiter — keeps /raid-check fast on warm caches.
+  const cached = client.users.cache.get(discordId);
+  if (cached) return cached.username || discordId;
   try {
-    const user = await client.users.fetch(discordId);
+    const user = await discordUserLimiter.run(() => client.users.fetch(discordId));
     return user?.username || discordId;
   } catch {
     return discordId;
@@ -984,53 +995,81 @@ const STATUS_FOOTER_LEGEND = `${UI.icons.done} done · ${UI.icons.partial} parti
 // cadence to avoid wasted fetches: any account refreshed within this window
 // is treated as fresh enough.
 const ROSTER_REFRESH_COOLDOWN_MS = 2 * 60 * 60 * 1000;
+// Short cooldown between failed refresh attempts. Without it, an account
+// whose every seed fails (wrong accountName + stale char names) would re-queue
+// the full seed list against bible on every /raid-status call — spam the
+// command N times in a minute = N × seedCount bible fetches for a single user.
+// 5 minutes is long enough to rate-limit retry spam but short enough that a
+// user who just fixed their roster via /add-roster-char isn't stuck waiting
+// 2h to see fresh data.
+const ROSTER_REFRESH_FAILURE_COOLDOWN_MS = 5 * 60 * 1000;
+
+function isAccountRefreshStale(account, now = Date.now()) {
+  const chars = Array.isArray(account?.characters) ? account.characters : [];
+  // Empty rosters have nothing to validate upstream overlap against; skip so
+  // they don't retry forever. /add-roster re-stamps lastRefreshedAt on its
+  // own save path.
+  if (chars.length === 0) return false;
+  const lastSuccess = Number(account?.lastRefreshedAt) || 0;
+  if ((now - lastSuccess) <= ROSTER_REFRESH_COOLDOWN_MS) return false;
+  // Failure cooldown: if the last ATTEMPT is more recent than the last
+  // SUCCESS, we're in a failing state — honor the shorter cooldown instead
+  // of re-hitting bible on every /raid-status spam.
+  const lastAttempt = Number(account?.lastRefreshAttemptAt) || 0;
+  if (lastAttempt > lastSuccess && (now - lastAttempt) < ROSTER_REFRESH_FAILURE_COOLDOWN_MS) {
+    return false;
+  }
+  return true;
+}
 
 /**
- * Lazy-refresh every stale account inside a hydrated User doc in place,
- * updating only the roster-shape fields (item level, combat score, class)
- * and stamping `lastRefreshedAt`. Raid progress (`assignedRaids`) and
- * tasks are deliberately preserved.
+ * Gather phase of the stale-account refresh: runs bible fetches for every
+ * stale account using the seed-with-overlap strategy. Does NOT mutate the
+ * passed doc — returns a data-only array that `applyStaleAccountRefreshes`
+ * can apply to a FRESH doc inside `saveWithRetry`. This separation matters
+ * because a VersionError retry must NOT re-fire bible HTTP calls; the
+ * expensive I/O happens once, outside the retry loop.
  *
- * Returns true if at least one account was refreshed so the caller knows
- * it needs to save. Individual account fetch failures are logged and
- * skipped; one failure does not block the others.
+ * Returns an array of `{ accountName, resolvedSeed, fetchedChars, attempted }`
+ * entries — one per stale account. `fetchedChars` is null on total seed
+ * failure; `attempted: true` means we burned bible quota (→ caller stamps
+ * `lastRefreshAttemptAt` regardless of success).
  */
-async function refreshStaleAccounts(userDoc) {
+async function collectStaleAccountRefreshes(userDoc) {
   if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
-    return false;
+    return [];
   }
 
   const now = Date.now();
-  const staleAccounts = userDoc.accounts.filter((account) => {
-    // Skip empty rosters — the post-round-5 inner loop needs at least one
-    // saved character to validate upstream overlap, and without one the
-    // account never stamps and would retry every /raid-status forever.
-    // /remove-roster remove_char can legitimately leave an account at 0
-    // characters, and /add-roster re-stamps lastRefreshedAt on its own
-    // save, so empty accounts have nothing useful to pull anyway.
-    const chars = Array.isArray(account?.characters) ? account.characters : [];
-    if (chars.length === 0) return false;
-    const last = Number(account?.lastRefreshedAt) || 0;
-    return (now - last) > ROSTER_REFRESH_COOLDOWN_MS;
-  });
-  if (staleAccounts.length === 0) return false;
+  const staleAccounts = userDoc.accounts.filter((account) => isAccountRefreshStale(account, now));
+  if (staleAccounts.length === 0) return [];
+
+  // Snapshot other account names for the collision guard so the apply
+  // phase doesn't need to re-derive them against the fresh doc (which may
+  // have diverged).
+  const otherAccountNames = userDoc.accounts.map((a) => normalizeName(a?.accountName));
 
   const results = await Promise.allSettled(
     staleAccounts.map(async (account) => {
+      const originalName = account.accountName;
       const seeds = [];
-      if (account.accountName) seeds.push(account.accountName);
+      if (originalName) seeds.push(originalName);
       for (const c of (account.characters || [])) {
         const n = getCharacterName(c);
         if (n && !seeds.includes(n)) seeds.push(n);
       }
-      if (seeds.length === 0) return { account, fetched: null };
+      if (seeds.length === 0) {
+        return { accountName: originalName, fetchedChars: null, resolvedSeed: null, attempted: false };
+      }
 
       const savedNames = (account.characters || [])
         .map((c) => normalizeName(getCharacterName(c)))
         .filter(Boolean);
 
+      let attempted = false;
       for (const seed of seeds) {
         try {
+          attempted = true;
           const fetched = await fetchRosterCharacters(seed);
           if (!Array.isArray(fetched) || fetched.length === 0) continue;
 
@@ -1049,34 +1088,77 @@ async function refreshStaleAccounts(userDoc) {
             continue;
           }
 
-          if (account.accountName !== seed) {
-            // Don't rewrite accountName to a seed that already belongs to
-            // another account for the same user — /remove-roster and
-            // autocomplete key off accountName as a unique-per-user id,
-            // so convergence would make the colliding roster unaddressable.
+          // Plan accountName convergence: only commit the rename in apply
+          // phase if the colliding-name check against the FRESH doc still
+          // holds there. Record the intent here.
+          let resolvedSeed = null;
+          if (originalName !== seed) {
             const normalizedSeed = normalizeName(seed);
-            const collides = userDoc.accounts.some(
-              (other) => other !== account && normalizeName(other.accountName) === normalizedSeed
+            const collides = otherAccountNames.some(
+              (n, i) => userDoc.accounts[i] !== account && n === normalizedSeed
             );
-            if (!collides) account.accountName = seed;
+            if (!collides) resolvedSeed = seed;
           }
-          return { account, fetched };
+          return { accountName: originalName, fetchedChars: fetched, resolvedSeed, attempted };
         } catch (err) {
           console.warn(`[refresh] seed "${seed}" failed: ${err?.message || err}`);
         }
       }
-      return { account, fetched: null };
+      return { accountName: originalName, fetchedChars: null, resolvedSeed: null, attempted };
     })
   );
 
-  let didUpdate = false;
+  const collected = [];
   for (const r of results) {
     if (r.status === "rejected") {
       console.warn(`[refresh] account fetch failed: ${r.reason?.message || r.reason}`);
       continue;
     }
-    const { account, fetched } = r.value || {};
-    if (!account || !Array.isArray(fetched) || fetched.length === 0) continue;
+    collected.push(r.value);
+  }
+  return collected;
+}
+
+/**
+ * Apply phase of the stale-account refresh: takes the data-only array from
+ * `collectStaleAccountRefreshes` and writes it into a FRESH (possibly
+ * re-fetched-on-VersionError) user doc. Does NO I/O — pure mutation.
+ *
+ * Returns true if the doc needs to be saved. Always stamps
+ * `lastRefreshAttemptAt` on accounts where bible was actually queried, even
+ * when every seed failed / had zero overlap — so the failure cooldown in
+ * `isAccountRefreshStale` can throttle retry spam.
+ */
+function applyStaleAccountRefreshes(userDoc, collected) {
+  if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+    return false;
+  }
+  if (!Array.isArray(collected) || collected.length === 0) return false;
+
+  const byName = new Map(
+    collected
+      .filter((c) => c?.accountName)
+      .map((c) => [normalizeName(c.accountName), c])
+  );
+
+  let didUpdate = false;
+  const now = Date.now();
+
+  for (const account of userDoc.accounts) {
+    const entry = byName.get(normalizeName(account?.accountName));
+    if (!entry) continue;
+    if (!entry.attempted) continue;
+
+    // Stamp attempt early — covers both success and failure branches below
+    // so the failure cooldown always kicks in when bible was actually hit.
+    account.lastRefreshAttemptAt = now;
+    didUpdate = true;
+
+    const fetched = entry.fetchedChars;
+    if (!Array.isArray(fetched) || fetched.length === 0) {
+      // All seeds failed — attempt stamp already applied above.
+      continue;
+    }
 
     const fetchedByName = new Map(
       fetched.map((c) => [normalizeName(c.charName), c])
@@ -1091,18 +1173,27 @@ async function refreshStaleAccounts(userDoc) {
       if (match.className) character.class = match.className;
     }
     if (!matchedAny) {
-      // Fetched roster had zero overlap with our saved characters — either
-      // the fallback seed landed on a foreign roster or the upstream top-N
-      // churned enough to drop everything we track. Do NOT stamp
-      // lastRefreshedAt, so the next /raid-status retries instead of
-      // suppressing refresh for 2h with stale data.
+      // Zero overlap — skip success stamp but keep attempt stamp so retry
+      // is rate-limited. Same "don't trust a foreign roster fallback"
+      // reasoning as before.
       console.warn(
-        `[refresh] account "${account.accountName}" fetched ${fetched.length} chars but zero overlap with saved roster — skipping stamp.`
+        `[refresh] account "${account.accountName}" fetched ${fetched.length} chars but zero overlap with saved roster — skipping success stamp.`
       );
       continue;
     }
-    account.lastRefreshedAt = Date.now();
-    didUpdate = true;
+
+    // Re-check collision against FRESH doc before committing the rename
+    // planned in collect phase. Another /remove-roster or /add-roster
+    // between collect and apply could have changed which names are taken.
+    if (entry.resolvedSeed && account.accountName !== entry.resolvedSeed) {
+      const normalizedSeed = normalizeName(entry.resolvedSeed);
+      const freshCollides = userDoc.accounts.some(
+        (other) => other !== account && normalizeName(other.accountName) === normalizedSeed
+      );
+      if (!freshCollides) account.accountName = entry.resolvedSeed;
+    }
+
+    account.lastRefreshedAt = now;
   }
 
   return didUpdate;
@@ -1216,19 +1307,34 @@ async function handleStatusCommand(interaction) {
   // account). If no refresh is needed the overhead is just the defer round-trip.
   await interaction.deferReply();
 
-  // Lazy refresh stale accounts inside saveWithRetry for concurrency safety,
-  // and return the hydrated-to-plain snapshot so we do not have to re-read
-  // the document a third time on the fast path.
+  // Lazy refresh stale accounts in two phases so bible fetches run ONCE even
+  // when saveWithRetry has to re-run the mutation against a fresh doc after
+  // a VersionError. Phase A (collect) reads a seed doc + hits bible for every
+  // stale account. Phase B (apply) runs inside saveWithRetry and is pure in-
+  // memory mutation + save — cheap to retry. Without this split, a concurrent
+  // save racing /raid-status would trigger a full roster re-scrape on every
+  // retry.
   let userDoc = null;
   try {
-    userDoc = await saveWithRetry(async () => {
-      const doc = await User.findOne({ discordId });
-      if (!doc) return null;
-      const didFreshenWeek = ensureFreshWeek(doc);
-      const didRefresh = await refreshStaleAccounts(doc);
-      if (didFreshenWeek || didRefresh) await doc.save();
-      return doc.toObject();
-    });
+    const seedDoc = await User.findOne({ discordId });
+    if (!seedDoc) {
+      userDoc = null;
+    } else {
+      // ensureFreshWeek on seedDoc so the staleness filter sees the post-
+      // reset state. The fresh doc inside the retry loop runs it again
+      // idempotently — second call is a no-op when already freshened.
+      ensureFreshWeek(seedDoc);
+      const collected = await collectStaleAccountRefreshes(seedDoc);
+
+      userDoc = await saveWithRetry(async () => {
+        const doc = await User.findOne({ discordId });
+        if (!doc) return null;
+        const didFreshenWeek = ensureFreshWeek(doc);
+        const didRefresh = applyStaleAccountRefreshes(doc, collected);
+        if (didFreshenWeek || didRefresh) await doc.save();
+        return doc.toObject();
+      });
+    }
   } catch (err) {
     console.error("[raid-status] lazy refresh failed:", err?.message || err);
     userDoc = await User.findOne({ discordId }).lean();
@@ -1832,6 +1938,9 @@ const HELP_SECTIONS = [
       "VN: Hiển thị per-account per-character, mỗi raid có count `done/total`.",
       "• Embed color động: xanh lá = xong hết, vàng = đang tiến triển, xanh dương = chưa bắt đầu.",
       "• Ở iLvl 1740+: Serca Hard VÀ Nightmare hiển thị riêng biệt để cậu chọn mode.",
+      "• **Lazy refresh**: account nào quá 2h chưa update thì Artist scrape bible roster page để sync itemLevel/combatScore/class — match bible cadence ~2h. Share `bibleLimiter` với `/raid-auto-manage`. Mỗi HTTP fetch gắn `AbortSignal.timeout(15s)` chống bible treo connection.",
+      "• **Failure cooldown**: nếu seed list của một account fail hết (wrong accountName + stale char names), Artist stamp `lastRefreshAttemptAt` và skip refresh account đó trong **5 phút** tiếp theo. Spam `/raid-status` trong lúc failing không còn queue N seed × bible fetch mỗi lần — tự heal khi hết cooldown hoặc khi user sửa roster qua `/add-roster`.",
+      "• **Gather/apply split**: bible fetch chạy OUTSIDE `saveWithRetry` một lần duy nhất; apply phase (mutate fresh doc + save) mới ở trong retry loop. VersionError retry không re-fire bible HTTP call.",
     ],
   },
   {
@@ -1868,6 +1977,7 @@ const HELP_SECTIONS = [
       "EN: Requires role named exactly `raid leader` (case-insensitive).",
       "VN: Role name phải là `raid leader` (không phân biệt hoa thường).",
       "• Output auto-paginate thành chunks ≤ 1900 chars — follow-up messages ephemeral.",
+      "• **Discord username resolution**: cache-first (discord.js users cache). Cache miss đi qua `discordUserLimiter` (max 5 in-flight) để server đông không burst `client.users.fetch` parallel — bảo vệ khỏi Discord 50 req/s global ceiling.",
     ],
   },
   {
@@ -1951,12 +2061,13 @@ const HELP_SECTIONS = [
       "• **Sort ASC trước reconcile**: bible trả newest-first nhưng Artist sort oldest→newest để latest-mode luôn thắng khi có mode-switch wipe.",
       "• **Mode-switch**: nếu bible log báo clear Serca NM nhưng DB đang track Serca Hard cho char đó, bible-wins — Artist wipe raid progress cũ rồi ghi theo mode mới.",
       "• **Cached meta**: lần đầu sync phải scrape HTML page `/roster` để lấy `characterSerial + cid + rid`; các lần sau dùng cache trong DB → chỉ tốn 1 API call per char.",
-      "• **Rate limit**: share `bibleLimiter` (max 2 request concurrent) với `/raid-status` refresh — không blast bible.",
+      "• **Rate limit + timeout**: cả meta-scrape (HTML `/roster` page) lẫn logs API đều đi qua `bibleLimiter` (max 2 request concurrent) — share với `/raid-status` refresh. Cold-cache sync (roster mới, cần meta+logs per char) không bypass được cap 2-in-flight. Mỗi HTTP call gắn `AbortSignal.timeout(15s)` — bible treo connection sẽ auto-abort thay vì giữ slot + inFlight guard vô hạn.",
+      "• **Gather/apply split**: bible HTTP chạy trong **gather phase OUTSIDE `saveWithRetry`**, rồi apply phase trong retry loop chỉ mutate in-memory. VersionError retry KHÔNG re-fire bible call nữa. Probe + commit share cùng `collected` array → chi phí giảm từ 2× bible run xuống 1×.",
       "• **Last success vs Last attempt**: nếu Cloudflare block hoặc bible trả `Logs not enabled` cho TẤT CẢ char, `lastAutoManageSyncAt` không được stamp (chỉ `lastAutoManageAttemptAt`). `action:status` surface cả 2 để admin thấy rõ khi sync đang fail liên tục.",
-      "• **Private logs → 403 Logs not enabled**: char có `Show on Profile` tắt trên `lostark.bible/me/logs` sẽ bị skip và hiện ở bucket Fail. Bot không auth thay user được (cookie HTTP-only, upload token write-only — đã test 2026-04-21). User phải tự bật `Show on Profile` cho chars muốn sync, hoặc chấp nhận skip.",
-      "• **Probe-before-enable**: khi gõ `action:on`, Artist chạy 1 lần sync **in memory** (không save) để phân loại char visible vs private. Nếu có char private → hiện warn embed với 2 nút `Vẫn bật` / `Huỷ`, timeout 60s = default Huỷ. Confirm thì re-run sync trên fresh doc rồi save; Cancel/timeout thì flag giữ OFF, không save gì.",
+      "• **Private logs → `Logs not enabled` body match**: chỉ phân loại char là private khi bible response body chứa chuỗi `Logs not enabled` (confirmed payload). Generic HTTP 403 (Cloudflare block, rate-limit, IP deny) KHÔNG bị misclassify thành private nữa — những case đó hiện ở bucket Fail với raw error message, bật `Show on Profile` sẽ không cứu được. Bot không auth thay user được (cookie HTTP-only, upload token write-only — đã test 2026-04-21).",
+      "• **Probe-before-enable**: khi gõ `action:on`, Artist chạy 1 lần sync **in memory** (không save) để phân loại char visible vs private. Nếu có char private → hiện warn embed với 2 nút `Vẫn bật` / `Huỷ`, timeout 60s = default Huỷ. Confirm thì re-run sync trên fresh doc rồi save; Cancel/timeout thì flag giữ OFF, không save gì **nhưng `lastAutoManageAttemptAt` vẫn được stamp** — probe HTTP đã tốn bible quota, cooldown phải phản ánh điều đó (không thì user spam `on` + Huỷ bypass được 5-min cooldown).",
       "• **Per-user sync throttle**: 5 phút cooldown + in-flight guard. `action:sync` spam → reject ephemeral với remaining time (tránh N-roster × M-char HTTP calls dội bible). `action:on` đang in-flight thì reject; đang cooldown thì vẫn flip flag nhưng skip cả probe lẫn sync, báo user chờ X phút rồi gõ `sync` sau.",
-      "• **Dynamic action dropdown**: dropdown autocomplete hide option dư thừa theo state — đang ON thì không show `on`, đang OFF thì không show `off`. Typed-paste `on`/`off` khi redundant → ephemeral reject.",
+      "• **Dynamic action dropdown**: dropdown autocomplete hide option dư thừa theo state — đang ON thì không show `on`, đang OFF thì không show `off`. Typed-paste `on`/`off` khi redundant → ephemeral reject. Action lạ (paste arbitrary string không thuộc `on/off/sync/status`) → ephemeral reject ngay đầu handler, không fall-through Discord-timeout.",
       "• **Chưa hook vào `/raid-status`** (phase 1 chỉ manual `action:sync`). Phase sau: opt-in flag sẽ trigger sync tự động.",
     ],
   },
@@ -3444,6 +3555,12 @@ async function fetchBibleCharacterMeta(charName) {
       "User-Agent": "Mozilla/5.0 (compatible; LostArkRaidManageBot/1.0)",
       Accept: "text/html",
     },
+    // Timeout guards against bible hanging the connection: without it, a
+    // stuck fetch holds the `bibleLimiter` slot AND the caller's
+    // `inFlightAutoManageSyncs` guard indefinitely, making the user appear
+    // "stuck in sync" with no way to recover. Same 15s budget as
+    // /add-roster's roster scrape.
+    signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) {
     throw new Error(`Bible roster page returned HTTP ${res.status} for "${charName}"`);
@@ -3479,9 +3596,24 @@ async function fetchBibleCharacterLogs({ serial, cid, rid, className, page = 1 }
       rid,
       page,
     }),
+    // See fetchBibleCharacterMeta — same hang-protection rationale.
+    signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) {
-    throw new Error(`Bible logs API returned HTTP ${res.status}`);
+    // Read body so callers can distinguish "Logs not enabled" (private char,
+    // user action fixes it) from Cloudflare/block 403s (bot-infra issue, user
+    // bật Public Log cũng không cứu được). See reference_bible_api.md.
+    let bodyText = "";
+    try {
+      bodyText = await res.text();
+    } catch {
+      bodyText = "";
+    }
+    const snippet = bodyText ? ` — ${bodyText.slice(0, 200).replace(/\s+/g, " ").trim()}` : "";
+    const err = new Error(`Bible logs API returned HTTP ${res.status}${snippet}`);
+    err.status = res.status;
+    err.bodyText = bodyText;
+    throw err;
   }
   const data = await res.json();
   return Array.isArray(data) ? data : [];
@@ -3489,6 +3621,14 @@ async function fetchBibleCharacterLogs({ serial, cid, rid, className, page = 1 }
 
 async function fetchBibleLogsWithLimiter({ serial, cid, rid, className, page = 1 }) {
   return bibleLimiter.run(() => fetchBibleCharacterLogs({ serial, cid, rid, className, page }));
+}
+
+// Route the meta HTML scrape through the same limiter the logs API uses so a
+// cold-cache sync (N chars, each needing both meta + logs) can't double
+// bible's effective concurrency — max 2 in-flight across both endpoints
+// combined, matching the UX promise in HELP_SECTIONS.
+async function fetchBibleCharacterMetaWithLimiter(charName) {
+  return bibleLimiter.run(() => fetchBibleCharacterMeta(charName));
 }
 
 /**
@@ -3613,47 +3753,127 @@ function reconcileCharacterFromLogs(character, logs, weekResetStart) {
 }
 
 /**
- * Run auto-manage sync for one user doc: for every character whose bible
- * meta we can load (or have cached), fetch fresh logs and reconcile.
- * Returns a per-character report plus the total applied count.
+ * Build the identity key used to match a gathered entry back to its
+ * character in the apply phase. Composite of normalized accountName +
+ * normalized charName so two same-name chars across different rosters
+ * (e.g. "Clauseduk" in roster A and a separate "Clauseduk" in roster B)
+ * don't collide in the apply-side Map and swap logs. We can't rely on
+ * `character.id` alone — backfill only runs through `/raid-set`, so users
+ * who only use `/raid-auto-manage` or text posts may have chars with no
+ * id yet. `\x1f` (ASCII Unit Separator) is a control char that cannot
+ * appear in Lost Ark character names.
  */
-async function syncAutoManageForUserDoc(userDoc, weekResetStart) {
+function autoManageEntryKey(accountName, charName) {
+  return normalizeName(accountName) + "\x1f" + normalizeName(charName);
+}
+
+/**
+ * Gather phase: fetch bible meta (if not cached) + logs for every char in
+ * the roster WITHOUT mutating the doc. Returns an array keyed by the
+ * composite account+char identity that `applyAutoManageCollected` can apply
+ * to any fresh doc. Split from the monolithic sync so `commitAutoManageOn`
+ * can run the bible I/O ONCE, outside saveWithRetry — VersionError retries
+ * then skip the I/O and only re-run the in-memory apply.
+ */
+async function gatherAutoManageLogsForUserDoc(userDoc, weekResetStart) {
+  const collected = [];
+  for (const account of userDoc.accounts || []) {
+    for (const character of account.characters || []) {
+      const charName = getCharacterName(character);
+      const entry = {
+        accountName: account.accountName,
+        charName,
+        // Composite key: accountName + charName. See autoManageEntryKey
+        // jsdoc for why charName alone is insufficient.
+        entryKey: autoManageEntryKey(account.accountName, charName),
+        className: getCharacterClass(character),
+        // `meta` is only set when the char wasn't already cached —
+        // apply phase propagates this into the fresh doc's character.
+        meta: null,
+        logs: null,
+        error: null,
+      };
+      try {
+        let serial = character.bibleSerial;
+        let cid = character.bibleCid;
+        let rid = character.bibleRid;
+        if (!serial || !cid || !rid) {
+          const meta = await fetchBibleCharacterMetaWithLimiter(entry.charName);
+          serial = meta.sn;
+          cid = meta.cid;
+          rid = meta.rid;
+          entry.meta = { sn: serial, cid, rid };
+        }
+        entry.logs = await fetchBibleLogsSinceWeekReset({
+          serial,
+          cid,
+          rid,
+          className: entry.className,
+          weekResetStart,
+        });
+      } catch (err) {
+        entry.error = err?.message || String(err);
+        console.warn(
+          `[auto-manage] gather for ${entry.charName} failed:`,
+          err?.message || err
+        );
+      }
+      collected.push(entry);
+    }
+  }
+  return collected;
+}
+
+/**
+ * Apply phase: pure in-memory mutation — take pre-gathered per-char data
+ * and reconcile against a (possibly-just-re-fetched) user doc. NO I/O.
+ * Safe to call multiple times under saveWithRetry.
+ */
+function applyAutoManageCollected(userDoc, weekResetStart, collected) {
   const report = { appliedTotal: 0, perChar: [] };
+  // Key by composite account+char identity so same-name chars across
+  // different rosters don't collide. See autoManageEntryKey jsdoc.
+  const byKey = new Map(collected.map((c) => [c.entryKey, c]));
 
   for (const account of userDoc.accounts || []) {
     for (const character of account.characters || []) {
+      const charName = getCharacterName(character);
       const entry = {
         accountName: account.accountName,
-        charName: getCharacterName(character),
+        charName,
         className: getCharacterClass(character),
         applied: [],
         error: null,
       };
+      const gathered = byKey.get(autoManageEntryKey(account.accountName, charName));
+      if (!gathered) {
+        // Char was added between gather and apply (e.g. concurrent
+        // /add-roster-char). Skip silently — next /raid-auto-manage run
+        // will pick it up.
+        continue;
+      }
+      if (gathered.error) {
+        entry.error = gathered.error;
+        report.perChar.push(entry);
+        continue;
+      }
       try {
-        // Cache bible meta on the character doc the first time we see it —
-        // subsequent syncs skip the HTML scrape.
-        if (!character.bibleSerial || !character.bibleCid || !character.bibleRid) {
-          const meta = await fetchBibleCharacterMeta(entry.charName);
-          character.bibleSerial = meta.sn;
-          character.bibleCid = meta.cid;
-          character.bibleRid = meta.rid;
+        if (gathered.meta) {
+          character.bibleSerial = gathered.meta.sn;
+          character.bibleCid = gathered.meta.cid;
+          character.bibleRid = gathered.meta.rid;
         }
-
-        const logs = await fetchBibleLogsSinceWeekReset({
-          serial: character.bibleSerial,
-          cid: character.bibleCid,
-          rid: character.bibleRid,
-          className: entry.className,
-          weekResetStart,
-        });
-
-        const applied = reconcileCharacterFromLogs(character, logs, weekResetStart);
+        const applied = reconcileCharacterFromLogs(
+          character,
+          gathered.logs || [],
+          weekResetStart
+        );
         entry.applied = applied;
         report.appliedTotal += applied.length;
       } catch (err) {
         entry.error = err?.message || String(err);
         console.warn(
-          `[auto-manage] sync for ${entry.charName} failed:`,
+          `[auto-manage] apply for ${charName} failed:`,
           err?.message || err
         );
       }
@@ -3664,9 +3884,32 @@ async function syncAutoManageForUserDoc(userDoc, weekResetStart) {
   return report;
 }
 
+/**
+ * Convenience wrapper preserved for the probe path (no-save, single-pass
+ * in-memory sim) and /raid-auto-manage action:sync (which also wraps with
+ * saveWithRetry + gather-outside via its caller). Composes gather + apply
+ * against the SAME doc.
+ */
+async function syncAutoManageForUserDoc(userDoc, weekResetStart) {
+  const collected = await gatherAutoManageLogsForUserDoc(userDoc, weekResetStart);
+  return applyAutoManageCollected(userDoc, weekResetStart, collected);
+}
+
 async function handleRaidAutoManageCommand(interaction) {
   const discordId = interaction.user.id;
   const action = interaction.options.getString("action", true);
+
+  // Autocomplete only offers on/off/sync/status, but users can paste
+  // arbitrary strings into slash command args. Reject early with a
+  // specific hint — otherwise a typo falls through every branch and
+  // Discord times out the interaction with no reply.
+  if (!["on", "off", "sync", "status"].includes(action)) {
+    await interaction.reply({
+      content: `${UI.icons.warn} Action không hợp lệ: \`${action}\`. Chọn một trong \`on\` · \`off\` · \`sync\` · \`status\` (autocomplete sẽ gợi ý đúng).`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
 
   // Redundant-state reject for manually-typed `on`/`off` (autocomplete
   // already hides the redundant option, but users can paste the full
@@ -3802,17 +4045,23 @@ async function handleRaidAutoManageCommand(interaction) {
         return;
       }
 
-      // Run sync in memory — DO NOT save probeDoc. We just want the
-      // perChar report to inspect hidden chars.
+      // Run gather + in-memory apply — DO NOT save probeDoc. Keep the
+      // `collected` array so commit can reuse it without a second bible
+      // run (previously probe + commit = 2× HTTP cost; now it's 1×).
       ensureFreshWeek(probeDoc);
-      const probeReport = await syncAutoManageForUserDoc(probeDoc, weekResetStart);
+      const probeCollected = await gatherAutoManageLogsForUserDoc(probeDoc, weekResetStart);
+      const probeReport = applyAutoManageCollected(probeDoc, weekResetStart, probeCollected);
       const hiddenChars = (probeReport?.perChar || []).filter((c) =>
         isPublicLogDisabledError(c?.error)
       );
 
       // --- Direct commit path: no hidden chars found ---
       if (hiddenChars.length === 0) {
-        const finalReport = await commitAutoManageOn(discordId, weekResetStart);
+        const finalReport = await commitAutoManageOn(
+          discordId,
+          weekResetStart,
+          probeCollected
+        );
         const syncEmbed = buildAutoManageSyncReportEmbed(finalReport);
         syncEmbed.setTitle(
           `${UI.icons.done} Auto-manage enabled · initial sync ${
@@ -3856,7 +4105,15 @@ async function handleRaidAutoManageCommand(interaction) {
       }
 
       if (decision === "confirm") {
-        const finalReport = await commitAutoManageOn(discordId, weekResetStart);
+        // Reuse probeCollected so confirm doesn't re-hit bible. Data is at
+        // most 60s old (collector timeout ceiling) — acceptable staleness
+        // for a one-shot initial sync; next /raid-auto-manage action:sync
+        // will pull fresher data under the normal cooldown.
+        const finalReport = await commitAutoManageOn(
+          discordId,
+          weekResetStart,
+          probeCollected
+        );
         const syncEmbed = buildAutoManageSyncReportEmbed(finalReport);
         syncEmbed.setTitle(
           `${UI.icons.done} Auto-manage enabled · initial sync ${
@@ -3865,6 +4122,11 @@ async function handleRaidAutoManageCommand(interaction) {
         );
         await interaction.editReply({ embeds: [syncEmbed], components: [] });
       } else {
+        // Probe HTTP already ran — stamp attempt so the cooldown reflects
+        // the bible quota we consumed, even though we're not committing the
+        // flag flip. Without this, spamming `action:on` + Huỷ would bypass
+        // the 5-minute cooldown.
+        await stampAutoManageAttempt(discordId);
         const title =
           decision === "timeout"
             ? "Auto-manage giữ OFF (timeout)"
@@ -3879,6 +4141,10 @@ async function handleRaidAutoManageCommand(interaction) {
         await interaction.editReply({ embeds: [cancelEmbed], components: [] });
       }
     } catch (err) {
+      // Same reasoning as the cancel/timeout branch: probe may have already
+      // sent bible requests before the throw. Stamp so cooldown still kicks
+      // in for the next attempt.
+      await stampAutoManageAttempt(discordId);
       console.error("[auto-manage] enable-with-sync failed:", err?.message || err);
       await interaction.editReply({
         content: `${UI.icons.warn} Probe/sync fail: ${err?.message || err}. Auto-manage GIỮ OFF — thử lại sau.`,
@@ -3943,6 +4209,24 @@ async function handleRaidAutoManageCommand(interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     try {
       const weekResetStart = weekResetStartMs();
+
+      // Phase A: gather bible data OUTSIDE saveWithRetry so a VersionError
+      // retry doesn't re-fire HTTP calls. The acquire guard already
+      // prevents concurrent syncs for the same user, so the seedDoc we read
+      // here is normally also the doc we save into — but /raid-set or
+      // /add-roster-char could race between read and save, triggering a
+      // VersionError that the retry path can handle in-memory.
+      const seedDoc = await User.findOne({ discordId });
+      if (!seedDoc || !Array.isArray(seedDoc.accounts) || seedDoc.accounts.length === 0) {
+        await interaction.editReply({
+          content: `${UI.icons.info} Cậu chưa có roster nào. Dùng \`/add-roster\` để thêm trước nhé.`,
+        });
+        return;
+      }
+      ensureFreshWeek(seedDoc);
+      const collected = await gatherAutoManageLogsForUserDoc(seedDoc, weekResetStart);
+
+      // Phase B: apply to fresh doc inside saveWithRetry — pure in-memory.
       let report;
       await saveWithRetry(async () => {
         const userDoc = await User.findOne({ discordId });
@@ -3955,7 +4239,7 @@ async function handleRaidAutoManageCommand(interaction) {
           return;
         }
         ensureFreshWeek(userDoc);
-        report = await syncAutoManageForUserDoc(userDoc, weekResetStart);
+        report = applyAutoManageCollected(userDoc, weekResetStart, collected);
         const now = Date.now();
         userDoc.lastAutoManageAttemptAt = now;
         if (report.perChar.some((c) => !c.error)) {
@@ -3984,33 +4268,84 @@ async function handleRaidAutoManageCommand(interaction) {
   }
 }
 
+/**
+ * Stamp `lastAutoManageAttemptAt` without flipping any flag. Called after the
+ * probe HTTP burst in cancel/timeout/error paths so the cooldown reflects
+ * bible quota actually consumed — otherwise users can spam
+ * `/raid-auto-manage action:on` + cancel to bypass the 5-min cooldown.
+ * Best-effort: logs and swallows DB errors so cooldown drift never masks the
+ * real UX (the cancel/error message itself).
+ */
+async function stampAutoManageAttempt(discordId) {
+  try {
+    await User.updateOne(
+      { discordId },
+      { $set: { lastAutoManageAttemptAt: Date.now() } }
+    );
+  } catch (err) {
+    console.warn(
+      "[auto-manage] stamp attempt failed:",
+      err?.message || err
+    );
+  }
+}
+
 function isPublicLogDisabledError(err) {
   if (!err) return false;
+  // Must match the bible-specific body ("Logs not enabled") — generic 403 is
+  // ambiguous (Cloudflare / rate-limit / IP block all return 403 too) and
+  // bật Public Log sẽ KHÔNG fix được Cloudflare, nên misclassify sẽ làm user
+  // lạc hướng. Body text confirmed in reference_bible_api.md.
   const msg = String(err);
-  return /\b403\b/.test(msg) || /logs\s*not\s*enabled/i.test(msg);
+  return /logs\s*not\s*enabled/i.test(msg);
 }
 
 /**
- * Commit the "auto-manage on" transition: flip the flag, re-run a fresh
- * sync against a re-fetched User doc, stamp lastAutoManageAttemptAt (and
- * lastAutoManageSyncAt if any char actually fetched without error), save.
+ * Commit the "auto-manage on" transition: flip the flag, apply fresh
+ * bible sync data against a re-fetched User doc, stamp
+ * lastAutoManageAttemptAt (and lastAutoManageSyncAt if any char fetched
+ * without error), save.
+ *
+ * Bible I/O runs in a gather phase OUTSIDE `saveWithRetry` so a VersionError
+ * during save doesn't re-fire HTTP calls — the apply phase inside the retry
+ * loop is pure in-memory mutation. Pre-gathered data from the probe phase
+ * can be passed via `preCollected` to avoid the second (commit-phase) bible
+ * run; when omitted, commit gathers on its own.
  *
  * Returns the sync report so the caller can render it. Safe to call under
- * an acquired sync slot — it only does one findOne/save cycle inside
- * saveWithRetry and does not re-acquire the slot.
+ * an acquired sync slot — it only does findOne/save cycles and does not
+ * re-acquire the slot.
  */
-async function commitAutoManageOn(discordId, weekResetStart) {
+async function commitAutoManageOn(discordId, weekResetStart, preCollected = null) {
+  let collected = preCollected;
+  if (!collected) {
+    const seedDoc = await User.findOne({ discordId });
+    if (!seedDoc) return undefined;
+    if (!Array.isArray(seedDoc.accounts) || seedDoc.accounts.length === 0) {
+      // No roster — flip flag only, no bible to hit.
+      await User.findOneAndUpdate(
+        { discordId },
+        { $set: { autoManageEnabled: true, lastAutoManageAttemptAt: Date.now() } },
+        { upsert: true, setDefaultsOnInsert: true }
+      );
+      return { appliedTotal: 0, perChar: [] };
+    }
+    ensureFreshWeek(seedDoc);
+    collected = await gatherAutoManageLogsForUserDoc(seedDoc, weekResetStart);
+  }
+
   let finalReport;
   await saveWithRetry(async () => {
     const fresh = await User.findOne({ discordId });
     if (!fresh) return;
     fresh.autoManageEnabled = true;
     if (!Array.isArray(fresh.accounts) || fresh.accounts.length === 0) {
+      fresh.lastAutoManageAttemptAt = Date.now();
       await fresh.save();
       return;
     }
     ensureFreshWeek(fresh);
-    finalReport = await syncAutoManageForUserDoc(fresh, weekResetStart);
+    finalReport = applyAutoManageCollected(fresh, weekResetStart, collected);
     const now = Date.now();
     fresh.lastAutoManageAttemptAt = now;
     if (finalReport.perChar.some((c) => !c.error)) {
@@ -4119,13 +4454,27 @@ function buildAutoManageSyncReportEmbed(report) {
   }
 
   if (errored.length > 0) {
-    embed.addFields({
-      name: `${UI.icons.warn} Fail (${errored.length})`,
-      value: errored
-        .slice(0, 5)
-        .map((c) => `\`${c.charName}\`: ${c.error}`)
-        .join("\n"),
+    // Per-line hard cap so one HTML-heavy Cloudflare 403 body (fetch now
+    // embeds up to 200 chars of response body into err.message) can't blow
+    // past Discord's 1024-char field limit on its own. addChunkedHelpField
+    // below handles the aggregate case (many errors) by splitting into
+    // continuation fields.
+    const MAX_ERROR_LINE = 180;
+    const DISPLAY_LIMIT = 10;
+    const lines = errored.slice(0, DISPLAY_LIMIT).map((c) => {
+      const raw = `\`${c.charName}\`: ${c.error}`;
+      return raw.length > MAX_ERROR_LINE
+        ? `${raw.slice(0, MAX_ERROR_LINE - 1)}…`
+        : raw;
     });
+    if (errored.length > DISPLAY_LIMIT) {
+      lines.push(`_… và ${errored.length - DISPLAY_LIMIT} char khác fail — check bot logs cho full error._`);
+    }
+    addChunkedHelpField(
+      embed,
+      `${UI.icons.warn} Fail (${errored.length})`,
+      lines.join("\n")
+    );
   }
 
   return embed;
