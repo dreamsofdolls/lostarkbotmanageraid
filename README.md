@@ -106,14 +106,15 @@ Dùng khi: cần tra cú pháp nhanh, onboard member mới, hoặc forget option
 
 ### `/raid-channel` + text monitor
 
-Admin-only command (`Manage Server` permission) để đăng ký 1 text channel làm **raid-clear monitor channel**. Subcommands:
+Admin-only command (`Manage Server` permission) để đăng ký 1 text channel làm **raid-clear monitor channel**. Tất cả actions gộp vào subcommand duy nhất `config` với option `action`:
 
-- `/raid-channel set channel:#raid-clears` — đăng ký channel + post/pin welcome
-- `/raid-channel show` — xem channel + health check permissions + deploy-flag warnings
-- `/raid-channel clear` — tắt monitor
-- `/raid-channel cleanup` — xóa thủ công non-pinned messages (giữ welcome)
-- `/raid-channel repin` — refresh welcome (unpin cũ + post+pin mới)
-- `/raid-channel schedule action:on|off` — bật/tắt auto-cleanup mỗi 00:00 VN
+- `/raid-channel config action:show` — xem channel + health check permissions + deploy-flag warnings
+- `/raid-channel config action:set channel:#raid-clears` — đăng ký channel + post/pin welcome
+- `/raid-channel config action:clear` — tắt monitor + reset schedule
+- `/raid-channel config action:cleanup` — xóa thủ công non-pinned messages (giữ welcome)
+- `/raid-channel config action:repin` — refresh welcome (delete stale + post+pin mới)
+- `/raid-channel config action:schedule-on` — bật auto-cleanup mỗi 00:00 VN
+- `/raid-channel config action:schedule-off` — tắt auto-cleanup daily
 
 Sau khi đăng ký, bất kỳ ai post message vào channel đó dạng `<raid> <difficulty> <character> [gate]` sẽ được bot parse và update raid cho char của **chính người post**. Thành công → bot DM user embed xác nhận + xóa message gốc. Lỗi phục hồi được (char không có, iLvl thiếu, v.v.) → bot ping user persistent hint, tự dọn khi user post lại hoặc sau 5 phút.
 
