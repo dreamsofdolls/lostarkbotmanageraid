@@ -17,6 +17,7 @@ const {
   handleRemoveRosterAutocomplete,
   handleRaidChannelMessage,
   loadMonitorChannelCache,
+  startRaidChannelScheduler,
 } = require("./raid-command");
 const { startWeeklyResetJob } = require("./weekly-reset");
 
@@ -96,6 +97,11 @@ async function startBot() {
   client.once(Events.ClientReady, async (readyClient) => {
     console.log(`Logged in as ${readyClient.user.tag}`);
     await registerSlashCommandsOnBoot(readyClient);
+    // Daily auto-cleanup scheduler for raid monitor channels. Runs always —
+    // per-guild `autoCleanupEnabled` flag gates whether a given guild
+    // actually does anything. Independent of TEXT_MONITOR_ENABLED so
+    // admins can schedule cleanups even when the text monitor is off.
+    startRaidChannelScheduler(readyClient);
   });
 
   if (TEXT_MONITOR_ENABLED) {

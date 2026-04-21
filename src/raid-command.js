@@ -629,8 +629,33 @@ const raidChannelCommand = new SlashCommandBuilder()
           .addChannelTypes(ChannelType.GuildText)
       )
   )
-  .addSubcommand((sub) => sub.setName("show").setDescription("Show the currently configured channel"))
-  .addSubcommand((sub) => sub.setName("clear").setDescription("Disable the raid monitor channel"));
+  .addSubcommand((sub) => sub.setName("show").setDescription("Show the currently configured channel + health status"))
+  .addSubcommand((sub) => sub.setName("clear").setDescription("Disable the raid monitor channel"))
+  .addSubcommand((sub) =>
+    sub
+      .setName("cleanup")
+      .setDescription("Delete all non-pinned messages in the monitor channel")
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("repin")
+      .setDescription("Unpin stale bot welcomes and post + pin a fresh welcome embed")
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("schedule")
+      .setDescription("Toggle daily auto-cleanup at 00:00 Vietnam time")
+      .addStringOption((opt) =>
+        opt
+          .setName("action")
+          .setDescription("Turn the daily auto-cleanup on or off")
+          .setRequired(true)
+          .addChoices(
+            { name: "on", value: "on" },
+            { name: "off", value: "off" }
+          )
+      )
+  );
 
 const commands = [
   addRosterCommand,
@@ -1806,9 +1831,12 @@ const HELP_SECTIONS = [
     short: "[Admin] Configure the raid-clear monitor channel",
     shortVn: "[Admin] Config channel để bot tự parse text → update raid",
     options: [
-      { name: "set channel:<channel>", required: false, desc: "Đăng ký 1 text channel làm monitor channel" },
-      { name: "show", required: false, desc: "Hiển thị channel đang được monitor" },
+      { name: "set channel:<channel>", required: false, desc: "Đăng ký 1 text channel làm monitor + post & pin welcome embed" },
+      { name: "show", required: false, desc: "Hiển thị channel + health check permissions + deploy-flag warnings" },
       { name: "clear", required: false, desc: "Tắt monitor (bot sẽ bỏ qua mọi message text)" },
+      { name: "cleanup", required: false, desc: "Xóa thủ công mọi message không pin trong channel (giữ welcome)" },
+      { name: "repin", required: false, desc: "Unpin stale welcome + post + pin 1 welcome mới" },
+      { name: "schedule action:<on|off>", required: false, desc: "Bật/tắt auto-cleanup mỗi 00:00 giờ VN" },
     ],
     example: "/raid-channel set channel:#raid-clears",
     notes: [
@@ -1817,9 +1845,12 @@ const HELP_SECTIONS = [
       "• **Aliases**: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca` (accept typo `secra`) · `normal` / `nor` · `hard` · `nightmare` / `nm` · gates `G1` / `G2`.",
       "• Không có gate = đánh dấu cả raid done (complete). Có gate = chỉ gate đó done (process).",
       "• Chỉ poster tự update char của mình (cần có roster đã đăng ký qua `/add-roster`).",
-      "• **Set** subcommand: kiểm tra bot permission (`View Channel` + `Send Messages` + `Manage Messages`) trong channel đích; nếu OK thì post welcome embed công khai và pin luôn. Thiếu quyền → reply lỗi, config không đổi.",
-      "• **Show** subcommand: hiển thị channel đang monitor + check real-time xem bot còn quyền và channel còn truy cập được không (fallback `channels.fetch` nếu cache cold).",
-      "• **Clear** subcommand: tắt monitor ngay, luôn write-through Mongo bất kể cache state.",
+      "• **Set**: kiểm tra bot permission trong channel đích, unpin welcome cũ của bot (nếu có), post welcome + pin fresh.",
+      "• **Show**: hiển thị channel + health check permissions + deploy-flag warnings.",
+      "• **Clear**: tắt monitor ngay, luôn write-through Mongo.",
+      "• **Cleanup**: xóa thủ công mọi message không pin trong monitor channel (giữ welcome pinned). Messages > 14 ngày Discord không cho bulk-delete, bot sẽ report `skipped (>14 ngày)` để admin xóa tay nếu cần.",
+      "• **Repin**: unpin welcome cũ + post welcome mới + pin. Dùng khi cần refresh text welcome sau code change hoặc khi pin bị user tháo nhầm.",
+      "• **Schedule on/off**: toggle auto-cleanup daily. Bật → mỗi 00:00 VN time, bot tự xóa non-pinned trong channel (catch-up nếu bot offline qua midnight). Tắt → chỉ cleanup thủ công.",
       "• Parse fail (không phải raid intent) → bot im lặng.",
       "• Lỗi phục hồi được (char không có, iLvl thiếu, combo sai, nhiều raid/difficulty/gate) → bot ping user reply persistent, tự dọn khi user post lại hoặc sau 5 phút.",
       "• Deploy: bật `Message Content Intent` ở Discord Developer Portal, hoặc set `TEXT_MONITOR_ENABLED=false` để chạy slash-command-only. Bot cần `Manage Messages` trong channel để xóa message + pin welcome.",
@@ -2380,7 +2411,7 @@ function buildRaidChannelWelcomeEmbed() {
     .setTitle(`🦊 Chào các bạn~ Artist ngồi trông channel này nhé`)
     .setDescription(
       [
-        "🦊 Mỗi lần clear raid xong, cứ post 1 tin nhắn ngắn dạng `<raid> <difficulty> <character> [gate]` vào đây là Artist sẽ tự động đánh dấu progress giúp — xong Artist dọn luôn tin nhắn cho channel khỏi rối nha~",
+        "🦊 Mỗi lần clear raid xong, cứ post 1 tin nhắn ngắn dạng `<raid> <difficulty> <character> [gate]` vào đây là Artist sẽ tự động đánh dấu progress giúp, xong Artist dọn luôn tin nhắn cho channel khỏi rối nha~",
         "",
         "**Artist chỉ update được character trong roster của chính bạn thôi đấy.** Chưa có roster? Chạy `/add-roster` trước rồi hẵng post clear nhé. Muốn xem lại tiến độ của mình, dùng `/raid-status`.",
       ].join("\n")
@@ -2445,12 +2476,22 @@ async function clearPendingHint(channel, key) {
   if (!entry) return;
   pendingChannelHints.delete(key);
   if (entry.timerId) clearTimeout(entry.timerId);
-  try {
-    const hint = await channel.messages.fetch(entry.hintId);
-    await hint.delete();
-  } catch {
-    // Already deleted or no longer fetchable — nothing to clean.
-  }
+
+  // Delete BOTH the bot's hint reply and the user's original failed message
+  // so the channel looks clean after retry. Best-effort: either may already
+  // be gone (user deleted manually, hint TTL expired, etc.), swallow errors.
+  const ids = [entry.hintId];
+  if (entry.originalId) ids.push(entry.originalId);
+  await Promise.allSettled(
+    ids.map(async (id) => {
+      try {
+        const msg = await channel.messages.fetch(id);
+        await msg.delete();
+      } catch {
+        // Already deleted or not fetchable — skip.
+      }
+    })
+  );
 }
 
 async function postPersistentHint(message, content) {
@@ -2461,7 +2502,14 @@ async function postPersistentHint(message, content) {
     const timerId = setTimeout(() => {
       clearPendingHint(message.channel, key).catch(() => {});
     }, HINT_TTL_MS);
-    pendingChannelHints.set(key, { hintId: hint.id, timerId });
+    // Track the user's original failed message too so the next clear (retry
+    // success or replacement hint) wipes the whole failed exchange, not just
+    // the bot's reply.
+    pendingChannelHints.set(key, {
+      hintId: hint.id,
+      originalId: message.id,
+      timerId,
+    });
   } catch (err) {
     console.warn("[raid-channel] persistent hint failed:", err?.message || err);
   }
@@ -2625,6 +2673,82 @@ async function handleRaidChannelMessage(message) {
   await Promise.allSettled(ops);
 }
 
+/**
+ * Delete every non-pinned message in the raid monitor channel. Uses
+ * Discord's `bulkDelete(messages, true)` — the `true` filters out messages
+ * older than 14 days (Discord API limit) and reports them as skipped
+ * instead of failing the whole batch.
+ *
+ * Caller must verify the bot has Manage Messages + Read Message History in
+ * the channel. Returns { deleted, skippedOld } for display. If the fetch
+ * or delete throws, the error propagates so the caller can surface it.
+ */
+async function cleanupRaidChannelMessages(channel) {
+  const fetched = await channel.messages.fetch({ limit: 100 });
+  const toDelete = fetched.filter((m) => !m.pinned);
+  if (toDelete.size === 0) return { deleted: 0, skippedOld: 0 };
+  const deleted = await channel.bulkDelete(toDelete, true);
+  const skippedOld = toDelete.size - deleted.size;
+  return { deleted: deleted.size, skippedOld };
+}
+
+/**
+ * Unpin any existing bot-authored pinned messages in the target channel,
+ * then post + pin a fresh welcome embed. Used by both `/raid-channel set`
+ * (initial welcome) and `/raid-channel repin` (manual refresh), so
+ * repeated invocations never accumulate duplicate welcome pins.
+ *
+ * Returns an object reporting which steps succeeded so the caller can
+ * decide whether to surface a warning to the admin.
+ */
+async function postRaidChannelWelcome(channel, botUserId) {
+  const outcome = { posted: false, pinned: false, unpinnedCount: 0 };
+
+  try {
+    const pinned = await channel.messages.fetchPinned();
+    for (const [, msg] of pinned) {
+      if (msg.author?.id === botUserId) {
+        try {
+          await msg.unpin();
+          outcome.unpinnedCount += 1;
+        } catch (err) {
+          console.warn("[raid-channel] unpin stale welcome failed:", err?.message || err);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[raid-channel] fetchPinned failed:", err?.message || err);
+  }
+
+  const embed = buildRaidChannelWelcomeEmbed();
+  try {
+    const sent = await channel.send({ embeds: [embed] });
+    outcome.posted = true;
+    try {
+      await sent.pin();
+      outcome.pinned = true;
+    } catch (err) {
+      console.warn("[raid-channel] pin fresh welcome failed:", err?.message || err);
+    }
+  } catch (err) {
+    console.warn("[raid-channel] post welcome failed:", err?.message || err);
+  }
+
+  return outcome;
+}
+
+async function resolveRaidMonitorChannel(interaction, channelId) {
+  let channel = interaction.guild?.channels?.cache?.get(channelId) || null;
+  if (!channel && interaction.guild?.channels?.fetch) {
+    try {
+      channel = await interaction.guild.channels.fetch(channelId);
+    } catch {
+      channel = null;
+    }
+  }
+  return channel;
+}
+
 async function handleRaidChannelCommand(interaction) {
   const sub = interaction.options.getSubcommand();
   const guildId = interaction.guildId;
@@ -2671,25 +2795,13 @@ async function handleRaidChannelCommand(interaction) {
     );
     setCachedMonitorChannelId(guildId, channel.id);
 
-    // Post a public onboarding message in the monitor channel so members
-    // see the format without having to run /raid-help. Pin it so the
-    // instructions stay at the top of the channel. Best-effort: if pin
-    // fails (unlikely since we already verified Manage Messages above),
-    // the message stays un-pinned and admin gets a heads-up.
-    let welcomeStatus = "posted";
-    try {
-      const welcomeEmbed = buildRaidChannelWelcomeEmbed();
-      const sent = await channel.send({ embeds: [welcomeEmbed] });
-      try {
-        await sent.pin();
-      } catch (pinErr) {
-        welcomeStatus = "posted (pin failed)";
-        console.warn("[raid-channel] pin failed:", pinErr?.message || pinErr);
-      }
-    } catch (sendErr) {
-      welcomeStatus = "NOT posted";
-      console.warn("[raid-channel] welcome post failed:", sendErr?.message || sendErr);
-    }
+    // Post + pin a fresh welcome via the shared helper. It also unpins any
+    // stale bot-authored welcomes in the channel so repeated `set` calls on
+    // the same channel don't accumulate duplicate pins.
+    const welcome = await postRaidChannelWelcome(channel, interaction.client.user.id);
+    const welcomeStatus = welcome.posted
+      ? welcome.pinned ? "posted & pinned" : "posted (pin failed)"
+      : "NOT posted";
 
     const embed = new EmbedBuilder()
       .setColor(UI.colors.success)
@@ -2699,7 +2811,7 @@ async function handleRaidChannelCommand(interaction) {
       )
       .addFields(
         { name: "Examples", value: "`Serca Nightmare Clauseduk` → mark raid as DONE\n`Serca Nor Soulrano G1` → mark G1 as done" },
-        { name: "Welcome message", value: `${welcomeStatus === "posted" ? UI.icons.done : UI.icons.warn} ${welcomeStatus} in <#${channel.id}>.` },
+        { name: "Welcome message", value: `${welcome.posted ? UI.icons.done : UI.icons.warn} ${welcomeStatus} in <#${channel.id}>.` },
         { name: "Nếu cậu đổi channel trước đó", value: "Remember to unpin/delete welcome message ở channel cũ để members không nhầm." },
       )
       .setTimestamp();
@@ -2779,7 +2891,178 @@ async function handleRaidChannelCommand(interaction) {
       .setTitle(`${UI.icons.reset} Raid Channel Cleared`)
       .setDescription("Monitor đã được tắt. Bot sẽ không xử lý message text nữa.");
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    return;
   }
+
+  if (sub === "cleanup") {
+    const channelId = getCachedMonitorChannelId(guildId);
+    if (!channelId) {
+      await interaction.reply({
+        content: `${UI.icons.warn} Chưa config channel nào. Dùng \`/raid-channel set\` trước.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const channel = await resolveRaidMonitorChannel(interaction, channelId);
+    if (!channel) {
+      await interaction.reply({
+        content: `${UI.icons.warn} Channel <#${channelId}> không truy cập được.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try {
+      const { deleted, skippedOld } = await cleanupRaidChannelMessages(channel);
+      const embed = new EmbedBuilder()
+        .setColor(UI.colors.success)
+        .setTitle(`${UI.icons.done} Channel Cleaned`)
+        .setDescription(`Đã dọn <#${channel.id}>, pinned messages giữ nguyên.`)
+        .addFields({ name: "Deleted", value: `${deleted} message(s)`, inline: true })
+        .setTimestamp();
+      if (skippedOld > 0) {
+        embed.addFields({ name: "Skipped (>14 ngày)", value: `${skippedOld}`, inline: true });
+      }
+      await interaction.editReply({ embeds: [embed] });
+    } catch (err) {
+      console.error("[raid-channel] manual cleanup failed:", err?.message || err);
+      await interaction.editReply({
+        content: `${UI.icons.warn} Cleanup fail: ${err?.message || err}. Check bot permissions (Manage Messages + Read Message History).`,
+      });
+    }
+    return;
+  }
+
+  if (sub === "repin") {
+    const channelId = getCachedMonitorChannelId(guildId);
+    if (!channelId) {
+      await interaction.reply({
+        content: `${UI.icons.warn} Chưa config channel nào. Dùng \`/raid-channel set\` trước.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const channel = await resolveRaidMonitorChannel(interaction, channelId);
+    if (!channel) {
+      await interaction.reply({
+        content: `${UI.icons.warn} Channel <#${channelId}> không truy cập được.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const welcome = await postRaidChannelWelcome(channel, interaction.client.user.id);
+    const embed = new EmbedBuilder()
+      .setColor(welcome.posted && welcome.pinned ? UI.colors.success : UI.colors.progress)
+      .setTitle(`${UI.icons.roster} Welcome Repinned`)
+      .setDescription(`<#${channel.id}>`)
+      .addFields(
+        { name: "Unpinned old", value: `${welcome.unpinnedCount}`, inline: true },
+        { name: "New welcome", value: welcome.posted ? (welcome.pinned ? "posted & pinned" : "posted (pin failed)") : "NOT posted", inline: true },
+      )
+      .setTimestamp();
+    await interaction.editReply({ embeds: [embed] });
+    return;
+  }
+
+  if (sub === "schedule") {
+    const action = interaction.options.getString("action", true);
+    const enabled = action === "on";
+    await GuildConfig.findOneAndUpdate(
+      { guildId },
+      { $set: { autoCleanupEnabled: enabled } },
+      { upsert: true, setDefaultsOnInsert: true }
+    );
+    const embed = new EmbedBuilder()
+      .setColor(enabled ? UI.colors.success : UI.colors.muted)
+      .setTitle(`${enabled ? UI.icons.done : UI.icons.reset} Auto-cleanup ${enabled ? "enabled" : "disabled"}`)
+      .setDescription(
+        enabled
+          ? "Mỗi 00:00 giờ Việt Nam (UTC+7), Artist sẽ tự xóa toàn bộ message không được pin trong monitor channel. Welcome pin giữ nguyên. Nếu bot offline qua midnight, tick tiếp theo sau khi online sẽ catch-up."
+          : "Auto-cleanup đã tắt. Admin vẫn có thể chạy thủ công qua `/raid-channel cleanup` bất cứ lúc nào."
+      )
+      .setTimestamp();
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Auto-cleanup scheduler (daily at 00:00 Vietnam time = 17:00 UTC)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns "YYYY-MM-DD" in Vietnam (UTC+7) calendar for the given moment.
+ * Used as the idempotency cursor `lastAutoCleanupKey`: once a guild runs
+ * cleanup for a given VN day, subsequent ticks within the same VN day
+ * short-circuit. Crossing the VN-midnight boundary produces a new key and
+ * the next tick picks it up.
+ */
+function getTargetCleanupDayKey(now = new Date()) {
+  const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+  return vnTime.toISOString().slice(0, 10);
+}
+
+async function runAutoCleanupTick(client) {
+  const targetKey = getTargetCleanupDayKey();
+  let configs;
+  try {
+    configs = await GuildConfig.find({
+      autoCleanupEnabled: true,
+      raidChannelId: { $ne: null },
+    }).lean();
+  } catch (err) {
+    console.error("[raid-channel] auto-cleanup config load failed:", err?.message || err);
+    return;
+  }
+  if (!configs.length) return;
+
+  for (const cfg of configs) {
+    if (cfg.lastAutoCleanupKey === targetKey) continue; // already done for this VN day
+    const guild = client.guilds.cache.get(cfg.guildId);
+    if (!guild) continue;
+    let channel = guild.channels.cache.get(cfg.raidChannelId);
+    if (!channel) {
+      try {
+        channel = await guild.channels.fetch(cfg.raidChannelId);
+      } catch {
+        continue;
+      }
+    }
+    if (!channel) continue;
+
+    try {
+      const { deleted, skippedOld } = await cleanupRaidChannelMessages(channel);
+      await GuildConfig.findOneAndUpdate(
+        { guildId: cfg.guildId },
+        { $set: { lastAutoCleanupKey: targetKey } }
+      );
+      console.log(
+        `[raid-channel] auto-cleanup guild=${cfg.guildId} key=${targetKey} deleted=${deleted} skippedOld=${skippedOld}`
+      );
+    } catch (err) {
+      console.error(
+        `[raid-channel] auto-cleanup failed guild=${cfg.guildId}:`,
+        err?.message || err
+      );
+    }
+  }
+}
+
+/**
+ * Start the 30-minute tick for the auto-cleanup scheduler. Cadence matches
+ * the weekly-reset job so operator has one mental model for background jobs.
+ * The tick is cheap when no guilds have `autoCleanupEnabled=true` (single
+ * filtered Mongo query returns empty, early-exit).
+ */
+function startRaidChannelScheduler(client) {
+  const run = () =>
+    runAutoCleanupTick(client).catch((err) => {
+      console.error("[raid-channel] scheduler tick failed:", err?.message || err);
+    });
+  run();
+  return setInterval(run, 30 * 60 * 1000);
 }
 
 module.exports = {
@@ -2790,5 +3073,6 @@ module.exports = {
   handleRemoveRosterAutocomplete,
   handleRaidChannelMessage,
   loadMonitorChannelCache,
+  startRaidChannelScheduler,
   parseRaidMessage,
 };
