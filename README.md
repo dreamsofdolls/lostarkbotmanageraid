@@ -140,6 +140,7 @@ Sau khi đăng ký, bất kỳ ai post message vào channel đó dạng `<raid> 
 | Parse fail (không phải raid intent) | Silent ignore |
 | Per-user cooldown hit (<2s kể từ tin nhắn trước, duplicate content hoặc không có pending hint) | Delete message luôn + spam ≥3 hit trong 10s → post 1 warning kitsune-style, dedup 60s. Typo → fix với content khác khi có pending hint được exception pass-through **1 lần duy nhất mỗi cooldown window** (không spam-bypass được bằng cách liên tục thay đổi content). |
 | Lỗi phục hồi được (char not found, iLvl thấp, combo sai, multi-raid/diff/gate) | Ping user persistent hint — auto-dọn khi user post lại hoặc sau 5 phút TTL |
+| Raid đã DONE từ trước (hoặc gate đã DONE khi post với gate) | DM user notice "Raid đã DONE rồi" + xóa message gốc. Không re-stamp timestamp, không ghi DB. Muốn reset phải dùng `/raid-set status:reset`. |
 | Internal error (DB/Discord fail) | Reply transient tự xóa 10s |
 | Success | DM user embed xác nhận + xóa message gốc + dọn hint cũ của user đó (nếu có) |
 
