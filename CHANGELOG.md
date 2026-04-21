@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. Dates use the local calendar of the commit.
 
+## 2026-04-21
+
+### Changed
+
+- **`/raid-set` raid-autocomplete now preserves the canonical raid order.** Previously the per-character branch sorted entries by `(rank ASC, minItemLevel DESC, label ASC)` — which produced `Kazeros Hard → Serca Hard → Act 4 Hard → Kazeros Normal → Serca Normal → Act 4 Normal`, mixing raids across difficulty buckets and surprising the user. The new sort respects the source order from `getRaidRequirementList()` (insertion order of `RAID_REQUIREMENTS`: `armoche → kazeros → serca`, and within each raid: `normal → hard → nightmare`). Same order as the `/raid-status` cards so mental model stays consistent. `src/raid-command.js` (autocompleteRaidSetRaid).
+- **`/raid-set` highlights fully-completed raids in the dropdown.** Raid options that are 100% done for the selected character now render as `🟢 {label} · {done}/{total} · DONE`, adding a trailing `· DONE` suffix to the existing green-circle icon. Makes it visually unambiguous when the user is about to touch a raid that is already finished. Partials (`🟡`) and pendings (`⚪`) are unchanged. `src/raid-command.js` (autocompleteRaidSetRaid, new shared `computeRaidProgress(character, req)` helper).
+- **`/raid-set status` is now autocomplete, and only offers `Reset` when the raid is complete.** The `status` option flipped from `addChoices` (static `Complete` / `Reset`) to `setAutocomplete(true)`. The new `autocompleteRaidSetStatus` handler reads the sibling `character` + `raid` values, reuses `computeRaidProgress`, and returns `[Reset (raid đã hoàn thành — chỉ có thể reset)]` when the raid is already `done === total`. In every other state (no character selected, raid not picked yet, partial, pending) it returns both `Complete` and `Reset` unchanged. Autocomplete is a UX suggestion layer — the handler does not reject spoofed `complete` submissions, but repeat-complete is a safe no-op (it just re-stamps `completedDate` on already-completed gates). `src/raid-command.js` (new autocompleteRaidSetStatus, handleRaidSetAutocomplete routes `status` focus, raidSetCommand builder drops addChoices).
+
 ## 2026-04-20
 
 ### Added
