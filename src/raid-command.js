@@ -1853,6 +1853,7 @@ const HELP_SECTIONS = [
       "• **Schedule on/off**: toggle auto-cleanup daily. Bật → mỗi 00:00 VN time, bot tự xóa non-pinned trong channel (catch-up nếu bot offline qua midnight). Tắt → chỉ cleanup thủ công.",
       "• Parse fail (không phải raid intent) → bot im lặng.",
       "• Lỗi phục hồi được (char không có, iLvl thiếu, combo sai, nhiều raid/difficulty/gate) → bot ping user reply persistent, tự dọn khi user post lại hoặc sau 5 phút.",
+      "• **Per-user cooldown 2 giây** giữa các parse-success message. Spam trên threshold (3 hit trong 10s) → bot post 1 warning kitsune-style rồi dedup im lặng trong 60s.",
       "• Deploy: bật `Message Content Intent` ở Discord Developer Portal, hoặc set `TEXT_MONITOR_ENABLED=false` để chạy slash-command-only.",
       "• **Permissions bot cần trong channel đích**: `View Channel`, `Send Messages`, `Manage Messages`, `Read Message History`, `Embed Links`. Thiếu 1 trong 5 là `/raid-channel set` reject.",
       "• Admin-only command (yêu cầu `Manage Server` permission).",
@@ -2442,6 +2443,7 @@ function buildRaidChannelWelcomeEmbed() {
           "• Gõ tin nhắn không giống format → Artist im lặng, không spam channel đâu.",
           "• Gõ đúng nhưng có lỗi (không tìm thấy char, iLvl thiếu, nhiều raid/difficulty/gate lẫn lộn) → Artist ping nhẹ nhàng; tin nhắn đó sẽ tự dọn khi bạn post lại, hoặc sau 5 phút nếu quên.",
           "• Post đúng → Artist DM bạn embed confirm riêng. Nếu DM bị tắt, Artist sẽ ping public ngắn rồi tự xóa sau 15 giây.",
+          "• Post cách nhau ít nhất **2 giây** nha~ Spam nhanh quá Artist sẽ im lặng bỏ qua và nhắc khéo 1 lần.",
         ].join("\n"),
       }
     )
@@ -2495,6 +2497,73 @@ async function clearPendingHint(channel, key) {
   );
 }
 
+// Per-user spam guard for the monitor channel. Silent-ignore on parse-null
+// already handles chat noise — this layer only fires on parse-success
+// messages that would actually cause bot work (hint posting, DM sending,
+// message deletion, or DB writes). Three sliding-window counters prevent
+// both accidental double-taps and deliberate spam, and the warning is
+// deduped so a sustained spammer only gets "quạo'd at" once per minute.
+const userMonitorCooldowns = new Map(); // key -> { lastProcessedAt, spamHits, spamWindowStart, warnedAt }
+const MONITOR_COOLDOWN_MS = 2000;     // min 2s between processed messages per user
+const MONITOR_SPAM_WINDOW_MS = 10000; // sliding window for counting spam hits
+const MONITOR_SPAM_THRESHOLD = 3;     // cooldown-hits within window → trigger warning
+const MONITOR_SPAM_WARN_CD_MS = 60000;// dedup: one warning per user per minute
+
+/**
+ * Gate a user's message against the per-user cooldown. Returns:
+ *   { accepted: true  } — OK to process this message
+ *   { accepted: false, warn: false } — in cooldown, silently drop
+ *   { accepted: false, warn: true  } — in cooldown AND spam threshold hit
+ *                                      AND not recently warned → caller
+ *                                      should post a quạo'd-up reply
+ */
+function recordUserMonitorActivity(message) {
+  const key = hintKey(message.guildId, message.channelId, message.author.id);
+  const now = Date.now();
+  const entry = userMonitorCooldowns.get(key) || {
+    lastProcessedAt: 0,
+    spamHits: 0,
+    spamWindowStart: 0,
+    warnedAt: 0,
+  };
+
+  if (now - entry.lastProcessedAt < MONITOR_COOLDOWN_MS) {
+    // Inside cooldown — this is a spam hit.
+    if (now - entry.spamWindowStart > MONITOR_SPAM_WINDOW_MS) {
+      entry.spamHits = 1;
+      entry.spamWindowStart = now;
+    } else {
+      entry.spamHits += 1;
+    }
+    const shouldWarn =
+      entry.spamHits >= MONITOR_SPAM_THRESHOLD &&
+      now - entry.warnedAt > MONITOR_SPAM_WARN_CD_MS;
+    if (shouldWarn) entry.warnedAt = now;
+    userMonitorCooldowns.set(key, entry);
+    return { accepted: false, warn: shouldWarn };
+  }
+
+  // Accept and reset spam tracking.
+  entry.lastProcessedAt = now;
+  entry.spamHits = 0;
+  entry.spamWindowStart = 0;
+  userMonitorCooldowns.set(key, entry);
+  return { accepted: true, warn: false };
+}
+
+async function postSpamWarning(message) {
+  try {
+    const reply = await message.reply({
+      content: `🦊💢 Này ơi, Artist theo không kịp đâu~ Mỗi tin cách nhau ít nhất 2 giây thôi nhé, không Artist im lặng ignore đấy!`,
+    });
+    setTimeout(() => {
+      reply.delete().catch(() => {});
+    }, 15_000);
+  } catch (err) {
+    console.warn("[raid-channel] spam warning post failed:", err?.message || err);
+  }
+}
+
 async function postPersistentHint(message, content) {
   const key = hintKey(message.guildId, message.channelId, message.author.id);
   await clearPendingHint(message.channel, key);
@@ -2535,6 +2604,16 @@ async function handleRaidChannelMessage(message) {
   const userHintKey = hintKey(message.guildId, message.channelId, message.author.id);
   const parsed = parseRaidMessage(message.content);
   if (!parsed) return; // Silent ignore: not a raid-update message.
+
+  // Per-user cooldown gate: stops a spammer from triggering bursts of
+  // postPersistentHint / DM / delete cycles. Chat noise (parse-null) is
+  // already silent so unaffected. Sustained spam above threshold trips a
+  // one-shot annoyed-kitsune warning, deduped per minute per user.
+  const cooldown = recordUserMonitorActivity(message);
+  if (!cooldown.accepted) {
+    if (cooldown.warn) await postSpamWarning(message);
+    return;
+  }
 
   if (parsed.error === "multi-gate") {
     await postPersistentHint(

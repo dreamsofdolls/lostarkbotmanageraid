@@ -137,6 +137,7 @@ Sau khi đăng ký, bất kỳ ai post message vào channel đó dạng `<raid> 
 | Trường hợp | Bot action |
 |-----------|-----------|
 | Parse fail (không phải raid intent) | Silent ignore |
+| Per-user cooldown hit (<2s kể từ tin nhắn parse-success trước) | Silent drop — spam ≥3 hit trong 10s → post 1 warning kitsune-style, dedup 60s |
 | Lỗi phục hồi được (char not found, iLvl thấp, combo sai, multi-raid/diff/gate) | Ping user persistent hint — auto-dọn khi user post lại hoặc sau 5 phút TTL |
 | Internal error (DB/Discord fail) | Reply transient tự xóa 10s |
 | Success | DM user embed xác nhận + xóa message gốc + dọn hint cũ của user đó (nếu có) |
