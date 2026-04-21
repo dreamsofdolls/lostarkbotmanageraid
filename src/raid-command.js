@@ -531,13 +531,9 @@ const raidSetCommand = new SlashCommandBuilder()
   .addStringOption((option) =>
     option
       .setName("gate")
-      .setDescription("Optional: update only one gate")
+      .setDescription("Specific gate — only active when status = Process")
       .setRequired(false)
-      .addChoices(
-        { name: "G1", value: "G1" },
-        { name: "G2", value: "G2" },
-        { name: "G3", value: "G3" }
-      )
+      .setAutocomplete(true)
   );
 
 const statusCommand = new SlashCommandBuilder()
@@ -1291,8 +1287,9 @@ async function autocompleteRaidSetStatus(interaction, focused) {
   const discordId = interaction.user.id;
 
   const baseChoices = [
-    { name: "Complete", value: "complete" },
-    { name: "Reset", value: "reset" },
+    { name: "Complete — mark the whole raid as done", value: "complete" },
+    { name: "Process — mark one specific gate as done (requires gate)", value: "process" },
+    { name: "Reset — clear all gates back to 0", value: "reset" },
   ];
 
   const applyFilter = (list) =>
@@ -1319,6 +1316,30 @@ async function autocompleteRaidSetStatus(interaction, focused) {
   await interaction.respond(applyFilter(choices)).catch(() => {});
 }
 
+async function autocompleteRaidSetGate(interaction, focused) {
+  const raidValue = interaction.options.getString("raid") || "";
+  const statusValue = interaction.options.getString("status") || "";
+  const needle = normalizeName(focused.value || "");
+
+  if (statusValue !== "process") {
+    await interaction.respond([]).catch(() => {});
+    return;
+  }
+
+  const raidMeta = RAID_REQUIREMENT_MAP[raidValue];
+  if (!raidMeta) {
+    await interaction.respond([]).catch(() => {});
+    return;
+  }
+
+  const gates = getGatesForRaid(raidMeta.raidKey);
+  const choices = gates
+    .filter((g) => !needle || normalizeName(g).includes(needle))
+    .map((g) => ({ name: g, value: g }));
+
+  await interaction.respond(choices).catch(() => {});
+}
+
 async function handleRaidSetAutocomplete(interaction) {
   try {
     const focused = interaction.options.getFocused(true);
@@ -1332,6 +1353,10 @@ async function handleRaidSetAutocomplete(interaction) {
     }
     if (focused?.name === "status") {
       await autocompleteRaidSetStatus(interaction, focused);
+      return;
+    }
+    if (focused?.name === "gate") {
+      await autocompleteRaidSetGate(interaction, focused);
       return;
     }
     await interaction.respond([]).catch(() => {});
@@ -1357,9 +1382,17 @@ async function handleRaidSetCommand(interaction) {
     return;
   }
 
-  if (!["complete", "reset"].includes(statusType)) {
+  if (!["complete", "reset", "process"].includes(statusType)) {
     await interaction.reply({
-      content: `${UI.icons.warn} Status không hợp lệ. Dùng \`complete\` hoặc \`reset\`.`,
+      content: `${UI.icons.warn} Status không hợp lệ. Dùng \`complete\`, \`process\`, hoặc \`reset\`.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (statusType === "process" && !targetGate) {
+    await interaction.reply({
+      content: `${UI.icons.warn} Status \`process\` yêu cầu chọn \`gate\` cụ thể (ví dụ G1 hoặc G2). Nếu muốn đánh dấu cả raid, dùng \`complete\`.`,
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -1411,10 +1444,11 @@ async function handleRaidSetCommand(interaction) {
         );
 
         const gateKeys = targetGate ? [targetGate] : getGateKeys(raidData);
+        const shouldMarkDone = statusType === "complete" || statusType === "process";
         for (const gate of gateKeys) {
           raidData[gate] = {
             difficulty: selectedDifficulty,
-            completedDate: statusType === "complete" ? now : null,
+            completedDate: shouldMarkDone ? now : null,
           };
         }
 
@@ -1441,10 +1475,14 @@ async function handleRaidSetCommand(interaction) {
     return;
   }
 
-  const isComplete = statusType === "complete";
+  const markedDone = statusType === "complete" || statusType === "process";
+  const titleText =
+    statusType === "process" ? "Gate Completed" :
+    statusType === "complete" ? "Raid Completed" :
+    "Raid Reset";
   const resultEmbed = new EmbedBuilder()
-    .setTitle(`${isComplete ? UI.icons.done : UI.icons.reset} Raid ${isComplete ? "Completed" : "Reset"}`)
-    .setColor(isComplete ? UI.colors.success : UI.colors.muted)
+    .setTitle(`${markedDone ? UI.icons.done : UI.icons.reset} ${titleText}`)
+    .setColor(markedDone ? UI.colors.success : UI.colors.muted)
     .addFields(
       { name: "Character", value: `**${characterName}**`, inline: true },
       { name: "Raid", value: `**${raidMeta.label}**`, inline: true },
@@ -1497,8 +1535,8 @@ const HELP_SECTIONS = [
     options: [
       { name: "character", required: true, desc: "Tên character — có autocomplete từ roster đã lưu / autocomplete from saved roster" },
       { name: "raid", required: true, desc: "Raid + difficulty — autocomplete filter theo character đã chọn, kèm icon tiến độ (🟢/🟡/⚪). Raid đã hoàn thành hiển thị suffix DONE." },
-      { name: "status", required: true, desc: "complete | reset — tự động chỉ còn `reset` khi raid đã DONE" },
-      { name: "gate", required: false, desc: "G1 | G2 | G3 — bỏ trống để update tất cả / blank = all gates" },
+      { name: "status", required: true, desc: "complete | process | reset — autocomplete. `process` đánh dấu 1 gate cụ thể; khi raid đã DONE thì dropdown tự thu còn `reset` thôi." },
+      { name: "gate", required: false, desc: "Gate cụ thể — autocomplete **chỉ active khi status = Process**, dropdown đọc số gate thực tế của raid (G1/G2 cho Act 4/Kazeros/Serca hiện tại)" },
     ],
     example: "/raid-set character:Clauseduk raid:kazeros_hard status:complete gate:G1",
     notes: [
