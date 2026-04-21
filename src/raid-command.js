@@ -1845,7 +1845,7 @@ const HELP_SECTIONS = [
       "• Lỗi phục hồi được (char không có, iLvl thiếu, combo sai, nhiều raid/difficulty/gate) → bot ping user reply persistent, tự dọn khi user post lại hoặc sau 5 phút TTL. Hint và message gốc của user cùng bị dọn để channel heal về clean state.",
       "• **Per-user cooldown 2 giây** content-aware: duplicate content trong cooldown → drop + delete message. Different content khi có pending hint (đang fix lỗi) → **1 exception duy nhất/cooldown window** (không spam-bypass). Spam ≥3 hit trong 10s → kitsune warning, dedup 60s.",
       "• Deploy: bật `Message Content Intent` ở Discord Developer Portal, hoặc set `TEXT_MONITOR_ENABLED=false` để chạy slash-command-only.",
-      "• **Permissions bot cần trong channel đích**: `View Channel`, `Send Messages`, `Manage Messages`, `Read Message History`, `Embed Links`. Thiếu 1 trong 5 là `/raid-channel set` reject.",
+      "• **Permissions bot cần trong channel đích**: `View Channel`, `Send Messages`, `Manage Messages`, `Read Message History`, `Embed Links`. Thiếu 1 trong 5 là `/raid-channel config action:set` reject.",
       "• Admin-only command (yêu cầu `Manage Server` permission).",
     ],
   },
@@ -2181,13 +2181,14 @@ async function handleRaidManagementCommand(interaction) {
 // handler fires for every message the bot can see — hitting Mongo on each
 // one would turn normal chat traffic into a DB read. The cache is loaded
 // once at boot (loadMonitorChannelCache) and updated in-place by
-// /raid-channel set|clear, so the hot path can filter with a Map lookup.
-// Single-process bot → no multi-instance invalidation needed.
+// /raid-channel config action:set|clear, so the hot path can filter with
+// a Map lookup. Single-process bot → no multi-instance invalidation needed.
 const monitorChannelCache = new Map(); // guildId -> channelId | null
 
 // `false` until `loadMonitorChannelCache` completes successfully at least
-// once. Callers (/raid-channel show) can surface this so admins know a
-// silent monitor failure is a cache-load issue, not just missing config.
+// once. Callers (/raid-channel config action:show) can surface this so
+// admins know a silent monitor failure is a cache-load issue, not just
+// missing config.
 let monitorCacheHealthy = false;
 let monitorCacheLoadError = null;
 
@@ -2852,11 +2853,12 @@ async function cleanupRaidChannelMessages(channel) {
 
 /**
  * Unpin the stored welcome message (if any), then post + pin a fresh
- * welcome embed. Used by both `/raid-channel set` (initial welcome) and
- * `/raid-channel repin` (manual refresh). The new welcome's message ID
- * is persisted to `GuildConfig.welcomeMessageId` so the next invocation
- * can identify the exact pin to remove instead of scanning every
- * bot-authored pin (which would also tear down unrelated bot pins).
+ * welcome embed. Used by both `/raid-channel config action:set` (initial
+ * welcome) and `/raid-channel config action:repin` (manual refresh). The
+ * new welcome's message ID is persisted to `GuildConfig.welcomeMessageId`
+ * so the next invocation can identify the exact pin to remove instead of
+ * scanning every bot-authored pin (which would also tear down unrelated
+ * bot pins).
  *
  * Returns an object reporting which steps succeeded so the caller can
  * decide whether to surface a warning to the admin.
