@@ -1875,6 +1875,49 @@ function buildHelpOverviewEmbed() {
   return embed;
 }
 
+const HELP_FIELD_VALUE_LIMIT = 1024; // Discord rejects embed field values above this.
+
+function splitHelpFieldValue(value, limit = HELP_FIELD_VALUE_LIMIT) {
+  const chunks = [];
+  let current = "";
+
+  for (const rawLine of String(value || "").split("\n")) {
+    const lineParts = [];
+    let remaining = rawLine;
+    while (remaining.length > limit) {
+      let cutAt = remaining.lastIndexOf(" ", limit);
+      if (cutAt < Math.floor(limit * 0.6)) cutAt = limit;
+      lineParts.push(remaining.slice(0, cutAt).trimEnd());
+      remaining = remaining.slice(cutAt).trimStart();
+    }
+    lineParts.push(remaining);
+
+    for (const part of lineParts) {
+      const next = current ? `${current}\n${part}` : part;
+      if (next.length > limit && current) {
+        chunks.push(current);
+        current = part;
+      } else {
+        current = next;
+      }
+    }
+  }
+
+  if (current) chunks.push(current);
+  return chunks.length > 0 ? chunks : ["_No details_"];
+}
+
+function addChunkedHelpField(embed, name, value) {
+  const chunks = splitHelpFieldValue(value);
+  chunks.forEach((chunk, index) => {
+    embed.addFields({
+      name: index === 0 ? name : `${name} (${index + 1})`,
+      value: chunk,
+      inline: false,
+    });
+  });
+}
+
 function buildHelpDetailEmbed(sectionKey) {
   const section = HELP_SECTIONS.find((item) => item.key === sectionKey);
   if (!section) return buildHelpOverviewEmbed();
@@ -1889,13 +1932,13 @@ function buildHelpDetailEmbed(sectionKey) {
       const req = opt.required ? "✅" : "⚪";
       return `${req} \`${opt.name}\` — ${opt.desc}`;
     });
-    embed.addFields({ name: "Options", value: optionLines.join("\n"), inline: false });
+    addChunkedHelpField(embed, "Options", optionLines.join("\n"));
   } else {
     embed.addFields({ name: "Options", value: "_No options_", inline: false });
   }
 
   embed.addFields({ name: "Example", value: `\`${section.example}\``, inline: false });
-  embed.addFields({ name: "Notes", value: section.notes.join("\n"), inline: false });
+  addChunkedHelpField(embed, "Notes", section.notes.join("\n"));
 
   return embed;
 }
