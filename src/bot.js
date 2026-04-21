@@ -15,6 +15,7 @@ const {
   handleRaidHelpSelect,
   handleRaidSetAutocomplete,
   handleRemoveRosterAutocomplete,
+  handleRaidChannelAutocomplete,
   handleRaidChannelMessage,
   loadMonitorChannelCache,
   startRaidChannelScheduler,
@@ -117,7 +118,7 @@ async function startBot() {
   client.on(Events.InteractionCreate, async (interaction) => {
     try {
       if (interaction.isChatInputCommand()) {
-        const allowed = ["add-roster", "raid-check", "raid-set", "raid-status", "raid-help", "remove-roster", "raid-channel"];
+        const allowed = ["add-roster", "raid-check", "raid-set", "raid-status", "raid-help", "remove-roster", "raid-channel", "raid-auto-manage"];
         if (!allowed.includes(interaction.commandName)) return;
         await handleRaidManagementCommand(interaction);
         return;
@@ -128,6 +129,8 @@ async function startBot() {
           await handleRaidSetAutocomplete(interaction);
         } else if (interaction.commandName === "remove-roster") {
           await handleRemoveRosterAutocomplete(interaction);
+        } else if (interaction.commandName === "raid-channel") {
+          await handleRaidChannelAutocomplete(interaction);
         } else {
           await interaction.respond([]).catch(() => {});
         }

@@ -30,6 +30,14 @@ const characterSchema = new mongoose.Schema(
     itemLevel: { type: Number, required: true, min: 0 },
     combatScore: { type: String, default: "" },
     isGoldEarner: { type: Boolean, default: false },
+    // lostark.bible identifiers cached the first time we fetch the
+    // character's logs page — avoids re-scraping the SSR HTML on every
+    // subsequent /raid-auto-manage sync. `sn` = characterSerial in
+    // bible's API payload, `cid` = class id, `rid` = roster id. Null
+    // until the first sync populates them.
+    bibleSerial: { type: String, default: null },
+    bibleCid: { type: Number, default: null },
+    bibleRid: { type: Number, default: null },
     assignedRaids: {
       armoche: { type: assignedRaidSchema, default: () => ({}) },
       kazeros: { type: assignedRaidSchema, default: () => ({}) },
@@ -68,6 +76,20 @@ const userSchema = new mongoose.Schema(
       ],
       default: [],
     },
+    // Opt-in flag for /raid-auto-manage — when true, the bot is
+    // allowed to pull lostark.bible clear logs for this user's
+    // characters and reconcile raid progress automatically. Off by
+    // default so no passive syncing happens without explicit consent.
+    autoManageEnabled: { type: Boolean, default: false },
+    // Unix ms timestamp of the last auto-manage sync ATTEMPT for this
+    // user (success or total failure). Always stamped so status can
+    // surface "last tried at" even when every char errored.
+    lastAutoManageAttemptAt: { type: Number, default: null },
+    // Unix ms timestamp of the last auto-manage sync where AT LEAST ONE
+    // character fetched+reconciled without throwing. Kept separate from
+    // the attempt stamp so a string of Cloudflare 403s doesn't lie about
+    // data freshness.
+    lastAutoManageSyncAt: { type: Number, default: null },
   },
   {
     timestamps: true,
