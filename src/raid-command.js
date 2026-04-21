@@ -2511,30 +2511,48 @@ const MONITOR_SPAM_WARN_CD_MS = 60000;// dedup: one warning per user per minute
 
 /**
  * Check whether a user's message should be accepted under the per-user
- * cooldown. Updates spam-tracking counters on cooldown hits so the caller
- * can post a warning. Does NOT bump `lastProcessedAt` — that happens in
- * `commitUserMonitorActivity` only after the write path actually succeeds,
- * so error paths (typo → hint → user corrects within <2s) don't lock the
- * user out of their own correction.
+ * cooldown. The cooldown is content-aware with a pending-hint exception:
  *
- * Returns:
- *   { accepted: true  } — OK to process this message
- *   { accepted: false, warn: false } — in cooldown, silently drop
- *   { accepted: false, warn: true  } — in cooldown AND spam threshold hit
- *                                      AND not recently warned → caller
- *                                      should post a quạo'd-up reply
+ *   - within cooldown + same content as last accepted → DROP (duplicate spam)
+ *   - within cooldown + different content + user has a pending hint → ACCEPT
+ *     (the user is clearly iterating on a recoverable error; blocking would
+ *     break the round-14 fix for typo-then-correct flows)
+ *   - within cooldown + different content + no pending hint → DROP (fresh
+ *     post right after a successful write; hard limit to prevent burst DB
+ *     writes)
+ *   - outside cooldown → ACCEPT
+ *
+ * Spam-tracking counters increment on every DROP so the caller can post
+ * the kitsune warning once per minute per user.
+ *
+ * Returns { accepted, warn }. commitUserMonitorActivity(message) must be
+ * called right after an accept so the next check sees the right lastContent
+ * and timestamp.
  */
 function checkUserMonitorCooldown(message) {
   const key = hintKey(message.guildId, message.channelId, message.author.id);
   const now = Date.now();
+  const contentKey = normalizeName(message.content);
   const entry = userMonitorCooldowns.get(key) || {
     lastProcessedAt: 0,
+    lastContent: "",
     spamHits: 0,
     spamWindowStart: 0,
     warnedAt: 0,
   };
 
-  if (now - entry.lastProcessedAt < MONITOR_COOLDOWN_MS) {
+  const withinCooldown = now - entry.lastProcessedAt < MONITOR_COOLDOWN_MS;
+  if (withinCooldown) {
+    const sameContent = contentKey && contentKey === entry.lastContent;
+    const hasPendingHint = pendingChannelHints.has(key);
+
+    // Correction-flow exception — let the user fix a just-seen hint with
+    // new content even though they're still inside the 2-second window.
+    if (hasPendingHint && !sameContent) {
+      return { accepted: true, warn: false };
+    }
+
+    // Otherwise drop. Bump spam tracking and maybe emit a warning.
     if (now - entry.spamWindowStart > MONITOR_SPAM_WINDOW_MS) {
       entry.spamHits = 1;
       entry.spamWindowStart = now;
@@ -2549,23 +2567,22 @@ function checkUserMonitorCooldown(message) {
     return { accepted: false, warn: shouldWarn };
   }
 
-  // Cooldown passes — do NOT bump lastProcessedAt yet. The caller bumps
-  // via commitUserMonitorActivity only on true success (raid write landed).
-  // That keeps error-path retries (wrong char, iLvl too low, etc.) from
-  // locking the user out of their own quick correction.
   return { accepted: true, warn: false };
 }
 
 function commitUserMonitorActivity(message) {
   const key = hintKey(message.guildId, message.channelId, message.author.id);
   const now = Date.now();
+  const contentKey = normalizeName(message.content);
   const entry = userMonitorCooldowns.get(key) || {
     lastProcessedAt: 0,
+    lastContent: "",
     spamHits: 0,
     spamWindowStart: 0,
     warnedAt: 0,
   };
   entry.lastProcessedAt = now;
+  entry.lastContent = contentKey;
   entry.spamHits = 0;
   entry.spamWindowStart = 0;
   userMonitorCooldowns.set(key, entry);
@@ -2630,22 +2647,27 @@ async function handleRaidChannelMessage(message) {
   // already silent so unaffected. Sustained spam above threshold trips a
   // one-shot annoyed-kitsune warning, deduped per minute per user.
   //
-  // IMPORTANT: checkUserMonitorCooldown only reads + updates spam-tracking;
-  // it does NOT bump lastProcessedAt. commitUserMonitorActivity is called
-  // at the end of a successful write path. Parse-error / char-not-found /
-  // iLvl-low retries don't consume a cooldown slot, so a user who typos
-  // and fixes within 2 seconds still lands their fix correctly.
+  // The check is content-aware with a pending-hint exception, so:
+  //   - Spam of duplicate content within 2s is dropped.
+  //   - Typo → hint → correct-with-new-content within 2s passes through
+  //     because the user has a pending hint (active correction flow).
+  //   - Fresh writes back-to-back within 2s of a successful write are
+  //     dropped as hard throttling.
+  //
+  // Commit happens immediately after a check-pass so the NEXT message
+  // sees the right lastContent / timestamp, regardless of whether this
+  // message ends up on the success path or an error path. Content-aware
+  // logic handles the round-14 goal (retries after hints work) without
+  // needing to defer the commit.
   const cooldown = checkUserMonitorCooldown(message);
   if (!cooldown.accepted) {
     if (cooldown.warn) await postSpamWarning(message);
-    // Delete the throttled parse-success message too. Otherwise the
-    // spammer's clear-attempts accumulate in the channel as visible text
-    // even though Artist ignored them — a soft surface leak that keeps
-    // the channel dirty despite the cooldown working correctly at the
-    // work-layer. Best-effort; swallow errors (permission / already gone).
+    // Delete the throttled message so the channel doesn't accumulate
+    // ignored attempts as visible text. Best-effort; swallow errors.
     message.delete().catch(() => {});
     return;
   }
+  commitUserMonitorActivity(message);
 
   if (parsed.error === "multi-gate") {
     await postPersistentHint(
@@ -2724,18 +2746,15 @@ async function handleRaidChannelMessage(message) {
     return;
   }
 
-  // Success path — the raid write actually landed:
-  //   1. Commit the cooldown so subsequent messages from this user within
-  //      2 seconds are dropped (real spam protection). Error paths above
-  //      skipped this commit so retries after hints remain fast.
-  //   2. DM the user a private confirmation (Discord's only "only you see it"
+  // Success path — the raid write actually landed. Cooldown was already
+  // committed at the top of the handler right after the check passed.
+  //   1. DM the user a private confirmation (Discord's only "only you see it"
   //      surface outside of interactions). If DM fails (user disabled DMs
   //      from server members), fall back to a short public ping so they
   //      still see that the update landed — otherwise they'd just see their
   //      message disappear with no feedback at all.
-  //   3. Clear any stale hint reply that may still be sitting in the channel.
-  //   4. Delete the original announcement so the channel stays tidy.
-  commitUserMonitorActivity(message);
+  //   2. Clear any stale hint reply that may still be sitting in the channel.
+  //   3. Delete the original announcement so the channel stays tidy.
   const confirmEmbed = buildRaidChannelSuccessEmbed({
     charName,
     raidMeta,
@@ -3159,11 +3178,15 @@ async function handleRaidChannelCommand(interaction) {
       return;
     }
 
-    // When enabling mid-day, stamp today's VN day key so the next
-    // 30-minute tick doesn't immediately run a "catch-up" cleanup — we
-    // want the first real auto-run to happen after the NEXT 00:00 VN
-    // boundary. Disabling doesn't touch the key so re-enabling later
-    // keeps missed-day catch-up behavior intact.
+    // Enable ALWAYS stamps today's VN day key — even on re-enable after
+    // days off — so the first tick after flipping the flag never runs a
+    // catch-up cleanup. Admin expectation on "turn the schedule on" is
+    // "schedule starts fresh", not "immediately purge everything since
+    // the last run." Bot-offline catch-up still works when the schedule
+    // stays enabled the whole time: the tick after restart sees a stale
+    // lastAutoCleanupKey and runs once. Disable leaves the key alone so
+    // it's available for debugging, but it's overwritten on the next
+    // enable regardless.
     const update = enabled
       ? { $set: { autoCleanupEnabled: true, lastAutoCleanupKey: getTargetCleanupDayKey() } }
       : { $set: { autoCleanupEnabled: false } };
