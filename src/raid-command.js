@@ -939,6 +939,14 @@ async function refreshStaleAccounts(userDoc) {
 
   const now = Date.now();
   const staleAccounts = userDoc.accounts.filter((account) => {
+    // Skip empty rosters — the post-round-5 inner loop needs at least one
+    // saved character to validate upstream overlap, and without one the
+    // account never stamps and would retry every /raid-status forever.
+    // /remove-roster remove_char can legitimately leave an account at 0
+    // characters, and /add-roster re-stamps lastRefreshedAt on its own
+    // save, so empty accounts have nothing useful to pull anyway.
+    const chars = Array.isArray(account?.characters) ? account.characters : [];
+    if (chars.length === 0) return false;
     const last = Number(account?.lastRefreshedAt) || 0;
     return (now - last) > ROSTER_REFRESH_COOLDOWN_MS;
   });
