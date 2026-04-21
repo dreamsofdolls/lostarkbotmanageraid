@@ -958,7 +958,17 @@ async function refreshStaleAccounts(userDoc) {
         try {
           const fetched = await fetchRosterCharacters(seed);
           if (Array.isArray(fetched) && fetched.length > 0) {
-            if (account.accountName !== seed) account.accountName = seed;
+            if (account.accountName !== seed) {
+              // Don't rewrite accountName to a seed that already belongs to
+              // another account for the same user — /remove-roster and
+              // autocomplete key off accountName as a unique-per-user id,
+              // so convergence would make the colliding roster unaddressable.
+              const normalizedSeed = normalizeName(seed);
+              const collides = userDoc.accounts.some(
+                (other) => other !== account && normalizeName(other.accountName) === normalizedSeed
+              );
+              if (!collides) account.accountName = seed;
+            }
             return { account, fetched };
           }
         } catch (err) {
@@ -981,12 +991,25 @@ async function refreshStaleAccounts(userDoc) {
     const fetchedByName = new Map(
       fetched.map((c) => [normalizeName(c.charName), c])
     );
+    let matchedAny = false;
     for (const character of (account.characters || [])) {
       const match = fetchedByName.get(normalizeName(getCharacterName(character)));
       if (!match) continue;
+      matchedAny = true;
       character.itemLevel = Number(match.itemLevel) || character.itemLevel;
       character.combatScore = String(match.combatScore || character.combatScore || "");
       if (match.className) character.class = match.className;
+    }
+    if (!matchedAny) {
+      // Fetched roster had zero overlap with our saved characters — either
+      // the fallback seed landed on a foreign roster or the upstream top-N
+      // churned enough to drop everything we track. Do NOT stamp
+      // lastRefreshedAt, so the next /raid-status retries instead of
+      // suppressing refresh for 2h with stale data.
+      console.warn(
+        `[refresh] account "${account.accountName}" fetched ${fetched.length} chars but zero overlap with saved roster — skipping stamp.`
+      );
+      continue;
     }
     account.lastRefreshedAt = Date.now();
     didUpdate = true;
@@ -1129,16 +1152,19 @@ async function handleStatusCommand(interaction) {
 
   // Memoize per-character raid status for the lifetime of this one render.
   // getStatusRaidsForCharacter is pure for a given character snapshot, so
-  // a simple Map keyed by character id (or normalized name fallback) lets
-  // global totals, per-account totals, and per-card rendering share one
-  // computation instead of repeating it three times per character.
+  // sharing results lets global totals, per-account totals, and per-card
+  // rendering reuse one computation instead of repeating it three times.
+  //
+  // Key by the character object reference itself (Map supports object keys)
+  // rather than by id-or-name: legacy docs without `character.id` could have
+  // two same-name characters across different rosters, and a name-fallback
+  // key would make one card render the other's cached progress.
   const raidsCache = new Map();
   const getRaidsFor = (character) => {
-    const key = character.id || normalizeName(getCharacterName(character));
-    let result = raidsCache.get(key);
+    let result = raidsCache.get(character);
     if (!result) {
       result = getStatusRaidsForCharacter(character);
-      raidsCache.set(key, result);
+      raidsCache.set(character, result);
     }
     return result;
   };
@@ -1923,10 +1949,21 @@ async function handleRemoveRosterCommand(interaction) {
 
     let reseededTo = null;
     if (wasSeed && account.characters.length > 0) {
-      const fallbackName = getCharacterName(account.characters[0]);
-      if (fallbackName) {
+      // Walk the remaining characters for the first name that does NOT
+      // collide with another account's accountName — roster autocomplete
+      // and removal key off accountName as a per-user unique identifier,
+      // so avoiding collision here preserves that invariant.
+      for (const candidate of account.characters) {
+        const fallbackName = getCharacterName(candidate);
+        if (!fallbackName) continue;
+        const normalizedFallback = normalizeName(fallbackName);
+        const collides = userDoc.accounts.some(
+          (other) => other !== account && normalizeName(other.accountName) === normalizedFallback
+        );
+        if (collides) continue;
         account.accountName = fallbackName;
         reseededTo = fallbackName;
+        break;
       }
     }
 
