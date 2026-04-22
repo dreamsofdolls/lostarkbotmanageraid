@@ -1314,7 +1314,16 @@ async function handleStatusCommand(interaction) {
   // memory mutation + save — cheap to retry. Without this split, a concurrent
   // save racing /raid-status would trigger a full roster re-scrape on every
   // retry.
+  //
+  // Phase 2 of /raid-auto-manage piggybacks here: if the user has opted in
+  // (`autoManageEnabled === true`) AND the auto-manage 5-min cooldown allows
+  // it (acquireAutoManageSyncSlot) we ALSO gather bible logs in the same
+  // collect pass and apply them in the same save. This keeps Phase 2
+  // automation gated by user intent (must invoke /raid-status) so we never
+  // burn quota for offline users, and reuses the existing slot/cooldown so
+  // spam-clicking /raid-status can't blast bible.
   let userDoc = null;
+  let autoManageGuard = null;
   try {
     const seedDoc = await User.findOne({ discordId });
     if (!seedDoc) {
@@ -1324,20 +1333,69 @@ async function handleStatusCommand(interaction) {
       // reset state. The fresh doc inside the retry loop runs it again
       // idempotently — second call is a no-op when already freshened.
       ensureFreshWeek(seedDoc);
-      const collected = await collectStaleAccountRefreshes(seedDoc);
+      const refreshCollected = await collectStaleAccountRefreshes(seedDoc);
+
+      // Phase 2 auto-manage piggyback: gate on opt-in + slot acquire.
+      // Slot acquire returns `acquired: false, reason: 'cooldown'|'in-flight'`
+      // when within the 5-min throttle or another auto-manage sync is
+      // running for this user — both cases silently fall through to cached
+      // raid data. Render path doesn't care; user can run
+      // `/raid-auto-manage action:status` for sync diagnostics.
+      let autoManageCollected = null;
+      let autoManageWeekResetStart = null;
+      const hasRoster = Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
+      if (seedDoc.autoManageEnabled && hasRoster) {
+        autoManageGuard = await acquireAutoManageSyncSlot(discordId);
+        if (autoManageGuard.acquired) {
+          autoManageWeekResetStart = weekResetStartMs();
+          try {
+            autoManageCollected = await gatherAutoManageLogsForUserDoc(
+              seedDoc,
+              autoManageWeekResetStart
+            );
+          } catch (err) {
+            console.warn(
+              "[raid-status] auto-manage piggyback gather failed:",
+              err?.message || err
+            );
+            // autoManageCollected stays null → apply branch below skips it.
+            // Slot still releases in `finally` so the next call can retry.
+          }
+        }
+      }
 
       userDoc = await saveWithRetry(async () => {
         const doc = await User.findOne({ discordId });
         if (!doc) return null;
         const didFreshenWeek = ensureFreshWeek(doc);
-        const didRefresh = applyStaleAccountRefreshes(doc, collected);
-        if (didFreshenWeek || didRefresh) await doc.save();
+        const didRefresh = applyStaleAccountRefreshes(doc, refreshCollected);
+
+        let didAutoManage = false;
+        if (autoManageCollected) {
+          const autoReport = applyAutoManageCollected(
+            doc,
+            autoManageWeekResetStart,
+            autoManageCollected
+          );
+          const now = Date.now();
+          doc.lastAutoManageAttemptAt = now;
+          if (autoReport.perChar.some((c) => !c.error)) {
+            doc.lastAutoManageSyncAt = now;
+          }
+          didAutoManage = true;
+        }
+
+        if (didFreshenWeek || didRefresh || didAutoManage) await doc.save();
         return doc.toObject();
       });
     }
   } catch (err) {
     console.error("[raid-status] lazy refresh failed:", err?.message || err);
     userDoc = await User.findOne({ discordId }).lean();
+  } finally {
+    // Release auto-manage slot we may have acquired above. Guard against
+    // releasing twice or releasing when never acquired.
+    if (autoManageGuard?.acquired) releaseAutoManageSyncSlot(discordId);
   }
 
   if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
@@ -1941,6 +1999,7 @@ const HELP_SECTIONS = [
       "• **Lazy refresh**: account nào quá 2h chưa update thì Artist scrape bible roster page để sync itemLevel/combatScore/class — match bible cadence ~2h. Share `bibleLimiter` với `/raid-auto-manage`. Mỗi HTTP fetch gắn `AbortSignal.timeout(15s)` chống bible treo connection.",
       "• **Failure cooldown**: nếu seed list của một account fail hết (wrong accountName + stale char names), Artist stamp `lastRefreshAttemptAt` và skip refresh account đó trong **5 phút** tiếp theo. Spam `/raid-status` trong lúc failing không còn queue N seed × bible fetch mỗi lần — tự heal khi hết cooldown hoặc khi user sửa roster qua `/add-roster`.",
       "• **Gather/apply split**: bible fetch chạy OUTSIDE `saveWithRetry` một lần duy nhất; apply phase (mutate fresh doc + save) mới ở trong retry loop. VersionError retry không re-fire bible HTTP call.",
+      "• **Auto-manage piggyback (Phase 2)**: nếu user đã bật `/raid-auto-manage action:on` (`autoManageEnabled = true`), `/raid-status` cũng sẽ tự pull bible logs trước khi render (gate bởi cùng cooldown 5 phút + in-flight guard của `/raid-auto-manage`). Nghĩa là user opt-in chỉ cần gõ `/raid-status` để vừa xem tiến độ vừa auto-sync, không phải gõ `action:sync` riêng. Nếu cooldown chưa hết hoặc gather fail (Cloudflare/timeout) → render với cached data, không vỡ command.",
     ],
   },
   {
@@ -2068,7 +2127,7 @@ const HELP_SECTIONS = [
       "• **Probe-before-enable**: khi gõ `action:on`, Artist chạy 1 lần sync **in memory** (không save) để phân loại char visible vs private. Nếu có char private → hiện warn embed với 2 nút `Vẫn bật` / `Huỷ`, timeout 60s = default Huỷ. Confirm thì re-run sync trên fresh doc rồi save; Cancel/timeout thì flag giữ OFF, không save gì **nhưng `lastAutoManageAttemptAt` vẫn được stamp** — probe HTTP đã tốn bible quota, cooldown phải phản ánh điều đó (không thì user spam `on` + Huỷ bypass được 5-min cooldown).",
       "• **Per-user sync throttle**: 5 phút cooldown + in-flight guard. `action:sync` spam → reject ephemeral với remaining time (tránh N-roster × M-char HTTP calls dội bible). `action:on` đang in-flight thì reject; đang cooldown thì vẫn flip flag nhưng skip cả probe lẫn sync, báo user chờ X phút rồi gõ `sync` sau.",
       "• **Dynamic action dropdown**: dropdown autocomplete hide option dư thừa theo state — đang ON thì không show `on`, đang OFF thì không show `off`. Typed-paste `on`/`off` khi redundant → ephemeral reject. Action lạ (paste arbitrary string không thuộc `on/off/sync/status`) → ephemeral reject ngay đầu handler, không fall-through Discord-timeout.",
-      "• **Chưa hook vào `/raid-status`** (phase 1 chỉ manual `action:sync`). Phase sau: opt-in flag sẽ trigger sync tự động.",
+      "• **Phase 2 — auto-sync piggyback vào `/raid-status`**: khi `autoManageEnabled = true` + cooldown 5 phút cho phép, mỗi lần user gõ `/raid-status` Artist sẽ pull bible logs trước khi render embed. Reuse cùng `acquireAutoManageSyncSlot` nên spam `/raid-status` không spam bible. Nếu cooldown chưa hết hoặc đang in-flight (action:sync chạy song song) → render với cached data, silent skip. Nếu gather throw (Cloudflare/timeout) → swallow + log + render cached, không vỡ `/raid-status`. Ý đồ: user chỉ trả cost khi muốn xem progress, bot offline 3AM không tốn quota.",
     ],
   },
 ];
