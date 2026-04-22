@@ -31,7 +31,7 @@ const characterSchema = new mongoose.Schema(
     combatScore: { type: String, default: "" },
     isGoldEarner: { type: Boolean, default: false },
     // lostark.bible identifiers cached the first time we fetch the
-    // character's logs page — avoids re-scraping the SSR HTML on every
+    // character's logs page - avoids re-scraping the SSR HTML on every
     // subsequent /raid-auto-manage sync. `sn` = characterSerial in
     // bible's API payload, `cid` = class id, `rid` = roster id. Null
     // until the first sync populates them.
@@ -83,7 +83,7 @@ const userSchema = new mongoose.Schema(
       ],
       default: [],
     },
-    // Opt-in flag for /raid-auto-manage — when true, the bot is
+    // Opt-in flag for /raid-auto-manage - when true, the bot is
     // allowed to pull lostark.bible clear logs for this user's
     // characters and reconcile raid progress automatically. Off by
     // default so no passive syncing happens without explicit consent.

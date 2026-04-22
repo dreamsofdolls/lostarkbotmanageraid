@@ -25,12 +25,12 @@ function getWeekKey(date = new Date()) {
  * ISO week, the target is the PREVIOUS ISO week (so users stay on last week's
  * key). At or after that moment, the target is the current ISO week. This lets
  * catch-up runs on non-Wednesdays still pick up any users whose cursor lags the
- * current target — the window missing bug.
+ * current target - the window missing bug.
  */
 function getTargetResetKey(now = new Date()) {
   const utcDay = now.getUTCDay();
   const utcHour = now.getUTCHours();
-  // Sunday (0) is ISO day 7 — part of the same ISO week as the preceding
+  // Sunday (0) is ISO day 7 - part of the same ISO week as the preceding
   // Wednesday, so treat it as "after this week's reset moment".
   const passedResetMoment =
     utcDay === 0 ||
