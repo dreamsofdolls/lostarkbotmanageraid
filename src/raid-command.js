@@ -1085,7 +1085,10 @@ async function handleRaidCheckCommand(interaction) {
   const headerDescription =
     `**${pendingChars.length}/${allEligible.length}** pending (${100 - completionPct}%) · iLvl ≥ **${raidMeta.minItemLevel}** · ` +
     `🟢 ${completeChars.length} · 🟡 ${partialChars.length} · ⚪ ${noneChars.length}`;
-  const footerText = `${RAID_CHECK_FOOTER_LEGEND} · ${userCount} ${userCount === 1 ? "user" : "users"} cần nhắc · ${rosterCount} ${rosterCount === 1 ? "roster" : "rosters"}`;
+  // Reuse /raid-status's English legend (`🟢 done · 🟡 partial · ⚪ pending`)
+  // so both paginated commands share the same footer vocabulary. User/roster
+  // counts dropped per Traine's "cho gọn" request.
+  const footerText = STATUS_FOOTER_LEGEND;
 
   // One embed per roster - mirrors /raid-status's 1-account-per-page model.
   // Roster header lives in setDescription right under the global summary so
@@ -1155,23 +1158,18 @@ async function handleRaidCheckCommand(interaction) {
     rosterGroups.filter((g) => g.autoManageEnabled).map((g) => g.discordId)
   ).size;
 
-  // Action row = Prev + Next (from generic helper) + Remind + Sync. 4 buttons
-  // fit within Discord's 5-per-row limit. Prev/Next customId prefix
-  // `raid-check-page:` deliberately NOT `raid-check:` so bot.js's global
-  // handleRaidCheckButton dispatcher ignores them. Local collector below
-  // owns pagination; global router still owns Remind/Sync routing.
+  // Action row = Prev + Next (from generic helper) + Sync. Prev/Next customId
+  // prefix `raid-check-page:` deliberately NOT `raid-check:` so bot.js's
+  // global handleRaidCheckButton dispatcher ignores them. Local collector
+  // below owns pagination; global router still owns Sync routing. Remind
+  // button was dropped per Traine's "bỏ chuông nhắc nhở" request - scanners
+  // ping users manually or via other channels.
   const buildActionRow = (currentPage, disabled) => {
     const row = buildPaginationRow(currentPage, pages.length, disabled, {
       prevId: "raid-check-page:prev",
       nextId: "raid-check-page:next",
     });
     row.addComponents(
-      new ButtonBuilder()
-        .setCustomId(`raid-check:remind:${raidKey}`)
-        .setLabel(`Remind ${pendingChars.length} pending`)
-        .setEmoji("🔔")
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(disabled),
       new ButtonBuilder()
         .setCustomId(`raid-check:sync:${raidKey}`)
         .setLabel(
@@ -1241,35 +1239,8 @@ async function handleRaidCheckCommand(interaction) {
 }
 
 // ============================================================================
-// /raid-check button handlers (Phase 2 interactive actions)
+// /raid-check button handlers (Sync button only - Remind removed Apr 2026)
 // ============================================================================
-
-// Build the per-user DM embed sent by the Remind button. Lists the recipient's
-// pending chars with the same gate-icon format as /raid-check, plus 3 update
-// paths the recipient can use to clear them.
-function buildRaidCheckRemindDMEmbed(requesterDisplay, guildName, raidMeta, chars) {
-  const lines = chars.map((c) => {
-    const icons = c.gateStatus.map(raidCheckGateIcon).join("");
-    return `${icons} **${c.charName}** \`${Math.round(c.itemLevel)}\``;
-  });
-  const raidValue = `${raidMeta.raidKey}_${normalizeName(raidMeta.modeKey)}`;
-  return new EmbedBuilder()
-    .setColor(UI.colors.progress)
-    .setTitle(`🔔 Raid Manager đang scan ${raidMeta.label}`)
-    .setDescription(
-      [
-        `**${requesterDisplay}** đang scan **${raidMeta.label}** trong **${guildName}** - cậu có **${chars.length}** char đang pending:`,
-        "",
-        lines.join("\n"),
-        "",
-        "**Cách update:**",
-        `- Post \`${raidMeta.label} <charname> [G1|G2]\` vào channel đã config (nếu guild có \`/raid-channel\`)`,
-        `- Hoặc gõ \`/raid-set character:<name> raid:${raidValue} status:complete\``,
-        `- Hoặc opt-in auto-sync: \`/raid-auto-manage action:on\`, sau đó \`action:sync\` mỗi lần clear`,
-      ].join("\n")
-    )
-    .setTimestamp();
-}
 
 // Build the per-user DM embed sent by the Sync button (only to users whose
 // auto-manage sync ACTUALLY produced new gate clears). delta is the
@@ -1321,9 +1292,7 @@ async function handleRaidCheckButton(interaction) {
     return;
   }
 
-  if (action === "remind") {
-    await handleRaidCheckRemindClick(interaction, raidMeta);
-  } else if (action === "sync") {
+  if (action === "sync") {
     await handleRaidCheckSyncClick(interaction, raidMeta);
   } else {
     await interaction.reply({
@@ -1331,63 +1300,6 @@ async function handleRaidCheckButton(interaction) {
       flags: MessageFlags.Ephemeral,
     });
   }
-}
-
-async function handleRaidCheckRemindClick(interaction, raidMeta) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  // Recompute snapshot so we DM exactly the users still pending right now,
-  // not the snapshot frozen at /raid-check invocation time. If someone
-  // /raid-set'd in the meantime they're not pending anymore - skip them.
-  const snapshot = await computeRaidCheckSnapshot(raidMeta);
-  const pending = snapshot.pendingChars;
-  if (pending.length === 0) {
-    await interaction.editReply({
-      content: `${UI.icons.done} Không còn ai pending nữa - có lẽ list đã được update sau khi cậu mở \`/raid-check\`. Gõ lại để refresh embed.`,
-    });
-    return;
-  }
-
-  const byUser = new Map();
-  for (const c of pending) {
-    if (!byUser.has(c.discordId)) byUser.set(c.discordId, []);
-    byUser.get(c.discordId).push(c);
-  }
-  for (const chars of byUser.values()) {
-    chars.sort((a, b) => b.itemLevel - a.itemLevel);
-  }
-
-  const requesterDisplay = interaction.user.username;
-  const guildName = interaction.guild?.name || "guild";
-
-  const dmResults = await Promise.all(
-    [...byUser.entries()].map(([discordId, chars]) =>
-      discordUserLimiter.run(async () => {
-        try {
-          const user = await interaction.client.users.fetch(discordId);
-          const dmChannel = await user.createDM();
-          const embed = buildRaidCheckRemindDMEmbed(requesterDisplay, guildName, raidMeta, chars);
-          await dmChannel.send({ embeds: [embed] });
-          return { discordId, ok: true };
-        } catch (err) {
-          return { discordId, ok: false, err: err?.message || String(err) };
-        }
-      })
-    )
-  );
-
-  const sent = dmResults.filter((r) => r.ok).length;
-  const failed = dmResults.filter((r) => !r.ok);
-  const lines = [`${UI.icons.done} Đã DM **${sent}** user với list pending chars của họ.`];
-  if (failed.length > 0) {
-    lines.push(
-      `${UI.icons.warn} **${failed.length}** user không nhận được DM (có thể đã tắt DM từ server members):`
-    );
-    for (const f of failed.slice(0, 10)) {
-      lines.push(`- <@${f.discordId}>`);
-    }
-    if (failed.length > 10) lines.push(`- ... và ${failed.length - 10} user khác`);
-  }
-  await interaction.editReply({ content: lines.join("\n") });
 }
 
 async function handleRaidCheckSyncClick(interaction, raidMeta) {
@@ -1406,7 +1318,7 @@ async function handleRaidCheckSyncClick(interaction, raidMeta) {
   ];
   if (optedInDiscordIds.length === 0) {
     await interaction.editReply({
-      content: `${UI.icons.info} Không có user nào opt-in \`/raid-auto-manage\` trong list pending. Dùng nút 🔔 Remind để nhắc họ gõ thủ công.`,
+      content: `${UI.icons.info} Không có user nào opt-in \`/raid-auto-manage\` trong list pending. Nhắc họ gõ \`/raid-auto-manage action:on\` hoặc tự update bằng \`/raid-set\`.`,
     });
     return;
   }
@@ -1513,13 +1425,10 @@ async function handleRaidCheckSyncClick(interaction, raidMeta) {
 // 2 phút match với cadence user expect - đủ để scroll qua roster list, không
 // lâu quá để giữ stale collector sống. Shared giữa nhiều command để consistent.
 const PAGINATION_SESSION_MS = 2 * 60 * 1000;
+// Shared English legend for footer of both /raid-status and /raid-check.
+// Single source of truth - keeps the two paginated commands visually
+// aligned.
 const STATUS_FOOTER_LEGEND = `${UI.icons.done} done · ${UI.icons.partial} partial · ${UI.icons.pending} pending`;
-// /raid-check footer legend - specific to 2-gate raid semantics (cleared /
-// one gate done / nothing done). "đi mới G1" matches the 2-gate raid set
-// currently shipped; when 3-gate raids land the label will need generalizing
-// to "đang đi" or similar. Aggregate icon via `pickProgressIcon` drives the
-// per-char field value, legend here tells Raid Manager what each color means.
-const RAID_CHECK_FOOTER_LEGEND = `${UI.icons.done} cleared · ${UI.icons.partial} đi mới G1 · ${UI.icons.pending} chưa đi`;
 
 // Lostark.bible updates each character roughly every 2 hours. We match that
 // cadence to avoid wasted fetches: any account refreshed within this window
@@ -2681,12 +2590,12 @@ const HELP_SECTIONS = [
       "• **Roster per page**: 1 roster = 1 embed page. Roster header `📁 accountName (displayName) · N pending · 🔄<relative>` nằm trong `setDescription` (dòng 2, ngay dưới global summary) - char cards bắt đầu sát dưới description không có wasted spacer row. User có 2 roster (main + alt) hiện thành 2 pages riêng. Rosters cùng user group consecutive, sort theo tổng pending của user desc rồi per-roster pending count desc.",
       "• **Pagination buttons + session**: `◀ Previous` / `Next ▶` (từ shared helper `buildPaginationRow`) cycle giữa các roster pages, y hệt `/raid-status`. Title embed hiện `⚠️ Raid Check · <raid> · Page X/Y`. Collector locked theo người chạy command, session timeout **2 phút** (shared constant `PAGINATION_SESSION_MS` với `/raid-status`), hết hạn disable buttons + footer đổi `⏱️ Session đã hết hạn (120s) · Dùng /raid-check để xem lại`.",
       "• **Sync badge trong roster header**: opted-in user có sync data hiện `🔄5m` / `🔄2h` / `🔄3d` (compact relative time tự compute). Opted-in nhưng chưa sync lần nào → `🔄never`. Non-opted-in → không hiện segment này.",
-      "• **Footer legend**: `🟢 cleared · 🟡 đi mới G1 · ⚪ chưa đi · N users cần nhắc · M rosters` - matches `/raid-status`'s footer-legend pattern. Prefix explain 3 aggregate colors (🟢 = tất cả gate done, 🟡 = mới xong 1 gate, ⚪ = chưa chạm gate nào), suffix cung cấp scan breakdown (action-able cho Raid Manager biết ping bao nhiêu người). Label `đi mới G1` specific cho 2-gate raids hiện tại; khi có 3-gate raid sẽ generalize thành 'đang đi' hoặc tương tự.",
+      "• **Footer legend**: `🟢 done · 🟡 partial · ⚪ pending` - reuses `/raid-status`'s `STATUS_FOOTER_LEGEND` const (single source of truth cho English legend của cả 2 paginated command). User/roster scan counts đã bỏ khỏi footer cho gọn per Traine's review.",
       "• **Sort order**: users có nhiều pending tổng nhất lên top; trong mỗi user rosters sort theo pending count desc; trong mỗi roster chars sort theo iLvl desc.",
       "• **Mode-scoped progress**: gate nào stored với difficulty KHÁC mode đang scan sẽ treat như pending (mode-switch wipe sẽ xảy ra khi user /raid-set ở mode này).",
-      "• **🔔 Remind button**: Raid Manager bấm → bot DM mỗi user pending list chars của họ + 3 cách update (post `/raid-channel`, gõ `/raid-set`, opt-in `/raid-auto-manage`). Operate trên ALL pending (không chỉ current page). DM rate-limited qua `discordUserLimiter` (max 5 concurrent) tránh burst Discord. User tắt DM → liệt kê failed list trong reply ephemeral.",
       "• **🔄 Sync button**: Raid Manager bấm → trigger auto-manage sync CHỈ cho opted-in user trong list pending (privacy-respecting - non-opted-in user KHÔNG bị force-sync). Operate trên ALL opted-in pending users (không chỉ current page). Reuse Phase 3 gather/apply pattern + `acquireAutoManageSyncSlot` (5-min cooldown share với /raid-auto-manage). User nào có char update mới sẽ nhận DM riêng (skip nếu sync chạy nhưng không có data mới). Disabled nếu không có opted-in user nào trong list.",
-      "• **Button customId routing**: Pagination buttons dùng prefix `raid-check-page:prev` / `raid-check-page:next` (KHÔNG `raid-check:*`) để bot.js's global `handleRaidCheckButton` dispatcher bỏ qua - collector trên reply message handle pagination locally. Remind/Sync tiếp tục dùng `raid-check:remind:<raidKey>` / `raid-check:sync:<raidKey>` qua global router.",
+      "• **Button customId routing**: Pagination buttons dùng prefix `raid-check-page:prev` / `raid-check-page:next` (KHÔNG `raid-check:*`) để bot.js's global `handleRaidCheckButton` dispatcher bỏ qua - collector trên reply message handle pagination locally. Sync vẫn dùng `raid-check:sync:<raidKey>` qua global router.",
+      "• **Remind button removed** (Apr 2026): nút 🔔 Remind đã bỏ theo Traine's cleanup request. Raid Manager ping user manual qua Discord @mention hoặc hướng dẫn họ dùng `/raid-auto-manage action:on` / `/raid-set` tự update.",
       "• **Discord username resolution**: cache-first (discord.js users cache). Cache miss đi qua `discordUserLimiter` (max 5 in-flight) để server đông không burst `client.users.fetch` parallel - bảo vệ khỏi Discord 50 req/s global ceiling.",
     ],
   },
