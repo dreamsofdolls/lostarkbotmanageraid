@@ -868,41 +868,18 @@ function raidCheckGateIcon(status) {
   return "⚪";
 }
 
-async function handleRaidCheckCommand(interaction) {
-  if (!isRaidLeader(interaction)) {
-    await interaction.reply({
-      content: `${UI.icons.lock} Chỉ Raid Manager mới được dùng \`/raid-check\` (config qua env \`RAID_MANAGER_ID\`).`,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const raidKey = interaction.options.getString("raid", true);
-  const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
-  if (!raidMeta) {
-    await interaction.reply({
-      content: `${UI.icons.warn} Raid option không hợp lệ. Vui lòng thử lại.`,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
+// Shared scan+classify pass for /raid-check. Returns the raw eligible list
+// + per-user metadata so both the initial command AND the button handlers
+// (Remind / Sync) can operate on a fresh Mongo snapshot every time - no
+// stale state map, no cache staleness bug.
+async function computeRaidCheckSnapshot(raidMeta) {
   const users = await User.find({}).lean();
-  // Per-user metadata cache: opt-in flag + last sync timestamp surface in
-  // the per-user field so Raid Manager sees data freshness inline.
   const userMeta = new Map();
-  // ALL eligible chars (not just pending) so we can render summary stats
-  // (eligible / done / pending breakdown). Each entry tracks per-gate
-  // status so the embed can render 🟢/🟡/⚪ icons per gate.
   const allEligible = [];
   const selectedDifficulty = toModeLabel(raidMeta.modeKey);
   const selectedDiffNorm = normalizeName(selectedDifficulty);
 
   for (const userDoc of users) {
-    // Read-only freshness: don't let previous-week completions hide pending
-    // characters before the 30-minute background reset tick persists them.
     ensureFreshWeek(userDoc);
     if (!userMeta.has(userDoc.discordId)) {
       userMeta.set(userDoc.discordId, {
@@ -921,14 +898,8 @@ async function handleRaidCheckCommand(interaction) {
         const assignedRaids = ensureAssignedRaids(character);
         const assigned = assignedRaids[raidMeta.raidKey] || {};
         const storedGateKeys = getGateKeys(assigned);
-        // Fall back to the official gate list if the char doc has no
-        // gates recorded yet for this raid - means "all gates pending".
         const officialGates =
           storedGateKeys.length > 0 ? storedGateKeys : getGatesForRaid(raidMeta.raidKey);
-
-        // Per-gate status: 'done' only if difficulty matches the requested
-        // mode AND completedDate is set. Mode-mismatch = treat as pending
-        // (a /raid-set on this mode would wipe the wrong-mode entry anyway).
         const gateStatus = officialGates.map((gate) => {
           const g = assigned[gate];
           if (!g) return "pending";
@@ -936,7 +907,6 @@ async function handleRaidCheckCommand(interaction) {
           if (!diffMatch) return "pending";
           return Number(g.completedDate) > 0 ? "done" : "pending";
         });
-
         const doneCount = gateStatus.filter((s) => s === "done").length;
         let overallStatus;
         if (doneCount === officialGates.length) overallStatus = "complete";
@@ -958,6 +928,34 @@ async function handleRaidCheckCommand(interaction) {
   const partialChars = allEligible.filter((c) => c.overallStatus === "partial");
   const noneChars = allEligible.filter((c) => c.overallStatus === "none");
   const pendingChars = [...partialChars, ...noneChars];
+
+  return { allEligible, completeChars, partialChars, noneChars, pendingChars, userMeta };
+}
+
+async function handleRaidCheckCommand(interaction) {
+  if (!isRaidLeader(interaction)) {
+    await interaction.reply({
+      content: `${UI.icons.lock} Chỉ Raid Manager mới được dùng \`/raid-check\` (config qua env \`RAID_MANAGER_ID\`).`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const raidKey = interaction.options.getString("raid", true);
+  const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
+  if (!raidMeta) {
+    await interaction.reply({
+      content: `${UI.icons.warn} Raid option không hợp lệ. Vui lòng thử lại.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  // Shared scan + classification (reused by Remind/Sync button handlers).
+  const { allEligible, completeChars, partialChars, noneChars, pendingChars, userMeta } =
+    await computeRaidCheckSnapshot(raidMeta);
 
   const modeKey = normalizeName(raidMeta.modeKey);
   const difficultyColor =
@@ -1092,10 +1090,305 @@ async function handleRaidCheckCommand(interaction) {
     currentSize += fieldSize;
   }
 
-  await interaction.editReply({ embeds: [embeds[0]] });
+  // Action row attached to the FIRST embed only - Discord renders it under
+  // that message and keeps it visible while the user scrolls. Continuation
+  // embeds (when output paginates) skip the row to avoid duplicate buttons
+  // racing each other.
+  //
+  // Sync button enabled only when at least one pending user has opted-in to
+  // /raid-auto-manage - otherwise the button is a no-op (just disabled to
+  // avoid the click-then-rejected confusion).
+  const optedInPendingCount = userGroups.filter((g) => g.autoManageEnabled).length;
+  const remindButton = new ButtonBuilder()
+    .setCustomId(`raid-check:remind:${raidKey}`)
+    .setLabel(`Remind ${pendingChars.length} pending`)
+    .setEmoji("🔔")
+    .setStyle(ButtonStyle.Primary);
+  const syncButton = new ButtonBuilder()
+    .setCustomId(`raid-check:sync:${raidKey}`)
+    .setLabel(
+      optedInPendingCount > 0
+        ? `Sync ${optedInPendingCount} opted-in user(s)`
+        : "Sync (no opted-in users)"
+    )
+    .setEmoji("🔄")
+    .setStyle(ButtonStyle.Secondary)
+    .setDisabled(optedInPendingCount === 0);
+  const actionRow = new ActionRowBuilder().addComponents(remindButton, syncButton);
+
+  await interaction.editReply({ embeds: [embeds[0]], components: [actionRow] });
   for (let i = 1; i < embeds.length; i += 1) {
     await interaction.followUp({ embeds: [embeds[i]], flags: MessageFlags.Ephemeral });
   }
+}
+
+// ============================================================================
+// /raid-check button handlers (Phase 2 interactive actions)
+// ============================================================================
+
+// Build the per-user DM embed sent by the Remind button. Lists the recipient's
+// pending chars with the same gate-icon format as /raid-check, plus 3 update
+// paths the recipient can use to clear them.
+function buildRaidCheckRemindDMEmbed(requesterDisplay, guildName, raidMeta, chars) {
+  const lines = chars.map((c) => {
+    const icons = c.gateStatus.map(raidCheckGateIcon).join("");
+    return `${icons} **${c.charName}** \`${Math.round(c.itemLevel)}\``;
+  });
+  const raidValue = `${raidMeta.raidKey}_${normalizeName(raidMeta.modeKey)}`;
+  return new EmbedBuilder()
+    .setColor(UI.colors.progress)
+    .setTitle(`🔔 Raid Manager đang scan ${raidMeta.label}`)
+    .setDescription(
+      [
+        `**${requesterDisplay}** đang scan **${raidMeta.label}** trong **${guildName}** - cậu có **${chars.length}** char đang pending:`,
+        "",
+        lines.join("\n"),
+        "",
+        "**Cách update:**",
+        `- Post \`${raidMeta.label} <charname> [G1|G2]\` vào channel đã config (nếu guild có \`/raid-channel\`)`,
+        `- Hoặc gõ \`/raid-set character:<name> raid:${raidValue} status:complete\``,
+        `- Hoặc opt-in auto-sync: \`/raid-auto-manage action:on\`, sau đó \`action:sync\` mỗi lần clear`,
+      ].join("\n")
+    )
+    .setTimestamp();
+}
+
+// Build the per-user DM embed sent by the Sync button (only to users whose
+// auto-manage sync ACTUALLY produced new gate clears). delta is the
+// `report.perChar` subset where `applied.length > 0`.
+function buildRaidCheckSyncDMEmbed(raidMeta, delta) {
+  const lines = delta.map((entry) => {
+    const applied = Array.isArray(entry.applied) ? entry.applied : [];
+    const gateInfo = applied
+      .map((a) => `${a.raidLabel || a.raidKey} ${a.gate}`)
+      .join(", ");
+    return `- **${entry.charName}** - ${applied.length} gate mới: ${gateInfo || "(detail không có)"}`;
+  });
+  return new EmbedBuilder()
+    .setColor(UI.colors.success)
+    .setTitle(`${UI.icons.done} Raid progress auto-synced`)
+    .setDescription(
+      [
+        `Raid Manager vừa trigger auto-sync cho char của cậu (qua \`/raid-check\`). Tớ đã pull bible logs mới và update:`,
+        "",
+        ...lines,
+        "",
+        `_Check \`/raid-status\` để xem full progress._`,
+      ].join("\n")
+    )
+    .setTimestamp();
+}
+
+// Dispatcher for any button with customId starting "raid-check:". Re-checks
+// Raid Manager auth on click (defense-in-depth - ephemeral filter SHOULD
+// already prevent non-invokers but Discord button events can leak through
+// on edge cases like reused message IDs).
+async function handleRaidCheckButton(interaction) {
+  if (!isRaidLeader(interaction)) {
+    await interaction.reply({
+      content: `${UI.icons.lock} Chỉ Raid Manager mới được dùng button này.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  const parts = interaction.customId.split(":");
+  const action = parts[1];
+  const raidKey = parts[2];
+  const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
+  if (!raidMeta) {
+    await interaction.reply({
+      content: `${UI.icons.warn} Raid không hợp lệ trong button. Gõ \`/raid-check\` lại để refresh.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (action === "remind") {
+    await handleRaidCheckRemindClick(interaction, raidMeta);
+  } else if (action === "sync") {
+    await handleRaidCheckSyncClick(interaction, raidMeta);
+  } else {
+    await interaction.reply({
+      content: `${UI.icons.warn} Button action không hỗ trợ: \`${action}\`.`,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+}
+
+async function handleRaidCheckRemindClick(interaction, raidMeta) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  // Recompute snapshot so we DM exactly the users still pending right now,
+  // not the snapshot frozen at /raid-check invocation time. If someone
+  // /raid-set'd in the meantime they're not pending anymore - skip them.
+  const snapshot = await computeRaidCheckSnapshot(raidMeta);
+  const pending = snapshot.pendingChars;
+  if (pending.length === 0) {
+    await interaction.editReply({
+      content: `${UI.icons.done} Không còn ai pending nữa - có lẽ list đã được update sau khi cậu mở \`/raid-check\`. Gõ lại để refresh embed.`,
+    });
+    return;
+  }
+
+  const byUser = new Map();
+  for (const c of pending) {
+    if (!byUser.has(c.discordId)) byUser.set(c.discordId, []);
+    byUser.get(c.discordId).push(c);
+  }
+  for (const chars of byUser.values()) {
+    chars.sort((a, b) => b.itemLevel - a.itemLevel);
+  }
+
+  const requesterDisplay = interaction.user.username;
+  const guildName = interaction.guild?.name || "guild";
+
+  const dmResults = await Promise.all(
+    [...byUser.entries()].map(([discordId, chars]) =>
+      discordUserLimiter.run(async () => {
+        try {
+          const user = await interaction.client.users.fetch(discordId);
+          const dmChannel = await user.createDM();
+          const embed = buildRaidCheckRemindDMEmbed(requesterDisplay, guildName, raidMeta, chars);
+          await dmChannel.send({ embeds: [embed] });
+          return { discordId, ok: true };
+        } catch (err) {
+          return { discordId, ok: false, err: err?.message || String(err) };
+        }
+      })
+    )
+  );
+
+  const sent = dmResults.filter((r) => r.ok).length;
+  const failed = dmResults.filter((r) => !r.ok);
+  const lines = [`${UI.icons.done} Đã DM **${sent}** user với list pending chars của họ.`];
+  if (failed.length > 0) {
+    lines.push(
+      `${UI.icons.warn} **${failed.length}** user không nhận được DM (có thể đã tắt DM từ server members):`
+    );
+    for (const f of failed.slice(0, 10)) {
+      lines.push(`- <@${f.discordId}>`);
+    }
+    if (failed.length > 10) lines.push(`- ... và ${failed.length - 10} user khác`);
+  }
+  await interaction.editReply({ content: lines.join("\n") });
+}
+
+async function handleRaidCheckSyncClick(interaction, raidMeta) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const snapshot = await computeRaidCheckSnapshot(raidMeta);
+
+  // Filter to opted-in pending users only (Option A from the earlier
+  // privacy/quota discussion - never force-sync a user who hasn't
+  // explicitly turned on auto-manage).
+  const optedInDiscordIds = [
+    ...new Set(
+      snapshot.pendingChars
+        .filter((c) => snapshot.userMeta.get(c.discordId)?.autoManageEnabled)
+        .map((c) => c.discordId)
+    ),
+  ];
+  if (optedInDiscordIds.length === 0) {
+    await interaction.editReply({
+      content: `${UI.icons.info} Không có user nào opt-in \`/raid-auto-manage\` trong list pending. Dùng nút 🔔 Remind để nhắc họ gõ thủ công.`,
+    });
+    return;
+  }
+
+  const weekResetStart = weekResetStartMs();
+  let syncedCount = 0;
+  let attemptedOnlyCount = 0;
+  let skippedCount = 0;
+  let failedCount = 0;
+  const deltasPerUser = new Map();
+
+  for (const discordId of optedInDiscordIds) {
+    const guard = await acquireAutoManageSyncSlot(discordId);
+    if (!guard.acquired) {
+      skippedCount += 1;
+      continue;
+    }
+    let bibleHit = false;
+    try {
+      const seedDoc = await User.findOne({ discordId });
+      if (!seedDoc || !Array.isArray(seedDoc.accounts) || seedDoc.accounts.length === 0) {
+        skippedCount += 1;
+        continue;
+      }
+      if (!seedDoc.autoManageEnabled) {
+        // Toggled off between snapshot + slot acquire. Respect the change.
+        skippedCount += 1;
+        continue;
+      }
+      ensureFreshWeek(seedDoc);
+      const collected = await gatherAutoManageLogsForUserDoc(seedDoc, weekResetStart);
+      bibleHit = true;
+      let outcome = "attempted-only";
+      let delta = null;
+      await saveWithRetry(async () => {
+        const fresh = await User.findOne({ discordId });
+        if (!fresh || !Array.isArray(fresh.accounts) || fresh.accounts.length === 0) return;
+        ensureFreshWeek(fresh);
+        if (!fresh.autoManageEnabled) {
+          fresh.lastAutoManageAttemptAt = Date.now();
+          await fresh.save();
+          return;
+        }
+        const report = applyAutoManageCollected(fresh, weekResetStart, collected);
+        const now = Date.now();
+        fresh.lastAutoManageAttemptAt = now;
+        if (report.perChar.some((c) => !c.error)) {
+          fresh.lastAutoManageSyncAt = now;
+          outcome = "synced";
+        }
+        const appliedEntries = report.perChar.filter(
+          (c) => Array.isArray(c.applied) && c.applied.length > 0
+        );
+        if (appliedEntries.length > 0) delta = appliedEntries;
+        await fresh.save();
+      });
+      if (outcome === "synced") syncedCount += 1;
+      else attemptedOnlyCount += 1;
+      if (delta) deltasPerUser.set(discordId, delta);
+    } catch (err) {
+      failedCount += 1;
+      if (bibleHit) await stampAutoManageAttempt(discordId);
+      console.warn(
+        `[raid-check sync] user ${discordId} failed:`,
+        err?.message || err
+      );
+    } finally {
+      releaseAutoManageSyncSlot(discordId);
+    }
+  }
+
+  // DM only users whose sync produced ACTUAL new clears (delta non-empty).
+  // Users who synced but had no changes don't get spammed.
+  const dmResults = await Promise.all(
+    [...deltasPerUser.entries()].map(([discordId, delta]) =>
+      discordUserLimiter.run(async () => {
+        try {
+          const user = await interaction.client.users.fetch(discordId);
+          const dmChannel = await user.createDM();
+          const embed = buildRaidCheckSyncDMEmbed(raidMeta, delta);
+          await dmChannel.send({ embeds: [embed] });
+          return { ok: true };
+        } catch {
+          return { ok: false };
+        }
+      })
+    )
+  );
+  const dmSent = dmResults.filter((r) => r.ok).length;
+  const dmFailed = dmResults.length - dmSent;
+
+  const lines = [
+    `${UI.icons.done} Đã trigger sync cho **${optedInDiscordIds.length}** opted-in user.`,
+    `- Synced (có data mới): **${syncedCount}** · Attempted-only (no fresh data): **${attemptedOnlyCount}**`,
+    `- Skipped (cooldown/in-flight): **${skippedCount}** · Failed: **${failedCount}**`,
+    `- Chars có update mới: **${deltasPerUser.size}** user · DM sent: **${dmSent}**${dmFailed > 0 ? ` · DM failed: **${dmFailed}**` : ""}`,
+    "",
+    `_Gõ \`/raid-check raid:${raidMeta.raidKey}_${normalizeName(raidMeta.modeKey)}\` để xem list pending mới._`,
+  ];
+  await interaction.editReply({ content: lines.join("\n") });
 }
 
 const STATUS_SESSION_MS = 2 * 60 * 1000;
@@ -2190,7 +2483,9 @@ const HELP_SECTIONS = [
       "• **Per-user metadata inline**: field name hiện pending count + `⚡ N partial` (user có char đang dở dang, gần xong) + `🔄 auto` (opted-in auto-manage). Field value có `_synced <relative-time>_` prepend cho opted-in user có sync data.",
       "• **Sort order**: user với nhiều pending nhất lên top; trong mỗi user, char sort iLvl desc. Tie-break by display name alphabetical.",
       "• **Mode-scoped progress**: gate nào stored với difficulty KHÁC mode đang scan sẽ treat như pending (mode-switch wipe sẽ xảy ra khi user /raid-set ở mode này).",
-      "• Output auto-paginate thành chunks ≤ 1900 chars - follow-up messages ephemeral.",
+      "• **🔔 Remind button**: Raid Manager bấm → bot DM mỗi user pending list chars của họ + 3 cách update (post `/raid-channel`, gõ `/raid-set`, opt-in `/raid-auto-manage`). DM rate-limited qua `discordUserLimiter` (max 5 concurrent) tránh burst Discord. User tắt DM → liệt kê failed list trong reply ephemeral.",
+      "• **🔄 Sync button**: Raid Manager bấm → trigger auto-manage sync CHỈ cho opted-in user trong list pending (privacy-respecting - non-opted-in user KHÔNG bị force-sync). Reuse Phase 3 gather/apply pattern + `acquireAutoManageSyncSlot` (5-min cooldown share với /raid-auto-manage). User nào có char update mới sẽ nhận DM riêng (skip nếu sync chạy nhưng không có data mới). Disabled nếu không có opted-in user nào trong list.",
+      "• Output auto-paginate thành chunks ≤ 1900 chars - follow-up messages ephemeral. Action row chỉ attach vào embed đầu tiên (continuation embeds không có button).",
       "• **Discord username resolution**: cache-first (discord.js users cache). Cache miss đi qua `discordUserLimiter` (max 5 in-flight) để server đông không burst `client.users.fetch` parallel - bảo vệ khỏi Discord 50 req/s global ceiling.",
     ],
   },
@@ -5380,6 +5675,7 @@ module.exports = {
   handleRaidChannelAutocomplete,
   handleRaidAutoManageAutocomplete,
   handleRaidChannelMessage,
+  handleRaidCheckButton,
   loadMonitorChannelCache,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
