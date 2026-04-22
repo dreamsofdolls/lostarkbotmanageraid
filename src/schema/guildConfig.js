@@ -10,7 +10,7 @@ const guildConfigSchema = new mongoose.Schema(
     // deletes every non-pinned message in `raidChannelId` right after
     // the VN-day boundary (00:00 Asia/Ho_Chi_Minh = 17:00 UTC).
     autoCleanupEnabled: { type: Boolean, default: false },
-    // Idempotency cursor — "YYYY-MM-DD" in VN calendar. Set to the target
+    // Idempotency cursor - "YYYY-MM-DD" in VN calendar. Set to the target
     // day's key after a successful cleanup so the next tick in the same
     // VN day short-circuits. Missed days (bot offline) catch up on the
     // next tick regardless of day of week.
