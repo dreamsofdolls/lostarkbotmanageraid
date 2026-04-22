@@ -899,6 +899,15 @@ function formatShortRelative(timestamp) {
   return `${days}d`;
 }
 
+// Mode hierarchy for /raid-check scan: Normal (1) < Hard (2) < Nightmare (3).
+// Clearing a HIGHER mode satisfies LOWER-mode weekly requirement. Char who
+// did Kazeros Hard doesn't need to appear pending when scanning Kazeros
+// Normal - Hard (2) >= Normal (1), so Hard progress counts as done for the
+// Normal scan. Reverse is NOT true: doing Normal doesn't satisfy Hard scan
+// (lower mode has no effect on higher-mode requirement).
+const MODE_RANK = { normal: 1, hard: 2, nightmare: 3 };
+const modeRank = (modeStr) => MODE_RANK[normalizeName(modeStr || "")] || 0;
+
 // Shared scan+classify pass for /raid-check. Returns the raw eligible list
 // + per-user metadata so both the initial command AND the button handlers
 // (Remind / Sync) can operate on a fresh Mongo snapshot every time - no
@@ -909,6 +918,7 @@ async function computeRaidCheckSnapshot(raidMeta) {
   const allEligible = [];
   const selectedDifficulty = toModeLabel(raidMeta.modeKey);
   const selectedDiffNorm = normalizeName(selectedDifficulty);
+  const scanRank = modeRank(selectedDiffNorm);
 
   for (const userDoc of users) {
     ensureFreshWeek(userDoc);
@@ -934,8 +944,12 @@ async function computeRaidCheckSnapshot(raidMeta) {
         const gateStatus = officialGates.map((gate) => {
           const g = assigned[gate];
           if (!g) return "pending";
-          const diffMatch = normalizeName(g.difficulty || "") === selectedDiffNorm;
-          if (!diffMatch) return "pending";
+          // Gate counts as done only when the stored mode rank is >= the
+          // scan mode rank. Higher modes satisfy lower-mode scans (Hard
+          // clear counts for Normal scan). Lower stored modes don't count
+          // for higher-mode scans (Normal clear doesn't satisfy Hard scan).
+          const storedRank = modeRank(g.difficulty);
+          if (storedRank < scanRank) return "pending";
           return Number(g.completedDate) > 0 ? "done" : "pending";
         });
         const doneCount = gateStatus.filter((s) => s === "done").length;
@@ -2744,7 +2758,7 @@ const HELP_SECTIONS = [
       "• **Sync badge trong roster header**: opted-in user có sync data hiện `🔄5m` / `🔄2h` / `🔄3d` (compact relative time tự compute). Opted-in nhưng chưa sync lần nào → `🔄never`. Non-opted-in → không hiện segment này.",
       "• **Footer legend với counts + page**: `🟢 N done · 🟡 M partial · ⚪ K pending · Page X/Y` - icon + count + English label merged, page indicator append cuối khi > 1 roster (move từ title xuống đây). Dynamic per page (page index thay đổi) compute inline trong `buildRaidCheckPage`. Discord render timestamp (`Today at HH:MM`) sau footer text tự động.",
       "• **Sort order**: users có nhiều pending tổng nhất lên top; trong mỗi user rosters sort theo pending count desc; trong mỗi roster chars sort theo iLvl desc.",
-      "• **Mode-scoped progress**: gate nào stored với difficulty KHÁC mode đang scan sẽ treat như pending (mode-switch wipe sẽ xảy ra khi user /raid-set ở mode này).",
+      "• **Mode hierarchy satisfies lower-mode scans**: mode rank Normal (1) < Hard (2) < Nightmare (3). Gate stored với mode rank ≥ scan mode rank sẽ count as done. Ví dụ: char cleared Kazeros Hard → scan Kazeros Normal thấy char đó done (Hard ≥ Normal, weekly requirement satisfied). Reverse không apply: char chỉ cleared Normal → scan Hard vẫn pending (cần Hard specifically). Helper `modeRank(str)` map Normal→1, Hard→2, Nightmare→3.",
       "• **🔄 Sync button**: Raid Manager bấm → trigger auto-manage sync CHỈ cho opted-in user trong list pending (privacy-respecting - non-opted-in user KHÔNG bị force-sync). Operate trên ALL opted-in pending users (không chỉ current page). Reuse Phase 3 gather/apply pattern + `acquireAutoManageSyncSlot` (5-min cooldown share với /raid-auto-manage). User nào có char update mới sẽ nhận DM riêng (skip nếu sync chạy nhưng không có data mới). Disabled nếu không có opted-in user nào trong list.",
       "• **Button customId routing**: Pagination buttons dùng prefix `raid-check-page:prev` / `raid-check-page:next` (KHÔNG `raid-check:*`) để bot.js's global `handleRaidCheckButton` dispatcher bỏ qua - collector trên reply message handle pagination locally. Sync vẫn dùng `raid-check:sync:<raidKey>` qua global router.",
       "• **Remind button removed** (Apr 2026): nút 🔔 Remind đã bỏ theo Traine's cleanup request. Raid Manager ping user manual qua Discord @mention hoặc hướng dẫn họ dùng `/raid-auto-manage action:on` / `/raid-set` tự update.",
