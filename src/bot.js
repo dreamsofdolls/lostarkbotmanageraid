@@ -18,6 +18,7 @@ const {
   handleRaidChannelAutocomplete,
   handleRaidAutoManageAutocomplete,
   handleRaidChannelMessage,
+  handleRaidCheckButton,
   loadMonitorChannelCache,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
@@ -149,6 +150,14 @@ async function startBot() {
 
       if (interaction.isStringSelectMenu() && interaction.customId === "raid-help:select") {
         await handleRaidHelpSelect(interaction);
+        return;
+      }
+
+      // Phase 2 /raid-check interactive buttons. Custom IDs follow the
+      // shape "raid-check:<action>:<raidKey>" - dispatcher handles auth +
+      // action routing, no per-button switch here.
+      if (interaction.isButton() && interaction.customId.startsWith("raid-check:")) {
+        await handleRaidCheckButton(interaction);
         return;
       }
     } catch (error) {
