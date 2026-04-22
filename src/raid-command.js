@@ -868,6 +868,21 @@ function raidCheckGateIcon(status) {
   return "⚪";
 }
 
+// Compact relative time (e.g. "5m", "2h", "3d") for /raid-check field names.
+// Embed field names don't render Discord's <t:X:R> timestamp markdown, so
+// we pre-compute a short label. English units keep the segment narrow
+// enough to fit next to pending count + roster + user without wrapping.
+function formatShortRelative(timestamp) {
+  const diffMs = Date.now() - Number(timestamp);
+  if (!Number.isFinite(diffMs) || diffMs < 60_000) return "just now";
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
+}
+
 // Shared scan+classify pass for /raid-check. Returns the raw eligible list
 // + per-user metadata so both the initial command AND the button handlers
 // (Remind / Sync) can operate on a fresh Mongo snapshot every time - no
@@ -1040,21 +1055,21 @@ async function handleRaidCheckCommand(interaction) {
       return a.accountName.localeCompare(b.accountName);
     });
 
-  // Summary header: scannable big-picture stats so Raid Manager can read
-  // "26 pending out of 30" at a glance instead of counting field rows.
+  // Summary header: one-line scannable stats. pending/eligible ratio is
+  // the primary number (what Raid Manager cares about), followed by iLvl
+  // threshold (context) and the 🟢/🟡/⚪ distribution (non-redundant with
+  // the first number because it splits "done vs started vs untouched" -
+  // something the ratio alone can't surface).
   const completionPct = allEligible.length > 0
     ? Math.round((completeChars.length / allEligible.length) * 100)
     : 0;
   const rosterCount = rosterGroups.length;
   const userCount = new Set(rosterGroups.map((g) => g.discordId)).size;
   const headerTitle = `${UI.icons.warn} Raid Check · ${raidMeta.label}`;
-  const headerLines = [
-    `📊 **${allEligible.length}** eligible · ✅ **${completeChars.length}** done · ⏳ **${pendingChars.length}** pending (${100 - completionPct}%)`,
-    `Progress: 🟢 **${completeChars.length}** done · 🟡 **${partialChars.length}** started · ⚪ **${noneChars.length}** chưa bắt đầu`,
-    `iLvl ≥ **${raidMeta.minItemLevel}** · ${userCount} ${userCount === 1 ? "user" : "users"} · ${rosterCount} ${rosterCount === 1 ? "roster" : "rosters"}`,
-  ];
-  const headerDescription = headerLines.join("\n");
-  const footerText = `Raid Manager scan · ${pendingChars.length} char(s) cần update`;
+  const headerDescription =
+    `**${pendingChars.length}/${allEligible.length}** pending (${100 - completionPct}%) · iLvl ≥ **${raidMeta.minItemLevel}** · ` +
+    `🟢 ${completeChars.length} · 🟡 ${partialChars.length} · ⚪ ${noneChars.length}`;
+  const footerText = `Raid Manager scan · ${userCount} ${userCount === 1 ? "user" : "users"} cần nhắc · ${rosterCount} ${rosterCount === 1 ? "roster" : "rosters"}`;
 
   const makeCheckEmbed = (isFirst) => {
     const e = new EmbedBuilder().setColor(difficultyColor).setFooter({ text: footerText });
@@ -1071,11 +1086,13 @@ async function handleRaidCheckCommand(interaction) {
   let currentSize = baseSize;
 
   // Format helper for a single char line - used once standalone + once
-  // when pairing into 2-col rows.
+  // when pairing into 2-col rows. Gate icons already carry the visual
+  // anchor so we drop bold + backticks to keep the 2-per-row rendering
+  // flat and dense.
   const formatCharLine = (c) => {
     const icons = c.gateStatus.map(raidCheckGateIcon).join("");
     const ilvl = Math.round(c.itemLevel);
-    return `${icons} **${c.charName}** \`${ilvl}\``;
+    return `${icons} ${c.charName} ${ilvl}`;
   };
 
   for (const group of rosterGroups) {
@@ -1091,28 +1108,24 @@ async function handleRaidCheckCommand(interaction) {
       const right = group.chars[i + 1] ? formatCharLine(group.chars[i + 1]) : "";
       pairLines.push(right ? `${left} · ${right}` : left);
     }
-    // Optional first-line freshness hint when the user is opted-in to
-    // auto-manage AND has at least one successful sync recorded. Surfaces
-    // "is this data fresh?" inline next to each roster's char list.
-    const headerInfoLines = [];
-    if (group.autoManageEnabled && group.lastAutoManageSyncAt > 0) {
-      headerInfoLines.push(
-        `_synced <t:${Math.floor(group.lastAutoManageSyncAt / 1000)}:R>_`
-      );
-    } else if (group.autoManageEnabled) {
-      headerInfoLines.push("_opted-in · chưa sync lần nào_");
-    }
-    const fieldValueRaw = [...headerInfoLines, ...pairLines].join("\n");
+    const fieldValueRaw = pairLines.join("\n");
     let fieldValue = fieldValueRaw;
     if (fieldValue.length > 1024) fieldValue = `${fieldValue.slice(0, 1020)}...`;
 
-    // Field name composition: displayName + roster accountName + pending
-    // count + (optional) partial count with ⚡ flag + (optional) opt-in
-    // badge. Roster name lets Raid Manager distinguish user A's main
-    // roster from user A's alt roster when they have multiple.
-    const partialNote = group.partialCount > 0 ? ` · ⚡ ${group.partialCount} partial` : "";
-    const optInBadge = group.autoManageEnabled ? " · 🔄 auto" : "";
-    const fieldName = `👤 ${group.displayName} · 📁 ${group.accountName} · ${group.chars.length} pending${partialNote}${optInBadge}`;
+    // Field name composition: roster as primary anchor (accountName is what
+    // Raid Manager remembers when scanning), Discord displayName in
+    // parentheses as secondary, pending count as the action-relevant
+    // number, then an optional sync badge merging opt-in flag + freshness
+    // timestamp into one segment. ⚡ partial count dropped from name - the
+    // 🟡 gate icons in the field value already surface partial state
+    // per-char, so a header-level aggregate is redundant.
+    let syncBadge = "";
+    if (group.autoManageEnabled) {
+      syncBadge = group.lastAutoManageSyncAt > 0
+        ? ` · 🔄 ${formatShortRelative(group.lastAutoManageSyncAt)}`
+        : " · 🔄 never";
+    }
+    const fieldName = `📁 ${group.accountName} (${group.displayName}) · ${group.chars.length} pending${syncBadge}`;
     const fieldSize = fieldName.length + fieldValue.length;
     const current = embeds[embeds.length - 1];
     const fieldCount = current.data.fields?.length ?? 0;
@@ -2522,11 +2535,11 @@ const HELP_SECTIONS = [
     notes: [
       "EN: Restricted to Discord user IDs configured in the `RAID_MANAGER_ID` env var (comma-separated).",
       "VN: Chỉ Discord user IDs được liệt kê trong env `RAID_MANAGER_ID` (cách nhau bằng dấu phẩy) được phép gọi. Operator config qua deploy env, không qua Discord role.",
-      "• **Header summary**: eligible / done / pending + progress distribution (🟢/🟡/⚪) + iLvl threshold + roster count - scan big picture trước khi dive vào list chi tiết.",
-      "• **Per-char display**: mỗi char hiện `<gate icons> **name** iLvl` với 1 icon per gate (🟢 = gate done, ⚪ = gate pending). Ví dụ Kazeros 2-gate: `🟢⚪ Clauseduk 1744` = G1 done, G2 chưa. iLvl round integer (1744 thay 1744.17) cho clean scan.",
+      "• **Header summary**: 1 dòng `pending/eligible (% chưa xong) · iLvl ≥ X · 🟢 done · 🟡 started · ⚪ chưa bắt đầu`. Ratio + distribution đủ để Raid Manager scan big-picture trong 1 glance, không cần count field rows.",
+      "• **Per-char display**: mỗi char hiện `<gate icons> name iLvl` với 1 icon per gate (🟢 = gate done, ⚪ = gate pending). Ví dụ Kazeros 2-gate: `🟢⚪ Clauseduk 1744` = G1 done, G2 chưa. Flat text (không bold, không backtick) vì gate icon đã là visual anchor - thêm emphasis sẽ over-weight. iLvl round integer (1744 thay 1744.17) cho clean scan.",
       "• **2-column layout**: chars pair lên thành `char1 · char2` mỗi row để nửa chiều dọc embed, đỡ text-wall. Odd char còn lại đi solo cuối cùng. Joined-value approach (không inline-field) để 1 roster 20+ char vẫn fit 1 field thay vì overflow 25-field limit.",
-      "• **Per-user+roster grouping**: 1 user có 2 roster (main + alt) → 2 section riêng biệt với accountName trong field header (`👤 dukazuo · 📁 Nailaduk · N pending`). Rosters cùng user group consecutive, sort theo tổng pending của user desc rồi per-roster pending count desc.",
-      "• **Per-user metadata inline**: field name hiện pending count + `⚡ N partial` (user có char đang dở dang, gần xong) + `🔄 auto` (opted-in auto-manage). Field value có `_synced <relative-time>_` prepend cho opted-in user có sync data.",
+      "• **Per-roster grouping**: field name format `📁 accountName (displayName) · N pending · 🔄 <relative>`. Roster là primary anchor (tên account Raid Manager nhớ khi scan), Discord displayName đi trong ngoặc đơn. 1 user có 2 roster (main + alt) → 2 field riêng biệt. Rosters cùng user group consecutive, sort theo tổng pending của user desc rồi per-roster pending count desc.",
+      "• **Sync badge trong field name**: user opted-in + có sync data hiện `🔄 5m` / `🔄 2h` / `🔄 3d` (compact relative time tự compute, English units để không wrap dòng). Opted-in nhưng chưa sync lần nào → `🔄 never`. Non-opted-in → không hiện segment này. ⚡ partial count đã bỏ - 🟡 gate icons trong value đã surface partial per-char, header aggregate là redundant.",
       "• **Sort order**: users có nhiều pending tổng nhất lên top; trong mỗi user rosters sort theo pending count desc; trong mỗi roster chars sort theo iLvl desc.",
       "• **Mode-scoped progress**: gate nào stored với difficulty KHÁC mode đang scan sẽ treat như pending (mode-switch wipe sẽ xảy ra khi user /raid-set ở mode này).",
       "• **🔔 Remind button**: Raid Manager bấm → bot DM mỗi user pending list chars của họ + 3 cách update (post `/raid-channel`, gõ `/raid-set`, opt-in `/raid-auto-manage`). DM rate-limited qua `discordUserLimiter` (max 5 concurrent) tránh burst Discord. User tắt DM → liệt kê failed list trong reply ephemeral.",
