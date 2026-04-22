@@ -924,9 +924,20 @@ const modeRank = (modeStr) => MODE_RANK[normalizeName(modeStr || "")] || 0;
 // + per-user metadata so both the initial command AND the button handlers
 // (Remind / Sync) can operate on a fresh Mongo snapshot every time - no
 // stale state map, no cache staleness bug.
+// Composite key separator (Unit Separator \x1f) for maps keyed by
+// discordId + accountName. Shared between rosterBuckets, rosterStats,
+// and rosterRefreshMap so lookups line up across the three structures.
+const ROSTER_KEY_SEP = "\x1f";
+
 async function computeRaidCheckSnapshot(raidMeta) {
   const users = await User.find({}).lean();
   const userMeta = new Map();
+  // rosterRefreshMap: composite key → account.lastRefreshedAt (ms timestamp
+  // of last /raid-status lazy refresh that pulled iLvl/class from bible).
+  // Covers ALL users (not just opted-in auto-manage) - any account that's
+  // been refreshed has a positive value. Used by /raid-check section header
+  // to surface roster data freshness via `📥<relative>` badge.
+  const rosterRefreshMap = new Map();
   const allEligible = [];
   const selectedDifficulty = toModeLabel(raidMeta.modeKey);
   const selectedDiffNorm = normalizeName(selectedDifficulty);
@@ -942,6 +953,8 @@ async function computeRaidCheckSnapshot(raidMeta) {
     }
     const accounts = Array.isArray(userDoc.accounts) ? userDoc.accounts : [];
     for (const account of accounts) {
+      const rosterKey = userDoc.discordId + ROSTER_KEY_SEP + (account.accountName || "(no name)");
+      rosterRefreshMap.set(rosterKey, Number(account.lastRefreshedAt) || 0);
       const characters = Array.isArray(account.characters) ? account.characters : [];
       for (const character of characters) {
         if (!character) continue;
@@ -991,7 +1004,7 @@ async function computeRaidCheckSnapshot(raidMeta) {
   const noneChars = allEligible.filter((c) => c.overallStatus === "none");
   const pendingChars = [...partialChars, ...noneChars];
 
-  return { allEligible, completeChars, partialChars, noneChars, pendingChars, userMeta };
+  return { allEligible, completeChars, partialChars, noneChars, pendingChars, userMeta, rosterRefreshMap };
 }
 
 async function handleRaidCheckCommand(interaction) {
@@ -1016,7 +1029,7 @@ async function handleRaidCheckCommand(interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   // Shared scan + classification (reused by Remind/Sync button handlers).
-  const { allEligible, completeChars, partialChars, noneChars, pendingChars, userMeta } =
+  const { allEligible, completeChars, partialChars, noneChars, pendingChars, userMeta, rosterRefreshMap } =
     await computeRaidCheckSnapshot(raidMeta);
 
   const modeKey = normalizeName(raidMeta.modeKey);
@@ -1050,10 +1063,9 @@ async function handleRaidCheckCommand(interaction) {
   );
 
   // Group pending chars by user+roster composite so a user with 2 rosters
-  // (main + alt) gets 2 separate sections. Key uses \x1f (Unit Separator)
-  // control char so accountName containing "::" or other separators can't
-  // accidentally collide - same pattern as `autoManageEntryKey`.
-  const ROSTER_KEY_SEP = "\x1f";
+  // (main + alt) gets 2 separate sections. Uses module-level
+  // `ROSTER_KEY_SEP` (\x1f Unit Separator) shared with rosterRefreshMap
+  // from the snapshot - same key shape across all per-roster maps.
   const rosterBuckets = new Map();
   for (const item of pendingChars) {
     const key = item.discordId + ROSTER_KEY_SEP + item.accountName;
@@ -1090,12 +1102,14 @@ async function handleRaidCheckCommand(interaction) {
       const [discordId, accountName] = key.split(ROSTER_KEY_SEP);
       const meta = userMeta.get(discordId) || {};
       const stats = rosterStats.get(key) || { none: 0, partial: 0, done: 0 };
+      const lastRefreshedAt = rosterRefreshMap.get(key) || 0;
       return {
         discordId,
         accountName,
         displayName: displayMap.get(discordId) || discordId,
         chars,
         stats,
+        lastRefreshedAt,
         partialCount: chars.filter((c) => c.overallStatus === "partial").length,
         autoManageEnabled: meta.autoManageEnabled || false,
         lastAutoManageSyncAt: meta.lastAutoManageSyncAt || 0,
@@ -1195,12 +1209,24 @@ async function handleRaidCheckCommand(interaction) {
   // padding below then looks proportional to content, not wasted. Lets
   // us use non-inline's full-width without the "thừa khoảng cách" feel.
   const addRosterSection = (embed, group) => {
-    let syncBadge = "";
-    if (group.autoManageEnabled) {
-      syncBadge = group.lastAutoManageSyncAt > 0
-        ? ` · 🔄${formatShortRelative(group.lastAutoManageSyncAt)}`
-        : " · 🔄never";
+    // Freshness badges:
+    // 📥 = roster data refresh (iLvl/class pulled từ bible qua /raid-status
+    //      lazy refresh). Stamped on every user, không cần opt-in.
+    // 🔄 = auto-manage bible log sync (raid progress pull). Chỉ opted-in
+    //      user qua /raid-auto-manage action:on.
+    // Show both nếu đủ data - 2 timestamp semantically khác nhau.
+    const badges = [];
+    if (group.lastRefreshedAt > 0) {
+      badges.push(`📥${formatShortRelative(group.lastRefreshedAt)}`);
     }
+    if (group.autoManageEnabled) {
+      badges.push(
+        group.lastAutoManageSyncAt > 0
+          ? `🔄${formatShortRelative(group.lastAutoManageSyncAt)}`
+          : "🔄never"
+      );
+    }
+    const syncBadge = badges.length > 0 ? " · " + badges.join(" · ") : "";
     // Per-roster state breakdown (filter zero counts)
     const statsText = formatRosterStats(group.stats || { none: 0, partial: 0, done: 0 });
     // Average iLvl of pending chars in this roster (integer round)
@@ -2786,7 +2812,7 @@ const HELP_SECTIONS = [
       "• **Header**: title embed hiện `⚠️ Raid Check · <raid label> (<minItemLevel>)` - gọn, chỉ command + raid + threshold (ví dụ `Act 4 Normal (1700)`). Description đã bỏ hoàn toàn - info đều ở title, per-roster headers, và footer. Page indicator + 3-state counts đều dưới footer.",
       "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field mirroring `/raid-status`'s pattern. Field name `<charName> · <iLvl>` được Discord auto-bold = scan anchor. Field value `<icon> <done>/<total>` (ví dụ `⚪ 0/2`) - value line có content nên không waste height (earlier attempt pack everything vào name line + ZWS value tạo gap 'cách nhau quá'). Aggregate 3-state icon qua `pickProgressIcon` (🟢 done all / 🟡 partial / ⚪ none). Raid label nằm ở title không lặp trong value.",
       "• **2-column layout via inline fields + spacer**: Discord default pack 3 inline field/row; chèn zero-width-space spacer field giữa mỗi cặp char để force 2-per-row - y hệt kỹ thuật `/raid-status`. Odd char cuối cùng cặp với 1 spacer để không bị Discord stretch full-width.",
-      "• **2 rosters per page (chunked)**: mỗi embed page chứa tối đa 2 roster sections stacked. Roster section = non-inline header field với RICH value line để tránh 'cách nhau thừa'. Name = `📁 accountName (displayName)` (clean label). Value = `<state breakdown> · avg iLvl <N> · 🔄<relative>` (ví dụ `4 ⚪ · 1 🟡 · 1 🟢 · avg iLvl 1704 · 🔄1h`). Rich content fill value line → inter-row padding look proportional không wasted. Per roster cost: 1 header + N char + ceil(N/2) spacer fields. 2 × 6-char rosters = 20 fields, fit 25-cap.",
+      "• **2 rosters per page (chunked)**: mỗi embed page chứa tối đa 2 roster sections stacked. Roster section = non-inline header field với RICH value line. Name = `📁 accountName (displayName)` (clean label). Value = `<state breakdown> · avg iLvl <N> · 📥<refreshRelative> · 🔄<autoManageRelative>`. **📥 badge** = roster data refresh (iLvl/class từ bible qua /raid-status lazy refresh) - applies to ALL users. **🔄 badge** = auto-manage bible log sync (raid progress) - chỉ opted-in user. Hai badges song song nếu đủ data. Ví dụ: `4 ⚪ · 1 🟡 · 1 🟢 · avg iLvl 1704 · 📥2h · 🔄1h`. Per roster cost: 1 header + N char + ceil(N/2) spacer fields. 2 × 6-char rosters = 20 fields, fit 25-cap.",
       "• **User filter dropdown** (action row 2): `StringSelectMenuBuilder` cho phép Raid Manager lọc pages theo Discord user. First option `🌐 All users (N pending)` reset filter. Tiếp theo top-24 users sort theo pending desc (`👤 displayName (N pending)`). Discord cap 25 options total. Selection → recompute pages chỉ chứa rosters của user đó, reset currentPage=0. `default: true` preserve selected state qua Prev/Next clicks. Rosters cùng user group consecutive, sort theo tổng pending user desc rồi per-roster pending desc. **Avatar in embed author**: khi filter = specific user, resolve Discord avatar cache-first (`client.users.cache` fallback to `fetch` via `discordUserLimiter`) và `setAuthor({name, iconURL})` trên mỗi page - visual confirmation filter đang active. Discord StringSelectMenu options không support per-option avatars (API limitation) nên embed author là compromise.",
       "• **Pagination buttons + session**: `◀ Previous` / `Next ▶` (shared helper `buildPaginationRow`) cycle giữa các roster-chunk pages. Title stable `⚠️ Raid Check · <raid> (<minItemLevel>)` không đổi theo page. Footer append page indicator. Collector locked theo người chạy, session timeout **2 phút** (`PAGINATION_SESSION_MS`), hết hạn disable all components + swap footer legend.",
       "• **Sync badge trong roster header**: opted-in user có sync data hiện `🔄5m` / `🔄2h` / `🔄3d` (compact relative time tự compute). Opted-in nhưng chưa sync lần nào → `🔄never`. Non-opted-in → không hiện segment này.",
