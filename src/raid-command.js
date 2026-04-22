@@ -93,7 +93,26 @@ const {
 } = require("./models/Raid");
 
 const MAX_CHARACTERS_PER_ACCOUNT = 6;
-const RAID_LEADER_ROLE_NAME = "raid leader";
+// Raid leader gating: switched from Discord role-name match to an explicit
+// env-configured user ID allowlist. Operator sets RAID_MANAGER_ID as
+// comma-separated Discord user IDs (e.g. "123456789012345678,987654321098765432").
+// Whitespace and empty entries are stripped. Empty/missing env = no raid
+// leaders configured = /raid-check effectively disabled (boot warns).
+//
+// Why env-over-role: deterministic (no Discord role rename surprises),
+// decoupled from server admin chain, multi-guild consistent, and rotation
+// happens via redeploy rather than touching Discord role assignments.
+const RAID_MANAGER_ID = new Set(
+  (process.env.RAID_MANAGER_ID || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+);
+if (RAID_MANAGER_ID.size === 0) {
+  console.warn(
+    "[raid-check] RAID_MANAGER_ID env not set or empty - /raid-check will reject every invocation. Set the env var to a comma-separated list of Discord user IDs to enable."
+  );
+}
 const RAID_CHOICES = getRaidRequirementChoices();
 const RAID_REQUIREMENT_MAP = getRaidRequirementMap();
 const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
@@ -513,9 +532,13 @@ function summarizeRaidProgress(allRaids) {
 }
 
 function isRaidLeader(interaction) {
-  const roles = interaction.member?.roles?.cache;
-  if (!roles) return false;
-  return roles.some((role) => normalizeName(role.name) === RAID_LEADER_ROLE_NAME);
+  // Env-allowlist check against the invoker's Discord user ID. Set is
+  // built once at module load (see RAID_MANAGER_ID) so this is O(1)
+  // per call. interaction.user.id is always present on slash commands -
+  // no need to defensive-check member or guild context.
+  const userId = interaction.user?.id;
+  if (!userId) return false;
+  return RAID_MANAGER_ID.has(userId);
 }
 
 const addRosterCommand = new SlashCommandBuilder()
@@ -2073,8 +2096,8 @@ const HELP_SECTIONS = [
     ],
     example: "/raid-check raid:kazeros_hard",
     notes: [
-      "EN: Requires role named exactly `raid leader` (case-insensitive).",
-      "VN: Role name phải là `raid leader` (không phân biệt hoa thường).",
+      "EN: Restricted to Discord user IDs configured in the `RAID_MANAGER_ID` env var (comma-separated).",
+      "VN: Chỉ Discord user IDs được liệt kê trong env `RAID_MANAGER_ID` (cách nhau bằng dấu phẩy) được phép gọi. Operator config qua deploy env, không qua Discord role.",
       "• Output auto-paginate thành chunks ≤ 1900 chars - follow-up messages ephemeral.",
       "• **Discord username resolution**: cache-first (discord.js users cache). Cache miss đi qua `discordUserLimiter` (max 5 in-flight) để server đông không burst `client.users.fetch` parallel - bảo vệ khỏi Discord 50 req/s global ceiling.",
     ],

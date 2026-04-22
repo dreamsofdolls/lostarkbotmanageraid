@@ -78,7 +78,7 @@ Ví dụ: `/raid-set character:Clauseduk raid:kazeros_hard status:complete gate:
 
 ### `/raid-check`
 
-**Chỉ dành cho role `raid leader`** (case-insensitive). Scan tất cả characters đủ item level nhưng chưa hoàn thành raid ở difficulty được chọn.
+**Chỉ dành cho Discord user IDs liệt kê trong env `RAID_MANAGER_ID`** (cách nhau bằng dấu phẩy). Scan tất cả characters đủ item level nhưng chưa hoàn thành raid ở difficulty được chọn.
 
 Output là **embed ephemeral** với:
 - Color động theo difficulty: đỏ = Nightmare, vàng = Hard, blurple = Normal
@@ -322,6 +322,9 @@ LostArk_RaidManage/
 | `MONGO_URI` | ✅ | - | MongoDB connection string |
 | `MONGO_DB_NAME` | ❌ | `manage` | Tên database |
 | `DNS_SERVERS` | ❌ | `8.8.8.8,1.1.1.1` | DNS fallback khi Atlas bị `ECONNREFUSED` (SRV lookup fail) |
+| `RAID_MANAGER_ID` | ❌ (recommended) | empty | Discord user IDs cho phép gọi `/raid-check`, comma-separated. Empty/missing → `/raid-check` reject mọi invocation + warn ở boot |
+| `AUTO_MANAGE_DAILY_DISABLED` | ❌ | `false` | Killswitch cho Phase 3 daily auto-sync scheduler. Set `true` để skip mọi tick (back off khi bible block) |
+| `TEXT_MONITOR_ENABLED` | ❌ | `true` | Set `false` để chạy slash-command-only, skip privileged `MessageContent` intent |
 
 Setup local: `cp .env.example .env` rồi điền giá trị thật.
 
@@ -355,7 +358,7 @@ Mỗi Railway redeploy bot sẽ **tự đăng ký slash command schema** khi boo
 
 ## Known Limitations
 
-- `/raid-check` chỉ nhận role có tên **exactly** `raid leader` (case-insensitive). Role name khác sẽ bị từ chối.
+- `/raid-check` chỉ nhận Discord user IDs liệt kê trong env `RAID_MANAGER_ID` (comma-separated). User ID không có trong list sẽ bị reject ephemeral. Empty/missing env → bot warn ở boot và `/raid-check` reject mọi invocation. Operator add/remove leader = update env + redeploy.
 - `/add-roster` phụ thuộc HTML/inline-JS structure của `lostark.bible`. Nếu site thay layout, regex + DOM selectors cần update.
 - Weekly reset dùng UTC cho cả trigger và week-key - không còn phụ thuộc container timezone.
 - Slash commands register theo **guild-scoped**, không phải global. Muốn enable ở nhiều server → cần chạy `deploy-commands.js` riêng cho mỗi `GUILD_ID`.
