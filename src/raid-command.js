@@ -1086,16 +1086,9 @@ async function handleRaidCheckCommand(interaction) {
     });
 
   // Summary header: title carries raid label + iLvl threshold inline
-  // (`Act 4 Normal (1700)`) so the description can be a single short
-  // ratio line. 3-state distribution counts live in the footer legend.
-  const completionPct = allEligible.length > 0
-    ? Math.round((completeChars.length / allEligible.length) * 100)
-    : 0;
-  const rosterCount = rosterGroups.length;
-  const userCount = new Set(rosterGroups.map((g) => g.discordId)).size;
+  // (`Act 4 Normal (1700)`). No description needed - footer legend covers
+  // state breakdown, and per-roster header carries the sync badge.
   const headerTitle = `${UI.icons.warn} Raid Check · ${raidMeta.label} (${raidMeta.minItemLevel})`;
-  const headerDescription =
-    `**${pendingChars.length}/${allEligible.length}** pending (${100 - completionPct}%)`;
   // Dynamic footer merges count + icon + English label per-state. Unlike
   // /raid-status's static `STATUS_FOOTER_LEGEND`, /raid-check counts vary
   // per scan so the footer is computed inline. `0 done · 0 partial · N
@@ -1166,9 +1159,10 @@ async function handleRaidCheckCommand(interaction) {
     return chunks;
   };
 
-  // Add one roster section to an embed: non-inline header field (name =
-  // roster label, value = pending count + sync badge; both lines carry
-  // content), followed by 2-col inline char cards with spacer pattern.
+  // Add one roster section to an embed: non-inline header field with ALL
+  // info (label + sync badge) on the name line per Traine "đặt nằm ngang
+  // ở tên nhân vật roster". Pending count dropped (footer has aggregate
+  // breakdown). Value = ZWS since Discord requires a non-empty value.
   const addRosterSection = (embed, group) => {
     let syncBadge = "";
     if (group.autoManageEnabled) {
@@ -1176,10 +1170,9 @@ async function handleRaidCheckCommand(interaction) {
         ? ` · 🔄${formatShortRelative(group.lastAutoManageSyncAt)}`
         : " · 🔄never";
     }
-    const headerValue = `${group.chars.length} pending${syncBadge}`;
     embed.addFields({
-      name: truncateText(`📁 ${group.accountName} (${group.displayName})`, 256),
-      value: truncateText(headerValue, 1024),
+      name: truncateText(`📁 ${group.accountName} (${group.displayName})${syncBadge}`, 256),
+      value: "​",
       inline: false,
     });
     for (let i = 0; i < group.chars.length; i += 2) {
@@ -1202,7 +1195,6 @@ async function handleRaidCheckCommand(interaction) {
       : footerText;
     const embed = new EmbedBuilder()
       .setTitle(headerTitle)
-      .setDescription(headerDescription)
       .setColor(difficultyColor)
       .setFooter({ text: pageFooter })
       .setTimestamp();
@@ -2749,10 +2741,10 @@ const HELP_SECTIONS = [
     notes: [
       "EN: Restricted to Discord user IDs configured in the `RAID_MANAGER_ID` env var (comma-separated).",
       "VN: Chỉ Discord user IDs được liệt kê trong env `RAID_MANAGER_ID` (cách nhau bằng dấu phẩy) được phép gọi. Operator config qua deploy env, không qua Discord role.",
-      "• **Header summary**: title embed hiện `⚠️ Raid Check · <raid label> (<minItemLevel>)` - gọn, chỉ command + raid + threshold. iLvl nhét trong parens (ví dụ `Act 4 Normal (1700)`). Description line 1 còn mỗi `pending/eligible (% chưa xong)`. Page indicator + 3-state counts đều dưới footer.",
+      "• **Header**: title embed hiện `⚠️ Raid Check · <raid label> (<minItemLevel>)` - gọn, chỉ command + raid + threshold (ví dụ `Act 4 Normal (1700)`). Description đã bỏ hoàn toàn - info đều ở title, per-roster headers, và footer. Page indicator + 3-state counts đều dưới footer.",
       "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field mirroring `/raid-status`'s pattern. Field name `<charName> · <iLvl>` được Discord auto-bold = scan anchor. Field value `<icon> <done>/<total>` (ví dụ `⚪ 0/2`) - value line có content nên không waste height (earlier attempt pack everything vào name line + ZWS value tạo gap 'cách nhau quá'). Aggregate 3-state icon qua `pickProgressIcon` (🟢 done all / 🟡 partial / ⚪ none). Raid label nằm ở title không lặp trong value.",
       "• **2-column layout via inline fields + spacer**: Discord default pack 3 inline field/row; chèn zero-width-space spacer field giữa mỗi cặp char để force 2-per-row - y hệt kỹ thuật `/raid-status`. Odd char cuối cùng cặp với 1 spacer để không bị Discord stretch full-width.",
-      "• **2 rosters per page (chunked)**: mỗi embed page chứa tối đa 2 roster sections stacked. Roster section = non-inline header field (name = `📁 accountName (displayName)`, value = `N pending · 🔄<relative>` - cả 2 dòng có content) + inline char cards 2-col với spacer pattern. User có nhiều roster → rosters consecutive trên multiple pages.",
+      "• **2 rosters per page (chunked)**: mỗi embed page chứa tối đa 2 roster sections stacked. Roster section = non-inline header field với ALL info nằm ngang trong name (`📁 accountName (displayName) · 🔄<relative>`), value = ZWS. Pending count bỏ khỏi section header (footer có 3-state breakdown rồi). + inline char cards 2-col với spacer pattern. User có nhiều roster → rosters consecutive trên multiple pages.",
       "• **User filter dropdown** (action row 2): `StringSelectMenuBuilder` cho phép Raid Manager lọc pages theo Discord user. First option `🌐 All users (N pending)` reset filter. Tiếp theo top-24 users sort theo pending desc (`👤 displayName (N pending)`). Discord cap 25 options total. Selection → recompute pages chỉ chứa rosters của user đó, reset currentPage=0. `default: true` preserve selected state qua Prev/Next clicks. Rosters cùng user group consecutive, sort theo tổng pending user desc rồi per-roster pending desc. **Avatar in embed author**: khi filter = specific user, resolve Discord avatar cache-first (`client.users.cache` fallback to `fetch` via `discordUserLimiter`) và `setAuthor({name, iconURL})` trên mỗi page - visual confirmation filter đang active. Discord StringSelectMenu options không support per-option avatars (API limitation) nên embed author là compromise.",
       "• **Pagination buttons + session**: `◀ Previous` / `Next ▶` (shared helper `buildPaginationRow`) cycle giữa các roster-chunk pages. Title stable `⚠️ Raid Check · <raid> (<minItemLevel>)` không đổi theo page. Footer append page indicator. Collector locked theo người chạy, session timeout **2 phút** (`PAGINATION_SESSION_MS`), hết hạn disable all components + swap footer legend.",
       "• **Sync badge trong roster header**: opted-in user có sync data hiện `🔄5m` / `🔄2h` / `🔄3d` (compact relative time tự compute). Opted-in nhưng chưa sync lần nào → `🔄never`. Non-opted-in → không hiện segment này.",
