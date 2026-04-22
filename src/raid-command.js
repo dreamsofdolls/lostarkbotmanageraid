@@ -1085,13 +1085,10 @@ async function handleRaidCheckCommand(interaction) {
   const baseSize = headerTitle.length + headerDescription.length + footerText.length + 50;
   let currentSize = baseSize;
 
-  // Per-char inline field mirroring /raid-status's card layout. Field name
-  // is auto-bold by Discord which gives the char name a proper scan anchor
-  // that the previous joined-value 2-col layout couldn't provide. Value
-  // uses the same `{icon} {label} · done/total` pattern as /raid-status so
-  // both commands feel like the same visual system. Per-gate icon string
-  // (e.g. `🟢⚪`) is kept so Raid Manager still sees partial-done state at
-  // a glance - no info lost vs the old layout.
+  // Per-char inline field mirrors /raid-status's desktop-friendly 2-column
+  // cards, but keeps the value shorter because /raid-check scans exactly
+  // one raid at a time (the raid label already lives in the embed title).
+  // This avoids avoidable wrapping in the narrow inline-field columns.
   const buildCharField = (c) => {
     const icons = c.gateStatus.map(raidCheckGateIcon).join("");
     const ilvl = Math.round(c.itemLevel);
@@ -1099,7 +1096,7 @@ async function handleRaidCheckCommand(interaction) {
     const total = c.gateStatus.length;
     return {
       name: truncateText(`${c.charName} · ${ilvl}`, 256),
-      value: truncateText(`${icons} ${raidMeta.label} · ${doneCount}/${total}`, 1024),
+      value: truncateText(`${icons} ${doneCount}/${total}`, 1024),
       inline: true,
     };
   };
@@ -1109,28 +1106,29 @@ async function handleRaidCheckCommand(interaction) {
   // force the char cards to pair up visibly as 2-per-row with a gap.
   const inlineSpacer = { name: "​", value: "​", inline: true };
 
-  // Field-budget helper: 1 non-inline header field + N char inline fields +
-  // ceil(N/2) spacer inline fields per roster. Header carries roster label
-  // in the field name and pending-count + sync-badge in the field value -
-  // previous iteration used ZWS as value which wasted ~1 line of vertical
-  // space as a blank line; filling value with meaningful info keeps the
-  // same 2-line header footprint but turns the "gap" into info density.
+  // Field-budget helper: 1 compact non-inline roster header + N char inline
+  // fields + ceil(N/2) spacer inline fields per roster.
   const rosterFieldCost = (chars) => 1 + chars.length + Math.ceil(chars.length / 2);
 
   for (const group of rosterGroups) {
     let syncBadge = "";
     if (group.autoManageEnabled) {
       syncBadge = group.lastAutoManageSyncAt > 0
-        ? ` · 🔄 ${formatShortRelative(group.lastAutoManageSyncAt)}`
-        : " · 🔄 never";
+        ? ` · 🔄${formatShortRelative(group.lastAutoManageSyncAt)}`
+        : " · 🔄never";
     }
-    const headerName = `📁 ${group.accountName} (${group.displayName})`;
-    const headerValue = `**${group.chars.length} pending**${syncBadge}`;
+    const headerName = `📁 ${group.accountName} (${group.displayName}) · ${group.chars.length} pending${syncBadge}`;
+    const headerValue = "\u200B";
 
     // Approximate size of this whole roster's contribution for the 6000-char
-    // embed cap. Char fields' value is `icons + label + · + done/total` ~
-    // 20 chars, header ~ 60 chars. Worst case roster (6 chars) ~ 60 + 6*20 = 180.
-    const rosterSize = headerName.length + headerValue.length + group.chars.length * (raidMeta.label.length + 20);
+    // embed cap. Count char names too so long names still paginate before
+    // Discord's hard limit.
+    const charSize = group.chars.reduce(
+      (sum, c) =>
+        sum + String(c.charName || "").length + String(Math.round(c.itemLevel)).length + 16,
+      0
+    );
+    const rosterSize = headerName.length + charSize;
     const need = rosterFieldCost(group.chars);
     const current = embeds[embeds.length - 1];
     const fieldCount = current.data.fields?.length ?? 0;
@@ -1141,11 +1139,9 @@ async function handleRaidCheckCommand(interaction) {
     }
 
     const target = embeds[embeds.length - 1];
-    // Roster section divider: non-inline field spans full width. Name =
-    // roster label, value = pending count + sync badge. Discord reserves
-    // the full name-line + value-line regardless, so we put real info in
-    // value instead of ZWS to avoid a blank "wasted" line between header
-    // and the char cards that follow.
+    // Roster section divider: keep pending count + refresh badge on the
+    // same visual row as the roster label, so the character cards start
+    // closer underneath instead of after a second metadata line.
     target.addFields({
       name: truncateText(headerName, 256),
       value: truncateText(headerValue, 1024),
@@ -2556,10 +2552,10 @@ const HELP_SECTIONS = [
       "EN: Restricted to Discord user IDs configured in the `RAID_MANAGER_ID` env var (comma-separated).",
       "VN: Chỉ Discord user IDs được liệt kê trong env `RAID_MANAGER_ID` (cách nhau bằng dấu phẩy) được phép gọi. Operator config qua deploy env, không qua Discord role.",
       "• **Header summary**: 1 dòng `pending/eligible (% chưa xong) · iLvl ≥ X · 🟢 done · 🟡 started · ⚪ chưa bắt đầu`. Ratio + distribution đủ để Raid Manager scan big-picture trong 1 glance, không cần count field rows.",
-      "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field, mirror pattern của `/raid-status`. Field name `<charName> · <iLvl>` được Discord auto-bold = scan anchor rõ ràng. Field value `<gate icons> <raid label> · <done>/<total>` cùng format với `/raid-status` (`🟢⚪ Act 4 Normal · 1/2`) nên 2 command cảm giác thuộc cùng visual system. Per-gate icons giữ nguyên để partial-done state (`🟢⚪` = G1 done G2 chưa) vẫn glance-able.",
+      "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field, mirror pattern của `/raid-status`. Field name `<charName> · <iLvl>` được Discord auto-bold = scan anchor rõ ràng. Field value rút gọn còn `<gate icons> <done>/<total>` (`🟢⚪ 1/2`) vì raid label đã nằm ở title, giảm wrap trong cột hẹp.",
       "• **2-column layout via inline fields + spacer**: Discord default pack 3 inline field/row; chèn zero-width-space spacer field (`{name:'​', value:'​', inline:true}`) giữa mỗi cặp char để force 2-per-row với gap thở - kỹ thuật y hệt `/raid-status`. Odd char cuối cùng cặp với 1 spacer để không bị Discord stretch full-width.",
-      "• **Roster section header**: non-inline field với name = `📁 accountName (displayName)` và value = `**N pending** · 🔄 <relative>`. Cả 2 dòng đều có thông tin → Discord reserves 2-line height nhưng không còn dòng nào bị phí. 1 user có 2 roster (main + alt) → 2 section riêng biệt. Rosters cùng user group consecutive, sort theo tổng pending của user desc rồi per-roster pending count desc.",
-      "• **Sync badge trong section header**: user opted-in + có sync data hiện `🔄 5m` / `🔄 2h` / `🔄 3d` (compact relative time tự compute, English units để không wrap dòng). Opted-in nhưng chưa sync lần nào → `🔄 never`. Non-opted-in → không hiện segment này.",
+      "• **Roster section header**: non-inline field với name = `📁 accountName (displayName) · N pending · 🔄<relative>` và value zero-width. Pending count + refresh nằm ngang với roster name để char cards bắt đầu sát hơn bên dưới. 1 user có 2 roster (main + alt) → 2 section riêng biệt. Rosters cùng user group consecutive, sort theo tổng pending của user desc rồi per-roster pending count desc.",
+      "• **Sync badge trong section header**: user opted-in + có sync data hiện `🔄5m` / `🔄2h` / `🔄3d` (compact relative time tự compute, English units để không wrap dòng). Opted-in nhưng chưa sync lần nào → `🔄never`. Non-opted-in → không hiện segment này.",
       "• **Field budget accounting**: mỗi roster cost = 1 header field + N char fields + ceil(N/2) spacer fields. 6-char roster = 10 fields, 4-char = 7, 1-char = 3. Pagination check trước khi start roster (`fieldCount + need > 25`) để section header không bị orphan ở cuối embed trước. Typical guild 24 pending × 6 rosters ~ 43 fields → 2 embed (initial + 1 follow-up ephemeral).",
       "• **Sort order**: users có nhiều pending tổng nhất lên top; trong mỗi user rosters sort theo pending count desc; trong mỗi roster chars sort theo iLvl desc.",
       "• **Mode-scoped progress**: gate nào stored với difficulty KHÁC mode đang scan sẽ treat như pending (mode-switch wipe sẽ xảy ra khi user /raid-set ở mode này).",
