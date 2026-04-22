@@ -1071,10 +1071,27 @@ async function handleRaidCheckCommand(interaction) {
     `🟢 ${completeChars.length} · 🟡 ${partialChars.length} · ⚪ ${noneChars.length}`;
   const footerText = `Raid Manager scan · ${userCount} ${userCount === 1 ? "user" : "users"} cần nhắc · ${rosterCount} ${rosterCount === 1 ? "roster" : "rosters"}`;
 
+  const makeCheckEmbed = (isFirst) => {
+    const e = new EmbedBuilder().setColor(difficultyColor).setFooter({ text: footerText });
+    if (isFirst) {
+      e.setTitle(headerTitle).setDescription(headerDescription).setTimestamp();
+    } else {
+      e.setTitle(`${headerTitle} (continued)`);
+    }
+    return e;
+  };
+
+  const embeds = [makeCheckEmbed(true)];
+  const baseSize = headerTitle.length + headerDescription.length + footerText.length + 50;
+  let currentSize = baseSize;
+
   // Per-char inline field mirroring /raid-status's card layout. Field name
-  // is auto-bold by Discord which gives the char name a proper scan anchor.
-  // Value uses the same `{icon} {label} · done/total` pattern as /raid-status
-  // so both commands feel like the same visual system.
+  // is auto-bold by Discord which gives the char name a proper scan anchor
+  // that the previous joined-value 2-col layout couldn't provide. Value
+  // uses the same `{icon} {label} · done/total` pattern as /raid-status so
+  // both commands feel like the same visual system. Per-gate icon string
+  // (e.g. `🟢⚪`) is kept so Raid Manager still sees partial-done state at
+  // a glance - no info lost vs the old layout.
   const buildCharField = (c) => {
     const icons = c.gateStatus.map(raidCheckGateIcon).join("");
     const ilvl = Math.round(c.itemLevel);
@@ -1092,26 +1109,12 @@ async function handleRaidCheckCommand(interaction) {
   // force the char cards to pair up visibly as 2-per-row with a gap.
   const inlineSpacer = { name: "​", value: "​", inline: true };
 
-  // Multi-embed layout: each roster = 1 embed with roster header as the
-  // embed TITLE (not a field). Previous iteration used a non-inline field
-  // with a zero-width-space value as the section header, but Discord still
-  // reserved full paragraph height for the empty value, creating a ~24px
-  // gap between header and char cards. Embed title → fields spacing is
-  // tighter (~8px) so moving the header up to the title band removes the
-  // visual gap entirely.
-  //
-  // Structure:
-  //   embeds[0]        = summary (title + description, no fields)
-  //   embeds[1..N]     = per-roster (title = roster header, fields = cards)
-  //   last embed       = also carries the footer
-  const embeds = [];
-
-  const summaryEmbed = new EmbedBuilder()
-    .setTitle(headerTitle)
-    .setDescription(headerDescription)
-    .setColor(difficultyColor)
-    .setTimestamp();
-  embeds.push(summaryEmbed);
+  // Field-budget helper: roster header occupies 1 row as 3 inline fields
+  // (header + 2 spacers fill the row), then each char pair takes 3 more
+  // inline fields (char + spacer + char-or-spacer). Inline header is
+  // tighter vertically than non-inline - no ZWS-value gap between the
+  // header and the first row of char cards.
+  const rosterFieldCost = (chars) => 3 + chars.length + Math.ceil(chars.length / 2);
 
   for (const group of rosterGroups) {
     let syncBadge = "";
@@ -1120,43 +1123,53 @@ async function handleRaidCheckCommand(interaction) {
         ? ` · 🔄 ${formatShortRelative(group.lastAutoManageSyncAt)}`
         : " · 🔄 never";
     }
-    const rosterTitle = truncateText(
-      `📁 ${group.accountName} (${group.displayName}) · ${group.chars.length} pending${syncBadge}`,
-      256
-    );
+    const headerName = `📁 ${group.accountName} (${group.displayName}) · ${group.chars.length} pending${syncBadge}`;
 
-    const rosterEmbed = new EmbedBuilder()
-      .setTitle(rosterTitle)
-      .setColor(difficultyColor);
+    // Approximate size of this whole roster's contribution for the 6000-char
+    // embed cap. Char fields' value is `icons + label + · + done/total` ~
+    // 20 chars, header ~ 60 chars. Worst case roster (6 chars) ~ 60 + 6*20 = 180.
+    const rosterSize = headerName.length + group.chars.length * (raidMeta.label.length + 20);
+    const need = rosterFieldCost(group.chars);
+    const current = embeds[embeds.length - 1];
+    const fieldCount = current.data.fields?.length ?? 0;
 
-    for (let i = 0; i < group.chars.length; i += 2) {
-      rosterEmbed.addFields(buildCharField(group.chars[i]));
-      rosterEmbed.addFields(inlineSpacer);
-      if (group.chars[i + 1]) {
-        rosterEmbed.addFields(buildCharField(group.chars[i + 1]));
-      } else {
-        rosterEmbed.addFields(inlineSpacer);
-      }
+    if (fieldCount + need > 25 || currentSize + rosterSize > 5500) {
+      embeds.push(makeCheckEmbed(false));
+      currentSize = 50;
     }
 
-    embeds.push(rosterEmbed);
+    const target = embeds[embeds.length - 1];
+    // Header row: inline header in column 1, spacers in columns 2-3.
+    // Inline fields render in a tighter row than non-inline fields, so the
+    // gap between the roster label and the first char-card row is reduced
+    // to standard row-to-row padding.
+    target.addFields(
+      { name: truncateText(headerName, 256), value: "​", inline: true },
+      inlineSpacer,
+      inlineSpacer,
+    );
+    for (let i = 0; i < group.chars.length; i += 2) {
+      target.addFields(buildCharField(group.chars[i]));
+      target.addFields(inlineSpacer);
+      if (group.chars[i + 1]) {
+        target.addFields(buildCharField(group.chars[i + 1]));
+      } else {
+        target.addFields(inlineSpacer);
+      }
+    }
+    currentSize += rosterSize;
   }
 
-  // Footer lands on the very last embed so "scan · N users · M rosters"
-  // sits below the final roster regardless of how many follow-up messages
-  // we need. If message split sends the last embed as a follow-up, the
-  // footer follows it there - same text, still at the visual bottom.
-  embeds[embeds.length - 1].setFooter({ text: footerText });
-
-  // Action row attached to the FIRST message only. Discord renders buttons
-  // under their parent message, so pinning them to the initial editReply
-  // keeps them visible at the top of the output. Follow-up messages (when
-  // we exceed the 10-embed-per-message limit) skip the row to avoid
-  // duplicate buttons racing each other.
+  // Action row attached to the FIRST embed only - Discord renders it under
+  // that message and keeps it visible while the user scrolls. Continuation
+  // embeds (when output paginates) skip the row to avoid duplicate buttons
+  // racing each other.
   //
   // Sync button enabled only when at least one pending user has opted-in to
-  // /raid-auto-manage. Count UNIQUE users (not roster sections) since opt-in
-  // is a per-user flag and a user with 2 rosters shouldn't inflate the count.
+  // /raid-auto-manage - otherwise the button is a no-op (just disabled to
+  // avoid the click-then-rejected confusion). Count UNIQUE users (not
+  // roster sections) since opt-in is a per-user flag, and a user with
+  // 2 rosters shouldn't inflate the count.
   const optedInPendingCount = new Set(
     rosterGroups.filter((g) => g.autoManageEnabled).map((g) => g.discordId)
   ).size;
@@ -1177,15 +1190,9 @@ async function handleRaidCheckCommand(interaction) {
     .setDisabled(optedInPendingCount === 0);
   const actionRow = new ActionRowBuilder().addComponents(remindButton, syncButton);
 
-  // Discord caps embeds at 10 per message, so we batch. First batch carries
-  // the action row and goes out via editReply (consuming the deferred reply).
-  // Subsequent batches go out as ephemeral followUps without buttons.
-  const MAX_EMBEDS_PER_MSG = 10;
-  const firstBatch = embeds.slice(0, MAX_EMBEDS_PER_MSG);
-  await interaction.editReply({ embeds: firstBatch, components: [actionRow] });
-  for (let i = MAX_EMBEDS_PER_MSG; i < embeds.length; i += MAX_EMBEDS_PER_MSG) {
-    const batch = embeds.slice(i, i + MAX_EMBEDS_PER_MSG);
-    await interaction.followUp({ embeds: batch, flags: MessageFlags.Ephemeral });
+  await interaction.editReply({ embeds: [embeds[0]], components: [actionRow] });
+  for (let i = 1; i < embeds.length; i += 1) {
+    await interaction.followUp({ embeds: [embeds[i]], flags: MessageFlags.Ephemeral });
   }
 }
 
@@ -2548,10 +2555,9 @@ const HELP_SECTIONS = [
       "• **Header summary**: 1 dòng `pending/eligible (% chưa xong) · iLvl ≥ X · 🟢 done · 🟡 started · ⚪ chưa bắt đầu`. Ratio + distribution đủ để Raid Manager scan big-picture trong 1 glance, không cần count field rows.",
       "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field, mirror pattern của `/raid-status`. Field name `<charName> · <iLvl>` được Discord auto-bold = scan anchor rõ ràng. Field value `<gate icons> <raid label> · <done>/<total>` cùng format với `/raid-status` (`🟢⚪ Act 4 Normal · 1/2`) nên 2 command cảm giác thuộc cùng visual system. Per-gate icons giữ nguyên để partial-done state (`🟢⚪` = G1 done G2 chưa) vẫn glance-able.",
       "• **2-column layout via inline fields + spacer**: Discord default pack 3 inline field/row; chèn zero-width-space spacer field (`{name:'​', value:'​', inline:true}`) giữa mỗi cặp char để force 2-per-row với gap thở - kỹ thuật y hệt `/raid-status`. Odd char cuối cùng cặp với 1 spacer để không bị Discord stretch full-width.",
-      "• **Multi-embed layout (1 roster = 1 embed)**: reply là message chứa nhiều embed - `embeds[0]` là summary (title + description stats, không có field), `embeds[1..N]` mỗi embed là 1 roster với title = `📁 accountName (displayName) · N pending · 🔄 <relative>` và fields = char cards inline. Lý do: bản trước dùng non-inline field với zero-width value làm section header, nhưng Discord reserve nguyên paragraph height cho empty value → gap ~24px giữa header và char cards. Embed title → fields spacing chỉ ~8px, tight hơn nhiều → chuyển header lên title band eliminate gap hoàn toàn.",
-      "• **Sync badge trong embed title**: user opted-in + có sync data hiện `🔄 5m` / `🔄 2h` / `🔄 3d` (compact relative time tự compute, English units để không wrap). Opted-in nhưng chưa sync lần nào → `🔄 never`. Non-opted-in → không hiện segment.",
-      "• **Footer ở embed cuối cùng**: footer `Raid Manager scan · N user cần nhắc · M roster` chỉ attach vào embed cuối - đảm bảo sit ở visual bottom bất kể multi-message split. Follow-up message cuối sẽ carry footer.",
-      "• **Message batching**: Discord cap 10 embed/message. First message = `editReply` với 10 embed đầu + action row buttons. Tiếp theo = ephemeral `followUp` batches of 10 (không có button để tránh duplicate row). Typical guild 6 rosters → 7 embed (1 summary + 6 roster) → fit 1 message. > 9 rosters mới split. Per-roster field budget: 1 char = 3 field (card + spacer + card-or-spacer) nên 6-char roster = 9 field, under 25-per-embed limit dễ dàng.",
+      "• **Roster section header**: inline field `📁 accountName (displayName) · N pending · 🔄 <relative>` ở column 1 + 2 spacer fields fill row. Dùng inline (không phải non-inline) để Discord render compact - non-inline + ZWS value sẽ tạo gap 1-line wasted giữa header và char cards bên dưới. 1 user có 2 roster (main + alt) → 2 section riêng biệt. Rosters cùng user group consecutive, sort theo tổng pending của user desc rồi per-roster pending count desc.",
+      "• **Sync badge trong section header**: user opted-in + có sync data hiện `🔄 5m` / `🔄 2h` / `🔄 3d` (compact relative time tự compute, English units để không wrap dòng). Opted-in nhưng chưa sync lần nào → `🔄 never`. Non-opted-in → không hiện segment này.",
+      "• **Field budget accounting**: mỗi roster cost = 3 header-row fields (header + 2 spacers) + N char fields + ceil(N/2) spacer fields. 6-char roster = 12 fields, 4-char = 9, 1-char = 6. Pagination check trước khi start roster (`fieldCount + need > 25`) để section header không bị orphan ở cuối embed trước. Typical guild 24 pending × 6 rosters ~ 48 fields → 2 embed (initial + 1 follow-up ephemeral).",
       "• **Sort order**: users có nhiều pending tổng nhất lên top; trong mỗi user rosters sort theo pending count desc; trong mỗi roster chars sort theo iLvl desc.",
       "• **Mode-scoped progress**: gate nào stored với difficulty KHÁC mode đang scan sẽ treat như pending (mode-switch wipe sẽ xảy ra khi user /raid-set ở mode này).",
       "• **🔔 Remind button**: Raid Manager bấm → bot DM mỗi user pending list chars của họ + 3 cách update (post `/raid-channel`, gõ `/raid-set`, opt-in `/raid-auto-manage`). DM rate-limited qua `discordUserLimiter` (max 5 concurrent) tránh burst Discord. User tắt DM → liệt kê failed list trong reply ephemeral.",
