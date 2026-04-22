@@ -1071,11 +1071,10 @@ async function handleRaidCheckCommand(interaction) {
       return a.accountName.localeCompare(b.accountName);
     });
 
-  // Summary header: one-line scannable stats. pending/eligible ratio is
-  // the primary number (what Raid Manager cares about), followed by iLvl
-  // threshold (context) and the 🟢/🟡/⚪ distribution (non-redundant with
-  // the first number because it splits "done vs started vs untouched" -
-  // something the ratio alone can't surface).
+  // Summary header: one-line scannable stats. pending/eligible ratio +
+  // iLvl threshold (≥ sign dropped per Traine - threshold implied by the
+  // label). 3-state distribution counts moved DOWN to the footer legend
+  // (merged with English labels there) so description stays lean.
   const completionPct = allEligible.length > 0
     ? Math.round((completeChars.length / allEligible.length) * 100)
     : 0;
@@ -1083,12 +1082,15 @@ async function handleRaidCheckCommand(interaction) {
   const userCount = new Set(rosterGroups.map((g) => g.discordId)).size;
   const headerTitle = `${UI.icons.warn} Raid Check · ${raidMeta.label}`;
   const headerDescription =
-    `**${pendingChars.length}/${allEligible.length}** pending (${100 - completionPct}%) · iLvl ≥ **${raidMeta.minItemLevel}** · ` +
-    `🟢 ${completeChars.length} · 🟡 ${partialChars.length} · ⚪ ${noneChars.length}`;
-  // Reuse /raid-status's English legend (`🟢 done · 🟡 partial · ⚪ pending`)
-  // so both paginated commands share the same footer vocabulary. User/roster
-  // counts dropped per Traine's "cho gọn" request.
-  const footerText = STATUS_FOOTER_LEGEND;
+    `**${pendingChars.length}/${allEligible.length}** pending (${100 - completionPct}%) · iLvl **${raidMeta.minItemLevel}**`;
+  // Dynamic footer merges count + icon + English label per-state. Unlike
+  // /raid-status's static `STATUS_FOOTER_LEGEND`, /raid-check counts vary
+  // per scan so the footer is computed inline. `0 done · 0 partial · N
+  // pending` reads naturally for Raid Manager scanning progress.
+  const footerText =
+    `${UI.icons.done} ${completeChars.length} done · ` +
+    `${UI.icons.partial} ${partialChars.length} partial · ` +
+    `${UI.icons.pending} ${noneChars.length} pending`;
 
   // One embed per roster - mirrors /raid-status's 1-account-per-page model.
   // Roster header lives in setDescription right under the global summary so
@@ -2587,13 +2589,13 @@ const HELP_SECTIONS = [
     notes: [
       "EN: Restricted to Discord user IDs configured in the `RAID_MANAGER_ID` env var (comma-separated).",
       "VN: Chỉ Discord user IDs được liệt kê trong env `RAID_MANAGER_ID` (cách nhau bằng dấu phẩy) được phép gọi. Operator config qua deploy env, không qua Discord role.",
-      "• **Header summary**: 1 dòng trong embed description `pending/eligible (% chưa xong) · iLvl ≥ X · 🟢 done · 🟡 started · ⚪ chưa bắt đầu`. Ratio + distribution đủ để Raid Manager scan big-picture trong 1 glance mỗi page.",
+      "• **Header summary**: 1 dòng trong description `pending/eligible (% chưa xong) · iLvl X` (bỏ dấu ≥ - threshold ngầm hiểu). 3-state distribution counts (🟢/🟡/⚪) moved xuống footer legend.",
       "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field mirroring `/raid-status`'s pattern. Field name `<charName> · <iLvl>` được Discord auto-bold = scan anchor. Field value `<icon> <done>/<total>` (ví dụ `⚪ 0/2`) - value line có content nên không waste height (earlier attempt pack everything vào name line + ZWS value tạo gap 'cách nhau quá'). Aggregate 3-state icon qua `pickProgressIcon` (🟢 done all / 🟡 partial / ⚪ none). Raid label nằm ở title không lặp trong value.",
       "• **2-column layout via inline fields + spacer**: Discord default pack 3 inline field/row; chèn zero-width-space spacer field giữa mỗi cặp char để force 2-per-row - y hệt kỹ thuật `/raid-status`. Odd char cuối cùng cặp với 1 spacer để không bị Discord stretch full-width.",
       "• **Roster per page**: 1 roster = 1 embed page. Roster header `📁 accountName (displayName) · N pending · 🔄<relative>` nằm trong `setDescription` (dòng 2, ngay dưới global summary) - char cards bắt đầu sát dưới description không có wasted spacer row. User có 2 roster (main + alt) hiện thành 2 pages riêng. Rosters cùng user group consecutive, sort theo tổng pending của user desc rồi per-roster pending count desc.",
       "• **Pagination buttons + session**: `◀ Previous` / `Next ▶` (từ shared helper `buildPaginationRow`) cycle giữa các roster pages, y hệt `/raid-status`. Title embed hiện `⚠️ Raid Check · <raid> · Page X/Y`. Collector locked theo người chạy command, session timeout **2 phút** (shared constant `PAGINATION_SESSION_MS` với `/raid-status`), hết hạn disable buttons + footer đổi `⏱️ Session đã hết hạn (120s) · Dùng /raid-check để xem lại`.",
       "• **Sync badge trong roster header**: opted-in user có sync data hiện `🔄5m` / `🔄2h` / `🔄3d` (compact relative time tự compute). Opted-in nhưng chưa sync lần nào → `🔄never`. Non-opted-in → không hiện segment này.",
-      "• **Footer legend**: `🟢 done · 🟡 partial · ⚪ pending` - reuses `/raid-status`'s `STATUS_FOOTER_LEGEND` const (single source of truth cho English legend của cả 2 paginated command). User/roster scan counts đã bỏ khỏi footer cho gọn per Traine's review.",
+      "• **Footer legend với counts**: `🟢 N done · 🟡 M partial · ⚪ K pending` - icon + count + English label merged. Dynamic per scan (counts thay đổi) nên compute inline thay vì reuse `/raid-status`'s static `STATUS_FOOTER_LEGEND`. Traine: 'hai cái [counts] này có thể đem xuống chỗ legendary cũng được' - merge counts từ description xuống footer để description gọn, footer rich info.",
       "• **Sort order**: users có nhiều pending tổng nhất lên top; trong mỗi user rosters sort theo pending count desc; trong mỗi roster chars sort theo iLvl desc.",
       "• **Mode-scoped progress**: gate nào stored với difficulty KHÁC mode đang scan sẽ treat như pending (mode-switch wipe sẽ xảy ra khi user /raid-set ở mode này).",
       "• **🔄 Sync button**: Raid Manager bấm → trigger auto-manage sync CHỈ cho opted-in user trong list pending (privacy-respecting - non-opted-in user KHÔNG bị force-sync). Operate trên ALL opted-in pending users (không chỉ current page). Reuse Phase 3 gather/apply pattern + `acquireAutoManageSyncSlot` (5-min cooldown share với /raid-auto-manage). User nào có char update mới sẽ nhận DM riêng (skip nếu sync chạy nhưng không có data mới). Disabled nếu không có opted-in user nào trong list.",
