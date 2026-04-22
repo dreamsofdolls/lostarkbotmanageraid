@@ -168,7 +168,7 @@ Kéo clear logs từ `lostark.bible/api/character/logs` và reconcile tự độ
 
 - **Phase 1 — manual**: `/raid-auto-manage action:sync` bất cứ lúc nào (5-min cooldown per user)
 - **Phase 2 — `/raid-status` piggyback**: gõ `/raid-status` tự pull bible song song với roster refresh (gate bởi cùng cooldown + in-flight slot)
-- **Phase 3 — 24h passive scheduler**: tick mỗi 30 phút, batch 3 user/tick (sort stalest first), chỉ pick user có `lastAutoManageSyncAt > 24h`. Mục đích: data fresh cho `/raid-check` ngay cả khi user inactive cả tuần. Killswitch: env `AUTO_MANAGE_DAILY_DISABLED=true`.
+- **Phase 3 — 24h passive scheduler**: tick mỗi 30 phút, batch 3 user/tick (sort theo `lastAutoManageAttemptAt` ascending — fair rotation, stuck user không monopolize batch), chỉ pick user có `lastAutoManageSyncAt` cũ hơn 24h (`< now - 24h`) hoặc null. Mục đích: data fresh cho `/raid-check` ngay cả khi user inactive cả tuần. Killswitch: env `AUTO_MANAGE_DAILY_DISABLED=true`.
 
 Subcommands (option `action`, **dynamic autocomplete** — dropdown chỉ show action khả dụng theo state hiện tại, ví dụ đang ON thì ẩn `on`):
 - `on` — **probe-before-enable flow**: Artist chạy 1 lần sync in-memory (không save) để phân loại char, nếu có char private → hiện warn embed với nút `Vẫn bật` / `Huỷ` (timeout 60s = default Huỷ). Confirm thì re-run sync trên fresh doc + flip `User.autoManageEnabled = true` + save. Cancel/timeout thì flag giữ OFF, không save gì — nhưng **`lastAutoManageAttemptAt` vẫn được stamp** (probe đã tốn bible quota, cooldown phải kick in để chặn spam-cancel bypass). Không có char private → commit trực tiếp + render sync report.
