@@ -892,20 +892,6 @@ function formatShortRelative(timestamp) {
   return `${days}d`;
 }
 
-// Per-roster stat breakdown for /raid-check's roster header. Replaces the
-// plain "N pending" text with icon counts `4 ⚪ · 1 🟡 · 1 🟢` per git
-// owner's spec. Zero-count segments are filtered out so rosters with a
-// clean single state render as just `6 ⚪` instead of the noisy
-// `6 ⚪ · 0 🟡 · 0 🟢`. Order matches the footer legend (pending → partial
-// → done) so Raid Manager scans left-to-right in the same visual order.
-function formatRosterStats(stats) {
-  const parts = [];
-  if (stats.none > 0) parts.push(`${stats.none} ${UI.icons.pending}`);
-  if (stats.partial > 0) parts.push(`${stats.partial} ${UI.icons.partial}`);
-  if (stats.done > 0) parts.push(`${stats.done} ${UI.icons.done}`);
-  return parts.join(" · ");
-}
-
 // Shared scan+classify pass for /raid-check. Returns the raw eligible list
 // + per-user metadata so both the initial command AND the button handlers
 // (Remind / Sync) can operate on a fresh Mongo snapshot every time - no
@@ -972,22 +958,7 @@ async function computeRaidCheckSnapshot(raidMeta) {
   const noneChars = allEligible.filter((c) => c.overallStatus === "none");
   const pendingChars = [...partialChars, ...noneChars];
 
-  // Per-roster stat breakdown (includes DONE chars too, not just pending).
-  // Used by the roster header in each page to show `4 ⚪ · 1 🟡 · 1 🟢`
-  // instead of just "6 pending". Same composite key format as the pending
-  // rosterBuckets so the two maps join cleanly in the render path.
-  const ROSTER_STATS_SEP = "\x1f";
-  const rosterStats = new Map();
-  for (const item of allEligible) {
-    const key = item.discordId + ROSTER_STATS_SEP + item.accountName;
-    if (!rosterStats.has(key)) rosterStats.set(key, { none: 0, partial: 0, done: 0 });
-    const bucket = rosterStats.get(key);
-    if (item.overallStatus === "complete") bucket.done += 1;
-    else if (item.overallStatus === "partial") bucket.partial += 1;
-    else bucket.none += 1;
-  }
-
-  return { allEligible, completeChars, partialChars, noneChars, pendingChars, userMeta, rosterStats };
+  return { allEligible, completeChars, partialChars, noneChars, pendingChars, userMeta };
 }
 
 async function handleRaidCheckCommand(interaction) {
@@ -1012,7 +983,7 @@ async function handleRaidCheckCommand(interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   // Shared scan + classification (reused by Remind/Sync button handlers).
-  const { allEligible, completeChars, partialChars, noneChars, pendingChars, userMeta, rosterStats } =
+  const { allEligible, completeChars, partialChars, noneChars, pendingChars, userMeta } =
     await computeRaidCheckSnapshot(raidMeta);
 
   const modeKey = normalizeName(raidMeta.modeKey);
@@ -1070,17 +1041,12 @@ async function handleRaidCheckCommand(interaction) {
     .map(([key, chars]) => {
       const [discordId, accountName] = key.split(ROSTER_KEY_SEP);
       const meta = userMeta.get(discordId) || {};
-      // Roster stats computed in computeRaidCheckSnapshot using the same
-      // composite key shape. Covers ALL eligible chars in the roster
-      // (including done ones) so the `N ⚪ · M 🟡 · K 🟢` header shows
-      // full-roster progress, not just the pending slice rendered below.
-      const stats = rosterStats.get(key) || { none: 0, partial: 0, done: 0 };
       return {
         discordId,
         accountName,
         displayName: displayMap.get(discordId) || discordId,
         chars,
-        stats,
+        partialCount: chars.filter((c) => c.overallStatus === "partial").length,
         autoManageEnabled: meta.autoManageEnabled || false,
         lastAutoManageSyncAt: meta.lastAutoManageSyncAt || 0,
       };
@@ -1109,36 +1075,38 @@ async function handleRaidCheckCommand(interaction) {
   const rosterCount = rosterGroups.length;
   const userCount = new Set(rosterGroups.map((g) => g.discordId)).size;
   const headerTitle = `${UI.icons.warn} Raid Check · ${raidMeta.label}`;
-  // Number-first icon breakdown (`31 ⚪ · 0 🟡 · 0 🟢`) matches the roster
-  // header format and the git owner's preferred layout. Global summary
-  // always shows all 3 counts even at zero so the 3-state spread is
-  // always visible at a glance.
   const headerDescription =
     `**${pendingChars.length}/${allEligible.length}** pending (${100 - completionPct}%) · iLvl ≥ **${raidMeta.minItemLevel}** · ` +
-    `${noneChars.length} ${UI.icons.pending} · ${partialChars.length} ${UI.icons.partial} · ${completeChars.length} ${UI.icons.done}`;
+    `🟢 ${completeChars.length} · 🟡 ${partialChars.length} · ⚪ ${noneChars.length}`;
   const footerText = `${RAID_CHECK_FOOTER_LEGEND} · ${userCount} ${userCount === 1 ? "user" : "users"} cần nhắc · ${rosterCount} ${rosterCount === 1 ? "roster" : "rosters"}`;
 
-  // Char line format per git owner's spec: `<name> · <iLvl> · <icon>` - one
-  // line per character, aggregate 3-state icon at the end, no done/total
-  // counter (icon conveys state by itself). Rendered as multi-line
-  // description text instead of inline fields - Discord's inline-field
-  // layout always reserves 2 visual lines (name + value) per card, which
-  // the owner explicitly flagged as "khoảng cách quá xa" (spacing too
-  // wide). Description lines have tight single line-height, roughly 50%
-  // vertical space saved per char on desktop rendering.
-  const formatCharLine = (c) => {
+  // One embed per roster - mirrors /raid-status's 1-account-per-page model.
+  // Roster header lives in setDescription right under the global summary so
+  // the inline char fields below sit tight against the header without a
+  // wasted spacer row. Pagination via Prev/Next buttons surfaces the other
+  // rosters one at a time.
+
+  // Per-char inline field mirroring /raid-status's 2-column card layout.
+  // Value uses a single aggregate 3-state icon via `pickProgressIcon` -
+  // same visual vocabulary as /raid-status's per-raid line (🟢/🟡/⚪).
+  // Raid label stays in the embed title since /raid-check scans exactly
+  // one raid-mode at a time, so value only carries the done/total ratio.
+  const buildCharField = (c) => {
     const doneCount = c.gateStatus.filter((s) => s === "done").length;
     const total = c.gateStatus.length;
     const icon = pickProgressIcon(doneCount, total);
-    return `${c.charName} · ${Math.round(c.itemLevel)} · ${icon}`;
+    return {
+      name: truncateText(`${c.charName} · ${Math.round(c.itemLevel)}`, 256),
+      value: truncateText(`${icon} ${doneCount}/${total}`, 1024),
+      inline: true,
+    };
   };
 
-  // One embed per roster - mirrors /raid-status's 1-account-per-page model.
-  // Everything lives in setDescription: global summary (line 1), roster
-  // header with stat breakdown (line 2), blank separator, then one char
-  // per line. No inline fields, no addFields call. Discord description
-  // cap is 4096 chars; a worst-case 20-char roster = ~600 chars, well
-  // under the limit.
+  // Spacer mirrors /raid-status's approach: Discord inline fields default
+  // to 3-per-row, so we inject a zero-width spacer as the middle column to
+  // force the char cards to pair up visibly as 2-per-row with a gap.
+  const inlineSpacer = { name: "​", value: "​", inline: true };
+
   const buildRaidCheckPage = (group, pageIndex, totalPages) => {
     const pageSuffix = totalPages > 1 ? ` · Page ${pageIndex + 1}/${totalPages}` : "";
     let syncBadge = "";
@@ -1147,21 +1115,26 @@ async function handleRaidCheckCommand(interaction) {
         ? ` · 🔄${formatShortRelative(group.lastAutoManageSyncAt)}`
         : " · 🔄never";
     }
-    // Replace the old "N pending" text with `N ⚪ · M 🟡 · K 🟢` icon
-    // breakdown per git owner's spec. `formatRosterStats` filters zero
-    // counts so a roster with just pending chars renders as plain `6 ⚪`.
-    const statBreakdown = formatRosterStats(group.stats);
-    const rosterHeader = `📁 ${group.accountName} (${group.displayName}) · ${statBreakdown}${syncBadge}`;
+    const rosterHeader = `📁 ${group.accountName} (${group.displayName}) · ${group.chars.length} pending${syncBadge}`;
 
-    const charLines = group.chars.map(formatCharLine).join("\n");
-    const description = `${headerDescription}\n${rosterHeader}\n\n${charLines}`;
-
-    return new EmbedBuilder()
+    const embed = new EmbedBuilder()
       .setTitle(`${headerTitle}${pageSuffix}`)
-      .setDescription(truncateText(description, 4096))
+      .setDescription(`${headerDescription}\n${rosterHeader}`)
       .setColor(difficultyColor)
       .setFooter({ text: footerText })
       .setTimestamp();
+
+    for (let i = 0; i < group.chars.length; i += 2) {
+      embed.addFields(buildCharField(group.chars[i]));
+      embed.addFields(inlineSpacer);
+      if (group.chars[i + 1]) {
+        embed.addFields(buildCharField(group.chars[i + 1]));
+      } else {
+        embed.addFields(inlineSpacer);
+      }
+    }
+
+    return embed;
   };
 
   const pages = rosterGroups.map((group, idx) =>
@@ -2632,13 +2605,13 @@ const HELP_SECTIONS = [
     notes: [
       "EN: Restricted to Discord user IDs configured in the `RAID_MANAGER_ID` env var (comma-separated).",
       "VN: Chỉ Discord user IDs được liệt kê trong env `RAID_MANAGER_ID` (cách nhau bằng dấu phẩy) được phép gọi. Operator config qua deploy env, không qua Discord role.",
-      "• **Header summary**: 1 dòng trong embed description `pending/eligible (% chưa xong) · iLvl ≥ X · N ⚪ · M 🟡 · K 🟢`. Number-first icon format consistent với roster stat breakdown. Ratio là primary action number, distribution bổ sung info done/partial/none split.",
-      "• **Per-char line (description text)**: mỗi char = 1 dòng text trong embed description format `<charName> · <iLvl> · <icon>` (ví dụ `Qiylyn · 1743 · 🟡`). Bỏ hẳn inline field 2-line card (Traine flag 'khoảng cách quá xa') - description line-height tight hơn ~50% vertical space. Aggregate 3-state icon qua `pickProgressIcon` (🟢 = tất cả gate done, 🟡 = 1 gate done, ⚪ = 0 gate). Bỏ `done/total` counter vì icon đã convey state + legend ở footer giải thích.",
-      "• **Roster per page**: 1 roster = 1 embed page. Roster header `📁 accountName (displayName) · <stat breakdown> · 🔄<relative>` ở dòng 2 của description (dưới global summary), blank line, rồi char list. **Stat breakdown** = `formatRosterStats(stats)` emit `N ⚪ · M 🟡 · K 🟢` (icon counts cho CẢ roster eligible chars, không chỉ pending chars shown). Filter zero counts (roster all-pending → `6 ⚪`). User có 2 roster (main + alt) hiện thành 2 pages riêng. Rosters cùng user group consecutive, sort theo tổng pending của user desc rồi per-roster pending count desc.",
+      "• **Header summary**: 1 dòng trong embed description `pending/eligible (% chưa xong) · iLvl ≥ X · 🟢 done · 🟡 started · ⚪ chưa bắt đầu`. Ratio + distribution đủ để Raid Manager scan big-picture trong 1 glance mỗi page.",
+      "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field, mirror pattern của `/raid-status`. Field name `<charName> · <iLvl>` được Discord auto-bold = scan anchor rõ ràng. Field value dùng aggregate 3-state icon `<icon> <done>/<total>` (`🟢 2/2` / `🟡 1/2` / `⚪ 0/2`) qua helper `pickProgressIcon` - cùng visual vocabulary với `/raid-status`'s per-raid line. Raid label đã nằm ở title nên value không cần lặp lại.",
+      "• **2-column layout via inline fields + spacer**: Discord default pack 3 inline field/row; chèn zero-width-space spacer field giữa mỗi cặp char để force 2-per-row - y hệt kỹ thuật `/raid-status`. Odd char cuối cùng cặp với 1 spacer để không bị Discord stretch full-width.",
+      "• **Roster per page**: 1 roster = 1 embed page. Roster header `📁 accountName (displayName) · N pending · 🔄<relative>` nằm trong `setDescription` (dòng 2, ngay dưới global summary) - char cards bắt đầu sát dưới description không có wasted spacer row. User có 2 roster (main + alt) hiện thành 2 pages riêng. Rosters cùng user group consecutive, sort theo tổng pending của user desc rồi per-roster pending count desc.",
       "• **Pagination buttons + session**: `◀ Previous` / `Next ▶` (từ shared helper `buildPaginationRow`) cycle giữa các roster pages, y hệt `/raid-status`. Title embed hiện `⚠️ Raid Check · <raid> · Page X/Y`. Collector locked theo người chạy command, session timeout **2 phút** (shared constant `PAGINATION_SESSION_MS` với `/raid-status`), hết hạn disable buttons + footer đổi `⏱️ Session đã hết hạn (120s) · Dùng /raid-check để xem lại`.",
       "• **Sync badge trong roster header**: opted-in user có sync data hiện `🔄5m` / `🔄2h` / `🔄3d` (compact relative time tự compute). Opted-in nhưng chưa sync lần nào → `🔄never`. Non-opted-in → không hiện segment này.",
       "• **Footer legend**: `🟢 cleared · 🟡 đi mới G1 · ⚪ chưa đi · N users cần nhắc · M rosters` - matches `/raid-status`'s footer-legend pattern. Prefix explain 3 aggregate colors (🟢 = tất cả gate done, 🟡 = mới xong 1 gate, ⚪ = chưa chạm gate nào), suffix cung cấp scan breakdown (action-able cho Raid Manager biết ping bao nhiêu người). Label `đi mới G1` specific cho 2-gate raids hiện tại; khi có 3-gate raid sẽ generalize thành 'đang đi' hoặc tương tự.",
-      "• **No inline fields** (description-only rendering): `/raid-check` KHÔNG dùng `addFields` pattern như `/raid-status`. Lý do: 1 raid 1 char = 1 line of info (icon + ratio), không cần 2-line card. Inline field 2-line rendering đã bị owner flag là 'khoảng cách quá xa'. All content in `setDescription` - global summary + roster header + char lines join với \\n. Description cap 4096 chars, worst-case 20-char roster = ~600 chars, an toàn.",
       "• **Sort order**: users có nhiều pending tổng nhất lên top; trong mỗi user rosters sort theo pending count desc; trong mỗi roster chars sort theo iLvl desc.",
       "• **Mode-scoped progress**: gate nào stored với difficulty KHÁC mode đang scan sẽ treat như pending (mode-switch wipe sẽ xảy ra khi user /raid-set ở mode này).",
       "• **🔔 Remind button**: Raid Manager bấm → bot DM mỗi user pending list chars của họ + 3 cách update (post `/raid-channel`, gõ `/raid-set`, opt-in `/raid-auto-manage`). Operate trên ALL pending (không chỉ current page). DM rate-limited qua `discordUserLimiter` (max 5 concurrent) tránh burst Discord. User tắt DM → liệt kê failed list trong reply ephemeral.",
