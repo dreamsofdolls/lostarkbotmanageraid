@@ -1094,17 +1094,17 @@ async function handleRaidCheckCommand(interaction) {
   // rosters one at a time.
 
   // Per-char inline field mirroring /raid-status's 2-column card layout.
-  // Value uses a single aggregate 3-state icon via `pickProgressIcon` -
-  // same visual vocabulary as /raid-status's per-raid line (🟢/🟡/⚪).
-  // Raid label stays in the embed title since /raid-check scans exactly
-  // one raid-mode at a time, so value only carries the done/total ratio.
+  // Everything (name, iLvl, aggregate icon, done/total) packed into the
+  // field.name line so the icon + counter sit horizontally next to the
+  // character name instead of wrapping to a separate value line below.
+  // Field.value is ZWS since Discord requires a non-empty value.
   const buildCharField = (c) => {
     const doneCount = c.gateStatus.filter((s) => s === "done").length;
     const total = c.gateStatus.length;
     const icon = pickProgressIcon(doneCount, total);
     return {
-      name: truncateText(`${c.charName} · ${Math.round(c.itemLevel)}`, 256),
-      value: truncateText(`${icon} ${doneCount}/${total}`, 1024),
+      name: truncateText(`${c.charName} · ${Math.round(c.itemLevel)} · ${icon} ${doneCount}/${total}`, 256),
+      value: "​",
       inline: true,
     };
   };
@@ -2676,7 +2676,7 @@ const HELP_SECTIONS = [
       "EN: Restricted to Discord user IDs configured in the `RAID_MANAGER_ID` env var (comma-separated).",
       "VN: Chỉ Discord user IDs được liệt kê trong env `RAID_MANAGER_ID` (cách nhau bằng dấu phẩy) được phép gọi. Operator config qua deploy env, không qua Discord role.",
       "• **Header summary**: 1 dòng trong embed description `pending/eligible (% chưa xong) · iLvl ≥ X · 🟢 done · 🟡 started · ⚪ chưa bắt đầu`. Ratio + distribution đủ để Raid Manager scan big-picture trong 1 glance mỗi page.",
-      "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field, mirror pattern của `/raid-status`. Field name `<charName> · <iLvl>` được Discord auto-bold = scan anchor rõ ràng. Field value dùng aggregate 3-state icon `<icon> <done>/<total>` (`🟢 2/2` / `🟡 1/2` / `⚪ 0/2`) qua helper `pickProgressIcon` - cùng visual vocabulary với `/raid-status`'s per-raid line. Raid label đã nằm ở title nên value không cần lặp lại.",
+      "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field. Field name chứa TẤT CẢ info `<charName> · <iLvl> · <icon> <done>/<total>` (ví dụ `Qiylyn · 1743 · ⚪ 0/2`) - icon + counter nằm ngang cùng dòng với name, không xuống value line bên dưới. Field value = ZWS (Discord yêu cầu non-empty). Aggregate 3-state icon qua `pickProgressIcon` (🟢 done all / 🟡 partial / ⚪ none). Raid label nằm ở embed title không lặp trong value.",
       "• **2-column layout via inline fields + spacer**: Discord default pack 3 inline field/row; chèn zero-width-space spacer field giữa mỗi cặp char để force 2-per-row - y hệt kỹ thuật `/raid-status`. Odd char cuối cùng cặp với 1 spacer để không bị Discord stretch full-width.",
       "• **Roster per page**: 1 roster = 1 embed page. Roster header `📁 accountName (displayName) · N pending · 🔄<relative>` nằm trong `setDescription` (dòng 2, ngay dưới global summary) - char cards bắt đầu sát dưới description không có wasted spacer row. User có 2 roster (main + alt) hiện thành 2 pages riêng. Rosters cùng user group consecutive, sort theo tổng pending của user desc rồi per-roster pending count desc.",
       "• **Pagination buttons + session**: `◀ Previous` / `Next ▶` (từ shared helper `buildPaginationRow`) cycle giữa các roster pages, y hệt `/raid-status`. Title embed hiện `⚠️ Raid Check · <raid> · Page X/Y`. Collector locked theo người chạy command, session timeout **2 phút** (shared constant `PAGINATION_SESSION_MS` với `/raid-status`), hết hạn disable buttons + footer đổi `⏱️ Session đã hết hạn (120s) · Dùng /raid-check để xem lại`.",
