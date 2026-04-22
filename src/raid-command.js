@@ -1192,6 +1192,17 @@ async function handleRaidCheckCommand(interaction) {
       .setColor(difficultyColor)
       .setFooter({ text: pageFooter })
       .setTimestamp();
+    // When user filter is active, show that user's display name + avatar
+    // in embed author slot as visual confirmation of who's being filtered.
+    // Discord StringSelectMenu options can't carry per-option avatars, so
+    // the embed author is the compromise - 1 avatar (the selected user's)
+    // at the top of each filtered page.
+    if (selectedUserId) {
+      const displayName = displayMap.get(selectedUserId) || selectedUserId;
+      const authorPayload = { name: displayName };
+      if (selectedUserAvatar) authorPayload.iconURL = selectedUserAvatar;
+      embed.setAuthor(authorPayload);
+    }
     for (const group of rosterChunk) {
       addRosterSection(embed, group);
     }
@@ -1274,8 +1285,11 @@ async function handleRaidCheckCommand(interaction) {
     ];
   };
 
-  // Initial state: no filter, page 0.
+  // Initial state: no filter, page 0. `selectedUserAvatar` captures the
+  // filtered user's Discord avatar URL (resolved lazily on filter-change)
+  // - buildRaidCheckPage reads it via closure to set embed.author iconURL.
   let selectedUserId = null;
+  let selectedUserAvatar = null;
   let pages = chunkRosters(filterByUser(selectedUserId)).map((chunk, idx, arr) =>
     buildRaidCheckPage(chunk, idx, arr.length)
   );
@@ -1317,6 +1331,25 @@ async function handleRaidCheckCommand(interaction) {
     } else if (i.customId === "raid-check-filter:user") {
       const value = Array.isArray(i.values) && i.values.length > 0 ? i.values[0] : FILTER_ALL;
       selectedUserId = value === FILTER_ALL ? null : value;
+      // Resolve avatar for the filtered user (cache-first). Skip entirely
+      // when clearing filter. discordUserLimiter caps concurrent fetches
+      // even though this is only 1 user at a time - defense against
+      // Discord's global REST rate limit.
+      if (selectedUserId) {
+        try {
+          let userObj = interaction.client.users.cache.get(selectedUserId);
+          if (!userObj) {
+            userObj = await discordUserLimiter.run(() =>
+              interaction.client.users.fetch(selectedUserId)
+            );
+          }
+          selectedUserAvatar = userObj ? userObj.displayAvatarURL({ size: 64 }) : null;
+        } catch {
+          selectedUserAvatar = null;
+        }
+      } else {
+        selectedUserAvatar = null;
+      }
       const filtered = filterByUser(selectedUserId);
       pages = chunkRosters(filtered).map((chunk, idx, arr) =>
         buildRaidCheckPage(chunk, idx, arr.length)
@@ -2706,7 +2739,7 @@ const HELP_SECTIONS = [
       "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field mirroring `/raid-status`'s pattern. Field name `<charName> · <iLvl>` được Discord auto-bold = scan anchor. Field value `<icon> <done>/<total>` (ví dụ `⚪ 0/2`) - value line có content nên không waste height (earlier attempt pack everything vào name line + ZWS value tạo gap 'cách nhau quá'). Aggregate 3-state icon qua `pickProgressIcon` (🟢 done all / 🟡 partial / ⚪ none). Raid label nằm ở title không lặp trong value.",
       "• **2-column layout via inline fields + spacer**: Discord default pack 3 inline field/row; chèn zero-width-space spacer field giữa mỗi cặp char để force 2-per-row - y hệt kỹ thuật `/raid-status`. Odd char cuối cùng cặp với 1 spacer để không bị Discord stretch full-width.",
       "• **2 rosters per page (chunked)**: mỗi embed page chứa tối đa 2 roster sections stacked. Roster section = non-inline header field (name = `📁 accountName (displayName)`, value = `N pending · 🔄<relative>` - cả 2 dòng có content) + inline char cards 2-col với spacer pattern. User có nhiều roster → rosters consecutive trên multiple pages.",
-      "• **User filter dropdown** (action row 2): `StringSelectMenuBuilder` cho phép Raid Manager lọc pages theo Discord user. First option `🌐 All users (N pending)` reset filter. Tiếp theo top-24 users sort theo pending desc (`👤 displayName (N pending)`). Discord cap 25 options total. Selection → recompute pages chỉ chứa rosters của user đó, reset currentPage=0. `default: true` preserve selected state qua Prev/Next clicks. Rosters cùng user group consecutive, sort theo tổng pending user desc rồi per-roster pending desc.",
+      "• **User filter dropdown** (action row 2): `StringSelectMenuBuilder` cho phép Raid Manager lọc pages theo Discord user. First option `🌐 All users (N pending)` reset filter. Tiếp theo top-24 users sort theo pending desc (`👤 displayName (N pending)`). Discord cap 25 options total. Selection → recompute pages chỉ chứa rosters của user đó, reset currentPage=0. `default: true` preserve selected state qua Prev/Next clicks. Rosters cùng user group consecutive, sort theo tổng pending user desc rồi per-roster pending desc. **Avatar in embed author**: khi filter = specific user, resolve Discord avatar cache-first (`client.users.cache` fallback to `fetch` via `discordUserLimiter`) và `setAuthor({name, iconURL})` trên mỗi page - visual confirmation filter đang active. Discord StringSelectMenu options không support per-option avatars (API limitation) nên embed author là compromise.",
       "• **Pagination buttons + session**: `◀ Previous` / `Next ▶` (shared helper `buildPaginationRow`) cycle giữa các roster-chunk pages. Title stable `⚠️ Raid Check · <raid> (<minItemLevel>)` không đổi theo page. Footer append page indicator. Collector locked theo người chạy, session timeout **2 phút** (`PAGINATION_SESSION_MS`), hết hạn disable all components + swap footer legend.",
       "• **Sync badge trong roster header**: opted-in user có sync data hiện `🔄5m` / `🔄2h` / `🔄3d` (compact relative time tự compute). Opted-in nhưng chưa sync lần nào → `🔄never`. Non-opted-in → không hiện segment này.",
       "• **Footer legend với counts + page**: `🟢 N done · 🟡 M partial · ⚪ K pending · Page X/Y` - icon + count + English label merged, page indicator append cuối khi > 1 roster (move từ title xuống đây). Dynamic per page (page index thay đổi) compute inline trong `buildRaidCheckPage`. Discord render timestamp (`Today at HH:MM`) sau footer text tự động.",
