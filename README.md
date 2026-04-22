@@ -80,12 +80,16 @@ Ví dụ: `/raid-set character:Clauseduk raid:kazeros_hard status:complete gate:
 
 **Chỉ dành cho Discord user IDs liệt kê trong env `RAID_MANAGER_ID`** (cách nhau bằng dấu phẩy). Scan tất cả characters đủ item level nhưng chưa hoàn thành raid ở difficulty được chọn.
 
-Output là **embed ephemeral** với pagination (1 roster = 1 page), mirror pattern của `/raid-status`:
+Output là **embed ephemeral** với pagination (1 roster = 1 page), **description-only rendering** (không dùng inline fields):
 - Color động theo difficulty: đỏ = Nightmare, vàng = Hard, blurple = Normal
-- **Title**: `⚠️ Raid Check · <raid label> · Page X/Y` (page suffix hiện khi > 1 roster, y hệt `/raid-status`).
-- **Description (2 dòng)**: line 1 = global summary `<pending>/<eligible> pending (<pct>%) · iLvl ≥ <X> · 🟢 <done> · 🟡 <started> · ⚪ <untouched>`, line 2 = current page's roster header `📁 <accountName> (<displayName>) · N pending · 🔄<relative>`. Char cards bắt đầu sát dưới description - không có wasted spacer row.
-- **Per-char card (inline field)**: mỗi character = 1 Discord inline field. Field name `<charName> · <iLvl>` được Discord auto-bold → scan anchor rõ ràng. Field value dùng **aggregate 3-state icon** qua helper `pickProgressIcon`: `🟢 2/2` (all gates done), `🟡 1/2` (partial - ít nhất 1 gate done), `⚪ 0/2` (none done). Format mirror `/raid-status`'s per-raid line (`🟢 Act 4 Hard · 2/2`) để 2 command cùng visual system. Raid label nằm trong title, không lặp lại trong value. iLvl round integer (`1744` thay `1744.17`).
-- **2-column layout via Discord inline fields**: Discord default pack 3 inline fields/row; chèn zero-width-space spacer field giữa mỗi cặp char để force 2-per-row - kỹ thuật y hệt `buildAccountPageEmbed` của `/raid-status`. Odd char cuối cùng cặp với 1 spacer để không stretch full-width.
+- **Title**: `⚠️ Raid Check · <raid label> · Page X/Y` (page suffix hiện khi > 1 roster).
+- **Description**: tất cả content nằm trong `setDescription`:
+  - Line 1: global summary `<pending>/<eligible> pending (<pct>%) · iLvl ≥ <X> · N ⚪ · M 🟡 · K 🟢` (number-first icon breakdown).
+  - Line 2: roster header `📁 <accountName> (<displayName>) · <stat breakdown> · 🔄<relative>` - stat breakdown thay `N pending` bằng icon counts `N ⚪ · M 🟡 · K 🟢` (filter zero counts).
+  - Blank line.
+  - Char list: **1 char = 1 dòng** format `<name> · <iLvl> · <icon>` (ví dụ `Qiylyn · 1743 · 🟡`). iLvl round integer.
+- **Aggregate 3-state icon** per char qua `pickProgressIcon`: 🟢 (all gates done), 🟡 (at least 1 gate done), ⚪ (0 gates done). Bỏ `done/total` counter vì icon + footer legend đủ convey state.
+- **Why description-only instead of inline fields**: Discord inline field reserve 2 visual lines per card (name + value) + row padding. Git owner flag 'khoảng cách quá xa'. Description text line-height tight single-line, ~50% vertical space saved per char.
 - **Pagination buttons + session**: `◀ Previous` / `Next ▶` (từ shared helper `buildPaginationRow` - `/raid-status` cũng dùng cùng helper, chỉ khác customId prefix) cycle giữa roster pages. Session timeout **2 phút** (shared constant `PAGINATION_SESSION_MS`), hết hạn thì disable buttons + footer đổi thành `⏱️ Session đã hết hạn (120s) · Dùng /raid-check để xem lại`. Collector lock theo người chạy command - user khác click prev/next sẽ nhận ephemeral reject.
 - **Sync badge trong roster header**: opted-in user có sync data hiện `🔄5m` / `🔄2h` / `🔄3d` (relative time tự compute, English units để giữ segment ngắn). Opted-in chưa sync lần nào → `🔄never`. Non-opted-in → không hiện segment.
 - **Action row 4 buttons**: `◀ Prev` + `Next ▶` + `🔔 Remind N pending` + `🔄 Sync N opted-in`. Pagination customId prefix `raid-check-page:*` (deliberately khác `raid-check:*` để bot.js's global dispatcher bỏ qua, collector handle pagination locally). Remind/Sync tiếp tục customId `raid-check:remind:<raidKey>` / `raid-check:sync:<raidKey>` routing qua global handler. **Remind + Sync operate trên ALL pending users** (không chỉ current page) - pagination chỉ là viewing surface, action là bulk.
