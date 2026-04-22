@@ -1159,15 +1159,12 @@ async function handleRaidCheckCommand(interaction) {
     return chunks;
   };
 
-  // Add one roster section to an embed. Section header is an INLINE field
-  // in column 1 of its row, followed by 2 spacer inline fields to consume
-  // the rest of the row (1 section header = 1 full row). Inline field
-  // rows have tighter inter-row padding than non-inline fields, closer
-  // to /raid-status's compact feel - /raid-status only renders inline
-  // fields (no mid-embed section dividers needed because it's 1 roster
-  // per page), so we mimic that density by keeping sections inline too.
-  // Trade-off: header text is limited to 1/3 row width (~130px); long
-  // labels may wrap but still tighter than non-inline's 2-line + padding.
+  // Add one roster section to an embed. Section header = non-inline field
+  // with name = clean roster label, value = RICH stats line (state
+  // breakdown + avg iLvl + sync badge). Rich value fills the field's
+  // value-line height with meaningful content instead of ZWS - inter-row
+  // padding below then looks proportional to content, not wasted. Lets
+  // us use non-inline's full-width without the "thừa khoảng cách" feel.
   const addRosterSection = (embed, group) => {
     let syncBadge = "";
     if (group.autoManageEnabled) {
@@ -1175,15 +1172,22 @@ async function handleRaidCheckCommand(interaction) {
         ? ` · 🔄${formatShortRelative(group.lastAutoManageSyncAt)}`
         : " · 🔄never";
     }
-    embed.addFields(
-      {
-        name: truncateText(`📁 ${group.accountName} (${group.displayName})${syncBadge}`, 256),
-        value: "​",
-        inline: true,
-      },
-      inlineSpacer,
-      inlineSpacer,
-    );
+    // Per-roster state breakdown (filter zero counts)
+    const statsText = formatRosterStats(group.stats || { none: 0, partial: 0, done: 0 });
+    // Average iLvl of pending chars in this roster (integer round)
+    const avgILvlText = group.chars.length > 0
+      ? `avg iLvl ${Math.round(
+          group.chars.reduce((sum, c) => sum + (Number(c.itemLevel) || 0), 0) / group.chars.length
+        )}`
+      : "";
+    const valueParts = [statsText, avgILvlText].filter(Boolean);
+    const headerValue = valueParts.join(" · ") + syncBadge;
+
+    embed.addFields({
+      name: truncateText(`📁 ${group.accountName} (${group.displayName})`, 256),
+      value: truncateText(headerValue || "​", 1024),
+      inline: false,
+    });
     for (let i = 0; i < group.chars.length; i += 2) {
       embed.addFields(buildCharField(group.chars[i]));
       embed.addFields(inlineSpacer);
@@ -2753,7 +2757,7 @@ const HELP_SECTIONS = [
       "• **Header**: title embed hiện `⚠️ Raid Check · <raid label> (<minItemLevel>)` - gọn, chỉ command + raid + threshold (ví dụ `Act 4 Normal (1700)`). Description đã bỏ hoàn toàn - info đều ở title, per-roster headers, và footer. Page indicator + 3-state counts đều dưới footer.",
       "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field mirroring `/raid-status`'s pattern. Field name `<charName> · <iLvl>` được Discord auto-bold = scan anchor. Field value `<icon> <done>/<total>` (ví dụ `⚪ 0/2`) - value line có content nên không waste height (earlier attempt pack everything vào name line + ZWS value tạo gap 'cách nhau quá'). Aggregate 3-state icon qua `pickProgressIcon` (🟢 done all / 🟡 partial / ⚪ none). Raid label nằm ở title không lặp trong value.",
       "• **2-column layout via inline fields + spacer**: Discord default pack 3 inline field/row; chèn zero-width-space spacer field giữa mỗi cặp char để force 2-per-row - y hệt kỹ thuật `/raid-status`. Odd char cuối cùng cặp với 1 spacer để không bị Discord stretch full-width.",
-      "• **2 rosters per page (chunked)**: mỗi embed page chứa tối đa 2 roster sections stacked. Roster section = **inline header field + 2 spacer fields** fill row (1 full row của Discord 3-inline-per-row layout). Label + sync badge nằm ngang trong name (`📁 accountName (displayName) · 🔄<relative>`). Inline header compact hơn non-inline (không bị generous padding + 2-line overhead của non-inline field) - approximate /raid-status's tight density. Char cards 2-col inline với spacer pattern theo sau. Per roster cost: 3 header + N char + ceil(N/2) spacer fields. 2 × 6-char rosters = 24 fields, fit 25-cap.",
+      "• **2 rosters per page (chunked)**: mỗi embed page chứa tối đa 2 roster sections stacked. Roster section = non-inline header field với RICH value line để tránh 'cách nhau thừa'. Name = `📁 accountName (displayName)` (clean label). Value = `<state breakdown> · avg iLvl <N> · 🔄<relative>` (ví dụ `4 ⚪ · 1 🟡 · 1 🟢 · avg iLvl 1704 · 🔄1h`). Rich content fill value line → inter-row padding look proportional không wasted. Per roster cost: 1 header + N char + ceil(N/2) spacer fields. 2 × 6-char rosters = 20 fields, fit 25-cap.",
       "• **User filter dropdown** (action row 2): `StringSelectMenuBuilder` cho phép Raid Manager lọc pages theo Discord user. First option `🌐 All users (N pending)` reset filter. Tiếp theo top-24 users sort theo pending desc (`👤 displayName (N pending)`). Discord cap 25 options total. Selection → recompute pages chỉ chứa rosters của user đó, reset currentPage=0. `default: true` preserve selected state qua Prev/Next clicks. Rosters cùng user group consecutive, sort theo tổng pending user desc rồi per-roster pending desc. **Avatar in embed author**: khi filter = specific user, resolve Discord avatar cache-first (`client.users.cache` fallback to `fetch` via `discordUserLimiter`) và `setAuthor({name, iconURL})` trên mỗi page - visual confirmation filter đang active. Discord StringSelectMenu options không support per-option avatars (API limitation) nên embed author là compromise.",
       "• **Pagination buttons + session**: `◀ Previous` / `Next ▶` (shared helper `buildPaginationRow`) cycle giữa các roster-chunk pages. Title stable `⚠️ Raid Check · <raid> (<minItemLevel>)` không đổi theo page. Footer append page indicator. Collector locked theo người chạy, session timeout **2 phút** (`PAGINATION_SESSION_MS`), hết hạn disable all components + swap footer legend.",
       "• **Sync badge trong roster header**: opted-in user có sync data hiện `🔄5m` / `🔄2h` / `🔄3d` (compact relative time tự compute). Opted-in nhưng chưa sync lần nào → `🔄never`. Non-opted-in → không hiện segment này.",
