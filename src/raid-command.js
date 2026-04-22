@@ -857,10 +857,21 @@ async function resolveDiscordDisplay(client, discordId) {
   }
 }
 
+// Per-gate display icon for Phase 1 progress-aware /raid-check rendering.
+// 'done'    = gate completed AT this raid's selected difficulty
+// 'partial' = unused right now (kept for future per-gate "started" semantics)
+// 'pending' = gate not done OR done at a different difficulty (mode-switch
+//             would wipe it anyway, so it's not real progress for this scan)
+function raidCheckGateIcon(status) {
+  if (status === "done") return "🟢";
+  if (status === "partial") return "🟡";
+  return "⚪";
+}
+
 async function handleRaidCheckCommand(interaction) {
   if (!isRaidLeader(interaction)) {
     await interaction.reply({
-      content: `${UI.icons.lock} Chỉ Raid Leader mới được dùng \`/raid-check\`.`,
+      content: `${UI.icons.lock} Chỉ Raid Manager mới được dùng \`/raid-check\` (config qua env \`RAID_MANAGER_ID\`).`,
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -879,12 +890,26 @@ async function handleRaidCheckCommand(interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const users = await User.find({}).lean();
-  const matchedCharacters = [];
+  // Per-user metadata cache: opt-in flag + last sync timestamp surface in
+  // the per-user field so Raid Manager sees data freshness inline.
+  const userMeta = new Map();
+  // ALL eligible chars (not just pending) so we can render summary stats
+  // (eligible / done / pending breakdown). Each entry tracks per-gate
+  // status so the embed can render 🟢/🟡/⚪ icons per gate.
+  const allEligible = [];
+  const selectedDifficulty = toModeLabel(raidMeta.modeKey);
+  const selectedDiffNorm = normalizeName(selectedDifficulty);
 
   for (const userDoc of users) {
     // Read-only freshness: don't let previous-week completions hide pending
     // characters before the 30-minute background reset tick persists them.
     ensureFreshWeek(userDoc);
+    if (!userMeta.has(userDoc.discordId)) {
+      userMeta.set(userDoc.discordId, {
+        autoManageEnabled: !!userDoc.autoManageEnabled,
+        lastAutoManageSyncAt: Number(userDoc.lastAutoManageSyncAt) || 0,
+      });
+    }
     const accounts = Array.isArray(userDoc.accounts) ? userDoc.accounts : [];
     for (const account of accounts) {
       const characters = Array.isArray(account.characters) ? account.characters : [];
@@ -894,24 +919,45 @@ async function handleRaidCheckCommand(interaction) {
         if (characterItemLevel < raidMeta.minItemLevel) continue;
 
         const assignedRaids = ensureAssignedRaids(character);
-        const assigned = assignedRaids[raidMeta.raidKey];
-        const selectedDifficulty = toModeLabel(raidMeta.modeKey);
-        const gateKeys = getGateKeys(assigned);
-        const sameDifficulty = gateKeys.every(
-          (gate) => normalizeName(assigned?.[gate]?.difficulty) === normalizeName(selectedDifficulty)
-        );
-        const completed = sameDifficulty && isAssignedRaidCompleted(assigned);
+        const assigned = assignedRaids[raidMeta.raidKey] || {};
+        const storedGateKeys = getGateKeys(assigned);
+        // Fall back to the official gate list if the char doc has no
+        // gates recorded yet for this raid - means "all gates pending".
+        const officialGates =
+          storedGateKeys.length > 0 ? storedGateKeys : getGatesForRaid(raidMeta.raidKey);
 
-        if (!completed) {
-          matchedCharacters.push({
-            discordId: userDoc.discordId,
-            charName: getCharacterName(character),
-            itemLevel: character.itemLevel,
-          });
-        }
+        // Per-gate status: 'done' only if difficulty matches the requested
+        // mode AND completedDate is set. Mode-mismatch = treat as pending
+        // (a /raid-set on this mode would wipe the wrong-mode entry anyway).
+        const gateStatus = officialGates.map((gate) => {
+          const g = assigned[gate];
+          if (!g) return "pending";
+          const diffMatch = normalizeName(g.difficulty || "") === selectedDiffNorm;
+          if (!diffMatch) return "pending";
+          return Number(g.completedDate) > 0 ? "done" : "pending";
+        });
+
+        const doneCount = gateStatus.filter((s) => s === "done").length;
+        let overallStatus;
+        if (doneCount === officialGates.length) overallStatus = "complete";
+        else if (doneCount > 0) overallStatus = "partial";
+        else overallStatus = "none";
+
+        allEligible.push({
+          discordId: userDoc.discordId,
+          charName: getCharacterName(character),
+          itemLevel: characterItemLevel,
+          gateStatus,
+          overallStatus,
+        });
       }
     }
   }
+
+  const completeChars = allEligible.filter((c) => c.overallStatus === "complete");
+  const partialChars = allEligible.filter((c) => c.overallStatus === "partial");
+  const noneChars = allEligible.filter((c) => c.overallStatus === "none");
+  const pendingChars = [...partialChars, ...noneChars];
 
   const modeKey = normalizeName(raidMeta.modeKey);
   const difficultyColor =
@@ -919,52 +965,71 @@ async function handleRaidCheckCommand(interaction) {
       : modeKey === "hard" ? UI.colors.progress
       : UI.colors.neutral;
 
-  if (matchedCharacters.length === 0) {
+  // Empty state: every eligible char already cleared.
+  if (pendingChars.length === 0) {
     const emptyEmbed = new EmbedBuilder()
       .setTitle(`${UI.icons.done} Raid Check · ${raidMeta.label}`)
       .setColor(UI.colors.success)
       .setDescription(
-        `Không có nhân vật nào đạt iLvl ≥ **${raidMeta.minItemLevel}** mà chưa hoàn thành **${raidMeta.label}**.\nAll eligible characters have completed this raid.`
+        `Toàn bộ **${allEligible.length}** character iLvl ≥ **${raidMeta.minItemLevel}** đã hoàn thành **${raidMeta.label}**.\nAll eligible characters have completed this raid.`
       )
       .setTimestamp();
     await interaction.editReply({ embeds: [emptyEmbed] });
     return;
   }
 
-  const uniqueDiscordIds = [...new Set(matchedCharacters.map((item) => item.discordId))];
+  // Resolve display names for the pending users only - cache-first via
+  // resolveDiscordDisplay (Phase 23 limiter applies on misses).
+  const pendingDiscordIds = [...new Set(pendingChars.map((c) => c.discordId))];
   const displayMap = new Map();
   await Promise.all(
-    uniqueDiscordIds.map(async (discordId) => {
+    pendingDiscordIds.map(async (discordId) => {
       const displayName = await resolveDiscordDisplay(interaction.client, discordId);
       displayMap.set(discordId, displayName);
     })
   );
 
+  // Group pending chars by Discord user, sort chars within each group by
+  // iLvl desc, then sort users by pending count desc (most pending first).
   const byUser = new Map();
-  for (const item of matchedCharacters) {
+  for (const item of pendingChars) {
     if (!byUser.has(item.discordId)) byUser.set(item.discordId, []);
     byUser.get(item.discordId).push(item);
   }
   for (const chars of byUser.values()) {
-    chars.sort((a, b) => (Number(b.itemLevel) || 0) - (Number(a.itemLevel) || 0));
+    chars.sort((a, b) => b.itemLevel - a.itemLevel);
   }
-
   const userGroups = [...byUser.entries()]
-    .map(([discordId, chars]) => ({
-      discordId,
-      displayName: displayMap.get(discordId) || discordId,
-      chars,
-    }))
+    .map(([discordId, chars]) => {
+      const meta = userMeta.get(discordId) || {};
+      return {
+        discordId,
+        displayName: displayMap.get(discordId) || discordId,
+        chars,
+        partialCount: chars.filter((c) => c.overallStatus === "partial").length,
+        autoManageEnabled: meta.autoManageEnabled || false,
+        lastAutoManageSyncAt: meta.lastAutoManageSyncAt || 0,
+      };
+    })
     .sort((a, b) => {
       const countDiff = b.chars.length - a.chars.length;
       if (countDiff !== 0) return countDiff;
       return a.displayName.localeCompare(b.displayName);
     });
 
+  // Summary header: scannable big-picture stats so Raid Manager can read
+  // "26 pending out of 30" at a glance instead of counting field rows.
+  const completionPct = allEligible.length > 0
+    ? Math.round((completeChars.length / allEligible.length) * 100)
+    : 0;
   const headerTitle = `${UI.icons.warn} Raid Check · ${raidMeta.label}`;
-  const headerDescription =
-    `**${matchedCharacters.length}** characters · **${userGroups.length}** rosters · iLvl ≥ **${raidMeta.minItemLevel}**`;
-  const footerText = `Pending raid: ${raidMeta.label} · Raid Leader scan`;
+  const headerLines = [
+    `📊 **${allEligible.length}** eligible · ✅ **${completeChars.length}** done · ⏳ **${pendingChars.length}** pending (${100 - completionPct}%)`,
+    `Progress: 🟢 **${completeChars.length}** done · 🟡 **${partialChars.length}** started · ⚪ **${noneChars.length}** chưa bắt đầu`,
+    `iLvl ≥ **${raidMeta.minItemLevel}** · ${userGroups.length} ${userGroups.length === 1 ? "roster" : "rosters"}`,
+  ];
+  const headerDescription = headerLines.join("\n");
+  const footerText = `Raid Manager scan · ${pendingChars.length} char(s) cần update`;
 
   const makeCheckEmbed = (isFirst) => {
     const e = new EmbedBuilder().setColor(difficultyColor).setFooter({ text: footerText });
@@ -981,13 +1046,35 @@ async function handleRaidCheckCommand(interaction) {
   let currentSize = baseSize;
 
   for (const group of userGroups) {
-    const rawLines = group.chars.map(
-      (item) => `• **${item.charName}** · \`${Number(item.itemLevel) || 0}\``
-    );
-    let fieldValue = rawLines.join("\n");
+    // Per-char line: gate icons + name + integer iLvl.
+    // Decimals like 1742.5 / 1734.17 are noise for raid-check decisions -
+    // round to integer for cleaner scan.
+    const rawLines = group.chars.map((c) => {
+      const icons = c.gateStatus.map(raidCheckGateIcon).join("");
+      const ilvl = Math.round(c.itemLevel);
+      return `${icons} **${c.charName}** \`${ilvl}\``;
+    });
+    // Optional first-line freshness hint when the user is opted-in to
+    // auto-manage AND has at least one successful sync recorded. Surfaces
+    // "is this data fresh?" inline next to each user's char list.
+    const headerInfoLines = [];
+    if (group.autoManageEnabled && group.lastAutoManageSyncAt > 0) {
+      headerInfoLines.push(
+        `_synced <t:${Math.floor(group.lastAutoManageSyncAt / 1000)}:R>_`
+      );
+    } else if (group.autoManageEnabled) {
+      headerInfoLines.push("_opted-in · chưa sync lần nào_");
+    }
+    const fieldValueRaw = [...headerInfoLines, ...rawLines].join("\n");
+    let fieldValue = fieldValueRaw;
     if (fieldValue.length > 1024) fieldValue = `${fieldValue.slice(0, 1020)}...`;
 
-    const fieldName = `👤 ${group.displayName} · ${group.chars.length}`;
+    // Field name composition: pending count + (optional) partial count
+    // with ⚡ flag + (optional) auto-manage opt-in badge. Keep it dense
+    // but scannable - all signals at a glance, no line break.
+    const partialNote = group.partialCount > 0 ? ` · ⚡ ${group.partialCount} partial` : "";
+    const optInBadge = group.autoManageEnabled ? " · 🔄 auto" : "";
+    const fieldName = `👤 ${group.displayName} · ${group.chars.length} pending${partialNote}${optInBadge}`;
     const fieldSize = fieldName.length + fieldValue.length;
     const current = embeds[embeds.length - 1];
     const fieldCount = current.data.fields?.length ?? 0;
@@ -2098,6 +2185,11 @@ const HELP_SECTIONS = [
     notes: [
       "EN: Restricted to Discord user IDs configured in the `RAID_MANAGER_ID` env var (comma-separated).",
       "VN: Chỉ Discord user IDs được liệt kê trong env `RAID_MANAGER_ID` (cách nhau bằng dấu phẩy) được phép gọi. Operator config qua deploy env, không qua Discord role.",
+      "• **Header summary**: eligible / done / pending + progress distribution (🟢/🟡/⚪) + iLvl threshold + roster count - scan big picture trước khi dive vào list chi tiết.",
+      "• **Per-char display**: mỗi char hiện `<gate icons> **name** iLvl` với 1 icon per gate (🟢 = gate done, ⚪ = gate pending). Ví dụ Kazeros 2-gate: `🟢⚪ Clauseduk 1744` = G1 done, G2 chưa. iLvl round integer (1744 thay 1744.17) cho clean scan.",
+      "• **Per-user metadata inline**: field name hiện pending count + `⚡ N partial` (user có char đang dở dang, gần xong) + `🔄 auto` (opted-in auto-manage). Field value có `_synced <relative-time>_` prepend cho opted-in user có sync data.",
+      "• **Sort order**: user với nhiều pending nhất lên top; trong mỗi user, char sort iLvl desc. Tie-break by display name alphabetical.",
+      "• **Mode-scoped progress**: gate nào stored với difficulty KHÁC mode đang scan sẽ treat như pending (mode-switch wipe sẽ xảy ra khi user /raid-set ở mode này).",
       "• Output auto-paginate thành chunks ≤ 1900 chars - follow-up messages ephemeral.",
       "• **Discord username resolution**: cache-first (discord.js users cache). Cache miss đi qua `discordUserLimiter` (max 5 in-flight) để server đông không burst `client.users.fetch` parallel - bảo vệ khỏi Discord 50 req/s global ceiling.",
     ],

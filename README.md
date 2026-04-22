@@ -82,8 +82,11 @@ Ví dụ: `/raid-set character:Clauseduk raid:kazeros_hard status:complete gate:
 
 Output là **embed ephemeral** với:
 - Color động theo difficulty: đỏ = Nightmare, vàng = Hard, blurple = Normal
-- Grouped by Discord user - nhiều char pending nhất hiển thị trên cùng; trong mỗi user, char sắp theo iLvl desc
-- Multi-embed pagination khi > 25 fields hoặc > 5500 chars - follow-up messages ephemeral
+- **Header summary**: eligible / done / pending count + progress distribution `🟢 done · 🟡 started · ⚪ chưa bắt đầu` + iLvl threshold + roster count. Raid Manager scan big-picture trước khi đọc list chi tiết.
+- **Per-char display**: mỗi char line format `<gate icons> **name** iLvl`. Icons 1-per-gate: 🟢 = gate đó done ở mode đang scan, ⚪ = gate đó chưa done (hoặc done ở mode khác - mode-switch wipe sẽ xảy ra khi `/raid-set` ở mode này). Ví dụ Kazeros 2-gate: `🟢⚪ Clauseduk 1744` = G1 done G2 chưa. iLvl round integer, bỏ decimal noise (`1744` thay `1744.17`).
+- **Per-user metadata inline**: field name `👤 <name> · N pending · ⚡ X partial · 🔄 auto` - `⚡` flag user có char dở dang (gần xong), `🔄 auto` = user đã opt-in `/raid-auto-manage`. Field value có `_synced <relative-time>_` prepend khi opted-in user có sync data → Raid Manager biết data fresh hay stale per-user.
+- Grouped by Discord user - nhiều char pending nhất hiển thị trên cùng; trong mỗi user, char sắp theo iLvl desc. Tie-break by display name alphabetical.
+- Multi-embed pagination khi > 25 fields hoặc > 5500 chars - follow-up messages ephemeral.
 - Empty state (mọi người đã xong): embed xanh lá `✅ All eligible characters have completed...`
 - **Discord username resolution**: cache-first (`client.users.cache.get`) - phần lớn user có trong cache từ các gateway events trước đó, không cần REST round-trip. Cache miss đi qua `discordUserLimiter` (max 5 in-flight) thay vì `Promise.all` unbounded - server đông không burst `client.users.fetch` parallel, tránh trip Discord global 50 req/s ceiling.
 
