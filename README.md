@@ -69,12 +69,17 @@ Update trạng thái raid cho 1 character cụ thể.
 
 | Option | Required | Choices |
 |--------|----------|---------|
-| `character` | ✅ | Tên character - **autocomplete** từ roster đã lưu (top 25, sort theo iLvl desc, format `name · class · iLvl`) |
+| `roster` | ✅ | Roster (account) chứa character - **autocomplete** list các account đã đăng ký với suffix char count (`📁 Clauseduk · 6 chars`). Required để narrow down character autocomplete khi user có nhiều roster (Discord autocomplete cap 25 entries; 5+ rosters × 6 chars = overflow, lower-iLvl chars bị cut). Chained: pick roster → character autocomplete filter theo roster đó. |
+| `character` | ✅ | Tên character - **autocomplete** filter theo roster đã chọn (chỉ show char trong roster đó), format `name · class · iLvl`. Mỗi roster max 6 char nên luôn fit 25-cap. Nếu roster chưa pick (autocomplete fires per-keystroke), fallback show chars across all accounts (legacy top-25 by iLvl desc). |
 | `raid` | ✅ | Raid + difficulty - **autocomplete** filter theo character đã chọn: chỉ show raids đủ iLvl, kèm icon tiến độ (`🟢 done · 🟡 partial · ⚪ pending · x/y`). Thứ tự luôn `Act 4 → Kazeros → Serca`, và trong từng raid thì `Normal → Hard → Nightmare` (khớp thứ tự card trong `/raid-status`). Raid đã hoàn thành hiển thị thêm suffix ` · DONE` để nổi bật. Values: `armoche_normal`, `armoche_hard`, `kazeros_normal`, `kazeros_hard`, `serca_normal`, `serca_hard`, `serca_nightmare`. |
 | `status` | ✅ | **autocomplete** - mặc định hiện `Complete` (cả raid xong), `Process` (1 gate xong), `Reset` (xoá về 0). Khi raid đã `done/done` cho character đã chọn thì dropdown chỉ còn `Reset (raid đã hoàn thành - chỉ có thể reset)` để tránh click nhầm. |
 | `gate` | ❌ | **autocomplete**, chỉ active khi `status = Process`. Dropdown đọc `getGatesForRaid(raidKey)` từ `src/models/Raid.js` nên luôn khớp đúng số gate thực tế của raid (Act 4/Kazeros/Serca hiện tại = G1, G2). Với `Complete`/`Reset` thì gate trả empty để tín hiệu "không cần chọn" - hai action này luôn tác động lên toàn bộ gate. `Process` bắt buộc phải có `gate`, nếu thiếu thì bot reject. |
 
-Ví dụ: `/raid-set character:Clauseduk raid:kazeros_hard status:complete gate:G1`
+Ví dụ: `/raid-set roster:Clauseduk character:Nailaduk raid:kazeros_hard status:complete`
+
+**Same-named chars disambiguation**: nếu 2 roster của cùng user có char trùng tên (main + alt `Clauseduk` chẳng hạn), roster field scope lookup vào roster đã chọn nên `findCharacterInUser(doc, charName, rosterName)` trả đúng char thay vì first-by-iteration.
+
+**Text-monitor parser** (`/raid-channel` text post như `Act4 Hard Clauseduk`) không có roster context - `applyRaidSetForDiscordId` nhận `rosterName=null` và fallback first-by-iteration. Không breaking change cho text path.
 
 ### `/raid-check`
 
