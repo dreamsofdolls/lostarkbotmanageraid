@@ -1078,7 +1078,7 @@ async function handleRaidCheckCommand(interaction) {
   const headerDescription =
     `**${pendingChars.length}/${allEligible.length}** pending (${100 - completionPct}%) · iLvl ≥ **${raidMeta.minItemLevel}** · ` +
     `🟢 ${completeChars.length} · 🟡 ${partialChars.length} · ⚪ ${noneChars.length}`;
-  const footerText = `Raid Manager scan · ${userCount} ${userCount === 1 ? "user" : "users"} cần nhắc · ${rosterCount} ${rosterCount === 1 ? "roster" : "rosters"}`;
+  const footerText = `${RAID_CHECK_FOOTER_LEGEND} · ${userCount} ${userCount === 1 ? "user" : "users"} cần nhắc · ${rosterCount} ${rosterCount === 1 ? "roster" : "rosters"}`;
 
   // One embed per roster - mirrors /raid-status's 1-account-per-page model.
   // Roster header lives in setDescription right under the global summary so
@@ -1507,6 +1507,12 @@ async function handleRaidCheckSyncClick(interaction, raidMeta) {
 // lâu quá để giữ stale collector sống. Shared giữa nhiều command để consistent.
 const PAGINATION_SESSION_MS = 2 * 60 * 1000;
 const STATUS_FOOTER_LEGEND = `${UI.icons.done} done · ${UI.icons.partial} partial · ${UI.icons.pending} pending`;
+// /raid-check footer legend - specific to 2-gate raid semantics (cleared /
+// one gate done / nothing done). "đi mới G1" matches the 2-gate raid set
+// currently shipped; when 3-gate raids land the label will need generalizing
+// to "đang đi" or similar. Aggregate icon via `pickProgressIcon` drives the
+// per-char field value, legend here tells Raid Manager what each color means.
+const RAID_CHECK_FOOTER_LEGEND = `${UI.icons.done} cleared · ${UI.icons.partial} đi mới G1 · ${UI.icons.pending} chưa đi`;
 
 // Lostark.bible updates each character roughly every 2 hours. We match that
 // cadence to avoid wasted fetches: any account refreshed within this window
@@ -2605,6 +2611,7 @@ const HELP_SECTIONS = [
       "• **Roster per page**: 1 roster = 1 embed page. Roster header `📁 accountName (displayName) · N pending · 🔄<relative>` nằm trong `setDescription` (dòng 2, ngay dưới global summary) - char cards bắt đầu sát dưới description không có wasted spacer row. User có 2 roster (main + alt) hiện thành 2 pages riêng. Rosters cùng user group consecutive, sort theo tổng pending của user desc rồi per-roster pending count desc.",
       "• **Pagination buttons + session**: `◀ Previous` / `Next ▶` (từ shared helper `buildPaginationRow`) cycle giữa các roster pages, y hệt `/raid-status`. Title embed hiện `⚠️ Raid Check · <raid> · Page X/Y`. Collector locked theo người chạy command, session timeout **2 phút** (shared constant `PAGINATION_SESSION_MS` với `/raid-status`), hết hạn disable buttons + footer đổi `⏱️ Session đã hết hạn (120s) · Dùng /raid-check để xem lại`.",
       "• **Sync badge trong roster header**: opted-in user có sync data hiện `🔄5m` / `🔄2h` / `🔄3d` (compact relative time tự compute). Opted-in nhưng chưa sync lần nào → `🔄never`. Non-opted-in → không hiện segment này.",
+      "• **Footer legend**: `🟢 cleared · 🟡 đi mới G1 · ⚪ chưa đi · N users cần nhắc · M rosters` - matches `/raid-status`'s footer-legend pattern. Prefix explain 3 aggregate colors (🟢 = tất cả gate done, 🟡 = mới xong 1 gate, ⚪ = chưa chạm gate nào), suffix cung cấp scan breakdown (action-able cho Raid Manager biết ping bao nhiêu người). Label `đi mới G1` specific cho 2-gate raids hiện tại; khi có 3-gate raid sẽ generalize thành 'đang đi' hoặc tương tự.",
       "• **Sort order**: users có nhiều pending tổng nhất lên top; trong mỗi user rosters sort theo pending count desc; trong mỗi roster chars sort theo iLvl desc.",
       "• **Mode-scoped progress**: gate nào stored với difficulty KHÁC mode đang scan sẽ treat như pending (mode-switch wipe sẽ xảy ra khi user /raid-set ở mode này).",
       "• **🔔 Remind button**: Raid Manager bấm → bot DM mỗi user pending list chars của họ + 3 cách update (post `/raid-channel`, gõ `/raid-set`, opt-in `/raid-auto-manage`). Operate trên ALL pending (không chỉ current page). DM rate-limited qua `discordUserLimiter` (max 5 concurrent) tránh burst Discord. User tắt DM → liệt kê failed list trong reply ephemeral.",
