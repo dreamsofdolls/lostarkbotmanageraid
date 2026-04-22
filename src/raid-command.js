@@ -2168,7 +2168,7 @@ const HELP_SECTIONS = [
       "• **Per-user sync throttle**: 5 phút cooldown + in-flight guard. `action:sync` spam → reject ephemeral với remaining time (tránh N-roster × M-char HTTP calls dội bible). `action:on` đang in-flight thì reject; đang cooldown thì vẫn flip flag nhưng skip cả probe lẫn sync, báo user chờ X phút rồi gõ `sync` sau.",
       "• **Dynamic action dropdown**: dropdown autocomplete hide option dư thừa theo state — đang ON thì không show `on`, đang OFF thì không show `off`. Typed-paste `on`/`off` khi redundant → ephemeral reject. Action lạ (paste arbitrary string không thuộc `on/off/sync/status`) → ephemeral reject ngay đầu handler, không fall-through Discord-timeout.",
       "• **Phase 2 — auto-sync piggyback vào `/raid-status`**: khi `autoManageEnabled = true` + cooldown 5 phút cho phép, mỗi lần user gõ `/raid-status` Artist sẽ pull bible logs **song song** với roster refresh (Promise.all, share `bibleLimiter`) trước khi render embed. Reuse cùng `acquireAutoManageSyncSlot` nên spam `/raid-status` không spam bible. Race-safe: re-check `autoManageEnabled` trên fresh doc trong `saveWithRetry`, nếu user bấm `action:off` giữa gather và save → skip apply nhưng vẫn stamp `lastAutoManageAttemptAt` (bible quota đã tốn). Save fail (mongo blip) → catch stamp attempt qua `stampAutoManageAttempt` để cooldown vẫn kick in. Cooldown chưa hết / in-flight → render cached, silent skip. Gather throw (Cloudflare/timeout) → swallow + log + render cached, không vỡ `/raid-status`.",
-      "• **Phase 3 — 24h passive auto-sync background scheduler**: opted-in user nào chưa sync trong 24h sẽ được background tick (mỗi 30 phút) tự pull bible logs, batch tối đa **3 user/tick** sort theo stalest first. Reuse cùng `acquireAutoManageSyncSlot` nên không double-fire với Phase 2 piggyback / manual `action:sync`. Filter ở DB level (`lastAutoManageSyncAt < now - 24h`) → user active đã sync gần đây tự bypass tick. Mục đích chính: data fresh cho `/raid-check` khi raid leader scan member inactive, và user vacation về vẫn thấy data tuần này. **Killswitch**: env `AUTO_MANAGE_DAILY_DISABLED=true` skip mọi tick — flip nhanh nếu bible block, không cần redeploy. Bible HTTP load: batch 3 × 5 chars × ~6 HTTP avg = ~90 HTTP/tick max, spread qua 48 ticks/day cover được ~144 user-syncs/day capacity.",
+      "• **Phase 3 — 24h passive auto-sync background scheduler**: opted-in user nào chưa sync trong 24h sẽ được background tick (mỗi 30 phút) tự pull bible logs, batch tối đa **3 user/tick** sort theo `lastAutoManageAttemptAt` ascending (chứ KHÔNG phải `lastAutoManageSyncAt`) — đảm bảo stuck user (perma-fail Cloudflare/private log) không monopolize batch forever, mọi user đều có rotation fair. Reuse cùng `acquireAutoManageSyncSlot` nên không double-fire với Phase 2 piggyback / manual `action:sync`. Filter ở DB level (`lastAutoManageSyncAt < now - 24h`) → user active đã sync gần đây tự bypass tick. **Tick overlap guard**: nếu tick trước chưa xong khi 30 phút mới đến (bible outage worst case), tick mới skip để không double traffic. **Summary log honesty**: tick log split 4 bucket (`synced` / `attempted-only` / `skipped` / `failed`) — chỉ count `synced` khi có ≥1 char success, tránh false-positive metric. **Killswitch**: env `AUTO_MANAGE_DAILY_DISABLED=true` skip mọi tick — flip nhanh nếu bible block, không cần redeploy. Bible HTTP load: batch 3 × 5 chars × ~6 HTTP avg = ~90 HTTP/tick max, spread qua 48 ticks/day cover được ~144 user-syncs/day capacity.",
     ],
   },
 ];
@@ -5097,8 +5097,16 @@ async function runAutoManageDailyTick() {
   //   - autoManageEnabled true (opted in)
   //   - has at least one account (Mongo "accounts.0 exists" pattern)
   //   - never synced (null) OR last success > 24h ago
-  // Sort stalest-first so longest-waiting users get serviced before
-  // marginal ones, then cap at BATCH_SIZE.
+  //
+  // Sort by `lastAutoManageAttemptAt` ascending — NOT `lastAutoManageSyncAt`.
+  // Why: stuck users (Cloudflare 403 forever, private-log forever) never
+  // advance `lastAutoManageSyncAt`, so sorting by sync-time would pick
+  // the same 3 stuck users every tick and starve everyone behind them
+  // (Codex round 27 finding #1). Sorting by attempt-time lets stuck users
+  // rotate out: each attempt stamps `lastAutoManageAttemptAt` (success
+  // path, opt-out race, save-fail catch — all stamp it), so after a tick
+  // they're no longer stalest by attempt and the next-stalest user gets
+  // a turn. Fair coverage even when some users perma-fail.
   const candidates = await User.find({
     autoManageEnabled: true,
     "accounts.0": { $exists: true },
@@ -5107,7 +5115,7 @@ async function runAutoManageDailyTick() {
       { lastAutoManageSyncAt: { $lt: cutoff } },
     ],
   })
-    .sort({ lastAutoManageSyncAt: 1 })
+    .sort({ lastAutoManageAttemptAt: 1 })
     .limit(AUTO_MANAGE_DAILY_BATCH_SIZE)
     .select("discordId")
     .lean();
@@ -5115,7 +5123,20 @@ async function runAutoManageDailyTick() {
   if (candidates.length === 0) return;
 
   const weekResetStart = weekResetStartMs();
+  // Counters split by actual outcome so the operator log never lies about
+  // "synced N" when really nothing got refreshed (Codex round 27 #3):
+  //   - syncedCount: at least 1 char succeeded → lastAutoManageSyncAt
+  //     stamped. The metric operator actually cares about for "is the
+  //     scheduler doing useful work?".
+  //   - attemptedOnlyCount: bible was hit but no char succeeded (all
+  //     errored, or user opted out mid-flight) → only attempt stamped,
+  //     no fresh data. Burns quota with zero progress.
+  //   - skippedCount: didn't hit bible (cooldown / in-flight / opt-out
+  //     before gather / no roster).
+  //   - failedCount: caught throw — usually bible HTTP error or save
+  //     blowup.
   let syncedCount = 0;
+  let attemptedOnlyCount = 0;
   let skippedCount = 0;
   let failedCount = 0;
 
@@ -5134,6 +5155,7 @@ async function runAutoManageDailyTick() {
       const seedDoc = await User.findOne({ discordId });
       if (!seedDoc || !Array.isArray(seedDoc.accounts) || seedDoc.accounts.length === 0) {
         // Roster removed between query + slot acquire — skip cleanly.
+        skippedCount += 1;
         continue;
       }
       // Opt-out race: user could have bấm action:off between the candidate
@@ -5146,6 +5168,11 @@ async function runAutoManageDailyTick() {
       ensureFreshWeek(seedDoc);
       const collected = await gatherAutoManageLogsForUserDoc(seedDoc, weekResetStart);
       bibleHit = true;
+      // Outcome bucket for THIS user, decided inside saveWithRetry and
+      // read after to drive the right counter increment. Default
+      // "attempted-only" — apply branches override to "synced" when at
+      // least one char actually fetched without error.
+      let outcome = "attempted-only";
       await saveWithRetry(async () => {
         const fresh = await User.findOne({ discordId });
         if (!fresh || !Array.isArray(fresh.accounts) || fresh.accounts.length === 0) return;
@@ -5163,10 +5190,12 @@ async function runAutoManageDailyTick() {
         fresh.lastAutoManageAttemptAt = now;
         if (report.perChar.some((c) => !c.error)) {
           fresh.lastAutoManageSyncAt = now;
+          outcome = "synced";
         }
         await fresh.save();
       });
-      syncedCount += 1;
+      if (outcome === "synced") syncedCount += 1;
+      else attemptedOnlyCount += 1;
     } catch (err) {
       failedCount += 1;
       // Codex round 26 #2 parity: bible burned quota but save threw. Stamp
@@ -5184,7 +5213,7 @@ async function runAutoManageDailyTick() {
   }
 
   console.log(
-    `[auto-manage daily] tick: ${candidates.length} candidate(s) · synced ${syncedCount} · skipped ${skippedCount} · failed ${failedCount}`
+    `[auto-manage daily] tick: ${candidates.length} candidate(s) · synced ${syncedCount} · attempted-only ${attemptedOnlyCount} · skipped ${skippedCount} · failed ${failedCount}`
   );
 }
 
@@ -5194,14 +5223,35 @@ async function runAutoManageDailyTick() {
  * has one mental model. Per-tick batch size + per-user slot acquire keep
  * bible footprint thin even at scale — see runAutoManageDailyTick header.
  *
+ * In-flight guard: a single tick can plausibly run > 30 min under bible
+ * outage (sequential users × sequential chars × up to 10 paginated logs ×
+ * 15s timeout per HTTP). `setInterval` doesn't block the next fire on a
+ * slow callback, so without the guard, two ticks could overlap and double
+ * bible traffic — defeating the per-tick batch cap (Codex round 27 #2).
+ * The guard is module-scope (not persisted) — process restart resets it,
+ * which is fine: a crash during a tick releases the slot anyway.
+ *
  * Returns the interval handle. Caller doesn't need to track it for the
  * normal lifetime — process exit kills the timer.
  */
+let dailyTickInFlight = false;
 function startAutoManageDailyScheduler() {
-  const run = () =>
-    runAutoManageDailyTick().catch((err) => {
+  const run = async () => {
+    if (dailyTickInFlight) {
+      console.warn(
+        "[auto-manage daily] previous tick still running — skipping this fire to avoid overlap"
+      );
+      return;
+    }
+    dailyTickInFlight = true;
+    try {
+      await runAutoManageDailyTick();
+    } catch (err) {
       console.error("[auto-manage daily] scheduler tick failed:", err?.message || err);
-    });
+    } finally {
+      dailyTickInFlight = false;
+    }
+  };
   run();
   return setInterval(run, AUTO_MANAGE_DAILY_TICK_MS);
 }
