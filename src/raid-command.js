@@ -1122,7 +1122,6 @@ async function handleRaidCheckCommand(interaction) {
   const inlineSpacer = { name: "​", value: "​", inline: true };
 
   const buildRaidCheckPage = (group, pageIndex, totalPages) => {
-    const pageSuffix = totalPages > 1 ? ` · Page ${pageIndex + 1}/${totalPages}` : "";
     let syncBadge = "";
     if (group.autoManageEnabled) {
       syncBadge = group.lastAutoManageSyncAt > 0
@@ -1130,12 +1129,18 @@ async function handleRaidCheckCommand(interaction) {
         : " · 🔄never";
     }
     const rosterHeader = `📁 ${group.accountName} (${group.displayName}) · ${group.chars.length} pending${syncBadge}`;
+    // Page indicator moved from title to footer (appended after state
+    // counts legend). Title stays clean `⚠️ Raid Check · Act 4 Normal
+    // (1700)`, footer carries all meta context on one line.
+    const pageFooter = totalPages > 1
+      ? `${footerText} · Page ${pageIndex + 1}/${totalPages}`
+      : footerText;
 
     const embed = new EmbedBuilder()
-      .setTitle(`${headerTitle}${pageSuffix}`)
+      .setTitle(headerTitle)
       .setDescription(`${headerDescription}\n${rosterHeader}`)
       .setColor(difficultyColor)
-      .setFooter({ text: footerText })
+      .setFooter({ text: pageFooter })
       .setTimestamp();
 
     for (let i = 0; i < group.chars.length; i += 2) {
@@ -2588,13 +2593,13 @@ const HELP_SECTIONS = [
     notes: [
       "EN: Restricted to Discord user IDs configured in the `RAID_MANAGER_ID` env var (comma-separated).",
       "VN: Chỉ Discord user IDs được liệt kê trong env `RAID_MANAGER_ID` (cách nhau bằng dấu phẩy) được phép gọi. Operator config qua deploy env, không qua Discord role.",
-      "• **Header summary**: title embed hiện `⚠️ Raid Check · <raid label> (<minItemLevel>) · Page X/Y` - iLvl threshold nhét vào parens cạnh raid label (ví dụ `Act 4 Normal (1700)`), description line 1 còn mỗi `pending/eligible (% chưa xong)`. 3-state distribution counts (🟢/🟡/⚪) ở footer legend.",
+      "• **Header summary**: title embed hiện `⚠️ Raid Check · <raid label> (<minItemLevel>)` - gọn, chỉ command + raid + threshold. iLvl nhét trong parens (ví dụ `Act 4 Normal (1700)`). Description line 1 còn mỗi `pending/eligible (% chưa xong)`. Page indicator + 3-state counts đều dưới footer.",
       "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field mirroring `/raid-status`'s pattern. Field name `<charName> · <iLvl>` được Discord auto-bold = scan anchor. Field value `<icon> <done>/<total>` (ví dụ `⚪ 0/2`) - value line có content nên không waste height (earlier attempt pack everything vào name line + ZWS value tạo gap 'cách nhau quá'). Aggregate 3-state icon qua `pickProgressIcon` (🟢 done all / 🟡 partial / ⚪ none). Raid label nằm ở title không lặp trong value.",
       "• **2-column layout via inline fields + spacer**: Discord default pack 3 inline field/row; chèn zero-width-space spacer field giữa mỗi cặp char để force 2-per-row - y hệt kỹ thuật `/raid-status`. Odd char cuối cùng cặp với 1 spacer để không bị Discord stretch full-width.",
       "• **Roster per page**: 1 roster = 1 embed page. Roster header `📁 accountName (displayName) · N pending · 🔄<relative>` nằm trong `setDescription` (dòng 2, ngay dưới global summary) - char cards bắt đầu sát dưới description không có wasted spacer row. User có 2 roster (main + alt) hiện thành 2 pages riêng. Rosters cùng user group consecutive, sort theo tổng pending của user desc rồi per-roster pending count desc.",
       "• **Pagination buttons + session**: `◀ Previous` / `Next ▶` (từ shared helper `buildPaginationRow`) cycle giữa các roster pages, y hệt `/raid-status`. Title embed hiện `⚠️ Raid Check · <raid> · Page X/Y`. Collector locked theo người chạy command, session timeout **2 phút** (shared constant `PAGINATION_SESSION_MS` với `/raid-status`), hết hạn disable buttons + footer đổi `⏱️ Session đã hết hạn (120s) · Dùng /raid-check để xem lại`.",
       "• **Sync badge trong roster header**: opted-in user có sync data hiện `🔄5m` / `🔄2h` / `🔄3d` (compact relative time tự compute). Opted-in nhưng chưa sync lần nào → `🔄never`. Non-opted-in → không hiện segment này.",
-      "• **Footer legend với counts**: `🟢 N done · 🟡 M partial · ⚪ K pending` - icon + count + English label merged. Dynamic per scan (counts thay đổi) nên compute inline thay vì reuse `/raid-status`'s static `STATUS_FOOTER_LEGEND`. Traine: 'hai cái [counts] này có thể đem xuống chỗ legendary cũng được' - merge counts từ description xuống footer để description gọn, footer rich info.",
+      "• **Footer legend với counts + page**: `🟢 N done · 🟡 M partial · ⚪ K pending · Page X/Y` - icon + count + English label merged, page indicator append cuối khi > 1 roster (move từ title xuống đây). Dynamic per page (page index thay đổi) compute inline trong `buildRaidCheckPage`. Discord render timestamp (`Today at HH:MM`) sau footer text tự động.",
       "• **Sort order**: users có nhiều pending tổng nhất lên top; trong mỗi user rosters sort theo pending count desc; trong mỗi roster chars sort theo iLvl desc.",
       "• **Mode-scoped progress**: gate nào stored với difficulty KHÁC mode đang scan sẽ treat như pending (mode-switch wipe sẽ xảy ra khi user /raid-set ở mode này).",
       "• **🔄 Sync button**: Raid Manager bấm → trigger auto-manage sync CHỈ cho opted-in user trong list pending (privacy-respecting - non-opted-in user KHÔNG bị force-sync). Operate trên ALL opted-in pending users (không chỉ current page). Reuse Phase 3 gather/apply pattern + `acquireAutoManageSyncSlot` (5-min cooldown share với /raid-auto-manage). User nào có char update mới sẽ nhận DM riêng (skip nếu sync chạy nhưng không có data mới). Disabled nếu không có opted-in user nào trong list.",
