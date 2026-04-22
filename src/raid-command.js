@@ -2785,7 +2785,7 @@ function buildRaidChannelMultiResultEmbed({
   const embed = new EmbedBuilder()
     .setColor(color)
     .setTitle(`${titleIcon} Raid Update · ${scopeLabel}`)
-    .setDescription(`Artist đã xử lý raid cho ${results.length} character~ 🦊`)
+    .setDescription(`Tớ đã xử lý raid cho ${results.length} character~`)
     .setTimestamp();
 
   if (done.length > 0) {
@@ -2838,7 +2838,7 @@ function buildRaidChannelAlreadyCompleteEmbed({
     .setColor(UI.colors.progress)
     .setTitle(`${UI.icons.info} Raid đã DONE từ trước rồi~`)
     .setDescription(
-      `**${charName}** đã clear **${scopeLabel}** tuần này rồi nhé 🦊 Artist không update lại đâu - để tránh overwriting progress cậu đã có.`
+      `**${charName}** đã clear **${scopeLabel}** tuần này rồi nhé. Tớ không update lại đâu - để tránh overwriting progress cậu đã có.`
     )
     .addFields(
       { name: "Character", value: `**${charName}**`, inline: true },
@@ -2873,7 +2873,7 @@ function buildRaidChannelSuccessEmbed({
   const embed = new EmbedBuilder()
     .setColor(UI.colors.success)
     .setTitle(title)
-    .setDescription(`Artist đã update progress cho **${charName}** rồi nha~ 🦊`)
+    .setDescription(`Tớ đã update progress cho **${charName}** rồi nha~`)
     .addFields(
       { name: "Character", value: `**${charName}**`, inline: true },
       { name: "Raid", value: `**${raidMeta.label}**`, inline: true },
@@ -2899,7 +2899,7 @@ function buildRaidChannelWelcomeEmbed() {
     .setTitle(`🦊 Chào các bạn~ Artist ngồi trông channel này nhé`)
     .setDescription(
       [
-        "🦊 Mỗi lần clear raid xong, cứ post 1 tin nhắn ngắn dạng `<raid> <difficulty> <character[, character2, ...]> [gate]` vào đây là Artist sẽ tự động đánh dấu progress giúp, xong Artist dọn luôn tin nhắn cho channel khỏi rối nha~",
+        "Mỗi lần clear raid xong, cứ post 1 tin nhắn ngắn dạng `<raid> <difficulty> <character[, character2, ...]> [gate]` vào đây là Artist sẽ tự đánh dấu progress giúp cậu, xong tớ dọn luôn tin nhắn cho channel khỏi rối nha~",
         "",
         "**Artist chỉ update được character trong roster của chính bạn thôi đấy.** Chưa có roster? Chạy `/add-roster` trước rồi hẵng post clear nhé. Muốn xem lại tiến độ của mình, dùng `/raid-status`.",
       ].join("\n")
@@ -2926,18 +2926,18 @@ function buildRaidChannelWelcomeEmbed() {
       {
         name: "⚠️ Vài chuyện Artist muốn nhắc nhỏ",
         value: [
-          "• Character phải đủ iLvl cho raid đó, không Artist sẽ nhắc khẽ~",
-          "• Gõ tin nhắn không giống format → Artist im lặng, không spam channel đâu.",
+          "• Character phải đủ iLvl cho raid đó, không tớ sẽ nhắc khẽ~",
+          "• Gõ tin nhắn không giống format → tớ im lặng, không spam channel đâu.",
           "• Gõ đúng nhưng có lỗi (không tìm thấy char, iLvl thiếu, nhiều raid/difficulty/gate lẫn lộn) → Artist ping nhẹ nhàng; tin nhắn đó sẽ tự dọn khi bạn post lại, hoặc sau 5 phút nếu quên.",
-          "• Post đúng → Artist DM bạn embed confirm riêng. Nếu DM bị tắt, Artist sẽ ping public ngắn rồi tự xóa sau 15 giây.",
-          "• Post 1 raid đã clear từ trước → Artist DM notice riêng báo đã DONE rồi, không update lại. Tránh overwrite progress tuần này. Muốn reset thật sự thì dùng `/raid-set` với `status:reset`.",
-          "• Post cách nhau ít nhất **2 giây** nha~ Spam nhanh quá Artist sẽ im lặng bỏ qua và nhắc khéo 1 lần.",
+          "• Post đúng → Artist DM bạn embed confirm riêng. Nếu DM bị tắt, tớ sẽ ping public ngắn rồi tự xóa sau 15 giây.",
+          "• Post 1 raid đã clear từ trước → tớ DM notice riêng báo đã DONE rồi, không update lại. Tránh overwrite progress tuần này. Muốn reset thật sự thì dùng `/raid-set` với `status:reset`.",
+          "• Post cách nhau ít nhất **2 giây** nha~ Spam nhanh quá tớ sẽ im lặng bỏ qua và nhắc khéo 1 lần.",
         ].join("\n"),
       },
       {
         name: "🤖 Lười post? Bật `/raid-auto-manage` nhé",
         value: [
-          "Gõ `/raid-auto-manage action:on` để Artist tự update raid progress cho cậu, không cần post thủ công.",
+          "Gõ `/raid-auto-manage action:on` để tớ tự update raid progress cho cậu, không cần post thủ công nha~",
           "Nhớ bật **Public Log** cho từng char muốn sync tại <https://lostark.bible/me/logs> trước nha.",
         ].join("\n"),
       }
@@ -3094,7 +3094,7 @@ function commitUserMonitorActivity(message, viaException = false) {
 async function postSpamWarning(message) {
   try {
     const reply = await message.reply({
-      content: `🦊💢 Này ơi, Artist theo không kịp đâu~ Mỗi tin cách nhau ít nhất 2 giây thôi nhé, không Artist im lặng ignore đấy!`,
+      content: `💢 Này ơi, tớ theo không kịp đâu~ Mỗi tin cách nhau ít nhất 2 giây thôi nhé, không Artist im lặng ignore đấy!`,
     });
     setTimeout(() => {
       reply.delete().catch(() => {});
@@ -3338,7 +3338,7 @@ async function handleRaidChannelMessage(message) {
         `_(Các character hợp lệ khác trong post của bạn đã được update rồi - check DM cho chi tiết.)_`
       );
     } else {
-      hintLines.push(`_(Sửa lại rồi post lại nhé, Artist sẽ tự dọn hint cũ.)_`);
+      hintLines.push(`_(Sửa lại rồi post lại nhé, tớ sẽ tự dọn hint cũ.)_`);
     }
     ops.push(postPersistentHint(message, hintLines.join("\n")));
   }
@@ -4099,7 +4099,7 @@ async function handleRaidAutoManageCommand(interaction) {
           .setColor(UI.colors.success)
           .setTitle(`${UI.icons.done} Auto-manage enabled (sync skipped)`)
           .setDescription(
-            `Flag đã bật. Sync vừa chạy gần đây nên Artist bỏ qua initial sync lần này - đợi **${formatAutoManageCooldownRemaining(
+            `Flag đã bật. Sync vừa chạy gần đây nên tớ bỏ qua initial sync lần này - đợi **${formatAutoManageCooldownRemaining(
               guard.remainingMs
             )}** rồi gõ \`/raid-auto-manage action:sync\` để pull log mới nhất.`
           )
@@ -4123,7 +4123,7 @@ async function handleRaidAutoManageCommand(interaction) {
           .setColor(UI.colors.success)
           .setTitle(`${UI.icons.done} Auto-manage enabled`)
           .setDescription(
-            "Đã bật auto-manage. Chưa có roster nên Artist chưa sync được gì - chạy `/add-roster` trước rồi gọi `/raid-auto-manage action:sync` để pull logs."
+            "Đã bật auto-manage. Chưa có roster nên tớ chưa sync được gì - chạy `/add-roster` trước rồi gọi `/raid-auto-manage action:sync` để pull logs."
           )
           .setTimestamp();
         await interaction.editReply({ embeds: [embed] });
@@ -4138,7 +4138,7 @@ async function handleRaidAutoManageCommand(interaction) {
           .setColor(UI.colors.success)
           .setTitle(`${UI.icons.done} Auto-manage enabled`)
           .setDescription(
-            "Đã bật auto-manage. Chưa có roster nên Artist chưa sync được gì - chạy `/add-roster` trước rồi gọi `/raid-auto-manage action:sync` để pull logs."
+            "Đã bật auto-manage. Chưa có roster nên tớ chưa sync được gì - chạy `/add-roster` trước rồi gọi `/raid-auto-manage action:sync` để pull logs."
           )
           .setTimestamp();
         await interaction.editReply({ embeds: [embed] });
