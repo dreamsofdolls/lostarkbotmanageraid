@@ -899,6 +899,18 @@ function formatShortRelative(timestamp) {
   return `${days}d`;
 }
 
+// Per-roster state breakdown formatter. Emits `N ⚪ · M 🟡 · K 🟢` with
+// zero-count segments filtered out. Used by /raid-check's section header
+// rich value line so a roster showing just 6 pending renders as plain
+// `6 ⚪` instead of the noisier `6 ⚪ · 0 🟡 · 0 🟢`.
+function formatRosterStats(stats) {
+  const parts = [];
+  if (stats.none > 0) parts.push(`${stats.none} ${UI.icons.pending}`);
+  if (stats.partial > 0) parts.push(`${stats.partial} ${UI.icons.partial}`);
+  if (stats.done > 0) parts.push(`${stats.done} ${UI.icons.done}`);
+  return parts.join(" · ");
+}
+
 // Mode hierarchy for /raid-check scan: Normal (1) < Hard (2) < Nightmare (3).
 // Clearing a HIGHER mode satisfies LOWER-mode weekly requirement. Char who
 // did Kazeros Hard doesn't need to appear pending when scanning Kazeros
@@ -1058,15 +1070,32 @@ async function handleRaidCheckCommand(interaction) {
   for (const item of pendingChars) {
     userTotalPending.set(item.discordId, (userTotalPending.get(item.discordId) || 0) + 1);
   }
+  // Per-roster 3-state count breakdown used by section header's rich
+  // value line. Covers ALL eligible chars (incl. `complete` ones) so
+  // rosters with mixed state render accurate counts like `4 ⚪ · 1 🟡 ·
+  // 1 🟢`. Same composite key as rosterBuckets so we can look up per
+  // group inside the map step.
+  const rosterStats = new Map();
+  for (const item of allEligible) {
+    const key = item.discordId + ROSTER_KEY_SEP + item.accountName;
+    if (!rosterStats.has(key)) rosterStats.set(key, { none: 0, partial: 0, done: 0 });
+    const s = rosterStats.get(key);
+    if (item.overallStatus === "complete") s.done += 1;
+    else if (item.overallStatus === "partial") s.partial += 1;
+    else s.none += 1;
+  }
+
   const rosterGroups = [...rosterBuckets.entries()]
     .map(([key, chars]) => {
       const [discordId, accountName] = key.split(ROSTER_KEY_SEP);
       const meta = userMeta.get(discordId) || {};
+      const stats = rosterStats.get(key) || { none: 0, partial: 0, done: 0 };
       return {
         discordId,
         accountName,
         displayName: displayMap.get(discordId) || discordId,
         chars,
+        stats,
         partialCount: chars.filter((c) => c.overallStatus === "partial").length,
         autoManageEnabled: meta.autoManageEnabled || false,
         lastAutoManageSyncAt: meta.lastAutoManageSyncAt || 0,
