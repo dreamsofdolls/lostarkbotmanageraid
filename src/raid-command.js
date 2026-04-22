@@ -1121,28 +1121,53 @@ async function handleRaidCheckCommand(interaction) {
   // force the char cards to pair up visibly as 2-per-row with a gap.
   const inlineSpacer = { name: "​", value: "​", inline: true };
 
-  const buildRaidCheckPage = (group, pageIndex, totalPages) => {
+  const ROSTERS_PER_PAGE = 2;
+  const FILTER_ALL = "__all__";
+
+  // Per-user pending total for dropdown options (sort desc, take top 24
+  // to leave 1 slot for the "All users" entry within Discord's 25-option
+  // cap for StringSelectMenu).
+  const userPendingTotals = new Map();
+  for (const item of pendingChars) {
+    userPendingTotals.set(item.discordId, (userPendingTotals.get(item.discordId) || 0) + 1);
+  }
+  const userDropdownEntries = [...userPendingTotals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 24);
+
+  // Filter helper: null/FILTER_ALL shows everyone, specific discordId
+  // narrows to that user's rosters only.
+  const filterByUser = (userId) => {
+    if (!userId || userId === FILTER_ALL) return rosterGroups;
+    return rosterGroups.filter((g) => g.discordId === userId);
+  };
+
+  // Chunk rosters into pages of N (default 2). Each chunk renders as one
+  // embed page with its roster sections stacked.
+  const chunkRosters = (groups) => {
+    const chunks = [];
+    for (let i = 0; i < groups.length; i += ROSTERS_PER_PAGE) {
+      chunks.push(groups.slice(i, i + ROSTERS_PER_PAGE));
+    }
+    return chunks;
+  };
+
+  // Add one roster section to an embed: non-inline header field (name =
+  // roster label, value = pending count + sync badge; both lines carry
+  // content), followed by 2-col inline char cards with spacer pattern.
+  const addRosterSection = (embed, group) => {
     let syncBadge = "";
     if (group.autoManageEnabled) {
       syncBadge = group.lastAutoManageSyncAt > 0
         ? ` · 🔄${formatShortRelative(group.lastAutoManageSyncAt)}`
         : " · 🔄never";
     }
-    const rosterHeader = `📁 ${group.accountName} (${group.displayName}) · ${group.chars.length} pending${syncBadge}`;
-    // Page indicator moved from title to footer (appended after state
-    // counts legend). Title stays clean `⚠️ Raid Check · Act 4 Normal
-    // (1700)`, footer carries all meta context on one line.
-    const pageFooter = totalPages > 1
-      ? `${footerText} · Page ${pageIndex + 1}/${totalPages}`
-      : footerText;
-
-    const embed = new EmbedBuilder()
-      .setTitle(headerTitle)
-      .setDescription(`${headerDescription}\n${rosterHeader}`)
-      .setColor(difficultyColor)
-      .setFooter({ text: pageFooter })
-      .setTimestamp();
-
+    const headerValue = `${group.chars.length} pending${syncBadge}`;
+    embed.addFields({
+      name: truncateText(`📁 ${group.accountName} (${group.displayName})`, 256),
+      value: truncateText(headerValue, 1024),
+      inline: false,
+    });
     for (let i = 0; i < group.chars.length; i += 2) {
       embed.addFields(buildCharField(group.chars[i]));
       embed.addFields(inlineSpacer);
@@ -1152,29 +1177,51 @@ async function handleRaidCheckCommand(interaction) {
         embed.addFields(inlineSpacer);
       }
     }
+  };
 
+  // Build one embed page rendering a chunk (up to ROSTERS_PER_PAGE) of
+  // roster sections. Title stable across pages; footer appends page
+  // indicator when there's more than 1 page.
+  const buildRaidCheckPage = (rosterChunk, pageIndex, totalPages) => {
+    const pageFooter = totalPages > 1
+      ? `${footerText} · Page ${pageIndex + 1}/${totalPages}`
+      : footerText;
+    const embed = new EmbedBuilder()
+      .setTitle(headerTitle)
+      .setDescription(headerDescription)
+      .setColor(difficultyColor)
+      .setFooter({ text: pageFooter })
+      .setTimestamp();
+    for (const group of rosterChunk) {
+      addRosterSection(embed, group);
+    }
     return embed;
   };
 
-  const pages = rosterGroups.map((group, idx) =>
-    buildRaidCheckPage(group, idx, rosterGroups.length)
-  );
+  // Empty-filter state (user picked a dropdown option whose data got
+  // cleared mid-session, e.g. they /raid-set'd their last pending char).
+  const buildEmptyFilterEmbed = (userId) => {
+    const username = (userId && displayMap.get(userId)) || "this user";
+    return new EmbedBuilder()
+      .setTitle(headerTitle)
+      .setDescription(`${UI.icons.done} **${username}** không có char nào pending trong ${raidMeta.label}.`)
+      .setColor(UI.colors.success)
+      .setFooter({ text: footerText })
+      .setTimestamp();
+  };
 
-  // Sync button enabled only when at least one pending user has opted-in to
-  // /raid-auto-manage. Count UNIQUE users (not roster sections) since opt-in
-  // is a per-user flag - a user with 2 rosters shouldn't inflate the count.
+  // Sync button enabled only when at least one pending user has opted-in
+  // to /raid-auto-manage. Count UNIQUE users - a user with 2 rosters
+  // shouldn't inflate the opt-in count.
   const optedInPendingCount = new Set(
     rosterGroups.filter((g) => g.autoManageEnabled).map((g) => g.discordId)
   ).size;
 
-  // Action row = Prev + Next (from generic helper) + Sync. Prev/Next customId
-  // prefix `raid-check-page:` deliberately NOT `raid-check:` so bot.js's
-  // global handleRaidCheckButton dispatcher ignores them. Local collector
-  // below owns pagination; global router still owns Sync routing. Remind
-  // button was dropped per Traine's "bỏ chuông nhắc nhở" request - scanners
-  // ping users manually or via other channels.
-  const buildActionRow = (currentPage, disabled) => {
-    const row = buildPaginationRow(currentPage, pages.length, disabled, {
+  // Button row: Prev + Next (from generic helper) + Sync. Prev/Next
+  // customId prefix `raid-check-page:` deliberately NOT `raid-check:` so
+  // bot.js's global handleRaidCheckButton dispatcher ignores them.
+  const buildButtonRow = (currentPage, totalPages, disabled) => {
+    const row = buildPaginationRow(currentPage, totalPages, disabled, {
       prevId: "raid-check-page:prev",
       nextId: "raid-check-page:next",
     });
@@ -1193,53 +1240,115 @@ async function handleRaidCheckCommand(interaction) {
     return row;
   };
 
+  // User filter dropdown. First option is always "All users" sentinel
+  // that resets the filter. Subsequent options list top-24 users by
+  // pending total desc with their display name + pending count.
+  const buildFilterDropdown = (selectedUserId, disabled) => {
+    const allDefault = !selectedUserId || selectedUserId === FILTER_ALL;
+    const options = [
+      {
+        label: truncateText(`All users (${pendingChars.length} pending)`, 100),
+        value: FILTER_ALL,
+        emoji: "🌐",
+        default: allDefault,
+      },
+      ...userDropdownEntries.map(([discordId, total]) => ({
+        label: truncateText(`${displayMap.get(discordId) || discordId} (${total} pending)`, 100),
+        value: discordId,
+        emoji: "👤",
+        default: selectedUserId === discordId,
+      })),
+    ];
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId("raid-check-filter:user")
+      .setPlaceholder("Filter by user / Lọc theo user...")
+      .setDisabled(disabled)
+      .addOptions(options);
+    return new ActionRowBuilder().addComponents(menu);
+  };
+
+  const buildComponents = (currentPage, totalPages, selectedUserId, disabled) => {
+    return [
+      buildButtonRow(currentPage, totalPages, disabled),
+      buildFilterDropdown(selectedUserId, disabled),
+    ];
+  };
+
+  // Initial state: no filter, page 0.
+  let selectedUserId = null;
+  let pages = chunkRosters(filterByUser(selectedUserId)).map((chunk, idx, arr) =>
+    buildRaidCheckPage(chunk, idx, arr.length)
+  );
   let currentPage = 0;
+
   await interaction.editReply({
     embeds: [pages[currentPage]],
-    components: [buildActionRow(currentPage, false)],
+    components: buildComponents(currentPage, pages.length, selectedUserId, false),
   });
 
-  // Single-roster scan: no pagination collector needed. Prev/Next stay
-  // disabled by the builder (0/0 boundary); Remind/Sync still route through
-  // bot.js's global handler on click.
-  if (pages.length <= 1) return;
-
-  // Multi-page: attach collector mirroring /raid-status's pagination pattern
-  // exactly - same session timeout constant, same user-lock, same on-end
-  // disable-buttons + swap-footer flow.
+  // Always attach collector - dropdown needs a handler regardless of
+  // page count. Mirrors /raid-status pattern (user-lock + on-end disable)
+  // but tracks filter state across interactions too.
   const message = await interaction.fetchReply();
   const collector = message.createMessageComponentCollector({
-    componentType: ComponentType.Button,
     time: PAGINATION_SESSION_MS,
   });
 
-  collector.on("collect", async (btn) => {
-    if (btn.user.id !== interaction.user.id) {
-      if (btn.customId === "raid-check-page:prev" || btn.customId === "raid-check-page:next") {
-        await btn.reply({
+  collector.on("collect", async (i) => {
+    // User lock: reject unauthorized clicks on OUR components; let
+    // others fall through to bot.js global router (e.g. Sync button).
+    if (i.user.id !== interaction.user.id) {
+      const ours =
+        (i.customId || "").startsWith("raid-check-page:") ||
+        i.customId === "raid-check-filter:user";
+      if (ours) {
+        await i.reply({
           content: `${UI.icons.lock} Chỉ người chạy \`/raid-check\` mới điều khiển được pagination.`,
           flags: MessageFlags.Ephemeral,
         }).catch(() => {});
       }
       return;
     }
-    if (btn.customId === "raid-check-page:prev") currentPage = Math.max(0, currentPage - 1);
-    else if (btn.customId === "raid-check-page:next") currentPage = Math.min(pages.length - 1, currentPage + 1);
-    else return; // Remind/Sync - handled by bot.js global router.
 
-    await btn.update({
+    if (i.customId === "raid-check-page:prev") {
+      currentPage = Math.max(0, currentPage - 1);
+    } else if (i.customId === "raid-check-page:next") {
+      currentPage = Math.min(pages.length - 1, currentPage + 1);
+    } else if (i.customId === "raid-check-filter:user") {
+      const value = Array.isArray(i.values) && i.values.length > 0 ? i.values[0] : FILTER_ALL;
+      selectedUserId = value === FILTER_ALL ? null : value;
+      const filtered = filterByUser(selectedUserId);
+      pages = chunkRosters(filtered).map((chunk, idx, arr) =>
+        buildRaidCheckPage(chunk, idx, arr.length)
+      );
+      currentPage = 0;
+      if (pages.length === 0) {
+        // Filter landed on a user with no pending rosters (edge case).
+        await i.update({
+          embeds: [buildEmptyFilterEmbed(selectedUserId)],
+          components: [buildFilterDropdown(selectedUserId, false)],
+        }).catch(() => {});
+        return;
+      }
+    } else {
+      // Sync button (raid-check:sync:*) - handled by bot.js global router.
+      return;
+    }
+
+    await i.update({
       embeds: [pages[currentPage]],
-      components: [buildActionRow(currentPage, false)],
+      components: buildComponents(currentPage, pages.length, selectedUserId, false),
     }).catch(() => {});
   });
 
   collector.on("end", async () => {
     try {
       const expiredFooter = `⏱️ Session đã hết hạn (${PAGINATION_SESSION_MS / 1000}s) · Dùng /raid-check để xem lại`;
-      const expiredEmbed = EmbedBuilder.from(pages[currentPage]).setFooter({ text: expiredFooter });
+      const source = pages[currentPage] || pages[0];
+      const expiredEmbed = EmbedBuilder.from(source).setFooter({ text: expiredFooter });
       await interaction.editReply({
         embeds: [expiredEmbed],
-        components: [buildActionRow(currentPage, true)],
+        components: buildComponents(currentPage, pages.length, selectedUserId, true),
       });
     } catch {
       // Interaction token may have expired - ignore.
@@ -2596,8 +2705,9 @@ const HELP_SECTIONS = [
       "• **Header summary**: title embed hiện `⚠️ Raid Check · <raid label> (<minItemLevel>)` - gọn, chỉ command + raid + threshold. iLvl nhét trong parens (ví dụ `Act 4 Normal (1700)`). Description line 1 còn mỗi `pending/eligible (% chưa xong)`. Page indicator + 3-state counts đều dưới footer.",
       "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field mirroring `/raid-status`'s pattern. Field name `<charName> · <iLvl>` được Discord auto-bold = scan anchor. Field value `<icon> <done>/<total>` (ví dụ `⚪ 0/2`) - value line có content nên không waste height (earlier attempt pack everything vào name line + ZWS value tạo gap 'cách nhau quá'). Aggregate 3-state icon qua `pickProgressIcon` (🟢 done all / 🟡 partial / ⚪ none). Raid label nằm ở title không lặp trong value.",
       "• **2-column layout via inline fields + spacer**: Discord default pack 3 inline field/row; chèn zero-width-space spacer field giữa mỗi cặp char để force 2-per-row - y hệt kỹ thuật `/raid-status`. Odd char cuối cùng cặp với 1 spacer để không bị Discord stretch full-width.",
-      "• **Roster per page**: 1 roster = 1 embed page. Roster header `📁 accountName (displayName) · N pending · 🔄<relative>` nằm trong `setDescription` (dòng 2, ngay dưới global summary) - char cards bắt đầu sát dưới description không có wasted spacer row. User có 2 roster (main + alt) hiện thành 2 pages riêng. Rosters cùng user group consecutive, sort theo tổng pending của user desc rồi per-roster pending count desc.",
-      "• **Pagination buttons + session**: `◀ Previous` / `Next ▶` (từ shared helper `buildPaginationRow`) cycle giữa các roster pages, y hệt `/raid-status`. Title embed hiện `⚠️ Raid Check · <raid> · Page X/Y`. Collector locked theo người chạy command, session timeout **2 phút** (shared constant `PAGINATION_SESSION_MS` với `/raid-status`), hết hạn disable buttons + footer đổi `⏱️ Session đã hết hạn (120s) · Dùng /raid-check để xem lại`.",
+      "• **2 rosters per page (chunked)**: mỗi embed page chứa tối đa 2 roster sections stacked. Roster section = non-inline header field (name = `📁 accountName (displayName)`, value = `N pending · 🔄<relative>` - cả 2 dòng có content) + inline char cards 2-col với spacer pattern. User có nhiều roster → rosters consecutive trên multiple pages.",
+      "• **User filter dropdown** (action row 2): `StringSelectMenuBuilder` cho phép Raid Manager lọc pages theo Discord user. First option `🌐 All users (N pending)` reset filter. Tiếp theo top-24 users sort theo pending desc (`👤 displayName (N pending)`). Discord cap 25 options total. Selection → recompute pages chỉ chứa rosters của user đó, reset currentPage=0. `default: true` preserve selected state qua Prev/Next clicks. Rosters cùng user group consecutive, sort theo tổng pending user desc rồi per-roster pending desc.",
+      "• **Pagination buttons + session**: `◀ Previous` / `Next ▶` (shared helper `buildPaginationRow`) cycle giữa các roster-chunk pages. Title stable `⚠️ Raid Check · <raid> (<minItemLevel>)` không đổi theo page. Footer append page indicator. Collector locked theo người chạy, session timeout **2 phút** (`PAGINATION_SESSION_MS`), hết hạn disable all components + swap footer legend.",
       "• **Sync badge trong roster header**: opted-in user có sync data hiện `🔄5m` / `🔄2h` / `🔄3d` (compact relative time tự compute). Opted-in nhưng chưa sync lần nào → `🔄never`. Non-opted-in → không hiện segment này.",
       "• **Footer legend với counts + page**: `🟢 N done · 🟡 M partial · ⚪ K pending · Page X/Y` - icon + count + English label merged, page indicator append cuối khi > 1 roster (move từ title xuống đây). Dynamic per page (page index thay đổi) compute inline trong `buildRaidCheckPage`. Discord render timestamp (`Today at HH:MM`) sau footer text tự động.",
       "• **Sort order**: users có nhiều pending tổng nhất lên top; trong mỗi user rosters sort theo pending count desc; trong mỗi roster chars sort theo iLvl desc.",
