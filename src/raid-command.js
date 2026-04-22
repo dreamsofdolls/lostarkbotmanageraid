@@ -1071,18 +1071,17 @@ async function handleRaidCheckCommand(interaction) {
       return a.accountName.localeCompare(b.accountName);
     });
 
-  // Summary header: one-line scannable stats. pending/eligible ratio +
-  // iLvl threshold (≥ sign dropped per Traine - threshold implied by the
-  // label). 3-state distribution counts moved DOWN to the footer legend
-  // (merged with English labels there) so description stays lean.
+  // Summary header: title carries raid label + iLvl threshold inline
+  // (`Act 4 Normal (1700)`) so the description can be a single short
+  // ratio line. 3-state distribution counts live in the footer legend.
   const completionPct = allEligible.length > 0
     ? Math.round((completeChars.length / allEligible.length) * 100)
     : 0;
   const rosterCount = rosterGroups.length;
   const userCount = new Set(rosterGroups.map((g) => g.discordId)).size;
-  const headerTitle = `${UI.icons.warn} Raid Check · ${raidMeta.label}`;
+  const headerTitle = `${UI.icons.warn} Raid Check · ${raidMeta.label} (${raidMeta.minItemLevel})`;
   const headerDescription =
-    `**${pendingChars.length}/${allEligible.length}** pending (${100 - completionPct}%) · iLvl **${raidMeta.minItemLevel}**`;
+    `**${pendingChars.length}/${allEligible.length}** pending (${100 - completionPct}%)`;
   // Dynamic footer merges count + icon + English label per-state. Unlike
   // /raid-status's static `STATUS_FOOTER_LEGEND`, /raid-check counts vary
   // per scan so the footer is computed inline. `0 done · 0 partial · N
@@ -2589,7 +2588,7 @@ const HELP_SECTIONS = [
     notes: [
       "EN: Restricted to Discord user IDs configured in the `RAID_MANAGER_ID` env var (comma-separated).",
       "VN: Chỉ Discord user IDs được liệt kê trong env `RAID_MANAGER_ID` (cách nhau bằng dấu phẩy) được phép gọi. Operator config qua deploy env, không qua Discord role.",
-      "• **Header summary**: 1 dòng trong description `pending/eligible (% chưa xong) · iLvl X` (bỏ dấu ≥ - threshold ngầm hiểu). 3-state distribution counts (🟢/🟡/⚪) moved xuống footer legend.",
+      "• **Header summary**: title embed hiện `⚠️ Raid Check · <raid label> (<minItemLevel>) · Page X/Y` - iLvl threshold nhét vào parens cạnh raid label (ví dụ `Act 4 Normal (1700)`), description line 1 còn mỗi `pending/eligible (% chưa xong)`. 3-state distribution counts (🟢/🟡/⚪) ở footer legend.",
       "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field mirroring `/raid-status`'s pattern. Field name `<charName> · <iLvl>` được Discord auto-bold = scan anchor. Field value `<icon> <done>/<total>` (ví dụ `⚪ 0/2`) - value line có content nên không waste height (earlier attempt pack everything vào name line + ZWS value tạo gap 'cách nhau quá'). Aggregate 3-state icon qua `pickProgressIcon` (🟢 done all / 🟡 partial / ⚪ none). Raid label nằm ở title không lặp trong value.",
       "• **2-column layout via inline fields + spacer**: Discord default pack 3 inline field/row; chèn zero-width-space spacer field giữa mỗi cặp char để force 2-per-row - y hệt kỹ thuật `/raid-status`. Odd char cuối cùng cặp với 1 spacer để không bị Discord stretch full-width.",
       "• **Roster per page**: 1 roster = 1 embed page. Roster header `📁 accountName (displayName) · N pending · 🔄<relative>` nằm trong `setDescription` (dòng 2, ngay dưới global summary) - char cards bắt đầu sát dưới description không có wasted spacer row. User có 2 roster (main + alt) hiện thành 2 pages riêng. Rosters cùng user group consecutive, sort theo tổng pending của user desc rồi per-roster pending count desc.",
