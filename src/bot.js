@@ -20,6 +20,7 @@ const {
   handleRaidChannelMessage,
   loadMonitorChannelCache,
   startRaidChannelScheduler,
+  startAutoManageDailyScheduler,
 } = require("./raid-command");
 const { startWeeklyResetJob } = require("./weekly-reset");
 
@@ -104,6 +105,12 @@ async function startBot() {
     // actually does anything. Independent of TEXT_MONITOR_ENABLED so
     // admins can schedule cleanups even when the text monitor is off.
     startRaidChannelScheduler(readyClient);
+    // Phase 3: 24h passive auto-sync scheduler for /raid-auto-manage
+    // opted-in users. 30-min tick, 3-user batch, per-user cooldown gated.
+    // Killswitch: AUTO_MANAGE_DAILY_DISABLED=true env var skips every tick
+    // — useful if bible starts blocking and ops need to back off without
+    // a redeploy.
+    startAutoManageDailyScheduler();
   });
 
   if (TEXT_MONITOR_ENABLED) {
