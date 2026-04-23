@@ -712,6 +712,68 @@ const raidAutoManageCommand = new SlashCommandBuilder()
       .setAutocomplete(true)
   );
 
+// Valid announcement type keys - kept in sync with GuildConfig.announcements
+// subdoc. Two groups:
+//   - CHANNEL_OVERRIDABLE: announcement's destination CAN be redirected to
+//     a non-monitor channel (pure announcements, user-tag nudges).
+//   - CHANNEL_BOUND: announcement's destination MUST be the monitor channel
+//     itself because the message refers to that channel in its semantics
+//     (greeting = "this channel is set", cleanup notice = "this channel
+//     just got cleaned", whisper ack = reply to a user's message here).
+const ANNOUNCEMENT_TYPES_CHANNEL_OVERRIDABLE = ["weekly-reset", "stuck-nudge"];
+const ANNOUNCEMENT_TYPES_CHANNEL_BOUND = ["set-greeting", "hourly-cleanup", "whisper-ack"];
+const ANNOUNCEMENT_TYPE_LABELS = {
+  "weekly-reset": "Weekly reset · Tuần mới đến",
+  "stuck-nudge": "Stuck private-log nudge",
+  "set-greeting": "Set greeting (action:set)",
+  "hourly-cleanup": "Hourly cleanup notice",
+  "whisper-ack": "Whisper ack (post clear)",
+};
+const ANNOUNCEMENT_TYPE_TO_SUBDOC_KEY = {
+  "weekly-reset": "weeklyReset",
+  "stuck-nudge": "stuckPrivateLogNudge",
+  "set-greeting": "setGreeting",
+  "hourly-cleanup": "hourlyCleanupNotice",
+  "whisper-ack": "whisperAck",
+};
+
+const raidAnnounceCommand = new SlashCommandBuilder()
+  .setName("raid-announce")
+  .setDescription("[Admin] Configure Artist's channel announcements")
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .setDMPermission(false)
+  .addStringOption((opt) =>
+    opt
+      .setName("type")
+      .setDescription("Loại thông báo")
+      .setRequired(true)
+      .addChoices(
+        ...[...ANNOUNCEMENT_TYPES_CHANNEL_OVERRIDABLE, ...ANNOUNCEMENT_TYPES_CHANNEL_BOUND].map(
+          (key) => ({ name: `${key} - ${ANNOUNCEMENT_TYPE_LABELS[key]}`, value: key })
+        )
+      )
+  )
+  .addStringOption((opt) =>
+    opt
+      .setName("action")
+      .setDescription("show / on / off / set-channel / clear-channel")
+      .setRequired(true)
+      .addChoices(
+        { name: "show - xem config hiện tại", value: "show" },
+        { name: "on - bật announcement", value: "on" },
+        { name: "off - tắt announcement", value: "off" },
+        { name: "set-channel - override destination (chỉ áp dụng weekly-reset + stuck-nudge)", value: "set-channel" },
+        { name: "clear-channel - revert về monitor channel mặc định", value: "clear-channel" }
+      )
+  )
+  .addChannelOption((opt) =>
+    opt
+      .setName("channel")
+      .setDescription("Channel đích (chỉ cần khi action:set-channel)")
+      .setRequired(false)
+      .addChannelTypes(ChannelType.GuildText)
+  );
+
 const commands = [
   addRosterCommand,
   raidCheckCommand,
@@ -721,6 +783,7 @@ const commands = [
   removeRosterCommand,
   raidChannelCommand,
   raidAutoManageCommand,
+  raidAnnounceCommand,
 ];
 
 async function handleAddRosterCommand(interaction) {
@@ -2912,6 +2975,30 @@ const HELP_SECTIONS = [
       "• **Stuck private-log channel nudge (Apr 2026)**: khi tick detect user có `report.perChar` toàn `isPublicLogDisabledError` (tất cả char trả `Logs not enabled`), Artist post 1 channel announcement tag user trong monitor channel của guild đầu tiên user là member, TTL 30 phút, dedup 7 ngày qua `User.lastPrivateLogNudgeAt`. Giọng Dusk (signed Artist, no stage-direction) hướng user vào `lostark.bible/me/logs` bật **Show on Profile**. Chỉ post khi bot cache có member record (cache-first, skip nếu cold members cache - không force fetch). Channel thay vì DM: Traine chọn tone nhẹ nhàng công khai, tránh DM áp lực. Reuse `postChannelAnnouncement` helper shared với hourly-cleanup notice + weekly-reset + /raid-channel set greeting.",
     ],
   },
+  {
+    key: "raid-announce",
+    label: "/raid-announce",
+    icon: "📣",
+    short: "[Admin] Configure Artist's channel announcements",
+    shortVn: "[Admin] Tắt/bật + override channel cho từng loại announcement",
+    options: [
+      { name: "type", required: true, desc: "Loại announcement - dropdown 5 giá trị: `weekly-reset` / `stuck-nudge` / `set-greeting` / `hourly-cleanup` / `whisper-ack`. Hai loại đầu là CHANNEL_OVERRIDABLE (chấp nhận `set-channel`), 3 loại sau là CHANNEL_BOUND (chỉ toggle on/off được)." },
+      { name: "action", required: true, desc: "`show` xem config · `on`/`off` toggle enabled · `set-channel` override destination (cần option `channel`, chỉ overridable types) · `clear-channel` xóa override (revert về monitor channel mặc định)" },
+      { name: "channel", required: false, desc: "Channel đích - chỉ cần khi action:set-channel. Phải là text channel trong cùng guild." },
+    ],
+    example: "/raid-announce type:weekly-reset action:set-channel channel:#raid-announcements",
+    notes: [
+      "EN: Manage Artist's 5 channel-announcement surfaces per guild. Two axes: enabled toggle + channel override (overrideable types only).",
+      "VN: Quản lý 5 loại announcement Artist đang post vào channel, per-guild. 2 trục config: enabled + channel override.",
+      "• **5 announcement types**: `weekly-reset` (Wed 17 VN tuần mới), `stuck-nudge` (phase 3 tick tag user toàn char private log), `set-greeting` (greeting ephemeral sau /raid-channel action:set), `hourly-cleanup` (notice sau cleanup mỗi giờ VN), `whisper-ack` (tag user trong channel khi /raid-channel post clear DM success).",
+      "• **Channel-overridable vs channel-bound**: `weekly-reset` + `stuck-nudge` là pure announcements/tags có thể redirect sang #announcements riêng. 3 loại còn lại (`set-greeting` / `hourly-cleanup` / `whisper-ack`) bound với monitor channel vì content refer cụ thể tới channel đó (\"channel này vừa dọn xong\" / \"Artist được mời đến channel này\" / whisper reply tin gốc) - `set-channel`/`clear-channel` sẽ reject với 3 loại bound này.",
+      "• **Fallback chain**: mỗi fire resolve channel qua `announcements.<type>.channelId || raidChannelId`. Override null = revert về monitor channel mặc định (set qua `/raid-channel config action:set`). Nếu cả 2 null → guild chưa setup monitor → announcement silent skip không crash.",
+      "• **Defaults**: mỗi type `enabled=true` + `channelId=null` khi schema default chạy. Legacy guild không có `announcements` subdoc → `getAnnouncementsConfig` normalize về defaults nên backward-compatible, không breaking.",
+      "• **Mongo path**: `GuildConfig.announcements.<subdocKey>.enabled|channelId`. Subdoc key map: `weekly-reset`→`weeklyReset`, `stuck-nudge`→`stuckPrivateLogNudge`, `set-greeting`→`setGreeting`, `hourly-cleanup`→`hourlyCleanupNotice`, `whisper-ack`→`whisperAck`.",
+      "• **Redundant-state guard**: `action:on` khi đang ON → ephemeral reject \"đã on rồi\", không tạo Mongo write thừa. Tương tự `action:off` khi đã OFF. `clear-channel` khi đã không có override → ephemeral info.",
+      "• **Require Manage Guild**: same as `/raid-channel` config. Server owner + admin only.",
+    ],
+  },
 ];
 
 function buildHelpOverviewEmbed() {
@@ -3281,6 +3368,150 @@ async function handleRaidManagementCommand(interaction) {
 
   if (interaction.commandName === "raid-auto-manage") {
     await handleRaidAutoManageCommand(interaction);
+    return;
+  }
+
+  if (interaction.commandName === "raid-announce") {
+    await handleRaidAnnounceCommand(interaction);
+  }
+}
+
+/**
+ * Load (or lazily initialize) the `announcements` subdoc for a guild.
+ * Legacy guilds that existed before the schema field landed may have
+ * `cfg.announcements = undefined`; schema defaults kick in on save but
+ * not on `.lean()` reads, so callers must normalize. Returns a plain
+ * object with every type's config populated with defaults.
+ */
+function getAnnouncementsConfig(cfg) {
+  const raw = cfg?.announcements || {};
+  const normalized = {};
+  for (const key of Object.values(ANNOUNCEMENT_TYPE_TO_SUBDOC_KEY)) {
+    const sub = raw[key] || {};
+    normalized[key] = {
+      enabled: sub.enabled !== false, // default true when missing
+      channelId: sub.channelId || null,
+    };
+  }
+  return normalized;
+}
+
+async function handleRaidAnnounceCommand(interaction) {
+  const guildId = interaction.guildId;
+  if (!guildId) {
+    await interaction.reply({
+      content: `${UI.icons.warn} Command này phải chạy trong server.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const type = interaction.options.getString("type", true);
+  const action = interaction.options.getString("action", true);
+  const channel = interaction.options.getChannel("channel", false);
+  const subdocKey = ANNOUNCEMENT_TYPE_TO_SUBDOC_KEY[type];
+  const typeLabel = ANNOUNCEMENT_TYPE_LABELS[type];
+  const overridable = ANNOUNCEMENT_TYPES_CHANNEL_OVERRIDABLE.includes(type);
+
+  // Read current config first so show/on/off paths don't force an upsert
+  // just to display state. Missing cfg → treat as legacy (all defaults).
+  const existing = await GuildConfig.findOne({ guildId }).lean();
+  const announcements = getAnnouncementsConfig(existing);
+  const current = announcements[subdocKey];
+
+  if (action === "show") {
+    const resolvedChannelId = current.channelId || existing?.raidChannelId || null;
+    const resolvedChannel = resolvedChannelId ? `<#${resolvedChannelId}>` : "*(chưa có - cần /raid-channel config action:set trước)*";
+    const overrideState = current.channelId
+      ? `override: <#${current.channelId}>`
+      : overridable
+        ? "override: *(chưa set - fallback về monitor channel)*"
+        : "*(type này channel-bound, không override được)*";
+    const embed = new EmbedBuilder()
+      .setColor(UI.colors.neutral)
+      .setTitle(`${UI.icons.info} Announcement · ${typeLabel}`)
+      .addFields(
+        { name: "Enabled", value: current.enabled ? `${UI.icons.done} on` : `${UI.icons.reset} off`, inline: true },
+        { name: "Destination", value: resolvedChannel, inline: true },
+        { name: "Channel config", value: overrideState, inline: false },
+      )
+      .setTimestamp();
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (action === "on" || action === "off") {
+    const enabled = action === "on";
+    if (current.enabled === enabled) {
+      await interaction.reply({
+        content: `${UI.icons.info} \`${type}\` đã ${enabled ? "on" : "off"} rồi, không cần đổi.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    await GuildConfig.findOneAndUpdate(
+      { guildId },
+      { $set: { [`announcements.${subdocKey}.enabled`]: enabled } },
+      { upsert: true, setDefaultsOnInsert: true }
+    );
+    await interaction.reply({
+      content: `${UI.icons.done} \`${type}\` đã chuyển sang **${enabled ? "ON" : "OFF"}**.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (action === "set-channel") {
+    if (!overridable) {
+      await interaction.reply({
+        content: `${UI.icons.warn} \`${type}\` là channel-bound (${typeLabel}) - không override channel được. Announcement này luôn post vào monitor channel. Chỉ \`weekly-reset\` và \`stuck-nudge\` chấp nhận override.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (!channel) {
+      await interaction.reply({
+        content: `${UI.icons.warn} action:set-channel cần option \`channel\`. Thử lại với channel mục tiêu nhé.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    await GuildConfig.findOneAndUpdate(
+      { guildId },
+      { $set: { [`announcements.${subdocKey}.channelId`]: channel.id } },
+      { upsert: true, setDefaultsOnInsert: true }
+    );
+    await interaction.reply({
+      content: `${UI.icons.done} \`${type}\` override sang <#${channel.id}>. Lần fire kế tiếp Artist sẽ post vào đó.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (action === "clear-channel") {
+    if (!overridable) {
+      await interaction.reply({
+        content: `${UI.icons.warn} \`${type}\` không có override để clear (channel-bound).`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (!current.channelId) {
+      await interaction.reply({
+        content: `${UI.icons.info} \`${type}\` đã dùng monitor channel mặc định sẵn rồi, không có override để clear.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    await GuildConfig.findOneAndUpdate(
+      { guildId },
+      { $set: { [`announcements.${subdocKey}.channelId`]: null } }
+    );
+    await interaction.reply({
+      content: `${UI.icons.done} \`${type}\` override đã clear - revert về monitor channel mặc định.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
   }
 }
 
@@ -4093,8 +4324,21 @@ async function handleRaidChannelMessage(message) {
     // tags the user so they realise the post was accepted (otherwise the
     // message just silently vanishes and feels like a rejection). Dusk's
     // whisper voice, but still signed as Artist per bot persona.
+    // Whisper ack can be disabled per-guild via /raid-announce. Load the
+    // flag BEFORE attempting send so a disabled guild skips entirely
+    // (no transient message flicker while it's auto-deleted).
+    let whisperAckEnabled = true;
+    try {
+      const cfg = await GuildConfig.findOne({ guildId: message.guildId })
+        .select("announcements.whisperAck")
+        .lean();
+      whisperAckEnabled = getAnnouncementsConfig(cfg).whisperAck.enabled;
+    } catch {
+      // Read fail → default to enabled (conservative: announce rather
+      // than silently drop - Traine's intent with this flow was visibility).
+    }
     let whisperMsg = null;
-    if (dmSucceeded) {
+    if (dmSucceeded && whisperAckEnabled) {
       try {
         whisperMsg = await message.channel.send({
           content: `<@${message.author.id}> ...Artist nhận được rồi nha~ Chờ Artist 5 giây gửi kết quả qua DM cho cậu nhé...`,
@@ -5534,12 +5778,24 @@ async function handleRaidChannelCommand(interaction) {
     // succeeded - if welcome.posted is false, the channel is in a broken
     // state and a greeting would be misleading.
     if (welcome.posted) {
-      await postChannelAnnouncement(
-        channel,
-        "Ồ, chỗ mới này Artist được mời đến trông coi nhỉ~ Xin chào các cậu, từ giờ cứ post clear raid theo format ở welcome pin phía trên là Artist tự cập nhật progress cho nha. Biển báo này Artist cuỗm đi sau 2 phút, welcome thì giữ nguyên.",
-        RAID_CHANNEL_GREETING_TTL_MS,
-        "raid-channel set greeting"
-      );
+      // Set greeting can be disabled per-guild via /raid-announce.
+      let greetingEnabled = true;
+      try {
+        const existingCfg = await GuildConfig.findOne({ guildId })
+          .select("announcements.setGreeting")
+          .lean();
+        greetingEnabled = getAnnouncementsConfig(existingCfg).setGreeting.enabled;
+      } catch {
+        // default enabled on read error
+      }
+      if (greetingEnabled) {
+        await postChannelAnnouncement(
+          channel,
+          "Ồ, chỗ mới này Artist được mời đến trông coi nhỉ~ Xin chào các cậu, từ giờ cứ post clear raid theo format ở welcome pin phía trên là Artist tự cập nhật progress cho nha. Biển báo này Artist cuỗm đi sau 2 phút, welcome thì giữ nguyên.",
+          RAID_CHANNEL_GREETING_TTL_MS,
+          "raid-channel set greeting"
+        );
+      }
     }
 
     const embed = new EmbedBuilder()
@@ -5874,15 +6130,20 @@ async function runAutoCleanupTick(client) {
         `[raid-channel] auto-cleanup guild=${cfg.guildId} key=${targetKey} deleted=${deleted} skippedOld=${skippedOld}`
       );
 
-      const noticeContent = deleted > 0
-        ? `Hừm... đến giờ Artist phải đi dọn rác rồi nhé. Xong, vừa dọn **${deleted}** tin rồi đấy~ Biển báo này 5 phút nữa Artist cuỗm đi luôn, các cậu cứ tiếp tục post clear bình thường nha.`
-        : `Ồ, giờ này Artist ghé qua xem chỗ này thế nào... ai dè sạch sẽ sẵn rồi nhé~ Vậy Artist ngồi uống trà 5 phút rồi đi tiếp, biển báo này tự biến mất sau đó. Các cậu cứ tiếp tục post clear bình thường nha.`;
-      await postChannelAnnouncement(
-        channel,
-        noticeContent,
-        AUTO_CLEANUP_NOTICE_TTL_MS,
-        "raid-channel auto-cleanup"
-      );
+      // Cleanup notice can be disabled per-guild via /raid-announce.
+      // Cleanup itself still runs; only the announcement is skipped.
+      const cleanupNoticeEnabled = getAnnouncementsConfig(cfg).hourlyCleanupNotice.enabled;
+      if (cleanupNoticeEnabled) {
+        const noticeContent = deleted > 0
+          ? `Hừm... đến giờ Artist phải đi dọn rác rồi nhé. Xong, vừa dọn **${deleted}** tin rồi đấy~ Biển báo này 5 phút nữa Artist cuỗm đi luôn, các cậu cứ tiếp tục post clear bình thường nha.`
+          : `Ồ, giờ này Artist ghé qua xem chỗ này thế nào... ai dè sạch sẽ sẵn rồi nhé~ Vậy Artist ngồi uống trà 5 phút rồi đi tiếp, biển báo này tự biến mất sau đó. Các cậu cứ tiếp tục post clear bình thường nha.`;
+        await postChannelAnnouncement(
+          channel,
+          noticeContent,
+          AUTO_CLEANUP_NOTICE_TTL_MS,
+          "raid-channel auto-cleanup"
+        );
+      }
     } catch (err) {
       console.error(
         `[raid-channel] auto-cleanup failed guild=${cfg.guildId}:`,
@@ -5959,16 +6220,21 @@ async function nudgeStuckPrivateLogUser(client, discordId) {
   }
 
   for (const cfg of configs) {
+    const announcements = getAnnouncementsConfig(cfg);
+    if (!announcements.stuckPrivateLogNudge.enabled) continue; // disabled per guild
     const guild = client.guilds.cache.get(cfg.guildId);
     if (!guild) continue;
     // Members cache can be cold on large guilds; skip non-member hits
     // without doing a full fetch (cheap path). If bot is deployed in a
     // single guild (Traine's setup), cache-hit is the common case.
     if (!guild.members.cache.has(discordId)) continue;
-    let channel = guild.channels.cache.get(cfg.raidChannelId);
+    // Channel override via /raid-announce set-channel; fallback to monitor
+    // channel if no override set.
+    const targetChannelId = announcements.stuckPrivateLogNudge.channelId || cfg.raidChannelId;
+    let channel = guild.channels.cache.get(targetChannelId);
     if (!channel) {
       try {
-        channel = await guild.channels.fetch(cfg.raidChannelId);
+        channel = await guild.channels.fetch(targetChannelId);
       } catch {
         continue;
       }

@@ -186,6 +186,30 @@ Sau khi đăng ký, bất kỳ ai post message vào channel đó dạng `<raid> 
 
 **Scheduler wiring change**: `startWeeklyResetJob` giờ nhận `client` param + được move vào `ClientReady` (trước ở `startBot` pre-login). Lý do: announcements cần Discord client để post. `startAutoManageDailyScheduler` cũng nhận `client` cho nudge path. Catch-up ticks sau bot restart dedup qua per-guild key nên không re-announce.
 
+### `/raid-announce` - management layer cho announcements (Apr 2026)
+
+Admin-only (Manage Guild) command config từng loại announcement per-guild. 5 options nhóm thành 2 loại:
+
+- **CHANNEL_OVERRIDABLE** (toggle enabled + set/clear channel override): `weekly-reset` · `stuck-nudge`
+- **CHANNEL_BOUND** (chỉ toggle enabled, channel cố định = monitor channel): `set-greeting` · `hourly-cleanup` · `whisper-ack`
+
+**Actions**:
+- `show` - embed ephemeral hiện enabled + destination resolved
+- `on` / `off` - toggle `announcements.<type>.enabled` (redundant-state guard)
+- `set-channel` - set `announcements.<type>.channelId` (chỉ overridable types, cần option `channel`)
+- `clear-channel` - null `channelId` revert về monitor channel mặc định
+
+**Fallback**: mỗi firing site resolve channel qua `announcements.<type>.channelId || raidChannelId`. Null cả 2 → guild chưa setup monitor → announcement silent skip.
+
+**Schema path**: `GuildConfig.announcements.<subdocKey>.{enabled,channelId}`. Subdoc key map: `weekly-reset`→`weeklyReset`, `stuck-nudge`→`stuckPrivateLogNudge`, `set-greeting`→`setGreeting`, `hourly-cleanup`→`hourlyCleanupNotice`, `whisper-ack`→`whisperAck`. Defaults `enabled=true` + `channelId=null`; legacy guilds không có subdoc → `getAnnouncementsConfig` normalize về defaults, backward-compatible.
+
+**Example flows**:
+```
+/raid-announce type:weekly-reset action:set-channel channel:#raid-announcements
+/raid-announce type:stuck-nudge action:off
+/raid-announce type:hourly-cleanup action:show
+```
+
 **Prerequisites deploy:**
 1. Bật `MESSAGE CONTENT INTENT` trong Discord Developer Portal → Bot → Privileged Gateway Intents. Nếu không bật, bot **sẽ không start được** (Discord reject login với "Used disallowed intents") - dùng env `TEXT_MONITOR_ENABLED=false` để deploy slash-command-only mà không cần privileged intent.
 2. Invite bot với scope `bot applications.commands` + permissions trong channel đã config: `View Channel`, `Send Messages`, `Manage Messages`, `Read Message History`, `Embed Links`. `/raid-channel config action:set` giờ tự check và từ chối nếu thiếu bất kỳ quyền nào. (`Read Message History` cần cho `clearPendingHint` fetch/delete tin cũ; `Embed Links` cần cho welcome + DM confirm embeds - thiếu là Discord strip embed).

@@ -157,12 +157,19 @@ async function postWeeklyResetAnnouncements(client, targetKey) {
   if (!configs.length) return;
 
   for (const cfg of configs) {
+    // /raid-announce per-guild enable + channel override. `.lean()` skips
+    // schema defaults so legacy guilds without `announcements` subdoc get
+    // the intended default (enabled=true, no override).
+    const weeklyCfg = cfg.announcements?.weeklyReset || {};
+    const weeklyEnabled = weeklyCfg.enabled !== false;
+    if (!weeklyEnabled) continue;
+    const targetChannelId = weeklyCfg.channelId || cfg.raidChannelId;
     const guild = client.guilds.cache.get(cfg.guildId);
     if (!guild) continue;
-    let channel = guild.channels.cache.get(cfg.raidChannelId);
+    let channel = guild.channels.cache.get(targetChannelId);
     if (!channel) {
       try {
-        channel = await guild.channels.fetch(cfg.raidChannelId);
+        channel = await guild.channels.fetch(targetChannelId);
       } catch {
         continue;
       }

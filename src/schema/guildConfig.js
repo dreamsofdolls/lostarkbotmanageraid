@@ -26,6 +26,65 @@ const guildConfigSchema = new mongoose.Schema(
     // ticks within the same ISO week short-circuit; crossing into the next
     // ISO week produces a new key and the next tick posts again.
     lastWeeklyAnnouncementKey: { type: String, default: null },
+    // Per-announcement-type config for Artist's channel voice. Each nested
+    // subdoc has:
+    //   - enabled: whether the announcement fires at all.
+    //   - channelId: override destination (null = fallback to raidChannelId).
+    //       Only weekly-reset and stuck-nudge accept overrides; the other
+    //       three types are channel-bound by semantics (greeting/cleanup
+    //       notice/whisper ack all refer to the raid monitor channel
+    //       itself) so their channelId is ignored by the firing site.
+    // Defaults all enabled=true / channelId=null so legacy guilds that
+    // existed before this field landed get the full voice out of the box.
+    announcements: {
+      type: new mongoose.Schema(
+        {
+          weeklyReset: {
+            type: new mongoose.Schema(
+              {
+                enabled: { type: Boolean, default: true },
+                channelId: { type: String, default: null },
+              },
+              { _id: false }
+            ),
+            default: () => ({}),
+          },
+          stuckPrivateLogNudge: {
+            type: new mongoose.Schema(
+              {
+                enabled: { type: Boolean, default: true },
+                channelId: { type: String, default: null },
+              },
+              { _id: false }
+            ),
+            default: () => ({}),
+          },
+          setGreeting: {
+            type: new mongoose.Schema(
+              { enabled: { type: Boolean, default: true } },
+              { _id: false }
+            ),
+            default: () => ({}),
+          },
+          hourlyCleanupNotice: {
+            type: new mongoose.Schema(
+              { enabled: { type: Boolean, default: true } },
+              { _id: false }
+            ),
+            default: () => ({}),
+          },
+          whisperAck: {
+            type: new mongoose.Schema(
+              { enabled: { type: Boolean, default: true } },
+              { _id: false }
+            ),
+            default: () => ({}),
+          },
+        },
+        { _id: false }
+      ),
+      default: () => ({}),
+    },
   },
   {
     timestamps: true,
