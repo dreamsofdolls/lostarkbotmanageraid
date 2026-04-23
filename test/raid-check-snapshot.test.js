@@ -195,3 +195,13 @@ test("parseRaidMessage accepts hm as a hard alias", () => {
     gate: null,
   });
 });
+
+test("parseRaidMessage accepts 9m as a nightmare alias", () => {
+  const parsed = parseRaidMessage("Serca 9m Clauseduk");
+  assert.deepEqual(parsed, {
+    raidKey: "serca",
+    modeKey: "nightmare",
+    charNames: ["clauseduk"],
+    gate: null,
+  });
+});

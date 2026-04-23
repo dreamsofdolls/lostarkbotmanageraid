@@ -153,7 +153,7 @@ Sau khi đăng ký, bất kỳ ai post message vào channel đó dạng `<raid> 
 
 **Aliases** (case-insensitive):
 - Raid: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca` (accept typo `secra`)
-- Difficulty: `normal` / `nor` · `hard` / `hm` · `nightmare` / `nm`
+- Difficulty: `normal` / `nor` · `hard` / `hm` · `nightmare` / `nm` / `9m`
 - Gate: `G1`, `G2`, ... (validate theo raid's actual gate list)
 
 **Separator**: space, `+`, hoặc `,` đều được (`Serca + Nor + Soulrano + G1`).
