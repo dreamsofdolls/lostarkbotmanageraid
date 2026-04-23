@@ -676,8 +676,8 @@ const RAID_CHANNEL_ACTION_CHOICES = [
   { name: "clear - disable monitor + reset schedule", value: "clear" },
   { name: "cleanup - delete all non-pinned messages now", value: "cleanup" },
   { name: "repin - refresh the pinned welcome embed", value: "repin" },
-  { name: "schedule-on - enable hourly auto-cleanup (VN time)", value: "schedule-on" },
-  { name: "schedule-off - disable hourly auto-cleanup", value: "schedule-off" },
+  { name: "schedule-on - enable auto-cleanup every 30 min (VN time)", value: "schedule-on" },
+  { name: "schedule-off - disable 30-min auto-cleanup", value: "schedule-off" },
 ];
 
 const raidChannelCommand = new SlashCommandBuilder()
@@ -782,14 +782,14 @@ const ANNOUNCEMENT_REGISTRY = {
       "Ồ, chỗ mới này Artist được mời đến trông coi nhỉ~ Xin chào các cậu, từ giờ cứ post clear raid theo format ở welcome pin phía trên là Artist tự cập nhật progress cho nha. Biển báo này Artist cuỗm đi sau 2 phút, welcome thì giữ nguyên.",
   },
   "hourly-cleanup": {
-    label: "Hourly cleanup notice",
+    label: "Cleanup notice",
     subdocKey: "hourlyCleanupNotice",
     channelOverridable: false,
-    trigger: "Mỗi đầu giờ VN (khi `schedule-on` đã bật), sau khi cleanup sweep chạy xong.",
-    dedup: "1 post/giờ/guild (`lastAutoCleanupKey = 'YYYY-MM-DDTHH'`). Tick 30 phút nên lag từ hour boundary tối đa 30 phút.",
+    trigger: "Mỗi 30 phút (đầu giờ + :30 giờ VN, khi `schedule-on` đã bật), sau khi cleanup sweep chạy xong.",
+    dedup: "1 post/slot/guild (`lastAutoCleanupKey = 'YYYY-MM-DDTHH:MM'` với MM ∈ {00, 30}). Tick 30 phút align với slot boundary.",
     messageTtl: "5 phút rồi Artist tự xóa",
     previewContent:
-      "Khi có rác: `Hừm... đến giờ Artist phải đi dọn rác rồi nhé. Xong, vừa dọn **N** tin rồi đấy~ ...`\nKhi channel sạch sẵn: `Ồ, giờ này Artist ghé qua xem chỗ này thế nào... ai dè sạch sẽ sẵn rồi nhé~ ...`",
+      "Variant tone thay đổi theo lượng rác:\n- Sạch sẵn: `Ồ, giờ này Artist ghé qua... ai dè sạch sẽ sẵn rồi nhé~ ...`\n- 1-5 tin: `Nhẹ nhàng thôi mà~ Artist vừa thu gom **N** mẩu tin rồi ...`\n- 6-20 tin: `Hừm... đến ca dọn rồi nhé. Xong, vừa dọn **N** tin ...`\n- 21+ tin: `Oáp... có tới **N** tin phải dọn này, Artist làm hụt hơi luôn~ ...`",
   },
   "whisper-ack": {
     label: "Whisper ack",
@@ -3121,8 +3121,8 @@ const HELP_SECTIONS = [
       { name: "action:clear", required: false, desc: "Tắt monitor + reset schedule" },
       { name: "action:cleanup", required: false, desc: "Xóa thủ công mọi message không pin (giữ welcome pinned)" },
       { name: "action:repin", required: false, desc: "Delete stale welcomes + post & pin 1 welcome mới" },
-      { name: "action:schedule-on", required: false, desc: "Bật auto-cleanup mỗi giờ (theo đầu giờ VN)" },
-      { name: "action:schedule-off", required: false, desc: "Tắt auto-cleanup hourly" },
+      { name: "action:schedule-on", required: false, desc: "Bật auto-cleanup mỗi 30 phút (slot :00 và :30 giờ VN)" },
+      { name: "action:schedule-off", required: false, desc: "Tắt auto-cleanup 30 phút" },
     ],
     example: "/raid-channel config action:set channel:#raid-clears",
     notes: [
@@ -3139,7 +3139,7 @@ const HELP_SECTIONS = [
       "• **Clear**: tắt monitor ngay, luôn write-through Mongo; cũng reset `autoCleanupEnabled` để schedule không tự kích lại khi admin `/set` channel mới.",
       "• **Cleanup**: xóa thủ công mọi message không pin trong monitor channel (giữ welcome pinned). Paginate đến hết channel. Messages > 14 ngày Discord không cho bulk-delete, bot sẽ report `skipped (>14 ngày)` để admin xóa tay nếu cần.",
       "• **Repin**: safe-order như Set - post + pin fresh trước, unpin stale sau. `welcomeMessageId` tracked trong DB để unpin đúng message cũ, không ảnh hưởng bot pins khác trong channel.",
-      "• **Schedule on/off**: toggle auto-cleanup hourly. Bật → mỗi đầu giờ VN, bot tự xóa non-pinned trong channel. **Cleanup chạy trước**, sau đó post 1 biển báo tone-aware (signed Artist, giọng Dusk không stage-direction): `deleted > 0` dùng tone càu nhàu báo số tin đã dọn, `deleted == 0` dùng tone hài lòng báo channel sạch sẵn + Artist ngồi uống trà. Cả 2 tự xóa sau 5 phút (`AUTO_CLEANUP_NOTICE_TTL_MS`). Reason vẫn nói khi idle: silence trong scheduled window đọc giống 'bot offline/broken'; content-tone notice double làm heartbeat + idle marker. Key format: `lastAutoCleanupKey = 'YYYY-MM-DDTHH'` trong VN time (đổi từ daily 'YYYY-MM-DD' → hourly resolution, legacy key sẽ không match → 1 lần re-sweep sau deploy, harmless). Enable stamp current-hour key ngay nên tick đầu tiên sau enable chờ đến đầu giờ kế, không catch-up ngay. Bot-offline catch-up chỉ hoạt động khi schedule đã enable continuous. Tick cadence 30 phút → hour-boundary crossing catch trong 30 phút worst-case. Tắt → chỉ cleanup thủ công (manual cleanup KHÔNG post biển báo, user đã biết đang chạy).",
+      "• **Schedule on/off**: toggle auto-cleanup 30 phút. Bật → mỗi slot :00 và :30 giờ VN, bot tự xóa non-pinned trong channel. **Cleanup chạy trước**, sau đó post 1 biển báo 4-bucket tone (sạch sẵn / trivial 1-5 / normal 6-20 / heavy 21+) với 3 variant random pick mỗi bucket để không bị đơn điệu, signed Artist, giọng Dusk không stage-direction. Cả 4 bucket đều tự xóa sau 5 phút (`AUTO_CLEANUP_NOTICE_TTL_MS`). Reason vẫn nói khi idle: silence trong scheduled window đọc giống 'bot offline/broken'; content-tone notice double làm heartbeat + idle marker. Key format: `lastAutoCleanupKey = 'YYYY-MM-DDTHH:MM'` với MM ∈ {00, 30} trong VN time (đổi từ hourly 'YYYY-MM-DDTHH' → 30-min resolution, legacy hour-keys không match → 1 lần re-sweep sau deploy, harmless). Enable stamp current slot key ngay nên tick đầu tiên sau enable chờ đến slot kế, không catch-up ngay. Bot-offline catch-up chỉ hoạt động khi schedule đã enable continuous. Tick cadence 30 phút align 1-1 với slot boundary. Tắt → chỉ cleanup thủ công (manual cleanup KHÔNG post biển báo, user đã biết đang chạy).",
       "• Parse fail (không phải raid intent) → bot im lặng.",
       "• Lỗi phục hồi được (char không có, iLvl thiếu, combo sai, nhiều raid/difficulty/gate) → bot ping user reply persistent, tự dọn khi user post lại hoặc sau 5 phút TTL. Hint và message gốc của user cùng bị dọn để channel heal về clean state.",
       "• **Raid đã clear từ trước** → bot DM user embed `Raid đã DONE rồi~` thay vì re-stamp timestamp + fresh success DM. Không update DB, tránh nhầm lẫn. Muốn reset thì chạy `/raid-set status:reset`.",
@@ -3650,10 +3650,15 @@ function nextAnnouncementEligibleBoundaryMs(typeKey, now = new Date()) {
     return candidate.getTime();
   }
   if (typeKey === "hourly-cleanup") {
+    // Cadence bumped from hourly to 30-min per Traine (Apr 2026). Next
+    // eligible boundary is the next :00 or :30 slot, same shape as the
+    // stuck-nudge tick boundary below.
     const candidate = new Date(now);
-    candidate.setUTCMinutes(0, 0, 0);
-    if (candidate.getTime() <= nowMs) {
-      candidate.setUTCHours(candidate.getUTCHours() + 1);
+    candidate.setUTCSeconds(0, 0);
+    if (candidate.getUTCMinutes() < 30) {
+      candidate.setUTCMinutes(30);
+    } else {
+      candidate.setUTCMinutes(60); // rolls into next hour
     }
     return candidate.getTime();
   }
@@ -4332,7 +4337,15 @@ function buildRaidChannelWelcomeEmbed() {
           "• Post đúng → Artist tag bạn ngay trong channel báo nhận được rồi, kèm DM embed confirm riêng; 5 giây sau tớ dọn cả tin gốc lẫn biển tag. Nếu DM bị tắt, tớ sẽ ping public ngắn rồi tự xóa sau 15 giây.",
           "• Post 1 raid đã clear từ trước → tớ DM notice riêng báo đã DONE rồi, không update lại. Tránh overwrite progress tuần này. Muốn reset thật sự thì dùng `/raid-set` với `status:reset`.",
           "• Post cách nhau ít nhất **2 giây** nha~ Spam nhanh quá tớ sẽ im lặng bỏ qua và nhắc khéo 1 lần.",
-          "• Mỗi đầu giờ (giờ VN), Artist tự đi dọn rác channel - sẽ post 1 biển báo trước khi quét, biển tự biến mất sau 5 phút. Welcome pin này giữ nguyên, không bị dọn.",
+        ].join("\n"),
+      },
+      {
+        name: "📣 Artist sẽ tự nói trong channel này khi nào",
+        value: [
+          "• **Mỗi 30 phút (giờ VN)**: Artist tự dọn rác channel, post 1 biển báo tone đổi theo lượng rác (sạch sẵn / nhẹ / bình thường / nhiều), biển tự biến sau 5 phút.",
+          "• **Thứ 4 17:00 VN (mỗi tuần)**: Artist thông báo progress raid vừa được reset tuần mới, biển tự biến sau 30 phút.",
+          "• **Khi có người vừa set channel này**: Artist post 1 dòng chào hỏi, tự biến sau 2 phút (welcome pin thì ở lại).",
+          "• **Khi có member bật `/raid-auto-manage` mà toàn char private log**: Artist sẽ tag khẽ nhắc bật Public Log ở lostark.bible, tối đa 1 lần mỗi 7 ngày.",
         ].join("\n"),
       },
       {
@@ -6522,7 +6535,7 @@ async function handleRaidChannelCommand(interaction) {
     // it's available for debugging, but it's overwritten on the next
     // enable regardless.
     const update = enabled
-      ? { $set: { autoCleanupEnabled: true, lastAutoCleanupKey: getTargetCleanupHourKey() } }
+      ? { $set: { autoCleanupEnabled: true, lastAutoCleanupKey: getTargetCleanupSlotKey() } }
       : { $set: { autoCleanupEnabled: false } };
     await GuildConfig.findOneAndUpdate(
       { guildId },
@@ -6534,7 +6547,7 @@ async function handleRaidChannelCommand(interaction) {
       .setTitle(`${enabled ? UI.icons.done : UI.icons.reset} Auto-cleanup ${enabled ? "enabled" : "disabled"}`)
       .setDescription(
         enabled
-          ? "Mỗi giờ (theo đầu giờ VN), Artist sẽ tự xóa toàn bộ message không được pin trong monitor channel. Welcome pin giữ nguyên. Trước khi dọn, Artist post 1 biển báo càu nhàu để members biết cleanup vừa chạy; biển tự biến mất sau 5 phút. Nếu bot offline qua 1 hour boundary, tick tiếp theo sau khi online sẽ catch-up."
+          ? "Mỗi 30 phút (slot :00 và :30 giờ VN), Artist sẽ tự xóa toàn bộ message không được pin trong monitor channel. Welcome pin giữ nguyên. Sau khi dọn, Artist post 1 biển báo 4-bucket (sạch sẵn / 1-5 / 6-20 / 21+ tin) với nhiều variant random pick; biển tự biến mất sau 5 phút. Nếu bot offline qua 1 slot boundary, tick tiếp theo sau khi online sẽ catch-up."
           : "Auto-cleanup đã tắt. Admin vẫn có thể chạy thủ công qua `/raid-channel config action:cleanup` bất cứ lúc nào."
       )
       .setTimestamp();
@@ -6543,7 +6556,7 @@ async function handleRaidChannelCommand(interaction) {
 }
 
 // ---------------------------------------------------------------------------
-// Auto-cleanup scheduler (hourly in Vietnam time)
+// Auto-cleanup scheduler (every 30 minutes in Vietnam time)
 // ---------------------------------------------------------------------------
 
 const AUTO_CLEANUP_NOTICE_TTL_MS = 5 * 60 * 1000; // marker sits 5 min before self-delete
@@ -6580,26 +6593,77 @@ async function postChannelAnnouncement(channel, content, ttlMs, logTag = "announ
 }
 
 /**
- * Returns "YYYY-MM-DDTHH" in Vietnam (UTC+7) calendar for the given moment.
- * Used as the idempotency cursor `lastAutoCleanupKey`: once a guild runs
- * cleanup for a given VN hour, subsequent ticks within the same hour
- * short-circuit. Crossing the hour boundary produces a new key and the
- * next tick picks it up.
+ * Returns "YYYY-MM-DDTHH:MM" in Vietnam (UTC+7) calendar where MM is
+ * snapped to "00" or "30". Used as the idempotency cursor
+ * `lastAutoCleanupKey`: once a guild runs cleanup for a given VN
+ * half-hour slot, subsequent ticks within the same slot short-circuit.
+ * Crossing a slot boundary produces a new key and the next tick picks
+ * it up.
  *
- * Previous format was day-granular ("YYYY-MM-DD") for 24h cadence; after
- * switching to hourly cadence (Apr 2026) the key needs hour resolution so
- * successive hours register as distinct work units. Legacy day-keys saved
- * in Mongo will never match the new hour-key format, so the first tick
- * after deploy re-runs cleanup once - harmless one-time re-sweep.
+ * Cadence history: daily (YYYY-MM-DD) → hourly (YYYY-MM-DDTHH) →
+ * half-hour (YYYY-MM-DDTHH:MM) per Traine's request. Legacy shorter
+ * keys stored in Mongo will never match the new slot key, so the first
+ * tick after deploy re-runs cleanup once - harmless one-time re-sweep.
  */
-function getTargetCleanupHourKey(now = new Date()) {
+function getTargetCleanupSlotKey(now = new Date()) {
   const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-  // ISO slice 0-13 = "YYYY-MM-DDTHH"
-  return vnTime.toISOString().slice(0, 13);
+  const dateHour = vnTime.toISOString().slice(0, 13); // "YYYY-MM-DDTHH"
+  const slotMinute = vnTime.getUTCMinutes() < 30 ? "00" : "30";
+  return `${dateHour}:${slotMinute}`;
+}
+
+/**
+ * Variant pool per cleanup-count bucket. Random pick at fire time gives
+ * the channel a more lived-in tone instead of a single repeating line.
+ * Buckets sized empirically: 0 = silent channel (idle marker), 1-5 = a
+ * few stragglers, 6-20 = typical night of posting, 21+ = backlog.
+ *
+ * All strings omit stage-direction italics per feedback_no_stage_directions
+ * and include the "Biển báo này 30 phút nữa Artist cuỗm đi" self-delete
+ * hint so members aren't surprised when the notice disappears.
+ */
+const CLEANUP_NOTICE_VARIANTS_BY_BUCKET = {
+  empty: [
+    "Ồ, giờ này Artist ghé qua xem chỗ này thế nào... ai dè sạch sẽ sẵn rồi nhé~ Vậy Artist ngồi uống trà 5 phút rồi đi tiếp, biển báo này tự biến mất sau đó. Các cậu cứ tiếp tục post clear bình thường nha.",
+    "Hmm~ Artist tới ca dọn mà chẳng có gì để dọn cả. Các cậu hôm nay gọn gàng quá đấy, Artist ngồi đây 5 phút rồi biến nhé.",
+    "Chỗ này vẫn sạch như cũ nhỉ~ Artist cảm ơn các cậu giữ channel ngăn nắp, biển báo này tự xóa sau 5 phút để không làm vướng.",
+  ],
+  trivial: [
+    "Nhẹ nhàng thôi mà~ Artist vừa thu gom **N** mẩu tin rồi, 5 phút nữa biển này tự biến nha.",
+    "Ok, **N** tin nhỏ xinh đã được Artist dọn gọn. Biển báo này 5 phút nữa cũng tự dọn luôn đấy.",
+    "Chỉ có **N** mẩu lặt vặt thôi, Artist vừa xử lý xong~ Biển báo này 5 phút nữa Artist cuỗm đi, các cậu cứ tiếp tục post clear nhé.",
+  ],
+  normal: [
+    "Hừm... đến ca dọn rồi nhé. Xong, vừa dọn **N** tin rồi đấy~ Biển báo này 5 phút nữa Artist cuỗm đi luôn, các cậu cứ tiếp tục post clear bình thường nha.",
+    "Đúng nhịp dọn dẹp đây~ Artist vừa quét **N** tin, channel gọn gàng lại rồi. Biển báo này tự biến sau 5 phút nha.",
+    "Xong một lượt dọn, **N** tin đã được Artist thu về gọn ghẽ. Biển báo này 5 phút nữa cũng dọn nốt, các cậu cứ post clear bình thường.",
+  ],
+  heavy: [
+    "Oáp... có tới **N** tin phải dọn này, Artist làm hụt hơi luôn~ Xong rồi, biển báo này 5 phút nữa Artist tự cuỗm đi nha.",
+    "Nhiều rác thật đấy, **N** tin lận~ Artist vừa xử lý gọn gàng, các cậu post sôi nổi ghê. Biển báo này 5 phút nữa tự biến.",
+    "Artist phải tăng ca dọn **N** tin nè, hơi mệt nhưng channel sạch lại rồi. Biển này 5 phút nữa tớ cuỗm đi, các cậu cứ tiếp tục post clear nha.",
+  ],
+};
+
+/**
+ * Resolve the notice text for a cleanup tick outcome. Bucketing sized
+ * empirically - 0 triggers the "idle heartbeat" pool, 1-5 the "trivial"
+ * pool, 6-20 the "normal" pool, 21+ the "heavy backlog" pool. Random
+ * pick within the bucket gives variety without falling out of tone.
+ */
+function pickCleanupNoticeContent(deleted) {
+  let bucket;
+  if (deleted <= 0) bucket = "empty";
+  else if (deleted <= 5) bucket = "trivial";
+  else if (deleted <= 20) bucket = "normal";
+  else bucket = "heavy";
+  const pool = CLEANUP_NOTICE_VARIANTS_BY_BUCKET[bucket];
+  const picked = pool[Math.floor(Math.random() * pool.length)];
+  return picked.replace(/\*\*N\*\*/g, `**${deleted}**`);
 }
 
 async function runAutoCleanupTick(client) {
-  const targetKey = getTargetCleanupHourKey();
+  const targetKey = getTargetCleanupSlotKey();
   let configs;
   try {
     configs = await GuildConfig.find({
@@ -6613,7 +6677,7 @@ async function runAutoCleanupTick(client) {
   if (!configs.length) return;
 
   for (const cfg of configs) {
-    if (cfg.lastAutoCleanupKey === targetKey) continue; // already done for this VN hour
+    if (cfg.lastAutoCleanupKey === targetKey) continue; // already done for this VN half-hour slot
     const guild = client.guilds.cache.get(cfg.guildId);
     if (!guild) continue;
     let channel = guild.channels.cache.get(cfg.raidChannelId);
@@ -6648,9 +6712,7 @@ async function runAutoCleanupTick(client) {
       // Cleanup itself still runs; only the announcement is skipped.
       const cleanupNoticeEnabled = getAnnouncementsConfig(cfg).hourlyCleanupNotice.enabled;
       if (cleanupNoticeEnabled) {
-        const noticeContent = deleted > 0
-          ? `Hừm... đến giờ Artist phải đi dọn rác rồi nhé. Xong, vừa dọn **${deleted}** tin rồi đấy~ Biển báo này 5 phút nữa Artist cuỗm đi luôn, các cậu cứ tiếp tục post clear bình thường nha.`
-          : `Ồ, giờ này Artist ghé qua xem chỗ này thế nào... ai dè sạch sẽ sẵn rồi nhé~ Vậy Artist ngồi uống trà 5 phút rồi đi tiếp, biển báo này tự biến mất sau đó. Các cậu cứ tiếp tục post clear bình thường nha.`;
+        const noticeContent = pickCleanupNoticeContent(deleted);
         await postChannelAnnouncement(
           channel,
           noticeContent,
