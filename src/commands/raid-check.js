@@ -54,7 +54,7 @@ function createRaidCheckCommand(deps) {
     const selectedDifficulty = toModeLabel(raidMeta.modeKey);
     const selectedDiffNorm = normalizeName(selectedDifficulty);
     const scanRank = modeRank(selectedDiffNorm);
-    const { lowestMin, selfMin, nextMin } = getRaidScanRange(
+    const { lowestMin, selfMin } = getRaidScanRange(
       raidMeta.raidKey,
       Number(raidMeta.minItemLevel) || 0
     );
@@ -118,15 +118,6 @@ function createRaidCheckCommand(deps) {
               });
               continue;
             }
-            if (nextMin != null && characterItemLevel >= nextMin) {
-              notEligibleChars.push({
-                ...baseEntry,
-                gateStatus: [],
-                overallStatus: "not-eligible",
-                notEligibleReason: "high",
-              });
-              continue;
-            }
           }
 
           allEligible.push({
@@ -158,30 +149,11 @@ function createRaidCheckCommand(deps) {
     };
   }
 
-  function getNextRaidModeLabel(raidMeta) {
-    const currentMin = Number(raidMeta?.minItemLevel) || 0;
-    const nextMode = Object.values(RAID_REQUIREMENT_MAP || {})
-      .filter(
-        (entry) =>
-          entry &&
-          entry.raidKey === raidMeta?.raidKey &&
-          (Number(entry.minItemLevel) || 0) > currentMin
-      )
-      .sort((a, b) => (Number(a.minItemLevel) || 0) - (Number(b.minItemLevel) || 0))[0];
-    return nextMode ? toModeLabel(nextMode.modeKey) : null;
-  }
-
-  function formatRaidCheckNotEligibleFieldValue(character, raidMeta) {
+  function formatRaidCheckNotEligibleFieldValue(character) {
     if (character?.notEligibleReason === "low") {
       return `${UI.icons.lock} _Not eligible yet (iLvl below min)_`;
     }
-
-    const currentModeLabel = toModeLabel(raidMeta?.modeKey);
-    const nextModeLabel = getNextRaidModeLabel(raidMeta);
-    const label = nextModeLabel
-      ? `_Eligible for ${nextModeLabel} - can still flex ${currentModeLabel}_`
-      : `_Eligible for a higher mode - can still flex ${currentModeLabel}_`;
-    return `${UI.icons.info} ${label}`;
+    return `${UI.icons.lock} _Not eligible yet_`;
   }
 
   function getRaidCheckRenderableChars(snapshot) {
@@ -396,7 +368,7 @@ function createRaidCheckCommand(deps) {
       if (character.overallStatus === "not-eligible") {
         return {
           name,
-          value: truncateText(formatRaidCheckNotEligibleFieldValue(character, raidMeta), 1024),
+          value: truncateText(formatRaidCheckNotEligibleFieldValue(character), 1024),
           inline: true,
         };
       }

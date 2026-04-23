@@ -92,7 +92,7 @@ test("buildRaidCheckSnapshotFromUsers keeps higher-mode clears complete even abo
   assert.equal(snapshot.notEligibleChars.length, 0);
 });
 
-test("buildRaidCheckSnapshotFromUsers marks out-grown chars as not-eligible when scanning a lower mode", () => {
+test("buildRaidCheckSnapshotFromUsers keeps higher-ilvl chars eligible when scanning a lower mode", () => {
   const snapshot = __test.buildRaidCheckSnapshotFromUsers(
     [
       {
@@ -103,7 +103,7 @@ test("buildRaidCheckSnapshotFromUsers marks out-grown chars as not-eligible when
             accountName: "Main",
             characters: [
               makeCharacter("FitForNormal", 1700, {}), // [1700, 1720) eligible for Act4 Normal
-              makeCharacter("AboveNormal", 1725, {}),  // >= 1720, out-grown - should do Hard
+              makeCharacter("AboveNormal", 1725, {}),
               makeCharacter("AboveNormal2", 1740, {}),
             ],
           },
@@ -113,9 +113,8 @@ test("buildRaidCheckSnapshotFromUsers marks out-grown chars as not-eligible when
     { raidKey: "armoche", modeKey: "normal", minItemLevel: 1700 }
   );
 
-  assert.equal(snapshot.allEligible.length, 1);
-  assert.equal(snapshot.notEligibleChars.length, 2);
-  assert.equal(snapshot.notEligibleChars[0]?.notEligibleReason, "high");
+  assert.equal(snapshot.allEligible.length, 3);
+  assert.equal(snapshot.notEligibleChars.length, 0);
   assert.equal(snapshot.allChars.length, 3); // combined render set
 });
 
@@ -145,19 +144,15 @@ test("buildRaidCheckSnapshotFromUsers marks under-iLvl chars as not-eligible whe
   assert.equal(snapshot.notEligibleChars[0]?.notEligibleReason, "low");
 });
 
-test("raid-check high-mode note explains that the char can still flex the scanned mode", () => {
-  const fieldValue = __test.formatRaidCheckNotEligibleFieldValue(
-    {
-      charName: "Qiylyn",
-      itemLevel: 1743,
-      notEligibleReason: "high",
-    },
-    { raidKey: "serca", modeKey: "hard", minItemLevel: 1730 }
-  );
+test("raid-check not-eligible note explains below-min chars clearly", () => {
+  const fieldValue = __test.formatRaidCheckNotEligibleFieldValue({
+    charName: "TooLow",
+    itemLevel: 1715,
+    notEligibleReason: "low",
+  });
 
-  assert.match(fieldValue, /Eligible for Nightmare/);
-  assert.match(fieldValue, /can still flex Hard/);
-  assert.match(fieldValue, /ℹ️/);
+  assert.match(fieldValue, /Not eligible yet/);
+  assert.match(fieldValue, /below min/);
 });
 
 test("raid-check renderable chars hide not-eligible entries from the visible list", () => {
@@ -182,7 +177,7 @@ test("raid-check renderable chars hide not-eligible entries from the visible lis
   );
 
   const renderable = __test.getRaidCheckRenderableChars(snapshot);
-  assert.deepEqual(renderable.map((char) => char.charName), ["PendingHard"]);
+  assert.deepEqual(renderable.map((char) => char.charName), ["PendingHard", "AlreadyNightmare"]);
 });
 
 test("buildRaidCheckSnapshotFromUsers keeps done-only rosters visible in the combined render set", () => {
@@ -668,3 +663,4 @@ test("ensureFreshWeek preserves gate clears already inside the current reset win
   assert.equal(character.tasks[1].completions, 0);
   assert.equal(character.tasks[1].completionDate, null);
 });
+
