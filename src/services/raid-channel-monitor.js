@@ -404,6 +404,19 @@ function createRaidChannelMonitorService({
       console.warn("[raid-channel] reply failed:", err?.message || err);
     }
   }
+  const emptyContentWarningAt = new Map(); // guildId:channelId -> unix ms
+  const EMPTY_CONTENT_WARNING_COOLDOWN_MS = 5 * 60 * 1000;
+  async function postEmptyContentWarning(message) {
+    const key = `${message.guildId}:${message.channelId}`;
+    const now = Date.now();
+    const last = emptyContentWarningAt.get(key) || 0;
+    if (now - last < EMPTY_CONTENT_WARNING_COOLDOWN_MS) return;
+    emptyContentWarningAt.set(key, now);
+    await postTransientReply(
+      message,
+      `${UI.icons.warn} Artist thấy message trong monitor channel nhưng không đọc được text content. Nếu cậu vừa gõ raid clear mà Artist im, kiểm tra **Message Content Intent** trong Discord Developer Portal và env \`TEXT_MONITOR_ENABLED\`, rồi redeploy bot nha.`
+    );
+  }
   // Persistent per-user hint tracker: when a user posts a recoverable-error
   // message, the bot pings them (reply with default repliedUser mention) and
   // keeps the hint visible until they retype. On the next message from the
@@ -569,11 +582,14 @@ function createRaidChannelMonitorService({
     if (message.author?.bot) return;
     if (message.system) return;
     if (message.webhookId) return;
-    if (!message.content || !message.content.trim()) return;
     // Cache lookup - no Mongo hit on the hot path. Miss means no config or
     // this channel isn't the configured monitor.
     const cachedChannelId = getCachedMonitorChannelId(message.guildId);
     if (!cachedChannelId || cachedChannelId !== message.channelId) return;
+    if (!message.content || !message.content.trim()) {
+      await postEmptyContentWarning(message);
+      return;
+    }
     const userHintKey = hintKey(message.guildId, message.channelId, message.author.id);
     const parsed = parseRaidMessage(message.content);
     if (!parsed) return; // Silent ignore: not a raid-update message.
