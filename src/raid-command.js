@@ -2297,6 +2297,7 @@ async function handleRaidCheckSyncClick(interaction, raidMeta) {
 // `/raid-check` because filtering + paging large roster scans takes longer.
 const STATUS_PAGINATION_SESSION_MS = 2 * 60 * 1000;
 const RAID_CHECK_PAGINATION_SESSION_MS = 5 * 60 * 1000;
+const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
 // Shared English legend for footer of both /raid-status and /raid-check.
 // Single source of truth - keeps the two paginated commands visually
 // aligned.
@@ -2331,6 +2332,46 @@ function isAccountRefreshStale(account, now = Date.now()) {
     return false;
   }
   return true;
+}
+
+function waitWithBudget(promise, budgetMs) {
+  let timeoutId;
+  const timeout = new Promise((resolve) => {
+    timeoutId = setTimeout(() => resolve({ timedOut: true, value: null }), budgetMs);
+  });
+  return Promise.race([
+    promise.then((value) => ({ timedOut: false, value })),
+    timeout,
+  ]).finally(() => clearTimeout(timeoutId));
+}
+
+async function applyAutoManageCollectedForStatus(discordId, weekResetStart, collected, logLabel) {
+  return await saveWithRetry(async () => {
+    const doc = await User.findOne({ discordId });
+    if (!doc) return null;
+    const didFreshenWeek = ensureFreshWeek(doc);
+
+    let didAutoManage = false;
+    if (collected && doc.autoManageEnabled) {
+      const autoReport = applyAutoManageCollected(doc, weekResetStart, collected);
+      const now = Date.now();
+      doc.lastAutoManageAttemptAt = now;
+      if (autoReport.perChar.some((c) => !c.error)) {
+        doc.lastAutoManageSyncAt = now;
+      }
+      didAutoManage = true;
+    } else {
+      // Bible was attempted but gather failed or timed out from the foreground
+      // path. Stamp attempt so rapid /raid-status retries don't immediately
+      // start another roster-wide sync.
+      doc.lastAutoManageAttemptAt = Date.now();
+      didAutoManage = true;
+    }
+
+    if (didFreshenWeek || didAutoManage) await doc.save();
+    console.log(`[raid-status] ${logLabel} auto-manage applied for user=${discordId}`);
+    return doc.toObject();
+  });
 }
 
 /**
@@ -2698,6 +2739,7 @@ async function handleStatusCommand(interaction) {
   // spam-clicking /raid-status can't blast bible.
   let userDoc = null;
   let autoManageGuard = null;
+  let autoManageReleaseInBackground = false;
   try {
     if (!seedDoc) {
       userDoc = null;
@@ -2746,14 +2788,42 @@ async function handleStatusCommand(interaction) {
       // internally, auto-manage gather loops chars sequentially - both
       // bounded by bibleLimiter. Total wall-clock = max(refresh, auto-
       // manage) instead of refresh + auto-manage.
-      const [refreshCollected, autoManageCollected] = await Promise.all([
+      const [refreshCollected, autoManageBudgetResult] = await Promise.all([
         collectStaleAccountRefreshes(seedDoc),
-        autoManagePromise,
+        autoManageGuard?.acquired
+          ? waitWithBudget(autoManagePromise, STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS)
+          : Promise.resolve({ timedOut: false, value: null }),
       ]);
+      let autoManageCollected = autoManageBudgetResult.value;
       // Track whether bible was actually hit on the auto-manage path -
       // controls whether we need to stamp `lastAutoManageAttemptAt` on
       // catch (Codex round 26 finding #2: cooldown bypass on save fail).
       const autoManageBibleHit = autoManageGuard?.acquired === true;
+      const autoManageTimedOut = autoManageGuard?.acquired && autoManageBudgetResult.timedOut;
+      if (autoManageTimedOut) {
+        autoManageCollected = null;
+        autoManageReleaseInBackground = true;
+        autoManagePromise
+          .then((backgroundCollected) =>
+            applyAutoManageCollectedForStatus(
+              discordId,
+              autoManageWeekResetStart,
+              backgroundCollected,
+              "background"
+            )
+          )
+          .catch(async (err) => {
+            console.warn(
+              "[raid-status] background auto-manage apply failed:",
+              err?.message || err
+            );
+            await stampAutoManageAttempt(discordId);
+          })
+          .finally(() => releaseAutoManageSyncSlot(discordId));
+        console.log(
+          `[raid-status] auto-manage exceeded ${STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS}ms budget for user=${discordId}; rendering cached data and continuing in background`
+        );
+      }
 
       userDoc = await saveWithRetry(async () => {
         const doc = await User.findOne({ discordId });
@@ -2782,9 +2852,10 @@ async function handleStatusCommand(interaction) {
           didAutoManage = true;
         } else if (autoManageBibleHit) {
           // Bible was hit but user toggled off (or gather returned null
-          // from a thrown error before save). Stamp attempt so cooldown
-          // still kicks in for the next call - same reasoning as the
-          // outer catch block below.
+          // from a thrown error before save, or timed out from the
+          // foreground budget). Stamp attempt so cooldown still kicks in
+          // for the next call - same reasoning as the outer catch block
+          // below.
           doc.lastAutoManageAttemptAt = Date.now();
           didAutoManage = true;
         }
@@ -2807,8 +2878,11 @@ async function handleStatusCommand(interaction) {
     userDoc = await User.findOne({ discordId }).lean();
   } finally {
     // Release auto-manage slot we may have acquired above. Guard against
-    // releasing twice or releasing when never acquired.
-    if (autoManageGuard?.acquired) releaseAutoManageSyncSlot(discordId);
+    // releasing twice or releasing when never acquired. When the piggyback
+    // timed out, the background continuation owns the release.
+    if (autoManageGuard?.acquired && !autoManageReleaseInBackground) {
+      releaseAutoManageSyncSlot(discordId);
+    }
   }
 
   if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
