@@ -398,11 +398,8 @@ function createRaidChannelMonitorService({
           ].join("\n"),
         },
         {
-          name: "👑 Roster đeo vương miện nho nhỏ",
-          value: [
-            "Thỉnh thoảng trong `/raid-check` và `/raid-status`, cậu sẽ thấy vài roster đầu section có `👑` thay cho `📁`.",
-            "Đó là roster của mấy bạn đang cầm chìa khoá Raid Manager - Artist quan tâm hơn xíu cho họ (sync data nhanh hơn đáng kể, gợi ý tận tình hơn khi có việc cần). Không phải ra bài phân biệt đâu nhé, chỉ là chu đáo với người ngày nào cũng điều phối raid thôi~",
-          ].join("\n"),
+          name: "👑 Ghi chú bé xíu",
+          value: "Thi thoảng cậu sẽ bắt gặp vài roster đội `👑` thay cho `📁`. Artist quen vài người thôi mà~",
         }
       )
       .setFooter({ text: "Muốn xem full hướng dẫn tất cả commands? Gõ /raid-help nhé~" });
