@@ -84,7 +84,10 @@ function toModeLabel(modeKey) {
 function toModeKey(modeLabel) {
   const lower = normalizeName(modeLabel);
   if (lower === "hard" || lower === "hm") return "hard";
-  if (lower === "nightmare" || lower === "nm" || lower === "9m") return "nightmare";
+  if (lower === "nightmare" || lower === "9m") return "nightmare";
+  // `nm` moved from nightmare to normal per Traine's alias preference: in
+  // this VN community `nm` reads as "nor-mal" more naturally than "9m".
+  // Nightmare keeps `9m` as the sole shorthand.
   return "normal";
 }
 

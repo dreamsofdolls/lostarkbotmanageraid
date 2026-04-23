@@ -272,6 +272,21 @@ test("parseRaidMessage accepts 9m as a nightmare alias", () => {
   });
 });
 
+test("parseRaidMessage treats nm as a normal alias (Traine's alias swap)", () => {
+  const parsed = parseRaidMessage("Serca nm Clauseduk");
+  assert.deepEqual(parsed, {
+    raidKey: "serca",
+    modeKey: "normal",
+    charNames: ["clauseduk"],
+    gate: null,
+  });
+});
+
+test("parseRaidMessage no longer treats nm as a nightmare shorthand", () => {
+  const parsed = parseRaidMessage("Serca nm Clauseduk");
+  assert.notEqual(parsed?.modeKey, "nightmare");
+});
+
 test("stale roster refresh canonicalizes diacritic-only bible character names", () => {
   const userDoc = {
     accounts: [

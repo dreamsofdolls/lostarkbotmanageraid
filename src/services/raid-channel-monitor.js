@@ -106,12 +106,16 @@ function createRaidChannelMonitorService({
   ]);
   const DIFFICULTY_ALIASES = new Map([
     ["nightmare", "nightmare"],
-    ["nm",        "nightmare"],
     ["9m",        "nightmare"],
     ["hard",      "hard"],
     ["hm",        "hard"],
     ["normal",    "normal"],
     ["nor",       "normal"],
+    // `nm` now maps to normal (not nightmare) per Traine's VN-community
+    // preference where "nm" reads as nor-mal more naturally. Nightmare
+    // shorthand is `9m` only. Breaking for anyone who was typing `nm` for
+    // nightmare, but the 2-operator deployment makes the blast radius small.
+    ["nm",        "normal"],
   ]);
   const GATE_TOKEN_RE = /^g([1-9])$/;
   /**
@@ -128,7 +132,7 @@ function createRaidChannelMonitorService({
    *                                                  progression
    *
    * Raid aliases: act 4 / act4 / armoche · kazeros / kaz · serca
-   * Difficulty aliases: normal / nor · hard / hm · nightmare / nm / 9m
+   * Difficulty aliases: normal / nor / nm · hard / hm · nightmare / 9m
    * Gate pattern: G1..G9 (validated downstream against raid's gate list)
    *
    * Returns:
@@ -365,7 +369,7 @@ function createRaidChannelMonitorService({
           name: "🏷️ Alias Artist nhận (không phân biệt hoa thường)",
           value: [
             "**Raid**: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca`",
-            "**Difficulty**: `normal` / `nor` · `hard` / `hm` · `nightmare` / `nm` / `9m`",
+            "**Difficulty**: `normal` / `nor` / `nm` · `hard` / `hm` · `nightmare` / `9m`",
             "**Gate**: `G1`, `G2` - chỉ dùng khi muốn đánh dấu đúng 1 gate",
             "**Separator**: space, `+`, hay `,` đều xài được hết",
           ].join("\n"),
