@@ -17,6 +17,7 @@ const {
   handleRemoveRosterAutocomplete,
   handleRaidChannelAutocomplete,
   handleRaidAutoManageAutocomplete,
+  handleRaidAnnounceAutocomplete,
   handleRaidChannelMessage,
   handleRaidCheckButton,
   loadMonitorChannelCache,
@@ -148,6 +149,8 @@ async function startBot() {
           await handleRaidChannelAutocomplete(interaction);
         } else if (interaction.commandName === "raid-auto-manage") {
           await handleRaidAutoManageAutocomplete(interaction);
+        } else if (interaction.commandName === "raid-announce") {
+          await handleRaidAnnounceAutocomplete(interaction);
         } else {
           await interaction.respond([]).catch(() => {});
         }

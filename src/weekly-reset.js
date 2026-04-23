@@ -132,9 +132,10 @@ function isWithinWeeklyResetWindow(now = new Date()) {
 }
 
 /**
- * For each guild with a configured monitor channel, post a weekly-reset
- * announcement tagged with the current target week key and self-delete
- * after WEEKLY_ANNOUNCEMENT_TTL_MS. Dedup per guild via
+ * For each guild with either a configured monitor channel OR an explicit
+ * weekly-reset override channel, post a weekly-reset announcement tagged
+ * with the current target week key and self-delete after
+ * WEEKLY_ANNOUNCEMENT_TTL_MS. Dedup per guild via
  * `GuildConfig.lastWeeklyAnnouncementKey` so a catch-up tick in the same
  * ISO week doesn't re-announce. Silent failure path - bot without
  * Send Messages perm or deleted channel just skips without throwing.
@@ -144,10 +145,19 @@ async function postWeeklyResetAnnouncements(client, targetKey) {
   let configs;
   try {
     configs = await GuildConfig.find({
-      raidChannelId: { $ne: null },
-      $or: [
-        { lastWeeklyAnnouncementKey: null },
-        { lastWeeklyAnnouncementKey: { $ne: targetKey } },
+      $and: [
+        {
+          $or: [
+            { raidChannelId: { $ne: null } },
+            { "announcements.weeklyReset.channelId": { $ne: null } },
+          ],
+        },
+        {
+          $or: [
+            { lastWeeklyAnnouncementKey: null },
+            { lastWeeklyAnnouncementKey: { $ne: targetKey } },
+          ],
+        },
       ],
     }).lean();
   } catch (err) {

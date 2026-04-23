@@ -184,6 +184,8 @@ Sau khi đăng ký, bất kỳ ai post message vào channel đó dạng `<raid> 
 3. **Weekly reset announcement** (TTL 30 phút): thứ 4 17:00 VN (= Wed 10:00 UTC) sau khi `resetWeekly` stamps new `weeklyResetKey`. **Double gate** cho alignment chặt với reset moment: `result.modifiedCount > 0` (reset thực sự chạy) **AND** `isWithinWeeklyResetWindow()` (24h window Wed 17 VN → Thu 17 VN). Loại bỏ edge case mid-week new-user onboarding làm false-fire announcement ngoài Wed. Per-guild dedup qua `GuildConfig.lastWeeklyAnnouncementKey = targetWeekKey`. Generic text (không tag user), chúc tuần raid vui vẻ. Trade-off: bot offline > 24h xuyên qua Wed 17 VN sẽ miss announcement tuần đó (progress reset vẫn áp dụng khi bot online lại).
 4. **Stuck private-log nudge** (TTL 30 phút, dedup 7 ngày): phase 3 auto-manage daily tick detect user có `report.perChar` toàn `isPublicLogDisabledError` → tag user trong monitor channel guild đầu tiên user là member, hướng dẫn vào `lostark.bible/me/logs` bật Show on Profile. Dedup qua `User.lastPrivateLogNudgeAt >= 7 days`. Cache-first member lookup (skip nếu cold, không force fetch).
 
+Các type overridable (`weekly-reset`, `stuck-nudge`) resolve đích qua `announcements.<type>.channelId || raidChannelId`, nên explicit `/raid-announce ... action:set-channel` vẫn có hiệu lực kể cả khi monitor channel đang null.
+
 **Scheduler wiring change**: `startWeeklyResetJob` giờ nhận `client` param + được move vào `ClientReady` (trước ở `startBot` pre-login). Lý do: announcements cần Discord client để post. `startAutoManageDailyScheduler` cũng nhận `client` cho nudge path. Catch-up ticks sau bot restart dedup qua per-guild key nên không re-announce.
 
 ### `/raid-announce` - management layer cho announcements (Apr 2026)
