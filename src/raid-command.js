@@ -667,15 +667,11 @@ async function loadFreshUserSnapshotForRaidViews(
 
 /**
  * For a given (raidKey, selfMin) compute the iLvl range bounds needed to
- * classify roster chars as eligible / too-low / out-grown for the scan.
+ * classify roster chars as eligible / too-low for the scan.
  *
  *   - lowestMin: min iLvl of the lowest-tier mode of this raid. Chars
  *     below this are outside the raid entirely and never render.
  *   - selfMin: scan mode's own min (usually === `raidMeta.minItemLevel`).
- *   - nextMin: min iLvl of the next-higher mode (null if scan mode is
- *     the top). Chars at or above `nextMin` have "out-grown" this mode
- *     and get a "Not eligible yet" marker so Raid Manager knows they
- *     should graduate to the higher difficulty.
  *
  * The `lowestMin` floor uses `Math.min(RAID_REQ lowest, selfMin)` so that
  * if a caller passes a selfMin below the actual lowest mode (e.g. older
@@ -689,9 +685,7 @@ function getRaidScanRange(raidKey, selfMin) {
     .filter(Number.isFinite);
   const baseLowest = mins.length > 0 ? Math.min(...mins) : selfMin;
   const lowestMin = Math.min(baseLowest, selfMin);
-  const nextHigher = mins.filter((m) => m > selfMin).sort((a, b) => a - b);
-  const nextMin = nextHigher.length > 0 ? nextHigher[0] : null;
-  return { lowestMin, selfMin, nextMin };
+  return { lowestMin, selfMin };
 }
 
 function buildRaidCheckUserQuery(raidMeta, now = Date.now()) {
