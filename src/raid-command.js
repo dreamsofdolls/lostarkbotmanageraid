@@ -1289,6 +1289,7 @@ const raidChannelMonitorService = createRaidChannelMonitorService({
   getGatesForRaid,
   applyRaidSetForDiscordId,
   getAnnouncementsConfig,
+  normalizeName,
 });
 ({
   loadMonitorChannelCache,
@@ -1395,6 +1396,7 @@ const raidAutoManageCommandHandlers = createRaidAutoManageCommand({
   acquireAutoManageSyncSlot,
   releaseAutoManageSyncSlot,
   formatAutoManageCooldownRemaining,
+  getAutoManageCooldownMs,
   weekResetStartMs,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
