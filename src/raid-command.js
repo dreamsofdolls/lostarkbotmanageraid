@@ -668,8 +668,8 @@ const RAID_CHANNEL_ACTION_CHOICES = [
   { name: "clear - disable monitor + reset schedule", value: "clear" },
   { name: "cleanup - delete all non-pinned messages now", value: "cleanup" },
   { name: "repin - refresh the pinned welcome embed", value: "repin" },
-  { name: "schedule-on - enable daily 00:00 VN auto-cleanup", value: "schedule-on" },
-  { name: "schedule-off - disable daily auto-cleanup", value: "schedule-off" },
+  { name: "schedule-on - enable hourly auto-cleanup (VN time)", value: "schedule-on" },
+  { name: "schedule-off - disable hourly auto-cleanup", value: "schedule-off" },
 ];
 
 const raidChannelCommand = new SlashCommandBuilder()
@@ -1203,40 +1203,33 @@ async function handleRaidCheckCommand(interaction) {
   };
 
   // Add one roster section to an embed. Section header = non-inline field
-  // with name = clean roster label, value = RICH stats line (state
-  // breakdown + avg iLvl + sync badge). Rich value fills the field's
-  // value-line height with meaningful content instead of ZWS - inter-row
-  // padding below then looks proportional to content, not wasted. Lets
-  // us use non-inline's full-width without the "thừa khoảng cách" feel.
+  // with name = clean roster label, value = state breakdown + freshness
+  // text ("Last updated Nh" / "Last synced Nh"). Explicit English labels
+  // read clearer than cryptic 📥/🔄 emoji badges, especially for raid
+  // managers scanning many rosters at once.
   const addRosterSection = (embed, group) => {
-    // Freshness badges:
-    // 📥 = roster data refresh (iLvl/class pulled từ bible qua /raid-status
-    //      lazy refresh). Stamped on every user, không cần opt-in.
-    // 🔄 = auto-manage bible log sync (raid progress pull). Chỉ opted-in
-    //      user qua /raid-auto-manage action:on.
+    // Freshness badges with explicit labels:
+    // "Last updated" = roster data refresh (iLvl/class pulled từ bible qua
+    //      /raid-status lazy refresh). Stamped on every user, không cần
+    //      opt-in - applies to all rosters.
+    // "Last synced"  = auto-manage bible log sync (raid progress pull).
+    //      Chỉ opted-in user qua /raid-auto-manage action:on.
     // Show both nếu đủ data - 2 timestamp semantically khác nhau.
     const badges = [];
     if (group.lastRefreshedAt > 0) {
-      badges.push(`📥${formatShortRelative(group.lastRefreshedAt)}`);
+      badges.push(`📥 Last updated ${formatShortRelative(group.lastRefreshedAt)} ago`);
     }
     if (group.autoManageEnabled) {
       badges.push(
         group.lastAutoManageSyncAt > 0
-          ? `🔄${formatShortRelative(group.lastAutoManageSyncAt)}`
-          : "🔄never"
+          ? `🔄 Last synced ${formatShortRelative(group.lastAutoManageSyncAt)} ago`
+          : "🔄 Never synced"
       );
     }
     const syncBadge = badges.length > 0 ? " · " + badges.join(" · ") : "";
     // Per-roster state breakdown (filter zero counts)
     const statsText = formatRosterStats(group.stats || { none: 0, partial: 0, done: 0 });
-    // Average iLvl of pending chars in this roster (integer round)
-    const avgILvlText = group.chars.length > 0
-      ? `avg iLvl ${Math.round(
-          group.chars.reduce((sum, c) => sum + (Number(c.itemLevel) || 0), 0) / group.chars.length
-        )}`
-      : "";
-    const valueParts = [statsText, avgILvlText].filter(Boolean);
-    const headerValue = valueParts.join(" · ") + syncBadge;
+    const headerValue = statsText + syncBadge;
 
     embed.addFields({
       name: truncateText(`📁 ${group.accountName} (${group.displayName})`, 256),
@@ -2812,7 +2805,7 @@ const HELP_SECTIONS = [
       "• **Header**: title embed hiện `⚠️ Raid Check · <raid label> (<minItemLevel>)` - gọn, chỉ command + raid + threshold (ví dụ `Act 4 Normal (1700)`). Description đã bỏ hoàn toàn - info đều ở title, per-roster headers, và footer. Page indicator + 3-state counts đều dưới footer.",
       "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field mirroring `/raid-status`'s pattern. Field name `<charName> · <iLvl>` được Discord auto-bold = scan anchor. Field value `<icon> <done>/<total>` (ví dụ `⚪ 0/2`) - value line có content nên không waste height (earlier attempt pack everything vào name line + ZWS value tạo gap 'cách nhau quá'). Aggregate 3-state icon qua `pickProgressIcon` (🟢 done all / 🟡 partial / ⚪ none). Raid label nằm ở title không lặp trong value.",
       "• **2-column layout via inline fields + spacer**: Discord default pack 3 inline field/row; chèn zero-width-space spacer field giữa mỗi cặp char để force 2-per-row - y hệt kỹ thuật `/raid-status`. Odd char cuối cùng cặp với 1 spacer để không bị Discord stretch full-width.",
-      "• **2 rosters per page (chunked)**: mỗi embed page chứa tối đa 2 roster sections stacked. Roster section = non-inline header field với RICH value line. Name = `📁 accountName (displayName)` (clean label). Value = `<state breakdown> · avg iLvl <N> · 📥<refreshRelative> · 🔄<autoManageRelative>`. **📥 badge** = roster data refresh (iLvl/class từ bible qua /raid-status lazy refresh) - applies to ALL users. **🔄 badge** = auto-manage bible log sync (raid progress) - chỉ opted-in user. Hai badges song song nếu đủ data. Ví dụ: `4 ⚪ · 1 🟡 · 1 🟢 · avg iLvl 1704 · 📥2h · 🔄1h`. Per roster cost: 1 header + N char + ceil(N/2) spacer fields. 2 × 6-char rosters = 20 fields, fit 25-cap.",
+      "• **2 rosters per page (chunked)**: mỗi embed page chứa tối đa 2 roster sections stacked. Roster section = non-inline header field với explicit value line. Name = `📁 accountName (displayName)` (clean label). Value = `<state breakdown> · 📥 Last updated <relative> ago · 🔄 Last synced <relative> ago`. **📥 Last updated** = roster data refresh (iLvl/class từ bible qua /raid-status lazy refresh) - applies to ALL users. **🔄 Last synced** = auto-manage bible log sync (raid progress) - chỉ opted-in user, `Never synced` nếu chưa có data. Hai dòng song song nếu đủ data. Ví dụ: `4 ⚪ · 1 🟡 · 1 🟢 · 📥 Last updated 2h ago · 🔄 Last synced 1h ago`. Avg iLvl dropped per Traine: text phrase `Last updated` rõ ràng hơn cryptic `📥9h` badge, scan-friendly cho Raid Manager quét nhiều roster. Per roster cost: 1 header + N char + ceil(N/2) spacer fields. 2 × 6-char rosters = 20 fields, fit 25-cap.",
       "• **User filter dropdown** (action row 2): `StringSelectMenuBuilder` cho phép Raid Manager lọc pages theo Discord user. First option `🌐 All users (N pending)` reset filter. Tiếp theo top-24 users sort theo pending desc (`👤 displayName (N pending)`). Discord cap 25 options total. Selection → recompute pages chỉ chứa rosters của user đó, reset currentPage=0. `default: true` preserve selected state qua Prev/Next clicks. Rosters cùng user group consecutive, sort theo tổng pending user desc rồi per-roster pending desc. **Avatar in embed author**: khi filter = specific user, resolve Discord avatar cache-first (`client.users.cache` fallback to `fetch` via `discordUserLimiter`) và `setAuthor({name, iconURL})` trên mỗi page - visual confirmation filter đang active. Discord StringSelectMenu options không support per-option avatars (API limitation) nên embed author là compromise.",
       "• **Pagination buttons + session**: `◀ Previous` / `Next ▶` (shared helper `buildPaginationRow`) cycle giữa các roster-chunk pages. Title stable `⚠️ Raid Check · <raid> (<minItemLevel>)` không đổi theo page. Footer append page indicator. Collector locked theo người chạy, session timeout **2 phút** (`PAGINATION_SESSION_MS`), hết hạn disable all components + swap footer legend.",
       "• **Sync badge trong roster header**: opted-in user có sync data hiện `🔄5m` / `🔄2h` / `🔄3d` (compact relative time tự compute). Opted-in nhưng chưa sync lần nào → `🔄never`. Non-opted-in → không hiện segment này.",
@@ -2856,8 +2849,8 @@ const HELP_SECTIONS = [
       { name: "action:clear", required: false, desc: "Tắt monitor + reset schedule" },
       { name: "action:cleanup", required: false, desc: "Xóa thủ công mọi message không pin (giữ welcome pinned)" },
       { name: "action:repin", required: false, desc: "Delete stale welcomes + post & pin 1 welcome mới" },
-      { name: "action:schedule-on", required: false, desc: "Bật auto-cleanup mỗi 00:00 giờ VN" },
-      { name: "action:schedule-off", required: false, desc: "Tắt auto-cleanup daily" },
+      { name: "action:schedule-on", required: false, desc: "Bật auto-cleanup mỗi giờ (theo đầu giờ VN)" },
+      { name: "action:schedule-off", required: false, desc: "Tắt auto-cleanup hourly" },
     ],
     example: "/raid-channel config action:set channel:#raid-clears",
     notes: [
@@ -2874,7 +2867,7 @@ const HELP_SECTIONS = [
       "• **Clear**: tắt monitor ngay, luôn write-through Mongo; cũng reset `autoCleanupEnabled` để schedule không tự kích lại khi admin `/set` channel mới.",
       "• **Cleanup**: xóa thủ công mọi message không pin trong monitor channel (giữ welcome pinned). Paginate đến hết channel. Messages > 14 ngày Discord không cho bulk-delete, bot sẽ report `skipped (>14 ngày)` để admin xóa tay nếu cần.",
       "• **Repin**: safe-order như Set - post + pin fresh trước, unpin stale sau. `welcomeMessageId` tracked trong DB để unpin đúng message cũ, không ảnh hưởng bot pins khác trong channel.",
-      "• **Schedule on/off**: toggle auto-cleanup daily. Bật → mỗi 00:00 VN time, bot tự xóa non-pinned trong channel. Enable stamp today's key ngay nên tick đầu tiên sau enable chờ đến 00:00 kế, không catch-up ngay. Bot-offline catch-up chỉ hoạt động khi schedule đã enable continuous. Tắt → chỉ cleanup thủ công.",
+      "• **Schedule on/off**: toggle auto-cleanup hourly. Bật → mỗi đầu giờ VN, bot tự xóa non-pinned trong channel. **Cleanup chạy trước**, sau đó post 1 biển báo tone-aware (signed Artist, giọng Dusk không stage-direction): `deleted > 0` dùng tone càu nhàu báo số tin đã dọn, `deleted == 0` dùng tone hài lòng báo channel sạch sẵn + Artist ngồi uống trà. Cả 2 tự xóa sau 5 phút (`AUTO_CLEANUP_NOTICE_TTL_MS`). Reason vẫn nói khi idle: silence trong scheduled window đọc giống 'bot offline/broken'; content-tone notice double làm heartbeat + idle marker. Key format: `lastAutoCleanupKey = 'YYYY-MM-DDTHH'` trong VN time (đổi từ daily 'YYYY-MM-DD' → hourly resolution, legacy key sẽ không match → 1 lần re-sweep sau deploy, harmless). Enable stamp current-hour key ngay nên tick đầu tiên sau enable chờ đến đầu giờ kế, không catch-up ngay. Bot-offline catch-up chỉ hoạt động khi schedule đã enable continuous. Tick cadence 30 phút → hour-boundary crossing catch trong 30 phút worst-case. Tắt → chỉ cleanup thủ công (manual cleanup KHÔNG post biển báo, user đã biết đang chạy).",
       "• Parse fail (không phải raid intent) → bot im lặng.",
       "• Lỗi phục hồi được (char không có, iLvl thiếu, combo sai, nhiều raid/difficulty/gate) → bot ping user reply persistent, tự dọn khi user post lại hoặc sau 5 phút TTL. Hint và message gốc của user cùng bị dọn để channel heal về clean state.",
       "• **Raid đã clear từ trước** → bot DM user embed `Raid đã DONE rồi~` thay vì re-stamp timestamp + fresh success DM. Không update DB, tránh nhầm lẫn. Muốn reset thì chạy `/raid-set status:reset`.",
@@ -3676,9 +3669,10 @@ function buildRaidChannelWelcomeEmbed() {
           "• Character phải đủ iLvl cho raid đó, không tớ sẽ nhắc khẽ~",
           "• Gõ tin nhắn không giống format → tớ im lặng, không spam channel đâu.",
           "• Gõ đúng nhưng có lỗi (không tìm thấy char, iLvl thiếu, nhiều raid/difficulty/gate lẫn lộn) → Artist ping nhẹ nhàng; tin nhắn đó sẽ tự dọn khi bạn post lại, hoặc sau 5 phút nếu quên.",
-          "• Post đúng → Artist DM bạn embed confirm riêng. Nếu DM bị tắt, tớ sẽ ping public ngắn rồi tự xóa sau 15 giây.",
+          "• Post đúng → Artist tag bạn ngay trong channel báo nhận được rồi, kèm DM embed confirm riêng; 5 giây sau tớ dọn cả tin gốc lẫn biển tag. Nếu DM bị tắt, tớ sẽ ping public ngắn rồi tự xóa sau 15 giây.",
           "• Post 1 raid đã clear từ trước → tớ DM notice riêng báo đã DONE rồi, không update lại. Tránh overwrite progress tuần này. Muốn reset thật sự thì dùng `/raid-set` với `status:reset`.",
           "• Post cách nhau ít nhất **2 giây** nha~ Spam nhanh quá tớ sẽ im lặng bỏ qua và nhắc khéo 1 lần.",
+          "• Mỗi đầu giờ (giờ VN), Artist tự đi dọn rác channel - sẽ post 1 biển báo trước khi quét, biển tự biến mất sau 5 phút. Welcome pin này giữ nguyên, không bị dọn.",
         ].join("\n"),
       },
       {
@@ -4102,7 +4096,7 @@ async function handleRaidChannelMessage(message) {
     if (dmSucceeded) {
       try {
         whisperMsg = await message.channel.send({
-          content: `*thì thầm* <@${message.author.id}> ...Artist nhận được rồi nha~ Chờ Artist 5 giây gửi kết quả qua DM cho cậu nhé...`,
+          content: `<@${message.author.id}> ...Artist nhận được rồi nha~ Chờ Artist 5 giây gửi kết quả qua DM cho cậu nhé...`,
           allowedMentions: { users: [message.author.id] },
         });
       } catch (err) {
@@ -5743,7 +5737,7 @@ async function handleRaidChannelCommand(interaction) {
     // it's available for debugging, but it's overwritten on the next
     // enable regardless.
     const update = enabled
-      ? { $set: { autoCleanupEnabled: true, lastAutoCleanupKey: getTargetCleanupDayKey() } }
+      ? { $set: { autoCleanupEnabled: true, lastAutoCleanupKey: getTargetCleanupHourKey() } }
       : { $set: { autoCleanupEnabled: false } };
     await GuildConfig.findOneAndUpdate(
       { guildId },
@@ -5755,7 +5749,7 @@ async function handleRaidChannelCommand(interaction) {
       .setTitle(`${enabled ? UI.icons.done : UI.icons.reset} Auto-cleanup ${enabled ? "enabled" : "disabled"}`)
       .setDescription(
         enabled
-          ? "Mỗi 00:00 giờ Việt Nam (UTC+7), Artist sẽ tự xóa toàn bộ message không được pin trong monitor channel. Welcome pin giữ nguyên. Nếu bot offline qua midnight, tick tiếp theo sau khi online sẽ catch-up."
+          ? "Mỗi giờ (theo đầu giờ VN), Artist sẽ tự xóa toàn bộ message không được pin trong monitor channel. Welcome pin giữ nguyên. Trước khi dọn, Artist post 1 biển báo càu nhàu để members biết cleanup vừa chạy; biển tự biến mất sau 5 phút. Nếu bot offline qua 1 hour boundary, tick tiếp theo sau khi online sẽ catch-up."
           : "Auto-cleanup đã tắt. Admin vẫn có thể chạy thủ công qua `/raid-channel config action:cleanup` bất cứ lúc nào."
       )
       .setTimestamp();
@@ -5764,23 +5758,32 @@ async function handleRaidChannelCommand(interaction) {
 }
 
 // ---------------------------------------------------------------------------
-// Auto-cleanup scheduler (daily at 00:00 Vietnam time = 17:00 UTC)
+// Auto-cleanup scheduler (hourly in Vietnam time)
 // ---------------------------------------------------------------------------
 
+const AUTO_CLEANUP_NOTICE_TTL_MS = 5 * 60 * 1000; // marker sits 5 min before self-delete
+
 /**
- * Returns "YYYY-MM-DD" in Vietnam (UTC+7) calendar for the given moment.
+ * Returns "YYYY-MM-DDTHH" in Vietnam (UTC+7) calendar for the given moment.
  * Used as the idempotency cursor `lastAutoCleanupKey`: once a guild runs
- * cleanup for a given VN day, subsequent ticks within the same VN day
- * short-circuit. Crossing the VN-midnight boundary produces a new key and
- * the next tick picks it up.
+ * cleanup for a given VN hour, subsequent ticks within the same hour
+ * short-circuit. Crossing the hour boundary produces a new key and the
+ * next tick picks it up.
+ *
+ * Previous format was day-granular ("YYYY-MM-DD") for 24h cadence; after
+ * switching to hourly cadence (Apr 2026) the key needs hour resolution so
+ * successive hours register as distinct work units. Legacy day-keys saved
+ * in Mongo will never match the new hour-key format, so the first tick
+ * after deploy re-runs cleanup once - harmless one-time re-sweep.
  */
-function getTargetCleanupDayKey(now = new Date()) {
+function getTargetCleanupHourKey(now = new Date()) {
   const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-  return vnTime.toISOString().slice(0, 10);
+  // ISO slice 0-13 = "YYYY-MM-DDTHH"
+  return vnTime.toISOString().slice(0, 13);
 }
 
 async function runAutoCleanupTick(client) {
-  const targetKey = getTargetCleanupDayKey();
+  const targetKey = getTargetCleanupHourKey();
   let configs;
   try {
     configs = await GuildConfig.find({
@@ -5794,7 +5797,7 @@ async function runAutoCleanupTick(client) {
   if (!configs.length) return;
 
   for (const cfg of configs) {
-    if (cfg.lastAutoCleanupKey === targetKey) continue; // already done for this VN day
+    if (cfg.lastAutoCleanupKey === targetKey) continue; // already done for this VN hour
     const guild = client.guilds.cache.get(cfg.guildId);
     if (!guild) continue;
     let channel = guild.channels.cache.get(cfg.raidChannelId);
@@ -5808,6 +5811,14 @@ async function runAutoCleanupTick(client) {
     if (!channel) continue;
 
     try {
+      // Run cleanup first, then post a tone-aware notice in EITHER case:
+      //   - deleted > 0  → grumpy "just dọn N tin" tone (there was work).
+      //   - deleted == 0 → content "channel đã sạch sẵn" tone (nothing to
+      //     do, Artist lounges 5 phút then leaves).
+      // Both notices self-delete after AUTO_CLEANUP_NOTICE_TTL_MS. Reason
+      // to speak even when idle: silence during a scheduled job window
+      // reads as "bot offline/broken" - a content-tone notice doubles as
+      // heartbeat + idle-state marker.
       const { deleted, skippedOld } = await cleanupRaidChannelMessages(channel);
       await GuildConfig.findOneAndUpdate(
         { guildId: cfg.guildId },
@@ -5816,6 +5827,26 @@ async function runAutoCleanupTick(client) {
       console.log(
         `[raid-channel] auto-cleanup guild=${cfg.guildId} key=${targetKey} deleted=${deleted} skippedOld=${skippedOld}`
       );
+
+      const noticeContent = deleted > 0
+        ? `Hừm... đến giờ Artist phải đi dọn rác rồi nhé. Xong, vừa dọn **${deleted}** tin rồi đấy~ Biển báo này 5 phút nữa Artist cuỗm đi luôn, các cậu cứ tiếp tục post clear bình thường nha.`
+        : `Ồ, giờ này Artist ghé qua xem chỗ này thế nào... ai dè sạch sẽ sẵn rồi nhé~ Vậy Artist ngồi uống trà 5 phút rồi đi tiếp, biển báo này tự biến mất sau đó. Các cậu cứ tiếp tục post clear bình thường nha.`;
+      let notice = null;
+      try {
+        notice = await channel.send({ content: noticeContent });
+      } catch (err) {
+        console.warn(
+          `[raid-channel] auto-cleanup notice post failed guild=${cfg.guildId}:`,
+          err?.message || err
+        );
+      }
+      // Fire-and-forget self-delete after the notice TTL - same pattern
+      // as the DM-success ack flow in handleRaidChannelMessage.
+      if (notice) {
+        setTimeout(() => {
+          notice.delete().catch(() => {});
+        }, AUTO_CLEANUP_NOTICE_TTL_MS);
+      }
     } catch (err) {
       console.error(
         `[raid-channel] auto-cleanup failed guild=${cfg.guildId}:`,
@@ -5826,10 +5857,10 @@ async function runAutoCleanupTick(client) {
 }
 
 /**
- * Start the 30-minute tick for the auto-cleanup scheduler. Cadence matches
- * the weekly-reset job so operator has one mental model for background jobs.
- * The tick is cheap when no guilds have `autoCleanupEnabled=true` (single
- * filtered Mongo query returns empty, early-exit).
+ * Start the 30-minute tick for the auto-cleanup scheduler. With the hourly
+ * cadence (Apr 2026), tick every 30 min so an hour-boundary crossing is
+ * caught within 30 min worst-case. The tick itself is idempotent via
+ * `lastAutoCleanupKey` so no-op ticks are cheap.
  */
 function startRaidChannelScheduler(client) {
   const run = () =>
