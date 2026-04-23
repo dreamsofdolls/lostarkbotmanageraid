@@ -1052,6 +1052,7 @@ function formatRosterStats(stats) {
   if (stats.none > 0) parts.push(`${stats.none} ${UI.icons.pending}`);
   if (stats.partial > 0) parts.push(`${stats.partial} ${UI.icons.partial}`);
   if (stats.done > 0) parts.push(`${stats.done} ${UI.icons.done}`);
+  if (stats.notEligible > 0) parts.push(`${stats.notEligible} ${UI.icons.lock}`);
   return parts.join(" · ");
 }
 
@@ -1178,6 +1179,35 @@ async function loadFreshUserSnapshotForRaidViews(
   }
 }
 
+/**
+ * For a given (raidKey, selfMin) compute the iLvl range bounds needed to
+ * classify roster chars as eligible / too-low / out-grown for the scan.
+ *
+ *   - lowestMin: min iLvl of the lowest-tier mode of this raid. Chars
+ *     below this are outside the raid entirely and never render.
+ *   - selfMin: scan mode's own min (usually === `raidMeta.minItemLevel`).
+ *   - nextMin: min iLvl of the next-higher mode (null if scan mode is
+ *     the top). Chars at or above `nextMin` have "out-grown" this mode
+ *     and get a "Not eligible yet" marker so Raid Manager knows they
+ *     should graduate to the higher difficulty.
+ *
+ * The `lowestMin` floor uses `Math.min(RAID_REQ lowest, selfMin)` so that
+ * if a caller passes a selfMin below the actual lowest mode (e.g. older
+ * tests), the range still degrades gracefully instead of hiding every
+ * char.
+ */
+function getRaidScanRange(raidKey, selfMin) {
+  const modes = RAID_REQUIREMENTS[raidKey]?.modes || {};
+  const mins = Object.values(modes)
+    .map((m) => Number(m.minItemLevel))
+    .filter(Number.isFinite);
+  const baseLowest = mins.length > 0 ? Math.min(...mins) : selfMin;
+  const lowestMin = Math.min(baseLowest, selfMin);
+  const nextHigher = mins.filter((m) => m > selfMin).sort((a, b) => a - b);
+  const nextMin = nextHigher.length > 0 ? nextHigher[0] : null;
+  return { lowestMin, selfMin, nextMin };
+}
+
 function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
   const userMeta = new Map();
   // rosterRefreshMap: composite key → account.lastRefreshedAt (ms timestamp
@@ -1186,10 +1216,21 @@ function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
   // been refreshed has a positive value. Used by /raid-check section header
   // to surface roster data freshness via `📥<relative>` badge.
   const rosterRefreshMap = new Map();
+  // `allEligible` = chars whose iLvl falls inside [selfMin, nextMin) - the
+  // scan mode's actual eligibility range. `notEligibleChars` = chars in the
+  // raid's broader scope [lowestMin, ∞) but outside the mode range (too
+  // low OR out-grown). Both get rendered; notEligible gets a 🔒 marker so
+  // Raid Manager sees the full roster picture while still knowing who's
+  // scan-relevant.
   const allEligible = [];
+  const notEligibleChars = [];
   const selectedDifficulty = toModeLabel(raidMeta.modeKey);
   const selectedDiffNorm = normalizeName(selectedDifficulty);
   const scanRank = modeRank(selectedDiffNorm);
+  const { lowestMin, selfMin, nextMin } = getRaidScanRange(
+    raidMeta.raidKey,
+    Number(raidMeta.minItemLevel) || 0
+  );
 
   for (const userDoc of users || []) {
     if (!userDoc) continue;
@@ -1208,7 +1249,42 @@ function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
       for (const character of characters) {
         if (!character) continue;
         const characterItemLevel = Number(character.itemLevel) || 0;
-        if (characterItemLevel < raidMeta.minItemLevel) continue;
+        // Below the raid's lowest-mode floor → not in scope at all, skip.
+        if (characterItemLevel < lowestMin) continue;
+
+        const baseEntry = {
+          discordId: userDoc.discordId,
+          // accountName lets /raid-check group by user+roster instead of
+          // just user, mirroring /raid-status's per-roster page semantics.
+          // A user with 2 rosters (main + alt) now shows 2 sections instead
+          // of a single mashed-together list.
+          accountName: account.accountName || "(no name)",
+          charName: getCharacterName(character),
+          itemLevel: characterItemLevel,
+        };
+
+        // In scope for the raid but outside this mode's range → render
+        // with the "Not eligible yet" marker and reason. Reasons:
+        //   - "low":  char below selfMin (e.g. 1720 char scanning Hard 1730)
+        //   - "high": char at/above nextMin (e.g. 1730 char scanning Normal 1710)
+        if (characterItemLevel < selfMin) {
+          notEligibleChars.push({
+            ...baseEntry,
+            gateStatus: [],
+            overallStatus: "not-eligible",
+            notEligibleReason: "low",
+          });
+          continue;
+        }
+        if (nextMin != null && characterItemLevel >= nextMin) {
+          notEligibleChars.push({
+            ...baseEntry,
+            gateStatus: [],
+            overallStatus: "not-eligible",
+            notEligibleReason: "high",
+          });
+          continue;
+        }
 
         const assignedRaids = ensureAssignedRaids(character);
         const assigned = assignedRaids[raidMeta.raidKey] || {};
@@ -1233,14 +1309,7 @@ function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
         else overallStatus = "none";
 
         allEligible.push({
-          discordId: userDoc.discordId,
-          // accountName lets /raid-check group by user+roster instead of
-          // just user, mirroring /raid-status's per-roster page semantics.
-          // A user with 2 rosters (main + alt) now shows 2 sections instead
-          // of a single mashed-together list.
-          accountName: account.accountName || "(no name)",
-          charName: getCharacterName(character),
-          itemLevel: characterItemLevel,
+          ...baseEntry,
           gateStatus,
           overallStatus,
         });
@@ -1252,8 +1321,23 @@ function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
   const partialChars = allEligible.filter((c) => c.overallStatus === "partial");
   const noneChars = allEligible.filter((c) => c.overallStatus === "none");
   const pendingChars = [...partialChars, ...noneChars];
+  // Combined render set: eligible chars + notEligible chars. Consumers
+  // iterate this to build rosterBuckets so the whole roster becomes
+  // visible instead of only the pending subset (previous behaviour hid
+  // done chars from rendering).
+  const allChars = [...allEligible, ...notEligibleChars];
 
-  return { allEligible, completeChars, partialChars, noneChars, pendingChars, userMeta, rosterRefreshMap };
+  return {
+    allEligible,
+    allChars,
+    completeChars,
+    partialChars,
+    noneChars,
+    notEligibleChars,
+    pendingChars,
+    userMeta,
+    rosterRefreshMap,
+  };
 }
 
 async function computeRaidCheckSnapshot(raidMeta, { syncFreshData = false } = {}) {
@@ -1300,8 +1384,17 @@ async function handleRaidCheckCommand(interaction) {
   // Initial render uses the same lazy-refresh semantics as /raid-status so
   // raid leaders scan against fresher roster/log data instead of a stale DB
   // snapshot. Sync button reuses the cheaper raw snapshot path later.
-  const { allEligible, completeChars, partialChars, noneChars, pendingChars, userMeta, rosterRefreshMap } =
-    await computeRaidCheckSnapshot(raidMeta, { syncFreshData: true });
+  const {
+    allEligible,
+    allChars,
+    completeChars,
+    partialChars,
+    noneChars,
+    notEligibleChars,
+    pendingChars,
+    userMeta,
+    rosterRefreshMap,
+  } = await computeRaidCheckSnapshot(raidMeta, { syncFreshData: true });
 
   const modeKey = normalizeName(raidMeta.modeKey);
   const difficultyColor =
@@ -1309,8 +1402,10 @@ async function handleRaidCheckCommand(interaction) {
       : modeKey === "hard" ? UI.colors.progress
       : UI.colors.neutral;
 
-  // Empty state: every eligible char already cleared.
-  if (pendingChars.length === 0) {
+  // Empty state: every eligible char already cleared AND no not-eligible
+  // chars to show. If there are not-eligible chars we still render so
+  // Raid Manager sees who's out of range (below min or out-grown).
+  if (pendingChars.length === 0 && notEligibleChars.length === 0) {
     const emptyEmbed = new EmbedBuilder()
       .setTitle(`${UI.icons.done} Raid Check · ${raidMeta.label}`)
       .setColor(UI.colors.success)
@@ -1322,28 +1417,36 @@ async function handleRaidCheckCommand(interaction) {
     return;
   }
 
-  // Resolve display names for the pending users only - cache-first via
-  // resolveDiscordDisplay (Phase 23 limiter applies on misses).
-  const pendingDiscordIds = [...new Set(pendingChars.map((c) => c.discordId))];
+  // Resolve display names for every user shown - now includes rosters
+  // that only have done/not-eligible chars (previously excluded because
+  // they weren't in pendingChars). Cache-first via resolveDiscordDisplay.
+  const visibleDiscordIds = [...new Set(allChars.map((c) => c.discordId))];
   const displayMap = new Map();
   await Promise.all(
-    pendingDiscordIds.map(async (discordId) => {
+    visibleDiscordIds.map(async (discordId) => {
       const displayName = await resolveDiscordDisplay(interaction.client, discordId);
       displayMap.set(discordId, displayName);
     })
   );
 
-  // Group pending chars by user+roster composite so a user with 2 rosters
-  // (main + alt) gets 2 separate sections. Uses module-level
+  // Group ALL chars (done + partial + none + not-eligible) by user+roster
+  // composite so a user with 2 rosters (main + alt) gets 2 separate
+  // sections. Previously grouped only pending chars which hid done +
+  // not-eligible chars from rendering - Traine noticed Qiylyn showed only
+  // 1 char while the roster had 4 chars in scope. Uses module-level
   // `ROSTER_KEY_SEP` (\x1f Unit Separator) shared with rosterRefreshMap
   // from the snapshot - same key shape across all per-roster maps.
   const rosterBuckets = new Map();
-  for (const item of pendingChars) {
+  for (const item of allChars) {
     const key = item.discordId + ROSTER_KEY_SEP + item.accountName;
     if (!rosterBuckets.has(key)) rosterBuckets.set(key, []);
     rosterBuckets.get(key).push(item);
   }
   for (const chars of rosterBuckets.values()) {
+    // Within a roster: not-eligible-high first (largest iLvl top), then
+    // eligible chars by iLvl desc, then not-eligible-low at the bottom.
+    // Pure iLvl-desc already achieves this because high-out-grown chars
+    // have the largest iLvl and low-ineligible chars have the smallest.
     chars.sort((a, b) => b.itemLevel - a.itemLevel);
   }
   // Per-user aggregate pending total - used as the PRIMARY sort key so
@@ -1353,27 +1456,33 @@ async function handleRaidCheckCommand(interaction) {
   for (const item of pendingChars) {
     userTotalPending.set(item.discordId, (userTotalPending.get(item.discordId) || 0) + 1);
   }
-  // Per-roster 3-state count breakdown used by section header's rich
-  // value line. Covers ALL eligible chars (incl. `complete` ones) so
-  // rosters with mixed state render accurate counts like `4 ⚪ · 1 🟡 ·
-  // 1 🟢`. Same composite key as rosterBuckets so we can look up per
-  // group inside the map step.
+  // Per-roster state breakdown used by section header's value line.
+  // Includes notEligible count so "4 ⚪ · 1 🟡 · 1 🟢 · 2 🔒" reads
+  // correctly when Raid Manager sees mixed rosters with out-of-range
+  // chars. Same composite key as rosterBuckets.
   const rosterStats = new Map();
+  const bumpStat = (key, field) => {
+    if (!rosterStats.has(key)) rosterStats.set(key, { none: 0, partial: 0, done: 0, notEligible: 0 });
+    rosterStats.get(key)[field] += 1;
+  };
   for (const item of allEligible) {
     const key = item.discordId + ROSTER_KEY_SEP + item.accountName;
-    if (!rosterStats.has(key)) rosterStats.set(key, { none: 0, partial: 0, done: 0 });
-    const s = rosterStats.get(key);
-    if (item.overallStatus === "complete") s.done += 1;
-    else if (item.overallStatus === "partial") s.partial += 1;
-    else s.none += 1;
+    if (item.overallStatus === "complete") bumpStat(key, "done");
+    else if (item.overallStatus === "partial") bumpStat(key, "partial");
+    else bumpStat(key, "none");
+  }
+  for (const item of notEligibleChars) {
+    const key = item.discordId + ROSTER_KEY_SEP + item.accountName;
+    bumpStat(key, "notEligible");
   }
 
   const rosterGroups = [...rosterBuckets.entries()]
     .map(([key, chars]) => {
       const [discordId, accountName] = key.split(ROSTER_KEY_SEP);
       const meta = userMeta.get(discordId) || {};
-      const stats = rosterStats.get(key) || { none: 0, partial: 0, done: 0 };
+      const stats = rosterStats.get(key) || { none: 0, partial: 0, done: 0, notEligible: 0 };
       const lastRefreshedAt = rosterRefreshMap.get(key) || 0;
+      const rosterPending = (stats.partial || 0) + (stats.none || 0);
       return {
         discordId,
         accountName,
@@ -1381,18 +1490,23 @@ async function handleRaidCheckCommand(interaction) {
         chars,
         stats,
         lastRefreshedAt,
+        rosterPending,
         partialCount: chars.filter((c) => c.overallStatus === "partial").length,
         autoManageEnabled: meta.autoManageEnabled || false,
         lastAutoManageSyncAt: meta.lastAutoManageSyncAt || 0,
       };
     })
     .sort((a, b) => {
-      // 1) User with most TOTAL pending across all rosters first
+      // 1) User with most TOTAL pending across all rosters first (so users
+      //    with chars still needing clears float to the top of the list).
       const totalDiff = (userTotalPending.get(b.discordId) || 0) - (userTotalPending.get(a.discordId) || 0);
       if (totalDiff !== 0) return totalDiff;
-      // 2) Same user - group rosters by pending count in this roster desc
-      const countDiff = b.chars.length - a.chars.length;
-      if (countDiff !== 0) return countDiff;
+      // 2) Same user - order rosters by their OWN pending count desc, not
+      //    by total chars shown. A roster with 1 pending + 5 done should
+      //    rank below a roster with 3 pending + 0 done, even though the
+      //    former has more total char cards.
+      const pendingDiff = b.rosterPending - a.rosterPending;
+      if (pendingDiff !== 0) return pendingDiff;
       // 3) Stable tie-break by display name then account name
       const nameDiff = a.displayName.localeCompare(b.displayName);
       if (nameDiff !== 0) return nameDiff;
@@ -1403,14 +1517,20 @@ async function handleRaidCheckCommand(interaction) {
   // (`Act 4 Normal (1700)`). No description needed - footer legend covers
   // state breakdown, and per-roster header carries the sync badge.
   const headerTitle = `${UI.icons.warn} Raid Check · ${raidMeta.label} (${raidMeta.minItemLevel})`;
-  // Dynamic footer merges count + icon + English label per-state. Unlike
-  // /raid-status's static `STATUS_FOOTER_LEGEND`, /raid-check counts vary
-  // per scan so the footer is computed inline. `0 done · 0 partial · N
-  // pending` reads naturally for Raid Manager scanning progress.
-  const footerText =
-    `${UI.icons.done} ${completeChars.length} done · ` +
-    `${UI.icons.partial} ${partialChars.length} partial · ` +
-    `${UI.icons.pending} ${noneChars.length} pending`;
+  // Dynamic footer: done / partial / pending / not-eligible counts so
+  // Raid Manager sees the full roster picture at a glance. The
+  // not-eligible segment is only rendered when there's at least one
+  // out-of-range char to avoid `· 0 🔒` visual noise on scans where
+  // every char sits in the mode range.
+  const footerParts = [
+    `${UI.icons.done} ${completeChars.length} done`,
+    `${UI.icons.partial} ${partialChars.length} partial`,
+    `${UI.icons.pending} ${noneChars.length} pending`,
+  ];
+  if (notEligibleChars.length > 0) {
+    footerParts.push(`${UI.icons.lock} ${notEligibleChars.length} not eligible`);
+  }
+  const footerText = footerParts.join(" · ");
 
   // One embed per roster - mirrors /raid-status's 1-account-per-page model.
   // Roster header lives in setDescription right under the global summary so
@@ -1427,11 +1547,25 @@ async function handleRaidCheckCommand(interaction) {
   // produced visible blank space below each card ("cách nhau quá") - this
   // format fills both lines with info instead.
   const buildCharField = (c) => {
+    const name = truncateText(`${c.charName} · ${Math.round(c.itemLevel)}`, 256);
+    // Not-eligible chars skip the done/total count (doesn't apply - char
+    // is outside this mode's range) and render 🔒 with a reason hint so
+    // Raid Manager sees WHY the char is marked "not eligible yet".
+    if (c.overallStatus === "not-eligible") {
+      const reasonHint = c.notEligibleReason === "high"
+        ? "_Not eligible yet (out-grown this mode)_"
+        : "_Not eligible yet (iLvl below min)_";
+      return {
+        name,
+        value: truncateText(`${UI.icons.lock} ${reasonHint}`, 1024),
+        inline: true,
+      };
+    }
     const doneCount = c.gateStatus.filter((s) => s === "done").length;
     const total = c.gateStatus.length;
     const icon = pickProgressIcon(doneCount, total);
     return {
-      name: truncateText(`${c.charName} · ${Math.round(c.itemLevel)}`, 256),
+      name,
       value: truncateText(`${icon} ${doneCount}/${total}`, 1024),
       inline: true,
     };
@@ -1499,7 +1633,7 @@ async function handleRaidCheckCommand(interaction) {
     }
     const syncBadge = badges.length > 0 ? " · " + badges.join(" · ") : "";
     // Per-roster state breakdown (filter zero counts)
-    const statsText = formatRosterStats(group.stats || { none: 0, partial: 0, done: 0 });
+    const statsText = formatRosterStats(group.stats || { none: 0, partial: 0, done: 0, notEligible: 0 });
     const headerValue = statsText + syncBadge;
 
     embed.addFields({
@@ -1559,11 +1693,17 @@ async function handleRaidCheckCommand(interaction) {
       .setTimestamp();
   };
 
-  // Sync button enabled only when at least one pending user has opted-in
-  // to /raid-auto-manage. Count UNIQUE users - a user with 2 rosters
-  // shouldn't inflate the opt-in count.
+  // Sync button enabled only when at least one PENDING user has opted-in
+  // to /raid-auto-manage. Before the all-chars render change, rosterGroups
+  // was pending-only so this filter was accurate; now it includes
+  // done-only + not-eligible-only rosters too, so we must cross-reference
+  // the pendingChars set to avoid inflating the opt-in count with users
+  // whose chars are all done. Count UNIQUE users.
+  const pendingDiscordIdSet = new Set(pendingChars.map((c) => c.discordId));
   const optedInPendingCount = new Set(
-    rosterGroups.filter((g) => g.autoManageEnabled).map((g) => g.discordId)
+    rosterGroups
+      .filter((g) => g.autoManageEnabled && pendingDiscordIdSet.has(g.discordId))
+      .map((g) => g.discordId)
   ).size;
 
   // Button row: Prev + Next (from generic helper) + Sync. Prev/Next

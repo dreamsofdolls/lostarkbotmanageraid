@@ -32,17 +32,20 @@ test("buildRaidCheckSnapshotFromUsers keeps roster freshness metadata and counts
             accountName: "Main",
             lastRefreshedAt: 5678,
             characters: [
-              makeCharacter("ClearedHard", 1700, {
+              // Both chars sit in Kazeros Normal's eligibility range
+              // [1710, 1730). ClearedHard completed Hard -> satisfies the
+              // Normal scan via mode hierarchy. StillPending hasn't cleared.
+              makeCharacter("ClearedHard", 1720, {
                 G1: { difficulty: "Hard", completedDate: 1 },
                 G2: { difficulty: "Hard", completedDate: 2 },
               }),
-              makeCharacter("StillPending", 1710, {}),
+              makeCharacter("StillPending", 1720, {}),
             ],
           },
         ],
       },
     ],
-    { raidKey: "kazeros", modeKey: "normal", minItemLevel: 1680 }
+    { raidKey: "kazeros", modeKey: "normal", minItemLevel: 1710 }
   );
 
   assert.equal(snapshot.completeChars.length, 1);
@@ -53,6 +56,59 @@ test("buildRaidCheckSnapshotFromUsers keeps roster freshness metadata and counts
   assert.equal(snapshot.rosterRefreshMap.get("user-1\x1fMain"), 5678);
   assert.equal(snapshot.completeChars[0]?.charName, "ClearedHard");
   assert.equal(snapshot.pendingChars[0]?.charName, "StillPending");
+});
+
+test("buildRaidCheckSnapshotFromUsers marks out-grown chars as not-eligible when scanning a lower mode", () => {
+  const snapshot = __test.buildRaidCheckSnapshotFromUsers(
+    [
+      {
+        discordId: "user-1",
+        weeklyResetKey: getTargetResetKey(new Date()),
+        accounts: [
+          {
+            accountName: "Main",
+            characters: [
+              makeCharacter("FitForNormal", 1700, {}), // [1700, 1720) eligible for Act4 Normal
+              makeCharacter("AboveNormal", 1725, {}),  // >= 1720, out-grown - should do Hard
+              makeCharacter("AboveNormal2", 1740, {}),
+            ],
+          },
+        ],
+      },
+    ],
+    { raidKey: "armoche", modeKey: "normal", minItemLevel: 1700 }
+  );
+
+  assert.equal(snapshot.allEligible.length, 1);
+  assert.equal(snapshot.notEligibleChars.length, 2);
+  assert.equal(snapshot.notEligibleChars[0]?.notEligibleReason, "high");
+  assert.equal(snapshot.allChars.length, 3); // combined render set
+});
+
+test("buildRaidCheckSnapshotFromUsers marks under-iLvl chars as not-eligible when scanning a higher mode", () => {
+  const snapshot = __test.buildRaidCheckSnapshotFromUsers(
+    [
+      {
+        discordId: "user-1",
+        weeklyResetKey: getTargetResetKey(new Date()),
+        accounts: [
+          {
+            accountName: "Main",
+            characters: [
+              makeCharacter("TooLow", 1715, {}),  // [1710, 1730) - below Kazeros Hard
+              makeCharacter("JustFit", 1735, {}), // >= 1730 - fits Kazeros Hard
+            ],
+          },
+        ],
+      },
+    ],
+    { raidKey: "kazeros", modeKey: "hard", minItemLevel: 1730 }
+  );
+
+  assert.equal(snapshot.allEligible.length, 1);
+  assert.equal(snapshot.notEligibleChars.length, 1);
+  assert.equal(snapshot.notEligibleChars[0]?.charName, "TooLow");
+  assert.equal(snapshot.notEligibleChars[0]?.notEligibleReason, "low");
 });
 
 test("raid-check pagination timeout is 5 minutes while raid-status stays at 2 minutes", () => {
