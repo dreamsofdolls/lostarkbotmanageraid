@@ -112,6 +112,16 @@ function createRaidSchedulerService({
   }
 
   /**
+   * True once the VN local clock reaches Artist's 08:00 wake-up boundary.
+   * This must NOT be inferred from `!isInArtistQuietHours()` because
+   * 00:00-02:59 VN is outside quiet hours too, yet still belongs to the
+   * previous day rhythm and must not trigger the wake-up sweep early.
+   */
+  function hasReachedArtistWakeupBoundary(now = new Date()) {
+    return getCurrentVNHour(now) >= ARTIST_QUIET_END_HOUR_VN;
+  }
+
+  /**
    * Variant pool per cleanup-count bucket. Random pick at fire time gives
    * the channel a more lived-in tone instead of a single repeating line.
    * Buckets sized empirically: 0 = silent channel (idle marker), 1-5 = a
@@ -354,7 +364,7 @@ function createRaidSchedulerService({
       // and post the combined wake-up+sweep notice. Subsequent ticks that
       // day fall through to the normal hourly-cleanup path because the
       // day key will match.
-      if (cfg.lastArtistWakeupKey !== vnDayKey) {
+      if (hasReachedArtistWakeupBoundary(now) && cfg.lastArtistWakeupKey !== vnDayKey) {
         try {
           const { deleted, skippedOld } = await cleanupRaidChannelMessages(channel);
           await GuildConfig.findOneAndUpdate(
@@ -742,6 +752,7 @@ function createRaidSchedulerService({
     getTargetVNDayKey,
     getCurrentVNHour,
     isInArtistQuietHours,
+    hasReachedArtistWakeupBoundary,
     buildCleanupNoticePreview,
     pickBedtimeNoticeContent,
     pickWakeupNoticeContent,
