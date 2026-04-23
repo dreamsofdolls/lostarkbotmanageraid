@@ -3961,9 +3961,20 @@ async function handleRaidAnnounceCommand(interaction) {
       : overridable
         ? "No override set (falls back to monitor channel)"
         : "Channel-bound (override not applicable)";
-    const previewText = entry.previewContent
-      ? truncateText(entry.previewContent, 1024)
-      : "*(no preview defined for this type)*";
+    // hourly-cleanup notice picks a random variant per fire out of a pool
+    // of 12, so a single hardcoded preview would misrepresent what Artist
+    // actually posts. Build the preview from the live variant pool so
+    // every variant shows up - adding a new variant to the pool auto-
+    // updates this preview. Other types have a single deterministic
+    // message, so they keep the static `previewContent` from the registry.
+    let previewText;
+    if (type === "hourly-cleanup") {
+      previewText = truncateText(buildCleanupNoticePreview(), 1024);
+    } else {
+      previewText = entry.previewContent
+        ? truncateText(entry.previewContent, 1024)
+        : "*(no preview defined for this type)*";
+    }
     // Keep timing text honest: show disabled/waiting states explicitly,
     // and for polled schedulers show both the next eligible wall-clock
     // boundary and the next REAL scheduler check based on boot phase.
@@ -6800,6 +6811,42 @@ function pickCleanupNoticeContent(deleted) {
   const pool = CLEANUP_NOTICE_VARIANTS_BY_BUCKET[bucket];
   const picked = pool[Math.floor(Math.random() * pool.length)];
   return picked.replace(/\*\*N\*\*/g, `**${deleted}**`);
+}
+
+// Ordered bucket metadata for rendering the cleanup preview. Pulled out
+// of the pool so preview listing stays stable order (empty -> heavy) and
+// the label text isn't duplicated in two places.
+const CLEANUP_NOTICE_BUCKETS_ORDERED = [
+  { key: "empty", label: "Sạch sẵn (0 tin)" },
+  { key: "trivial", label: "Nhẹ (1-5 tin)" },
+  { key: "normal", label: "Vừa (6-20 tin)" },
+  { key: "heavy", label: "Nhiều (21+ tin)" },
+];
+
+/**
+ * Build the /raid-announce show preview text for the hourly-cleanup
+ * type from CLEANUP_NOTICE_VARIANTS_BY_BUCKET so admins see every
+ * variant Artist might actually post. Each variant is truncated to
+ * VARIANT_MAX so the whole field stays under Discord's 1024-char
+ * field value cap - there are up to 4 buckets * 3 variants = 12
+ * lines plus 4 bucket headers, so ~70 chars/variant fits comfortably.
+ */
+function buildCleanupNoticePreview() {
+  // 60 chars/variant keeps total under Discord's 1024-char field cap
+  // across 4 buckets × 3 variants + 4 bucket headers + intro line.
+  const VARIANT_MAX = 60;
+  const lines = ["Random pick mỗi lần fire theo lượng rác:"];
+  for (const { key, label } of CLEANUP_NOTICE_BUCKETS_ORDERED) {
+    const pool = CLEANUP_NOTICE_VARIANTS_BY_BUCKET[key] || [];
+    lines.push("");
+    lines.push(`**${label}** - ${pool.length} variants:`);
+    for (const variant of pool) {
+      const shortened =
+        variant.length > VARIANT_MAX ? variant.slice(0, VARIANT_MAX) + "..." : variant;
+      lines.push(`• ${shortened}`);
+    }
+  }
+  return lines.join("\n");
 }
 
 async function runAutoCleanupTick(client) {
