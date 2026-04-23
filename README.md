@@ -177,6 +177,15 @@ Sau khi đăng ký, bất kỳ ai post message vào channel đó dạng `<raid> 
 
 **Welcome repin sau deploy**: welcome embed đã cập nhật (thêm row về whisper ack + hourly cleanup). Các server đã pin welcome cũ thì **admin cần chạy `/raid-channel config action:repin` một lần** để refresh nội dung. Repin là safe-order (post + pin fresh trước, unpin stale sau) nên không mất welcome giữa chừng.
 
+**Artist voice announcements (Apr 2026)** - 4 use cases share `postChannelAnnouncement(channel, content, ttlMs, logTag)` helper (fire-and-forget + setTimeout self-delete, no stage-direction per `feedback_no_stage_directions`):
+
+1. **`/raid-channel config action:set` greeting** (TTL 2 phút): sau khi welcome pin post success, Artist post 1 tin greeting ceremonial trong monitor channel để members đang online thấy Artist "đến trông coi". Welcome = long-lived doc, greeting = ephemeral arrival moment.
+2. **Hourly auto-cleanup notice** (TTL 5 phút): mỗi đầu giờ VN sau khi cleanup chạy. Tone-aware: `deleted > 0` càu nhàu với số tin đã dọn, `deleted == 0` hài lòng báo channel sạch sẵn + Artist ngồi uống trà.
+3. **Weekly reset announcement** (TTL 30 phút): thứ 4 17:00 VN (= Wed 10:00 UTC) sau khi `resetWeekly` stamps new `weeklyResetKey`. Per-guild dedup qua `GuildConfig.lastWeeklyAnnouncementKey = targetWeekKey`. Generic text (không tag user), chúc tuần raid vui vẻ.
+4. **Stuck private-log nudge** (TTL 30 phút, dedup 7 ngày): phase 3 auto-manage daily tick detect user có `report.perChar` toàn `isPublicLogDisabledError` → tag user trong monitor channel guild đầu tiên user là member, hướng dẫn vào `lostark.bible/me/logs` bật Show on Profile. Dedup qua `User.lastPrivateLogNudgeAt >= 7 days`. Cache-first member lookup (skip nếu cold, không force fetch).
+
+**Scheduler wiring change**: `startWeeklyResetJob` giờ nhận `client` param + được move vào `ClientReady` (trước ở `startBot` pre-login). Lý do: announcements cần Discord client để post. `startAutoManageDailyScheduler` cũng nhận `client` cho nudge path. Catch-up ticks sau bot restart dedup qua per-guild key nên không re-announce.
+
 **Prerequisites deploy:**
 1. Bật `MESSAGE CONTENT INTENT` trong Discord Developer Portal → Bot → Privileged Gateway Intents. Nếu không bật, bot **sẽ không start được** (Discord reject login với "Used disallowed intents") - dùng env `TEXT_MONITOR_ENABLED=false` để deploy slash-command-only mà không cần privileged intent.
 2. Invite bot với scope `bot applications.commands` + permissions trong channel đã config: `View Channel`, `Send Messages`, `Manage Messages`, `Read Message History`, `Embed Links`. `/raid-channel config action:set` giờ tự check và từ chối nếu thiếu bất kỳ quyền nào. (`Read Message History` cần cho `clearPendingHint` fetch/delete tin cũ; `Embed Links` cần cho welcome + DM confirm embeds - thiếu là Discord strip embed).
