@@ -2515,7 +2515,7 @@ function buildAccountPageEmbed(account, pageIndex, totalPages, globalTotals, get
   // Freshness + countdown line mirrors /raid-check's roster header badges
   // so user không phải đoán tại sao /raid-status refresh xong data vẫn cũ.
   // "Last updated" = roster metadata refresh (auto, 2h cooldown).
-  // "Last synced"  = auto-manage bible log sync (opted-in only, 5m cooldown).
+  // "Last synced"  = auto-manage bible log sync (opted-in only, 15m cooldown).
   const freshnessLine = buildAccountFreshnessLine(account, userMeta);
   const freshnessBlock = freshnessLine ? `\n${freshnessLine}` : "";
 
@@ -2594,7 +2594,7 @@ async function handleStatusCommand(interaction) {
   // retry.
   //
   // Phase 2 of /raid-auto-manage piggybacks here: if the user has opted in
-  // (`autoManageEnabled === true`) AND the auto-manage 5-min cooldown allows
+  // (`autoManageEnabled === true`) AND the auto-manage 15-min cooldown allows
   // it (acquireAutoManageSyncSlot) we ALSO gather bible logs in the same
   // collect pass and apply them in the same save. This keeps Phase 2
   // automation gated by user intent (must invoke /raid-status) so we never
@@ -2614,7 +2614,7 @@ async function handleStatusCommand(interaction) {
 
       // Phase 2 auto-manage piggyback: gate on opt-in + slot acquire.
       // Slot acquire returns `acquired: false, reason: 'cooldown'|'in-flight'`
-      // when within the 5-min throttle or another auto-manage sync is
+      // when within the 15-min throttle or another auto-manage sync is
       // running for this user - both cases silently fall through to cached
       // raid data. Render path doesn't care; user can run
       // `/raid-auto-manage action:status` for sync diagnostics.
@@ -3383,7 +3383,7 @@ const HELP_SECTIONS = [
       "• **Failure cooldown**: nếu seed list của một account fail hết (wrong accountName + stale char names), Artist stamp `lastRefreshAttemptAt` và skip refresh account đó trong **5 phút** tiếp theo. Spam `/raid-status` trong lúc failing không còn queue N seed × bible fetch mỗi lần - tự heal khi hết cooldown hoặc khi user sửa roster qua `/add-roster`.",
       "• **Gather/apply split**: bible fetch chạy OUTSIDE `saveWithRetry` một lần duy nhất; apply phase (mutate fresh doc + save) mới ở trong retry loop. VersionError retry không re-fire bible HTTP call.",
       "• **Auto-manage piggyback (Phase 2)**: nếu user đã bật `/raid-auto-manage action:on` (`autoManageEnabled = true`), `/raid-status` cũng sẽ tự pull bible logs **song song** với roster refresh (Promise.all, share `bibleLimiter`) trước khi render. Re-check `autoManageEnabled` trên fresh doc trong save phase nên user bấm `action:off` giữa gather và save sẽ không bị apply thừa 1 sync. Save fail (mongo blip) → stamp attempt qua `stampAutoManageAttempt` để cooldown vẫn protect bible. Cooldown chưa hết / gather throw → render cached, không vỡ command.",
-      "• **Freshness + countdown line**: mỗi account embed có thêm dòng `📥 Last updated Nh ago · ⏳ Next refresh in Xh · 🔄 Last synced Nm ago · ⏳ Next sync in Ym` dưới summary. Khi cooldown đã hết show `✅ Refresh ready` / `✅ Sync ready` để user biết chạy lại `/raid-status` sẽ thực sự fetch data mới thay vì đoán mò. `📥` = roster metadata (iLvl/class) gate 2h. `🔄` = auto-manage bible log sync gate 5m - chỉ hiện khi user đã opt-in.",
+      "• **Freshness + countdown line**: mỗi account embed có thêm dòng `📥 Last updated Nh ago · ⏳ Next refresh in Xh · 🔄 Last synced Nm ago · ⏳ Next sync in Ym` dưới summary. Khi cooldown đã hết show `✅ Refresh ready` / `✅ Sync ready` để user biết chạy lại `/raid-status` sẽ thực sự fetch data mới thay vì đoán mò. `📥` = roster metadata (iLvl/class) gate 2h. `🔄` = auto-manage bible log sync gate 15m - chỉ hiện khi user đã opt-in.",
     ],
   },
   {
@@ -3425,14 +3425,14 @@ const HELP_SECTIONS = [
       "• **Header**: title embed hiện `⚠️ Raid Check · <raid label> (<minItemLevel>)` - gọn, chỉ command + raid + threshold (ví dụ `Act 4 Normal (1700)`). Description đã bỏ hoàn toàn - info đều ở title, per-roster headers, và footer. Page indicator + 3-state counts đều dưới footer.",
       "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field mirroring `/raid-status`'s pattern. Field name `<charName> · <iLvl>` được Discord auto-bold = scan anchor. Field value `<icon> <done>/<total>` (ví dụ `⚪ 0/2`) - value line có content nên không waste height (earlier attempt pack everything vào name line + ZWS value tạo gap 'cách nhau quá'). Aggregate 3-state icon qua `pickProgressIcon` (🟢 done all / 🟡 partial / ⚪ none). Raid label nằm ở title không lặp trong value.",
       "• **2-column layout via inline fields + spacer**: Discord default pack 3 inline field/row; chèn zero-width-space spacer field giữa mỗi cặp char để force 2-per-row - y hệt kỹ thuật `/raid-status`. Odd char cuối cùng cặp với 1 spacer để không bị Discord stretch full-width.",
-      "• **2 rosters per page (chunked)**: mỗi embed page chứa tối đa 2 roster sections stacked. Roster section = non-inline header field với explicit value line. Name = `📁 accountName (displayName)` (clean label). Value = `<state breakdown> · 📥 Last updated <relative> ago · ⏳ Next refresh in <remain> · 🔄 Last synced <relative> ago · ⏳ Next sync in <remain>`. **📥 Last updated** = roster data refresh (iLvl/class từ bible qua `/raid-status` lazy refresh HOẶC pre-scan refresh của `/raid-check`) - applies to ALL users, 2h cooldown. **🔄 Last synced** = auto-manage bible log sync (raid progress) - chỉ opted-in user, `Never synced` nếu chưa có data, 5m cooldown. **⏳ Next X in Ym** countdown pairs với mỗi badge trên - khi cooldown còn active show thời gian còn lại, khi expired show `✅ Refresh ready` / `✅ Sync ready` để user không phải đoán mò tại sao Sync button bấm xong data không đổi. Ví dụ: `4 ⚪ · 1 🟡 · 1 🟢 · 📥 Last updated 30m ago · ⏳ Next refresh in 1h30m · 🔄 Last synced 3m ago · ⏳ Next sync in 2m`. Per roster cost: 1 header + N char + ceil(N/2) spacer fields. 2 × 6-char rosters = 20 fields, fit 25-cap.",
+      "• **2 rosters per page (chunked)**: mỗi embed page chứa tối đa 2 roster sections stacked. Roster section = non-inline header field với explicit value line. Name = `📁 accountName (displayName)` (clean label). Value = `<state breakdown> · 📥 Last updated <relative> ago · ⏳ Next refresh in <remain> · 🔄 Last synced <relative> ago · ⏳ Next sync in <remain>`. **📥 Last updated** = roster data refresh (iLvl/class từ bible qua `/raid-status` lazy refresh HOẶC pre-scan refresh của `/raid-check`) - applies to ALL users, 2h cooldown. **🔄 Last synced** = auto-manage bible log sync (raid progress) - chỉ opted-in user, `Never synced` nếu chưa có data, 15m cooldown. **⏳ Next X in Ym** countdown pairs với mỗi badge trên - khi cooldown còn active show thời gian còn lại, khi expired show `✅ Refresh ready` / `✅ Sync ready` để user không phải đoán mò tại sao Sync button bấm xong data không đổi. Ví dụ: `4 ⚪ · 1 🟡 · 1 🟢 · 📥 Last updated 30m ago · ⏳ Next refresh in 1h30m · 🔄 Last synced 3m ago · ⏳ Next sync in 12m`. Per roster cost: 1 header + N char + ceil(N/2) spacer fields. 2 × 6-char rosters = 20 fields, fit 25-cap.",
       "• **User filter dropdown** (action row 2): `StringSelectMenuBuilder` cho phép Raid Manager lọc pages theo Discord user. First option `🌐 All users (N pending)` reset filter. Tiếp theo top-24 users sort theo pending desc (`👤 displayName (N pending)`). Discord cap 25 options total. Selection → recompute pages chỉ chứa rosters của user đó, reset currentPage=0. `default: true` preserve selected state qua Prev/Next clicks. Rosters cùng user group consecutive, sort theo tổng pending user desc rồi per-roster pending desc. **Avatar in embed author**: khi filter = specific user, resolve Discord avatar cache-first (`client.users.cache` fallback to `fetch` via `discordUserLimiter`) và `setAuthor({name, iconURL})` trên mỗi page - visual confirmation filter đang active. Discord StringSelectMenu options không support per-option avatars (API limitation) nên embed author là compromise.",
       "• **Pagination buttons + session**: `◀ Previous` / `Next ▶` (shared helper `buildPaginationRow`) cycle giữa các roster-chunk pages. Title stable `⚠️ Raid Check · <raid> (<minItemLevel>)` không đổi theo page. Footer append page indicator. Collector locked theo người chạy, session timeout **5 phút** (`RAID_CHECK_PAGINATION_SESSION_MS`), hết hạn disable all components + swap footer legend.",
-      "• **Sync badge trong roster header**: opted-in user có sync data hiện `🔄 Last synced Nm/h/d ago`. Opted-in nhưng chưa sync lần nào → `🔄 Never synced`. Non-opted-in → không hiện segment này. Kèm countdown `⏳ Next sync in Xm` (cooldown 5m gate bởi `lastAutoManageAttemptAt`) hoặc `✅ Sync ready` khi expired.",
+      "• **Sync badge trong roster header**: opted-in user có sync data hiện `🔄 Last synced Nm/h/d ago`. Opted-in nhưng chưa sync lần nào → `🔄 Never synced`. Non-opted-in → không hiện segment này. Kèm countdown `⏳ Next sync in Xm` (cooldown 15m gate bởi `lastAutoManageAttemptAt`) hoặc `✅ Sync ready` khi expired.",
       "• **Footer legend với counts + page**: `🟢 N done · 🟡 M partial · ⚪ K pending · Page X/Y` - icon + count + English label merged, page indicator append cuối khi > 1 roster (move từ title xuống đây). Dynamic per page (page index thay đổi) compute inline trong `buildRaidCheckPage`. Discord render timestamp (`Today at HH:MM`) sau footer text tự động.",
       "• **Sort order**: users có nhiều pending tổng nhất lên top; trong mỗi user rosters sort theo pending count desc; trong mỗi roster chars sort theo iLvl desc.",
       "• **Mode hierarchy satisfies lower-mode scans**: mode rank Normal (1) < Hard (2) < Nightmare (3). Gate stored với mode rank ≥ scan mode rank sẽ count as done. Ví dụ: char cleared Kazeros Hard → scan Kazeros Normal thấy char đó done (Hard ≥ Normal, weekly requirement satisfied). Reverse không apply: char chỉ cleared Normal → scan Hard vẫn pending (cần Hard specifically). Helper `modeRank(str)` map Normal→1, Hard→2, Nightmare→3.",
-      "• **🔄 Sync button**: Raid Manager bấm → trigger auto-manage sync CHỈ cho opted-in user trong list pending (privacy-respecting - non-opted-in user KHÔNG bị force-sync). Operate trên ALL opted-in pending users (không chỉ current page). Reuse Phase 3 gather/apply pattern + `acquireAutoManageSyncSlot` (5-min cooldown share với /raid-auto-manage). User nào có char update mới sẽ nhận DM riêng (skip nếu sync chạy nhưng không có data mới). Disabled nếu không có opted-in user nào trong list.",
+      "• **🔄 Sync button**: Raid Manager bấm → trigger auto-manage sync CHỈ cho opted-in user trong list pending (privacy-respecting - non-opted-in user KHÔNG bị force-sync). Operate trên ALL opted-in pending users (không chỉ current page). Reuse Phase 3 gather/apply pattern + `acquireAutoManageSyncSlot` (15-min cooldown share với /raid-auto-manage). User nào có char update mới sẽ nhận DM riêng (skip nếu sync chạy nhưng không có data mới). Disabled nếu không có opted-in user nào trong list.",
       "• **Button customId routing**: Pagination buttons dùng prefix `raid-check-page:prev` / `raid-check-page:next` (KHÔNG `raid-check:*`) để bot.js's global `handleRaidCheckButton` dispatcher bỏ qua - collector trên reply message handle pagination locally. Sync vẫn dùng `raid-check:sync:<raidKey>` qua global router.",
       "• **Remind button removed** (Apr 2026): nút 🔔 Remind đã bỏ theo Traine's cleanup request. Raid Manager ping user manual qua Discord @mention hoặc hướng dẫn họ dùng `/raid-auto-manage action:on` / `/raid-set` tự update.",
       "• **Discord username resolution**: cache-first (discord.js users cache). Cache miss đi qua `discordUserLimiter` (max 5 in-flight) để server đông không burst `client.users.fetch` parallel - bảo vệ khỏi Discord 50 req/s global ceiling.",
@@ -3524,10 +3524,10 @@ const HELP_SECTIONS = [
       "• **Gather/apply split**: bible HTTP chạy trong **gather phase OUTSIDE `saveWithRetry`**, rồi apply phase trong retry loop chỉ mutate in-memory. VersionError retry KHÔNG re-fire bible call nữa. Probe + commit share cùng `collected` array → chi phí giảm từ 2× bible run xuống 1×.",
       "• **Last success vs Last attempt**: nếu Cloudflare block hoặc bible trả `Logs not enabled` cho TẤT CẢ char, `lastAutoManageSyncAt` không được stamp (chỉ `lastAutoManageAttemptAt`). `action:status` surface cả 2 để admin thấy rõ khi sync đang fail liên tục.",
       "• **Private logs → `Logs not enabled` body match**: chỉ phân loại char là private khi bible response body chứa chuỗi `Logs not enabled` (confirmed payload). Generic HTTP 403 (Cloudflare block, rate-limit, IP deny) KHÔNG bị misclassify thành private nữa - những case đó hiện ở bucket Fail với raw error message, bật `Show on Profile` sẽ không cứu được. Bot không auth thay user được (cookie HTTP-only, upload token write-only - đã test 2026-04-21).",
-      "• **Probe-before-enable**: khi gõ `action:on`, Artist chạy 1 lần sync **in memory** (không save) để phân loại char visible vs private. Nếu có char private → hiện warn embed với 2 nút `Vẫn bật` / `Huỷ`, timeout 60s = default Huỷ. Confirm thì re-run sync trên fresh doc rồi save; Cancel/timeout thì flag giữ OFF, không save gì **nhưng `lastAutoManageAttemptAt` vẫn được stamp** - probe HTTP đã tốn bible quota, cooldown phải phản ánh điều đó (không thì user spam `on` + Huỷ bypass được 5-min cooldown).",
-      "• **Per-user sync throttle**: 5 phút cooldown + in-flight guard. `action:sync` spam → reject ephemeral với remaining time (tránh N-roster × M-char HTTP calls dội bible). `action:on` đang in-flight thì reject; đang cooldown thì vẫn flip flag nhưng skip cả probe lẫn sync, báo user chờ X phút rồi gõ `sync` sau.",
+      "• **Probe-before-enable**: khi gõ `action:on`, Artist chạy 1 lần sync **in memory** (không save) để phân loại char visible vs private. Nếu có char private → hiện warn embed với 2 nút `Vẫn bật` / `Huỷ`, timeout 60s = default Huỷ. Confirm thì re-run sync trên fresh doc rồi save; Cancel/timeout thì flag giữ OFF, không save gì **nhưng `lastAutoManageAttemptAt` vẫn được stamp** - probe HTTP đã tốn bible quota, cooldown phải phản ánh điều đó (không thì user spam `on` + Huỷ bypass được 15-min cooldown).",
+      "• **Per-user sync throttle**: 15 phút cooldown + in-flight guard. `action:sync` spam → reject ephemeral với remaining time (tránh N-roster × M-char HTTP calls dội bible). `action:on` đang in-flight thì reject; đang cooldown thì vẫn flip flag nhưng skip cả probe lẫn sync, báo user chờ X phút rồi gõ `sync` sau.",
       "• **Dynamic action dropdown**: dropdown autocomplete hide option dư thừa theo state - đang ON thì không show `on`, đang OFF thì không show `off`. Typed-paste `on`/`off` khi redundant → ephemeral reject. Action lạ (paste arbitrary string không thuộc `on/off/sync/status`) → ephemeral reject ngay đầu handler, không fall-through Discord-timeout.",
-      "• **Phase 2 - auto-sync piggyback vào `/raid-status`**: khi `autoManageEnabled = true` + cooldown 5 phút cho phép, mỗi lần user gõ `/raid-status` Artist sẽ pull bible logs **song song** với roster refresh (Promise.all, share `bibleLimiter`) trước khi render embed. Reuse cùng `acquireAutoManageSyncSlot` nên spam `/raid-status` không spam bible. Race-safe: re-check `autoManageEnabled` trên fresh doc trong `saveWithRetry`, nếu user bấm `action:off` giữa gather và save → skip apply nhưng vẫn stamp `lastAutoManageAttemptAt` (bible quota đã tốn). Save fail (mongo blip) → catch stamp attempt qua `stampAutoManageAttempt` để cooldown vẫn kick in. Cooldown chưa hết / in-flight → render cached, silent skip. Gather throw (Cloudflare/timeout) → swallow + log + render cached, không vỡ `/raid-status`.",
+      "• **Phase 2 - auto-sync piggyback vào `/raid-status`**: khi `autoManageEnabled = true` + cooldown 15 phút cho phép, mỗi lần user gõ `/raid-status` Artist sẽ pull bible logs **song song** với roster refresh (Promise.all, share `bibleLimiter`) trước khi render embed. Reuse cùng `acquireAutoManageSyncSlot` nên spam `/raid-status` không spam bible. Race-safe: re-check `autoManageEnabled` trên fresh doc trong `saveWithRetry`, nếu user bấm `action:off` giữa gather và save → skip apply nhưng vẫn stamp `lastAutoManageAttemptAt` (bible quota đã tốn). Save fail (mongo blip) → catch stamp attempt qua `stampAutoManageAttempt` để cooldown vẫn kick in. Cooldown chưa hết / in-flight → render cached, silent skip. Gather throw (Cloudflare/timeout) → swallow + log + render cached, không vỡ `/raid-status`.",
       "• **Phase 3 - 24h passive auto-sync background scheduler**: opted-in user nào chưa sync trong 24h sẽ được background tick (mỗi 30 phút) tự pull bible logs, batch tối đa **3 user/tick** sort theo `lastAutoManageAttemptAt` ascending (chứ KHÔNG phải `lastAutoManageSyncAt`) - đảm bảo stuck user (perma-fail Cloudflare/private log) không monopolize batch forever, mọi user đều có rotation fair. Reuse cùng `acquireAutoManageSyncSlot` nên không double-fire với Phase 2 piggyback / manual `action:sync`. Filter ở DB level (`lastAutoManageSyncAt < now - 24h`) → user active đã sync gần đây tự bypass tick. **Tick overlap guard**: nếu tick trước chưa xong khi 30 phút mới đến (bible outage worst case), tick mới skip để không double traffic. **Summary log honesty**: tick log split 4 bucket (`synced` / `attempted-only` / `skipped` / `failed`) - chỉ count `synced` khi có ≥1 char success, tránh false-positive metric. **Killswitch**: env `AUTO_MANAGE_DAILY_DISABLED=true` skip mọi tick - flip nhanh nếu bible block, không cần redeploy. Bible HTTP load: batch 3 × 5 chars × ~6 HTTP avg = ~90 HTTP/tick max, spread qua 48 ticks/day cover được ~144 user-syncs/day capacity.",
       "• **Stuck private-log channel nudge (Apr 2026)**: khi tick detect user có `report.perChar` toàn `isPublicLogDisabledError` (tất cả char trả `Logs not enabled`), Artist post 1 channel announcement tag user trong guild đầu tiên user là member, đích resolve qua `announcements.stuckPrivateLogNudge.channelId || raidChannelId`, TTL 30 phút, dedup 7 ngày qua `User.lastPrivateLogNudgeAt`. Giọng Dusk (signed Artist, no stage-direction) hướng user vào `lostark.bible/me/logs` bật **Show on Profile**. Chỉ post khi bot cache có member record (cache-first, skip nếu cold members cache - không force fetch). Channel thay vì DM: Traine chọn tone nhẹ nhàng công khai, tránh DM áp lực. Reuse `postChannelAnnouncement` helper shared với hourly-cleanup notice + weekly-reset + /raid-channel set greeting.",
     ],
@@ -5391,9 +5391,9 @@ async function resolveRaidMonitorChannel(interaction, channelId) {
 // caps concurrency across the whole process, but a single user spamming
 // action:sync still queues N-roster × M-char HTTP calls each time. Two
 // guards combine: in-flight Set rejects parallel runs, cooldown rejects
-// rapid-sequential runs within 5 min based on User.lastAutoManageAttemptAt
+// rapid-sequential runs within 15 min based on User.lastAutoManageAttemptAt
 // (which is already stamped on every sync attempt, success or not).
-const AUTO_MANAGE_SYNC_COOLDOWN_MS = 5 * 60 * 1000;
+const AUTO_MANAGE_SYNC_COOLDOWN_MS = 15 * 60 * 1000;
 const inFlightAutoManageSyncs = new Set(); // discordId
 
 /**
@@ -6099,7 +6099,7 @@ async function handleRaidAutoManageCommand(interaction) {
         // Probe HTTP already ran - stamp attempt so the cooldown reflects
         // the bible quota we consumed, even though we're not committing the
         // flag flip. Without this, spamming `action:on` + Huỷ would bypass
-        // the 5-minute cooldown.
+        // the 15-minute cooldown.
         await stampAutoManageAttempt(discordId);
         const title =
           decision === "timeout"
@@ -6174,7 +6174,7 @@ async function handleRaidAutoManageCommand(interaction) {
         await interaction.reply({
           content: `${UI.icons.info} Sync vừa chạy gần đây. Đợi thêm **${formatAutoManageCooldownRemaining(
             guard.remainingMs
-          )}** rồi sync tiếp nhé (cooldown 5 phút để tránh gõ bible liên tục).`,
+          )}** rồi sync tiếp nhé (cooldown 15 phút để tránh gõ bible liên tục).`,
           flags: MessageFlags.Ephemeral,
         });
       }
@@ -6246,7 +6246,7 @@ async function handleRaidAutoManageCommand(interaction) {
  * Stamp `lastAutoManageAttemptAt` without flipping any flag. Called after the
  * probe HTTP burst in cancel/timeout/error paths so the cooldown reflects
  * bible quota actually consumed - otherwise users can spam
- * `/raid-auto-manage action:on` + cancel to bypass the 5-min cooldown.
+ * `/raid-auto-manage action:on` + cancel to bypass the 15-min cooldown.
  * Best-effort: logs and swallows DB errors so cooldown drift never masks the
  * real UX (the cancel/error message itself).
  */
@@ -7438,7 +7438,7 @@ async function runAutoManageDailyTick(client) {
     } catch (err) {
       failedCount += 1;
       // Codex round 26 #2 parity: bible burned quota but save threw. Stamp
-      // attempt so the slot's 5-min cooldown still kicks in for next tick.
+      // attempt so the slot's 15-min cooldown still kicks in for next tick.
       if (bibleHit) {
         await stampAutoManageAttempt(discordId);
       }
