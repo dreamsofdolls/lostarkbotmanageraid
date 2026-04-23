@@ -18,6 +18,7 @@ function createAutoManageSyncService(deps) {
 
       const didFreshenWeek = ensureFreshWeek(doc);
       let didAutoManage = false;
+      let outcome = "attempt-stamped";
 
       if (collected && doc.autoManageEnabled) {
         const autoReport = applyAutoManageCollected(doc, weekResetStart, collected);
@@ -25,6 +26,13 @@ function createAutoManageSyncService(deps) {
         doc.lastAutoManageAttemptAt = now;
         if (autoReport.perChar.some((c) => !c.error)) {
           doc.lastAutoManageSyncAt = now;
+          outcome = autoReport.perChar.some(
+            (c) => Array.isArray(c.applied) && c.applied.length > 0
+          )
+            ? "synced-with-delta"
+            : "synced-no-delta";
+        } else {
+          outcome = "all-chars-failed";
         }
         didAutoManage = true;
       } else {
@@ -33,7 +41,9 @@ function createAutoManageSyncService(deps) {
       }
 
       if (didFreshenWeek || didAutoManage) await doc.save();
-      console.log(`[raid-status] ${logLabel} auto-manage applied for user=${discordId}`);
+      console.log(
+        `[raid-status] ${logLabel} auto-manage finished for user=${discordId} outcome=${outcome}`
+      );
       return doc.toObject();
     });
   }
