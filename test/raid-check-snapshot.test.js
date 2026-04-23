@@ -145,6 +145,21 @@ test("buildRaidCheckSnapshotFromUsers marks under-iLvl chars as not-eligible whe
   assert.equal(snapshot.notEligibleChars[0]?.notEligibleReason, "low");
 });
 
+test("raid-check high-mode note explains that the char can still flex the scanned mode", () => {
+  const fieldValue = __test.formatRaidCheckNotEligibleFieldValue(
+    {
+      charName: "Qiylyn",
+      itemLevel: 1743,
+      notEligibleReason: "high",
+    },
+    { raidKey: "serca", modeKey: "hard", minItemLevel: 1730 }
+  );
+
+  assert.match(fieldValue, /Eligible for Nightmare/);
+  assert.match(fieldValue, /can still flex Hard/);
+  assert.match(fieldValue, /ℹ️/);
+});
+
 test("buildRaidCheckSnapshotFromUsers keeps done-only rosters visible in the combined render set", () => {
   const snapshot = __test.buildRaidCheckSnapshotFromUsers(
     [
