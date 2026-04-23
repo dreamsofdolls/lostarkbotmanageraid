@@ -379,6 +379,45 @@ function createAutoManageCoreService({
     return normalizeName(accountName) + "\x1f" + normalizeName(charName);
   }
 
+  function filterLogsForCharacter(logs, expectedName) {
+    const expected = normalizeName(expectedName);
+    if (!expected || !Array.isArray(logs) || logs.length === 0) {
+      return { logs: Array.isArray(logs) ? logs : [], mismatchedNames: [], hadNamedLogs: false };
+    }
+    const namedLogs = logs.filter((log) => normalizeName(log?.name));
+    if (namedLogs.length === 0) {
+      return { logs, mismatchedNames: [], hadNamedLogs: false };
+    }
+    const filtered = namedLogs.filter((log) => normalizeName(log?.name) === expected);
+    const mismatchedNames = [
+      ...new Set(
+        namedLogs
+          .map((log) => log?.name)
+          .filter((name) => normalizeName(name) !== expected)
+      ),
+    ];
+    return { logs: filtered, mismatchedNames, hadNamedLogs: true };
+  }
+
+  async function resolveBibleMetaForEntry(account, character, entry, rosterFetchCache) {
+    try {
+      const meta = await fetchBibleCharacterMetaWithLimiter(entry.charName);
+      return { meta, canonicalName: null, source: "direct" };
+    } catch (directErr) {
+      const resolved = await resolveBibleCharacterMetaViaRoster(
+        account,
+        character,
+        rosterFetchCache
+      );
+      if (!resolved) throw directErr;
+      return {
+        meta: resolved.meta,
+        canonicalName: resolved.canonicalName,
+        source: `roster seed "${resolved.seed}" (${resolved.matchType} match)`,
+      };
+    }
+  }
+
   /**
    * Gather phase: fetch bible meta (if not cached) + logs for every char in
    * the roster WITHOUT mutating the doc. Returns an array keyed by the
@@ -412,22 +451,19 @@ function createAutoManageCoreService({
           let cid = character.bibleCid;
           let rid = character.bibleRid;
           if (!serial || !cid || !rid) {
-            let meta;
-            try {
-              meta = await fetchBibleCharacterMetaWithLimiter(entry.charName);
-            } catch (directErr) {
-              const resolved = await resolveBibleCharacterMetaViaRoster(
-                account,
-                character,
-                rosterFetchCache
-              );
-              if (!resolved) throw directErr;
-              meta = resolved.meta;
+            const resolved = await resolveBibleMetaForEntry(
+              account,
+              character,
+              entry,
+              rosterFetchCache
+            );
+            if (resolved.canonicalName) {
               entry.canonicalName = resolved.canonicalName;
               console.warn(
-                `[auto-manage] resolved bible meta for "${entry.charName}" via roster seed "${resolved.seed}" as "${resolved.canonicalName}" (${resolved.matchType} match).`
+                `[auto-manage] resolved bible meta for "${entry.charName}" via ${resolved.source} as "${resolved.canonicalName}".`
               );
             }
+            const meta = resolved.meta;
             serial = meta.sn;
             cid = meta.cid;
             rid = meta.rid;
@@ -440,6 +476,49 @@ function createAutoManageCoreService({
             className: entry.className,
             weekResetStart,
           });
+          const expectedLogName = entry.canonicalName || entry.charName;
+          let filteredLogs = filterLogsForCharacter(entry.logs, expectedLogName);
+          if (filteredLogs.mismatchedNames.length > 0 && filteredLogs.logs.length > 0) {
+            console.warn(
+              `[auto-manage] bible logs for "${entry.charName}" included other character(s): ${filteredLogs.mismatchedNames.join(", ")}; filtering them out.`
+            );
+          }
+          if (
+            filteredLogs.hadNamedLogs &&
+            filteredLogs.logs.length === 0 &&
+            filteredLogs.mismatchedNames.length > 0
+          ) {
+            console.warn(
+              `[auto-manage] bible metadata for "${entry.charName}" returned only other character log(s): ${filteredLogs.mismatchedNames.join(", ")}; refreshing metadata.`
+            );
+            const resolved = await resolveBibleMetaForEntry(
+              account,
+              character,
+              entry,
+              rosterFetchCache
+            );
+            const meta = resolved.meta;
+            serial = meta.sn;
+            cid = meta.cid;
+            rid = meta.rid;
+            entry.meta = { sn: serial, cid, rid };
+            if (resolved.canonicalName) entry.canonicalName = resolved.canonicalName;
+            entry.logs = await fetchBibleLogsSinceWeekReset({
+              serial,
+              cid,
+              rid,
+              className: entry.className,
+              weekResetStart,
+            });
+            const refreshedExpectedName = entry.canonicalName || entry.charName;
+            filteredLogs = filterLogsForCharacter(entry.logs, refreshedExpectedName);
+            if (filteredLogs.mismatchedNames.length > 0 && filteredLogs.logs.length > 0) {
+              console.warn(
+                `[auto-manage] refreshed bible logs for "${entry.charName}" still included other character(s): ${filteredLogs.mismatchedNames.join(", ")}; filtering them out.`
+              );
+            }
+          }
+          entry.logs = filteredLogs.logs;
         } catch (err) {
           entry.error = err?.message || String(err);
           console.warn(
