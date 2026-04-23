@@ -10,6 +10,22 @@ const dns = require("node:dns");
 
 let connected = false;
 
+async function ensureApplicationIndexes() {
+  if (process.env.MONGO_ENSURE_INDEXES === "false") return;
+
+  const started = Date.now();
+  try {
+    const User = require("./src/schema/user");
+    const GuildConfig = require("./src/schema/guildConfig");
+    await Promise.all([User.createIndexes(), GuildConfig.createIndexes()]);
+    console.log(`[db] Ensured Mongo indexes in ${Date.now() - started}ms`);
+  } catch (err) {
+    // Index creation is a performance/ops aid, not a correctness gate.
+    // Keep the bot online even if the Mongo user lacks index privileges.
+    console.warn("[db] Mongo index ensure failed:", err?.message || err);
+  }
+}
+
 /**
  * Connect to MongoDB if not already connected.
  * Safe to call multiple times – subsequent calls are no-ops.
@@ -51,6 +67,8 @@ async function connectDB() {
 
   const { host, port, name } = mongoose.connection;
   console.log(`[db] Connected to MongoDB at ${host}:${port}/${name}`);
+
+  await ensureApplicationIndexes();
 
   mongoose.connection.on("disconnected", () => {
     connected = false;
