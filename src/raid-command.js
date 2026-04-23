@@ -712,30 +712,70 @@ const raidAutoManageCommand = new SlashCommandBuilder()
       .setAutocomplete(true)
   );
 
-// Valid announcement type keys - kept in sync with GuildConfig.announcements
-// subdoc. Two groups:
-//   - CHANNEL_OVERRIDABLE: announcement's destination CAN be redirected to
-//     a non-monitor channel (pure announcements, user-tag nudges).
-//   - CHANNEL_BOUND: announcement's destination MUST be the monitor channel
-//     itself because the message refers to that channel in its semantics
-//     (greeting = "this channel is set", cleanup notice = "this channel
-//     just got cleaned", whisper ack = reply to a user's message here).
-const ANNOUNCEMENT_TYPES_CHANNEL_OVERRIDABLE = ["weekly-reset", "stuck-nudge"];
-const ANNOUNCEMENT_TYPES_CHANNEL_BOUND = ["set-greeting", "hourly-cleanup", "whisper-ack"];
-const ANNOUNCEMENT_TYPE_LABELS = {
-  "weekly-reset": "Weekly reset · Tuần mới đến",
-  "stuck-nudge": "Stuck private-log nudge",
-  "set-greeting": "Set greeting (action:set)",
-  "hourly-cleanup": "Hourly cleanup notice",
-  "whisper-ack": "Whisper ack (post clear)",
+// ---------------------------------------------------------------------------
+// Announcement registry - single source of truth for all Artist channel
+// announcements. Adding a new type requires:
+//   1. A new entry here (type key + label + subdocKey + channelOverridable)
+//   2. A matching subdoc in GuildConfig.announcements schema
+//   3. Firing-site code at wherever the announcement actually fires
+//   4. (Optional) note in HELP_SECTIONS /raid-announce bullet
+//
+// Design choice: nested subdoc storage (GuildConfig.announcements) stays,
+// a collection-per-announcement refactor was considered and skipped because
+// cardinality is low (5 types × 1-ish guilds) and no query pattern needs
+// cross-guild announcement analytics or dynamic user-defined types. If the
+// type count crosses ~10 OR rich metadata lands (cron, TTL override,
+// conditions), revisit collection split then.
+//
+// Groups:
+//   - channelOverridable: destination CAN be redirected to a non-monitor
+//     channel via /raid-announce set-channel. Used for pure announcements
+//     and user-tag nudges that don't semantically refer to the monitor
+//     channel itself.
+//   - !channelOverridable (channel-bound): destination MUST be the monitor
+//     channel because the message refers to that channel (greeting = "this
+//     channel is set", cleanup notice = "this channel just got cleaned",
+//     whisper ack = reply to a user's message here).
+const ANNOUNCEMENT_REGISTRY = {
+  "weekly-reset": {
+    label: "Weekly reset · Tuần mới đến",
+    subdocKey: "weeklyReset",
+    channelOverridable: true,
+  },
+  "stuck-nudge": {
+    label: "Stuck private-log nudge",
+    subdocKey: "stuckPrivateLogNudge",
+    channelOverridable: true,
+  },
+  "set-greeting": {
+    label: "Set greeting (action:set)",
+    subdocKey: "setGreeting",
+    channelOverridable: false,
+  },
+  "hourly-cleanup": {
+    label: "Hourly cleanup notice",
+    subdocKey: "hourlyCleanupNotice",
+    channelOverridable: false,
+  },
+  "whisper-ack": {
+    label: "Whisper ack (post clear)",
+    subdocKey: "whisperAck",
+    channelOverridable: false,
+  },
 };
-const ANNOUNCEMENT_TYPE_TO_SUBDOC_KEY = {
-  "weekly-reset": "weeklyReset",
-  "stuck-nudge": "stuckPrivateLogNudge",
-  "set-greeting": "setGreeting",
-  "hourly-cleanup": "hourlyCleanupNotice",
-  "whisper-ack": "whisperAck",
-};
+
+// Derived accessors - cheap object iteration on a 5-entry object. Keeping
+// derivations in-function (rather than top-level computed consts) makes
+// the registry the only place that needs editing when adding a type.
+function announcementTypeKeys() {
+  return Object.keys(ANNOUNCEMENT_REGISTRY);
+}
+function announcementTypeEntry(typeKey) {
+  return ANNOUNCEMENT_REGISTRY[typeKey] || null;
+}
+function announcementSubdocKeys() {
+  return Object.values(ANNOUNCEMENT_REGISTRY).map((r) => r.subdocKey);
+}
 
 const raidAnnounceCommand = new SlashCommandBuilder()
   .setName("raid-announce")
@@ -748,9 +788,12 @@ const raidAnnounceCommand = new SlashCommandBuilder()
       .setDescription("Loại thông báo")
       .setRequired(true)
       .addChoices(
-        ...[...ANNOUNCEMENT_TYPES_CHANNEL_OVERRIDABLE, ...ANNOUNCEMENT_TYPES_CHANNEL_BOUND].map(
-          (key) => ({ name: `${key} - ${ANNOUNCEMENT_TYPE_LABELS[key]}`, value: key })
-        )
+        // Derived from ANNOUNCEMENT_REGISTRY so adding a new type = new
+        // registry entry + subdoc, no command-builder edit needed.
+        ...announcementTypeKeys().map((key) => ({
+          name: `${key} - ${ANNOUNCEMENT_REGISTRY[key].label}`,
+          value: key,
+        }))
       )
   )
   .addStringOption((opt) =>
@@ -2994,7 +3037,7 @@ const HELP_SECTIONS = [
       "• **Channel-overridable vs channel-bound**: `weekly-reset` + `stuck-nudge` là pure announcements/tags có thể redirect sang #announcements riêng. 3 loại còn lại (`set-greeting` / `hourly-cleanup` / `whisper-ack`) bound với monitor channel vì content refer cụ thể tới channel đó (\"channel này vừa dọn xong\" / \"Artist được mời đến channel này\" / whisper reply tin gốc) - `set-channel`/`clear-channel` sẽ reject với 3 loại bound này.",
       "• **Fallback chain**: mỗi fire resolve channel qua `announcements.<type>.channelId || raidChannelId`. Override null = revert về monitor channel mặc định (set qua `/raid-channel config action:set`). Nếu cả 2 null → guild chưa setup monitor → announcement silent skip không crash.",
       "• **Defaults**: mỗi type `enabled=true` + `channelId=null` khi schema default chạy. Legacy guild không có `announcements` subdoc → `getAnnouncementsConfig` normalize về defaults nên backward-compatible, không breaking.",
-      "• **Mongo path**: `GuildConfig.announcements.<subdocKey>.enabled|channelId`. Subdoc key map: `weekly-reset`→`weeklyReset`, `stuck-nudge`→`stuckPrivateLogNudge`, `set-greeting`→`setGreeting`, `hourly-cleanup`→`hourlyCleanupNotice`, `whisper-ack`→`whisperAck`.",
+      "• **Mongo path**: `GuildConfig.announcements.<subdocKey>.enabled|channelId`. Subdoc key map: `weekly-reset`→`weeklyReset`, `stuck-nudge`→`stuckPrivateLogNudge`, `set-greeting`→`setGreeting`, `hourly-cleanup`→`hourlyCleanupNotice`, `whisper-ack`→`whisperAck`. Keys sống trong central `ANNOUNCEMENT_REGISTRY` object (raid-command.js) - single source of truth cho label + subdocKey + channelOverridable flag. Adding a new type: 1 registry entry + 1 schema subdoc + firing site code (không cần edit command builder hay helper vì tất cả derived).",
       "• **Redundant-state guard**: `action:on` khi đang ON → ephemeral reject \"đã on rồi\", không tạo Mongo write thừa. Tương tự `action:off` khi đã OFF. `clear-channel` khi đã không có override → ephemeral info.",
       "• **Require Manage Guild**: same as `/raid-channel` config. Server owner + admin only.",
     ],
@@ -3386,9 +3429,9 @@ async function handleRaidManagementCommand(interaction) {
 function getAnnouncementsConfig(cfg) {
   const raw = cfg?.announcements || {};
   const normalized = {};
-  for (const key of Object.values(ANNOUNCEMENT_TYPE_TO_SUBDOC_KEY)) {
-    const sub = raw[key] || {};
-    normalized[key] = {
+  for (const subdocKey of announcementSubdocKeys()) {
+    const sub = raw[subdocKey] || {};
+    normalized[subdocKey] = {
       enabled: sub.enabled !== false, // default true when missing
       channelId: sub.channelId || null,
     };
@@ -3409,9 +3452,18 @@ async function handleRaidAnnounceCommand(interaction) {
   const type = interaction.options.getString("type", true);
   const action = interaction.options.getString("action", true);
   const channel = interaction.options.getChannel("channel", false);
-  const subdocKey = ANNOUNCEMENT_TYPE_TO_SUBDOC_KEY[type];
-  const typeLabel = ANNOUNCEMENT_TYPE_LABELS[type];
-  const overridable = ANNOUNCEMENT_TYPES_CHANNEL_OVERRIDABLE.includes(type);
+  const entry = announcementTypeEntry(type);
+  if (!entry) {
+    // Discord's static choices should prevent this, but guard against
+    // future drift (e.g. someone renames a registry key and forgets to
+    // redeploy slash commands).
+    await interaction.reply({
+      content: `${UI.icons.warn} Loại announcement không hợp lệ: \`${type}\`.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  const { subdocKey, label: typeLabel, channelOverridable: overridable } = entry;
 
   // Read current config first so show/on/off paths don't force an upsert
   // just to display state. Missing cfg → treat as legacy (all defaults).
