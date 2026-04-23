@@ -2862,7 +2862,7 @@ const HELP_SECTIONS = [
       "• Chỉ poster tự update char của mình (cần có roster đã đăng ký qua `/add-roster`).",
       "• **Multi-char trong 1 post**: liệt kê nhiều tên cách nhau bằng space/comma/+ - ví dụ `Act4 Hard Priscilladuk, Nailaduk`. Bot apply raid update cho từng char, DM 1 embed aggregated (done/already-done/not-found/iLvl-thiếu grouped).",
       "• Nếu trong post có char gõ sai, Artist sẽ ping user trong channel với tên char không tìm thấy - các char hợp lệ khác vẫn được update bình thường.",
-      "• **Set**: kiểm tra bot permission trong channel đích, **post + pin welcome fresh trước**, rồi mới unpin welcome cũ (safe-order - partial failure giữ welcome cũ để channel không mất guidance).",
+      "• **Set**: kiểm tra bot permission trong channel đích, **post + pin welcome fresh trước**, rồi mới unpin welcome cũ (safe-order - partial failure giữ welcome cũ để channel không mất guidance). Sau khi welcome post success, Artist post thêm 1 **greeting ephemeral** vào channel (giọng Dusk, signed Artist, TTL 2 phút) để members đang online thấy Artist vừa 'đến trông coi' - welcome pin là long-lived documentation, greeting là ceremonial moment. Greeting dùng `postChannelAnnouncement` helper shared với hourly-cleanup notice + weekly-reset + private-log nudge.",
       "• **Show**: hiển thị channel + health check permissions + deploy-flag warnings.",
       "• **Clear**: tắt monitor ngay, luôn write-through Mongo; cũng reset `autoCleanupEnabled` để schedule không tự kích lại khi admin `/set` channel mới.",
       "• **Cleanup**: xóa thủ công mọi message không pin trong monitor channel (giữ welcome pinned). Paginate đến hết channel. Messages > 14 ngày Discord không cho bulk-delete, bot sẽ report `skipped (>14 ngày)` để admin xóa tay nếu cần.",
@@ -2909,6 +2909,7 @@ const HELP_SECTIONS = [
       "• **Dynamic action dropdown**: dropdown autocomplete hide option dư thừa theo state - đang ON thì không show `on`, đang OFF thì không show `off`. Typed-paste `on`/`off` khi redundant → ephemeral reject. Action lạ (paste arbitrary string không thuộc `on/off/sync/status`) → ephemeral reject ngay đầu handler, không fall-through Discord-timeout.",
       "• **Phase 2 - auto-sync piggyback vào `/raid-status`**: khi `autoManageEnabled = true` + cooldown 5 phút cho phép, mỗi lần user gõ `/raid-status` Artist sẽ pull bible logs **song song** với roster refresh (Promise.all, share `bibleLimiter`) trước khi render embed. Reuse cùng `acquireAutoManageSyncSlot` nên spam `/raid-status` không spam bible. Race-safe: re-check `autoManageEnabled` trên fresh doc trong `saveWithRetry`, nếu user bấm `action:off` giữa gather và save → skip apply nhưng vẫn stamp `lastAutoManageAttemptAt` (bible quota đã tốn). Save fail (mongo blip) → catch stamp attempt qua `stampAutoManageAttempt` để cooldown vẫn kick in. Cooldown chưa hết / in-flight → render cached, silent skip. Gather throw (Cloudflare/timeout) → swallow + log + render cached, không vỡ `/raid-status`.",
       "• **Phase 3 - 24h passive auto-sync background scheduler**: opted-in user nào chưa sync trong 24h sẽ được background tick (mỗi 30 phút) tự pull bible logs, batch tối đa **3 user/tick** sort theo `lastAutoManageAttemptAt` ascending (chứ KHÔNG phải `lastAutoManageSyncAt`) - đảm bảo stuck user (perma-fail Cloudflare/private log) không monopolize batch forever, mọi user đều có rotation fair. Reuse cùng `acquireAutoManageSyncSlot` nên không double-fire với Phase 2 piggyback / manual `action:sync`. Filter ở DB level (`lastAutoManageSyncAt < now - 24h`) → user active đã sync gần đây tự bypass tick. **Tick overlap guard**: nếu tick trước chưa xong khi 30 phút mới đến (bible outage worst case), tick mới skip để không double traffic. **Summary log honesty**: tick log split 4 bucket (`synced` / `attempted-only` / `skipped` / `failed`) - chỉ count `synced` khi có ≥1 char success, tránh false-positive metric. **Killswitch**: env `AUTO_MANAGE_DAILY_DISABLED=true` skip mọi tick - flip nhanh nếu bible block, không cần redeploy. Bible HTTP load: batch 3 × 5 chars × ~6 HTTP avg = ~90 HTTP/tick max, spread qua 48 ticks/day cover được ~144 user-syncs/day capacity.",
+      "• **Stuck private-log channel nudge (Apr 2026)**: khi tick detect user có `report.perChar` toàn `isPublicLogDisabledError` (tất cả char trả `Logs not enabled`), Artist post 1 channel announcement tag user trong monitor channel của guild đầu tiên user là member, TTL 30 phút, dedup 7 ngày qua `User.lastPrivateLogNudgeAt`. Giọng Dusk (signed Artist, no stage-direction) hướng user vào `lostark.bible/me/logs` bật **Show on Profile**. Chỉ post khi bot cache có member record (cache-first, skip nếu cold members cache - không force fetch). Channel thay vì DM: Traine chọn tone nhẹ nhàng công khai, tránh DM áp lực. Reuse `postChannelAnnouncement` helper shared với hourly-cleanup notice + weekly-reset + /raid-channel set greeting.",
     ],
   },
 ];
@@ -5525,6 +5526,22 @@ async function handleRaidChannelCommand(interaction) {
       ? welcome.pinned ? "posted & pinned" : "posted (pin failed)"
       : "NOT posted";
 
+    // Ceremonial "Artist arrive" greeting posted in the monitor channel
+    // right after the welcome pin lands. Separate from the pinned welcome
+    // (long-lived documentation) - the greeting is an ephemeral
+    // announcement (TTL 2 min) so channel members actively online see
+    // Artist take up residence. Only post when the welcome itself
+    // succeeded - if welcome.posted is false, the channel is in a broken
+    // state and a greeting would be misleading.
+    if (welcome.posted) {
+      await postChannelAnnouncement(
+        channel,
+        "Ồ, chỗ mới này Artist được mời đến trông coi nhỉ~ Xin chào các cậu, từ giờ cứ post clear raid theo format ở welcome pin phía trên là Artist tự cập nhật progress cho nha. Biển báo này Artist cuỗm đi sau 2 phút, welcome thì giữ nguyên.",
+        RAID_CHANNEL_GREETING_TTL_MS,
+        "raid-channel set greeting"
+      );
+    }
+
     const embed = new EmbedBuilder()
       .setColor(UI.colors.success)
       .setTitle(`${UI.icons.done} Raid Channel Set`)
@@ -5762,6 +5779,35 @@ async function handleRaidChannelCommand(interaction) {
 // ---------------------------------------------------------------------------
 
 const AUTO_CLEANUP_NOTICE_TTL_MS = 5 * 60 * 1000; // marker sits 5 min before self-delete
+const RAID_CHANNEL_GREETING_TTL_MS = 2 * 60 * 1000; // set greeting sits 2 min before self-delete
+const PRIVATE_LOG_NUDGE_TTL_MS = 30 * 60 * 1000; // stuck-user nudge sits 30 min before self-delete
+const PRIVATE_LOG_NUDGE_DEDUP_MS = 7 * 24 * 60 * 60 * 1000; // 7-day per-user dedup
+
+/**
+ * Fire-and-forget channel announcement with TTL self-delete. Returns the
+ * sent Message on success (so caller can stamp dedup cursors only on
+ * confirmed post), null on send failure. Same pattern as the whisper-ack
+ * flow in handleRaidChannelMessage and the hourly-cleanup notice.
+ *
+ * `ttlMs > 0` schedules a setTimeout to delete the message. `ttlMs = 0`
+ * leaves the message permanent (not used currently but left for future
+ * callers like persistent markers).
+ */
+async function postChannelAnnouncement(channel, content, ttlMs, logTag = "announcement") {
+  let sent = null;
+  try {
+    sent = await channel.send({ content });
+  } catch (err) {
+    console.warn(`[${logTag}] send failed:`, err?.message || err);
+    return null;
+  }
+  if (ttlMs > 0) {
+    setTimeout(() => {
+      sent.delete().catch(() => {});
+    }, ttlMs);
+  }
+  return sent;
+}
 
 /**
  * Returns "YYYY-MM-DDTHH" in Vietnam (UTC+7) calendar for the given moment.
@@ -5831,22 +5877,12 @@ async function runAutoCleanupTick(client) {
       const noticeContent = deleted > 0
         ? `Hừm... đến giờ Artist phải đi dọn rác rồi nhé. Xong, vừa dọn **${deleted}** tin rồi đấy~ Biển báo này 5 phút nữa Artist cuỗm đi luôn, các cậu cứ tiếp tục post clear bình thường nha.`
         : `Ồ, giờ này Artist ghé qua xem chỗ này thế nào... ai dè sạch sẽ sẵn rồi nhé~ Vậy Artist ngồi uống trà 5 phút rồi đi tiếp, biển báo này tự biến mất sau đó. Các cậu cứ tiếp tục post clear bình thường nha.`;
-      let notice = null;
-      try {
-        notice = await channel.send({ content: noticeContent });
-      } catch (err) {
-        console.warn(
-          `[raid-channel] auto-cleanup notice post failed guild=${cfg.guildId}:`,
-          err?.message || err
-        );
-      }
-      // Fire-and-forget self-delete after the notice TTL - same pattern
-      // as the DM-success ack flow in handleRaidChannelMessage.
-      if (notice) {
-        setTimeout(() => {
-          notice.delete().catch(() => {});
-        }, AUTO_CLEANUP_NOTICE_TTL_MS);
-      }
+      await postChannelAnnouncement(
+        channel,
+        noticeContent,
+        AUTO_CLEANUP_NOTICE_TTL_MS,
+        "raid-channel auto-cleanup"
+      );
     } catch (err) {
       console.error(
         `[raid-channel] auto-cleanup failed guild=${cfg.guildId}:`,
@@ -5888,7 +5924,78 @@ const AUTO_MANAGE_DAILY_TICK_MS = 30 * 60 * 1000;
 const AUTO_MANAGE_DAILY_CUTOFF_MS = 24 * 60 * 60 * 1000;
 const AUTO_MANAGE_DAILY_BATCH_SIZE = 3;
 
-async function runAutoManageDailyTick() {
+/**
+ * For each user whose sync tick produced an all-"Logs not enabled"
+ * outcome, post a channel-level nudge tagging the user in the first
+ * reachable monitor channel they're a member of. Uses `User.lastPrivateLogNudgeAt`
+ * for 7-day dedup so a stuck user isn't tagged each 30-min tick.
+ *
+ * Channel resolution policy: iterate guilds with monitor channel, find
+ * the first one where the user is a member (cache-first, skip if cold).
+ * If no guild in bot's cache has the user, skip the nudge entirely -
+ * we don't have a public surface to nudge on.
+ */
+async function nudgeStuckPrivateLogUser(client, discordId) {
+  if (!client) return;
+  let userDoc;
+  try {
+    userDoc = await User.findOne({ discordId }).select("lastPrivateLogNudgeAt").lean();
+  } catch (err) {
+    console.warn(`[auto-manage daily] nudge lookup failed user=${discordId}:`, err?.message || err);
+    return;
+  }
+  if (!userDoc) return;
+  const now = Date.now();
+  if (userDoc.lastPrivateLogNudgeAt && now - userDoc.lastPrivateLogNudgeAt < PRIVATE_LOG_NUDGE_DEDUP_MS) {
+    return; // still within 7-day dedup window
+  }
+
+  let configs;
+  try {
+    configs = await GuildConfig.find({ raidChannelId: { $ne: null } }).lean();
+  } catch (err) {
+    console.warn(`[auto-manage daily] nudge config load failed user=${discordId}:`, err?.message || err);
+    return;
+  }
+
+  for (const cfg of configs) {
+    const guild = client.guilds.cache.get(cfg.guildId);
+    if (!guild) continue;
+    // Members cache can be cold on large guilds; skip non-member hits
+    // without doing a full fetch (cheap path). If bot is deployed in a
+    // single guild (Traine's setup), cache-hit is the common case.
+    if (!guild.members.cache.has(discordId)) continue;
+    let channel = guild.channels.cache.get(cfg.raidChannelId);
+    if (!channel) {
+      try {
+        channel = await guild.channels.fetch(cfg.raidChannelId);
+      } catch {
+        continue;
+      }
+    }
+    if (!channel) continue;
+
+    const sent = await postChannelAnnouncement(
+      channel,
+      `<@${discordId}> nhắc khẽ nhé~ Roster cậu đã bật auto-manage nhưng hiện tại tất cả char đều là private log, Artist không sync được data đâu. Vào https://lostark.bible/me/logs bật **Show on Profile** cho char cần sync giúp tớ nha. Biển báo này Artist cuỗm đi sau 30 phút.`,
+      PRIVATE_LOG_NUDGE_TTL_MS,
+      "auto-manage private-log nudge"
+    );
+    if (sent) {
+      try {
+        await User.findOneAndUpdate({ discordId }, { $set: { lastPrivateLogNudgeAt: now } });
+      } catch (err) {
+        console.warn(
+          `[auto-manage daily] nudge dedup stamp failed user=${discordId}:`,
+          err?.message || err
+        );
+      }
+      return; // only post in one guild per nudge
+    }
+  }
+}
+
+async function runAutoManageDailyTick(client) {
   if (process.env.AUTO_MANAGE_DAILY_DISABLED === "true") return;
 
   const cutoff = Date.now() - AUTO_MANAGE_DAILY_CUTOFF_MS;
@@ -5972,6 +6079,10 @@ async function runAutoManageDailyTick() {
       // "attempted-only" - apply branches override to "synced" when at
       // least one char actually fetched without error.
       let outcome = "attempted-only";
+      // Capture the latest report ref so the post-save stuck-user check
+      // can read it (saveWithRetry may run its closure multiple times on
+      // VersionError; we want the last committed pass).
+      let latestReport = null;
       await saveWithRetry(async () => {
         const fresh = await User.findOne({ discordId });
         if (!fresh || !Array.isArray(fresh.accounts) || fresh.accounts.length === 0) return;
@@ -5985,6 +6096,7 @@ async function runAutoManageDailyTick() {
           return;
         }
         const report = applyAutoManageCollected(fresh, weekResetStart, collected);
+        latestReport = report;
         const now = Date.now();
         fresh.lastAutoManageAttemptAt = now;
         if (report.perChar.some((c) => !c.error)) {
@@ -5995,6 +6107,19 @@ async function runAutoManageDailyTick() {
       });
       if (outcome === "synced") syncedCount += 1;
       else attemptedOnlyCount += 1;
+
+      // Stuck private-log detection: every char in this user's roster
+      // returned "Logs not enabled" from bible. Post a 7-day-deduped
+      // channel nudge (not DM - Traine: nudge như weekly reset ý).
+      // Skip if the save closure never produced a report (e.g. mid-flight
+      // opt-out short-circuited before apply).
+      if (
+        latestReport &&
+        latestReport.perChar.length > 0 &&
+        latestReport.perChar.every((c) => isPublicLogDisabledError(c.error))
+      ) {
+        await nudgeStuckPrivateLogUser(client, discordId);
+      }
     } catch (err) {
       failedCount += 1;
       // Codex round 26 #2 parity: bible burned quota but save threw. Stamp
@@ -6034,7 +6159,7 @@ async function runAutoManageDailyTick() {
  * normal lifetime - process exit kills the timer.
  */
 let dailyTickInFlight = false;
-function startAutoManageDailyScheduler() {
+function startAutoManageDailyScheduler(client) {
   const run = async () => {
     if (dailyTickInFlight) {
       console.warn(
@@ -6044,7 +6169,7 @@ function startAutoManageDailyScheduler() {
     }
     dailyTickInFlight = true;
     try {
-      await runAutoManageDailyTick();
+      await runAutoManageDailyTick(client);
     } catch (err) {
       console.error("[auto-manage daily] scheduler tick failed:", err?.message || err);
     } finally {

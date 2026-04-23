@@ -71,7 +71,6 @@ async function registerSlashCommandsOnBoot(client) {
 
 async function startBot() {
   await connectDB();
-  startWeeklyResetJob();
 
   // Warm the monitor channel cache BEFORE Discord login. The cache is pure
   // DB data - no client dependency - and loading it inside `ClientReady`
@@ -106,12 +105,19 @@ async function startBot() {
     // actually does anything. Independent of TEXT_MONITOR_ENABLED so
     // admins can schedule cleanups even when the text monitor is off.
     startRaidChannelScheduler(readyClient);
+    // Weekly raid reset: must run inside ClientReady (not earlier at
+    // connectDB time) because the tick posts per-guild announcements via
+    // the Discord client. Catch-up ticks dedup per guild via
+    // `lastWeeklyAnnouncementKey` so a bot restart inside the same ISO
+    // week won't re-announce.
+    startWeeklyResetJob(readyClient);
     // Phase 3: 24h passive auto-sync scheduler for /raid-auto-manage
     // opted-in users. 30-min tick, 3-user batch, per-user cooldown gated.
     // Killswitch: AUTO_MANAGE_DAILY_DISABLED=true env var skips every tick
     // - useful if bible starts blocking and ops need to back off without
-    // a redeploy.
-    startAutoManageDailyScheduler();
+    // a redeploy. Accepts client ref so the tick can post channel
+    // announcements when it detects a stuck private-log user.
+    startAutoManageDailyScheduler(readyClient);
   });
 
   if (TEXT_MONITOR_ENABLED) {

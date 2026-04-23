@@ -97,6 +97,10 @@ const userSchema = new mongoose.Schema(
     // the attempt stamp so a string of Cloudflare 403s doesn't lie about
     // data freshness.
     lastAutoManageSyncAt: { type: Number, default: null },
+    // Unix ms timestamp of the last channel-announcement nudge Artist
+    // posted for this user when every char returned "Logs not enabled".
+    // Dedup at 7 days so stuck users aren't spam-tagged each 30-min tick.
+    lastPrivateLogNudgeAt: { type: Number, default: null },
   },
   {
     timestamps: true,

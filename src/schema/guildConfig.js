@@ -20,6 +20,12 @@ const guildConfigSchema = new mongoose.Schema(
     // can unpin the exact stored message instead of scanning every
     // bot-authored pin (which would remove unrelated bot pins).
     welcomeMessageId: { type: String, default: null },
+    // Per-guild dedup for the weekly reset announcement. Set to the target
+    // ISO week key (e.g. "2026-W17") once the post-reset announcement has
+    // been posted in this guild's monitor channel. Subsequent weekly-reset
+    // ticks within the same ISO week short-circuit; crossing into the next
+    // ISO week produces a new key and the next tick posts again.
+    lastWeeklyAnnouncementKey: { type: String, default: null },
   },
   {
     timestamps: true,
