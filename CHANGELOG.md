@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file. Dates use t
 
 ### Changed
 
+- **`/raid-check` now filters candidate users by raid iLvl floor in Mongo before snapshot/pre-refresh work.** The command already skipped characters below the selected raid's broad floor in JS; pushing `accounts.characters.itemLevel >= lowestMin` into the query avoids loading and lazy-refreshing users who cannot appear in the rendered scan at all. Added a multikey index on `accounts.characters.itemLevel` for that path. `/raid-status` also reuses its initial hydrated `User.findOne` for the refresh path, removing one duplicate read from the normal command flow. `src/raid-command.js`, `src/schema/user.js`, `test/raid-check-snapshot.test.js`, `README.md`.
+
+- **Auto-manage roster fallback now caches roster fetches per account during one gather.** If direct bible meta lookup fails for several characters in the same roster (for example stored names missing diacritics), the fallback no longer re-fetches the same account roster for each character. It reuses the first seed result inside the current sync attempt, reducing worst-case fallback traffic while keeping the same direct-meta and log-fetch behavior. `src/raid-command.js`.
+
 - **Auto-manage sync cooldown increased from 5 minutes to 15 minutes.** This affects `/raid-auto-manage action:sync`, `/raid-status` piggyback sync, and the `/raid-check` Sync button because they all share `acquireAutoManageSyncSlot`. The visible countdown now shows the longer gate, e.g. a sync from 3 minutes ago renders `⏳ Next sync in 12m` instead of `2m`. `src/raid-command.js`, `test/raid-check-snapshot.test.js`, `README.md`.
 
 ### Added

@@ -114,6 +114,14 @@ const userSchema = new mongoose.Schema(
 // collection grows.
 userSchema.index({ weeklyResetKey: 1 });
 
+// /raid-check scans only need users with at least one character in the
+// selected raid's broader iLvl scope. Multikey index lets Mongo prune users
+// below the raid floor before the command does any render/pre-refresh work.
+userSchema.index(
+  { "accounts.characters.itemLevel": 1 },
+  { name: "raid_check_item_level_scan" }
+);
+
 // Phase 3 daily auto-manage tick filters to opted-in users, narrows by stale
 // `lastAutoManageSyncAt`, then sorts by `lastAutoManageAttemptAt` for fair
 // rotation. Partial index keeps the structure compact because only opted-in
