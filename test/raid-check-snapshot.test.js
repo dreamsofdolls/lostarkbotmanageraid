@@ -1,3 +1,8 @@
+// Seed RAID_MANAGER_ID before requiring raid-command so manager.js captures
+// a deterministic allowlist at module load. Tests below rely on these IDs
+// to verify manager-specific branching (30s sync cooldown, 👑 roster prefix).
+process.env.RAID_MANAGER_ID = "test-manager-1,test-manager-2";
+
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
@@ -387,6 +392,74 @@ test("buildAccountFreshnessLine omits sync badge when auto-manage is off", () =>
   assert.match(line, /Last updated/);
   assert.doesNotMatch(line, /synced/);
   assert.doesNotMatch(line, /Sync/);
+});
+
+test("parseManagerIds splits, trims, skips empties, and dedupes", () => {
+  const { parseManagerIds } = require("../src/services/manager");
+  const ids = parseManagerIds("123, 456 ,  ,123,789");
+  assert.deepEqual([...ids].sort(), ["123", "456", "789"]);
+  assert.equal(parseManagerIds("").size, 0);
+  assert.equal(parseManagerIds("   ").size, 0);
+  assert.equal(parseManagerIds(undefined).size >= 0, true);
+});
+
+test("isManagerId matches env-allowlisted Discord user IDs", () => {
+  assert.equal(__test.isManagerId("test-manager-1"), true);
+  assert.equal(__test.isManagerId("test-manager-2"), true);
+  assert.equal(__test.isManagerId("unknown-id"), false);
+  assert.equal(__test.isManagerId(null), false);
+  assert.equal(__test.isManagerId(undefined), false);
+  assert.equal(__test.isManagerId(""), false);
+});
+
+test("getAutoManageCooldownMs returns 30s for managers and 15m for everyone else", () => {
+  assert.equal(__test.getAutoManageCooldownMs("test-manager-1"), 30 * 1000);
+  assert.equal(__test.getAutoManageCooldownMs("test-manager-2"), 30 * 1000);
+  assert.equal(__test.getAutoManageCooldownMs("regular-user"), 15 * 60_000);
+  assert.equal(__test.getAutoManageCooldownMs(null), 15 * 60_000);
+});
+
+test("buildAccountFreshnessLine uses the 30s sync cooldown for managers", () => {
+  const now = Date.now();
+  const account = { lastRefreshedAt: now - 60_000 };
+  const userMeta = {
+    discordId: "test-manager-1",
+    autoManageEnabled: true,
+    lastAutoManageSyncAt: now - 10_000, // 10s ago
+    lastAutoManageAttemptAt: now - 10_000, // 20s remaining against 30s cooldown
+  };
+  const line = __test.buildAccountFreshnessLine(account, userMeta);
+  // Manager cooldown is 30s total; with 10s elapsed there should be ~20s
+  // left, rendered as "Ns" not a minute-formatted string. The exact value
+  // floats a bit under millisecond drift, so we only assert the shape.
+  assert.match(line, /Next sync in \d+s/);
+  assert.doesNotMatch(line, /Next sync in \d+m/);
+});
+
+test("buildAccountFreshnessLine keeps the 15m sync cooldown for non-managers", () => {
+  const now = Date.now();
+  const account = { lastRefreshedAt: now - 60_000 };
+  const userMeta = {
+    discordId: "regular-user",
+    autoManageEnabled: true,
+    lastAutoManageSyncAt: now - 3 * 60_000,
+    lastAutoManageAttemptAt: now - 3 * 60_000, // 12m remaining against 15m cooldown
+  };
+  const line = __test.buildAccountFreshnessLine(account, userMeta);
+  assert.match(line, /Next sync in 12m/);
+});
+
+test("buildAccountFreshnessLine flips to Sync ready once the manager 30s window expires", () => {
+  const now = Date.now();
+  const account = { lastRefreshedAt: now - 60_000 };
+  const userMeta = {
+    discordId: "test-manager-1",
+    autoManageEnabled: true,
+    lastAutoManageSyncAt: now - 45_000,
+    lastAutoManageAttemptAt: now - 45_000, // past the 30s manager window
+  };
+  const line = __test.buildAccountFreshnessLine(account, userMeta);
+  assert.match(line, /Sync ready/);
 });
 
 test("ensureFreshWeek preserves gate clears already inside the current reset window", () => {

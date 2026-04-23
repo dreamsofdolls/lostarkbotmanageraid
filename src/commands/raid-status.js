@@ -30,13 +30,27 @@ function createRaidStatusCommand(deps) {
     stampAutoManageAttempt,
     weekResetStartMs,
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
+    getAutoManageCooldownMs,
+    isManagerId,
   } = deps;
+
+  // Manager characters get a 👑 prefix in the roster embed so the shorter
+  // sync cooldown + priority isn't silent. One emoji per manager-owned char
+  // name; non-manager characters render unchanged. The discordId is the
+  // character's *owner* (= the User doc holding this character), not the
+  // viewer - /raid-status only renders the viewer's own roster so they
+  // collapse to the same id, but /raid-check reuses buildAccountFreshnessLine
+  // across rosters where they differ.
+  function decorateCharacterName(character, discordId) {
+    const base = getCharacterName(character);
+    return isManagerId(discordId) ? `👑 ${base}` : base;
+  }
 
   const STATUS_FOOTER_LEGEND =
     `${UI.icons.done} done · ${UI.icons.partial} partial · ${UI.icons.pending} pending`;
 
-  function buildCharacterField(character, getRaidsFor) {
-    const name = getCharacterName(character);
+  function buildCharacterField(character, getRaidsFor, discordId = null) {
+    const name = decorateCharacterName(character, discordId);
     const itemLevel = Number(character.itemLevel) || 0;
     const fieldName = truncateText(`${name} · ${itemLevel}`, 256);
 
@@ -70,9 +84,16 @@ function createRaidStatusCommand(deps) {
       const lastSync = lastSyncAt > 0
         ? `${UI.icons.reset} Last synced ${formatShortRelative(lastSyncAt)} ago`
         : `${UI.icons.reset} Never synced`;
+      // Manager (in RAID_MANAGER_ID allowlist) has a 30s sync cooldown vs 15m
+      // for regular users - the countdown must reflect the per-user value or
+      // it would mislead managers into waiting minutes after a click when
+      // they're actually sync-ready within seconds.
+      const cooldownMs = typeof getAutoManageCooldownMs === "function" && userMeta?.discordId
+        ? getAutoManageCooldownMs(userMeta.discordId)
+        : AUTO_MANAGE_SYNC_COOLDOWN_MS;
       const remain = formatNextCooldownRemaining(
         Number(userMeta?.lastAutoManageAttemptAt) || 0,
-        AUTO_MANAGE_SYNC_COOLDOWN_MS
+        cooldownMs
       );
       parts.push(
         remain
@@ -135,12 +156,13 @@ function createRaidStatusCommand(deps) {
     }
 
     const inlineSpacer = { name: "\u200B", value: "\u200B", inline: true };
+    const ownerDiscordId = userMeta?.discordId || null;
     for (let i = 0; i < characters.length; i += 2) {
-      embed.addFields(buildCharacterField(characters[i], getRaidsFor));
+      embed.addFields(buildCharacterField(characters[i], getRaidsFor, ownerDiscordId));
       embed.addFields(inlineSpacer);
       embed.addFields(
         characters[i + 1]
-          ? buildCharacterField(characters[i + 1], getRaidsFor)
+          ? buildCharacterField(characters[i + 1], getRaidsFor, ownerDiscordId)
           : inlineSpacer
       );
     }
@@ -295,6 +317,7 @@ function createRaidStatusCommand(deps) {
     const globalTotals = { characters: totalCharacters, progress: globalProgress };
 
     const statusUserMeta = {
+      discordId: userDoc.discordId,
       autoManageEnabled: !!userDoc.autoManageEnabled,
       lastAutoManageSyncAt: Number(userDoc.lastAutoManageSyncAt) || 0,
       lastAutoManageAttemptAt: Number(userDoc.lastAutoManageAttemptAt) || 0,
