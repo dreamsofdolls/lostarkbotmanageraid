@@ -3045,7 +3045,7 @@ const HELP_SECTIONS = [
       "• **Dynamic action dropdown**: dropdown autocomplete hide option dư thừa theo state - đang ON thì không show `on`, đang OFF thì không show `off`. Typed-paste `on`/`off` khi redundant → ephemeral reject. Action lạ (paste arbitrary string không thuộc `on/off/sync/status`) → ephemeral reject ngay đầu handler, không fall-through Discord-timeout.",
       "• **Phase 2 - auto-sync piggyback vào `/raid-status`**: khi `autoManageEnabled = true` + cooldown 5 phút cho phép, mỗi lần user gõ `/raid-status` Artist sẽ pull bible logs **song song** với roster refresh (Promise.all, share `bibleLimiter`) trước khi render embed. Reuse cùng `acquireAutoManageSyncSlot` nên spam `/raid-status` không spam bible. Race-safe: re-check `autoManageEnabled` trên fresh doc trong `saveWithRetry`, nếu user bấm `action:off` giữa gather và save → skip apply nhưng vẫn stamp `lastAutoManageAttemptAt` (bible quota đã tốn). Save fail (mongo blip) → catch stamp attempt qua `stampAutoManageAttempt` để cooldown vẫn kick in. Cooldown chưa hết / in-flight → render cached, silent skip. Gather throw (Cloudflare/timeout) → swallow + log + render cached, không vỡ `/raid-status`.",
       "• **Phase 3 - 24h passive auto-sync background scheduler**: opted-in user nào chưa sync trong 24h sẽ được background tick (mỗi 30 phút) tự pull bible logs, batch tối đa **3 user/tick** sort theo `lastAutoManageAttemptAt` ascending (chứ KHÔNG phải `lastAutoManageSyncAt`) - đảm bảo stuck user (perma-fail Cloudflare/private log) không monopolize batch forever, mọi user đều có rotation fair. Reuse cùng `acquireAutoManageSyncSlot` nên không double-fire với Phase 2 piggyback / manual `action:sync`. Filter ở DB level (`lastAutoManageSyncAt < now - 24h`) → user active đã sync gần đây tự bypass tick. **Tick overlap guard**: nếu tick trước chưa xong khi 30 phút mới đến (bible outage worst case), tick mới skip để không double traffic. **Summary log honesty**: tick log split 4 bucket (`synced` / `attempted-only` / `skipped` / `failed`) - chỉ count `synced` khi có ≥1 char success, tránh false-positive metric. **Killswitch**: env `AUTO_MANAGE_DAILY_DISABLED=true` skip mọi tick - flip nhanh nếu bible block, không cần redeploy. Bible HTTP load: batch 3 × 5 chars × ~6 HTTP avg = ~90 HTTP/tick max, spread qua 48 ticks/day cover được ~144 user-syncs/day capacity.",
-      "• **Stuck private-log channel nudge (Apr 2026)**: khi tick detect user có `report.perChar` toàn `isPublicLogDisabledError` (tất cả char trả `Logs not enabled`), Artist post 1 channel announcement tag user trong monitor channel của guild đầu tiên user là member, TTL 30 phút, dedup 7 ngày qua `User.lastPrivateLogNudgeAt`. Giọng Dusk (signed Artist, no stage-direction) hướng user vào `lostark.bible/me/logs` bật **Show on Profile**. Chỉ post khi bot cache có member record (cache-first, skip nếu cold members cache - không force fetch). Channel thay vì DM: Traine chọn tone nhẹ nhàng công khai, tránh DM áp lực. Reuse `postChannelAnnouncement` helper shared với hourly-cleanup notice + weekly-reset + /raid-channel set greeting.",
+      "• **Stuck private-log channel nudge (Apr 2026)**: khi tick detect user có `report.perChar` toàn `isPublicLogDisabledError` (tất cả char trả `Logs not enabled`), Artist post 1 channel announcement tag user trong guild đầu tiên user là member, đích resolve qua `announcements.stuckPrivateLogNudge.channelId || raidChannelId`, TTL 30 phút, dedup 7 ngày qua `User.lastPrivateLogNudgeAt`. Giọng Dusk (signed Artist, no stage-direction) hướng user vào `lostark.bible/me/logs` bật **Show on Profile**. Chỉ post khi bot cache có member record (cache-first, skip nếu cold members cache - không force fetch). Channel thay vì DM: Traine chọn tone nhẹ nhàng công khai, tránh DM áp lực. Reuse `postChannelAnnouncement` helper shared với hourly-cleanup notice + weekly-reset + /raid-channel set greeting.",
     ],
   },
   {
@@ -3483,6 +3483,17 @@ async function handleRaidAnnounceCommand(interaction) {
   const type = interaction.options.getString("type", true);
   const action = interaction.options.getString("action", true);
   const channel = interaction.options.getChannel("channel", false);
+  const validActions = ["show", "on", "off", "set-channel", "clear-channel"];
+  // Autocomplete hides invalid values, but slash inputs are still free-text
+  // underneath. Reject typos explicitly so the interaction never falls
+  // through to Discord's "application did not respond" timeout.
+  if (!validActions.includes(action)) {
+    await interaction.reply({
+      content: `${UI.icons.warn} Action không hợp lệ: \`${action}\`. Chọn một trong \`show\` · \`on\` · \`off\` · \`set-channel\` · \`clear-channel\`.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
   const entry = announcementTypeEntry(type);
   if (!entry) {
     // Discord's static choices should prevent this, but guard against
@@ -3506,7 +3517,9 @@ async function handleRaidAnnounceCommand(interaction) {
     const resolvedChannelId = current.channelId || existing?.raidChannelId || null;
     const resolvedChannel = resolvedChannelId
       ? `<#${resolvedChannelId}>`
-      : "*(no monitor channel set - run /raid-channel action:set first)*";
+      : overridable
+        ? "*(no destination set - either set an override here or configure the monitor channel via /raid-channel config action:set)*"
+        : "*(no monitor channel set - run /raid-channel config action:set first)*";
     const overrideState = current.channelId
       ? `Override: <#${current.channelId}>`
       : overridable
@@ -3574,6 +3587,15 @@ async function handleRaidAnnounceCommand(interaction) {
       });
       return;
     }
+    const botMember = interaction.guild?.members?.me;
+    const missing = getMissingAnnouncementChannelPermissions(channel, botMember);
+    if (missing.length > 0) {
+      await interaction.reply({
+        content: `${UI.icons.warn} Bot thiếu permission trong <#${channel.id}>: **${missing.join(", ")}**. Grant cho bot rồi chạy lại \`/raid-announce\` nhé.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
     await GuildConfig.findOneAndUpdate(
       { guildId },
       { $set: { [`announcements.${subdocKey}.channelId`]: channel.id } },
@@ -3611,6 +3633,11 @@ async function handleRaidAnnounceCommand(interaction) {
     });
     return;
   }
+
+  await interaction.reply({
+    content: `${UI.icons.warn} Action không hợp lệ: \`${action}\`.`,
+    flags: MessageFlags.Ephemeral,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -3684,11 +3711,24 @@ const BOT_CHANNEL_PERMS = [
   { flag: PermissionFlagsBits.EmbedLinks, label: "Embed Links" },
 ];
 
-function getMissingBotChannelPermissions(channel, botMember) {
-  if (!channel || !botMember) return BOT_CHANNEL_PERMS.map((p) => p.label);
+const ANNOUNCEMENT_CHANNEL_PERMS = [
+  { flag: PermissionFlagsBits.ViewChannel, label: "View Channel" },
+  { flag: PermissionFlagsBits.SendMessages, label: "Send Messages" },
+];
+
+function getMissingChannelPermissions(channel, botMember, requiredPerms) {
+  if (!channel || !botMember) return requiredPerms.map((p) => p.label);
   const perms = channel.permissionsFor(botMember);
-  if (!perms) return BOT_CHANNEL_PERMS.map((p) => p.label);
-  return BOT_CHANNEL_PERMS.filter((p) => !perms.has(p.flag)).map((p) => p.label);
+  if (!perms) return requiredPerms.map((p) => p.label);
+  return requiredPerms.filter((p) => !perms.has(p.flag)).map((p) => p.label);
+}
+
+function getMissingBotChannelPermissions(channel, botMember) {
+  return getMissingChannelPermissions(channel, botMember, BOT_CHANNEL_PERMS);
+}
+
+function getMissingAnnouncementChannelPermissions(channel, botMember) {
+  return getMissingChannelPermissions(channel, botMember, ANNOUNCEMENT_CHANNEL_PERMS);
 }
 
 const RAID_ALIASES = new Map([
