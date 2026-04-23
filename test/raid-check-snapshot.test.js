@@ -31,6 +31,7 @@ test("buildRaidCheckSnapshotFromUsers keeps roster freshness metadata and counts
           {
             accountName: "Main",
             lastRefreshedAt: 5678,
+            lastRefreshAttemptAt: 6789,
             characters: [
               // Both chars sit in Kazeros Normal's eligibility range
               // [1710, 1730). ClearedHard completed Hard -> satisfies the
@@ -54,6 +55,7 @@ test("buildRaidCheckSnapshotFromUsers keeps roster freshness metadata and counts
   assert.equal(snapshot.userMeta.get("user-1")?.autoManageEnabled, true);
   assert.equal(snapshot.userMeta.get("user-1")?.lastAutoManageSyncAt, 1234);
   assert.equal(snapshot.rosterRefreshMap.get("user-1\x1fMain"), 5678);
+  assert.equal(snapshot.rosterRefreshAttemptMap.get("user-1\x1fMain"), 6789);
   assert.equal(snapshot.completeChars[0]?.charName, "ClearedHard");
   assert.equal(snapshot.pendingChars[0]?.charName, "StillPending");
 });
@@ -306,6 +308,18 @@ test("buildAccountFreshnessLine shows ready marker when cooldown expired", () =>
   const line = __test.buildAccountFreshnessLine(account, userMeta);
   assert.match(line, /Refresh ready/);
   assert.match(line, /Sync ready/);
+});
+
+test("buildAccountFreshnessLine honors short refresh failure cooldown", () => {
+  const now = Date.now();
+  const account = {
+    lastRefreshedAt: now - 3 * 60 * 60_000, // success cooldown expired
+    lastRefreshAttemptAt: now - 2 * 60_000, // but a failed attempt is still cooling down
+  };
+  const line = __test.buildAccountFreshnessLine(account, { autoManageEnabled: false });
+  assert.match(line, /Last updated 3h ago/);
+  assert.match(line, /Next refresh in 3m/);
+  assert.doesNotMatch(line, /Refresh ready/);
 });
 
 test("buildAccountFreshnessLine omits sync badge when auto-manage is off", () => {
