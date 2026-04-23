@@ -201,7 +201,9 @@ Admin-only (Manage Guild) command config từng loại announcement per-guild. 5
 
 **Fallback**: mỗi firing site resolve channel qua `announcements.<type>.channelId || raidChannelId`. Null cả 2 → guild chưa setup monitor → announcement silent skip.
 
-**Schema path**: `GuildConfig.announcements.<subdocKey>.{enabled,channelId}`. Subdoc key map: `weekly-reset`→`weeklyReset`, `stuck-nudge`→`stuckPrivateLogNudge`, `set-greeting`→`setGreeting`, `hourly-cleanup`→`hourlyCleanupNotice`, `whisper-ack`→`whisperAck`. Defaults `enabled=true` + `channelId=null`; legacy guilds không có subdoc → `getAnnouncementsConfig` normalize về defaults, backward-compatible.
+**Schema path**: `GuildConfig.announcements.<subdocKey>.{enabled,channelId}`. Subdoc key map: `weekly-reset`→`weeklyReset`, `stuck-nudge`→`stuckPrivateLogNudge`, `set-greeting`→`setGreeting`, `hourly-cleanup`→`hourlyCleanupNotice`, `whisper-ack`→`whisperAck`. Keys + labels + channelOverridable flag sống trong central `ANNOUNCEMENT_REGISTRY` (raid-command.js) - single source of truth, command choices + handler + helper đều derive từ registry. **Adding a new announcement type**: 1 registry entry + 1 schema subdoc + firing site code (không cần edit command builder hay helper). Defaults `enabled=true` + `channelId=null`; legacy guilds không có subdoc → `getAnnouncementsConfig` normalize về defaults, backward-compatible.
+
+**Tại sao nested subdoc thay vì collection riêng**: cardinality thấp (5 types × 1-ish guild), không có cross-guild analytics / dynamic user-defined types / cron-style scheduling use case. Nested subdoc = 1 lookup per fire, không N+1. Nếu sau này cross ~10 types hoặc cần rich metadata (TTL override, cron, conditions), refactor Registry → Collection dễ hơn refactor scattered constants → Collection.
 
 **Example flows**:
 ```
