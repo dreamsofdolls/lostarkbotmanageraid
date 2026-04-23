@@ -138,7 +138,7 @@ test("buildRaidCheckSnapshotFromUsers marks under-iLvl chars as not-eligible whe
   assert.equal(snapshot.notEligibleChars[0]?.notEligibleReason, "low");
 });
 
-test("buildRaidCheckSnapshotFromUsers hides unrelated done-only rosters from the combined render set", () => {
+test("buildRaidCheckSnapshotFromUsers keeps done-only rosters visible in the combined render set", () => {
   const snapshot = __test.buildRaidCheckSnapshotFromUsers(
     [
       {
@@ -177,8 +177,8 @@ test("buildRaidCheckSnapshotFromUsers hides unrelated done-only rosters from the
   );
 
   const rosterKeys = [...new Set(snapshot.allChars.map((c) => `${c.discordId}|${c.accountName}`))];
-  assert.deepEqual(rosterKeys, ["pending-user|PendingRoster"]);
-  assert.equal(snapshot.allChars.length, 2);
+  assert.deepEqual(rosterKeys, ["done-user|DoneOnly", "pending-user|PendingRoster"]);
+  assert.equal(snapshot.allChars.length, 3);
 });
 
 test("raid-check pagination timeout is 5 minutes while raid-status stays at 2 minutes", () => {
