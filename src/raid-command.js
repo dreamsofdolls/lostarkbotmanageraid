@@ -1263,29 +1263,6 @@ function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
           itemLevel: characterItemLevel,
         };
 
-        // In scope for the raid but outside this mode's range → render
-        // with the "Not eligible yet" marker and reason. Reasons:
-        //   - "low":  char below selfMin (e.g. 1720 char scanning Hard 1730)
-        //   - "high": char at/above nextMin (e.g. 1730 char scanning Normal 1710)
-        if (characterItemLevel < selfMin) {
-          notEligibleChars.push({
-            ...baseEntry,
-            gateStatus: [],
-            overallStatus: "not-eligible",
-            notEligibleReason: "low",
-          });
-          continue;
-        }
-        if (nextMin != null && characterItemLevel >= nextMin) {
-          notEligibleChars.push({
-            ...baseEntry,
-            gateStatus: [],
-            overallStatus: "not-eligible",
-            notEligibleReason: "high",
-          });
-          continue;
-        }
-
         const assignedRaids = ensureAssignedRaids(character);
         const assigned = assignedRaids[raidMeta.raidKey] || {};
         const storedGateKeys = getGateKeys(assigned);
@@ -1308,6 +1285,30 @@ function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
         else if (doneCount > 0) overallStatus = "partial";
         else overallStatus = "none";
 
+        // Only chars with NO progress satisfying this scan become
+        // "not eligible". A higher-mode clear should still count as
+        // complete/partial for lower-mode scans via mode hierarchy.
+        if (overallStatus === "none") {
+          if (characterItemLevel < selfMin) {
+            notEligibleChars.push({
+              ...baseEntry,
+              gateStatus: [],
+              overallStatus: "not-eligible",
+              notEligibleReason: "low",
+            });
+            continue;
+          }
+          if (nextMin != null && characterItemLevel >= nextMin) {
+            notEligibleChars.push({
+              ...baseEntry,
+              gateStatus: [],
+              overallStatus: "not-eligible",
+              notEligibleReason: "high",
+            });
+            continue;
+          }
+        }
+
         allEligible.push({
           ...baseEntry,
           gateStatus,
@@ -1321,11 +1322,19 @@ function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
   const partialChars = allEligible.filter((c) => c.overallStatus === "partial");
   const noneChars = allEligible.filter((c) => c.overallStatus === "none");
   const pendingChars = [...partialChars, ...noneChars];
-  // Combined render set: eligible chars + notEligible chars. Consumers
-  // iterate this to build rosterBuckets so the whole roster becomes
-  // visible instead of only the pending subset (previous behaviour hid
-  // done chars from rendering).
-  const allChars = [...allEligible, ...notEligibleChars];
+  // Combined render set: show every char inside RELEVANT rosters (those with
+  // at least one pending or not-eligible char), but keep unrelated done-only
+  // rosters out of /raid-check.
+  const relevantRosterKeys = new Set(
+    [...pendingChars, ...notEligibleChars].map(
+      (c) => c.discordId + ROSTER_KEY_SEP + c.accountName
+    )
+  );
+  const allChars = relevantRosterKeys.size === 0
+    ? []
+    : [...allEligible, ...notEligibleChars].filter((c) =>
+        relevantRosterKeys.has(c.discordId + ROSTER_KEY_SEP + c.accountName)
+      );
 
   return {
     allEligible,
@@ -1417,9 +1426,9 @@ async function handleRaidCheckCommand(interaction) {
     return;
   }
 
-  // Resolve display names for every user shown - now includes rosters
-  // that only have done/not-eligible chars (previously excluded because
-  // they weren't in pendingChars). Cache-first via resolveDiscordDisplay.
+  // Resolve display names for every user shown. Relevant rosters can now
+  // include done companions + not-eligible chars, not just the pending
+  // subset. Cache-first via resolveDiscordDisplay.
   const visibleDiscordIds = [...new Set(allChars.map((c) => c.discordId))];
   const displayMap = new Map();
   await Promise.all(
@@ -1429,13 +1438,12 @@ async function handleRaidCheckCommand(interaction) {
     })
   );
 
-  // Group ALL chars (done + partial + none + not-eligible) by user+roster
-  // composite so a user with 2 rosters (main + alt) gets 2 separate
-  // sections. Previously grouped only pending chars which hid done +
-  // not-eligible chars from rendering - Traine noticed Qiylyn showed only
-  // 1 char while the roster had 4 chars in scope. Uses module-level
-  // `ROSTER_KEY_SEP` (\x1f Unit Separator) shared with rosterRefreshMap
-  // from the snapshot - same key shape across all per-roster maps.
+  // Group every VISIBLE char (done + partial + none + not-eligible) by
+  // user+roster composite so a user with 2 rosters (main + alt) gets
+  // 2 separate sections. Relevant rosters show the full roster picture;
+  // unrelated done-only rosters stay filtered out earlier. Uses module-
+  // level `ROSTER_KEY_SEP` (\x1f Unit Separator) shared with
+  // rosterRefreshMap - same key shape across all per-roster maps.
   const rosterBuckets = new Map();
   for (const item of allChars) {
     const key = item.discordId + ROSTER_KEY_SEP + item.accountName;
