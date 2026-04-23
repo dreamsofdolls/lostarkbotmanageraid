@@ -738,29 +738,42 @@ const raidAutoManageCommand = new SlashCommandBuilder()
 //     whisper ack = reply to a user's message here).
 const ANNOUNCEMENT_REGISTRY = {
   "weekly-reset": {
-    label: "Weekly reset · Tuần mới đến",
+    label: "Weekly reset",
     subdocKey: "weeklyReset",
     channelOverridable: true,
+    // Preview shown in /raid-announce show. Firing sites still inline
+    // content because some interpolate (<@user>, N count); preview gives
+    // admins a read-only sample of the message template.
+    previewContent:
+      "Tuần mới đến rồi nhỉ~ Artist vừa reset progress raid tuần này cho các cậu, giờ chỉ việc làm lại từ đầu thôi. Chúc các cậu tuần raid vui vẻ nha, biển báo này Artist cuỗm đi sau 30 phút.",
   },
   "stuck-nudge": {
-    label: "Stuck private-log nudge",
+    label: "Stuck private log nudge",
     subdocKey: "stuckPrivateLogNudge",
     channelOverridable: true,
+    previewContent:
+      "<@user> nhắc khẽ nhé~ Roster cậu đã bật auto-manage nhưng hiện tại tất cả char đều là private log, Artist không sync được data đâu. Vào https://lostark.bible/me/logs bật **Show on Profile** cho char cần sync giúp tớ nha. Biển báo này Artist cuỗm đi sau 30 phút.",
   },
   "set-greeting": {
-    label: "Set greeting (action:set)",
+    label: "Set greeting",
     subdocKey: "setGreeting",
     channelOverridable: false,
+    previewContent:
+      "Ồ, chỗ mới này Artist được mời đến trông coi nhỉ~ Xin chào các cậu, từ giờ cứ post clear raid theo format ở welcome pin phía trên là Artist tự cập nhật progress cho nha. Biển báo này Artist cuỗm đi sau 2 phút, welcome thì giữ nguyên.",
   },
   "hourly-cleanup": {
     label: "Hourly cleanup notice",
     subdocKey: "hourlyCleanupNotice",
     channelOverridable: false,
+    previewContent:
+      "Khi có rác: `Hừm... đến giờ Artist phải đi dọn rác rồi nhé. Xong, vừa dọn **N** tin rồi đấy~ ...`\nKhi channel sạch sẵn: `Ồ, giờ này Artist ghé qua xem chỗ này thế nào... ai dè sạch sẽ sẵn rồi nhé~ ...`",
   },
   "whisper-ack": {
-    label: "Whisper ack (post clear)",
+    label: "Whisper ack",
     subdocKey: "whisperAck",
     channelOverridable: false,
+    previewContent:
+      "<@user> ...Artist nhận được rồi nha~ Chờ Artist 5 giây gửi kết quả qua DM cho cậu nhé...",
   },
 };
 
@@ -785,13 +798,14 @@ const raidAnnounceCommand = new SlashCommandBuilder()
   .addStringOption((opt) =>
     opt
       .setName("type")
-      .setDescription("Loại thông báo")
+      .setDescription("Announcement type")
       .setRequired(true)
       .addChoices(
-        // Derived from ANNOUNCEMENT_REGISTRY so adding a new type = new
-        // registry entry + subdoc, no command-builder edit needed.
+        // Display the clean English label only - key is the `value` under
+        // the hood so user-facing text isn't a dash soup (key-slug + dash
+        // separator + label). Derived from ANNOUNCEMENT_REGISTRY.
         ...announcementTypeKeys().map((key) => ({
-          name: `${key} - ${ANNOUNCEMENT_REGISTRY[key].label}`,
+          name: ANNOUNCEMENT_REGISTRY[key].label,
           value: key,
         }))
       )
@@ -799,20 +813,18 @@ const raidAnnounceCommand = new SlashCommandBuilder()
   .addStringOption((opt) =>
     opt
       .setName("action")
-      .setDescription("show / on / off / set-channel / clear-channel")
+      .setDescription("What to do with the selected announcement")
       .setRequired(true)
-      .addChoices(
-        { name: "show - xem config hiện tại", value: "show" },
-        { name: "on - bật announcement", value: "on" },
-        { name: "off - tắt announcement", value: "off" },
-        { name: "set-channel - override destination (chỉ áp dụng weekly-reset + stuck-nudge)", value: "set-channel" },
-        { name: "clear-channel - revert về monitor channel mặc định", value: "clear-channel" }
-      )
+      // Autocomplete (not static choices) so labels can annotate the
+      // CURRENT per-guild state (e.g. "Turn on (currently OFF)") and hide
+      // redundant actions (on while on, off while off, clear-channel when
+      // no override set, set-channel for channel-bound types).
+      .setAutocomplete(true)
   )
   .addChannelOption((opt) =>
     opt
       .setName("channel")
-      .setDescription("Channel đích (chỉ cần khi action:set-channel)")
+      .setDescription("Destination channel (required when action = Set channel override)")
       .setRequired(false)
       .addChannelTypes(ChannelType.GuildText)
   );
@@ -3031,6 +3043,7 @@ const HELP_SECTIONS = [
     ],
     example: "/raid-announce type:weekly-reset action:set-channel channel:#raid-announcements",
     notes: [
+      "• **Override resolution note**: 2 type overridable (`weekly-reset`, `stuck-nudge`) resolve đích qua `announcements.<type>.channelId || raidChannelId`, nên `/raid-announce ... action:set-channel` vẫn chạy kể cả khi monitor channel chưa set.",
       "EN: Manage Artist's 5 channel-announcement surfaces per guild. Two axes: enabled toggle + channel override (overrideable types only).",
       "VN: Quản lý 5 loại announcement Artist đang post vào channel, per-guild. 2 trục config: enabled + channel override.",
       "• **5 announcement types**: `weekly-reset` (Wed 17 VN tuần mới), `stuck-nudge` (phase 3 tick tag user toàn char private log), `set-greeting` (greeting ephemeral sau /raid-channel action:set), `hourly-cleanup` (notice sau cleanup mỗi giờ VN), `whisper-ack` (tag user trong channel khi /raid-channel post clear DM success).",
@@ -3473,19 +3486,25 @@ async function handleRaidAnnounceCommand(interaction) {
 
   if (action === "show") {
     const resolvedChannelId = current.channelId || existing?.raidChannelId || null;
-    const resolvedChannel = resolvedChannelId ? `<#${resolvedChannelId}>` : "*(chưa có - cần /raid-channel config action:set trước)*";
+    const resolvedChannel = resolvedChannelId
+      ? `<#${resolvedChannelId}>`
+      : "*(no monitor channel set - run /raid-channel action:set first)*";
     const overrideState = current.channelId
-      ? `override: <#${current.channelId}>`
+      ? `Override: <#${current.channelId}>`
       : overridable
-        ? "override: *(chưa set - fallback về monitor channel)*"
-        : "*(type này channel-bound, không override được)*";
+        ? "No override set (falls back to monitor channel)"
+        : "Channel-bound (override not applicable)";
+    const previewText = entry.previewContent
+      ? truncateText(entry.previewContent, 1024)
+      : "*(no preview defined for this type)*";
     const embed = new EmbedBuilder()
       .setColor(UI.colors.neutral)
       .setTitle(`${UI.icons.info} Announcement · ${typeLabel}`)
       .addFields(
-        { name: "Enabled", value: current.enabled ? `${UI.icons.done} on` : `${UI.icons.reset} off`, inline: true },
+        { name: "Enabled", value: current.enabled ? `${UI.icons.done} ON` : `${UI.icons.reset} OFF`, inline: true },
         { name: "Destination", value: resolvedChannel, inline: true },
         { name: "Channel config", value: overrideState, inline: false },
+        { name: "Message preview", value: previewText, inline: false },
       )
       .setTimestamp();
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
@@ -5754,6 +5773,90 @@ async function handleRaidAutoManageAutocomplete(interaction) {
   }
 }
 
+/**
+ * Autocomplete for /raid-announce action option. Labels annotate the
+ * current per-guild state so admin knows what flipping the action will
+ * actually do (e.g. "Turn on · currently OFF"), and redundant actions
+ * are hidden entirely (on while on, off while off, set-channel on
+ * channel-bound types, clear-channel when no override set).
+ *
+ * When `type` hasn't been picked yet (user focuses action first), fall
+ * back to generic labels without state - Discord's choice order in the
+ * command schema still ensures type is pre-required, but the autocomplete
+ * runs with whatever partial values the user has entered so far.
+ */
+async function handleRaidAnnounceAutocomplete(interaction) {
+  try {
+    const focused = interaction.options.getFocused(true);
+    if (focused?.name !== "action") {
+      await interaction.respond([]).catch(() => {});
+      return;
+    }
+
+    const typeValue = interaction.options.getString("type");
+    const entry = typeValue ? announcementTypeEntry(typeValue) : null;
+
+    // Load per-guild state only when type is known. Cheap single-doc
+    // projection - autocomplete fires per-keystroke so keep it lean.
+    let current = null;
+    if (entry && interaction.guildId) {
+      try {
+        const cfg = await GuildConfig.findOne({ guildId: interaction.guildId })
+          .select(`announcements.${entry.subdocKey} raidChannelId`)
+          .lean();
+        current = getAnnouncementsConfig(cfg)[entry.subdocKey];
+      } catch (err) {
+        console.warn("[autocomplete] raid-announce state load failed:", err?.message || err);
+      }
+    }
+
+    const overridable = entry?.channelOverridable === true;
+    const options = [];
+
+    // Always available - pure read.
+    options.push({ name: "Show current config", value: "show" });
+
+    if (current) {
+      // Enabled-toggle pair: expose only the action that would actually
+      // change state. Annotate with current state so admin sees impact.
+      if (current.enabled) {
+        options.push({ name: "Turn off · currently ON", value: "off" });
+      } else {
+        options.push({ name: "Turn on · currently OFF", value: "on" });
+      }
+    } else {
+      // No type picked or config load failed - expose both so user still
+      // has a path forward. Generic labels, no state annotation.
+      options.push({ name: "Turn on", value: "on" });
+      options.push({ name: "Turn off", value: "off" });
+    }
+
+    if (overridable) {
+      options.push({ name: "Set channel override", value: "set-channel" });
+      if (current && current.channelId) {
+        options.push({ name: "Clear channel override", value: "clear-channel" });
+      }
+    }
+    // For channel-bound types we simply OMIT set-channel + clear-channel
+    // so the dropdown can't even suggest them. The handler still has a
+    // reject path as a belt-and-suspenders guard if someone types the
+    // action string directly via API.
+
+    const needle = normalizeName(focused.value || "");
+    const filtered = (!needle
+      ? options
+      : options.filter(
+          (c) => normalizeName(c.name).includes(needle) || normalizeName(c.value).includes(needle)
+        )
+    ).slice(0, 25);
+
+    await interaction.respond(filtered).catch(() => {});
+  } catch (err) {
+    console.error("[autocomplete] raid-announce error:", err?.message || err);
+    await interaction.respond([]).catch(() => {});
+  }
+}
+
 async function handleRaidChannelCommand(interaction) {
   const guildId = interaction.guildId;
   if (!guildId) {
@@ -6240,13 +6343,15 @@ const AUTO_MANAGE_DAILY_BATCH_SIZE = 3;
 /**
  * For each user whose sync tick produced an all-"Logs not enabled"
  * outcome, post a channel-level nudge tagging the user in the first
- * reachable monitor channel they're a member of. Uses `User.lastPrivateLogNudgeAt`
+ * reachable guild surface they're a member of (`stuck-nudge` override
+ * channel or fallback monitor channel). Uses `User.lastPrivateLogNudgeAt`
  * for 7-day dedup so a stuck user isn't tagged each 30-min tick.
  *
- * Channel resolution policy: iterate guilds with monitor channel, find
- * the first one where the user is a member (cache-first, skip if cold).
- * If no guild in bot's cache has the user, skip the nudge entirely -
- * we don't have a public surface to nudge on.
+ * Channel resolution policy: iterate guilds that have either a monitor
+ * channel or an explicit stuck-nudge override, find the first one where
+ * the user is a member (cache-first, skip if cold). If no guild in bot's
+ * cache has the user, skip the nudge entirely - we don't have a public
+ * surface to nudge on.
  */
 async function nudgeStuckPrivateLogUser(client, discordId) {
   if (!client) return;
@@ -6265,7 +6370,12 @@ async function nudgeStuckPrivateLogUser(client, discordId) {
 
   let configs;
   try {
-    configs = await GuildConfig.find({ raidChannelId: { $ne: null } }).lean();
+    configs = await GuildConfig.find({
+      $or: [
+        { raidChannelId: { $ne: null } },
+        { "announcements.stuckPrivateLogNudge.channelId": { $ne: null } },
+      ],
+    }).lean();
   } catch (err) {
     console.warn(`[auto-manage daily] nudge config load failed user=${discordId}:`, err?.message || err);
     return;
@@ -6506,6 +6616,7 @@ module.exports = {
   handleRemoveRosterAutocomplete,
   handleRaidChannelAutocomplete,
   handleRaidAutoManageAutocomplete,
+  handleRaidAnnounceAutocomplete,
   handleRaidChannelMessage,
   handleRaidCheckButton,
   loadMonitorChannelCache,
