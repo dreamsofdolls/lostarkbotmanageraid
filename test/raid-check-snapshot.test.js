@@ -334,6 +334,18 @@ test("Artist quiet hours: isInArtistQuietHours covers [3, 8) and nothing else", 
   assert.equal(__test.isInArtistQuietHours(afternoon), false);
 });
 
+test("Artist quiet hours: wake-up boundary only opens at 08:00 VN, not midnight-to-02:59", () => {
+  const beforeMidnightWake = new Date(Date.UTC(2026, 3, 23, 17, 30, 0, 0)); // 00:30 VN
+  const beforeQuietStarts = new Date(Date.UTC(2026, 3, 23, 19, 30, 0, 0)); // 02:30 VN
+  const wakeupBoundary = new Date(Date.UTC(2026, 3, 24, 1, 0, 0, 0)); // 08:00 VN
+  const afterWakeup = new Date(Date.UTC(2026, 3, 24, 2, 30, 0, 0)); // 09:30 VN
+
+  assert.equal(__test.hasReachedArtistWakeupBoundary(beforeMidnightWake), false);
+  assert.equal(__test.hasReachedArtistWakeupBoundary(beforeQuietStarts), false);
+  assert.equal(__test.hasReachedArtistWakeupBoundary(wakeupBoundary), true);
+  assert.equal(__test.hasReachedArtistWakeupBoundary(afterWakeup), true);
+});
+
 test("Artist quiet hours: bedtime pool returns one of 3 variants, none mentioning sweep count", () => {
   const seen = new Set();
   for (let i = 0; i < 50; i += 1) {
