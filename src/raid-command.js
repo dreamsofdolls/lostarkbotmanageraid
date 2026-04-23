@@ -88,6 +88,7 @@ const RAID_CHECK_USER_QUERY_FIELDS = [
   "weeklyResetKey",
   "autoManageEnabled",
   "lastAutoManageSyncAt",
+  "lastAutoManageAttemptAt",
   "accounts.accountName",
   "accounts.lastRefreshedAt",
   "accounts.lastRefreshAttemptAt",
@@ -174,6 +175,12 @@ function normalizeName(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function foldName(value) {
+  return normalizeName(value)
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
 function createCharacterId() {
   try {
     return randomUUID();
@@ -218,6 +225,64 @@ function getCharacterName(character) {
 
 function getCharacterClass(character) {
   return character?.class || character?.className || "Unknown";
+}
+
+function buildFetchedRosterIndexes(fetchedChars) {
+  const byName = new Map();
+  const byFoldedName = new Map();
+
+  for (const fetched of fetchedChars || []) {
+    const charName = fetched?.charName;
+    const normalized = normalizeName(charName);
+    if (!normalized) continue;
+
+    byName.set(normalized, fetched);
+
+    const folded = foldName(charName);
+    if (!folded) continue;
+    if (!byFoldedName.has(folded)) byFoldedName.set(folded, []);
+    byFoldedName.get(folded).push(fetched);
+  }
+
+  return { byName, byFoldedName };
+}
+
+function pickUniqueFetchedRosterCandidate(candidates, character) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0];
+
+  const storedClass = normalizeName(getCharacterClass(character));
+  const classMatches = storedClass
+    ? candidates.filter((c) => normalizeName(c?.className) === storedClass)
+    : [];
+  if (classMatches.length === 1) return classMatches[0];
+
+  const narrowed = classMatches.length > 0 ? classMatches : candidates;
+  const storedItemLevel = Number(character?.itemLevel) || 0;
+  if (storedItemLevel > 0) {
+    const closeMatches = narrowed.filter((c) => {
+      const fetchedItemLevel = Number(c?.itemLevel) || 0;
+      return fetchedItemLevel > 0 && Math.abs(fetchedItemLevel - storedItemLevel) < 2;
+    });
+    if (closeMatches.length === 1) return closeMatches[0];
+  }
+
+  return null;
+}
+
+function findFetchedRosterMatchForCharacter(character, indexes) {
+  const currentName = getCharacterName(character);
+  const exact = indexes?.byName?.get(normalizeName(currentName));
+  if (exact) return { match: exact, matchType: "exact" };
+
+  const folded = foldName(currentName);
+  if (!folded) return null;
+
+  const foldedCandidates = indexes?.byFoldedName?.get(folded) || [];
+  const foldedMatch = pickUniqueFetchedRosterCandidate(foldedCandidates, character);
+  if (!foldedMatch) return null;
+
+  return { match: foldedMatch, matchType: "folded" };
 }
 
 function getRequirementFor(raidKey, modeKey) {
@@ -1068,6 +1133,26 @@ function formatShortRelative(timestamp) {
   return `${days}d`;
 }
 
+// "time remaining" compact formatter for a cooldown window ending at
+// `lastAttemptAt + cooldownMs`. Returns `null` when the cooldown already
+// elapsed (or was never started) so callers can swap in a "ready" marker.
+// Kept separate from `formatShortRelative` because THIS one rounds UP to
+// the next second/minute - a 61s remaining should read "2m" not "1m" so
+// the user doesn't press too early and hit the still-active cooldown.
+function formatNextCooldownRemaining(lastAttemptAt, cooldownMs) {
+  const last = Number(lastAttemptAt) || 0;
+  if (last <= 0) return null;
+  const remaining = last + Number(cooldownMs) - Date.now();
+  if (remaining <= 0) return null;
+  const secs = Math.ceil(remaining / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.ceil(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  const remMins = mins - hours * 60;
+  return remMins > 0 ? `${hours}h${remMins}m` : `${hours}h`;
+}
+
 // Per-roster state breakdown formatter. Emits `N ⚪ · M 🟡 · K 🟢` with
 // zero-count segments filtered out. Used by /raid-check's section header
 // rich value line so a roster showing just 6 pending renders as plain
@@ -1264,6 +1349,7 @@ function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
       userMeta.set(userDoc.discordId, {
         autoManageEnabled: !!userDoc.autoManageEnabled,
         lastAutoManageSyncAt: Number(userDoc.lastAutoManageSyncAt) || 0,
+        lastAutoManageAttemptAt: Number(userDoc.lastAutoManageAttemptAt) || 0,
       });
     }
     const accounts = Array.isArray(userDoc.accounts) ? userDoc.accounts : [];
@@ -1525,6 +1611,7 @@ async function handleRaidCheckCommand(interaction) {
         partialCount: chars.filter((c) => c.overallStatus === "partial").length,
         autoManageEnabled: meta.autoManageEnabled || false,
         lastAutoManageSyncAt: meta.lastAutoManageSyncAt || 0,
+        lastAutoManageAttemptAt: meta.lastAutoManageAttemptAt || 0,
       };
     })
     .sort((a, b) => {
@@ -1663,19 +1750,37 @@ async function handleRaidCheckCommand(interaction) {
     // Freshness badges with explicit labels:
     // "Last updated" = roster data refresh (iLvl/class pulled từ bible qua
     //      /raid-status lazy refresh). Stamped on every user, không cần
-    //      opt-in - applies to all rosters.
+    //      opt-in - applies to all rosters. 2h cooldown.
     // "Last synced"  = auto-manage bible log sync (raid progress pull).
-    //      Chỉ opted-in user qua /raid-auto-manage action:on.
-    // Show both nếu đủ data - 2 timestamp semantically khác nhau.
+    //      Chỉ opted-in user qua /raid-auto-manage action:on. 5m cooldown.
+    // Each badge pairs with a countdown: "Next X in Ym" khi cooldown còn
+    // active, "Sync ready" / "Refresh ready" khi expired - user không phải
+    // đoán mò tại sao Sync button bấm xong không đổi gì.
     const badges = [];
     if (group.lastRefreshedAt > 0) {
-      badges.push(`📥 Last updated ${formatShortRelative(group.lastRefreshedAt)} ago`);
+      const remain = formatNextCooldownRemaining(
+        group.lastRefreshedAt,
+        ROSTER_REFRESH_COOLDOWN_MS
+      );
+      const lastUpdated = `📥 Last updated ${formatShortRelative(group.lastRefreshedAt)} ago`;
+      badges.push(
+        remain
+          ? `${lastUpdated} · ⏳ Next refresh in ${remain}`
+          : `${lastUpdated} · ✅ Refresh ready`
+      );
     }
     if (group.autoManageEnabled) {
+      const lastSync = group.lastAutoManageSyncAt > 0
+        ? `🔄 Last synced ${formatShortRelative(group.lastAutoManageSyncAt)} ago`
+        : "🔄 Never synced";
+      const remain = formatNextCooldownRemaining(
+        group.lastAutoManageAttemptAt,
+        AUTO_MANAGE_SYNC_COOLDOWN_MS
+      );
       badges.push(
-        group.lastAutoManageSyncAt > 0
-          ? `🔄 Last synced ${formatShortRelative(group.lastAutoManageSyncAt)} ago`
-          : "🔄 Never synced"
+        remain
+          ? `${lastSync} · ⏳ Next sync in ${remain}`
+          : `${lastSync} · ✅ Sync ready`
       );
     }
     const syncBadge = badges.length > 0 ? " · " + badges.join(" · ") : "";
@@ -2191,6 +2296,9 @@ async function collectStaleAccountRefreshes(userDoc) {
       const savedNames = (account.characters || [])
         .map((c) => normalizeName(getCharacterName(c)))
         .filter(Boolean);
+      const savedFoldedNames = (account.characters || [])
+        .map((c) => foldName(getCharacterName(c)))
+        .filter(Boolean);
 
       let attempted = false;
       for (const seed of seeds) {
@@ -2206,7 +2314,10 @@ async function collectStaleAccountRefreshes(userDoc) {
           // the account would keep hitting the same bad first seed and
           // never self-heal on subsequent /raid-status calls.
           const fetchedNames = new Set(fetched.map((c) => normalizeName(c.charName)));
-          const hasOverlap = savedNames.some((n) => fetchedNames.has(n));
+          const fetchedFoldedNames = new Set(fetched.map((c) => foldName(c.charName)));
+          const hasOverlap =
+            savedNames.some((n) => fetchedNames.has(n)) ||
+            savedFoldedNames.some((n) => fetchedFoldedNames.has(n));
           if (!hasOverlap) {
             console.warn(
               `[refresh] seed "${seed}" returned ${fetched.length} chars but zero overlap with saved roster - trying next seed.`
@@ -2286,14 +2397,20 @@ function applyStaleAccountRefreshes(userDoc, collected) {
       continue;
     }
 
-    const fetchedByName = new Map(
-      fetched.map((c) => [normalizeName(c.charName), c])
-    );
+    const fetchedIndexes = buildFetchedRosterIndexes(fetched);
     let matchedAny = false;
     for (const character of (account.characters || [])) {
-      const match = fetchedByName.get(normalizeName(getCharacterName(character)));
-      if (!match) continue;
+      const matchInfo = findFetchedRosterMatchForCharacter(character, fetchedIndexes);
+      if (!matchInfo) continue;
+      const match = matchInfo.match;
       matchedAny = true;
+      const currentName = getCharacterName(character);
+      if (match.charName && currentName !== match.charName) {
+        character.name = match.charName;
+        character.bibleSerial = null;
+        character.bibleCid = null;
+        character.bibleRid = null;
+      }
       character.itemLevel = Number(match.itemLevel) || character.itemLevel;
       character.combatScore = String(match.combatScore || character.combatScore || "");
       if (match.className) character.class = match.className;
@@ -2346,7 +2463,45 @@ function buildCharacterField(character, getRaidsFor) {
   };
 }
 
-function buildAccountPageEmbed(account, pageIndex, totalPages, globalTotals, getRaidsFor) {
+// Shared freshness + countdown badge line used by both /raid-check's roster
+// header và /raid-status's per-account embed. Takes the account doc (for
+// `lastRefreshedAt` roster metadata stamp) and a userMeta bag with the
+// auto-manage stamps at user-level. Returns `""` when neither badge
+// has data - caller inlines the result.
+function buildAccountFreshnessLine(account, userMeta) {
+  const parts = [];
+  const lastRefreshedAt = Number(account?.lastRefreshedAt) || 0;
+  if (lastRefreshedAt > 0) {
+    const remain = formatNextCooldownRemaining(
+      lastRefreshedAt,
+      ROSTER_REFRESH_COOLDOWN_MS
+    );
+    const lastUpdated = `📥 Last updated ${formatShortRelative(lastRefreshedAt)} ago`;
+    parts.push(
+      remain
+        ? `${lastUpdated} · ⏳ Next refresh in ${remain}`
+        : `${lastUpdated} · ✅ Refresh ready`
+    );
+  }
+  if (userMeta?.autoManageEnabled) {
+    const lastSyncAt = Number(userMeta?.lastAutoManageSyncAt) || 0;
+    const lastSync = lastSyncAt > 0
+      ? `🔄 Last synced ${formatShortRelative(lastSyncAt)} ago`
+      : "🔄 Never synced";
+    const remain = formatNextCooldownRemaining(
+      Number(userMeta?.lastAutoManageAttemptAt) || 0,
+      AUTO_MANAGE_SYNC_COOLDOWN_MS
+    );
+    parts.push(
+      remain
+        ? `${lastSync} · ⏳ Next sync in ${remain}`
+        : `${lastSync} · ✅ Sync ready`
+    );
+  }
+  return parts.join(" · ");
+}
+
+function buildAccountPageEmbed(account, pageIndex, totalPages, globalTotals, getRaidsFor, userMeta = null) {
   const characters = Array.isArray(account.characters) ? account.characters : [];
 
   const accountRaids = [];
@@ -2374,9 +2529,16 @@ function buildAccountPageEmbed(account, pageIndex, totalPages, globalTotals, get
     ? `\n🌐 All accounts: **${globalTotals.characters}** chars · **${globalTotals.progress.completed}/${globalTotals.progress.total}** raids done`
     : "";
 
+  // Freshness + countdown line mirrors /raid-check's roster header badges
+  // so user không phải đoán tại sao /raid-status refresh xong data vẫn cũ.
+  // "Last updated" = roster metadata refresh (auto, 2h cooldown).
+  // "Last synced"  = auto-manage bible log sync (opted-in only, 5m cooldown).
+  const freshnessLine = buildAccountFreshnessLine(account, userMeta);
+  const freshnessBlock = freshnessLine ? `\n${freshnessLine}` : "";
+
   const embed = new EmbedBuilder()
     .setTitle(title)
-    .setDescription(description + globalSummary)
+    .setDescription(description + globalSummary + freshnessBlock)
     .setColor(accountProgress.color)
     .setFooter({ text: STATUS_FOOTER_LEGEND })
     .setTimestamp();
@@ -2611,8 +2773,13 @@ async function handleStatusCommand(interaction) {
   const globalProgress = summarizeRaidProgress(allRaidEntries);
   const globalTotals = { characters: totalCharacters, progress: globalProgress };
 
+  const statusUserMeta = {
+    autoManageEnabled: !!userDoc.autoManageEnabled,
+    lastAutoManageSyncAt: Number(userDoc.lastAutoManageSyncAt) || 0,
+    lastAutoManageAttemptAt: Number(userDoc.lastAutoManageAttemptAt) || 0,
+  };
   const pages = accounts.map((account, idx) =>
-    buildAccountPageEmbed(account, idx, accounts.length, globalTotals, getRaidsFor)
+    buildAccountPageEmbed(account, idx, accounts.length, globalTotals, getRaidsFor, statusUserMeta)
   );
 
   if (pages.length === 1) {
@@ -3233,6 +3400,7 @@ const HELP_SECTIONS = [
       "• **Failure cooldown**: nếu seed list của một account fail hết (wrong accountName + stale char names), Artist stamp `lastRefreshAttemptAt` và skip refresh account đó trong **5 phút** tiếp theo. Spam `/raid-status` trong lúc failing không còn queue N seed × bible fetch mỗi lần - tự heal khi hết cooldown hoặc khi user sửa roster qua `/add-roster`.",
       "• **Gather/apply split**: bible fetch chạy OUTSIDE `saveWithRetry` một lần duy nhất; apply phase (mutate fresh doc + save) mới ở trong retry loop. VersionError retry không re-fire bible HTTP call.",
       "• **Auto-manage piggyback (Phase 2)**: nếu user đã bật `/raid-auto-manage action:on` (`autoManageEnabled = true`), `/raid-status` cũng sẽ tự pull bible logs **song song** với roster refresh (Promise.all, share `bibleLimiter`) trước khi render. Re-check `autoManageEnabled` trên fresh doc trong save phase nên user bấm `action:off` giữa gather và save sẽ không bị apply thừa 1 sync. Save fail (mongo blip) → stamp attempt qua `stampAutoManageAttempt` để cooldown vẫn protect bible. Cooldown chưa hết / gather throw → render cached, không vỡ command.",
+      "• **Freshness + countdown line**: mỗi account embed có thêm dòng `📥 Last updated Nh ago · ⏳ Next refresh in Xh · 🔄 Last synced Nm ago · ⏳ Next sync in Ym` dưới summary. Khi cooldown đã hết show `✅ Refresh ready` / `✅ Sync ready` để user biết chạy lại `/raid-status` sẽ thực sự fetch data mới thay vì đoán mò. `📥` = roster metadata (iLvl/class) gate 2h. `🔄` = auto-manage bible log sync gate 5m - chỉ hiện khi user đã opt-in.",
     ],
   },
   {
@@ -3274,10 +3442,10 @@ const HELP_SECTIONS = [
       "• **Header**: title embed hiện `⚠️ Raid Check · <raid label> (<minItemLevel>)` - gọn, chỉ command + raid + threshold (ví dụ `Act 4 Normal (1700)`). Description đã bỏ hoàn toàn - info đều ở title, per-roster headers, và footer. Page indicator + 3-state counts đều dưới footer.",
       "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field mirroring `/raid-status`'s pattern. Field name `<charName> · <iLvl>` được Discord auto-bold = scan anchor. Field value `<icon> <done>/<total>` (ví dụ `⚪ 0/2`) - value line có content nên không waste height (earlier attempt pack everything vào name line + ZWS value tạo gap 'cách nhau quá'). Aggregate 3-state icon qua `pickProgressIcon` (🟢 done all / 🟡 partial / ⚪ none). Raid label nằm ở title không lặp trong value.",
       "• **2-column layout via inline fields + spacer**: Discord default pack 3 inline field/row; chèn zero-width-space spacer field giữa mỗi cặp char để force 2-per-row - y hệt kỹ thuật `/raid-status`. Odd char cuối cùng cặp với 1 spacer để không bị Discord stretch full-width.",
-      "• **2 rosters per page (chunked)**: mỗi embed page chứa tối đa 2 roster sections stacked. Roster section = non-inline header field với explicit value line. Name = `📁 accountName (displayName)` (clean label). Value = `<state breakdown> · 📥 Last updated <relative> ago · 🔄 Last synced <relative> ago`. **📥 Last updated** = roster data refresh (iLvl/class từ bible qua `/raid-status` lazy refresh HOẶC pre-scan refresh của `/raid-check`) - applies to ALL users. **🔄 Last synced** = auto-manage bible log sync (raid progress) - chỉ opted-in user, `Never synced` nếu chưa có data. Hai dòng song song nếu đủ data. Ví dụ: `4 ⚪ · 1 🟡 · 1 🟢 · 📥 Last updated 2h ago · 🔄 Last synced 1h ago`. Avg iLvl dropped per Traine: text phrase `Last updated` rõ ràng hơn cryptic `📥9h` badge, scan-friendly cho Raid Manager quét nhiều roster. Per roster cost: 1 header + N char + ceil(N/2) spacer fields. 2 × 6-char rosters = 20 fields, fit 25-cap.",
+      "• **2 rosters per page (chunked)**: mỗi embed page chứa tối đa 2 roster sections stacked. Roster section = non-inline header field với explicit value line. Name = `📁 accountName (displayName)` (clean label). Value = `<state breakdown> · 📥 Last updated <relative> ago · ⏳ Next refresh in <remain> · 🔄 Last synced <relative> ago · ⏳ Next sync in <remain>`. **📥 Last updated** = roster data refresh (iLvl/class từ bible qua `/raid-status` lazy refresh HOẶC pre-scan refresh của `/raid-check`) - applies to ALL users, 2h cooldown. **🔄 Last synced** = auto-manage bible log sync (raid progress) - chỉ opted-in user, `Never synced` nếu chưa có data, 5m cooldown. **⏳ Next X in Ym** countdown pairs với mỗi badge trên - khi cooldown còn active show thời gian còn lại, khi expired show `✅ Refresh ready` / `✅ Sync ready` để user không phải đoán mò tại sao Sync button bấm xong data không đổi. Ví dụ: `4 ⚪ · 1 🟡 · 1 🟢 · 📥 Last updated 30m ago · ⏳ Next refresh in 1h30m · 🔄 Last synced 3m ago · ⏳ Next sync in 2m`. Per roster cost: 1 header + N char + ceil(N/2) spacer fields. 2 × 6-char rosters = 20 fields, fit 25-cap.",
       "• **User filter dropdown** (action row 2): `StringSelectMenuBuilder` cho phép Raid Manager lọc pages theo Discord user. First option `🌐 All users (N pending)` reset filter. Tiếp theo top-24 users sort theo pending desc (`👤 displayName (N pending)`). Discord cap 25 options total. Selection → recompute pages chỉ chứa rosters của user đó, reset currentPage=0. `default: true` preserve selected state qua Prev/Next clicks. Rosters cùng user group consecutive, sort theo tổng pending user desc rồi per-roster pending desc. **Avatar in embed author**: khi filter = specific user, resolve Discord avatar cache-first (`client.users.cache` fallback to `fetch` via `discordUserLimiter`) và `setAuthor({name, iconURL})` trên mỗi page - visual confirmation filter đang active. Discord StringSelectMenu options không support per-option avatars (API limitation) nên embed author là compromise.",
       "• **Pagination buttons + session**: `◀ Previous` / `Next ▶` (shared helper `buildPaginationRow`) cycle giữa các roster-chunk pages. Title stable `⚠️ Raid Check · <raid> (<minItemLevel>)` không đổi theo page. Footer append page indicator. Collector locked theo người chạy, session timeout **5 phút** (`RAID_CHECK_PAGINATION_SESSION_MS`), hết hạn disable all components + swap footer legend.",
-      "• **Sync badge trong roster header**: opted-in user có sync data hiện `🔄5m` / `🔄2h` / `🔄3d` (compact relative time tự compute). Opted-in nhưng chưa sync lần nào → `🔄never`. Non-opted-in → không hiện segment này.",
+      "• **Sync badge trong roster header**: opted-in user có sync data hiện `🔄 Last synced Nm/h/d ago`. Opted-in nhưng chưa sync lần nào → `🔄 Never synced`. Non-opted-in → không hiện segment này. Kèm countdown `⏳ Next sync in Xm` (cooldown 5m gate bởi `lastAutoManageAttemptAt`) hoặc `✅ Sync ready` khi expired.",
       "• **Footer legend với counts + page**: `🟢 N done · 🟡 M partial · ⚪ K pending · Page X/Y` - icon + count + English label merged, page indicator append cuối khi > 1 roster (move từ title xuống đây). Dynamic per page (page index thay đổi) compute inline trong `buildRaidCheckPage`. Discord render timestamp (`Today at HH:MM`) sau footer text tự động.",
       "• **Sort order**: users có nhiều pending tổng nhất lên top; trong mỗi user rosters sort theo pending count desc; trong mỗi roster chars sort theo iLvl desc.",
       "• **Mode hierarchy satisfies lower-mode scans**: mode rank Normal (1) < Hard (2) < Nightmare (3). Gate stored với mode rank ≥ scan mode rank sẽ count as done. Ví dụ: char cleared Kazeros Hard → scan Kazeros Normal thấy char đó done (Hard ≥ Normal, weekly requirement satisfied). Reverse không apply: char chỉ cleared Normal → scan Hard vẫn pending (cần Hard specifically). Helper `modeRank(str)` map Normal→1, Hard→2, Nightmare→3.",
@@ -5389,6 +5557,55 @@ async function fetchBibleCharacterMetaWithLimiter(charName) {
   return bibleLimiter.run(() => fetchBibleCharacterMeta(charName));
 }
 
+async function resolveBibleCharacterMetaViaRoster(account, character) {
+  const seeds = [];
+  if (account?.accountName) seeds.push(account.accountName);
+  for (const c of account?.characters || []) {
+    const name = getCharacterName(c);
+    if (name && !seeds.includes(name)) seeds.push(name);
+  }
+
+  for (const seed of seeds) {
+    let fetched;
+    try {
+      fetched = await fetchRosterCharacters(seed);
+    } catch (err) {
+      console.warn(
+        `[auto-manage] roster fallback seed "${seed}" failed:`,
+        err?.message || err
+      );
+      continue;
+    }
+    if (!Array.isArray(fetched) || fetched.length === 0) continue;
+
+    const matchInfo = findFetchedRosterMatchForCharacter(
+      character,
+      buildFetchedRosterIndexes(fetched)
+    );
+    const canonicalName = matchInfo?.match?.charName;
+    if (!canonicalName) continue;
+
+    let meta;
+    try {
+      meta = await fetchBibleCharacterMetaWithLimiter(canonicalName);
+    } catch (err) {
+      console.warn(
+        `[auto-manage] roster fallback canonical meta for "${canonicalName}" failed:`,
+        err?.message || err
+      );
+      continue;
+    }
+    return {
+      canonicalName,
+      meta,
+      matchType: matchInfo.matchType,
+      seed,
+    };
+  }
+
+  return null;
+}
+
 /**
  * Paginate bible's logs API until we see an entry older than
  * `weekResetStart`, get an empty page, or hit `maxPages`. Bible returns
@@ -5548,6 +5765,7 @@ async function gatherAutoManageLogsForUserDoc(userDoc, weekResetStart) {
         // `meta` is only set when the char wasn't already cached -
         // apply phase propagates this into the fresh doc's character.
         meta: null,
+        canonicalName: null,
         logs: null,
         error: null,
       };
@@ -5556,7 +5774,18 @@ async function gatherAutoManageLogsForUserDoc(userDoc, weekResetStart) {
         let cid = character.bibleCid;
         let rid = character.bibleRid;
         if (!serial || !cid || !rid) {
-          const meta = await fetchBibleCharacterMetaWithLimiter(entry.charName);
+          let meta;
+          try {
+            meta = await fetchBibleCharacterMetaWithLimiter(entry.charName);
+          } catch (directErr) {
+            const resolved = await resolveBibleCharacterMetaViaRoster(account, character);
+            if (!resolved) throw directErr;
+            meta = resolved.meta;
+            entry.canonicalName = resolved.canonicalName;
+            console.warn(
+              `[auto-manage] resolved bible meta for "${entry.charName}" via roster seed "${resolved.seed}" as "${resolved.canonicalName}" (${resolved.matchType} match).`
+            );
+          }
           serial = meta.sn;
           cid = meta.cid;
           rid = meta.rid;
@@ -5616,6 +5845,10 @@ function applyAutoManageCollected(userDoc, weekResetStart, collected) {
         continue;
       }
       try {
+        if (gathered.canonicalName && getCharacterName(character) !== gathered.canonicalName) {
+          character.name = gathered.canonicalName;
+          entry.charName = gathered.canonicalName;
+        }
         if (gathered.meta) {
           character.bibleSerial = gathered.meta.sn;
           character.bibleCid = gathered.meta.cid;
@@ -7303,5 +7536,13 @@ module.exports = {
     nextAnnouncementEligibleBoundaryMs,
     nextAnnouncementSchedulerCheckMs,
     buildAnnouncementWhenItFiresText,
+    foldName,
+    buildFetchedRosterIndexes,
+    findFetchedRosterMatchForCharacter,
+    applyStaleAccountRefreshes,
+    formatNextCooldownRemaining,
+    buildAccountFreshnessLine,
+    ROSTER_REFRESH_COOLDOWN_MS,
+    AUTO_MANAGE_SYNC_COOLDOWN_MS,
   },
 };

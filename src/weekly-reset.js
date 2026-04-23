@@ -48,19 +48,51 @@ function getTargetResetKey(now = new Date()) {
   return getWeekKey(earlier);
 }
 
-function clearCharacterProgress(character) {
+function getCurrentResetStartMs(now = new Date()) {
+  const cursor = new Date(now.getTime());
+  for (let i = 0; i < 8; i += 1) {
+    const day = cursor.getUTCDay();
+    if (day === 3 && cursor.getUTCHours() >= 10) {
+      return Date.UTC(
+        cursor.getUTCFullYear(),
+        cursor.getUTCMonth(),
+        cursor.getUTCDate(),
+        10, 0, 0, 0
+      );
+    }
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+    cursor.setUTCHours(23, 59, 59, 999);
+  }
+  return now.getTime() - 7 * 24 * 60 * 60 * 1000;
+}
+
+function shouldPreserveCurrentWeekCompletion(timestamp, preserveSinceMs) {
+  if (!(Number(preserveSinceMs) > 0)) return false;
+  return Number(timestamp) >= preserveSinceMs;
+}
+
+function clearCharacterProgress(character, { preserveSinceMs = null } = {}) {
   const assignedRaids = character.assignedRaids || {};
   for (const raidKey of RAID_GROUP_KEYS) {
     if (!assignedRaids[raidKey]) continue;
     const gateKeys = Object.keys(assignedRaids[raidKey] || {}).filter((gate) => /^G\d+$/i.test(gate));
     for (const gate of gateKeys) {
       if (!assignedRaids[raidKey][gate]) continue;
+      if (shouldPreserveCurrentWeekCompletion(
+        assignedRaids[raidKey][gate].completedDate,
+        preserveSinceMs
+      )) {
+        continue;
+      }
       assignedRaids[raidKey][gate].completedDate = null;
     }
   }
 
   const tasks = Array.isArray(character.tasks) ? character.tasks : [];
   for (const task of tasks) {
+    if (shouldPreserveCurrentWeekCompletion(task.completionDate, preserveSinceMs)) {
+      continue;
+    }
     task.completions = 0;
     task.completionDate = null;
   }
@@ -71,6 +103,7 @@ function clearCharacterProgress(character) {
 
 async function resetWeekly(now = new Date()) {
   const targetKey = getTargetResetKey(now);
+  const resetStartMs = getCurrentResetStartMs(now);
 
   const staleUsers = await User.find({ weeklyResetKey: { $ne: targetKey } }).select("_id discordId").lean();
   let modifiedCount = 0;
@@ -83,7 +116,7 @@ async function resetWeekly(now = new Date()) {
 
         for (const account of user.accounts || []) {
           for (const character of account.characters || []) {
-            clearCharacterProgress(character);
+            clearCharacterProgress(character, { preserveSinceMs: resetStartMs });
           }
         }
         user.weeklyResetKey = targetKey;
@@ -261,10 +294,11 @@ function ensureFreshWeek(user, now = new Date()) {
   if (!user) return false;
   const targetKey = getTargetResetKey(now);
   if (user.weeklyResetKey === targetKey) return false;
+  const resetStartMs = getCurrentResetStartMs(now);
 
   for (const account of user.accounts || []) {
     for (const character of account.characters || []) {
-      clearCharacterProgress(character);
+      clearCharacterProgress(character, { preserveSinceMs: resetStartMs });
     }
   }
   user.weeklyResetKey = targetKey;
@@ -278,6 +312,7 @@ module.exports = {
   WEEKLY_RESET_TICK_MS,
   getWeekKey,
   getTargetResetKey,
+  getCurrentResetStartMs,
   ensureFreshWeek,
   clearCharacterProgress,
 };
