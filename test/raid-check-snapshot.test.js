@@ -206,11 +206,19 @@ test("raid-check user query filters by raid floor while preserving stale refresh
       {
         accounts: {
           $elemMatch: {
-            $or: [
-              { lastRefreshedAt: null },
-              { lastRefreshedAt: { $exists: false } },
+            $and: [
               {
-                lastRefreshedAt: { $lt: now - __test.ROSTER_REFRESH_COOLDOWN_MS },
+                $or: [
+                  { lastRefreshedAt: null },
+                  { lastRefreshedAt: { $exists: false } },
+                  {
+                    lastRefreshedAt: {
+                      $lt: now - __test.ROSTER_REFRESH_COOLDOWN_MS,
+                    },
+                  },
+                ],
+              },
+              {
                 $or: [
                   { lastRefreshAttemptAt: null },
                   { lastRefreshAttemptAt: { $exists: false } },
