@@ -283,9 +283,9 @@ function createAutoManageCoreService({
 
   function normalizeDifficultyToModeKey(difficulty) {
     const normalized = normalizeName(difficulty || "");
-    if (normalized === "nightmare" || normalized === "nm" || normalized === "9m") return "nightmare";
+    if (normalized === "nightmare" || normalized === "9m") return "nightmare";
     if (normalized === "hard" || normalized === "hm") return "hard";
-    if (normalized === "normal" || normalized === "nor") return "normal";
+    if (normalized === "normal" || normalized === "nor" || normalized === "nm") return "normal";
     return null;
   }
 
