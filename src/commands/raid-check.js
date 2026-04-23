@@ -35,6 +35,8 @@ function createRaidCheckCommand(deps) {
     stampAutoManageAttempt,
     weekResetStartMs,
     isRaidLeader,
+    isManagerId,
+    getAutoManageCooldownMs,
     RAID_REQUIREMENT_MAP,
     RAID_CHECK_USER_QUERY_FIELDS,
     ROSTER_KEY_SEP,
@@ -365,7 +367,13 @@ function createRaidCheckCommand(deps) {
     };
 
     const buildCharField = (character) => {
-      const name = truncateText(`${character.charName} · ${Math.round(character.itemLevel)}`, 256);
+      // 👑 prefix for manager-owned characters so the roster header makes the
+      // shorter sync cooldown visible. character.discordId is the *owner* of
+      // this char (set when the snapshot bucket was built), not the viewer.
+      const decoratedName = isManagerId && isManagerId(character.discordId)
+        ? `👑 ${character.charName}`
+        : character.charName;
+      const name = truncateText(`${decoratedName} · ${Math.round(character.itemLevel)}`, 256);
       if (character.overallStatus === "not-eligible") {
         const label = character.notEligibleReason === "low"
           ? "_Not eligible yet (iLvl below min)_"

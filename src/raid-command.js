@@ -140,12 +140,15 @@ const MAX_CHARACTERS_PER_ACCOUNT = 6;
 // Why env-over-role: deterministic (no Discord role rename surprises),
 // decoupled from server admin chain, multi-guild consistent, and rotation
 // happens via redeploy rather than touching Discord role assignments.
-const RAID_MANAGER_ID = new Set(
-  (process.env.RAID_MANAGER_ID || "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-);
+//
+// The same allowlist now also drives manager privileges (shorter auto-manage
+// sync cooldown, on-roster visual tag). Shared helper lives in services/manager.js
+// so raid-status / raid-check / auto-manage-core all read from one place.
+const {
+  MANAGER_IDS: RAID_MANAGER_ID,
+  isManagerId,
+  getAutoManageCooldownMs,
+} = require("./services/manager");
 if (RAID_MANAGER_ID.size === 0) {
   console.warn(
     "[raid-check] RAID_MANAGER_ID env not set or empty - /raid-check will reject every invocation. Set the env var to a comma-separated list of Discord user IDs to enable."
@@ -1044,6 +1047,7 @@ let handleRaidAutoManageCommand;
 let handleRaidAutoManageAutocomplete;
 
 let AUTO_MANAGE_SYNC_COOLDOWN_MS;
+let getAutoManageCooldownMsFromService;
 let acquireAutoManageSyncSlot;
 let releaseAutoManageSyncSlot;
 let formatAutoManageCooldownRemaining;
@@ -1104,6 +1108,7 @@ const autoManageCoreService = createAutoManageCoreService({
 });
 ({
   AUTO_MANAGE_SYNC_COOLDOWN_MS,
+  getAutoManageCooldownMs: getAutoManageCooldownMsFromService,
   acquireAutoManageSyncSlot,
   releaseAutoManageSyncSlot,
   formatAutoManageCooldownRemaining,
@@ -1190,6 +1195,8 @@ const raidStatusCommand = createRaidStatusCommand({
   stampAutoManageAttempt,
   weekResetStartMs,
   AUTO_MANAGE_SYNC_COOLDOWN_MS,
+  getAutoManageCooldownMs,
+  isManagerId,
 });
 ({
   handleStatusCommand,
@@ -1231,6 +1238,8 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   stampAutoManageAttempt,
   weekResetStartMs,
   isRaidLeader,
+  isManagerId,
+  getAutoManageCooldownMs,
   RAID_REQUIREMENT_MAP,
   RAID_CHECK_USER_QUERY_FIELDS,
   ROSTER_KEY_SEP,
@@ -1458,5 +1467,7 @@ module.exports = {
     ROSTER_REFRESH_COOLDOWN_MS,
     ROSTER_REFRESH_FAILURE_COOLDOWN_MS,
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
+    isManagerId,
+    getAutoManageCooldownMs,
   },
 };

@@ -1,5 +1,10 @@
 "use strict";
 
+const {
+  DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS,
+  getAutoManageCooldownMs: getAutoManageCooldownMsDefault,
+} = require("./manager");
+
 function createAutoManageCoreService({
   EmbedBuilder,
   UI,
@@ -19,6 +24,9 @@ function createAutoManageCoreService({
   normalizeAssignedRaid,
   ensureAssignedRaids,
   bibleLimiter,
+  // Injected so tests can stub per-user cooldown logic without touching env.
+  // Falls back to the real manager.js helper (env-driven) in production.
+  getAutoManageCooldownMs = getAutoManageCooldownMsDefault,
 }) {
   // ---------------------------------------------------------------------------
   // /raid-auto-manage - lostark.bible clear-log sync
@@ -28,9 +36,14 @@ function createAutoManageCoreService({
   // caps concurrency across the whole process, but a single user spamming
   // action:sync still queues N-roster × M-char HTTP calls each time. Two
   // guards combine: in-flight Set rejects parallel runs, cooldown rejects
-  // rapid-sequential runs within 15 min based on User.lastAutoManageAttemptAt
-  // (which is already stamped on every sync attempt, success or not).
-  const AUTO_MANAGE_SYNC_COOLDOWN_MS = 15 * 60 * 1000;
+  // rapid-sequential runs based on User.lastAutoManageAttemptAt.
+  //
+  // Cooldown is now per-user: non-manager = 15m (the legacy ceiling protecting
+  // bible.lostark from spam), manager (in RAID_MANAGER_ID) = 30s so the 2-3
+  // operators can resync quickly after reconciling a raid clear. Managers are
+  // a small, trusted set so the tighter cadence does not meaningfully raise
+  // bible load compared to the existing daily passive scheduler.
+  const AUTO_MANAGE_SYNC_COOLDOWN_MS = DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS;
   const inFlightAutoManageSyncs = new Set(); // discordId
 
   /**
@@ -60,12 +73,13 @@ function createAutoManageCoreService({
       ).lean();
       const lastAttempt = user?.lastAutoManageAttemptAt || 0;
       const elapsed = Date.now() - lastAttempt;
-      if (!ignoreCooldown && lastAttempt && elapsed < AUTO_MANAGE_SYNC_COOLDOWN_MS) {
+      const effectiveCooldownMs = getAutoManageCooldownMs(discordId);
+      if (!ignoreCooldown && lastAttempt && elapsed < effectiveCooldownMs) {
         inFlightAutoManageSyncs.delete(discordId);
         return {
           acquired: false,
           reason: "cooldown",
-          remainingMs: AUTO_MANAGE_SYNC_COOLDOWN_MS - elapsed,
+          remainingMs: effectiveCooldownMs - elapsed,
         };
       }
       return { acquired: true };
@@ -888,6 +902,7 @@ function createAutoManageCoreService({
 
   return {
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
+    getAutoManageCooldownMs,
     acquireAutoManageSyncSlot,
     releaseAutoManageSyncSlot,
     formatAutoManageCooldownRemaining,
