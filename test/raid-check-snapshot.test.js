@@ -188,16 +188,44 @@ test("raid-check pagination timeout is 5 minutes while raid-status stays at 2 mi
   assert.equal(__test.RAID_CHECK_PAGINATION_SESSION_MS, 5 * 60 * 1000);
 });
 
-test("raid-check user query pushes raid floor filtering into Mongo", () => {
-  const query = __test.buildRaidCheckUserQuery({
-    raidKey: "kazeros",
-    modeKey: "hard",
-    minItemLevel: 1730,
-  });
+test("raid-check user query filters by raid floor while preserving stale refresh candidates", () => {
+  const now = Date.UTC(2026, 3, 23, 10, 0, 0, 0);
+  const query = __test.buildRaidCheckUserQuery(
+    {
+      raidKey: "kazeros",
+      modeKey: "hard",
+      minItemLevel: 1730,
+    },
+    now
+  );
 
   assert.deepEqual(query, {
     "accounts.0": { $exists: true },
-    "accounts.characters.itemLevel": { $gte: 1710 },
+    $or: [
+      { "accounts.characters.itemLevel": { $gte: 1710 } },
+      {
+        accounts: {
+          $elemMatch: {
+            $or: [
+              { lastRefreshedAt: null },
+              { lastRefreshedAt: { $exists: false } },
+              {
+                lastRefreshedAt: { $lt: now - __test.ROSTER_REFRESH_COOLDOWN_MS },
+                $or: [
+                  { lastRefreshAttemptAt: null },
+                  { lastRefreshAttemptAt: { $exists: false } },
+                  {
+                    lastRefreshAttemptAt: {
+                      $lt: now - __test.ROSTER_REFRESH_FAILURE_COOLDOWN_MS,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    ],
   });
 });
 
