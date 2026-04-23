@@ -702,7 +702,7 @@ function createRaidCheckCommand(deps) {
     await Promise.all(
       optedInDiscordIds.map((discordId) =>
         raidCheckSyncLimiter.run(async () => {
-          const guard = await acquireAutoManageSyncSlot(discordId);
+          const guard = await acquireAutoManageSyncSlot(discordId, { ignoreCooldown: true });
           if (!guard.acquired) {
             skippedCount += 1;
             return;
