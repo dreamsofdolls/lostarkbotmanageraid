@@ -367,13 +367,7 @@ function createRaidCheckCommand(deps) {
     };
 
     const buildCharField = (character) => {
-      // 👑 prefix for manager-owned characters so the roster header makes the
-      // shorter sync cooldown visible. character.discordId is the *owner* of
-      // this char (set when the snapshot bucket was built), not the viewer.
-      const decoratedName = isManagerId && isManagerId(character.discordId)
-        ? `👑 ${character.charName}`
-        : character.charName;
-      const name = truncateText(`${decoratedName} · ${Math.round(character.itemLevel)}`, 256);
+      const name = truncateText(`${character.charName} · ${Math.round(character.itemLevel)}`, 256);
       if (character.overallStatus === "not-eligible") {
         const label = character.notEligibleReason === "low"
           ? "_Not eligible yet (iLvl below min)_"
@@ -423,8 +417,15 @@ function createRaidCheckCommand(deps) {
     const addRosterSection = (embed, group) => {
       const freshnessLine = buildAccountFreshnessLine(group, group);
 
+      // Swap the folder icon for a crown when the roster belongs to a Raid
+      // Manager. Keeps the manager cue visible once per roster instead of
+      // stamping every char name (which gets scan-hostile in a long list and
+      // would fight the planned class-icon swap on the char line).
+      const headerIcon = isManagerId && isManagerId(group.discordId)
+        ? "👑"
+        : UI.icons.folder;
       embed.addFields({
-        name: truncateText(`${UI.icons.folder} ${group.accountName} (${group.displayName})`, 256),
+        name: truncateText(`${headerIcon} ${group.accountName} (${group.displayName})`, 256),
         value: truncateText(freshnessLine || "\u200B", 1024),
         inline: false,
       });
