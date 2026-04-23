@@ -1249,6 +1249,7 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
 });
 ({
   buildRaidCheckSnapshotFromUsers,
+  formatRaidCheckNotEligibleFieldValue,
   computeRaidCheckSnapshot,
   handleRaidCheckCommand,
   handleRaidCheckButton,
@@ -1452,6 +1453,7 @@ module.exports = {
   parseRaidMessage,
   __test: {
     buildRaidCheckSnapshotFromUsers,
+    formatRaidCheckNotEligibleFieldValue,
     STATUS_PAGINATION_SESSION_MS,
     RAID_CHECK_PAGINATION_SESSION_MS,
     nextIntervalTickMs,

@@ -158,6 +158,32 @@ function createRaidCheckCommand(deps) {
     };
   }
 
+  function getNextRaidModeLabel(raidMeta) {
+    const currentMin = Number(raidMeta?.minItemLevel) || 0;
+    const nextMode = Object.values(RAID_REQUIREMENT_MAP || {})
+      .filter(
+        (entry) =>
+          entry &&
+          entry.raidKey === raidMeta?.raidKey &&
+          (Number(entry.minItemLevel) || 0) > currentMin
+      )
+      .sort((a, b) => (Number(a.minItemLevel) || 0) - (Number(b.minItemLevel) || 0))[0];
+    return nextMode ? toModeLabel(nextMode.modeKey) : null;
+  }
+
+  function formatRaidCheckNotEligibleFieldValue(character, raidMeta) {
+    if (character?.notEligibleReason === "low") {
+      return `${UI.icons.lock} _Not eligible yet (iLvl below min)_`;
+    }
+
+    const currentModeLabel = toModeLabel(raidMeta?.modeKey);
+    const nextModeLabel = getNextRaidModeLabel(raidMeta);
+    const label = nextModeLabel
+      ? `_Eligible for ${nextModeLabel} - can still flex ${currentModeLabel}_`
+      : `_Eligible for a higher mode - can still flex ${currentModeLabel}_`;
+    return `${UI.icons.info} ${label}`;
+  }
+
   async function computeRaidCheckSnapshot(raidMeta, { syncFreshData = false } = {}) {
     const started = Date.now();
     const userQuery = buildRaidCheckUserQuery(raidMeta);
@@ -369,12 +395,9 @@ function createRaidCheckCommand(deps) {
     const buildCharField = (character) => {
       const name = truncateText(`${character.charName} · ${Math.round(character.itemLevel)}`, 256);
       if (character.overallStatus === "not-eligible") {
-        const label = character.notEligibleReason === "low"
-          ? "_Not eligible yet (iLvl below min)_"
-          : "_Not eligible yet_";
         return {
           name,
-          value: truncateText(`${UI.icons.lock} ${label}`, 1024),
+          value: truncateText(formatRaidCheckNotEligibleFieldValue(character, raidMeta), 1024),
           inline: true,
         };
       }
@@ -823,6 +846,7 @@ function createRaidCheckCommand(deps) {
 
   return {
     buildRaidCheckSnapshotFromUsers,
+    formatRaidCheckNotEligibleFieldValue,
     computeRaidCheckSnapshot,
     handleRaidCheckCommand,
     handleRaidCheckButton,
