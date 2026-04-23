@@ -432,9 +432,8 @@ Mỗi Railway redeploy bot sẽ **tự đăng ký slash command schema** khi boo
 
 ## Legacy Files (Safe to Ignore)
 
-Repo hiện có 2 file leftover từ template copy-paste, **không được import bởi bot**:
+Repo hiện còn 1 file leftover từ template copy-paste, **không được import bởi bot**:
 
-- `config.js` - ESM config cho LoaLogs bot (officer approvers, Gemini, ScraperAPI). Env vars mismatch với `db.js` (`MONGODB_URI` vs `MONGO_URI`).
 - `src/models/GuildConfig.js` - Schema cho `/lasetup` / `/laremote` / blacklist - không có command nào trong bot này dùng.
 
-Có thể xoá cả 2 file nếu muốn repo sạch hơn.
+Có thể xoá file này nếu muốn repo sạch hơn nữa.
