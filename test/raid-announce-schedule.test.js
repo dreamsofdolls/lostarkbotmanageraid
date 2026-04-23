@@ -23,10 +23,12 @@ test("nextAnnouncementEligibleBoundaryMs keeps weekly reset on the next Wed 10:0
   assert.equal(next, Date.UTC(2026, 3, 29, 10, 0, 0, 0));
 });
 
-test("nextAnnouncementEligibleBoundaryMs advances hourly cleanup from an exact hour", () => {
+test("nextAnnouncementEligibleBoundaryMs advances cleanup to the next :30 slot from an exact hour", () => {
   const now = new Date(Date.UTC(2026, 3, 24, 12, 0, 0, 0));
   const next = __test.nextAnnouncementEligibleBoundaryMs("hourly-cleanup", now);
-  assert.equal(next, Date.UTC(2026, 3, 24, 13, 0, 0, 0));
+  // Cadence is 30 min (slots at :00 and :30) so next boundary from :00
+  // is the same hour's :30 slot, not the next hour.
+  assert.equal(next, Date.UTC(2026, 3, 24, 12, 30, 0, 0));
 });
 
 test("buildAnnouncementWhenItFiresText shows disabled cleanup when the hourly schedule is off", () => {
