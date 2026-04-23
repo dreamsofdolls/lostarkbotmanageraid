@@ -1153,6 +1153,19 @@ function formatNextCooldownRemaining(lastAttemptAt, cooldownMs) {
   return remMins > 0 ? `${hours}h${remMins}m` : `${hours}h`;
 }
 
+function formatRosterRefreshCooldownRemaining(account) {
+  const lastSuccess = Number(account?.lastRefreshedAt) || 0;
+  const lastAttempt = Number(account?.lastRefreshAttemptAt) || 0;
+  if (lastAttempt > lastSuccess) {
+    const failureRemain = formatNextCooldownRemaining(
+      lastAttempt,
+      ROSTER_REFRESH_FAILURE_COOLDOWN_MS
+    );
+    if (failureRemain) return failureRemain;
+  }
+  return formatNextCooldownRemaining(lastSuccess, ROSTER_REFRESH_COOLDOWN_MS);
+}
+
 // Per-roster state breakdown formatter. Emits `N ⚪ · M 🟡 · K 🟢` with
 // zero-count segments filtered out. Used by /raid-check's section header
 // rich value line so a roster showing just 6 pending renders as plain
@@ -1326,6 +1339,10 @@ function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
   // been refreshed has a positive value. Used by /raid-check section header
   // to surface roster data freshness via `📥<relative>` badge.
   const rosterRefreshMap = new Map();
+  // Same key shape as rosterRefreshMap, but stores account.lastRefreshAttemptAt.
+  // The refresh gate can be the short failure cooldown when the last attempt
+  // failed after an older successful refresh.
+  const rosterRefreshAttemptMap = new Map();
   // `allEligible` = chars whose iLvl falls inside [selfMin, nextMin) - the
   // scan mode's actual eligibility range. `notEligibleChars` = chars in the
   // raid's broader scope [lowestMin, ∞) but outside the mode range (too
@@ -1356,6 +1373,7 @@ function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
     for (const account of accounts) {
       const rosterKey = userDoc.discordId + ROSTER_KEY_SEP + (account.accountName || "(no name)");
       rosterRefreshMap.set(rosterKey, Number(account.lastRefreshedAt) || 0);
+      rosterRefreshAttemptMap.set(rosterKey, Number(account.lastRefreshAttemptAt) || 0);
       const characters = Array.isArray(account.characters) ? account.characters : [];
       for (const character of characters) {
         if (!character) continue;
@@ -1448,6 +1466,7 @@ function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
     pendingChars,
     userMeta,
     rosterRefreshMap,
+    rosterRefreshAttemptMap,
   };
 }
 
@@ -1513,6 +1532,7 @@ async function handleRaidCheckCommand(interaction) {
     pendingChars,
     userMeta,
     rosterRefreshMap,
+    rosterRefreshAttemptMap,
   } = await computeRaidCheckSnapshot(raidMeta, { syncFreshData: true });
 
   const modeKey = normalizeName(raidMeta.modeKey);
@@ -1599,6 +1619,7 @@ async function handleRaidCheckCommand(interaction) {
       const meta = userMeta.get(discordId) || {};
       const stats = rosterStats.get(key) || { none: 0, partial: 0, done: 0, notEligible: 0 };
       const lastRefreshedAt = rosterRefreshMap.get(key) || 0;
+      const lastRefreshAttemptAt = rosterRefreshAttemptMap.get(key) || 0;
       const rosterPending = (stats.partial || 0) + (stats.none || 0);
       return {
         discordId,
@@ -1607,6 +1628,7 @@ async function handleRaidCheckCommand(interaction) {
         chars,
         stats,
         lastRefreshedAt,
+        lastRefreshAttemptAt,
         rosterPending,
         partialCount: chars.filter((c) => c.overallStatus === "partial").length,
         autoManageEnabled: meta.autoManageEnabled || false,
@@ -1747,46 +1769,10 @@ async function handleRaidCheckCommand(interaction) {
   // read clearer than cryptic 📥/🔄 emoji badges, especially for raid
   // managers scanning many rosters at once.
   const addRosterSection = (embed, group) => {
-    // Freshness badges with explicit labels:
-    // "Last updated" = roster data refresh (iLvl/class pulled từ bible qua
-    //      /raid-status lazy refresh). Stamped on every user, không cần
-    //      opt-in - applies to all rosters. 2h cooldown.
-    // "Last synced"  = auto-manage bible log sync (raid progress pull).
-    //      Chỉ opted-in user qua /raid-auto-manage action:on. 5m cooldown.
-    // Each badge pairs with a countdown: "Next X in Ym" khi cooldown còn
-    // active, "Sync ready" / "Refresh ready" khi expired - user không phải
-    // đoán mò tại sao Sync button bấm xong không đổi gì.
-    const badges = [];
-    if (group.lastRefreshedAt > 0) {
-      const remain = formatNextCooldownRemaining(
-        group.lastRefreshedAt,
-        ROSTER_REFRESH_COOLDOWN_MS
-      );
-      const lastUpdated = `📥 Last updated ${formatShortRelative(group.lastRefreshedAt)} ago`;
-      badges.push(
-        remain
-          ? `${lastUpdated} · ⏳ Next refresh in ${remain}`
-          : `${lastUpdated} · ✅ Refresh ready`
-      );
-    }
-    if (group.autoManageEnabled) {
-      const lastSync = group.lastAutoManageSyncAt > 0
-        ? `🔄 Last synced ${formatShortRelative(group.lastAutoManageSyncAt)} ago`
-        : "🔄 Never synced";
-      const remain = formatNextCooldownRemaining(
-        group.lastAutoManageAttemptAt,
-        AUTO_MANAGE_SYNC_COOLDOWN_MS
-      );
-      badges.push(
-        remain
-          ? `${lastSync} · ⏳ Next sync in ${remain}`
-          : `${lastSync} · ✅ Sync ready`
-      );
-    }
-    const syncBadge = badges.length > 0 ? " · " + badges.join(" · ") : "";
     // Per-roster state breakdown (filter zero counts)
     const statsText = formatRosterStats(group.stats || { none: 0, partial: 0, done: 0, notEligible: 0 });
-    const headerValue = statsText + syncBadge;
+    const freshnessLine = buildAccountFreshnessLine(group, group);
+    const headerValue = [statsText, freshnessLine].filter(Boolean).join(" · ");
 
     embed.addFields({
       name: truncateText(`📁 ${group.accountName} (${group.displayName})`, 256),
@@ -2472,10 +2458,7 @@ function buildAccountFreshnessLine(account, userMeta) {
   const parts = [];
   const lastRefreshedAt = Number(account?.lastRefreshedAt) || 0;
   if (lastRefreshedAt > 0) {
-    const remain = formatNextCooldownRemaining(
-      lastRefreshedAt,
-      ROSTER_REFRESH_COOLDOWN_MS
-    );
+    const remain = formatRosterRefreshCooldownRemaining(account);
     const lastUpdated = `📥 Last updated ${formatShortRelative(lastRefreshedAt)} ago`;
     parts.push(
       remain
@@ -7542,6 +7525,7 @@ module.exports = {
     applyStaleAccountRefreshes,
     formatNextCooldownRemaining,
     buildAccountFreshnessLine,
+    formatRosterRefreshCooldownRemaining,
     ROSTER_REFRESH_COOLDOWN_MS,
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
   },
