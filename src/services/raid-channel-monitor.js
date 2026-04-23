@@ -421,7 +421,7 @@ function createRaidChannelMonitorService({
     emptyContentWarningAt.set(key, now);
     await postTransientReply(
       message,
-      `${UI.icons.warn} Artist thấy message trong monitor channel nhưng không đọc được text content. Nếu cậu vừa gõ raid clear mà Artist im, kiểm tra **Message Content Intent** trong Discord Developer Portal và env \`TEXT_MONITOR_ENABLED\`, rồi redeploy bot nha.`
+      `${UI.icons.warn} Ớ kìa, tin của cậu bay qua rồi nhưng Artist không đọc được chữ nào hết... Không phải lỗi của cậu đâu nha, chắc tớ đang rối mấy cài đặt bên trong. Phiền cậu nhờ chủ bot xem hộ giúp Artist xíu, sửa xong cậu gõ lại là tớ bắt được ngay~`
     );
   }
   // Persistent per-user hint tracker: when a user posts a recoverable-error
