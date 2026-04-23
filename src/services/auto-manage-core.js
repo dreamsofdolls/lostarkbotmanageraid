@@ -426,18 +426,24 @@ function createAutoManageCoreService({
    * can run the bible I/O ONCE, outside saveWithRetry - VersionError retries
    * then skip the I/O and only re-run the in-memory apply.
    */
-  async function gatherAutoManageLogsForUserDoc(userDoc, weekResetStart) {
+  async function gatherAutoManageLogsForUserDoc(userDoc, weekResetStart, options = {}) {
+    const includeEntryKeys = options?.includeEntryKeys
+      ? new Set(options.includeEntryKeys)
+      : null;
     const collected = [];
     for (const account of userDoc.accounts || []) {
       const rosterFetchCache = new Map();
       for (const character of account.characters || []) {
         const charName = getCharacterName(character);
+        const entryKey = autoManageEntryKey(account.accountName, charName);
+        if (includeEntryKeys && !includeEntryKeys.has(entryKey)) continue;
+
         const entry = {
           accountName: account.accountName,
           charName,
           // Composite key: accountName + charName. See autoManageEntryKey
           // jsdoc for why charName alone is insufficient.
-          entryKey: autoManageEntryKey(account.accountName, charName),
+          entryKey,
           className: getCharacterClass(character),
           // `meta` is only set when the char wasn't already cached -
           // apply phase propagates this into the fresh doc's character.
@@ -885,6 +891,7 @@ function createAutoManageCoreService({
     acquireAutoManageSyncSlot,
     releaseAutoManageSyncSlot,
     formatAutoManageCooldownRemaining,
+    autoManageEntryKey,
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
     syncAutoManageForUserDoc,
