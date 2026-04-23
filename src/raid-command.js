@@ -208,7 +208,7 @@ function toModeLabel(modeKey) {
 function toModeKey(modeLabel) {
   const lower = normalizeName(modeLabel);
   if (lower === "hard" || lower === "hm") return "hard";
-  if (lower === "nightmare") return "nightmare";
+  if (lower === "nightmare" || lower === "nm" || lower === "9m") return "nightmare";
   return "normal";
 }
 
@@ -3326,7 +3326,7 @@ const HELP_SECTIONS = [
       "EN: Users post short messages like `Serca Nightmare Clauseduk` or `Serca Nor Soulrano G1`; bot parses, deletes the source message, and DMs the author a private confirmation embed.",
       "VN: Post message dạng `<raid> <difficulty> <character> [gate]` vào channel đã config - bot tự update raid, xóa message, và DM xác nhận riêng cho chính người post.",
       "• **Whisper acknowledgement trước khi xóa** (Apr 2026): khi parse thành công + DM gửi được, Artist post 1 dòng whisper tag user trong channel (`*thì thầm* @user ...Artist nhận được rồi nha~ Chờ 5 giây gửi DM...`) rồi mới xóa tin nhắn gốc + whisper sau 5 giây. User có visual confirmation trước khi tin vanish, không bị nhầm với rejection silent. Nếu DM fail → fallback public message hiện tại đảm nhận confirm (không kèm whisper để không double-post).",
-      "• **Aliases**: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca` (accept typo `secra`) · `normal` / `nor` · `hard` / `hm` · `nightmare` / `nm` · gates `G1` / `G2`.",
+      "• **Aliases**: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca` (accept typo `secra`) · `normal` / `nor` · `hard` / `hm` · `nightmare` / `nm` / `9m` · gates `G1` / `G2`.",
       "• Không có gate = đánh dấu cả raid done (complete). Có gate `G_N` = **cumulative: mark G1 đến G_N đều done** (Lost Ark sequential progression - đi tới G2 nghĩa là G1 đã qua).",
       "• Chỉ poster tự update char của mình (cần có roster đã đăng ký qua `/add-roster`).",
       "• **Multi-char trong 1 post**: liệt kê nhiều tên cách nhau bằng space/comma/+ - ví dụ `Act4 Hard Priscilladuk, Nailaduk`. Bot apply raid update cho từng char, DM 1 embed aggregated (done/already-done/not-found/iLvl-thiếu grouped).",
@@ -4249,6 +4249,7 @@ const RAID_ALIASES = new Map([
 const DIFFICULTY_ALIASES = new Map([
   ["nightmare", "nightmare"],
   ["nm",        "nightmare"],
+  ["9m",        "nightmare"],
   ["hard",      "hard"],
   ["hm",        "hard"],
   ["normal",    "normal"],
@@ -4271,7 +4272,7 @@ const GATE_TOKEN_RE = /^g([1-9])$/;
  *                                                  progression
  *
  * Raid aliases: act 4 / act4 / armoche · kazeros / kaz · serca
- * Difficulty aliases: normal / nor · hard / hm · nightmare / nm
+ * Difficulty aliases: normal / nor · hard / hm · nightmare / nm / 9m
  * Gate pattern: G1..G9 (validated downstream against raid's gate list)
  *
  * Returns:
@@ -4532,7 +4533,7 @@ function buildRaidChannelWelcomeEmbed() {
         name: "🏷️ Alias Artist nhận (không phân biệt hoa thường)",
         value: [
           "**Raid**: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca`",
-          "**Difficulty**: `normal` / `nor` · `hard` / `hm` · `nightmare` / `nm`",
+          "**Difficulty**: `normal` / `nor` · `hard` / `hm` · `nightmare` / `nm` / `9m`",
           "**Gate**: `G1`, `G2` - chỉ dùng khi muốn đánh dấu đúng 1 gate",
           "**Separator**: space, `+`, hay `,` đều xài được hết",
         ].join("\n"),
@@ -5414,9 +5415,9 @@ async function fetchBibleLogsSinceWeekReset({ serial, cid, rid, className, weekR
 
 function normalizeDifficultyToModeKey(difficulty) {
   const normalized = normalizeName(difficulty || "");
-  if (normalized === "nightmare") return "nightmare";
+  if (normalized === "nightmare" || normalized === "nm" || normalized === "9m") return "nightmare";
   if (normalized === "hard" || normalized === "hm") return "hard";
-  if (normalized === "normal") return "normal";
+  if (normalized === "normal" || normalized === "nor") return "normal";
   return null;
 }
 
