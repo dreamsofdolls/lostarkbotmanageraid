@@ -166,9 +166,12 @@ Sau khi đăng ký, bất kỳ ai post message vào channel đó dạng `<raid> 
 | Lỗi phục hồi được (char not found, iLvl thấp, combo sai, multi-raid/diff/gate) | Ping user persistent hint - auto-dọn khi user post lại hoặc sau 5 phút TTL |
 | Raid đã DONE từ trước (hoặc gate đã DONE khi post với gate) | DM user notice "Raid đã DONE rồi" + xóa message gốc. Không re-stamp timestamp, không ghi DB. Muốn reset phải dùng `/raid-set status:reset`. |
 | Internal error (DB/Discord fail) | Reply transient tự xóa 10s |
-| Success | DM user embed xác nhận + xóa message gốc + dọn hint cũ của user đó (nếu có) |
+| Success (DM sent) | Artist post 1 whisper tag user trong channel (`*thì thầm* @user ...Artist nhận được rồi nha~ Chờ 5 giây gửi DM...`) + DM user embed xác nhận. Sau 5 giây xóa cả whisper + message gốc. Dọn hint cũ của user đó (nếu có) |
+| Success (DM fail) | Fallback public message mention user với raid + char, tự xóa sau 15 giây (không kèm whisper để không double-post). Xóa message gốc + dọn hint cũ |
 
 **DM confirmation**: Discord chỉ hỗ trợ ephemeral (chỉ tác giả thấy) cho interactions - không có trên `MessageCreate`. Workaround là DM. Nếu user tắt "Allow direct messages from server members" → DM fail, bot **fallback post 1 tin nhắn công khai ngắn** mention user + raid + char, tự xóa sau 15 giây, để user vẫn biết update đã thành công thay vì thấy message biến mất không phản hồi. Log warn chỉ ở server, user được thông báo cách bật lại DM để nhận confirm private lần sau.
+
+**Whisper acknowledgement (success + DM sent)**: ngay sau khi DM thành công, Artist post 1 dòng whisper tag user trong channel (`*thì thầm* @user ...Artist nhận được rồi nha~ Chờ Artist 5 giây gửi kết quả qua DM cho cậu nhé...`) rồi delay 5 giây mới xóa message gốc + whisper cùng lúc. Mục đích: user có visual confirm trước khi message vanish, không nhầm với rejection silent. DM-fail path skip whisper vì fallback public message đã tự confirm (tránh double-post). Whisper dùng giọng Dusk (whisper style) nhưng signed là Artist per bot persona.
 
 **Prerequisites deploy:**
 1. Bật `MESSAGE CONTENT INTENT` trong Discord Developer Portal → Bot → Privileged Gateway Intents. Nếu không bật, bot **sẽ không start được** (Discord reject login với "Used disallowed intents") - dùng env `TEXT_MONITOR_ENABLED=false` để deploy slash-command-only mà không cần privileged intent.

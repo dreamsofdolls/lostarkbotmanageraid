@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. Dates use the local calendar of the commit.
 
+## 2026-04-23
+
+### Added
+
+- **`/raid-channel` whisper acknowledgement trước khi xóa tin nhắn thành công.** Traine: "nếu như cậu tag người đó và để dòng thông báo kiểu chờ 5 giây để gửi cho thì user sẽ biết là à hóa ra mình nhập thành công rồi. Mà dòng tin nhắn thông báo phải dùng giọng điệu của cậu đó Dusk (thì thầm) nhưng mà vẫn tên Artist nhé". Problem: user post message hợp lệ → Artist process + DM + xóa source ngay qua `message.delete()` trong `ops`. User thấy tin biến mất silent, không phân biệt được giữa "accepted + deleted" và "rejected/ignored" (vì rejected path cũng delete cho nhiều case như cooldown/duplicate). Fix: trong success branch (`hasProgress` true), nếu DM gửi được (`dmSucceeded`) post 1 dòng whisper tag user trong channel với giọng Dusk + signed "Artist" (`*thì thầm* @user ...Artist nhận được rồi nha~ Chờ Artist 5 giây gửi kết quả qua DM cho cậu nhé...`). Replace immediate `message.delete()` trong ops bằng `setTimeout(5000)` fire-and-forget delete cả source + whisper cùng lúc. `clearPendingHint` vẫn stay trong ops (không cần chờ 5s). DM-fail path skip whisper vì fallback public message đã đảm nhận role acknowledgement (tránh double-post). Whisper dùng `allowedMentions: { users: [authorId] }` để tag hoạt động + không leak mention khác. Fire-and-forget setTimeout: không lý do gì giữ handler sleep 5s để await delete - release sớm, timer cleanup on its own. `src/raid-command.js` (handleRaidChannelMessage success branch rewrite), HELP_SECTIONS `/raid-channel` bullet mới, README flow table thêm row "Success (DM sent)" / "Success (DM fail)" + paragraph whisper acknowledgement.
+
 ## 2026-04-22
 
 ### Added
