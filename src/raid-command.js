@@ -741,6 +741,12 @@ const ANNOUNCEMENT_REGISTRY = {
     label: "Weekly reset",
     subdocKey: "weeklyReset",
     channelOverridable: true,
+    // Trigger + lifecycle metadata shown in /raid-announce show. Keeping
+    // these as registry data (not hardcoded in the embed builder) means
+    // adding a new announcement type only touches the registry.
+    trigger: "Every Wednesday 17:00 VN (= Wed 10:00 UTC), right after the weekly raid progress reset runs.",
+    dedup: "Once per ISO week per guild (`lastWeeklyAnnouncementKey`). Tick 30 phút cadence với 24h post-reset window catches catch-up scenarios.",
+    messageTtl: "30 phút rồi Artist tự xóa",
     // Preview shown in /raid-announce show. Firing sites still inline
     // content because some interpolate (<@user>, N count); preview gives
     // admins a read-only sample of the message template.
@@ -751,6 +757,9 @@ const ANNOUNCEMENT_REGISTRY = {
     label: "Stuck private log nudge",
     subdocKey: "stuckPrivateLogNudge",
     channelOverridable: true,
+    trigger: "During the 30-minute phase-3 auto-manage tick, when a user's roster returns `Logs not enabled` for every character (all private).",
+    dedup: "7 ngày per user (`User.lastPrivateLogNudgeAt`). Guild chọn = first reachable guild có member cache hit.",
+    messageTtl: "30 phút rồi Artist tự xóa",
     previewContent:
       "<@user> nhắc khẽ nhé~ Roster cậu đã bật auto-manage nhưng hiện tại tất cả char đều là private log, Artist không sync được data đâu. Vào https://lostark.bible/me/logs bật **Show on Profile** cho char cần sync giúp tớ nha. Biển báo này Artist cuỗm đi sau 30 phút.",
   },
@@ -758,6 +767,9 @@ const ANNOUNCEMENT_REGISTRY = {
     label: "Set greeting",
     subdocKey: "setGreeting",
     channelOverridable: false,
+    trigger: "Ngay sau khi admin chạy `/raid-channel config action:set` và welcome pin post thành công.",
+    dedup: "Không có dedup - greeting bám theo mỗi lần admin set channel (hiếm khi lặp).",
+    messageTtl: "2 phút rồi Artist tự xóa",
     previewContent:
       "Ồ, chỗ mới này Artist được mời đến trông coi nhỉ~ Xin chào các cậu, từ giờ cứ post clear raid theo format ở welcome pin phía trên là Artist tự cập nhật progress cho nha. Biển báo này Artist cuỗm đi sau 2 phút, welcome thì giữ nguyên.",
   },
@@ -765,6 +777,9 @@ const ANNOUNCEMENT_REGISTRY = {
     label: "Hourly cleanup notice",
     subdocKey: "hourlyCleanupNotice",
     channelOverridable: false,
+    trigger: "Mỗi đầu giờ VN (khi `schedule-on` đã bật), sau khi cleanup sweep chạy xong.",
+    dedup: "1 post/giờ/guild (`lastAutoCleanupKey = 'YYYY-MM-DDTHH'`). Tick 30 phút nên lag từ hour boundary tối đa 30 phút.",
+    messageTtl: "5 phút rồi Artist tự xóa",
     previewContent:
       "Khi có rác: `Hừm... đến giờ Artist phải đi dọn rác rồi nhé. Xong, vừa dọn **N** tin rồi đấy~ ...`\nKhi channel sạch sẵn: `Ồ, giờ này Artist ghé qua xem chỗ này thế nào... ai dè sạch sẽ sẵn rồi nhé~ ...`",
   },
@@ -772,6 +787,9 @@ const ANNOUNCEMENT_REGISTRY = {
     label: "Whisper ack",
     subdocKey: "whisperAck",
     channelOverridable: false,
+    trigger: "Sau mỗi post clear raid hợp lệ trong monitor channel + DM xác nhận gửi thành công.",
+    dedup: "Không có - fire mỗi message hợp lệ (đã được rate-limit bởi per-user cooldown 2 giây).",
+    messageTtl: "5 giây rồi Artist xóa cùng tin gốc",
     previewContent:
       "<@user> ...Artist nhận được rồi nha~ Chờ Artist 5 giây gửi kết quả qua DM cho cậu nhé...",
   },
@@ -3497,6 +3515,14 @@ async function handleRaidAnnounceCommand(interaction) {
     const previewText = entry.previewContent
       ? truncateText(entry.previewContent, 1024)
       : "*(no preview defined for this type)*";
+    // Compose trigger + dedup + TTL into a single "When it fires" block
+    // so admin sees the full lifecycle (when / how often / how long) in
+    // one field. Fall back to placeholders if a future registry entry
+    // forgets to fill these in.
+    const triggerLine = `**Trigger:** ${entry.trigger || "*(not defined)*"}`;
+    const dedupLine = `**Dedup:** ${entry.dedup || "*(none)*"}`;
+    const ttlLine = `**Message TTL:** ${entry.messageTtl || "*(permanent until manual delete)*"}`;
+    const scheduleText = truncateText([triggerLine, dedupLine, ttlLine].join("\n"), 1024);
     const embed = new EmbedBuilder()
       .setColor(UI.colors.neutral)
       .setTitle(`${UI.icons.info} Announcement · ${typeLabel}`)
@@ -3504,6 +3530,7 @@ async function handleRaidAnnounceCommand(interaction) {
         { name: "Enabled", value: current.enabled ? `${UI.icons.done} ON` : `${UI.icons.reset} OFF`, inline: true },
         { name: "Destination", value: resolvedChannel, inline: true },
         { name: "Channel config", value: overrideState, inline: false },
+        { name: "When it fires", value: scheduleText, inline: false },
         { name: "Message preview", value: previewText, inline: false },
       )
       .setTimestamp();
