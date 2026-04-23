@@ -108,6 +108,28 @@ const userSchema = new mongoose.Schema(
   }
 );
 
+// Weekly reset wakes every 30 minutes and needs to find users whose cursor
+// lags the current target week. The query still uses `$ne`, but an index on
+// the cursor keeps that scheduler from hard-full-scanning forever as the user
+// collection grows.
+userSchema.index({ weeklyResetKey: 1 });
+
+// Phase 3 daily auto-manage tick filters to opted-in users, narrows by stale
+// `lastAutoManageSyncAt`, then sorts by `lastAutoManageAttemptAt` for fair
+// rotation. Partial index keeps the structure compact because only opted-in
+// users participate in that scheduler path.
+userSchema.index(
+  {
+    autoManageEnabled: 1,
+    lastAutoManageSyncAt: 1,
+    lastAutoManageAttemptAt: 1,
+  },
+  {
+    name: "auto_manage_daily_scan",
+    partialFilterExpression: { autoManageEnabled: true },
+  }
+);
+
 const User = mongoose.model("User", userSchema);
 
 /**
