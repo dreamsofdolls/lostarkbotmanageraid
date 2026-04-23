@@ -21,7 +21,11 @@ jsdomVirtualConsole.on("jsdomError", (err) => {
 });
 const User = require("./schema/user");
 const { saveWithRetry } = require("./schema/user");
-const { ensureFreshWeek } = require("./weekly-reset");
+const {
+  ensureFreshWeek,
+  getWeeklyResetSchedulerStartedAtMs,
+  WEEKLY_RESET_TICK_MS,
+} = require("./weekly-reset");
 
 /**
  * Minimal concurrency limiter: tasks queue up and run at most `max` in
@@ -66,6 +70,10 @@ const bibleLimiter = new ConcurrencyLimiter(2);
 // raiding server could queue up dozens of fetches at once and trip the
 // global 50-req/s ceiling - 5 in flight is a safe middle ground.
 const discordUserLimiter = new ConcurrencyLimiter(5);
+// /raid-check's initial render may pre-refresh multiple users before it scans.
+// Keep that user-level fan-out bounded so one leader view doesn't stampede
+// Mongo while still letting bible HTTP overlap through bibleLimiter.
+const raidCheckRefreshLimiter = new ConcurrencyLimiter(3);
 
 /**
  * In-flight dedup loader for autocomplete paths. Rapid keystrokes for the
@@ -1059,14 +1067,118 @@ const modeRank = (modeStr) => MODE_RANK[normalizeName(modeStr || "")] || 0;
 // Shared scan+classify pass for /raid-check. Returns the raw eligible list
 // + per-user metadata so both the initial command AND the button handlers
 // (Remind / Sync) can operate on a fresh Mongo snapshot every time - no
-// stale state map, no cache staleness bug.
+// stale state map, no cache staleness bug. Initial render can optionally
+// pre-refresh source users first so it matches `/raid-status` freshness.
 // Composite key separator (Unit Separator \x1f) for maps keyed by
 // discordId + accountName. Shared between rosterBuckets, rosterStats,
 // and rosterRefreshMap so lookups line up across the three structures.
 const ROSTER_KEY_SEP = "\x1f";
 
-async function computeRaidCheckSnapshot(raidMeta) {
-  const users = await User.find({}).lean();
+function toPlainUserSnapshot(userDoc) {
+  if (!userDoc) return null;
+  return typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
+}
+
+// Shared "render-facing" refresh helper: lazy-refresh stale roster data,
+// optionally piggyback auto-manage, then return a plain object snapshot for
+// commands that only need to read/render the result.
+async function loadFreshUserSnapshotForRaidViews(
+  seedDoc,
+  { allowAutoManage = true, logLabel = "[raid-status]" } = {}
+) {
+  if (!seedDoc) return null;
+  const discordId = seedDoc.discordId;
+  if (!discordId) return toPlainUserSnapshot(seedDoc);
+
+  const hasRoster = Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
+  const didFreshenSeedWeek = ensureFreshWeek(seedDoc);
+
+  if (!hasRoster) {
+    if (!didFreshenSeedWeek) return toPlainUserSnapshot(seedDoc);
+    try {
+      return await saveWithRetry(async () => {
+        const doc = await User.findOne({ discordId });
+        if (!doc) return null;
+        const didFreshenWeek = ensureFreshWeek(doc);
+        if (didFreshenWeek) await doc.save();
+        return doc.toObject();
+      });
+    } catch (err) {
+      console.error(`${logLabel} refresh failed for ${discordId}:`, err?.message || err);
+      return await User.findOne({ discordId }).lean();
+    }
+  }
+
+  let autoManageGuard = null;
+  try {
+    let autoManagePromise = Promise.resolve(null);
+    let autoManageWeekResetStart = null;
+    if (allowAutoManage && seedDoc.autoManageEnabled) {
+      autoManageGuard = await acquireAutoManageSyncSlot(discordId);
+      if (autoManageGuard.acquired) {
+        autoManageWeekResetStart = weekResetStartMs();
+        autoManagePromise = gatherAutoManageLogsForUserDoc(
+          seedDoc,
+          autoManageWeekResetStart
+        ).catch((err) => {
+          console.warn(
+            `${logLabel} auto-manage piggyback gather failed:`,
+            err?.message || err
+          );
+          return null;
+        });
+      }
+    }
+
+    const [refreshCollected, autoManageCollected] = await Promise.all([
+      collectStaleAccountRefreshes(seedDoc),
+      autoManagePromise,
+    ]);
+    const autoManageBibleHit = autoManageGuard?.acquired === true;
+    const needsFreshWrite =
+      didFreshenSeedWeek || refreshCollected.length > 0 || autoManageBibleHit;
+
+    if (!needsFreshWrite) return toPlainUserSnapshot(seedDoc);
+
+    return await saveWithRetry(async () => {
+      const doc = await User.findOne({ discordId });
+      if (!doc) return null;
+      const didFreshenWeek = ensureFreshWeek(doc);
+      const didRefresh = applyStaleAccountRefreshes(doc, refreshCollected);
+
+      let didAutoManage = false;
+      if (autoManageCollected && doc.autoManageEnabled) {
+        const autoReport = applyAutoManageCollected(
+          doc,
+          autoManageWeekResetStart,
+          autoManageCollected
+        );
+        const now = Date.now();
+        doc.lastAutoManageAttemptAt = now;
+        if (autoReport.perChar.some((c) => !c.error)) {
+          doc.lastAutoManageSyncAt = now;
+        }
+        didAutoManage = true;
+      } else if (autoManageBibleHit) {
+        doc.lastAutoManageAttemptAt = Date.now();
+        didAutoManage = true;
+      }
+
+      if (didFreshenWeek || didRefresh || didAutoManage) await doc.save();
+      return doc.toObject();
+    });
+  } catch (err) {
+    console.error(`${logLabel} refresh failed for ${discordId}:`, err?.message || err);
+    if (autoManageGuard?.acquired) {
+      await stampAutoManageAttempt(discordId);
+    }
+    return await User.findOne({ discordId }).lean();
+  } finally {
+    if (autoManageGuard?.acquired) releaseAutoManageSyncSlot(discordId);
+  }
+}
+
+function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
   const userMeta = new Map();
   // rosterRefreshMap: composite key → account.lastRefreshedAt (ms timestamp
   // of last /raid-status lazy refresh that pulled iLvl/class from bible).
@@ -1079,7 +1191,8 @@ async function computeRaidCheckSnapshot(raidMeta) {
   const selectedDiffNorm = normalizeName(selectedDifficulty);
   const scanRank = modeRank(selectedDiffNorm);
 
-  for (const userDoc of users) {
+  for (const userDoc of users || []) {
+    if (!userDoc) continue;
     ensureFreshWeek(userDoc);
     if (!userMeta.has(userDoc.discordId)) {
       userMeta.set(userDoc.discordId, {
@@ -1143,6 +1256,26 @@ async function computeRaidCheckSnapshot(raidMeta) {
   return { allEligible, completeChars, partialChars, noneChars, pendingChars, userMeta, rosterRefreshMap };
 }
 
+async function computeRaidCheckSnapshot(raidMeta, { syncFreshData = false } = {}) {
+  if (!syncFreshData) {
+    const users = await User.find({}).lean();
+    return buildRaidCheckSnapshotFromUsers(users, raidMeta);
+  }
+
+  const seedUsers = await User.find({ "accounts.0": { $exists: true } });
+  const users = await Promise.all(
+    seedUsers.map((seedDoc) =>
+      raidCheckRefreshLimiter.run(() =>
+        loadFreshUserSnapshotForRaidViews(seedDoc, {
+          allowAutoManage: true,
+          logLabel: "[raid-check]",
+        })
+      )
+    )
+  );
+  return buildRaidCheckSnapshotFromUsers(users, raidMeta);
+}
+
 async function handleRaidCheckCommand(interaction) {
   if (!isRaidLeader(interaction)) {
     await interaction.reply({
@@ -1164,9 +1297,11 @@ async function handleRaidCheckCommand(interaction) {
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  // Shared scan + classification (reused by Remind/Sync button handlers).
+  // Initial render uses the same lazy-refresh semantics as /raid-status so
+  // raid leaders scan against fresher roster/log data instead of a stale DB
+  // snapshot. Sync button reuses the cheaper raw snapshot path later.
   const { allEligible, completeChars, partialChars, noneChars, pendingChars, userMeta, rosterRefreshMap } =
-    await computeRaidCheckSnapshot(raidMeta);
+    await computeRaidCheckSnapshot(raidMeta, { syncFreshData: true });
 
   const modeKey = normalizeName(raidMeta.modeKey);
   const difficultyColor =
@@ -1508,7 +1643,7 @@ async function handleRaidCheckCommand(interaction) {
   // but tracks filter state across interactions too.
   const message = await interaction.fetchReply();
   const collector = message.createMessageComponentCollector({
-    time: PAGINATION_SESSION_MS,
+    time: RAID_CHECK_PAGINATION_SESSION_MS,
   });
 
   collector.on("collect", async (i) => {
@@ -1579,7 +1714,7 @@ async function handleRaidCheckCommand(interaction) {
 
   collector.on("end", async () => {
     try {
-      const expiredFooter = `⏱️ Session đã hết hạn (${PAGINATION_SESSION_MS / 1000}s) · Dùng /raid-check để xem lại`;
+      const expiredFooter = `⏱️ Session đã hết hạn (${RAID_CHECK_PAGINATION_SESSION_MS / 1000}s) · Dùng /raid-check để xem lại`;
       const source = pages[currentPage] || pages[0];
       const expiredEmbed = EmbedBuilder.from(source).setFooter({ text: expiredFooter });
       await interaction.editReply({
@@ -1775,10 +1910,11 @@ async function handleRaidCheckSyncClick(interaction, raidMeta) {
   await interaction.editReply({ content: lines.join("\n") });
 }
 
-// Session timeout for any paginated command (/raid-status, /raid-check).
-// 2 phút match với cadence user expect - đủ để scroll qua roster list, không
-// lâu quá để giữ stale collector sống. Shared giữa nhiều command để consistent.
-const PAGINATION_SESSION_MS = 2 * 60 * 1000;
+// Separate pagination windows: /raid-check gets longer than /raid-status.
+// Personal `/raid-status` paging stays short; raid leaders get 5 minutes on
+// `/raid-check` because filtering + paging large roster scans takes longer.
+const STATUS_PAGINATION_SESSION_MS = 2 * 60 * 1000;
+const RAID_CHECK_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 // Shared English legend for footer of both /raid-status and /raid-check.
 // Single source of truth - keeps the two paginated commands visually
 // aligned.
@@ -2296,7 +2432,7 @@ async function handleStatusCommand(interaction) {
 
   const collector = message.createMessageComponentCollector({
     componentType: ComponentType.Button,
-    time: PAGINATION_SESSION_MS,
+    time: STATUS_PAGINATION_SESSION_MS,
   });
 
   collector.on("collect", async (btn) => {
@@ -2319,7 +2455,7 @@ async function handleStatusCommand(interaction) {
 
   collector.on("end", async () => {
     try {
-      const expiredFooter = `⏱️ Session đã hết hạn (${PAGINATION_SESSION_MS / 1000}s) · Dùng /raid-status để xem lại`;
+      const expiredFooter = `⏱️ Session đã hết hạn (${STATUS_PAGINATION_SESSION_MS / 1000}s) · Dùng /raid-status để xem lại`;
       const expiredEmbed = EmbedBuilder.from(pages[currentPage]).setFooter({ text: expiredFooter });
       await interaction.editReply({
         embeds: [expiredEmbed],
@@ -2941,9 +3077,9 @@ const HELP_SECTIONS = [
       "• **Header**: title embed hiện `⚠️ Raid Check · <raid label> (<minItemLevel>)` - gọn, chỉ command + raid + threshold (ví dụ `Act 4 Normal (1700)`). Description đã bỏ hoàn toàn - info đều ở title, per-roster headers, và footer. Page indicator + 3-state counts đều dưới footer.",
       "• **Per-char card (inline field)**: mỗi char = 1 Discord inline field mirroring `/raid-status`'s pattern. Field name `<charName> · <iLvl>` được Discord auto-bold = scan anchor. Field value `<icon> <done>/<total>` (ví dụ `⚪ 0/2`) - value line có content nên không waste height (earlier attempt pack everything vào name line + ZWS value tạo gap 'cách nhau quá'). Aggregate 3-state icon qua `pickProgressIcon` (🟢 done all / 🟡 partial / ⚪ none). Raid label nằm ở title không lặp trong value.",
       "• **2-column layout via inline fields + spacer**: Discord default pack 3 inline field/row; chèn zero-width-space spacer field giữa mỗi cặp char để force 2-per-row - y hệt kỹ thuật `/raid-status`. Odd char cuối cùng cặp với 1 spacer để không bị Discord stretch full-width.",
-      "• **2 rosters per page (chunked)**: mỗi embed page chứa tối đa 2 roster sections stacked. Roster section = non-inline header field với explicit value line. Name = `📁 accountName (displayName)` (clean label). Value = `<state breakdown> · 📥 Last updated <relative> ago · 🔄 Last synced <relative> ago`. **📥 Last updated** = roster data refresh (iLvl/class từ bible qua /raid-status lazy refresh) - applies to ALL users. **🔄 Last synced** = auto-manage bible log sync (raid progress) - chỉ opted-in user, `Never synced` nếu chưa có data. Hai dòng song song nếu đủ data. Ví dụ: `4 ⚪ · 1 🟡 · 1 🟢 · 📥 Last updated 2h ago · 🔄 Last synced 1h ago`. Avg iLvl dropped per Traine: text phrase `Last updated` rõ ràng hơn cryptic `📥9h` badge, scan-friendly cho Raid Manager quét nhiều roster. Per roster cost: 1 header + N char + ceil(N/2) spacer fields. 2 × 6-char rosters = 20 fields, fit 25-cap.",
+      "• **2 rosters per page (chunked)**: mỗi embed page chứa tối đa 2 roster sections stacked. Roster section = non-inline header field với explicit value line. Name = `📁 accountName (displayName)` (clean label). Value = `<state breakdown> · 📥 Last updated <relative> ago · 🔄 Last synced <relative> ago`. **📥 Last updated** = roster data refresh (iLvl/class từ bible qua `/raid-status` lazy refresh HOẶC pre-scan refresh của `/raid-check`) - applies to ALL users. **🔄 Last synced** = auto-manage bible log sync (raid progress) - chỉ opted-in user, `Never synced` nếu chưa có data. Hai dòng song song nếu đủ data. Ví dụ: `4 ⚪ · 1 🟡 · 1 🟢 · 📥 Last updated 2h ago · 🔄 Last synced 1h ago`. Avg iLvl dropped per Traine: text phrase `Last updated` rõ ràng hơn cryptic `📥9h` badge, scan-friendly cho Raid Manager quét nhiều roster. Per roster cost: 1 header + N char + ceil(N/2) spacer fields. 2 × 6-char rosters = 20 fields, fit 25-cap.",
       "• **User filter dropdown** (action row 2): `StringSelectMenuBuilder` cho phép Raid Manager lọc pages theo Discord user. First option `🌐 All users (N pending)` reset filter. Tiếp theo top-24 users sort theo pending desc (`👤 displayName (N pending)`). Discord cap 25 options total. Selection → recompute pages chỉ chứa rosters của user đó, reset currentPage=0. `default: true` preserve selected state qua Prev/Next clicks. Rosters cùng user group consecutive, sort theo tổng pending user desc rồi per-roster pending desc. **Avatar in embed author**: khi filter = specific user, resolve Discord avatar cache-first (`client.users.cache` fallback to `fetch` via `discordUserLimiter`) và `setAuthor({name, iconURL})` trên mỗi page - visual confirmation filter đang active. Discord StringSelectMenu options không support per-option avatars (API limitation) nên embed author là compromise.",
-      "• **Pagination buttons + session**: `◀ Previous` / `Next ▶` (shared helper `buildPaginationRow`) cycle giữa các roster-chunk pages. Title stable `⚠️ Raid Check · <raid> (<minItemLevel>)` không đổi theo page. Footer append page indicator. Collector locked theo người chạy, session timeout **2 phút** (`PAGINATION_SESSION_MS`), hết hạn disable all components + swap footer legend.",
+      "• **Pagination buttons + session**: `◀ Previous` / `Next ▶` (shared helper `buildPaginationRow`) cycle giữa các roster-chunk pages. Title stable `⚠️ Raid Check · <raid> (<minItemLevel>)` không đổi theo page. Footer append page indicator. Collector locked theo người chạy, session timeout **5 phút** (`RAID_CHECK_PAGINATION_SESSION_MS`), hết hạn disable all components + swap footer legend.",
       "• **Sync badge trong roster header**: opted-in user có sync data hiện `🔄5m` / `🔄2h` / `🔄3d` (compact relative time tự compute). Opted-in nhưng chưa sync lần nào → `🔄never`. Non-opted-in → không hiện segment này.",
       "• **Footer legend với counts + page**: `🟢 N done · 🟡 M partial · ⚪ K pending · Page X/Y` - icon + count + English label merged, page indicator append cuối khi > 1 roster (move từ title xuống đây). Dynamic per page (page index thay đổi) compute inline trong `buildRaidCheckPage`. Discord render timestamp (`Today at HH:MM`) sau footer text tự động.",
       "• **Sort order**: users có nhiều pending tổng nhất lên top; trong mỗi user rosters sort theo pending count desc; trong mỗi roster chars sort theo iLvl desc.",
@@ -3471,24 +3607,30 @@ function getAnnouncementsConfig(cfg) {
 }
 
 /**
- * Compute the next scheduled check/fire moment (epoch ms) for a given
- * announcement type. Returns null for event-driven types that fire only
- * when a user or admin action happens (set-greeting, whisper-ack).
- *
- * Semantics per type:
- *   - weekly-reset: next Wed 10:00 UTC (= Wed 17:00 VN). Actual post may
- *     lag up to 30 min after this moment due to 30-min tick cadence.
- *   - hourly-cleanup: next hour boundary UTC (= hour boundary VN since
- *     offset is 7 full hours). Same 30-min tick lag applies.
- *   - stuck-nudge: next 30-min tick boundary (on the :00 or :30). Whether
- *     a post actually happens also depends on per-user state, so this is
- *     "next check" not "next guaranteed fire".
- *
- * Kept next to ANNOUNCEMENT_REGISTRY rather than embedded in registry
- * entries because computing dates requires Date manipulation the registry
- * can't express cleanly as a static field.
+ * Next scheduler wake-up time for an interval job that started at
+ * `startedAtMs` and runs every `intervalMs`. We intentionally derive this
+ * from the scheduler's REAL boot phase instead of wall-clock boundaries,
+ * because `setInterval(30m)` keeps the process-start phase forever
+ * (:17/:47, :03/:33, etc).
  */
-function nextAnnouncementFireMs(typeKey, now = new Date()) {
+function nextIntervalTickMs(startedAtMs, intervalMs, now = new Date()) {
+  const nowMs = now instanceof Date ? now.getTime() : Number(now);
+  if (!Number.isFinite(startedAtMs) || !Number.isFinite(intervalMs) || intervalMs <= 0) {
+    return null;
+  }
+  if (nowMs < startedAtMs) return startedAtMs;
+  const elapsed = nowMs - startedAtMs;
+  const ticksElapsed = Math.floor(elapsed / intervalMs) + 1;
+  return startedAtMs + (ticksElapsed * intervalMs);
+}
+
+/**
+ * Wall-clock eligibility boundary for announcement types whose natural
+ * trigger is tied to a calendar boundary. This is NOT always the same as
+ * the next actual scheduler check because the bot polls every 30 minutes
+ * from its boot phase.
+ */
+function nextAnnouncementEligibleBoundaryMs(typeKey, now = new Date()) {
   const nowMs = now.getTime();
   if (typeKey === "weekly-reset") {
     const candidate = new Date(Date.UTC(
@@ -3526,6 +3668,97 @@ function nextAnnouncementFireMs(typeKey, now = new Date()) {
     return candidate.getTime();
   }
   return null; // event-driven
+}
+
+function nextAnnouncementSchedulerCheckMs(typeKey, now = new Date(), schedulerState = {}) {
+  const {
+    weeklyResetStartedAtMs = getWeeklyResetSchedulerStartedAtMs(),
+    autoCleanupStartedAtMs = autoCleanupSchedulerStartedAtMs,
+    autoManageStartedAtMs = autoManageSchedulerStartedAtMs,
+  } = schedulerState;
+  if (typeKey === "weekly-reset") {
+    return nextIntervalTickMs(weeklyResetStartedAtMs, WEEKLY_RESET_TICK_MS, now);
+  }
+  if (typeKey === "hourly-cleanup") {
+    return nextIntervalTickMs(autoCleanupStartedAtMs, AUTO_CLEANUP_TICK_MS, now);
+  }
+  if (typeKey === "stuck-nudge") {
+    return nextIntervalTickMs(autoManageStartedAtMs, AUTO_MANAGE_DAILY_TICK_MS, now);
+  }
+  return null;
+}
+
+function formatDiscordTimestampPair(ms) {
+  const unixSec = Math.floor(ms / 1000);
+  return `<t:${unixSec}:R> (<t:${unixSec}:F>)`;
+}
+
+function buildAnnouncementWhenItFiresText(typeKey, entry, current, guildCfg, now = new Date(), schedulerState = {}) {
+  const {
+    autoManageDisabled = process.env.AUTO_MANAGE_DAILY_DISABLED === "true",
+  } = schedulerState;
+  const triggerLine = `**Trigger:** ${entry?.trigger || "*(not defined)*"}`;
+  const dedupLine = `**Dedup:** ${entry?.dedup || "*(none)*"}`;
+  const ttlLine = `**Message TTL:** ${entry?.messageTtl || "*(permanent until manual delete)*"}`;
+  const effectiveDestinationId = current?.channelId || guildCfg?.raidChannelId || null;
+  const lines = [triggerLine];
+
+  if (current?.enabled === false) {
+    lines.push("**Next check:** Disabled (`/raid-announce action:on` to re-enable)");
+    lines.push(dedupLine, ttlLine);
+    return lines.join("\n");
+  }
+
+  if (!effectiveDestinationId) {
+    lines.push(
+      entry?.channelOverridable
+        ? "**Next check:** Waiting for a destination channel (`set-channel` here or `/raid-channel config action:set`)"
+        : "**Next check:** Waiting for `/raid-channel config action:set` (monitor channel not configured)"
+    );
+    lines.push(dedupLine, ttlLine);
+    return lines.join("\n");
+  }
+
+  if (typeKey === "set-greeting" || typeKey === "whisper-ack") {
+    lines.push("**Next check:** On-demand (fires when the trigger condition happens; not on a fixed schedule)");
+    lines.push(dedupLine, ttlLine);
+    return lines.join("\n");
+  }
+
+  if (typeKey === "hourly-cleanup" && guildCfg?.autoCleanupEnabled !== true) {
+    lines.push("**Next check:** Disabled until `/raid-channel config action:schedule-on` is enabled");
+    lines.push(dedupLine, ttlLine);
+    return lines.join("\n");
+  }
+
+  if (typeKey === "stuck-nudge" && autoManageDisabled) {
+    lines.push("**Next check:** Disabled by deploy killswitch (`AUTO_MANAGE_DAILY_DISABLED=true`)");
+    lines.push(dedupLine, ttlLine);
+    return lines.join("\n");
+  }
+
+  const eligibleBoundaryMs = nextAnnouncementEligibleBoundaryMs(typeKey, now);
+  if (eligibleBoundaryMs) {
+    lines.push(`**Next eligible boundary:** ${formatDiscordTimestampPair(eligibleBoundaryMs)}`);
+  }
+
+  const nextCheckMs = nextAnnouncementSchedulerCheckMs(typeKey, now, schedulerState);
+  if (nextCheckMs) {
+    lines.push(`**Next scheduler check:** ${formatDiscordTimestampPair(nextCheckMs)}`);
+  } else {
+    lines.push("**Next scheduler check:** After bot startup");
+  }
+
+  if (typeKey === "weekly-reset") {
+    lines.push("**Note:** The announcement posts only if that scheduler pass actually resets at least one user and is still inside the Wed→Thu reset window.");
+  } else if (typeKey === "hourly-cleanup") {
+    lines.push("**Note:** The notice posts only after this guild's cleanup run completes.");
+  } else if (typeKey === "stuck-nudge") {
+    lines.push("**Note:** The nudge posts only if that tick finds a user whose logs are private.");
+  }
+
+  lines.push(dedupLine, ttlLine);
+  return lines.join("\n");
 }
 
 async function handleRaidAnnounceCommand(interaction) {
@@ -3586,24 +3819,11 @@ async function handleRaidAnnounceCommand(interaction) {
     const previewText = entry.previewContent
       ? truncateText(entry.previewContent, 1024)
       : "*(no preview defined for this type)*";
-    // Compose trigger + next-fire + dedup + TTL into a single
-    // "When it fires" block so admin sees the full lifecycle (when /
-    // how often / how long) in one field. Next-fire uses Discord's
-    // native timestamp tokens so the countdown auto-refreshes in each
-    // user's client + respects their locale/timezone.
-    const triggerLine = `**Trigger:** ${entry.trigger || "*(not defined)*"}`;
-    const nextFireMs = nextAnnouncementFireMs(type);
-    let nextFireLine;
-    if (nextFireMs) {
-      const unixSec = Math.floor(nextFireMs / 1000);
-      nextFireLine = `**Next fire:** <t:${unixSec}:R> (<t:${unixSec}:F>)`;
-    } else {
-      nextFireLine = "**Next fire:** On-demand (fires when the trigger condition happens; not on a fixed schedule)";
-    }
-    const dedupLine = `**Dedup:** ${entry.dedup || "*(none)*"}`;
-    const ttlLine = `**Message TTL:** ${entry.messageTtl || "*(permanent until manual delete)*"}`;
+    // Keep timing text honest: show disabled/waiting states explicitly,
+    // and for polled schedulers show both the next eligible wall-clock
+    // boundary and the next REAL scheduler check based on boot phase.
     const scheduleText = truncateText(
-      [triggerLine, nextFireLine, dedupLine, ttlLine].join("\n"),
+      buildAnnouncementWhenItFiresText(type, entry, current, existing),
       1024
     );
     const embed = new EmbedBuilder()
@@ -6330,6 +6550,8 @@ const AUTO_CLEANUP_NOTICE_TTL_MS = 5 * 60 * 1000; // marker sits 5 min before se
 const RAID_CHANNEL_GREETING_TTL_MS = 2 * 60 * 1000; // set greeting sits 2 min before self-delete
 const PRIVATE_LOG_NUDGE_TTL_MS = 30 * 60 * 1000; // stuck-user nudge sits 30 min before self-delete
 const PRIVATE_LOG_NUDGE_DEDUP_MS = 7 * 24 * 60 * 60 * 1000; // 7-day per-user dedup
+const AUTO_CLEANUP_TICK_MS = 30 * 60 * 1000;
+let autoCleanupSchedulerStartedAtMs = null;
 
 /**
  * Fire-and-forget channel announcement with TTL self-delete. Returns the
@@ -6452,12 +6674,13 @@ async function runAutoCleanupTick(client) {
  * `lastAutoCleanupKey` so no-op ticks are cheap.
  */
 function startRaidChannelScheduler(client) {
+  autoCleanupSchedulerStartedAtMs = Date.now();
   const run = () =>
     runAutoCleanupTick(client).catch((err) => {
       console.error("[raid-channel] scheduler tick failed:", err?.message || err);
     });
   run();
-  return setInterval(run, 30 * 60 * 1000);
+  return setInterval(run, AUTO_CLEANUP_TICK_MS);
 }
 
 // Phase 3: 24h passive auto-sync for opted-in users. Spreads sync work
@@ -6476,6 +6699,7 @@ function startRaidChannelScheduler(client) {
 const AUTO_MANAGE_DAILY_TICK_MS = 30 * 60 * 1000;
 const AUTO_MANAGE_DAILY_CUTOFF_MS = 24 * 60 * 60 * 1000;
 const AUTO_MANAGE_DAILY_BATCH_SIZE = 3;
+let autoManageSchedulerStartedAtMs = null;
 
 /**
  * For each user whose sync tick produced an all-"Logs not enabled"
@@ -6725,6 +6949,7 @@ async function runAutoManageDailyTick(client) {
  */
 let dailyTickInFlight = false;
 function startAutoManageDailyScheduler(client) {
+  autoManageSchedulerStartedAtMs = Date.now();
   const run = async () => {
     if (dailyTickInFlight) {
       console.warn(
@@ -6760,4 +6985,13 @@ module.exports = {
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
   parseRaidMessage,
+  __test: {
+    buildRaidCheckSnapshotFromUsers,
+    STATUS_PAGINATION_SESSION_MS,
+    RAID_CHECK_PAGINATION_SESSION_MS,
+    nextIntervalTickMs,
+    nextAnnouncementEligibleBoundaryMs,
+    nextAnnouncementSchedulerCheckMs,
+    buildAnnouncementWhenItFiresText,
+  },
 };

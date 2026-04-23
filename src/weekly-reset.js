@@ -4,6 +4,8 @@ const GuildConfig = require("./schema/guildConfig");
 const { RAID_REQUIREMENTS } = require("./models/Raid");
 
 const WEEKLY_ANNOUNCEMENT_TTL_MS = 30 * 60 * 1000; // marker sits 30 min before self-delete
+const WEEKLY_RESET_TICK_MS = 30 * 60 * 1000;
+let weeklyResetSchedulerStartedAtMs = null;
 
 const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
 
@@ -206,6 +208,7 @@ async function postWeeklyResetAnnouncements(client, targetKey) {
 }
 
 function startWeeklyResetJob(client) {
+  weeklyResetSchedulerStartedAtMs = Date.now();
   const run = async () => {
     try {
       const result = await resetWeekly();
@@ -236,7 +239,11 @@ function startWeeklyResetJob(client) {
   };
 
   run().catch(() => {});
-  return setInterval(run, 30 * 60 * 1000);
+  return setInterval(run, WEEKLY_RESET_TICK_MS);
+}
+
+function getWeeklyResetSchedulerStartedAtMs() {
+  return weeklyResetSchedulerStartedAtMs;
 }
 
 /**
@@ -267,6 +274,8 @@ function ensureFreshWeek(user, now = new Date()) {
 module.exports = {
   resetWeekly,
   startWeeklyResetJob,
+  getWeeklyResetSchedulerStartedAtMs,
+  WEEKLY_RESET_TICK_MS,
   getWeekKey,
   getTargetResetKey,
   ensureFreshWeek,
