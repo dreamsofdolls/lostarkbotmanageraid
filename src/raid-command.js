@@ -1561,18 +1561,19 @@ async function handleRaidCheckCommand(interaction) {
   const buildCharField = (c) => {
     const name = truncateText(`${c.charName} · ${Math.round(c.itemLevel)}`, 256);
     // Not-eligible chars skip the done/total count (doesn't apply - char
-    // is outside this mode's range). Label is uniform "Not eligible yet"
-    // without a parenthetical reason: for the high-iLvl case "out-grown"
-    // is misleading because a lazy player can still drop down to the
-    // lower mode, and for the low-iLvl case the char card already shows
-    // the char's iLvl right next to the label so the shortage is visible
-    // without spelling it out. `notEligibleReason` stays on the snapshot
-    // data for future use (sorting, separate sections) but is not
-    // surfaced in the render string.
+    // is outside this mode's range). Label rules:
+    //   - Low iLvl: "Not eligible yet (iLvl below min)" - explicit because
+    //     shortage is actionable (player needs to level up).
+    //   - High iLvl: plain "Not eligible yet" - "out-grown" would be
+    //     misleading since a lazy player can still drop to the lower
+    //     mode to farm, so we don't claim they CAN'T do this.
     if (c.overallStatus === "not-eligible") {
+      const label = c.notEligibleReason === "low"
+        ? "_Not eligible yet (iLvl below min)_"
+        : "_Not eligible yet_";
       return {
         name,
-        value: truncateText(`${UI.icons.lock} _Not eligible yet_`, 1024),
+        value: truncateText(`${UI.icons.lock} ${label}`, 1024),
         inline: true,
       };
     }
