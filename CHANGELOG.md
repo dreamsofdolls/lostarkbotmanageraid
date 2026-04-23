@@ -2,7 +2,11 @@
 
 All notable changes to this project will be documented in this file. Dates use the local calendar of the commit.
 
-## 2026-04-23
+## 2026-04-24
+
+### Added
+
+- **Artist quiet hours 03:00-08:00 VN + ceremonial bedtime & wake-up moments.** Traine: "Artist có thể sẽ đi ngủ vào lúc 3h sáng và sẽ không thông báo hay làm gì nữa... Artist sẽ dậy lúc 8h sáng và chào mọi người rùi đi dọn dẹp". The auto-cleanup scheduler (`runAutoCleanupTick` in `src/services/raid-schedulers.js`) now dispatches three branches off the same 30-minute tick: (1) **quiet branch** when the VN hour is in `[3, 8)` → skip both the cleanup sweep and the hourly notice; the first tick inside the window posts one bedtime embed (3-variant pool, TTL 5 phút, dedup via new `GuildConfig.lastArtistBedtimeKey = YYYY-MM-DD` VN calendar). (2) **Wake-up branch** at the first tick at/after 08:00 VN on a day where wake-up hasn't fired → sweep the overnight backlog in one catch-up pass, post the combined wake-up + sweep embed (4-bucket pool sized by deleted count, TTL 10 phút, dedup via `lastArtistWakeupKey = YYYY-MM-DD`), and stamp both the wake-up key and the current slot's `lastAutoCleanupKey` so the 08:30 tick doesn't double-sweep. (3) **Normal branch** otherwise → existing hourly-cleanup path unchanged. Message-handling for raid-clear posts is untouched, so users can still post clears during the quiet window and get DM confirmations 24/7. New `artist-bedtime` and `artist-wakeup` entries in `ANNOUNCEMENT_REGISTRY` let admins see the schedule via `/raid-announce show` and disable the embeds per-guild (`announcements.artistBedtime.enabled` / `announcements.artistWakeup.enabled`); disabling bedtime still keeps the channel quiet (no cleanup sweep), disabling wake-up still runs the catch-up sweep but without the greeting. Welcome embed's "📣 Artist sẽ tự nói" field updated to describe the new cadence. Nine new tests cover VN hour/day boundary math across the UTC+7 crossover, `isInArtistQuietHours` window edges (03:00 inclusive, 08:00 exclusive), bedtime and wake-up pool interpolation (`**N**` only in wake-up, not bedtime), and the new `nextAnnouncementEligibleBoundaryMs` branches for both types. `src/services/raid-schedulers.js`, `src/schema/guildConfig.js`, `src/raid/announcements.js`, `src/raid-command.js`, `src/services/raid-channel-monitor.js`, `src/commands/raid-help.js`, `test/raid-check-snapshot.test.js`, `README.md`.
 
 ### Changed
 

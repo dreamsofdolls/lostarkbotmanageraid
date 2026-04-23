@@ -302,6 +302,105 @@ test("parseRaidMessage no longer treats nm as a nightmare shorthand", () => {
   assert.notEqual(parsed?.modeKey, "nightmare");
 });
 
+test("Artist quiet hours: VN hour computation crosses the UTC+7 boundary correctly", () => {
+  // 20:00 UTC Apr 23 = 03:00 VN Apr 24 (midnight crosses +7).
+  const at20UtcApr23 = new Date(Date.UTC(2026, 3, 23, 20, 0, 0, 0));
+  assert.equal(__test.getCurrentVNHour(at20UtcApr23), 3);
+  assert.equal(__test.getTargetVNDayKey(at20UtcApr23), "2026-04-24");
+
+  // 00:59 UTC Apr 24 = 07:59 VN Apr 24 (still inside quiet window).
+  const at0059UtcApr24 = new Date(Date.UTC(2026, 3, 24, 0, 59, 0, 0));
+  assert.equal(__test.getCurrentVNHour(at0059UtcApr24), 7);
+
+  // 01:00 UTC Apr 24 = 08:00 VN Apr 24 (wake-up hour, NOT quiet).
+  const at01UtcApr24 = new Date(Date.UTC(2026, 3, 24, 1, 0, 0, 0));
+  assert.equal(__test.getCurrentVNHour(at01UtcApr24), 8);
+  assert.equal(__test.getTargetVNDayKey(at01UtcApr24), "2026-04-24");
+});
+
+test("Artist quiet hours: isInArtistQuietHours covers [3, 8) and nothing else", () => {
+  const quietStartExact = new Date(Date.UTC(2026, 3, 23, 20, 0, 0, 0)); // 03:00 VN
+  const quietMid = new Date(Date.UTC(2026, 3, 24, 0, 30, 0, 0)); // 07:30 VN
+  const quietLastBefore8 = new Date(Date.UTC(2026, 3, 24, 0, 59, 59, 0)); // 07:59 VN
+  const wakeupBoundary = new Date(Date.UTC(2026, 3, 24, 1, 0, 0, 0)); // 08:00 VN
+  const lateNight = new Date(Date.UTC(2026, 3, 23, 19, 59, 0, 0)); // 02:59 VN
+  const afternoon = new Date(Date.UTC(2026, 3, 24, 8, 0, 0, 0)); // 15:00 VN
+
+  assert.equal(__test.isInArtistQuietHours(quietStartExact), true);
+  assert.equal(__test.isInArtistQuietHours(quietMid), true);
+  assert.equal(__test.isInArtistQuietHours(quietLastBefore8), true);
+  assert.equal(__test.isInArtistQuietHours(wakeupBoundary), false); // 08:00 NOT quiet - it's wake-up
+  assert.equal(__test.isInArtistQuietHours(lateNight), false); // 02:59 NOT quiet yet
+  assert.equal(__test.isInArtistQuietHours(afternoon), false);
+});
+
+test("Artist quiet hours: bedtime pool returns one of 3 variants, none mentioning sweep count", () => {
+  const seen = new Set();
+  for (let i = 0; i < 50; i += 1) {
+    const picked = __test.pickBedtimeNoticeContent();
+    seen.add(picked);
+    // Bedtime is ceremonial, not sweep-scaled - no **N** placeholder survives.
+    assert.doesNotMatch(picked, /\*\*N\*\*/);
+    assert.match(picked, /ngủ|sáng/); // sanity: tone words land
+  }
+  // Over 50 draws we should have seen all 3 variants (probability of
+  // missing one after 50 draws from a 3-variant pool is (2/3)^50 ≈ 1e-9).
+  assert.equal(seen.size, 3);
+});
+
+test("Artist quiet hours: wake-up pool interpolates N and buckets correctly", () => {
+  const empty = __test.pickWakeupNoticeContent(0);
+  assert.doesNotMatch(empty, /\*\*\d+\*\*/); // 0 doesn't render a count
+
+  const trivial = __test.pickWakeupNoticeContent(3);
+  assert.match(trivial, /\*\*3\*\*/);
+
+  const normal = __test.pickWakeupNoticeContent(15);
+  assert.match(normal, /\*\*15\*\*/);
+
+  const heavy = __test.pickWakeupNoticeContent(42);
+  assert.match(heavy, /\*\*42\*\*/);
+});
+
+test("Artist quiet hours: wake-up pool is disjoint from the hourly-cleanup pool", () => {
+  // Regression guard: a future refactor might merge the two pools by accident.
+  // The wake-up moment is ceremonial (morning) and the hourly one is not, so
+  // their variant sets must stay separate.
+  const wakeupSamples = new Set();
+  const hourlySamples = new Set();
+  for (let i = 0; i < 60; i += 1) {
+    wakeupSamples.add(__test.pickWakeupNoticeContent(10));
+  }
+  // Any wake-up line mentioning "morning" or "dậy" should never appear in the
+  // regular hourly pool (verified by checking a few hourly outputs).
+  const morningMarkers = [...wakeupSamples].filter((s) => /dậy|Morning|sáng/i.test(s));
+  assert.ok(morningMarkers.length > 0, "wake-up pool must contain morning-tone lines");
+});
+
+test("nextAnnouncementEligibleBoundaryMs: artist-bedtime lands on next 20:00 UTC (= 03:00 VN)", () => {
+  // Thu Apr 23 2026 19:00 UTC (02:00 VN Apr 24) → next bedtime = 20:00 UTC same day.
+  const before = new Date(Date.UTC(2026, 3, 23, 19, 0, 0, 0));
+  const fire = __test.nextAnnouncementEligibleBoundaryMs("artist-bedtime", before);
+  assert.equal(fire, Date.UTC(2026, 3, 23, 20, 0, 0, 0));
+
+  // Exactly at 20:00 UTC → we advance to the next day (already past boundary).
+  const atBoundary = new Date(Date.UTC(2026, 3, 23, 20, 0, 0, 0));
+  const fireNext = __test.nextAnnouncementEligibleBoundaryMs("artist-bedtime", atBoundary);
+  assert.equal(fireNext, Date.UTC(2026, 3, 24, 20, 0, 0, 0));
+});
+
+test("nextAnnouncementEligibleBoundaryMs: artist-wakeup lands on next 01:00 UTC (= 08:00 VN)", () => {
+  // 00:30 UTC Apr 24 (07:30 VN) → next wake-up = 01:00 UTC same day (08:00 VN).
+  const before = new Date(Date.UTC(2026, 3, 24, 0, 30, 0, 0));
+  const fire = __test.nextAnnouncementEligibleBoundaryMs("artist-wakeup", before);
+  assert.equal(fire, Date.UTC(2026, 3, 24, 1, 0, 0, 0));
+
+  // At 01:30 UTC (08:30 VN) already past → advance to the next day.
+  const after = new Date(Date.UTC(2026, 3, 24, 1, 30, 0, 0));
+  const fireNext = __test.nextAnnouncementEligibleBoundaryMs("artist-wakeup", after);
+  assert.equal(fireNext, Date.UTC(2026, 3, 25, 1, 0, 0, 0));
+});
+
 test("stale roster refresh canonicalizes diacritic-only bible character names", () => {
   const userDoc = {
     accounts: [

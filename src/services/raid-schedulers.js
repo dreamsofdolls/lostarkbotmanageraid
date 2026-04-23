@@ -20,6 +20,14 @@ function createRaidSchedulerService({
   // ---------------------------------------------------------------------------
 
   const AUTO_CLEANUP_NOTICE_TTL_MS = 5 * 60 * 1000; // marker sits 5 min before self-delete
+  const ARTIST_BEDTIME_NOTICE_TTL_MS = 5 * 60 * 1000;
+  const ARTIST_WAKEUP_NOTICE_TTL_MS = 10 * 60 * 1000; // longer so 8am members catch it
+  // Quiet-hours window in VN local time. Artist skips cleanup + posts no
+  // ticks in [QUIET_START_HOUR, QUIET_END_HOUR). Message handling is
+  // unaffected - users can still post raid clears in the middle of the
+  // night, Artist just doesn't patrol.
+  const ARTIST_QUIET_START_HOUR_VN = 3;
+  const ARTIST_QUIET_END_HOUR_VN = 8;
   const PRIVATE_LOG_NUDGE_TTL_MS = 30 * 60 * 1000; // stuck-user nudge sits 30 min before self-delete
   const PRIVATE_LOG_NUDGE_DEDUP_MS = 7 * 24 * 60 * 60 * 1000; // 7-day per-user dedup
   const AUTO_CLEANUP_TICK_MS = 30 * 60 * 1000;
@@ -69,6 +77,38 @@ function createRaidSchedulerService({
     const dateHour = vnTime.toISOString().slice(0, 13); // "YYYY-MM-DDTHH"
     const slotMinute = vnTime.getUTCMinutes() < 30 ? "00" : "30";
     return `${dateHour}:${slotMinute}`;
+  }
+
+  /**
+   * Returns "YYYY-MM-DD" in VN (UTC+7) calendar. Shared dedup key for
+   * Artist's once-per-day ceremonial moments (bedtime greeting at 3:00 VN,
+   * wake-up + morning sweep at 8:00 VN). Distinct from the half-hour slot
+   * key because those ceremonies fire once per calendar day, not per slot.
+   */
+  function getTargetVNDayKey(now = new Date()) {
+    const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+    return vnTime.toISOString().slice(0, 10);
+  }
+
+  /**
+   * VN local hour (0-23). Used to decide whether a tick falls inside the
+   * quiet-hours window. The calc mirrors getTargetCleanupSlotKey so both
+   * helpers stay in lockstep if the UTC offset ever changes.
+   */
+  function getCurrentVNHour(now = new Date()) {
+    const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+    return vnTime.getUTCHours();
+  }
+
+  /**
+   * True when the current VN hour is inside Artist's quiet window. The
+   * window is half-open: [QUIET_START_HOUR, QUIET_END_HOUR). Hour 8 is NOT
+   * quiet - it's the wake-up hour where the catch-up cleanup runs. Hour 2
+   * is NOT quiet - the last pre-bedtime cleanup slot at 2:30 runs as usual.
+   */
+  function isInArtistQuietHours(now = new Date()) {
+    const hour = getCurrentVNHour(now);
+    return hour >= ARTIST_QUIET_START_HOUR_VN && hour < ARTIST_QUIET_END_HOUR_VN;
   }
 
   /**
@@ -123,6 +163,82 @@ function createRaidSchedulerService({
     return picked.replace(/\*\*N\*\*/g, `**${deleted}**`);
   }
 
+  /**
+   * Bedtime greeting variants. Fired once per VN calendar day at the first
+   * tick inside [3:00, 8:00). Tone: sleepy/peaceful, acknowledges Artist
+   * going quiet but reassures that user posts still work. No bucketing -
+   * the event is the same shape every day (it's ceremonial, not sweep-
+   * scaled), so a flat 3-variant pool keeps the channel from repeating
+   * the exact same line two mornings in a row.
+   */
+  const BEDTIME_NOTICE_VARIANTS = [
+    "Khuya rồi, Artist đi ngủ đây nhé~ Từ giờ tới 8h sáng tớ tạm nghỉ, không dọn rác cũng không ồn ào gì. Các cậu cứ post clear bình thường, sáng ra Artist dậy xử lý gọn 1 lần. Biển báo này 5 phút tự cuỗm, chúc cả nhà ngủ ngon nha.",
+    "Khuya quá rồi đấy, Artist sập nguồn đây~ Tớ nghỉ tới 8h sáng, kênh này tạm yên tĩnh nhé - các cậu cứ post clear như thường, Artist tỉnh dậy sẽ dọn 1 thể. Ngủ ngon nha, biển báo 5 phút nữa Artist cuỗm theo.",
+    "Tới giờ đi ngủ của Artist rồi~ Tớ tắt đèn đây, tạm biệt mọi người đến 8h sáng nha. Yên tâm, raid clear các cậu post vẫn được Artist ghi nhận bình thường, chỉ là biển báo dọn dẹp nghỉ thôi. Biển này 5 phút nữa cũng đi ngủ theo Artist.",
+  ];
+
+  /**
+   * Wake-up + morning-sweep combined-embed variants. Fires once at the
+   * first tick ≥ 8:00 VN. Bucketed by the overnight sweep count because
+   * a 0-message night reads differently from a 40-message backlog. Same
+   * **N** interpolation pattern as the hourly-cleanup pool.
+   *
+   * Tone: Artist just woke, is a bit groggy, acknowledges the sweep.
+   * Explicitly DIFFERENT pool from the hourly "heavy" bucket so 8 AM
+   * doesn't feel like any other heavy cleanup - it's the ceremonial
+   * day-start moment.
+   */
+  const WAKEUP_NOTICE_VARIANTS_BY_BUCKET = {
+    empty: [
+      "Morning các cậu~ Artist vươn vai dậy đây nè, ghé qua thấy kênh sạch trơn luôn. Không có gì để dọn ngày mới, các cậu ngoan ghê~ Biển báo này 10 phút nữa Artist cuỗm đi.",
+      "Tớ dậy rồi nhé~ Đêm qua cả kênh ngủ ngon, không tin nào bỏ lại cho Artist cả. Bắt đầu ngày mới thôi nào, biển báo 10 phút tự đi ngủ tiếp.",
+      "Chào buổi sáng các cậu~ Artist mới mở mắt, kênh này sạch như chưa có gì xảy ra. Ngày mới các cậu raid vui nha, biển báo này 10 phút nữa sủi.",
+    ],
+    trivial: [
+      "Morning nha~ Artist vừa dậy, ngó lại thấy đêm qua có **N** tin thôi - tớ dọn luôn 1 thể cho kênh thoáng. Ngày mới raid khoẻ nha, biển báo 10 phút tự cuỗm.",
+      "Chào ngày mới các cậu~ Đêm qua có **N** tin nhỏ xinh, Artist dọn trong lúc đánh răng xong rồi. Giờ Artist làm việc bình thường lại, biển này 10 phút nữa đi.",
+      "Tớ dậy rồi đây~ Đêm qua chỉ có **N** tin, Artist gom nhanh 1 cái, xong rồi nè. Các cậu tiếp tục post clear thoải mái nha, biển báo 10 phút nữa tự cuỗm.",
+    ],
+    normal: [
+      "Morning các cậu~ Artist vừa mở mắt, ngó sang kênh thấy **N** tin tích đêm qua - dọn 1 thể cho gọn rồi đây. Ngày mới ta lại chiến nha, biển báo 10 phút tự đi.",
+      "Artist dậy rồi nè~ Đêm qua **N** tin tích lại, tớ sweep 1 cái cho sạch. Cảm ơn các cậu raid chăm ghê, biển báo này 10 phút nữa cuỗm đi cho khuất mắt.",
+      "Chào buổi sáng~ Artist mở app thấy **N** tin đêm qua, gom hết 1 cái cho kênh thoáng. Ngày mới ta làm việc tiếp thôi, biển báo 10 phút nữa Artist mang theo.",
+    ],
+    heavy: [
+      "Oáp... Artist mới dậy đã thấy **N** tin tích đêm qua, các cậu raid dữ dội thật. Tớ dọn 1 thể cho gọn rồi đây, hơi mệt nhưng xong rùi~ Biển báo 10 phút tự đi cho khuất mắt Artist.",
+      "Morning... Artist vừa mở mắt đã choáng với **N** tin tích đêm qua, các cậu farm không nghỉ luôn hả~ Tớ sweep 1 thể cho gọn, xong mệt muốn đi ngủ tiếp. Biển báo 10 phút nữa Artist cuỗm đi.",
+      "Ớ kìa, Artist mới dậy đã có **N** tin đợi sẵn - các cậu raid xuyên đêm thật hả? Tớ dọn 1 cái cho kênh thoáng, thôi vào việc luôn. Biển báo này 10 phút nữa tự cuỗm nha.",
+    ],
+  };
+
+  /**
+   * Random pick from bedtime pool. Flat list (no bucketing) because the
+   * event is always the same - Artist is going quiet, sweep count not
+   * relevant at this moment.
+   */
+  function pickBedtimeNoticeContent() {
+    const pool = BEDTIME_NOTICE_VARIANTS;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  /**
+   * Random pick from the wake-up/morning-sweep pool with the same
+   * bucketing as the hourly-cleanup notice (empty / trivial / normal /
+   * heavy by sweep count). Separate pool from the hourly one so 8 AM
+   * never reuses an "afternoon" line - the ceremonial tone matters even
+   * when the count matches a regular heavy cleanup.
+   */
+  function pickWakeupNoticeContent(deleted) {
+    let bucket;
+    if (deleted <= 0) bucket = "empty";
+    else if (deleted <= 5) bucket = "trivial";
+    else if (deleted <= 20) bucket = "normal";
+    else bucket = "heavy";
+    const pool = WAKEUP_NOTICE_VARIANTS_BY_BUCKET[bucket];
+    const picked = pool[Math.floor(Math.random() * pool.length)];
+    return picked.replace(/\*\*N\*\*/g, `**${deleted}**`);
+  }
+
   // Ordered bucket metadata for rendering the cleanup preview. Pulled out
   // of the pool so preview listing stays stable order (empty -> heavy) and
   // the label text isn't duplicated in two places.
@@ -160,7 +276,10 @@ function createRaidSchedulerService({
   }
 
   async function runAutoCleanupTick(client) {
-    const targetKey = getTargetCleanupSlotKey();
+    const now = new Date();
+    const targetKey = getTargetCleanupSlotKey(now);
+    const vnDayKey = getTargetVNDayKey(now);
+    const quiet = isInArtistQuietHours(now);
     let configs;
     try {
       configs = await GuildConfig.find({
@@ -174,7 +293,6 @@ function createRaidSchedulerService({
     if (!configs.length) return;
 
     for (const cfg of configs) {
-      if (cfg.lastAutoCleanupKey === targetKey) continue; // already done for this VN half-hour slot
       const guild = client.guilds.cache.get(cfg.guildId);
       if (!guild) continue;
       let channel = guild.channels.cache.get(cfg.raidChannelId);
@@ -186,6 +304,92 @@ function createRaidSchedulerService({
         }
       }
       if (!channel) continue;
+
+      const announcements = getAnnouncementsConfig(cfg);
+
+      // Quiet-hours branch: [3:00, 8:00) VN. Artist does NOT sweep and
+      // does NOT post the hourly-cleanup notice. First tick after 3:00
+      // posts one bedtime greeting (if enabled + not yet posted today);
+      // subsequent quiet-hours ticks are silent no-ops. The dedup key is
+      // VN calendar day, not slot, so a bot restart inside [3:00, 8:00)
+      // on the same day won't re-fire bedtime.
+      if (quiet) {
+        if (cfg.lastArtistBedtimeKey === vnDayKey) continue;
+        if (!announcements.artistBedtime.enabled) {
+          // Bedtime disabled per-guild → still stamp the day key so we
+          // don't keep entering this branch; the guild just gets silence.
+          await GuildConfig.findOneAndUpdate(
+            { guildId: cfg.guildId },
+            { $set: { lastArtistBedtimeKey: vnDayKey } }
+          );
+          continue;
+        }
+        try {
+          const sent = await postChannelAnnouncement(
+            channel,
+            pickBedtimeNoticeContent(),
+            ARTIST_BEDTIME_NOTICE_TTL_MS,
+            "raid-channel artist-bedtime"
+          );
+          if (sent) {
+            await GuildConfig.findOneAndUpdate(
+              { guildId: cfg.guildId },
+              { $set: { lastArtistBedtimeKey: vnDayKey } }
+            );
+            console.log(
+              `[raid-channel] artist-bedtime guild=${cfg.guildId} day=${vnDayKey}`
+            );
+          }
+        } catch (err) {
+          console.error(
+            `[raid-channel] artist-bedtime failed guild=${cfg.guildId}:`,
+            err?.message || err
+          );
+        }
+        continue;
+      }
+
+      // Wake-up branch: first tick ≥ 8:00 VN on a day where wake-up has
+      // not fired yet. Sweep the overnight backlog in one catch-up pass
+      // and post the combined wake-up+sweep notice. Subsequent ticks that
+      // day fall through to the normal hourly-cleanup path because the
+      // day key will match.
+      if (cfg.lastArtistWakeupKey !== vnDayKey) {
+        try {
+          const { deleted, skippedOld } = await cleanupRaidChannelMessages(channel);
+          await GuildConfig.findOneAndUpdate(
+            { guildId: cfg.guildId },
+            {
+              $set: {
+                lastArtistWakeupKey: vnDayKey,
+                lastAutoCleanupKey: targetKey,
+              },
+            }
+          );
+          console.log(
+            `[raid-channel] artist-wakeup guild=${cfg.guildId} day=${vnDayKey} deleted=${deleted} skippedOld=${skippedOld}`
+          );
+          if (announcements.artistWakeup.enabled) {
+            await postChannelAnnouncement(
+              channel,
+              pickWakeupNoticeContent(deleted),
+              ARTIST_WAKEUP_NOTICE_TTL_MS,
+              "raid-channel artist-wakeup"
+            );
+          }
+        } catch (err) {
+          console.error(
+            `[raid-channel] artist-wakeup failed guild=${cfg.guildId}:`,
+            err?.message || err
+          );
+        }
+        continue;
+      }
+
+      // Normal hourly-cleanup path. Slot dedup: one sweep per half-hour
+      // VN slot. Crossing a slot boundary produces a new key and the next
+      // tick picks it up.
+      if (cfg.lastAutoCleanupKey === targetKey) continue;
 
       try {
         // Run cleanup first, then post a tone-aware notice in EITHER case:
@@ -207,8 +411,7 @@ function createRaidSchedulerService({
 
         // Cleanup notice can be disabled per-guild via /raid-announce.
         // Cleanup itself still runs; only the announcement is skipped.
-        const cleanupNoticeEnabled = getAnnouncementsConfig(cfg).hourlyCleanupNotice.enabled;
-        if (cleanupNoticeEnabled) {
+        if (announcements.hourlyCleanupNotice.enabled) {
           const noticeContent = pickCleanupNoticeContent(deleted);
           await postChannelAnnouncement(
             channel,
@@ -532,9 +735,16 @@ function createRaidSchedulerService({
   return {
     AUTO_CLEANUP_TICK_MS,
     AUTO_MANAGE_DAILY_TICK_MS,
+    ARTIST_QUIET_START_HOUR_VN,
+    ARTIST_QUIET_END_HOUR_VN,
     postChannelAnnouncement,
     getTargetCleanupSlotKey,
+    getTargetVNDayKey,
+    getCurrentVNHour,
+    isInArtistQuietHours,
     buildCleanupNoticePreview,
+    pickBedtimeNoticeContent,
+    pickWakeupNoticeContent,
     startRaidChannelScheduler,
     startAutoManageDailyScheduler,
     getAutoCleanupSchedulerStartedAtMs: () => autoCleanupSchedulerStartedAtMs,

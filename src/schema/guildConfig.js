@@ -26,6 +26,17 @@ const guildConfigSchema = new mongoose.Schema(
     // ticks within the same ISO week short-circuit; crossing into the next
     // ISO week produces a new key and the next tick posts again.
     lastWeeklyAnnouncementKey: { type: String, default: null },
+    // Per-guild dedup for Artist's daily bedtime moment. `YYYY-MM-DD` in VN
+    // calendar. Set once the 3:00 VN quiet-hours greeting has been posted
+    // today; subsequent quiet-hours ticks skip the announcement AND the
+    // cleanup sweep. Rolls over each VN calendar day so the next bedtime
+    // fires fresh.
+    lastArtistBedtimeKey: { type: String, default: null },
+    // Per-guild dedup for Artist's daily wake-up + morning-sweep moment.
+    // `YYYY-MM-DD` in VN calendar. Set once the 8:00 VN wake-up embed +
+    // catch-up cleanup have both run today. Subsequent ticks that day fall
+    // through to the normal hourly-cleanup path.
+    lastArtistWakeupKey: { type: String, default: null },
     // Per-announcement-type config for Artist's channel voice. Each nested
     // subdoc has:
     //   - enabled: whether the announcement fires at all.
@@ -67,6 +78,29 @@ const guildConfigSchema = new mongoose.Schema(
             default: () => ({}),
           },
           hourlyCleanupNotice: {
+            type: new mongoose.Schema(
+              { enabled: { type: Boolean, default: true } },
+              { _id: false }
+            ),
+            default: () => ({}),
+          },
+          // Artist's 3:00 VN bedtime greeting. Channel-bound (like the
+          // hourly cleanup notice) because the message refers to the
+          // monitor channel itself going quiet. Disable = bedtime skipped
+          // silently, quiet-hours behavior (no cleanup sweep) still applies.
+          artistBedtime: {
+            type: new mongoose.Schema(
+              { enabled: { type: Boolean, default: true } },
+              { _id: false }
+            ),
+            default: () => ({}),
+          },
+          // Artist's 8:00 VN wake-up + morning-sweep notice. Channel-bound
+          // for the same reason. Disable = the wake-up greeting text is
+          // skipped; the catch-up cleanup sweep still runs because skipping
+          // it would leave overnight messages piled until the first :00 or
+          // :30 tick after 8:00.
+          artistWakeup: {
             type: new mongoose.Schema(
               { enabled: { type: Boolean, default: true } },
               { _id: false }

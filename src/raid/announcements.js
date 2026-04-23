@@ -71,6 +71,26 @@ const ANNOUNCEMENT_REGISTRY = {
     previewContent:
       "Variant tone thay đổi theo lượng rác:\n- Sạch sẵn: `Ồ, giờ này Artist ghé qua... ai dè sạch sẽ sẵn rồi nhé~ ...`\n- 1-5 tin: `Nhẹ nhàng thôi mà~ Artist vừa thu gom **N** mẩu tin rồi ...`\n- 6-20 tin: `Hừm... đến ca dọn rồi nhé. Xong, vừa dọn **N** tin ...`\n- 21+ tin: `Oáp... có tới **N** tin phải dọn này, Artist làm hụt hơi luôn~ ...`",
   },
+  "artist-bedtime": {
+    label: "Artist bedtime",
+    subdocKey: "artistBedtime",
+    channelOverridable: false,
+    trigger: "Mỗi ngày lúc 3:00 VN (= 20:00 UTC hôm trước), tick đầu tiên sau boundary. Artist post embed ngủ nghỉ rồi quiet-hours bắt đầu.",
+    dedup: "1 post/VN calendar day/guild (`lastArtistBedtimeKey = 'YYYY-MM-DD'`). Tick 30 phút trong [3:00, 8:00) bỏ qua cả cleanup sweep lẫn notice.",
+    messageTtl: "5 phút rồi Artist tự xóa",
+    previewContent:
+      "Khuya rồi, Artist đi ngủ đây nhé~ Từ giờ tới 8h sáng tớ tạm nghỉ, không dọn rác cũng không ồn ào gì đâu. Các cậu cứ post clear bình thường, sáng ra Artist dậy xử lý gọn 1 lần. Biển báo này Artist cuỗm đi sau 5 phút, chúc cả nhà ngủ ngon~",
+  },
+  "artist-wakeup": {
+    label: "Artist wakeup",
+    subdocKey: "artistWakeup",
+    channelOverridable: false,
+    trigger: "Mỗi ngày lúc 8:00 VN (= 1:00 UTC), tick đầu tiên sau boundary. Artist post wake-up greeting + sweep catch-up 1 lần cho đống tin đêm qua.",
+    dedup: "1 post/VN calendar day/guild (`lastArtistWakeupKey = 'YYYY-MM-DD'`). Sau wake-up, các slot :30/:00 trong ngày quay về hourly-cleanup bình thường.",
+    messageTtl: "10 phút rồi Artist tự xóa (dài hơn cleanup thường để members online 8h sáng kịp thấy)",
+    previewContent:
+      "Morning các cậu~ Artist vừa dậy đây nè, vươn vai một cái. Đêm qua tích **N** tin nhắn, Artist dọn luôn 1 thể cho kênh thoáng nha. Giờ Artist làm việc bình thường, biển báo này 10 phút tự cuỗm.",
+  },
   "whisper-ack": {
     label: "Whisper ack",
     subdocKey: "whisperAck",
