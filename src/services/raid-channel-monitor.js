@@ -388,7 +388,9 @@ function createRaidChannelMonitorService({
         {
           name: "📣 Artist sẽ tự nói trong channel này khi nào",
           value: [
-            "• **Mỗi 30 phút (giờ VN)**: Artist tự dọn rác channel, post 1 biển báo tone đổi theo lượng rác (sạch sẵn / nhẹ / bình thường / nhiều), biển tự biến sau 5 phút.",
+            "• **Mỗi 30 phút (giờ VN, từ 8h sáng đến 3h đêm)**: Artist tự dọn rác channel, post 1 biển báo tone đổi theo lượng rác (sạch sẵn / nhẹ / bình thường / nhiều), biển tự biến sau 5 phút.",
+            "• **3h đêm (giờ VN)**: Artist đi ngủ, post 1 biển báo gn rồi tạm nghỉ đến 8h sáng - trong khoảng này không dọn rác cũng không ồn ào, nhưng raid clear các cậu post vẫn được ghi nhận bình thường.",
+            "• **8h sáng (giờ VN)**: Artist dậy, sweep 1 lần catch-up đống tin tích đêm qua + post 1 biển báo chào ngày mới, biển tự biến sau 10 phút.",
             "• **Thứ 4 17:00 VN (mỗi tuần)**: Artist thông báo progress raid vừa được reset tuần mới, biển tự biến sau 30 phút.",
             "• **Khi có người vừa set channel này**: Artist post 1 dòng chào hỏi, tự biến sau 2 phút (welcome pin thì ở lại).",
             "• **Khi có member bật `/raid-auto-manage` mà toàn char private log**: Artist sẽ tag khẽ nhắc bật Public Log ở lostark.bible, tối đa 1 lần mỗi 7 ngày.",

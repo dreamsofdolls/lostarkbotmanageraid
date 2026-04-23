@@ -947,6 +947,21 @@ function nextAnnouncementEligibleBoundaryMs(typeKey, now = new Date()) {
     }
     return candidate.getTime();
   }
+  if (typeKey === "artist-bedtime" || typeKey === "artist-wakeup") {
+    // Bedtime = 3:00 VN = 20:00 UTC previous day. Wake-up = 8:00 VN =
+    // 1:00 UTC same day. Compute the next UTC boundary that matches.
+    const targetUtcHour = typeKey === "artist-bedtime" ? 20 : 1;
+    const candidate = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      targetUtcHour, 0, 0, 0
+    ));
+    if (candidate.getTime() <= nowMs) {
+      candidate.setUTCDate(candidate.getUTCDate() + 1);
+    }
+    return candidate.getTime();
+  }
   return null; // event-driven
 }
 
@@ -964,6 +979,12 @@ function nextAnnouncementSchedulerCheckMs(typeKey, now = new Date(), schedulerSt
   }
   if (typeKey === "stuck-nudge") {
     return nextIntervalTickMs(autoManageStartedAtMs, AUTO_MANAGE_DAILY_TICK_MS, now);
+  }
+  if (typeKey === "artist-bedtime" || typeKey === "artist-wakeup") {
+    // These piggyback on the auto-cleanup scheduler tick, so the next
+    // scheduler check is the same cadence. The dispatch logic inside
+    // runAutoCleanupTick decides which path fires at tick time.
+    return nextIntervalTickMs(autoCleanupStartedAtMs, AUTO_CLEANUP_TICK_MS, now);
   }
   return null;
 }
@@ -1007,6 +1028,14 @@ function buildAnnouncementWhenItFiresText(typeKey, entry, current, guildCfg, now
 
   if (typeKey === "hourly-cleanup" && guildCfg?.autoCleanupEnabled !== true) {
     lines.push("**Next check:** Disabled until `/raid-channel config action:schedule-on` is enabled");
+    lines.push(dedupLine, ttlLine);
+    return lines.join("\n");
+  }
+
+  // Bedtime + wake-up both ride the auto-cleanup scheduler tick, so
+  // they're silent whenever the scheduler itself is off.
+  if ((typeKey === "artist-bedtime" || typeKey === "artist-wakeup") && guildCfg?.autoCleanupEnabled !== true) {
+    lines.push("**Next check:** Disabled until `/raid-channel config action:schedule-on` is enabled (shares the cleanup scheduler)");
     lines.push(dedupLine, ttlLine);
     return lines.join("\n");
   }
@@ -1334,6 +1363,19 @@ const raidSchedulerService = createRaidSchedulerService({
   getAutoManageSchedulerStartedAtMs,
 } = raidSchedulerService);
 
+// Expose quiet-hours helpers for __test access. Tests exercise them via
+// raid-command.__test so they stay behind the public boundary and aren't
+// part of the runtime contract other callers can reach for.
+const {
+  getTargetVNDayKey,
+  getCurrentVNHour,
+  isInArtistQuietHours,
+  pickBedtimeNoticeContent,
+  pickWakeupNoticeContent,
+  ARTIST_QUIET_START_HOUR_VN,
+  ARTIST_QUIET_END_HOUR_VN,
+} = raidSchedulerService;
+
 const raidHelpCommandHandlers = createRaidHelpCommand({
   EmbedBuilder,
   StringSelectMenuBuilder,
@@ -1473,5 +1515,12 @@ module.exports = {
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
     isManagerId,
     getAutoManageCooldownMs,
+    getTargetVNDayKey,
+    getCurrentVNHour,
+    isInArtistQuietHours,
+    pickBedtimeNoticeContent,
+    pickWakeupNoticeContent,
+    ARTIST_QUIET_START_HOUR_VN,
+    ARTIST_QUIET_END_HOUR_VN,
   },
 };
