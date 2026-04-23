@@ -14,6 +14,7 @@ const UI = {
     lock: "🔒",
     warn: "⚠️",
     info: "ℹ️",
+    folder: "📁",
     roster: "📥",
   },
 };

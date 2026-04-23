@@ -415,7 +415,7 @@ function createRaidCheckCommand(deps) {
       const freshnessLine = buildAccountFreshnessLine(group, group);
 
       embed.addFields({
-        name: truncateText(`${UI.icons.roster} ${group.accountName} (${group.displayName})`, 256),
+        name: truncateText(`${UI.icons.folder} ${group.accountName} (${group.displayName})`, 256),
         value: truncateText(freshnessLine || "\u200B", 1024),
         inline: false,
       });
