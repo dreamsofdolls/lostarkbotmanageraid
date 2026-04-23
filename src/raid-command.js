@@ -1017,6 +1017,7 @@ let AUTO_MANAGE_SYNC_COOLDOWN_MS;
 let acquireAutoManageSyncSlot;
 let releaseAutoManageSyncSlot;
 let formatAutoManageCooldownRemaining;
+let autoManageEntryKey;
 let gatherAutoManageLogsForUserDoc;
 let applyAutoManageCollected;
 let syncAutoManageForUserDoc;
@@ -1076,6 +1077,7 @@ const autoManageCoreService = createAutoManageCoreService({
   acquireAutoManageSyncSlot,
   releaseAutoManageSyncSlot,
   formatAutoManageCooldownRemaining,
+  autoManageEntryKey,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
   syncAutoManageForUserDoc,
@@ -1193,6 +1195,7 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   loadFreshUserSnapshotForRaidViews,
   acquireAutoManageSyncSlot,
   releaseAutoManageSyncSlot,
+  autoManageEntryKey,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
   stampAutoManageAttempt,

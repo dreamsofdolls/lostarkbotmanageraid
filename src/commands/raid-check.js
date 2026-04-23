@@ -29,6 +29,7 @@ function createRaidCheckCommand(deps) {
     loadFreshUserSnapshotForRaidViews,
     acquireAutoManageSyncSlot,
     releaseAutoManageSyncSlot,
+    autoManageEntryKey,
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
     stampAutoManageAttempt,
@@ -673,13 +674,21 @@ function createRaidCheckCommand(deps) {
     const snapshot = await computeRaidCheckSnapshot(raidMeta);
     const snapshotMs = Date.now() - snapshotStarted;
 
-    const optedInDiscordIds = [
-      ...new Set(
-        snapshot.pendingChars
-          .filter((c) => snapshot.userMeta.get(c.discordId)?.autoManageEnabled)
-          .map((c) => c.discordId)
-      ),
-    ];
+    const pendingEntryKeysByDiscordId = new Map();
+    for (const pendingChar of snapshot.pendingChars) {
+      if (!snapshot.userMeta.get(pendingChar.discordId)?.autoManageEnabled) continue;
+      if (!pendingEntryKeysByDiscordId.has(pendingChar.discordId)) {
+        pendingEntryKeysByDiscordId.set(pendingChar.discordId, new Set());
+      }
+      pendingEntryKeysByDiscordId
+        .get(pendingChar.discordId)
+        .add(autoManageEntryKey(pendingChar.accountName, pendingChar.charName));
+    }
+    const optedInDiscordIds = [...pendingEntryKeysByDiscordId.keys()];
+    const scopedCharCount = [...pendingEntryKeysByDiscordId.values()].reduce(
+      (sum, entryKeys) => sum + entryKeys.size,
+      0
+    );
     const pendingUserCount = new Set(snapshot.pendingChars.map((c) => c.discordId)).size;
     if (optedInDiscordIds.length === 0) {
       console.log(
@@ -721,7 +730,9 @@ function createRaidCheckCommand(deps) {
             }
 
             ensureFreshWeek(seedDoc);
-            const collected = await gatherAutoManageLogsForUserDoc(seedDoc, weekResetStart);
+            const collected = await gatherAutoManageLogsForUserDoc(seedDoc, weekResetStart, {
+              includeEntryKeys: pendingEntryKeysByDiscordId.get(discordId),
+            });
             bibleHit = true;
 
             let outcome = "attempted-only";
@@ -787,11 +798,11 @@ function createRaidCheckCommand(deps) {
     const dmFailed = dmResults.length - dmSent;
 
     console.log(
-      `[raid-check sync] raid=${raidMeta.raidKey}:${raidMeta.modeKey} pendingUsers=${pendingUserCount} optedIn=${optedInDiscordIds.length} synced=${syncedCount} attemptedOnly=${attemptedOnlyCount} skipped=${skippedCount} failed=${failedCount} dmSent=${dmSent} dmFailed=${dmFailed} snapshotMs=${snapshotMs} syncMs=${syncMs} dmMs=${dmMs} totalMs=${Date.now() - started}`
+      `[raid-check sync] raid=${raidMeta.raidKey}:${raidMeta.modeKey} pendingUsers=${pendingUserCount} optedIn=${optedInDiscordIds.length} scopedChars=${scopedCharCount} synced=${syncedCount} attemptedOnly=${attemptedOnlyCount} skipped=${skippedCount} failed=${failedCount} dmSent=${dmSent} dmFailed=${dmFailed} snapshotMs=${snapshotMs} syncMs=${syncMs} dmMs=${dmMs} totalMs=${Date.now() - started}`
     );
 
     const lines = [
-      `${UI.icons.done} Đã trigger sync cho **${optedInDiscordIds.length}** opted-in user.`,
+      `${UI.icons.done} Đã trigger sync cho **${optedInDiscordIds.length}** opted-in user (**${scopedCharCount}** pending char).`,
       `- Synced (có data mới): **${syncedCount}** · Attempted-only (no fresh data): **${attemptedOnlyCount}**`,
       `- Skipped (cooldown/in-flight): **${skippedCount}** · Failed: **${failedCount}**`,
       `- Chars có update mới: **${deltasPerUser.size}** user · DM sent: **${dmSent}**${dmFailed > 0 ? ` · DM failed: **${dmFailed}**` : ""}`,
