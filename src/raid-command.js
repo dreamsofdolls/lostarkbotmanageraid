@@ -1352,11 +1352,15 @@ function buildRaidCheckUserQuery(raidMeta, now = Date.now()) {
       {
         accounts: {
           $elemMatch: {
-            $or: [
-              { lastRefreshedAt: null },
-              { lastRefreshedAt: { $exists: false } },
+            $and: [
               {
-                lastRefreshedAt: { $lt: refreshCutoff },
+                $or: [
+                  { lastRefreshedAt: null },
+                  { lastRefreshedAt: { $exists: false } },
+                  { lastRefreshedAt: { $lt: refreshCutoff } },
+                ],
+              },
+              {
                 $or: [
                   { lastRefreshAttemptAt: null },
                   { lastRefreshAttemptAt: { $exists: false } },
