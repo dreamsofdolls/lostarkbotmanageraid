@@ -3470,6 +3470,64 @@ function getAnnouncementsConfig(cfg) {
   return normalized;
 }
 
+/**
+ * Compute the next scheduled check/fire moment (epoch ms) for a given
+ * announcement type. Returns null for event-driven types that fire only
+ * when a user or admin action happens (set-greeting, whisper-ack).
+ *
+ * Semantics per type:
+ *   - weekly-reset: next Wed 10:00 UTC (= Wed 17:00 VN). Actual post may
+ *     lag up to 30 min after this moment due to 30-min tick cadence.
+ *   - hourly-cleanup: next hour boundary UTC (= hour boundary VN since
+ *     offset is 7 full hours). Same 30-min tick lag applies.
+ *   - stuck-nudge: next 30-min tick boundary (on the :00 or :30). Whether
+ *     a post actually happens also depends on per-user state, so this is
+ *     "next check" not "next guaranteed fire".
+ *
+ * Kept next to ANNOUNCEMENT_REGISTRY rather than embedded in registry
+ * entries because computing dates requires Date manipulation the registry
+ * can't express cleanly as a static field.
+ */
+function nextAnnouncementFireMs(typeKey, now = new Date()) {
+  const nowMs = now.getTime();
+  if (typeKey === "weekly-reset") {
+    const candidate = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      10, 0, 0, 0
+    ));
+    const utcDay = now.getUTCDay();
+    if (utcDay === 3 && now.getUTCHours() < 10) {
+      return candidate.getTime();
+    }
+    // If today is Wed at/after 10 UTC, daysUntilWed collapses to 0 via
+    // modulo; promote it to 7 so we advance a full week.
+    const daysUntilWed = ((3 - utcDay + 7) % 7) || 7;
+    candidate.setUTCDate(candidate.getUTCDate() + daysUntilWed);
+    return candidate.getTime();
+  }
+  if (typeKey === "hourly-cleanup") {
+    const candidate = new Date(now);
+    candidate.setUTCMinutes(0, 0, 0);
+    if (candidate.getTime() <= nowMs) {
+      candidate.setUTCHours(candidate.getUTCHours() + 1);
+    }
+    return candidate.getTime();
+  }
+  if (typeKey === "stuck-nudge") {
+    const candidate = new Date(now);
+    candidate.setUTCSeconds(0, 0);
+    if (candidate.getUTCMinutes() < 30) {
+      candidate.setUTCMinutes(30);
+    } else {
+      candidate.setUTCMinutes(60); // rolls into next hour
+    }
+    return candidate.getTime();
+  }
+  return null; // event-driven
+}
+
 async function handleRaidAnnounceCommand(interaction) {
   const guildId = interaction.guildId;
   if (!guildId) {
@@ -3528,14 +3586,26 @@ async function handleRaidAnnounceCommand(interaction) {
     const previewText = entry.previewContent
       ? truncateText(entry.previewContent, 1024)
       : "*(no preview defined for this type)*";
-    // Compose trigger + dedup + TTL into a single "When it fires" block
-    // so admin sees the full lifecycle (when / how often / how long) in
-    // one field. Fall back to placeholders if a future registry entry
-    // forgets to fill these in.
+    // Compose trigger + next-fire + dedup + TTL into a single
+    // "When it fires" block so admin sees the full lifecycle (when /
+    // how often / how long) in one field. Next-fire uses Discord's
+    // native timestamp tokens so the countdown auto-refreshes in each
+    // user's client + respects their locale/timezone.
     const triggerLine = `**Trigger:** ${entry.trigger || "*(not defined)*"}`;
+    const nextFireMs = nextAnnouncementFireMs(type);
+    let nextFireLine;
+    if (nextFireMs) {
+      const unixSec = Math.floor(nextFireMs / 1000);
+      nextFireLine = `**Next fire:** <t:${unixSec}:R> (<t:${unixSec}:F>)`;
+    } else {
+      nextFireLine = "**Next fire:** On-demand (fires when the trigger condition happens; not on a fixed schedule)";
+    }
     const dedupLine = `**Dedup:** ${entry.dedup || "*(none)*"}`;
     const ttlLine = `**Message TTL:** ${entry.messageTtl || "*(permanent until manual delete)*"}`;
-    const scheduleText = truncateText([triggerLine, dedupLine, ttlLine].join("\n"), 1024);
+    const scheduleText = truncateText(
+      [triggerLine, nextFireLine, dedupLine, ttlLine].join("\n"),
+      1024
+    );
     const embed = new EmbedBuilder()
       .setColor(UI.colors.neutral)
       .setTitle(`${UI.icons.info} Announcement · ${typeLabel}`)
