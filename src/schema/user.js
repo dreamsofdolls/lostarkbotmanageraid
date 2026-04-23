@@ -121,6 +121,10 @@ userSchema.index(
   { "accounts.characters.itemLevel": 1 },
   { name: "raid_check_item_level_scan" }
 );
+userSchema.index(
+  { "accounts.lastRefreshedAt": 1 },
+  { name: "raid_check_refresh_scan" }
+);
 
 // Phase 3 daily auto-manage tick filters to opted-in users, narrows by stale
 // `lastAutoManageSyncAt`, then sorts by `lastAutoManageAttemptAt` for fair

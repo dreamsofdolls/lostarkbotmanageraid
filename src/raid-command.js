@@ -1331,7 +1331,7 @@ function getRaidScanRange(raidKey, selfMin) {
   return { lowestMin, selfMin, nextMin };
 }
 
-function buildRaidCheckUserQuery(raidMeta) {
+function buildRaidCheckUserQuery(raidMeta, now = Date.now()) {
   const query = { ...RAID_CHECK_USER_BASE_QUERY };
   if (!raidMeta) return query;
 
@@ -1340,7 +1340,34 @@ function buildRaidCheckUserQuery(raidMeta) {
     Number(raidMeta.minItemLevel) || 0
   );
   if (Number.isFinite(lowestMin) && lowestMin > 0) {
-    query["accounts.characters.itemLevel"] = { $gte: lowestMin };
+    const refreshCutoff = now - ROSTER_REFRESH_COOLDOWN_MS;
+    const failureCutoff = now - ROSTER_REFRESH_FAILURE_COOLDOWN_MS;
+    // Keep stale/unrefreshed accounts in the candidate set even when their
+    // cached iLvl is below the raid floor. Initial /raid-check intentionally
+    // lazy-refreshes stale roster metadata before scanning; filtering only
+    // by cached iLvl here would hide a character who honed past the floor
+    // since the last successful refresh.
+    query.$or = [
+      { "accounts.characters.itemLevel": { $gte: lowestMin } },
+      {
+        accounts: {
+          $elemMatch: {
+            $or: [
+              { lastRefreshedAt: null },
+              { lastRefreshedAt: { $exists: false } },
+              {
+                lastRefreshedAt: { $lt: refreshCutoff },
+                $or: [
+                  { lastRefreshAttemptAt: null },
+                  { lastRefreshAttemptAt: { $exists: false } },
+                  { lastRefreshAttemptAt: { $lt: failureCutoff } },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    ];
   }
   return query;
 }
@@ -7614,6 +7641,7 @@ module.exports = {
     buildAccountFreshnessLine,
     formatRosterRefreshCooldownRemaining,
     ROSTER_REFRESH_COOLDOWN_MS,
+    ROSTER_REFRESH_FAILURE_COOLDOWN_MS,
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
   },
 };
