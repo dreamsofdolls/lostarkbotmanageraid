@@ -247,6 +247,16 @@ test("parseRaidMessage accepts hm as a hard alias", () => {
   });
 });
 
+test("parseRaidMessage accepts short kaz hm text-channel format", () => {
+  const parsed = parseRaidMessage("kaz hm cyrano");
+  assert.deepEqual(parsed, {
+    raidKey: "kazeros",
+    modeKey: "hard",
+    charNames: ["cyrano"],
+    gate: null,
+  });
+});
+
 test("parseRaidMessage accepts 9m as a nightmare alias", () => {
   const parsed = parseRaidMessage("Serca 9m Clauseduk");
   assert.deepEqual(parsed, {
