@@ -1517,20 +1517,32 @@ async function handleRaidCheckCommand(interaction) {
   // (`Act 4 Normal (1700)`). No description needed - footer legend covers
   // state breakdown, and per-roster header carries the sync badge.
   const headerTitle = `${UI.icons.warn} Raid Check · ${raidMeta.label} (${raidMeta.minItemLevel})`;
-  // Dynamic footer: done / partial / pending / not-eligible counts so
-  // Raid Manager sees the full roster picture at a glance. The
-  // not-eligible segment is only rendered when there's at least one
-  // out-of-range char to avoid `· 0 🔒` visual noise on scans where
-  // every char sits in the mode range.
-  const footerParts = [
-    `${UI.icons.done} ${completeChars.length} done`,
-    `${UI.icons.partial} ${partialChars.length} partial`,
-    `${UI.icons.pending} ${noneChars.length} pending`,
-  ];
-  if (notEligibleChars.length > 0) {
-    footerParts.push(`${UI.icons.lock} ${notEligibleChars.length} not eligible`);
-  }
-  const footerText = footerParts.join(" · ");
+  // Footer stats must recompute PER RENDER because the user filter
+  // dropdown narrows the visible roster set. A footer built once off the
+  // global `completeChars.length` would show aggregate totals even when
+  // Raid Manager filtered to one user (Traine noticed "13 done" while
+  // filtered view only contained 4 done chars for that user). Summing
+  // `group.stats` over the filtered groups gives per-scope counts that
+  // match what's actually rendered on the page. `notEligible` segment is
+  // suppressed when 0 to avoid `· 0 🔒` visual noise on scans where every
+  // char sits inside the mode range.
+  const buildFooterText = (groups) => {
+    let done = 0, partial = 0, none = 0, notEligible = 0;
+    for (const g of groups) {
+      const s = g.stats || {};
+      done += s.done || 0;
+      partial += s.partial || 0;
+      none += s.none || 0;
+      notEligible += s.notEligible || 0;
+    }
+    const parts = [
+      `${UI.icons.done} ${done} done`,
+      `${UI.icons.partial} ${partial} partial`,
+      `${UI.icons.pending} ${none} pending`,
+    ];
+    if (notEligible > 0) parts.push(`${UI.icons.lock} ${notEligible} not eligible`);
+    return parts.join(" · ");
+  };
 
   // One embed per roster - mirrors /raid-status's 1-account-per-page model.
   // Roster header lives in setDescription right under the global summary so
@@ -1654,11 +1666,14 @@ async function handleRaidCheckCommand(interaction) {
 
   // Build one embed page rendering a chunk (up to ROSTERS_PER_PAGE) of
   // roster sections. Title stable across pages; footer appends page
-  // indicator when there's more than 1 page.
-  const buildRaidCheckPage = (rosterChunk, pageIndex, totalPages) => {
+  // indicator when there's more than 1 page. `visibleGroups` is the
+  // filtered full list for this render (all pages combined, before
+  // chunking) so the footer counts match the filter scope.
+  const buildRaidCheckPage = (rosterChunk, pageIndex, totalPages, visibleGroups) => {
+    const baseFooter = buildFooterText(visibleGroups || rosterChunk);
     const pageFooter = totalPages > 1
-      ? `${footerText} · Page ${pageIndex + 1}/${totalPages}`
-      : footerText;
+      ? `${baseFooter} · Page ${pageIndex + 1}/${totalPages}`
+      : baseFooter;
     const embed = new EmbedBuilder()
       .setTitle(headerTitle)
       .setColor(difficultyColor)
@@ -1683,13 +1698,15 @@ async function handleRaidCheckCommand(interaction) {
 
   // Empty-filter state (user picked a dropdown option whose data got
   // cleared mid-session, e.g. they /raid-set'd their last pending char).
+  // Footer here falls back to global counts since there's nothing
+  // filter-scoped to render.
   const buildEmptyFilterEmbed = (userId) => {
     const username = (userId && displayMap.get(userId)) || "this user";
     return new EmbedBuilder()
       .setTitle(headerTitle)
       .setDescription(`${UI.icons.done} **${username}** không có char nào pending trong ${raidMeta.label}.`)
       .setColor(UI.colors.success)
-      .setFooter({ text: footerText })
+      .setFooter({ text: buildFooterText(rosterGroups) })
       .setTimestamp();
   };
 
@@ -1768,8 +1785,9 @@ async function handleRaidCheckCommand(interaction) {
   // - buildRaidCheckPage reads it via closure to set embed.author iconURL.
   let selectedUserId = null;
   let selectedUserAvatar = null;
-  let pages = chunkRosters(filterByUser(selectedUserId)).map((chunk, idx, arr) =>
-    buildRaidCheckPage(chunk, idx, arr.length)
+  const initialFiltered = filterByUser(selectedUserId);
+  let pages = chunkRosters(initialFiltered).map((chunk, idx, arr) =>
+    buildRaidCheckPage(chunk, idx, arr.length, initialFiltered)
   );
   let currentPage = 0;
 
@@ -1830,7 +1848,7 @@ async function handleRaidCheckCommand(interaction) {
       }
       const filtered = filterByUser(selectedUserId);
       pages = chunkRosters(filtered).map((chunk, idx, arr) =>
-        buildRaidCheckPage(chunk, idx, arr.length)
+        buildRaidCheckPage(chunk, idx, arr.length, filtered)
       );
       currentPage = 0;
       if (pages.length === 0) {
