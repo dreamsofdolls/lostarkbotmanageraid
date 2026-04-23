@@ -31,6 +31,7 @@ const {
   formatShortRelative,
   formatNextCooldownRemaining,
   waitWithBudget,
+  buildDiscordIdentityFields,
 } = require("./raid/shared");
 const {
   announcementTypeKeys,
@@ -782,49 +783,78 @@ let handleRemoveRosterCommand;
 let handleRaidChannelAutocomplete;
 let handleRaidChannelCommand;
 
+async function cacheDiscordIdentityForExistingUser(interaction) {
+  const discordId = interaction?.user?.id;
+  if (!discordId) return;
+
+  const identity = buildDiscordIdentityFields(interaction);
+  if (!Object.values(identity).some(Boolean)) return;
+
+  try {
+    await User.updateOne(
+      {
+        discordId,
+        $or: Object.entries(identity).map(([field, value]) => ({
+          [field]: { $ne: value },
+        })),
+      },
+      { $set: identity }
+    );
+  } catch (err) {
+    console.warn(
+      `[user-cache] failed to cache Discord identity for ${discordId}:`,
+      err?.message || err
+    );
+  }
+}
+
 async function handleRaidManagementCommand(interaction) {
-  if (interaction.commandName === "add-roster") {
-    await handleAddRosterCommand(interaction);
-    return;
-  }
+  try {
+    if (interaction.commandName === "add-roster") {
+      await handleAddRosterCommand(interaction);
+      return;
+    }
 
-  if (interaction.commandName === "raid-check") {
-    await handleRaidCheckCommand(interaction);
-    return;
-  }
+    if (interaction.commandName === "raid-check") {
+      await handleRaidCheckCommand(interaction);
+      return;
+    }
 
-  if (interaction.commandName === "raid-set") {
-    await handleRaidSetCommand(interaction);
-    return;
-  }
+    if (interaction.commandName === "raid-set") {
+      await handleRaidSetCommand(interaction);
+      return;
+    }
 
-  if (interaction.commandName === "raid-status") {
-    await handleStatusCommand(interaction);
-    return;
-  }
+    if (interaction.commandName === "raid-status") {
+      await handleStatusCommand(interaction);
+      return;
+    }
 
-  if (interaction.commandName === "raid-help") {
-    await handleRaidHelpCommand(interaction);
-    return;
-  }
+    if (interaction.commandName === "raid-help") {
+      await handleRaidHelpCommand(interaction);
+      return;
+    }
 
-  if (interaction.commandName === "remove-roster") {
-    await handleRemoveRosterCommand(interaction);
-    return;
-  }
+    if (interaction.commandName === "remove-roster") {
+      await handleRemoveRosterCommand(interaction);
+      return;
+    }
 
-  if (interaction.commandName === "raid-channel") {
-    await handleRaidChannelCommand(interaction);
-    return;
-  }
+    if (interaction.commandName === "raid-channel") {
+      await handleRaidChannelCommand(interaction);
+      return;
+    }
 
-  if (interaction.commandName === "raid-auto-manage") {
-    await handleRaidAutoManageCommand(interaction);
-    return;
-  }
+    if (interaction.commandName === "raid-auto-manage") {
+      await handleRaidAutoManageCommand(interaction);
+      return;
+    }
 
-  if (interaction.commandName === "raid-announce") {
-    await handleRaidAnnounceCommand(interaction);
+    if (interaction.commandName === "raid-announce") {
+      await handleRaidAnnounceCommand(interaction);
+    }
+  } finally {
+    await cacheDiscordIdentityForExistingUser(interaction);
   }
 }
 
