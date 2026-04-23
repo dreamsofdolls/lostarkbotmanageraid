@@ -6789,30 +6789,32 @@ function getTargetCleanupSlotKey(now = new Date()) {
  * Buckets sized empirically: 0 = silent channel (idle marker), 1-5 = a
  * few stragglers, 6-20 = typical night of posting, 21+ = backlog.
  *
- * All strings omit stage-direction italics per feedback_no_stage_directions
- * and include the "Biển báo này 30 phút nữa Artist cuỗm đi" self-delete
- * hint so members aren't surprised when the notice disappears.
+ * Voice: "cắm tạm biển / nghỉ / sủi" instead of the earlier "tự biến /
+ * tự dọn" phrasing per Traine - the self-delete mechanic reads more
+ * naturally as Artist physically placing a sign, resting a bit, then
+ * slipping away with it. No stage-direction italics per
+ * feedback_no_stage_directions.
  */
 const CLEANUP_NOTICE_VARIANTS_BY_BUCKET = {
   empty: [
-    "Ồ, giờ này Artist ghé qua xem chỗ này thế nào... ai dè sạch sẽ sẵn rồi nhé~ Vậy Artist ngồi uống trà 5 phút rồi đi tiếp, biển báo này tự biến mất sau đó. Các cậu cứ tiếp tục post clear bình thường nha.",
-    "Hmm~ Artist tới ca dọn mà chẳng có gì để dọn cả. Các cậu hôm nay gọn gàng quá đấy, Artist ngồi đây 5 phút rồi biến nhé.",
-    "Chỗ này vẫn sạch như cũ nhỉ~ Artist cảm ơn các cậu giữ channel ngăn nắp, biển báo này tự xóa sau 5 phút để không làm vướng.",
+    "Ghé qua thấy chỗ này sạch tinh rồi nhé~ Artist cắm tạm biển ngồi nghỉ 5 phút xong sủi đi thôi, các cậu cứ tiếp tục post clear bình thường nha.",
+    "Hmm, các cậu dọn sẵn sạch gọn quá~ Artist đặt biển ở đây nghỉ tay 5 phút rồi sủi, biển cũng đi theo Artist luôn.",
+    "Chỗ này vẫn ngăn nắp ghê~ Artist cắm biển cảm ơn, tranh thủ nghỉ 5 phút rồi sủi đi làm việc khác, các cậu cứ tự nhiên.",
   ],
   trivial: [
-    "Nhẹ nhàng thôi mà~ Artist vừa thu gom **N** mẩu tin rồi, 5 phút nữa biển này tự biến nha.",
-    "Ok, **N** tin nhỏ xinh đã được Artist dọn gọn. Biển báo này 5 phút nữa cũng tự dọn luôn đấy.",
-    "Chỉ có **N** mẩu lặt vặt thôi, Artist vừa xử lý xong~ Biển báo này 5 phút nữa Artist cuỗm đi, các cậu cứ tiếp tục post clear nhé.",
+    "Thu gom **N** mẩu tin, nhẹ nhàng thôi mà~ Artist cắm tạm biển nghỉ 5 phút xong sủi đi tiếp nhé.",
+    "Ok, **N** tin nhỏ xinh Artist đã dọn gọn. Biển báo cắm tạm đây thôi, 5 phút xong hai đứa cùng sủi.",
+    "Có **N** mẩu lặt vặt thôi, Artist xử lý xong liền~ Cắm biển ngồi 5 phút rồi sủi, các cậu cứ post clear tiếp nha.",
   ],
   normal: [
-    "Hừm... đến ca dọn rồi nhé. Xong, vừa dọn **N** tin rồi đấy~ Biển báo này 5 phút nữa Artist cuỗm đi luôn, các cậu cứ tiếp tục post clear bình thường nha.",
-    "Đúng nhịp dọn dẹp đây~ Artist vừa quét **N** tin, channel gọn gàng lại rồi. Biển báo này tự biến sau 5 phút nha.",
-    "Xong một lượt dọn, **N** tin đã được Artist thu về gọn ghẽ. Biển báo này 5 phút nữa cũng dọn nốt, các cậu cứ post clear bình thường.",
+    "Đến ca dọn rồi nhé, Artist vừa quét **N** tin~ Cắm biển ngồi nghỉ 5 phút xong sủi đi thôi, các cậu cứ post clear bình thường.",
+    "Đúng nhịp dọn dẹp đây~ **N** tin đã được Artist thu gọn. Biển cắm tạm ở đây nghỉ 5 phút rồi sủi nha.",
+    "Xong một lượt, **N** tin được Artist dọn gọn ghẽ. Artist cắm biển nghỉ chút 5 phút, xong sủi đi, các cậu cứ tiếp tục.",
   ],
   heavy: [
-    "Oáp... có tới **N** tin phải dọn này, Artist làm hụt hơi luôn~ Xong rồi, biển báo này 5 phút nữa Artist tự cuỗm đi nha.",
-    "Nhiều rác thật đấy, **N** tin lận~ Artist vừa xử lý gọn gàng, các cậu post sôi nổi ghê. Biển báo này 5 phút nữa tự biến.",
-    "Artist phải tăng ca dọn **N** tin nè, hơi mệt nhưng channel sạch lại rồi. Biển này 5 phút nữa tớ cuỗm đi, các cậu cứ tiếp tục post clear nha.",
+    "Oáp... **N** tin phải dọn này, Artist hụt hơi thật~ Cắm biển xuống nghỉ 5 phút đã, xong Artist với biển cùng sủi nha.",
+    "Nhiều rác thật đấy, **N** tin lận~ Artist vừa dọn gọn xong, cắm tạm biển ngồi thở 5 phút rồi sủi, các cậu post sôi nổi ghê.",
+    "Artist tăng ca dọn **N** tin luôn, mệt ghê~ Cắm biển nghỉ 5 phút rồi sủi đi, các cậu cứ tiếp tục post clear thoải mái nha.",
   ],
 };
 
