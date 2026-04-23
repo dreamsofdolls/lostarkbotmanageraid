@@ -9,6 +9,12 @@ function createRaidChannelMonitorService({
   getGatesForRaid,
   applyRaidSetForDiscordId,
   getAnnouncementsConfig,
+  // Injected so checkUserMonitorCooldown / clearUserMonitorCooldown can fold
+  // message.content into a stable dedup key. Missing this dep in the compose
+  // site caused every MessageCreate to throw ReferenceError and the silent
+  // try/catch in bot.js swallowed the error, making the whole channel appear
+  // unresponsive even though the listener was bound.
+  normalizeName,
 }) {
   // Raid channel monitor (text-driven raid-set)
   // ---------------------------------------------------------------------------
