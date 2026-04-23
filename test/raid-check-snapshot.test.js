@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { __test, parseRaidMessage } = require("../src/raid-command");
-const { getTargetResetKey } = require("../src/weekly-reset");
+const { ensureFreshWeek, getTargetResetKey } = require("../src/weekly-reset");
 
 function makeCharacter(name, itemLevel, kazeros = {}) {
   return {
@@ -204,4 +204,155 @@ test("parseRaidMessage accepts 9m as a nightmare alias", () => {
     charNames: ["clauseduk"],
     gate: null,
   });
+});
+
+test("stale roster refresh canonicalizes diacritic-only bible character names", () => {
+  const userDoc = {
+    accounts: [
+      {
+        accountName: "Cruelfighter",
+        lastRefreshedAt: 0,
+        lastRefreshAttemptAt: 0,
+        characters: [
+          {
+            name: "Lastdance",
+            class: "Wardancer",
+            itemLevel: 1700,
+            combatScore: "",
+            bibleSerial: "old",
+            bibleCid: 1,
+            bibleRid: 2,
+            assignedRaids: { armoche: {}, kazeros: {}, serca: {} },
+            tasks: [],
+          },
+        ],
+      },
+    ],
+  };
+
+  const didUpdate = __test.applyStaleAccountRefreshes(userDoc, [
+    {
+      accountName: "Cruelfighter",
+      resolvedSeed: null,
+      attempted: true,
+      fetchedChars: [
+        {
+          charName: "Lastdanc\u00eb",
+          className: "Wardancer",
+          itemLevel: 1700.8334,
+          combatScore: "1861.7",
+        },
+      ],
+    },
+  ]);
+
+  const character = userDoc.accounts[0].characters[0];
+  assert.equal(didUpdate, true);
+  assert.equal(character.name, "Lastdanc\u00eb");
+  assert.equal(character.itemLevel, 1700.8334);
+  assert.equal(character.class, "Wardancer");
+  assert.equal(character.bibleSerial, null);
+  assert.equal(character.bibleCid, null);
+  assert.equal(character.bibleRid, null);
+  assert.ok(userDoc.accounts[0].lastRefreshedAt > 0);
+});
+
+test("formatNextCooldownRemaining rounds up and returns null when expired", () => {
+  const now = Date.now();
+  // Expired (was 10 min ago, cooldown 5 min) -> null so caller can swap
+  // in a "ready" marker.
+  assert.equal(
+    __test.formatNextCooldownRemaining(now - 10 * 60_000, 5 * 60_000),
+    null
+  );
+  // Exactly 0 (edge of boundary) -> null so we never show "0s".
+  assert.equal(__test.formatNextCooldownRemaining(now, 0), null);
+  // Never attempted (lastAttemptAt = 0) -> null.
+  assert.equal(__test.formatNextCooldownRemaining(0, 5 * 60_000), null);
+  // 61s remaining -> "2m" (round up, not "1m") so user doesn't press too early.
+  const rem61s = __test.formatNextCooldownRemaining(now - 4 * 60_000 + 1_000, 5 * 60_000);
+  assert.equal(rem61s, "2m");
+  // Sub-minute remaining -> seconds.
+  const rem30s = __test.formatNextCooldownRemaining(now - 4 * 60_000 - 30_000, 5 * 60_000);
+  assert.match(rem30s, /^\d+s$/);
+  // Hours+minutes compact.
+  const rem90m = __test.formatNextCooldownRemaining(now - 30 * 60_000, 2 * 60 * 60_000);
+  assert.equal(rem90m, "1h30m");
+});
+
+test("buildAccountFreshnessLine renders both refresh and sync badges with countdown state", () => {
+  const now = Date.now();
+  const account = { lastRefreshedAt: now - 30 * 60_000 }; // 30 min ago -> 2h cooldown still active
+  const userMeta = {
+    autoManageEnabled: true,
+    lastAutoManageSyncAt: now - 3 * 60_000, // 3 min ago
+    lastAutoManageAttemptAt: now - 3 * 60_000, // cooldown still active (5m)
+  };
+  const line = __test.buildAccountFreshnessLine(account, userMeta);
+  assert.match(line, /Last updated 30m ago/);
+  assert.match(line, /Next refresh in 1h30m/);
+  assert.match(line, /Last synced 3m ago/);
+  assert.match(line, /Next sync in 2m/);
+});
+
+test("buildAccountFreshnessLine shows ready marker when cooldown expired", () => {
+  const now = Date.now();
+  const account = { lastRefreshedAt: now - 3 * 60 * 60_000 }; // 3h ago -> expired
+  const userMeta = {
+    autoManageEnabled: true,
+    lastAutoManageSyncAt: now - 30 * 60_000, // 30m ago
+    lastAutoManageAttemptAt: now - 30 * 60_000, // 5m cooldown expired
+  };
+  const line = __test.buildAccountFreshnessLine(account, userMeta);
+  assert.match(line, /Refresh ready/);
+  assert.match(line, /Sync ready/);
+});
+
+test("buildAccountFreshnessLine omits sync badge when auto-manage is off", () => {
+  const account = { lastRefreshedAt: Date.now() - 60_000 };
+  const line = __test.buildAccountFreshnessLine(account, { autoManageEnabled: false });
+  assert.match(line, /Last updated/);
+  assert.doesNotMatch(line, /synced/);
+  assert.doesNotMatch(line, /Sync/);
+});
+
+test("ensureFreshWeek preserves gate clears already inside the current reset window", () => {
+  const now = new Date(Date.UTC(2026, 3, 23, 8, 0, 0, 0)); // Thu Apr 23 2026, after Wed 10:00 UTC reset
+  const currentWeekClear = Date.UTC(2026, 3, 23, 6, 59, 11, 61);
+  const previousWeekClear = Date.UTC(2026, 3, 22, 9, 59, 59, 999);
+  const userDoc = {
+    weeklyResetKey: "2026-W16",
+    accounts: [
+      {
+        characters: [
+          {
+            assignedRaids: {
+              armoche: {
+                G1: { difficulty: "Normal", completedDate: currentWeekClear },
+                G2: { difficulty: "Normal", completedDate: previousWeekClear },
+              },
+              kazeros: {},
+              serca: {},
+            },
+            tasks: [
+              { id: "current-task", completions: 1, completionDate: currentWeekClear },
+              { id: "old-task", completions: 1, completionDate: previousWeekClear },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  const changed = ensureFreshWeek(userDoc, now);
+  const character = userDoc.accounts[0].characters[0];
+
+  assert.equal(changed, true);
+  assert.equal(userDoc.weeklyResetKey, getTargetResetKey(now));
+  assert.equal(character.assignedRaids.armoche.G1.completedDate, currentWeekClear);
+  assert.equal(character.assignedRaids.armoche.G2.completedDate, null);
+  assert.equal(character.tasks[0].completions, 1);
+  assert.equal(character.tasks[0].completionDate, currentWeekClear);
+  assert.equal(character.tasks[1].completions, 0);
+  assert.equal(character.tasks[1].completionDate, null);
 });
