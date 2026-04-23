@@ -1322,19 +1322,10 @@ function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
   const partialChars = allEligible.filter((c) => c.overallStatus === "partial");
   const noneChars = allEligible.filter((c) => c.overallStatus === "none");
   const pendingChars = [...partialChars, ...noneChars];
-  // Combined render set: show every char inside RELEVANT rosters (those with
-  // at least one pending or not-eligible char), but keep unrelated done-only
-  // rosters out of /raid-check.
-  const relevantRosterKeys = new Set(
-    [...pendingChars, ...notEligibleChars].map(
-      (c) => c.discordId + ROSTER_KEY_SEP + c.accountName
-    )
-  );
-  const allChars = relevantRosterKeys.size === 0
-    ? []
-    : [...allEligible, ...notEligibleChars].filter((c) =>
-        relevantRosterKeys.has(c.discordId + ROSTER_KEY_SEP + c.accountName)
-      );
+  // Combined render set: eligible chars + notEligible chars. /raid-check is a
+  // roster audit view, so once the scan finds in-scope chars we keep the full
+  // picture visible instead of hiding unrelated done-only rosters.
+  const allChars = [...allEligible, ...notEligibleChars];
 
   return {
     allEligible,
@@ -1426,9 +1417,9 @@ async function handleRaidCheckCommand(interaction) {
     return;
   }
 
-  // Resolve display names for every user shown. Relevant rosters can now
-  // include done companions + not-eligible chars, not just the pending
-  // subset. Cache-first via resolveDiscordDisplay.
+  // Resolve display names for every user shown. Visible rosters can include
+  // done companions and done-only rosters now, not just the pending subset.
+  // Cache-first via resolveDiscordDisplay.
   const visibleDiscordIds = [...new Set(allChars.map((c) => c.discordId))];
   const displayMap = new Map();
   await Promise.all(
@@ -1440,10 +1431,9 @@ async function handleRaidCheckCommand(interaction) {
 
   // Group every VISIBLE char (done + partial + none + not-eligible) by
   // user+roster composite so a user with 2 rosters (main + alt) gets
-  // 2 separate sections. Relevant rosters show the full roster picture;
-  // unrelated done-only rosters stay filtered out earlier. Uses module-
-  // level `ROSTER_KEY_SEP` (\x1f Unit Separator) shared with
-  // rosterRefreshMap - same key shape across all per-roster maps.
+  // 2 separate sections. Uses module-level `ROSTER_KEY_SEP`
+  // (\x1f Unit Separator) shared with rosterRefreshMap - same key shape
+  // across all per-roster maps.
   const rosterBuckets = new Map();
   for (const item of allChars) {
     const key = item.discordId + ROSTER_KEY_SEP + item.accountName;
