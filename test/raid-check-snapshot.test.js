@@ -58,6 +58,33 @@ test("buildRaidCheckSnapshotFromUsers keeps roster freshness metadata and counts
   assert.equal(snapshot.pendingChars[0]?.charName, "StillPending");
 });
 
+test("buildRaidCheckSnapshotFromUsers keeps higher-mode clears complete even above the next mode threshold", () => {
+  const snapshot = __test.buildRaidCheckSnapshotFromUsers(
+    [
+      {
+        discordId: "user-1",
+        weeklyResetKey: getTargetResetKey(new Date()),
+        accounts: [
+          {
+            accountName: "Main",
+            characters: [
+              makeCharacter("HardDone1740", 1740, {
+                G1: { difficulty: "Hard", completedDate: 1 },
+                G2: { difficulty: "Hard", completedDate: 2 },
+              }),
+            ],
+          },
+        ],
+      },
+    ],
+    { raidKey: "kazeros", modeKey: "normal", minItemLevel: 1710 }
+  );
+
+  assert.equal(snapshot.completeChars.length, 1);
+  assert.equal(snapshot.completeChars[0]?.charName, "HardDone1740");
+  assert.equal(snapshot.notEligibleChars.length, 0);
+});
+
 test("buildRaidCheckSnapshotFromUsers marks out-grown chars as not-eligible when scanning a lower mode", () => {
   const snapshot = __test.buildRaidCheckSnapshotFromUsers(
     [
@@ -109,6 +136,49 @@ test("buildRaidCheckSnapshotFromUsers marks under-iLvl chars as not-eligible whe
   assert.equal(snapshot.notEligibleChars.length, 1);
   assert.equal(snapshot.notEligibleChars[0]?.charName, "TooLow");
   assert.equal(snapshot.notEligibleChars[0]?.notEligibleReason, "low");
+});
+
+test("buildRaidCheckSnapshotFromUsers hides unrelated done-only rosters from the combined render set", () => {
+  const snapshot = __test.buildRaidCheckSnapshotFromUsers(
+    [
+      {
+        discordId: "done-user",
+        weeklyResetKey: getTargetResetKey(new Date()),
+        accounts: [
+          {
+            accountName: "DoneOnly",
+            characters: [
+              makeCharacter("AlreadyDone", 1720, {
+                G1: { difficulty: "Normal", completedDate: 1 },
+                G2: { difficulty: "Normal", completedDate: 2 },
+              }),
+            ],
+          },
+        ],
+      },
+      {
+        discordId: "pending-user",
+        weeklyResetKey: getTargetResetKey(new Date()),
+        accounts: [
+          {
+            accountName: "PendingRoster",
+            characters: [
+              makeCharacter("StillPending", 1720, {}),
+              makeCharacter("DoneMate", 1720, {
+                G1: { difficulty: "Normal", completedDate: 1 },
+                G2: { difficulty: "Normal", completedDate: 2 },
+              }),
+            ],
+          },
+        ],
+      },
+    ],
+    { raidKey: "kazeros", modeKey: "normal", minItemLevel: 1710 }
+  );
+
+  const rosterKeys = [...new Set(snapshot.allChars.map((c) => `${c.discordId}|${c.accountName}`))];
+  assert.deepEqual(rosterKeys, ["pending-user|PendingRoster"]);
+  assert.equal(snapshot.allChars.length, 2);
 });
 
 test("raid-check pagination timeout is 5 minutes while raid-status stays at 2 minutes", () => {
