@@ -82,7 +82,7 @@ const raidCheckSyncLimiter = new ConcurrencyLimiter(3);
 // Narrow Mongo payload for /raid-check scans. The view only needs roster
 // fields, refresh stamps, weekly cursor, and auto-manage badges - not the
 // rest of the User document.
-const RAID_CHECK_USER_QUERY = { "accounts.0": { $exists: true } };
+const RAID_CHECK_USER_BASE_QUERY = { "accounts.0": { $exists: true } };
 const RAID_CHECK_USER_QUERY_FIELDS = [
   "discordId",
   "weeklyResetKey",
@@ -1331,6 +1331,20 @@ function getRaidScanRange(raidKey, selfMin) {
   return { lowestMin, selfMin, nextMin };
 }
 
+function buildRaidCheckUserQuery(raidMeta) {
+  const query = { ...RAID_CHECK_USER_BASE_QUERY };
+  if (!raidMeta) return query;
+
+  const { lowestMin } = getRaidScanRange(
+    raidMeta.raidKey,
+    Number(raidMeta.minItemLevel) || 0
+  );
+  if (Number.isFinite(lowestMin) && lowestMin > 0) {
+    query["accounts.characters.itemLevel"] = { $gte: lowestMin };
+  }
+  return query;
+}
+
 function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
   const userMeta = new Map();
   // rosterRefreshMap: composite key → account.lastRefreshedAt (ms timestamp
@@ -1471,14 +1485,15 @@ function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
 }
 
 async function computeRaidCheckSnapshot(raidMeta, { syncFreshData = false } = {}) {
+  const userQuery = buildRaidCheckUserQuery(raidMeta);
   if (!syncFreshData) {
-    const users = await User.find(RAID_CHECK_USER_QUERY)
+    const users = await User.find(userQuery)
       .select(RAID_CHECK_USER_QUERY_FIELDS)
       .lean();
     return buildRaidCheckSnapshotFromUsers(users, raidMeta);
   }
 
-  const seedUsers = await User.find(RAID_CHECK_USER_QUERY)
+  const seedUsers = await User.find(userQuery)
     .select(RAID_CHECK_USER_QUERY_FIELDS);
   const users = await Promise.all(
     seedUsers.map((seedDoc) =>
@@ -2572,8 +2587,10 @@ async function handleStatusCommand(interaction) {
   const discordId = interaction.user.id;
 
   // Fast path: no roster at all → ephemeral reply, skip defer entirely.
-  const preCheck = await User.findOne({ discordId }).lean();
-  if (!preCheck || !Array.isArray(preCheck.accounts) || preCheck.accounts.length === 0) {
+  // Keep the hydrated doc for the refresh path so normal `/raid-status`
+  // does not pay a second identical User.findOne before it can render.
+  const seedDoc = await User.findOne({ discordId });
+  if (!seedDoc || !Array.isArray(seedDoc.accounts) || seedDoc.accounts.length === 0) {
     await interaction.reply({
       content: `${UI.icons.info} Cậu chưa có roster nào. Dùng \`/add-roster\` để thêm trước nhé.`,
       flags: MessageFlags.Ephemeral,
@@ -2603,7 +2620,6 @@ async function handleStatusCommand(interaction) {
   let userDoc = null;
   let autoManageGuard = null;
   try {
-    const seedDoc = await User.findOne({ discordId });
     if (!seedDoc) {
       userDoc = null;
     } else {
@@ -5540,7 +5556,7 @@ async function fetchBibleCharacterMetaWithLimiter(charName) {
   return bibleLimiter.run(() => fetchBibleCharacterMeta(charName));
 }
 
-async function resolveBibleCharacterMetaViaRoster(account, character) {
+async function resolveBibleCharacterMetaViaRoster(account, character, rosterFetchCache = null) {
   const seeds = [];
   if (account?.accountName) seeds.push(account.accountName);
   for (const c of account?.characters || []) {
@@ -5550,14 +5566,31 @@ async function resolveBibleCharacterMetaViaRoster(account, character) {
 
   for (const seed of seeds) {
     let fetched;
-    try {
-      fetched = await fetchRosterCharacters(seed);
-    } catch (err) {
-      console.warn(
-        `[auto-manage] roster fallback seed "${seed}" failed:`,
-        err?.message || err
-      );
-      continue;
+    const cacheKey = normalizeName(seed);
+    if (rosterFetchCache) {
+      if (!rosterFetchCache.has(cacheKey)) {
+        rosterFetchCache.set(
+          cacheKey,
+          fetchRosterCharacters(seed).catch((err) => {
+            console.warn(
+              `[auto-manage] roster fallback seed "${seed}" failed:`,
+              err?.message || err
+            );
+            return null;
+          })
+        );
+      }
+      fetched = await rosterFetchCache.get(cacheKey);
+    } else {
+      try {
+        fetched = await fetchRosterCharacters(seed);
+      } catch (err) {
+        console.warn(
+          `[auto-manage] roster fallback seed "${seed}" failed:`,
+          err?.message || err
+        );
+        continue;
+      }
     }
     if (!Array.isArray(fetched) || fetched.length === 0) continue;
 
@@ -5736,6 +5769,7 @@ function autoManageEntryKey(accountName, charName) {
 async function gatherAutoManageLogsForUserDoc(userDoc, weekResetStart) {
   const collected = [];
   for (const account of userDoc.accounts || []) {
+    const rosterFetchCache = new Map();
     for (const character of account.characters || []) {
       const charName = getCharacterName(character);
       const entry = {
@@ -5761,7 +5795,11 @@ async function gatherAutoManageLogsForUserDoc(userDoc, weekResetStart) {
           try {
             meta = await fetchBibleCharacterMetaWithLimiter(entry.charName);
           } catch (directErr) {
-            const resolved = await resolveBibleCharacterMetaViaRoster(account, character);
+            const resolved = await resolveBibleCharacterMetaViaRoster(
+              account,
+              character,
+              rosterFetchCache
+            );
             if (!resolved) throw directErr;
             meta = resolved.meta;
             entry.canonicalName = resolved.canonicalName;
@@ -7519,6 +7557,7 @@ module.exports = {
     nextAnnouncementEligibleBoundaryMs,
     nextAnnouncementSchedulerCheckMs,
     buildAnnouncementWhenItFiresText,
+    buildRaidCheckUserQuery,
     foldName,
     buildFetchedRosterIndexes,
     findFetchedRosterMatchForCharacter,

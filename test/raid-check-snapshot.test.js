@@ -188,6 +188,19 @@ test("raid-check pagination timeout is 5 minutes while raid-status stays at 2 mi
   assert.equal(__test.RAID_CHECK_PAGINATION_SESSION_MS, 5 * 60 * 1000);
 });
 
+test("raid-check user query pushes raid floor filtering into Mongo", () => {
+  const query = __test.buildRaidCheckUserQuery({
+    raidKey: "kazeros",
+    modeKey: "hard",
+    minItemLevel: 1730,
+  });
+
+  assert.deepEqual(query, {
+    "accounts.0": { $exists: true },
+    "accounts.characters.itemLevel": { $gte: 1710 },
+  });
+});
+
 test("parseRaidMessage accepts hm as a hard alias", () => {
   const parsed = parseRaidMessage("Kazeros hm Clauseduk");
   assert.deepEqual(parsed, {
