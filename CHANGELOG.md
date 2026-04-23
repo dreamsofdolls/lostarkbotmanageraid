@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file. Dates use t
 
 ### Changed
 
+- **Operational polish for `/raid-check` performance work.** Bot startup now best-effort ensures declared Mongo indexes (`MONGO_ENSURE_INDEXES=false` disables this for manually managed Atlas projects) so the new item-level prefilter is not just theoretical after deploy. `/raid-check` snapshot and Sync button paths now log candidate/user counts plus query/refresh/sync/DM timings, making it easier to see whether a slow command is Mongo, bible, or Discord DM fan-out. `db.js`, `.env.example`, `src/raid-command.js`, `README.md`.
+
 - **`/raid-check` now filters candidate users by raid iLvl floor in Mongo before snapshot/pre-refresh work.** The command already skipped characters below the selected raid's broad floor in JS; pushing `accounts.characters.itemLevel >= lowestMin` into the query avoids loading and lazy-refreshing users who cannot appear in the rendered scan at all. Added a multikey index on `accounts.characters.itemLevel` for that path. `/raid-status` also reuses its initial hydrated `User.findOne` for the refresh path, removing one duplicate read from the normal command flow. `src/raid-command.js`, `src/schema/user.js`, `test/raid-check-snapshot.test.js`, `README.md`.
 
 - **Auto-manage roster fallback now caches roster fetches per account during one gather.** If direct bible meta lookup fails for several characters in the same roster (for example stored names missing diacritics), the fallback no longer re-fetches the same account roster for each character. It reuses the first seed result inside the current sync attempt, reducing worst-case fallback traffic while keeping the same direct-meta and log-fetch behavior. `src/raid-command.js`.

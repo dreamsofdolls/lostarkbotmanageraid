@@ -1485,16 +1485,39 @@ function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
 }
 
 async function computeRaidCheckSnapshot(raidMeta, { syncFreshData = false } = {}) {
+  const started = Date.now();
   const userQuery = buildRaidCheckUserQuery(raidMeta);
+  const raidLabel = `${raidMeta?.raidKey || "unknown"}:${raidMeta?.modeKey || "unknown"}`;
+  const logSnapshot = (extra) => {
+    const parts = Object.entries(extra)
+      .map(([key, value]) => `${key}=${value}`)
+      .join(" ");
+    console.log(
+      `[raid-check] snapshot raid=${raidLabel} syncFreshData=${syncFreshData} ${parts} totalMs=${Date.now() - started}`
+    );
+  };
+
   if (!syncFreshData) {
+    const queryStarted = Date.now();
     const users = await User.find(userQuery)
       .select(RAID_CHECK_USER_QUERY_FIELDS)
       .lean();
-    return buildRaidCheckSnapshotFromUsers(users, raidMeta);
+    const queryMs = Date.now() - queryStarted;
+    const snapshot = buildRaidCheckSnapshotFromUsers(users, raidMeta);
+    logSnapshot({
+      users: users.length,
+      allChars: snapshot.allChars.length,
+      pending: snapshot.pendingChars.length,
+      queryMs,
+    });
+    return snapshot;
   }
 
+  const queryStarted = Date.now();
   const seedUsers = await User.find(userQuery)
     .select(RAID_CHECK_USER_QUERY_FIELDS);
+  const queryMs = Date.now() - queryStarted;
+  const refreshStarted = Date.now();
   const users = await Promise.all(
     seedUsers.map((seedDoc) =>
       raidCheckRefreshLimiter.run(() =>
@@ -1509,7 +1532,17 @@ async function computeRaidCheckSnapshot(raidMeta, { syncFreshData = false } = {}
       )
     )
   );
-  return buildRaidCheckSnapshotFromUsers(users, raidMeta);
+  const refreshMs = Date.now() - refreshStarted;
+  const snapshot = buildRaidCheckSnapshotFromUsers(users, raidMeta);
+  logSnapshot({
+    users: seedUsers.length,
+    freshUsers: users.filter(Boolean).length,
+    allChars: snapshot.allChars.length,
+    pending: snapshot.pendingChars.length,
+    queryMs,
+    refreshMs,
+  });
+  return snapshot;
 }
 
 async function handleRaidCheckCommand(interaction) {
@@ -2091,8 +2124,11 @@ async function handleRaidCheckButton(interaction) {
 }
 
 async function handleRaidCheckSyncClick(interaction, raidMeta) {
+  const started = Date.now();
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const snapshotStarted = Date.now();
   const snapshot = await computeRaidCheckSnapshot(raidMeta);
+  const snapshotMs = Date.now() - snapshotStarted;
 
   // Filter to opted-in pending users only (Option A from the earlier
   // privacy/quota discussion - never force-sync a user who hasn't
@@ -2104,7 +2140,11 @@ async function handleRaidCheckSyncClick(interaction, raidMeta) {
         .map((c) => c.discordId)
     ),
   ];
+  const pendingUserCount = new Set(snapshot.pendingChars.map((c) => c.discordId)).size;
   if (optedInDiscordIds.length === 0) {
+    console.log(
+      `[raid-check sync] raid=${raidMeta.raidKey}:${raidMeta.modeKey} pendingUsers=${pendingUserCount} optedIn=0 snapshotMs=${snapshotMs} totalMs=${Date.now() - started}`
+    );
     await interaction.editReply({
       content: `${UI.icons.info} Không có user nào opt-in \`/raid-auto-manage\` trong list pending. Nhắc họ gõ \`/raid-auto-manage action:on\` hoặc tự update bằng \`/raid-set\`.`,
     });
@@ -2118,6 +2158,7 @@ async function handleRaidCheckSyncClick(interaction, raidMeta) {
   let failedCount = 0;
   const deltasPerUser = new Map();
 
+  const syncStarted = Date.now();
   await Promise.all(
     optedInDiscordIds.map((discordId) =>
       raidCheckSyncLimiter.run(async () => {
@@ -2181,9 +2222,11 @@ async function handleRaidCheckSyncClick(interaction, raidMeta) {
       })
     )
   );
+  const syncMs = Date.now() - syncStarted;
 
   // DM only users whose sync produced ACTUAL new clears (delta non-empty).
   // Users who synced but had no changes don't get spammed.
+  const dmStarted = Date.now();
   const dmResults = await Promise.all(
     [...deltasPerUser.entries()].map(([discordId, delta]) =>
       discordUserLimiter.run(async () => {
@@ -2199,8 +2242,13 @@ async function handleRaidCheckSyncClick(interaction, raidMeta) {
       })
     )
   );
+  const dmMs = Date.now() - dmStarted;
   const dmSent = dmResults.filter((r) => r.ok).length;
   const dmFailed = dmResults.length - dmSent;
+
+  console.log(
+    `[raid-check sync] raid=${raidMeta.raidKey}:${raidMeta.modeKey} pendingUsers=${pendingUserCount} optedIn=${optedInDiscordIds.length} synced=${syncedCount} attemptedOnly=${attemptedOnlyCount} skipped=${skippedCount} failed=${failedCount} dmSent=${dmSent} dmFailed=${dmFailed} snapshotMs=${snapshotMs} syncMs=${syncMs} dmMs=${dmMs} totalMs=${Date.now() - started}`
+  );
 
   const lines = [
     `${UI.icons.done} Đã trigger sync cho **${optedInDiscordIds.length}** opted-in user.`,

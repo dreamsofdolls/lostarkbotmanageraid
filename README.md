@@ -385,6 +385,7 @@ LostArk_RaidManage/
 | `GUILD_ID` | ✅ (deploy) | - | Server ID để register slash commands (guild-scoped) |
 | `MONGO_URI` | ✅ | - | MongoDB connection string |
 | `MONGO_DB_NAME` | ❌ | `manage` | Tên database |
+| `MONGO_ENSURE_INDEXES` | ❌ | `true` | Bot gọi `createIndexes()` khi connect để đảm bảo index cho `/raid-check`/scheduler tồn tại. Set `false` nếu Atlas index được quản lý thủ công |
 | `DNS_SERVERS` | ❌ | `8.8.8.8,1.1.1.1` | DNS fallback khi Atlas bị `ECONNREFUSED` (SRV lookup fail) |
 | `RAID_MANAGER_ID` | ❌ (recommended) | empty | Discord user IDs cho phép gọi `/raid-check`, comma-separated. Empty/missing → `/raid-check` reject mọi invocation + warn ở boot |
 | `AUTO_MANAGE_DAILY_DISABLED` | ❌ | `false` | Killswitch cho Phase 3 daily auto-sync scheduler. Set `true` để skip mọi tick (back off khi bible block) |
