@@ -741,6 +741,8 @@ function buildRaidCheckUserQuery(raidMeta, now = Date.now()) {
 
 let handleAddRosterCommand;
 let buildRaidCheckSnapshotFromUsers;
+let formatRaidCheckNotEligibleFieldValue;
+let getRaidCheckRenderableChars;
 let computeRaidCheckSnapshot;
 let handleRaidCheckCommand;
 let handleRaidCheckButton;
@@ -1279,6 +1281,7 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
 ({
   buildRaidCheckSnapshotFromUsers,
   formatRaidCheckNotEligibleFieldValue,
+  getRaidCheckRenderableChars,
   computeRaidCheckSnapshot,
   handleRaidCheckCommand,
   handleRaidCheckButton,
@@ -1497,6 +1500,7 @@ module.exports = {
   __test: {
     buildRaidCheckSnapshotFromUsers,
     formatRaidCheckNotEligibleFieldValue,
+    getRaidCheckRenderableChars,
     STATUS_PAGINATION_SESSION_MS,
     RAID_CHECK_PAGINATION_SESSION_MS,
     nextIntervalTickMs,

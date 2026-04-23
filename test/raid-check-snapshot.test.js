@@ -160,6 +160,31 @@ test("raid-check high-mode note explains that the char can still flex the scanne
   assert.match(fieldValue, /ℹ️/);
 });
 
+test("raid-check renderable chars hide not-eligible entries from the visible list", () => {
+  const snapshot = __test.buildRaidCheckSnapshotFromUsers(
+    [
+      {
+        discordId: "user-1",
+        weeklyResetKey: getTargetResetKey(new Date()),
+        accounts: [
+          {
+            accountName: "Main",
+            characters: [
+              makeCharacter("PendingHard", 1735, {}),
+              makeCharacter("TooLow", 1715, {}),
+              makeCharacter("AlreadyNightmare", 1743, {}),
+            ],
+          },
+        ],
+      },
+    ],
+    { raidKey: "serca", modeKey: "hard", minItemLevel: 1730 }
+  );
+
+  const renderable = __test.getRaidCheckRenderableChars(snapshot);
+  assert.deepEqual(renderable.map((char) => char.charName), ["PendingHard"]);
+});
+
 test("buildRaidCheckSnapshotFromUsers keeps done-only rosters visible in the combined render set", () => {
   const snapshot = __test.buildRaidCheckSnapshotFromUsers(
     [

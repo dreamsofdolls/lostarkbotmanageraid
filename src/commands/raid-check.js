@@ -184,6 +184,10 @@ function createRaidCheckCommand(deps) {
     return `${UI.icons.info} ${label}`;
   }
 
+  function getRaidCheckRenderableChars(snapshot) {
+    return Array.isArray(snapshot?.allEligible) ? [...snapshot.allEligible] : [];
+  }
+
   async function computeRaidCheckSnapshot(raidMeta, { syncFreshData = false } = {}) {
     const started = Date.now();
     const userQuery = buildRaidCheckUserQuery(raidMeta);
@@ -263,13 +267,12 @@ function createRaidCheckCommand(deps) {
 
     const {
       allEligible,
-      allChars,
-      notEligibleChars,
       pendingChars,
       userMeta,
       rosterRefreshMap,
       rosterRefreshAttemptMap,
     } = await computeRaidCheckSnapshot(raidMeta, { syncFreshData: true });
+    const renderChars = getRaidCheckRenderableChars({ allEligible });
 
     const modeKey = normalizeName(raidMeta.modeKey);
     const difficultyColor =
@@ -279,19 +282,20 @@ function createRaidCheckCommand(deps) {
           ? UI.colors.progress
           : UI.colors.neutral;
 
-    if (pendingChars.length === 0 && notEligibleChars.length === 0) {
+    if (pendingChars.length === 0) {
+      const description = allEligible.length > 0
+        ? `Toan bo **${allEligible.length}** eligible character da hoan thanh **${raidMeta.label}**.\nAll eligible characters have completed this raid.`
+        : `No eligible characters found for **${raidMeta.label}** at this item-level threshold.`;
       const emptyEmbed = new EmbedBuilder()
         .setTitle(`${UI.icons.done} Raid Check · ${raidMeta.label}`)
         .setColor(UI.colors.success)
-        .setDescription(
-          `Toàn bộ **${allEligible.length}** character iLvl ≥ **${raidMeta.minItemLevel}** đã hoàn thành **${raidMeta.label}**.\nAll eligible characters have completed this raid.`
-        )
+        .setDescription(description)
         .setTimestamp();
       await interaction.editReply({ embeds: [emptyEmbed] });
       return;
     }
 
-    const visibleDiscordIds = [...new Set(allChars.map((c) => c.discordId))];
+    const visibleDiscordIds = [...new Set(renderChars.map((c) => c.discordId))];
     const displayMap = new Map();
     await Promise.all(
       visibleDiscordIds.map(async (discordId) => {
@@ -301,7 +305,7 @@ function createRaidCheckCommand(deps) {
     );
 
     const rosterBuckets = new Map();
-    for (const item of allChars) {
+    for (const item of renderChars) {
       const key = item.discordId + ROSTER_KEY_SEP + item.accountName;
       if (!rosterBuckets.has(key)) rosterBuckets.set(key, []);
       rosterBuckets.get(key).push(item);
@@ -328,11 +332,6 @@ function createRaidCheckCommand(deps) {
       else if (item.overallStatus === "partial") bumpStat(key, "partial");
       else bumpStat(key, "none");
     }
-    for (const item of notEligibleChars) {
-      const key = item.discordId + ROSTER_KEY_SEP + item.accountName;
-      bumpStat(key, "notEligible");
-    }
-
     const rosterGroups = [...rosterBuckets.entries()]
       .map(([key, chars]) => {
         const [discordId, accountName] = key.split(ROSTER_KEY_SEP);
@@ -847,6 +846,7 @@ function createRaidCheckCommand(deps) {
   return {
     buildRaidCheckSnapshotFromUsers,
     formatRaidCheckNotEligibleFieldValue,
+    getRaidCheckRenderableChars,
     computeRaidCheckSnapshot,
     handleRaidCheckCommand,
     handleRaidCheckButton,
