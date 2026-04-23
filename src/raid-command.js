@@ -2863,6 +2863,7 @@ const HELP_SECTIONS = [
     notes: [
       "EN: Users post short messages like `Serca Nightmare Clauseduk` or `Serca Nor Soulrano G1`; bot parses, deletes the source message, and DMs the author a private confirmation embed.",
       "VN: Post message dạng `<raid> <difficulty> <character> [gate]` vào channel đã config - bot tự update raid, xóa message, và DM xác nhận riêng cho chính người post.",
+      "• **Whisper acknowledgement trước khi xóa** (Apr 2026): khi parse thành công + DM gửi được, Artist post 1 dòng whisper tag user trong channel (`*thì thầm* @user ...Artist nhận được rồi nha~ Chờ 5 giây gửi DM...`) rồi mới xóa tin nhắn gốc + whisper sau 5 giây. User có visual confirmation trước khi tin vanish, không bị nhầm với rejection silent. Nếu DM fail → fallback public message hiện tại đảm nhận confirm (không kèm whisper để không double-post).",
       "• **Aliases**: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca` (accept typo `secra`) · `normal` / `nor` · `hard` · `nightmare` / `nm` · gates `G1` / `G2`.",
       "• Không có gate = đánh dấu cả raid done (complete). Có gate `G_N` = **cumulative: mark G1 đến G_N đều done** (Lost Ark sequential progression - đi tới G2 nghĩa là G1 đã qua).",
       "• Chỉ poster tự update char của mình (cần có roster đã đăng ký qua `/add-roster`).",
@@ -4093,11 +4094,32 @@ async function handleRaidChannelMessage(message) {
   // If everything failed, keep the message so the user can see what they
   // posted + the hint next to it, easier to retype correctly.
   if (hasProgress) {
-    ops.push(
+    // When DM was the delivery path, post a whisper acknowledgement that
+    // tags the user so they realise the post was accepted (otherwise the
+    // message just silently vanishes and feels like a rejection). Dusk's
+    // whisper voice, but still signed as Artist per bot persona.
+    let whisperMsg = null;
+    if (dmSucceeded) {
+      try {
+        whisperMsg = await message.channel.send({
+          content: `*thì thầm* <@${message.author.id}> ...Artist nhận được rồi nha~ Chờ Artist 5 giây gửi kết quả qua DM cho cậu nhé...`,
+          allowedMentions: { users: [message.author.id] },
+        });
+      } catch (err) {
+        console.warn("[raid-channel] whisper confirm failed:", err?.message || err);
+      }
+    }
+    // Delay deletion so the user has time to notice the whisper before
+    // both messages disappear. Fire-and-forget - no reason to make the
+    // handler sit around for 5s just to await a delete.
+    setTimeout(() => {
       message.delete().catch((err) => {
         console.warn("[raid-channel] delete failed (missing Manage Messages?):", err?.message || err);
-      })
-    );
+      });
+      if (whisperMsg) {
+        whisperMsg.delete().catch(() => {});
+      }
+    }, 5_000);
     // Also clear any stale pending hint from a previous bad post, now that
     // a real write landed.
     if (!hasErrors) {
