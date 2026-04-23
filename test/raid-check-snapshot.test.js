@@ -288,13 +288,13 @@ test("buildAccountFreshnessLine renders both refresh and sync badges with countd
   const userMeta = {
     autoManageEnabled: true,
     lastAutoManageSyncAt: now - 3 * 60_000, // 3 min ago
-    lastAutoManageAttemptAt: now - 3 * 60_000, // cooldown still active (5m)
+    lastAutoManageAttemptAt: now - 3 * 60_000, // cooldown still active (15m)
   };
   const line = __test.buildAccountFreshnessLine(account, userMeta);
   assert.match(line, /Last updated 30m ago/);
   assert.match(line, /Next refresh in 1h30m/);
   assert.match(line, /Last synced 3m ago/);
-  assert.match(line, /Next sync in 2m/);
+  assert.match(line, /Next sync in 12m/);
 });
 
 test("buildAccountFreshnessLine shows ready marker when cooldown expired", () => {
@@ -303,7 +303,7 @@ test("buildAccountFreshnessLine shows ready marker when cooldown expired", () =>
   const userMeta = {
     autoManageEnabled: true,
     lastAutoManageSyncAt: now - 30 * 60_000, // 30m ago
-    lastAutoManageAttemptAt: now - 30 * 60_000, // 5m cooldown expired
+    lastAutoManageAttemptAt: now - 30 * 60_000, // 15m cooldown expired
   };
   const line = __test.buildAccountFreshnessLine(account, userMeta);
   assert.match(line, /Refresh ready/);
