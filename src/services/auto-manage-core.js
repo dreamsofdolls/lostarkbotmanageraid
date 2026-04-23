@@ -45,7 +45,7 @@ function createAutoManageCoreService({
    *   - `acquired: true`  → caller MUST releaseAutoManageSyncSlot() in finally.
    *   - `acquired: false` → slot is NOT held; caller must not release.
    */
-  async function acquireAutoManageSyncSlot(discordId) {
+  async function acquireAutoManageSyncSlot(discordId, { ignoreCooldown = false } = {}) {
     if (inFlightAutoManageSyncs.has(discordId)) {
       return { acquired: false, reason: "in-flight" };
     }
@@ -60,7 +60,7 @@ function createAutoManageCoreService({
       ).lean();
       const lastAttempt = user?.lastAutoManageAttemptAt || 0;
       const elapsed = Date.now() - lastAttempt;
-      if (lastAttempt && elapsed < AUTO_MANAGE_SYNC_COOLDOWN_MS) {
+      if (!ignoreCooldown && lastAttempt && elapsed < AUTO_MANAGE_SYNC_COOLDOWN_MS) {
         inFlightAutoManageSyncs.delete(discordId);
         return {
           acquired: false,
