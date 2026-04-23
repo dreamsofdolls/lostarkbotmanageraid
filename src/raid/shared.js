@@ -138,6 +138,21 @@ function waitWithBudget(promise, budgetMs) {
   ]).finally(() => clearTimeout(timeoutId));
 }
 
+function buildDiscordIdentityFields(source) {
+  const user = source?.user || source || {};
+  const member = source?.member || {};
+  const username = String(user.username || "").trim();
+  const globalName = String(user.globalName || "").trim();
+  const memberDisplayName = String(member.displayName || member.nick || "").trim();
+  const userDisplayName = String(user.displayName || globalName || username || "").trim();
+
+  return {
+    discordUsername: username,
+    discordGlobalName: globalName,
+    discordDisplayName: memberDisplayName || userDisplayName,
+  };
+}
+
 module.exports = {
   ConcurrencyLimiter,
   UI,
@@ -153,4 +168,5 @@ module.exports = {
   formatShortRelative,
   formatNextCooldownRemaining,
   waitWithBudget,
+  buildDiscordIdentityFields,
 };

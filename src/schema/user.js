@@ -70,6 +70,12 @@ const accountSchema = new mongoose.Schema(
 const userSchema = new mongoose.Schema(
   {
     discordId: { type: String, required: true, unique: true, index: true },
+    // Cached Discord identity for operators/admins browsing MongoDB. The
+    // authoritative key remains discordId; these fields are best-effort
+    // display labels refreshed when the user runs a slash command.
+    discordUsername: { type: String, default: "" },
+    discordGlobalName: { type: String, default: "" },
+    discordDisplayName: { type: String, default: "" },
     weeklyResetKey: { type: String, default: "" },
     accounts: { type: [accountSchema], default: [] },
     tasks: {
