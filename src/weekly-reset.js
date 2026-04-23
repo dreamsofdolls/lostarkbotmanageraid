@@ -105,6 +105,33 @@ async function resetWeekly(now = new Date()) {
 }
 
 /**
+ * True if `now` falls within 24h after the most recent Wed 10:00 UTC
+ * reset moment (= Wed 17:00 Vietnam time). Window covers Wed 17:00 VN
+ * through Thu 17:00 VN. Used to gate the weekly-reset announcement so
+ * that mid-week onboarding events (new user joining on Friday gets
+ * weeklyResetKey stamped, which would otherwise trigger a stale
+ * "new week" announcement) are filtered out.
+ *
+ * Why stateless over module-level lastKnownTargetKey tracking: a bot
+ * restart loses module state and would misclassify the first post-restart
+ * tick as either "always fresh" (spurious announcements on every deploy)
+ * or "always seen" (miss announcement after a Wed-17 reboot). UTC wall-
+ * clock derived is stable across restarts.
+ *
+ * Trade-off: if the bot is offline for > 24h straddling Wed 17 VN, this
+ * week's announcement is missed. Users still observe progress reset via
+ * /raid-status; only the celebratory channel post is skipped. Acceptable
+ * for rare long outages.
+ */
+function isWithinWeeklyResetWindow(now = new Date()) {
+  const utcDay = now.getUTCDay();    // 0 = Sunday, 3 = Wednesday, 4 = Thursday
+  const utcHour = now.getUTCHours();
+  if (utcDay === 3 && utcHour >= 10) return true; // Wed 10:00 UTC → Wed 23:59 UTC
+  if (utcDay === 4 && utcHour < 10) return true;  // Thu 00:00 UTC → Thu 09:59 UTC
+  return false;
+}
+
+/**
  * For each guild with a configured monitor channel, post a weekly-reset
  * announcement tagged with the current target week key and self-delete
  * after WEEKLY_ANNOUNCEMENT_TTL_MS. Dedup per guild via
@@ -170,11 +197,22 @@ function startWeeklyResetJob(client) {
           `[weekly-reset] resetKey=${result.resetKey} matched=${result.matchedCount} modified=${result.modifiedCount}`
         );
       }
-      // Post the channel announcement AFTER reset so members reading the
-      // announcement already see fresh progress. Runs on every tick but
-      // short-circuits at the per-guild dedup key - no spam during
-      // catch-up ticks within the same ISO week.
-      await postWeeklyResetAnnouncements(client, result.resetKey);
+      // Gate the announcement on BOTH a successful reset (modifiedCount > 0
+      // = some user actually got reset this tick) AND the 24h post-reset
+      // window (Wed 17:00 VN → Thu 17:00 VN). Together these identify a
+      // "reset boundary was just crossed" event:
+      //   - modifiedCount > 0 alone fires on mid-week new-user onboarding
+      //     (user joined Friday, gets weeklyResetKey stamped → modified=1).
+      //   - window alone fires on every tick Wed 17 → Thu 17 even when
+      //     no reset actually happened (e.g. catch-up after Wed-17-VN-first
+      //     tick already posted and now dedup is stamped - harmless but
+      //     waste of 30-min tick wake time).
+      // Per-guild dedup inside postWeeklyResetAnnouncements prevents
+      // double-posts within the same window; this outer gate prevents
+      // stale "Tuần mới" posts outside Wed-17-VN → Thu-17-VN entirely.
+      if (result.modifiedCount > 0 && isWithinWeeklyResetWindow()) {
+        await postWeeklyResetAnnouncements(client, result.resetKey);
+      }
     } catch (error) {
       console.error("[weekly-reset] Failed to reset raid completion:", error.message);
     }
