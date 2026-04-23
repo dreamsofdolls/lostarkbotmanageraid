@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { __test } = require("../src/raid-command");
+const { __test, parseRaidMessage } = require("../src/raid-command");
 const { getTargetResetKey } = require("../src/weekly-reset");
 
 function makeCharacter(name, itemLevel, kazeros = {}) {
@@ -184,4 +184,14 @@ test("buildRaidCheckSnapshotFromUsers keeps done-only rosters visible in the com
 test("raid-check pagination timeout is 5 minutes while raid-status stays at 2 minutes", () => {
   assert.equal(__test.STATUS_PAGINATION_SESSION_MS, 2 * 60 * 1000);
   assert.equal(__test.RAID_CHECK_PAGINATION_SESSION_MS, 5 * 60 * 1000);
+});
+
+test("parseRaidMessage accepts hm as a hard alias", () => {
+  const parsed = parseRaidMessage("Kazeros hm Clauseduk");
+  assert.deepEqual(parsed, {
+    raidKey: "kazeros",
+    modeKey: "hard",
+    charNames: ["clauseduk"],
+    gate: null,
+  });
 });
