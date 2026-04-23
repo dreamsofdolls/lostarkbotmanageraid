@@ -949,7 +949,7 @@ function createRaidChannelMonitorService({
       }
     }
     try {
-      const pinned = await channel.messages.fetchPinned();
+      const pinned = await channel.messages.fetchPins();
       for (const [, msg] of pinned) {
         if (msg.author?.id !== botUserId) continue;
         const title = msg.embeds?.[0]?.title || "";

@@ -14,6 +14,7 @@ function createRaidAutoManageCommand(deps) {
     acquireAutoManageSyncSlot,
     releaseAutoManageSyncSlot,
     formatAutoManageCooldownRemaining,
+    getAutoManageCooldownMs,
     weekResetStartMs,
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
@@ -242,7 +243,7 @@ async function handleRaidAutoManageCommand(interaction) {
           // Probe HTTP already ran - stamp attempt so the cooldown reflects
           // the bible quota we consumed, even though we're not committing the
           // flag flip. Without this, spamming `action:on` + Huỷ would bypass
-          // the 15-minute cooldown.
+          // the per-user sync cooldown.
           await stampAutoManageAttempt(discordId);
           const title =
             decision === "timeout"
@@ -312,10 +313,18 @@ async function handleRaidAutoManageCommand(interaction) {
             flags: MessageFlags.Ephemeral,
           });
         } else {
+          const totalCooldownText =
+            typeof getAutoManageCooldownMs === "function"
+              ? formatAutoManageCooldownRemaining(getAutoManageCooldownMs(discordId))
+              : null;
           await interaction.reply({
             content: `${UI.icons.info} Sync vừa chạy gần đây. Đợi thêm **${formatAutoManageCooldownRemaining(
               guard.remainingMs
-            )}** rồi sync tiếp nhé (cooldown 15 phút để tránh gõ bible liên tục).`,
+            )}** rồi sync tiếp nhé${
+              totalCooldownText
+                ? ` (cooldown của cậu là **${totalCooldownText}** để tránh gõ bible liên tục).`
+                : "."
+            }`,
             flags: MessageFlags.Ephemeral,
           });
         }
@@ -382,7 +391,7 @@ async function handleRaidAutoManageCommand(interaction) {
    * Stamp `lastAutoManageAttemptAt` without flipping any flag. Called after the
    * probe HTTP burst in cancel/timeout/error paths so the cooldown reflects
    * bible quota actually consumed - otherwise users can spam
-   * `/raid-auto-manage action:on` + cancel to bypass the 15-min cooldown.
+   * `/raid-auto-manage action:on` + cancel to bypass the per-user sync cooldown.
    * Best-effort: logs and swallows DB errors so cooldown drift never masks the
    * real UX (the cancel/error message itself).
    */
