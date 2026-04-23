@@ -34,23 +34,20 @@ function createRaidStatusCommand(deps) {
     isManagerId,
   } = deps;
 
-  // Manager characters get a 👑 prefix in the roster embed so the shorter
-  // sync cooldown + priority isn't silent. One emoji per manager-owned char
-  // name; non-manager characters render unchanged. The discordId is the
-  // character's *owner* (= the User doc holding this character), not the
-  // viewer - /raid-status only renders the viewer's own roster so they
-  // collapse to the same id, but /raid-check reuses buildAccountFreshnessLine
-  // across rosters where they differ.
-  function decorateCharacterName(character, discordId) {
-    const base = getCharacterName(character);
-    return isManagerId(discordId) ? `👑 ${base}` : base;
+  // Manager rosters get a 👑 at the account header (swapping the default
+  // 📁 folder icon) instead of stamping every character name with a crown.
+  // Per-char crown was scan-hostile once there were many chars and collides
+  // with the planned class-icon swap for the char name slot, so the visual
+  // cue lives at the roster boundary where it only appears once per group.
+  function pickRosterHeaderIcon(discordId) {
+    return isManagerId && isManagerId(discordId) ? "👑" : UI.icons.roster;
   }
 
   const STATUS_FOOTER_LEGEND =
     `${UI.icons.done} done · ${UI.icons.partial} partial · ${UI.icons.pending} pending`;
 
-  function buildCharacterField(character, getRaidsFor, discordId = null) {
-    const name = decorateCharacterName(character, discordId);
+  function buildCharacterField(character, getRaidsFor) {
+    const name = getCharacterName(character);
     const itemLevel = Number(character.itemLevel) || 0;
     const fieldName = truncateText(`${name} · ${itemLevel}`, 256);
 
@@ -130,7 +127,8 @@ function createRaidStatusCommand(deps) {
           : UI.icons.pending;
 
     const pageSuffix = totalPages > 1 ? ` · Page ${pageIndex + 1}/${totalPages}` : "";
-    const title = `${titleIcon} ${UI.icons.roster} ${account.accountName}${pageSuffix}`;
+    const headerIcon = pickRosterHeaderIcon(userMeta?.discordId);
+    const title = `${titleIcon} ${headerIcon} ${account.accountName}${pageSuffix}`;
 
     const description = accountProgress.total === 0
       ? `**${characters.length}** character${characters.length === 1 ? "" : "s"} · no eligible raids yet`
@@ -156,13 +154,12 @@ function createRaidStatusCommand(deps) {
     }
 
     const inlineSpacer = { name: "\u200B", value: "\u200B", inline: true };
-    const ownerDiscordId = userMeta?.discordId || null;
     for (let i = 0; i < characters.length; i += 2) {
-      embed.addFields(buildCharacterField(characters[i], getRaidsFor, ownerDiscordId));
+      embed.addFields(buildCharacterField(characters[i], getRaidsFor));
       embed.addFields(inlineSpacer);
       embed.addFields(
         characters[i + 1]
-          ? buildCharacterField(characters[i + 1], getRaidsFor, ownerDiscordId)
+          ? buildCharacterField(characters[i + 1], getRaidsFor)
           : inlineSpacer
       );
     }
