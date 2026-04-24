@@ -2212,6 +2212,25 @@ function createRaidCheckCommand(deps) {
         userMeta
       );
 
+      // Manager roster: drop the 3-state progress icon (🟢/🟡/⚪/🔒)
+      // from the title and leave the crown alone. The builder emits
+      // "{progressIcon} 👑 {accountName}" for every account; when the
+      // owner is a Raid Manager, that leading circle reads as visual
+      // noise next to the much heavier 👑 (both compete for the leader's
+      // eye on scroll). Crown alone is enough signal - the footer
+      // already carries the per-user done/partial/pending rollup for
+      // anyone wanting the progress at a glance. Per Traine's ask this
+      // is scoped to /raid-check only; /raid-status keeps the progress
+      // icon so non-manager callers still see their own account-level
+      // status at the top of each page.
+      if (isManagerId && isManagerId(userDoc.discordId)) {
+        const origTitle = embed.data?.title || "";
+        const crownIdx = origTitle.indexOf("👑");
+        if (crownIdx > 0) {
+          embed.setTitle(origTitle.slice(crownIdx));
+        }
+      }
+
       // Re-inject the cross-account rollup line when the viewed user
       // owns more than one account. Prepended above the freshness line
       // so visual order stays: global → freshness (description now
