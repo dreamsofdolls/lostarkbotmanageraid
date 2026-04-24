@@ -531,25 +531,20 @@ test("Edit flow: buildEditableCharsByUser sorts chars by iLvl descending", () =>
   assert.deepEqual(names, ["HighGeo", "MidGeo", "LowGeo"]);
 });
 
-test("Edit flow: getEligibleRaidsForChar filters raids by minItemLevel", () => {
-  // 1710 → should include Act4 Normal (1700) and Kazeros Normal (1710) but
-  // NOT Kazeros Hard (1730), Serca Normal (1720), etc. Exact eligibility
-  // list depends on RAID_REQUIREMENT_MAP so we assert the minItemLevel
-  // contract without hard-coding the full raid list.
-  const raids = __test.getEligibleRaidsForChar(1710);
-  assert.ok(raids.length > 0, "at least some raids qualify at 1710");
-  for (const { entry } of raids) {
-    assert.ok(
-      Number(entry.minItemLevel) <= 1710,
-      `raid with floor ${entry.minItemLevel} should not be returned for 1710 char`
-    );
-  }
-  // Highest gear (1760) → every raid should qualify.
-  const allRaids = __test.getEligibleRaidsForChar(1760);
-  assert.ok(allRaids.length >= raids.length);
-  // Zero iLvl → empty list.
-  const noRaids = __test.getEligibleRaidsForChar(0);
-  assert.equal(noRaids.length, 0);
+test("Edit flow: getEligibleRaidsForChar filters raids by active mode range", () => {
+  assert.deepEqual(
+    __test.getEligibleRaidsForChar(1710).map(({ raidKey }) => raidKey),
+    ["armoche_normal", "kazeros_normal", "serca_normal"]
+  );
+  assert.deepEqual(
+    __test.getEligibleRaidsForChar(1730).map(({ raidKey }) => raidKey),
+    ["armoche_hard", "kazeros_hard", "serca_hard"]
+  );
+  assert.deepEqual(
+    __test.getEligibleRaidsForChar(1740).map(({ raidKey }) => raidKey),
+    ["armoche_hard", "kazeros_hard", "serca_nightmare"]
+  );
+  assert.deepEqual(__test.getEligibleRaidsForChar(0), []);
 });
 
 test("Edit flow: getEligibleRaidsForChar returns entries in ascending minItemLevel order", () => {
