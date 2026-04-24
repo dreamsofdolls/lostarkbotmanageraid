@@ -753,6 +753,7 @@ let buildEditableCharsByUser;
 let getEligibleRaidsForChar;
 let getCharRaidGateStatus;
 let applyLocalRaidEditToChar;
+let buildRaidCheckEditDMEmbed;
 let handleRaidCheckCommand;
 let handleRaidCheckButton;
 let handleStatusCommand;
@@ -1303,6 +1304,7 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   getEligibleRaidsForChar,
   getCharRaidGateStatus,
   applyLocalRaidEditToChar,
+  buildRaidCheckEditDMEmbed,
   handleRaidCheckCommand,
   handleRaidCheckButton,
 } = raidCheckCommandHandlers);
@@ -1552,5 +1554,6 @@ module.exports = {
     getEligibleRaidsForChar,
     getCharRaidGateStatus,
     applyLocalRaidEditToChar,
+    buildRaidCheckEditDMEmbed,
   },
 };
