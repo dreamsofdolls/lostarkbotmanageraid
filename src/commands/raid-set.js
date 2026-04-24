@@ -470,7 +470,7 @@ function createRaidSetCommand(deps) {
       const alreadyEmbed = new EmbedBuilder()
         .setColor(UI.colors.progress)
         .setTitle(`${UI.icons.info} Đã DONE từ trước rồi`)
-        .setDescription(`**${characterName}** đã clear **${scope}** tuần này rồi - không update lại. Nếu cậu muốn reset, đổi \`status\` sang \`reset\` và chạy lại nhé.`)
+        .setDescription(`**${characterName}** đã clear **${scope}** tuần này rồi, không update lại. Nếu cậu muốn reset, đổi \`status\` sang \`reset\` và chạy lại nhé.`)
         .addFields(
           { name: "Character", value: `**${characterName}**`, inline: true },
           { name: "Raid", value: `**${raidMeta.label}**`, inline: true },
@@ -480,7 +480,24 @@ function createRaidSetCommand(deps) {
       await interaction.reply({ embeds: [alreadyEmbed], flags: MessageFlags.Ephemeral });
       return;
     }
+    if (result.alreadyReset) {
+      const scope = effectiveGate ? `${raidMeta.label} · ${effectiveGate}` : raidMeta.label;
+      const alreadyResetEmbed = new EmbedBuilder()
+        .setColor(UI.colors.muted)
+        .setTitle(`${UI.icons.info} Đã reset sẵn rồi`)
+        .setDescription(`**${characterName}** ở **${scope}** vốn đã không có gate nào cleared, không có gì để xoá. Muốn mark done thì đổi \`status\` sang \`complete\` hoặc \`process\` rồi chạy lại nhé.`)
+        .addFields(
+          { name: "Character", value: `**${characterName}**`, inline: true },
+          { name: "Raid", value: `**${raidMeta.label}**`, inline: true },
+          { name: "Gate", value: effectiveGate || "All gates", inline: true },
+        )
+        .setTimestamp();
+      await interaction.reply({ embeds: [alreadyResetEmbed], flags: MessageFlags.Ephemeral });
+      return;
+    }
     if (!result.updated) {
+      // By this point noRoster / matched / alreadyComplete / alreadyReset are
+      // all handled. The only remaining not-updated branch is ineligible iLvl.
       await interaction.reply({
         content: `${UI.icons.warn} Character **${characterName}** đang ở iLvl **${result.ineligibleItemLevel}**, chưa đủ **${raidMeta.minItemLevel}+** để thao tác **${raidMeta.label}**.`,
         flags: MessageFlags.Ephemeral,
