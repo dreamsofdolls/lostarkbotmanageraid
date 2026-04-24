@@ -2267,7 +2267,8 @@ function createRaidCheckCommand(deps) {
         1,
         globalTotals,
         getRaidsFor,
-        userMeta
+        userMeta,
+        { hideIneligibleChars: !!filterRaidId }
       );
 
       // Manager roster: drop the 3-state progress icon (🟢/🟡/⚪/🔒)

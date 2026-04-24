@@ -126,8 +126,10 @@ function createRaidStatusCommand(deps) {
     totalPages,
     globalTotals,
     getRaidsFor,
-    userMeta = null
+    userMeta = null,
+    options = {}
   ) {
+    const { hideIneligibleChars = false } = options;
     const characters = Array.isArray(account.characters) ? account.characters : [];
 
     const accountRaids = [];
@@ -183,12 +185,33 @@ function createRaidStatusCommand(deps) {
     }
 
     const inlineSpacer = { name: "\u200B", value: "\u200B", inline: true };
-    for (let i = 0; i < characters.length; i += 2) {
-      embed.addFields(buildCharacterField(characters[i], getRaidsFor));
+    // When `hideIneligibleChars` is on (caller has an active raid filter),
+    // drop chars whose getRaidsFor returns empty - a locked "🔒 Not
+    // eligible yet" card for every char below the iLvl gate is pure
+    // noise when the caller just wants to see who CAN do the picked raid.
+    // Filter state lives at the call site; passing the flag lets the
+    // builder render an "all chars ineligible" notice when the roster
+    // has zero relevant chars, vs "no chars saved" (empty account) vs
+    // the normal fields path.
+    const visibleChars = hideIneligibleChars
+      ? characters.filter((c) => getRaidsFor(c).length > 0)
+      : characters;
+
+    if (visibleChars.length === 0 && hideIneligibleChars) {
+      embed.addFields({
+        name: "​",
+        value: `${UI.icons.lock} _Không có character nào eligible cho raid này trong roster._`,
+        inline: false,
+      });
+      return embed;
+    }
+
+    for (let i = 0; i < visibleChars.length; i += 2) {
+      embed.addFields(buildCharacterField(visibleChars[i], getRaidsFor));
       embed.addFields(inlineSpacer);
       embed.addFields(
-        characters[i + 1]
-          ? buildCharacterField(characters[i + 1], getRaidsFor)
+        visibleChars[i + 1]
+          ? buildCharacterField(visibleChars[i + 1], getRaidsFor)
           : inlineSpacer
       );
     }
@@ -417,7 +440,8 @@ function createRaidStatusCommand(deps) {
         accounts.length,
         filteredTotals,
         getRaidsFor,
-        statusUserMeta
+        statusUserMeta,
+        { hideIneligibleChars: !!filterRaidId }
       );
     };
 
