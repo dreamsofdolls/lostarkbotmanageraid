@@ -1214,6 +1214,8 @@ const autoManageSyncService = createAutoManageSyncService({
 const raidStatusCommand = createRaidStatusCommand({
   EmbedBuilder,
   ComponentType,
+  StringSelectMenuBuilder,
+  ActionRowBuilder,
   MessageFlags,
   UI,
   User,
