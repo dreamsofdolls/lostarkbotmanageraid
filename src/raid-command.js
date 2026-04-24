@@ -765,6 +765,7 @@ let applyStaleAccountRefreshes;
 let formatRosterRefreshCooldownRemaining;
 let buildAccountFreshnessLine;
 let buildAccountPageEmbed;
+let buildStatusFooterText;
 
 // Generic Prev/Next pagination row builder. Customize customId prefix per
 // command so the same visual/behavioral pattern works without collision:
@@ -1245,6 +1246,7 @@ const raidStatusCommand = createRaidStatusCommand({
   handleStatusCommand,
   buildAccountFreshnessLine,
   buildAccountPageEmbed,
+  buildStatusFooterText,
 } = raidStatusCommand);
 
 const raidCheckCommandHandlers = createRaidCheckCommand({
@@ -1269,6 +1271,7 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   buildRaidCheckUserQuery,
   buildAccountFreshnessLine,
   buildAccountPageEmbed,
+  buildStatusFooterText,
   summarizeRaidProgress,
   getStatusRaidsForCharacter,
   buildPaginationRow,
