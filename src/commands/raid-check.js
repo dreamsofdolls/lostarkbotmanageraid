@@ -102,6 +102,15 @@ function createRaidCheckCommand(deps) {
             // rule in services/manager-edit-auth or the cascading
             // select builders.
             publicLogDisabled: !!character.publicLogDisabled,
+            // Full assignedRaids copy so the Edit flow can show per-gate
+            // state for ANY raid the leader picks in the raid dropdown,
+            // not just the scanned raidMeta. Without this the cascading
+            // select would render "Complete / Process / Reset" with no
+            // indication of what's already done, and Complete on an
+            // already-done raid would silently no-op server-side after a
+            // confusing click. Keeping the whole tree is cheap - each
+            // character has at most 3 raids × 2-3 gates.
+            assignedRaids: character.assignedRaids || {},
           };
 
           const assignedRaids = ensureAssignedRaids(character);
@@ -936,6 +945,66 @@ function createRaidCheckCommand(deps) {
       .map(([raidKey, entry]) => ({ raidKey, entry }));
   }
 
+  /**
+   * Read the gate state for a picked raid off the char's stored
+   * assignedRaids tree. Returns per-gate rows (done? current mode?) +
+   * a rollup `overallStatus` + `modeChangeNeeded` flag so the Edit UI
+   * can disable buttons that would be pure no-ops and warn when the
+   * picked mode would wipe a different mode's progress.
+   *
+   * `modeChangeNeeded` = true means the raid has at least one gate
+   * stored at a DIFFERENT difficulty than the picked one. Applying
+   * Complete/Process at the picked mode will wipe those gates (see
+   * applyRaidSetForDiscordId's `modeResetCount` path) so the leader
+   * should get a visible warning before clicking.
+   */
+  function getCharRaidGateStatus(character, raidKey, modeKey) {
+    const assigned = character?.assignedRaids?.[raidKey] || {};
+    const officialGates = getGatesForRaid(raidKey) || [];
+    const normalizedPickedMode = normalizeName(toModeLabel(modeKey));
+    let modeChangeNeeded = false;
+    const gates = officialGates.map((gate) => {
+      const entry = assigned[gate] || {};
+      const storedMode = entry.difficulty
+        ? String(entry.difficulty).toLowerCase()
+        : null;
+      const doneAtSomeMode = Number(entry.completedDate) > 0;
+      const doneAtPickedMode =
+        doneAtSomeMode && storedMode === normalizedPickedMode;
+      if (storedMode && storedMode !== normalizedPickedMode && doneAtSomeMode) {
+        modeChangeNeeded = true;
+      }
+      return {
+        gate,
+        doneAtPickedMode,
+        doneAtSomeMode,
+        storedMode,
+      };
+    });
+    const doneCount = gates.filter((g) => g.doneAtPickedMode).length;
+    let overallStatus;
+    if (gates.length === 0) overallStatus = "unknown";
+    else if (doneCount === gates.length) overallStatus = "complete";
+    else if (doneCount > 0) overallStatus = "partial";
+    else overallStatus = "none";
+    return { gates, overallStatus, modeChangeNeeded };
+  }
+
+  function formatGateStateLine(gateStatus, raidKey) {
+    if (!gateStatus || gateStatus.overallStatus === "unknown") return null;
+    const parts = gateStatus.gates.map((g) => {
+      if (g.doneAtPickedMode) return `🟢 ${g.gate}`;
+      if (g.doneAtSomeMode) return `🟠 ${g.gate} (${g.storedMode})`;
+      return `⚪ ${g.gate}`;
+    });
+    const rollup = gateStatus.overallStatus === "complete"
+      ? "DONE"
+      : gateStatus.overallStatus === "partial"
+        ? "partial"
+        : "chưa clear";
+    return `${parts.join(" · ")}  _(${rollup})_`;
+  }
+
   function formatCharEditLabel(char) {
     const suffix = char.autoManageEnabled && char.publicLogDisabled
       ? " · log off (manager only)"
@@ -987,9 +1056,37 @@ function createRaidCheckCommand(deps) {
       `🧍 **User:** ${userLabel}`,
       `⚔️ **Character:** ${charLabel}`,
       `🎯 **Raid:** ${raidLabel}`,
-      "",
-      `👉 ${nextStep}`,
     ];
+
+    // Show live gate state once a raid is picked so the leader can see
+    // what's already done before picking a status button. 🟢 = done at
+    // the picked mode, 🟠 = done at a DIFFERENT mode (Complete/Process
+    // at the new mode will wipe it), ⚪ = pending.
+    if (state.selectedChar && state.selectedRaid) {
+      const raidMeta = RAID_REQUIREMENT_MAP[state.selectedRaid];
+      const gateStatus = getCharRaidGateStatus(
+        state.selectedChar,
+        raidMeta?.raidKey,
+        raidMeta?.modeKey
+      );
+      const gateLine = formatGateStateLine(gateStatus, raidMeta?.raidKey);
+      if (gateLine) {
+        description.push(`📊 **Current:** ${gateLine}`);
+      }
+      if (gateStatus.modeChangeNeeded) {
+        description.push(
+          `${UI.icons.warn} _Char đang clear ở **mode khác** - bấm Complete/Process sẽ wipe progress cũ trước khi mark mode mới._`
+        );
+      }
+      if (gateStatus.overallStatus === "complete") {
+        description.push(
+          `${UI.icons.info} _Raid này đã DONE sẵn - Complete và Process đều no-op, chỉ Reset có hiệu quả._`
+        );
+      }
+    }
+
+    description.push("");
+    description.push(`👉 ${nextStep}`);
 
     if (state.selectedChar?.autoManageEnabled && state.selectedChar?.publicLogDisabled) {
       description.push("");
@@ -1085,8 +1182,21 @@ function createRaidCheckCommand(deps) {
       }
     }
 
-    // Row 4: status buttons (only when raid picked).
+    // Row 4: status buttons (only when raid picked). Disable Complete
+    // when the raid is already done at the picked mode (would be a
+    // no-op server-side) and disable Process when there are no open
+    // gates left to mark. Reset is always enabled - it's useful even
+    // on a complete raid (e.g. undoing an accidental mark).
     if (state.selectedRaid) {
+      const raidMeta = RAID_REQUIREMENT_MAP[state.selectedRaid];
+      const gateStatus = state.selectedChar
+        ? getCharRaidGateStatus(state.selectedChar, raidMeta?.raidKey, raidMeta?.modeKey)
+        : null;
+      const allGatesDoneAtPickedMode = gateStatus?.overallStatus === "complete";
+      const hasOpenGateAtPickedMode = gateStatus
+        ? gateStatus.gates.some((g) => !g.doneAtPickedMode)
+        : true;
+
       rows.push(
         new ActionRowBuilder().addComponents(
           new ButtonBuilder()
@@ -1094,13 +1204,13 @@ function createRaidCheckCommand(deps) {
             .setLabel("Complete")
             .setEmoji("✅")
             .setStyle(ButtonStyle.Success)
-            .setDisabled(disabled),
+            .setDisabled(disabled || allGatesDoneAtPickedMode),
           new ButtonBuilder()
             .setCustomId("raid-check-edit:status:process")
             .setLabel("Process (1 gate)")
             .setEmoji("📝")
             .setStyle(ButtonStyle.Primary)
-            .setDisabled(disabled),
+            .setDisabled(disabled || !hasOpenGateAtPickedMode),
           new ButtonBuilder()
             .setCustomId("raid-check-edit:status:reset")
             .setLabel("Reset")
@@ -1116,18 +1226,30 @@ function createRaidCheckCommand(deps) {
       );
     }
 
-    // Row 5: gate buttons (only when Process mode entered).
+    // Row 5: gate buttons (only when Process mode entered). Gate buttons
+    // reflect current state: 🟢 emoji + disabled for gates already done
+    // at the picked mode (re-marking would be a no-op), 🟠 for gates
+    // done at a different mode (clicking triggers the mode-wipe path),
+    // ⚪ for clean pending.
     if (state.selectedRaid && state.awaitingGate) {
-      const gates = getGatesForRaid(state.selectedRaid) || [];
+      const raidMeta = RAID_REQUIREMENT_MAP[state.selectedRaid];
+      const gateStatus = state.selectedChar
+        ? getCharRaidGateStatus(state.selectedChar, raidMeta?.raidKey, raidMeta?.modeKey)
+        : { gates: [] };
       const gateRow = new ActionRowBuilder();
-      for (const gate of gates.slice(0, 5)) {
-        gateRow.addComponents(
-          new ButtonBuilder()
-            .setCustomId(`raid-check-edit:gate:${gate}`)
-            .setLabel(gate)
-            .setStyle(ButtonStyle.Primary)
-            .setDisabled(disabled)
-        );
+      for (const g of gateStatus.gates.slice(0, 5)) {
+        const btn = new ButtonBuilder()
+          .setCustomId(`raid-check-edit:gate:${g.gate}`)
+          .setLabel(g.gate)
+          .setDisabled(disabled || g.doneAtPickedMode);
+        if (g.doneAtPickedMode) {
+          btn.setEmoji("🟢").setStyle(ButtonStyle.Secondary);
+        } else if (g.doneAtSomeMode) {
+          btn.setEmoji("🟠").setStyle(ButtonStyle.Primary);
+        } else {
+          btn.setEmoji("⚪").setStyle(ButtonStyle.Primary);
+        }
+        gateRow.addComponents(btn);
       }
       if (gateRow.components.length > 0) rows.push(gateRow);
     }
@@ -1449,6 +1571,7 @@ function createRaidCheckCommand(deps) {
     computeRaidCheckSnapshot,
     buildEditableCharsByUser,
     getEligibleRaidsForChar,
+    getCharRaidGateStatus,
     handleRaidCheckCommand,
     handleRaidCheckButton,
   };
