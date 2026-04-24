@@ -273,6 +273,7 @@ function createRaidSetCommand(deps) {
     let ineligibleItemLevel = 0;
     let modeResetCount = 0;
     let alreadyComplete = false;
+    let alreadyReset = false;
     // The properly-cased character name from the roster - user's input may
     // be lowercase (especially from the text-channel parser which lowercases
     // for alias matching), but the embed should show the name the way the
@@ -287,6 +288,7 @@ function createRaidSetCommand(deps) {
       ineligibleItemLevel = 0;
       modeResetCount = 0;
       alreadyComplete = false;
+      alreadyReset = false;
       displayName = "";
       const userDoc = await User.findOne({ discordId });
       if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
@@ -355,6 +357,23 @@ function createRaidSetCommand(deps) {
           return;
         }
       }
+      // Symmetric short-circuit for reset: if no mode-change would fire AND
+      // every target gate is already unstamped (completedDate missing or 0),
+      // the reset is a pure no-op. Without this, applyRaidSetForDiscordId
+      // re-writes { completedDate: null } on top of already-null gates, still
+      // returns updated: true, and the /raid-check Edit DM ends up telling
+      // the member "Artist vừa Reset về 0" for a raid they never touched.
+      // Codex flagged this after the Edit DM landed.
+      if (!shouldMarkDone && !modeChangeDetected) {
+        const everyTargetAlreadyEmpty = gateKeys.length === 0 || gateKeys.every((g) => {
+          const entry = raidData[g];
+          return !entry || !(Number(entry.completedDate) > 0);
+        });
+        if (everyTargetAlreadyEmpty) {
+          alreadyReset = true;
+          return;
+        }
+      }
       for (const gate of gateKeys) {
         raidData[gate] = {
           difficulty: selectedDifficulty,
@@ -374,6 +393,7 @@ function createRaidSetCommand(deps) {
       matched: matchedCount > 0,
       updated: updatedCount > 0,
       alreadyComplete,
+      alreadyReset,
       ineligibleItemLevel,
       modeResetCount,
       selectedDifficulty,
