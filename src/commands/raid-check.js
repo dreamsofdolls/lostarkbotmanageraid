@@ -1921,9 +1921,17 @@ function createRaidCheckCommand(deps) {
       // Pass totalPages=1 so buildAccountPageEmbed's title does NOT
       // emit its own within-user " · Page X/Y" suffix. Account name
       // already identifies which account this is; emitting two "Page"
-      // markers (one within-user in title, one cross-user in footer)
-      // reads as double-paginated and confuses the leader. Keep the
-      // cross-user counter solely in the footer below.
+      // markers reads as double-paginated and confuses the leader.
+      // The page counter moves to the author line below where it sits
+      // next to the Discord display name per Traine's ask.
+      //
+      // CAVEAT: in /raid-status, `totalPages > 1` is dual-purpose - it
+      // gates BOTH the title page counter AND the "🌐 All accounts"
+      // cross-account rollup line. Passing totalPages=1 here suppresses
+      // the rollup line unintentionally, so we re-inject it manually
+      // below. The rollup is important for all-mode because a user's
+      // per-account "2/16 raids done" without context doesn't tell the
+      // leader whether that's the user's only account or one of five.
       const accountPageIdx = 0;
       const embed = buildAccountPageEmbed(
         account,
@@ -1934,24 +1942,39 @@ function createRaidCheckCommand(deps) {
         userMeta
       );
 
-      // Overlay a setAuthor with Discord avatar + display name so the
-      // leader can tell users apart at a glance. /raid-status never
-      // needed this because its context is always single-user; all-mode
-      // flips between different users per page.
-      const meta = authorMeta.get(userDoc.discordId);
-      if (meta) {
-        const authorPayload = { name: meta.displayName };
-        if (meta.avatarURL) authorPayload.iconURL = meta.avatarURL;
-        embed.setAuthor(authorPayload);
+      // Re-inject the cross-account rollup line that buildAccountPageEmbed
+      // suppressed when we passed totalPages=1. Same copy it uses so the
+      // surface stays consistent with /raid-status.
+      if (userAccounts.length > 1) {
+        const rollupLine = `\n🌐 All accounts: **${globalTotals.characters}** chars · **${globalTotals.progress.completed}/${globalTotals.progress.total}** raids done`;
+        const baseDescription = embed.data?.description || "";
+        // Insert the rollup right after the first line (account-level
+        // progress summary) and before the freshness line, matching
+        // /raid-status's visual order: account → global → freshness.
+        const lines = baseDescription.split("\n");
+        if (lines.length >= 2) {
+          lines.splice(1, 0, rollupLine.trimStart());
+          embed.setDescription(lines.join("\n"));
+        } else {
+          embed.setDescription(baseDescription + rollupLine);
+        }
       }
 
-      // Append cross-user page counter to the footer legend so the
-      // leader sees their overall position across all users+accounts.
-      // buildAccountPageEmbed always sets a legend footer (no page
-      // info inside it), so concatenating is safe.
-      const baseFooter = embed.data?.footer?.text || "";
-      if (totalPages > 1) {
-        embed.setFooter({ text: `${baseFooter} · Page ${pageIndex + 1}/${totalPages}` });
+      // Overlay a setAuthor with Discord avatar + display name. Append
+      // cross-user "Page X/Y" to the right of the name per Traine's
+      // ask - Discord author.name is a single string with no right-
+      // align option, so concatenation is the only way to put the
+      // counter next to the user. 256-char cap leaves plenty of room.
+      const meta = authorMeta.get(userDoc.discordId);
+      if (meta) {
+        const pageSuffix = totalPages > 1
+          ? ` · Page ${pageIndex + 1}/${totalPages}`
+          : "";
+        const authorPayload = {
+          name: truncateText(`${meta.displayName}${pageSuffix}`, 256),
+        };
+        if (meta.avatarURL) authorPayload.iconURL = meta.avatarURL;
+        embed.setAuthor(authorPayload);
       }
 
       return embed;
