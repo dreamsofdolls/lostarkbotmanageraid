@@ -1524,8 +1524,17 @@ function createRaidCheckCommand(deps) {
       components: buildEditComponents(state),
     });
     const followup = await interaction.fetchReply();
+    // scopeAll opens with raidMeta=null (the raid is picked inside the
+    // UI), so log a sentinel instead of dereferencing raidMeta.raidKey.
+    // Before this guard a TypeError fired between editReply and the
+    // collector setup below, which meant the raid dropdown rendered
+    // but had no handler to process clicks - a silent dead UI.
+    // Caught by Codex review of commit e15b275.
+    const openedRaidLabel = scopeAll
+      ? "all"
+      : `${raidMeta.raidKey}:${raidMeta.modeKey}`;
     console.log(
-      `[raid-check edit] opened raid=${raidMeta.raidKey}:${raidMeta.modeKey} users=${editableByUser.size} openMs=${Date.now() - started}`
+      `[raid-check edit] opened raid=${openedRaidLabel} users=${editableByUser.size} openMs=${Date.now() - started}`
     );
 
     const collector = followup.createMessageComponentCollector({
