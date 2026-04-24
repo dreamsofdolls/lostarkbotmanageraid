@@ -2128,7 +2128,9 @@ function createRaidCheckCommand(deps) {
     // the filter on specific-raid /raid-check but with accounts as
     // the unit instead of char-pages.
     const FILTER_ALL = "__all__";
+    const FILTER_ALL_RAIDS = "__all_raids__";
     let filterUserId = null;
+    let filterRaidId = null;
     let filteredIndices = pagesData.map((_, i) => i);
     let currentLocalPage = 0;
 
@@ -2149,6 +2151,49 @@ function createRaidCheckCommand(deps) {
       currentLocalPage = 0;
     };
 
+    // Raid dropdown aggregate. Built once at init so the option labels
+    // (e.g. "Act 4 Hard (42 pending)") stay stable across filter toggles -
+    // the counts reflect guild-wide "chars who haven't fully cleared this
+    // raid" so leaders see the total backlog per raid independent of the
+    // current user focus. Combining filters (user X + raid Y) shows X's
+    // own filtered progress in the footer; the dropdown label still
+    // carries the global total so leader can spot backlog hotspots at a
+    // glance before drilling in.
+    //
+    // `pending` counts char-raid entries where isCompleted === false
+    // (matches /raid-check specific-raid's counting semantics: 1 char =
+    // 1 unit per raid). Sorted by pending desc so the backlog-heaviest
+    // raid surfaces first - same "most pending first" logic as the
+    // user-filter in specific-raid mode.
+    const raidAggregate = new Map();
+    for (const p of pagesData) {
+      const chars = Array.isArray(p.account.characters) ? p.account.characters : [];
+      for (const ch of chars) {
+        for (const raid of getStatusRaidsForCharacter(ch)) {
+          const key = `${raid.raidKey}:${raid.modeKey}`;
+          let entry = raidAggregate.get(key);
+          if (!entry) {
+            entry = {
+              key,
+              label: raid.raidName,
+              raidKey: raid.raidKey,
+              modeKey: raid.modeKey,
+              pending: 0,
+            };
+            raidAggregate.set(key, entry);
+          }
+          if (!raid.isCompleted) entry.pending += 1;
+        }
+      }
+    }
+    const raidDropdownEntries = [...raidAggregate.values()].sort(
+      (a, b) => b.pending - a.pending || a.label.localeCompare(b.label)
+    );
+    const totalRaidPending = raidDropdownEntries.reduce(
+      (sum, r) => sum + r.pending,
+      0
+    );
+
     const buildPage = (pageIndex) => {
       const { userDoc, account } = pagesData[pageIndex];
       // Per-user raids cache. Lives inside buildPage so it rebuilds
@@ -2157,7 +2202,7 @@ function createRaidCheckCommand(deps) {
       // but the defensive reset keeps this identical to /raid-status
       // where raidsCache is per-command invocation).
       const raidsCache = new Map();
-      const getRaidsFor = (character) => {
+      const rawGetRaidsFor = (character) => {
         let result = raidsCache.get(character);
         if (!result) {
           result = getStatusRaidsForCharacter(character);
@@ -2165,6 +2210,19 @@ function createRaidCheckCommand(deps) {
         }
         return result;
       };
+      // Raid filter narrows each character's raid list down to the
+      // single picked raid (or empty if the char isn't eligible for it).
+      // getRaidsFor is the only source of raid entries for both the
+      // char fields AND the globalTotals rollup below, so wrapping it
+      // here makes the footer counts automatically reflect "just the
+      // picked raid's done/partial/pending across this user's chars" -
+      // no separate filter pass needed downstream.
+      const getRaidsFor = filterRaidId
+        ? (character) =>
+            rawGetRaidsFor(character).filter(
+              (r) => `${r.raidKey}:${r.modeKey}` === filterRaidId
+            )
+        : rawGetRaidsFor;
 
       const userAccounts = Array.isArray(userDoc.accounts) ? userDoc.accounts : [];
       const userTotalChars = userAccounts.reduce(
@@ -2351,9 +2409,50 @@ function createRaidCheckCommand(deps) {
       );
     };
 
+    // Raid filter dropdown. Parallel to user-filter in structure but
+    // orthogonal in semantics - picking a raid narrows every char's
+    // raid list (and therefore the footer counts) down to that single
+    // raid, without touching which accounts/pages are visible. Leaders
+    // can combine both filters: "Du × Kazeros Hard" surfaces Du's
+    // pending chars for just that one raid. Option labels are the
+    // guild-wide pending counts computed at init (see `raidAggregate`),
+    // so clicking around filters doesn't rewrite the labels underneath
+    // the leader's hand.
+    const buildRaidFilterRow = (disabled) => {
+      const options = [
+        {
+          label: truncateText(`All raids (${totalRaidPending} total pending)`, 100),
+          value: FILTER_ALL_RAIDS,
+          emoji: "🌐",
+          default: filterRaidId === null,
+        },
+      ];
+      // StringSelect caps at 25 options; 1 slot is the All-raids entry,
+      // leaving 24 for actual raids. Act 4 Normal/Hard/Nightmare + Kazeros
+      // Normal/Hard/Nightmare + Serca Hard/Nightmare = 8 entries max
+      // today, so the slice is defensive against future raid additions
+      // rather than a real cap against current content.
+      for (const r of raidDropdownEntries.slice(0, 24)) {
+        options.push({
+          label: truncateText(`${r.label} (${r.pending} pending)`, 100),
+          value: r.key,
+          emoji: "⚔️",
+          default: filterRaidId === r.key,
+        });
+      }
+      return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId("raid-check-all-filter:raid")
+          .setPlaceholder("Filter by raid / Lọc theo raid...")
+          .setDisabled(disabled)
+          .addOptions(options)
+      );
+    };
+
     const buildComponents = (disabled) => [
       buildButtonRow(disabled),
       buildFilterRow(disabled),
+      buildRaidFilterRow(disabled),
     ];
 
     const currentAbsoluteIndex = () =>
@@ -2379,7 +2478,8 @@ function createRaidCheckCommand(deps) {
         const customId = component.customId || "";
         const ours =
           customId.startsWith("raid-check-all-page:") ||
-          customId === "raid-check-all-filter:user";
+          customId === "raid-check-all-filter:user" ||
+          customId === "raid-check-all-filter:raid";
         if (ours) {
           await component
             .reply({
@@ -2398,6 +2498,27 @@ function createRaidCheckCommand(deps) {
             ? component.values[0]
             : FILTER_ALL;
         applyUserFilter(value);
+        await component
+          .update({
+            embeds: [buildPage(currentAbsoluteIndex())],
+            components: buildComponents(false),
+          })
+          .catch(() => {});
+        return;
+      }
+
+      if (customId === "raid-check-all-filter:raid") {
+        const value =
+          Array.isArray(component.values) && component.values.length > 0
+            ? component.values[0]
+            : FILTER_ALL_RAIDS;
+        filterRaidId = value === FILTER_ALL_RAIDS ? null : value;
+        // Deliberately NOT resetting currentLocalPage - raid filter is
+        // orthogonal to page structure (unlike user filter, which shrinks
+        // `filteredIndices`, the raid filter just changes what each page
+        // shows internally). Resetting would confuse "I was on page 3 of
+        // Du's accounts, why am I back at page 1?" when the page list
+        // didn't change size at all.
         await component
           .update({
             embeds: [buildPage(currentAbsoluteIndex())],
