@@ -118,7 +118,7 @@ User document example:
 }
 ```
 
-**Gate System.** Raid is "done" when every official gate has `completedDate > 0` at the selected difficulty. `assignedRaids.<raidKey>` uses `strict: false` so adding G3+ later is migration-free. Mode hierarchy: Nightmare (3) > Hard (2) > Normal (1) — clearing a higher mode satisfies a lower-mode scan.
+**Gate System.** Raid is "done" when every official gate has `completedDate > 0` at the selected difficulty. `assignedRaids.<raidKey>` uses `strict: false` so adding G3+ later is migration-free. `/raid-check` places characters in their natural iLvl bucket first (for example Serca Normal is `[1710,1730)`, Hard is `[1730,1740)`, Nightmare is `1740+`), but explicit clears are also shown on the mode they actually cleared and annotated when viewed from another bucket, e.g. `2/2 (Normal Clear)`.
 
 **Class map.** 30+ Lost Ark classes mapped from bible internal IDs to display names in `src/models/Class.js`. Unknown IDs fall back to title-cased raw ID.
 

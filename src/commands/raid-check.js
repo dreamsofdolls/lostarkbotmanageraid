@@ -20,7 +20,6 @@ function createRaidCheckCommand(deps) {
     ensureAssignedRaids,
     getGateKeys,
     getRaidScanRange,
-    modeRank,
     buildRaidCheckUserQuery,
     buildAccountFreshnessLine,
     buildAccountPageEmbed,
@@ -57,7 +56,6 @@ function createRaidCheckCommand(deps) {
     const notEligibleChars = [];
     const selectedDifficulty = toModeLabel(raidMeta.modeKey);
     const selectedDiffNorm = normalizeName(selectedDifficulty);
-    const scanRank = modeRank(selectedDiffNorm);
     const { lowestMin, selfMin, nextMin } = getRaidScanRange(
       raidMeta.raidKey,
       Number(raidMeta.minItemLevel) || 0
@@ -121,12 +119,19 @@ function createRaidCheckCommand(deps) {
           const storedGateKeys = getGateKeys(assigned);
           const officialGates =
             storedGateKeys.length > 0 ? storedGateKeys : getGatesForRaid(raidMeta.raidKey);
+          const naturalInRange =
+            characterItemLevel >= selfMin && characterItemLevel < nextMin;
+          const selectedModeDoneGates = new Set();
+          const completedModeLabels = new Set();
           const gateStatus = officialGates.map((gate) => {
             const gateEntry = assigned[gate];
             if (!gateEntry) return "pending";
-            const storedRank = modeRank(gateEntry.difficulty);
-            if (storedRank < scanRank) return "pending";
-            return Number(gateEntry.completedDate) > 0 ? "done" : "pending";
+            if (!(Number(gateEntry.completedDate) > 0)) return "pending";
+
+            const storedDiffNorm = normalizeName(gateEntry.difficulty);
+            if (storedDiffNorm === selectedDiffNorm) selectedModeDoneGates.add(gate);
+            if (gateEntry.difficulty) completedModeLabels.add(toModeLabel(gateEntry.difficulty));
+            return "done";
           });
 
           const doneCount = gateStatus.filter((status) => status === "done").length;
@@ -135,88 +140,35 @@ function createRaidCheckCommand(deps) {
           else if (doneCount > 0) overallStatus = "partial";
           else overallStatus = "none";
 
-          // High-side filter distinguishes two out-of-range cases:
+          // Mode placement has two sources:
+          //   1. natural bucket by current iLvl range (default planning view)
+          //   2. explicit progress at the selected mode (what they actually ran)
           //
-          //   (a) OUT-GROWN: char cleared THIS mode at a lower iLvl
-          //       earlier in the week, then grew past nextMin. E.g.
-          //       Cyracha cleared Serca Normal at 1725, is now 1732.
-          //       Their natural tier is Hard now. Filter out -
-          //       leader's mental model "/raid-check raid:serca_normal
-          //       = chars in [1710, 1730)" should hold.
-          //
-          //   (b) HIERARCHY: char cleared a HIGHER mode (storedRank
-          //       > scanRank). E.g. 1740 char cleared Kazeros Hard,
-          //       which via mode hierarchy also counts as Kazeros
-          //       Normal clear. Keep visible - leader running
-          //       /raid-check kazeros_normal wants to see "who has
-          //       cleared Normal-or-higher this week". Hiding the
-          //       1740 Hard-cleared char would misrepresent the
-          //       Normal cohort's done count.
-          //
-          // Distinguish by scanning the char's done gates for a
-          // stored mode HIGHER than scanRank. If any found, it's a
-          // hierarchy case. Otherwise it's out-grown (or plain
-          // "none"). Previous behavior only applied this filter for
-          // "none" status, which leaked case (a) into the view.
-          // Traine report 2026-04-24.
-          let doneViaHierarchy = false;
-          if (characterItemLevel >= nextMin) {
-            for (const gate of officialGates) {
-              const entry = assigned[gate];
-              if (!entry || !(Number(entry.completedDate) > 0)) continue;
-              const storedRank = modeRank(entry.difficulty);
-              if (storedRank > scanRank) {
-                doneViaHierarchy = true;
-                break;
-              }
-            }
-          }
-          if (characterItemLevel >= nextMin && !doneViaHierarchy) {
+          // Example: a 1740 Serca character naturally belongs to Nightmare.
+          // If they actually clear Serca Normal, show them in BOTH the
+          // Nightmare bucket (with "Normal Clear") and the Normal page (because
+          // that page is the source-of-truth view for Normal clears). But a
+          // 1730+ character with Hard progress should not leak into Normal just
+          // because Hard ranks above Normal.
+          const hasSelectedModeProgress = selectedModeDoneGates.size > 0;
+          if (!naturalInRange && !hasSelectedModeProgress) {
             notEligibleChars.push({
               ...baseEntry,
               gateStatus: [],
               overallStatus: "not-eligible",
-              notEligibleReason: "high",
+              notEligibleReason: characterItemLevel < selfMin ? "low" : "high",
             });
             continue;
           }
 
-          // Low-side filter: only for chars that haven't cleared yet.
-          // A char who cleared Act 4 Normal at 1705 and is still 1705
-          // when the floor was lifted to 1710 (edge case) keeps their
-          // done visibility so the rollup stays accurate for the
-          // mode they actually completed. Applying low-side filter
-          // unconditionally would invalidate legitimate prior clears.
-          if (overallStatus === "none" && characterItemLevel < selfMin) {
-            notEligibleChars.push({
-              ...baseEntry,
-              gateStatus: [],
-              overallStatus: "not-eligible",
-              notEligibleReason: "low",
-            });
-            continue;
-          }
-
-          // Annotation for done gates that were cleared at a HIGHER
-          // mode than scan. Leader scanning Serca Normal wants to know
-          // that Cyravelle's 2/2 green came from a Hard clear (via
-          // mode hierarchy), not a Normal clear - current render of
-          // "🟢 2/2" alone is ambiguous. Collect distinct higher
-          // modes used across the done gates; render as "(Hard)" or
-          // "(Hard/Nightmare)" suffix in buildCharField. Empty set =
-          // all done gates at scan mode = no annotation needed.
-          const hierarchyModes = new Set();
-          for (let gi = 0; gi < officialGates.length; gi += 1) {
-            if (gateStatus[gi] !== "done") continue;
-            const entry = assigned[officialGates[gi]];
-            if (!entry) continue;
-            const storedRank = modeRank(entry.difficulty);
-            if (storedRank > scanRank && entry.difficulty) {
-              hierarchyModes.add(toModeLabel(entry.difficulty));
-            }
-          }
+          // Annotation for clears whose actual mode is important context:
+          // different mode than the scan, or an out-of-range same-mode clear
+          // surfaced by explicit progress instead of the natural iLvl bucket.
           const doneModeAnnotation =
-            hierarchyModes.size > 0 ? [...hierarchyModes].join("/") : null;
+            completedModeLabels.size > 0 &&
+            (!completedModeLabels.has(selectedDifficulty) || !naturalInRange)
+              ? [...completedModeLabels].map((mode) => `${mode} Clear`).join("/")
+              : null;
 
           allEligible.push({
             ...baseEntry,
@@ -517,16 +469,15 @@ function createRaidCheckCommand(deps) {
       const doneCount = character.gateStatus.filter((status) => status === "done").length;
       const total = character.gateStatus.length;
       const icon = pickProgressIcon(doneCount, total);
-      // If any done gate was cleared at a higher mode than the scan
-      // (mode hierarchy), annotate with that mode so leader sees the
-      // char satisfied this view via Hard/Nightmare, not the scan
-      // mode. Same-mode clears render without suffix (the default).
-      const hierarchySuffix = character.doneModeAnnotation
+      // If the clear was recorded at another mode, or this page is showing an
+      // out-of-range explicit clear, annotate the actual mode so leaders can
+      // distinguish "2/2 Nightmare" from "2/2 (Normal Clear)".
+      const modeSuffix = character.doneModeAnnotation
         ? ` _(${character.doneModeAnnotation})_`
         : "";
       return {
         name,
-        value: truncateText(`${icon} ${doneCount}/${total}${hierarchySuffix}`, 1024),
+        value: truncateText(`${icon} ${doneCount}/${total}${modeSuffix}`, 1024),
         inline: true,
       };
     };
