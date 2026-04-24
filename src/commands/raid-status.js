@@ -5,6 +5,8 @@ function createRaidStatusCommand(deps) {
   const {
     EmbedBuilder,
     ComponentType,
+    StringSelectMenuBuilder,
+    ActionRowBuilder,
     MessageFlags,
     UI,
     User,
@@ -317,7 +319,7 @@ function createRaidStatusCommand(deps) {
     }
 
     const raidsCache = new Map();
-    const getRaidsFor = (character) => {
+    const baseGetRaidsFor = (character) => {
       let result = raidsCache.get(character);
       if (!result) {
         result = getStatusRaidsForCharacter(character);
@@ -331,14 +333,6 @@ function createRaidStatusCommand(deps) {
       (sum, account) => sum + (Array.isArray(account.characters) ? account.characters.length : 0),
       0
     );
-    const allRaidEntries = [];
-    for (const account of accounts) {
-      for (const character of account.characters || []) {
-        allRaidEntries.push(...getRaidsFor(character));
-      }
-    }
-    const globalProgress = summarizeRaidProgress(allRaidEntries);
-    const globalTotals = { characters: totalCharacters, progress: globalProgress };
 
     const statusUserMeta = {
       discordId: userDoc.discordId,
@@ -346,63 +340,184 @@ function createRaidStatusCommand(deps) {
       lastAutoManageSyncAt: Number(userDoc.lastAutoManageSyncAt) || 0,
       lastAutoManageAttemptAt: Number(userDoc.lastAutoManageAttemptAt) || 0,
     };
-    const pages = accounts.map((account, idx) =>
-      buildAccountPageEmbed(
-        account,
-        idx,
-        accounts.length,
-        globalTotals,
-        getRaidsFor,
-        statusUserMeta
-      )
+
+    // Raid-filter aggregate for the caller's own roster. Parallel to the
+    // all-mode dropdown in /raid-check raid:all, but counts here are
+    // self-scoped (chars across caller's accounts where the raid isn't
+    // fully cleared yet). Computed once at init with the unfiltered
+    // getRaidsFor so toggling filters later doesn't rewrite the labels
+    // underneath the user's hand - labels stay as a stable "my backlog
+    // per raid" reference. Sorted pending desc so the heaviest backlog
+    // surfaces first.
+    const FILTER_ALL_RAIDS = "__all_raids__";
+    const raidAggregate = new Map();
+    for (const account of accounts) {
+      for (const ch of account.characters || []) {
+        for (const raid of baseGetRaidsFor(ch)) {
+          const key = `${raid.raidKey}:${raid.modeKey}`;
+          let entry = raidAggregate.get(key);
+          if (!entry) {
+            entry = {
+              key,
+              label: raid.raidName,
+              raidKey: raid.raidKey,
+              modeKey: raid.modeKey,
+              pending: 0,
+            };
+            raidAggregate.set(key, entry);
+          }
+          if (!raid.isCompleted) entry.pending += 1;
+        }
+      }
+    }
+    const raidDropdownEntries = [...raidAggregate.values()].sort(
+      (a, b) => b.pending - a.pending || a.label.localeCompare(b.label)
+    );
+    const totalRaidPending = raidDropdownEntries.reduce(
+      (sum, r) => sum + r.pending,
+      0
     );
 
-    if (pages.length === 1) {
-      await interaction.editReply({ embeds: [pages[0]] });
-      return;
-    }
-
     let currentPage = 0;
+    let filterRaidId = null;
+
+    // Build the current page's embed given the active (page, raid-filter)
+    // pair. Rebuilt on every state change instead of pre-baking a pages[]
+    // array because any filter pick invalidates every pre-built embed -
+    // /raid-status's roster count is small enough (<10 accounts typical)
+    // that one buildAccountPageEmbed per interaction is zero-cost.
+    const buildCurrentEmbed = () => {
+      const getRaidsFor = filterRaidId
+        ? (ch) =>
+            baseGetRaidsFor(ch).filter(
+              (r) => `${r.raidKey}:${r.modeKey}` === filterRaidId
+            )
+        : baseGetRaidsFor;
+
+      // Recompute globalTotals against the filtered view so the footer
+      // (and the cross-account rollup line, when >1 account) reflect
+      // only the picked raid's done/partial/pending when a filter is
+      // active. Characters count stays at totalCharacters regardless -
+      // "12 chars in roster" is a static fact of the roster, not
+      // something the filter narrows.
+      const filteredEntries = [];
+      for (const a of accounts) {
+        for (const c of a.characters || []) {
+          filteredEntries.push(...getRaidsFor(c));
+        }
+      }
+      const filteredTotals = {
+        characters: totalCharacters,
+        progress: summarizeRaidProgress(filteredEntries),
+      };
+
+      return buildAccountPageEmbed(
+        accounts[currentPage],
+        currentPage,
+        accounts.length,
+        filteredTotals,
+        getRaidsFor,
+        statusUserMeta
+      );
+    };
+
+    const buildRaidFilterRow = (disabled) => {
+      const options = [
+        {
+          label: truncateText(`All raids (${totalRaidPending} total pending)`, 100),
+          value: FILTER_ALL_RAIDS,
+          emoji: "🌐",
+          default: filterRaidId === null,
+        },
+      ];
+      for (const r of raidDropdownEntries.slice(0, 24)) {
+        options.push({
+          label: truncateText(`${r.label} (${r.pending} pending)`, 100),
+          value: r.key,
+          emoji: "⚔️",
+          default: filterRaidId === r.key,
+        });
+      }
+      return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId("status-filter:raid")
+          .setPlaceholder("Filter by raid / Lọc theo raid...")
+          .setDisabled(disabled)
+          .addOptions(options)
+      );
+    };
+
+    const buildComponents = (disabled) => {
+      const rows = [];
+      if (accounts.length > 1) {
+        rows.push(
+          buildPaginationRow(currentPage, accounts.length, disabled, {
+            prevId: "status:prev",
+            nextId: "status:next",
+          })
+        );
+      }
+      // Skip the raid-filter row when the caller has no eligible raids
+      // at all (empty roster / all chars below minItemLevel gates) -
+      // dropdown with only the All-raids entry is just noise.
+      if (raidDropdownEntries.length > 0) {
+        rows.push(buildRaidFilterRow(disabled));
+      }
+      return rows;
+    };
+
+    const initialComponents = buildComponents(false);
+
     await interaction.editReply({
-      embeds: [pages[currentPage]],
-      components: [
-        buildPaginationRow(currentPage, pages.length, false, {
-          prevId: "status:prev",
-          nextId: "status:next",
-        }),
-      ],
+      embeds: [buildCurrentEmbed()],
+      components: initialComponents,
     });
+
+    // No interactive surface (single account + no eligible raids) - skip
+    // the collector entirely. Without this guard the collector would
+    // spin for STATUS_PAGINATION_SESSION_MS doing nothing.
+    if (initialComponents.length === 0) return;
+
     const message = await interaction.fetchReply();
 
+    // No componentType filter - collector must listen to both Button
+    // (prev/next) AND StringSelect (raid filter) interactions.
     const collector = message.createMessageComponentCollector({
-      componentType: ComponentType.Button,
       time: STATUS_PAGINATION_SESSION_MS,
     });
 
-    collector.on("collect", async (btn) => {
-      if (btn.user.id !== interaction.user.id) {
-        await btn.reply({
-          content: `${UI.icons.lock} Chỉ người chạy \`/raid-status\` mới điều khiển được pagination.`,
+    collector.on("collect", async (component) => {
+      if (component.user.id !== interaction.user.id) {
+        await component.reply({
+          content: `${UI.icons.lock} Chỉ người chạy \`/raid-status\` mới điều khiển được.`,
           flags: MessageFlags.Ephemeral,
         }).catch(() => {});
         return;
       }
 
-      if (btn.customId === "status:prev") currentPage = Math.max(0, currentPage - 1);
-      else if (btn.customId === "status:next") {
-        currentPage = Math.min(pages.length - 1, currentPage + 1);
+      const id = component.customId || "";
+      if (id === "status:prev") {
+        currentPage = Math.max(0, currentPage - 1);
+      } else if (id === "status:next") {
+        currentPage = Math.min(accounts.length - 1, currentPage + 1);
+      } else if (id === "status-filter:raid") {
+        const value =
+          Array.isArray(component.values) && component.values.length > 0
+            ? component.values[0]
+            : FILTER_ALL_RAIDS;
+        filterRaidId = value === FILTER_ALL_RAIDS ? null : value;
+        // Do NOT reset currentPage - raid filter is orthogonal to page
+        // structure (pages still map 1:1 to accounts, only what each
+        // page displays internally changes). Resetting to page 0 on
+        // filter pick would feel broken: "I was viewing account 3, why
+        // did I jump back to account 1 just because I filtered a raid?"
       } else {
         return;
       }
 
-      await btn.update({
-        embeds: [pages[currentPage]],
-        components: [
-          buildPaginationRow(currentPage, pages.length, false, {
-            prevId: "status:prev",
-            nextId: "status:next",
-          }),
-        ],
+      await component.update({
+        embeds: [buildCurrentEmbed()],
+        components: buildComponents(false),
       }).catch(() => {});
     });
 
@@ -410,17 +525,12 @@ function createRaidStatusCommand(deps) {
       try {
         const expiredFooter =
           `⏱️ Session đã hết hạn (${STATUS_PAGINATION_SESSION_MS / 1000}s) · Dùng /raid-status để xem lại`;
-        const expiredEmbed = EmbedBuilder.from(pages[currentPage]).setFooter({
+        const expiredEmbed = EmbedBuilder.from(buildCurrentEmbed()).setFooter({
           text: expiredFooter,
         });
         await interaction.editReply({
           embeds: [expiredEmbed],
-          components: [
-            buildPaginationRow(currentPage, pages.length, true, {
-              prevId: "status:prev",
-              nextId: "status:next",
-            }),
-          ],
+          components: buildComponents(true),
         });
       } catch {
         // Interaction token may have expired.
