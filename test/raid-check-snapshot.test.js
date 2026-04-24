@@ -176,6 +176,67 @@ test("raid-check not-eligible note explains out-grown chars clearly", () => {
   assert.match(fieldValue, /out-grown/);
 });
 
+test("buildRaidCheckSnapshotFromUsers filters out-grown chars even when they already cleared the lower mode", () => {
+  // Regression for the 2026-04-24 Traine report: a 1732 char who
+  // cleared Serca Normal earlier in the week (at a lower iLvl) was
+  // leaking into /raid-check raid:serca_normal as a 2/2 done entry
+  // because the high-side range filter only ran for overallStatus
+  // "none". Lost Ark progression is monotonic so once a char passes
+  // nextMin they've out-grown this mode - the clear history stays
+  // in the DB but the char should not appear in THIS mode's view.
+  const snapshot = __test.buildRaidCheckSnapshotFromUsers(
+    [
+      {
+        discordId: "user-1",
+        weeklyResetKey: getTargetResetKey(new Date()),
+        accounts: [
+          {
+            accountName: "Main",
+            characters: [
+              {
+                id: "grown-id",
+                name: "Cyracha",
+                class: "Bard",
+                itemLevel: 1732, // above nextMin (1730) for Serca Normal
+                assignedRaids: {
+                  armoche: {},
+                  kazeros: {},
+                  serca: {
+                    G1: { difficulty: "Normal", completedDate: 1 },
+                    G2: { difficulty: "Normal", completedDate: 2 },
+                  },
+                },
+                tasks: [],
+              },
+              {
+                id: "in-range-id",
+                name: "SercaRegular",
+                class: "Bard",
+                itemLevel: 1725,
+                assignedRaids: { armoche: {}, kazeros: {}, serca: {} },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    { raidKey: "serca", modeKey: "normal", minItemLevel: 1710 }
+  );
+
+  const eligibleNames = snapshot.allEligible.map((c) => c.charName);
+  assert.ok(
+    !eligibleNames.includes("Cyracha"),
+    `Cyracha (1732, done at Normal) should be filtered out when scanning Serca Normal (nextMin=1730), got: ${eligibleNames.join(",")}`
+  );
+  assert.ok(eligibleNames.includes("SercaRegular"));
+
+  const outGrown = snapshot.notEligibleChars.find(
+    (c) => c.charName === "Cyracha"
+  );
+  assert.ok(outGrown, "Cyracha should land in notEligibleChars");
+  assert.equal(outGrown.notEligibleReason, "high");
+});
+
 test("raid-check renderable chars hide not-eligible entries from the visible list", () => {
   const snapshot = __test.buildRaidCheckSnapshotFromUsers(
     [
