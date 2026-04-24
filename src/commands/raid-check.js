@@ -332,7 +332,12 @@ function createRaidCheckCommand(deps) {
     const displayMap = new Map();
     await Promise.all(
       visibleDiscordIds.map(async (discordId) => {
-        const displayName = await resolveDiscordDisplay(interaction.client, discordId);
+        const meta = userMeta.get(discordId) || {};
+        const displayName = await resolveCachedDisplayName(
+          interaction.client,
+          discordId,
+          meta
+        );
         displayMap.set(discordId, displayName);
       })
     );
@@ -908,6 +913,28 @@ function createRaidCheckCommand(deps) {
 
   const RAID_CHECK_EDIT_SESSION_MS = 5 * 60 * 1000;
 
+  // Shared display-name resolver for every view inside /raid-check (main
+  // render + Edit cascade). Prefers the cached identity strings on the User
+  // doc (stamped every slash-command invocation) because those reflect the
+  // guild-displayed nickname / global name rather than the raw username
+  // handle discord.js's local cache typically holds. Falls back to
+  // `resolveDiscordDisplay` (already gated by discordUserLimiter internally)
+  // for users whose doc fields are empty, and finally to the snowflake.
+  async function resolveCachedDisplayName(client, discordId, meta) {
+    const cached =
+      meta?.discordDisplayName ||
+      meta?.discordGlobalName ||
+      meta?.discordUsername ||
+      "";
+    if (cached) return cached;
+    try {
+      const live = await resolveDiscordDisplay(client, discordId);
+      return live || discordId;
+    } catch {
+      return discordId;
+    }
+  }
+
   /**
    * Partition the snapshot chars into a Map keyed by discordId with the
    * editable subset under each. Edit follows the same eligibility surface as
@@ -1340,38 +1367,20 @@ function createRaidCheckCommand(deps) {
       return;
     }
 
-    // Resolve display names for just the editable users. Prefer the
-    // cached identity strings on the User doc (stamped every slash-command
-    // invocation) - those reflect the guild-displayed nickname / global
-    // name rather than the raw username handle discord.js's cache
-    // typically holds. Fall back to a live fetch via resolveDiscordDisplay
-    // for users whose doc fields are empty (never ran a slash command on
-    // the current schema), and finally to the raw snowflake.
+    // Resolve display names for just the editable users, via the shared
+    // cache-first helper. See resolveCachedDisplayName for why we prefer the
+    // User doc's cached identity over discord.js's own users cache.
     const displayMap = new Map();
     await Promise.all(
-      [...editableByUser.keys()].map((discordId) =>
-        discordUserLimiter.run(async () => {
-          const meta = snapshot.userMeta.get(discordId) || {};
-          const cachedDisplay =
-            meta.discordDisplayName ||
-            meta.discordGlobalName ||
-            meta.discordUsername ||
-            "";
-          if (cachedDisplay) {
-            displayMap.set(discordId, cachedDisplay);
-            return;
-          }
-          try {
-            const live = await resolveDiscordDisplay(interaction.client, discordId);
-            // resolveDiscordDisplay returns a STRING (username) or the
-            // snowflake fallback - no `.displayName` property. Store it
-            // directly.
-            displayMap.set(discordId, live || discordId);
-          } catch {
-            displayMap.set(discordId, discordId);
-          }
-        })
-      )
+      [...editableByUser.keys()].map(async (discordId) => {
+        const meta = snapshot.userMeta.get(discordId) || {};
+        const name = await resolveCachedDisplayName(
+          interaction.client,
+          discordId,
+          meta
+        );
+        displayMap.set(discordId, name);
+      })
     );
 
     const state = {
@@ -1650,7 +1659,14 @@ function createRaidCheckCommand(deps) {
       dmOutcome = "skipped-self";
     } else if (didApplyWrite) {
       try {
-        const user = await component.client.users.fetch(state.selectedUser);
+        // Gate the REST fetch through discordUserLimiter (same limiter the
+        // Sync DM path uses) to keep /raid-check consistent with Discord's
+        // global rate ceiling. Single-user apply is low volume on its own,
+        // but funneling every REST call through the same limiter means
+        // burst-edit sessions do not race Sync DM traffic.
+        const user = await discordUserLimiter.run(() =>
+          component.client.users.fetch(state.selectedUser)
+        );
         const dmChannel = await user.createDM();
         const dmEmbed = buildRaidCheckEditDMEmbed({
           targetChar,
