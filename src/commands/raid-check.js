@@ -913,16 +913,21 @@ function createRaidCheckCommand(deps) {
   }
 
   /**
-   * Raids this char is eligible for, based on RAID_REQUIREMENT_MAP. Used to
-   * populate the raid select AFTER the char is picked. Skipping raids the
-   * char can't do prevents "mark Nightmare on a 1710 char" footgun that
-   * `applyRaidSetForDiscordId` would reject as `ineligibleItemLevel`
-   * anyway - better to hide than to reject after the click.
+   * Raids this char is eligible for, based on the same mode range contract
+   * `/raid-check` uses: a mode is editable only when
+   * minItemLevel <= char iLvl < next higher mode min. Highest modes have no
+   * upper bound. This keeps a 1730 char from showing Normal options that the
+   * scan itself already hides as out-grown.
    */
   function getEligibleRaidsForChar(itemLevel) {
     const level = Number(itemLevel) || 0;
     return Object.entries(RAID_REQUIREMENT_MAP)
-      .filter(([, entry]) => (Number(entry.minItemLevel) || 0) <= level)
+      .filter(([, entry]) => {
+        const minItemLevel = Number(entry.minItemLevel) || 0;
+        if (level < minItemLevel) return false;
+        const { nextMin } = getRaidScanRange(entry.raidKey, minItemLevel);
+        return level < nextMin;
+      })
       .sort((a, b) => {
         const diff = (Number(a[1].minItemLevel) || 0) - (Number(b[1].minItemLevel) || 0);
         if (diff !== 0) return diff;
