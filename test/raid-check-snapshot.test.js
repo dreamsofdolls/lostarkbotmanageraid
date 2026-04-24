@@ -554,6 +554,61 @@ test("Edit flow: getEligibleRaidsForChar returns entries in ascending minItemLev
   assert.deepEqual(mins, sorted, "eligible raids must be sorted by min iLvl ascending");
 });
 
+test("Edit flow: getCharRaidGateStatus rolls up complete when every gate done at picked mode", () => {
+  const character = {
+    assignedRaids: {
+      kazeros: {
+        G1: { difficulty: "Hard", completedDate: 1 },
+        G2: { difficulty: "Hard", completedDate: 2 },
+      },
+    },
+  };
+  const status = __test.getCharRaidGateStatus(character, "kazeros", "hard");
+  assert.equal(status.overallStatus, "complete");
+  assert.equal(status.modeChangeNeeded, false);
+  assert.ok(status.gates.every((g) => g.doneAtPickedMode));
+});
+
+test("Edit flow: getCharRaidGateStatus flags partial with one gate open", () => {
+  const character = {
+    assignedRaids: {
+      kazeros: {
+        G1: { difficulty: "Hard", completedDate: 1 },
+      },
+    },
+  };
+  const status = __test.getCharRaidGateStatus(character, "kazeros", "hard");
+  assert.equal(status.overallStatus, "partial");
+  assert.equal(status.gates[0].doneAtPickedMode, true);
+  assert.equal(status.gates[1].doneAtPickedMode, false);
+});
+
+test("Edit flow: getCharRaidGateStatus surfaces modeChangeNeeded for cross-mode picks", () => {
+  const character = {
+    assignedRaids: {
+      kazeros: {
+        G1: { difficulty: "Hard", completedDate: 1 },
+        G2: { difficulty: "Hard", completedDate: 2 },
+      },
+    },
+  };
+  const status = __test.getCharRaidGateStatus(character, "kazeros", "normal");
+  assert.equal(status.modeChangeNeeded, true);
+  // Done at a DIFFERENT mode doesn't count as done for the picked mode.
+  assert.equal(status.overallStatus, "none");
+  assert.equal(status.gates[0].doneAtPickedMode, false);
+  assert.equal(status.gates[0].doneAtSomeMode, true);
+  assert.equal(status.gates[0].storedMode, "hard");
+});
+
+test("Edit flow: getCharRaidGateStatus handles untouched raid as none with no conflict", () => {
+  const character = { assignedRaids: {} };
+  const status = __test.getCharRaidGateStatus(character, "kazeros", "hard");
+  assert.equal(status.overallStatus, "none");
+  assert.equal(status.modeChangeNeeded, false);
+  assert.ok(status.gates.every((g) => !g.doneAtPickedMode && !g.doneAtSomeMode));
+});
+
 test("stale roster refresh canonicalizes diacritic-only bible character names", () => {
   const userDoc = {
     accounts: [

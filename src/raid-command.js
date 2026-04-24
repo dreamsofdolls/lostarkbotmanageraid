@@ -751,6 +751,7 @@ let getRaidCheckRenderableChars;
 let computeRaidCheckSnapshot;
 let buildEditableCharsByUser;
 let getEligibleRaidsForChar;
+let getCharRaidGateStatus;
 let handleRaidCheckCommand;
 let handleRaidCheckButton;
 let handleStatusCommand;
@@ -1299,6 +1300,7 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   computeRaidCheckSnapshot,
   buildEditableCharsByUser,
   getEligibleRaidsForChar,
+  getCharRaidGateStatus,
   handleRaidCheckCommand,
   handleRaidCheckButton,
 } = raidCheckCommandHandlers);
@@ -1546,5 +1548,6 @@ module.exports = {
     ARTIST_QUIET_END_HOUR_VN,
     buildEditableCharsByUser,
     getEligibleRaidsForChar,
+    getCharRaidGateStatus,
   },
 };
