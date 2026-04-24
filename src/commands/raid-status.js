@@ -43,8 +43,24 @@ function createRaidStatusCommand(deps) {
     return isManagerId && isManagerId(discordId) ? "👑" : UI.icons.roster;
   }
 
-  const STATUS_FOOTER_LEGEND =
-    `${UI.icons.done} done · ${UI.icons.partial} partial · ${UI.icons.pending} pending`;
+  // Footer shows subject-scoped rollup (done/partial/pending across the
+  // viewed user's entire roster) + optional page counter, matching
+  // /raid-check's footer semantics. In /raid-status the "subject" is the
+  // caller themselves, so counts stay identical across pagination pages;
+  // the `pageInfo` tail appends only when totalPages > 1.
+  function buildStatusFooterText(globalTotals, pageInfo = null) {
+    const { completed = 0, partial = 0, total = 0 } = globalTotals?.progress || {};
+    const pending = Math.max(0, total - completed - partial);
+    const parts = [
+      `${UI.icons.done} ${completed} done`,
+      `${UI.icons.partial} ${partial} partial`,
+      `${UI.icons.pending} ${pending} pending`,
+    ];
+    if (pageInfo && Number(pageInfo.totalPages) > 1) {
+      parts.push(`Page ${Number(pageInfo.pageIndex) + 1}/${Number(pageInfo.totalPages)}`);
+    }
+    return parts.join(" · ");
+  }
 
   function buildCharacterField(character, getRaidsFor) {
     const name = getCharacterName(character);
@@ -126,27 +142,38 @@ function createRaidStatusCommand(deps) {
           ? UI.icons.partial
           : UI.icons.pending;
 
-    const pageSuffix = totalPages > 1 ? ` · Page ${pageIndex + 1}/${totalPages}` : "";
+    // Page counter lives in the footer (next to done/partial/pending
+    // counts) per /raid-check parity; title stays as just icon + account
+    // so the identity of the rendered roster is the sole headline.
     const headerIcon = pickRosterHeaderIcon(userMeta?.discordId);
-    const title = `${titleIcon} ${headerIcon} ${account.accountName}${pageSuffix}`;
+    const title = `${titleIcon} ${headerIcon} ${account.accountName}`;
 
-    const description = accountProgress.total === 0
-      ? `**${characters.length}** character${characters.length === 1 ? "" : "s"} · no eligible raids yet`
-      : `**${characters.length}** character${characters.length === 1 ? "" : "s"} · **${accountProgress.completed}/${accountProgress.total}** raids done · ${accountProgress.partial} in progress`;
-
-    const globalSummary = totalPages > 1
-      ? `\n🌐 All accounts: **${globalTotals.characters}** chars · **${globalTotals.progress.completed}/${globalTotals.progress.total}** raids done`
-      : "";
-
+    // Description used to lead with a per-account "N chars · X/Y raids
+    // done · K in progress" line, but those counts are now carried by
+    // the footer legend itself (X done · Y partial · Z pending) - keeping
+    // both would duplicate the same information in two places. The
+    // cross-account rollup stays because it's a different scope
+    // (subject-wide, not per-account) and helps when flipping pages.
+    const descriptionLines = [];
+    if (totalPages > 1) {
+      descriptionLines.push(
+        `🌐 All accounts: **${globalTotals.characters}** chars · **${globalTotals.progress.completed}/${globalTotals.progress.total}** raids done`
+      );
+    }
     const freshnessLine = buildAccountFreshnessLine(account, userMeta);
-    const freshnessBlock = freshnessLine ? `\n${freshnessLine}` : "";
+    if (freshnessLine) descriptionLines.push(freshnessLine);
 
     const embed = new EmbedBuilder()
       .setTitle(title)
-      .setDescription(description + globalSummary + freshnessBlock)
       .setColor(accountProgress.color)
-      .setFooter({ text: STATUS_FOOTER_LEGEND })
+      .setFooter({
+        text: buildStatusFooterText(globalTotals, { pageIndex, totalPages }),
+      })
       .setTimestamp();
+
+    if (descriptionLines.length > 0) {
+      embed.setDescription(descriptionLines.join("\n"));
+    }
 
     if (characters.length === 0) {
       embed.addFields({ name: "\u200B", value: "_No characters saved._", inline: false });
@@ -405,7 +432,7 @@ function createRaidStatusCommand(deps) {
     handleStatusCommand,
     buildAccountFreshnessLine,
     buildAccountPageEmbed,
-    STATUS_FOOTER_LEGEND,
+    buildStatusFooterText,
   };
 }
 

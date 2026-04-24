@@ -23,6 +23,7 @@ function createRaidCheckCommand(deps) {
     buildRaidCheckUserQuery,
     buildAccountFreshnessLine,
     buildAccountPageEmbed,
+    buildStatusFooterText,
     summarizeRaidProgress,
     getStatusRaidsForCharacter,
     buildPaginationRow,
@@ -2192,74 +2193,60 @@ function createRaidCheckCommand(deps) {
         lastAutoManageAttemptAt: Number(userDoc.lastAutoManageAttemptAt) || 0,
       };
 
-      // Pass totalPages=1 so buildAccountPageEmbed's title does NOT
-      // emit its own within-user " · Page X/Y" suffix. Account name
-      // already identifies which account this is; emitting two "Page"
-      // markers reads as double-paginated and confuses the leader.
-      // The page counter moves to the author line below where it sits
-      // next to the Discord display name per Traine's ask.
-      //
-      // CAVEAT: in /raid-status, `totalPages > 1` is dual-purpose - it
-      // gates BOTH the title page counter AND the "🌐 All accounts"
-      // cross-account rollup line. Passing totalPages=1 here suppresses
-      // the rollup line unintentionally, so we re-inject it manually
-      // below. The rollup is important for all-mode because a user's
-      // per-account "2/16 raids done" without context doesn't tell the
-      // leader whether that's the user's only account or one of five.
-      const accountPageIdx = 0;
+      // Pass totalPages=1 so buildAccountPageEmbed does NOT emit its own
+      // "🌐 All accounts" rollup line (that line is gated on
+      // `totalPages > 1`, and in /raid-status pages==accounts so they
+      // align - but in all-mode our pagination is cross-user, so we must
+      // suppress the builder's rollup and re-inject based on the viewed
+      // user's own account count below). The builder's footer page
+      // counter is also suppressed here; we overlay the all-mode one
+      // (absolute or filtered, depending on user filter state) right
+      // after so leaders can tell "Page X/Y" from the footer next to the
+      // done/partial/pending counts, matching /raid-check parity.
       const embed = buildAccountPageEmbed(
         account,
-        accountPageIdx,
+        0,
         1,
         globalTotals,
         getRaidsFor,
         userMeta
       );
 
-      // Re-inject the cross-account rollup line that buildAccountPageEmbed
-      // suppressed when we passed totalPages=1. Same copy it uses so the
-      // surface stays consistent with /raid-status.
+      // Re-inject the cross-account rollup line when the viewed user
+      // owns more than one account. Prepended above the freshness line
+      // so visual order stays: global → freshness (description now
+      // contains only those two lines at most, per /raid-check parity).
       if (userAccounts.length > 1) {
-        const rollupLine = `\n🌐 All accounts: **${globalTotals.characters}** chars · **${globalTotals.progress.completed}/${globalTotals.progress.total}** raids done`;
+        const rollupLine = `🌐 All accounts: **${globalTotals.characters}** chars · **${globalTotals.progress.completed}/${globalTotals.progress.total}** raids done`;
         const baseDescription = embed.data?.description || "";
-        // Insert the rollup right after the first line (account-level
-        // progress summary) and before the freshness line, matching
-        // /raid-status's visual order: account → global → freshness.
-        const lines = baseDescription.split("\n");
-        if (lines.length >= 2) {
-          lines.splice(1, 0, rollupLine.trimStart());
-          embed.setDescription(lines.join("\n"));
-        } else {
-          embed.setDescription(baseDescription + rollupLine);
-        }
+        embed.setDescription(baseDescription ? `${rollupLine}\n${baseDescription}` : rollupLine);
       }
 
-      // Overlay a setAuthor with Discord avatar + display name. Append
-      // cross-user "Page X/Y" to the right of the name per Traine's
-      // ask - Discord author.name is a single string with no right-
-      // align option, so concatenation is the only way to put the
-      // counter next to the user. 256-char cap leaves plenty of room.
+      // Overlay the footer with all-mode-aware page info. Counts come
+      // from globalTotals (viewed user's entire roster), matching how
+      // /raid-status scopes its footer to the caller's own roster -
+      // "same subject, footer = subject's rollup" keeps the semantics
+      // consistent across both commands.
       //
-      // Page counter adapts to the filter state: when a user filter
-      // is active, show filtered "Page 2/3" (local to that user's
-      // accounts) instead of the absolute cross-user index, since
-      // the leader cares about "where am I in Du's accounts" not
-      // "which global page this is" once they've focused on someone.
+      // Page counter adapts to the filter state: no filter = absolute
+      // cross-user index; user filter active = local index within that
+      // user's accounts. The leader cares about "where am I in Du's
+      // accounts" once they've focused, not the absolute page number.
+      const footerPageInfo = filterUserId === null
+        ? { pageIndex, totalPages }
+        : { pageIndex: currentLocalPage, totalPages: filteredIndices.length };
+      embed.setFooter({
+        text: buildStatusFooterText(globalTotals, footerPageInfo),
+      });
+
+      // Overlay a setAuthor with Discord avatar + display name. Page
+      // indicator used to live here ("Du · Page 5/14") but moved to the
+      // footer above for /raid-check parity - author now carries only
+      // identity (name + avatar) so the header stays uncluttered.
       const meta = authorMeta.get(userDoc.discordId);
       if (meta) {
-        let pageSuffix = "";
-        if (filterUserId === null) {
-          if (totalPages > 1) {
-            pageSuffix = ` · Page ${pageIndex + 1}/${totalPages}`;
-          }
-        } else {
-          const localTotal = filteredIndices.length;
-          if (localTotal > 1) {
-            pageSuffix = ` · Page ${currentLocalPage + 1}/${localTotal}`;
-          }
-        }
         const authorPayload = {
-          name: truncateText(`${meta.displayName}${pageSuffix}`, 256),
+          name: truncateText(meta.displayName, 256),
         };
         if (meta.avatarURL) authorPayload.iconURL = meta.avatarURL;
         embed.setAuthor(authorPayload);
