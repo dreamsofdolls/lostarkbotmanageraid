@@ -37,6 +37,7 @@ function createRaidCheckCommand(deps) {
     isRaidLeader,
     isManagerId,
     getAutoManageCooldownMs,
+    applyRaidSetForDiscordId,
     RAID_REQUIREMENT_MAP,
     RAID_CHECK_USER_QUERY_FIELDS,
     ROSTER_KEY_SEP,
@@ -87,6 +88,12 @@ function createRaidCheckCommand(deps) {
             accountName: account.accountName || "(no name)",
             charName: getCharacterName(character),
             itemLevel: characterItemLevel,
+            // Carried forward so the /raid-check Edit flow can decide
+            // whether a leader is allowed to touch this char despite the
+            // owner having auto-sync enabled - see the Edit-flow auth
+            // rule in services/manager-edit-auth or the cascading
+            // select builders.
+            publicLogDisabled: !!character.publicLogDisabled,
           };
 
           const assignedRaids = ensureAssignedRaids(character);
@@ -487,6 +494,19 @@ function createRaidCheckCommand(deps) {
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(disabled || optedInPendingCount === 0)
       );
+      // Leader edit flow. Always enabled (as long as session is live) - the
+      // user/char select lists are computed fresh per click off the latest
+      // snapshot, so a click here opens an ephemeral follow-up regardless
+      // of whether there are pending chars (a leader may want to `reset`
+      // a DONE char too).
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`raid-check:edit:${raidKey}`)
+          .setLabel("Edit progress")
+          .setEmoji("✏️")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(disabled)
+      );
       return row;
     };
 
@@ -662,6 +682,8 @@ function createRaidCheckCommand(deps) {
 
     if (action === "sync") {
       await handleRaidCheckSyncClick(interaction, raidMeta);
+    } else if (action === "edit") {
+      await handleRaidCheckEditClick(interaction, raidMeta);
     } else {
       await interaction.reply({
         content: `${UI.icons.warn} Button action không hỗ trợ: \`${action}\`.`,
@@ -815,11 +837,548 @@ function createRaidCheckCommand(deps) {
     await interaction.editReply({ content: lines.join("\n") });
   }
 
+  // ---------------------------------------------------------------------------
+  // /raid-check Edit flow
+  // ---------------------------------------------------------------------------
+  // Leader picks a user → char → raid → status (Complete / Process / Reset)
+  // → (gate if Process) and the bot applies via the same applyRaidSetForDiscordId
+  // helper the slash /raid-set path uses. Lives entirely inside an ephemeral
+  // follow-up message so the parent /raid-check embed stays clean.
+  //
+  // Auth rule: user.autoManageEnabled = true AND char.publicLogDisabled = false
+  // means bible auto-sync owns this char; the leader's manual edit would be
+  // overwritten on the next sync tick, so we skip it from the char select.
+  // Auto-sync user's chars where publicLogDisabled = true show up (bible can
+  // never sync those, manager is the only path that can move progress).
+  // Non-auto-sync users: every char is editable.
+
+  const RAID_CHECK_EDIT_SESSION_MS = 5 * 60 * 1000;
+
+  /**
+   * Partition the snapshot chars into a Map keyed by discordId with the
+   * editable subset under each. Chars not visible in `/raid-check` at the
+   * moment (iLvl below the raid floor → not in snapshot.allChars) stay
+   * invisible to Edit too; we don't scan the full User collection just for
+   * the cascading select, leader can use `/raid-set` directly for those
+   * fringe cases.
+   */
+  function buildEditableCharsByUser(snapshot) {
+    const byUser = new Map();
+    for (const char of snapshot.allChars || []) {
+      const meta = snapshot.userMeta.get(char.discordId) || {};
+      const autoSyncOn = !!meta.autoManageEnabled;
+      // Auto-sync ON + log ON → bible owns, skip.
+      if (autoSyncOn && !char.publicLogDisabled) continue;
+      if (!byUser.has(char.discordId)) {
+        byUser.set(char.discordId, {
+          discordId: char.discordId,
+          autoManageEnabled: autoSyncOn,
+          chars: [],
+        });
+      }
+      byUser.get(char.discordId).chars.push({
+        accountName: char.accountName,
+        charName: char.charName,
+        itemLevel: char.itemLevel,
+        publicLogDisabled: !!char.publicLogDisabled,
+        autoManageEnabled: autoSyncOn,
+      });
+    }
+    // Sort chars inside each user by iLvl desc so highest-geared surfaces first.
+    for (const group of byUser.values()) {
+      group.chars.sort((a, b) => b.itemLevel - a.itemLevel);
+    }
+    return byUser;
+  }
+
+  /**
+   * Raids this char is eligible for, based on RAID_REQUIREMENT_MAP. Used to
+   * populate the raid select AFTER the char is picked. Skipping raids the
+   * char can't do prevents "mark Nightmare on a 1710 char" footgun that
+   * `applyRaidSetForDiscordId` would reject as `ineligibleItemLevel`
+   * anyway - better to hide than to reject after the click.
+   */
+  function getEligibleRaidsForChar(itemLevel) {
+    const level = Number(itemLevel) || 0;
+    return Object.entries(RAID_REQUIREMENT_MAP)
+      .filter(([, entry]) => (Number(entry.minItemLevel) || 0) <= level)
+      .sort((a, b) => {
+        const diff = (Number(a[1].minItemLevel) || 0) - (Number(b[1].minItemLevel) || 0);
+        if (diff !== 0) return diff;
+        return a[0].localeCompare(b[0]);
+      })
+      .map(([raidKey, entry]) => ({ raidKey, entry }));
+  }
+
+  function formatCharEditLabel(char) {
+    const suffix = char.autoManageEnabled && char.publicLogDisabled
+      ? " · log off (manager only)"
+      : "";
+    return truncateText(
+      `${char.charName} · ${Math.round(char.itemLevel)}${suffix}`,
+      100
+    );
+  }
+
+  function formatUserEditLabel(group, displayName) {
+    const tag = group.autoManageEnabled ? " · auto-sync" : "";
+    const count = group.chars.length;
+    return truncateText(`${displayName} · ${count} editable${tag}`, 100);
+  }
+
+  function buildEditEmbed(state) {
+    const lines = [];
+    const userLine = state.selectedUser
+      ? `**User:** ${state.displayMap.get(state.selectedUser) || state.selectedUser}`
+      : "**User:** _chưa chọn_";
+    const charLine = state.selectedChar
+      ? `**Character:** ${state.selectedChar.charName} · ${Math.round(state.selectedChar.itemLevel)}${state.selectedChar.publicLogDisabled ? " (log off)" : ""}`
+      : "**Character:** _chưa chọn_";
+    const raidLine = state.selectedRaid
+      ? `**Raid:** ${RAID_REQUIREMENT_MAP[state.selectedRaid]?.label || state.selectedRaid}`
+      : "**Raid:** _chưa chọn_";
+    lines.push(userLine, charLine, raidLine);
+
+    if (state.selectedChar?.autoManageEnabled && state.selectedChar?.publicLogDisabled) {
+      lines.push("");
+      lines.push(`${UI.icons.warn} _Char này thuộc user đã bật auto-sync nhưng public log đang tắt - edit tay sẽ không bị bible ghi đè._`);
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle("✏️ Edit raid progress")
+      .setColor(state.applied ? UI.colors.success : UI.colors.neutral)
+      .setDescription(lines.join("\n"));
+
+    if (state.applied && state.message) {
+      embed.addFields({ name: "Kết quả", value: state.message });
+    }
+    if (!state.applied && state.warning) {
+      embed.addFields({ name: "Lưu ý", value: state.warning });
+    }
+
+    embed.setFooter({ text: `Session ${RAID_CHECK_EDIT_SESSION_MS / 60_000} phút · chỉ người chạy /raid-check thao tác` });
+    return embed;
+  }
+
+  function buildEditComponents(state) {
+    const rows = [];
+    const disabled = state.applied || state.locked;
+
+    // Row 1: user select. Always present so leader can re-pick.
+    const userOptions = [...state.editableByUser.values()]
+      .slice(0, 25)
+      .map((group) => ({
+        label: formatUserEditLabel(group, state.displayMap.get(group.discordId) || group.discordId),
+        value: group.discordId,
+        emoji: group.autoManageEnabled ? "🤖" : "👤",
+        default: state.selectedUser === group.discordId,
+      }));
+    if (userOptions.length > 0) {
+      rows.push(
+        new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId("raid-check-edit:user")
+            .setPlaceholder("Chọn user cần edit...")
+            .setDisabled(disabled)
+            .addOptions(userOptions)
+        )
+      );
+    }
+
+    // Row 2: char select (only when user picked).
+    if (state.selectedUser) {
+      const group = state.editableByUser.get(state.selectedUser);
+      const charOptions = (group?.chars || [])
+        .slice(0, 25)
+        .map((char) => ({
+          label: formatCharEditLabel(char),
+          value: `${char.accountName}||${char.charName}`,
+          emoji: char.publicLogDisabled ? "🔒" : "⚔️",
+          default:
+            state.selectedChar?.charName === char.charName &&
+            state.selectedChar?.accountName === char.accountName,
+        }));
+      if (charOptions.length > 0) {
+        rows.push(
+          new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId("raid-check-edit:char")
+              .setPlaceholder("Chọn character...")
+              .setDisabled(disabled)
+              .addOptions(charOptions)
+          )
+        );
+      }
+    }
+
+    // Row 3: raid select (only when char picked).
+    if (state.selectedChar) {
+      const raidOptions = getEligibleRaidsForChar(state.selectedChar.itemLevel)
+        .slice(0, 25)
+        .map(({ raidKey, entry }) => ({
+          label: truncateText(`${entry.label} · ${entry.minItemLevel}+`, 100),
+          value: raidKey,
+          default: state.selectedRaid === raidKey,
+        }));
+      if (raidOptions.length > 0) {
+        rows.push(
+          new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId("raid-check-edit:raid")
+              .setPlaceholder("Chọn raid + difficulty...")
+              .setDisabled(disabled)
+              .addOptions(raidOptions)
+          )
+        );
+      }
+    }
+
+    // Row 4: status buttons (only when raid picked).
+    if (state.selectedRaid) {
+      rows.push(
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId("raid-check-edit:status:complete")
+            .setLabel("Complete")
+            .setEmoji("✅")
+            .setStyle(ButtonStyle.Success)
+            .setDisabled(disabled),
+          new ButtonBuilder()
+            .setCustomId("raid-check-edit:status:process")
+            .setLabel("Process (1 gate)")
+            .setEmoji("📝")
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(disabled),
+          new ButtonBuilder()
+            .setCustomId("raid-check-edit:status:reset")
+            .setLabel("Reset")
+            .setEmoji("🔄")
+            .setStyle(ButtonStyle.Danger)
+            .setDisabled(disabled),
+          new ButtonBuilder()
+            .setCustomId("raid-check-edit:cancel")
+            .setLabel(state.applied ? "Close" : "Cancel")
+            .setEmoji("✖️")
+            .setStyle(ButtonStyle.Secondary)
+        )
+      );
+    }
+
+    // Row 5: gate buttons (only when Process mode entered).
+    if (state.selectedRaid && state.awaitingGate) {
+      const gates = getGatesForRaid(state.selectedRaid) || [];
+      const gateRow = new ActionRowBuilder();
+      for (const gate of gates.slice(0, 5)) {
+        gateRow.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`raid-check-edit:gate:${gate}`)
+            .setLabel(gate)
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(disabled)
+        );
+      }
+      if (gateRow.components.length > 0) rows.push(gateRow);
+    }
+
+    return rows;
+  }
+
+  async function handleRaidCheckEditClick(interaction, raidMeta) {
+    const started = Date.now();
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const snapshot = await computeRaidCheckSnapshot(raidMeta);
+    const editableByUser = buildEditableCharsByUser(snapshot);
+
+    if (editableByUser.size === 0) {
+      await interaction.editReply({
+        content: `${UI.icons.info} Không có char nào available để edit (raid floor ${raidMeta.minItemLevel}+ và không có char thuộc user đã tắt auto-sync hoặc có log off).`,
+      });
+      return;
+    }
+
+    // Resolve display names for just the editable users (bounded by
+    // discordUserLimiter so a big pending list doesn't burst fetch).
+    const displayMap = new Map();
+    await Promise.all(
+      [...editableByUser.keys()].map((discordId) =>
+        discordUserLimiter.run(async () => {
+          try {
+            const display = await resolveDiscordDisplay(interaction.client, discordId);
+            displayMap.set(discordId, display?.displayName || discordId);
+          } catch {
+            displayMap.set(discordId, discordId);
+          }
+        })
+      )
+    );
+
+    const state = {
+      raidMeta,
+      editableByUser,
+      displayMap,
+      selectedUser: null,
+      selectedChar: null,
+      selectedRaid: null,
+      awaitingGate: false,
+      applied: false,
+      locked: false,
+      message: null,
+      warning: null,
+    };
+
+    await interaction.editReply({
+      embeds: [buildEditEmbed(state)],
+      components: buildEditComponents(state),
+    });
+    const followup = await interaction.fetchReply();
+    console.log(
+      `[raid-check edit] opened raid=${raidMeta.raidKey}:${raidMeta.modeKey} users=${editableByUser.size} openMs=${Date.now() - started}`
+    );
+
+    const collector = followup.createMessageComponentCollector({
+      time: RAID_CHECK_EDIT_SESSION_MS,
+    });
+
+    collector.on("collect", async (component) => {
+      if (component.user.id !== interaction.user.id) {
+        await component.reply({
+          content: `${UI.icons.lock} Chỉ người mở Edit session mới thao tác được.`,
+          flags: MessageFlags.Ephemeral,
+        }).catch(() => {});
+        return;
+      }
+      const parts = (component.customId || "").split(":");
+      // parts[0] = "raid-check-edit", parts[1] = action, parts[2] = value (if any)
+      const action = parts[1];
+
+      if (action === "user") {
+        state.selectedUser = component.values[0];
+        state.selectedChar = null;
+        state.selectedRaid = null;
+        state.awaitingGate = false;
+        state.warning = null;
+        await component.update({
+          embeds: [buildEditEmbed(state)],
+          components: buildEditComponents(state),
+        }).catch(() => {});
+        return;
+      }
+      if (action === "char") {
+        const group = state.editableByUser.get(state.selectedUser);
+        const [accountName, charName] = (component.values[0] || "").split("||");
+        const picked = (group?.chars || []).find(
+          (c) => c.accountName === accountName && c.charName === charName
+        );
+        state.selectedChar = picked || null;
+        state.selectedRaid = null;
+        state.awaitingGate = false;
+        state.warning = null;
+        await component.update({
+          embeds: [buildEditEmbed(state)],
+          components: buildEditComponents(state),
+        }).catch(() => {});
+        return;
+      }
+      if (action === "raid") {
+        state.selectedRaid = component.values[0];
+        state.awaitingGate = false;
+        state.warning = null;
+        await component.update({
+          embeds: [buildEditEmbed(state)],
+          components: buildEditComponents(state),
+        }).catch(() => {});
+        return;
+      }
+      if (action === "status") {
+        const statusType = parts[2];
+        if (statusType === "process") {
+          state.awaitingGate = true;
+          state.warning = "Chọn gate cần đánh dấu Process.";
+          await component.update({
+            embeds: [buildEditEmbed(state)],
+            components: buildEditComponents(state),
+          }).catch(() => {});
+          return;
+        }
+        // Complete / Reset: apply immediately.
+        await applyEditAndConfirm(component, state, statusType, null);
+        return;
+      }
+      if (action === "gate") {
+        const gate = parts[2];
+        await applyEditAndConfirm(component, state, "process", gate);
+        return;
+      }
+      if (action === "cancel") {
+        state.locked = true;
+        await component.update({
+          embeds: [EmbedBuilder.from(buildEditEmbed(state)).setFooter({ text: "Session đã đóng · mở lại bằng nút Edit trong /raid-check" })],
+          components: buildEditComponents(state).map((row) => {
+            for (const c of row.components) {
+              if (typeof c.setDisabled === "function") c.setDisabled(true);
+            }
+            return row;
+          }),
+        }).catch(() => {});
+        collector.stop("cancelled");
+        return;
+      }
+    });
+
+    collector.on("end", async (_collected, reason) => {
+      if (reason === "cancelled" || state.applied) return;
+      let refreshed = false;
+      try {
+        await interaction.editReply({
+          embeds: [
+            EmbedBuilder.from(buildEditEmbed(state)).setFooter({
+              text: "Session đã hết hạn · mở lại bằng nút Edit trong /raid-check",
+            }),
+          ],
+          components: buildEditComponents(state).map((row) => {
+            for (const c of row.components) {
+              if (typeof c.setDisabled === "function") c.setDisabled(true);
+            }
+            return row;
+          }),
+        });
+        refreshed = true;
+      } catch (err) {
+        // Ephemeral followup interaction token has already expired (> 15 min
+        // idle after deferReply). We can't edit that message any more, so
+        // fall through to the public tag so the leader at least understands
+        // why their last click did nothing.
+        console.warn(`[raid-check edit] session-end edit failed:`, err?.message || err);
+      }
+      if (!refreshed) {
+        await postEditSessionExpiredNotice(
+          interaction,
+          "Edit session `/raid-check` của cậu vừa hết hạn và Artist không update được UI ephemeral nữa. Gõ lại `/raid-check` rồi bấm ✏️ Edit để mở session mới nhé."
+        );
+      }
+    });
+  }
+
+  /**
+   * When the Edit flow's ephemeral follow-up can no longer be edited
+   * (interaction token past the 15-minute window, Discord outage, etc.)
+   * we lose the channel to talk back. Post a public-channel tag so the
+   * leader sees a concrete "here's why that click did nothing" instead
+   * of a silent UI. Best-effort + auto-delete so the channel doesn't
+   * accumulate stale notices.
+   */
+  async function postEditSessionExpiredNotice(interaction, note) {
+    const channel = interaction.channel;
+    if (!channel || typeof channel.send !== "function") return;
+    try {
+      const sent = await channel.send({
+        content: `<@${interaction.user.id}> ${note}`,
+        allowedMentions: { users: [interaction.user.id] },
+      });
+      setTimeout(() => {
+        sent.delete().catch(() => {});
+      }, 30_000);
+    } catch (err) {
+      console.warn(
+        `[raid-check edit] session-expired tag post failed:`,
+        err?.message || err
+      );
+    }
+  }
+
+  async function applyEditAndConfirm(component, state, statusType, gate) {
+    state.locked = true;
+    // Freeze components visually while the apply is in-flight.
+    await component.update({
+      embeds: [buildEditEmbed(state)],
+      components: buildEditComponents(state),
+    }).catch(() => {});
+
+    const raidKey = state.selectedRaid;
+    const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
+    const targetChar = state.selectedChar;
+    const effectiveGates = statusType === "process" && gate ? [gate] : [];
+
+    let result;
+    try {
+      result = await applyRaidSetForDiscordId({
+        discordId: state.selectedUser,
+        characterName: targetChar.charName,
+        rosterName: targetChar.accountName,
+        raidMeta,
+        statusType,
+        effectiveGates,
+      });
+    } catch (err) {
+      state.locked = false;
+      state.applied = false;
+      state.warning = `${UI.icons.warn} Apply failed: ${err?.message || String(err)}`;
+      await component.message.edit({
+        embeds: [buildEditEmbed(state)],
+        components: buildEditComponents(state),
+      }).catch(() => {});
+      console.warn(`[raid-check edit] apply failed:`, err?.message || err);
+      return;
+    }
+
+    state.applied = true;
+    const summaryParts = [];
+    const statusLabel =
+      statusType === "complete" ? "Complete" :
+      statusType === "reset" ? "Reset" :
+      `Process ${gate || "?"}`;
+    if (result?.noRoster) {
+      summaryParts.push(`${UI.icons.warn} User chưa có roster nào.`);
+    } else if (result?.matched === 0) {
+      summaryParts.push(`${UI.icons.warn} Không tìm thấy char "${targetChar.charName}" trong roster.`);
+    } else if (result?.ineligibleItemLevel) {
+      summaryParts.push(`${UI.icons.warn} Char iLvl ${result.ineligibleItemLevel} chưa đủ cho ${raidMeta.label} (${raidMeta.minItemLevel}+).`);
+    } else {
+      summaryParts.push(`${UI.icons.done} Đã apply **${statusLabel}** cho **${targetChar.charName}** · ${raidMeta.label}.`);
+      if (result?.modeResetCount > 0) {
+        summaryParts.push(`_Mode cũ đã bị wipe vì difficulty mới._`);
+      }
+      if (result?.alreadyComplete) {
+        summaryParts.push(`_Raid đã DONE sẵn - không cần update._`);
+      }
+    }
+    summaryParts.push("");
+    summaryParts.push(`_Gõ lại \`/raid-check raid:${raidMeta.raidKey}_${normalizeName(raidMeta.modeKey)}\` để xem pending list mới._`);
+    state.message = summaryParts.join("\n");
+
+    let uiRefreshed = false;
+    try {
+      await component.message.edit({
+        embeds: [buildEditEmbed(state)],
+        components: buildEditComponents(state),
+      });
+      uiRefreshed = true;
+    } catch (err) {
+      console.warn(
+        `[raid-check edit] post-apply UI refresh failed:`,
+        err?.message || err
+      );
+    }
+    console.log(
+      `[raid-check edit] applied user=${state.selectedUser} char=${targetChar.charName} raid=${raidKey} status=${statusType}${gate ? ` gate=${gate}` : ""}`
+    );
+    if (!uiRefreshed) {
+      // Apply succeeded but we can't update the ephemeral UI. Surface a
+      // public tag so the leader sees confirmation + knows to rerun.
+      await postEditSessionExpiredNotice(
+        component,
+        `Apply **${statusLabel}** cho **${targetChar.charName}** · ${raidMeta.label} đã xong rồi, nhưng Artist không refresh được UI ephemeral. Gõ lại \`/raid-check\` để xem pending list mới.`
+      );
+    }
+  }
+
   return {
     buildRaidCheckSnapshotFromUsers,
     formatRaidCheckNotEligibleFieldValue,
     getRaidCheckRenderableChars,
     computeRaidCheckSnapshot,
+    buildEditableCharsByUser,
+    getEligibleRaidsForChar,
     handleRaidCheckCommand,
     handleRaidCheckButton,
   };
