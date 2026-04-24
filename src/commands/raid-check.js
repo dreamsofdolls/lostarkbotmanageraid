@@ -1158,9 +1158,7 @@ function createRaidCheckCommand(deps) {
     } else if (!state.selectedUser) {
       nextStep = "Pick **user** cần chỉnh progress trước nhé (dropdown ngay bên dưới).";
     } else if (!state.selectedChar) {
-      nextStep = `Giờ chọn **character** trong roster của bạn đó. Icon tắt/mở theo progress của **${state.raidMeta.label}**: 🟢 DONE · 🟠 partial · 🟡 khác mode · ⚪ chưa clear.`;
-    } else if (!state.selectedRaid) {
-      nextStep = "Chọn **raid + difficulty** cậu muốn update.";
+      nextStep = `Giờ chọn **character** trong roster của bạn đó. Icon trong label theo progress của **${state.raidMeta.label}**: 🟢 DONE · 🟠 partial · 🟡 khác mode · ⚪ chưa clear.`;
     } else if (state.awaitingGate) {
       nextStep = "Pick **gate** (G1/G2) cho status Process - chỉ gate đó được đánh dấu done.";
     } else {
@@ -1173,16 +1171,17 @@ function createRaidCheckCommand(deps) {
     const charLabel = state.selectedChar
       ? `${state.selectedChar.charName} · ${Math.round(state.selectedChar.itemLevel)}${state.selectedChar.publicLogDisabled ? " · 🔒 log off" : ""}`
       : "_chưa chọn_";
-    const raidLabel = state.selectedRaid
-      ? RAID_REQUIREMENT_MAP[state.selectedRaid]?.label || state.selectedRaid
-      : "_chưa chọn_";
+    const raidLabel =
+      RAID_REQUIREMENT_MAP[state.selectedRaid]?.label ||
+      state.raidMeta?.label ||
+      state.selectedRaid;
 
     const description = [
-      "Artist dẫn cậu chỉnh progress giúp member nhé~ Chọn theo thứ tự **user → char → raid → status** thôi.",
+      `Artist dẫn cậu chỉnh progress giúp member nhé~ Edit này scope cho **${raidLabel}** thôi, cậu chỉ cần chọn **user → char → status**.`,
       "",
       `🧍 **User:** ${userLabel}`,
       `⚔️ **Character:** ${charLabel}`,
-      `🎯 **Raid:** ${raidLabel}`,
+      `🎯 **Raid:** ${raidLabel} _(lock theo /raid-check)_`,
     ];
 
     // Show live gate state once a raid is picked so the leader can see
@@ -1287,38 +1286,27 @@ function createRaidCheckCommand(deps) {
       }
     }
 
-    // Row 3: raid select (only when char picked).
-    if (state.selectedChar) {
-      const raidOptions = getEligibleRaidsForChar(state.selectedChar.itemLevel)
-        .slice(0, 25)
-        .map(({ raidKey, entry }) => ({
-          label: truncateText(`${entry.label} · ${entry.minItemLevel}+`, 100),
-          value: raidKey,
-          default: state.selectedRaid === raidKey,
-        }));
-      if (raidOptions.length > 0) {
-        rows.push(
-          new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder()
-              .setCustomId("raid-check-edit:raid")
-              .setPlaceholder("Chọn raid + difficulty...")
-              .setDisabled(disabled)
-              .addOptions(raidOptions)
-          )
-        );
-      }
-    }
+    // Edit is scoped to state.raidMeta.raidKey (set at init, preserved
+    // across user/char re-picks). A raid select row used to live here
+    // but the snapshot only contains chars eligible for the scanned
+    // raid anyway - free-picking another raid in the cascade just
+    // produced "char iLvl too low" errors when the other raid's floor
+    // was higher. If an "All raid" mode is ever added, the raid select
+    // should sit ABOVE the char select so char options can be filtered
+    // against the chosen raid instead of the other way around.
 
-    // Row 4: status buttons (only when raid picked). Disable Complete
+    // Row 3: status buttons (only when char picked). Disable Complete
     // when the raid is already done at the picked mode (would be a
     // no-op server-side) and disable Process when there are no open
     // gates left to mark. Reset is always enabled - it's useful even
     // on a complete raid (e.g. undoing an accidental mark).
-    if (state.selectedRaid) {
+    if (state.selectedChar) {
       const raidMeta = RAID_REQUIREMENT_MAP[state.selectedRaid];
-      const gateStatus = state.selectedChar
-        ? getCharRaidGateStatus(state.selectedChar, raidMeta?.raidKey, raidMeta?.modeKey)
-        : null;
+      const gateStatus = getCharRaidGateStatus(
+        state.selectedChar,
+        raidMeta?.raidKey,
+        raidMeta?.modeKey
+      );
       const allGatesDoneAtPickedMode = gateStatus?.overallStatus === "complete";
       const hasOpenGateAtPickedMode = gateStatus
         ? gateStatus.gates.some((g) => !g.doneAtPickedMode)
@@ -1353,16 +1341,18 @@ function createRaidCheckCommand(deps) {
       );
     }
 
-    // Row 5: gate buttons (only when Process mode entered). Gate buttons
+    // Row 4: gate buttons (only when Process mode entered). Gate buttons
     // reflect current state: 🟢 emoji + disabled for gates already done
     // at the picked mode (re-marking would be a no-op), 🟠 for gates
     // done at a different mode (clicking triggers the mode-wipe path),
     // ⚪ for clean pending.
-    if (state.selectedRaid && state.awaitingGate) {
+    if (state.selectedChar && state.awaitingGate) {
       const raidMeta = RAID_REQUIREMENT_MAP[state.selectedRaid];
-      const gateStatus = state.selectedChar
-        ? getCharRaidGateStatus(state.selectedChar, raidMeta?.raidKey, raidMeta?.modeKey)
-        : { gates: [] };
+      const gateStatus = getCharRaidGateStatus(
+        state.selectedChar,
+        raidMeta?.raidKey,
+        raidMeta?.modeKey
+      );
       const gateRow = new ActionRowBuilder();
       for (const g of gateStatus.gates.slice(0, 5)) {
         const btn = new ButtonBuilder()
@@ -1419,7 +1409,12 @@ function createRaidCheckCommand(deps) {
       displayMap,
       selectedUser: null,
       selectedChar: null,
-      selectedRaid: null,
+      // Edit is always scoped to the raid the leader pulled `/raid-check`
+      // against. Cross-raid edit was a free-pick dropdown before, but the
+      // snapshot itself is filtered by raidMeta (buildRaidCheckSnapshot)
+      // so the raid select was effectively dead weight. Lock it from
+      // init so status buttons surface as soon as a char is picked.
+      selectedRaid: raidMeta.raidKey,
       awaitingGate: false,
       applied: false,
       locked: false,
@@ -1455,7 +1450,8 @@ function createRaidCheckCommand(deps) {
       if (action === "user") {
         state.selectedUser = component.values[0];
         state.selectedChar = null;
-        state.selectedRaid = null;
+        // selectedRaid stays locked to raidMeta.raidKey (the raid the
+        // leader opened /raid-check against) through every re-pick.
         state.awaitingGate = false;
         state.warning = null;
         await component.update({
@@ -1471,17 +1467,6 @@ function createRaidCheckCommand(deps) {
           (c) => c.accountName === accountName && c.charName === charName
         );
         state.selectedChar = picked || null;
-        state.selectedRaid = null;
-        state.awaitingGate = false;
-        state.warning = null;
-        await component.update({
-          embeds: [buildEditEmbed(state)],
-          components: buildEditComponents(state),
-        }).catch(() => {});
-        return;
-      }
-      if (action === "raid") {
-        state.selectedRaid = component.values[0];
         state.awaitingGate = false;
         state.warning = null;
         await component.update({
