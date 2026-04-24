@@ -23,6 +23,9 @@ function createRaidCheckCommand(deps) {
     modeRank,
     buildRaidCheckUserQuery,
     buildAccountFreshnessLine,
+    buildAccountPageEmbed,
+    summarizeRaidProgress,
+    getStatusRaidsForCharacter,
     buildPaginationRow,
     pickProgressIcon,
     resolveDiscordDisplay,
@@ -262,6 +265,15 @@ function createRaidCheckCommand(deps) {
     }
 
     const raidKey = interaction.options.getString("raid", true);
+    // All-mode is a synthetic choice that does NOT map to a raidMeta
+    // entry. It pulls a cross-raid overview (per-account page with
+    // every eligible raid per char, mirrors /raid-status layout) so
+    // the leader can scan the whole guild without running one
+    // /raid-check per raid×mode.
+    if (raidKey === "all") {
+      await handleRaidCheckAllCommand(interaction);
+      return;
+    }
     const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
     if (!raidMeta) {
       await interaction.reply({
@@ -1769,6 +1781,231 @@ function createRaidCheckCommand(deps) {
         `Apply **${statusLabel}** cho **${targetChar.charName}** · ${raidMeta.label} đã xong rồi, nhưng Artist không refresh được UI ephemeral. Gõ lại \`/raid-check\` để xem pending list mới.`
       );
     }
+  }
+
+  // Cross-raid overview for /raid-check raid:all. Mirrors /raid-status's
+  // per-account page layout so the leader sees ONE account at a time
+  // (inline 2-col char fields, account progress rollup, freshness badge)
+  // but scoped across every user in the guild instead of just the
+  // caller's own roster. Pagination flips through all (user, account)
+  // pairs; each page carries a setAuthor avatar + display name so the
+  // leader can tell users apart without reading the roster label. Edit
+  // button is intentionally omitted in this commit - cross-raid Edit
+  // needs a raid dropdown cascade (Commit 2); leaders who want to edit
+  // should open /raid-check with a specific raid×mode for now.
+  async function handleRaidCheckAllCommand(interaction) {
+    if (!isRaidLeader(interaction)) {
+      await interaction.reply({
+        content: `${UI.icons.lock} Chỉ Raid Manager mới được dùng \`/raid-check\` (config qua env \`RAID_MANAGER_ID\`).`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const started = Date.now();
+
+    // Only users with at least one account matter for the overview.
+    // Select enough identity fields to resolve an avatar-less fallback
+    // display name (same cache-first preference the Edit flow uses).
+    const users = await User.find({ "accounts.0": { $exists: true } })
+      .select(
+        "discordId accounts autoManageEnabled lastAutoManageSyncAt lastAutoManageAttemptAt discordUsername discordGlobalName discordDisplayName"
+      )
+      .lean();
+
+    for (const userDoc of users) {
+      ensureFreshWeek(userDoc);
+    }
+
+    // Each page = one (user, account) pair. Empty accounts (0 chars)
+    // still render a blank page so the leader knows the slot exists
+    // rather than have it silently disappear - same contract /raid-status
+    // uses for its own caller's empty accounts.
+    const pagesData = [];
+    for (const userDoc of users) {
+      const accounts = Array.isArray(userDoc.accounts) ? userDoc.accounts : [];
+      for (let idx = 0; idx < accounts.length; idx += 1) {
+        pagesData.push({ userDoc, account: accounts[idx], accountIdx: idx });
+      }
+    }
+
+    if (pagesData.length === 0) {
+      await interaction.editReply({
+        content: `${UI.icons.info} Chưa có ai có roster nào cả. Bảo các member dùng \`/add-roster\` trước nhé~`,
+      });
+      return;
+    }
+
+    // Resolve Discord display name + avatar for each visible user once.
+    // Cache-first on discord.js users cache, limiter-gated miss path
+    // (same helper the existing /raid-check render already uses).
+    const visibleUserIds = [...new Set(pagesData.map((p) => p.userDoc.discordId))];
+    const authorMeta = new Map();
+    await Promise.all(
+      visibleUserIds.map(async (discordId) => {
+        const userDoc = users.find((u) => u.discordId === discordId);
+        const cachedDisplayName =
+          userDoc?.discordDisplayName ||
+          userDoc?.discordGlobalName ||
+          userDoc?.discordUsername ||
+          "";
+        let displayName = cachedDisplayName || discordId;
+        let avatarURL = null;
+        try {
+          let userObj = interaction.client.users.cache.get(discordId);
+          if (!userObj) {
+            userObj = await discordUserLimiter.run(() =>
+              interaction.client.users.fetch(discordId)
+            );
+          }
+          if (userObj) {
+            avatarURL = userObj.displayAvatarURL({ size: 64 });
+            if (!cachedDisplayName) {
+              displayName = userObj.username || displayName;
+            }
+          }
+        } catch {
+          // Fallback to cached name / snowflake; avatar stays null.
+        }
+        authorMeta.set(discordId, { displayName, avatarURL });
+      })
+    );
+
+    const totalPages = pagesData.length;
+
+    const buildPage = (pageIndex) => {
+      const { userDoc, account } = pagesData[pageIndex];
+      // Per-user raids cache. Lives inside buildPage so it rebuilds
+      // per render - cheap, and keeps stale computed entries from
+      // persisting if userDoc state changes in-session (it does not,
+      // but the defensive reset keeps this identical to /raid-status
+      // where raidsCache is per-command invocation).
+      const raidsCache = new Map();
+      const getRaidsFor = (character) => {
+        let result = raidsCache.get(character);
+        if (!result) {
+          result = getStatusRaidsForCharacter(character);
+          raidsCache.set(character, result);
+        }
+        return result;
+      };
+
+      const userAccounts = Array.isArray(userDoc.accounts) ? userDoc.accounts : [];
+      const userTotalChars = userAccounts.reduce(
+        (sum, a) => sum + (Array.isArray(a.characters) ? a.characters.length : 0),
+        0
+      );
+      const allRaidEntries = [];
+      for (const a of userAccounts) {
+        for (const ch of a.characters || []) {
+          allRaidEntries.push(...getRaidsFor(ch));
+        }
+      }
+      // globalTotals in buildAccountPageEmbed is "this user's all-
+      // accounts rollup" - that's what /raid-status uses for its
+      // single-user case too. For all-mode, the outer page X/Y is
+      // cross-user so this rollup stays user-scoped.
+      const globalTotals = {
+        characters: userTotalChars,
+        progress: summarizeRaidProgress(allRaidEntries),
+      };
+
+      const userMeta = {
+        discordId: userDoc.discordId,
+        autoManageEnabled: !!userDoc.autoManageEnabled,
+        lastAutoManageSyncAt: Number(userDoc.lastAutoManageSyncAt) || 0,
+        lastAutoManageAttemptAt: Number(userDoc.lastAutoManageAttemptAt) || 0,
+      };
+
+      // Pass totalPages=1 so buildAccountPageEmbed's title does NOT
+      // emit its own within-user " · Page X/Y" suffix. Account name
+      // already identifies which account this is; emitting two "Page"
+      // markers (one within-user in title, one cross-user in footer)
+      // reads as double-paginated and confuses the leader. Keep the
+      // cross-user counter solely in the footer below.
+      const accountPageIdx = 0;
+      const embed = buildAccountPageEmbed(
+        account,
+        accountPageIdx,
+        1,
+        globalTotals,
+        getRaidsFor,
+        userMeta
+      );
+
+      // Overlay a setAuthor with Discord avatar + display name so the
+      // leader can tell users apart at a glance. /raid-status never
+      // needed this because its context is always single-user; all-mode
+      // flips between different users per page.
+      const meta = authorMeta.get(userDoc.discordId);
+      if (meta) {
+        const authorPayload = { name: meta.displayName };
+        if (meta.avatarURL) authorPayload.iconURL = meta.avatarURL;
+        embed.setAuthor(authorPayload);
+      }
+
+      // Append cross-user page counter to the footer legend so the
+      // leader sees their overall position across all users+accounts.
+      // buildAccountPageEmbed always sets a legend footer (no page
+      // info inside it), so concatenating is safe.
+      const baseFooter = embed.data?.footer?.text || "";
+      if (totalPages > 1) {
+        embed.setFooter({ text: `${baseFooter} · Page ${pageIndex + 1}/${totalPages}` });
+      }
+
+      return embed;
+    };
+
+    let currentPage = 0;
+    const buildButtonRow = (page, disabled) => {
+      return buildPaginationRow(page, totalPages, disabled, {
+        prevId: "raid-check-all-page:prev",
+        nextId: "raid-check-all-page:next",
+      });
+    };
+
+    await interaction.editReply({
+      embeds: [buildPage(currentPage)],
+      components: [buildButtonRow(currentPage, false)],
+    });
+    const followup = await interaction.fetchReply();
+    console.log(
+      `[raid-check all] rendered pages=${totalPages} users=${visibleUserIds.length} openMs=${Date.now() - started}`
+    );
+
+    const collector = followup.createMessageComponentCollector({
+      time: RAID_CHECK_PAGINATION_SESSION_MS,
+    });
+
+    collector.on("collect", async (component) => {
+      if (component.user.id !== interaction.user.id) {
+        await component
+          .reply({
+            content: `${UI.icons.lock} Chỉ người mở /raid-check mới bấm được.`,
+            flags: MessageFlags.Ephemeral,
+          })
+          .catch(() => {});
+        return;
+      }
+      const parts = (component.customId || "").split(":");
+      if (parts[0] !== "raid-check-all-page") return;
+      if (parts[1] === "prev") currentPage = Math.max(0, currentPage - 1);
+      else if (parts[1] === "next") currentPage = Math.min(totalPages - 1, currentPage + 1);
+      else return;
+      await component
+        .update({
+          embeds: [buildPage(currentPage)],
+          components: [buildButtonRow(currentPage, false)],
+        })
+        .catch(() => {});
+    });
+
+    collector.on("end", async () => {
+      await followup
+        .edit({ components: [buildButtonRow(currentPage, true)] })
+        .catch(() => {});
+    });
   }
 
   return {

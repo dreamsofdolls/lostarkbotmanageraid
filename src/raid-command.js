@@ -159,6 +159,14 @@ if (RAID_MANAGER_ID.size === 0) {
   );
 }
 const RAID_CHOICES = getRaidRequirementChoices();
+// /raid-check-only extension: the synthetic "all" value pulls the
+// cross-raid overview page (per-account roster with every eligible
+// raid per char, mirrors /raid-status). NOT present in /raid-set's
+// autocomplete because there is no "all-raid" write semantics.
+const RAID_CHECK_CHOICES = [
+  { name: "All raids (overview)", value: "all" },
+  ...RAID_CHOICES,
+];
 const RAID_REQUIREMENT_MAP = getRaidRequirementMap();
 const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
 
@@ -515,7 +523,10 @@ function isRaidLeader(interaction) {
 }
 
 const commands = createRaidCommandDefinitions({
-  RAID_CHOICES,
+  // definitions.js wires these into /raid-check's `raid` option only,
+  // so it's safe to feed the all-augmented list here. /raid-set uses
+  // autocomplete (not static choices) and never sees this.
+  RAID_CHOICES: RAID_CHECK_CHOICES,
   announcementTypeKeys,
   announcementTypeEntry,
 });
@@ -1267,6 +1278,9 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   modeRank,
   buildRaidCheckUserQuery,
   buildAccountFreshnessLine,
+  buildAccountPageEmbed,
+  summarizeRaidProgress,
+  getStatusRaidsForCharacter,
   buildPaginationRow,
   pickProgressIcon,
   resolveDiscordDisplay,
