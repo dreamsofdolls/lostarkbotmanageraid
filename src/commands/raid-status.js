@@ -1,4 +1,4 @@
-const STATUS_PAGINATION_SESSION_MS = 2 * 60 * 1000;
+const STATUS_PAGINATION_SESSION_MS = 3 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
 
 function createRaidStatusCommand(deps) {
