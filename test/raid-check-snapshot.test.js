@@ -519,6 +519,36 @@ test("Edit flow: buildEditableCharsByUser drops users whose every char is bible-
   assert.equal(editable.size, 0);
 });
 
+test("Edit flow: buildEditableCharsByUser carries assignedRaids so gate-state UI reads real progress", () => {
+  // Regression: the Edit dropdown used to render a stripped char shape
+  // without assignedRaids, so a char that had already cleared Kazeros Hard
+  // still showed "⚪ G1 · ⚪ G2 chưa clear" in the Current line. The dropdown
+  // entry must now carry the normalized raid tree straight through so the
+  // Current preview + no-op button disable logic reflect reality.
+  const userMeta = new Map([["u", { autoManageEnabled: false }]]);
+  const allChars = [
+    {
+      discordId: "u",
+      accountName: "A",
+      charName: "Cyracha",
+      itemLevel: 1732,
+      publicLogDisabled: false,
+      assignedRaids: {
+        kazeros: {
+          G1: { difficulty: "Hard", completedDate: 111 },
+          G2: { difficulty: "Hard", completedDate: 222 },
+        },
+      },
+    },
+  ];
+  const editable = __test.buildEditableCharsByUser({ allChars, userMeta });
+  const char = editable.get("u").chars[0];
+  assert.equal(char.assignedRaids.kazeros.G1.completedDate, 111);
+  const status = __test.getCharRaidGateStatus(char, "kazeros", "hard");
+  assert.equal(status.overallStatus, "complete");
+  assert.ok(status.gates.every((g) => g.doneAtPickedMode));
+});
+
 test("Edit flow: buildEditableCharsByUser sorts chars by iLvl descending", () => {
   const userMeta = new Map([["u", { autoManageEnabled: false }]]);
   const allChars = [
