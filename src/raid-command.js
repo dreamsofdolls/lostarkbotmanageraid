@@ -105,6 +105,9 @@ const RAID_CHECK_USER_QUERY_FIELDS = [
   "accounts.characters.raids",
   "accounts.characters.assignedRaids",
   "accounts.characters.publicLogDisabled",
+  "discordUsername",
+  "discordGlobalName",
+  "discordDisplayName",
 ].join(" ");
 
 /**

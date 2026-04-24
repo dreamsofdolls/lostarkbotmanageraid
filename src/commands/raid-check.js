@@ -68,6 +68,14 @@ function createRaidCheckCommand(deps) {
           autoManageEnabled: !!userDoc.autoManageEnabled,
           lastAutoManageSyncAt: Number(userDoc.lastAutoManageSyncAt) || 0,
           lastAutoManageAttemptAt: Number(userDoc.lastAutoManageAttemptAt) || 0,
+          // Cached Discord identity strings from the User doc. The Edit
+          // flow prefers these (populated the last time the user ran a
+          // slash command) over a live client.users.fetch round-trip
+          // because discord.js's cached user often only has the raw
+          // username handle, not the guild-displayed nickname.
+          discordUsername: userDoc.discordUsername || "",
+          discordGlobalName: userDoc.discordGlobalName || "",
+          discordDisplayName: userDoc.discordDisplayName || "",
         });
       }
 
@@ -940,27 +948,53 @@ function createRaidCheckCommand(deps) {
   }
 
   function buildEditEmbed(state) {
-    const lines = [];
-    const userLine = state.selectedUser
-      ? `**User:** ${state.displayMap.get(state.selectedUser) || state.selectedUser}`
-      : "**User:** _chưa chọn_";
-    const charLine = state.selectedChar
-      ? `**Character:** ${state.selectedChar.charName} · ${Math.round(state.selectedChar.itemLevel)}${state.selectedChar.publicLogDisabled ? " (log off)" : ""}`
-      : "**Character:** _chưa chọn_";
-    const raidLine = state.selectedRaid
-      ? `**Raid:** ${RAID_REQUIREMENT_MAP[state.selectedRaid]?.label || state.selectedRaid}`
-      : "**Raid:** _chưa chọn_";
-    lines.push(userLine, charLine, raidLine);
+    // Pick the next step hint so the leader always knows which dropdown
+    // to look at. The dropdown itself also updates live but a dense UI
+    // with 3 selects stacked needs a verbal anchor in the embed too.
+    let nextStep = null;
+    if (state.applied) {
+      nextStep = "Xong~ Bấm ✖️ Close để đóng, hoặc gõ lại `/raid-check` xem pending list mới.";
+    } else if (!state.selectedUser) {
+      nextStep = "Pick **user** cần chỉnh progress trước nhé (dropdown ngay bên dưới).";
+    } else if (!state.selectedChar) {
+      nextStep = "Giờ chọn **character** trong roster của bạn đó.";
+    } else if (!state.selectedRaid) {
+      nextStep = "Chọn **raid + difficulty** cậu muốn update.";
+    } else if (state.awaitingGate) {
+      nextStep = "Pick **gate** (G1/G2) cho status Process - chỉ gate đó được đánh dấu done.";
+    } else {
+      nextStep = "Cuối cùng bấm **✅ Complete** (full raid), **📝 Process** (1 gate), hay **🔄 Reset** (xoá sạch).";
+    }
+
+    const userLabel = state.selectedUser
+      ? state.displayMap.get(state.selectedUser) || state.selectedUser
+      : "_chưa chọn_";
+    const charLabel = state.selectedChar
+      ? `${state.selectedChar.charName} · ${Math.round(state.selectedChar.itemLevel)}${state.selectedChar.publicLogDisabled ? " · 🔒 log off" : ""}`
+      : "_chưa chọn_";
+    const raidLabel = state.selectedRaid
+      ? RAID_REQUIREMENT_MAP[state.selectedRaid]?.label || state.selectedRaid
+      : "_chưa chọn_";
+
+    const description = [
+      "Artist dẫn cậu chỉnh progress giúp member nhé~ Chọn theo thứ tự **user → char → raid → status** thôi.",
+      "",
+      `🧍 **User:** ${userLabel}`,
+      `⚔️ **Character:** ${charLabel}`,
+      `🎯 **Raid:** ${raidLabel}`,
+      "",
+      `👉 ${nextStep}`,
+    ];
 
     if (state.selectedChar?.autoManageEnabled && state.selectedChar?.publicLogDisabled) {
-      lines.push("");
-      lines.push(`${UI.icons.warn} _Char này thuộc user đã bật auto-sync nhưng public log đang tắt - edit tay sẽ không bị bible ghi đè._`);
+      description.push("");
+      description.push(`${UI.icons.warn} _Char này thuộc user đã bật auto-sync nhưng public log tắt - edit tay sẽ không bị bible ghi đè nhé._`);
     }
 
     const embed = new EmbedBuilder()
-      .setTitle("✏️ Edit raid progress")
+      .setTitle("✏️ Chỉnh progress giúp member")
       .setColor(state.applied ? UI.colors.success : UI.colors.neutral)
-      .setDescription(lines.join("\n"));
+      .setDescription(description.join("\n"));
 
     if (state.applied && state.message) {
       embed.addFields({ name: "Kết quả", value: state.message });
@@ -969,7 +1003,7 @@ function createRaidCheckCommand(deps) {
       embed.addFields({ name: "Lưu ý", value: state.warning });
     }
 
-    embed.setFooter({ text: `Session ${RAID_CHECK_EDIT_SESSION_MS / 60_000} phút · chỉ người chạy /raid-check thao tác` });
+    embed.setFooter({ text: `Session ${RAID_CHECK_EDIT_SESSION_MS / 60_000} phút · chỉ cậu thao tác được` });
     return embed;
   }
 
@@ -1109,15 +1143,33 @@ function createRaidCheckCommand(deps) {
       return;
     }
 
-    // Resolve display names for just the editable users (bounded by
-    // discordUserLimiter so a big pending list doesn't burst fetch).
+    // Resolve display names for just the editable users. Prefer the
+    // cached identity strings on the User doc (stamped every slash-command
+    // invocation) - those reflect the guild-displayed nickname / global
+    // name rather than the raw username handle discord.js's cache
+    // typically holds. Fall back to a live fetch via resolveDiscordDisplay
+    // for users whose doc fields are empty (never ran a slash command on
+    // the current schema), and finally to the raw snowflake.
     const displayMap = new Map();
     await Promise.all(
       [...editableByUser.keys()].map((discordId) =>
         discordUserLimiter.run(async () => {
+          const meta = snapshot.userMeta.get(discordId) || {};
+          const cachedDisplay =
+            meta.discordDisplayName ||
+            meta.discordGlobalName ||
+            meta.discordUsername ||
+            "";
+          if (cachedDisplay) {
+            displayMap.set(discordId, cachedDisplay);
+            return;
+          }
           try {
-            const display = await resolveDiscordDisplay(interaction.client, discordId);
-            displayMap.set(discordId, display?.displayName || discordId);
+            const live = await resolveDiscordDisplay(interaction.client, discordId);
+            // resolveDiscordDisplay returns a STRING (username) or the
+            // snowflake fallback - no `.displayName` property. Store it
+            // directly.
+            displayMap.set(discordId, live || discordId);
           } catch {
             displayMap.set(discordId, discordId);
           }
