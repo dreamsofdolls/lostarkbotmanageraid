@@ -912,6 +912,13 @@ function createRaidCheckCommand(deps) {
         itemLevel: char.itemLevel,
         publicLogDisabled: !!char.publicLogDisabled,
         autoManageEnabled: autoSyncOn,
+        // Carry the normalized assignedRaids tree from the snapshot so
+        // getCharRaidGateStatus + applyLocalRaidEditToChar can read + mutate
+        // per-gate state without a second DB read. Without this the Edit
+        // dropdown entry was a stripped shape, every gate rendered as "⚪
+        // chưa clear" even for raids the char had already completed, and
+        // the post-apply local mirror had nothing to mutate.
+        assignedRaids: char.assignedRaids || {},
       });
     }
     // Sort chars inside each user by iLvl desc so highest-geared surfaces first.
