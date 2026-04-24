@@ -176,6 +176,49 @@ test("raid-check not-eligible note explains out-grown chars clearly", () => {
   assert.match(fieldValue, /out-grown/);
 });
 
+test("buildRaidCheckSnapshotFromUsers annotates hierarchy clears with the stored mode label", () => {
+  // Regression for the 2026-04-24 follow-up: a Hard-cleared char
+  // showing in a Normal-mode scan renders identically to a same-mode
+  // Normal clear ("🟢 2/2"), leaving the leader unable to tell
+  // which mode was actually done. doneModeAnnotation captures the
+  // set of higher-than-scan stored modes for done gates.
+  const snapshot = __test.buildRaidCheckSnapshotFromUsers(
+    [
+      {
+        discordId: "user-1",
+        weeklyResetKey: getTargetResetKey(new Date()),
+        accounts: [
+          {
+            accountName: "Main",
+            characters: [
+              makeCharacter("HardClearedInNormalScan", 1740, {
+                G1: { difficulty: "Hard", completedDate: 1 },
+                G2: { difficulty: "Hard", completedDate: 2 },
+              }),
+              makeCharacter("NormalClearInNormalScan", 1720, {
+                G1: { difficulty: "Normal", completedDate: 1 },
+                G2: { difficulty: "Normal", completedDate: 2 },
+              }),
+            ],
+          },
+        ],
+      },
+    ],
+    { raidKey: "kazeros", modeKey: "normal", minItemLevel: 1710 }
+  );
+
+  const hardChar = snapshot.allEligible.find(
+    (c) => c.charName === "HardClearedInNormalScan"
+  );
+  const normalChar = snapshot.allEligible.find(
+    (c) => c.charName === "NormalClearInNormalScan"
+  );
+  assert.ok(hardChar, "hierarchy Hard-cleared char should stay eligible for Normal scan");
+  assert.equal(hardChar.doneModeAnnotation, "Hard");
+  assert.ok(normalChar, "same-mode Normal clear should stay eligible");
+  assert.equal(normalChar.doneModeAnnotation, null);
+});
+
 test("buildRaidCheckSnapshotFromUsers filters out-grown chars even when they already cleared the lower mode", () => {
   // Regression for the 2026-04-24 Traine report: a 1732 char who
   // cleared Serca Normal earlier in the week (at a lower iLvl) was

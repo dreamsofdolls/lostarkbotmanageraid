@@ -197,10 +197,32 @@ function createRaidCheckCommand(deps) {
             continue;
           }
 
+          // Annotation for done gates that were cleared at a HIGHER
+          // mode than scan. Leader scanning Serca Normal wants to know
+          // that Cyravelle's 2/2 green came from a Hard clear (via
+          // mode hierarchy), not a Normal clear - current render of
+          // "🟢 2/2" alone is ambiguous. Collect distinct higher
+          // modes used across the done gates; render as "(Hard)" or
+          // "(Hard/Nightmare)" suffix in buildCharField. Empty set =
+          // all done gates at scan mode = no annotation needed.
+          const hierarchyModes = new Set();
+          for (let gi = 0; gi < officialGates.length; gi += 1) {
+            if (gateStatus[gi] !== "done") continue;
+            const entry = assigned[officialGates[gi]];
+            if (!entry) continue;
+            const storedRank = modeRank(entry.difficulty);
+            if (storedRank > scanRank && entry.difficulty) {
+              hierarchyModes.add(toModeLabel(entry.difficulty));
+            }
+          }
+          const doneModeAnnotation =
+            hierarchyModes.size > 0 ? [...hierarchyModes].join("/") : null;
+
           allEligible.push({
             ...baseEntry,
             gateStatus,
             overallStatus,
+            doneModeAnnotation,
           });
         }
       }
@@ -495,9 +517,16 @@ function createRaidCheckCommand(deps) {
       const doneCount = character.gateStatus.filter((status) => status === "done").length;
       const total = character.gateStatus.length;
       const icon = pickProgressIcon(doneCount, total);
+      // If any done gate was cleared at a higher mode than the scan
+      // (mode hierarchy), annotate with that mode so leader sees the
+      // char satisfied this view via Hard/Nightmare, not the scan
+      // mode. Same-mode clears render without suffix (the default).
+      const hierarchySuffix = character.doneModeAnnotation
+        ? ` _(${character.doneModeAnnotation})_`
+        : "";
       return {
         name,
-        value: truncateText(`${icon} ${doneCount}/${total}`, 1024),
+        value: truncateText(`${icon} ${doneCount}/${total}${hierarchySuffix}`, 1024),
         inline: true,
       };
     };
