@@ -135,25 +135,66 @@ function createRaidCheckCommand(deps) {
           else if (doneCount > 0) overallStatus = "partial";
           else overallStatus = "none";
 
-          if (overallStatus === "none") {
-            if (characterItemLevel < selfMin) {
-              notEligibleChars.push({
-                ...baseEntry,
-                gateStatus: [],
-                overallStatus: "not-eligible",
-                notEligibleReason: "low",
-              });
-              continue;
+          // High-side filter distinguishes two out-of-range cases:
+          //
+          //   (a) OUT-GROWN: char cleared THIS mode at a lower iLvl
+          //       earlier in the week, then grew past nextMin. E.g.
+          //       Cyracha cleared Serca Normal at 1725, is now 1732.
+          //       Their natural tier is Hard now. Filter out -
+          //       leader's mental model "/raid-check raid:serca_normal
+          //       = chars in [1710, 1730)" should hold.
+          //
+          //   (b) HIERARCHY: char cleared a HIGHER mode (storedRank
+          //       > scanRank). E.g. 1740 char cleared Kazeros Hard,
+          //       which via mode hierarchy also counts as Kazeros
+          //       Normal clear. Keep visible - leader running
+          //       /raid-check kazeros_normal wants to see "who has
+          //       cleared Normal-or-higher this week". Hiding the
+          //       1740 Hard-cleared char would misrepresent the
+          //       Normal cohort's done count.
+          //
+          // Distinguish by scanning the char's done gates for a
+          // stored mode HIGHER than scanRank. If any found, it's a
+          // hierarchy case. Otherwise it's out-grown (or plain
+          // "none"). Previous behavior only applied this filter for
+          // "none" status, which leaked case (a) into the view.
+          // Traine report 2026-04-24.
+          let doneViaHierarchy = false;
+          if (characterItemLevel >= nextMin) {
+            for (const gate of officialGates) {
+              const entry = assigned[gate];
+              if (!entry || !(Number(entry.completedDate) > 0)) continue;
+              const storedRank = modeRank(entry.difficulty);
+              if (storedRank > scanRank) {
+                doneViaHierarchy = true;
+                break;
+              }
             }
-            if (characterItemLevel >= nextMin) {
-              notEligibleChars.push({
-                ...baseEntry,
-                gateStatus: [],
-                overallStatus: "not-eligible",
-                notEligibleReason: "high",
-              });
-              continue;
-            }
+          }
+          if (characterItemLevel >= nextMin && !doneViaHierarchy) {
+            notEligibleChars.push({
+              ...baseEntry,
+              gateStatus: [],
+              overallStatus: "not-eligible",
+              notEligibleReason: "high",
+            });
+            continue;
+          }
+
+          // Low-side filter: only for chars that haven't cleared yet.
+          // A char who cleared Act 4 Normal at 1705 and is still 1705
+          // when the floor was lifted to 1710 (edge case) keeps their
+          // done visibility so the rollup stays accurate for the
+          // mode they actually completed. Applying low-side filter
+          // unconditionally would invalidate legitimate prior clears.
+          if (overallStatus === "none" && characterItemLevel < selfMin) {
+            notEligibleChars.push({
+              ...baseEntry,
+              gateStatus: [],
+              overallStatus: "not-eligible",
+              notEligibleReason: "low",
+            });
+            continue;
           }
 
           allEligible.push({
