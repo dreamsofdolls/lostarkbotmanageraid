@@ -968,7 +968,7 @@ function createRaidCheckCommand(deps) {
   // never sync those, manager is the only path that can move progress).
   // Non-auto-sync users: every char is editable.
 
-  const RAID_CHECK_EDIT_SESSION_MS = 5 * 60 * 1000;
+  const RAID_CHECK_EDIT_SESSION_MS = 3 * 60 * 1000;
 
   // Shared display-name resolver for every view inside /raid-check (main
   // render + Edit cascade). Prefers the cached identity strings on the User
