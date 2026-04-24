@@ -484,12 +484,12 @@ function createRaidSetCommand(deps) {
       const scope = effectiveGate ? `${raidMeta.label} · ${effectiveGate}` : raidMeta.label;
       const alreadyResetEmbed = new EmbedBuilder()
         .setColor(UI.colors.muted)
-        .setTitle(`${UI.icons.info} Đã reset sẵn rồi`)
-        .setDescription(`**${characterName}** ở **${scope}** vốn đã không có gate nào cleared, không có gì để xoá. Muốn mark done thì đổi \`status\` sang \`complete\` hoặc \`process\` rồi chạy lại nhé.`)
+        .setTitle(`${UI.icons.info} Raid này vốn đã sạch rồi`)
+        .setDescription(`**${characterName}** ở **${scope}** chưa có gate nào được đánh dấu xong cả, Artist chẳng có gì để xoá cho cậu đâu~ Nếu cậu muốn đánh dấu gate xong xuôi thì đổi \`status\` sang \`complete\` hoặc \`process\` rồi chạy lại giúp tớ nha.`)
         .addFields(
           { name: "Character", value: `**${characterName}**`, inline: true },
           { name: "Raid", value: `**${raidMeta.label}**`, inline: true },
-          { name: "Gate", value: effectiveGate || "All gates", inline: true },
+          { name: "Gate", value: effectiveGate || "Toàn bộ gate", inline: true },
         )
         .setTimestamp();
       await interaction.reply({ embeds: [alreadyResetEmbed], flags: MessageFlags.Ephemeral });
