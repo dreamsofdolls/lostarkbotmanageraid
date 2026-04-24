@@ -55,7 +55,7 @@ function createRaidCheckCommand(deps) {
     const selectedDifficulty = toModeLabel(raidMeta.modeKey);
     const selectedDiffNorm = normalizeName(selectedDifficulty);
     const scanRank = modeRank(selectedDiffNorm);
-    const { lowestMin, selfMin } = getRaidScanRange(
+    const { lowestMin, selfMin, nextMin } = getRaidScanRange(
       raidMeta.raidKey,
       Number(raidMeta.minItemLevel) || 0
     );
@@ -125,6 +125,15 @@ function createRaidCheckCommand(deps) {
               });
               continue;
             }
+            if (characterItemLevel >= nextMin) {
+              notEligibleChars.push({
+                ...baseEntry,
+                gateStatus: [],
+                overallStatus: "not-eligible",
+                notEligibleReason: "high",
+              });
+              continue;
+            }
           }
 
           allEligible.push({
@@ -159,6 +168,9 @@ function createRaidCheckCommand(deps) {
   function formatRaidCheckNotEligibleFieldValue(character) {
     if (character?.notEligibleReason === "low") {
       return `${UI.icons.lock} _Not eligible yet (iLvl below min)_`;
+    }
+    if (character?.notEligibleReason === "high") {
+      return `${UI.icons.lock} _Not eligible yet (out-grown this mode)_`;
     }
     return `${UI.icons.lock} _Not eligible yet_`;
   }
@@ -856,15 +868,16 @@ function createRaidCheckCommand(deps) {
 
   /**
    * Partition the snapshot chars into a Map keyed by discordId with the
-   * editable subset under each. Chars not visible in `/raid-check` at the
-   * moment (iLvl below the raid floor → not in snapshot.allChars) stay
-   * invisible to Edit too; we don't scan the full User collection just for
-   * the cascading select, leader can use `/raid-set` directly for those
-   * fringe cases.
+   * editable subset under each. Edit follows the same eligibility surface as
+   * the rendered `/raid-check` list; `allChars` may include not-eligible audit
+   * entries, but those should not leak into the cascading select.
    */
   function buildEditableCharsByUser(snapshot) {
     const byUser = new Map();
-    for (const char of snapshot.allChars || []) {
+    const sourceChars = Array.isArray(snapshot.allEligible)
+      ? snapshot.allEligible
+      : (snapshot.allChars || []);
+    for (const char of sourceChars) {
       const meta = snapshot.userMeta.get(char.discordId) || {};
       const autoSyncOn = !!meta.autoManageEnabled;
       // Auto-sync ON + log ON → bible owns, skip.
