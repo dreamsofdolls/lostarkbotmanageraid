@@ -29,6 +29,7 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ### Fixed
 
+- `/raid-check raid:all` → Edit progress opened a dead UI: an `opened raid=` console.log dereferenced `raidMeta.raidKey` / `raidMeta.modeKey` unguarded, but scopeAll enters with `raidMeta=null`. The TypeError fired after `editReply` but before `createMessageComponentCollector`, so the raid dropdown rendered with no handler to catch clicks. Log now branches to an "all" sentinel when scopeAll, else formats the specific raid label. Caught by Codex review of commit `e15b275`.
 - `/raid-check` Edit Complete / Process / Reset silently no-op'd under the raid-lock flow: `selectedRaid` was initialized to `raidMeta.raidKey` (just the raid portion, e.g. `serca`) while `RAID_REQUIREMENT_MAP` is keyed by the combined `${raidKey}_${modeKey}` form (e.g. `serca_hard`). Every downstream lookup returned `undefined`, the apply call fell through without writing. Edit click now passes the combined key through from the button handler into state.
 - `raid-channel-monitor` threw `ReferenceError: normalizeName is not defined` on every `MessageCreate`; bot.js's silent try/catch masked it. Now injected as a dep.
 - Edit-flow user dropdown rendered raw Discord snowflake IDs: `resolveDiscordDisplay` returns a string, not `{ displayName }`. Falls back through cached User-doc identity strings first.
