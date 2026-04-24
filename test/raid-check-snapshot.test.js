@@ -780,6 +780,31 @@ test("Edit flow: DM embed calls out mode-switch wipe when it happened", () => {
   assert.match(embed.description, /wipe/);
 });
 
+test("Edit flow: applyLocalRaidEditToChar noop Reset leaves untouched gates unchanged", () => {
+  // This mirrors the server-side alreadyReset guard in raid-set.js:
+  // applyRaidSetForDiscordId now returns updated=false + alreadyReset=true
+  // for a Reset on an already-empty raid, so the Edit flow never calls
+  // applyLocalRaidEditToChar at all (the mirror is gated on result.updated).
+  // But if the mirror WERE called on an empty raid, it should still produce
+  // a sane shape with every gate carrying the picked difficulty and a
+  // null/undefined completedDate - never accidentally stamp a timestamp.
+  const character = { assignedRaids: {} };
+  __test.applyLocalRaidEditToChar(
+    character,
+    { raidKey: "kazeros", modeKey: "hard" },
+    "reset",
+    [],
+    555
+  );
+  const kaz = character.assignedRaids.kazeros;
+  assert.ok(kaz);
+  for (const gate of Object.keys(kaz)) {
+    const entry = kaz[gate];
+    assert.equal(entry.difficulty, "Hard");
+    assert.ok(!(Number(entry.completedDate) > 0));
+  }
+});
+
 test("Edit flow: local char state mirrors mode-switch wipe before marking", () => {
   const character = {
     assignedRaids: {

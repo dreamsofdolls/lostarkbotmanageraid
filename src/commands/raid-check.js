@@ -1681,13 +1681,14 @@ function createRaidCheckCommand(deps) {
       summaryParts.push(`${UI.icons.warn} Không tìm thấy char "${targetChar.charName}" trong roster.`);
     } else if (result?.ineligibleItemLevel) {
       summaryParts.push(`${UI.icons.warn} Char iLvl ${result.ineligibleItemLevel} chưa đủ cho ${raidMeta.label} (${raidMeta.minItemLevel}+).`);
+    } else if (result?.alreadyComplete) {
+      summaryParts.push(`${UI.icons.info} _Raid đã DONE sẵn cho **${targetChar.charName}** · ${raidMeta.label}, không có gì để update._`);
+    } else if (result?.alreadyReset) {
+      summaryParts.push(`${UI.icons.info} _Raid đã ở trạng thái reset sẵn cho **${targetChar.charName}** · ${raidMeta.label}, không có gì để xoá._`);
     } else {
       summaryParts.push(`${UI.icons.done} Đã apply **${statusLabel}** cho **${targetChar.charName}** · ${raidMeta.label}.`);
       if (result?.modeResetCount > 0) {
         summaryParts.push(`_Mode cũ đã bị wipe vì difficulty mới._`);
-      }
-      if (result?.alreadyComplete) {
-        summaryParts.push(`_Raid đã DONE sẵn, không cần update._`);
       }
     }
     if (dmOutcome === "sent") {
