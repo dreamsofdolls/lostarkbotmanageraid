@@ -742,7 +742,12 @@ function createRaidCheckCommand(deps) {
     if (action === "sync") {
       await handleRaidCheckSyncClick(interaction, raidMeta);
     } else if (action === "edit") {
-      await handleRaidCheckEditClick(interaction, raidMeta);
+      // Pass the combined `raid_mode` key (the RAID_REQUIREMENT_MAP key)
+      // alongside raidMeta so the Edit flow can lock selectedRaid to the
+      // same key the map uses. raidMeta.raidKey alone is just the raid
+      // portion ("serca") and would break every RAID_REQUIREMENT_MAP
+      // lookup downstream.
+      await handleRaidCheckEditClick(interaction, raidMeta, raidKey);
     } else {
       await interaction.reply({
         content: `${UI.icons.warn} Button action không hỗ trợ: \`${action}\`.`,
@@ -1374,7 +1379,7 @@ function createRaidCheckCommand(deps) {
     return rows;
   }
 
-  async function handleRaidCheckEditClick(interaction, raidMeta) {
+  async function handleRaidCheckEditClick(interaction, raidMeta, raidKey) {
     const started = Date.now();
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const snapshot = await computeRaidCheckSnapshot(raidMeta);
@@ -1414,7 +1419,14 @@ function createRaidCheckCommand(deps) {
       // snapshot itself is filtered by raidMeta (buildRaidCheckSnapshot)
       // so the raid select was effectively dead weight. Lock it from
       // init so status buttons surface as soon as a char is picked.
-      selectedRaid: raidMeta.raidKey,
+      //
+      // IMPORTANT: this is the combined map key ("serca_hard") passed
+      // from handleRaidCheckButton, NOT raidMeta.raidKey (just "serca").
+      // RAID_REQUIREMENT_MAP is keyed by the combined form; misusing the
+      // object field would make every downstream RAID_REQUIREMENT_MAP
+      // lookup (embed render, status-button guard, applyEditAndConfirm)
+      // return undefined and silently no-op the apply.
+      selectedRaid: raidKey,
       awaitingGate: false,
       applied: false,
       locked: false,
