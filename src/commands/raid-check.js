@@ -91,6 +91,7 @@ function createRaidCheckCommand(deps) {
           const characterItemLevel = Number(character.itemLevel) || 0;
           if (characterItemLevel < lowestMin) continue;
 
+          const assignedRaids = ensureAssignedRaids(character);
           const baseEntry = {
             discordId: userDoc.discordId,
             accountName: account.accountName || "(no name)",
@@ -110,10 +111,9 @@ function createRaidCheckCommand(deps) {
             // already-done raid would silently no-op server-side after a
             // confusing click. Keeping the whole tree is cheap - each
             // character has at most 3 raids × 2-3 gates.
-            assignedRaids: character.assignedRaids || {},
+            assignedRaids,
           };
 
-          const assignedRaids = ensureAssignedRaids(character);
           const assigned = assignedRaids[raidMeta.raidKey] || {};
           const storedGateKeys = getGateKeys(assigned);
           const officialGates =
@@ -1005,6 +1005,44 @@ function createRaidCheckCommand(deps) {
     return `${parts.join(" · ")}  _(${rollup})_`;
   }
 
+  function applyLocalRaidEditToChar(character, raidMeta, statusType, effectiveGates, now = Date.now()) {
+    if (!character || !raidMeta) return;
+    const selectedDifficulty = toModeLabel(raidMeta.modeKey);
+    const normalizedSelectedDiff = normalizeName(selectedDifficulty);
+    const officialGates = getGatesForRaid(raidMeta.raidKey) || [];
+    const gateList = Array.isArray(effectiveGates) ? effectiveGates.filter(Boolean) : [];
+    if (!character.assignedRaids) character.assignedRaids = {};
+
+    const raidData = character.assignedRaids[raidMeta.raidKey] || {};
+    let modeChangeDetected = false;
+    for (const gate of officialGates) {
+      const existingDiff = raidData[gate]?.difficulty;
+      if (existingDiff && normalizeName(existingDiff) !== normalizedSelectedDiff) {
+        modeChangeDetected = true;
+        break;
+      }
+    }
+    if (modeChangeDetected) {
+      for (const gate of officialGates) {
+        raidData[gate] = { difficulty: selectedDifficulty, completedDate: undefined };
+      }
+    }
+
+    const storedGateKeys = getGateKeys(raidData);
+    const targetGates =
+      gateList.length > 0 ? gateList :
+      storedGateKeys.length > 0 ? storedGateKeys :
+      officialGates;
+    const shouldMarkDone = statusType === "complete" || statusType === "process";
+    for (const gate of targetGates) {
+      raidData[gate] = {
+        difficulty: selectedDifficulty,
+        completedDate: shouldMarkDone ? now : null,
+      };
+    }
+    character.assignedRaids[raidMeta.raidKey] = raidData;
+  }
+
   function formatCharEditLabel(char) {
     const suffix = char.autoManageEnabled && char.publicLogDisabled
       ? " · log off (manager only)"
@@ -1513,6 +1551,9 @@ function createRaidCheckCommand(deps) {
       return;
     }
 
+    if (result?.updated) {
+      applyLocalRaidEditToChar(targetChar, raidMeta, statusType, effectiveGates);
+    }
     state.applied = true;
     const summaryParts = [];
     const statusLabel =
@@ -1572,6 +1613,7 @@ function createRaidCheckCommand(deps) {
     buildEditableCharsByUser,
     getEligibleRaidsForChar,
     getCharRaidGateStatus,
+    applyLocalRaidEditToChar,
     handleRaidCheckCommand,
     handleRaidCheckButton,
   };

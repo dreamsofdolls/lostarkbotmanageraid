@@ -609,6 +609,98 @@ test("Edit flow: getCharRaidGateStatus handles untouched raid as none with no co
   assert.ok(status.gates.every((g) => !g.doneAtPickedMode && !g.doneAtSomeMode));
 });
 
+test("Edit flow: snapshot carries normalized assignedRaids for gate-state UI", () => {
+  const snapshot = __test.buildRaidCheckSnapshotFromUsers(
+    [
+      {
+        discordId: "user-1",
+        weeklyResetKey: getTargetResetKey(new Date()),
+        accounts: [
+          {
+            accountName: "Main",
+            characters: [
+              {
+                name: "LegacySerca",
+                class: "Bard",
+                itemLevel: 1710,
+                assignedRaids: {
+                  armoche: {},
+                  kazeros: {},
+                  serca: {
+                    G1: { difficulty: "Normal", completedDate: 1 },
+                    G3: { difficulty: "Normal", completedDate: 3 },
+                  },
+                },
+                tasks: [],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    { raidKey: "serca", modeKey: "normal", minItemLevel: 1710 }
+  );
+
+  assert.equal(snapshot.allEligible[0].assignedRaids.serca.G3, undefined);
+  const status = __test.getCharRaidGateStatus(
+    snapshot.allEligible[0],
+    "serca",
+    "normal"
+  );
+  assert.deepEqual(status.gates.map((g) => g.gate), ["G1", "G2"]);
+  assert.equal(status.gates[0].doneAtPickedMode, true);
+  assert.equal(status.gates[1].doneAtPickedMode, false);
+});
+
+test("Edit flow: local char state updates after Process so Current reflects the apply", () => {
+  const character = {
+    assignedRaids: {
+      kazeros: {
+        G1: { difficulty: "Hard", completedDate: undefined },
+        G2: { difficulty: "Hard", completedDate: undefined },
+      },
+    },
+  };
+
+  __test.applyLocalRaidEditToChar(
+    character,
+    { raidKey: "kazeros", modeKey: "hard" },
+    "process",
+    ["G1"],
+    123
+  );
+  const status = __test.getCharRaidGateStatus(character, "kazeros", "hard");
+  assert.equal(status.overallStatus, "partial");
+  assert.equal(status.gates[0].doneAtPickedMode, true);
+  assert.equal(status.gates[1].doneAtPickedMode, false);
+});
+
+test("Edit flow: local char state mirrors mode-switch wipe before marking", () => {
+  const character = {
+    assignedRaids: {
+      kazeros: {
+        G1: { difficulty: "Hard", completedDate: 1 },
+        G2: { difficulty: "Hard", completedDate: 2 },
+      },
+    },
+  };
+
+  __test.applyLocalRaidEditToChar(
+    character,
+    { raidKey: "kazeros", modeKey: "normal" },
+    "process",
+    ["G1"],
+    123
+  );
+  const status = __test.getCharRaidGateStatus(character, "kazeros", "normal");
+  assert.equal(status.modeChangeNeeded, false);
+  assert.equal(status.overallStatus, "partial");
+  assert.equal(status.gates[0].doneAtPickedMode, true);
+  assert.equal(status.gates[1].doneAtPickedMode, false);
+  assert.equal(character.assignedRaids.kazeros.G2.difficulty, "Normal");
+  assert.equal(character.assignedRaids.kazeros.G2.completedDate, undefined);
+});
+
 test("stale roster refresh canonicalizes diacritic-only bible character names", () => {
   const userDoc = {
     accounts: [
