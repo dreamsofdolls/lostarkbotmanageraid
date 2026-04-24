@@ -1102,14 +1102,44 @@ function createRaidCheckCommand(deps) {
     character.assignedRaids[raidMeta.raidKey] = raidData;
   }
 
-  function formatCharEditLabel(char) {
-    const suffix = char.autoManageEnabled && char.publicLogDisabled
-      ? " · log off (manager only)"
-      : "";
-    return truncateText(
-      `${char.charName} · ${Math.round(char.itemLevel)}${suffix}`,
-      100
-    );
+  function formatCharEditLabel(char, raidMeta) {
+    // Base: "Cyrano · 1733"
+    const parts = [char.charName, String(Math.round(char.itemLevel))];
+
+    // Progress hint for the raid the leader is scanning (state.raidMeta),
+    // so they can see which chars still need work WITHOUT having to pick
+    // each one and wait for the gate buttons to render. Uses the same
+    // rollup as formatGateStateLine for visual consistency:
+    //   🟢 DONE  - every gate done at the picked mode
+    //   🟠 X/Y   - some gates done at the picked mode
+    //   🟡 khác mode - nothing done at picked mode but char has cleared
+    //                  at a different difficulty (apply would wipe it)
+    //   ⚪ 0/Y   - untouched at this raid entirely
+    if (raidMeta?.raidKey) {
+      const gateStatus = getCharRaidGateStatus(
+        char,
+        raidMeta.raidKey,
+        raidMeta.modeKey
+      );
+      const total = gateStatus.gates.length;
+      if (total > 0) {
+        const done = gateStatus.gates.filter((g) => g.doneAtPickedMode).length;
+        if (gateStatus.overallStatus === "complete") {
+          parts.push(`🟢 ${done}/${total}`);
+        } else if (gateStatus.overallStatus === "partial") {
+          parts.push(`🟠 ${done}/${total}`);
+        } else if (gateStatus.modeChangeNeeded) {
+          parts.push("🟡 khác mode");
+        } else {
+          parts.push(`⚪ ${done}/${total}`);
+        }
+      }
+    }
+
+    if (char.autoManageEnabled && char.publicLogDisabled) {
+      parts.push("log off");
+    }
+    return truncateText(parts.join(" · "), 100);
   }
 
   function formatUserEditLabel(group, displayName) {
@@ -1128,7 +1158,7 @@ function createRaidCheckCommand(deps) {
     } else if (!state.selectedUser) {
       nextStep = "Pick **user** cần chỉnh progress trước nhé (dropdown ngay bên dưới).";
     } else if (!state.selectedChar) {
-      nextStep = "Giờ chọn **character** trong roster của bạn đó.";
+      nextStep = `Giờ chọn **character** trong roster của bạn đó. Icon tắt/mở theo progress của **${state.raidMeta.label}**: 🟢 DONE · 🟠 partial · 🟡 khác mode · ⚪ chưa clear.`;
     } else if (!state.selectedRaid) {
       nextStep = "Chọn **raid + difficulty** cậu muốn update.";
     } else if (state.awaitingGate) {
@@ -1237,7 +1267,7 @@ function createRaidCheckCommand(deps) {
       const charOptions = (group?.chars || [])
         .slice(0, 25)
         .map((char) => ({
-          label: formatCharEditLabel(char),
+          label: formatCharEditLabel(char, state.raidMeta),
           value: `${char.accountName}||${char.charName}`,
           emoji: char.publicLogDisabled ? "🔒" : "⚔️",
           default:
