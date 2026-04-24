@@ -705,6 +705,81 @@ test("Edit flow: local char state updates after Process so Current reflects the 
   assert.equal(status.gates[1].doneAtPickedMode, false);
 });
 
+test("Edit flow: DM embed speaks in Artist voice without naming the leader", () => {
+  const embed = __test.buildRaidCheckEditDMEmbed({
+    targetChar: { charName: "Cyracha", itemLevel: 1732 },
+    raidMeta: { label: "Kazeros Hard", modeKey: "hard", raidKey: "kazeros" },
+    statusType: "complete",
+    gate: null,
+    modeResetHappened: false,
+  });
+  const json = embed.toJSON();
+  assert.match(json.title, /Artist/);
+  assert.match(json.description, /Artist/);
+  // Leader identity must NOT leak through - no specific user names,
+  // only the generic Raid Manager role. Regression guard for Traine's
+  // "don't name the Raid Manager" rule.
+  assert.doesNotMatch(json.description, /Raid Manager [A-Za-z]+(?: \w+)+\b/);
+  assert.match(json.description, /Raid Manager/);
+  assert.match(json.description, /Cyracha/);
+  assert.match(json.description, /Kazeros Hard/);
+  assert.match(json.description, /Đánh dấu toàn bộ gate là done/);
+});
+
+test("Edit flow: DM embed describes Process gate and Reset distinctly", () => {
+  const processEmbed = __test.buildRaidCheckEditDMEmbed({
+    targetChar: { charName: "Cyracha", itemLevel: 1732 },
+    raidMeta: { label: "Kazeros Hard", modeKey: "hard", raidKey: "kazeros" },
+    statusType: "process",
+    gate: "G1",
+    modeResetHappened: false,
+  }).toJSON();
+  assert.match(processEmbed.description, /Đánh dấu \*\*G1\*\*/);
+
+  const resetEmbed = __test.buildRaidCheckEditDMEmbed({
+    targetChar: { charName: "Cyracha", itemLevel: 1732 },
+    raidMeta: { label: "Kazeros Hard", modeKey: "hard", raidKey: "kazeros" },
+    statusType: "reset",
+    gate: null,
+    modeResetHappened: false,
+  }).toJSON();
+  assert.match(resetEmbed.description, /Reset về 0/);
+});
+
+test("Edit flow: DM embed avoids sentence-level hyphens (Dusk voice rule)", () => {
+  // Traine rule: user-facing DM text uses punctuation (periods, commas,
+  // parentheses) instead of hyphen-separated clauses. This test guards
+  // against regressing back to the "- có thể họ đã tắt DM -" style.
+  const embeds = ["complete", "reset"].map((statusType) =>
+    __test.buildRaidCheckEditDMEmbed({
+      targetChar: { charName: "Cyracha", itemLevel: 1732 },
+      raidMeta: { label: "Kazeros Hard", modeKey: "hard", raidKey: "kazeros" },
+      statusType,
+      gate: null,
+      modeResetHappened: statusType === "complete",
+    }).toJSON()
+  );
+  for (const embed of embeds) {
+    // A hyphen surrounded by whitespace is the tell for clause-splitting
+    // dashes. Hyphens inside identifiers (/raid-status, Manage-Server,
+    // Lost-Ark-Bible, etc.) are fine, so we only flag the space-hyphen-space
+    // pattern.
+    assert.doesNotMatch(embed.description, / - /);
+  }
+});
+
+test("Edit flow: DM embed calls out mode-switch wipe when it happened", () => {
+  const embed = __test.buildRaidCheckEditDMEmbed({
+    targetChar: { charName: "Cyracha", itemLevel: 1732 },
+    raidMeta: { label: "Kazeros Normal", modeKey: "normal", raidKey: "kazeros" },
+    statusType: "complete",
+    gate: null,
+    modeResetHappened: true,
+  }).toJSON();
+  assert.match(embed.description, /Mode cũ/);
+  assert.match(embed.description, /wipe/);
+});
+
 test("Edit flow: local char state mirrors mode-switch wipe before marking", () => {
   const character = {
     assignedRaids: {

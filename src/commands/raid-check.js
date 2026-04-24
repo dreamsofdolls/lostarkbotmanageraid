@@ -670,19 +670,19 @@ function createRaidCheckCommand(deps) {
       const gateInfo = applied
         .map((item) => `${item.raidLabel || item.raidKey} ${item.gate}`)
         .join(", ");
-      return `- **${entry.charName}** - ${applied.length} gate mới: ${gateInfo || "(detail không có)"}`;
+      return `**${entry.charName}** · ${applied.length} gate mới: ${gateInfo || "_(detail không có)_"}`;
     });
 
     return new EmbedBuilder()
       .setColor(UI.colors.success)
-      .setTitle(`${UI.icons.done} Raid progress auto-synced`)
+      .setTitle(`${UI.icons.done} Artist vừa sync progress raid giúp cậu`)
       .setDescription(
         [
-          "Raid Manager vừa trigger auto-sync cho char của cậu (qua `/raid-check`). Tớ đã pull bible logs mới và update:",
+          "Chào cậu~ Có Raid Manager vừa nhờ Artist pull logs từ bible sync progress raid cho cậu đây nha. Sau khi sync xong, Artist thấy mấy gate mới này cho char của cậu:",
           "",
           ...lines,
           "",
-          "_Check `/raid-status` để xem full progress._",
+          "Cậu ghé `/raid-status` xem full progress nha~",
         ].join("\n")
       )
       .setTimestamp();
@@ -1523,6 +1523,50 @@ function createRaidCheckCommand(deps) {
     }
   }
 
+  /**
+   * DM sent to the target member after a Raid Manager uses the Edit flow
+   * to change their progress. Artist speaks in first-person: the specific
+   * Raid Manager's identity is intentionally NOT surfaced (roles only, no
+   * names) so the DM reads as a system notification from the bot, not a
+   * finger-point at a particular leader. Best-effort: never blocks apply,
+   * never re-tried on failure.
+   */
+  function buildRaidCheckEditDMEmbed({
+    targetChar,
+    raidMeta,
+    statusType,
+    gate,
+    modeResetHappened,
+  }) {
+    const actionLine =
+      statusType === "complete"
+        ? "✅ Đánh dấu toàn bộ gate là done"
+        : statusType === "reset"
+          ? "🔄 Reset về 0, toàn bộ gate đã xoá sạch"
+          : `📝 Đánh dấu **${gate || "gate"}** là done, các gate khác giữ nguyên`;
+    const color =
+      statusType === "reset" ? UI.colors.progress : UI.colors.success;
+    const lines = [
+      "Chào cậu~ Có Raid Manager vừa nhờ Artist chỉnh progress raid cho cậu một chút đây nha. Artist vừa làm việc này:",
+      "",
+      `**Character:** ${targetChar.charName} · ${Math.round(targetChar.itemLevel)}`,
+      `**Raid:** ${raidMeta.label}`,
+      `**Thay đổi:** ${actionLine}`,
+    ];
+    if (modeResetHappened) {
+      lines.push("");
+      lines.push(`${UI.icons.warn} _Mode cũ của raid này Artist đã wipe vì difficulty mới. Gate ở mode cũ không còn được count nữa nhé._`);
+    }
+    lines.push("");
+    lines.push("Cậu ghé `/raid-status` xem full progress mới giúp Artist nha~");
+
+    return new EmbedBuilder()
+      .setColor(color)
+      .setTitle(`${UI.icons.done} Artist vừa chỉnh progress raid giúp cậu`)
+      .setDescription(lines.join("\n"))
+      .setTimestamp();
+  }
+
   async function applyEditAndConfirm(component, state, statusType, gate) {
     state.locked = true;
     // Freeze components visually while the apply is in-flight.
@@ -1562,6 +1606,45 @@ function createRaidCheckCommand(deps) {
       applyLocalRaidEditToChar(targetChar, raidMeta, statusType, effectiveGates);
     }
     state.applied = true;
+
+    // DM the target member when their progress actually changed on disk.
+    // Skip three cases: (1) no-op apply (result.updated false; nothing for
+    // the target to hear about), (2) self-edit (leader edited their own
+    // char; they already see the confirmation in the ephemeral UI), and
+    // (3) write did not land (noRoster / matched===0 / ineligible - the
+    // summary below handles those). The DM is Artist's voice with no
+    // leader identity per Traine's rule.
+    const isSelfEdit = state.selectedUser === component.user.id;
+    const didApplyWrite =
+      result?.updated === true &&
+      !result?.noRoster &&
+      result?.matched !== 0 &&
+      !result?.ineligibleItemLevel;
+    let dmOutcome = null; // "sent" | "failed" | "skipped-self" | null (not attempted)
+    if (didApplyWrite && isSelfEdit) {
+      dmOutcome = "skipped-self";
+    } else if (didApplyWrite) {
+      try {
+        const user = await component.client.users.fetch(state.selectedUser);
+        const dmChannel = await user.createDM();
+        const dmEmbed = buildRaidCheckEditDMEmbed({
+          targetChar,
+          raidMeta,
+          statusType,
+          gate,
+          modeResetHappened: result?.modeResetCount > 0,
+        });
+        await dmChannel.send({ embeds: [dmEmbed] });
+        dmOutcome = "sent";
+      } catch (err) {
+        dmOutcome = "failed";
+        console.warn(
+          `[raid-check edit] DM to ${state.selectedUser} failed:`,
+          err?.message || err
+        );
+      }
+    }
+
     const summaryParts = [];
     const statusLabel =
       statusType === "complete" ? "Complete" :
@@ -1579,8 +1662,15 @@ function createRaidCheckCommand(deps) {
         summaryParts.push(`_Mode cũ đã bị wipe vì difficulty mới._`);
       }
       if (result?.alreadyComplete) {
-        summaryParts.push(`_Raid đã DONE sẵn - không cần update._`);
+        summaryParts.push(`_Raid đã DONE sẵn, không cần update._`);
       }
+    }
+    if (dmOutcome === "sent") {
+      summaryParts.push(`📨 _Đã DM báo member biết progress vừa thay đổi._`);
+    } else if (dmOutcome === "failed") {
+      summaryParts.push(`${UI.icons.warn} _DM cho member fail, có thể họ đã tắt DM from server members. Update vẫn vào DB rồi._`);
+    } else if (dmOutcome === "skipped-self") {
+      summaryParts.push(`_Bỏ qua DM vì cậu edit char của chính mình._`);
     }
     summaryParts.push("");
     summaryParts.push(`_Gõ lại \`/raid-check raid:${raidMeta.raidKey}_${normalizeName(raidMeta.modeKey)}\` để xem pending list mới._`);
@@ -1621,6 +1711,7 @@ function createRaidCheckCommand(deps) {
     getEligibleRaidsForChar,
     getCharRaidGateStatus,
     applyLocalRaidEditToChar,
+    buildRaidCheckEditDMEmbed,
     handleRaidCheckCommand,
     handleRaidCheckButton,
   };
