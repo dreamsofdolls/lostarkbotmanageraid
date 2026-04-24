@@ -742,6 +742,16 @@ function createRaidCheckCommand(deps) {
     const parts = interaction.customId.split(":");
     const action = parts[1];
     const raidKey = parts[2];
+
+    // edit-all has no raidKey in the customId because the raid is picked
+    // inside the Edit UI via a dropdown. Handle it before the raidMeta
+    // validation gate below, which would otherwise reject the missing
+    // raidKey as "invalid raid".
+    if (action === "edit-all") {
+      await handleRaidCheckEditClick(interaction, null, null);
+      return;
+    }
+
     const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
     if (!raidMeta) {
       await interaction.reply({
@@ -1172,8 +1182,12 @@ function createRaidCheckCommand(deps) {
     let nextStep = null;
     if (state.applied) {
       nextStep = "Xong~ Bấm ✖️ Close để đóng, hoặc gõ lại `/raid-check` xem pending list mới.";
+    } else if (state.scopeAll && !state.raidMeta) {
+      nextStep = "Pick **raid + difficulty** trước nhé - tớ sẽ load roster editable cho raid đó.";
+    } else if (state.scopeAll && state.editableByUser.size === 0) {
+      nextStep = "Raid này không có user/char nào edit được (floor quá cao hoặc mọi char thuộc user auto-sync + log on). Đổi raid khác xem~";
     } else if (!state.selectedUser) {
-      nextStep = "Pick **user** cần chỉnh progress trước nhé (dropdown ngay bên dưới).";
+      nextStep = "Pick **user** cần chỉnh progress nhé (dropdown ngay bên dưới).";
     } else if (!state.selectedChar) {
       nextStep = `Giờ chọn **character** trong roster của bạn đó. Icon trong label theo progress của **${state.raidMeta.label}**: 🟢 DONE · 🟠 partial · 🟡 khác mode · ⚪ chưa clear.`;
     } else if (state.awaitingGate) {
@@ -1188,17 +1202,31 @@ function createRaidCheckCommand(deps) {
     const charLabel = state.selectedChar
       ? `${state.selectedChar.charName} · ${Math.round(state.selectedChar.itemLevel)}${state.selectedChar.publicLogDisabled ? " · 🔒 log off" : ""}`
       : "_chưa chọn_";
-    const raidLabel =
-      RAID_REQUIREMENT_MAP[state.selectedRaid]?.label ||
-      state.raidMeta?.label ||
-      state.selectedRaid;
+    const raidLabel = state.selectedRaid
+      ? RAID_REQUIREMENT_MAP[state.selectedRaid]?.label ||
+        state.raidMeta?.label ||
+        state.selectedRaid
+      : "_chưa chọn_";
+
+    // Header copy changes per mode. All-mode leader can flip raids
+    // mid-session (cascade resets when they do), while specific-raid
+    // mode locks to whatever /raid-check was opened against.
+    const headerLine = state.scopeAll
+      ? (state.raidMeta
+          ? `Artist đang giúp cậu edit progress cross-raid~ Đang làm việc trên **${raidLabel}**. Đổi raid qua dropdown bất cứ lúc nào - cascade sẽ reset.`
+          : "Artist giúp cậu edit progress cross-raid nhé~ Pick **raid + difficulty** trước để tớ load roster.")
+      : `Artist dẫn cậu chỉnh progress giúp member nhé~ Edit này scope cho **${raidLabel}** thôi, cậu chỉ cần chọn **user → char → status**.`;
+
+    const raidLineSuffix = state.scopeAll
+      ? (state.raidMeta ? " _(đổi qua dropdown)_" : "")
+      : " _(lock theo /raid-check)_";
 
     const description = [
-      `Artist dẫn cậu chỉnh progress giúp member nhé~ Edit này scope cho **${raidLabel}** thôi, cậu chỉ cần chọn **user → char → status**.`,
+      headerLine,
       "",
       `🧍 **User:** ${userLabel}`,
       `⚔️ **Character:** ${charLabel}`,
-      `🎯 **Raid:** ${raidLabel} _(lock theo /raid-check)_`,
+      `🎯 **Raid:** ${raidLabel}${raidLineSuffix}`,
     ];
 
     // Show live gate state once a raid is picked so the leader can see
@@ -1256,7 +1284,40 @@ function createRaidCheckCommand(deps) {
     const rows = [];
     const disabled = state.applied || state.locked;
 
-    // Row 1: user select. Always present so leader can re-pick.
+    // Row 1 (scopeAll only): Raid dropdown sits on top because in
+    // all-mode the snapshot itself has to be re-loaded per picked raid
+    // (editableByUser changes per raid×mode). Per Traine's ordering
+    // note: "nếu thêm all raid thì raid dropdown nằm trên char" - the
+    // same logic applies to user select: picking a raid filters which
+    // users have any editable char. Specific-raid mode does NOT render
+    // this row because the raid is locked upstream.
+    if (state.scopeAll) {
+      const raidOptions = Object.entries(RAID_REQUIREMENT_MAP)
+        .sort(([, a], [, b]) => a.minItemLevel - b.minItemLevel)
+        .slice(0, 25)
+        .map(([raidKey, entry]) => ({
+          label: truncateText(`${entry.label} · ${entry.minItemLevel}+`, 100),
+          value: raidKey,
+          default: state.selectedRaid === raidKey,
+        }));
+      rows.push(
+        new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId("raid-check-edit:raid")
+            .setPlaceholder("Chọn raid + difficulty trước...")
+            .setDisabled(disabled)
+            .addOptions(raidOptions)
+        )
+      );
+    }
+
+    // In scopeAll, bail out if no raid picked yet - the user / char
+    // rows below reach into state.editableByUser, which is only
+    // populated AFTER a raid pick loads its snapshot.
+    if (state.scopeAll && !state.raidMeta) return rows;
+
+    // Row 2 (or Row 1 when not scopeAll): user select. Always present
+    // when we have a snapshot so leader can re-pick.
     const userOptions = [...state.editableByUser.values()]
       .slice(0, 25)
       .map((group) => ({
@@ -1277,7 +1338,7 @@ function createRaidCheckCommand(deps) {
       );
     }
 
-    // Row 2: char select (only when user picked).
+    // Char select (only when user picked).
     if (state.selectedUser) {
       const group = state.editableByUser.get(state.selectedUser);
       const charOptions = (group?.chars || [])
@@ -1303,16 +1364,14 @@ function createRaidCheckCommand(deps) {
       }
     }
 
-    // Edit is scoped to state.raidMeta.raidKey (set at init, preserved
-    // across user/char re-picks). A raid select row used to live here
-    // but the snapshot only contains chars eligible for the scanned
-    // raid anyway - free-picking another raid in the cascade just
-    // produced "char iLvl too low" errors when the other raid's floor
-    // was higher. If an "All raid" mode is ever added, the raid select
-    // should sit ABOVE the char select so char options can be filtered
-    // against the chosen raid instead of the other way around.
+    // In specific-raid mode, state.raidMeta is locked at init to whatever
+    // /raid-check was opened against. In scopeAll mode, picking the raid
+    // dropdown above triggers a snapshot reload that sets raidMeta and
+    // rebuilds editableByUser, so the user/char rows below stay valid
+    // for the picked raid. Either way, applyEditAndConfirm reads
+    // state.selectedRaid (the combined map key) for RAID_REQUIREMENT_MAP.
 
-    // Row 3: status buttons (only when char picked). Disable Complete
+    // Status buttons (only when char picked). Disable Complete
     // when the raid is already done at the picked mode (would be a
     // no-op server-side) and disable Process when there are no open
     // gates left to mark. Reset is always enabled - it's useful even
@@ -1358,7 +1417,7 @@ function createRaidCheckCommand(deps) {
       );
     }
 
-    // Row 4: gate buttons (only when Process mode entered). Gate buttons
+    // Gate buttons (only when Process mode entered). Gate buttons
     // reflect current state: 🟢 emoji + disabled for gates already done
     // at the picked mode (re-marking would be a no-op), 🟠 for gates
     // done at a different mode (clicking triggers the mode-wipe path),
@@ -1394,51 +1453,65 @@ function createRaidCheckCommand(deps) {
   async function handleRaidCheckEditClick(interaction, raidMeta, raidKey) {
     const started = Date.now();
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const snapshot = await computeRaidCheckSnapshot(raidMeta);
-    const editableByUser = buildEditableCharsByUser(snapshot);
 
-    if (editableByUser.size === 0) {
-      await interaction.editReply({
-        content: `${UI.icons.info} Không có char nào available để edit (raid floor ${raidMeta.minItemLevel}+ và không có char thuộc user đã tắt auto-sync hoặc có log off).`,
-      });
-      return;
+    // Two entry modes:
+    //   - specific-raid: raidMeta + raidKey passed in, we preload the
+    //     snapshot + editableByUser + displayMap for exactly that raid.
+    //   - scopeAll (raidMeta null): no preload; leader picks raid via
+    //     a dropdown inside the Edit UI, and the `raid` action handler
+    //     below loads the per-raid snapshot on the fly.
+    const scopeAll = !raidMeta;
+
+    let editableByUser = new Map();
+    let displayMap = new Map();
+    let snapshot = null;
+
+    if (!scopeAll) {
+      snapshot = await computeRaidCheckSnapshot(raidMeta);
+      editableByUser = buildEditableCharsByUser(snapshot);
+
+      if (editableByUser.size === 0) {
+        await interaction.editReply({
+          content: `${UI.icons.info} Không có char nào available để edit (raid floor ${raidMeta.minItemLevel}+ và không có char thuộc user đã tắt auto-sync hoặc có log off).`,
+        });
+        return;
+      }
+
+      // Resolve display names for just the editable users, via the shared
+      // cache-first helper. See resolveCachedDisplayName for why we prefer the
+      // User doc's cached identity over discord.js's own users cache.
+      await Promise.all(
+        [...editableByUser.keys()].map(async (discordId) => {
+          const meta = snapshot.userMeta.get(discordId) || {};
+          const name = await resolveCachedDisplayName(
+            interaction.client,
+            discordId,
+            meta
+          );
+          displayMap.set(discordId, name);
+        })
+      );
     }
 
-    // Resolve display names for just the editable users, via the shared
-    // cache-first helper. See resolveCachedDisplayName for why we prefer the
-    // User doc's cached identity over discord.js's own users cache.
-    const displayMap = new Map();
-    await Promise.all(
-      [...editableByUser.keys()].map(async (discordId) => {
-        const meta = snapshot.userMeta.get(discordId) || {};
-        const name = await resolveCachedDisplayName(
-          interaction.client,
-          discordId,
-          meta
-        );
-        displayMap.set(discordId, name);
-      })
-    );
-
     const state = {
-      raidMeta,
+      scopeAll,
+      raidMeta: raidMeta || null,
       editableByUser,
       displayMap,
       selectedUser: null,
       selectedChar: null,
-      // Edit is always scoped to the raid the leader pulled `/raid-check`
-      // against. Cross-raid edit was a free-pick dropdown before, but the
-      // snapshot itself is filtered by raidMeta (buildRaidCheckSnapshot)
-      // so the raid select was effectively dead weight. Lock it from
-      // init so status buttons surface as soon as a char is picked.
+      // Specific-raid: locked at init to the combined map key
+      // ("serca_hard"), preserved through every user/char re-pick.
+      // ScopeAll: starts null; set when the raid dropdown fires a `raid`
+      // action and reloads the snapshot for the picked raid.
       //
-      // IMPORTANT: this is the combined map key ("serca_hard") passed
-      // from handleRaidCheckButton, NOT raidMeta.raidKey (just "serca").
-      // RAID_REQUIREMENT_MAP is keyed by the combined form; misusing the
-      // object field would make every downstream RAID_REQUIREMENT_MAP
-      // lookup (embed render, status-button guard, applyEditAndConfirm)
-      // return undefined and silently no-op the apply.
-      selectedRaid: raidKey,
+      // IMPORTANT: this is the combined map key, NOT raidMeta.raidKey
+      // (just "serca"). RAID_REQUIREMENT_MAP is keyed by the combined
+      // form; misusing the object field would make every downstream
+      // RAID_REQUIREMENT_MAP lookup (embed render, status-button guard,
+      // applyEditAndConfirm) return undefined and silently no-op the
+      // apply. This regression happened in 639ac03 / fixed in f8cd84a.
+      selectedRaid: raidKey || null,
       awaitingGate: false,
       applied: false,
       locked: false,
@@ -1470,6 +1543,61 @@ function createRaidCheckCommand(deps) {
       const parts = (component.customId || "").split(":");
       // parts[0] = "raid-check-edit", parts[1] = action, parts[2] = value (if any)
       const action = parts[1];
+
+      if (action === "raid") {
+        // Scope-all raid picker. Load the snapshot + editableByUser +
+        // displayMap for the picked raid so the user/char cascade below
+        // can render against real data. Ack immediately with deferUpdate
+        // so Discord doesn't time out the 3-second interaction window
+        // while computeRaidCheckSnapshot hits the DB.
+        const pickedRaidKey = component.values[0];
+        const pickedRaidMeta = RAID_REQUIREMENT_MAP[pickedRaidKey];
+        if (!pickedRaidMeta) {
+          state.warning = `${UI.icons.warn} Raid không hợp lệ.`;
+          await component.update({
+            embeds: [buildEditEmbed(state)],
+            components: buildEditComponents(state),
+          }).catch(() => {});
+          return;
+        }
+        await component.deferUpdate().catch(() => {});
+        try {
+          const newSnapshot = await computeRaidCheckSnapshot(pickedRaidMeta);
+          const newEditableByUser = buildEditableCharsByUser(newSnapshot);
+          const newDisplayMap = new Map();
+          await Promise.all(
+            [...newEditableByUser.keys()].map(async (discordId) => {
+              const meta = newSnapshot.userMeta.get(discordId) || {};
+              const name = await resolveCachedDisplayName(
+                interaction.client,
+                discordId,
+                meta
+              );
+              newDisplayMap.set(discordId, name);
+            })
+          );
+
+          state.raidMeta = pickedRaidMeta;
+          state.selectedRaid = pickedRaidKey;
+          state.editableByUser = newEditableByUser;
+          state.displayMap = newDisplayMap;
+          // Changing raid invalidates any previously picked user/char -
+          // a user who was editable for Serca Hard might have no char
+          // eligible for Act 4 Normal at all.
+          state.selectedUser = null;
+          state.selectedChar = null;
+          state.awaitingGate = false;
+          state.warning = null;
+        } catch (err) {
+          state.warning = `${UI.icons.warn} Load snapshot cho raid này fail: ${err?.message || String(err)}`;
+          console.warn(`[raid-check edit scopeAll] raid-pick load failed:`, err?.message || err);
+        }
+        await interaction.editReply({
+          embeds: [buildEditEmbed(state)],
+          components: buildEditComponents(state),
+        }).catch(() => {});
+        return;
+      }
 
       if (action === "user") {
         state.selectedUser = component.values[0];
@@ -1982,10 +2110,24 @@ function createRaidCheckCommand(deps) {
 
     let currentPage = 0;
     const buildButtonRow = (page, disabled) => {
-      return buildPaginationRow(page, totalPages, disabled, {
+      const row = buildPaginationRow(page, totalPages, disabled, {
         prevId: "raid-check-all-page:prev",
         nextId: "raid-check-all-page:next",
       });
+      // Append the cross-raid Edit button. customId `raid-check:edit-all`
+      // has no raidKey segment on purpose - the Edit UI's raid dropdown
+      // picks one mid-session. Bot.js's global InteractionCreate listener
+      // routes `raid-check:*` customIds to handleRaidCheckButton, which
+      // short-circuits into the scopeAll Edit flow.
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId("raid-check:edit-all")
+          .setLabel("Edit progress")
+          .setEmoji("✏️")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(disabled)
+      );
+      return row;
     };
 
     await interaction.editReply({
