@@ -92,7 +92,7 @@ test("buildRaidCheckSnapshotFromUsers keeps higher-mode clears complete even abo
   assert.equal(snapshot.notEligibleChars.length, 0);
 });
 
-test("buildRaidCheckSnapshotFromUsers keeps higher-ilvl chars eligible when scanning a lower mode", () => {
+test("buildRaidCheckSnapshotFromUsers filters chars that out-grow the scanned mode", () => {
   const snapshot = __test.buildRaidCheckSnapshotFromUsers(
     [
       {
@@ -102,20 +102,30 @@ test("buildRaidCheckSnapshotFromUsers keeps higher-ilvl chars eligible when scan
           {
             accountName: "Main",
             characters: [
-              makeCharacter("FitForNormal", 1700, {}), // [1700, 1720) eligible for Act4 Normal
-              makeCharacter("AboveNormal", 1725, {}),
-              makeCharacter("AboveNormal2", 1740, {}),
+              makeCharacter("FitForSercaNormal", 1710, {}),
+              makeCharacter("StillNormalRange", 1729.99, {}),
+              makeCharacter("OutGrownHard", 1730, {}),
+              makeCharacter("OutGrownNightmare", 1740, {}),
             ],
           },
         ],
       },
     ],
-    { raidKey: "armoche", modeKey: "normal", minItemLevel: 1700 }
+    { raidKey: "serca", modeKey: "normal", minItemLevel: 1710 }
   );
 
-  assert.equal(snapshot.allEligible.length, 3);
-  assert.equal(snapshot.notEligibleChars.length, 0);
-  assert.equal(snapshot.allChars.length, 3); // combined render set
+  assert.deepEqual(
+    snapshot.allEligible.map((char) => char.charName),
+    ["FitForSercaNormal", "StillNormalRange"]
+  );
+  assert.deepEqual(
+    snapshot.notEligibleChars.map((char) => [char.charName, char.notEligibleReason]),
+    [
+      ["OutGrownHard", "high"],
+      ["OutGrownNightmare", "high"],
+    ]
+  );
+  assert.equal(snapshot.allChars.length, 4); // combined render set keeps audit context
 });
 
 test("buildRaidCheckSnapshotFromUsers marks under-iLvl chars as not-eligible when scanning a higher mode", () => {
@@ -155,6 +165,17 @@ test("raid-check not-eligible note explains below-min chars clearly", () => {
   assert.match(fieldValue, /below min/);
 });
 
+test("raid-check not-eligible note explains out-grown chars clearly", () => {
+  const fieldValue = __test.formatRaidCheckNotEligibleFieldValue({
+    charName: "TooHigh",
+    itemLevel: 1730,
+    notEligibleReason: "high",
+  });
+
+  assert.match(fieldValue, /Not eligible yet/);
+  assert.match(fieldValue, /out-grown/);
+});
+
 test("raid-check renderable chars hide not-eligible entries from the visible list", () => {
   const snapshot = __test.buildRaidCheckSnapshotFromUsers(
     [
@@ -177,7 +198,7 @@ test("raid-check renderable chars hide not-eligible entries from the visible lis
   );
 
   const renderable = __test.getRaidCheckRenderableChars(snapshot);
-  assert.deepEqual(renderable.map((char) => char.charName), ["PendingHard", "AlreadyNightmare"]);
+  assert.deepEqual(renderable.map((char) => char.charName), ["PendingHard"]);
 });
 
 test("buildRaidCheckSnapshotFromUsers keeps done-only rosters visible in the combined render set", () => {
@@ -454,6 +475,35 @@ test("Edit flow: buildEditableCharsByUser hides auto-sync chars when log is ON",
   assert.ok(editable.has("manual-user"));
   assert.equal(editable.get("manual-user").chars.length, 1);
   assert.equal(editable.get("manual-user").chars[0].charName, "ManualChar");
+});
+
+test("Edit flow: buildEditableCharsByUser does not leak not-eligible audit chars", () => {
+  const userMeta = new Map([["manual-user", { autoManageEnabled: false }]]);
+  const eligible = {
+    discordId: "manual-user",
+    accountName: "A",
+    charName: "NormalRange",
+    itemLevel: 1729.99,
+    publicLogDisabled: false,
+  };
+  const notEligible = {
+    discordId: "manual-user",
+    accountName: "A",
+    charName: "OutGrownHard",
+    itemLevel: 1730,
+    publicLogDisabled: false,
+    overallStatus: "not-eligible",
+    notEligibleReason: "high",
+  };
+  const editable = __test.buildEditableCharsByUser({
+    allEligible: [eligible],
+    allChars: [eligible, notEligible],
+    userMeta,
+  });
+  assert.deepEqual(
+    editable.get("manual-user").chars.map((char) => char.charName),
+    ["NormalRange"]
+  );
 });
 
 test("Edit flow: buildEditableCharsByUser drops users whose every char is bible-owned", () => {
@@ -739,4 +789,3 @@ test("ensureFreshWeek preserves gate clears already inside the current reset win
   assert.equal(character.tasks[1].completions, 0);
   assert.equal(character.tasks[1].completionDate, null);
 });
-

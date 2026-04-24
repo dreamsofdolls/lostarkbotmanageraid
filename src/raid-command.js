@@ -673,6 +673,9 @@ async function loadFreshUserSnapshotForRaidViews(
  *   - lowestMin: min iLvl of the lowest-tier mode of this raid. Chars
  *     below this are outside the raid entirely and never render.
  *   - selfMin: scan mode's own min (usually === `raidMeta.minItemLevel`).
+ *   - nextMin: min iLvl of the next higher mode. Chars at or above this
+ *     floor have out-grown the selected mode and should not show as pending
+ *     for it unless they already carry lower/higher-mode progress.
  *
  * The `lowestMin` floor uses `Math.min(RAID_REQ lowest, selfMin)` so that
  * if a caller passes a selfMin below the actual lowest mode (e.g. older
@@ -686,7 +689,11 @@ function getRaidScanRange(raidKey, selfMin) {
     .filter(Number.isFinite);
   const baseLowest = mins.length > 0 ? Math.min(...mins) : selfMin;
   const lowestMin = Math.min(baseLowest, selfMin);
-  return { lowestMin, selfMin };
+  const higherMins = mins
+    .filter((min) => min > selfMin)
+    .sort((a, b) => a - b);
+  const nextMin = higherMins.length > 0 ? higherMins[0] : Infinity;
+  return { lowestMin, selfMin, nextMin };
 }
 
 function buildRaidCheckUserQuery(raidMeta, now = Date.now()) {
