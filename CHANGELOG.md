@@ -6,6 +6,7 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ### Added
 
+- `/raid-check raid:all` synthetic overview choice: cross-raid view of every member's roster, mirroring `/raid-status`'s per-account page layout (inline 2-col char fields, account progress rollup, freshness badge) but scoped across every user in the guild instead of just the caller's own. Each page adds a `setAuthor` with display name + avatar so leaders can tell users apart while flipping pages. Read-only for now; Edit button is deliberately omitted until the raid-dropdown cascade for cross-raid Edit ships in a follow-up.
 - `/raid-check` leader **Edit button**: cascading select (user → char → raid → status → optional gate), Manager-only, reuses `applyRaidSetForDiscordId`.
   - Live gate state shown once raid is picked; Complete / Process buttons disable when no-op, gate buttons show 🟢 / 🟠 / ⚪ per stored state.
   - Auto-sync users skipped except for chars with `publicLogDisabled=true` (bible can't reach them).
