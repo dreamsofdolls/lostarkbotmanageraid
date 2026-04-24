@@ -1204,9 +1204,23 @@ function createRaidCheckCommand(deps) {
       nextStep = "Cuối cùng bấm **✅ Complete** (full raid), **📝 Process** (1 gate), hay **🔄 Reset** (xoá sạch).";
     }
 
-    const userLabel = state.selectedUser
-      ? state.displayMap.get(state.selectedUser) || state.selectedUser
-      : "_chưa chọn_";
+    // User label priorities (in order):
+    //   1. Explicit selection (state.selectedUser) - post-pick state
+    //   2. scopeAll pre-select carried from the all-mode source page -
+    //      pending raid pick but we show it so leader sees context
+    //   3. Nothing picked yet
+    let userLabel;
+    if (state.selectedUser) {
+      userLabel = state.displayMap.get(state.selectedUser) || state.selectedUser;
+    } else if (
+      state.scopeAll &&
+      state.preSelectedUserId &&
+      state.preSelectedDisplayName
+    ) {
+      userLabel = `${state.preSelectedDisplayName} _(sẽ auto-pick sau khi cậu chọn raid)_`;
+    } else {
+      userLabel = "_chưa chọn_";
+    }
     const charLabel = state.selectedChar
       ? `${state.selectedChar.charName} · ${Math.round(state.selectedChar.itemLevel)}${state.selectedChar.publicLogDisabled ? " · 🔒 log off" : ""}`
       : "_chưa chọn_";
@@ -1481,6 +1495,40 @@ function createRaidCheckCommand(deps) {
     let displayMap = new Map();
     let snapshot = null;
 
+    // Resolve pre-select display name upfront so the User line shows
+    // context from the very first render, not just after the leader
+    // picks a raid. Without this, leader clicks Edit from Du's page,
+    // sees "User: chưa chọn" until they also pick a raid - which
+    // reads as "context was lost" even though the discordId is
+    // stashed in state.
+    let preSelectedDisplayName = null;
+    if (scopeAll && preSelectedUserId) {
+      try {
+        const preDoc = await User.findOne({ discordId: preSelectedUserId })
+          .select("discordUsername discordGlobalName discordDisplayName")
+          .lean();
+        const cached =
+          preDoc?.discordDisplayName ||
+          preDoc?.discordGlobalName ||
+          preDoc?.discordUsername ||
+          "";
+        if (cached) {
+          preSelectedDisplayName = cached;
+        } else {
+          preSelectedDisplayName = await resolveDiscordDisplay(
+            interaction.client,
+            preSelectedUserId
+          );
+        }
+      } catch (err) {
+        console.warn(
+          `[raid-check edit scopeAll] pre-select display resolve failed for ${preSelectedUserId}:`,
+          err?.message || err
+        );
+        preSelectedDisplayName = preSelectedUserId;
+      }
+    }
+
     if (!scopeAll) {
       snapshot = await computeRaidCheckSnapshot(raidMeta);
       editableByUser = buildEditableCharsByUser(snapshot);
@@ -1516,6 +1564,7 @@ function createRaidCheckCommand(deps) {
       // Stored for the `raid` action handler to consume once the
       // per-raid snapshot is loaded. Only meaningful in scopeAll.
       preSelectedUserId: scopeAll ? preSelectedUserId : null,
+      preSelectedDisplayName,
       selectedUser: null,
       selectedChar: null,
       // Specific-raid: locked at init to the combined map key
@@ -1621,13 +1670,21 @@ function createRaidCheckCommand(deps) {
           // raid. Consumed-once: clear the hint after applying so
           // subsequent raid re-picks use the leader's own explicit
           // user choice (or lack thereof) without re-pre-selecting.
-          if (
-            state.preSelectedUserId &&
-            newEditableByUser.has(state.preSelectedUserId)
-          ) {
-            state.selectedUser = state.preSelectedUserId;
+          if (state.preSelectedUserId) {
+            if (newEditableByUser.has(state.preSelectedUserId)) {
+              state.selectedUser = state.preSelectedUserId;
+            } else {
+              // Pre-select dropped silently because the focused user
+              // has no editable char for this raid (floor too high,
+              // or all chars auto-sync + log on). Surface a warning
+              // so the leader understands why User went from
+              // "Du _(sẽ auto-pick...)_" back to "chưa chọn".
+              const preName = state.preSelectedDisplayName || state.preSelectedUserId;
+              state.warning = `${UI.icons.info} _${preName} không có char nào editable cho **${pickedRaidMeta.label}** - Artist đã bỏ pre-select. Chọn user khác từ dropdown nhé._`;
+            }
           }
           state.preSelectedUserId = null;
+          state.preSelectedDisplayName = null;
         } catch (err) {
           state.warning = `${UI.icons.warn} Load snapshot cho raid này fail: ${err?.message || String(err)}`;
           console.warn(`[raid-check edit scopeAll] raid-pick load failed:`, err?.message || err);
