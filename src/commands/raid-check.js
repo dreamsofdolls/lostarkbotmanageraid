@@ -2011,6 +2011,34 @@ function createRaidCheckCommand(deps) {
 
     const totalPages = pagesData.length;
 
+    // User filter state. Starts as null (show all users). When a user
+    // is picked from the filter dropdown, filteredIndices shrinks to
+    // just that user's accounts (absolute indices into pagesData),
+    // and currentLocalPage is the index INTO filteredIndices. Mirrors
+    // the filter on specific-raid /raid-check but with accounts as
+    // the unit instead of char-pages.
+    const FILTER_ALL = "__all__";
+    let filterUserId = null;
+    let filteredIndices = pagesData.map((_, i) => i);
+    let currentLocalPage = 0;
+
+    const applyUserFilter = (pickedValue) => {
+      filterUserId = pickedValue === FILTER_ALL ? null : pickedValue;
+      if (filterUserId === null) {
+        filteredIndices = pagesData.map((_, i) => i);
+      } else {
+        filteredIndices = [];
+        for (let i = 0; i < pagesData.length; i += 1) {
+          if (pagesData[i].userDoc.discordId === filterUserId) {
+            filteredIndices.push(i);
+          }
+        }
+      }
+      // Reset to first page of the filtered subset; the previously
+      // viewed absolute page may be outside the new filter.
+      currentLocalPage = 0;
+    };
+
     const buildPage = (pageIndex) => {
       const { userDoc, account } = pagesData[pageIndex];
       // Per-user raids cache. Lives inside buildPage so it rebuilds
@@ -2102,11 +2130,25 @@ function createRaidCheckCommand(deps) {
       // ask - Discord author.name is a single string with no right-
       // align option, so concatenation is the only way to put the
       // counter next to the user. 256-char cap leaves plenty of room.
+      //
+      // Page counter adapts to the filter state: when a user filter
+      // is active, show filtered "Page 2/3" (local to that user's
+      // accounts) instead of the absolute cross-user index, since
+      // the leader cares about "where am I in Du's accounts" not
+      // "which global page this is" once they've focused on someone.
       const meta = authorMeta.get(userDoc.discordId);
       if (meta) {
-        const pageSuffix = totalPages > 1
-          ? ` · Page ${pageIndex + 1}/${totalPages}`
-          : "";
+        let pageSuffix = "";
+        if (filterUserId === null) {
+          if (totalPages > 1) {
+            pageSuffix = ` · Page ${pageIndex + 1}/${totalPages}`;
+          }
+        } else {
+          const localTotal = filteredIndices.length;
+          if (localTotal > 1) {
+            pageSuffix = ` · Page ${currentLocalPage + 1}/${localTotal}`;
+          }
+        }
         const authorPayload = {
           name: truncateText(`${meta.displayName}${pageSuffix}`, 256),
         };
@@ -2117,9 +2159,9 @@ function createRaidCheckCommand(deps) {
       return embed;
     };
 
-    let currentPage = 0;
-    const buildButtonRow = (page, disabled) => {
-      const row = buildPaginationRow(page, totalPages, disabled, {
+    const buildButtonRow = (disabled) => {
+      const localTotal = filteredIndices.length;
+      const row = buildPaginationRow(currentLocalPage, localTotal, disabled, {
         prevId: "raid-check-all-page:prev",
         nextId: "raid-check-all-page:next",
       });
@@ -2139,9 +2181,66 @@ function createRaidCheckCommand(deps) {
       return row;
     };
 
+    // User filter dropdown. Mirrors specific-raid /raid-check's
+    // "All users / Filter theo user" picker so a leader in all-mode
+    // can jump straight to a specific member without clicking Next
+    // through everyone. Discord StringSelect caps at 25 options so
+    // slice the per-user list at 24 (plus the All-users entry).
+    // With 24+ users in the guild, the overflow users won't appear
+    // in the dropdown but are still reachable via Prev/Next.
+    const buildFilterRow = (disabled) => {
+      const options = [
+        {
+          label: truncateText(`All users (${pagesData.length} pages)`, 100),
+          value: FILTER_ALL,
+          emoji: "🌐",
+          default: filterUserId === null,
+        },
+      ];
+      const sortedUsers = visibleUserIds
+        .map((discordId) => {
+          let accountsCount = 0;
+          for (const p of pagesData) {
+            if (p.userDoc.discordId === discordId) accountsCount += 1;
+          }
+          return {
+            discordId,
+            accountsCount,
+            displayName: authorMeta.get(discordId)?.displayName || discordId,
+          };
+        })
+        .sort((a, b) => a.displayName.localeCompare(b.displayName));
+      for (const u of sortedUsers.slice(0, 24)) {
+        options.push({
+          label: truncateText(
+            `${u.displayName} (${u.accountsCount} acc${u.accountsCount === 1 ? "" : "s"})`,
+            100
+          ),
+          value: u.discordId,
+          emoji: "👤",
+          default: filterUserId === u.discordId,
+        });
+      }
+      return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId("raid-check-all-filter:user")
+          .setPlaceholder("Jump to user / Lọc theo user...")
+          .setDisabled(disabled)
+          .addOptions(options)
+      );
+    };
+
+    const buildComponents = (disabled) => [
+      buildButtonRow(disabled),
+      buildFilterRow(disabled),
+    ];
+
+    const currentAbsoluteIndex = () =>
+      filteredIndices[currentLocalPage] ?? filteredIndices[0] ?? 0;
+
     await interaction.editReply({
-      embeds: [buildPage(currentPage)],
-      components: [buildButtonRow(currentPage, false)],
+      embeds: [buildPage(currentAbsoluteIndex())],
+      components: buildComponents(false),
     });
     const followup = await interaction.fetchReply();
     console.log(
@@ -2154,30 +2253,61 @@ function createRaidCheckCommand(deps) {
 
     collector.on("collect", async (component) => {
       if (component.user.id !== interaction.user.id) {
+        // Only reply-lock on components we own; a stray click on some
+        // other bot's component shouldn't get a scolding message.
+        const customId = component.customId || "";
+        const ours =
+          customId.startsWith("raid-check-all-page:") ||
+          customId === "raid-check-all-filter:user";
+        if (ours) {
+          await component
+            .reply({
+              content: `${UI.icons.lock} Chỉ người mở /raid-check mới bấm được.`,
+              flags: MessageFlags.Ephemeral,
+            })
+            .catch(() => {});
+        }
+        return;
+      }
+      const customId = component.customId || "";
+
+      if (customId === "raid-check-all-filter:user") {
+        const value =
+          Array.isArray(component.values) && component.values.length > 0
+            ? component.values[0]
+            : FILTER_ALL;
+        applyUserFilter(value);
         await component
-          .reply({
-            content: `${UI.icons.lock} Chỉ người mở /raid-check mới bấm được.`,
-            flags: MessageFlags.Ephemeral,
+          .update({
+            embeds: [buildPage(currentAbsoluteIndex())],
+            components: buildComponents(false),
           })
           .catch(() => {});
         return;
       }
-      const parts = (component.customId || "").split(":");
-      if (parts[0] !== "raid-check-all-page") return;
-      if (parts[1] === "prev") currentPage = Math.max(0, currentPage - 1);
-      else if (parts[1] === "next") currentPage = Math.min(totalPages - 1, currentPage + 1);
-      else return;
-      await component
-        .update({
-          embeds: [buildPage(currentPage)],
-          components: [buildButtonRow(currentPage, false)],
-        })
-        .catch(() => {});
+
+      if (customId.startsWith("raid-check-all-page:")) {
+        const action = customId.split(":")[1];
+        const localTotal = filteredIndices.length;
+        if (action === "prev") currentLocalPage = Math.max(0, currentLocalPage - 1);
+        else if (action === "next") currentLocalPage = Math.min(localTotal - 1, currentLocalPage + 1);
+        else return;
+        await component
+          .update({
+            embeds: [buildPage(currentAbsoluteIndex())],
+            components: buildComponents(false),
+          })
+          .catch(() => {});
+        return;
+      }
+
+      // raid-check:edit-all + other non-owned components fall through
+      // to the bot.js global dispatcher.
     });
 
     collector.on("end", async () => {
       await followup
-        .edit({ components: [buildButtonRow(currentPage, true)] })
+        .edit({ components: buildComponents(true) })
         .catch(() => {});
     });
   }
