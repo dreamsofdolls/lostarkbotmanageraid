@@ -34,6 +34,23 @@ const { DISCORD_TOKEN, GUILD_ID } = process.env;
 // lets a deployment run slash-command-only without the privileged intent.
 const TEXT_MONITOR_ENABLED = process.env.TEXT_MONITOR_ENABLED !== "false";
 
+function isUnknownInteractionError(error) {
+  return error?.code === 10062 || error?.rawError?.code === 10062;
+}
+
+function describeInteraction(interaction) {
+  if (!interaction) return "unknown";
+  if (interaction.isChatInputCommand?.()) return `command=${interaction.commandName}`;
+  if (interaction.isAutocomplete?.()) return `autocomplete=${interaction.commandName}`;
+  if (interaction.customId) return `customId=${interaction.customId}`;
+  return `type=${interaction.type || "unknown"}`;
+}
+
+function getInteractionAgeMs(interaction) {
+  const created = Number(interaction?.createdTimestamp) || 0;
+  return created > 0 ? Date.now() - created : null;
+}
+
 if (!DISCORD_TOKEN) {
   console.error("Missing DISCORD_TOKEN in .env");
   process.exit(1);
@@ -170,6 +187,15 @@ async function startBot() {
         return;
       }
     } catch (error) {
+      if (isUnknownInteractionError(error)) {
+        const ageMs = getInteractionAgeMs(interaction);
+        const agePart = ageMs === null ? "" : ` ageMs=${ageMs}`;
+        console.warn(
+          `[bot] stale interaction ignored: ${describeInteraction(interaction)}${agePart}`
+        );
+        return;
+      }
+
       console.error("[bot] interaction error:", error);
 
       const payload = {
