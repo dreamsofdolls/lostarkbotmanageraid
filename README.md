@@ -1,14 +1,15 @@
 # Lost Ark Raid Management Bot
 
-Discord bot tracking weekly raid progress for a small Lost Ark roster. Syncs characters from `lostark.bible`, parses raid-clear posts, and auto-manages weekly reset on Wednesday 17:00 VN.
+Discord bot tracking weekly raid progress for a small Lost Ark roster. Syncs characters from `lostark.bible`, parses raid-clear posts in a configured channel, auto-reconciles progress against bible clear-logs, and handles the Wednesday 17:00 VN weekly reset.
 
 ## Features
 
-- Slash commands for roster sync (`/add-roster`), progress view (`/raid-status`), per-char update (`/raid-set`), and manager scan (`/raid-check`)
-- Text-channel monitor: post `<raid> <difficulty> <character> [gate]` in the configured channel, bot parses + updates + DM confirms
-- Auto-sync from lostark.bible logs (opt-in via `/raid-auto-manage`) with 30-minute passive scheduler
-- Weekly reset Wed 17:00 VN with per-guild announcement
-- Auto-cleanup of the monitor channel every 30 minutes, with Artist quiet hours 03:00-08:00 VN (bedtime + morning catch-up sweep)
+- Slash commands for roster sync, progress view, per-char update, and manager scan
+- Text-channel monitor: post `<raid> <difficulty> <character> [gate]`, bot parses + updates + DM confirms
+- Auto-sync from lostark.bible logs (opt-in via `/raid-auto-manage`) with a passive 24h scheduler
+- Weekly reset Wed 17:00 VN (catch-up safe) with per-guild announcement
+- Monitor-channel auto-cleanup every 30 minutes, with Artist quiet hours 03:00-08:00 VN (bedtime + morning catch-up sweep)
+- Raid Manager tier: shorter sync cooldown, `👑` roster header icon, exclusive `/raid-check` Edit flow
 - Bilingual help (`/raid-help`) with dropdown drill-down
 
 ## Commands
@@ -16,79 +17,242 @@ Discord bot tracking weekly raid progress for a small Lost Ark roster. Syncs cha
 | Command | Who | What |
 |---|---|---|
 | `/add-roster` | anyone | Sync top-N characters (by combat score) from `lostark.bible` into one account |
-| `/raid-status` | anyone (self) | View your raid progress, paginated 1 roster/page; lazy-refreshes iLvl from bible (2h cache) |
-| `/raid-set` | anyone (self) | Update one character's raid: `complete` / `process <gate>` / `reset` |
-| `/raid-check` | Raid Manager | Scan every roster for pending chars in a raid; Sync button (bible pull), Edit button (manager-only cascading edit) |
+| `/raid-status` | anyone (self) | View raid progress, paginated 1 roster/page; lazy iLvl refresh (2h cache) |
+| `/raid-set` | anyone (self) | Update one character: `complete` / `process <gate>` / `reset` |
+| `/raid-check` | Raid Manager | Scan rosters for pending chars; Sync button (bible pull) + Edit button (cascading select) |
 | `/raid-auto-manage` | anyone (self) | `on` / `off` / `sync` / `status` for automated bible log reconciliation |
-| `/raid-channel` | admin | Register monitor channel, cleanup schedule, repin welcome |
+| `/raid-channel` | admin | Register monitor channel, toggle schedules, repin welcome |
 | `/raid-announce` | admin | List / enable / disable / redirect per-guild announcement types |
-| `/raid-help` | anyone | Drill-down help (dropdown lists all commands + details) |
+| `/raid-help` | anyone | Drill-down help (dropdown lists every command) |
 | `/remove-roster` | anyone (self) | Remove a roster or one character from it |
 
-Raid Manager = Discord user IDs listed in `RAID_MANAGER_ID` env var (comma-separated). Manager privileges: shorter 30s auto-manage sync cooldown (vs 15m default), `👑` header icon on their rosters in `/raid-check` / `/raid-status`, and exclusive access to the `/raid-check` Edit button.
+Raid Manager = Discord user IDs listed in `RAID_MANAGER_ID` (comma-separated). Manager perks: 30s auto-manage sync cooldown (vs 15m), `👑` header icon on their rosters, and exclusive access to `/raid-check`.
 
 ## Text-monitor format
 
 Post into the channel registered via `/raid-channel`:
 
-```
+```text
 Serca Nightmare Clauseduk            → mark all Serca Nightmare gates done
 Kazeros Hard Soulrano G1             → mark G1 only (cumulative: G_N also marks G1..G_{N-1})
 Act4 Hard Priscilladuk, Nailaduk     → multi-char in one post
 ```
 
-**Aliases** (case-insensitive):
+Aliases (case-insensitive):
 
-- Raid: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca` (typo `secra`)
-- Difficulty: `normal` / `nor` / `nm` · `hard` / `hm` · `nightmare` / `9m` (note: `nm` is Normal, Nightmare uses `9m`)
-- Gate: `G1`, `G2`, ...
-- Separator: space, `+`, or `,`
+| Kind | Values |
+|---|---|
+| Raid | `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca` (typo `secra`) |
+| Difficulty | `normal` / `nor` / `nm` · `hard` / `hm` · `nightmare` / `9m` |
+| Gate | `G1`, `G2`, ... (validated per raid) |
+| Separator | space, `+`, or `,` |
 
-## Setup
+Note: `nm` is Normal (not Nightmare). Nightmare only accepts the full word or `9m`.
 
-```bash
-npm install
-cp .env.example .env    # then edit
-npm start               # runs src/bot.js
-npm test                # runs node --test on test/
+## Data Model
+
+One MongoDB collection (`users`), one document per Discord user. Accounts and characters nest as subdocuments; raid progress lives on each character.
+
+```mermaid
+erDiagram
+    USER ||--o{ ACCOUNT : "has"
+    ACCOUNT ||--o{ CHARACTER : "contains"
+    CHARACTER ||--|| ASSIGNED_RAIDS : "tracks"
+    ASSIGNED_RAIDS ||--o{ GATE : "per-raid per-gate"
+
+    USER {
+        string discordId PK
+        string weeklyResetKey
+        bool autoManageEnabled
+        number lastAutoManageSyncAt
+        number lastAutoManageAttemptAt
+    }
+    ACCOUNT {
+        string accountName
+        number lastRefreshedAt
+        number lastRefreshAttemptAt
+    }
+    CHARACTER {
+        string name
+        string class
+        number itemLevel
+        string combatScore
+        bool publicLogDisabled
+        string bibleSerial
+        number bibleCid
+        number bibleRid
+    }
+    GATE {
+        string difficulty
+        number completedDate
+    }
 ```
 
-### Environment
+User document example:
 
-| Var | Required | Default | Notes |
-|---|---|---|---|
-| `DISCORD_TOKEN` | ✅ | - | Bot token from Developer Portal |
-| `CLIENT_ID` | ✅ | - | Application ID, used to register guild slash commands |
-| `GUILD_ID` | ✅ | - | Target guild for per-guild slash command registration |
-| `MONGO_URI` | ✅ | - | MongoDB connection string |
-| `MONGO_DB_NAME` | ❌ | `manage` | Database name |
-| `MONGO_ENSURE_INDEXES` | ❌ | `true` | Skip index ensure at boot if you manage indexes in Atlas |
-| `DNS_SERVERS` | ❌ | `8.8.8.8,1.1.1.1` | Fallback DNS resolution list |
-| `TEXT_MONITOR_ENABLED` | ❌ | `true` | Set `false` to skip the privileged MessageContent intent + the `MessageCreate` listener |
-| `RAID_MANAGER_ID` | ❌ (recommended) | empty | Comma-separated Discord user IDs allowed to invoke `/raid-check` + granted manager privileges. Empty/missing means `/raid-check` rejects everyone and the bot warns at boot |
-| `AUTO_MANAGE_DAILY_DISABLED` | ❌ | `false` | Killswitch for the 24-hour passive auto-sync scheduler without a redeploy |
+```jsonc
+{
+  "discordId": "390361918071635968",
+  "weeklyResetKey": "2026-W17",
+  "autoManageEnabled": true,
+  "accounts": [
+    {
+      "accountName": "Clauseduk",
+      "lastRefreshedAt": 1745961200000,
+      "characters": [
+        {
+          "name": "Clauseduk",
+          "class": "Paladin",
+          "itemLevel": 1743,
+          "combatScore": "~4234.35",
+          "publicLogDisabled": false,
+          "assignedRaids": {
+            "armoche": { "G1": { "difficulty": "Hard", "completedDate": 1745961111000 } },
+            "kazeros": { },
+            "serca":   { }
+          }
+        }
+      ]
+    }
+  ]
+}
+```
 
-To enable the text monitor, flip `Bot → Privileged Gateway Intents → Message Content Intent` on in the Discord Developer Portal. Otherwise set `TEXT_MONITOR_ENABLED=false` to run slash-command-only.
+**Gate System.** Raid is "done" when every official gate has `completedDate > 0` at the selected difficulty. `assignedRaids.<raidKey>` uses `strict: false` so adding G3+ later is migration-free. Mode hierarchy: Nightmare (3) > Hard (2) > Normal (1) — clearing a higher mode satisfies a lower-mode scan.
+
+**Class map.** 30+ Lost Ark classes mapped from bible internal IDs to display names in `src/models/Class.js`. Unknown IDs fall back to title-cased raw ID.
+
+**GuildConfig** (second collection) stores per-guild monitor channel, cleanup schedule cursors, bedtime/wake-up dedup keys, and per-announcement enable flags. See `src/schema/guildConfig.js`.
 
 ## Architecture
 
-- **`src/bot.js`** - process entry point: connect DB, warm monitor cache, register slash commands, wire listeners
-- **`src/raid-command.js`** - compose root: builds command handlers + services + shared helpers via dependency injection
-- **`src/commands/*.js`** - one file per slash command, each exports a `create<Name>Command(deps)` factory
-- **`src/services/*.js`** - cross-command concerns (auto-manage bible sync, roster refresh, channel monitor, schedulers, RAID_MANAGER_ID allowlist)
-- **`src/schema/*.js`** - Mongoose schemas with indexes declared inline
-- **`src/raid/*.js`** - pure helpers: shared string/time utils, raid/announcement registries
-- **`test/*.test.js`** - `node --test`, no mocks for DB or Discord; exercises pure functions exposed via `__test` blocks
+```
+LostArk_RaidManage/
+├── src/
+│   ├── bot.js                      # Discord client + interaction router + listeners
+│   ├── index.js                    # Thin wrapper: require("./bot")
+│   ├── deploy-commands.js          # Standalone slash-command registration (REST)
+│   ├── raid-command.js             # Compose root: wires every command + service
+│   │
+│   ├── commands/                   # One file per slash command (factory pattern)
+│   │   ├── add-roster.js
+│   │   ├── raid-announce.js
+│   │   ├── raid-auto-manage.js
+│   │   ├── raid-channel.js
+│   │   ├── raid-check.js           # Scan + Sync + Edit cascading select
+│   │   ├── raid-help.js
+│   │   ├── raid-set.js             # applyRaidSetForDiscordId shared write path
+│   │   ├── raid-status.js
+│   │   ├── remove-roster.js
+│   │   └── definitions.js          # SlashCommandBuilder registry
+│   │
+│   ├── services/                   # Cross-command concerns
+│   │   ├── auto-manage-core.js     # Bible log gather + apply + cooldown slot
+│   │   ├── auto-manage-sync.js     # Status-side piggyback helper
+│   │   ├── manager.js              # RAID_MANAGER_ID allowlist + cooldown picker
+│   │   ├── raid-channel-monitor.js # Text-monitor parser + cleanup + welcome embed
+│   │   ├── raid-schedulers.js      # 30-min cleanup tick, bedtime/wake-up, daily auto-sync
+│   │   ├── roster-fetch.js         # lostark.bible HTML scrape
+│   │   └── roster-refresh.js       # 2h lazy refresh with failure cooldown
+│   │
+│   ├── schema/                     # Mongoose schemas + indexes
+│   │   ├── user.js
+│   │   └── guildConfig.js
+│   │
+│   ├── raid/                       # Pure helpers / registries
+│   │   ├── shared.js               # Time, name, format utils
+│   │   └── announcements.js        # Announcement registry (single source of truth)
+│   │
+│   ├── models/
+│   │   ├── Raid.js                 # RAID_REQUIREMENTS (iLvl floors + gate lists)
+│   │   └── Class.js                # Bible class ID → display name map
+│   │
+│   └── weekly-reset.js             # 30-min tick, Wed 10:00 UTC boundary
+│
+├── db.js                           # Lazy Mongo connect with DNS fallback
+├── test/
+│   └── raid-check-snapshot.test.js # node --test, pure functions via __test exports
+├── Dockerfile                      # node:20-slim, npm install --omit=dev
+├── railway.toml                    # Deploy policy
+├── .env.example
+└── package.json
+```
 
-Raid Manager allowlist is single-sourced in `src/services/manager.js`. Auto-manage sync cooldown is per-user (30s for managers, 15m for everyone else). Auto-cleanup + bedtime + wake-up share one 30-minute scheduler tick that branches on the current VN hour.
+Three composition principles:
+
+1. **Factory + dep injection.** Every command/service exports `create<Name>(deps)` so `raid-command.js` wires the object graph once at boot. Tests instantiate with stubs.
+2. **Registry as single source of truth.** `ANNOUNCEMENT_REGISTRY`, `RAID_REQUIREMENTS`, `RAID_MANAGER_ID` all live in exactly one place and are referenced from docs, HELP_SECTIONS, and runtime logic.
+3. **Shared write paths.** `applyRaidSetForDiscordId` is reused by `/raid-set`, the text monitor, and the `/raid-check` Edit flow — new UIs never re-implement raid mutation.
+
+Interaction flow:
+
+```mermaid
+flowchart LR
+  U[Discord user] -->|slash / button| B[bot.js router]
+  B -->|InteractionCreate| RC[raid-command handlers]
+  B -->|MessageCreate| RM[raid-channel-monitor]
+  RC -->|read / write| DB[(MongoDB)]
+  RM -->|read / write| DB
+  RC -->|HTTP| BIB[lostark.bible]
+  RM -->|applyRaidSetForDiscordId| RC
+```
+
+Weekly reset runs every 30 minutes (UTC-based trigger: Wed ≥ 10:00 UTC). Per-user dedup via `weeklyResetKey` (ISO week string). Catch-up safe: a bot offline through the reset window fires on the next tick.
+
+## Environment Variables
+
+| Var | Required | Default | Notes |
+|---|:---:|---|---|
+| `DISCORD_TOKEN` | ✅ | - | Bot token from Developer Portal |
+| `CLIENT_ID` | ✅ | - | Application ID for slash-command registration |
+| `GUILD_ID` | ✅ | - | Target guild (slash commands are guild-scoped) |
+| `MONGO_URI` | ✅ | - | MongoDB connection string |
+| `MONGO_DB_NAME` | ❌ | `manage` | Database name |
+| `MONGO_ENSURE_INDEXES` | ❌ | `true` | Set `false` if indexes are managed in Atlas UI |
+| `DNS_SERVERS` | ❌ | `8.8.8.8,1.1.1.1` | DNS fallback when Atlas SRV lookup fails |
+| `TEXT_MONITOR_ENABLED` | ❌ | `true` | `false` skips the privileged MessageContent intent + listener |
+| `RAID_MANAGER_ID` | ❌ (recommended) | empty | Comma-separated user IDs. Empty = `/raid-check` rejects everyone; manager perks never apply |
+| `AUTO_MANAGE_DAILY_DISABLED` | ❌ | `false` | Killswitch for the 24h passive auto-sync scheduler (no redeploy needed) |
+
+Discord Developer Portal: flip `Bot → Privileged Gateway Intents → Message Content Intent` on to let the text monitor read posts, or set `TEXT_MONITOR_ENABLED=false` to run slash-command-only.
+
+## Run Local
+
+```bash
+npm install
+cp .env.example .env        # then edit with real values
+npm run deploy:commands     # first time only, or when slash schema changes
+npm start                   # or: npm run dev (node --watch)
+npm test                    # node --test on test/
+```
+
+Logic-only changes (inside a command, no new option or name tweak) don't require `deploy:commands` — Discord keeps the cached schema.
+
+## Railway Deploy
+
+1. Push to the GitHub branch Railway tracks (`main`).
+2. Create the Railway service → link repo.
+3. In the service's **Variables** tab, set every env var (minimum: `DISCORD_TOKEN`, `CLIENT_ID`, `GUILD_ID`, `MONGO_URI`).
+4. Railway builds from `Dockerfile` (node:20-slim, `npm install --omit=dev`) and starts via `node src/bot.js`.
+5. `railway.toml` sets restart policy = `ON_FAILURE`, max 3 retries.
+
+The bot **re-registers slash commands on every boot** (`ClientReady` handler calls `rest.put(applicationGuildCommands, ...)`), so a push → Railway redeploy → new schema lands without any separate CLI step. Registration failure logs a warning and the bot boots with the previous cached schema — fail-soft. `deploy-commands.js` stays around only for dev-machine force-registers.
 
 ## Development
 
-- `npm test` - unit tests
-- `npm run dev` - local run with `node --watch`
-- `npm run deploy:commands` - standalone slash-command registration (the bot also registers on boot)
+- Run tests before pushing: `npm test`
+- Commits auto-deploy via Railway on push to `main` — think of `main` as production
+- No CI pipeline; test suite is the only gate
+- Prefer editing existing files; don't create documentation files unless asked
 
-Railway auto-deploys on push to `main`. No CI required.
+## Known Limitations
+
+- `/add-roster` scrapes `lostark.bible` HTML + inline SSR JSON. Layout changes upstream will break the regex and DOM selectors in `src/services/roster-fetch.js`.
+- Slash commands are guild-scoped. Enabling the bot in more servers needs one `deploy-commands` run per `GUILD_ID`.
+- `RAID_MANAGER_ID` rotation requires a redeploy. There's no `/admin add-manager` command.
+- Bible auto-sync can't reach a character with Public Log OFF. The `/raid-check` Edit flow is the only write path for those; `publicLogDisabled` flags them so leaders can still edit.
+- `MessageContent` is a Discord privileged intent. Large-guild deployments (100+ members without manual approval) need to set `TEXT_MONITOR_ENABLED=false` until Discord grants intent access.
+- One Mongo cluster, one collection per kind; no sharding or read replicas. The per-user footprint is small (≤ 30 chars across ≤ 5 accounts) so this fits comfortably for the 2-person deployment.
 
 ## License
 
