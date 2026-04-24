@@ -24,7 +24,7 @@ function makeCharacter(name, itemLevel, kazeros = {}) {
   };
 }
 
-test("buildRaidCheckSnapshotFromUsers keeps roster freshness metadata and counts higher-mode clears for lower-mode scans", () => {
+test("buildRaidCheckSnapshotFromUsers keeps roster freshness metadata and counts off-mode clears inside natural bucket", () => {
   const snapshot = __test.buildRaidCheckSnapshotFromUsers(
     [
       {
@@ -39,8 +39,8 @@ test("buildRaidCheckSnapshotFromUsers keeps roster freshness metadata and counts
             lastRefreshAttemptAt: 6789,
             characters: [
               // Both chars sit in Kazeros Normal's eligibility range
-              // [1710, 1730). ClearedHard completed Hard -> satisfies the
-              // Normal scan via mode hierarchy. StillPending hasn't cleared.
+              // [1710, 1730). ClearedHard completed Hard via explicit
+              // progress; StillPending hasn't cleared.
               makeCharacter("ClearedHard", 1720, {
                 G1: { difficulty: "Hard", completedDate: 1 },
                 G2: { difficulty: "Hard", completedDate: 2 },
@@ -65,7 +65,7 @@ test("buildRaidCheckSnapshotFromUsers keeps roster freshness metadata and counts
   assert.equal(snapshot.pendingChars[0]?.charName, "StillPending");
 });
 
-test("buildRaidCheckSnapshotFromUsers keeps higher-mode clears complete even above the next mode threshold", () => {
+test("buildRaidCheckSnapshotFromUsers filters higher-mode clears above the next mode threshold", () => {
   const snapshot = __test.buildRaidCheckSnapshotFromUsers(
     [
       {
@@ -87,9 +87,10 @@ test("buildRaidCheckSnapshotFromUsers keeps higher-mode clears complete even abo
     { raidKey: "kazeros", modeKey: "normal", minItemLevel: 1710 }
   );
 
-  assert.equal(snapshot.completeChars.length, 1);
-  assert.equal(snapshot.completeChars[0]?.charName, "HardDone1740");
-  assert.equal(snapshot.notEligibleChars.length, 0);
+  assert.equal(snapshot.completeChars.length, 0);
+  assert.equal(snapshot.notEligibleChars.length, 1);
+  assert.equal(snapshot.notEligibleChars[0]?.charName, "HardDone1740");
+  assert.equal(snapshot.notEligibleChars[0]?.notEligibleReason, "high");
 });
 
 test("buildRaidCheckSnapshotFromUsers filters chars that out-grow the scanned mode", () => {
@@ -176,12 +177,10 @@ test("raid-check not-eligible note explains out-grown chars clearly", () => {
   assert.match(fieldValue, /out-grown/);
 });
 
-test("buildRaidCheckSnapshotFromUsers annotates hierarchy clears with the stored mode label", () => {
-  // Regression for the 2026-04-24 follow-up: a Hard-cleared char
-  // showing in a Normal-mode scan renders identically to a same-mode
-  // Normal clear ("🟢 2/2"), leaving the leader unable to tell
-  // which mode was actually done. doneModeAnnotation captures the
-  // set of higher-than-scan stored modes for done gates.
+test("buildRaidCheckSnapshotFromUsers annotates off-mode clears with the stored mode label", () => {
+  // Legacy/data-repair guard: if a higher-mode clear exists while the
+  // character is still inside the lower mode's iLvl range, annotate it
+  // so the leader can see the stored mode clearly.
   const snapshot = __test.buildRaidCheckSnapshotFromUsers(
     [
       {
@@ -191,7 +190,7 @@ test("buildRaidCheckSnapshotFromUsers annotates hierarchy clears with the stored
           {
             accountName: "Main",
             characters: [
-              makeCharacter("HardClearedInNormalScan", 1740, {
+              makeCharacter("HardClearedInNormalScan", 1720, {
                 G1: { difficulty: "Hard", completedDate: 1 },
                 G2: { difficulty: "Hard", completedDate: 2 },
               }),
@@ -213,20 +212,16 @@ test("buildRaidCheckSnapshotFromUsers annotates hierarchy clears with the stored
   const normalChar = snapshot.allEligible.find(
     (c) => c.charName === "NormalClearInNormalScan"
   );
-  assert.ok(hardChar, "hierarchy Hard-cleared char should stay eligible for Normal scan");
-  assert.equal(hardChar.doneModeAnnotation, "Hard");
+  assert.ok(hardChar, "off-mode Hard-cleared char should stay visible in its natural Normal bucket");
+  assert.equal(hardChar.doneModeAnnotation, "Hard Clear");
   assert.ok(normalChar, "same-mode Normal clear should stay eligible");
   assert.equal(normalChar.doneModeAnnotation, null);
 });
 
-test("buildRaidCheckSnapshotFromUsers filters out-grown chars even when they already cleared the lower mode", () => {
-  // Regression for the 2026-04-24 Traine report: a 1732 char who
-  // cleared Serca Normal earlier in the week (at a lower iLvl) was
-  // leaking into /raid-check raid:serca_normal as a 2/2 done entry
-  // because the high-side range filter only ran for overallStatus
-  // "none". Lost Ark progression is monotonic so once a char passes
-  // nextMin they've out-grown this mode - the clear history stays
-  // in the DB but the char should not appear in THIS mode's view.
+test("buildRaidCheckSnapshotFromUsers keeps out-grown chars visible for the mode they actually cleared", () => {
+  // A char can be geared for Serca Hard but still choose to clear Serca
+  // Normal. The default planning bucket follows iLvl, but explicit same-mode
+  // progress must still surface in that mode's page.
   const snapshot = __test.buildRaidCheckSnapshotFromUsers(
     [
       {
@@ -267,17 +262,95 @@ test("buildRaidCheckSnapshotFromUsers filters out-grown chars even when they alr
   );
 
   const eligibleNames = snapshot.allEligible.map((c) => c.charName);
-  assert.ok(
-    !eligibleNames.includes("Cyracha"),
-    `Cyracha (1732, done at Normal) should be filtered out when scanning Serca Normal (nextMin=1730), got: ${eligibleNames.join(",")}`
-  );
-  assert.ok(eligibleNames.includes("SercaRegular"));
+  assert.deepEqual(eligibleNames, ["Cyracha", "SercaRegular"]);
 
-  const outGrown = snapshot.notEligibleChars.find(
-    (c) => c.charName === "Cyracha"
+  const outGrownClear = snapshot.allEligible.find((c) => c.charName === "Cyracha");
+  assert.equal(outGrownClear?.overallStatus, "complete");
+  assert.equal(outGrownClear?.doneModeAnnotation, "Normal Clear");
+});
+
+test("buildRaidCheckSnapshotFromUsers shows natural bucket chars with off-mode clear annotation", () => {
+  const snapshot = __test.buildRaidCheckSnapshotFromUsers(
+    [
+      {
+        discordId: "user-1",
+        weeklyResetKey: getTargetResetKey(new Date()),
+        accounts: [
+          {
+            accountName: "Main",
+            characters: [
+              {
+                id: "nightmare-ready-id",
+                name: "Cyranite",
+                class: "Bard",
+                itemLevel: 1740,
+                assignedRaids: {
+                  armoche: {},
+                  kazeros: {},
+                  serca: {
+                    G1: { difficulty: "Normal", completedDate: 1 },
+                    G2: { difficulty: "Normal", completedDate: 2 },
+                  },
+                },
+                tasks: [],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    { raidKey: "serca", modeKey: "nightmare", minItemLevel: 1740 }
   );
-  assert.ok(outGrown, "Cyracha should land in notEligibleChars");
-  assert.equal(outGrown.notEligibleReason, "high");
+
+  assert.equal(snapshot.allEligible.length, 1);
+  assert.equal(snapshot.completeChars[0]?.charName, "Cyranite");
+  assert.equal(snapshot.completeChars[0]?.doneModeAnnotation, "Normal Clear");
+});
+
+test("buildRaidCheckSnapshotFromUsers keeps Serca Hard clears out of Serca Normal scan", () => {
+  const snapshot = __test.buildRaidCheckSnapshotFromUsers(
+    [
+      {
+        discordId: "user-1",
+        weeklyResetKey: getTargetResetKey(new Date()),
+        accounts: [
+          {
+            accountName: "Main",
+            characters: [
+              {
+                id: "hard-id",
+                name: "Cyravelle",
+                class: "Bard",
+                itemLevel: 1733,
+                assignedRaids: {
+                  armoche: {},
+                  kazeros: {},
+                  serca: {
+                    G1: { difficulty: "Hard", completedDate: 1 },
+                    G2: { difficulty: "Hard", completedDate: 2 },
+                  },
+                },
+                tasks: [],
+              },
+              {
+                id: "normal-id",
+                name: "Soulrano",
+                class: "Bard",
+                itemLevel: 1722,
+                assignedRaids: { armoche: {}, kazeros: {}, serca: {} },
+                tasks: [],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    { raidKey: "serca", modeKey: "normal", minItemLevel: 1710 }
+  );
+
+  assert.deepEqual(snapshot.allEligible.map((char) => char.charName), ["Soulrano"]);
+  assert.equal(snapshot.notEligibleChars[0]?.charName, "Cyravelle");
+  assert.equal(snapshot.notEligibleChars[0]?.notEligibleReason, "high");
 });
 
 test("raid-check renderable chars hide not-eligible entries from the visible list", () => {

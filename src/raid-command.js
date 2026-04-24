@@ -557,15 +557,6 @@ function raidCheckGateIcon(status) {
   return "⚪";
 }
 
-// Mode hierarchy for /raid-check scan: Normal (1) < Hard (2) < Nightmare (3).
-// Clearing a HIGHER mode satisfies LOWER-mode weekly requirement. Char who
-// did Kazeros Hard doesn't need to appear pending when scanning Kazeros
-// Normal - Hard (2) >= Normal (1), so Hard progress counts as done for the
-// Normal scan. Reverse is NOT true: doing Normal doesn't satisfy Hard scan
-// (lower mode has no effect on higher-mode requirement).
-const MODE_RANK = { normal: 1, hard: 2, nightmare: 3 };
-const modeRank = (modeStr) => MODE_RANK[normalizeName(modeStr || "")] || 0;
-
 // Shared scan+classify pass for /raid-check. Returns the raw eligible list
 // + per-user metadata so both the initial command AND the button handlers
 // (Remind / Sync) can operate on a fresh Mongo snapshot every time - no
@@ -688,8 +679,8 @@ async function loadFreshUserSnapshotForRaidViews(
  *     below this are outside the raid entirely and never render.
  *   - selfMin: scan mode's own min (usually === `raidMeta.minItemLevel`).
  *   - nextMin: min iLvl of the next higher mode. Chars at or above this
- *     floor have out-grown the selected mode and should not show as pending
- *     for it unless they already carry lower/higher-mode progress.
+ *     floor have out-grown the selected mode and should not show in that
+ *     mode's scan page.
  *
  * The `lowestMin` floor uses `Math.min(RAID_REQ lowest, selfMin)` so that
  * if a caller passes a selfMin below the actual lowest mode (e.g. older
@@ -1275,7 +1266,6 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   ensureAssignedRaids,
   getGateKeys,
   getRaidScanRange,
-  modeRank,
   buildRaidCheckUserQuery,
   buildAccountFreshnessLine,
   buildAccountPageEmbed,
