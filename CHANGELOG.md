@@ -21,6 +21,7 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ### Changed
 
+- `/raid-check` now annotates mode-hierarchy clears in the char field: a 1740 char who cleared Kazeros Hard renders as "🟢 2/2 _(Hard)_" in a Kazeros Normal scan, while a same-mode Normal clear stays "🟢 2/2" (no annotation). Previously both rendered identically, so leaders couldn't tell whether the done stamp came from the scanned mode or a higher one. Added `doneModeAnnotation` to snapshot char entries with the set of higher-than-scan stored modes.
 - Difficulty alias `nm` moved Nightmare → Normal (alongside `nor`). Nightmare keeps `9m` only. Breaking for anyone typing `nm` for Nightmare.
 - Manager crown relocated from per-char name prefix to roster header (📁 → 👑) to keep the char line free for the planned class-icon swap.
 - `/raid-status` auto-manage piggyback capped at a 2.5s foreground budget; overflow applies in the background.
