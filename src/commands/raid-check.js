@@ -747,8 +747,16 @@ function createRaidCheckCommand(deps) {
     // inside the Edit UI via a dropdown. Handle it before the raidMeta
     // validation gate below, which would otherwise reject the missing
     // raidKey as "invalid raid".
+    //
+    // parts[2] carries the discordId of the user currently shown on the
+    // source page (the all-mode Edit button rebuilds its customId per
+    // page flip). Used as pre-select so clicking Edit while viewing
+    // Bao's page opens with Bao pre-picked once the leader chooses a
+    // raid. Empty string / falsy means no pre-select (defensive - the
+    // all-mode code always includes a discordId today).
     if (action === "edit-all") {
-      await handleRaidCheckEditClick(interaction, null, null);
+      const preSelectedUserId = parts[2] || null;
+      await handleRaidCheckEditClick(interaction, null, null, preSelectedUserId);
       return;
     }
 
@@ -1450,7 +1458,7 @@ function createRaidCheckCommand(deps) {
     return rows;
   }
 
-  async function handleRaidCheckEditClick(interaction, raidMeta, raidKey) {
+  async function handleRaidCheckEditClick(interaction, raidMeta, raidKey, preSelectedUserId = null) {
     const started = Date.now();
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -1460,6 +1468,13 @@ function createRaidCheckCommand(deps) {
     //   - scopeAll (raidMeta null): no preload; leader picks raid via
     //     a dropdown inside the Edit UI, and the `raid` action handler
     //     below loads the per-raid snapshot on the fly.
+    //
+    // preSelectedUserId: scopeAll-only hint carrying the discordId of
+    // the user shown on the source all-mode page. Applied after the
+    // leader picks a raid, IF that user has at least one editable char
+    // for the picked raid. If not (floor too high / fully auto-sync
+    // with log-on), the pre-select silently drops and user dropdown
+    // works as normal.
     const scopeAll = !raidMeta;
 
     let editableByUser = new Map();
@@ -1498,6 +1513,9 @@ function createRaidCheckCommand(deps) {
       raidMeta: raidMeta || null,
       editableByUser,
       displayMap,
+      // Stored for the `raid` action handler to consume once the
+      // per-raid snapshot is loaded. Only meaningful in scopeAll.
+      preSelectedUserId: scopeAll ? preSelectedUserId : null,
       selectedUser: null,
       selectedChar: null,
       // Specific-raid: locked at init to the combined map key
@@ -1597,6 +1615,19 @@ function createRaidCheckCommand(deps) {
           state.selectedChar = null;
           state.awaitingGate = false;
           state.warning = null;
+
+          // Pre-select the user the leader was viewing on the source
+          // all-mode page, IF they're still editable for the picked
+          // raid. Consumed-once: clear the hint after applying so
+          // subsequent raid re-picks use the leader's own explicit
+          // user choice (or lack thereof) without re-pre-selecting.
+          if (
+            state.preSelectedUserId &&
+            newEditableByUser.has(state.preSelectedUserId)
+          ) {
+            state.selectedUser = state.preSelectedUserId;
+          }
+          state.preSelectedUserId = null;
         } catch (err) {
           state.warning = `${UI.icons.warn} Load snapshot cho raid này fail: ${err?.message || String(err)}`;
           console.warn(`[raid-check edit scopeAll] raid-pick load failed:`, err?.message || err);
@@ -2165,14 +2196,20 @@ function createRaidCheckCommand(deps) {
         prevId: "raid-check-all-page:prev",
         nextId: "raid-check-all-page:next",
       });
-      // Append the cross-raid Edit button. customId `raid-check:edit-all`
-      // has no raidKey segment on purpose - the Edit UI's raid dropdown
-      // picks one mid-session. Bot.js's global InteractionCreate listener
-      // routes `raid-check:*` customIds to handleRaidCheckButton, which
-      // short-circuits into the scopeAll Edit flow.
+      // Append the cross-raid Edit button. customId encodes the
+      // discordId of the user currently shown on this page so the
+      // Edit flow can pre-select them after the leader picks a raid.
+      // Per Traine: clicking Edit while viewing Bao's page should
+      // target Bao, not force re-picking from a fresh dropdown.
+      // `raid-check:edit-all:<discordId>` is still routed by bot.js's
+      // global dispatcher (matches the `raid-check:*` prefix) and
+      // handleRaidCheckButton splits parts[2] out as the pre-select.
+      const currentAbs = currentAbsoluteIndex();
+      const currentViewUserId =
+        pagesData[currentAbs]?.userDoc?.discordId || "";
       row.addComponents(
         new ButtonBuilder()
-          .setCustomId("raid-check:edit-all")
+          .setCustomId(`raid-check:edit-all:${currentViewUserId}`)
           .setLabel("Edit progress")
           .setEmoji("✏️")
           .setStyle(ButtonStyle.Secondary)
