@@ -299,7 +299,32 @@ function createRaidCheckCommand(deps) {
         .setColor(UI.colors.success)
         .setDescription(description)
         .setTimestamp();
-      await interaction.editReply({ embeds: [emptyEmbed] });
+      // Edit button stays available even on the empty-state path so a
+      // leader can Reset a DONE char for a re-clear, or fix an incorrect
+      // stamp, without having to find another raid that still has
+      // pending chars first. Matches the "Edit button always enabled"
+      // contract at buildButtonRow. Only suppress it when there's
+      // literally no char in scope (allChars === 0) because the Edit
+      // cascade would then have nothing to show.
+      const hasEditableChar =
+        Array.isArray(allEligible) && allEligible.length > 0;
+      const components = hasEditableChar
+        ? [
+            new ActionRowBuilder().addComponents(
+              new ButtonBuilder()
+                .setCustomId(`raid-check:edit:${raidKey}`)
+                .setLabel("Edit progress")
+                .setEmoji("✏️")
+                .setStyle(ButtonStyle.Secondary)
+            ),
+          ]
+        : [];
+      // Button click routing: bot.js's global InteractionCreate listener
+      // auto-dispatches any `raid-check:*` customId to handleRaidCheckButton
+      // (see bot.js line ~168), so we don't install a local collector on
+      // this path. Interaction token expires in 15 min; after that a click
+      // will fail silently in Discord's UI, same as any stale ephemeral.
+      await interaction.editReply({ embeds: [emptyEmbed], components });
       return;
     }
 
