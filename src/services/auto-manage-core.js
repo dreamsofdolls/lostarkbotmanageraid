@@ -582,6 +582,14 @@ function createAutoManageCoreService({
         }
         if (gathered.error) {
           entry.error = gathered.error;
+          // Stamp the public-log-off flag for the /raid-check Edit exception.
+          // Bible-returned "Logs not enabled" is the only reliable per-char
+          // signal we have that the owner's public log toggle is OFF for
+          // THIS char specifically, so the leader Edit flow can let managers
+          // manually move progress the auto-sync path can never reach.
+          if (isPublicLogDisabledError(gathered.error)) {
+            character.publicLogDisabled = true;
+          }
           report.perChar.push(entry);
           continue;
         }
@@ -602,6 +610,10 @@ function createAutoManageCoreService({
           );
           entry.applied = applied;
           report.appliedTotal += applied.length;
+          // Successful sync means the owner's public log is ON for this
+          // char right now. Clear any stale flag so a char that flipped
+          // log-public between syncs stops being marked "manager edit only".
+          if (character.publicLogDisabled) character.publicLogDisabled = false;
         } catch (err) {
           entry.error = err?.message || String(err);
           console.warn(

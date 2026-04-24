@@ -433,6 +433,82 @@ test("nextAnnouncementEligibleBoundaryMs: artist-wakeup lands on next 01:00 UTC 
   assert.equal(fireNext, Date.UTC(2026, 3, 25, 1, 0, 0, 0));
 });
 
+test("Edit flow: buildEditableCharsByUser hides auto-sync chars when log is ON", () => {
+  // Simulate the snapshot shape buildEditableCharsByUser expects: allChars
+  // with per-char publicLogDisabled + a userMeta Map with autoManageEnabled.
+  const userMeta = new Map([
+    ["auto-user", { autoManageEnabled: true }],
+    ["manual-user", { autoManageEnabled: false }],
+  ]);
+  const allChars = [
+    { discordId: "auto-user", accountName: "A", charName: "AutoLogOn", itemLevel: 1720, publicLogDisabled: false },
+    { discordId: "auto-user", accountName: "A", charName: "AutoLogOff", itemLevel: 1715, publicLogDisabled: true },
+    { discordId: "manual-user", accountName: "B", charName: "ManualChar", itemLevel: 1730, publicLogDisabled: false },
+  ];
+  const editable = __test.buildEditableCharsByUser({ allChars, userMeta });
+  // Auto-user present only because one of their chars has log off.
+  assert.ok(editable.has("auto-user"));
+  assert.equal(editable.get("auto-user").chars.length, 1);
+  assert.equal(editable.get("auto-user").chars[0].charName, "AutoLogOff");
+  // Manual-user: all chars editable regardless of log state.
+  assert.ok(editable.has("manual-user"));
+  assert.equal(editable.get("manual-user").chars.length, 1);
+  assert.equal(editable.get("manual-user").chars[0].charName, "ManualChar");
+});
+
+test("Edit flow: buildEditableCharsByUser drops users whose every char is bible-owned", () => {
+  const userMeta = new Map([
+    ["all-bible-owned", { autoManageEnabled: true }],
+  ]);
+  const allChars = [
+    { discordId: "all-bible-owned", accountName: "X", charName: "A", itemLevel: 1720, publicLogDisabled: false },
+    { discordId: "all-bible-owned", accountName: "X", charName: "B", itemLevel: 1720, publicLogDisabled: false },
+  ];
+  const editable = __test.buildEditableCharsByUser({ allChars, userMeta });
+  assert.equal(editable.has("all-bible-owned"), false);
+  assert.equal(editable.size, 0);
+});
+
+test("Edit flow: buildEditableCharsByUser sorts chars by iLvl descending", () => {
+  const userMeta = new Map([["u", { autoManageEnabled: false }]]);
+  const allChars = [
+    { discordId: "u", accountName: "A", charName: "LowGeo", itemLevel: 1700, publicLogDisabled: false },
+    { discordId: "u", accountName: "A", charName: "HighGeo", itemLevel: 1740, publicLogDisabled: false },
+    { discordId: "u", accountName: "A", charName: "MidGeo", itemLevel: 1720, publicLogDisabled: false },
+  ];
+  const editable = __test.buildEditableCharsByUser({ allChars, userMeta });
+  const names = editable.get("u").chars.map((c) => c.charName);
+  assert.deepEqual(names, ["HighGeo", "MidGeo", "LowGeo"]);
+});
+
+test("Edit flow: getEligibleRaidsForChar filters raids by minItemLevel", () => {
+  // 1710 → should include Act4 Normal (1700) and Kazeros Normal (1710) but
+  // NOT Kazeros Hard (1730), Serca Normal (1720), etc. Exact eligibility
+  // list depends on RAID_REQUIREMENT_MAP so we assert the minItemLevel
+  // contract without hard-coding the full raid list.
+  const raids = __test.getEligibleRaidsForChar(1710);
+  assert.ok(raids.length > 0, "at least some raids qualify at 1710");
+  for (const { entry } of raids) {
+    assert.ok(
+      Number(entry.minItemLevel) <= 1710,
+      `raid with floor ${entry.minItemLevel} should not be returned for 1710 char`
+    );
+  }
+  // Highest gear (1760) → every raid should qualify.
+  const allRaids = __test.getEligibleRaidsForChar(1760);
+  assert.ok(allRaids.length >= raids.length);
+  // Zero iLvl → empty list.
+  const noRaids = __test.getEligibleRaidsForChar(0);
+  assert.equal(noRaids.length, 0);
+});
+
+test("Edit flow: getEligibleRaidsForChar returns entries in ascending minItemLevel order", () => {
+  const raids = __test.getEligibleRaidsForChar(1800);
+  const mins = raids.map(({ entry }) => Number(entry.minItemLevel) || 0);
+  const sorted = [...mins].sort((a, b) => a - b);
+  assert.deepEqual(mins, sorted, "eligible raids must be sorted by min iLvl ascending");
+});
+
 test("stale roster refresh canonicalizes diacritic-only bible character names", () => {
   const userDoc = {
     accounts: [

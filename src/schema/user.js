@@ -38,6 +38,16 @@ const characterSchema = new mongoose.Schema(
     bibleSerial: { type: String, default: null },
     bibleCid: { type: Number, default: null },
     bibleRid: { type: Number, default: null },
+    // Set true when the most recent auto-manage sync for this character
+    // returned "Logs not enabled" from lostark.bible (public log OFF in
+    // the player's bible profile), cleared to false when a subsequent
+    // sync fetches logs successfully. Used by the /raid-check Edit flow
+    // to carve out a per-char exception: normally the leader Edit button
+    // skips chars that belong to opted-in (auto-sync) users because any
+    // manual edit would be overwritten on the next bible sync, but a
+    // char with public log OFF is never going to be bible-syncable so
+    // the leader is the only one who can move its progress.
+    publicLogDisabled: { type: Boolean, default: false },
     assignedRaids: {
       armoche: { type: assignedRaidSchema, default: () => ({}) },
       kazeros: { type: assignedRaidSchema, default: () => ({}) },

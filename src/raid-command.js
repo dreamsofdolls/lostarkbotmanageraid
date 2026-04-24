@@ -104,6 +104,7 @@ const RAID_CHECK_USER_QUERY_FIELDS = [
   "accounts.characters.itemLevel",
   "accounts.characters.raids",
   "accounts.characters.assignedRaids",
+  "accounts.characters.publicLogDisabled",
 ].join(" ");
 
 /**
@@ -738,6 +739,8 @@ let buildRaidCheckSnapshotFromUsers;
 let formatRaidCheckNotEligibleFieldValue;
 let getRaidCheckRenderableChars;
 let computeRaidCheckSnapshot;
+let buildEditableCharsByUser;
+let getEligibleRaidsForChar;
 let handleRaidCheckCommand;
 let handleRaidCheckButton;
 let handleStatusCommand;
@@ -1265,6 +1268,13 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   isRaidLeader,
   isManagerId,
   getAutoManageCooldownMs,
+  // Late-bind thunk wrapper: raid-set's factory composes AFTER
+  // raid-check's below, so the `applyRaidSetForDiscordId` `let` binding
+  // is still undefined at the moment this dep object is built. The
+  // arrow captures the outer binding by reference and is only invoked
+  // at interaction time when raid-set has long since composed and
+  // filled in the value.
+  applyRaidSetForDiscordId: (args) => applyRaidSetForDiscordId(args),
   RAID_REQUIREMENT_MAP,
   RAID_CHECK_USER_QUERY_FIELDS,
   ROSTER_KEY_SEP,
@@ -1277,6 +1287,8 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   formatRaidCheckNotEligibleFieldValue,
   getRaidCheckRenderableChars,
   computeRaidCheckSnapshot,
+  buildEditableCharsByUser,
+  getEligibleRaidsForChar,
   handleRaidCheckCommand,
   handleRaidCheckButton,
 } = raidCheckCommandHandlers);
@@ -1522,5 +1534,7 @@ module.exports = {
     pickWakeupNoticeContent,
     ARTIST_QUIET_START_HOUR_VN,
     ARTIST_QUIET_END_HOUR_VN,
+    buildEditableCharsByUser,
+    getEligibleRaidsForChar,
   },
 };
