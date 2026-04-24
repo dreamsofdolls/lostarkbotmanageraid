@@ -2151,48 +2151,15 @@ function createRaidCheckCommand(deps) {
       currentLocalPage = 0;
     };
 
-    // Raid dropdown aggregate. Built once at init so the option labels
-    // (e.g. "Act 4 Hard (42 pending)") stay stable across filter toggles -
-    // the counts reflect guild-wide "chars who haven't fully cleared this
-    // raid" so leaders see the total backlog per raid independent of the
-    // current user focus. Combining filters (user X + raid Y) shows X's
-    // own filtered progress in the footer; the dropdown label still
-    // carries the global total so leader can spot backlog hotspots at a
-    // glance before drilling in.
-    //
-    // `pending` counts char-raid entries where isCompleted === false
-    // (matches /raid-check specific-raid's counting semantics: 1 char =
-    // 1 unit per raid). Sorted by pending desc so the backlog-heaviest
-    // raid surfaces first - same "most pending first" logic as the
-    // user-filter in specific-raid mode.
-    const raidAggregate = new Map();
-    for (const p of pagesData) {
-      const chars = Array.isArray(p.account.characters) ? p.account.characters : [];
-      for (const ch of chars) {
-        for (const raid of getStatusRaidsForCharacter(ch)) {
-          const key = `${raid.raidKey}:${raid.modeKey}`;
-          let entry = raidAggregate.get(key);
-          if (!entry) {
-            entry = {
-              key,
-              label: raid.raidName,
-              raidKey: raid.raidKey,
-              modeKey: raid.modeKey,
-              pending: 0,
-            };
-            raidAggregate.set(key, entry);
-          }
-          if (!raid.isCompleted) entry.pending += 1;
-        }
-      }
-    }
-    const raidDropdownEntries = [...raidAggregate.values()].sort(
-      (a, b) => b.pending - a.pending || a.label.localeCompare(b.label)
-    );
-    const totalRaidPending = raidDropdownEntries.reduce(
-      (sum, r) => sum + r.pending,
-      0
-    );
+    // Dropdown counts (both user-filter and raid-filter labels) are
+    // computed lazily on each render via `computePendingAggregate` below,
+    // so the two dropdowns stay cross-reactive: picking a user reshapes
+    // the raid-filter labels to that user's backlog, and picking a raid
+    // reshapes the user-filter labels to that raid's backlog per user.
+    // Per Traine's ask - stable guild-wide labels were disorienting
+    // during drill-down ("Du's filter says 7 pending for Kazeros Hard
+    // but the raid dropdown shows 42? Whose 42?"), dynamic labels keep
+    // every number on the screen consistent with the current focus.
 
     const buildPage = (pageIndex) => {
       const { userDoc, account } = pagesData[pageIndex];
@@ -2361,41 +2328,83 @@ function createRaidCheckCommand(deps) {
       return row;
     };
 
-    // User filter dropdown. Mirrors specific-raid /raid-check's
-    // "All users / Filter theo user" picker so a leader in all-mode
-    // can jump straight to a specific member without clicking Next
-    // through everyone. Discord StringSelect caps at 25 options so
-    // slice the per-user list at 24 (plus the All-users entry).
-    // With 24+ users in the guild, the overflow users won't appear
-    // in the dropdown but are still reachable via Prev/Next.
+    // Pending aggregation walker shared by both filter-row builders.
+    // Returns { perUserPending: Map<discordId,count>, perRaidPending:
+    // Map<"raidKey:modeKey",{label,pending}>, totalPending } scoped to
+    // the (raidFilter, userFilter) args. Single pass over pagesData ×
+    // chars × raids so both dropdowns pull from the same in-memory tally
+    // instead of walking twice per render - guild scale is small enough
+    // that the double-use is free, but the DRY keeps both counts
+    // guaranteed consistent.
+    const computePendingAggregate = ({ raidFilter, userFilter }) => {
+      const perUserPending = new Map();
+      const perRaidPending = new Map();
+      let totalPending = 0;
+      for (const p of pagesData) {
+        const discordId = p.userDoc.discordId;
+        if (userFilter && discordId !== userFilter) continue;
+        const chars = Array.isArray(p.account.characters) ? p.account.characters : [];
+        for (const ch of chars) {
+          for (const raid of getStatusRaidsForCharacter(ch)) {
+            const key = `${raid.raidKey}:${raid.modeKey}`;
+            // Record the raid existence for the per-raid dropdown BEFORE
+            // the pending gate so a raid all chars have cleared still
+            // appears in the dropdown (with pending=0) rather than
+            // silently vanishing once the backlog hits zero.
+            let raidEntry = perRaidPending.get(key);
+            if (!raidEntry) {
+              raidEntry = { key, label: raid.raidName, pending: 0 };
+              perRaidPending.set(key, raidEntry);
+            }
+            if (raidFilter && key !== raidFilter) continue;
+            if (raid.isCompleted) continue;
+            perUserPending.set(discordId, (perUserPending.get(discordId) || 0) + 1);
+            raidEntry.pending += 1;
+            totalPending += 1;
+          }
+        }
+      }
+      return { perUserPending, perRaidPending, totalPending };
+    };
+
+    // User filter dropdown, reactive to the active raid filter. When a
+    // raid is picked, each user's label shows pending count FOR THAT
+    // RAID ("Du (7 pending)"); when no raid is picked, labels show
+    // guild-wide backlog per user. The "All users" entry carries the
+    // running total so the leader can see at a glance how much work is
+    // outstanding in the currently-filtered view (pre/post raid pick).
+    //
+    // Users sorted pending desc so the heaviest backlog surfaces first -
+    // in specific-raid /raid-check the same rule applies (most-pending
+    // user on top). Discord StringSelect caps at 25 options; 1 is the
+    // All-users entry so 24 users fit below. Overflow users fall off
+    // but stay reachable via Prev/Next pagination.
     const buildFilterRow = (disabled) => {
+      const { perUserPending, totalPending } = computePendingAggregate({
+        raidFilter: filterRaidId,
+        userFilter: null, // user dropdown always lists every user, scope here is raid-only
+      });
       const options = [
         {
-          label: truncateText(`All users (${pagesData.length} pages)`, 100),
+          label: truncateText(`All users (${totalPending} pending)`, 100),
           value: FILTER_ALL,
           emoji: "🌐",
           default: filterUserId === null,
         },
       ];
       const sortedUsers = visibleUserIds
-        .map((discordId) => {
-          let accountsCount = 0;
-          for (const p of pagesData) {
-            if (p.userDoc.discordId === discordId) accountsCount += 1;
-          }
-          return {
-            discordId,
-            accountsCount,
-            displayName: authorMeta.get(discordId)?.displayName || discordId,
-          };
-        })
-        .sort((a, b) => a.displayName.localeCompare(b.displayName));
+        .map((discordId) => ({
+          discordId,
+          pending: perUserPending.get(discordId) || 0,
+          displayName: authorMeta.get(discordId)?.displayName || discordId,
+        }))
+        .sort(
+          (a, b) =>
+            b.pending - a.pending || a.displayName.localeCompare(b.displayName)
+        );
       for (const u of sortedUsers.slice(0, 24)) {
         options.push({
-          label: truncateText(
-            `${u.displayName} (${u.accountsCount} acc${u.accountsCount === 1 ? "" : "s"})`,
-            100
-          ),
+          label: truncateText(`${u.displayName} (${u.pending} pending)`, 100),
           value: u.discordId,
           emoji: "👤",
           default: filterUserId === u.discordId,
@@ -2410,30 +2419,35 @@ function createRaidCheckCommand(deps) {
       );
     };
 
-    // Raid filter dropdown. Parallel to user-filter in structure but
-    // orthogonal in semantics - picking a raid narrows every char's
-    // raid list (and therefore the footer counts) down to that single
-    // raid, without touching which accounts/pages are visible. Leaders
-    // can combine both filters: "Du × Kazeros Hard" surfaces Du's
-    // pending chars for just that one raid. Option labels are the
-    // guild-wide pending counts computed at init (see `raidAggregate`),
-    // so clicking around filters doesn't rewrite the labels underneath
-    // the leader's hand.
+    // Raid filter dropdown, reactive to the active user filter. When a
+    // user is picked, each raid's label shows pending count FOR THAT
+    // USER ONLY ("Kazeros Hard (3 pending)"); when no user is picked,
+    // labels are guild-wide backlog per raid. Leader pick-flow is
+    // naturally two-step: first narrow to a user, then see which raid
+    // that user still needs → both labels update so the shown counts
+    // always match the current drill-down, no stale guild numbers
+    // confusing the per-user scope.
     const buildRaidFilterRow = (disabled) => {
+      const { perRaidPending, totalPending } = computePendingAggregate({
+        raidFilter: null, // raid dropdown always lists every raid, scope here is user-only
+        userFilter: filterUserId,
+      });
+      const raidEntries = [...perRaidPending.values()].sort(
+        (a, b) => b.pending - a.pending || a.label.localeCompare(b.label)
+      );
       const options = [
         {
-          label: truncateText(`All raids (${totalRaidPending} total pending)`, 100),
+          label: truncateText(`All raids (${totalPending} total pending)`, 100),
           value: FILTER_ALL_RAIDS,
           emoji: "🌐",
           default: filterRaidId === null,
         },
       ];
-      // StringSelect caps at 25 options; 1 slot is the All-raids entry,
-      // leaving 24 for actual raids. Act 4 Normal/Hard/Nightmare + Kazeros
-      // Normal/Hard/Nightmare + Serca Hard/Nightmare = 8 entries max
-      // today, so the slice is defensive against future raid additions
-      // rather than a real cap against current content.
-      for (const r of raidDropdownEntries.slice(0, 24)) {
+      // StringSelect caps at 25 options; 1 slot is All-raids entry so
+      // 24 actual raids fit. Act 4 Normal/Hard + Kazeros Normal/Hard +
+      // Serca Hard/Nightmare = 6 today, plenty of headroom for future
+      // raid additions.
+      for (const r of raidEntries.slice(0, 24)) {
         options.push({
           label: truncateText(`${r.label} (${r.pending} pending)`, 100),
           value: r.key,
