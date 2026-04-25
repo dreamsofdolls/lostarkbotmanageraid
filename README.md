@@ -166,7 +166,8 @@ LostArk_RaidManage/
 │   ├── raid/                       # Pure helpers / registries
 │   │   ├── shared.js               # Time, name, format utils
 │   │   ├── announcements.js        # Announcement registry (single source of truth)
-│   │   └── character.js            # Character + raid normalization (20 helpers + RAID_REQUIREMENT_MAP)
+│   │   ├── character.js            # Character + raid normalization (20 helpers + RAID_REQUIREMENT_MAP)
+│   │   └── raid-check-query.js     # /raid-check Mongo query (filter, projection, iLvl-range)
 │   │
 │   ├── db.js                       # Lazy Mongo connect with DNS fallback
 │   └── weekly-reset.js             # 30-min tick, Wed 10:00 UTC boundary
