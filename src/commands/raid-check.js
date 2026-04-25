@@ -7,6 +7,21 @@ const { isSupportClass } = require("../data/Class");
 
 const RAID_CHECK_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 
+// Bible-piggyback budget for /raid-check command-open. Mirrors the
+// /raid-status piggyback pattern (STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS
+// = 2500ms) so render isn't held hostage by slow bible. Slow gathers
+// keep running in the background after the budget elapses; the user
+// just sees the pre-piggyback render and can hit Sync if they want
+// the in-flight write to land before re-render.
+const RAID_CHECK_PIGGYBACK_BUDGET_MS = 2500;
+
+// Cap the per-open piggyback at this many opted-in pending users.
+// Above this threshold the piggyback is skipped entirely - the manager
+// should use the explicit Sync button (no budget cap there) for
+// heavy-backlog raids. Keeps a single /raid-check open from spending
+// the per-instance bible budget on an entire guild.
+const RAID_CHECK_PIGGYBACK_MAX_USERS = 8;
+
 function createRaidCheckCommand(deps) {
   const {
     EmbedBuilder,
@@ -24,6 +39,7 @@ function createRaidCheckCommand(deps) {
     getCharacterName,
     truncateText,
     formatShortRelative,
+    waitWithBudget,
     getGatesForRaid,
     ensureAssignedRaids,
     getGateKeys,
@@ -156,6 +172,128 @@ function createRaidCheckCommand(deps) {
     computeRaidCheckSnapshot,
   });
 
+  // Per-user piggyback bible-sync wrapped in a slot guard. Same pipeline
+  // handleRaidCheckSyncClick uses, scoped to ONE user's pending entries
+  // for THIS raid via includeEntryKeys so each per-user bible call is
+  // narrow. Returns true iff the apply landed at least one new gate.
+  // Errors are swallowed (logged) - piggyback is best-effort by design.
+  async function piggybackBibleSyncForUser(discordId, raidMeta, snapshot, weekResetStart) {
+    const guard = await acquireAutoManageSyncSlot(discordId);
+    if (!guard.acquired) return false;
+    try {
+      const seedDoc = await User.findOne({ discordId });
+      if (
+        !seedDoc?.autoManageEnabled ||
+        !Array.isArray(seedDoc.accounts) ||
+        seedDoc.accounts.length === 0
+      ) {
+        return false;
+      }
+      ensureFreshWeek(seedDoc);
+
+      // Narrow the bible call to JUST this user's pending entries in
+      // the raid currently being viewed - no point gathering logs for
+      // chars / raids the leader isn't looking at on this open.
+      const includeEntryKeys = new Set();
+      for (const ch of snapshot.pendingChars) {
+        if (ch.discordId === discordId) {
+          includeEntryKeys.add(autoManageEntryKey(ch.accountName, ch.charName));
+        }
+      }
+      if (includeEntryKeys.size === 0) return false;
+
+      const collected = await gatherAutoManageLogsForUserDoc(
+        seedDoc,
+        weekResetStart,
+        { includeEntryKeys }
+      );
+      let appliedSomething = false;
+      await saveWithRetry(async () => {
+        const fresh = await User.findOne({ discordId });
+        if (!fresh || !Array.isArray(fresh.accounts) || fresh.accounts.length === 0) return;
+        ensureFreshWeek(fresh);
+        if (!fresh.autoManageEnabled) {
+          fresh.lastAutoManageAttemptAt = Date.now();
+          await fresh.save();
+          return;
+        }
+        const report = applyAutoManageCollected(fresh, weekResetStart, collected);
+        const now = Date.now();
+        fresh.lastAutoManageAttemptAt = now;
+        if (report.perChar.some((c) => !c.error)) {
+          fresh.lastAutoManageSyncAt = now;
+          if (report.perChar.some((c) => Array.isArray(c.applied) && c.applied.length > 0)) {
+            appliedSomething = true;
+          }
+        }
+        await fresh.save();
+      });
+      return appliedSomething;
+    } catch (err) {
+      console.warn(
+        `[raid-check piggyback] user ${discordId} failed:`,
+        err?.message || err
+      );
+      try { await stampAutoManageAttempt(discordId); } catch {}
+      return false;
+    } finally {
+      releaseAutoManageSyncSlot(discordId);
+    }
+  }
+
+  // Open-time bible piggyback. Scoped to opted-in users with at least
+  // one pending char in the raid being viewed. Skips entirely when the
+  // cohort is empty OR larger than MAX_USERS (heavy backlog raids
+  // belong to the explicit Sync button, not the per-open piggyback).
+  // Race against BUDGET_MS so a slow bible doesn't hold render hostage;
+  // any in-flight gather past budget keeps running in background and
+  // its save still updates lastAutoManageSyncAt for the next open.
+  async function tryBiblePiggybackForOpen(snapshot, raidMeta) {
+    const optedInDiscordIds = [
+      ...new Set(snapshot.pendingChars.map((c) => c.discordId)),
+    ].filter((id) => snapshot.userMeta.get(id)?.autoManageEnabled);
+
+    if (optedInDiscordIds.length === 0) return false;
+    if (optedInDiscordIds.length > RAID_CHECK_PIGGYBACK_MAX_USERS) {
+      console.log(
+        `[raid-check piggyback] skip raid=${raidMeta.raidKey}:${raidMeta.modeKey} (${optedInDiscordIds.length} opted-in users > cap ${RAID_CHECK_PIGGYBACK_MAX_USERS}); use Sync button instead`
+      );
+      return false;
+    }
+
+    const started = Date.now();
+    const weekResetStart = weekResetStartMs();
+    const allPiggybackPromise = Promise.all(
+      optedInDiscordIds.map((discordId) =>
+        raidCheckSyncLimiter.run(() =>
+          piggybackBibleSyncForUser(discordId, raidMeta, snapshot, weekResetStart)
+        )
+      )
+    );
+
+    const budgetResult = await waitWithBudget(
+      allPiggybackPromise,
+      RAID_CHECK_PIGGYBACK_BUDGET_MS
+    );
+    const elapsedMs = Date.now() - started;
+
+    if (budgetResult.timedOut) {
+      console.log(
+        `[raid-check piggyback] budget exceeded raid=${raidMeta.raidKey}:${raidMeta.modeKey} users=${optedInDiscordIds.length} elapsedMs=${elapsedMs}; rendering pre-piggyback data, gathers continuing in background`
+      );
+      // Don't await the background settle - those gathers' saves stamp
+      // lastAutoManageSyncAt so the NEXT open picks them up.
+      allPiggybackPromise.catch(() => {});
+      return false;
+    }
+
+    const appliedAny = budgetResult.value.some((applied) => applied);
+    console.log(
+      `[raid-check piggyback] done raid=${raidMeta.raidKey}:${raidMeta.modeKey} users=${optedInDiscordIds.length} appliedAny=${appliedAny} elapsedMs=${elapsedMs}`
+    );
+    return appliedAny;
+  }
+
   async function handleRaidCheckCommand(interaction) {
     if (!isRaidLeader(interaction)) {
       await interaction.reply({
@@ -186,13 +324,36 @@ function createRaidCheckCommand(deps) {
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
+    let snapshot = await computeRaidCheckSnapshot(raidMeta, { syncFreshData: true });
+
+    // Light bible-piggyback so /raid-check no longer feels stale on open.
+    // Without this the render reflected only data the daily background
+    // ticker (24h gap) or someone's prior /raid-status had already
+    // written. Manager would have to click Sync manually every time to
+    // see fresh progress - exactly the UX gap Traine flagged.
+    //
+    // Scope: opted-in users with at least one pending char in THIS raid.
+    // Cap at MAX_USERS; above that the explicit Sync button is the
+    // right tool (no budget cap, full guild reach). Per-user gather
+    // scopes its bible call to JUST that user's pending chars via
+    // includeEntryKeys, so multi-user piggyback is still cheap.
+    //
+    // Budget: BUDGET_MS cap - if the bible is slow we render with
+    // pre-piggyback data and let the in-flight gathers finish in the
+    // background (their save still updates lastAutoManageSyncAt for the
+    // next /raid-check open).
+    const piggybacked = await tryBiblePiggybackForOpen(snapshot, raidMeta);
+    if (piggybacked) {
+      snapshot = await computeRaidCheckSnapshot(raidMeta, { syncFreshData: false });
+    }
+
     const {
       allEligible,
       pendingChars,
       userMeta,
       rosterRefreshMap,
       rosterRefreshAttemptMap,
-    } = await computeRaidCheckSnapshot(raidMeta, { syncFreshData: true });
+    } = snapshot;
     const renderChars = getRaidCheckRenderableChars({ allEligible });
 
     const modeKey = normalizeName(raidMeta.modeKey);

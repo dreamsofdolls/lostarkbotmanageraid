@@ -4,6 +4,13 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-25
 
+### Added (bible piggyback for /raid-check)
+
+- `/raid-check` now piggyback-syncs bible logs on command-open, scoped to opted-in users with at least one pending char in the viewed raid. Mirrors the `/raid-status` piggyback pattern (`STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500ms`) so render isn't held hostage by slow bible. Closes the UX gap a manager would otherwise see: opening `/raid-check` previously showed only data the daily background ticker (24h gap) or someone's prior `/raid-status` had already written.
+- Per-user gather is narrowed via `includeEntryKeys` to JUST that user's pending entries in the viewed raid, so multi-user piggyback stays cheap. Cohort cap `RAID_CHECK_PIGGYBACK_MAX_USERS = 8` skips the piggyback entirely for heavy-backlog raids - the explicit Sync button (no budget cap) stays the right tool there.
+- If the budget elapses, render proceeds with pre-piggyback data and the in-flight gathers continue in background; their save still updates `lastAutoManageSyncAt` so the NEXT open picks them up.
+- Footer hint added in same release: shows the OLDEST opted-in user's `lastAutoManageSyncAt` across visible groups (`bible: 5h ago oldest · bấm Sync để pull mới`) so the manager can tell at a glance whether the displayed pending list is fresh-from-bible or stale.
+
 ### Added
 
 - `/raid-check` user-filter dropdowns now show a per-user support/DPS breakdown beside the pending count: `Du (8 pending · 2🪄 6⚔️)` instead of bare `Du (8 pending)`. Applies to both surfaces - the specific-raid filter (e.g., `/raid-check raid:serca_hard`) and the cross-raid filter (`/raid-check raid:all`). Hard-support classes are Bard, Paladin, Artist, Valkyrie; everyone else counts as DPS. Helps a Raid Manager see at a glance whether a heavy backlog is composition-blocking (low support count) or just queue depth.
