@@ -11,7 +11,7 @@ embed body / dropdown labels you have to upload each PNG as a **guild custom
 emoji** in the Thaemine server, then wire the emoji ID into
 `data/Class.js`'s `CLASS_EMOJI_MAP`.
 
-### Recommended: bulk upload via script
+### Recommended: bulk upload via script (application emoji)
 
 ```bash
 node scripts/upload-class-emoji.js          # idempotent: skip existing
@@ -19,20 +19,27 @@ node scripts/upload-class-emoji.js --dry    # validate setup, no upload
 node scripts/upload-class-emoji.js --force  # re-upload even if exists
 ```
 
-The script uses `DISCORD_TOKEN` + `GUILD_ID` from `.env`, calls Discord REST
-`POST /guilds/{guild.id}/emojis` for each PNG, and writes the resulting
-`{ displayName: "<:emoji:id>" }` map to `assets/class-icons/emoji-map.json`.
-`data/Class.js` auto-merges that JSON into `CLASS_EMOJI_MAP` at startup, so
-the only follow-up steps after running the script are: `git add` the new
-`emoji-map.json`, commit, push - bot picks up class icons on next deploy.
+The script uses `DISCORD_TOKEN` from `.env` (the application id is auto-
+resolved via `GET /applications/@me`, so no extra env var needed), calls
+Discord REST `POST /applications/{app.id}/emojis` for each PNG, and writes
+the resulting `{ displayName: "<:emoji:id>" }` map to
+`assets/class-icons/emoji-map.json`. `data/Class.js` auto-merges that JSON
+into `CLASS_EMOJI_MAP` at startup, so the only follow-up steps after
+running the script are: `git add` the new `emoji-map.json`, commit, push -
+bot picks up class icons on next deploy.
+
+Why application emoji instead of guild emoji:
+- **Owned by the bot application, not any single guild**, so the bot can
+  use them in every guild it joins (future-proof for multi-server)
+- **Don't consume Thaemine's 50-slot guild emoji budget** which is
+  community-shared with member-uploaded emoji
+- **No "Manage Expressions" permission** needed in any guild - emoji are
+  application assets the bot owns
+- **2000 emoji slot per application** vs 50 free / 250 boosted per guild
 
 Requirements:
-- Bot must have **Manage Expressions** permission (formerly "Manage Emojis
-  and Stickers") in the target guild
-- Discord guild has at least 25 free emoji slots (alias classes share a
-  slot, so the script uses ~25 of the 50 free slots / 250 boosted)
-- Bot rate limit: ~50 emoji uploads / 30s per guild; the script sleeps
-  250ms between uploads so a full 25-emoji run takes ~7 seconds
+- Application emoji rate limit similar to guild (~50/30s); the script
+  sleeps 250ms between uploads so a full 25-emoji run takes ~7 seconds
 
 ### Manual fallback: Discord UI
 
