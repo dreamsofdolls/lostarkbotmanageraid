@@ -659,6 +659,7 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   toModeLabel,
   getCharacterName,
   truncateText,
+  formatShortRelative,
   getGatesForRaid,
   ensureAssignedRaids,
   getGateKeys,

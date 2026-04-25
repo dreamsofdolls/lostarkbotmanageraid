@@ -23,6 +23,7 @@ function createRaidCheckCommand(deps) {
     toModeLabel,
     getCharacterName,
     truncateText,
+    formatShortRelative,
     getGatesForRaid,
     ensureAssignedRaids,
     getGateKeys,
@@ -320,6 +321,38 @@ function createRaidCheckCommand(deps) {
       });
 
     const headerTitle = `${UI.icons.warn} Raid Check · ${raidMeta.label} (${raidMeta.minItemLevel})`;
+
+    // Surface bible-sync freshness in the footer because /raid-check itself
+    // does NOT pull bible (only the explicit Sync button + the daily
+    // background ticker do). Without this hint a leader could not tell
+    // whether the pending list reflects last-minute progress or 23h-stale
+    // data. We use the OLDEST opted-in user's lastAutoManageSyncAt across
+    // the visible groups - "fresh" requires every visible user to be
+    // recent. Non-opted-in users are skipped (they never auto-sync, so a
+    // null timestamp on them isn't a freshness problem).
+    const formatLastBibleSyncLine = (groups) => {
+      let oldestSyncAt = Infinity;
+      let optedInCount = 0;
+      let neverSyncedCount = 0;
+      for (const group of groups) {
+        const meta = snapshot.userMeta.get(group.discordId);
+        if (!meta?.autoManageEnabled) continue;
+        optedInCount += 1;
+        const syncAt = Number(meta.lastAutoManageSyncAt) || 0;
+        if (syncAt <= 0) {
+          neverSyncedCount += 1;
+          oldestSyncAt = 0;
+        } else if (syncAt < oldestSyncAt) {
+          oldestSyncAt = syncAt;
+        }
+      }
+      if (optedInCount === 0) return null;
+      if (oldestSyncAt === 0) {
+        return `${UI.icons.info} bible: ${neverSyncedCount}/${optedInCount} chưa sync lần nào`;
+      }
+      return `${UI.icons.info} bible: oldest ${formatShortRelative(oldestSyncAt)} · bấm Sync để pull mới`;
+    };
+
     const buildFooterText = (groups) => {
       let done = 0;
       let partial = 0;
@@ -338,7 +371,9 @@ function createRaidCheckCommand(deps) {
         `${UI.icons.pending} ${none} pending`,
       ];
       if (notEligible > 0) parts.push(`${UI.icons.lock} ${notEligible} not eligible`);
-      return parts.join(" · ");
+      const syncLine = formatLastBibleSyncLine(groups);
+      const counts = parts.join(" · ");
+      return syncLine ? `${counts}\n${syncLine}` : counts;
     };
 
     const buildCharField = (character) => {
