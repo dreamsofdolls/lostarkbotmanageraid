@@ -4,6 +4,13 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-26
 
+### Changed (class icon bootstrap: content-addressed naming)
+
+- Bootstrap now uses **content-addressed emoji names**: each application emoji is created as `{bibleClassId}_{md5short}` where `md5short` is the first 6 chars of the PNG's MD5 hash. On every restart, the bootstrap detects when a PNG's content has changed by computing the expected name from current bytes and comparing against the existing emoji's name. Mismatch → delete + re-upload with new hash; match → skip.
+- **Removes the manual `CLASS_EMOJI_FORCE_REFRESH` env var dance Traine had to do every time PNG art changed.** Workflow simplifies from "edit PNG → set env var → push → wait → unset env var → push" to "edit PNG → push". The bot does the rest.
+- Migration: first deploy with this code sees the legacy plain-named emoji (`bard`, `paladin`, `infighter_male`) on the application and treats them as content mismatches because they have no hash suffix. They get deleted + re-uploaded with hash-suffixed names in one bootstrap pass. ~10s migration cost, single deploy. Subsequent restarts are normal idempotent skip.
+- Orphan detection now strips the `_hex` suffix when checking if an emoji name parses as a known class - keeps the warning relevant to actually-orphaned class emoji even after the rename.
+
 ### Fixed (class icon: real Machinist art + orphan handling)
 
 - Replaced the Artillerist-art placeholder for Scouter/Machinist with the real Machinist class icon. Found on Fandom Wiki (uncategorized like Souleater) at `ClassIcon-Gunner-Machinist.png`. Previously a Machinist character would render with Artillerist art - silently misleading any user who knew the difference. Removing the bad default felt safer than keeping it; the right art was a direct lookup away.

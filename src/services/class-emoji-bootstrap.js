@@ -3,24 +3,30 @@
  *
  * Bot-startup bootstrap for class icons. Runs inside `ClientReady` and
  * does whatever's needed to make `getClassEmoji(name)` return a real
- * `<:bard:123>` form for every class with a PNG in
+ * `<:bard_a3f9b2:123>` form for every class with a PNG in
  * `assets/class-icons/`. After this completes the char-field renderers
  * in /raid-status + /raid-check show class icons inline.
  *
- * Why bot-startup instead of a manual script:
- *   - Traine wants the deploy flow to be just "git push -> Railway"
- *   - One-time-script-then-commit-JSON pattern adds a step Traine has
- *     to remember any time class art is added or replaced
- *   - The bot already has DISCORD_TOKEN + the discord.js REST manager,
- *     so it can do this work itself with zero new credentials
+ * **Content-addressed naming.** Each emoji is uploaded with the name
+ * `{bibleClassId}_{md5short}` where md5short is the first 6 chars of
+ * the PNG's MD5 hash. On every restart the bootstrap:
+ *   - Lists existing application emoji
+ *   - For each PNG, computes the expected name from current content
+ *   - If an existing emoji matches the expected name -> content unchanged,
+ *     reuse the ID
+ *   - If an existing emoji exists for the bible ID but with a DIFFERENT
+ *     hash suffix (or no suffix at all - legacy from pre-hash bootstrap)
+ *     -> content changed, DELETE the stale emoji + upload new one
+ *   - If no existing emoji for the bible ID -> upload
  *
- * Idempotent: lists existing application emoji on every startup, only
- * uploads PNGs whose name doesn't already exist. After the first deploy
- * uploads ~25 emoji, every subsequent startup is just one GET + skip
- * (~500ms overhead). Safe to run on every restart.
+ * Result: any time a PNG file content changes (new art, color invert,
+ * source upgrade) the bot detects it on the next deploy and refreshes
+ * Discord's copy automatically. No env var dance, no manual script run.
  *
- * Self-healing: if an application emoji gets manually deleted from the
- * Discord developer portal, the next bot restart re-uploads it.
+ * One-time migration cost: first deploy with this code sees the legacy
+ * plain-named emoji (`bard`, `paladin`) and treats them as content
+ * mismatches because they have no hash suffix. They get deleted +
+ * re-uploaded with hash-suffixed names. ~10s overhead, single deploy.
  *
  * Failure mode: any error (REST blocked, app emoji slot exhausted, etc.)
  * is logged and swallowed. Bot keeps running with whatever subset of
@@ -31,6 +37,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const { CLASS_NAMES, CLASS_EMOJI_MAP } = require("../data/Class");
 
@@ -81,23 +88,39 @@ function detectMime(buffer) {
   return "application/octet-stream";
 }
 
+function shortHash(buffer) {
+  return crypto.createHash("md5").update(buffer).digest("hex").slice(0, 6);
+}
+
+function expectedEmojiName(bibleId, buffer) {
+  return `${bibleId}_${shortHash(buffer)}`;
+}
+
+// Identify an existing application emoji that "belongs" to a given bible
+// class ID, regardless of its hash suffix (or lack thereof). Matches:
+//   - The exact bible ID with no underscore suffix (legacy pre-hash format)
+//   - The bible ID followed by `_` + hex (current hash-suffix format)
+// Doesn't accidentally match unrelated emoji that happen to start with
+// the same prefix because we anchor on either no-suffix or `_hex` only.
+function findExistingForBibleId(existingByName, bibleId) {
+  // Exact legacy match
+  if (existingByName.has(bibleId)) return existingByName.get(bibleId);
+  // Hash-suffixed match: same bible ID + `_` + 1-12 hex chars
+  const re = new RegExp(`^${bibleId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}_[0-9a-f]{1,12}$`);
+  for (const [name, emoji] of existingByName) {
+    if (re.test(name)) return emoji;
+  }
+  return null;
+}
+
 /**
  * Bootstrap class emoji for the running bot.
  *
- * Set `CLASS_EMOJI_FORCE_REFRESH=true` to delete every existing class
- * emoji on the application and re-upload from scratch. Use when the PNG
- * source file changed (Discord doesn't expose image-update on emoji - only
- * delete + re-create works). Set the env var once, deploy, wait for the
- * bootstrap log to confirm, then unset + deploy again to return to
- * idempotent mode. Leaving it on permanently means every restart wipes +
- * re-uploads everything (slow + spends rate budget needlessly).
- *
  * @param {import('discord.js').Client} client - Logged-in discord.js client.
- * @returns {Promise<{uploaded: number, reused: number, aliasResolved: number, deleted: number, orphans: number, skipped: number, failed: number, total: number}>}
+ * @returns {Promise<{uploaded: number, reused: number, refreshed: number, aliasResolved: number, orphans: number, skipped: number, failed: number, total: number}>}
  */
 async function bootstrapClassEmoji(client) {
-  const FORCE_REFRESH = process.env.CLASS_EMOJI_FORCE_REFRESH === "true";
-  const ZERO = { uploaded: 0, reused: 0, aliasResolved: 0, deleted: 0, orphans: 0, skipped: 0, failed: 0, total: 0 };
+  const ZERO = { uploaded: 0, reused: 0, refreshed: 0, aliasResolved: 0, orphans: 0, skipped: 0, failed: 0, total: 0 };
 
   if (!fs.existsSync(ICONS_DIR)) {
     console.warn(
@@ -139,56 +162,8 @@ async function bootstrapClassEmoji(client) {
     return ZERO;
   }
 
-  // Build the set of emoji names this run will manage so the orphan +
-  // force-refresh paths below have a single source of truth.
-  const managedNames = new Set();
-  for (const filename of files) {
-    const bibleId = path.parse(filename).name;
-    // Aliases don't need their own emoji - skip naming them.
-    if (findCanonicalAlias(bibleId)) continue;
-    managedNames.add(bibleId);
-  }
-
-  let deleted = 0;
-
-  // Force-refresh path: delete every existing managed emoji so the upload
-  // loop below re-creates them fresh. Used when PNG source content changed
-  // (Discord emoji image is immutable; only delete + re-create works).
-  if (FORCE_REFRESH) {
-    console.log(`[class-emoji] CLASS_EMOJI_FORCE_REFRESH=true - deleting ${[...existingByName.keys()].filter((n) => managedNames.has(n)).length} managed emoji before re-upload`);
-    for (const [name, emoji] of existingByName) {
-      if (!managedNames.has(name)) continue;
-      try {
-        await client.rest.delete(`/applications/${appId}/emojis/${emoji.id}`);
-        deleted += 1;
-        await new Promise((r) => setTimeout(r, 250));
-      } catch (err) {
-        console.warn(
-          `[class-emoji] failed to delete :${name}: (${emoji.id}) for force-refresh:`,
-          err?.message || err
-        );
-      }
-    }
-    // After deletion the existingByName cache is stale; clear so the upload
-    // loop treats everything as new.
-    existingByName = new Map();
-  }
-
-  // Orphan detection: app emoji whose name isn't in any current PNG file.
-  // Don't auto-delete (could be intentional - bot might use other custom
-  // emoji for non-class purposes); just log a warning so a human can
-  // clean up manually via the developer portal if needed.
-  const orphanNames = [...existingByName.keys()].filter(
-    (n) => !managedNames.has(n) && CLASS_NAMES[n] !== undefined
-  );
-  if (orphanNames.length > 0) {
-    console.warn(
-      `[class-emoji] orphan class emoji on application (no matching PNG in assets/class-icons/): ${orphanNames.join(", ")} - delete manually at https://discord.com/developers/applications if no longer wanted`
-    );
-  }
-
-  // Upload non-alias entries first so canonical IDs exist when aliases
-  // try to resolve. Sort canonical ahead of aliases.
+  // Sort canonical files ahead of aliases so canonical IDs exist by the
+  // time aliases try to resolve.
   const sortedFiles = files.sort((a, b) => {
     const aIsAlias = !!findCanonicalAlias(path.parse(a).name);
     const bIsAlias = !!findCanonicalAlias(path.parse(b).name);
@@ -196,13 +171,18 @@ async function bootstrapClassEmoji(client) {
     return aIsAlias ? 1 : -1;
   });
 
+  // Track which existing emoji we matched to a current PNG, so anything
+  // left over is a true orphan.
+  const matchedEmojiIds = new Set();
   const idByBibleId = {};
+  const fullNameByBibleId = {};
+
   let uploaded = 0;
   let reused = 0;
+  let refreshed = 0;
   let aliasResolved = 0;
   let skipped = 0;
   let failed = 0;
-  const orphans = orphanNames.length;
 
   for (const filename of sortedFiles) {
     const bibleId = path.parse(filename).name;
@@ -211,15 +191,16 @@ async function bootstrapClassEmoji(client) {
       skipped += 1;
       continue;
     }
-    const emojiName = bibleId;
 
-    // Alias path: don't upload, point at canonical's emoji ID
+    // Alias path: don't upload, point at canonical's already-uploaded ID
     const canonical = findCanonicalAlias(bibleId);
     if (canonical) {
       const canonicalId = idByBibleId[canonical];
-      if (canonicalId) {
-        CLASS_EMOJI_MAP[displayName] = `<:${canonical}:${canonicalId}>`;
+      const canonicalName = fullNameByBibleId[canonical];
+      if (canonicalId && canonicalName) {
+        CLASS_EMOJI_MAP[displayName] = `<:${canonicalName}:${canonicalId}>`;
         idByBibleId[bibleId] = canonicalId;
+        fullNameByBibleId[bibleId] = canonicalName;
         aliasResolved += 1;
       } else {
         skipped += 1;
@@ -227,18 +208,41 @@ async function bootstrapClassEmoji(client) {
       continue;
     }
 
-    // Existing emoji: reuse without re-uploading
-    if (existingByName.has(emojiName)) {
-      const e = existingByName.get(emojiName);
-      CLASS_EMOJI_MAP[displayName] = `<:${e.name}:${e.id}>`;
-      idByBibleId[bibleId] = e.id;
+    const buffer = fs.readFileSync(path.join(ICONS_DIR, filename));
+    const expectedName = expectedEmojiName(bibleId, buffer);
+    const existing = findExistingForBibleId(existingByName, bibleId);
+
+    // Reuse path: existing emoji matches expected hash-suffixed name -
+    // content unchanged since last upload, nothing to do but record the ID.
+    if (existing && existing.name === expectedName) {
+      CLASS_EMOJI_MAP[displayName] = `<:${existing.name}:${existing.id}>`;
+      idByBibleId[bibleId] = existing.id;
+      fullNameByBibleId[bibleId] = existing.name;
+      matchedEmojiIds.add(existing.id);
       reused += 1;
       continue;
     }
 
-    // Upload missing emoji
+    // Refresh path: existing emoji has the wrong name (different hash, or
+    // legacy plain name pre-hash bootstrap). Discord emoji image is
+    // immutable - delete the stale one then upload fresh content.
+    if (existing) {
+      try {
+        await client.rest.delete(`/applications/${appId}/emojis/${existing.id}`);
+        matchedEmojiIds.add(existing.id);
+        await new Promise((r) => setTimeout(r, 250));
+      } catch (err) {
+        console.warn(
+          `[class-emoji] failed to delete stale :${existing.name}: (${existing.id}) before refresh:`,
+          err?.message || err
+        );
+        failed += 1;
+        continue;
+      }
+    }
+
+    // Upload (either new or refresh after delete)
     try {
-      const buffer = fs.readFileSync(path.join(ICONS_DIR, filename));
       const mime = detectMime(buffer);
       if (buffer.byteLength > 256 * 1024) {
         console.warn(
@@ -249,7 +253,7 @@ async function bootstrapClassEmoji(client) {
       }
       const dataUri = `data:${mime};base64,${buffer.toString("base64")}`;
       const created = await client.rest.post(`/applications/${appId}/emojis`, {
-        body: { name: emojiName, image: dataUri },
+        body: { name: expectedName, image: dataUri },
       });
       if (!created?.id) {
         console.warn(`[class-emoji] ${filename} upload returned no id; skipping`);
@@ -258,9 +262,12 @@ async function bootstrapClassEmoji(client) {
       }
       CLASS_EMOJI_MAP[displayName] = `<:${created.name}:${created.id}>`;
       idByBibleId[bibleId] = created.id;
-      uploaded += 1;
+      fullNameByBibleId[bibleId] = created.name;
+      matchedEmojiIds.add(created.id);
+      if (existing) refreshed += 1;
+      else uploaded += 1;
       // Application emoji rate limit: ~50 / 30s. Sleep 250ms between
-      // uploads to stay well under without making startup feel slow.
+      // mutations to stay well under without making startup feel slow.
       await new Promise((r) => setTimeout(r, 250));
     } catch (err) {
       failed += 1;
@@ -271,11 +278,29 @@ async function bootstrapClassEmoji(client) {
     }
   }
 
-  const total = uploaded + reused + aliasResolved;
+  // Orphan detection: app emoji whose name parses as a class bible-ID but
+  // didn't match any current PNG (matchedEmojiIds didn't pick it up).
+  // Don't auto-delete - could be intentional, surface for human cleanup.
+  const orphanNames = [];
+  for (const [name, emoji] of existingByName) {
+    if (matchedEmojiIds.has(emoji.id)) continue;
+    // Strip optional `_hex` suffix to get the candidate bible ID.
+    const candidateBibleId = name.replace(/_[0-9a-f]{1,12}$/i, "");
+    if (CLASS_NAMES[candidateBibleId] !== undefined) {
+      orphanNames.push(name);
+    }
+  }
+  if (orphanNames.length > 0) {
+    console.warn(
+      `[class-emoji] orphan class emoji on application (no matching PNG in assets/class-icons/): ${orphanNames.join(", ")} - delete manually at https://discord.com/developers/applications if no longer wanted`
+    );
+  }
+
+  const total = uploaded + reused + refreshed + aliasResolved;
   console.log(
-    `[class-emoji] bootstrap done: uploaded=${uploaded} reused=${reused} aliasResolved=${aliasResolved} deleted=${deleted} orphans=${orphans} skipped=${skipped} failed=${failed} totalActive=${total}`
+    `[class-emoji] bootstrap done: uploaded=${uploaded} refreshed=${refreshed} reused=${reused} aliasResolved=${aliasResolved} orphans=${orphanNames.length} skipped=${skipped} failed=${failed} totalActive=${total}`
   );
-  return { uploaded, reused, aliasResolved, deleted, orphans, skipped, failed, total };
+  return { uploaded, reused, refreshed, aliasResolved, orphans: orphanNames.length, skipped, failed, total };
 }
 
 module.exports = { bootstrapClassEmoji };
