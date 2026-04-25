@@ -100,6 +100,14 @@ function isSupportClass(className) {
  * Format: `<:emoji_name:emoji_id>` (no spaces, no leading backslash). To
  * extract the ID from a freshly-uploaded emoji, type `\:bard:` in any
  * channel - Discord will print the raw form so you can copy it.
+ *
+ * Recommended workflow: run `node scripts/upload-class-emoji.js` once to
+ * bulk-upload every PNG in `assets/class-icons/` to the Thaemine guild
+ * via the Discord REST API. The script writes the resulting
+ * `assets/class-icons/emoji-map.json` which is auto-merged into this
+ * map at module load (see the merge block below). Manual paste is only
+ * needed if a class is missing from the script's output (e.g., 5 newer
+ * classes the source folder doesn't have art for yet).
  */
 const CLASS_EMOJI_MAP = {
   // Warriors
@@ -138,6 +146,32 @@ const CLASS_EMOJI_MAP = {
   Aeromancer: '',
   Wildsoul: '',
 };
+
+// Auto-merge `assets/class-icons/emoji-map.json` over the empty seeds above
+// when the file exists. The upload script writes that file after pushing
+// emoji to the Thaemine guild, so the only manual step is committing the
+// JSON. Wrapped in try/catch so a missing/malformed file falls back
+// silently to the empty defaults (bot keeps rendering without icons).
+try {
+  const path = require('path');
+  const emojiMapPath = path.resolve(__dirname, '..', '..', 'assets', 'class-icons', 'emoji-map.json');
+  const overrides = require(emojiMapPath);
+  if (overrides && typeof overrides === 'object') {
+    for (const [displayName, emojiString] of Object.entries(overrides)) {
+      if (typeof emojiString === 'string' && emojiString.length > 0) {
+        CLASS_EMOJI_MAP[displayName] = emojiString;
+      }
+    }
+  }
+} catch (err) {
+  // ENOENT (file not yet generated) is the normal pre-upload state.
+  // Anything else (parse error, etc.) we silently ignore so a bad file
+  // can't take down the bot - the empty-map no-op fallback is correct
+  // default behavior either way.
+  if (err && err.code !== 'MODULE_NOT_FOUND') {
+    console.warn('[Class.js] failed to load emoji-map.json:', err?.message || err);
+  }
+}
 
 /**
  * @param {string} className - Display name (e.g., "Bard", "Berserker").
