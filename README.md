@@ -139,10 +139,11 @@ LostArk_RaidManage/
 │   │   ├── raid-announce.js
 │   │   ├── raid-auto-manage.js
 │   │   ├── raid-channel.js
-│   │   ├── raid-check.js           # Scan + Sync + Edit cascading select (orchestrator)
+│   │   ├── raid-check.js           # Scan + Sync + button routing (orchestrator)
 │   │   ├── raid-check/
 │   │   │   ├── snapshot.js         # /raid-check snapshot build + classify (factory)
 │   │   │   ├── edit-helpers.js     # Edit-flow pure helpers (eligible raids, gate state, labels)
+│   │   │   ├── edit-ui.js          # Edit cascading-select UI: embed/components, click handler, apply, DM (factory)
 │   │   │   └── all-mode.js         # /raid-check raid:all cross-raid overview handler (factory)
 │   │   ├── raid-help.js
 │   │   ├── raid-set.js             # applyRaidSetForDiscordId shared write path
