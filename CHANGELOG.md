@@ -4,6 +4,13 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-26
 
+### Fixed (class icon: real Machinist art + orphan handling)
+
+- Replaced the Artillerist-art placeholder for Scouter/Machinist with the real Machinist class icon. Found on Fandom Wiki (uncategorized like Souleater) at `ClassIcon-Gunner-Machinist.png`. Previously a Machinist character would render with Artillerist art - silently misleading any user who knew the difference. Removing the bad default felt safer than keeping it; the right art was a direct lookup away.
+- Bootstrap now detects + logs **orphan application emoji** - emoji on the bot's app that map to a known class but no longer have a corresponding PNG file. Doesn't auto-delete (could collide with non-class emoji bot might use later); just surfaces the list so a human can clean up via the developer portal.
+- Added `CLASS_EMOJI_FORCE_REFRESH=true` env var path: bootstrap deletes every managed class emoji and re-uploads from current PNG content. Required when a PNG file changes (Discord emoji image is immutable; only delete + re-create swaps the art). Set the var, redeploy, wait for bootstrap log, then unset + redeploy to return to idempotent mode.
+- Missing class count now 4 (Breaker, Wildsoul, Valkyrie, Guardian Knight); Machinist removed from the missing list.
+
 ### Added (class icon auto-bootstrap on startup)
 
 - Bot now bootstraps class emoji on `ClientReady` so the deploy flow is just `git push`. Added `src/services/class-emoji-bootstrap.js` which: lists existing application emoji, uploads any PNG in `assets/class-icons/` whose name isn't already registered, mutates `CLASS_EMOJI_MAP` in memory with the resulting `<:name:id>` strings. After the first deploy uploads the full set, every subsequent restart is just one GET + skip (~500ms overhead).
