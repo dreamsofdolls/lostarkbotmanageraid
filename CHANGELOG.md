@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-25
 
+### Changed (Phase 2.3)
+
+- Extracted announcement timing + scheduler-tick math into `src/raid/scheduling.js` via factory pattern. Six functions moved (`getAnnouncementsConfig`, `nextIntervalTickMs`, `nextAnnouncementEligibleBoundaryMs`, `nextAnnouncementSchedulerCheckMs`, `formatDiscordTimestampPair`, `buildAnnouncementWhenItFiresText`).
+- Factory pattern (instead of plain module exports) is required because two of the timing functions read scheduler started-at timestamps and tick intervals through `let` bindings that only get assigned by `createRaidSchedulerService` at boot. The compose root passes getter functions that close over those bindings, so the lookup defers until the timing helper is actually invoked at interaction-handler time. Pre-/post-extraction behavior is byte-identical (verified by re-running `nextAnnouncementSchedulerCheckMs` from `__test` exports against the prior commit).
+- `raid-command.js`: 1145 -> 961 lines. Total Phase 2 reduction: 1568 -> 961 (-38%).
+
 ### Changed (Phase 2.2)
 
 - Continued splitting `src/raid-command.js`. Extracted the /raid-check Mongo query construction into `src/raid/raid-check-query.js`:
