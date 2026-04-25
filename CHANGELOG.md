@@ -4,12 +4,13 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-26
 
-### Added (class icon bulk upload script)
+### Added (class icon bulk upload script - application emoji)
 
-- `scripts/upload-class-emoji.js`: Node script that bulk-uploads every PNG in `assets/class-icons/` to the Thaemine guild via Discord REST `POST /guilds/{id}/emojis`, then writes the resulting display-name -> `<:emoji:id>` map to `assets/class-icons/emoji-map.json`. Idempotent by default (skips emoji whose name already exists in the guild), `--force` re-uploads everything, `--dry` validates without calling the API.
-- `data/Class.js`: now auto-loads `assets/class-icons/emoji-map.json` at module-load and merges entries over the empty seeds in `CLASS_EMOJI_MAP`. Falls back silently to the empty defaults when the file is missing or malformed (the bot just renders without icons - no crash). Removes the "manually paste 23 emoji IDs into source code" step that the prior scaffold required.
-- Alias-aware: bible class IDs that share art with another class (`force_master`/`soulmaster`, `hawk_eye`/`hawkeye`) get pointed at the canonical's emoji ID instead of consuming a duplicate guild emoji slot. Stays under the 50-slot free tier even with all 25 unique class icons.
-- Discord rate-limit safe: 250ms sleep between uploads keeps the full 25-emoji run at ~7s while staying well under the 50 emoji / 30s per-guild ceiling.
+- `scripts/upload-class-emoji.js`: Node script that bulk-uploads every PNG in `assets/class-icons/` as Discord **application emoji** (owned by the bot, not by any single guild) via REST `POST /applications/{app.id}/emojis`, then writes the resulting display-name -> `<:emoji:id>` map to `assets/class-icons/emoji-map.json`. Application id is auto-resolved via `GET /applications/@me` so the only env var needed is `DISCORD_TOKEN`. Idempotent by default (skips emoji whose name already exists in the application), `--force` re-uploads everything, `--dry` validates without calling the API.
+- Why application emoji over guild emoji: bot owns the assets so they work in every guild it joins (future-proof for multi-server), don't consume Thaemine's 50-slot guild emoji budget (community-shared with member uploads), no "Manage Expressions" permission needed in any guild, 2000-slot per-application limit vs 50 free / 250 boosted per guild.
+- `data/Class.js`: auto-loads `assets/class-icons/emoji-map.json` at module-load and merges entries over the empty seeds in `CLASS_EMOJI_MAP`. Falls back silently to the empty defaults when the file is missing or malformed (the bot just renders without icons - no crash). Removes the "manually paste 23 emoji IDs into source code" step that the prior scaffold required.
+- Alias-aware: bible class IDs that share art with another class (`force_master`/`soulmaster`, `hawk_eye`/`hawkeye`) get pointed at the canonical's emoji ID instead of consuming a duplicate application emoji slot.
+- Discord rate-limit safe: 250ms sleep between uploads keeps the full 25-emoji run at ~7s while staying well under the per-app ceiling.
 
 ### Added (class icon scaffold)
 

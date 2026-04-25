@@ -2,34 +2,44 @@
 /**
  * upload-class-emoji.js
  *
- * Bulk-upload class icon PNGs from `assets/class-icons/` into the Thaemine
- * guild as Discord custom emoji, then write the resulting emoji-id map to
+ * Bulk-upload class icon PNGs from `assets/class-icons/` as Discord
+ * **application emoji** (owned by the bot application, NOT by any single
+ * guild), then write the resulting emoji-id map to
  * `assets/class-icons/emoji-map.json`. The bot reads that JSON at startup
  * (via `data/Class.js`) and merges it into `CLASS_EMOJI_MAP` so the char
  * field renderers can prefix `<:bard:123>` before each character name.
  *
- * Why a script instead of manual UI:
+ * Why application emoji instead of guild emoji:
+ *   - Application emoji are owned by the bot's application, not any
+ *     individual guild. The bot can use them in EVERY guild it's in
+ *     without needing per-guild upload + permission setup.
+ *   - Don't consume Thaemine's 50-slot guild emoji budget (which is
+ *     community-shared with member-uploaded emojis).
+ *   - Application emoji limit is 2000 per app vs 50 free / 250 boosted
+ *     for guild emoji - room for class icons + future feature emoji.
+ *   - No "Manage Expressions" permission needed in any guild - the bot
+ *     owns the emoji as an application asset.
+ *
+ * Why a script instead of the Discord UI:
  *   - 23+ files to upload, each requiring a name + a paste-back step
- *   - Discord's UI doesn't expose emoji IDs without a backslash-message hack
+ *   - Discord's developer portal doesn't bulk-import emoji
  *   - This script gets the IDs straight from the API response and dumps a
  *     ready-to-commit JSON file in one shot
  *
  * Requires:
- *   - DISCORD_TOKEN (bot token, .env)
- *   - GUILD_ID (Thaemine server ID, .env)
- *   - Bot has "Manage Expressions" permission (formerly "Manage Emojis and
- *     Stickers") in the target guild
+ *   - DISCORD_TOKEN (bot token, .env). The application ID is derived
+ *     automatically via `GET /applications/@me` so no extra env var.
  *
  * Usage:
  *   node scripts/upload-class-emoji.js          # upload + write map
  *   node scripts/upload-class-emoji.js --dry    # validate setup, no upload
  *   node scripts/upload-class-emoji.js --force  # re-upload even if name
- *                                                already exists in guild
+ *                                                already exists in app
  *
- * Idempotent by default: if a guild emoji with the same name already
- * exists, the script SKIPS the upload and reuses the existing ID. This
- * makes re-runs cheap (only new files actually upload) and prevents
- * accidental emoji-slot exhaustion.
+ * Idempotent by default: if an application emoji with the same name
+ * already exists, the script SKIPS the upload and reuses the existing
+ * ID. Re-runs are cheap (only new files actually upload) and won't
+ * waste application emoji slots.
  */
 
 require("dotenv").config();
@@ -96,22 +106,34 @@ function discordRequest(method, route, { token, body, contentType } = {}) {
   });
 }
 
-async function fetchExistingEmojis({ token, guildId }) {
+async function fetchAppId({ token }) {
+  const { body } = await discordRequest("GET", "/applications/@me", { token });
+  if (!body?.id) {
+    throw new Error("Could not resolve application id from /applications/@me");
+  }
+  return body.id;
+}
+
+async function fetchExistingEmojis({ token, appId }) {
+  // Application emoji list endpoint. Wraps the array in `{ items: [...] }`
+  // unlike the guild endpoint which returns the array directly - normalize
+  // here so the rest of the script doesn't need to know.
   const { body } = await discordRequest(
     "GET",
-    `/guilds/${guildId}/emojis`,
+    `/applications/${appId}/emojis`,
     { token }
   );
+  const items = Array.isArray(body?.items) ? body.items : Array.isArray(body) ? body : [];
   const byName = new Map();
-  for (const e of Array.isArray(body) ? body : []) {
+  for (const e of items) {
     byName.set(e.name, e);
   }
   return byName;
 }
 
-async function uploadEmoji({ token, guildId, name, imageBuffer, mime }) {
+async function uploadEmoji({ token, appId, name, imageBuffer, mime }) {
   const dataUri = `data:${mime};base64,${imageBuffer.toString("base64")}`;
-  const { body } = await discordRequest("POST", `/guilds/${guildId}/emojis`, {
+  const { body } = await discordRequest("POST", `/applications/${appId}/emojis`, {
     token,
     body: { name, image: dataUri },
   });
@@ -161,9 +183,8 @@ function findCanonicalAlias(bibleId) {
 }
 
 async function main() {
-  const { DISCORD_TOKEN, GUILD_ID } = process.env;
+  const { DISCORD_TOKEN } = process.env;
   if (!DISCORD_TOKEN) die("DISCORD_TOKEN missing in env (.env)");
-  if (!GUILD_ID) die("GUILD_ID missing in env (.env)");
   if (!fs.existsSync(ICONS_DIR)) die(`Icons dir not found: ${ICONS_DIR}`);
 
   const files = fs
@@ -176,11 +197,13 @@ async function main() {
   console.log(`Mode: ${DRY_RUN ? "DRY RUN (no uploads)" : FORCE ? "FORCE (re-upload existing)" : "IDEMPOTENT (skip existing)"}`);
   console.log("");
 
-  const existing = DRY_RUN
-    ? new Map()
-    : await fetchExistingEmojis({ token: DISCORD_TOKEN, guildId: GUILD_ID });
+  let appId = null;
+  let existing = new Map();
   if (!DRY_RUN) {
-    console.log(`Guild has ${existing.size} existing emoji(s) currently.`);
+    appId = await fetchAppId({ token: DISCORD_TOKEN });
+    console.log(`Resolved application id: ${appId}`);
+    existing = await fetchExistingEmojis({ token: DISCORD_TOKEN, appId });
+    console.log(`Application has ${existing.size} existing emoji(s) currently.`);
     console.log("");
   }
 
@@ -258,7 +281,7 @@ async function main() {
       }
       const created = await uploadEmoji({
         token: DISCORD_TOKEN,
-        guildId: GUILD_ID,
+        appId,
         name: emojiName,
         imageBuffer: buffer,
         mime,
@@ -267,8 +290,9 @@ async function main() {
       idByBibleId[bibleId] = created.id;
       uploaded += 1;
       console.log(`  + ${filename} -> uploaded as :${created.name}:${created.id} (display: ${displayName})`);
-      // Discord emoji upload rate limit: ~50/30s per guild. Sleep 250ms
-      // between uploads to stay well clear without making the script slow.
+      // Application emoji rate limit: similar to guild emoji ceiling
+      // (~50/30s). Sleep 250ms between uploads to stay well under
+      // without making the script slow.
       await new Promise((r) => setTimeout(r, 250));
     } catch (err) {
       failed += 1;
