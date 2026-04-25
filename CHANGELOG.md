@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-25
 
+### Changed (Phase 3c)
+
+- Extracted the largest single handler in `commands/raid-check.js`: `handleRaidCheckAllCommand` (528 lines) into `src/commands/raid-check/all-mode.js` via factory pattern. Self-contained handler that uses character-helpers via outer-scope deps, not the snapshot/edit-helpers extracted earlier - so the cut was clean (no cross-helper threading needed).
+- Factory `createAllModeHandler({...17 deps})` takes Discord builders, the User model, character helpers, and the pagination session constant. The orchestrator destructures `handleRaidCheckAllCommand` and the existing inline call (`await handleRaidCheckAllCommand(interaction)` from `handleRaidCheckCommand`) keeps working unchanged because the destructured name resolves through local scope.
+- `raid-check.js`: 2210 -> 1706 lines. Phase 3 total: **2590 -> 1706 (-884, -34%)**.
+
 ### Changed (Phase 3b)
 
 - Continued splitting `commands/raid-check.js`. Step 2: extracted the 7 pure Edit-flow helpers to `src/commands/raid-check/edit-helpers.js`.
