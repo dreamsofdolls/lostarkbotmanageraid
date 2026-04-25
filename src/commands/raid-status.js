@@ -1,4 +1,4 @@
-const { isSupportClass } = require("../data/Class");
+const { isSupportClass, getClassEmoji } = require("../data/Class");
 
 const STATUS_PAGINATION_SESSION_MS = 3 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
@@ -69,7 +69,12 @@ function createRaidStatusCommand(deps) {
   function buildCharacterField(character, getRaidsFor) {
     const name = getCharacterName(character);
     const itemLevel = Number(character.itemLevel) || 0;
-    const fieldName = truncateText(`${name} · ${itemLevel}`, 256);
+    // Class emoji prepended to char name when the class is mapped in
+    // CLASS_EMOJI_MAP. Empty string fallback when unmapped - safe no-op
+    // so the field renders cleanly while emoji are still being uploaded.
+    const classIcon = getClassEmoji(character.class);
+    const namePrefix = classIcon ? `${classIcon} ` : "";
+    const fieldName = truncateText(`${namePrefix}${name} · ${itemLevel}`, 256);
 
     const raids = getRaidsFor(character);
     const fieldValue = raids.length === 0

@@ -3,7 +3,7 @@ const { createEditHelpers } = require("./raid-check/edit-helpers");
 const { createAllModeHandler } = require("./raid-check/all-mode");
 const { createEditUi } = require("./raid-check/edit-ui");
 const { createSyncUi } = require("./raid-check/sync-ui");
-const { isSupportClass } = require("../data/Class");
+const { isSupportClass, getClassEmoji } = require("../data/Class");
 
 const RAID_CHECK_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 
@@ -538,7 +538,13 @@ function createRaidCheckCommand(deps) {
     };
 
     const buildCharField = (character) => {
-      const name = truncateText(`${character.charName} · ${Math.round(character.itemLevel)}`, 256);
+      // Class emoji prepended to the char name when the class is mapped in
+      // CLASS_EMOJI_MAP (Discord guild emoji uploads). Empty string when
+      // unmapped - safe no-op fallback so the field renders cleanly while
+      // emoji are still being uploaded one class at a time.
+      const classIcon = getClassEmoji(character.className);
+      const namePrefix = classIcon ? `${classIcon} ` : "";
+      const name = truncateText(`${namePrefix}${character.charName} · ${Math.round(character.itemLevel)}`, 256);
       if (character.overallStatus === "not-eligible") {
         return {
           name,

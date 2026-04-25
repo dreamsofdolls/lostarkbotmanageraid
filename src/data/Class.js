@@ -83,9 +83,77 @@ function isSupportClass(className) {
   return SUPPORT_CLASS_NAMES.has(String(className || '').trim());
 }
 
+/**
+ * Map of class display name -> Discord guild custom emoji string. Discord
+ * cannot render local PNG files inline, so each class icon must first be
+ * uploaded to the Thaemine server's emoji slots, then the resulting
+ * `<:name:id>` form pasted into this map.
+ *
+ * The bot reads `character.class` (the resolved display name) and looks up
+ * the emoji here. Any class missing from the map renders without an icon
+ * prefix - safe no-op fallback so the bot keeps working while emoji are
+ * being uploaded one at a time.
+ *
+ * Source PNG files (named by bible class ID, not display name) live under
+ * `assets/class-icons/` with a README documenting the upload workflow.
+ *
+ * Format: `<:emoji_name:emoji_id>` (no spaces, no leading backslash). To
+ * extract the ID from a freshly-uploaded emoji, type `\:bard:` in any
+ * channel - Discord will print the raw form so you can copy it.
+ */
+const CLASS_EMOJI_MAP = {
+  // Warriors
+  Berserker: '',
+  Slayer: '',
+  Gunlancer: '',
+  Paladin: '',
+  Valkyrie: '',
+  Destroyer: '',
+  'Guardian Knight': '',
+  // Martial Artists
+  Wardancer: '',
+  Scrapper: '',
+  Soulfist: '',
+  Glaivier: '',
+  Striker: '',
+  Breaker: '',
+  // Gunners
+  Deadeye: '',
+  Gunslinger: '',
+  Artillerist: '',
+  Sharpshooter: '',
+  Machinist: '',
+  // Mages
+  Bard: '',
+  Arcanist: '',
+  Summoner: '',
+  Sorceress: '',
+  // Assassins
+  Deathblade: '',
+  'Shadow Hunter': '',
+  Reaper: '',
+  Souleater: '',
+  // Specialists
+  Artist: '',
+  Aeromancer: '',
+  Wildsoul: '',
+};
+
+/**
+ * @param {string} className - Display name (e.g., "Bard", "Berserker").
+ * @returns {string} Discord custom emoji string `<:name:id>` for the class,
+ *   or empty string when the class isn't mapped (yet) - empty string is a
+ *   safe no-op when prepended to a char name template literal.
+ */
+function getClassEmoji(className) {
+  return CLASS_EMOJI_MAP[String(className || '').trim()] || '';
+}
+
 module.exports = {
   CLASS_NAMES,
   getClassName,
   SUPPORT_CLASS_NAMES,
   isSupportClass,
+  CLASS_EMOJI_MAP,
+  getClassEmoji,
 };

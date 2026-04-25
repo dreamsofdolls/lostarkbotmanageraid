@@ -2,6 +2,18 @@
 
 Dates use the local calendar of the commit. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## 2026-04-26
+
+### Added (class icon scaffold)
+
+- Scaffold for prepending Discord guild custom emoji class icons before character names in embed body fields. Long-anticipated feature - `raid-check.js`, `raid-status.js`, and `raid-help.js` all carry comments referencing this "planned class-icon swap" (the manager 👑 was deliberately moved to the roster header rather than per-char to avoid colliding with this future swap).
+- `src/data/Class.js`: new `CLASS_EMOJI_MAP` (display name -> `<:emoji:id>` form) + `getClassEmoji(name)` helper. Empty values seeded for all 29 known class display names so the bot keeps rendering cleanly while emoji are uploaded one at a time. Helper returns empty string when a class isn't mapped (yet) - safe no-op fallback prepending nothing.
+- Wired `${getClassEmoji(...)} ` into char field rendering at:
+  - `commands/raid-status.js` `buildCharacterField` (also covers `/raid-check raid:all` because it reuses `buildAccountPageEmbed`)
+  - `commands/raid-check.js` `buildCharField` (specific-raid view)
+- `assets/class-icons/`: 26 PNG files seeded from Lost Ark Wiki (Fandom) - 22 unique icons + 4 alias copies for class IDs that share art (`force_master`/`soulmaster` = Soulfist, `hawk_eye`/`hawkeye` = Sharpshooter). Filenames match the bible class ID for upload-by-name workflow. README in the folder documents the upload steps + the 5 newer classes Fandom is missing (Souleater, Breaker, Wildsoul, Valkyrie, Guardian Knight) so they can be supplied manually.
+- No behavior change at runtime until `CLASS_EMOJI_MAP` entries are filled - this commit is pure scaffold + asset prep. To activate per class: upload the matching PNG to Thaemine, copy the `<:name:id>` form, paste into the matching `CLASS_EMOJI_MAP` entry. Bot picks up on next deploy.
+
 ## 2026-04-25
 
 ### Added (piggyback outcome surface for /raid-status)
