@@ -2,6 +2,7 @@ const { createSnapshotHelpers } = require("./raid-check/snapshot");
 const { createEditHelpers } = require("./raid-check/edit-helpers");
 const { createAllModeHandler } = require("./raid-check/all-mode");
 const { createEditUi } = require("./raid-check/edit-ui");
+const { createSyncUi } = require("./raid-check/sync-ui");
 
 const RAID_CHECK_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 
@@ -120,6 +121,37 @@ function createRaidCheckCommand(deps) {
     isManagerId,
     discordUserLimiter,
     RAID_CHECK_PAGINATION_SESSION_MS,
+  });
+
+  // Sync flow + shared display-name resolver extracted to
+  // ./raid-check/sync-ui.js. Wired BEFORE createEditUi because edit-ui
+  // consumes resolveCachedDisplayName as a dep (Edit cascade resolves
+  // display names per editable user). The same resolver is also called
+  // from the main /raid-check render path below, so the destructure has
+  // to land before any handler body that references it gets invoked.
+  const {
+    resolveCachedDisplayName,
+    buildRaidCheckSyncDMEmbed,
+    handleRaidCheckSyncClick,
+  } = createSyncUi({
+    EmbedBuilder,
+    MessageFlags,
+    UI,
+    User,
+    ensureFreshWeek,
+    normalizeName,
+    saveWithRetry,
+    weekResetStartMs,
+    autoManageEntryKey,
+    gatherAutoManageLogsForUserDoc,
+    applyAutoManageCollected,
+    stampAutoManageAttempt,
+    acquireAutoManageSyncSlot,
+    releaseAutoManageSyncSlot,
+    raidCheckSyncLimiter,
+    discordUserLimiter,
+    resolveDiscordDisplay,
+    computeRaidCheckSnapshot,
   });
 
   async function handleRaidCheckCommand(interaction) {
@@ -579,30 +611,6 @@ function createRaidCheckCommand(deps) {
     });
   }
 
-  function buildRaidCheckSyncDMEmbed(raidMeta, delta) {
-    const lines = delta.map((entry) => {
-      const applied = Array.isArray(entry.applied) ? entry.applied : [];
-      const gateInfo = applied
-        .map((item) => `${item.raidLabel || item.raidKey} ${item.gate}`)
-        .join(", ");
-      return `**${entry.charName}** · ${applied.length} gate mới: ${gateInfo || "_(detail không có)_"}`;
-    });
-
-    return new EmbedBuilder()
-      .setColor(UI.colors.success)
-      .setTitle(`${UI.icons.done} Artist vừa sync progress raid giúp cậu`)
-      .setDescription(
-        [
-          "Chào cậu~ Có Raid Manager vừa nhờ Artist pull logs từ bible sync progress raid cho cậu đây nha. Sau khi sync xong, Artist thấy mấy gate mới này cho char của cậu:",
-          "",
-          ...lines,
-          "",
-          "Cậu ghé `/raid-status` xem full progress nha~",
-        ].join("\n")
-      )
-      .setTimestamp();
-  }
-
   async function handleRaidCheckButton(interaction) {
     if (!isRaidLeader(interaction)) {
       await interaction.reply({
@@ -659,195 +667,14 @@ function createRaidCheckCommand(deps) {
     }
   }
 
-  async function handleRaidCheckSyncClick(interaction, raidMeta) {
-    const started = Date.now();
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const snapshotStarted = Date.now();
-    const snapshot = await computeRaidCheckSnapshot(raidMeta);
-    const snapshotMs = Date.now() - snapshotStarted;
-
-    const pendingEntryKeysByDiscordId = new Map();
-    for (const pendingChar of snapshot.pendingChars) {
-      if (!snapshot.userMeta.get(pendingChar.discordId)?.autoManageEnabled) continue;
-      if (!pendingEntryKeysByDiscordId.has(pendingChar.discordId)) {
-        pendingEntryKeysByDiscordId.set(pendingChar.discordId, new Set());
-      }
-      pendingEntryKeysByDiscordId
-        .get(pendingChar.discordId)
-        .add(autoManageEntryKey(pendingChar.accountName, pendingChar.charName));
-    }
-    const optedInDiscordIds = [...pendingEntryKeysByDiscordId.keys()];
-    const scopedCharCount = [...pendingEntryKeysByDiscordId.values()].reduce(
-      (sum, entryKeys) => sum + entryKeys.size,
-      0
-    );
-    const pendingUserCount = new Set(snapshot.pendingChars.map((c) => c.discordId)).size;
-    if (optedInDiscordIds.length === 0) {
-      console.log(
-        `[raid-check sync] raid=${raidMeta.raidKey}:${raidMeta.modeKey} pendingUsers=${pendingUserCount} optedIn=0 snapshotMs=${snapshotMs} totalMs=${Date.now() - started}`
-      );
-      await interaction.editReply({
-        content: `${UI.icons.info} Không có user nào opt-in \`/raid-auto-manage\` trong list pending. Nhắc họ gõ \`/raid-auto-manage action:on\` hoặc tự update bằng \`/raid-set\`.`,
-      });
-      return;
-    }
-
-    const weekResetStart = weekResetStartMs();
-    let syncedCount = 0;
-    let attemptedOnlyCount = 0;
-    let skippedCount = 0;
-    let failedCount = 0;
-    const deltasPerUser = new Map();
-
-    const syncStarted = Date.now();
-    await Promise.all(
-      optedInDiscordIds.map((discordId) =>
-        raidCheckSyncLimiter.run(async () => {
-          const guard = await acquireAutoManageSyncSlot(discordId, { ignoreCooldown: true });
-          if (!guard.acquired) {
-            skippedCount += 1;
-            return;
-          }
-
-          let bibleHit = false;
-          try {
-            const seedDoc = await User.findOne({ discordId });
-            if (!seedDoc || !Array.isArray(seedDoc.accounts) || seedDoc.accounts.length === 0) {
-              skippedCount += 1;
-              return;
-            }
-            if (!seedDoc.autoManageEnabled) {
-              skippedCount += 1;
-              return;
-            }
-
-            ensureFreshWeek(seedDoc);
-            const collected = await gatherAutoManageLogsForUserDoc(seedDoc, weekResetStart, {
-              includeEntryKeys: pendingEntryKeysByDiscordId.get(discordId),
-            });
-            bibleHit = true;
-
-            let outcome = "attempted-only";
-            let delta = null;
-            await saveWithRetry(async () => {
-              const fresh = await User.findOne({ discordId });
-              if (!fresh || !Array.isArray(fresh.accounts) || fresh.accounts.length === 0) return;
-
-              ensureFreshWeek(fresh);
-              if (!fresh.autoManageEnabled) {
-                fresh.lastAutoManageAttemptAt = Date.now();
-                await fresh.save();
-                return;
-              }
-
-              const report = applyAutoManageCollected(fresh, weekResetStart, collected);
-              const now = Date.now();
-              fresh.lastAutoManageAttemptAt = now;
-              if (report.perChar.some((c) => !c.error)) {
-                fresh.lastAutoManageSyncAt = now;
-                outcome = "synced";
-              }
-              const appliedEntries = report.perChar.filter(
-                (entry) => Array.isArray(entry.applied) && entry.applied.length > 0
-              );
-              if (appliedEntries.length > 0) delta = appliedEntries;
-              await fresh.save();
-            });
-
-            if (outcome === "synced") syncedCount += 1;
-            else attemptedOnlyCount += 1;
-            if (delta) deltasPerUser.set(discordId, delta);
-          } catch (err) {
-            failedCount += 1;
-            if (bibleHit) await stampAutoManageAttempt(discordId);
-            console.warn(`[raid-check sync] user ${discordId} failed:`, err?.message || err);
-          } finally {
-            releaseAutoManageSyncSlot(discordId);
-          }
-        })
-      )
-    );
-    const syncMs = Date.now() - syncStarted;
-
-    const dmStarted = Date.now();
-    const dmResults = await Promise.all(
-      [...deltasPerUser.entries()].map(([discordId, delta]) =>
-        discordUserLimiter.run(async () => {
-          try {
-            const user = await interaction.client.users.fetch(discordId);
-            const dmChannel = await user.createDM();
-            const embed = buildRaidCheckSyncDMEmbed(raidMeta, delta);
-            await dmChannel.send({ embeds: [embed] });
-            return { ok: true };
-          } catch {
-            return { ok: false };
-          }
-        })
-      )
-    );
-    const dmMs = Date.now() - dmStarted;
-    const dmSent = dmResults.filter((result) => result.ok).length;
-    const dmFailed = dmResults.length - dmSent;
-
-    console.log(
-      `[raid-check sync] raid=${raidMeta.raidKey}:${raidMeta.modeKey} pendingUsers=${pendingUserCount} optedIn=${optedInDiscordIds.length} scopedChars=${scopedCharCount} synced=${syncedCount} attemptedOnly=${attemptedOnlyCount} skipped=${skippedCount} failed=${failedCount} dmSent=${dmSent} dmFailed=${dmFailed} snapshotMs=${snapshotMs} syncMs=${syncMs} dmMs=${dmMs} totalMs=${Date.now() - started}`
-    );
-
-    const lines = [
-      `${UI.icons.done} Đã trigger sync cho **${optedInDiscordIds.length}** opted-in user (**${scopedCharCount}** pending char).`,
-      `- Synced (có data mới): **${syncedCount}** · Attempted-only (no fresh data): **${attemptedOnlyCount}**`,
-      `- Skipped (cooldown/in-flight): **${skippedCount}** · Failed: **${failedCount}**`,
-      `- Chars có update mới: **${deltasPerUser.size}** user · DM sent: **${dmSent}**${dmFailed > 0 ? ` · DM failed: **${dmFailed}**` : ""}`,
-      "",
-      `_Gõ \`/raid-check raid:${raidMeta.raidKey}_${normalizeName(raidMeta.modeKey)}\` để xem list pending mới._`,
-    ];
-    await interaction.editReply({ content: lines.join("\n") });
-  }
-
-  // ---------------------------------------------------------------------------
-  // /raid-check Edit flow
-  // ---------------------------------------------------------------------------
-  // Leader picks a user → char → raid → status (Complete / Process / Reset)
-  // → (gate if Process) and the bot applies via the same applyRaidSetForDiscordId
-  // helper the slash /raid-set path uses. Lives entirely inside an ephemeral
-  // follow-up message so the parent /raid-check embed stays clean.
-  //
-  // Auth rule: user.autoManageEnabled = true AND char.publicLogDisabled = false
-  // means bible auto-sync owns this char; the leader's manual edit would be
-  // overwritten on the next sync tick, so we skip it from the char select.
-  // Auto-sync user's chars where publicLogDisabled = true show up (bible can
-  // never sync those, manager is the only path that can move progress).
-  // Non-auto-sync users: every char is editable.
-
   const RAID_CHECK_EDIT_SESSION_MS = 3 * 60 * 1000;
 
-  // Shared display-name resolver for every view inside /raid-check (main
-  // render + Edit cascade). Prefers the cached identity strings on the User
-  // doc (stamped every slash-command invocation) because those reflect the
-  // guild-displayed nickname / global name rather than the raw username
-  // handle discord.js's local cache typically holds. Falls back to
-  // `resolveDiscordDisplay` (already gated by discordUserLimiter internally)
-  // for users whose doc fields are empty, and finally to the snowflake.
-  async function resolveCachedDisplayName(client, discordId, meta) {
-    const cached =
-      meta?.discordDisplayName ||
-      meta?.discordGlobalName ||
-      meta?.discordUsername ||
-      "";
-    if (cached) return cached;
-    try {
-      const live = await resolveDiscordDisplay(client, discordId);
-      return live || discordId;
-    } catch {
-      return discordId;
-    }
-  }
-
-  // Edit cascading-select flow extracted to ./raid-check/edit-ui.js. Wired
-  // here AFTER resolveCachedDisplayName + RAID_CHECK_EDIT_SESSION_MS are in
-  // scope; the factory consumes both as deps. The 6 returned functions
-  // cross-call each other through their shared closure, so we destructure
-  // and bind locally so the call sites below stay unchanged.
+  // Edit cascading-select flow extracted to ./raid-check/edit-ui.js.
+  // Consumes resolveCachedDisplayName from the sync-ui factory above, so
+  // sync-ui has to be wired first. RAID_CHECK_EDIT_SESSION_MS is the local
+  // const right above. The 6 returned functions cross-call each other
+  // through their shared closure, so we destructure and bind locally so
+  // the call sites below stay unchanged.
   const {
     buildEditEmbed,
     buildEditComponents,

@@ -4,6 +4,13 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-25
 
+### Changed (Phase 3e)
+
+- Extracted the /raid-check Sync button flow + the shared display-name resolver from `commands/raid-check.js` into `src/commands/raid-check/sync-ui.js`. Three functions moved (~205 lines): `resolveCachedDisplayName`, `buildRaidCheckSyncDMEmbed`, `handleRaidCheckSyncClick`.
+- Factory `createSyncUi({...18 deps})` returns all three. Wiring order is now load-bearing in the orchestrator: sync-ui must be wired BEFORE edit-ui because edit-ui's factory consumes `resolveCachedDisplayName` as a dep (the Edit cascade resolves display names per editable user). The same resolver also services the main /raid-check render path, so the sync-ui destructure has to land before any handler body that references it gets invoked.
+- No external contract change. `handleRaidCheckButton` continues to dispatch `action === "sync"` to `handleRaidCheckSyncClick`, now resolved through the local destructure.
+- `raid-check.js`: 913 -> 740 lines (-173). Phase 3 total: **2590 -> 740 (-1850, -71%)**.
+
 ### Changed (Phase 3d)
 
 - Extracted the entire Edit cascading-select flow from `commands/raid-check.js` into `src/commands/raid-check/edit-ui.js` via factory pattern. Six tightly-coupled functions moved together (~830 lines): `buildEditEmbed`, `buildEditComponents`, `handleRaidCheckEditClick` (the message-collector setup), `postEditSessionExpiredNotice`, `buildRaidCheckEditDMEmbed`, `applyEditAndConfirm`.
