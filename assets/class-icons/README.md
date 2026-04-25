@@ -1,91 +1,99 @@
 # Class Icons
 
-PNG sources for the 27 Lost Ark classes the bot's `data/Class.js` recognizes.
-Filenames match the **bible class ID** (the key in `CLASS_NAMES`) so a single
-constant in `data/Class.js` maps `class display name -> Discord custom emoji`.
+PNG sources for the 27 Lost Ark classes the bot's `data/Class.js`
+recognizes. Filenames match the **bible class ID** (the key in
+`CLASS_NAMES`) so the bootstrap can derive every other identifier
+(emoji name, display name) from the filename alone.
 
 ## How these icons reach Discord
 
-Discord cannot render local PNG files inline. Each PNG has to be registered
-as a Discord **application emoji** (owned by the bot application, not by
-any single guild) before the bot can reference it as `<:bard:123>` in
-embed text. The good news: **the bot does this for you on startup**. You
-just `git push` and Railway redeploys; first boot uploads any new PNGs and
-populates `CLASS_EMOJI_MAP` in memory.
+Discord cannot render local PNG files inline. Each PNG has to be
+registered as a Discord **application emoji** (owned by the bot
+application, not by any single guild) before the bot can reference it
+as `<:bard_a3f9b2:123>` in embed text. **The bot does this for you on
+startup** - just drop the PNG into this folder and push.
 
 ### The deploy flow
 
-1. Drop a PNG into this folder, named after the bible class ID (e.g.
-   `bard.png`, `holyknight.png`). The filenames already in this folder
-   follow that convention.
-2. `git add` the PNG, commit, push.
-3. Railway redeploys. On `ClientReady`, `src/services/class-emoji-bootstrap.js`
-   runs:
-   - Lists existing application emoji via `GET /applications/{appId}/emojis`
-   - For each PNG file: if an emoji with that name already exists in the
-     application, reuse the ID; otherwise upload it via
-     `POST /applications/{appId}/emojis`
-   - Mutates `CLASS_EMOJI_MAP` in memory with the resulting `<:name:id>`
-     strings, keyed by class display name
+1. Drop a PNG into this folder, named after the bible class ID
+   (`bard.png`, `holyknight.png`, etc.). The filenames already in this
+   folder follow that convention.
+2. `git add` + commit + push.
+3. Railway redeploys. On `ClientReady`,
+   `src/services/class-emoji-bootstrap.js` runs:
+   - Lists existing application emoji via
+     `GET /applications/{appId}/emojis`
+   - For each PNG: computes expected name as
+     `{bibleClassId}_{md5short}` where `md5short` is the first 6 chars
+     of the PNG's MD5 hash
+   - Reuses if an emoji with the expected name already exists
+   - Refreshes (delete + re-upload) if an emoji exists for the bible
+     ID but with a different hash suffix (or no suffix at all)
+   - Uploads if no emoji exists for the bible ID
+   - Mutates `CLASS_EMOJI_MAP` in memory with the resulting
+     `<:name:id>` strings
 4. Next time someone runs `/raid-status` or `/raid-check`, char fields
-   render `<:bard:123> Cyrano · 1740` instead of `Cyrano · 1740`.
+   render `<:bard_a3f9b2:123> Cyrano · 1740` instead of bare
+   `Cyrano · 1740`.
 
-The bootstrap is **idempotent** (re-runs are safe; only new PNGs upload)
-and **self-healing** (if you delete an emoji from the developer portal, the
-next bot restart re-uploads it). Failure is logged and swallowed: any
-emoji that fails to upload just renders without an icon, the bot keeps
-running.
-
-### Updating an existing class icon (PNG content changed)
-
-Just replace the PNG and push. The bootstrap is **content-addressed**:
-each emoji is uploaded with the name `{bibleClassId}_{md5short}` where
-`md5short` is the first 6 chars of the PNG's MD5. On every restart:
-
-- Existing emoji whose name matches the expected hash → reuse (content
-  unchanged)
-- Existing emoji with the SAME bible ID but DIFFERENT hash suffix (or
-  no suffix at all) → delete + re-upload with new hash (content
-  changed since last upload)
-- No existing emoji → upload
-
-So replacing `infighter_male.png` with new art and pushing is enough -
-the bot detects the hash mismatch on next deploy and refreshes Discord
-automatically. No env var, no manual delete, no script run.
-
-The orphan-detection log line lists any application emoji whose name
-parses as a class bible-ID but didn't match any current PNG file (e.g.
-you removed a placeholder file). Bot does NOT auto-delete orphans;
-clean up manually at <https://discord.com/developers/applications> if
-you want the slot back.
+The bootstrap is **content-addressed** (any PNG content change is
+auto-detected via the MD5 hash suffix and triggers a refresh), and
+**self-healing** (deleting an emoji from the developer portal causes
+the next bot restart to re-upload it).
 
 ### Why application emoji instead of guild emoji
 
-- **Owned by the bot application, not any single guild**, so the bot can
-  use them in every guild it joins (future-proof for multi-server)
+- **Owned by the bot application, not any single guild**, so the bot
+  can use them in every guild it joins (future-proof for multi-server)
 - **Don't consume Thaemine's 50-slot guild emoji budget** which is
   community-shared with member-uploaded emoji
-- **No "Manage Expressions" permission** needed in any guild - emoji are
-  application assets the bot owns
-- **2000 emoji slot per application** vs 50 free / 250 boosted per guild
+- **No "Manage Expressions" permission** needed in any guild - emoji
+  are application assets the bot owns
+- **2000 emoji slot per application** vs 50 free / 250 boosted per
+  guild
 
-### Manual override script (optional)
+### Color caveat for community AI vector sources
 
-`scripts/upload-class-emoji.js` exists for local testing or one-shot
-maintenance (e.g., re-uploading after manually editing PNGs without
-deploying). Same upload logic as the bot's startup bootstrap, runs from
-your shell with `DISCORD_TOKEN` in `.env`. Writes
-`assets/class-icons/emoji-map.json` for inspection/debugging - the bot
-itself doesn't read that JSON; the app-emoji list endpoint is the source
-of truth.
+Game-UI rips (Fandom Wiki) are **white-on-transparent**, designed for
+dark UI overlay - they render correctly on Discord dark mode without
+modification.
+
+Community AI vector packs (Inven post, etc.) often ship as
+**black-on-transparent** because they're authored against white
+print/web backgrounds. Drop one into Discord dark mode unmodified and
+the silhouette vanishes.
+
+To convert a black silhouette to white while preserving alpha:
 
 ```bash
-node scripts/upload-class-emoji.js          # idempotent: skip existing
-node scripts/upload-class-emoji.js --dry    # validate setup, no upload
-node scripts/upload-class-emoji.js --force  # re-upload even if exists
+pip install Pillow  # one-time
+python scripts/invert-icon.py assets/class-icons/<file>.png
 ```
 
-## Where the source PNGs came from
+The bot bootstrap will detect the content change on next deploy
+(different MD5 → different hash suffix → delete + re-upload).
+
+### Aspect ratio for non-square sources
+
+Folder convention is 320x320 PNG. If a source is non-square (e.g. some
+Discord emoji rips are 86x96 or 46x46), upscale + pad with transparent
+background instead of stretching. Example pipeline used for the
+Wildsoul / Valkyrie / Guardian Knight rips:
+
+```python
+from PIL import Image
+img = Image.open(src).convert("RGBA")
+TARGET = 320
+w, h = img.size
+scale = TARGET / max(w, h)
+resized = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+canvas = Image.new("RGBA", (TARGET, TARGET), (0, 0, 0, 0))
+canvas.paste(resized, ((TARGET - resized.width) // 2,
+                       (TARGET - resized.height) // 2), resized)
+canvas.save(dst, "PNG", optimize=True)
+```
+
+## Source attribution
 
 | Bible class ID | Display name | Source |
 |---|---|---|
@@ -93,9 +101,12 @@ node scripts/upload-class-emoji.js --force  # re-upload even if exists
 | berserker_female | Slayer | Lost Ark Wiki (Fandom) |
 | warlord | Gunlancer | Lost Ark Wiki (Fandom) |
 | holyknight | Paladin | Lost Ark Wiki (Fandom) |
+| holyknight_female | Valkyrie | Discord emoji rip (white silhouette, upscaled 46→320) |
 | destroyer | Destroyer | Lost Ark Wiki (Fandom) |
+| dragon_knight | Guardian Knight | Discord emoji rip (white silhouette, upscaled 96→320) |
 | battle_master | Wardancer | Lost Ark Wiki (Fandom) |
 | infighter | Scrapper | Lost Ark Wiki (Fandom) |
+| infighter_male | Breaker | Inven AI vector (inverted to white via `invert-icon.py`) |
 | soulmaster | Soulfist | Lost Ark Wiki (Fandom) |
 | force_master | Soulfist | Alias of `soulmaster.png` |
 | lance_master | Glaivier | Lost Ark Wiki (Fandom) |
@@ -105,6 +116,7 @@ node scripts/upload-class-emoji.js --force  # re-upload even if exists
 | blaster | Artillerist | Lost Ark Wiki (Fandom) |
 | hawkeye | Sharpshooter | Lost Ark Wiki (Fandom) |
 | hawk_eye | Sharpshooter | Alias of `hawkeye.png` |
+| scouter | Machinist | Lost Ark Wiki (Fandom, uncategorized file) |
 | bard | Bard | Lost Ark Wiki (Fandom) |
 | arcana | Arcanist | Lost Ark Wiki (Fandom) |
 | summoner | Summoner | Lost Ark Wiki (Fandom) |
@@ -112,51 +124,19 @@ node scripts/upload-class-emoji.js --force  # re-upload even if exists
 | blade | Deathblade | Lost Ark Wiki (Fandom) |
 | demonic | Shadow Hunter | Lost Ark Wiki (Fandom) |
 | reaper | Reaper | Lost Ark Wiki (Fandom) |
+| soul_eater | Souleater | Lost Ark Wiki (Fandom, uncategorized file) |
 | yinyangshi | Artist | Lost Ark Wiki (Fandom) |
 | weather_artist | Aeromancer | Lost Ark Wiki (Fandom) |
-| scouter | Machinist | **Placeholder (Artillerist art)** - replace |
+| alchemist | Wildsoul | Discord emoji rip (white silhouette, 86x96 padded → 320x320) |
 
-## Manual supply needed (5 missing + 1 placeholder)
-
-The Lost Ark Wiki on Fandom is out of date and is missing icons for the 6
-newer classes. You'll need to source these from another community pack
-(Papunika, Maxroll, official Smilegate KR site) and drop the PNG into
-this folder with the matching bible class ID name.
-
-| Bible class ID | Display name | Notes |
-|---|---|---|
-| ~~soul_eater~~ | ~~Souleater~~ | ✅ Found on Fandom (file existed but wasn't in `Category:Class_Icons`) - already in folder |
-| ~~scouter~~ | ~~Machinist~~ | ✅ Fandom (uncategorized) - white-on-transparent for dark UI |
-| ~~infighter_male~~ | ~~Breaker~~ | ✅ Inven AI vector inverted - clenched fist inside octagonal MMA ring |
-| ~~holyknight_female~~ | ~~Valkyrie~~ | ✅ Discord emoji rip (white silhouette, upscaled 46→320 LANCZOS) |
-| ~~dragon_knight~~ | ~~Guardian Knight~~ | ✅ Discord emoji rip (white silhouette, upscaled 96→320 LANCZOS) |
-| ~~alchemist~~ | ~~Wildsoul~~ | ✅ Discord emoji rip (white silhouette, 86x96 → 320x320 aspect-preserved + padded) |
-
-**Coverage complete (2026-04-26):** All 27 known Lost Ark classes now have icon assets in this folder. If Smilegate releases a new class, drop the PNG (or webp) here named after the bible class ID and add the matching `CLASS_NAMES` entry in `src/data/Class.js` - the bot bootstrap will auto-upload it on next deploy. For reference, the [Inven post (Korean community, 2024) - 26 class logos as AI vector + PNG](https://www.inven.co.kr/board/lostark/6271/144967) is a good starting point if you need to source new art.
-
-### Color caveat for Inven sources
-
-Inven AI vector exports are **black-on-transparent** (designed for white
-print/web backgrounds). Drop one into Discord dark mode unmodified and
-the silhouette vanishes into the background.
-
-Run `python scripts/invert-icon.py assets/class-icons/<file>.png` to
-flip RGB while preserving alpha - black silhouette becomes white,
-matching the Fandom-sourced 22 in this folder. Requires `pip install
-Pillow` once.
-
-Game-UI rips (Fandom) are already white-on-transparent and don't need
-the invert.
-
-The bot WILL keep working without these - the char field just renders without
-a class icon prefix until you upload + map the emoji. Add them as you find
-art you're happy with.
-
-## Source attribution
+**Coverage:** All 27 known Lost Ark classes (2026-04-26). If Smilegate
+releases a new class, add an entry to `CLASS_NAMES` in
+`src/data/Class.js` + drop the PNG here named after the bible class
+ID. Bot bootstrap auto-uploads on next deploy.
 
 The Fandom-sourced icons fall under
 [Creative Commons Attribution-Share Alike (CC BY-SA)](https://www.fandom.com/licensing).
 Images were retrieved from
 <https://lostark.fandom.com/wiki/Category:Class_Icons> via the Fandom
-MediaWiki API (April 2026 snapshot). If you redistribute the bot or this
-asset folder, preserve attribution to Lost Ark Wiki.
+MediaWiki API (April 2026 snapshot). If you redistribute the bot or
+this asset folder, preserve attribution to Lost Ark Wiki.
