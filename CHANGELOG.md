@@ -6,6 +6,10 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ### Changed
 
+- Started splitting `src/raid-command.js` (was 1568 lines, single compose-root file). Step 1: extracted 20 pure character/raid normalization helpers into `src/raid/character.js` along with `RAID_REQUIREMENT_MAP`.
+  - Extracted: `createCharacterId`, `buildFetchedRosterIndexes`, `pickUniqueFetchedRosterCandidate`, `findFetchedRosterMatchForCharacter`, `getRequirementFor`, `getBestEligibleModeKey`, `sanitizeTasks`, `getGateKeys`, `normalizeAssignedRaid`, `getCompletedGateKeys`, `buildAssignedRaidFromLegacy`, `ensureAssignedRaids`, `isAssignedRaidCompleted`, `buildCharacterRecord`, `ensureRaidEntries`, `getStatusRaidsForCharacter`, `pickProgressIcon`, `formatRaidStatusLine`, `summarizeRaidProgress`, `raidCheckGateIcon`.
+  - All these functions are pure (no closure on Discord client / Mongoose / scheduler state) and trivially unit-testable in isolation.
+  - `raid-command.js`: 1568 -> 1239 lines (-329, -21%).
 - Source-tree cleanup. No behavior change. Aligns RaidManage layout with the LoaLogs convention so cross-project navigation feels the same:
   - **Deleted dead code** `src/models/GuildConfig.js`. It was a 36-line ESM file leftover from a copy-paste from LoaLogs, with a totally different schema than the live Mongoose model and never imported anywhere. Confirmed by full grep before removal.
   - **Moved** `db.js` (root) to `src/db.js`. Root now only holds entry/meta files (Dockerfile, railway.toml, package.json, etc.); all source lives under `src/`.
