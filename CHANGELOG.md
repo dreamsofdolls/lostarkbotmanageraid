@@ -7,6 +7,7 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 ### Added
 
 - `/raid-check` user-filter dropdowns now show a per-user support/DPS breakdown beside the pending count: `Du (8 pending · 2🪄 6⚔️)` instead of bare `Du (8 pending)`. Applies to both surfaces - the specific-raid filter (e.g., `/raid-check raid:serca_hard`) and the cross-raid filter (`/raid-check raid:all`). Hard-support classes are Bard, Paladin, Artist, Valkyrie; everyone else counts as DPS. Helps a Raid Manager see at a glance whether a heavy backlog is composition-blocking (low support count) or just queue depth.
+- `/raid-status` raid-filter dropdown now shows the same support/DPS breakdown per raid: `Aegir Hard (3 pending · 1🪄 2⚔️)`. Caller-scoped (only the caller's own roster), so the breakdown surfaces whether a personal raid backlog is blocked on supports or DPS.
 - `src/data/Class.js`: new `SUPPORT_CLASS_NAMES` Set + `isSupportClass(name)` helper. Stored as display names (not bible class IDs) because the consuming code reads the resolved `character.class` field.
 - `src/commands/raid-check/snapshot.js`: `pendingChars` rows now carry a `className` field so the user-filter dropdown can read class info without a second pass over the raw character documents.
 

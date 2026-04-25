@@ -1,3 +1,5 @@
+const { isSupportClass } = require("../data/Class");
+
 const STATUS_PAGINATION_SESSION_MS = 3 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
 
@@ -372,10 +374,16 @@ function createRaidStatusCommand(deps) {
     // underneath the user's hand - labels stay as a stable "my backlog
     // per raid" reference. Sorted pending desc so the heaviest backlog
     // surfaces first.
+    // Per-raid entries also track {supports, dps} so the dropdown label
+    // can render "Aegir Hard (3 pending · 1🪄 2⚔️)" - lets the caller see
+    // at a glance whether a raid's backlog is composition-blocking (no
+    // supports left) or just queue depth. Hard-support classes are Bard
+    // / Paladin / Artist / Valkyrie; everyone else counts as DPS.
     const FILTER_ALL_RAIDS = "__all_raids__";
     const raidAggregate = new Map();
     for (const account of accounts) {
       for (const ch of account.characters || []) {
+        const charIsSupport = isSupportClass(ch?.class);
         for (const raid of baseGetRaidsFor(ch)) {
           const key = `${raid.raidKey}:${raid.modeKey}`;
           let entry = raidAggregate.get(key);
@@ -386,10 +394,16 @@ function createRaidStatusCommand(deps) {
               raidKey: raid.raidKey,
               modeKey: raid.modeKey,
               pending: 0,
+              supports: 0,
+              dps: 0,
             };
             raidAggregate.set(key, entry);
           }
-          if (!raid.isCompleted) entry.pending += 1;
+          if (!raid.isCompleted) {
+            entry.pending += 1;
+            if (charIsSupport) entry.supports += 1;
+            else entry.dps += 1;
+          }
         }
       }
     }
@@ -456,7 +470,10 @@ function createRaidStatusCommand(deps) {
       ];
       for (const r of raidDropdownEntries.slice(0, 24)) {
         options.push({
-          label: truncateText(`${r.label} (${r.pending} pending)`, 100),
+          label: truncateText(
+            `${r.label} (${r.pending} pending · ${r.supports}🪄 ${r.dps}⚔️)`,
+            100
+          ),
           value: r.key,
           emoji: "⚔️",
           default: filterRaidId === r.key,
