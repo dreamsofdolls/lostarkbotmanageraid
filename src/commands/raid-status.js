@@ -122,6 +122,30 @@ function createRaidStatusCommand(deps) {
     return parts.join(" · ");
   }
 
+  // Map the piggyback outcome captured during handleRaidStatusCommand
+  // into a single description line. Returns null when the line would
+  // add noise without information (no piggyback was attempted, or it
+  // ran cleanly but found nothing new - the freshness line above
+  // already covers the "data is fresh" case).
+  function buildPiggybackOutcomeLine(piggybackOutcome) {
+    if (!piggybackOutcome) return null;
+    switch (piggybackOutcome.outcome) {
+      case "applied": {
+        const n = piggybackOutcome.newGatesApplied || 0;
+        return `${UI.icons.reset} Bible vừa sync · **${n}** gate mới đã apply`;
+      }
+      case "timeout":
+        return `${UI.icons.warn} Bible sync chậm · render data cache, gather đang chạy nền (mở lại sau ~10s để thấy data mới)`;
+      case "failed":
+        return `${UI.icons.warn} Bible sync gặp vấn đề · đang xem cache, thử mở lại sau vài phút`;
+      case "cooldown":
+      case "synced-no-new":
+      case "not-applicable":
+      default:
+        return null;
+    }
+  }
+
   function buildAccountPageEmbed(
     account,
     pageIndex,
@@ -168,6 +192,17 @@ function createRaidStatusCommand(deps) {
     }
     const freshnessLine = buildAccountFreshnessLine(account, userMeta);
     if (freshnessLine) descriptionLines.push(freshnessLine);
+
+    // Surface the bible-piggyback outcome from THIS open so the user
+    // (regular member, /raid-status is their only sync entry point) can
+    // tell whether the data they're seeing reflects a fresh pull, a
+    // silently-failed attempt, or a cached read because they were within
+    // the 15m cooldown. Skip the "not-applicable" / "synced-no-new"
+    // cases on purpose - they add noise without information (the freshness
+    // line above already tells them when bible was last successfully
+    // synced + countdown to next free attempt).
+    const outcomeLine = buildPiggybackOutcomeLine(userMeta?.piggybackOutcome);
+    if (outcomeLine) descriptionLines.push(outcomeLine);
 
     const embed = new EmbedBuilder()
       .setTitle(title)
@@ -238,6 +273,25 @@ function createRaidStatusCommand(deps) {
     let autoManageGuard = null;
     let autoManageReleaseInBackground = false;
 
+    // Piggyback outcome tracker so we can surface "what just happened on
+    // this open" in the embed. /raid-status is the only sync entry point
+    // for regular users (they cannot use /raid-check Sync); without an
+    // outcome surface the user has no way to tell whether the data they
+    // see reflects a fresh bible pull, a silently-timed-out attempt, or
+    // a cached read because they were within the 15m cooldown.
+    //
+    // outcome values:
+    //   - "not-applicable": user not opted-in / no roster, no piggyback
+    //   - "cooldown": slot guard rejected (within 15m of last attempt)
+    //   - "failed": gather promise rejected (bible API issue)
+    //   - "timeout": gather exceeded the 2.5s budget, running in bg
+    //   - "synced-no-new": gather + apply succeeded but no new gates
+    //   - "applied": gather + apply succeeded, N new gates applied
+    const piggybackOutcome = {
+      outcome: "not-applicable",
+      newGatesApplied: 0,
+    };
+
     try {
       ensureFreshWeek(seedDoc);
 
@@ -258,6 +312,8 @@ function createRaidStatusCommand(deps) {
             );
             return null;
           });
+        } else {
+          piggybackOutcome.outcome = "cooldown";
         }
       }
 
@@ -270,6 +326,16 @@ function createRaidStatusCommand(deps) {
       let autoManageCollected = autoManageBudgetResult.value;
       const autoManageBibleHit = autoManageGuard?.acquired === true;
       const autoManageTimedOut = autoManageGuard?.acquired && autoManageBudgetResult.timedOut;
+      // Gather rejected: budget didn't time out, slot was acquired, but
+      // the value is null (the .catch in the gather chain converts a
+      // throw into null). Distinct from timeout because the bg task is
+      // already settled - nothing keeps running.
+      const autoManageGatherFailed =
+        autoManageGuard?.acquired &&
+        !autoManageBudgetResult.timedOut &&
+        autoManageBudgetResult.value === null;
+      if (autoManageTimedOut) piggybackOutcome.outcome = "timeout";
+      else if (autoManageGatherFailed) piggybackOutcome.outcome = "failed";
 
       if (autoManageTimedOut) {
         autoManageCollected = null;
@@ -315,6 +381,16 @@ function createRaidStatusCommand(deps) {
           if (autoReport.perChar.some((c) => !c.error)) {
             doc.lastAutoManageSyncAt = now;
           }
+          // Count newly-applied gates so the surface line can show
+          // "synced N new gates" instead of just "synced". Sums
+          // perChar[].applied[].length across every char in the report.
+          const newGates = autoReport.perChar.reduce(
+            (sum, entry) =>
+              sum + (Array.isArray(entry.applied) ? entry.applied.length : 0),
+            0
+          );
+          piggybackOutcome.newGatesApplied = newGates;
+          piggybackOutcome.outcome = newGates > 0 ? "applied" : "synced-no-new";
           didAutoManage = true;
         } else if (autoManageBibleHit) {
           doc.lastAutoManageAttemptAt = Date.now();
@@ -364,6 +440,12 @@ function createRaidStatusCommand(deps) {
       autoManageEnabled: !!userDoc.autoManageEnabled,
       lastAutoManageSyncAt: Number(userDoc.lastAutoManageSyncAt) || 0,
       lastAutoManageAttemptAt: Number(userDoc.lastAutoManageAttemptAt) || 0,
+      // Captured upstream during the piggyback flow so buildAccountPageEmbed
+      // can surface "what just happened on this open" without re-deriving
+      // outcome from timestamp deltas (which can't distinguish "we just
+      // synced and got nothing new" from "bible was unreachable so we kept
+      // the cached data" - both leave lastAutoManageSyncAt unchanged).
+      piggybackOutcome,
     };
 
     // Raid-filter aggregate for the caller's own roster. Parallel to the

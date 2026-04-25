@@ -4,6 +4,16 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-25
 
+### Added (piggyback outcome surface for /raid-status)
+
+- `/raid-status` embed description now surfaces the bible-piggyback outcome from THIS open so a regular user can tell whether the data they're seeing reflects a fresh pull, a silently-failed attempt, or a cached read because they were within the 15m cooldown. `/raid-status` is the only sync entry point for non-Manager users (they cannot use `/raid-check` Sync), so this transparency was the highest-value gap to close.
+- Outcome lines (only shown when they add information):
+  - `🔄 Bible vừa sync · N gate mới đã apply` (applied case, N gates landed this open)
+  - `⚠️ Bible sync chậm · render data cache, gather đang chạy nền (mở lại sau ~10s để thấy data mới)` (timeout case)
+  - `⚠️ Bible sync gặp vấn đề · đang xem cache, thử mở lại sau vài phút` (gather threw)
+  - Skipped silently when no piggyback was attempted (cooldown, not opted-in) OR when sync ran cleanly but applied 0 new gates - the existing freshness line already covers those cases.
+- Outcome captured upstream during the existing piggyback flow (slot guard, gather, apply paths) and threaded through `statusUserMeta.piggybackOutcome` to `buildAccountPageEmbed`. No new service deps; reuses existing `applyAutoManageCollected` report shape (`perChar[].applied[].length`) to count newly-applied gates.
+
 ### Added (bible piggyback for /raid-check)
 
 - `/raid-check` now piggyback-syncs bible logs on command-open, scoped to opted-in users with at least one pending char in the viewed raid. Mirrors the `/raid-status` piggyback pattern (`STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500ms`) so render isn't held hostage by slow bible. Closes the UX gap a manager would otherwise see: opening `/raid-check` previously showed only data the daily background ticker (24h gap) or someone's prior `/raid-status` had already written.
