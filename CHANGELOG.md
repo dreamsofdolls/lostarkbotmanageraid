@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-25
 
+### Changed (Phase 3a)
+
+- Started splitting `src/commands/raid-check.js` (was 2590 lines). Step 1: extracted the snapshot construction layer to `src/commands/raid-check/snapshot.js` via factory pattern.
+  - Extracted: `buildRaidCheckSnapshotFromUsers` (150 lines, the heaviest), `formatRaidCheckNotEligibleFieldValue`, `getRaidCheckRenderableChars`, `computeRaidCheckSnapshot`.
+  - Factory `createSnapshotHelpers({...15 deps})` takes Mongoose model, query helpers, character normalizers, and the lazy-refresh limiter. Compose root in raid-check.js wires it once.
+  - `raid-check.js`: 2590 -> 2395 lines (-195).
+- Verified end-to-end: full `require('./src/raid-command')` loads through the entire compose chain; `__test.buildRaidCheckSnapshotFromUsers` is callable on the resulting module; mock-deps invocation test exercised all 4 extracted exports with realistic char roster data.
+
 ### Changed (Phase 2.3)
 
 - Extracted announcement timing + scheduler-tick math into `src/raid/scheduling.js` via factory pattern. Six functions moved (`getAnnouncementsConfig`, `nextIntervalTickMs`, `nextAnnouncementEligibleBoundaryMs`, `nextAnnouncementSchedulerCheckMs`, `formatDiscordTimestampPair`, `buildAnnouncementWhenItFiresText`).

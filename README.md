@@ -139,7 +139,9 @@ LostArk_RaidManage/
 │   │   ├── raid-announce.js
 │   │   ├── raid-auto-manage.js
 │   │   ├── raid-channel.js
-│   │   ├── raid-check.js           # Scan + Sync + Edit cascading select
+│   │   ├── raid-check.js           # Scan + Sync + Edit cascading select (orchestrator)
+│   │   ├── raid-check/
+│   │   │   └── snapshot.js         # /raid-check snapshot build + classify (factory)
 │   │   ├── raid-help.js
 │   │   ├── raid-set.js             # applyRaidSetForDiscordId shared write path
 │   │   ├── raid-status.js
