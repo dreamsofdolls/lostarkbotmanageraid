@@ -25,6 +25,7 @@ const {
   startAutoManageDailyScheduler,
 } = require("./raid-command");
 const { startWeeklyResetJob } = require("./weekly-reset");
+const { bootstrapClassEmoji } = require("./services/class-emoji-bootstrap");
 
 const { DISCORD_TOKEN, GUILD_ID } = process.env;
 
@@ -118,6 +119,15 @@ async function startBot() {
   client.once(Events.ClientReady, async (readyClient) => {
     console.log(`Logged in as ${readyClient.user.tag}`);
     await registerSlashCommandsOnBoot(readyClient);
+    // Idempotent: lists existing application emoji, uploads only PNGs
+    // that aren't already there. After the first deploy uploads the full
+    // set, subsequent restarts are just one GET + skip (~500ms). Failure
+    // is logged + swallowed - bot keeps running with whatever subset of
+    // CLASS_EMOJI_MAP got populated; getClassEmoji falls back to empty
+    // string for the rest so char fields just render without icons.
+    bootstrapClassEmoji(readyClient).catch((err) =>
+      console.warn("[bot] class-emoji bootstrap rejected (non-fatal):", err?.message || err)
+    );
     // Daily auto-cleanup scheduler for raid monitor channels. Runs always -
     // per-guild `autoCleanupEnabled` flag gates whether a given guild
     // actually does anything. Independent of TEXT_MONITOR_ENABLED so
