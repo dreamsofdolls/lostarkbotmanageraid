@@ -9,7 +9,34 @@ constant in `data/Class.js` maps `class display name -> Discord custom emoji`.
 Discord cannot render local PNG files inline. To use these as inline icons in
 embed body / dropdown labels you have to upload each PNG as a **guild custom
 emoji** in the Thaemine server, then wire the emoji ID into
-`data/Class.js`'s `CLASS_EMOJI_MAP`. Workflow:
+`data/Class.js`'s `CLASS_EMOJI_MAP`.
+
+### Recommended: bulk upload via script
+
+```bash
+node scripts/upload-class-emoji.js          # idempotent: skip existing
+node scripts/upload-class-emoji.js --dry    # validate setup, no upload
+node scripts/upload-class-emoji.js --force  # re-upload even if exists
+```
+
+The script uses `DISCORD_TOKEN` + `GUILD_ID` from `.env`, calls Discord REST
+`POST /guilds/{guild.id}/emojis` for each PNG, and writes the resulting
+`{ displayName: "<:emoji:id>" }` map to `assets/class-icons/emoji-map.json`.
+`data/Class.js` auto-merges that JSON into `CLASS_EMOJI_MAP` at startup, so
+the only follow-up steps after running the script are: `git add` the new
+`emoji-map.json`, commit, push - bot picks up class icons on next deploy.
+
+Requirements:
+- Bot must have **Manage Expressions** permission (formerly "Manage Emojis
+  and Stickers") in the target guild
+- Discord guild has at least 25 free emoji slots (alias classes share a
+  slot, so the script uses ~25 of the 50 free slots / 250 boosted)
+- Bot rate limit: ~50 emoji uploads / 30s per guild; the script sleeps
+  250ms between uploads so a full 25-emoji run takes ~7 seconds
+
+### Manual fallback: Discord UI
+
+If the script can't run (no bot permission, etc.), fall back to manual:
 
 1. Open Thaemine **Server Settings -> Emoji -> Upload Emoji**.
 2. Upload each PNG with the bible class ID as the emoji name (e.g.
@@ -18,7 +45,7 @@ emoji** in the Thaemine server, then wire the emoji ID into
 3. After upload, send a test message in any channel: `\:bard:` (the leading
    backslash makes Discord show the raw `<:bard:123456789012345678>` form).
 4. Copy the full `<:name:id>` string and paste it into the corresponding entry
-   of `CLASS_EMOJI_MAP` in `src/data/Class.js`.
+   of `CLASS_EMOJI_MAP` in `src/data/Class.js` (or into the JSON file).
 
 The map starts empty - `getClassEmoji(name)` returns an empty string for any
 class whose ID isn't in the map yet, so the bot keeps rendering cleanly while

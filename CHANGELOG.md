@@ -4,6 +4,13 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-26
 
+### Added (class icon bulk upload script)
+
+- `scripts/upload-class-emoji.js`: Node script that bulk-uploads every PNG in `assets/class-icons/` to the Thaemine guild via Discord REST `POST /guilds/{id}/emojis`, then writes the resulting display-name -> `<:emoji:id>` map to `assets/class-icons/emoji-map.json`. Idempotent by default (skips emoji whose name already exists in the guild), `--force` re-uploads everything, `--dry` validates without calling the API.
+- `data/Class.js`: now auto-loads `assets/class-icons/emoji-map.json` at module-load and merges entries over the empty seeds in `CLASS_EMOJI_MAP`. Falls back silently to the empty defaults when the file is missing or malformed (the bot just renders without icons - no crash). Removes the "manually paste 23 emoji IDs into source code" step that the prior scaffold required.
+- Alias-aware: bible class IDs that share art with another class (`force_master`/`soulmaster`, `hawk_eye`/`hawkeye`) get pointed at the canonical's emoji ID instead of consuming a duplicate guild emoji slot. Stays under the 50-slot free tier even with all 25 unique class icons.
+- Discord rate-limit safe: 250ms sleep between uploads keeps the full 25-emoji run at ~7s while staying well under the 50 emoji / 30s per-guild ceiling.
+
 ### Added (class icon scaffold)
 
 - Scaffold for prepending Discord guild custom emoji class icons before character names in embed body fields. Long-anticipated feature - `raid-check.js`, `raid-status.js`, and `raid-help.js` all carry comments referencing this "planned class-icon swap" (the manager 👑 was deliberately moved to the roster header rather than per-char to avoid colliding with this future swap).
