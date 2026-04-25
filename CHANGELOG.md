@@ -4,6 +4,10 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-25
 
+### Fixed
+
+- `/raid-check raid:all` and per-char raid lists no longer surface a "0/2 pending Nightmare" card next to a completed Hard card on the same Serca character. In Lost Ark the weekly raid slot is shared across every difficulty of the same raid - clearing at any one mode (Normal/Hard/Nightmare) consumes the slot - so showing both as pending is misleading. The Serca 1740+ branch in `getStatusRaidsForCharacter` now checks `completedGateKeys.length > 0` first; if the char is locked for the week, only the actually-cleared mode card is emitted. The "show both options" fan-out is preserved for chars that haven't entered Serca yet this week. Same fix automatically benefits any future raid that surfaces multiple modes simultaneously.
+
 ### Changed
 
 - Started splitting `src/raid-command.js` (was 1568 lines, single compose-root file). Step 1: extracted 20 pure character/raid normalization helpers into `src/raid/character.js` along with `RAID_REQUIREMENT_MAP`.
