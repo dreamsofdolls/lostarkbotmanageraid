@@ -130,9 +130,9 @@ this folder with the matching bible class ID name.
 | ~~infighter_male~~ | ~~Breaker~~ | ✅ Inven AI vector inverted - clenched fist inside octagonal MMA ring |
 | ~~holyknight_female~~ | ~~Valkyrie~~ | ✅ Discord emoji rip (white silhouette, upscaled 46→320 LANCZOS) |
 | ~~dragon_knight~~ | ~~Guardian Knight~~ | ✅ Discord emoji rip (white silhouette, upscaled 96→320 LANCZOS) |
-| alchemist | Wildsoul | Specialist advanced class - try Inven post below |
+| ~~alchemist~~ | ~~Wildsoul~~ | ✅ Discord emoji rip (white silhouette, 86x96 → 320x320 aspect-preserved + padded) |
 
-**For the 1 still missing:** [Inven post (Korean community, 2024) - 26 class logos as AI vector + PNG](https://www.inven.co.kr/board/lostark/6271/144967) bundles all classes including the newer ones via Naver Blog download links organized by region (Shushire / Sileen / Arthétain / Anytis / Darenyu / Specialists). Filename naming convention: drop into this folder as the matching bible class ID (`alchemist.png` for Wildsoul).
+**Coverage complete (2026-04-26):** All 27 known Lost Ark classes now have icon assets in this folder. If Smilegate releases a new class, drop the PNG (or webp) here named after the bible class ID and add the matching `CLASS_NAMES` entry in `src/data/Class.js` - the bot bootstrap will auto-upload it on next deploy. For reference, the [Inven post (Korean community, 2024) - 26 class logos as AI vector + PNG](https://www.inven.co.kr/board/lostark/6271/144967) is a good starting point if you need to source new art.
 
 ### Color caveat for Inven sources
 
