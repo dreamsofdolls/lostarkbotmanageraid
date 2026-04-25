@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-25
 
+### Changed (Phase 3b)
+
+- Continued splitting `commands/raid-check.js`. Step 2: extracted the 7 pure Edit-flow helpers to `src/commands/raid-check/edit-helpers.js`.
+  - Extracted: `buildEditableCharsByUser`, `getEligibleRaidsForChar`, `getCharRaidGateStatus`, `formatGateStateLine`, `applyLocalRaidEditToChar`, `formatCharEditLabel`, `formatUserEditLabel`.
+  - Factory `createEditHelpers({...8 deps})` takes string/format helpers + raid-requirement map. Self-contained group with no cross-references to the snapshot layer.
+  - Invocation test caught a missing `getRaidScanRange` dep that the deps-name grep had missed - fixed before strip. Lesson reinforced: invocation > static + grep.
+  - `raid-check.js`: 2395 -> 2210 lines (-185). Phase 3 running total: 2590 -> 2210 (-15%).
+
 ### Changed (Phase 3a)
 
 - Started splitting `src/commands/raid-check.js` (was 2590 lines). Step 1: extracted the snapshot construction layer to `src/commands/raid-check/snapshot.js` via factory pattern.
