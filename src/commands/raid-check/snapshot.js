@@ -83,6 +83,12 @@ function createSnapshotHelpers({
             discordId: userDoc.discordId,
             accountName: account.accountName || "(no name)",
             charName: getCharacterName(character),
+            // Carried so the user-filter dropdown can show a per-user
+            // support/DPS breakdown ("8 pending · 2🪄 6⚔️"). Without
+            // this the dropdown only knows the total, which makes it
+            // hard to tell whether a backlog is composition-blocking
+            // (low support count) or just queue depth.
+            className: character.class || "",
             itemLevel: characterItemLevel,
             // Carried forward so the /raid-check Edit flow can decide
             // whether a leader is allowed to touch this char despite the

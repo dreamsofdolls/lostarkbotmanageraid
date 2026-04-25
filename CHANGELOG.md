@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-25
 
+### Added
+
+- `/raid-check` user-filter dropdowns now show a per-user support/DPS breakdown beside the pending count: `Du (8 pending · 2🪄 6⚔️)` instead of bare `Du (8 pending)`. Applies to both surfaces - the specific-raid filter (e.g., `/raid-check raid:serca_hard`) and the cross-raid filter (`/raid-check raid:all`). Hard-support classes are Bard, Paladin, Artist, Valkyrie; everyone else counts as DPS. Helps a Raid Manager see at a glance whether a heavy backlog is composition-blocking (low support count) or just queue depth.
+- `src/data/Class.js`: new `SUPPORT_CLASS_NAMES` Set + `isSupportClass(name)` helper. Stored as display names (not bible class IDs) because the consuming code reads the resolved `character.class` field.
+- `src/commands/raid-check/snapshot.js`: `pendingChars` rows now carry a `className` field so the user-filter dropdown can read class info without a second pass over the raw character documents.
+
 ### Changed (Phase 3e)
 
 - Extracted the /raid-check Sync button flow + the shared display-name resolver from `commands/raid-check.js` into `src/commands/raid-check/sync-ui.js`. Three functions moved (~205 lines): `resolveCachedDisplayName`, `buildRaidCheckSyncDMEmbed`, `handleRaidCheckSyncClick`.
