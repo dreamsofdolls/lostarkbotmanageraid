@@ -11,6 +11,8 @@
  * other handlers harder.
  */
 
+const { isSupportClass } = require("../../data/Class");
+
 function createAllModeHandler({
   ActionRowBuilder,
   ButtonBuilder,
@@ -327,6 +329,12 @@ function createAllModeHandler({
     // instead of walking twice per render - guild scale is small enough
     // that the double-use is free, but the DRY keeps both counts
     // guaranteed consistent.
+    // perUserPending entries are { count, supports, dps } so the
+    // user-filter dropdown can render "Du · 8 pending (2🪄 6⚔️)" instead
+    // of bare "(8 pending)". Hard-support classes (Bard / Paladin /
+    // Artist / Valkyrie) get the 🪄 bucket; everything else is DPS.
+    // Without this split it's hard to tell whether a heavy backlog is
+    // composition-blocking (no supports ready) or just queue depth.
     const computePendingAggregate = ({ raidFilter, userFilter }) => {
       const perUserPending = new Map();
       const perRaidPending = new Map();
@@ -336,6 +344,7 @@ function createAllModeHandler({
         if (userFilter && discordId !== userFilter) continue;
         const chars = Array.isArray(p.account.characters) ? p.account.characters : [];
         for (const ch of chars) {
+          const charIsSupport = isSupportClass(ch?.class);
           for (const raid of getStatusRaidsForCharacter(ch)) {
             const key = `${raid.raidKey}:${raid.modeKey}`;
             // Record the raid existence for the per-raid dropdown BEFORE
@@ -349,7 +358,14 @@ function createAllModeHandler({
             }
             if (raidFilter && key !== raidFilter) continue;
             if (raid.isCompleted) continue;
-            perUserPending.set(discordId, (perUserPending.get(discordId) || 0) + 1);
+            let userEntry = perUserPending.get(discordId);
+            if (!userEntry) {
+              userEntry = { count: 0, supports: 0, dps: 0 };
+              perUserPending.set(discordId, userEntry);
+            }
+            userEntry.count += 1;
+            if (charIsSupport) userEntry.supports += 1;
+            else userEntry.dps += 1;
             raidEntry.pending += 1;
             totalPending += 1;
           }
@@ -384,18 +400,26 @@ function createAllModeHandler({
         },
       ];
       const sortedUsers = visibleUserIds
-        .map((discordId) => ({
-          discordId,
-          pending: perUserPending.get(discordId) || 0,
-          displayName: authorMeta.get(discordId)?.displayName || discordId,
-        }))
+        .map((discordId) => {
+          const tally = perUserPending.get(discordId) || { count: 0, supports: 0, dps: 0 };
+          return {
+            discordId,
+            pending: tally.count,
+            supports: tally.supports,
+            dps: tally.dps,
+            displayName: authorMeta.get(discordId)?.displayName || discordId,
+          };
+        })
         .sort(
           (a, b) =>
             b.pending - a.pending || a.displayName.localeCompare(b.displayName)
         );
       for (const u of sortedUsers.slice(0, 24)) {
         options.push({
-          label: truncateText(`${u.displayName} (${u.pending} pending)`, 100),
+          label: truncateText(
+            `${u.displayName} (${u.pending} pending · ${u.supports}🪄 ${u.dps}⚔️)`,
+            100
+          ),
           value: u.discordId,
           emoji: "👤",
           default: filterUserId === u.discordId,

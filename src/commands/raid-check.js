@@ -3,6 +3,7 @@ const { createEditHelpers } = require("./raid-check/edit-helpers");
 const { createAllModeHandler } = require("./raid-check/all-mode");
 const { createEditUi } = require("./raid-check/edit-ui");
 const { createSyncUi } = require("./raid-check/sync-ui");
+const { isSupportClass } = require("../data/Class");
 
 const RAID_CHECK_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 
@@ -370,12 +371,25 @@ function createRaidCheckCommand(deps) {
     const ROSTERS_PER_PAGE = 2;
     const FILTER_ALL = "__all__";
 
+    // Per-user pending tally + role breakdown so the user-filter dropdown
+    // can render "Du · 8 pending (2🪄 6⚔️)" instead of bare "(8 pending)".
+    // Hard-support classes (Bard / Paladin / Artist / Valkyrie) get the
+    // 🪄 bucket; everything else is DPS. Without this split it's hard to
+    // tell whether a heavy backlog is composition-blocking (no supports
+    // ready) or just queue depth.
     const userPendingTotals = new Map();
     for (const item of pendingChars) {
-      userPendingTotals.set(item.discordId, (userPendingTotals.get(item.discordId) || 0) + 1);
+      let entry = userPendingTotals.get(item.discordId);
+      if (!entry) {
+        entry = { total: 0, supports: 0, dps: 0 };
+        userPendingTotals.set(item.discordId, entry);
+      }
+      entry.total += 1;
+      if (isSupportClass(item.className)) entry.supports += 1;
+      else entry.dps += 1;
     }
     const userDropdownEntries = [...userPendingTotals.entries()]
-      .sort((a, b) => b[1] - a[1])
+      .sort((a, b) => b[1].total - a[1].total)
       .slice(0, 24);
 
     const filterByUser = (userId) => {
@@ -495,8 +509,11 @@ function createRaidCheckCommand(deps) {
           emoji: "🌐",
           default: allDefault,
         },
-        ...userDropdownEntries.map(([discordId, total]) => ({
-          label: truncateText(`${displayMap.get(discordId) || discordId} (${total} pending)`, 100),
+        ...userDropdownEntries.map(([discordId, tally]) => ({
+          label: truncateText(
+            `${displayMap.get(discordId) || discordId} (${tally.total} pending · ${tally.supports}🪄 ${tally.dps}⚔️)`,
+            100
+          ),
           value: discordId,
           emoji: "👤",
           default: selectedId === discordId,
