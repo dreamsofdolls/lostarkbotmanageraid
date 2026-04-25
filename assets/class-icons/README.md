@@ -125,8 +125,8 @@ this folder with the matching bible class ID name.
 | Bible class ID | Display name | Notes |
 |---|---|---|
 | ~~soul_eater~~ | ~~Souleater~~ | ✅ Found on Fandom (file existed but wasn't in `Category:Class_Icons`) - already in folder |
-| ~~scouter~~ | ~~Machinist~~ | ✅ Found on Fandom (uncategorized like Souleater) - already in folder, replaced earlier Artillerist placeholder |
-| infighter_male | Breaker | Martial Artist advanced class - try Inven post below |
+| ~~scouter~~ | ~~Machinist~~ | ✅ Inven AI vector (preferred over Fandom raster) - already in folder |
+| ~~infighter_male~~ | ~~Breaker~~ | ✅ Inven AI vector - already in folder (Traine sourced 2026-04-26) |
 | alchemist | Wildsoul | Specialist advanced class - try Inven post below |
 | holyknight_female | Valkyrie | Warrior advanced class (support) - try Inven post below |
 | dragon_knight | Guardian Knight | Warrior advanced class - try Inven post below |
