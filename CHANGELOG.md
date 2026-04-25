@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-25
 
+### Changed (Phase 3d)
+
+- Extracted the entire Edit cascading-select flow from `commands/raid-check.js` into `src/commands/raid-check/edit-ui.js` via factory pattern. Six tightly-coupled functions moved together (~830 lines): `buildEditEmbed`, `buildEditComponents`, `handleRaidCheckEditClick` (the message-collector setup), `postEditSessionExpiredNotice`, `buildRaidCheckEditDMEmbed`, `applyEditAndConfirm`.
+- Factory `createEditUi({...23 deps})` is the heaviest dep surface so far - the Edit handler crosses many seams (discord.js builders, Mongoose User model, limiters, the raid-set apply service, plus several pure helpers from `edit-helpers.js` + `snapshot.js`). All 6 functions live in the same factory body so they cross-call through a shared closure (e.g., `handleRaidCheckEditClick` calls `applyEditAndConfirm` + `buildEditEmbed` + `postEditSessionExpiredNotice`) without re-threading deps.
+- External contract preserved: `buildRaidCheckEditDMEmbed` is destructured from the factory and re-exported from `createRaidCheckCommand` so `raid-command.js`'s downstream consumers see no change.
+- Invocation test exercised all 4 builder paths (initial / with-char / applied / scopeAll-noRaid), all 4 component-row counts (1→2→3→4 by cascade depth), and all 3 DM-embed status types (complete / reset / process) before stripping originals.
+- `raid-check.js`: 1706 -> 913 lines (-793). Phase 3 total: **2590 -> 913 (-1677, -65%)**.
+
 ### Changed (Phase 3c)
 
 - Extracted the largest single handler in `commands/raid-check.js`: `handleRaidCheckAllCommand` (528 lines) into `src/commands/raid-check/all-mode.js` via factory pattern. Self-contained handler that uses character-helpers via outer-scope deps, not the snapshot/edit-helpers extracted earlier - so the cut was clean (no cross-helper threading needed).
