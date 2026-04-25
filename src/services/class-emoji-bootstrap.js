@@ -162,6 +162,38 @@ async function bootstrapClassEmoji(client) {
     return ZERO;
   }
 
+  // Alias cleanup pass: any existing emoji whose name matches a
+  // non-canonical alias bible ID is a duplicate of the canonical's
+  // art. Earlier bootstrap versions (before the alias dedup got
+  // tightened) uploaded both, leaving Discord with `hawkeye` AND
+  // `hawk_eye` as separate emoji that render the same Sharpshooter
+  // icon. Auto-delete is safe here because aliases are KNOWN
+  // structural duplicates by design - unlike generic orphan emoji
+  // which could be intentional non-class assets.
+  const aliasBibleIds = new Set();
+  for (const group of ALIAS_GROUPS) {
+    // Skip [0] which is the canonical; everything else is an alias.
+    for (const id of group.slice(1)) aliasBibleIds.add(id);
+  }
+  let aliasCleanedUp = 0;
+  for (const [name, emoji] of [...existingByName.entries()]) {
+    const candidateBibleId = name.replace(/_[0-9a-f]{1,12}$/i, "");
+    if (aliasBibleIds.has(candidateBibleId)) {
+      try {
+        await client.rest.delete(`/applications/${appId}/emojis/${emoji.id}`);
+        existingByName.delete(name);
+        aliasCleanedUp += 1;
+        console.log(`[class-emoji] deleted duplicate alias :${name}: (canonical handles it)`);
+        await new Promise((r) => setTimeout(r, 250));
+      } catch (err) {
+        console.warn(
+          `[class-emoji] failed to delete duplicate alias :${name}: (${emoji.id}):`,
+          err?.message || err
+        );
+      }
+    }
+  }
+
   // Sort canonical files ahead of aliases so canonical IDs exist by the
   // time aliases try to resolve.
   const sortedFiles = files.sort((a, b) => {
@@ -298,9 +330,9 @@ async function bootstrapClassEmoji(client) {
 
   const total = uploaded + reused + refreshed + aliasResolved;
   console.log(
-    `[class-emoji] bootstrap done: uploaded=${uploaded} refreshed=${refreshed} reused=${reused} aliasResolved=${aliasResolved} orphans=${orphanNames.length} skipped=${skipped} failed=${failed} totalActive=${total}`
+    `[class-emoji] bootstrap done: uploaded=${uploaded} refreshed=${refreshed} reused=${reused} aliasResolved=${aliasResolved} aliasCleanedUp=${aliasCleanedUp} orphans=${orphanNames.length} skipped=${skipped} failed=${failed} totalActive=${total}`
   );
-  return { uploaded, reused, refreshed, aliasResolved, orphans: orphanNames.length, skipped, failed, total };
+  return { uploaded, reused, refreshed, aliasResolved, aliasCleanedUp, orphans: orphanNames.length, skipped, failed, total };
 }
 
 module.exports = { bootstrapClassEmoji };
