@@ -127,12 +127,12 @@ this folder with the matching bible class ID name.
 |---|---|---|
 | ~~soul_eater~~ | ~~Souleater~~ | ✅ Found on Fandom (file existed but wasn't in `Category:Class_Icons`) - already in folder |
 | ~~scouter~~ | ~~Machinist~~ | ✅ Fandom (uncategorized) - white-on-transparent for dark UI |
-| ~~infighter_male~~ | ~~Breaker~~ | ✅ Inven AI vector - clenched fist inside octagonal MMA ring |
+| ~~infighter_male~~ | ~~Breaker~~ | ✅ Inven AI vector inverted - clenched fist inside octagonal MMA ring |
+| ~~holyknight_female~~ | ~~Valkyrie~~ | ✅ Discord emoji rip (white silhouette, upscaled 46→320 LANCZOS) |
+| ~~dragon_knight~~ | ~~Guardian Knight~~ | ✅ Discord emoji rip (white silhouette, upscaled 96→320 LANCZOS) |
 | alchemist | Wildsoul | Specialist advanced class - try Inven post below |
-| holyknight_female | Valkyrie | Warrior advanced class (support) - try Inven post below |
-| dragon_knight | Guardian Knight | Warrior advanced class - try Inven post below |
 
-**For the 3 still missing:** [Inven post (Korean community, 2024) - 26 class logos as AI vector + PNG](https://www.inven.co.kr/board/lostark/6271/144967) bundles all classes including the newer ones via Naver Blog download links organized by region (Shushire / Sileen / Arthétain / Anytis / Darenyu / Specialists). Filename naming convention: drop into this folder as the matching bible class ID (`alchemist.png` for Wildsoul, `holyknight_female.png` for Valkyrie, `dragon_knight.png` for Guardian Knight).
+**For the 1 still missing:** [Inven post (Korean community, 2024) - 26 class logos as AI vector + PNG](https://www.inven.co.kr/board/lostark/6271/144967) bundles all classes including the newer ones via Naver Blog download links organized by region (Shushire / Sileen / Arthétain / Anytis / Darenyu / Specialists). Filename naming convention: drop into this folder as the matching bible class ID (`alchemist.png` for Wildsoul).
 
 ### Color caveat for Inven sources
 
