@@ -290,6 +290,34 @@ function getStatusRaidsForCharacter(character) {
     const allGateKeys = rawGateKeys.length > 0 ? rawGateKeys : getGatesForRaid(raidKey);
 
     if (raidKey === "serca" && itemLevel >= 1740) {
+      // Lockout-aware: in Lost Ark the weekly raid slot is shared across
+      // every difficulty of the same raid, so clearing at any one mode
+      // (Normal/Hard/Nightmare) consumes the slot. Once the char has any
+      // completed gate this week, only surface the actually-cleared mode -
+      // showing a "0/2 pending Nightmare" card next to "2/2 Hard done"
+      // is misleading because the char physically can't run Nightmare
+      // until next reset. normalizeAssignedRaid above already promoted
+      // canonicalDifficulty to the cleared mode, so modeKey here points
+      // at the right card.
+      const lockedThisWeek = completedGateKeys.length > 0;
+      if (lockedThisWeek) {
+        const requirement = getRequirementFor(raidKey, modeKey);
+        if (requirement && itemLevel >= requirement.minItemLevel) {
+          selected.push({
+            raidName: requirement.label,
+            raidKey,
+            modeKey,
+            minItemLevel: requirement.minItemLevel,
+            allGateKeys,
+            completedGateKeys,
+            isCompleted: isAssignedRaidCompleted(assignedRaid),
+          });
+        }
+        continue;
+      }
+
+      // Not locked yet - surface BOTH Hard and Nightmare so the leader
+      // can see which mode the char is set up for.
       for (const sercaModeKey of ["hard", "nightmare"]) {
         const sercaRequirement = getRequirementFor(raidKey, sercaModeKey);
         if (!sercaRequirement || itemLevel < sercaRequirement.minItemLevel) continue;
