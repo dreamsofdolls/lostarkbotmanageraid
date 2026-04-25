@@ -36,6 +36,28 @@ next bot restart re-uploads it). Failure is logged and swallowed: any
 emoji that fails to upload just renders without an icon, the bot keeps
 running.
 
+### Updating an existing class icon (PNG content changed)
+
+Discord emoji image content is **immutable** - the only way to swap art
+on an existing emoji is to delete it then re-create. The bootstrap won't
+do that automatically because skipping existing names is the right
+default 99% of the time.
+
+To refresh after replacing one or more PNGs in this folder:
+
+1. Set Railway env var `CLASS_EMOJI_FORCE_REFRESH=true`
+2. Redeploy. Bootstrap log will show
+   `deleting N managed emoji before re-upload`. After ~10s every emoji
+   is re-created from the current PNG content.
+3. Unset `CLASS_EMOJI_FORCE_REFRESH` (or set `=false`) and redeploy
+   again so subsequent restarts go back to fast idempotent mode.
+
+The orphan-detection log line lists any application emoji whose name
+matches a known class but no PNG exists for it locally - useful when
+you remove a placeholder file. Bot does NOT auto-delete orphans; clean
+up manually at <https://discord.com/developers/applications> if you
+want the slot back.
+
 ### Why application emoji instead of guild emoji
 
 - **Owned by the bot application, not any single guild**, so the bot can
@@ -103,11 +125,11 @@ this folder with the matching bible class ID name.
 | Bible class ID | Display name | Notes |
 |---|---|---|
 | ~~soul_eater~~ | ~~Souleater~~ | ✅ Found on Fandom (file existed but wasn't in `Category:Class_Icons`) - already in folder |
+| ~~scouter~~ | ~~Machinist~~ | ✅ Found on Fandom (uncategorized like Souleater) - already in folder, replaced earlier Artillerist placeholder |
 | infighter_male | Breaker | Martial Artist advanced class - try Inven post below |
 | alchemist | Wildsoul | Specialist advanced class - try Inven post below |
 | holyknight_female | Valkyrie | Warrior advanced class (support) - try Inven post below |
 | dragon_knight | Guardian Knight | Warrior advanced class - try Inven post below |
-| scouter | Machinist | Currently placeholder = Artillerist art |
 
 **For the 4 still missing:** [Inven post (Korean community, 2024) - 26 class logos as AI vector + PNG](https://www.inven.co.kr/board/lostark/6271/144967) bundles all classes including the newer ones via Naver Blog download links organized by region (Shushire / Sileen / Arthétain / Anytis / Darenyu / Specialists). Filename naming convention: drop into this folder as the matching bible class ID (`infighter_male.png` for Breaker, `alchemist.png` for Wildsoul, `holyknight_female.png` for Valkyrie, `dragon_knight.png` for Guardian Knight).
 
