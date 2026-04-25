@@ -131,7 +131,21 @@ this folder with the matching bible class ID name.
 | holyknight_female | Valkyrie | Warrior advanced class (support) - try Inven post below |
 | dragon_knight | Guardian Knight | Warrior advanced class - try Inven post below |
 
-**For the 4 still missing:** [Inven post (Korean community, 2024) - 26 class logos as AI vector + PNG](https://www.inven.co.kr/board/lostark/6271/144967) bundles all classes including the newer ones via Naver Blog download links organized by region (Shushire / Sileen / Arthétain / Anytis / Darenyu / Specialists). Filename naming convention: drop into this folder as the matching bible class ID (`infighter_male.png` for Breaker, `alchemist.png` for Wildsoul, `holyknight_female.png` for Valkyrie, `dragon_knight.png` for Guardian Knight).
+**For the 3 still missing:** [Inven post (Korean community, 2024) - 26 class logos as AI vector + PNG](https://www.inven.co.kr/board/lostark/6271/144967) bundles all classes including the newer ones via Naver Blog download links organized by region (Shushire / Sileen / Arthétain / Anytis / Darenyu / Specialists). Filename naming convention: drop into this folder as the matching bible class ID (`alchemist.png` for Wildsoul, `holyknight_female.png` for Valkyrie, `dragon_knight.png` for Guardian Knight).
+
+### Color caveat for Inven sources
+
+Inven AI vector exports are **black-on-transparent** (designed for white
+print/web backgrounds). Drop one into Discord dark mode unmodified and
+the silhouette vanishes into the background.
+
+Run `python scripts/invert-icon.py assets/class-icons/<file>.png` to
+flip RGB while preserving alpha - black silhouette becomes white,
+matching the Fandom-sourced 22 in this folder. Requires `pip install
+Pillow` once.
+
+Game-UI rips (Fandom) are already white-on-transparent and don't need
+the invert.
 
 The bot WILL keep working without these - the char field just renders without
 a class icon prefix until you upload + map the emoji. Add them as you find
