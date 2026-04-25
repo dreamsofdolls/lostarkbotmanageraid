@@ -1,7 +1,7 @@
-const User = require("./schema/user");
-const { saveWithRetry } = require("./schema/user");
-const GuildConfig = require("./schema/guildConfig");
-const { RAID_REQUIREMENTS } = require("./models/Raid");
+const User = require("./models/user");
+const { saveWithRetry } = require("./models/user");
+const GuildConfig = require("./models/guildConfig");
+const { RAID_REQUIREMENTS } = require("./data/Raid");
 
 const WEEKLY_ANNOUNCEMENT_TTL_MS = 30 * 60 * 1000; // marker sits 30 min before self-delete
 const WEEKLY_RESET_TICK_MS = 30 * 60 * 1000;

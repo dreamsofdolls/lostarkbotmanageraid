@@ -8,10 +8,10 @@ const {
   MessageFlags,
   PermissionFlagsBits,
 } = require("discord.js");
-const GuildConfig = require("./schema/guildConfig");
+const GuildConfig = require("./models/guildConfig");
 const { randomUUID } = require("node:crypto");
-const User = require("./schema/user");
-const { saveWithRetry } = require("./schema/user");
+const User = require("./models/user");
+const { saveWithRetry } = require("./models/user");
 const {
   ensureFreshWeek,
   getWeeklyResetSchedulerStartedAtMs,
@@ -132,7 +132,7 @@ const {
   getRaidRequirementMap,
   getGatesForRaid,
   getRaidGateForBoss,
-} = require("./models/Raid");
+} = require("./data/Raid");
 
 const MAX_CHARACTERS_PER_ACCOUNT = 6;
 // Raid leader gating: switched from Discord role-name match to an explicit
