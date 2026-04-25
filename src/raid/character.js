@@ -16,16 +16,20 @@ const {
   UI,
   normalizeName,
   foldName,
+  toModeLabel,
+  toModeKey,
   getCharacterName,
   getCharacterClass,
 } = require("./shared");
 const {
   RAID_REQUIREMENTS,
+  getRaidRequirementList,
   getRaidRequirementMap,
   getGatesForRaid,
 } = require("../data/Raid");
 
 const RAID_REQUIREMENT_MAP = getRaidRequirementMap();
+const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
 
 function createCharacterId() {
   try {
