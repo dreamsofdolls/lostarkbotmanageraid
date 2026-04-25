@@ -4,6 +4,15 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-25
 
+### Changed (Phase 2.2)
+
+- Continued splitting `src/raid-command.js`. Extracted the /raid-check Mongo query construction into `src/raid/raid-check-query.js`:
+  - `RAID_CHECK_USER_BASE_QUERY` (filter), `RAID_CHECK_USER_QUERY_FIELDS` (projection)
+  - `getRaidScanRange(raidKey, selfMin)` - per-raid iLvl range bounds (lowestMin / selfMin / nextMin)
+  - `buildRaidCheckUserQuery(raidMeta, now)` - assembles the query object with the stale-roster carve-out
+- Each function invocation-tested before commit (lesson from Phase 2.1 hotfix - static check + import resolver are not enough; runtime call validates internal symbol bindings). Full `require('./src/raid-command')` now loads cleanly past both extraction points.
+- `raid-command.js`: 1239 -> 1145 lines (running total since Phase 2.1: 1568 -> 1145, -27%).
+
 ### Fixed
 
 - `/raid-check raid:all` and per-char raid lists no longer surface a "0/2 pending Nightmare" card next to a completed Hard card on the same Serca character. In Lost Ark the weekly raid slot is shared across every difficulty of the same raid - clearing at any one mode (Normal/Hard/Nightmare) consumes the slot - so showing both as pending is misleading. The Serca 1740+ branch in `getStatusRaidsForCharacter` now checks `completedGateKeys.length > 0` first; if the char is locked for the week, only the actually-cleared mode card is emitted. The "show both options" fan-out is preserved for chars that haven't entered Serca yet this week. Same fix automatically benefits any future raid that surfaces multiple modes simultaneously.
