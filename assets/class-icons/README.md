@@ -38,25 +38,26 @@ running.
 
 ### Updating an existing class icon (PNG content changed)
 
-Discord emoji image content is **immutable** - the only way to swap art
-on an existing emoji is to delete it then re-create. The bootstrap won't
-do that automatically because skipping existing names is the right
-default 99% of the time.
+Just replace the PNG and push. The bootstrap is **content-addressed**:
+each emoji is uploaded with the name `{bibleClassId}_{md5short}` where
+`md5short` is the first 6 chars of the PNG's MD5. On every restart:
 
-To refresh after replacing one or more PNGs in this folder:
+- Existing emoji whose name matches the expected hash → reuse (content
+  unchanged)
+- Existing emoji with the SAME bible ID but DIFFERENT hash suffix (or
+  no suffix at all) → delete + re-upload with new hash (content
+  changed since last upload)
+- No existing emoji → upload
 
-1. Set Railway env var `CLASS_EMOJI_FORCE_REFRESH=true`
-2. Redeploy. Bootstrap log will show
-   `deleting N managed emoji before re-upload`. After ~10s every emoji
-   is re-created from the current PNG content.
-3. Unset `CLASS_EMOJI_FORCE_REFRESH` (or set `=false`) and redeploy
-   again so subsequent restarts go back to fast idempotent mode.
+So replacing `infighter_male.png` with new art and pushing is enough -
+the bot detects the hash mismatch on next deploy and refreshes Discord
+automatically. No env var, no manual delete, no script run.
 
 The orphan-detection log line lists any application emoji whose name
-matches a known class but no PNG exists for it locally - useful when
-you remove a placeholder file. Bot does NOT auto-delete orphans; clean
-up manually at <https://discord.com/developers/applications> if you
-want the slot back.
+parses as a class bible-ID but didn't match any current PNG file (e.g.
+you removed a placeholder file). Bot does NOT auto-delete orphans;
+clean up manually at <https://discord.com/developers/applications> if
+you want the slot back.
 
 ### Why application emoji instead of guild emoji
 
