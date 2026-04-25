@@ -660,6 +660,7 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   getCharacterName,
   truncateText,
   formatShortRelative,
+  waitWithBudget,
   getGatesForRaid,
   ensureAssignedRaids,
   getGateKeys,
