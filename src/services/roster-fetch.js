@@ -1,7 +1,7 @@
 "use strict";
 
 const { JSDOM, VirtualConsole } = require("jsdom");
-const { getClassName } = require("../models/Class");
+const { getClassName } = require("../data/Class");
 const { parseItemLevel } = require("../raid/shared");
 
 const jsdomVirtualConsole = new VirtualConsole();

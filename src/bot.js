@@ -8,7 +8,7 @@ const {
   REST,
   Routes,
 } = require("discord.js");
-const { connectDB } = require("../db");
+const { connectDB } = require("./db");
 const {
   commands,
   handleRaidManagementCommand,

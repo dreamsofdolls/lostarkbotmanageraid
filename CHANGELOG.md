@@ -2,6 +2,17 @@
 
 Dates use the local calendar of the commit. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## 2026-04-25
+
+### Changed
+
+- Source-tree cleanup. No behavior change. Aligns RaidManage layout with the LoaLogs convention so cross-project navigation feels the same:
+  - **Deleted dead code** `src/models/GuildConfig.js`. It was a 36-line ESM file leftover from a copy-paste from LoaLogs, with a totally different schema than the live Mongoose model and never imported anywhere. Confirmed by full grep before removal.
+  - **Moved** `db.js` (root) to `src/db.js`. Root now only holds entry/meta files (Dockerfile, railway.toml, package.json, etc.); all source lives under `src/`.
+  - **Renamed** `src/schema/` to `src/models/` (Mongoose models - matches the standard Node convention and LoaLogs's `bot/models/`).
+  - **Renamed** `src/models/` to `src/data/` (`Class.js` and `Raid.js` are pure constant lookup tables, not Mongoose models - the old `models/` name was misleading).
+  - All 10 require() paths rewritten; relative-import resolver script confirms 31/31 source files resolve.
+
 ## 2026-04-24
 
 ### Added

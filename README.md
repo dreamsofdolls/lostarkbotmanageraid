@@ -120,9 +120,9 @@ User document example:
 
 **Gate System.** Raid is "done" when every official gate has `completedDate > 0` at the selected difficulty. `assignedRaids.<raidKey>` uses `strict: false` so adding G3+ later is migration-free. `/raid-check` places characters in their natural iLvl bucket first (for example Serca Normal is `[1710,1730)`, Hard is `[1730,1740)`, Nightmare is `1740+`), but explicit clears are also shown on the mode they actually cleared and annotated when viewed from another bucket, e.g. `2/2 (Normal Clear)`.
 
-**Class map.** 30+ Lost Ark classes mapped from bible internal IDs to display names in `src/models/Class.js`. Unknown IDs fall back to title-cased raw ID.
+**Class map.** 30+ Lost Ark classes mapped from bible internal IDs to display names in `src/data/Class.js`. Unknown IDs fall back to title-cased raw ID.
 
-**GuildConfig** (second collection) stores per-guild monitor channel, cleanup schedule cursors, bedtime/wake-up dedup keys, and per-announcement enable flags. See `src/schema/guildConfig.js`.
+**GuildConfig** (second collection) stores per-guild monitor channel, cleanup schedule cursors, bedtime/wake-up dedup keys, and per-announcement enable flags. See `src/models/guildConfig.js`.
 
 ## Architecture
 
@@ -155,21 +155,21 @@ LostArk_RaidManage/
 │   │   ├── roster-fetch.js         # lostark.bible HTML scrape
 │   │   └── roster-refresh.js       # 2h lazy refresh with failure cooldown
 │   │
-│   ├── schema/                     # Mongoose schemas + indexes
+│   ├── models/                     # Mongoose schemas + indexes
 │   │   ├── user.js
 │   │   └── guildConfig.js
+│   │
+│   ├── data/                       # Pure constant lookup tables (no Mongoose)
+│   │   ├── Raid.js                 # RAID_REQUIREMENTS (iLvl floors + gate lists)
+│   │   └── Class.js                # Bible class ID -> display name map
 │   │
 │   ├── raid/                       # Pure helpers / registries
 │   │   ├── shared.js               # Time, name, format utils
 │   │   └── announcements.js        # Announcement registry (single source of truth)
 │   │
-│   ├── models/
-│   │   ├── Raid.js                 # RAID_REQUIREMENTS (iLvl floors + gate lists)
-│   │   └── Class.js                # Bible class ID → display name map
-│   │
+│   ├── db.js                       # Lazy Mongo connect with DNS fallback
 │   └── weekly-reset.js             # 30-min tick, Wed 10:00 UTC boundary
 │
-├── db.js                           # Lazy Mongo connect with DNS fallback
 ├── test/
 │   └── raid-check-snapshot.test.js # node --test, pure functions via __test exports
 ├── Dockerfile                      # node:20-slim, npm install --omit=dev

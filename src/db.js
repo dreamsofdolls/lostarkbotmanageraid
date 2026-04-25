@@ -15,8 +15,8 @@ async function ensureApplicationIndexes() {
 
   const started = Date.now();
   try {
-    const User = require("./src/schema/user");
-    const GuildConfig = require("./src/schema/guildConfig");
+    const User = require("./models/user");
+    const GuildConfig = require("./models/guildConfig");
     await Promise.all([User.createIndexes(), GuildConfig.createIndexes()]);
     console.log(`[db] Ensured Mongo indexes in ${Date.now() - started}ms`);
   } catch (err) {
