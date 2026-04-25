@@ -6,29 +6,38 @@ constant in `data/Class.js` maps `class display name -> Discord custom emoji`.
 
 ## How these icons reach Discord
 
-Discord cannot render local PNG files inline. To use these as inline icons in
-embed body / dropdown labels you have to upload each PNG as a **guild custom
-emoji** in the Thaemine server, then wire the emoji ID into
-`data/Class.js`'s `CLASS_EMOJI_MAP`.
+Discord cannot render local PNG files inline. Each PNG has to be registered
+as a Discord **application emoji** (owned by the bot application, not by
+any single guild) before the bot can reference it as `<:bard:123>` in
+embed text. The good news: **the bot does this for you on startup**. You
+just `git push` and Railway redeploys; first boot uploads any new PNGs and
+populates `CLASS_EMOJI_MAP` in memory.
 
-### Recommended: bulk upload via script (application emoji)
+### The deploy flow
 
-```bash
-node scripts/upload-class-emoji.js          # idempotent: skip existing
-node scripts/upload-class-emoji.js --dry    # validate setup, no upload
-node scripts/upload-class-emoji.js --force  # re-upload even if exists
-```
+1. Drop a PNG into this folder, named after the bible class ID (e.g.
+   `bard.png`, `holyknight.png`). The filenames already in this folder
+   follow that convention.
+2. `git add` the PNG, commit, push.
+3. Railway redeploys. On `ClientReady`, `src/services/class-emoji-bootstrap.js`
+   runs:
+   - Lists existing application emoji via `GET /applications/{appId}/emojis`
+   - For each PNG file: if an emoji with that name already exists in the
+     application, reuse the ID; otherwise upload it via
+     `POST /applications/{appId}/emojis`
+   - Mutates `CLASS_EMOJI_MAP` in memory with the resulting `<:name:id>`
+     strings, keyed by class display name
+4. Next time someone runs `/raid-status` or `/raid-check`, char fields
+   render `<:bard:123> Cyrano · 1740` instead of `Cyrano · 1740`.
 
-The script uses `DISCORD_TOKEN` from `.env` (the application id is auto-
-resolved via `GET /applications/@me`, so no extra env var needed), calls
-Discord REST `POST /applications/{app.id}/emojis` for each PNG, and writes
-the resulting `{ displayName: "<:emoji:id>" }` map to
-`assets/class-icons/emoji-map.json`. `data/Class.js` auto-merges that JSON
-into `CLASS_EMOJI_MAP` at startup, so the only follow-up steps after
-running the script are: `git add` the new `emoji-map.json`, commit, push -
-bot picks up class icons on next deploy.
+The bootstrap is **idempotent** (re-runs are safe; only new PNGs upload)
+and **self-healing** (if you delete an emoji from the developer portal, the
+next bot restart re-uploads it). Failure is logged and swallowed: any
+emoji that fails to upload just renders without an icon, the bot keeps
+running.
 
-Why application emoji instead of guild emoji:
+### Why application emoji instead of guild emoji
+
 - **Owned by the bot application, not any single guild**, so the bot can
   use them in every guild it joins (future-proof for multi-server)
 - **Don't consume Thaemine's 50-slot guild emoji budget** which is
@@ -37,27 +46,21 @@ Why application emoji instead of guild emoji:
   application assets the bot owns
 - **2000 emoji slot per application** vs 50 free / 250 boosted per guild
 
-Requirements:
-- Application emoji rate limit similar to guild (~50/30s); the script
-  sleeps 250ms between uploads so a full 25-emoji run takes ~7 seconds
+### Manual override script (optional)
 
-### Manual fallback: Discord UI
+`scripts/upload-class-emoji.js` exists for local testing or one-shot
+maintenance (e.g., re-uploading after manually editing PNGs without
+deploying). Same upload logic as the bot's startup bootstrap, runs from
+your shell with `DISCORD_TOKEN` in `.env`. Writes
+`assets/class-icons/emoji-map.json` for inspection/debugging - the bot
+itself doesn't read that JSON; the app-emoji list endpoint is the source
+of truth.
 
-If the script can't run (no bot permission, etc.), fall back to manual:
-
-1. Open Thaemine **Server Settings -> Emoji -> Upload Emoji**.
-2. Upload each PNG with the bible class ID as the emoji name (e.g.
-   `bard.png` -> emoji name `bard`). Discord allows lowercase + underscores
-   only; the filenames here already follow that convention.
-3. After upload, send a test message in any channel: `\:bard:` (the leading
-   backslash makes Discord show the raw `<:bard:123456789012345678>` form).
-4. Copy the full `<:name:id>` string and paste it into the corresponding entry
-   of `CLASS_EMOJI_MAP` in `src/data/Class.js` (or into the JSON file).
-
-The map starts empty - `getClassEmoji(name)` returns an empty string for any
-class whose ID isn't in the map yet, so the bot keeps rendering cleanly while
-you fill in entries one at a time. Once filled, `${getClassEmoji(char.class)}`
-in the char field renderers prepends the icon before the character name.
+```bash
+node scripts/upload-class-emoji.js          # idempotent: skip existing
+node scripts/upload-class-emoji.js --dry    # validate setup, no upload
+node scripts/upload-class-emoji.js --force  # re-upload even if exists
+```
 
 ## Where the source PNGs came from
 

@@ -4,6 +4,13 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-26
 
+### Added (class icon auto-bootstrap on startup)
+
+- Bot now bootstraps class emoji on `ClientReady` so the deploy flow is just `git push`. Added `src/services/class-emoji-bootstrap.js` which: lists existing application emoji, uploads any PNG in `assets/class-icons/` whose name isn't already registered, mutates `CLASS_EMOJI_MAP` in memory with the resulting `<:name:id>` strings. After the first deploy uploads the full set, every subsequent restart is just one GET + skip (~500ms overhead).
+- Replaces the previous workflow of "run script locally, commit emoji-map.json, push" with "drop PNG into assets/class-icons/, push" - one less step Traine has to remember and one less commit per icon set update.
+- Idempotent + self-healing: a PNG re-added after manual deletion from the developer portal gets re-uploaded automatically on the next restart. Failure mode is graceful: any emoji that fails to upload just renders without an icon; bot keeps running.
+- The standalone `scripts/upload-class-emoji.js` is kept for local testing / one-shot maintenance but no longer required for deployment.
+
 ### Added (class icon bulk upload script - application emoji)
 
 - `scripts/upload-class-emoji.js`: Node script that bulk-uploads every PNG in `assets/class-icons/` as Discord **application emoji** (owned by the bot, not by any single guild) via REST `POST /applications/{app.id}/emojis`, then writes the resulting display-name -> `<:emoji:id>` map to `assets/class-icons/emoji-map.json`. Application id is auto-resolved via `GET /applications/@me` so the only env var needed is `DISCORD_TOKEN`. Idempotent by default (skips emoji whose name already exists in the application), `--force` re-uploads everything, `--dry` validates without calling the API.
