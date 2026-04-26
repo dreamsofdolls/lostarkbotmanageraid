@@ -8,11 +8,14 @@ const crypto = require("crypto");
 // Traine specified.
 const SESSION_TTL_MS = 5 * 60 * 1000;
 
-// Discord StringSelectMenu cap. Real Lost Ark rosters max out at ~18
-// characters per account, so 25 covers everyone with headroom. If a
-// roster ever exceeds this, the extras are dropped from the picker (the
-// CP-sorted prefix wins, matching the old top-N behavior for that edge).
-const SELECT_MAX_OPTIONS = 25;
+// Discord caps a message at 5 ActionRow components. The picker layout
+// reserves 1 row for Confirm + Cancel buttons, leaving 4 rows for
+// per-char toggle buttons at 5 buttons per row = 20 max chars in the
+// picker. Real Lost Ark rosters max ~18 chars per account in-game so
+// 20 still has headroom. Any chars beyond the cap get dropped from the
+// picker (CP-sorted prefix wins) and surfaced as an embed warning.
+const PICKER_MAX_OPTIONS = 20;
+const BUTTONS_PER_ROW = 5;
 
 const CHECK_ICON = "✅";
 const UNCHECK_ICON = "⬜";
@@ -55,15 +58,17 @@ function createAddRosterCommand({
   }
 
   function buildSelectionEmbed(session) {
+    // Char list shows stats only — selection state lives on the toggle
+    // buttons below (✅/⬜ in the button label) so the embed and the
+    // controls don't duplicate the same information visually.
     const lines = session.chars.map((c, i) => {
-      const checked = session.selectedIndices.has(i) ? CHECK_ICON : UNCHECK_ICON;
       const cp = c.combatScore || "?";
-      return `${checked} **${i + 1}.** ${c.charName} · ${c.className} · iLvl \`${c.itemLevel}\` · CP \`${cp}\``;
+      return `**${i + 1}.** ${c.charName} · ${c.className} · iLvl \`${c.itemLevel}\` · CP \`${cp}\``;
     });
 
     const desc = [
       `Roster: [**${session.seedCharName}**](${buildSeedRosterLink(session.seedCharName)})`,
-      `Tìm thấy **${session.chars.length}** characters - chọn những char muốn track:`,
+      `Tìm thấy **${session.chars.length}** characters - bấm nút bên dưới để toggle ✅/⬜:`,
       "",
       ...lines,
       "",
@@ -86,29 +91,38 @@ function createAddRosterCommand({
   }
 
   function buildSelectionComponents(session) {
-    // Plain objects (APIStringSelectOption shape) instead of
-    // StringSelectMenuOptionBuilder so the factory doesn't have to take
-    // an extra discord.js dep — addOptions accepts both shapes.
-    const options = session.chars.map((c, i) => {
-      const cpLabel = c.combatScore || "?";
-      return {
-        label: `${i + 1}. ${c.charName} (${c.className})`.slice(0, 100),
-        description: `iLvl ${c.itemLevel} · CP ${cpLabel}`.slice(0, 100),
-        value: String(i),
-        default: session.selectedIndices.has(i),
-      };
-    });
-
-    // min=0 lets the user deselect everything via the dropdown; the
-    // Confirm button below is disabled in that state so an empty save
-    // is impossible. max=chars.length so multi-select up to all is
-    // allowed (Discord caps at 25 anyway, which we already enforced).
-    const select = new StringSelectMenuBuilder()
-      .setCustomId(`add-roster:select:${session.sessionId}`)
-      .setPlaceholder(`Chọn chars (${session.chars.length} có sẵn)`)
-      .setMinValues(0)
-      .setMaxValues(session.chars.length)
-      .addOptions(options);
+    // Per-char toggle buttons replace the previous StringSelectMenu.
+    // Rationale: a multi-select dropdown duplicated state with the
+    // embed (both showed ✅/⬜ for each char) and got visually messy
+    // when expanded with default-selected pills wrapping across lines.
+    // Toggle buttons keep state visible permanently in one place
+    // (button label + green/gray style) and collapse the workflow to
+    // a single click per char to flip.
+    //
+    // Layout: 4 rows of up to 5 char buttons (PICKER_MAX_OPTIONS=20)
+    // + 1 row of Confirm/Cancel. Discord's hard cap is 5 ActionRows
+    // per message, so this is the maximum picker size.
+    const charRows = [];
+    for (let rowStart = 0; rowStart < session.chars.length; rowStart += BUTTONS_PER_ROW) {
+      const row = new ActionRowBuilder();
+      const rowEnd = Math.min(rowStart + BUTTONS_PER_ROW, session.chars.length);
+      for (let i = rowStart; i < rowEnd; i += 1) {
+        const c = session.chars[i];
+        const isSelected = session.selectedIndices.has(i);
+        const marker = isSelected ? CHECK_ICON : UNCHECK_ICON;
+        // Button label cap is 80 chars. Keep the index + name + class
+        // visible; truncate the char name first if needed.
+        const baseLabel = `${marker} ${i + 1}. ${c.charName} (${c.className})`;
+        const label = baseLabel.length > 80 ? `${baseLabel.slice(0, 77)}...` : baseLabel;
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`add-roster:toggle:${session.sessionId}:${i}`)
+            .setLabel(label)
+            .setStyle(isSelected ? ButtonStyle.Success : ButtonStyle.Secondary)
+        );
+      }
+      charRows.push(row);
+    }
 
     const confirmBtn = new ButtonBuilder()
       .setCustomId(`add-roster:confirm:${session.sessionId}`)
@@ -122,7 +136,7 @@ function createAddRosterCommand({
       .setStyle(ButtonStyle.Secondary);
 
     return [
-      new ActionRowBuilder().addComponents(select),
+      ...charRows,
       new ActionRowBuilder().addComponents(confirmBtn, cancelBtn),
     ];
   }
@@ -416,10 +430,9 @@ function createAddRosterCommand({
     }
 
     // CP-sorted (highest first) so the picker shows the most-played
-    // chars at the top by default. We do NOT slice to the old top-N
-    // here — that was the whole point of this rewrite. We only cap at
-    // SELECT_MAX_OPTIONS (Discord limit) which is well above any real
-    // roster size.
+    // chars at the top by default. We only cap at PICKER_MAX_OPTIONS
+    // (Discord 5-row limit minus the Confirm/Cancel row) which is
+    // well above any real roster size.
     const sortedChars = [...rosterCharacters].sort((a, b) => {
       const aCombat = parseCombatScore(a.combatScore);
       const bCombat = parseCombatScore(b.combatScore);
@@ -427,13 +440,13 @@ function createAddRosterCommand({
       if (combatDiff !== 0) return combatDiff;
       return b.itemLevel - a.itemLevel;
     });
-    const displayChars = sortedChars.slice(0, SELECT_MAX_OPTIONS);
-    const truncated = sortedChars.length > SELECT_MAX_OPTIONS;
+    const displayChars = sortedChars.slice(0, PICKER_MAX_OPTIONS);
+    const truncated = sortedChars.length > PICKER_MAX_OPTIONS;
 
     const sessionId = newSessionId();
     // Default selection: every char shown. Matches Traine's intent
-    // ("user này chơi toàn bộ"). Users with alts they don't play can
-    // deselect via the dropdown before confirming.
+    // ("user này chơi toàn bộ"). Users with alts they don't play
+    // toggle them off via the per-char buttons before confirming.
     const selectedIndices = new Set(displayChars.map((_, i) => i));
 
     const session = {
@@ -447,7 +460,7 @@ function createAddRosterCommand({
       // this fetch — feeds the race-safe overlap guard inside
       // persistSelectedRoster. NOT just the displayed (capped) chars
       // because two sessions on the same bible roster could each truncate
-      // to different 25-char windows yet still represent the same roster.
+      // to different windows yet still represent the same roster.
       bibleNames: bibleNameSet,
       chars: displayChars.map((c) => ({
         charName: c.charName,
@@ -462,7 +475,7 @@ function createAddRosterCommand({
 
     if (truncated) {
       console.warn(
-        `[add-roster] roster ${seedCharName} has ${sortedChars.length} chars; truncated to ${SELECT_MAX_OPTIONS} for picker.`
+        `[add-roster] roster ${seedCharName} has ${sortedChars.length} chars; truncated to ${PICKER_MAX_OPTIONS} for picker.`
       );
     }
 
@@ -491,8 +504,11 @@ function createAddRosterCommand({
     return null;
   }
 
-  async function handleAddRosterSelect(interaction) {
+  async function handleAddRosterButton(interaction) {
+    // CustomId shape: `add-roster:<action>:<sessionId>` for confirm/cancel,
+    // `add-roster:toggle:<sessionId>:<charIndex>` for per-char toggle.
     const parts = interaction.customId.split(":");
+    const action = parts[1];
     const sessionId = parts[2];
     const session = sessions.get(sessionId);
     if (!session) {
@@ -505,28 +521,25 @@ function createAddRosterCommand({
     const denied = await authorizeSession(interaction, session);
     if (denied) return;
 
-    // Replace selection wholesale — values is the full new selection
-    // set (not a delta), so a Set rebuild is correct.
-    session.selectedIndices = new Set(interaction.values.map((v) => Number(v)));
-
-    await interaction.update({
-      embeds: [buildSelectionEmbed(session)],
-      components: buildSelectionComponents(session),
-    });
-  }
-
-  async function handleAddRosterButton(interaction) {
-    const [, action, sessionId] = interaction.customId.split(":");
-    const session = sessions.get(sessionId);
-    if (!session) {
-      await interaction.reply({
-        content: `${UI.icons.warn} Phiên đã hết hạn. Chạy lại \`/add-roster\` nhé~`,
-        flags: MessageFlags.Ephemeral,
+    if (action === "toggle") {
+      const charIndex = Number(parts[3]);
+      if (!Number.isInteger(charIndex) || charIndex < 0 || charIndex >= session.chars.length) {
+        // Stale customId from a prior session shape; ignore silently
+        // by acking the interaction. Avoids "interaction failed".
+        await interaction.deferUpdate().catch(() => {});
+        return;
+      }
+      if (session.selectedIndices.has(charIndex)) {
+        session.selectedIndices.delete(charIndex);
+      } else {
+        session.selectedIndices.add(charIndex);
+      }
+      await interaction.update({
+        embeds: [buildSelectionEmbed(session)],
+        components: buildSelectionComponents(session),
       });
       return;
     }
-    const denied = await authorizeSession(interaction, session);
-    if (denied) return;
 
     if (action === "cancel") {
       clearSession(sessionId);
@@ -552,7 +565,7 @@ function createAddRosterCommand({
         .map((i) => session.chars[i]);
 
       // Cap at MAX_CHARACTERS_PER_ACCOUNT defensively. The picker is
-      // already capped at SELECT_MAX_OPTIONS but a future change could
+      // already capped at PICKER_MAX_OPTIONS but a future change could
       // raise that without reviewing the storage cap, so guard here too.
       if (selectedChars.length > MAX_CHARACTERS_PER_ACCOUNT) {
         await interaction.reply({
@@ -617,7 +630,6 @@ function createAddRosterCommand({
 
   return {
     handleAddRosterCommand,
-    handleAddRosterSelect,
     handleAddRosterButton,
     // Internals exposed for unit tests in test/add-roster.test.js. Not
     // part of the public contract — runtime callers go through the

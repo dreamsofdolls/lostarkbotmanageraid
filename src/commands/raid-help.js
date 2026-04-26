@@ -22,7 +22,7 @@ const HELP_SECTIONS = [
       notes: [
         "EN: Fetches the full roster, then opens an interactive picker so you choose exactly which chars to track. Defaults to all chars selected; deselect any alts you don't run before clicking Confirm.",
         "VN: Fetch toàn bộ roster, mở picker để cậu tự chọn char muốn track. Mặc định tick hết - bỏ tick những alt không chơi rồi bấm **Confirm** để lưu.",
-        `• Cap **${25} chars/roster** (Discord StringSelectMenu limit). Roster Lost Ark thực tế max ~18 char nên đủ cho mọi player.`,
+        `• Cap **${20} chars/roster** (Discord 5-row component limit: 4 toggle-button rows × 5 + 1 row Confirm/Cancel). Roster Lost Ark thực tế max ~18 char nên đủ cho mọi player.`,
         "• **Phiên 5 phút**: từ lúc gõ lệnh đến lúc bấm Confirm. Hết giờ embed tự đổi thành \"Phiên đã hết hạn\" - chạy lại `/add-roster` để thử lại.",
         "• Chỉ người gõ lệnh mới chọn / confirm / cancel được - người khác bấm sẽ bị ephemeral reject.",
         "• Nếu roster đã được saved (bất kỳ char nào trong bible roster trùng với char đã saved của user), bot sẽ từ chối + suggest dùng `/edit-roster` để sửa thay vì tạo account mới trùng.",
@@ -44,7 +44,7 @@ const HELP_SECTIONS = [
         "VN: Lấy roster hiện tại + roster bible mới fetch, merge thành 1 picker (default tick = char đang saved). Tick char `🆕` để add, bỏ tick char đã saved để xoá, **Confirm** để apply. Trạng thái raid completion được giữ nguyên cho char survive.",
         `• ${"🆕"} = char mới có ở bible chưa được saved · ${"📦"} = char saved nhưng không còn ở bible (rename / private log).`,
         "• Bible offline: vẫn dùng được nhưng chỉ thấy char đã saved → cậu chỉ remove được, không add mới được. Thử lại sau khi bible up.",
-        "• Cap **25 chars/roster** (Discord StringSelectMenu limit) - giống `/add-roster`.",
+        "• Cap **20 chars/roster** (Discord 5-row component limit) - giống `/add-roster`.",
         "• **Phiên 5 phút**: từ lúc gõ lệnh đến lúc Confirm. Hết giờ tự huỷ.",
         "• Chỉ self - không có `target:` option. Manager muốn fix giúp user lười: `/remove-roster` rồi `/add-roster target:`.",
         "• Bỏ tick hết (0 selected) → ephemeral hint sang `/remove-roster` (xoá hẳn account là operation khác).",

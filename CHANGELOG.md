@@ -33,6 +33,8 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 - Extracted `buildEditRosterPickerChars` helper in `commands/edit-roster.js` so the saved-first sort + cap truncation contract is unit-testable without driving the full Discord handler.
 
 ### Changed
+- **`/add-roster` + `/edit-roster` picker UI** swapped from `StringSelectMenu` to per-char toggle buttons. The dropdown was visually noisy when default-selected (each char appearing as a wrapping pill chip in the open-state) and duplicated the embed's `✅`/`⬜` markers. Toggle buttons keep selection state in one place (button label + green/gray style), 1 click per char to flip, no menu open required. Layout: 4 rows of up to 5 char buttons + 1 row of Confirm/Cancel (Discord 5-row hard cap).
+- `MAX_CHARACTERS_PER_ACCOUNT` lowered **25 → 20** to match the new picker capacity (Discord 5-row component limit). LA in-game roster max is ~18 chars so still has headroom.
 - **`/edit-roster` is now ephemeral** (caller-only visibility). The picker, diff outcome, bible-error states, and final saved-embed all stay private to the caller — no channel noise, no leaking roster composition to bystanders. Component interactions still work identically on ephemeral messages so the 5-min session contract is unchanged. `/add-roster` stays public on purpose so members can see new rosters being onboarded.
 
 ### Fixed

@@ -20,10 +20,8 @@ const {
   handleRaidAnnounceAutocomplete,
   handleRaidChannelMessage,
   handleRaidCheckButton,
-  handleAddRosterSelect,
   handleAddRosterButton,
   handleEditRosterAutocomplete,
-  handleEditRosterSelect,
   handleEditRosterButton,
   loadMonitorChannelCache,
   startRaidChannelScheduler,
@@ -184,23 +182,15 @@ async function startBot() {
     selectHandlers: {
       "raid-help:select": handleRaidHelpSelect,
     },
-    selectRoutes: [
-      // /add-roster picker uses customId "add-roster:select:<sessionId>"
-      // - the sessionId is dynamic so the exact-match selectHandlers
-      // table can't key on it. Prefix-match routes handle this case.
-      { prefix: "add-roster:select:", handle: handleAddRosterSelect },
-      // /edit-roster picker mirrors the /add-roster pattern.
-      { prefix: "edit-roster:select:", handle: handleEditRosterSelect },
-    ],
     buttonRoutes: [
       // Phase 2 /raid-check interactive buttons. Custom IDs follow the
       // shape "raid-check:<action>:<raidKey>" - dispatcher handles auth
       // + action routing, no per-button switch here.
       { prefix: "raid-check:", handle: handleRaidCheckButton },
-      // /add-roster Confirm/Cancel buttons use customId
-      // "add-roster:<action>:<sessionId>" - same prefix-routing pattern.
+      // /add-roster picker buttons: confirm / cancel / toggle (per-char).
+      // CustomId: "add-roster:<action>:<sessionId>[:<charIndex>]".
       { prefix: "add-roster:", handle: handleAddRosterButton },
-      // /edit-roster Confirm/Cancel buttons mirror the /add-roster shape.
+      // /edit-roster mirrors the /add-roster button shape.
       { prefix: "edit-roster:", handle: handleEditRosterButton },
     ],
   });
