@@ -12,11 +12,13 @@
  */
 
 const { isSupportClass } = require("../../data/Class");
+const { buildNoticeEmbed } = require("../../raid/shared");
 
 function createAllModeHandler({
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  EmbedBuilder,
   MessageFlags,
   StringSelectMenuBuilder,
   User,
@@ -36,7 +38,13 @@ function createAllModeHandler({
   async function handleRaidCheckAllCommand(interaction) {
     if (!isRaidLeader(interaction)) {
       await interaction.reply({
-        content: `${UI.icons.lock} Chỉ Raid Manager mới được dùng \`/raid-check\` (config qua env \`RAID_MANAGER_ID\`).`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "lock",
+            title: "Chỉ Raid Manager mới được dùng",
+            description: "Lệnh `/raid-check raid:all` chỉ Raid Manager mới chạy được nha cậu (config qua env `RAID_MANAGER_ID`). Gõ `/raid-status` nếu cậu muốn xem progress của roster mình.",
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -72,7 +80,14 @@ function createAllModeHandler({
 
     if (pagesData.length === 0) {
       await interaction.editReply({
-        content: `${UI.icons.info} Chưa có ai có roster nào cả. Bảo các member dùng \`/add-roster\` trước nhé~`,
+        content: null,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "info",
+            title: "Server chưa có roster nào",
+            description: "Artist không thấy member nào đã `/add-roster` cả nha. Bảo các cậu trong server gõ `/add-roster` trước rồi `/raid-check raid:all` mới có data để overview.",
+          }),
+        ],
       });
       return;
     }
@@ -532,7 +547,13 @@ function createAllModeHandler({
         if (ours) {
           await component
             .reply({
-              content: `${UI.icons.lock} Chỉ người mở /raid-check mới bấm được.`,
+              embeds: [
+                buildNoticeEmbed(EmbedBuilder, {
+                  type: "lock",
+                  title: "Chỉ người mở mới bấm được",
+                  description: "Component này thuộc session `/raid-check raid:all` của người khác nha cậu, Artist chỉ cho người mở session điều khiển. Cậu mở session riêng bằng `/raid-check` của mình nhé.",
+                }),
+              ],
               flags: MessageFlags.Ephemeral,
             })
             .catch(() => {});

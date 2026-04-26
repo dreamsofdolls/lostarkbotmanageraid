@@ -4,6 +4,7 @@ const { createAllModeHandler } = require("./raid-check/all-mode");
 const { createEditUi } = require("./raid-check/edit-ui");
 const { createSyncUi } = require("./raid-check/sync-ui");
 const { isSupportClass, getClassEmoji } = require("../data/Class");
+const { buildNoticeEmbed } = require("../raid/shared");
 
 const RAID_CHECK_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 
@@ -125,6 +126,7 @@ function createRaidCheckCommand(deps) {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
+    EmbedBuilder,
     MessageFlags,
     StringSelectMenuBuilder,
     User,
@@ -297,7 +299,13 @@ function createRaidCheckCommand(deps) {
   async function handleRaidCheckCommand(interaction) {
     if (!isRaidLeader(interaction)) {
       await interaction.reply({
-        content: `${UI.icons.lock} Chỉ Raid Manager mới được dùng \`/raid-check\` (config qua env \`RAID_MANAGER_ID\`).`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "lock",
+            title: "Chỉ Raid Manager mới được dùng",
+            description: "Lệnh `/raid-check` chỉ Raid Manager mới chạy được nha cậu (config qua env `RAID_MANAGER_ID`). Gõ `/raid-status` nếu cậu muốn xem progress của roster mình.",
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -316,7 +324,13 @@ function createRaidCheckCommand(deps) {
     const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
     if (!raidMeta) {
       await interaction.reply({
-        content: `${UI.icons.warn} Raid option không hợp lệ. Vui lòng thử lại.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Raid option không hợp lệ",
+            description: "Artist không nhận diện được raid cậu chọn. Gõ lại `/raid-check` rồi chọn từ dropdown nha.",
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -772,7 +786,13 @@ function createRaidCheckCommand(deps) {
           component.customId === "raid-check-filter:user";
         if (ours) {
           await component.reply({
-            content: `${UI.icons.lock} Chỉ người chạy \`/raid-check\` mới điều khiển được pagination.`,
+            embeds: [
+              buildNoticeEmbed(EmbedBuilder, {
+                type: "lock",
+                title: "Chỉ người mở mới điều khiển được",
+                description: "Pagination này thuộc session `/raid-check` của người khác nha cậu, Artist chỉ cho người chạy lệnh thao tác. Mở session riêng bằng `/raid-check` của mình nhé.",
+              }),
+            ],
             flags: MessageFlags.Ephemeral,
           }).catch(() => {});
         }
@@ -846,7 +866,13 @@ function createRaidCheckCommand(deps) {
   async function handleRaidCheckButton(interaction) {
     if (!isRaidLeader(interaction)) {
       await interaction.reply({
-        content: `${UI.icons.lock} Chỉ Raid Manager mới được dùng button này.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "lock",
+            title: "Chỉ Raid Manager mới dùng được",
+            description: "Button này thuộc về flow `/raid-check` của Raid Manager nha cậu. Người khác bấm Artist từ chối luôn.",
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -876,7 +902,13 @@ function createRaidCheckCommand(deps) {
     const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
     if (!raidMeta) {
       await interaction.reply({
-        content: `${UI.icons.warn} Raid không hợp lệ trong button. Gõ \`/raid-check\` lại để refresh.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Button đã hết hạn",
+            description: "Raid trong button không còn hợp lệ (có thể session cũ hoặc bot vừa restart). Gõ `/raid-check` lại để refresh nha.",
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -893,7 +925,13 @@ function createRaidCheckCommand(deps) {
       await handleRaidCheckEditClick(interaction, raidMeta, raidKey);
     } else {
       await interaction.reply({
-        content: `${UI.icons.warn} Button action không hỗ trợ: \`${action}\`.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Button action không hỗ trợ",
+            description: `Action \`${action}\` không khớp với flow Artist biết. Có thể button cũ từ build trước, gõ \`/raid-check\` lại để refresh nha.`,
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
     }

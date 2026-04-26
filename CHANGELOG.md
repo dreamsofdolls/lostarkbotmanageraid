@@ -17,6 +17,10 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 - 12 plain-text replies trong `/raid-announce` (action validation, toggle on/off, set-channel, clear-channel) chuyển sang `buildNoticeEmbed` với type-coded color (success/info/warn/lock) + title + description Artist voice. Parity với `/add-roster`, `/edit-roster`, `/raid-set`, `/remove-roster`. Dead fallthrough branch cuối handler bị xóa (action validation đầu handler đã reject hết).
 - 3 success replies (toggle on/off, set-channel, clear-channel) thêm **bold key: value** layout (`Loại` / `Trạng thái mới` hoặc `Channel mới` / `Tác động`) trong description, parity style với `/raid-set` Reset embed, scan-friendly hơn prose blob single line.
 
+### Changed (sweep còn lại: convert mọi plain `interaction.reply({content})` sang notice embed)
+- 32 plain-text replies trong `/raid-channel` (11), `/raid-auto-manage` (10), `/raid-check` (5 + button + sync stats), `/raid-check raid:all` (3), `/raid-check Edit` (2), `/raid-status` (5) chuyển sang `buildNoticeEmbed` với type-coded color + title + Artist-voice description. Sync result của `/raid-check Sync` đặc biệt: dùng structured **bold key: value** layout (Synced / Attempted-only / Skipped / Failed / Chars có update / DM sent) parity với `/raid-set` style.
+- Latent runtime bug fix: `raid-check/all-mode.js` dùng `UI.icons.lock`/`UI.icons.info` mà `UI` không có trong factory deps. Path không reachable thường (rare admin reject) nên chưa bao giờ crash. Fix: thêm `EmbedBuilder` vào deps + import `buildNoticeEmbed` ở module top, refactor 3 reject paths sang notice embed.
+
 ## 2026-04-26
 
 ### Added

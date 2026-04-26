@@ -1,5 +1,7 @@
 "use strict";
 
+const { buildNoticeEmbed } = require("../raid/shared");
+
 const RAID_CHANNEL_GREETING_TTL_MS = 2 * 60 * 1000; // set greeting sits 2 min before self-delete
 
 // Full action catalog for /raid-channel config. Autocomplete handler
@@ -77,7 +79,13 @@ function createRaidChannelCommand({
     const guildId = interaction.guildId;
     if (!guildId) {
       await interaction.reply({
-        content: `${UI.icons.warn} Command này chỉ dùng trong server.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Server only",
+            description: "Cậu phải chạy `/raid-channel config` trong server nha, Artist không config được monitor channel ở DM đâu.",
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -92,7 +100,13 @@ function createRaidChannelCommand({
       const channel = interaction.options.getChannel("channel");
       if (!channel) {
         await interaction.reply({
-          content: `${UI.icons.warn} Action \`set\` yêu cầu option \`channel\`. Ví dụ: \`/raid-channel config action:set channel:#raid-clears\`.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: "Thiếu option `channel`",
+              description: "Action `set` cần kèm option `channel:#<tên-kênh>` để Artist biết monitor kênh nào. Ví dụ: `/raid-channel config action:set channel:#raid-clears`.",
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -102,7 +116,13 @@ function createRaidChannelCommand({
       // thinking the channel is active when MessageCreate is silently dropped.
       if (!isTextMonitorEnabled()) {
         await interaction.reply({
-          content: `${UI.icons.warn} Text monitor hiện đang tắt ở deploy layer (\`TEXT_MONITOR_ENABLED=false\`). Bật env var đó (+ enable Message Content Intent ở Developer Portal nếu chưa) rồi redeploy, xong mới \`/raid-channel config action:set\` nhé - không config sẽ không có effect.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "lock",
+              title: "Text monitor đang tắt ở deploy layer",
+              description: "Env var `TEXT_MONITOR_ENABLED=false` đang khoá MessageCreate listener. Bật env var đó (kèm enable Message Content Intent ở Developer Portal nếu chưa) rồi redeploy, xong mới `/raid-channel config action:set` được nha. Không config sẽ không có effect.",
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -115,7 +135,13 @@ function createRaidChannelCommand({
       const missing = getMissingBotChannelPermissions(channel, botMember);
       if (missing.length > 0) {
         await interaction.reply({
-          content: `${UI.icons.warn} Bot thiếu permission trong <#${channel.id}>: **${missing.join(", ")}**. Grant cho bot rồi chạy lại \`/raid-channel config action:set\` nhé.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "lock",
+              title: "Bot thiếu permission",
+              description: `Artist không monitor được <#${channel.id}> vì thiếu: **${missing.join(", ")}**. Grant cho bot ở channel đó rồi chạy lại \`/raid-channel config action:set\` nha.`,
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -253,7 +279,13 @@ function createRaidChannelCommand({
       const channelId = getCachedMonitorChannelId(guildId);
       if (!channelId) {
         await interaction.reply({
-          content: `${UI.icons.warn} Chưa config channel nào. Dùng \`/raid-channel config action:set\` trước.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: "Chưa config channel",
+              description: "Cậu chưa set monitor channel nào cho Artist nha. Chạy `/raid-channel config action:set channel:#<tên-kênh>` trước rồi mới dùng action này được.",
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -261,7 +293,13 @@ function createRaidChannelCommand({
       const channel = await resolveRaidMonitorChannel(interaction, channelId);
       if (!channel) {
         await interaction.reply({
-          content: `${UI.icons.warn} Channel <#${channelId}> không truy cập được.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: "Channel không truy cập được",
+              description: `Artist không vào được <#${channelId}> (channel có thể đã bị xoá hoặc bot không có access). Cậu kiểm tra lại channel + permission nha, rồi \`/raid-channel config action:set\` lại nếu cần.`,
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -282,7 +320,14 @@ function createRaidChannelCommand({
       } catch (err) {
         console.error("[raid-channel] manual cleanup failed:", err?.message || err);
         await interaction.editReply({
-          content: `${UI.icons.warn} Cleanup fail: ${err?.message || err}. Check bot permissions (Manage Messages + Read Message History).`,
+          content: null,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "error",
+              title: "Cleanup fail",
+              description: `Artist dọn channel không xong vì \`${err?.message || err}\`. Check bot permission (Manage Messages + Read Message History) rồi thử lại nha.`,
+            }),
+          ],
         });
       }
       return;
@@ -291,7 +336,13 @@ function createRaidChannelCommand({
       const channelId = getCachedMonitorChannelId(guildId);
       if (!channelId) {
         await interaction.reply({
-          content: `${UI.icons.warn} Chưa config channel nào. Dùng \`/raid-channel config action:set\` trước.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: "Chưa config channel",
+              description: "Cậu chưa set monitor channel nào cho Artist nha. Chạy `/raid-channel config action:set channel:#<tên-kênh>` trước rồi mới dùng action này được.",
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -299,7 +350,13 @@ function createRaidChannelCommand({
       const channel = await resolveRaidMonitorChannel(interaction, channelId);
       if (!channel) {
         await interaction.reply({
-          content: `${UI.icons.warn} Channel <#${channelId}> không truy cập được.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: "Channel không truy cập được",
+              description: `Artist không vào được <#${channelId}> (channel có thể đã bị xoá hoặc bot không có access). Cậu kiểm tra lại channel + permission nha, rồi \`/raid-channel config action:set\` lại nếu cần.`,
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -328,7 +385,13 @@ function createRaidChannelCommand({
         const cfg = await GuildConfig.findOne({ guildId }).lean();
         if (cfg && !!cfg.autoCleanupEnabled === enabled) {
           await interaction.reply({
-            content: `${UI.icons.info} Schedule đang ở state \`${enabled ? "on" : "off"}\` rồi - không có gì để đổi.`,
+            embeds: [
+              buildNoticeEmbed(EmbedBuilder, {
+                type: "info",
+                title: "Không có gì đổi",
+                description: `Schedule auto-cleanup đang ở state \`${enabled ? "on" : "off"}\` rồi nha cậu, Artist không stamp lại.`,
+              }),
+            ],
             flags: MessageFlags.Ephemeral,
           });
           return;
@@ -343,7 +406,13 @@ function createRaidChannelCommand({
       // would give admin a success embed for a job that never runs.
       if (enabled && !getCachedMonitorChannelId(guildId)) {
         await interaction.reply({
-          content: `${UI.icons.warn} Chưa config channel nào. Chạy \`/raid-channel config action:set channel:#<channel>\` trước rồi mới enable schedule nhé - không scheduler sẽ không có gì để dọn.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: "Chưa config channel",
+              description: "Cậu phải `/raid-channel config action:set channel:#<tên-kênh>` trước rồi mới enable schedule được nha. Không thì scheduler không có channel để dọn, thành ra fire vô ích.",
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;

@@ -1,4 +1,5 @@
 const { isSupportClass, getClassEmoji } = require("../data/Class");
+const { buildNoticeEmbed } = require("../raid/shared");
 
 const STATUS_PAGINATION_SESSION_MS = 3 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
@@ -296,7 +297,13 @@ function createRaidStatusCommand(deps) {
     const seedDoc = await User.findOne({ discordId });
     if (!seedDoc || !Array.isArray(seedDoc.accounts) || seedDoc.accounts.length === 0) {
       await interaction.reply({
-        content: `${UI.icons.info} Cậu chưa có roster nào. Dùng \`/add-roster\` để thêm trước nhé.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "info",
+            title: "Cậu chưa có roster nào",
+            description: "Artist không thấy roster nào của cậu trong DB. Dùng `/add-roster` để add roster đầu tiên rồi mới `/raid-status` xem progress được nha~",
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -449,7 +456,14 @@ function createRaidStatusCommand(deps) {
 
     if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
       await interaction.editReply({
-        content: `${UI.icons.info} Cậu chưa có roster nào. Dùng \`/add-roster\` để thêm trước nhé.`,
+        content: null,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "info",
+            title: "Cậu chưa có roster nào",
+            description: "Artist không thấy roster nào của cậu trong DB. Dùng `/add-roster` để add roster đầu tiên rồi mới `/raid-status` xem progress được nha~",
+          }),
+        ],
       });
       return;
     }
@@ -749,7 +763,13 @@ function createRaidStatusCommand(deps) {
     collector.on("collect", async (component) => {
       if (component.user.id !== interaction.user.id) {
         await component.reply({
-          content: `${UI.icons.lock} Chỉ người chạy \`/raid-status\` mới điều khiển được.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "lock",
+              title: "Chỉ người mở mới điều khiển được",
+              description: "Pagination này thuộc session `/raid-status` của người khác nha cậu, Artist chỉ cho người chạy lệnh thao tác. Mở session riêng bằng `/raid-status` của mình nhé.",
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         }).catch(() => {});
         return;
@@ -768,7 +788,13 @@ function createRaidStatusCommand(deps) {
         // click feels acknowledged.
         if (!statusUserMeta.autoManageEnabled) {
           await component.reply({
-            content: `${UI.icons.info} Cậu chưa bật auto-sync. Gõ \`/raid-auto-manage action:on\` trước khi bấm Sync nhé.`,
+            embeds: [
+              buildNoticeEmbed(EmbedBuilder, {
+                type: "info",
+                title: "Cậu chưa bật auto-sync",
+                description: "Sync button chỉ chạy được khi cậu đã `/raid-auto-manage action:on`. Gõ lệnh đó trước rồi quay lại bấm Sync nha~",
+              }),
+            ],
             flags: MessageFlags.Ephemeral,
           }).catch(() => {});
           return;
@@ -788,7 +814,13 @@ function createRaidStatusCommand(deps) {
                 cooldownMs
               ) || "vài giây";
             await component.reply({
-              content: `${UI.icons.info} Cooldown chưa hết, đợi ${remain} nữa nha~`,
+              embeds: [
+                buildNoticeEmbed(EmbedBuilder, {
+                  type: "info",
+                  title: "Đang trong cooldown",
+                  description: `Cậu vừa sync gần đây nha, đợi thêm **${remain}** nữa rồi bấm Sync tiếp được.`,
+                }),
+              ],
               flags: MessageFlags.Ephemeral,
             }).catch(() => {});
             return;

@@ -1,3 +1,7 @@
+"use strict";
+
+const { buildNoticeEmbed } = require("../raid/shared");
+
 function createRaidAutoManageCommand(deps) {
   const {
     EmbedBuilder,
@@ -34,7 +38,13 @@ async function handleRaidAutoManageCommand(interaction) {
     // Discord times out the interaction with no reply.
     if (!["on", "off", "sync", "status"].includes(action)) {
       await interaction.reply({
-        content: `${UI.icons.warn} Action không hợp lệ: \`${action}\`. Chọn một trong \`on\` · \`off\` · \`sync\` · \`status\` (autocomplete sẽ gợi ý đúng).`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Action không hợp lệ",
+            description: `Action \`${action}\` Artist không nhận được. Cho phép: \`on\` · \`off\` · \`sync\` · \`status\`. Autocomplete sẽ gợi ý đúng nha.`,
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -50,14 +60,26 @@ async function handleRaidAutoManageCommand(interaction) {
       const enabled = !!stateUser?.autoManageEnabled;
       if (action === "on" && enabled) {
         await interaction.reply({
-          content: `${UI.icons.info} Auto-manage đang bật rồi. Dùng \`/raid-auto-manage action:sync\` để sync ngay, hoặc \`action:status\` để xem trạng thái.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "info",
+              title: "Auto-manage đang bật rồi",
+              description: "Cậu đã opt-in từ trước nha. Muốn sync ngay thì action `sync`, hoặc `status` để xem trạng thái cooldown + lần sync gần nhất.",
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
       }
       if (action === "off" && !enabled) {
         await interaction.reply({
-          content: `${UI.icons.info} Auto-manage đang tắt sẵn rồi - không có gì để disable nữa.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "info",
+              title: "Auto-manage đang tắt sẵn",
+              description: "Cậu chưa opt-in nha, không có flag để disable. Muốn bật thì action `on`.",
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -98,7 +120,13 @@ async function handleRaidAutoManageCommand(interaction) {
       const guard = await acquireAutoManageSyncSlot(discordId);
       if (!guard.acquired && guard.reason === "in-flight") {
         await interaction.reply({
-          content: `${UI.icons.info} Một sync khác đang chạy cho cậu rồi - đợi nó xong rồi mới bật nhé.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "info",
+              title: "Sync khác đang chạy",
+              description: "Cậu có 1 sync khác đang fetch bible cho roster rồi nha, Artist không bật song song được. Đợi nó xong khoảng 5-10 giây rồi gõ lại nhé.",
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -265,7 +293,14 @@ async function handleRaidAutoManageCommand(interaction) {
         await stampAutoManageAttempt(discordId);
         console.error("[auto-manage] enable-with-sync failed:", err?.message || err);
         await interaction.editReply({
-          content: `${UI.icons.warn} Probe/sync fail: ${err?.message || err}. Auto-manage GIỮ OFF - thử lại sau.`,
+          content: null,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "error",
+              title: "Probe/sync fail",
+              description: `Artist gặp lỗi khi probe bible: \`${err?.message || err}\`. Auto-manage **giữ OFF** nha, không bật vì sync đầu chưa thành công. Thử lại sau khoảng 1-2 phút.`,
+            }),
+          ],
           components: [],
         }).catch(() => {});
       } finally {
@@ -309,7 +344,13 @@ async function handleRaidAutoManageCommand(interaction) {
       if (!guard.acquired) {
         if (guard.reason === "in-flight") {
           await interaction.reply({
-            content: `${UI.icons.info} Một sync khác của cậu đang chạy rồi - đợi kết quả trước nhé, đừng gõ spam~`,
+            embeds: [
+              buildNoticeEmbed(EmbedBuilder, {
+                type: "info",
+                title: "Sync khác đang chạy",
+                description: "Cậu có 1 sync khác của mình đang fetch bible rồi nha, đợi kết quả trước đừng gõ spam~ Artist sẽ DM khi xong.",
+              }),
+            ],
             flags: MessageFlags.Ephemeral,
           });
         } else {
@@ -317,14 +358,22 @@ async function handleRaidAutoManageCommand(interaction) {
             typeof getAutoManageCooldownMs === "function"
               ? formatAutoManageCooldownRemaining(getAutoManageCooldownMs(discordId))
               : null;
+          const cooldownDescription = [
+            `Sync vừa chạy gần đây nha cậu, Artist đang giữ cooldown.`,
+            "",
+            `**Đợi thêm:** ${formatAutoManageCooldownRemaining(guard.remainingMs)}`,
+            totalCooldownText ? `**Cooldown của cậu:** ${totalCooldownText}` : null,
+            "",
+            "Cooldown để tránh gõ bible liên tục, qua ngưỡng đó cậu sync tiếp được nha.",
+          ].filter((line) => line !== null).join("\n");
           await interaction.reply({
-            content: `${UI.icons.info} Sync vừa chạy gần đây. Đợi thêm **${formatAutoManageCooldownRemaining(
-              guard.remainingMs
-            )}** rồi sync tiếp nhé${
-              totalCooldownText
-                ? ` (cooldown của cậu là **${totalCooldownText}** để tránh gõ bible liên tục).`
-                : "."
-            }`,
+            embeds: [
+              buildNoticeEmbed(EmbedBuilder, {
+                type: "info",
+                title: "Đang trong cooldown",
+                description: cooldownDescription,
+              }),
+            ],
             flags: MessageFlags.Ephemeral,
           });
         }
@@ -342,7 +391,14 @@ async function handleRaidAutoManageCommand(interaction) {
         const seedDoc = await User.findOne({ discordId });
         if (!seedDoc || !Array.isArray(seedDoc.accounts) || seedDoc.accounts.length === 0) {
           await interaction.editReply({
-            content: `${UI.icons.info} Cậu chưa có roster nào. Dùng \`/add-roster\` để thêm trước nhé.`,
+            content: null,
+            embeds: [
+              buildNoticeEmbed(EmbedBuilder, {
+                type: "info",
+                title: "Cậu chưa có roster nào",
+                description: "Artist không thấy roster nào của cậu trong DB. Dùng `/add-roster` để add roster đầu tiên rồi mới opt-in auto-manage được nha.",
+              }),
+            ],
           });
           return;
         }
@@ -371,7 +427,14 @@ async function handleRaidAutoManageCommand(interaction) {
         });
         if (report?.noRoster) {
           await interaction.editReply({
-            content: `${UI.icons.info} Cậu chưa có roster nào. Dùng \`/add-roster\` để thêm trước nhé.`,
+            content: null,
+            embeds: [
+              buildNoticeEmbed(EmbedBuilder, {
+                type: "info",
+                title: "Cậu chưa có roster nào",
+                description: "Artist không thấy roster nào của cậu trong DB. Dùng `/add-roster` để add roster đầu tiên rồi mới opt-in auto-manage được nha.",
+              }),
+            ],
           });
           return;
         }
@@ -380,7 +443,14 @@ async function handleRaidAutoManageCommand(interaction) {
       } catch (err) {
         console.error("[auto-manage] sync failed:", err?.message || err);
         await interaction.editReply({
-          content: `${UI.icons.warn} Sync fail: ${err?.message || err}. Check lostark.bible có block (Cloudflare) hoặc char names có đúng không.`,
+          content: null,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "error",
+              title: "Sync fail",
+              description: `Artist sync không xong vì: \`${err?.message || err}\`. Có thể lostark.bible đang block (Cloudflare 403) hoặc char names có gì sai. Thử lại sau vài phút nha, nếu vẫn fail thì check char ở https://lostark.bible/me/logs.`,
+            }),
+          ],
         });
       } finally {
         releaseAutoManageSyncSlot(discordId);
