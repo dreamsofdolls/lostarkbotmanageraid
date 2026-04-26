@@ -353,7 +353,7 @@ function createAllModeHandler({
             // silently vanishing once the backlog hits zero.
             let raidEntry = perRaidPending.get(key);
             if (!raidEntry) {
-              raidEntry = { key, label: raid.raidName, pending: 0 };
+              raidEntry = { key, label: raid.raidName, pending: 0, supports: 0, dps: 0 };
               perRaidPending.set(key, raidEntry);
             }
             if (raidFilter && key !== raidFilter) continue;
@@ -367,6 +367,8 @@ function createAllModeHandler({
             if (charIsSupport) userEntry.supports += 1;
             else userEntry.dps += 1;
             raidEntry.pending += 1;
+            if (charIsSupport) raidEntry.supports += 1;
+            else raidEntry.dps += 1;
             totalPending += 1;
           }
         }
@@ -474,8 +476,14 @@ function createAllModeHandler({
       // Serca Hard/Nightmare = 6 today, plenty of headroom for future
       // raid additions.
       for (const r of raidEntries.slice(0, 24)) {
+        // Same DONE-vs-breakdown rule as the user dropdown above:
+        // "0 pending · 0🪄 0⚔️" reads as noise; collapse to "DONE" so
+        // the leader scans the raid list for actually-pending entries.
+        const suffix = r.pending === 0
+          ? "DONE"
+          : `${r.pending} pending · ${r.supports}🪄 ${r.dps}⚔️`;
         options.push({
-          label: truncateText(`${r.label} (${r.pending} pending)`, 100),
+          label: truncateText(`${r.label} (${suffix})`, 100),
           value: r.key,
           emoji: "⚔️",
           default: filterRaidId === r.key,
