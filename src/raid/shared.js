@@ -156,7 +156,45 @@ function buildDiscordIdentityFields(source) {
   };
 }
 
+// Build a richer ephemeral notice embed for user-facing rejection /
+// guidance / "session expired" surfaces. Replaces the plain
+// `interaction.reply({ content: "⚠️ ..." })` pattern that read flat
+// in-channel — color-coded embed reads at a glance and gives the
+// Artist persona room for a friendlier voice.
+//
+// Caller passes EmbedBuilder so this helper stays in raid/shared
+// (Discord.js dep doesn't need to leak in here). `type` picks color +
+// header icon by intent; defaults: info=blue, warn=yellow, lock=red,
+// success=green, error=red, muted=gray.
+function buildNoticeEmbed(EmbedBuilder, { type = "info", title, description }) {
+  const color =
+    type === "warn"
+      ? UI.colors.progress
+      : type === "lock" || type === "error"
+        ? UI.colors.danger
+        : type === "success"
+          ? UI.colors.success
+          : type === "muted"
+            ? UI.colors.muted
+            : UI.colors.neutral;
+  const icon =
+    type === "warn"
+      ? UI.icons.warn
+      : type === "lock"
+        ? UI.icons.lock
+        : type === "error"
+          ? UI.icons.warn
+          : type === "success"
+            ? UI.icons.done
+            : UI.icons.info;
+  const embed = new EmbedBuilder().setColor(color);
+  if (title) embed.setTitle(`${icon} ${title}`);
+  if (description) embed.setDescription(description);
+  return embed;
+}
+
 module.exports = {
+  buildNoticeEmbed,
   ConcurrencyLimiter,
   UI,
   normalizeName,
