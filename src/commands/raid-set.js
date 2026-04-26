@@ -195,10 +195,19 @@ function createRaidSetCommand(deps) {
       return;
     }
     const { isComplete } = computeRaidProgress(character, raidMeta);
-    const choices = isComplete
-      ? [{ name: "Reset (raid đã hoàn thành - chỉ có thể reset)", value: "reset" }]
-      : baseChoices;
-    await interaction.respond(applyFilter(choices)).catch(() => {});
+    if (isComplete) {
+      // Raid is fully done — Reset is the only valid action. Do NOT
+      // run the typed-needle filter against the single choice: if the
+      // user previously typed "complete" or "process" against a different
+      // raid then switched here, that needle would filter out the Reset
+      // option entirely and Discord would render an empty dropdown the
+      // user can't escape. Always surface Reset for done raids.
+      await interaction
+        .respond([{ name: "Reset (raid đã hoàn thành - chỉ có thể reset)", value: "reset" }])
+        .catch(() => {});
+      return;
+    }
+    await interaction.respond(applyFilter(baseChoices)).catch(() => {});
   }
   async function autocompleteRaidSetGate(interaction, focused) {
     const raidValue = interaction.options.getString("raid") || "";
