@@ -30,6 +30,28 @@ const HELP_SECTIONS = [
       ],
     },
     {
+      key: "edit-roster",
+      label: "/edit-roster",
+      icon: "📁",
+      short: "Edit an existing roster: add chars from bible or remove saved chars",
+      shortVn: "Sửa roster đã có: add char mới từ bible hoặc bỏ char đã saved",
+      options: [
+        { name: "roster", required: true, desc: "Roster đã saved cần edit (autocomplete)" },
+      ],
+      example: "/edit-roster roster:Clauseduk",
+      notes: [
+        "EN: Fetches the saved account + the live bible roster, merges them into one picker (default-selected = currently saved chars). Tick new bible chars to add them, untick saved chars to remove them, Confirm to apply the diff. Per-char raid completion state is preserved across edits.",
+        "VN: Lấy roster hiện tại + roster bible mới fetch, merge thành 1 picker (default tick = char đang saved). Tick char `🆕` để add, bỏ tick char đã saved để xoá, **Confirm** để apply. Trạng thái raid completion được giữ nguyên cho char survive.",
+        `• ${"🆕"} = char mới có ở bible chưa được saved · ${"📦"} = char saved nhưng không còn ở bible (rename / private log).`,
+        "• Bible offline: vẫn dùng được nhưng chỉ thấy char đã saved → cậu chỉ remove được, không add mới được. Thử lại sau khi bible up.",
+        "• Cap **25 chars/roster** (Discord StringSelectMenu limit) - giống `/add-roster`.",
+        "• **Phiên 5 phút**: từ lúc gõ lệnh đến lúc Confirm. Hết giờ tự huỷ.",
+        "• Chỉ self - không có `target:` option. Manager muốn fix giúp user lười: `/remove-roster` rồi `/add-roster target:`.",
+        "• Bỏ tick hết (0 selected) → ephemeral hint sang `/remove-roster` (xoá hẳn account là operation khác).",
+        "• Bot dùng char CP cao nhất trong roster đã saved làm seed để re-fetch bible. Nếu char đó rename in-game thì bible fetch sẽ fail và rơi vào saved-only mode.",
+      ],
+    },
+    {
       key: "raid-status",
       label: "/raid-status",
       icon: "📊",

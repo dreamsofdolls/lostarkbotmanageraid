@@ -48,6 +48,7 @@ const {
   RAID_CHECK_PAGINATION_SESSION_MS,
 } = require("./commands/raid-check");
 const { createAddRosterCommand } = require("./commands/add-roster");
+const { createEditRosterCommand } = require("./commands/edit-roster");
 const { createRaidCommandDefinitions } = require("./commands/definitions");
 const { createRaidAutoManageCommand } = require("./commands/raid-auto-manage");
 const { createRaidAnnounceCommand } = require("./commands/raid-announce");
@@ -333,6 +334,10 @@ async function loadFreshUserSnapshotForRaidViews(
 let handleAddRosterCommand;
 let handleAddRosterSelect;
 let handleAddRosterButton;
+let handleEditRosterCommand;
+let handleEditRosterAutocomplete;
+let handleEditRosterSelect;
+let handleEditRosterButton;
 let buildRaidCheckSnapshotFromUsers;
 let formatRaidCheckNotEligibleFieldValue;
 let getRaidCheckRenderableChars;
@@ -416,6 +421,11 @@ async function handleRaidManagementCommand(interaction) {
   try {
     if (interaction.commandName === "add-roster") {
       await handleAddRosterCommand(interaction);
+      return;
+    }
+
+    if (interaction.commandName === "edit-roster") {
+      await handleEditRosterCommand(interaction);
       return;
     }
 
@@ -598,6 +608,34 @@ const addRosterCommandHandlers = createAddRosterCommand({
   handleAddRosterSelect,
   handleAddRosterButton,
 } = addRosterCommandHandlers);
+
+const editRosterCommandHandlers = createEditRosterCommand({
+  EmbedBuilder,
+  StringSelectMenuBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  MessageFlags,
+  UI,
+  User,
+  saveWithRetry,
+  ensureFreshWeek,
+  MAX_CHARACTERS_PER_ACCOUNT,
+  fetchRosterCharacters,
+  parseCombatScore,
+  normalizeName,
+  getCharacterName,
+  getCharacterClass,
+  buildCharacterRecord,
+  createCharacterId,
+  loadUserForAutocomplete,
+});
+({
+  handleEditRosterCommand,
+  handleEditRosterAutocomplete,
+  handleEditRosterSelect,
+  handleEditRosterButton,
+} = editRosterCommandHandlers);
 
 const rosterRefreshService = createRosterRefreshService({
   normalizeName,
@@ -941,6 +979,9 @@ module.exports = {
   handleRaidCheckButton,
   handleAddRosterSelect,
   handleAddRosterButton,
+  handleEditRosterAutocomplete,
+  handleEditRosterSelect,
+  handleEditRosterButton,
   loadMonitorChannelCache,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,

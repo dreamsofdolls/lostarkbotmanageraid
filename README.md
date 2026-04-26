@@ -17,6 +17,7 @@ Discord bot tracking weekly raid progress for a small Lost Ark roster. Syncs cha
 | Command | Who | What |
 |---|---|---|
 | `/add-roster` | anyone (self); Raid Manager (`target:` for others) | Fetch a roster from `lostark.bible`, open an interactive picker (multi-select + Confirm/Cancel, 5-min session), then save the chosen chars (cap 25/roster) |
+| `/edit-roster` | anyone (self) | Edit an existing saved roster: re-fetches bible + opens a merged picker (saved ∪ bible) so you can add new chars or untick saved ones in one shot. Preserves per-char raid completion state. |
 | `/raid-status` | anyone (self) | View raid progress, paginated 1 roster/page; lazy iLvl refresh (2h cache) |
 | `/raid-set` | anyone (self) | Update one character: `complete` / `process <gate>` / `reset` |
 | `/raid-check` | Raid Manager | Scan rosters for pending chars; Sync button (bible pull) + Edit button (cascading select) |

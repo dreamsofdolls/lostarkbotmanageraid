@@ -22,6 +22,9 @@ const {
   handleRaidCheckButton,
   handleAddRosterSelect,
   handleAddRosterButton,
+  handleEditRosterAutocomplete,
+  handleEditRosterSelect,
+  handleEditRosterButton,
   loadMonitorChannelCache,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
@@ -159,6 +162,7 @@ async function startBot() {
     MessageFlags,
     allowedCommands: [
       "add-roster",
+      "edit-roster",
       "raid-check",
       "raid-set",
       "raid-status",
@@ -171,6 +175,7 @@ async function startBot() {
     handleSlashCommand: handleRaidManagementCommand,
     autocompleteHandlers: {
       "raid-set": handleRaidSetAutocomplete,
+      "edit-roster": handleEditRosterAutocomplete,
       "remove-roster": handleRemoveRosterAutocomplete,
       "raid-channel": handleRaidChannelAutocomplete,
       "raid-auto-manage": handleRaidAutoManageAutocomplete,
@@ -184,6 +189,8 @@ async function startBot() {
       // - the sessionId is dynamic so the exact-match selectHandlers
       // table can't key on it. Prefix-match routes handle this case.
       { prefix: "add-roster:select:", handle: handleAddRosterSelect },
+      // /edit-roster picker mirrors the /add-roster pattern.
+      { prefix: "edit-roster:select:", handle: handleEditRosterSelect },
     ],
     buttonRoutes: [
       // Phase 2 /raid-check interactive buttons. Custom IDs follow the
@@ -193,6 +200,8 @@ async function startBot() {
       // /add-roster Confirm/Cancel buttons use customId
       // "add-roster:<action>:<sessionId>" - same prefix-routing pattern.
       { prefix: "add-roster:", handle: handleAddRosterButton },
+      // /edit-roster Confirm/Cancel buttons mirror the /add-roster shape.
+      { prefix: "edit-roster:", handle: handleEditRosterButton },
     ],
   });
 

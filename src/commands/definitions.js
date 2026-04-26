@@ -85,6 +85,17 @@ function createRaidCommandDefinitions({
     .setName("raid-help")
     .setDescription("Show help for all raid commands");
 
+  const editRosterCommand = new SlashCommandBuilder()
+    .setName("edit-roster")
+    .setDescription("Edit an existing roster: add chars from bible or remove saved chars")
+    .addStringOption((option) =>
+      option
+        .setName("roster")
+        .setDescription("Which saved roster to edit (autocomplete)")
+        .setRequired(true)
+        .setAutocomplete(true)
+    );
+
   const removeRosterCommand = new SlashCommandBuilder()
     .setName("remove-roster")
     .setDescription("Remove a roster or a character")
@@ -195,6 +206,7 @@ function createRaidCommandDefinitions({
 
   const commands = [
     addRosterCommand,
+    editRosterCommand,
     raidCheckCommand,
     raidSetCommand,
     statusCommand,
