@@ -23,7 +23,12 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 - `bot.js` interaction handler extracted to `src/services/interaction-router.js` factory.
 - Support emoji **🪄 → 🛡️** for universal coverage (Unicode 7.0 vs spotty 13.0).
 
+### Added (test coverage for /add-roster + /edit-roster)
+- **25 new tests** (`test/add-roster.test.js` + `test/edit-roster.test.js`) covering: race-safe overlap guard, single-session dup detection, account-match merge semantics, per-char state preservation, multi-seed fallback, zero-overlap reject, saved-first sort against truncation, diff-apply add/remove/keep summary, and error paths (vanished account, vanished user). Run with `npm test`.
+- Extracted `buildEditRosterPickerChars` helper in `commands/edit-roster.js` so the saved-first sort + cap truncation contract is unit-testable without driving the full Discord handler.
+
 ### Fixed
+- **`/edit-roster` wiped bible-side identifiers** on Confirm — `buildCharacterRecord` (shared helper) intentionally ships only the minimal char shape (no `bibleSerial` / `bibleCid` / `bibleRid` / `publicLogDisabled`), so every edit silently dropped them. Next `/raid-auto-manage` sync had to re-resolve serials from bible's SSR page (extra HTTP per char) and the bot would re-attempt sync on chars with public log off. Fix: explicitly overlay these fields back onto the rebuilt record. Caught by the new test suite, not Codex.
 - **`/add-roster` duplicate-roster split** - one bible roster could be split across two accounts when the seed char wasn't yet saved but its roster was already saved under a different accountName. Fix: post-fetch overlap guard against the full bible char list.
 - **`/add-roster` race-safe overlap guard** - two pickers opened concurrently against the same bible roster could still split it on Confirm. Fix: re-run the overlap check inside `saveWithRetry` against the freshly-loaded user doc; throw `RACE_DUP_ROSTER` on collision and steer the user to `/edit-roster`.
 - **`/add-roster` Manager target ping** - target user wasn't actually notified because the `<@id>` mention only lived in the embed description; Discord only fires notifications for mentions in the message `content` field. Fix: add an explicit content line with the target mention.

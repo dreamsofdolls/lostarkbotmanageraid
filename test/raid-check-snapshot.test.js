@@ -1088,13 +1088,15 @@ test("buildAccountFreshnessLine renders both refresh and sync badges with countd
   const userMeta = {
     autoManageEnabled: true,
     lastAutoManageSyncAt: now - 3 * 60_000, // 3 min ago
-    lastAutoManageAttemptAt: now - 3 * 60_000, // cooldown still active (15m)
+    lastAutoManageAttemptAt: now - 3 * 60_000, // cooldown still active (10m default)
   };
   const line = __test.buildAccountFreshnessLine(account, userMeta);
   assert.match(line, /Last updated 30m ago/);
   assert.match(line, /Next refresh in 1h30m/);
   assert.match(line, /Last synced 3m ago/);
-  assert.match(line, /Next sync in 12m/);
+  // Default sync cooldown was tightened 15m -> 10m on 2026-04-26;
+  // 3min elapsed against 10min cap leaves 7m remaining.
+  assert.match(line, /Next sync in 7m/);
 });
 
 test("buildAccountFreshnessLine shows ready marker when cooldown expired", () => {
@@ -1148,51 +1150,52 @@ test("isManagerId matches env-allowlisted Discord user IDs", () => {
   assert.equal(__test.isManagerId(""), false);
 });
 
-test("getAutoManageCooldownMs returns 30s for managers and 15m for everyone else", () => {
-  assert.equal(__test.getAutoManageCooldownMs("test-manager-1"), 30 * 1000);
-  assert.equal(__test.getAutoManageCooldownMs("test-manager-2"), 30 * 1000);
-  assert.equal(__test.getAutoManageCooldownMs("regular-user"), 15 * 60_000);
-  assert.equal(__test.getAutoManageCooldownMs(null), 15 * 60_000);
+test("getAutoManageCooldownMs returns 15s for managers and 10m for everyone else", () => {
+  // Cooldowns tightened on 2026-04-26: Manager 30s -> 15s, regular 15m -> 10m.
+  assert.equal(__test.getAutoManageCooldownMs("test-manager-1"), 15 * 1000);
+  assert.equal(__test.getAutoManageCooldownMs("test-manager-2"), 15 * 1000);
+  assert.equal(__test.getAutoManageCooldownMs("regular-user"), 10 * 60_000);
+  assert.equal(__test.getAutoManageCooldownMs(null), 10 * 60_000);
 });
 
-test("buildAccountFreshnessLine uses the 30s sync cooldown for managers", () => {
+test("buildAccountFreshnessLine uses the 15s sync cooldown for managers", () => {
   const now = Date.now();
   const account = { lastRefreshedAt: now - 60_000 };
   const userMeta = {
     discordId: "test-manager-1",
     autoManageEnabled: true,
-    lastAutoManageSyncAt: now - 10_000, // 10s ago
-    lastAutoManageAttemptAt: now - 10_000, // 20s remaining against 30s cooldown
+    lastAutoManageSyncAt: now - 5_000, // 5s ago
+    lastAutoManageAttemptAt: now - 5_000, // 10s remaining against 15s cooldown
   };
   const line = __test.buildAccountFreshnessLine(account, userMeta);
-  // Manager cooldown is 30s total; with 10s elapsed there should be ~20s
+  // Manager cooldown is 15s total; with 5s elapsed there should be ~10s
   // left, rendered as "Ns" not a minute-formatted string. The exact value
   // floats a bit under millisecond drift, so we only assert the shape.
   assert.match(line, /Next sync in \d+s/);
   assert.doesNotMatch(line, /Next sync in \d+m/);
 });
 
-test("buildAccountFreshnessLine keeps the 15m sync cooldown for non-managers", () => {
+test("buildAccountFreshnessLine keeps the 10m sync cooldown for non-managers", () => {
   const now = Date.now();
   const account = { lastRefreshedAt: now - 60_000 };
   const userMeta = {
     discordId: "regular-user",
     autoManageEnabled: true,
     lastAutoManageSyncAt: now - 3 * 60_000,
-    lastAutoManageAttemptAt: now - 3 * 60_000, // 12m remaining against 15m cooldown
+    lastAutoManageAttemptAt: now - 3 * 60_000, // 7m remaining against 10m cooldown
   };
   const line = __test.buildAccountFreshnessLine(account, userMeta);
-  assert.match(line, /Next sync in 12m/);
+  assert.match(line, /Next sync in 7m/);
 });
 
-test("buildAccountFreshnessLine flips to Sync ready once the manager 30s window expires", () => {
+test("buildAccountFreshnessLine flips to Sync ready once the manager 15s window expires", () => {
   const now = Date.now();
   const account = { lastRefreshedAt: now - 60_000 };
   const userMeta = {
     discordId: "test-manager-1",
     autoManageEnabled: true,
-    lastAutoManageSyncAt: now - 45_000,
-    lastAutoManageAttemptAt: now - 45_000, // past the 30s manager window
+    lastAutoManageSyncAt: now - 30_000,
+    lastAutoManageAttemptAt: now - 30_000, // past the 15s manager window
   };
   const line = __test.buildAccountFreshnessLine(account, userMeta);
   assert.match(line, /Sync ready/);

@@ -619,6 +619,14 @@ function createAddRosterCommand({
     handleAddRosterCommand,
     handleAddRosterSelect,
     handleAddRosterButton,
+    // Internals exposed for unit tests in test/add-roster.test.js. Not
+    // part of the public contract — runtime callers go through the
+    // handlers above. The session map is exposed read-only-by-convention
+    // for tests that need to inject a session before exercising Confirm.
+    __test: {
+      persistSelectedRoster,
+      sessions,
+    },
   };
 }
 
