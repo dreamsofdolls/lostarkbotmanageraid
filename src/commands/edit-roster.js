@@ -47,6 +47,46 @@ function createEditRosterCommand({
     return crypto.randomBytes(8).toString("hex");
   }
 
+  // Build the picker char list from saved + bible. Pure helper extracted
+  // so the saved-first sort + truncation contract is unit-testable
+  // without driving the full Discord handler. The saved-first ordering
+  // is LOAD-BEARING: slice-to-cap must never bump a saved char out of
+  // the displayed window because Confirm persists exactly the displayed
+  // selection. Returns the displayed chars plus the count of bible-only
+  // chars excluded by the cap so the embed can warn the user.
+  function buildEditRosterPickerChars(savedChars, bibleChars, cap) {
+    const savedMap = new Map(savedChars.map((c) => [normalizeName(c.name), c]));
+    const bibleMap = new Map(bibleChars.map((c) => [normalizeName(c.charName), c]));
+    const allKeys = new Set([...savedMap.keys(), ...bibleMap.keys()]);
+
+    const merged = [];
+    for (const key of allKeys) {
+      const saved = savedMap.get(key);
+      const bible = bibleMap.get(key);
+      merged.push({
+        charName: bible?.charName || saved.name,
+        className: bible?.className || saved.class,
+        itemLevel: bible?.itemLevel ?? saved.itemLevel,
+        combatScore: bible?.combatScore || saved.combatScore,
+        savedKey: saved ? key : null,
+        inBible: !!bible,
+      });
+    }
+
+    merged.sort((a, b) => {
+      const aIsSaved = a.savedKey ? 1 : 0;
+      const bIsSaved = b.savedKey ? 1 : 0;
+      if (aIsSaved !== bIsSaved) return bIsSaved - aIsSaved;
+      const cpDiff = parseCombatScore(b.combatScore) - parseCombatScore(a.combatScore);
+      if (cpDiff !== 0) return cpDiff;
+      return (b.itemLevel || 0) - (a.itemLevel || 0);
+    });
+
+    const displayChars = merged.slice(0, cap);
+    const excludedBibleOnlyCount = Math.max(0, merged.length - displayChars.length);
+    return { merged, displayChars, excludedBibleOnlyCount };
+  }
+
   // Multi-seed bible fetch with overlap reject. Builds a seed list from
   // the saved chars (highest-CP first) + accountName as last fallback,
   // then tries each seed sequentially. Skips any result that has ZERO
@@ -372,9 +412,10 @@ function createEditRosterCommand({
         } else {
           summary.added.push(character.charName);
         }
-        return buildCharacterRecord(
+        const existingPlain = existing ? existing.toObject?.() ?? existing : {};
+        const record = buildCharacterRecord(
           {
-            ...(existing ? existing.toObject?.() ?? existing : {}),
+            ...existingPlain,
             name: character.charName,
             class: character.className,
             itemLevel: character.itemLevel,
@@ -382,6 +423,26 @@ function createEditRosterCommand({
           },
           existing?.id || createCharacterId()
         );
+        // buildCharacterRecord (shared helper) intentionally ships a
+        // minimal char shape (id/name/class/itemLevel/isGoldEarner/
+        // combatScore/assignedRaids/tasks) and does NOT pass through
+        // bible-side identifiers or the public-log flag. Edit-roster's
+        // contract is "preserve per-char state across edits", so
+        // explicitly overlay these fields. Without this, every Confirm
+        // would wipe bibleSerial/cid/rid (forcing the next
+        // /raid-auto-manage sync to re-resolve them via bible's SSR
+        // page — extra HTTP round-trip per char) and forget
+        // publicLogDisabled (causing the bot to re-attempt sync on
+        // chars known to have public log off).
+        if (existing) {
+          if (existing.bibleSerial != null) record.bibleSerial = existing.bibleSerial;
+          if (existing.bibleCid != null) record.bibleCid = existing.bibleCid;
+          if (existing.bibleRid != null) record.bibleRid = existing.bibleRid;
+          if (existing.publicLogDisabled !== undefined) {
+            record.publicLogDisabled = existing.publicLogDisabled;
+          }
+        }
+        return record;
       });
 
       // Stamp lastRefreshedAt: the bible fetch we just did to build the
@@ -447,26 +508,8 @@ function createEditRosterCommand({
       targetAccount.accountName
     );
 
-    // Merge saved + bible into a deduped list keyed by normalized name.
-    // Bible-side fields (iLvl/CP/class) win when both sources have the
-    // char — they're fresher. Saved-only entries keep their stored values.
-    const savedMap = new Map(savedChars.map((c) => [normalizeName(c.name), c]));
-    const bibleMap = new Map(bibleChars.map((c) => [normalizeName(c.charName), c]));
-    const allKeys = new Set([...savedMap.keys(), ...bibleMap.keys()]);
-
-    const merged = [];
-    for (const key of allKeys) {
-      const saved = savedMap.get(key);
-      const bible = bibleMap.get(key);
-      merged.push({
-        charName: bible?.charName || saved.name,
-        className: bible?.className || saved.class,
-        itemLevel: bible?.itemLevel ?? saved.itemLevel,
-        combatScore: bible?.combatScore || saved.combatScore,
-        savedKey: saved ? key : null,
-        inBible: !!bible,
-      });
-    }
+    const { merged, displayChars, excludedBibleOnlyCount } =
+      buildEditRosterPickerChars(savedChars, bibleChars, SELECT_MAX_OPTIONS);
 
     if (merged.length === 0) {
       await interaction.editReply({
@@ -475,27 +518,6 @@ function createEditRosterCommand({
       return;
     }
 
-    // Sort: saved chars first (by CP desc within), then bible-only chars
-    // (by CP desc within). Saved-first ordering is LOAD-BEARING for the
-    // truncation step below — slicing top-25 must never bump a saved
-    // char out of the picker because Confirm persists exactly the
-    // displayed selection, so a hidden saved char would be silently
-    // deleted. Was the high-severity bug Codex flagged.
-    merged.sort((a, b) => {
-      const aIsSaved = a.savedKey ? 1 : 0;
-      const bIsSaved = b.savedKey ? 1 : 0;
-      if (aIsSaved !== bIsSaved) return bIsSaved - aIsSaved;
-      const cpDiff = parseCombatScore(b.combatScore) - parseCombatScore(a.combatScore);
-      if (cpDiff !== 0) return cpDiff;
-      return (b.itemLevel || 0) - (a.itemLevel || 0);
-    });
-
-    const displayChars = merged.slice(0, SELECT_MAX_OPTIONS);
-    // Saved chars are guaranteed not to be excluded because savedCount ≤
-    // MAX_CHARACTERS_PER_ACCOUNT (= SELECT_MAX_OPTIONS), and they all
-    // sort first. Excluded entries are exclusively bible-only chars
-    // beyond the cap — surface a count so the user knows extras exist.
-    const excludedBibleOnlyCount = Math.max(0, merged.length - displayChars.length);
     if (excludedBibleOnlyCount > 0) {
       console.warn(
         `[edit-roster] roster ${targetAccount.accountName} merged ${merged.length} chars; ${excludedBibleOnlyCount} bible-only char(s) excluded from picker (cap ${SELECT_MAX_OPTIONS}).`
@@ -646,6 +668,14 @@ function createEditRosterCommand({
     handleEditRosterCommand,
     handleEditRosterSelect,
     handleEditRosterButton,
+    // Internals exposed for unit tests in test/edit-roster.test.js. Not
+    // part of the public contract.
+    __test: {
+      persistEditedRoster,
+      fetchBibleRosterWithFallback,
+      buildEditRosterPickerChars,
+      sessions,
+    },
   };
 }
 
