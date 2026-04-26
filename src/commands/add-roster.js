@@ -337,6 +337,35 @@ function createAddRosterCommand({
       return;
     }
 
+    // Robust duplicate-roster guard (post-fetch). The pre-fetch guard above
+    // only catches seedCharName collisions with accountName / saved char
+    // names - it misses the case where the user seeds with a real bible
+    // char they haven't saved yet but whose roster already lives under a
+    // different accountName. Without this check, persistSelectedRoster
+    // would create a SECOND account pointing to the same bible roster
+    // (because the account-match logic only inspects the user's selection,
+    // not the full bible char list), splitting one bible roster across
+    // two accounts and breaking the "1 bible roster = 1 account/user"
+    // invariant that /remove-roster + /raid-set rely on. Direct users to
+    // /edit-roster instead since that's exactly the right tool here.
+    if (existingUser && Array.isArray(existingUser.accounts)) {
+      const bibleNameSet = new Set(
+        rosterCharacters.map((c) => normalizeName(c.charName))
+      );
+      const collidingAccount = existingUser.accounts.find((account) => {
+        const chars = Array.isArray(account.characters) ? account.characters : [];
+        return chars.some((c) =>
+          bibleNameSet.has(normalizeName(getCharacterName(c)))
+        );
+      });
+      if (collidingAccount) {
+        await interaction.editReply({
+          content: `${UI.icons.warn} Roster này đã được saved ở account **${collidingAccount.accountName}** (chars overlap với bible roster). Dùng \`/edit-roster roster:${collidingAccount.accountName}\` để sửa, hoặc \`/remove-roster\` để xoá rồi add lại.`,
+        });
+        return;
+      }
+    }
+
     // CP-sorted (highest first) so the picker shows the most-played
     // chars at the top by default. We do NOT slice to the old top-N
     // here — that was the whole point of this rewrite. We only cap at
@@ -498,12 +527,18 @@ function createAddRosterCommand({
         return;
       }
 
+      // Ping the target user when Manager added on their behalf. Discord
+      // ONLY fires notifications for mentions in the message `content`
+      // field — mentions inside an embed description don't ping anyone,
+      // even with allowedMentions set. Without an explicit content
+      // mention here the target wouldn't get any notification despite
+      // the embed text saying "đã được Manager add giúp <@target>".
       await interaction.editReply({
+        content: session.actingForOther
+          ? `<@${session.targetId}> Heya~ Manager <@${session.callerId}> vừa add giúp roster này cho cậu rồi nhé. Check thử xem chars có đúng không, sai thì \`/edit-roster\` sửa được.`
+          : null,
         embeds: [buildSavedEmbed(session, savedAccount)],
         components: [],
-        // Ping the target only when manager-added so they get a notif
-        // their roster was set up. Self-add (most common case) doesn't
-        // need any mention.
         allowedMentions: session.actingForOther
           ? { users: [session.targetId] }
           : { parse: [] },
