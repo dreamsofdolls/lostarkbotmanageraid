@@ -124,7 +124,13 @@ function createRaidStatusCommand(deps) {
       );
     }
 
-    return parts.join(" · ");
+    // Render refresh segment + sync segment on SEPARATE lines instead of
+    // joining with " · " on one line. The combined line was getting wide
+    // (4 sub-segments × ~15 chars each = ~60 chars) and harder to scan
+    // because refresh + sync are distinct concepts (roster metadata vs
+    // bible logs) on different cooldown clocks. Stacking them visually
+    // mirrors the conceptual split.
+    return parts.join("\n");
   }
 
   // Map the piggyback outcome captured during handleRaidStatusCommand
@@ -132,17 +138,23 @@ function createRaidStatusCommand(deps) {
   // add noise without information (no piggyback was attempted, or it
   // ran cleanly but found nothing new - the freshness line above
   // already covers the "data is fresh" case).
+  //
+  // Voice: Artist persona (per CLAUDE.md memory) - friendly first-person
+  // "tớ"/"Artist" framing instead of neutral status copy. Icons picked
+  // for semantic clarity: ⏳ (in-progress) for timeout because the
+  // gather is still running in background, ⚠️ for failed because the
+  // gather actually rejected.
   function buildPiggybackOutcomeLine(piggybackOutcome) {
     if (!piggybackOutcome) return null;
     switch (piggybackOutcome.outcome) {
       case "applied": {
         const n = piggybackOutcome.newGatesApplied || 0;
-        return `${UI.icons.reset} Bible vừa sync · **${n}** gate mới đã apply`;
+        return `${UI.icons.reset} Artist vừa sync xong, có **${n}** gate mới luôn nha~`;
       }
       case "timeout":
-        return `${UI.icons.warn} Bible sync chậm · render data cache, gather đang chạy nền (mở lại sau ~10s để thấy data mới)`;
+        return "⏳ Bible đang chậm tay, Artist gather còn chạy ngầm. Cậu mở lại sau ~10s là có data tươi nha~";
       case "failed":
-        return `${UI.icons.warn} Bible sync gặp vấn đề · đang xem cache, thử mở lại sau vài phút`;
+        return `${UI.icons.warn} Bible đang dở chứng, Artist tạm xem cache. Cậu thử lại sau vài phút giúp tớ nhé~`;
       case "cooldown":
       case "synced-no-new":
       case "not-applicable":
