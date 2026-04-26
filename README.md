@@ -23,7 +23,7 @@ Discord bot tracking weekly raid progress for a small Lost Ark roster. Syncs cha
 | `/raid-check` | Raid Manager | Scan rosters for pending chars; Sync button (bible pull) + Edit button (cascading select) |
 | `/raid-auto-manage` | anyone (self) | `on` / `off` / `sync` / `status` for automated bible log reconciliation |
 | `/raid-channel` | admin | Register monitor channel, toggle schedules, repin welcome |
-| `/raid-announce` | admin | List / enable / disable / redirect per-guild announcement types |
+| `/raid-announce` | admin | List / enable / disable / redirect per-guild announcement types (9 types: weekly-reset, stuck-nudge, set-greeting, hourly-cleanup, artist-bedtime, artist-wakeup, whisper-ack, maintenance-early, maintenance-countdown) |
 | `/raid-help` | anyone | Drill-down help (dropdown lists every command) |
 | `/remove-roster` | anyone (self) | Remove a roster or one character from it |
 

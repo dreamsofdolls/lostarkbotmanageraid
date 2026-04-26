@@ -455,6 +455,371 @@ function createRaidSchedulerService({
     return setInterval(run, AUTO_CLEANUP_TICK_MS);
   }
 
+  // ---------------------------------------------------------------------------
+  // Maintenance reminder scheduler (LA VN weekly maintenance: Wednesday 14:00 VN)
+  // ---------------------------------------------------------------------------
+  // Lost Ark VN bảo trì cố định Wednesday 14:00 VN. Hard-coded ở đây thay vì
+  // configurable per guild because (a) the schedule is tied to the publisher
+  // not the server, (b) a single global truth avoids drift if multiple guilds
+  // ever join, and (c) keeping the value as constants means changing the
+  // schedule is a one-line PR if LA VN ever shifts the boundary.
+  const MAINTENANCE_DAY_VN = 3; // 0=Sun, 3=Wed
+  const MAINTENANCE_HOUR_VN = 14;
+  const MAINTENANCE_MINUTE_VN = 0;
+  const MAINTENANCE_TICK_MS = 60 * 1000; // 1-min cadence to catch every slot
+  // TTL per group: early reminders linger 30 phút (members may scroll back),
+  // countdown reminders self-delete faster because the next slot is right behind
+  // them. T-1m TTL is shortest because the server is about to be down anyway.
+  const MAINTENANCE_TTL_EARLY_MS = 30 * 60 * 1000;
+  const MAINTENANCE_TTL_COUNTDOWN_MS = 10 * 60 * 1000;
+  const MAINTENANCE_TTL_FINAL_MS = 5 * 60 * 1000;
+  let maintenanceSchedulerStartedAtMs = null;
+
+  // Slot definitions: minutesBefore = phút trước boundary 14:00 VN. Two
+  // separate arrays so the per-group enabled flag and per-group dedup key
+  // map cleanly to MAINTENANCE_EARLY_SLOTS vs MAINTENANCE_COUNTDOWN_SLOTS.
+  // `pingHere` only true for the 2 milestones Traine flagged (T-3h, T-1h).
+  const MAINTENANCE_EARLY_SLOTS = [
+    { key: "T-3h", minutesBefore: 180, ttlMs: MAINTENANCE_TTL_EARLY_MS, pingHere: true },
+    { key: "T-2h", minutesBefore: 120, ttlMs: MAINTENANCE_TTL_EARLY_MS, pingHere: false },
+    { key: "T-1h", minutesBefore: 60, ttlMs: MAINTENANCE_TTL_EARLY_MS, pingHere: true },
+  ];
+  const MAINTENANCE_COUNTDOWN_SLOTS = [
+    { key: "T-15m", minutesBefore: 15, ttlMs: MAINTENANCE_TTL_COUNTDOWN_MS, pingHere: false },
+    { key: "T-10m", minutesBefore: 10, ttlMs: MAINTENANCE_TTL_COUNTDOWN_MS, pingHere: false },
+    { key: "T-5m", minutesBefore: 5, ttlMs: MAINTENANCE_TTL_COUNTDOWN_MS, pingHere: false },
+    { key: "T-1m", minutesBefore: 1, ttlMs: MAINTENANCE_TTL_FINAL_MS, pingHere: false },
+  ];
+
+  // Variant pool per slot. 3 variants each so a server doesn't read the
+  // same line two weeks in a row. Tone progression: early = checklist nhắc
+  // (shop solo / event / paradise / key hell), countdown = đếm ngược dồn
+  // dập, final = chốt thoát game. `@here` baked into the string for the 2
+  // milestone slots per Traine - bot only needs to send content as-is.
+  // No em-dash anywhere per feedback_no_emdash; LA term game (shop solo,
+  // event, paradise, key hell, raid, clear) preserved per Traine guidance.
+  const MAINTENANCE_VARIANTS = {
+    "T-3h": [
+      "@here Nee các cậu~ 3 tiếng nữa là tới giờ bảo trì rồi đó. Tranh thủ làm nốt mấy việc nha: shop solo tuần này còn gì hay không thì lượn 1 vòng ngó thử, event đang chạy ai chưa nhận quà thì lấy kẻo phí, paradise với key hell ai chưa đi thì gấp lên đi nốt. Artist nhắc trước cho khỏi quên thôi, biển báo này 30 phút nữa Artist cuỗm đi nha.",
+      "@here Còn 3 tiếng nữa thôi là server bảo trì các cậu ơi~ Mấy việc tuần này nhớ nha: shop solo còn món nào hay thì sắm nhanh, event đang chạy quà nhận luôn cho gọn, paradise với key hell chưa đi thì giờ là lúc thích hợp đó. Artist nhắc đầu giờ thôi, biển báo 30 phút nữa Artist cuỗm theo.",
+      "@here 3 giờ đồng hồ nữa thì bảo trì rồi nhé các cậu. Artist nhắc cho đỡ quên: shop solo tuần này có gì thì rinh về, event đang chạy quà còn dư thì nhặt nốt, paradise với key hell ai còn nợ thì giải quyết luôn cho nhẹ đầu. Biển báo này 30 phút nữa Artist gói lại nha.",
+    ],
+    "T-2h": [
+      "Hai tiếng nữa thì bảo trì rồi nhé các cậu~ Artist nhắc lại cho chắc: shop solo, event, paradise, key hell mấy món hôm nay nhớ chốt nốt nha. Biển báo này 30 phút nữa Artist cuỗm đi.",
+      "Còn 2 tiếng cuối trong giờ làm việc đó~ Ai còn dở shop solo, event, paradise hay key hell thì gấp lên nha, tránh để sát giờ mới làm thì không kịp. Biển báo Artist gói lại sau 30 phút.",
+      "2 tiếng nữa server bảo trì rồi các cậu~ Artist ngó thấy nhiều cậu vẫn online nên nhắc thêm 1 lần: shop solo / event / paradise / key hell mấy món tuần này nhớ làm cho gọn nha. Biển báo cuỗm đi sau 30 phút.",
+    ],
+    "T-1h": [
+      "@here Còn 1 tiếng nữa là tới giờ bảo trì rồi nhé các cậu! Lần nhắc cuối trong giờ làm việc đây, shop solo, event, paradise, key hell ai còn dở thì gấp lên hoàn thành nha, qua 14:00 là cooldown reset hết. Artist gói biển báo này lại sau 30 phút.",
+      "@here 60 phút cuối rồi đó các cậu~ Shop solo, event, paradise, key hell ai chưa xong thì giờ là hạn chót thật rồi nha. Artist nhắc gấp đây, biển báo cuỗm sau 30 phút.",
+      "@here Một tiếng nữa thôi là bảo trì các cậu ơi! Artist giục lần cuối: shop solo, event, paradise, key hell mấy món tuần này ai còn nợ thì gấp lên giải quyết, qua giờ là không quay lại được đâu. Biển báo này 30 phút nữa Artist cuỗm đi.",
+    ],
+    "T-15m": [
+      "15 phút cuối rồi đó các cậu~ Còn dở việc gì thì cố nốt đi nha, sắp tới giờ bảo trì rồi. Artist đếm ngược cùng các cậu đây, biển báo này 10 phút nữa cuỗm đi.",
+      "Một khắc đồng hồ nữa thôi là server tắt nhé~ Ai đang trong raid thì cố clear cho xong, không thì thoát game cho lành. Artist đếm ngược, biển báo 10 phút sau Artist cuỗm theo.",
+      "Còn 15 phút nữa thôi các cậu~ Sắp tới giờ rồi đó, gói gọn lại đi nhé. Artist đứng đếm ngược cùng các cậu, biển báo này Artist gói lại sau 10 phút.",
+    ],
+    "T-10m": [
+      "10 phút nữa thôi các cậu ơi~ Đang dở gì thì xong nốt nhanh đi nha, đừng để sát giờ. Artist đếm tiếp, biển báo 10 phút nữa cuỗm theo.",
+      "Còn 10 phút thôi đó~ Ai đang ở thành phố thì giờ cũng đừng vào raid mới làm gì, tốn tiền vào ra. Artist nhắc nhẹ, biển báo cuỗm sau 10 phút.",
+      "Đếm ngược 10 phút cuối nha các cậu. Sắp tới giờ Artist với server cùng nghỉ rồi đó. Biển báo này Artist mang theo sau 10 phút.",
+    ],
+    "T-5m": [
+      "5 phút cuối rồi nhé các cậu~ Đăng xuất gọn ghẽ thôi, đừng cố raid kẻo tự nhiên mất tiến độ giữa chừng. Artist đếm tiếp, biển báo 10 phút nữa cuỗm đi.",
+      "Còn 5 phút thôi đó~ Ai đang trong raid thì cứ thoát ra cho lành, vào dở mất công. Artist gần ngủ trưa rồi đây, biển báo cuỗm sau 10 phút.",
+      "Đếm ngược 5 phút cuối các cậu ơi! Server sắp tắt rồi nha, ai online thì chuẩn bị thoát game cho gọn. Biển báo này 10 phút nữa Artist mang đi.",
+    ],
+    "T-1m": [
+      "1 phút cuối rồi nha các cậu! Thoát game thôi cho lành, đang dở gì cũng đành dừng đây, server tắt là mất hết đấy. Hẹn gặp lại sau bảo trì nha~",
+      "60 giây cuối các cậu ơi! Lưu rồi thoát thôi, đừng tiếc nuối cố thêm gì, tới rồi là tới rồi. Artist đi nghỉ đây, hẹn các cậu sau bảo trì~",
+      "Một phút thôi đó! Thoát game gấp đi các cậu~ Artist với server cùng đi nghỉ giờ này, biển báo này 5 phút nữa cũng tự đi luôn. Hẹn gặp lại nha.",
+    ],
+  };
+
+  /**
+   * Resolve the maintenance slot (if any) that should fire at the given
+   * instant. Returns null when the current VN datetime is NOT inside a
+   * maintenance reminder window: wrong day-of-week, past the boundary, or
+   * the minutesUntil value doesn't exactly match any of the 7 slots.
+   *
+   * Exact-minute match is intentional: tick cadence is 1 minute and the
+   * dedup key prevents double-fire, so a clean equality check is simpler
+   * than a tolerance window (which would have ambiguity between adjacent
+   * countdown slots only 5 minutes apart). Edge case: a tick delayed > 60s
+   * by event-loop pressure can miss its slot, an acceptable trade-off for
+   * code clarity. Restart inside the reminder window resumes from the next
+   * matching slot forward.
+   */
+  function getMaintenanceSlotForNow(now = new Date()) {
+    const vn = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+    const dayOfWeek = vn.getUTCDay();
+    if (dayOfWeek !== MAINTENANCE_DAY_VN) return null;
+    const hour = vn.getUTCHours();
+    const minute = vn.getUTCMinutes();
+    const minutesUntil =
+      (MAINTENANCE_HOUR_VN - hour) * 60 + (MAINTENANCE_MINUTE_VN - minute);
+    if (minutesUntil <= 0) return null;
+    const earlyMatch = MAINTENANCE_EARLY_SLOTS.find(
+      (s) => s.minutesBefore === minutesUntil
+    );
+    if (earlyMatch) {
+      return { slot: earlyMatch, group: "early" };
+    }
+    const countdownMatch = MAINTENANCE_COUNTDOWN_SLOTS.find(
+      (s) => s.minutesBefore === minutesUntil
+    );
+    if (countdownMatch) {
+      return { slot: countdownMatch, group: "countdown" };
+    }
+    return null;
+  }
+
+  /**
+   * Pick a random variant from the pool for the given slot key. Returns
+   * the raw string (already includes `@here` prefix when applicable, since
+   * pingHere is baked into the variant text). Caller passes content
+   * directly to postChannelAnnouncement.
+   */
+  function pickMaintenanceVariant(slotKey) {
+    const pool = MAINTENANCE_VARIANTS[slotKey];
+    if (!pool || pool.length === 0) return "";
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  /**
+   * Build the /raid-announce show preview text for a maintenance group
+   * from MAINTENANCE_VARIANTS so admins see every variant Artist might
+   * actually post per slot. Mirrors the buildCleanupNoticePreview shape:
+   * heading per slot, truncated variants, total under Discord 1024 cap.
+   */
+  function buildMaintenancePreview(group) {
+    const slots = group === "early" ? MAINTENANCE_EARLY_SLOTS : MAINTENANCE_COUNTDOWN_SLOTS;
+    const VARIANT_MAX = 70;
+    const lines = [
+      group === "early"
+        ? "Random pick mỗi mốc (3 variants/mốc):"
+        : "Random pick mỗi mốc (3 variants/mốc, đếm ngược):",
+    ];
+    for (const s of slots) {
+      const pool = MAINTENANCE_VARIANTS[s.key] || [];
+      lines.push("");
+      lines.push(`**${s.key}**${s.pingHere ? " (ping @here)" : ""} - ${pool.length} variants:`);
+      for (const variant of pool) {
+        const shortened =
+          variant.length > VARIANT_MAX ? variant.slice(0, VARIANT_MAX) + "..." : variant;
+        lines.push(`- ${shortened}`);
+      }
+    }
+    return lines.join("\n");
+  }
+
+  /**
+   * Snapshot of the maintenance schedule's wall-clock shape, exposed so
+   * scheduling.js can compute "Next eligible boundary" for the 2 maintenance
+   * announcement types without re-hard-coding 14:00 VN / Wed / minutesBefore
+   * arrays. Single source of truth: changing the constants or slot lists at
+   * the top of this section automatically flows into /raid-announce show.
+   *
+   * VN to UTC offset is fixed at 7 (Vietnam doesn't observe DST), so the
+   * subtraction is safe. If that ever changes, this is the only line to fix.
+   */
+  function getMaintenanceSlotConfigSnapshot() {
+    return {
+      dayOfWeek: MAINTENANCE_DAY_VN,
+      utcHour: MAINTENANCE_HOUR_VN - 7,
+      utcMinute: MAINTENANCE_MINUTE_VN,
+      earlyMinutes: MAINTENANCE_EARLY_SLOTS.map((s) => s.minutesBefore),
+      countdownMinutes: MAINTENANCE_COUNTDOWN_SLOTS.map((s) => s.minutesBefore),
+    };
+  }
+
+  /**
+   * Mongo filter for the maintenance scheduler tick. A guild is eligible
+   * when ANY of the 3 channel paths is non-null:
+   *   1. raidChannelId (default fallback for both groups)
+   *   2. announcements.maintenanceEarly.channelId (override for early)
+   *   3. announcements.maintenanceCountdown.channelId (override for countdown)
+   *
+   * Earlier shape filtered ONLY raidChannelId, which silently dropped any
+   * guild that configured an override but hadn't set a monitor channel yet.
+   * That contradicted the /raid-announce UX which advertises set-channel as
+   * working independent of /raid-channel config action:set. Pattern parity
+   * with nudgeStuckPrivateLogUser's $or filter elsewhere in this file.
+   */
+  function buildMaintenanceConfigQuery() {
+    return {
+      $or: [
+        { raidChannelId: { $ne: null } },
+        { "announcements.maintenanceEarly.channelId": { $ne: null } },
+        { "announcements.maintenanceCountdown.channelId": { $ne: null } },
+      ],
+    };
+  }
+
+  async function runMaintenanceTick(client) {
+    const now = new Date();
+    const match = getMaintenanceSlotForNow(now);
+    if (!match) return;
+    const { slot, group } = match;
+    const vn = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+    const vnDayKey = vn.toISOString().slice(0, 10);
+    const tickKey = `${vnDayKey}:${slot.key}`;
+    const subdocKey = group === "early" ? "maintenanceEarly" : "maintenanceCountdown";
+    const dedupField =
+      group === "early" ? "lastMaintenanceEarlyKey" : "lastMaintenanceCountdownKey";
+
+    let configs;
+    try {
+      configs = await GuildConfig.find(buildMaintenanceConfigQuery()).lean();
+    } catch (err) {
+      console.error("[maintenance] config load failed:", err?.message || err);
+      return;
+    }
+    if (!configs.length) return;
+
+    for (const cfg of configs) {
+      const announcements = getAnnouncementsConfig(cfg);
+      const conf = announcements[subdocKey];
+      // Cheap pre-filter on lean doc - cuts the obvious no-ops before the
+      // atomic claim round-trip. The claim itself re-checks both fields
+      // server-side so this isn't trusted as the source of truth.
+      if (!conf.enabled) continue;
+      if (cfg[dedupField] === tickKey) continue;
+
+      const guild = client.guilds.cache.get(cfg.guildId);
+      if (!guild) continue;
+      // channelId override falls back to monitor channel - same parity
+      // with weekly-reset and stuck-nudge announcement types. Both null
+      // (e.g. guild matched on the OTHER group's override but THIS group
+      // has neither override nor monitor) → skip silently rather than
+      // throwing on a null fetch.
+      const targetChannelId = conf.channelId || cfg.raidChannelId;
+      if (!targetChannelId) continue;
+      let channel = guild.channels.cache.get(targetChannelId);
+      if (!channel) {
+        try {
+          channel = await guild.channels.fetch(targetChannelId);
+        } catch {
+          continue;
+        }
+      }
+      if (!channel) continue;
+
+      const content = pickMaintenanceVariant(slot.key);
+      if (!content) continue;
+
+      // Atomic claim via findOneAndUpdate filter: stamps dedup ONLY if
+      // (a) this exact tickKey hasn't been stamped yet AND (b) the group
+      // is still enabled. `$ne: false` matches both `true` AND missing
+      // (legacy guilds with the subdoc absent before defaults applied).
+      // Combines 3 prior race classes into one Mongo round-trip:
+      //   - Race opt-out: admin runs /raid-announce action:off between
+      //     `find` and post → claim filter rejects, skip silently.
+      //   - Cross-tick double-post: 2 ticks read tickKey=null, both
+      //     post, both stamp → claim filter only lets one pass.
+      //   - In-process tick overlap: separate `tickInFlight` flag in
+      //     startMaintenanceScheduler is the primary defense; atomic
+      //     claim is the belt-and-suspenders backup.
+      // Trade-off: post failure AFTER claim loses this slot (next tick
+      // sees stamped key, won't retry). Acceptable because Discord post
+      // failures are rare + a missed slot is no worse than bot offline at
+      // that slot. Same shape as artist-wakeup pre-stamp pattern above.
+      let claimed;
+      try {
+        claimed = await GuildConfig.findOneAndUpdate(
+          {
+            guildId: cfg.guildId,
+            [dedupField]: { $ne: tickKey },
+            [`announcements.${subdocKey}.enabled`]: { $ne: false },
+          },
+          { $set: { [dedupField]: tickKey } },
+          { new: true }
+        ).lean();
+      } catch (err) {
+        console.error(
+          `[maintenance] guild=${cfg.guildId} slot=${slot.key} claim failed:`,
+          err?.message || err
+        );
+        continue;
+      }
+      if (!claimed) continue;
+
+      // postChannelAnnouncement catches `channel.send()` failures internally
+      // and resolves `null` instead of throwing (see helper at top of file).
+      // The atomic claim above already stamped `dedupField`, so a null return
+      // here means the slot is GONE this cycle: next tick sees the stamp,
+      // skips, and we won't retry until next Wednesday. Log path must
+      // distinguish the 2 outcomes so operator has a signal to debug
+      // (Discord permission missing, network blip, etc) vs treating a silent
+      // failure as a successful fire.
+      let sent;
+      try {
+        sent = await postChannelAnnouncement(
+          channel,
+          content,
+          slot.ttlMs,
+          `maintenance ${slot.key}`
+        );
+      } catch (err) {
+        // Defensive: if helper contract changes and starts throwing again,
+        // treat as send failure too rather than crashing the tick loop.
+        console.error(
+          `[maintenance] guild=${cfg.guildId} slot=${slot.key} post threw (dedup stamped, slot lost until next cycle):`,
+          err?.message || err
+        );
+        continue;
+      }
+      if (sent) {
+        console.log(
+          `[maintenance] posted guild=${cfg.guildId} group=${group} slot=${slot.key} key=${tickKey}`
+        );
+      } else {
+        console.warn(
+          `[maintenance] claimed but send failed guild=${cfg.guildId} slot=${slot.key} (dedup stamped, slot lost until next cycle, check channel permissions or Discord availability)`
+        );
+      }
+    }
+  }
+
+  /**
+   * Start the 1-min maintenance reminder scheduler. Tick fires regardless
+   * of day-of-week; getMaintenanceSlotForNow short-circuits non-Wednesday
+   * ticks before any DB query, so 6/7 days a week the tick costs nothing
+   * past 2 wall-clock reads. Per-guild gating via maintenanceEarly.enabled /
+   * maintenanceCountdown.enabled honors the registry-level toggle from
+   * /raid-announce.
+   *
+   * In-flight guard (parity with startAutoManageDailyScheduler): a single
+   * tick under Mongo lag could plausibly outlast the 60s tick interval; a
+   * second fire while the first is still running would double-process every
+   * guild, post twice in the worst case (atomic claim catches that, but
+   * still wastes a Mongo write + log noise). The flag is module-scope, not
+   * persisted - process restart resets it, which is fine because a crash
+   * mid-tick releases the slot anyway.
+   */
+  let maintenanceTickInFlight = false;
+  function startMaintenanceScheduler(client) {
+    maintenanceSchedulerStartedAtMs = Date.now();
+    const run = async () => {
+      if (maintenanceTickInFlight) {
+        console.warn(
+          "[maintenance] previous tick still running - skipping this fire to avoid overlap"
+        );
+        return;
+      }
+      maintenanceTickInFlight = true;
+      try {
+        await runMaintenanceTick(client);
+      } catch (err) {
+        console.error("[maintenance] scheduler tick failed:", err?.message || err);
+      } finally {
+        maintenanceTickInFlight = false;
+      }
+    };
+    run();
+    return setInterval(run, MAINTENANCE_TICK_MS);
+  }
+
   // Phase 3: 24h passive auto-sync for opted-in users. Spreads sync work
   // across the day so the bible footprint stays thin even at scale.
   //
@@ -745,6 +1110,10 @@ function createRaidSchedulerService({
   return {
     AUTO_CLEANUP_TICK_MS,
     AUTO_MANAGE_DAILY_TICK_MS,
+    MAINTENANCE_TICK_MS,
+    MAINTENANCE_DAY_VN,
+    MAINTENANCE_HOUR_VN,
+    MAINTENANCE_MINUTE_VN,
     ARTIST_QUIET_START_HOUR_VN,
     ARTIST_QUIET_END_HOUR_VN,
     postChannelAnnouncement,
@@ -756,10 +1125,17 @@ function createRaidSchedulerService({
     buildCleanupNoticePreview,
     pickBedtimeNoticeContent,
     pickWakeupNoticeContent,
+    getMaintenanceSlotForNow,
+    pickMaintenanceVariant,
+    buildMaintenancePreview,
+    buildMaintenanceConfigQuery,
+    getMaintenanceSlotConfigSnapshot,
     startRaidChannelScheduler,
     startAutoManageDailyScheduler,
+    startMaintenanceScheduler,
     getAutoCleanupSchedulerStartedAtMs: () => autoCleanupSchedulerStartedAtMs,
     getAutoManageSchedulerStartedAtMs: () => autoManageSchedulerStartedAtMs,
+    getMaintenanceSchedulerStartedAtMs: () => maintenanceSchedulerStartedAtMs,
   };
 }
 

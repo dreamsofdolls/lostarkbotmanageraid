@@ -2,6 +2,17 @@
 
 Dates use the local calendar of the commit. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## 2026-04-27
+
+### Added (`/raid-announce` maintenance reminders: nhắc trước bảo trì Wed 14:00 VN)
+- **2 announcement types mới**: `maintenance-early` (3 mốc T-3h / T-2h / T-1h, ping `@here` ở T-3h và T-1h) + `maintenance-countdown` (4 mốc T-15m / T-10m / T-5m / T-1m, không ping). Cả 2 channel-overridable, default ON, bật/tắt độc lập qua `/raid-announce action:on|off`.
+- **21 variants Artist voice** (3 variants/mốc) random pick mỗi lần fire. Early reminders liệt kê checklist (`shop solo` / `event` / `paradise` / `key hell`), countdown đếm ngược dồn dập, T-1m chốt "thoát game thôi". Vietnamese-first, term game LA giữ.
+- **`startMaintenanceScheduler` 1-min tick** trong `src/services/raid-schedulers.js`. In-flight guard + atomic CAS dedup claim (parity với `startAutoManageDailyScheduler`). Eligibility filter `$or` 3 channel paths nên guild đã set override qua `/raid-announce action:set-channel` mà chưa setup monitor channel vẫn fire đúng. Non-Wed ticks early-exit trước Mongo query.
+- **Live preview** qua `/raid-announce type:maintenance-... action:show` - admin thấy đủ 21 variants + lịch fire kế tiếp trước khi enable, parity với `hourly-cleanup` pool preview.
+
+### Changed (`/raid-help` + welcome pin reflect 9 announcement types)
+- HELP section `/raid-announce`: 7 → 9 types (4 channel-overridable, 5 channel-bound). Thêm bullet maintenance schedule + TTL + ping policy. Welcome pin embed của `/raid-channel` cũng có dòng mới mô tả nhịp nhắc bảo trì.
+
 ## 2026-04-26
 
 ### Added

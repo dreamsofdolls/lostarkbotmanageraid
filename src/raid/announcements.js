@@ -101,9 +101,29 @@ const ANNOUNCEMENT_REGISTRY = {
     previewContent:
       "<@user> ...Artist DM kết quả cho cậu rồi nha~ Channel sẽ tự dọn cả 2 tin nhắn sau 5 giây...",
   },
+  "maintenance-early": {
+    label: "Maintenance early reminder",
+    subdocKey: "maintenanceEarly",
+    channelOverridable: true,
+    trigger: "Mỗi tuần thứ 4 lúc 11:00 / 12:00 / 13:00 VN (tức T-3h / T-2h / T-1h trước boundary 14:00 VN). Tick 1 phút bắt mốc.",
+    dedup: "1 post/slot/guild (`lastMaintenanceEarlyKey = 'YYYY-MM-DD:T-{3h|2h|1h}'`). Mỗi tuần 1 chu kỳ key mới.",
+    messageTtl: "30 phút rồi Artist tự xóa",
+    previewContent:
+      "Random pick mỗi mốc theo pool 3 variants, voice Artist liệt kê todo (shop solo, event, paradise, key hell).\nT-3h: nhắc nhẹ, không tag.\nT-2h: nhắc thêm 1 lần, không tag.\nT-1h: tag @everyone, giọng giục nhẹ.",
+  },
+  "maintenance-countdown": {
+    label: "Maintenance countdown",
+    subdocKey: "maintenanceCountdown",
+    channelOverridable: true,
+    trigger: "Mỗi tuần thứ 4 lúc 13:45 / 13:50 / 13:55 / 13:59 VN (tức T-15m / T-10m / T-5m / T-1m). Tick 1 phút bắt mốc.",
+    dedup: "1 post/slot/guild (`lastMaintenanceCountdownKey = 'YYYY-MM-DD:T-{15m|10m|5m|1m}'`).",
+    messageTtl: "10 phút rồi Artist tự xóa (mốc T-1m TTL ngắn hơn vì server sắp tắt)",
+    previewContent:
+      "Random pick mỗi mốc, voice gấp gáp dần.\nT-15m / T-10m / T-5m: không tag, giọng đếm ngược.\nT-1m: tag @everyone, giọng chốt 'thoát game thôi'.",
+  },
 };
 
-// Derived accessors - cheap object iteration on a 5-entry object. Keeping
+// Derived accessors - cheap object iteration on a small registry. Keeping
 // derivations in-function (rather than top-level computed consts) makes
 // the registry the only place that needs editing when adding a type.
 function announcementTypeKeys() {
@@ -115,10 +135,16 @@ function announcementTypeEntry(typeKey) {
 function announcementSubdocKeys() {
   return Object.values(ANNOUNCEMENT_REGISTRY).map((r) => r.subdocKey);
 }
+function announcementOverridableTypeKeys() {
+  return Object.entries(ANNOUNCEMENT_REGISTRY)
+    .filter(([, entry]) => entry.channelOverridable === true)
+    .map(([key]) => key);
+}
 
 module.exports = {
   ANNOUNCEMENT_REGISTRY,
   announcementTypeKeys,
   announcementTypeEntry,
   announcementSubdocKeys,
+  announcementOverridableTypeKeys,
 };
