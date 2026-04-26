@@ -4,6 +4,17 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-26
 
+### Added (/edit-roster: diff-style roster manager)
+
+- New `/edit-roster roster:<autocomplete>` slash command. Bridges the gap between `/add-roster` (creates new) and `/remove-roster` (deletes char or whole account): lets you fine-tune an existing saved roster by adding chars from the live bible roster OR removing saved chars in one picker, then commits the diff.
+- Flow: pick which saved roster to edit (autocomplete from your accounts) → bot re-fetches bible using the highest-CP saved char as seed → merges saved + bible into one deduped list (`🆕` tag = bible-only, `📦` tag = saved-only / no longer in bible, untagged = both) → picker opens with default-selected = currently saved chars → tick/untick → Confirm applies the diff.
+- **Preserves per-char state**: raid completion (`assignedRaids`), `tasks`, `bibleSerial/cid/rid`, `publicLogDisabled` all survive the edit for chars that aren't removed. Only `name`/`class`/`itemLevel`/`combatScore` are refreshed from bible. New chars get a fresh id + record.
+- **Bible-offline graceful degrade**: if bible fetch fails for the seed char (e.g. char renamed in-game, bible API down), the picker still opens with saved chars only — user can remove but not add. Embed surfaces the error reason inline.
+- **5-min session + auth gate**: identical contract to `/add-roster` picker. Only the original caller can interact; cross-user clicks get an ephemeral reject. Sessions live in-process and clear on bot restart.
+- **0-select rejected at Confirm**: hints toward `/remove-roster` (which already has the dedicated empty-roster cleanup flow). Cap 25 chars/roster enforced defensively at Confirm.
+- **Self-only**: no `target:` option. Manager-on-behalf-of-user edit flow is `/remove-roster` + `/add-roster target:` — keeps the destructive surface area smaller.
+- Wired through `selectRoutes` (`edit-roster:select:`) and `buttonRoutes` (`edit-roster:`) in `bot.js`. Autocomplete handler mirrors `/remove-roster`'s roster-listing pattern.
+
 ### Changed (/add-roster: interactive multi-select picker, drop top-N auto)
 
 - `/add-roster` now opens an interactive picker after fetching the roster instead of silently slicing top-N by combat score. The embed lists every char with check/uncheck markers, a `StringSelectMenu` (multi-select up to all chars) for picking, and Confirm/Cancel buttons. Default selection = all chars (matches the "user này chơi toàn bộ" intent that motivated this change). Players who alt-collect deselect their non-played chars before clicking Confirm.
