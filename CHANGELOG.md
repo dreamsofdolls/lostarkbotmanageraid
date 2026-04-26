@@ -15,6 +15,7 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 
 ### Changed (`/raid-announce` replies thành notice embed Artist voice)
 - 12 plain-text replies trong `/raid-announce` (action validation, toggle on/off, set-channel, clear-channel) chuyển sang `buildNoticeEmbed` với type-coded color (success/info/warn/lock) + title + description Artist voice. Parity với `/add-roster`, `/edit-roster`, `/raid-set`, `/remove-roster`. Dead fallthrough branch cuối handler bị xóa (action validation đầu handler đã reject hết).
+- 3 success replies (toggle on/off, set-channel, clear-channel) thêm **bold key: value** layout (`Loại` / `Trạng thái mới` hoặc `Channel mới` / `Tác động`) trong description, parity style với `/raid-set` Reset embed, scan-friendly hơn prose blob single line.
 
 ## 2026-04-26
 
