@@ -25,7 +25,7 @@ const HELP_SECTIONS = [
         `• Cap **${25} chars/roster** (Discord StringSelectMenu limit). Roster Lost Ark thực tế max ~18 char nên đủ cho mọi player.`,
         "• **Phiên 5 phút**: từ lúc gõ lệnh đến lúc bấm Confirm. Hết giờ embed tự đổi thành \"Phiên đã hết hạn\" - chạy lại `/add-roster` để thử lại.",
         "• Chỉ người gõ lệnh mới chọn / confirm / cancel được - người khác bấm sẽ bị ephemeral reject.",
-        "• Nếu roster/character đã tồn tại trong account khác của cùng Discord user, bot sẽ từ chối luôn ở bước đầu.",
+        "• Nếu roster đã được saved (bất kỳ char nào trong bible roster trùng với char đã saved của user), bot sẽ từ chối + suggest dùng `/edit-roster` để sửa thay vì tạo account mới trùng.",
         "• **Option `target` (Raid Manager only)**: chỉ định 1 user khác, roster sẽ lưu dưới Discord ID của user đó (không phải caller). Use case: member quá lười tự gõ → Manager gõ lệnh + tự chọn chars + Confirm. Reply embed sẽ ping user kia + ghi rõ \"Roster này được Raid Manager X add giúp Y\". Non-Manager dùng option này → ephemeral reject.",
       ],
     },

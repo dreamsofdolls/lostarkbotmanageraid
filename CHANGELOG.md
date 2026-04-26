@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-26
 
+### Fixed (/add-roster: 2 bugs from Codex post-ship review)
+
+- **Duplicate-roster split**: the pre-fetch dup guard only checked `seedCharName` against existing accountNames + saved char names, missing the case where the user seeds with a real bible char they haven't saved yet but whose roster already lives under a different accountName. The post-confirm match logic in `persistSelectedRoster` only inspected the user's selection (not the full bible char list), so it would silently create a SECOND account pointing to the same bible roster — splitting one bible roster across two accounts and breaking the "1 bible roster = 1 account/user" invariant that `/remove-roster` + `/raid-set` rely on.
+  - Fix: added a post-fetch overlap guard that diffs the full bible char list against every existing saved account; any overlap → reject with a hint pointing the user to `/edit-roster roster:<account>` (the proper tool for editing an existing roster).
+- **Manager target ping never fired**: the Confirm-time editReply set `allowedMentions: { users: [targetId] }` but the `content` field was empty — the only `<@id>` reference lived inside the embed description, and Discord does NOT fire notifications for mentions inside embed text (only message `content` mentions trigger notifs). Net effect: target user got no notification despite the embed saying "đã được Manager add giúp <@target>".
+  - Fix: when `actingForOther`, set an explicit `content` line with the target mention + a brief Artist-voice note ("Heya~ Manager X vừa add giúp roster này cho cậu...") so Discord actually pings them.
+- Both bugs were in code shipped earlier today (commits `99d26e9` + `62d6924`); no test coverage caught them. Surfaced via Codex review at `feedback_codex/feedback_content.md`.
+
 ### Added (/edit-roster: diff-style roster manager)
 
 - New `/edit-roster roster:<autocomplete>` slash command. Bridges the gap between `/add-roster` (creates new) and `/remove-roster` (deletes char or whole account): lets you fine-tune an existing saved roster by adding chars from the live bible roster OR removing saved chars in one picker, then commits the diff.
