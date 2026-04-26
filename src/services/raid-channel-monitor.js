@@ -369,11 +369,16 @@ function createRaidChannelMonitorService({
       )
       .addFields(
         {
-          // Onboarding workflow lives in the first field so một newcomer
-          // scan pin top-down sẽ gặp 3 bước trước docs format post.
-          // Word choice: ưu tiên VN cho động từ thường (lấy/chọn/theo dõi/
-          // thêm/bỏ/xem) — giữ lại các từ technical / nhãn nút thật
-          // (`picker`, `Confirm`, `command`, `language`) để khớp UI thật.
+          // Onboarding workflow lives in the first field so a newcomer
+          // scanning the pin top-down hits the 3-step path before the
+          // post-format docs (which only matter once they have a roster).
+          // Copy is Vietnamese (community match), but technical labels
+          // are kept in English so they line up with the actual UI:
+          //   - Discord identifiers: `/command` names, slash option
+          //     names like `language:`
+          //   - Button label that must match the picker UI: "Confirm"
+          //   - Gamer / lostark.bible terms with no clean VN equivalent:
+          //     picker, raid, gate, Public Log, DPS, Support, DM
           name: "🚀 Mới vào server? Bắt đầu ở đây",
           value: [
             "1. `/add-roster name:<tên-char-bất-kỳ>` → Artist lấy roster từ lostark.bible, mở picker để cậu chọn ✅ chars muốn theo dõi rồi bấm **Confirm**.",
