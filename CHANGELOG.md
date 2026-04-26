@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-26
 
+### Added (Artist persona emoji bootstrap)
+
+- Generalized `class-emoji-bootstrap.js` into `src/services/emoji-bootstrap.js` accepting a config (`{namespace, iconsDir, emojiMap, resolveDisplayKey, aliasGroups}`). Two named wrappers ship: `bootstrapClassEmoji(client)` for `assets/class-icons/` -> `CLASS_EMOJI_MAP`, and `bootstrapArtistEmoji(client)` for `assets/artist-icons/` -> `ARTIST_EMOJI_MAP`. Same content-addressed naming pattern (`{name}_{md5short}`), same idempotent + self-healing semantics, same orphan + alias-cleanup passes. No code duplication.
+- New `src/data/ArtistEmoji.js` mirrors `Class.js` shape: `ARTIST_EMOJI_MAP` (3 entries: `shy`, `neutral`, `note`) + `getArtistEmoji(name)` helper with empty-string fallback so callers can unconditionally prepend without truthiness checks.
+- `assets/artist-icons/` now has 3 PNG files keyed by persona name (renamed from Discord snowflake source filenames for semantic clarity): `shy.png` (blushing greeting), `neutral.png` (default cute), `note.png` (chibi reading book - "Artist is checking" voice). Original `.webp` / `.jpg` archives kept alongside.
+- `bot.js` now invokes both bootstraps on `ClientReady` (parallel fire-and-forget, both non-fatal). First deploy uploads 3 artist emoji + maintains 25 class emoji; subsequent deploys skip everything via hash-match.
+- `raid-channel-monitor.js` pinned welcome embed title swaps the legacy `🦊` for `${getArtistEmoji("shy")}` - resolved at render-time from the bootstrap-populated map, so the actual emoji ID is bot-application-owned (works in every guild bot joins) and refreshes automatically when the source PNG changes.
+
 ### Changed (interaction routing extracted to its own module)
 
 - `bot.js` interaction handler (a 5-branch `if/else if` ladder over `isChatInputCommand` / `isAutocomplete` / `isStringSelectMenu` / `isButton` plus a per-command autocomplete sub-switch) extracted to `src/services/interaction-router.js` via factory pattern. `bot.js` now passes 4 small registry maps (`allowedCommands`, `autocompleteHandlers`, `selectHandlers`, `buttonRoutes`) and registers the router's single `handle` function on `Events.InteractionCreate`.

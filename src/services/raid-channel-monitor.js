@@ -1,5 +1,7 @@
 "use strict";
 
+const { getArtistEmoji } = require("../data/ArtistEmoji");
+
 function createRaidChannelMonitorService({
   PermissionFlagsBits,
   EmbedBuilder,
@@ -347,12 +349,17 @@ function createRaidChannelMonitorService({
   function buildRaidChannelWelcomeEmbed() {
     return new EmbedBuilder()
       .setColor(UI.colors.neutral)
-      // Custom Artist persona emoji (chibi shy face) replaces the legacy
-      // generic 🦊 fox. Discord embed title supports custom emoji syntax
-      // `<:name:id>` on modern clients - if it renders as literal text on
-      // any client, move this prefix into the description first line
-      // instead (description always renders custom emoji reliably).
-      .setTitle(`<:artist_chibi:1083410606671003698> Chào các bạn~ Artist ngồi trông channel này nhé`)
+      // Artist persona emoji (chibi "shy" face) replaces the legacy
+      // generic 🦊 fox. Resolved at render-time from the ARTIST_EMOJI_MAP
+      // that the artist-emoji bootstrap populates on ClientReady - so
+      // the actual emoji ID is bot-application-owned (works in every
+      // guild the bot joins) and refreshes automatically when the
+      // source PNG content changes.
+      //
+      // Empty-string fallback when the bootstrap hasn't completed yet
+      // means the title degrades to "Chào các bạn~..." without an
+      // icon prefix - cleaner than rendering literal `<:shy:0>` text.
+      .setTitle(`${getArtistEmoji("shy")} Chào các bạn~ Artist ngồi trông channel này nhé`.trim())
       .setDescription(
         [
           "Mỗi lần clear raid xong, cứ post 1 tin nhắn ngắn dạng `<raid> <difficulty> <character[, character2, ...]> [gate]` vào đây là Artist sẽ tự đánh dấu progress giúp cậu, xong tớ dọn luôn tin nhắn cho channel khỏi rối nha~",
