@@ -972,9 +972,20 @@ function createRaidChannelMonitorService({
       }
     }
     try {
-      const pinned = await channel.messages.fetchPins();
-      for (const [, msg] of pinned) {
-        if (msg.author?.id !== botUserId) continue;
+      // discord.js v14.18+ replaced the deprecated `fetchPinned()`
+      // (which returned a Collection<id, Message>) with `fetchPins()`,
+      // whose response shape is `{ items: MessagePin[], hasMore }` —
+      // `items` is a plain array (NOT a Collection), and each entry is
+      // a MessagePin wrapping the actual Message under `.message`.
+      // Iterating the response object directly throws "pinned is not
+      // iterable"; destructuring `[, msg]` from a MessagePin would also
+      // give garbage. Discord caps pinned messages at 50 per channel
+      // and one fetch returns up to 50, so `hasMore` is safely ignored
+      // for the welcome-scan use case.
+      const { items: pins = [] } = await channel.messages.fetchPins();
+      for (const pin of pins) {
+        const msg = pin?.message;
+        if (!msg || msg.author?.id !== botUserId) continue;
         const title = msg.embeds?.[0]?.title || "";
         // Welcome title signature is stable across versions (kitsune +
         // "Artist ngồi trông channel này"). Match loose enough to survive
@@ -984,7 +995,7 @@ function createRaidChannelMonitorService({
         }
       }
     } catch (err) {
-      console.warn("[raid-channel] fetchPinned for stale-welcome scan failed:", err?.message || err);
+      console.warn("[raid-channel] fetchPins for stale-welcome scan failed:", err?.message || err);
     }
     const embed = buildRaidChannelWelcomeEmbed();
     try {
