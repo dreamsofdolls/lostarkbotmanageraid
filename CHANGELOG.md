@@ -13,6 +13,9 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 ### Changed (`/raid-help` + welcome pin reflect 9 announcement types)
 - HELP section `/raid-announce`: 7 → 9 types (4 channel-overridable, 5 channel-bound). Thêm bullet maintenance schedule + TTL + ping policy. Welcome pin embed của `/raid-channel` cũng có dòng mới mô tả nhịp nhắc bảo trì.
 
+### Changed (`/raid-announce` replies thành notice embed Artist voice)
+- 12 plain-text replies trong `/raid-announce` (action validation, toggle on/off, set-channel, clear-channel) chuyển sang `buildNoticeEmbed` với type-coded color (success/info/warn/lock) + title + description Artist voice. Parity với `/add-roster`, `/edit-roster`, `/raid-set`, `/remove-roster`. Dead fallthrough branch cuối handler bị xóa (action validation đầu handler đã reject hết).
+
 ## 2026-04-26
 
 ### Added

@@ -1,3 +1,7 @@
+"use strict";
+
+const { buildNoticeEmbed } = require("../raid/shared");
+
 function createRaidAnnounceCommand(deps) {
   const {
     EmbedBuilder,
@@ -19,7 +23,13 @@ async function handleRaidAnnounceCommand(interaction) {
     const guildId = interaction.guildId;
     if (!guildId) {
       await interaction.reply({
-        content: `${UI.icons.warn} Command này phải chạy trong server.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Server only",
+            description: "Cậu phải chạy `/raid-announce` trong server nha, Artist không config được announcement ở DM đâu.",
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -33,7 +43,13 @@ async function handleRaidAnnounceCommand(interaction) {
     // through to Discord's "application did not respond" timeout.
     if (!validActions.includes(action)) {
       await interaction.reply({
-        content: `${UI.icons.warn} Action không hợp lệ: \`${action}\`. Chọn một trong \`show\` · \`on\` · \`off\` · \`set-channel\` · \`clear-channel\`.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Action không hợp lệ",
+            description: `Action \`${action}\` Artist không nhận được. Cho phép: \`show\` · \`on\` · \`off\` · \`set-channel\` · \`clear-channel\`.`,
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -44,7 +60,13 @@ async function handleRaidAnnounceCommand(interaction) {
       // future drift (e.g. someone renames a registry key and forgets to
       // redeploy slash commands).
       await interaction.reply({
-        content: `${UI.icons.warn} Loại announcement không hợp lệ: \`${type}\`.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Loại announcement không hợp lệ",
+            description: `Type \`${type}\` không có trong registry. Có thể slash schema chưa redeploy sau khi rename, cậu thử \`/raid-announce\` lại với dropdown gợi ý nha.`,
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -110,7 +132,13 @@ async function handleRaidAnnounceCommand(interaction) {
       const enabled = action === "on";
       if (current.enabled === enabled) {
         await interaction.reply({
-          content: `${UI.icons.info} \`${type}\` đã ${enabled ? "on" : "off"} rồi, không cần đổi.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "info",
+              title: "Không có gì đổi",
+              description: `\`${type}\` đang **${enabled ? "ON" : "OFF"}** rồi, Artist không stamp lại nha. Muốn xem state hiện tại thì chạy action \`show\`.`,
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -121,7 +149,13 @@ async function handleRaidAnnounceCommand(interaction) {
         { upsert: true, setDefaultsOnInsert: true }
       );
       await interaction.reply({
-        content: `${UI.icons.done} \`${type}\` đã chuyển sang **${enabled ? "ON" : "OFF"}**.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "success",
+            title: "Đã chuyển trạng thái",
+            description: `\`${type}\` giờ là **${enabled ? "ON" : "OFF"}** nha, lần fire kế tiếp Artist sẽ ${enabled ? "post lại bình thường" : "im lặng skip"}.`,
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -137,14 +171,26 @@ async function handleRaidAnnounceCommand(interaction) {
           .map((k) => `\`${k}\``)
           .join(", ");
         await interaction.reply({
-          content: `${UI.icons.warn} \`${type}\` (${typeLabel}) là channel-bound nha cậu, Artist không override channel được cho loại này đâu. Loại này luôn post vào monitor channel theo thiết kế. Chỉ ${overridableList} mới chấp nhận override.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: "Loại này không override được",
+              description: `\`${type}\` (${typeLabel}) luôn post vào monitor channel theo thiết kế, Artist không cho override được đâu. Chỉ ${overridableList} mới chấp nhận \`set-channel\`.`,
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
       }
       if (!channel) {
         await interaction.reply({
-          content: `${UI.icons.warn} action:set-channel cần option \`channel\`. Thử lại với channel mục tiêu nhé.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: "Thiếu option `channel`",
+              description: "Action `set-channel` cần kèm option `channel:#abc` để Artist biết override sang đâu. Chạy lại `/raid-announce ... action:set-channel channel:#tên-kênh` nha.",
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -153,7 +199,13 @@ async function handleRaidAnnounceCommand(interaction) {
       const missing = getMissingAnnouncementChannelPermissions(channel, botMember);
       if (missing.length > 0) {
         await interaction.reply({
-          content: `${UI.icons.warn} Bot thiếu permission trong <#${channel.id}>: **${missing.join(", ")}**. Grant cho bot rồi chạy lại \`/raid-announce\` nhé.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "lock",
+              title: "Bot thiếu permission",
+              description: `Artist không post được vào <#${channel.id}> vì thiếu: **${missing.join(", ")}**. Cậu grant cho bot ở channel đó rồi chạy lại \`/raid-announce ... action:set-channel\` nha.`,
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -164,7 +216,13 @@ async function handleRaidAnnounceCommand(interaction) {
         { upsert: true, setDefaultsOnInsert: true }
       );
       await interaction.reply({
-        content: `${UI.icons.done} \`${type}\` override sang <#${channel.id}>. Lần fire kế tiếp Artist sẽ post vào đó.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "success",
+            title: "Override channel xong",
+            description: `\`${type}\` giờ post vào <#${channel.id}> nha. Lần fire kế tiếp Artist sẽ ghé qua đó. Muốn revert thì action \`clear-channel\`.`,
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -172,14 +230,26 @@ async function handleRaidAnnounceCommand(interaction) {
     if (action === "clear-channel") {
       if (!overridable) {
         await interaction.reply({
-          content: `${UI.icons.warn} \`${type}\` không có override để clear (channel-bound).`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: "Loại này không có override",
+              description: `\`${type}\` là channel-bound (luôn post vào monitor channel theo thiết kế), nên không có override để clear. Chỉ overridable types mới có dòng override để xóa.`,
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
       }
       if (!current.channelId) {
         await interaction.reply({
-          content: `${UI.icons.info} \`${type}\` đã dùng monitor channel mặc định sẵn rồi, không có override để clear.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "info",
+              title: "Không có gì để clear",
+              description: `\`${type}\` đang post thẳng vào monitor channel mặc định, override hiện đã \`null\` rồi. Muốn check thì action \`show\`.`,
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -189,15 +259,22 @@ async function handleRaidAnnounceCommand(interaction) {
         { $set: { [`announcements.${subdocKey}.channelId`]: null } }
       );
       await interaction.reply({
-        content: `${UI.icons.done} \`${type}\` override đã clear - revert về monitor channel mặc định.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "success",
+            title: "Override đã clear",
+            description: `\`${type}\` revert về monitor channel mặc định nha. Lần fire kế tiếp Artist sẽ post vào đó. Muốn override lại thì action \`set-channel channel:#abc\`.`,
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
-    await interaction.reply({
-      content: `${UI.icons.warn} Action không hợp lệ: \`${action}\`.`,
-      flags: MessageFlags.Ephemeral,
-    });
+    // Action validation at the top of the handler already rejects every
+    // string that isn't in `validActions`, so this fallthrough is unreachable.
+    // Removed the final reject branch entirely - if a future contributor
+    // adds a new valid action they'll see compile-time errors via the action
+    // dispatch chain instead of a silently-rendered "invalid action" notice.
   }
   // ---------------------------------------------------------------------------
 
