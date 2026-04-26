@@ -23,8 +23,13 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 - `bot.js` interaction handler extracted to `src/services/interaction-router.js` factory.
 - Support emoji **🪄 → 🛡️** for universal coverage (Unicode 7.0 vs spotty 13.0).
 
-### Added (test coverage for /add-roster + /edit-roster)
-- **25 new tests** (`test/add-roster.test.js` + `test/edit-roster.test.js`) covering: race-safe overlap guard, single-session dup detection, account-match merge semantics, per-char state preservation, multi-seed fallback, zero-overlap reject, saved-first sort against truncation, diff-apply add/remove/keep summary, and error paths (vanished account, vanished user). Run with `npm test`.
+### Added (test coverage expanded across all commands — 137 tests total)
+- **47 more tests** added on top of the earlier 25, bringing full-suite to **137 / 137 passing**:
+  - `test/raid-set.test.js` (13 tests): `applyRaidSetForDiscordId` complete/process/reset paths, alreadyComplete + alreadyReset short-circuits, mode-switch wipe, ineligible iLvl, no-roster, char-not-found, roster-scoped lookup vs first-by-iteration, case-insensitive char match, cumulative process semantics.
+  - `test/remove-roster.test.js` (10 tests): `remove_roster` whole-account delete, `remove_char` single-char delete, **seed-reseed when removing the seed char** (skips colliding accountNames), empty-account edge case, validation rejections, and case-insensitive accountName match.
+  - `test/raid-help.test.js` (10 tests): overview + dropdown shape, every section key renders without throwing, **Discord 1024-char field-chunking holds across all sections**, required vs optional option markers, no-options notice, dropdown emoji + ≤100-char description.
+  - `test/raid-status.test.js` (14 tests): `buildStatusFooterText` math + page-counter visibility, `buildAccountPageEmbed` title-icon flips (done/lock), 'All accounts' rollup shown only when paginating, `hideIneligibleChars` filter notice, Manager 👑 vs regular 📥 header swap.
+- **25 earlier tests** (`test/add-roster.test.js` + `test/edit-roster.test.js`): race-safe overlap guard, single-session dup detection, account-match merge, per-char state preservation, multi-seed fallback, zero-overlap reject, saved-first sort against truncation, diff-apply add/remove/keep summary, vanished-account / vanished-user error paths.
 - Extracted `buildEditRosterPickerChars` helper in `commands/edit-roster.js` so the saved-first sort + cap truncation contract is unit-testable without driving the full Discord handler.
 
 ### Fixed
