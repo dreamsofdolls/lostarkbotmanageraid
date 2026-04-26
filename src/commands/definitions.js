@@ -23,6 +23,12 @@ function createRaidCommandDefinitions({
         .setRequired(false)
         .setMinValue(1)
         .setMaxValue(6)
+    )
+    .addUserOption((option) =>
+      option
+        .setName("target")
+        .setDescription("(Raid Manager only) Add roster on behalf of another user")
+        .setRequired(false)
     );
 
   const raidCheckCommand = new SlashCommandBuilder()

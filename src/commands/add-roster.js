@@ -15,11 +15,39 @@ function createAddRosterCommand({
   getCharacterClass,
   buildCharacterRecord,
   createCharacterId,
+  isManagerId,
 }) {
   async function handleAddRosterCommand(interaction) {
-    const discordId = interaction.user.id;
+    const callerId = interaction.user.id;
     const seedCharName = interaction.options.getString("name", true).trim();
     const topCount = interaction.options.getInteger("total") ?? MAX_CHARACTERS_PER_ACCOUNT;
+
+    // Target option: Raid Manager onboarding for lazy members. When the
+    // caller specifies `target`, we save the roster under THAT user's
+    // discordId instead of the caller's. Manager-gated because letting
+    // any user write to any other user's roster doc would let members
+    // grief each other (overwrite progress, add fake chars).
+    const targetUser = interaction.options.getUser("target");
+    let discordId = callerId;
+    let actingForOther = false;
+    if (targetUser && targetUser.id !== callerId) {
+      if (typeof isManagerId !== "function" || !isManagerId(callerId)) {
+        await interaction.reply({
+          content: `${UI.icons.lock} Chỉ Raid Manager mới được add roster cho người khác (option \`target\`). Tự add cho mình thì bỏ option \`target\` đi nhé.`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      if (targetUser.bot) {
+        await interaction.reply({
+          content: `${UI.icons.warn} Không add roster cho bot được nha~`,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      discordId = targetUser.id;
+      actingForOther = true;
+    }
     // Reject if this roster is already saved under this Discord user.
     // Seed name matches either an existing account name or any stored
     // character name → block the add. Users who want to refresh a saved
@@ -116,14 +144,23 @@ function createAddRosterCommand({
       }
     );
     const seedRosterLink = `https://lostark.bible/character/NA/${encodeURIComponent(seedCharName)}/roster`;
+    const descriptionLines = [
+      `Roster: [**${savedAccount.accountName}**](${seedRosterLink})`,
+      `Saved: **Top ${savedAccount.characters.length}** characters by combat power`,
+    ];
+    // Surface the manager-on-behalf attribution so the channel + the
+    // target both see clearly who set this roster up. <@id> mention
+    // pings on first render; suppress via allowedMentions on the reply
+    // so the target gets a notification but not an extra @mention
+    // (Discord client still highlights the mention text either way).
+    if (actingForOther) {
+      descriptionLines.push(
+        `\n${UI.icons.info} Roster này được Raid Manager <@${callerId}> add giúp <@${targetUser.id}> nha~`
+      );
+    }
     const embed = new EmbedBuilder()
       .setTitle(`${UI.icons.roster} Roster Synced`)
-      .setDescription(
-        [
-          `Roster: [**${savedAccount.accountName}**](${seedRosterLink})`,
-          `Saved: **Top ${savedAccount.characters.length}** characters by combat power`,
-        ].join("\n")
-      )
+      .setDescription(descriptionLines.join("\n"))
       .addFields({
         name: `Characters (${savedAccount.characters.length})`,
         value: summaryLines.join("\n").slice(0, 1024),
@@ -132,7 +169,15 @@ function createAddRosterCommand({
       .setColor(UI.colors.success)
       .setFooter({ text: "Source: lostark.bible" })
       .setTimestamp();
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({
+      embeds: [embed],
+      // Ping the target only when manager-added so they get a notif
+      // their roster was set up. Self-add (most common case) doesn't
+      // need any mention.
+      allowedMentions: actingForOther
+        ? { users: [targetUser.id] }
+        : { parse: [] },
+    });
   }
 
   return {
