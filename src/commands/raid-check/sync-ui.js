@@ -21,6 +21,8 @@
  * (Edit cascade also resolves display names per editable user).
  */
 
+const { buildNoticeEmbed } = require("../../raid/shared");
+
 function createSyncUi({
   EmbedBuilder,
   MessageFlags,
@@ -117,7 +119,14 @@ function createSyncUi({
         `[raid-check sync] raid=${raidMeta.raidKey}:${raidMeta.modeKey} pendingUsers=${pendingUserCount} optedIn=0 snapshotMs=${snapshotMs} totalMs=${Date.now() - started}`
       );
       await interaction.editReply({
-        content: `${UI.icons.info} Không có user nào opt-in \`/raid-auto-manage\` trong list pending. Nhắc họ gõ \`/raid-auto-manage action:on\` hoặc tự update bằng \`/raid-set\`.`,
+        content: null,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "info",
+            title: "Không có user nào opt-in",
+            description: "Trong list pending hiện tại không có ai đã `/raid-auto-manage action:on` cả nha, Artist không có user để sync. Nhắc các cậu trong list bật auto-manage, hoặc dùng `/raid-set` để update thủ công.",
+          }),
+        ],
       });
       return;
     }
@@ -223,15 +232,28 @@ function createSyncUi({
       `[raid-check sync] raid=${raidMeta.raidKey}:${raidMeta.modeKey} pendingUsers=${pendingUserCount} optedIn=${optedInDiscordIds.length} scopedChars=${scopedCharCount} synced=${syncedCount} attemptedOnly=${attemptedOnlyCount} skipped=${skippedCount} failed=${failedCount} dmSent=${dmSent} dmFailed=${dmFailed} snapshotMs=${snapshotMs} syncMs=${syncMs} dmMs=${dmMs} totalMs=${Date.now() - started}`
     );
 
-    const lines = [
-      `${UI.icons.done} Đã trigger sync cho **${optedInDiscordIds.length}** opted-in user (**${scopedCharCount}** pending char).`,
-      `- Synced (có data mới): **${syncedCount}** · Attempted-only (no fresh data): **${attemptedOnlyCount}**`,
-      `- Skipped (cooldown/in-flight): **${skippedCount}** · Failed: **${failedCount}**`,
-      `- Chars có update mới: **${deltasPerUser.size}** user · DM sent: **${dmSent}**${dmFailed > 0 ? ` · DM failed: **${dmFailed}**` : ""}`,
+    const description = [
+      `Artist đã trigger sync cho **${optedInDiscordIds.length}** opted-in user (**${scopedCharCount}** pending char).`,
       "",
-      `_Gõ \`/raid-check raid:${raidMeta.raidKey}_${normalizeName(raidMeta.modeKey)}\` để xem list pending mới._`,
-    ];
-    await interaction.editReply({ content: lines.join("\n") });
+      `**Synced (có data mới):** ${syncedCount}`,
+      `**Attempted-only (no fresh data):** ${attemptedOnlyCount}`,
+      `**Skipped (cooldown / in-flight):** ${skippedCount}`,
+      `**Failed:** ${failedCount}`,
+      `**Chars có update mới:** ${deltasPerUser.size} user`,
+      `**DM sent:** ${dmSent}${dmFailed > 0 ? ` (DM failed: ${dmFailed})` : ""}`,
+      "",
+      `Gõ \`/raid-check raid:${raidMeta.raidKey}_${normalizeName(raidMeta.modeKey)}\` để xem list pending mới nha~`,
+    ].join("\n");
+    await interaction.editReply({
+      content: null,
+      embeds: [
+        buildNoticeEmbed(EmbedBuilder, {
+          type: "success",
+          title: "Sync xong",
+          description,
+        }),
+      ],
+    });
   }
 
   return {

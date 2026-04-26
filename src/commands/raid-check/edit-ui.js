@@ -18,6 +18,8 @@
  * builders) so they all live in the same factory closure.
  */
 
+const { buildNoticeEmbed } = require("../../raid/shared");
+
 function createEditUi({
   EmbedBuilder,
   StringSelectMenuBuilder,
@@ -396,7 +398,14 @@ function createEditUi({
 
       if (editableByUser.size === 0) {
         await interaction.editReply({
-          content: `${UI.icons.info} Không có char nào available để edit (raid floor ${raidMeta.minItemLevel}+ và không có char thuộc user đã tắt auto-sync hoặc có log off).`,
+          content: null,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "info",
+              title: "Không có char editable",
+              description: `Artist không thấy char nào edit được cho raid này nha. Điều kiện: iLvl >= ${raidMeta.minItemLevel}, char thuộc user đã tắt auto-sync hoặc có log private. Có thể tất cả member đều đã sync xong, hoặc chưa ai opt-in.`,
+            }),
+          ],
         });
         return;
       }
@@ -472,7 +481,13 @@ function createEditUi({
     collector.on("collect", async (component) => {
       if (component.user.id !== interaction.user.id) {
         await component.reply({
-          content: `${UI.icons.lock} Chỉ người mở Edit session mới thao tác được.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "lock",
+              title: "Chỉ người mở Edit session mới thao tác",
+              description: "Component này thuộc Edit session của người khác nha cậu, Artist không cho cross-user thao tác. Mở session Edit riêng bằng `/raid-check` rồi chọn raid mình quản nhé.",
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         }).catch(() => {});
         return;
