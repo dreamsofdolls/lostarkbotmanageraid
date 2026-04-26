@@ -1,3 +1,5 @@
+const { buildNoticeEmbed } = require("../raid/shared");
+
 function createRemoveRosterCommand(deps) {
   const {
     EmbedBuilder,
@@ -97,14 +99,26 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
     const characterName = (interaction.options.getString("character") || "").trim();
     if (action !== "remove_roster" && action !== "remove_char") {
       await interaction.reply({
-        content: `${UI.icons.warn} Action không hợp lệ.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Action không hợp lệ",
+            description: "Artist chỉ hiểu `remove_roster` (xoá cả account) hoặc `remove_char` (xoá 1 char). Pick trong dropdown nhé~",
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
     if (action === "remove_char" && !characterName) {
       await interaction.reply({
-        content: `${UI.icons.warn} Cần chọn \`character\` khi action là **Remove a single character**.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Cần chọn `character`",
+            description: "Action **Remove a single character** cần option `character` để Artist biết xoá ai. Gõ thêm field `character:` rồi đợi autocomplete gợi ý nhé.",
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;

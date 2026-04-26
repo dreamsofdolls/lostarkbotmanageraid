@@ -35,10 +35,21 @@ function getAutoManageCooldownMs(discordId) {
     : DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS;
 }
 
+// First entry in the allowlist — used as the "primary admin to ping"
+// in error embeds so users see a clickable @mention instead of a
+// generic "ping admin" message. Returns null when no managers are
+// configured (env unset / empty), which lets call sites fall back to
+// the generic copy gracefully.
+function getPrimaryManagerId() {
+  for (const id of MANAGER_IDS) return id;
+  return null;
+}
+
 module.exports = {
   MANAGER_IDS,
   isManagerId,
   getAutoManageCooldownMs,
+  getPrimaryManagerId,
   parseManagerIds,
   DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS,
   MANAGER_AUTO_MANAGE_SYNC_COOLDOWN_MS,

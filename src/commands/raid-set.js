@@ -1,3 +1,5 @@
+const { buildNoticeEmbed } = require("../raid/shared");
+
 function createRaidSetCommand(deps) {
   const {
     EmbedBuilder,
@@ -410,14 +412,26 @@ function createRaidSetCommand(deps) {
     const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
     if (!raidMeta) {
       await interaction.reply({
-        content: `${UI.icons.warn} Raid option không hợp lệ. Vui lòng thử lại.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Raid option không hợp lệ",
+            description: "Pick raid trong dropdown autocomplete nhé - Artist chỉ hiểu các raid có trong list cố định.",
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
     if (!["complete", "reset", "process"].includes(statusType)) {
       await interaction.reply({
-        content: `${UI.icons.warn} Status không hợp lệ. Dùng \`complete\`, \`process\`, hoặc \`reset\`.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Status không hợp lệ",
+            description: "Artist chỉ hiểu 3 status: `complete` (mark cả raid), `process` (mark 1 gate), `reset` (xoá hết). Pick một trong autocomplete nhé.",
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -426,7 +440,13 @@ function createRaidSetCommand(deps) {
     if (statusType === "process") {
       if (!targetGate) {
         await interaction.reply({
-          content: `${UI.icons.warn} Status \`process\` yêu cầu chọn \`gate\` cụ thể (ví dụ G1 hoặc G2). Nếu muốn đánh dấu cả raid, dùng \`complete\`.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: "`process` cần chọn gate",
+              description: "Status `process` để mark 1 gate cụ thể, Artist cần biết gate nào (G1, G2, ...). Nếu muốn mark cả raid done, đổi sang status `complete` thay nha.",
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -434,7 +454,13 @@ function createRaidSetCommand(deps) {
       const validGates = getGatesForRaid(raidMeta.raidKey);
       if (!validGates.includes(targetGate)) {
         await interaction.reply({
-          content: `${UI.icons.warn} Gate **${targetGate}** không tồn tại cho **${raidMeta.label}**. Gates hợp lệ: ${validGates.map((g) => `\`${g}\``).join(", ")}.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: "Gate không tồn tại",
+              description: `Gate **${targetGate}** không có trong **${raidMeta.label}** đâu nha. Gates hợp lệ: ${validGates.map((g) => `\`${g}\``).join(", ")}.`,
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -453,14 +479,26 @@ function createRaidSetCommand(deps) {
     });
     if (result.noRoster) {
       await interaction.reply({
-        content: `${UI.icons.info} Cậu chưa có roster nào. Dùng \`/add-roster\` để thêm trước nhé.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "info",
+            title: "Cậu chưa có roster nào",
+            description: "Artist không thấy roster nào của cậu. Dùng `/add-roster` để add roster đầu tiên trước, sau đó mới `/raid-set` được nha~",
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
     if (!result.matched) {
       await interaction.reply({
-        content: `${UI.icons.warn} Không tìm thấy character **${characterName}** trong roster.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Không tìm thấy character",
+            description: `Artist không tìm thấy character **${characterName}** trong roster **${rosterName}** của cậu. Lần sau dùng autocomplete (gõ field \`character:\` rồi đợi gợi ý) để tránh sai tên nha.`,
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -499,7 +537,13 @@ function createRaidSetCommand(deps) {
       // By this point noRoster / matched / alreadyComplete / alreadyReset are
       // all handled. The only remaining not-updated branch is ineligible iLvl.
       await interaction.reply({
-        content: `${UI.icons.warn} Character **${characterName}** đang ở iLvl **${result.ineligibleItemLevel}**, chưa đủ **${raidMeta.minItemLevel}+** để thao tác **${raidMeta.label}**.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Character chưa đủ iLvl",
+            description: `**${characterName}** đang ở iLvl **${result.ineligibleItemLevel}**, chưa đủ **${raidMeta.minItemLevel}+** để vào **${raidMeta.label}**. Lên gear thêm rồi chạy lại nha~`,
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;

@@ -163,6 +163,7 @@ const {
   MANAGER_IDS: RAID_MANAGER_ID,
   isManagerId,
   getAutoManageCooldownMs,
+  getPrimaryManagerId,
 } = require("./services/manager");
 if (RAID_MANAGER_ID.size === 0) {
   console.warn(
@@ -599,6 +600,7 @@ const addRosterCommandHandlers = createAddRosterCommand({
   buildCharacterRecord,
   createCharacterId,
   isManagerId,
+  getPrimaryManagerId,
 });
 ({
   handleAddRosterCommand,
@@ -624,6 +626,7 @@ const editRosterCommandHandlers = createEditRosterCommand({
   buildCharacterRecord,
   createCharacterId,
   loadUserForAutocomplete,
+  getPrimaryManagerId,
 });
 ({
   handleEditRosterCommand,

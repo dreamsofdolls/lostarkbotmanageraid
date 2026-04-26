@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("crypto");
+const { buildNoticeEmbed } = require("../raid/shared");
 
 // Same 5-min window as /add-roster picker. Long enough to read + decide,
 // short enough that abandoned sessions don't pile up in memory.
@@ -37,7 +38,15 @@ function createEditRosterCommand({
   buildCharacterRecord,
   createCharacterId,
   loadUserForAutocomplete,
+  getPrimaryManagerId,
 }) {
+  // Used in error embeds to ping the primary admin (first entry of
+  // RAID_MANAGER_ID env) by mention. Falls back to plain "admin"
+  // text when no manager is configured.
+  const adminMention = (() => {
+    const id = typeof getPrimaryManagerId === "function" ? getPrimaryManagerId() : null;
+    return id ? `<@${id}>` : "admin";
+  })();
   // sessionId -> session state. Same shape/semantics as the /add-roster
   // sessions map: in-process only, dropped on bot restart, keyed by a
   // random 16-hex token so concurrent /edit-roster invocations don't
@@ -483,7 +492,13 @@ function createEditRosterCommand({
     const userDoc = await User.findOne({ discordId: callerId }).lean();
     if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
       await interaction.reply({
-        content: `${UI.icons.warn} Cậu chưa có roster nào để edit nha~ Dùng \`/add-roster\` để tạo mới trước.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "info",
+            title: "Cậu chưa có roster nào",
+            description: "Artist không thấy roster nào của cậu trong DB cả. Dùng `/add-roster` để add roster đầu tiên trước, sau đó mới `/edit-roster` được nha~",
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -494,7 +509,13 @@ function createEditRosterCommand({
     );
     if (!targetAccount) {
       await interaction.reply({
-        content: `${UI.icons.warn} Không tìm thấy roster **${rosterArg}** trong account của cậu. Dùng autocomplete để chọn cho chuẩn nhé.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Không tìm thấy roster",
+            description: `Artist không tìm thấy roster **${rosterArg}** trong DB của cậu. Lần sau dùng autocomplete (gõ field \`roster:\` rồi đợi dropdown gợi ý) cho chuẩn nha~`,
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -535,7 +556,20 @@ function createEditRosterCommand({
 
     if (merged.length === 0) {
       await interaction.editReply({
-        content: `${UI.icons.warn} Roster **${targetAccount.accountName}** không có char nào ở DB và bible cũng không trả về gì. Dùng \`/remove-roster\` nếu muốn xoá hẳn account này, hoặc \`/add-roster\` để tạo lại.`,
+        content: null,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Roster trống và bible không trả về gì",
+            description: [
+              `Roster **${targetAccount.accountName}** không có char nào ở DB, bible cũng không fetch được kết quả.`,
+              "",
+              "Cậu có thể:",
+              `• \`/remove-roster\` để xoá hẳn account trống này`,
+              `• \`/add-roster\` để tạo lại từ seed char khác`,
+            ].join("\n"),
+          }),
+        ],
       });
       return;
     }
@@ -589,7 +623,13 @@ function createEditRosterCommand({
   function authorizeSession(interaction, session) {
     if (interaction.user.id !== session.callerId) {
       return interaction.reply({
-        content: `${UI?.icons?.lock || "🔒"} Chỉ người gọi lệnh mới chọn được nhé.`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "lock",
+            title: "Picker này không phải của cậu",
+            description: "Chỉ người gõ lệnh `/edit-roster` mới điều khiển được picker đó nha. Cậu muốn edit roster của mình thì gõ `/edit-roster` riêng.",
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
     }
@@ -605,7 +645,13 @@ function createEditRosterCommand({
     const session = sessions.get(sessionId);
     if (!session) {
       await interaction.reply({
-        content: `${UI.icons.warn} Phiên đã hết hạn. Chạy lại \`/edit-roster\` nhé~`,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "muted",
+            title: "Phiên đã hết hạn",
+            description: "Phiên 5 phút đã trôi qua mất rồi. Chạy lại `/edit-roster` để Artist mở picker mới cho cậu nha~",
+          }),
+        ],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -646,7 +692,13 @@ function createEditRosterCommand({
         // is a different operation (cleanup the whole account) and has its
         // own dedicated command.
         await interaction.reply({
-          content: `${UI.icons.warn} Phải giữ ít nhất 1 char. Nếu cậu muốn xoá hẳn roster **${session.accountName}**, dùng \`/remove-roster\` nhé.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: "Phải giữ ít nhất 1 char",
+              description: `Cậu toggle off hết tất cả chars rồi - Artist không cho roster trống. Nếu cậu muốn xoá hẳn roster **${session.accountName}**, dùng \`/remove-roster\` (lệnh dành riêng cho việc xoá hẳn account).`,
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -657,7 +709,13 @@ function createEditRosterCommand({
 
       if (selectedChars.length > MAX_CHARACTERS_PER_ACCOUNT) {
         await interaction.reply({
-          content: `${UI.icons.warn} Tối đa **${MAX_CHARACTERS_PER_ACCOUNT}** characters mỗi roster. Cậu đang chọn ${selectedChars.length} - bỏ bớt rồi confirm lại nhé.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: "Vượt cap roster",
+              description: `Mỗi roster Artist lưu được tối đa **${MAX_CHARACTERS_PER_ACCOUNT}** chars. Cậu đang chọn **${selectedChars.length}** - toggle off bớt vài char rồi Confirm lại nhé.`,
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -672,9 +730,15 @@ function createEditRosterCommand({
       } catch (err) {
         console.error(`[edit-roster] persist failed:`, err);
         await interaction.editReply({
-          embeds: [],
+          content: null,
           components: [],
-          content: `${UI.icons.warn} Lưu roster thất bại: ${err?.message || err}. Thử lại nhé.`,
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "error",
+              title: "Lưu roster fail",
+              description: `Artist lưu thay đổi không xong: ${err?.message || err}\n\nThử lại sau vài giây nhé. Nếu lặp lại nhiều lần ping ${adminMention} giúp Artist debug~`,
+            }),
+          ],
         });
         return;
       }

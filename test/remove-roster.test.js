@@ -215,10 +215,11 @@ test("remove-roster: rejects unknown action without touching state", async () =>
   // State unchanged.
   const stored = docs.get("user-1");
   assert.equal(stored.accounts[0].characters.length, 1);
-  // Ephemeral rejection emitted.
+  // Ephemeral rejection emitted as a notice embed (Artist persona).
   const replyArg = interaction._calls.reply[0];
   assert.equal(replyArg.flags, MessageFlags.Ephemeral);
-  assert.match(replyArg.content, /không hợp lệ/);
+  const embedJson = replyArg.embeds[0].toJSON();
+  assert.match(embedJson.title, /không hợp lệ/i);
 });
 
 test("remove-roster: rejects remove_char without a character argument", async () => {
@@ -236,7 +237,8 @@ test("remove-roster: rejects remove_char without a character argument", async ()
   assert.equal(stored.accounts[0].characters.length, 1);
   const replyArg = interaction._calls.reply[0];
   assert.equal(replyArg.flags, MessageFlags.Ephemeral);
-  assert.match(replyArg.content, /Cần chọn `character`/);
+  const embedJson = replyArg.embeds[0].toJSON();
+  assert.match(embedJson.title, /character/i);
 });
 
 test("remove-roster: surfaces 'No Roster' when user has no accounts", async () => {
