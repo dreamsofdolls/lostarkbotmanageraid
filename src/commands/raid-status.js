@@ -662,22 +662,45 @@ function createRaidStatusCommand(deps) {
     // (silent skip in the current outcome-line policy) - here we instead
     // surface the remaining cooldown via an ephemeral followup so the
     // click feedback is explicit.
-    const buildSyncRow = (disabled) =>
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("status:sync")
-          .setLabel("Sync ngay")
-          .setEmoji("🔄")
-          .setStyle(ButtonStyle.Primary)
-          .setDisabled(disabled)
+    // Resolve the per-user cooldown ms via the manager allowlist (15s
+    // for Manager, 10m for everyone else). Falls back to the legacy
+    // module constant if the helper isn't injected.
+    const resolveCooldownMs = () =>
+      typeof getAutoManageCooldownMs === "function"
+        ? getAutoManageCooldownMs(discordId)
+        : AUTO_MANAGE_SYNC_COOLDOWN_MS;
+
+    // Compose the Sync button label dynamically: when the user is
+    // currently within the per-user cooldown window, embed the
+    // remaining wait directly in the label so they can see "how
+    // long until I can re-sync" at a glance without clicking. When
+    // the cooldown has elapsed (or never started), label collapses
+    // to the cleaner "Sync ngay" call-to-action.
+    const computeSyncLabel = () => {
+      const remain = formatNextCooldownRemaining(
+        Number(statusUserMeta.lastAutoManageAttemptAt) || 0,
+        resolveCooldownMs()
       );
+      return remain ? `Sync (${remain})` : "Sync ngay";
+    };
+
+    const buildSyncButton = (disabled) =>
+      new ButtonBuilder()
+        .setCustomId("status:sync")
+        .setLabel(computeSyncLabel())
+        .setEmoji("🔄")
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(disabled);
+
+    const buildSyncRow = (disabled) =>
+      new ActionRowBuilder().addComponents(buildSyncButton(disabled));
 
     const buildComponents = (disabled) => {
       const rows = [];
       const showSync = statusUserMeta.autoManageEnabled;
       if (accounts.length > 1) {
         // Append Sync into the same row as Prev/Next so the 3 buttons
-        // sit on a single line ([◀ Previous] [Next ▶] [🔄 Sync ngay])
+        // sit on a single line ([◀ Previous] [Next ▶] [🔄 Sync (Xm)])
         // instead of taking 2 rows. ActionRow caps at 5 buttons; we
         // use 3 max so plenty of headroom.
         const paginationRow = buildPaginationRow(currentPage, accounts.length, disabled, {
@@ -685,14 +708,7 @@ function createRaidStatusCommand(deps) {
           nextId: "status:next",
         });
         if (showSync) {
-          paginationRow.addComponents(
-            new ButtonBuilder()
-              .setCustomId("status:sync")
-              .setLabel("Sync ngay")
-              .setEmoji("🔄")
-              .setStyle(ButtonStyle.Primary)
-              .setDisabled(disabled)
-          );
+          paginationRow.addComponents(buildSyncButton(disabled));
         }
         rows.push(paginationRow);
       } else if (showSync) {
