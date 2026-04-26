@@ -32,6 +32,10 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 - **25 earlier tests** (`test/add-roster.test.js` + `test/edit-roster.test.js`): race-safe overlap guard, single-session dup detection, account-match merge, per-char state preservation, multi-seed fallback, zero-overlap reject, saved-first sort against truncation, diff-apply add/remove/keep summary, vanished-account / vanished-user error paths.
 - Extracted `buildEditRosterPickerChars` helper in `commands/edit-roster.js` so the saved-first sort + cap truncation contract is unit-testable without driving the full Discord handler.
 
+### Added (pinned welcome embed: "Member mới? Bắt đầu ở đây" onboarding field)
+- Pinned welcome embed in `raid-channel-monitor.js` gets a new first field laying out the 3-step roster onboarding path: `/add-roster` (initial picker), `/edit-roster` (manage saved chars), `/raid-status` + `/raid-help` (view + docs). Newcomer scanning the pin top-down now sees the workflow before the post-format docs. Description trimmed to remove the now-duplicate `/add-roster` mention.
+- Existing guilds need `/raid-channel config action:rebuild` to swap the old pinned welcome for the new shape; new channels post the updated embed automatically.
+
 ### Changed (notice embeds + Artist voice across user-facing rejections)
 - All warning / info / lock / error rejection paths in `/add-roster`, `/edit-roster`, `/raid-set`, `/remove-roster` swapped from plain `interaction.reply({ content: "⚠️ ..." })` to color-coded notice embeds with title + description in Artist persona voice. Prior plain-text replies blended into channel chrome and read flat; the new format gives each rejection a clear visual identity (yellow=warn, blue=info, red=lock/error, gray=expired) and Artist's friendly first-person framing ("Artist không tìm thấy...", "Cậu chưa toggle char nào...", "Toggle off bớt vài char rồi Confirm lại nhé~").
 - New `buildNoticeEmbed(EmbedBuilder, { type, title, description })` helper in `src/raid/shared.js` so future call sites land on a consistent notice shape (color + icon + title + description) instead of recreating the embed scaffolding inline.
