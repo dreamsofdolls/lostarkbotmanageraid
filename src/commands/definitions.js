@@ -83,7 +83,17 @@ function createRaidCommandDefinitions({
 
   const raidHelpCommand = new SlashCommandBuilder()
     .setName("raid-help")
-    .setDescription("Show help for all raid commands");
+    .setDescription("Show help for all raid commands")
+    .addStringOption((option) =>
+      option
+        .setName("language")
+        .setDescription("Display language (default: Tiếng Việt)")
+        .setRequired(false)
+        .addChoices(
+          { name: "Tiếng Việt", value: "vi" },
+          { name: "English", value: "en" }
+        )
+    );
 
   const editRosterCommand = new SlashCommandBuilder()
     .setName("edit-roster")

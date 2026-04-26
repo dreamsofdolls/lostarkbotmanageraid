@@ -179,9 +179,13 @@ async function startBot() {
       "raid-auto-manage": handleRaidAutoManageAutocomplete,
       "raid-announce": handleRaidAnnounceAutocomplete,
     },
-    selectHandlers: {
-      "raid-help:select": handleRaidHelpSelect,
-    },
+    selectHandlers: {},
+    selectRoutes: [
+      // /raid-help dropdown customId carries the user's chosen language
+      // suffix: `raid-help:select:<lang>`. Prefix-routing lets the
+      // single handler dispatch all language variants.
+      { prefix: "raid-help:select:", handle: handleRaidHelpSelect },
+    ],
     buttonRoutes: [
       // Phase 2 /raid-check interactive buttons. Custom IDs follow the
       // shape "raid-check:<action>:<raidKey>" - dispatcher handles auth
