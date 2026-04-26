@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-26
 
+### Fixed (/add-roster: race-safe overlap guard inside saveWithRetry — Codex follow-up)
+
+- The earlier overlap guard (commit `4b94664`) ran ONLY at command time, immediately after the bible fetch. It fixed the single-session bug but missed the concurrent-session race: if two `/add-roster` sessions opened pickers against the same bible roster before either committed, both passed the command-time guard against an empty user doc, and the second Confirm could still split the same bible roster into a second account because `persistSelectedRoster`'s account-match logic only looked at `seedCharName` + the user's selection, never the full bible char list.
+- Fix: stash the full normalized bible name set into `session.bibleNames` and re-run the overlap check inside the `saveWithRetry` body, against the freshly-loaded userDoc, BEFORE creating a new account. Skips the account already identified as the merge target (overlap there is intentional). On collision, throw a typed error `{ code: "RACE_DUP_ROSTER", collidingAccountName }` — `saveWithRetry` only retries VersionError + E11000, so this error bubbles up cleanly to the Confirm handler which renders a friendly "concurrent session committed first, use /edit-roster" message.
+- Source: `feedback_codex/feedback_content.md` (Codex flagged after the previous fix shipped).
+
 ### Fixed (/add-roster: 2 bugs from Codex post-ship review)
 
 - **Duplicate-roster split**: the pre-fetch dup guard only checked `seedCharName` against existing accountNames + saved char names, missing the case where the user seeds with a real bible char they haven't saved yet but whose roster already lives under a different accountName. The post-confirm match logic in `persistSelectedRoster` only inspected the user's selection (not the full bible char list), so it would silently create a SECOND account pointing to the same bible roster — splitting one bible roster across two accounts and breaking the "1 bible roster = 1 account/user" invariant that `/remove-roster` + `/raid-set` rely on.
