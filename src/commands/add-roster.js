@@ -185,7 +185,7 @@ function createAddRosterCommand({
       .setFooter({ text: "Source: lostark.bible" });
   }
 
-  function buildSavedEmbed(session, savedAccount) {
+  function buildSavedEmbed(session, savedAccount, dmDelivery = null) {
     const summaryLines = savedAccount.characters.map(
       (character, index) =>
         `${index + 1}. ${character.name} · ${character.class} · \`${character.itemLevel}\` · \`${character.combatScore || "?"}\``
@@ -198,6 +198,21 @@ function createAddRosterCommand({
       descriptionLines.push(
         `\n${UI.icons.info} Roster này được Raid Manager <@${session.callerId}> add giúp <@${session.targetId}> nha~`
       );
+      // Surface DM-delivery status so the Manager knows whether the
+      // target got a private notice or only the channel ping.
+      if (dmDelivery?.delivered) {
+        descriptionLines.push(
+          `📩 Artist đã DM riêng cho <@${session.targetId}> kèm full chars list.`
+        );
+      } else if (dmDelivery?.reason === "dms-disabled") {
+        descriptionLines.push(
+          `${UI.icons.warn} Không DM được cho <@${session.targetId}> (target tắt DM từ server members). Channel ping ở trên là backup nha.`
+        );
+      } else if (dmDelivery?.reason === "error") {
+        descriptionLines.push(
+          `${UI.icons.warn} DM cho <@${session.targetId}> fail (lỗi khác). Channel ping vẫn ok.`
+        );
+      }
     }
     return new EmbedBuilder()
       .setTitle(`${UI.icons.roster} Roster Synced`)
@@ -210,6 +225,72 @@ function createAddRosterCommand({
       .setColor(UI.colors.success)
       .setFooter({ text: "Source: lostark.bible" })
       .setTimestamp();
+  }
+
+  // Personal DM embed for the Manager-target onboarding flow. Mirrors
+  // buildSavedEmbed's content but with a Manager-friendly intro line +
+  // hints at the next-step commands (/raid-status, /edit-roster) so
+  // the target knows what to do without scrolling channel chrome.
+  function buildTargetDMEmbed(session, savedAccount, guildName) {
+    const summaryLines = savedAccount.characters.map(
+      (character, index) =>
+        `${index + 1}. ${character.name} · ${character.class} · \`${character.itemLevel}\` · \`${character.combatScore || "?"}\``
+    );
+    const guildLine = guildName ? ` trong server **${guildName}**` : "";
+    return new EmbedBuilder()
+      .setTitle(`${UI.icons.roster} Roster mới do Manager add giúp cậu`)
+      .setDescription(
+        [
+          `Heya~ Raid Manager <@${session.callerId}> vừa add giúp cậu một roster mới${guildLine}. Artist DM riêng cho cậu xem cho tiện nha.`,
+          "",
+          `Roster: [**${savedAccount.accountName}**](${buildSeedRosterLink(session.seedCharName)})`,
+          `Đã save **${savedAccount.characters.length}** characters.`,
+          "",
+          "Vài lệnh tiếp theo:",
+          "• `/raid-status` → xem tiến độ raid mọi lúc",
+          "• `/edit-roster` → chỉnh sửa nếu có chars sai (thêm/bỏ)",
+          "• `/raid-help` → tài liệu đầy đủ mọi lệnh",
+        ].join("\n")
+      )
+      .addFields({
+        name: `Characters (${savedAccount.characters.length})`,
+        value: summaryLines.join("\n").slice(0, 1024),
+        inline: false,
+      })
+      .setColor(UI.colors.success)
+      .setFooter({ text: "Source: lostark.bible · Artist Bot" })
+      .setTimestamp();
+  }
+
+  // Best-effort DM to the target user when Manager added on their
+  // behalf. Returns a delivery report so the channel embed can surface
+  // success / failure ("📩 Đã DM" vs "⚠️ Không DM được"). Discord
+  // API code 50007 = "Cannot send messages to this user" — fires when
+  // target has DMs from server members disabled, has blocked the bot,
+  // or shares no mutual servers (latter shouldn't happen here since
+  // they're in the slash command's guild). Treated as expected, not
+  // an error.
+  async function tryDeliverTargetDM(client, session, savedAccount, guildName) {
+    if (!session.actingForOther || !session.targetId) {
+      return { delivered: false, reason: "not-acting-for-other" };
+    }
+    try {
+      const targetUser = await client.users.fetch(session.targetId);
+      await targetUser.send({
+        embeds: [buildTargetDMEmbed(session, savedAccount, guildName)],
+      });
+      return { delivered: true };
+    } catch (err) {
+      const dmsDisabled =
+        err?.code === 50007 || err?.rawError?.code === 50007;
+      console.warn(
+        `[add-roster] DM to target ${session.targetId} failed${dmsDisabled ? " (DMs disabled)" : ""}: ${err?.message || err}`
+      );
+      return {
+        delivered: false,
+        reason: dmsDisabled ? "dms-disabled" : "error",
+      };
+    }
   }
 
   // The save path used to live inline in handleAddRosterCommand; pulled
@@ -700,6 +781,23 @@ function createAddRosterCommand({
         return;
       }
 
+      // Manager target onboarding: best-effort DM to the target user
+      // BEFORE the channel embed lands, so the embed can surface DM
+      // delivery status ("📩 Đã DM" / "⚠️ Không DM được"). DM is the
+      // primary notification (cleaner, persistent in target's inbox);
+      // channel ping below stays as both audit proof + fallback when
+      // DMs are blocked.
+      let dmDelivery = null;
+      if (session.actingForOther) {
+        const guildName = interaction.guild?.name || null;
+        dmDelivery = await tryDeliverTargetDM(
+          interaction.client,
+          session,
+          savedAccount,
+          guildName
+        );
+      }
+
       // Ping the target user when Manager added on their behalf. Discord
       // ONLY fires notifications for mentions in the message `content`
       // field — mentions inside an embed description don't ping anyone,
@@ -710,7 +808,7 @@ function createAddRosterCommand({
         content: session.actingForOther
           ? `<@${session.targetId}> Heya~ Manager <@${session.callerId}> vừa add giúp roster này cho cậu rồi nhé. Check thử xem chars có đúng không, sai thì \`/edit-roster\` sửa được.`
           : null,
-        embeds: [buildSavedEmbed(session, savedAccount)],
+        embeds: [buildSavedEmbed(session, savedAccount, dmDelivery)],
         components: [],
         allowedMentions: session.actingForOther
           ? { users: [session.targetId] }
