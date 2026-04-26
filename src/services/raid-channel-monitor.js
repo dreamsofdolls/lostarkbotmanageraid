@@ -885,8 +885,14 @@ function createRaidChannelMonitorService({
       let whisperMsg = null;
       if (dmSucceeded && whisperAckEnabled) {
         try {
+          // Whisper fires AFTER the DM has already been sent, so the
+          // copy must reflect that — earlier wording said "Chờ Artist
+          // 5 giây gửi qua DM" which read as if the DM was still
+          // pending. The 5s delay is purely for the channel cleanup
+          // window (gives the user time to see the ack before both
+          // the whisper + the original post vanish).
           whisperMsg = await message.channel.send({
-            content: `<@${message.author.id}> ...Artist nhận được rồi nha~ Chờ Artist 5 giây gửi kết quả qua DM cho cậu nhé...`,
+            content: `<@${message.author.id}> ...Artist DM kết quả cho cậu rồi nha~ Channel sẽ tự dọn cả 2 tin nhắn sau 5 giây...`,
             allowedMentions: { users: [message.author.id] },
           });
         } catch (err) {
