@@ -99,7 +99,7 @@ const ANNOUNCEMENT_REGISTRY = {
     dedup: "Không có - fire mỗi message hợp lệ (đã được rate-limit bởi per-user cooldown 2 giây).",
     messageTtl: "5 giây rồi Artist xóa cùng tin gốc",
     previewContent:
-      "<@user> ...Artist nhận được rồi nha~ Chờ Artist 5 giây gửi kết quả qua DM cho cậu nhé...",
+      "<@user> ...Artist DM kết quả cho cậu rồi nha~ Channel sẽ tự dọn cả 2 tin nhắn sau 5 giây...",
   },
 };
 
