@@ -126,11 +126,14 @@ test("remove-roster: remove_roster deletes the entire account", async () => {
   const stored = docs.get("user-1");
   assert.equal(stored.accounts.length, 1);
   assert.equal(stored.accounts[0].accountName, "Bravo");
-  // Reply embed should reference the removed account + char count.
+  // Reply embed should reference the removed account in the
+  // Artist-voice description (cold field table dropped — content lives
+  // in the description sentence now).
   const replyArg = interaction._calls.reply[0];
   const embedJson = replyArg.embeds[0].toJSON();
-  assert.match(embedJson.title, /Roster Removed/);
-  assert.ok(embedJson.fields.find((f) => f.value.includes("Alpha")));
+  assert.match(embedJson.title, /Đã xoá roster/);
+  assert.match(embedJson.description, /Alpha/);
+  assert.match(embedJson.description, /2\*\* character/);
 });
 
 test("remove-roster: remove_char drops one char from the account, others stay", async () => {

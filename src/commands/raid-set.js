@@ -514,14 +514,19 @@ function createRaidSetCommand(deps) {
     }
     if (result.alreadyComplete) {
       const scope = effectiveGate ? `${raidMeta.label} · ${effectiveGate}` : raidMeta.label;
+      // Description carries the same trio of facts (character / raid /
+      // gate) inline. Dropping the cold 3-field inline table avoids the
+      // "tabular log entry" feel the embed used to have — Artist voice
+      // reads as a sentence instead of a database row.
       const alreadyEmbed = new EmbedBuilder()
         .setColor(UI.colors.progress)
-        .setTitle(`${UI.icons.info} Đã DONE từ trước rồi`)
-        .setDescription(`**${characterName}** đã clear **${scope}** tuần này rồi, không update lại. Nếu cậu muốn reset, đổi \`status\` sang \`reset\` và chạy lại nhé.`)
-        .addFields(
-          { name: "Character", value: `**${characterName}**`, inline: true },
-          { name: "Raid", value: `**${raidMeta.label}**`, inline: true },
-          { name: "Gate", value: effectiveGate || "All gates", inline: true },
+        .setTitle(`${UI.icons.info} Đã DONE từ trước rồi nha~`)
+        .setDescription(
+          [
+            `**${characterName}** đã clear **${scope}** tuần này rồi, Artist không update đè lại đâu nha.`,
+            "",
+            `Nếu thực sự muốn reset, đổi option \`status\` sang \`reset\` rồi chạy lại - tớ sẽ xoá sạch tiến độ tuần này.`,
+          ].join("\n")
         )
         .setTimestamp();
       await interaction.reply({ embeds: [alreadyEmbed], flags: MessageFlags.Ephemeral });
@@ -531,12 +536,13 @@ function createRaidSetCommand(deps) {
       const scope = effectiveGate ? `${raidMeta.label} · ${effectiveGate}` : raidMeta.label;
       const alreadyResetEmbed = new EmbedBuilder()
         .setColor(UI.colors.muted)
-        .setTitle(`${UI.icons.info} Raid này vốn đã sạch rồi`)
-        .setDescription(`**${characterName}** ở **${scope}** chưa có gate nào được đánh dấu xong cả, Artist chẳng có gì để xoá cho cậu đâu~ Nếu cậu muốn đánh dấu gate xong xuôi thì đổi \`status\` sang \`complete\` hoặc \`process\` rồi chạy lại giúp tớ nha.`)
-        .addFields(
-          { name: "Character", value: `**${characterName}**`, inline: true },
-          { name: "Raid", value: `**${raidMeta.label}**`, inline: true },
-          { name: "Gate", value: effectiveGate || "Toàn bộ gate", inline: true },
+        .setTitle(`${UI.icons.info} Raid vốn đã sạch sẵn rồi`)
+        .setDescription(
+          [
+            `**${characterName}** ở **${scope}** chưa có gate nào được đánh dấu xong cả, Artist chẳng có gì để xoá cho cậu đâu~`,
+            "",
+            `Nếu cậu muốn đánh dấu gate xong xuôi thì đổi \`status\` sang \`complete\` hoặc \`process\` rồi chạy lại giúp tớ nha.`,
+          ].join("\n")
         )
         .setTimestamp();
       await interaction.reply({ embeds: [alreadyResetEmbed], flags: MessageFlags.Ephemeral });
@@ -558,22 +564,33 @@ function createRaidSetCommand(deps) {
       return;
     }
     const markedDone = statusType === "complete" || statusType === "process";
-    const titleText =
-      statusType === "process" ? "Gate Completed" :
-      statusType === "complete" ? "Raid Completed" :
-      "Raid Reset";
+    // Title + Artist-voice description. Dropping the 3-column inline
+    // field table (Character / Raid / Gates) — that read like a
+    // database log entry. Description carries the same facts as a
+    // sentence, with statusType-specific phrasing for nuance:
+    //   - process: "vừa clear G_X" + roadmap hint
+    //   - complete: "mark cả raid done"
+    //   - reset:    "xoá sạch tiến độ"
+    let titleText;
+    let descText;
+    if (statusType === "process") {
+      titleText = "Gate clear xong nha~";
+      descText = `Artist mark **${effectiveGate}** của **${raidMeta.label}** done cho **${characterName}** rồi nha. Còn gate khác cứ post tiếp hoặc \`/raid-set status:process gate:G2\` khi clear xong - tớ tự cộng dồn theo Lost Ark sequential progression.`;
+    } else if (statusType === "complete") {
+      titleText = "Raid done luôn nha~";
+      descText = `Artist mark cả **${raidMeta.label}** done cho **${characterName}** rồi. Tuần này khỏi lo nữa, đợi reset thứ 4 17h VN tuần sau là làm lại từ đầu.`;
+    } else {
+      titleText = "Đã reset sạch";
+      descText = `Artist xoá sạch tiến độ **${raidMeta.label}** của **${characterName}** tuần này rồi nha. Giờ cậu có thể đánh dấu lại từ đầu khi clear xong - dùng \`/raid-set\` hoặc post format trong raid channel.`;
+    }
     const resultEmbed = new EmbedBuilder()
       .setTitle(`${markedDone ? UI.icons.done : UI.icons.reset} ${titleText}`)
       .setColor(markedDone ? UI.colors.success : UI.colors.muted)
-      .addFields(
-        { name: "Character", value: `**${characterName}**`, inline: true },
-        { name: "Raid", value: `**${raidMeta.label}**`, inline: true },
-        { name: "Gates", value: effectiveGate || "All gates", inline: true },
-      )
+      .setDescription(descText)
       .setTimestamp();
     if (result.modeResetCount > 0) {
       resultEmbed.setFooter({
-        text: `Switched difficulty to ${result.selectedDifficulty} - previous mode progress cleared for a consistent state.`,
+        text: `Mode đổi sang ${result.selectedDifficulty} - tiến độ mode cũ bị xoá để giữ data consistent.`,
       });
     }
     await interaction.reply({ embeds: [resultEmbed], flags: MessageFlags.Ephemeral });

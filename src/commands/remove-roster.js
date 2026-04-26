@@ -149,12 +149,23 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
         const removedCount = Array.isArray(account.characters) ? account.characters.length : 0;
         userDoc.accounts.splice(accountIndex, 1);
         await userDoc.save();
+        // Description-driven layout (no cold field table). Artist voice
+        // states what happened + reminds the user the action is
+        // reversible via /add-roster, so the destructive `danger` color
+        // is balanced by a recovery hint in the copy.
+        const charPart =
+          removedCount === 0
+            ? "(account không có character nào)"
+            : `cùng **${removedCount}** character${removedCount === 1 ? "" : "s"}`;
         replyEmbed = new EmbedBuilder()
           .setColor(UI.colors.danger)
-          .setTitle(`🗑️ Roster Removed`)
-          .addFields(
-            { name: "Roster", value: `**${account.accountName}**`, inline: true },
-            { name: "Characters removed", value: `${removedCount}`, inline: true },
+          .setTitle(`🗑️ Đã xoá roster`)
+          .setDescription(
+            [
+              `Artist vừa dọn sạch roster **${account.accountName}** ${charPart} khỏi DB của cậu.`,
+              "",
+              `Tất cả tiến độ raid trong account này không còn nữa. Muốn add lại thì chạy \`/add-roster name:<tên-char>\` để Artist mở picker mới nha~`,
+            ].join("\n")
           )
           .setTimestamp();
         return;
@@ -193,18 +204,25 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
         }
       }
       await userDoc.save();
+      const remaining = account.characters.length;
+      const remainingPart =
+        remaining === 0
+          ? "Roster giờ trống — cậu có thể `/remove-roster` để xoá hẳn account, hoặc `/edit-roster` để add lại chars mới."
+          : `Roster **${account.accountName}** còn lại **${remaining}** character${remaining === 1 ? "" : "s"}.`;
       const embed = new EmbedBuilder()
         .setColor(UI.colors.muted)
-        .setTitle(`🗑️ Character Removed`)
-        .addFields(
-          { name: "Character", value: `**${characterName}**`, inline: true },
-          { name: "Roster", value: `**${account.accountName}**`, inline: true },
-          { name: "Remaining", value: `${account.characters.length} character${account.characters.length === 1 ? "" : "s"}`, inline: true },
+        .setTitle(`🗑️ Đã xoá character`)
+        .setDescription(
+          [
+            `Artist vừa xoá **${characterName}** khỏi roster **${account.accountName}** nha.`,
+            "",
+            remainingPart,
+          ].join("\n")
         )
         .setTimestamp();
       if (reseededTo) {
         embed.setFooter({
-          text: `Roster seed re-pointed to "${reseededTo}" so /raid-status refresh keeps working.`,
+          text: `Seed roster đổi sang "${reseededTo}" để /raid-status refresh tiếp tục hoạt động.`,
         });
       }
       replyEmbed = embed;
