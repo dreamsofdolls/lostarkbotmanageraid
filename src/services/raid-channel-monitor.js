@@ -347,7 +347,12 @@ function createRaidChannelMonitorService({
   function buildRaidChannelWelcomeEmbed() {
     return new EmbedBuilder()
       .setColor(UI.colors.neutral)
-      .setTitle(`🦊 Chào các bạn~ Artist ngồi trông channel này nhé`)
+      // Custom Artist persona emoji (chibi shy face) replaces the legacy
+      // generic 🦊 fox. Discord embed title supports custom emoji syntax
+      // `<:name:id>` on modern clients - if it renders as literal text on
+      // any client, move this prefix into the description first line
+      // instead (description always renders custom emoji reliably).
+      .setTitle(`<:artist_chibi:1083410606671003698> Chào các bạn~ Artist ngồi trông channel này nhé`)
       .setDescription(
         [
           "Mỗi lần clear raid xong, cứ post 1 tin nhắn ngắn dạng `<raid> <difficulty> <character[, character2, ...]> [gate]` vào đây là Artist sẽ tự đánh dấu progress giúp cậu, xong tớ dọn luôn tin nhắn cho channel khỏi rối nha~",
