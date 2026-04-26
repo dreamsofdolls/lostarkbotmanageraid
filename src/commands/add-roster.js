@@ -185,8 +185,22 @@ function createAddRosterCommand({
   // The save path used to live inline in handleAddRosterCommand; pulled
   // out so Confirm can reuse the same logic without round-tripping the
   // whole command. Returns a plain account snapshot for embed rendering.
+  //
+  // Throws an Error with code "RACE_DUP_ROSTER" + collidingAccountName
+  // when the freshly-loaded userDoc already contains an account whose
+  // chars overlap the bible roster we fetched. The Confirm handler
+  // catches this and renders a user-friendly hint pointing to /edit-roster.
   async function persistSelectedRoster(session, selectedChars) {
     const rosterNameSet = new Set(selectedChars.map((c) => normalizeName(c.charName)));
+    // Full bible char names from the fetch that opened this picker.
+    // Used inside the saveWithRetry body to detect a concurrent
+    // /add-roster session that committed first against the same bible
+    // roster (race the command-time guard can't catch). Empty Set is
+    // a no-op skip — preserves behavior if a future caller forgets
+    // to populate session.bibleNames.
+    const bibleNameSet = session.bibleNames instanceof Set
+      ? session.bibleNames
+      : new Set();
     let savedAccount;
     await saveWithRetry(async () => {
       let userDoc = await User.findOne({ discordId: session.discordId });
@@ -201,6 +215,34 @@ function createAddRosterCommand({
         if (chars.some((character) => normalizeName(getCharacterName(character)) === normalizedSeed)) return true;
         return chars.some((character) => rosterNameSet.has(normalizeName(getCharacterName(character))));
       });
+
+      // Race-safe overlap guard: re-check, with the freshest userDoc, that
+      // no OTHER account already covers the bible roster we're about to
+      // create/merge into. Skip the account we identified above as our
+      // target — that's where merging is supposed to happen and any
+      // overlap there is by design. Catches the case where two
+      // /add-roster sessions opened pickers concurrently (both passed
+      // the command-time guard against an empty user doc), then the
+      // first session committed an account that the second session can
+      // no longer ignore.
+      if (bibleNameSet.size > 0) {
+        const collidingAccount = userDoc.accounts.find((item) => {
+          if (account && item === account) return false;
+          const chars = Array.isArray(item.characters) ? item.characters : [];
+          return chars.some((character) =>
+            bibleNameSet.has(normalizeName(getCharacterName(character)))
+          );
+        });
+        if (collidingAccount) {
+          const err = new Error(
+            `Roster đã được saved ở account '${collidingAccount.accountName}' (concurrent /add-roster session committed first).`
+          );
+          err.code = "RACE_DUP_ROSTER";
+          err.collidingAccountName = collidingAccount.accountName;
+          throw err;
+        }
+      }
+
       if (!account) {
         userDoc.accounts.push({ accountName: session.seedCharName, characters: [] });
         account = userDoc.accounts[userDoc.accounts.length - 1];
@@ -348,10 +390,17 @@ function createAddRosterCommand({
     // two accounts and breaking the "1 bible roster = 1 account/user"
     // invariant that /remove-roster + /raid-set rely on. Direct users to
     // /edit-roster instead since that's exactly the right tool here.
+    // Build the bible name set once: used both for the command-time
+    // overlap guard below AND stashed into session.bibleNames so
+    // persistSelectedRoster can re-run the same overlap check inside
+    // saveWithRetry against the FRESH userDoc (catches the race where
+    // a concurrent /add-roster session committed first between command
+    // time and Confirm).
+    const bibleNameSet = new Set(
+      rosterCharacters.map((c) => normalizeName(c.charName))
+    );
+
     if (existingUser && Array.isArray(existingUser.accounts)) {
-      const bibleNameSet = new Set(
-        rosterCharacters.map((c) => normalizeName(c.charName))
-      );
       const collidingAccount = existingUser.accounts.find((account) => {
         const chars = Array.isArray(account.characters) ? account.characters : [];
         return chars.some((c) =>
@@ -394,6 +443,12 @@ function createAddRosterCommand({
       discordId,
       actingForOther,
       seedCharName,
+      // Snapshot of the FULL bible roster's normalized char names from
+      // this fetch — feeds the race-safe overlap guard inside
+      // persistSelectedRoster. NOT just the displayed (capped) chars
+      // because two sessions on the same bible roster could each truncate
+      // to different 25-char windows yet still represent the same roster.
+      bibleNames: bibleNameSet,
       chars: displayChars.map((c) => ({
         charName: c.charName,
         className: c.className,
@@ -518,6 +573,20 @@ function createAddRosterCommand({
       try {
         savedAccount = await persistSelectedRoster(session, selectedChars);
       } catch (err) {
+        // Race-detected duplicate (a concurrent /add-roster session
+        // committed first against the same bible roster). Friendly
+        // hint + steer to /edit-roster instead of a generic error.
+        if (err?.code === "RACE_DUP_ROSTER") {
+          console.warn(
+            `[add-roster] race-detected duplicate roster: ${err.collidingAccountName}`
+          );
+          await interaction.editReply({
+            embeds: [],
+            components: [],
+            content: `${UI.icons.warn} Trong lúc cậu đang chọn, một phiên \`/add-roster\` khác vừa save xong roster này ở account **${err.collidingAccountName}**. Dùng \`/edit-roster roster:${err.collidingAccountName}\` để add chars mới vào account đó nhé.`,
+          });
+          return;
+        }
         console.error(`[add-roster] persist failed:`, err);
         await interaction.editReply({
           embeds: [],
