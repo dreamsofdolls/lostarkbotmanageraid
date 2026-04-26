@@ -574,9 +574,9 @@ function createRaidCheckCommand(deps) {
     const FILTER_ALL = "__all__";
 
     // Per-user pending tally + role breakdown so the user-filter dropdown
-    // can render "Du · 8 pending (2🪄 6⚔️)" instead of bare "(8 pending)".
+    // can render "Du · 8 pending (2🛡️ 6⚔️)" instead of bare "(8 pending)".
     // Hard-support classes (Bard / Paladin / Artist / Valkyrie) get the
-    // 🪄 bucket; everything else is DPS. Without this split it's hard to
+    // 🛡️ bucket; everything else is DPS. Without this split it's hard to
     // tell whether a heavy backlog is composition-blocking (no supports
     // ready) or just queue depth.
     const userPendingTotals = new Map();
@@ -716,13 +716,13 @@ function createRaidCheckCommand(deps) {
         },
         ...userDropdownEntries.map(([discordId, tally]) => {
           // Collapse the role-breakdown suffix when the user has 0 pending -
-          // "(0 pending · 0🪄 0⚔️)" reads as noise that takes longer to parse
+          // "(0 pending · 0🛡️ 0⚔️)" reads as noise that takes longer to parse
           // than the more informative "(DONE)". Only the DONE marker stays
           // so leaders can scan the dropdown for who's still actually
           // outstanding without filtering by hand.
           const suffix = tally.total === 0
             ? "DONE"
-            : `${tally.total} pending · ${tally.supports}🪄 ${tally.dps}⚔️`;
+            : `${tally.total} pending · ${tally.supports}🛡️ ${tally.dps}⚔️`;
           return {
             label: truncateText(
               `${displayMap.get(discordId) || discordId} (${suffix})`,

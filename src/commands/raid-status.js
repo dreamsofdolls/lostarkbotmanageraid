@@ -490,7 +490,7 @@ function createRaidStatusCommand(deps) {
     // per raid" reference. Sorted pending desc so the heaviest backlog
     // surfaces first.
     // Per-raid entries also track {supports, dps} so the dropdown label
-    // can render "Aegir Hard (3 pending · 1🪄 2⚔️)" - lets the caller see
+    // can render "Aegir Hard (3 pending · 1🛡️ 2⚔️)" - lets the caller see
     // at a glance whether a raid's backlog is composition-blocking (no
     // supports left) or just queue depth. Hard-support classes are Bard
     // / Paladin / Artist / Valkyrie; everyone else counts as DPS.
@@ -588,11 +588,11 @@ function createRaidStatusCommand(deps) {
       ];
       for (const r of raidDropdownEntries.slice(0, 24)) {
         // Caller has cleared every eligible char of this raid -> show
-        // "DONE" instead of "0 pending · 0🪄 0⚔️". Cleaner scan when most
+        // "DONE" instead of "0 pending · 0🛡️ 0⚔️". Cleaner scan when most
         // of the roster is up to date but a couple raids still drag.
         const suffix = r.pending === 0
           ? "DONE"
-          : `${r.pending} pending · ${r.supports}🪄 ${r.dps}⚔️`;
+          : `${r.pending} pending · ${r.supports}🛡️ ${r.dps}⚔️`;
         options.push({
           label: truncateText(
             `${r.label} (${suffix})`,

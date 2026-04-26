@@ -330,9 +330,9 @@ function createAllModeHandler({
     // that the double-use is free, but the DRY keeps both counts
     // guaranteed consistent.
     // perUserPending entries are { count, supports, dps } so the
-    // user-filter dropdown can render "Du · 8 pending (2🪄 6⚔️)" instead
+    // user-filter dropdown can render "Du · 8 pending (2🛡️ 6⚔️)" instead
     // of bare "(8 pending)". Hard-support classes (Bard / Paladin /
-    // Artist / Valkyrie) get the 🪄 bucket; everything else is DPS.
+    // Artist / Valkyrie) get the 🛡️ bucket; everything else is DPS.
     // Without this split it's hard to tell whether a heavy backlog is
     // composition-blocking (no supports ready) or just queue depth.
     const computePendingAggregate = ({ raidFilter, userFilter }) => {
@@ -420,11 +420,11 @@ function createAllModeHandler({
             b.pending - a.pending || a.displayName.localeCompare(b.displayName)
         );
       for (const u of sortedUsers.slice(0, 24)) {
-        // 0 pending -> "DONE" instead of "0 pending · 0🪄 0⚔️". The
+        // 0 pending -> "DONE" instead of "0 pending · 0🛡️ 0⚔️". The
         // breakdown suffix only adds info when there's actual backlog.
         const suffix = u.pending === 0
           ? "DONE"
-          : `${u.pending} pending · ${u.supports}🪄 ${u.dps}⚔️`;
+          : `${u.pending} pending · ${u.supports}🛡️ ${u.dps}⚔️`;
         options.push({
           label: truncateText(
             `${u.displayName} (${suffix})`,
@@ -477,11 +477,11 @@ function createAllModeHandler({
       // raid additions.
       for (const r of raidEntries.slice(0, 24)) {
         // Same DONE-vs-breakdown rule as the user dropdown above:
-        // "0 pending · 0🪄 0⚔️" reads as noise; collapse to "DONE" so
+        // "0 pending · 0🛡️ 0⚔️" reads as noise; collapse to "DONE" so
         // the leader scans the raid list for actually-pending entries.
         const suffix = r.pending === 0
           ? "DONE"
-          : `${r.pending} pending · ${r.supports}🪄 ${r.dps}⚔️`;
+          : `${r.pending} pending · ${r.supports}🛡️ ${r.dps}⚔️`;
         options.push({
           label: truncateText(`${r.label} (${suffix})`, 100),
           value: r.key,

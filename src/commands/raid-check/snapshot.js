@@ -84,7 +84,7 @@ function createSnapshotHelpers({
             accountName: account.accountName || "(no name)",
             charName: getCharacterName(character),
             // Carried so the user-filter dropdown can show a per-user
-            // support/DPS breakdown ("8 pending · 2🪄 6⚔️"). Without
+            // support/DPS breakdown ("8 pending · 2🛡️ 6⚔️"). Without
             // this the dropdown only knows the total, which makes it
             // hard to tell whether a backlog is composition-blocking
             // (low support count) or just queue depth.
