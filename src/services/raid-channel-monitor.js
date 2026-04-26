@@ -369,16 +369,16 @@ function createRaidChannelMonitorService({
       )
       .addFields(
         {
-          // Onboarding workflow lives in the first field so a brand new
-          // member scanning the pin top-down sees the 3-step path before
-          // the post-format docs (which only matter once they have a
-          // roster). Keeps the pin functional as a "getting started"
-          // surface without duplicating the full /raid-help content.
-          name: "🚀 Member mới? Bắt đầu ở đây",
+          // Onboarding workflow lives in the first field so một newcomer
+          // scan pin top-down sẽ gặp 3 bước trước docs format post.
+          // Word choice: ưu tiên VN cho động từ thường (lấy/chọn/theo dõi/
+          // thêm/bỏ/xem) — giữ lại các từ technical / nhãn nút thật
+          // (`picker`, `Confirm`, `command`, `language`) để khớp UI thật.
+          name: "🚀 Mới vào server? Bắt đầu ở đây",
           value: [
-            "1. `/add-roster name:<tên-char-bất-kỳ>` → Artist fetch roster từ lostark.bible, mở picker để cậu toggle ✅ chars muốn track rồi Confirm.",
-            "2. `/edit-roster roster:<tên>` → sau này muốn add chars mới vào roster đã có hoặc xoá chars không còn chơi.",
-            "3. `/raid-status` → xem progress raid của mình mọi lúc · `/raid-help` → docs đầy đủ mọi command (có toggle `language: English`).",
+            "1. `/add-roster name:<tên-char-bất-kỳ>` → Artist lấy roster từ lostark.bible, mở picker để cậu chọn ✅ chars muốn theo dõi rồi bấm **Confirm**.",
+            "2. `/edit-roster roster:<tên>` → sau này muốn thêm chars mới vào roster đã có hoặc bỏ chars không còn chơi.",
+            "3. `/raid-status` → xem tiến độ raid mọi lúc · `/raid-help` → tài liệu đầy đủ mọi lệnh (có tuỳ chọn `language: English`).",
           ].join("\n"),
         },
         {
@@ -442,7 +442,7 @@ function createRaidChannelMonitorService({
           ].join("\n"),
         }
       )
-      .setFooter({ text: "Muốn xem full hướng dẫn tất cả commands? Gõ /raid-help nhé~" });
+      .setFooter({ text: "Muốn xem hướng dẫn đầy đủ tất cả lệnh? Gõ /raid-help nhé~" });
   }
   async function postTransientReply(message, content) {
     try {
