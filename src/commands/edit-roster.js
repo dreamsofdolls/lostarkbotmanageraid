@@ -6,10 +6,12 @@ const crypto = require("crypto");
 // short enough that abandoned sessions don't pile up in memory.
 const SESSION_TTL_MS = 5 * 60 * 1000;
 
-// Discord StringSelectMenu cap. Real Lost Ark rosters max out at ~18
-// characters per account, so 25 covers everyone with headroom. Matches
-// the cap used by /add-roster's picker.
-const SELECT_MAX_OPTIONS = 25;
+// Discord caps a message at 5 ActionRow components. The picker layout
+// reserves 1 row for Confirm + Cancel buttons, leaving 4 rows for
+// per-char toggle buttons at 5 buttons per row = 20 max chars in the
+// picker. Matches the cap used by /add-roster's picker.
+const PICKER_MAX_OPTIONS = 20;
+const BUTTONS_PER_ROW = 5;
 
 const CHECK_ICON = "✅";
 const UNCHECK_ICON = "⬜";
@@ -18,7 +20,6 @@ const STALE_TAG = "📦"; // saved locally but not in current bible roster
 
 function createEditRosterCommand({
   EmbedBuilder,
-  StringSelectMenuBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -192,17 +193,19 @@ function createEditRosterCommand({
   }
 
   function buildSelectionEmbed(session) {
+    // Char list shows stats + tag (🆕/📦) only — selection state lives
+    // on the per-char toggle buttons below so embed and controls don't
+    // duplicate the same ✅/⬜ marker visually.
     const lines = session.chars.map((c, i) => {
-      const checked = session.selectedIndices.has(i) ? CHECK_ICON : UNCHECK_ICON;
       const cp = c.combatScore || "?";
       const tag = tagFor(c);
       const tagSuffix = tag ? ` · ${tag}` : "";
-      return `${checked} **${i + 1}.** ${c.charName} · ${c.className} · iLvl \`${c.itemLevel}\` · CP \`${cp}\`${tagSuffix}`;
+      return `**${i + 1}.** ${c.charName} · ${c.className} · iLvl \`${c.itemLevel}\` · CP \`${cp}\`${tagSuffix}`;
     });
 
     const desc = [
       `Roster: **${session.accountName}**`,
-      `Đang edit - tick những char muốn **giữ/add**, bỏ tick những char muốn **xoá**:`,
+      `Đang edit - bấm nút bên dưới để toggle ✅/⬜ chars muốn **giữ/add** vs **xoá**:`,
       "",
       ...lines,
       "",
@@ -222,7 +225,7 @@ function createEditRosterCommand({
     if (session.excludedBibleOnlyCount > 0) {
       desc.push("");
       desc.push(
-        `${UI.icons.warn} ${session.excludedBibleOnlyCount} char mới ở bible chưa hiện được do cap ${SELECT_MAX_OPTIONS} đầy. Bỏ tick saved char muốn xoá rồi Confirm trước, sau đó \`/edit-roster\` lần nữa để add tiếp char mới còn lại.`
+        `${UI.icons.warn} ${session.excludedBibleOnlyCount} char mới ở bible chưa hiện được do cap ${PICKER_MAX_OPTIONS} đầy. Toggle off saved char muốn xoá rồi Confirm trước, sau đó \`/edit-roster\` lần nữa để add tiếp char mới còn lại.`
       );
     }
     desc.push(
@@ -237,24 +240,32 @@ function createEditRosterCommand({
   }
 
   function buildSelectionComponents(session) {
-    const options = session.chars.map((c, i) => {
-      const cpLabel = c.combatScore || "?";
-      const tag = tagFor(c);
-      const tagSuffix = tag ? ` · ${tag}` : "";
-      return {
-        label: `${i + 1}. ${c.charName} (${c.className})`.slice(0, 100),
-        description: `iLvl ${c.itemLevel} · CP ${cpLabel}${tagSuffix}`.slice(0, 100),
-        value: String(i),
-        default: session.selectedIndices.has(i),
-      };
-    });
-
-    const select = new StringSelectMenuBuilder()
-      .setCustomId(`edit-roster:select:${session.sessionId}`)
-      .setPlaceholder(`Tick chars muốn giữ/add (${session.chars.length} có sẵn)`)
-      .setMinValues(0)
-      .setMaxValues(session.chars.length)
-      .addOptions(options);
+    // Per-char toggle buttons. See add-roster.js for the rationale —
+    // dropdown was visually messy with default-selected pills wrapping.
+    // Toggle button label carries the ✅/⬜ state, style flips between
+    // Success (green) / Secondary (gray). Layout: 4 rows of up to 5
+    // char buttons + 1 row of Confirm/Cancel. Discord 5-row hard cap.
+    const charRows = [];
+    for (let rowStart = 0; rowStart < session.chars.length; rowStart += BUTTONS_PER_ROW) {
+      const row = new ActionRowBuilder();
+      const rowEnd = Math.min(rowStart + BUTTONS_PER_ROW, session.chars.length);
+      for (let i = rowStart; i < rowEnd; i += 1) {
+        const c = session.chars[i];
+        const isSelected = session.selectedIndices.has(i);
+        const marker = isSelected ? CHECK_ICON : UNCHECK_ICON;
+        const tag = tagFor(c);
+        const tagSuffix = tag ? ` ${tag}` : "";
+        const baseLabel = `${marker} ${i + 1}. ${c.charName}${tagSuffix}`;
+        const label = baseLabel.length > 80 ? `${baseLabel.slice(0, 77)}...` : baseLabel;
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`edit-roster:toggle:${session.sessionId}:${i}`)
+            .setLabel(label)
+            .setStyle(isSelected ? ButtonStyle.Success : ButtonStyle.Secondary)
+        );
+      }
+      charRows.push(row);
+    }
 
     const confirmBtn = new ButtonBuilder()
       .setCustomId(`edit-roster:confirm:${session.sessionId}`)
@@ -268,7 +279,7 @@ function createEditRosterCommand({
       .setStyle(ButtonStyle.Secondary);
 
     return [
-      new ActionRowBuilder().addComponents(select),
+      ...charRows,
       new ActionRowBuilder().addComponents(confirmBtn, cancelBtn),
     ];
   }
@@ -517,7 +528,7 @@ function createEditRosterCommand({
     );
 
     const { merged, displayChars, excludedBibleOnlyCount } =
-      buildEditRosterPickerChars(savedChars, bibleChars, SELECT_MAX_OPTIONS);
+      buildEditRosterPickerChars(savedChars, bibleChars, PICKER_MAX_OPTIONS);
 
     if (merged.length === 0) {
       await interaction.editReply({
@@ -528,7 +539,7 @@ function createEditRosterCommand({
 
     if (excludedBibleOnlyCount > 0) {
       console.warn(
-        `[edit-roster] roster ${targetAccount.accountName} merged ${merged.length} chars; ${excludedBibleOnlyCount} bible-only char(s) excluded from picker (cap ${SELECT_MAX_OPTIONS}).`
+        `[edit-roster] roster ${targetAccount.accountName} merged ${merged.length} chars; ${excludedBibleOnlyCount} bible-only char(s) excluded from picker (cap ${PICKER_MAX_OPTIONS}).`
       );
     }
 
@@ -582,28 +593,12 @@ function createEditRosterCommand({
     return null;
   }
 
-  async function handleEditRosterSelect(interaction) {
-    const sessionId = interaction.customId.split(":")[2];
-    const session = sessions.get(sessionId);
-    if (!session) {
-      await interaction.reply({
-        content: `${UI.icons.warn} Phiên đã hết hạn. Chạy lại \`/edit-roster\` nhé~`,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-    const denied = await authorizeSession(interaction, session);
-    if (denied) return;
-
-    session.selectedIndices = new Set(interaction.values.map((v) => Number(v)));
-    await interaction.update({
-      embeds: [buildSelectionEmbed(session)],
-      components: buildSelectionComponents(session),
-    });
-  }
-
   async function handleEditRosterButton(interaction) {
-    const [, action, sessionId] = interaction.customId.split(":");
+    // CustomId shape: `edit-roster:<action>:<sessionId>` for confirm/cancel,
+    // `edit-roster:toggle:<sessionId>:<charIndex>` for per-char toggle.
+    const parts = interaction.customId.split(":");
+    const action = parts[1];
+    const sessionId = parts[2];
     const session = sessions.get(sessionId);
     if (!session) {
       await interaction.reply({
@@ -614,6 +609,24 @@ function createEditRosterCommand({
     }
     const denied = await authorizeSession(interaction, session);
     if (denied) return;
+
+    if (action === "toggle") {
+      const charIndex = Number(parts[3]);
+      if (!Number.isInteger(charIndex) || charIndex < 0 || charIndex >= session.chars.length) {
+        await interaction.deferUpdate().catch(() => {});
+        return;
+      }
+      if (session.selectedIndices.has(charIndex)) {
+        session.selectedIndices.delete(charIndex);
+      } else {
+        session.selectedIndices.add(charIndex);
+      }
+      await interaction.update({
+        embeds: [buildSelectionEmbed(session)],
+        components: buildSelectionComponents(session),
+      });
+      return;
+    }
 
     if (action === "cancel") {
       clearSession(sessionId);
@@ -674,7 +687,6 @@ function createEditRosterCommand({
   return {
     handleEditRosterAutocomplete,
     handleEditRosterCommand,
-    handleEditRosterSelect,
     handleEditRosterButton,
     // Internals exposed for unit tests in test/edit-roster.test.js. Not
     // part of the public contract.

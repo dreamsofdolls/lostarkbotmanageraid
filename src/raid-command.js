@@ -139,13 +139,13 @@ const {
 } = require("./raid/raid-check-query");
 const { createSchedulingHelpers } = require("./raid/scheduling");
 
-// Hard cap on characters saved per roster account. Bumped from 6 → 25 when
-// /add-roster moved from "auto top-N by CP" to interactive multi-select:
-// some Lost Ark players actually run 7-8+ chars, so the old top-6 silently
-// dropped chars they actively played. 25 matches the Discord StringSelectMenu
-// option limit (the picker's natural ceiling) and is well above any real
-// roster size (~18 char slots in-game).
-const MAX_CHARACTERS_PER_ACCOUNT = 25;
+// Hard cap on characters saved per roster account. Sized to the
+// /add-roster + /edit-roster picker capacity: Discord caps a message
+// at 5 ActionRow components, the picker layout uses 1 row for
+// Confirm/Cancel + 4 rows of 5 toggle buttons each = 20 max. Real
+// Lost Ark rosters max ~18 chars per account in-game so 20 still has
+// headroom.
+const MAX_CHARACTERS_PER_ACCOUNT = 20;
 // Raid leader gating: switched from Discord role-name match to an explicit
 // env-configured user ID allowlist. Operator sets RAID_MANAGER_ID as
 // comma-separated Discord user IDs (e.g. "123456789012345678,987654321098765432").
@@ -332,11 +332,9 @@ async function loadFreshUserSnapshotForRaidViews(
 
 
 let handleAddRosterCommand;
-let handleAddRosterSelect;
 let handleAddRosterButton;
 let handleEditRosterCommand;
 let handleEditRosterAutocomplete;
-let handleEditRosterSelect;
 let handleEditRosterButton;
 let buildRaidCheckSnapshotFromUsers;
 let formatRaidCheckNotEligibleFieldValue;
@@ -581,10 +579,9 @@ const autoManageCoreService = createAutoManageCoreService({
 
 const addRosterCommandHandlers = createAddRosterCommand({
   EmbedBuilder,
-  // /add-roster now opens an interactive picker (multi-select + Confirm/Cancel
-  // buttons) before saving, so the factory needs the component builders that
-  // raid-status / raid-check already use.
-  StringSelectMenuBuilder,
+  // /add-roster picker = per-char toggle buttons + Confirm/Cancel,
+  // no StringSelectMenu (the dropdown was visually noisy when
+  // default-selected and got replaced with toggle buttons).
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -605,13 +602,11 @@ const addRosterCommandHandlers = createAddRosterCommand({
 });
 ({
   handleAddRosterCommand,
-  handleAddRosterSelect,
   handleAddRosterButton,
 } = addRosterCommandHandlers);
 
 const editRosterCommandHandlers = createEditRosterCommand({
   EmbedBuilder,
-  StringSelectMenuBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -633,7 +628,6 @@ const editRosterCommandHandlers = createEditRosterCommand({
 ({
   handleEditRosterCommand,
   handleEditRosterAutocomplete,
-  handleEditRosterSelect,
   handleEditRosterButton,
 } = editRosterCommandHandlers);
 
@@ -977,10 +971,8 @@ module.exports = {
   handleRaidAnnounceAutocomplete,
   handleRaidChannelMessage,
   handleRaidCheckButton,
-  handleAddRosterSelect,
   handleAddRosterButton,
   handleEditRosterAutocomplete,
-  handleEditRosterSelect,
   handleEditRosterButton,
   loadMonitorChannelCache,
   startRaidChannelScheduler,
