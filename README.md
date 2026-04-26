@@ -26,7 +26,7 @@ Discord bot tracking weekly raid progress for a small Lost Ark roster. Syncs cha
 | `/raid-help` | anyone | Drill-down help (dropdown lists every command) |
 | `/remove-roster` | anyone (self) | Remove a roster or one character from it |
 
-Raid Manager = Discord user IDs listed in `RAID_MANAGER_ID` (comma-separated). Manager perks: 30s auto-manage sync cooldown (vs 15m), `👑` header icon on their rosters, and exclusive access to `/raid-check`.
+Raid Manager = Discord user IDs listed in `RAID_MANAGER_ID` (comma-separated). Manager perks: 15s auto-manage sync cooldown (vs 10m), `👑` header icon on their rosters, and exclusive access to `/raid-check`.
 
 ## Text-monitor format
 

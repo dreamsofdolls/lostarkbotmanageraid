@@ -38,8 +38,8 @@ function createAutoManageCoreService({
   // guards combine: in-flight Set rejects parallel runs, cooldown rejects
   // rapid-sequential runs based on User.lastAutoManageAttemptAt.
   //
-  // Cooldown is now per-user: non-manager = 15m (the legacy ceiling protecting
-  // bible.lostark from spam), manager (in RAID_MANAGER_ID) = 30s so the 2-3
+  // Cooldown is now per-user: non-manager = 10m (the ceiling protecting
+  // bible.lostark from spam), manager (in RAID_MANAGER_ID) = 15s so the 2-3
   // operators can resync quickly after reconciling a raid clear. Managers are
   // a small, trusted set so the tighter cadence does not meaningfully raise
   // bible load compared to the existing daily passive scheduler.

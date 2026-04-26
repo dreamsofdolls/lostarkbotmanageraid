@@ -9,8 +9,8 @@
 // privilege config across env + DB. Consistent with AUTO_MANAGE_DAILY_DISABLED
 // and other boot-time toggles.
 
-const DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS = 15 * 60 * 1000;
-const MANAGER_AUTO_MANAGE_SYNC_COOLDOWN_MS = 30 * 1000;
+const DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS = 10 * 60 * 1000;
+const MANAGER_AUTO_MANAGE_SYNC_COOLDOWN_MS = 15 * 1000;
 
 function parseManagerIds(rawEnvValue) {
   const raw = typeof rawEnvValue === "string" ? rawEnvValue : (process.env.RAID_MANAGER_ID || "");

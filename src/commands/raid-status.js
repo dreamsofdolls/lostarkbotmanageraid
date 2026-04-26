@@ -106,7 +106,7 @@ function createRaidStatusCommand(deps) {
       const lastSync = lastSyncAt > 0
         ? `${UI.icons.reset} Last synced ${formatShortRelative(lastSyncAt)} ago`
         : `${UI.icons.reset} Never synced`;
-      // Manager (in RAID_MANAGER_ID allowlist) has a 30s sync cooldown vs 15m
+      // Manager (in RAID_MANAGER_ID allowlist) has a 15s sync cooldown vs 10m
       // for regular users - the countdown must reflect the per-user value or
       // it would mislead managers into waiting minutes after a click when
       // they're actually sync-ready within seconds.
@@ -202,7 +202,7 @@ function createRaidStatusCommand(deps) {
     // (regular member, /raid-status is their only sync entry point) can
     // tell whether the data they're seeing reflects a fresh pull, a
     // silently-failed attempt, or a cached read because they were within
-    // the 15m cooldown. Skip the "not-applicable" / "synced-no-new"
+    // the 10m cooldown. Skip the "not-applicable" / "synced-no-new"
     // cases on purpose - they add noise without information (the freshness
     // line above already tells them when bible was last successfully
     // synced + countdown to next free attempt).
@@ -283,11 +283,11 @@ function createRaidStatusCommand(deps) {
     // for regular users (they cannot use /raid-check Sync); without an
     // outcome surface the user has no way to tell whether the data they
     // see reflects a fresh bible pull, a silently-timed-out attempt, or
-    // a cached read because they were within the 15m cooldown.
+    // a cached read because they were within the 10m cooldown.
     //
     // outcome values:
     //   - "not-applicable": user not opted-in / no roster, no piggyback
-    //   - "cooldown": slot guard rejected (within 15m of last attempt)
+    //   - "cooldown": slot guard rejected (within 10m of last attempt)
     //   - "failed": gather promise rejected (bible API issue)
     //   - "timeout": gather exceeded the 2.5s budget, running in bg
     //   - "synced-no-new": gather + apply succeeded but no new gates
