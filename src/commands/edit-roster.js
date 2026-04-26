@@ -47,6 +47,75 @@ function createEditRosterCommand({
     return crypto.randomBytes(8).toString("hex");
   }
 
+  // Multi-seed bible fetch with overlap reject. Builds a seed list from
+  // the saved chars (highest-CP first) + accountName as last fallback,
+  // then tries each seed sequentially. Skips any result that has ZERO
+  // overlap with the saved roster — that's the signal the seed went
+  // stale (in-game rename / different player's char with same name) and
+  // bible returned someone else's roster, which we MUST NOT silently
+  // merge into the picker. First seed with overlap wins. All seeds
+  // failing or zero-overlap → `bibleError` set, caller falls back to
+  // saved-only / remove-only mode.
+  async function fetchBibleRosterWithFallback(savedChars, accountName) {
+    const seeds = [];
+    const sortedSaved = [...savedChars].sort(
+      (a, b) => parseCombatScore(b.combatScore) - parseCombatScore(a.combatScore)
+    );
+    for (const c of sortedSaved) {
+      if (c.name && !seeds.includes(c.name)) seeds.push(c.name);
+    }
+    if (accountName && !seeds.includes(accountName)) seeds.push(accountName);
+
+    if (seeds.length === 0) {
+      return { bibleChars: [], bibleError: "Không có seed để fetch bible." };
+    }
+
+    const savedNameSet = new Set(
+      savedChars.map((c) => normalizeName(c.name)).filter(Boolean)
+    );
+
+    let lastError = null;
+    let zeroOverlapHit = false;
+    for (const seed of seeds) {
+      try {
+        const fetched = await fetchRosterCharacters(seed);
+        if (!Array.isArray(fetched) || fetched.length === 0) continue;
+
+        // Skip overlap check only when the saved roster is empty (no
+        // way to verify the seed pointed at the right roster — but
+        // there's also no risk of merging the wrong chars into a
+        // populated picker).
+        if (savedNameSet.size > 0) {
+          const fetchedNames = new Set(
+            fetched.map((c) => normalizeName(c.charName))
+          );
+          const hasOverlap = [...savedNameSet].some((n) => fetchedNames.has(n));
+          if (!hasOverlap) {
+            zeroOverlapHit = true;
+            console.warn(
+              `[edit-roster] seed "${seed}" returned ${fetched.length} chars but zero overlap with saved roster - trying next seed.`
+            );
+            continue;
+          }
+        }
+
+        return { bibleChars: fetched, bibleError: null };
+      } catch (err) {
+        lastError = err?.message || String(err);
+        console.warn(`[edit-roster] seed "${seed}" failed: ${lastError}`);
+      }
+    }
+
+    return {
+      bibleChars: [],
+      bibleError:
+        lastError ||
+        (zeroOverlapHit
+          ? "Mọi seed đều trả roster không trùng saved chars (rename in-game?)"
+          : "Bible không trả về kết quả nào."),
+    };
+  }
+
   // Mirror /remove-roster's roster autocomplete: list the caller's saved
   // accounts with a char-count hint, fuzzy-filtered by what they've typed.
   async function handleEditRosterAutocomplete(interaction) {
@@ -108,6 +177,12 @@ function createEditRosterCommand({
     } else {
       desc.push(
         `${UI.icons.info} ${NEW_TAG} = char mới có ở bible chưa được add · ${STALE_TAG} = char đã saved nhưng không còn ở bible (rename/private log?).`
+      );
+    }
+    if (session.excludedBibleOnlyCount > 0) {
+      desc.push("");
+      desc.push(
+        `${UI.icons.warn} ${session.excludedBibleOnlyCount} char mới ở bible chưa hiện được do cap ${SELECT_MAX_OPTIONS} đầy. Bỏ tick saved char muốn xoá rồi Confirm trước, sau đó \`/edit-roster\` lần nữa để add tiếp char mới còn lại.`
       );
     }
     desc.push(
@@ -359,25 +434,18 @@ function createEditRosterCommand({
       combatScore: c.combatScore || "",
     }));
 
-    // Pick highest-CP saved char as bible seed - most likely to still
-    // exist + be findable. Fall back to accountName if the account is
-    // empty (shouldn't happen via normal flow, but /remove-roster can
-    // leave an empty account behind).
-    const seedFromSaved = [...savedChars].sort(
-      (a, b) => parseCombatScore(b.combatScore) - parseCombatScore(a.combatScore)
-    )[0];
-    const seedName = seedFromSaved?.name || targetAccount.accountName;
-
-    let bibleChars = [];
-    let bibleError = null;
-    try {
-      bibleChars = await fetchRosterCharacters(seedName);
-    } catch (err) {
-      bibleError = err?.message || String(err);
-      console.warn(
-        `[edit-roster] bible fetch failed for seed '${seedName}': ${bibleError}`
-      );
-    }
+    // Multi-seed bible fetch with overlap check. Mirrors the safer
+    // pattern in services/roster-refresh.js (collectStaleAccountRefreshes):
+    // try each saved char + accountName as a seed in priority order;
+    // skip results that have ZERO overlap with the saved roster (signals
+    // the seed is stale / pointing at someone else's roster after an
+    // in-game rename, and merging that data would silently fold an
+    // unrelated roster's chars into the picker). Single-seed trust was
+    // the bug Codex flagged.
+    const { bibleChars, bibleError } = await fetchBibleRosterWithFallback(
+      savedChars,
+      targetAccount.accountName
+    );
 
     // Merge saved + bible into a deduped list keyed by normalized name.
     // Bible-side fields (iLvl/CP/class) win when both sources have the
@@ -407,17 +475,30 @@ function createEditRosterCommand({
       return;
     }
 
+    // Sort: saved chars first (by CP desc within), then bible-only chars
+    // (by CP desc within). Saved-first ordering is LOAD-BEARING for the
+    // truncation step below — slicing top-25 must never bump a saved
+    // char out of the picker because Confirm persists exactly the
+    // displayed selection, so a hidden saved char would be silently
+    // deleted. Was the high-severity bug Codex flagged.
     merged.sort((a, b) => {
+      const aIsSaved = a.savedKey ? 1 : 0;
+      const bIsSaved = b.savedKey ? 1 : 0;
+      if (aIsSaved !== bIsSaved) return bIsSaved - aIsSaved;
       const cpDiff = parseCombatScore(b.combatScore) - parseCombatScore(a.combatScore);
       if (cpDiff !== 0) return cpDiff;
       return (b.itemLevel || 0) - (a.itemLevel || 0);
     });
 
     const displayChars = merged.slice(0, SELECT_MAX_OPTIONS);
-    const truncated = merged.length > SELECT_MAX_OPTIONS;
-    if (truncated) {
+    // Saved chars are guaranteed not to be excluded because savedCount ≤
+    // MAX_CHARACTERS_PER_ACCOUNT (= SELECT_MAX_OPTIONS), and they all
+    // sort first. Excluded entries are exclusively bible-only chars
+    // beyond the cap — surface a count so the user knows extras exist.
+    const excludedBibleOnlyCount = Math.max(0, merged.length - displayChars.length);
+    if (excludedBibleOnlyCount > 0) {
       console.warn(
-        `[edit-roster] roster ${targetAccount.accountName} merged ${merged.length} chars; truncated to ${SELECT_MAX_OPTIONS} for picker.`
+        `[edit-roster] roster ${targetAccount.accountName} merged ${merged.length} chars; ${excludedBibleOnlyCount} bible-only char(s) excluded from picker (cap ${SELECT_MAX_OPTIONS}).`
       );
     }
 
@@ -436,6 +517,7 @@ function createEditRosterCommand({
       discordId: callerId,
       accountName: targetAccount.accountName,
       bibleError,
+      excludedBibleOnlyCount,
       chars: displayChars.map((c) => ({
         charName: c.charName,
         className: c.className,

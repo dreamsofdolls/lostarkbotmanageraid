@@ -1,286 +1,116 @@
 # Changelog
 
-Dates use the local calendar of the commit. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
+Dates use the local calendar of the commit. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## 2026-04-26
 
-### Fixed (/add-roster: race-safe overlap guard inside saveWithRetry — Codex follow-up)
+### Added
+- **`/edit-roster <roster>`** - interactive picker that diffs your saved roster against bible. Tick `🆕` chars to add, untick saved chars to remove, Confirm to apply. Preserves raid completion state. Self-only, 5-min session.
+- **`/add-roster` interactive picker** - replaces the old auto top-N-by-CP slicing. Default-tick all chars, untick alts, Confirm. 5-min session, auth-gated.
+- **`/add-roster target:<user>`** - Raid Manager onboarding option to add a roster on behalf of a lazy member.
+- **Class icon system** - 27 class PNGs in `assets/class-icons/` auto-uploaded as Discord application emoji on bot startup. Content-addressed naming (`{name}_{md5short}`); editing a PNG and pushing is the whole deploy flow.
+- **Artist persona emoji** (`shy`, `neutral`, `note`) for bot-voice surfaces. Pinned welcome embed uses `shy`.
+- **`/raid-status` Sync button** on the pagination row, with cooldown countdown in the label (`Sync (5m)` / `Sync ngay`). In-place embed update on click.
+- **`interaction-router.js` `selectRoutes`** prefix-match branch for select menus carrying dynamic customIds (e.g. session IDs).
 
-- The earlier overlap guard (commit `4b94664`) ran ONLY at command time, immediately after the bible fetch. It fixed the single-session bug but missed the concurrent-session race: if two `/add-roster` sessions opened pickers against the same bible roster before either committed, both passed the command-time guard against an empty user doc, and the second Confirm could still split the same bible roster into a second account because `persistSelectedRoster`'s account-match logic only looked at `seedCharName` + the user's selection, never the full bible char list.
-- Fix: stash the full normalized bible name set into `session.bibleNames` and re-run the overlap check inside the `saveWithRetry` body, against the freshly-loaded userDoc, BEFORE creating a new account. Skips the account already identified as the merge target (overlap there is intentional). On collision, throw a typed error `{ code: "RACE_DUP_ROSTER", collidingAccountName }` — `saveWithRetry` only retries VersionError + E11000, so this error bubbles up cleanly to the Confirm handler which renders a friendly "concurrent session committed first, use /edit-roster" message.
-- Source: `feedback_codex/feedback_content.md` (Codex flagged after the previous fix shipped).
+### Changed
+- `MAX_CHARACTERS_PER_ACCOUNT` raised **6 → 25** (Discord StringSelectMenu cap).
+- `/add-roster` slash schema: dropped the `total` integer option (picker replaces it).
+- Auto-manage sync cooldown tightened: **15m → 10m** (regular), **30s → 15s** (Manager).
+- `/raid-check` runs a bible piggyback sync on command-open (budget 2.5s, max 8 users).
+- `/raid-check` dropdowns show **DONE** label when 0 pending. Footer freshness line splits to 2 rows.
+- `/raid-status` outcome line moved from description top to a final field above the legend; reworded to remove English (`gather` → `đang lấy`, `data tươi` → `data mới`).
+- `bot.js` interaction handler extracted to `src/services/interaction-router.js` factory.
+- Support emoji **🪄 → 🛡️** for universal coverage (Unicode 7.0 vs spotty 13.0).
 
-### Fixed (/add-roster: 2 bugs from Codex post-ship review)
-
-- **Duplicate-roster split**: the pre-fetch dup guard only checked `seedCharName` against existing accountNames + saved char names, missing the case where the user seeds with a real bible char they haven't saved yet but whose roster already lives under a different accountName. The post-confirm match logic in `persistSelectedRoster` only inspected the user's selection (not the full bible char list), so it would silently create a SECOND account pointing to the same bible roster — splitting one bible roster across two accounts and breaking the "1 bible roster = 1 account/user" invariant that `/remove-roster` + `/raid-set` rely on.
-  - Fix: added a post-fetch overlap guard that diffs the full bible char list against every existing saved account; any overlap → reject with a hint pointing the user to `/edit-roster roster:<account>` (the proper tool for editing an existing roster).
-- **Manager target ping never fired**: the Confirm-time editReply set `allowedMentions: { users: [targetId] }` but the `content` field was empty — the only `<@id>` reference lived inside the embed description, and Discord does NOT fire notifications for mentions inside embed text (only message `content` mentions trigger notifs). Net effect: target user got no notification despite the embed saying "đã được Manager add giúp <@target>".
-  - Fix: when `actingForOther`, set an explicit `content` line with the target mention + a brief Artist-voice note ("Heya~ Manager X vừa add giúp roster này cho cậu...") so Discord actually pings them.
-- Both bugs were in code shipped earlier today (commits `99d26e9` + `62d6924`); no test coverage caught them. Surfaced via Codex review at `feedback_codex/feedback_content.md`.
-
-### Added (/edit-roster: diff-style roster manager)
-
-- New `/edit-roster roster:<autocomplete>` slash command. Bridges the gap between `/add-roster` (creates new) and `/remove-roster` (deletes char or whole account): lets you fine-tune an existing saved roster by adding chars from the live bible roster OR removing saved chars in one picker, then commits the diff.
-- Flow: pick which saved roster to edit (autocomplete from your accounts) → bot re-fetches bible using the highest-CP saved char as seed → merges saved + bible into one deduped list (`🆕` tag = bible-only, `📦` tag = saved-only / no longer in bible, untagged = both) → picker opens with default-selected = currently saved chars → tick/untick → Confirm applies the diff.
-- **Preserves per-char state**: raid completion (`assignedRaids`), `tasks`, `bibleSerial/cid/rid`, `publicLogDisabled` all survive the edit for chars that aren't removed. Only `name`/`class`/`itemLevel`/`combatScore` are refreshed from bible. New chars get a fresh id + record.
-- **Bible-offline graceful degrade**: if bible fetch fails for the seed char (e.g. char renamed in-game, bible API down), the picker still opens with saved chars only — user can remove but not add. Embed surfaces the error reason inline.
-- **5-min session + auth gate**: identical contract to `/add-roster` picker. Only the original caller can interact; cross-user clicks get an ephemeral reject. Sessions live in-process and clear on bot restart.
-- **0-select rejected at Confirm**: hints toward `/remove-roster` (which already has the dedicated empty-roster cleanup flow). Cap 25 chars/roster enforced defensively at Confirm.
-- **Self-only**: no `target:` option. Manager-on-behalf-of-user edit flow is `/remove-roster` + `/add-roster target:` — keeps the destructive surface area smaller.
-- Wired through `selectRoutes` (`edit-roster:select:`) and `buttonRoutes` (`edit-roster:`) in `bot.js`. Autocomplete handler mirrors `/remove-roster`'s roster-listing pattern.
-
-### Changed (/add-roster: interactive multi-select picker, drop top-N auto)
-
-- `/add-roster` now opens an interactive picker after fetching the roster instead of silently slicing top-N by combat score. The embed lists every char with check/uncheck markers, a `StringSelectMenu` (multi-select up to all chars) for picking, and Confirm/Cancel buttons. Default selection = all chars (matches the "user này chơi toàn bộ" intent that motivated this change). Players who alt-collect deselect their non-played chars before clicking Confirm.
-- **Cap raised 6 → 25 chars/roster** (`MAX_CHARACTERS_PER_ACCOUNT`). The old hardcoded 6 silently dropped chars 7+ from any roster with more characters than that — bad for users who run 7-8 mains. 25 matches the Discord StringSelectMenu option limit and is well above the in-game ~18 char-slot ceiling. A defensive check at Confirm time still rejects selections larger than the cap.
-- **5-minute session window** from the slash invocation to the Confirm click. In-memory session state keyed by random `sessionId`; on timeout the embed is rewritten to "Phiên đã hết hạn" and the components are removed. Cancel button does the same with a "Đã huỷ" embed. Both clear the timer + drop the session map entry.
-- **Auth gate**: only the original caller can interact with the picker components. Cross-user clicks (other server members trying to confirm someone else's picker) get an ephemeral "Chỉ người gọi lệnh mới chọn được" reject. The Manager `target:` flow keeps the Manager as the caller — the target user can't click anything; they just get the final ping.
-- Slash command schema: dropped the `total` integer option (was 1-6). The picker replaces it.
-- Save logic preserved: existing per-char state (raid completion, etc.) is merged in by name match before write, same as before. `account.lastRefreshedAt` still stamped so `/raid-status` lazy refresh treats the account as fresh.
-
-### Added (interaction router: prefix-match select routes)
-
-- `src/services/interaction-router.js` now accepts an optional `selectRoutes` array (parallel to `buttonRoutes`) for `StringSelectMenu` customIds that carry dynamic data (e.g. session IDs). The exact-match `selectHandlers` table is tried first; on miss, prefix routes fire in order. Used by `/add-roster`'s `add-roster:select:<sessionId>` picker.
-
-### Added (Artist persona emoji bootstrap)
-
-- Generalized `class-emoji-bootstrap.js` into `src/services/emoji-bootstrap.js` accepting a config (`{namespace, iconsDir, emojiMap, resolveDisplayKey, aliasGroups}`). Two named wrappers ship: `bootstrapClassEmoji(client)` for `assets/class-icons/` -> `CLASS_EMOJI_MAP`, and `bootstrapArtistEmoji(client)` for `assets/artist-icons/` -> `ARTIST_EMOJI_MAP`. Same content-addressed naming pattern (`{name}_{md5short}`), same idempotent + self-healing semantics, same orphan + alias-cleanup passes. No code duplication.
-- New `src/data/ArtistEmoji.js` mirrors `Class.js` shape: `ARTIST_EMOJI_MAP` (3 entries: `shy`, `neutral`, `note`) + `getArtistEmoji(name)` helper with empty-string fallback so callers can unconditionally prepend without truthiness checks.
-- `assets/artist-icons/` now has 3 PNG files keyed by persona name (renamed from Discord snowflake source filenames for semantic clarity): `shy.png` (blushing greeting), `neutral.png` (default cute), `note.png` (chibi reading book - "Artist is checking" voice). Original `.webp` / `.jpg` archives kept alongside.
-- `bot.js` now invokes both bootstraps on `ClientReady` (parallel fire-and-forget, both non-fatal). First deploy uploads 3 artist emoji + maintains 25 class emoji; subsequent deploys skip everything via hash-match.
-- `raid-channel-monitor.js` pinned welcome embed title swaps the legacy `🦊` for `${getArtistEmoji("shy")}` - resolved at render-time from the bootstrap-populated map, so the actual emoji ID is bot-application-owned (works in every guild bot joins) and refreshes automatically when the source PNG changes.
-
-### Changed (interaction routing extracted to its own module)
-
-- `bot.js` interaction handler (a 5-branch `if/else if` ladder over `isChatInputCommand` / `isAutocomplete` / `isStringSelectMenu` / `isButton` plus a per-command autocomplete sub-switch) extracted to `src/services/interaction-router.js` via factory pattern. `bot.js` now passes 4 small registry maps (`allowedCommands`, `autocompleteHandlers`, `selectHandlers`, `buttonRoutes`) and registers the router's single `handle` function on `Events.InteractionCreate`.
-- Adding a new slash command / autocomplete / button / select menu now means updating one of the registry props in `bot.js` instead of editing the dispatcher branching - matches the registry-of-handlers pattern Phase 3 used for `/raid-check` snapshot/edit/all-mode/sync/edit-ui factories.
-- Pure helpers (`isUnknownInteractionError`, `describeInteraction`, `getInteractionAgeMs`) moved into the router module too since they're only consumed by the dispatcher's error path. Re-exported for any future test harness.
-- `bot.js`: 220 → 188 lines (-32). All routing logic now lives in one focused 156-line module instead of being mixed into the entry point. Behavioral verified via stub-test of all 8 dispatch paths (allowed/disallowed slash, known/unknown autocomplete, known/unknown select, prefix-match/no-match button) before commit.
-
-### Changed (class icon bootstrap: content-addressed naming)
-
-- Bootstrap now uses **content-addressed emoji names**: each application emoji is created as `{bibleClassId}_{md5short}` where `md5short` is the first 6 chars of the PNG's MD5 hash. On every restart, the bootstrap detects when a PNG's content has changed by computing the expected name from current bytes and comparing against the existing emoji's name. Mismatch → delete + re-upload with new hash; match → skip.
-- **Removes the manual `CLASS_EMOJI_FORCE_REFRESH` env var dance Traine had to do every time PNG art changed.** Workflow simplifies from "edit PNG → set env var → push → wait → unset env var → push" to "edit PNG → push". The bot does the rest.
-- Migration: first deploy with this code sees the legacy plain-named emoji (`bard`, `paladin`, `infighter_male`) on the application and treats them as content mismatches because they have no hash suffix. They get deleted + re-uploaded with hash-suffixed names in one bootstrap pass. ~10s migration cost, single deploy. Subsequent restarts are normal idempotent skip.
-- Orphan detection now strips the `_hex` suffix when checking if an emoji name parses as a known class - keeps the warning relevant to actually-orphaned class emoji even after the rename.
-
-### Fixed (class icon: real Machinist art + orphan handling)
-
-- Replaced the Artillerist-art placeholder for Scouter/Machinist with the real Machinist class icon. Found on Fandom Wiki (uncategorized like Souleater) at `ClassIcon-Gunner-Machinist.png`. Previously a Machinist character would render with Artillerist art - silently misleading any user who knew the difference. Removing the bad default felt safer than keeping it; the right art was a direct lookup away.
-- Bootstrap now detects + logs **orphan application emoji** - emoji on the bot's app that map to a known class but no longer have a corresponding PNG file. Doesn't auto-delete (could collide with non-class emoji bot might use later); just surfaces the list so a human can clean up via the developer portal.
-- Added `CLASS_EMOJI_FORCE_REFRESH=true` env var path: bootstrap deletes every managed class emoji and re-uploads from current PNG content. Required when a PNG file changes (Discord emoji image is immutable; only delete + re-create swaps the art). Set the var, redeploy, wait for bootstrap log, then unset + redeploy to return to idempotent mode.
-- Missing class count now 4 (Breaker, Wildsoul, Valkyrie, Guardian Knight); Machinist removed from the missing list.
-
-### Added (class icon auto-bootstrap on startup)
-
-- Bot now bootstraps class emoji on `ClientReady` so the deploy flow is just `git push`. Added `src/services/class-emoji-bootstrap.js` which: lists existing application emoji, uploads any PNG in `assets/class-icons/` whose name isn't already registered, mutates `CLASS_EMOJI_MAP` in memory with the resulting `<:name:id>` strings. After the first deploy uploads the full set, every subsequent restart is just one GET + skip (~500ms overhead).
-- Replaces the previous workflow of "run script locally, commit emoji-map.json, push" with "drop PNG into assets/class-icons/, push" - one less step Traine has to remember and one less commit per icon set update.
-- Idempotent + self-healing: a PNG re-added after manual deletion from the developer portal gets re-uploaded automatically on the next restart. Failure mode is graceful: any emoji that fails to upload just renders without an icon; bot keeps running.
-- The standalone `scripts/upload-class-emoji.js` is kept for local testing / one-shot maintenance but no longer required for deployment.
-
-### Added (class icon bulk upload script - application emoji)
-
-- `scripts/upload-class-emoji.js`: Node script that bulk-uploads every PNG in `assets/class-icons/` as Discord **application emoji** (owned by the bot, not by any single guild) via REST `POST /applications/{app.id}/emojis`, then writes the resulting display-name -> `<:emoji:id>` map to `assets/class-icons/emoji-map.json`. Application id is auto-resolved via `GET /applications/@me` so the only env var needed is `DISCORD_TOKEN`. Idempotent by default (skips emoji whose name already exists in the application), `--force` re-uploads everything, `--dry` validates without calling the API.
-- Why application emoji over guild emoji: bot owns the assets so they work in every guild it joins (future-proof for multi-server), don't consume Thaemine's 50-slot guild emoji budget (community-shared with member uploads), no "Manage Expressions" permission needed in any guild, 2000-slot per-application limit vs 50 free / 250 boosted per guild.
-- `data/Class.js`: auto-loads `assets/class-icons/emoji-map.json` at module-load and merges entries over the empty seeds in `CLASS_EMOJI_MAP`. Falls back silently to the empty defaults when the file is missing or malformed (the bot just renders without icons - no crash). Removes the "manually paste 23 emoji IDs into source code" step that the prior scaffold required.
-- Alias-aware: bible class IDs that share art with another class (`force_master`/`soulmaster`, `hawk_eye`/`hawkeye`) get pointed at the canonical's emoji ID instead of consuming a duplicate application emoji slot.
-- Discord rate-limit safe: 250ms sleep between uploads keeps the full 25-emoji run at ~7s while staying well under the per-app ceiling.
-
-### Added (class icon scaffold)
-
-- Scaffold for prepending Discord guild custom emoji class icons before character names in embed body fields. Long-anticipated feature - `raid-check.js`, `raid-status.js`, and `raid-help.js` all carry comments referencing this "planned class-icon swap" (the manager 👑 was deliberately moved to the roster header rather than per-char to avoid colliding with this future swap).
-- `src/data/Class.js`: new `CLASS_EMOJI_MAP` (display name -> `<:emoji:id>` form) + `getClassEmoji(name)` helper. Empty values seeded for all 29 known class display names so the bot keeps rendering cleanly while emoji are uploaded one at a time. Helper returns empty string when a class isn't mapped (yet) - safe no-op fallback prepending nothing.
-- Wired `${getClassEmoji(...)} ` into char field rendering at:
-  - `commands/raid-status.js` `buildCharacterField` (also covers `/raid-check raid:all` because it reuses `buildAccountPageEmbed`)
-  - `commands/raid-check.js` `buildCharField` (specific-raid view)
-- `assets/class-icons/`: 26 PNG files seeded from Lost Ark Wiki (Fandom) - 22 unique icons + 4 alias copies for class IDs that share art (`force_master`/`soulmaster` = Soulfist, `hawk_eye`/`hawkeye` = Sharpshooter). Filenames match the bible class ID for upload-by-name workflow. README in the folder documents the upload steps + the 5 newer classes Fandom is missing (Souleater, Breaker, Wildsoul, Valkyrie, Guardian Knight) so they can be supplied manually.
-- No behavior change at runtime until `CLASS_EMOJI_MAP` entries are filled - this commit is pure scaffold + asset prep. To activate per class: upload the matching PNG to Thaemine, copy the `<:name:id>` form, paste into the matching `CLASS_EMOJI_MAP` entry. Bot picks up on next deploy.
+### Fixed
+- **`/add-roster` duplicate-roster split** - one bible roster could be split across two accounts when the seed char wasn't yet saved but its roster was already saved under a different accountName. Fix: post-fetch overlap guard against the full bible char list.
+- **`/add-roster` race-safe overlap guard** - two pickers opened concurrently against the same bible roster could still split it on Confirm. Fix: re-run the overlap check inside `saveWithRetry` against the freshly-loaded user doc; throw `RACE_DUP_ROSTER` on collision and steer the user to `/edit-roster`.
+- **`/add-roster` Manager target ping** - target user wasn't actually notified because the `<@id>` mention only lived in the embed description; Discord only fires notifications for mentions in the message `content` field. Fix: add an explicit content line with the target mention.
+- **`/edit-roster` saved-char drop on > 25 merged** - merging saved + bible could push some saved chars out of the top-25 picker window when bible returned new high-CP chars; Confirm would silently delete them. Fix: sort saved chars first within the picker so they always fit, with an embed warning when bible-only chars get excluded.
+- **`/edit-roster` wrong-roster trust** - trusted a single bible seed without overlap check; if the seed char was renamed in-game, bible could return another roster's chars and the picker would merge them in. Fix: multi-seed fetch with zero-overlap reject (mirrors `roster-refresh.js` pattern).
+- **Class icon: real Machinist art** (was an Artillerist placeholder).
 
 ## 2026-04-25
 
-### Added (piggyback outcome surface for /raid-status)
-
-- `/raid-status` embed description now surfaces the bible-piggyback outcome from THIS open so a regular user can tell whether the data they're seeing reflects a fresh pull, a silently-failed attempt, or a cached read because they were within the 15m cooldown. `/raid-status` is the only sync entry point for non-Manager users (they cannot use `/raid-check` Sync), so this transparency was the highest-value gap to close.
-- Outcome lines (only shown when they add information):
-  - `🔄 Bible vừa sync · N gate mới đã apply` (applied case, N gates landed this open)
-  - `⚠️ Bible sync chậm · render data cache, gather đang chạy nền (mở lại sau ~10s để thấy data mới)` (timeout case)
-  - `⚠️ Bible sync gặp vấn đề · đang xem cache, thử mở lại sau vài phút` (gather threw)
-  - Skipped silently when no piggyback was attempted (cooldown, not opted-in) OR when sync ran cleanly but applied 0 new gates - the existing freshness line already covers those cases.
-- Outcome captured upstream during the existing piggyback flow (slot guard, gather, apply paths) and threaded through `statusUserMeta.piggybackOutcome` to `buildAccountPageEmbed`. No new service deps; reuses existing `applyAutoManageCollected` report shape (`perChar[].applied[].length`) to count newly-applied gates.
-
-### Added (bible piggyback for /raid-check)
-
-- `/raid-check` now piggyback-syncs bible logs on command-open, scoped to opted-in users with at least one pending char in the viewed raid. Mirrors the `/raid-status` piggyback pattern (`STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500ms`) so render isn't held hostage by slow bible. Closes the UX gap a manager would otherwise see: opening `/raid-check` previously showed only data the daily background ticker (24h gap) or someone's prior `/raid-status` had already written.
-- Per-user gather is narrowed via `includeEntryKeys` to JUST that user's pending entries in the viewed raid, so multi-user piggyback stays cheap. Cohort cap `RAID_CHECK_PIGGYBACK_MAX_USERS = 8` skips the piggyback entirely for heavy-backlog raids - the explicit Sync button (no budget cap) stays the right tool there.
-- If the budget elapses, render proceeds with pre-piggyback data and the in-flight gathers continue in background; their save still updates `lastAutoManageSyncAt` so the NEXT open picks them up.
-- Footer hint added in same release: shows the OLDEST opted-in user's `lastAutoManageSyncAt` across visible groups (`bible: 5h ago oldest · bấm Sync để pull mới`) so the manager can tell at a glance whether the displayed pending list is fresh-from-bible or stale.
-
 ### Added
-
-- `/raid-check` user-filter dropdowns now show a per-user support/DPS breakdown beside the pending count: `Du (8 pending · 2🪄 6⚔️)` instead of bare `Du (8 pending)`. Applies to both surfaces - the specific-raid filter (e.g., `/raid-check raid:serca_hard`) and the cross-raid filter (`/raid-check raid:all`). Hard-support classes are Bard, Paladin, Artist, Valkyrie; everyone else counts as DPS. Helps a Raid Manager see at a glance whether a heavy backlog is composition-blocking (low support count) or just queue depth.
-- `/raid-status` raid-filter dropdown now shows the same support/DPS breakdown per raid: `Aegir Hard (3 pending · 1🪄 2⚔️)`. Caller-scoped (only the caller's own roster), so the breakdown surfaces whether a personal raid backlog is blocked on supports or DPS.
-- `src/data/Class.js`: new `SUPPORT_CLASS_NAMES` Set + `isSupportClass(name)` helper. Stored as display names (not bible class IDs) because the consuming code reads the resolved `character.class` field.
-- `src/commands/raid-check/snapshot.js`: `pendingChars` rows now carry a `className` field so the user-filter dropdown can read class info without a second pass over the raw character documents.
-
-### Changed (Phase 3e)
-
-- Extracted the /raid-check Sync button flow + the shared display-name resolver from `commands/raid-check.js` into `src/commands/raid-check/sync-ui.js`. Three functions moved (~205 lines): `resolveCachedDisplayName`, `buildRaidCheckSyncDMEmbed`, `handleRaidCheckSyncClick`.
-- Factory `createSyncUi({...18 deps})` returns all three. Wiring order is now load-bearing in the orchestrator: sync-ui must be wired BEFORE edit-ui because edit-ui's factory consumes `resolveCachedDisplayName` as a dep (the Edit cascade resolves display names per editable user). The same resolver also services the main /raid-check render path, so the sync-ui destructure has to land before any handler body that references it gets invoked.
-- No external contract change. `handleRaidCheckButton` continues to dispatch `action === "sync"` to `handleRaidCheckSyncClick`, now resolved through the local destructure.
-- `raid-check.js`: 913 -> 740 lines (-173). Phase 3 total: **2590 -> 740 (-1850, -71%)**.
-
-### Changed (Phase 3d)
-
-- Extracted the entire Edit cascading-select flow from `commands/raid-check.js` into `src/commands/raid-check/edit-ui.js` via factory pattern. Six tightly-coupled functions moved together (~830 lines): `buildEditEmbed`, `buildEditComponents`, `handleRaidCheckEditClick` (the message-collector setup), `postEditSessionExpiredNotice`, `buildRaidCheckEditDMEmbed`, `applyEditAndConfirm`.
-- Factory `createEditUi({...23 deps})` is the heaviest dep surface so far - the Edit handler crosses many seams (discord.js builders, Mongoose User model, limiters, the raid-set apply service, plus several pure helpers from `edit-helpers.js` + `snapshot.js`). All 6 functions live in the same factory body so they cross-call through a shared closure (e.g., `handleRaidCheckEditClick` calls `applyEditAndConfirm` + `buildEditEmbed` + `postEditSessionExpiredNotice`) without re-threading deps.
-- External contract preserved: `buildRaidCheckEditDMEmbed` is destructured from the factory and re-exported from `createRaidCheckCommand` so `raid-command.js`'s downstream consumers see no change.
-- Invocation test exercised all 4 builder paths (initial / with-char / applied / scopeAll-noRaid), all 4 component-row counts (1→2→3→4 by cascade depth), and all 3 DM-embed status types (complete / reset / process) before stripping originals.
-- `raid-check.js`: 1706 -> 913 lines (-793). Phase 3 total: **2590 -> 913 (-1677, -65%)**.
-
-### Changed (Phase 3c)
-
-- Extracted the largest single handler in `commands/raid-check.js`: `handleRaidCheckAllCommand` (528 lines) into `src/commands/raid-check/all-mode.js` via factory pattern. Self-contained handler that uses character-helpers via outer-scope deps, not the snapshot/edit-helpers extracted earlier - so the cut was clean (no cross-helper threading needed).
-- Factory `createAllModeHandler({...17 deps})` takes Discord builders, the User model, character helpers, and the pagination session constant. The orchestrator destructures `handleRaidCheckAllCommand` and the existing inline call (`await handleRaidCheckAllCommand(interaction)` from `handleRaidCheckCommand`) keeps working unchanged because the destructured name resolves through local scope.
-- `raid-check.js`: 2210 -> 1706 lines. Phase 3 total: **2590 -> 1706 (-884, -34%)**.
-
-### Changed (Phase 3b)
-
-- Continued splitting `commands/raid-check.js`. Step 2: extracted the 7 pure Edit-flow helpers to `src/commands/raid-check/edit-helpers.js`.
-  - Extracted: `buildEditableCharsByUser`, `getEligibleRaidsForChar`, `getCharRaidGateStatus`, `formatGateStateLine`, `applyLocalRaidEditToChar`, `formatCharEditLabel`, `formatUserEditLabel`.
-  - Factory `createEditHelpers({...8 deps})` takes string/format helpers + raid-requirement map. Self-contained group with no cross-references to the snapshot layer.
-  - Invocation test caught a missing `getRaidScanRange` dep that the deps-name grep had missed - fixed before strip. Lesson reinforced: invocation > static + grep.
-  - `raid-check.js`: 2395 -> 2210 lines (-185). Phase 3 running total: 2590 -> 2210 (-15%).
-
-### Changed (Phase 3a)
-
-- Started splitting `src/commands/raid-check.js` (was 2590 lines). Step 1: extracted the snapshot construction layer to `src/commands/raid-check/snapshot.js` via factory pattern.
-  - Extracted: `buildRaidCheckSnapshotFromUsers` (150 lines, the heaviest), `formatRaidCheckNotEligibleFieldValue`, `getRaidCheckRenderableChars`, `computeRaidCheckSnapshot`.
-  - Factory `createSnapshotHelpers({...15 deps})` takes Mongoose model, query helpers, character normalizers, and the lazy-refresh limiter. Compose root in raid-check.js wires it once.
-  - `raid-check.js`: 2590 -> 2395 lines (-195).
-- Verified end-to-end: full `require('./src/raid-command')` loads through the entire compose chain; `__test.buildRaidCheckSnapshotFromUsers` is callable on the resulting module; mock-deps invocation test exercised all 4 extracted exports with realistic char roster data.
-
-### Changed (Phase 2.3)
-
-- Extracted announcement timing + scheduler-tick math into `src/raid/scheduling.js` via factory pattern. Six functions moved (`getAnnouncementsConfig`, `nextIntervalTickMs`, `nextAnnouncementEligibleBoundaryMs`, `nextAnnouncementSchedulerCheckMs`, `formatDiscordTimestampPair`, `buildAnnouncementWhenItFiresText`).
-- Factory pattern (instead of plain module exports) is required because two of the timing functions read scheduler started-at timestamps and tick intervals through `let` bindings that only get assigned by `createRaidSchedulerService` at boot. The compose root passes getter functions that close over those bindings, so the lookup defers until the timing helper is actually invoked at interaction-handler time. Pre-/post-extraction behavior is byte-identical (verified by re-running `nextAnnouncementSchedulerCheckMs` from `__test` exports against the prior commit).
-- `raid-command.js`: 1145 -> 961 lines. Total Phase 2 reduction: 1568 -> 961 (-38%).
-
-### Changed (Phase 2.2)
-
-- Continued splitting `src/raid-command.js`. Extracted the /raid-check Mongo query construction into `src/raid/raid-check-query.js`:
-  - `RAID_CHECK_USER_BASE_QUERY` (filter), `RAID_CHECK_USER_QUERY_FIELDS` (projection)
-  - `getRaidScanRange(raidKey, selfMin)` - per-raid iLvl range bounds (lowestMin / selfMin / nextMin)
-  - `buildRaidCheckUserQuery(raidMeta, now)` - assembles the query object with the stale-roster carve-out
-- Each function invocation-tested before commit (lesson from Phase 2.1 hotfix - static check + import resolver are not enough; runtime call validates internal symbol bindings). Full `require('./src/raid-command')` now loads cleanly past both extraction points.
-- `raid-command.js`: 1239 -> 1145 lines (running total since Phase 2.1: 1568 -> 1145, -27%).
-
-### Fixed
-
-- `/raid-check raid:all` and per-char raid lists no longer surface a "0/2 pending Nightmare" card next to a completed Hard card on the same Serca character. In Lost Ark the weekly raid slot is shared across every difficulty of the same raid - clearing at any one mode (Normal/Hard/Nightmare) consumes the slot - so showing both as pending is misleading. The Serca 1740+ branch in `getStatusRaidsForCharacter` now checks `completedGateKeys.length > 0` first; if the char is locked for the week, only the actually-cleared mode card is emitted. The "show both options" fan-out is preserved for chars that haven't entered Serca yet this week. Same fix automatically benefits any future raid that surfaces multiple modes simultaneously.
+- `/raid-status` embed surfaces the bible-piggyback outcome on each open (sync ok / cooldown / timeout / failed) so non-Manager users can tell fresh data from cache.
+- `/raid-check` user-filter dropdowns show a per-user support/DPS breakdown (`Du (8 pending · 2🪄 6⚔️)`); `/raid-status` raid-filter dropdown gets the same.
+- `data/Class.js`: `SUPPORT_CLASS_NAMES` set + `isSupportClass()` helper.
 
 ### Changed
+- **Refactor Phase 3**: split `commands/raid-check.js` into 5 focused modules under `commands/raid-check/`: `snapshot.js`, `edit-helpers.js`, `all-mode.js`, `edit-ui.js`, `sync-ui.js`. Net: 2590 → 740 lines (-71%).
+- **Refactor Phase 2**: split `raid-command.js` into `raid/character.js`, `raid/raid-check-query.js`, `raid/scheduling.js`. Net: 1568 → 961 lines (-38%).
+- **Source-tree cleanup**: `db.js` → `src/db.js`; `src/schema/` → `src/models/` (Mongoose); `src/models/` → `src/data/` (lookup tables); deleted dead `GuildConfig.js`.
 
-- Started splitting `src/raid-command.js` (was 1568 lines, single compose-root file). Step 1: extracted 20 pure character/raid normalization helpers into `src/raid/character.js` along with `RAID_REQUIREMENT_MAP`.
-  - Extracted: `createCharacterId`, `buildFetchedRosterIndexes`, `pickUniqueFetchedRosterCandidate`, `findFetchedRosterMatchForCharacter`, `getRequirementFor`, `getBestEligibleModeKey`, `sanitizeTasks`, `getGateKeys`, `normalizeAssignedRaid`, `getCompletedGateKeys`, `buildAssignedRaidFromLegacy`, `ensureAssignedRaids`, `isAssignedRaidCompleted`, `buildCharacterRecord`, `ensureRaidEntries`, `getStatusRaidsForCharacter`, `pickProgressIcon`, `formatRaidStatusLine`, `summarizeRaidProgress`, `raidCheckGateIcon`.
-  - All these functions are pure (no closure on Discord client / Mongoose / scheduler state) and trivially unit-testable in isolation.
-  - `raid-command.js`: 1568 -> 1239 lines (-329, -21%).
-- Source-tree cleanup. No behavior change. Aligns RaidManage layout with the LoaLogs convention so cross-project navigation feels the same:
-  - **Deleted dead code** `src/models/GuildConfig.js`. It was a 36-line ESM file leftover from a copy-paste from LoaLogs, with a totally different schema than the live Mongoose model and never imported anywhere. Confirmed by full grep before removal.
-  - **Moved** `db.js` (root) to `src/db.js`. Root now only holds entry/meta files (Dockerfile, railway.toml, package.json, etc.); all source lives under `src/`.
-  - **Renamed** `src/schema/` to `src/models/` (Mongoose models - matches the standard Node convention and LoaLogs's `bot/models/`).
-  - **Renamed** `src/models/` to `src/data/` (`Class.js` and `Raid.js` are pure constant lookup tables, not Mongoose models - the old `models/` name was misleading).
-  - All 10 require() paths rewritten; relative-import resolver script confirms 31/31 source files resolve.
+### Fixed
+- `/raid-check raid:all` no longer shows a pending Nightmare card next to a completed Hard card on the same Serca character. Lost Ark shares the weekly slot across difficulties of one raid — clearing any mode locks all others.
 
 ## 2026-04-24
 
 ### Added
-
-- `/raid-check raid:all` synthetic overview choice: cross-raid view of every member's roster, mirroring `/raid-status`'s per-account page layout (inline 2-col char fields, account progress rollup, freshness badge) but scoped across every user in the guild instead of just the caller's own. Each page adds a `setAuthor` with display name + "Page X/Y" so leaders can tell users apart while flipping pages.
-- Cross-raid **Edit** from all-mode: clicking ✏️ Edit on /raid-check raid:all opens the same Edit UI as specific-raid but with a **raid dropdown** prepended on top. Picking a raid reloads the per-raid snapshot + editable-user list on the fly and resets the user/char picks (a user who was editable for Serca Hard may have no char eligible for Act 4 Normal). Specific-raid Edit flow is unchanged - `state.scopeAll` flag in the shared state machine drives the branch.
-- `/raid-status` **raid-filter dropdown**: "Filter by raid / Lọc theo raid..." lets the caller narrow char cards + footer counts down to a single raid across their own roster. Options format `{Raid Label} ({N} pending)` with N = self-scoped char count where `isCompleted === false`, sorted pending desc. Labels computed once at init for stable backlog reference. Shown on both single-account and multi-account callers (single-account no longer short-circuits past the collector). Orthogonal to pagination - `currentPage` doesn't reset on filter pick since page structure is unchanged. Dropdown suppressed entirely when the caller's roster has zero eligible raids (no useful filter targets).
-- All-mode **raid-filter dropdown**: third action row "Filter by raid / Lọc theo raid..." lets leaders narrow every char card AND the footer `done/partial/pending` counts down to a single raid. Options are labeled `{Raid Label} ({N} pending)` with N = guild-wide count of char-raid entries where `isCompleted === false`; sorted pending desc so backlog-heaviest surfaces first. Labels computed once at init so toggling filters doesn't rewrite them underneath the leader's hand - counts stay as stable reference for backlog triage. Orthogonal to the user filter: combining `user:Du × raid:Kazeros Hard` shows Du's Kazeros Hard progress in the footer while dropdown labels still report guild totals. Page structure unchanged (raid filter only rewrites what each page displays internally, not which pages exist), so `currentLocalPage` does not reset on pick. 25-option cap leaves 24 raid slots after the All-raids entry (today's 6-raid roster has plenty of headroom).
-- All-mode **user-filter dropdown**: "Jump to user / Lọc theo user..." below the pagination row lets a leader jump straight to a specific member's accounts without Prev/Next spam. Mirrors the user filter on specific-raid /raid-check but with accounts as the unit. Page counter in the author slot adapts: "Page 2/3" within a filter, "Page 4/14" across all users. 25-option cap means the first 24 users (alphabetical) appear in the dropdown; overflow users stay reachable via Prev/Next.
-- All-mode Edit button **carries user context** from the viewed page: clicking ✏️ Edit while on Bao's page encodes Bao's discordId into the button customId, and the Edit flow pre-selects Bao once the leader picks a raid (if Bao is still editable for the picked raid - otherwise the pre-select silently drops and the user dropdown works as normal). Leader no longer has to re-pick the user they were already focused on.
-- `/raid-check` leader **Edit button**: cascading select (user → char → raid → status → optional gate), Manager-only, reuses `applyRaidSetForDiscordId`.
-  - Live gate state shown once raid is picked; Complete / Process buttons disable when no-op, gate buttons show 🟢 / 🟠 / ⚪ per stored state.
-  - Auto-sync users skipped except for chars with `publicLogDisabled=true` (bible can't reach them).
-  - On token/UI failure, bot posts a public tag telling the leader to rerun (auto-delete 30s).
-- **Raid Manager privilege tier** off the existing `RAID_MANAGER_ID` allowlist: 30s auto-manage cooldown (vs 15m default), 👑 header icon on their rosters in `/raid-check` + `/raid-status`, gentle welcome-embed mention.
-- **Artist quiet hours 03:00-08:00 VN**: bedtime embed at first tick ≥ 03:00 (3 variants, TTL 5m), wake-up + catch-up sweep at first tick ≥ 08:00 (4-bucket pool, TTL 10m). Message parsing stays active 24/7; only the scheduler sleeps.
-- `character.publicLogDisabled` schema flag, stamped/cleared by `applyAutoManageCollected` on bible "Logs not enabled" errors.
-- `/raid-status` + `/raid-check` freshness badges now pair with an "⏳ Next refresh/sync in Xm" countdown that flips to "✅ Refresh/Sync ready" on expiry.
+- **`/raid-check raid:all`** synthetic overview: cross-raid view of every member's roster, mirroring `/raid-status`'s per-account page layout. Includes cross-raid Edit (raid dropdown prepended), user-filter dropdown, raid-filter dropdown, and Edit-button user context.
+- **`/raid-status` raid-filter dropdown** scoped to the caller's roster.
+- **`/raid-check` Edit button** (Manager-only): cascading user → char → status → optional gate select, reuses `applyRaidSetForDiscordId`. Auto-sync users skipped except for `publicLogDisabled=true` chars.
+- **Raid Manager privilege tier** off existing `RAID_MANAGER_ID`: 30s auto-manage cooldown (vs 15m), 👑 header icon on rosters.
+- **Artist quiet hours 03:00-08:00 VN**: bedtime + wake-up embeds; message parsing stays active 24/7.
+- `character.publicLogDisabled` schema flag.
+- Freshness countdown on `/raid-status` + `/raid-check` (`⏳ Next refresh in Xm` / `✅ Sync ready`).
 
 ### Changed
-
-- `/raid-check raid:all` user-filter + raid-filter dropdowns are now **cross-reactive**: picking a user reshapes the raid-filter labels to that user's backlog (`Kazeros Hard (3 pending)` = Du's 3 pending, not guild 42), and picking a raid reshapes the user-filter labels to that raid's per-user backlog. `All users` / `All raids` header entries carry the running total for whatever scope the other filter defines. Both dropdowns pull from a single `computePendingAggregate` walker so the counts on screen are always consistent with each other - previously static guild-wide labels were disorienting during drill-down ("Du shows 7 pending but the raid dropdown says 42? Whose 42?"). User-filter labels also changed from `(N accs)` to `(N pending)` so both dropdowns surface pending counts as the unit of interest. Dead `raidAggregate` / `raidDropdownEntries` / `totalRaidPending` init block removed.
-- `/raid-status` + `/raid-check raid:all` char cards **hide ineligible chars** when a raid filter is active. Previously a locked `🔒 Not eligible yet` card rendered for every char below the picked raid's iLvl gate, so the eligible chars sat buried in a wall of locks. Now `buildAccountPageEmbed` accepts a `hideIneligibleChars` option; both call sites pass `!!filterRaidId`, and chars whose `getRaidsFor` returns empty drop out of the 2-col layout. When the filter empties a roster entirely, the builder renders a single notice field `🔒 Không có character nào eligible cho raid này trong roster.` - distinguishes "nobody in this roster can do the picked raid" from the empty-account (`_No characters saved._`) and normal populated paths.
-- `/raid-check raid:all` manager-roster title drops the leading 🟢/🟡/⚪/🔒 progress icon when the viewed user is a Raid Manager - the 👑 crown already carries stronger visual weight than the 3-state circle and leaving both reads as `orange · crown · name` (double header gate). Crown alone is the signal; per-user done/partial/pending still lives in the footer for leaders who want the progress glance. Scoped to `/raid-check` only, `/raid-status` keeps the title icon so non-manager callers still see account-level status at the top of each page.
-- `/raid-status` + `/raid-check raid:all` footer now carries the subject's `X done · Y partial · Z pending` rollup (plus `Page N/M` when paginated), matching `/raid-check` specific-raid parity. Per-account description line `"N chars · X/Y raids done · K in progress"` dropped because its data already lives in the footer counts - description now holds only the optional `🌐 All accounts` cross-account rollup and the freshness/countdown line. Title no longer carries a page suffix in `/raid-status`, and `/raid-check raid:all` setAuthor is down to just display name + avatar. Shared `buildStatusFooterText(globalTotals, pageInfo)` helper wired from `createRaidStatusCommand` through `raid-command.js` into `createRaidCheckCommand`'s deps so both surfaces format counts identically.
-- `/raid-check` now annotates mode-hierarchy clears in the char field: a 1740 char who cleared Kazeros Hard renders as "🟢 2/2 _(Hard)_" in a Kazeros Normal scan, while a same-mode Normal clear stays "🟢 2/2" (no annotation). Previously both rendered identically, so leaders couldn't tell whether the done stamp came from the scanned mode or a higher one. Added `doneModeAnnotation` to snapshot char entries with the set of higher-than-scan stored modes.
-- Difficulty alias `nm` moved Nightmare → Normal (alongside `nor`). Nightmare keeps `9m` only. Breaking for anyone typing `nm` for Nightmare.
-- Manager crown relocated from per-char name prefix to roster header (📁 → 👑) to keep the char line free for the planned class-icon swap.
-- `/raid-status` auto-manage piggyback capped at a 2.5s foreground budget; overflow applies in the background.
-- `/raid-check` main render now resolves display names via the same cache-first helper as the Edit flow (User-doc `discordDisplayName/globalName/username` before a live fetch). Main view and Edit dropdown stay in sync and skip unnecessary Discord REST round-trips when the doc is warm.
-- Edit-apply DM fetch now goes through `discordUserLimiter`, matching the Sync DM path so burst-edit sessions stay under Discord's global rate ceiling.
-- Edit flow **character dropdown** now shows per-raid gate rollup next to each char (🟢 DONE · 🟠 X/Y · 🟡 khác mode · ⚪ chưa clear) against the raid the leader is scanning, so picking a target no longer requires clicking into the char first to see if it's already done.
-- Edit flow is now **locked to the raid the leader opened `/raid-check` against**. Raid select row removed - `/raid-check raid:serca_hard` + Edit only edits Serca Hard on the target char. The snapshot was already filtered by that raid, so free-picking another raid in the cascade was mostly dead weight (and confusing when it surfaced chars ineligible for the picked alternative). Cross-raid edit is out of scope until an "All raid" /raid-check mode is added, at which point the raid select would sit above the char select so char options can be filtered against the chosen raid.
+- `/raid-check raid:all` filter dropdowns are **cross-reactive**: picking a user reshapes raid-filter labels to that user's backlog and vice versa, with a single `computePendingAggregate` walker.
+- `/raid-status` + `/raid-check raid:all` char cards **hide ineligible chars** when a raid filter is active.
+- Manager crown moved from per-char prefix to roster header (📁 → 👑) to make room for the planned class-icon swap.
+- `/raid-status` auto-manage piggyback capped at a 2.5s foreground budget; overflow applies in background.
+- Edit flow locked to the raid the leader opened `/raid-check` against (raid select removed; cross-raid edit lives in raid:all mode).
+- Difficulty alias `nm` moved Nightmare → Normal. Nightmare keeps `9m` only. **Breaking** for anyone typing `nm` for Nightmare.
 
 ### Fixed
-
-- `/raid-check` out-grown chars leaked into lower-mode views when they had a done stamp: a 1732 char who cleared Serca Normal earlier in the week (at e.g. 1725, then grew past the 1730 nextMin) continued to appear in /raid-check raid:serca_normal as 2/2 done. High-side `nextMin` range filter previously ran only for `overallStatus === "none"`, bypassing done/partial chars entirely. Now applied unconditionally EXCEPT when the clear came from a higher mode via hierarchy (e.g. 1740 char cleared Kazeros Hard → still shows in kazeros_normal view as done, which is desired - they "satisfied Normal by doing Hard"). Regression test added covering the out-grown-at-exact-mode case.
-- `/raid-check raid:all` → Edit progress opened a dead UI: an `opened raid=` console.log dereferenced `raidMeta.raidKey` / `raidMeta.modeKey` unguarded, but scopeAll enters with `raidMeta=null`. The TypeError fired after `editReply` but before `createMessageComponentCollector`, so the raid dropdown rendered with no handler to catch clicks. Log now branches to an "all" sentinel when scopeAll, else formats the specific raid label. Caught by Codex review of commit `e15b275`.
-- `/raid-check` Edit Complete / Process / Reset silently no-op'd under the raid-lock flow: `selectedRaid` was initialized to `raidMeta.raidKey` (just the raid portion, e.g. `serca`) while `RAID_REQUIREMENT_MAP` is keyed by the combined `${raidKey}_${modeKey}` form (e.g. `serca_hard`). Every downstream lookup returned `undefined`, the apply call fell through without writing. Edit click now passes the combined key through from the button handler into state.
-- `raid-channel-monitor` threw `ReferenceError: normalizeName is not defined` on every `MessageCreate`; bot.js's silent try/catch masked it. Now injected as a dep.
-- Edit-flow user dropdown rendered raw Discord snowflake IDs: `resolveDiscordDisplay` returns a string, not `{ displayName }`. Falls back through cached User-doc identity strings first.
-- `ensureFreshWeek` no longer wipes gate/task timestamps that land inside the current reset window (preserves current-week clears on stale-cursor users).
-- Auto-sync self-heals diacritic-only roster name mismatches (`Lastdance` → `Lastdancë`) via a class/iLvl-gated `foldName` matcher.
+- `/raid-check` out-grown chars (e.g. 1732 char who cleared Serca Normal at 1725) no longer leak into lower-mode views as done.
+- `/raid-check raid:all` Edit no longer dies on `raidMeta=null` (caught by Codex review of `e15b275`).
+- `/raid-check` Edit Complete/Process/Reset no-op'd because `selectedRaid` was the raid portion only, not the combined `${raidKey}_${modeKey}` key.
+- `raid-channel-monitor` `ReferenceError: normalizeName is not defined` on every MessageCreate (was masked by silent try/catch).
+- Edit-flow user dropdown rendered raw Discord snowflake IDs (`resolveDiscordDisplay` returns a string, not an object).
+- `ensureFreshWeek` no longer wipes gate/task timestamps inside the current reset window.
+- Auto-sync self-heals diacritic-only roster name mismatches (`Lastdance` → `Lastdancë`).
 
 ## 2026-04-23
 
 ### Added
-
-- `/raid-check` Mongo prefilter by raid iLvl floor + stale-account carveout; new indexes on `accounts.characters.itemLevel` and `accounts.lastRefreshedAt`.
+- `/raid-check` Mongo prefilter by raid iLvl floor + stale-account carve-out; new indexes on `accounts.characters.itemLevel` and `accounts.lastRefreshedAt`.
 - Empty raid-channel messages now post a warning instead of silent-dropping.
 
 ### Changed
-
-- Auto-manage sync cooldown raised 5m → 15m to protect `bible.lostark`.
-- Scheduler tick logging now distinguishes synced / attempted-only / skipped / failed buckets (no more "synced N" inflation).
+- Auto-manage sync cooldown raised **5m → 15m** to protect `bible.lostark`.
+- Scheduler tick logging distinguishes synced / attempted-only / skipped / failed buckets.
 
 ### Fixed
-
 - Auto-manage roster fallback no longer re-fetches the same roster per character in one gather pass.
 
 ## 2026-04-22
 
 ### Added
-
-- `/raid-auto-manage` **Phase 3**: 24h passive auto-sync scheduler (30-min tick, batch of 3 users, killswitch `AUTO_MANAGE_DAILY_DISABLED`).
-- Stuck private-log channel nudge (7-day per-user dedup via `User.lastPrivateLogNudgeAt`).
-- `/raid-announce` command: list / enable-disable / redirect per-guild announcement types.
+- **`/raid-auto-manage` Phase 3**: 24h passive auto-sync scheduler (30-min tick, batch of 3 users, killswitch `AUTO_MANAGE_DAILY_DISABLED`).
+- Stuck private-log channel nudge (7-day per-user dedup).
+- **`/raid-announce`**: list / enable-disable / redirect per-guild announcement types.
 
 ### Fixed
-
-- Codex review rounds 21-27: gather/apply key collisions, parallel gather backpressure, cooldown slot leak on save-fail, scheduler fairness (stalled users starving the queue), operator-log outcome honesty.
+- Codex review rounds 21-27: gather/apply key collisions, parallel gather backpressure, cooldown slot leak on save-fail, scheduler fairness, operator-log outcome honesty.
 
 ## 2026-04-21
 
 ### Added
-
-- `/raid-auto-manage` **Phase 1 + 2**: `on` / `off` / `sync` / `status` plus `/raid-status` piggyback sync for opted-in users.
-- Text-channel monitor expansion: multi-char posts, whisper-ack with 5s TTL, per-user 2s cooldown with spam warning at ≥3 hits/10s.
+- **`/raid-auto-manage` Phase 1 + 2**: `on` / `off` / `sync` / `status`; `/raid-status` piggyback sync for opted-in users.
+- Text-channel monitor expansion: multi-char posts, whisper-ack with 5s TTL, per-user 2s cooldown with spam warning.
 - Bible private-log detection with an actionable Public Log prompt.
 
 ### Fixed
-
-- Codex review rounds 8-20: gate/difficulty edge cases, same-name-char disambiguation across rosters, autocomplete 25-cap overflow, whisper-ack race conditions, misc polish.
+- Codex review rounds 8-20: gate/difficulty edge cases, same-name-char disambiguation across rosters, autocomplete 25-cap overflow, whisper-ack race conditions.
 
 ## 2026-04-20
 
 ### Added
-
-- Initial commit: Discord bot scaffolding, Mongoose schemas, weekly reset (Wed 17:00 VN), core slash commands (`/add-roster`, `/raid-status`, `/raid-set`, `/raid-check`), `/raid-channel` text monitor, `/raid-help` drill-down dropdown.
+- Initial commit: bot scaffolding, Mongoose schemas, weekly reset (Wed 17:00 VN), core slash commands (`/add-roster`, `/raid-status`, `/raid-set`, `/raid-check`), `/raid-channel` text monitor, `/raid-help` drill-down dropdown.
 
 ### Fixed
-
-- Codex review round 1-7: initial hardening pass on command gating, error UX, permission checks.
+- Codex review rounds 1-7: command gating, error UX, permission checks.
