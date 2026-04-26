@@ -26,6 +26,7 @@ const {
 } = require("./raid-command");
 const { startWeeklyResetJob } = require("./weekly-reset");
 const { bootstrapClassEmoji } = require("./services/class-emoji-bootstrap");
+const { createInteractionRouter } = require("./services/interaction-router");
 
 const { DISCORD_TOKEN, GUILD_ID } = process.env;
 
@@ -34,23 +35,6 @@ const { DISCORD_TOKEN, GUILD_ID } = process.env;
 // rejects the login and the bot process exits. Setting TEXT_MONITOR_ENABLED=false
 // lets a deployment run slash-command-only without the privileged intent.
 const TEXT_MONITOR_ENABLED = process.env.TEXT_MONITOR_ENABLED !== "false";
-
-function isUnknownInteractionError(error) {
-  return error?.code === 10062 || error?.rawError?.code === 10062;
-}
-
-function describeInteraction(interaction) {
-  if (!interaction) return "unknown";
-  if (interaction.isChatInputCommand?.()) return `command=${interaction.commandName}`;
-  if (interaction.isAutocomplete?.()) return `autocomplete=${interaction.commandName}`;
-  if (interaction.customId) return `customId=${interaction.customId}`;
-  return `type=${interaction.type || "unknown"}`;
-}
-
-function getInteractionAgeMs(interaction) {
-  const created = Number(interaction?.createdTimestamp) || 0;
-  return created > 0 ? Date.now() - created : null;
-}
 
 if (!DISCORD_TOKEN) {
   console.error("Missing DISCORD_TOKEN in .env");
@@ -158,68 +142,42 @@ async function startBot() {
     });
   }
 
-  client.on(Events.InteractionCreate, async (interaction) => {
-    try {
-      if (interaction.isChatInputCommand()) {
-        const allowed = ["add-roster", "raid-check", "raid-set", "raid-status", "raid-help", "remove-roster", "raid-channel", "raid-auto-manage", "raid-announce"];
-        if (!allowed.includes(interaction.commandName)) return;
-        await handleRaidManagementCommand(interaction);
-        return;
-      }
-
-      if (interaction.isAutocomplete()) {
-        if (interaction.commandName === "raid-set") {
-          await handleRaidSetAutocomplete(interaction);
-        } else if (interaction.commandName === "remove-roster") {
-          await handleRemoveRosterAutocomplete(interaction);
-        } else if (interaction.commandName === "raid-channel") {
-          await handleRaidChannelAutocomplete(interaction);
-        } else if (interaction.commandName === "raid-auto-manage") {
-          await handleRaidAutoManageAutocomplete(interaction);
-        } else if (interaction.commandName === "raid-announce") {
-          await handleRaidAnnounceAutocomplete(interaction);
-        } else {
-          await interaction.respond([]).catch(() => {});
-        }
-        return;
-      }
-
-      if (interaction.isStringSelectMenu() && interaction.customId === "raid-help:select") {
-        await handleRaidHelpSelect(interaction);
-        return;
-      }
-
+  // Routing extracted to ./services/interaction-router.js. Adding a new
+  // command / autocomplete / button / select means updating one of the
+  // registry props below; bot.js stays focused on lifecycle.
+  const router = createInteractionRouter({
+    MessageFlags,
+    allowedCommands: [
+      "add-roster",
+      "raid-check",
+      "raid-set",
+      "raid-status",
+      "raid-help",
+      "remove-roster",
+      "raid-channel",
+      "raid-auto-manage",
+      "raid-announce",
+    ],
+    handleSlashCommand: handleRaidManagementCommand,
+    autocompleteHandlers: {
+      "raid-set": handleRaidSetAutocomplete,
+      "remove-roster": handleRemoveRosterAutocomplete,
+      "raid-channel": handleRaidChannelAutocomplete,
+      "raid-auto-manage": handleRaidAutoManageAutocomplete,
+      "raid-announce": handleRaidAnnounceAutocomplete,
+    },
+    selectHandlers: {
+      "raid-help:select": handleRaidHelpSelect,
+    },
+    buttonRoutes: [
       // Phase 2 /raid-check interactive buttons. Custom IDs follow the
-      // shape "raid-check:<action>:<raidKey>" - dispatcher handles auth +
-      // action routing, no per-button switch here.
-      if (interaction.isButton() && interaction.customId.startsWith("raid-check:")) {
-        await handleRaidCheckButton(interaction);
-        return;
-      }
-    } catch (error) {
-      if (isUnknownInteractionError(error)) {
-        const ageMs = getInteractionAgeMs(interaction);
-        const agePart = ageMs === null ? "" : ` ageMs=${ageMs}`;
-        console.warn(
-          `[bot] stale interaction ignored: ${describeInteraction(interaction)}${agePart}`
-        );
-        return;
-      }
-
-      console.error("[bot] interaction error:", error);
-
-      const payload = {
-        content: "Có lỗi xảy ra khi xử lý lệnh. Vui lòng thử lại.",
-        flags: MessageFlags.Ephemeral,
-      };
-
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp(payload).catch(() => {});
-      } else if (interaction.isRepliable?.()) {
-        await interaction.reply(payload).catch(() => {});
-      }
-    }
+      // shape "raid-check:<action>:<raidKey>" - dispatcher handles auth
+      // + action routing, no per-button switch here.
+      { prefix: "raid-check:", handle: handleRaidCheckButton },
+    ],
   });
+
+  client.on(Events.InteractionCreate, router.handle);
 
   await client.login(DISCORD_TOKEN);
 }
