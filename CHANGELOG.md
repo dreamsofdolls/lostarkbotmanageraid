@@ -32,6 +32,10 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 - **25 earlier tests** (`test/add-roster.test.js` + `test/edit-roster.test.js`): race-safe overlap guard, single-session dup detection, account-match merge, per-char state preservation, multi-seed fallback, zero-overlap reject, saved-first sort against truncation, diff-apply add/remove/keep summary, vanished-account / vanished-user error paths.
 - Extracted `buildEditRosterPickerChars` helper in `commands/edit-roster.js` so the saved-first sort + cap truncation contract is unit-testable without driving the full Discord handler.
 
+### Added (`/add-roster target:` flow now DMs the target user with full details)
+- When a Raid Manager adds a roster on behalf of someone (`target:` option), Artist now sends the target user a private DM with the saved-embed + a friendly Manager-attribution intro + next-step hints (`/raid-status`, `/edit-roster`, `/raid-help`). Channel embed stays intact as audit proof + fallback when DMs are blocked.
+- DM delivery status surfaces in the channel embed itself: "📩 Artist đã DM riêng cho <@target>" on success, "⚠️ Không DM được... Channel ping ở trên là backup" when target has DMs disabled (Discord 50007), or a generic "DM fail" line for other API errors. Manager sees at a glance whether their target got a private notice.
+
 ### Added (pinned welcome embed: "Member mới? Bắt đầu ở đây" onboarding field)
 - Pinned welcome embed in `raid-channel-monitor.js` gets a new first field laying out the 3-step roster onboarding path: `/add-roster` (initial picker), `/edit-roster` (manage saved chars), `/raid-status` + `/raid-help` (view + docs). Newcomer scanning the pin top-down now sees the workflow before the post-format docs. Description trimmed to remove the now-duplicate `/add-roster` mention.
 - Existing guilds need `/raid-channel config action:rebuild` to swap the old pinned welcome for the new shape; new channels post the updated embed automatically.
