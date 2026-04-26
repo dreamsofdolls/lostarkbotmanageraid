@@ -152,7 +152,7 @@ function createRaidStatusCommand(deps) {
         return `${UI.icons.reset} Artist vừa sync xong, có **${n}** gate mới luôn nha~`;
       }
       case "timeout":
-        return "⏳ Bible đang chậm tay, Artist gather còn chạy ngầm. Cậu mở lại sau ~10s là có data tươi nha~";
+        return "⏳ Bible đang chậm tay, Artist vẫn đang lấy ngầm. Cậu mở lại sau ~10s là có data mới nha~";
       case "failed":
         return `${UI.icons.warn} Bible đang dở chứng, Artist tạm xem cache. Cậu thử lại sau vài phút giúp tớ nhé~`;
       case "cooldown":
@@ -210,16 +210,19 @@ function createRaidStatusCommand(deps) {
     const freshnessLine = buildAccountFreshnessLine(account, userMeta);
     if (freshnessLine) descriptionLines.push(freshnessLine);
 
-    // Surface the bible-piggyback outcome from THIS open so the user
-    // (regular member, /raid-status is their only sync entry point) can
-    // tell whether the data they're seeing reflects a fresh pull, a
-    // silently-failed attempt, or a cached read because they were within
-    // the 10m cooldown. Skip the "not-applicable" / "synced-no-new"
-    // cases on purpose - they add noise without information (the freshness
-    // line above already tells them when bible was last successfully
-    // synced + countdown to next free attempt).
+    // Bible-piggyback outcome line (computed here so the early-return
+    // paths below can also surface it, but rendered as a FINAL FIELD
+    // below the char fields - see the addFields call near the end of
+    // this function). Placement at the bottom (just before the
+    // done/partial/pending legend in the footer) keeps the freshness
+    // info compact at the top while leaving room for the outcome to
+    // sit next to the totals it explains.
+    //
+    // Skip the "not-applicable" / "synced-no-new" / "cooldown" cases:
+    // those add noise without information - the freshness line above
+    // already tells the user when bible was last successfully synced
+    // + countdown to the next free attempt.
     const outcomeLine = buildPiggybackOutcomeLine(userMeta?.piggybackOutcome);
-    if (outcomeLine) descriptionLines.push(outcomeLine);
 
     const embed = new EmbedBuilder()
       .setTitle(title)
@@ -233,8 +236,19 @@ function createRaidStatusCommand(deps) {
       embed.setDescription(descriptionLines.join("\n"));
     }
 
+    // Render outcome as a FINAL field just before the footer legend.
+    // Used by every return path so the user gets the same "what just
+    // happened on bible sync" info regardless of whether the roster is
+    // full / empty / all-ineligible.
+    const appendOutcomeField = () => {
+      if (outcomeLine) {
+        embed.addFields({ name: "\u200B", value: outcomeLine, inline: false });
+      }
+    };
+
     if (characters.length === 0) {
       embed.addFields({ name: "\u200B", value: "_No characters saved._", inline: false });
+      appendOutcomeField();
       return embed;
     }
 
@@ -257,6 +271,7 @@ function createRaidStatusCommand(deps) {
         value: `${UI.icons.lock} _Không có character nào eligible cho raid này trong roster._`,
         inline: false,
       });
+      appendOutcomeField();
       return embed;
     }
 
@@ -270,6 +285,7 @@ function createRaidStatusCommand(deps) {
       );
     }
 
+    appendOutcomeField();
     return embed;
   }
 
