@@ -32,10 +32,13 @@ function makeFactory() {
   });
 }
 
-function makeReplyInteraction() {
+function makeReplyInteraction({ language = null } = {}) {
   const calls = { reply: [], update: [] };
   return {
     user: { id: "user-1" },
+    options: {
+      getString: (name) => (name === "language" ? language : null),
+    },
     reply: async (arg) => {
       calls.reply.push(arg);
     },
@@ -46,9 +49,11 @@ function makeReplyInteraction() {
   };
 }
 
-function makeSelectInteraction(value) {
+function makeSelectInteraction(value, { lang = "vi" } = {}) {
   const interaction = makeReplyInteraction();
   interaction.values = value == null ? [] : [value];
+  // CustomId now carries the lang suffix from buildHelpDropdown.
+  interaction.customId = `raid-help:select:${lang}`;
   return interaction;
 }
 
@@ -85,16 +90,116 @@ test("handleRaidHelpCommand: replies with overview embed + dropdown, ephemeral",
   assert.equal(embedJson.fields.length, EXPECTED_SECTION_KEYS.length);
 });
 
-test("dropdown contains every help section", async () => {
+test("dropdown contains every help section + bakes default lang into customId", async () => {
   const factory = makeFactory();
   const interaction = makeReplyInteraction();
   await factory.handleRaidHelpCommand(interaction);
 
   const row = interaction._calls.reply[0].components[0].toJSON();
   const select = row.components[0];
-  assert.equal(select.custom_id, "raid-help:select");
+  assert.equal(select.custom_id, "raid-help:select:vi", "default lang is vi");
   const optionValues = select.options.map((o) => o.value).sort();
   assert.deepEqual(optionValues, [...EXPECTED_SECTION_KEYS].sort());
+});
+
+test("language=en option renders English overview + bakes en into dropdown customId", async () => {
+  const factory = makeFactory();
+  const interaction = makeReplyInteraction({ language: "en" });
+  await factory.handleRaidHelpCommand(interaction);
+
+  const reply = interaction._calls.reply[0];
+  const embedJson = reply.embeds[0].toJSON();
+  // Title carries lang code suffix.
+  assert.match(embedJson.title, /\(EN\)/);
+  // Description in English.
+  assert.match(embedJson.description, /Lost Ark raid progress tracker/);
+  assert.doesNotMatch(embedJson.description, /Bot quản lý/);
+  // Dropdown customId carries lang.
+  const select = reply.components[0].toJSON().components[0];
+  assert.equal(select.custom_id, "raid-help:select:en");
+});
+
+test("language=vi (default) renders Vietnamese overview", async () => {
+  const factory = makeFactory();
+  const interaction = makeReplyInteraction({ language: "vi" });
+  await factory.handleRaidHelpCommand(interaction);
+
+  const embedJson = interaction._calls.reply[0].embeds[0].toJSON();
+  assert.match(embedJson.title, /\(VI\)/);
+  assert.match(embedJson.description, /Bot quản lý/);
+  assert.doesNotMatch(embedJson.description, /Lost Ark raid progress tracker/);
+});
+
+test("invalid language value falls back to default vi", async () => {
+  const factory = makeFactory();
+  const interaction = makeReplyInteraction({ language: "fr" });
+  await factory.handleRaidHelpCommand(interaction);
+
+  const embedJson = interaction._calls.reply[0].embeds[0].toJSON();
+  assert.match(embedJson.title, /\(VI\)/);
+});
+
+test("detail embed in English: notes with VN: prefix are stripped", async () => {
+  // /add-roster section has paired EN: / VN: notes — under en mode,
+  // the VN-prefixed lines must NOT appear.
+  const factory = makeFactory();
+  const interaction = makeSelectInteraction("add-roster", { lang: "en" });
+  await factory.handleRaidHelpSelect(interaction);
+
+  const allFields = getAllFieldValues(interaction._calls.update[0].embeds[0].toJSON());
+  // En line about "Fetches the full roster" survives.
+  assert.match(allFields, /Fetches the full roster/);
+  // VN line about "Fetch toàn bộ roster" must not appear.
+  assert.doesNotMatch(allFields, /Fetch toàn bộ roster/);
+  // The "VN: " prefix itself shouldn't leak into the rendered text.
+  assert.doesNotMatch(allFields, /^VN:/m);
+});
+
+test("detail embed in Vietnamese: notes with EN: prefix are stripped", async () => {
+  const factory = makeFactory();
+  const interaction = makeSelectInteraction("add-roster", { lang: "vi" });
+  await factory.handleRaidHelpSelect(interaction);
+
+  const allFields = getAllFieldValues(interaction._calls.update[0].embeds[0].toJSON());
+  assert.match(allFields, /Fetch toàn bộ roster/);
+  assert.doesNotMatch(allFields, /Fetches the full roster/);
+  assert.doesNotMatch(allFields, /^EN:/m);
+});
+
+test("detail embed: untagged technical bullets render in BOTH languages", async () => {
+  // Notes lines starting with "•" (no EN:/VN: prefix) are shared
+  // technical jargon — they must survive both language filters.
+  const factory = makeFactory();
+
+  const enInteraction = makeSelectInteraction("add-roster", { lang: "en" });
+  await factory.handleRaidHelpSelect(enInteraction);
+  const enFields = getAllFieldValues(enInteraction._calls.update[0].embeds[0].toJSON());
+
+  const viInteraction = makeSelectInteraction("add-roster", { lang: "vi" });
+  await factory.handleRaidHelpSelect(viInteraction);
+  const viFields = getAllFieldValues(viInteraction._calls.update[0].embeds[0].toJSON());
+
+  // Cap line is a technical bullet (starts with "•") — must appear in both.
+  assert.match(enFields, /Cap.*chars\/roster/);
+  assert.match(viFields, /Cap.*chars\/roster/);
+});
+
+test("detail embed in English uses 'No options' label for option-less sections", async () => {
+  const factory = makeFactory();
+  const interaction = makeSelectInteraction("raid-status", { lang: "en" });
+  await factory.handleRaidHelpSelect(interaction);
+
+  const optionsField = interaction._calls.update[0].embeds[0].toJSON().fields.find((f) => f.name === "Options");
+  assert.match(optionsField.value, /No options/i);
+});
+
+test("detail embed in Vietnamese uses 'Không có options' label", async () => {
+  const factory = makeFactory();
+  const interaction = makeSelectInteraction("raid-status", { lang: "vi" });
+  await factory.handleRaidHelpSelect(interaction);
+
+  const optionsField = interaction._calls.update[0].embeds[0].toJSON().fields.find((f) => f.name === "Options");
+  assert.match(optionsField.value, /Không có options/i);
 });
 
 test("handleRaidHelpSelect: valid section key returns matching detail embed", async () => {
@@ -175,10 +280,11 @@ test("detail embed: optional-option marker (⚪) renders for optional args", asy
   assert.match(allFields, /⚪ `target`/);
 });
 
-test("detail embed: 'No options' surfaces when section has empty options array", async () => {
+test("detail embed: 'Không có options' surfaces when section has empty options array (default lang)", async () => {
   // /raid-status has no options. Detail embed shouldn't render an
-  // empty Options field — must surface the explicit "No options"
-  // notice instead.
+  // empty Options field — must surface the explicit notice instead.
+  // Default lang is vi → "Không có options". The English equivalent
+  // ("No options") has its own dedicated test below.
   const factory = makeFactory();
   const interaction = makeSelectInteraction("raid-status");
   await factory.handleRaidHelpSelect(interaction);
@@ -186,7 +292,7 @@ test("detail embed: 'No options' surfaces when section has empty options array",
   const embedJson = interaction._calls.update[0].embeds[0].toJSON();
   const optionsField = embedJson.fields.find((f) => f.name === "Options");
   assert.ok(optionsField, "should still have an Options field even when empty");
-  assert.match(optionsField.value, /No options/i);
+  assert.match(optionsField.value, /Không có options/i);
 });
 
 test("dropdown options carry section icons as emoji + truncated descriptions ≤100 chars", async () => {

@@ -251,22 +251,47 @@ const HELP_SECTIONS = [
       ],
     },
   ];
-  function buildHelpOverviewEmbed() {
+  // Language toggle: pick "en" or "vi" (default). Each render builder
+  // takes the resolved lang and emits monolingual content. Notes
+  // pre-tagged with "EN: " / "VN: " filter accordingly; un-tagged lines
+  // (technical bullets, code refs) render in both languages.
+  const LANG_DEFAULT = "vi";
+  function pickLang(value) {
+    return value === "en" ? "en" : "vi";
+  }
+  function pickShortText(section, lang) {
+    return lang === "en" ? section.short : section.shortVn;
+  }
+  function filterNotesByLang(notes, lang) {
+    const PREFIX_EN = /^EN:\s*/;
+    const PREFIX_VN = /^VN:\s*/;
+    return notes
+      .filter((line) => {
+        if (PREFIX_EN.test(line)) return lang === "en";
+        if (PREFIX_VN.test(line)) return lang === "vi";
+        return true; // shared technical notes
+      })
+      .map((line) => line.replace(PREFIX_EN, "").replace(PREFIX_VN, ""));
+  }
+
+  function buildHelpOverviewEmbed(lang = LANG_DEFAULT) {
+    const titleSuffix = lang === "en" ? "EN" : "VI";
+    const desc = lang === "en"
+      ? "Lost Ark raid progress tracker for Discord. Pick a command below for details."
+      : "Bot quản lý tiến độ raid Lost Ark. Chọn command ở dropdown để xem chi tiết.";
+    const footer = lang === "en"
+      ? "Switch language: /raid-help language:vi"
+      : "Đổi ngôn ngữ: /raid-help language:en";
     const embed = new EmbedBuilder()
-      .setTitle("🎯 Raid Management Bot - Help")
-      .setDescription(
-        [
-          "**EN:** Lost Ark raid progress tracker for Discord. Pick a command below for details.",
-          "**VN:** Bot quản lý tiến độ raid Lost Ark. Chọn command ở dropdown để xem chi tiết.",
-        ].join("\n")
-      )
+      .setTitle(`🎯 Raid Management Bot - Help (${titleSuffix})`)
+      .setDescription(desc)
       .setColor(UI.colors.neutral)
-      .setFooter({ text: "Type /raid-help anytime · Soạn /raid-help bất cứ lúc nào" })
+      .setFooter({ text: footer })
       .setTimestamp();
     for (const section of HELP_SECTIONS) {
       embed.addFields({
         name: `${section.icon} ${section.label}`,
-        value: `${section.short}\n_${section.shortVn}_`,
+        value: pickShortText(section, lang),
         inline: false,
       });
     }
@@ -309,12 +334,13 @@ const HELP_SECTIONS = [
       });
     });
   }
-  function buildHelpDetailEmbed(sectionKey) {
+  function buildHelpDetailEmbed(sectionKey, lang = LANG_DEFAULT) {
     const section = HELP_SECTIONS.find((item) => item.key === sectionKey);
-    if (!section) return buildHelpOverviewEmbed();
+    if (!section) return buildHelpOverviewEmbed(lang);
+    const noOptionsLabel = lang === "en" ? "_No options_" : "_Không có options_";
     const embed = new EmbedBuilder()
       .setTitle(`${section.icon} ${section.label}`)
-      .setDescription(`**EN:** ${section.short}\n**VN:** ${section.shortVn}`)
+      .setDescription(pickShortText(section, lang))
       .setColor(UI.colors.neutral);
     if (section.options.length > 0) {
       const optionLines = section.options.map((opt) => {
@@ -323,38 +349,51 @@ const HELP_SECTIONS = [
       });
       addChunkedHelpField(embed, "Options", optionLines.join("\n"));
     } else {
-      embed.addFields({ name: "Options", value: "_No options_", inline: false });
+      embed.addFields({ name: "Options", value: noOptionsLabel, inline: false });
     }
     embed.addFields({ name: "Example", value: `\`${section.example}\``, inline: false });
-    addChunkedHelpField(embed, "Notes", section.notes.join("\n"));
+    const filteredNotes = filterNotesByLang(section.notes, lang);
+    addChunkedHelpField(embed, "Notes", filteredNotes.join("\n"));
     return embed;
   }
-  function buildHelpDropdown() {
+  function buildHelpDropdown(lang = LANG_DEFAULT) {
+    const placeholder = lang === "en"
+      ? "📖 Pick a command for details..."
+      : "📖 Chọn command để xem chi tiết...";
+    // Lang baked into the customId so dropdown selections after a
+    // language switch render the detail in the user's chosen language
+    // without re-running the slash command. selectRoutes prefix-match
+    // in bot.js dispatches `raid-help:select:<lang>` to the same
+    // handler.
     const menu = new StringSelectMenuBuilder()
-      .setCustomId("raid-help:select")
-      .setPlaceholder("📖 Pick a command for details... / Chọn command để xem chi tiết...")
+      .setCustomId(`raid-help:select:${lang}`)
+      .setPlaceholder(placeholder)
       .addOptions(
         HELP_SECTIONS.map((section) => ({
           label: section.label,
           value: section.key,
-          description: section.short.slice(0, 100),
+          description: pickShortText(section, lang).slice(0, 100),
           emoji: section.icon,
         }))
       );
     return new ActionRowBuilder().addComponents(menu);
   }
   async function handleRaidHelpCommand(interaction) {
+    const lang = pickLang(interaction.options.getString("language"));
     await interaction.reply({
-      embeds: [buildHelpOverviewEmbed()],
-      components: [buildHelpDropdown()],
+      embeds: [buildHelpOverviewEmbed(lang)],
+      components: [buildHelpDropdown(lang)],
       flags: MessageFlags.Ephemeral,
     });
   }
   async function handleRaidHelpSelect(interaction) {
+    // CustomId shape: `raid-help:select:<lang>` - lang baked in by the
+    // dropdown builder so the detail embed stays monolingual.
+    const lang = pickLang(interaction.customId.split(":")[2]);
     const sectionKey = interaction.values?.[0];
     await interaction.update({
-      embeds: [buildHelpDetailEmbed(sectionKey)],
-      components: [buildHelpDropdown()],
+      embeds: [buildHelpDetailEmbed(sectionKey, lang)],
+      components: [buildHelpDropdown(lang)],
     });
   }
   return {

@@ -32,6 +32,9 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 - **25 earlier tests** (`test/add-roster.test.js` + `test/edit-roster.test.js`): race-safe overlap guard, single-session dup detection, account-match merge, per-char state preservation, multi-seed fallback, zero-overlap reject, saved-first sort against truncation, diff-apply add/remove/keep summary, vanished-account / vanished-user error paths.
 - Extracted `buildEditRosterPickerChars` helper in `commands/edit-roster.js` so the saved-first sort + cap truncation contract is unit-testable without driving the full Discord handler.
 
+### Added
+- **`/raid-help language:`** option (`Tiếng Việt` / `English`, default `vi`). Each embed now renders ONE language only instead of stacking EN + VN side-by-side. Notes pre-tagged with `EN: ` or `VN: ` filter to the chosen language; un-tagged technical bullets (cap, code refs, etc.) survive both. Lang baked into the dropdown customId so detail-embed selections after the slash command keep the chosen language. Test coverage: 8 new tests covering language selection, prefix-strip filtering, and the per-language "No options" / "Không có options" labels.
+
 ### Changed
 - **`/add-roster` + `/edit-roster` picker UI** swapped from `StringSelectMenu` to per-char toggle buttons. The dropdown was visually noisy when default-selected (each char appearing as a wrapping pill chip in the open-state) and duplicated the embed's `✅`/`⬜` markers. Toggle buttons keep selection state in one place (button label + green/gray style), 1 click per char to flip, no menu open required. Layout: 4 rows of up to 5 char buttons + 1 row of Confirm/Cancel (Discord 5-row hard cap).
 - `MAX_CHARACTERS_PER_ACCOUNT` lowered **25 → 20** to match the new picker capacity (Discord 5-row component limit). LA in-game roster max is ~18 chars so still has headroom.
