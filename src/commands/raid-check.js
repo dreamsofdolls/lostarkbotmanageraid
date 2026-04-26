@@ -706,20 +706,33 @@ function createRaidCheckCommand(deps) {
       const allDefault = !selectedId || selectedId === FILTER_ALL;
       const options = [
         {
-          label: truncateText(`All users (${pendingChars.length} pending)`, 100),
+          label: truncateText(
+            `All users (${pendingChars.length === 0 ? "DONE" : `${pendingChars.length} pending`})`,
+            100
+          ),
           value: FILTER_ALL,
           emoji: "🌐",
           default: allDefault,
         },
-        ...userDropdownEntries.map(([discordId, tally]) => ({
-          label: truncateText(
-            `${displayMap.get(discordId) || discordId} (${tally.total} pending · ${tally.supports}🪄 ${tally.dps}⚔️)`,
-            100
-          ),
-          value: discordId,
-          emoji: "👤",
-          default: selectedId === discordId,
-        })),
+        ...userDropdownEntries.map(([discordId, tally]) => {
+          // Collapse the role-breakdown suffix when the user has 0 pending -
+          // "(0 pending · 0🪄 0⚔️)" reads as noise that takes longer to parse
+          // than the more informative "(DONE)". Only the DONE marker stays
+          // so leaders can scan the dropdown for who's still actually
+          // outstanding without filtering by hand.
+          const suffix = tally.total === 0
+            ? "DONE"
+            : `${tally.total} pending · ${tally.supports}🪄 ${tally.dps}⚔️`;
+          return {
+            label: truncateText(
+              `${displayMap.get(discordId) || discordId} (${suffix})`,
+              100
+            ),
+            value: discordId,
+            emoji: "👤",
+            default: selectedId === discordId,
+          };
+        }),
       ];
       const menu = new StringSelectMenuBuilder()
         .setCustomId("raid-check-filter:user")

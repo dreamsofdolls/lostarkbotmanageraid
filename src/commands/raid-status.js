@@ -549,16 +549,25 @@ function createRaidStatusCommand(deps) {
     const buildRaidFilterRow = (disabled) => {
       const options = [
         {
-          label: truncateText(`All raids (${totalRaidPending} total pending)`, 100),
+          label: truncateText(
+            `All raids (${totalRaidPending === 0 ? "DONE" : `${totalRaidPending} total pending`})`,
+            100
+          ),
           value: FILTER_ALL_RAIDS,
           emoji: "🌐",
           default: filterRaidId === null,
         },
       ];
       for (const r of raidDropdownEntries.slice(0, 24)) {
+        // Caller has cleared every eligible char of this raid -> show
+        // "DONE" instead of "0 pending · 0🪄 0⚔️". Cleaner scan when most
+        // of the roster is up to date but a couple raids still drag.
+        const suffix = r.pending === 0
+          ? "DONE"
+          : `${r.pending} pending · ${r.supports}🪄 ${r.dps}⚔️`;
         options.push({
           label: truncateText(
-            `${r.label} (${r.pending} pending · ${r.supports}🪄 ${r.dps}⚔️)`,
+            `${r.label} (${suffix})`,
             100
           ),
           value: r.key,
