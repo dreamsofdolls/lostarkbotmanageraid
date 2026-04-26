@@ -418,6 +418,15 @@ function createRaidChannelMonitorService({
         {
           name: "👑 Ghi chú bé xíu",
           value: "Thi thoảng cậu sẽ bắt gặp vài roster đội `👑` thay cho `📁`. Artist quen vài người thôi mà~",
+        },
+        {
+          name: "🛡️ ⚔️ Icon trong dropdown nghĩa là gì?",
+          value: [
+            "Khi cậu xem `/raid-status` hay `/raid-check`, dropdown filter sẽ kèm 2 icon nho nhỏ phân loại pending count:",
+            "• `🛡️` = **Support** (Bard / Paladin / Artist / Valkyrie)",
+            "• `⚔️` = **DPS** (mọi class còn lại)",
+            "Ví dụ `Du (8 pending · 2🛡️ 6⚔️)` = Du còn 8 char chưa clear raid, trong đó 2 sup + 6 DPS. Để Raid Manager nhìn 1 phát biết comp còn thiếu role nào.",
+          ].join("\n"),
         }
       )
       .setFooter({ text: "Muốn xem full hướng dẫn tất cả commands? Gõ /raid-help nhé~" });
