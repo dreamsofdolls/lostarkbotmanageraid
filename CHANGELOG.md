@@ -4,6 +4,13 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-26
 
+### Changed (interaction routing extracted to its own module)
+
+- `bot.js` interaction handler (a 5-branch `if/else if` ladder over `isChatInputCommand` / `isAutocomplete` / `isStringSelectMenu` / `isButton` plus a per-command autocomplete sub-switch) extracted to `src/services/interaction-router.js` via factory pattern. `bot.js` now passes 4 small registry maps (`allowedCommands`, `autocompleteHandlers`, `selectHandlers`, `buttonRoutes`) and registers the router's single `handle` function on `Events.InteractionCreate`.
+- Adding a new slash command / autocomplete / button / select menu now means updating one of the registry props in `bot.js` instead of editing the dispatcher branching - matches the registry-of-handlers pattern Phase 3 used for `/raid-check` snapshot/edit/all-mode/sync/edit-ui factories.
+- Pure helpers (`isUnknownInteractionError`, `describeInteraction`, `getInteractionAgeMs`) moved into the router module too since they're only consumed by the dispatcher's error path. Re-exported for any future test harness.
+- `bot.js`: 220 → 188 lines (-32). All routing logic now lives in one focused 156-line module instead of being mixed into the entry point. Behavioral verified via stub-test of all 8 dispatch paths (allowed/disallowed slash, known/unknown autocomplete, known/unknown select, prefix-match/no-match button) before commit.
+
 ### Changed (class icon bootstrap: content-addressed naming)
 
 - Bootstrap now uses **content-addressed emoji names**: each application emoji is created as `{bibleClassId}_{md5short}` where `md5short` is the first 6 chars of the PNG's MD5 hash. On every restart, the bootstrap detects when a PNG's content has changed by computing the expected name from current bytes and comparing against the existing emoji's name. Mismatch → delete + re-upload with new hash; match → skip.
