@@ -514,6 +514,14 @@ function createRaidChannelMonitorService({
   const MONITOR_COOLDOWN_MS = 2000;     // min 2s between processed messages per user
   const MONITOR_SPAM_WINDOW_MS = 10000; // sliding window for counting spam hits
   const MONITOR_SPAM_THRESHOLD = 3;     // cooldown-hits within window → trigger warning
+
+  // Per-process dedup of MessageCreate events. Set holds message ids
+  // currently inside the handler's TTL window; second handler call for
+  // the same id short-circuits before any side effects (channel.send,
+  // DM, delete, persistent hint write). TTL = 60s, well above the ~5s
+  // whisper-ack visible lifetime so dedup outlives any visible reaction.
+  const recentlyHandledMessageIds = new Set();
+  const DEDUP_TTL_MS = 60 * 1000;
   const MONITOR_SPAM_WARN_CD_MS = 60000;// dedup: one warning per user per minute
   /**
    * Check whether a user's message should be accepted under the per-user
@@ -641,6 +649,27 @@ function createRaidChannelMonitorService({
     // this channel isn't the configured monitor.
     const cachedChannelId = getCachedMonitorChannelId(message.guildId);
     if (!cachedChannelId || cachedChannelId !== message.channelId) return;
+    // Per-process dedup: short-circuit if we've already started handling
+    // this exact message id within the TTL window. Defends against:
+    //   - Discord gateway anomaly (rare; sometimes the same MessageCreate
+    //     fires twice on a flaky connection)
+    //   - Future internal bug that accidentally double-registers the
+    //     MessageCreate listener
+    // Does NOT defend against dual-instance deploys (Railway rolling
+    // restart window where two containers both subscribe to the gateway)
+    // because each process has its own Set — that case needs an ops fix
+    // (single-replica config / stop-old-before-start-new strategy).
+    if (recentlyHandledMessageIds.has(message.id)) {
+      console.warn(
+        `[raid-channel] duplicate handler call for message ${message.id} (author=${message.author?.id}) — dropping`
+      );
+      return;
+    }
+    recentlyHandledMessageIds.add(message.id);
+    setTimeout(
+      () => recentlyHandledMessageIds.delete(message.id),
+      DEDUP_TTL_MS
+    );
     if (!message.content || !message.content.trim()) {
       await postEmptyContentWarning(message);
       return;
