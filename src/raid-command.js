@@ -576,6 +576,7 @@ const addRosterCommandHandlers = createAddRosterCommand({
   getCharacterClass,
   buildCharacterRecord,
   createCharacterId,
+  isManagerId,
 });
 ({
   handleAddRosterCommand,
