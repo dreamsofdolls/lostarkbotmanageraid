@@ -153,7 +153,13 @@ async function handleRaidAnnounceCommand(interaction) {
           buildNoticeEmbed(EmbedBuilder, {
             type: "success",
             title: "Đã chuyển trạng thái",
-            description: `\`${type}\` giờ là **${enabled ? "ON" : "OFF"}** nha, lần fire kế tiếp Artist sẽ ${enabled ? "post lại bình thường" : "im lặng skip"}.`,
+            description: [
+              `**Loại:** \`${type}\` (${typeLabel})`,
+              `**Trạng thái mới:** ${enabled ? "ON" : "OFF"}`,
+              `**Tác động:** Lần fire kế tiếp Artist ${enabled ? "post lại bình thường" : "im lặng skip"}.`,
+              "",
+              "Cậu xem state đầy đủ qua action `show` nếu muốn check nha~",
+            ].join("\n"),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -219,8 +225,16 @@ async function handleRaidAnnounceCommand(interaction) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "success",
-            title: "Override channel xong",
-            description: `\`${type}\` giờ post vào <#${channel.id}> nha. Lần fire kế tiếp Artist sẽ ghé qua đó. Muốn revert thì action \`clear-channel\`.`,
+            title: "Override channel ghi sổ rồi nha",
+            description: [
+              "Artist đã đổi destination cho announcement này.",
+              "",
+              `**Loại:** \`${type}\` (${typeLabel})`,
+              `**Channel mới:** <#${channel.id}>`,
+              "**Tác động:** Lần fire kế tiếp Artist sẽ post vào kênh đó.",
+              "",
+              `Muốn revert về monitor channel mặc định thì cậu chạy \`/raid-announce type:${type} action:clear-channel\` nha~`,
+            ].join("\n"),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -262,8 +276,16 @@ async function handleRaidAnnounceCommand(interaction) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "success",
-            title: "Override đã clear",
-            description: `\`${type}\` revert về monitor channel mặc định nha. Lần fire kế tiếp Artist sẽ post vào đó. Muốn override lại thì action \`set-channel channel:#abc\`.`,
+            title: "Override đã xoá",
+            description: [
+              "Artist đã clear override channel cho announcement này.",
+              "",
+              `**Loại:** \`${type}\` (${typeLabel})`,
+              "**Channel mới:** Monitor channel mặc định",
+              "**Tác động:** Lần fire kế tiếp Artist post vào monitor channel.",
+              "",
+              "Muốn override sang kênh khác thì action `set-channel channel:#abc` nha.",
+            ].join("\n"),
           }),
         ],
         flags: MessageFlags.Ephemeral,
