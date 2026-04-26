@@ -48,7 +48,8 @@ function getInteractionAgeMs(interaction) {
  * @property {string[]} allowedCommands - Slash command allowlist; non-matching commands are ignored.
  * @property {(interaction) => Promise<void>} handleSlashCommand - Dispatcher for any slash command in `allowedCommands`.
  * @property {Record<string, (interaction) => Promise<void>>} autocompleteHandlers - Per-command autocomplete handlers, keyed by commandName.
- * @property {Record<string, (interaction) => Promise<void>>} selectHandlers - String-select handlers, keyed by exact customId.
+ * @property {Record<string, (interaction) => Promise<void>>} selectHandlers - String-select handlers, keyed by exact customId. Tried first.
+ * @property {Array<{prefix: string, handle: (interaction) => Promise<void>}>} [selectRoutes] - Optional select handlers matched by customId prefix (first match wins). Used when the customId carries dynamic data (session IDs, etc.).
  * @property {Array<{prefix: string, handle: (interaction) => Promise<void>}>} buttonRoutes - Button handlers matched by customId prefix (first match wins).
  */
 
@@ -62,6 +63,7 @@ function createInteractionRouter({
   handleSlashCommand,
   autocompleteHandlers,
   selectHandlers,
+  selectRoutes = [],
   buttonRoutes,
 }) {
   const allowedCommandSet = new Set(allowedCommands);
@@ -87,9 +89,20 @@ function createInteractionRouter({
     }
 
     if (interaction.isStringSelectMenu()) {
+      // Exact-match table first (covers static customIds like
+      // "raid-help:select"); then prefix-match routes (used when the
+      // customId carries dynamic data such as a session ID — same shape
+      // as buttonRoutes below). First matching prefix wins.
       const handler = selectHandlers[interaction.customId];
       if (handler) {
         await handler(interaction);
+        return;
+      }
+      for (const route of selectRoutes) {
+        if (interaction.customId.startsWith(route.prefix)) {
+          await route.handle(interaction);
+          return;
+        }
       }
       return;
     }

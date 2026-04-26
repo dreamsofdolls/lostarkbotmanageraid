@@ -16,14 +16,6 @@ function createRaidCommandDefinitions({
         .setDescription("Any character name in the roster")
         .setRequired(true)
     )
-    .addIntegerOption((option) =>
-      option
-        .setName("total")
-        .setDescription("How many characters to save (1-6)")
-        .setRequired(false)
-        .setMinValue(1)
-        .setMaxValue(6)
-    )
     .addUserOption((option) =>
       option
         .setName("target")

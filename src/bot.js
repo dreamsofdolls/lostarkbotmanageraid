@@ -20,6 +20,8 @@ const {
   handleRaidAnnounceAutocomplete,
   handleRaidChannelMessage,
   handleRaidCheckButton,
+  handleAddRosterSelect,
+  handleAddRosterButton,
   loadMonitorChannelCache,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
@@ -177,11 +179,20 @@ async function startBot() {
     selectHandlers: {
       "raid-help:select": handleRaidHelpSelect,
     },
+    selectRoutes: [
+      // /add-roster picker uses customId "add-roster:select:<sessionId>"
+      // - the sessionId is dynamic so the exact-match selectHandlers
+      // table can't key on it. Prefix-match routes handle this case.
+      { prefix: "add-roster:select:", handle: handleAddRosterSelect },
+    ],
     buttonRoutes: [
       // Phase 2 /raid-check interactive buttons. Custom IDs follow the
       // shape "raid-check:<action>:<raidKey>" - dispatcher handles auth
       // + action routing, no per-button switch here.
       { prefix: "raid-check:", handle: handleRaidCheckButton },
+      // /add-roster Confirm/Cancel buttons use customId
+      // "add-roster:<action>:<sessionId>" - same prefix-routing pattern.
+      { prefix: "add-roster:", handle: handleAddRosterButton },
     ],
   });
 
