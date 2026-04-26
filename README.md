@@ -136,7 +136,8 @@ LostArk_RaidManage/
 │   ├── raid-command.js             # Compose root: wires every command + service
 │   │
 │   ├── commands/                   # One file per slash command (factory pattern)
-│   │   ├── add-roster.js
+│   │   ├── add-roster.js           # Interactive picker (per-char toggle buttons, 5-min session)
+│   │   ├── edit-roster.js          # Diff-style picker (saved ∪ bible, add/remove in one Confirm)
 │   │   ├── raid-announce.js
 │   │   ├── raid-auto-manage.js
 │   │   ├── raid-channel.js
@@ -147,7 +148,7 @@ LostArk_RaidManage/
 │   │   │   ├── edit-ui.js          # Edit cascading-select UI: embed/components, click handler, apply, DM (factory)
 │   │   │   ├── sync-ui.js          # Sync button flow + cache-first display-name resolver (factory)
 │   │   │   └── all-mode.js         # /raid-check raid:all cross-raid overview handler (factory)
-│   │   ├── raid-help.js
+│   │   ├── raid-help.js            # Drill-down dropdown + language toggle (en/vi)
 │   │   ├── raid-set.js             # applyRaidSetForDiscordId shared write path
 │   │   ├── raid-status.js
 │   │   ├── remove-roster.js
@@ -156,7 +157,9 @@ LostArk_RaidManage/
 │   ├── services/                   # Cross-command concerns
 │   │   ├── auto-manage-core.js     # Bible log gather + apply + cooldown slot
 │   │   ├── auto-manage-sync.js     # Status-side piggyback helper
-│   │   ├── manager.js              # RAID_MANAGER_ID allowlist + cooldown picker
+│   │   ├── emoji-bootstrap.js      # Generic application-emoji uploader (class-icons + artist-icons), content-hash naming
+│   │   ├── interaction-router.js   # Single MessageCreate dispatch: slash / autocomplete / select / button (prefix-match)
+│   │   ├── manager.js              # RAID_MANAGER_ID allowlist + cooldown picker + getPrimaryManagerId
 │   │   ├── raid-channel-monitor.js # Text-monitor parser + cleanup + welcome embed
 │   │   ├── raid-schedulers.js      # 30-min cleanup tick, bedtime/wake-up, daily auto-sync
 │   │   ├── roster-fetch.js         # lostark.bible HTML scrape
@@ -168,10 +171,11 @@ LostArk_RaidManage/
 │   │
 │   ├── data/                       # Pure constant lookup tables (no Mongoose)
 │   │   ├── Raid.js                 # RAID_REQUIREMENTS (iLvl floors + gate lists)
-│   │   └── Class.js                # Bible class ID -> display name map
+│   │   ├── Class.js                # Bible class ID -> display name + CLASS_EMOJI_MAP (runtime-mutated by bootstrap)
+│   │   └── ArtistEmoji.js          # Artist persona emoji map (shy/neutral/note) + getArtistEmoji helper
 │   │
 │   ├── raid/                       # Pure helpers / registries
-│   │   ├── shared.js               # Time, name, format utils
+│   │   ├── shared.js               # Time, name, format utils + buildNoticeEmbed helper
 │   │   ├── announcements.js        # Announcement registry (single source of truth)
 │   │   ├── character.js            # Character + raid normalization (20 helpers + RAID_REQUIREMENT_MAP)
 │   │   ├── raid-check-query.js     # /raid-check Mongo query (filter, projection, iLvl-range)
@@ -180,8 +184,23 @@ LostArk_RaidManage/
 │   ├── db.js                       # Lazy Mongo connect with DNS fallback
 │   └── weekly-reset.js             # 30-min tick, Wed 10:00 UTC boundary
 │
-├── test/
-│   └── raid-check-snapshot.test.js # node --test, pure functions via __test exports
+├── assets/
+│   ├── class-icons/                # 27 class PNGs (white silhouette) auto-uploaded as application emoji
+│   └── artist-icons/               # 3 Artist persona PNGs (shy / neutral / note)
+│
+├── scripts/
+│   └── invert-icon.py              # PIL helper: invert RGB while preserving alpha (for dark-bg sources)
+│
+├── test/                           # node --test, pure functions via __test exports
+│   ├── add-roster.test.js          # persistSelectedRoster: race-safe overlap guard, account-match
+│   ├── edit-roster.test.js         # persistEditedRoster, fetchBibleRosterWithFallback, picker sort
+│   ├── raid-announce-schedule.test.js
+│   ├── raid-check-snapshot.test.js # Snapshot, edit flow, freshness, manager, quiet hours
+│   ├── raid-help.test.js           # Dropdown, detail embeds, language toggle, field chunking
+│   ├── raid-set.test.js            # applyRaidSetForDiscordId state machine
+│   ├── raid-status.test.js         # buildStatusFooterText, buildAccountPageEmbed
+│   └── remove-roster.test.js       # remove_roster, remove_char + seed-reseed
+│
 ├── Dockerfile                      # node:20-slim, npm install --omit=dev
 ├── railway.toml                    # Deploy policy
 ├── .env.example
