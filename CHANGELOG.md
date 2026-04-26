@@ -4,6 +4,19 @@ Dates use the local calendar of the commit. Format loosely follows [Keep a Chang
 
 ## 2026-04-26
 
+### Changed (/add-roster: interactive multi-select picker, drop top-N auto)
+
+- `/add-roster` now opens an interactive picker after fetching the roster instead of silently slicing top-N by combat score. The embed lists every char with check/uncheck markers, a `StringSelectMenu` (multi-select up to all chars) for picking, and Confirm/Cancel buttons. Default selection = all chars (matches the "user này chơi toàn bộ" intent that motivated this change). Players who alt-collect deselect their non-played chars before clicking Confirm.
+- **Cap raised 6 → 25 chars/roster** (`MAX_CHARACTERS_PER_ACCOUNT`). The old hardcoded 6 silently dropped chars 7+ from any roster with more characters than that — bad for users who run 7-8 mains. 25 matches the Discord StringSelectMenu option limit and is well above the in-game ~18 char-slot ceiling. A defensive check at Confirm time still rejects selections larger than the cap.
+- **5-minute session window** from the slash invocation to the Confirm click. In-memory session state keyed by random `sessionId`; on timeout the embed is rewritten to "Phiên đã hết hạn" and the components are removed. Cancel button does the same with a "Đã huỷ" embed. Both clear the timer + drop the session map entry.
+- **Auth gate**: only the original caller can interact with the picker components. Cross-user clicks (other server members trying to confirm someone else's picker) get an ephemeral "Chỉ người gọi lệnh mới chọn được" reject. The Manager `target:` flow keeps the Manager as the caller — the target user can't click anything; they just get the final ping.
+- Slash command schema: dropped the `total` integer option (was 1-6). The picker replaces it.
+- Save logic preserved: existing per-char state (raid completion, etc.) is merged in by name match before write, same as before. `account.lastRefreshedAt` still stamped so `/raid-status` lazy refresh treats the account as fresh.
+
+### Added (interaction router: prefix-match select routes)
+
+- `src/services/interaction-router.js` now accepts an optional `selectRoutes` array (parallel to `buttonRoutes`) for `StringSelectMenu` customIds that carry dynamic data (e.g. session IDs). The exact-match `selectHandlers` table is tried first; on miss, prefix routes fire in order. Used by `/add-roster`'s `add-roster:select:<sessionId>` picker.
+
 ### Added (Artist persona emoji bootstrap)
 
 - Generalized `class-emoji-bootstrap.js` into `src/services/emoji-bootstrap.js` accepting a config (`{namespace, iconsDir, emojiMap, resolveDisplayKey, aliasGroups}`). Two named wrappers ship: `bootstrapClassEmoji(client)` for `assets/class-icons/` -> `CLASS_EMOJI_MAP`, and `bootstrapArtistEmoji(client)` for `assets/artist-icons/` -> `ARTIST_EMOJI_MAP`. Same content-addressed naming pattern (`{name}_{md5short}`), same idempotent + self-healing semantics, same orphan + alias-cleanup passes. No code duplication.

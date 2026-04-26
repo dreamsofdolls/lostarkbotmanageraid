@@ -16,15 +16,17 @@ const HELP_SECTIONS = [
       shortVn: "Đồng bộ roster từ lostark.bible",
       options: [
         { name: "name", required: true, desc: "Tên 1 character trong roster / Name of a character in the roster" },
-        { name: "total", required: false, desc: "Số characters muốn lưu (1-6, default 6) / Number of characters to save" },
         { name: "target", required: false, desc: "(Raid Manager) Add roster giúp 1 user khác - bypass cho member quá lười tự gõ" },
       ],
-      example: "/add-roster name:Clauseduk total:6",
+      example: "/add-roster name:Clauseduk",
       notes: [
-        "EN: Saves top-N characters ranked by combat score; falls back to item level for ties.",
-        "VN: Lưu top-N nhân vật theo combat score; nếu bằng điểm thì xếp theo item level.",
-        "• Nếu roster/character đã tồn tại trong account khác của cùng Discord user, bot sẽ từ chối.",
-        "• **Option `target` (Raid Manager only)**: chỉ định 1 user khác, roster sẽ lưu dưới Discord ID của user đó (không phải caller). Use case: member quá lười tự gõ → Manager add giúp. Reply embed sẽ ping user kia + ghi rõ \"Roster này được Raid Manager X add giúp Y\". Non-Manager dùng option này → ephemeral reject.",
+        "EN: Fetches the full roster, then opens an interactive picker so you choose exactly which chars to track. Defaults to all chars selected; deselect any alts you don't run before clicking Confirm.",
+        "VN: Fetch toàn bộ roster, mở picker để cậu tự chọn char muốn track. Mặc định tick hết - bỏ tick những alt không chơi rồi bấm **Confirm** để lưu.",
+        `• Cap **${25} chars/roster** (Discord StringSelectMenu limit). Roster Lost Ark thực tế max ~18 char nên đủ cho mọi player.`,
+        "• **Phiên 5 phút**: từ lúc gõ lệnh đến lúc bấm Confirm. Hết giờ embed tự đổi thành \"Phiên đã hết hạn\" - chạy lại `/add-roster` để thử lại.",
+        "• Chỉ người gõ lệnh mới chọn / confirm / cancel được - người khác bấm sẽ bị ephemeral reject.",
+        "• Nếu roster/character đã tồn tại trong account khác của cùng Discord user, bot sẽ từ chối luôn ở bước đầu.",
+        "• **Option `target` (Raid Manager only)**: chỉ định 1 user khác, roster sẽ lưu dưới Discord ID của user đó (không phải caller). Use case: member quá lười tự gõ → Manager gõ lệnh + tự chọn chars + Confirm. Reply embed sẽ ping user kia + ghi rõ \"Roster này được Raid Manager X add giúp Y\". Non-Manager dùng option này → ephemeral reject.",
       ],
     },
     {
