@@ -25,7 +25,7 @@ const {
   startAutoManageDailyScheduler,
 } = require("./raid-command");
 const { startWeeklyResetJob } = require("./weekly-reset");
-const { bootstrapClassEmoji } = require("./services/class-emoji-bootstrap");
+const { bootstrapClassEmoji, bootstrapArtistEmoji } = require("./services/emoji-bootstrap");
 const { createInteractionRouter } = require("./services/interaction-router");
 
 const { DISCORD_TOKEN, GUILD_ID } = process.env;
@@ -111,6 +111,14 @@ async function startBot() {
     // string for the rest so char fields just render without icons.
     bootstrapClassEmoji(readyClient).catch((err) =>
       console.warn("[bot] class-emoji bootstrap rejected (non-fatal):", err?.message || err)
+    );
+    // Artist persona emoji (assets/artist-icons/) - same content-hash
+    // pattern as class-emoji, separate folder + map. Powers the chibi
+    // Artist face in the pinned welcome embed and any future
+    // bot-voice surfaces. Failure is also non-fatal: getArtistEmoji
+    // falls back to empty string when an entry is unmapped.
+    bootstrapArtistEmoji(readyClient).catch((err) =>
+      console.warn("[bot] artist-emoji bootstrap rejected (non-fatal):", err?.message || err)
     );
     // Daily auto-cleanup scheduler for raid monitor channels. Runs always -
     // per-guild `autoCleanupEnabled` flag gates whether a given guild
