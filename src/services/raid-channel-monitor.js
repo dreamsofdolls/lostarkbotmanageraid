@@ -364,10 +364,23 @@ function createRaidChannelMonitorService({
         [
           "Mỗi lần clear raid xong, cứ post 1 tin nhắn ngắn dạng `<raid> <difficulty> <character[, character2, ...]> [gate]` vào đây là Artist sẽ tự đánh dấu progress giúp cậu, xong tớ dọn luôn tin nhắn cho channel khỏi rối nha~",
           "",
-          "**Artist chỉ update được character trong roster của chính bạn thôi đấy.** Chưa có roster? Chạy `/add-roster` trước rồi hẵng post clear nhé. Muốn xem lại tiến độ của mình, dùng `/raid-status`.",
+          "**Artist chỉ update được character trong roster của chính bạn thôi đấy.** Chưa có roster thì xem field bên dưới để biết bắt đầu từ đâu nha.",
         ].join("\n")
       )
       .addFields(
+        {
+          // Onboarding workflow lives in the first field so a brand new
+          // member scanning the pin top-down sees the 3-step path before
+          // the post-format docs (which only matter once they have a
+          // roster). Keeps the pin functional as a "getting started"
+          // surface without duplicating the full /raid-help content.
+          name: "🚀 Member mới? Bắt đầu ở đây",
+          value: [
+            "1. `/add-roster name:<tên-char-bất-kỳ>` → Artist fetch roster từ lostark.bible, mở picker để cậu toggle ✅ chars muốn track rồi Confirm.",
+            "2. `/edit-roster roster:<tên>` → sau này muốn add chars mới vào roster đã có hoặc xoá chars không còn chơi.",
+            "3. `/raid-status` → xem progress raid của mình mọi lúc · `/raid-help` → docs đầy đủ mọi command (có toggle `language: English`).",
+          ].join("\n"),
+        },
         {
           name: "📌 Ví dụ cho dễ hình dung",
           value: [
