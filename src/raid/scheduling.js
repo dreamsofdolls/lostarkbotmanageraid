@@ -24,6 +24,9 @@ function createSchedulingHelpers({
   resolveAutoCleanupTickMs,
   resolveAutoManageStarted,
   resolveAutoManageDailyTickMs,
+  resolveMaintenanceStarted,
+  resolveMaintenanceTickMs,
+  resolveMaintenanceSlotConfig,
 }) {
 
   /**
@@ -127,6 +130,37 @@ function createSchedulingHelpers({
       }
       return candidate.getTime();
     }
+    if (typeKey === "maintenance-early" || typeKey === "maintenance-countdown") {
+      // Single source of truth: the slot config snapshot from the scheduler
+      // module. Boundary day-of-week, UTC hour, minute, and the minutesBefore
+      // arrays all come through one resolver - changing the maintenance
+      // schedule at the top of raid-schedulers.js automatically flows here.
+      const cfg = resolveMaintenanceSlotConfig?.();
+      if (!cfg) return null;
+      const minutesArr = typeKey === "maintenance-early" ? cfg.earlyMinutes : cfg.countdownMinutes;
+      if (!Array.isArray(minutesArr) || minutesArr.length === 0) return null;
+      const utcDay = now.getUTCDay();
+      const daysToAdd = utcDay === cfg.dayOfWeek
+        ? 0
+        : (cfg.dayOfWeek - utcDay + 7) % 7;
+      const boundary = new Date(Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate() + daysToAdd,
+        cfg.utcHour, cfg.utcMinute, 0, 0
+      ));
+      const boundaryMs = boundary.getTime();
+      const mocTimes = minutesArr
+        .map((m) => boundaryMs - m * 60000)
+        .sort((a, b) => a - b);
+      for (const t of mocTimes) {
+        if (t > nowMs) return t;
+      }
+      // All mốc this week passed - next eligible is the earliest mốc
+      // (largest minutesBefore) of NEXT week's boundary.
+      const earliestMinutes = Math.max(...minutesArr);
+      return boundaryMs + 7 * 24 * 60 * 60 * 1000 - earliestMinutes * 60000;
+    }
     return null; // event-driven
   }
   
@@ -150,6 +184,11 @@ function createSchedulingHelpers({
       // scheduler check is the same cadence. The dispatch logic inside
       // runAutoCleanupTick decides which path fires at tick time.
       return nextIntervalTickMs(autoCleanupStartedAtMs, resolveAutoCleanupTickMs(), now);
+    }
+    if (typeKey === "maintenance-early" || typeKey === "maintenance-countdown") {
+      const maintenanceStartedAtMs = resolveMaintenanceStarted?.();
+      const tickMs = resolveMaintenanceTickMs?.();
+      return nextIntervalTickMs(maintenanceStartedAtMs, tickMs, now);
     }
     return null;
   }

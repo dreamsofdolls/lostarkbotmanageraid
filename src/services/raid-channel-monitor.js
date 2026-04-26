@@ -422,6 +422,7 @@ function createRaidChannelMonitorService({
             "• **3h đêm (giờ VN)**: Artist đi ngủ, post 1 biển báo gn rồi tạm nghỉ đến 8h sáng - trong khoảng này không dọn rác cũng không ồn ào, nhưng raid clear các cậu post vẫn được ghi nhận bình thường.",
             "• **8h sáng (giờ VN)**: Artist dậy, sweep 1 lần catch-up đống tin tích đêm qua + post 1 biển báo chào ngày mới, biển tự biến sau 10 phút.",
             "• **Thứ 4 17:00 VN (mỗi tuần)**: Artist thông báo progress raid vừa được reset tuần mới, biển tự biến sau 30 phút.",
+            "• **Thứ 4 trước bảo trì 14:00 VN**: Artist nhắc lịch bảo trì 7 lần. 3 lần đầu T-3h/T-2h/T-1h kèm checklist (shop solo, event, paradise, key hell), ping `@here` ở T-3h và T-1h để member online thấy. 4 lần countdown T-15m/T-10m/T-5m/T-1m không ping, đếm ngược tới giờ tắt server.",
             "• **Khi có người vừa set channel này**: Artist post 1 dòng chào hỏi, tự biến sau 2 phút (welcome pin thì ở lại).",
             "• **Khi có member bật `/raid-auto-manage` mà toàn char private log**: Artist sẽ tag khẽ nhắc bật Public Log ở lostark.bible, tối đa 1 lần mỗi 7 ngày.",
           ].join("\n"),

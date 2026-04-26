@@ -37,6 +37,7 @@ const {
   announcementTypeKeys,
   announcementTypeEntry,
   announcementSubdocKeys,
+  announcementOverridableTypeKeys,
 } = require("./raid/announcements");
 const {
   createRaidStatusCommand,
@@ -495,13 +496,17 @@ let weekResetStartMs;
 
 let AUTO_CLEANUP_TICK_MS;
 let AUTO_MANAGE_DAILY_TICK_MS;
+let MAINTENANCE_TICK_MS;
 let postChannelAnnouncement;
 let getTargetCleanupSlotKey;
 let buildCleanupNoticePreview;
+let buildMaintenancePreview;
 let startRaidChannelScheduler;
 let startAutoManageDailyScheduler;
+let startMaintenanceScheduler;
 let getAutoCleanupSchedulerStartedAtMs;
 let getAutoManageSchedulerStartedAtMs;
+let getMaintenanceSchedulerStartedAtMs;
 
 let loadMonitorChannelCache;
 let getMonitorCacheHealth;
@@ -538,6 +543,9 @@ const {
   resolveAutoCleanupTickMs: () => AUTO_CLEANUP_TICK_MS,
   resolveAutoManageStarted: () => getAutoManageSchedulerStartedAtMs?.(),
   resolveAutoManageDailyTickMs: () => AUTO_MANAGE_DAILY_TICK_MS,
+  resolveMaintenanceStarted: () => getMaintenanceSchedulerStartedAtMs?.(),
+  resolveMaintenanceTickMs: () => MAINTENANCE_TICK_MS,
+  resolveMaintenanceSlotConfig: () => getMaintenanceSlotConfigSnapshot?.(),
 });
 
 const autoManageCoreService = createAutoManageCoreService({
@@ -838,13 +846,17 @@ const raidSchedulerService = createRaidSchedulerService({
 ({
   AUTO_CLEANUP_TICK_MS,
   AUTO_MANAGE_DAILY_TICK_MS,
+  MAINTENANCE_TICK_MS,
   postChannelAnnouncement,
   getTargetCleanupSlotKey,
   buildCleanupNoticePreview,
+  buildMaintenancePreview,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
+  startMaintenanceScheduler,
   getAutoCleanupSchedulerStartedAtMs,
   getAutoManageSchedulerStartedAtMs,
+  getMaintenanceSchedulerStartedAtMs,
 } = raidSchedulerService);
 
 // Expose quiet-hours helpers for __test access. Tests exercise them via
@@ -859,6 +871,13 @@ const {
   pickWakeupNoticeContent,
   ARTIST_QUIET_START_HOUR_VN,
   ARTIST_QUIET_END_HOUR_VN,
+  getMaintenanceSlotForNow,
+  pickMaintenanceVariant,
+  buildMaintenanceConfigQuery,
+  getMaintenanceSlotConfigSnapshot,
+  MAINTENANCE_DAY_VN,
+  MAINTENANCE_HOUR_VN,
+  MAINTENANCE_MINUTE_VN,
 } = raidSchedulerService;
 
 const raidHelpCommandHandlers = createRaidHelpCommand({
@@ -899,8 +918,10 @@ const raidAnnounceCommandHandlers = createRaidAnnounceCommand({
   normalizeName,
   truncateText,
   announcementTypeEntry,
+  announcementOverridableTypeKeys,
   getAnnouncementsConfig,
   buildCleanupNoticePreview,
+  buildMaintenancePreview,
   buildAnnouncementWhenItFiresText,
   getMissingAnnouncementChannelPermissions,
 });
@@ -980,6 +1001,7 @@ module.exports = {
   loadMonitorChannelCache,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
+  startMaintenanceScheduler,
   parseRaidMessage,
   __test: {
     buildRaidCheckSnapshotFromUsers,
@@ -1012,6 +1034,14 @@ module.exports = {
     pickWakeupNoticeContent,
     ARTIST_QUIET_START_HOUR_VN,
     ARTIST_QUIET_END_HOUR_VN,
+    buildMaintenancePreview,
+    MAINTENANCE_TICK_MS,
+    getMaintenanceSlotForNow,
+    pickMaintenanceVariant,
+    buildMaintenanceConfigQuery,
+    MAINTENANCE_DAY_VN,
+    MAINTENANCE_HOUR_VN,
+    MAINTENANCE_MINUTE_VN,
     buildEditableCharsByUser,
     getEligibleRaidsForChar,
     getCharRaidGateStatus,

@@ -9,8 +9,10 @@ function createRaidAnnounceCommand(deps) {
     announcementTypeEntry,
     getAnnouncementsConfig,
     buildCleanupNoticePreview,
+    buildMaintenancePreview,
     buildAnnouncementWhenItFiresText,
     getMissingAnnouncementChannelPermissions,
+    announcementOverridableTypeKeys,
   } = deps;
 
 async function handleRaidAnnounceCommand(interaction) {
@@ -74,6 +76,10 @@ async function handleRaidAnnounceCommand(interaction) {
       let previewText;
       if (type === "hourly-cleanup") {
         previewText = truncateText(buildCleanupNoticePreview(), 1024);
+      } else if (type === "maintenance-early") {
+        previewText = truncateText(buildMaintenancePreview("early"), 1024);
+      } else if (type === "maintenance-countdown") {
+        previewText = truncateText(buildMaintenancePreview("countdown"), 1024);
       } else {
         previewText = entry.previewContent
           ? truncateText(entry.previewContent, 1024)
@@ -122,8 +128,16 @@ async function handleRaidAnnounceCommand(interaction) {
     }
     if (action === "set-channel") {
       if (!overridable) {
+        // Build the "accepted overridable types" list from the registry so a
+        // newly-added overridable type (e.g. maintenance-* in 2026-04-27)
+        // automatically shows up in this reject message. Earlier text was
+        // hard-coded "weekly-reset và stuck-nudge" and drifted out of sync
+        // when the maintenance types landed.
+        const overridableList = announcementOverridableTypeKeys()
+          .map((k) => `\`${k}\``)
+          .join(", ");
         await interaction.reply({
-          content: `${UI.icons.warn} \`${type}\` là channel-bound (${typeLabel}) - không override channel được. Announcement này luôn post vào monitor channel. Chỉ \`weekly-reset\` và \`stuck-nudge\` chấp nhận override.`,
+          content: `${UI.icons.warn} \`${type}\` (${typeLabel}) là channel-bound nha cậu, Artist không override channel được cho loại này đâu. Loại này luôn post vào monitor channel theo thiết kế. Chỉ ${overridableList} mới chấp nhận override.`,
           flags: MessageFlags.Ephemeral,
         });
         return;

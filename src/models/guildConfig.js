@@ -37,6 +37,17 @@ const guildConfigSchema = new mongoose.Schema(
     // catch-up cleanup have both run today. Subsequent ticks that day fall
     // through to the normal hourly-cleanup path.
     lastArtistWakeupKey: { type: String, default: null },
+    // Per-guild dedup for the maintenance-early reminder group (T-3h, T-2h,
+    // T-1h marks). Format: `YYYY-MM-DD:<slotKey>` where slotKey is one of
+    // "T-3h", "T-2h", "T-1h". Set after a successful post for that slot.
+    // The maintenance scheduler short-circuits when the current target slot
+    // matches the stored key. Different group keys are tracked separately
+    // so an early group failure never blocks the countdown group.
+    lastMaintenanceEarlyKey: { type: String, default: null },
+    // Per-guild dedup for the maintenance-countdown reminder group (T-15m,
+    // T-10m, T-5m, T-1m). Same shape as `lastMaintenanceEarlyKey` but the
+    // slotKey set is "T-15m" / "T-10m" / "T-5m" / "T-1m".
+    lastMaintenanceCountdownKey: { type: String, default: null },
     // Per-announcement-type config for Artist's channel voice. Each nested
     // subdoc has:
     //   - enabled: whether the announcement fires at all.
@@ -110,6 +121,34 @@ const guildConfigSchema = new mongoose.Schema(
           whisperAck: {
             type: new mongoose.Schema(
               { enabled: { type: Boolean, default: true } },
+              { _id: false }
+            ),
+            default: () => ({}),
+          },
+          // Maintenance early reminders (T-3h / T-2h / T-1h marks). Channel-
+          // overridable: server có thể đẩy vào kênh khác kênh monitor để
+          // tránh ping cùng chỗ với clear-raid notifications. Group bật/tắt
+          // độc lập với maintenanceCountdown.
+          maintenanceEarly: {
+            type: new mongoose.Schema(
+              {
+                enabled: { type: Boolean, default: true },
+                channelId: { type: String, default: null },
+              },
+              { _id: false }
+            ),
+            default: () => ({}),
+          },
+          // Maintenance countdown reminders (T-15m / T-10m / T-5m / T-1m).
+          // Same channel-override model as maintenanceEarly. Tách group để
+          // server không muốn 4 ping liên tiếp gần boundary có thể tắt
+          // riêng nhóm này mà vẫn giữ 3 reminder đầu.
+          maintenanceCountdown: {
+            type: new mongoose.Schema(
+              {
+                enabled: { type: Boolean, default: true },
+                channelId: { type: String, default: null },
+              },
               { _id: false }
             ),
             default: () => ({}),

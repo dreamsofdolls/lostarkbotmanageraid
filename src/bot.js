@@ -26,6 +26,7 @@ const {
   loadMonitorChannelCache,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
+  startMaintenanceScheduler,
 } = require("./raid-command");
 const { startWeeklyResetJob } = require("./weekly-reset");
 const { bootstrapClassEmoji, bootstrapArtistEmoji } = require("./services/emoji-bootstrap");
@@ -141,6 +142,13 @@ async function startBot() {
     // a redeploy. Accepts client ref so the tick can post channel
     // announcements when it detects a stuck private-log user.
     startAutoManageDailyScheduler(readyClient);
+    // Maintenance reminder scheduler. 1-min tick, hard-coded fire schedule
+    // for LA VN Wednesday 14:00 maintenance boundary - 7 mốc total
+    // (T-3h/2h/1h early reminders + T-15m/10m/5m/1m countdown). Per-guild
+    // gating via /raid-announce type:maintenance-early|countdown action:on/off.
+    // Tick is cheap on non-Wednesday days (early-exits before any DB query),
+    // so leaving it running 24/7 has negligible cost.
+    startMaintenanceScheduler(readyClient);
   });
 
   if (TEXT_MONITOR_ENABLED) {
