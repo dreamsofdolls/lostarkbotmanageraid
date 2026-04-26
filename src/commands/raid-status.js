@@ -674,25 +674,38 @@ function createRaidStatusCommand(deps) {
 
     const buildComponents = (disabled) => {
       const rows = [];
+      const showSync = statusUserMeta.autoManageEnabled;
       if (accounts.length > 1) {
-        rows.push(
-          buildPaginationRow(currentPage, accounts.length, disabled, {
-            prevId: "status:prev",
-            nextId: "status:next",
-          })
-        );
+        // Append Sync into the same row as Prev/Next so the 3 buttons
+        // sit on a single line ([◀ Previous] [Next ▶] [🔄 Sync ngay])
+        // instead of taking 2 rows. ActionRow caps at 5 buttons; we
+        // use 3 max so plenty of headroom.
+        const paginationRow = buildPaginationRow(currentPage, accounts.length, disabled, {
+          prevId: "status:prev",
+          nextId: "status:next",
+        });
+        if (showSync) {
+          paginationRow.addComponents(
+            new ButtonBuilder()
+              .setCustomId("status:sync")
+              .setLabel("Sync ngay")
+              .setEmoji("🔄")
+              .setStyle(ButtonStyle.Primary)
+              .setDisabled(disabled)
+          );
+        }
+        rows.push(paginationRow);
+      } else if (showSync) {
+        // Single account: no pagination row to merge into, so Sync gets
+        // its own dedicated row (otherwise the button would be missing
+        // entirely for users with 1 roster).
+        rows.push(buildSyncRow(disabled));
       }
       // Skip the raid-filter row when the caller has no eligible raids
       // at all (empty roster / all chars below minItemLevel gates) -
       // dropdown with only the All-raids entry is just noise.
       if (raidDropdownEntries.length > 0) {
         rows.push(buildRaidFilterRow(disabled));
-      }
-      // Sync row only when the caller has opted-in to auto-manage; it
-      // would do nothing for non-opted-in users and just adds a dead
-      // button to the layout.
-      if (statusUserMeta.autoManageEnabled) {
-        rows.push(buildSyncRow(disabled));
       }
       return rows;
     };
