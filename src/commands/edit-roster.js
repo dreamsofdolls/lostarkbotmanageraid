@@ -267,16 +267,19 @@ function createEditRosterCommand({
       charRows.push(row);
     }
 
+    // Color scheme: Success/Secondary are reserved for per-char toggle
+    // buttons above. Confirm = Primary (blue), Cancel = Danger (red)
+    // so the action row is visually distinct from the toggle row.
     const confirmBtn = new ButtonBuilder()
       .setCustomId(`edit-roster:confirm:${session.sessionId}`)
       .setLabel(`Confirm (${session.selectedIndices.size})`)
-      .setStyle(ButtonStyle.Success)
+      .setStyle(ButtonStyle.Primary)
       .setDisabled(session.selectedIndices.size === 0);
 
     const cancelBtn = new ButtonBuilder()
       .setCustomId(`edit-roster:cancel:${session.sessionId}`)
       .setLabel("Cancel")
-      .setStyle(ButtonStyle.Secondary);
+      .setStyle(ButtonStyle.Danger);
 
     return [
       ...charRows,

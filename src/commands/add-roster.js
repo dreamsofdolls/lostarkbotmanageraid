@@ -124,16 +124,22 @@ function createAddRosterCommand({
       charRows.push(row);
     }
 
+    // Color scheme keeps action buttons visually distinct from toggle
+    // state buttons: Success (green) / Secondary (gray) belong to the
+    // per-char toggles, so Confirm uses Primary (blue) and Cancel uses
+    // Danger (red). Without this split the channel screenshot showed
+    // Confirm visually identical to a selected char and Cancel
+    // identical to an unselected one — hard to scan the action row.
     const confirmBtn = new ButtonBuilder()
       .setCustomId(`add-roster:confirm:${session.sessionId}`)
       .setLabel(`Confirm (${session.selectedIndices.size})`)
-      .setStyle(ButtonStyle.Success)
+      .setStyle(ButtonStyle.Primary)
       .setDisabled(session.selectedIndices.size === 0);
 
     const cancelBtn = new ButtonBuilder()
       .setCustomId(`add-roster:cancel:${session.sessionId}`)
       .setLabel("Cancel")
-      .setStyle(ButtonStyle.Secondary);
+      .setStyle(ButtonStyle.Danger);
 
     return [
       ...charRows,
