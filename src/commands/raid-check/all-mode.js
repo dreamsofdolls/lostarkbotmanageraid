@@ -393,7 +393,10 @@ function createAllModeHandler({
       });
       const options = [
         {
-          label: truncateText(`All users (${totalPending} pending)`, 100),
+          label: truncateText(
+            `All users (${totalPending === 0 ? "DONE" : `${totalPending} pending`})`,
+            100
+          ),
           value: FILTER_ALL,
           emoji: "🌐",
           default: filterUserId === null,
@@ -415,9 +418,14 @@ function createAllModeHandler({
             b.pending - a.pending || a.displayName.localeCompare(b.displayName)
         );
       for (const u of sortedUsers.slice(0, 24)) {
+        // 0 pending -> "DONE" instead of "0 pending · 0🪄 0⚔️". The
+        // breakdown suffix only adds info when there's actual backlog.
+        const suffix = u.pending === 0
+          ? "DONE"
+          : `${u.pending} pending · ${u.supports}🪄 ${u.dps}⚔️`;
         options.push({
           label: truncateText(
-            `${u.displayName} (${u.pending} pending · ${u.supports}🪄 ${u.dps}⚔️)`,
+            `${u.displayName} (${suffix})`,
             100
           ),
           value: u.discordId,
@@ -452,7 +460,10 @@ function createAllModeHandler({
       );
       const options = [
         {
-          label: truncateText(`All raids (${totalPending} total pending)`, 100),
+          label: truncateText(
+            `All raids (${totalPending === 0 ? "DONE" : `${totalPending} total pending`})`,
+            100
+          ),
           value: FILTER_ALL_RAIDS,
           emoji: "🌐",
           default: filterRaidId === null,
