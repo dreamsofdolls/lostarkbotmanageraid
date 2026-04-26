@@ -486,7 +486,15 @@ function createEditRosterCommand({
       return;
     }
 
-    await interaction.deferReply();
+    // Ephemeral: /edit-roster is a maintenance operation on the caller's
+    // own roster — the picker, the diff outcome, and the bible-fetch
+    // error states are all only meaningful to the caller. Showing them
+    // in-channel would be channel noise + leak roster composition to
+    // bystanders. Component interactions (Confirm/Cancel/select) work
+    // identically on ephemeral messages, so the contract carries through
+    // the whole 5-min session. Contrast with /add-roster, which stays
+    // public on purpose so members can see new rosters being onboarded.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const savedChars = (targetAccount.characters || []).map((c) => ({
       name: getCharacterName(c),
