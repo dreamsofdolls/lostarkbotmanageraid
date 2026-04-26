@@ -32,6 +32,9 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 - **25 earlier tests** (`test/add-roster.test.js` + `test/edit-roster.test.js`): race-safe overlap guard, single-session dup detection, account-match merge, per-char state preservation, multi-seed fallback, zero-overlap reject, saved-first sort against truncation, diff-apply add/remove/keep summary, vanished-account / vanished-user error paths.
 - Extracted `buildEditRosterPickerChars` helper in `commands/edit-roster.js` so the saved-first sort + cap truncation contract is unit-testable without driving the full Discord handler.
 
+### Changed (picker color scheme — distinguish action row from toggle row)
+- `/add-roster` + `/edit-roster` Confirm button: `Success (green)` → `Primary (blue)`. Cancel button: `Secondary (gray)` → `Danger (red)`. Per-char toggle buttons keep their `Success/Secondary` palette. Without this split the Confirm button was visually identical to a selected char toggle and Cancel identical to an unselected one — the action row blended into the toggle grid. Now the action row is the only blue/red pair on the message, scannable at a glance.
+
 ### Added
 - **`/raid-help language:`** option (`Tiếng Việt` / `English`, default `vi`). Each embed now renders ONE language only instead of stacking EN + VN side-by-side. Notes pre-tagged with `EN: ` or `VN: ` filter to the chosen language; un-tagged technical bullets (cap, code refs, etc.) survive both. Lang baked into the dropdown customId so detail-embed selections after the slash command keep the chosen language. Test coverage: 8 new tests covering language selection, prefix-strip filtering, and the per-language "No options" / "Không có options" labels.
 
