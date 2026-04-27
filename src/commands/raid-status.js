@@ -826,12 +826,25 @@ function createRaidStatusCommand(deps) {
         return embed;
       }
 
-      embed.setDescription(
-        [
-          "Bấm dropdown bên dưới để toggle complete cho từng task.",
-          `Auto-reset: Daily 17:00 VN ${UI.icons.reset} Weekly 17:00 VN thứ 4.`,
-        ].join("\n")
-      );
+      // Reuse the same freshness/sync lines the Raid view builds via
+      // buildAccountPageEmbed. Two reasons:
+      //   1. Parity: users want to know "when was this last refreshed +
+      //      next refresh ready" regardless of which view they're on.
+      //   2. Layout: those lines are this embed's longest content
+      //      (`Last updated <t:R> · ⏳ Refresh ready <t:R>` ~ 55 chars
+      //      after Discord's relative-timestamp expansion). Discord
+      //      auto-fits inline-field column width to the longest line in
+      //      the embed body, so without these lines the column shrinks
+      //      and long char headers like `Crimsonjudgment · 1700` wrap
+      //      onto a second line. Adding them widens the columns to match
+      //      the Raid view exactly.
+      const descriptionLines = [
+        "Bấm dropdown bên dưới để toggle complete cho từng task.",
+        `Auto-reset: Daily 17:00 VN ${UI.icons.reset} Weekly 17:00 VN thứ 4.`,
+      ];
+      const freshnessLine = buildAccountFreshnessLine(account, statusUserMeta);
+      if (freshnessLine) descriptionLines.push(freshnessLine);
+      embed.setDescription(descriptionLines.join("\n"));
 
       embed.addFields(...fields);
 
