@@ -38,6 +38,11 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `/raid-status` side-task toggle now binds to the captured roster name instead of the page index, so a concurrent `/remove-roster` mid-session can no longer redirect the toggle into a different roster.
 - Welcome pin emoji no longer goes dead after each bot restart; the emoji bootstrap now dedups duplicate-basename asset files (preferring `.png`) instead of alternately deleting + reuploading the same persona's emoji and churning its ID. Removed `assets/artist-icons/{shy.webp,neutral.webp,note.jpg}` that were colliding with their `.png` siblings on `path.parse(filename).name`.
 
+### Security
+- Bot refuses to start when `NODE_TLS_REJECT_UNAUTHORIZED=0` is set in the environment. The variable disables Node's HTTPS certificate validation for every outbound call (Discord, MongoDB, lostark.bible) and exposes the deployment to MITM; the startup guard turns it into a deploy-time failure instead of a silent runtime hazard. `.env.example` documents the prohibition.
+- `/raid-channel config` and `/raid-announce` now do a runtime `ManageGuild` permission check inside the handler. `setDefaultMemberPermissions(ManageGuild)` on the slash schema is a Discord-side render hint only; if registration ever drifts (e.g. a failed `deploy-commands.js` mid-update), Discord still routes invocations to the handler. The runtime backstop guarantees only members with Manage Server can mutate channel / announcement config.
+- `/raid-check raid:all` Mongo projection drops `bibleSerial`, `bibleCid`, and `bibleRid`. They were unused in this surface (only `/raid-auto-manage` consumes them); removing them keeps Manager-side reads minimal under data-minimization principles.
+
 ### Refactor
 - Extracted `buildAccountTaskFields()` into `src/raid/task-view.js` so `/raid-status` and `/raid-check` share the same task-card renderer and totals math.
 - Extracted `pack2Columns()` and `formatProgressTotals()` into `src/raid/shared.js` to keep embed layout and footer icon ordering consistent across views.

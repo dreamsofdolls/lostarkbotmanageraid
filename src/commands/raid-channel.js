@@ -21,6 +21,7 @@ const RAID_CHANNEL_ACTION_CHOICES = [
 function createRaidChannelCommand({
   EmbedBuilder,
   MessageFlags,
+  PermissionFlagsBits,
   UI,
   GuildConfig,
   normalizeName,
@@ -84,6 +85,30 @@ function createRaidChannelCommand({
             type: "warn",
             title: "Server only",
             description: "Cậu phải chạy `/raid-channel config` trong server nha, Artist không config được monitor channel ở DM đâu.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    // Defense-in-depth ManageGuild check. The slash command schema sets
+    // setDefaultMemberPermissions(ManageGuild) so Discord hides the entry
+    // for unprivileged members, but that's a client-side render hint only:
+    // if the schema ever fails to register (e.g. deploy-commands.js mid-
+    // failure leaves stale registration without the flag), Discord will
+    // happily route invocations to the handler. The runtime check
+    // guarantees only ManageGuild members can mutate channel/monitor
+    // config regardless of registration state.
+    if (
+      !interaction.memberPermissions ||
+      !interaction.memberPermissions.has(PermissionFlagsBits.ManageGuild)
+    ) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "lock",
+            title: "Cần Manage Server",
+            description: "Lệnh `/raid-channel config` chỉ dành cho thành viên có quyền **Manage Server** trên Discord. Nhờ admin mở quyền hộ rồi thử lại nha~",
           }),
         ],
         flags: MessageFlags.Ephemeral,

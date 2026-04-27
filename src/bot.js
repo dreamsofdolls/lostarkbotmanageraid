@@ -1,5 +1,21 @@
 require("dotenv").config();
 
+// TLS validation guard. NODE_TLS_REJECT_UNAUTHORIZED=0 disables Node's
+// HTTPS certificate verification globally and exposes every outbound TLS
+// call (Discord gateway/REST, MongoDB Atlas, lostark.bible) to MITM. The
+// bot has no legitimate use case for it: every upstream serves a valid
+// public cert. Refuse to start so the operator notices in deploy logs
+// rather than running silently insecure for weeks.
+if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0") {
+  console.error(
+    "[security] NODE_TLS_REJECT_UNAUTHORIZED=0 detected in environment. " +
+      "This disables TLS certificate validation for ALL outbound HTTPS " +
+      "(Discord, MongoDB, lostark.bible) and is a MITM hazard. Remove it " +
+      "from your shell / Railway env vars before starting the bot."
+  );
+  process.exit(1);
+}
+
 const {
   Client,
   GatewayIntentBits,
