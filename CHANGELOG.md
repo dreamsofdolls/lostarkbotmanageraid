@@ -21,6 +21,9 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 - 32 plain-text replies trong `/raid-channel` (11), `/raid-auto-manage` (10), `/raid-check` (5 + button + sync stats), `/raid-check raid:all` (3), `/raid-check Edit` (2), `/raid-status` (5) chuyển sang `buildNoticeEmbed` với type-coded color + title + Artist-voice description. Sync result của `/raid-check Sync` đặc biệt: dùng structured **bold key: value** layout (Synced / Attempted-only / Skipped / Failed / Chars có update / DM sent) parity với `/raid-set` style.
 - Latent runtime bug fix: `raid-check/all-mode.js` dùng `UI.icons.lock`/`UI.icons.info` mà `UI` không có trong factory deps. Path không reachable thường (rare admin reject) nên chưa bao giờ crash. Fix: thêm `EmbedBuilder` vào deps + import `buildNoticeEmbed` ở module top, refactor 3 reject paths sang notice embed.
 
+### Added (`/raid-check` + `/raid-status` roster header: badge `📝 Auto-sync OFF` cho user chưa opt-in)
+- Header section của mỗi roster trong `/raid-check` (raid filter), `/raid-check raid:all`, và `/raid-status` thêm suffix `· 📝 Auto-sync OFF` khi `userMeta.autoManageEnabled === false`. Silent khi opted-in (freshness line dưới đã có "Last synced X ago"). Manager scan list pending phân biệt ngay 3 state: opt-in + đã sync (timestamp), opt-in + chưa sync ("Never synced"), chưa opt-in (badge OFF). Trước đó case 3 silent giống case 2 nên ambiguity. Dùng strict `=== false` trong shared builder để legacy doc thiếu flag không false-positive.
+
 ## 2026-04-26
 
 ### Added
