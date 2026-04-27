@@ -156,6 +156,54 @@ function createRaidTaskCommand(deps) {
     await interaction.respond(choices).catch(() => {});
   }
 
+  // Suggest task names from the user's existing side tasks across every
+  // character + roster, deduped by (name, reset) pair. Sorted by recency
+  // (most recent createdAt first) so a chore the user just registered
+  // bubbles to the top when they /raid-task add for another char. Reset
+  // cycle is annotated in the suggestion label so the user can spot the
+  // distinction when same name lives across both cycles ("Una" daily vs
+  // "Una" weekly are 2 different suggestions).
+  async function autocompleteTaskName(interaction, focused) {
+    const needle = normalizeName(focused.value || "");
+    const discordId = interaction.user.id;
+    const userDoc = await loadUserForAutocomplete(discordId);
+    if (!userDoc || !Array.isArray(userDoc.accounts)) {
+      await interaction.respond([]).catch(() => {});
+      return;
+    }
+    const seenKey = new Set();
+    const candidates = [];
+    for (const account of userDoc.accounts) {
+      const chars = Array.isArray(account.characters) ? account.characters : [];
+      for (const character of chars) {
+        const tasks = Array.isArray(character.sideTasks)
+          ? character.sideTasks
+          : [];
+        for (const task of tasks) {
+          if (!task?.name) continue;
+          const key = `${normalizeName(task.name)}::${task.reset}`;
+          if (seenKey.has(key)) continue;
+          if (needle && !normalizeName(task.name).includes(needle)) continue;
+          seenKey.add(key);
+          candidates.push({
+            name: task.name,
+            reset: task.reset,
+            createdAt: Number(task.createdAt) || 0,
+          });
+        }
+      }
+    }
+    candidates.sort((a, b) => b.createdAt - a.createdAt);
+    const choices = candidates.slice(0, 25).map((c) => {
+      const label = `${c.name} · ${c.reset}`;
+      return {
+        name: label.length > 100 ? `${label.slice(0, 97)}...` : label,
+        value: c.name.length > 100 ? c.name.slice(0, 100) : c.name,
+      };
+    });
+    await interaction.respond(choices).catch(() => {});
+  }
+
   async function autocompleteTask(interaction, focused) {
     const needle = normalizeName(focused.value || "");
     const characterInput = interaction.options.getString("character") || "";
@@ -201,6 +249,10 @@ function createRaidTaskCommand(deps) {
       }
       if (focused?.name === "task") {
         await autocompleteTask(interaction, focused);
+        return;
+      }
+      if (focused?.name === "name") {
+        await autocompleteTaskName(interaction, focused);
         return;
       }
       await interaction.respond([]).catch(() => {});
@@ -377,6 +429,211 @@ function createRaidTaskCommand(deps) {
             `**Slot còn lại:** ${TASK_CAP_DAILY - dailyCount} daily · ${TASK_CAP_WEEKLY - weeklyCount} weekly`,
             "Vào `/raid-status` rồi đổi sang **Task view** để toggle complete nha.",
           ].join("\n"),
+        }),
+      ],
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  // Add the same task to every character in a single roster. Each char
+  // is independently checked for cap (3 daily / 5 weekly) + duplicate
+  // (same name + same reset cycle); chars that fail either check are
+  // skipped and surfaced in the summary so the user knows which need
+  // manual handling. Single Mongo write per invocation regardless of
+  // char count.
+  async function handleAddAll(interaction) {
+    const discordId = interaction.user.id;
+    const rosterName = interaction.options.getString("roster", true);
+    const taskName = interaction.options.getString("name", true).trim();
+    const reset = interaction.options.getString("reset", true);
+
+    if (!taskName) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Tên task không hợp lệ",
+            description: "Tên task không được để trống nha. Gõ lại với nội dung mô tả ngắn gọn.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const added = [];
+    const skippedCap = [];
+    const skippedDup = [];
+    let outcome = "ok";
+    let resolvedRosterName = rosterName;
+
+    try {
+      await saveWithRetry(async () => {
+        added.length = 0;
+        skippedCap.length = 0;
+        skippedDup.length = 0;
+        const userDoc = await User.findOne({ discordId });
+        if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+          outcome = "no-roster";
+          return;
+        }
+        const targetRoster = normalizeName(rosterName);
+        const account = userDoc.accounts.find(
+          (a) => normalizeName(a.accountName) === targetRoster
+        );
+        if (!account) {
+          outcome = "no-roster-match";
+          return;
+        }
+        resolvedRosterName = account.accountName;
+        const characters = Array.isArray(account.characters)
+          ? account.characters
+          : [];
+        if (characters.length === 0) {
+          outcome = "empty-roster";
+          return;
+        }
+
+        const cap = reset === "daily" ? TASK_CAP_DAILY : TASK_CAP_WEEKLY;
+        const cycleStart =
+          reset === "daily" ? dailyResetStartMs() : weekResetStartMs();
+        const taskNameNormalized = normalizeName(taskName);
+
+        for (const character of characters) {
+          const sideTasks = ensureSideTasks(character);
+          const charName = getCharacterDisplayName(character);
+          if (countByReset(sideTasks, reset) >= cap) {
+            skippedCap.push(charName);
+            continue;
+          }
+          const dup = sideTasks.some(
+            (t) =>
+              normalizeName(t?.name) === taskNameNormalized &&
+              t?.reset === reset
+          );
+          if (dup) {
+            skippedDup.push(charName);
+            continue;
+          }
+          sideTasks.push({
+            taskId: generateTaskId(),
+            name: taskName,
+            reset,
+            completed: false,
+            lastResetAt: cycleStart,
+            createdAt: Date.now(),
+          });
+          added.push(charName);
+        }
+
+        if (added.length > 0) {
+          await userDoc.save();
+        }
+      });
+    } catch (error) {
+      console.error("[raid-task add-all] save failed:", error?.message || error);
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "error",
+            title: "Save thất bại",
+            description: "Mongo trả lỗi khi lưu task. Thử lại sau ít phút nha.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (outcome === "no-roster") {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Cậu chưa có roster",
+            description: "Artist chưa thấy roster nào của cậu. Chạy `/add-roster` trước rồi mới đăng ký task được.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (outcome === "no-roster-match") {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Không tìm thấy roster",
+            description: `Artist không tìm thấy roster **${rosterName}** của cậu. Dùng autocomplete khi gõ field \`roster:\` để tránh sai tên nha.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (outcome === "empty-roster") {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "info",
+            title: "Roster rỗng",
+            description: `Roster **${resolvedRosterName}** không có character nào để add task.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (added.length === 0 && skippedCap.length === 0 && skippedDup.length === 0) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "info",
+            title: "Không có gì để thêm",
+            description: `Roster **${resolvedRosterName}** không có character phù hợp.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const totalChars = added.length + skippedCap.length + skippedDup.length;
+    const lines = [
+      `**Roster:** ${resolvedRosterName}`,
+      `**Task:** ${taskName}`,
+      `**Cycle:** ${reset === "daily" ? "Daily (reset 17:00 VN)" : "Weekly (reset 17:00 VN thứ 4)"}`,
+      "",
+      `**Added:** ${added.length}/${totalChars} character${added.length === 1 ? "" : "s"}`,
+    ];
+    if (added.length > 0) {
+      lines.push(`> ${added.join(", ")}`);
+    }
+    if (skippedDup.length > 0) {
+      lines.push("");
+      lines.push(`**Skipped (đã có task này):** ${skippedDup.length}`);
+      lines.push(`> ${skippedDup.join(", ")}`);
+    }
+    if (skippedCap.length > 0) {
+      lines.push("");
+      lines.push(
+        `**Skipped (đã đủ ${reset === "daily" ? TASK_CAP_DAILY : TASK_CAP_WEEKLY} task ${reset}):** ${skippedCap.length}`
+      );
+      lines.push(`> ${skippedCap.join(", ")}`);
+    }
+
+    const type = added.length > 0 ? "success" : "info";
+    const title =
+      added.length > 0
+        ? `Đã thêm task cho ${added.length} char`
+        : "Không có char nào được thêm";
+    await interaction.reply({
+      embeds: [
+        buildNoticeEmbed(EmbedBuilder, {
+          type,
+          title,
+          description: lines.join("\n"),
         }),
       ],
       flags: MessageFlags.Ephemeral,
@@ -655,6 +912,7 @@ function createRaidTaskCommand(deps) {
   async function handleRaidTaskCommand(interaction) {
     const sub = interaction.options.getSubcommand();
     if (sub === "add") return handleAdd(interaction);
+    if (sub === "add-all") return handleAddAll(interaction);
     if (sub === "remove") return handleRemove(interaction);
     if (sub === "clear") return handleClear(interaction);
     await interaction.reply({
@@ -662,7 +920,7 @@ function createRaidTaskCommand(deps) {
         buildNoticeEmbed(EmbedBuilder, {
           type: "warn",
           title: "Subcommand không hợp lệ",
-          description: `Subcommand \`${sub}\` Artist không nhận được. Cho phép: \`add\` · \`remove\` · \`clear\`.`,
+          description: `Subcommand \`${sub}\` Artist không nhận được. Cho phép: \`add\` · \`add-all\` · \`remove\` · \`clear\`.`,
         }),
       ],
       flags: MessageFlags.Ephemeral,

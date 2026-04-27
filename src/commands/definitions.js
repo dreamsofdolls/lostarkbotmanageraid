@@ -239,9 +239,40 @@ function createRaidCommandDefinitions({
         .addStringOption((opt) =>
           opt
             .setName("name")
-            .setDescription("Task name (max 60 chars)")
+            .setDescription("Task name (autocomplete from your past tasks, max 60 chars)")
             .setRequired(true)
             .setMaxLength(60)
+            .setAutocomplete(true)
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("reset")
+            .setDescription("How often this task resets")
+            .setRequired(true)
+            .addChoices(
+              { name: "Daily (17:00 VN)", value: "daily" },
+              { name: "Weekly (17:00 VN Wed)", value: "weekly" }
+            )
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("add-all")
+        .setDescription("Add the same task to EVERY character in a roster at once")
+        .addStringOption((opt) =>
+          opt
+            .setName("roster")
+            .setDescription("Roster (account) - task sẽ thêm cho mọi char trong roster này")
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("name")
+            .setDescription("Task name (autocomplete from your past tasks, max 60 chars)")
+            .setRequired(true)
+            .setMaxLength(60)
+            .setAutocomplete(true)
         )
         .addStringOption((opt) =>
           opt

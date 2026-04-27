@@ -467,6 +467,173 @@ test("REGRESSION (Codex #2): account with > 25 total tasks scoped per-char by fi
   assert.ok(TASK_CAP_DAILY + TASK_CAP_WEEKLY < 25);
 });
 
+// ---------------------------------------------------------------------------
+// add-all subcommand: bulk add same task to every char in a roster
+// ---------------------------------------------------------------------------
+
+test("add-all: adds task to every char that fits, skips chars at cap + duplicates separately", async () => {
+  const FAKE_DAILY = Date.UTC(2026, 3, 22, 10, 0, 0, 0);
+  let savedDoc = null;
+  const userDoc = {
+    discordId: "u1",
+    accounts: [
+      {
+        accountName: "main",
+        characters: [
+          // Char A: empty - should be added.
+          { name: "Alpha", class: "Berserker", itemLevel: 1700, sideTasks: [] },
+          // Char B: already has the task - should skip as dup.
+          {
+            name: "Beta",
+            class: "Bard",
+            itemLevel: 1690,
+            sideTasks: [
+              {
+                taskId: "x",
+                name: "Una Dailies",
+                reset: "daily",
+                completed: false,
+                lastResetAt: 0,
+                createdAt: 0,
+              },
+            ],
+          },
+          // Char C: at daily cap with 3 OTHER daily tasks - should skip cap.
+          {
+            name: "Charlie",
+            class: "Sorc",
+            itemLevel: 1680,
+            sideTasks: [
+              { taskId: "a", name: "T1", reset: "daily", completed: false, lastResetAt: 0, createdAt: 0 },
+              { taskId: "b", name: "T2", reset: "daily", completed: false, lastResetAt: 0, createdAt: 0 },
+              { taskId: "c", name: "T3", reset: "daily", completed: false, lastResetAt: 0, createdAt: 0 },
+            ],
+          },
+          // Char D: empty - should be added.
+          { name: "Delta", class: "Paladin", itemLevel: 1670, sideTasks: [] },
+        ],
+      },
+    ],
+    save: async function () {
+      savedDoc = JSON.parse(JSON.stringify(this));
+    },
+  };
+
+  const replyCalls = [];
+  const stubEmbed = {
+    setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
+    addFields() { return this; }, setFooter() { return this; },
+  };
+  const { createRaidTaskCommand } = require("../src/commands/raid-task");
+  const handlers = createRaidTaskCommand({
+    EmbedBuilder: function () { return stubEmbed; },
+    ActionRowBuilder: class { addComponents() { return this; } },
+    ButtonBuilder: class { setCustomId() { return this; } setLabel() { return this; } setStyle() { return this; } },
+    ButtonStyle: { Danger: 4, Secondary: 2 },
+    MessageFlags: { Ephemeral: 64 },
+    User: { findOne: async () => userDoc },
+    saveWithRetry: async (fn) => fn(),
+    loadUserForAutocomplete: async () => userDoc,
+    dailyResetStartMs: () => FAKE_DAILY,
+    weekResetStartMs: () => 0,
+  });
+
+  const interaction = {
+    user: { id: "u1" },
+    options: {
+      getSubcommand: () => "add-all",
+      getString: (name) => {
+        if (name === "roster") return "main";
+        if (name === "name") return "Una Dailies";
+        if (name === "reset") return "daily";
+        return null;
+      },
+    },
+    reply: async (payload) => { replyCalls.push(payload); },
+  };
+
+  await handlers.handleRaidTaskCommand(interaction);
+
+  assert.ok(savedDoc, "expected save() to be called when at least one add succeeded");
+  // Alpha + Delta got it, Beta (dup) + Charlie (cap) skipped.
+  const finalChars = savedDoc.accounts[0].characters;
+  const alphaTasks = finalChars.find((c) => c.name === "Alpha").sideTasks;
+  const betaTasks = finalChars.find((c) => c.name === "Beta").sideTasks;
+  const charlieTasks = finalChars.find((c) => c.name === "Charlie").sideTasks;
+  const deltaTasks = finalChars.find((c) => c.name === "Delta").sideTasks;
+
+  assert.equal(alphaTasks.length, 1);
+  assert.equal(alphaTasks[0].name, "Una Dailies");
+  assert.equal(alphaTasks[0].lastResetAt, FAKE_DAILY, "lastResetAt seed should be cycle start");
+
+  assert.equal(betaTasks.length, 1, "Beta already had the task; no duplicate added");
+  assert.equal(charlieTasks.length, 3, "Charlie was at cap; no add");
+
+  assert.equal(deltaTasks.length, 1);
+  assert.equal(deltaTasks[0].name, "Una Dailies");
+
+  // Reply should be a single ephemeral notice.
+  assert.equal(replyCalls.length, 1);
+  assert.equal(replyCalls[0].flags, 64);
+});
+
+test("add-all: skips save() entirely when no char fits (every char dup or cap)", async () => {
+  const userDoc = {
+    discordId: "u1",
+    accounts: [
+      {
+        accountName: "main",
+        characters: [
+          {
+            name: "Alpha",
+            class: "Berserker",
+            itemLevel: 1700,
+            sideTasks: [
+              { taskId: "x", name: "Una", reset: "daily", completed: false, lastResetAt: 0, createdAt: 0 },
+            ],
+          },
+        ],
+      },
+    ],
+    save: async () => { throw new Error("save() should not be called"); },
+  };
+  const stubEmbed = {
+    setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
+    addFields() { return this; }, setFooter() { return this; },
+  };
+  const { createRaidTaskCommand } = require("../src/commands/raid-task");
+  const handlers = createRaidTaskCommand({
+    EmbedBuilder: function () { return stubEmbed; },
+    ActionRowBuilder: class { addComponents() { return this; } },
+    ButtonBuilder: class { setCustomId() { return this; } setLabel() { return this; } setStyle() { return this; } },
+    ButtonStyle: { Danger: 4, Secondary: 2 },
+    MessageFlags: { Ephemeral: 64 },
+    User: { findOne: async () => userDoc },
+    saveWithRetry: async (fn) => fn(),
+    loadUserForAutocomplete: async () => userDoc,
+    dailyResetStartMs: () => 0,
+    weekResetStartMs: () => 0,
+  });
+
+  let replied = false;
+  const interaction = {
+    user: { id: "u1" },
+    options: {
+      getSubcommand: () => "add-all",
+      getString: (name) => {
+        if (name === "roster") return "main";
+        if (name === "name") return "Una";
+        if (name === "reset") return "daily";
+        return null;
+      },
+    },
+    reply: async () => { replied = true; },
+  };
+  // Should not throw; save is not called because added.length === 0.
+  await handlers.handleRaidTaskCommand(interaction);
+  assert.equal(replied, true);
+});
+
 test("resetExpiredSideTasks reports modifiedCount accurately when Mongo touches docs", async () => {
   const userStub = {
     updateMany: async (filter, update, options) => {
