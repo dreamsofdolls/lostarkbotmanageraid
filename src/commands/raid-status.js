@@ -1,7 +1,7 @@
 const { isSupportClass, getClassEmoji } = require("../data/Class");
 const { buildNoticeEmbed } = require("../raid/shared");
 
-const STATUS_PAGINATION_SESSION_MS = 3 * 60 * 1000;
+const STATUS_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
 
 function createRaidStatusCommand(deps) {
@@ -740,6 +740,23 @@ function createRaidStatusCommand(deps) {
     const buildSyncRow = (disabled) =>
       new ActionRowBuilder().addComponents(buildSyncButton(disabled));
 
+    // Parse a Discord custom-emoji string `<:name:id>` (or `<a:name:id>`
+    // for animated) into an object the StringSelectMenu option's `emoji`
+    // property accepts. Returns null on miss so callers can `|| undefined`
+    // to skip the emoji slot. StringSelectMenu does NOT render custom
+    // emoji embedded in the label string - it shows the raw `<:name:id>`
+    // text - so the emoji has to ride the structured field instead.
+    const parseCustomEmoji = (raw) => {
+      if (typeof raw !== "string" || raw.length === 0) return null;
+      const match = raw.match(/^<(a?):([^:]+):(\d+)>$/);
+      if (!match) return null;
+      return {
+        animated: match[1] === "a",
+        name: match[2],
+        id: match[3],
+      };
+    };
+
     // Build the Task-view embed for the current page's account. Per-char
     // grouping with daily + weekly subsections inline. Fields are capped
     // at 25 (Discord limit) so accounts with > ~12 chars-with-tasks would
@@ -775,7 +792,7 @@ function createRaidStatusCommand(deps) {
       embed.setDescription(
         [
           "Bấm dropdown bên dưới để toggle complete cho từng task.",
-          "Auto-reset: Daily 17:00 VN · Weekly 17:00 VN thứ 4.",
+          `Auto-reset: Daily 17:00 VN ${UI.icons.reset} Weekly 17:00 VN thứ 4.`,
         ].join("\n")
       );
 
@@ -804,19 +821,26 @@ function createRaidStatusCommand(deps) {
         totalDailyDone += dailyTasks.filter((t) => t?.completed).length;
         totalWeeklyDone += weeklyTasks.filter((t) => t?.completed).length;
 
+        // Section/task icons mirror /raid-status raid view: 🟢 done /
+        // ⚪ pending - same UI.icons set the raid pages already use.
+        // Section headers carry just bold text (no emoji prefix) since
+        // the per-task icon column already conveys completion state and
+        // the cycle name itself ("Daily" / "Weekly") is unambiguous.
         const lines = [];
         if (dailyTasks.length > 0) {
-          lines.push(`**🌒 Daily (${dailyTasks.filter((t) => t.completed).length}/${dailyTasks.length})**`);
+          const dailyDone = dailyTasks.filter((t) => t.completed).length;
+          lines.push(`**Daily** · ${dailyDone}/${dailyTasks.length}`);
           for (const task of dailyTasks) {
-            const icon = task.completed ? "✅" : "⬜";
+            const icon = task.completed ? UI.icons.done : UI.icons.pending;
             lines.push(`${icon} ${task.name}`);
           }
         }
         if (weeklyTasks.length > 0) {
           if (lines.length > 0) lines.push("");
-          lines.push(`**📅 Weekly (${weeklyTasks.filter((t) => t.completed).length}/${weeklyTasks.length})**`);
+          const weeklyDone = weeklyTasks.filter((t) => t.completed).length;
+          lines.push(`**Weekly** · ${weeklyDone}/${weeklyTasks.length}`);
           for (const task of weeklyTasks) {
-            const icon = task.completed ? "✅" : "⬜";
+            const icon = task.completed ? UI.icons.done : UI.icons.pending;
             lines.push(`${icon} ${task.name}`);
           }
         }
@@ -829,10 +853,14 @@ function createRaidStatusCommand(deps) {
 
       const footerParts = [];
       if (totalDaily > 0) {
-        footerParts.push(`🌒 ${totalDailyDone}/${totalDaily} daily`);
+        footerParts.push(
+          `${UI.icons.done} ${totalDailyDone}/${totalDaily} daily`
+        );
       }
       if (totalWeekly > 0) {
-        footerParts.push(`📅 ${totalWeeklyDone}/${totalWeekly} weekly`);
+        footerParts.push(
+          `${UI.icons.done} ${totalWeeklyDone}/${totalWeekly} weekly`
+        );
       }
       if (accounts.length > 1) {
         footerParts.push(`Page ${currentPage + 1}/${accounts.length}`);
@@ -920,18 +948,24 @@ function createRaidStatusCommand(deps) {
         const doneCount = Array.isArray(character.sideTasks)
           ? character.sideTasks.filter((t) => t?.completed).length
           : 0;
-        const classIcon = getClassEmoji(character.class) || "";
         const label = truncateText(
-          `${classIcon ? `${classIcon} ` : ""}${name} · ${itemLevel} · ${doneCount}/${taskCount}`,
+          `${name} · ${itemLevel} · ${doneCount}/${taskCount}`,
           100
         );
-        return {
+        const classEmojiObj = parseCustomEmoji(getClassEmoji(character.class));
+        const option = {
           label,
           value: name.slice(0, 100),
           default:
             !!activeName &&
             name.trim().toLowerCase() === activeName.trim().toLowerCase(),
         };
+        // StringSelectMenu options accept custom emoji ONLY via the
+        // structured `emoji` field, never inline in `label` text -
+        // embedding `<:name:id>` in the label renders as raw markup
+        // (Discord regression Trainee caught on the live deploy).
+        if (classEmojiObj) option.emoji = classEmojiObj;
+        return option;
       });
       return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
@@ -980,10 +1014,13 @@ function createRaidStatusCommand(deps) {
         );
       }
       const options = sideTasks.slice(0, 25).map((task) => {
-        const icon = task.completed ? "✅" : "⬜";
-        const cycleIcon = task.reset === "daily" ? "🌒" : "📅";
+        // Match raid-view icon set (UI.icons.done/pending) + drop the
+        // calendar emoji which Discord rendered as a bare "17" tile in
+        // some clients. Cycle (daily/weekly) shown as text suffix so
+        // the dropdown stays readable when both cycles coexist.
+        const icon = task.completed ? UI.icons.done : UI.icons.pending;
         const label = truncateText(
-          `${icon} ${cycleIcon} ${task.name}`,
+          `${icon} ${task.name} · ${task.reset}`,
           100
         );
         return {

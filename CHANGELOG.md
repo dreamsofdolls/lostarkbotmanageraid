@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 
 ## 2026-04-27
 
+### Changed (`/raid-status` session: 3 phút → 5 phút, parity với `/raid-check`)
+- `STATUS_PAGINATION_SESSION_MS` 3 → 5 min. Trước /raid-status hết hạn nhanh hơn /raid-check (3 vs 5), với view toggle Task ↔ Raid + nhiều dropdown hơn (raid filter, view, char filter, task toggle), 3 phút bắt đầu thiếu để user xem + toggle complete loạt task. Test pin updated.
+
+### Fixed (Task view UX: custom emoji rendered as raw markup trong dropdown + icon parity raid view)
+- **StringSelectMenu custom emoji bug**: char-filter dropdown nhúng `${classIcon}` (= `<:weather_artist_047224:1497...>`) vào `label` string → Discord render thành raw markup chữ vì StringSelectMenu chỉ accept custom emoji qua structured field `emoji: { id, name, animated }`, không qua label text. Fix: parse custom emoji form `<a?:name:id>` thành object, pass qua option `emoji` property; label giữ plain text.
+- **Embed icon parity**: section header trong Task view trước dùng `🌒 Daily` / `📅 Weekly` - calendar emoji render kiểu "17" tile xấu trên 1 số client. Fix: drop emoji prefix ở section header (chỉ `**Daily** · X/Y`), task line icons swap `✅/⬜` → `UI.icons.done` (🟢) `/ UI.icons.pending` (⚪) parity raid view. Footer dùng cùng icon set.
+- Toggle dropdown labels cũng drop calendar emoji + thêm cycle suffix dạng text (`task.reset` → "daily"/"weekly") cho rõ.
+
 ### Fixed (welcome embed: split field "📣 Artist sẽ tự nói" sau khi đụng cap 1024)
 - **Production crash** ở `/raid-channel config action:repin` với `ExpectedConstraintError: s.string().lengthLessThanOrEqual()` - field "📣 Artist sẽ tự nói trong channel này khi nào" đã 1185 chars > Discord cap 1024 sau khi bullet maintenance T-3h/.../T-1m thêm earlier today (2026-04-27 maintenance reminder commit).
 - Fix: tách bullet maintenance thành field riêng "🛠️ Lịch bảo trì thứ 4 (14:00 VN)". Field gốc giờ 894 chars + field mới 270 chars, đều an toàn dưới cap. Total embed ~4500/6000 vẫn nhiều headroom.
