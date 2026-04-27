@@ -39,6 +39,12 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 - 7 test mới ở `test/raid-check-enable-auto.test.js` cover `tryEnableAutoManageForUser`: `flipped` happy path, CAS filter shape (regression cho race fix), no-stamp guard (regression cho copy-vs-queue mismatch), `already-on` race, `missing` user, `error` from findOneAndUpdate, fallback findOne tolerance. Mocked Mongoose User stub vì helper module-level + dep-injectable.
 - 3 test mới ở `test/raid-status.test.js` cover Auto-sync OFF badge trong `buildAccountPageEmbed`: render khi `=== false`, ẩn khi `=== true`, ẩn cho legacy doc với `autoManageEnabled === undefined` (strict check guard).
 
+### Added (Option C: DM kèm roster + Public Log status + button `🚫 Tắt auto-sync ngay`)
+- DM gửi user khi Manager bật-hộ giờ kèm 1 field per roster account, mỗi char render 1 dòng `<icon> <name> · <iLvl> · <status>`. Status icon 3-way: 🔓 Public OK (`publicLogDisabled=false` AND user đã từng sync), 🔒 Private (`publicLogDisabled=true`), ❓ Chưa kiểm tra (default state khi chưa từng sync). Footer hint Public Log chỉ render khi có ít nhất 1 char Private/unknown - skip nếu mọi char đã confirmed Public (tránh visual noise).
+- Button `🚫 Tắt auto-sync ngay` (Danger style) ship trong DM cùng embed. User bấm → atomic CAS flip true→false qua `tryDisableAutoManageForSelf` helper, edit DM in-place thành muted "Đã tắt auto-sync rồi nha~" + button removed. Self-only enforcement: handler check `interaction.user.id === target` trước khi flip - regular member click DM của người khác bị reject với lock notice.
+- Refactor `handleRaidCheckButton` để `disable-auto-self` action bypass Manager gate (self-only), các action còn lại (`sync` / `edit` / `enable-auto-one` / `edit-all`) vẫn gated.
+- 11 test mới: 4 cover `tryDisableAutoManageForSelf` (disabled / already-off / missing / error), 7 cover `buildEnableAutoDmEmbed` (3 status icon variants, footer toggle, empty account skip, multiple accounts, manager mention).
+
 ## 2026-04-26
 
 ### Added
