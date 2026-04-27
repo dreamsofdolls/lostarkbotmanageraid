@@ -32,6 +32,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `/raid-channel` welcome embed no longer trips Discord's 1024-character field cap after adding maintenance copy.
 - `/raid-status` and `/raid-check` now surface explicit sync outcomes instead of silently re-rendering after a click.
 - `/raid-check` Manager Task view intentionally includes `sideTasks` in projection now that monitoring is a supported capability.
+- `/edit-roster` Confirm no longer wipes a kept character's `/raid-task` side-task entries; the shared char-record builder now copies `sideTasks` alongside `tasks`.
+- `/edit-roster` no longer silently deletes saved characters beyond the 20-character picker cap on legacy rosters; off-window chars stay untouched and the picker shows a dedicated warning.
+- `/raid-status` side-task toggle now binds to the captured roster name instead of the page index, so a concurrent `/remove-roster` mid-session can no longer redirect the toggle into a different roster.
 
 ### Refactor
 - Extracted `buildAccountTaskFields()` into `src/raid/task-view.js` so `/raid-status` and `/raid-check` share the same task-card renderer and totals math.
