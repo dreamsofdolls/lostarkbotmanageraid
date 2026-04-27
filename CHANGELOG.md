@@ -14,7 +14,8 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - Welcome pin got a clearer onboarding block for new members.
 
 ### Changed
-- Task view (`/raid-status` and `/raid-check raid:all`) per-task lines now mirror the Raid view's `[icon] [name] · [info]` format, appending `· daily` / `· weekly` to each task line. Decimal item-level precision is preserved in the char header (no more `1734.17` → `1734` truncation): the longer task lines widen Discord's auto-fit inline columns enough that long char names like `Crimsonjudgment · 1700` stay on a single line.
+- Task view (`/raid-status` and `/raid-check raid:all`) per-task lines now mirror the Raid view's `[icon] [name] · [info]` format, appending `· daily` / `· weekly` to each task line. Decimal item-level precision is preserved in the char header (no more `1734.17` → `1734` truncation).
+- `/raid-status` Task view description now includes the same freshness / refresh-ready / sync-ready lines the Raid view shows. Two-fold benefit: parity (the freshness info applies regardless of which view is active) plus those long lines drive Discord's auto-fit column allocation so headers like `Crimsonjudgment · 1700` no longer wrap.
 - `/raid-check raid:all` Task view now renders class icons in char headers (matching `/raid-status` Task view). The earlier empty-fallback was unintentional inconsistency, not a deliberate Manager-side simplification.
 - `CHANGELOG` and help surfaces were rewritten to be more user-first: less internal jargon, more direct usage guidance.
 - `/raid-help` was reworked around onboarding and practical command usage instead of Mongo / factory / routing details.
