@@ -17,6 +17,8 @@ const {
   handleRemoveRosterAutocomplete,
   handleRaidChannelAutocomplete,
   handleRaidAutoManageAutocomplete,
+  handleRaidTaskAutocomplete,
+  handleRaidTaskButton,
   handleRaidAnnounceAutocomplete,
   handleRaidChannelMessage,
   handleRaidCheckButton,
@@ -27,6 +29,7 @@ const {
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
   startMaintenanceScheduler,
+  startSideTaskResetScheduler,
 } = require("./raid-command");
 const { startWeeklyResetJob } = require("./weekly-reset");
 const { bootstrapClassEmoji, bootstrapArtistEmoji } = require("./services/emoji-bootstrap");
@@ -149,6 +152,12 @@ async function startBot() {
     // Tick is cheap on non-Wednesday days (early-exits before any DB query),
     // so leaving it running 24/7 has negligible cost.
     startMaintenanceScheduler(readyClient);
+    // Side-task reset scheduler. 30-min tick, bulk updateMany. Resets
+    // per-character side tasks once their cycle boundary passes (daily
+    // 10:00 UTC = 17:00 VN, weekly Wed 10:00 UTC = 17:00 VN). Independent
+    // of AUTO_MANAGE_DAILY_DISABLED so player-tracked chores never get
+    // stuck "completed forever" even if bible auto-sync is off.
+    startSideTaskResetScheduler();
   });
 
   if (TEXT_MONITOR_ENABLED) {
@@ -177,6 +186,7 @@ async function startBot() {
       "raid-channel",
       "raid-auto-manage",
       "raid-announce",
+      "raid-task",
     ],
     handleSlashCommand: handleRaidManagementCommand,
     autocompleteHandlers: {
@@ -186,6 +196,7 @@ async function startBot() {
       "raid-channel": handleRaidChannelAutocomplete,
       "raid-auto-manage": handleRaidAutoManageAutocomplete,
       "raid-announce": handleRaidAnnounceAutocomplete,
+      "raid-task": handleRaidTaskAutocomplete,
     },
     selectHandlers: {},
     selectRoutes: [
@@ -204,6 +215,9 @@ async function startBot() {
       { prefix: "add-roster:", handle: handleAddRosterButton },
       // /edit-roster mirrors the /add-roster button shape.
       { prefix: "edit-roster:", handle: handleEditRosterButton },
+      // /raid-task clear-confirm + clear-cancel buttons. CustomIds:
+      // "raid-task:clear-confirm:<encoded-charname>" or "raid-task:clear-cancel".
+      { prefix: "raid-task:", handle: handleRaidTaskButton },
     ],
   });
 

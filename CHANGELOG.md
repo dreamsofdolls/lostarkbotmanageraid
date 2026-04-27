@@ -4,6 +4,13 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 
 ## 2026-04-27
 
+### Added (`/raid-task` + `/raid-status` Task view: per-character side-task tracker)
+- Schema mới `sideTaskSchema` ở `accounts.characters[].sideTasks` (`taskId/name(60)/reset(daily|weekly)/completed/lastResetAt/createdAt`). Cap 3 daily + 5 weekly enforced ở command layer thay vì schema validator để toggle complete không bị reject khi pre-existing data >cap.
+- `/raid-task` 3 sub: `add` (char autocomplete + name + cycle choice) / `remove` (char + task autocomplete bằng taskId) / `clear` (ephemeral confirm Danger button trước khi xoá all). Module-level helpers (`tryEnable`-style 4-outcome shape) export để invocation-test.
+- `/raid-status` thêm dropdown `📋 Tiến độ raid` ↔ `📝 Side tasks`. Task view: per-char field 2 sub-section daily/weekly với ✅/⬜, dropdown `Bấm để toggle complete...` flip trực tiếp (no extra command). Pagination preserve giữa 2 view.
+- `startSideTaskResetScheduler` 30-min tick độc lập với `AUTO_MANAGE_DAILY_DISABLED`. Bulk `updateMany` với `arrayFilters` theo `task.reset + task.lastResetAt < cycleStart`; `$elemMatch` pre-filter nên steady-state no-op. Daily boundary 17:00 VN = 10:00 UTC (LA daily reset), weekly dùng existing `weekResetStartMs` (Wed 17:00 VN).
+- Privacy boundary: `/raid-check` all-mode `.select()` expanded từ blob `accounts` → enumerated subfields (no `sideTasks`); regression test pin allowlist không chứa `sideTasks`. 17 test mới (boundary math + helpers + bulk shape + privacy guard); suite 193 → 210.
+
 ### Added (`/raid-announce` maintenance reminders: nhắc trước bảo trì Wed 14:00 VN)
 - **2 announcement types mới**: `maintenance-early` (3 mốc T-3h / T-2h / T-1h, ping `@here` ở T-3h và T-1h) + `maintenance-countdown` (4 mốc T-15m / T-10m / T-5m / T-1m, không ping). Cả 2 channel-overridable, default ON, bật/tắt độc lập qua `/raid-announce action:on|off`.
 - **21 variants Artist voice** (3 variants/mốc) random pick mỗi lần fire. Early reminders liệt kê checklist (`shop solo` / `event` / `paradise` / `key hell`), countdown đếm ngược dồn dập, T-1m chốt "thoát game thôi". Vietnamese-first, term game LA giữ.

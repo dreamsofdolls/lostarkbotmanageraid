@@ -65,6 +65,7 @@ const EXPECTED_SECTION_KEYS = [
   "add-roster",
   "edit-roster",
   "raid-status",
+  "raid-task",
   "raid-set",
   "raid-check",
   "remove-roster",

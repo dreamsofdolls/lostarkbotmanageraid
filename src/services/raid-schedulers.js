@@ -1084,6 +1084,118 @@ function createRaidSchedulerService({
    * Returns the interval handle. Caller doesn't need to track it for the
    * normal lifetime - process exit kills the timer.
    */
+  // ---------------------------------------------------------------------------
+  // Side-task reset scheduler
+  // ---------------------------------------------------------------------------
+  //
+  // Auto-resets `completed=false` on per-character side tasks once their
+  // cycle boundary passes. Runs on a dedicated 30-min interval so a global
+  // AUTO_MANAGE_DAILY_DISABLED killswitch doesn't strand side-tasks in
+  // "completed forever" state (side tasks are user-tracked chores, unrelated
+  // to bible auto-sync).
+  //
+  // Cycle boundaries:
+  //   - daily   = 10:00 UTC (= 17:00 VN, LA daily reset moment)
+  //   - weekly  = `weekResetStartMs()` (Wed 10:00 UTC = 17:00 VN, same as
+  //               raid weekly reset - on Wednesdays the daily and weekly
+  //               boundaries collide at the same instant by design)
+  //
+  // Reset is bulk via `updateMany` with named arrayFilter so a tick costs
+  // one round-trip regardless of user count. The pre-filter on the outer
+  // query short-circuits when no document has any expired side task, so
+  // the steady state is essentially a no-op.
+
+  const SIDE_TASK_RESET_TICK_MS = 30 * 60 * 1000;
+  let sideTaskSchedulerStartedAtMs = null;
+  let sideTaskTickInFlight = false;
+
+  function dailyResetStartMs(now = new Date()) {
+    // Snap to the most recent 10:00 UTC boundary that has passed.
+    // LA's daily reset is 17:00 VN = 10:00 UTC (UTC+7 offset).
+    const cursor = new Date(now.getTime());
+    if (cursor.getUTCHours() < 10) {
+      cursor.setUTCDate(cursor.getUTCDate() - 1);
+    }
+    return Date.UTC(
+      cursor.getUTCFullYear(),
+      cursor.getUTCMonth(),
+      cursor.getUTCDate(),
+      10, 0, 0, 0
+    );
+  }
+
+  async function resetExpiredSideTasks(now = new Date()) {
+    const dailyStart = dailyResetStartMs(now);
+    const weeklyStart = weekResetStartMs(now);
+
+    const dailyResult = await User.updateMany(
+      {
+        "accounts.characters.sideTasks": {
+          $elemMatch: { reset: "daily", lastResetAt: { $lt: dailyStart } },
+        },
+      },
+      {
+        $set: {
+          "accounts.$[].characters.$[].sideTasks.$[task].completed": false,
+          "accounts.$[].characters.$[].sideTasks.$[task].lastResetAt": dailyStart,
+        },
+      },
+      {
+        arrayFilters: [
+          { "task.reset": "daily", "task.lastResetAt": { $lt: dailyStart } },
+        ],
+      }
+    );
+
+    const weeklyResult = await User.updateMany(
+      {
+        "accounts.characters.sideTasks": {
+          $elemMatch: { reset: "weekly", lastResetAt: { $lt: weeklyStart } },
+        },
+      },
+      {
+        $set: {
+          "accounts.$[].characters.$[].sideTasks.$[task].completed": false,
+          "accounts.$[].characters.$[].sideTasks.$[task].lastResetAt": weeklyStart,
+        },
+      },
+      {
+        arrayFilters: [
+          { "task.reset": "weekly", "task.lastResetAt": { $lt: weeklyStart } },
+        ],
+      }
+    );
+
+    return {
+      dailyModified: dailyResult?.modifiedCount || 0,
+      weeklyModified: weeklyResult?.modifiedCount || 0,
+      dailyStart,
+      weeklyStart,
+    };
+  }
+
+  function startSideTaskResetScheduler() {
+    sideTaskSchedulerStartedAtMs = Date.now();
+    const run = async () => {
+      if (sideTaskTickInFlight) return;
+      sideTaskTickInFlight = true;
+      try {
+        const report = await resetExpiredSideTasks();
+        if (report.dailyModified > 0 || report.weeklyModified > 0) {
+          console.log(
+            `[side-task reset] daily=${report.dailyModified} weekly=${report.weeklyModified}`
+          );
+        }
+      } catch (err) {
+        console.error("[side-task reset] tick failed:", err?.message || err);
+      } finally {
+        sideTaskTickInFlight = false;
+      }
+    };
+    run();
+    return setInterval(run, SIDE_TASK_RESET_TICK_MS);
+  }
+
   let dailyTickInFlight = false;
   function startAutoManageDailyScheduler(client) {
     autoManageSchedulerStartedAtMs = Date.now();
@@ -1133,9 +1245,13 @@ function createRaidSchedulerService({
     startRaidChannelScheduler,
     startAutoManageDailyScheduler,
     startMaintenanceScheduler,
+    startSideTaskResetScheduler,
+    dailyResetStartMs,
+    resetExpiredSideTasks,
     getAutoCleanupSchedulerStartedAtMs: () => autoCleanupSchedulerStartedAtMs,
     getAutoManageSchedulerStartedAtMs: () => autoManageSchedulerStartedAtMs,
     getMaintenanceSchedulerStartedAtMs: () => maintenanceSchedulerStartedAtMs,
+    getSideTaskSchedulerStartedAtMs: () => sideTaskSchedulerStartedAtMs,
   };
 }
 

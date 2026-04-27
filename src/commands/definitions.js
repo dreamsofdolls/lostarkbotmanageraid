@@ -214,6 +214,71 @@ function createRaidCommandDefinitions({
         .addChannelTypes(ChannelType.GuildText)
     );
 
+  const raidTaskCommand = new SlashCommandBuilder()
+    .setName("raid-task")
+    .setDescription("Track daily/weekly side tasks per character (cap 3 daily + 5 weekly)")
+    .setDMPermission(false)
+    .addSubcommand((sub) =>
+      sub
+        .setName("add")
+        .setDescription("Add a daily or weekly side task to one of your characters")
+        .addStringOption((opt) =>
+          opt
+            .setName("character")
+            .setDescription("Character to attach this task to")
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("name")
+            .setDescription("Task name (max 60 chars)")
+            .setRequired(true)
+            .setMaxLength(60)
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("reset")
+            .setDescription("How often this task resets")
+            .setRequired(true)
+            .addChoices(
+              { name: "Daily (17:00 VN)", value: "daily" },
+              { name: "Weekly (17:00 VN Wed)", value: "weekly" }
+            )
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("remove")
+        .setDescription("Remove one side task from a character")
+        .addStringOption((opt) =>
+          opt
+            .setName("character")
+            .setDescription("Character to remove a task from")
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("task")
+            .setDescription("Task to remove (autocomplete by character)")
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("clear")
+        .setDescription("Remove ALL side tasks from one character (confirm required)")
+        .addStringOption((opt) =>
+          opt
+            .setName("character")
+            .setDescription("Character to clear")
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+    );
+
   const commands = [
     addRosterCommand,
     editRosterCommand,
@@ -225,6 +290,7 @@ function createRaidCommandDefinitions({
     raidChannelCommand,
     raidAutoManageCommand,
     raidAnnounceCommand,
+    raidTaskCommand,
   ];
 
   return commands;

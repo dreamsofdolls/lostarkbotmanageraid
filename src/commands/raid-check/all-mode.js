@@ -56,9 +56,39 @@ function createAllModeHandler({
     // Only users with at least one account matter for the overview.
     // Select enough identity fields to resolve an avatar-less fallback
     // display name (same cache-first preference the Edit flow uses).
+    //
+    // Account subfields enumerated explicitly so `accounts.characters.sideTasks`
+    // (per-user side tasks registered via /raid-task) NEVER leaks into
+    // Manager-facing /raid-check views. Privacy boundary - if you add a
+    // new account field that all-mode needs, add it here; do NOT widen to
+    // `accounts` because that would re-include `sideTasks`.
     const users = await User.find({ "accounts.0": { $exists: true } })
       .select(
-        "discordId accounts autoManageEnabled lastAutoManageSyncAt lastAutoManageAttemptAt discordUsername discordGlobalName discordDisplayName"
+        [
+          "discordId",
+          "discordUsername",
+          "discordGlobalName",
+          "discordDisplayName",
+          "autoManageEnabled",
+          "lastAutoManageSyncAt",
+          "lastAutoManageAttemptAt",
+          "weeklyResetKey",
+          "accounts.accountName",
+          "accounts.lastRefreshedAt",
+          "accounts.lastRefreshAttemptAt",
+          "accounts.characters.id",
+          "accounts.characters.name",
+          "accounts.characters.class",
+          "accounts.characters.itemLevel",
+          "accounts.characters.combatScore",
+          "accounts.characters.isGoldEarner",
+          "accounts.characters.assignedRaids",
+          "accounts.characters.tasks",
+          "accounts.characters.publicLogDisabled",
+          "accounts.characters.bibleSerial",
+          "accounts.characters.bibleCid",
+          "accounts.characters.bibleRid",
+        ].join(" ")
       )
       .lean();
 
