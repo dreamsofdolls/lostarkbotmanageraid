@@ -60,18 +60,9 @@ function buildAccountTaskFields(account, helpers) {
 
   const buildCharField = (character) => {
     const charName = getCharacterName(character);
-    // Decimal-preserving header. Item levels in Lost Ark have fractional
-    // precision (1734.17, 1710.83) and the player relies on those digits
-    // for honing decisions, so we keep them as-is. The previous "floor"
-    // workaround for column-wrap is replaced by widening value-line
-    // content below (raid-view-style `[icon] [name] · [info]` per task)
-    // so Discord's auto-fit allocates wide enough columns and the header
-    // never has to be trimmed.
-    const itemLevel = Number(character.itemLevel) || 0;
     const classIcon = getClassEmoji(character.class);
     const namePrefix = classIcon ? `${classIcon} ` : "";
-    // Match raid-view header shape exactly: class icon + char name + iLvl.
-    const fieldName = truncateText(`${namePrefix}${charName} · ${itemLevel}`, 256);
+    const fieldName = truncateText(`${namePrefix}${charName}`, 256);
 
     const sideTasks = Array.isArray(character.sideTasks)
       ? character.sideTasks
