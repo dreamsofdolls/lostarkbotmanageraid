@@ -70,13 +70,8 @@ function buildAccountTaskFields(account, helpers) {
     const itemLevel = Number(character.itemLevel) || 0;
     const classIcon = getClassEmoji(character.class);
     const namePrefix = classIcon ? `${classIcon} ` : "";
-    // Keep the visual structure identical to raid-view headers, but bind
-    // the separator to the iLvl with NBSP so Discord does not wrap
-    // `1734.17` onto its own line in narrow inline-field columns.
-    const fieldName = truncateText(
-      `${namePrefix}${charName}\u00A0·\u00A0${itemLevel}`,
-      256
-    );
+    // Match raid-view header shape exactly: class icon + char name + iLvl.
+    const fieldName = truncateText(`${namePrefix}${charName} · ${itemLevel}`, 256);
 
     const sideTasks = Array.isArray(character.sideTasks)
       ? character.sideTasks
@@ -88,22 +83,20 @@ function buildAccountTaskFields(account, helpers) {
     totals.dailyDone += dailyTasks.filter((t) => t?.completed).length;
     totals.weeklyDone += weeklyTasks.filter((t) => t?.completed).length;
 
-    // Task-line format intentionally mirrors the Raid view's
-    // `[icon] [name] · [info]` pattern. Discord allocates inline-field
-    // column width from the longest line in the embed's combined value
-    // content - if every task line is just `[icon] [name]` (~11 chars)
-    // the columns shrink and char-name headers like `Crimsonjudgment ·
-    // 1700` wrap to a second line. Adding the `· daily`/`· weekly`
-    // suffix bumps each task line to ~17-19 chars (parity with raid
-    // lines like `🟢 Aegir Hard · 2/2`) and the columns auto-widen to
-    // accommodate the long char headers without any per-header
-    // truncation. The reset-cycle suffix is technically redundant with
-    // the section header right above it, but it pulls double duty as a
-    // visual padding mechanism and as quick-glance info while scrolling.
+    const pickTaskSectionIcon = (done, total) => {
+      if (total > 0 && done === total) return UI.icons.done;
+      if (done > 0) return UI.icons.partial || UI.icons.pending;
+      return UI.icons.pending;
+    };
+
+    // Mirror raid-view value lines: `[icon] [label] · [done]/[total]`.
+    // Keeping the first value line long and raid-shaped gives Discord's
+    // inline-field auto-layout the same width signal as raid view, instead
+    // of a short bold section header that makes long char headers wrap.
     const lines = [];
     if (dailyTasks.length > 0) {
       const dailyDone = dailyTasks.filter((t) => t.completed).length;
-      lines.push(`**Daily** · ${dailyDone}/${dailyTasks.length}`);
+      lines.push(`${pickTaskSectionIcon(dailyDone, dailyTasks.length)} Daily tasks · ${dailyDone}/${dailyTasks.length}`);
       for (const task of dailyTasks) {
         const icon = task.completed ? UI.icons.done : UI.icons.pending;
         lines.push(`${icon} ${task.name} · daily`);
@@ -112,7 +105,7 @@ function buildAccountTaskFields(account, helpers) {
     if (weeklyTasks.length > 0) {
       if (lines.length > 0) lines.push("");
       const weeklyDone = weeklyTasks.filter((t) => t.completed).length;
-      lines.push(`**Weekly** · ${weeklyDone}/${weeklyTasks.length}`);
+      lines.push(`${pickTaskSectionIcon(weeklyDone, weeklyTasks.length)} Weekly tasks · ${weeklyDone}/${weeklyTasks.length}`);
       for (const task of weeklyTasks) {
         const icon = task.completed ? UI.icons.done : UI.icons.pending;
         lines.push(`${icon} ${task.name} · weekly`);
