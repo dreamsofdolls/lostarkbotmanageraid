@@ -196,7 +196,16 @@ function createRaidStatusCommand(deps) {
     // counts) per /raid-check parity; title stays as just icon + account
     // so the identity of the rendered roster is the sole headline.
     const headerIcon = pickRosterHeaderIcon(userMeta?.discordId);
-    const title = `${titleIcon} ${headerIcon} ${account.accountName}`;
+    // Inline `· 📝 Auto-sync OFF` badge when the rendered subject hasn't
+    // opted into /raid-auto-manage. Useful in 2 contexts that share this
+    // builder: (1) /raid-status caller seeing their own roster with a
+    // light nudge to opt in; (2) /raid-check raid:all leader scanning
+    // across guild members, immediately spotting who requires manual
+    // Edit. Silent when opted-in to keep the title lean for the common
+    // case. Strict `=== false` so a missing/unknown flag (legacy doc)
+    // doesn't false-positive into showing OFF.
+    const autoSyncBadge = userMeta?.autoManageEnabled === false ? " · 📝 Auto-sync OFF" : "";
+    const title = `${titleIcon} ${headerIcon} ${account.accountName}${autoSyncBadge}`;
 
     // Description used to lead with a per-account "N chars · X/Y raids
     // done · K in progress" line, but those counts are now carried by

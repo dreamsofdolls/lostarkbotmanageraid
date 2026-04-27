@@ -631,8 +631,15 @@ function createRaidCheckCommand(deps) {
       const headerIcon = isManagerId && isManagerId(group.discordId)
         ? "👑"
         : UI.icons.folder;
+      // Inline `· 📝 Auto-sync OFF` badge so the leader immediately sees
+      // which rosters won't be touched by the auto-manage scheduler. Silent
+      // when opted-in (the freshness line below already shows the
+      // last-synced timestamp); the OFF badge is the only one rendered
+      // because manual-handling rosters are the exception that needs
+      // action (Edit cascade or nudging the member to opt in).
+      const autoSyncBadge = group.autoManageEnabled ? "" : " · 📝 Auto-sync OFF";
       embed.addFields({
-        name: truncateText(`${headerIcon} ${group.accountName} (${group.displayName})`, 256),
+        name: truncateText(`${headerIcon} ${group.accountName} (${group.displayName})${autoSyncBadge}`, 256),
         value: truncateText(freshnessLine || "\u200B", 1024),
         inline: false,
       });
