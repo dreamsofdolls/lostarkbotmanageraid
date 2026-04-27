@@ -221,6 +221,55 @@ function formatProgressTotals(totals, UI) {
   return parts.join(" · ");
 }
 
+// Discord MessageFlags.Ephemeral as a literal constant. Imported once
+// here so the notice-reply wrappers below don't need every caller to
+// thread MessageFlags through. discord.js exports it as a frozen enum
+// (numeric value 64) - safe to bake in.
+const MESSAGE_FLAG_EPHEMERAL = 1 << 6; // 64
+
+/**
+ * Reply with a notice embed, ephemeral by default. Wrapper around the
+ * common 7-line pattern:
+ *   await interaction.reply({
+ *     embeds: [buildNoticeEmbed(EmbedBuilder, { type, title, description })],
+ *     flags: MessageFlags.Ephemeral,
+ *   });
+ *
+ * Caller passes EmbedBuilder so this stays decoupled from discord.js
+ * imports. Pass `ephemeral: false` to broadcast to the channel.
+ */
+function replyNotice(interaction, EmbedBuilder, options, { ephemeral = true } = {}) {
+  const payload = {
+    embeds: [buildNoticeEmbed(EmbedBuilder, options)],
+  };
+  if (ephemeral) payload.flags = MESSAGE_FLAG_EPHEMERAL;
+  return interaction.reply(payload);
+}
+
+/**
+ * editReply with a notice embed. Used for follow-up edits on a deferred
+ * reply or after a slow operation. ephemeral flag is determined by the
+ * original deferReply, so this wrapper just edits in place.
+ */
+function editNotice(interaction, EmbedBuilder, options) {
+  return interaction.editReply({
+    embeds: [buildNoticeEmbed(EmbedBuilder, options)],
+  });
+}
+
+/**
+ * component.update with a notice embed - used by collector handlers
+ * that swap a button-bearing message into a final state. Components
+ * default to empty (= remove the buttons), pass `components` in
+ * `extras` to keep them.
+ */
+function updateNotice(component, EmbedBuilder, options, { components = [] } = {}) {
+  return component.update({
+    embeds: [buildNoticeEmbed(EmbedBuilder, options)],
+    components,
+  });
+}
+
 // Frozen zero-width-space inline field used as a 2-column layout spacer.
 // Discord auto-packs `inline: true` fields up to 3 per row; injecting one
 // of these between every char card forces exactly 2 cards per row instead.
@@ -276,4 +325,7 @@ module.exports = {
   INLINE_SPACER,
   pack2Columns,
   formatProgressTotals,
+  replyNotice,
+  editNotice,
+  updateNotice,
 };

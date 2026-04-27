@@ -174,6 +174,61 @@ test("pack2Columns: empty input returns empty array", () => {
   assert.deepEqual(pack2Columns([]), []);
 });
 
+test("replyNotice wraps interaction.reply with the notice embed + ephemeral flag", async () => {
+  const { replyNotice } = require("../src/raid/shared");
+  const calls = [];
+  const interaction = {
+    reply: async (payload) => calls.push(payload),
+  };
+  class StubEmbed {
+    setColor() { return this; }
+    setTitle() { return this; }
+    setDescription() { return this; }
+  }
+  await replyNotice(interaction, StubEmbed, {
+    type: "warn",
+    title: "T",
+    description: "D",
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].flags, 64); // MessageFlags.Ephemeral
+  assert.equal(calls[0].embeds.length, 1);
+});
+
+test("replyNotice: ephemeral:false omits the flag for channel-broadcast notices", async () => {
+  const { replyNotice } = require("../src/raid/shared");
+  const calls = [];
+  const interaction = { reply: async (payload) => calls.push(payload) };
+  class StubEmbed {
+    setColor() { return this; }
+    setTitle() { return this; }
+    setDescription() { return this; }
+  }
+  await replyNotice(interaction, StubEmbed, { type: "info", title: "X" }, { ephemeral: false });
+  assert.equal(calls[0].flags, undefined);
+});
+
+test("updateNotice clears components by default and accepts override via extras", async () => {
+  const { updateNotice } = require("../src/raid/shared");
+  const calls = [];
+  const component = { update: async (payload) => calls.push(payload) };
+  class StubEmbed {
+    setColor() { return this; }
+    setTitle() { return this; }
+    setDescription() { return this; }
+  }
+  await updateNotice(component, StubEmbed, { type: "muted", title: "X" });
+  assert.deepEqual(calls[0].components, []);
+
+  await updateNotice(
+    component,
+    StubEmbed,
+    { type: "info", title: "Y" },
+    { components: [{ keep: "row" }] }
+  );
+  assert.deepEqual(calls[1].components, [{ keep: "row" }]);
+});
+
 test("formatProgressTotals: standard 3-icon line", () => {
   const { formatProgressTotals } = require("../src/raid/shared");
   const UI = { icons: { done: "🟢", partial: "🟡", pending: "⚪", lock: "🔒" } };
