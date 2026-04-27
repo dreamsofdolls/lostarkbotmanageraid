@@ -80,7 +80,7 @@ function buildAccountTaskFields(account, helpers) {
       lines.push(`**Daily** · ${dailyDone}/${dailyTasks.length}`);
       for (const task of dailyTasks) {
         const icon = task.completed ? UI.icons.done : UI.icons.pending;
-        lines.push(`${icon} ${task.name} · daily`);
+        lines.push(`${icon} ${task.name}`);
       }
     }
     if (weeklyTasks.length > 0) {
@@ -89,7 +89,7 @@ function buildAccountTaskFields(account, helpers) {
       lines.push(`**Weekly** · ${weeklyDone}/${weeklyTasks.length}`);
       for (const task of weeklyTasks) {
         const icon = task.completed ? UI.icons.done : UI.icons.pending;
-        lines.push(`${icon} ${task.name} · weekly`);
+        lines.push(`${icon} ${task.name}`);
       }
     }
     return {
