@@ -801,7 +801,14 @@ function createRaidStatusCommand(deps) {
       let totalDailyDone = 0;
       let totalWeeklyDone = 0;
 
-      for (const character of charsWithTasks.slice(0, 25)) {
+      // Inline-field 2-column layout matching /raid-status raid view:
+      // every char field is `inline: true`, with a ZWS spacer between
+      // each pair so Discord packs exactly 2 cards per row instead of 3.
+      // Odd char at the end pairs with one extra spacer so it doesn't
+      // get stretched full-width by Discord's auto-layout.
+      const inlineSpacer = { name: "​", value: "​", inline: true };
+
+      const buildTaskCharField = (character) => {
         const charName = getCharacterName(character);
         const itemLevel = Number(character.itemLevel) || 0;
         const classIcon = getClassEmoji(character.class);
@@ -822,10 +829,9 @@ function createRaidStatusCommand(deps) {
         totalWeeklyDone += weeklyTasks.filter((t) => t?.completed).length;
 
         // Section/task icons mirror /raid-status raid view: 🟢 done /
-        // ⚪ pending - same UI.icons set the raid pages already use.
-        // Section headers carry just bold text (no emoji prefix) since
-        // the per-task icon column already conveys completion state and
-        // the cycle name itself ("Daily" / "Weekly") is unambiguous.
+        // ⚪ pending. Section headers carry just bold text (no emoji
+        // prefix) since the per-task icon column already conveys state
+        // and the cycle name ("Daily" / "Weekly") is unambiguous.
         const lines = [];
         if (dailyTasks.length > 0) {
           const dailyDone = dailyTasks.filter((t) => t.completed).length;
@@ -844,11 +850,25 @@ function createRaidStatusCommand(deps) {
             lines.push(`${icon} ${task.name}`);
           }
         }
-        embed.addFields({
+        return {
           name: fieldName,
           value: truncateText(lines.join("\n") || "(không có task)", 1024),
-          inline: false,
-        });
+          inline: true,
+        };
+      };
+
+      // 2-column packing: field cap is 25, each char takes 2 fields
+      // (card + spacer) so we can fit up to 12 chars-with-tasks per
+      // page. Slice covers that ceiling.
+      const visibleChars = charsWithTasks.slice(0, 12);
+      for (let i = 0; i < visibleChars.length; i += 2) {
+        embed.addFields(buildTaskCharField(visibleChars[i]));
+        embed.addFields(inlineSpacer);
+        embed.addFields(
+          visibleChars[i + 1]
+            ? buildTaskCharField(visibleChars[i + 1])
+            : inlineSpacer
+        );
       }
 
       const footerParts = [];
