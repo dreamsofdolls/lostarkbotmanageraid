@@ -2,6 +2,10 @@
 
 const crypto = require("crypto");
 const { buildNoticeEmbed } = require("../raid/shared");
+const {
+  getRosterMatches,
+  truncateChoice,
+} = require("../raid/autocomplete-helpers");
 
 // Same 5-min window as /add-roster picker. Long enough to read + decide,
 // short enough that abandoned sessions don't pile up in memory.
@@ -174,24 +178,13 @@ function createEditRosterCommand({
       await interaction.respond([]).catch(() => {});
       return;
     }
-    const needle = normalizeName(focused.value || "");
-    const discordId = interaction.user.id;
-    const userDoc = await loadUserForAutocomplete(discordId);
-    if (!userDoc || !Array.isArray(userDoc.accounts)) {
-      await interaction.respond([]).catch(() => {});
-      return;
-    }
-    const choices = userDoc.accounts
-      .filter((a) => !needle || normalizeName(a.accountName).includes(needle))
-      .slice(0, 25)
-      .map((a) => {
-        const chars = Array.isArray(a.characters) ? a.characters : [];
-        const label = `${UI.icons.folder} ${a.accountName} · ${chars.length} char${chars.length === 1 ? "" : "s"}`;
-        return {
-          name: label.length > 100 ? `${label.slice(0, 97)}...` : label,
-          value: a.accountName.length > 100 ? a.accountName.slice(0, 100) : a.accountName,
-        };
-      });
+    const userDoc = await loadUserForAutocomplete(interaction.user.id);
+    const matches = getRosterMatches(userDoc, focused.value || "");
+    const choices = matches.map((a) => {
+      const charCount = Array.isArray(a.characters) ? a.characters.length : 0;
+      const label = `${UI.icons.folder} ${a.accountName} · ${charCount} char${charCount === 1 ? "" : "s"}`;
+      return truncateChoice(label, a.accountName);
+    });
     await interaction.respond(choices).catch(() => {});
   }
 
