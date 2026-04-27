@@ -393,10 +393,10 @@ test("buildAccountTaskFields rolls up totals + 2-column packs char fields", () =
   assert.equal(fields[1].name, "​", "middle field is a ZWS spacer");
   assert.match(fields[0].name, /Alpha/);
   assert.doesNotMatch(fields[0].name, /1700/);
-  assert.match(fields[0].value, /Daily tasks · 1\/2/);
+  assert.match(fields[0].value, /\*\*Daily\*\* · 1\/2/);
   assert.match(fields[2].name, /Beta/);
   assert.doesNotMatch(fields[2].name, /1690/);
-  assert.match(fields[2].value, /Weekly tasks · 1\/1/);
+  assert.match(fields[2].value, /\*\*Weekly\*\* · 1\/1/);
 });
 
 test("buildAccountTaskFields returns empty fields when no chars-with-tasks", () => {

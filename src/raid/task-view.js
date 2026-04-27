@@ -74,20 +74,10 @@ function buildAccountTaskFields(account, helpers) {
     totals.dailyDone += dailyTasks.filter((t) => t?.completed).length;
     totals.weeklyDone += weeklyTasks.filter((t) => t?.completed).length;
 
-    const pickTaskSectionIcon = (done, total) => {
-      if (total > 0 && done === total) return UI.icons.done;
-      if (done > 0) return UI.icons.partial || UI.icons.pending;
-      return UI.icons.pending;
-    };
-
-    // Mirror raid-view value lines: `[icon] [label] · [done]/[total]`.
-    // Keeping the first value line long and raid-shaped gives Discord's
-    // inline-field auto-layout the same width signal as raid view, instead
-    // of a short bold section header that makes long char headers wrap.
     const lines = [];
     if (dailyTasks.length > 0) {
       const dailyDone = dailyTasks.filter((t) => t.completed).length;
-      lines.push(`${pickTaskSectionIcon(dailyDone, dailyTasks.length)} Daily tasks · ${dailyDone}/${dailyTasks.length}`);
+      lines.push(`**Daily** · ${dailyDone}/${dailyTasks.length}`);
       for (const task of dailyTasks) {
         const icon = task.completed ? UI.icons.done : UI.icons.pending;
         lines.push(`${icon} ${task.name} · daily`);
@@ -96,7 +86,7 @@ function buildAccountTaskFields(account, helpers) {
     if (weeklyTasks.length > 0) {
       if (lines.length > 0) lines.push("");
       const weeklyDone = weeklyTasks.filter((t) => t.completed).length;
-      lines.push(`${pickTaskSectionIcon(weeklyDone, weeklyTasks.length)} Weekly tasks · ${weeklyDone}/${weeklyTasks.length}`);
+      lines.push(`**Weekly** · ${weeklyDone}/${weeklyTasks.length}`);
       for (const task of weeklyTasks) {
         const icon = task.completed ? UI.icons.done : UI.icons.pending;
         lines.push(`${icon} ${task.name} · weekly`);
