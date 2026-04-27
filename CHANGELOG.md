@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 
 ## 2026-04-27
 
+### Added (real-time freshness countdown qua Discord native timestamp + explicit Sync feedback)
+- `buildAccountFreshnessLine` (shared bởi `/raid-status` + `/raid-check` + raid:all) đổi từ `formatShortRelative()` static → Discord native timestamp `<t:UNIX:R>`. Browser tự tick từng giây, không cần server push hay setInterval. "Last updated 30m ago" giờ đếm thời gian lùi mượt khi user mở embed lâu, "Next refresh in 1h30m" cũng tự count down về 0.
+- `synced-no-new` outcome trước return null (silent embed re-render) → giờ surface `${UI.icons.done} Artist đã sync rồi, hiện không có gate clear mới nha~` ở description. User biết click Sync đã work mà không có gì mới.
+- Click Sync button trong `/raid-status` giờ kèm ephemeral `followUp` notice với type-coded copy: `applied N gate mới`, `synced không gate mới`, hoặc `failed bible dở chứng`. Trước đó embed re-render mặc định không tell user explicit success/failure.
+
 ### Changed (`/raid-status` session: 3 phút → 5 phút, parity với `/raid-check`)
 - `STATUS_PAGINATION_SESSION_MS` 3 → 5 min. Trước /raid-status hết hạn nhanh hơn /raid-check (3 vs 5), với view toggle Task ↔ Raid + nhiều dropdown hơn (raid filter, view, char filter, task toggle), 3 phút bắt đầu thiếu để user xem + toggle complete loạt task. Test pin updated.
 

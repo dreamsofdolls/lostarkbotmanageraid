@@ -29,6 +29,7 @@ function createRaidStatusCommand(deps) {
     collectStaleAccountRefreshes,
     applyStaleAccountRefreshes,
     formatRosterRefreshCooldownRemaining,
+    ROSTER_REFRESH_COOLDOWN_MS,
     acquireAutoManageSyncSlot,
     releaseAutoManageSyncSlot,
     gatherAutoManageLogsForUserDoc,
@@ -95,36 +96,55 @@ function createRaidStatusCommand(deps) {
     const parts = [];
     const lastRefreshedAt = Number(account?.lastRefreshedAt) || 0;
     if (lastRefreshedAt > 0) {
+      // Discord native timestamp `<t:UNIX:R>` ticks client-side - browser
+      // refreshes the relative string every second without a server-side
+      // re-render. Replaces the static `formatShortRelative()` snapshot
+      // so the freshness line stays accurate even after the user has
+      // been staring at the embed for a minute.
+      const lastUpdatedTs = `<t:${Math.floor(lastRefreshedAt / 1000)}:R>`;
+      const lastUpdated = `${UI.icons.roster} Last updated ${lastUpdatedTs}`;
       const remain = formatRosterRefreshCooldownRemaining(account);
-      const lastUpdated = `${UI.icons.roster} Last updated ${formatShortRelative(lastRefreshedAt)} ago`;
-      parts.push(
-        remain
-          ? `${lastUpdated} · ⏳ Next refresh in ${remain}`
-          : `${lastUpdated} · ✅ Refresh ready`
-      );
+      if (remain) {
+        // `lastRefreshAttemptAt` (or lastRefreshedAt if no attempt
+        // recorded) + cooldown is the moment the next refresh becomes
+        // eligible; render that as another <t:R> so "in Xm" ticks down
+        // toward zero in real time.
+        const cooldownMs = ROSTER_REFRESH_COOLDOWN_MS;
+        const cursor =
+          Number(account?.lastRefreshAttemptAt) ||
+          Number(account?.lastRefreshedAt) ||
+          0;
+        const nextEligible = cursor + cooldownMs;
+        const nextTs = `<t:${Math.floor(nextEligible / 1000)}:R>`;
+        parts.push(`${lastUpdated} · ⏳ Next refresh ${nextTs}`);
+      } else {
+        parts.push(`${lastUpdated} · ✅ Refresh ready`);
+      }
     }
 
     if (userMeta?.autoManageEnabled) {
       const lastSyncAt = Number(userMeta?.lastAutoManageSyncAt) || 0;
-      const lastSync = lastSyncAt > 0
-        ? `${UI.icons.reset} Last synced ${formatShortRelative(lastSyncAt)} ago`
-        : `${UI.icons.reset} Never synced`;
+      const lastSync =
+        lastSyncAt > 0
+          ? `${UI.icons.reset} Last synced <t:${Math.floor(lastSyncAt / 1000)}:R>`
+          : `${UI.icons.reset} Never synced`;
       // Manager (in RAID_MANAGER_ID allowlist) has a 15s sync cooldown vs 10m
       // for regular users - the countdown must reflect the per-user value or
       // it would mislead managers into waiting minutes after a click when
       // they're actually sync-ready within seconds.
-      const cooldownMs = typeof getAutoManageCooldownMs === "function" && userMeta?.discordId
-        ? getAutoManageCooldownMs(userMeta.discordId)
-        : AUTO_MANAGE_SYNC_COOLDOWN_MS;
-      const remain = formatNextCooldownRemaining(
-        Number(userMeta?.lastAutoManageAttemptAt) || 0,
-        cooldownMs
-      );
-      parts.push(
-        remain
-          ? `${lastSync} · ⏳ Next sync in ${remain}`
-          : `${lastSync} · ✅ Sync ready`
-      );
+      const cooldownMs =
+        typeof getAutoManageCooldownMs === "function" && userMeta?.discordId
+          ? getAutoManageCooldownMs(userMeta.discordId)
+          : AUTO_MANAGE_SYNC_COOLDOWN_MS;
+      const lastAttempt = Number(userMeta?.lastAutoManageAttemptAt) || 0;
+      const remain = formatNextCooldownRemaining(lastAttempt, cooldownMs);
+      if (remain) {
+        const nextEligible = lastAttempt + cooldownMs;
+        const nextTs = `<t:${Math.floor(nextEligible / 1000)}:R>`;
+        parts.push(`${lastSync} · ⏳ Next sync ${nextTs}`);
+      } else {
+        parts.push(`${lastSync} · ✅ Sync ready`);
+      }
     }
 
     // Render refresh segment + sync segment on SEPARATE lines instead of
@@ -154,12 +174,13 @@ function createRaidStatusCommand(deps) {
         const n = piggybackOutcome.newGatesApplied || 0;
         return `${UI.icons.reset} Artist vừa sync xong, có **${n}** gate mới luôn nha~`;
       }
+      case "synced-no-new":
+        return `${UI.icons.done} Artist đã sync rồi, hiện không có gate clear mới nha~`;
       case "timeout":
         return "⏳ Bible đang chậm tay, Artist vẫn đang lấy ngầm. Cậu mở lại sau ~10s là có data mới nha~";
       case "failed":
         return `${UI.icons.warn} Bible đang dở chứng, Artist tạm xem cache. Cậu thử lại sau vài phút giúp tớ nhé~`;
       case "cooldown":
-      case "synced-no-new":
       case "not-applicable":
       default:
         return null;
@@ -1285,6 +1306,46 @@ function createRaidStatusCommand(deps) {
           embeds: [buildCurrentEmbed()],
           components: buildComponents(false),
         }).catch(() => {});
+
+        // Explicit click feedback: the embed re-render alone doesn't
+        // tell the user whether the click succeeded or what changed.
+        // Followup is ephemeral so it auto-dismisses for the user
+        // without cluttering the channel for others (the original
+        // /raid-status reply isn't ephemeral by default).
+        let followupCopy = null;
+        let followupType = "info";
+        if (manualOutcome.outcome === "applied") {
+          const n = manualOutcome.newGatesApplied || 0;
+          followupCopy = `Artist vừa sync xong, có **${n}** gate mới được apply nha~`;
+          followupType = "success";
+        } else if (manualOutcome.outcome === "synced-no-new") {
+          followupCopy =
+            "Sync xong rồi, không có gate mới so với cache. Embed đã refresh lại nha~";
+          followupType = "info";
+        } else if (manualOutcome.outcome === "failed") {
+          followupCopy =
+            "Bible đang dở chứng, sync chưa lấy được data mới. Cooldown đã reset, cậu thử lại sau vài phút giúp tớ nhé~";
+          followupType = "warn";
+        }
+        if (followupCopy) {
+          await component
+            .followUp({
+              embeds: [
+                buildNoticeEmbed(EmbedBuilder, {
+                  type: followupType,
+                  title:
+                    followupType === "success"
+                      ? "Đã sync xong"
+                      : followupType === "warn"
+                        ? "Sync gặp trục trặc"
+                        : "Đã sync",
+                  description: followupCopy,
+                }),
+              ],
+              flags: MessageFlags.Ephemeral,
+            })
+            .catch(() => {});
+        }
         return;
       } else if (id === "status-filter:raid") {
         const value =
