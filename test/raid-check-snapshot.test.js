@@ -1093,10 +1093,13 @@ test("buildAccountFreshnessLine renders both refresh and sync badges with countd
   const line = __test.buildAccountFreshnessLine(account, userMeta);
   // Discord native timestamps render `<t:UNIX:R>` client-side; tests just
   // assert the shape is present + UNIX value is in the right ballpark.
+  // Wording uses "Refresh ready" / "Sync ready" + timestamp so both future
+  // ("in 14s") and past ("16s ago") tenses read cleanly without the
+  // "Next sync ... ago" awkwardness.
   assert.match(line, /Last updated <t:\d+:R>/);
-  assert.match(line, /Next refresh <t:\d+:R>/);
+  assert.match(line, /Refresh ready <t:\d+:R>/);
   assert.match(line, /Last synced <t:\d+:R>/);
-  assert.match(line, /Next sync <t:\d+:R>/);
+  assert.match(line, /Sync ready <t:\d+:R>/);
 });
 
 test("buildAccountFreshnessLine shows ready marker when cooldown expired", () => {
@@ -1120,8 +1123,8 @@ test("buildAccountFreshnessLine honors short refresh failure cooldown", () => {
   };
   const line = __test.buildAccountFreshnessLine(account, { autoManageEnabled: false });
   assert.match(line, /Last updated <t:\d+:R>/);
-  assert.match(line, /Next refresh <t:\d+:R>/);
-  assert.doesNotMatch(line, /Refresh ready/);
+  assert.match(line, /⏳ Refresh ready <t:\d+:R>/);
+  assert.doesNotMatch(line, /✅ Refresh ready/);
 });
 
 test("buildAccountFreshnessLine omits sync badge when auto-manage is off", () => {
@@ -1171,7 +1174,7 @@ test("buildAccountFreshnessLine uses the 15s sync cooldown for managers", () => 
   // Manager cooldown 15s; with the move to Discord native timestamps the
   // string is `<t:UNIX:R>` and Discord renders the relative text. Verify
   // the next-sync UNIX is within ~15s of now (manager cooldown window).
-  const nextMatch = line.match(/Next sync <t:(\d+):R>/);
+  const nextMatch = line.match(/⏳ Sync ready <t:(\d+):R>/);
   assert.ok(nextMatch, `expected Next sync timestamp; got: ${line}`);
   const nextEligibleMs = Number(nextMatch[1]) * 1000;
   const remainingMs = nextEligibleMs - now;
@@ -1190,7 +1193,7 @@ test("buildAccountFreshnessLine keeps the 10m sync cooldown for non-managers", (
   const line = __test.buildAccountFreshnessLine(account, userMeta);
   // 7m remaining, encoded as Unix seconds. ~5-9 minute window allows
   // millisecond drift between line render + assertion.
-  const nextMatch = line.match(/Next sync <t:(\d+):R>/);
+  const nextMatch = line.match(/⏳ Sync ready <t:(\d+):R>/);
   assert.ok(nextMatch);
   const remainingMs = Number(nextMatch[1]) * 1000 - now;
   assert.ok(remainingMs > 5 * 60_000 && remainingMs < 9 * 60_000);

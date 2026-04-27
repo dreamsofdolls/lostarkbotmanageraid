@@ -4,6 +4,10 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 
 ## 2026-04-27
 
+### Fixed (real-time countdown wording: "Next sync ago" awkwardness sau khi qua mốc 0)
+- Discord `<t:UNIX:R>` tick client-side liên tục, khi nextEligible qua mốc 0 → flip sang past tense "16 seconds ago". Wording cũ `Next sync <t:R>` đọc thành `Next sync 16 seconds ago` nghe sai (manager 15s cooldown idle expose bug rõ nhất).
+- Reword: `Next sync` → `Sync ready`, `Next refresh` → `Refresh ready`. Cả 2 tense đọc OK: future `Sync ready in 14s` (sắp ready) + past `Sync ready 16s ago` (đã ready 16s rồi). Test pin updated. HELP_SECTIONS notes synced.
+
 ### Added (Task view: bulk-toggle + roster-wide placeholder field)
 - Char-filter dropdown trong `/raid-status` Task view giờ có option đầu `🌐 Tất cả character · X/Y` khi account có >1 char-có-task. Pick → toggle dropdown đổi sang aggregate mode: liệt kê mọi `(name, reset)` task gom lại từ mọi char với label `<icon> <name> · <cycle> (X/N done)`. Click 1 task → flip cùng state cho mọi char đang sở hữu (mọi `🟢` → tất cả `⚪`, ngược lại tất cả `🟢`). Use case: vừa xong Paradise daily cho 6 alts, click 1 lần xong cả 6.
 - Placeholder field "🌟 Task chung của roster (sắp có)" giữa per-char cards và footer - copy Artist-voice giới thiệu feature *task áp cho cả roster* (1 task định nghĩa, áp mọi char trong account) sắp được code. Trong lúc chờ user dùng `action:all` để bulk add tạm. Char cap mỗi page giảm từ 12 → 11 để placeholder field fit Discord 25-field embed cap.
