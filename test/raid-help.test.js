@@ -62,6 +62,7 @@ function getAllFieldValues(embedJson) {
 }
 
 const EXPECTED_SECTION_KEYS = [
+  "getting-started",
   "add-roster",
   "edit-roster",
   "raid-status",
@@ -148,10 +149,10 @@ test("detail embed in English: notes with VN: prefix are stripped", async () => 
   await factory.handleRaidHelpSelect(interaction);
 
   const allFields = getAllFieldValues(interaction._calls.update[0].embeds[0].toJSON());
-  // En line about "Fetches the full roster" survives.
-  assert.match(allFields, /Fetches the full roster/);
-  // VN line about "Fetch toàn bộ roster" must not appear.
-  assert.doesNotMatch(allFields, /Fetch toàn bộ roster/);
+  // EN line about fetching the full account survives.
+  assert.match(allFields, /fetches the full account/i);
+  // VN line about "fetch toàn bộ roster" must not appear.
+  assert.doesNotMatch(allFields, /toàn bộ roster/);
   // The "VN: " prefix itself shouldn't leak into the rendered text.
   assert.doesNotMatch(allFields, /^VN:/m);
 });
@@ -162,8 +163,8 @@ test("detail embed in Vietnamese: notes with EN: prefix are stripped", async () 
   await factory.handleRaidHelpSelect(interaction);
 
   const allFields = getAllFieldValues(interaction._calls.update[0].embeds[0].toJSON());
-  assert.match(allFields, /Fetch toàn bộ roster/);
-  assert.doesNotMatch(allFields, /Fetches the full roster/);
+  assert.match(allFields, /toàn bộ roster/);
+  assert.doesNotMatch(allFields, /fetches the full account/i);
   assert.doesNotMatch(allFields, /^EN:/m);
 });
 
@@ -180,9 +181,11 @@ test("detail embed: untagged technical bullets render in BOTH languages", async 
   await factory.handleRaidHelpSelect(viInteraction);
   const viFields = getAllFieldValues(viInteraction._calls.update[0].embeds[0].toJSON());
 
-  // Cap line is a technical bullet (starts with "•") — must appear in both.
-  assert.match(enFields, /Cap.*chars\/roster/);
-  assert.match(viFields, /Cap.*chars\/roster/);
+  // Cap line is a shared technical line (no EN:/VN: prefix) — must
+  // appear in both languages. Round-30 rewrite tightened the copy to
+  // "Cap 20 char/roster" (singular "char").
+  assert.match(enFields, /Cap 20 char\/roster/);
+  assert.match(viFields, /Cap 20 char\/roster/);
 });
 
 test("detail embed in English uses 'No options' label for option-less sections", async () => {

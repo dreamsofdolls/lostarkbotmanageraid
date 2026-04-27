@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 
 ## 2026-04-27
 
+### Changed (`/raid-help` rework user-first: drop tech detail + onboarding section)
+- Trước mỗi section dài 8-15 bullet mix tech detail (Mongo `$or`, `lastAutoManageAttemptAt` cooldown logic, factory pattern, prefix-match dispatcher, customId routing). User gõ `/raid-help` chỉ cần biết "lệnh làm gì + khi nào dùng" - tech bullet drown signal.
+- Rewrite mỗi section theo template 4 phần: 1-line intro EN/VN, **Khi nào dùng** (use case cụ thể), **Cách Artist xử lý** (flow ngắn), **Mẹo** (2-3 UX tip). Drop hết Mongo path / factory wiring / customId scheme. Giữ contract numbers (cap 20 char/roster, 3 daily + 5 weekly tasks, 15s/10m cooldown, 17:00 VN reset).
+- Thêm section đầu **"🚀 Mới vào - Bắt đầu ở đây"**: 3 bước onboarding (`/add-roster` → `/raid-status` → `/raid-set` hoặc `/raid-auto-manage`). User mới gõ `/raid-help` thấy section này đầu tiên trong dropdown, đỡ phải đoán flow.
+- Test pin keys updated (10 → 11 sections), 2 phrase regex update theo new copy. Suite stays at 227.
+
 ### Refactor (DRY round 30: shared utilities cho raid-status + raid-check)
 - **Skip #1 chủ động**: per-char raid field renderer trông giống nhau ngoài mặt nhưng input shape (raw char vs pre-computed snapshot) + output (multi-raid line vs single icon+count) + special states (raid-check có "not-eligible" branch) divergent quá. Forced shape sẽ stiffen → giữ surface-specific.
 - **#2 `INLINE_SPACER` + `pack2Columns(fields)` shared util** trong `src/raid/shared.js`: 3 call sites (raid-status raid view, raid-check raid view, raid/task-view.js) đang inline cùng spacer constant + 5-line packing loop. Extract → 1-line caller. INLINE_SPACER frozen để mutation không poison shared ref.
