@@ -129,6 +129,18 @@ function createAllModeHandler({
 
     const totalPages = pagesData.length;
 
+    // Quick lookup of auto-manage state by discordId, used by the
+    // "Bật auto-sync hộ" button which only renders when the user filter
+    // is narrowed to a single user AND that user hasn't opted in. One
+    // entry per user (pagesData has 1+ pages per user but autoManageEnabled
+    // is user-level so first-seen wins).
+    const autoManageStateByDiscordId = new Map();
+    for (const p of pagesData) {
+      const id = p.userDoc?.discordId;
+      if (!id || autoManageStateByDiscordId.has(id)) continue;
+      autoManageStateByDiscordId.set(id, !!p.userDoc.autoManageEnabled);
+    }
+
     // User filter state. Starts as null (show all users). When a user
     // is picked from the filter dropdown, filteredIndices shrinks to
     // just that user's accounts (absolute indices into pagesData),
@@ -333,6 +345,26 @@ function createAllModeHandler({
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(disabled)
       );
+      // Enable-auto-on-behalf button: visible only when the user filter
+      // narrows the view to one specific user AND that user hasn't opted
+      // into /raid-auto-manage. Click flips their flag + DMs them. The
+      // shared `raid-check:enable-auto-one:<discordId>` handler in
+      // raid-check.js routes both modes since the action is raid-agnostic.
+      if (filterUserId) {
+        const focusedUserOptedIn = autoManageStateByDiscordId.get(filterUserId);
+        if (focusedUserOptedIn === false) {
+          const focusedDisplayName =
+            authorMeta.get(filterUserId)?.displayName || filterUserId;
+          row.addComponents(
+            new ButtonBuilder()
+              .setCustomId(`raid-check:enable-auto-one:${filterUserId}`)
+              .setLabel(truncateText(`Bật auto-sync hộ ${focusedDisplayName}`, 80))
+              .setEmoji("🔄")
+              .setStyle(ButtonStyle.Primary)
+              .setDisabled(disabled)
+          );
+        }
+      }
       return row;
     };
 

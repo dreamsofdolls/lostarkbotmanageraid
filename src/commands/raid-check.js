@@ -690,15 +690,18 @@ function createRaidCheckCommand(deps) {
         .filter((group) => group.autoManageEnabled && pendingDiscordIdSet.has(group.discordId))
         .map((group) => group.discordId)
     ).size;
-    // List of pending users who haven't opted into /raid-auto-manage. Used
-    // to (a) gate the "Bật auto-sync hộ" button visibility and (b) build
-    // the multi-select option list when the leader clicks it. Set instead
-    // of array for cheap membership tests inside the click handler.
-    const offOptedPendingDiscordIds = [...new Set(
-      rosterGroups
-        .filter((group) => !group.autoManageEnabled && pendingDiscordIdSet.has(group.discordId))
-        .map((group) => group.discordId)
-    )];
+    // Quick lookup of auto-manage state by discordId, used by the
+    // "Bật auto-sync hộ" button which only renders when the user filter
+    // is narrowed to a single user AND that user hasn't opted in. The
+    // first roster group hit per user is enough since autoManageEnabled
+    // is user-level (not per-account); rosterGroups lists 1+ entries per
+    // user (one per account) but they all share the same flag.
+    const autoManageStateByDiscordId = new Map();
+    for (const group of rosterGroups) {
+      if (!autoManageStateByDiscordId.has(group.discordId)) {
+        autoManageStateByDiscordId.set(group.discordId, group.autoManageEnabled);
+      }
+    }
 
     const buildButtonRow = (currentPage, totalPages, disabled, selectedId = null) => {
       const row = buildPaginationRow(currentPage, totalPages, disabled, {
@@ -713,7 +716,23 @@ function createRaidCheckCommand(deps) {
       // contradict the "I'm filtering to user X" intent). Pagination still
       // useful for browsing the filtered user's accounts; the filter
       // dropdown stays so the leader can revert to All or switch user.
+      //
+      // The narrowed view IS where the "Bật auto-sync hộ" button shines:
+      // the leader has visually committed to one user, so the
+      // single-target flip + DM is the precise action they're asking for.
       if (selectedId) {
+        const focusedUserOptedIn = autoManageStateByDiscordId.get(selectedId);
+        if (focusedUserOptedIn === false) {
+          const focusedDisplayName = displayMap.get(selectedId) || selectedId;
+          row.addComponents(
+            new ButtonBuilder()
+              .setCustomId(`raid-check:enable-auto-one:${selectedId}`)
+              .setLabel(truncateText(`Bật auto-sync hộ ${focusedDisplayName}`, 80))
+              .setEmoji("🔄")
+              .setStyle(ButtonStyle.Primary)
+              .setDisabled(disabled)
+          );
+        }
         return row;
       }
       // Sync button only renders when at least one pending user has opted
@@ -729,22 +748,6 @@ function createRaidCheckCommand(deps) {
             .setLabel(`Sync ${optedInPendingCount} opted-in user(s)`)
             .setEmoji("🔄")
             .setStyle(ButtonStyle.Secondary)
-            .setDisabled(disabled)
-        );
-      }
-      // Enable-auto-on-behalf button: visible when at least one pending
-      // user is opted-out. Lets the leader flip /raid-auto-manage on for
-      // those members so the daily scheduler tick will pick them up next
-      // 24h cycle. Each affected user gets a DM notification with how to
-      // opt back out. Hidden when zero off-opted users (no work to do)
-      // or when the user filter is active (per the bulk-only rule above).
-      if (offOptedPendingDiscordIds.length > 0) {
-        row.addComponents(
-          new ButtonBuilder()
-            .setCustomId(`raid-check:enable-auto-others:${raidKey}`)
-            .setLabel(`Bật auto-sync hộ ${offOptedPendingDiscordIds.length} user`)
-            .setEmoji("🔄")
-            .setStyle(ButtonStyle.Primary)
             .setDisabled(disabled)
         );
       }
@@ -911,36 +914,49 @@ function createRaidCheckCommand(deps) {
     });
   }
 
-  // Enable-auto-on-behalf flow: Manager picks a multi-select of pending
-  // users who haven't opted into /raid-auto-manage and Artist flips the
-  // flag on their behalf, DMs each affected user, and reports back.
+  // Enable-auto-on-behalf flow: button shows up only when the user
+  // filter narrows /raid-check or /raid-check raid:all to one specific
+  // user, AND that user hasn't opted into /raid-auto-manage. Click flips
+  // their User.autoManageEnabled to true, stamps lastAutoManageAttemptAt
+  // (seeds cooldown clock), and DMs the user with the manager's mention,
+  // a Public Log hint, and opt-out instructions.
+  //
   // No probe-before-enable (unlike /raid-auto-manage action:on) because
   // the Manager isn't the data owner - they don't know which chars are
   // private. Stuck-private-log nudge flow already handles that case
   // 7-days-once after the next scheduler tick attempts to sync.
-  const RAID_CHECK_ENABLE_AUTO_SESSION_MS = 3 * 60 * 1000;
-  async function handleRaidCheckEnableAutoOthersClick(interaction, raidMeta, raidKey) {
-    // Refetch users + rebuild snapshot at click time. The leader could
-    // have left /raid-check open for several minutes before clicking, so
-    // a state pulled from the snapshot at command-open could be stale
-    // (member opted in via DM in the meantime, etc).
-    let users;
+  async function handleRaidCheckEnableAutoOneClick(interaction, targetDiscordId) {
+    if (!targetDiscordId) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Button đã hết hạn",
+            description: "Button không có target user (có thể session cũ hoặc bot vừa restart). Gõ `/raid-check` lại để refresh nha.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    // Refetch the target user state at click time. The source page can
+    // be stale by minutes - the user might have already opted in via DM
+    // or lost their roster entirely between the page render and now.
+    let targetDoc;
     try {
-      users = await User.find(
-        buildRaidCheckUserQuery(raidMeta),
-        RAID_CHECK_USER_QUERY_FIELDS
-      ).lean();
+      targetDoc = await User.findOne({ discordId: targetDiscordId }).lean();
     } catch (err) {
       console.error(
-        "[raid-check enable-auto] user fetch failed:",
+        `[raid-check enable-auto] target fetch failed user=${targetDiscordId}:`,
         err?.message || err
       );
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "error",
-            title: "Lỗi load user list",
-            description: `Artist không load được user list cho raid này: \`${err?.message || err}\`. Thử lại sau nha.`,
+            title: "Lỗi load user",
+            description: `Artist không load được state của user: \`${err?.message || err}\`. Thử lại sau nha.`,
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -948,23 +964,27 @@ function createRaidCheckCommand(deps) {
       return;
     }
 
-    const snapshot = buildRaidCheckSnapshotFromUsers(users || [], raidMeta);
-    const pendingDiscordIds = new Set(
-      snapshot.allEligible
-        .filter((c) => c.overallStatus !== "complete")
-        .map((c) => c.discordId)
-    );
-    const eligibleUsers = (users || []).filter(
-      (u) => !u.autoManageEnabled && pendingDiscordIds.has(u.discordId)
-    );
+    if (!targetDoc) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "User không tồn tại",
+            description: `Artist không thấy user \`${targetDiscordId}\` trong DB nữa (có thể họ đã \`/remove-roster\`). Refresh lại \`/raid-check\` để page sync state mới nha.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
-    if (eligibleUsers.length === 0) {
+    if (targetDoc.autoManageEnabled) {
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: "Không có user nào để bật hộ",
-            description: "Tất cả user pending đều đã opt-in `/raid-auto-manage` rồi nha. Có thể list vừa update sau khi cậu mở `/raid-check`, gõ lại lệnh để refresh nếu cần.",
+            title: "User đã opt-in rồi",
+            description: `<@${targetDiscordId}> đã bật \`/raid-auto-manage\` rồi nha (có thể họ tự bật giữa lúc cậu mở page và bấm button). Refresh \`/raid-check\` để page sync state mới.`,
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -972,171 +992,101 @@ function createRaidCheckCommand(deps) {
       return;
     }
 
-    // Discord StringSelect cap is 25 options. If a leader has more than
-    // 25 off-opted users in pending (possible on a big server), present
-    // the first 25 and surface a hint to click again for the next batch.
-    const truncated = eligibleUsers.length > 25;
-    const optionUsers = eligibleUsers.slice(0, 25);
-    const options = optionUsers.map((u) => {
-      const displayName =
-        u.discordDisplayName ||
-        u.discordGlobalName ||
-        u.discordUsername ||
-        u.discordId;
-      return {
-        label: truncateText(displayName, 100),
-        value: u.discordId,
-        emoji: "👤",
-      };
-    });
-
-    const select = new StringSelectMenuBuilder()
-      .setCustomId(`raid-check-enable-auto:select:${raidKey}`)
-      .setPlaceholder("Chọn user để bật hộ auto-sync (multi-select)...")
-      .setMinValues(1)
-      .setMaxValues(options.length)
-      .addOptions(options);
-    const row = new ActionRowBuilder().addComponents(select);
-
-    const truncationNote = truncated
-      ? `\n\n*Có ${eligibleUsers.length} user off-opted, Discord StringSelect cap 25 nên Artist hiện 25 user đầu. Bấm lại button \`Bật auto-sync hộ\` cho batch tiếp theo nha.*`
-      : "";
-
-    const reply = await interaction.reply({
-      embeds: [
-        buildNoticeEmbed(EmbedBuilder, {
-          type: "info",
-          title: "Bật auto-sync hộ",
-          description: `Chọn user cậu muốn bật \`/raid-auto-manage\` hộ trong ${raidMeta.label} (${raidMeta.minItemLevel}). Multi-select OK.\n\nSau khi cậu pick xong, Artist sẽ flip flag + DM riêng cho mỗi user. Lần sync đầu tiên sẽ chạy ở scheduler tick kế tiếp (24h cycle), không sync ngay đâu nha.${truncationNote}`,
-        }),
-      ],
-      components: [row],
-      flags: MessageFlags.Ephemeral,
-      fetchReply: true,
-    });
-
-    const collector = reply.createMessageComponentCollector({
-      componentType: ComponentType.StringSelect,
-      filter: (c) =>
-        c.user.id === interaction.user.id &&
-        c.customId === `raid-check-enable-auto:select:${raidKey}`,
-      time: RAID_CHECK_ENABLE_AUTO_SESSION_MS,
-    });
-
-    collector.on("collect", async (selectInteraction) => {
-      const selectedDiscordIds = selectInteraction.values;
-      await selectInteraction.deferUpdate().catch(() => {});
-
-      const results = [];
-      for (const discordId of selectedDiscordIds) {
-        let flipped = false;
-        try {
-          // Stamp lastAutoManageAttemptAt to seed the cooldown clock from
-          // the moment of opt-in, mirroring the /raid-auto-manage action:on
-          // path. Without this stamp the very next action:sync click could
-          // fire before the regular cooldown window applies.
-          const updated = await User.findOneAndUpdate(
-            { discordId },
-            {
-              $set: {
-                autoManageEnabled: true,
-                lastAutoManageAttemptAt: Date.now(),
-              },
-            },
-            { new: true }
-          );
-          if (updated) flipped = true;
-        } catch (err) {
-          console.error(
-            `[raid-check enable-auto] flip failed user=${discordId}:`,
-            err?.message || err
-          );
-        }
-
-        let dmSent = false;
-        if (flipped) {
-          try {
-            const targetUser = await interaction.client.users
-              .fetch(discordId)
-              .catch(() => null);
-            if (targetUser) {
-              const dmEmbed = buildNoticeEmbed(EmbedBuilder, {
-                type: "info",
-                title: "Manager đã bật auto-sync hộ cậu",
-                description: [
-                  `Heya~ Raid Manager <@${interaction.user.id}> vừa bật \`/raid-auto-manage\` hộ cậu trong session \`/raid-check ${raidMeta.label} (${raidMeta.minItemLevel})\` rồi nha.`,
-                  "",
-                  "Từ giờ Artist sẽ tự sync raid progress từ lostark.bible cho roster của cậu, scheduler chạy mỗi 24h.",
-                  "",
-                  "Nếu char nào của cậu đang **Private Log**, Artist không pull được data đâu. Vào https://lostark.bible/me/logs bật **Show on Profile** giúp tớ.",
-                  "",
-                  "Muốn tắt thì gõ `/raid-auto-manage action:off` bất cứ lúc nào~",
-                ].join("\n"),
-              });
-              await targetUser.send({ embeds: [dmEmbed] });
-              dmSent = true;
-            }
-          } catch (err) {
-            console.warn(
-              `[raid-check enable-auto] DM failed user=${discordId}:`,
-              err?.message || err
-            );
-          }
-        }
-        results.push({ discordId, flipped, dmSent });
-      }
-
-      const flippedCount = results.filter((r) => r.flipped).length;
-      const dmSentCount = results.filter((r) => r.dmSent).length;
-      const dmFailedCount = flippedCount - dmSentCount;
-      const flippedMentions =
-        results
-          .filter((r) => r.flipped)
-          .map((r) => `<@${r.discordId}>`)
-          .join(", ") || "(none)";
-
-      console.log(
-        `[raid-check enable-auto] manager=${interaction.user.id} raid=${raidKey} requested=${selectedDiscordIds.length} flipped=${flippedCount} dmSent=${dmSentCount} dmFailed=${dmFailedCount}`
+    let flipped = false;
+    try {
+      // Stamp lastAutoManageAttemptAt to seed the cooldown clock from
+      // the moment of opt-in, mirroring /raid-auto-manage action:on.
+      // Without this stamp the very next action:sync click could fire
+      // before the regular cooldown window applies.
+      const updated = await User.findOneAndUpdate(
+        { discordId: targetDiscordId },
+        {
+          $set: {
+            autoManageEnabled: true,
+            lastAutoManageAttemptAt: Date.now(),
+          },
+        },
+        { new: true }
       );
-
-      const successEmbed = buildNoticeEmbed(EmbedBuilder, {
-        type: "success",
-        title: `Đã bật auto-sync hộ ${flippedCount} user`,
-        description: [
-          `**Đã bật cho:** ${flippedMentions}`,
-          `**DM sent:** ${dmSentCount}`,
-          dmFailedCount > 0
-            ? `**DM failed:** ${dmFailedCount} (user có thể tắt DM riêng, flag vẫn được flip thành công)`
-            : null,
-          "",
-          "Lần sync đầu tiên sẽ chạy ở scheduler tick kế tiếp (24h cycle).",
-        ]
-          .filter(Boolean)
-          .join("\n"),
+      if (updated) flipped = true;
+    } catch (err) {
+      console.error(
+        `[raid-check enable-auto] flip failed user=${targetDiscordId}:`,
+        err?.message || err
+      );
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "error",
+            title: "Flip flag fail",
+            description: `Artist gặp lỗi khi flip flag: \`${err?.message || err}\`. Thử lại sau nha.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
       });
-      await interaction
-        .editReply({
-          embeds: [successEmbed],
-          components: [],
-        })
-        .catch(() => {});
-      collector.stop("done");
-    });
+      return;
+    }
 
-    collector.on("end", async (collected, reason) => {
-      if (reason !== "done" && collected.size === 0) {
-        const expiredEmbed = buildNoticeEmbed(EmbedBuilder, {
-          type: "muted",
-          title: "Session bật-hộ đã hết hạn",
-          description: `Cậu không pick user nào trong ${RAID_CHECK_ENABLE_AUTO_SESSION_MS / 1000}s. Bấm lại button \`Bật auto-sync hộ\` để mở session mới nha.`,
+    if (!flipped) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Không flip được",
+            description: "Artist không flip được flag (user có thể đã bị xoá khỏi DB giữa lúc check và update). Thử refresh `/raid-check` rồi bấm lại nha.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    let dmSent = false;
+    try {
+      const targetUser = await interaction.client.users
+        .fetch(targetDiscordId)
+        .catch(() => null);
+      if (targetUser) {
+        const dmEmbed = buildNoticeEmbed(EmbedBuilder, {
+          type: "info",
+          title: "Manager đã bật auto-sync hộ cậu",
+          description: [
+            `Heya~ Raid Manager <@${interaction.user.id}> vừa bật \`/raid-auto-manage\` hộ cậu rồi nha.`,
+            "",
+            "Từ giờ Artist sẽ tự sync raid progress từ lostark.bible cho roster của cậu, scheduler chạy mỗi 24h.",
+            "",
+            "Nếu char nào của cậu đang **Private Log**, Artist không pull được data đâu. Vào https://lostark.bible/me/logs bật **Show on Profile** giúp tớ.",
+            "",
+            "Muốn tắt thì gõ `/raid-auto-manage action:off` bất cứ lúc nào~",
+          ].join("\n"),
         });
-        await interaction
-          .editReply({
-            embeds: [expiredEmbed],
-            components: [],
-          })
-          .catch(() => {});
+        await targetUser.send({ embeds: [dmEmbed] });
+        dmSent = true;
       }
+    } catch (err) {
+      console.warn(
+        `[raid-check enable-auto] DM failed user=${targetDiscordId}:`,
+        err?.message || err
+      );
+    }
+
+    console.log(
+      `[raid-check enable-auto] manager=${interaction.user.id} target=${targetDiscordId} flipped=true dmSent=${dmSent}`
+    );
+
+    const successEmbed = buildNoticeEmbed(EmbedBuilder, {
+      type: "success",
+      title: "Đã bật auto-sync hộ",
+      description: [
+        `**Đã bật cho:** <@${targetDiscordId}>`,
+        `**DM sent:** ${dmSent ? "Yes" : "No (user có thể tắt DM riêng, flag vẫn được flip thành công)"}`,
+        "",
+        "Lần sync đầu tiên sẽ chạy ở scheduler tick kế tiếp (24h cycle).",
+      ].join("\n"),
+    });
+    await interaction.reply({
+      embeds: [successEmbed],
+      flags: MessageFlags.Ephemeral,
     });
   }
 
@@ -1176,6 +1126,18 @@ function createRaidCheckCommand(deps) {
       return;
     }
 
+    // enable-auto-one: customId is `raid-check:enable-auto-one:<discordId>`
+    // (no raidKey, since flipping the auto-manage flag is raid-agnostic).
+    // Both /raid-check raid:<specific> and /raid-check raid:all reach this
+    // button when their user filter narrows to the target. Handle it before
+    // the raidMeta gate below since parts[2] holds the discordId, not a
+    // raidKey.
+    if (action === "enable-auto-one") {
+      const targetDiscordId = parts[2] || null;
+      await handleRaidCheckEnableAutoOneClick(interaction, targetDiscordId);
+      return;
+    }
+
     const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
     if (!raidMeta) {
       await interaction.reply({
@@ -1200,8 +1162,6 @@ function createRaidCheckCommand(deps) {
       // portion ("serca") and would break every RAID_REQUIREMENT_MAP
       // lookup downstream.
       await handleRaidCheckEditClick(interaction, raidMeta, raidKey);
-    } else if (action === "enable-auto-others") {
-      await handleRaidCheckEnableAutoOthersClick(interaction, raidMeta, raidKey);
     } else {
       await interaction.reply({
         embeds: [
