@@ -24,6 +24,10 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 ### Added (`/raid-check` + `/raid-status` roster header: badge `📝 Auto-sync OFF` cho user chưa opt-in)
 - Header section của mỗi roster trong `/raid-check` (raid filter), `/raid-check raid:all`, và `/raid-status` thêm suffix `· 📝 Auto-sync OFF` khi `userMeta.autoManageEnabled === false`. Silent khi opted-in (freshness line dưới đã có "Last synced X ago"). Manager scan list pending phân biệt ngay 3 state: opt-in + đã sync (timestamp), opt-in + chưa sync ("Never synced"), chưa opt-in (badge OFF). Trước đó case 3 silent giống case 2 nên ambiguity. Dùng strict `=== false` trong shared builder để legacy doc thiếu flag không false-positive.
 
+### Changed (`/raid-check` button row: conditional Sync + Edit theo filter state)
+- Sync và Edit buttons giờ chỉ render trong view "All users" (filter mặc định). Khi user filter narrow xuống 1 user cụ thể, cả 2 button bị remove khỏi row, chỉ giữ pagination. Lý do: cả 2 action thuộc bulk scope (Sync sync mọi opted-in user, Edit cascade pick user/char bất kỳ) - mâu thuẫn với intent "tôi đang focus 1 user" của filter.
+- Sync button thêm điều kiện `optedInPendingCount > 0` mới render, parity với `/raid-status` (Sync ẩn hoàn toàn khi owner chưa opt-in). Trước đó button hiện nhưng disabled với label `"Sync (no opted-in users)"` đọc như visual noise; giờ ẩn luôn, manager fall back sang Edit cascade nếu cần update progress thủ công.
+
 ## 2026-04-26
 
 ### Added
