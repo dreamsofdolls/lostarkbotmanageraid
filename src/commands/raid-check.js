@@ -914,7 +914,7 @@ function createRaidCheckCommand(deps) {
       // useful for browsing the filtered user's accounts; the filter
       // dropdown stays so the leader can revert to All or switch user.
       //
-      // The narrowed view IS where the bật-hộ / tắt-hộ buttons shine:
+      // The narrowed view IS where the enable-on-behalf / disable-on-behalf buttons shine:
       // the leader has visually committed to one user, so a single-
       // target flip + DM is the precise action they're asking for. The
       // direction is determined by the focused user's current opt-in
@@ -1257,7 +1257,7 @@ function createRaidCheckCommand(deps) {
   }
 
   // Self-only quick-disable handler reachable from the button shipped
-  // inside the bật-hộ DM. Clicker must equal the encoded target. Updates
+  // inside the enable-on-behalf DM. Clicker must equal the encoded target. Updates
   // the DM in place (interaction.update) with a muted success or
   // already-off notice and removes the button so a second click can't
   // fire stale outcomes.
@@ -1468,7 +1468,7 @@ function createRaidCheckCommand(deps) {
   // per account with pagination (Prev/Next) when the user has > 1
   // account-with-tasks - matches /raid-status Task view's compact 2-
   // column layout instead of stacking N embeds, which Trainee flagged
-  // as "cồng kềnh" on the round-29 first cut.
+  // as clunky on the round-29 first cut.
   //
   // Read-only: no toggle dropdown (Manager doesn't modify member
   // data). Reply is ephemeral so the data never lands in the channel

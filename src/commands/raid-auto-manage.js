@@ -270,7 +270,7 @@ async function handleRaidAutoManageCommand(interaction) {
         } else {
           // Probe HTTP already ran - stamp attempt so the cooldown reflects
           // the bible quota we consumed, even though we're not committing the
-          // flag flip. Without this, spamming `action:on` + Huỷ would bypass
+          // flag flip. Without this, spamming `action:on` + Cancel would bypass
           // the per-user sync cooldown.
           await stampAutoManageAttempt(discordId);
           const title =

@@ -161,8 +161,8 @@ function createAutoManageCoreService({
     });
     if (!res.ok) {
       // Read body so callers can distinguish "Logs not enabled" (private char,
-      // user action fixes it) from Cloudflare/block 403s (bot-infra issue, user
-      // bật Public Log cũng không cứu được). See reference_bible_api.md.
+      // user action fixes it) from Cloudflare/block 403s (bot-infra issue,
+      // toggling Public Log won't help). See reference_bible_api.md.
       let bodyText = "";
       try {
         bodyText = await res.text();
@@ -657,8 +657,8 @@ function createAutoManageCoreService({
     if (!err) return false;
     // Must match the bible-specific body ("Logs not enabled") - generic 403 is
     // ambiguous (Cloudflare / rate-limit / IP block all return 403 too) and
-    // bật Public Log sẽ KHÔNG fix được Cloudflare, nên misclassify sẽ làm user
-    // lạc hướng. Body text confirmed in reference_bible_api.md.
+    // toggling Public Log will NOT fix Cloudflare, so misclassifying these
+    // would mislead the user. Body text confirmed in reference_bible_api.md.
     const msg = String(err);
     return /logs\s*not\s*enabled/i.test(msg);
   }
@@ -888,12 +888,12 @@ function createAutoManageCoreService({
 
   function weekResetStartMs(now = new Date()) {
     // Inverse of getTargetCleanupDayKey-ish logic: find the most recent
-    // weekly-reset boundary that has passed - **5h chiều thứ 4 giờ Việt Nam**
+    // weekly-reset boundary that has passed - **5pm Wednesday VN time**
     // (17:00 VN = 10:00 UTC, UTC+7). Matches the weekly-reset module so
     // "this week" means "after the last weekly-reset moment."
     const cursor = new Date(now.getTime());
     // Walk backwards day-by-day up to 7 days until we find the last
-    // passed Wed 10:00 UTC moment (= 5h chiều thứ 4 VN).
+    // passed Wed 10:00 UTC moment (= 5pm Wednesday VN).
     for (let i = 0; i < 8; i += 1) {
       const day = cursor.getUTCDay(); // 0=Sun .. 6=Sat
       if (day === 3 && cursor.getUTCHours() >= 10) {

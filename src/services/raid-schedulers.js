@@ -458,8 +458,9 @@ function createRaidSchedulerService({
   // ---------------------------------------------------------------------------
   // Maintenance reminder scheduler (LA VN weekly maintenance: Wednesday 14:00 VN)
   // ---------------------------------------------------------------------------
-  // Lost Ark VN bảo trì cố định Wednesday 14:00 VN. Hard-coded ở đây thay vì
-  // configurable per guild because (a) the schedule is tied to the publisher
+  // Lost Ark VN maintenance is fixed at Wednesday 14:00 VN. Hard-coded
+  // here rather than configurable per guild because (a) the schedule is
+  // tied to the publisher
   // not the server, (b) a single global truth avoids drift if multiple guilds
   // ever join, and (c) keeping the value as constants means changing the
   // schedule is a one-line PR if LA VN ever shifts the boundary.
@@ -467,7 +468,7 @@ function createRaidSchedulerService({
   const MAINTENANCE_HOUR_VN = 14;
   const MAINTENANCE_MINUTE_VN = 0;
   const MAINTENANCE_TICK_MS = 60 * 1000; // 1-min cadence to catch every slot
-  // TTL per group: early reminders linger 30 phút (members may scroll back),
+  // TTL per group: early reminders linger 30 min (members may scroll back),
   // countdown reminders self-delete faster because the next slot is right behind
   // them. T-1m TTL is shortest because the server is about to be down anyway.
   const MAINTENANCE_TTL_EARLY_MS = 30 * 60 * 1000;
@@ -475,7 +476,7 @@ function createRaidSchedulerService({
   const MAINTENANCE_TTL_FINAL_MS = 5 * 60 * 1000;
   let maintenanceSchedulerStartedAtMs = null;
 
-  // Slot definitions: minutesBefore = phút trước boundary 14:00 VN. Two
+  // Slot definitions: minutesBefore = minutes before the 14:00 VN boundary. Two
   // separate arrays so the per-group enabled flag and per-group dedup key
   // map cleanly to MAINTENANCE_EARLY_SLOTS vs MAINTENANCE_COUNTDOWN_SLOTS.
   // `pingHere` only true for the 2 milestones Traine flagged (T-3h, T-1h).
@@ -492,9 +493,10 @@ function createRaidSchedulerService({
   ];
 
   // Variant pool per slot. 3 variants each so a server doesn't read the
-  // same line two weeks in a row. Tone progression: early = checklist nhắc
-  // (shop solo / event / paradise / key hell), countdown = đếm ngược dồn
-  // dập, final = chốt thoát game. `@here` baked into the string for the 2
+  // same line two weeks in a row. Tone progression: early = checklist
+  // reminder (shop solo / event / paradise / key hell), countdown =
+  // urgent ticking down, final = "log out now". `@here` baked into the
+  // string for the 2
   // milestone slots per Traine - bot only needs to send content as-is.
   // No em-dash anywhere per feedback_no_emdash; LA term game (shop solo,
   // event, paradise, key hell, raid, clear) preserved per Traine guidance.
@@ -990,7 +992,7 @@ function createRaidSchedulerService({
           skippedCount += 1;
           continue;
         }
-        // Opt-out race: user could have bấm action:off between the candidate
+        // Opt-out race: user could have hit action:off between the candidate
         // query and the slot acquire. Skip silently - no point hitting bible
         // for a user who explicitly opted out.
         if (!seedDoc.autoManageEnabled) {
@@ -1036,7 +1038,8 @@ function createRaidSchedulerService({
 
         // Stuck private-log detection: every char in this user's roster
         // returned "Logs not enabled" from bible. Post a 7-day-deduped
-        // channel nudge (not DM - Traine: nudge như weekly reset ý).
+        // channel nudge (not DM - Traine wanted the same surface as the
+        // weekly-reset nudge: public channel, not private DM).
         // Skip if the save closure never produced a report (e.g. mid-flight
         // opt-out short-circuited before apply).
         if (
