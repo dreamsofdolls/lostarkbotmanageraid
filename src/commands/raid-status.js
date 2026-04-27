@@ -601,6 +601,14 @@ function createRaidStatusCommand(deps) {
     // body + the third action row but keeps pagination semantics so the
     // user stays on the same account when toggling views.
     let currentView = "raid";
+    // Char filter for Task view's toggle dropdown. Stored per-page (Map
+    // keyed by currentPage) so navigating across accounts doesn't lose
+    // the user's per-account char focus. null = "auto-pick first char
+    // with tasks" so the toggle dropdown is always populated when there's
+    // at least one task on the account. Codex round 28 finding #2:
+    // without scoping, accounts with > 25 total tasks (4+ chars × cap 8)
+    // would silently drop tail entries from the toggle dropdown.
+    const taskCharFilterByPage = new Map();
 
     // Build the current page's embed given the active (page, raid-filter,
     // view) triple. Rebuilt on every state change instead of pre-baking a
@@ -861,43 +869,89 @@ function createRaidStatusCommand(deps) {
       );
     };
 
-    // Toggle dropdown for Task view. Lists every task of the CURRENT
-    // page's account, capped at 25 (Discord StringSelect limit). Value
-    // shape: `<charName>::<taskId>` so the collector can resolve back
-    // to the character + task pair without a second lookup. Char names
-    // never contain `::` (Discord-allowed char set excludes it from
-    // friendly-name validation in this codebase) so the separator is
-    // collision-safe.
-    const buildTaskToggleRow = (disabled) => {
+    // List the chars in the current account that have at least one
+    // side task, in display order. Driver for both the char-filter
+    // dropdown and the resolveTaskCharFilter() default-picker.
+    const charsWithTasksOnPage = () => {
       const account = accounts[currentPage];
       const characters = Array.isArray(account?.characters)
         ? account.characters
         : [];
-      const options = [];
-      for (const character of characters) {
-        const charName = getCharacterName(character);
-        const sideTasks = Array.isArray(character.sideTasks)
-          ? character.sideTasks
-          : [];
-        for (const task of sideTasks) {
-          const icon = task.completed ? "✅" : "⬜";
-          const cycleIcon = task.reset === "daily" ? "🌒" : "📅";
-          const label = truncateText(
-            `${icon} ${charName} · ${cycleIcon} ${task.name}`,
-            100
-          );
-          options.push({
-            label,
-            value: `${charName}::${task.taskId}`.slice(0, 100),
-          });
-          if (options.length >= 25) break;
-        }
-        if (options.length >= 25) break;
+      return characters.filter(
+        (c) => Array.isArray(c?.sideTasks) && c.sideTasks.length > 0
+      );
+    };
+
+    // Resolve the effective char filter for the current page. Explicit
+    // user pick wins; otherwise auto-pick the first char with tasks so
+    // the toggle dropdown always has actionable items when at least one
+    // task exists. Returns null when the page has zero tasks.
+    const resolveTaskCharFilter = () => {
+      const explicit = taskCharFilterByPage.get(currentPage);
+      const candidates = charsWithTasksOnPage();
+      if (candidates.length === 0) return null;
+      if (explicit) {
+        const stillExists = candidates.find(
+          (c) =>
+            getCharacterName(c).trim().toLowerCase() ===
+            explicit.trim().toLowerCase()
+        );
+        if (stillExists) return getCharacterName(stillExists);
       }
-      if (options.length === 0) {
-        // No tasks → render a disabled placeholder dropdown so the row
-        // height stays consistent with raid view, and nudge the user
-        // toward /raid-task add.
+      return getCharacterName(candidates[0]);
+    };
+
+    // Char-filter dropdown: lists every char on the current page that
+    // has at least one side task. User pick scopes the toggle dropdown
+    // to that char only - because per-char cap is 8, the toggle
+    // dropdown after filter is guaranteed to fit Discord's 25-option
+    // StringSelect cap. Hidden when the page has no tasks (toggle row
+    // would be a disabled placeholder anyway).
+    const buildTaskCharFilterRow = (disabled) => {
+      const candidates = charsWithTasksOnPage();
+      if (candidates.length === 0) return null;
+      const activeName = resolveTaskCharFilter();
+      const options = candidates.slice(0, 25).map((character) => {
+        const name = getCharacterName(character);
+        const itemLevel = Number(character.itemLevel) || 0;
+        const taskCount = Array.isArray(character.sideTasks)
+          ? character.sideTasks.length
+          : 0;
+        const doneCount = Array.isArray(character.sideTasks)
+          ? character.sideTasks.filter((t) => t?.completed).length
+          : 0;
+        const classIcon = getClassEmoji(character.class) || "";
+        const label = truncateText(
+          `${classIcon ? `${classIcon} ` : ""}${name} · ${itemLevel} · ${doneCount}/${taskCount}`,
+          100
+        );
+        return {
+          label,
+          value: name.slice(0, 100),
+          default:
+            !!activeName &&
+            name.trim().toLowerCase() === activeName.trim().toLowerCase(),
+        };
+      });
+      return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId("status-task:char-filter")
+          .setPlaceholder("Chọn character để toggle task...")
+          .setDisabled(disabled)
+          .addOptions(options)
+      );
+    };
+
+    // Toggle dropdown for Task view. After the Codex-round-28 fix this
+    // is scoped to ONE character at a time (selected via the char-filter
+    // dropdown above). With per-char cap 8 the result always fits the
+    // 25-option Discord StringSelect cap. Value shape:
+    // `<charName>::<taskId>` so the collector can resolve back to the
+    // character + task pair without a second lookup. Char names never
+    // contain `::` so the separator is collision-safe.
+    const buildTaskToggleRow = (disabled) => {
+      const activeName = resolveTaskCharFilter();
+      if (!activeName) {
         return new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
             .setCustomId("status-task:toggle")
@@ -906,10 +960,41 @@ function createRaidStatusCommand(deps) {
             .addOptions([{ label: "(empty)", value: "noop" }])
         );
       }
+      const account = accounts[currentPage];
+      const character = (account?.characters || []).find(
+        (c) =>
+          getCharacterName(c).trim().toLowerCase() ===
+          activeName.trim().toLowerCase()
+      );
+      const sideTasks =
+        character && Array.isArray(character.sideTasks)
+          ? character.sideTasks
+          : [];
+      if (sideTasks.length === 0) {
+        return new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId("status-task:toggle")
+            .setPlaceholder(`${activeName} chưa có task - dùng /raid-task add`)
+            .setDisabled(true)
+            .addOptions([{ label: "(empty)", value: "noop" }])
+        );
+      }
+      const options = sideTasks.slice(0, 25).map((task) => {
+        const icon = task.completed ? "✅" : "⬜";
+        const cycleIcon = task.reset === "daily" ? "🌒" : "📅";
+        const label = truncateText(
+          `${icon} ${cycleIcon} ${task.name}`,
+          100
+        );
+        return {
+          label,
+          value: `${activeName}::${task.taskId}`.slice(0, 100),
+        };
+      });
       return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("status-task:toggle")
-          .setPlaceholder("Bấm để toggle complete...")
+          .setPlaceholder(`Toggle task của ${activeName}...`)
           .setDisabled(disabled)
           .addOptions(options)
       );
@@ -919,9 +1004,11 @@ function createRaidStatusCommand(deps) {
       const rows = [];
       const showSync = statusUserMeta.autoManageEnabled;
       if (currentView === "task") {
-        // Task view: pagination (when > 1 account) + view toggle + task
-        // toggle dropdown. No raid-filter (irrelevant), no sync button
-        // (toggle complete writes directly, no bible round-trip).
+        // Task view layout: pagination (>1 account) + view toggle +
+        // char filter (when account has tasks) + task toggle dropdown.
+        // The char filter is the round-28 fix for the > 25-task cap -
+        // it scopes the toggle to one char so the dropdown always fits
+        // Discord's 25-option ceiling.
         if (accounts.length > 1) {
           rows.push(
             buildPaginationRow(currentPage, accounts.length, disabled, {
@@ -931,6 +1018,8 @@ function createRaidStatusCommand(deps) {
           );
         }
         rows.push(buildViewToggleRow(disabled));
+        const charFilterRow = buildTaskCharFilterRow(disabled);
+        if (charFilterRow) rows.push(charFilterRow);
         rows.push(buildTaskToggleRow(disabled));
         return rows;
       }
@@ -1157,6 +1246,14 @@ function createRaidStatusCommand(deps) {
             ? component.values[0]
             : "raid";
         currentView = picked === "task" ? "task" : "raid";
+      } else if (id === "status-task:char-filter") {
+        const picked =
+          Array.isArray(component.values) && component.values.length > 0
+            ? component.values[0]
+            : "";
+        if (picked) {
+          taskCharFilterByPage.set(currentPage, picked);
+        }
       } else if (id === "status-task:toggle") {
         const value =
           Array.isArray(component.values) && component.values.length > 0

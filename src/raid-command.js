@@ -985,6 +985,8 @@ const raidTaskCommandHandlers = createRaidTaskCommand({
   User,
   saveWithRetry,
   loadUserForAutocomplete,
+  dailyResetStartMs,
+  weekResetStartMs,
 });
 ({
   handleRaidTaskCommand,
