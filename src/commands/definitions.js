@@ -224,6 +224,13 @@ function createRaidCommandDefinitions({
         .setDescription("Add a daily or weekly side task to one of your characters")
         .addStringOption((opt) =>
           opt
+            .setName("roster")
+            .setDescription("Roster (account) chứa character - autocomplete")
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+        .addStringOption((opt) =>
+          opt
             .setName("character")
             .setDescription("Character to attach this task to")
             .setRequired(true)
@@ -253,6 +260,13 @@ function createRaidCommandDefinitions({
         .setDescription("Remove one side task from a character")
         .addStringOption((opt) =>
           opt
+            .setName("roster")
+            .setDescription("Roster (account) chứa character - autocomplete")
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+        .addStringOption((opt) =>
+          opt
             .setName("character")
             .setDescription("Character to remove a task from")
             .setRequired(true)
@@ -270,6 +284,13 @@ function createRaidCommandDefinitions({
       sub
         .setName("clear")
         .setDescription("Remove ALL side tasks from one character (confirm required)")
+        .addStringOption((opt) =>
+          opt
+            .setName("roster")
+            .setDescription("Roster (account) chứa character - autocomplete")
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
         .addStringOption((opt) =>
           opt
             .setName("character")
