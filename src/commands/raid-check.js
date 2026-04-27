@@ -1052,7 +1052,7 @@ function createRaidCheckCommand(deps) {
             `Heya~ Raid Manager <@${interaction.user.id}> vừa bật \`/raid-auto-manage\` hộ cậu rồi nha. Từ giờ Artist sẽ tự sync raid progress cho cậu mỗi 24h.`,
             "",
             "**Trạng thái mới:** ON",
-            "**Khi nào sync lần đầu:** Scheduler tick kế tiếp (~30 phút) sẽ ưu tiên cậu vì roster mới opt-in",
+            "**Khi nào sync lần đầu:** Sớm trong các tick scheduler tới (chạy mỗi ~30 phút, mỗi tick batch 3 user)",
             "**Cách tắt:** Gõ `/raid-auto-manage action:off` bất cứ lúc nào",
             "",
             "Char nào đang **Private Log** thì Artist không pull được data đâu nha. Vào https://lostark.bible/me/logs bật **Show on Profile** giúp tớ.",
@@ -1076,7 +1076,7 @@ function createRaidCheckCommand(deps) {
       type: "success",
       title: "Artist đã bật auto-sync hộ rồi nha",
       description: [
-        "Flag flip thành công, scheduler sẽ pick user này trong tick kế tiếp (~30 phút) vì họ đứng ưu tiên với `lastAutoManageAttemptAt = null`.",
+        "Flag flip thành công. User này nằm trong batch ưu tiên (`lastAutoManageAttemptAt = null`), scheduler sẽ pick sớm trong các tick tới (mỗi ~30 phút, batch 3 user).",
         "",
         `**Đã bật cho:** <@${targetDiscordId}>`,
         `**Trạng thái mới:** ON`,
