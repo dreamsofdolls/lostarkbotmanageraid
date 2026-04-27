@@ -12,7 +12,8 @@
  */
 
 const { isSupportClass } = require("../../data/Class");
-const { buildNoticeEmbed } = require("../../raid/shared");
+const { buildNoticeEmbed, UI } = require("../../raid/shared");
+const { buildAccountTaskFields } = require("../../raid/task-view");
 
 function createAllModeHandler({
   ActionRowBuilder,
@@ -182,6 +183,15 @@ function createAllModeHandler({
     const FILTER_ALL = "__all__";
     const FILTER_ALL_RAIDS = "__all_raids__";
     let filterUserId = null;
+    // View toggle state. Default "raid" = the cross-raid scan view; "task"
+    // swaps the same embed in-place to a per-account read-only Task view
+    // (Manager spot-check). Toggle button only renders when filterUserId
+    // is set since the Task view is per-user data. Page index (currentLocal-
+    // Page) is shared between views: page = "Nth account of focused user",
+    // raid view renders raid scan for that account, task view renders
+    // sideTasks for the same account, so toggling preserves which account
+    // the Manager was viewing.
+    let currentView = "raid";
     let filterRaidId = null;
     let filteredIndices = pagesData.map((_, i) => i);
     let currentLocalPage = 0;
@@ -352,77 +362,147 @@ function createAllModeHandler({
       return embed;
     };
 
+    // Read-only Task view embed for the current page's account. Lives
+    // inside the all-mode collector so toggling Raid ↔ Task swaps in-
+    // place rather than spawning a separate followup. Layout body comes
+    // from the shared `buildAccountTaskFields` helper (also used by
+    // /raid-status), so visual parity is enforced. The Manager-specific
+    // bits live here: title (display name + roster), pagination footer,
+    // "Read-only" suffix.
+    const buildTaskPage = (pageIndex) => {
+      const { userDoc, account } = pagesData[pageIndex];
+      const accountName = String(account?.accountName || "(unnamed roster)");
+      const meta = authorMeta.get(userDoc.discordId);
+      const displayName =
+        meta?.displayName ||
+        userDoc.discordDisplayName ||
+        userDoc.discordGlobalName ||
+        userDoc.discordUsername ||
+        `<@${userDoc.discordId}>`;
+
+      const embed = new EmbedBuilder()
+        .setColor(0x5865f2)
+        .setTitle(`📝 ${displayName} · ${accountName}`);
+
+      const { fields, totals } = buildAccountTaskFields(account, {
+        UI,
+        getClassEmoji: () => "",
+        truncateText,
+      });
+
+      if (fields.length > 0) {
+        embed.addFields(...fields);
+      } else {
+        embed.setDescription(
+          `Account **${accountName}** chưa có side task nào. Member dùng \`/raid-task add\` để đăng ký chore daily/weekly.`
+        );
+      }
+
+      const footerParts = [];
+      if (totals.daily > 0) {
+        footerParts.push(`🟢 ${totals.dailyDone}/${totals.daily} daily`);
+      }
+      if (totals.weekly > 0) {
+        footerParts.push(`🟢 ${totals.weeklyDone}/${totals.weekly} weekly`);
+      }
+      const localTotal = filteredIndices.length;
+      if (localTotal > 1) {
+        footerParts.push(`Page ${currentLocalPage + 1}/${localTotal}`);
+      }
+      footerParts.push("Read-only · Manager view");
+      embed.setFooter({ text: footerParts.join(" · ") });
+
+      if (meta) {
+        const authorPayload = { name: truncateText(displayName, 256) };
+        if (meta.avatarURL) authorPayload.iconURL = meta.avatarURL;
+        embed.setAuthor(authorPayload);
+      }
+      return embed;
+    };
+
+    const renderEmbed = (pageIndex) =>
+      currentView === "task" ? buildTaskPage(pageIndex) : buildPage(pageIndex);
+
     const buildButtonRow = (disabled) => {
       const localTotal = filteredIndices.length;
       const row = buildPaginationRow(currentLocalPage, localTotal, disabled, {
         prevId: "raid-check-all-page:prev",
         nextId: "raid-check-all-page:next",
       });
-      // Append the cross-raid Edit button. customId encodes the
-      // discordId of the user currently shown on this page so the
-      // Edit flow can pre-select them after the leader picks a raid.
-      // Per Traine: clicking Edit while viewing Bao's page should
-      // target Bao, not force re-picking from a fresh dropdown.
-      // `raid-check:edit-all:<discordId>` is still routed by bot.js's
-      // global dispatcher (matches the `raid-check:*` prefix) and
-      // handleRaidCheckButton splits parts[2] out as the pre-select.
       const currentAbs = currentAbsoluteIndex();
       const currentViewUserId =
         pagesData[currentAbs]?.userDoc?.discordId || "";
-      row.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`raid-check:edit-all:${currentViewUserId}`)
-          .setLabel("Edit progress")
-          .setEmoji("✏️")
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(disabled)
-      );
-      // Enable-/disable-auto-on-behalf buttons: visible only when the
-      // user filter narrows the view to one specific user. Direction
-      // depends on that user's current opt-in state. Both buttons reuse
-      // the shared raid-check.js handlers (`enable-auto-one` /
-      // `disable-auto-one`) since the action is raid-agnostic.
-      // Button label drops the target's display name on purpose: filter
-      // narrow has already established which user is in focus (author
-      // section + filter dropdown both show the name), so repeating it
-      // on the button is just visual weight. The customId still carries
-      // the discordId for the dispatch handler.
-      if (filterUserId) {
-        const focusedUserOptedIn = autoManageStateByDiscordId.get(filterUserId);
-        if (focusedUserOptedIn === false) {
-          row.addComponents(
-            new ButtonBuilder()
-              .setCustomId(`raid-check:enable-auto-one:${filterUserId}`)
-              .setLabel("Bật auto-sync")
-              .setEmoji("🔄")
-              .setStyle(ButtonStyle.Primary)
-              .setDisabled(disabled)
-          );
-        } else if (focusedUserOptedIn === true) {
-          row.addComponents(
-            new ButtonBuilder()
-              .setCustomId(`raid-check:disable-auto-one:${filterUserId}`)
-              .setLabel("Tắt auto-sync")
-              .setEmoji("🚫")
-              .setStyle(ButtonStyle.Secondary)
-              .setDisabled(disabled)
-          );
-        }
-        // Manager-only Task view button. Available exclusively in
-        // /raid-check raid:all (the cross-raid overview - Manager
-        // monitoring use case) and only when the user filter has
-        // narrowed to one specific user. Click opens an ephemeral
-        // followup with the same per-char Task view layout that user's
-        // own /raid-status renders, read-only. The Manager can spot-
-        // check chore progress without ping-ing the member.
+
+      // Edit + enable/disable-auto buttons only in raid view. Task view
+      // is read-only Manager spot-check, those actions don't fit the
+      // mode and the row would get visually crowded next to the toggle
+      // button anyway.
+      if (currentView === "raid") {
+        // Append the cross-raid Edit button. customId encodes the
+        // discordId of the user currently shown on this page so the
+        // Edit flow can pre-select them after the leader picks a raid.
+        // Per Traine: clicking Edit while viewing Bao's page should
+        // target Bao, not force re-picking from a fresh dropdown.
         row.addComponents(
           new ButtonBuilder()
-            .setCustomId(`raid-check:view-tasks:${filterUserId}`)
-            .setLabel("Xem tasks")
-            .setEmoji("📝")
+            .setCustomId(`raid-check:edit-all:${currentViewUserId}`)
+            .setLabel("Edit progress")
+            .setEmoji("✏️")
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(disabled)
         );
+        // Enable-/disable-auto-on-behalf buttons: visible only when the
+        // user filter narrows the view to one specific user. Direction
+        // depends on that user's current opt-in state.
+        if (filterUserId) {
+          const focusedUserOptedIn = autoManageStateByDiscordId.get(filterUserId);
+          if (focusedUserOptedIn === false) {
+            row.addComponents(
+              new ButtonBuilder()
+                .setCustomId(`raid-check:enable-auto-one:${filterUserId}`)
+                .setLabel("Bật auto-sync")
+                .setEmoji("🔄")
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(disabled)
+            );
+          } else if (focusedUserOptedIn === true) {
+            row.addComponents(
+              new ButtonBuilder()
+                .setCustomId(`raid-check:disable-auto-one:${filterUserId}`)
+                .setLabel("Tắt auto-sync")
+                .setEmoji("🚫")
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(disabled)
+            );
+          }
+        }
+      }
+
+      // View toggle button: only when filterUserId is set (Task view
+      // is per-user data). Label flips based on currentView so a
+      // single button handles both directions. CustomId uses the
+      // `raid-check-all:` prefix so the local collector handles it
+      // and the global router doesn't double-fire.
+      if (filterUserId) {
+        if (currentView === "raid") {
+          row.addComponents(
+            new ButtonBuilder()
+              .setCustomId("raid-check-all:view-toggle:task")
+              .setLabel("Xem tasks")
+              .setEmoji("📝")
+              .setStyle(ButtonStyle.Secondary)
+              .setDisabled(disabled)
+          );
+        } else {
+          row.addComponents(
+            new ButtonBuilder()
+              .setCustomId("raid-check-all:view-toggle:raid")
+              .setLabel("Quay lại raid scan")
+              .setEmoji("📋")
+              .setStyle(ButtonStyle.Primary)
+              .setDisabled(disabled)
+          );
+        }
       }
       return row;
     };
@@ -604,17 +684,22 @@ function createAllModeHandler({
       );
     };
 
-    const buildComponents = (disabled) => [
-      buildButtonRow(disabled),
-      buildFilterRow(disabled),
-      buildRaidFilterRow(disabled),
-    ];
+    const buildComponents = (disabled) => {
+      const rows = [buildButtonRow(disabled), buildFilterRow(disabled)];
+      // Raid filter is irrelevant in Task view (the embed renders
+      // sideTasks, not raid progress). Skip the row to keep the UI
+      // focused; pop it back the moment the Manager flips to raid view.
+      if (currentView === "raid") {
+        rows.push(buildRaidFilterRow(disabled));
+      }
+      return rows;
+    };
 
     const currentAbsoluteIndex = () =>
       filteredIndices[currentLocalPage] ?? filteredIndices[0] ?? 0;
 
     await interaction.editReply({
-      embeds: [buildPage(currentAbsoluteIndex())],
+      embeds: [renderEmbed(currentAbsoluteIndex())],
       components: buildComponents(false),
     });
     const followup = await interaction.fetchReply();
@@ -634,7 +719,8 @@ function createAllModeHandler({
         const ours =
           customId.startsWith("raid-check-all-page:") ||
           customId === "raid-check-all-filter:user" ||
-          customId === "raid-check-all-filter:raid";
+          customId === "raid-check-all-filter:raid" ||
+          customId.startsWith("raid-check-all:view-toggle:");
         if (ours) {
           await component
             .reply({
@@ -659,9 +745,12 @@ function createAllModeHandler({
             ? component.values[0]
             : FILTER_ALL;
         applyUserFilter(value);
+        // Going back to "All users" auto-leaves Task view since Task
+        // view is per-user only.
+        if (!filterUserId) currentView = "raid";
         await component
           .update({
-            embeds: [buildPage(currentAbsoluteIndex())],
+            embeds: [renderEmbed(currentAbsoluteIndex())],
             components: buildComponents(false),
           })
           .catch(() => {});
@@ -682,7 +771,22 @@ function createAllModeHandler({
         // didn't change size at all.
         await component
           .update({
-            embeds: [buildPage(currentAbsoluteIndex())],
+            embeds: [renderEmbed(currentAbsoluteIndex())],
+            components: buildComponents(false),
+          })
+          .catch(() => {});
+        return;
+      }
+
+      if (customId.startsWith("raid-check-all:view-toggle:")) {
+        // CustomId shape `raid-check-all:view-toggle:<target>` where
+        // target = "task" or "raid". Page index stays so the Manager's
+        // current account in focus carries across views.
+        const target = customId.split(":")[2];
+        currentView = target === "task" ? "task" : "raid";
+        await component
+          .update({
+            embeds: [renderEmbed(currentAbsoluteIndex())],
             components: buildComponents(false),
           })
           .catch(() => {});
@@ -697,7 +801,7 @@ function createAllModeHandler({
         else return;
         await component
           .update({
-            embeds: [buildPage(currentAbsoluteIndex())],
+            embeds: [renderEmbed(currentAbsoluteIndex())],
             components: buildComponents(false),
           })
           .catch(() => {});
