@@ -929,6 +929,7 @@ const removeRosterCommandHandlers = createRemoveRosterCommand({
 const raidAnnounceCommandHandlers = createRaidAnnounceCommand({
   EmbedBuilder,
   MessageFlags,
+  PermissionFlagsBits,
   UI,
   GuildConfig,
   normalizeName,
@@ -998,6 +999,7 @@ const raidTaskCommandHandlers = createRaidTaskCommand({
 const raidChannelCommandHandlers = createRaidChannelCommand({
   EmbedBuilder,
   MessageFlags,
+  PermissionFlagsBits,
   UI,
   GuildConfig,
   normalizeName,

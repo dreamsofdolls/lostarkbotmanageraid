@@ -6,6 +6,7 @@ function createRaidAnnounceCommand(deps) {
   const {
     EmbedBuilder,
     MessageFlags,
+    PermissionFlagsBits,
     UI,
     GuildConfig,
     normalizeName,
@@ -28,6 +29,27 @@ async function handleRaidAnnounceCommand(interaction) {
             type: "warn",
             title: "Server only",
             description: "Cậu phải chạy `/raid-announce` trong server nha, Artist không config được announcement ở DM đâu.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    // Defense-in-depth ManageGuild check. Same rationale as /raid-channel:
+    // setDefaultMemberPermissions is a client-side render hint Discord
+    // applies BEFORE routing, but a stale or failed schema registration
+    // would let any member trigger the handler. Backstop with a real
+    // runtime permission check.
+    if (
+      !interaction.memberPermissions ||
+      !interaction.memberPermissions.has(PermissionFlagsBits.ManageGuild)
+    ) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "lock",
+            title: "Cần Manage Server",
+            description: "Lệnh `/raid-announce` chỉ dành cho thành viên có quyền **Manage Server** trên Discord. Nhờ admin mở quyền hộ rồi thử lại nha~",
           }),
         ],
         flags: MessageFlags.Ephemeral,

@@ -64,6 +64,13 @@ function createAllModeHandler({
     // monitoring (Manager design call). If you add a new account field,
     // add it here; do NOT widen to `accounts` because that would silently
     // include any other future fields we haven't decided to expose.
+    //
+    // Data minimization: bibleSerial/bibleCid/bibleRid are deliberately
+    // NOT projected here. They're internal lostark.bible identifiers used
+    // by /raid-auto-manage to skip SSR re-resolution; the all-mode view
+    // doesn't render or otherwise consume them, so leaving them out of
+    // the read keeps Manager-side queries lean and avoids accidental
+    // exposure if a future log-line ever spills the user doc.
     const users = await User.find({ "accounts.0": { $exists: true } })
       .select(
         [
@@ -88,9 +95,6 @@ function createAllModeHandler({
           "accounts.characters.tasks",
           "accounts.characters.sideTasks",
           "accounts.characters.publicLogDisabled",
-          "accounts.characters.bibleSerial",
-          "accounts.characters.bibleCid",
-          "accounts.characters.bibleRid",
         ].join(" ")
       )
       .lean();
