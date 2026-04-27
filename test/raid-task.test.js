@@ -392,6 +392,10 @@ test("buildAccountTaskFields rolls up totals + 2-column packs char fields", () =
   assert.equal(fields.length, 3, "expected 3 fields for 2 chars (card + spacer + card)");
   assert.equal(fields[1].name, "​", "middle field is a ZWS spacer");
   assert.match(fields[0].name, /Alpha/);
+  assert.ok(
+    fields[0].name.includes("Alpha\u00A0·\u00A01700"),
+    "task-view char header should bind name + iLvl with NBSP to prevent Discord wrapping iLvl alone"
+  );
   assert.match(fields[2].name, /Beta/);
 });
 
