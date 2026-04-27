@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 
 ## 2026-04-27
 
+### Refactor (DRY round 30: shared utilities cho raid-status + raid-check)
+- **Skip #1 chủ động**: per-char raid field renderer trông giống nhau ngoài mặt nhưng input shape (raw char vs pre-computed snapshot) + output (multi-raid line vs single icon+count) + special states (raid-check có "not-eligible" branch) divergent quá. Forced shape sẽ stiffen → giữ surface-specific.
+- **#2 `INLINE_SPACER` + `pack2Columns(fields)` shared util** trong `src/raid/shared.js`: 3 call sites (raid-status raid view, raid-check raid view, raid/task-view.js) đang inline cùng spacer constant + 5-line packing loop. Extract → 1-line caller. INLINE_SPACER frozen để mutation không poison shared ref.
+- **#3 `formatProgressTotals(totals, UI)` shared formatter** cùng file: render `🟢 N done · 🟡 N partial · ⚪ N pending [· 🔒 N not eligible]` line. Cả 2 surface caller giữ aggregation upstream (raid-status derive pending từ total-completed-partial, raid-check track pending trực tiếp + có notEligible) rồi gọi formatter cho line. Đảm bảo icon ordering / spacing không drift.
+- 7 unit test mới (4 cho pack2Columns + INLINE_SPACER frozen, 3 cho formatProgressTotals). Suite 220 → 227.
+
 ### Refactor (extract `buildAccountTaskFields` helper - DRY giữa /raid-status + /raid-check Manager Task view)
 - Round 29 đầu tiên duplicate ~80 LOC layout (per-char field + 2-col ZWS-spacer packing + totals math) ở cả `/raid-status` Task view và `/raid-check raid:all` Manager Task view. Trainee flag "cồng kềnh" → tớ extract pure helper `src/raid/task-view.js::buildAccountTaskFields(account, helpers)`. Cả 2 surface giờ thin wrapper - chỉ owns title/description/footer/placeholder, body delegate.
 - Manager view chuyển từ "stack N embed" → "1 embed/page với pagination Prev/Next" (parity /raid-status), session 5 phút giống raid-check pagination.

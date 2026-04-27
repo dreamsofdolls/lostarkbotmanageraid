@@ -4,7 +4,11 @@ const { createAllModeHandler } = require("./raid-check/all-mode");
 const { createEditUi } = require("./raid-check/edit-ui");
 const { createSyncUi } = require("./raid-check/sync-ui");
 const { isSupportClass, getClassEmoji } = require("../data/Class");
-const { buildNoticeEmbed, pack2Columns } = require("../raid/shared");
+const {
+  buildNoticeEmbed,
+  pack2Columns,
+  formatProgressTotals,
+} = require("../raid/shared");
 const { buildAccountTaskFields } = require("../raid/task-view");
 
 const RAID_CHECK_PAGINATION_SESSION_MS = 5 * 60 * 1000;
@@ -733,23 +737,20 @@ function createRaidCheckCommand(deps) {
     const buildFooterText = (groups) => {
       let done = 0;
       let partial = 0;
-      let none = 0;
+      let pending = 0;
       let notEligible = 0;
       for (const group of groups) {
         const stats = group.stats || {};
         done += stats.done || 0;
         partial += stats.partial || 0;
-        none += stats.none || 0;
+        pending += stats.none || 0;
         notEligible += stats.notEligible || 0;
       }
-      const parts = [
-        `${UI.icons.done} ${done} done`,
-        `${UI.icons.partial} ${partial} partial`,
-        `${UI.icons.pending} ${none} pending`,
-      ];
-      if (notEligible > 0) parts.push(`${UI.icons.lock} ${notEligible} not eligible`);
+      const counts = formatProgressTotals(
+        { done, partial, pending, notEligible },
+        UI
+      );
       const syncLine = formatLastBibleSyncLine(groups);
-      const counts = parts.join(" · ");
       return syncLine ? `${counts}\n${syncLine}` : counts;
     };
 

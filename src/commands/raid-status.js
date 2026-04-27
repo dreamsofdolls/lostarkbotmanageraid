@@ -1,5 +1,9 @@
 const { isSupportClass, getClassEmoji } = require("../data/Class");
-const { buildNoticeEmbed, pack2Columns } = require("../raid/shared");
+const {
+  buildNoticeEmbed,
+  pack2Columns,
+  formatProgressTotals,
+} = require("../raid/shared");
 const { buildAccountTaskFields } = require("../raid/task-view");
 
 const STATUS_PAGINATION_SESSION_MS = 5 * 60 * 1000;
@@ -60,15 +64,18 @@ function createRaidStatusCommand(deps) {
   function buildStatusFooterText(globalTotals, pageInfo = null) {
     const { completed = 0, partial = 0, total = 0 } = globalTotals?.progress || {};
     const pending = Math.max(0, total - completed - partial);
-    const parts = [
-      `${UI.icons.done} ${completed} done`,
-      `${UI.icons.partial} ${partial} partial`,
-      `${UI.icons.pending} ${pending} pending`,
-    ];
+    // Shared formatter for the `🟢 N done · 🟡 N · ⚪ N` icon line so
+    // /raid-status + /raid-check render with identical icon ordering /
+    // spacing. Page indicator stays surface-specific (only multi-page
+    // /raid-status appends it).
+    let line = formatProgressTotals(
+      { done: completed, partial, pending },
+      UI
+    );
     if (pageInfo && Number(pageInfo.totalPages) > 1) {
-      parts.push(`Page ${Number(pageInfo.pageIndex) + 1}/${Number(pageInfo.totalPages)}`);
+      line += ` · Page ${Number(pageInfo.pageIndex) + 1}/${Number(pageInfo.totalPages)}`;
     }
-    return parts.join(" · ");
+    return line;
   }
 
   function buildCharacterField(character, getRaidsFor) {
