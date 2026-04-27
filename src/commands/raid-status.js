@@ -879,9 +879,10 @@ function createRaidStatusCommand(deps) {
       };
 
       // 2-column packing: field cap is 25, each char takes 2 fields
-      // (card + spacer) so we can fit up to 12 chars-with-tasks per
-      // page. Slice covers that ceiling.
-      const visibleChars = charsWithTasks.slice(0, 12);
+      // (card + spacer). Cap at 11 chars (= 22 fields) so the
+      // roster-wide placeholder field below + future legend field still
+      // fit within Discord's 25-field embed cap with one slot of room.
+      const visibleChars = charsWithTasks.slice(0, 11);
       for (let i = 0; i < visibleChars.length; i += 2) {
         embed.addFields(buildTaskCharField(visibleChars[i]));
         embed.addFields(inlineSpacer);
@@ -891,6 +892,21 @@ function createRaidStatusCommand(deps) {
             : inlineSpacer
         );
       }
+
+      // Placeholder field for the upcoming "shared task per roster"
+      // feature - one task definition that applies to every char in
+      // the account (vs the current per-char model). Sits between the
+      // char cards and the footer legend so users see the roadmap at
+      // a glance. Artist-voice copy keeps the persona consistent.
+      // Remove this addFields() block when the real feature lands.
+      embed.addFields({
+        name: "🌟 Task chung của roster (sắp có)",
+        value: [
+          "Tớ ngóng feature này dữ lắm~ Sắp tới mỗi roster sẽ có thêm 1 list task **áp cho mọi char trong account** (kiểu chore chung Owner đăng ký, không phải gõ `/raid-task add` cho từng con).",
+          "Trong lúc chờ, cậu cứ dùng `action:all` ở `/raid-task add` để bulk add tạm cho mọi char nha~",
+        ].join("\n"),
+        inline: false,
+      });
 
       const footerParts = [];
       if (totalDaily > 0) {
@@ -951,14 +967,23 @@ function createRaidStatusCommand(deps) {
       );
     };
 
+    // Sentinel value for the char-filter "All characters" mode - sits at
+    // the top of the dropdown so the user can flip the same task across
+    // every char in one click (use case: just finished Paradise on 6
+    // alts, don't want to toggle 6 times). Pick anything that can't be
+    // a Discord-allowed char name to keep the namespace collision-free.
+    const ALL_CHARS_SENTINEL = "__ALL_CHARS__";
+
     // Resolve the effective char filter for the current page. Explicit
     // user pick wins; otherwise auto-pick the first char with tasks so
     // the toggle dropdown always has actionable items when at least one
-    // task exists. Returns null when the page has zero tasks.
+    // task exists. Returns null when the page has zero tasks. Returns
+    // ALL_CHARS_SENTINEL when the user explicitly picked the bulk mode.
     const resolveTaskCharFilter = () => {
       const explicit = taskCharFilterByPage.get(currentPage);
       const candidates = charsWithTasksOnPage();
       if (candidates.length === 0) return null;
+      if (explicit === ALL_CHARS_SENTINEL) return ALL_CHARS_SENTINEL;
       if (explicit) {
         const stillExists = candidates.find(
           (c) =>
@@ -968,6 +993,46 @@ function createRaidStatusCommand(deps) {
         if (stillExists) return getCharacterName(stillExists);
       }
       return getCharacterName(candidates[0]);
+    };
+
+    // Aggregate every (name, reset) task across the current page's
+    // chars-with-tasks. Each entry rolls up:
+    //   - chars that own this task ID-set
+    //   - count completed across those chars
+    // Used by the all-mode toggle dropdown to render `(X/N done)` and
+    // to flip the bulk state in a single Mongo write.
+    const aggregateTasksOnPage = () => {
+      const candidates = charsWithTasksOnPage();
+      const byKey = new Map();
+      for (const character of candidates) {
+        const charName = getCharacterName(character);
+        const sideTasks = Array.isArray(character.sideTasks)
+          ? character.sideTasks
+          : [];
+        for (const task of sideTasks) {
+          if (!task?.name) continue;
+          const key = `${task.name.trim().toLowerCase()}::${task.reset}`;
+          let entry = byKey.get(key);
+          if (!entry) {
+            entry = {
+              name: task.name,
+              reset: task.reset,
+              owners: [],
+              doneCount: 0,
+            };
+            byKey.set(key, entry);
+          }
+          entry.owners.push({
+            charName,
+            taskId: task.taskId,
+            completed: !!task.completed,
+          });
+          if (task.completed) entry.doneCount += 1;
+        }
+      }
+      return [...byKey.values()].sort((a, b) =>
+        a.name.localeCompare(b.name) || a.reset.localeCompare(b.reset)
+      );
     };
 
     // Char-filter dropdown: lists every char on the current page that
@@ -980,7 +1045,36 @@ function createRaidStatusCommand(deps) {
       const candidates = charsWithTasksOnPage();
       if (candidates.length === 0) return null;
       const activeName = resolveTaskCharFilter();
-      const options = candidates.slice(0, 25).map((character) => {
+      const options = [];
+      // Bulk-mode entry first when the page has > 1 char with tasks -
+      // single-char accounts don't need the bulk option (it would just
+      // duplicate the per-char view). 24 char options + 1 bulk = 25 cap.
+      if (candidates.length > 1) {
+        const totalTaskCount = candidates.reduce(
+          (sum, c) =>
+            sum + (Array.isArray(c.sideTasks) ? c.sideTasks.length : 0),
+          0
+        );
+        const totalDone = candidates.reduce(
+          (sum, c) =>
+            sum +
+            (Array.isArray(c.sideTasks)
+              ? c.sideTasks.filter((t) => t?.completed).length
+              : 0),
+          0
+        );
+        options.push({
+          label: truncateText(
+            `🌐 Tất cả character · ${totalDone}/${totalTaskCount}`,
+            100
+          ),
+          value: ALL_CHARS_SENTINEL,
+          description: "Bulk toggle 1 task cho mọi char cùng có nó",
+          default: activeName === ALL_CHARS_SENTINEL,
+        });
+      }
+      const charSlots = candidates.length > 1 ? 24 : 25;
+      candidates.slice(0, charSlots).forEach((character) => {
         const name = getCharacterName(character);
         const itemLevel = Number(character.itemLevel) || 0;
         const taskCount = Array.isArray(character.sideTasks)
@@ -1006,7 +1100,7 @@ function createRaidStatusCommand(deps) {
         // embedding `<:name:id>` in the label renders as raw markup
         // (Discord regression Trainee caught on the live deploy).
         if (classEmojiObj) option.emoji = classEmojiObj;
-        return option;
+        options.push(option);
       });
       return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
@@ -1033,6 +1127,47 @@ function createRaidStatusCommand(deps) {
             .setPlaceholder("Chưa có task nào - dùng /raid-task add để thêm")
             .setDisabled(true)
             .addOptions([{ label: "(empty)", value: "noop" }])
+        );
+      }
+      // Bulk mode: dropdown lists every (name, reset) task aggregated
+      // across all chars on the page. Picking one toggles the same task
+      // ID on every owner-char in a single Mongo write. State icon
+      // reflects aggregate completion: 🟢 when every owner-char has it
+      // done, ⚪ otherwise. Clicking when 🟢 marks all as undone, when
+      // ⚪ marks all as done (favors completion since "I just finished"
+      // is the typical trigger).
+      if (activeName === ALL_CHARS_SENTINEL) {
+        const aggregates = aggregateTasksOnPage();
+        if (aggregates.length === 0) {
+          return new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId("status-task:toggle")
+              .setPlaceholder("Account chưa có task nào")
+              .setDisabled(true)
+              .addOptions([{ label: "(empty)", value: "noop" }])
+          );
+        }
+        const options = aggregates.slice(0, 25).map((agg) => {
+          const allDone = agg.doneCount === agg.owners.length;
+          const icon = allDone ? UI.icons.done : UI.icons.pending;
+          const label = truncateText(
+            `${icon} ${agg.name} · ${agg.reset} (${agg.doneCount}/${agg.owners.length})`,
+            100
+          );
+          // Value shape `__all__::<reset>::<lowercaseName>` so the
+          // toggle handler can re-resolve owners safely. lowercaseName
+          // because aggregateTasksOnPage keys on normalized name.
+          return {
+            label,
+            value: `__all__::${agg.reset}::${agg.name.trim().toLowerCase()}`.slice(0, 100),
+          };
+        });
+        return new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId("status-task:toggle")
+            .setPlaceholder("Bulk toggle task cho mọi char...")
+            .setDisabled(disabled)
+            .addOptions(options)
         );
       }
       const account = accounts[currentPage];
@@ -1381,44 +1516,96 @@ function createRaidStatusCommand(deps) {
           await component.deferUpdate().catch(() => {});
           return;
         }
-        const sepIdx = value.indexOf("::");
-        const targetCharName = sepIdx > 0 ? value.slice(0, sepIdx) : "";
-        const targetTaskId = sepIdx > 0 ? value.slice(sepIdx + 2) : "";
-        if (!targetCharName || !targetTaskId) {
-          await component.deferUpdate().catch(() => {});
-          return;
-        }
-        try {
-          await saveWithRetry(async () => {
-            const userDocFresh = await User.findOne({ discordId });
-            if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return;
-            const account = userDocFresh.accounts[currentPage];
-            if (!account || !Array.isArray(account.characters)) return;
-            const target = account.characters.find(
-              (c) =>
-                String(c?.name || "").trim().toLowerCase() ===
-                targetCharName.trim().toLowerCase()
+        // Bulk-toggle path. Value shape `__all__::<reset>::<lowerName>`.
+        // Aggregate the task across every char on the page that owns it
+        // (matched by lowercase name + reset cycle), then flip:
+        //   - if every owner is done → mark all undone
+        //   - else → mark all done
+        // One save covers the batch.
+        if (value.startsWith("__all__::")) {
+          const parts = value.split("::");
+          const targetReset = parts[1] || "";
+          const targetNameLower = parts.slice(2).join("::");
+          if (!targetReset || !targetNameLower) {
+            await component.deferUpdate().catch(() => {});
+            return;
+          }
+          try {
+            await saveWithRetry(async () => {
+              const userDocFresh = await User.findOne({ discordId });
+              if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return;
+              const account = userDocFresh.accounts[currentPage];
+              if (!account || !Array.isArray(account.characters)) return;
+              // Find every char that owns the matching (name, reset) task.
+              const owners = [];
+              for (const ch of account.characters) {
+                if (!Array.isArray(ch?.sideTasks)) continue;
+                const task = ch.sideTasks.find(
+                  (t) =>
+                    String(t?.name || "").trim().toLowerCase() === targetNameLower &&
+                    t?.reset === targetReset
+                );
+                if (task) owners.push({ task });
+              }
+              if (owners.length === 0) return;
+              const allDone = owners.every((o) => o.task.completed);
+              const nextState = !allDone;
+              for (const { task } of owners) {
+                task.completed = nextState;
+              }
+              await userDocFresh.save();
+            });
+          } catch (err) {
+            console.error(
+              "[raid-status side-task bulk-toggle] save failed:",
+              err?.message || err
             );
-            if (!target) return;
-            if (!Array.isArray(target.sideTasks)) target.sideTasks = [];
-            const task = target.sideTasks.find((t) => t?.taskId === targetTaskId);
-            if (!task) return;
-            task.completed = !task.completed;
-            await userDocFresh.save();
-          });
-        } catch (err) {
-          console.error(
-            "[raid-status side-task toggle] save failed:",
-            err?.message || err
-          );
-        }
-        // Reload the view-local accounts snapshot so the next embed render
-        // reflects the just-toggled state. Cheap lean read scoped to the
-        // single discordId, no bible round-trip.
-        const reloaded = await User.findOne({ discordId }).lean();
-        if (reloaded && Array.isArray(reloaded.accounts)) {
-          userDoc = reloaded;
-          accounts = userDoc.accounts;
+          }
+          const reloaded = await User.findOne({ discordId }).lean();
+          if (reloaded && Array.isArray(reloaded.accounts)) {
+            userDoc = reloaded;
+            accounts = userDoc.accounts;
+          }
+        } else {
+          const sepIdx = value.indexOf("::");
+          const targetCharName = sepIdx > 0 ? value.slice(0, sepIdx) : "";
+          const targetTaskId = sepIdx > 0 ? value.slice(sepIdx + 2) : "";
+          if (!targetCharName || !targetTaskId) {
+            await component.deferUpdate().catch(() => {});
+            return;
+          }
+          try {
+            await saveWithRetry(async () => {
+              const userDocFresh = await User.findOne({ discordId });
+              if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return;
+              const account = userDocFresh.accounts[currentPage];
+              if (!account || !Array.isArray(account.characters)) return;
+              const target = account.characters.find(
+                (c) =>
+                  String(c?.name || "").trim().toLowerCase() ===
+                  targetCharName.trim().toLowerCase()
+              );
+              if (!target) return;
+              if (!Array.isArray(target.sideTasks)) target.sideTasks = [];
+              const task = target.sideTasks.find((t) => t?.taskId === targetTaskId);
+              if (!task) return;
+              task.completed = !task.completed;
+              await userDocFresh.save();
+            });
+          } catch (err) {
+            console.error(
+              "[raid-status side-task toggle] save failed:",
+              err?.message || err
+            );
+          }
+          // Reload the view-local accounts snapshot so the next embed render
+          // reflects the just-toggled state. Cheap lean read scoped to the
+          // single discordId, no bible round-trip.
+          const reloaded = await User.findOne({ discordId }).lean();
+          if (reloaded && Array.isArray(reloaded.accounts)) {
+            userDoc = reloaded;
+            accounts = userDoc.accounts;
+          }
         }
       } else {
         return;
