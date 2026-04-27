@@ -14,7 +14,12 @@ process.env.RAID_MANAGER_ID = "test-manager";
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { tryEnableAutoManageForUser } = require("../src/commands/raid-check");
+const {
+  tryEnableAutoManageForUser,
+  tryDisableAutoManageForSelf,
+  buildEnableAutoDmEmbed,
+} = require("../src/commands/raid-check");
+const { EmbedBuilder } = require("discord.js");
 
 // Build a stub UserModel that records the filter passed to
 // findOneAndUpdate + lets each test plant its own findOneAndUpdate /
@@ -150,4 +155,218 @@ test("tryEnableAutoManageForUser tolerates findOne throwing in the fallback path
   });
   const result = await tryEnableAutoManageForUser(UserStub, "user-1");
   assert.equal(result.outcome, "missing");
+});
+
+// --------- tryDisableAutoManageForSelf (Option C quick-undo button) ---------
+//
+// The disable variant mirrors the enable helper but flips true → false.
+// Used by the per-user "🚫 Tắt auto-sync ngay" button shipped in the DM
+// after a Manager bật-hộ. Self-only enforcement happens in the click
+// handler; this helper just owns the atomic state transition.
+
+test("tryDisableAutoManageForSelf returns 'disabled' when CAS filter matches", async () => {
+  const updatedDoc = { discordId: "user-1", autoManageEnabled: false };
+  const UserStub = makeUserStub({
+    findOneAndUpdateImpl: () => Promise.resolve(updatedDoc),
+  });
+  const result = await tryDisableAutoManageForSelf(UserStub, "user-1");
+  assert.equal(result.outcome, "disabled");
+  assert.equal(result.doc, updatedDoc);
+  // Filter must require autoManageEnabled === true (not $ne false) so
+  // the helper rejects an already-off doc and routes to the fallback
+  // probe instead of double-flipping silently.
+  const call = UserStub.calls.findOneAndUpdate[0];
+  assert.equal(call.filter.discordId, "user-1");
+  assert.equal(call.filter.autoManageEnabled, true);
+  assert.deepEqual(call.update.$set, { autoManageEnabled: false });
+});
+
+test("tryDisableAutoManageForSelf returns 'already-off' when CAS rejects but doc still exists", async () => {
+  // User clicked the button twice in a row, or hit /raid-auto-manage
+  // action:off in parallel. Outcome 'already-off' is benign (UI tells
+  // them nothing to change).
+  const UserStub = makeUserStub({
+    findOneAndUpdateImpl: () => Promise.resolve(null),
+    findOneImpl: () =>
+      Promise.resolve({ _id: "id-1", autoManageEnabled: false }),
+  });
+  const result = await tryDisableAutoManageForSelf(UserStub, "user-1");
+  assert.equal(result.outcome, "already-off");
+});
+
+test("tryDisableAutoManageForSelf returns 'missing' when doc is gone entirely", async () => {
+  const UserStub = makeUserStub({
+    findOneAndUpdateImpl: () => Promise.resolve(null),
+    findOneImpl: () => Promise.resolve(null),
+  });
+  const result = await tryDisableAutoManageForSelf(UserStub, "user-1");
+  assert.equal(result.outcome, "missing");
+});
+
+test("tryDisableAutoManageForSelf returns 'error' when findOneAndUpdate throws", async () => {
+  const dbErr = new Error("Mongo timeout");
+  const UserStub = makeUserStub({
+    findOneAndUpdateImpl: () => Promise.reject(dbErr),
+  });
+  const result = await tryDisableAutoManageForSelf(UserStub, "user-1");
+  assert.equal(result.outcome, "error");
+  assert.equal(result.error, dbErr);
+});
+
+// --------- buildEnableAutoDmEmbed (Option C DM with roster + log status) ---------
+//
+// The DM lists every char with one of three Public Log status icons so
+// the user knows which chars they need to flip on lostark.bible AFTER
+// the Manager turns auto-sync on. Status rules are sticky and easy to
+// regress on if someone later swaps default semantics, so the suite
+// pins the icon contract.
+
+function makeUserDoc({
+  accounts = [],
+  lastAutoManageSyncAt = 0,
+  autoManageEnabled = true,
+} = {}) {
+  return { autoManageEnabled, lastAutoManageSyncAt, accounts };
+}
+
+test("buildEnableAutoDmEmbed: emits 🔓 Public OK for chars when user has synced before AND publicLogDisabled=false", () => {
+  const userDoc = makeUserDoc({
+    lastAutoManageSyncAt: 1700000000000, // any positive timestamp
+    accounts: [
+      {
+        accountName: "Alpha",
+        characters: [
+          { name: "Cyrano", itemLevel: 1733, publicLogDisabled: false },
+        ],
+      },
+    ],
+  });
+  const embed = buildEnableAutoDmEmbed(EmbedBuilder, {
+    managerId: "manager-1",
+    userDoc,
+  });
+  const json = embed.toJSON();
+  const fields = json.fields || [];
+  assert.equal(fields.length, 1);
+  assert.match(fields[0].value, /🔓 Cyrano · 1733 · Public OK/);
+});
+
+test("buildEnableAutoDmEmbed: emits 🔒 Private for chars with publicLogDisabled=true", () => {
+  const userDoc = makeUserDoc({
+    lastAutoManageSyncAt: 1700000000000,
+    accounts: [
+      {
+        accountName: "Alpha",
+        characters: [
+          { name: "Naila", itemLevel: 1730, publicLogDisabled: true },
+        ],
+      },
+    ],
+  });
+  const embed = buildEnableAutoDmEmbed(EmbedBuilder, {
+    managerId: "manager-1",
+    userDoc,
+  });
+  const fields = embed.toJSON().fields || [];
+  assert.match(fields[0].value, /🔒 Naila · 1730 · Private \(cần bật Public Log\)/);
+});
+
+test("buildEnableAutoDmEmbed: emits ❓ Chưa kiểm tra when user has never synced (lastAutoManageSyncAt=0)", () => {
+  const userDoc = makeUserDoc({
+    lastAutoManageSyncAt: 0,
+    accounts: [
+      {
+        accountName: "Alpha",
+        characters: [
+          { name: "Cyrano", itemLevel: 1733, publicLogDisabled: false },
+        ],
+      },
+    ],
+  });
+  const embed = buildEnableAutoDmEmbed(EmbedBuilder, {
+    managerId: "manager-1",
+    userDoc,
+  });
+  const fields = embed.toJSON().fields || [];
+  assert.match(fields[0].value, /❓ Cyrano · 1733 · Chưa kiểm tra/);
+});
+
+test("buildEnableAutoDmEmbed: footer hint appears when at least one char is Private OR unknown", () => {
+  const userDoc = makeUserDoc({
+    lastAutoManageSyncAt: 0, // never synced → all chars unknown
+    accounts: [
+      {
+        accountName: "Alpha",
+        characters: [
+          { name: "Cyrano", itemLevel: 1733, publicLogDisabled: false },
+        ],
+      },
+    ],
+  });
+  const embed = buildEnableAutoDmEmbed(EmbedBuilder, {
+    managerId: "manager-1",
+    userDoc,
+  });
+  const json = embed.toJSON();
+  assert.ok(json.footer, "footer should be set when chars are unknown/private");
+  assert.match(json.footer.text, /lostark\.bible|Show on Profile/);
+});
+
+test("buildEnableAutoDmEmbed: footer hint OMITTED when every char is confirmed Public", () => {
+  const userDoc = makeUserDoc({
+    lastAutoManageSyncAt: 1700000000000,
+    accounts: [
+      {
+        accountName: "Alpha",
+        characters: [
+          { name: "Cyrano", itemLevel: 1733, publicLogDisabled: false },
+          { name: "Naila", itemLevel: 1730, publicLogDisabled: false },
+        ],
+      },
+    ],
+  });
+  const embed = buildEnableAutoDmEmbed(EmbedBuilder, {
+    managerId: "manager-1",
+    userDoc,
+  });
+  const json = embed.toJSON();
+  // Footer should NOT exist when all chars are Public OK - the hint
+  // would just be visual noise.
+  assert.equal(json.footer, undefined);
+});
+
+test("buildEnableAutoDmEmbed: emits one field per non-empty account, omits empty accounts", () => {
+  const userDoc = makeUserDoc({
+    lastAutoManageSyncAt: 0,
+    accounts: [
+      {
+        accountName: "Alpha",
+        characters: [{ name: "Cyrano", itemLevel: 1733, publicLogDisabled: false }],
+      },
+      { accountName: "Beta", characters: [] }, // empty - skip
+      {
+        accountName: "Gamma",
+        characters: [{ name: "Bao", itemLevel: 1745, publicLogDisabled: false }],
+      },
+    ],
+  });
+  const embed = buildEnableAutoDmEmbed(EmbedBuilder, {
+    managerId: "manager-1",
+    userDoc,
+  });
+  const json = embed.toJSON();
+  const fields = json.fields || [];
+  assert.equal(fields.length, 2, "empty Beta account should be skipped");
+  assert.match(fields[0].name, /Alpha/);
+  assert.match(fields[1].name, /Gamma/);
+});
+
+test("buildEnableAutoDmEmbed: includes manager mention in description", () => {
+  const userDoc = makeUserDoc({ accounts: [] });
+  const embed = buildEnableAutoDmEmbed(EmbedBuilder, {
+    managerId: "manager-7",
+    userDoc,
+  });
+  const json = embed.toJSON();
+  assert.match(json.description, /<@manager-7>/);
 });
