@@ -60,7 +60,16 @@ function buildAccountTaskFields(account, helpers) {
 
   const buildCharField = (character) => {
     const charName = getCharacterName(character);
-    const itemLevel = Number(character.itemLevel) || 0;
+    // Floor to integer for the field-name header. Discord allocates inline
+    // column width based on the LONGEST line in any field's value, not on
+    // field-name length. Task view value lines (`🟢 Paradise`, `Weekly · 3/3`)
+    // are short, so Discord packs columns narrower than the Raid view does
+    // - and a header like `Myrtenshielder · 1734.17` overflows that narrow
+    // column and wraps onto a second line. Dropping the fractional part
+    // saves 2-3 chars per affected char and keeps every header on one line.
+    // The Raid view already fits comfortably (longer raid-status lines
+    // expand its columns), so its header still uses the raw decimal.
+    const itemLevel = Math.floor(Number(character.itemLevel) || 0);
     const classIcon = getClassEmoji(character.class);
     const namePrefix = classIcon ? `${classIcon} ` : "";
     const fieldName = truncateText(
