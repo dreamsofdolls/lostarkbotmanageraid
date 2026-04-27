@@ -713,6 +713,7 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ComponentType,
   MessageFlags,
   UI,
   User,
