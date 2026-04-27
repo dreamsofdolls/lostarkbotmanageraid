@@ -23,11 +23,21 @@ function getCharacterDisplayName(character) {
   return String(character?.name || "").trim();
 }
 
-function findCharacterInUser(userDoc, characterName) {
+// Resolve a single (account, character) pair from a user doc. When
+// `rosterName` is supplied (slash command path - the field is required so
+// callers always pass it), the search is scoped to just that account so
+// same-named chars across rosters can't collide. When omitted (legacy
+// callers / tests), falls back to first-by-iteration match across every
+// account so older invocation paths keep working.
+function findCharacterInUser(userDoc, characterName, rosterName = null) {
   if (!userDoc || !Array.isArray(userDoc.accounts)) return null;
   const target = normalizeName(characterName);
   if (!target) return null;
+  const rosterTarget = rosterName ? normalizeName(rosterName) : null;
   for (const account of userDoc.accounts) {
+    if (rosterTarget && normalizeName(account.accountName) !== rosterTarget) {
+      continue;
+    }
     const chars = Array.isArray(account.characters) ? account.characters : [];
     for (const character of chars) {
       if (normalizeName(getCharacterDisplayName(character)) === target) {
@@ -63,7 +73,7 @@ function createRaidTaskCommand(deps) {
     weekResetStartMs,
   } = deps;
 
-  async function autocompleteCharacter(interaction, focused) {
+  async function autocompleteRoster(interaction, focused) {
     const needle = normalizeName(focused.value || "");
     const discordId = interaction.user.id;
     const userDoc = await loadUserForAutocomplete(discordId);
@@ -71,9 +81,48 @@ function createRaidTaskCommand(deps) {
       await interaction.respond([]).catch(() => {});
       return;
     }
+    const choices = userDoc.accounts
+      .filter((a) => !needle || normalizeName(a.accountName).includes(needle))
+      .slice(0, 25)
+      .map((a) => {
+        const chars = Array.isArray(a.characters) ? a.characters : [];
+        const taskTotal = chars.reduce(
+          (sum, c) => sum + (Array.isArray(c.sideTasks) ? c.sideTasks.length : 0),
+          0
+        );
+        const taskSuffix = taskTotal > 0 ? ` · ${taskTotal} task` : "";
+        const label = `📁 ${a.accountName} · ${chars.length} char${chars.length === 1 ? "" : "s"}${taskSuffix}`;
+        return {
+          name: label.length > 100 ? `${label.slice(0, 97)}...` : label,
+          value:
+            a.accountName.length > 100 ? a.accountName.slice(0, 100) : a.accountName,
+        };
+      });
+    await interaction.respond(choices).catch(() => {});
+  }
+
+  async function autocompleteCharacter(interaction, focused) {
+    const needle = normalizeName(focused.value || "");
+    const rosterInput = interaction.options.getString("roster") || "";
+    const discordId = interaction.user.id;
+    const userDoc = await loadUserForAutocomplete(discordId);
+    if (!userDoc || !Array.isArray(userDoc.accounts)) {
+      await interaction.respond([]).catch(() => {});
+      return;
+    }
+    // Source accounts: roster-filtered when the user has already picked
+    // one, else every account (Discord autocomplete fires per-keystroke
+    // regardless of fill order, so the field has to be useful even before
+    // roster is filled). Same fall-back pattern as /raid-set.
+    const rosterTarget = rosterInput ? normalizeName(rosterInput) : null;
+    const accounts = rosterTarget
+      ? userDoc.accounts.filter(
+          (a) => normalizeName(a.accountName) === rosterTarget
+        )
+      : userDoc.accounts;
     const entries = [];
     const seen = new Set();
-    for (const account of userDoc.accounts) {
+    for (const account of accounts) {
       const chars = Array.isArray(account.characters) ? account.characters : [];
       for (const character of chars) {
         const name = getCharacterDisplayName(character);
@@ -110,13 +159,14 @@ function createRaidTaskCommand(deps) {
   async function autocompleteTask(interaction, focused) {
     const needle = normalizeName(focused.value || "");
     const characterInput = interaction.options.getString("character") || "";
+    const rosterInput = interaction.options.getString("roster") || "";
     const discordId = interaction.user.id;
     if (!characterInput) {
       await interaction.respond([]).catch(() => {});
       return;
     }
     const userDoc = await loadUserForAutocomplete(discordId);
-    const found = findCharacterInUser(userDoc, characterInput);
+    const found = findCharacterInUser(userDoc, characterInput, rosterInput || null);
     if (!found) {
       await interaction.respond([]).catch(() => {});
       return;
@@ -141,6 +191,10 @@ function createRaidTaskCommand(deps) {
   async function handleRaidTaskAutocomplete(interaction) {
     try {
       const focused = interaction.options.getFocused(true);
+      if (focused?.name === "roster") {
+        await autocompleteRoster(interaction, focused);
+        return;
+      }
       if (focused?.name === "character") {
         await autocompleteCharacter(interaction, focused);
         return;
@@ -158,6 +212,7 @@ function createRaidTaskCommand(deps) {
 
   async function handleAdd(interaction) {
     const discordId = interaction.user.id;
+    const rosterName = interaction.options.getString("roster", true);
     const characterName = interaction.options.getString("character", true);
     const taskName = interaction.options.getString("name", true).trim();
     const reset = interaction.options.getString("reset", true);
@@ -188,7 +243,7 @@ function createRaidTaskCommand(deps) {
           outcome = "no-roster";
           return;
         }
-        const found = findCharacterInUser(userDoc, characterName);
+        const found = findCharacterInUser(userDoc, characterName, rosterName);
         if (!found) {
           outcome = "no-character";
           return;
@@ -330,6 +385,7 @@ function createRaidTaskCommand(deps) {
 
   async function handleRemove(interaction) {
     const discordId = interaction.user.id;
+    const rosterName = interaction.options.getString("roster", true);
     const characterName = interaction.options.getString("character", true);
     const taskId = interaction.options.getString("task", true);
 
@@ -344,7 +400,7 @@ function createRaidTaskCommand(deps) {
           outcome = "no-roster";
           return;
         }
-        const found = findCharacterInUser(userDoc, characterName);
+        const found = findCharacterInUser(userDoc, characterName, rosterName);
         if (!found) {
           outcome = "no-character";
           return;
@@ -419,10 +475,13 @@ function createRaidTaskCommand(deps) {
 
   async function handleClear(interaction) {
     const discordId = interaction.user.id;
+    const rosterName = interaction.options.getString("roster", true);
     const characterName = interaction.options.getString("character", true);
 
     const userDoc = await User.findOne({ discordId }).lean();
-    const found = userDoc ? findCharacterInUser(userDoc, characterName) : null;
+    const found = userDoc
+      ? findCharacterInUser(userDoc, characterName, rosterName)
+      : null;
     if (!found) {
       await interaction.reply({
         embeds: [
@@ -457,9 +516,12 @@ function createRaidTaskCommand(deps) {
     const dailyCount = countByReset(sideTasks, "daily");
     const weeklyCount = countByReset(sideTasks, "weekly");
 
+    const resolvedRosterName = found.account.accountName || rosterName;
     const confirmRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId(`raid-task:clear-confirm:${encodeURIComponent(resolvedCharName)}`)
+        .setCustomId(
+          `raid-task:clear-confirm:${encodeURIComponent(resolvedRosterName)}:${encodeURIComponent(resolvedCharName)}`
+        )
         .setLabel(`Xoá toàn bộ ${sideTasks.length} task`)
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
@@ -488,8 +550,13 @@ function createRaidTaskCommand(deps) {
   }
 
   async function handleClearConfirmButton(interaction) {
+    // CustomId shape: `raid-task:clear-confirm:<encodedRoster>:<encodedChar>`.
+    // Legacy clear-confirm without roster (single colon-segment in slot 2)
+    // falls back to first-by-iteration char match for backward-compat with
+    // pending sessions from before the roster-required deploy.
     const parts = (interaction.customId || "").split(":");
-    const charNameEncoded = parts[2] || "";
+    const rosterName = parts[2] ? decodeURIComponent(parts[2]) : null;
+    const charNameEncoded = parts[3] || parts[2] || "";
     const characterName = decodeURIComponent(charNameEncoded);
     const discordId = interaction.user.id;
 
@@ -504,7 +571,11 @@ function createRaidTaskCommand(deps) {
           outcome = "no-roster";
           return;
         }
-        const found = findCharacterInUser(userDoc, characterName);
+        const found = findCharacterInUser(
+          userDoc,
+          characterName,
+          parts[3] ? rosterName : null
+        );
         if (!found) {
           outcome = "no-character";
           return;

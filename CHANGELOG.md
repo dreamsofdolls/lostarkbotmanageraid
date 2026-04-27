@@ -4,6 +4,15 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 
 ## 2026-04-27
 
+### Fixed (welcome embed: split field "📣 Artist sẽ tự nói" sau khi đụng cap 1024)
+- **Production crash** ở `/raid-channel config action:repin` với `ExpectedConstraintError: s.string().lengthLessThanOrEqual()` - field "📣 Artist sẽ tự nói trong channel này khi nào" đã 1185 chars > Discord cap 1024 sau khi bullet maintenance T-3h/.../T-1m thêm earlier today (2026-04-27 maintenance reminder commit).
+- Fix: tách bullet maintenance thành field riêng "🛠️ Lịch bảo trì thứ 4 (14:00 VN)". Field gốc giờ 894 chars + field mới 270 chars, đều an toàn dưới cap. Total embed ~4500/6000 vẫn nhiều headroom.
+- 2 regression test ở `test/raid-channel-welcome.test.js` parse source để pin: mỗi field ≤ 1024, tổng < 5500. Suite 213 → 215.
+
+### Changed (`/raid-task`: thêm `roster` option scoped autocomplete - parity `/raid-set`)
+- 3 sub `add` / `remove` / `clear` đều thêm option `roster` required đứng trước `character`. Char autocomplete giờ filter theo roster đã pick - sidesteps Discord 25-result cap khi user có 5+ rosters × 6 chars (~30+ total) bị silent truncate ở top-25 by iLvl. Same-named chars across rosters cũng disambiguate được.
+- `findCharacterInUser(userDoc, charName, rosterName?)` accept optional rosterName scoping; legacy callers (rosterName=null) vẫn first-by-iteration để backward-compat. Clear-confirm button customId expand thành `raid-task:clear-confirm:<encodedRoster>:<encodedChar>` với fallback parse cho session pending từ trước deploy.
+
 ### Fixed (`/raid-task` + `/raid-status` Task view: 2 Codex round-28 findings)
 - **HIGH: newly-added task bị reset oan trong cùng kỳ** - `handleAdd` để `lastResetAt: 0`, scheduler tick coi mọi task có `lastResetAt < cycleStart` là expired và flip về ⬜. User add daily task lúc 20:00 VN + tick complete ngay → 30 phút sau bị reset oan dù vẫn cùng cycle. Fix: seed `lastResetAt = dailyResetStartMs() | weekResetStartMs()` lúc add, cycleStart deps inject vào factory. Regression test pin both daily + weekly seed value.
 - **MEDIUM: > 25 tasks/account silent drop khỏi toggle dropdown** - cap 25 hardcoded ở `buildTaskToggleRow` cộng cap 8/char × 4 char đã có thể vượt. Fix: thêm row dropdown `Chọn character để toggle task...` (per-page Map state), filter toggle dropdown theo selected char, default auto-pick char đầu tiên có task. Per-char cap 8 < 25 nên sau filter luôn fit. Regression test xây account 5 char × 8 task = 40 tổng, assert mỗi char list ≤ 25.
