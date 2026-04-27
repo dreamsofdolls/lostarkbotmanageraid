@@ -391,6 +391,19 @@ function createAllModeHandler({
       });
 
       if (fields.length > 0) {
+        // Visual-parity description with /raid-status Task view. Without
+        // any description Discord auto-fits the embed to the inline char
+        // cards alone and the result feels cramped (~520px) compared to
+        // /raid-status (~660px which has its own description + roadmap
+        // placeholder driving the width). Two short lines is enough to
+        // unlock the wider layout while keeping the Manager-side framing
+        // explicit (no toggle behavior here, that's owner-side only).
+        embed.setDescription(
+          [
+            `Read-only Manager view - chỉ owner toggle được ở \`/raid-status\` của họ.`,
+            `Auto-reset: Daily 17:00 VN ${UI.icons.reset} Weekly 17:00 VN thứ 4.`,
+          ].join("\n")
+        );
         embed.addFields(...fields);
       } else {
         embed.setDescription(

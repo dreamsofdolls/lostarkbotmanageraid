@@ -22,6 +22,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `/raid-status` and `/raid-check` now render freshness / sync readiness with Discord native relative timestamps instead of static text snapshots.
 - `/raid-status` and `/raid-check` share task-card and progress-line helpers, reducing layout drift between the two surfaces.
 - `/raid-announce`, `/raid-channel`, `/raid-auto-manage`, `/raid-check`, `/raid-status`, and related command replies were swept onto notice-embed UX instead of plain text.
+- `/raid-check raid:all` Task view now shows a short read-only header + auto-reset note so the embed expands to a comfortable width instead of squeezing inline char cards into a narrow column.
 
 ### Fixed
 - `/raid-help language:en` no longer leaks Vietnamese bullets after the round-31 rewrite.
