@@ -29,10 +29,15 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 - Sync button thêm điều kiện `optedInPendingCount > 0` mới render, parity với `/raid-status` (Sync ẩn hoàn toàn khi owner chưa opt-in). Trước đó button hiện nhưng disabled với label `"Sync (no opted-in users)"` đọc như visual noise; giờ ẩn luôn, manager fall back sang Edit cascade nếu cần update progress thủ công.
 
 ### Added (`/raid-check` + `/raid-check raid:all` button mới `Bật auto-sync hộ <user>` cho Manager flip flag thay user)
-- Button render khi user filter narrow xuống 1 user cụ thể AND user đó có `autoManageEnabled === false`. Filter "All users" → ẩn button (vì target không xác định). Bấm → flip `User.autoManageEnabled = true` cho target + stamp `lastAutoManageAttemptAt` (seed cooldown clock) + DM target embed báo Manager đã bật hộ + cách opt-out + hint Public Log.
-- Single-user single-click flow, không có multi-select / collector. Refetch state ở click time để tránh race nếu user vừa tự opt-in giữa lúc Manager mở page và bấm button.
+- Button render khi user filter narrow xuống 1 user cụ thể AND user đó có `autoManageEnabled === false`. Filter "All users" → ẩn button (vì target không xác định). Bấm → flip flag cho target + DM target embed báo Manager đã bật hộ + cách opt-out + hint Public Log.
+- Single-user single-click flow, không có multi-select / collector. Cùng `customId` pattern `raid-check:enable-auto-one:<discordId>` cho cả 2 mode (raid-specific + raid:all), routed bởi `handleRaidCheckButton` early-handle (no raidKey gate vì action raid-agnostic).
 - Skip probe-before-enable (khác `/raid-auto-manage action:on` flow): Manager không phải data owner, không biết char nào private. Stuck-private-log nudge flow đã handle case private 7 ngày 1 lần sau scheduler tick kế tiếp.
-- Cùng `customId` pattern `raid-check:enable-auto-one:<discordId>` cho cả 2 mode (raid-specific + raid:all), routed bởi `handleRaidCheckButton` early-handle (no raidKey gate vì action raid-agnostic).
+- **Atomic CAS via `findOneAndUpdate({ discordId, autoManageEnabled: { $ne: true } }, ...)`**: trước đó là check-then-update non-atomic, 2 manager bấm cùng lúc (hoặc manager + user tự `action:on`) đều produce success embed + duplicate DM. Codex bắt race; helper `tryEnableAutoManageForUser` (module-level, testable) trả 4 outcome (`flipped` / `already-on` / `missing` / `error`), fallback `findOne` phân biệt 2 reject case.
+- **KHÔNG stamp `lastAutoManageAttemptAt`** ở flow này (khác `/raid-auto-manage action:on` path đang stamp để defend probe-before-enable race). Stamping đẩy user mới opt-in vào cuối hàng scheduler (sort ASC by lastAttempt) - mâu thuẫn với copy "Scheduler tick kế tiếp sẽ ưu tiên cậu". Để `null` thì user được priority sort. Copy DM/embed honest hơn ("~30 phút", "ưu tiên user mới opt-in" thay vì lời hứa cụ thể).
+
+### Added (test coverage cho enable-auto flow + Auto-sync OFF badge)
+- 7 test mới ở `test/raid-check-enable-auto.test.js` cover `tryEnableAutoManageForUser`: `flipped` happy path, CAS filter shape (regression cho race fix), no-stamp guard (regression cho copy-vs-queue mismatch), `already-on` race, `missing` user, `error` from findOneAndUpdate, fallback findOne tolerance. Mocked Mongoose User stub vì helper module-level + dep-injectable.
+- 3 test mới ở `test/raid-status.test.js` cover Auto-sync OFF badge trong `buildAccountPageEmbed`: render khi `=== false`, ẩn khi `=== true`, ẩn cho legacy doc với `autoManageEnabled === undefined` (strict check guard).
 
 ## 2026-04-26
 

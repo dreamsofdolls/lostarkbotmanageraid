@@ -23,6 +23,60 @@ const RAID_CHECK_PIGGYBACK_BUDGET_MS = 2500;
 // the per-instance bible budget on an entire guild.
 const RAID_CHECK_PIGGYBACK_MAX_USERS = 8;
 
+/**
+ * Atomic enable-auto helper used by the /raid-check "Bật auto-sync hộ"
+ * button. Flips autoManageEnabled false→true via a single CAS
+ * findOneAndUpdate filter so two managers (or manager + user) racing on
+ * the same target can't both produce a success and a duplicate DM.
+ *
+ * Module-level (not closure-bound) so the unit suite can mock the User
+ * model and exercise all 4 outcomes without spinning up the full
+ * /raid-check command factory.
+ *
+ * Outcomes:
+ *   - "flipped": filter matched, doc returned with the new state.
+ *   - "already-on": doc exists but autoManageEnabled was already true
+ *     (someone got here first, or user toggled on between page render
+ *     and click).
+ *   - "missing": no doc at all (user removed roster after page render).
+ *   - "error": findOneAndUpdate threw - surface to caller.
+ *
+ * Note: we do NOT stamp lastAutoManageAttemptAt here, unlike the
+ * /raid-auto-manage action:on path which stamps to defend its
+ * probe-before-enable race. Stamping puts the new opt-in at the tail
+ * of the daily scheduler's ascending lastAttempt sort, contradicting
+ * the "next tick will pick up your roster" copy. Leaving the field as
+ * null gives the new user priority in the next scheduler tick.
+ */
+async function tryEnableAutoManageForUser(UserModel, discordId) {
+  if (!discordId) return { outcome: "missing" };
+  let updated;
+  try {
+    updated = await UserModel.findOneAndUpdate(
+      { discordId, autoManageEnabled: { $ne: true } },
+      { $set: { autoManageEnabled: true } },
+      { new: true }
+    );
+  } catch (err) {
+    return { outcome: "error", error: err };
+  }
+  if (updated) return { outcome: "flipped", doc: updated };
+  // Filter rejected. Distinguish already-on (doc exists but flag true
+  // when we tried) from missing (doc gone entirely). Operator/UX care
+  // about the difference: already-on is benign (refresh hint), missing
+  // is an audit signal (someone removed roster mid-session).
+  let existing;
+  try {
+    existing = await UserModel.findOne({ discordId })
+      .select("_id autoManageEnabled")
+      .lean();
+  } catch {
+    existing = null;
+  }
+  if (!existing) return { outcome: "missing" };
+  return { outcome: "already-on" };
+}
+
 function createRaidCheckCommand(deps) {
   const {
     EmbedBuilder,
@@ -917,9 +971,9 @@ function createRaidCheckCommand(deps) {
   // Enable-auto-on-behalf flow: button shows up only when the user
   // filter narrows /raid-check or /raid-check raid:all to one specific
   // user, AND that user hasn't opted into /raid-auto-manage. Click flips
-  // their User.autoManageEnabled to true, stamps lastAutoManageAttemptAt
-  // (seeds cooldown clock), and DMs the user with the manager's mention,
-  // a Public Log hint, and opt-out instructions.
+  // their User.autoManageEnabled to true (atomic CAS via the helper
+  // above) and DMs the user with the manager's mention, a Public Log
+  // hint, and opt-out instructions.
   //
   // No probe-before-enable (unlike /raid-auto-manage action:on) because
   // the Manager isn't the data owner - they don't know which chars are
@@ -940,31 +994,25 @@ function createRaidCheckCommand(deps) {
       return;
     }
 
-    // Refetch the target user state at click time. The source page can
-    // be stale by minutes - the user might have already opted in via DM
-    // or lost their roster entirely between the page render and now.
-    let targetDoc;
-    try {
-      targetDoc = await User.findOne({ discordId: targetDiscordId }).lean();
-    } catch (err) {
+    const result = await tryEnableAutoManageForUser(User, targetDiscordId);
+    if (result.outcome === "error") {
       console.error(
-        `[raid-check enable-auto] target fetch failed user=${targetDiscordId}:`,
-        err?.message || err
+        `[raid-check enable-auto] flip failed user=${targetDiscordId}:`,
+        result.error?.message || result.error
       );
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "error",
-            title: "Lỗi load user",
-            description: `Artist không load được state của user: \`${err?.message || err}\`. Thử lại sau nha.`,
+            title: "Flip flag fail",
+            description: `Artist gặp lỗi khi flip flag: \`${result.error?.message || result.error}\`. Thử lại sau nha.`,
           }),
         ],
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
-
-    if (!targetDoc) {
+    if (result.outcome === "missing") {
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
@@ -977,70 +1025,20 @@ function createRaidCheckCommand(deps) {
       });
       return;
     }
-
-    if (targetDoc.autoManageEnabled) {
+    if (result.outcome === "already-on") {
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
             title: "User đã opt-in rồi",
-            description: `<@${targetDiscordId}> đã bật \`/raid-auto-manage\` rồi nha (có thể họ tự bật giữa lúc cậu mở page và bấm button). Refresh \`/raid-check\` để page sync state mới.`,
+            description: `<@${targetDiscordId}> đã bật \`/raid-auto-manage\` rồi nha (có thể họ tự bật giữa lúc cậu mở page và bấm button, hoặc Manager khác bấm trước cậu). Refresh \`/raid-check\` để page sync state mới.`,
           }),
         ],
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
-
-    let flipped = false;
-    try {
-      // Stamp lastAutoManageAttemptAt to seed the cooldown clock from
-      // the moment of opt-in, mirroring /raid-auto-manage action:on.
-      // Without this stamp the very next action:sync click could fire
-      // before the regular cooldown window applies.
-      const updated = await User.findOneAndUpdate(
-        { discordId: targetDiscordId },
-        {
-          $set: {
-            autoManageEnabled: true,
-            lastAutoManageAttemptAt: Date.now(),
-          },
-        },
-        { new: true }
-      );
-      if (updated) flipped = true;
-    } catch (err) {
-      console.error(
-        `[raid-check enable-auto] flip failed user=${targetDiscordId}:`,
-        err?.message || err
-      );
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "error",
-            title: "Flip flag fail",
-            description: `Artist gặp lỗi khi flip flag: \`${err?.message || err}\`. Thử lại sau nha.`,
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    if (!flipped) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: "Không flip được",
-            description: "Artist không flip được flag (user có thể đã bị xoá khỏi DB giữa lúc check và update). Thử refresh `/raid-check` rồi bấm lại nha.",
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
+    // result.outcome === "flipped" - proceed to DM + success embed
     let dmSent = false;
     try {
       const targetUser = await interaction.client.users
@@ -1054,7 +1052,7 @@ function createRaidCheckCommand(deps) {
             `Heya~ Raid Manager <@${interaction.user.id}> vừa bật \`/raid-auto-manage\` hộ cậu rồi nha. Từ giờ Artist sẽ tự sync raid progress cho cậu mỗi 24h.`,
             "",
             "**Trạng thái mới:** ON",
-            "**Lần sync đầu:** Scheduler tick kế tiếp (24h cycle)",
+            "**Khi nào sync lần đầu:** Scheduler tick kế tiếp (~30 phút) sẽ ưu tiên cậu vì roster mới opt-in",
             "**Cách tắt:** Gõ `/raid-auto-manage action:off` bất cứ lúc nào",
             "",
             "Char nào đang **Private Log** thì Artist không pull được data đâu nha. Vào https://lostark.bible/me/logs bật **Show on Profile** giúp tớ.",
@@ -1078,7 +1076,7 @@ function createRaidCheckCommand(deps) {
       type: "success",
       title: "Artist đã bật auto-sync hộ rồi nha",
       description: [
-        "Flag đã flip thành công, scheduler sẽ pick user này trong tick kế tiếp (24h cycle).",
+        "Flag flip thành công, scheduler sẽ pick user này trong tick kế tiếp (~30 phút) vì họ đứng ưu tiên với `lastAutoManageAttemptAt = null`.",
         "",
         `**Đã bật cho:** <@${targetDiscordId}>`,
         `**Trạng thái mới:** ON`,
@@ -1251,4 +1249,5 @@ function createRaidCheckCommand(deps) {
 module.exports = {
   createRaidCheckCommand,
   RAID_CHECK_PAGINATION_SESSION_MS,
+  tryEnableAutoManageForUser,
 };

@@ -301,3 +301,53 @@ test("buildAccountPageEmbed: roster header icon stays 📥 for a non-Manager ros
   assert.match(embed.toJSON().title, /📥/);
   assert.doesNotMatch(embed.toJSON().title, /👑/);
 });
+
+// --------- Auto-sync OFF badge (added 2026-04-27) ---------
+//
+// The badge is the only visual cue that distinguishes a non-opted-in
+// user from an opted-in-but-never-synced user, so it has to render only
+// when the flag is explicitly false. Strict `=== false` matters for
+// legacy docs where autoManageEnabled is undefined - those should NOT
+// show OFF (we don't know the user's intent yet).
+
+test("buildAccountPageEmbed: appends ' · 📝 Auto-sync OFF' badge to title when autoManageEnabled === false", () => {
+  const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 0 }, characters: 0 },
+    NOOP_GET_RAIDS_FOR,
+    { discordId: "regular-user", autoManageEnabled: false }
+  );
+  assert.match(embed.toJSON().title, /· 📝 Auto-sync OFF/);
+});
+
+test("buildAccountPageEmbed: omits Auto-sync OFF badge when autoManageEnabled === true (silent on opted-in)", () => {
+  const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 0 }, characters: 0 },
+    NOOP_GET_RAIDS_FOR,
+    { discordId: "regular-user", autoManageEnabled: true }
+  );
+  assert.doesNotMatch(embed.toJSON().title, /Auto-sync OFF/);
+});
+
+test("buildAccountPageEmbed: omits Auto-sync OFF badge for legacy doc with undefined autoManageEnabled", () => {
+  // userMeta.autoManageEnabled is undefined - common for legacy User
+  // docs from before /raid-auto-manage shipped. Strict `=== false`
+  // means we don't false-positive into showing OFF here.
+  const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 0 }, characters: 0 },
+    NOOP_GET_RAIDS_FOR,
+    { discordId: "regular-user" }
+  );
+  assert.doesNotMatch(embed.toJSON().title, /Auto-sync OFF/);
+});
