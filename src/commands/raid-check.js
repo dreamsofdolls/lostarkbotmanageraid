@@ -690,23 +690,38 @@ function createRaidCheckCommand(deps) {
         .map((group) => group.discordId)
     ).size;
 
-    const buildButtonRow = (currentPage, totalPages, disabled) => {
+    const buildButtonRow = (currentPage, totalPages, disabled, selectedId = null) => {
       const row = buildPaginationRow(currentPage, totalPages, disabled, {
         prevId: "raid-check-page:prev",
         nextId: "raid-check-page:next",
       });
-      row.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`raid-check:sync:${raidKey}`)
-          .setLabel(
-            optedInPendingCount > 0
-              ? `Sync ${optedInPendingCount} opted-in user(s)`
-              : "Sync (no opted-in users)"
-          )
-          .setEmoji("🔄")
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(disabled || optedInPendingCount === 0)
-      );
+      // Hide Sync + Edit when the user filter narrows the view to one
+      // specific user. Both actions are designed for the bulk "All users"
+      // view: Sync runs across every opted-in pending user (counter-
+      // intuitive when the leader is currently focused on one), and Edit
+      // cascade lets the leader pick any user/char (which would visually
+      // contradict the "I'm filtering to user X" intent). Pagination still
+      // useful for browsing the filtered user's accounts; the filter
+      // dropdown stays so the leader can revert to All or switch user.
+      if (selectedId) {
+        return row;
+      }
+      // Sync button only renders when at least one pending user has opted
+      // into /raid-auto-manage. Parity with /raid-status, where the Sync
+      // button is hidden entirely when the owner is opted-out (clicking a
+      // disabled "no opted-in users" button is just visual noise). When 0
+      // opted-in, leaders fall back to Edit cascade for manual progress
+      // updates instead.
+      if (optedInPendingCount > 0) {
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`raid-check:sync:${raidKey}`)
+            .setLabel(`Sync ${optedInPendingCount} opted-in user(s)`)
+            .setEmoji("🔄")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(disabled)
+        );
+      }
       // Leader edit flow. Always enabled (as long as session is live) - the
       // user/char select lists are computed fresh per click off the latest
       // snapshot, so a click here opens an ephemeral follow-up regardless
@@ -764,7 +779,7 @@ function createRaidCheckCommand(deps) {
     };
 
     const buildComponents = (currentPage, totalPages, selectedId, disabled) => ([
-      buildButtonRow(currentPage, totalPages, disabled),
+      buildButtonRow(currentPage, totalPages, disabled, selectedId),
       buildFilterDropdown(selectedId, disabled),
     ]);
 
