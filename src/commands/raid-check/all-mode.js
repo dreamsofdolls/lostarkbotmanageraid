@@ -57,11 +57,12 @@ function createAllModeHandler({
     // Select enough identity fields to resolve an avatar-less fallback
     // display name (same cache-first preference the Edit flow uses).
     //
-    // Account subfields enumerated explicitly so `accounts.characters.sideTasks`
-    // (per-user side tasks registered via /raid-task) NEVER leaks into
-    // Manager-facing /raid-check views. Privacy boundary - if you add a
-    // new account field that all-mode needs, add it here; do NOT widen to
-    // `accounts` because that would re-include `sideTasks`.
+    // Account subfields enumerated explicitly. Round-29 added
+    // `accounts.characters.sideTasks` so the all-mode + raid-check Task
+    // view dropdown can render members' per-char chore lists for Manager
+    // monitoring (Manager design call). If you add a new account field,
+    // add it here; do NOT widen to `accounts` because that would silently
+    // include any other future fields we haven't decided to expose.
     const users = await User.find({ "accounts.0": { $exists: true } })
       .select(
         [
@@ -84,6 +85,7 @@ function createAllModeHandler({
           "accounts.characters.isGoldEarner",
           "accounts.characters.assignedRaids",
           "accounts.characters.tasks",
+          "accounts.characters.sideTasks",
           "accounts.characters.publicLogDisabled",
           "accounts.characters.bibleSerial",
           "accounts.characters.bibleCid",
@@ -406,6 +408,21 @@ function createAllModeHandler({
               .setDisabled(disabled)
           );
         }
+        // Manager-only Task view button. Available exclusively in
+        // /raid-check raid:all (the cross-raid overview - Manager
+        // monitoring use case) and only when the user filter has
+        // narrowed to one specific user. Click opens an ephemeral
+        // followup with the same per-char Task view layout that user's
+        // own /raid-status renders, read-only. The Manager can spot-
+        // check chore progress without ping-ing the member.
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`raid-check:view-tasks:${filterUserId}`)
+            .setLabel("Xem tasks")
+            .setEmoji("📝")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(disabled)
+        );
       }
       return row;
     };

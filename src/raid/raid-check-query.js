@@ -17,8 +17,11 @@ const {
 } = require("../services/roster-refresh");
 
 // Narrow Mongo payload for /raid-check scans. The view only needs roster
-// fields, refresh stamps, weekly cursor, and auto-manage badges - not the
-// rest of the User document.
+// fields, refresh stamps, weekly cursor, auto-manage badges, and (since
+// the round-29 Manager-task-view feature) per-character side tasks so the
+// 📝 Task view dropdown can render the same per-char list as
+// /raid-status. The full User document still stays out - we just opened
+// up the side-task subtree by Manager design call.
 const RAID_CHECK_USER_BASE_QUERY = { "accounts.0": { $exists: true } };
 const RAID_CHECK_USER_QUERY_FIELDS = [
   "discordId",
@@ -37,6 +40,7 @@ const RAID_CHECK_USER_QUERY_FIELDS = [
   "accounts.characters.raids",
   "accounts.characters.assignedRaids",
   "accounts.characters.publicLogDisabled",
+  "accounts.characters.sideTasks",
   "discordUsername",
   "discordGlobalName",
   "discordDisplayName",

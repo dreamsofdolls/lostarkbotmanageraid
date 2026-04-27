@@ -144,43 +144,44 @@ test("ensureSideTasks returns existing array unchanged", () => {
 // Privacy regression: /raid-check all-mode .select projection
 // ---------------------------------------------------------------------------
 
-test("PRIVACY: raid-check all-mode select() does NOT include sideTasks", () => {
-  // The all-mode .select() string is expected to enumerate explicit account
-  // subfields rather than the entire `accounts` blob. If a future refactor
-  // shortens it back to "accounts", side tasks would leak into the manager
-  // view - this regression test pins the explicit list.
+test("PROJECTION: raid-check all-mode select() includes sideTasks (Manager Task view)", () => {
+  // Round-29: Manager-side Task view in /raid-check needs the side-task
+  // subtree on the lean docs. The .select() must enumerate explicit
+  // account subfields (NOT the whole `accounts` blob - that would
+  // silently include other internal fields we haven't decided to
+  // surface). This regression pins both the inclusion + the explicit-
+  // enumeration shape.
   const fs = require("fs");
   const path = require("path");
   const allModeSrc = fs.readFileSync(
     path.join(__dirname, "..", "src", "commands", "raid-check", "all-mode.js"),
     "utf8"
   );
-  // Find the User.find select call.
   const match = allModeSrc.match(
     /User\.find\([^)]*\)\s*\.select\(\s*\[([\s\S]*?)\]\.join/
   );
   assert.ok(match, "expected explicit array-style select() in all-mode.js");
   const fieldList = match[1];
   assert.ok(
-    !fieldList.includes("sideTasks"),
-    "sideTasks must NOT appear in all-mode select projection"
+    fieldList.includes("accounts.characters.sideTasks"),
+    "sideTasks must be in all-mode select projection (Manager Task view)"
   );
-  // Also assert the bare `"accounts"` (whole-array) is NOT present - that
-  // would silently re-include sideTasks via Mongo's parent-path semantics.
+  // Bare `"accounts"` (whole-array) still not allowed - keeps the
+  // projection a deliberate allowlist.
   assert.ok(
     !/"accounts"\s*,/.test(fieldList),
-    "select must not project the entire accounts array"
+    "select must enumerate subfields, not project the entire accounts array"
   );
 });
 
-test("PRIVACY: RAID_CHECK_USER_QUERY_FIELDS allowlist excludes sideTasks", () => {
+test("PROJECTION: RAID_CHECK_USER_QUERY_FIELDS allowlist includes sideTasks", () => {
   const {
     RAID_CHECK_USER_QUERY_FIELDS,
   } = require("../src/raid/raid-check-query");
   assert.ok(typeof RAID_CHECK_USER_QUERY_FIELDS === "string");
   assert.ok(
-    !RAID_CHECK_USER_QUERY_FIELDS.includes("sideTasks"),
-    "sideTasks must not be in /raid-check select projection"
+    RAID_CHECK_USER_QUERY_FIELDS.includes("accounts.characters.sideTasks"),
+    "sideTasks must be in /raid-check select projection (Manager Task view)"
   );
 });
 
