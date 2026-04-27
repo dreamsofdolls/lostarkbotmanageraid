@@ -1,5 +1,6 @@
 const { isSupportClass, getClassEmoji } = require("../data/Class");
 const { buildNoticeEmbed } = require("../raid/shared");
+const { buildAccountTaskFields } = require("../raid/task-view");
 
 const STATUS_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
@@ -792,26 +793,26 @@ function createRaidStatusCommand(deps) {
       };
     };
 
-    // Build the Task-view embed for the current page's account. Per-char
-    // grouping with daily + weekly subsections inline. Fields are capped
-    // at 25 (Discord limit) so accounts with > ~12 chars-with-tasks would
-    // truncate; not a real concern at our scale (typical account has < 8
-    // chars). Fields stay within the 1024-char-per-field budget because
-    // task names are capped at 60 chars × 8 tasks max per char.
+    // Build the Task-view embed for the current page's account. Body
+    // (per-char fields + 2-column ZWS-spacer packing + totals math) is
+    // delegated to the shared `buildAccountTaskFields` helper so the
+    // /raid-check raid:all Manager Task view renders the same look
+    // without duplicating ~80 LOC of layout code. This wrapper owns
+    // the surface-specific bits: title, description, the "🌟 sắp có"
+    // placeholder, and the page-indicator footer.
     const buildTaskViewEmbed = (account) => {
       const accountName = String(account?.accountName || "(unnamed roster)");
-      const characters = Array.isArray(account?.characters)
-        ? account.characters
-        : [];
       const embed = new EmbedBuilder()
         .setColor(UI.colors.neutral)
         .setTitle(`📝 Side tasks · ${accountName}`);
 
-      const charsWithTasks = characters.filter(
-        (c) => Array.isArray(c?.sideTasks) && c.sideTasks.length > 0
-      );
+      const { fields, totals } = buildAccountTaskFields(account, {
+        UI,
+        getClassEmoji,
+        truncateText,
+      });
 
-      if (charsWithTasks.length === 0) {
+      if (totals.charsWithTasks === 0) {
         embed.setDescription(
           [
             "Account này chưa có side task nào nha.",
@@ -831,81 +832,7 @@ function createRaidStatusCommand(deps) {
         ].join("\n")
       );
 
-      let totalDaily = 0;
-      let totalWeekly = 0;
-      let totalDailyDone = 0;
-      let totalWeeklyDone = 0;
-
-      // Inline-field 2-column layout matching /raid-status raid view:
-      // every char field is `inline: true`, with a ZWS spacer between
-      // each pair so Discord packs exactly 2 cards per row instead of 3.
-      // Odd char at the end pairs with one extra spacer so it doesn't
-      // get stretched full-width by Discord's auto-layout.
-      const inlineSpacer = { name: "​", value: "​", inline: true };
-
-      const buildTaskCharField = (character) => {
-        const charName = getCharacterName(character);
-        const itemLevel = Number(character.itemLevel) || 0;
-        const classIcon = getClassEmoji(character.class);
-        const namePrefix = classIcon ? `${classIcon} ` : "";
-        const fieldName = truncateText(
-          `${namePrefix}${charName} · ${itemLevel}`,
-          256
-        );
-
-        const sideTasks = Array.isArray(character.sideTasks)
-          ? character.sideTasks
-          : [];
-        const dailyTasks = sideTasks.filter((t) => t?.reset === "daily");
-        const weeklyTasks = sideTasks.filter((t) => t?.reset === "weekly");
-        totalDaily += dailyTasks.length;
-        totalWeekly += weeklyTasks.length;
-        totalDailyDone += dailyTasks.filter((t) => t?.completed).length;
-        totalWeeklyDone += weeklyTasks.filter((t) => t?.completed).length;
-
-        // Section/task icons mirror /raid-status raid view: 🟢 done /
-        // ⚪ pending. Section headers carry just bold text (no emoji
-        // prefix) since the per-task icon column already conveys state
-        // and the cycle name ("Daily" / "Weekly") is unambiguous.
-        const lines = [];
-        if (dailyTasks.length > 0) {
-          const dailyDone = dailyTasks.filter((t) => t.completed).length;
-          lines.push(`**Daily** · ${dailyDone}/${dailyTasks.length}`);
-          for (const task of dailyTasks) {
-            const icon = task.completed ? UI.icons.done : UI.icons.pending;
-            lines.push(`${icon} ${task.name}`);
-          }
-        }
-        if (weeklyTasks.length > 0) {
-          if (lines.length > 0) lines.push("");
-          const weeklyDone = weeklyTasks.filter((t) => t.completed).length;
-          lines.push(`**Weekly** · ${weeklyDone}/${weeklyTasks.length}`);
-          for (const task of weeklyTasks) {
-            const icon = task.completed ? UI.icons.done : UI.icons.pending;
-            lines.push(`${icon} ${task.name}`);
-          }
-        }
-        return {
-          name: fieldName,
-          value: truncateText(lines.join("\n") || "(không có task)", 1024),
-          inline: true,
-        };
-      };
-
-      // 2-column packing: field cap is 25, each char takes 2 fields
-      // (card + spacer). Cap at 11 chars (= 22 fields) so the
-      // roster-wide placeholder field below + future legend field still
-      // fit within Discord's 25-field embed cap with one slot of room.
-      const visibleChars = charsWithTasks.slice(0, 11);
-      for (let i = 0; i < visibleChars.length; i += 2) {
-        embed.addFields(buildTaskCharField(visibleChars[i]));
-        embed.addFields(inlineSpacer);
-        embed.addFields(
-          visibleChars[i + 1]
-            ? buildTaskCharField(visibleChars[i + 1])
-            : inlineSpacer
-        );
-      }
+      embed.addFields(...fields);
 
       // Placeholder field for the upcoming "shared task per roster"
       // feature - one task definition that applies to every char in
@@ -923,15 +850,11 @@ function createRaidStatusCommand(deps) {
       });
 
       const footerParts = [];
-      if (totalDaily > 0) {
-        footerParts.push(
-          `${UI.icons.done} ${totalDailyDone}/${totalDaily} daily`
-        );
+      if (totals.daily > 0) {
+        footerParts.push(`${UI.icons.done} ${totals.dailyDone}/${totals.daily} daily`);
       }
-      if (totalWeekly > 0) {
-        footerParts.push(
-          `${UI.icons.done} ${totalWeeklyDone}/${totalWeekly} weekly`
-        );
+      if (totals.weekly > 0) {
+        footerParts.push(`${UI.icons.done} ${totals.weeklyDone}/${totals.weekly} weekly`);
       }
       if (accounts.length > 1) {
         footerParts.push(`Page ${currentPage + 1}/${accounts.length}`);

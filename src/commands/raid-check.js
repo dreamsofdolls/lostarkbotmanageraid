@@ -5,6 +5,7 @@ const { createEditUi } = require("./raid-check/edit-ui");
 const { createSyncUi } = require("./raid-check/sync-ui");
 const { isSupportClass, getClassEmoji } = require("../data/Class");
 const { buildNoticeEmbed } = require("../raid/shared");
+const { buildAccountTaskFields } = require("../raid/task-view");
 
 const RAID_CHECK_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 
@@ -1467,16 +1468,15 @@ function createRaidCheckCommand(deps) {
   }
 
   // Read-only Task view click handler triggered by the
-  // "📝 Xem tasks" button in /raid-check raid:all. Pulls the target
-  // user's roster (with side tasks) and renders an ephemeral embed per
-  // account, mirroring the /raid-status Task view layout so a Manager
-  // sees the same information their member sees. Read-only: no toggle
-  // dropdown, no save path.
+  // "📝 Xem tasks" button in /raid-check raid:all. Renders ONE embed
+  // per account with pagination (Prev/Next) when the user has > 1
+  // account-with-tasks - matches /raid-status Task view's compact 2-
+  // column layout instead of stacking N embeds, which Trainee flagged
+  // as "cồng kềnh" on the round-29 first cut.
   //
-  // Privacy note: side-task data is pulled by Manager design call
-  // (round 29) - members are not notified when a Manager views their
-  // tasks. Reply uses MessageFlags.Ephemeral so the embed never lands
-  // in the channel transcript.
+  // Read-only: no toggle dropdown (Manager doesn't modify member
+  // data). Reply is ephemeral so the data never lands in the channel
+  // transcript - members aren't notified when a Manager spot-checks.
   async function handleRaidCheckViewTasksClick(interaction, targetDiscordId) {
     if (!targetDiscordId) {
       await interaction.reply({
@@ -1537,102 +1537,95 @@ function createRaidCheckCommand(deps) {
       return;
     }
 
-    // Build 1 embed per account-with-tasks so layout stays clean even
-    // when a user has 2-3 rosters. Discord caps at 10 embeds per reply
-    // which is far more than realistic account counts.
     const displayName =
       userDoc.discordDisplayName ||
       userDoc.discordGlobalName ||
       userDoc.discordUsername ||
       `<@${targetDiscordId}>`;
-    const embeds = accountsWithTasks.slice(0, 10).map((account) => {
-      const accountName = String(account.accountName || "(unnamed roster)");
-      const characters = Array.isArray(account.characters)
-        ? account.characters
-        : [];
-      const charsWithTasks = characters.filter(
-        (c) => Array.isArray(c?.sideTasks) && c.sideTasks.length > 0
-      );
+    const totalPages = accountsWithTasks.length;
 
+    // Body delegated to the shared helper so the Manager view renders
+    // the same per-char layout that the user sees in /raid-status. This
+    // surface owns the title (display name + roster), pagination footer,
+    // and the "Read-only" suffix that signals the Manager can look but
+    // not toggle.
+    const buildAccountEmbed = (account, pageIdx) => {
+      const accountName = String(account.accountName || "(unnamed roster)");
       const embed = new EmbedBuilder()
         .setColor(UI.colors.neutral)
         .setTitle(`📝 ${displayName} · ${accountName}`);
-
-      let totalDaily = 0;
-      let totalWeekly = 0;
-      let totalDailyDone = 0;
-      let totalWeeklyDone = 0;
-
-      const inlineSpacer = { name: "​", value: "​", inline: true };
-      const buildCharField = (character) => {
-        const charName = String(character?.name || "").trim();
-        const itemLevel = Number(character.itemLevel) || 0;
-        const sideTasks = Array.isArray(character.sideTasks)
-          ? character.sideTasks
-          : [];
-        const dailyTasks = sideTasks.filter((t) => t?.reset === "daily");
-        const weeklyTasks = sideTasks.filter((t) => t?.reset === "weekly");
-        totalDaily += dailyTasks.length;
-        totalWeekly += weeklyTasks.length;
-        totalDailyDone += dailyTasks.filter((t) => t?.completed).length;
-        totalWeeklyDone += weeklyTasks.filter((t) => t?.completed).length;
-
-        const lines = [];
-        if (dailyTasks.length > 0) {
-          const dailyDone = dailyTasks.filter((t) => t.completed).length;
-          lines.push(`**Daily** · ${dailyDone}/${dailyTasks.length}`);
-          for (const task of dailyTasks) {
-            const icon = task.completed ? UI.icons.done : UI.icons.pending;
-            lines.push(`${icon} ${task.name}`);
-          }
-        }
-        if (weeklyTasks.length > 0) {
-          if (lines.length > 0) lines.push("");
-          const weeklyDone = weeklyTasks.filter((t) => t.completed).length;
-          lines.push(`**Weekly** · ${weeklyDone}/${weeklyTasks.length}`);
-          for (const task of weeklyTasks) {
-            const icon = task.completed ? UI.icons.done : UI.icons.pending;
-            lines.push(`${icon} ${task.name}`);
-          }
-        }
-        return {
-          name: `${charName} · ${itemLevel}`,
-          value: lines.join("\n") || "(không có task)",
-          inline: true,
-        };
-      };
-
-      // 2-column packing matches /raid-status Task view: char field +
-      // ZWS spacer between pairs forces Discord to render exactly 2 per
-      // row. Cap 11 chars (= 22 fields) leaves room for the footer.
-      const visible = charsWithTasks.slice(0, 11);
-      for (let i = 0; i < visible.length; i += 2) {
-        embed.addFields(buildCharField(visible[i]));
-        embed.addFields(inlineSpacer);
-        embed.addFields(
-          visible[i + 1] ? buildCharField(visible[i + 1]) : inlineSpacer
-        );
-      }
-
+      const { fields, totals } = buildAccountTaskFields(account, {
+        UI,
+        getClassEmoji: () => "",
+        truncateText,
+      });
+      if (fields.length > 0) embed.addFields(...fields);
       const footerParts = [];
-      if (totalDaily > 0) {
-        footerParts.push(
-          `${UI.icons.done} ${totalDailyDone}/${totalDaily} daily`
-        );
+      if (totals.daily > 0) {
+        footerParts.push(`${UI.icons.done} ${totals.dailyDone}/${totals.daily} daily`);
       }
-      if (totalWeekly > 0) {
-        footerParts.push(
-          `${UI.icons.done} ${totalWeeklyDone}/${totalWeekly} weekly`
-        );
+      if (totals.weekly > 0) {
+        footerParts.push(`${UI.icons.done} ${totals.weeklyDone}/${totals.weekly} weekly`);
+      }
+      if (totalPages > 1) {
+        footerParts.push(`Page ${pageIdx + 1}/${totalPages}`);
       }
       footerParts.push("Read-only · Manager view");
       embed.setFooter({ text: footerParts.join(" · ") });
       return embed;
-    });
+    };
+
+    let currentPage = 0;
+    const buildComponents = (disabled) => {
+      if (totalPages <= 1) return [];
+      return [
+        buildPaginationRow(currentPage, totalPages, disabled, {
+          prevId: "raid-check-tasks-page:prev",
+          nextId: "raid-check-tasks-page:next",
+        }),
+      ];
+    };
 
     await interaction.reply({
-      embeds,
+      embeds: [buildAccountEmbed(accountsWithTasks[0], 0)],
+      components: buildComponents(false),
       flags: MessageFlags.Ephemeral,
+    });
+
+    if (totalPages <= 1) return;
+
+    const message = await interaction.fetchReply();
+    const collector = message.createMessageComponentCollector({
+      time: RAID_CHECK_PAGINATION_SESSION_MS,
+    });
+    collector.on("collect", async (component) => {
+      // Ephemeral message - only the original Manager can interact, so
+      // no per-user gating. Bound the customId to our prefix to avoid
+      // routing past stray clicks (defensive against shared message ids).
+      const id = component.customId || "";
+      if (id === "raid-check-tasks-page:prev") {
+        currentPage = Math.max(0, currentPage - 1);
+      } else if (id === "raid-check-tasks-page:next") {
+        currentPage = Math.min(totalPages - 1, currentPage + 1);
+      } else {
+        return;
+      }
+      await component
+        .update({
+          embeds: [buildAccountEmbed(accountsWithTasks[currentPage], currentPage)],
+          components: buildComponents(false),
+        })
+        .catch(() => {});
+    });
+    collector.on("end", async () => {
+      try {
+        await interaction.editReply({
+          embeds: [buildAccountEmbed(accountsWithTasks[currentPage], currentPage)],
+          components: buildComponents(true),
+        });
+      } catch {
+        /* token may have expired */
+      }
     });
   }
 
