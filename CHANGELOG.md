@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 
 ## 2026-04-27
 
+### Refactor (extract `buildAccountTaskFields` helper - DRY giữa /raid-status + /raid-check Manager Task view)
+- Round 29 đầu tiên duplicate ~80 LOC layout (per-char field + 2-col ZWS-spacer packing + totals math) ở cả `/raid-status` Task view và `/raid-check raid:all` Manager Task view. Trainee flag "cồng kềnh" → tớ extract pure helper `src/raid/task-view.js::buildAccountTaskFields(account, helpers)`. Cả 2 surface giờ thin wrapper - chỉ owns title/description/footer/placeholder, body delegate.
+- Manager view chuyển từ "stack N embed" → "1 embed/page với pagination Prev/Next" (parity /raid-status), session 5 phút giống raid-check pagination.
+- 3 unit test mới cho helper: 2-column packing math, empty-account, odd-char spacer pad. Suite 217 → 220.
+
 ### Added (`/raid-check raid:all` Manager Task view button cho monitoring)
 - Button mới `📝 Xem tasks` trong button row của `/raid-check raid:all`, chỉ hiện khi user filter narrow xuống 1 user cụ thể (parity vị trí với `Bật/Tắt auto-sync` button). Click → ephemeral followup embed hiển thị side tasks của user đó per-account, layout 2-column char fields giống `/raid-status` Task view, read-only (không có toggle dropdown).
 - Privacy note: round 28 tớ design schema-level isolation `accounts.characters.sideTasks` exclude khỏi raid-check projection. Round 29 reverse decision theo Manager design call - Manager cần monitor chore progress của member. Member không nhận notification khi Manager xem.

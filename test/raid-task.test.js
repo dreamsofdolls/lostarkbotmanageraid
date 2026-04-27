@@ -144,6 +144,90 @@ test("ensureSideTasks returns existing array unchanged", () => {
 // Privacy regression: /raid-check all-mode .select projection
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Shared task-view helper: pure function used by both /raid-status + /raid-check
+// ---------------------------------------------------------------------------
+
+test("buildAccountTaskFields rolls up totals + 2-column packs char fields", () => {
+  const { buildAccountTaskFields } = require("../src/raid/task-view");
+  const account = {
+    accountName: "main",
+    characters: [
+      {
+        name: "Alpha",
+        class: "Berserker",
+        itemLevel: 1700,
+        sideTasks: [
+          { taskId: "1", name: "Una", reset: "daily", completed: true },
+          { taskId: "2", name: "Chaos", reset: "daily", completed: false },
+        ],
+      },
+      {
+        name: "Beta",
+        class: "Bard",
+        itemLevel: 1690,
+        sideTasks: [
+          { taskId: "3", name: "Guardian", reset: "weekly", completed: true },
+        ],
+      },
+      // No-tasks char should be filtered out.
+      { name: "Gamma", class: "Sorc", itemLevel: 1680, sideTasks: [] },
+    ],
+  };
+  const helpers = {
+    UI: { icons: { done: "🟢", pending: "⚪" } },
+    truncateText: (s) => s,
+  };
+  const { fields, totals } = buildAccountTaskFields(account, helpers);
+
+  assert.equal(totals.charsWithTasks, 2, "Gamma filtered out");
+  assert.equal(totals.daily, 2);
+  assert.equal(totals.dailyDone, 1);
+  assert.equal(totals.weekly, 1);
+  assert.equal(totals.weeklyDone, 1);
+  // 2-column packing: 2 chars => 1 char + spacer + 1 char = 3 fields.
+  assert.equal(fields.length, 3, "expected 3 fields for 2 chars (card + spacer + card)");
+  assert.equal(fields[1].name, "​", "middle field is a ZWS spacer");
+  assert.match(fields[0].name, /Alpha/);
+  assert.match(fields[2].name, /Beta/);
+});
+
+test("buildAccountTaskFields returns empty fields when no chars-with-tasks", () => {
+  const { buildAccountTaskFields } = require("../src/raid/task-view");
+  const account = {
+    accountName: "empty",
+    characters: [{ name: "X", itemLevel: 1700, sideTasks: [] }],
+  };
+  const { fields, totals } = buildAccountTaskFields(account, {
+    UI: { icons: { done: "🟢", pending: "⚪" } },
+  });
+  assert.equal(fields.length, 0);
+  assert.equal(totals.charsWithTasks, 0);
+  assert.equal(totals.rendered, 0);
+});
+
+test("buildAccountTaskFields odd char count pads with spacer to keep 2-column", () => {
+  const { buildAccountTaskFields } = require("../src/raid/task-view");
+  const account = {
+    accountName: "main",
+    characters: [
+      {
+        name: "Solo",
+        class: "Reaper",
+        itemLevel: 1700,
+        sideTasks: [{ taskId: "1", name: "X", reset: "daily", completed: false }],
+      },
+    ],
+  };
+  const { fields } = buildAccountTaskFields(account, {
+    UI: { icons: { done: "🟢", pending: "⚪" } },
+  });
+  // 1 char => 1 card + spacer + spacer (3 fields, both trailing slots are spacers).
+  assert.equal(fields.length, 3);
+  assert.equal(fields[1].name, "​");
+  assert.equal(fields[2].name, "​");
+});
+
 test("PROJECTION: raid-check all-mode select() includes sideTasks (Manager Task view)", () => {
   // Round-29: Manager-side Task view in /raid-check needs the side-task
   // subtree on the lean docs. The .select() must enumerate explicit
