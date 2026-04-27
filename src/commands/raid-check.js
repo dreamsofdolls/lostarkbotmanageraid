@@ -1466,6 +1466,176 @@ function createRaidCheckCommand(deps) {
     });
   }
 
+  // Read-only Task view click handler triggered by the
+  // "📝 Xem tasks" button in /raid-check raid:all. Pulls the target
+  // user's roster (with side tasks) and renders an ephemeral embed per
+  // account, mirroring the /raid-status Task view layout so a Manager
+  // sees the same information their member sees. Read-only: no toggle
+  // dropdown, no save path.
+  //
+  // Privacy note: side-task data is pulled by Manager design call
+  // (round 29) - members are not notified when a Manager views their
+  // tasks. Reply uses MessageFlags.Ephemeral so the embed never lands
+  // in the channel transcript.
+  async function handleRaidCheckViewTasksClick(interaction, targetDiscordId) {
+    if (!targetDiscordId) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Button đã hết hạn",
+            description: "Discord đã rớt context của button này (chắc bot vừa restart). Refresh `/raid-check raid:all` rồi thử lại nha.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const userDoc = await User.findOne({ discordId: targetDiscordId })
+      .select(
+        "discordId discordUsername discordGlobalName discordDisplayName accounts.accountName accounts.characters.name accounts.characters.class accounts.characters.itemLevel accounts.characters.sideTasks"
+      )
+      .lean();
+
+    if (!userDoc) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Không tìm thấy user",
+            description: `Artist không thấy doc của <@${targetDiscordId}> trong DB. Có thể user chưa từng dùng bot.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const accounts = Array.isArray(userDoc.accounts) ? userDoc.accounts : [];
+    const accountsWithTasks = accounts.filter((account) => {
+      const chars = Array.isArray(account?.characters) ? account.characters : [];
+      return chars.some(
+        (c) => Array.isArray(c?.sideTasks) && c.sideTasks.length > 0
+      );
+    });
+
+    if (accountsWithTasks.length === 0) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "info",
+            title: `📝 Tasks · <@${targetDiscordId}>`,
+            description: [
+              `User <@${targetDiscordId}> chưa đăng ký side task nào.`,
+              "Họ chưa từng dùng `/raid-task add` để track chore daily/weekly.",
+            ].join("\n"),
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    // Build 1 embed per account-with-tasks so layout stays clean even
+    // when a user has 2-3 rosters. Discord caps at 10 embeds per reply
+    // which is far more than realistic account counts.
+    const displayName =
+      userDoc.discordDisplayName ||
+      userDoc.discordGlobalName ||
+      userDoc.discordUsername ||
+      `<@${targetDiscordId}>`;
+    const embeds = accountsWithTasks.slice(0, 10).map((account) => {
+      const accountName = String(account.accountName || "(unnamed roster)");
+      const characters = Array.isArray(account.characters)
+        ? account.characters
+        : [];
+      const charsWithTasks = characters.filter(
+        (c) => Array.isArray(c?.sideTasks) && c.sideTasks.length > 0
+      );
+
+      const embed = new EmbedBuilder()
+        .setColor(UI.colors.neutral)
+        .setTitle(`📝 ${displayName} · ${accountName}`);
+
+      let totalDaily = 0;
+      let totalWeekly = 0;
+      let totalDailyDone = 0;
+      let totalWeeklyDone = 0;
+
+      const inlineSpacer = { name: "​", value: "​", inline: true };
+      const buildCharField = (character) => {
+        const charName = String(character?.name || "").trim();
+        const itemLevel = Number(character.itemLevel) || 0;
+        const sideTasks = Array.isArray(character.sideTasks)
+          ? character.sideTasks
+          : [];
+        const dailyTasks = sideTasks.filter((t) => t?.reset === "daily");
+        const weeklyTasks = sideTasks.filter((t) => t?.reset === "weekly");
+        totalDaily += dailyTasks.length;
+        totalWeekly += weeklyTasks.length;
+        totalDailyDone += dailyTasks.filter((t) => t?.completed).length;
+        totalWeeklyDone += weeklyTasks.filter((t) => t?.completed).length;
+
+        const lines = [];
+        if (dailyTasks.length > 0) {
+          const dailyDone = dailyTasks.filter((t) => t.completed).length;
+          lines.push(`**Daily** · ${dailyDone}/${dailyTasks.length}`);
+          for (const task of dailyTasks) {
+            const icon = task.completed ? UI.icons.done : UI.icons.pending;
+            lines.push(`${icon} ${task.name}`);
+          }
+        }
+        if (weeklyTasks.length > 0) {
+          if (lines.length > 0) lines.push("");
+          const weeklyDone = weeklyTasks.filter((t) => t.completed).length;
+          lines.push(`**Weekly** · ${weeklyDone}/${weeklyTasks.length}`);
+          for (const task of weeklyTasks) {
+            const icon = task.completed ? UI.icons.done : UI.icons.pending;
+            lines.push(`${icon} ${task.name}`);
+          }
+        }
+        return {
+          name: `${charName} · ${itemLevel}`,
+          value: lines.join("\n") || "(không có task)",
+          inline: true,
+        };
+      };
+
+      // 2-column packing matches /raid-status Task view: char field +
+      // ZWS spacer between pairs forces Discord to render exactly 2 per
+      // row. Cap 11 chars (= 22 fields) leaves room for the footer.
+      const visible = charsWithTasks.slice(0, 11);
+      for (let i = 0; i < visible.length; i += 2) {
+        embed.addFields(buildCharField(visible[i]));
+        embed.addFields(inlineSpacer);
+        embed.addFields(
+          visible[i + 1] ? buildCharField(visible[i + 1]) : inlineSpacer
+        );
+      }
+
+      const footerParts = [];
+      if (totalDaily > 0) {
+        footerParts.push(
+          `${UI.icons.done} ${totalDailyDone}/${totalDaily} daily`
+        );
+      }
+      if (totalWeekly > 0) {
+        footerParts.push(
+          `${UI.icons.done} ${totalWeeklyDone}/${totalWeekly} weekly`
+        );
+      }
+      footerParts.push("Read-only · Manager view");
+      embed.setFooter({ text: footerParts.join(" · ") });
+      return embed;
+    });
+
+    await interaction.reply({
+      embeds,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
   // Self-only re-enable handler reachable from the button shipped inside
   // the disable-on-behalf DM. Mirror of handleRaidCheckDisableAutoSelfClick
   // but flips the flag back to true. Self-only: clicker must equal
@@ -1624,6 +1794,19 @@ function createRaidCheckCommand(deps) {
     if (action === "disable-auto-one") {
       const targetDiscordId = parts[2] || null;
       await handleRaidCheckDisableAutoOneClick(interaction, targetDiscordId);
+      return;
+    }
+
+    // view-tasks: customId is `raid-check:view-tasks:<discordId>`. Read-
+    // only Manager spot-check of a member's per-char side tasks. Lives
+    // ONLY in /raid-check raid:all (the cross-raid overview button row
+    // adds it) and only when user filter narrows to one user. Renders
+    // an ephemeral followup so the embed dismisses on its own and
+    // doesn't leak member task data into the raid-check pagination
+    // session that other people in the channel can also see.
+    if (action === "view-tasks") {
+      const targetDiscordId = parts[2] || null;
+      await handleRaidCheckViewTasksClick(interaction, targetDiscordId);
       return;
     }
 

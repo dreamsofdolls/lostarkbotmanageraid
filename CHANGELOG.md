@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 
 ## 2026-04-27
 
+### Added (`/raid-check raid:all` Manager Task view button cho monitoring)
+- Button mới `📝 Xem tasks` trong button row của `/raid-check raid:all`, chỉ hiện khi user filter narrow xuống 1 user cụ thể (parity vị trí với `Bật/Tắt auto-sync` button). Click → ephemeral followup embed hiển thị side tasks của user đó per-account, layout 2-column char fields giống `/raid-status` Task view, read-only (không có toggle dropdown).
+- Privacy note: round 28 tớ design schema-level isolation `accounts.characters.sideTasks` exclude khỏi raid-check projection. Round 29 reverse decision theo Manager design call - Manager cần monitor chore progress của member. Member không nhận notification khi Manager xem.
+- Projection: `RAID_CHECK_USER_QUERY_FIELDS` + all-mode select bổ sung `accounts.characters.sideTasks`. 2 regression test flip từ "must NOT include sideTasks" → "must INCLUDE sideTasks", giữ explicit-enumeration shape (vẫn không cho whole `accounts` blob để future fields opt-in chọn lọc).
+- Click ephemeral nên data không leak vào channel transcript. Discord caps 10 embeds/reply, 1 embed/account thoải mái cho realistic 1-3 account user.
+
 ### Fixed (real-time countdown wording: "Next sync ago" awkwardness sau khi qua mốc 0)
 - Discord `<t:UNIX:R>` tick client-side liên tục, khi nextEligible qua mốc 0 → flip sang past tense "16 seconds ago". Wording cũ `Next sync <t:R>` đọc thành `Next sync 16 seconds ago` nghe sai (manager 15s cooldown idle expose bug rõ nhất).
 - Reword: `Next sync` → `Sync ready`, `Next refresh` → `Refresh ready`. Cả 2 tense đọc OK: future `Sync ready in 14s` (sắp ready) + past `Sync ready 16s ago` (đã ready 16s rồi). Test pin updated. HELP_SECTIONS notes synced.
