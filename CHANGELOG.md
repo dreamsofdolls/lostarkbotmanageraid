@@ -36,6 +36,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `/edit-roster` Confirm no longer wipes a kept character's `/raid-task` side-task entries; the shared char-record builder now copies `sideTasks` alongside `tasks`.
 - `/edit-roster` no longer silently deletes saved characters beyond the 20-character picker cap on legacy rosters; off-window chars stay untouched and the picker shows a dedicated warning.
 - `/raid-status` side-task toggle now binds to the captured roster name instead of the page index, so a concurrent `/remove-roster` mid-session can no longer redirect the toggle into a different roster.
+- Welcome pin emoji no longer goes dead after each bot restart; the emoji bootstrap now dedups duplicate-basename asset files (preferring `.png`) instead of alternately deleting + reuploading the same persona's emoji and churning its ID. Removed `assets/artist-icons/{shy.webp,neutral.webp,note.jpg}` that were colliding with their `.png` siblings on `path.parse(filename).name`.
 
 ### Refactor
 - Extracted `buildAccountTaskFields()` into `src/raid/task-view.js` so `/raid-status` and `/raid-check` share the same task-card renderer and totals math.

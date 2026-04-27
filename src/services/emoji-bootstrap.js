@@ -158,13 +158,40 @@ async function bootstrapEmojiFolder(client, config) {
     return ZERO;
   }
 
-  const files = fs
+  const allFiles = fs
     .readdirSync(iconsDir)
     .filter((f) => /\.(png|webp|gif|jpg|jpeg)$/i.test(f));
-  if (files.length === 0) {
+  if (allFiles.length === 0) {
     console.warn(`[${namespace}] no image files in ${iconsDir}; skipping bootstrap`);
     return ZERO;
   }
+
+  // Dedup by basename. The bootstrap keys every emoji on
+  // `path.parse(filename).name` (extension stripped), so two files like
+  // `shy.png` + `shy.webp` collide on key "shy". Without this guard, each
+  // boot would alternate-delete-reupload the two variants and churn the
+  // emoji ID, which silently breaks any pinned message that hardcoded the
+  // previous ID. Prefer .png > .gif > .jpg/.jpeg > .webp on conflict and
+  // warn loudly so the dev removes the duplicate from the asset folder.
+  const extPriority = { png: 0, gif: 1, jpg: 2, jpeg: 2, webp: 3 };
+  const filesByBase = new Map();
+  for (const f of allFiles) {
+    const base = path.parse(f).name;
+    const ext = path.parse(f).ext.replace(/^\./, "").toLowerCase();
+    const prio = extPriority[ext] ?? 99;
+    const current = filesByBase.get(base);
+    if (!current || prio < current.prio) {
+      filesByBase.set(base, { filename: f, prio });
+    }
+  }
+  if (filesByBase.size !== allFiles.length) {
+    const winners = new Set([...filesByBase.values()].map((v) => v.filename));
+    const dropped = allFiles.filter((f) => !winners.has(f));
+    console.warn(
+      `[${namespace}] duplicate basenames in ${iconsDir} - ignoring ${dropped.length} non-preferred file(s): ${dropped.join(", ")}. Remove them from the asset folder to silence this warning.`
+    );
+  }
+  const files = [...filesByBase.values()].map((v) => v.filename);
 
   const appId = client.application?.id || client.user?.id;
   if (!appId) {
