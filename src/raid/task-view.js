@@ -1,5 +1,7 @@
 "use strict";
 
+const { pack2Columns } = require("./shared");
+
 /**
  * Shared helper for the Task view layout used by both `/raid-status` and
  * `/raid-check raid:all` (Manager spot-check). Renders the per-character
@@ -56,8 +58,6 @@ function buildAccountTaskFields(account, helpers) {
     return { fields: [], totals };
   }
 
-  const inlineSpacer = { name: "​", value: "​", inline: true };
-
   const buildCharField = (character) => {
     const charName = getCharacterName(character);
     const itemLevel = Number(character.itemLevel) || 0;
@@ -105,14 +105,7 @@ function buildAccountTaskFields(account, helpers) {
 
   const visible = charsWithTasks.slice(0, PAGE_CHAR_CAP);
   totals.rendered = visible.length;
-  const fields = [];
-  for (let i = 0; i < visible.length; i += 2) {
-    fields.push(buildCharField(visible[i]));
-    fields.push(inlineSpacer);
-    fields.push(
-      visible[i + 1] ? buildCharField(visible[i + 1]) : inlineSpacer
-    );
-  }
+  const fields = pack2Columns(visible.map(buildCharField));
 
   return { fields, totals };
 }

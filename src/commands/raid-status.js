@@ -1,5 +1,5 @@
 const { isSupportClass, getClassEmoji } = require("../data/Class");
-const { buildNoticeEmbed } = require("../raid/shared");
+const { buildNoticeEmbed, pack2Columns } = require("../raid/shared");
 const { buildAccountTaskFields } = require("../raid/task-view");
 
 const STATUS_PAGINATION_SESSION_MS = 5 * 60 * 1000;
@@ -300,7 +300,6 @@ function createRaidStatusCommand(deps) {
       return embed;
     }
 
-    const inlineSpacer = { name: "\u200B", value: "\u200B", inline: true };
     // When `hideIneligibleChars` is on (caller has an active raid filter),
     // drop chars whose getRaidsFor returns empty - a locked "🔒 Not
     // eligible yet" card for every char below the iLvl gate is pure
@@ -323,15 +322,9 @@ function createRaidStatusCommand(deps) {
       return embed;
     }
 
-    for (let i = 0; i < visibleChars.length; i += 2) {
-      embed.addFields(buildCharacterField(visibleChars[i], getRaidsFor));
-      embed.addFields(inlineSpacer);
-      embed.addFields(
-        visibleChars[i + 1]
-          ? buildCharacterField(visibleChars[i + 1], getRaidsFor)
-          : inlineSpacer
-      );
-    }
+    embed.addFields(
+      ...pack2Columns(visibleChars.map((c) => buildCharacterField(c, getRaidsFor)))
+    );
 
     appendOutcomeField();
     return embed;
