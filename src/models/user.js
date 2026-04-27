@@ -22,6 +22,26 @@ const characterTaskSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// User-defined "side tasks" attached to a character. Distinct from `tasks`
+// above which tracks raid-clear completions ported from LoaLogs. Side tasks
+// are arbitrary daily/weekly chores the player wants to track (Una dailies,
+// Chaos runs, Guardian, GvG, anything). Auto-resets on the existing
+// scheduler tick using `lastResetAt` vs the cycle boundary so the player
+// doesn't have to clear flags manually. Field intentionally separate from
+// any /raid-check select projection - this data must never leak into
+// Manager-side views.
+const sideTaskSchema = new mongoose.Schema(
+  {
+    taskId: { type: String, required: true },
+    name: { type: String, required: true, maxlength: 60 },
+    reset: { type: String, enum: ["daily", "weekly"], required: true },
+    completed: { type: Boolean, default: false },
+    lastResetAt: { type: Number, default: 0 },
+    createdAt: { type: Number, default: () => Date.now() },
+  },
+  { _id: false }
+);
+
 const characterSchema = new mongoose.Schema(
   {
     id: { type: String, required: true },
@@ -54,6 +74,11 @@ const characterSchema = new mongoose.Schema(
       serca: { type: assignedRaidSchema, default: () => ({}) },
     },
     tasks: { type: [characterTaskSchema], default: [] },
+    // Per-character side tasks (daily/weekly chores). Cap is enforced at
+    // the command layer (/raid-task add) because Mongoose subdoc validators
+    // run against the whole array on every save and would reject legitimate
+    // toggle-complete flows on a character that previously had >cap entries.
+    sideTasks: { type: [sideTaskSchema], default: [] },
   },
   { _id: false }
 );

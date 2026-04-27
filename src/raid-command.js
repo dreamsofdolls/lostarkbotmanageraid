@@ -466,6 +466,11 @@ async function handleRaidManagementCommand(interaction) {
 
     if (interaction.commandName === "raid-announce") {
       await handleRaidAnnounceCommand(interaction);
+      return;
+    }
+
+    if (interaction.commandName === "raid-task") {
+      await handleRaidTaskCommand(interaction);
     }
   } finally {
     await cacheDiscordIdentityForExistingUser(interaction);
@@ -477,6 +482,9 @@ let handleRaidAnnounceCommand;
 let handleRaidAnnounceAutocomplete;
 let handleRaidAutoManageCommand;
 let handleRaidAutoManageAutocomplete;
+let handleRaidTaskCommand;
+let handleRaidTaskAutocomplete;
+let handleRaidTaskButton;
 
 let AUTO_MANAGE_SYNC_COOLDOWN_MS;
 let getAutoManageCooldownMsFromService;
@@ -504,9 +512,11 @@ let buildMaintenancePreview;
 let startRaidChannelScheduler;
 let startAutoManageDailyScheduler;
 let startMaintenanceScheduler;
+let startSideTaskResetScheduler;
 let getAutoCleanupSchedulerStartedAtMs;
 let getAutoManageSchedulerStartedAtMs;
 let getMaintenanceSchedulerStartedAtMs;
+let getSideTaskSchedulerStartedAtMs;
 
 let loadMonitorChannelCache;
 let getMonitorCacheHealth;
@@ -855,9 +865,11 @@ const raidSchedulerService = createRaidSchedulerService({
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
   startMaintenanceScheduler,
+  startSideTaskResetScheduler,
   getAutoCleanupSchedulerStartedAtMs,
   getAutoManageSchedulerStartedAtMs,
   getMaintenanceSchedulerStartedAtMs,
+  getSideTaskSchedulerStartedAtMs,
 } = raidSchedulerService);
 
 // Expose quiet-hours helpers for __test access. Tests exercise them via
@@ -879,6 +891,8 @@ const {
   MAINTENANCE_DAY_VN,
   MAINTENANCE_HOUR_VN,
   MAINTENANCE_MINUTE_VN,
+  dailyResetStartMs,
+  resetExpiredSideTasks,
 } = raidSchedulerService;
 
 const raidHelpCommandHandlers = createRaidHelpCommand({
@@ -961,6 +975,23 @@ const raidAutoManageCommandHandlers = createRaidAutoManageCommand({
   handleRaidAutoManageAutocomplete,
 } = raidAutoManageCommandHandlers);
 
+const { createRaidTaskCommand } = require("./commands/raid-task");
+const raidTaskCommandHandlers = createRaidTaskCommand({
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  MessageFlags,
+  User,
+  saveWithRetry,
+  loadUserForAutocomplete,
+});
+({
+  handleRaidTaskCommand,
+  handleRaidTaskAutocomplete,
+  handleRaidTaskButton,
+} = raidTaskCommandHandlers);
+
 const raidChannelCommandHandlers = createRaidChannelCommand({
   EmbedBuilder,
   MessageFlags,
@@ -994,6 +1025,8 @@ module.exports = {
   handleRaidChannelAutocomplete,
   handleRaidAutoManageAutocomplete,
   handleRaidAnnounceAutocomplete,
+  handleRaidTaskAutocomplete,
+  handleRaidTaskButton,
   handleRaidChannelMessage,
   handleRaidCheckButton,
   handleAddRosterButton,
@@ -1003,6 +1036,7 @@ module.exports = {
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
   startMaintenanceScheduler,
+  startSideTaskResetScheduler,
   parseRaidMessage,
   __test: {
     buildRaidCheckSnapshotFromUsers,
@@ -1043,6 +1077,8 @@ module.exports = {
     MAINTENANCE_DAY_VN,
     MAINTENANCE_HOUR_VN,
     MAINTENANCE_MINUTE_VN,
+    dailyResetStartMs,
+    resetExpiredSideTasks,
     buildEditableCharsByUser,
     getEligibleRaidsForChar,
     getCharRaidGateStatus,

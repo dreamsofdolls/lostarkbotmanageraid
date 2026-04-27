@@ -596,13 +596,27 @@ function createRaidStatusCommand(deps) {
 
     let currentPage = 0;
     let filterRaidId = null;
+    // View toggle: "raid" = default progress page, "task" = per-character
+    // side-task list (registered via /raid-task). Dropdown swaps the embed
+    // body + the third action row but keeps pagination semantics so the
+    // user stays on the same account when toggling views.
+    let currentView = "raid";
 
-    // Build the current page's embed given the active (page, raid-filter)
-    // pair. Rebuilt on every state change instead of pre-baking a pages[]
-    // array because any filter pick invalidates every pre-built embed -
-    // /raid-status's roster count is small enough (<10 accounts typical)
-    // that one buildAccountPageEmbed per interaction is zero-cost.
+    // Build the current page's embed given the active (page, raid-filter,
+    // view) triple. Rebuilt on every state change instead of pre-baking a
+    // pages[] array because any filter pick invalidates every pre-built
+    // embed - /raid-status's roster count is small enough (<10 accounts
+    // typical) that one buildAccountPageEmbed per interaction is zero-cost.
+    //
+    // When currentView === "task", dispatch to buildTaskViewEmbed (defined
+    // further below) which renders the per-character side-task list for
+    // the current page's account. The raid filter doesn't apply in task
+    // view but its state is preserved so toggling back keeps the user's
+    // raid filter pick.
     const buildCurrentEmbed = () => {
+      if (currentView === "task") {
+        return buildTaskViewEmbed(accounts[currentPage]);
+      }
       const getRaidsFor = filterRaidId
         ? (ch) =>
             baseGetRaidsFor(ch).filter(
@@ -718,9 +732,208 @@ function createRaidStatusCommand(deps) {
     const buildSyncRow = (disabled) =>
       new ActionRowBuilder().addComponents(buildSyncButton(disabled));
 
+    // Build the Task-view embed for the current page's account. Per-char
+    // grouping with daily + weekly subsections inline. Fields are capped
+    // at 25 (Discord limit) so accounts with > ~12 chars-with-tasks would
+    // truncate; not a real concern at our scale (typical account has < 8
+    // chars). Fields stay within the 1024-char-per-field budget because
+    // task names are capped at 60 chars × 8 tasks max per char.
+    const buildTaskViewEmbed = (account) => {
+      const accountName = String(account?.accountName || "(unnamed roster)");
+      const characters = Array.isArray(account?.characters)
+        ? account.characters
+        : [];
+      const embed = new EmbedBuilder()
+        .setColor(UI.colors.neutral)
+        .setTitle(`📝 Side tasks · ${accountName}`);
+
+      const charsWithTasks = characters.filter(
+        (c) => Array.isArray(c?.sideTasks) && c.sideTasks.length > 0
+      );
+
+      if (charsWithTasks.length === 0) {
+        embed.setDescription(
+          [
+            "Account này chưa có side task nào nha.",
+            "",
+            "**Cách thêm:** `/raid-task add character:<char> name:<tên> reset:<daily|weekly>`",
+            "**Cap:** 3 daily + 5 weekly mỗi character.",
+            "**Auto-reset:** Daily 17:00 VN · Weekly 17:00 VN thứ 4.",
+          ].join("\n")
+        );
+        return embed;
+      }
+
+      embed.setDescription(
+        [
+          "Bấm dropdown bên dưới để toggle complete cho từng task.",
+          "Auto-reset: Daily 17:00 VN · Weekly 17:00 VN thứ 4.",
+        ].join("\n")
+      );
+
+      let totalDaily = 0;
+      let totalWeekly = 0;
+      let totalDailyDone = 0;
+      let totalWeeklyDone = 0;
+
+      for (const character of charsWithTasks.slice(0, 25)) {
+        const charName = getCharacterName(character);
+        const itemLevel = Number(character.itemLevel) || 0;
+        const classIcon = getClassEmoji(character.class);
+        const namePrefix = classIcon ? `${classIcon} ` : "";
+        const fieldName = truncateText(
+          `${namePrefix}${charName} · ${itemLevel}`,
+          256
+        );
+
+        const sideTasks = Array.isArray(character.sideTasks)
+          ? character.sideTasks
+          : [];
+        const dailyTasks = sideTasks.filter((t) => t?.reset === "daily");
+        const weeklyTasks = sideTasks.filter((t) => t?.reset === "weekly");
+        totalDaily += dailyTasks.length;
+        totalWeekly += weeklyTasks.length;
+        totalDailyDone += dailyTasks.filter((t) => t?.completed).length;
+        totalWeeklyDone += weeklyTasks.filter((t) => t?.completed).length;
+
+        const lines = [];
+        if (dailyTasks.length > 0) {
+          lines.push(`**🌒 Daily (${dailyTasks.filter((t) => t.completed).length}/${dailyTasks.length})**`);
+          for (const task of dailyTasks) {
+            const icon = task.completed ? "✅" : "⬜";
+            lines.push(`${icon} ${task.name}`);
+          }
+        }
+        if (weeklyTasks.length > 0) {
+          if (lines.length > 0) lines.push("");
+          lines.push(`**📅 Weekly (${weeklyTasks.filter((t) => t.completed).length}/${weeklyTasks.length})**`);
+          for (const task of weeklyTasks) {
+            const icon = task.completed ? "✅" : "⬜";
+            lines.push(`${icon} ${task.name}`);
+          }
+        }
+        embed.addFields({
+          name: fieldName,
+          value: truncateText(lines.join("\n") || "(không có task)", 1024),
+          inline: false,
+        });
+      }
+
+      const footerParts = [];
+      if (totalDaily > 0) {
+        footerParts.push(`🌒 ${totalDailyDone}/${totalDaily} daily`);
+      }
+      if (totalWeekly > 0) {
+        footerParts.push(`📅 ${totalWeeklyDone}/${totalWeekly} weekly`);
+      }
+      if (accounts.length > 1) {
+        footerParts.push(`Page ${currentPage + 1}/${accounts.length}`);
+      }
+      if (footerParts.length > 0) {
+        embed.setFooter({ text: footerParts.join(" · ") });
+      }
+      return embed;
+    };
+
+    const buildViewToggleRow = (disabled) => {
+      const options = [
+        {
+          label: "Tiến độ raid",
+          description: "Xem progress raid đã/chưa clear theo từng character",
+          value: "raid",
+          emoji: "📋",
+          default: currentView === "raid",
+        },
+        {
+          label: "Side tasks",
+          description: "Xem + toggle daily/weekly task tự đăng ký",
+          value: "task",
+          emoji: "📝",
+          default: currentView === "task",
+        },
+      ];
+      return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId("status-view:toggle")
+          .setPlaceholder("Chọn view...")
+          .setDisabled(disabled)
+          .addOptions(options)
+      );
+    };
+
+    // Toggle dropdown for Task view. Lists every task of the CURRENT
+    // page's account, capped at 25 (Discord StringSelect limit). Value
+    // shape: `<charName>::<taskId>` so the collector can resolve back
+    // to the character + task pair without a second lookup. Char names
+    // never contain `::` (Discord-allowed char set excludes it from
+    // friendly-name validation in this codebase) so the separator is
+    // collision-safe.
+    const buildTaskToggleRow = (disabled) => {
+      const account = accounts[currentPage];
+      const characters = Array.isArray(account?.characters)
+        ? account.characters
+        : [];
+      const options = [];
+      for (const character of characters) {
+        const charName = getCharacterName(character);
+        const sideTasks = Array.isArray(character.sideTasks)
+          ? character.sideTasks
+          : [];
+        for (const task of sideTasks) {
+          const icon = task.completed ? "✅" : "⬜";
+          const cycleIcon = task.reset === "daily" ? "🌒" : "📅";
+          const label = truncateText(
+            `${icon} ${charName} · ${cycleIcon} ${task.name}`,
+            100
+          );
+          options.push({
+            label,
+            value: `${charName}::${task.taskId}`.slice(0, 100),
+          });
+          if (options.length >= 25) break;
+        }
+        if (options.length >= 25) break;
+      }
+      if (options.length === 0) {
+        // No tasks → render a disabled placeholder dropdown so the row
+        // height stays consistent with raid view, and nudge the user
+        // toward /raid-task add.
+        return new ActionRowBuilder().addComponents(
+          new StringSelectMenuBuilder()
+            .setCustomId("status-task:toggle")
+            .setPlaceholder("Chưa có task nào - dùng /raid-task add để thêm")
+            .setDisabled(true)
+            .addOptions([{ label: "(empty)", value: "noop" }])
+        );
+      }
+      return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId("status-task:toggle")
+          .setPlaceholder("Bấm để toggle complete...")
+          .setDisabled(disabled)
+          .addOptions(options)
+      );
+    };
+
     const buildComponents = (disabled) => {
       const rows = [];
       const showSync = statusUserMeta.autoManageEnabled;
+      if (currentView === "task") {
+        // Task view: pagination (when > 1 account) + view toggle + task
+        // toggle dropdown. No raid-filter (irrelevant), no sync button
+        // (toggle complete writes directly, no bible round-trip).
+        if (accounts.length > 1) {
+          rows.push(
+            buildPaginationRow(currentPage, accounts.length, disabled, {
+              prevId: "status:prev",
+              nextId: "status:next",
+            })
+          );
+        }
+        rows.push(buildViewToggleRow(disabled));
+        rows.push(buildTaskToggleRow(disabled));
+        return rows;
+      }
       if (accounts.length > 1) {
         // Append Sync into the same row as Prev/Next so the 3 buttons
         // sit on a single line ([◀ Previous] [Next ▶] [🔄 Sync (Xm)])
@@ -740,6 +953,11 @@ function createRaidStatusCommand(deps) {
         // entirely for users with 1 roster).
         rows.push(buildSyncRow(disabled));
       }
+      // View toggle row sits BEFORE the raid filter so the visual hierarchy
+      // is "navigation (page/sync) → mode (raid/task view) → in-mode filter
+      // (raid filter)". Toggle is always shown so the user can discover the
+      // task view even when the raid roster is empty.
+      rows.push(buildViewToggleRow(disabled));
       // Skip the raid-filter row when the caller has no eligible raids
       // at all (empty roster / all chars below minItemLevel gates) -
       // dropdown with only the All-raids entry is just noise.
@@ -933,6 +1151,60 @@ function createRaidStatusCommand(deps) {
         // page displays internally changes). Resetting to page 0 on
         // filter pick would feel broken: "I was viewing account 3, why
         // did I jump back to account 1 just because I filtered a raid?"
+      } else if (id === "status-view:toggle") {
+        const picked =
+          Array.isArray(component.values) && component.values.length > 0
+            ? component.values[0]
+            : "raid";
+        currentView = picked === "task" ? "task" : "raid";
+      } else if (id === "status-task:toggle") {
+        const value =
+          Array.isArray(component.values) && component.values.length > 0
+            ? component.values[0]
+            : "";
+        if (!value || value === "noop") {
+          await component.deferUpdate().catch(() => {});
+          return;
+        }
+        const sepIdx = value.indexOf("::");
+        const targetCharName = sepIdx > 0 ? value.slice(0, sepIdx) : "";
+        const targetTaskId = sepIdx > 0 ? value.slice(sepIdx + 2) : "";
+        if (!targetCharName || !targetTaskId) {
+          await component.deferUpdate().catch(() => {});
+          return;
+        }
+        try {
+          await saveWithRetry(async () => {
+            const userDocFresh = await User.findOne({ discordId });
+            if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return;
+            const account = userDocFresh.accounts[currentPage];
+            if (!account || !Array.isArray(account.characters)) return;
+            const target = account.characters.find(
+              (c) =>
+                String(c?.name || "").trim().toLowerCase() ===
+                targetCharName.trim().toLowerCase()
+            );
+            if (!target) return;
+            if (!Array.isArray(target.sideTasks)) target.sideTasks = [];
+            const task = target.sideTasks.find((t) => t?.taskId === targetTaskId);
+            if (!task) return;
+            task.completed = !task.completed;
+            await userDocFresh.save();
+          });
+        } catch (err) {
+          console.error(
+            "[raid-status side-task toggle] save failed:",
+            err?.message || err
+          );
+        }
+        // Reload the view-local accounts snapshot so the next embed render
+        // reflects the just-toggled state. Cheap lean read scoped to the
+        // single discordId, no bible round-trip.
+        const reloaded = await User.findOne({ discordId }).lean();
+        if (reloaded && Array.isArray(reloaded.accounts)) {
+          userDoc = reloaded;
+          accounts = userDoc.accounts;
+        }
       } else {
         return;
       }

@@ -435,6 +435,14 @@ function createRaidChannelMonitorService({
           ].join("\n"),
         },
         {
+          name: "📝 Side tasks - track chore daily/weekly riêng từng char",
+          value: [
+            "Mỗi người đều có checklist riêng để theo dõi chore phụ ngoài raid (Una dailies, Chaos, Guardian, GvG, ...) gắn theo từng character.",
+            "Đăng ký bằng `/raid-task add` (cap **3 daily + 5 weekly** mỗi char), rồi mở `/raid-status` chọn dropdown `📝 Side tasks` để toggle ✅/⬜.",
+            "Auto-reset 17:00 VN mỗi ngày (daily) hoặc thứ 4 17:00 VN (weekly) - tớ tự lo phần đó nha~",
+          ].join("\n"),
+        },
+        {
           name: "👑 Ghi chú bé xíu",
           value: "Thi thoảng cậu sẽ bắt gặp vài roster đội `👑` thay cho `📁`. Artist quen vài người thôi mà~",
         },
