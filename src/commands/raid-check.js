@@ -1051,13 +1051,13 @@ function createRaidCheckCommand(deps) {
           type: "info",
           title: "Manager đã bật auto-sync hộ cậu",
           description: [
-            `Heya~ Raid Manager <@${interaction.user.id}> vừa bật \`/raid-auto-manage\` hộ cậu rồi nha.`,
+            `Heya~ Raid Manager <@${interaction.user.id}> vừa bật \`/raid-auto-manage\` hộ cậu rồi nha. Từ giờ Artist sẽ tự sync raid progress cho cậu mỗi 24h.`,
             "",
-            "Từ giờ Artist sẽ tự sync raid progress từ lostark.bible cho roster của cậu, scheduler chạy mỗi 24h.",
+            "**Trạng thái mới:** ON",
+            "**Lần sync đầu:** Scheduler tick kế tiếp (24h cycle)",
+            "**Cách tắt:** Gõ `/raid-auto-manage action:off` bất cứ lúc nào",
             "",
-            "Nếu char nào của cậu đang **Private Log**, Artist không pull được data đâu. Vào https://lostark.bible/me/logs bật **Show on Profile** giúp tớ.",
-            "",
-            "Muốn tắt thì gõ `/raid-auto-manage action:off` bất cứ lúc nào~",
+            "Char nào đang **Private Log** thì Artist không pull được data đâu nha. Vào https://lostark.bible/me/logs bật **Show on Profile** giúp tớ.",
           ].join("\n"),
         });
         await targetUser.send({ embeds: [dmEmbed] });
@@ -1076,12 +1076,17 @@ function createRaidCheckCommand(deps) {
 
     const successEmbed = buildNoticeEmbed(EmbedBuilder, {
       type: "success",
-      title: "Đã bật auto-sync hộ",
+      title: "Artist đã bật auto-sync hộ rồi nha",
       description: [
-        `**Đã bật cho:** <@${targetDiscordId}>`,
-        `**DM sent:** ${dmSent ? "Yes" : "No (user có thể tắt DM riêng, flag vẫn được flip thành công)"}`,
+        "Flag đã flip thành công, scheduler sẽ pick user này trong tick kế tiếp (24h cycle).",
         "",
-        "Lần sync đầu tiên sẽ chạy ở scheduler tick kế tiếp (24h cycle).",
+        `**Đã bật cho:** <@${targetDiscordId}>`,
+        `**Trạng thái mới:** ON`,
+        dmSent
+          ? "**DM thông báo:** Đã gửi"
+          : "**DM thông báo:** Không gửi được (user tắt DM riêng), flag vẫn được flip OK",
+        "",
+        "Nếu user muốn tắt thì họ gõ `/raid-auto-manage action:off` bất cứ lúc nào nha.",
       ].join("\n"),
     });
     await interaction.reply({
