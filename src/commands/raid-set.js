@@ -1,4 +1,9 @@
 const { buildNoticeEmbed } = require("../raid/shared");
+const {
+  getRosterMatches,
+  getCharacterMatches,
+  truncateChoice,
+} = require("../raid/autocomplete-helpers");
 
 function createRaidSetCommand(deps) {
   const {
@@ -44,24 +49,13 @@ function createRaidSetCommand(deps) {
   // (rosters) with char count suffix so picker can see roster size at a glance.
   // Same format as /remove-roster's roster autocomplete for visual consistency.
   async function autocompleteRaidSetRoster(interaction, focused) {
-    const needle = normalizeName(focused.value || "");
-    const discordId = interaction.user.id;
-    const userDoc = await loadUserForAutocomplete(discordId);
-    if (!userDoc || !Array.isArray(userDoc.accounts)) {
-      await interaction.respond([]).catch(() => {});
-      return;
-    }
-    const choices = userDoc.accounts
-      .filter((a) => !needle || normalizeName(a.accountName).includes(needle))
-      .slice(0, 25)
-      .map((a) => {
-        const chars = Array.isArray(a.characters) ? a.characters : [];
-        const label = `📁 ${a.accountName} · ${chars.length} char${chars.length === 1 ? "" : "s"}`;
-        return {
-          name: label.length > 100 ? `${label.slice(0, 97)}...` : label,
-          value: a.accountName.length > 100 ? a.accountName.slice(0, 100) : a.accountName,
-        };
-      });
+    const userDoc = await loadUserForAutocomplete(interaction.user.id);
+    const matches = getRosterMatches(userDoc, focused.value || "");
+    const choices = matches.map((a) => {
+      const charCount = Array.isArray(a.characters) ? a.characters.length : 0;
+      const label = `📁 ${a.accountName} · ${charCount} char${charCount === 1 ? "" : "s"}`;
+      return truncateChoice(label, a.accountName);
+    });
     await interaction.respond(choices).catch(() => {});
   }
   // Character autocomplete for /raid-set. Reads the upstream `roster` option
@@ -69,46 +63,21 @@ function createRaidSetCommand(deps) {
   // Discord 25-result cap when the user has 5+ rosters worth of characters
   // (~30+ total), which the flat "top 25 by iLvl" approach silently truncated.
   async function autocompleteRaidSetCharacter(interaction, focused) {
-    const needle = normalizeName(focused.value || "");
-    const rosterInput = interaction.options.getString("roster") || "";
-    const discordId = interaction.user.id;
-    const userDoc = await loadUserForAutocomplete(discordId);
-    if (!userDoc || !Array.isArray(userDoc.accounts)) {
-      await interaction.respond([]).catch(() => {});
-      return;
-    }
-    // Source accounts: roster-filtered if user has already picked one, else
-    // all accounts (so the field works even before roster is filled - Discord
-    // autocomplete fires per-keystroke regardless of fill order).
-    const rosterTarget = rosterInput ? normalizeName(rosterInput) : null;
-    const accounts = rosterTarget
-      ? userDoc.accounts.filter((a) => normalizeName(a.accountName) === rosterTarget)
-      : userDoc.accounts;
-    const entries = [];
-    const seen = new Set();
-    for (const account of accounts) {
-      const chars = Array.isArray(account.characters) ? account.characters : [];
-      for (const character of chars) {
-        const name = getCharacterName(character);
-        const normalized = normalizeName(name);
-        if (!name || seen.has(normalized)) continue;
-        if (needle && !normalized.includes(needle)) continue;
-        seen.add(normalized);
-        entries.push({
-          name,
-          className: getCharacterClass(character),
-          itemLevel: Number(character.itemLevel) || 0,
-        });
-      }
-    }
-    entries.sort((a, b) => b.itemLevel - a.itemLevel || a.name.localeCompare(b.name));
-    const choices = entries.slice(0, 25).map((entry) => {
-      const label = `${entry.name} · ${entry.className} · ${entry.itemLevel}`;
-      return {
-        name: label.length > 100 ? `${label.slice(0, 97)}...` : label,
-        value: entry.name.length > 100 ? entry.name.slice(0, 100) : entry.name,
-      };
+    const userDoc = await loadUserForAutocomplete(interaction.user.id);
+    // Source accounts: roster-filtered if user has already picked one,
+    // else all accounts (Discord autocomplete fires per-keystroke
+    // regardless of fill order, so the field has to be useful before
+    // roster is filled). Dedup + iLvl sort = /raid-set defaults.
+    const entries = getCharacterMatches(userDoc, {
+      rosterFilter: interaction.options.getString("roster") || null,
+      needle: focused.value || "",
     });
+    const choices = entries.map((entry) =>
+      truncateChoice(
+        `${entry.name} · ${entry.className} · ${entry.itemLevel}`,
+        entry.name
+      )
+    );
     await interaction.respond(choices).catch(() => {});
   }
   function computeRaidProgress(character, req) {

@@ -1,6 +1,11 @@
 "use strict";
 
 const { buildNoticeEmbed } = require("../raid/shared");
+const {
+  getRosterMatches,
+  getCharacterMatches,
+  truncateChoice,
+} = require("../raid/autocomplete-helpers");
 
 const TASK_CAP_DAILY = 3;
 const TASK_CAP_WEEKLY = 5;
@@ -74,84 +79,32 @@ function createRaidTaskCommand(deps) {
   } = deps;
 
   async function autocompleteRoster(interaction, focused) {
-    const needle = normalizeName(focused.value || "");
-    const discordId = interaction.user.id;
-    const userDoc = await loadUserForAutocomplete(discordId);
-    if (!userDoc || !Array.isArray(userDoc.accounts)) {
-      await interaction.respond([]).catch(() => {});
-      return;
-    }
-    const choices = userDoc.accounts
-      .filter((a) => !needle || normalizeName(a.accountName).includes(needle))
-      .slice(0, 25)
-      .map((a) => {
-        const chars = Array.isArray(a.characters) ? a.characters : [];
-        const taskTotal = chars.reduce(
-          (sum, c) => sum + (Array.isArray(c.sideTasks) ? c.sideTasks.length : 0),
-          0
-        );
-        const taskSuffix = taskTotal > 0 ? ` · ${taskTotal} task` : "";
-        const label = `📁 ${a.accountName} · ${chars.length} char${chars.length === 1 ? "" : "s"}${taskSuffix}`;
-        return {
-          name: label.length > 100 ? `${label.slice(0, 97)}...` : label,
-          value:
-            a.accountName.length > 100 ? a.accountName.slice(0, 100) : a.accountName,
-        };
-      });
+    const userDoc = await loadUserForAutocomplete(interaction.user.id);
+    const matches = getRosterMatches(userDoc, focused.value || "");
+    const choices = matches.map((a) => {
+      const chars = Array.isArray(a.characters) ? a.characters : [];
+      const taskTotal = chars.reduce(
+        (sum, c) => sum + (Array.isArray(c.sideTasks) ? c.sideTasks.length : 0),
+        0
+      );
+      const taskSuffix = taskTotal > 0 ? ` · ${taskTotal} task` : "";
+      const label = `📁 ${a.accountName} · ${chars.length} char${chars.length === 1 ? "" : "s"}${taskSuffix}`;
+      return truncateChoice(label, a.accountName);
+    });
     await interaction.respond(choices).catch(() => {});
   }
 
   async function autocompleteCharacter(interaction, focused) {
-    const needle = normalizeName(focused.value || "");
-    const rosterInput = interaction.options.getString("roster") || "";
-    const discordId = interaction.user.id;
-    const userDoc = await loadUserForAutocomplete(discordId);
-    if (!userDoc || !Array.isArray(userDoc.accounts)) {
-      await interaction.respond([]).catch(() => {});
-      return;
-    }
-    // Source accounts: roster-filtered when the user has already picked
-    // one, else every account (Discord autocomplete fires per-keystroke
-    // regardless of fill order, so the field has to be useful even before
-    // roster is filled). Same fall-back pattern as /raid-set.
-    const rosterTarget = rosterInput ? normalizeName(rosterInput) : null;
-    const accounts = rosterTarget
-      ? userDoc.accounts.filter(
-          (a) => normalizeName(a.accountName) === rosterTarget
-        )
-      : userDoc.accounts;
-    const entries = [];
-    const seen = new Set();
-    for (const account of accounts) {
-      const chars = Array.isArray(account.characters) ? account.characters : [];
-      for (const character of chars) {
-        const name = getCharacterDisplayName(character);
-        const normalized = normalizeName(name);
-        if (!name || seen.has(normalized)) continue;
-        if (needle && !normalized.includes(needle)) continue;
-        seen.add(normalized);
-        const sideTaskCount = Array.isArray(character.sideTasks)
-          ? character.sideTasks.length
-          : 0;
-        entries.push({
-          name,
-          className: String(character.class || ""),
-          itemLevel: Number(character.itemLevel) || 0,
-          sideTaskCount,
-        });
-      }
-    }
-    entries.sort(
-      (a, b) => b.itemLevel - a.itemLevel || a.name.localeCompare(b.name)
-    );
-    const choices = entries.slice(0, 25).map((entry) => {
+    const userDoc = await loadUserForAutocomplete(interaction.user.id);
+    const entries = getCharacterMatches(userDoc, {
+      rosterFilter: interaction.options.getString("roster") || null,
+      needle: focused.value || "",
+    });
+    const choices = entries.map((entry) => {
       const taskSuffix =
         entry.sideTaskCount > 0 ? ` · ${entry.sideTaskCount} task` : "";
       const label = `${entry.name} · ${entry.className} · ${entry.itemLevel}${taskSuffix}`;
-      return {
-        name: label.length > 100 ? `${label.slice(0, 97)}...` : label,
-        value: entry.name.length > 100 ? entry.name.slice(0, 100) : entry.name,
-      };
+      return truncateChoice(label, entry.name);
     });
     await interaction.respond(choices).catch(() => {});
   }

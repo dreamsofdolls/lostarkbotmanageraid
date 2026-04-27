@@ -174,6 +174,75 @@ test("pack2Columns: empty input returns empty array", () => {
   assert.deepEqual(pack2Columns([]), []);
 });
 
+test("autocomplete-helpers: getRosterMatches filters by needle + caps 25", () => {
+  const { getRosterMatches } = require("../src/raid/autocomplete-helpers");
+  const userDoc = {
+    accounts: Array.from({ length: 30 }, (_, i) => ({
+      accountName: `Roster${i}`,
+      characters: [],
+    })),
+  };
+  // No needle → 25 cap.
+  assert.equal(getRosterMatches(userDoc).length, 25);
+  // Needle "Roster1" matches "Roster1", "Roster10".."Roster19" = 11.
+  const matches = getRosterMatches(userDoc, "Roster1");
+  assert.equal(matches.length, 11);
+  // Empty doc → empty array (no throw).
+  assert.deepEqual(getRosterMatches(null), []);
+  assert.deepEqual(getRosterMatches({}), []);
+});
+
+test("autocomplete-helpers: getCharacterMatches respects rosterFilter + dedup + sort", () => {
+  const { getCharacterMatches } = require("../src/raid/autocomplete-helpers");
+  const userDoc = {
+    accounts: [
+      {
+        accountName: "main",
+        characters: [
+          { name: "Alpha", class: "Berserker", itemLevel: 1700, sideTasks: [{}, {}] },
+          { name: "Beta", class: "Bard", itemLevel: 1690, sideTasks: [] },
+        ],
+      },
+      {
+        accountName: "alt",
+        characters: [
+          { name: "Beta", class: "Sorc", itemLevel: 1680, sideTasks: [] },
+          { name: "Gamma", class: "Paladin", itemLevel: 1750, sideTasks: [] },
+        ],
+      },
+    ],
+  };
+  // No filter → cross-account, dedup "Beta" (first wins by iteration order).
+  const all = getCharacterMatches(userDoc);
+  assert.equal(all.length, 3, "Beta deduped, expect Alpha/Beta/Gamma");
+  // Sort iLvl desc: Gamma 1750, Alpha 1700, Beta 1690.
+  assert.equal(all[0].name, "Gamma");
+  assert.equal(all[1].name, "Alpha");
+  assert.equal(all[2].name, "Beta");
+  // sideTaskCount surfaces.
+  assert.equal(all[1].sideTaskCount, 2);
+  // Roster filter scopes to one account.
+  const alt = getCharacterMatches(userDoc, { rosterFilter: "alt" });
+  assert.equal(alt.length, 2);
+  assert.deepEqual(alt.map((e) => e.name).sort(), ["Beta", "Gamma"]);
+  // Needle filter.
+  const beta = getCharacterMatches(userDoc, { needle: "beta" });
+  assert.equal(beta.length, 1);
+  assert.equal(beta[0].name, "Beta");
+  // dedup:false keeps both Betas.
+  const noDedup = getCharacterMatches(userDoc, { dedup: false });
+  assert.equal(noDedup.filter((e) => e.name === "Beta").length, 2);
+});
+
+test("autocomplete-helpers: truncateChoice caps name + value to 100 chars", () => {
+  const { truncateChoice } = require("../src/raid/autocomplete-helpers");
+  const longName = "A".repeat(150);
+  const out = truncateChoice(longName, longName);
+  assert.equal(out.name.length, 100);
+  assert.ok(out.name.endsWith("..."));
+  assert.equal(out.value.length, 100);
+});
+
 test("replyNotice wraps interaction.reply with the notice embed + ephemeral flag", async () => {
   const { replyNotice } = require("../src/raid/shared");
   const calls = [];

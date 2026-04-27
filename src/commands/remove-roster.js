@@ -1,4 +1,9 @@
 const { buildNoticeEmbed } = require("../raid/shared");
+const {
+  getRosterMatches,
+  getCharacterMatches,
+  truncateChoice,
+} = require("../raid/autocomplete-helpers");
 
 function createRemoveRosterCommand(deps) {
   const {
@@ -16,24 +21,13 @@ function createRemoveRosterCommand(deps) {
   } = deps;
 
 async function autocompleteRemoveRosterRoster(interaction, focused) {
-    const needle = normalizeName(focused.value || "");
-    const discordId = interaction.user.id;
-    const userDoc = await loadUserForAutocomplete(discordId);
-    if (!userDoc || !Array.isArray(userDoc.accounts)) {
-      await interaction.respond([]).catch(() => {});
-      return;
-    }
-    const choices = userDoc.accounts
-      .filter((a) => !needle || normalizeName(a.accountName).includes(needle))
-      .slice(0, 25)
-      .map((a) => {
-        const chars = Array.isArray(a.characters) ? a.characters : [];
-        const label = `📁 ${a.accountName} · ${chars.length} char${chars.length === 1 ? "" : "s"}`;
-        return {
-          name: label.length > 100 ? `${label.slice(0, 97)}...` : label,
-          value: a.accountName.length > 100 ? a.accountName.slice(0, 100) : a.accountName,
-        };
-      });
+    const userDoc = await loadUserForAutocomplete(interaction.user.id);
+    const matches = getRosterMatches(userDoc, focused.value || "");
+    const choices = matches.map((a) => {
+      const charCount = Array.isArray(a.characters) ? a.characters.length : 0;
+      const label = `📁 ${a.accountName} · ${charCount} char${charCount === 1 ? "" : "s"}`;
+      return truncateChoice(label, a.accountName);
+    });
     await interaction.respond(choices).catch(() => {});
   }
   async function autocompleteRemoveRosterCharacter(interaction, focused) {
@@ -42,37 +36,22 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
       await interaction.respond([]).catch(() => {});
       return;
     }
-    const needle = normalizeName(focused.value || "");
-    const discordId = interaction.user.id;
-    const userDoc = await loadUserForAutocomplete(discordId);
-    if (!userDoc || !Array.isArray(userDoc.accounts)) {
-      await interaction.respond([]).catch(() => {});
-      return;
-    }
-    const normalizedRoster = normalizeName(rosterInput);
-    const account = userDoc.accounts.find(
-      (a) => normalizeName(a.accountName) === normalizedRoster
+    const userDoc = await loadUserForAutocomplete(interaction.user.id);
+    // Scope to one roster (no dedup needed, no iLvl sort - remove flow
+    // shows chars in roster's natural order so user can match what they
+    // see in /raid-status).
+    const entries = getCharacterMatches(userDoc, {
+      rosterFilter: rosterInput,
+      needle: focused.value || "",
+      dedup: false,
+      sortByILvl: false,
+    });
+    const choices = entries.map((entry) =>
+      truncateChoice(
+        `${entry.name} · ${entry.className} · ${entry.itemLevel}`,
+        entry.name
+      )
     );
-    if (!account || !Array.isArray(account.characters)) {
-      await interaction.respond([]).catch(() => {});
-      return;
-    }
-    const choices = account.characters
-      .filter((c) => {
-        const name = normalizeName(getCharacterName(c));
-        return name && (!needle || name.includes(needle));
-      })
-      .slice(0, 25)
-      .map((c) => {
-        const name = getCharacterName(c);
-        const cls = getCharacterClass(c);
-        const iLvl = Number(c.itemLevel) || 0;
-        const label = `${name} · ${cls} · ${iLvl}`;
-        return {
-          name: label.length > 100 ? `${label.slice(0, 97)}...` : label,
-          value: name.length > 100 ? name.slice(0, 100) : name,
-        };
-      });
     await interaction.respond(choices).catch(() => {});
   }
   async function handleRemoveRosterAutocomplete(interaction) {
