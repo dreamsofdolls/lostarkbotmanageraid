@@ -109,6 +109,15 @@ function createRaidStatusCommand(deps) {
         // recorded) + cooldown is the moment the next refresh becomes
         // eligible; render that as another <t:R> so "in Xm" ticks down
         // toward zero in real time.
+        //
+        // Wording is "Refresh ready <t:R>" instead of "Next refresh
+        // <t:R>" so both tense forms read cleanly: future "Refresh ready
+        // in 1h30m" + past "Refresh ready 16s ago" (= has been ready for
+        // 16s). Discord's client-side ticker keeps counting past zero
+        // into past tense once the embed has been on screen long enough,
+        // so neutral wording avoids the awkward "Next sync 16 seconds
+        // ago" the original Round-29 wording produced when an idle user
+        // watched the embed past the manager 15s cooldown.
         const cooldownMs = ROSTER_REFRESH_COOLDOWN_MS;
         const cursor =
           Number(account?.lastRefreshAttemptAt) ||
@@ -116,7 +125,7 @@ function createRaidStatusCommand(deps) {
           0;
         const nextEligible = cursor + cooldownMs;
         const nextTs = `<t:${Math.floor(nextEligible / 1000)}:R>`;
-        parts.push(`${lastUpdated} · ⏳ Next refresh ${nextTs}`);
+        parts.push(`${lastUpdated} · ⏳ Refresh ready ${nextTs}`);
       } else {
         parts.push(`${lastUpdated} · ✅ Refresh ready`);
       }
@@ -139,9 +148,14 @@ function createRaidStatusCommand(deps) {
       const lastAttempt = Number(userMeta?.lastAutoManageAttemptAt) || 0;
       const remain = formatNextCooldownRemaining(lastAttempt, cooldownMs);
       if (remain) {
+        // Same neutral-tense wording as the refresh branch above:
+        // "Sync ready in 14s" (future) / "Sync ready 16s ago" (past =
+        // has been ready 16s) both read cleanly while letting Discord's
+        // <t:R> ticker keep counting in real time without flipping into
+        // an awkward "Next sync ago" form.
         const nextEligible = lastAttempt + cooldownMs;
         const nextTs = `<t:${Math.floor(nextEligible / 1000)}:R>`;
-        parts.push(`${lastSync} · ⏳ Next sync ${nextTs}`);
+        parts.push(`${lastSync} · ⏳ Sync ready ${nextTs}`);
       } else {
         parts.push(`${lastSync} · ✅ Sync ready`);
       }
