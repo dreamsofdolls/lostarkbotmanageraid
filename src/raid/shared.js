@@ -193,6 +193,34 @@ function buildNoticeEmbed(EmbedBuilder, { type = "info", title, description }) {
   return embed;
 }
 
+/**
+ * Render the shared `🟢 N done · 🟡 N partial · ⚪ N pending [· 🔒 N not eligible]`
+ * footer line used by `/raid-status` (caller's own roster rollup) and
+ * `/raid-check` (subject-scoped or filtered roster rollup). Caller owns
+ * the aggregation upstream - this just formats the icon line so the two
+ * surfaces can't drift on icon ordering / spacing / "not eligible"
+ * suffix rules.
+ *
+ * `notEligible` is optional: omit / pass 0 to suppress the lock segment
+ * (raid-status doesn't track it; raid-check does for chars below the
+ * raid floor).
+ */
+function formatProgressTotals(totals, UI) {
+  const done = Number(totals?.done) || 0;
+  const partial = Number(totals?.partial) || 0;
+  const pending = Number(totals?.pending) || 0;
+  const notEligible = Number(totals?.notEligible) || 0;
+  const parts = [
+    `${UI.icons.done} ${done} done`,
+    `${UI.icons.partial} ${partial} partial`,
+    `${UI.icons.pending} ${pending} pending`,
+  ];
+  if (notEligible > 0) {
+    parts.push(`${UI.icons.lock} ${notEligible} not eligible`);
+  }
+  return parts.join(" · ");
+}
+
 // Frozen zero-width-space inline field used as a 2-column layout spacer.
 // Discord auto-packs `inline: true` fields up to 3 per row; injecting one
 // of these between every char card forces exactly 2 cards per row instead.
@@ -247,4 +275,5 @@ module.exports = {
   buildDiscordIdentityFields,
   INLINE_SPACER,
   pack2Columns,
+  formatProgressTotals,
 };

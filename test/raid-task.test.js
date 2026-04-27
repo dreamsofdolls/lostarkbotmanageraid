@@ -174,6 +174,41 @@ test("pack2Columns: empty input returns empty array", () => {
   assert.deepEqual(pack2Columns([]), []);
 });
 
+test("formatProgressTotals: standard 3-icon line", () => {
+  const { formatProgressTotals } = require("../src/raid/shared");
+  const UI = { icons: { done: "🟢", partial: "🟡", pending: "⚪", lock: "🔒" } };
+  const out = formatProgressTotals({ done: 2, partial: 1, pending: 4 }, UI);
+  assert.equal(out, "🟢 2 done · 🟡 1 partial · ⚪ 4 pending");
+});
+
+test("formatProgressTotals: notEligible suffix only when > 0", () => {
+  const { formatProgressTotals } = require("../src/raid/shared");
+  const UI = { icons: { done: "🟢", partial: "🟡", pending: "⚪", lock: "🔒" } };
+  const withLock = formatProgressTotals(
+    { done: 1, partial: 0, pending: 2, notEligible: 3 },
+    UI
+  );
+  assert.equal(withLock, "🟢 1 done · 🟡 0 partial · ⚪ 2 pending · 🔒 3 not eligible");
+  const withoutLock = formatProgressTotals(
+    { done: 1, partial: 0, pending: 2, notEligible: 0 },
+    UI
+  );
+  assert.doesNotMatch(withoutLock, /not eligible/);
+});
+
+test("formatProgressTotals: missing fields default to 0", () => {
+  const { formatProgressTotals } = require("../src/raid/shared");
+  const UI = { icons: { done: "🟢", partial: "🟡", pending: "⚪", lock: "🔒" } };
+  assert.equal(
+    formatProgressTotals({}, UI),
+    "🟢 0 done · 🟡 0 partial · ⚪ 0 pending"
+  );
+  assert.equal(
+    formatProgressTotals(null, UI),
+    "🟢 0 done · 🟡 0 partial · ⚪ 0 pending"
+  );
+});
+
 test("INLINE_SPACER is frozen so mutation can't poison shared reference", () => {
   const { INLINE_SPACER } = require("../src/raid/shared");
   assert.equal(Object.isFrozen(INLINE_SPACER), true);
