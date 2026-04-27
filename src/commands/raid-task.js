@@ -59,6 +59,8 @@ function createRaidTaskCommand(deps) {
     User,
     saveWithRetry,
     loadUserForAutocomplete,
+    dailyResetStartMs,
+    weekResetStartMs,
   } = deps;
 
   async function autocompleteCharacter(interaction, focused) {
@@ -212,12 +214,21 @@ function createRaidTaskCommand(deps) {
           return;
         }
 
+        // Seed lastResetAt to the CURRENT cycle's start so the scheduler
+        // tick treats this task as "already in sync with this cycle" - not
+        // as a stale legacy entry that needs an immediate reset. Without
+        // this, a user who adds a daily task at 20:00 VN and toggles it
+        // complete will see it flipped back to ⬜ on the next 30-min tick
+        // because lastResetAt=0 < dailyResetStartMs(now). Codex round 28
+        // finding #1.
+        const cycleStart =
+          reset === "daily" ? dailyResetStartMs() : weekResetStartMs();
         sideTasks.push({
           taskId: generateTaskId(),
           name: taskName,
           reset,
           completed: false,
-          lastResetAt: 0,
+          lastResetAt: cycleStart,
           createdAt: Date.now(),
         });
         dailyCount = countByReset(sideTasks, "daily");

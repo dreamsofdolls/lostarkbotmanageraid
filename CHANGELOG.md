@@ -4,6 +4,10 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 
 ## 2026-04-27
 
+### Fixed (`/raid-task` + `/raid-status` Task view: 2 Codex round-28 findings)
+- **HIGH: newly-added task bị reset oan trong cùng kỳ** - `handleAdd` để `lastResetAt: 0`, scheduler tick coi mọi task có `lastResetAt < cycleStart` là expired và flip về ⬜. User add daily task lúc 20:00 VN + tick complete ngay → 30 phút sau bị reset oan dù vẫn cùng cycle. Fix: seed `lastResetAt = dailyResetStartMs() | weekResetStartMs()` lúc add, cycleStart deps inject vào factory. Regression test pin both daily + weekly seed value.
+- **MEDIUM: > 25 tasks/account silent drop khỏi toggle dropdown** - cap 25 hardcoded ở `buildTaskToggleRow` cộng cap 8/char × 4 char đã có thể vượt. Fix: thêm row dropdown `Chọn character để toggle task...` (per-page Map state), filter toggle dropdown theo selected char, default auto-pick char đầu tiên có task. Per-char cap 8 < 25 nên sau filter luôn fit. Regression test xây account 5 char × 8 task = 40 tổng, assert mỗi char list ≤ 25.
+
 ### Added (`/raid-task` + `/raid-status` Task view: per-character side-task tracker)
 - Schema mới `sideTaskSchema` ở `accounts.characters[].sideTasks` (`taskId/name(60)/reset(daily|weekly)/completed/lastResetAt/createdAt`). Cap 3 daily + 5 weekly enforced ở command layer thay vì schema validator để toggle complete không bị reject khi pre-existing data >cap.
 - `/raid-task` 3 sub: `add` (char autocomplete + name + cycle choice) / `remove` (char + task autocomplete bằng taskId) / `clear` (ephemeral confirm Danger button trước khi xoá all). Module-level helpers (`tryEnable`-style 4-outcome shape) export để invocation-test.

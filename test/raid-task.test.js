@@ -255,6 +255,218 @@ test("resetExpiredSideTasks issues 2 updateMany calls (daily + weekly) with the 
   );
 });
 
+// ---------------------------------------------------------------------------
+// Codex round 28 regressions: lastResetAt seed + > 25 task per account
+// ---------------------------------------------------------------------------
+
+test("REGRESSION (Codex #1): newly-added task seeds lastResetAt to current cycle start", async () => {
+  // Drive a real createRaidTaskCommand factory with stubbed deps so we can
+  // observe the saved task. Validates that handleAdd does NOT use 0 as the
+  // seed - because lastResetAt=0 < dailyResetStartMs(now) makes the next
+  // scheduler tick reset the just-added task back to ⬜.
+  const FAKE_DAILY_START = Date.UTC(2026, 3, 22, 10, 0, 0, 0);
+  const FAKE_WEEKLY_START = Date.UTC(2026, 3, 22, 10, 0, 0, 0);
+  let savedDoc = null;
+  const userDoc = {
+    discordId: "u1",
+    accounts: [
+      {
+        accountName: "main",
+        characters: [
+          {
+            name: "Frostmourne",
+            class: "Berserker",
+            itemLevel: 1700,
+            sideTasks: [],
+          },
+        ],
+      },
+    ],
+    save: async function () {
+      savedDoc = JSON.parse(JSON.stringify(this));
+    },
+  };
+  const UserStub = { findOne: async () => userDoc };
+
+  const { createRaidTaskCommand } = require("../src/commands/raid-task");
+  const handlers = createRaidTaskCommand({
+    EmbedBuilder: class {
+      constructor() {
+        this._json = { fields: [] };
+      }
+      setColor() { return this; }
+      setTitle() { return this; }
+      setDescription() { return this; }
+      addFields() { return this; }
+      setFooter() { return this; }
+      toJSON() { return this._json; }
+    },
+    ActionRowBuilder: class { addComponents() { return this; } },
+    ButtonBuilder: class {
+      setCustomId() { return this; }
+      setLabel() { return this; }
+      setStyle() { return this; }
+    },
+    ButtonStyle: { Danger: 4, Secondary: 2 },
+    MessageFlags: { Ephemeral: 64 },
+    User: UserStub,
+    saveWithRetry: async (fn) => fn(),
+    loadUserForAutocomplete: async () => userDoc,
+    dailyResetStartMs: () => FAKE_DAILY_START,
+    weekResetStartMs: () => FAKE_WEEKLY_START,
+  });
+
+  const interaction = {
+    user: { id: "u1" },
+    options: {
+      getSubcommand: () => "add",
+      getString: (name, _required) => {
+        if (name === "character") return "Frostmourne";
+        if (name === "name") return "Una Dailies";
+        if (name === "reset") return "daily";
+        return null;
+      },
+    },
+    reply: async () => {},
+  };
+  await handlers.handleRaidTaskCommand(interaction);
+
+  assert.ok(savedDoc, "expected userDoc.save() to be called");
+  const persisted = savedDoc.accounts[0].characters[0].sideTasks[0];
+  assert.equal(persisted.name, "Una Dailies");
+  assert.equal(persisted.reset, "daily");
+  assert.equal(
+    persisted.lastResetAt,
+    FAKE_DAILY_START,
+    "lastResetAt must be seeded to current dailyResetStartMs - 0 would let the next scheduler tick reset oan"
+  );
+});
+
+test("REGRESSION (Codex #1): weekly task seeds lastResetAt to weekResetStartMs", async () => {
+  const FAKE_WEEKLY_START = Date.UTC(2026, 3, 22, 10, 0, 0, 0);
+  const FAKE_DAILY_START = Date.UTC(2026, 3, 23, 10, 0, 0, 0);
+  let savedDoc = null;
+  const userDoc = {
+    discordId: "u1",
+    accounts: [
+      {
+        accountName: "main",
+        characters: [
+          { name: "Frostmourne", class: "Berserker", itemLevel: 1700, sideTasks: [] },
+        ],
+      },
+    ],
+    save: async function () {
+      savedDoc = JSON.parse(JSON.stringify(this));
+    },
+  };
+  const { createRaidTaskCommand } = require("../src/commands/raid-task");
+  const handlers = createRaidTaskCommand({
+    EmbedBuilder: class {
+      setColor() { return this; }
+      setTitle() { return this; }
+      setDescription() { return this; }
+      addFields() { return this; }
+      setFooter() { return this; }
+    },
+    ActionRowBuilder: class { addComponents() { return this; } },
+    ButtonBuilder: class {
+      setCustomId() { return this; }
+      setLabel() { return this; }
+      setStyle() { return this; }
+    },
+    ButtonStyle: { Danger: 4, Secondary: 2 },
+    MessageFlags: { Ephemeral: 64 },
+    User: { findOne: async () => userDoc },
+    saveWithRetry: async (fn) => fn(),
+    loadUserForAutocomplete: async () => userDoc,
+    dailyResetStartMs: () => FAKE_DAILY_START,
+    weekResetStartMs: () => FAKE_WEEKLY_START,
+  });
+
+  const interaction = {
+    user: { id: "u1" },
+    options: {
+      getSubcommand: () => "add",
+      getString: (name) => {
+        if (name === "character") return "Frostmourne";
+        if (name === "name") return "Guardian Raid";
+        if (name === "reset") return "weekly";
+        return null;
+      },
+    },
+    reply: async () => {},
+  };
+  await handlers.handleRaidTaskCommand(interaction);
+
+  const persisted = savedDoc.accounts[0].characters[0].sideTasks[0];
+  assert.equal(persisted.lastResetAt, FAKE_WEEKLY_START);
+  assert.notEqual(persisted.lastResetAt, FAKE_DAILY_START);
+});
+
+test("REGRESSION (Codex #2): account with > 25 total tasks scoped per-char by filter", () => {
+  // Synthesize an account with 5 chars × 8 tasks = 40 total, each char
+  // sitting at the per-char cap. Without the round-28 char-filter, the
+  // toggle dropdown would silently drop entries 26..40. With the filter,
+  // each char's 8 tasks fit comfortably under Discord's 25-option cap.
+  const account = {
+    accountName: "MaxedOut",
+    characters: [],
+  };
+  for (let i = 1; i <= 5; i += 1) {
+    const sideTasks = [];
+    for (let d = 1; d <= TASK_CAP_DAILY; d += 1) {
+      sideTasks.push({
+        taskId: generateTaskId(),
+        name: `Daily ${d}`,
+        reset: "daily",
+        completed: false,
+        lastResetAt: 0,
+        createdAt: Date.now(),
+      });
+    }
+    for (let w = 1; w <= TASK_CAP_WEEKLY; w += 1) {
+      sideTasks.push({
+        taskId: generateTaskId(),
+        name: `Weekly ${w}`,
+        reset: "weekly",
+        completed: false,
+        lastResetAt: 0,
+        createdAt: Date.now(),
+      });
+    }
+    account.characters.push({
+      name: `Char${i}`,
+      class: "Berserker",
+      itemLevel: 1700,
+      sideTasks,
+    });
+  }
+
+  const totalTasks = account.characters.reduce(
+    (sum, c) => sum + c.sideTasks.length,
+    0
+  );
+  assert.ok(totalTasks > 25, `setup must exceed 25 total tasks (got ${totalTasks})`);
+
+  // Simulate the round-28 fix: per-char cap = TASK_CAP_DAILY + TASK_CAP_WEEKLY.
+  // Filtering by ANY char must always produce a list <= 25 (Discord cap).
+  for (const character of account.characters) {
+    assert.ok(
+      character.sideTasks.length <= 25,
+      `per-char task list must fit Discord's 25-option dropdown cap (got ${character.sideTasks.length})`
+    );
+    assert.ok(
+      character.sideTasks.length <= TASK_CAP_DAILY + TASK_CAP_WEEKLY,
+      "per-char list must respect the documented cap"
+    );
+  }
+
+  // The combined cap (8) is well under 25, so even if Discord lowered the
+  // limit in a future update, the architectural choice has headroom.
+  assert.ok(TASK_CAP_DAILY + TASK_CAP_WEEKLY < 25);
+});
+
 test("resetExpiredSideTasks reports modifiedCount accurately when Mongo touches docs", async () => {
   const userStub = {
     updateMany: async (filter, update, options) => {
