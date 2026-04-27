@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 
 ## 2026-04-27
 
+### Fixed (`/raid-help` regression: round-31 rewrite drop EN/VN pairs nên EN view bị mix VN bullets)
+- Trainee phát hiện EN view của /raid-help vẫn hiện bullet tiếng Việt (tớ rewrite round 31 chỉ giữ EN/VN paired ở intro line, các bullet khác để untagged → render cả 2 lang). Đúng, đó là regression.
+- Re-pair every bullet với EN: + VN: prefix riêng. Untagged chỉ giữ cho separator (blank line) + bullet hoàn toàn ngôn ngữ-neutral (vd `• Serca Hard Clauseduk`). EN user mở /raid-help language:en giờ thấy English thuần, VN user thấy Vietnamese thuần.
+- File 424 → 502 lines (+78 do double-language). Suite stays at 227.
+
 ### Changed (`/raid-help` rework user-first: drop tech detail + onboarding section)
 - Trước mỗi section dài 8-15 bullet mix tech detail (Mongo `$or`, `lastAutoManageAttemptAt` cooldown logic, factory pattern, prefix-match dispatcher, customId routing). User gõ `/raid-help` chỉ cần biết "lệnh làm gì + khi nào dùng" - tech bullet drown signal.
 - Rewrite mỗi section theo template 4 phần: 1-line intro EN/VN, **Khi nào dùng** (use case cụ thể), **Cách Artist xử lý** (flow ngắn), **Mẹo** (2-3 UX tip). Drop hết Mongo path / factory wiring / customId scheme. Giữ contract numbers (cap 20 char/roster, 3 daily + 5 weekly tasks, 15s/10m cooldown, 17:00 VN reset).
