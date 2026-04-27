@@ -17,7 +17,7 @@
  *
  * Persona expressions (current set):
  *   - `shy`: blushing/embarrassed face. Use for warm greetings,
- *     compliments, ngại moments.
+ *     compliments, embarrassed moments.
  *   - `neutral`: default cute face. Use for most neutral statements
  *     where you want a persona presence without specific emotion.
  *   - `note`: chibi reading a book. Use for "Artist is checking" /

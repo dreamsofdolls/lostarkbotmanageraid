@@ -156,8 +156,8 @@ function createSchedulingHelpers({
       for (const t of mocTimes) {
         if (t > nowMs) return t;
       }
-      // All mốc this week passed - next eligible is the earliest mốc
-      // (largest minutesBefore) of NEXT week's boundary.
+      // All fire points this week passed - next eligible is the earliest
+      // fire point (largest minutesBefore) of NEXT week's boundary.
       const earliestMinutes = Math.max(...minutesArr);
       return boundaryMs + 7 * 24 * 60 * 60 * 1000 - earliestMinutes * 60000;
     }

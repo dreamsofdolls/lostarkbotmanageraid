@@ -126,9 +126,10 @@ const guildConfigSchema = new mongoose.Schema(
             default: () => ({}),
           },
           // Maintenance early reminders (T-3h / T-2h / T-1h marks). Channel-
-          // overridable: server có thể đẩy vào kênh khác kênh monitor để
-          // tránh ping cùng chỗ với clear-raid notifications. Group bật/tắt
-          // độc lập với maintenanceCountdown.
+          // overridable: a server can push these to a different channel from
+          // the monitor channel to avoid pinging in the same place as
+          // clear-raid notifications. Toggle group is independent of
+          // maintenanceCountdown.
           maintenanceEarly: {
             type: new mongoose.Schema(
               {
@@ -140,9 +141,10 @@ const guildConfigSchema = new mongoose.Schema(
             default: () => ({}),
           },
           // Maintenance countdown reminders (T-15m / T-10m / T-5m / T-1m).
-          // Same channel-override model as maintenanceEarly. Tách group để
-          // server không muốn 4 ping liên tiếp gần boundary có thể tắt
-          // riêng nhóm này mà vẫn giữ 3 reminder đầu.
+          // Same channel-override model as maintenanceEarly. Split into a
+          // separate group so a server that doesn't want 4 consecutive
+          // pings near the boundary can disable just this group while
+          // keeping the 3 earlier reminders.
           maintenanceCountdown: {
             type: new mongoose.Schema(
               {
