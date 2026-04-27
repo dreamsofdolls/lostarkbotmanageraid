@@ -541,8 +541,9 @@ test("add-all: adds task to every char that fits, skips chars at cap + duplicate
   const interaction = {
     user: { id: "u1" },
     options: {
-      getSubcommand: () => "add-all",
+      getSubcommand: () => "add",
       getString: (name) => {
+        if (name === "action") return "all";
         if (name === "roster") return "main";
         if (name === "name") return "Una Dailies";
         if (name === "reset") return "daily";
@@ -619,8 +620,9 @@ test("add-all: skips save() entirely when no char fits (every char dup or cap)",
   const interaction = {
     user: { id: "u1" },
     options: {
-      getSubcommand: () => "add-all",
+      getSubcommand: () => "add",
       getString: (name) => {
+        if (name === "action") return "all";
         if (name === "roster") return "main";
         if (name === "name") return "Una";
         if (name === "reset") return "daily";

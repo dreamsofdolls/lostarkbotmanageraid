@@ -262,12 +262,31 @@ function createRaidTaskCommand(deps) {
     }
   }
 
-  async function handleAdd(interaction) {
+  async function handleAddSingle(interaction) {
     const discordId = interaction.user.id;
     const rosterName = interaction.options.getString("roster", true);
-    const characterName = interaction.options.getString("character", true);
+    // `character` is optional at the Discord schema level (because the
+    // sibling action=all branch doesn't need it) but required at runtime
+    // for action=single. The dispatcher already routed us here, so error
+    // out with a clear hint when the user picked single without filling
+    // the field.
+    const characterName = interaction.options.getString("character", false);
     const taskName = interaction.options.getString("name", true).trim();
     const reset = interaction.options.getString("reset", true);
+
+    if (!characterName) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Thiếu character",
+            description: "Action `single` cần field `character`. Hoặc đổi action sang `all` để add cho mọi char trong roster nha~",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
     if (!taskName) {
       await interaction.reply({
@@ -911,8 +930,16 @@ function createRaidTaskCommand(deps) {
 
   async function handleRaidTaskCommand(interaction) {
     const sub = interaction.options.getSubcommand();
-    if (sub === "add") return handleAdd(interaction);
-    if (sub === "add-all") return handleAddAll(interaction);
+    if (sub === "add") {
+      // Sub-routing by `action`: single → one specific char (requires
+      // `character` field), all → every char in the roster (no character
+      // field needed). Default to "single" if action is missing for
+      // backward-compat with old test mocks that don't supply it.
+      const action =
+        interaction.options.getString("action", false) || "single";
+      if (action === "all") return handleAddAll(interaction);
+      return handleAddSingle(interaction);
+    }
     if (sub === "remove") return handleRemove(interaction);
     if (sub === "clear") return handleClear(interaction);
     await interaction.reply({
@@ -920,7 +947,7 @@ function createRaidTaskCommand(deps) {
         buildNoticeEmbed(EmbedBuilder, {
           type: "warn",
           title: "Subcommand không hợp lệ",
-          description: `Subcommand \`${sub}\` Artist không nhận được. Cho phép: \`add\` · \`add-all\` · \`remove\` · \`clear\`.`,
+          description: `Subcommand \`${sub}\` Artist không nhận được. Cho phép: \`add\` · \`remove\` · \`clear\`.`,
         }),
       ],
       flags: MessageFlags.Ephemeral,

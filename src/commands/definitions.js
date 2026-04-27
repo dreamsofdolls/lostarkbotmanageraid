@@ -221,7 +221,17 @@ function createRaidCommandDefinitions({
     .addSubcommand((sub) =>
       sub
         .setName("add")
-        .setDescription("Add a daily or weekly side task to one of your characters")
+        .setDescription("Add a daily or weekly side task (single char or every char in a roster)")
+        .addStringOption((opt) =>
+          opt
+            .setName("action")
+            .setDescription("single = một char cụ thể · all = mọi char trong roster")
+            .setRequired(true)
+            .addChoices(
+              { name: "Single character", value: "single" },
+              { name: "All characters in roster", value: "all" }
+            )
+        )
         .addStringOption((opt) =>
           opt
             .setName("roster")
@@ -231,58 +241,28 @@ function createRaidCommandDefinitions({
         )
         .addStringOption((opt) =>
           opt
+            .setName("name")
+            .setDescription("Task name (autocomplete from your past tasks, max 60 chars)")
+            .setRequired(true)
+            .setMaxLength(60)
+            .setAutocomplete(true)
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("reset")
+            .setDescription("How often this task resets")
+            .setRequired(true)
+            .addChoices(
+              { name: "Daily (17:00 VN)", value: "daily" },
+              { name: "Weekly (17:00 VN Wed)", value: "weekly" }
+            )
+        )
+        .addStringOption((opt) =>
+          opt
             .setName("character")
-            .setDescription("Character to attach this task to")
-            .setRequired(true)
+            .setDescription("(action=single only) Character to attach this task to - autocomplete by roster")
+            .setRequired(false)
             .setAutocomplete(true)
-        )
-        .addStringOption((opt) =>
-          opt
-            .setName("name")
-            .setDescription("Task name (autocomplete from your past tasks, max 60 chars)")
-            .setRequired(true)
-            .setMaxLength(60)
-            .setAutocomplete(true)
-        )
-        .addStringOption((opt) =>
-          opt
-            .setName("reset")
-            .setDescription("How often this task resets")
-            .setRequired(true)
-            .addChoices(
-              { name: "Daily (17:00 VN)", value: "daily" },
-              { name: "Weekly (17:00 VN Wed)", value: "weekly" }
-            )
-        )
-    )
-    .addSubcommand((sub) =>
-      sub
-        .setName("add-all")
-        .setDescription("Add the same task to EVERY character in a roster at once")
-        .addStringOption((opt) =>
-          opt
-            .setName("roster")
-            .setDescription("Roster (account) - task sẽ thêm cho mọi char trong roster này")
-            .setRequired(true)
-            .setAutocomplete(true)
-        )
-        .addStringOption((opt) =>
-          opt
-            .setName("name")
-            .setDescription("Task name (autocomplete from your past tasks, max 60 chars)")
-            .setRequired(true)
-            .setMaxLength(60)
-            .setAutocomplete(true)
-        )
-        .addStringOption((opt) =>
-          opt
-            .setName("reset")
-            .setDescription("How often this task resets")
-            .setRequired(true)
-            .addChoices(
-              { name: "Daily (17:00 VN)", value: "daily" },
-              { name: "Weekly (17:00 VN Wed)", value: "weekly" }
-            )
         )
     )
     .addSubcommand((sub) =>
