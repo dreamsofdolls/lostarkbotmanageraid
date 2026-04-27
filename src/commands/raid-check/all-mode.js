@@ -11,7 +11,7 @@
  * other handlers harder.
  */
 
-const { isSupportClass } = require("../../data/Class");
+const { isSupportClass, getClassEmoji } = require("../../data/Class");
 const { buildNoticeEmbed, UI } = require("../../raid/shared");
 const { buildAccountTaskFields } = require("../../raid/task-view");
 
@@ -390,7 +390,7 @@ function createAllModeHandler({
 
       const { fields, totals } = buildAccountTaskFields(account, {
         UI,
-        getClassEmoji: () => "",
+        getClassEmoji,
         truncateText,
       });
 

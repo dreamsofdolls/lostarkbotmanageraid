@@ -60,16 +60,14 @@ function buildAccountTaskFields(account, helpers) {
 
   const buildCharField = (character) => {
     const charName = getCharacterName(character);
-    // Floor to integer for the field-name header. Discord allocates inline
-    // column width based on the LONGEST line in any field's value, not on
-    // field-name length. Task view value lines (`🟢 Paradise`, `Weekly · 3/3`)
-    // are short, so Discord packs columns narrower than the Raid view does
-    // - and a header like `Myrtenshielder · 1734.17` overflows that narrow
-    // column and wraps onto a second line. Dropping the fractional part
-    // saves 2-3 chars per affected char and keeps every header on one line.
-    // The Raid view already fits comfortably (longer raid-status lines
-    // expand its columns), so its header still uses the raw decimal.
-    const itemLevel = Math.floor(Number(character.itemLevel) || 0);
+    // Decimal-preserving header. Item levels in Lost Ark have fractional
+    // precision (1734.17, 1710.83) and the player relies on those digits
+    // for honing decisions, so we keep them as-is. The previous "floor"
+    // workaround for column-wrap is replaced by widening value-line
+    // content below (raid-view-style `[icon] [name] · [info]` per task)
+    // so Discord's auto-fit allocates wide enough columns and the header
+    // never has to be trimmed.
+    const itemLevel = Number(character.itemLevel) || 0;
     const classIcon = getClassEmoji(character.class);
     const namePrefix = classIcon ? `${classIcon} ` : "";
     const fieldName = truncateText(
@@ -87,13 +85,25 @@ function buildAccountTaskFields(account, helpers) {
     totals.dailyDone += dailyTasks.filter((t) => t?.completed).length;
     totals.weeklyDone += weeklyTasks.filter((t) => t?.completed).length;
 
+    // Task-line format intentionally mirrors the Raid view's
+    // `[icon] [name] · [info]` pattern. Discord allocates inline-field
+    // column width from the longest line in the embed's combined value
+    // content - if every task line is just `[icon] [name]` (~11 chars)
+    // the columns shrink and char-name headers like `Crimsonjudgment ·
+    // 1700` wrap to a second line. Adding the `· daily`/`· weekly`
+    // suffix bumps each task line to ~17-19 chars (parity with raid
+    // lines like `🟢 Aegir Hard · 2/2`) and the columns auto-widen to
+    // accommodate the long char headers without any per-header
+    // truncation. The reset-cycle suffix is technically redundant with
+    // the section header right above it, but it pulls double duty as a
+    // visual padding mechanism and as quick-glance info while scrolling.
     const lines = [];
     if (dailyTasks.length > 0) {
       const dailyDone = dailyTasks.filter((t) => t.completed).length;
       lines.push(`**Daily** · ${dailyDone}/${dailyTasks.length}`);
       for (const task of dailyTasks) {
         const icon = task.completed ? UI.icons.done : UI.icons.pending;
-        lines.push(`${icon} ${task.name}`);
+        lines.push(`${icon} ${task.name} · daily`);
       }
     }
     if (weeklyTasks.length > 0) {
@@ -102,7 +112,7 @@ function buildAccountTaskFields(account, helpers) {
       lines.push(`**Weekly** · ${weeklyDone}/${weeklyTasks.length}`);
       for (const task of weeklyTasks) {
         const icon = task.completed ? UI.icons.done : UI.icons.pending;
-        lines.push(`${icon} ${task.name}`);
+        lines.push(`${icon} ${task.name} · weekly`);
       }
     }
     return {
