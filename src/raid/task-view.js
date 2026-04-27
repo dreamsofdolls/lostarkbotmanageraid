@@ -70,8 +70,11 @@ function buildAccountTaskFields(account, helpers) {
     const itemLevel = Number(character.itemLevel) || 0;
     const classIcon = getClassEmoji(character.class);
     const namePrefix = classIcon ? `${classIcon} ` : "";
+    // Keep the visual structure identical to raid-view headers, but bind
+    // the separator to the iLvl with NBSP so Discord does not wrap
+    // `1734.17` onto its own line in narrow inline-field columns.
     const fieldName = truncateText(
-      `${namePrefix}${charName} · ${itemLevel}`,
+      `${namePrefix}${charName}\u00A0·\u00A0${itemLevel}`,
       256
     );
 
