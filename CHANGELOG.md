@@ -28,6 +28,11 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 - Sync và Edit buttons giờ chỉ render trong view "All users" (filter mặc định). Khi user filter narrow xuống 1 user cụ thể, cả 2 button bị remove khỏi row, chỉ giữ pagination. Lý do: cả 2 action thuộc bulk scope (Sync sync mọi opted-in user, Edit cascade pick user/char bất kỳ) - mâu thuẫn với intent "tôi đang focus 1 user" của filter.
 - Sync button thêm điều kiện `optedInPendingCount > 0` mới render, parity với `/raid-status` (Sync ẩn hoàn toàn khi owner chưa opt-in). Trước đó button hiện nhưng disabled với label `"Sync (no opted-in users)"` đọc như visual noise; giờ ẩn luôn, manager fall back sang Edit cascade nếu cần update progress thủ công.
 
+### Added (`/raid-check` button mới `Bật auto-sync hộ N user` cho Manager flip flag thay user)
+- Button render khi filter "All users" + có `≥1 user pending chưa opt-in /raid-auto-manage`. Bấm → ephemeral followup với multi-select 25 user đầu, Manager pick 1+ user → Artist flip `User.autoManageEnabled = true` + stamp `lastAutoManageAttemptAt` (seed cooldown clock) + DM riêng cho mỗi user notify ai bật hộ + cách opt-out + hint Public Log.
+- Skip probe-before-enable (khác `/raid-auto-manage action:on` flow): Manager không phải data owner, không biết char nào private; probe tốn bible HTTP cho mỗi user. Stuck-private-log nudge flow đã handle case private 7 ngày 1 lần sau scheduler tick kế tiếp.
+- 3-min collector session tự expire, Discord StringSelect cap 25 nên truncation note xuất hiện khi >25 off-opted user (Manager bấm lại button cho batch tiếp).
+
 ## 2026-04-26
 
 ### Added
