@@ -421,8 +421,8 @@ test("buildRaidCheckSnapshotFromUsers keeps done-only rosters visible in the com
   assert.equal(snapshot.allChars.length, 3);
 });
 
-test("raid-check pagination timeout is 5 minutes while raid-status stays at 3 minutes", () => {
-  assert.equal(__test.STATUS_PAGINATION_SESSION_MS, 3 * 60 * 1000);
+test("raid-status + raid-check pagination timeouts both 5 minutes", () => {
+  assert.equal(__test.STATUS_PAGINATION_SESSION_MS, 5 * 60 * 1000);
   assert.equal(__test.RAID_CHECK_PAGINATION_SESSION_MS, 5 * 60 * 1000);
 });
 
