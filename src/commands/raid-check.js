@@ -4,7 +4,7 @@ const { createAllModeHandler } = require("./raid-check/all-mode");
 const { createEditUi } = require("./raid-check/edit-ui");
 const { createSyncUi } = require("./raid-check/sync-ui");
 const { isSupportClass, getClassEmoji } = require("../data/Class");
-const { buildNoticeEmbed } = require("../raid/shared");
+const { buildNoticeEmbed, pack2Columns } = require("../raid/shared");
 const { buildAccountTaskFields } = require("../raid/task-view");
 
 const RAID_CHECK_PAGINATION_SESSION_MS = 5 * 60 * 1000;
@@ -785,7 +785,6 @@ function createRaidCheckCommand(deps) {
       };
     };
 
-    const inlineSpacer = { name: "\u200B", value: "\u200B", inline: true };
     const ROSTERS_PER_PAGE = 2;
     const FILTER_ALL = "__all__";
 
@@ -845,11 +844,7 @@ function createRaidCheckCommand(deps) {
         value: truncateText(freshnessLine || "\u200B", 1024),
         inline: false,
       });
-      for (let i = 0; i < group.chars.length; i += 2) {
-        embed.addFields(buildCharField(group.chars[i]));
-        embed.addFields(inlineSpacer);
-        embed.addFields(group.chars[i + 1] ? buildCharField(group.chars[i + 1]) : inlineSpacer);
-      }
+      embed.addFields(...pack2Columns(group.chars.map(buildCharField)));
     };
 
     const buildRaidCheckPage = (rosterChunk, pageIndex, totalPages, visibleGroups) => {

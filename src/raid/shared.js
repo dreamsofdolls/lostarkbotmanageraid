@@ -193,6 +193,41 @@ function buildNoticeEmbed(EmbedBuilder, { type = "info", title, description }) {
   return embed;
 }
 
+// Frozen zero-width-space inline field used as a 2-column layout spacer.
+// Discord auto-packs `inline: true` fields up to 3 per row; injecting one
+// of these between every char card forces exactly 2 cards per row instead.
+// Kept frozen so accidental mutation (e.g. a caller setting `.inline =
+// false`) can't poison every other render that shares the reference.
+const INLINE_SPACER = Object.freeze({
+  name: "​",
+  value: "​",
+  inline: true,
+});
+
+/**
+ * Re-pack an array of inline-true fields into a 2-column layout by
+ * interleaving INLINE_SPACER between each pair. The trailing card on an
+ * odd-length array gets one extra spacer so Discord doesn't stretch it
+ * to full width on the last row.
+ *
+ *   pack2Columns([A, B, C]) → [A, spacer, B, A, spacer, spacer]   ❌ wrong
+ *
+ * Output shape is `[A, spacer, B, C, spacer, spacer]` -
+ *   row 1: A | spacer | B
+ *   row 2: C | spacer | spacer
+ * Discord renders 3 inline fields per row, so the spacer at index 1
+ * pushes B to a new column visually inside row 1, etc.
+ */
+function pack2Columns(fields) {
+  const out = [];
+  for (let i = 0; i < fields.length; i += 2) {
+    out.push(fields[i]);
+    out.push(INLINE_SPACER);
+    out.push(fields[i + 1] ? fields[i + 1] : INLINE_SPACER);
+  }
+  return out;
+}
+
 module.exports = {
   buildNoticeEmbed,
   ConcurrencyLimiter,
@@ -210,4 +245,6 @@ module.exports = {
   formatNextCooldownRemaining,
   waitWithBudget,
   buildDiscordIdentityFields,
+  INLINE_SPACER,
+  pack2Columns,
 };

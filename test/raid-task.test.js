@@ -145,6 +145,50 @@ test("ensureSideTasks returns existing array unchanged", () => {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
+// pack2Columns shared util: ZWS-spacer 2-column layout packer
+// ---------------------------------------------------------------------------
+
+test("pack2Columns: even count interleaves spacers correctly", () => {
+  const { pack2Columns, INLINE_SPACER } = require("../src/raid/shared");
+  const A = { name: "A", value: "a", inline: true };
+  const B = { name: "B", value: "b", inline: true };
+  const C = { name: "C", value: "c", inline: true };
+  const D = { name: "D", value: "d", inline: true };
+  const out = pack2Columns([A, B, C, D]);
+  // 4 chars -> 2 rows of [card, spacer, card]
+  assert.deepEqual(out, [A, INLINE_SPACER, B, C, INLINE_SPACER, D]);
+});
+
+test("pack2Columns: odd count pads trailing card with extra spacer", () => {
+  const { pack2Columns, INLINE_SPACER } = require("../src/raid/shared");
+  const A = { name: "A", value: "a", inline: true };
+  const B = { name: "B", value: "b", inline: true };
+  const C = { name: "C", value: "c", inline: true };
+  const out = pack2Columns([A, B, C]);
+  // C alone -> [C, spacer, spacer] so Discord doesn't full-width it.
+  assert.deepEqual(out, [A, INLINE_SPACER, B, C, INLINE_SPACER, INLINE_SPACER]);
+});
+
+test("pack2Columns: empty input returns empty array", () => {
+  const { pack2Columns } = require("../src/raid/shared");
+  assert.deepEqual(pack2Columns([]), []);
+});
+
+test("INLINE_SPACER is frozen so mutation can't poison shared reference", () => {
+  const { INLINE_SPACER } = require("../src/raid/shared");
+  assert.equal(Object.isFrozen(INLINE_SPACER), true);
+  // Defensive: setting a property on a frozen object throws in strict
+  // mode and silently no-ops in sloppy. Either way, the value can't
+  // change.
+  try {
+    INLINE_SPACER.inline = false;
+  } catch {
+    /* expected in strict mode */
+  }
+  assert.equal(INLINE_SPACER.inline, true);
+});
+
+// ---------------------------------------------------------------------------
 // Shared task-view helper: pure function used by both /raid-status + /raid-check
 // ---------------------------------------------------------------------------
 
