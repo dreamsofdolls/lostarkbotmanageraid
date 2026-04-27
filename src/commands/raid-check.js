@@ -924,14 +924,18 @@ function createRaidCheckCommand(deps) {
       // state - off-opted users see "Bật auto-sync hộ", opted-in users
       // see "Tắt auto-sync hộ". Symmetric: every action a Manager can
       // take on behalf has its inverse on the same surface.
+      // Button label drops the target's display name on purpose: filter
+      // narrow has already established which user is in focus (header
+      // section + filter dropdown both show the name), so repeating it
+      // on the button is just visual weight. The customId still carries
+      // the discordId for the dispatch handler.
       if (selectedId) {
         const focusedUserOptedIn = autoManageStateByDiscordId.get(selectedId);
-        const focusedDisplayName = displayMap.get(selectedId) || selectedId;
         if (focusedUserOptedIn === false) {
           row.addComponents(
             new ButtonBuilder()
               .setCustomId(`raid-check:enable-auto-one:${selectedId}`)
-              .setLabel(truncateText(`Bật auto-sync hộ ${focusedDisplayName}`, 80))
+              .setLabel("Bật auto-sync")
               .setEmoji("🔄")
               .setStyle(ButtonStyle.Primary)
               .setDisabled(disabled)
@@ -940,7 +944,7 @@ function createRaidCheckCommand(deps) {
           row.addComponents(
             new ButtonBuilder()
               .setCustomId(`raid-check:disable-auto-one:${selectedId}`)
-              .setLabel(truncateText(`Tắt auto-sync hộ ${focusedDisplayName}`, 80))
+              .setLabel("Tắt auto-sync")
               .setEmoji("🚫")
               .setStyle(ButtonStyle.Secondary)
               .setDisabled(disabled)

@@ -350,15 +350,18 @@ function createAllModeHandler({
       // depends on that user's current opt-in state. Both buttons reuse
       // the shared raid-check.js handlers (`enable-auto-one` /
       // `disable-auto-one`) since the action is raid-agnostic.
+      // Button label drops the target's display name on purpose: filter
+      // narrow has already established which user is in focus (author
+      // section + filter dropdown both show the name), so repeating it
+      // on the button is just visual weight. The customId still carries
+      // the discordId for the dispatch handler.
       if (filterUserId) {
         const focusedUserOptedIn = autoManageStateByDiscordId.get(filterUserId);
-        const focusedDisplayName =
-          authorMeta.get(filterUserId)?.displayName || filterUserId;
         if (focusedUserOptedIn === false) {
           row.addComponents(
             new ButtonBuilder()
               .setCustomId(`raid-check:enable-auto-one:${filterUserId}`)
-              .setLabel(truncateText(`Bật auto-sync hộ ${focusedDisplayName}`, 80))
+              .setLabel("Bật auto-sync")
               .setEmoji("🔄")
               .setStyle(ButtonStyle.Primary)
               .setDisabled(disabled)
@@ -367,7 +370,7 @@ function createAllModeHandler({
           row.addComponents(
             new ButtonBuilder()
               .setCustomId(`raid-check:disable-auto-one:${filterUserId}`)
-              .setLabel(truncateText(`Tắt auto-sync hộ ${focusedDisplayName}`, 80))
+              .setLabel("Tắt auto-sync")
               .setEmoji("🚫")
               .setStyle(ButtonStyle.Secondary)
               .setDisabled(disabled)
