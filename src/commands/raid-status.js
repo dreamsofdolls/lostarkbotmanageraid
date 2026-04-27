@@ -3,6 +3,7 @@ const {
   buildNoticeEmbed,
   pack2Columns,
   formatProgressTotals,
+  normalizeName,
 } = require("../raid/shared");
 const { buildAccountTaskFields } = require("../raid/task-view");
 
@@ -1467,11 +1468,24 @@ function createRaidStatusCommand(deps) {
             await component.deferUpdate().catch(() => {});
             return;
           }
+          // Bind by accountName captured at click-time, not by currentPage
+          // index. If the account list was mutated between session start
+          // and this click (e.g. concurrent /remove-roster shrunk the
+          // list), userDocFresh.accounts[currentPage] could now point at
+          // a different account and we'd write the toggle into the wrong
+          // roster. Refind by normalized name inside the save closure.
+          const targetAccountName = accounts[currentPage]?.accountName || "";
+          if (!targetAccountName) {
+            await component.deferUpdate().catch(() => {});
+            return;
+          }
           try {
             await saveWithRetry(async () => {
               const userDocFresh = await User.findOne({ discordId });
               if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return;
-              const account = userDocFresh.accounts[currentPage];
+              const account = userDocFresh.accounts.find(
+                (a) => normalizeName(a?.accountName) === normalizeName(targetAccountName)
+              );
               if (!account || !Array.isArray(account.characters)) return;
               // Find every char that owns the matching (name, reset) task.
               const owners = [];
@@ -1511,11 +1525,22 @@ function createRaidStatusCommand(deps) {
             await component.deferUpdate().catch(() => {});
             return;
           }
+          // Same accountName binding as the bulk-toggle path - resolve
+          // the account by stable name rather than by currentPage index
+          // so a concurrent roster-list mutation can't redirect the
+          // single-task toggle into a different account.
+          const targetAccountName = accounts[currentPage]?.accountName || "";
+          if (!targetAccountName) {
+            await component.deferUpdate().catch(() => {});
+            return;
+          }
           try {
             await saveWithRetry(async () => {
               const userDocFresh = await User.findOne({ discordId });
               if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return;
-              const account = userDocFresh.accounts[currentPage];
+              const account = userDocFresh.accounts.find(
+                (a) => normalizeName(a?.accountName) === normalizeName(targetAccountName)
+              );
               if (!account || !Array.isArray(account.characters)) return;
               const target = account.characters.find(
                 (c) =>

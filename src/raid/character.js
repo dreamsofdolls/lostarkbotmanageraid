@@ -122,6 +122,27 @@ function sanitizeTasks(tasks) {
     }));
 }
 
+// Sanitize per-character side-task entries (sideTaskSchema in models/user.js).
+// Mirrors sanitizeTasks but maps the sideTaskSchema fields. Treated as
+// user-owned state on par with `tasks`, so buildCharacterRecord must
+// preserve it across roster rebuilds (e.g. /edit-roster Confirm) — without
+// this pass, a Confirm that keeps a char would silently wipe its side
+// tasks because the helper rebuilds the char shape from a minimal field
+// list.
+function sanitizeSideTasks(sideTasks) {
+  if (!Array.isArray(sideTasks)) return [];
+  return sideTasks
+    .filter((task) => task && task.taskId && task.name)
+    .map((task) => ({
+      taskId: String(task.taskId),
+      name: String(task.name),
+      reset: task.reset === "weekly" ? "weekly" : "daily",
+      completed: Boolean(task.completed),
+      lastResetAt: Number(task.lastResetAt) || 0,
+      createdAt: Number(task.createdAt) || Date.now(),
+    }));
+}
+
 function getGateKeys(assignedRaid) {
   return Object.keys(assignedRaid || {})
     .filter((key) => /^G\d+$/i.test(key))
@@ -244,6 +265,7 @@ function buildCharacterRecord(source, fallbackId) {
     combatScore: String(source?.combatScore || ""),
     assignedRaids: ensureAssignedRaids(source),
     tasks: sanitizeTasks(source?.tasks),
+    sideTasks: sanitizeSideTasks(source?.sideTasks),
   };
 }
 
@@ -420,6 +442,7 @@ module.exports = {
   getRequirementFor,
   getBestEligibleModeKey,
   sanitizeTasks,
+  sanitizeSideTasks,
   getGateKeys,
   normalizeAssignedRaid,
   getCompletedGateKeys,

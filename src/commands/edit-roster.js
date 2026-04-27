@@ -66,8 +66,11 @@ function createEditRosterCommand({
   // without driving the full Discord handler. The saved-first ordering
   // is LOAD-BEARING: slice-to-cap must never bump a saved char out of
   // the displayed window because Confirm persists exactly the displayed
-  // selection. Returns the displayed chars plus the count of bible-only
-  // chars excluded by the cap so the embed can warn the user.
+  // selection. Returns the displayed chars plus separate counts for
+  // bible-only-overflow vs saved-overflow so the embed can warn the user
+  // accurately and persistEditedRoster can preserve off-window saved
+  // chars instead of silently dropping them on Confirm (legacy rosters
+  // with > cap saved chars).
   function buildEditRosterPickerChars(savedChars, bibleChars, cap) {
     const savedMap = new Map(savedChars.map((c) => [normalizeName(c.name), c]));
     const bibleMap = new Map(bibleChars.map((c) => [normalizeName(c.charName), c]));
@@ -97,8 +100,25 @@ function createEditRosterCommand({
     });
 
     const displayChars = merged.slice(0, cap);
-    const excludedBibleOnlyCount = Math.max(0, merged.length - displayChars.length);
-    return { merged, displayChars, excludedBibleOnlyCount };
+    const excluded = merged.slice(cap);
+    let excludedBibleOnlyCount = 0;
+    let excludedSavedCount = 0;
+    const excludedSavedKeys = new Set();
+    for (const c of excluded) {
+      if (c.savedKey) {
+        excludedSavedCount += 1;
+        excludedSavedKeys.add(c.savedKey);
+      } else {
+        excludedBibleOnlyCount += 1;
+      }
+    }
+    return {
+      merged,
+      displayChars,
+      excludedBibleOnlyCount,
+      excludedSavedCount,
+      excludedSavedKeys,
+    };
   }
 
   // Multi-seed bible fetch with overlap reject. Builds a seed list from
@@ -222,6 +242,12 @@ function createEditRosterCommand({
     } else {
       desc.push(
         `${UI.icons.info} ${NEW_TAG} = char mới có ở bible chưa được add · ${STALE_TAG} = char đã saved nhưng không còn ở bible (rename/private log?).`
+      );
+    }
+    if (session.excludedSavedCount > 0) {
+      desc.push("");
+      desc.push(
+        `${UI.icons.warn} Roster có saved chars vượt cap picker (${PICKER_MAX_OPTIONS}). **${session.excludedSavedCount}** saved char ngoài cửa sổ sẽ được giữ nguyên không thay đổi - cậu chỉ edit được top ${PICKER_MAX_OPTIONS} chars hiển thị thôi nha. Để dọn hẳn, dùng \`/remove-roster\` rồi \`/add-roster\` lại từ đầu.`
       );
     }
     if (session.excludedBibleOnlyCount > 0) {
@@ -379,14 +405,18 @@ function createEditRosterCommand({
 
   // The diff-apply save: fully replace account.characters[] based on the
   // user's selection, but preserve per-char state (raid completion,
-  // bibleSerial/cid/rid, publicLogDisabled, tasks) on chars that survive
-  // the edit by name match. New chars get a fresh id + record. Removed
-  // chars are dropped entirely.
+  // bibleSerial/cid/rid, publicLogDisabled, tasks, sideTasks) on chars
+  // that survive the edit by name match. New chars get a fresh id +
+  // record. Removed chars are dropped entirely. Off-window saved chars
+  // (legacy roster > picker cap, recorded in session.preservedSavedKeys)
+  // were never displayed to the user, so they bypass the diff entirely
+  // and are kept as-is at the head of account.characters.
   //
   // Returns a summary: which char names were added/removed/kept, plus
   // the final chars array for the embed.
   async function persistEditedRoster(session, selectedChars) {
     const summary = { added: [], removed: [], kept: [], finalChars: [] };
+    const preservedKeys = session.preservedSavedKeys || new Set();
 
     await saveWithRetry(async () => {
       const userDoc = await User.findOne({ discordId: session.discordId });
@@ -413,14 +443,27 @@ function createEditRosterCommand({
       summary.kept = [];
 
       // Tally removals: chars previously in account but absent from the
-      // user's selection.
+      // user's selection. Off-window saved chars (preservedKeys) are
+      // never on the picker so they cannot be selected, but they MUST
+      // NOT be tallied as removals either - they survive untouched.
       for (const [key, oldChar] of existingMap.entries()) {
+        if (preservedKeys.has(key)) continue;
         if (!selectedNameSet.has(key)) {
           summary.removed.push(getCharacterName(oldChar));
         }
       }
 
-      account.characters = selectedChars.map((character) => {
+      // Off-window saved chars are appended as-is at the head of the
+      // rebuilt characters array. Order matters less than identity here
+      // (every other code path looks them up by name), but heading the
+      // list keeps stable indices for the chars that did fit in the
+      // picker.
+      const preservedChars = [];
+      for (const [key, oldChar] of existingMap.entries()) {
+        if (preservedKeys.has(key)) preservedChars.push(oldChar);
+      }
+
+      const editedChars = selectedChars.map((character) => {
         const key = normalizeName(character.charName);
         const existing = existingMap.get(key);
         if (existing) {
@@ -439,17 +482,15 @@ function createEditRosterCommand({
           },
           existing?.id || createCharacterId()
         );
-        // buildCharacterRecord (shared helper) intentionally ships a
-        // minimal char shape (id/name/class/itemLevel/isGoldEarner/
-        // combatScore/assignedRaids/tasks) and does NOT pass through
-        // bible-side identifiers or the public-log flag. Edit-roster's
-        // contract is "preserve per-char state across edits", so
-        // explicitly overlay these fields. Without this, every Confirm
-        // would wipe bibleSerial/cid/rid (forcing the next
-        // /raid-auto-manage sync to re-resolve them via bible's SSR
-        // page — extra HTTP round-trip per char) and forget
-        // publicLogDisabled (causing the bot to re-attempt sync on
-        // chars known to have public log off).
+        // buildCharacterRecord ships id/name/class/itemLevel/isGoldEarner/
+        // combatScore/assignedRaids/tasks/sideTasks. It does NOT pass
+        // through bible-side identifiers or the public-log flag, so
+        // overlay them explicitly - without this, every Confirm would
+        // wipe bibleSerial/cid/rid (forcing the next /raid-auto-manage
+        // sync to re-resolve them via bible's SSR page, extra HTTP
+        // round-trip per char) and forget publicLogDisabled (causing
+        // the bot to re-attempt sync on chars known to have public log
+        // off).
         if (existing) {
           if (existing.bibleSerial != null) record.bibleSerial = existing.bibleSerial;
           if (existing.bibleCid != null) record.bibleCid = existing.bibleCid;
@@ -460,6 +501,8 @@ function createEditRosterCommand({
         }
         return record;
       });
+
+      account.characters = [...preservedChars, ...editedChars];
 
       // Stamp lastRefreshedAt: the bible fetch we just did to build the
       // picker is fresher than whatever was on the account, so /raid-status
@@ -544,8 +587,13 @@ function createEditRosterCommand({
       targetAccount.accountName
     );
 
-    const { merged, displayChars, excludedBibleOnlyCount } =
-      buildEditRosterPickerChars(savedChars, bibleChars, PICKER_MAX_OPTIONS);
+    const {
+      merged,
+      displayChars,
+      excludedBibleOnlyCount,
+      excludedSavedCount,
+      excludedSavedKeys,
+    } = buildEditRosterPickerChars(savedChars, bibleChars, PICKER_MAX_OPTIONS);
 
     if (merged.length === 0) {
       await interaction.editReply({
@@ -567,9 +615,9 @@ function createEditRosterCommand({
       return;
     }
 
-    if (excludedBibleOnlyCount > 0) {
+    if (excludedBibleOnlyCount > 0 || excludedSavedCount > 0) {
       console.warn(
-        `[edit-roster] roster ${targetAccount.accountName} merged ${merged.length} chars; ${excludedBibleOnlyCount} bible-only char(s) excluded from picker (cap ${PICKER_MAX_OPTIONS}).`
+        `[edit-roster] roster ${targetAccount.accountName} merged ${merged.length} chars; excluded from picker (cap ${PICKER_MAX_OPTIONS}): ${excludedSavedCount} saved + ${excludedBibleOnlyCount} bible-only.`
       );
     }
 
@@ -589,6 +637,12 @@ function createEditRosterCommand({
       accountName: targetAccount.accountName,
       bibleError,
       excludedBibleOnlyCount,
+      excludedSavedCount,
+      // Off-window saved-char keys (legacy roster > picker cap). These chars
+      // are not in the picker, so they cannot participate in the toggle
+      // decision - persistEditedRoster preserves them as-is rather than
+      // dropping them when rewriting account.characters from selectedChars.
+      preservedSavedKeys: excludedSavedKeys,
       chars: displayChars.map((c) => ({
         charName: c.charName,
         className: c.className,

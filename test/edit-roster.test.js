@@ -158,6 +158,112 @@ test("buildEditRosterPickerChars: saved chars never excluded by truncation when 
   assert.equal(savedDisplayedCount, 25);
 });
 
+test("buildEditRosterPickerChars: tracks saved-overflow keys when savedCount > cap (legacy roster)", () => {
+  // Codex round 32 finding #2: a legacy roster with > cap saved chars
+  // (e.g. 22 chars stored before the 20-cap was tightened) gets sliced
+  // to top 20. The 2 dropped saved chars must be exposed via
+  // excludedSavedKeys so persistEditedRoster can preserve them as-is
+  // instead of silently deleting them on Confirm.
+  const { factory } = makeFactory();
+  const savedChars = [];
+  for (let i = 0; i < 22; i += 1) {
+    savedChars.push({
+      name: `Saved${String(i).padStart(2, "0")}`,
+      class: "Bard",
+      itemLevel: 1500 + i,
+      combatScore: String(50000 + i * 100),
+    });
+  }
+  const bibleChars = savedChars.map((c) => ({
+    charName: c.name,
+    className: c.class,
+    itemLevel: c.itemLevel,
+    combatScore: c.combatScore,
+  }));
+
+  const {
+    displayChars,
+    excludedBibleOnlyCount,
+    excludedSavedCount,
+    excludedSavedKeys,
+  } = factory.__test.buildEditRosterPickerChars(savedChars, bibleChars, 20);
+
+  assert.equal(displayChars.length, 20);
+  assert.equal(excludedBibleOnlyCount, 0);
+  assert.equal(excludedSavedCount, 2);
+  assert.equal(excludedSavedKeys.size, 2);
+  // Lowest-CP saved chars are the ones pushed off-window (sort puts
+  // higher CP first within the saved tier).
+  assert.equal(excludedSavedKeys.has("saved00"), true);
+  assert.equal(excludedSavedKeys.has("saved01"), true);
+});
+
+test("persistEditedRoster: preserves off-window saved chars when picker capped (data-loss fix)", async () => {
+  // The legacy-roster bug surface: 22 saved chars + cap 20. The picker
+  // shows top 20 (by saved-first sort). User toggles off chars 5/10 and
+  // Confirms. The 2 off-window chars (Saved00, Saved01 - lowest CP)
+  // must SURVIVE Confirm even though they were never on the picker.
+  const { factory, docs } = makeFactory();
+  const characters = [];
+  for (let i = 0; i < 22; i += 1) {
+    characters.push({
+      id: `id-${i}`,
+      name: `Saved${String(i).padStart(2, "0")}`,
+      class: "Bard",
+      itemLevel: 1500 + i,
+      combatScore: String(50000 + i * 100),
+      assignedRaids: { armoche: {}, kazeros: {}, serca: {} },
+      tasks: [],
+      sideTasks: [],
+    });
+  }
+  // Stamp side-task on the off-window low-CP char to also pin sideTasks
+  // preservation through the off-window code path.
+  characters[0].sideTasks = [
+    { taskId: "t1", name: "una", reset: "daily", completed: false, lastResetAt: 0, createdAt: 1 },
+  ];
+  docs.set("user-1", {
+    discordId: "user-1",
+    accounts: [{ accountName: "Alpha", characters }],
+  });
+
+  const preservedSavedKeys = new Set(["saved00", "saved01"]);
+  const session = makeEditSession({ accountName: "Alpha" });
+  session.preservedSavedKeys = preservedSavedKeys;
+
+  // User confirms keeping all 20 displayed (Saved02..Saved21) plus
+  // toggles off two of them as removals (Saved05, Saved10).
+  const selected = [];
+  for (let i = 21; i >= 2; i -= 1) {
+    if (i === 5 || i === 10) continue;
+    selected.push({
+      charName: `Saved${String(i).padStart(2, "0")}`,
+      className: "Bard",
+      itemLevel: 1500 + i,
+      combatScore: String(50000 + i * 100),
+    });
+  }
+
+  const summary = await factory.__test.persistEditedRoster(session, selected);
+
+  // Off-window keys are NOT counted as removed even though they aren't
+  // in selectedChars.
+  assert.deepEqual(summary.removed.sort(), ["Saved05", "Saved10"]);
+
+  const stored = docs.get("user-1");
+  const finalNames = stored.accounts[0].characters.map((c) => c.name).sort();
+  // Saved00 + Saved01 survive at the head, plus the 18 selected.
+  assert.equal(finalNames.length, 20);
+  assert.equal(finalNames.includes("Saved00"), true);
+  assert.equal(finalNames.includes("Saved01"), true);
+  assert.equal(finalNames.includes("Saved05"), false);
+  assert.equal(finalNames.includes("Saved10"), false);
+  // Off-window char's sideTasks survive intact.
+  const saved00 = stored.accounts[0].characters.find((c) => c.name === "Saved00");
+  assert.equal(saved00.sideTasks.length, 1);
+  assert.equal(saved00.sideTasks[0].taskId, "t1");
+});
+
 test("buildEditRosterPickerChars: surfaces bible-only chars in remaining slots when room exists", () => {
   // 3 saved + 5 bible-only → 25-cap leaves 22 free slots → all 5
   // bible-only fit, 0 excluded.
@@ -492,6 +598,74 @@ test("persistEditedRoster: preserves per-char state (raid completion, bibleSeria
   assert.equal(a.assignedRaids.kazeros.G1.completedDate, 111);
   assert.equal(a.tasks[0].completions, 3);
   assert.equal(a.tasks[0].completionDate, 222);
+});
+
+test("persistEditedRoster: preserves sideTasks on kept chars (HIGH bug fix)", async () => {
+  // Codex round 32 finding #1: Confirm path used buildCharacterRecord
+  // which previously didn't copy sideTasks, so any user with /raid-task
+  // entries on a char would silently lose them on /edit-roster Confirm
+  // even when re-selecting that char. Pin the fix: sideTasks must
+  // round-trip through persistEditedRoster intact.
+  const { factory, docs } = makeFactory();
+  docs.set("user-1", {
+    discordId: "user-1",
+    accounts: [
+      {
+        accountName: "Alpha",
+        characters: [
+          {
+            id: "a-id",
+            name: "A",
+            class: "Bard",
+            itemLevel: 1700,
+            combatScore: "85000",
+            assignedRaids: { armoche: {}, kazeros: {}, serca: {} },
+            tasks: [],
+            sideTasks: [
+              {
+                taskId: "side-1",
+                name: "Una daily",
+                reset: "daily",
+                completed: true,
+                lastResetAt: 1700000000000,
+                createdAt: 1690000000000,
+              },
+              {
+                taskId: "side-2",
+                name: "Guardian weekly",
+                reset: "weekly",
+                completed: false,
+                lastResetAt: 1700000000000,
+                createdAt: 1690000000000,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  const session = makeEditSession({ accountName: "Alpha" });
+  // Confirm with A unchanged - the bug surfaces here because Confirm
+  // rebuilds the char record from scratch even when nothing edits.
+  const selected = [
+    { charName: "A", className: "Bard", itemLevel: 1700, combatScore: "85000" },
+  ];
+
+  await factory.__test.persistEditedRoster(session, selected);
+
+  const stored = docs.get("user-1");
+  const a = stored.accounts[0].characters[0];
+  assert.equal(Array.isArray(a.sideTasks), true);
+  assert.equal(a.sideTasks.length, 2);
+  const byId = Object.fromEntries(a.sideTasks.map((t) => [t.taskId, t]));
+  assert.equal(byId["side-1"].name, "Una daily");
+  assert.equal(byId["side-1"].reset, "daily");
+  assert.equal(byId["side-1"].completed, true);
+  assert.equal(byId["side-1"].lastResetAt, 1700000000000);
+  assert.equal(byId["side-2"].name, "Guardian weekly");
+  assert.equal(byId["side-2"].reset, "weekly");
+  assert.equal(byId["side-2"].completed, false);
 });
 
 test("persistEditedRoster: throws when account vanished between command and Confirm", async () => {
