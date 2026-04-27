@@ -699,6 +699,7 @@ const raidStatusCommand = createRaidStatusCommand({
   collectStaleAccountRefreshes,
   applyStaleAccountRefreshes,
   formatRosterRefreshCooldownRemaining,
+  ROSTER_REFRESH_COOLDOWN_MS,
   acquireAutoManageSyncSlot,
   releaseAutoManageSyncSlot,
   gatherAutoManageLogsForUserDoc,
