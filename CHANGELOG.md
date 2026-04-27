@@ -1,284 +1,126 @@
 # Changelog
 
-Dates use the local calendar of the commit. Format follows [Keep a Changelog](https://keepachangelog.com/).
+Dates use the local calendar of the commit. Structure loosely follows [Keep a Changelog](https://keepachangelog.com/).
+
+This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
 ## 2026-04-27
 
-### Fixed (`/raid-help` regression: round-31 rewrite drop EN/VN pairs nên EN view bị mix VN bullets)
-- Trainee phát hiện EN view của /raid-help vẫn hiện bullet tiếng Việt (tớ rewrite round 31 chỉ giữ EN/VN paired ở intro line, các bullet khác để untagged → render cả 2 lang). Đúng, đó là regression.
-- Re-pair every bullet với EN: + VN: prefix riêng. Untagged chỉ giữ cho separator (blank line) + bullet hoàn toàn ngôn ngữ-neutral (vd `• Serca Hard Clauseduk`). EN user mở /raid-help language:en giờ thấy English thuần, VN user thấy Vietnamese thuần.
-- File 424 → 502 lines (+78 do double-language). Suite stays at 227.
-
-### Changed (`/raid-help` rework user-first: drop tech detail + onboarding section)
-- Trước mỗi section dài 8-15 bullet mix tech detail (Mongo `$or`, `lastAutoManageAttemptAt` cooldown logic, factory pattern, prefix-match dispatcher, customId routing). User gõ `/raid-help` chỉ cần biết "lệnh làm gì + khi nào dùng" - tech bullet drown signal.
-- Rewrite mỗi section theo template 4 phần: 1-line intro EN/VN, **Khi nào dùng** (use case cụ thể), **Cách Artist xử lý** (flow ngắn), **Mẹo** (2-3 UX tip). Drop hết Mongo path / factory wiring / customId scheme. Giữ contract numbers (cap 20 char/roster, 3 daily + 5 weekly tasks, 15s/10m cooldown, 17:00 VN reset).
-- Thêm section đầu **"🚀 Mới vào - Bắt đầu ở đây"**: 3 bước onboarding (`/add-roster` → `/raid-status` → `/raid-set` hoặc `/raid-auto-manage`). User mới gõ `/raid-help` thấy section này đầu tiên trong dropdown, đỡ phải đoán flow.
-- Test pin keys updated (10 → 11 sections), 2 phrase regex update theo new copy. Suite stays at 227.
-
-### Refactor (DRY round 30: shared utilities cho raid-status + raid-check)
-- **Skip #1 chủ động**: per-char raid field renderer trông giống nhau ngoài mặt nhưng input shape (raw char vs pre-computed snapshot) + output (multi-raid line vs single icon+count) + special states (raid-check có "not-eligible" branch) divergent quá. Forced shape sẽ stiffen → giữ surface-specific.
-- **#2 `INLINE_SPACER` + `pack2Columns(fields)` shared util** trong `src/raid/shared.js`: 3 call sites (raid-status raid view, raid-check raid view, raid/task-view.js) đang inline cùng spacer constant + 5-line packing loop. Extract → 1-line caller. INLINE_SPACER frozen để mutation không poison shared ref.
-- **#3 `formatProgressTotals(totals, UI)` shared formatter** cùng file: render `🟢 N done · 🟡 N partial · ⚪ N pending [· 🔒 N not eligible]` line. Cả 2 surface caller giữ aggregation upstream (raid-status derive pending từ total-completed-partial, raid-check track pending trực tiếp + có notEligible) rồi gọi formatter cho line. Đảm bảo icon ordering / spacing không drift.
-- 7 unit test mới (4 cho pack2Columns + INLINE_SPACER frozen, 3 cho formatProgressTotals). Suite 220 → 227.
-
-### Refactor (extract `buildAccountTaskFields` helper - DRY giữa /raid-status + /raid-check Manager Task view)
-- Round 29 đầu tiên duplicate ~80 LOC layout (per-char field + 2-col ZWS-spacer packing + totals math) ở cả `/raid-status` Task view và `/raid-check raid:all` Manager Task view. Trainee flag "cồng kềnh" → tớ extract pure helper `src/raid/task-view.js::buildAccountTaskFields(account, helpers)`. Cả 2 surface giờ thin wrapper - chỉ owns title/description/footer/placeholder, body delegate.
-- Manager view chuyển từ "stack N embed" → "1 embed/page với pagination Prev/Next" (parity /raid-status), session 5 phút giống raid-check pagination.
-- 3 unit test mới cho helper: 2-column packing math, empty-account, odd-char spacer pad. Suite 217 → 220.
-
-### Added (`/raid-check raid:all` Manager Task view button cho monitoring)
-- Button mới `📝 Xem tasks` trong button row của `/raid-check raid:all`, chỉ hiện khi user filter narrow xuống 1 user cụ thể (parity vị trí với `Bật/Tắt auto-sync` button). Click → ephemeral followup embed hiển thị side tasks của user đó per-account, layout 2-column char fields giống `/raid-status` Task view, read-only (không có toggle dropdown).
-- Privacy note: round 28 tớ design schema-level isolation `accounts.characters.sideTasks` exclude khỏi raid-check projection. Round 29 reverse decision theo Manager design call - Manager cần monitor chore progress của member. Member không nhận notification khi Manager xem.
-- Projection: `RAID_CHECK_USER_QUERY_FIELDS` + all-mode select bổ sung `accounts.characters.sideTasks`. 2 regression test flip từ "must NOT include sideTasks" → "must INCLUDE sideTasks", giữ explicit-enumeration shape (vẫn không cho whole `accounts` blob để future fields opt-in chọn lọc).
-- Click ephemeral nên data không leak vào channel transcript. Discord caps 10 embeds/reply, 1 embed/account thoải mái cho realistic 1-3 account user.
-
-### Fixed (real-time countdown wording: "Next sync ago" awkwardness sau khi qua mốc 0)
-- Discord `<t:UNIX:R>` tick client-side liên tục, khi nextEligible qua mốc 0 → flip sang past tense "16 seconds ago". Wording cũ `Next sync <t:R>` đọc thành `Next sync 16 seconds ago` nghe sai (manager 15s cooldown idle expose bug rõ nhất).
-- Reword: `Next sync` → `Sync ready`, `Next refresh` → `Refresh ready`. Cả 2 tense đọc OK: future `Sync ready in 14s` (sắp ready) + past `Sync ready 16s ago` (đã ready 16s rồi). Test pin updated. HELP_SECTIONS notes synced.
-
-### Added (Task view: bulk-toggle + roster-wide placeholder field)
-- Char-filter dropdown trong `/raid-status` Task view giờ có option đầu `🌐 Tất cả character · X/Y` khi account có >1 char-có-task. Pick → toggle dropdown đổi sang aggregate mode: liệt kê mọi `(name, reset)` task gom lại từ mọi char với label `<icon> <name> · <cycle> (X/N done)`. Click 1 task → flip cùng state cho mọi char đang sở hữu (mọi `🟢` → tất cả `⚪`, ngược lại tất cả `🟢`). Use case: vừa xong Paradise daily cho 6 alts, click 1 lần xong cả 6.
-- Placeholder field "🌟 Task chung của roster (sắp có)" giữa per-char cards và footer - copy Artist-voice giới thiệu feature *task áp cho cả roster* (1 task định nghĩa, áp mọi char trong account) sắp được code. Trong lúc chờ user dùng `action:all` để bulk add tạm. Char cap mỗi page giảm từ 12 → 11 để placeholder field fit Discord 25-field embed cap.
-
-### Changed (`/raid-task`: gộp `add` + `add-all` thành 1 subcommand `add` với option `action`)
-- Trước có 2 subcommand riêng `/raid-task add` (1 char) + `/raid-task add-all` (mọi char trong roster) - autocomplete UI hiển thị cả 2 nhìn rối. Gộp thành `/raid-task add action:<single|all>`. Default action không có nhưng sub-routing fallback "single" để backward-compat test mocks.
-- `character` field giờ optional ở Discord schema; runtime validate: `action=single` mà thiếu `character` → reject với hint suggest action `all`. Same conditional-required pattern như `/raid-channel config action:set channel:<x>`.
-- HELP_SECTIONS + README đồng bộ.
-
-### Added (real-time freshness countdown qua Discord native timestamp + explicit Sync feedback)
-- `buildAccountFreshnessLine` (shared bởi `/raid-status` + `/raid-check` + raid:all) đổi từ `formatShortRelative()` static → Discord native timestamp `<t:UNIX:R>`. Browser tự tick từng giây, không cần server push hay setInterval. "Last updated 30m ago" giờ đếm thời gian lùi mượt khi user mở embed lâu, "Next refresh in 1h30m" cũng tự count down về 0.
-- `synced-no-new` outcome trước return null (silent embed re-render) → giờ surface `${UI.icons.done} Artist đã sync rồi, hiện không có gate clear mới nha~` ở description. User biết click Sync đã work mà không có gì mới.
-- Click Sync button trong `/raid-status` giờ kèm ephemeral `followUp` notice với type-coded copy: `applied N gate mới`, `synced không gate mới`, hoặc `failed bible dở chứng`. Trước đó embed re-render mặc định không tell user explicit success/failure.
-
-### Changed (`/raid-status` session: 3 phút → 5 phút, parity với `/raid-check`)
-- `STATUS_PAGINATION_SESSION_MS` 3 → 5 min. Trước /raid-status hết hạn nhanh hơn /raid-check (3 vs 5), với view toggle Task ↔ Raid + nhiều dropdown hơn (raid filter, view, char filter, task toggle), 3 phút bắt đầu thiếu để user xem + toggle complete loạt task. Test pin updated.
-
-### Fixed (Task view UX: custom emoji rendered as raw markup trong dropdown + icon parity raid view)
-- **StringSelectMenu custom emoji bug**: char-filter dropdown nhúng `${classIcon}` (= `<:weather_artist_047224:1497...>`) vào `label` string → Discord render thành raw markup chữ vì StringSelectMenu chỉ accept custom emoji qua structured field `emoji: { id, name, animated }`, không qua label text. Fix: parse custom emoji form `<a?:name:id>` thành object, pass qua option `emoji` property; label giữ plain text.
-- **Embed icon parity**: section header trong Task view trước dùng `🌒 Daily` / `📅 Weekly` - calendar emoji render kiểu "17" tile xấu trên 1 số client. Fix: drop emoji prefix ở section header (chỉ `**Daily** · X/Y`), task line icons swap `✅/⬜` → `UI.icons.done` (🟢) `/ UI.icons.pending` (⚪) parity raid view. Footer dùng cùng icon set.
-- Toggle dropdown labels cũng drop calendar emoji + thêm cycle suffix dạng text (`task.reset` → "daily"/"weekly") cho rõ.
-
-### Fixed (welcome embed: split field "📣 Artist sẽ tự nói" sau khi đụng cap 1024)
-- **Production crash** ở `/raid-channel config action:repin` với `ExpectedConstraintError: s.string().lengthLessThanOrEqual()` - field "📣 Artist sẽ tự nói trong channel này khi nào" đã 1185 chars > Discord cap 1024 sau khi bullet maintenance T-3h/.../T-1m thêm earlier today (2026-04-27 maintenance reminder commit).
-- Fix: tách bullet maintenance thành field riêng "🛠️ Lịch bảo trì thứ 4 (14:00 VN)". Field gốc giờ 894 chars + field mới 270 chars, đều an toàn dưới cap. Total embed ~4500/6000 vẫn nhiều headroom.
-- 2 regression test ở `test/raid-channel-welcome.test.js` parse source để pin: mỗi field ≤ 1024, tổng < 5500. Suite 213 → 215.
-
-### Changed (`/raid-task`: thêm `roster` option scoped autocomplete - parity `/raid-set`)
-- 3 sub `add` / `remove` / `clear` đều thêm option `roster` required đứng trước `character`. Char autocomplete giờ filter theo roster đã pick - sidesteps Discord 25-result cap khi user có 5+ rosters × 6 chars (~30+ total) bị silent truncate ở top-25 by iLvl. Same-named chars across rosters cũng disambiguate được.
-- `findCharacterInUser(userDoc, charName, rosterName?)` accept optional rosterName scoping; legacy callers (rosterName=null) vẫn first-by-iteration để backward-compat. Clear-confirm button customId expand thành `raid-task:clear-confirm:<encodedRoster>:<encodedChar>` với fallback parse cho session pending từ trước deploy.
-
-### Fixed (`/raid-task` + `/raid-status` Task view: 2 Codex round-28 findings)
-- **HIGH: newly-added task bị reset oan trong cùng kỳ** - `handleAdd` để `lastResetAt: 0`, scheduler tick coi mọi task có `lastResetAt < cycleStart` là expired và flip về ⬜. User add daily task lúc 20:00 VN + tick complete ngay → 30 phút sau bị reset oan dù vẫn cùng cycle. Fix: seed `lastResetAt = dailyResetStartMs() | weekResetStartMs()` lúc add, cycleStart deps inject vào factory. Regression test pin both daily + weekly seed value.
-- **MEDIUM: > 25 tasks/account silent drop khỏi toggle dropdown** - cap 25 hardcoded ở `buildTaskToggleRow` cộng cap 8/char × 4 char đã có thể vượt. Fix: thêm row dropdown `Chọn character để toggle task...` (per-page Map state), filter toggle dropdown theo selected char, default auto-pick char đầu tiên có task. Per-char cap 8 < 25 nên sau filter luôn fit. Regression test xây account 5 char × 8 task = 40 tổng, assert mỗi char list ≤ 25.
-
-### Added (`/raid-task` + `/raid-status` Task view: per-character side-task tracker)
-- Schema mới `sideTaskSchema` ở `accounts.characters[].sideTasks` (`taskId/name(60)/reset(daily|weekly)/completed/lastResetAt/createdAt`). Cap 3 daily + 5 weekly enforced ở command layer thay vì schema validator để toggle complete không bị reject khi pre-existing data >cap.
-- `/raid-task` 3 sub: `add` (char autocomplete + name + cycle choice) / `remove` (char + task autocomplete bằng taskId) / `clear` (ephemeral confirm Danger button trước khi xoá all). Module-level helpers (`tryEnable`-style 4-outcome shape) export để invocation-test.
-- `/raid-status` thêm dropdown `📋 Tiến độ raid` ↔ `📝 Side tasks`. Task view: per-char field 2 sub-section daily/weekly với ✅/⬜, dropdown `Bấm để toggle complete...` flip trực tiếp (no extra command). Pagination preserve giữa 2 view.
-- `startSideTaskResetScheduler` 30-min tick độc lập với `AUTO_MANAGE_DAILY_DISABLED`. Bulk `updateMany` với `arrayFilters` theo `task.reset + task.lastResetAt < cycleStart`; `$elemMatch` pre-filter nên steady-state no-op. Daily boundary 17:00 VN = 10:00 UTC (LA daily reset), weekly dùng existing `weekResetStartMs` (Wed 17:00 VN).
-- Privacy boundary: `/raid-check` all-mode `.select()` expanded từ blob `accounts` → enumerated subfields (no `sideTasks`); regression test pin allowlist không chứa `sideTasks`. 17 test mới (boundary math + helpers + bulk shape + privacy guard); suite 193 → 210.
-
-### Added (`/raid-announce` maintenance reminders: nhắc trước bảo trì Wed 14:00 VN)
-- **2 announcement types mới**: `maintenance-early` (3 mốc T-3h / T-2h / T-1h, ping `@here` ở T-3h và T-1h) + `maintenance-countdown` (4 mốc T-15m / T-10m / T-5m / T-1m, không ping). Cả 2 channel-overridable, default ON, bật/tắt độc lập qua `/raid-announce action:on|off`.
-- **21 variants Artist voice** (3 variants/mốc) random pick mỗi lần fire. Early reminders liệt kê checklist (`shop solo` / `event` / `paradise` / `key hell`), countdown đếm ngược dồn dập, T-1m chốt "thoát game thôi". Vietnamese-first, term game LA giữ.
-- **`startMaintenanceScheduler` 1-min tick** trong `src/services/raid-schedulers.js`. In-flight guard + atomic CAS dedup claim (parity với `startAutoManageDailyScheduler`). Eligibility filter `$or` 3 channel paths nên guild đã set override qua `/raid-announce action:set-channel` mà chưa setup monitor channel vẫn fire đúng. Non-Wed ticks early-exit trước Mongo query.
-- **Live preview** qua `/raid-announce type:maintenance-... action:show` - admin thấy đủ 21 variants + lịch fire kế tiếp trước khi enable, parity với `hourly-cleanup` pool preview.
-
-### Changed (`/raid-help` + welcome pin reflect 9 announcement types)
-- HELP section `/raid-announce`: 7 → 9 types (4 channel-overridable, 5 channel-bound). Thêm bullet maintenance schedule + TTL + ping policy. Welcome pin embed của `/raid-channel` cũng có dòng mới mô tả nhịp nhắc bảo trì.
-
-### Changed (`/raid-announce` replies thành notice embed Artist voice)
-- 12 plain-text replies trong `/raid-announce` (action validation, toggle on/off, set-channel, clear-channel) chuyển sang `buildNoticeEmbed` với type-coded color (success/info/warn/lock) + title + description Artist voice. Parity với `/add-roster`, `/edit-roster`, `/raid-set`, `/remove-roster`. Dead fallthrough branch cuối handler bị xóa (action validation đầu handler đã reject hết).
-- 3 success replies (toggle on/off, set-channel, clear-channel) thêm **bold key: value** layout (`Loại` / `Trạng thái mới` hoặc `Channel mới` / `Tác động`) trong description, parity style với `/raid-set` Reset embed, scan-friendly hơn prose blob single line.
-
-### Changed (sweep còn lại: convert mọi plain `interaction.reply({content})` sang notice embed)
-- 32 plain-text replies trong `/raid-channel` (11), `/raid-auto-manage` (10), `/raid-check` (5 + button + sync stats), `/raid-check raid:all` (3), `/raid-check Edit` (2), `/raid-status` (5) chuyển sang `buildNoticeEmbed` với type-coded color + title + Artist-voice description. Sync result của `/raid-check Sync` đặc biệt: dùng structured **bold key: value** layout (Synced / Attempted-only / Skipped / Failed / Chars có update / DM sent) parity với `/raid-set` style.
-- Latent runtime bug fix: `raid-check/all-mode.js` dùng `UI.icons.lock`/`UI.icons.info` mà `UI` không có trong factory deps. Path không reachable thường (rare admin reject) nên chưa bao giờ crash. Fix: thêm `EmbedBuilder` vào deps + import `buildNoticeEmbed` ở module top, refactor 3 reject paths sang notice embed.
-
-### Added (`/raid-check` + `/raid-status` roster header: badge `📝 Auto-sync OFF` cho user chưa opt-in)
-- Header section của mỗi roster trong `/raid-check` (raid filter), `/raid-check raid:all`, và `/raid-status` thêm suffix `· 📝 Auto-sync OFF` khi `userMeta.autoManageEnabled === false`. Silent khi opted-in (freshness line dưới đã có "Last synced X ago"). Manager scan list pending phân biệt ngay 3 state: opt-in + đã sync (timestamp), opt-in + chưa sync ("Never synced"), chưa opt-in (badge OFF). Trước đó case 3 silent giống case 2 nên ambiguity. Dùng strict `=== false` trong shared builder để legacy doc thiếu flag không false-positive.
-
-### Changed (`/raid-check` button row: conditional Sync + Edit theo filter state)
-- Sync và Edit buttons giờ chỉ render trong view "All users" (filter mặc định). Khi user filter narrow xuống 1 user cụ thể, cả 2 button bị remove khỏi row, chỉ giữ pagination. Lý do: cả 2 action thuộc bulk scope (Sync sync mọi opted-in user, Edit cascade pick user/char bất kỳ) - mâu thuẫn với intent "tôi đang focus 1 user" của filter.
-- Sync button thêm điều kiện `optedInPendingCount > 0` mới render, parity với `/raid-status` (Sync ẩn hoàn toàn khi owner chưa opt-in). Trước đó button hiện nhưng disabled với label `"Sync (no opted-in users)"` đọc như visual noise; giờ ẩn luôn, manager fall back sang Edit cascade nếu cần update progress thủ công.
-
-### Added (`/raid-check` + `/raid-check raid:all` button mới `Bật auto-sync hộ <user>` cho Manager flip flag thay user)
-- Button render khi user filter narrow xuống 1 user cụ thể AND user đó có `autoManageEnabled === false`. Filter "All users" → ẩn button (vì target không xác định). Bấm → flip flag cho target + DM target embed báo Manager đã bật hộ + cách opt-out + hint Public Log.
-- Single-user single-click flow, không có multi-select / collector. Cùng `customId` pattern `raid-check:enable-auto-one:<discordId>` cho cả 2 mode (raid-specific + raid:all), routed bởi `handleRaidCheckButton` early-handle (no raidKey gate vì action raid-agnostic).
-- Skip probe-before-enable (khác `/raid-auto-manage action:on` flow): Manager không phải data owner, không biết char nào private. Stuck-private-log nudge flow đã handle case private 7 ngày 1 lần sau scheduler tick kế tiếp.
-- **Atomic CAS via `findOneAndUpdate({ discordId, autoManageEnabled: { $ne: true } }, ...)`**: trước đó là check-then-update non-atomic, 2 manager bấm cùng lúc (hoặc manager + user tự `action:on`) đều produce success embed + duplicate DM. Codex bắt race; helper `tryEnableAutoManageForUser` (module-level, testable) trả 4 outcome (`flipped` / `already-on` / `missing` / `error`), fallback `findOne` phân biệt 2 reject case.
-- **KHÔNG stamp `lastAutoManageAttemptAt`** ở flow này (khác `/raid-auto-manage action:on` path đang stamp để defend probe-before-enable race). Stamping đẩy user mới opt-in vào cuối hàng scheduler (sort ASC by lastAttempt) - mâu thuẫn với copy "Scheduler tick kế tiếp sẽ ưu tiên cậu". Để `null` thì user được priority sort. Copy DM/embed honest hơn ("~30 phút", "ưu tiên user mới opt-in" thay vì lời hứa cụ thể).
-
-### Added (test coverage cho enable-auto flow + Auto-sync OFF badge)
-- 7 test mới ở `test/raid-check-enable-auto.test.js` cover `tryEnableAutoManageForUser`: `flipped` happy path, CAS filter shape (regression cho race fix), no-stamp guard (regression cho copy-vs-queue mismatch), `already-on` race, `missing` user, `error` from findOneAndUpdate, fallback findOne tolerance. Mocked Mongoose User stub vì helper module-level + dep-injectable.
-- 3 test mới ở `test/raid-status.test.js` cover Auto-sync OFF badge trong `buildAccountPageEmbed`: render khi `=== false`, ẩn khi `=== true`, ẩn cho legacy doc với `autoManageEnabled === undefined` (strict check guard).
-
-### Added (Option C: DM kèm roster + Public Log status + button `🚫 Tắt auto-sync ngay`)
-- DM gửi user khi Manager bật-hộ giờ kèm 1 field per roster account, mỗi char render 1 dòng `<icon> <name> · <iLvl> · <status>`. Status icon 3-way: 🔓 Public OK (`publicLogDisabled=false` AND user đã từng sync), 🔒 Private (`publicLogDisabled=true`), ❓ Chưa kiểm tra (default state khi chưa từng sync). Footer hint Public Log chỉ render khi có ít nhất 1 char Private/unknown - skip nếu mọi char đã confirmed Public (tránh visual noise).
-- Button `🚫 Tắt auto-sync ngay` (Danger style) ship trong DM cùng embed. User bấm → atomic CAS flip true→false qua `tryDisableAutoManage` helper, edit DM in-place thành muted "Đã tắt auto-sync rồi nha~" + button removed. Self-only enforcement: handler check `interaction.user.id === target` trước khi flip - regular member click DM của người khác bị reject với lock notice.
-- Refactor `handleRaidCheckButton` để `disable-auto-self` action bypass Manager gate (self-only), các action còn lại (`sync` / `edit` / `enable-auto-one` / `edit-all`) vẫn gated.
-- 11 test mới: 4 cover `tryDisableAutoManage` (disabled / already-off / missing / error), 7 cover `buildEnableAutoDmEmbed` (3 status icon variants, footer toggle, empty account skip, multiple accounts, manager mention).
-
-### Added (symmetric tắt-hộ: button `Tắt auto-sync hộ <user>` cho Manager + button `🔄 Bật lại auto-sync ngay` self-revert trong DM)
-- Button row trong `/raid-check` + `/raid-check raid:all` giờ đối xứng theo state của user đang focus: filter narrow + `autoManageEnabled === false` → `🔄 Bật auto-sync hộ` (Primary), filter narrow + `autoManageEnabled === true` → `🚫 Tắt auto-sync hộ` (Secondary). Manager có thể flip cả 2 hướng on-behalf.
-- DM gửi user khi Manager tắt-hộ ngắn hơn DM bật-hộ (skip roster status section vì không cần action gì từ user khi data collection đã stop). Vẫn có 1-line key:value (Trạng thái mới: OFF, Sync thủ công: ..., Bật lại nhanh: ...) + Primary button `🔄 Bật lại auto-sync ngay` cho user 1-click revert.
-- Helper rename trung lập: `tryEnableAutoManageForUser` → `tryEnableAutoManage`, `tryDisableAutoManageForSelf` → `tryDisableAutoManage`. Cả 2 giờ được dùng bởi cả self-button (DM) lẫn manager-on-behalf (raid-check button), name không còn imply use case cụ thể.
-- 4 button action giờ trong `handleRaidCheckButton` dispatch: `enable-auto-one` + `disable-auto-one` (Manager-gated), `enable-auto-self` + `disable-auto-self` (self-only, bypass Manager gate). 4 case x 2 entry points (raid-specific + raid:all) = symmetric matrix.
-- 3 test mới cover `buildDisableAutoDmEmbed`: manager mention, ON→OFF transition + re-enable path advertisement, no roster fields (disable case skips status by design).
-
-## 2026-04-26
-
 ### Added
-- **`/edit-roster <roster>`** - interactive picker that diffs your saved roster against bible. Tick `🆕` chars to add, untick saved chars to remove, Confirm to apply. Preserves raid completion state. Self-only, 5-min session.
-- **`/add-roster` interactive picker** - replaces the old auto top-N-by-CP slicing. Default-tick all chars, untick alts, Confirm. 5-min session, auth-gated.
-- **`/add-roster target:<user>`** - Raid Manager onboarding option to add a roster on behalf of a lazy member.
-- **Class icon system** - 27 class PNGs in `assets/class-icons/` auto-uploaded as Discord application emoji on bot startup. Content-addressed naming (`{name}_{md5short}`); editing a PNG and pushing is the whole deploy flow.
-- **Artist persona emoji** (`shy`, `neutral`, `note`) for bot-voice surfaces. Pinned welcome embed uses `shy`.
-- **`/raid-status` Sync button** on the pagination row, with cooldown countdown in the label (`Sync (5m)` / `Sync ngay`). In-place embed update on click.
-- **`interaction-router.js` `selectRoutes`** prefix-match branch for select menus carrying dynamic customIds (e.g. session IDs).
+- `/raid-task` side-task tracker is now a full feature set: `add`, `remove`, `clear`, `action:all`, daily/weekly cycle support, and direct toggle from `/raid-status`.
+- `/raid-status` Task view now supports bulk toggle by shared task name across a whole roster and shows a placeholder card for future roster-wide shared tasks.
+- `/raid-check raid:all` now has a Manager-only Task view button so Managers can inspect a member's side-task progress without leaving the flow.
+- `/raid-announce` gained Wednesday maintenance reminders with separate early-warning and countdown variants.
+- Welcome pin got a clearer onboarding block for new members.
 
 ### Changed
-- `MAX_CHARACTERS_PER_ACCOUNT` raised **6 → 25** (Discord StringSelectMenu cap).
-- `/add-roster` slash schema: dropped the `total` integer option (picker replaces it).
-- Auto-manage sync cooldown tightened: **15m → 10m** (regular), **30s → 15s** (Manager).
-- `/raid-check` runs a bible piggyback sync on command-open (budget 2.5s, max 8 users).
-- `/raid-check` dropdowns show **DONE** label when 0 pending. Footer freshness line splits to 2 rows.
-- `/raid-status` outcome line moved from description top to a final field above the legend; reworded to remove English (`gather` → `đang lấy`, `data tươi` → `data mới`).
-- `bot.js` interaction handler extracted to `src/services/interaction-router.js` factory.
-- Support emoji **🪄 → 🛡️** for universal coverage (Unicode 7.0 vs spotty 13.0).
-
-### Added (test coverage expanded across all commands — 137 tests total)
-- **47 more tests** added on top of the earlier 25, bringing full-suite to **137 / 137 passing**:
-  - `test/raid-set.test.js` (13 tests): `applyRaidSetForDiscordId` complete/process/reset paths, alreadyComplete + alreadyReset short-circuits, mode-switch wipe, ineligible iLvl, no-roster, char-not-found, roster-scoped lookup vs first-by-iteration, case-insensitive char match, cumulative process semantics.
-  - `test/remove-roster.test.js` (10 tests): `remove_roster` whole-account delete, `remove_char` single-char delete, **seed-reseed when removing the seed char** (skips colliding accountNames), empty-account edge case, validation rejections, and case-insensitive accountName match.
-  - `test/raid-help.test.js` (10 tests): overview + dropdown shape, every section key renders without throwing, **Discord 1024-char field-chunking holds across all sections**, required vs optional option markers, no-options notice, dropdown emoji + ≤100-char description.
-  - `test/raid-status.test.js` (14 tests): `buildStatusFooterText` math + page-counter visibility, `buildAccountPageEmbed` title-icon flips (done/lock), 'All accounts' rollup shown only when paginating, `hideIneligibleChars` filter notice, Manager 👑 vs regular 📥 header swap.
-- **25 earlier tests** (`test/add-roster.test.js` + `test/edit-roster.test.js`): race-safe overlap guard, single-session dup detection, account-match merge, per-char state preservation, multi-seed fallback, zero-overlap reject, saved-first sort against truncation, diff-apply add/remove/keep summary, vanished-account / vanished-user error paths.
-- Extracted `buildEditRosterPickerChars` helper in `commands/edit-roster.js` so the saved-first sort + cap truncation contract is unit-testable without driving the full Discord handler.
-
-### Added (`/add-roster target:` flow now DMs the target user with full details)
-- When a Raid Manager adds a roster on behalf of someone (`target:` option), Artist now sends the target user a private DM with the saved-embed + a friendly Manager-attribution intro + next-step hints (`/raid-status`, `/edit-roster`, `/raid-help`). Channel embed stays intact as audit proof + fallback when DMs are blocked.
-- DM delivery status surfaces in the channel embed itself: "📩 Artist đã DM riêng cho <@target>" on success, "⚠️ Không DM được... Channel ping ở trên là backup" when target has DMs disabled (Discord 50007), or a generic "DM fail" line for other API errors. Manager sees at a glance whether their target got a private notice.
-
-### Added (pinned welcome embed: "Member mới? Bắt đầu ở đây" onboarding field)
-- Pinned welcome embed in `raid-channel-monitor.js` gets a new first field laying out the 3-step roster onboarding path: `/add-roster` (initial picker), `/edit-roster` (manage saved chars), `/raid-status` + `/raid-help` (view + docs). Newcomer scanning the pin top-down now sees the workflow before the post-format docs. Description trimmed to remove the now-duplicate `/add-roster` mention.
-- Existing guilds need `/raid-channel config action:rebuild` to swap the old pinned welcome for the new shape; new channels post the updated embed automatically.
-
-### Changed (5 success embeds: drop cold field tables, add Artist voice descriptions)
-- **`/raid-set` Raid Reset / Raid Completed / Gate Completed** result embed: was just title + 3 inline fields (Character / Raid / Gates) reading like a database log row. Now title + Artist-voice description with statusType-specific phrasing — "Raid done luôn nha~ Artist mark cả X done cho Y rồi", "Gate clear xong nha~ ... còn gate khác cứ post tiếp", "Đã reset sạch... cậu có thể đánh dấu lại từ đầu khi clear xong". Mode-switch footer also rewritten to VN ("Mode đổi sang ... tiến độ mode cũ bị xoá").
-- **`/raid-set` alreadyComplete / alreadyReset** notices: kept the Artist-voice description (already friendly), dropped the redundant cold field table that repeated the same Character / Raid / Gate facts. Single voice surface, no tabular duplicate.
-- **`/remove-roster` Roster Removed / Character Removed** notices: were title + cold field table with no description. Now title + Artist-voice description that states what happened + a recovery hint ("Muốn add lại thì chạy `/add-roster`...", "Roster giờ trống — `/remove-roster` để xoá hẳn account, hoặc `/edit-roster` để add lại"). Reseed footer translated to VN.
-- One test in `remove-roster.test.js` updated: `replyArg.embeds[0].fields[].value` → `embeds[0].description` since the field table moved into the description sentence.
-
-### Changed (notice embeds + Artist voice across user-facing rejections)
-- All warning / info / lock / error rejection paths in `/add-roster`, `/edit-roster`, `/raid-set`, `/remove-roster` swapped from plain `interaction.reply({ content: "⚠️ ..." })` to color-coded notice embeds with title + description in Artist persona voice. Prior plain-text replies blended into channel chrome and read flat; the new format gives each rejection a clear visual identity (yellow=warn, blue=info, red=lock/error, gray=expired) and Artist's friendly first-person framing ("Artist không tìm thấy...", "Cậu chưa toggle char nào...", "Toggle off bớt vài char rồi Confirm lại nhé~").
-- New `buildNoticeEmbed(EmbedBuilder, { type, title, description })` helper in `src/raid/shared.js` so future call sites land on a consistent notice shape (color + icon + title + description) instead of recreating the embed scaffolding inline.
-- Error embeds (persist failures) now ping the **primary Raid Manager** by `<@id>` mention instead of saying "ping admin" generically. Resolved at factory boot time via new `getPrimaryManagerId()` helper in `services/manager.js` (returns first entry of `RAID_MANAGER_ID` env, falls back to plain "admin" text when no manager configured).
-
-### Changed (picker color scheme — distinguish action row from toggle row)
-- `/add-roster` + `/edit-roster` Confirm button: `Success (green)` → `Primary (blue)`. Cancel button: `Secondary (gray)` → `Danger (red)`. Per-char toggle buttons keep their `Success/Secondary` palette. Without this split the Confirm button was visually identical to a selected char toggle and Cancel identical to an unselected one — the action row blended into the toggle grid. Now the action row is the only blue/red pair on the message, scannable at a glance.
-
-### Added
-- **`/raid-help language:`** option (`Tiếng Việt` / `English`, default `vi`). Each embed now renders ONE language only instead of stacking EN + VN side-by-side. Notes pre-tagged with `EN: ` or `VN: ` filter to the chosen language; un-tagged technical bullets (cap, code refs, etc.) survive both. Lang baked into the dropdown customId so detail-embed selections after the slash command keep the chosen language. Test coverage: 8 new tests covering language selection, prefix-strip filtering, and the per-language "No options" / "Không có options" labels.
-
-### Changed
-- **`/add-roster` + `/edit-roster` picker UI** swapped from `StringSelectMenu` to per-char toggle buttons. The dropdown was visually noisy when default-selected (each char appearing as a wrapping pill chip in the open-state) and duplicated the embed's `✅`/`⬜` markers. Toggle buttons keep selection state in one place (button label + green/gray style), 1 click per char to flip, no menu open required. Layout: 4 rows of up to 5 char buttons + 1 row of Confirm/Cancel (Discord 5-row hard cap).
-- `MAX_CHARACTERS_PER_ACCOUNT` lowered **25 → 20** to match the new picker capacity (Discord 5-row component limit). LA in-game roster max is ~18 chars so still has headroom.
-- **`/edit-roster` is now ephemeral** (caller-only visibility). The picker, diff outcome, bible-error states, and final saved-embed all stay private to the caller — no channel noise, no leaking roster composition to bystanders. Component interactions still work identically on ephemeral messages so the 5-min session contract is unchanged. `/add-roster` stays public on purpose so members can see new rosters being onboarded.
+- `CHANGELOG` and help surfaces were rewritten to be more user-first: less internal jargon, more direct usage guidance.
+- `/raid-help` was reworked around onboarding and practical command usage instead of Mongo / factory / routing details.
+- `/raid-task` merged the old `add` and `add-all` split into one `add action:<single|all>` flow.
+- `/raid-task` now requires `roster` across task flows so character autocomplete can scope correctly and avoid the Discord 25-choice cap.
+- `/raid-status` pagination session was extended from 3 minutes to 5 minutes for parity with `/raid-check`.
+- `/raid-status` and `/raid-check` now render freshness / sync readiness with Discord native relative timestamps instead of static text snapshots.
+- `/raid-status` and `/raid-check` share task-card and progress-line helpers, reducing layout drift between the two surfaces.
+- `/raid-announce`, `/raid-channel`, `/raid-auto-manage`, `/raid-check`, `/raid-status`, and related command replies were swept onto notice-embed UX instead of plain text.
 
 ### Fixed
-- **`/raid-set` status autocomplete returned empty for DONE raids when user had typed needle text**. The DONE-raid path collapses choices to a single "Reset" option, but the helper then ran `applyFilter(choices)` against whatever the user typed in the status field. If they had typed "complete" or "process" against a different raid before switching to a DONE one, "Reset" wouldn't match the needle → autocomplete returned `[]` → Discord rendered an empty/loading dropdown the user couldn't escape. Fix: when the raid is fully complete, surface the Reset choice unconditionally (skip the needle filter) since it's the only valid action.
-- **whisper-ack copy was misleading about DM timing**. Old text "Chờ Artist 5 giây gửi kết quả qua DM cho cậu nhé..." read as if the DM was still pending — the DM has actually been sent BEFORE the whisper hits the channel; the 5-second delay is purely the cleanup window so the user has time to see the ack before both messages vanish. Reworded to "Artist DM kết quả cho cậu rồi nha~ Channel sẽ tự dọn cả 2 tin nhắn sau 5 giây..." (past-tense DM, explicit cleanup framing). Synced `raid/announcements.js` previewContent so `/raid-announce type:whisper-ack action:show` reflects the new copy.
-- **`raid-channel-monitor` double-replied to a single raid clear post**. Defense-in-depth: added per-process message-id dedup Set with 60s TTL inside `handleRaidChannelMessage` — second handler call for the same `message.id` short-circuits before any side effects (channel.send, DM, delete, persistent hint write). Catches Discord gateway anomalies + future internal listener-double-registration bugs. Does NOT defend against dual-instance Railway deploys (each container has its own Set); that case needs an ops fix (single-replica + stop-old-before-start-new strategy) — `console.warn` on dedup hit so the issue is observable in logs either way.
-- **`raid-channel-monitor` stale-welcome pin scan crashed** with `pinned is not iterable` on every guild boot. discord.js v14.18+ replaced the deprecated `fetchPinned()` (returned `Collection<id, Message>`) with `fetchPins()` whose new shape is `{items: MessagePin[], hasMore}` — `items` is a plain array (not a Collection), and each entry wraps the actual Message under `.message`. Iterating the response object directly threw, so the welcome-pin dedup pass silently failed and would have left an old welcome embed pinned alongside a new one. Fix: destructure `items`, iterate plain array, read `pin.message`. Caught from Railway logs (deploy `Apr 26 18:47:14`).
-- **`/edit-roster` wiped bible-side identifiers** on Confirm — `buildCharacterRecord` (shared helper) intentionally ships only the minimal char shape (no `bibleSerial` / `bibleCid` / `bibleRid` / `publicLogDisabled`), so every edit silently dropped them. Next `/raid-auto-manage` sync had to re-resolve serials from bible's SSR page (extra HTTP per char) and the bot would re-attempt sync on chars with public log off. Fix: explicitly overlay these fields back onto the rebuilt record. Caught by the new test suite, not Codex.
-- **`/add-roster` duplicate-roster split** - one bible roster could be split across two accounts when the seed char wasn't yet saved but its roster was already saved under a different accountName. Fix: post-fetch overlap guard against the full bible char list.
-- **`/add-roster` race-safe overlap guard** - two pickers opened concurrently against the same bible roster could still split it on Confirm. Fix: re-run the overlap check inside `saveWithRetry` against the freshly-loaded user doc; throw `RACE_DUP_ROSTER` on collision and steer the user to `/edit-roster`.
-- **`/add-roster` Manager target ping** - target user wasn't actually notified because the `<@id>` mention only lived in the embed description; Discord only fires notifications for mentions in the message `content` field. Fix: add an explicit content line with the target mention.
-- **`/edit-roster` saved-char drop on > 25 merged** - merging saved + bible could push some saved chars out of the top-25 picker window when bible returned new high-CP chars; Confirm would silently delete them. Fix: sort saved chars first within the picker so they always fit, with an embed warning when bible-only chars get excluded.
-- **`/edit-roster` wrong-roster trust** - trusted a single bible seed without overlap check; if the seed char was renamed in-game, bible could return another roster's chars and the picker would merge them in. Fix: multi-seed fetch with zero-overlap reject (mirrors `roster-refresh.js` pattern).
-- **Class icon: real Machinist art** (was an Artillerist placeholder).
+- `/raid-help language:en` no longer leaks Vietnamese bullets after the round-31 rewrite.
+- Newly added side tasks no longer get reset incorrectly inside the same daily/weekly cycle.
+- Task toggle UI no longer silently drops tasks when an account has more than 25 total tasks; filtering is now per character.
+- StringSelectMenu task/class icons no longer render as raw emoji markup in dropdown labels.
+- Real-time countdown wording no longer produces awkward lines like `Next sync 16 seconds ago`; copy now uses neutral phrasing such as `Sync ready`.
+- `/raid-channel` welcome embed no longer trips Discord's 1024-character field cap after adding maintenance copy.
+- `/raid-status` and `/raid-check` now surface explicit sync outcomes instead of silently re-rendering after a click.
+- `/raid-check` Manager Task view intentionally includes `sideTasks` in projection now that monitoring is a supported capability.
+
+### Refactor
+- Extracted `buildAccountTaskFields()` into `src/raid/task-view.js` so `/raid-status` and `/raid-check` share the same task-card renderer and totals math.
+- Extracted `pack2Columns()` and `formatProgressTotals()` into `src/raid/shared.js` to keep embed layout and footer icon ordering consistent across views.
+- Added regression coverage around task reset seeding, per-character task filtering, shared task rendering, and maintenance reminder copy.
+
+### Tests
+- Test suite continued expanding across roster flows, task flows, status/check rendering, help copy, channel welcome embeds, and maintenance reminders.
 
 ## 2026-04-25
 
 ### Added
-- `/raid-status` embed surfaces the bible-piggyback outcome on each open (sync ok / cooldown / timeout / failed) so non-Manager users can tell fresh data from cache.
-- `/raid-check` user-filter dropdowns show a per-user support/DPS breakdown (`Du (8 pending · 2🪄 6⚔️)`); `/raid-status` raid-filter dropdown gets the same.
-- `data/Class.js`: `SUPPORT_CLASS_NAMES` set + `isSupportClass()` helper.
+- `/raid-status` now surfaces the piggyback bible-sync outcome each time the user opens it.
+- `/raid-check` user filters and `/raid-status` raid filters gained support/DPS breakdown hints.
+- `data/Class.js` gained `SUPPORT_CLASS_NAMES` and `isSupportClass()`.
 
 ### Changed
-- **Refactor Phase 3**: split `commands/raid-check.js` into 5 focused modules under `commands/raid-check/`: `snapshot.js`, `edit-helpers.js`, `all-mode.js`, `edit-ui.js`, `sync-ui.js`. Net: 2590 → 740 lines (-71%).
-- **Refactor Phase 2**: split `raid-command.js` into `raid/character.js`, `raid/raid-check-query.js`, `raid/scheduling.js`. Net: 1568 → 961 lines (-38%).
-- **Source-tree cleanup**: `db.js` → `src/db.js`; `src/schema/` → `src/models/` (Mongoose); `src/models/` → `src/data/` (lookup tables); deleted dead `GuildConfig.js`.
+- Major refactor split `commands/raid-check.js` into focused modules under `commands/raid-check/`.
+- `raid-command.js` was split further into raid-domain modules for character, scheduling, and query concerns.
+- Source tree cleanup renamed and reorganized database, model, and data directories.
 
 ### Fixed
-- `/raid-check raid:all` no longer shows a pending Nightmare card next to a completed Hard card on the same Serca character. Lost Ark shares the weekly slot across difficulties of one raid — clearing any mode locks all others.
+- `/raid-check raid:all` no longer shows conflicting Hard/Nightmare progress cards for the same weekly-locked raid slot.
 
 ## 2026-04-24
 
 ### Added
-- **`/raid-check raid:all`** synthetic overview: cross-raid view of every member's roster, mirroring `/raid-status`'s per-account page layout. Includes cross-raid Edit (raid dropdown prepended), user-filter dropdown, raid-filter dropdown, and Edit-button user context.
-- **`/raid-status` raid-filter dropdown** scoped to the caller's roster.
-- **`/raid-check` Edit button** (Manager-only): cascading user → char → status → optional gate select, reuses `applyRaidSetForDiscordId`. Auto-sync users skipped except for `publicLogDisabled=true` chars.
-- **Raid Manager privilege tier** off existing `RAID_MANAGER_ID`: 30s auto-manage cooldown (vs 15m), 👑 header icon on rosters.
-- **Artist quiet hours 03:00-08:00 VN**: bedtime + wake-up embeds; message parsing stays active 24/7.
-- `character.publicLogDisabled` schema flag.
-- Freshness countdown on `/raid-status` + `/raid-check` (`⏳ Next refresh in Xm` / `✅ Sync ready`).
+- `/raid-check raid:all` overview mode: cross-user, cross-roster synthetic view with Edit support.
+- `/raid-status` got a raid filter dropdown scoped to the caller's roster.
+- `/raid-check` gained the Manager-only Edit button flow, reusing the core `/raid-set` write path.
+- Raid Manager privilege tier was formalized off `RAID_MANAGER_ID`, including crown markers and faster auto-manage cooldown.
+- Quiet hours (03:00-08:00 VN) were added for Artist persona messaging.
+- `character.publicLogDisabled` schema flag was introduced.
+- Freshness countdown lines landed in `/raid-status` and `/raid-check`.
 
 ### Changed
-- `/raid-check raid:all` filter dropdowns are **cross-reactive**: picking a user reshapes raid-filter labels to that user's backlog and vice versa, with a single `computePendingAggregate` walker.
-- `/raid-status` + `/raid-check raid:all` char cards **hide ineligible chars** when a raid filter is active.
-- Manager crown moved from per-char prefix to roster header (📁 → 👑) to make room for the planned class-icon swap.
-- `/raid-status` auto-manage piggyback capped at a 2.5s foreground budget; overflow applies in background.
-- Edit flow locked to the raid the leader opened `/raid-check` against (raid select removed; cross-raid edit lives in raid:all mode).
-- Difficulty alias `nm` moved Nightmare → Normal. Nightmare keeps `9m` only. **Breaking** for anyone typing `nm` for Nightmare.
+- `/raid-check raid:all` filter dropdowns became cross-reactive so user and raid filters reshape each other.
+- Filtered views now hide ineligible characters when a raid filter is active.
+- Manager crown moved from per-character labeling to the roster header.
+- `/raid-status` auto-manage piggyback got a 2.5-second foreground budget with background completion fallback.
+- Difficulty shorthand `nm` was remapped from Nightmare to Normal; Nightmare keeps `9m`.
 
 ### Fixed
-- `/raid-check` out-grown chars (e.g. 1732 char who cleared Serca Normal at 1725) no longer leak into lower-mode views as done.
-- `/raid-check raid:all` Edit no longer dies on `raidMeta=null` (caught by Codex review of `e15b275`).
-- `/raid-check` Edit Complete/Process/Reset no-op'd because `selectedRaid` was the raid portion only, not the combined `${raidKey}_${modeKey}` key.
-- `raid-channel-monitor` `ReferenceError: normalizeName is not defined` on every MessageCreate (was masked by silent try/catch).
-- Edit-flow user dropdown rendered raw Discord snowflake IDs (`resolveDiscordDisplay` returns a string, not an object).
-- `ensureFreshWeek` no longer wipes gate/task timestamps inside the current reset window.
-- Auto-sync self-heals diacritic-only roster name mismatches (`Lastdance` → `Lastdancë`).
+- Over-geared characters no longer leak lower-difficulty completion into filtered views.
+- `/raid-check raid:all` Edit no longer crashes on `raidMeta=null`.
+- Edit Complete/Process/Reset paths now bind correctly to the combined `${raidKey}_${modeKey}` key.
+- `raid-channel-monitor` no longer throws `normalizeName is not defined`.
+- Edit-flow user dropdown no longer renders raw Discord IDs.
+- `ensureFreshWeek` no longer wipes timestamps inside the current reset window.
+- Auto-sync now self-heals diacritic-only roster-name mismatches.
 
 ## 2026-04-23
 
 ### Added
-- `/raid-check` Mongo prefilter by raid iLvl floor + stale-account carve-out; new indexes on `accounts.characters.itemLevel` and `accounts.lastRefreshedAt`.
-- Empty raid-channel messages now post a warning instead of silent-dropping.
+- `/raid-check` now prefilters Mongo by raid item-level floor and stale-account carve-out.
+- New indexes were added for `accounts.characters.itemLevel` and `accounts.lastRefreshedAt`.
+- Empty raid-channel messages now produce a warning instead of silently dropping.
 
 ### Changed
-- Auto-manage sync cooldown raised **5m → 15m** to protect `bible.lostark`.
-- Scheduler tick logging distinguishes synced / attempted-only / skipped / failed buckets.
+- Auto-manage sync cooldown increased from 5 minutes to 15 minutes to protect `bible.lostark`.
+- Scheduler logging now distinguishes synced, attempted-only, skipped, and failed buckets.
 
 ### Fixed
-- Auto-manage roster fallback no longer re-fetches the same roster per character in one gather pass.
+- Auto-manage roster fallback no longer re-fetches the same roster repeatedly in one gather pass.
 
 ## 2026-04-22
 
 ### Added
-- **`/raid-auto-manage` Phase 3**: 24h passive auto-sync scheduler (30-min tick, batch of 3 users, killswitch `AUTO_MANAGE_DAILY_DISABLED`).
-- Stuck private-log channel nudge (7-day per-user dedup).
-- **`/raid-announce`**: list / enable-disable / redirect per-guild announcement types.
+- `/raid-auto-manage` Phase 3: 24-hour passive auto-sync scheduler with a 30-minute tick and `AUTO_MANAGE_DAILY_DISABLED` kill switch.
+- Stuck private-log channel nudge with 7-day per-user dedup.
+- `/raid-announce` base feature: per-guild announcement listing, enable/disable, and redirect support.
 
 ### Fixed
-- Codex review rounds 21-27: gather/apply key collisions, parallel gather backpressure, cooldown slot leak on save-fail, scheduler fairness, operator-log outcome honesty.
+- Codex review rounds 21-27 closed issues around gather/apply key collisions, parallel gather backpressure, cooldown slot leaks, scheduler fairness, and operator-log accuracy.
 
 ## 2026-04-21
 
 ### Added
-- **`/raid-auto-manage` Phase 1 + 2**: `on` / `off` / `sync` / `status`; `/raid-status` piggyback sync for opted-in users.
-- Text-channel monitor expansion: multi-char posts, whisper-ack with 5s TTL, per-user 2s cooldown with spam warning.
-- Bible private-log detection with an actionable Public Log prompt.
+- `/raid-auto-manage` Phase 1 + 2: `on`, `off`, `sync`, `status`, plus `/raid-status` piggyback sync for opted-in users.
+- Text-channel monitor expanded to support multi-character posts, whisper-ack cleanup flow, and per-user cooldown.
+- Bible private-log detection now prompts users with actionable guidance.
 
 ### Fixed
-- Codex review rounds 8-20: gate/difficulty edge cases, same-name-char disambiguation across rosters, autocomplete 25-cap overflow, whisper-ack race conditions.
+- Codex review rounds 8-20 closed edge cases around gates, difficulties, same-name characters across rosters, autocomplete overflow, and whisper-ack race conditions.
 
 ## 2026-04-20
 
 ### Added
-- Initial commit: bot scaffolding, Mongoose schemas, weekly reset (Wed 17:00 VN), core slash commands (`/add-roster`, `/raid-status`, `/raid-set`, `/raid-check`), `/raid-channel` text monitor, `/raid-help` drill-down dropdown.
+- Initial bot release: Discord bot scaffold, Mongoose schemas, weekly reset handling (Wed 17:00 VN), core slash commands (`/add-roster`, `/raid-status`, `/raid-set`, `/raid-check`), raid-channel text monitor, and `/raid-help`.
 
 ### Fixed
-- Codex review rounds 1-7: command gating, error UX, permission checks.
+- Codex review rounds 1-7 closed early issues around command gating, error UX, and permission checks.
