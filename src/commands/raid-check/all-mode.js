@@ -345,22 +345,31 @@ function createAllModeHandler({
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(disabled)
       );
-      // Enable-auto-on-behalf button: visible only when the user filter
-      // narrows the view to one specific user AND that user hasn't opted
-      // into /raid-auto-manage. Click flips their flag + DMs them. The
-      // shared `raid-check:enable-auto-one:<discordId>` handler in
-      // raid-check.js routes both modes since the action is raid-agnostic.
+      // Enable-/disable-auto-on-behalf buttons: visible only when the
+      // user filter narrows the view to one specific user. Direction
+      // depends on that user's current opt-in state. Both buttons reuse
+      // the shared raid-check.js handlers (`enable-auto-one` /
+      // `disable-auto-one`) since the action is raid-agnostic.
       if (filterUserId) {
         const focusedUserOptedIn = autoManageStateByDiscordId.get(filterUserId);
+        const focusedDisplayName =
+          authorMeta.get(filterUserId)?.displayName || filterUserId;
         if (focusedUserOptedIn === false) {
-          const focusedDisplayName =
-            authorMeta.get(filterUserId)?.displayName || filterUserId;
           row.addComponents(
             new ButtonBuilder()
               .setCustomId(`raid-check:enable-auto-one:${filterUserId}`)
               .setLabel(truncateText(`Bật auto-sync hộ ${focusedDisplayName}`, 80))
               .setEmoji("🔄")
               .setStyle(ButtonStyle.Primary)
+              .setDisabled(disabled)
+          );
+        } else if (focusedUserOptedIn === true) {
+          row.addComponents(
+            new ButtonBuilder()
+              .setCustomId(`raid-check:disable-auto-one:${filterUserId}`)
+              .setLabel(truncateText(`Tắt auto-sync hộ ${focusedDisplayName}`, 80))
+              .setEmoji("🚫")
+              .setStyle(ButtonStyle.Secondary)
               .setDisabled(disabled)
           );
         }

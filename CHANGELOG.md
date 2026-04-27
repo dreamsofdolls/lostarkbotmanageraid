@@ -41,9 +41,16 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 
 ### Added (Option C: DM kèm roster + Public Log status + button `🚫 Tắt auto-sync ngay`)
 - DM gửi user khi Manager bật-hộ giờ kèm 1 field per roster account, mỗi char render 1 dòng `<icon> <name> · <iLvl> · <status>`. Status icon 3-way: 🔓 Public OK (`publicLogDisabled=false` AND user đã từng sync), 🔒 Private (`publicLogDisabled=true`), ❓ Chưa kiểm tra (default state khi chưa từng sync). Footer hint Public Log chỉ render khi có ít nhất 1 char Private/unknown - skip nếu mọi char đã confirmed Public (tránh visual noise).
-- Button `🚫 Tắt auto-sync ngay` (Danger style) ship trong DM cùng embed. User bấm → atomic CAS flip true→false qua `tryDisableAutoManageForSelf` helper, edit DM in-place thành muted "Đã tắt auto-sync rồi nha~" + button removed. Self-only enforcement: handler check `interaction.user.id === target` trước khi flip - regular member click DM của người khác bị reject với lock notice.
+- Button `🚫 Tắt auto-sync ngay` (Danger style) ship trong DM cùng embed. User bấm → atomic CAS flip true→false qua `tryDisableAutoManage` helper, edit DM in-place thành muted "Đã tắt auto-sync rồi nha~" + button removed. Self-only enforcement: handler check `interaction.user.id === target` trước khi flip - regular member click DM của người khác bị reject với lock notice.
 - Refactor `handleRaidCheckButton` để `disable-auto-self` action bypass Manager gate (self-only), các action còn lại (`sync` / `edit` / `enable-auto-one` / `edit-all`) vẫn gated.
-- 11 test mới: 4 cover `tryDisableAutoManageForSelf` (disabled / already-off / missing / error), 7 cover `buildEnableAutoDmEmbed` (3 status icon variants, footer toggle, empty account skip, multiple accounts, manager mention).
+- 11 test mới: 4 cover `tryDisableAutoManage` (disabled / already-off / missing / error), 7 cover `buildEnableAutoDmEmbed` (3 status icon variants, footer toggle, empty account skip, multiple accounts, manager mention).
+
+### Added (symmetric tắt-hộ: button `Tắt auto-sync hộ <user>` cho Manager + button `🔄 Bật lại auto-sync ngay` self-revert trong DM)
+- Button row trong `/raid-check` + `/raid-check raid:all` giờ đối xứng theo state của user đang focus: filter narrow + `autoManageEnabled === false` → `🔄 Bật auto-sync hộ` (Primary), filter narrow + `autoManageEnabled === true` → `🚫 Tắt auto-sync hộ` (Secondary). Manager có thể flip cả 2 hướng on-behalf.
+- DM gửi user khi Manager tắt-hộ ngắn hơn DM bật-hộ (skip roster status section vì không cần action gì từ user khi data collection đã stop). Vẫn có 1-line key:value (Trạng thái mới: OFF, Sync thủ công: ..., Bật lại nhanh: ...) + Primary button `🔄 Bật lại auto-sync ngay` cho user 1-click revert.
+- Helper rename trung lập: `tryEnableAutoManageForUser` → `tryEnableAutoManage`, `tryDisableAutoManageForSelf` → `tryDisableAutoManage`. Cả 2 giờ được dùng bởi cả self-button (DM) lẫn manager-on-behalf (raid-check button), name không còn imply use case cụ thể.
+- 4 button action giờ trong `handleRaidCheckButton` dispatch: `enable-auto-one` + `disable-auto-one` (Manager-gated), `enable-auto-self` + `disable-auto-self` (self-only, bypass Manager gate). 4 case x 2 entry points (raid-specific + raid:all) = symmetric matrix.
+- 3 test mới cover `buildDisableAutoDmEmbed`: manager mention, ON→OFF transition + re-enable path advertisement, no roster fields (disable case skips status by design).
 
 ## 2026-04-26
 

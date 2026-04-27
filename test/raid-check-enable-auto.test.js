@@ -15,9 +15,10 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
-  tryEnableAutoManageForUser,
-  tryDisableAutoManageForSelf,
+  tryEnableAutoManage,
+  tryDisableAutoManage,
   buildEnableAutoDmEmbed,
+  buildDisableAutoDmEmbed,
 } = require("../src/commands/raid-check");
 const { EmbedBuilder } = require("discord.js");
 
@@ -53,16 +54,16 @@ function makeUserStub({ findOneAndUpdateImpl, findOneImpl } = {}) {
   };
 }
 
-test("tryEnableAutoManageForUser returns 'missing' when discordId is empty (defensive guard)", async () => {
+test("tryEnableAutoManage returns 'missing' when discordId is empty (defensive guard)", async () => {
   const UserStub = makeUserStub();
-  const result = await tryEnableAutoManageForUser(UserStub, "");
+  const result = await tryEnableAutoManage(UserStub, "");
   assert.equal(result.outcome, "missing");
   // Should short-circuit BEFORE any DB call.
   assert.equal(UserStub.calls.findOneAndUpdate.length, 0);
   assert.equal(UserStub.calls.findOne.length, 0);
 });
 
-test("tryEnableAutoManageForUser returns 'flipped' when CAS filter matches", async () => {
+test("tryEnableAutoManage returns 'flipped' when CAS filter matches", async () => {
   const updatedDoc = {
     discordId: "user-1",
     autoManageEnabled: true,
@@ -70,7 +71,7 @@ test("tryEnableAutoManageForUser returns 'flipped' when CAS filter matches", asy
   const UserStub = makeUserStub({
     findOneAndUpdateImpl: () => Promise.resolve(updatedDoc),
   });
-  const result = await tryEnableAutoManageForUser(UserStub, "user-1");
+  const result = await tryEnableAutoManage(UserStub, "user-1");
   assert.equal(result.outcome, "flipped");
   assert.equal(result.doc, updatedDoc);
   // Critically: the CAS filter MUST include autoManageEnabled $ne true so
@@ -84,7 +85,7 @@ test("tryEnableAutoManageForUser returns 'flipped' when CAS filter matches", asy
   assert.equal(UserStub.calls.findOne.length, 0);
 });
 
-test("tryEnableAutoManageForUser update payload does NOT stamp lastAutoManageAttemptAt", async () => {
+test("tryEnableAutoManage update payload does NOT stamp lastAutoManageAttemptAt", async () => {
   // Codex round 28 #2: stamping lastAutoManageAttemptAt here would push
   // the new opt-in to the tail of the daily scheduler's ascending sort
   // (sorted by exactly that field), contradicting the "next tick will
@@ -95,7 +96,7 @@ test("tryEnableAutoManageForUser update payload does NOT stamp lastAutoManageAtt
     findOneAndUpdateImpl: () =>
       Promise.resolve({ discordId: "user-1", autoManageEnabled: true }),
   });
-  await tryEnableAutoManageForUser(UserStub, "user-1");
+  await tryEnableAutoManage(UserStub, "user-1");
   const call = UserStub.calls.findOneAndUpdate[0];
   assert.deepEqual(Object.keys(call.update.$set).sort(), ["autoManageEnabled"]);
   assert.equal(call.update.$set.autoManageEnabled, true);
@@ -105,7 +106,7 @@ test("tryEnableAutoManageForUser update payload does NOT stamp lastAutoManageAtt
   );
 });
 
-test("tryEnableAutoManageForUser returns 'already-on' when CAS rejects but doc still exists", async () => {
+test("tryEnableAutoManage returns 'already-on' when CAS rejects but doc still exists", async () => {
   // Race: a concurrent path flipped the flag between page render and
   // click. The CAS filter rejects; the fallback findOne sees the doc
   // with autoManageEnabled=true. Outcome 'already-on' is benign (UX
@@ -115,29 +116,29 @@ test("tryEnableAutoManageForUser returns 'already-on' when CAS rejects but doc s
     findOneImpl: () =>
       Promise.resolve({ _id: "id-1", autoManageEnabled: true }),
   });
-  const result = await tryEnableAutoManageForUser(UserStub, "user-1");
+  const result = await tryEnableAutoManage(UserStub, "user-1");
   assert.equal(result.outcome, "already-on");
   assert.equal(UserStub.calls.findOneAndUpdate.length, 1);
   assert.equal(UserStub.calls.findOne.length, 1);
 });
 
-test("tryEnableAutoManageForUser returns 'missing' when CAS rejects AND fallback finds no doc", async () => {
+test("tryEnableAutoManage returns 'missing' when CAS rejects AND fallback finds no doc", async () => {
   // Race: user removed their roster entirely between page render and
   // click. CAS rejects (filter on discordId fails), fallback also gone.
   const UserStub = makeUserStub({
     findOneAndUpdateImpl: () => Promise.resolve(null),
     findOneImpl: () => Promise.resolve(null),
   });
-  const result = await tryEnableAutoManageForUser(UserStub, "user-gone");
+  const result = await tryEnableAutoManage(UserStub, "user-gone");
   assert.equal(result.outcome, "missing");
 });
 
-test("tryEnableAutoManageForUser returns 'error' when findOneAndUpdate throws", async () => {
+test("tryEnableAutoManage returns 'error' when findOneAndUpdate throws", async () => {
   const dbErr = new Error("Mongo timeout");
   const UserStub = makeUserStub({
     findOneAndUpdateImpl: () => Promise.reject(dbErr),
   });
-  const result = await tryEnableAutoManageForUser(UserStub, "user-1");
+  const result = await tryEnableAutoManage(UserStub, "user-1");
   assert.equal(result.outcome, "error");
   assert.equal(result.error, dbErr);
   // Must not fall through to findOne probe when CAS itself errored - that
@@ -145,7 +146,7 @@ test("tryEnableAutoManageForUser returns 'error' when findOneAndUpdate throws", 
   assert.equal(UserStub.calls.findOne.length, 0);
 });
 
-test("tryEnableAutoManageForUser tolerates findOne throwing in the fallback path", async () => {
+test("tryEnableAutoManage tolerates findOne throwing in the fallback path", async () => {
   // CAS rejects + fallback read errors. We treat unknown state as
   // 'missing' rather than crashing - the leader gets the refresh-page
   // hint instead of a stack trace.
@@ -153,23 +154,23 @@ test("tryEnableAutoManageForUser tolerates findOne throwing in the fallback path
     findOneAndUpdateImpl: () => Promise.resolve(null),
     findOneImpl: () => Promise.reject(new Error("Mongo blip")),
   });
-  const result = await tryEnableAutoManageForUser(UserStub, "user-1");
+  const result = await tryEnableAutoManage(UserStub, "user-1");
   assert.equal(result.outcome, "missing");
 });
 
-// --------- tryDisableAutoManageForSelf (Option C quick-undo button) ---------
+// --------- tryDisableAutoManage (Option C quick-undo button) ---------
 //
 // The disable variant mirrors the enable helper but flips true → false.
 // Used by the per-user "🚫 Tắt auto-sync ngay" button shipped in the DM
 // after a Manager bật-hộ. Self-only enforcement happens in the click
 // handler; this helper just owns the atomic state transition.
 
-test("tryDisableAutoManageForSelf returns 'disabled' when CAS filter matches", async () => {
+test("tryDisableAutoManage returns 'disabled' when CAS filter matches", async () => {
   const updatedDoc = { discordId: "user-1", autoManageEnabled: false };
   const UserStub = makeUserStub({
     findOneAndUpdateImpl: () => Promise.resolve(updatedDoc),
   });
-  const result = await tryDisableAutoManageForSelf(UserStub, "user-1");
+  const result = await tryDisableAutoManage(UserStub, "user-1");
   assert.equal(result.outcome, "disabled");
   assert.equal(result.doc, updatedDoc);
   // Filter must require autoManageEnabled === true (not $ne false) so
@@ -181,7 +182,7 @@ test("tryDisableAutoManageForSelf returns 'disabled' when CAS filter matches", a
   assert.deepEqual(call.update.$set, { autoManageEnabled: false });
 });
 
-test("tryDisableAutoManageForSelf returns 'already-off' when CAS rejects but doc still exists", async () => {
+test("tryDisableAutoManage returns 'already-off' when CAS rejects but doc still exists", async () => {
   // User clicked the button twice in a row, or hit /raid-auto-manage
   // action:off in parallel. Outcome 'already-off' is benign (UI tells
   // them nothing to change).
@@ -190,25 +191,25 @@ test("tryDisableAutoManageForSelf returns 'already-off' when CAS rejects but doc
     findOneImpl: () =>
       Promise.resolve({ _id: "id-1", autoManageEnabled: false }),
   });
-  const result = await tryDisableAutoManageForSelf(UserStub, "user-1");
+  const result = await tryDisableAutoManage(UserStub, "user-1");
   assert.equal(result.outcome, "already-off");
 });
 
-test("tryDisableAutoManageForSelf returns 'missing' when doc is gone entirely", async () => {
+test("tryDisableAutoManage returns 'missing' when doc is gone entirely", async () => {
   const UserStub = makeUserStub({
     findOneAndUpdateImpl: () => Promise.resolve(null),
     findOneImpl: () => Promise.resolve(null),
   });
-  const result = await tryDisableAutoManageForSelf(UserStub, "user-1");
+  const result = await tryDisableAutoManage(UserStub, "user-1");
   assert.equal(result.outcome, "missing");
 });
 
-test("tryDisableAutoManageForSelf returns 'error' when findOneAndUpdate throws", async () => {
+test("tryDisableAutoManage returns 'error' when findOneAndUpdate throws", async () => {
   const dbErr = new Error("Mongo timeout");
   const UserStub = makeUserStub({
     findOneAndUpdateImpl: () => Promise.reject(dbErr),
   });
-  const result = await tryDisableAutoManageForSelf(UserStub, "user-1");
+  const result = await tryDisableAutoManage(UserStub, "user-1");
   assert.equal(result.outcome, "error");
   assert.equal(result.error, dbErr);
 });
@@ -369,4 +370,35 @@ test("buildEnableAutoDmEmbed: includes manager mention in description", () => {
   });
   const json = embed.toJSON();
   assert.match(json.description, /<@manager-7>/);
+});
+
+// --------- buildDisableAutoDmEmbed (Manager-on-behalf disable DM) ---------
+//
+// Mirror of the enable DM but with disable-tone copy. Doesn't include a
+// roster status section because nothing about the user's chars matters
+// when stopping data collection - the symmetric reduce keeps the
+// disable DM short.
+
+test("buildDisableAutoDmEmbed: includes manager mention in description", () => {
+  const embed = buildDisableAutoDmEmbed(EmbedBuilder, { managerId: "manager-9" });
+  const json = embed.toJSON();
+  assert.match(json.description, /<@manager-9>/);
+});
+
+test("buildDisableAutoDmEmbed: states ON→OFF transition + opt-back-in path explicitly", () => {
+  const embed = buildDisableAutoDmEmbed(EmbedBuilder, { managerId: "manager-1" });
+  const json = embed.toJSON();
+  assert.match(json.description, /Trạng thái mới.*OFF/);
+  // Re-enable path must be advertised so the user has agency to revert
+  // without having to figure out the slash command from scratch.
+  assert.match(json.description, /Bật lại nhanh|action:on/);
+});
+
+test("buildDisableAutoDmEmbed: emits no roster fields (disable case skips status section by design)", () => {
+  const embed = buildDisableAutoDmEmbed(EmbedBuilder, { managerId: "manager-1" });
+  const json = embed.toJSON();
+  // Field count matters: any roster sections here would imply we still
+  // need the user to act on Public Log, which is irrelevant once auto-
+  // sync is off.
+  assert.equal((json.fields || []).length, 0);
 });

@@ -48,7 +48,7 @@ const RAID_CHECK_PIGGYBACK_MAX_USERS = 8;
  * the "next tick will pick up your roster" copy. Leaving the field as
  * null gives the new user priority in the next scheduler tick.
  */
-async function tryEnableAutoManageForUser(UserModel, discordId) {
+async function tryEnableAutoManage(UserModel, discordId) {
   if (!discordId) return { outcome: "missing" };
   let updated;
   try {
@@ -80,7 +80,7 @@ async function tryEnableAutoManageForUser(UserModel, discordId) {
 /**
  * Atomic disable-auto helper used by the per-user "🚫 Tắt auto-sync ngay"
  * button that ships in the DM after a Manager flips the flag on their
- * behalf. Same atomic-CAS shape as tryEnableAutoManageForUser but in the
+ * behalf. Same atomic-CAS shape as tryEnableAutoManage but in the
  * opposite direction (true → false). Self-only: the click handler verifies
  * the clicker IS the target before invoking this.
  *
@@ -91,7 +91,7 @@ async function tryEnableAutoManageForUser(UserModel, discordId) {
  *   - "missing": no doc at all.
  *   - "error": DB threw.
  */
-async function tryDisableAutoManageForSelf(UserModel, discordId) {
+async function tryDisableAutoManage(UserModel, discordId) {
   if (!discordId) return { outcome: "missing" };
   let updated;
   try {
@@ -195,6 +195,32 @@ function buildEnableAutoDmEmbed(EmbedBuilder, { managerId, userDoc }) {
   }
 
   return embed;
+}
+
+/**
+ * Build the DM embed sent to a user when a Manager disables auto-sync
+ * on their behalf via the "Tắt auto-sync hộ" button. Mirror of
+ * buildEnableAutoDmEmbed but with disable-tone copy + a self-only
+ * "🔄 Bật lại auto-sync ngay" button hint (the button itself is added
+ * by the caller, this just builds the embed).
+ *
+ * No roster status section: the disable case doesn't need it - we're
+ * stopping data collection, not asking the user to fix anything. The
+ * symmetric reduce keeps the disable DM short + tone-appropriate.
+ */
+function buildDisableAutoDmEmbed(EmbedBuilder, { managerId }) {
+  const description = [
+    `Heya~ Raid Manager <@${managerId}> vừa tắt \`/raid-auto-manage\` hộ cậu rồi nha. Từ giờ Artist không tự sync raid progress cho cậu nữa.`,
+    "",
+    "**Trạng thái mới:** OFF",
+    "**Sync thủ công:** Gõ `/raid-set` hoặc post clear vào monitor channel của server",
+    "**Bật lại nhanh:** Bấm button bên dưới hoặc gõ `/raid-auto-manage action:on`",
+  ].join("\n");
+
+  return new EmbedBuilder()
+    .setColor(0x99AAB5) // muted gray, matches buildNoticeEmbed type:muted
+    .setTitle("⚪ Manager đã tắt auto-sync hộ cậu")
+    .setDescription(description);
 }
 
 function createRaidCheckCommand(deps) {
@@ -891,19 +917,32 @@ function createRaidCheckCommand(deps) {
       // useful for browsing the filtered user's accounts; the filter
       // dropdown stays so the leader can revert to All or switch user.
       //
-      // The narrowed view IS where the "Bật auto-sync hộ" button shines:
-      // the leader has visually committed to one user, so the
-      // single-target flip + DM is the precise action they're asking for.
+      // The narrowed view IS where the bật-hộ / tắt-hộ buttons shine:
+      // the leader has visually committed to one user, so a single-
+      // target flip + DM is the precise action they're asking for. The
+      // direction is determined by the focused user's current opt-in
+      // state - off-opted users see "Bật auto-sync hộ", opted-in users
+      // see "Tắt auto-sync hộ". Symmetric: every action a Manager can
+      // take on behalf has its inverse on the same surface.
       if (selectedId) {
         const focusedUserOptedIn = autoManageStateByDiscordId.get(selectedId);
+        const focusedDisplayName = displayMap.get(selectedId) || selectedId;
         if (focusedUserOptedIn === false) {
-          const focusedDisplayName = displayMap.get(selectedId) || selectedId;
           row.addComponents(
             new ButtonBuilder()
               .setCustomId(`raid-check:enable-auto-one:${selectedId}`)
               .setLabel(truncateText(`Bật auto-sync hộ ${focusedDisplayName}`, 80))
               .setEmoji("🔄")
               .setStyle(ButtonStyle.Primary)
+              .setDisabled(disabled)
+          );
+        } else if (focusedUserOptedIn === true) {
+          row.addComponents(
+            new ButtonBuilder()
+              .setCustomId(`raid-check:disable-auto-one:${selectedId}`)
+              .setLabel(truncateText(`Tắt auto-sync hộ ${focusedDisplayName}`, 80))
+              .setEmoji("🚫")
+              .setStyle(ButtonStyle.Secondary)
               .setDisabled(disabled)
           );
         }
@@ -1114,7 +1153,7 @@ function createRaidCheckCommand(deps) {
       return;
     }
 
-    const result = await tryEnableAutoManageForUser(User, targetDiscordId);
+    const result = await tryEnableAutoManage(User, targetDiscordId);
     if (result.outcome === "error") {
       console.error(
         `[raid-check enable-auto] flip failed user=${targetDiscordId}:`,
@@ -1249,7 +1288,7 @@ function createRaidCheckCommand(deps) {
       return;
     }
 
-    const result = await tryDisableAutoManageForSelf(User, targetDiscordId);
+    const result = await tryDisableAutoManage(User, targetDiscordId);
     if (result.outcome === "error") {
       console.error(
         `[raid-check disable-auto-self] flip failed user=${targetDiscordId}:`,
@@ -1308,19 +1347,230 @@ function createRaidCheckCommand(deps) {
       .catch(() => {});
   }
 
+  // Manager-on-behalf disable flow. Mirror of handleRaidCheckEnableAutoOneClick
+  // but flips the flag in the opposite direction. Same atomic CAS shape +
+  // 4-outcome dispatch + DM to the affected user (with a "Bật lại"
+  // self-button for symmetric one-click revert).
+  async function handleRaidCheckDisableAutoOneClick(interaction, targetDiscordId) {
+    if (!targetDiscordId) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Button đã hết hạn",
+            description: "Button không có target user (có thể session cũ hoặc bot vừa restart). Gõ `/raid-check` lại để refresh nha.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const result = await tryDisableAutoManage(User, targetDiscordId);
+    if (result.outcome === "error") {
+      console.error(
+        `[raid-check disable-auto-one] flip failed user=${targetDiscordId}:`,
+        result.error?.message || result.error
+      );
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "error",
+            title: "Tắt flag fail",
+            description: `Artist gặp lỗi khi tắt: \`${result.error?.message || result.error}\`. Thử lại sau nha.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (result.outcome === "missing") {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "User không tồn tại",
+            description: `Artist không thấy user \`${targetDiscordId}\` trong DB nữa (có thể họ đã \`/remove-roster\`). Refresh lại \`/raid-check\` để page sync state mới nha.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (result.outcome === "already-off") {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "info",
+            title: "User đã off rồi",
+            description: `<@${targetDiscordId}> đã tắt \`/raid-auto-manage\` rồi nha (có thể họ tự tắt giữa lúc cậu mở page và bấm button, hoặc Manager khác bấm trước cậu). Refresh \`/raid-check\` để page sync state mới.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    // result.outcome === "disabled" - proceed to DM + success embed
+    let dmSent = false;
+    try {
+      const targetUser = await interaction.client.users
+        .fetch(targetDiscordId)
+        .catch(() => null);
+      if (targetUser) {
+        const dmEmbed = buildDisableAutoDmEmbed(EmbedBuilder, {
+          managerId: interaction.user.id,
+        });
+        const reEnableRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`raid-check:enable-auto-self:${targetDiscordId}`)
+            .setLabel("Bật lại auto-sync ngay")
+            .setEmoji("🔄")
+            .setStyle(ButtonStyle.Primary)
+        );
+        await targetUser.send({ embeds: [dmEmbed], components: [reEnableRow] });
+        dmSent = true;
+      }
+    } catch (err) {
+      console.warn(
+        `[raid-check disable-auto-one] DM failed user=${targetDiscordId}:`,
+        err?.message || err
+      );
+    }
+
+    console.log(
+      `[raid-check disable-auto-one] manager=${interaction.user.id} target=${targetDiscordId} outcome=disabled dmSent=${dmSent}`
+    );
+
+    const successEmbed = buildNoticeEmbed(EmbedBuilder, {
+      type: "muted",
+      title: "Artist đã tắt auto-sync hộ rồi nha",
+      description: [
+        "Flag flip thành công. Scheduler sẽ không pull bible logs cho user này nữa cho đến khi họ (hoặc Manager) bật lại.",
+        "",
+        `**Đã tắt cho:** <@${targetDiscordId}>`,
+        `**Trạng thái mới:** OFF`,
+        dmSent
+          ? "**DM thông báo:** Đã gửi (kèm button bật lại)"
+          : "**DM thông báo:** Không gửi được (user tắt DM riêng), flag vẫn được flip OK",
+        "",
+        "Nếu user muốn bật lại thì họ gõ `/raid-auto-manage action:on` hoặc bấm button trong DM nha.",
+      ].join("\n"),
+    });
+    await interaction.reply({
+      embeds: [successEmbed],
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  // Self-only re-enable handler reachable from the button shipped inside
+  // the disable-on-behalf DM. Mirror of handleRaidCheckDisableAutoSelfClick
+  // but flips the flag back to true. Self-only: clicker must equal
+  // encoded target.
+  async function handleRaidCheckEnableAutoSelfClick(interaction, targetDiscordId) {
+    if (!targetDiscordId) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Button đã hết hạn",
+            description: "Button không có target user (DM bị stale hoặc bot vừa redeploy). Gõ `/raid-auto-manage action:on` thay nha.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (interaction.user.id !== targetDiscordId) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "lock",
+            title: "Button này chỉ chủ DM bấm được",
+            description: "Button `Bật lại auto-sync ngay` chỉ user nhận DM mới có thể bấm nha. Nếu cậu muốn bật auto-sync của riêng mình, gõ `/raid-auto-manage action:on` từ trong server bất cứ lúc nào.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const result = await tryEnableAutoManage(User, targetDiscordId);
+    if (result.outcome === "error") {
+      console.error(
+        `[raid-check enable-auto-self] flip failed user=${targetDiscordId}:`,
+        result.error?.message || result.error
+      );
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "error",
+            title: "Bật auto-sync fail",
+            description: `Artist gặp lỗi khi bật: \`${result.error?.message || result.error}\`. Thử gõ \`/raid-auto-manage action:on\` thay nha.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (result.outcome === "missing") {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Account không tồn tại",
+            description: "Artist không tìm thấy roster của cậu trong DB nữa (có thể đã `/remove-roster` toàn bộ). Bật `/add-roster` trước rồi mới opt-in được nha.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    let title;
+    let description;
+    if (result.outcome === "flipped") {
+      title = "Đã bật lại auto-sync rồi nha~";
+      description = "Artist đã bật `/raid-auto-manage` cho cậu. Từ giờ Artist sẽ tự sync raid progress mỗi 24h. Muốn tắt thì gõ `/raid-auto-manage action:off`.";
+    } else {
+      // already-on
+      title = "Auto-sync đã bật sẵn rồi";
+      description = "Cậu đã bật `/raid-auto-manage` trước đó (qua slash command hoặc đã bấm button này lần trước). Không có gì để đổi.";
+    }
+    const updatedEmbed = buildNoticeEmbed(EmbedBuilder, {
+      type: "success",
+      title,
+      description,
+    });
+    console.log(
+      `[raid-check enable-auto-self] user=${targetDiscordId} outcome=${result.outcome}`
+    );
+    await interaction
+      .update({
+        embeds: [updatedEmbed],
+        components: [],
+      })
+      .catch(() => {});
+  }
+
   async function handleRaidCheckButton(interaction) {
     const parts = interaction.customId.split(":");
     const action = parts[1];
     const raidKey = parts[2];
 
-    // Self-only actions bypass the Manager gate. disable-auto-self ships
-    // in the DM that Manager sent to the target after the enable-on-behalf
-    // flow runs; the target (a regular member, not necessarily a Manager)
-    // needs to be able to click it to revert. Handler enforces clicker ==
-    // target instead of Manager allowlist.
+    // Self-only actions bypass the Manager gate. Both ship as buttons
+    // INSIDE DMs that the Manager sent to the target after the
+    // on-behalf flow ran; the target (a regular member, not necessarily
+    // a Manager) needs to be able to click these to revert the
+    // Manager's action. Handler enforces clicker == target instead of
+    // Manager allowlist.
     if (action === "disable-auto-self") {
       const targetDiscordId = parts[2] || null;
       await handleRaidCheckDisableAutoSelfClick(interaction, targetDiscordId);
+      return;
+    }
+    if (action === "enable-auto-self") {
+      const targetDiscordId = parts[2] || null;
+      await handleRaidCheckEnableAutoSelfClick(interaction, targetDiscordId);
       return;
     }
 
@@ -1365,6 +1615,11 @@ function createRaidCheckCommand(deps) {
     if (action === "enable-auto-one") {
       const targetDiscordId = parts[2] || null;
       await handleRaidCheckEnableAutoOneClick(interaction, targetDiscordId);
+      return;
+    }
+    if (action === "disable-auto-one") {
+      const targetDiscordId = parts[2] || null;
+      await handleRaidCheckDisableAutoOneClick(interaction, targetDiscordId);
       return;
     }
 
@@ -1476,7 +1731,8 @@ function createRaidCheckCommand(deps) {
 module.exports = {
   createRaidCheckCommand,
   RAID_CHECK_PAGINATION_SESSION_MS,
-  tryEnableAutoManageForUser,
-  tryDisableAutoManageForSelf,
+  tryEnableAutoManage,
+  tryDisableAutoManage,
   buildEnableAutoDmEmbed,
+  buildDisableAutoDmEmbed,
 };
