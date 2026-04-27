@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Format follows [Keep a Changelog](ht
 
 ## 2026-04-27
 
+### Changed (`/raid-task`: gộp `add` + `add-all` thành 1 subcommand `add` với option `action`)
+- Trước có 2 subcommand riêng `/raid-task add` (1 char) + `/raid-task add-all` (mọi char trong roster) - autocomplete UI hiển thị cả 2 nhìn rối. Gộp thành `/raid-task add action:<single|all>`. Default action không có nhưng sub-routing fallback "single" để backward-compat test mocks.
+- `character` field giờ optional ở Discord schema; runtime validate: `action=single` mà thiếu `character` → reject với hint suggest action `all`. Same conditional-required pattern như `/raid-channel config action:set channel:<x>`.
+- HELP_SECTIONS + README đồng bộ.
+
 ### Added (real-time freshness countdown qua Discord native timestamp + explicit Sync feedback)
 - `buildAccountFreshnessLine` (shared bởi `/raid-status` + `/raid-check` + raid:all) đổi từ `formatShortRelative()` static → Discord native timestamp `<t:UNIX:R>`. Browser tự tick từng giây, không cần server push hay setInterval. "Last updated 30m ago" giờ đếm thời gian lùi mượt khi user mở embed lâu, "Next refresh in 1h30m" cũng tự count down về 0.
 - `synced-no-new` outcome trước return null (silent embed re-render) → giờ surface `${UI.icons.done} Artist đã sync rồi, hiện không có gate clear mới nha~` ở description. User biết click Sync đã work mà không có gì mới.
