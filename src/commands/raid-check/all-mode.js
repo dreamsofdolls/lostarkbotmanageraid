@@ -43,7 +43,7 @@ function createAllModeHandler({
           buildNoticeEmbed(EmbedBuilder, {
             type: "lock",
             title: "Chỉ Raid Manager mới được dùng",
-            description: "Lệnh `/raid-check raid:all` chỉ Raid Manager mới chạy được nha cậu (config qua env `RAID_MANAGER_ID`). Gõ `/raid-status` nếu cậu muốn xem progress của roster mình.",
+            description: "Lệnh `/raid-check` chỉ Raid Manager mới chạy được nha cậu (config qua env `RAID_MANAGER_ID`). Gõ `/raid-status` nếu cậu muốn xem progress của roster mình.",
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -122,7 +122,7 @@ function createAllModeHandler({
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
             title: "Server chưa có roster nào",
-            description: "Artist không thấy member nào đã `/add-roster` cả nha. Bảo các cậu trong server gõ `/add-roster` trước rồi `/raid-check raid:all` mới có data để overview.",
+            description: "Artist không thấy member nào đã `/add-roster` cả nha. Bảo các cậu trong server gõ `/add-roster` trước rồi `/raid-check` mới có data để overview.",
           }),
         ],
       });
@@ -745,7 +745,7 @@ function createAllModeHandler({
                 buildNoticeEmbed(EmbedBuilder, {
                   type: "lock",
                   title: "Chỉ người mở mới bấm được",
-                  description: "Component này thuộc session `/raid-check raid:all` của người khác nha cậu, Artist chỉ cho người mở session điều khiển. Cậu mở session riêng bằng `/raid-check` của mình nhé.",
+                  description: "Component này thuộc session `/raid-check` của người khác nha cậu, Artist chỉ cho người mở session điều khiển. Cậu mở session riêng bằng `/raid-check` của mình nhé.",
                 }),
               ],
               flags: MessageFlags.Ephemeral,

@@ -517,7 +517,15 @@ function createRaidCheckCommand(deps) {
       return;
     }
 
-    const raidKey = interaction.options.getString("raid", true);
+    // Round-32: `raid` option became optional and defaults to the
+    // overview path. Picker dropdown only ever shows "All raids
+    // (overview)", but defending the empty/null case keeps the handler
+    // robust when the option is omitted (e.g. a user typing
+    // `/raid-check` + Enter, or a Discord client edge case that drops
+    // the option). The per-raid branch below is reachable only by
+    // someone manually typing `raid:<key>` since autocomplete no longer
+    // surfaces those keys.
+    const raidKey = interaction.options.getString("raid") || "all";
     // All-mode is a synthetic choice that does NOT map to a raidMeta
     // entry. It pulls a cross-raid overview (per-account page with
     // every eligible raid per char, mirrors /raid-status layout) so
