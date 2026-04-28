@@ -29,7 +29,6 @@ function createEditUi({
   MessageFlags,
   UI,
   User,
-  normalizeName,
   truncateText,
   RAID_REQUIREMENT_MAP,
   resolveDiscordDisplay,
@@ -855,7 +854,7 @@ function createEditUi({
       summaryParts.push(`_Bỏ qua DM vì cậu edit char của chính mình._`);
     }
     summaryParts.push("");
-    summaryParts.push(`_Gõ lại \`/raid-check raid:${raidMeta.raidKey}_${normalizeName(raidMeta.modeKey)}\` để xem pending list mới._`);
+    summaryParts.push(`_Mở \`/raid-check\` rồi pick **${raidMeta.label}** ở dropdown filter để xem pending list mới._`);
     state.message = summaryParts.join("\n");
 
     let uiRefreshed = false;

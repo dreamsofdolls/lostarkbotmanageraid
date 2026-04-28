@@ -29,7 +29,6 @@ function createSyncUi({
   UI,
   User,
   ensureFreshWeek,
-  normalizeName,
   saveWithRetry,
   weekResetStartMs,
   autoManageEntryKey,
@@ -242,7 +241,7 @@ function createSyncUi({
       `**Chars có update mới:** ${deltasPerUser.size} user`,
       `**DM sent:** ${dmSent}${dmFailed > 0 ? ` (DM failed: ${dmFailed})` : ""}`,
       "",
-      `Gõ \`/raid-check raid:${raidMeta.raidKey}_${normalizeName(raidMeta.modeKey)}\` để xem list pending mới nha~`,
+      `Mở \`/raid-check\` rồi pick **${raidMeta.label}** ở dropdown filter để xem list pending mới nha~`,
     ].join("\n");
     await interaction.editReply({
       content: null,

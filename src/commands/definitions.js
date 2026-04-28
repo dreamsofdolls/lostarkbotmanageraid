@@ -3,7 +3,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require("discord.js");
 
 function createRaidCommandDefinitions({
-  RAID_CHOICES,
   announcementTypeKeys,
   announcementTypeEntry,
 }) {
@@ -23,26 +22,14 @@ function createRaidCommandDefinitions({
         .setRequired(false)
     );
 
+  // /raid-check has no command-line options. Cross-raid overview is the
+  // sole entry point; per-raid focus is achieved via the inline raid-
+  // filter dropdown inside the embed. The previous `raid` option (with
+  // its 7+1 choice list) was retired in round-32 because the inline
+  // filter offered the same UX without doubling the command surface.
   const raidCheckCommand = new SlashCommandBuilder()
     .setName("raid-check")
-    .setDescription("(Raid Leader) Cross-raid overview of guild progress")
-    .addStringOption((option) => {
-      // Single-choice "all" overview is now the canonical entry point.
-      // Per-raid focus is achieved via the inline raid-filter dropdown
-      // inside the all-mode embed instead of a separate command path.
-      // The option stays optional (defaults to "all" in the handler) so
-      // users can simply type `/raid-check` + Enter without picking from
-      // a dropdown that only has one item anyway.
-      option
-        .setName("raid")
-        .setDescription("(Optional) Defaults to All raids overview")
-        .setRequired(false);
-
-      for (const choice of RAID_CHOICES) {
-        option.addChoices(choice);
-      }
-      return option;
-    });
+    .setDescription("(Raid Leader) Cross-raid overview of guild progress");
 
   const raidSetCommand = new SlashCommandBuilder()
     .setName("raid-set")

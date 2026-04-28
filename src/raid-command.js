@@ -104,7 +104,6 @@ function loadUserForAutocomplete(discordId) {
 }
 const {
   RAID_REQUIREMENTS,
-  getRaidRequirementChoices,
   getRaidRequirementList,
   getRaidRequirementMap,
   getGatesForRaid,
@@ -171,23 +170,14 @@ if (RAID_MANAGER_ID.size === 0) {
     "[raid-check] RAID_MANAGER_ID env not set or empty - /raid-check will reject every invocation. Set the env var to a comma-separated list of Discord user IDs to enable."
   );
 }
-const RAID_CHOICES = getRaidRequirementChoices();
-// /raid-check-only extension: the synthetic "all" value pulls the
-// cross-raid overview page (per-account roster with every eligible
-// raid per char, mirrors /raid-status). NOT present in /raid-set's
-// autocomplete because there is no "all-raid" write semantics.
-//
-// Round-32: per-raid choices were dropped from this list so /raid-check's
-// dropdown only ever shows the overview entry. Per-raid focus is now
-// reached via the inline raid-filter dropdown inside the all-mode embed
-// (single entry point, less command-line surface). The per-raid handler
-// path in raid-check.js stays alive as defensive code so a user that
-// types `raid:armoche_hard` directly (rare, no autocomplete prompt) still
-// works; once we're confident no one needs that path it can be removed
-// in a follow-up cleanup pass.
-const RAID_CHECK_CHOICES = [
-  { name: "All raids (overview)", value: "all" },
-];
+// Round-32: /raid-check's `raid` option was removed entirely. The picker
+// dropdown collapsed to one synthetic "all" entry (round-32a) and then
+// the option was dropped (round-32b) because the inline raid-filter
+// dropdown inside the all-mode embed already covers per-raid focus
+// without a separate command-line argument. RAID_CHOICES was the
+// /raid-check-specific choice list; nothing else consumed it, so it's
+// gone too. /raid-set still uses its own autocomplete-driven raid input
+// path, unaffected by this change.
 const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
 
 
@@ -202,10 +192,6 @@ function isRaidLeader(interaction) {
 }
 
 const commands = createRaidCommandDefinitions({
-  // definitions.js wires these into /raid-check's `raid` option only,
-  // so it's safe to feed the all-augmented list here. /raid-set uses
-  // autocomplete (not static choices) and never sees this.
-  RAID_CHOICES: RAID_CHECK_CHOICES,
   announcementTypeKeys,
   announcementTypeEntry,
 });
