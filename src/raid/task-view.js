@@ -4,7 +4,7 @@ const { pack2Columns } = require("./shared");
 
 /**
  * Shared helper for the Task view layout used by both `/raid-status` and
- * `/raid-check raid:all` (Manager spot-check). Renders the per-character
+ * `/raid-check` (Manager spot-check). Renders the per-character
  * card fields with the 2-column ZWS-spacer packing trick that matches the
  * raid view, plus rolls up daily/weekly totals so the caller can build
  * its own footer.

@@ -243,7 +243,7 @@ function createRaidStatusCommand(deps) {
     // Inline `· 📝 Auto-sync OFF` badge when the rendered subject hasn't
     // opted into /raid-auto-manage. Useful in 2 contexts that share this
     // builder: (1) /raid-status caller seeing their own roster with a
-    // light nudge to opt in; (2) /raid-check raid:all leader scanning
+    // light nudge to opt in; (2) /raid-check leader scanning
     // across guild members, immediately spotting who requires manual
     // Edit. Silent when opted-in to keep the title lean for the common
     // case. Strict `=== false` so a missing/unknown flag (legacy doc)
@@ -542,7 +542,7 @@ function createRaidStatusCommand(deps) {
     let statusUserMeta = buildStatusUserMeta(userDoc, piggybackOutcome);
 
     // Raid-filter aggregate for the caller's own roster. Parallel to the
-    // all-mode dropdown in /raid-check raid:all, but counts here are
+    // all-mode dropdown in /raid-check, but counts here are
     // self-scoped (chars across caller's accounts where the raid isn't
     // fully cleared yet). Computed once at init with the unfiltered
     // getRaidsFor so toggling filters later doesn't rewrite the labels
@@ -797,7 +797,7 @@ function createRaidStatusCommand(deps) {
     // Build the Task-view embed for the current page's account. Body
     // (per-char fields + 2-column ZWS-spacer packing + totals math) is
     // delegated to the shared `buildAccountTaskFields` helper so the
-    // /raid-check raid:all Manager Task view renders the same look
+    // /raid-check Manager Task view renders the same look
     // without duplicating ~80 LOC of layout code. This wrapper owns
     // the surface-specific bits: title, description, the "🌟 sắp có"
     // placeholder, and the page-indicator footer.

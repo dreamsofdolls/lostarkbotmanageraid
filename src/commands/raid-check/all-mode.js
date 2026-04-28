@@ -1,7 +1,7 @@
 /**
  * all-mode.js
  *
- * /raid-check raid:all - cross-raid overview handler. Builds per-account
+ * /raid-check - cross-raid overview handler. Builds per-account
  * pages with every eligible raid listed per char, mirroring /raid-status
  * but scoped guild-wide instead of just the caller's roster.
  *
