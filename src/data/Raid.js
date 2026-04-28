@@ -48,13 +48,6 @@ function buildRaidRequirementList() {
   return list;
 }
 
-function getRaidRequirementChoices() {
-  return buildRaidRequirementList().map((raid) => ({
-    name: `${raid.label} · ${raid.minItemLevel}+`,
-    value: raid.value,
-  }));
-}
-
 function getRaidRequirementList() {
   return buildRaidRequirementList().map(({ value, ...raid }) => raid);
 }
@@ -98,7 +91,6 @@ function getRaidGateForBoss(bossName) {
 
 module.exports = {
   RAID_REQUIREMENTS,
-  getRaidRequirementChoices,
   getRaidRequirementList,
   getRaidRequirementMap,
   getGatesForRaid,

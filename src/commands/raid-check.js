@@ -230,20 +230,16 @@ function createRaidCheckCommand(deps) {
     toModeLabel,
     getCharacterName,
     truncateText,
-    formatShortRelative,
-    waitWithBudget,
     getGatesForRaid,
     ensureAssignedRaids,
     getGateKeys,
     getRaidScanRange,
     buildRaidCheckUserQuery,
-    buildAccountFreshnessLine,
     buildAccountPageEmbed,
     buildStatusFooterText,
     summarizeRaidProgress,
     getStatusRaidsForCharacter,
     buildPaginationRow,
-    pickProgressIcon,
     resolveDiscordDisplay,
     loadFreshUserSnapshotForRaidViews,
     acquireAutoManageSyncSlot,
@@ -255,7 +251,6 @@ function createRaidCheckCommand(deps) {
     weekResetStartMs,
     isRaidLeader,
     isManagerId,
-    getAutoManageCooldownMs,
     applyRaidSetForDiscordId,
     RAID_REQUIREMENT_MAP,
     RAID_CHECK_USER_QUERY_FIELDS,
@@ -1140,17 +1135,6 @@ function createRaidCheckCommand(deps) {
     applyLocalRaidEditToChar,
     RAID_CHECK_EDIT_SESSION_MS,
   });
-
-  // Cross-raid overview for /raid-check. Mirrors /raid-status's
-  // per-account page layout so the leader sees ONE account at a time
-  // (inline 2-col char fields, account progress rollup, freshness badge)
-  // but scoped across every user in the guild instead of just the
-  // caller's own roster. Pagination flips through all (user, account)
-  // pairs; each page carries a setAuthor avatar + display name so the
-  // leader can tell users apart without reading the roster label. Edit
-  // button is intentionally omitted in this commit - cross-raid Edit
-  // needs a raid dropdown cascade (Commit 2); leaders who want to edit
-  // should open /raid-check with a specific raid×mode for now.
 
   return {
     buildRaidCheckSnapshotFromUsers,
