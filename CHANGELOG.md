@@ -14,7 +14,8 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - Welcome pin got a clearer onboarding block for new members.
 
 ### Changed
-- Task view (`/raid-status` and `/raid-check raid:all`) per-task lines now mirror the Raid view's `[icon] [name] · [info]` format, appending `· daily` / `· weekly` to each task line. Decimal item-level precision is preserved in the char header (no more `1734.17` → `1734` truncation).
+- `/raid-check` is now a single entry point: the `raid` option is optional (defaults to the cross-raid overview) and the picker dropdown only surfaces "All raids (overview)". Per-raid focus is reached via the inline raid-filter dropdown inside the embed instead of a separate command path. The legacy per-raid handler stays in place as defensive code so anyone typing `raid:<key>` directly still works.
+- Task view (`/raid-status` and `/raid-check`) per-task lines now mirror the Raid view's `[icon] [name] · [info]` format, appending `· daily` / `· weekly` to each task line. Decimal item-level precision is preserved in the char header (no more `1734.17` → `1734` truncation).
 - Task view char headers bind the `name · itemLevel` separator with non-breaking spaces (` · `) so Discord can no longer wrap the iLvl onto a second line in narrow inline-field columns. Cleanest fix without padding the embed body or trimming decimals.
 - `/raid-check raid:all` Task view now renders class icons in char headers (matching `/raid-status` Task view). The earlier empty-fallback was unintentional inconsistency, not a deliberate Manager-side simplification.
 - `CHANGELOG` and help surfaces were rewritten to be more user-first: less internal jargon, more direct usage guidance.

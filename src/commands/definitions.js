@@ -25,12 +25,18 @@ function createRaidCommandDefinitions({
 
   const raidCheckCommand = new SlashCommandBuilder()
     .setName("raid-check")
-    .setDescription("(Raid Leader) Scan all uncompleted eligible characters for a raid")
+    .setDescription("(Raid Leader) Cross-raid overview of guild progress")
     .addStringOption((option) => {
+      // Single-choice "all" overview is now the canonical entry point.
+      // Per-raid focus is achieved via the inline raid-filter dropdown
+      // inside the all-mode embed instead of a separate command path.
+      // The option stays optional (defaults to "all" in the handler) so
+      // users can simply type `/raid-check` + Enter without picking from
+      // a dropdown that only has one item anyway.
       option
         .setName("raid")
-        .setDescription("Raid to scan")
-        .setRequired(true);
+        .setDescription("(Optional) Defaults to All raids overview")
+        .setRequired(false);
 
       for (const choice of RAID_CHOICES) {
         option.addChoices(choice);

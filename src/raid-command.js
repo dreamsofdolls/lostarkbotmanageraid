@@ -176,9 +176,17 @@ const RAID_CHOICES = getRaidRequirementChoices();
 // cross-raid overview page (per-account roster with every eligible
 // raid per char, mirrors /raid-status). NOT present in /raid-set's
 // autocomplete because there is no "all-raid" write semantics.
+//
+// Round-32: per-raid choices were dropped from this list so /raid-check's
+// dropdown only ever shows the overview entry. Per-raid focus is now
+// reached via the inline raid-filter dropdown inside the all-mode embed
+// (single entry point, less command-line surface). The per-raid handler
+// path in raid-check.js stays alive as defensive code so a user that
+// types `raid:armoche_hard` directly (rare, no autocomplete prompt) still
+// works; once we're confident no one needs that path it can be removed
+// in a follow-up cleanup pass.
 const RAID_CHECK_CHOICES = [
   { name: "All raids (overview)", value: "all" },
-  ...RAID_CHOICES,
 ];
 const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
 
