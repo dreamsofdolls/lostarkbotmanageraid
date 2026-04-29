@@ -52,10 +52,8 @@ const guildConfigSchema = new mongoose.Schema(
     // subdoc has:
     //   - enabled: whether the announcement fires at all.
     //   - channelId: override destination (null = fallback to raidChannelId).
-    //       Only weekly-reset and stuck-nudge accept overrides; the other
-    //       three types are channel-bound by semantics (greeting/cleanup
-    //       notice/whisper ack all refer to the raid monitor channel
-    //       itself) so their channelId is ignored by the firing site.
+    //       Only subdocs with a channelId field accept overrides; channel-bound
+    //       types omit it and always fire into the raid monitor channel.
     // Defaults all enabled=true / channelId=null so legacy guilds that
     // existed before this field landed get the full voice out of the box.
     announcements: {

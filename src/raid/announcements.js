@@ -10,7 +10,7 @@
 //
 // Design choice: nested subdoc storage (GuildConfig.announcements) stays,
 // a collection-per-announcement refactor was considered and skipped because
-// cardinality is low (5 types × 1-ish guilds) and no query pattern needs
+// cardinality is low (single-digit types × 1-ish guilds) and no query pattern needs
 // cross-guild announcement analytics or dynamic user-defined types. If the
 // type count crosses ~10 OR rich metadata lands (cron, TTL override,
 // conditions), revisit collection split then.
@@ -109,7 +109,7 @@ const ANNOUNCEMENT_REGISTRY = {
     dedup: "1 post/slot/guild (`lastMaintenanceEarlyKey = 'YYYY-MM-DD:T-{3h|2h|1h}'`). Mỗi tuần 1 chu kỳ key mới.",
     messageTtl: "30 phút rồi Artist tự xóa",
     previewContent:
-      "Random pick mỗi mốc theo pool 3 variants, voice Artist liệt kê todo (shop solo, event, paradise, key hell).\nT-3h: nhắc nhẹ, không tag.\nT-2h: nhắc thêm 1 lần, không tag.\nT-1h: tag @everyone, giọng giục nhẹ.",
+      "Random pick mỗi mốc theo pool 3 variants, voice Artist liệt kê todo (shop solo, event, paradise, key hell).\nT-3h: ping @here để member online thấy.\nT-2h: nhắc thêm 1 lần, không tag.\nT-1h: ping @here, giọng giục nhẹ.",
   },
   "maintenance-countdown": {
     label: "Maintenance countdown",
@@ -119,7 +119,7 @@ const ANNOUNCEMENT_REGISTRY = {
     dedup: "1 post/slot/guild (`lastMaintenanceCountdownKey = 'YYYY-MM-DD:T-{15m|10m|5m|1m}'`).",
     messageTtl: "10 phút rồi Artist tự xóa (mốc T-1m TTL ngắn hơn vì server sắp tắt)",
     previewContent:
-      "Random pick mỗi mốc, voice gấp gáp dần.\nT-15m / T-10m / T-5m: không tag, giọng đếm ngược.\nT-1m: tag @everyone, giọng chốt 'thoát game thôi'.",
+      "Random pick mỗi mốc, voice gấp gáp dần.\nT-15m / T-10m / T-5m / T-1m: không tag, giọng đếm ngược tới 'thoát game thôi'.",
   },
 };
 

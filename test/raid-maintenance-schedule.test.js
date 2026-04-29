@@ -8,6 +8,7 @@ const assert = require("node:assert/strict");
 const { __test } = require("../src/raid-command");
 const {
   announcementOverridableTypeKeys,
+  announcementTypeEntry,
 } = require("../src/raid/announcements");
 
 // Lost Ark VN maintenance: Wednesday 14:00 VN = Wednesday 07:00 UTC.
@@ -159,6 +160,16 @@ test("buildMaintenancePreview('countdown') lists all 4 countdown mốc keys", ()
   assert.match(preview, /T-10m/);
   assert.match(preview, /T-5m/);
   assert.match(preview, /T-1m/);
+});
+
+test("maintenance registry preview matches the runtime ping policy", () => {
+  const earlyPreview = announcementTypeEntry("maintenance-early").previewContent;
+  const countdownPreview = announcementTypeEntry("maintenance-countdown").previewContent;
+
+  assert.match(earlyPreview, /T-3h: ping @here/);
+  assert.match(earlyPreview, /T-1h: ping @here/);
+  assert.doesNotMatch(earlyPreview, /@everyone/);
+  assert.doesNotMatch(countdownPreview, /@here|@everyone/);
 });
 
 // Tiny in-test matcher that mirrors Mongo's $or + dot-path + $ne semantics
