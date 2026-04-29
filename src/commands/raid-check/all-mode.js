@@ -33,8 +33,16 @@ function createAllModeHandler({
   isRaidLeader,
   isManagerId,
   discordUserLimiter,
+  raidCheckRefreshLimiter,
+  loadFreshUserSnapshotForRaidViews,
+  shouldLoadFreshUserSnapshotForRaidViews,
+  RAID_CHECK_USER_QUERY_FIELDS,
   RAID_CHECK_PAGINATION_SESSION_MS,
 }) {
+  function toPlainUserDoc(userDoc) {
+    if (!userDoc) return null;
+    return typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
+  }
 
   async function handleRaidCheckAllCommand(interaction) {
     if (!isRaidLeader(interaction)) {
@@ -54,53 +62,54 @@ function createAllModeHandler({
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const started = Date.now();
 
-    // Only users with at least one account matter for the overview.
-    // Select enough identity fields to resolve an avatar-less fallback
-    // display name (same cache-first preference the Edit flow uses).
-    //
-    // Account subfields enumerated explicitly. Round-29 added
-    // `accounts.characters.sideTasks` so the all-mode + raid-check Task
-    // view dropdown can render members' per-char chore lists for Manager
-    // monitoring (Manager design call). If you add a new account field,
-    // add it here; do NOT widen to `accounts` because that would silently
-    // include any other future fields we haven't decided to expose.
-    //
-    // Data minimization: bibleSerial/bibleCid/bibleRid are deliberately
-    // NOT projected here. They're internal lostark.bible identifiers used
-    // by /raid-auto-manage to skip SSR re-resolution; the all-mode view
-    // doesn't render or otherwise consume them, so leaving them out of
-    // the read keeps Manager-side queries lean and avoids accidental
-    // exposure if a future log-line ever spills the user doc.
-    const users = await User.find({ "accounts.0": { $exists: true } })
-      .select(
-        [
-          "discordId",
-          "discordUsername",
-          "discordGlobalName",
-          "discordDisplayName",
-          "autoManageEnabled",
-          "lastAutoManageSyncAt",
-          "lastAutoManageAttemptAt",
-          "weeklyResetKey",
-          "accounts.accountName",
-          "accounts.lastRefreshedAt",
-          "accounts.lastRefreshAttemptAt",
-          "accounts.characters.id",
-          "accounts.characters.name",
-          "accounts.characters.class",
-          "accounts.characters.itemLevel",
-          "accounts.characters.combatScore",
-          "accounts.characters.isGoldEarner",
-          "accounts.characters.assignedRaids",
-          "accounts.characters.tasks",
-          "accounts.characters.sideTasks",
-          "accounts.characters.publicLogDisabled",
-        ].join(" ")
-      )
-      .lean();
-
-    for (const userDoc of users) {
-      ensureFreshWeek(userDoc);
+    // Only users with at least one account matter for the overview. Keep
+    // the projection shared with the raid-check snapshot path so fields
+    // such as charName/className/raids/sideTasks cannot drift between
+    // the page views.
+    const buildUsersQuery = () =>
+      User.find({ "accounts.0": { $exists: true } }).select(
+        RAID_CHECK_USER_QUERY_FIELDS
+      );
+    const canRefreshFreshData =
+      typeof loadFreshUserSnapshotForRaidViews === "function" &&
+      raidCheckRefreshLimiter &&
+      typeof raidCheckRefreshLimiter.run === "function";
+    let users;
+    if (canRefreshFreshData) {
+      const seedUsers = await buildUsersQuery();
+      let refreshQueued = 0;
+      let freshBypass = 0;
+      users = (
+        await Promise.all(
+          seedUsers.map((seedDoc) => {
+            const shouldRefresh =
+              typeof shouldLoadFreshUserSnapshotForRaidViews === "function"
+                ? shouldLoadFreshUserSnapshotForRaidViews(seedDoc, {
+                    allowAutoManage: false,
+                  })
+                : true;
+            if (!shouldRefresh) {
+              freshBypass += 1;
+              return Promise.resolve(toPlainUserDoc(seedDoc));
+            }
+            refreshQueued += 1;
+            return raidCheckRefreshLimiter.run(() =>
+              loadFreshUserSnapshotForRaidViews(seedDoc, {
+                allowAutoManage: false,
+                logLabel: "[raid-check all]",
+              })
+            );
+          })
+        )
+      ).filter(Boolean);
+      console.log(
+        `[raid-check all] refreshQueued=${refreshQueued} freshBypass=${freshBypass}`
+      );
+    } else {
+      users = await buildUsersQuery().lean();
+      for (const userDoc of users) {
+        ensureFreshWeek(userDoc);
+      }
     }
 
     // Each page = one (user, account) pair. Empty accounts (0 chars)
@@ -189,12 +198,9 @@ function createAllModeHandler({
     let filterUserId = null;
     // View toggle state. Default "raid" = the cross-raid scan view; "task"
     // swaps the same embed in-place to a per-account read-only Task view
-    // (Manager spot-check). Toggle button only renders when filterUserId
-    // is set since the Task view is per-user data. Page index (currentLocal-
-    // Page) is shared between views: page = "Nth account of focused user",
-    // raid view renders raid scan for that account, task view renders
-    // sideTasks for the same account, so toggling preserves which account
-    // the Manager was viewing.
+    // (Manager spot-check). The toggle targets the user on the current
+    // page, so users beyond Discord's 24-option dropdown cap remain
+    // reachable through normal pagination.
     let currentView = "raid";
     let filterRaidId = null;
     let filteredIndices = pagesData.map((_, i) => i);
@@ -449,6 +455,7 @@ function createAllModeHandler({
       const currentAbs = currentAbsoluteIndex();
       const currentViewUserId =
         pagesData[currentAbs]?.userDoc?.discordId || "";
+      const actionUserId = filterUserId || currentViewUserId;
 
       // Edit + enable/disable-auto buttons only in raid view. Task view
       // is read-only Manager spot-check, those actions don't fit the
@@ -468,15 +475,15 @@ function createAllModeHandler({
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(disabled)
         );
-        // Enable-/disable-auto-on-behalf buttons: visible only when the
-        // user filter narrows the view to one specific user. Direction
-        // depends on that user's current opt-in state.
-        if (filterUserId) {
-          const focusedUserOptedIn = autoManageStateByDiscordId.get(filterUserId);
+        // Enable-/disable-auto-on-behalf buttons target the current page's
+        // user, so members beyond the 24-option dropdown cap are still
+        // actionable via pagination.
+        if (actionUserId) {
+          const focusedUserOptedIn = autoManageStateByDiscordId.get(actionUserId);
           if (focusedUserOptedIn === false) {
             row.addComponents(
               new ButtonBuilder()
-                .setCustomId(`raid-check:enable-auto-one:${filterUserId}`)
+                .setCustomId(`raid-check:enable-auto-one:${actionUserId}`)
                 .setLabel("Bật auto-sync")
                 .setEmoji("🔄")
                 .setStyle(ButtonStyle.Primary)
@@ -485,7 +492,7 @@ function createAllModeHandler({
           } else if (focusedUserOptedIn === true) {
             row.addComponents(
               new ButtonBuilder()
-                .setCustomId(`raid-check:disable-auto-one:${filterUserId}`)
+                .setCustomId(`raid-check:disable-auto-one:${actionUserId}`)
                 .setLabel("Tắt auto-sync")
                 .setEmoji("🚫")
                 .setStyle(ButtonStyle.Secondary)
@@ -495,12 +502,11 @@ function createAllModeHandler({
         }
       }
 
-      // View toggle button: only when filterUserId is set (Task view
-      // is per-user data). Label flips based on currentView so a
-      // single button handles both directions. CustomId uses the
-      // `raid-check-all:` prefix so the local collector handles it
-      // and the global router doesn't double-fire.
-      if (filterUserId) {
+      // View toggle button follows the current page's user/account. Label
+      // flips based on currentView so a single button handles both
+      // directions. CustomId uses the `raid-check-all:` prefix so the
+      // local collector handles it and the global router doesn't double-fire.
+      if (actionUserId) {
         if (currentView === "raid") {
           row.addComponents(
             new ButtonBuilder()
@@ -762,9 +768,6 @@ function createAllModeHandler({
             ? component.values[0]
             : FILTER_ALL;
         applyUserFilter(value);
-        // Going back to "All users" auto-leaves Task view since Task
-        // view is per-user only.
-        if (!filterUserId) currentView = "raid";
         await component
           .update({
             embeds: [renderEmbed(currentAbsoluteIndex())],

@@ -14,6 +14,7 @@ const User = require("./models/user");
 const { saveWithRetry } = require("./models/user");
 const {
   ensureFreshWeek,
+  getTargetResetKey,
   getWeeklyResetSchedulerStartedAtMs,
   WEEKLY_RESET_TICK_MS,
 } = require("./weekly-reset");
@@ -345,6 +346,7 @@ let handleRaidCheckButton;
 let handleStatusCommand;
 let applyAutoManageCollectedForStatus;
 let collectStaleAccountRefreshes;
+let hasStaleAccountRefreshes;
 let applyStaleAccountRefreshes;
 let formatRosterRefreshCooldownRemaining;
 let buildAccountFreshnessLine;
@@ -656,9 +658,28 @@ const rosterRefreshService = createRosterRefreshService({
 });
 ({
   collectStaleAccountRefreshes,
+  hasStaleAccountRefreshes,
   applyStaleAccountRefreshes,
   formatRosterRefreshCooldownRemaining,
 } = rosterRefreshService);
+
+function shouldLoadFreshUserSnapshotForRaidViews(
+  seedDoc,
+  { allowAutoManage = true } = {}
+) {
+  if (!seedDoc?.discordId) return false;
+  if (seedDoc.weeklyResetKey !== getTargetResetKey()) return true;
+  const hasRoster =
+    Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
+  if (!hasRoster) return false;
+  if (
+    typeof hasStaleAccountRefreshes === "function" &&
+    hasStaleAccountRefreshes(seedDoc)
+  ) {
+    return true;
+  }
+  return Boolean(allowAutoManage && seedDoc.autoManageEnabled);
+}
 
 const autoManageSyncService = createAutoManageSyncService({
   User,
@@ -739,6 +760,7 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   buildPaginationRow,
   resolveDiscordDisplay,
   loadFreshUserSnapshotForRaidViews,
+  shouldLoadFreshUserSnapshotForRaidViews,
   acquireAutoManageSyncSlot,
   releaseAutoManageSyncSlot,
   autoManageEntryKey,

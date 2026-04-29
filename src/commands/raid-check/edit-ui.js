@@ -392,7 +392,9 @@ function createEditUi({
     }
 
     if (!scopeAll) {
-      snapshot = await computeRaidCheckSnapshot(raidMeta);
+      snapshot = await computeRaidCheckSnapshot(raidMeta, {
+        syncFreshData: true,
+      });
       editableByUser = buildEditableCharsByUser(snapshot);
 
       if (editableByUser.size === 0) {
@@ -513,7 +515,9 @@ function createEditUi({
         }
         await component.deferUpdate().catch(() => {});
         try {
-          const newSnapshot = await computeRaidCheckSnapshot(pickedRaidMeta);
+          const newSnapshot = await computeRaidCheckSnapshot(pickedRaidMeta, {
+            syncFreshData: true,
+          });
           const newEditableByUser = buildEditableCharsByUser(newSnapshot);
           const newDisplayMap = new Map();
           await Promise.all(

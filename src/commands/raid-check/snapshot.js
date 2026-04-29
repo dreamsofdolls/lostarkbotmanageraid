@@ -32,7 +32,12 @@ function createSnapshotHelpers({
   // Lazy refresh fan-out
   raidCheckRefreshLimiter,
   loadFreshUserSnapshotForRaidViews,
+  shouldLoadFreshUserSnapshotForRaidViews,
 }) {
+  function toPlainUserDoc(userDoc) {
+    if (!userDoc) return null;
+    return typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
+  }
 
   function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
     const userMeta = new Map();
@@ -239,21 +244,36 @@ function createSnapshotHelpers({
     const seedUsers = await User.find(userQuery).select(RAID_CHECK_USER_QUERY_FIELDS);
     const queryMs = Date.now() - queryStarted;
     const refreshStarted = Date.now();
+    let refreshQueued = 0;
+    let freshBypass = 0;
     const users = await Promise.all(
-      seedUsers.map((seedDoc) =>
-        raidCheckRefreshLimiter.run(() =>
+      seedUsers.map((seedDoc) => {
+        const shouldRefresh =
+          typeof shouldLoadFreshUserSnapshotForRaidViews === "function"
+            ? shouldLoadFreshUserSnapshotForRaidViews(seedDoc, {
+                allowAutoManage: false,
+              })
+            : true;
+        if (!shouldRefresh) {
+          freshBypass += 1;
+          return Promise.resolve(toPlainUserDoc(seedDoc));
+        }
+        refreshQueued += 1;
+        return raidCheckRefreshLimiter.run(() =>
           loadFreshUserSnapshotForRaidViews(seedDoc, {
             allowAutoManage: false,
             logLabel: "[raid-check]",
           })
-        )
-      )
+        );
+      })
     );
     const refreshMs = Date.now() - refreshStarted;
     const snapshot = buildRaidCheckSnapshotFromUsers(users, raidMeta);
     logSnapshot({
       users: seedUsers.length,
       freshUsers: users.filter(Boolean).length,
+      refreshQueued,
+      freshBypass,
       allChars: snapshot.allChars.length,
       pending: snapshot.pendingChars.length,
       queryMs,
