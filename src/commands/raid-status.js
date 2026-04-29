@@ -1,9 +1,18 @@
-const { isSupportClass } = require("../data/Class");
 const { createRaidStatusView } = require("./raid-status/view");
 const { createRaidStatusTaskUi } = require("./raid-status/task-ui");
+const { createRaidStatusSync } = require("./raid-status/sync");
+const {
+  FILTER_ALL_RAIDS,
+  buildRaidDropdownState,
+  buildRaidFilterRow,
+} = require("./raid-status/raid-filter");
+const {
+  parseTaskToggleValue,
+  toggleBulkSideTask,
+  toggleSingleSideTask,
+} = require("./raid-status/task-actions");
 const {
   buildNoticeEmbed,
-  normalizeName,
 } = require("../raid/shared");
 
 const STATUS_PAGINATION_SESSION_MS = 5 * 60 * 1000;
@@ -64,6 +73,27 @@ function createRaidStatusCommand(deps) {
     isManagerId,
   });
 
+  const {
+    buildStatusUserMeta,
+    loadStatusUserDoc,
+    runManualStatusSync,
+  } = createRaidStatusSync({
+    User,
+    saveWithRetry,
+    ensureFreshWeek,
+    collectStaleAccountRefreshes,
+    applyStaleAccountRefreshes,
+    waitWithBudget,
+    acquireAutoManageSyncSlot,
+    releaseAutoManageSyncSlot,
+    gatherAutoManageLogsForUserDoc,
+    applyAutoManageCollected,
+    applyAutoManageCollectedForStatus,
+    stampAutoManageAttempt,
+    weekResetStartMs,
+    STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS,
+  });
+
   async function handleStatusCommand(interaction) {
     const discordId = interaction.user.id;
     const seedDoc = await User.findOne({ discordId });
@@ -83,148 +113,11 @@ function createRaidStatusCommand(deps) {
 
     await interaction.deferReply();
 
-    let userDoc = null;
-    let autoManageGuard = null;
-    let autoManageReleaseInBackground = false;
-
-    // Piggyback outcome tracker so we can surface "what just happened on
-    // this open" in the embed. /raid-status is the only sync entry point
-    // for regular users (they cannot use /raid-check Sync); without an
-    // outcome surface the user has no way to tell whether the data they
-    // see reflects a fresh bible pull, a silently-timed-out attempt, or
-    // a cached read because they were within the 10m cooldown.
-    //
-    // outcome values:
-    //   - "not-applicable": user not opted-in / no roster, no piggyback
-    //   - "cooldown": slot guard rejected (within 10m of last attempt)
-    //   - "failed": gather promise rejected (bible API issue)
-    //   - "timeout": gather exceeded the 2.5s budget, running in bg
-    //   - "synced-no-new": gather + apply succeeded but no new gates
-    //   - "applied": gather + apply succeeded, N new gates applied
-    const piggybackOutcome = {
-      outcome: "not-applicable",
-      newGatesApplied: 0,
-    };
-
-    try {
-      ensureFreshWeek(seedDoc);
-
-      let autoManagePromise = Promise.resolve(null);
-      let autoManageWeekResetStart = null;
-      const hasRoster = Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
-      if (seedDoc.autoManageEnabled && hasRoster) {
-        autoManageGuard = await acquireAutoManageSyncSlot(discordId);
-        if (autoManageGuard.acquired) {
-          autoManageWeekResetStart = weekResetStartMs();
-          autoManagePromise = gatherAutoManageLogsForUserDoc(
-            seedDoc,
-            autoManageWeekResetStart
-          ).catch((err) => {
-            console.warn(
-              "[raid-status] auto-manage piggyback gather failed:",
-              err?.message || err
-            );
-            return null;
-          });
-        } else {
-          piggybackOutcome.outcome = "cooldown";
-        }
-      }
-
-      const [refreshCollected, autoManageBudgetResult] = await Promise.all([
-        collectStaleAccountRefreshes(seedDoc),
-        autoManageGuard?.acquired
-          ? waitWithBudget(autoManagePromise, STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS)
-          : Promise.resolve({ timedOut: false, value: null }),
-      ]);
-      let autoManageCollected = autoManageBudgetResult.value;
-      const autoManageBibleHit = autoManageGuard?.acquired === true;
-      const autoManageTimedOut = autoManageGuard?.acquired && autoManageBudgetResult.timedOut;
-      // Gather rejected: budget didn't time out, slot was acquired, but
-      // the value is null (the .catch in the gather chain converts a
-      // throw into null). Distinct from timeout because the bg task is
-      // already settled - nothing keeps running.
-      const autoManageGatherFailed =
-        autoManageGuard?.acquired &&
-        !autoManageBudgetResult.timedOut &&
-        autoManageBudgetResult.value === null;
-      if (autoManageTimedOut) piggybackOutcome.outcome = "timeout";
-      else if (autoManageGatherFailed) piggybackOutcome.outcome = "failed";
-
-      if (autoManageTimedOut) {
-        autoManageCollected = null;
-        autoManageReleaseInBackground = true;
-        autoManagePromise
-          .then((backgroundCollected) =>
-            applyAutoManageCollectedForStatus(
-              discordId,
-              autoManageWeekResetStart,
-              backgroundCollected,
-              "background"
-            )
-          )
-          .catch(async (err) => {
-            console.warn(
-              "[raid-status] background auto-manage apply failed:",
-              err?.message || err
-            );
-            await stampAutoManageAttempt(discordId);
-          })
-          .finally(() => releaseAutoManageSyncSlot(discordId));
-        console.log(
-          `[raid-status] auto-manage exceeded ${STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS}ms budget for user=${discordId}; rendering cached data and continuing in background`
-        );
-      }
-
-      userDoc = await saveWithRetry(async () => {
-        const doc = await User.findOne({ discordId });
-        if (!doc) return null;
-
-        const didFreshenWeek = ensureFreshWeek(doc);
-        const didRefresh = applyStaleAccountRefreshes(doc, refreshCollected);
-
-        let didAutoManage = false;
-        if (autoManageCollected && doc.autoManageEnabled) {
-          const autoReport = applyAutoManageCollected(
-            doc,
-            autoManageWeekResetStart,
-            autoManageCollected
-          );
-          const now = Date.now();
-          doc.lastAutoManageAttemptAt = now;
-          if (autoReport.perChar.some((c) => !c.error)) {
-            doc.lastAutoManageSyncAt = now;
-          }
-          // Count newly-applied gates so the surface line can show
-          // "synced N new gates" instead of just "synced". Sums
-          // perChar[].applied[].length across every char in the report.
-          const newGates = autoReport.perChar.reduce(
-            (sum, entry) =>
-              sum + (Array.isArray(entry.applied) ? entry.applied.length : 0),
-            0
-          );
-          piggybackOutcome.newGatesApplied = newGates;
-          piggybackOutcome.outcome = newGates > 0 ? "applied" : "synced-no-new";
-          didAutoManage = true;
-        } else if (autoManageBibleHit) {
-          doc.lastAutoManageAttemptAt = Date.now();
-          didAutoManage = true;
-        }
-
-        if (didFreshenWeek || didRefresh || didAutoManage) await doc.save();
-        return doc.toObject();
-      });
-    } catch (err) {
-      console.error("[raid-status] lazy refresh failed:", err?.message || err);
-      if (autoManageGuard?.acquired) {
-        await stampAutoManageAttempt(discordId);
-      }
-      userDoc = await User.findOne({ discordId }).lean();
-    } finally {
-      if (autoManageGuard?.acquired && !autoManageReleaseInBackground) {
-        releaseAutoManageSyncSlot(discordId);
-      }
-    }
+    const {
+      userDoc: refreshedUserDoc,
+      piggybackOutcome,
+    } = await loadStatusUserDoc(discordId, seedDoc);
+    let userDoc = refreshedUserDoc;
 
     if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
       await interaction.editReply({
@@ -256,15 +149,6 @@ function createRaidStatusCommand(deps) {
       0
     );
 
-    // Extracted so the Sync button handler can reload userDoc + outcome
-    // and rebuild this object without duplicating the field shape.
-    const buildStatusUserMeta = (doc, outcome) => ({
-      discordId: doc.discordId,
-      autoManageEnabled: !!doc.autoManageEnabled,
-      lastAutoManageSyncAt: Number(doc.lastAutoManageSyncAt) || 0,
-      lastAutoManageAttemptAt: Number(doc.lastAutoManageAttemptAt) || 0,
-      piggybackOutcome: outcome,
-    });
     let statusUserMeta = buildStatusUserMeta(userDoc, piggybackOutcome);
 
     // Raid-filter aggregate for the caller's own roster. Parallel to the
@@ -280,81 +164,19 @@ function createRaidStatusCommand(deps) {
     // at a glance whether a raid's backlog is composition-blocking (no
     // supports left) or just queue depth. Hard-support classes are Bard
     // / Paladin / Artist / Valkyrie; everyone else counts as DPS.
-    const FILTER_ALL_RAIDS = "__all_raids__";
-    let raidAggregate = new Map();
-    for (const account of accounts) {
-      for (const ch of account.characters || []) {
-        const charIsSupport = isSupportClass(ch?.class);
-        for (const raid of baseGetRaidsFor(ch)) {
-          const key = `${raid.raidKey}:${raid.modeKey}`;
-          let entry = raidAggregate.get(key);
-          if (!entry) {
-            entry = {
-              key,
-              label: raid.raidName,
-              raidKey: raid.raidKey,
-              modeKey: raid.modeKey,
-              pending: 0,
-              supports: 0,
-              dps: 0,
-            };
-            raidAggregate.set(key, entry);
-          }
-          if (!raid.isCompleted) {
-            entry.pending += 1;
-            if (charIsSupport) entry.supports += 1;
-            else entry.dps += 1;
-          }
-        }
-      }
-    }
-    let raidDropdownEntries = [...raidAggregate.values()].sort(
-      (a, b) => b.pending - a.pending || a.label.localeCompare(b.label)
-    );
-    let totalRaidPending = raidDropdownEntries.reduce(
-      (sum, r) => sum + r.pending,
-      0
-    );
+    let {
+      raidDropdownEntries,
+      totalRaidPending,
+    } = buildRaidDropdownState(accounts, baseGetRaidsFor);
 
     // Repopulates raidAggregate / raidDropdownEntries / totalRaidPending
     // from the current `accounts` array. Called after the Sync button
     // reloads userDoc so the per-raid dropdown counts reflect any newly-
     // applied gates.
     const recomputeRaidAggregate = () => {
-      raidAggregate = new Map();
-      for (const account of accounts) {
-        for (const ch of account.characters || []) {
-          const charIsSupport = isSupportClass(ch?.class);
-          for (const raid of baseGetRaidsFor(ch)) {
-            const key = `${raid.raidKey}:${raid.modeKey}`;
-            let entry = raidAggregate.get(key);
-            if (!entry) {
-              entry = {
-                key,
-                label: raid.raidName,
-                raidKey: raid.raidKey,
-                modeKey: raid.modeKey,
-                pending: 0,
-                supports: 0,
-                dps: 0,
-              };
-              raidAggregate.set(key, entry);
-            }
-            if (!raid.isCompleted) {
-              entry.pending += 1;
-              if (charIsSupport) entry.supports += 1;
-              else entry.dps += 1;
-            }
-          }
-        }
-      }
-      raidDropdownEntries = [...raidAggregate.values()].sort(
-        (a, b) => b.pending - a.pending || a.label.localeCompare(b.label)
-      );
-      totalRaidPending = raidDropdownEntries.reduce(
-        (sum, r) => sum + r.pending,
-        0
-      );
+      const nextState = buildRaidDropdownState(accounts, baseGetRaidsFor);
+      raidDropdownEntries = nextState.raidDropdownEntries;
+      totalRaidPending = nextState.totalRaidPending;
     };
 
     let currentPage = 0;
@@ -439,44 +261,6 @@ function createRaidStatusCommand(deps) {
         getRaidsFor,
         statusUserMeta,
         { hideIneligibleChars: !!filterRaidId }
-      );
-    };
-
-    const buildRaidFilterRow = (disabled) => {
-      const options = [
-        {
-          label: truncateText(
-            `All raids (${totalRaidPending === 0 ? "DONE" : `${totalRaidPending} total pending`})`,
-            100
-          ),
-          value: FILTER_ALL_RAIDS,
-          emoji: "🌐",
-          default: filterRaidId === null,
-        },
-      ];
-      for (const r of raidDropdownEntries.slice(0, 24)) {
-        // Caller has cleared every eligible char of this raid -> show
-        // "DONE" instead of "0 pending · 0🛡️ 0⚔️". Cleaner scan when most
-        // of the roster is up to date but a couple raids still drag.
-        const suffix = r.pending === 0
-          ? "DONE"
-          : `${r.pending} pending · ${r.supports}🛡️ ${r.dps}⚔️`;
-        options.push({
-          label: truncateText(
-            `${r.label} (${suffix})`,
-            100
-          ),
-          value: r.key,
-          emoji: "⚔️",
-          default: filterRaidId === r.key,
-        });
-      }
-      return new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-          .setCustomId("status-filter:raid")
-          .setPlaceholder("Filter by raid / Lọc theo raid...")
-          .setDisabled(disabled)
-          .addOptions(options)
       );
     };
 
@@ -573,7 +357,15 @@ function createRaidStatusCommand(deps) {
       // at all (empty roster / all chars below minItemLevel gates) -
       // dropdown with only the All-raids entry is just noise.
       if (raidDropdownEntries.length > 0) {
-        rows.push(buildRaidFilterRow(disabled));
+        rows.push(buildRaidFilterRow({
+          ActionRowBuilder,
+          StringSelectMenuBuilder,
+          truncateText,
+          raidDropdownEntries,
+          totalRaidPending,
+          filterRaidId,
+          disabled,
+        }));
       }
       return rows;
     };
@@ -637,100 +429,38 @@ function createRaidStatusCommand(deps) {
           }).catch(() => {});
           return;
         }
-        let manualGuard = null;
-        const manualOutcome = { outcome: "not-applicable", newGatesApplied: 0 };
-        try {
-          manualGuard = await acquireAutoManageSyncSlot(discordId);
-          if (!manualGuard.acquired) {
-            const cooldownMs =
-              typeof getAutoManageCooldownMs === "function"
-                ? getAutoManageCooldownMs(discordId)
-                : AUTO_MANAGE_SYNC_COOLDOWN_MS;
-            const remain =
-              formatNextCooldownRemaining(
-                Number(statusUserMeta.lastAutoManageAttemptAt) || 0,
-                cooldownMs
-              ) || "vài giây";
-            await component.reply({
-              embeds: [
-                buildNoticeEmbed(EmbedBuilder, {
-                  type: "info",
-                  title: "Đang trong cooldown",
-                  description: `Cậu vừa sync gần đây nha, đợi thêm **${remain}** nữa rồi bấm Sync tiếp được.`,
-                }),
-              ],
-              flags: MessageFlags.Ephemeral,
-            }).catch(() => {});
-            return;
-          }
-          await component.deferUpdate().catch(() => {});
-          const weekResetStart = weekResetStartMs();
-          const seedDocLocal = await User.findOne({ discordId });
-          if (!seedDocLocal) {
-            manualOutcome.outcome = "failed";
-          } else {
-            ensureFreshWeek(seedDocLocal);
-            let collectedLocal = null;
-            try {
-              collectedLocal = await gatherAutoManageLogsForUserDoc(
-                seedDocLocal,
-                weekResetStart
-              );
-            } catch (gatherErr) {
-              console.warn(
-                "[raid-status manual-sync] gather failed:",
-                gatherErr?.message || gatherErr
-              );
-              manualOutcome.outcome = "failed";
-            }
-            if (collectedLocal) {
-              await saveWithRetry(async () => {
-                const fresh = await User.findOne({ discordId });
-                if (!fresh) return;
-                ensureFreshWeek(fresh);
-                if (!fresh.autoManageEnabled) {
-                  fresh.lastAutoManageAttemptAt = Date.now();
-                  await fresh.save();
-                  return;
-                }
-                const report = applyAutoManageCollected(
-                  fresh,
-                  weekResetStart,
-                  collectedLocal
-                );
-                const now = Date.now();
-                fresh.lastAutoManageAttemptAt = now;
-                if (report.perChar.some((c) => !c.error)) {
-                  fresh.lastAutoManageSyncAt = now;
-                }
-                const newGates = report.perChar.reduce(
-                  (sum, e) =>
-                    sum + (Array.isArray(e.applied) ? e.applied.length : 0),
-                  0
-                );
-                manualOutcome.newGatesApplied = newGates;
-                manualOutcome.outcome =
-                  newGates > 0 ? "applied" : "synced-no-new";
-                await fresh.save();
-              });
-            }
-          }
-        } catch (err) {
-          console.error(
-            "[raid-status manual-sync] unexpected error:",
-            err?.message || err
-          );
-          manualOutcome.outcome = "failed";
-          await stampAutoManageAttempt(discordId).catch(() => {});
-        } finally {
-          if (manualGuard?.acquired) releaseAutoManageSyncSlot(discordId);
+        const manualResult = await runManualStatusSync(discordId, {
+          onAcquired: () => component.deferUpdate().catch(() => {}),
+        });
+        const manualOutcome = manualResult.outcome;
+        if (manualResult.status === "cooldown") {
+          const cooldownMs =
+            typeof getAutoManageCooldownMs === "function"
+              ? getAutoManageCooldownMs(discordId)
+              : AUTO_MANAGE_SYNC_COOLDOWN_MS;
+          const remain =
+            formatNextCooldownRemaining(
+              Number(statusUserMeta.lastAutoManageAttemptAt) || 0,
+              cooldownMs
+            ) || "vài giây";
+          await component.reply({
+            embeds: [
+              buildNoticeEmbed(EmbedBuilder, {
+                type: "info",
+                title: "Đang trong cooldown",
+                description: `Cậu vừa sync gần đây nha, đợi thêm **${remain}** nữa rồi bấm Sync tiếp được.`,
+              }),
+            ],
+            flags: MessageFlags.Ephemeral,
+          }).catch(() => {});
+          return;
         }
 
         // Reload userDoc fresh + recompute everything dependent on it.
         // The raidsCache holds per-character refs; .clear() invalidates
         // entries pointing at the old (pre-reload) character objects so
         // baseGetRaidsFor recomputes against the new accounts array.
-        const reloaded = await User.findOne({ discordId }).lean();
+        const reloaded = manualResult.userDoc;
         if (reloaded && Array.isArray(reloaded.accounts)) {
           userDoc = reloaded;
           accounts = userDoc.accounts;
@@ -821,61 +551,27 @@ function createRaidStatusCommand(deps) {
           Array.isArray(component.values) && component.values.length > 0
             ? component.values[0]
             : "";
-        if (!value || value === "noop") {
+        const parsed = parseTaskToggleValue(value);
+        if (parsed.kind === "noop" || parsed.kind === "invalid") {
           await component.deferUpdate().catch(() => {});
           return;
         }
-        // Bulk-toggle path. Value shape `__all__::<reset>::<lowerName>`.
-        // Aggregate the task across every char on the page that owns it
-        // (matched by lowercase name + reset cycle), then flip:
-        //   - if every owner is done → mark all undone
-        //   - else → mark all done
-        // One save covers the batch.
-        if (value.startsWith("__all__::")) {
-          const parts = value.split("::");
-          const targetReset = parts[1] || "";
-          const targetNameLower = parts.slice(2).join("::");
-          if (!targetReset || !targetNameLower) {
-            await component.deferUpdate().catch(() => {});
-            return;
-          }
-          // Bind by accountName captured at click-time, not by currentPage
-          // index. If the account list was mutated between session start
-          // and this click (e.g. concurrent /remove-roster shrunk the
-          // list), userDocFresh.accounts[currentPage] could now point at
-          // a different account and we'd write the toggle into the wrong
-          // roster. Refind by normalized name inside the save closure.
-          const targetAccountName = accounts[currentPage]?.accountName || "";
-          if (!targetAccountName) {
-            await component.deferUpdate().catch(() => {});
-            return;
-          }
+
+        const targetAccountName = accounts[currentPage]?.accountName || "";
+        if (!targetAccountName) {
+          await component.deferUpdate().catch(() => {});
+          return;
+        }
+
+        if (parsed.kind === "bulk") {
           try {
-            await saveWithRetry(async () => {
-              const userDocFresh = await User.findOne({ discordId });
-              if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return;
-              const account = userDocFresh.accounts.find(
-                (a) => normalizeName(a?.accountName) === normalizeName(targetAccountName)
-              );
-              if (!account || !Array.isArray(account.characters)) return;
-              // Find every char that owns the matching (name, reset) task.
-              const owners = [];
-              for (const ch of account.characters) {
-                if (!Array.isArray(ch?.sideTasks)) continue;
-                const task = ch.sideTasks.find(
-                  (t) =>
-                    String(t?.name || "").trim().toLowerCase() === targetNameLower &&
-                    t?.reset === targetReset
-                );
-                if (task) owners.push({ task });
-              }
-              if (owners.length === 0) return;
-              const allDone = owners.every((o) => o.task.completed);
-              const nextState = !allDone;
-              for (const { task } of owners) {
-                task.completed = nextState;
-              }
-              await userDocFresh.save();
+            await toggleBulkSideTask({
+              User,
+              saveWithRetry,
+              discordId,
+              targetAccountName,
+              targetReset: parsed.targetReset,
+              targetNameLower: parsed.targetNameLower,
             });
           } catch (err) {
             console.error(
@@ -883,47 +579,15 @@ function createRaidStatusCommand(deps) {
               err?.message || err
             );
           }
-          const reloaded = await User.findOne({ discordId }).lean();
-          if (reloaded && Array.isArray(reloaded.accounts)) {
-            userDoc = reloaded;
-            accounts = userDoc.accounts;
-          }
-        } else {
-          const sepIdx = value.indexOf("::");
-          const targetCharName = sepIdx > 0 ? value.slice(0, sepIdx) : "";
-          const targetTaskId = sepIdx > 0 ? value.slice(sepIdx + 2) : "";
-          if (!targetCharName || !targetTaskId) {
-            await component.deferUpdate().catch(() => {});
-            return;
-          }
-          // Same accountName binding as the bulk-toggle path - resolve
-          // the account by stable name rather than by currentPage index
-          // so a concurrent roster-list mutation can't redirect the
-          // single-task toggle into a different account.
-          const targetAccountName = accounts[currentPage]?.accountName || "";
-          if (!targetAccountName) {
-            await component.deferUpdate().catch(() => {});
-            return;
-          }
+        } else if (parsed.kind === "single") {
           try {
-            await saveWithRetry(async () => {
-              const userDocFresh = await User.findOne({ discordId });
-              if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return;
-              const account = userDocFresh.accounts.find(
-                (a) => normalizeName(a?.accountName) === normalizeName(targetAccountName)
-              );
-              if (!account || !Array.isArray(account.characters)) return;
-              const target = account.characters.find(
-                (c) =>
-                  String(c?.name || "").trim().toLowerCase() ===
-                  targetCharName.trim().toLowerCase()
-              );
-              if (!target) return;
-              if (!Array.isArray(target.sideTasks)) target.sideTasks = [];
-              const task = target.sideTasks.find((t) => t?.taskId === targetTaskId);
-              if (!task) return;
-              task.completed = !task.completed;
-              await userDocFresh.save();
+            await toggleSingleSideTask({
+              User,
+              saveWithRetry,
+              discordId,
+              targetAccountName,
+              targetCharName: parsed.targetCharName,
+              targetTaskId: parsed.targetTaskId,
             });
           } catch (err) {
             console.error(
@@ -931,14 +595,12 @@ function createRaidStatusCommand(deps) {
               err?.message || err
             );
           }
-          // Reload the view-local accounts snapshot so the next embed render
-          // reflects the just-toggled state. Cheap lean read scoped to the
-          // single discordId, no bible round-trip.
-          const reloaded = await User.findOne({ discordId }).lean();
-          if (reloaded && Array.isArray(reloaded.accounts)) {
-            userDoc = reloaded;
-            accounts = userDoc.accounts;
-          }
+        }
+
+        const reloaded = await User.findOne({ discordId }).lean();
+        if (reloaded && Array.isArray(reloaded.accounts)) {
+          userDoc = reloaded;
+          accounts = userDoc.accounts;
         }
       } else {
         return;
