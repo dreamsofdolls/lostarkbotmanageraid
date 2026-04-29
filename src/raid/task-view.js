@@ -18,13 +18,15 @@ const { pack2Columns } = require("./shared");
  *
  * Helper owns:
  *   - char field building (icons, daily/weekly section headers)
- *   - 2-column spacer packing
+ *   - 2-column spacer packing for small rosters
  *   - totals math
- *   - cap math (max 11 chars-with-tasks per page so 2-column packing
- *     stays inside Discord's 25-field cap with room for caller-added
- *     placeholder + footer fields)
+ *   - layout switch math (2-column packing only stays inside Discord's
+ *     25-field cap for small rosters; larger rosters render every char
+ *     as a full-width field instead of hiding tasks)
  */
 
+// With the spacer trick, 11 chars pack to 18 fields, leaving room for
+// caller-added placeholder fields. Above this, render one field per char.
 const PAGE_CHAR_CAP = 11;
 
 function getCharacterName(character) {
@@ -99,9 +101,12 @@ function buildAccountTaskFields(account, helpers) {
     };
   };
 
-  const visible = charsWithTasks.slice(0, PAGE_CHAR_CAP);
-  totals.rendered = visible.length;
-  const fields = pack2Columns(visible.map(buildCharField));
+  const charFields = charsWithTasks.map(buildCharField);
+  totals.rendered = charFields.length;
+  const fields =
+    charFields.length <= PAGE_CHAR_CAP
+      ? pack2Columns(charFields)
+      : charFields.map((field) => ({ ...field, inline: false }));
 
   return { fields, totals };
 }

@@ -11,6 +11,7 @@ function createRosterRefreshService(deps) {
     findFetchedRosterMatchForCharacter,
     fetchRosterCharacters,
   } = deps;
+  const staleAccountRefreshInFlight = new Map();
 
   function isAccountRefreshStale(account, now = Date.now()) {
     const chars = Array.isArray(account?.characters) ? account.characters : [];
@@ -27,6 +28,11 @@ function createRosterRefreshService(deps) {
     return true;
   }
 
+  function hasStaleAccountRefreshes(userDoc, now = Date.now()) {
+    const accounts = Array.isArray(userDoc?.accounts) ? userDoc.accounts : [];
+    return accounts.some((account) => isAccountRefreshStale(account, now));
+  }
+
   function formatRosterRefreshCooldownRemaining(account) {
     const lastSuccess = Number(account?.lastRefreshedAt) || 0;
     const lastAttempt = Number(account?.lastRefreshAttemptAt) || 0;
@@ -38,6 +44,86 @@ function createRosterRefreshService(deps) {
       if (failureRemain) return failureRemain;
     }
     return formatNextCooldownRemaining(lastSuccess, ROSTER_REFRESH_COOLDOWN_MS);
+  }
+
+  function buildRefreshInFlightKey(userDoc, account) {
+    const discordId = String(userDoc?.discordId || "").trim();
+    const accountName = normalizeName(account?.accountName);
+    if (!discordId || !accountName) return null;
+    return `${discordId}:${accountName}`;
+  }
+
+  async function collectOneStaleAccountRefresh(userDoc, account, otherAccountNames) {
+    const originalName = account.accountName;
+    const seeds = [];
+    if (originalName) seeds.push(originalName);
+    for (const c of account.characters || []) {
+      const name = getCharacterName(c);
+      if (name && !seeds.includes(name)) seeds.push(name);
+    }
+    if (seeds.length === 0) {
+      return {
+        accountName: originalName,
+        fetchedChars: null,
+        resolvedSeed: null,
+        attempted: false,
+      };
+    }
+
+    const savedNames = (account.characters || [])
+      .map((c) => normalizeName(getCharacterName(c)))
+      .filter(Boolean);
+    const savedFoldedNames = (account.characters || [])
+      .map((c) => foldName(getCharacterName(c)))
+      .filter(Boolean);
+
+    let attempted = false;
+    for (const seed of seeds) {
+      try {
+        attempted = true;
+        const fetched = await fetchRosterCharacters(seed);
+        if (!Array.isArray(fetched) || fetched.length === 0) continue;
+
+        const fetchedNames = new Set(fetched.map((c) => normalizeName(c.charName)));
+        const fetchedFoldedNames = new Set(fetched.map((c) => foldName(c.charName)));
+        const hasOverlap =
+          savedNames.some((n) => fetchedNames.has(n)) ||
+          savedFoldedNames.some((n) => fetchedFoldedNames.has(n));
+        if (!hasOverlap) {
+          console.warn(
+            `[refresh] seed "${seed}" returned ${fetched.length} chars but zero overlap with saved roster - trying next seed.`
+          );
+          continue;
+        }
+
+        let resolvedSeed = null;
+        if (originalName !== seed) {
+          const normalizedSeed = normalizeName(seed);
+          const collides = otherAccountNames.some(
+            (name, i) => userDoc.accounts[i] !== account && name === normalizedSeed
+          );
+          if (!collides) resolvedSeed = seed;
+        }
+
+        return { accountName: originalName, fetchedChars: fetched, resolvedSeed, attempted };
+      } catch (err) {
+        console.warn(`[refresh] seed "${seed}" failed: ${err?.message || err}`);
+      }
+    }
+
+    return { accountName: originalName, fetchedChars: null, resolvedSeed: null, attempted };
+  }
+
+  function collectOneStaleAccountRefreshDeduped(userDoc, account, otherAccountNames) {
+    const key = buildRefreshInFlightKey(userDoc, account);
+    if (!key) return collectOneStaleAccountRefresh(userDoc, account, otherAccountNames);
+
+    if (!staleAccountRefreshInFlight.has(key)) {
+      const promise = collectOneStaleAccountRefresh(userDoc, account, otherAccountNames)
+        .finally(() => staleAccountRefreshInFlight.delete(key));
+      staleAccountRefreshInFlight.set(key, promise);
+    }
+    return staleAccountRefreshInFlight.get(key);
   }
 
   async function collectStaleAccountRefreshes(userDoc) {
@@ -52,66 +138,9 @@ function createRosterRefreshService(deps) {
     const otherAccountNames = userDoc.accounts.map((a) => normalizeName(a?.accountName));
 
     const results = await Promise.allSettled(
-      staleAccounts.map(async (account) => {
-        const originalName = account.accountName;
-        const seeds = [];
-        if (originalName) seeds.push(originalName);
-        for (const c of account.characters || []) {
-          const name = getCharacterName(c);
-          if (name && !seeds.includes(name)) seeds.push(name);
-        }
-        if (seeds.length === 0) {
-          return {
-            accountName: originalName,
-            fetchedChars: null,
-            resolvedSeed: null,
-            attempted: false,
-          };
-        }
-
-        const savedNames = (account.characters || [])
-          .map((c) => normalizeName(getCharacterName(c)))
-          .filter(Boolean);
-        const savedFoldedNames = (account.characters || [])
-          .map((c) => foldName(getCharacterName(c)))
-          .filter(Boolean);
-
-        let attempted = false;
-        for (const seed of seeds) {
-          try {
-            attempted = true;
-            const fetched = await fetchRosterCharacters(seed);
-            if (!Array.isArray(fetched) || fetched.length === 0) continue;
-
-            const fetchedNames = new Set(fetched.map((c) => normalizeName(c.charName)));
-            const fetchedFoldedNames = new Set(fetched.map((c) => foldName(c.charName)));
-            const hasOverlap =
-              savedNames.some((n) => fetchedNames.has(n)) ||
-              savedFoldedNames.some((n) => fetchedFoldedNames.has(n));
-            if (!hasOverlap) {
-              console.warn(
-                `[refresh] seed "${seed}" returned ${fetched.length} chars but zero overlap with saved roster - trying next seed.`
-              );
-              continue;
-            }
-
-            let resolvedSeed = null;
-            if (originalName !== seed) {
-              const normalizedSeed = normalizeName(seed);
-              const collides = otherAccountNames.some(
-                (name, i) => userDoc.accounts[i] !== account && name === normalizedSeed
-              );
-              if (!collides) resolvedSeed = seed;
-            }
-
-            return { accountName: originalName, fetchedChars: fetched, resolvedSeed, attempted };
-          } catch (err) {
-            console.warn(`[refresh] seed "${seed}" failed: ${err?.message || err}`);
-          }
-        }
-
-        return { accountName: originalName, fetchedChars: null, resolvedSeed: null, attempted };
-      })
+      staleAccounts.map((account) =>
+        collectOneStaleAccountRefreshDeduped(userDoc, account, otherAccountNames)
+      )
     );
 
     const collected = [];
@@ -193,6 +222,7 @@ function createRosterRefreshService(deps) {
 
   return {
     isAccountRefreshStale,
+    hasStaleAccountRefreshes,
     formatRosterRefreshCooldownRemaining,
     collectStaleAccountRefreshes,
     applyStaleAccountRefreshes,

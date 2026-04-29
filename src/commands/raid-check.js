@@ -242,6 +242,7 @@ function createRaidCheckCommand(deps) {
     buildPaginationRow,
     resolveDiscordDisplay,
     loadFreshUserSnapshotForRaidViews,
+    shouldLoadFreshUserSnapshotForRaidViews,
     acquireAutoManageSyncSlot,
     releaseAutoManageSyncSlot,
     autoManageEntryKey,
@@ -283,6 +284,7 @@ function createRaidCheckCommand(deps) {
     getGatesForRaid,
     raidCheckRefreshLimiter,
     loadFreshUserSnapshotForRaidViews,
+    shouldLoadFreshUserSnapshotForRaidViews,
   });
 
   // Pure edit-flow helpers extracted to ./raid-check/edit-helpers.js.
@@ -326,6 +328,10 @@ function createRaidCheckCommand(deps) {
     isRaidLeader,
     isManagerId,
     discordUserLimiter,
+    raidCheckRefreshLimiter,
+    loadFreshUserSnapshotForRaidViews,
+    shouldLoadFreshUserSnapshotForRaidViews,
+    RAID_CHECK_USER_QUERY_FIELDS,
     RAID_CHECK_PAGINATION_SESSION_MS,
   });
 

@@ -144,6 +144,10 @@ test("persistSelectedRoster: matches existing account by name and merges new cha
             combatScore: "85000",
             assignedRaids: { armoche: {}, kazeros: { G1: { difficulty: "Hard", completedDate: 111 } }, serca: {} },
             tasks: [],
+            bibleSerial: "serial-alpha",
+            bibleCid: "cid-alpha",
+            bibleRid: "rid-alpha",
+            publicLogDisabled: true,
           },
         ],
       },
@@ -167,6 +171,10 @@ test("persistSelectedRoster: matches existing account by name and merges new cha
   const persistedAlpha = stored.accounts[0].characters.find((c) => c.name === "Alpha");
   assert.equal(persistedAlpha.id, "char-alpha-id"); // id preserved
   assert.equal(persistedAlpha.assignedRaids.kazeros.G1.completedDate, 111);
+  assert.equal(persistedAlpha.bibleSerial, "serial-alpha");
+  assert.equal(persistedAlpha.bibleCid, "cid-alpha");
+  assert.equal(persistedAlpha.bibleRid, "rid-alpha");
+  assert.equal(persistedAlpha.publicLogDisabled, true);
   // Bible-side fields refreshed.
   assert.equal(persistedAlpha.itemLevel, 1705);
 });

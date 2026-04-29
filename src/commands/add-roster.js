@@ -20,6 +20,26 @@ const BUTTONS_PER_ROW = 5;
 
 const CHECK_ICON = "✅";
 const UNCHECK_ICON = "⬜";
+const PRESERVED_CHARACTER_FIELDS = [
+  "bibleSerial",
+  "bibleCid",
+  "bibleRid",
+  "publicLogDisabled",
+];
+
+function preserveExistingCharacterState(record, existing) {
+  if (!existing) return record;
+  const source = existing.toObject?.() ?? existing;
+  for (const field of PRESERVED_CHARACTER_FIELDS) {
+    if (
+      Object.prototype.hasOwnProperty.call(source, field) &&
+      source[field] !== undefined
+    ) {
+      record[field] = source[field];
+    }
+  }
+  return record;
+}
 
 function createAddRosterCommand({
   EmbedBuilder,
@@ -363,7 +383,7 @@ function createAddRosterCommand({
       );
       account.characters = selectedChars.map((character) => {
         const existing = existingMap.get(normalizeName(character.charName));
-        return buildCharacterRecord(
+        const record = buildCharacterRecord(
           {
             ...(existing ? existing.toObject?.() ?? existing : {}),
             name: character.charName,
@@ -373,6 +393,7 @@ function createAddRosterCommand({
           },
           existing?.id || createCharacterId()
         );
+        return preserveExistingCharacterState(record, existing);
       });
       // Stamp the refresh timestamp so /raid-status lazy-refresh treats this
       // account as fresh for the cooldown window and skips a redundant fetch.

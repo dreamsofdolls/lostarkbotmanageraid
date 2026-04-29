@@ -403,6 +403,40 @@ test("buildAccountTaskFields rolls up totals + 2-column packs char fields", () =
   assert.doesNotMatch(fields[2].value, /· weekly/);
 });
 
+test("buildAccountTaskFields renders every task char when roster exceeds 2-column cap", () => {
+  const { PAGE_CHAR_CAP, buildAccountTaskFields } = require("../src/raid/task-view");
+  const account = {
+    accountName: "large",
+    characters: Array.from({ length: PAGE_CHAR_CAP + 1 }, (_, index) => ({
+      name: `Char${index + 1}`,
+      class: "Bard",
+      itemLevel: 1700,
+      sideTasks: [
+        {
+          taskId: `daily-${index + 1}`,
+          name: `Daily ${index + 1}`,
+          reset: "daily",
+          completed: index % 2 === 0,
+        },
+      ],
+    })),
+  };
+
+  const { fields, totals } = buildAccountTaskFields(account, {
+    UI: { icons: { done: "done", pending: "todo" } },
+    truncateText: (s) => s,
+  });
+
+  assert.equal(totals.charsWithTasks, PAGE_CHAR_CAP + 1);
+  assert.equal(totals.rendered, PAGE_CHAR_CAP + 1);
+  assert.equal(totals.daily, PAGE_CHAR_CAP + 1);
+  assert.equal(totals.dailyDone, 6);
+  assert.equal(fields.length, PAGE_CHAR_CAP + 1);
+  assert.ok(fields.every((field) => field.inline === false));
+  assert.match(fields.at(-1).name, /Char12/);
+  assert.match(fields.at(-1).value, /Daily 12/);
+});
+
 test("buildAccountTaskFields returns empty fields when no chars-with-tasks", () => {
   const { buildAccountTaskFields } = require("../src/raid/task-view");
   const account = {
@@ -439,33 +473,63 @@ test("buildAccountTaskFields odd char count pads with spacer to keep 2-column", 
   assert.equal(fields[2].name, "​");
 });
 
-test("PROJECTION: raid-check all-mode select() includes sideTasks (Manager Task view)", () => {
-  // Round-29: Manager-side Task view in /raid-check needs the side-task
-  // subtree on the lean docs. The .select() must enumerate explicit
-  // account subfields (NOT the whole `accounts` blob - that would
-  // silently include other internal fields we haven't decided to
-  // surface). This regression pins both the inclusion + the explicit-
-  // enumeration shape.
+test("PROJECTION: raid-check all-mode uses the shared raid-check projection", () => {
+  // Manager all-mode and the per-raid snapshot must stay on the same
+  // allowlist. This pins sideTasks plus alias fields such as
+  // charName/className/raids that previously drifted out of all-mode.
   const fs = require("fs");
   const path = require("path");
   const allModeSrc = fs.readFileSync(
     path.join(__dirname, "..", "src", "commands", "raid-check", "all-mode.js"),
     "utf8"
   );
-  const match = allModeSrc.match(
-    /User\.find\([^)]*\)\s*\.select\(\s*\[([\s\S]*?)\]\.join/
-  );
-  assert.ok(match, "expected explicit array-style select() in all-mode.js");
-  const fieldList = match[1];
+  const { RAID_CHECK_USER_QUERY_FIELDS } = require("../src/raid/raid-check-query");
   assert.ok(
-    fieldList.includes("accounts.characters.sideTasks"),
-    "sideTasks must be in all-mode select projection (Manager Task view)"
+    allModeSrc.includes("RAID_CHECK_USER_QUERY_FIELDS"),
+    "all-mode must use the shared /raid-check projection constant"
   );
-  // Bare `"accounts"` (whole-array) still not allowed - keeps the
-  // projection a deliberate allowlist.
   assert.ok(
-    !/"accounts"\s*,/.test(fieldList),
-    "select must enumerate subfields, not project the entire accounts array"
+    RAID_CHECK_USER_QUERY_FIELDS.includes("accounts.characters.sideTasks"),
+    "sideTasks must be in shared projection (Manager Task view)"
+  );
+  assert.ok(
+    RAID_CHECK_USER_QUERY_FIELDS.includes("accounts.characters.charName"),
+    "charName alias must be in shared projection"
+  );
+  assert.ok(
+    RAID_CHECK_USER_QUERY_FIELDS.includes("accounts.characters.className"),
+    "className alias must be in shared projection"
+  );
+  assert.ok(
+    RAID_CHECK_USER_QUERY_FIELDS.includes("accounts.characters.raids"),
+    "raids must be in shared projection for legacy stored rows"
+  );
+  assert.ok(
+    !RAID_CHECK_USER_QUERY_FIELDS.split(/\s+/).includes("accounts"),
+    "projection must enumerate subfields, not project the entire accounts array"
+  );
+});
+
+test("REGRESSION: raid-check all-mode actions target current page user", () => {
+  const fs = require("fs");
+  const path = require("path");
+  const allModeSrc = fs.readFileSync(
+    path.join(__dirname, "..", "src", "commands", "raid-check", "all-mode.js"),
+    "utf8"
+  );
+
+  assert.ok(
+    allModeSrc.includes("const actionUserId = filterUserId || currentViewUserId;"),
+    "all-mode action buttons must fall back to the currently visible user"
+  );
+  assert.ok(
+    allModeSrc.includes("raid-check:enable-auto-one:${actionUserId}") &&
+      allModeSrc.includes("raid-check:disable-auto-one:${actionUserId}"),
+    "auto-sync buttons must target the currently visible user"
+  );
+  assert.ok(
+    !allModeSrc.includes('if (!filterUserId) currentView = "raid";'),
+    "clearing the dropdown filter must not force Task view away from current-page users"
   );
 });
 

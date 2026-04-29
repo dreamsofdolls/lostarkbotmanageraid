@@ -94,7 +94,9 @@ function createSyncUi({
     const started = Date.now();
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const snapshotStarted = Date.now();
-    const snapshot = await computeRaidCheckSnapshot(raidMeta);
+    const snapshot = await computeRaidCheckSnapshot(raidMeta, {
+      syncFreshData: true,
+    });
     const snapshotMs = Date.now() - snapshotStarted;
 
     const pendingEntryKeysByDiscordId = new Map();

@@ -7,6 +7,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { __test, parseRaidMessage } = require("../src/raid-command");
+const { createSnapshotHelpers } = require("../src/commands/raid-check/snapshot");
 const { ensureFreshWeek, getTargetResetKey } = require("../src/weekly-reset");
 
 function makeCharacter(name, itemLevel, kazeros = {}) {
@@ -1210,6 +1211,96 @@ test("buildAccountFreshnessLine flips to Sync ready once the manager 15s window 
   };
   const line = __test.buildAccountFreshnessLine(account, userMeta);
   assert.match(line, /Sync ready/);
+});
+
+test("REGRESSION: raid-check Sync/Edit flows request fresh snapshot data", () => {
+  const fs = require("fs");
+  const path = require("path");
+  const syncSrc = fs.readFileSync(
+    path.join(__dirname, "..", "src", "commands", "raid-check", "sync-ui.js"),
+    "utf8"
+  );
+  const editSrc = fs.readFileSync(
+    path.join(__dirname, "..", "src", "commands", "raid-check", "edit-ui.js"),
+    "utf8"
+  );
+
+  assert.match(
+    syncSrc,
+    /computeRaidCheckSnapshot\(\s*raidMeta\s*,\s*\{\s*syncFreshData:\s*true\s*,?\s*\}\s*\)/,
+    "Sync button must refresh stale roster/log data before computing pending chars"
+  );
+  assert.match(
+    editSrc,
+    /computeRaidCheckSnapshot\(\s*raidMeta\s*,\s*\{\s*syncFreshData:\s*true\s*,?\s*\}\s*\)/,
+    "Specific-raid Edit must refresh stale roster/log data before building editable chars"
+  );
+  assert.match(
+    editSrc,
+    /computeRaidCheckSnapshot\(\s*pickedRaidMeta\s*,\s*\{\s*syncFreshData:\s*true\s*,?\s*\}\s*\)/,
+    "Scope-all Edit raid picker must refresh stale roster/log data for the picked raid"
+  );
+});
+
+test("computeRaidCheckSnapshot(syncFreshData) bypasses fresh users before refresh limiter", async () => {
+  const refreshCalls = [];
+  let limiterCalls = 0;
+  const makeDoc = (discordId) => ({
+    discordId,
+    weeklyResetKey: getTargetResetKey(),
+    autoManageEnabled: false,
+    accounts: [],
+    toObject() {
+      return {
+        discordId,
+        weeklyResetKey: this.weeklyResetKey,
+        autoManageEnabled: this.autoManageEnabled,
+        accounts: [],
+      };
+    },
+  });
+  const freshDoc = makeDoc("fresh-user");
+  const staleDoc = makeDoc("stale-user");
+  const helpers = createSnapshotHelpers({
+    User: {
+      find: () => ({
+        select: async () => [freshDoc, staleDoc],
+      }),
+    },
+    buildRaidCheckUserQuery: () => ({}),
+    RAID_CHECK_USER_QUERY_FIELDS: "discordId accounts",
+    UI: { icons: { done: "done", partial: "partial", pending: "pending", lock: "lock" } },
+    ROSTER_KEY_SEP: "\x1f",
+    toModeLabel: () => "Normal",
+    normalizeName: (value) => String(value || "").trim().toLowerCase(),
+    getRaidScanRange: () => ({ lowestMin: 0, selfMin: 0, nextMin: Infinity }),
+    ensureFreshWeek: () => false,
+    ensureAssignedRaids: () => ({}),
+    getCharacterName: (character) => character?.name || "",
+    getGateKeys: () => [],
+    getGatesForRaid: () => [],
+    raidCheckRefreshLimiter: {
+      run: async (op) => {
+        limiterCalls += 1;
+        return op();
+      },
+    },
+    loadFreshUserSnapshotForRaidViews: async (doc) => {
+      refreshCalls.push(doc.discordId);
+      return doc.toObject();
+    },
+    shouldLoadFreshUserSnapshotForRaidViews: (doc) => doc.discordId === "stale-user",
+  });
+
+  const snapshot = await helpers.computeRaidCheckSnapshot(
+    { raidKey: "kazeros", modeKey: "normal", minItemLevel: 0 },
+    { syncFreshData: true }
+  );
+
+  assert.deepEqual(refreshCalls, ["stale-user"]);
+  assert.equal(limiterCalls, 1);
+  assert.equal(snapshot.userMeta.has("fresh-user"), true);
+  assert.equal(snapshot.userMeta.has("stale-user"), true);
 });
 
 test("ensureFreshWeek preserves gate clears already inside the current reset window", () => {
