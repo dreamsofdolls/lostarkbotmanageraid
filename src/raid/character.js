@@ -181,8 +181,32 @@ function normalizeAssignedRaid(assignedRaid, fallbackDifficulty, raidKey) {
 
   let canonicalDifficulty;
   if (diffTally.size === 0) {
-    canonicalDifficulty =
-      assignedRaid?.G1?.difficulty || assignedRaid?.G2?.difficulty || fallbackDifficulty;
+    // No completion stamped yet - we have flexibility to pick the right
+    // difficulty. Compare the stale stored difficulty (from a previous
+    // /add-roster or /edit-roster when the char was at lower iLvl) to
+    // `fallbackDifficulty` (the best-eligible mode at the CURRENT iLvl,
+    // computed by the caller in ensureAssignedRaids). Auto-upgrade if
+    // the stored mode is below the best-eligible mode, otherwise
+    // preserve the stored choice. This is what unblocks the "char hit
+    // 1720, Act 4 should bump Normal -> Hard" UX gap users hit after
+    // a bible-side iLvl bump that didn't recompute assignedRaids.
+    //
+    // Auto-upgrade only (never auto-downgrade): an over-tier stored
+    // difficulty (e.g. Hard stamped via manual /raid-set on a char
+    // that's later at sub-threshold iLvl) may be a deliberate manual
+    // choice the player wants to keep until weekly reset clears it.
+    const existingDifficulty =
+      assignedRaid?.G1?.difficulty || assignedRaid?.G2?.difficulty;
+    if (!existingDifficulty) {
+      canonicalDifficulty = fallbackDifficulty;
+    } else {
+      const existingMin =
+        getRequirementFor(raidKey, toModeKey(existingDifficulty))?.minItemLevel || 0;
+      const fallbackMin =
+        getRequirementFor(raidKey, toModeKey(fallbackDifficulty))?.minItemLevel || 0;
+      canonicalDifficulty =
+        fallbackMin > existingMin ? fallbackDifficulty : existingDifficulty;
+    }
   } else {
     let best = null;
     for (const entry of diffTally.values()) {
