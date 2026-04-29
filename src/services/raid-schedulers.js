@@ -32,6 +32,7 @@ function createRaidSchedulerService({
   const PRIVATE_LOG_NUDGE_DEDUP_MS = 7 * 24 * 60 * 60 * 1000; // 7-day per-user dedup
   const AUTO_CLEANUP_TICK_MS = 30 * 60 * 1000;
   let autoCleanupSchedulerStartedAtMs = null;
+  let autoCleanupTickInFlight = false;
 
   /**
    * Fire-and-forget channel announcement with TTL self-delete. Returns the
@@ -328,10 +329,17 @@ function createRaidSchedulerService({
         if (!announcements.artistBedtime.enabled) {
           // Bedtime disabled per-guild → still stamp the day key so we
           // don't keep entering this branch; the guild just gets silence.
-          await GuildConfig.findOneAndUpdate(
-            { guildId: cfg.guildId },
-            { $set: { lastArtistBedtimeKey: vnDayKey } }
-          );
+          try {
+            await GuildConfig.findOneAndUpdate(
+              { guildId: cfg.guildId },
+              { $set: { lastArtistBedtimeKey: vnDayKey } }
+            );
+          } catch (err) {
+            console.error(
+              `[raid-channel] artist-bedtime disabled-stamp failed guild=${cfg.guildId}:`,
+              err?.message || err
+            );
+          }
           continue;
         }
         try {
@@ -443,14 +451,28 @@ function createRaidSchedulerService({
    * Start the 30-minute tick for the auto-cleanup scheduler. With the hourly
    * cadence (Apr 2026), tick every 30 min so an hour-boundary crossing is
    * caught within 30 min worst-case. The tick itself is idempotent via
-   * `lastAutoCleanupKey` so no-op ticks are cheap.
+   * `lastAutoCleanupKey` so no-op ticks are cheap. The in-flight guard keeps
+   * a slow cleanup pass from overlapping the next interval fire before the
+   * per-guild key is stamped.
    */
   function startRaidChannelScheduler(client) {
     autoCleanupSchedulerStartedAtMs = Date.now();
-    const run = () =>
-      runAutoCleanupTick(client).catch((err) => {
+    const run = async () => {
+      if (autoCleanupTickInFlight) {
+        console.warn(
+          "[raid-channel] previous scheduler tick still running - skipping this fire to avoid overlap"
+        );
+        return;
+      }
+      autoCleanupTickInFlight = true;
+      try {
+        await runAutoCleanupTick(client);
+      } catch (err) {
         console.error("[raid-channel] scheduler tick failed:", err?.message || err);
-      });
+      } finally {
+        autoCleanupTickInFlight = false;
+      }
+    };
     run();
     return setInterval(run, AUTO_CLEANUP_TICK_MS);
   }
