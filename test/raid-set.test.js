@@ -451,3 +451,72 @@ test("applyRaidSetForDiscordId: complete cumulative — process G2 marks G1 too 
   assert.ok(Number(kaz.G1.completedDate) > 0);
   assert.ok(Number(kaz.G2.completedDate) > 0);
 });
+
+// ---------------------------------------------------------------------------
+// normalizeAssignedRaid: auto-upgrade to best-eligible mode when iLvl bumps
+// ---------------------------------------------------------------------------
+
+test("normalizeAssignedRaid: auto-upgrades stale Normal stamp to Hard when iLvl now qualifies", () => {
+  // Bug surfaced by Traine: char crossed the 1720 Act 4 Hard threshold
+  // but Act 4 still rendered as Normal. Cause: a previous /add-roster
+  // (or /edit-roster Confirm) at sub-threshold iLvl stamped
+  // assignedRaids.armoche.G1.difficulty="Normal", and bible refresh's
+  // iLvl bump never recomputed assignedRaids. normalizeAssignedRaid
+  // had been preferring the stored G1.difficulty over the
+  // best-eligible fallback for the no-completion case, which made the
+  // upgrade impossible without manual /raid-set intervention. Pin the
+  // fix: with no completion stamped and stored mode below the best
+  // eligible mode, the canonical difficulty should auto-bump up to
+  // match the current iLvl tier.
+  const stale = {
+    G1: { difficulty: "Normal", completedDate: undefined },
+    G2: { difficulty: "Normal", completedDate: undefined },
+  };
+  // armoche Hard threshold = 1720 in RAID_REQUIREMENT_MAP. Pass "Hard"
+  // as the fallback (== best-eligible at this iLvl) and confirm both
+  // gates flip to Hard.
+  const result = normalizeAssignedRaid(stale, "Hard", "armoche");
+  assert.equal(result.G1.difficulty, "Hard");
+  assert.equal(result.G2.difficulty, "Hard");
+});
+
+test("normalizeAssignedRaid: preserves over-tier stamped difficulty (no auto-downgrade)", () => {
+  // Inverse of the auto-upgrade case: an over-tier stored difficulty
+  // (e.g. Hard manually stamped via /raid-set on a 1700 char that
+  // wouldn't actually clear it in-game) may be a deliberate user
+  // choice. Auto-downgrading it on every read would silently overwrite
+  // intent. Only auto-promote, never auto-demote.
+  const stale = {
+    G1: { difficulty: "Hard", completedDate: undefined },
+    G2: { difficulty: "Hard", completedDate: undefined },
+  };
+  const result = normalizeAssignedRaid(stale, "Normal", "armoche");
+  assert.equal(result.G1.difficulty, "Hard");
+  assert.equal(result.G2.difficulty, "Hard");
+});
+
+test("normalizeAssignedRaid: in-progress completion locks mode against auto-upgrade", () => {
+  // If the player has actually cleared a gate at the lower mode this
+  // week, weekly lockout makes the cleared mode the only option until
+  // reset. Auto-upgrading would silently invalidate the completion
+  // (Lost Ark weekly entries are mode-scoped). The diffTally branch
+  // already handled this case, but the regression test pins the
+  // contract so refactors can't accidentally drop it.
+  const partiallyCleared = {
+    G1: { difficulty: "Normal", completedDate: 1700000000000 }, // done
+    G2: { difficulty: "Normal", completedDate: undefined },
+  };
+  const result = normalizeAssignedRaid(partiallyCleared, "Hard", "armoche");
+  assert.equal(result.G1.difficulty, "Normal", "completed Normal mode wins over Hard fallback");
+  assert.equal(result.G2.difficulty, "Normal", "G2 inherits the canonical mode for coherence");
+  assert.ok(Number(result.G1.completedDate) > 0, "G1 completion preserved");
+});
+
+test("normalizeAssignedRaid: empty stored difficulty falls back to best-eligible", () => {
+  // Fresh char path: assignedRaid is `{}` (or missing G1/G2 difficulty
+  // strings). With nothing to preserve, the best-eligible fallback is
+  // the natural choice.
+  const result = normalizeAssignedRaid({}, "Hard", "armoche");
+  assert.equal(result.G1.difficulty, "Hard");
+  assert.equal(result.G2.difficulty, "Hard");
+});
