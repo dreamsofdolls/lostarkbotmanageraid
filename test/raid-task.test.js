@@ -23,6 +23,7 @@ const {
   parseSharedTaskExpiresAt,
   resolveScheduledSharedTaskState,
   getSharedTaskDisplay,
+  getNextSharedTaskTransitionMs,
 } = require("../src/raid/shared-tasks");
 
 // ---------------------------------------------------------------------------
@@ -213,6 +214,27 @@ test("scheduled shared task: Field Boss follows Tue/Fri/Sun PT windows", () => {
 
   assert.equal(resolveScheduledSharedTaskState(task, tuesdayNoon).active, true);
   assert.equal(resolveScheduledSharedTaskState(task, wednesdayNoon).active, false);
+});
+
+test("scheduled shared task: next transition helper returns nearest open or close", () => {
+  const account = {
+    sharedTasks: [
+      { taskId: "manual", preset: "event_shop", reset: "weekly" },
+      { taskId: "cg", preset: "chaos_gate", reset: "scheduled" },
+      { taskId: "fb", preset: "field_boss", reset: "scheduled" },
+    ],
+  };
+  const mondayLate = new Date("2026-04-28T06:30:00.000Z"); // Mon 23:30 PDT.
+  const afterWindow = new Date("2026-04-28T13:05:00.000Z"); // Tue 06:05 PDT.
+
+  assert.equal(
+    getNextSharedTaskTransitionMs(account, mondayLate),
+    Date.UTC(2026, 3, 28, 13, 0, 0, 0)
+  );
+  assert.equal(
+    getNextSharedTaskTransitionMs(account, afterWindow),
+    Date.UTC(2026, 3, 28, 18, 0, 0, 0)
+  );
 });
 
 // ---------------------------------------------------------------------------

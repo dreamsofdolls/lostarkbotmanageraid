@@ -310,6 +310,21 @@ function getSharedTaskDisplay(task, now = new Date()) {
   };
 }
 
+function getNextSharedTaskTransitionMs(account, now = new Date()) {
+  const nowMs = now.getTime();
+  let nextMs = null;
+  for (const task of getVisibleSharedTasks(account, nowMs)) {
+    if (task?.reset !== SCHEDULED_RESET) continue;
+    const state = resolveScheduledSharedTaskState(task, now);
+    const candidateMs = state.active ? state.windowEndAtMs : state.nextAtMs;
+    if (!Number.isFinite(candidateMs) || candidateMs <= nowMs) continue;
+    if (nextMs === null || candidateMs < nextMs) {
+      nextMs = candidateMs;
+    }
+  }
+  return nextMs;
+}
+
 module.exports = {
   PACIFIC_TIME_ZONE,
   SCHEDULED_RESET,
@@ -326,6 +341,7 @@ module.exports = {
   getVisibleSharedTasks,
   resolveScheduledSharedTaskState,
   getSharedTaskDisplay,
+  getNextSharedTaskTransitionMs,
   formatSharedResetLabel,
   normalizeName,
 };
