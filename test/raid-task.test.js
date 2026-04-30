@@ -1137,6 +1137,117 @@ test("shared-add: adds Chaos Gate as scheduled roster task", async () => {
   assert.equal(task.lastResetAt, 0);
 });
 
+test("shared-add autocomplete: preset labels show already-added state", async () => {
+  const userDoc = {
+    discordId: "u1",
+    accounts: [
+      {
+        accountName: "main",
+        characters: [],
+        sharedTasks: [
+          { taskId: "cg", preset: "chaos_gate", name: "Chaos Gate", reset: "scheduled" },
+        ],
+      },
+    ],
+  };
+  const stubEmbed = {
+    setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
+    addFields() { return this; }, setFooter() { return this; },
+  };
+  const { createRaidTaskCommand } = require("../src/commands/raid-task");
+  const handlers = createRaidTaskCommand({
+    EmbedBuilder: function () { return stubEmbed; },
+    ActionRowBuilder: class { addComponents() { return this; } },
+    ButtonBuilder: class { setCustomId() { return this; } setLabel() { return this; } setStyle() { return this; } },
+    ButtonStyle: { Danger: 4, Secondary: 2 },
+    MessageFlags: { Ephemeral: 64 },
+    User: { findOne: async () => userDoc },
+    saveWithRetry: async (fn) => fn(),
+    loadUserForAutocomplete: async () => userDoc,
+    dailyResetStartMs: () => 0,
+    weekResetStartMs: () => 0,
+  });
+
+  let choices = null;
+  const interaction = {
+    user: { id: "u1" },
+    options: {
+      getFocused: () => ({ name: "preset", value: "" }),
+      getString: (name) => (name === "roster" ? "main" : null),
+    },
+    respond: async (value) => { choices = value; },
+  };
+
+  await handlers.handleRaidTaskAutocomplete(interaction);
+
+  const chaosGate = choices.find((choice) => choice.value === "chaos_gate");
+  assert.ok(chaosGate, "expected chaos_gate autocomplete choice");
+  assert.match(chaosGate.name, /đã thêm/);
+});
+
+test("shared-add: all_rosters adds missing rosters and skips duplicates", async () => {
+  let savedDoc = null;
+  const userDoc = {
+    discordId: "u1",
+    accounts: [
+      {
+        accountName: "main",
+        characters: [],
+        sharedTasks: [],
+      },
+      {
+        accountName: "alt",
+        characters: [],
+        sharedTasks: [
+          { taskId: "existing", preset: "chaos_gate", name: "Chaos Gate", reset: "scheduled" },
+        ],
+      },
+    ],
+    save: async function () {
+      savedDoc = JSON.parse(JSON.stringify(this));
+    },
+  };
+  const stubEmbed = {
+    setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
+    addFields() { return this; }, setFooter() { return this; },
+  };
+  const { createRaidTaskCommand } = require("../src/commands/raid-task");
+  const handlers = createRaidTaskCommand({
+    EmbedBuilder: function () { return stubEmbed; },
+    ActionRowBuilder: class { addComponents() { return this; } },
+    ButtonBuilder: class { setCustomId() { return this; } setLabel() { return this; } setStyle() { return this; } },
+    ButtonStyle: { Danger: 4, Secondary: 2 },
+    MessageFlags: { Ephemeral: 64 },
+    User: { findOne: async () => userDoc },
+    saveWithRetry: async (fn) => fn(),
+    loadUserForAutocomplete: async () => userDoc,
+    dailyResetStartMs: () => 111,
+    weekResetStartMs: () => 222,
+  });
+
+  const interaction = {
+    user: { id: "u1" },
+    options: {
+      getSubcommand: () => "shared-add",
+      getString: (name) => {
+        if (name === "roster") return "main";
+        if (name === "preset") return "chaos_gate";
+        return null;
+      },
+      getBoolean: (name) => name === "all_rosters",
+    },
+    reply: async () => {},
+  };
+
+  await handlers.handleRaidTaskCommand(interaction);
+
+  assert.ok(savedDoc, "expected save() to be called");
+  assert.equal(savedDoc.accounts[0].sharedTasks.length, 1);
+  assert.equal(savedDoc.accounts[0].sharedTasks[0].preset, "chaos_gate");
+  assert.equal(savedDoc.accounts[1].sharedTasks.length, 1);
+  assert.equal(savedDoc.accounts[1].sharedTasks[0].taskId, "existing");
+});
+
 test("shared-remove: deletes one roster shared task by id", async () => {
   let savedDoc = null;
   const userDoc = {
