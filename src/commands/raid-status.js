@@ -10,6 +10,7 @@ const {
   parseTaskToggleValue,
   toggleBulkSideTask,
   toggleSingleSideTask,
+  toggleSharedTask,
 } = require("./raid-status/task-actions");
 const {
   buildNoticeEmbed,
@@ -199,6 +200,7 @@ function createRaidStatusCommand(deps) {
       ALL_CHARS_SENTINEL,
       buildTaskViewEmbed,
       buildViewToggleRow,
+      buildSharedTaskToggleRow,
       buildTaskCharFilterRow,
       buildTaskToggleRow,
     } = createRaidStatusTaskUi({
@@ -324,6 +326,8 @@ function createRaidStatusCommand(deps) {
           );
         }
         rows.push(buildViewToggleRow(disabled));
+        const sharedTaskRow = buildSharedTaskToggleRow(disabled);
+        if (sharedTaskRow) rows.push(sharedTaskRow);
         const charFilterRow = buildTaskCharFilterRow(disabled);
         if (charFilterRow) rows.push(charFilterRow);
         rows.push(buildTaskToggleRow(disabled));
@@ -563,7 +567,22 @@ function createRaidStatusCommand(deps) {
           return;
         }
 
-        if (parsed.kind === "bulk") {
+        if (parsed.kind === "shared") {
+          try {
+            await toggleSharedTask({
+              User,
+              saveWithRetry,
+              discordId,
+              targetAccountName,
+              taskId: parsed.taskId,
+            });
+          } catch (err) {
+            console.error(
+              "[raid-status shared-task toggle] save failed:",
+              err?.message || err
+            );
+          }
+        } else if (parsed.kind === "bulk") {
           try {
             await toggleBulkSideTask({
               User,

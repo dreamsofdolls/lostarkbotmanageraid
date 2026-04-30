@@ -42,6 +42,36 @@ const sideTaskSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Account-level checklist items that are not tied to a specific character:
+// event shops, Chaos Gate, Field Boss, and similar roster chores. Scheduled
+// presets use `completedForKey` so a completion belongs to one event-day
+// window instead of staying done forever.
+const sharedTaskSchema = new mongoose.Schema(
+  {
+    taskId: { type: String, required: true },
+    preset: {
+      type: String,
+      enum: ["custom", "event_shop", "chaos_gate", "field_boss"],
+      default: "custom",
+    },
+    name: { type: String, required: true, maxlength: 60 },
+    reset: {
+      type: String,
+      enum: ["daily", "weekly", "scheduled"],
+      required: true,
+    },
+    completed: { type: Boolean, default: false },
+    completedAt: { type: Number, default: null },
+    completedForKey: { type: String, default: "" },
+    lastResetAt: { type: Number, default: 0 },
+    createdAt: { type: Number, default: () => Date.now() },
+    expiresAt: { type: Number, default: null },
+    archivedAt: { type: Number, default: null },
+    timezone: { type: String, default: "America/Los_Angeles" },
+  },
+  { _id: false }
+);
+
 const characterSchema = new mongoose.Schema(
   {
     id: { type: String, required: true },
@@ -98,6 +128,7 @@ const accountSchema = new mongoose.Schema(
     // unresolvable (wrong accountName + stale char names → every seed fails
     // or returns zero-overlap).
     lastRefreshAttemptAt: { type: Number, default: null },
+    sharedTasks: { type: [sharedTaskSchema], default: [] },
   },
   { _id: false }
 );

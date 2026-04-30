@@ -302,6 +302,73 @@ function createRaidCommandDefinitions({
             .setRequired(true)
             .setAutocomplete(true)
         )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("shared-add")
+        .setDescription("Add a roster-level shared task (event shop, Chaos Gate, Field Boss)")
+        .addStringOption((opt) =>
+          opt
+            .setName("roster")
+            .setDescription("Roster (account) to attach the shared task to")
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("preset")
+            .setDescription("Shared task preset")
+            .setRequired(true)
+            .addChoices(
+              { name: "Event Shop", value: "event_shop" },
+              { name: "Chaos Gate (NA West PT)", value: "chaos_gate" },
+              { name: "Field Boss (NA West PT)", value: "field_boss" },
+              { name: "Custom shared task", value: "custom" }
+            )
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("name")
+            .setDescription("Optional display name (default comes from preset, max 60 chars)")
+            .setRequired(false)
+            .setMaxLength(60)
+            .setAutocomplete(true)
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("reset")
+            .setDescription("Manual shared task reset cycle (ignored by scheduled presets)")
+            .setRequired(false)
+            .addChoices(
+              { name: "Daily (17:00 VN)", value: "daily" },
+              { name: "Weekly (17:00 VN Wed)", value: "weekly" }
+            )
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("expires_at")
+            .setDescription("Optional expiry date for event shops, format YYYY-MM-DD")
+            .setRequired(false)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("shared-remove")
+        .setDescription("Remove one roster-level shared task")
+        .addStringOption((opt) =>
+          opt
+            .setName("roster")
+            .setDescription("Roster (account) containing the shared task")
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("task")
+            .setDescription("Shared task to remove")
+            .setRequired(true)
+            .setAutocomplete(true)
+        )
     );
 
   const commands = [

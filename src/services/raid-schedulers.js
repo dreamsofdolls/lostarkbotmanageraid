@@ -1191,9 +1191,51 @@ function createRaidSchedulerService({
       }
     );
 
+    const sharedDailyResult = await User.updateMany(
+      {
+        "accounts.sharedTasks": {
+          $elemMatch: { reset: "daily", lastResetAt: { $lt: dailyStart } },
+        },
+      },
+      {
+        $set: {
+          "accounts.$[].sharedTasks.$[task].completed": false,
+          "accounts.$[].sharedTasks.$[task].completedAt": null,
+          "accounts.$[].sharedTasks.$[task].lastResetAt": dailyStart,
+        },
+      },
+      {
+        arrayFilters: [
+          { "task.reset": "daily", "task.lastResetAt": { $lt: dailyStart } },
+        ],
+      }
+    );
+
+    const sharedWeeklyResult = await User.updateMany(
+      {
+        "accounts.sharedTasks": {
+          $elemMatch: { reset: "weekly", lastResetAt: { $lt: weeklyStart } },
+        },
+      },
+      {
+        $set: {
+          "accounts.$[].sharedTasks.$[task].completed": false,
+          "accounts.$[].sharedTasks.$[task].completedAt": null,
+          "accounts.$[].sharedTasks.$[task].lastResetAt": weeklyStart,
+        },
+      },
+      {
+        arrayFilters: [
+          { "task.reset": "weekly", "task.lastResetAt": { $lt: weeklyStart } },
+        ],
+      }
+    );
+
     return {
       dailyModified: dailyResult?.modifiedCount || 0,
       weeklyModified: weeklyResult?.modifiedCount || 0,
+      sharedDailyModified: sharedDailyResult?.modifiedCount || 0,
+      sharedWeeklyModified: sharedWeeklyResult?.modifiedCount || 0,
       dailyStart,
       weeklyStart,
     };
@@ -1206,9 +1248,14 @@ function createRaidSchedulerService({
       sideTaskTickInFlight = true;
       try {
         const report = await resetExpiredSideTasks();
-        if (report.dailyModified > 0 || report.weeklyModified > 0) {
+        if (
+          report.dailyModified > 0 ||
+          report.weeklyModified > 0 ||
+          report.sharedDailyModified > 0 ||
+          report.sharedWeeklyModified > 0
+        ) {
           console.log(
-            `[side-task reset] daily=${report.dailyModified} weekly=${report.weeklyModified}`
+            `[side-task reset] daily=${report.dailyModified} weekly=${report.weeklyModified} sharedDaily=${report.sharedDailyModified} sharedWeekly=${report.sharedWeeklyModified}`
           );
         }
       } catch (err) {

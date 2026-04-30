@@ -6,6 +6,19 @@ const {
   getCharacterMatches,
   truncateChoice,
 } = require("../raid/autocomplete-helpers");
+const {
+  SCHEDULED_RESET,
+  SHARED_TASK_CAP_DAILY,
+  SHARED_TASK_CAP_WEEKLY,
+  SHARED_TASK_CAP_SCHEDULED,
+  getSharedTaskPreset,
+  ensureSharedTasks,
+  countSharedTasksByReset,
+  sharedTaskCapForReset,
+  parseSharedTaskExpiresAt,
+  getVisibleSharedTasks,
+  getSharedTaskDisplay,
+} = require("../raid/shared-tasks");
 
 const TASK_CAP_DAILY = 3;
 const TASK_CAP_WEEKLY = 5;
@@ -51,6 +64,16 @@ function findCharacterInUser(userDoc, characterName, rosterName = null) {
     }
   }
   return null;
+}
+
+function findAccountInUser(userDoc, rosterName) {
+  if (!userDoc || !Array.isArray(userDoc.accounts)) return null;
+  const target = normalizeName(rosterName);
+  if (!target) return null;
+  return (
+    userDoc.accounts.find((account) => normalizeName(account?.accountName) === target) ||
+    null
+  );
 }
 
 function ensureSideTasks(character) {
@@ -158,6 +181,14 @@ function createRaidTaskCommand(deps) {
   }
 
   async function autocompleteTask(interaction, focused) {
+    const subcommand = typeof interaction.options.getSubcommand === "function"
+      ? interaction.options.getSubcommand(false)
+      : "";
+    if (subcommand === "shared-remove") {
+      await autocompleteSharedTask(interaction, focused);
+      return;
+    }
+
     const needle = normalizeName(focused.value || "");
     const characterInput = interaction.options.getString("character") || "";
     const rosterInput = interaction.options.getString("roster") || "";
@@ -185,6 +216,34 @@ function createRaidTaskCommand(deps) {
           name: label.length > 100 ? `${label.slice(0, 97)}...` : label,
           value: task.taskId,
         };
+      });
+    await interaction.respond(choices).catch(() => {});
+  }
+
+  async function autocompleteSharedTask(interaction, focused) {
+    const needle = normalizeName(focused.value || "");
+    const rosterInput = interaction.options.getString("roster") || "";
+    const discordId = interaction.user.id;
+    if (!rosterInput) {
+      await interaction.respond([]).catch(() => {});
+      return;
+    }
+    const userDoc = await loadUserForAutocomplete(discordId);
+    const account = findAccountInUser(userDoc, rosterInput);
+    if (!account) {
+      await interaction.respond([]).catch(() => {});
+      return;
+    }
+    const now = new Date();
+    const choices = getVisibleSharedTasks(account, now.getTime())
+      .filter((task) => !needle || normalizeName(task?.name).includes(needle))
+      .slice(0, 25)
+      .map((task) => {
+        const display = getSharedTaskDisplay(task, now);
+        return truncateChoice(
+          `${display.emoji} ${display.name} · ${display.status}`,
+          task.taskId
+        );
       });
     await interaction.respond(choices).catch(() => {});
   }
@@ -612,6 +671,304 @@ function createRaidTaskCommand(deps) {
     });
   }
 
+  function resolveSharedTaskReset(preset, requestedReset) {
+    if (preset.kind === "scheduled") return SCHEDULED_RESET;
+    if (requestedReset === "daily" || requestedReset === "weekly") {
+      return requestedReset;
+    }
+    return preset.reset || "weekly";
+  }
+
+  async function handleSharedAdd(interaction) {
+    const discordId = interaction.user.id;
+    const rosterName = interaction.options.getString("roster", true);
+    const presetKey = interaction.options.getString("preset", true);
+    const preset = getSharedTaskPreset(presetKey);
+    const requestedReset = interaction.options.getString("reset", false);
+    const reset = resolveSharedTaskReset(preset, requestedReset);
+    const taskNameInput = interaction.options.getString("name", false);
+    const taskName = String(taskNameInput || preset.defaultName).trim();
+    const expiresRaw = interaction.options.getString("expires_at", false);
+    const expiresAt = parseSharedTaskExpiresAt(expiresRaw);
+
+    if (!taskName) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Tên task không hợp lệ",
+            description: "Task chung cần có tên. Với preset custom, cậu điền field `name:` giúp tớ nha.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (Number.isNaN(expiresAt)) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Ngày hết hạn không hợp lệ",
+            description: "Field `expires_at` dùng format `YYYY-MM-DD`, ví dụ `2026-05-20`.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (expiresAt && expiresAt < Date.now()) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Ngày hết hạn đã qua",
+            description: "Task vừa thêm sẽ bị ẩn ngay nếu `expires_at` nằm trong quá khứ. Cậu chỉnh lại ngày rồi thử lại nha.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    let outcome = "added";
+    let resolvedRosterName = rosterName;
+    let countForReset = 0;
+    const now = Date.now();
+
+    try {
+      await saveWithRetry(async () => {
+        const userDoc = await User.findOne({ discordId });
+        if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+          outcome = "no-roster";
+          return;
+        }
+        const account = findAccountInUser(userDoc, rosterName);
+        if (!account) {
+          outcome = "no-roster-match";
+          return;
+        }
+        resolvedRosterName = account.accountName;
+        const sharedTasks = ensureSharedTasks(account);
+        const cap = sharedTaskCapForReset(reset);
+        countForReset = countSharedTasksByReset(sharedTasks, reset, now);
+        if (countForReset >= cap) {
+          outcome = "cap-reached";
+          return;
+        }
+
+        const dup = sharedTasks.some((task) => {
+          if (!task || Number(task.archivedAt) > 0) return false;
+          const exp = Number(task.expiresAt) || 0;
+          if (exp > 0 && exp < now) return false;
+          if (preset.kind === "scheduled") {
+            return task.preset === preset.preset;
+          }
+          return (
+            normalizeName(task.name) === normalizeName(taskName) &&
+            task.reset === reset
+          );
+        });
+        if (dup) {
+          outcome = "duplicate";
+          return;
+        }
+
+        const cycleStart =
+          reset === "daily"
+            ? dailyResetStartMs()
+            : reset === "weekly"
+              ? weekResetStartMs()
+              : 0;
+        sharedTasks.push({
+          taskId: generateTaskId(),
+          preset: preset.preset,
+          name: taskName,
+          reset,
+          completed: false,
+          completedAt: null,
+          completedForKey: "",
+          lastResetAt: cycleStart,
+          createdAt: now,
+          expiresAt,
+          archivedAt: null,
+          timezone: preset.timeZone || "America/Los_Angeles",
+        });
+        countForReset += 1;
+        await userDoc.save();
+      });
+    } catch (error) {
+      console.error("[raid-task shared-add] save failed:", error?.message || error);
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "error",
+            title: "Save thất bại",
+            description: "Mongo trả lỗi khi lưu task chung. Thử lại sau ít phút nha.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (outcome === "no-roster" || outcome === "no-roster-match") {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Không tìm thấy roster",
+            description: `Artist không tìm thấy roster **${rosterName}** của cậu. Dùng autocomplete khi gõ field \`roster:\` để tránh sai tên nha.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (outcome === "cap-reached") {
+      const cap = sharedTaskCapForReset(reset);
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Đã đầy slot task chung",
+            description: `Roster **${resolvedRosterName}** đã có **${countForReset}/${cap}** task chung loại \`${reset}\` rồi. Xoá bớt bằng \`/raid-task shared-remove\` trước nha.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (outcome === "duplicate") {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "info",
+            title: "Task chung đã tồn tại",
+            description: preset.kind === "scheduled"
+              ? `Roster **${resolvedRosterName}** đã có preset **${preset.label}** rồi.`
+              : `Roster **${resolvedRosterName}** đã có task \`${taskName}\` cùng cycle \`${reset}\` rồi.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const lines = [
+      `**Roster:** ${resolvedRosterName}`,
+      `**Task:** ${preset.emoji} ${taskName}`,
+      `**Loại:** ${preset.label}`,
+      `**Reset:** ${preset.kind === "scheduled" ? "Theo lịch NA West (Pacific)" : reset}`,
+    ];
+    if (preset.scheduleText) lines.push(`**Lịch:** ${preset.scheduleText}`);
+    if (expiresAt) {
+      lines.push(`**Hết hạn:** <t:${Math.floor(expiresAt / 1000)}:D>`);
+    }
+    lines.push("");
+    lines.push("Vào `/raid-status` → **Side tasks** để toggle task chung.");
+
+    await interaction.reply({
+      embeds: [
+        buildNoticeEmbed(EmbedBuilder, {
+          type: "success",
+          title: "Đã thêm task chung",
+          description: lines.join("\n"),
+        }),
+      ],
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  async function handleSharedRemove(interaction) {
+    const discordId = interaction.user.id;
+    const rosterName = interaction.options.getString("roster", true);
+    const taskId = interaction.options.getString("task", true);
+
+    let outcome = "removed";
+    let resolvedRosterName = rosterName;
+    let removedTaskName = "";
+
+    try {
+      await saveWithRetry(async () => {
+        const userDoc = await User.findOne({ discordId });
+        if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+          outcome = "no-roster";
+          return;
+        }
+        const account = findAccountInUser(userDoc, rosterName);
+        if (!account) {
+          outcome = "no-roster-match";
+          return;
+        }
+        resolvedRosterName = account.accountName;
+        const sharedTasks = ensureSharedTasks(account);
+        const idx = sharedTasks.findIndex((task) => task?.taskId === taskId);
+        if (idx === -1) {
+          outcome = "task-not-found";
+          return;
+        }
+        removedTaskName = sharedTasks[idx]?.name || "(không tên)";
+        sharedTasks.splice(idx, 1);
+        await userDoc.save();
+      });
+    } catch (error) {
+      console.error("[raid-task shared-remove] save failed:", error?.message || error);
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "error",
+            title: "Save thất bại",
+            description: "Mongo trả lỗi khi xoá task chung. Thử lại sau ít phút nha.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (outcome === "no-roster" || outcome === "no-roster-match") {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Không tìm thấy roster",
+            description: `Artist không tìm thấy roster **${rosterName}** của cậu.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (outcome === "task-not-found") {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Task chung đã không còn",
+            description: "Task này có vẻ đã bị xoá từ trước. Gõ lại `/raid-status` hoặc dùng autocomplete mới nha.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    await interaction.reply({
+      embeds: [
+        buildNoticeEmbed(EmbedBuilder, {
+          type: "success",
+          title: "Đã xoá task chung",
+          description: [
+            `**Roster:** ${resolvedRosterName}`,
+            `**Task vừa xoá:** ${removedTaskName}`,
+          ].join("\n"),
+        }),
+      ],
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
   async function handleRemove(interaction) {
     const discordId = interaction.user.id;
     const rosterName = interaction.options.getString("roster", true);
@@ -895,12 +1252,14 @@ function createRaidTaskCommand(deps) {
     }
     if (sub === "remove") return handleRemove(interaction);
     if (sub === "clear") return handleClear(interaction);
+    if (sub === "shared-add") return handleSharedAdd(interaction);
+    if (sub === "shared-remove") return handleSharedRemove(interaction);
     await interaction.reply({
       embeds: [
         buildNoticeEmbed(EmbedBuilder, {
           type: "warn",
           title: "Subcommand không hợp lệ",
-          description: `Subcommand \`${sub}\` Artist không nhận được. Cho phép: \`add\` · \`remove\` · \`clear\`.`,
+          description: `Subcommand \`${sub}\` Artist không nhận được. Cho phép: \`add\` · \`remove\` · \`clear\` · \`shared-add\` · \`shared-remove\`.`,
         }),
       ],
       flags: MessageFlags.Ephemeral,
@@ -918,8 +1277,13 @@ module.exports = {
   createRaidTaskCommand,
   TASK_CAP_DAILY,
   TASK_CAP_WEEKLY,
+  SHARED_TASK_CAP_DAILY,
+  SHARED_TASK_CAP_WEEKLY,
+  SHARED_TASK_CAP_SCHEDULED,
   generateTaskId,
   findCharacterInUser,
+  findAccountInUser,
   countByReset,
   ensureSideTasks,
+  ensureSharedTasks,
 };
