@@ -1,5 +1,9 @@
 const { getClassEmoji } = require("../../data/Class");
 const { buildAccountTaskFields } = require("../../raid/task-view");
+const {
+  getVisibleSharedTasks,
+  getSharedTaskDisplay,
+} = require("../../raid/shared-tasks");
 
 function createRaidStatusTaskUi(deps) {
   const {
@@ -37,26 +41,29 @@ function createRaidStatusTaskUi(deps) {
     // delegated to the shared `buildAccountTaskFields` helper so the
     // /raid-check Manager Task view renders the same look
     // without duplicating ~80 LOC of layout code. This wrapper owns
-    // the surface-specific bits: title, description, the "🌟 sắp có"
-    // placeholder, and the page-indicator footer.
+    // the surface-specific bits: title, description, shared-task field,
+    // and the page-indicator footer.
     const buildTaskViewEmbed = (account) => {
       const accountName = String(account?.accountName || "(unnamed roster)");
       const embed = new EmbedBuilder()
         .setColor(UI.colors.neutral)
         .setTitle(`📝 Side tasks · ${accountName}`);
 
+      const now = new Date();
+      const sharedTasks = getVisibleSharedTasks(account, now.getTime());
       const { fields, totals } = buildAccountTaskFields(account, {
         UI,
         getClassEmoji,
         truncateText,
       });
 
-      if (totals.charsWithTasks === 0) {
+      if (totals.charsWithTasks === 0 && sharedTasks.length === 0) {
         embed.setDescription(
           [
-            "Account này chưa có side task nào nha.",
+            "Account này chưa có side task/task chung nào nha.",
             "",
             "**Cách thêm:** `/raid-task add character:<char> name:<tên> reset:<daily|weekly>`",
+            "**Task chung:** `/raid-task shared-add roster:<roster> preset:<event_shop|chaos_gate|field_boss>`",
             "**Cap:** 3 daily + 5 weekly mỗi character.",
             "**Auto-reset:** Daily 17:00 VN · Weekly 17:00 VN thứ 4.",
           ].join("\n")
@@ -71,24 +78,43 @@ function createRaidStatusTaskUi(deps) {
         ].join("\n")
       );
 
-      embed.addFields(...fields);
+      if (sharedTasks.length > 0) {
+        const lines = sharedTasks.slice(0, 12).map((task) => {
+          const display = getSharedTaskDisplay(task, now);
+          const icon = display.completed ? UI.icons.done : UI.icons.pending;
+          return `${icon} ${display.emoji} **${display.name}** · ${display.status}`;
+        });
+        if (sharedTasks.length > 12) {
+          lines.push(`_+${sharedTasks.length - 12} task chung khác_`);
+        }
+        embed.addFields({
+          name: "🌟 Task chung của roster",
+          value: truncateText(lines.join("\n"), 1024),
+          inline: false,
+        });
+      }
 
-      // Placeholder field for the upcoming "shared task per roster"
-      // feature - one task definition that applies to every char in
-      // the account (vs the current per-char model). Sits between the
-      // char cards and the footer legend so users see the roadmap at
-      // a glance. Artist-voice copy keeps the persona consistent.
-      // Remove this addFields() block when the real feature lands.
-      embed.addFields({
-        name: "🌟 Task chung của roster (sắp có)",
-        value: [
-          "Tớ ngóng feature này dữ lắm~ Sắp tới mỗi roster sẽ có thêm 1 list task **áp cho mọi char trong account** (kiểu chore chung Owner đăng ký, không phải gõ `/raid-task add` cho từng con).",
-          "Trong lúc chờ, cậu cứ dùng `action:all` ở `/raid-task add` để bulk add tạm cho mọi char nha~",
-        ].join("\n"),
-        inline: false,
-      });
+      const fieldBudget = sharedTasks.length > 0 ? 24 : 25;
+      const visibleFields =
+        fields.length > fieldBudget
+          ? [
+              ...fields.slice(0, fieldBudget - 1),
+              {
+                name: "…",
+                value: `_+${fields.length - fieldBudget + 1} character có task khác_`,
+                inline: false,
+              },
+            ]
+          : fields;
+      if (visibleFields.length > 0) embed.addFields(...visibleFields);
 
       const footerParts = [];
+      if (sharedTasks.length > 0) {
+        const sharedDone = sharedTasks.filter((task) =>
+          getSharedTaskDisplay(task, now).completed
+        ).length;
+        footerParts.push(`${UI.icons.done} ${sharedDone}/${sharedTasks.length} shared`);
+      }
       if (totals.daily > 0) {
         footerParts.push(`${UI.icons.done} ${totals.dailyDone}/${totals.daily} daily`);
       }
@@ -102,6 +128,33 @@ function createRaidStatusTaskUi(deps) {
         embed.setFooter({ text: footerParts.join(" · ") });
       }
       return embed;
+    };
+
+    const buildSharedTaskToggleRow = (disabled) => {
+      const account = getAccounts()[getCurrentPage()];
+      const now = new Date();
+      const sharedTasks = getVisibleSharedTasks(account, now.getTime()).filter((task) => {
+        const display = getSharedTaskDisplay(task, now);
+        return task?.reset !== "scheduled" || display.active;
+      });
+      if (sharedTasks.length === 0) return null;
+
+      const options = sharedTasks.slice(0, 25).map((task) => {
+        const display = getSharedTaskDisplay(task, now);
+        const icon = display.completed ? UI.icons.done : UI.icons.pending;
+        return {
+          label: truncateText(`${icon} ${display.name} · ${display.status}`, 100),
+          value: `shared::${task.taskId}`.slice(0, 100),
+          emoji: display.emoji,
+        };
+      });
+      return new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId("status-task:toggle")
+          .setPlaceholder("Toggle task chung của roster...")
+          .setDisabled(disabled)
+          .addOptions(options)
+      );
     };
 
     const buildViewToggleRow = (disabled) => {
@@ -393,6 +446,7 @@ function createRaidStatusTaskUi(deps) {
     ALL_CHARS_SENTINEL,
     buildTaskViewEmbed,
     buildViewToggleRow,
+    buildSharedTaskToggleRow,
     charsWithTasksOnPage,
     resolveTaskCharFilter,
     aggregateTasksOnPage,

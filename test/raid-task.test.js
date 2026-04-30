@@ -9,11 +9,20 @@ const { __test } = require("../src/raid-command");
 const {
   TASK_CAP_DAILY,
   TASK_CAP_WEEKLY,
+  SHARED_TASK_CAP_DAILY,
+  SHARED_TASK_CAP_WEEKLY,
+  SHARED_TASK_CAP_SCHEDULED,
   generateTaskId,
   findCharacterInUser,
+  findAccountInUser,
   countByReset,
   ensureSideTasks,
+  ensureSharedTasks,
 } = require("../src/commands/raid-task");
+const {
+  parseSharedTaskExpiresAt,
+  resolveScheduledSharedTaskState,
+} = require("../src/raid/shared-tasks");
 
 // ---------------------------------------------------------------------------
 // dailyResetStartMs - LA daily reset is 17:00 VN = 10:00 UTC
@@ -54,6 +63,12 @@ test("dailyResetStartMs returns ms equal to 17:00 VN (UTC+7)", () => {
 test("TASK_CAP constants are 3 daily + 5 weekly", () => {
   assert.equal(TASK_CAP_DAILY, 3);
   assert.equal(TASK_CAP_WEEKLY, 5);
+});
+
+test("SHARED_TASK_CAP constants are 5 daily + 5 weekly + 5 scheduled", () => {
+  assert.equal(SHARED_TASK_CAP_DAILY, 5);
+  assert.equal(SHARED_TASK_CAP_WEEKLY, 5);
+  assert.equal(SHARED_TASK_CAP_SCHEDULED, 5);
 });
 
 test("generateTaskId returns non-empty string < 20 chars", () => {
@@ -111,6 +126,18 @@ test("findCharacterInUser returns first match across multiple accounts", () => {
   assert.equal(found.account.accountName, "alt");
 });
 
+test("findAccountInUser resolves roster names case-insensitively", () => {
+  const userDoc = {
+    accounts: [
+      { accountName: "Alt Roster" },
+      { accountName: "MainRoster" },
+    ],
+  };
+  const found = findAccountInUser(userDoc, "mainroster");
+  assert.ok(found);
+  assert.equal(found.accountName, "MainRoster");
+});
+
 test("countByReset filters by daily/weekly correctly", () => {
   const sideTasks = [
     { reset: "daily", name: "Una1", completed: false },
@@ -138,6 +165,49 @@ test("ensureSideTasks returns existing array unchanged", () => {
   const result = ensureSideTasks(character);
   assert.equal(result.length, 1);
   assert.equal(result[0].taskId, "abc");
+});
+
+test("ensureSharedTasks initializes missing account-level shared task list", () => {
+  const account = {};
+  const result = ensureSharedTasks(account);
+  assert.deepEqual(result, []);
+  assert.deepEqual(account.sharedTasks, []);
+});
+
+test("parseSharedTaskExpiresAt accepts YYYY-MM-DD and rejects invalid dates", () => {
+  assert.equal(
+    parseSharedTaskExpiresAt("2026-05-20"),
+    Date.UTC(2026, 4, 20, 23, 59, 59, 999)
+  );
+  assert.ok(Number.isNaN(parseSharedTaskExpiresAt("2026-02-31")));
+  assert.ok(Number.isNaN(parseSharedTaskExpiresAt("20-05-2026")));
+  assert.equal(parseSharedTaskExpiresAt(""), null);
+});
+
+test("scheduled shared task: Chaos Gate stays on the Monday event key after midnight PT", () => {
+  const task = { preset: "chaos_gate", reset: "scheduled", completedForKey: "" };
+  const mondayLate = new Date("2026-04-28T06:30:00.000Z"); // Mon 23:30 PDT.
+  const tuesdayEarly = new Date("2026-04-28T11:30:00.000Z"); // Tue 04:30 PDT.
+  const afterWindow = new Date("2026-04-28T13:05:00.000Z"); // Tue 06:05 PDT.
+
+  const lateState = resolveScheduledSharedTaskState(task, mondayLate);
+  const earlyState = resolveScheduledSharedTaskState(task, tuesdayEarly);
+  const afterState = resolveScheduledSharedTaskState(task, afterWindow);
+
+  assert.equal(lateState.active, true);
+  assert.equal(earlyState.active, true);
+  assert.equal(lateState.key, "chaos_gate:2026-04-27");
+  assert.equal(earlyState.key, "chaos_gate:2026-04-27");
+  assert.equal(afterState.active, false);
+});
+
+test("scheduled shared task: Field Boss follows Tue/Fri/Sun PT windows", () => {
+  const task = { preset: "field_boss", reset: "scheduled", completedForKey: "" };
+  const tuesdayNoon = new Date("2026-04-28T19:00:00.000Z"); // Tue 12:00 PDT.
+  const wednesdayNoon = new Date("2026-04-29T19:00:00.000Z"); // Wed 12:00 PDT.
+
+  assert.equal(resolveScheduledSharedTaskState(task, tuesdayNoon).active, true);
+  assert.equal(resolveScheduledSharedTaskState(task, wednesdayNoon).active, false);
 });
 
 // ---------------------------------------------------------------------------
@@ -585,12 +655,18 @@ test("resetExpiredSideTasks issues 2 updateMany calls (daily + weekly) with the 
   const now = new Date(Date.UTC(2026, 3, 22, 12, 0, 0, 0));
   const report = await service.resetExpiredSideTasks(now);
 
-  assert.equal(calls.length, 2, "expected 2 updateMany calls (daily + weekly)");
+  assert.equal(
+    calls.length,
+    4,
+    "expected 4 updateMany calls (char daily/weekly + shared daily/weekly)"
+  );
   assert.equal(report.dailyModified, 0);
   assert.equal(report.weeklyModified, 0);
+  assert.equal(report.sharedDailyModified, 0);
+  assert.equal(report.sharedWeeklyModified, 0);
   assert.equal(report.dailyStart, Date.UTC(2026, 3, 22, 10, 0, 0, 0));
 
-  const [dailyCall, weeklyCall] = calls;
+  const [dailyCall, weeklyCall, sharedDailyCall, sharedWeeklyCall] = calls;
 
   // Daily call: filters tasks with reset=daily AND lastResetAt < dailyStart.
   assert.equal(dailyCall.options.arrayFilters[0]["task.reset"], "daily");
@@ -613,6 +689,15 @@ test("resetExpiredSideTasks issues 2 updateMany calls (daily + weekly) with the 
     weeklyCall.options.arrayFilters[0]["task.lastResetAt"]["$lt"],
     Date.UTC(2026, 3, 22, 10, 0, 0, 0)
   );
+
+  assert.ok(
+    "accounts.$[].sharedTasks.$[task].completed" in sharedDailyCall.update.$set
+  );
+  assert.equal(sharedDailyCall.options.arrayFilters[0]["task.reset"], "daily");
+  assert.ok(
+    "accounts.$[].sharedTasks.$[task].completed" in sharedWeeklyCall.update.$set
+  );
+  assert.equal(sharedWeeklyCall.options.arrayFilters[0]["task.reset"], "weekly");
 });
 
 // ---------------------------------------------------------------------------
@@ -994,6 +1079,119 @@ test("add-all: skips save() entirely when no char fits (every char dup or cap)",
   // Should not throw; save is not called because added.length === 0.
   await handlers.handleRaidTaskCommand(interaction);
   assert.equal(replied, true);
+});
+
+test("shared-add: adds Chaos Gate as scheduled roster task", async () => {
+  let savedDoc = null;
+  const userDoc = {
+    discordId: "u1",
+    accounts: [
+      {
+        accountName: "main",
+        characters: [],
+        sharedTasks: [],
+      },
+    ],
+    save: async function () {
+      savedDoc = JSON.parse(JSON.stringify(this));
+    },
+  };
+  const stubEmbed = {
+    setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
+    addFields() { return this; }, setFooter() { return this; },
+  };
+  const { createRaidTaskCommand } = require("../src/commands/raid-task");
+  const handlers = createRaidTaskCommand({
+    EmbedBuilder: function () { return stubEmbed; },
+    ActionRowBuilder: class { addComponents() { return this; } },
+    ButtonBuilder: class { setCustomId() { return this; } setLabel() { return this; } setStyle() { return this; } },
+    ButtonStyle: { Danger: 4, Secondary: 2 },
+    MessageFlags: { Ephemeral: 64 },
+    User: { findOne: async () => userDoc },
+    saveWithRetry: async (fn) => fn(),
+    loadUserForAutocomplete: async () => userDoc,
+    dailyResetStartMs: () => 111,
+    weekResetStartMs: () => 222,
+  });
+
+  const interaction = {
+    user: { id: "u1" },
+    options: {
+      getSubcommand: () => "shared-add",
+      getString: (name) => {
+        if (name === "roster") return "main";
+        if (name === "preset") return "chaos_gate";
+        return null;
+      },
+    },
+    reply: async () => {},
+  };
+
+  await handlers.handleRaidTaskCommand(interaction);
+
+  assert.ok(savedDoc, "expected save() to be called");
+  const task = savedDoc.accounts[0].sharedTasks[0];
+  assert.equal(task.preset, "chaos_gate");
+  assert.equal(task.name, "Chaos Gate");
+  assert.equal(task.reset, "scheduled");
+  assert.equal(task.lastResetAt, 0);
+});
+
+test("shared-remove: deletes one roster shared task by id", async () => {
+  let savedDoc = null;
+  const userDoc = {
+    discordId: "u1",
+    accounts: [
+      {
+        accountName: "main",
+        sharedTasks: [
+          { taskId: "keep", name: "Event Shop", reset: "weekly" },
+          { taskId: "drop", name: "Chaos Gate", reset: "scheduled" },
+        ],
+      },
+    ],
+    save: async function () {
+      savedDoc = JSON.parse(JSON.stringify(this));
+    },
+  };
+  const stubEmbed = {
+    setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
+    addFields() { return this; }, setFooter() { return this; },
+  };
+  const { createRaidTaskCommand } = require("../src/commands/raid-task");
+  const handlers = createRaidTaskCommand({
+    EmbedBuilder: function () { return stubEmbed; },
+    ActionRowBuilder: class { addComponents() { return this; } },
+    ButtonBuilder: class { setCustomId() { return this; } setLabel() { return this; } setStyle() { return this; } },
+    ButtonStyle: { Danger: 4, Secondary: 2 },
+    MessageFlags: { Ephemeral: 64 },
+    User: { findOne: async () => userDoc },
+    saveWithRetry: async (fn) => fn(),
+    loadUserForAutocomplete: async () => userDoc,
+    dailyResetStartMs: () => 0,
+    weekResetStartMs: () => 0,
+  });
+
+  const interaction = {
+    user: { id: "u1" },
+    options: {
+      getSubcommand: () => "shared-remove",
+      getString: (name) => {
+        if (name === "roster") return "main";
+        if (name === "task") return "drop";
+        return null;
+      },
+    },
+    reply: async () => {},
+  };
+
+  await handlers.handleRaidTaskCommand(interaction);
+
+  assert.ok(savedDoc, "expected save() to be called");
+  assert.deepEqual(
+    savedDoc.accounts[0].sharedTasks.map((task) => task.taskId),
+    ["keep"]
+  );
 });
 
 test("resetExpiredSideTasks reports modifiedCount accurately when Mongo touches docs", async () => {

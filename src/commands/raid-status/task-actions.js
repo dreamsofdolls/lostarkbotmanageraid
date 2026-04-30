@@ -1,7 +1,14 @@
 const { normalizeName } = require("../../raid/shared");
+const { resolveScheduledSharedTaskState } = require("../../raid/shared-tasks");
 
 function parseTaskToggleValue(value) {
   if (!value || value === "noop") return { kind: "noop" };
+
+  if (value.startsWith("shared::")) {
+    const taskId = value.slice("shared::".length);
+    if (!taskId) return { kind: "invalid" };
+    return { kind: "shared", taskId };
+  }
 
   if (value.startsWith("__all__::")) {
     const parts = value.split("::");
@@ -97,8 +104,52 @@ async function toggleSingleSideTask(options) {
   });
 }
 
+async function toggleSharedTask(options) {
+  const {
+    User,
+    saveWithRetry,
+    discordId,
+    targetAccountName,
+    taskId,
+    now = new Date(),
+  } = options;
+
+  await saveWithRetry(async () => {
+    const userDocFresh = await User.findOne({ discordId });
+    if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return;
+    const account = userDocFresh.accounts.find(
+      (a) => normalizeName(a?.accountName) === normalizeName(targetAccountName)
+    );
+    if (!account || !Array.isArray(account.sharedTasks)) return;
+
+    const task = account.sharedTasks.find((t) => t?.taskId === taskId);
+    if (!task || Number(task.archivedAt) > 0) return;
+    const expiresAt = Number(task.expiresAt) || 0;
+    if (expiresAt > 0 && expiresAt < now.getTime()) return;
+
+    if (task.reset === "scheduled") {
+      const state = resolveScheduledSharedTaskState(task, now);
+      if (!state.active || !state.key) return;
+      if (task.completedForKey === state.key) {
+        task.completedForKey = "";
+        task.completed = false;
+        task.completedAt = null;
+      } else {
+        task.completedForKey = state.key;
+        task.completed = true;
+        task.completedAt = now.getTime();
+      }
+    } else {
+      task.completed = !task.completed;
+      task.completedAt = task.completed ? now.getTime() : null;
+    }
+    await userDocFresh.save();
+  });
+}
+
 module.exports = {
   parseTaskToggleValue,
   toggleBulkSideTask,
   toggleSingleSideTask,
+  toggleSharedTask,
 };
