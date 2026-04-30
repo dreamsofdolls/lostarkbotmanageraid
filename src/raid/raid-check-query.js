@@ -22,6 +22,7 @@ const {
 // 📝 Task view dropdown can render the same per-char list as
 // /raid-status. The full User document still stays out - we just opened
 // up the side-task subtree by Manager design call.
+// Roster-level accounts.sharedTasks is also projected for shared task rows.
 const RAID_CHECK_USER_BASE_QUERY = { "accounts.0": { $exists: true } };
 const RAID_CHECK_USER_QUERY_FIELDS = [
   "discordId",
@@ -32,6 +33,7 @@ const RAID_CHECK_USER_QUERY_FIELDS = [
   "accounts.accountName",
   "accounts.lastRefreshedAt",
   "accounts.lastRefreshAttemptAt",
+  "accounts.sharedTasks",
   "accounts.characters.name",
   "accounts.characters.charName",
   "accounts.characters.class",

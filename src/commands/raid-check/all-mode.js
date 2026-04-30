@@ -14,6 +14,10 @@
 const { isSupportClass, getClassEmoji } = require("../../data/Class");
 const { buildNoticeEmbed, UI } = require("../../raid/shared");
 const { buildAccountTaskFields } = require("../../raid/task-view");
+const {
+  getVisibleSharedTasks,
+  getSharedTaskDisplay,
+} = require("../../raid/shared-tasks");
 
 function createAllModeHandler({
   ActionRowBuilder,
@@ -399,8 +403,10 @@ function createAllModeHandler({
         getClassEmoji,
         truncateText,
       });
+      const now = new Date();
+      const sharedTasks = getVisibleSharedTasks(account, now.getTime());
 
-      if (fields.length > 0) {
+      if (fields.length > 0 || sharedTasks.length > 0) {
         // Visual-parity description with /raid-status Task view. Without
         // any description Discord auto-fits the embed to the inline char
         // cards alone and the result feels cramped (~520px) compared to
@@ -414,7 +420,34 @@ function createAllModeHandler({
             `Auto-reset: Daily 17:00 VN ${UI.icons.reset} Weekly 17:00 VN thứ 4.`,
           ].join("\n")
         );
-        embed.addFields(...fields);
+        if (sharedTasks.length > 0) {
+          const lines = sharedTasks.slice(0, 12).map((task) => {
+            const display = getSharedTaskDisplay(task, now);
+            const icon = display.completed ? UI.icons.done : UI.icons.pending;
+            return `${icon} ${display.emoji} **${display.name}** · ${display.status}`;
+          });
+          if (sharedTasks.length > 12) {
+            lines.push(`_+${sharedTasks.length - 12} task chung khác_`);
+          }
+          embed.addFields({
+            name: "🌟 Task chung của roster",
+            value: truncateText(lines.join("\n"), 1024),
+            inline: false,
+          });
+        }
+        const fieldBudget = sharedTasks.length > 0 ? 24 : 25;
+        const visibleFields =
+          fields.length > fieldBudget
+            ? [
+                ...fields.slice(0, fieldBudget - 1),
+                {
+                  name: "…",
+                  value: `_+${fields.length - fieldBudget + 1} character có task khác_`,
+                  inline: false,
+                },
+              ]
+            : fields;
+        if (visibleFields.length > 0) embed.addFields(...visibleFields);
       } else {
         embed.setDescription(
           `Account **${accountName}** chưa có side task nào. Member dùng \`/raid-task add\` để đăng ký chore daily/weekly.`
@@ -422,6 +455,12 @@ function createAllModeHandler({
       }
 
       const footerParts = [];
+      if (sharedTasks.length > 0) {
+        const sharedDone = sharedTasks.filter((task) =>
+          getSharedTaskDisplay(task, now).completed
+        ).length;
+        footerParts.push(`${UI.icons.done} ${sharedDone}/${sharedTasks.length} task chung`);
+      }
       if (totals.daily > 0) {
         footerParts.push(`🟢 ${totals.dailyDone}/${totals.daily} daily`);
       }

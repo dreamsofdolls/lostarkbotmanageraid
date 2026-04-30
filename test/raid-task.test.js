@@ -22,6 +22,7 @@ const {
 const {
   parseSharedTaskExpiresAt,
   resolveScheduledSharedTaskState,
+  getSharedTaskDisplay,
 } = require("../src/raid/shared-tasks");
 
 // ---------------------------------------------------------------------------
@@ -198,7 +199,11 @@ test("scheduled shared task: Chaos Gate stays on the Monday event key after midn
   assert.equal(earlyState.active, true);
   assert.equal(lateState.key, "chaos_gate:2026-04-27");
   assert.equal(earlyState.key, "chaos_gate:2026-04-27");
+  assert.equal(lateState.windowEndAtMs, Date.UTC(2026, 3, 28, 13, 0, 0, 0));
   assert.equal(afterState.active, false);
+  assert.equal(afterState.nextAtMs, Date.UTC(2026, 3, 30, 18, 0, 0, 0));
+  assert.match(getSharedTaskDisplay(task, afterWindow).status, /<t:\d+:R>/);
+  assert.match(getSharedTaskDisplay(task, afterWindow).status, /<t:\d+:f>/);
 });
 
 test("scheduled shared task: Field Boss follows Tue/Fri/Sun PT windows", () => {
@@ -563,6 +568,10 @@ test("PROJECTION: raid-check all-mode uses the shared raid-check projection", ()
     "sideTasks must be in shared projection (Manager Task view)"
   );
   assert.ok(
+    RAID_CHECK_USER_QUERY_FIELDS.includes("accounts.sharedTasks"),
+    "sharedTasks must be in shared projection (Manager Task view)"
+  );
+  assert.ok(
     RAID_CHECK_USER_QUERY_FIELDS.includes("accounts.characters.charName"),
     "charName alias must be in shared projection"
   );
@@ -612,6 +621,75 @@ test("PROJECTION: RAID_CHECK_USER_QUERY_FIELDS allowlist includes sideTasks", ()
     RAID_CHECK_USER_QUERY_FIELDS.includes("accounts.characters.sideTasks"),
     "sideTasks must be in /raid-check select projection (Manager Task view)"
   );
+  assert.ok(
+    RAID_CHECK_USER_QUERY_FIELDS.includes("accounts.sharedTasks"),
+    "sharedTasks must be in /raid-check select projection (Manager Task view)"
+  );
+});
+
+test("raid-check task view renders roster shared tasks even without side tasks", async () => {
+  const { createTaskViewUi } = require("../src/commands/raid-check/task-view-ui");
+  let selectedFields = "";
+  const userDoc = {
+    discordId: "u1",
+    discordDisplayName: "Artist",
+    accounts: [
+      {
+        accountName: "main",
+        characters: [],
+        sharedTasks: [
+          {
+            taskId: "event",
+            preset: "event_shop",
+            name: "Event Shop",
+            reset: "weekly",
+            completed: false,
+          },
+        ],
+      },
+    ],
+  };
+  class StubEmbed {
+    constructor() { this.fields = []; }
+    setColor(value) { this.color = value; return this; }
+    setTitle(value) { this.title = value; return this; }
+    setDescription(value) { this.description = value; return this; }
+    addFields(...fields) { this.fields.push(...fields.flat()); return this; }
+    setFooter(value) { this.footer = value; return this; }
+  }
+  const handlers = createTaskViewUi({
+    EmbedBuilder: StubEmbed,
+    MessageFlags: { Ephemeral: 64 },
+    UI: {
+      colors: { neutral: 0x5865f2 },
+      icons: { done: "done", pending: "todo" },
+    },
+    User: {
+      findOne: () => ({
+        select(fields) {
+          selectedFields = fields;
+          return { lean: async () => userDoc };
+        },
+      }),
+    },
+    truncateText: (value, max = 100) =>
+      value.length > max ? `${value.slice(0, max - 3)}...` : value,
+    buildPaginationRow: () => ({ row: true }),
+    RAID_CHECK_PAGINATION_SESSION_MS: 1,
+  });
+
+  let replyPayload = null;
+  const interaction = {
+    reply: async (payload) => { replyPayload = payload; },
+  };
+
+  await handlers.handleRaidCheckViewTasksClick(interaction, "u1");
+
+  assert.match(selectedFields, /accounts\.sharedTasks/);
+  const embed = replyPayload.embeds[0];
+  assert.ok(embed.fields.some((field) => /Task chung/.test(field.name)));
+  assert.ok(embed.fields.some((field) => /Event Shop/.test(field.value)));
+  assert.equal(replyPayload.flags, 64);
 });
 
 // ---------------------------------------------------------------------------

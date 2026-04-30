@@ -1,5 +1,9 @@
 const { buildNoticeEmbed } = require("../../raid/shared");
 const { buildAccountTaskFields } = require("../../raid/task-view");
+const {
+  getVisibleSharedTasks,
+  getSharedTaskDisplay,
+} = require("../../raid/shared-tasks");
 
 function createTaskViewUi(deps) {
   const {
@@ -39,7 +43,7 @@ function createTaskViewUi(deps) {
 
     const userDoc = await User.findOne({ discordId: targetDiscordId })
       .select(
-        "discordId discordUsername discordGlobalName discordDisplayName accounts.accountName accounts.characters.name accounts.characters.class accounts.characters.itemLevel accounts.characters.sideTasks"
+        "discordId discordUsername discordGlobalName discordDisplayName accounts.accountName accounts.sharedTasks accounts.characters.name accounts.characters.class accounts.characters.itemLevel accounts.characters.sideTasks"
       )
       .lean();
 
@@ -60,9 +64,10 @@ function createTaskViewUi(deps) {
     const accounts = Array.isArray(userDoc.accounts) ? userDoc.accounts : [];
     const accountsWithTasks = accounts.filter((account) => {
       const chars = Array.isArray(account?.characters) ? account.characters : [];
-      return chars.some(
+      const hasSideTasks = chars.some(
         (c) => Array.isArray(c?.sideTasks) && c.sideTasks.length > 0
       );
+      return hasSideTasks || getVisibleSharedTasks(account).length > 0;
     });
 
     if (accountsWithTasks.length === 0) {
@@ -104,8 +109,43 @@ function createTaskViewUi(deps) {
         getClassEmoji: () => "",
         truncateText,
       });
-      if (fields.length > 0) embed.addFields(...fields);
+      const now = new Date();
+      const sharedTasks = getVisibleSharedTasks(account, now.getTime());
+      if (sharedTasks.length > 0) {
+        const lines = sharedTasks.slice(0, 12).map((task) => {
+          const display = getSharedTaskDisplay(task, now);
+          const icon = display.completed ? UI.icons.done : UI.icons.pending;
+          return `${icon} ${display.emoji} **${display.name}** · ${display.status}`;
+        });
+        if (sharedTasks.length > 12) {
+          lines.push(`_+${sharedTasks.length - 12} task chung khác_`);
+        }
+        embed.addFields({
+          name: "🌟 Task chung của roster",
+          value: truncateText(lines.join("\n"), 1024),
+          inline: false,
+        });
+      }
+      const fieldBudget = sharedTasks.length > 0 ? 24 : 25;
+      const visibleFields =
+        fields.length > fieldBudget
+          ? [
+              ...fields.slice(0, fieldBudget - 1),
+              {
+                name: "…",
+                value: `_+${fields.length - fieldBudget + 1} character có task khác_`,
+                inline: false,
+              },
+            ]
+          : fields;
+      if (visibleFields.length > 0) embed.addFields(...visibleFields);
       const footerParts = [];
+      if (sharedTasks.length > 0) {
+        const sharedDone = sharedTasks.filter((task) =>
+          getSharedTaskDisplay(task, now).completed
+        ).length;
+        footerParts.push(`${UI.icons.done} ${sharedDone}/${sharedTasks.length} task chung`);
+      }
       if (totals.daily > 0) {
         footerParts.push(`${UI.icons.done} ${totals.dailyDone}/${totals.daily} daily`);
       }
