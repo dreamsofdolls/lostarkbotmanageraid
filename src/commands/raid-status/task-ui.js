@@ -60,12 +60,15 @@ function createRaidStatusTaskUi(deps) {
       if (totals.charsWithTasks === 0 && sharedTasks.length === 0) {
         embed.setDescription(
           [
-            "Account này chưa có side task/task chung nào nha.",
+            "Tớ chưa thấy side task / task chung nào ở account này nha~",
             "",
-            "**Cách thêm:** `/raid-task add character:<char> name:<tên> reset:<daily|weekly>`",
-            "**Task chung:** `/raid-task shared-add roster:<roster> preset:<event_shop|chaos_gate|field_boss>`",
-            "**Cap:** 3 daily + 5 weekly mỗi character.",
-            "**Auto-reset:** Daily 17:00 VN · Weekly 17:00 VN thứ 4.",
+            "**Side task** (gắn 1 character, cap 3 daily + 5 weekly mỗi char):",
+            "`/raid-task add action:single roster:<roster> character:<char> name:<tên> reset:<daily|weekly>`",
+            "",
+            "**Task chung** (cấp roster, mọi char trong roster share - cap 5 daily + 5 weekly + 5 scheduled):",
+            "`/raid-task shared-add roster:<roster> preset:<event_shop|chaos_gate|field_boss|custom>`",
+            "",
+            `${UI.icons.reset} Reset: Daily 17:00 VN · Weekly 17:00 VN thứ 4 · Chaos Gate / Field Boss tự bật theo lịch NA West (Pacific).`,
           ].join("\n")
         );
         return embed;
@@ -73,8 +76,8 @@ function createRaidStatusTaskUi(deps) {
 
       embed.setDescription(
         [
-          "Bấm dropdown bên dưới để toggle complete cho từng task.",
-          `Auto-reset: Daily 17:00 VN ${UI.icons.reset} Weekly 17:00 VN thứ 4.`,
+          "Bấm dropdown bên dưới để toggle complete cho từng task nha~",
+          `${UI.icons.reset} Reset: Daily 17:00 VN · Weekly 17:00 VN thứ 4 · Scheduled theo lịch NA West.`,
         ].join("\n")
       );
 
@@ -113,7 +116,7 @@ function createRaidStatusTaskUi(deps) {
         const sharedDone = sharedTasks.filter((task) =>
           getSharedTaskDisplay(task, now).completed
         ).length;
-        footerParts.push(`${UI.icons.done} ${sharedDone}/${sharedTasks.length} shared`);
+        footerParts.push(`${UI.icons.done} ${sharedDone}/${sharedTasks.length} task chung`);
       }
       if (totals.daily > 0) {
         footerParts.push(`${UI.icons.done} ${totals.dailyDone}/${totals.daily} daily`);
@@ -168,7 +171,7 @@ function createRaidStatusTaskUi(deps) {
         },
         {
           label: "Side tasks",
-          description: "Xem + toggle daily/weekly task tự đăng ký",
+          description: "Xem + toggle task riêng theo char và task chung của roster",
           value: "task",
           emoji: "📝",
           default: getCurrentView() === "task",

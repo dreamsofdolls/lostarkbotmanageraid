@@ -19,7 +19,20 @@ const {
   parseSharedTaskExpiresAt,
   getVisibleSharedTasks,
   getSharedTaskDisplay,
+  formatSharedResetLabel,
 } = require("../raid/shared-tasks");
+
+// User-facing reset label that includes the actual VN reset moment so the
+// shared-add reply / cap-reached / duplicate notices read as a complete
+// sentence instead of interpolating the raw `daily`/`weekly`/`scheduled`
+// keyword from the schema. Scheduled presets get the timezone hint since
+// they don't follow the 17:00 VN cycle.
+function formatSharedResetDetail(reset) {
+  if (reset === "daily") return "Daily (reset 17:00 VN)";
+  if (reset === "weekly") return "Weekly (reset 17:00 VN thứ 4)";
+  if (reset === SCHEDULED_RESET) return "Theo lịch NA West (Pacific)";
+  return formatSharedResetLabel(reset);
+}
 
 const TASK_CAP_DAILY = 3;
 const TASK_CAP_WEEKLY = 5;
@@ -984,7 +997,7 @@ function createRaidTaskCommand(deps) {
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
             title: "Đã đầy slot task chung",
-            description: `Roster **${resolvedRosterName}** đã có **${countForReset}/${cap}** task chung loại \`${reset}\` rồi. Xoá bớt bằng \`/raid-task shared-remove\` trước nha.`,
+            description: `Roster **${resolvedRosterName}** đầy **${countForReset}/${cap}** task chung **${formatSharedResetDetail(reset)}** rồi nha cậu. Xoá bớt bằng \`/raid-task shared-remove\` trước, rồi tớ mới gắn thêm được.`,
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -998,8 +1011,8 @@ function createRaidTaskCommand(deps) {
             type: "info",
             title: "Task chung đã tồn tại",
             description: preset.kind === "scheduled"
-              ? `Roster **${resolvedRosterName}** đã có preset **${preset.label}** rồi.`
-              : `Roster **${resolvedRosterName}** đã có task \`${taskName}\` cùng cycle \`${reset}\` rồi.`,
+              ? `Roster **${resolvedRosterName}** gắn preset **${preset.label}** từ trước rồi, tớ không add chồng nha~`
+              : `Roster **${resolvedRosterName}** đã có task \`${taskName}\` (${formatSharedResetDetail(reset)}) rồi nha. Đặt tên khác hoặc đổi cycle nếu cậu muốn add cái mới.`,
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -1008,7 +1021,7 @@ function createRaidTaskCommand(deps) {
     }
 
     const lines = [
-      "Artist đã ghi vào sổ rồi.",
+      "Artist đã ghi vào sổ rồi nha~",
       applyAllRosters
         ? `**Rosters:** ${addedRosters.length}/${targetRosterCount} roster`
         : `**Roster:** ${resolvedRosterName}`,
@@ -1020,14 +1033,14 @@ function createRaidTaskCommand(deps) {
         : []),
       `**Task:** ${preset.emoji} ${taskName}`,
       `**Loại:** ${preset.label}`,
-      `**Reset:** ${preset.kind === "scheduled" ? "Theo lịch NA West (Pacific)" : reset}`,
+      `**Reset:** ${formatSharedResetDetail(reset)}`,
     ];
     if (preset.scheduleText) lines.push(`**Lịch:** ${preset.scheduleText}`);
     if (expiresAt) {
       lines.push(`**Hết hạn:** <t:${Math.floor(expiresAt / 1000)}:D>`);
     }
     lines.push("");
-    lines.push("Vào `/raid-status` → **Side tasks** để toggle task chung.");
+    lines.push("Vào `/raid-status` → dropdown **📝 Side tasks** rồi bấm task chung trong list để toggle nha.");
 
     await interaction.reply({
       embeds: [

@@ -4,6 +4,17 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-04-30
+
+### Changed
+- `getSharedTaskDisplay` returns Vietnamese status labels (`Đang mở`, `Mở Mon 11:00 AM PT`, `Mỗi ngày`, `Mỗi tuần`) instead of mixing raw `daily`/`weekly`/`scheduled` keywords with `next ...` English prefixes. Status now reads as one consistent line in `/raid-status` Task view, the shared-task toggle dropdown, and `/raid-task shared-remove` autocomplete.
+- `/raid-task shared-add` reply, cap-reached, and duplicate notices now use `formatSharedResetDetail()` so the cycle is rendered as `Daily (reset 17:00 VN)` / `Weekly (reset 17:00 VN thứ 4)` / `Theo lịch NA West (Pacific)` instead of interpolating the raw schema keyword. Copy also restored to Artist voice (`tớ`/`Artist`, `nha~` particle).
+- `/raid-status` Task view empty state now lists both side-task and task chung commands with the correct required fields (`action:single roster:<roster>`) and both caps (3+5 per char vs 5+5+5 per roster), and notes Chaos Gate / Field Boss follow NA West (Pacific) windows.
+- `/raid-status` Task view footer label changed from `shared` to `task chung` for consistency with the section header.
+
+### Docs
+- README `/raid-task` row + headline feature bullet now mention `shared-add` / `shared-remove`, `all_rosters:true`, `expires_at`, and the NA West scheduled presets.
+
 ## 2026-04-27
 
 ### Added

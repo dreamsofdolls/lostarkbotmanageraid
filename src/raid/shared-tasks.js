@@ -232,6 +232,13 @@ function isSharedTaskCompleted(task, now = new Date()) {
   return !!task?.completed;
 }
 
+function formatSharedResetLabel(reset) {
+  if (reset === "daily") return "Mỗi ngày";
+  if (reset === "weekly") return "Mỗi tuần";
+  if (reset === SCHEDULED_RESET) return "Theo lịch";
+  return "Mỗi tuần";
+}
+
 function getSharedTaskDisplay(task, now = new Date()) {
   const preset = getSharedTaskPreset(task?.preset);
   const name = String(task?.name || preset.defaultName).trim();
@@ -242,9 +249,9 @@ function getSharedTaskDisplay(task, now = new Date()) {
       emoji: preset.emoji,
       completed: state.completed,
       status: state.active
-        ? "đang mở"
+        ? "Đang mở"
         : state.nextLabel
-          ? `next ${state.nextLabel}`
+          ? `Mở ${state.nextLabel}`
           : preset.scheduleText,
       scheduleText: preset.scheduleText,
       active: state.active,
@@ -255,8 +262,8 @@ function getSharedTaskDisplay(task, now = new Date()) {
     name,
     emoji: preset.emoji,
     completed: !!task?.completed,
-    status: task?.reset || "weekly",
-    scheduleText: task?.reset || "weekly",
+    status: formatSharedResetLabel(task?.reset),
+    scheduleText: formatSharedResetLabel(task?.reset),
     active: true,
     key: null,
   };
@@ -279,5 +286,6 @@ module.exports = {
   resolveScheduledSharedTaskState,
   isSharedTaskCompleted,
   getSharedTaskDisplay,
+  formatSharedResetLabel,
   normalizeName,
 };
