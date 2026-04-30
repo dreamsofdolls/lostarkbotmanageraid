@@ -8,6 +8,7 @@ const {
 } = require("../raid/autocomplete-helpers");
 const {
   SCHEDULED_RESET,
+  SHARED_TASK_PRESETS,
   SHARED_TASK_CAP_DAILY,
   SHARED_TASK_CAP_WEEKLY,
   SHARED_TASK_CAP_SCHEDULED,
@@ -22,6 +23,12 @@ const {
 
 const TASK_CAP_DAILY = 3;
 const TASK_CAP_WEEKLY = 5;
+const SHARED_TASK_PRESET_ORDER = [
+  "event_shop",
+  "chaos_gate",
+  "field_boss",
+  "custom",
+];
 
 function generateTaskId() {
   // 10-char base36 from random + timestamp suffix. Collision risk is
@@ -35,6 +42,40 @@ function generateTaskId() {
 
 function normalizeName(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function isLiveSharedTask(task, nowMs = Date.now()) {
+  if (!task || Number(task.archivedAt) > 0) return false;
+  const expiresAt = Number(task.expiresAt) || 0;
+  return !(expiresAt > 0 && expiresAt < nowMs);
+}
+
+function sharedTaskHasPreset(account, presetKey, nowMs = Date.now()) {
+  return ensureSharedTasks(account).some(
+    (task) => isLiveSharedTask(task, nowMs) && task?.preset === presetKey
+  );
+}
+
+function isDuplicateSharedTask(sharedTasks, preset, taskName, reset, nowMs = Date.now()) {
+  return (Array.isArray(sharedTasks) ? sharedTasks : []).some((task) => {
+    if (!isLiveSharedTask(task, nowMs)) return false;
+    if (preset.preset !== "custom" && task.preset === preset.preset) {
+      return true;
+    }
+    if (preset.kind === "scheduled") {
+      return task.preset === preset.preset;
+    }
+    return (
+      normalizeName(task.name) === normalizeName(taskName) &&
+      task.reset === reset
+    );
+  });
+}
+
+function sharedPresetLabel(preset) {
+  if (preset.preset === "chaos_gate") return "Chaos Gate (NA West PT)";
+  if (preset.preset === "field_boss") return "Field Boss (NA West PT)";
+  return preset.label;
 }
 
 function getCharacterDisplayName(character) {
@@ -244,7 +285,58 @@ function createRaidTaskCommand(deps) {
           `${display.emoji} ${display.name} · ${display.status}`,
           task.taskId
         );
-      });
+    });
+    await interaction.respond(choices).catch(() => {});
+  }
+
+  async function autocompleteSharedPreset(interaction, focused) {
+    const needle = normalizeName(focused.value || "");
+    const rosterInput = interaction.options.getString("roster") || "";
+    const userDoc = await loadUserForAutocomplete(interaction.user.id);
+    const accounts = Array.isArray(userDoc?.accounts) ? userDoc.accounts : [];
+    const selectedAccount = rosterInput
+      ? findAccountInUser(userDoc, rosterInput)
+      : null;
+    const now = Date.now();
+
+    const choices = SHARED_TASK_PRESET_ORDER
+      .map((presetKey) => SHARED_TASK_PRESETS[presetKey])
+      .filter(Boolean)
+      .map((preset) => {
+        const label = sharedPresetLabel(preset);
+        let status = "";
+        if (preset.preset === "custom") {
+          status = "có thể thêm nhiều";
+        } else if (selectedAccount) {
+          status = sharedTaskHasPreset(selectedAccount, preset.preset, now)
+            ? "đã thêm"
+            : "chưa thêm";
+        } else if (accounts.length > 0) {
+          const count = accounts.filter((account) =>
+            sharedTaskHasPreset(account, preset.preset, now)
+          ).length;
+          status = count > 0
+            ? `đã thêm ${count}/${accounts.length} roster`
+            : "chưa thêm";
+        } else {
+          status = "chưa có roster";
+        }
+
+        return {
+          label,
+          value: preset.preset,
+          choice: truncateChoice(`${label} · ${status}`, preset.preset),
+        };
+      })
+      .filter(
+        (entry) =>
+          !needle ||
+          normalizeName(entry.label).includes(needle) ||
+          normalizeName(entry.value).includes(needle)
+      )
+      .slice(0, 25)
+      .map((entry) => entry.choice);
+
     await interaction.respond(choices).catch(() => {});
   }
 
@@ -261,6 +353,10 @@ function createRaidTaskCommand(deps) {
       }
       if (focused?.name === "task") {
         await autocompleteTask(interaction, focused);
+        return;
+      }
+      if (focused?.name === "preset") {
+        await autocompleteSharedPreset(interaction, focused);
         return;
       }
       if (focused?.name === "name") {
@@ -690,6 +786,23 @@ function createRaidTaskCommand(deps) {
     const taskName = String(taskNameInput || preset.defaultName).trim();
     const expiresRaw = interaction.options.getString("expires_at", false);
     const expiresAt = parseSharedTaskExpiresAt(expiresRaw);
+    const applyAllRosters =
+      typeof interaction.options.getBoolean === "function" &&
+      interaction.options.getBoolean("all_rosters", false) === true;
+
+    if (!SHARED_TASK_PRESETS[presetKey]) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Preset không hợp lệ",
+            description: "Artist chỉ nhận các preset trong autocomplete: `event_shop`, `chaos_gate`, `field_boss`, `custom`.",
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
     if (!taskName) {
       await interaction.reply({
@@ -734,6 +847,10 @@ function createRaidTaskCommand(deps) {
     let outcome = "added";
     let resolvedRosterName = rosterName;
     let countForReset = 0;
+    let targetRosterCount = 0;
+    const addedRosters = [];
+    const skippedDup = [];
+    const skippedCap = [];
     const now = Date.now();
 
     try {
@@ -743,59 +860,70 @@ function createRaidTaskCommand(deps) {
           outcome = "no-roster";
           return;
         }
-        const account = findAccountInUser(userDoc, rosterName);
-        if (!account) {
+        const targetAccounts = applyAllRosters
+          ? userDoc.accounts.filter((account) => account?.accountName)
+          : [findAccountInUser(userDoc, rosterName)].filter(Boolean);
+        if (targetAccounts.length === 0) {
           outcome = "no-roster-match";
           return;
         }
-        resolvedRosterName = account.accountName;
-        const sharedTasks = ensureSharedTasks(account);
-        const cap = sharedTaskCapForReset(reset);
-        countForReset = countSharedTasksByReset(sharedTasks, reset, now);
-        if (countForReset >= cap) {
-          outcome = "cap-reached";
-          return;
-        }
+        targetRosterCount = targetAccounts.length;
+        resolvedRosterName = targetAccounts[0]?.accountName || rosterName;
 
-        const dup = sharedTasks.some((task) => {
-          if (!task || Number(task.archivedAt) > 0) return false;
-          const exp = Number(task.expiresAt) || 0;
-          if (exp > 0 && exp < now) return false;
-          if (preset.kind === "scheduled") {
-            return task.preset === preset.preset;
+        for (const account of targetAccounts) {
+          const sharedTasks = ensureSharedTasks(account);
+          const cap = sharedTaskCapForReset(reset);
+          const currentCount = countSharedTasksByReset(sharedTasks, reset, now);
+          if (currentCount >= cap) {
+            countForReset = currentCount;
+            skippedCap.push(`${account.accountName} (${currentCount}/${cap})`);
+            if (!applyAllRosters) {
+              outcome = "cap-reached";
+              return;
+            }
+            continue;
           }
-          return (
-            normalizeName(task.name) === normalizeName(taskName) &&
-            task.reset === reset
-          );
-        });
-        if (dup) {
-          outcome = "duplicate";
-          return;
+
+          if (isDuplicateSharedTask(sharedTasks, preset, taskName, reset, now)) {
+            skippedDup.push(account.accountName);
+            if (!applyAllRosters) {
+              outcome = "duplicate";
+              return;
+            }
+            continue;
+          }
+
+          const cycleStart =
+            reset === "daily"
+              ? dailyResetStartMs()
+              : reset === "weekly"
+                ? weekResetStartMs()
+                : 0;
+          sharedTasks.push({
+            taskId: generateTaskId(),
+            preset: preset.preset,
+            name: taskName,
+            reset,
+            completed: false,
+            completedAt: null,
+            completedForKey: "",
+            lastResetAt: cycleStart,
+            createdAt: now,
+            expiresAt,
+            archivedAt: null,
+            timezone: preset.timeZone || "America/Los_Angeles",
+          });
+          countForReset = currentCount + 1;
+          addedRosters.push(account.accountName);
         }
 
-        const cycleStart =
-          reset === "daily"
-            ? dailyResetStartMs()
-            : reset === "weekly"
-              ? weekResetStartMs()
-              : 0;
-        sharedTasks.push({
-          taskId: generateTaskId(),
-          preset: preset.preset,
-          name: taskName,
-          reset,
-          completed: false,
-          completedAt: null,
-          completedForKey: "",
-          lastResetAt: cycleStart,
-          createdAt: now,
-          expiresAt,
-          archivedAt: null,
-          timezone: preset.timeZone || "America/Los_Angeles",
-        });
-        countForReset += 1;
-        await userDoc.save();
+        if (applyAllRosters && addedRosters.length === 0) {
+          outcome = "none-added";
+          return;
+        }
+        if (addedRosters.length > 0) {
+          await userDoc.save();
+        }
       });
     } catch (error) {
       console.error("[raid-task shared-add] save failed:", error?.message || error);
@@ -819,6 +947,30 @@ function createRaidTaskCommand(deps) {
             type: "warn",
             title: "Không tìm thấy roster",
             description: `Artist không tìm thấy roster **${rosterName}** của cậu. Dùng autocomplete khi gõ field \`roster:\` để tránh sai tên nha.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (outcome === "none-added") {
+      const lines = [
+        `**Task:** ${preset.emoji} ${taskName}`,
+        `**Loại:** ${preset.label}`,
+        `**Rosters kiểm tra:** ${targetRosterCount}`,
+      ];
+      if (skippedDup.length > 0) {
+        lines.push(`**Đã có sẵn:** ${skippedDup.join(", ")}`);
+      }
+      if (skippedCap.length > 0) {
+        lines.push(`**Đầy slot:** ${skippedCap.join(", ")}`);
+      }
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "info",
+            title: "Không có roster mới được thêm",
+            description: lines.join("\n"),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -856,7 +1008,16 @@ function createRaidTaskCommand(deps) {
     }
 
     const lines = [
-      `**Roster:** ${resolvedRosterName}`,
+      "Artist đã ghi vào sổ rồi.",
+      applyAllRosters
+        ? `**Rosters:** ${addedRosters.length}/${targetRosterCount} roster`
+        : `**Roster:** ${resolvedRosterName}`,
+      ...(applyAllRosters && skippedDup.length > 0
+        ? [`**Đã có sẵn nên bỏ qua:** ${skippedDup.join(", ")}`]
+        : []),
+      ...(applyAllRosters && skippedCap.length > 0
+        ? [`**Đầy slot nên bỏ qua:** ${skippedCap.join(", ")}`]
+        : []),
       `**Task:** ${preset.emoji} ${taskName}`,
       `**Loại:** ${preset.label}`,
       `**Reset:** ${preset.kind === "scheduled" ? "Theo lịch NA West (Pacific)" : reset}`,

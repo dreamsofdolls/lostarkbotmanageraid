@@ -319,12 +319,7 @@ function createRaidCommandDefinitions({
             .setName("preset")
             .setDescription("Shared task preset")
             .setRequired(true)
-            .addChoices(
-              { name: "Event Shop", value: "event_shop" },
-              { name: "Chaos Gate (NA West PT)", value: "chaos_gate" },
-              { name: "Field Boss (NA West PT)", value: "field_boss" },
-              { name: "Custom shared task", value: "custom" }
-            )
+            .setAutocomplete(true)
         )
         .addStringOption((opt) =>
           opt
@@ -348,6 +343,12 @@ function createRaidCommandDefinitions({
           opt
             .setName("expires_at")
             .setDescription("Optional expiry date for event shops, format YYYY-MM-DD")
+            .setRequired(false)
+        )
+        .addBooleanOption((opt) =>
+          opt
+            .setName("all_rosters")
+            .setDescription("Apply this shared task to all of your saved rosters")
             .setRequired(false)
         )
     )
