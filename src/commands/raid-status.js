@@ -15,9 +15,13 @@ const {
 const {
   buildNoticeEmbed,
 } = require("../raid/shared");
+const {
+  getNextSharedTaskTransitionMs,
+} = require("../raid/shared-tasks");
 
 const STATUS_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
+const STATUS_TASK_AUTO_REFRESH_GRACE_MS = 1000;
 
 function createRaidStatusCommand(deps) {
   const {
@@ -393,6 +397,49 @@ function createRaidStatusCommand(deps) {
     const collector = message.createMessageComponentCollector({
       time: STATUS_PAGINATION_SESSION_MS,
     });
+    const sessionExpiresAtMs = Date.now() + STATUS_PAGINATION_SESSION_MS;
+    let collectorEnded = false;
+    let taskAutoRefreshTimer = null;
+
+    const clearTaskAutoRefresh = () => {
+      if (taskAutoRefreshTimer) {
+        clearTimeout(taskAutoRefreshTimer);
+        taskAutoRefreshTimer = null;
+      }
+    };
+
+    const scheduleTaskAutoRefresh = () => {
+      clearTaskAutoRefresh();
+      if (collectorEnded || currentView !== "task") return;
+
+      const nextTransitionMs = getNextSharedTaskTransitionMs(
+        accounts[currentPage],
+        new Date()
+      );
+      if (!nextTransitionMs) return;
+
+      const fireAtMs = nextTransitionMs + STATUS_TASK_AUTO_REFRESH_GRACE_MS;
+      if (fireAtMs >= sessionExpiresAtMs) return;
+
+      const delayMs = Math.max(
+        STATUS_TASK_AUTO_REFRESH_GRACE_MS,
+        fireAtMs - Date.now()
+      );
+      taskAutoRefreshTimer = setTimeout(async () => {
+        taskAutoRefreshTimer = null;
+        if (collectorEnded || currentView !== "task") return;
+        try {
+          await interaction.editReply({
+            embeds: [buildCurrentEmbed()],
+            components: buildComponents(false),
+          });
+        } catch (err) {
+          console.warn("[raid-status task auto-refresh] edit failed:", err?.message || err);
+          return;
+        }
+        scheduleTaskAutoRefresh();
+      }, delayMs);
+    };
 
     collector.on("collect", async (component) => {
       if (component.user.id !== interaction.user.id) {
@@ -625,13 +672,16 @@ function createRaidStatusCommand(deps) {
         return;
       }
 
-      await component.update({
+      const updated = await component.update({
         embeds: [buildCurrentEmbed()],
         components: buildComponents(false),
-      }).catch(() => {});
+      }).then(() => true).catch(() => false);
+      if (updated) scheduleTaskAutoRefresh();
     });
 
     collector.on("end", async () => {
+      collectorEnded = true;
+      clearTaskAutoRefresh();
       try {
         const expiredFooter =
           `⏱️ Session đã hết hạn (${STATUS_PAGINATION_SESSION_MS / 1000}s) · Dùng /raid-status để xem lại`;
