@@ -154,6 +154,31 @@ function shiftLocalDate(parts, deltaDays) {
   };
 }
 
+function zonedDateTimeToUtcMs(parts, hour, minute, timeZone = PACIFIC_TIME_ZONE) {
+  const targetWallMs = Date.UTC(parts.year, parts.month - 1, parts.day, hour, minute);
+  let guessMs = targetWallMs;
+  for (let i = 0; i < 4; i += 1) {
+    const current = getZonedParts(new Date(guessMs), timeZone);
+    const currentWallMs = Date.UTC(
+      current.year,
+      current.month - 1,
+      current.day,
+      current.hour,
+      current.minute
+    );
+    const deltaMs = currentWallMs - targetWallMs;
+    if (deltaMs === 0) break;
+    guessMs -= deltaMs;
+  }
+  return guessMs;
+}
+
+function formatDiscordTimestamp(ms, style = "f") {
+  const value = Number(ms);
+  if (!Number.isFinite(value) || value <= 0) return "";
+  return `<t:${Math.floor(value / 1000)}:${style}>`;
+}
+
 function pad2(n) {
   return String(n).padStart(2, "0");
 }
@@ -192,8 +217,19 @@ function resolveScheduledSharedTaskState(task, now = new Date()) {
   const active = !!anchor;
   const key = active ? scheduledTaskKey(task, anchor) : null;
   const completed = active && task?.completedForKey === key;
+  const endHour = Math.floor(preset.endMinuteExclusive / 60);
+  const endMinute = preset.endMinuteExclusive % 60;
+  const windowEndAtMs = anchor
+    ? zonedDateTimeToUtcMs(
+        shiftLocalDate(anchor, 1),
+        endHour,
+        endMinute,
+        preset.timeZone
+      )
+    : null;
 
   let nextLabel = "";
+  let nextAtMs = null;
   if (!active) {
     let next = null;
     if (
@@ -212,6 +248,12 @@ function resolveScheduledSharedTaskState(task, now = new Date()) {
     }
     if (next) {
       nextLabel = `${WEEKDAY_SHORT[next.weekday]} 11:00 AM PT`;
+      nextAtMs = zonedDateTimeToUtcMs(
+        next,
+        Math.floor(preset.startMinute / 60),
+        preset.startMinute % 60,
+        preset.timeZone
+      );
     }
   }
 
@@ -222,14 +264,9 @@ function resolveScheduledSharedTaskState(task, now = new Date()) {
     anchorDateKey: anchor ? localDateKey(anchor) : "",
     scheduleText: preset.scheduleText,
     nextLabel,
+    nextAtMs,
+    windowEndAtMs,
   };
-}
-
-function isSharedTaskCompleted(task, now = new Date()) {
-  if (task?.reset === SCHEDULED_RESET) {
-    return resolveScheduledSharedTaskState(task, now).completed;
-  }
-  return !!task?.completed;
 }
 
 function formatSharedResetLabel(reset) {
@@ -249,13 +286,17 @@ function getSharedTaskDisplay(task, now = new Date()) {
       emoji: preset.emoji,
       completed: state.completed,
       status: state.active
-        ? "Đang mở"
-        : state.nextLabel
-          ? `Mở ${state.nextLabel}`
+        ? `Đang mở${state.windowEndAtMs ? ` · đóng ${formatDiscordTimestamp(state.windowEndAtMs, "R")}` : ""}`
+        : state.nextAtMs
+          ? `Mở ${formatDiscordTimestamp(state.nextAtMs, "R")} · ${formatDiscordTimestamp(state.nextAtMs, "f")}`
+          : state.nextLabel
+            ? `Mở ${state.nextLabel}`
           : preset.scheduleText,
       scheduleText: preset.scheduleText,
       active: state.active,
       key: state.key,
+      nextAtMs: state.nextAtMs,
+      windowEndAtMs: state.windowEndAtMs,
     };
   }
   return {
@@ -284,7 +325,6 @@ module.exports = {
   isSharedTaskExpired,
   getVisibleSharedTasks,
   resolveScheduledSharedTaskState,
-  isSharedTaskCompleted,
   getSharedTaskDisplay,
   formatSharedResetLabel,
   normalizeName,
