@@ -34,8 +34,9 @@ const SHARED_TASK_PRESETS = Object.freeze({
     timeZone: PACIFIC_TIME_ZONE,
     activeDays: [1, 4, 6, 0],
     startMinute: 11 * 60,
+    slotMinutes: 60,
     endMinuteExclusive: 6 * 60,
-    scheduleText: "Mon/Thu/Sat/Sun · 11 AM-5 AM PT",
+    scheduleText: "Mon/Thu/Sat/Sun hourly 11 AM-5 AM PT",
   }),
   field_boss: Object.freeze({
     preset: "field_boss",
@@ -47,8 +48,9 @@ const SHARED_TASK_PRESETS = Object.freeze({
     timeZone: PACIFIC_TIME_ZONE,
     activeDays: [2, 5, 0],
     startMinute: 11 * 60,
+    slotMinutes: 60,
     endMinuteExclusive: 6 * 60,
-    scheduleText: "Tue/Fri/Sun · 11 AM-5 AM PT",
+    scheduleText: "Tue/Fri/Sun hourly 11 AM-5 AM PT",
   }),
 });
 
@@ -192,6 +194,56 @@ function scheduledTaskKey(task, anchorParts) {
   return `${preset.preset}:${localDateKey(anchorParts)}`;
 }
 
+function scheduleWindowDurationMinutes(preset) {
+  if (preset.endMinuteExclusive > preset.startMinute) {
+    return preset.endMinuteExclusive - preset.startMinute;
+  }
+  return 24 * 60 - preset.startMinute + preset.endMinuteExclusive;
+}
+
+function getScheduleSlotMinutes(preset) {
+  const value = Number(preset.slotMinutes);
+  return Number.isFinite(value) && value > 0
+    ? value
+    : scheduleWindowDurationMinutes(preset);
+}
+
+function utcMsFromAnchorRelativeMinute(anchorParts, relativeMinute, timeZone) {
+  const dayOffset = Math.floor(relativeMinute / (24 * 60));
+  const minuteOfDay = relativeMinute % (24 * 60);
+  const parts = shiftLocalDate(anchorParts, dayOffset);
+  return zonedDateTimeToUtcMs(
+    parts,
+    Math.floor(minuteOfDay / 60),
+    minuteOfDay % 60,
+    timeZone
+  );
+}
+
+function resolveActiveScheduleWindow(preset, parts) {
+  const minuteOfDay = parts.hour * 60 + parts.minute;
+  const windowDuration = scheduleWindowDurationMinutes(preset);
+  if (
+    preset.activeDays.includes(parts.weekday) &&
+    minuteOfDay >= preset.startMinute
+  ) {
+    const elapsedMinutes = minuteOfDay - preset.startMinute;
+    if (elapsedMinutes < windowDuration) {
+      return { anchor: parts, elapsedMinutes, windowDuration };
+    }
+  }
+
+  const yesterday = shiftLocalDate(parts, -1);
+  if (preset.activeDays.includes(yesterday.weekday)) {
+    const elapsedMinutes = 24 * 60 - preset.startMinute + minuteOfDay;
+    if (elapsedMinutes >= 0 && elapsedMinutes < windowDuration) {
+      return { anchor: yesterday, elapsedMinutes, windowDuration };
+    }
+  }
+
+  return null;
+}
+
 function resolveScheduledSharedTaskState(task, now = new Date()) {
   const preset = getSharedTaskPreset(task?.preset);
   if (preset.kind !== "scheduled") {
@@ -205,25 +257,45 @@ function resolveScheduledSharedTaskState(task, now = new Date()) {
 
   const parts = getZonedParts(now, preset.timeZone);
   const minuteOfDay = parts.hour * 60 + parts.minute;
-  const activeToday =
-    preset.activeDays.includes(parts.weekday) &&
-    minuteOfDay >= preset.startMinute;
-  const yesterday = shiftLocalDate(parts, -1);
-  const activeFromYesterday =
-    preset.activeDays.includes(yesterday.weekday) &&
-    minuteOfDay < preset.endMinuteExclusive;
-
-  const anchor = activeToday ? parts : activeFromYesterday ? yesterday : null;
-  const active = !!anchor;
+  const activeWindow = resolveActiveScheduleWindow(preset, parts);
+  const anchor = activeWindow?.anchor || null;
+  const active = !!activeWindow;
   const key = active ? scheduledTaskKey(task, anchor) : null;
   const completed = active && task?.completedForKey === key;
-  const endHour = Math.floor(preset.endMinuteExclusive / 60);
-  const endMinute = preset.endMinuteExclusive % 60;
-  const windowEndAtMs = anchor
-    ? zonedDateTimeToUtcMs(
-        shiftLocalDate(anchor, 1),
-        endHour,
-        endMinute,
+  const slotMinutes = getScheduleSlotMinutes(preset);
+  const slotOffset = activeWindow
+    ? Math.floor(activeWindow.elapsedMinutes / slotMinutes) * slotMinutes
+    : 0;
+  const slotStartRelativeMinute = active
+    ? preset.startMinute + slotOffset
+    : null;
+  const slotEndRelativeMinute = active
+    ? preset.startMinute + Math.min(
+        slotOffset + slotMinutes,
+        activeWindow.windowDuration
+      )
+    : null;
+  const windowEndRelativeMinute = active
+    ? preset.startMinute + activeWindow.windowDuration
+    : null;
+  const slotStartAtMs = active
+    ? utcMsFromAnchorRelativeMinute(
+        anchor,
+        slotStartRelativeMinute,
+        preset.timeZone
+      )
+    : null;
+  const slotEndAtMs = active
+    ? utcMsFromAnchorRelativeMinute(
+        anchor,
+        slotEndRelativeMinute,
+        preset.timeZone
+      )
+    : null;
+  const windowEndAtMs = active
+    ? utcMsFromAnchorRelativeMinute(
+        anchor,
+        windowEndRelativeMinute,
         preset.timeZone
       )
     : null;
@@ -265,7 +337,10 @@ function resolveScheduledSharedTaskState(task, now = new Date()) {
     scheduleText: preset.scheduleText,
     nextLabel,
     nextAtMs,
+    slotStartAtMs,
+    slotEndAtMs,
     windowEndAtMs,
+    nextTransitionAtMs: active ? slotEndAtMs : nextAtMs,
   };
 }
 
@@ -281,21 +356,31 @@ function getSharedTaskDisplay(task, now = new Date()) {
   const name = String(task?.name || preset.defaultName).trim();
   if (task?.reset === SCHEDULED_RESET) {
     const state = resolveScheduledSharedTaskState(task, now);
+    const activeEndsAtMs = state.slotEndAtMs || state.windowEndAtMs;
+    const status = state.active
+      ? `Đang mở${activeEndsAtMs ? ` · lượt này đóng ${formatDiscordTimestamp(activeEndsAtMs, "R")}` : ""}`
+      : state.nextAtMs
+        ? `Mở ${formatDiscordTimestamp(state.nextAtMs, "R")} · ${formatDiscordTimestamp(state.nextAtMs, "f")}`
+        : state.nextLabel
+          ? `Mở ${state.nextLabel}`
+          : preset.scheduleText;
+    const optionStatus = state.active
+      ? "Đang mở"
+      : state.nextLabel
+        ? `Mở ${state.nextLabel}`
+        : preset.scheduleText;
     return {
       name,
       emoji: preset.emoji,
       completed: state.completed,
-      status: state.active
-        ? `Đang mở${state.windowEndAtMs ? ` · đóng ${formatDiscordTimestamp(state.windowEndAtMs, "R")}` : ""}`
-        : state.nextAtMs
-          ? `Mở ${formatDiscordTimestamp(state.nextAtMs, "R")} · ${formatDiscordTimestamp(state.nextAtMs, "f")}`
-          : state.nextLabel
-            ? `Mở ${state.nextLabel}`
-          : preset.scheduleText,
+      status,
+      optionStatus,
       scheduleText: preset.scheduleText,
       active: state.active,
       key: state.key,
       nextAtMs: state.nextAtMs,
+      slotStartAtMs: state.slotStartAtMs,
+      slotEndAtMs: state.slotEndAtMs,
       windowEndAtMs: state.windowEndAtMs,
     };
   }
@@ -304,6 +389,7 @@ function getSharedTaskDisplay(task, now = new Date()) {
     emoji: preset.emoji,
     completed: !!task?.completed,
     status: formatSharedResetLabel(task?.reset),
+    optionStatus: formatSharedResetLabel(task?.reset),
     scheduleText: formatSharedResetLabel(task?.reset),
     active: true,
     key: null,
@@ -316,7 +402,9 @@ function getNextSharedTaskTransitionMs(account, now = new Date()) {
   for (const task of getVisibleSharedTasks(account, nowMs)) {
     if (task?.reset !== SCHEDULED_RESET) continue;
     const state = resolveScheduledSharedTaskState(task, now);
-    const candidateMs = state.active ? state.windowEndAtMs : state.nextAtMs;
+    const candidateMs =
+      state.nextTransitionAtMs ||
+      (state.active ? state.windowEndAtMs : state.nextAtMs);
     if (!Number.isFinite(candidateMs) || candidateMs <= nowMs) continue;
     if (nextMs === null || candidateMs < nextMs) {
       nextMs = candidateMs;

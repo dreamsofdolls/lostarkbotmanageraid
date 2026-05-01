@@ -68,7 +68,7 @@ function createRaidStatusTaskUi(deps) {
             "**Task chung** (cấp roster, mọi char trong roster share - cap 5 daily + 5 weekly + 5 scheduled):",
             "`/raid-task shared-add roster:<roster> preset:<event_shop|chaos_gate|field_boss|custom>`",
             "",
-            `${UI.icons.reset} Reset: Daily 17:00 VN · Weekly 17:00 VN thứ 4 · Chaos Gate / Field Boss tự bật theo lịch NA West (Pacific).`,
+            `${UI.icons.reset} Reset: Daily 17:00 VN · Weekly 17:00 VN thứ 4 · Chaos Gate / Field Boss tự bật hourly theo lịch NA West (Pacific).`,
           ].join("\n")
         );
         return embed;
@@ -77,7 +77,7 @@ function createRaidStatusTaskUi(deps) {
       embed.setDescription(
         [
           "Bấm dropdown bên dưới để toggle complete cho từng task nha~",
-          `${UI.icons.reset} Reset: Daily 17:00 VN · Weekly 17:00 VN thứ 4 · Scheduled theo lịch NA West.`,
+          `${UI.icons.reset} Reset: Daily 17:00 VN · Weekly 17:00 VN thứ 4 · Scheduled hourly theo lịch NA West.`,
         ].join("\n")
       );
 
@@ -146,7 +146,10 @@ function createRaidStatusTaskUi(deps) {
         const display = getSharedTaskDisplay(task, now);
         const icon = display.completed ? UI.icons.done : UI.icons.pending;
         return {
-          label: truncateText(`${icon} ${display.name} · ${display.status}`, 100),
+          label: truncateText(
+            `${icon} ${display.name} · ${display.optionStatus || display.status}`,
+            100
+          ),
           value: `shared::${task.taskId}`.slice(0, 100),
           emoji: display.emoji,
         };
