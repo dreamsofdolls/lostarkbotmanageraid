@@ -44,8 +44,8 @@ const sideTaskSchema = new mongoose.Schema(
 
 // Account-level checklist items that are not tied to a specific character:
 // event shops, Chaos Gate, Field Boss, and similar roster chores. Scheduled
-// presets use `completedForKey` so a completion belongs to one event-day
-// window instead of staying done forever. Hourly spawns only affect display
+// presets use `completedForKey` so a completion belongs to one daily-reset
+// cycle instead of staying done forever. Hourly spawns only affect display
 // refresh timing; they do not force users to re-complete the task every hour.
 const sharedTaskSchema = new mongoose.Schema(
   {
