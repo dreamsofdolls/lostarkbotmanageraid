@@ -295,7 +295,7 @@ function createRaidTaskCommand(deps) {
       .map((task) => {
         const display = getSharedTaskDisplay(task, now);
         return truncateChoice(
-          `${display.emoji} ${display.name} · ${display.status}`,
+          `${display.emoji} ${display.name} · ${display.optionStatus || display.status}`,
           task.taskId
         );
     });

@@ -186,7 +186,7 @@ test("parseSharedTaskExpiresAt accepts YYYY-MM-DD and rejects invalid dates", ()
   assert.equal(parseSharedTaskExpiresAt(""), null);
 });
 
-test("scheduled shared task: Chaos Gate stays on the Monday event key after midnight PT", () => {
+test("scheduled shared task: Chaos Gate stays on the event-day key but transitions hourly", () => {
   const task = { preset: "chaos_gate", reset: "scheduled", completedForKey: "" };
   const mondayLate = new Date("2026-04-28T06:30:00.000Z"); // Mon 23:30 PDT.
   const tuesdayEarly = new Date("2026-04-28T11:30:00.000Z"); // Tue 04:30 PDT.
@@ -200,9 +200,16 @@ test("scheduled shared task: Chaos Gate stays on the Monday event key after midn
   assert.equal(earlyState.active, true);
   assert.equal(lateState.key, "chaos_gate:2026-04-27");
   assert.equal(earlyState.key, "chaos_gate:2026-04-27");
+  assert.equal(lateState.slotEndAtMs, Date.UTC(2026, 3, 28, 7, 0, 0, 0));
+  assert.equal(earlyState.slotEndAtMs, Date.UTC(2026, 3, 28, 12, 0, 0, 0));
   assert.equal(lateState.windowEndAtMs, Date.UTC(2026, 3, 28, 13, 0, 0, 0));
   assert.equal(afterState.active, false);
   assert.equal(afterState.nextAtMs, Date.UTC(2026, 3, 30, 18, 0, 0, 0));
+  assert.match(
+    getSharedTaskDisplay(task, mondayLate).status,
+    new RegExp(`<t:${Math.floor(lateState.slotEndAtMs / 1000)}:R>`)
+  );
+  assert.doesNotMatch(getSharedTaskDisplay(task, mondayLate).optionStatus, /<t:/);
   assert.match(getSharedTaskDisplay(task, afterWindow).status, /<t:\d+:R>/);
   assert.match(getSharedTaskDisplay(task, afterWindow).status, /<t:\d+:f>/);
 });
@@ -229,7 +236,7 @@ test("scheduled shared task: next transition helper returns nearest open or clos
 
   assert.equal(
     getNextSharedTaskTransitionMs(account, mondayLate),
-    Date.UTC(2026, 3, 28, 13, 0, 0, 0)
+    Date.UTC(2026, 3, 28, 7, 0, 0, 0)
   );
   assert.equal(
     getNextSharedTaskTransitionMs(account, afterWindow),
