@@ -205,6 +205,13 @@ function formatVietnamPacificScheduleLabel(ms) {
   ].join(" · ");
 }
 
+function formatVietnamScheduleLabel(ms) {
+  const value = Number(ms);
+  if (!Number.isFinite(value) || value <= 0) return "";
+  const vn = getZonedParts(new Date(value), VIETNAM_TIME_ZONE);
+  return `${WEEKDAY_VN[vn.weekday]} ${pad2(vn.hour)}:${pad2(vn.minute)} VN`;
+}
+
 function localDateKey(parts) {
   return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
 }
@@ -402,20 +409,25 @@ function getSharedTaskDisplay(task, now = new Date()) {
   if (task?.reset === SCHEDULED_RESET) {
     const state = resolveScheduledSharedTaskState(task, now);
     const activeEndsAtMs = state.slotEndAtMs || state.windowEndAtMs;
+    const activeScheduleLabel = activeEndsAtMs
+      ? formatVietnamPacificScheduleLabel(activeEndsAtMs)
+      : "";
+    const nextScheduleLabel = state.nextAtMs
+      ? formatVietnamPacificScheduleLabel(state.nextAtMs)
+      : state.nextLabel;
     const status = state.active
-      ? `Đang mở${activeEndsAtMs ? ` · lượt này đóng ${formatDiscordTimestamp(activeEndsAtMs, "R")}` : ""}`
+      ? `Đang mở${activeEndsAtMs ? ` · lượt này đóng ${formatDiscordTimestamp(activeEndsAtMs, "R")} · ${activeScheduleLabel}` : ""}`
       : state.nextAtMs
-        ? `Mở ${formatDiscordTimestamp(state.nextAtMs, "R")} · ${formatDiscordTimestamp(state.nextAtMs, "f")}`
-        : state.nextLabel
-          ? `Mở ${state.nextLabel}`
+        ? `Mở ${formatDiscordTimestamp(state.nextAtMs, "R")} · ${formatDiscordTimestamp(state.nextAtMs, "f")} · ${nextScheduleLabel}`
+        : nextScheduleLabel
+          ? `Mở ${nextScheduleLabel}`
           : preset.scheduleText;
-    const activeOptionStatus = activeEndsAtMs
-      ? `Đang mở · đóng ${formatVietnamPacificScheduleLabel(activeEndsAtMs)}`
-      : "Đang mở";
     const optionStatus = state.active
-      ? activeOptionStatus
-      : state.nextLabel
-        ? `Mở ${state.nextLabel}`
+      ? "Đang mở"
+      : state.nextAtMs
+        ? `Mở ${formatVietnamScheduleLabel(state.nextAtMs)}`
+        : nextScheduleLabel
+          ? `Mở ${nextScheduleLabel}`
         : preset.scheduleText;
     return {
       name,
