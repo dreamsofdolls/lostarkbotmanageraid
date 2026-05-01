@@ -1,6 +1,7 @@
 "use strict";
 
 const PACIFIC_TIME_ZONE = "America/Los_Angeles";
+const VIETNAM_TIME_ZONE = "Asia/Ho_Chi_Minh";
 const SHARED_TASK_CAP_DAILY = 5;
 const SHARED_TASK_CAP_WEEKLY = 5;
 const SHARED_TASK_CAP_SCHEDULED = 5;
@@ -55,6 +56,7 @@ const SHARED_TASK_PRESETS = Object.freeze({
 });
 
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAY_VN = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 
 function normalizeName(value) {
   return String(value || "").trim().toLowerCase();
@@ -183,6 +185,24 @@ function formatDiscordTimestamp(ms, style = "f") {
 
 function pad2(n) {
   return String(n).padStart(2, "0");
+}
+
+function formatTwelveHour(parts) {
+  const hour = parts.hour % 12 || 12;
+  const suffix = parts.hour < 12 ? "AM" : "PM";
+  return `${hour}:${pad2(parts.minute)} ${suffix}`;
+}
+
+function formatVietnamPacificScheduleLabel(ms) {
+  const value = Number(ms);
+  if (!Number.isFinite(value) || value <= 0) return "";
+  const date = new Date(value);
+  const vn = getZonedParts(date, VIETNAM_TIME_ZONE);
+  const pt = getZonedParts(date, PACIFIC_TIME_ZONE);
+  return [
+    `${WEEKDAY_VN[vn.weekday]} ${pad2(vn.hour)}:${pad2(vn.minute)} VN`,
+    `${WEEKDAY_SHORT[pt.weekday]} ${formatTwelveHour(pt)} PT`,
+  ].join(" · ");
 }
 
 function localDateKey(parts) {
@@ -344,13 +364,13 @@ function resolveScheduledSharedTaskState(task, now = new Date()) {
       }
     }
     if (next) {
-      nextLabel = `${WEEKDAY_SHORT[next.weekday]} 11:00 AM PT`;
       nextAtMs = zonedDateTimeToUtcMs(
         next,
         Math.floor(preset.startMinute / 60),
         preset.startMinute % 60,
         preset.timeZone
       );
+      nextLabel = formatVietnamPacificScheduleLabel(nextAtMs);
     }
   }
 
@@ -389,8 +409,11 @@ function getSharedTaskDisplay(task, now = new Date()) {
         : state.nextLabel
           ? `Mở ${state.nextLabel}`
           : preset.scheduleText;
+    const activeOptionStatus = activeEndsAtMs
+      ? `Đang mở · đóng ${formatVietnamPacificScheduleLabel(activeEndsAtMs)}`
+      : "Đang mở";
     const optionStatus = state.active
-      ? "Đang mở"
+      ? activeOptionStatus
       : state.nextLabel
         ? `Mở ${state.nextLabel}`
         : preset.scheduleText;
@@ -440,6 +463,7 @@ function getNextSharedTaskTransitionMs(account, now = new Date()) {
 
 module.exports = {
   PACIFIC_TIME_ZONE,
+  VIETNAM_TIME_ZONE,
   SCHEDULED_RESET,
   SHARED_TASK_PRESETS,
   SHARED_TASK_CAP_DAILY,
