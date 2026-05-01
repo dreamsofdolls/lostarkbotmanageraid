@@ -77,3 +77,30 @@ test("hasStaleAccountRefreshes returns false for fresh accounts and true for exp
   assert.equal(service.hasStaleAccountRefreshes(freshUser), false);
   assert.equal(service.hasStaleAccountRefreshes(makeStaleUser()), true);
 });
+
+test("collectStaleAccountRefreshes summarizes repeated HTTP 429 seed failures", async () => {
+  const service = makeService(async () => {
+    throw new Error("LostArk Bible HTTP 429");
+  });
+  const user = makeStaleUser();
+  user.accounts[0].characters.push(
+    { name: "Beta", class: "Bard", itemLevel: 1700 },
+    { name: "Gamma", class: "Bard", itemLevel: 1700 }
+  );
+
+  const originalWarn = console.warn;
+  const warnings = [];
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    const result = await service.collectStaleAccountRefreshes(user);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].attempted, true);
+    assert.equal(result[0].fetchedChars, null);
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /account "Alpha" 3 seed\(s\) hit LostArk Bible HTTP 429/);
+  assert.doesNotMatch(warnings[0], /seed "Alpha" failed/);
+});

@@ -1,5 +1,15 @@
 const ROSTER_REFRESH_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const ROSTER_REFRESH_FAILURE_COOLDOWN_MS = 5 * 60 * 1000;
+const REFRESH_SEED_FAILURE_DETAIL_LIMIT = 3;
+
+function getErrorMessage(err) {
+  return err?.message || String(err || "unknown error");
+}
+
+function isRateLimitMessage(message) {
+  return /\bHTTP 429\b/i.test(String(message || "")) ||
+    /rate.?limit/i.test(String(message || ""));
+}
 
 function createRosterRefreshService(deps) {
   const {
@@ -78,6 +88,8 @@ function createRosterRefreshService(deps) {
       .filter(Boolean);
 
     let attempted = false;
+    let zeroOverlapCount = 0;
+    const seedFailures = [];
     for (const seed of seeds) {
       try {
         attempted = true;
@@ -90,9 +102,7 @@ function createRosterRefreshService(deps) {
           savedNames.some((n) => fetchedNames.has(n)) ||
           savedFoldedNames.some((n) => fetchedFoldedNames.has(n));
         if (!hasOverlap) {
-          console.warn(
-            `[refresh] seed "${seed}" returned ${fetched.length} chars but zero overlap with saved roster - trying next seed.`
-          );
+          zeroOverlapCount += 1;
           continue;
         }
 
@@ -107,7 +117,30 @@ function createRosterRefreshService(deps) {
 
         return { accountName: originalName, fetchedChars: fetched, resolvedSeed, attempted };
       } catch (err) {
-        console.warn(`[refresh] seed "${seed}" failed: ${err?.message || err}`);
+        seedFailures.push({ seed, message: getErrorMessage(err) });
+      }
+    }
+
+    if (zeroOverlapCount > 0) {
+      console.warn(
+        `[refresh] account "${originalName || "(unnamed roster)"}" skipped ${zeroOverlapCount} seed(s) with zero overlap - refresh not applied.`
+      );
+    }
+    if (seedFailures.length > 0) {
+      const rateLimited = seedFailures.filter((entry) => isRateLimitMessage(entry.message));
+      const otherFailures = seedFailures.filter((entry) => !isRateLimitMessage(entry.message));
+      if (rateLimited.length > 0) {
+        console.warn(
+          `[refresh] account "${originalName || "(unnamed roster)"}" ${rateLimited.length} seed(s) hit LostArk Bible HTTP 429 - suppressed per-seed logs.`
+        );
+      }
+      for (const entry of otherFailures.slice(0, REFRESH_SEED_FAILURE_DETAIL_LIMIT)) {
+        console.warn(`[refresh] seed "${entry.seed}" failed: ${entry.message}`);
+      }
+      if (otherFailures.length > REFRESH_SEED_FAILURE_DETAIL_LIMIT) {
+        console.warn(
+          `[refresh] account "${originalName || "(unnamed roster)"}" ${otherFailures.length - REFRESH_SEED_FAILURE_DETAIL_LIMIT} additional seed failure(s) suppressed.`
+        );
       }
     }
 
