@@ -216,13 +216,15 @@ test("scheduled shared task: Chaos Gate completion key follows daily reset and t
   const activeDisplay = getSharedTaskDisplay(task, mondayLate);
   const inactiveDisplay = getSharedTaskDisplay(task, afterWindow);
   assert.doesNotMatch(activeDisplay.optionStatus, /<t:/);
-  assert.match(activeDisplay.optionStatus, /T3 14:00 VN · Tue 12:00 AM PT/);
+  assert.equal(activeDisplay.optionStatus, "Đang mở");
+  assert.match(activeDisplay.status, /T3 14:00 VN · Tue 12:00 AM PT/);
   assert.match(inactiveDisplay.status, /<t:\d+:R>/);
   assert.match(inactiveDisplay.status, /<t:\d+:f>/);
   assert.match(
-    inactiveDisplay.optionStatus,
-    /Mở T6 01:00 VN · Thu 11:00 AM PT/
+    inactiveDisplay.status,
+    /T6 01:00 VN · Thu 11:00 AM PT/
   );
+  assert.equal(inactiveDisplay.optionStatus, "Mở T6 01:00 VN");
 });
 
 test("scheduled shared task: Field Boss follows Tue/Fri/Sun PT windows", () => {
