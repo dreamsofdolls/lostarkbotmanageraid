@@ -397,6 +397,14 @@ function createRaidStatusCommand(deps) {
     const collector = message.createMessageComponentCollector({
       time: STATUS_PAGINATION_SESSION_MS,
     });
+    const editDrivenComponentIds = new Set([
+      "status:prev",
+      "status:next",
+      "status-filter:raid",
+      "status-view:toggle",
+      "status-task:char-filter",
+      "status-task:toggle",
+    ]);
     const sessionExpiresAtMs = Date.now() + STATUS_PAGINATION_SESSION_MS;
     let collectorEnded = false;
     let taskAutoRefreshTimer = null;
@@ -457,6 +465,14 @@ function createRaidStatusCommand(deps) {
       }
 
       const id = component.customId || "";
+      if (editDrivenComponentIds.has(id)) {
+        const deferred = await component.deferUpdate().then(() => true).catch((err) => {
+          console.warn("[raid-status component] defer failed:", err?.message || err);
+          return false;
+        });
+        if (!deferred) return;
+      }
+
       if (id === "status:prev") {
         currentPage = Math.max(0, currentPage - 1);
       } else if (id === "status:next") {
@@ -604,13 +620,11 @@ function createRaidStatusCommand(deps) {
             : "";
         const parsed = parseTaskToggleValue(value);
         if (parsed.kind === "noop" || parsed.kind === "invalid") {
-          await component.deferUpdate().catch(() => {});
           return;
         }
 
         const targetAccountName = accounts[currentPage]?.accountName || "";
         if (!targetAccountName) {
-          await component.deferUpdate().catch(() => {});
           return;
         }
 
@@ -672,10 +686,13 @@ function createRaidStatusCommand(deps) {
         return;
       }
 
-      const updated = await component.update({
+      const updated = await interaction.editReply({
         embeds: [buildCurrentEmbed()],
         components: buildComponents(false),
-      }).then(() => true).catch(() => false);
+      }).then(() => true).catch((err) => {
+        console.warn("[raid-status component] edit failed:", err?.message || err);
+        return false;
+      });
       if (updated) scheduleTaskAutoRefresh();
     });
 
