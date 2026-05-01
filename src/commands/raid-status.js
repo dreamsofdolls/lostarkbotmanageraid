@@ -403,6 +403,7 @@ function createRaidStatusCommand(deps) {
       "status-filter:raid",
       "status-view:toggle",
       "status-task:char-filter",
+      "status-task:shared-toggle",
       "status-task:toggle",
     ]);
     const sessionExpiresAtMs = Date.now() + STATUS_PAGINATION_SESSION_MS;
@@ -613,7 +614,7 @@ function createRaidStatusCommand(deps) {
         if (picked) {
           taskCharFilterByPage.set(currentPage, picked);
         }
-      } else if (id === "status-task:toggle") {
+      } else if (id === "status-task:shared-toggle" || id === "status-task:toggle") {
         const value =
           Array.isArray(component.values) && component.values.length > 0
             ? component.values[0]

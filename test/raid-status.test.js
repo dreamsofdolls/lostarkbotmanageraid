@@ -25,6 +25,7 @@ const {
 } = require("discord.js");
 
 const { createRaidStatusCommand } = require("../src/commands/raid-status");
+const { createRaidStatusTaskUi } = require("../src/commands/raid-status/task-ui");
 const {
   UI,
   truncateText,
@@ -350,4 +351,61 @@ test("buildAccountPageEmbed: omits Auto-sync OFF badge for legacy doc with undef
     { discordId: "regular-user" }
   );
   assert.doesNotMatch(embed.toJSON().title, /Auto-sync OFF/);
+});
+
+test("raid-status task view uses unique custom ids for shared and side task dropdowns", () => {
+  const accounts = [
+    {
+      accountName: "Qilynn",
+      sharedTasks: [
+        {
+          taskId: "shared-1",
+          name: "Solo shop",
+          reset: "weekly",
+          completed: false,
+        },
+      ],
+      characters: [
+        {
+          name: "Qilynn",
+          class: "Artist",
+          itemLevel: 1745,
+          sideTasks: [
+            {
+              taskId: "side-1",
+              name: "Paradise",
+              reset: "weekly",
+              completed: false,
+            },
+          ],
+        },
+      ],
+    },
+  ];
+  const taskUi = createRaidStatusTaskUi({
+    EmbedBuilder,
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    UI,
+    getCharacterName,
+    truncateText,
+    getAccounts: () => accounts,
+    getCurrentPage: () => 0,
+    getCurrentView: () => "task",
+    getTaskCharFilter: () => undefined,
+  });
+
+  const rows = [
+    taskUi.buildSharedTaskToggleRow(false),
+    taskUi.buildTaskCharFilterRow(false),
+    taskUi.buildTaskToggleRow(false),
+  ].filter(Boolean);
+  const customIds = rows.map((row) => row.toJSON().components[0].custom_id);
+
+  assert.deepEqual(customIds, [
+    "status-task:shared-toggle",
+    "status-task:char-filter",
+    "status-task:toggle",
+  ]);
+  assert.equal(new Set(customIds).size, customIds.length);
 });

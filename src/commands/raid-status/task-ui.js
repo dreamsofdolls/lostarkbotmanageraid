@@ -153,7 +153,7 @@ function createRaidStatusTaskUi(deps) {
       });
       return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-          .setCustomId("status-task:toggle")
+          .setCustomId("status-task:shared-toggle")
           .setPlaceholder("Toggle task chung của roster...")
           .setDisabled(disabled)
           .addOptions(options)
