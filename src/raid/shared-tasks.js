@@ -189,9 +189,34 @@ function localDateKey(parts) {
   return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
 }
 
-function scheduledTaskKey(task, anchorParts) {
+function utcDateKey(date) {
+  return [
+    date.getUTCFullYear(),
+    pad2(date.getUTCMonth() + 1),
+    pad2(date.getUTCDate()),
+  ].join("-");
+}
+
+function dailyResetStartMs(now = new Date()) {
+  const date = now instanceof Date ? now : new Date(now);
+  const boundaryMs = Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate(),
+    10,
+    0,
+    0,
+    0
+  );
+  return date.getTime() >= boundaryMs
+    ? boundaryMs
+    : boundaryMs - 24 * 60 * 60 * 1000;
+}
+
+function scheduledTaskKey(task, now = new Date()) {
   const preset = getSharedTaskPreset(task?.preset);
-  return `${preset.preset}:${localDateKey(anchorParts)}`;
+  const resetStart = new Date(dailyResetStartMs(now));
+  return `${preset.preset}:daily:${utcDateKey(resetStart)}`;
 }
 
 function scheduleWindowDurationMinutes(preset) {
@@ -260,7 +285,7 @@ function resolveScheduledSharedTaskState(task, now = new Date()) {
   const activeWindow = resolveActiveScheduleWindow(preset, parts);
   const anchor = activeWindow?.anchor || null;
   const active = !!activeWindow;
-  const key = active ? scheduledTaskKey(task, anchor) : null;
+  const key = active ? scheduledTaskKey(task, now) : null;
   const completed = active && task?.completedForKey === key;
   const slotMinutes = getScheduleSlotMinutes(preset);
   const slotOffset = activeWindow
