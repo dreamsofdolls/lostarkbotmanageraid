@@ -18,6 +18,11 @@ function createRaidSetCommand(deps) {
     getCharacterClass,
     createCharacterId,
     loadUserForAutocomplete,
+    // Cross-user loader injected by the wiring layer. Returns lean user
+    // docs whose accounts include at least one entry with
+    // `registeredBy === discordId`. Optional - test harnesses that don't
+    // exercise the helper-Manager path can omit it (default no-op).
+    loadAccountsRegisteredBy = async () => [],
     getRaidRequirementList,
     RAID_REQUIREMENT_MAP,
     getGatesForRaid,
@@ -26,6 +31,98 @@ function createRaidSetCommand(deps) {
     getGateKeys,
     toModeLabel,
   } = deps;
+
+  // Build a human-readable owner label from the cached Discord identity
+  // fields on the user doc. Preference order matches what shows up in
+  // the Discord client: server display name > global name > legacy
+  // username > raw discordId. Used only for autocomplete picker labels;
+  // the discordId remains the source of truth for routing the write.
+  function pickOwnerLabel(userDoc) {
+    if (!userDoc) return "(unknown user)";
+    const candidates = [
+      userDoc.discordDisplayName,
+      userDoc.discordGlobalName,
+      userDoc.discordUsername,
+    ];
+    for (const candidate of candidates) {
+      const trimmed = String(candidate || "").trim();
+      if (trimmed) return trimmed;
+    }
+    return userDoc.discordId || "(unknown user)";
+  }
+
+  // Flatten the cross-user query result into per-account rows so
+  // autocomplete and resolveRosterOwner can iterate without re-walking
+  // the user docs each time. Filters out any account whose
+  // `registeredBy` doesn't actually match the executor (defensive: the
+  // Mongo query matches at the user-doc level via the multikey index,
+  // so a user doc with mixed-helper accounts could surface unrelated
+  // siblings without this per-account filter).
+  function flattenRegisteredAccounts(userDocs, executorId) {
+    const out = [];
+    if (!Array.isArray(userDocs)) return out;
+    for (const doc of userDocs) {
+      if (!doc || !Array.isArray(doc.accounts)) continue;
+      const ownerLabel = pickOwnerLabel(doc);
+      for (const account of doc.accounts) {
+        if (account?.registeredBy !== executorId) continue;
+        out.push({
+          ownerDiscordId: doc.discordId,
+          ownerLabel,
+          account,
+        });
+      }
+    }
+    return out;
+  }
+
+  // Resolve a roster name picked in /raid-set to the user doc that
+  // actually owns it. Search order:
+  //   1. The executor's own accounts (self-add path - status quo).
+  //   2. Helper-added accounts where `registeredBy === executor.id`
+  //      (Manager onboarding flow).
+  // Returns null when neither matches, an `{ ambiguous, matches }`
+  // sentinel when the helper-side search hits >1 owner with the same
+  // accountName (rare but possible if char-name uniqueness is broken
+  // across regions), or `{ ownerDiscordId, ownerLabel, account }`
+  // when exactly one match is found.
+  async function resolveRosterOwner(executorId, rosterName) {
+    if (!rosterName) return null;
+    const target = normalizeName(rosterName);
+    const ownDoc = await loadUserForAutocomplete(executorId);
+    if (ownDoc && Array.isArray(ownDoc.accounts)) {
+      const ownAccount = ownDoc.accounts.find(
+        (a) => normalizeName(a.accountName) === target
+      );
+      if (ownAccount) {
+        return {
+          ownerDiscordId: executorId,
+          ownerLabel: null,
+          ownerDoc: ownDoc,
+          account: ownAccount,
+          actingForOther: false,
+        };
+      }
+    }
+    const registeredDocs = await loadAccountsRegisteredBy(executorId);
+    const flattened = flattenRegisteredAccounts(registeredDocs, executorId);
+    const matches = flattened.filter(
+      (entry) => normalizeName(entry.account.accountName) === target
+    );
+    if (matches.length === 0) return null;
+    if (matches.length > 1) {
+      return { ambiguous: true, matches };
+    }
+    // Surface the full owner doc so autocomplete callers that need the
+    // whole accounts array (character / raid filtering) can reuse the
+    // registered-by query result instead of round-tripping again via
+    // loadUserForAutocomplete(ownerDiscordId).
+    const ownerDoc =
+      Array.isArray(registeredDocs)
+        ? registeredDocs.find((doc) => doc?.discordId === matches[0].ownerDiscordId) || null
+        : null;
+    return { ...matches[0], ownerDoc, actingForOther: true };
+  }
 
 // Finds a character by name inside a user doc. Optional `rosterName` narrows
   // the search to a single account (accountName match) so /raid-set with the
@@ -45,31 +142,77 @@ function createRaidSetCommand(deps) {
     }
     return null;
   }
-  // Autocomplete for the /raid-set `roster` option - lists user's accounts
-  // (rosters) with char count suffix so picker can see roster size at a glance.
-  // Same format as /remove-roster's roster autocomplete for visual consistency.
+  // Autocomplete for the /raid-set `roster` option - lists user's own
+  // accounts AND any account where the executor is `registeredBy` (i.e.
+  // Manager onboarding flow's helper rosters). Own-rosters use the
+  // existing `📁` glyph; helper-added rosters use `👥` plus the owner's
+  // display name suffix so the Manager can tell at a glance whose
+  // progress they are about to edit.
   async function autocompleteRaidSetRoster(interaction, focused) {
-    const userDoc = await loadUserForAutocomplete(interaction.user.id);
-    const matches = getRosterMatches(userDoc, focused.value || "");
-    const choices = matches.map((a) => {
+    const executorId = interaction.user.id;
+    const needle = focused.value || "";
+    const target = normalizeName(needle);
+    const ownDoc = await loadUserForAutocomplete(executorId);
+    const ownMatches = getRosterMatches(ownDoc, needle);
+    const ownChoices = ownMatches.map((a) => {
       const charCount = Array.isArray(a.characters) ? a.characters.length : 0;
       const label = `📁 ${a.accountName} · ${charCount} char${charCount === 1 ? "" : "s"}`;
       return truncateChoice(label, a.accountName);
     });
-    await interaction.respond(choices).catch(() => {});
+    let helperChoices = [];
+    try {
+      const registeredDocs = await loadAccountsRegisteredBy(executorId);
+      const flattened = flattenRegisteredAccounts(registeredDocs, executorId);
+      helperChoices = flattened
+        .filter(
+          (entry) =>
+            !target || normalizeName(entry.account.accountName).includes(target)
+        )
+        .map((entry) => {
+          const charCount = Array.isArray(entry.account.characters)
+            ? entry.account.characters.length
+            : 0;
+          const label = `👥 ${entry.account.accountName} · ${charCount} char${charCount === 1 ? "" : "s"} · giúp ${entry.ownerLabel}`;
+          return truncateChoice(label, entry.account.accountName);
+        });
+    } catch (err) {
+      // Helper-added lookup is best-effort - if Mongo flakes here we
+      // still want to surface the executor's own rosters rather than
+      // failing the entire autocomplete.
+      console.warn(
+        "[raid-set autocomplete] loadAccountsRegisteredBy failed:",
+        err?.message || err
+      );
+    }
+    const merged = [...ownChoices, ...helperChoices].slice(0, 25);
+    await interaction.respond(merged).catch(() => {});
   }
   // Character autocomplete for /raid-set. Reads the upstream `roster` option
   // (now required) and filters to just that account's chars - sidesteps the
   // Discord 25-result cap when the user has 5+ rosters worth of characters
   // (~30+ total), which the flat "top 25 by iLvl" approach silently truncated.
+  // When the picked roster is helper-added (Manager onboarding), this
+  // resolves the actual owner's user doc via resolveRosterOwner so the char
+  // list reflects the registered user's roster, not the executor's own.
   async function autocompleteRaidSetCharacter(interaction, focused) {
-    const userDoc = await loadUserForAutocomplete(interaction.user.id);
-    // Source accounts: roster-filtered if user has already picked one,
-    // else all accounts (Discord autocomplete fires per-keystroke
-    // regardless of fill order, so the field has to be useful before
-    // roster is filled). Dedup + iLvl sort = /raid-set defaults.
+    const executorId = interaction.user.id;
+    const rosterInput = interaction.options.getString("roster") || "";
+    let userDoc = null;
+    if (rosterInput) {
+      const resolved = await resolveRosterOwner(executorId, rosterInput);
+      if (resolved && !resolved.ambiguous && resolved.ownerDoc) {
+        userDoc = resolved.ownerDoc;
+      }
+    }
+    if (!userDoc) {
+      // Fallback when roster hasn't been picked yet, or pick is invalid:
+      // surface the executor's own chars. Discord autocomplete fires
+      // per-keystroke regardless of field-fill order, so the char field
+      // has to render something useful before roster is finalized.
+      userDoc = await loadUserForAutocomplete(executorId);
+    }
     const entries = getCharacterMatches(userDoc, {
-      rosterFilter: interaction.options.getString("roster") || null,
+      rosterFilter: rosterInput || null,
       needle: focused.value || "",
     });
     const choices = entries.map((entry) =>
@@ -102,7 +245,7 @@ function createRaidSetCommand(deps) {
     const rosterInput = interaction.options.getString("roster") || "";
     const characterInput = interaction.options.getString("character") || "";
     const needle = normalizeName(focused.value || "");
-    const discordId = interaction.user.id;
+    const executorId = interaction.user.id;
     const allRaids = getRaidRequirementList();
     const renderPlain = () =>
       allRaids
@@ -116,7 +259,20 @@ function createRaidSetCommand(deps) {
       await interaction.respond(renderPlain()).catch(() => {});
       return;
     }
-    const userDoc = await loadUserForAutocomplete(discordId);
+    // Resolve owner from the picked roster so the iLvl-aware progress
+    // labels read from the right user's character. Without this, a
+    // Manager picking a helper-added roster would see their own roster's
+    // (or empty) progress instead of the registered user's.
+    let userDoc = null;
+    if (rosterInput) {
+      const resolved = await resolveRosterOwner(executorId, rosterInput);
+      if (resolved && !resolved.ambiguous && resolved.ownerDoc) {
+        userDoc = resolved.ownerDoc;
+      }
+    }
+    if (!userDoc) {
+      userDoc = await loadUserForAutocomplete(executorId);
+    }
     // Pass rosterInput so same-named chars across rosters resolve to the
     // roster the user actually picked, not just first-by-iteration.
     const character = findCharacterInUser(userDoc, characterInput, rosterInput || null);
@@ -144,7 +300,7 @@ function createRaidSetCommand(deps) {
     const characterInput = interaction.options.getString("character") || "";
     const raidValue = interaction.options.getString("raid") || "";
     const needle = normalizeName(focused.value || "");
-    const discordId = interaction.user.id;
+    const executorId = interaction.user.id;
     const baseChoices = [
       { name: "Complete - mark the whole raid as done", value: "complete" },
       { name: "Process - mark one specific gate as done (requires gate)", value: "process" },
@@ -157,7 +313,19 @@ function createRaidSetCommand(deps) {
       await interaction.respond(applyFilter(baseChoices)).catch(() => {});
       return;
     }
-    const userDoc = await loadUserForAutocomplete(discordId);
+    // Same owner-resolution as autocompleteRaidSetRaid: helper-added
+    // rosters need to read the registered user's character to detect the
+    // "raid already complete -> only Reset is offered" branch correctly.
+    let userDoc = null;
+    if (rosterInput) {
+      const resolved = await resolveRosterOwner(executorId, rosterInput);
+      if (resolved && !resolved.ambiguous && resolved.ownerDoc) {
+        userDoc = resolved.ownerDoc;
+      }
+    }
+    if (!userDoc) {
+      userDoc = await loadUserForAutocomplete(executorId);
+    }
     const character = findCharacterInUser(userDoc, characterInput, rosterInput || null);
     if (!character) {
       await interaction.respond(applyFilter(baseChoices)).catch(() => {});
@@ -235,10 +403,11 @@ function createRaidSetCommand(deps) {
    * surface it owns (slash-command embed, message reaction, log line).
    *
    * Returns:
-   *   { noRoster?, matched, updated, ineligibleItemLevel, modeResetCount }
+   *   { noRoster?, authLost?, matched, updated, ineligibleItemLevel, modeResetCount }
    */
   async function applyRaidSetForDiscordId({
     discordId,
+    executorId = null,
     characterName,
     rosterName = null,
     raidMeta,
@@ -254,6 +423,7 @@ function createRaidSetCommand(deps) {
     let modeResetCount = 0;
     let alreadyComplete = false;
     let alreadyReset = false;
+    let authLost = false;
     // The properly-cased character name from the roster - user's input may
     // be lowercase (especially from the text-channel parser which lowercases
     // for alias matching), but the embed should show the name the way the
@@ -269,6 +439,7 @@ function createRaidSetCommand(deps) {
       modeResetCount = 0;
       alreadyComplete = false;
       alreadyReset = false;
+      authLost = false;
       displayName = "";
       const userDoc = await User.findOne({ discordId });
       if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
@@ -279,6 +450,21 @@ function createRaidSetCommand(deps) {
         return;
       }
       ensureFreshWeek(userDoc);
+      // Helper-Manager slash writes are authorized by account.registeredBy,
+      // which was read once during resolveRosterOwner. Re-check it on the
+      // fresh document inside the retry/write closure so a remove/re-add or
+      // ownership change between resolve and save cannot write into a new
+      // same-named roster.
+      if (executorId && executorId !== discordId) {
+        const rosterTarget = rosterName ? normalizeName(rosterName) : "";
+        const account = userDoc.accounts.find(
+          (item) => normalizeName(item.accountName) === rosterTarget
+        );
+        if (!account || account.registeredBy !== executorId) {
+          authLost = true;
+          return;
+        }
+      }
       // Resolve exactly ONE character. When rosterName is provided (slash
       // command path, required field), scope the lookup to that roster so
       // same-named chars across rosters don't collide. When null (text-
@@ -370,6 +556,7 @@ function createRaidSetCommand(deps) {
     });
     return {
       noRoster,
+      authLost,
       matched: matchedCount > 0,
       updated: updatedCount > 0,
       alreadyComplete,
@@ -381,7 +568,7 @@ function createRaidSetCommand(deps) {
     };
   }
   async function handleRaidSetCommand(interaction) {
-    const discordId = interaction.user.id;
+    const executorId = interaction.user.id;
     const rosterName = interaction.options.getString("roster", true).trim();
     const characterName = interaction.options.getString("character", true).trim();
     const raidKey = interaction.options.getString("raid", true);
@@ -444,11 +631,57 @@ function createRaidSetCommand(deps) {
         return;
       }
     }
+    // Resolve which user actually owns the picked roster. This is the
+    // single point where /raid-set decides between self-edit (executor's
+    // own roster) and helper-Manager edit (a roster the executor
+    // previously registered for someone else via /add-roster target:).
+    // Anything below this line operates on `targetDiscordId`, never
+    // `executorId`, so the rest of the handler is owner-agnostic.
+    // Deliberately runs AFTER the cheap input validations above so a
+    // bad raid / status / gate input does not pay an extra Mongo round
+    // trip.
+    const resolvedOwner = await resolveRosterOwner(executorId, rosterName);
+    if (!resolvedOwner) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Roster không tồn tại",
+            description: `Artist không tìm thấy roster **${rosterName}** trong cả roster của cậu lẫn roster cậu đã add giúp người khác. Pick lại từ autocomplete \`roster:\` cho chắc nha - autocomplete chỉ list những roster cậu thực sự thao tác được.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (resolvedOwner.ambiguous) {
+      const ownerNames = resolvedOwner.matches
+        .map((entry) => entry.ownerLabel)
+        .join(", ");
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "warn",
+            title: "Roster trùng tên ở nhiều user",
+            description: `Có ${resolvedOwner.matches.length} roster tên **${rosterName}** mà cậu là người add giúp (${ownerNames}). Artist không quyết được set vào ai. Liên hệ admin để rename hoặc xoá bớt nha.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const targetDiscordId = resolvedOwner.ownerDiscordId;
+    const actingForOther = resolvedOwner.actingForOther;
+    const ownerLabel = resolvedOwner.ownerLabel;
     // /raid-set slash command keeps explicit single-gate semantics - admin
     // power-user surface needs the ability to mark exactly one gate without
     // cascading to earlier ones (edge cases like fixing a bad record).
+    // Routes through `targetDiscordId` rather than `executorId` so a
+    // helper Manager (registeredBy match) writes to the registered
+    // user's doc, not their own.
     const result = await applyRaidSetForDiscordId({
-      discordId,
+      discordId: targetDiscordId,
+      executorId,
       characterName,
       rosterName,
       raidMeta,
@@ -456,15 +689,37 @@ function createRaidSetCommand(deps) {
       effectiveGates: effectiveGate ? [effectiveGate] : [],
     });
     if (result.noRoster) {
+      // After resolveRosterOwner succeeded but applyRaidSetForDiscordId
+      // still saw no accounts, the registered user's roster was deleted
+      // (or never existed) between the two reads. Surface a precise
+      // notice depending on whether we were acting on our own behalf or
+      // a helper-Manager target so the executor knows who has to act.
+      const description = actingForOther
+        ? `Roster của <@${targetDiscordId}> đã bị xoá hoặc không còn nữa. Artist không sửa hộ được - phải đợi <@${targetDiscordId}> tự \`/add-roster\` lại, hoặc cậu chạy \`/add-roster target:<user>\` đăng ký giúp lại nha.`
+        : "Artist không thấy roster nào của cậu. Dùng `/add-roster` để add roster đầu tiên trước, sau đó mới `/raid-set` được nha~";
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: "Cậu chưa có roster nào",
-            description: "Artist không thấy roster nào của cậu. Dùng `/add-roster` để add roster đầu tiên trước, sau đó mới `/raid-set` được nha~",
+            title: actingForOther ? "Roster đã bị xoá" : "Cậu chưa có roster nào",
+            description,
           }),
         ],
         flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (result.authLost) {
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "lock",
+            title: "Quyền roster đã đổi",
+            description: `Roster **${rosterName}** của <@${targetDiscordId}> không còn được đăng ký bởi cậu nữa, hoặc đã bị xoá rồi tạo lại trong lúc command đang chạy. Pick lại từ autocomplete \`roster:\`; nếu vẫn không thấy thì cần chạy lại \`/add-roster target:<user>\` trước khi set progress tiếp nha.`,
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+        allowedMentions: { parse: [] },
       });
       return;
     }
@@ -534,7 +789,7 @@ function createRaidSetCommand(deps) {
     }
     const markedDone = statusType === "complete" || statusType === "process";
     // Title + Artist-voice description. Dropping the 3-column inline
-    // field table (Character / Raid / Gates) — that read like a
+    // field table (Character / Raid / Gates) - that read like a
     // database log entry. Description carries the same facts as a
     // sentence, with statusType-specific phrasing for nuance:
     //   - process: "vừa clear G_X" + roadmap hint
@@ -552,6 +807,15 @@ function createRaidSetCommand(deps) {
       titleText = "Đã reset sạch";
       descText = `Artist xoá sạch tiến độ **${raidMeta.label}** của **${characterName}** tuần này rồi nha. Giờ cậu có thể đánh dấu lại từ đầu khi clear xong - dùng \`/raid-set\` hoặc post format trong raid channel.`;
     }
+    // Helper-Manager hint: prepend a line so the executor sees clearly
+    // that the write landed on someone else's roster (a roster they
+    // previously registered via /add-roster target:). Reply is
+    // ephemeral, so the `<@id>` mention does not ping the target - it
+    // just renders as a clickable display-name pill for confirmation.
+    if (actingForOther) {
+      const labelHint = ownerLabel ? ` (**${ownerLabel}**)` : "";
+      descText = `${UI.icons.info} Cậu đang set giúp <@${targetDiscordId}>${labelHint} - cậu là người đăng ký roster này trước đó nên Artist vẫn cho cậu update tiếp nhé.\n\n${descText}`;
+    }
     const resultEmbed = new EmbedBuilder()
       .setTitle(`${markedDone ? UI.icons.done : UI.icons.reset} ${titleText}`)
       .setColor(markedDone ? UI.colors.success : UI.colors.muted)
@@ -562,12 +826,23 @@ function createRaidSetCommand(deps) {
         text: `Mode đổi sang ${result.selectedDifficulty} - tiến độ mode cũ bị xoá để giữ data consistent.`,
       });
     }
-    await interaction.reply({ embeds: [resultEmbed], flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      embeds: [resultEmbed],
+      flags: MessageFlags.Ephemeral,
+      // Belt-and-braces: even though ephemeral replies do not fire
+      // notifications, suppress mention parse so the target user
+      // never gets a phantom ping while the Manager is reviewing.
+      allowedMentions: { parse: [] },
+    });
   }
   return {
     handleRaidSetAutocomplete,
     handleRaidSetCommand,
     applyRaidSetForDiscordId,
+    // Exposed for tests in test/raid-set.test.js so the helper-Manager
+    // routing can be exercised without driving the full slash-command
+    // handler through a mock Discord interaction.
+    resolveRosterOwner,
   };
 }
 

@@ -4,6 +4,21 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-02
+
+### Added
+- `accountSchema.registeredBy` (`String`, default `null`): stamped with the helper Manager's discordId when `/add-roster target:U` runs, left null on self-add. Drives `/raid-set` authorization: a Manager who registered a roster on someone else's behalf keeps editing rights on that roster without re-checking the live `RAID_MANAGER_ID` allowlist. Backed by a partial multikey index `registered_by_scan` (filter: `registeredBy: $type "string"`) so cross-user autocomplete scans only the helper-Manager rows.
+- `/raid-set` autocomplete now lists helper-added rosters alongside own rosters, marked `👥 <accountName> · giúp <ownerLabel>` (vs `📁` for own). Picking a helper roster routes character / raid / status autocomplete to the registered user's doc and routes the `applyRaidSetForDiscordId` write to that doc as well. Reply embed prepends a hint line confirming whose roster the write landed on.
+
+### Changed
+- `/add-roster` `persistSelectedRoster` stamps `registeredBy = session.callerId` only on a brand-new account when `actingForOther` is true. Existing accounts preserve their stamp on merge so a different Manager re-running `/add-roster` cannot silently take over the helper slot.
+
+### Tests
+- Added 7 `resolveRosterOwner` tests in `test/raid-set.test.js` (own match, helper match, own-wins-on-tie, miss, ambiguous cross-user collision, empty-input short-circuit, end-to-end helper-flow write isolation) and 3 `persistSelectedRoster` tests in `test/add-roster.test.js` (stamp-on-actingForOther, no-stamp-on-self-add, preserve-on-merge). Full suite 262 -> 272 passing, no regressions.
+
+### Docs
+- README `/raid-set` row + `raid-help` notes block document the helper-Manager flow and the `👥` autocomplete marker.
+
 ## 2026-04-30
 
 ### Changed

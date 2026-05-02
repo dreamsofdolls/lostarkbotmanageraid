@@ -177,6 +177,8 @@ const HELP_SECTIONS = [
         "VN: **Đổi mode**: ví dụ Serca Nightmare → Hard sẽ wipe progress cũ vì raid weekly entry là mode-scoped.",
         "EN: **Faster alternative**: post text `Kazeros Hard Nailaduk G1` in the raid channel - auto-updates without typing a slash command.",
         "VN: **Alternative nhanh hơn**: post text `Kazeros Hard Nailaduk G1` vào channel raid - tự update không cần gõ slash command.",
+        "EN: **Manager helper flow**: a Raid Manager who used `/add-roster target:U` to register a roster for user U also sees that roster in their own `/raid-set` autocomplete (marked with 👥 + the user's display name) and can keep maintaining U's progress on it.",
+        "VN: **Flow Manager add giúp**: Raid Manager đã dùng `/add-roster target:U` để add roster cho user U cũng sẽ thấy roster đó trong autocomplete `/raid-set` của mình (gắn nhãn 👥 + tên user) và có thể tiếp tục update tiến độ cho U.",
       ],
     },
     {

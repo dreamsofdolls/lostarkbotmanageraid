@@ -381,3 +381,113 @@ test("persistSelectedRoster: matches existing account when selection chars overl
   const persistedAlpha = stored.accounts[0].characters.find((c) => c.name === "Alpha");
   assert.equal(persistedAlpha.assignedRaids.kazeros.G1.completedDate, 999, "Alpha's raid completion preserved");
 });
+
+test("persistSelectedRoster: stamps registeredBy with callerId when actingForOther is true", async () => {
+  // /add-roster target:U flow: Manager M acts on User U's behalf, so the
+  // freshly-created account on U's doc must record M's discordId in
+  // `registeredBy`. /raid-set later uses this match to authorize M to
+  // keep maintaining U's progress.
+  const { factory, docs } = makeFactory();
+  const session = {
+    sessionId: "sess-mgr-target",
+    callerId: "test-manager-1",
+    targetId: "user-2",
+    discordId: "user-2",
+    actingForOther: true,
+    seedCharName: "Bravo",
+    bibleNames: new Set(["bravo"]),
+    chars: [],
+    selectedIndices: new Set(),
+    expireTimer: null,
+  };
+  const selected = [
+    { charName: "Bravo", className: "Bard", itemLevel: 1730, combatScore: "90000" },
+  ];
+
+  await factory.__test.persistSelectedRoster(session, selected);
+
+  const stored = docs.get("user-2");
+  assert.equal(stored.accounts.length, 1);
+  assert.equal(
+    stored.accounts[0].registeredBy,
+    "test-manager-1",
+    "Manager onboarding flow must stamp the helper's discordId on the new account"
+  );
+});
+
+test("persistSelectedRoster: leaves registeredBy null when user self-adds", async () => {
+  // Self-add path (no `target:` option, actingForOther === false): the
+  // /raid-set helper-Manager lookup uses `registeredBy` as the authorization
+  // key, so a self-added account MUST stay at the schema default (null) so
+  // it never matches a stranger's executor id by accident.
+  const { factory, docs } = makeFactory();
+  const session = makeSession({
+    seedCharName: "Solo",
+    bibleNames: ["solo"],
+  });
+  const selected = [
+    { charName: "Solo", className: "Berserker", itemLevel: 1700, combatScore: "85000" },
+  ];
+
+  await factory.__test.persistSelectedRoster(session, selected);
+
+  const stored = docs.get("user-1");
+  assert.equal(stored.accounts.length, 1);
+  // Mongoose default is null, but the in-memory test stub doesn't apply
+  // schema defaults - so we assert the field is unset/falsy rather than
+  // strictly null. The persist code path must NOT be writing a string
+  // here.
+  assert.ok(
+    stored.accounts[0].registeredBy === undefined ||
+      stored.accounts[0].registeredBy === null,
+    "self-add path must not stamp registeredBy"
+  );
+});
+
+test("persistSelectedRoster: preserves existing registeredBy on merge into pre-stamped account", async () => {
+  // Edge case: another /add-roster session (or a future re-register flow)
+  // already created an account with `registeredBy = X`. Running this
+  // helper against that account again must NOT overwrite the existing
+  // stamp - the original helper Manager keeps their authorization.
+  const { factory, docs } = makeFactory();
+  docs.set("user-2", {
+    discordId: "user-2",
+    accounts: [
+      {
+        accountName: "Charlie",
+        characters: [
+          { id: "c-id", name: "Charlie", class: "Bard", itemLevel: 1700, combatScore: "85000", assignedRaids: { armoche: {}, kazeros: {}, serca: {} }, tasks: [] },
+        ],
+        registeredBy: "original-helper",
+      },
+    ],
+  });
+
+  // Session simulates a different caller running /add-roster target:user-2
+  // and the merge logic finding the same account.
+  const session = {
+    sessionId: "sess-other-mgr",
+    callerId: "different-manager",
+    targetId: "user-2",
+    discordId: "user-2",
+    actingForOther: true,
+    seedCharName: "Charlie",
+    bibleNames: new Set(["charlie"]),
+    chars: [],
+    selectedIndices: new Set(),
+    expireTimer: null,
+  };
+  const selected = [
+    { charName: "Charlie", className: "Bard", itemLevel: 1705, combatScore: "86000" },
+  ];
+
+  await factory.__test.persistSelectedRoster(session, selected);
+
+  const stored = docs.get("user-2");
+  assert.equal(stored.accounts.length, 1, "should merge, not create new account");
+  assert.equal(
+    stored.accounts[0].registeredBy,
+    "original-helper",
+    "merge must preserve the original registeredBy stamp"
+  );
+});

@@ -375,7 +375,23 @@ function createAddRosterCommand({
       }
 
       if (!account) {
-        userDoc.accounts.push({ accountName: session.seedCharName, characters: [] });
+        // When the caller is a Manager acting on behalf of another user
+        // (`actingForOther`), stamp `registeredBy` with the caller's
+        // discordId so /raid-set can later authorize that Manager to keep
+        // maintaining the registered user's progress without re-checking
+        // the live Manager role. Self-add path leaves `registeredBy` null.
+        // We only set this on a brand-new account; an existing account's
+        // `registeredBy` is preserved (the merge branch below) so a
+        // different Manager re-running /add-roster against an already-
+        // registered roster cannot silently take over the helper slot.
+        const newAccount = {
+          accountName: session.seedCharName,
+          characters: [],
+        };
+        if (session.actingForOther && session.callerId) {
+          newAccount.registeredBy = session.callerId;
+        }
+        userDoc.accounts.push(newAccount);
         account = userDoc.accounts[userDoc.accounts.length - 1];
       }
       const existingMap = new Map(

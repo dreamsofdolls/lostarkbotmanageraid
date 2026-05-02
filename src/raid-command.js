@@ -103,6 +103,35 @@ function loadUserForAutocomplete(discordId) {
   }
   return autocompleteUserInFlight.get(discordId);
 }
+
+/**
+ * Cross-user lookup for /raid-set autocomplete: every user doc that has at
+ * least one account with `registeredBy === discordId`. The executor (a
+ * Manager who used /add-roster target:) sees their helper-added rosters
+ * alongside their own. Same in-flight dedup pattern as
+ * `loadUserForAutocomplete` so per-keystroke autocomplete fan-out doesn't
+ * stampede Mongo. Projects only the fields the picker label needs
+ * (display-name cache + accounts) to keep result size compact.
+ */
+const accountsRegisteredByInFlight = new Map();
+function loadAccountsRegisteredBy(discordId) {
+  if (!accountsRegisteredByInFlight.has(discordId)) {
+    const promise = User.find(
+      { "accounts.registeredBy": discordId },
+      {
+        discordId: 1,
+        discordUsername: 1,
+        discordGlobalName: 1,
+        discordDisplayName: 1,
+        accounts: 1,
+      }
+    )
+      .lean()
+      .finally(() => accountsRegisteredByInFlight.delete(discordId));
+    accountsRegisteredByInFlight.set(discordId, promise);
+  }
+  return accountsRegisteredByInFlight.get(discordId);
+}
 const {
   RAID_REQUIREMENTS,
   getRaidRequirementList,
@@ -810,6 +839,7 @@ const raidSetCommandHandlers = createRaidSetCommand({
   getCharacterClass,
   createCharacterId,
   loadUserForAutocomplete,
+  loadAccountsRegisteredBy,
   getRaidRequirementList,
   RAID_REQUIREMENT_MAP,
   getGatesForRaid,

@@ -130,6 +130,14 @@ const accountSchema = new mongoose.Schema(
     // or returns zero-overlap).
     lastRefreshAttemptAt: { type: Number, default: null },
     sharedTasks: { type: [sharedTaskSchema], default: [] },
+    // Discord id of the user who ran /add-roster for this account when
+    // acting on behalf of someone else (Manager onboarding flow). Null
+    // when the owner self-added. Used by /raid-set to authorize the
+    // helper Manager to keep maintaining raid progress on the registered
+    // user's roster without re-checking the live Manager role - the act
+    // of registering (which already gated through isManagerId) is the
+    // authorization. Cleared only by /remove-roster + /add-roster cycle.
+    registeredBy: { type: String, default: null },
   },
   { _id: false }
 );
@@ -212,6 +220,20 @@ userSchema.index(
   {
     name: "auto_manage_daily_scan",
     partialFilterExpression: { autoManageEnabled: true },
+  }
+);
+
+// /raid-set autocomplete needs to look up every account whose registeredBy
+// equals the executor's discordId, across the whole user collection (not
+// just the executor's own doc). Multikey index keeps the cross-user scan
+// O(matched-accounts) instead of full-collection. Partial filter trims the
+// index to just the helper-Manager rows since the vast majority of accounts
+// have registeredBy null (self-added).
+userSchema.index(
+  { "accounts.registeredBy": 1 },
+  {
+    name: "registered_by_scan",
+    partialFilterExpression: { "accounts.registeredBy": { $type: "string" } },
   }
 );
 
