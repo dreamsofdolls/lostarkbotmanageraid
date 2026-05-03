@@ -19,7 +19,7 @@ const {
   tryDisableAutoManage,
   buildEnableAutoDmEmbed,
   buildDisableAutoDmEmbed,
-} = require("../src/commands/raid-check");
+} = require("../bot/handlers/raid-check");
 const { EmbedBuilder } = require("discord.js");
 
 // Build a stub UserModel that records the filter passed to

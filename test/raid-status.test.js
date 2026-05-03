@@ -24,8 +24,8 @@ const {
   MessageFlags,
 } = require("discord.js");
 
-const { createRaidStatusCommand } = require("../src/commands/raid-status");
-const { createRaidStatusTaskUi } = require("../src/commands/raid-status/task-ui");
+const { createRaidStatusCommand } = require("../bot/handlers/raid-status");
+const { createRaidStatusTaskUi } = require("../bot/handlers/raid-status/task-ui");
 const {
   UI,
   truncateText,
@@ -33,15 +33,15 @@ const {
   formatNextCooldownRemaining,
   waitWithBudget,
   getCharacterName,
-} = require("../src/raid/shared");
+} = require("../bot/utils/raid/shared");
 const {
   summarizeRaidProgress,
   formatRaidStatusLine,
   getStatusRaidsForCharacter,
   ensureAssignedRaids,
   RAID_REQUIREMENT_MAP,
-} = require("../src/raid/character");
-const { getAutoManageCooldownMs, isManagerId } = require("../src/services/manager");
+} = require("../bot/utils/raid/character");
+const { getAutoManageCooldownMs, isManagerId } = require("../bot/services/manager");
 
 function makeFactory() {
   return createRaidStatusCommand({

@@ -19,8 +19,8 @@ const {
   MessageFlags,
 } = require("discord.js");
 
-const { createRaidHelpCommand } = require("../src/commands/raid-help");
-const { UI } = require("../src/raid/shared");
+const { createRaidHelpCommand } = require("../bot/handlers/raid-help");
+const { UI } = require("../bot/utils/raid/shared");
 
 function makeFactory() {
   return createRaidHelpCommand({

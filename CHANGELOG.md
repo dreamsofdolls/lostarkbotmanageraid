@@ -78,8 +78,8 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `/raid-check raid:all` Mongo projection drops `bibleSerial`, `bibleCid`, and `bibleRid`. They were unused in this surface (only `/raid-auto-manage` consumes them); removing them keeps Manager-side reads minimal under data-minimization principles.
 
 ### Refactor
-- Extracted `buildAccountTaskFields()` into `src/raid/task-view.js` so `/raid-status` and `/raid-check` share the same task-card renderer and totals math.
-- Extracted `pack2Columns()` and `formatProgressTotals()` into `src/raid/shared.js` to keep embed layout and footer icon ordering consistent across views.
+- Extracted `buildAccountTaskFields()` into `bot/utils/raid/task-view.js` so `/raid-status` and `/raid-check` share the same task-card renderer and totals math.
+- Extracted `pack2Columns()` and `formatProgressTotals()` into `bot/utils/raid/shared.js` to keep embed layout and footer icon ordering consistent across views.
 - Added regression coverage around task reset seeding, per-character task filtering, shared task rendering, and maintenance reminder copy.
 
 ### Tests

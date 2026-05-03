@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { createRaidSchedulerService } = require("../src/services/raid-schedulers");
+const { createRaidSchedulerService } = require("../bot/services/raid-schedulers");
 
 function createServiceWithGuildConfig(GuildConfig) {
   return createRaidSchedulerService({

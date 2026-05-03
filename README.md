@@ -123,95 +123,67 @@ User document example:
 
 **Gate System.** Raid is "done" when every official gate has `completedDate > 0` at the selected difficulty. `assignedRaids.<raidKey>` uses `strict: false` so adding G3+ later is migration-free. `/raid-check` places characters in their natural iLvl bucket first (for example Serca Normal is `[1710,1730)`, Hard is `[1730,1740)`, Nightmare is `1740+`), but explicit clears are also shown on the mode they actually cleared and annotated when viewed from another bucket, e.g. `2/2 (Normal Clear)`.
 
-**Class map.** 30+ Lost Ark classes mapped from bible internal IDs to display names in `src/data/Class.js`. Unknown IDs fall back to title-cased raw ID.
+**Class map.** 30+ Lost Ark classes mapped from bible internal IDs to display names in `bot/models/Class.js`. Unknown IDs fall back to title-cased raw ID.
 
-**GuildConfig** (second collection) stores per-guild monitor channel, cleanup schedule cursors, bedtime/wake-up dedup keys, and per-announcement enable flags. See `src/models/guildConfig.js`.
+**GuildConfig** (second collection) stores per-guild monitor channel, cleanup schedule cursors, bedtime/wake-up dedup keys, and per-announcement enable flags. See `bot/models/guildConfig.js`.
 
 ## Architecture
 
 ```
 LostArk_RaidManage/
-├── src/
-│   ├── bot.js                      # Discord client + interaction router + listeners
-│   ├── index.js                    # Thin wrapper: require("./bot")
-│   ├── deploy-commands.js          # Standalone slash-command registration (REST)
-│   ├── raid-command.js             # Compose root: wires every command + service
-│   │
-│   ├── commands/                   # One file per slash command (factory pattern)
-│   │   ├── add-roster.js           # Interactive picker (per-char toggle buttons, 5-min session)
-│   │   ├── edit-roster.js          # Diff-style picker (saved ∪ bible, add/remove in one Confirm)
-│   │   ├── raid-announce.js
-│   │   ├── raid-auto-manage.js
-│   │   ├── raid-channel.js
-│   │   ├── raid-check.js           # Scan + button routing (orchestrator)
-│   │   ├── raid-check/
-│   │   │   ├── snapshot.js         # /raid-check snapshot build + classify (factory)
-│   │   │   ├── edit-helpers.js     # Edit-flow pure helpers (eligible raids, gate state, labels)
-│   │   │   ├── edit-ui.js          # Edit cascading-select UI: embed/components, click handler, apply, DM (factory)
-│   │   │   ├── sync-ui.js          # Sync button flow + cache-first display-name resolver (factory)
-│   │   │   └── all-mode.js         # /raid-check raid:all cross-raid overview handler (factory)
-│   │   ├── raid-help.js            # Drill-down dropdown + language toggle (en/vi)
-│   │   ├── raid-set.js             # applyRaidSetForDiscordId shared write path
-│   │   ├── raid-status.js
-│   │   ├── remove-roster.js
-│   │   └── definitions.js          # SlashCommandBuilder registry
-│   │
-│   ├── services/                   # Cross-command concerns
-│   │   ├── auto-manage-core.js     # Bible log gather + apply + cooldown slot
-│   │   ├── auto-manage-sync.js     # Status-side piggyback helper
-│   │   ├── emoji-bootstrap.js      # Generic application-emoji uploader (class-icons + artist-icons), content-hash naming
-│   │   ├── interaction-router.js   # Single MessageCreate dispatch: slash / autocomplete / select / button (prefix-match)
-│   │   ├── manager.js              # RAID_MANAGER_ID allowlist + cooldown picker + getPrimaryManagerId
-│   │   ├── raid-channel-monitor.js # Text-monitor parser + cleanup + welcome embed
-│   │   ├── raid-schedulers.js      # 30-min cleanup tick, bedtime/wake-up, daily auto-sync
-│   │   ├── roster-fetch.js         # lostark.bible HTML scrape
-│   │   └── roster-refresh.js       # 2h lazy refresh with failure cooldown
-│   │
-│   ├── models/                     # Mongoose schemas + indexes
-│   │   ├── user.js
-│   │   └── guildConfig.js
-│   │
-│   ├── data/                       # Pure constant lookup tables (no Mongoose)
-│   │   ├── Raid.js                 # RAID_REQUIREMENTS (iLvl floors + gate lists)
-│   │   ├── Class.js                # Bible class ID -> display name + CLASS_EMOJI_MAP (runtime-mutated by bootstrap)
-│   │   └── ArtistEmoji.js          # Artist persona emoji map (shy/neutral/note) + getArtistEmoji helper
-│   │
-│   ├── raid/                       # Pure helpers / registries
-│   │   ├── shared.js               # Time, name, format utils + buildNoticeEmbed helper
-│   │   ├── announcements.js        # Announcement registry (single source of truth)
-│   │   ├── character.js            # Character + raid normalization (20 helpers + RAID_REQUIREMENT_MAP)
-│   │   ├── raid-check-query.js     # /raid-check Mongo query (filter, projection, iLvl-range)
-│   │   └── scheduling.js           # Announcement timing + scheduler-tick math (factory, deferred deps)
-│   │
-│   ├── db.js                       # Lazy Mongo connect with DNS fallback
-│   └── weekly-reset.js             # 30-min tick, Wed 10:00 UTC boundary
-│
-├── assets/
-│   ├── class-icons/                # 27 class PNGs (white silhouette) auto-uploaded as application emoji
-│   └── artist-icons/               # 3 Artist persona PNGs (shy / neutral / note)
-│
-├── scripts/
-│   └── invert-icon.py              # PIL helper: invert RGB while preserving alpha (for dark-bg sources)
-│
-├── test/                           # node --test, pure functions via __test exports
-│   ├── add-roster.test.js          # persistSelectedRoster: race-safe overlap guard, account-match
-│   ├── edit-roster.test.js         # persistEditedRoster, fetchBibleRosterWithFallback, picker sort
-│   ├── raid-announce-schedule.test.js
-│   ├── raid-check-snapshot.test.js # Snapshot, edit flow, freshness, manager, quiet hours
-│   ├── raid-help.test.js           # Dropdown, detail embeds, language toggle, field chunking
-│   ├── raid-set.test.js            # applyRaidSetForDiscordId state machine
-│   ├── raid-status.test.js         # buildStatusFooterText, buildAccountPageEmbed
-│   └── remove-roster.test.js       # remove_roster, remove_char + seed-reseed
-│
-├── Dockerfile                      # node:20-slim, npm install --omit=dev
-├── railway.toml                    # Deploy policy
-├── .env.example
-└── package.json
+|-- bot.js                         # Discord client + interaction router + listeners
+|-- bot/
+|   |-- commands.js                # Compose root: wires every command + service
+|   |-- db.js                      # Lazy Mongo connect with DNS fallback
+|   |-- handlers/                  # One file per slash command / interaction family
+|   |   |-- add-roster.js
+|   |   |-- edit-roster.js
+|   |   |-- definitions.js          # SlashCommandBuilder registry
+|   |   |-- raid-announce.js
+|   |   |-- raid-auto-manage.js
+|   |   |-- raid-channel.js
+|   |   |-- raid-check.js            # Scan + button routing orchestrator
+|   |   |-- raid-check/              # Snapshot, edit, sync, task-view, all-mode UI
+|   |   |-- raid-help.js
+|   |   |-- raid-set.js
+|   |   |-- raid-status.js
+|   |   |-- raid-status/             # Status view, task UI, sync, filters
+|   |   |-- raid-task.js
+|   |   `-- remove-roster.js
+|   |-- models/                    # Mongoose schemas + static lookup models
+|   |   |-- user.js
+|   |   |-- guildConfig.js
+|   |   |-- Raid.js
+|   |   |-- Class.js
+|   |   `-- ArtistEmoji.js
+|   |-- services/                  # Cross-command concerns and schedulers
+|   |   |-- auto-manage-core.js
+|   |   |-- auto-manage-sync.js
+|   |   |-- emoji-bootstrap.js
+|   |   |-- interaction-router.js
+|   |   |-- manager.js
+|   |   |-- raid-channel-monitor.js
+|   |   |-- raid-schedulers.js
+|   |   |-- roster-fetch.js
+|   |   |-- roster-refresh.js
+|   |   `-- weekly-reset.js
+|   `-- utils/
+|       `-- raid/                  # Pure raid helpers, registries, query builders
+|-- assets/
+|   |-- class-icons/
+|   `-- artist-icons/
+|-- scripts/
+|   |-- deploy-commands.js         # Standalone slash-command registration (REST)
+|   `-- invert-icon.py
+|-- test/                          # node --test, pure functions via __test exports
+|-- Dockerfile
+|-- railway.toml
+|-- .env.example
+`-- package.json
 ```
-
 Three composition principles:
 
-1. **Factory + dep injection.** Every command/service exports `create<Name>(deps)` so `raid-command.js` wires the object graph once at boot. Tests instantiate with stubs.
+1. **Factory + dep injection.** Every command/service exports `create<Name>(deps)` so `bot/commands.js` wires the object graph once at boot. Tests instantiate with stubs.
 2. **Registry as single source of truth.** `ANNOUNCEMENT_REGISTRY`, `RAID_REQUIREMENTS`, `RAID_MANAGER_ID` all live in exactly one place and are referenced from docs, HELP_SECTIONS, and runtime logic.
 3. **Shared write paths.** `applyRaidSetForDiscordId` is reused by `/raid-set`, the text monitor, and the `/raid-check` Edit flow — new UIs never re-implement raid mutation.
 
@@ -220,7 +192,7 @@ Interaction flow:
 ```mermaid
 flowchart LR
   U[Discord user] -->|slash / button| B[bot.js router]
-  B -->|InteractionCreate| RC[raid-command handlers]
+  B -->|InteractionCreate| RC[commands + handlers]
   B -->|MessageCreate| RM[raid-channel-monitor]
   RC -->|read / write| DB[(MongoDB)]
   RM -->|read / write| DB
@@ -264,10 +236,10 @@ Logic-only changes (inside a command, no new option or name tweak) don't require
 1. Push to the GitHub branch Railway tracks (`main`).
 2. Create the Railway service → link repo.
 3. In the service's **Variables** tab, set every env var (minimum: `DISCORD_TOKEN`, `CLIENT_ID`, `GUILD_ID`, `MONGO_URI`).
-4. Railway builds from `Dockerfile` (node:20-slim, `npm install --omit=dev`) and starts via `node src/bot.js`.
+4. Railway builds from `Dockerfile` (node:20-slim, `npm install --omit=dev`) and starts via `node bot.js`.
 5. `railway.toml` sets restart policy = `ON_FAILURE`, max 3 retries.
 
-The bot **re-registers slash commands on every boot** (`ClientReady` handler calls `rest.put(applicationGuildCommands, ...)`), so a push → Railway redeploy → new schema lands without any separate CLI step. Registration failure logs a warning and the bot boots with the previous cached schema — fail-soft. `deploy-commands.js` stays around only for dev-machine force-registers.
+The bot **re-registers slash commands on every boot** (`ClientReady` handler calls `rest.put(applicationGuildCommands, ...)`), so a push → Railway redeploy → new schema lands without any separate CLI step. Registration failure logs a warning and the bot boots with the previous cached schema — fail-soft. `scripts/deploy-commands.js` stays around only for dev-machine force-registers.
 
 ## Development
 
@@ -278,7 +250,7 @@ The bot **re-registers slash commands on every boot** (`ClientReady` handler cal
 
 ## Known Limitations
 
-- `/add-roster` scrapes `lostark.bible` HTML + inline SSR JSON. Layout changes upstream will break the regex and DOM selectors in `src/services/roster-fetch.js`.
+- `/add-roster` scrapes `lostark.bible` HTML + inline SSR JSON. Layout changes upstream will break the regex and DOM selectors in `bot/services/roster-fetch.js`.
 - Slash commands are guild-scoped. Enabling the bot in more servers needs one `deploy-commands` run per `GUILD_ID`.
 - `RAID_MANAGER_ID` rotation requires a redeploy. There's no `/admin add-manager` command.
 - Bible auto-sync can't reach a character with Public Log OFF. The `/raid-check` Edit flow is the only write path for those; `publicLogDisabled` flags them so leaders can still edit.

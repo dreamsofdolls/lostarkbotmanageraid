@@ -1,15 +1,15 @@
-// Seed RAID_MANAGER_ID before requiring raid-command so the module-level
+// Seed RAID_MANAGER_ID before requiring bot/commands so the module-level
 // boot warning doesn't fire during this test file.
 process.env.RAID_MANAGER_ID = "test-manager-1,test-manager-2";
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { __test } = require("../src/raid-command");
+const { __test } = require("../bot/commands");
 const {
   announcementOverridableTypeKeys,
   announcementTypeEntry,
-} = require("../src/raid/announcements");
+} = require("../bot/utils/raid/announcements");
 
 // Lost Ark VN maintenance: Wednesday 14:00 VN = Wednesday 07:00 UTC.
 // All test instants below use Apr 22 2026 (a Wednesday) for the boundary
