@@ -13,14 +13,14 @@ const assert = require("node:assert/strict");
 
 const { EmbedBuilder, MessageFlags } = require("discord.js");
 
-const { createRemoveRosterCommand } = require("../src/commands/remove-roster");
+const { createRemoveRosterCommand } = require("../bot/handlers/remove-roster");
 const {
   UI,
   normalizeName,
   getCharacterName,
   getCharacterClass,
-} = require("../src/raid/shared");
-const { createCharacterId } = require("../src/raid/character");
+} = require("../bot/utils/raid/shared");
+const { createCharacterId } = require("../bot/utils/raid/character");
 
 function makeUserModel() {
   const docs = new Map();

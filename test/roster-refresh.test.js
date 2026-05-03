@@ -4,12 +4,12 @@ const assert = require("node:assert/strict");
 const {
   createRosterRefreshService,
   ROSTER_REFRESH_COOLDOWN_MS,
-} = require("../src/services/roster-refresh");
-const { normalizeName, foldName, getCharacterName } = require("../src/raid/shared");
+} = require("../bot/services/roster-refresh");
+const { normalizeName, foldName, getCharacterName } = require("../bot/utils/raid/shared");
 const {
   buildFetchedRosterIndexes,
   findFetchedRosterMatchForCharacter,
-} = require("../src/raid/character");
+} = require("../bot/utils/raid/character");
 
 function makeService(fetchRosterCharacters) {
   return createRosterRefreshService({

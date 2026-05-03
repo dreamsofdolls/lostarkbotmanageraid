@@ -1,11 +1,11 @@
-// Seed RAID_MANAGER_ID before requiring raid-command so the module-level
+// Seed RAID_MANAGER_ID before requiring bot/commands so the module-level
 // boot warning doesn't fire during this test file.
 process.env.RAID_MANAGER_ID = "test-manager-1,test-manager-2";
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { __test } = require("../src/raid-command");
+const { __test } = require("../bot/commands");
 
 test("nextIntervalTickMs follows scheduler boot phase instead of wall-clock boundaries", () => {
   const startedAt = Date.UTC(2026, 3, 23, 12, 17, 0, 0);

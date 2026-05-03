@@ -13,25 +13,25 @@ const assert = require("node:assert/strict");
 
 const { EmbedBuilder, MessageFlags } = require("discord.js");
 
-const { createRaidSetCommand } = require("../src/commands/raid-set");
+const { createRaidSetCommand } = require("../bot/handlers/raid-set");
 const {
   UI,
   normalizeName,
   getCharacterName,
   getCharacterClass,
   toModeLabel,
-} = require("../src/raid/shared");
+} = require("../bot/utils/raid/shared");
 const {
   createCharacterId,
   ensureAssignedRaids,
   normalizeAssignedRaid,
   getGateKeys,
   RAID_REQUIREMENT_MAP,
-} = require("../src/raid/character");
+} = require("../bot/utils/raid/character");
 const {
   getRaidRequirementList,
   getGatesForRaid,
-} = require("../src/data/Raid");
+} = require("../bot/models/Raid");
 
 function makeUserModel() {
   const docs = new Map();

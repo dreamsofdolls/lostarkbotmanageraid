@@ -8,4 +8,4 @@ RUN npm install --omit=dev
 
 COPY . .
 
-CMD ["node", "src/bot.js"]
+CMD ["node", "bot.js"]

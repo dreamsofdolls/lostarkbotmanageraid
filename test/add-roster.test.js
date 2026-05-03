@@ -20,9 +20,9 @@ const {
   MessageFlags,
 } = require("discord.js");
 
-const { createAddRosterCommand } = require("../src/commands/add-roster");
-const { UI, normalizeName, parseCombatScore, getCharacterName, getCharacterClass } = require("../src/raid/shared");
-const { buildCharacterRecord, createCharacterId } = require("../src/raid/character");
+const { createAddRosterCommand } = require("../bot/handlers/add-roster");
+const { UI, normalizeName, parseCombatScore, getCharacterName, getCharacterClass } = require("../bot/utils/raid/shared");
+const { buildCharacterRecord, createCharacterId } = require("../bot/utils/raid/character");
 
 // In-memory User model stub. findOne returns either a "live" doc (with
 // .save) or .lean() returns the plain JSON. save() persists back into

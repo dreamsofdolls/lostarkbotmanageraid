@@ -1,4 +1,4 @@
-// Seed RAID_MANAGER_ID before requiring raid-command so manager.js captures
+// Seed RAID_MANAGER_ID before requiring bot/commands so manager.js captures
 // a deterministic allowlist at module load. Tests below rely on these IDs
 // to verify manager-specific branching (30s sync cooldown, 👑 roster prefix).
 process.env.RAID_MANAGER_ID = "test-manager-1,test-manager-2";
@@ -6,9 +6,9 @@ process.env.RAID_MANAGER_ID = "test-manager-1,test-manager-2";
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { __test, parseRaidMessage } = require("../src/raid-command");
-const { createSnapshotHelpers } = require("../src/commands/raid-check/snapshot");
-const { ensureFreshWeek, getTargetResetKey } = require("../src/weekly-reset");
+const { __test, parseRaidMessage } = require("../bot/commands");
+const { createSnapshotHelpers } = require("../bot/handlers/raid-check/snapshot");
+const { ensureFreshWeek, getTargetResetKey } = require("../bot/services/weekly-reset");
 
 function makeCharacter(name, itemLevel, kazeros = {}) {
   return {
@@ -1137,7 +1137,7 @@ test("buildAccountFreshnessLine omits sync badge when auto-manage is off", () =>
 });
 
 test("parseManagerIds splits, trims, skips empties, and dedupes", () => {
-  const { parseManagerIds } = require("../src/services/manager");
+  const { parseManagerIds } = require("../bot/services/manager");
   const ids = parseManagerIds("123, 456 ,  ,123,789");
   assert.deepEqual([...ids].sort(), ["123", "456", "789"]);
   assert.equal(parseManagerIds("").size, 0);
@@ -1217,11 +1217,11 @@ test("REGRESSION: raid-check Sync/Edit flows request fresh snapshot data", () =>
   const fs = require("fs");
   const path = require("path");
   const syncSrc = fs.readFileSync(
-    path.join(__dirname, "..", "src", "commands", "raid-check", "sync-ui.js"),
+    path.join(__dirname, "..", "bot", "handlers", "raid-check", "sync-ui.js"),
     "utf8"
   );
   const editSrc = fs.readFileSync(
-    path.join(__dirname, "..", "src", "commands", "raid-check", "edit-ui.js"),
+    path.join(__dirname, "..", "bot", "handlers", "raid-check", "edit-ui.js"),
     "utf8"
   );
 
