@@ -221,6 +221,19 @@ function formatProgressTotals(totals, UI) {
   return parts.join(" · ");
 }
 
+/**
+ * Render a gold amount with locale-style thousands separators and a
+ * trailing `G` suffix (e.g. `26,000G`). Used by the per-character gold
+ * line in `/raid-status` and the account / cross-account rollup. Negative
+ * inputs (shouldn't occur in normal flow) and non-finite values floor to
+ * `0G` rather than printing `NaN` so a render bug can't crash the embed.
+ */
+function formatGold(amount) {
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n <= 0) return "0G";
+  return `${Math.floor(n).toLocaleString("en-US")}G`;
+}
+
 // Discord MessageFlags.Ephemeral as a literal constant. Imported once
 // here so the notice-reply wrappers below don't need every caller to
 // thread MessageFlags through. discord.js exports it as a frozen enum
@@ -325,6 +338,7 @@ module.exports = {
   INLINE_SPACER,
   pack2Columns,
   formatProgressTotals,
+  formatGold,
   replyNotice,
   editNotice,
   updateNotice,

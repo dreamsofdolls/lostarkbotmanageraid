@@ -105,6 +105,8 @@ const HELP_SECTIONS = [
         "VN: **🔄 Sync ngay button**: chỉ hiện khi đã `/raid-auto-manage action:on`. Bấm để pull bible logs ngay (cooldown 15s cho Raid Manager, 10 phút cho user thường).",
         "EN: **Filters**: raid filter dropdown to zoom into one specific raid. Toggle `📝 Side tasks` to view daily/weekly chores registered via `/raid-task`.",
         "VN: **Filter**: dropdown raid filter để zoom 1 raid cụ thể. Toggle `📝 Side tasks` để xem checklist chore daily/weekly đã đăng ký qua `/raid-task`.",
+        "EN: **💰 Gold tracking**: each char shows `💰 earned / total G` (unbound). Per-account rollup line in description sums every gold-earner. Lost Ark caps at 6 gold-earners per account/week - non-earner chars render `💰 _Not gold-earner_` so you know they're skipped on purpose. Raid filter narrows the gold sums in lockstep with the raid counts.",
+        "VN: **💰 Track gold**: mỗi char hiện `💰 đã kiếm / tổng G` (unbound). Dòng rollup trong description cộng dồn mọi gold-earner trong account. Lost Ark cap 6 gold-earner mỗi account/tuần - char không phải gold-earner hiện `💰 _Not gold-earner_` để cậu biết bot cố tình skip. Raid filter cũng narrow gold theo raid đó luôn.",
         "EN: **Real-time countdown**: the `Last updated`, `Last synced`, `Sync ready` lines tick down automatically (Discord native timestamp), no need to refresh the embed.",
         "VN: **Real-time countdown**: dòng `Last updated`, `Last synced`, `Sync ready` đếm ngược tự động (Discord native timestamp), không cần refresh embed.",
       ],

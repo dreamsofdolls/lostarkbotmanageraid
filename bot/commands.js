@@ -33,6 +33,7 @@ const {
   formatNextCooldownRemaining,
   waitWithBudget,
   buildDiscordIdentityFields,
+  formatGold,
 } = require("./utils/raid/shared");
 const {
   announcementTypeKeys,
@@ -158,6 +159,8 @@ const {
   getStatusRaidsForCharacter,
   formatRaidStatusLine,
   summarizeRaidProgress,
+  summarizeAccountGold,
+  summarizeGlobalGold,
   raidCheckGateIcon,
   RAID_REQUIREMENT_MAP,
 } = require("./utils/raid/character");
@@ -736,6 +739,9 @@ const raidStatusCommand = createRaidStatusCommand({
   formatNextCooldownRemaining,
   waitWithBudget,
   summarizeRaidProgress,
+  summarizeAccountGold,
+  summarizeGlobalGold,
+  formatGold,
   formatRaidStatusLine,
   getStatusRaidsForCharacter,
   buildPaginationRow,

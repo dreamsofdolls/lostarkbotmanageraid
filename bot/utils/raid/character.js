@@ -26,6 +26,8 @@ const {
   getRaidRequirementList,
   getRaidRequirementMap,
   getGatesForRaid,
+  getGoldForGate,
+  getGoldForRaid,
 } = require("../../models/Raid");
 
 const RAID_REQUIREMENT_MAP = getRaidRequirementMap();
@@ -319,6 +321,25 @@ function ensureRaidEntries(character) {
   return raids;
 }
 
+// Compute the (earnedGold, totalGold) pair for a raid entry. earnedGold
+// sums the gold reward of every gate already cleared this week at the
+// raid's selected mode; totalGold sums every official gate of that mode.
+// Both values are raid-intrinsic - they do NOT account for the
+// character's `isGoldEarner` flag, since LA's 6-gold-earner cap is a
+// per-roster constraint applied by the rollup layer (see
+// summarizeAccountGold).
+function computeRaidGold(raidKey, modeKey, completedGateKeys, allGateKeys) {
+  let earned = 0;
+  for (const gate of completedGateKeys || []) {
+    earned += getGoldForGate(raidKey, modeKey, gate);
+  }
+  let total = 0;
+  for (const gate of allGateKeys || []) {
+    total += getGoldForGate(raidKey, modeKey, gate);
+  }
+  return { earnedGold: earned, totalGold: total };
+}
+
 function getStatusRaidsForCharacter(character) {
   const itemLevel = Number(character?.itemLevel) || 0;
   const assignedRaids = ensureAssignedRaids(character);
@@ -357,6 +378,7 @@ function getStatusRaidsForCharacter(character) {
             allGateKeys,
             completedGateKeys,
             isCompleted: isAssignedRaidCompleted(assignedRaid),
+            ...computeRaidGold(raidKey, modeKey, completedGateKeys, allGateKeys),
           });
         }
         continue;
@@ -369,14 +391,16 @@ function getStatusRaidsForCharacter(character) {
         if (!sercaRequirement || itemLevel < sercaRequirement.minItemLevel) continue;
 
         const isSameMode = modeKey === sercaModeKey;
+        const sercaCompleted = isSameMode ? completedGateKeys : [];
         selected.push({
           raidName: sercaRequirement.label,
           raidKey,
           modeKey: sercaModeKey,
           minItemLevel: sercaRequirement.minItemLevel,
           allGateKeys,
-          completedGateKeys: isSameMode ? completedGateKeys : [],
+          completedGateKeys: sercaCompleted,
           isCompleted: isSameMode && isAssignedRaidCompleted(assignedRaid),
+          ...computeRaidGold(raidKey, sercaModeKey, sercaCompleted, allGateKeys),
         });
       }
       continue;
@@ -393,6 +417,7 @@ function getStatusRaidsForCharacter(character) {
       allGateKeys,
       completedGateKeys,
       isCompleted: isAssignedRaidCompleted(assignedRaid),
+      ...computeRaidGold(raidKey, modeKey, completedGateKeys, allGateKeys),
     });
   }
 
@@ -427,6 +452,53 @@ function formatRaidStatusLine(raid) {
   const total = gates.length;
   const icon = raid.isCompleted ? UI.icons.done : pickProgressIcon(done, total);
   return `${icon} ${raid.raidName} · ${done}/${total}`;
+}
+
+// Sum (earned, total) gold across an array of raid entries already
+// scoped to one character. Caller decides whether to apply the
+// `isGoldEarner` gate - this helper only does the arithmetic so it
+// composes with the per-char card path (which always renders, gated by
+// `isGoldEarner` at the view layer to swap in the muted "Not gold-earner"
+// line).
+function summarizeCharacterGold(raids) {
+  let earned = 0;
+  let total = 0;
+  for (const raid of raids || []) {
+    earned += Number(raid?.earnedGold) || 0;
+    total += Number(raid?.totalGold) || 0;
+  }
+  return { earned, total };
+}
+
+// Sum gold for a whole account, gating per-character on `isGoldEarner`.
+// Lost Ark caps gold-earners at 6 per account/week, so chars without the
+// flag are excluded entirely from the rollup. `getRaidsFor` is the same
+// callable the view layer uses (already filter-scoped when the caller
+// has a raid filter active), so this function inherits the active filter
+// without taking it as a separate argument.
+function summarizeAccountGold(account, getRaidsFor) {
+  let earned = 0;
+  let total = 0;
+  for (const character of account?.characters || []) {
+    if (!character?.isGoldEarner) continue;
+    const sub = summarizeCharacterGold(getRaidsFor(character));
+    earned += sub.earned;
+    total += sub.total;
+  }
+  return { earned, total };
+}
+
+// Cross-account variant for the multi-roster rollup line. Wraps
+// summarizeAccountGold and inherits the same isGoldEarner gate.
+function summarizeGlobalGold(accounts, getRaidsFor) {
+  let earned = 0;
+  let total = 0;
+  for (const account of accounts || []) {
+    const sub = summarizeAccountGold(account, getRaidsFor);
+    earned += sub.earned;
+    total += sub.total;
+  }
+  return { earned, total };
 }
 
 function summarizeRaidProgress(allRaids) {
@@ -479,6 +551,10 @@ module.exports = {
   pickProgressIcon,
   formatRaidStatusLine,
   summarizeRaidProgress,
+  summarizeCharacterGold,
+  summarizeAccountGold,
+  summarizeGlobalGold,
+  computeRaidGold,
   raidCheckGateIcon,
   RAID_REQUIREMENT_MAP,
 };
