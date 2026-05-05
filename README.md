@@ -8,7 +8,7 @@ Discord bot tracking weekly raid progress for a small Lost Ark roster. Syncs cha
 - Text-channel monitor: post `<raid> <difficulty> <character> [gate]`, bot parses + updates + DM confirms
 - Auto-sync from lostark.bible logs (opt-in via `/raid-auto-manage`) with a passive 24h scheduler
 - Per-character side-task tracker + roster-level shared-task tracker (`/raid-task`) with auto-reset at 17:00 VN daily / Wed 17:00 VN weekly (Chaos Gate / Field Boss follow NA West schedule)
-- Per-character + per-account weekly gold-earned tracker (unbound), gated on `isGoldEarner` per Lost Ark's 6-gold-earner-per-account cap
+- Per-character + per-account weekly gold-earned tracker (unbound), with `/raid-gold-earner` picker to mark which 6 chars/account earn gold (per Lost Ark's cap)
 - Weekly reset Wed 17:00 VN (catch-up safe) with per-guild announcement
 - Monitor-channel auto-cleanup every 30 minutes, with Artist quiet hours 03:00-08:00 VN (bedtime + morning catch-up sweep)
 - Raid Manager tier: shorter sync cooldown, `👑` roster header icon, exclusive `/raid-check` Edit flow
@@ -21,6 +21,7 @@ Discord bot tracking weekly raid progress for a small Lost Ark roster. Syncs cha
 | `/add-roster` | anyone (self); Raid Manager (`target:` for others) | Fetch a roster from `lostark.bible`, open an interactive picker (per-char toggle buttons + Confirm/Cancel, 5-min session), then save the chosen chars (cap 20/roster) |
 | `/edit-roster` | anyone (self) | Edit an existing saved roster: re-fetches bible + opens a merged picker (saved ∪ bible) so you can add new chars or untick saved ones in one shot. Preserves per-char raid completion state. |
 | `/raid-status` | anyone (self) | View raid progress, paginated 1 roster/page; lazy iLvl refresh (2h cache); per-char + per-account weekly gold rollup (unbound, gated on `isGoldEarner`) |
+| `/raid-gold-earner` | anyone (self) | Picker to flip the per-character `isGoldEarner` flag (cap 6/account/week per LA). Pre-checks top 6 by iLvl on first open for legacy data; new chars default to ON. |
 | `/raid-set` | anyone (self); Raid Manager (rosters they registered via `/add-roster target:`) | Update one character: `complete` / `process <gate>` / `reset`. Manager-registered rosters surface in autocomplete with a 👥 marker so the helper can keep maintaining the registered user's progress. |
 | `/raid-check` | Raid Manager | Scan rosters for pending chars; Sync button (bible pull) + Edit button (cascading select) |
 | `/raid-auto-manage` | anyone (self) | `on` / `off` / `sync` / `status` for automated bible log reconciliation |

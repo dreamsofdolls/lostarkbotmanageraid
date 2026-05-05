@@ -80,7 +80,14 @@ const characterSchema = new mongoose.Schema(
     class: { type: String, required: true },
     itemLevel: { type: Number, required: true, min: 0 },
     combatScore: { type: String, default: "" },
-    isGoldEarner: { type: Boolean, default: false },
+    // Default true: chars added via /add-roster opt INTO the gold rollup
+    // by default. The 6-gold-earner-per-account-per-week LA cap is enforced
+    // at the picker level in /raid-gold-earner, not here at the schema -
+    // the schema just decides what a freshly-saved char should look like
+    // when no explicit value was supplied. Existing docs saved before
+    // this default flip retain whatever value they had stored (Mongoose
+    // default only kicks in for missing fields at write time).
+    isGoldEarner: { type: Boolean, default: true },
     // lostark.bible identifiers cached the first time we fetch the
     // character's logs page - avoids re-scraping the SSR HTML on every
     // subsequent /raid-auto-manage sync. `sn` = characterSerial in
