@@ -41,6 +41,7 @@ function createRaidStatusCommand(deps) {
     waitWithBudget,
     summarizeRaidProgress,
     summarizeAccountGold,
+    summarizeGlobalGold,
     formatGold,
     formatRaidStatusLine,
     getStatusRaidsForCharacter,
@@ -258,9 +259,14 @@ function createRaidStatusCommand(deps) {
           filteredEntries.push(...getRaidsFor(c));
         }
       }
+      // Cross-account gold tail on the 🌐 line uses summarizeGlobalGold,
+      // which inherits the active raid filter via the same getRaidsFor
+      // closure - so picking a single raid narrows the cross-account
+      // gold sum in lockstep with the chars/raids-done tail.
       const filteredTotals = {
         characters: totalCharacters,
         progress: summarizeRaidProgress(filteredEntries),
+        gold: summarizeGlobalGold(accounts, getRaidsFor),
       };
 
       return buildAccountPageEmbed(
