@@ -68,7 +68,6 @@ function makeFactory() {
     waitWithBudget,
     summarizeRaidProgress,
     summarizeAccountGold,
-    summarizeGlobalGold,
     formatGold,
     formatRaidStatusLine,
     getStatusRaidsForCharacter,
@@ -540,18 +539,59 @@ test("buildAccountPageEmbed: per-character header carries ' · 💰' suffix for 
   assert.match(charField.name, /· 1730 · 💰/);
 });
 
-test("buildAccountPageEmbed: appends '/raid-gold-earner' discoverability hint to description tail when account has chars", () => {
-  const char = makeChar("Anyone", 1730, { isGoldEarner: false });
-  const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
+test("buildAccountPageEmbed: shows '/raid-gold-earner' hint when account has at least one eligible non-earner char", () => {
+  // Mixed account: 1 earner, 1 non-earner. The non-earner is a candidate
+  // the user might want to flip - hint stays visible to advertise the
+  // command.
+  const earner = makeChar("Earner", 1730, { isGoldEarner: true });
+  const passive = makeChar("Passive", 1730, { isGoldEarner: false });
+  const account = { accountName: "Alpha", characters: [earner, passive], lastRefreshedAt: 0 };
   const embed = buildAccountPageEmbed(
     account,
     0,
     1,
-    { progress: { completed: 0, partial: 0, total: 0 }, characters: 1 },
-    NOOP_GET_RAIDS_FOR
+    { progress: { completed: 0, partial: 0, total: 0 }, characters: 2 },
+    getStatusRaidsForCharacter
   );
   const desc = embed.toJSON().description || "";
   assert.match(desc, /\/raid-gold-earner/);
+});
+
+test("buildAccountPageEmbed: omits '/raid-gold-earner' hint when every eligible char is already a gold-earner (no decision left)", () => {
+  // Cap-reached-or-below state: every eligible char in the account is
+  // marked. Nothing for the user to flip via the picker, so the hint is
+  // noise. Covers both "5 chars all earner" (sub-cap) and "6 chars all
+  // earner" (at cap).
+  const a = makeChar("A", 1730, { isGoldEarner: true });
+  const b = makeChar("B", 1730, { isGoldEarner: true });
+  const account = { accountName: "Alpha", characters: [a, b], lastRefreshedAt: 0 };
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 0 }, characters: 2 },
+    getStatusRaidsForCharacter
+  );
+  const desc = embed.toJSON().description || "";
+  assert.doesNotMatch(desc, /\/raid-gold-earner/);
+});
+
+test("buildAccountPageEmbed: omits '/raid-gold-earner' hint when non-earner chars are all sub-iLvl (cant earn anyway)", () => {
+  // 1 earner at 1730 + 1 sub-1700 alt that's a non-earner. The alt has
+  // zero eligible raids so it can't earn gold regardless of the flag -
+  // doesn't count toward "decision pending". Hint should stay hidden.
+  const earner = makeChar("Earner", 1730, { isGoldEarner: true });
+  const baby = makeChar("Sub", 1500, { isGoldEarner: false });
+  const account = { accountName: "Alpha", characters: [earner, baby], lastRefreshedAt: 0 };
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 0 }, characters: 2 },
+    getStatusRaidsForCharacter
+  );
+  const desc = embed.toJSON().description || "";
+  assert.doesNotMatch(desc, /\/raid-gold-earner/);
 });
 
 test("buildAccountPageEmbed: omits '/raid-gold-earner' hint on empty roster (no chars to mark)", () => {
@@ -617,22 +657,29 @@ test("buildAccountPageEmbed: omits per-account rollup when account has no gold-e
   assert.doesNotMatch(desc, /Earned this week/);
 });
 
-test("buildAccountPageEmbed: cross-account 🌐 line carries gold tail when paginating + globalTotals.gold present", () => {
+test("buildAccountPageEmbed: cross-account 🌐 line carries chars + raids only - gold tail removed in round-32", () => {
+  // Gold previously tailed the 🌐 line, but the per-account "Earned
+  // this week" rollup directly below already showed the same number on
+  // every page so the tail was visual duplication. Removed per Traine's
+  // feedback (2026-05-05).
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
   const embed = buildAccountPageEmbed(
     account,
     0,
-    3, // multi-page
+    3,
     {
       progress: { completed: 5, partial: 1, total: 8 },
       characters: 12,
-      gold: { earned: 50000, total: 200000 },
+      gold: { earned: 50000, total: 200000 }, // still passed but now ignored
     },
     NOOP_GET_RAIDS_FOR
   );
   const desc = embed.toJSON().description || "";
   assert.match(desc, /All accounts/);
-  assert.match(desc, /💰 \*\*50,000G \/ 200,000G\*\*/);
+  assert.match(desc, /5\/8/);
+  // No gold segment on the 🌐 line itself - 'Earned this week' below
+  // carries the per-account number.
+  assert.doesNotMatch(desc, /All accounts.*💰/);
 });
 
 test("raid-status task view uses unique custom ids for shared and side task dropdowns", () => {
