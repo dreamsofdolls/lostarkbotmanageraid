@@ -4,6 +4,22 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-05
+
+### Added
+- Weekly gold tracking on `/raid-status`. Each character card now appends a `💰 earned / total G` line (unbound) computed from the per-(raid, mode, gate) gold table newly seeded into `RAID_REQUIREMENTS`. Per-account rollup is added to the description; cross-account rollup tails the existing `🌐 All accounts` line when the caller has more than one roster.
+- `getGoldForGate(raidKey, modeKey, gate)` and `getGoldForRaid(raidKey, modeKey)` exports on `bot/models/Raid.js`. `bot/utils/raid/character.js` exports `computeRaidGold`, `summarizeCharacterGold`, `summarizeAccountGold`, `summarizeGlobalGold`. `bot/utils/raid/shared.js` exports `formatGold` (locale-comma + `G` suffix).
+- `getStatusRaidsForCharacter` now decorates every raid entry with `earnedGold` + `totalGold` so downstream surfaces don't recompute the gate-by-gate sum.
+
+### Changed
+- The 6-gold-earner-per-account-per-week cap is honored at the rollup layer via `character.isGoldEarner`. Non-earner characters render a muted `💰 _Not gold-earner_` line on their card so the user knows the bot deliberately skipped them; account / cross-account rollups suppress the gold segment entirely when no gold-earner exists. Raid filter narrows gold sums in lockstep with the raid counters.
+
+### Tests
+- 14 new gold tests in `test/raid-status.test.js` cover `formatGold`, `computeRaidGold`, `getStatusRaidsForCharacter` decoration, `summarizeCharacterGold` / `summarizeAccountGold` / `summarizeGlobalGold` math, the per-char card render (gold-earner / non-earner / no-eligible-raids cases), and the account + cross-account rollup lines. Full suite 287 passing, no regressions.
+
+### Docs
+- README features list + `/raid-status` row mention the gold rollup. `/raid-help` `raid-status` notes block + pinned welcome embed each gained a bilingual section explaining the 6-gold-earner cap and the muted "Not gold-earner" line.
+
 ## 2026-05-02
 
 ### Added

@@ -33,9 +33,14 @@ const {
   formatNextCooldownRemaining,
   waitWithBudget,
   getCharacterName,
+  formatGold,
 } = require("../bot/utils/raid/shared");
 const {
   summarizeRaidProgress,
+  summarizeAccountGold,
+  summarizeGlobalGold,
+  summarizeCharacterGold,
+  computeRaidGold,
   formatRaidStatusLine,
   getStatusRaidsForCharacter,
   ensureAssignedRaids,
@@ -62,6 +67,9 @@ function makeFactory() {
     formatNextCooldownRemaining,
     waitWithBudget,
     summarizeRaidProgress,
+    summarizeAccountGold,
+    summarizeGlobalGold,
+    formatGold,
     formatRaidStatusLine,
     getStatusRaidsForCharacter,
     buildPaginationRow: () => new ActionRowBuilder(),
@@ -132,12 +140,13 @@ test("buildStatusFooterText: handles missing progress field defensively", () => 
 
 // --------- buildAccountPageEmbed ---------
 
-function makeChar(name, itemLevel) {
+function makeChar(name, itemLevel, options = {}) {
   return {
     id: `${name}-id`,
     name,
     class: "Bard",
     itemLevel,
+    isGoldEarner: Boolean(options.isGoldEarner),
     assignedRaids: ensureAssignedRaids({}),
     tasks: [],
   };
@@ -351,6 +360,221 @@ test("buildAccountPageEmbed: omits Auto-sync OFF badge for legacy doc with undef
     { discordId: "regular-user" }
   );
   assert.doesNotMatch(embed.toJSON().title, /Auto-sync OFF/);
+});
+
+// --------- Gold tracking (added 2026-05-05) ---------
+//
+// Per (raid, mode, gate) gold values live in models/Raid.js. The view
+// surfaces them in three places: per-character `💰 earned / total` line,
+// per-account rollup in description, and the cross-account 🌐 line when
+// paginating. All three respect the Lost Ark 6-gold-earner-per-account
+// rule via `character.isGoldEarner` - non-gold-earners are excluded
+// from totals and render a muted "_Not gold-earner_" line so the user
+// knows the bot didn't drop them by accident.
+
+test("formatGold: produces locale-style 'NN,NNNG' suffix and floors invalid input to 0G", () => {
+  assert.equal(formatGold(26000), "26,000G");
+  assert.equal(formatGold(1500), "1,500G");
+  assert.equal(formatGold(0), "0G");
+  assert.equal(formatGold(undefined), "0G");
+  assert.equal(formatGold(NaN), "0G");
+  assert.equal(formatGold(-100), "0G");
+});
+
+test("computeRaidGold: sums earned vs total across the gates of a (raid, mode)", () => {
+  // Kazeros Hard G1=17000, G2=35000. Earned = G1 only = 17000.
+  // Total = both gates = 52000.
+  const gold = computeRaidGold("kazeros", "hard", ["G1"], ["G1", "G2"]);
+  assert.equal(gold.earnedGold, 17000);
+  assert.equal(gold.totalGold, 52000);
+});
+
+test("computeRaidGold: returns 0 earned when no gates cleared, full total still surfaces", () => {
+  const gold = computeRaidGold("serca", "nightmare", [], ["G1", "G2"]);
+  assert.equal(gold.earnedGold, 0);
+  // Serca Nightmare G1=21000 + G2=33000 = 54000.
+  assert.equal(gold.totalGold, 54000);
+});
+
+test("getStatusRaidsForCharacter: decorates each raid entry with earnedGold + totalGold", () => {
+  // 1730 char defaults to Hard across all 3 raids per
+  // getBestEligibleModeKey logic. Sum at this iLvl: Act 4 Hard 42000 +
+  // Kazeros Hard 52000 + Serca Hard 44000 = 138000G total.
+  const char = makeChar("Maxlevel", 1730);
+  const raids = getStatusRaidsForCharacter(char);
+  assert.equal(raids.length, 3);
+  for (const raid of raids) {
+    assert.ok(typeof raid.earnedGold === "number", `raid ${raid.raidName} missing earnedGold`);
+    assert.ok(typeof raid.totalGold === "number", `raid ${raid.raidName} missing totalGold`);
+  }
+  const sum = raids.reduce((acc, r) => acc + r.totalGold, 0);
+  assert.equal(sum, 138000);
+});
+
+test("summarizeCharacterGold: sums earnedGold + totalGold across raid entries", () => {
+  const raids = [
+    { earnedGold: 17000, totalGold: 52000 },
+    { earnedGold: 12500, totalGold: 33000 },
+  ];
+  const result = summarizeCharacterGold(raids);
+  assert.equal(result.earned, 29500);
+  assert.equal(result.total, 85000);
+});
+
+test("summarizeAccountGold: only counts characters with isGoldEarner=true", () => {
+  // 1 gold-earner + 1 non-earner at 1730. Only the gold-earner contributes.
+  const earner = makeChar("Earner", 1730, { isGoldEarner: true });
+  const passive = makeChar("Passive", 1730, { isGoldEarner: false });
+  const account = { accountName: "A", characters: [earner, passive], lastRefreshedAt: 0 };
+  const result = summarizeAccountGold(account, getStatusRaidsForCharacter);
+  assert.equal(result.total, 138000);
+  assert.equal(result.earned, 0);
+});
+
+test("summarizeAccountGold: returns zero totals when no gold-earner is configured", () => {
+  // Roster of all non-gold-earners → bot must surface 0/0 so the view
+  // layer can suppress the rollup line entirely.
+  const a = makeChar("Alt1", 1730, { isGoldEarner: false });
+  const b = makeChar("Alt2", 1730, { isGoldEarner: false });
+  const account = { accountName: "AltsOnly", characters: [a, b], lastRefreshedAt: 0 };
+  const result = summarizeAccountGold(account, getStatusRaidsForCharacter);
+  assert.equal(result.total, 0);
+  assert.equal(result.earned, 0);
+});
+
+test("summarizeGlobalGold: composes summarizeAccountGold across multiple accounts", () => {
+  const earnerA = makeChar("EarnerA", 1730, { isGoldEarner: true });
+  const earnerB = makeChar("EarnerB", 1730, { isGoldEarner: true });
+  const accounts = [
+    { accountName: "A", characters: [earnerA], lastRefreshedAt: 0 },
+    { accountName: "B", characters: [earnerB], lastRefreshedAt: 0 },
+  ];
+  const result = summarizeGlobalGold(accounts, getStatusRaidsForCharacter);
+  assert.equal(result.total, 138000 * 2);
+});
+
+test("buildAccountPageEmbed: per-character field appends '💰 X / Y' for gold-earner with eligible raids", () => {
+  // Synthetic raid entry with a single gate done out of two (so total
+  // surfaces but earned is non-zero).
+  const char = makeChar("Earner", 1730, { isGoldEarner: true });
+  const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
+  const fakeRaid = {
+    raidName: "Kazeros Hard",
+    raidKey: "kazeros",
+    modeKey: "hard",
+    completedGateKeys: ["G1"],
+    allGateKeys: ["G1", "G2"],
+    isCompleted: false,
+    earnedGold: 17000,
+    totalGold: 52000,
+  };
+  const getRaidsFor = () => [fakeRaid];
+
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 1, total: 1 }, characters: 1 },
+    getRaidsFor
+  );
+  const json = embed.toJSON();
+  const charField = json.fields.find((f) => /Earner/.test(f.name));
+  assert.ok(charField, "char field should be present");
+  assert.match(charField.value, /💰 17,000G \/ 52,000G/);
+});
+
+test("buildAccountPageEmbed: per-character field shows '💰 _Not gold-earner_' for non-earners with eligible raids", () => {
+  const char = makeChar("Passive", 1730, { isGoldEarner: false });
+  const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
+  const fakeRaid = {
+    raidName: "Kazeros Hard",
+    completedGateKeys: [],
+    allGateKeys: ["G1", "G2"],
+    isCompleted: false,
+    earnedGold: 0,
+    totalGold: 52000,
+  };
+  const getRaidsFor = () => [fakeRaid];
+
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 1 }, characters: 1 },
+    getRaidsFor
+  );
+  const charField = embed.toJSON().fields.find((f) => /Passive/.test(f.name));
+  assert.match(charField.value, /💰 _Not gold-earner_/);
+  // Numeric line must NOT appear on a non-earner card.
+  assert.doesNotMatch(charField.value, /\d+G \//);
+});
+
+test("buildAccountPageEmbed: per-character field omits the gold line when char has no eligible raids", () => {
+  // Char too low iLvl for any raid → "🔒 Not eligible yet" notice;
+  // tacking on a "💰 0G / 0G" line would just be noise.
+  const char = makeChar("LowGear", 1500, { isGoldEarner: true });
+  const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 0 }, characters: 1 },
+    NOOP_GET_RAIDS_FOR
+  );
+  const charField = embed.toJSON().fields.find((f) => /LowGear/.test(f.name));
+  assert.ok(charField, "low-gear char field should still render");
+  assert.match(charField.value, /Not eligible/);
+  assert.doesNotMatch(charField.value, /💰/);
+});
+
+test("buildAccountPageEmbed: appends per-account 'Earned this week' rollup to description when account has gold-earners", () => {
+  const char = makeChar("Earner", 1730, { isGoldEarner: true });
+  const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 3 }, characters: 1 },
+    getStatusRaidsForCharacter
+  );
+  const desc = embed.toJSON().description || "";
+  // 1730 gold-earner = 138000G total potential, 0 earned.
+  assert.match(desc, /💰 Earned this week:/);
+  assert.match(desc, /138,000G/);
+});
+
+test("buildAccountPageEmbed: omits per-account rollup when account has no gold-earners", () => {
+  // All-passives account: rollup line would read '0G / 0G' which is
+  // noise/misleading. Suppressed entirely.
+  const char = makeChar("Alt", 1730, { isGoldEarner: false });
+  const account = { accountName: "AltsOnly", characters: [char], lastRefreshedAt: 0 };
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 3 }, characters: 1 },
+    getStatusRaidsForCharacter
+  );
+  const desc = embed.toJSON().description || "";
+  assert.doesNotMatch(desc, /Earned this week/);
+});
+
+test("buildAccountPageEmbed: cross-account 🌐 line carries gold tail when paginating + globalTotals.gold present", () => {
+  const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    3, // multi-page
+    {
+      progress: { completed: 5, partial: 1, total: 8 },
+      characters: 12,
+      gold: { earned: 50000, total: 200000 },
+    },
+    NOOP_GET_RAIDS_FOR
+  );
+  const desc = embed.toJSON().description || "";
+  assert.match(desc, /All accounts/);
+  assert.match(desc, /💰 \*\*50,000G \/ 200,000G\*\*/);
 });
 
 test("raid-status task view uses unique custom ids for shared and side task dropdowns", () => {

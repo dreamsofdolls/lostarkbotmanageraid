@@ -452,6 +452,13 @@ function createRaidChannelMonitorService({
           ].join("\n"),
         },
         {
+          name: "💰 Track gold raid mỗi tuần",
+          value: [
+            "Mở `/raid-status` để xem dòng `💰 đã kiếm / tổng G` (unbound) trên mỗi character + rollup cộng dồn cả account.",
+            "Lost Ark cap **6 gold-earner / account / tuần**, char không bật flag sẽ hiện `💰 _Not gold-earner_` để cậu biết tớ cố tình skip.",
+          ].join("\n"),
+        },
+        {
           name: "👑 Ghi chú bé xíu",
           value: "Thi thoảng cậu sẽ bắt gặp vài roster đội `👑` thay cho `📁`. Artist quen vài người thôi mà~",
         },

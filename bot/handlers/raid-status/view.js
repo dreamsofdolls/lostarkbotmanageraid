@@ -9,6 +9,8 @@ function createRaidStatusView(deps) {
     truncateText,
     formatNextCooldownRemaining,
     summarizeRaidProgress,
+    summarizeAccountGold,
+    formatGold,
     formatRaidStatusLine,
     formatRosterRefreshCooldownRemaining,
     ROSTER_REFRESH_COOLDOWN_MS,
@@ -48,6 +50,27 @@ function createRaidStatusView(deps) {
     return line;
   }
 
+  // Gold line per character card. Renders only when the char has at least
+  // one eligible raid this week (otherwise the "🔒 Not eligible yet"
+  // notice already covers the empty state - tacking on "💰 0G / 0G" would
+  // be noise). For non-gold-earners (`isGoldEarner=false`) we emit a
+  // muted line that explains why no number appears, instead of silently
+  // omitting it - hiding the line risks user confusion ("did the bot
+  // forget to count me?"). The 6-gold-earner-per-account cap is a Lost
+  // Ark rule, not a bot quirk; the line documents the rule inline.
+  function buildCharacterGoldLine(character, raids) {
+    if (!Array.isArray(raids) || raids.length === 0) return null;
+    if (!character?.isGoldEarner) return "💰 _Not gold-earner_";
+    let earned = 0;
+    let total = 0;
+    for (const raid of raids) {
+      earned += Number(raid?.earnedGold) || 0;
+      total += Number(raid?.totalGold) || 0;
+    }
+    if (total <= 0) return null;
+    return `💰 ${formatGold(earned)} / ${formatGold(total)}`;
+  }
+
   function buildCharacterField(character, getRaidsFor) {
     const name = getCharacterName(character);
     const itemLevel = Number(character.itemLevel) || 0;
@@ -59,13 +82,16 @@ function createRaidStatusView(deps) {
     const fieldName = truncateText(`${namePrefix}${name} · ${itemLevel}`, 256);
 
     const raids = getRaidsFor(character);
-    const fieldValue = raids.length === 0
-      ? `${UI.icons.lock} _Not eligible yet_`
-      : raids.map((raid) => formatRaidStatusLine(raid)).join("\n");
+    const lines = raids.length === 0
+      ? [`${UI.icons.lock} _Not eligible yet_`]
+      : raids.map((raid) => formatRaidStatusLine(raid));
+
+    const goldLine = buildCharacterGoldLine(character, raids);
+    if (goldLine) lines.push(goldLine);
 
     return {
       name: fieldName,
-      value: truncateText(fieldValue, 1024),
+      value: truncateText(lines.join("\n"), 1024),
       inline: true,
     };
   }
@@ -228,9 +254,33 @@ function createRaidStatusView(deps) {
     // (subject-wide, not per-account) and helps when flipping pages.
     const descriptionLines = [];
     if (totalPages > 1) {
+      // Cross-account rollup gets a gold tail when at least one
+      // gold-earner exists across the roster. summarizeGlobalGold returns
+      // {earned:0,total:0} for an all-non-gold-earner roster, in which
+      // case appending "💰 0G / 0G" would be misleading - users would
+      // wonder if their gold-earner flags broke. Suppressing the segment
+      // when total <= 0 keeps the line honest.
+      const globalGoldTotal = Number(globalTotals?.gold?.total) || 0;
+      const globalGoldEarned = Number(globalTotals?.gold?.earned) || 0;
+      const globalGoldTail = globalGoldTotal > 0
+        ? ` · 💰 **${formatGold(globalGoldEarned)} / ${formatGold(globalGoldTotal)}**`
+        : "";
       descriptionLines.push(
-        `🌐 All accounts: **${globalTotals.characters}** chars · **${globalTotals.progress.completed}/${globalTotals.progress.total}** raids done`
+        `🌐 All accounts: **${globalTotals.characters}** chars · **${globalTotals.progress.completed}/${globalTotals.progress.total}** raids done${globalGoldTail}`
       );
+    }
+    // Per-account gold rollup. Always emitted on accounts with at least
+    // one gold-earner, even on a single-page roster (we still want the
+    // "this week's haul" headline). Suppressed when no gold-earner is
+    // configured for the account at all - same honesty rule as the
+    // cross-account tail above.
+    if (typeof summarizeAccountGold === "function") {
+      const accountGold = summarizeAccountGold(account, getRaidsFor);
+      if (accountGold.total > 0) {
+        descriptionLines.push(
+          `💰 Earned this week: **${formatGold(accountGold.earned)}** / **${formatGold(accountGold.total)}**`
+        );
+      }
     }
     const freshnessLine = buildAccountFreshnessLine(account, userMeta);
     if (freshnessLine) descriptionLines.push(freshnessLine);
