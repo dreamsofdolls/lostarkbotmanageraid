@@ -256,19 +256,12 @@ function createRaidStatusView(deps) {
     // (subject-wide, not per-account) and helps when flipping pages.
     const descriptionLines = [];
     if (totalPages > 1) {
-      // Cross-account rollup gets a gold tail when at least one
-      // gold-earner exists across the roster. summarizeGlobalGold returns
-      // {earned:0,total:0} for an all-non-gold-earner roster, in which
-      // case appending "💰 0G / 0G" would be misleading - users would
-      // wonder if their gold-earner flags broke. Suppressing the segment
-      // when total <= 0 keeps the line honest.
-      const globalGoldTotal = Number(globalTotals?.gold?.total) || 0;
-      const globalGoldEarned = Number(globalTotals?.gold?.earned) || 0;
-      const globalGoldTail = globalGoldTotal > 0
-        ? ` · 💰 **${formatGold(globalGoldEarned)} / ${formatGold(globalGoldTotal)}**`
-        : "";
+      // Cross-account rollup carries chars + raids-done counts only.
+      // The gold figure used to tail this line, but the per-account
+      // "Earned this week" line directly below already shows the same
+      // number on every page so the tail was visual duplication.
       descriptionLines.push(
-        `🌐 All accounts: **${globalTotals.characters}** chars · **${globalTotals.progress.completed}/${globalTotals.progress.total}** raids done${globalGoldTail}`
+        `🌐 All accounts: **${globalTotals.characters}** chars · **${globalTotals.progress.completed}/${globalTotals.progress.total}** raids done`
       );
     }
     // Per-account gold rollup. Always emitted on accounts with at least
@@ -287,12 +280,21 @@ function createRaidStatusView(deps) {
     const freshnessLine = buildAccountFreshnessLine(account, userMeta);
     if (freshnessLine) descriptionLines.push(freshnessLine);
 
-    // Discoverability hint for the new /raid-gold-earner command. Shown
-    // on accounts that have at least one character so the user knows
-    // which surface to use to flip the 💰 flag on/off (cap 6/account/week
-    // is the LA rule, not a bot limit). Suppressed on empty rosters
-    // because there's nothing to mark.
-    if (Array.isArray(account.characters) && account.characters.length > 0) {
+    // Discoverability hint for /raid-gold-earner. Shown ONLY when the
+    // account has at least one eligible char (>= 1 raid unlocked at
+    // current iLvl) that isn't yet a gold-earner. Suppressed when:
+    //   - every eligible char is already an earner (cap-reached state
+    //     or all-gold-earner state - no decision left)
+    //   - account has no eligible chars at all (early-roster / sub-1700)
+    //   - account is empty
+    // Below-iLvl chars are excluded from the count because they can't
+    // earn raid gold this week regardless of the flag, so they don't
+    // signal "decision pending" - matches Traine's "5 chars all above
+    // 1700 + all marked → hint disappears" rule.
+    const eligibleNonEarnerCount = (account.characters || []).filter(
+      (c) => !c?.isGoldEarner && getRaidsFor(c).length > 0
+    ).length;
+    if (eligibleNonEarnerCount > 0) {
       descriptionLines.push(
         "_💰 Mark gold-earner bằng `/raid-gold-earner roster:<tên>` (cap 6 / account / tuần)._"
       );

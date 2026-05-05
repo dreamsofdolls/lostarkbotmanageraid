@@ -41,7 +41,6 @@ function createRaidStatusCommand(deps) {
     waitWithBudget,
     summarizeRaidProgress,
     summarizeAccountGold,
-    summarizeGlobalGold,
     formatGold,
     formatRaidStatusLine,
     getStatusRaidsForCharacter,
@@ -259,16 +258,9 @@ function createRaidStatusCommand(deps) {
           filteredEntries.push(...getRaidsFor(c));
         }
       }
-      // Cross-account gold rollup respects the same getRaidsFor scope as
-      // the progress totals above, so the 🌐 line stays consistent: when
-      // the user picks a raid filter, both the X/Y raids done counter and
-      // the X/Y gold counter narrow to the picked raid in lockstep.
-      // summarizeGlobalGold internally gates on character.isGoldEarner so
-      // non-gold-earner chars don't inflate the rollup denominator.
       const filteredTotals = {
         characters: totalCharacters,
         progress: summarizeRaidProgress(filteredEntries),
-        gold: summarizeGlobalGold(accounts, getRaidsFor),
       };
 
       return buildAccountPageEmbed(

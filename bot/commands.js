@@ -161,7 +161,6 @@ const {
   formatRaidStatusLine,
   summarizeRaidProgress,
   summarizeAccountGold,
-  summarizeGlobalGold,
   raidCheckGateIcon,
   RAID_REQUIREMENT_MAP,
 } = require("./utils/raid/character");
@@ -766,7 +765,6 @@ const raidStatusCommand = createRaidStatusCommand({
   waitWithBudget,
   summarizeRaidProgress,
   summarizeAccountGold,
-  summarizeGlobalGold,
   formatGold,
   formatRaidStatusLine,
   getStatusRaidsForCharacter,
