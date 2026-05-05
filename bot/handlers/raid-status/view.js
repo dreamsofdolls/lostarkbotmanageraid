@@ -50,17 +50,13 @@ function createRaidStatusView(deps) {
     return line;
   }
 
-  // Gold line per character card. Renders only when the char has at least
-  // one eligible raid this week (otherwise the "🔒 Not eligible yet"
-  // notice already covers the empty state - tacking on "💰 0G / 0G" would
-  // be noise). For non-gold-earners (`isGoldEarner=false`) we emit a
-  // muted line that explains why no number appears, instead of silently
-  // omitting it - hiding the line risks user confusion ("did the bot
-  // forget to count me?"). The 6-gold-earner-per-account cap is a Lost
-  // Ark rule, not a bot quirk; the line documents the rule inline.
+  // Gold line per character card - renders only for gold-earners with at
+  // least one eligible raid this week. Non-earners emit no line at all:
+  // the header already carries the 💰 marker (its absence signals "not
+  // gold-earner") so a dedicated body line would just clutter the card.
   function buildCharacterGoldLine(character, raids) {
     if (!Array.isArray(raids) || raids.length === 0) return null;
-    if (!character?.isGoldEarner) return "💰 _Not gold-earner_";
+    if (!character?.isGoldEarner) return null;
     let earned = 0;
     let total = 0;
     for (const raid of raids) {
@@ -79,7 +75,13 @@ function createRaidStatusView(deps) {
     // so the field renders cleanly while emoji are still being uploaded.
     const classIcon = getClassEmoji(character.class);
     const namePrefix = classIcon ? `${classIcon} ` : "";
-    const fieldName = truncateText(`${namePrefix}${name} · ${itemLevel}`, 256);
+    // Trailing 💰 marks gold-earner chars at the header level so the
+    // user can scan a roster page for "who's earning this week" without
+    // reading the per-card body line. Position chosen by Traine: right
+    // after the iLvl number (the de facto "char identity" suffix). Non-
+    // earners get nothing - absence is the signal.
+    const goldSuffix = character?.isGoldEarner ? " · 💰" : "";
+    const fieldName = truncateText(`${namePrefix}${name} · ${itemLevel}${goldSuffix}`, 256);
 
     const raids = getRaidsFor(character);
     const lines = raids.length === 0
@@ -284,6 +286,17 @@ function createRaidStatusView(deps) {
     }
     const freshnessLine = buildAccountFreshnessLine(account, userMeta);
     if (freshnessLine) descriptionLines.push(freshnessLine);
+
+    // Discoverability hint for the new /raid-gold-earner command. Shown
+    // on accounts that have at least one character so the user knows
+    // which surface to use to flip the 💰 flag on/off (cap 6/account/week
+    // is the LA rule, not a bot limit). Suppressed on empty rosters
+    // because there's nothing to mark.
+    if (Array.isArray(account.characters) && account.characters.length > 0) {
+      descriptionLines.push(
+        "_💰 Mark gold-earner bằng `/raid-gold-earner roster:<tên>` (cap 6 / account / tuần)._"
+      );
+    }
 
     // Bible-piggyback outcome line (computed here so the early-return
     // paths below can also surface it, but rendered as a FINAL FIELD

@@ -483,7 +483,10 @@ test("buildAccountPageEmbed: per-character field appends '💰 X / Y' for gold-e
   assert.match(charField.value, /💰 17,000G \/ 52,000G/);
 });
 
-test("buildAccountPageEmbed: per-character field shows '💰 _Not gold-earner_' for non-earners with eligible raids", () => {
+test("buildAccountPageEmbed: per-character field omits the gold body line for non-earners (header 💰 absence is the signal)", () => {
+  // Non-earner card: no 💰 anywhere in the body. Header marker is the
+  // sole indicator (absence = not earning). Body line was removed in
+  // round-32 because the duplicate signal was visual clutter.
   const char = makeChar("Passive", 1730, { isGoldEarner: false });
   const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
   const fakeRaid = {
@@ -504,9 +507,64 @@ test("buildAccountPageEmbed: per-character field shows '💰 _Not gold-earner_' 
     getRaidsFor
   );
   const charField = embed.toJSON().fields.find((f) => /Passive/.test(f.name));
-  assert.match(charField.value, /💰 _Not gold-earner_/);
-  // Numeric line must NOT appear on a non-earner card.
-  assert.doesNotMatch(charField.value, /\d+G \//);
+  // Header MUST NOT carry the 💰 suffix.
+  assert.doesNotMatch(charField.name, /💰/);
+  // Body MUST NOT carry any 💰 line.
+  assert.doesNotMatch(charField.value, /💰/);
+});
+
+test("buildAccountPageEmbed: per-character header carries ' · 💰' suffix for gold-earner chars", () => {
+  // Header marker. Position chosen by user request: right after the
+  // iLvl number, separated by ' · '. Acts as the at-a-glance "is this
+  // char in my 6-pack" indicator.
+  const char = makeChar("Earner", 1730, { isGoldEarner: true });
+  const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
+  const fakeRaid = {
+    raidName: "Kazeros Hard",
+    completedGateKeys: [],
+    allGateKeys: ["G1", "G2"],
+    isCompleted: false,
+    earnedGold: 0,
+    totalGold: 52000,
+  };
+  const getRaidsFor = () => [fakeRaid];
+
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 1 }, characters: 1 },
+    getRaidsFor
+  );
+  const charField = embed.toJSON().fields.find((f) => /Earner/.test(f.name));
+  assert.match(charField.name, /· 1730 · 💰/);
+});
+
+test("buildAccountPageEmbed: appends '/raid-gold-earner' discoverability hint to description tail when account has chars", () => {
+  const char = makeChar("Anyone", 1730, { isGoldEarner: false });
+  const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 0 }, characters: 1 },
+    NOOP_GET_RAIDS_FOR
+  );
+  const desc = embed.toJSON().description || "";
+  assert.match(desc, /\/raid-gold-earner/);
+});
+
+test("buildAccountPageEmbed: omits '/raid-gold-earner' hint on empty roster (no chars to mark)", () => {
+  const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 0 }, characters: 0 },
+    NOOP_GET_RAIDS_FOR
+  );
+  const desc = embed.toJSON().description || "";
+  assert.doesNotMatch(desc, /\/raid-gold-earner/);
 });
 
 test("buildAccountPageEmbed: per-character field omits the gold line when char has no eligible raids", () => {

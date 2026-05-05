@@ -41,6 +41,8 @@ const {
   handleAddRosterButton,
   handleEditRosterAutocomplete,
   handleEditRosterButton,
+  handleRaidGoldEarnerAutocomplete,
+  handleRaidGoldEarnerButton,
   loadMonitorChannelCache,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
@@ -203,6 +205,7 @@ async function startBot() {
       "raid-auto-manage",
       "raid-announce",
       "raid-task",
+      "raid-gold-earner",
     ],
     handleSlashCommand: handleRaidManagementCommand,
     autocompleteHandlers: {
@@ -213,6 +216,7 @@ async function startBot() {
       "raid-auto-manage": handleRaidAutoManageAutocomplete,
       "raid-announce": handleRaidAnnounceAutocomplete,
       "raid-task": handleRaidTaskAutocomplete,
+      "raid-gold-earner": handleRaidGoldEarnerAutocomplete,
     },
     selectHandlers: {},
     selectRoutes: [
@@ -234,6 +238,9 @@ async function startBot() {
       // /raid-task clear-confirm + clear-cancel buttons. CustomIds:
       // "raid-task:clear-confirm:<encoded-charname>" or "raid-task:clear-cancel".
       { prefix: "raid-task:", handle: handleRaidTaskButton },
+      // /raid-gold-earner picker buttons: toggle / confirm / cancel.
+      // CustomId: "gold-earner:<action>:<sessionId>[:<charIndex>]".
+      { prefix: "gold-earner:", handle: handleRaidGoldEarnerButton },
     ],
   });
 

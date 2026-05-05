@@ -51,6 +51,7 @@ const {
   RAID_CHECK_PAGINATION_SESSION_MS,
 } = require("./handlers/raid-check");
 const { createAddRosterCommand } = require("./handlers/add-roster");
+const { createRaidGoldEarnerCommand } = require("./handlers/raid-gold-earner");
 const { createEditRosterCommand } = require("./handlers/edit-roster");
 const { createRaidCommandDefinitions } = require("./handlers/definitions");
 const { createRaidAutoManageCommand } = require("./handlers/raid-auto-manage");
@@ -361,6 +362,9 @@ async function loadFreshUserSnapshotForRaidViews(
 
 let handleAddRosterCommand;
 let handleAddRosterButton;
+let handleRaidGoldEarnerCommand;
+let handleRaidGoldEarnerAutocomplete;
+let handleRaidGoldEarnerButton;
 let handleEditRosterCommand;
 let handleEditRosterAutocomplete;
 let handleEditRosterButton;
@@ -478,6 +482,11 @@ async function handleRaidManagementCommand(interaction) {
 
     if (interaction.commandName === "remove-roster") {
       await handleRemoveRosterCommand(interaction);
+      return;
+    }
+
+    if (interaction.commandName === "raid-gold-earner") {
+      await handleRaidGoldEarnerCommand(interaction);
       return;
     }
 
@@ -651,6 +660,23 @@ const addRosterCommandHandlers = createAddRosterCommand({
   handleAddRosterCommand,
   handleAddRosterButton,
 } = addRosterCommandHandlers);
+
+const raidGoldEarnerCommandHandlers = createRaidGoldEarnerCommand({
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  MessageFlags,
+  UI,
+  User,
+  saveWithRetry,
+  loadUserForAutocomplete,
+});
+({
+  handleRaidGoldEarnerCommand,
+  handleRaidGoldEarnerAutocomplete,
+  handleRaidGoldEarnerButton,
+} = raidGoldEarnerCommandHandlers);
 
 const editRosterCommandHandlers = createEditRosterCommand({
   EmbedBuilder,
@@ -1083,6 +1109,8 @@ module.exports = {
   handleAddRosterButton,
   handleEditRosterAutocomplete,
   handleEditRosterButton,
+  handleRaidGoldEarnerAutocomplete,
+  handleRaidGoldEarnerButton,
   loadMonitorChannelCache,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,

@@ -287,7 +287,13 @@ function buildCharacterRecord(source, fallbackId) {
     name: getCharacterName(source),
     class: getCharacterClass(source),
     itemLevel: Number(source?.itemLevel) || 0,
-    isGoldEarner: Boolean(source?.isGoldEarner),
+    // Default true on missing field: matches the schema default. A
+    // freshly-built record from /add-roster (where source has no
+    // isGoldEarner key) opts in by default; an explicit `false` (set via
+    // /raid-gold-earner) is preserved verbatim. Without the `!== false`
+    // guard, `Boolean(undefined)` would silently downgrade every new
+    // char to non-earner - the bug the previous default-false world had.
+    isGoldEarner: source?.isGoldEarner !== false,
     combatScore: String(source?.combatScore || ""),
     assignedRaids: ensureAssignedRaids(source),
     tasks: sanitizeTasks(source?.tasks),

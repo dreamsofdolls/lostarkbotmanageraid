@@ -7,18 +7,21 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ## 2026-05-05
 
 ### Added
-- Weekly gold tracking on `/raid-status`. Each character card now appends a `💰 earned / total G` line (unbound) computed from the per-(raid, mode, gate) gold table newly seeded into `RAID_REQUIREMENTS`. Per-account rollup is added to the description; cross-account rollup tails the existing `🌐 All accounts` line when the caller has more than one roster.
+- Weekly gold tracking on `/raid-status`. Gold-earner character cards now append a `💰 earned / total G` line (unbound) computed from the per-(raid, mode, gate) gold table newly seeded into `RAID_REQUIREMENTS`. Per-account rollup goes in the description; cross-account rollup tails the existing `🌐 All accounts` line when paginating across rosters.
+- New `/raid-gold-earner roster:<name>` slash command. Opens an ephemeral picker (5-min session) to flip `character.isGoldEarner` per character, hard-capped at 6 ticks per Lost Ark's gold-earner-per-account-per-week rule. Pre-checks the top 6 by iLvl on first open for legacy data (every char `false` from the pre-default-true world) so legacy users can confirm in one click.
 - `getGoldForGate(raidKey, modeKey, gate)` and `getGoldForRaid(raidKey, modeKey)` exports on `bot/models/Raid.js`. `bot/utils/raid/character.js` exports `computeRaidGold`, `summarizeCharacterGold`, `summarizeAccountGold`, `summarizeGlobalGold`. `bot/utils/raid/shared.js` exports `formatGold` (locale-comma + `G` suffix).
 - `getStatusRaidsForCharacter` now decorates every raid entry with `earnedGold` + `totalGold` so downstream surfaces don't recompute the gate-by-gate sum.
 
 ### Changed
-- The 6-gold-earner-per-account-per-week cap is honored at the rollup layer via `character.isGoldEarner`. Non-earner characters render a muted `💰 _Not gold-earner_` line on their card so the user knows the bot deliberately skipped them; account / cross-account rollups suppress the gold segment entirely when no gold-earner exists. Raid filter narrows gold sums in lockstep with the raid counters.
+- Schema default for `characterSchema.isGoldEarner` flipped from `false` to `true`. `buildCharacterRecord` mirrors the flip via `source?.isGoldEarner !== false` so missing/undefined fields opt in by default while explicit `false` (set via `/raid-gold-earner`) is preserved verbatim. Net effect: chars added through `/add-roster` after this release are gold-earners until the user explicitly unticks them.
+- Gold-earner chars now carry a `· 💰` suffix in the `/raid-status` per-char header (right after the iLvl). The previous body line `💰 _Not gold-earner_` for non-earners was removed - the absence of the header marker is now the sole "not gold-earner" signal, freeing one line of body space per non-earner card. Existing body line for earners (`💰 earned / total G`) is unchanged.
+- Per-account rollup line added to description: `💰 Earned this week: **X** / **Y**`. Suppressed when no gold-earner exists in the account so the line never reads `0G / 0G`. Account pages also surface a one-liner discoverability tip pointing at `/raid-gold-earner` when the account has at least one character.
 
 ### Tests
-- 14 new gold tests in `test/raid-status.test.js` cover `formatGold`, `computeRaidGold`, `getStatusRaidsForCharacter` decoration, `summarizeCharacterGold` / `summarizeAccountGold` / `summarizeGlobalGold` math, the per-char card render (gold-earner / non-earner / no-eligible-raids cases), and the account + cross-account rollup lines. Full suite 287 passing, no regressions.
+- 14 new gold tests in `test/raid-status.test.js` plus 13 new tests in `test/raid-gold-earner.test.js` cover the gold helpers, raid entry decoration, per-char + per-account + cross-account rendering, picker session state (pre-check fallback, cap-6 toggle rejection, ownership guard, stale-session UX, off-window-preserve on confirm). Full suite 287 → 303 passing.
 
 ### Docs
-- README features list + `/raid-status` row mention the gold rollup. `/raid-help` `raid-status` notes block + pinned welcome embed each gained a bilingual section explaining the 6-gold-earner cap and the muted "Not gold-earner" line.
+- README features list + commands table mention `/raid-gold-earner`. `/raid-help` adds a `💰 raid-gold-earner` section and updates the `raid-status` notes for the new header marker + dropped non-earner body line. Pinned welcome embed gold field rewrites to point users at the picker command.
 
 ## 2026-05-02
 

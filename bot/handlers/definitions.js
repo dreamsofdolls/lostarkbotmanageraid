@@ -99,6 +99,17 @@ function createRaidCommandDefinitions({
         .setAutocomplete(true)
     );
 
+  const raidGoldEarnerCommand = new SlashCommandBuilder()
+    .setName("raid-gold-earner")
+    .setDescription("Pick which characters in a roster earn weekly gold (LA cap 6/account)")
+    .addStringOption((option) =>
+      option
+        .setName("roster")
+        .setDescription("Roster (account) to configure - autocomplete")
+        .setRequired(true)
+        .setAutocomplete(true)
+    );
+
   const removeRosterCommand = new SlashCommandBuilder()
     .setName("remove-roster")
     .setDescription("Remove a roster or a character")
@@ -379,6 +390,7 @@ function createRaidCommandDefinitions({
     raidSetCommand,
     statusCommand,
     raidHelpCommand,
+    raidGoldEarnerCommand,
     removeRosterCommand,
     raidChannelCommand,
     raidAutoManageCommand,
