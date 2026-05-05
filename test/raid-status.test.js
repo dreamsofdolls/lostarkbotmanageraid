@@ -512,10 +512,12 @@ test("buildAccountPageEmbed: per-character field omits the gold body line for no
   assert.doesNotMatch(charField.value, /💰/);
 });
 
-test("buildAccountPageEmbed: per-character header carries ' · 💰' suffix for gold-earner chars", () => {
-  // Header marker. Position chosen by user request: right after the
-  // iLvl number, separated by ' · '. Acts as the at-a-glance "is this
-  // char in my 6-pack" indicator.
+test("buildAccountPageEmbed: per-character header does NOT carry a 💰 suffix - gold body line is the sole indicator (round-32 rev)", () => {
+  // Earlier round added a header marker `· 💰` after the iLvl, but the
+  // body line `💰 earned / total G` already conveys the same info on
+  // every gold-earner card so the header marker was visual duplication.
+  // Removed per Traine's review (2026-05-05). Earner identity now lives
+  // exclusively in the body line.
   const char = makeChar("Earner", 1730, { isGoldEarner: true });
   const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
   const fakeRaid = {
@@ -536,7 +538,10 @@ test("buildAccountPageEmbed: per-character header carries ' · 💰' suffix for 
     getRaidsFor
   );
   const charField = embed.toJSON().fields.find((f) => /Earner/.test(f.name));
-  assert.match(charField.name, /· 1730 · 💰/);
+  // Header is just `<class-icon> Name · iLvl`, no 💰 suffix.
+  assert.doesNotMatch(charField.name, /💰/);
+  // Body MUST still carry the 💰 line for an earner with eligible raids.
+  assert.match(charField.value, /💰 0G \/ 52,000G/);
 });
 
 test("buildAccountPageEmbed: shows '/raid-gold-earner' hint when account has at least one eligible non-earner char", () => {

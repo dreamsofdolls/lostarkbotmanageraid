@@ -75,13 +75,7 @@ function createRaidStatusView(deps) {
     // so the field renders cleanly while emoji are still being uploaded.
     const classIcon = getClassEmoji(character.class);
     const namePrefix = classIcon ? `${classIcon} ` : "";
-    // Trailing 💰 marks gold-earner chars at the header level so the
-    // user can scan a roster page for "who's earning this week" without
-    // reading the per-card body line. Position chosen by Traine: right
-    // after the iLvl number (the de facto "char identity" suffix). Non-
-    // earners get nothing - absence is the signal.
-    const goldSuffix = character?.isGoldEarner ? " · 💰" : "";
-    const fieldName = truncateText(`${namePrefix}${name} · ${itemLevel}${goldSuffix}`, 256);
+    const fieldName = truncateText(`${namePrefix}${name} · ${itemLevel}`, 256);
 
     const raids = getRaidsFor(character);
     const lines = raids.length === 0
