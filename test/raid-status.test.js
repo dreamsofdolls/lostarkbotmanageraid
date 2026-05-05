@@ -68,6 +68,7 @@ function makeFactory() {
     waitWithBudget,
     summarizeRaidProgress,
     summarizeAccountGold,
+    summarizeGlobalGold,
     formatGold,
     formatRaidStatusLine,
     getStatusRaidsForCharacter,
@@ -662,11 +663,12 @@ test("buildAccountPageEmbed: omits per-account rollup when account has no gold-e
   assert.doesNotMatch(desc, /Earned this week/);
 });
 
-test("buildAccountPageEmbed: cross-account 🌐 line carries chars + raids only - gold tail removed in round-32", () => {
-  // Gold previously tailed the 🌐 line, but the per-account "Earned
-  // this week" rollup directly below already showed the same number on
-  // every page so the tail was visual duplication. Removed per Traine's
-  // feedback (2026-05-05).
+test("buildAccountPageEmbed: cross-account 🌐 line tails the GRAND total gold across every roster when paginating", () => {
+  // The per-account 'Earned this week' line below shows the current
+  // page's account only; the 🌐 tail is the cross-account aggregate.
+  // Both can show the same number when only one account has earners,
+  // but with multiple accounts marked the tail diverges and acts as
+  // the user's at-a-glance grand total.
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
   const embed = buildAccountPageEmbed(
     account,
@@ -675,15 +677,35 @@ test("buildAccountPageEmbed: cross-account 🌐 line carries chars + raids only 
     {
       progress: { completed: 5, partial: 1, total: 8 },
       characters: 12,
-      gold: { earned: 50000, total: 200000 }, // still passed but now ignored
+      gold: { earned: 50000, total: 200000 },
     },
     NOOP_GET_RAIDS_FOR
   );
   const desc = embed.toJSON().description || "";
   assert.match(desc, /All accounts/);
   assert.match(desc, /5\/8/);
-  // No gold segment on the 🌐 line itself - 'Earned this week' below
-  // carries the per-account number.
+  // 🌐 line carries the gold tail in bold form for the grand total.
+  assert.match(desc, /💰 \*\*50,000G \/ 200,000G\*\*/);
+});
+
+test("buildAccountPageEmbed: cross-account 🌐 line omits gold tail when grand total is 0 (all-non-earner roster)", () => {
+  // Honesty rule: a roster where no one is a gold-earner shouldn't
+  // surface a '💰 0G / 0G' grand total - it would just confuse users
+  // into thinking their flags broke. Tail suppressed entirely.
+  const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    3,
+    {
+      progress: { completed: 0, partial: 0, total: 0 },
+      characters: 5,
+      gold: { earned: 0, total: 0 },
+    },
+    NOOP_GET_RAIDS_FOR
+  );
+  const desc = embed.toJSON().description || "";
+  assert.match(desc, /All accounts/);
   assert.doesNotMatch(desc, /All accounts.*💰/);
 });
 

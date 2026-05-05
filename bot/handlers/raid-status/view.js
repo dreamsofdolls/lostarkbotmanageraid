@@ -250,12 +250,22 @@ function createRaidStatusView(deps) {
     // (subject-wide, not per-account) and helps when flipping pages.
     const descriptionLines = [];
     if (totalPages > 1) {
-      // Cross-account rollup carries chars + raids-done counts only.
-      // The gold figure used to tail this line, but the per-account
-      // "Earned this week" line directly below already shows the same
-      // number on every page so the tail was visual duplication.
+      // Cross-account rollup. The gold tail is the GRAND total across
+      // every roster the user has - distinct from the per-account
+      // "Earned this week" line directly below (which is just the
+      // current page's account). Round-32 briefly removed the tail
+      // because a single-earner-account user saw identical numbers in
+      // both places, but with multiple accounts marked the cross-
+      // account figure is a separate signal worth keeping.
+      // Suppressed when total <= 0 so an all-non-earner roster doesn't
+      // render a misleading "💰 0G / 0G" segment.
+      const globalGoldTotal = Number(globalTotals?.gold?.total) || 0;
+      const globalGoldEarned = Number(globalTotals?.gold?.earned) || 0;
+      const globalGoldTail = globalGoldTotal > 0
+        ? ` · 💰 **${formatGold(globalGoldEarned)} / ${formatGold(globalGoldTotal)}**`
+        : "";
       descriptionLines.push(
-        `🌐 All accounts: **${globalTotals.characters}** chars · **${globalTotals.progress.completed}/${globalTotals.progress.total}** raids done`
+        `🌐 All accounts: **${globalTotals.characters}** chars · **${globalTotals.progress.completed}/${globalTotals.progress.total}** raids done${globalGoldTail}`
       );
     }
     // Per-account gold rollup. Always emitted on accounts with at least
