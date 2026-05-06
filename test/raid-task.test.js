@@ -492,6 +492,7 @@ test("buildAccountTaskFields rolls up totals + 2-column packs char fields", () =
         name: "Alpha",
         class: "Berserker",
         itemLevel: 1700,
+        combatScore: "85000",
         sideTasks: [
           { taskId: "1", name: "Una", reset: "daily", completed: true },
           { taskId: "2", name: "Chaos", reset: "daily", completed: false },
@@ -524,12 +525,14 @@ test("buildAccountTaskFields rolls up totals + 2-column packs char fields", () =
   assert.equal(fields.length, 3, "expected 3 fields for 2 chars (card + spacer + card)");
   assert.equal(fields[1].name, "​", "middle field is a ZWS spacer");
   assert.match(fields[0].name, /Alpha/);
-  assert.doesNotMatch(fields[0].name, /1700/);
+  assert.match(fields[0].name, /1700/);
+  assert.doesNotMatch(fields[0].name, /85000/);
+  assert.match(fields[0].value, /CP 85000/);
   assert.match(fields[0].value, /\*\*Daily\*\* · 1\/2/);
   assert.match(fields[0].value, /🟢 Una/);
   assert.doesNotMatch(fields[0].value, /· daily/);
   assert.match(fields[2].name, /Beta/);
-  assert.doesNotMatch(fields[2].name, /1690/);
+  assert.match(fields[2].name, /1690/);
   assert.match(fields[2].value, /\*\*Weekly\*\* · 1\/1/);
   assert.match(fields[2].value, /🟢 Guardian/);
   assert.doesNotMatch(fields[2].value, /· weekly/);
@@ -681,6 +684,20 @@ test("PROJECTION: RAID_CHECK_USER_QUERY_FIELDS allowlist includes sideTasks", ()
   assert.ok(
     RAID_CHECK_USER_QUERY_FIELDS.includes("accounts.sharedTasks"),
     "sharedTasks must be in /raid-check select projection (Manager Task view)"
+  );
+  assert.ok(
+    RAID_CHECK_USER_QUERY_FIELDS.includes("accounts.characters.combatScore"),
+    "combatScore must be in /raid-check select projection (Manager Task view)"
+  );
+  const fs = require("fs");
+  const path = require("path");
+  const taskViewSrc = fs.readFileSync(
+    path.join(__dirname, "..", "bot", "handlers", "raid-check", "task-view-ui.js"),
+    "utf8"
+  );
+  assert.ok(
+    taskViewSrc.includes("accounts.characters.combatScore"),
+    "direct Manager Task view select projection must include combatScore"
   );
 });
 

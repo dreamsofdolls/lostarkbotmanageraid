@@ -39,6 +39,7 @@ const RAID_CHECK_USER_QUERY_FIELDS = [
   "accounts.characters.class",
   "accounts.characters.className",
   "accounts.characters.itemLevel",
+  "accounts.characters.combatScore",
   "accounts.characters.raids",
   "accounts.characters.assignedRaids",
   "accounts.characters.publicLogDisabled",
