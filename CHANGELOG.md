@@ -4,6 +4,15 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-07
+
+### Changed
+- Chaos Gate and Field Boss shared-task presets now use the fixed `UTC-4` schedule instead of Pacific time. A source slot like Thu 11:00 UTC-4 now displays as Thu 22:00 VN, not Fri 01:00 VN.
+- Updated `/raid-help`, `/raid-status` Task view copy, and README schedule wording from NA West/PT to UTC-4.
+
+### Tests
+- Updated scheduled shared-task tests to pin the new UTC-4 slot keys and VN dropdown time.
+
 ## 2026-05-06
 
 ### Changed
