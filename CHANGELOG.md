@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-06
+
+### Changed
+- `/raid-status` and `/raid-check raid:all` now render Serca like the other weekly-lockout raids: a 1740+ character shows one Serca line, defaulting to Serca Nightmare until the character actually clears/marks a lower mode. A Serca Hard or Serca Normal clear now replaces the Nightmare line instead of appearing beside it.
+
+### Tests
+- Added a regression test covering Serca 1740+ status display for default Nightmare, cleared Hard, and cleared Normal.
+
 ## 2026-05-05
 
 ### Added
