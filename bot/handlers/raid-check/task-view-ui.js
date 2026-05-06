@@ -43,7 +43,7 @@ function createTaskViewUi(deps) {
 
     const userDoc = await User.findOne({ discordId: targetDiscordId })
       .select(
-        "discordId discordUsername discordGlobalName discordDisplayName accounts.accountName accounts.sharedTasks accounts.characters.name accounts.characters.class accounts.characters.itemLevel accounts.characters.combatScore accounts.characters.sideTasks"
+        "discordId discordUsername discordGlobalName discordDisplayName accounts.accountName accounts.sharedTasks accounts.characters.name accounts.characters.class accounts.characters.itemLevel accounts.characters.sideTasks"
       )
       .lean();
 
