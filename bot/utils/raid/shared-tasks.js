@@ -240,10 +240,11 @@ function dailyResetStartMs(now = new Date()) {
     : boundaryMs - 24 * 60 * 60 * 1000;
 }
 
-function scheduledTaskKey(task, now = new Date()) {
+function scheduledTaskKey(task, slotStartAtMs) {
   const preset = getSharedTaskPreset(task?.preset);
-  const resetStart = new Date(dailyResetStartMs(now));
-  return `${preset.preset}:daily:${utcDateKey(resetStart)}`;
+  const slotStart = new Date(slotStartAtMs);
+  const slotTime = `${pad2(slotStart.getUTCHours())}:${pad2(slotStart.getUTCMinutes())}`;
+  return `${preset.preset}:slot:${utcDateKey(slotStart)}T${slotTime}Z`;
 }
 
 function scheduleWindowDurationMinutes(preset) {
@@ -312,8 +313,6 @@ function resolveScheduledSharedTaskState(task, now = new Date()) {
   const activeWindow = resolveActiveScheduleWindow(preset, parts);
   const anchor = activeWindow?.anchor || null;
   const active = !!activeWindow;
-  const key = active ? scheduledTaskKey(task, now) : null;
-  const completed = active && task?.completedForKey === key;
   const slotMinutes = getScheduleSlotMinutes(preset);
   const slotOffset = activeWindow
     ? Math.floor(activeWindow.elapsedMinutes / slotMinutes) * slotMinutes
@@ -351,6 +350,8 @@ function resolveScheduledSharedTaskState(task, now = new Date()) {
         preset.timeZone
       )
     : null;
+  const key = active ? scheduledTaskKey(task, slotStartAtMs) : null;
+  const completed = active && task?.completedForKey === key;
 
   let nextLabel = "";
   let nextAtMs = null;

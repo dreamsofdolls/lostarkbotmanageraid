@@ -186,14 +186,18 @@ test("parseSharedTaskExpiresAt accepts YYYY-MM-DD and rejects invalid dates", ()
   assert.equal(parseSharedTaskExpiresAt(""), null);
 });
 
-test("scheduled shared task: Chaos Gate completion key follows daily reset and transitions hourly", () => {
+test("scheduled shared task: Chaos Gate completion key follows hourly spawn slots", () => {
   const task = { preset: "chaos_gate", reset: "scheduled", completedForKey: "" };
   const mondayLate = new Date("2026-04-28T06:30:00.000Z"); // Mon 23:30 PDT.
+  const sameMondaySlot = new Date("2026-04-28T06:59:00.000Z"); // Mon 23:59 PDT.
+  const nextMondaySlot = new Date("2026-04-28T07:00:00.000Z"); // Tue 00:00 PDT.
   const beforeDailyReset = new Date("2026-04-28T09:30:00.000Z"); // Tue 02:30 PDT, before 10:00 UTC reset.
   const tuesdayEarly = new Date("2026-04-28T11:30:00.000Z"); // Tue 04:30 PDT, after reset.
   const afterWindow = new Date("2026-04-28T13:05:00.000Z"); // Tue 06:05 PDT.
 
   const lateState = resolveScheduledSharedTaskState(task, mondayLate);
+  const sameSlotState = resolveScheduledSharedTaskState(task, sameMondaySlot);
+  const nextSlotState = resolveScheduledSharedTaskState(task, nextMondaySlot);
   const beforeResetState = resolveScheduledSharedTaskState(task, beforeDailyReset);
   const earlyState = resolveScheduledSharedTaskState(task, tuesdayEarly);
   const afterState = resolveScheduledSharedTaskState(task, afterWindow);
@@ -201,9 +205,11 @@ test("scheduled shared task: Chaos Gate completion key follows daily reset and t
   assert.equal(lateState.active, true);
   assert.equal(beforeResetState.active, true);
   assert.equal(earlyState.active, true);
-  assert.equal(lateState.key, "chaos_gate:daily:2026-04-27");
-  assert.equal(beforeResetState.key, "chaos_gate:daily:2026-04-27");
-  assert.equal(earlyState.key, "chaos_gate:daily:2026-04-28");
+  assert.equal(lateState.key, "chaos_gate:slot:2026-04-28T06:00Z");
+  assert.equal(sameSlotState.key, lateState.key);
+  assert.equal(nextSlotState.key, "chaos_gate:slot:2026-04-28T07:00Z");
+  assert.equal(beforeResetState.key, "chaos_gate:slot:2026-04-28T09:00Z");
+  assert.equal(earlyState.key, "chaos_gate:slot:2026-04-28T11:00Z");
   assert.equal(lateState.slotEndAtMs, Date.UTC(2026, 3, 28, 7, 0, 0, 0));
   assert.equal(earlyState.slotEndAtMs, Date.UTC(2026, 3, 28, 12, 0, 0, 0));
   assert.equal(lateState.windowEndAtMs, Date.UTC(2026, 3, 28, 13, 0, 0, 0));
@@ -229,11 +235,20 @@ test("scheduled shared task: Chaos Gate completion key follows daily reset and t
 
 test("scheduled shared task: Field Boss follows Tue/Fri/Sun PT windows", () => {
   const task = { preset: "field_boss", reset: "scheduled", completedForKey: "" };
+  const sundayLate = new Date("2026-04-27T06:30:00.000Z"); // Sun 23:30 PDT.
+  const mondayNoon = new Date("2026-04-27T19:00:00.000Z"); // Mon 12:00 PDT.
   const tuesdayNoon = new Date("2026-04-28T19:00:00.000Z"); // Tue 12:00 PDT.
   const wednesdayNoon = new Date("2026-04-29T19:00:00.000Z"); // Wed 12:00 PDT.
 
-  assert.equal(resolveScheduledSharedTaskState(task, tuesdayNoon).active, true);
+  const sundayState = resolveScheduledSharedTaskState(task, sundayLate);
+  const tuesdayState = resolveScheduledSharedTaskState(task, tuesdayNoon);
+
+  assert.equal(sundayState.active, true);
+  assert.equal(resolveScheduledSharedTaskState(task, mondayNoon).active, false);
+  assert.equal(tuesdayState.active, true);
   assert.equal(resolveScheduledSharedTaskState(task, wednesdayNoon).active, false);
+  assert.equal(sundayState.key, "field_boss:slot:2026-04-27T06:00Z");
+  assert.equal(tuesdayState.key, "field_boss:slot:2026-04-28T19:00Z");
 });
 
 test("scheduled shared task: next transition helper returns nearest open or close", () => {
