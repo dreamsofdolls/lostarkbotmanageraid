@@ -41,11 +41,6 @@ function formatItemLevel(character) {
   return text || "0";
 }
 
-function formatCombatScore(character) {
-  const text = String(character?.combatScore || "").trim();
-  return text && text !== "?" ? text : "";
-}
-
 function buildAccountTaskFields(account, helpers) {
   const {
     UI,
@@ -93,8 +88,6 @@ function buildAccountTaskFields(account, helpers) {
     totals.weeklyDone += weeklyTasks.filter((t) => t?.completed).length;
 
     const lines = [];
-    const combatScore = formatCombatScore(character);
-    if (combatScore) lines.push(`_CP ${combatScore}_`);
     if (dailyTasks.length > 0) {
       const dailyDone = dailyTasks.filter((t) => t.completed).length;
       lines.push(`**Daily** · ${dailyDone}/${dailyTasks.length}`);
