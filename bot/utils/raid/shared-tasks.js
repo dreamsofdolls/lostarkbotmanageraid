@@ -410,16 +410,13 @@ function getSharedTaskDisplay(task, now = new Date()) {
   if (task?.reset === SCHEDULED_RESET) {
     const state = resolveScheduledSharedTaskState(task, now);
     const activeEndsAtMs = state.slotEndAtMs || state.windowEndAtMs;
-    const activeScheduleLabel = activeEndsAtMs
-      ? formatVietnamPacificScheduleLabel(activeEndsAtMs)
-      : "";
     const nextScheduleLabel = state.nextAtMs
       ? formatVietnamPacificScheduleLabel(state.nextAtMs)
       : state.nextLabel;
     const status = state.active
-      ? `Đang mở${activeEndsAtMs ? ` · lượt này đóng ${formatDiscordTimestamp(activeEndsAtMs, "R")} · ${activeScheduleLabel}` : ""}`
+      ? `Đang mở${activeEndsAtMs ? ` · lượt này đóng ${formatDiscordTimestamp(activeEndsAtMs, "R")} · ${formatDiscordTimestamp(activeEndsAtMs, "f")}` : ""}`
       : state.nextAtMs
-        ? `Mở ${formatDiscordTimestamp(state.nextAtMs, "R")} · ${formatDiscordTimestamp(state.nextAtMs, "f")} · ${nextScheduleLabel}`
+        ? `Mở ${formatDiscordTimestamp(state.nextAtMs, "R")} · ${formatDiscordTimestamp(state.nextAtMs, "f")}`
         : nextScheduleLabel
           ? `Mở ${nextScheduleLabel}`
           : preset.scheduleText;

@@ -223,13 +223,14 @@ test("scheduled shared task: Chaos Gate completion key follows hourly spawn slot
   const inactiveDisplay = getSharedTaskDisplay(task, afterWindow);
   assert.doesNotMatch(activeDisplay.optionStatus, /<t:/);
   assert.equal(activeDisplay.optionStatus, "Đang mở");
-  assert.match(activeDisplay.status, /T3 14:00 VN · Tue 12:00 AM PT/);
+  assert.match(
+    activeDisplay.status,
+    new RegExp(`<t:${Math.floor(lateState.slotEndAtMs / 1000)}:f>`)
+  );
+  assert.doesNotMatch(activeDisplay.status, /VN · .* PT/);
   assert.match(inactiveDisplay.status, /<t:\d+:R>/);
   assert.match(inactiveDisplay.status, /<t:\d+:f>/);
-  assert.match(
-    inactiveDisplay.status,
-    /T6 01:00 VN · Thu 11:00 AM PT/
-  );
+  assert.doesNotMatch(inactiveDisplay.status, /VN · .* PT/);
   assert.equal(inactiveDisplay.optionStatus, "Mở T6 01:00 VN");
 });
 
