@@ -357,60 +357,8 @@ function getStatusRaidsForCharacter(character) {
     const modeKey = toModeKey(selectedDifficulty);
     const completedGateKeys = getCompletedGateKeys(assignedRaid);
 
-    // At 1740+, surface both Serca Hard and Nightmare as selectable options
-    // (Hard alone still eligible from 1730 via the generic branch below).
     const rawGateKeys = getGateKeys(assignedRaid);
     const allGateKeys = rawGateKeys.length > 0 ? rawGateKeys : getGatesForRaid(raidKey);
-
-    if (raidKey === "serca" && itemLevel >= 1740) {
-      // Lockout-aware: in Lost Ark the weekly raid slot is shared across
-      // every difficulty of the same raid, so clearing at any one mode
-      // (Normal/Hard/Nightmare) consumes the slot. Once the char has any
-      // completed gate this week, only surface the actually-cleared mode -
-      // showing a "0/2 pending Nightmare" card next to "2/2 Hard done"
-      // is misleading because the char physically can't run Nightmare
-      // until next reset. normalizeAssignedRaid above already promoted
-      // canonicalDifficulty to the cleared mode, so modeKey here points
-      // at the right card.
-      const lockedThisWeek = completedGateKeys.length > 0;
-      if (lockedThisWeek) {
-        const requirement = getRequirementFor(raidKey, modeKey);
-        if (requirement && itemLevel >= requirement.minItemLevel) {
-          selected.push({
-            raidName: requirement.label,
-            raidKey,
-            modeKey,
-            minItemLevel: requirement.minItemLevel,
-            allGateKeys,
-            completedGateKeys,
-            isCompleted: isAssignedRaidCompleted(assignedRaid),
-            ...computeRaidGold(raidKey, modeKey, completedGateKeys, allGateKeys),
-          });
-        }
-        continue;
-      }
-
-      // Not locked yet - surface BOTH Hard and Nightmare so the leader
-      // can see which mode the char is set up for.
-      for (const sercaModeKey of ["hard", "nightmare"]) {
-        const sercaRequirement = getRequirementFor(raidKey, sercaModeKey);
-        if (!sercaRequirement || itemLevel < sercaRequirement.minItemLevel) continue;
-
-        const isSameMode = modeKey === sercaModeKey;
-        const sercaCompleted = isSameMode ? completedGateKeys : [];
-        selected.push({
-          raidName: sercaRequirement.label,
-          raidKey,
-          modeKey: sercaModeKey,
-          minItemLevel: sercaRequirement.minItemLevel,
-          allGateKeys,
-          completedGateKeys: sercaCompleted,
-          isCompleted: isSameMode && isAssignedRaidCompleted(assignedRaid),
-          ...computeRaidGold(raidKey, sercaModeKey, sercaCompleted, allGateKeys),
-        });
-      }
-      continue;
-    }
 
     const requirement = getRequirementFor(raidKey, modeKey);
     if (!requirement || itemLevel < requirement.minItemLevel) continue;
@@ -428,9 +376,9 @@ function getStatusRaidsForCharacter(character) {
   }
 
   // Display order: Act 4 → Kazeros (Final) → Serca, top-to-bottom per
-  // character card. Within the same raid (Serca Hard vs Nightmare at 1740+),
-  // the lower difficulty tier comes first because it is the lower iLvl gate -
-  // e.g. Serca Hard (1730) appears above Serca Nightmare (1740).
+  // character card. Each raid contributes at most one mode; Serca follows
+  // the same lockout model as Kazeros: default to the best eligible mode,
+  // then show the mode actually cleared when the player runs a lower tier.
   const raidDisplayOrder = { armoche: 0, kazeros: 1, serca: 2 };
   return selected.sort((a, b) => {
     const orderDiff = (raidDisplayOrder[a.raidKey] ?? 99) - (raidDisplayOrder[b.raidKey] ?? 99);

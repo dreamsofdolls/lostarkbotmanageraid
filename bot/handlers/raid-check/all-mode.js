@@ -721,8 +721,9 @@ function createAllModeHandler({
       ];
       // StringSelect caps at 25 options; 1 slot is All-raids entry so
       // 24 actual raids fit. Act 4 Normal/Hard + Kazeros Normal/Hard +
-      // Serca Hard/Nightmare = 6 today, plenty of headroom for future
-      // raid additions.
+      // Serca Normal/Hard/Nightmare = 7 possible modes today, plenty of
+      // headroom for future raid additions. Each character contributes at
+      // most one Serca entry in the overview.
       for (const r of raidEntries.slice(0, 24)) {
         // Same DONE-vs-breakdown rule as the user dropdown above:
         // "0 pending · 0🛡️ 0⚔️" reads as noise; collapse to "DONE" so

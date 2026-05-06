@@ -411,6 +411,49 @@ test("getStatusRaidsForCharacter: decorates each raid entry with earnedGold + to
   assert.equal(sum, 138000);
 });
 
+test("getStatusRaidsForCharacter: Serca 1740+ shows one mode, switching to the cleared lower mode", () => {
+  const nightmareReady = makeChar("NightmareReady", 1740);
+  const nightmareSerca = getStatusRaidsForCharacter(nightmareReady).filter(
+    (raid) => raid.raidKey === "serca"
+  );
+  assert.deepEqual(
+    nightmareSerca.map((raid) => raid.raidName),
+    ["Serca Nightmare"]
+  );
+
+  const hardClear = {
+    ...makeChar("HardClear", 1740),
+    assignedRaids: {
+      armoche: {},
+      kazeros: {},
+      serca: {
+        G1: { difficulty: "Hard", completedDate: 1 },
+        G2: { difficulty: "Hard", completedDate: 2 },
+      },
+    },
+  };
+  const hardSerca = getStatusRaidsForCharacter(hardClear).filter(
+    (raid) => raid.raidKey === "serca"
+  );
+  assert.deepEqual(hardSerca.map((raid) => raid.raidName), ["Serca Hard"]);
+
+  const normalClear = {
+    ...makeChar("NormalClear", 1740),
+    assignedRaids: {
+      armoche: {},
+      kazeros: {},
+      serca: {
+        G1: { difficulty: "Normal", completedDate: 1 },
+        G2: { difficulty: "Normal", completedDate: 2 },
+      },
+    },
+  };
+  const normalSerca = getStatusRaidsForCharacter(normalClear).filter(
+    (raid) => raid.raidKey === "serca"
+  );
+  assert.deepEqual(normalSerca.map((raid) => raid.raidName), ["Serca Normal"]);
+});
+
 test("summarizeCharacterGold: sums earnedGold + totalGold across raid entries", () => {
   const raids = [
     { earnedGold: 17000, totalGold: 52000 },
