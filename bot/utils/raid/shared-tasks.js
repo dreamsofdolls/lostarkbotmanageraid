@@ -1,6 +1,8 @@
 "use strict";
 
-const PACIFIC_TIME_ZONE = "America/Los_Angeles";
+const SCHEDULE_SOURCE_TIME_ZONE = "Etc/GMT+4"; // Fixed UTC-4; IANA Etc sign is intentionally reversed.
+const SCHEDULE_SOURCE_LABEL = "UTC-4";
+const PACIFIC_TIME_ZONE = SCHEDULE_SOURCE_TIME_ZONE; // Backward-compatible export name.
 const VIETNAM_TIME_ZONE = "Asia/Ho_Chi_Minh";
 const SHARED_TASK_CAP_DAILY = 5;
 const SHARED_TASK_CAP_WEEKLY = 5;
@@ -32,12 +34,12 @@ const SHARED_TASK_PRESETS = Object.freeze({
     reset: SCHEDULED_RESET,
     kind: "scheduled",
     emoji: "🌪️",
-    timeZone: PACIFIC_TIME_ZONE,
+    timeZone: SCHEDULE_SOURCE_TIME_ZONE,
     activeDays: [1, 4, 6, 0],
     startMinute: 11 * 60,
     slotMinutes: 60,
     endMinuteExclusive: 6 * 60,
-    scheduleText: "Mon/Thu/Sat/Sun hourly 11 AM-5 AM PT",
+    scheduleText: "Mon/Thu/Sat/Sun hourly 11 AM-5 AM UTC-4",
   }),
   field_boss: Object.freeze({
     preset: "field_boss",
@@ -46,12 +48,12 @@ const SHARED_TASK_PRESETS = Object.freeze({
     reset: SCHEDULED_RESET,
     kind: "scheduled",
     emoji: "👹",
-    timeZone: PACIFIC_TIME_ZONE,
+    timeZone: SCHEDULE_SOURCE_TIME_ZONE,
     activeDays: [2, 5, 0],
     startMinute: 11 * 60,
     slotMinutes: 60,
     endMinuteExclusive: 6 * 60,
-    scheduleText: "Tue/Fri/Sun hourly 11 AM-5 AM PT",
+    scheduleText: "Tue/Fri/Sun hourly 11 AM-5 AM UTC-4",
   }),
 });
 
@@ -125,7 +127,7 @@ function getVisibleSharedTasks(account, nowMs = Date.now()) {
   );
 }
 
-function getZonedParts(date = new Date(), timeZone = PACIFIC_TIME_ZONE) {
+function getZonedParts(date = new Date(), timeZone = SCHEDULE_SOURCE_TIME_ZONE) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,
     year: "numeric",
@@ -158,7 +160,7 @@ function shiftLocalDate(parts, deltaDays) {
   };
 }
 
-function zonedDateTimeToUtcMs(parts, hour, minute, timeZone = PACIFIC_TIME_ZONE) {
+function zonedDateTimeToUtcMs(parts, hour, minute, timeZone = SCHEDULE_SOURCE_TIME_ZONE) {
   const targetWallMs = Date.UTC(parts.year, parts.month - 1, parts.day, hour, minute);
   let guessMs = targetWallMs;
   for (let i = 0; i < 4; i += 1) {
@@ -193,15 +195,15 @@ function formatTwelveHour(parts) {
   return `${hour}:${pad2(parts.minute)} ${suffix}`;
 }
 
-function formatVietnamPacificScheduleLabel(ms) {
+function formatVietnamSourceScheduleLabel(ms) {
   const value = Number(ms);
   if (!Number.isFinite(value) || value <= 0) return "";
   const date = new Date(value);
   const vn = getZonedParts(date, VIETNAM_TIME_ZONE);
-  const pt = getZonedParts(date, PACIFIC_TIME_ZONE);
+  const source = getZonedParts(date, SCHEDULE_SOURCE_TIME_ZONE);
   return [
     `${WEEKDAY_VN[vn.weekday]} ${pad2(vn.hour)}:${pad2(vn.minute)} VN`,
-    `${WEEKDAY_SHORT[pt.weekday]} ${formatTwelveHour(pt)} PT`,
+    `${WEEKDAY_SHORT[source.weekday]} ${formatTwelveHour(source)} ${SCHEDULE_SOURCE_LABEL}`,
   ].join(" · ");
 }
 
@@ -378,7 +380,7 @@ function resolveScheduledSharedTaskState(task, now = new Date()) {
         preset.startMinute % 60,
         preset.timeZone
       );
-      nextLabel = formatVietnamPacificScheduleLabel(nextAtMs);
+      nextLabel = formatVietnamSourceScheduleLabel(nextAtMs);
     }
   }
 
@@ -411,7 +413,7 @@ function getSharedTaskDisplay(task, now = new Date()) {
     const state = resolveScheduledSharedTaskState(task, now);
     const activeEndsAtMs = state.slotEndAtMs || state.windowEndAtMs;
     const nextScheduleLabel = state.nextAtMs
-      ? formatVietnamPacificScheduleLabel(state.nextAtMs)
+      ? formatVietnamSourceScheduleLabel(state.nextAtMs)
       : state.nextLabel;
     const status = state.active
       ? `Đang mở${activeEndsAtMs ? ` · lượt này đóng ${formatDiscordTimestamp(activeEndsAtMs, "R")} · ${formatDiscordTimestamp(activeEndsAtMs, "f")}` : ""}`
@@ -473,6 +475,8 @@ function getNextSharedTaskTransitionMs(account, now = new Date()) {
 
 module.exports = {
   PACIFIC_TIME_ZONE,
+  SCHEDULE_SOURCE_TIME_ZONE,
+  SCHEDULE_SOURCE_LABEL,
   VIETNAM_TIME_ZONE,
   SCHEDULED_RESET,
   SHARED_TASK_PRESETS,

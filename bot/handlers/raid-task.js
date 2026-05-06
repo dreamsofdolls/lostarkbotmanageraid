@@ -30,7 +30,7 @@ const {
 function formatSharedResetDetail(reset) {
   if (reset === "daily") return "Daily (reset 17:00 VN)";
   if (reset === "weekly") return "Weekly (reset 17:00 VN thứ 4)";
-  if (reset === SCHEDULED_RESET) return "Theo lịch NA West (Pacific)";
+  if (reset === SCHEDULED_RESET) return "Theo lịch UTC-4";
   return formatSharedResetLabel(reset);
 }
 
@@ -86,8 +86,8 @@ function isDuplicateSharedTask(sharedTasks, preset, taskName, reset, nowMs = Dat
 }
 
 function sharedPresetLabel(preset) {
-  if (preset.preset === "chaos_gate") return "Chaos Gate (NA West PT)";
-  if (preset.preset === "field_boss") return "Field Boss (NA West PT)";
+  if (preset.preset === "chaos_gate") return "Chaos Gate (UTC-4)";
+  if (preset.preset === "field_boss") return "Field Boss (UTC-4)";
   return preset.label;
 }
 

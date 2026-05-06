@@ -188,33 +188,28 @@ test("parseSharedTaskExpiresAt accepts YYYY-MM-DD and rejects invalid dates", ()
 
 test("scheduled shared task: Chaos Gate completion key follows hourly spawn slots", () => {
   const task = { preset: "chaos_gate", reset: "scheduled", completedForKey: "" };
-  const mondayLate = new Date("2026-04-28T06:30:00.000Z"); // Mon 23:30 PDT.
-  const sameMondaySlot = new Date("2026-04-28T06:59:00.000Z"); // Mon 23:59 PDT.
-  const nextMondaySlot = new Date("2026-04-28T07:00:00.000Z"); // Tue 00:00 PDT.
-  const beforeDailyReset = new Date("2026-04-28T09:30:00.000Z"); // Tue 02:30 PDT, before 10:00 UTC reset.
-  const tuesdayEarly = new Date("2026-04-28T11:30:00.000Z"); // Tue 04:30 PDT, after reset.
-  const afterWindow = new Date("2026-04-28T13:05:00.000Z"); // Tue 06:05 PDT.
+  const mondayLate = new Date("2026-04-28T02:30:00.000Z"); // Mon 22:30 UTC-4.
+  const sameMondaySlot = new Date("2026-04-28T02:59:00.000Z"); // Mon 22:59 UTC-4.
+  const nextMondaySlot = new Date("2026-04-28T03:00:00.000Z"); // Mon 23:00 UTC-4.
+  const beforeDailyReset = new Date("2026-04-28T09:30:00.000Z"); // Tue 05:30 UTC-4, before 10:00 UTC reset.
+  const afterWindow = new Date("2026-04-28T10:05:00.000Z"); // Tue 06:05 UTC-4.
 
   const lateState = resolveScheduledSharedTaskState(task, mondayLate);
   const sameSlotState = resolveScheduledSharedTaskState(task, sameMondaySlot);
   const nextSlotState = resolveScheduledSharedTaskState(task, nextMondaySlot);
   const beforeResetState = resolveScheduledSharedTaskState(task, beforeDailyReset);
-  const earlyState = resolveScheduledSharedTaskState(task, tuesdayEarly);
   const afterState = resolveScheduledSharedTaskState(task, afterWindow);
 
   assert.equal(lateState.active, true);
   assert.equal(beforeResetState.active, true);
-  assert.equal(earlyState.active, true);
-  assert.equal(lateState.key, "chaos_gate:slot:2026-04-28T06:00Z");
+  assert.equal(lateState.key, "chaos_gate:slot:2026-04-28T02:00Z");
   assert.equal(sameSlotState.key, lateState.key);
-  assert.equal(nextSlotState.key, "chaos_gate:slot:2026-04-28T07:00Z");
+  assert.equal(nextSlotState.key, "chaos_gate:slot:2026-04-28T03:00Z");
   assert.equal(beforeResetState.key, "chaos_gate:slot:2026-04-28T09:00Z");
-  assert.equal(earlyState.key, "chaos_gate:slot:2026-04-28T11:00Z");
-  assert.equal(lateState.slotEndAtMs, Date.UTC(2026, 3, 28, 7, 0, 0, 0));
-  assert.equal(earlyState.slotEndAtMs, Date.UTC(2026, 3, 28, 12, 0, 0, 0));
-  assert.equal(lateState.windowEndAtMs, Date.UTC(2026, 3, 28, 13, 0, 0, 0));
+  assert.equal(lateState.slotEndAtMs, Date.UTC(2026, 3, 28, 3, 0, 0, 0));
+  assert.equal(lateState.windowEndAtMs, Date.UTC(2026, 3, 28, 10, 0, 0, 0));
   assert.equal(afterState.active, false);
-  assert.equal(afterState.nextAtMs, Date.UTC(2026, 3, 30, 18, 0, 0, 0));
+  assert.equal(afterState.nextAtMs, Date.UTC(2026, 3, 30, 15, 0, 0, 0));
   assert.match(
     getSharedTaskDisplay(task, mondayLate).status,
     new RegExp(`<t:${Math.floor(lateState.slotEndAtMs / 1000)}:R>`)
@@ -227,19 +222,19 @@ test("scheduled shared task: Chaos Gate completion key follows hourly spawn slot
     activeDisplay.status,
     new RegExp(`<t:${Math.floor(lateState.slotEndAtMs / 1000)}:f>`)
   );
-  assert.doesNotMatch(activeDisplay.status, /VN · .* PT/);
+  assert.doesNotMatch(activeDisplay.status, /VN · .*UTC-4/);
   assert.match(inactiveDisplay.status, /<t:\d+:R>/);
   assert.match(inactiveDisplay.status, /<t:\d+:f>/);
-  assert.doesNotMatch(inactiveDisplay.status, /VN · .* PT/);
-  assert.equal(inactiveDisplay.optionStatus, "Mở T6 01:00 VN");
+  assert.doesNotMatch(inactiveDisplay.status, /VN · .*UTC-4/);
+  assert.equal(inactiveDisplay.optionStatus, "Mở T5 22:00 VN");
 });
 
-test("scheduled shared task: Field Boss follows Tue/Fri/Sun PT windows", () => {
+test("scheduled shared task: Field Boss follows Tue/Fri/Sun UTC-4 windows", () => {
   const task = { preset: "field_boss", reset: "scheduled", completedForKey: "" };
-  const sundayLate = new Date("2026-04-27T06:30:00.000Z"); // Sun 23:30 PDT.
-  const mondayNoon = new Date("2026-04-27T19:00:00.000Z"); // Mon 12:00 PDT.
-  const tuesdayNoon = new Date("2026-04-28T19:00:00.000Z"); // Tue 12:00 PDT.
-  const wednesdayNoon = new Date("2026-04-29T19:00:00.000Z"); // Wed 12:00 PDT.
+  const sundayLate = new Date("2026-04-27T02:30:00.000Z"); // Sun 22:30 UTC-4.
+  const mondayNoon = new Date("2026-04-27T16:00:00.000Z"); // Mon 12:00 UTC-4.
+  const tuesdayNoon = new Date("2026-04-28T16:00:00.000Z"); // Tue 12:00 UTC-4.
+  const wednesdayNoon = new Date("2026-04-29T16:00:00.000Z"); // Wed 12:00 UTC-4.
 
   const sundayState = resolveScheduledSharedTaskState(task, sundayLate);
   const tuesdayState = resolveScheduledSharedTaskState(task, tuesdayNoon);
@@ -248,8 +243,8 @@ test("scheduled shared task: Field Boss follows Tue/Fri/Sun PT windows", () => {
   assert.equal(resolveScheduledSharedTaskState(task, mondayNoon).active, false);
   assert.equal(tuesdayState.active, true);
   assert.equal(resolveScheduledSharedTaskState(task, wednesdayNoon).active, false);
-  assert.equal(sundayState.key, "field_boss:slot:2026-04-27T06:00Z");
-  assert.equal(tuesdayState.key, "field_boss:slot:2026-04-28T19:00Z");
+  assert.equal(sundayState.key, "field_boss:slot:2026-04-27T02:00Z");
+  assert.equal(tuesdayState.key, "field_boss:slot:2026-04-28T16:00Z");
 });
 
 test("scheduled shared task: next transition helper returns nearest open or close", () => {
@@ -260,16 +255,16 @@ test("scheduled shared task: next transition helper returns nearest open or clos
       { taskId: "fb", preset: "field_boss", reset: "scheduled" },
     ],
   };
-  const mondayLate = new Date("2026-04-28T06:30:00.000Z"); // Mon 23:30 PDT.
-  const afterWindow = new Date("2026-04-28T13:05:00.000Z"); // Tue 06:05 PDT.
+  const mondayLate = new Date("2026-04-28T02:30:00.000Z"); // Mon 22:30 UTC-4.
+  const afterWindow = new Date("2026-04-28T10:05:00.000Z"); // Tue 06:05 UTC-4.
 
   assert.equal(
     getNextSharedTaskTransitionMs(account, mondayLate),
-    Date.UTC(2026, 3, 28, 7, 0, 0, 0)
+    Date.UTC(2026, 3, 28, 3, 0, 0, 0)
   );
   assert.equal(
     getNextSharedTaskTransitionMs(account, afterWindow),
-    Date.UTC(2026, 3, 28, 18, 0, 0, 0)
+    Date.UTC(2026, 3, 28, 15, 0, 0, 0)
   );
 });
 
