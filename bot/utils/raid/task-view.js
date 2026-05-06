@@ -2,6 +2,8 @@
 
 const { pack2Columns } = require("./shared");
 
+const HEADER_SEPARATOR = "\u00A0\u00B7\u00A0";
+
 /**
  * Shared helper for the Task view layout used by both `/raid-status` and
  * `/raid-check` (Manager spot-check). Renders the per-character
@@ -31,6 +33,17 @@ const PAGE_CHAR_CAP = 11;
 
 function getCharacterName(character) {
   return String(character?.name || character?.charName || "").trim();
+}
+
+function formatItemLevel(character) {
+  const raw = character?.itemLevel;
+  const text = String(raw ?? "").trim();
+  return text || "0";
+}
+
+function formatCombatScore(character) {
+  const text = String(character?.combatScore || "").trim();
+  return text && text !== "?" ? text : "";
 }
 
 function buildAccountTaskFields(account, helpers) {
@@ -64,7 +77,10 @@ function buildAccountTaskFields(account, helpers) {
     const charName = getCharacterName(character);
     const classIcon = getClassEmoji(character.class);
     const namePrefix = classIcon ? `${classIcon} ` : "";
-    const fieldName = truncateText(`${namePrefix}${charName}`, 256);
+    const fieldName = truncateText(
+      `${namePrefix}${charName}${HEADER_SEPARATOR}${formatItemLevel(character)}`,
+      256
+    );
 
     const sideTasks = Array.isArray(character.sideTasks)
       ? character.sideTasks
@@ -77,6 +93,8 @@ function buildAccountTaskFields(account, helpers) {
     totals.weeklyDone += weeklyTasks.filter((t) => t?.completed).length;
 
     const lines = [];
+    const combatScore = formatCombatScore(character);
+    if (combatScore) lines.push(`_CP ${combatScore}_`);
     if (dailyTasks.length > 0) {
       const dailyDone = dailyTasks.filter((t) => t.completed).length;
       lines.push(`**Daily** · ${dailyDone}/${dailyTasks.length}`);
@@ -86,7 +104,7 @@ function buildAccountTaskFields(account, helpers) {
       }
     }
     if (weeklyTasks.length > 0) {
-      if (lines.length > 0) lines.push("");
+      if (dailyTasks.length > 0) lines.push("");
       const weeklyDone = weeklyTasks.filter((t) => t.completed).length;
       lines.push(`**Weekly** · ${weeklyDone}/${weeklyTasks.length}`);
       for (const task of weeklyTasks) {

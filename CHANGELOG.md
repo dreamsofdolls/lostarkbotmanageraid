@@ -8,9 +8,11 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ### Changed
 - `/raid-status` and `/raid-check raid:all` now render Serca like the other weekly-lockout raids: a 1740+ character shows one Serca line, defaulting to Serca Nightmare until the character actually clears/marks a lower mode. A Serca Hard or Serca Normal clear now replaces the Nightmare line instead of appearing beside it.
+- Task view character headers now stay raid-view-like and compact (`name · iLvl` with a non-breaking separator). CP, when available, renders as a body metadata line instead of extending the field title, preventing long headers from wrapping inside Discord's narrow inline columns. Manager Task view projections now include `combatScore` too.
 
 ### Tests
 - Added a regression test covering Serca 1740+ status display for default Nightmare, cleared Hard, and cleared Normal.
+- Added Task view coverage for compact headers, CP body metadata, and Manager-side `combatScore` projection.
 
 ## 2026-05-05
 
