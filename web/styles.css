@@ -133,12 +133,20 @@ table th { color: var(--text-dim); font-weight: 600; }
 }
 
 .class-icon {
-  width: 20px;
-  height: 20px;
-  flex: 0 0 20px;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
   border-radius: 50%;
   object-fit: cover;
-  background: #14171a;
+  /* Lighter than the card bg (#232629) + subtle ring so transparent
+     class-glyph PNGs pop against the dark page. brightness filter
+     boosts the line-art luminance without distorting the per-class
+     color identity (Reaper purple, Berserker red, etc) the way an
+     invert would. */
+  background: #3a3e44;
+  border: 1px solid #4a4f55;
+  padding: 1px;
+  filter: brightness(1.15) saturate(1.05);
 }
 
 /* Per-raid preview group: each (raid, mode) gets its own card-like
