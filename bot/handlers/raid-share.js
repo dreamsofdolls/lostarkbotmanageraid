@@ -1,6 +1,7 @@
 const RosterShare = require("../models/RosterShare");
 const User = require("../models/user");
 const { isManagerId } = require("../services/manager");
+const { t, getUserLanguage } = require("../services/i18n");
 
 function buildAlertEmbed({ EmbedBuilder, UI, type = "info", title, description, footer }) {
   const colorKey = type === "error" ? "danger" : type === "success" ? "success" : "neutral";
@@ -22,6 +23,13 @@ function ownerLabel(userDoc, fallbackId) {
   );
 }
 
+// Localize a stored access level ("edit" / "view") into the viewer's
+// language so all 3 callers (grant update description, list outgoing/
+// incoming rows) render the access badge consistently.
+function localizedAccessLevel(level, lang) {
+  return t(`share.accessLevel.${level || "edit"}`, lang);
+}
+
 function createRaidShareCommand(deps) {
   const { EmbedBuilder, MessageFlags, UI } = deps;
 
@@ -29,7 +37,7 @@ function createRaidShareCommand(deps) {
   // Manager-only (env RAID_MANAGER_ID). Upserts a RosterShare so a
   // second grant on the same target overwrites accessLevel rather than
   // creating a duplicate document.
-  async function handleGrant(interaction) {
+  async function handleGrant(interaction, lang) {
     const target = interaction.options.getUser("target", true);
     const permission = interaction.options.getString("permission") || "edit";
 
@@ -39,8 +47,8 @@ function createRaidShareCommand(deps) {
           EmbedBuilder,
           UI,
           type: "error",
-          title: "Không share cho bot",
-          description: "Target phải là một Discord user thật, không phải bot.",
+          title: t("share.grant.botTargetTitle", lang),
+          description: t("share.grant.botTargetDescription", lang),
         })],
         flags: MessageFlags.Ephemeral,
       });
@@ -52,8 +60,8 @@ function createRaidShareCommand(deps) {
           EmbedBuilder,
           UI,
           type: "error",
-          title: "Không share cho chính mình",
-          description: "Target không thể là chính cậu - rosters của cậu thì cậu vẫn quản lý mà~",
+          title: t("share.grant.selfTargetTitle", lang),
+          description: t("share.grant.selfTargetDescription", lang),
         })],
         flags: MessageFlags.Ephemeral,
       });
@@ -87,28 +95,37 @@ function createRaidShareCommand(deps) {
       { upsert: true },
     );
 
-    const verb = previousLevel ? "Cập nhật share" : "Đã share";
-    const desc = previousLevel
-      ? `Đổi quyền cho <@${target.id}> từ \`${previousLevel}\` → \`${permission}\`. ` +
-        `Lần kế tiếp họ chạy /raid-status hoặc /raid-set, autocomplete sẽ phản ánh quyền mới.`
-      : `Từ giờ <@${target.id}> sẽ thấy mọi roster của cậu trong /raid-status và ` +
-        `(với quyền \`${permission}\`) có thể ${permission === "edit" ? "**update progress** qua /raid-set, /raid-task, text parser" : "**xem read-only** không update được"}. ` +
-        `Cậu có thể \`/raid-share revoke\` bất cứ lúc nào để rút quyền.`;
+    const isUpdate = !!previousLevel;
+    const title = isUpdate
+      ? t("share.grant.successTitleUpdate", lang)
+      : t("share.grant.successTitleNew", lang);
+    let desc;
+    if (isUpdate) {
+      desc = t("share.grant.descriptionUpdate", lang, {
+        target: target.id,
+        previous: localizedAccessLevel(previousLevel, lang),
+        permission: localizedAccessLevel(permission, lang),
+      });
+    } else if (permission === "edit") {
+      desc = t("share.grant.descriptionNewEdit", lang, { target: target.id });
+    } else {
+      desc = t("share.grant.descriptionNewView", lang, { target: target.id });
+    }
 
     await interaction.editReply({
       embeds: [buildAlertEmbed({
         EmbedBuilder,
         UI,
         type: "success",
-        title: `${verb} thành công`,
+        title,
         description: desc,
-        footer: `Manager-only command · only RAID_MANAGER_ID accounts can /raid-share`,
+        footer: t("share.grant.footer", lang),
       })],
     });
   }
 
   // ── /raid-share revoke target:@B ────────────────────────────────────
-  async function handleRevoke(interaction) {
+  async function handleRevoke(interaction, lang) {
     const target = interaction.options.getUser("target", true);
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -124,8 +141,8 @@ function createRaidShareCommand(deps) {
           EmbedBuilder,
           UI,
           type: "info",
-          title: "Không có share nào để rút",
-          description: `<@${target.id}> chưa được cậu share roster. Không có gì để revoke.`,
+          title: t("share.revoke.noShareTitle", lang),
+          description: t("share.revoke.noShareDescription", lang, { target: target.id }),
         })],
       });
       return;
@@ -136,10 +153,8 @@ function createRaidShareCommand(deps) {
         EmbedBuilder,
         UI,
         type: "success",
-        title: "Đã rút share",
-        description:
-          `<@${target.id}> sẽ không còn thấy roster của cậu trong /raid-status nữa. ` +
-          `Lần kế tiếp họ chạy command, view sẽ revert về roster của riêng họ.`,
+        title: t("share.revoke.successTitle", lang),
+        description: t("share.revoke.successDescription", lang, { target: target.id }),
       })],
     });
   }
@@ -147,7 +162,7 @@ function createRaidShareCommand(deps) {
   // ── /raid-share list [direction:in|out|both] ────────────────────────
   // Default direction = both. Outgoing = shares cậu đã grant (cậu = A).
   // Incoming = shares cậu đang nhận (cậu = B).
-  async function handleList(interaction) {
+  async function handleList(interaction, lang) {
     const direction = interaction.options.getString("direction") || "both";
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -177,15 +192,16 @@ function createRaidShareCommand(deps) {
     const lines = [];
 
     if (showOutgoing) {
-      lines.push("**📤 Outgoing shares** (cậu đã grant cho người khác):");
+      lines.push(t("share.list.outgoingHeader", lang));
       if (outgoing.length === 0) {
-        lines.push("_Chưa share roster cho ai._");
+        lines.push(t("share.list.outgoingEmpty", lang));
       } else {
         for (const share of outgoing) {
           const suspended = !isManagerId(interaction.user.id);
-          const tag = suspended ? " ⚠️ (cậu hết Manager → share đang suspended)" : "";
+          const tag = suspended ? t("share.list.outgoingSuspendedTag", lang) : "";
+          const accessText = localizedAccessLevel(share.accessLevel, lang);
           lines.push(
-            `• <@${share.granteeDiscordId}> · \`${share.accessLevel}\`${tag}`,
+            `• <@${share.granteeDiscordId}> · \`${accessText}\`${tag}`,
           );
         }
       }
@@ -194,17 +210,18 @@ function createRaidShareCommand(deps) {
     if (showOutgoing && showIncoming) lines.push("");
 
     if (showIncoming) {
-      lines.push("**📥 Incoming shares** (người khác share cho cậu):");
+      lines.push(t("share.list.incomingHeader", lang));
       if (incoming.length === 0) {
-        lines.push("_Chưa ai share roster cho cậu._");
+        lines.push(t("share.list.incomingEmpty", lang));
       } else {
         for (const share of incoming) {
           const ownerDoc = incomingOwnerById.get(share.ownerDiscordId);
           const label = ownerLabel(ownerDoc, share.ownerDiscordId);
           const suspended = !isManagerId(share.ownerDiscordId);
-          const tag = suspended ? " ⚠️ (owner hết Manager → share đang suspended)" : "";
+          const tag = suspended ? t("share.list.incomingSuspendedTag", lang) : "";
+          const accessText = localizedAccessLevel(share.accessLevel, lang);
           lines.push(
-            `• ${label} (<@${share.ownerDiscordId}>) · \`${share.accessLevel}\`${tag}`,
+            `• ${label} (<@${share.ownerDiscordId}>) · \`${accessText}\`${tag}`,
           );
         }
       }
@@ -212,11 +229,9 @@ function createRaidShareCommand(deps) {
 
     const embed = new EmbedBuilder()
       .setColor(UI.colors.neutral)
-      .setTitle("🔗 Roster Share · Overview")
+      .setTitle(t("share.list.title", lang))
       .setDescription(lines.join("\n"))
-      .setFooter({
-        text: "/raid-share grant target:@... · /raid-share revoke target:@...",
-      });
+      .setFooter({ text: t("share.list.footer", lang) });
 
     await interaction.editReply({ embeds: [embed] });
   }
@@ -225,6 +240,10 @@ function createRaidShareCommand(deps) {
   // grant/revoke. List is open to everyone so a regular user can see
   // who has shared rosters with them.
   async function handleRaidShareCommand(interaction) {
+    // Resolve invoker's locale once at command entry; every reply on
+    // /raid-share is ephemeral to the invoker, so this lang threads
+    // through every branch without any clicker-vs-owner split.
+    const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
     const sub = interaction.options.getSubcommand();
 
     if ((sub === "grant" || sub === "revoke") && !isManagerId(interaction.user.id)) {
@@ -233,19 +252,17 @@ function createRaidShareCommand(deps) {
           EmbedBuilder,
           UI,
           type: "error",
-          title: "Manager-only command",
-          description:
-            "`/raid-share grant` và `/raid-share revoke` chỉ dành cho Raid Manager " +
-            "(env `RAID_MANAGER_ID`). Cậu vẫn có thể `/raid-share list` để xem ai đang share roster cho cậu.",
+          title: t("share.auth.managerOnlyTitle", lang),
+          description: t("share.auth.managerOnlyDescription", lang),
         })],
         flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
-    if (sub === "grant") return handleGrant(interaction);
-    if (sub === "revoke") return handleRevoke(interaction);
-    if (sub === "list") return handleList(interaction);
+    if (sub === "grant") return handleGrant(interaction, lang);
+    if (sub === "revoke") return handleRevoke(interaction, lang);
+    if (sub === "list") return handleList(interaction, lang);
 
     await interaction.reply({
       content: `Unknown subcommand: ${sub}`,
