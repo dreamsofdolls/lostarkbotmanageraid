@@ -113,17 +113,29 @@ async function startBot() {
   // an empty-looking cache that masquerades as "chưa config channel nào".
   await loadMonitorChannelCache();
 
-  // Local-sync HTTP server hosts the web companion (Phase 3) at /sync/*
-  // and will serve POST /api/raid-sync (Phase 4). Listens on PORT (Railway
-  // injects this) so the deploy passes Railway's "service detected" probe.
-  // Disabled when LOCAL_SYNC_HTTP_DISABLED=true so a degraded deploy can
-  // run pure-Discord-only without binding a port.
+  // Local-sync HTTP server hosts the web companion at /sync/* and the
+  // POST /api/raid-sync endpoint that consumes companion-uploaded
+  // encounters.db deltas. Listens on PORT (Railway injects this) so
+  // the deploy passes Railway's "service detected" probe. Disabled
+  // when LOCAL_SYNC_HTTP_DISABLED=true so a degraded deploy can run
+  // pure-Discord-only without binding a port.
   if (process.env.LOCAL_SYNC_HTTP_DISABLED !== "true") {
     try {
       const path = require("node:path");
       const { startLocalSyncHttpServer } = require("./bot/services/local-sync/http-server");
+      const { createRaidSyncEndpoint } = require("./bot/services/local-sync/sync-endpoint");
+      const User = require("./bot/models/user");
+      const { applyRaidSetForDiscordId } = require("./bot/commands");
+      const raidSyncHandler = createRaidSyncEndpoint({
+        User,
+        applyRaidSetForDiscordId,
+      });
       startLocalSyncHttpServer({
         webDir: path.join(__dirname, "web"),
+        apiHandlers: {
+          "POST /api/raid-sync": raidSyncHandler,
+          "OPTIONS /api/raid-sync": raidSyncHandler, // CORS preflight
+        },
       });
     } catch (err) {
       console.error(

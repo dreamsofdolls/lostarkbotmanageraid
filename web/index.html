@@ -35,16 +35,22 @@
     </section>
 
     <section id="preview-section" class="card" hidden>
-      <h2>3. Last 7-day preview (dry-run)</h2>
-      <p class="hint">
-        Phase 3 only previews what would be sent. Phase 4 wires the actual sync POST.
-      </p>
+      <h2>3. Last 7-day preview</h2>
       <div id="preview-output">Loading sql.js WASM...</div>
+    </section>
+
+    <section id="sync-section" class="card" hidden>
+      <h2>4. Sync to Artist</h2>
+      <p class="hint">
+        Sends the cleared encounters above to the bot. Per-character ownership is enforced server-side - chars not in your roster are skipped.
+      </p>
+      <button id="sync-btn" type="button" disabled>Sync now</button>
+      <div id="sync-output" class="meta" hidden></div>
     </section>
 
     <footer>
       <p class="hint">
-        Phase 3 of 6. <a href="https://github.com/dreamsofdolls/lostarkbotmanageraid">Source</a>.
+        Phase 4 of 6 (live sync). <a href="https://github.com/dreamsofdolls/lostarkbotmanageraid">Source</a>.
       </p>
     </footer>
   </main>

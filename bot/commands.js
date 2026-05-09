@@ -1133,6 +1133,19 @@ const raidChannelCommandHandlers = createRaidChannelCommand({
 } = raidChannelCommandHandlers);
 
 
+// Thunk wrapper around the `applyRaidSetForDiscordId` let-binding so
+// downstream consumers (local-sync HTTP endpoint, future text parsers)
+// can take a stable function reference at require-time even though
+// the binding itself is filled in lazily during command-factory init.
+async function callApplyRaidSetForDiscordId(args) {
+  if (typeof applyRaidSetForDiscordId !== "function") {
+    throw new Error(
+      "[commands] applyRaidSetForDiscordId not initialized yet - command factory hasn't run"
+    );
+  }
+  return applyRaidSetForDiscordId(args);
+}
+
 module.exports = {
   commands,
   handleRaidManagementCommand,
@@ -1158,6 +1171,7 @@ module.exports = {
   startMaintenanceScheduler,
   startSideTaskResetScheduler,
   parseRaidMessage,
+  applyRaidSetForDiscordId: callApplyRaidSetForDiscordId,
   __test: {
     buildRaidCheckSnapshotFromUsers,
     formatRaidCheckNotEligibleFieldValue,
