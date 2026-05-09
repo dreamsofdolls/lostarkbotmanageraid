@@ -4,6 +4,16 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-09 (later 11)
+
+### Changed (text-parser hints + stuck-nudge follow "ping target's lang" rule)
+- `bot/services/raid-channel-monitor.js` `handleRaidChannelMessage` swapped `guildLang` for `authorLang` (resolved from `message.author.id`) across all 14 user-directed t() call sites: parse-error hints (multi-gate / multi-raid / multi-difficulty / invalid-combo / invalid-gate / no-roster / errorNotFound / errorIneligible / errorSystem / errorPartialNote / errorRetryNote), the public `whisperAck`, and the public `dmFallback`. All of these auto-ping or explicitly mention the poster, so the audience-of-one is them. Other channel members are now an incidental audience.
+- `postSpamWarning` and `postEmptyContentWarning` now resolve the addressee's per-user lang internally instead of reading the guild's broadcast lang. Reply auto-mention pulls the addressee's eye, so they're the reader.
+- Welcome embed (`postRaidChannelWelcome`) stays on `guildLang` - that's a true channel-wide broadcast with no specific user pinged.
+- `bot/services/raid-schedulers.js` `nudgeStuckPrivateLogUser` now resolves the target user's lang via `getUserLanguage(discordId, ...)` instead of the host guild's broadcast lang. The body has a `<@discordId>` mention, so it's user-addressed.
+- Pattern matches the `add-roster.js:897-907` precedent ("Channel ping content uses the TARGET's lang") - same rule applied consistently across the codebase.
+- 327/327 tests pass.
+
 ## 2026-05-09 (later 10)
 
 ### Fixed (Side tasks view JP/EN locale leak)

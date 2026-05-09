@@ -466,9 +466,10 @@ function createRaidChannelMonitorService({
     const last = emptyContentWarningAt.get(key) || 0;
     if (now - last < EMPTY_CONTENT_WARNING_COOLDOWN_MS) return;
     emptyContentWarningAt.set(key, now);
-    // Empty-content warning is public (channel reply) but addressed at the
-    // poster - guild's broadcast lang covers both audiences fairly.
-    const lang = await getGuildLanguage(message.guildId, { GuildConfigModel: GuildConfig });
+    // Empty-content reply auto-pings the poster, so render in their
+    // per-user lang. The ping is what makes them look at it; other
+    // channel members are an incidental audience.
+    const lang = await getUserLanguage(message.author.id, { UserModel: User });
     await postTransientReply(
       message,
       t("text-parser.emptyContent", lang, { icon: UI.icons.warn })
@@ -608,9 +609,12 @@ function createRaidChannelMonitorService({
   }
   async function postSpamWarning(message) {
     try {
-      // Spam warning is a public reply seen by everyone in channel - guild
-      // language even though it's reply-style addressed at the spammer.
-      const lang = await getGuildLanguage(message.guildId, { GuildConfigModel: GuildConfig });
+      // Spam reply auto-pings the spammer (Discord default reply mention),
+      // so the spammer is the addressed reader. Render in their per-user
+      // lang per the "bot pings X => X's lang" rule. Other channel members
+      // see it incidentally; the audience-of-one (the spammer) is what
+      // matters for comprehension.
+      const lang = await getUserLanguage(message.author.id, { UserModel: User });
       const reply = await message.reply({
         content: t("text-parser.spamWarn", lang),
       });
@@ -708,29 +712,31 @@ function createRaidChannelMonitorService({
       return;
     }
     commitUserMonitorActivity(message, cooldown.viaException);
-    // Resolve guild lang once per message; used for every public hint /
-    // whisper-ack / public DM-fallback post downstream. The DM body itself
-    // uses the recipient's per-user lang (resolved separately below) since
-    // that's a private 1:1 surface.
-    const guildLang = await getGuildLanguage(message.guildId, { GuildConfigModel: GuildConfig });
+    // Resolve the poster's per-user lang once per message. Every hint /
+    // whisper-ack / public DM-fallback post downstream is reply-style or
+    // explicit-mention addressed to the poster, so the audience-of-one
+    // is them - render in their lang. Falls back to DEFAULT_LANGUAGE
+    // ("vi") on cache + DB miss. Reused as `dmLang` for the private
+    // DM surface below since both are read by the same person.
+    const authorLang = await getUserLanguage(message.author.id, { UserModel: User });
     if (parsed.error === "multi-gate") {
       await postPersistentHint(
         message,
-        t("text-parser.multiGate", guildLang, { icon: UI.icons.warn, gates: parsed.gates.join(", ") })
+        t("text-parser.multiGate", authorLang, { icon: UI.icons.warn, gates: parsed.gates.join(", ") })
       );
       return;
     }
     if (parsed.error === "multi-raid") {
       await postPersistentHint(
         message,
-        t("text-parser.multiRaid", guildLang, { icon: UI.icons.warn, raids: parsed.raids.join(", ") })
+        t("text-parser.multiRaid", authorLang, { icon: UI.icons.warn, raids: parsed.raids.join(", ") })
       );
       return;
     }
     if (parsed.error === "multi-difficulty") {
       await postPersistentHint(
         message,
-        t("text-parser.multiDifficulty", guildLang, {
+        t("text-parser.multiDifficulty", authorLang, {
           icon: UI.icons.warn,
           difficulties: parsed.difficulties.join(", "),
         })
@@ -743,7 +749,7 @@ function createRaidChannelMonitorService({
     if (!raidMeta) {
       await postPersistentHint(
         message,
-        t("text-parser.invalidCombo", guildLang, { icon: UI.icons.warn, raidKey, modeKey })
+        t("text-parser.invalidCombo", authorLang, { icon: UI.icons.warn, raidKey, modeKey })
       );
       return;
     }
@@ -752,7 +758,7 @@ function createRaidChannelMonitorService({
       if (!validGates.includes(gate)) {
         await postPersistentHint(
           message,
-          t("text-parser.invalidGate", guildLang, {
+          t("text-parser.invalidGate", authorLang, {
             icon: UI.icons.warn,
             gate,
             raidLabel: raidMeta.label,
@@ -844,7 +850,7 @@ function createRaidChannelMonitorService({
     if (hadNoRoster) {
       await postPersistentHint(
         message,
-        t("text-parser.noRoster", guildLang, { icon: UI.icons.info })
+        t("text-parser.noRoster", authorLang, { icon: UI.icons.info })
       );
       return;
     }
@@ -856,10 +862,10 @@ function createRaidChannelMonitorService({
     const hasProgress = successCount > 0 || alreadyCount > 0;
     const hasErrors =
       notFoundResults.length > 0 || ineligibleResults.length > 0 || errorResults.length > 0;
-    // DM body uses the recipient's per-user lang since it's a private 1:1
-    // surface (the poster). Falls back to guild lang on cache miss + no
-    // User doc - DEFAULT_LANGUAGE in i18n.js handles that.
-    const dmLang = await getUserLanguage(message.author.id, { UserModel: User });
+    // DM body is read by the same person as the channel hints (the
+    // poster), so reuse authorLang resolved at the top of the handler -
+    // avoids a redundant DB round-trip on the same user_id.
+    const dmLang = authorLang;
     // Build an aggregated embed for DM - covers both single-char and multi-char
     // cases, and groups results by status so the user sees one tidy card.
     const aggregateEmbed = buildRaidChannelMultiResultEmbed({
@@ -893,7 +899,7 @@ function createRaidChannelMonitorService({
       const hintLines = [];
       if (notFoundResults.length > 0) {
         hintLines.push(
-          t("text-parser.errorNotFound", guildLang, {
+          t("text-parser.errorNotFound", authorLang, {
             icon: UI.icons.warn,
             names: notFoundResults.map((r) => `\`${r.charName}\``).join(", "),
           })
@@ -901,7 +907,7 @@ function createRaidChannelMonitorService({
       }
       if (ineligibleResults.length > 0) {
         hintLines.push(
-          t("text-parser.errorIneligible", guildLang, {
+          t("text-parser.errorIneligible", authorLang, {
             icon: UI.icons.warn,
             raidLabel: raidMeta.label,
             minItemLevel: raidMeta.minItemLevel,
@@ -913,16 +919,16 @@ function createRaidChannelMonitorService({
       }
       if (errorResults.length > 0) {
         hintLines.push(
-          t("text-parser.errorSystem", guildLang, {
+          t("text-parser.errorSystem", authorLang, {
             icon: UI.icons.warn,
             names: errorResults.map((r) => `\`${r.charName}\``).join(", "),
           })
         );
       }
       if (hasProgress) {
-        hintLines.push(t("text-parser.errorPartialNote", guildLang));
+        hintLines.push(t("text-parser.errorPartialNote", authorLang));
       } else {
-        hintLines.push(t("text-parser.errorRetryNote", guildLang));
+        hintLines.push(t("text-parser.errorRetryNote", authorLang));
       }
       ops.push(postPersistentHint(message, hintLines.join("\n")));
     }
@@ -957,7 +963,7 @@ function createRaidChannelMonitorService({
           // window (gives the user time to see the ack before both
           // the whisper + the original post vanish).
           whisperMsg = await message.channel.send({
-            content: t("text-parser.whisperAck", guildLang, { userId: message.author.id }),
+            content: t("text-parser.whisperAck", authorLang, { userId: message.author.id }),
             allowedMentions: { users: [message.author.id] },
           });
         } catch (err) {
@@ -999,12 +1005,12 @@ function createRaidChannelMonitorService({
         .join(", ");
       const parts = [];
       if (doneNames) {
-        parts.push(t("text-parser.dmFallbackMarkDone", guildLang, { scope, names: doneNames }));
+        parts.push(t("text-parser.dmFallbackMarkDone", authorLang, { scope, names: doneNames }));
       }
       if (alreadyNames) {
-        parts.push(t("text-parser.dmFallbackAlready", guildLang, { scope, names: alreadyNames }));
+        parts.push(t("text-parser.dmFallbackAlready", authorLang, { scope, names: alreadyNames }));
       }
-      const fallbackText = t("text-parser.dmFallback", guildLang, {
+      const fallbackText = t("text-parser.dmFallback", authorLang, {
         icon: UI.icons.done,
         userId: message.author.id,
         parts: parts.join("; "),
@@ -1130,9 +1136,10 @@ function createRaidChannelMonitorService({
     } catch (err) {
       console.warn("[raid-channel] fetchPins for stale-welcome scan failed:", err?.message || err);
     }
-    // Resolve the guild's broadcast language and render in that locale. New
-    // GuildConfig docs (no language field yet) fall back to "vi" via
-    // getGuildLanguage's defaults, matching the legacy behavior.
+    // Welcome embed is a channel-wide broadcast (no specific user pinged),
+    // so it stays on the guild's broadcast language. New GuildConfig docs
+    // (no language field yet) fall back to "vi" via getGuildLanguage's
+    // defaults, matching the legacy behavior.
     const guildLang = await getGuildLanguage(guildId, { GuildConfigModel: GuildConfig });
     const embed = buildRaidChannelWelcomeEmbed(guildLang);
     try {

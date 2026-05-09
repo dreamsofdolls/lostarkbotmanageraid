@@ -1,6 +1,6 @@
 "use strict";
 
-const { t, getGuildLanguage } = require("./i18n");
+const { t, getGuildLanguage, getUserLanguage } = require("./i18n");
 const { TRANSLATIONS, DEFAULT_LANGUAGE } = require("../locales");
 
 // Helper - read an array-shaped locale node (e.g.
@@ -922,13 +922,15 @@ function createRaidSchedulerService({
       }
       if (!channel) continue;
 
-      // Nudge is a public broadcast in this guild's monitor channel - use
-      // the guild's broadcast language. The user being tagged sees it but
-      // so does everyone else in the channel.
-      const guildLang = await getGuildLanguage(cfg.guildId, { GuildConfigModel: GuildConfig });
+      // Nudge body explicitly mentions <@discordId> to pull that user's
+      // attention - render in the target user's per-user lang per the
+      // "bot pings X => X's lang" rule. Other channel members see it
+      // incidentally; the audience-of-one (the user with the stuck
+      // private log) is who needs to act on it.
+      const targetLang = await getUserLanguage(discordId, { UserModel: User });
       const sent = await postChannelAnnouncement(
         channel,
-        t("announcements.stuck-nudge.body", guildLang, { discordId }),
+        t("announcements.stuck-nudge.body", targetLang, { discordId }),
         PRIVATE_LOG_NUDGE_TTL_MS,
         "auto-manage private-log nudge"
       );
