@@ -19,6 +19,8 @@
  */
 
 const { buildNoticeEmbed } = require("../../utils/raid/shared");
+const { t, getUserLanguage } = require("../../services/i18n");
+const { getRaidModeLabel } = require("../../utils/raid/labels");
 
 function createEditUi({
   EmbedBuilder,
@@ -46,24 +48,42 @@ function createEditUi({
 }) {
 
   function buildEditEmbed(state) {
+    const lang = state.lang || "vi";
+    // Resolve the picked raid label once for use across nextStep, header
+    // and the raid line. Falls back to "_not picked_" sentinel.
+    const resolveRaidLabel = () => {
+      if (!state.selectedRaid) return null;
+      const meta = RAID_REQUIREMENT_MAP[state.selectedRaid];
+      if (meta?.raidKey && meta?.modeKey) {
+        return getRaidModeLabel(meta.raidKey, meta.modeKey, lang);
+      }
+      return meta?.label || state.raidMeta?.label || state.selectedRaid;
+    };
+    const pickedRaidLabel = resolveRaidLabel();
+
     // Pick the next step hint so the leader always knows which dropdown
     // to look at. The dropdown itself also updates live but a dense UI
     // with 3 selects stacked needs a verbal anchor in the embed too.
     let nextStep = null;
     if (state.applied) {
-      nextStep = "Xong~ Bấm ✖️ Close để đóng, hoặc gõ lại `/raid-check` xem pending list mới.";
+      nextStep = t("raid-check.editFlow.nextStepCompleted", lang);
     } else if (state.scopeAll && !state.raidMeta) {
-      nextStep = "Pick **raid + difficulty** trước nhé - tớ sẽ load roster editable cho raid đó.";
+      nextStep = t("raid-check.editFlow.nextStepPickRaid", lang);
     } else if (state.scopeAll && state.editableByUser.size === 0) {
-      nextStep = "Raid này không có user/char nào edit được (floor quá cao hoặc mọi char thuộc user auto-sync + log on). Đổi raid khác xem~";
+      nextStep = t("raid-check.editFlow.nextStepNoEditable", lang);
     } else if (!state.selectedUser) {
-      nextStep = "Pick **user** cần chỉnh progress nhé (dropdown ngay bên dưới).";
+      nextStep = t("raid-check.editFlow.nextStepPickUser", lang);
     } else if (!state.selectedChar) {
-      nextStep = `Giờ chọn **character** trong roster của bạn đó. Icon trong label theo progress của **${state.raidMeta.label}**: 🟢 DONE · 🟠 partial · 🟡 khác mode · ⚪ chưa clear.`;
+      const raidLabelForChar = state.raidMeta
+        ? getRaidModeLabel(state.raidMeta.raidKey, state.raidMeta.modeKey, lang)
+        : pickedRaidLabel || "";
+      nextStep = t("raid-check.editFlow.nextStepPickChar", lang, {
+        raidLabel: raidLabelForChar,
+      });
     } else if (state.awaitingGate) {
-      nextStep = "Pick **gate** (G1/G2) cho status Process - chỉ gate đó được đánh dấu done.";
+      nextStep = t("raid-check.editFlow.nextStepPickGate", lang);
     } else {
-      nextStep = "Cuối cùng bấm **✅ Complete** (full raid), **📝 Process** (1 gate), hay **🔄 Reset** (xoá sạch).";
+      nextStep = t("raid-check.editFlow.nextStepPickStatus", lang);
     }
 
     // User label priorities (in order):
@@ -79,38 +99,36 @@ function createEditUi({
       state.preSelectedUserId &&
       state.preSelectedDisplayName
     ) {
-      userLabel = `${state.preSelectedDisplayName} _(sẽ auto-pick sau khi cậu chọn raid)_`;
+      userLabel = t("raid-check.editFlow.preSelectHint", lang, {
+        name: state.preSelectedDisplayName,
+      });
     } else {
-      userLabel = "_chưa chọn_";
+      userLabel = t("raid-check.editFlow.noneSelected", lang);
     }
     const charLabel = state.selectedChar
       ? `${state.selectedChar.charName} · ${Math.round(state.selectedChar.itemLevel)}${state.selectedChar.publicLogDisabled ? " · 🔒 log off" : ""}`
-      : "_chưa chọn_";
-    const raidLabel = state.selectedRaid
-      ? RAID_REQUIREMENT_MAP[state.selectedRaid]?.label ||
-        state.raidMeta?.label ||
-        state.selectedRaid
-      : "_chưa chọn_";
+      : t("raid-check.editFlow.noneSelected", lang);
+    const raidLabel = pickedRaidLabel || t("raid-check.editFlow.noneSelected", lang);
 
     // Header copy changes per mode. All-mode leader can flip raids
     // mid-session (cascade resets when they do), while specific-raid
     // mode locks to whatever /raid-check was opened against.
     const headerLine = state.scopeAll
       ? (state.raidMeta
-          ? `Artist đang giúp cậu edit progress cross-raid~ Đang làm việc trên **${raidLabel}**. Đổi raid qua dropdown bất cứ lúc nào - cascade sẽ reset.`
-          : "Artist giúp cậu edit progress cross-raid nhé~ Pick **raid + difficulty** trước để tớ load roster.")
-      : `Artist dẫn cậu chỉnh progress giúp member nhé~ Edit này scope cho **${raidLabel}** thôi, cậu chỉ cần chọn **user → char → status**.`;
+          ? t("raid-check.editFlow.headerScopeAllPicked", lang, { raidLabel })
+          : t("raid-check.editFlow.headerScopeAllUnpicked", lang))
+      : t("raid-check.editFlow.headerScopeLocked", lang, { raidLabel });
 
     const raidLineSuffix = state.scopeAll
-      ? (state.raidMeta ? " _(đổi qua dropdown)_" : "")
-      : " _(lock theo /raid-check)_";
+      ? (state.raidMeta ? t("raid-check.editFlow.raidSuffixScopeAllPicked", lang) : "")
+      : t("raid-check.editFlow.raidSuffixScopeLocked", lang);
 
     const description = [
       headerLine,
       "",
-      `🧍 **User:** ${userLabel}`,
-      `⚔️ **Character:** ${charLabel}`,
-      `🎯 **Raid:** ${raidLabel}${raidLineSuffix}`,
+      t("raid-check.editFlow.userLine", lang, { value: userLabel }),
+      t("raid-check.editFlow.charLine", lang, { value: charLabel }),
+      t("raid-check.editFlow.raidLine", lang, { value: raidLabel, suffix: raidLineSuffix }),
     ];
 
     // Show live gate state once a raid is picked so the leader can see
@@ -124,18 +142,18 @@ function createEditUi({
         raidMeta?.raidKey,
         raidMeta?.modeKey
       );
-      const gateLine = formatGateStateLine(gateStatus, raidMeta?.raidKey);
+      const gateLine = formatGateStateLine(gateStatus, raidMeta?.raidKey, lang);
       if (gateLine) {
-        description.push(`📊 **Current:** ${gateLine}`);
+        description.push(t("raid-check.editFlow.currentLine", lang, { value: gateLine }));
       }
       if (gateStatus.modeChangeNeeded) {
         description.push(
-          `${UI.icons.warn} _Char đang clear ở **mode khác** - bấm Complete/Process sẽ wipe progress cũ trước khi mark mode mới._`
+          t("raid-check.editFlow.modeChangeWarn", lang, { warnIcon: UI.icons.warn })
         );
       }
       if (gateStatus.overallStatus === "complete") {
         description.push(
-          `${UI.icons.info} _Raid này đã DONE sẵn - Complete và Process đều no-op, chỉ Reset có hiệu quả._`
+          t("raid-check.editFlow.alreadyDoneInfo", lang, { infoIcon: UI.icons.info })
         );
       }
     }
@@ -145,26 +163,33 @@ function createEditUi({
 
     if (state.selectedChar?.autoManageEnabled && state.selectedChar?.publicLogDisabled) {
       description.push("");
-      description.push(`${UI.icons.warn} _Char này thuộc user đã bật auto-sync nhưng public log tắt - edit tay sẽ không bị bible ghi đè nhé._`);
+      description.push(
+        t("raid-check.editFlow.autoSyncLogOffNote", lang, { warnIcon: UI.icons.warn })
+      );
     }
 
     const embed = new EmbedBuilder()
-      .setTitle("✏️ Chỉnh progress giúp member")
+      .setTitle(t("raid-check.editFlow.title", lang))
       .setColor(state.applied ? UI.colors.success : UI.colors.neutral)
       .setDescription(description.join("\n"));
 
     if (state.applied && state.message) {
-      embed.addFields({ name: "Kết quả", value: state.message });
+      embed.addFields({ name: t("raid-check.editFlow.resultFieldName", lang), value: state.message });
     }
     if (!state.applied && state.warning) {
-      embed.addFields({ name: "Lưu ý", value: state.warning });
+      embed.addFields({ name: t("raid-check.editFlow.noteFieldName", lang), value: state.warning });
     }
 
-    embed.setFooter({ text: `Session ${RAID_CHECK_EDIT_SESSION_MS / 60_000} phút · chỉ cậu thao tác được` });
+    embed.setFooter({
+      text: t("raid-check.editFlow.footerActive", lang, {
+        minutes: RAID_CHECK_EDIT_SESSION_MS / 60_000,
+      }),
+    });
     return embed;
   }
 
   function buildEditComponents(state) {
+    const lang = state.lang || "vi";
     const rows = [];
     const disabled = state.applied || state.locked;
 
@@ -180,7 +205,13 @@ function createEditUi({
         .sort(([, a], [, b]) => a.minItemLevel - b.minItemLevel)
         .slice(0, 25)
         .map(([raidKey, entry]) => ({
-          label: truncateText(`${entry.label} · ${entry.minItemLevel}+`, 100),
+          label: truncateText(
+            t("raid-check.editFlow.raidOptionLabel", lang, {
+              label: getRaidModeLabel(entry.raidKey, entry.modeKey, lang),
+              minItemLevel: entry.minItemLevel,
+            }),
+            100
+          ),
           value: raidKey,
           default: state.selectedRaid === raidKey,
         }));
@@ -188,7 +219,7 @@ function createEditUi({
         new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
             .setCustomId("raid-check-edit:raid")
-            .setPlaceholder("Chọn raid + difficulty trước...")
+            .setPlaceholder(t("raid-check.editFlow.raidPickerPlaceholder", lang))
             .setDisabled(disabled)
             .addOptions(raidOptions)
         )
@@ -205,7 +236,7 @@ function createEditUi({
     const userOptions = [...state.editableByUser.values()]
       .slice(0, 25)
       .map((group) => ({
-        label: formatUserEditLabel(group, state.displayMap.get(group.discordId) || group.discordId),
+        label: formatUserEditLabel(group, state.displayMap.get(group.discordId) || group.discordId, lang),
         value: group.discordId,
         emoji: group.autoManageEnabled ? "🤖" : "👤",
         default: state.selectedUser === group.discordId,
@@ -215,7 +246,7 @@ function createEditUi({
         new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
             .setCustomId("raid-check-edit:user")
-            .setPlaceholder("Chọn user cần edit...")
+            .setPlaceholder(t("raid-check.editFlow.userPickerPlaceholder", lang))
             .setDisabled(disabled)
             .addOptions(userOptions)
         )
@@ -228,7 +259,7 @@ function createEditUi({
       const charOptions = (group?.chars || [])
         .slice(0, 25)
         .map((char) => ({
-          label: formatCharEditLabel(char, state.raidMeta),
+          label: formatCharEditLabel(char, state.raidMeta, lang),
           value: `${char.accountName}||${char.charName}`,
           emoji: char.publicLogDisabled ? "🔒" : "⚔️",
           default:
@@ -240,7 +271,7 @@ function createEditUi({
           new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
               .setCustomId("raid-check-edit:char")
-              .setPlaceholder("Chọn character...")
+              .setPlaceholder(t("raid-check.editFlow.charPickerPlaceholder", lang))
               .setDisabled(disabled)
               .addOptions(charOptions)
           )
@@ -276,25 +307,29 @@ function createEditUi({
         new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId("raid-check-edit:status:complete")
-            .setLabel("Complete")
+            .setLabel(t("raid-check.editFlow.buttonComplete", lang))
             .setEmoji("✅")
             .setStyle(ButtonStyle.Success)
             .setDisabled(disabled || allGatesDoneAtPickedMode),
           new ButtonBuilder()
             .setCustomId("raid-check-edit:status:process")
-            .setLabel("Process (1 gate)")
+            .setLabel(t("raid-check.editFlow.buttonProcess", lang))
             .setEmoji("📝")
             .setStyle(ButtonStyle.Primary)
             .setDisabled(disabled || !hasOpenGateAtPickedMode),
           new ButtonBuilder()
             .setCustomId("raid-check-edit:status:reset")
-            .setLabel("Reset")
+            .setLabel(t("raid-check.editFlow.buttonReset", lang))
             .setEmoji("🔄")
             .setStyle(ButtonStyle.Danger)
             .setDisabled(disabled),
           new ButtonBuilder()
             .setCustomId("raid-check-edit:cancel")
-            .setLabel(state.applied ? "Close" : "Cancel")
+            .setLabel(
+              state.applied
+                ? t("raid-check.editFlow.buttonClose", lang)
+                : t("raid-check.editFlow.buttonCancel", lang)
+            )
             .setEmoji("✖️")
             .setStyle(ButtonStyle.Secondary)
         )
@@ -336,6 +371,10 @@ function createEditUi({
 
   async function handleRaidCheckEditClick(interaction, raidMeta, raidKey, preSelectedUserId = null) {
     const started = Date.now();
+    // Manager (Edit-button clicker) is the sole viewer of the ephemeral
+    // followup + every cascading select. Resolve once, thread through
+    // state so every render path uses the same lang.
+    const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     // Two entry modes:
@@ -403,8 +442,10 @@ function createEditUi({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "info",
-              title: "Không có char editable",
-              description: `Artist không thấy char nào edit được cho raid này nha. Điều kiện: iLvl >= ${raidMeta.minItemLevel}, char thuộc user đã tắt auto-sync hoặc có log private. Có thể tất cả member đều đã sync xong, hoặc chưa ai opt-in.`,
+              title: t("raid-check.editFlow.noEditableTitle", lang),
+              description: t("raid-check.editFlow.noEditableDescription", lang, {
+                minItemLevel: raidMeta.minItemLevel,
+              }),
             }),
           ],
         });
@@ -429,6 +470,7 @@ function createEditUi({
 
     const state = {
       scopeAll,
+      lang,
       raidMeta: raidMeta || null,
       editableByUser,
       displayMap,
@@ -481,12 +523,14 @@ function createEditUi({
 
     collector.on("collect", async (component) => {
       if (component.user.id !== interaction.user.id) {
+        // Lock message read by unauthorized clicker - render in their lang.
+        const clickerLang = await getUserLanguage(component.user.id, { UserModel: User });
         await component.reply({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "lock",
-              title: "Chỉ người mở Edit session mới thao tác",
-              description: "Component này thuộc Edit session của người khác nha cậu, Artist không cho cross-user thao tác. Mở session Edit riêng bằng `/raid-check` rồi chọn raid mình quản nhé.",
+              title: t("raid-check.editFlow.lockOtherTitle", clickerLang),
+              description: t("raid-check.editFlow.lockOtherDescription", clickerLang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -506,7 +550,9 @@ function createEditUi({
         const pickedRaidKey = component.values[0];
         const pickedRaidMeta = RAID_REQUIREMENT_MAP[pickedRaidKey];
         if (!pickedRaidMeta) {
-          state.warning = `${UI.icons.warn} Raid không hợp lệ.`;
+          state.warning = t("raid-check.editFlow.raidInvalidWarning", lang, {
+            warnIcon: UI.icons.warn,
+          });
           await component.update({
             embeds: [buildEditEmbed(state)],
             components: buildEditComponents(state),
@@ -556,16 +602,23 @@ function createEditUi({
               // Pre-select dropped silently because the focused user
               // has no editable char for this raid (floor too high,
               // or all chars auto-sync + log on). Surface a warning
-              // so the leader understands why User went from
-              // "Du _(sẽ auto-pick...)_" back to "chưa chọn".
+              // so the leader understands why User went from pre-
+              // selected back to none.
               const preName = state.preSelectedDisplayName || state.preSelectedUserId;
-              state.warning = `${UI.icons.info} _${preName} không có char nào editable cho **${pickedRaidMeta.label}** - Artist đã bỏ pre-select. Chọn user khác từ dropdown nhé._`;
+              state.warning = t("raid-check.editFlow.preSelectDropped", lang, {
+                infoIcon: UI.icons.info,
+                name: preName,
+                raidLabel: getRaidModeLabel(pickedRaidMeta.raidKey, pickedRaidMeta.modeKey, lang),
+              });
             }
           }
           state.preSelectedUserId = null;
           state.preSelectedDisplayName = null;
         } catch (err) {
-          state.warning = `${UI.icons.warn} Load snapshot cho raid này fail: ${err?.message || String(err)}`;
+          state.warning = t("raid-check.editFlow.snapshotLoadFailWarning", lang, {
+            warnIcon: UI.icons.warn,
+            error: err?.message || String(err),
+          });
           console.warn(`[raid-check edit scopeAll] raid-pick load failed:`, err?.message || err);
         }
         await interaction.editReply({
@@ -607,7 +660,7 @@ function createEditUi({
         const statusType = parts[2];
         if (statusType === "process") {
           state.awaitingGate = true;
-          state.warning = "Chọn gate cần đánh dấu Process.";
+          state.warning = t("raid-check.editFlow.pickGateWarning", lang);
           await component.update({
             embeds: [buildEditEmbed(state)],
             components: buildEditComponents(state),
@@ -626,7 +679,11 @@ function createEditUi({
       if (action === "cancel") {
         state.locked = true;
         await component.update({
-          embeds: [EmbedBuilder.from(buildEditEmbed(state)).setFooter({ text: "Session đã đóng · mở lại bằng nút Edit trong /raid-check" })],
+          embeds: [
+            EmbedBuilder.from(buildEditEmbed(state)).setFooter({
+              text: t("raid-check.editFlow.footerClosed", lang),
+            }),
+          ],
           components: buildEditComponents(state).map((row) => {
             for (const c of row.components) {
               if (typeof c.setDisabled === "function") c.setDisabled(true);
@@ -646,7 +703,7 @@ function createEditUi({
         await interaction.editReply({
           embeds: [
             EmbedBuilder.from(buildEditEmbed(state)).setFooter({
-              text: "Session đã hết hạn · mở lại bằng nút Edit trong /raid-check",
+              text: t("raid-check.editFlow.footerExpired", lang),
             }),
           ],
           components: buildEditComponents(state).map((row) => {
@@ -667,7 +724,7 @@ function createEditUi({
       if (!refreshed) {
         await postEditSessionExpiredNotice(
           interaction,
-          "Edit session `/raid-check` của cậu vừa hết hạn và Artist không update được UI ephemeral nữa. Gõ lại `/raid-check` rồi bấm ✏️ Edit để mở session mới nhé."
+          t("raid-check.editFlow.sessionExpiredNotice", lang)
         );
       }
     });
@@ -714,37 +771,45 @@ function createEditUi({
     statusType,
     gate,
     modeResetHappened,
+    lang = "vi",
   }) {
     const actionLine =
       statusType === "complete"
-        ? "✅ Đánh dấu toàn bộ gate là done"
+        ? t("raid-check.editDm.actionComplete", lang)
         : statusType === "reset"
-          ? "🔄 Reset về 0, toàn bộ gate đã xoá sạch"
-          : `📝 Đánh dấu **${gate || "gate"}** là done, các gate khác giữ nguyên`;
+          ? t("raid-check.editDm.actionReset", lang)
+          : t("raid-check.editDm.actionProcess", lang, {
+              gate: gate || t("raid-check.editDm.actionProcessFallback", lang),
+            });
     const color =
       statusType === "reset" ? UI.colors.progress : UI.colors.success;
+    const raidLabel = getRaidModeLabel(raidMeta.raidKey, raidMeta.modeKey, lang);
     const lines = [
-      "Chào cậu~ Có Raid Manager vừa nhờ Artist chỉnh progress raid cho cậu một chút đây nha. Artist vừa làm việc này:",
+      t("raid-check.editDm.intro", lang),
       "",
-      `**Character:** ${targetChar.charName} · ${Math.round(targetChar.itemLevel)}`,
-      `**Raid:** ${raidMeta.label}`,
-      `**Thay đổi:** ${actionLine}`,
+      t("raid-check.editDm.charLine", lang, {
+        charName: targetChar.charName,
+        itemLevel: Math.round(targetChar.itemLevel),
+      }),
+      t("raid-check.editDm.raidLine", lang, { raidLabel }),
+      t("raid-check.editDm.changeLine", lang, { action: actionLine }),
     ];
     if (modeResetHappened) {
       lines.push("");
-      lines.push(`${UI.icons.warn} _Mode cũ của raid này Artist đã wipe vì difficulty mới. Gate ở mode cũ không còn được count nữa nhé._`);
+      lines.push(t("raid-check.editDm.modeResetNote", lang, { warnIcon: UI.icons.warn }));
     }
     lines.push("");
-    lines.push("Cậu ghé `/raid-status` xem full progress mới giúp Artist nha~");
+    lines.push(t("raid-check.editDm.footer", lang));
 
     return new EmbedBuilder()
       .setColor(color)
-      .setTitle(`${UI.icons.done} Artist vừa chỉnh progress raid giúp cậu`)
+      .setTitle(t("raid-check.editDm.title", lang, { doneIcon: UI.icons.done }))
       .setDescription(lines.join("\n"))
       .setTimestamp();
   }
 
   async function applyEditAndConfirm(component, state, statusType, gate) {
+    const lang = state.lang || "vi";
     state.locked = true;
     // Freeze components visually while the apply is in-flight.
     await component.update({
@@ -770,7 +835,10 @@ function createEditUi({
     } catch (err) {
       state.locked = false;
       state.applied = false;
-      state.warning = `${UI.icons.warn} Apply failed: ${err?.message || String(err)}`;
+      state.warning = t("raid-check.editFlow.applyFailedWarning", lang, {
+        warnIcon: UI.icons.warn,
+        error: err?.message || String(err),
+      });
       await component.message.edit({
         embeds: [buildEditEmbed(state)],
         components: buildEditComponents(state),
@@ -811,12 +879,16 @@ function createEditUi({
           component.client.users.fetch(state.selectedUser)
         );
         const dmChannel = await user.createDM();
+        // DM is delivered to the target, not the manager - render in
+        // the target's lang per viewer-language rule.
+        const targetLang = await getUserLanguage(state.selectedUser, { UserModel: User });
         const dmEmbed = buildRaidCheckEditDMEmbed({
           targetChar,
           raidMeta,
           statusType,
           gate,
           modeResetHappened: result?.modeResetCount > 0,
+          lang: targetLang,
         });
         await dmChannel.send({ embeds: [dmEmbed] });
         dmOutcome = "sent";
@@ -831,34 +903,58 @@ function createEditUi({
 
     const summaryParts = [];
     const statusLabel =
-      statusType === "complete" ? "Complete" :
-      statusType === "reset" ? "Reset" :
-      `Process ${gate || "?"}`;
+      statusType === "complete" ? t("raid-check.editFlow.statusLabelComplete", lang) :
+      statusType === "reset" ? t("raid-check.editFlow.statusLabelReset", lang) :
+      gate
+        ? t("raid-check.editFlow.statusLabelProcess", lang, { gate })
+        : t("raid-check.editFlow.statusLabelProcessFallback", lang);
+    const raidLabelManager = getRaidModeLabel(raidMeta.raidKey, raidMeta.modeKey, lang);
     if (result?.noRoster) {
-      summaryParts.push(`${UI.icons.warn} User chưa có roster nào.`);
+      summaryParts.push(t("raid-check.editFlow.applySummaryNoRoster", lang, { warnIcon: UI.icons.warn }));
     } else if (result?.matched === 0) {
-      summaryParts.push(`${UI.icons.warn} Không tìm thấy char "${targetChar.charName}" trong roster.`);
+      summaryParts.push(t("raid-check.editFlow.applySummaryCharNotFound", lang, {
+        warnIcon: UI.icons.warn,
+        charName: targetChar.charName,
+      }));
     } else if (result?.ineligibleItemLevel) {
-      summaryParts.push(`${UI.icons.warn} Char iLvl ${result.ineligibleItemLevel} chưa đủ cho ${raidMeta.label} (${raidMeta.minItemLevel}+).`);
+      summaryParts.push(t("raid-check.editFlow.applySummaryIneligible", lang, {
+        warnIcon: UI.icons.warn,
+        itemLevel: result.ineligibleItemLevel,
+        raidLabel: raidLabelManager,
+        minItemLevel: raidMeta.minItemLevel,
+      }));
     } else if (result?.alreadyComplete) {
-      summaryParts.push(`${UI.icons.info} _Raid đã DONE sẵn cho **${targetChar.charName}** · ${raidMeta.label}, không có gì để update._`);
+      summaryParts.push(t("raid-check.editFlow.applySummaryAlreadyComplete", lang, {
+        infoIcon: UI.icons.info,
+        charName: targetChar.charName,
+        raidLabel: raidLabelManager,
+      }));
     } else if (result?.alreadyReset) {
-      summaryParts.push(`${UI.icons.info} _Raid đã ở trạng thái reset sẵn cho **${targetChar.charName}** · ${raidMeta.label}, không có gì để xoá._`);
+      summaryParts.push(t("raid-check.editFlow.applySummaryAlreadyReset", lang, {
+        infoIcon: UI.icons.info,
+        charName: targetChar.charName,
+        raidLabel: raidLabelManager,
+      }));
     } else {
-      summaryParts.push(`${UI.icons.done} Đã apply **${statusLabel}** cho **${targetChar.charName}** · ${raidMeta.label}.`);
+      summaryParts.push(t("raid-check.editFlow.applySummaryDone", lang, {
+        doneIcon: UI.icons.done,
+        statusLabel,
+        charName: targetChar.charName,
+        raidLabel: raidLabelManager,
+      }));
       if (result?.modeResetCount > 0) {
-        summaryParts.push(`_Mode cũ đã bị wipe vì difficulty mới._`);
+        summaryParts.push(t("raid-check.editFlow.applySummaryModeWipe", lang));
       }
     }
     if (dmOutcome === "sent") {
-      summaryParts.push(`📨 _Đã DM báo member biết progress vừa thay đổi._`);
+      summaryParts.push(t("raid-check.editFlow.applySummaryDmSent", lang));
     } else if (dmOutcome === "failed") {
-      summaryParts.push(`${UI.icons.warn} _DM cho member fail, có thể họ đã tắt DM from server members. Update vẫn vào DB rồi._`);
+      summaryParts.push(t("raid-check.editFlow.applySummaryDmFailed", lang, { warnIcon: UI.icons.warn }));
     } else if (dmOutcome === "skipped-self") {
-      summaryParts.push(`_Bỏ qua DM vì cậu edit char của chính mình._`);
+      summaryParts.push(t("raid-check.editFlow.applySummaryDmSkippedSelf", lang));
     }
     summaryParts.push("");
-    summaryParts.push(`_Mở \`/raid-check\` rồi pick **${raidMeta.label}** ở dropdown filter để xem pending list mới._`);
+    summaryParts.push(t("raid-check.editFlow.applySummaryHint", lang, { raidLabel: raidLabelManager }));
     state.message = summaryParts.join("\n");
 
     let uiRefreshed = false;
@@ -882,7 +978,11 @@ function createEditUi({
       // public tag so the leader sees confirmation + knows to rerun.
       await postEditSessionExpiredNotice(
         component,
-        `Apply **${statusLabel}** cho **${targetChar.charName}** · ${raidMeta.label} đã xong rồi, nhưng Artist không refresh được UI ephemeral. Gõ lại \`/raid-check\` để xem pending list mới.`
+        t("raid-check.editFlow.applyUiRefreshFailNotice", lang, {
+          statusLabel,
+          charName: targetChar.charName,
+          raidLabel: raidLabelManager,
+        })
       );
     }
   }

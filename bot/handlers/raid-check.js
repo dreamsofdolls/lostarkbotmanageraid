@@ -12,6 +12,7 @@ const {
 } = require("./raid-check/auto-manage");
 const { createTaskViewUi } = require("./raid-check/task-view-ui");
 const { buildNoticeEmbed } = require("../utils/raid/shared");
+const { t, getUserLanguage } = require("../services/i18n");
 
 const RAID_CHECK_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 
@@ -193,12 +194,13 @@ function createRaidCheckCommand(deps) {
 
   async function handleRaidCheckCommand(interaction) {
     if (!isRaidLeader(interaction)) {
+      const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "lock",
-            title: "Chỉ Raid Manager mới được dùng",
-            description: "Lệnh `/raid-check` chỉ Raid Manager mới chạy được nha cậu (config qua env `RAID_MANAGER_ID`). Gõ `/raid-status` nếu cậu muốn xem progress của roster mình.",
+            title: t("raid-check.auth.managerOnlyTitle", lang),
+            description: t("raid-check.auth.managerOnlyDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -241,12 +243,13 @@ function createRaidCheckCommand(deps) {
 
     // Everything below requires Raid Manager.
     if (!isRaidLeader(interaction)) {
+      const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "lock",
-            title: "Chỉ Raid Manager mới dùng được",
-            description: "Button này thuộc về flow `/raid-check` của Raid Manager nha cậu. Người khác bấm Artist từ chối luôn.",
+            title: t("raid-check.auth.buttonManagerOnlyTitle", clickerLang),
+            description: t("raid-check.auth.buttonManagerOnlyDescription", clickerLang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -303,12 +306,13 @@ function createRaidCheckCommand(deps) {
 
     const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
     if (!raidMeta) {
+      const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Button đã hết hạn",
-            description: "Raid trong button không còn hợp lệ (có thể session cũ hoặc bot vừa restart). Gõ `/raid-check` lại để refresh nha.",
+            title: t("raid-check.staleButton.title", clickerLang),
+            description: t("raid-check.staleButton.raidInvalidDescription", clickerLang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -326,12 +330,13 @@ function createRaidCheckCommand(deps) {
       // lookup downstream.
       await handleRaidCheckEditClick(interaction, raidMeta, raidKey);
     } else {
+      const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Button action không hỗ trợ",
-            description: `Action \`${action}\` không khớp với flow Artist biết. Có thể button cũ từ build trước, gõ \`/raid-check\` lại để refresh nha.`,
+            title: t("raid-check.staleButton.unsupportedActionTitle", clickerLang),
+            description: t("raid-check.staleButton.unsupportedActionDescription", clickerLang, { action }),
           }),
         ],
         flags: MessageFlags.Ephemeral,

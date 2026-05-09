@@ -11,6 +11,8 @@
  * outer compose root.
  */
 
+const { t } = require("../../services/i18n");
+
 function createEditHelpers({
   UI,
   normalizeName,
@@ -130,19 +132,25 @@ function createEditHelpers({
     return { gates, overallStatus, modeChangeNeeded };
   }
 
-  function formatGateStateLine(gateStatus, raidKey) {
+  function formatGateStateLine(gateStatus, raidKey, lang = "vi") {
     if (!gateStatus || gateStatus.overallStatus === "unknown") return null;
     const parts = gateStatus.gates.map((g) => {
       if (g.doneAtPickedMode) return `🟢 ${g.gate}`;
-      if (g.doneAtSomeMode) return `🟠 ${g.gate} (${g.storedMode})`;
+      if (g.doneAtSomeMode) {
+        return t("raid-check.editFlow.gateLineDoneOther", lang, {
+          gate: g.gate,
+          mode: g.storedMode,
+        });
+      }
       return `⚪ ${g.gate}`;
     });
     const rollup = gateStatus.overallStatus === "complete"
-      ? "DONE"
+      ? t("raid-check.editFlow.gateRollupComplete", lang)
       : gateStatus.overallStatus === "partial"
-        ? "partial"
-        : "chưa clear";
-    return `${parts.join(" · ")}  _(${rollup})_`;
+        ? t("raid-check.editFlow.gateRollupPartial", lang)
+        : t("raid-check.editFlow.gateRollupNone", lang);
+    const suffix = t("raid-check.editFlow.gateLineSuffix", lang, { rollup });
+    return `${parts.join(" · ")}  ${suffix}`;
   }
 
   function applyLocalRaidEditToChar(character, raidMeta, statusType, effectiveGates, now = Date.now()) {
@@ -183,7 +191,7 @@ function createEditHelpers({
     character.assignedRaids[raidMeta.raidKey] = raidData;
   }
 
-  function formatCharEditLabel(char, raidMeta) {
+  function formatCharEditLabel(char, raidMeta, lang = "vi") {
     // Base: "Cyrano · 1733"
     const parts = [char.charName, String(Math.round(char.itemLevel))];
 
@@ -193,7 +201,7 @@ function createEditHelpers({
     // rollup as formatGateStateLine for visual consistency:
     //   🟢 DONE  - every gate done at the picked mode
     //   🟠 X/Y   - some gates done at the picked mode
-    //   🟡 khác mode - nothing done at picked mode but char has cleared
+    //   🟡 different mode - nothing done at picked mode but char has cleared
     //                  at a different difficulty (apply would wipe it)
     //   ⚪ 0/Y   - untouched at this raid entirely
     if (raidMeta?.raidKey) {
@@ -210,7 +218,7 @@ function createEditHelpers({
         } else if (gateStatus.overallStatus === "partial") {
           parts.push(`🟠 ${done}/${total}`);
         } else if (gateStatus.modeChangeNeeded) {
-          parts.push("🟡 khác mode");
+          parts.push(`🟡 ${t("raid-check.editFlow.gateRollupDifferentMode", lang)}`);
         } else {
           parts.push(`⚪ ${done}/${total}`);
         }
@@ -218,15 +226,24 @@ function createEditHelpers({
     }
 
     if (char.autoManageEnabled && char.publicLogDisabled) {
-      parts.push("log off");
+      parts.push(t("raid-check.editFlow.charOptionLogOff", lang));
     }
     return truncateText(parts.join(" · "), 100);
   }
 
-  function formatUserEditLabel(group, displayName) {
-    const tag = group.autoManageEnabled ? " · auto-sync" : "";
+  function formatUserEditLabel(group, displayName, lang = "vi") {
+    const tag = group.autoManageEnabled
+      ? t("raid-check.editFlow.userOptionAutoSyncTag", lang)
+      : "";
     const count = group.chars.length;
-    return truncateText(`${displayName} · ${count} editable${tag}`, 100);
+    return truncateText(
+      t("raid-check.editFlow.userOptionLabel", lang, {
+        name: displayName,
+        count,
+        tag,
+      }),
+      100
+    );
   }
 
   return {
