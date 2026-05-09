@@ -302,44 +302,91 @@ async function runPreviewQuery(sqlite3, db) {
     console.warn("[local-sync] roster fetch threw:", err?.message || err);
   }
   const diff = buildDiff(rosterAccounts, buckets);
-  // Headline: count of distinct chars + raid clears the sync will apply.
-  const distinctChars = new Set(buckets.map((b) => b.charName.toLowerCase())).size;
-  let html = `<div class="meta">${t("preview.headlineCount", { chars: distinctChars, clears: buckets.length })} <span class="hint">${t("preview.schemaDebug", { table, bossCol, tsCol, charCol: charCol || "-" })}</span></div>`;
-  // Legend explains the 4 cell states so user knows what each badge
-  // means before scanning the grid. Compact inline layout - 1 line.
-  html += renderDiffLegend();
-  if (diff.length === 0 && buckets.length === 0) {
-    html += `<p class="hint" style="margin-top:12px;">${t("preview.noBucketsMatched")}</p>`;
+  // Cache the diff + reset to first page on every fresh preview run.
+  // currentRosterPage state lives on window so the pagination buttons
+  // (rendered as inline HTML, click-bound after innerHTML write) can
+  // mutate it via the helper below.
+  window.__artistDiff = diff;
+  window.__artistRosterPage = 0;
+  window.__artistUnmappedBosses = unmappedBosses;
+  window.__artistMeta = {
+    distinctChars: new Set(buckets.map((b) => b.charName.toLowerCase())).size,
+    clears: buckets.length,
+    schemaDebug: { table, bossCol, tsCol, charCol: charCol || "-" },
+  };
+  renderDiffPage();
+  syncSection.hidden = false;
+  syncBtn.disabled = lastDeltas.length === 0;
+  if (lastDeltas.length === 0) {
+    syncOutput.hidden = false;
+    syncOutput.innerHTML = t("sync.nothingToSyncFull");
+  } else {
+    syncOutput.hidden = true;
   }
-  // Render roster-grouped layout: one section per account, char rows
-  // inside, each char has a row of raid+mode cells with gate badges.
-  // Mental model matches /raid-status (roster -> char -> raid grid).
-  for (const account of diff) {
-    html += `<section class="roster-block">`;
-    html += `<h3 class="roster-heading">🏛️ ${escapeHtml(account.accountName)} <span class="hint">· ${t("preview.raidGroupCharCount", { n: account.characters.length })}</span></h3>`;
-    for (const character of account.characters) {
-      html += `<div class="char-row">`;
-      html += `<div class="char-row-head">${formatCharRowHead(character)}</div>`;
-      html += `<div class="char-cells">`;
-      for (const cell of character.cells) {
-        const raidLabel = getRaidLabel(cell.raidKey);
-        const modeLabel = getModeLabel(cell.modeKey);
-        const cellEmoji = cell.modeKey === "nightmare" ? "🌑" : cell.modeKey === "hard" ? "⚔️" : "🛡️";
-        html += `<div class="raid-cell">`;
-        html += `<div class="raid-cell-label" title="${escapeHtml(raidLabel + " " + modeLabel)}">${cellEmoji} ${escapeHtml(modeLabel.slice(0, 1).toUpperCase())}</div>`;
+}
+
+// Render the full preview-output panel for the current roster page.
+// Bound to window.__artistRosterPage so prev/next button clicks just
+// mutate that index + re-call this. Re-rendering the whole panel is
+// cheap (handful of DOM nodes per raid card) and keeps the click
+// handlers fresh after innerHTML rewrites.
+function renderDiffPage() {
+  const diff = window.__artistDiff || [];
+  const meta = window.__artistMeta || { distinctChars: 0, clears: 0, schemaDebug: {} };
+  const unmappedBosses = window.__artistUnmappedBosses || [];
+  let pageIndex = Number(window.__artistRosterPage) || 0;
+  if (pageIndex < 0) pageIndex = 0;
+  if (pageIndex >= diff.length) pageIndex = Math.max(0, diff.length - 1);
+  window.__artistRosterPage = pageIndex;
+
+  let html = `<div class="meta">${t("preview.headlineCount", { chars: meta.distinctChars, clears: meta.clears })} <span class="hint">${t("preview.schemaDebug", meta.schemaDebug)}</span></div>`;
+  html += renderDiffLegend();
+
+  if (diff.length === 0) {
+    html += `<p class="hint" style="margin-top:12px;">${t("preview.noBucketsMatched")}</p>`;
+  } else {
+    const page = diff[pageIndex];
+    // Roster pagination header: prev / account-name (X/Y) / next. The
+    // counter + buttons hide entirely for single-roster users so the UI
+    // stays uncluttered. Buttons disable at the boundaries instead of
+    // disappearing - prevents layout jumps when paging end-to-end.
+    html += `<div class="roster-pagination">`;
+    if (diff.length > 1) {
+      const prevDisabled = pageIndex === 0 ? "disabled" : "";
+      html += `<button class="page-btn" id="roster-prev" ${prevDisabled}>◀</button>`;
+    }
+    html += `<span class="roster-name">🏛️ ${escapeHtml(page.accountName)}</span>`;
+    if (diff.length > 1) {
+      html += `<span class="page-counter">${pageIndex + 1}/${diff.length}</span>`;
+      const nextDisabled = pageIndex >= diff.length - 1 ? "disabled" : "";
+      html += `<button class="page-btn" id="roster-next" ${nextDisabled}>▶</button>`;
+    }
+    html += `</div>`;
+    // Raid cards for the active page. Each card = (raid, mode) header
+    // followed by char rows. Char row layout matches /raid-status:
+    // [class icon] name (ilvl) | [gate badges]. State color comes from
+    // the gate-* CSS class on each badge.
+    for (const card of page.raidCards) {
+      const raidLabel = getRaidLabel(card.raidKey);
+      const modeLabel = getModeLabel(card.modeKey);
+      const cardEmoji = card.modeKey === "nightmare" ? "🌑" : card.modeKey === "hard" ? "⚔️" : "🛡️";
+      html += `<div class="raid-card">`;
+      html += `<h4 class="raid-card-header">${cardEmoji} ${escapeHtml(raidLabel)} ${escapeHtml(modeLabel)} <span class="hint">· ${t("preview.raidGroupCharCount", { n: card.chars.length })}</span></h4>`;
+      for (const char of card.chars) {
+        html += `<div class="raid-card-char">`;
+        html += `<div class="char-info">${formatCharRowHead(char)}</div>`;
         html += `<div class="gate-badges">`;
-        for (const gate of cell.gates) {
-          const state = cell.states[gate];
+        for (const gate of char.gates) {
+          const state = char.states[gate];
           html += renderGateBadge(gate, state);
         }
         html += `</div>`;
         html += `</div>`;
       }
       html += `</div>`;
-      html += `</div>`;
     }
-    html += `</section>`;
   }
+
   // Unmapped folded into <details> at the bottom so the main view
   // stays focused on "what will sync". Manager / debug surface when
   // a user wants to see why their count is lower than expected.
@@ -354,13 +401,24 @@ async function runPreviewQuery(sqlite3, db) {
     html += `</details>`;
   }
   previewOutput.innerHTML = html;
-  syncSection.hidden = false;
-  syncBtn.disabled = lastDeltas.length === 0;
-  if (lastDeltas.length === 0) {
-    syncOutput.hidden = false;
-    syncOutput.innerHTML = t("sync.nothingToSyncFull");
-  } else {
-    syncOutput.hidden = true;
+
+  // Re-bind pagination handlers after each render. They mutate the
+  // global page index + re-call this function. Cheap because diff is
+  // already in memory.
+  const prevBtn = document.getElementById("roster-prev");
+  const nextBtn = document.getElementById("roster-next");
+  if (prevBtn) {
+    prevBtn.addEventListener("click", () => {
+      window.__artistRosterPage = Math.max(0, (window.__artistRosterPage || 0) - 1);
+      renderDiffPage();
+    });
+  }
+  if (nextBtn) {
+    nextBtn.addEventListener("click", () => {
+      const total = (window.__artistDiff || []).length;
+      window.__artistRosterPage = Math.min(total - 1, (window.__artistRosterPage || 0) + 1);
+      renderDiffPage();
+    });
   }
 }
 
