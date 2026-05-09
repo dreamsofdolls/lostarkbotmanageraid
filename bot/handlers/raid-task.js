@@ -38,7 +38,7 @@ function formatSharedResetDetail(reset, lang) {
   if (reset === "daily") return t("raid-task.sharedAdd.resetDetailDaily", lang);
   if (reset === "weekly") return t("raid-task.sharedAdd.resetDetailWeekly", lang);
   if (reset === SCHEDULED_RESET) return t("raid-task.sharedAdd.resetDetailScheduled", lang);
-  return formatSharedResetLabel(reset);
+  return formatSharedResetLabel(reset, lang);
 }
 
 const TASK_CAP_DAILY = 3;
@@ -447,6 +447,7 @@ function createRaidTaskCommand(deps) {
       await interaction.respond([]).catch(() => {});
       return;
     }
+    const lang = await getUserLanguage(discordId, { UserModel: User });
     const userDoc = await loadUserDocForRosterAutocomplete(discordId, rosterInput);
     const account = findAccountInUser(userDoc, rosterInput);
     if (!account) {
@@ -458,7 +459,7 @@ function createRaidTaskCommand(deps) {
       .filter((task) => !needle || normalizeName(task?.name).includes(needle))
       .slice(0, 25)
       .map((task) => {
-        const display = getSharedTaskDisplay(task, now);
+        const display = getSharedTaskDisplay(task, now, lang);
         return truncateChoice(
           `${display.emoji} ${display.name} · ${display.optionStatus || display.status}`,
           task.taskId

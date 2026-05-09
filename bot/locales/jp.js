@@ -26,6 +26,19 @@ module.exports = {
       notEligible: "対象外",
     },
   },
+  "shared-task": {
+    reset: {
+      daily: "毎日",
+      weekly: "毎週",
+      scheduled: "スケジュール制",
+    },
+    status: {
+      nowOpen: "今開催中",
+      nowOpenWithCloses: "今開催中 · 今期 {whenR} まで · {whenAbs}",
+      opensAt: "{whenR} 開催 · {whenAbs}",
+      opensAtShort: "{label} 開催",
+    },
+  },
   "raid-language": {
     title: "🌐 アーティストの言語を変更",
     description: "アーティストが話す言語を選んでね♪ これからすべてのコマンドがこの言語で表示されますわ～",

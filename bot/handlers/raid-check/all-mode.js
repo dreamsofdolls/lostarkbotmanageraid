@@ -436,7 +436,7 @@ function createAllModeHandler({
         );
         if (sharedTasks.length > 0) {
           const lines = sharedTasks.slice(0, 12).map((task) => {
-            const display = getSharedTaskDisplay(task, now);
+            const display = getSharedTaskDisplay(task, now, lang);
             const icon = display.completed ? UI.icons.done : UI.icons.pending;
             return `${icon} ${display.emoji} **${display.name}** · ${display.status}`;
           });
@@ -471,7 +471,7 @@ function createAllModeHandler({
       const footerParts = [];
       if (sharedTasks.length > 0) {
         const sharedDone = sharedTasks.filter((task) =>
-          getSharedTaskDisplay(task, now).completed
+          getSharedTaskDisplay(task, now, lang).completed
         ).length;
         footerParts.push(t("raid-check.allMode.sharedFooter", lang, {
           doneIcon: UI.icons.done,

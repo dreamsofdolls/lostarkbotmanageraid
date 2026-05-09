@@ -26,6 +26,19 @@ module.exports = {
       notEligible: "not eligible",
     },
   },
+  "shared-task": {
+    reset: {
+      daily: "Daily",
+      weekly: "Weekly",
+      scheduled: "Scheduled",
+    },
+    status: {
+      nowOpen: "Open now",
+      nowOpenWithCloses: "Open now · this slot closes {whenR} · {whenAbs}",
+      opensAt: "Opens {whenR} · {whenAbs}",
+      opensAtShort: "Opens {label}",
+    },
+  },
   "raid-language": {
     title: "🌐 Switch Artist's language",
     description: "Pick the language you want Artist to use. Every command will display in that language going forward.",
