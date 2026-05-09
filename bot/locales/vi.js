@@ -137,6 +137,7 @@ module.exports = {
       followupFailedDescription: "Bible đang dở chứng, sync chưa lấy được data mới. Cooldown đã reset, cậu thử lại sau vài phút giúp tớ nhé~",
       cooldownFallback: "vài giây",
     },
+    expiredFooter: "⏱️ Session đã hết hạn ({seconds}s) · Dùng /raid-status để xem lại",
     taskView: {
       embedTitle: "📝 Side tasks · {accountName}",
       mainDescription: "Bấm dropdown bên dưới để toggle complete cho từng task nha~\n{iconReset} Reset: Daily 17:00 VN · Weekly 17:00 VN thứ 4 · Scheduled hourly theo lịch UTC-4.",

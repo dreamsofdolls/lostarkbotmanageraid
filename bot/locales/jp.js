@@ -128,6 +128,7 @@ module.exports = {
       followupFailedDescription: "Bible が機嫌悪いみたい… 新しいデータが取れませんでしたわ。クールダウンはリセットしたので、数分後にもう一度試してね～",
       cooldownFallback: "数秒",
     },
+    expiredFooter: "⏱️ セッションが期限切れですわ ({seconds}秒) · もう一度見るには /raid-status を実行してね♪",
     taskView: {
       embedTitle: "📝 サイドタスク · {accountName}",
       mainDescription: "下のドロップダウンを押して各タスクの完了をトグルしてね♪\n{iconReset} リセット: 毎日 17:00 VN · 毎週 17:00 VN 水曜日 · スケジュール毎時 UTC-4 ですわ。",

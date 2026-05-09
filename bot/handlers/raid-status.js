@@ -835,8 +835,9 @@ function createRaidStatusCommand(deps) {
       collectorEnded = true;
       clearTaskAutoRefresh();
       try {
-        const expiredFooter =
-          `⏱️ Session đã hết hạn (${STATUS_PAGINATION_SESSION_MS / 1000}s) · Dùng /raid-status để xem lại`;
+        const expiredFooter = t("raid-status.expiredFooter", lang, {
+          seconds: STATUS_PAGINATION_SESSION_MS / 1000,
+        });
         const expiredEmbed = EmbedBuilder.from(buildCurrentEmbed()).setFooter({
           text: expiredFooter,
         });
