@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-09 (later)
+
+### Changed
+- Hide the `🔄 Sync ngay` button on `/raid-status` shared pages. The sync action runs against the viewer's own `lastAutoManageAttemptAt` record - firing it while paginated to Manager A's shared roster would refresh B's accounts but not A's, which is confusing. Owner A still gets the button on their own `/raid-status`. UX: only B's own pages show Sync, so the button's behavior matches its label.
+
 ## 2026-05-09
 
 ### Added (roster-share Phase 2b: /raid-set + text parser write paths)
