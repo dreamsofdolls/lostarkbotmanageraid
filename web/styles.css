@@ -318,6 +318,12 @@ table th { color: var(--text-dim); font-weight: 600; }
   color: var(--text-dim);
   font-weight: 600;
   white-space: nowrap;
+  /* Fixed-width column so gate badges line up vertically across modes
+     of the same raid (Hard vs Normal vs Nightmare have different char
+     counts; without a min-width the G1/G2 badges drift horizontally
+     between rows). 80px fits "🌑 Nightmare" comfortably and right-
+     pads the shorter "⚔️ Hard" label. */
+  min-width: 80px;
 }
 
 .raid-card {
