@@ -31,6 +31,21 @@ module.exports = {
       notEligible: "not eligible",
     },
   },
+  // Shared-task display labels rendered in /raid-task autocomplete +
+  // /raid-status taskView + /raid-check task-view-ui.
+  "shared-task": {
+    reset: {
+      daily: "Mỗi ngày",
+      weekly: "Mỗi tuần",
+      scheduled: "Theo lịch",
+    },
+    status: {
+      nowOpen: "Đang mở",
+      nowOpenWithCloses: "Đang mở · lượt này đóng {whenR} · {whenAbs}",
+      opensAt: "Mở {whenR} · {whenAbs}",
+      opensAtShort: "Mở {label}",
+    },
+  },
   "raid-language": {
     title: "🌐 Đổi ngôn ngữ Artist",
     description: "Chọn ngôn ngữ cậu muốn Artist dùng. Tất cả lệnh sẽ hiển thị bằng ngôn ngữ này từ giờ.",

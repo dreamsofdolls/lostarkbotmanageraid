@@ -399,14 +399,19 @@ function resolveScheduledSharedTaskState(task, now = new Date()) {
   };
 }
 
-function formatSharedResetLabel(reset) {
-  if (reset === "daily") return "Mỗi ngày";
-  if (reset === "weekly") return "Mỗi tuần";
-  if (reset === SCHEDULED_RESET) return "Theo lịch";
-  return "Mỗi tuần";
+function formatSharedResetLabel(reset, lang) {
+  // Lazy-require avoids circular import at module-load time. Optional
+  // `lang` keeps the helper back-compat with callers that haven't been
+  // migrated yet (default falls through to vi via t()).
+  const { t } = require("../../services/i18n");
+  if (reset === "daily") return t("shared-task.reset.daily", lang);
+  if (reset === "weekly") return t("shared-task.reset.weekly", lang);
+  if (reset === SCHEDULED_RESET) return t("shared-task.reset.scheduled", lang);
+  return t("shared-task.reset.weekly", lang);
 }
 
-function getSharedTaskDisplay(task, now = new Date()) {
+function getSharedTaskDisplay(task, now = new Date(), lang) {
+  const { t } = require("../../services/i18n");
   const preset = getSharedTaskPreset(task?.preset);
   const name = String(task?.name || preset.defaultName).trim();
   if (task?.reset === SCHEDULED_RESET) {
@@ -416,18 +421,28 @@ function getSharedTaskDisplay(task, now = new Date()) {
       ? formatVietnamSourceScheduleLabel(state.nextAtMs)
       : state.nextLabel;
     const status = state.active
-      ? `Đang mở${activeEndsAtMs ? ` · lượt này đóng ${formatDiscordTimestamp(activeEndsAtMs, "R")} · ${formatDiscordTimestamp(activeEndsAtMs, "f")}` : ""}`
+      ? activeEndsAtMs
+        ? t("shared-task.status.nowOpenWithCloses", lang, {
+            whenR: formatDiscordTimestamp(activeEndsAtMs, "R"),
+            whenAbs: formatDiscordTimestamp(activeEndsAtMs, "f"),
+          })
+        : t("shared-task.status.nowOpen", lang)
       : state.nextAtMs
-        ? `Mở ${formatDiscordTimestamp(state.nextAtMs, "R")} · ${formatDiscordTimestamp(state.nextAtMs, "f")}`
+        ? t("shared-task.status.opensAt", lang, {
+            whenR: formatDiscordTimestamp(state.nextAtMs, "R"),
+            whenAbs: formatDiscordTimestamp(state.nextAtMs, "f"),
+          })
         : nextScheduleLabel
-          ? `Mở ${nextScheduleLabel}`
+          ? t("shared-task.status.opensAtShort", lang, { label: nextScheduleLabel })
           : preset.scheduleText;
     const optionStatus = state.active
-      ? "Đang mở"
+      ? t("shared-task.status.nowOpen", lang)
       : state.nextAtMs
-        ? `Mở ${formatVietnamScheduleLabel(state.nextAtMs)}`
+        ? t("shared-task.status.opensAtShort", lang, {
+            label: formatVietnamScheduleLabel(state.nextAtMs),
+          })
         : nextScheduleLabel
-          ? `Mở ${nextScheduleLabel}`
+          ? t("shared-task.status.opensAtShort", lang, { label: nextScheduleLabel })
         : preset.scheduleText;
     return {
       name,

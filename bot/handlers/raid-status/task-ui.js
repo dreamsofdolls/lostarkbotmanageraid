@@ -79,7 +79,7 @@ function createRaidStatusTaskUi(deps) {
 
       if (sharedTasks.length > 0) {
         const lines = sharedTasks.slice(0, 12).map((task) => {
-          const display = getSharedTaskDisplay(task, now);
+          const display = getSharedTaskDisplay(task, now, lang);
           const icon = display.completed ? UI.icons.done : UI.icons.pending;
           return `${icon} ${display.emoji} **${display.name}** · ${display.status}`;
         });
@@ -116,7 +116,7 @@ function createRaidStatusTaskUi(deps) {
       const footerParts = [];
       if (sharedTasks.length > 0) {
         const sharedDone = sharedTasks.filter((task) =>
-          getSharedTaskDisplay(task, now).completed
+          getSharedTaskDisplay(task, now, lang).completed
         ).length;
         footerParts.push(
           `${UI.icons.done} ${t("raid-status.taskView.footerSharedDone", lang, {
@@ -159,13 +159,13 @@ function createRaidStatusTaskUi(deps) {
       const account = getAccounts()[getCurrentPage()];
       const now = new Date();
       const sharedTasks = getVisibleSharedTasks(account, now.getTime()).filter((task) => {
-        const display = getSharedTaskDisplay(task, now);
+        const display = getSharedTaskDisplay(task, now, lang);
         return task?.reset !== "scheduled" || display.active;
       });
       if (sharedTasks.length === 0) return null;
 
       const options = sharedTasks.slice(0, 25).map((task) => {
-        const display = getSharedTaskDisplay(task, now);
+        const display = getSharedTaskDisplay(task, now, lang);
         const icon = display.completed ? UI.icons.done : UI.icons.pending;
         return {
           label: truncateText(
