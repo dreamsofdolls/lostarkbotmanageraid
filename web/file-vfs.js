@@ -161,7 +161,9 @@ export class FileBackedVFS extends FacadeVFS {
 
   async jFullPathname(name, pOut) {
     // Identity transform - we don't have a real directory tree.
-    // FacadeVFS marshals the string into pOut for us.
-    return name;
+    const { read, written } = new TextEncoder().encodeInto(name, pOut);
+    if (read < name.length || written >= pOut.length) return VFS.SQLITE_IOERR;
+    pOut[written] = 0;
+    return VFS.SQLITE_OK;
   }
 }
