@@ -15,6 +15,7 @@ const {
   generateTaskId,
   findCharacterInUser,
   findAccountInUser,
+  resolveTaskWriteTargetFromAccessible,
   countByReset,
   ensureSideTasks,
   ensureSharedTasks,
@@ -138,6 +139,41 @@ test("findAccountInUser resolves roster names case-insensitively", () => {
   const found = findAccountInUser(userDoc, "mainroster");
   assert.ok(found);
   assert.equal(found.accountName, "MainRoster");
+});
+
+test("resolveTaskWriteTargetFromAccessible routes shared roster writes to the owner", () => {
+  const result = resolveTaskWriteTargetFromAccessible("viewer", "Alice", [
+    {
+      isOwn: false,
+      accountName: "Alice",
+      ownerDiscordId: "owner-a",
+      ownerLabel: "Owner A",
+      accessLevel: "edit",
+    },
+  ]);
+
+  assert.deepEqual(result, {
+    discordId: "owner-a",
+    viaShare: true,
+    ownerLabel: "Owner A",
+    accessLevel: "edit",
+    canEdit: true,
+  });
+});
+
+test("resolveTaskWriteTargetFromAccessible keeps own roster precedence over same-named share", () => {
+  const result = resolveTaskWriteTargetFromAccessible("viewer", "Main", [
+    { isOwn: true, accountName: "Main", ownerDiscordId: "viewer", accessLevel: "edit" },
+    {
+      isOwn: false,
+      accountName: "Main",
+      ownerDiscordId: "owner-a",
+      ownerLabel: "Owner A",
+      accessLevel: "edit",
+    },
+  ]);
+
+  assert.deepEqual(result, { discordId: "viewer", viaShare: false });
 });
 
 test("countByReset filters by daily/weekly correctly", () => {

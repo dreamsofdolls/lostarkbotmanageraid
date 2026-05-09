@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-09 (later 5)
+
+### Fixed
+- `/raid-status` now rebuilds the full own+shared roster list after Sync and Task-view toggles. Before this, a viewer who had incoming `/raid-share` access could lose shared roster pages from the active embed after any path reloaded only their own `User` doc.
+- `/raid-task` share-aware autocomplete now resolves the picked shared roster before listing characters, removable side tasks, roster-level shared tasks, and shared preset status. Same-named own rosters keep precedence over shared rosters so a user cannot accidentally write into a manager's roster when their own roster has the same name.
+
 ## 2026-05-09 (later 4)
 
 ### Added (roster-share Phase 2e: side-task toggle on shared pages)
