@@ -401,10 +401,11 @@ function createRaidSetCommand(deps) {
     const raidValue = interaction.options.getString("raid") || "";
     const needle = normalizeName(focused.value || "");
     const executorId = interaction.user.id;
+    const lang = await getUserLanguage(executorId, { UserModel: User });
     const baseChoices = [
-      { name: "Complete - mark the whole raid as done", value: "complete" },
-      { name: "Process - mark one specific gate as done (requires gate)", value: "process" },
-      { name: "Reset - clear all gates back to 0", value: "reset" },
+      { name: t("raid-set.statusChoices.complete", lang), value: "complete" },
+      { name: t("raid-set.statusChoices.process", lang), value: "process" },
+      { name: t("raid-set.statusChoices.reset", lang), value: "reset" },
     ];
     const applyFilter = (list) =>
       list.filter((c) => !needle || normalizeName(c.name).includes(needle));
@@ -440,7 +441,7 @@ function createRaidSetCommand(deps) {
       // option entirely and Discord would render an empty dropdown the
       // user can't escape. Always surface Reset for done raids.
       await interaction
-        .respond([{ name: "Reset (raid đã hoàn thành - chỉ có thể reset)", value: "reset" }])
+        .respond([{ name: t("raid-set.statusChoices.resetOnly", lang), value: "reset" }])
         .catch(() => {});
       return;
     }
