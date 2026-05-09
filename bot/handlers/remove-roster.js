@@ -4,6 +4,7 @@ const {
   getCharacterMatches,
   truncateChoice,
 } = require("../utils/raid/autocomplete-helpers");
+const { t, getUserLanguage } = require("../services/i18n");
 
 function createRemoveRosterCommand(deps) {
   const {
@@ -73,6 +74,7 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
   }
   async function handleRemoveRosterCommand(interaction) {
     const discordId = interaction.user.id;
+    const lang = await getUserLanguage(discordId, { UserModel: User });
     const rosterName = interaction.options.getString("roster", true).trim();
     const action = interaction.options.getString("action", true);
     const characterName = (interaction.options.getString("character") || "").trim();
@@ -81,8 +83,8 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Action không hợp lệ",
-            description: "Artist chỉ hiểu `remove_roster` (xoá cả account) hoặc `remove_char` (xoá 1 char). Pick trong dropdown nhé~",
+            title: t("raid-remove-roster.invalid.actionTitle", lang),
+            description: t("raid-remove-roster.invalid.actionDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -94,8 +96,8 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Cần chọn `character`",
-            description: "Action **Remove a single character** cần option `character` để Artist biết xoá ai. Gõ thêm field `character:` rồi đợi autocomplete gợi ý nhé.",
+            title: t("raid-remove-roster.invalid.missingCharTitle", lang),
+            description: t("raid-remove-roster.invalid.missingCharDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -108,8 +110,12 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
       if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
         replyEmbed = new EmbedBuilder()
           .setColor(UI.colors.muted)
-          .setTitle(`${UI.icons.info} No Roster`)
-          .setDescription(`Cậu chưa có roster nào để xóa. Dùng \`/raid-add-roster\` trước nhé.`);
+          .setTitle(
+            t("raid-remove-roster.notFound.noRosterTitle", lang, {
+              iconInfo: UI.icons.info,
+            })
+          )
+          .setDescription(t("raid-remove-roster.notFound.noRosterDescription", lang));
         return;
       }
       const normalizedRoster = normalizeName(rosterName);
@@ -119,8 +125,16 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
       if (accountIndex === -1) {
         replyEmbed = new EmbedBuilder()
           .setColor(UI.colors.danger)
-          .setTitle(`${UI.icons.warn} Roster Not Found`)
-          .setDescription(`Không tìm thấy roster **${rosterName}** trong data của cậu.`);
+          .setTitle(
+            t("raid-remove-roster.notFound.rosterNotFoundTitle", lang, {
+              iconWarn: UI.icons.warn,
+            })
+          )
+          .setDescription(
+            t("raid-remove-roster.notFound.rosterNotFoundDescription", lang, {
+              rosterName,
+            })
+          );
         return;
       }
       const account = userDoc.accounts[accountIndex];
@@ -134,17 +148,19 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
         // is balanced by a recovery hint in the copy.
         const charPart =
           removedCount === 0
-            ? "(account không có character nào)"
-            : `cùng **${removedCount}** character${removedCount === 1 ? "" : "s"}`;
+            ? t("raid-remove-roster.removedRoster.noChars", lang)
+            : t("raid-remove-roster.removedRoster.withChars", lang, {
+                count: removedCount,
+                plural: removedCount === 1 ? "" : "s",
+              });
         replyEmbed = new EmbedBuilder()
           .setColor(UI.colors.danger)
-          .setTitle(`🗑️ Đã xoá roster`)
+          .setTitle(t("raid-remove-roster.removedRoster.title", lang))
           .setDescription(
-            [
-              `Artist vừa dọn sạch roster **${account.accountName}** ${charPart} khỏi DB của cậu.`,
-              "",
-              `Tất cả tiến độ raid trong account này không còn nữa. Muốn add lại thì chạy \`/raid-add-roster name:<tên-char>\` để Artist mở picker mới nha~`,
-            ].join("\n")
+            t("raid-remove-roster.removedRoster.description", lang, {
+              accountName: account.accountName,
+              charPart,
+            })
           )
           .setTimestamp();
         return;
@@ -157,8 +173,17 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
       if (charIndex === -1) {
         replyEmbed = new EmbedBuilder()
           .setColor(UI.colors.progress)
-          .setTitle(`${UI.icons.warn} Character Not Found`)
-          .setDescription(`Không tìm thấy character **${characterName}** trong roster **${account.accountName}**.`);
+          .setTitle(
+            t("raid-remove-roster.notFound.charNotFoundTitle", lang, {
+              iconWarn: UI.icons.warn,
+            })
+          )
+          .setDescription(
+            t("raid-remove-roster.notFound.charNotFoundDescription", lang, {
+              characterName,
+              accountName: account.accountName,
+            })
+          );
         return;
       }
       const wasSeed = normalizeName(account.accountName) === normalizedChar;
@@ -186,22 +211,28 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
       const remaining = account.characters.length;
       const remainingPart =
         remaining === 0
-          ? "Roster giờ trống — cậu có thể `/raid-remove-roster` để xoá hẳn account, hoặc `/raid-edit-roster` để add lại chars mới."
-          : `Roster **${account.accountName}** còn lại **${remaining}** character${remaining === 1 ? "" : "s"}.`;
+          ? t("raid-remove-roster.removedChar.empty", lang)
+          : t("raid-remove-roster.removedChar.remaining", lang, {
+              accountName: account.accountName,
+              count: remaining,
+              plural: remaining === 1 ? "" : "s",
+            });
       const embed = new EmbedBuilder()
         .setColor(UI.colors.muted)
-        .setTitle(`🗑️ Đã xoá character`)
+        .setTitle(t("raid-remove-roster.removedChar.title", lang))
         .setDescription(
-          [
-            `Artist vừa xoá **${characterName}** khỏi roster **${account.accountName}** nha.`,
-            "",
+          t("raid-remove-roster.removedChar.description", lang, {
+            characterName,
+            accountName: account.accountName,
             remainingPart,
-          ].join("\n")
+          })
         )
         .setTimestamp();
       if (reseededTo) {
         embed.setFooter({
-          text: `Seed roster đổi sang "${reseededTo}" để /raid-status refresh tiếp tục hoạt động.`,
+          text: t("raid-remove-roster.removedChar.reseededFooter", lang, {
+            newSeed: reseededTo,
+          }),
         });
       }
       replyEmbed = embed;

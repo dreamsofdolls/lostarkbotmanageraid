@@ -6,6 +6,7 @@ const {
   getRosterMatches,
   truncateChoice,
 } = require("../utils/raid/autocomplete-helpers");
+const { t, getUserLanguage } = require("../services/i18n");
 
 // Same 5-min window as /raid-add-roster picker. Long enough to read + decide,
 // short enough that abandoned sessions don't pile up in memory.
@@ -130,6 +131,12 @@ function createEditRosterCommand({
   // merge into the picker. First seed with overlap wins. All seeds
   // failing or zero-overlap → `bibleError` set, caller falls back to
   // saved-only / remove-only mode.
+  // Note: bibleError messages stay in Vietnamese here for backward
+  // compatibility with existing tests that assert on the literal strings.
+  // The embed-render layer treats these as opaque error text and surfaces
+  // them inline. (i18n applied to the *frame* — the offline-warning
+  // sentence — but the inner error message stays as-is, similar to how
+  // HTTP error.message strings flow through verbatim.)
   async function fetchBibleRosterWithFallback(savedChars, accountName) {
     const seeds = [];
     const sortedSaved = [...savedChars].sort(
@@ -198,11 +205,16 @@ function createEditRosterCommand({
       await interaction.respond([]).catch(() => {});
       return;
     }
+    const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
     const userDoc = await loadUserForAutocomplete(interaction.user.id);
     const matches = getRosterMatches(userDoc, focused.value || "");
     const choices = matches.map((a) => {
       const charCount = Array.isArray(a.characters) ? a.characters.length : 0;
-      const label = `${UI.icons.folder} ${a.accountName} · ${charCount} char${charCount === 1 ? "" : "s"}`;
+      const charsWord =
+        charCount === 1
+          ? t("raid-edit-roster.autocomplete.charsSingular", lang)
+          : t("raid-edit-roster.autocomplete.charsPlural", lang);
+      const label = `${UI.icons.folder} ${a.accountName} · ${charCount} ${charsWord}`;
       return truncateChoice(label, a.accountName);
     });
     await interaction.respond(choices).catch(() => {});
@@ -218,6 +230,7 @@ function createEditRosterCommand({
     // Char list shows stats + tag (🆕/📦) only — selection state lives
     // on the per-char toggle buttons below so embed and controls don't
     // duplicate the same ✅/⬜ marker visually.
+    const lang = session.lang;
     const lines = session.chars.map((c, i) => {
       const cp = c.combatScore || "?";
       const tag = tagFor(c);
@@ -226,45 +239,66 @@ function createEditRosterCommand({
     });
 
     const desc = [
-      `Roster: **${session.accountName}**`,
-      `Đang edit - bấm nút bên dưới để toggle ✅/⬜ chars muốn **giữ/add** vs **xoá**:`,
+      t("raid-edit-roster.picker.rosterLine", lang, { accountName: session.accountName }),
+      t("raid-edit-roster.picker.headerLine", lang),
       "",
       ...lines,
       "",
-      `Đang chọn: **${session.selectedIndices.size}** / ${session.chars.length}`,
+      t("raid-edit-roster.picker.selectingLine", lang, {
+        selected: session.selectedIndices.size,
+        total: session.chars.length,
+      }),
     ];
 
     if (session.bibleError) {
       desc.push("");
       desc.push(
-        `${UI.icons.warn} Bible offline (${session.bibleError}) - chỉ thấy char đã saved, không add char mới được. Thử lại sau khi bible up.`
+        t("raid-edit-roster.picker.bibleOffline", lang, {
+          iconWarn: UI.icons.warn,
+          error: session.bibleError,
+        })
       );
     } else {
       desc.push(
-        `${UI.icons.info} ${NEW_TAG} = char mới có ở bible chưa được add · ${STALE_TAG} = char đã saved nhưng không còn ở bible (rename/private log?).`
+        t("raid-edit-roster.picker.legend", lang, {
+          iconInfo: UI.icons.info,
+          newTag: NEW_TAG,
+          staleTag: STALE_TAG,
+        })
       );
     }
     if (session.excludedSavedCount > 0) {
       desc.push("");
       desc.push(
-        `${UI.icons.warn} Roster có saved chars vượt cap picker (${PICKER_MAX_OPTIONS}). **${session.excludedSavedCount}** saved char ngoài cửa sổ sẽ được giữ nguyên không thay đổi - cậu chỉ edit được top ${PICKER_MAX_OPTIONS} chars hiển thị thôi nha. Để dọn hẳn, dùng \`/raid-remove-roster\` rồi \`/raid-add-roster\` lại từ đầu.`
+        t("raid-edit-roster.picker.excludedSaved", lang, {
+          iconWarn: UI.icons.warn,
+          cap: PICKER_MAX_OPTIONS,
+          count: session.excludedSavedCount,
+        })
       );
     }
     if (session.excludedBibleOnlyCount > 0) {
       desc.push("");
       desc.push(
-        `${UI.icons.warn} ${session.excludedBibleOnlyCount} char mới ở bible chưa hiện được do cap ${PICKER_MAX_OPTIONS} đầy. Toggle off saved char muốn xoá rồi Confirm trước, sau đó \`/raid-edit-roster\` lần nữa để add tiếp char mới còn lại.`
+        t("raid-edit-roster.picker.excludedBibleOnly", lang, {
+          iconWarn: UI.icons.warn,
+          count: session.excludedBibleOnlyCount,
+          cap: PICKER_MAX_OPTIONS,
+        })
       );
     }
-    desc.push(
-      `${UI.icons.info} Phiên 5 phút - hết giờ sẽ tự huỷ. Bấm **Confirm** để apply, **Cancel** để bỏ.`
-    );
+    desc.push(t("raid-edit-roster.picker.footerHint", lang, { iconInfo: UI.icons.info }));
 
     return new EmbedBuilder()
-      .setTitle(`${UI.icons.folder} Edit roster: ${session.accountName}`)
+      .setTitle(
+        t("raid-edit-roster.picker.title", lang, {
+          iconFolder: UI.icons.folder,
+          accountName: session.accountName,
+        })
+      )
       .setDescription(desc.join("\n").slice(0, 4000))
       .setColor(UI.colors.neutral)
-      .setFooter({ text: "Source: lostark.bible · Confirm trong 5 phút" });
+      .setFooter({ text: t("raid-edit-roster.picker.footerText", lang) });
   }
 
   function buildSelectionComponents(session) {
@@ -306,7 +340,7 @@ function createEditRosterCommand({
 
     const cancelBtn = new ButtonBuilder()
       .setCustomId(`edit-roster:cancel:${session.sessionId}`)
-      .setLabel("Cancel")
+      .setLabel(t("raid-edit-roster.picker.cancelLabel", session.lang))
       .setStyle(ButtonStyle.Danger);
 
     return [
@@ -316,62 +350,81 @@ function createEditRosterCommand({
   }
 
   function buildExpiredEmbed(session) {
+    const lang = session.lang;
     return new EmbedBuilder()
-      .setTitle(`${UI.icons.warn} Phiên đã hết hạn`)
+      .setTitle(t("raid-edit-roster.expired.title", lang, { iconWarn: UI.icons.warn }))
       .setDescription(
-        [
-          `Roster: **${session.accountName}**`,
-          "",
-          `Phiên 5 phút đã hết và không có thay đổi nào được lưu. Chạy lại \`/raid-edit-roster\` để thử lại nhé~`,
-        ].join("\n")
+        t("raid-edit-roster.expired.description", lang, {
+          accountName: session.accountName,
+        })
       )
       .setColor(UI.colors.muted)
-      .setFooter({ text: "Source: lostark.bible" });
+      .setFooter({ text: t("raid-edit-roster.expired.footerText", lang) });
   }
 
   function buildCancelledEmbed(session) {
+    const lang = session.lang;
     return new EmbedBuilder()
-      .setTitle(`${UI.icons.info} Đã huỷ`)
+      .setTitle(t("raid-edit-roster.cancelled.title", lang, { iconInfo: UI.icons.info }))
       .setDescription(
-        [
-          `Roster: **${session.accountName}**`,
-          "",
-          `Không có thay đổi nào được lưu. Chạy lại \`/raid-edit-roster\` khi cậu sẵn sàng.`,
-        ].join("\n")
+        t("raid-edit-roster.cancelled.description", lang, {
+          accountName: session.accountName,
+        })
       )
       .setColor(UI.colors.muted)
-      .setFooter({ text: "Source: lostark.bible" });
+      .setFooter({ text: t("raid-edit-roster.cancelled.footerText", lang) });
   }
 
   function buildSavedEmbed(session, summary) {
+    const lang = session.lang;
     const { added, removed, kept, finalChars } = summary;
     const lines = finalChars.map(
       (c, i) =>
         `${i + 1}. ${c.name} · ${c.class} · \`${c.itemLevel}\` · \`${c.combatScore || "?"}\``
     );
     const diffParts = [];
-    if (added.length) diffParts.push(`${added.length} added (${added.join(", ")})`);
-    if (removed.length) diffParts.push(`${removed.length} removed (${removed.join(", ")})`);
-    if (kept.length && !added.length && !removed.length) {
-      diffParts.push(`${kept.length} unchanged (refreshed bible-side fields)`);
+    if (added.length) {
+      diffParts.push(
+        t("raid-edit-roster.saved.diffAdded", lang, {
+          count: added.length,
+          names: added.join(", "),
+        })
+      );
     }
-    const diffLine = diffParts.length ? diffParts.join(" · ") : "Không có thay đổi";
+    if (removed.length) {
+      diffParts.push(
+        t("raid-edit-roster.saved.diffRemoved", lang, {
+          count: removed.length,
+          names: removed.join(", "),
+        })
+      );
+    }
+    if (kept.length && !added.length && !removed.length) {
+      diffParts.push(
+        t("raid-edit-roster.saved.diffUnchanged", lang, { count: kept.length })
+      );
+    }
+    const diffLine = diffParts.length
+      ? diffParts.join(" · ")
+      : t("raid-edit-roster.saved.diffNoChange", lang);
 
     return new EmbedBuilder()
-      .setTitle(`${UI.icons.folder} Roster Updated`)
+      .setTitle(t("raid-edit-roster.saved.title", lang, { iconFolder: UI.icons.folder }))
       .setDescription(
         [
-          `Roster: **${session.accountName}**`,
-          `Diff: ${diffLine}`,
+          t("raid-edit-roster.saved.rosterLine", lang, { accountName: session.accountName }),
+          t("raid-edit-roster.saved.diffLine", lang, { diff: diffLine }),
         ].join("\n")
       )
       .addFields({
-        name: `Characters (${finalChars.length})`,
-        value: lines.join("\n").slice(0, 1024) || "_(empty)_",
+        name: t("raid-edit-roster.saved.charactersField", lang, { count: finalChars.length }),
+        value:
+          lines.join("\n").slice(0, 1024) ||
+          t("raid-edit-roster.saved.charactersEmpty", lang),
         inline: false,
       })
       .setColor(UI.colors.success)
-      .setFooter({ text: "Source: lostark.bible" })
+      .setFooter({ text: t("raid-edit-roster.saved.footerText", lang) })
       .setTimestamp();
   }
 
@@ -523,6 +576,7 @@ function createEditRosterCommand({
 
   async function handleEditRosterCommand(interaction) {
     const callerId = interaction.user.id;
+    const lang = await getUserLanguage(callerId, { UserModel: User });
     const rosterArg = interaction.options.getString("roster", true).trim();
 
     const userDoc = await User.findOne({ discordId: callerId }).lean();
@@ -531,8 +585,8 @@ function createEditRosterCommand({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: "Cậu chưa có roster nào",
-            description: "Artist không thấy roster nào của cậu trong DB cả. Dùng `/raid-add-roster` để add roster đầu tiên trước, sau đó mới `/raid-edit-roster` được nha~",
+            title: t("raid-edit-roster.notice.noRostersTitle", lang),
+            description: t("raid-edit-roster.notice.noRostersDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -548,8 +602,10 @@ function createEditRosterCommand({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Không tìm thấy roster",
-            description: `Artist không tìm thấy roster **${rosterArg}** trong DB của cậu. Lần sau dùng autocomplete (gõ field \`roster:\` rồi đợi dropdown gợi ý) cho chuẩn nha~`,
+            title: t("raid-edit-roster.notice.notFoundTitle", lang),
+            description: t("raid-edit-roster.notice.notFoundDescription", lang, {
+              rosterName: rosterArg,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -601,14 +657,10 @@ function createEditRosterCommand({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Roster trống và bible không trả về gì",
-            description: [
-              `Roster **${targetAccount.accountName}** không có char nào ở DB, bible cũng không fetch được kết quả.`,
-              "",
-              "Cậu có thể:",
-              `• \`/raid-remove-roster\` để xoá hẳn account trống này`,
-              `• \`/raid-add-roster\` để tạo lại từ seed char khác`,
-            ].join("\n"),
+            title: t("raid-edit-roster.notice.emptyMergedTitle", lang),
+            description: t("raid-edit-roster.notice.emptyMergedDescription", lang, {
+              accountName: targetAccount.accountName,
+            }),
           }),
         ],
       });
@@ -633,6 +685,7 @@ function createEditRosterCommand({
     const session = {
       sessionId,
       callerId,
+      lang,
       discordId: callerId,
       accountName: targetAccount.accountName,
       bibleError,
@@ -667,14 +720,15 @@ function createEditRosterCommand({
     );
   }
 
-  function authorizeSession(interaction, session) {
+  async function authorizeSession(interaction, session) {
     if (interaction.user.id !== session.callerId) {
+      const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
       return interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "lock",
-            title: "Picker này không phải của cậu",
-            description: "Chỉ người gõ lệnh `/raid-edit-roster` mới điều khiển được picker đó nha. Cậu muốn edit roster của mình thì gõ `/raid-edit-roster` riêng.",
+            title: t("raid-edit-roster.auth.notYourPickerTitle", clickerLang),
+            description: t("raid-edit-roster.auth.notYourPickerDescription", clickerLang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -691,12 +745,13 @@ function createEditRosterCommand({
     const sessionId = parts[2];
     const session = sessions.get(sessionId);
     if (!session) {
+      const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "muted",
-            title: "Phiên đã hết hạn",
-            description: "Phiên 5 phút đã trôi qua mất rồi. Chạy lại `/raid-edit-roster` để Artist mở picker mới cho cậu nha~",
+            title: t("raid-edit-roster.expired.staleSessionTitle", clickerLang),
+            description: t("raid-edit-roster.expired.staleSessionDescription", clickerLang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -742,8 +797,10 @@ function createEditRosterCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Phải giữ ít nhất 1 char",
-              description: `Cậu toggle off hết tất cả chars rồi - Artist không cho roster trống. Nếu cậu muốn xoá hẳn roster **${session.accountName}**, dùng \`/raid-remove-roster\` (lệnh dành riêng cho việc xoá hẳn account).`,
+              title: t("raid-edit-roster.confirm.noSelectionTitle", session.lang),
+              description: t("raid-edit-roster.confirm.noSelectionDescription", session.lang, {
+                accountName: session.accountName,
+              }),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -759,8 +816,11 @@ function createEditRosterCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Vượt cap roster",
-              description: `Mỗi roster Artist lưu được tối đa **${MAX_CHARACTERS_PER_ACCOUNT}** chars. Cậu đang chọn **${selectedChars.length}** - toggle off bớt vài char rồi Confirm lại nhé.`,
+              title: t("raid-edit-roster.confirm.capExceededTitle", session.lang),
+              description: t("raid-edit-roster.confirm.capExceededDescription", session.lang, {
+                cap: MAX_CHARACTERS_PER_ACCOUNT,
+                count: selectedChars.length,
+              }),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -782,8 +842,11 @@ function createEditRosterCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "error",
-              title: "Lưu roster fail",
-              description: `Artist lưu thay đổi không xong: ${err?.message || err}\n\nThử lại sau vài giây nhé. Nếu lặp lại nhiều lần ping ${adminMention} giúp Artist debug~`,
+              title: t("raid-edit-roster.persistFail.title", session.lang),
+              description: t("raid-edit-roster.persistFail.description", session.lang, {
+                error: err?.message || err,
+                adminMention,
+              }),
             }),
           ],
         });
