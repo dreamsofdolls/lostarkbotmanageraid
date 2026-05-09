@@ -446,6 +446,7 @@ function createRaidStatusCommand(deps) {
             buildPaginationRow(currentPage, accounts.length, disabled, {
               prevId: "status:prev",
               nextId: "status:next",
+              lang,
             })
           );
         }
@@ -465,6 +466,7 @@ function createRaidStatusCommand(deps) {
         const paginationRow = buildPaginationRow(currentPage, accounts.length, disabled, {
           prevId: "status:prev",
           nextId: "status:next",
+          lang,
         });
         if (showSync) {
           paginationRow.addComponents(buildSyncButton(disabled));

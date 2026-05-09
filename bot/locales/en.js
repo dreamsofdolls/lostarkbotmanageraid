@@ -14,6 +14,18 @@ module.exports = {
     nativeShort: "English",
     code: "en",
   },
+  common: {
+    pagination: {
+      previous: "◀ Previous",
+      next: "Next ▶",
+    },
+    progress: {
+      done: "done",
+      partial: "partial",
+      pending: "pending",
+      notEligible: "not eligible",
+    },
+  },
   "raid-language": {
     title: "🌐 Switch Artist's language",
     description: "Pick the language you want Artist to use. Every command will display in that language going forward.",
