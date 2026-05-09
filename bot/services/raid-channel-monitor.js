@@ -108,6 +108,14 @@ function createRaidChannelMonitorService({
     // frequently. Accept as an alias so /raid-channel monitor doesn't silent-
     // ignore the whole message.
     ["secra",   "serca"],
+    // Japanese katakana aliases - JP users typing native raid names should
+    // parse the same way as VN/EN users. Lost Ark JP localization renders
+    // raid names as: アクト4 (Act 4 / Armoche), カゼロス (Kazeros), セルカ
+    // (Serca). Lower-case via parser tokenizer doesn't apply to non-ASCII
+    // glyphs so katakana is matched as-is.
+    ["アクト4",  "armoche"],
+    ["カゼロス", "kazeros"],
+    ["セルカ",   "serca"],
   ]);
   const DIFFICULTY_ALIASES = new Map([
     ["nightmare", "nightmare"],
@@ -121,6 +129,13 @@ function createRaidChannelMonitorService({
     // shorthand is `9m` only. Breaking for anyone who was typing `nm` for
     // nightmare, but the 2-operator deployment makes the blast radius small.
     ["nm",        "normal"],
+    // Japanese katakana difficulty aliases. ノーマル / ハード / ナイトメア
+    // mirror the in-game JP-LA difficulty labels so a JP user can post
+    // "セルカ ハード Soulrano" naturally without code-switching to English
+    // or Vietnamese mode words.
+    ["ノーマル",     "normal"],
+    ["ハード",       "hard"],
+    ["ナイトメア",   "nightmare"],
   ]);
   const GATE_TOKEN_RE = /^g([1-9])$/;
   /**
