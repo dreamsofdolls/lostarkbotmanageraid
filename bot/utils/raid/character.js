@@ -414,8 +414,8 @@ function formatRaidStatusLine(raid, lang) {
     // Lazy-require to avoid circular import: labels.js → models/Raid.js
     // → (potentially) other utils. Pull at call time so the dependency
     // graph stays clean at module load.
-    const { getRaidLabel } = require("./labels");
-    label = getRaidLabel(raid.raidKey, lang) || raid.raidName;
+    const { getRaidModeLabel } = require("./labels");
+    label = getRaidModeLabel(raid.raidKey, raid.modeKey, lang) || raid.raidName;
   }
   return `${icon} ${label} · ${done}/${total}`;
 }

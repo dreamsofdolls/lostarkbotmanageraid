@@ -470,6 +470,21 @@ test("getStatusRaidsForCharacter: Serca 1740+ shows one mode, switching to the c
   assert.deepEqual(normalSerca.map((raid) => raid.raidName), ["Serca Normal"]);
 });
 
+test("formatRaidStatusLine: translated raid labels keep the difficulty mode", () => {
+  const raid = {
+    raidName: "Kazeros Hard",
+    raidKey: "kazeros",
+    modeKey: "hard",
+    completedGateKeys: ["G1"],
+    allGateKeys: ["G1", "G2"],
+    isCompleted: false,
+  };
+
+  assert.match(formatRaidStatusLine(raid), /Kazeros Hard · 1\/2/);
+  assert.match(formatRaidStatusLine(raid, "vi"), /Kazeros Hard · 1\/2/);
+  assert.match(formatRaidStatusLine(raid, "jp"), /カゼロス ハード · 1\/2/);
+});
+
 test("summarizeCharacterGold: sums earnedGold + totalGold across raid entries", () => {
   const raids = [
     { earnedGold: 17000, totalGold: 52000 },
