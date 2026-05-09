@@ -18,6 +18,8 @@ const {
   getVisibleSharedTasks,
   getSharedTaskDisplay,
 } = require("../../utils/raid/shared-tasks");
+const { t, getUserLanguage } = require("../../services/i18n");
+const { getRaidModeLabel } = require("../../utils/raid/labels");
 
 function createAllModeHandler({
   ActionRowBuilder,
@@ -49,13 +51,19 @@ function createAllModeHandler({
   }
 
   async function handleRaidCheckAllCommand(interaction) {
+    // Manager (slash invoker) views the main /raid-check embed - resolve
+    // their lang once at entry and thread through every render closure
+    // below. Auth-fail path uses caller's lang too (they could be a
+    // non-Manager who happens to have a language preference set).
+    const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
+
     if (!isRaidLeader(interaction)) {
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "lock",
-            title: "Chỉ Raid Manager mới được dùng",
-            description: "Lệnh `/raid-check` chỉ Raid Manager mới chạy được nha cậu (config qua env `RAID_MANAGER_ID`). Gõ `/raid-status` nếu cậu muốn xem progress của roster mình.",
+            title: t("raid-check.auth.managerOnlyTitle", lang),
+            description: t("raid-check.auth.managerOnlyDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -134,8 +142,8 @@ function createAllModeHandler({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: "Server chưa có roster nào",
-            description: "Artist không thấy member nào đã `/raid-add-roster` cả nha. Bảo các cậu trong server gõ `/raid-add-roster` trước rồi `/raid-check` mới có data để overview.",
+            title: t("raid-check.notice.noRosterTitle", lang),
+            description: t("raid-check.notice.noRosterDescription", lang),
           }),
         ],
       });
@@ -338,7 +346,11 @@ function createAllModeHandler({
       // so visual order stays: global → freshness (description now
       // contains only those two lines at most, per /raid-check parity).
       if (userAccounts.length > 1) {
-        const rollupLine = `🌐 All accounts: **${globalTotals.characters}** chars · **${globalTotals.progress.completed}/${globalTotals.progress.total}** raids done`;
+        const rollupLine = t("raid-check.allMode.rollupLine", lang, {
+          characters: globalTotals.characters,
+          completed: globalTotals.progress.completed,
+          total: globalTotals.progress.total,
+        });
         const baseDescription = embed.data?.description || "";
         embed.setDescription(baseDescription ? `${rollupLine}\n${baseDescription}` : rollupLine);
       }
@@ -385,7 +397,9 @@ function createAllModeHandler({
     // "Read-only" suffix.
     const buildTaskPage = (pageIndex) => {
       const { userDoc, account } = pagesData[pageIndex];
-      const accountName = String(account?.accountName || "(unnamed roster)");
+      const accountName = String(
+        account?.accountName || t("raid-check.allMode.unnamedRoster", lang)
+      );
       const meta = authorMeta.get(userDoc.discordId);
       const displayName =
         meta?.displayName ||
@@ -416,8 +430,8 @@ function createAllModeHandler({
         // explicit (no toggle behavior here, that's owner-side only).
         embed.setDescription(
           [
-            `Read-only Manager view - chỉ owner toggle được ở \`/raid-status\` của họ.`,
-            `Auto-reset: Daily 17:00 VN ${UI.icons.reset} Weekly 17:00 VN thứ 4.`,
+            t("raid-check.allMode.taskHeaderDescription", lang),
+            t("raid-check.allMode.taskHeaderResetLine", lang, { resetIcon: UI.icons.reset }),
           ].join("\n")
         );
         if (sharedTasks.length > 0) {
@@ -427,10 +441,10 @@ function createAllModeHandler({
             return `${icon} ${display.emoji} **${display.name}** · ${display.status}`;
           });
           if (sharedTasks.length > 12) {
-            lines.push(`_+${sharedTasks.length - 12} task chung khác_`);
+            lines.push(t("raid-check.allMode.sharedTaskExtra", lang, { n: sharedTasks.length - 12 }));
           }
           embed.addFields({
-            name: "🌟 Task chung của roster",
+            name: t("raid-check.allMode.sharedTaskHeader", lang),
             value: truncateText(lines.join("\n"), 1024),
             inline: false,
           });
@@ -442,7 +456,7 @@ function createAllModeHandler({
                 ...fields.slice(0, fieldBudget - 1),
                 {
                   name: "…",
-                  value: `_+${fields.length - fieldBudget + 1} character có task khác_`,
+                  value: t("raid-check.allMode.charsExtraField", lang, { n: fields.length - fieldBudget + 1 }),
                   inline: false,
                 },
               ]
@@ -450,7 +464,7 @@ function createAllModeHandler({
         if (visibleFields.length > 0) embed.addFields(...visibleFields);
       } else {
         embed.setDescription(
-          `Account **${accountName}** chưa có side task nào. Member dùng \`/raid-task add\` để đăng ký chore daily/weekly.`
+          t("raid-check.allMode.noTasksDescription", lang, { accountName })
         );
       }
 
@@ -459,19 +473,32 @@ function createAllModeHandler({
         const sharedDone = sharedTasks.filter((task) =>
           getSharedTaskDisplay(task, now).completed
         ).length;
-        footerParts.push(`${UI.icons.done} ${sharedDone}/${sharedTasks.length} task chung`);
+        footerParts.push(t("raid-check.allMode.sharedFooter", lang, {
+          doneIcon: UI.icons.done,
+          done: sharedDone,
+          total: sharedTasks.length,
+        }));
       }
       if (totals.daily > 0) {
-        footerParts.push(`🟢 ${totals.dailyDone}/${totals.daily} daily`);
+        footerParts.push(t("raid-check.allMode.dailyFooter", lang, {
+          done: totals.dailyDone,
+          total: totals.daily,
+        }));
       }
       if (totals.weekly > 0) {
-        footerParts.push(`🟢 ${totals.weeklyDone}/${totals.weekly} weekly`);
+        footerParts.push(t("raid-check.allMode.weeklyFooter", lang, {
+          done: totals.weeklyDone,
+          total: totals.weekly,
+        }));
       }
       const localTotal = filteredIndices.length;
       if (localTotal > 1) {
-        footerParts.push(`Page ${currentLocalPage + 1}/${localTotal}`);
+        footerParts.push(t("raid-check.allMode.pageFooter", lang, {
+          current: currentLocalPage + 1,
+          total: localTotal,
+        }));
       }
-      footerParts.push("Read-only · Manager view");
+      footerParts.push(t("raid-check.allMode.readOnlySuffix", lang));
       embed.setFooter({ text: footerParts.join(" · ") });
 
       if (meta) {
@@ -509,7 +536,7 @@ function createAllModeHandler({
         row.addComponents(
           new ButtonBuilder()
             .setCustomId(`raid-check:edit-all:${currentViewUserId}`)
-            .setLabel("Edit progress")
+            .setLabel(t("raid-check.buttons.editProgress", lang))
             .setEmoji("✏️")
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(disabled)
@@ -523,7 +550,7 @@ function createAllModeHandler({
             row.addComponents(
               new ButtonBuilder()
                 .setCustomId(`raid-check:enable-auto-one:${actionUserId}`)
-                .setLabel("Bật auto-sync")
+                .setLabel(t("raid-check.buttons.enableAutoSync", lang))
                 .setEmoji("🔄")
                 .setStyle(ButtonStyle.Primary)
                 .setDisabled(disabled)
@@ -532,7 +559,7 @@ function createAllModeHandler({
             row.addComponents(
               new ButtonBuilder()
                 .setCustomId(`raid-check:disable-auto-one:${actionUserId}`)
-                .setLabel("Tắt auto-sync")
+                .setLabel(t("raid-check.buttons.disableAutoSync", lang))
                 .setEmoji("🚫")
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled)
@@ -550,7 +577,7 @@ function createAllModeHandler({
           row.addComponents(
             new ButtonBuilder()
               .setCustomId("raid-check-all:view-toggle:task")
-              .setLabel("Xem tasks")
+              .setLabel(t("raid-check.buttons.viewTasks", lang))
               .setEmoji("📝")
               .setStyle(ButtonStyle.Secondary)
               .setDisabled(disabled)
@@ -559,7 +586,7 @@ function createAllModeHandler({
           row.addComponents(
             new ButtonBuilder()
               .setCustomId("raid-check-all:view-toggle:raid")
-              .setLabel("Quay lại raid scan")
+              .setLabel(t("raid-check.buttons.backToRaidScan", lang))
               .setEmoji("📋")
               .setStyle(ButtonStyle.Primary)
               .setDisabled(disabled)
@@ -598,10 +625,17 @@ function createAllModeHandler({
             // Record the raid existence for the per-raid dropdown BEFORE
             // the pending gate so a raid all chars have cleared still
             // appears in the dropdown (with pending=0) rather than
-            // silently vanishing once the backlog hits zero.
+            // silently vanishing once the backlog hits zero. Localize
+            // label per Manager's lang via getRaidModeLabel.
             let raidEntry = perRaidPending.get(key);
             if (!raidEntry) {
-              raidEntry = { key, label: raid.raidName, pending: 0, supports: 0, dps: 0 };
+              raidEntry = {
+                key,
+                label: getRaidModeLabel(raid.raidKey, raid.modeKey, lang),
+                pending: 0,
+                supports: 0,
+                dps: 0,
+              };
               perRaidPending.set(key, raidEntry);
             }
             if (raidFilter && key !== raidFilter) continue;
@@ -644,7 +678,9 @@ function createAllModeHandler({
       const options = [
         {
           label: truncateText(
-            `All users (${totalPending === 0 ? "DONE" : `${totalPending} pending`})`,
+            totalPending === 0
+              ? t("raid-check.filter.allUsersDone", lang)
+              : t("raid-check.filter.allUsersPending", lang, { n: totalPending }),
             100
           ),
           value: FILTER_ALL,
@@ -670,14 +706,16 @@ function createAllModeHandler({
       for (const u of sortedUsers.slice(0, 24)) {
         // 0 pending -> "DONE" instead of "0 pending · 0🛡️ 0⚔️". The
         // breakdown suffix only adds info when there's actual backlog.
-        const suffix = u.pending === 0
-          ? "DONE"
-          : `${u.pending} pending · ${u.supports}🛡️ ${u.dps}⚔️`;
+        const label = u.pending === 0
+          ? t("raid-check.filter.userDone", lang, { name: u.displayName })
+          : t("raid-check.filter.userPending", lang, {
+              name: u.displayName,
+              n: u.pending,
+              supports: u.supports,
+              dps: u.dps,
+            });
         options.push({
-          label: truncateText(
-            `${u.displayName} (${suffix})`,
-            100
-          ),
+          label: truncateText(label, 100),
           value: u.discordId,
           emoji: "👤",
           default: filterUserId === u.discordId,
@@ -686,7 +724,7 @@ function createAllModeHandler({
       return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("raid-check-all-filter:user")
-          .setPlaceholder("Jump to user / Lọc theo user...")
+          .setPlaceholder(t("raid-check.filter.userPlaceholder", lang))
           .setDisabled(disabled)
           .addOptions(options)
       );
@@ -711,7 +749,9 @@ function createAllModeHandler({
       const options = [
         {
           label: truncateText(
-            `All raids (${totalPending === 0 ? "DONE" : `${totalPending} total pending`})`,
+            totalPending === 0
+              ? t("raid-check.filter.allRaidsDone", lang)
+              : t("raid-check.filter.allRaidsPending", lang, { n: totalPending }),
             100
           ),
           value: FILTER_ALL_RAIDS,
@@ -728,11 +768,16 @@ function createAllModeHandler({
         // Same DONE-vs-breakdown rule as the user dropdown above:
         // "0 pending · 0🛡️ 0⚔️" reads as noise; collapse to "DONE" so
         // the leader scans the raid list for actually-pending entries.
-        const suffix = r.pending === 0
-          ? "DONE"
-          : `${r.pending} pending · ${r.supports}🛡️ ${r.dps}⚔️`;
+        const label = r.pending === 0
+          ? t("raid-check.filter.raidDone", lang, { label: r.label })
+          : t("raid-check.filter.raidPending", lang, {
+              label: r.label,
+              n: r.pending,
+              supports: r.supports,
+              dps: r.dps,
+            });
         options.push({
-          label: truncateText(`${r.label} (${suffix})`, 100),
+          label: truncateText(label, 100),
           value: r.key,
           emoji: "⚔️",
           default: filterRaidId === r.key,
@@ -741,7 +786,7 @@ function createAllModeHandler({
       return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("raid-check-all-filter:raid")
-          .setPlaceholder("Filter by raid / Lọc theo raid...")
+          .setPlaceholder(t("raid-check.filter.raidPlaceholder", lang))
           .setDisabled(disabled)
           .addOptions(options)
       );
@@ -785,13 +830,16 @@ function createAllModeHandler({
           customId === "raid-check-all-filter:raid" ||
           customId.startsWith("raid-check-all:view-toggle:");
         if (ours) {
+          // Lock message is read by the unauthorized clicker, render in
+          // their lang (not session opener's).
+          const clickerLang = await getUserLanguage(component.user.id, { UserModel: User });
           await component
             .reply({
               embeds: [
                 buildNoticeEmbed(EmbedBuilder, {
                   type: "lock",
-                  title: "Chỉ người mở mới bấm được",
-                  description: "Component này thuộc session `/raid-check` của người khác nha cậu, Artist chỉ cho người mở session điều khiển. Cậu mở session riêng bằng `/raid-check` của mình nhé.",
+                  title: t("raid-check.notice.sessionLockTitle", clickerLang),
+                  description: t("raid-check.notice.sessionLockDescription", clickerLang),
                 }),
               ],
               flags: MessageFlags.Ephemeral,

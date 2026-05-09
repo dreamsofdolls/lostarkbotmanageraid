@@ -22,6 +22,8 @@
  */
 
 const { buildNoticeEmbed } = require("../../utils/raid/shared");
+const { t, getUserLanguage } = require("../../services/i18n");
+const { getRaidModeLabel } = require("../../utils/raid/labels");
 
 function createSyncUi({
   EmbedBuilder,
@@ -66,25 +68,29 @@ function createSyncUi({
     }
   }
 
-  function buildRaidCheckSyncDMEmbed(raidMeta, delta) {
+  function buildRaidCheckSyncDMEmbed(raidMeta, delta, lang = "vi") {
     const lines = delta.map((entry) => {
       const applied = Array.isArray(entry.applied) ? entry.applied : [];
       const gateInfo = applied
         .map((item) => `${item.raidLabel || item.raidKey} ${item.gate}`)
         .join(", ");
-      return `**${entry.charName}** · ${applied.length} gate mới: ${gateInfo || "_(detail không có)_"}`;
+      return t("raid-check.syncDm.charLine", lang, {
+        charName: entry.charName,
+        n: applied.length,
+        gateInfo: gateInfo || t("raid-check.syncDm.gateInfoEmpty", lang),
+      });
     });
 
     return new EmbedBuilder()
       .setColor(UI.colors.success)
-      .setTitle(`${UI.icons.done} Artist vừa sync progress raid giúp cậu`)
+      .setTitle(t("raid-check.syncDm.title", lang, { doneIcon: UI.icons.done }))
       .setDescription(
         [
-          "Chào cậu~ Có Raid Manager vừa nhờ Artist pull logs từ bible sync progress raid cho cậu đây nha. Sau khi sync xong, Artist thấy mấy gate mới này cho char của cậu:",
+          t("raid-check.syncDm.intro", lang),
           "",
           ...lines,
           "",
-          "Cậu ghé `/raid-status` xem full progress nha~",
+          t("raid-check.syncDm.footer", lang),
         ].join("\n")
       )
       .setTimestamp();
@@ -92,6 +98,9 @@ function createSyncUi({
 
   async function handleRaidCheckSyncClick(interaction, raidMeta) {
     const started = Date.now();
+    // Manager (clicker) views the ephemeral report - use their lang.
+    const managerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
+    const raidModeLabel = getRaidModeLabel(raidMeta.raidKey, raidMeta.modeKey, managerLang);
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const snapshotStarted = Date.now();
     const snapshot = await computeRaidCheckSnapshot(raidMeta, {
@@ -124,8 +133,8 @@ function createSyncUi({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: "Không có user nào opt-in",
-            description: "Trong list pending hiện tại không có ai đã `/raid-auto-manage action:on` cả nha, Artist không có user để sync. Nhắc các cậu trong list bật auto-manage, hoặc dùng `/raid-set` để update thủ công.",
+            title: t("raid-check.syncFlow.noOptedInTitle", managerLang),
+            description: t("raid-check.syncFlow.noOptedInDescription", managerLang),
           }),
         ],
       });
@@ -216,7 +225,10 @@ function createSyncUi({
           try {
             const user = await interaction.client.users.fetch(discordId);
             const dmChannel = await user.createDM();
-            const embed = buildRaidCheckSyncDMEmbed(raidMeta, delta);
+            // DM is read by the target, render in their lang per the
+            // viewer-language rule.
+            const targetLang = await getUserLanguage(discordId, { UserModel: User });
+            const embed = buildRaidCheckSyncDMEmbed(raidMeta, delta, targetLang);
             await dmChannel.send({ embeds: [embed] });
             return { ok: true };
           } catch {
@@ -234,23 +246,29 @@ function createSyncUi({
     );
 
     const description = [
-      `Artist đã trigger sync cho **${optedInDiscordIds.length}** opted-in user (**${scopedCharCount}** pending char).`,
+      t("raid-check.syncFlow.reportLineIntro", managerLang, {
+        users: optedInDiscordIds.length,
+        chars: scopedCharCount,
+      }),
       "",
-      `**Synced (có data mới):** ${syncedCount}`,
-      `**Attempted-only (no fresh data):** ${attemptedOnlyCount}`,
-      `**Skipped (cooldown / in-flight):** ${skippedCount}`,
-      `**Failed:** ${failedCount}`,
-      `**Chars có update mới:** ${deltasPerUser.size} user`,
-      `**DM sent:** ${dmSent}${dmFailed > 0 ? ` (DM failed: ${dmFailed})` : ""}`,
+      t("raid-check.syncFlow.reportLineSynced", managerLang, { n: syncedCount }),
+      t("raid-check.syncFlow.reportLineAttemptedOnly", managerLang, { n: attemptedOnlyCount }),
+      t("raid-check.syncFlow.reportLineSkipped", managerLang, { n: skippedCount }),
+      t("raid-check.syncFlow.reportLineFailed", managerLang, { n: failedCount }),
+      t("raid-check.syncFlow.reportLineUpdated", managerLang, { n: deltasPerUser.size }),
+      t("raid-check.syncFlow.reportLineDmSent", managerLang, { sent: dmSent }) +
+        (dmFailed > 0
+          ? t("raid-check.syncFlow.reportLineDmFailedSuffix", managerLang, { n: dmFailed })
+          : ""),
       "",
-      `Mở \`/raid-check\` rồi pick **${raidMeta.label}** ở dropdown filter để xem list pending mới nha~`,
+      t("raid-check.syncFlow.reportLineHint", managerLang, { raidLabel: raidModeLabel }),
     ].join("\n");
     await interaction.editReply({
       content: null,
       embeds: [
         buildNoticeEmbed(EmbedBuilder, {
           type: "success",
-          title: "Sync xong",
+          title: t("raid-check.syncFlow.reportTitle", managerLang),
           description,
         }),
       ],

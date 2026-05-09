@@ -4,6 +4,7 @@ const {
   getVisibleSharedTasks,
   getSharedTaskDisplay,
 } = require("../../utils/raid/shared-tasks");
+const { t, getUserLanguage } = require("../../services/i18n");
 
 function createTaskViewUi(deps) {
   const {
@@ -27,13 +28,16 @@ function createTaskViewUi(deps) {
   // data). Reply is ephemeral so the data never lands in the channel
   // transcript - members aren't notified when a Manager spot-checks.
   async function handleRaidCheckViewTasksClick(interaction, targetDiscordId) {
+    // Manager (clicker) is the viewer here - read-only spot-check.
+    const lang = await getUserLanguage(interaction.user?.id, { UserModel: User });
+
     if (!targetDiscordId) {
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Button đã hết hạn",
-            description: "Discord đã rớt context của button này (chắc bot vừa restart). Refresh `/raid-check` rồi thử lại nha.",
+            title: t("raid-check.staleButton.title", lang),
+            description: t("raid-check.staleButton.taskViewDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -52,8 +56,8 @@ function createTaskViewUi(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Không tìm thấy user",
-            description: `Artist không thấy doc của <@${targetDiscordId}> trong DB. Có thể user chưa từng dùng bot.`,
+            title: t("raid-check.taskView.noUserTitle", lang),
+            description: t("raid-check.taskView.noUserDescription", lang, { target: targetDiscordId }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -75,10 +79,10 @@ function createTaskViewUi(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: `📝 Tasks · <@${targetDiscordId}>`,
+            title: t("raid-check.taskView.noTasksTitle", lang, { target: targetDiscordId }),
             description: [
-              `User <@${targetDiscordId}> chưa đăng ký side task nào.`,
-              "Họ chưa từng dùng `/raid-task add` để track chore daily/weekly.",
+              t("raid-check.taskView.noTasksLine1", lang, { target: targetDiscordId }),
+              t("raid-check.taskView.noTasksLine2", lang),
             ].join("\n"),
           }),
         ],
@@ -100,7 +104,9 @@ function createTaskViewUi(deps) {
     // and the "Read-only" suffix that signals the Manager can look but
     // not toggle.
     const buildAccountEmbed = (account, pageIdx) => {
-      const accountName = String(account.accountName || "(unnamed roster)");
+      const accountName = String(
+        account.accountName || t("raid-check.taskView.unnamedRoster", lang)
+      );
       const embed = new EmbedBuilder()
         .setColor(UI.colors.neutral)
         .setTitle(`📝 ${displayName} · ${accountName}`);
@@ -118,10 +124,10 @@ function createTaskViewUi(deps) {
           return `${icon} ${display.emoji} **${display.name}** · ${display.status}`;
         });
         if (sharedTasks.length > 12) {
-          lines.push(`_+${sharedTasks.length - 12} task chung khác_`);
+          lines.push(t("raid-check.taskView.sharedTaskExtra", lang, { n: sharedTasks.length - 12 }));
         }
         embed.addFields({
-          name: "🌟 Task chung của roster",
+          name: t("raid-check.taskView.sharedTaskHeader", lang),
           value: truncateText(lines.join("\n"), 1024),
           inline: false,
         });
@@ -133,7 +139,7 @@ function createTaskViewUi(deps) {
               ...fields.slice(0, fieldBudget - 1),
               {
                 name: "…",
-                value: `_+${fields.length - fieldBudget + 1} character có task khác_`,
+                value: t("raid-check.taskView.charsExtraField", lang, { n: fields.length - fieldBudget + 1 }),
                 inline: false,
               },
             ]
@@ -144,18 +150,33 @@ function createTaskViewUi(deps) {
         const sharedDone = sharedTasks.filter((task) =>
           getSharedTaskDisplay(task, now).completed
         ).length;
-        footerParts.push(`${UI.icons.done} ${sharedDone}/${sharedTasks.length} task chung`);
+        footerParts.push(t("raid-check.taskView.sharedFooter", lang, {
+          doneIcon: UI.icons.done,
+          done: sharedDone,
+          total: sharedTasks.length,
+        }));
       }
       if (totals.daily > 0) {
-        footerParts.push(`${UI.icons.done} ${totals.dailyDone}/${totals.daily} daily`);
+        footerParts.push(t("raid-check.taskView.dailyFooter", lang, {
+          doneIcon: UI.icons.done,
+          done: totals.dailyDone,
+          total: totals.daily,
+        }));
       }
       if (totals.weekly > 0) {
-        footerParts.push(`${UI.icons.done} ${totals.weeklyDone}/${totals.weekly} weekly`);
+        footerParts.push(t("raid-check.taskView.weeklyFooter", lang, {
+          doneIcon: UI.icons.done,
+          done: totals.weeklyDone,
+          total: totals.weekly,
+        }));
       }
       if (totalPages > 1) {
-        footerParts.push(`Page ${pageIdx + 1}/${totalPages}`);
+        footerParts.push(t("raid-check.taskView.pageFooter", lang, {
+          current: pageIdx + 1,
+          total: totalPages,
+        }));
       }
-      footerParts.push("Read-only · Manager view");
+      footerParts.push(t("raid-check.taskView.readOnlySuffix", lang));
       embed.setFooter({ text: footerParts.join(" · ") });
       return embed;
     };

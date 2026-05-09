@@ -12,6 +12,8 @@
  * them once at boot.
  */
 
+const { t } = require("../../services/i18n");
+
 function createSnapshotHelpers({
   // Mongoose + query
   User,
@@ -197,14 +199,14 @@ function createSnapshotHelpers({
     };
   }
 
-  function formatRaidCheckNotEligibleFieldValue(character) {
+  function formatRaidCheckNotEligibleFieldValue(character, lang = "vi") {
     if (character?.notEligibleReason === "low") {
-      return `${UI.icons.lock} _Not eligible yet (iLvl below min)_`;
+      return `${UI.icons.lock} ${t("raid-check.snapshot.notEligibleLow", lang)}`;
     }
     if (character?.notEligibleReason === "high") {
-      return `${UI.icons.lock} _Not eligible yet (out-grown this mode)_`;
+      return `${UI.icons.lock} ${t("raid-check.snapshot.notEligibleHigh", lang)}`;
     }
-    return `${UI.icons.lock} _Not eligible yet_`;
+    return `${UI.icons.lock} ${t("raid-check.snapshot.notEligibleGeneric", lang)}`;
   }
 
   function getRaidCheckRenderableChars(snapshot) {
