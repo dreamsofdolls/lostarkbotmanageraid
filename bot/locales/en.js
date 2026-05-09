@@ -58,6 +58,13 @@ module.exports = {
       pageSuffix: " · Page {current}/{total}",
       goldEarnerHint: "_💰 Mark gold-earners via `/raid-gold-earner roster:<name>` (cap 6 / account / week)._",
     },
+    filter: {
+      placeholder: "Filter by raid...",
+      allRaidsDone: "All raids (DONE)",
+      allRaidsPending: "All raids ({n} total pending)",
+      raidEntryDone: "{label} (DONE)",
+      raidEntryPending: "{label} ({n} pending · {supports}🛡️ {dps}⚔️)",
+    },
   },
   "raid-help": {
     overview: {
