@@ -257,8 +257,18 @@ table th { color: var(--text-dim); font-weight: 600; }
    view since "what has my char done this week" is the natural mental
    model when previewing what will sync. Toggle button at the top
    swaps to raid-first. */
-.char-card {
+/* Char cards pack 2-up via this wrapper. Each card is min ~340px so
+   the raid rows inside stay readable; wide viewports get 2 columns,
+   narrow (~720px or less) collapse to 1. Falling back gracefully on
+   mobile means we don't have to ship a media query. */
+.char-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 12px;
   margin-top: 12px;
+}
+.char-card {
+  margin-top: 0; /* gap on the wrapper grid handles spacing */
   padding: 10px 14px;
   background: #1d2024;
   border: 1px solid var(--border);
