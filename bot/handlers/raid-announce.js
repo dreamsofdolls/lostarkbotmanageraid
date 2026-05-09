@@ -1,6 +1,7 @@
 "use strict";
 
 const { buildNoticeEmbed } = require("../utils/raid/shared");
+const { t, getUserLanguage } = require("../services/i18n");
 
 function createRaidAnnounceCommand(deps) {
   const {
@@ -8,6 +9,7 @@ function createRaidAnnounceCommand(deps) {
     MessageFlags,
     PermissionFlagsBits,
     UI,
+    User,
     GuildConfig,
     normalizeName,
     truncateText,
@@ -22,13 +24,19 @@ function createRaidAnnounceCommand(deps) {
 
 async function handleRaidAnnounceCommand(interaction) {
     const guildId = interaction.guildId;
+    // Slash invoker is the only viewer of every ephemeral reply on this
+    // command, so resolve once and thread through every notice + success
+    // embed. Scheduled announcement bodies (the actual public broadcasts
+    // that fire on a cron) are localized separately in the scheduler and
+    // are out of scope for this handler migration.
+    const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
     if (!guildId) {
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Server only",
-            description: "Cậu phải chạy `/raid-announce` trong server nha, Artist không config được announcement ở DM đâu.",
+            title: t("raid-announce.auth.serverOnlyTitle", lang),
+            description: t("raid-announce.auth.serverOnlyDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -48,8 +56,8 @@ async function handleRaidAnnounceCommand(interaction) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "lock",
-            title: "Cần Manage Server",
-            description: "Lệnh `/raid-announce` chỉ dành cho thành viên có quyền **Manage Server** trên Discord. Nhờ admin mở quyền hộ rồi thử lại nha~",
+            title: t("raid-announce.auth.manageGuildTitle", lang),
+            description: t("raid-announce.auth.manageGuildDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -68,8 +76,8 @@ async function handleRaidAnnounceCommand(interaction) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Action không hợp lệ",
-            description: `Action \`${action}\` Artist không nhận được. Cho phép: \`show\` · \`on\` · \`off\` · \`set-channel\` · \`clear-channel\`.`,
+            title: t("raid-announce.invalid.actionTitle", lang),
+            description: t("raid-announce.invalid.actionDescription", lang, { action }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -85,8 +93,8 @@ async function handleRaidAnnounceCommand(interaction) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Loại announcement không hợp lệ",
-            description: `Type \`${type}\` không có trong registry. Có thể slash schema chưa redeploy sau khi rename, cậu thử \`/raid-announce\` lại với dropdown gợi ý nha.`,
+            title: t("raid-announce.invalid.typeTitle", lang),
+            description: t("raid-announce.invalid.typeDescription", lang, { type }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -104,19 +112,22 @@ async function handleRaidAnnounceCommand(interaction) {
       const resolvedChannel = resolvedChannelId
         ? `<#${resolvedChannelId}>`
         : overridable
-          ? "*(no destination set - either set an override here or configure the monitor channel via /raid-channel config action:set)*"
-          : "*(no monitor channel set - run /raid-channel config action:set first)*";
+          ? t("raid-announce.show.destinationOverridable", lang)
+          : t("raid-announce.show.destinationChannelBound", lang);
       const overrideState = current.channelId
-        ? `Override: <#${current.channelId}>`
+        ? t("raid-announce.show.channelConfigOverride", lang, { channelId: current.channelId })
         : overridable
-          ? "No override set (falls back to monitor channel)"
-          : "Channel-bound (override not applicable)";
+          ? t("raid-announce.show.channelConfigNoOverride", lang)
+          : t("raid-announce.show.channelConfigBound", lang);
       // hourly-cleanup notice picks a random variant per fire out of a pool
       // of 12, so a single hardcoded preview would misrepresent what Artist
       // actually posts. Build the preview from the live variant pool so
       // every variant shows up - adding a new variant to the pool auto-
       // updates this preview. Other types have a single deterministic
       // message, so they keep the static `previewContent` from the registry.
+      // The previews themselves are scheduled-announcement bodies (out of
+      // scope for this i18n migration), so they render in their original
+      // VN voice.
       let previewText;
       if (type === "hourly-cleanup") {
         previewText = truncateText(buildCleanupNoticePreview(), 1024);
@@ -127,24 +138,29 @@ async function handleRaidAnnounceCommand(interaction) {
       } else {
         previewText = entry.previewContent
           ? truncateText(entry.previewContent, 1024)
-          : "*(no preview defined for this type)*";
+          : t("raid-announce.show.previewMissing", lang);
       }
       // Keep timing text honest: show disabled/waiting states explicitly,
       // and for polled schedulers show both the next eligible wall-clock
       // boundary and the next REAL scheduler check based on boot phase.
+      // buildAnnouncementWhenItFiresText is upstream scheduler text and
+      // stays in its source-of-truth voice (out of scope here).
       const scheduleText = truncateText(
         buildAnnouncementWhenItFiresText(type, entry, current, existing),
         1024
       );
+      const enabledValue = current.enabled
+        ? `${UI.icons.done} ${t("raid-announce.show.enabledOn", lang)}`
+        : `${UI.icons.reset} ${t("raid-announce.show.enabledOff", lang)}`;
       const embed = new EmbedBuilder()
         .setColor(UI.colors.neutral)
-        .setTitle(`${UI.icons.info} Announcement · ${typeLabel}`)
+        .setTitle(`${UI.icons.info} ${t("raid-announce.show.title", lang, { typeLabel })}`)
         .addFields(
-          { name: "Enabled", value: current.enabled ? `${UI.icons.done} ON` : `${UI.icons.reset} OFF`, inline: true },
-          { name: "Destination", value: resolvedChannel, inline: true },
-          { name: "Channel config", value: overrideState, inline: false },
-          { name: "When it fires", value: scheduleText, inline: false },
-          { name: "Message preview", value: previewText, inline: false },
+          { name: t("raid-announce.show.enabledLabel", lang), value: enabledValue, inline: true },
+          { name: t("raid-announce.show.destinationLabel", lang), value: resolvedChannel, inline: true },
+          { name: t("raid-announce.show.channelConfigLabel", lang), value: overrideState, inline: false },
+          { name: t("raid-announce.show.whenLabel", lang), value: scheduleText, inline: false },
+          { name: t("raid-announce.show.previewLabel", lang), value: previewText, inline: false },
         )
         .setTimestamp();
       await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
@@ -152,13 +168,19 @@ async function handleRaidAnnounceCommand(interaction) {
     }
     if (action === "on" || action === "off") {
       const enabled = action === "on";
+      const stateText = enabled
+        ? t("raid-announce.show.enabledOn", lang)
+        : t("raid-announce.show.enabledOff", lang);
       if (current.enabled === enabled) {
         await interaction.reply({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "info",
-              title: "Không có gì đổi",
-              description: `\`${type}\` đang **${enabled ? "ON" : "OFF"}** rồi, Artist không stamp lại nha. Muốn xem state hiện tại thì chạy action \`show\`.`,
+              title: t("raid-announce.toggle.noopTitle", lang),
+              description: t("raid-announce.toggle.noopDescription", lang, {
+                type,
+                state: stateText,
+              }),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -174,13 +196,18 @@ async function handleRaidAnnounceCommand(interaction) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "success",
-            title: "Đã chuyển trạng thái",
+            title: t("raid-announce.toggle.successTitle", lang),
             description: [
-              `**Loại:** \`${type}\` (${typeLabel})`,
-              `**Trạng thái mới:** ${enabled ? "ON" : "OFF"}`,
-              `**Tác động:** Lần fire kế tiếp Artist ${enabled ? "post lại bình thường" : "im lặng skip"}.`,
+              t("raid-announce.toggle.successLineType", lang, { type, typeLabel }),
+              t("raid-announce.toggle.successLineState", lang, { state: stateText }),
+              t(
+                enabled
+                  ? "raid-announce.toggle.successLineImpactOn"
+                  : "raid-announce.toggle.successLineImpactOff",
+                lang
+              ),
               "",
-              "Cậu xem state đầy đủ qua action `show` nếu muốn check nha~",
+              t("raid-announce.toggle.successLineCheck", lang),
             ].join("\n"),
           }),
         ],
@@ -202,8 +229,12 @@ async function handleRaidAnnounceCommand(interaction) {
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Loại này không override được",
-              description: `\`${type}\` (${typeLabel}) luôn post vào monitor channel theo thiết kế, Artist không cho override được đâu. Chỉ ${overridableList} mới chấp nhận \`set-channel\`.`,
+              title: t("raid-announce.setChannel.notOverridableTitle", lang),
+              description: t("raid-announce.setChannel.notOverridableDescription", lang, {
+                type,
+                typeLabel,
+                overridableList,
+              }),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -215,8 +246,8 @@ async function handleRaidAnnounceCommand(interaction) {
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Thiếu option `channel`",
-              description: "Action `set-channel` cần kèm option `channel:#abc` để Artist biết override sang đâu. Chạy lại `/raid-announce ... action:set-channel channel:#tên-kênh` nha.",
+              title: t("raid-announce.setChannel.missingChannelTitle", lang),
+              description: t("raid-announce.setChannel.missingChannelDescription", lang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -230,8 +261,11 @@ async function handleRaidAnnounceCommand(interaction) {
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "lock",
-              title: "Bot thiếu permission",
-              description: `Artist không post được vào <#${channel.id}> vì thiếu: **${missing.join(", ")}**. Cậu grant cho bot ở channel đó rồi chạy lại \`/raid-announce ... action:set-channel\` nha.`,
+              title: t("raid-announce.setChannel.missingPermsTitle", lang),
+              description: t("raid-announce.setChannel.missingPermsDescription", lang, {
+                channelId: channel.id,
+                missing: missing.join(", "),
+              }),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -247,15 +281,15 @@ async function handleRaidAnnounceCommand(interaction) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "success",
-            title: "Override channel ghi sổ rồi nha",
+            title: t("raid-announce.setChannel.successTitle", lang),
             description: [
-              "Artist đã đổi destination cho announcement này.",
+              t("raid-announce.setChannel.successLineIntro", lang),
               "",
-              `**Loại:** \`${type}\` (${typeLabel})`,
-              `**Channel mới:** <#${channel.id}>`,
-              "**Tác động:** Lần fire kế tiếp Artist sẽ post vào kênh đó.",
+              t("raid-announce.setChannel.successLineType", lang, { type, typeLabel }),
+              t("raid-announce.setChannel.successLineChannel", lang, { channelId: channel.id }),
+              t("raid-announce.setChannel.successLineImpact", lang),
               "",
-              `Muốn revert về monitor channel mặc định thì cậu chạy \`/raid-announce type:${type} action:clear-channel\` nha~`,
+              t("raid-announce.setChannel.successLineRevert", lang, { type }),
             ].join("\n"),
           }),
         ],
@@ -269,8 +303,8 @@ async function handleRaidAnnounceCommand(interaction) {
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Loại này không có override",
-              description: `\`${type}\` là channel-bound (luôn post vào monitor channel theo thiết kế), nên không có override để clear. Chỉ overridable types mới có dòng override để xóa.`,
+              title: t("raid-announce.clearChannel.notOverridableTitle", lang),
+              description: t("raid-announce.clearChannel.notOverridableDescription", lang, { type }),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -282,8 +316,8 @@ async function handleRaidAnnounceCommand(interaction) {
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "info",
-              title: "Không có gì để clear",
-              description: `\`${type}\` đang post thẳng vào monitor channel mặc định, override hiện đã \`null\` rồi. Muốn check thì action \`show\`.`,
+              title: t("raid-announce.clearChannel.noOverrideTitle", lang),
+              description: t("raid-announce.clearChannel.noOverrideDescription", lang, { type }),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -298,15 +332,15 @@ async function handleRaidAnnounceCommand(interaction) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "success",
-            title: "Override đã xoá",
+            title: t("raid-announce.clearChannel.successTitle", lang),
             description: [
-              "Artist đã clear override channel cho announcement này.",
+              t("raid-announce.clearChannel.successLineIntro", lang),
               "",
-              `**Loại:** \`${type}\` (${typeLabel})`,
-              "**Channel mới:** Monitor channel mặc định",
-              "**Tác động:** Lần fire kế tiếp Artist post vào monitor channel.",
+              t("raid-announce.clearChannel.successLineType", lang, { type, typeLabel }),
+              t("raid-announce.clearChannel.successLineChannel", lang),
+              t("raid-announce.clearChannel.successLineImpact", lang),
               "",
-              "Muốn override sang kênh khác thì action `set-channel channel:#abc` nha.",
+              t("raid-announce.clearChannel.successLineRevert", lang),
             ].join("\n"),
           }),
         ],
@@ -329,6 +363,7 @@ async function handleRaidAnnounceCommand(interaction) {
         await interaction.respond([]).catch(() => {});
         return;
       }
+      const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
       const typeValue = interaction.options.getString("type");
       const entry = typeValue ? announcementTypeEntry(typeValue) : null;
       // Load per-guild state only when type is known. Cheap single-doc
@@ -347,25 +382,25 @@ async function handleRaidAnnounceCommand(interaction) {
       const overridable = entry?.channelOverridable === true;
       const options = [];
       // Always available - pure read.
-      options.push({ name: "Show current config", value: "show" });
+      options.push({ name: t("raid-announce.autocomplete.show", lang), value: "show" });
       if (current) {
         // Enabled-toggle pair: expose only the action that would actually
         // change state. Annotate with current state so admin sees impact.
         if (current.enabled) {
-          options.push({ name: "Turn off · currently ON", value: "off" });
+          options.push({ name: t("raid-announce.autocomplete.turnOffWithState", lang), value: "off" });
         } else {
-          options.push({ name: "Turn on · currently OFF", value: "on" });
+          options.push({ name: t("raid-announce.autocomplete.turnOnWithState", lang), value: "on" });
         }
       } else {
         // No type picked or config load failed - expose both so user still
         // has a path forward. Generic labels, no state annotation.
-        options.push({ name: "Turn on", value: "on" });
-        options.push({ name: "Turn off", value: "off" });
+        options.push({ name: t("raid-announce.autocomplete.turnOnGeneric", lang), value: "on" });
+        options.push({ name: t("raid-announce.autocomplete.turnOffGeneric", lang), value: "off" });
       }
       if (overridable) {
-        options.push({ name: "Set channel override", value: "set-channel" });
+        options.push({ name: t("raid-announce.autocomplete.setChannel", lang), value: "set-channel" });
         if (current && current.channelId) {
-          options.push({ name: "Clear channel override", value: "clear-channel" });
+          options.push({ name: t("raid-announce.autocomplete.clearChannel", lang), value: "clear-channel" });
         }
       }
       // For channel-bound types we simply OMIT set-channel + clear-channel
