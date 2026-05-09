@@ -18,6 +18,42 @@ const {
 const {
   getNextSharedTaskTransitionMs,
 } = require("../utils/raid/shared-tasks");
+const { getAccessibleAccounts } = require("../services/access-control");
+
+// Build a render-ready accounts array: caller's own subdocs PLUS shared
+// accounts pulled from manager-A User docs via the access-control
+// helper. Shared subdocs are converted to plain objects (so the local
+// _sharedFrom badge field doesn't risk Mongoose validation if anything
+// tries to save the merged array later) and stamped with the metadata
+// the view layer reads to render the "shared by" badge on the page
+// title and freshness line.
+async function buildMergedAccounts(viewerDiscordId, ownAccounts) {
+  const merged = Array.isArray(ownAccounts) ? ownAccounts.slice() : [];
+
+  let accessible;
+  try {
+    accessible = await getAccessibleAccounts(viewerDiscordId);
+  } catch (err) {
+    console.warn("[raid-status] getAccessibleAccounts failed:", err.message);
+    return merged;
+  }
+
+  for (const entry of accessible) {
+    if (entry.isOwn) continue;
+    const sourceAccount = entry.account;
+    const plainAccount = sourceAccount && typeof sourceAccount.toObject === "function"
+      ? sourceAccount.toObject({ depopulate: true })
+      : { ...sourceAccount };
+    plainAccount._sharedFrom = {
+      ownerDiscordId: entry.ownerDiscordId,
+      ownerLabel: entry.ownerLabel,
+      accessLevel: entry.accessLevel,
+    };
+    merged.push(plainAccount);
+  }
+
+  return merged;
+}
 
 const STATUS_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
@@ -155,7 +191,13 @@ function createRaidStatusCommand(deps) {
       return result;
     };
 
-    let accounts = userDoc.accounts;
+    // Merge in accounts shared from manager-A users (RAID_MANAGER_ID
+    // allowlist) so /raid-status renders both B's own rosters AND any
+    // rosters A has granted to B via /raid-share grant. Shared accounts
+    // carry an `_sharedFrom` tag the view layer reads to badge the page
+    // title with "Shared by Alice" and skip auto-manage badges B has no
+    // control over.
+    let accounts = await buildMergedAccounts(discordId, userDoc.accounts);
     const totalCharacters = accounts.reduce(
       (sum, account) => sum + (Array.isArray(account.characters) ? account.characters.length : 0),
       0
