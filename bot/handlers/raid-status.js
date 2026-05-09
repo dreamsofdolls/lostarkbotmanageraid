@@ -59,6 +59,7 @@ function createRaidStatusCommand(deps) {
     weekResetStartMs,
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
     getAutoManageCooldownMs,
+    getRosterRefreshCooldownMs,
     isManagerId,
   } = deps;
 
@@ -80,6 +81,7 @@ function createRaidStatusCommand(deps) {
     ROSTER_REFRESH_COOLDOWN_MS,
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
     getAutoManageCooldownMs,
+    getRosterRefreshCooldownMs,
     isManagerId,
   });
 

@@ -15,6 +15,19 @@ const {
   ROSTER_REFRESH_COOLDOWN_MS,
   ROSTER_REFRESH_FAILURE_COOLDOWN_MS,
 } = require("../../services/roster-refresh");
+const {
+  MANAGER_ROSTER_REFRESH_COOLDOWN_MS,
+} = require("../../services/manager");
+
+// /raid-check is restricted to RAID_MANAGER_ID (env-allowlisted users) by
+// design, so the query's "stale roster" cutoff uses the manager-side
+// 10-minute cooldown instead of the regular-user 2-hour value. A manager
+// running /raid-check during raid roll-call wants stale-recently rosters
+// to surface as candidates so the lazy-refresh path can pull fresh iLvl
+// before scanning - waiting two hours for the same query to widen would
+// make the manager's privilege effectively invisible at the query layer.
+// Regular users cannot reach this query; the gate lives in handlers/raid-check.
+const RAID_CHECK_REFRESH_CUTOFF_MS = MANAGER_ROSTER_REFRESH_COOLDOWN_MS;
 
 // Narrow Mongo payload for /raid-check scans. The view only needs roster
 // fields, refresh stamps, weekly cursor, auto-manage badges, and (since
@@ -86,7 +99,7 @@ function buildRaidCheckUserQuery(raidMeta, now = Date.now()) {
     Number(raidMeta.minItemLevel) || 0
   );
   if (Number.isFinite(lowestMin) && lowestMin > 0) {
-    const refreshCutoff = now - ROSTER_REFRESH_COOLDOWN_MS;
+    const refreshCutoff = now - RAID_CHECK_REFRESH_CUTOFF_MS;
     const failureCutoff = now - ROSTER_REFRESH_FAILURE_COOLDOWN_MS;
     // Keep stale/unrefreshed accounts in the candidate set even when their
     // cached iLvl is below the raid floor. Initial /raid-check intentionally

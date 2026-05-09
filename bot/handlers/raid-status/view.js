@@ -16,6 +16,7 @@ function createRaidStatusView(deps) {
     ROSTER_REFRESH_COOLDOWN_MS,
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
     getAutoManageCooldownMs,
+    getRosterRefreshCooldownMs,
     isManagerId,
   } = deps;
 
@@ -103,7 +104,16 @@ function createRaidStatusView(deps) {
       // been staring at the embed for a minute.
       const lastUpdatedTs = `<t:${Math.floor(lastRefreshedAt / 1000)}:R>`;
       const lastUpdated = `${UI.icons.roster} Last updated ${lastUpdatedTs}`;
-      const remain = formatRosterRefreshCooldownRemaining(account);
+      // Manager (in RAID_MANAGER_ID allowlist) gets a 10-min refresh
+      // cooldown vs 2h for regular users so the operational refresh path
+      // mirrors the per-user cooldown they'd actually hit. Falls back to
+      // the conservative 2h default when the helper isn't wired in
+      // (older deps shape, tests).
+      const refreshCooldownMs =
+        typeof getRosterRefreshCooldownMs === "function" && userMeta?.discordId
+          ? getRosterRefreshCooldownMs(userMeta.discordId)
+          : ROSTER_REFRESH_COOLDOWN_MS;
+      const remain = formatRosterRefreshCooldownRemaining(account, refreshCooldownMs);
       if (remain) {
         // `lastRefreshAttemptAt` (or lastRefreshedAt if no attempt
         // recorded) + cooldown is the moment the next refresh becomes
@@ -118,7 +128,7 @@ function createRaidStatusView(deps) {
         // so neutral wording avoids the awkward "Next sync 16 seconds
         // ago" the original Round-29 wording produced when an idle user
         // watched the embed past the manager 15s cooldown.
-        const cooldownMs = ROSTER_REFRESH_COOLDOWN_MS;
+        const cooldownMs = refreshCooldownMs;
         const cursor =
           Number(account?.lastRefreshAttemptAt) ||
           Number(account?.lastRefreshedAt) ||

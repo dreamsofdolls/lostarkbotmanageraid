@@ -23,12 +23,16 @@ function createRosterRefreshService(deps) {
   } = deps;
   const staleAccountRefreshInFlight = new Map();
 
-  function isAccountRefreshStale(account, now = Date.now()) {
+  // cooldownMs is parameterized so callers with a manager discordId can
+  // pass `getRosterRefreshCooldownMs(discordId)` (10m for managers, 2h
+  // for regulars). Default keeps the conservative 2h spacing for
+  // ambient calls that don't have a viewer in scope.
+  function isAccountRefreshStale(account, now = Date.now(), cooldownMs = ROSTER_REFRESH_COOLDOWN_MS) {
     const chars = Array.isArray(account?.characters) ? account.characters : [];
     if (chars.length === 0) return false;
 
     const lastSuccess = Number(account?.lastRefreshedAt) || 0;
-    if ((now - lastSuccess) <= ROSTER_REFRESH_COOLDOWN_MS) return false;
+    if ((now - lastSuccess) <= cooldownMs) return false;
 
     const lastAttempt = Number(account?.lastRefreshAttemptAt) || 0;
     if (lastAttempt > lastSuccess && (now - lastAttempt) < ROSTER_REFRESH_FAILURE_COOLDOWN_MS) {
@@ -38,12 +42,12 @@ function createRosterRefreshService(deps) {
     return true;
   }
 
-  function hasStaleAccountRefreshes(userDoc, now = Date.now()) {
+  function hasStaleAccountRefreshes(userDoc, now = Date.now(), cooldownMs = ROSTER_REFRESH_COOLDOWN_MS) {
     const accounts = Array.isArray(userDoc?.accounts) ? userDoc.accounts : [];
-    return accounts.some((account) => isAccountRefreshStale(account, now));
+    return accounts.some((account) => isAccountRefreshStale(account, now, cooldownMs));
   }
 
-  function formatRosterRefreshCooldownRemaining(account) {
+  function formatRosterRefreshCooldownRemaining(account, cooldownMs = ROSTER_REFRESH_COOLDOWN_MS) {
     const lastSuccess = Number(account?.lastRefreshedAt) || 0;
     const lastAttempt = Number(account?.lastRefreshAttemptAt) || 0;
     if (lastAttempt > lastSuccess) {
@@ -53,7 +57,7 @@ function createRosterRefreshService(deps) {
       );
       if (failureRemain) return failureRemain;
     }
-    return formatNextCooldownRemaining(lastSuccess, ROSTER_REFRESH_COOLDOWN_MS);
+    return formatNextCooldownRemaining(lastSuccess, cooldownMs);
   }
 
   function buildRefreshInFlightKey(userDoc, account) {
