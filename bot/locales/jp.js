@@ -14,6 +14,18 @@ module.exports = {
     nativeShort: "日本語",
     code: "jp",
   },
+  common: {
+    pagination: {
+      previous: "◀ 前へ",
+      next: "次へ ▶",
+    },
+    progress: {
+      done: "完了",
+      partial: "部分",
+      pending: "未完了",
+      notEligible: "対象外",
+    },
+  },
   "raid-language": {
     title: "🌐 アーティストの言語を変更",
     description: "アーティストが話す言語を選んでね♪ これからすべてのコマンドがこの言語で表示されますわ～",

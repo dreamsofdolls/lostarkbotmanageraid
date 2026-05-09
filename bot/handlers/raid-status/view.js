@@ -44,7 +44,8 @@ function createRaidStatusView(deps) {
     // /raid-status appends it).
     let line = formatProgressTotals(
       { done: completed, partial, pending },
-      UI
+      UI,
+      lang,
     );
     if (pageInfo && Number(pageInfo.totalPages) > 1) {
       line += t("raid-status.embed.pageSuffix", lang, {

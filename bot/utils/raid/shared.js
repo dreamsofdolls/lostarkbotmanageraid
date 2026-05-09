@@ -205,18 +205,21 @@ function buildNoticeEmbed(EmbedBuilder, { type = "info", title, description }) {
  * (raid-status doesn't track it; raid-check does for chars below the
  * raid floor).
  */
-function formatProgressTotals(totals, UI) {
+function formatProgressTotals(totals, UI, lang) {
+  // Lazy require to avoid circular import at module load. Default lang
+  // back-compat: omit `lang` and t() falls back to vi via the resolver.
+  const { t } = require("../../services/i18n");
   const done = Number(totals?.done) || 0;
   const partial = Number(totals?.partial) || 0;
   const pending = Number(totals?.pending) || 0;
   const notEligible = Number(totals?.notEligible) || 0;
   const parts = [
-    `${UI.icons.done} ${done} done`,
-    `${UI.icons.partial} ${partial} partial`,
-    `${UI.icons.pending} ${pending} pending`,
+    `${UI.icons.done} ${done} ${t("common.progress.done", lang)}`,
+    `${UI.icons.partial} ${partial} ${t("common.progress.partial", lang)}`,
+    `${UI.icons.pending} ${pending} ${t("common.progress.pending", lang)}`,
   ];
   if (notEligible > 0) {
-    parts.push(`${UI.icons.lock} ${notEligible} not eligible`);
+    parts.push(`${UI.icons.lock} ${notEligible} ${t("common.progress.notEligible", lang)}`);
   }
   return parts.join(" · ");
 }

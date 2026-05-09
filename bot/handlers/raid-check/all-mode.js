@@ -319,7 +319,7 @@ function createAllModeHandler({
         globalTotals,
         getRaidsFor,
         userMeta,
-        { hideIneligibleChars: !!filterRaidId }
+        { hideIneligibleChars: !!filterRaidId, lang }
       );
 
       // Manager roster: drop the 3-state progress icon (🟢/🟡/⚪/🔒)
@@ -369,7 +369,7 @@ function createAllModeHandler({
         ? { pageIndex, totalPages }
         : { pageIndex: currentLocalPage, totalPages: filteredIndices.length };
       embed.setFooter({
-        text: buildStatusFooterText(globalTotals, footerPageInfo),
+        text: buildStatusFooterText(globalTotals, footerPageInfo, lang),
       });
 
       // Overlay a setAuthor with Discord avatar + display name. Page
@@ -517,6 +517,7 @@ function createAllModeHandler({
       const row = buildPaginationRow(currentLocalPage, localTotal, disabled, {
         prevId: "raid-check-all-page:prev",
         nextId: "raid-check-all-page:next",
+        lang,
       });
       const currentAbs = currentAbsoluteIndex();
       const currentViewUserId =

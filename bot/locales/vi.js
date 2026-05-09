@@ -15,6 +15,22 @@ module.exports = {
     nativeShort: "Tiếng Việt",
     code: "vi",
   },
+  // Shared UI fragments rendered everywhere (pagination buttons,
+  // progress rollups in footers). Migrated together because they
+  // surface in /raid-status, /raid-check, raid-check/all-mode, and any
+  // future paginated view.
+  common: {
+    pagination: {
+      previous: "◀ Trước",
+      next: "Sau ▶",
+    },
+    progress: {
+      done: "done",
+      partial: "partial",
+      pending: "pending",
+      notEligible: "not eligible",
+    },
+  },
   "raid-language": {
     title: "🌐 Đổi ngôn ngữ Artist",
     description: "Chọn ngôn ngữ cậu muốn Artist dùng. Tất cả lệnh sẽ hiển thị bằng ngôn ngữ này từ giờ.",

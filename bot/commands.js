@@ -399,16 +399,20 @@ let buildStatusFooterText;
 // matches its own prefix; bot.js's global router doesn't see either
 // (status:* isn't routed, raid-check-page:* deliberately NOT prefixed
 // "raid-check:" to avoid the existing handleRaidCheckButton dispatcher).
-function buildPaginationRow(currentPage, totalPages, disabled, { prevId, nextId }) {
+function buildPaginationRow(currentPage, totalPages, disabled, { prevId, nextId, lang }) {
+  // Lang is optional - back-compat with callers that haven't been
+  // migrated yet (default "vi" via t() fallback). When passed, button
+  // labels render in the viewer's locale.
+  const { t } = require("./services/i18n");
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(prevId)
-      .setLabel("\u25C0 Previous")
+      .setLabel(t("common.pagination.previous", lang))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(disabled || currentPage === 0),
     new ButtonBuilder()
       .setCustomId(nextId)
-      .setLabel("Next \u25B6")
+      .setLabel(t("common.pagination.next", lang))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(disabled || currentPage === totalPages - 1),
   );
