@@ -508,12 +508,16 @@ function renderDiffPage() {
         html += `<div class="char-card">`;
         html += `<div class="char-card-head">${formatCharRowHead(character)}</div>`;
         // Group cells by raidKey so the same raid's modes sit on one
-        // row: "Act 4: 🛡️Normal ✓✓  ⚔️Hard ✓✓"
+        // row: "Act 4: 🛡️Normal ✓✓  ⚔️Hard ✓✓". Wrap all raid rows
+        // in a CSS grid so they sit 2-up on wide viewports (typical
+        // case: 2-3 raids, fits 2 across with room to spare) and
+        // collapse to 1-up on narrow.
         const cellsByRaid = new Map();
         for (const cell of character.cells) {
           if (!cellsByRaid.has(cell.raidKey)) cellsByRaid.set(cell.raidKey, []);
           cellsByRaid.get(cell.raidKey).push(cell);
         }
+        html += `<div class="char-raid-grid">`;
         for (const [raidKey, raidCells] of cellsByRaid) {
           const raidLabel = getRaidLabel(raidKey);
           html += `<div class="char-raid-row">`;
@@ -534,6 +538,7 @@ function renderDiffPage() {
           html += `</div>`;
           html += `</div>`;
         }
+        html += `</div>`;
         html += `</div>`;
       }
     } else {
