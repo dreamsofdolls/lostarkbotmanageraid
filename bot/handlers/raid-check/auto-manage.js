@@ -23,6 +23,9 @@
  * the "next tick will pick up your roster" copy. Leaving the field as
  * null gives the new user priority in the next scheduler tick.
  */
+
+const { t, getUserLanguage } = require("../../services/i18n");
+
 async function tryEnableAutoManage(UserModel, discordId) {
   if (!discordId) return { outcome: "missing" };
   let updated;
@@ -106,24 +109,26 @@ async function tryDisableAutoManage(UserModel, discordId) {
  *
  * Module-level pure function (takes EmbedBuilder + userDoc + managerId)
  * so the suite can build snapshots without spinning up the full command
- * factory.
+ * factory. Final positional `lang` defaults to "vi" so existing tests
+ * (which assert on the VN strings) keep passing without churn; live
+ * callers thread the recipient's locale.
  */
-function buildEnableAutoDmEmbed(EmbedBuilder, { managerId, userDoc }) {
+function buildEnableAutoDmEmbed(EmbedBuilder, { managerId, userDoc }, lang = "vi") {
   const accounts = Array.isArray(userDoc?.accounts) ? userDoc.accounts : [];
   const lastSyncAt = Number(userDoc?.lastAutoManageSyncAt) || 0;
   const hasEverSynced = lastSyncAt > 0;
 
   const description = [
-    `Heya~ Raid Manager <@${managerId}> vừa bật \`/raid-auto-manage\` hộ cậu rồi nha. Từ giờ Artist sẽ tự sync raid progress cho cậu mỗi 24h.`,
+    t("raid-auto-manage.dm.enable.description", lang, { managerId }),
     "",
-    "**Trạng thái mới:** ON",
-    "**Khi nào sync lần đầu:** Sớm trong các tick scheduler tới (chạy mỗi ~30 phút, mỗi tick batch 3 user)",
-    "**Tắt nhanh:** Bấm button bên dưới hoặc gõ `/raid-auto-manage action:off`",
+    t("raid-auto-manage.dm.enable.statusLine", lang),
+    t("raid-auto-manage.dm.enable.firstSyncLine", lang),
+    t("raid-auto-manage.dm.enable.quickOffLine", lang),
   ].join("\n");
 
   const embed = new EmbedBuilder()
     .setColor(0x5865F2) // info blue, matches buildNoticeEmbed type:info
-    .setTitle("ℹ️ Manager đã bật auto-sync hộ cậu")
+    .setTitle(`ℹ️ ${t("raid-auto-manage.dm.enable.title", lang)}`)
     .setDescription(description);
 
   // One field per roster (account). Each line: status icon + char name +
@@ -133,24 +138,33 @@ function buildEnableAutoDmEmbed(EmbedBuilder, { managerId, userDoc }) {
     const characters = Array.isArray(account?.characters) ? account.characters : [];
     if (characters.length === 0) continue;
     const lines = characters.map((ch) => {
-      const name = ch?.name || "(no name)";
+      const name = ch?.name || t("raid-auto-manage.dm.enable.charNoName", lang);
       const iLvl = Number(ch?.itemLevel) || 0;
       let icon;
       let statusText;
       if (ch?.publicLogDisabled === true) {
         icon = "🔒";
-        statusText = "Private (cần bật Public Log)";
+        statusText = t("raid-auto-manage.dm.enable.charPrivate", lang);
       } else if (hasEverSynced) {
         icon = "🔓";
-        statusText = "Public OK";
+        statusText = t("raid-auto-manage.dm.enable.charPublicOk", lang);
       } else {
         icon = "❓";
-        statusText = "Chưa kiểm tra";
+        statusText = t("raid-auto-manage.dm.enable.charUnknown", lang);
       }
-      return `${icon} ${name} · ${iLvl} · ${statusText}`;
+      return t("raid-auto-manage.dm.enable.charLine", lang, {
+        icon,
+        name,
+        iLvl,
+        statusText,
+      });
     });
     embed.addFields({
-      name: `📁 ${account.accountName || "(no name)"} (${characters.length} char)`,
+      name: t("raid-auto-manage.dm.enable.accountFieldName", lang, {
+        accountName:
+          account.accountName || t("raid-auto-manage.dm.enable.accountNoName", lang),
+        count: characters.length,
+      }),
       value: lines.join("\n").slice(0, 1024),
       inline: false,
     });
@@ -165,7 +179,7 @@ function buildEnableAutoDmEmbed(EmbedBuilder, { managerId, userDoc }) {
   );
   if (anyUnknownOrPrivate) {
     embed.setFooter({
-      text: "Char nào báo 🔒 Private (hoặc ❓ rồi sau Private), vào lostark.bible/me/logs bật Show on Profile giúp Artist nha.",
+      text: t("raid-auto-manage.dm.enable.privateFooter", lang),
     });
   }
 
@@ -183,18 +197,18 @@ function buildEnableAutoDmEmbed(EmbedBuilder, { managerId, userDoc }) {
  * stopping data collection, not asking the user to fix anything. The
  * symmetric reduce keeps the disable DM short + tone-appropriate.
  */
-function buildDisableAutoDmEmbed(EmbedBuilder, { managerId }) {
+function buildDisableAutoDmEmbed(EmbedBuilder, { managerId }, lang = "vi") {
   const description = [
-    `Heya~ Raid Manager <@${managerId}> vừa tắt \`/raid-auto-manage\` hộ cậu rồi nha. Từ giờ Artist không tự sync raid progress cho cậu nữa.`,
+    t("raid-auto-manage.dm.disable.description", lang, { managerId }),
     "",
-    "**Trạng thái mới:** OFF",
-    "**Sync thủ công:** Gõ `/raid-set` hoặc post clear vào monitor channel của server",
-    "**Bật lại nhanh:** Bấm button bên dưới hoặc gõ `/raid-auto-manage action:on`",
+    t("raid-auto-manage.dm.disable.statusLine", lang),
+    t("raid-auto-manage.dm.disable.manualSyncLine", lang),
+    t("raid-auto-manage.dm.disable.quickOnLine", lang),
   ].join("\n");
 
   return new EmbedBuilder()
     .setColor(0x99AAB5) // muted gray, matches buildNoticeEmbed type:muted
-    .setTitle("⚪ Manager đã tắt auto-sync hộ cậu")
+    .setTitle(`⚪ ${t("raid-auto-manage.dm.disable.title", lang)}`)
     .setDescription(description);
 }
 
@@ -221,13 +235,15 @@ function createRaidCheckAutoManageUi(deps) {
   // private. Stuck-private-log nudge flow already handles that case
   // 7-days-once after the next scheduler tick attempts to sync.
   async function handleRaidCheckEnableAutoOneClick(interaction, targetDiscordId) {
+    // Manager (clicker) is the only viewer of the ephemeral reply.
+    const managerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
     if (!targetDiscordId) {
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Button đã hết hạn",
-            description: "Button không có target user (có thể session cũ hoặc bot vừa restart). Gõ `/raid-check` lại để refresh nha.",
+            title: t("raid-auto-manage.enableButton.expiredTitle", managerLang),
+            description: t("raid-auto-manage.enableButton.expiredDescription", managerLang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -245,8 +261,10 @@ function createRaidCheckAutoManageUi(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "error",
-            title: "Flip flag fail",
-            description: `Artist gặp lỗi khi flip flag: \`${result.error?.message || result.error}\`. Thử lại sau nha.`,
+            title: t("raid-auto-manage.enableButton.flipFailTitle", managerLang),
+            description: t("raid-auto-manage.enableButton.flipFailDescription", managerLang, {
+              error: result.error?.message || result.error,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -258,8 +276,10 @@ function createRaidCheckAutoManageUi(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "User không tồn tại",
-            description: `Artist không thấy user \`${targetDiscordId}\` trong DB nữa (có thể họ đã \`/raid-remove-roster\`). Refresh lại \`/raid-check\` để page sync state mới nha.`,
+            title: t("raid-auto-manage.enableButton.userMissingTitle", managerLang),
+            description: t("raid-auto-manage.enableButton.userMissingDescription", managerLang, {
+              target: targetDiscordId,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -271,8 +291,10 @@ function createRaidCheckAutoManageUi(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: "User đã opt-in rồi",
-            description: `<@${targetDiscordId}> đã bật \`/raid-auto-manage\` rồi nha (có thể họ tự bật giữa lúc cậu mở page và bấm button, hoặc Manager khác bấm trước cậu). Refresh \`/raid-check\` để page sync state mới.`,
+            title: t("raid-auto-manage.enableButton.alreadyOnTitle", managerLang),
+            description: t("raid-auto-manage.enableButton.alreadyOnDescription", managerLang, {
+              target: targetDiscordId,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -286,10 +308,14 @@ function createRaidCheckAutoManageUi(deps) {
         .fetch(targetDiscordId)
         .catch(() => null);
       if (targetUser) {
-        const dmEmbed = buildEnableAutoDmEmbed(EmbedBuilder, {
-          managerId: interaction.user.id,
-          userDoc: result.doc,
-        });
+        // DM is delivered to the target, NOT the manager - render in the
+        // recipient's locale per viewer-language rule.
+        const targetLang = await getUserLanguage(targetDiscordId, { UserModel: User });
+        const dmEmbed = buildEnableAutoDmEmbed(
+          EmbedBuilder,
+          { managerId: interaction.user.id, userDoc: result.doc },
+          targetLang,
+        );
         // Quick-disable button so the affected user has a 1-click path
         // back to opted-out without remembering the slash command. Self-
         // only enforcement happens in the click handler (verifies clicker
@@ -298,7 +324,7 @@ function createRaidCheckAutoManageUi(deps) {
         const disableRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId(`raid-check:disable-auto-self:${targetDiscordId}`)
-            .setLabel("Tắt auto-sync ngay")
+            .setLabel(t("raid-auto-manage.dm.enable.disableSelfButton", targetLang))
             .setEmoji("🚫")
             .setStyle(ButtonStyle.Danger)
         );
@@ -318,17 +344,19 @@ function createRaidCheckAutoManageUi(deps) {
 
     const successEmbed = buildNoticeEmbed(EmbedBuilder, {
       type: "success",
-      title: "Artist đã bật auto-sync hộ rồi nha",
+      title: t("raid-auto-manage.enableButton.successTitle", managerLang),
       description: [
-        "Flag flip thành công. User này nằm trong batch ưu tiên (`lastAutoManageAttemptAt = null`), scheduler sẽ pick sớm trong các tick tới (mỗi ~30 phút, batch 3 user).",
+        t("raid-auto-manage.enableButton.successLineIntro", managerLang),
         "",
-        `**Đã bật cho:** <@${targetDiscordId}>`,
-        `**Trạng thái mới:** ON`,
+        t("raid-auto-manage.enableButton.successLineTarget", managerLang, {
+          target: targetDiscordId,
+        }),
+        t("raid-auto-manage.enableButton.successLineState", managerLang),
         dmSent
-          ? "**DM thông báo:** Đã gửi"
-          : "**DM thông báo:** Không gửi được (user tắt DM riêng), flag vẫn được flip OK",
+          ? t("raid-auto-manage.enableButton.successLineDmSent", managerLang)
+          : t("raid-auto-manage.enableButton.successLineDmFailed", managerLang),
         "",
-        "Nếu user muốn tắt thì họ gõ `/raid-auto-manage action:off` bất cứ lúc nào nha.",
+        t("raid-auto-manage.enableButton.successLineOutro", managerLang),
       ].join("\n"),
     });
     await interaction.reply({
@@ -343,13 +371,16 @@ function createRaidCheckAutoManageUi(deps) {
   // already-off notice and removes the button so a second click can't
   // fire stale outcomes.
   async function handleRaidCheckDisableAutoSelfClick(interaction, targetDiscordId) {
+    // Clicker IS the DM recipient (self-only enforcement below); use
+    // their lang for every string this handler renders.
+    const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
     if (!targetDiscordId) {
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Button đã hết hạn",
-            description: "Button không có target user (DM bị stale hoặc bot vừa redeploy). Gõ `/raid-auto-manage action:off` thay nha.",
+            title: t("raid-auto-manage.disableSelf.expiredTitle", lang),
+            description: t("raid-auto-manage.disableSelf.expiredDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -361,8 +392,8 @@ function createRaidCheckAutoManageUi(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "lock",
-            title: "Button này chỉ chủ DM bấm được",
-            description: "Button `Tắt auto-sync ngay` chỉ user nhận DM mới có thể bấm nha. Nếu cậu muốn opt-out auto-sync của riêng mình, gõ `/raid-auto-manage action:off` từ trong server bất cứ lúc nào.",
+            title: t("raid-auto-manage.disableSelf.notOwnerTitle", lang),
+            description: t("raid-auto-manage.disableSelf.notOwnerDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -380,8 +411,10 @@ function createRaidCheckAutoManageUi(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "error",
-            title: "Tắt auto-sync fail",
-            description: `Artist gặp lỗi khi tắt: \`${result.error?.message || result.error}\`. Thử gõ \`/raid-auto-manage action:off\` thay nha.`,
+            title: t("raid-auto-manage.disableSelf.failTitle", lang),
+            description: t("raid-auto-manage.disableSelf.failDescription", lang, {
+              error: result.error?.message || result.error,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -393,8 +426,8 @@ function createRaidCheckAutoManageUi(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Account không tồn tại",
-            description: "Artist không tìm thấy roster của cậu trong DB nữa (có thể đã `/raid-remove-roster` toàn bộ). Không có gì để tắt.",
+            title: t("raid-auto-manage.disableSelf.accountMissingTitle", lang),
+            description: t("raid-auto-manage.disableSelf.accountMissingDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -405,12 +438,12 @@ function createRaidCheckAutoManageUi(deps) {
     let title;
     let description;
     if (result.outcome === "disabled") {
-      title = "Đã tắt auto-sync rồi nha~";
-      description = "Artist đã tắt `/raid-auto-manage` cho cậu. Từ giờ Artist không tự sync nữa - cậu update progress thủ công bằng `/raid-set` hoặc post clear vào monitor channel của server. Muốn bật lại thì gõ `/raid-auto-manage action:on`.";
+      title = t("raid-auto-manage.disableSelf.disabledTitle", lang);
+      description = t("raid-auto-manage.disableSelf.disabledDescription", lang);
     } else {
       // already-off
-      title = "Auto-sync đã tắt sẵn rồi";
-      description = "Cậu đã tắt `/raid-auto-manage` trước đó (qua slash command hoặc đã bấm button này lần trước). Không có gì để đổi.";
+      title = t("raid-auto-manage.disableSelf.alreadyOffTitle", lang);
+      description = t("raid-auto-manage.disableSelf.alreadyOffDescription", lang);
     }
     const updatedEmbed = buildNoticeEmbed(EmbedBuilder, {
       type: "muted",
@@ -434,13 +467,14 @@ function createRaidCheckAutoManageUi(deps) {
   // 4-outcome dispatch + DM to the affected user (with a "Bật lại"
   // self-button for symmetric one-click revert).
   async function handleRaidCheckDisableAutoOneClick(interaction, targetDiscordId) {
+    const managerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
     if (!targetDiscordId) {
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Button đã hết hạn",
-            description: "Button không có target user (có thể session cũ hoặc bot vừa restart). Gõ `/raid-check` lại để refresh nha.",
+            title: t("raid-auto-manage.disableButton.expiredTitle", managerLang),
+            description: t("raid-auto-manage.disableButton.expiredDescription", managerLang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -458,8 +492,10 @@ function createRaidCheckAutoManageUi(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "error",
-            title: "Tắt flag fail",
-            description: `Artist gặp lỗi khi tắt: \`${result.error?.message || result.error}\`. Thử lại sau nha.`,
+            title: t("raid-auto-manage.disableButton.flipFailTitle", managerLang),
+            description: t("raid-auto-manage.disableButton.flipFailDescription", managerLang, {
+              error: result.error?.message || result.error,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -471,8 +507,10 @@ function createRaidCheckAutoManageUi(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "User không tồn tại",
-            description: `Artist không thấy user \`${targetDiscordId}\` trong DB nữa (có thể họ đã \`/raid-remove-roster\`). Refresh lại \`/raid-check\` để page sync state mới nha.`,
+            title: t("raid-auto-manage.disableButton.userMissingTitle", managerLang),
+            description: t("raid-auto-manage.disableButton.userMissingDescription", managerLang, {
+              target: targetDiscordId,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -484,8 +522,10 @@ function createRaidCheckAutoManageUi(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: "User đã off rồi",
-            description: `<@${targetDiscordId}> đã tắt \`/raid-auto-manage\` rồi nha (có thể họ tự tắt giữa lúc cậu mở page và bấm button, hoặc Manager khác bấm trước cậu). Refresh \`/raid-check\` để page sync state mới.`,
+            title: t("raid-auto-manage.disableButton.alreadyOffTitle", managerLang),
+            description: t("raid-auto-manage.disableButton.alreadyOffDescription", managerLang, {
+              target: targetDiscordId,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -499,13 +539,17 @@ function createRaidCheckAutoManageUi(deps) {
         .fetch(targetDiscordId)
         .catch(() => null);
       if (targetUser) {
-        const dmEmbed = buildDisableAutoDmEmbed(EmbedBuilder, {
-          managerId: interaction.user.id,
-        });
+        // DM rendered in target's locale, not manager's.
+        const targetLang = await getUserLanguage(targetDiscordId, { UserModel: User });
+        const dmEmbed = buildDisableAutoDmEmbed(
+          EmbedBuilder,
+          { managerId: interaction.user.id },
+          targetLang,
+        );
         const reEnableRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId(`raid-check:enable-auto-self:${targetDiscordId}`)
-            .setLabel("Bật lại auto-sync ngay")
+            .setLabel(t("raid-auto-manage.dm.disable.enableSelfButton", targetLang))
             .setEmoji("🔄")
             .setStyle(ButtonStyle.Primary)
         );
@@ -525,17 +569,19 @@ function createRaidCheckAutoManageUi(deps) {
 
     const successEmbed = buildNoticeEmbed(EmbedBuilder, {
       type: "muted",
-      title: "Artist đã tắt auto-sync hộ rồi nha",
+      title: t("raid-auto-manage.disableButton.successTitle", managerLang),
       description: [
-        "Flag flip thành công. Scheduler sẽ không pull bible logs cho user này nữa cho đến khi họ (hoặc Manager) bật lại.",
+        t("raid-auto-manage.disableButton.successLineIntro", managerLang),
         "",
-        `**Đã tắt cho:** <@${targetDiscordId}>`,
-        `**Trạng thái mới:** OFF`,
+        t("raid-auto-manage.disableButton.successLineTarget", managerLang, {
+          target: targetDiscordId,
+        }),
+        t("raid-auto-manage.disableButton.successLineState", managerLang),
         dmSent
-          ? "**DM thông báo:** Đã gửi (kèm button bật lại)"
-          : "**DM thông báo:** Không gửi được (user tắt DM riêng), flag vẫn được flip OK",
+          ? t("raid-auto-manage.disableButton.successLineDmSent", managerLang)
+          : t("raid-auto-manage.disableButton.successLineDmFailed", managerLang),
         "",
-        "Nếu user muốn bật lại thì họ gõ `/raid-auto-manage action:on` hoặc bấm button trong DM nha.",
+        t("raid-auto-manage.disableButton.successLineOutro", managerLang),
       ].join("\n"),
     });
     await interaction.reply({
@@ -549,13 +595,14 @@ function createRaidCheckAutoManageUi(deps) {
   // but flips the flag back to true. Self-only: clicker must equal
   // encoded target.
   async function handleRaidCheckEnableAutoSelfClick(interaction, targetDiscordId) {
+    const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
     if (!targetDiscordId) {
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Button đã hết hạn",
-            description: "Button không có target user (DM bị stale hoặc bot vừa redeploy). Gõ `/raid-auto-manage action:on` thay nha.",
+            title: t("raid-auto-manage.enableSelf.expiredTitle", lang),
+            description: t("raid-auto-manage.enableSelf.expiredDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -567,8 +614,8 @@ function createRaidCheckAutoManageUi(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "lock",
-            title: "Button này chỉ chủ DM bấm được",
-            description: "Button `Bật lại auto-sync ngay` chỉ user nhận DM mới có thể bấm nha. Nếu cậu muốn bật auto-sync của riêng mình, gõ `/raid-auto-manage action:on` từ trong server bất cứ lúc nào.",
+            title: t("raid-auto-manage.enableSelf.notOwnerTitle", lang),
+            description: t("raid-auto-manage.enableSelf.notOwnerDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -586,8 +633,10 @@ function createRaidCheckAutoManageUi(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "error",
-            title: "Bật auto-sync fail",
-            description: `Artist gặp lỗi khi bật: \`${result.error?.message || result.error}\`. Thử gõ \`/raid-auto-manage action:on\` thay nha.`,
+            title: t("raid-auto-manage.enableSelf.failTitle", lang),
+            description: t("raid-auto-manage.enableSelf.failDescription", lang, {
+              error: result.error?.message || result.error,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -599,8 +648,8 @@ function createRaidCheckAutoManageUi(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Account không tồn tại",
-            description: "Artist không tìm thấy roster của cậu trong DB nữa (có thể đã `/raid-remove-roster` toàn bộ). Bật `/raid-add-roster` trước rồi mới opt-in được nha.",
+            title: t("raid-auto-manage.enableSelf.accountMissingTitle", lang),
+            description: t("raid-auto-manage.enableSelf.accountMissingDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -611,12 +660,12 @@ function createRaidCheckAutoManageUi(deps) {
     let title;
     let description;
     if (result.outcome === "flipped") {
-      title = "Đã bật lại auto-sync rồi nha~";
-      description = "Artist đã bật `/raid-auto-manage` cho cậu. Từ giờ Artist sẽ tự sync raid progress mỗi 24h. Muốn tắt thì gõ `/raid-auto-manage action:off`.";
+      title = t("raid-auto-manage.enableSelf.flippedTitle", lang);
+      description = t("raid-auto-manage.enableSelf.flippedDescription", lang);
     } else {
       // already-on
-      title = "Auto-sync đã bật sẵn rồi";
-      description = "Cậu đã bật `/raid-auto-manage` trước đó (qua slash command hoặc đã bấm button này lần trước). Không có gì để đổi.";
+      title = t("raid-auto-manage.enableSelf.alreadyOnTitle", lang);
+      description = t("raid-auto-manage.enableSelf.alreadyOnDescription", lang);
     }
     const updatedEmbed = buildNoticeEmbed(EmbedBuilder, {
       type: "success",
