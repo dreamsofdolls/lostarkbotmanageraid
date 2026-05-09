@@ -10,6 +10,7 @@ const {
   getAccessibleAccounts,
   canEditAccount,
 } = require("../services/access-control");
+const { t, getUserLanguage } = require("../services/i18n");
 const {
   SCHEDULED_RESET,
   SHARED_TASK_PRESETS,
@@ -30,11 +31,13 @@ const {
 // shared-add reply / cap-reached / duplicate notices read as a complete
 // sentence instead of interpolating the raw `daily`/`weekly`/`scheduled`
 // keyword from the schema. Scheduled presets get the timezone hint since
-// they don't follow the 17:00 VN cycle.
-function formatSharedResetDetail(reset) {
-  if (reset === "daily") return "Daily (reset 17:00 VN)";
-  if (reset === "weekly") return "Weekly (reset 17:00 VN thứ 4)";
-  if (reset === SCHEDULED_RESET) return "Theo lịch UTC-4";
+// they don't follow the 17:00 VN cycle. `lang` flows in from the
+// handler's executor-locale resolution so the label matches the rest of
+// the embed.
+function formatSharedResetDetail(reset, lang) {
+  if (reset === "daily") return t("raid-task.sharedAdd.resetDetailDaily", lang);
+  if (reset === "weekly") return t("raid-task.sharedAdd.resetDetailWeekly", lang);
+  if (reset === SCHEDULED_RESET) return t("raid-task.sharedAdd.resetDetailScheduled", lang);
   return formatSharedResetLabel(reset);
 }
 
@@ -238,20 +241,31 @@ function createRaidTaskCommand(deps) {
 
   // User-facing rejection embed when a viewer with `permission:view`
   // share tries to write through a side-task path. Centralized so the
-  // 7+ write handlers reject identically.
-  function buildViewOnlyShareEmbed(target) {
+  // 7+ write handlers reject identically. `lang` is the executor's locale -
+  // the embed is shown ephemerally to whoever ran the slash command.
+  function buildViewOnlyShareEmbed(target, lang) {
     return buildNoticeEmbed(EmbedBuilder, {
       type: "error",
-      title: "Share view-only",
-      description:
-        `Manager **${target.ownerLabel || "(unknown)"}** đã share roster cho cậu nhưng ở mức ` +
-        `\`view\` (xem read-only) - cậu không update side task được. Nhờ Manager đổi sang ` +
-        "`/raid-share grant target:@cậu permission:edit` rồi thử lại nha~",
+      title: t("raid-task.shareViewOnly.title", lang),
+      description: t("raid-task.shareViewOnly.description", lang, {
+        owner: target.ownerLabel || "(unknown)",
+      }),
     });
   }
 
   async function autocompleteRoster(interaction, focused) {
     const executorId = interaction.user.id;
+    // Resolve executor's locale once per autocomplete tick so every
+    // choice category (own / shared) renders in their language. The
+    // i18n cache absorbs the per-keystroke fan-out cost.
+    const lang = await getUserLanguage(executorId, { UserModel: User });
+    const charsWord = (n) =>
+      t(
+        n === 1 ? "raid-task.autocomplete.charsSingular" : "raid-task.autocomplete.charsPlural",
+        lang,
+      );
+    const taskSuffixFor = (n) =>
+      n > 0 ? t("raid-task.autocomplete.taskSuffix", lang, { n }) : "";
     const userDoc = await loadUserForAutocomplete(executorId);
     const matches = getRosterMatches(userDoc, focused.value || "");
     const choices = matches.map((a) => {
@@ -260,8 +274,12 @@ function createRaidTaskCommand(deps) {
         (sum, c) => sum + (Array.isArray(c.sideTasks) ? c.sideTasks.length : 0),
         0
       );
-      const taskSuffix = taskTotal > 0 ? ` · ${taskTotal} task` : "";
-      const label = `📁 ${a.accountName} · ${chars.length} char${chars.length === 1 ? "" : "s"}${taskSuffix}`;
+      const label = t("raid-task.autocomplete.ownChoice", lang, {
+        name: a.accountName,
+        charCount: chars.length,
+        charsWord: charsWord(chars.length),
+        taskSuffix: taskSuffixFor(taskTotal),
+      });
       return truncateChoice(label, a.accountName);
     });
 
@@ -287,9 +305,20 @@ function createRaidTaskCommand(deps) {
             (sum, c) => sum + (Array.isArray(c.sideTasks) ? c.sideTasks.length : 0),
             0,
           );
-          const taskSuffix = taskTotal > 0 ? ` · ${taskTotal} task` : "";
-          const accessTag = entry.accessLevel === "view" ? " · 👁️ view" : "";
-          const label = `👥 ${entry.accountName} · ${chars.length} char${chars.length === 1 ? "" : "s"}${taskSuffix} · shared by ${entry.ownerLabel}${accessTag}`;
+          const accessTag =
+            entry.accessLevel === "view"
+              ? t("raid-task.autocomplete.sharedAccessTagView", lang, {
+                  viewLabel: t("share.accessLevel.view", lang),
+                })
+              : "";
+          const label = t("raid-task.autocomplete.sharedChoice", lang, {
+            name: entry.accountName,
+            charCount: chars.length,
+            charsWord: charsWord(chars.length),
+            taskSuffix: taskSuffixFor(taskTotal),
+            owner: entry.ownerLabel,
+            accessTag,
+          });
           return truncateChoice(label, entry.accountName);
         });
     } catch (err) {
@@ -441,6 +470,7 @@ function createRaidTaskCommand(deps) {
   async function autocompleteSharedPreset(interaction, focused) {
     const needle = normalizeName(focused.value || "");
     const rosterInput = interaction.options.getString("roster") || "";
+    const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
     const userDoc = rosterInput
       ? await loadUserDocForRosterAutocomplete(interaction.user.id, rosterInput)
       : await loadUserForAutocomplete(interaction.user.id);
@@ -457,20 +487,23 @@ function createRaidTaskCommand(deps) {
         const label = sharedPresetLabel(preset);
         let status = "";
         if (preset.preset === "custom") {
-          status = "có thể thêm nhiều";
+          status = t("raid-task.autocomplete.sharedPresetCustom", lang);
         } else if (selectedAccount) {
           status = sharedTaskHasPreset(selectedAccount, preset.preset, now)
-            ? "đã thêm"
-            : "chưa thêm";
+            ? t("raid-task.autocomplete.sharedPresetAdded", lang)
+            : t("raid-task.autocomplete.sharedPresetNotAdded", lang);
         } else if (accounts.length > 0) {
           const count = accounts.filter((account) =>
             sharedTaskHasPreset(account, preset.preset, now)
           ).length;
           status = count > 0
-            ? `đã thêm ${count}/${accounts.length} roster`
-            : "chưa thêm";
+            ? t("raid-task.autocomplete.sharedPresetAddedCount", lang, {
+                n: count,
+                total: accounts.length,
+              })
+            : t("raid-task.autocomplete.sharedPresetNotAdded", lang);
         } else {
-          status = "chưa có roster";
+          status = t("raid-task.autocomplete.sharedPresetNoRoster", lang);
         }
 
         return {
@@ -523,6 +556,10 @@ function createRaidTaskCommand(deps) {
 
   async function handleAddSingle(interaction) {
     const executorId = interaction.user.id;
+    // Executor's locale - the slash invoker IS the only viewer of every
+    // ephemeral reply on /raid-task add, so this lang threads through every
+    // notice + success embed without any clicker-vs-owner split.
+    const lang = await getUserLanguage(executorId, { UserModel: User });
     const rosterName = interaction.options.getString("roster", true);
     // `character` is optional at the Discord schema level (because the
     // sibling action=all branch doesn't need it) but required at runtime
@@ -538,8 +575,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Thiếu character",
-            description: "Action `single` cần field `character`. Hoặc đổi action sang `all` để add cho mọi char trong roster nha~",
+            title: t("raid-task.common.missingCharacterTitle", lang),
+            description: t("raid-task.common.missingCharacterDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -552,8 +589,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Tên task không hợp lệ",
-            description: "Tên task không được để trống nha. Gõ lại với nội dung mô tả ngắn gọn.",
+            title: t("raid-task.common.invalidTaskNameTitle", lang),
+            description: t("raid-task.common.invalidTaskNameDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -564,7 +601,7 @@ function createRaidTaskCommand(deps) {
     const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
     if (writeTarget.viaShare && !writeTarget.canEdit) {
       await interaction.reply({
-        embeds: [buildViewOnlyShareEmbed(writeTarget)],
+        embeds: [buildViewOnlyShareEmbed(writeTarget, lang)],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -641,8 +678,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "error",
-            title: "Save thất bại",
-            description: "Mongo trả lỗi khi lưu task. Thử lại sau ít phút, nếu vẫn fail thì ping ops nha.",
+            title: t("raid-task.save.addFailedTitle", lang),
+            description: t("raid-task.save.addFailedDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -655,8 +692,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Cậu chưa có roster",
-            description: "Artist chưa thấy roster nào của cậu. Chạy `/add-roster` trước rồi mới đăng ký task được.",
+            title: t("raid-task.common.noRosterTitle", lang),
+            description: t("raid-task.common.noRosterDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -668,8 +705,10 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Không tìm thấy character",
-            description: `Artist không tìm thấy **${characterName}** trong roster của cậu. Dùng autocomplete khi gõ field \`character:\` để tránh sai tên nha.`,
+            title: t("raid-task.common.noCharacterTitle", lang),
+            description: t("raid-task.common.noCharacterDescription", lang, {
+              characterName,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -682,13 +721,16 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Đã đầy slot",
-            description: [
-              `**${resolvedCharName}** đã đủ **${cap} task ${reset}** rồi nha. Cap cứng để list không bị loãng.`,
-              "",
-              `**Hiện tại:** ${dailyCount}/${TASK_CAP_DAILY} daily · ${weeklyCount}/${TASK_CAP_WEEKLY} weekly`,
-              "**Cách giải:** Gõ `/raid-task remove` xoá task cũ trước, rồi mới add task mới.",
-            ].join("\n"),
+            title: t("raid-task.add.capReachedTitle", lang),
+            description: t("raid-task.add.capReachedDescription", lang, {
+              characterName: resolvedCharName,
+              cap,
+              reset,
+              dailyCount,
+              weeklyCount,
+              capDaily: TASK_CAP_DAILY,
+              capWeekly: TASK_CAP_WEEKLY,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -700,8 +742,12 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: "Task đã tồn tại",
-            description: `Char **${resolvedCharName}** đã có task \`${taskName}\` cùng cycle \`${reset}\` rồi. Đặt tên khác hoặc đổi cycle nha.`,
+            title: t("raid-task.add.duplicateTitle", lang),
+            description: t("raid-task.add.duplicateDescription", lang, {
+              characterName: resolvedCharName,
+              taskName,
+              reset,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -709,19 +755,22 @@ function createRaidTaskCommand(deps) {
       return;
     }
 
+    const cycleLabel =
+      reset === "daily"
+        ? t("raid-task.add.cycleDailyLabel", lang)
+        : t("raid-task.add.cycleWeeklyLabel", lang);
     await interaction.reply({
       embeds: [
         buildNoticeEmbed(EmbedBuilder, {
           type: "success",
-          title: "Đã thêm side task",
-          description: [
-            `**Character:** ${resolvedCharName}`,
-            `**Task:** ${taskName}`,
-            `**Cycle:** ${reset === "daily" ? "Daily (reset 17:00 VN)" : "Weekly (reset 17:00 VN thứ 4)"}`,
-            "",
-            `**Slot còn lại:** ${TASK_CAP_DAILY - dailyCount} daily · ${TASK_CAP_WEEKLY - weeklyCount} weekly`,
-            "Vào `/raid-status` rồi đổi sang **Task view** để toggle complete nha.",
-          ].join("\n"),
+          title: t("raid-task.add.successTitle", lang),
+          description: t("raid-task.add.successDescription", lang, {
+            characterName: resolvedCharName,
+            taskName,
+            cycleLabel,
+            remainDaily: TASK_CAP_DAILY - dailyCount,
+            remainWeekly: TASK_CAP_WEEKLY - weeklyCount,
+          }),
         }),
       ],
       flags: MessageFlags.Ephemeral,
@@ -736,6 +785,7 @@ function createRaidTaskCommand(deps) {
   // char count.
   async function handleAddAll(interaction) {
     const executorId = interaction.user.id;
+    const lang = await getUserLanguage(executorId, { UserModel: User });
     const rosterName = interaction.options.getString("roster", true);
     const taskName = interaction.options.getString("name", true).trim();
     const reset = interaction.options.getString("reset", true);
@@ -745,8 +795,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Tên task không hợp lệ",
-            description: "Tên task không được để trống nha. Gõ lại với nội dung mô tả ngắn gọn.",
+            title: t("raid-task.common.invalidTaskNameTitle", lang),
+            description: t("raid-task.common.invalidTaskNameDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -757,7 +807,7 @@ function createRaidTaskCommand(deps) {
     const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
     if (writeTarget.viaShare && !writeTarget.canEdit) {
       await interaction.reply({
-        embeds: [buildViewOnlyShareEmbed(writeTarget)],
+        embeds: [buildViewOnlyShareEmbed(writeTarget, lang)],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -844,8 +894,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "error",
-            title: "Save thất bại",
-            description: "Mongo trả lỗi khi lưu task. Thử lại sau ít phút nha.",
+            title: t("raid-task.save.addFailedTitle", lang),
+            description: t("raid-task.save.addAllFailedDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -858,8 +908,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Cậu chưa có roster",
-            description: "Artist chưa thấy roster nào của cậu. Chạy `/add-roster` trước rồi mới đăng ký task được.",
+            title: t("raid-task.common.noRosterTitle", lang),
+            description: t("raid-task.common.noRosterDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -871,8 +921,10 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Không tìm thấy roster",
-            description: `Artist không tìm thấy roster **${rosterName}** của cậu. Dùng autocomplete khi gõ field \`roster:\` để tránh sai tên nha.`,
+            title: t("raid-task.common.rosterNotFoundTitle", lang),
+            description: t("raid-task.common.rosterNotFoundDescription", lang, {
+              rosterName,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -884,8 +936,10 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: "Roster rỗng",
-            description: `Roster **${resolvedRosterName}** không có character nào để add task.`,
+            title: t("raid-task.addAll.emptyRosterTitle", lang),
+            description: t("raid-task.addAll.emptyRosterDescription", lang, {
+              rosterName: resolvedRosterName,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -898,8 +952,10 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: "Không có gì để thêm",
-            description: `Roster **${resolvedRosterName}** không có character phù hợp.`,
+            title: t("raid-task.addAll.noMatchTitle", lang),
+            description: t("raid-task.addAll.noMatchDescription", lang, {
+              rosterName: resolvedRosterName,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -907,41 +963,66 @@ function createRaidTaskCommand(deps) {
       return;
     }
 
+    // Build the success embed body. The locale `successDescription`
+    // template carries the roster/task/cycle/added prefix; the dup +
+    // cap skipped sections are appended via the per-locale
+    // skippedHeader/skippedLine templates so the wording stays in
+    // the executor's language.
+    const cycleLabel =
+      reset === "daily"
+        ? t("raid-task.add.cycleDailyLabel", lang)
+        : t("raid-task.add.cycleWeeklyLabel", lang);
     const totalChars = added.length + skippedCap.length + skippedDup.length;
-    const lines = [
-      `**Roster:** ${resolvedRosterName}`,
-      `**Task:** ${taskName}`,
-      `**Cycle:** ${reset === "daily" ? "Daily (reset 17:00 VN)" : "Weekly (reset 17:00 VN thứ 4)"}`,
-      "",
-      `**Added:** ${added.length}/${totalChars} character${added.length === 1 ? "" : "s"}`,
-    ];
-    if (added.length > 0) {
-      lines.push(`> ${added.join(", ")}`);
-    }
+    const addedNames =
+      `${added.length}/${totalChars}` +
+      (added.length > 0 ? `\n> ${added.join(", ")}` : "");
+    const skippedSectionParts = [];
     if (skippedDup.length > 0) {
-      lines.push("");
-      lines.push(`**Skipped (đã có task này):** ${skippedDup.length}`);
-      lines.push(`> ${skippedDup.join(", ")}`);
+      const reasonDup = t("raid-task.addAll.skippedReasonDup", lang);
+      skippedSectionParts.push(
+        "\n\n" +
+          t("raid-task.addAll.skippedHeader", lang, { count: skippedDup.length }) +
+          "\n" +
+          skippedDup
+            .map((charName) =>
+              t("raid-task.addAll.skippedLine", lang, { charName, reason: reasonDup }),
+            )
+            .join("\n"),
+      );
     }
     if (skippedCap.length > 0) {
-      lines.push("");
-      lines.push(
-        `**Skipped (đã đủ ${reset === "daily" ? TASK_CAP_DAILY : TASK_CAP_WEEKLY} task ${reset}):** ${skippedCap.length}`
+      const cap = reset === "daily" ? TASK_CAP_DAILY : TASK_CAP_WEEKLY;
+      const reasonCap = t("raid-task.addAll.skippedReasonCap", lang, { cap, reset });
+      skippedSectionParts.push(
+        "\n\n" +
+          t("raid-task.addAll.skippedHeader", lang, { count: skippedCap.length }) +
+          "\n" +
+          skippedCap
+            .map((charName) =>
+              t("raid-task.addAll.skippedLine", lang, { charName, reason: reasonCap }),
+            )
+            .join("\n"),
       );
-      lines.push(`> ${skippedCap.join(", ")}`);
     }
+    const skippedSection = skippedSectionParts.join("");
 
     const type = added.length > 0 ? "success" : "info";
     const title =
       added.length > 0
-        ? `Đã thêm task cho ${added.length} char`
-        : "Không có char nào được thêm";
+        ? t("raid-task.addAll.successTitle", lang)
+        : t("raid-task.addAll.noMatchTitle", lang);
     await interaction.reply({
       embeds: [
         buildNoticeEmbed(EmbedBuilder, {
           type,
           title,
-          description: lines.join("\n"),
+          description: t("raid-task.addAll.successDescription", lang, {
+            rosterName: resolvedRosterName,
+            taskName,
+            cycleLabel,
+            addedNames,
+            skippedSection,
+          }),
         }),
       ],
       flags: MessageFlags.Ephemeral,
@@ -958,6 +1039,7 @@ function createRaidTaskCommand(deps) {
 
   async function handleSharedAdd(interaction) {
     const executorId = interaction.user.id;
+    const lang = await getUserLanguage(executorId, { UserModel: User });
     const rosterName = interaction.options.getString("roster", true);
     const presetKey = interaction.options.getString("preset", true);
     const preset = getSharedTaskPreset(presetKey);
@@ -976,8 +1058,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Preset không hợp lệ",
-            description: "Artist chỉ nhận các preset trong autocomplete: `event_shop`, `chaos_gate`, `field_boss`, `custom`.",
+            title: t("raid-task.sharedAdd.invalidPresetTitle", lang),
+            description: t("raid-task.sharedAdd.invalidPresetDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -990,8 +1072,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Tên task không hợp lệ",
-            description: "Task chung cần có tên. Với preset custom, cậu điền field `name:` giúp tớ nha.",
+            title: t("raid-task.sharedAdd.customNeedsNameTitle", lang),
+            description: t("raid-task.sharedAdd.customNeedsNameDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -1003,8 +1085,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Ngày hết hạn không hợp lệ",
-            description: "Field `expires_at` dùng format `YYYY-MM-DD`, ví dụ `2026-05-20`.",
+            title: t("raid-task.sharedAdd.invalidExpiryTitle", lang),
+            description: t("raid-task.sharedAdd.invalidExpiryDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -1016,8 +1098,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Ngày hết hạn đã qua",
-            description: "Task vừa thêm sẽ bị ẩn ngay nếu `expires_at` nằm trong quá khứ. Cậu chỉnh lại ngày rồi thử lại nha.",
+            title: t("raid-task.sharedAdd.pastExpiryTitle", lang),
+            description: t("raid-task.sharedAdd.pastExpiryDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -1035,7 +1117,7 @@ function createRaidTaskCommand(deps) {
       writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
       if (writeTarget.viaShare && !writeTarget.canEdit) {
         await interaction.reply({
-          embeds: [buildViewOnlyShareEmbed(writeTarget)],
+          embeds: [buildViewOnlyShareEmbed(writeTarget, lang)],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -1135,8 +1217,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "error",
-            title: "Save thất bại",
-            description: "Mongo trả lỗi khi lưu task chung. Thử lại sau ít phút nha.",
+            title: t("raid-task.save.addFailedTitle", lang),
+            description: t("raid-task.save.sharedAddFailedDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -1149,8 +1231,10 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Không tìm thấy roster",
-            description: `Artist không tìm thấy roster **${rosterName}** của cậu. Dùng autocomplete khi gõ field \`roster:\` để tránh sai tên nha.`,
+            title: t("raid-task.common.rosterNotFoundTitle", lang),
+            description: t("raid-task.common.rosterNotFoundDescription", lang, {
+              rosterName,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -1158,22 +1242,44 @@ function createRaidTaskCommand(deps) {
       return;
     }
     if (outcome === "none-added") {
-      const lines = [
-        `**Task:** ${preset.emoji} ${taskName}`,
-        `**Loại:** ${preset.label}`,
-        `**Rosters kiểm tra:** ${targetRosterCount}`,
-      ];
+      // Build skippedSummary block from per-locale templates so the
+      // dup vs cap reasons read in the executor's language.
+      const summaryParts = [];
       if (skippedDup.length > 0) {
-        lines.push(`**Đã có sẵn:** ${skippedDup.join(", ")}`);
+        summaryParts.push(
+          t("raid-task.sharedAdd.skippedSummaryDup", lang, {
+            names: skippedDup.join(", "),
+          }),
+        );
       }
       if (skippedCap.length > 0) {
-        lines.push(`**Đầy slot:** ${skippedCap.join(", ")}`);
+        summaryParts.push(
+          t("raid-task.sharedAdd.skippedSummaryCap", lang, {
+            names: skippedCap.join(", "),
+          }),
+        );
       }
+      const skippedSummary = summaryParts.length > 0 ? summaryParts.join("\n") : "";
+      // Compose the embed body manually because the locale's
+      // `noNewRosterDescription` is a tighter template; the handler
+      // here surfaces preset + roster-count + skipped info in one
+      // compact block. Each labeled line uses a per-locale template
+      // so wording stays in the executor's language.
+      const lines = [
+        t("raid-task.sharedAdd.noNewRosterTaskLine", lang, {
+          taskName: `${preset.emoji} ${taskName}`,
+        }),
+        t("raid-task.sharedAdd.noNewRosterTypeLine", lang, {
+          presetLabel: preset.label,
+        }),
+        t("raid-task.sharedAdd.noNewRosterRostersChecked", lang, { count: targetRosterCount }),
+      ];
+      if (skippedSummary) lines.push(skippedSummary);
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: "Không có roster mới được thêm",
+            title: t("raid-task.sharedAdd.noNewRosterTitle", lang),
             description: lines.join("\n"),
           }),
         ],
@@ -1187,8 +1293,13 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Đã đầy slot task chung",
-            description: `Roster **${resolvedRosterName}** đầy **${countForReset}/${cap}** task chung **${formatSharedResetDetail(reset)}** rồi nha cậu. Xoá bớt bằng \`/raid-task shared-remove\` trước, rồi tớ mới gắn thêm được.`,
+            title: t("raid-task.sharedAdd.capReachedTitle", lang),
+            description: t("raid-task.sharedAdd.capReachedDescriptionSingle", lang, {
+              rosterName: resolvedRosterName,
+              count: countForReset,
+              cap,
+              resetLabel: formatSharedResetDetail(reset, lang),
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -1200,10 +1311,18 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: "Task chung đã tồn tại",
-            description: preset.kind === "scheduled"
-              ? `Roster **${resolvedRosterName}** gắn preset **${preset.label}** từ trước rồi, tớ không add chồng nha~`
-              : `Roster **${resolvedRosterName}** đã có task \`${taskName}\` (${formatSharedResetDetail(reset)}) rồi nha. Đặt tên khác hoặc đổi cycle nếu cậu muốn add cái mới.`,
+            title: t("raid-task.sharedAdd.duplicateTitle", lang),
+            description:
+              preset.kind === "scheduled"
+                ? t("raid-task.sharedAdd.duplicateScheduledDescription", lang, {
+                    rosterName: resolvedRosterName,
+                    presetLabel: preset.label,
+                  })
+                : t("raid-task.sharedAdd.duplicateNamedDescription", lang, {
+                    rosterName: resolvedRosterName,
+                    taskName,
+                    resetLabel: formatSharedResetDetail(reset, lang),
+                  }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -1211,34 +1330,55 @@ function createRaidTaskCommand(deps) {
       return;
     }
 
-    const lines = [
-      "Artist đã ghi vào sổ rồi nha~",
-      applyAllRosters
-        ? `**Rosters:** ${addedRosters.length}/${targetRosterCount} roster`
-        : `**Roster:** ${resolvedRosterName}`,
-      ...(applyAllRosters && skippedDup.length > 0
-        ? [`**Đã có sẵn nên bỏ qua:** ${skippedDup.join(", ")}`]
-        : []),
-      ...(applyAllRosters && skippedCap.length > 0
-        ? [`**Đầy slot nên bỏ qua:** ${skippedCap.join(", ")}`]
-        : []),
-      `**Task:** ${preset.emoji} ${taskName}`,
-      `**Loại:** ${preset.label}`,
-      `**Reset:** ${formatSharedResetDetail(reset)}`,
-    ];
-    if (preset.scheduleText) lines.push(`**Lịch:** ${preset.scheduleText}`);
-    if (expiresAt) {
-      lines.push(`**Hết hạn:** <t:${Math.floor(expiresAt / 1000)}:D>`);
+    // Success path. The locale provides single + multi templates that
+    // carry roster/task/type/expiry info. Skipped sections (dup/cap)
+    // only appear in apply-all-rosters mode and use the dedicated
+    // skippedSection* templates.
+    const expirySuffix = expiresAt
+      ? t("raid-task.sharedAdd.expirySuffix", lang, {
+          date: `<t:${Math.floor(expiresAt / 1000)}:D>`,
+        })
+      : "";
+    const presetLabel = `${preset.emoji} ${preset.label}`;
+    let descriptionText;
+    if (applyAllRosters) {
+      const skippedSectionParts = [];
+      if (skippedDup.length > 0) {
+        skippedSectionParts.push(
+          t("raid-task.sharedAdd.skippedSectionDup", lang, {
+            names: skippedDup.join(", "),
+          }),
+        );
+      }
+      if (skippedCap.length > 0) {
+        skippedSectionParts.push(
+          t("raid-task.sharedAdd.skippedSectionCap", lang, {
+            names: skippedCap.join(", "),
+          }),
+        );
+      }
+      descriptionText = t("raid-task.sharedAdd.successDescriptionMulti", lang, {
+        presetLabel,
+        expirySuffix,
+        addedCount: addedRosters.length,
+        addedNames: addedRosters.join(", "),
+        skippedSection: skippedSectionParts.join(""),
+      });
+    } else {
+      descriptionText = t("raid-task.sharedAdd.successDescriptionSingle", lang, {
+        rosterName: resolvedRosterName,
+        taskName: `${preset.emoji} ${taskName}`,
+        presetLabel,
+        expirySuffix,
+      });
     }
-    lines.push("");
-    lines.push("Vào `/raid-status` → dropdown **📝 Side tasks** rồi bấm task chung trong list để toggle nha.");
 
     await interaction.reply({
       embeds: [
         buildNoticeEmbed(EmbedBuilder, {
           type: "success",
-          title: "Đã thêm task chung",
-          description: lines.join("\n"),
+          title: t("raid-task.sharedAdd.successTitle", lang),
+          description: descriptionText,
         }),
       ],
       flags: MessageFlags.Ephemeral,
@@ -1247,13 +1387,14 @@ function createRaidTaskCommand(deps) {
 
   async function handleSharedRemove(interaction) {
     const executorId = interaction.user.id;
+    const lang = await getUserLanguage(executorId, { UserModel: User });
     const rosterName = interaction.options.getString("roster", true);
     const taskId = interaction.options.getString("task", true);
 
     const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
     if (writeTarget.viaShare && !writeTarget.canEdit) {
       await interaction.reply({
-        embeds: [buildViewOnlyShareEmbed(writeTarget)],
+        embeds: [buildViewOnlyShareEmbed(writeTarget, lang)],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -1288,7 +1429,7 @@ function createRaidTaskCommand(deps) {
           outcome = "task-not-found";
           return;
         }
-        removedTaskName = sharedTasks[idx]?.name || "(không tên)";
+        removedTaskName = sharedTasks[idx]?.name || t("raid-task.unnamedTaskFallback", lang);
         sharedTasks.splice(idx, 1);
         await userDoc.save();
       });
@@ -1298,8 +1439,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "error",
-            title: "Save thất bại",
-            description: "Mongo trả lỗi khi xoá task chung. Thử lại sau ít phút nha.",
+            title: t("raid-task.save.addFailedTitle", lang),
+            description: t("raid-task.save.sharedRemoveFailedDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -1312,8 +1453,10 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Không tìm thấy roster",
-            description: `Artist không tìm thấy roster **${rosterName}** của cậu.`,
+            title: t("raid-task.common.rosterNotFoundTitle", lang),
+            description: t("raid-task.common.rosterNotFoundDescription", lang, {
+              rosterName,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -1325,8 +1468,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Task chung đã không còn",
-            description: "Task này có vẻ đã bị xoá từ trước. Gõ lại `/raid-status` hoặc dùng autocomplete mới nha.",
+            title: t("raid-task.sharedRemove.noTaskTitle", lang),
+            description: t("raid-task.sharedRemove.noTaskDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -1338,11 +1481,11 @@ function createRaidTaskCommand(deps) {
       embeds: [
         buildNoticeEmbed(EmbedBuilder, {
           type: "success",
-          title: "Đã xoá task chung",
-          description: [
-            `**Roster:** ${resolvedRosterName}`,
-            `**Task vừa xoá:** ${removedTaskName}`,
-          ].join("\n"),
+          title: t("raid-task.sharedRemove.successTitle", lang),
+          description: t("raid-task.sharedRemove.successDescription", lang, {
+            rosterName: resolvedRosterName,
+            taskName: removedTaskName,
+          }),
         }),
       ],
       flags: MessageFlags.Ephemeral,
@@ -1351,6 +1494,7 @@ function createRaidTaskCommand(deps) {
 
   async function handleRemove(interaction) {
     const executorId = interaction.user.id;
+    const lang = await getUserLanguage(executorId, { UserModel: User });
     const rosterName = interaction.options.getString("roster", true);
     const characterName = interaction.options.getString("character", true);
     const taskId = interaction.options.getString("task", true);
@@ -1358,7 +1502,7 @@ function createRaidTaskCommand(deps) {
     const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
     if (writeTarget.viaShare && !writeTarget.canEdit) {
       await interaction.reply({
-        embeds: [buildViewOnlyShareEmbed(writeTarget)],
+        embeds: [buildViewOnlyShareEmbed(writeTarget, lang)],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -1393,7 +1537,7 @@ function createRaidTaskCommand(deps) {
           outcome = "task-not-found";
           return;
         }
-        removedTaskName = sideTasks[idx]?.name || "(không tên)";
+        removedTaskName = sideTasks[idx]?.name || t("raid-task.unnamedTaskFallback", lang);
         sideTasks.splice(idx, 1);
         await userDoc.save();
       });
@@ -1403,8 +1547,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "error",
-            title: "Save thất bại",
-            description: "Mongo trả lỗi khi xoá task. Thử lại sau ít phút nha.",
+            title: t("raid-task.save.addFailedTitle", lang),
+            description: t("raid-task.save.removeFailedDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -1417,8 +1561,10 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Không tìm thấy character",
-            description: `Artist không tìm thấy **${characterName}** trong roster của cậu. Dùng autocomplete khi gõ field \`character:\` nha.`,
+            title: t("raid-task.common.noCharacterTitle", lang),
+            description: t("raid-task.common.noCharacterDescription", lang, {
+              characterName,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -1430,8 +1576,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Task đã không còn",
-            description: "Task này có vẻ đã bị xoá từ trước (hoặc autocomplete trỏ tới id không còn tồn tại). Refresh `/raid-status` để xem list mới nha.",
+            title: t("raid-task.remove.noTaskTitle", lang),
+            description: t("raid-task.remove.noTaskDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -1443,11 +1589,11 @@ function createRaidTaskCommand(deps) {
       embeds: [
         buildNoticeEmbed(EmbedBuilder, {
           type: "success",
-          title: "Đã xoá task",
-          description: [
-            `**Character:** ${resolvedCharName}`,
-            `**Task vừa xoá:** ${removedTaskName}`,
-          ].join("\n"),
+          title: t("raid-task.remove.successTitle", lang),
+          description: t("raid-task.remove.successDescription", lang, {
+            characterName: resolvedCharName,
+            taskName: removedTaskName,
+          }),
         }),
       ],
       flags: MessageFlags.Ephemeral,
@@ -1456,13 +1602,14 @@ function createRaidTaskCommand(deps) {
 
   async function handleClear(interaction) {
     const executorId = interaction.user.id;
+    const lang = await getUserLanguage(executorId, { UserModel: User });
     const rosterName = interaction.options.getString("roster", true);
     const characterName = interaction.options.getString("character", true);
 
     const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
     if (writeTarget.viaShare && !writeTarget.canEdit) {
       await interaction.reply({
-        embeds: [buildViewOnlyShareEmbed(writeTarget)],
+        embeds: [buildViewOnlyShareEmbed(writeTarget, lang)],
         flags: MessageFlags.Ephemeral,
       });
       return;
@@ -1483,8 +1630,10 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Không tìm thấy character",
-            description: `Artist không tìm thấy **${characterName}** trong roster của cậu. Dùng autocomplete khi gõ field \`character:\` nha.`,
+            title: t("raid-task.common.noCharacterTitle", lang),
+            description: t("raid-task.common.noCharacterDescription", lang, {
+              characterName,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -1500,8 +1649,10 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: "Không có gì để clear",
-            description: `**${resolvedCharName}** chưa có side task nào nha.`,
+            title: t("raid-task.clear.nothingTitle", lang),
+            description: t("raid-task.clear.nothingDescription", lang, {
+              characterName: resolvedCharName,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -1518,11 +1669,11 @@ function createRaidTaskCommand(deps) {
         .setCustomId(
           `raid-task:clear-confirm:${encodeURIComponent(resolvedRosterName)}:${encodeURIComponent(resolvedCharName)}`
         )
-        .setLabel(`Xoá toàn bộ ${sideTasks.length} task`)
+        .setLabel(t("raid-task.clear.confirmButtonLabel", lang))
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
         .setCustomId("raid-task:clear-cancel")
-        .setLabel("Huỷ")
+        .setLabel(t("raid-task.clear.cancelButtonLabel", lang))
         .setStyle(ButtonStyle.Secondary)
     );
 
@@ -1530,14 +1681,13 @@ function createRaidTaskCommand(deps) {
       embeds: [
         buildNoticeEmbed(EmbedBuilder, {
           type: "warn",
-          title: "Xác nhận xoá toàn bộ",
-          description: [
-            `Cậu sắp xoá **${sideTasks.length} task** của **${resolvedCharName}**:`,
-            `· ${dailyCount} daily`,
-            `· ${weeklyCount} weekly`,
-            "",
-            "Hành động này không undo được. Bấm nút bên dưới để xác nhận hoặc huỷ.",
-          ].join("\n"),
+          title: t("raid-task.clear.confirmTitle", lang),
+          description: t("raid-task.clear.confirmDescription", lang, {
+            taskCount: sideTasks.length,
+            characterName: resolvedCharName,
+            dailyCount,
+            weeklyCount,
+          }),
         }),
       ],
       components: [confirmRow],
@@ -1555,6 +1705,11 @@ function createRaidTaskCommand(deps) {
     const charNameEncoded = parts[3] || parts[2] || "";
     const characterName = decodeURIComponent(charNameEncoded);
     const executorId = interaction.user.id;
+    // Resolve clicker's locale. The /raid-task clear reply is ephemeral
+    // so only the original invoker can click this button - clicker ===
+    // session opener in practice, but resolving via the button-clicker
+    // discordId is the safer pattern.
+    const lang = await getUserLanguage(executorId, { UserModel: User });
 
     // Share-aware target resolution. The button click respects whatever
     // share the user picked when they originally ran /raid-task clear -
@@ -1565,7 +1720,7 @@ function createRaidTaskCommand(deps) {
       : { discordId: executorId, viaShare: false };
     if (writeTarget.viaShare && !writeTarget.canEdit) {
       await interaction.update({
-        embeds: [buildViewOnlyShareEmbed(writeTarget)],
+        embeds: [buildViewOnlyShareEmbed(writeTarget, lang)],
         components: [],
       });
       return;
@@ -1580,6 +1735,11 @@ function createRaidTaskCommand(deps) {
     let outcome = "cleared";
     let resolvedCharName = characterName;
     let removedCount = 0;
+    // Capture daily/weekly counts BEFORE the splice so the success
+    // embed (locale `clear.successDescription` interpolates both)
+    // can render the breakdown the user just deleted.
+    let removedDailyCount = 0;
+    let removedWeeklyCount = 0;
 
     try {
       await saveWithRetry(async () => {
@@ -1600,6 +1760,8 @@ function createRaidTaskCommand(deps) {
         resolvedCharName = getCharacterDisplayName(found.character);
         const sideTasks = ensureSideTasks(found.character);
         removedCount = sideTasks.length;
+        removedDailyCount = countByReset(sideTasks, "daily");
+        removedWeeklyCount = countByReset(sideTasks, "weekly");
         found.character.sideTasks = [];
         await userDoc.save();
       });
@@ -1609,8 +1771,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "error",
-            title: "Save thất bại",
-            description: "Mongo trả lỗi khi clear. Thử lại sau ít phút nha.",
+            title: t("raid-task.save.addFailedTitle", lang),
+            description: t("raid-task.save.clearFailedDescription", lang),
           }),
         ],
         components: [],
@@ -1623,8 +1785,8 @@ function createRaidTaskCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Character không còn",
-            description: "Character này có vẻ vừa bị xoá khỏi roster. Refresh `/raid-status` nha.",
+            title: t("raid-task.clear.confirmFailedCharacterTitle", lang),
+            description: t("raid-task.clear.confirmFailedCharacterDescription", lang),
           }),
         ],
         components: [],
@@ -1636,8 +1798,13 @@ function createRaidTaskCommand(deps) {
       embeds: [
         buildNoticeEmbed(EmbedBuilder, {
           type: "success",
-          title: "Đã clear",
-          description: `Đã xoá **${removedCount} task** của **${resolvedCharName}**.`,
+          title: t("raid-task.clear.successTitle", lang),
+          description: t("raid-task.clear.successDescription", lang, {
+            taskCount: removedCount,
+            characterName: resolvedCharName,
+            dailyCount: removedDailyCount,
+            weeklyCount: removedWeeklyCount,
+          }),
         }),
       ],
       components: [],
@@ -1645,12 +1812,13 @@ function createRaidTaskCommand(deps) {
   }
 
   async function handleClearCancelButton(interaction) {
+    const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
     await interaction.update({
       embeds: [
         buildNoticeEmbed(EmbedBuilder, {
           type: "muted",
-          title: "Đã huỷ",
-          description: "Không xoá gì cả nha~",
+          title: t("raid-task.clear.cancelledTitle", lang),
+          description: t("raid-task.clear.cancelledDescription", lang),
         }),
       ],
       components: [],
@@ -1685,12 +1853,15 @@ function createRaidTaskCommand(deps) {
     if (sub === "clear") return handleClear(interaction);
     if (sub === "shared-add") return handleSharedAdd(interaction);
     if (sub === "shared-remove") return handleSharedRemove(interaction);
+    // Fallback path: unknown subcommand. Resolve lang lazily here since
+    // we never reach this branch on the happy path.
+    const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
     await interaction.reply({
       embeds: [
         buildNoticeEmbed(EmbedBuilder, {
           type: "warn",
-          title: "Subcommand không hợp lệ",
-          description: `Subcommand \`${sub}\` Artist không nhận được. Cho phép: \`add\` · \`remove\` · \`clear\` · \`shared-add\` · \`shared-remove\`.`,
+          title: t("raid-task.invalidSubcommandTitle", lang),
+          description: t("raid-task.invalidSubcommandDescription", lang, { sub }),
         }),
       ],
       flags: MessageFlags.Ephemeral,
