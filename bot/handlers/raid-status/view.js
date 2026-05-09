@@ -252,11 +252,15 @@ function createRaidStatusView(deps) {
     const isShared = !!sharedFrom;
     const headerIcon = isShared ? "👥" : pickRosterHeaderIcon(userMeta?.discordId);
     // Inline `· 📝 Auto-sync OFF` badge when the rendered subject hasn't
-    // opted into /raid-auto-manage. Strict `=== false` so a missing/unknown
-    // flag (legacy doc) doesn't false-positive into showing OFF. Skipped
-    // on shared pages because the auto-sync flag belongs to owner A.
+    // opted into /raid-auto-manage AND isn't running local-sync either.
+    // Strict `=== false` so a missing/unknown flag (legacy doc) doesn't
+    // false-positive into showing OFF. Skipped on shared pages because
+    // the auto-sync flag belongs to owner A. Skipped for local-sync
+    // users because they DO have auto-sync (via web companion) - the
+    // badge would be misleading.
+    const localSyncOn = !!userMeta?.localSyncEnabled;
     const autoSyncBadge =
-      !isShared && userMeta?.autoManageEnabled === false
+      !isShared && userMeta?.autoManageEnabled === false && !localSyncOn
         ? t("raid-status.embed.autoSyncOffBadge", lang)
         : "";
     const sharedBadge = isShared
