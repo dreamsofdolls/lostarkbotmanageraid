@@ -392,6 +392,7 @@ module.exports = {
     sync: {
       buttonReady: "Sync ngay",
       buttonCooldown: "Sync ({remain})",
+      localOpenButtonLabel: "Open Web Companion",
       noControlTitle: "Chỉ người mở mới điều khiển được",
       noControlDescription: "Embed này thuộc session `/raid-status` của người khác nha cậu, Artist chỉ cho người mở session thao tác. Mở session riêng bằng `/raid-status` của mình nhé.",
       noAutoSyncTitle: "Cậu chưa bật auto-sync",
@@ -830,6 +831,8 @@ module.exports = {
       userMissingDescription: "Artist không thấy user `{target}` trong DB nữa (có thể họ đã `/raid-remove-roster`). Refresh lại `/raid-check` để page sync state mới nha.",
       alreadyOnTitle: "User đã opt-in rồi",
       alreadyOnDescription: "<@{target}> đã bật `/raid-auto-manage` rồi nha (có thể họ tự bật giữa lúc cậu mở page và bấm button, hoặc Manager khác bấm trước cậu). Refresh `/raid-check` để page sync state mới.",
+      localLockedTitle: "User đang dùng local-sync",
+      localLockedDescription: "<@{target}> đang opt-in **local-sync mode** rồi nha - chỉ một trong hai mode (bible auto-sync hoặc local-sync) chạy 1 lúc, nên Artist không bật bible auto-sync hộ được. Họ phải tự `/raid-auto-manage action:local-off` rồi mới chuyển sang bible.",
       successTitle: "Artist đã bật auto-sync hộ rồi nha",
       successLineIntro: "Flag flip thành công. User này nằm trong batch ưu tiên (`lastAutoManageAttemptAt = null`), scheduler sẽ pick sớm trong các tick tới (mỗi ~30 phút, batch 3 user).",
       successLineTarget: "**Đã bật cho:** <@{target}>",
@@ -882,6 +885,8 @@ module.exports = {
       flippedDescription: "Artist đã bật `/raid-auto-manage` cho cậu. Từ giờ Artist sẽ tự sync raid progress mỗi 24h. Muốn tắt thì gõ `/raid-auto-manage action:off`.",
       alreadyOnTitle: "Auto-sync đã bật sẵn rồi",
       alreadyOnDescription: "Cậu đã bật `/raid-auto-manage` trước đó (qua slash command hoặc đã bấm button này lần trước). Không có gì để đổi.",
+      localLockedTitle: "Cậu đang dùng local-sync rồi",
+      localLockedDescription: "Cậu đang bật **local-sync mode** - chỉ 1 trong 2 mode chạy 1 lúc, nên không bật được bible auto-sync. Muốn chuyển sang bible thì `/raid-auto-manage action:local-off` rồi gõ `action:on`.",
     },
   },
   "raid-task": {

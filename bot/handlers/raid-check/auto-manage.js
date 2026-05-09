@@ -30,8 +30,14 @@ async function tryEnableAutoManage(UserModel, discordId) {
   if (!discordId) return { outcome: "missing" };
   let updated;
   try {
+    // Phase 5 mutex: also gate on `localSyncEnabled !== true`. Manager
+    // can't bind FSA permission for someone in local-sync mode, so the
+    // bible auto-sync flip would silently violate the "exactly one
+    // mode" invariant. Stale UI button (race: target opted into local
+    // between embed render and click) hits this filter and falls
+    // through to the local-locked outcome.
     updated = await UserModel.findOneAndUpdate(
-      { discordId, autoManageEnabled: { $ne: true } },
+      { discordId, autoManageEnabled: { $ne: true }, localSyncEnabled: { $ne: true } },
       { $set: { autoManageEnabled: true } },
       { new: true }
     );
@@ -40,18 +46,19 @@ async function tryEnableAutoManage(UserModel, discordId) {
   }
   if (updated) return { outcome: "flipped", doc: updated };
   // Filter rejected. Distinguish already-on (doc exists but flag true
-  // when we tried) from missing (doc gone entirely). Operator/UX care
-  // about the difference: already-on is benign (refresh hint), missing
-  // is an audit signal (someone removed roster mid-session).
+  // when we tried) from missing (doc gone entirely) from local-locked
+  // (doc exists but localSyncEnabled blocks the flip). Operator/UX
+  // each surface a different message.
   let existing;
   try {
     existing = await UserModel.findOne({ discordId })
-      .select("_id autoManageEnabled")
+      .select("_id autoManageEnabled localSyncEnabled")
       .lean();
   } catch {
     existing = null;
   }
   if (!existing) return { outcome: "missing" };
+  if (existing.localSyncEnabled) return { outcome: "local-locked" };
   return { outcome: "already-on" };
 }
 
@@ -293,6 +300,26 @@ function createRaidCheckAutoManageUi(deps) {
             type: "info",
             title: t("raid-auto-manage.enableButton.alreadyOnTitle", managerLang),
             description: t("raid-auto-manage.enableButton.alreadyOnDescription", managerLang, {
+              target: targetDiscordId,
+            }),
+          }),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    if (result.outcome === "local-locked") {
+      // Phase 5 mutex: target is in local-sync mode. The Manager UI
+      // should already hide this button (all-mode.js renders neither
+      // enable nor disable when localSyncEnabled is true), so this is
+      // a stale-message race. Surface the actual situation instead of
+      // silently no-op'ing.
+      await interaction.reply({
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "info",
+            title: t("raid-auto-manage.enableButton.localLockedTitle", managerLang),
+            description: t("raid-auto-manage.enableButton.localLockedDescription", managerLang, {
               target: targetDiscordId,
             }),
           }),
@@ -662,6 +689,12 @@ function createRaidCheckAutoManageUi(deps) {
     if (result.outcome === "flipped") {
       title = t("raid-auto-manage.enableSelf.flippedTitle", lang);
       description = t("raid-auto-manage.enableSelf.flippedDescription", lang);
+    } else if (result.outcome === "local-locked") {
+      // Phase 5: user has localSyncEnabled. Self-enable button is from a
+      // DM that might be stale - tell them to use action:local-off first
+      // if they actually want bible. Reply embed type=info, not error.
+      title = t("raid-auto-manage.enableSelf.localLockedTitle", lang);
+      description = t("raid-auto-manage.enableSelf.localLockedDescription", lang);
     } else {
       // already-on
       title = t("raid-auto-manage.enableSelf.alreadyOnTitle", lang);

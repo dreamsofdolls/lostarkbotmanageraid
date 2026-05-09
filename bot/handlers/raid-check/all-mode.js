@@ -192,11 +192,19 @@ function createAllModeHandler({
     // is narrowed to a single user AND that user hasn't opted in. One
     // entry per user (pagesData has 1+ pages per user but autoManageEnabled
     // is user-level so first-seen wins).
+    //
+    // Phase 5: also stamp localSyncEnabled per user. If a user is in
+    // local-sync mode, the Manager-acts-on-behalf enable button must
+    // hide entirely - Manager can't bind FSA permission for someone
+    // else's browser, so flipping autoManageEnabled would silently
+    // violate the mutex.
     const autoManageStateByDiscordId = new Map();
+    const localSyncStateByDiscordId = new Map();
     for (const p of pagesData) {
       const id = p.userDoc?.discordId;
       if (!id || autoManageStateByDiscordId.has(id)) continue;
       autoManageStateByDiscordId.set(id, !!p.userDoc.autoManageEnabled);
+      localSyncStateByDiscordId.set(id, !!p.userDoc.localSyncEnabled);
     }
 
     // User filter state. Starts as null (show all users). When a user
@@ -548,7 +556,15 @@ function createAllModeHandler({
         // actionable via pagination.
         if (actionUserId) {
           const focusedUserOptedIn = autoManageStateByDiscordId.get(actionUserId);
-          if (focusedUserOptedIn === false) {
+          const focusedUserLocalOn = localSyncStateByDiscordId.get(actionUserId) === true;
+          if (focusedUserLocalOn) {
+            // Phase 5: target user is in local-sync mode. Manager cannot
+            // bind a browser FSA permission on their behalf; the only
+            // path is the user themselves clicking "Open Web Companion".
+            // Hide both enable + disable buttons - the toggle is theirs
+            // alone. Edit Progress + view-toggle stay so Manager can
+            // still spot-check progress.
+          } else if (focusedUserOptedIn === false) {
             row.addComponents(
               new ButtonBuilder()
                 .setCustomId(`raid-check:enable-auto-one:${actionUserId}`)

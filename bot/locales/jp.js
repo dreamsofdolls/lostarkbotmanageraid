@@ -373,6 +373,7 @@ module.exports = {
     sync: {
       buttonReady: "今すぐ同期♪",
       buttonCooldown: "同期 ({remain})",
+      localOpenButtonLabel: "Web Companion を開く",
       noControlTitle: "コマンドを実行した人だけが操作できますわ",
       noControlDescription: "このページネーションは別の人の `/raid-status` セッションですわ～ アーティストはコマンド実行者だけに操作させてますの。自分の `/raid-status` を新しく開いてくださいね♪",
       noAutoSyncTitle: "自動同期がまだオフですわ",
@@ -811,6 +812,8 @@ module.exports = {
       userMissingDescription: "アーティスト、DB に user `{target}` がもう見つかりませんわ (`/raid-remove-roster` した可能性)。`/raid-check` を再実行して状態を同期してね♪",
       alreadyOnTitle: "ユーザーはもうオプトイン済みですわ",
       alreadyOnDescription: "<@{target}> さんはもう `/raid-auto-manage` をオンにしていますわ (ページを開いてからボタンを押すまでの間に自分でオンにしたか、別のマネージャーが先にクリックしたかもしれませんの)。`/raid-check` を再実行して状態を同期してね♪",
+      localLockedTitle: "ユーザーはローカル同期モード中ですわ",
+      localLockedDescription: "<@{target}> さんは **ローカル同期モード** にオプトイン中ですわ - 同時にアクティブにできるのは bible 自動同期かローカル同期のどちらか1つだけなので、アーティストは代わりに bible 自動同期をオンにできませんの。本人が `/raid-auto-manage action:local-off` してから bible に切り替えてね♪",
       successTitle: "アーティストが代わりに自動同期をオンにしましたわ♪",
       successLineIntro: "フラグ切り替え成功ですわ♪ このユーザーは優先バッチに入ってるので (`lastAutoManageAttemptAt = null`)、これからのスケジューラー周期で早めに拾われますわ (約30分ごと、3人ずつ処理)。",
       successLineTarget: "**オンにした対象:** <@{target}>",
@@ -863,6 +866,8 @@ module.exports = {
       flippedDescription: "アーティストがあなたの `/raid-auto-manage` をオンにしましたわ。これから24時間ごとにレイド進捗を自動同期しますわ♪ オフにしたい時は `/raid-auto-manage action:off` を使ってね～",
       alreadyOnTitle: "自動同期はもうオンですわ",
       alreadyOnDescription: "前から `/raid-auto-manage` をオンにしてましたわ (スラッシュコマンド経由か、このボタンを前回押したか)。何も変わりませんわ～",
+      localLockedTitle: "あなたはローカル同期モード中ですわ",
+      localLockedDescription: "**ローカル同期モード** がオンですわ - 同時にアクティブにできるモードは1つだけなので、bible 自動同期はオンにできませんの。 bible に切り替えたい時は `/raid-auto-manage action:local-off` してから `action:on` を呼んでくださいね♪",
     },
   },
   "raid-task": {

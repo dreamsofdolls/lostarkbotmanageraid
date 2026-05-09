@@ -4,6 +4,23 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-10 (Phase 5 - UI button-flip)
+
+### Changed (/raid-status + /raid-check adapt to local-sync mode)
+- `/raid-status` Sync button now swaps based on user's sync mode:
+  - **bible mode** (existing): Primary button "Sync ngay" / "Sync (Xm)" with cooldown countdown, customId `status:sync`.
+  - **local mode** (new): Link button "🌐 Open Web Companion" pointing at `${PUBLIC_BASE_URL}/sync?token=<jwt>` (token freshly minted at render). Click opens browser; web companion auto-loads with the user's identity.
+  - **off**: button hidden (existing behavior).
+  - Mutex enforcement: `showSync = autoManageEnabled || localSyncEnabled` so either mode shows a button. Both-on never happens (Phase 1 mutex), but local takes precedence in `buildSyncButton` if it ever did.
+- `bot/handlers/raid-status/sync.js` `buildStatusUserMeta` now exposes `localSyncEnabled` + `lastLocalSyncAt` so the view layer can branch without re-fetching.
+- `/raid-check` Manager view (`raid-check/all-mode.js`):
+  - "Bật auto-sync hộ" button **hidden** when target user has `localSyncEnabled: true`. Manager cannot bind a browser FSA permission for someone else; surfacing the button would be a no-op at best, mutex violation at worst.
+  - "Tắt auto-sync hộ" also hidden in local mode (Manager isn't who flipped the local flag, shouldn't be the one flipping it back either).
+  - Edit Progress + view-toggle buttons stay (Manager spot-check still works).
+- `tryEnableAutoManage` server-side mutex: filter now requires `localSyncEnabled !== true`. Race condition safe - if a user opts into local between embed render and Manager click, the CAS misses and a new "local-locked" outcome surfaces a clear notice instead of silently writing.
+- 6 new locale keys (vi/jp/en): `raid-status.sync.localOpenButtonLabel`, `raid-auto-manage.enableButton.localLocked{Title,Description}`, `raid-auto-manage.enableSelf.localLocked{Title,Description}`.
+- 370/370 tests pass.
+
 ## 2026-05-10 (Phase 4.5 - streaming SQLite)
 
 ### Changed (web companion swaps sql.js -> wa-sqlite for multi-GB file support)

@@ -20,6 +20,7 @@ const {
 } = require("../utils/raid/shared-tasks");
 const { getAccessibleAccounts } = require("../services/access-control");
 const { t, getUserLanguage } = require("../services/i18n");
+const { mintToken: mintLocalSyncToken } = require("../services/local-sync");
 
 // Build a render-ready accounts array: caller's own subdocs PLUS shared
 // accounts pulled from manager-A User docs via the access-control
@@ -412,16 +413,50 @@ function createRaidStatusCommand(deps) {
         : t("raid-status.sync.buttonReady", lang);
     };
 
-    const buildSyncButton = (disabled) =>
-      new ButtonBuilder()
+    // Phase 5 button-flip: when the user is in local-sync mode, replace
+    // the bible-driven "Sync ngay" Primary button with an "Open Web
+    // Companion" Link button. Mints a fresh 30-min token at render time
+    // so the URL is always valid for that pageview. Token mint can
+    // throw if env vars unset - fall back to no-companion state which
+    // the showSync gate also catches.
+    const buildLocalSyncButton = () => {
+      const baseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+      if (!baseUrl) return null;
+      let token;
+      try {
+        token = mintLocalSyncToken(discordId);
+      } catch (err) {
+        console.warn("[raid-status] local-sync token mint failed:", err?.message || err);
+        return null;
+      }
+      const url = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
+      return new ButtonBuilder()
+        .setStyle(ButtonStyle.Link)
+        .setLabel(t("raid-status.sync.localOpenButtonLabel", lang))
+        .setEmoji("🌐")
+        .setURL(url);
+    };
+
+    const buildSyncButton = (disabled) => {
+      // Local mode short-circuits before computeSyncLabel/customId paths
+      // because Link buttons in Discord don't have customId or disabled
+      // state; they always open the URL when clicked.
+      if (statusUserMeta.localSyncEnabled) {
+        return buildLocalSyncButton();
+      }
+      return new ButtonBuilder()
         .setCustomId("status:sync")
         .setLabel(computeSyncLabel())
         .setEmoji("🔄")
         .setStyle(ButtonStyle.Primary)
         .setDisabled(disabled);
+    };
 
-    const buildSyncRow = (disabled) =>
-      new ActionRowBuilder().addComponents(buildSyncButton(disabled));
+    const buildSyncRow = (disabled) => {
+      const btn = buildSyncButton(disabled);
+      if (!btn) return null;
+      return new ActionRowBuilder().addComponents(btn);
+    };
 
     const buildComponents = (disabled) => {
       const rows = [];
@@ -432,9 +467,13 @@ function createRaidStatusCommand(deps) {
       // confusing the viewer. Owner A still gets the button on their
       // own /raid-status. UX: only B's own pages show Sync, so the
       // button's behavior matches its label.
+      //
+      // Phase 5: showSync flips on for EITHER mode (bible OR local),
+      // since each renders its own button shape via buildSyncButton.
       const currentAccount = accounts[currentPage];
       const currentPageIsShared = !!currentAccount?._sharedFrom;
-      const showSync = statusUserMeta.autoManageEnabled && !currentPageIsShared;
+      const anySyncMode = statusUserMeta.autoManageEnabled || statusUserMeta.localSyncEnabled;
+      const showSync = anySyncMode && !currentPageIsShared;
       if (currentView === "task") {
         // Task view layout: pagination (>1 account) + view toggle +
         // char filter (when account has tasks) + task toggle dropdown.
@@ -469,14 +508,20 @@ function createRaidStatusCommand(deps) {
           lang,
         });
         if (showSync) {
-          paginationRow.addComponents(buildSyncButton(disabled));
+          // buildSyncButton returns null when local mode is enabled but
+          // PUBLIC_BASE_URL/LOCAL_SYNC_TOKEN_SECRET env unset (degraded
+          // deploy). Skip silently - the user will see no Sync button,
+          // matches the autoManage-off case behaviorally.
+          const btn = buildSyncButton(disabled);
+          if (btn) paginationRow.addComponents(btn);
         }
         rows.push(paginationRow);
       } else if (showSync) {
         // Single account: no pagination row to merge into, so Sync gets
         // its own dedicated row (otherwise the button would be missing
         // entirely for users with 1 roster).
-        rows.push(buildSyncRow(disabled));
+        const row = buildSyncRow(disabled);
+        if (row) rows.push(row);
       }
       // View toggle row sits BEFORE the raid filter so the visual hierarchy
       // is "navigation (page/sync) → mode (raid/task view) → in-mode filter
