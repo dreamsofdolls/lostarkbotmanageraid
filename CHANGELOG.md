@@ -4,6 +4,18 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-05 (later)
+
+### Added
+- `/raid-share` command (Manager-only): `grant target:@B [permission:edit|view]`, `revoke target:@B`, `list [direction:both|in|out]`. Manager A can share roster access with grantee B; share is all-or-nothing per (A, B) pair (B sees ALL of A's rosters when share is active). Default permission `edit` (B can update progress); A can downgrade with `permission:view` for read-only. Re-running grant on same target overwrites the access level rather than creating a duplicate document. Auto-suspends when A is no longer in `RAID_MANAGER_ID` (existing share records stay; helper filters them out).
+- `bot/models/RosterShare.js` Mongoose schema for the `roster_shares` collection. Unique index on `(ownerDiscordId, granteeDiscordId)` so upsert-style grants work.
+- `bot/services/access-control.js` exposes `getAccessibleAccounts(viewerDiscordId)`, `canEditAccount(viewerDiscordId, ownerDiscordId)`, `findAccessibleCharacter(viewerDiscordId, charName)`. DI-friendly (accepts injected `User`, `RosterShare`, `isManagerId` so tests don't need a real Mongo).
+
+### Notes
+- 316/316 tests pass (9 new access-control tests covering own-only, shared-merge, view-vs-edit, manager-suspension, char lookup paths).
+- **This commit ships the share *mechanism* (grant + revoke + list + DB record + access-control helper) but does NOT yet wire shared rosters into `/raid-status`, `/raid-set`, `/raid-task`, or the raid-channel text parser.** A grant currently records intent without changing what B sees in those flows. The next commit (planned) will swap the `userDoc.accounts`-centric loops in `handleStatusCommand` and `/raid-set` autocomplete to consume `getAccessibleAccounts(viewerDiscordId)` instead, plus expand the text parser's char-name lookup to span the same accessible pool.
+- Splitting mechanism vs activation lets the command surface go through review while integration is tested in isolation in the follow-up. Existing flows are completely unchanged in this commit; production behavior pre-grant is identical to today.
+
 ## 2026-05-05
 
 ### Changed

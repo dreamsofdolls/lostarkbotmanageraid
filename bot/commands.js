@@ -59,6 +59,7 @@ const { createRaidAnnounceCommand } = require("./handlers/raid-announce");
 const { createRemoveRosterCommand } = require("./handlers/remove-roster");
 const { createRaidChannelCommand } = require("./handlers/raid-channel");
 const { createRaidHelpCommand } = require("./handlers/raid-help");
+const { createRaidShareCommand } = require("./handlers/raid-share");
 const { createRaidSetCommand } = require("./handlers/raid-set");
 const {
   createRosterRefreshService,
@@ -417,6 +418,7 @@ let handleRaidSetCommand;
 let applyRaidSetForDiscordId;
 
 let handleRaidHelpCommand;
+let handleRaidShareCommand;
 let handleRaidHelpSelect;
 
 let handleRemoveRosterAutocomplete;
@@ -476,6 +478,10 @@ async function handleRaidManagementCommand(interaction) {
       return;
     }
 
+    if (interaction.commandName === "raid-share") {
+      await handleRaidShareCommand(interaction);
+      return;
+    }
     if (interaction.commandName === "raid-help") {
       await handleRaidHelpCommand(interaction);
       return;
@@ -981,6 +987,13 @@ const raidHelpCommandHandlers = createRaidHelpCommand({
   handleRaidHelpCommand,
   handleRaidHelpSelect,
 } = raidHelpCommandHandlers);
+
+const raidShareCommandHandlers = createRaidShareCommand({
+  EmbedBuilder,
+  MessageFlags,
+  UI,
+});
+({ handleRaidShareCommand } = raidShareCommandHandlers);
 
 const removeRosterCommandHandlers = createRemoveRosterCommand({
   EmbedBuilder,

@@ -206,6 +206,7 @@ async function startBot() {
       "raid-announce",
       "raid-task",
       "raid-gold-earner",
+      "raid-share",
     ],
     handleSlashCommand: handleRaidManagementCommand,
     autocompleteHandlers: {
