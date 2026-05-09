@@ -80,11 +80,12 @@ function createRaidCommandDefinitions({
     .addStringOption((option) =>
       option
         .setName("language")
-        .setDescription("Display language (default: Tiếng Việt)")
+        .setDescription("Display language (default: your /raid-language preference)")
         .setRequired(false)
         .addChoices(
           { name: "Tiếng Việt", value: "vi" },
-          { name: "English", value: "en" }
+          { name: "English", value: "en" },
+          { name: "日本語", value: "jp" }
         )
     );
 
@@ -383,6 +384,11 @@ function createRaidCommandDefinitions({
         )
     );
 
+  const raidLanguageCommand = new SlashCommandBuilder()
+    .setName("raid-language")
+    .setDescription("Đổi ngôn ngữ Artist hiển thị cho cậu (Tiếng Việt / 日本語)")
+    .setDMPermission(false);
+
   const raidShareCommand = new SlashCommandBuilder()
     .setName("raid-share")
     .setDescription("Manager: share roster access with another user")
@@ -450,6 +456,7 @@ function createRaidCommandDefinitions({
     raidAnnounceCommand,
     raidTaskCommand,
     raidShareCommand,
+    raidLanguageCommand,
   ];
 
   return commands;

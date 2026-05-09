@@ -60,6 +60,7 @@ const { createRemoveRosterCommand } = require("./handlers/remove-roster");
 const { createRaidChannelCommand } = require("./handlers/raid-channel");
 const { createRaidHelpCommand } = require("./handlers/raid-help");
 const { createRaidShareCommand } = require("./handlers/raid-share");
+const { createRaidLanguageCommand } = require("./handlers/raid-language");
 const { createRaidSetCommand } = require("./handlers/raid-set");
 const {
   createRosterRefreshService,
@@ -420,6 +421,8 @@ let applyRaidSetForDiscordId;
 let handleRaidHelpCommand;
 let handleRaidShareCommand;
 let handleRaidHelpSelect;
+let handleRaidLanguageCommand;
+let handleRaidLanguageSelect;
 
 let handleRemoveRosterAutocomplete;
 let handleRemoveRosterCommand;
@@ -480,6 +483,10 @@ async function handleRaidManagementCommand(interaction) {
 
     if (interaction.commandName === "raid-share") {
       await handleRaidShareCommand(interaction);
+      return;
+    }
+    if (interaction.commandName === "raid-language") {
+      await handleRaidLanguageCommand(interaction);
       return;
     }
     if (interaction.commandName === "raid-help") {
@@ -995,6 +1002,18 @@ const raidShareCommandHandlers = createRaidShareCommand({
 });
 ({ handleRaidShareCommand } = raidShareCommandHandlers);
 
+const raidLanguageCommandHandlers = createRaidLanguageCommand({
+  EmbedBuilder,
+  StringSelectMenuBuilder,
+  ActionRowBuilder,
+  MessageFlags,
+  UI,
+});
+({
+  handleRaidLanguageCommand,
+  handleRaidLanguageSelect,
+} = raidLanguageCommandHandlers);
+
 const removeRosterCommandHandlers = createRemoveRosterCommand({
   EmbedBuilder,
   MessageFlags,
@@ -1112,6 +1131,7 @@ module.exports = {
   commands,
   handleRaidManagementCommand,
   handleRaidHelpSelect,
+  handleRaidLanguageSelect,
   handleRaidSetAutocomplete,
   handleRemoveRosterAutocomplete,
   handleRaidChannelAutocomplete,

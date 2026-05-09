@@ -384,7 +384,8 @@ function createRaidChannelMonitorService({
           value: [
             "1. `/add-roster name:<tên-char-bất-kỳ>` → Artist lấy roster từ lostark.bible, mở picker để cậu chọn ✅ chars muốn theo dõi rồi bấm **Confirm**.",
             "2. `/edit-roster roster:<tên>` → sau này muốn thêm chars mới vào roster đã có hoặc bỏ chars không còn chơi.",
-            "3. `/raid-status` → xem tiến độ raid mọi lúc · `/raid-help` → tài liệu đầy đủ mọi lệnh (có tuỳ chọn `language: English`).",
+            "3. `/raid-status` → xem tiến độ raid mọi lúc · `/raid-help` → tài liệu đầy đủ mọi lệnh.",
+            "4. 🌐 `/raid-language` → đổi Artist sang 🇯🇵 日本語 (cute hơn~) hoặc giữ 🇻🇳 Tiếng Việt mặc định.",
           ].join("\n"),
         },
         {

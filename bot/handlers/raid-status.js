@@ -19,6 +19,7 @@ const {
   getNextSharedTaskTransitionMs,
 } = require("../utils/raid/shared-tasks");
 const { getAccessibleAccounts } = require("../services/access-control");
+const { t, getUserLanguage } = require("../services/i18n");
 
 // Build a render-ready accounts array: caller's own subdocs PLUS shared
 // accounts pulled from manager-A User docs via the access-control
@@ -144,6 +145,12 @@ function createRaidStatusCommand(deps) {
 
   async function handleStatusCommand(interaction) {
     const discordId = interaction.user.id;
+    // Resolve viewer's persistent language preference once at command
+    // entry. Threads through every render path (early-exit notice,
+    // buildAccountPageEmbed, freshness lines) so the whole interaction
+    // renders monolingual. Falls back to default vi when no preference
+    // is stored.
+    const lang = await getUserLanguage(discordId, { UserModel: User });
     const seedDoc = await User.findOne({ discordId });
     const hasOwnAccounts =
       seedDoc && Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
@@ -172,8 +179,8 @@ function createRaidStatusCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: "Cậu chưa có roster nào",
-            description: "Artist không thấy roster nào của cậu trong DB. Dùng `/add-roster` để add roster đầu tiên rồi mới `/raid-status` xem progress được nha~",
+            title: t("raid-status.notice.noRosterTitle", lang),
+            description: t("raid-status.notice.noRosterDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -204,8 +211,8 @@ function createRaidStatusCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: "Cậu chưa có roster nào",
-            description: "Artist không thấy roster nào của cậu trong DB. Dùng `/add-roster` để add roster đầu tiên rồi mới `/raid-status` xem progress được nha~",
+            title: t("raid-status.notice.noRosterTitle", lang),
+            description: t("raid-status.notice.noRosterDescription", lang),
           }),
         ],
       });
@@ -367,7 +374,7 @@ function createRaidStatusCommand(deps) {
         filteredTotals,
         getRaidsFor,
         statusUserMeta,
-        { hideIneligibleChars: !!filterRaidId }
+        { hideIneligibleChars: !!filterRaidId, lang }
       );
     };
 

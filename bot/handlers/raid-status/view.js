@@ -1,5 +1,6 @@
 const { getClassEmoji } = require("../../models/Class");
 const { pack2Columns, formatProgressTotals } = require("../../utils/raid/shared");
+const { t } = require("../../services/i18n");
 
 function createRaidStatusView(deps) {
   const {
@@ -34,7 +35,7 @@ function createRaidStatusView(deps) {
   // /raid-check's footer semantics. In /raid-status the "subject" is the
   // caller themselves, so counts stay identical across pagination pages;
   // the `pageInfo` tail appends only when totalPages > 1.
-  function buildStatusFooterText(globalTotals, pageInfo = null) {
+  function buildStatusFooterText(globalTotals, pageInfo = null, lang) {
     const { completed = 0, partial = 0, total = 0 } = globalTotals?.progress || {};
     const pending = Math.max(0, total - completed - partial);
     // Shared formatter for the `🟢 N done · 🟡 N · ⚪ N` icon line so
@@ -46,7 +47,10 @@ function createRaidStatusView(deps) {
       UI
     );
     if (pageInfo && Number(pageInfo.totalPages) > 1) {
-      line += ` · Page ${Number(pageInfo.pageIndex) + 1}/${Number(pageInfo.totalPages)}`;
+      line += t("raid-status.embed.pageSuffix", lang, {
+        current: Number(pageInfo.pageIndex) + 1,
+        total: Number(pageInfo.totalPages),
+      });
     }
     return line;
   }
@@ -68,7 +72,7 @@ function createRaidStatusView(deps) {
     return `💰 ${formatGold(earned)} / ${formatGold(total)}`;
   }
 
-  function buildCharacterField(character, getRaidsFor) {
+  function buildCharacterField(character, getRaidsFor, lang) {
     const name = getCharacterName(character);
     const itemLevel = Number(character.itemLevel) || 0;
     // Class emoji prepended to char name when the class is mapped in
@@ -80,8 +84,8 @@ function createRaidStatusView(deps) {
 
     const raids = getRaidsFor(character);
     const lines = raids.length === 0
-      ? [`${UI.icons.lock} _Not eligible yet_`]
-      : raids.map((raid) => formatRaidStatusLine(raid));
+      ? [`${UI.icons.lock} ${t("raid-status.embed.notEligible", lang)}`]
+      : raids.map((raid) => formatRaidStatusLine(raid, lang));
 
     const goldLine = buildCharacterGoldLine(character, raids);
     if (goldLine) lines.push(goldLine);
@@ -93,7 +97,7 @@ function createRaidStatusView(deps) {
     };
   }
 
-  function buildAccountFreshnessLine(account, userMeta) {
+  function buildAccountFreshnessLine(account, userMeta, lang) {
     const parts = [];
     const lastRefreshedAt = Number(account?.lastRefreshedAt) || 0;
     if (lastRefreshedAt > 0) {
@@ -103,7 +107,8 @@ function createRaidStatusView(deps) {
       // so the freshness line stays accurate even after the user has
       // been staring at the embed for a minute.
       const lastUpdatedTs = `<t:${Math.floor(lastRefreshedAt / 1000)}:R>`;
-      const lastUpdated = `${UI.icons.roster} Last updated ${lastUpdatedTs}`;
+      const lastUpdatedLabel = t("raid-status.freshness.lastUpdated", lang);
+      const lastUpdated = `${UI.icons.roster} ${lastUpdatedLabel} ${lastUpdatedTs}`;
       // Manager (in RAID_MANAGER_ID allowlist) gets a 10-min refresh
       // cooldown vs 2h for regular users so the operational refresh path
       // mirrors the per-user cooldown they'd actually hit. Falls back to
@@ -119,15 +124,6 @@ function createRaidStatusView(deps) {
         // recorded) + cooldown is the moment the next refresh becomes
         // eligible; render that as another <t:R> so "in Xm" ticks down
         // toward zero in real time.
-        //
-        // Wording is "Refresh ready <t:R>" instead of "Next refresh
-        // <t:R>" so both tense forms read cleanly: future "Refresh ready
-        // in 1h30m" + past "Refresh ready 16s ago" (= has been ready for
-        // 16s). Discord's client-side ticker keeps counting past zero
-        // into past tense once the embed has been on screen long enough,
-        // so neutral wording avoids the awkward "Next sync 16 seconds
-        // ago" the original Round-29 wording produced when an idle user
-        // watched the embed past the manager 15s cooldown.
         const cooldownMs = refreshCooldownMs;
         const cursor =
           Number(account?.lastRefreshAttemptAt) ||
@@ -135,9 +131,11 @@ function createRaidStatusView(deps) {
           0;
         const nextEligible = cursor + cooldownMs;
         const nextTs = `<t:${Math.floor(nextEligible / 1000)}:R>`;
-        parts.push(`${lastUpdated} · ⏳ Refresh ready ${nextTs}`);
+        const refreshReadyLabel = t("raid-status.freshness.refreshReady", lang);
+        parts.push(`${lastUpdated} · ⏳ ${refreshReadyLabel} ${nextTs}`);
       } else {
-        parts.push(`${lastUpdated} · ✅ Refresh ready`);
+        const refreshReadyNowLabel = t("raid-status.freshness.refreshReadyNow", lang);
+        parts.push(`${lastUpdated} · ✅ ${refreshReadyNowLabel}`);
       }
     }
 
@@ -149,10 +147,12 @@ function createRaidStatusView(deps) {
     const isShared = !!account?._sharedFrom;
     if (!isShared && userMeta?.autoManageEnabled) {
       const lastSyncAt = Number(userMeta?.lastAutoManageSyncAt) || 0;
+      const lastSyncLabel = t("raid-status.freshness.lastSynced", lang);
+      const neverSyncedLabel = t("raid-status.freshness.neverSynced", lang);
       const lastSync =
         lastSyncAt > 0
-          ? `${UI.icons.reset} Last synced <t:${Math.floor(lastSyncAt / 1000)}:R>`
-          : `${UI.icons.reset} Never synced`;
+          ? `${UI.icons.reset} ${lastSyncLabel} <t:${Math.floor(lastSyncAt / 1000)}:R>`
+          : `${UI.icons.reset} ${neverSyncedLabel}`;
       // Manager (in RAID_MANAGER_ID allowlist) has a 15s sync cooldown vs 10m
       // for regular users - the countdown must reflect the per-user value or
       // it would mislead managers into waiting minutes after a click when
@@ -164,16 +164,13 @@ function createRaidStatusView(deps) {
       const lastAttempt = Number(userMeta?.lastAutoManageAttemptAt) || 0;
       const remain = formatNextCooldownRemaining(lastAttempt, cooldownMs);
       if (remain) {
-        // Same neutral-tense wording as the refresh branch above:
-        // "Sync ready in 14s" (future) / "Sync ready 16s ago" (past =
-        // has been ready 16s) both read cleanly while letting Discord's
-        // <t:R> ticker keep counting in real time without flipping into
-        // an awkward "Next sync ago" form.
         const nextEligible = lastAttempt + cooldownMs;
         const nextTs = `<t:${Math.floor(nextEligible / 1000)}:R>`;
-        parts.push(`${lastSync} · ⏳ Sync ready ${nextTs}`);
+        const syncReadyLabel = t("raid-status.freshness.syncReady", lang);
+        parts.push(`${lastSync} · ⏳ ${syncReadyLabel} ${nextTs}`);
       } else {
-        parts.push(`${lastSync} · ✅ Sync ready`);
+        const syncReadyNowLabel = t("raid-status.freshness.syncReadyNow", lang);
+        parts.push(`${lastSync} · ✅ ${syncReadyNowLabel}`);
       }
     }
 
@@ -193,23 +190,22 @@ function createRaidStatusView(deps) {
   // already covers the "data is fresh" case).
   //
   // Voice: Artist persona (per CLAUDE.md memory) - friendly first-person
-  // "tớ"/"Artist" framing instead of neutral status copy. Icons picked
-  // for semantic clarity: ⏳ (in-progress) for timeout because the
-  // gather is still running in background, ⚠️ for failed because the
-  // gather actually rejected.
-  function buildPiggybackOutcomeLine(piggybackOutcome) {
+  // "tớ"/"Artist" framing instead of neutral status copy. Locale pack
+  // owns the wording per language; this function only routes outcomes
+  // to the right translation key.
+  function buildPiggybackOutcomeLine(piggybackOutcome, lang) {
     if (!piggybackOutcome) return null;
     switch (piggybackOutcome.outcome) {
       case "applied": {
         const n = piggybackOutcome.newGatesApplied || 0;
-        return `${UI.icons.reset} Artist vừa sync xong, có **${n}** gate mới luôn nha~`;
+        return `${UI.icons.reset} ${t("raid-status.piggyback.applied", lang, { n })}`;
       }
       case "synced-no-new":
-        return `${UI.icons.done} Artist đã sync rồi, hiện không có gate clear mới nha~`;
+        return `${UI.icons.done} ${t("raid-status.piggyback.syncedNoNew", lang)}`;
       case "timeout":
-        return "⏳ Bible đang chậm tay, Artist vẫn đang lấy ngầm. Cậu mở lại sau ~10s là có data mới nha~";
+        return `⏳ ${t("raid-status.piggyback.timeout", lang)}`;
       case "failed":
-        return `${UI.icons.warn} Bible đang dở chứng, Artist tạm xem cache. Cậu thử lại sau vài phút giúp tớ nhé~`;
+        return `${UI.icons.warn} ${t("raid-status.piggyback.failed", lang)}`;
       case "cooldown":
       case "not-applicable":
       default:
@@ -226,7 +222,10 @@ function createRaidStatusView(deps) {
     userMeta = null,
     options = {}
   ) {
-    const { hideIneligibleChars = false } = options;
+    // Lang threads through every render path. Default to the system
+    // default ("vi") so older callers that haven't been migrated yet
+    // still get sensible output - i18n.t() falls back gracefully.
+    const { hideIneligibleChars = false, lang = "vi" } = options;
     const characters = Array.isArray(account.characters) ? account.characters : [];
 
     const accountRaids = [];
@@ -250,109 +249,74 @@ function createRaidStatusView(deps) {
     // settings, not B's; rendering A's setting on B's view would mislead.
     const sharedFrom = account._sharedFrom;
     const isShared = !!sharedFrom;
-    // Page counter lives in the footer (next to done/partial/pending
-    // counts) per /raid-check parity; title stays as just icon + account
-    // so the identity of the rendered roster is the sole headline.
     const headerIcon = isShared ? "👥" : pickRosterHeaderIcon(userMeta?.discordId);
     // Inline `· 📝 Auto-sync OFF` badge when the rendered subject hasn't
-    // opted into /raid-auto-manage. Useful in 2 contexts that share this
-    // builder: (1) /raid-status caller seeing their own roster with a
-    // light nudge to opt in; (2) /raid-check leader scanning
-    // across guild members, immediately spotting who requires manual
-    // Edit. Silent when opted-in to keep the title lean for the common
-    // case. Strict `=== false` so a missing/unknown flag (legacy doc)
-    // doesn't false-positive into showing OFF. Skipped on shared pages
-    // because the auto-sync flag belongs to owner A's settings, not B's.
+    // opted into /raid-auto-manage. Strict `=== false` so a missing/unknown
+    // flag (legacy doc) doesn't false-positive into showing OFF. Skipped
+    // on shared pages because the auto-sync flag belongs to owner A.
     const autoSyncBadge =
       !isShared && userMeta?.autoManageEnabled === false
-        ? " · 📝 Auto-sync OFF"
+        ? t("raid-status.embed.autoSyncOffBadge", lang)
         : "";
     const sharedBadge = isShared
-      ? ` · 👥 Shared by ${sharedFrom.ownerLabel || "(unknown)"} (${sharedFrom.accessLevel || "edit"})`
+      ? t("raid-status.embed.sharedBySuffix", lang, {
+          owner: sharedFrom.ownerLabel || "(unknown)",
+          level: sharedFrom.accessLevel || "edit",
+        })
       : "";
     const title = `${titleIcon} ${headerIcon} ${account.accountName}${autoSyncBadge}${sharedBadge}`;
 
-    // Description used to lead with a per-account "N chars · X/Y raids
-    // done · K in progress" line, but those counts are now carried by
-    // the footer legend itself (X done · Y partial · Z pending) - keeping
-    // both would duplicate the same information in two places. The
-    // cross-account rollup stays because it's a different scope
-    // (subject-wide, not per-account) and helps when flipping pages.
     const descriptionLines = [];
     if (totalPages > 1) {
-      // Cross-account rollup. The gold tail is the GRAND total across
-      // every roster the user has - distinct from the per-account
-      // "Earned this week" line directly below (which is just the
-      // current page's account). Round-32 briefly removed the tail
-      // because a single-earner-account user saw identical numbers in
-      // both places, but with multiple accounts marked the cross-
-      // account figure is a separate signal worth keeping.
-      // Suppressed when total <= 0 so an all-non-earner roster doesn't
-      // render a misleading "💰 0G / 0G" segment.
+      // Cross-account rollup. Suppressed when total <= 0 so an
+      // all-non-earner roster doesn't render a misleading "💰 0G / 0G".
       const globalGoldTotal = Number(globalTotals?.gold?.total) || 0;
       const globalGoldEarned = Number(globalTotals?.gold?.earned) || 0;
       const globalGoldTail = globalGoldTotal > 0
         ? ` · 💰 **${formatGold(globalGoldEarned)} / ${formatGold(globalGoldTotal)}**`
         : "";
       descriptionLines.push(
-        `🌐 All accounts: **${globalTotals.characters}** chars · **${globalTotals.progress.completed}/${globalTotals.progress.total}** raids done${globalGoldTail}`
+        t("raid-status.embed.allAccounts", lang, {
+          chars: globalTotals.characters,
+          done: globalTotals.progress.completed,
+          total: globalTotals.progress.total,
+          goldTail: globalGoldTail,
+        }),
       );
     }
     // Per-account gold rollup. Always emitted on accounts with at least
-    // one gold-earner, even on a single-page roster (we still want the
-    // "this week's haul" headline). Suppressed when no gold-earner is
-    // configured for the account at all - same honesty rule as the
-    // cross-account tail above.
+    // one gold-earner.
     if (typeof summarizeAccountGold === "function") {
       const accountGold = summarizeAccountGold(account, getRaidsFor);
       if (accountGold.total > 0) {
         descriptionLines.push(
-          `💰 Earned this week: **${formatGold(accountGold.earned)}** / **${formatGold(accountGold.total)}**`
+          t("raid-status.embed.earnedThisWeek", lang, {
+            earned: formatGold(accountGold.earned),
+            total: formatGold(accountGold.total),
+          }),
         );
       }
     }
-    const freshnessLine = buildAccountFreshnessLine(account, userMeta);
+    const freshnessLine = buildAccountFreshnessLine(account, userMeta, lang);
     if (freshnessLine) descriptionLines.push(freshnessLine);
 
     // Discoverability hint for /raid-gold-earner. Shown ONLY when the
     // account has at least one eligible char (>= 1 raid unlocked at
-    // current iLvl) that isn't yet a gold-earner. Suppressed when:
-    //   - every eligible char is already an earner (cap-reached state
-    //     or all-gold-earner state - no decision left)
-    //   - account has no eligible chars at all (early-roster / sub-1700)
-    //   - account is empty
-    // Below-iLvl chars are excluded from the count because they can't
-    // earn raid gold this week regardless of the flag, so they don't
-    // signal "decision pending" - matches Traine's "5 chars all above
-    // 1700 + all marked → hint disappears" rule.
+    // current iLvl) that isn't yet a gold-earner.
     const eligibleNonEarnerCount = (account.characters || []).filter(
       (c) => !c?.isGoldEarner && getRaidsFor(c).length > 0
     ).length;
     if (eligibleNonEarnerCount > 0) {
-      descriptionLines.push(
-        "_💰 Mark gold-earner bằng `/raid-gold-earner roster:<tên>` (cap 6 / account / tuần)._"
-      );
+      descriptionLines.push(t("raid-status.embed.goldEarnerHint", lang));
     }
 
-    // Bible-piggyback outcome line (computed here so the early-return
-    // paths below can also surface it, but rendered as a FINAL FIELD
-    // below the char fields - see the addFields call near the end of
-    // this function). Placement at the bottom (just before the
-    // done/partial/pending legend in the footer) keeps the freshness
-    // info compact at the top while leaving room for the outcome to
-    // sit next to the totals it explains.
-    //
-    // Skip the "not-applicable" / "synced-no-new" / "cooldown" cases:
-    // those add noise without information - the freshness line above
-    // already tells the user when bible was last successfully synced
-    // + countdown to the next free attempt.
-    const outcomeLine = buildPiggybackOutcomeLine(userMeta?.piggybackOutcome);
+    const outcomeLine = buildPiggybackOutcomeLine(userMeta?.piggybackOutcome, lang);
 
     const embed = new EmbedBuilder()
       .setTitle(title)
       .setColor(accountProgress.color)
       .setFooter({
-        text: buildStatusFooterText(globalTotals, { pageIndex, totalPages }),
+        text: buildStatusFooterText(globalTotals, { pageIndex, totalPages }, lang),
       })
       .setTimestamp();
 
@@ -360,30 +324,22 @@ function createRaidStatusView(deps) {
       embed.setDescription(descriptionLines.join("\n"));
     }
 
-    // Render outcome as a FINAL field just before the footer legend.
-    // Used by every return path so the user gets the same "what just
-    // happened on bible sync" info regardless of whether the roster is
-    // full / empty / all-ineligible.
     const appendOutcomeField = () => {
       if (outcomeLine) {
-        embed.addFields({ name: "\u200B", value: outcomeLine, inline: false });
+        embed.addFields({ name: "​", value: outcomeLine, inline: false });
       }
     };
 
     if (characters.length === 0) {
-      embed.addFields({ name: "\u200B", value: "_No characters saved._", inline: false });
+      embed.addFields({
+        name: "​",
+        value: t("raid-status.embed.noCharacters", lang),
+        inline: false,
+      });
       appendOutcomeField();
       return embed;
     }
 
-    // When `hideIneligibleChars` is on (caller has an active raid filter),
-    // drop chars whose getRaidsFor returns empty - a locked "🔒 Not
-    // eligible yet" card for every char below the iLvl gate is pure
-    // noise when the caller just wants to see who CAN do the picked raid.
-    // Filter state lives at the call site; passing the flag lets the
-    // builder render an "all chars ineligible" notice when the roster
-    // has zero relevant chars, vs "no chars saved" (empty account) vs
-    // the normal fields path.
     const visibleChars = hideIneligibleChars
       ? characters.filter((c) => getRaidsFor(c).length > 0)
       : characters;
@@ -391,7 +347,7 @@ function createRaidStatusView(deps) {
     if (visibleChars.length === 0 && hideIneligibleChars) {
       embed.addFields({
         name: "​",
-        value: `${UI.icons.lock} _Không có character nào eligible cho raid này trong roster._`,
+        value: `${UI.icons.lock} ${t("raid-status.embed.allIneligible", lang)}`,
         inline: false,
       });
       appendOutcomeField();
@@ -399,7 +355,7 @@ function createRaidStatusView(deps) {
     }
 
     embed.addFields(
-      ...pack2Columns(visibleChars.map((c) => buildCharacterField(c, getRaidsFor)))
+      ...pack2Columns(visibleChars.map((c) => buildCharacterField(c, getRaidsFor, lang)))
     );
 
     appendOutcomeField();

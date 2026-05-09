@@ -398,14 +398,26 @@ function pickProgressIcon(done, total) {
   return UI.icons.pending;
 }
 
-function formatRaidStatusLine(raid) {
+function formatRaidStatusLine(raid, lang) {
   const gates = Array.isArray(raid.allGateKeys) && raid.allGateKeys.length > 0
     ? raid.allGateKeys
     : getGatesForRaid(raid.raidKey);
   const done = new Set(raid.completedGateKeys || []).size;
   const total = gates.length;
   const icon = raid.isCompleted ? UI.icons.done : pickProgressIcon(done, total);
-  return `${icon} ${raid.raidName} · ${done}/${total}`;
+  // Lang-aware label: pull from locale registry when a lang is supplied,
+  // otherwise fall back to the raid's canonical raidName for back-compat
+  // (older callers haven't been migrated yet, and tests use the older
+  // signature).
+  let label = raid.raidName;
+  if (lang) {
+    // Lazy-require to avoid circular import: labels.js → models/Raid.js
+    // → (potentially) other utils. Pull at call time so the dependency
+    // graph stays clean at module load.
+    const { getRaidLabel } = require("./labels");
+    label = getRaidLabel(raid.raidKey, lang) || raid.raidName;
+  }
+  return `${icon} ${label} · ${done}/${total}`;
 }
 
 // Sum (earned, total) gold across an array of raid entries already
