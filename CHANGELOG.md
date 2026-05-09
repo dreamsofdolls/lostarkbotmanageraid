@@ -4,6 +4,18 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-10 (Web companion preview redesign - per-raid tables)
+
+### Changed (web companion preview groups by raid+mode instead of flat row list)
+- **Why:** flat preview table showed each (char, boss, difficulty) row separately - 60+ rows for a roster with ~9 chars and 3 active raids was hard to scan. User couldn't tell at a glance which raid each char actually cleared because raw boss names ("Archdemon Kazeros", "Brelshaza, Ember in the Ashes") don't match the bot's raid card vocabulary.
+- New `web/preview-utils.js` mirrors the bot-side boss->raid mapping + bucketize logic (`BOSS_TO_RAID_GATE`, `bucketize`, `groupByRaid`, `findUnmappedBosses`). Stays in sync with `bot/models/Raid.js` + `bot/services/local-sync/apply.js`.
+- `web/app.js` `runPreviewQuery` now renders **one table per (raid, mode)** with the raid card mental model: heading shows raid label + mode + char count, table shows char + cumulative gates ("G1+G2") + latest clear timestamp. Matches what `/raid-status` will show after sync, no shape drift.
+- Failed encounters (cleared=0) and unmapped bosses (Guardian / Chaos / non-Legion content) move to `<details>` collapsibles at the bottom, hidden by default. Main preview stays focused on "what will sync".
+- New CSS classes `.raid-group` + `.footer-details` for the per-raid card + collapsible footer.
+- Server-side sync stays authoritative - web preview can be wrong without causing data corruption (server re-maps + filters), but visually they match.
+- Smoke-tested with screenshot data: 9 chars + 3 raids collapse from 60+ flat rows to 3 raid tables (Kazeros Normal, Act 4 Hard, Kazeros Hard).
+- 372/372 tests pass.
+
 ## 2026-05-10 (Phase 6 - stuck-nudge "Switch to Local Sync")
 
 ### Added (local-sync rollout COMPLETE - Phase 6 of 6)
