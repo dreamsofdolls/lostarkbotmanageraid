@@ -346,10 +346,14 @@ function normalizeDifficultyLabel(value) {
  *   "mode-conflict" DB cleared at a different difficulty than modeKey AND
  *                   file has a clear at modeKey - applyRaidSet will wipe
  *                   the old mode and write the new one
- *   "db-other-mode" DB cleared at a different difficulty AND file has no
- *                   clear at modeKey - represents "char was on Normal,
- *                   no Hard activity in last 7 days"
- *   "empty"         neither DB nor file has it
+ *   "empty"         no actionable state for THIS mode (neither cleared at
+ *                   this mode nor pending; OR cleared at a different mode
+ *                   with no current-week activity at this mode - the
+ *                   off-mode clear is informational but irrelevant for
+ *                   the "is this raid+mode worth showing" question and
+ *                   was previously a separate "db-other-mode" state -
+ *                   collapsed into empty so chars who only do Hard don't
+ *                   pollute the Normal raid card)
  */
 export function resolveCellState({ assignedRaids, fileGates, modeKey, gate }) {
   const dbEntry = assignedRaids?.[gate];
@@ -360,8 +364,8 @@ export function resolveCellState({ assignedRaids, fileGates, modeKey, gate }) {
   if (dbCleared && (!dbModeKey || dbModeKey === targetModeLabel)) {
     return "synced";
   }
-  if (dbCleared && dbModeKey !== targetModeLabel) {
-    return fileHas ? "mode-conflict" : "db-other-mode";
+  if (dbCleared && dbModeKey !== targetModeLabel && fileHas) {
+    return "mode-conflict";
   }
   if (fileHas) return "pending";
   return "empty";
@@ -383,43 +387,40 @@ export function buildFileClearMap(buckets) {
 }
 
 /**
- * Build the renderable diff structure - mirrors /raid-status's logic:
- * roster -> raid+mode cards -> char rows with gate states. Pivots away
- * from the char-first cells layout (Phase 7 first cut) to match the
- * Discord raid-card mental model the user already knows.
+ * Build the renderable diff structure with TWO projections of the
+ * same per-(char, raid, mode, gate) cell data so the UI can offer
+ * toggle between char-first and raid-first views:
+ *
+ *   - `raidCards`: account -> raid+mode cards -> char rows. Best for
+ *     "who in this account cleared raid X". Manager scan flow.
+ *   - `characters`: account -> char cards -> raid+mode cells. Best for
+ *     "what raids has this char done this week". Default per-user flow.
+ *
+ * Cells are computed once (resolveCellState) and shared by both views;
+ * the projection step just pivots the same data. Cells with all gates
+ * empty are filtered out of both views (no point rendering rows of
+ * "·" badges - that's just noise).
  *
  * Returns: array of accounts:
  *   [{
  *     accountName,
- *     raidCards: [{
- *       raidKey, modeKey,
- *       chars: [{
- *         name, class, itemLevel,
- *         gates: ["G1", "G2"],
- *         states: { G1: "synced"|"pending"|"mode-conflict"|"db-other-mode", G2: ... }
- *       }, ...]
- *     }]
+ *     raidCards: [{ raidKey, modeKey, chars: [{name, class, itemLevel, gates, states}] }],
+ *     characters: [{ name, class, itemLevel, cells: [{raidKey, modeKey, gates, states}] }]
  *   }]
- *
- * Filtering:
- *   - char ilvl < raid+mode minIlvl -> char skipped from THAT card
- *   - char with all-empty states for the card -> char skipped (would
- *     render as a row of "·" badges = noise)
- *   - card with no chars after filtering -> card skipped
- *   - account with no cards -> account skipped (pagination won't show it)
  */
 export function buildDiff(rosterAccounts, fileBuckets) {
   const fileClearMap = buildFileClearMap(fileBuckets || []);
   const accounts = [];
   for (const account of rosterAccounts || []) {
     const accountName = account?.accountName || "(unnamed)";
-    // Bucket char rows under their raid+mode key first, then assemble
-    // the cards in display order at the end. This way we get one
-    // pass over chars + a deterministic raid+mode iteration order.
+    // Pre-compute every char's eligible cells with state. Single pass
+    // populates both projections.
+    const charEntries = [];
     const charsByRaidMode = new Map();
     for (const character of account?.characters || []) {
       const charNameLower = String(character?.name || "").toLowerCase();
       const eligible = getEligibleRaidModes(character?.itemLevel);
+      const charCells = [];
       for (const { raidKey, modeKey } of eligible) {
         const gates = getGatesForRaid(raidKey);
         const states = {};
@@ -432,6 +433,15 @@ export function buildDiff(rosterAccounts, fileBuckets) {
           if (state !== "empty") hasActivity = true;
         }
         if (!hasActivity) continue;
+        const cell = {
+          raidKey,
+          modeKey,
+          gates,
+          states,
+        };
+        charCells.push(cell);
+        // Mirror into raid-first projection - same cell, different
+        // grouping. char identity travels with it.
         const key = `${raidKey}_${modeKey}`;
         if (!charsByRaidMode.has(key)) charsByRaidMode.set(key, []);
         charsByRaidMode.get(key).push({
@@ -442,24 +452,31 @@ export function buildDiff(rosterAccounts, fileBuckets) {
           states,
         });
       }
+      if (charCells.length > 0) {
+        charEntries.push({
+          name: character?.name || "",
+          class: character?.class || "",
+          itemLevel: Number(character?.itemLevel) || 0,
+          cells: charCells,
+        });
+      }
     }
-    // Deterministic raid-card order: armoche -> kazeros -> serca,
-    // normal -> hard -> nightmare. Same as /raid-status and matches the
-    // RAID_ORDER / MODE_ORDER constants in this file.
+    // Char-first projection: sort by ilvl desc + name for stable order.
+    charEntries.sort((a, b) => (b.itemLevel - a.itemLevel) || a.name.localeCompare(b.name));
+    // Raid-first projection: deterministic raid+mode order, chars
+    // sorted by ilvl desc within each card.
     const raidCards = [];
     for (const raidKey of RAID_ORDER) {
       for (const modeKey of MODE_ORDER) {
         const key = `${raidKey}_${modeKey}`;
         const chars = charsByRaidMode.get(key);
         if (!chars || chars.length === 0) continue;
-        // Sort chars by ilvl desc so the heaviest hitters render first
-        // - matches the bot's roster ordering convention.
         chars.sort((a, b) => (b.itemLevel - a.itemLevel) || a.name.localeCompare(b.name));
         raidCards.push({ raidKey, modeKey, chars });
       }
     }
-    if (raidCards.length > 0) {
-      accounts.push({ accountName, raidCards });
+    if (charEntries.length > 0 || raidCards.length > 0) {
+      accounts.push({ accountName, characters: charEntries, raidCards });
     }
   }
   return accounts;
