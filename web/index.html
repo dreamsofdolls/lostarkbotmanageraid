@@ -50,13 +50,14 @@
 
     <footer>
       <p class="hint">
-        Phase 4 of 6 (live sync). <a href="https://github.com/dreamsofdolls/lostarkbotmanageraid">Source</a>.
+        Phase 4.5 (streaming SQLite). <a href="https://github.com/dreamsofdolls/lostarkbotmanageraid">Source</a>.
       </p>
     </footer>
   </main>
 
-  <!-- sql.js loaded from CDN; small + cached so we avoid bundling 1.5MB of WASM in the bot deploy. -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+  <!-- wa-sqlite (asyncify build) loaded lazily by app.js when a file is dropped.
+       We use the streaming VFS pattern so multi-GB encounters.db files work
+       (sql.js needed full-file ArrayBuffer; Chrome caps that at ~2GB). -->
   <script src="/sync/app.js" type="module"></script>
 </body>
 </html>

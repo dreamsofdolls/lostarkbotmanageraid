@@ -4,6 +4,17 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-10 (Phase 4.5 - streaming SQLite)
+
+### Changed (web companion swaps sql.js -> wa-sqlite for multi-GB file support)
+- **Why:** Real-world LOA Logs `encounters.db` files run 1-4+ GB after months of meter data. sql.js requires the full file as a single Uint8Array passed to its constructor; Chrome caps ArrayBuffer around 2 GB practical. 4 GB files failed with `NotReadableError` mid-read. la-utils inspection (slice patterns + IndexedDB FileSystemHandle storage) confirmed the fix is streaming SQLite via custom VFS.
+- New `web/file-vfs.js` - a read-only async VFS for wa-sqlite that streams from `File.slice()`. SQLite only fetches the B-tree pages it actually needs (tens of MB even for 4 GB files). Refuses writes (read-only by design).
+- `web/app.js` rewritten to use wa-sqlite (asyncify build) loaded lazily from jsdelivr: `wa-sqlite-async.mjs` + `src/sqlite-api.js` + the custom file-vfs. Lazy ESM imports keep page-load light when no file is dropped.
+- Schema detection via `PRAGMA table_info(encounter)` - adapts column names to whichever LOA Logs version wrote the file. Handles `current_boss_name` vs `current_boss`, `last_combat_packet` vs `fight_start`, `local_player` vs `local_player_name`. Surfaces a clear error listing actual columns when nothing matches.
+- Removed `<script src=".../sql-wasm.js">` from `index.html`; wa-sqlite loads via dynamic import in `app.js` instead.
+- Smoke-tested static serving: `/sync`, `/sync/app.js`, `/sync/file-vfs.js`, `/sync/styles.css` all 200.
+- 370/370 tests pass (no test changes; this is purely web-side).
+
 ## 2026-05-10 (Phase 4 - real sync wired)
 
 ### Added (local-sync Phase 4 - POST /api/raid-sync wired end-to-end)
