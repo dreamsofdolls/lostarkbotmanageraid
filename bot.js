@@ -125,18 +125,26 @@ async function startBot() {
       const path = require("node:path");
       const { startLocalSyncHttpServer } = require("./bot/services/local-sync/http-server");
       const { createRaidSyncEndpoint } = require("./bot/services/local-sync/sync-endpoint");
+      const { createRosterEndpoint } = require("./bot/services/local-sync/roster-endpoint");
       const User = require("./bot/models/user");
       const { applyRaidSetForDiscordId } = require("./bot/commands");
       const raidSyncHandler = createRaidSyncEndpoint({
         User,
         applyRaidSetForDiscordId,
       });
+      const rosterHandler = createRosterEndpoint({ User });
       startLocalSyncHttpServer({
         webDir: path.join(__dirname, "web"),
         classIconsDir: path.join(__dirname, "assets", "class-icons"),
         apiHandlers: {
           "POST /api/raid-sync": raidSyncHandler,
           "OPTIONS /api/raid-sync": raidSyncHandler, // CORS preflight
+          // Phase 7: roster snapshot for the diff-view preview. Slim
+          // projection of User.accounts[].characters[].assignedRaids so
+          // the web companion can render "synced (DB) vs pending (file)"
+          // per gate cell without spilling private ops metadata.
+          "GET /api/me/roster": rosterHandler,
+          "OPTIONS /api/me/roster": rosterHandler,
         },
       });
     } catch (err) {

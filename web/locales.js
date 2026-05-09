@@ -104,6 +104,15 @@ const VI = {
     hard: "Hard",
     nightmare: "Nightmare",
   },
+  diff: {
+    state: {
+      synced: "đã sync",
+      pending: "sẽ sync",
+      "mode-conflict": "đổi difficulty (sẽ wipe mode cũ)",
+      "db-other-mode": "DB clear ở mode khác",
+      empty: "chưa clear",
+    },
+  },
 };
 
 const JP = {
@@ -195,6 +204,15 @@ const JP = {
     hard: "ハード",
     nightmare: "ナイトメア",
   },
+  diff: {
+    state: {
+      synced: "同期済み",
+      pending: "同期予定",
+      "mode-conflict": "難易度変更 (旧モードはリセットされますわ)",
+      "db-other-mode": "DB に別の難易度のクリアあり",
+      empty: "未クリア",
+    },
+  },
 };
 
 const EN = {
@@ -285,6 +303,15 @@ const EN = {
     normal: "Normal",
     hard: "Hard",
     nightmare: "Nightmare",
+  },
+  diff: {
+    state: {
+      synced: "synced",
+      pending: "will sync",
+      "mode-conflict": "difficulty change (old mode will be reset)",
+      "db-other-mode": "DB cleared at different mode",
+      empty: "not cleared",
+    },
   },
 };
 

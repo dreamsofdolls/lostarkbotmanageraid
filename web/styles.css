@@ -165,6 +165,113 @@ table th { color: var(--text-dim); font-weight: 600; }
 }
 .raid-group table { margin-top: 4px; }
 
+/* Phase 7 roster-grouped diff view: per-account section with char
+   rows. Each char row has identity (icon+name+ilvl) on the left and
+   raid-cell strip on the right, where each cell shows gate badges
+   colored by diff state. Mental model matches /raid-status raid card
+   but flipped to roster-first. */
+.roster-block {
+  margin-top: 20px;
+  padding: 12px 14px;
+  background: #1d2024;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.roster-heading {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.char-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid #2a2e35;
+}
+.char-row:last-child { border-bottom: none; }
+.char-row-head {
+  flex: 0 0 200px;
+  font-size: 13px;
+}
+.char-cells {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.raid-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  background: #14171a;
+  border-radius: 4px;
+  min-width: 60px;
+}
+.raid-cell-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.gate-badges {
+  display: flex;
+  gap: 3px;
+}
+.gate-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.gate-synced {
+  background: rgba(76, 175, 80, 0.18);
+  color: #8dd791;
+  border-color: rgba(76, 175, 80, 0.4);
+}
+.gate-pending {
+  background: rgba(245, 166, 35, 0.18);
+  color: #ffd28b;
+  border-color: rgba(245, 166, 35, 0.5);
+}
+.gate-mode-conflict {
+  background: rgba(255, 112, 67, 0.18);
+  color: #ffaa88;
+  border-color: rgba(255, 112, 67, 0.5);
+}
+.gate-db-other-mode {
+  background: rgba(100, 149, 237, 0.18);
+  color: #a4c1ec;
+  border-color: rgba(100, 149, 237, 0.4);
+}
+.gate-empty {
+  background: #14171a;
+  color: var(--text-dim);
+  border-color: #2a2e35;
+}
+
+/* Compact legend strip above the roster blocks. Maps each gate state
+   to its color so the user can decode the badges below. Inline-flex
+   with wrap so it collapses on narrow viewports. */
+.diff-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 4px;
+  font-size: 11px;
+}
+.legend-item {
+  padding: 3px 8px;
+  border-radius: 3px;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
 /* Footer collapsibles for failed + unmapped sections - keep them
    visually distinct from the main raid groups and hide their detail
    by default so the focused view is "what will sync". */
