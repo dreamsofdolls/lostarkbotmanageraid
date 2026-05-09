@@ -4,6 +4,18 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-05 (later 2)
+
+### Added
+- `/raid-status` now renders shared rosters alongside the caller's own. After loading the caller's `User` doc, the handler calls `getAccessibleAccounts(viewerDiscordId)` and merges every roster owned by a Manager A who has run `/raid-share grant target:B` against B (the caller). Shared accounts are converted to plain objects and tagged with `_sharedFrom` so the view can badge them without leaking foreign Mongoose subdocs into save paths.
+- View badge: shared pages render with a 👥 header icon (instead of 👑/📁) and a `· 👥 Shared by Alice (edit)` suffix on the page title. The auto-sync state badge and the `Last synced / Sync ready` freshness lines are suppressed on shared pages because those values belong to owner A's settings, not the viewer's. `Last updated` stays because it reads from the account subdoc itself (which travels with the share).
+
+### Notes
+- 316/316 tests pass (no regressions; existing freshness / page-render tests still cover own-roster paths).
+- B with **zero own rosters** still hits the "Cậu chưa có roster nào" early-exit. The merge happens after B's own `User` doc is loaded so the gate stays the same shape as before; supporting "B has only shared rosters" needs a small early-exit refactor and is deferred to a follow-up.
+- Sync button on a shared page still operates on the viewer's own discordId (B's accounts only), so clicking Sync while paginated to A's shared roster will refresh B's stuff but not A's. That's the safer default - B should not trigger sync-cooldown stamps on A's auto-manage record. A polish pass can hide the Sync button on shared pages later.
+- **Write paths still pending (Phase 2b):** `/raid-set`, `/raid-task`, and the raid-channel text parser still scope writes by the caller's own `User` doc. So even though B sees A's rosters in `/raid-status`, B cannot yet update A's progress through those flows. The grant's `accessLevel: 'edit'` records the intent; activating it requires plumbing `getAccessibleAccounts` + `canEditAccount` into ~5 sub-handlers in `raid-set.js`, the text parser, and `/raid-task`. Splitting that work into a dedicated commit keeps the write-path refactor reviewable in isolation.
+
 ## 2026-05-05 (later)
 
 ### Added

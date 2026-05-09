@@ -141,7 +141,13 @@ function createRaidStatusView(deps) {
       }
     }
 
-    if (userMeta?.autoManageEnabled) {
+    // Auto-manage state belongs to the account *owner*, not the viewer.
+    // On shared pages the auto-sync line would render B's settings on
+    // A's roster, which is misleading. Hide the line for shared
+    // accounts; rely on the title's "Shared by ..." badge to signal
+    // why sync info is absent.
+    const isShared = !!account?._sharedFrom;
+    if (!isShared && userMeta?.autoManageEnabled) {
       const lastSyncAt = Number(userMeta?.lastAutoManageSyncAt) || 0;
       const lastSync =
         lastSyncAt > 0
@@ -237,10 +243,17 @@ function createRaidStatusView(deps) {
           ? UI.icons.partial
           : UI.icons.pending;
 
+    // Shared rosters surface with a 👥 header icon (instead of the
+    // owner-roster 👑/📁) and a "Shared by ..." suffix so the viewer
+    // immediately reads the page as not-their-own. Owner-A's auto-sync
+    // state is also hidden because the badge belongs to A's account
+    // settings, not B's; rendering A's setting on B's view would mislead.
+    const sharedFrom = account._sharedFrom;
+    const isShared = !!sharedFrom;
     // Page counter lives in the footer (next to done/partial/pending
     // counts) per /raid-check parity; title stays as just icon + account
     // so the identity of the rendered roster is the sole headline.
-    const headerIcon = pickRosterHeaderIcon(userMeta?.discordId);
+    const headerIcon = isShared ? "👥" : pickRosterHeaderIcon(userMeta?.discordId);
     // Inline `· 📝 Auto-sync OFF` badge when the rendered subject hasn't
     // opted into /raid-auto-manage. Useful in 2 contexts that share this
     // builder: (1) /raid-status caller seeing their own roster with a
@@ -248,9 +261,16 @@ function createRaidStatusView(deps) {
     // across guild members, immediately spotting who requires manual
     // Edit. Silent when opted-in to keep the title lean for the common
     // case. Strict `=== false` so a missing/unknown flag (legacy doc)
-    // doesn't false-positive into showing OFF.
-    const autoSyncBadge = userMeta?.autoManageEnabled === false ? " · 📝 Auto-sync OFF" : "";
-    const title = `${titleIcon} ${headerIcon} ${account.accountName}${autoSyncBadge}`;
+    // doesn't false-positive into showing OFF. Skipped on shared pages
+    // because the auto-sync flag belongs to owner A's settings, not B's.
+    const autoSyncBadge =
+      !isShared && userMeta?.autoManageEnabled === false
+        ? " · 📝 Auto-sync OFF"
+        : "";
+    const sharedBadge = isShared
+      ? ` · 👥 Shared by ${sharedFrom.ownerLabel || "(unknown)"} (${sharedFrom.accessLevel || "edit"})`
+      : "";
+    const title = `${titleIcon} ${headerIcon} ${account.accountName}${autoSyncBadge}${sharedBadge}`;
 
     // Description used to lead with a per-account "N chars · X/Y raids
     // done · K in progress" line, but those counts are now carried by
