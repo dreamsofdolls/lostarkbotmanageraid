@@ -55,6 +55,75 @@ const RAID_GATES = {
   serca: ["G1", "G2"],
 };
 
+// LOA Logs stores numeric class IDs in encounter_preview.players as
+// "classId:name". Map those IDs to the local PNG assets used by the bot's
+// Discord emoji bootstrap.
+const CLASS_ICON_BY_ID = {
+  102: "berserker",
+  103: "destroyer",
+  104: "warlord",
+  105: "holyknight",
+  112: "berserker_female",
+  113: "holyknight_female",
+  202: "arcana",
+  203: "summoner",
+  204: "bard",
+  205: "elemental_master",
+  302: "battle_master",
+  303: "infighter",
+  304: "soulmaster",
+  305: "lance_master",
+  312: "battle_master_male",
+  313: "infighter_male",
+  402: "blade",
+  403: "demonic",
+  404: "reaper",
+  405: "soul_eater",
+  502: "hawk_eye",
+  503: "devil_hunter",
+  504: "blaster",
+  505: "scouter",
+  512: "devil_hunter_female",
+  602: "yinyangshi",
+  603: "weather_artist",
+  604: "alchemist",
+  701: "dragon_knight",
+  702: "dragon_knight",
+};
+
+const CLASS_LABEL_BY_ID = {
+  102: "Berserker",
+  103: "Destroyer",
+  104: "Gunlancer",
+  105: "Paladin",
+  112: "Slayer",
+  113: "Valkyrie",
+  202: "Arcanist",
+  203: "Summoner",
+  204: "Bard",
+  205: "Sorceress",
+  302: "Wardancer",
+  303: "Scrapper",
+  304: "Soulfist",
+  305: "Glaivier",
+  312: "Striker",
+  313: "Breaker",
+  402: "Deathblade",
+  403: "Shadowhunter",
+  404: "Reaper",
+  405: "Souleater",
+  502: "Sharpshooter",
+  503: "Deadeye",
+  504: "Artillerist",
+  505: "Machinist",
+  512: "Gunslinger",
+  602: "Artist",
+  603: "Aeromancer",
+  604: "Wildsoul",
+  701: "Guardian Knight",
+  702: "Guardian Knight",
+};
+
 // Difficulty string -> internal modeKey. Permissive on input because
 // LOA Logs has shifted strings between versions (Trial -> Inferno ->
 // Nightmare). Mirror of bot/services/local-sync/apply.js.
@@ -79,6 +148,29 @@ export function getGatesForRaid(raidKey) {
   return RAID_GATES[raidKey] || ["G1", "G2"];
 }
 
+function normalizeCharName(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+export function getClassInfoForChar(playersRaw, charName) {
+  const target = normalizeCharName(charName);
+  if (!target) return null;
+  for (const item of String(playersRaw || "").split(",")) {
+    const match = /^(\d+):(.*)$/.exec(item.trim());
+    if (!match) continue;
+    const [, classId, name] = match;
+    if (normalizeCharName(name) !== target) continue;
+    const iconName = CLASS_ICON_BY_ID[classId];
+    if (!iconName) return { classId, className: CLASS_LABEL_BY_ID[classId] || "" };
+    return {
+      classId,
+      className: CLASS_LABEL_BY_ID[classId] || iconName,
+      classIcon: `/sync/class-icons/${iconName}.png`,
+    };
+  }
+  return null;
+}
+
 /**
  * Bucketize raw encounter rows into one entry per (char, raid, mode)
  * tuple, keeping the highest gate cleared. Mirror of
@@ -86,7 +178,7 @@ export function getGatesForRaid(raidKey) {
  * EXACT shape the server will receive (no surprise during sync).
  *
  * Input row shape (from sqlite3.exec callback):
- *   [boss, difficulty, cleared, charName, count, lastMs]
+ *   [boss, difficulty, cleared, charName, count, lastMs, players]
  *
  * Output: array of buckets:
  *   {
@@ -100,7 +192,7 @@ export function getGatesForRaid(raidKey) {
 export function bucketize(rows) {
   const map = new Map();
   for (const row of rows) {
-    const [boss, difficulty, cleared, charName, _count, lastMs] = row;
+    const [boss, difficulty, cleared, charName, _count, lastMs, playersRaw] = row;
     if (Number(cleared) !== 1) continue;
     if (!charName) continue;
     const gateInfo = getRaidGateForBoss(boss);
@@ -111,10 +203,14 @@ export function bucketize(rows) {
     if (gateIndex < 0) continue;
     const bucketKey = `${String(charName).toLowerCase()}::${gateInfo.raidKey}::${modeKey}`;
     const lastClearMs = Number(lastMs) || 0;
+    const classInfo = getClassInfoForChar(playersRaw, charName);
     const existing = map.get(bucketKey);
     if (!existing || gateIndex > existing.gateIndex) {
       map.set(bucketKey, {
         charName,
+        classId: classInfo?.classId || "",
+        className: classInfo?.className || "",
+        classIcon: classInfo?.classIcon || "",
         raidKey: gateInfo.raidKey,
         modeKey,
         gateIndex,
@@ -125,6 +221,11 @@ export function bucketize(rows) {
       });
     } else if (gateIndex === existing.gateIndex && lastClearMs > existing.lastClearMs) {
       existing.lastClearMs = lastClearMs;
+      if (!existing.classIcon && classInfo?.classIcon) {
+        existing.classId = classInfo.classId || "";
+        existing.className = classInfo.className || "";
+        existing.classIcon = classInfo.classIcon || "";
+      }
     }
   }
   return [...map.values()];

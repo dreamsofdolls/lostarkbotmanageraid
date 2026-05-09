@@ -55,16 +55,23 @@ function sign(payloadB64) {
  * to 30 minutes which is the safe upper bound for "user opens DM, opens
  * link, drops file, hits sync".
  *
+ * Optional `lang` (Phase i18n): when present, encoded in the payload so
+ * the web companion can render in the user's preferred language without
+ * a separate round-trip. Stale at most 30 minutes (token TTL) - if user
+ * runs /raid-language after mint and reuses the URL, the page renders
+ * in the old lang until a fresh mint via /raid-auto-manage local-on.
+ *
  * Throws if the secret env var is unset - callers should let this
  * propagate to the user as a "feature not configured" error rather than
  * silently fall back to insecure behavior.
  */
-function mintToken(discordId, ttlSec = DEFAULT_TTL_SEC) {
+function mintToken(discordId, ttlSec = DEFAULT_TTL_SEC, lang = null) {
   if (!discordId || typeof discordId !== "string") {
     throw new Error("[local-sync/tokens] mintToken: discordId required");
   }
   const now = Math.floor(Date.now() / 1000);
   const payload = { discordId, iat: now, exp: now + Math.max(60, Number(ttlSec) || DEFAULT_TTL_SEC) };
+  if (typeof lang === "string" && lang) payload.lang = lang;
   const payloadB64 = base64url(JSON.stringify(payload));
   const sig = sign(payloadB64);
   return `${payloadB64}.${sig}`;

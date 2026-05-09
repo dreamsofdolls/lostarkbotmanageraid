@@ -97,7 +97,10 @@ function createStuckNudgeButtonHandler({ EmbedBuilder, ActionRowBuilder, ButtonB
     let companionUrl = null;
     if (baseUrl) {
       try {
-        const token = mintLocalSyncToken(targetDiscordId);
+        // clickerLang resolved earlier via getUserLanguage(clickerId);
+        // clickerId === targetDiscordId by this point (verified above),
+        // so passing clickerLang is correct for the target's preference.
+        const token = mintLocalSyncToken(targetDiscordId, undefined, clickerLang);
         companionUrl = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
       } catch (err) {
         console.warn("[stuck-nudge] token mint failed:", err?.message || err);

@@ -125,6 +125,22 @@ table th, table td {
 }
 table th { color: var(--text-dim); font-weight: 600; }
 
+.char-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.class-icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #14171a;
+}
+
 /* Per-raid preview group: each (raid, mode) gets its own card-like
    block with a heading + small table. Stacks vertically inside the
    main preview-output container; spacing between groups keeps the
