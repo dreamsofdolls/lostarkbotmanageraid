@@ -163,8 +163,8 @@ test("raid-check not-eligible note explains below-min chars clearly", () => {
     notEligibleReason: "low",
   });
 
-  assert.match(fieldValue, /Not eligible yet/);
-  assert.match(fieldValue, /below min/);
+  assert.match(fieldValue, /Chưa đủ điều kiện/);
+  assert.match(fieldValue, /thấp hơn min/);
 });
 
 test("raid-check not-eligible note explains out-grown chars clearly", () => {
@@ -174,7 +174,7 @@ test("raid-check not-eligible note explains out-grown chars clearly", () => {
     notEligibleReason: "high",
   });
 
-  assert.match(fieldValue, /Not eligible yet/);
+  assert.match(fieldValue, /Chưa đủ điều kiện/);
   assert.match(fieldValue, /out-grown/);
 });
 
@@ -1099,13 +1099,13 @@ test("buildAccountFreshnessLine renders both refresh and sync badges with countd
   const line = __test.buildAccountFreshnessLine(account, userMeta);
   // Discord native timestamps render `<t:UNIX:R>` client-side; tests just
   // assert the shape is present + UNIX value is in the right ballpark.
-  // Wording uses "Refresh ready" / "Sync ready" + timestamp so both future
+  // Wording uses "Refresh sẵn sàng" / "Sync sẵn sàng" + timestamp so both future
   // ("in 14s") and past ("16s ago") tenses read cleanly without the
   // "Next sync ... ago" awkwardness.
-  assert.match(line, /Last updated <t:\d+:R>/);
-  assert.match(line, /Refresh ready <t:\d+:R>/);
-  assert.match(line, /Last synced <t:\d+:R>/);
-  assert.match(line, /Sync ready <t:\d+:R>/);
+  assert.match(line, /Cập nhật <t:\d+:R>/);
+  assert.match(line, /Refresh sẵn sàng <t:\d+:R>/);
+  assert.match(line, /Sync gần nhất <t:\d+:R>/);
+  assert.match(line, /Sync sẵn sàng <t:\d+:R>/);
 });
 
 test("buildAccountFreshnessLine shows ready marker when cooldown expired", () => {
@@ -1117,8 +1117,8 @@ test("buildAccountFreshnessLine shows ready marker when cooldown expired", () =>
     lastAutoManageAttemptAt: now - 30 * 60_000, // 15m cooldown expired
   };
   const line = __test.buildAccountFreshnessLine(account, userMeta);
-  assert.match(line, /Refresh ready/);
-  assert.match(line, /Sync ready/);
+  assert.match(line, /Refresh sẵn sàng/);
+  assert.match(line, /Sync sẵn sàng/);
 });
 
 test("buildAccountFreshnessLine honors short refresh failure cooldown", () => {
@@ -1128,15 +1128,15 @@ test("buildAccountFreshnessLine honors short refresh failure cooldown", () => {
     lastRefreshAttemptAt: now - 2 * 60_000, // but a failed attempt is still cooling down
   };
   const line = __test.buildAccountFreshnessLine(account, { autoManageEnabled: false });
-  assert.match(line, /Last updated <t:\d+:R>/);
-  assert.match(line, /⏳ Refresh ready <t:\d+:R>/);
-  assert.doesNotMatch(line, /✅ Refresh ready/);
+  assert.match(line, /Cập nhật <t:\d+:R>/);
+  assert.match(line, /⏳ Refresh sẵn sàng <t:\d+:R>/);
+  assert.doesNotMatch(line, /✅ Refresh sẵn sàng/);
 });
 
 test("buildAccountFreshnessLine omits sync badge when auto-manage is off", () => {
   const account = { lastRefreshedAt: Date.now() - 60_000 };
   const line = __test.buildAccountFreshnessLine(account, { autoManageEnabled: false });
-  assert.match(line, /Last updated/);
+  assert.match(line, /Cập nhật/);
   assert.doesNotMatch(line, /synced/);
   assert.doesNotMatch(line, /Sync/);
 });
@@ -1180,7 +1180,7 @@ test("buildAccountFreshnessLine uses the 15s sync cooldown for managers", () => 
   // Manager cooldown 15s; with the move to Discord native timestamps the
   // string is `<t:UNIX:R>` and Discord renders the relative text. Verify
   // the next-sync UNIX is within ~15s of now (manager cooldown window).
-  const nextMatch = line.match(/⏳ Sync ready <t:(\d+):R>/);
+  const nextMatch = line.match(/⏳ Sync sẵn sàng <t:(\d+):R>/);
   assert.ok(nextMatch, `expected Next sync timestamp; got: ${line}`);
   const nextEligibleMs = Number(nextMatch[1]) * 1000;
   const remainingMs = nextEligibleMs - now;
@@ -1199,13 +1199,13 @@ test("buildAccountFreshnessLine keeps the 10m sync cooldown for non-managers", (
   const line = __test.buildAccountFreshnessLine(account, userMeta);
   // 7m remaining, encoded as Unix seconds. ~5-9 minute window allows
   // millisecond drift between line render + assertion.
-  const nextMatch = line.match(/⏳ Sync ready <t:(\d+):R>/);
+  const nextMatch = line.match(/⏳ Sync sẵn sàng <t:(\d+):R>/);
   assert.ok(nextMatch);
   const remainingMs = Number(nextMatch[1]) * 1000 - now;
   assert.ok(remainingMs > 5 * 60_000 && remainingMs < 9 * 60_000);
 });
 
-test("buildAccountFreshnessLine flips to Sync ready once the manager 15s window expires", () => {
+test("buildAccountFreshnessLine flips to Sync sẵn sàng once the manager 15s window expires", () => {
   const now = Date.now();
   const account = { lastRefreshedAt: now - 60_000 };
   const userMeta = {
@@ -1215,7 +1215,7 @@ test("buildAccountFreshnessLine flips to Sync ready once the manager 15s window 
     lastAutoManageAttemptAt: now - 30_000, // past the 15s manager window
   };
   const line = __test.buildAccountFreshnessLine(account, userMeta);
-  assert.match(line, /Sync ready/);
+  assert.match(line, /Sync sẵn sàng/);
 });
 
 test("REGRESSION: raid-check Sync/Edit flows request fresh snapshot data", () => {

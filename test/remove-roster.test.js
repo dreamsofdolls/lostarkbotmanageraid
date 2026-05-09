@@ -244,7 +244,7 @@ test("remove-roster: rejects remove_char without a character argument", async ()
   assert.match(embedJson.title, /character/i);
 });
 
-test("remove-roster: surfaces 'No Roster' when user has no accounts", async () => {
+test("remove-roster: surfaces 'Chưa có roster' when user has no accounts", async () => {
   const { factory } = makeFactory();
   // No user doc seeded.
 
@@ -255,10 +255,10 @@ test("remove-roster: surfaces 'No Roster' when user has no accounts", async () =
 
   const replyArg = interaction._calls.reply[0];
   const embedJson = replyArg.embeds[0].toJSON();
-  assert.match(embedJson.title, /No Roster/);
+  assert.match(embedJson.title, /Chưa có roster/);
 });
 
-test("remove-roster: surfaces 'Roster Not Found' when accountName mismatch", async () => {
+test("remove-roster: surfaces 'Không tìm thấy roster' when accountName mismatch", async () => {
   const { factory, docs } = makeFactory();
   seedUser(docs, [
     { accountName: "Alpha", characters: [makeChar("Cyrano")] },
@@ -271,7 +271,7 @@ test("remove-roster: surfaces 'Roster Not Found' when accountName mismatch", asy
 
   const replyArg = interaction._calls.reply[0];
   const embedJson = replyArg.embeds[0].toJSON();
-  assert.match(embedJson.title, /Roster Not Found/);
+  assert.match(embedJson.title, /Không tìm thấy roster/);
   // Original account untouched.
   assert.equal(docs.get("user-1").accounts.length, 1);
 });
@@ -289,7 +289,7 @@ test("remove-roster: surfaces 'Character Not Found' when char missing in roster"
 
   const replyArg = interaction._calls.reply[0];
   const embedJson = replyArg.embeds[0].toJSON();
-  assert.match(embedJson.title, /Character Not Found/);
+  assert.match(embedJson.title, /Không tìm thấy character/);
   // Roster + char untouched.
   assert.equal(docs.get("user-1").accounts[0].characters.length, 1);
 });

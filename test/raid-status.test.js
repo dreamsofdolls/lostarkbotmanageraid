@@ -129,7 +129,7 @@ test("buildStatusFooterText: page counter appears only when totalPages > 1", () 
     { progress: { completed: 1, partial: 0, total: 1 } },
     { pageIndex: 1, totalPages: 3 }
   );
-  assert.match(multi, /Page 2\/3/);
+  assert.match(multi, /Trang 2\/3/);
 });
 
 test("buildStatusFooterText: handles missing progress field defensively", () => {
@@ -184,9 +184,9 @@ test("buildAccountPageEmbed: empty roster surfaces an explicit notice (not a bla
   assert.match(json.title, /Alpha/);
   // Either a description note or a fields entry should signal the empty state.
   const hasEmptyNotice =
-    /No characters/i.test(json.description || "") ||
-    (json.fields || []).some((f) => /No characters/i.test(f.value));
-  assert.ok(hasEmptyNotice, "empty roster should render a 'No characters' notice");
+    /Chưa có character/i.test(json.description || "") ||
+    (json.fields || []).some((f) => /Chưa có character/i.test(f.value));
+  assert.ok(hasEmptyNotice, "empty roster should render a 'Chưa có character' notice");
 });
 
 test("buildAccountPageEmbed: title icon flips to 'done' when every raid is completed", () => {
@@ -240,10 +240,10 @@ test("buildAccountPageEmbed: page counter shows in footer when totalPages > 1", 
     { progress: { completed: 0, partial: 0, total: 0 }, characters: 0 },
     NOOP_GET_RAIDS_FOR
   );
-  assert.match(embed.toJSON().footer.text, /Page 2\/3/);
+  assert.match(embed.toJSON().footer.text, /Trang 2\/3/);
 });
 
-test("buildAccountPageEmbed: includes 'All accounts' rollup line in description when paginating", () => {
+test("buildAccountPageEmbed: includes 'Tổng tất cả roster' rollup line in description when paginating", () => {
   // Multi-account caller flips between pages; the cross-account rollup
   // helps them keep a sense of overall progress.
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
@@ -255,12 +255,12 @@ test("buildAccountPageEmbed: includes 'All accounts' rollup line in description 
     NOOP_GET_RAIDS_FOR
   );
   const json = embed.toJSON();
-  assert.match(json.description, /All accounts/);
-  assert.match(json.description, /12.*chars/);
+  assert.match(json.description, /Tổng tất cả roster/);
+  assert.match(json.description, /12.*char/);
   assert.match(json.description, /5\/8/);
 });
 
-test("buildAccountPageEmbed: omits 'All accounts' rollup on a single-page roster", () => {
+test("buildAccountPageEmbed: omits 'Tổng tất cả roster' rollup on a single-page roster", () => {
   // No need for the cross-account context when there's only one page.
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
   const embed = buildAccountPageEmbed(
@@ -271,7 +271,7 @@ test("buildAccountPageEmbed: omits 'All accounts' rollup on a single-page roster
     NOOP_GET_RAIDS_FOR
   );
   const desc = embed.toJSON().description || "";
-  assert.doesNotMatch(desc, /All accounts/);
+  assert.doesNotMatch(desc, /Tổng tất cả roster/);
 });
 
 test("buildAccountPageEmbed: hideIneligibleChars filter swaps roster body for an empty notice when all chars filtered out", () => {
@@ -294,7 +294,7 @@ test("buildAccountPageEmbed: hideIneligibleChars filter swaps roster body for an
   );
   const json = embed.toJSON();
   const hasIneligibleNotice = (json.fields || []).some((f) =>
-    /eligible/i.test(f.value || "")
+    /đủ điều kiện/i.test(f.value || "")
   );
   assert.ok(hasIneligibleNotice, "should surface an 'ineligible for this raid' notice");
 });
@@ -346,7 +346,7 @@ test("buildAccountPageEmbed: appends ' · 📝 Auto-sync OFF' badge to title whe
     NOOP_GET_RAIDS_FOR,
     { discordId: "regular-user", autoManageEnabled: false }
   );
-  assert.match(embed.toJSON().title, /· 📝 Auto-sync OFF/);
+  assert.match(embed.toJSON().title, /· 📝 Auto-sync TẮT/);
 });
 
 test("buildAccountPageEmbed: omits Auto-sync OFF badge when autoManageEnabled === true (silent on opted-in)", () => {
@@ -359,7 +359,7 @@ test("buildAccountPageEmbed: omits Auto-sync OFF badge when autoManageEnabled ==
     NOOP_GET_RAIDS_FOR,
     { discordId: "regular-user", autoManageEnabled: true }
   );
-  assert.doesNotMatch(embed.toJSON().title, /Auto-sync OFF/);
+  assert.doesNotMatch(embed.toJSON().title, /Auto-sync TẮT/);
 });
 
 test("buildAccountPageEmbed: omits Auto-sync OFF badge for legacy doc with undefined autoManageEnabled", () => {
@@ -375,7 +375,7 @@ test("buildAccountPageEmbed: omits Auto-sync OFF badge for legacy doc with undef
     NOOP_GET_RAIDS_FOR,
     { discordId: "regular-user" }
   );
-  assert.doesNotMatch(embed.toJSON().title, /Auto-sync OFF/);
+  assert.doesNotMatch(embed.toJSON().title, /Auto-sync TẮT/);
 });
 
 // --------- Gold tracking (added 2026-05-05) ---------
@@ -701,11 +701,11 @@ test("buildAccountPageEmbed: per-character field omits the gold line when char h
   );
   const charField = embed.toJSON().fields.find((f) => /LowGear/.test(f.name));
   assert.ok(charField, "low-gear char field should still render");
-  assert.match(charField.value, /Not eligible/);
+  assert.match(charField.value, /Chưa đủ điều kiện/);
   assert.doesNotMatch(charField.value, /💰/);
 });
 
-test("buildAccountPageEmbed: appends per-account 'Earned this week' rollup to description when account has gold-earners", () => {
+test("buildAccountPageEmbed: appends per-account 'Tuần này đã kiếm' rollup to description when account has gold-earners", () => {
   const char = makeChar("Earner", 1730, { isGoldEarner: true });
   const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
   const embed = buildAccountPageEmbed(
@@ -717,7 +717,7 @@ test("buildAccountPageEmbed: appends per-account 'Earned this week' rollup to de
   );
   const desc = embed.toJSON().description || "";
   // 1730 gold-earner = 138000G total potential, 0 earned.
-  assert.match(desc, /💰 Earned this week:/);
+  assert.match(desc, /💰 Tuần này đã kiếm:/);
   assert.match(desc, /138,000G/);
 });
 
@@ -734,11 +734,11 @@ test("buildAccountPageEmbed: omits per-account rollup when account has no gold-e
     getStatusRaidsForCharacter
   );
   const desc = embed.toJSON().description || "";
-  assert.doesNotMatch(desc, /Earned this week/);
+  assert.doesNotMatch(desc, /Tuần này đã kiếm/);
 });
 
 test("buildAccountPageEmbed: cross-account 🌐 line tails the GRAND total gold across every roster when paginating", () => {
-  // The per-account 'Earned this week' line below shows the current
+  // The per-account 'Tuần này đã kiếm' line below shows the current
   // page's account only; the 🌐 tail is the cross-account aggregate.
   // Both can show the same number when only one account has earners,
   // but with multiple accounts marked the tail diverges and acts as
@@ -756,7 +756,7 @@ test("buildAccountPageEmbed: cross-account 🌐 line tails the GRAND total gold 
     NOOP_GET_RAIDS_FOR
   );
   const desc = embed.toJSON().description || "";
-  assert.match(desc, /All accounts/);
+  assert.match(desc, /Tổng tất cả roster/);
   assert.match(desc, /5\/8/);
   // 🌐 line carries the gold tail in bold form for the grand total.
   assert.match(desc, /💰 \*\*50,000G \/ 200,000G\*\*/);
@@ -779,7 +779,7 @@ test("buildAccountPageEmbed: cross-account 🌐 line omits gold tail when grand 
     NOOP_GET_RAIDS_FOR
   );
   const desc = embed.toJSON().description || "";
-  assert.match(desc, /All accounts/);
+  assert.match(desc, /Tổng tất cả roster/);
   assert.doesNotMatch(desc, /All accounts.*💰/);
 });
 
