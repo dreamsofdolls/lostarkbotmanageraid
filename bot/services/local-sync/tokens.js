@@ -10,7 +10,7 @@ const crypto = require("node:crypto");
  *
  *   <payload-b64url>.<signature-b64url>
  *
- * Payload JSON: { discordId, iat, exp }. Signature: HMAC-SHA256 over
+ * Payload JSON: { discordId, iat, exp, nonce }. Signature: HMAC-SHA256 over
  * the payload segment with a secret from env. Verification is constant-
  * time (timingSafeEqual) so a malformed token can't leak length info.
  *
@@ -70,7 +70,12 @@ function mintToken(discordId, ttlSec = DEFAULT_TTL_SEC, lang = null) {
     throw new Error("[local-sync/tokens] mintToken: discordId required");
   }
   const now = Math.floor(Date.now() / 1000);
-  const payload = { discordId, iat: now, exp: now + Math.max(60, Number(ttlSec) || DEFAULT_TTL_SEC) };
+  const payload = {
+    discordId,
+    iat: now,
+    exp: now + Math.max(60, Number(ttlSec) || DEFAULT_TTL_SEC),
+    nonce: crypto.randomBytes(8).toString("hex"),
+  };
   if (typeof lang === "string" && lang) payload.lang = lang;
   const payloadB64 = base64url(JSON.stringify(payload));
   const sig = sign(payloadB64);
@@ -126,13 +131,21 @@ function verifyToken(token) {
   return { ok: true, payload };
 }
 
+function isCurrentStoredToken(userDoc, token, nowSec = Math.floor(Date.now() / 1000)) {
+  // Backward compatibility for links minted before token persistence existed.
+  // Once a stored token exists, rotation/reset can hard-revoke older URLs.
+  if (!userDoc?.lastLocalSyncToken) return true;
+  if (userDoc.lastLocalSyncToken !== token) return false;
+  const expAt = Number(userDoc.lastLocalSyncTokenExpAt) || 0;
+  return !expAt || expAt >= nowSec;
+}
+
 /**
  * Mint + persist on User. Used by /raid-auto-manage local-on,
  * /raid-status local-sync "New link" button, stuck-nudge button -
  * any flow that explicitly produces a fresh token. Replaces any
- * existing stored token (rotation semantics: old token still valid
- * until natural exp, but no longer the "current" one /raid-status
- * resumes to).
+ * existing stored token. Endpoints require this current stored token when
+ * one exists, so rotation/reset hard-revokes older URLs immediately.
  *
  * Returns the minted token string. Throws on mint failure (env unset)
  * or DB update failure.
@@ -177,6 +190,7 @@ async function getOrMintLocalSyncToken(discordId, lang, deps = {}) {
 module.exports = {
   mintToken,
   verifyToken,
+  isCurrentStoredToken,
   rotateLocalSyncToken,
   getOrMintLocalSyncToken,
   DEFAULT_TTL_SEC,

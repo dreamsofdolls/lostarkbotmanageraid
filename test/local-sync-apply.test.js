@@ -151,6 +151,19 @@ test("applyLocalSyncDeltas - cumulative gate expansion: G2 cleared writes [G1, G
   assert.equal(applyStub.calls[0].statusType, "process");
 });
 
+test("applyLocalSyncDeltas - write calls can require local-sync to still be enabled", async () => {
+  const applyStub = makeApplyStub(() => ({ syncDisabled: true }));
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Brelshaza, Ember in the Ashes", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 1 },
+  ], makeDeps(applyStub, { requireLocalSyncEnabled: true }));
+
+  assert.equal(applyStub.calls.length, 1);
+  assert.equal(applyStub.calls[0].requireLocalSyncEnabled, true);
+  assert.equal(result.applied.length, 0);
+  assert.equal(result.rejected.length, 1);
+  assert.equal(result.rejected[0].reason, "local_sync_disabled");
+});
+
 test("applyLocalSyncDeltas - unmapped boss bucketed without calling apply", async () => {
   const applyStub = makeApplyStub();
   const result = await applyLocalSyncDeltas("u1", [

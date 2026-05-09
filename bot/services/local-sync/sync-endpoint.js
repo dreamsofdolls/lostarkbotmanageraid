@@ -1,6 +1,11 @@
 "use strict";
 
-const { verifyToken, applyLocalSyncDeltas, recordLocalSyncSuccess } = require("./index");
+const {
+  verifyToken,
+  isCurrentStoredToken,
+  applyLocalSyncDeltas,
+  recordLocalSyncSuccess,
+} = require("./index");
 const { getRaidRequirementMap } = require("../../models/Raid");
 
 /**
@@ -124,7 +129,7 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId }) {
     let userState;
     try {
       userState = await User.findOne({ discordId })
-        .select("localSyncEnabled accounts")
+        .select("localSyncEnabled lastLocalSyncToken lastLocalSyncTokenExpAt accounts")
         .lean();
     } catch (err) {
       console.error("[sync-endpoint] state read failed:", err?.message || err);
@@ -138,6 +143,13 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId }) {
       });
       return;
     }
+    if (!isCurrentStoredToken(userState, token)) {
+      send(res, 401, {
+        ok: false,
+        error: "token revoked - open a new local-sync link",
+      });
+      return;
+    }
 
     // 4. Apply.
     let summary;
@@ -146,10 +158,19 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId }) {
         applyRaidSetForDiscordId,
         getRaidRequirementMap,
         userDoc: userState,
+        requireLocalSyncEnabled: true,
       });
     } catch (err) {
       console.error("[sync-endpoint] apply failed:", err?.message || err);
       send(res, 500, { ok: false, error: err.message || "apply failed" });
+      return;
+    }
+    if ((summary?.rejected || []).some((item) => item.reason === "local_sync_disabled")) {
+      send(res, 409, {
+        ok: false,
+        error: "local-sync disabled - run /raid-auto-manage action:local-on to re-enable",
+        ...summary,
+      });
       return;
     }
 

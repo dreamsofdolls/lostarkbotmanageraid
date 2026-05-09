@@ -831,6 +831,8 @@ module.exports = {
       successTitle: "Reset xong",
       successDescription: "Đã wipe sync state + raid progress của cậu nha~ Roster, char, tasks giữ nguyên. Chạy `/raid-auto-manage action:on` (bible) hoặc `action:local-on` (web companion) để sync replay từ đầu.",
       failTitle: "Reset fail",
+      inFlightTitle: "Reset đang đợi sync khác",
+      inFlightDescription: "Đang có một sync Bible của cậu chạy rồi. Đợi sync đó xong rồi reset lại nha, để tránh vừa wipe xong lại bị sync cũ ghi đè.",
       failDescription: "Artist gặp lỗi khi wipe data: `{error}`. Thử lại sau vài giây nha. Data hiện tại có thể đã wipe 1 phần - check `/raid-status` xem state.",
     },
     dm: {

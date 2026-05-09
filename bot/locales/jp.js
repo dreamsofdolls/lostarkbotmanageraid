@@ -808,6 +808,8 @@ module.exports = {
       successTitle: "リセット完了ですわ♪",
       successDescription: "同期状態とレイド進捗をクリアしましたわ～ ロスター、キャラ、タスクは無事ですわ♪ `/raid-auto-manage action:on` (bible) または `action:local-on` (Web companion) を実行して、ゼロから再同期してくださいませ。",
       failTitle: "リセットに失敗しましたわ",
+      inFlightTitle: "別の同期が終わるまでリセット待ちですわ",
+      inFlightDescription: "あなたのロスターで Bible 同期がまだ動いていますわ。その同期が終わってからもう一度リセットしてくださいませ。古い同期結果がリセット後に書き戻されるのを防ぎますわ。",
       failDescription: "アーティスト、データの消去で失敗しましたわ: `{error}`。 数秒後にもう一度試してくださいませ。 現在のデータは部分的に消えている可能性がありますわ - `/raid-status` で状態を確認してね。",
     },
     dm: {

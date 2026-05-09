@@ -1,6 +1,6 @@
 "use strict";
 
-const { verifyToken } = require("./index");
+const { verifyToken, isCurrentStoredToken } = require("./index");
 
 /**
  * Build the `GET /api/me/roster` handler. Returns the user's slim roster
@@ -74,7 +74,7 @@ function createRosterEndpoint({ User }) {
     let userDoc;
     try {
       userDoc = await User.findOne({ discordId })
-        .select("discordId localSyncEnabled accounts.accountName accounts.characters.name accounts.characters.class accounts.characters.itemLevel accounts.characters.assignedRaids")
+        .select("discordId localSyncEnabled lastLocalSyncToken lastLocalSyncTokenExpAt accounts.accountName accounts.characters.name accounts.characters.class accounts.characters.itemLevel accounts.characters.assignedRaids")
         .lean();
     } catch (err) {
       console.error("[roster-endpoint] read failed:", err?.message || err);
@@ -92,6 +92,13 @@ function createRosterEndpoint({ User }) {
       send(res, 409, {
         ok: false,
         error: "local-sync disabled - run /raid-auto-manage action:local-on to re-enable",
+      });
+      return;
+    }
+    if (!isCurrentStoredToken(userDoc, token)) {
+      send(res, 401, {
+        ok: false,
+        error: "token revoked - open a new local-sync link",
       });
       return;
     }
