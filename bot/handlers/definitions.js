@@ -207,8 +207,22 @@ function createRaidCommandDefinitions({
         })
         .setRequired(true)
         .addChoices(
-          { name: "Remove entire roster", value: "remove_roster" },
-          { name: "Remove a single character", value: "remove_char" }
+          {
+            name: "Remove entire roster",
+            name_localizations: {
+              vi: "Xoá cả roster",
+              ja: "ロスター全体を削除",
+            },
+            value: "remove_roster",
+          },
+          {
+            name: "Remove a single character",
+            name_localizations: {
+              vi: "Xoá 1 character",
+              ja: "キャラ 1 体を削除",
+            },
+            value: "remove_char",
+          }
         )
     )
     .addStringOption((option) =>
@@ -384,8 +398,19 @@ function createRaidCommandDefinitions({
             })
             .setRequired(true)
             .addChoices(
-              { name: "Single character", value: "single" },
-              { name: "All characters in roster", value: "all" }
+              {
+                name: "Single character",
+                name_localizations: { vi: "Một character", ja: "単体キャラ" },
+                value: "single",
+              },
+              {
+                name: "All characters in roster",
+                name_localizations: {
+                  vi: "Mọi character trong roster",
+                  ja: "ロスター内の全キャラ",
+                },
+                value: "all",
+              }
             )
         )
         .addStringOption((opt) =>
@@ -421,8 +446,22 @@ function createRaidCommandDefinitions({
             })
             .setRequired(true)
             .addChoices(
-              { name: "Daily (17:00 VN)", value: "daily" },
-              { name: "Weekly (17:00 VN Wed)", value: "weekly" }
+              {
+                name: "Daily (17:00 VN)",
+                name_localizations: {
+                  vi: "Daily (reset 17:00 VN)",
+                  ja: "デイリー (リセット 19:00 JST)",
+                },
+                value: "daily",
+              },
+              {
+                name: "Weekly (17:00 VN Wed)",
+                name_localizations: {
+                  vi: "Weekly (reset 17:00 VN thứ 4)",
+                  ja: "ウィークリー (リセット 水曜 19:00 JST)",
+                },
+                value: "weekly",
+              }
             )
         )
         .addStringOption((opt) =>
@@ -562,8 +601,22 @@ function createRaidCommandDefinitions({
             })
             .setRequired(false)
             .addChoices(
-              { name: "Daily (17:00 VN)", value: "daily" },
-              { name: "Weekly (17:00 VN Wed)", value: "weekly" }
+              {
+                name: "Daily (17:00 VN)",
+                name_localizations: {
+                  vi: "Daily (reset 17:00 VN)",
+                  ja: "デイリー (リセット 19:00 JST)",
+                },
+                value: "daily",
+              },
+              {
+                name: "Weekly (17:00 VN Wed)",
+                name_localizations: {
+                  vi: "Weekly (reset 17:00 VN thứ 4)",
+                  ja: "ウィークリー (リセット 水曜 19:00 JST)",
+                },
+                value: "weekly",
+              }
             )
         )
         .addStringOption((opt) =>
@@ -664,8 +717,22 @@ function createRaidCommandDefinitions({
             })
             .setRequired(false)
             .addChoices(
-              { name: "edit (read + write)", value: "edit" },
-              { name: "view (read-only)", value: "view" }
+              {
+                name: "edit (read + write)",
+                name_localizations: {
+                  vi: "edit (xem + chỉnh sửa)",
+                  ja: "編集可 (閲覧 + 更新)",
+                },
+                value: "edit",
+              },
+              {
+                name: "view (read-only)",
+                name_localizations: {
+                  vi: "view (chỉ xem)",
+                  ja: "閲覧のみ",
+                },
+                value: "view",
+              }
             )
         )
     )
@@ -706,9 +773,27 @@ function createRaidCommandDefinitions({
             })
             .setRequired(false)
             .addChoices(
-              { name: "both", value: "both" },
-              { name: "out (shares you granted)", value: "out" },
-              { name: "in (shares you received)", value: "in" }
+              {
+                name: "both",
+                name_localizations: { vi: "cả hai", ja: "両方" },
+                value: "both",
+              },
+              {
+                name: "out (shares you granted)",
+                name_localizations: {
+                  vi: "out (cậu đã share cho người khác)",
+                  ja: "out (あなたが渡した分)",
+                },
+                value: "out",
+              },
+              {
+                name: "in (shares you received)",
+                name_localizations: {
+                  vi: "in (người khác share cho cậu)",
+                  ja: "in (あなたが受け取った分)",
+                },
+                value: "in",
+              }
             )
         )
     );
