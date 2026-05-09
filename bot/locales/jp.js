@@ -680,7 +680,7 @@ module.exports = {
   "raid-auto-manage": {
     invalid: {
       actionTitle: "アクションが無効ですわ",
-      actionDescription: "アクション `{action}` は受け付けられませんわ～ 使えるのは: `on` · `off` · `sync` · `status` · `local-on` · `local-off` ですよ♪ オートコンプリートが正しく案内してくれますわ。",
+      actionDescription: "アクション `{action}` は受け付けられませんわ～ 使えるのは: `on` · `off` · `sync` · `status` · `local-on` · `local-off` · `reset` ですよ♪ オートコンプリートが正しく案内してくれますわ。",
     },
     redundant: {
       alreadyOnTitle: "自動管理はもうオンですわ",
@@ -795,6 +795,20 @@ module.exports = {
       statusLabel: "status - 現在のオプトイン状態と最後の同期時刻を表示",
       localOnLabel: "local-on - ローカル同期にオプトイン (Web companion で encounters.db を読み込み)",
       localOffLabel: "local-off - ローカル同期を無効化",
+      resetLabel: "reset - 同期状態とレイド進捗を初期化 (工場出荷状態、再同期向け)",
+    },
+    reset: {
+      confirmTitle: "リセットしてもよろしいですか?",
+      confirmDescription: "リセットすると **すべてのレイド進捗** と同期状態をクリアしますわ (ゲートは0、自動管理はオフ、トークンは破棄)。 ロスター、キャラデータ、サイドタスク、ゴールド受け取りフラグは **そのまま残ります**わ♪ リセット後は `action:on` または `action:local-on` を実行して、ゼロから再同期してくださいませ。\n\nこの操作は **取り消せません** - 本当に大丈夫な時だけ確定してくださいね。",
+      confirmButton: "リセット確定",
+      cancelButton: "キャンセル",
+      cancelTitle: "リセットをキャンセルしましたわ",
+      cancelTimeoutTitle: "リセットをキャンセルしましたわ (タイムアウト)",
+      cancelDescription: "何も変えていませんわ。 データはそのままですよ♪",
+      successTitle: "リセット完了ですわ♪",
+      successDescription: "同期状態とレイド進捗をクリアしましたわ～ ロスター、キャラ、タスクは無事ですわ♪ `/raid-auto-manage action:on` (bible) または `action:local-on` (Web companion) を実行して、ゼロから再同期してくださいませ。",
+      failTitle: "リセットに失敗しましたわ",
+      failDescription: "アーティスト、データの消去で失敗しましたわ: `{error}`。 数秒後にもう一度試してくださいませ。 現在のデータは部分的に消えている可能性がありますわ - `/raid-status` で状態を確認してね。",
     },
     dm: {
       enable: {

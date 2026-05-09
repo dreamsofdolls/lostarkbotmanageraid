@@ -681,7 +681,7 @@ module.exports = {
   "raid-auto-manage": {
     invalid: {
       actionTitle: "Invalid action",
-      actionDescription: "Action `{action}` is not supported. Allowed: `on` · `off` · `sync` · `status` · `local-on` · `local-off`. Pick from the autocomplete suggestions.",
+      actionDescription: "Action `{action}` is not supported. Allowed: `on` · `off` · `sync` · `status` · `local-on` · `local-off` · `reset`. Pick from the autocomplete suggestions.",
     },
     redundant: {
       alreadyOnTitle: "Auto-manage is already on",
@@ -796,6 +796,20 @@ module.exports = {
       statusLabel: "status - show current opt-in + last sync time",
       localOnLabel: "local-on - opt-in to local-sync (read encounters.db via web)",
       localOffLabel: "local-off - disable local-sync",
+      resetLabel: "reset - wipe sync state + raid progress (factory reset, fresh re-sync)",
+    },
+    reset: {
+      confirmTitle: "Confirm reset?",
+      confirmDescription: "Reset will wipe **all your raid progress** and sync state (gates back to 0, auto-manage off, tokens revoked). Roster, character data, side tasks, gold-earner flag are **kept intact**. After reset, run `action:on` or `action:local-on` so Artist syncs replay from scratch.\n\nThis cannot be undone - confirm only if you're sure.",
+      confirmButton: "Confirm reset",
+      cancelButton: "Cancel",
+      cancelTitle: "Reset cancelled",
+      cancelTimeoutTitle: "Reset cancelled (timeout)",
+      cancelDescription: "Nothing changed. Your data is intact.",
+      successTitle: "Reset complete",
+      successDescription: "Your sync state and raid progress are wiped. Roster, characters, tasks are kept. Run `/raid-auto-manage action:on` (bible) or `action:local-on` (web companion) to sync replay from scratch.",
+      failTitle: "Reset failed",
+      failDescription: "Artist hit an error wiping data: `{error}`. Try again in a few seconds. Current data may be partially wiped - check `/raid-status` to see state.",
     },
     dm: {
       enable: {

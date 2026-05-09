@@ -703,7 +703,7 @@ module.exports = {
   "raid-auto-manage": {
     invalid: {
       actionTitle: "Action không hợp lệ",
-      actionDescription: "Action `{action}` Artist không nhận được. Cho phép: `on` · `off` · `sync` · `status` · `local-on` · `local-off`. Autocomplete sẽ gợi ý đúng nha.",
+      actionDescription: "Action `{action}` Artist không nhận được. Cho phép: `on` · `off` · `sync` · `status` · `local-on` · `local-off` · `reset`. Autocomplete sẽ gợi ý đúng nha.",
     },
     redundant: {
       alreadyOnTitle: "Auto-manage đang bật rồi",
@@ -818,6 +818,20 @@ module.exports = {
       statusLabel: "status - show current opt-in + last sync time",
       localOnLabel: "local-on - opt-in to local-sync (read encounters.db via web)",
       localOffLabel: "local-off - disable local-sync",
+      resetLabel: "reset - wipe sync state + raid progress (factory reset, fresh re-sync)",
+    },
+    reset: {
+      confirmTitle: "Xác nhận reset?",
+      confirmDescription: "Reset sẽ wipe **tất cả raid progress** + sync state của cậu (gates về 0, auto-manage tắt, token huỷ). Roster, char data, side tasks, gold-earner flag **giữ nguyên**. Sau reset gõ `action:on` hoặc `action:local-on` để Artist sync lại từ đầu.\n\nHành động này **không undo được** - confirm nếu chắc chắn nhé.",
+      confirmButton: "Xác nhận reset",
+      cancelButton: "Huỷ",
+      cancelTitle: "Đã huỷ reset",
+      cancelTimeoutTitle: "Đã huỷ reset (timeout)",
+      cancelDescription: "Không có gì thay đổi. Data của cậu nguyên vẹn.",
+      successTitle: "Reset xong",
+      successDescription: "Đã wipe sync state + raid progress của cậu nha~ Roster, char, tasks giữ nguyên. Chạy `/raid-auto-manage action:on` (bible) hoặc `action:local-on` (web companion) để sync replay từ đầu.",
+      failTitle: "Reset fail",
+      failDescription: "Artist gặp lỗi khi wipe data: `{error}`. Thử lại sau vài giây nha. Data hiện tại có thể đã wipe 1 phần - check `/raid-status` xem state.",
     },
     dm: {
       enable: {
