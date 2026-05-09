@@ -9,6 +9,7 @@
 // is greppable from any caller without spelunking through sub-modules.
 
 const state = require("./state");
+const tokens = require("./tokens");
 
 module.exports = {
   SYNC_MODE: state.SYNC_MODE,
@@ -18,4 +19,7 @@ module.exports = {
   resolveSyncMode: state.resolveSyncMode,
   getSyncStatus: state.getSyncStatus,
   recordLocalSyncSuccess: state.recordLocalSyncSuccess,
+  mintToken: tokens.mintToken,
+  verifyToken: tokens.verifyToken,
+  TOKEN_DEFAULT_TTL_SEC: tokens.DEFAULT_TTL_SEC,
 };

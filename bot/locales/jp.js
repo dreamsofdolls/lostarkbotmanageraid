@@ -683,6 +683,8 @@ module.exports = {
     localEnable: {
       successTitle: "ローカル同期を有効にしましたわ♪",
       successDescription: "ローカル同期モードをオンにしましたわ～♪ Web companion サイトはアーティストが構築中ですの (Phase 3) - 完成したらブラウザで `encounters.db` をドラッグ＆ドロップできる専用リンクを DM で送りますわ♪ それまでは `/raid-set` で手動更新できますわ。 やめたい時は `action:local-off` を呼んでね。",
+      successDescriptionWithLink: "ローカル同期モードをオンにしましたわ♪ 下の **Open Web Companion** ボタンを押してブラウザで companion ページを開いてくださいませ - `%localappdata%\\LOA Logs\\` の `encounters.db` をドラッグ＆ドロップすればアーティストがデータをプレビューできますわ♪ リンクは30分有効、期限切れたらもう一度 `action:local-on` を呼んでね。 やめたい時は `action:local-off` ですわ。",
+      openButtonLabel: "Web Companion を開く",
     },
     localDisable: {
       title: "ローカル同期を無効にしましたわ",

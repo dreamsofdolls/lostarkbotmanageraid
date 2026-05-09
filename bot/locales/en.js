@@ -684,6 +684,8 @@ module.exports = {
     localEnable: {
       successTitle: "Local-sync enabled",
       successDescription: "Local-sync mode is on. The web companion site is still being built (Phase 3) - once it's live, Artist will DM you a personal link to drag-and-drop your `encounters.db` file. Until then, manual `/raid-set` still works. Change your mind? `action:local-off`.",
+      successDescriptionWithLink: "Local-sync mode is on. Click **Open Web Companion** below to open the companion page in your browser - drag-and-drop your `encounters.db` file (at `%localappdata%\\LOA Logs\\`) and Artist previews your data. The link is valid for 30 minutes; if it expires, run `action:local-on` again. Change your mind? `action:local-off`.",
+      openButtonLabel: "Open Web Companion",
     },
     localDisable: {
       title: "Local-sync disabled",
