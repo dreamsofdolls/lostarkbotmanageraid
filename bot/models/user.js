@@ -188,6 +188,21 @@ const userSchema = new mongoose.Schema(
     // posted for this user when every char returned "Logs not enabled".
     // Dedup at 7 days so stuck users aren't spam-tagged each 30-min tick.
     lastPrivateLogNudgeAt: { type: Number, default: null },
+    // Local-sync mode opt-in. MUTUALLY EXCLUSIVE with autoManageEnabled -
+    // a user can have at most one active sync source at a time. Local-sync
+    // pulls raid clears from the user's local LOA Logs encounters.db via a
+    // browser-companion (File System Access API + sql.js); enable flow
+    // lives in bot/services/local-sync/state.js so the mutex is enforced
+    // at the data layer regardless of which UI surface flips the flag.
+    localSyncEnabled: { type: Boolean, default: false },
+    // Unix ms timestamp of the last successful local-sync POST received
+    // from the web companion. Distinct from lastAutoManageSyncAt so the
+    // /raid-auto-manage action:status can show both modes' freshness.
+    lastLocalSyncAt: { type: Number, default: null },
+    // Unix ms timestamp of the first time the user opted into local-sync
+    // (set on the local-on action, cleared on local-off). Used by the
+    // onboarding embed to show "Local sync linked X days ago".
+    localSyncLinkedAt: { type: Number, default: null },
     // Preferred display locale for Artist's responses. Drives every
     // user-facing string via bot/services/i18n.js. Default "vi" so
     // pre-existing users see no behavior change after the i18n rollout;
