@@ -3,53 +3,55 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Artist · Local Sync</title>
+  <!-- title gets overwritten in app.js once the active lang is resolved
+       from the URL token; data-i18n keeps the key wired up. -->
+  <title data-i18n="meta.pageTitle">Artist · Local Sync</title>
   <link rel="stylesheet" href="/sync/styles.css" />
 </head>
 <body>
   <main class="container">
     <header>
-      <h1>Local Sync</h1>
-      <p class="subtitle">Web companion for Artist's <code>/raid-auto-manage local-on</code> mode</p>
+      <h1 data-i18n="header.h1">Local Sync</h1>
+      <p class="subtitle" data-i18n="header.subtitle">Web companion for Artist's <code>/raid-auto-manage local-on</code> mode</p>
     </header>
 
     <section id="auth-state" class="card">
-      <h2>1. Identity</h2>
-      <div id="auth-status">Reading link token...</div>
+      <h2 data-i18n="identity.section">1. Identity</h2>
+      <div id="auth-status" data-i18n="identity.loading">Reading link token...</div>
     </section>
 
     <section id="file-section" class="card" hidden>
-      <h2>2. Encounters database</h2>
-      <p class="hint">
+      <h2 data-i18n="file.section">2. Encounters database</h2>
+      <p class="hint" data-i18n="file.hint">
         Drag-and-drop your <code>encounters.db</code> file from
         <code>%localappdata%\LOA Logs\</code>. Browser keeps the permission for
         next visits.
       </p>
       <div id="drop-zone" class="drop-zone">
-        <p>Drop <code>encounters.db</code> here</p>
-        <p class="hint">or</p>
-        <button id="pick-file-btn" type="button">Pick file</button>
+        <p data-i18n="file.dropHere">Drop <code>encounters.db</code> here</p>
+        <p class="hint" data-i18n="file.or">or</p>
+        <button id="pick-file-btn" type="button" data-i18n="file.pickBtn">Pick file</button>
       </div>
       <div id="file-meta" class="meta" hidden></div>
     </section>
 
     <section id="preview-section" class="card" hidden>
-      <h2>3. Last 7-day preview</h2>
-      <div id="preview-output">Loading sql.js WASM...</div>
+      <h2 data-i18n="preview.section">3. Last 7-day preview</h2>
+      <div id="preview-output" data-i18n="preview.loadingWasm">Loading SQLite WASM...</div>
     </section>
 
     <section id="sync-section" class="card" hidden>
-      <h2>4. Sync to Artist</h2>
-      <p class="hint">
+      <h2 data-i18n="sync.section">4. Sync to Artist</h2>
+      <p class="hint" data-i18n="sync.hint">
         Sends the cleared encounters above to the bot. Per-character ownership is enforced server-side - chars not in your roster are skipped.
       </p>
-      <button id="sync-btn" type="button" disabled>Sync now</button>
+      <button id="sync-btn" type="button" disabled data-i18n="sync.btnReady">Sync now</button>
       <div id="sync-output" class="meta" hidden></div>
     </section>
 
     <footer>
       <p class="hint">
-        Phase 4.5 (streaming SQLite). <a href="https://github.com/dreamsofdolls/lostarkbotmanageraid">Source</a>.
+        <span data-i18n="footer.text">Phase 4.5 (streaming SQLite). Source</span> · <a href="https://github.com/dreamsofdolls/lostarkbotmanageraid">GitHub</a>.
       </p>
     </footer>
   </main>

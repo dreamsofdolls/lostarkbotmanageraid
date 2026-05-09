@@ -210,7 +210,10 @@ function createRaidAutoManageCommand(deps) {
       let mintError = null;
       if (baseUrl) {
         try {
-          const token = mintLocalSyncToken(discordId);
+          // Embed user's lang in the token so the web companion renders
+          // in their preferred language without an extra round-trip.
+          // `lang` was resolved at handler entry via getUserLanguage.
+          const token = mintLocalSyncToken(discordId, undefined, lang);
           companionUrl = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
         } catch (err) {
           mintError = err?.message || String(err);

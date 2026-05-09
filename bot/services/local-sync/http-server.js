@@ -38,16 +38,11 @@ function pickMime(filePath) {
   return MIME_TYPES[path.extname(filePath).toLowerCase()] || "application/octet-stream";
 }
 
-async function tryReadStaticFile(webDir, requestPath) {
-  // Strip the /sync prefix and normalize. Empty / "/" / "/index" all map
-  // to index.html so the user can land on bare /sync without a 404.
-  let rel = requestPath.replace(/^\/sync\/?/, "");
-  if (rel === "" || rel === "index") rel = "index.html";
-  // Reject decoded traversal attempts up front. resolve() collapses
-  // ../ but a request for `/sync/..%2F..%2Fbot.js` still tries to
-  // escape webDir; the join + startsWith check below catches that.
-  const resolved = path.resolve(webDir, rel);
-  if (!resolved.startsWith(path.resolve(webDir) + path.sep) && resolved !== path.resolve(webDir, "index.html")) {
+async function tryReadFileFromRoot(rootDir, relPath) {
+  if (!relPath) return { error: "not_found" };
+  const root = path.resolve(rootDir);
+  const resolved = path.resolve(rootDir, relPath);
+  if (!resolved.startsWith(root + path.sep) && resolved !== root) {
     return { error: "forbidden" };
   }
   try {
@@ -57,6 +52,17 @@ async function tryReadStaticFile(webDir, requestPath) {
     if (err.code === "ENOENT") return { error: "not_found" };
     return { error: "read_failed", detail: err.message };
   }
+}
+
+async function tryReadStaticFile(webDir, requestPath) {
+  // Strip the /sync prefix and normalize. Empty / "/" / "/index" all map
+  // to index.html so the user can land on bare /sync without a 404.
+  let rel = requestPath.replace(/^\/sync\/?/, "");
+  if (rel === "" || rel === "index") rel = "index.html";
+  // Reject decoded traversal attempts up front. resolve() collapses
+  // ../ but a request for `/sync/..%2F..%2Fbot.js` still tries to
+  // escape webDir; the join + startsWith check below catches that.
+  return tryReadFileFromRoot(webDir, rel);
 }
 
 function getEnvPort(fallback = 3000) {
@@ -71,7 +77,7 @@ function getEnvPort(fallback = 3000) {
  * is a map keyed by HTTP method + path prefix that Phase 4 plugs into;
  * Phase 3 leaves it empty.
  */
-function startLocalSyncHttpServer({ port = getEnvPort(), webDir, apiHandlers = {} } = {}) {
+function startLocalSyncHttpServer({ port = getEnvPort(), webDir, classIconsDir = null, apiHandlers = {} } = {}) {
   if (!webDir) {
     throw new Error("[local-sync/http-server] webDir is required");
   }
@@ -91,6 +97,33 @@ function startLocalSyncHttpServer({ port = getEnvPort(), webDir, apiHandlers = {
       const apiKey = `${req.method} ${pathname}`;
       if (typeof apiHandlers[apiKey] === "function") {
         await apiHandlers[apiKey](req, res, parsed);
+        return;
+      }
+      // Static class icons used by the web preview. Kept outside webDir so
+      // Discord emoji bootstrap and web companion share one asset source.
+      if (req.method === "GET" && classIconsDir && pathname.startsWith("/sync/class-icons/")) {
+        const rel = pathname.replace(/^\/sync\/class-icons\/?/, "");
+        const result = await tryReadFileFromRoot(classIconsDir, rel);
+        if (result.error === "forbidden") {
+          res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("forbidden");
+          return;
+        }
+        if (result.error === "not_found") {
+          res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("not found");
+          return;
+        }
+        if (result.error) {
+          res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("server error");
+          return;
+        }
+        res.writeHead(200, {
+          "Content-Type": result.mime,
+          "Cache-Control": "public, max-age=86400",
+        });
+        res.end(result.data);
         return;
       }
       // Static path: only serve under /sync/*. Anything else falls through to 404.

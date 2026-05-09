@@ -4,6 +4,21 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-10 (Web companion i18n - vi/jp/en across all surfaces)
+
+### Added (web companion respects user's /raid-language preference)
+- **Why:** every Discord-side surface renders in the viewer's lang per the `feedback_i18n_viewer_language` rule, but the web companion was hardcoded EN. JP/VN users opening the link saw English headers/buttons/messages even though they'd set Artist to their native lang.
+- `bot/services/local-sync/tokens.js` `mintToken(discordId, ttlSec, lang?)` now optionally encodes `lang` in the JWT payload. Web reads it on page load and applies via `setActiveLang` before rendering. Token TTL = 30 min so language stays fresh per session.
+- `bot/handlers/raid-auto-manage.js` `local-on` success embed + `bot/handlers/raid-status.js` Sync button + `bot/handlers/stuck-nudge-button.js` DM link all pass user's resolved lang into `mintToken`. Stuck-nudge uses clicker's lang (clicker === target by that point per the auth check).
+- `web/locales.js` (new) - vi/jp/en string dicts (~50 keys × 3 langs). Same nested-object shape as bot-side locales.
+- `web/i18n.js` (new) - `t(key, vars)`, `setActiveLang/getActiveLang`, `getRaidLabel/getModeLabel`, `applyDomTranslations()` to walk `data-i18n` attributes at boot. Missing keys console-warn once and surface the raw key (no silent empty strings).
+- `web/index.html` static text wrapped in `data-i18n` attributes; JS swaps at boot before painting.
+- `web/app.js` rewritten - every inline English string moved to `t()` calls. Token decode now feeds `setActiveLang` first thing so the auth-status message renders in the right lang. Raid + mode labels in the per-raid tables resolve via `getRaidLabel(raidKey)` / `getModeLabel(modeKey)` so JP user sees "アクト4 ハード", VN user sees "Act 4 Hard" (gamer loanwords), EN user sees "Act 4 Hard".
+- Boss names stay English across all locales (LOA Logs writes them verbatim to encounters.db; not translating proper nouns the game itself doesn't translate).
+- Schema debug line stays English (dev-facing, not user-facing).
+- Smoke-tested all 6 web modules serve via the HTTP server: index.html, app.js, i18n.js, locales.js, preview-utils.js, file-vfs.js. Locale lookup verified across vi/jp/en for 9 representative keys.
+- 375/375 tests pass (no test changes; this is web-only + token-payload extension).
+
 ## 2026-05-10 (Web companion preview redesign - per-raid tables)
 
 ### Changed (web companion preview groups by raid+mode instead of flat row list)

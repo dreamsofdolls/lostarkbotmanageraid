@@ -424,7 +424,8 @@ function createRaidStatusCommand(deps) {
       if (!baseUrl) return null;
       let token;
       try {
-        token = mintLocalSyncToken(discordId);
+        // Embed lang so web companion renders in viewer's language.
+        token = mintLocalSyncToken(discordId, undefined, lang);
       } catch (err) {
         console.warn("[raid-status] local-sync token mint failed:", err?.message || err);
         return null;

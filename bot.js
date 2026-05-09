@@ -133,6 +133,7 @@ async function startBot() {
       });
       startLocalSyncHttpServer({
         webDir: path.join(__dirname, "web"),
+        classIconsDir: path.join(__dirname, "assets", "class-icons"),
         apiHandlers: {
           "POST /api/raid-sync": raidSyncHandler,
           "OPTIONS /api/raid-sync": raidSyncHandler, // CORS preflight
