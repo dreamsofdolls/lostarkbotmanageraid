@@ -512,16 +512,30 @@ function createRaidChannelCommand({
     if (action === "set-language") {
       const requested = interaction.options.getString("language", false);
       if (!requested) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-channel-language.missingTitle", lang),
-              description: t("raid-channel-language.missingDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
-        });
+        // No language picked = "view current" affordance. Admin can run
+        // `/raid-channel config action:set-language` as a read-only probe to
+        // see the active broadcast language + how to change it, without
+        // needing to remember `action:show`. Resolve current guild language
+        // and render a neutral info embed; fall back to the default locale
+        // entry if the read fails so admin still gets useful copy.
+        let currentEntry = SUPPORTED_LANGUAGES.find((l) => l.code === "vi");
+        try {
+          const guildLangCode = await getGuildLanguage(guildId, { GuildConfigModel: GuildConfig });
+          const found = SUPPORTED_LANGUAGES.find((l) => l.code === guildLangCode);
+          if (found) currentEntry = found;
+        } catch (err) {
+          console.warn("[raid-channel] guild language read failed:", err?.message || err);
+        }
+        const embed = new EmbedBuilder()
+          .setColor(UI.colors.neutral)
+          .setTitle(`${UI.icons.info} ${t("raid-channel-language.currentTitle", lang)}`)
+          .setDescription(
+            t("raid-channel-language.currentDescription", lang, {
+              flag: currentEntry.flag,
+              label: currentEntry.label,
+            })
+          );
+        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
         return;
       }
       // Validate against the first-class locale list. Slash choices already

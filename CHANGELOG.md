@@ -4,6 +4,13 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-09 (later 9)
+
+### Changed (`/raid-channel config action:set-language` reveals current language)
+- Running `set-language` without picking a `language:` value no longer warns - it now renders a neutral info embed showing the guild's active broadcast language ("Ngôn ngữ broadcast hiện tại: 🇻🇳 Tiếng Việt") plus the cú pháp đổi. Admin probe-and-change in one knob, không cần nhớ riêng `action:show`.
+- Added `raid-channel-language.currentTitle` / `currentDescription` to vi/jp/en, dropped the dead `missingTitle` / `missingDescription` keys (no other call sites). JP and EN got native copies in the same Senko/professional tone as the surrounding `raid-channel-language.*` block.
+- 327/327 tests pass.
+
 ## 2026-05-09 (later 8)
 
 ### Changed (`/raid-status` JP coverage complete)
