@@ -1,7 +1,13 @@
 "use strict";
 
 const { buildNoticeEmbed } = require("../utils/raid/shared");
-const { t, getUserLanguage } = require("../services/i18n");
+const {
+  t,
+  getUserLanguage,
+  getGuildLanguage,
+  setGuildLanguage,
+  SUPPORTED_LANGUAGES,
+} = require("../services/i18n");
 
 const RAID_CHANNEL_GREETING_TTL_MS = 2 * 60 * 1000; // set greeting sits 2 min before self-delete
 
@@ -18,6 +24,11 @@ const RAID_CHANNEL_ACTION_CHOICES = [
   { value: "repin", labelKey: "repin" },
   { value: "schedule-on", labelKey: "scheduleOn" },
   { value: "schedule-off", labelKey: "scheduleOff" },
+  // Per-guild broadcast language switch. Persists on GuildConfig.language and
+  // is read at every public-broadcast firing site via getGuildLanguage().
+  // Lives under the same `action:` autocomplete so admins discover it next to
+  // the existing channel config knobs.
+  { value: "set-language", labelKey: "setLanguage", external: true },
 ];
 
 function createRaidChannelCommand({
@@ -73,7 +84,11 @@ function createRaidChannelCommand({
           return true;
         })
         .map((c) => ({
-          name: t(`raid-channel.autocomplete.${c.labelKey}`, lang),
+          // set-language pulls its label from the dedicated namespace; the
+          // pre-existing actions stay under raid-channel.autocomplete.*.
+          name: c.external
+            ? t(`raid-channel-language.${c.labelKey === "setLanguage" ? "autocompleteLabel" : c.labelKey}`, lang)
+            : t(`raid-channel.autocomplete.${c.labelKey}`, lang),
           value: c.value,
         }))
         .filter((c) => {
@@ -208,8 +223,8 @@ function createRaidChannelCommand({
       // Artist take up residence. Only post when the welcome itself
       // succeeded - if welcome.posted is false, the channel is in a broken
       // state and a greeting would be misleading. Greeting is a public
-      // broadcast - no per-guild language config yet, so render with the
-      // invoker's lang (the admin who ran the command).
+      // broadcast - render in the guild's broadcast language so the voice
+      // matches every other public announcement going forward.
       if (welcome.posted) {
         // Set greeting can be disabled per-guild via /raid-announce.
         let greetingEnabled = true;
@@ -222,9 +237,10 @@ function createRaidChannelCommand({
           // default enabled on read error
         }
         if (greetingEnabled) {
+          const guildLang = await getGuildLanguage(guildId, { GuildConfigModel: GuildConfig });
           await postChannelAnnouncement(
             channel,
-            t("raid-channel.set.greetingMessage", lang),
+            t("raid-channel.set.greetingMessage", guildLang),
             RAID_CHANNEL_GREETING_TTL_MS,
             "raid-channel set greeting"
           );
@@ -287,8 +303,28 @@ function createRaidChannelCommand({
           })
         );
       }
+      // Resolve the broadcast language line up front so it can be appended
+      // to either the no-config or configured branches consistently. Admin
+      // always wants to know what voice the public broadcasts will use,
+      // independent of whether the monitor channel is set yet.
+      let broadcastLangLine = null;
+      try {
+        const guildLangCode = await getGuildLanguage(guildId, { GuildConfigModel: GuildConfig });
+        const langEntry =
+          SUPPORTED_LANGUAGES.find((l) => l.code === guildLangCode) ||
+          SUPPORTED_LANGUAGES.find((l) => l.code === "vi");
+        if (langEntry) {
+          broadcastLangLine = t("raid-channel-language.showCurrentLine", lang, {
+            flag: langEntry.flag,
+            label: langEntry.label,
+          });
+        }
+      } catch (err) {
+        console.warn("[raid-channel] guild language read failed:", err?.message || err);
+      }
       if (!channelId) {
         const lines = [t("raid-channel.show.noConfigLine", lang)];
+        if (broadcastLangLine) lines.push("", broadcastLangLine);
         if (deployNotes.length > 0) lines.push("", ...deployNotes);
         embed.setDescription(lines.join("\n"));
       } else {
@@ -318,6 +354,7 @@ function createRaidChannelCommand({
         } else {
           lines.push(t("raid-channel.show.channelOkLine", lang, { icon: UI.icons.done }));
         }
+        if (broadcastLangLine) lines.push("", broadcastLangLine);
         if (deployNotes.length > 0) lines.push("", ...deployNotes);
         embed.setDescription(lines.join("\n"));
       }
@@ -470,6 +507,60 @@ function createRaidChannelCommand({
         )
         .setTimestamp();
       await interaction.editReply({ embeds: [embed] });
+      return;
+    }
+    if (action === "set-language") {
+      const requested = interaction.options.getString("language", false);
+      if (!requested) {
+        await interaction.reply({
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: t("raid-channel-language.missingTitle", lang),
+              description: t("raid-channel-language.missingDescription", lang),
+            }),
+          ],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      // Validate against the first-class locale list. Slash choices already
+      // restrict the dropdown but treat free-text as untrusted - normalize
+      // and reject anything outside vi/jp/en. We must avoid the
+      // setGuildLanguage's silent "fall back to vi" path on invalid input
+      // because that would stamp `vi` AND show a success embed for the
+      // wrong language.
+      const normalizedRequested = String(requested).toLowerCase();
+      const langEntry = SUPPORTED_LANGUAGES.find((l) => l.code === normalizedRequested);
+      if (!langEntry) {
+        await interaction.reply({
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: t("raid-channel-language.invalidTitle", lang),
+              description: t("raid-channel-language.invalidDescription", lang, { lang: requested }),
+            }),
+          ],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      // Persist + invalidate cache. Render the success embed in the NEW
+      // guild language so admin sees how the broadcasts will read going
+      // forward (gives a quick visual sanity check of the chosen voice).
+      await setGuildLanguage(guildId, langEntry.code, { GuildConfigModel: GuildConfig });
+      const newLang = langEntry.code;
+      const embed = new EmbedBuilder()
+        .setColor(UI.colors.success)
+        .setTitle(`${UI.icons.done} ${t("raid-channel-language.successTitle", newLang)}`)
+        .setDescription(
+          t("raid-channel-language.successDescription", newLang, {
+            flag: langEntry.flag,
+            label: langEntry.label,
+          })
+        )
+        .setTimestamp();
+      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
       return;
     }
     if (action === "schedule-on" || action === "schedule-off") {

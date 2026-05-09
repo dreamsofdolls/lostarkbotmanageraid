@@ -3,6 +3,16 @@ const mongoose = require("mongoose");
 const guildConfigSchema = new mongoose.Schema(
   {
     guildId: { type: String, required: true, unique: true, index: true },
+    // Per-guild language code for PUBLIC announcement bodies (welcome embed,
+    // weekly-reset / cleanup / bedtime / wakeup / maintenance / stuck-nudge
+    // notices, text-parser whisper ack and raid-update reply embeds, etc).
+    // These broadcasts have no single per-user "viewer" so they can't use
+    // per-user `User.language`. Default "vi" matches the legacy behavior
+    // when this field doesn't exist on a doc - getGuildLanguage falls back
+    // to "vi" on missing/null. JP/EN guilds opt in via /raid-channel config
+    // action:set-language. Free-text on the schema (validated at action
+    // boundary) so adding a new locale doesn't require a schema migration.
+    language: { type: String, default: "vi" },
     // Channel ID the bot monitors for short-text raid-clear messages.
     // null/empty = monitor disabled for this guild.
     raidChannelId: { type: String, default: null },

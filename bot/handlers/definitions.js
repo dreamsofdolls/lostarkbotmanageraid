@@ -162,6 +162,17 @@ function createRaidCommandDefinitions({
             .setRequired(false)
             .addChannelTypes(ChannelType.GuildText)
         )
+        .addStringOption((opt) =>
+          opt
+            .setName("language")
+            .setDescription("Broadcast language (for action=set-language)")
+            .setRequired(false)
+            .addChoices(
+              { name: "🇻🇳 Tiếng Việt", value: "vi" },
+              { name: "🇯🇵 日本語", value: "jp" },
+              { name: "🇬🇧 English", value: "en" },
+            )
+        )
     );
 
   const raidAutoManageCommand = new SlashCommandBuilder()
