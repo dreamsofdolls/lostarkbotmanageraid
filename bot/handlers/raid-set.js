@@ -8,6 +8,8 @@ const {
   getAccessibleAccounts,
   canEditAccount,
 } = require("../services/access-control");
+const { t, getUserLanguage } = require("../services/i18n");
+const { getRaidModeLabel } = require("../utils/raid/labels");
 
 function createRaidSetCommand(deps) {
   const {
@@ -190,11 +192,25 @@ function createRaidSetCommand(deps) {
     const executorId = interaction.user.id;
     const needle = focused.value || "";
     const target = normalizeName(needle);
+    // Resolve executor's locale once per autocomplete tick so all 3
+    // choice categories render in their language. getUserLanguage hits
+    // the in-process cache after the first call so per-keystroke fan-out
+    // stays cheap.
+    const lang = await getUserLanguage(executorId, { UserModel: User });
+    const charsWord = (n) =>
+      t(
+        n === 1 ? "raid-set.autocomplete.charsSingular" : "raid-set.autocomplete.charsPlural",
+        lang,
+      );
     const ownDoc = await loadUserForAutocomplete(executorId);
     const ownMatches = getRosterMatches(ownDoc, needle);
     const ownChoices = ownMatches.map((a) => {
       const charCount = Array.isArray(a.characters) ? a.characters.length : 0;
-      const label = `📁 ${a.accountName} · ${charCount} char${charCount === 1 ? "" : "s"}`;
+      const label = t("raid-set.autocomplete.ownChoice", lang, {
+        name: a.accountName,
+        charCount,
+        charsWord: charsWord(charCount),
+      });
       return truncateChoice(label, a.accountName);
     });
     let helperChoices = [];
@@ -210,7 +226,12 @@ function createRaidSetCommand(deps) {
           const charCount = Array.isArray(entry.account.characters)
             ? entry.account.characters.length
             : 0;
-          const label = `👥 ${entry.account.accountName} · ${charCount} char${charCount === 1 ? "" : "s"} · giúp ${entry.ownerLabel}`;
+          const label = t("raid-set.autocomplete.helperChoice", lang, {
+            name: entry.account.accountName,
+            charCount,
+            charsWord: charsWord(charCount),
+            owner: entry.ownerLabel,
+          });
           return truncateChoice(label, entry.account.accountName);
         });
     } catch (err) {
@@ -225,8 +246,9 @@ function createRaidSetCommand(deps) {
     // Roster shares granted by Manager A to executor via /raid-share grant.
     // Distinct from helperChoices because share access doesn't change
     // roster ownership; the autocomplete tag therefore differs ("shared
-    // by" vs "giúp"). View-level shares are tagged so the executor sees
-    // they cannot /raid-set on that roster even if it's pickable.
+    // by" vs the helper-Manager equivalent). View-level shares carry the
+    // 👁️ tag so the executor sees they cannot /raid-set on that roster
+    // even if it's pickable.
     let shareChoices = [];
     try {
       const accessible = await getAccessibleAccounts(executorId);
@@ -240,8 +262,19 @@ function createRaidSetCommand(deps) {
           const charCount = Array.isArray(entry.account?.characters)
             ? entry.account.characters.length
             : 0;
-          const accessTag = entry.accessLevel === "view" ? " · 👁️ view" : "";
-          const label = `👥 ${entry.accountName} · ${charCount} char${charCount === 1 ? "" : "s"} · shared by ${entry.ownerLabel}${accessTag}`;
+          const accessTag =
+            entry.accessLevel === "view"
+              ? t("raid-set.autocomplete.sharedAccessTagView", lang, {
+                  viewLabel: t("share.accessLevel.view", lang),
+                })
+              : "";
+          const label = t("raid-set.autocomplete.sharedChoice", lang, {
+            name: entry.accountName,
+            charCount,
+            charsWord: charsWord(charCount),
+            owner: entry.ownerLabel,
+            accessTag,
+          });
           return truncateChoice(label, entry.accountName);
         });
     } catch (err) {
@@ -648,6 +681,18 @@ function createRaidSetCommand(deps) {
   }
   async function handleRaidSetCommand(interaction) {
     const executorId = interaction.user.id;
+    // Executor's locale - the slash invoker IS the only viewer of every
+    // ephemeral reply on /raid-set, so this lang threads through every
+    // notice + success embed without any clicker-vs-owner split.
+    const lang = await getUserLanguage(executorId, { UserModel: User });
+    // Localized raid label ("アクト4 ハード" / "Act 4 Hard") for use in
+    // user-facing strings. Models keep canonical EN; locale lookup
+    // happens here at render time.
+    const localizedRaidLabel = (key) => {
+      const meta = RAID_REQUIREMENT_MAP[key];
+      if (!meta) return key;
+      return getRaidModeLabel(meta.raidKey, meta.modeKey, lang);
+    };
     const rosterName = interaction.options.getString("roster", true).trim();
     const characterName = interaction.options.getString("character", true).trim();
     const raidKey = interaction.options.getString("raid", true);
@@ -659,8 +704,8 @@ function createRaidSetCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Raid option không hợp lệ",
-            description: "Pick raid trong dropdown autocomplete nhé - Artist chỉ hiểu các raid có trong list cố định.",
+            title: t("raid-set.invalid.raidTitle", lang),
+            description: t("raid-set.invalid.raidDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -672,8 +717,8 @@ function createRaidSetCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Status không hợp lệ",
-            description: "Artist chỉ hiểu 3 status: `complete` (mark cả raid), `process` (mark 1 gate), `reset` (xoá hết). Pick một trong autocomplete nhé.",
+            title: t("raid-set.invalid.statusTitle", lang),
+            description: t("raid-set.invalid.statusDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -687,8 +732,8 @@ function createRaidSetCommand(deps) {
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "`process` cần chọn gate",
-              description: "Status `process` để mark 1 gate cụ thể, Artist cần biết gate nào (G1, G2, ...). Nếu muốn mark cả raid done, đổi sang status `complete` thay nha.",
+              title: t("raid-set.invalid.processNeedsGateTitle", lang),
+              description: t("raid-set.invalid.processNeedsGateDescription", lang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -701,8 +746,12 @@ function createRaidSetCommand(deps) {
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Gate không tồn tại",
-              description: `Gate **${targetGate}** không có trong **${raidMeta.label}** đâu nha. Gates hợp lệ: ${validGates.map((g) => `\`${g}\``).join(", ")}.`,
+              title: t("raid-set.invalid.gateTitle", lang),
+              description: t("raid-set.invalid.gateDescription", lang, {
+                gate: targetGate,
+                raidLabel: localizedRaidLabel(raidKey),
+                validGates: validGates.map((g) => `\`${g}\``).join(", "),
+              }),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -725,8 +774,8 @@ function createRaidSetCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Roster không tồn tại",
-            description: `Artist không tìm thấy roster **${rosterName}** trong cả roster của cậu lẫn roster cậu đã add giúp người khác. Pick lại từ autocomplete \`roster:\` cho chắc nha - autocomplete chỉ list những roster cậu thực sự thao tác được.`,
+            title: t("raid-set.roster.notFoundTitle", lang),
+            description: t("raid-set.roster.notFoundDescription", lang, { rosterName }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -741,8 +790,12 @@ function createRaidSetCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Roster trùng tên ở nhiều user",
-            description: `Có ${resolvedOwner.matches.length} roster tên **${rosterName}** mà cậu là người add giúp (${ownerNames}). Artist không quyết được set vào ai. Liên hệ admin để rename hoặc xoá bớt nha.`,
+            title: t("raid-set.roster.ambiguousTitle", lang),
+            description: t("raid-set.roster.ambiguousDescription", lang, {
+              count: resolvedOwner.matches.length,
+              rosterName,
+              ownerNames,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -774,13 +827,17 @@ function createRaidSetCommand(deps) {
       // notice depending on whether we were acting on our own behalf or
       // a helper-Manager target so the executor knows who has to act.
       const description = actingForOther
-        ? `Roster của <@${targetDiscordId}> đã bị xoá hoặc không còn nữa. Artist không sửa hộ được - phải đợi <@${targetDiscordId}> tự \`/add-roster\` lại, hoặc cậu chạy \`/add-roster target:<user>\` đăng ký giúp lại nha.`
-        : "Artist không thấy roster nào của cậu. Dùng `/add-roster` để add roster đầu tiên trước, sau đó mới `/raid-set` được nha~";
+        ? t("raid-set.roster.deletedForOtherDescription", lang, {
+            target: targetDiscordId,
+          })
+        : t("raid-set.roster.noRosterDescription", lang);
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: actingForOther ? "Roster đã bị xoá" : "Cậu chưa có roster nào",
+            title: actingForOther
+              ? t("raid-set.roster.deletedForOtherTitle", lang)
+              : t("raid-set.roster.noRosterTitle", lang),
             description,
           }),
         ],
@@ -793,8 +850,11 @@ function createRaidSetCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "lock",
-            title: "Quyền roster đã đổi",
-            description: `Roster **${rosterName}** của <@${targetDiscordId}> không còn được đăng ký bởi cậu nữa, hoặc đã bị xoá rồi tạo lại trong lúc command đang chạy. Pick lại từ autocomplete \`roster:\`; nếu vẫn không thấy thì cần chạy lại \`/add-roster target:<user>\` trước khi set progress tiếp nha.`,
+            title: t("raid-set.roster.authLostTitle", lang),
+            description: t("raid-set.roster.authLostDescription", lang, {
+              rosterName,
+              target: targetDiscordId,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -807,8 +867,11 @@ function createRaidSetCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Không tìm thấy character",
-            description: `Artist không tìm thấy character **${characterName}** trong roster **${rosterName}** của cậu. Lần sau dùng autocomplete (gõ field \`character:\` rồi đợi gợi ý) để tránh sai tên nha.`,
+            title: t("raid-set.character.notFoundTitle", lang),
+            description: t("raid-set.character.notFoundDescription", lang, {
+              characterName,
+              rosterName,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -816,36 +879,36 @@ function createRaidSetCommand(deps) {
       return;
     }
     if (result.alreadyComplete) {
-      const scope = effectiveGate ? `${raidMeta.label} · ${effectiveGate}` : raidMeta.label;
+      const localizedRaid = localizedRaidLabel(raidKey);
+      const scope = effectiveGate ? `${localizedRaid} · ${effectiveGate}` : localizedRaid;
       // Description carries the same trio of facts (character / raid /
       // gate) inline. Dropping the cold 3-field inline table avoids the
       // "tabular log entry" feel the embed used to have — Artist voice
       // reads as a sentence instead of a database row.
       const alreadyEmbed = new EmbedBuilder()
         .setColor(UI.colors.progress)
-        .setTitle(`${UI.icons.info} Đã DONE từ trước rồi nha~`)
+        .setTitle(`${UI.icons.info} ${t("raid-set.already.completeTitle", lang)}`)
         .setDescription(
-          [
-            `**${characterName}** đã clear **${scope}** tuần này rồi, Artist không update đè lại đâu nha.`,
-            "",
-            `Nếu thực sự muốn reset, đổi option \`status\` sang \`reset\` rồi chạy lại - tớ sẽ xoá sạch tiến độ tuần này.`,
-          ].join("\n")
+          t("raid-set.already.completeDescription", lang, {
+            characterName,
+            scope,
+          }),
         )
         .setTimestamp();
       await interaction.reply({ embeds: [alreadyEmbed], flags: MessageFlags.Ephemeral });
       return;
     }
     if (result.alreadyReset) {
-      const scope = effectiveGate ? `${raidMeta.label} · ${effectiveGate}` : raidMeta.label;
+      const localizedRaid = localizedRaidLabel(raidKey);
+      const scope = effectiveGate ? `${localizedRaid} · ${effectiveGate}` : localizedRaid;
       const alreadyResetEmbed = new EmbedBuilder()
         .setColor(UI.colors.muted)
-        .setTitle(`${UI.icons.info} Raid vốn đã sạch sẵn rồi`)
+        .setTitle(`${UI.icons.info} ${t("raid-set.already.resetTitle", lang)}`)
         .setDescription(
-          [
-            `**${characterName}** ở **${scope}** chưa có gate nào được đánh dấu xong cả, Artist chẳng có gì để xoá cho cậu đâu~`,
-            "",
-            `Nếu cậu muốn đánh dấu gate xong xuôi thì đổi \`status\` sang \`complete\` hoặc \`process\` rồi chạy lại giúp tớ nha.`,
-          ].join("\n")
+          t("raid-set.already.resetDescription", lang, {
+            characterName,
+            scope,
+          }),
         )
         .setTimestamp();
       await interaction.reply({ embeds: [alreadyResetEmbed], flags: MessageFlags.Ephemeral });
@@ -858,8 +921,13 @@ function createRaidSetCommand(deps) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Character chưa đủ iLvl",
-            description: `**${characterName}** đang ở iLvl **${result.ineligibleItemLevel}**, chưa đủ **${raidMeta.minItemLevel}+** để vào **${raidMeta.label}**. Lên gear thêm rồi chạy lại nha~`,
+            title: t("raid-set.character.notEligibleTitle", lang),
+            description: t("raid-set.character.notEligibleDescription", lang, {
+              characterName,
+              itemLevel: result.ineligibleItemLevel,
+              minItemLevel: raidMeta.minItemLevel,
+              raidLabel: localizedRaidLabel(raidKey),
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -874,17 +942,28 @@ function createRaidSetCommand(deps) {
     //   - process: "vừa clear G_X" + roadmap hint
     //   - complete: "mark cả raid done"
     //   - reset:    "xoá sạch tiến độ"
+    const localizedRaid = localizedRaidLabel(raidKey);
     let titleText;
     let descText;
     if (statusType === "process") {
-      titleText = "Gate clear xong nha~";
-      descText = `Artist mark **${effectiveGate}** của **${raidMeta.label}** done cho **${characterName}** rồi nha. Còn gate khác cứ post tiếp hoặc \`/raid-set status:process gate:G2\` khi clear xong - tớ tự cộng dồn theo Lost Ark sequential progression.`;
+      titleText = t("raid-set.success.processTitle", lang);
+      descText = t("raid-set.success.processDescription", lang, {
+        gate: effectiveGate,
+        raidLabel: localizedRaid,
+        characterName,
+      });
     } else if (statusType === "complete") {
-      titleText = "Raid done luôn nha~";
-      descText = `Artist mark cả **${raidMeta.label}** done cho **${characterName}** rồi. Tuần này khỏi lo nữa, đợi reset thứ 4 17h VN tuần sau là làm lại từ đầu.`;
+      titleText = t("raid-set.success.completeTitle", lang);
+      descText = t("raid-set.success.completeDescription", lang, {
+        raidLabel: localizedRaid,
+        characterName,
+      });
     } else {
-      titleText = "Đã reset sạch";
-      descText = `Artist xoá sạch tiến độ **${raidMeta.label}** của **${characterName}** tuần này rồi nha. Giờ cậu có thể đánh dấu lại từ đầu khi clear xong - dùng \`/raid-set\` hoặc post format trong raid channel.`;
+      titleText = t("raid-set.success.resetTitle", lang);
+      descText = t("raid-set.success.resetDescription", lang, {
+        raidLabel: localizedRaid,
+        characterName,
+      });
     }
     // Helper-Manager hint: prepend a line so the executor sees clearly
     // that the write landed on someone else's roster (a roster they
@@ -892,8 +971,15 @@ function createRaidSetCommand(deps) {
     // ephemeral, so the `<@id>` mention does not ping the target - it
     // just renders as a clickable display-name pill for confirmation.
     if (actingForOther) {
-      const labelHint = ownerLabel ? ` (**${ownerLabel}**)` : "";
-      descText = `${UI.icons.info} Cậu đang set giúp <@${targetDiscordId}>${labelHint} - cậu là người đăng ký roster này trước đó nên Artist vẫn cho cậu update tiếp nhé.\n\n${descText}`;
+      const labelHint = ownerLabel
+        ? t("raid-set.success.helperLabelHint", lang, { ownerLabel })
+        : "";
+      const helperPrefix = t("raid-set.success.helperPrefix", lang, {
+        iconInfo: UI.icons.info,
+        target: targetDiscordId,
+        labelHint,
+      });
+      descText = `${helperPrefix}${descText}`;
     }
     const resultEmbed = new EmbedBuilder()
       .setTitle(`${markedDone ? UI.icons.done : UI.icons.reset} ${titleText}`)
@@ -902,7 +988,9 @@ function createRaidSetCommand(deps) {
       .setTimestamp();
     if (result.modeResetCount > 0) {
       resultEmbed.setFooter({
-        text: `Mode đổi sang ${result.selectedDifficulty} - tiến độ mode cũ bị xoá để giữ data consistent.`,
+        text: t("raid-set.success.modeChangedFooter", lang, {
+          mode: result.selectedDifficulty,
+        }),
       });
     }
     await interaction.reply({
