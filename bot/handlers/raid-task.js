@@ -7,6 +7,10 @@ const {
   truncateChoice,
 } = require("../utils/raid/autocomplete-helpers");
 const {
+  getAccessibleAccounts,
+  canEditAccount,
+} = require("../services/access-control");
+const {
   SCHEDULED_RESET,
   SHARED_TASK_PRESETS,
   SHARED_TASK_CAP_DAILY,
@@ -155,8 +159,61 @@ function createRaidTaskCommand(deps) {
     weekResetStartMs,
   } = deps;
 
+  // Resolve the discordId whose User doc the side-task write should
+  // mutate. When `rosterName` matches a roster shared to the executor
+  // via /raid-share grant, the helper returns the OWNER's discordId
+  // and a `viaShare` marker so the saveWithRetry closure naturally
+  // loads the right document. View-level shares come back with
+  // `canEdit: false` so callers can short-circuit before the retry
+  // and surface a permission embed.
+  //
+  // Returns either:
+  //   { discordId, viaShare: false }  (own roster, or no rosterName)
+  //   { discordId, viaShare: true, ownerLabel, accessLevel, canEdit }
+  async function resolveTaskWriteTarget(executorId, rosterName) {
+    if (!rosterName) {
+      return { discordId: executorId, viaShare: false };
+    }
+    let accessible = [];
+    try {
+      accessible = await getAccessibleAccounts(executorId);
+    } catch (err) {
+      console.warn("[raid-task] getAccessibleAccounts failed:", err?.message || err);
+      return { discordId: executorId, viaShare: false };
+    }
+    const target = normalizeName(rosterName);
+    const sharedMatch = accessible.find(
+      (entry) => !entry.isOwn && normalizeName(entry.accountName) === target,
+    );
+    if (!sharedMatch) {
+      return { discordId: executorId, viaShare: false };
+    }
+    return {
+      discordId: sharedMatch.ownerDiscordId,
+      viaShare: true,
+      ownerLabel: sharedMatch.ownerLabel,
+      accessLevel: sharedMatch.accessLevel,
+      canEdit: sharedMatch.accessLevel === "edit",
+    };
+  }
+
+  // User-facing rejection embed when a viewer with `permission:view`
+  // share tries to write through a side-task path. Centralized so the
+  // 7+ write handlers reject identically.
+  function buildViewOnlyShareEmbed(target) {
+    return buildNoticeEmbed(EmbedBuilder, {
+      type: "error",
+      title: "Share view-only",
+      description:
+        `Manager **${target.ownerLabel || "(unknown)"}** đã share roster cho cậu nhưng ở mức ` +
+        `\`view\` (xem read-only) - cậu không update side task được. Nhờ Manager đổi sang ` +
+        "`/raid-share grant target:@cậu permission:edit` rồi thử lại nha~",
+    });
+  }
+
   async function autocompleteRoster(interaction, focused) {
-    const userDoc = await loadUserForAutocomplete(interaction.user.id);
+    const executorId = interaction.user.id;
+    const userDoc = await loadUserForAutocomplete(executorId);
     const matches = getRosterMatches(userDoc, focused.value || "");
     const choices = matches.map((a) => {
       const chars = Array.isArray(a.characters) ? a.characters : [];
@@ -168,7 +225,43 @@ function createRaidTaskCommand(deps) {
       const label = `📁 ${a.accountName} · ${chars.length} char${chars.length === 1 ? "" : "s"}${taskSuffix}`;
       return truncateChoice(label, a.accountName);
     });
-    await interaction.respond(choices).catch(() => {});
+
+    // Append rosters shared to executor via /raid-share grant. View-
+    // level shares get a `· 👁️ view` tag so the executor sees they
+    // cannot add/remove side tasks even if the roster is pickable
+    // (write handlers will reject with the view-only embed).
+    const target = focused.value ? focused.value.toLowerCase() : "";
+    let shareChoices = [];
+    try {
+      const accessible = await getAccessibleAccounts(executorId);
+      shareChoices = accessible
+        .filter(
+          (entry) =>
+            !entry.isOwn &&
+            (!target || (entry.accountName || "").toLowerCase().includes(target)),
+        )
+        .map((entry) => {
+          const chars = Array.isArray(entry.account?.characters)
+            ? entry.account.characters
+            : [];
+          const taskTotal = chars.reduce(
+            (sum, c) => sum + (Array.isArray(c.sideTasks) ? c.sideTasks.length : 0),
+            0,
+          );
+          const taskSuffix = taskTotal > 0 ? ` · ${taskTotal} task` : "";
+          const accessTag = entry.accessLevel === "view" ? " · 👁️ view" : "";
+          const label = `👥 ${entry.accountName} · ${chars.length} char${chars.length === 1 ? "" : "s"}${taskSuffix} · shared by ${entry.ownerLabel}${accessTag}`;
+          return truncateChoice(label, entry.accountName);
+        });
+    } catch (err) {
+      console.warn(
+        "[raid-task autocomplete] getAccessibleAccounts failed:",
+        err?.message || err,
+      );
+    }
+
+    const merged = [...choices, ...shareChoices].slice(0, 25);
+    await interaction.respond(merged).catch(() => {});
   }
 
   async function autocompleteCharacter(interaction, focused) {
@@ -384,7 +477,7 @@ function createRaidTaskCommand(deps) {
   }
 
   async function handleAddSingle(interaction) {
-    const discordId = interaction.user.id;
+    const executorId = interaction.user.id;
     const rosterName = interaction.options.getString("roster", true);
     // `character` is optional at the Discord schema level (because the
     // sibling action=all branch doesn't need it) but required at runtime
@@ -421,6 +514,21 @@ function createRaidTaskCommand(deps) {
         flags: MessageFlags.Ephemeral,
       });
       return;
+    }
+
+    const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
+    if (writeTarget.viaShare && !writeTarget.canEdit) {
+      await interaction.reply({
+        embeds: [buildViewOnlyShareEmbed(writeTarget)],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const discordId = writeTarget.discordId;
+    if (writeTarget.viaShare) {
+      console.log(
+        `[raid-task] share-write executor=${executorId} owner=${discordId} cmd=add-single roster=${rosterName}`,
+      );
     }
 
     let outcome = "added";
@@ -582,7 +690,7 @@ function createRaidTaskCommand(deps) {
   // manual handling. Single Mongo write per invocation regardless of
   // char count.
   async function handleAddAll(interaction) {
-    const discordId = interaction.user.id;
+    const executorId = interaction.user.id;
     const rosterName = interaction.options.getString("roster", true);
     const taskName = interaction.options.getString("name", true).trim();
     const reset = interaction.options.getString("reset", true);
@@ -599,6 +707,21 @@ function createRaidTaskCommand(deps) {
         flags: MessageFlags.Ephemeral,
       });
       return;
+    }
+
+    const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
+    if (writeTarget.viaShare && !writeTarget.canEdit) {
+      await interaction.reply({
+        embeds: [buildViewOnlyShareEmbed(writeTarget)],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const discordId = writeTarget.discordId;
+    if (writeTarget.viaShare) {
+      console.log(
+        `[raid-task] share-write executor=${executorId} owner=${discordId} cmd=add-all roster=${rosterName}`,
+      );
     }
 
     const added = [];
@@ -789,7 +912,7 @@ function createRaidTaskCommand(deps) {
   }
 
   async function handleSharedAdd(interaction) {
-    const discordId = interaction.user.id;
+    const executorId = interaction.user.id;
     const rosterName = interaction.options.getString("roster", true);
     const presetKey = interaction.options.getString("preset", true);
     const preset = getSharedTaskPreset(presetKey);
@@ -856,6 +979,29 @@ function createRaidTaskCommand(deps) {
       });
       return;
     }
+
+    // Share-aware target resolution. Only applies when the operation
+    // targets a single roster - `applyAllRosters: true` operates on
+    // executor's OWN rosters only (shared rosters are guest passes,
+    // not full ownership, so bulk-applying tasks across them would
+    // overstep the share contract).
+    let writeTarget = { discordId: executorId, viaShare: false };
+    if (!applyAllRosters) {
+      writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
+      if (writeTarget.viaShare && !writeTarget.canEdit) {
+        await interaction.reply({
+          embeds: [buildViewOnlyShareEmbed(writeTarget)],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      if (writeTarget.viaShare) {
+        console.log(
+          `[raid-task] share-write executor=${executorId} owner=${writeTarget.discordId} cmd=shared-add roster=${rosterName}`,
+        );
+      }
+    }
+    const discordId = writeTarget.discordId;
 
     let outcome = "added";
     let resolvedRosterName = rosterName;
@@ -1055,9 +1201,24 @@ function createRaidTaskCommand(deps) {
   }
 
   async function handleSharedRemove(interaction) {
-    const discordId = interaction.user.id;
+    const executorId = interaction.user.id;
     const rosterName = interaction.options.getString("roster", true);
     const taskId = interaction.options.getString("task", true);
+
+    const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
+    if (writeTarget.viaShare && !writeTarget.canEdit) {
+      await interaction.reply({
+        embeds: [buildViewOnlyShareEmbed(writeTarget)],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const discordId = writeTarget.discordId;
+    if (writeTarget.viaShare) {
+      console.log(
+        `[raid-task] share-write executor=${executorId} owner=${discordId} cmd=shared-remove roster=${rosterName}`,
+      );
+    }
 
     let outcome = "removed";
     let resolvedRosterName = rosterName;
@@ -1144,10 +1305,25 @@ function createRaidTaskCommand(deps) {
   }
 
   async function handleRemove(interaction) {
-    const discordId = interaction.user.id;
+    const executorId = interaction.user.id;
     const rosterName = interaction.options.getString("roster", true);
     const characterName = interaction.options.getString("character", true);
     const taskId = interaction.options.getString("task", true);
+
+    const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
+    if (writeTarget.viaShare && !writeTarget.canEdit) {
+      await interaction.reply({
+        embeds: [buildViewOnlyShareEmbed(writeTarget)],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const discordId = writeTarget.discordId;
+    if (writeTarget.viaShare) {
+      console.log(
+        `[raid-task] share-write executor=${executorId} owner=${discordId} cmd=remove roster=${rosterName}`,
+      );
+    }
 
     let outcome = "removed";
     let resolvedCharName = "";
@@ -1234,9 +1410,24 @@ function createRaidTaskCommand(deps) {
   }
 
   async function handleClear(interaction) {
-    const discordId = interaction.user.id;
+    const executorId = interaction.user.id;
     const rosterName = interaction.options.getString("roster", true);
     const characterName = interaction.options.getString("character", true);
+
+    const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
+    if (writeTarget.viaShare && !writeTarget.canEdit) {
+      await interaction.reply({
+        embeds: [buildViewOnlyShareEmbed(writeTarget)],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    const discordId = writeTarget.discordId;
+    if (writeTarget.viaShare) {
+      console.log(
+        `[raid-task] share-preview executor=${executorId} owner=${discordId} cmd=clear roster=${rosterName}`,
+      );
+    }
 
     const userDoc = await User.findOne({ discordId }).lean();
     const found = userDoc
@@ -1318,7 +1509,28 @@ function createRaidTaskCommand(deps) {
     const rosterName = parts[2] ? decodeURIComponent(parts[2]) : null;
     const charNameEncoded = parts[3] || parts[2] || "";
     const characterName = decodeURIComponent(charNameEncoded);
-    const discordId = interaction.user.id;
+    const executorId = interaction.user.id;
+
+    // Share-aware target resolution. The button click respects whatever
+    // share the user picked when they originally ran /raid-task clear -
+    // a re-resolve here keeps the write routing to the same owner doc
+    // even if the share changed mid-flight.
+    const writeTarget = parts[3]
+      ? await resolveTaskWriteTarget(executorId, rosterName)
+      : { discordId: executorId, viaShare: false };
+    if (writeTarget.viaShare && !writeTarget.canEdit) {
+      await interaction.update({
+        embeds: [buildViewOnlyShareEmbed(writeTarget)],
+        components: [],
+      });
+      return;
+    }
+    const discordId = writeTarget.discordId;
+    if (writeTarget.viaShare) {
+      console.log(
+        `[raid-task] share-write executor=${executorId} owner=${discordId} cmd=clear-confirm roster=${rosterName}`,
+      );
+    }
 
     let outcome = "cleared";
     let resolvedCharName = characterName;

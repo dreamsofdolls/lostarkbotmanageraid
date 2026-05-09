@@ -4,6 +4,19 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-09 (later 2)
+
+### Added (roster-share Phase 2c: /raid-task integration)
+- `/raid-task` now spans rosters shared to the executor via `/raid-share grant`. New `resolveTaskWriteTarget(executorId, rosterName)` helper (inside `createRaidTaskCommand`) consults `getAccessibleAccounts` to detect whether a target roster is shared; on hit it returns the owner's `discordId` so the existing saveWithRetry closures naturally load and mutate the right `User` doc.
+- All 7 write handlers wired through the helper: `handleAddSingle`, `handleAddAll`, `handleSharedAdd` (only when targeting a single roster, not when `applyAllRosters: true`), `handleSharedRemove`, `handleRemove`, `handleClear`, and `handleClearConfirmButton`. Each handler short-circuits with a centralized `buildViewOnlyShareEmbed` rejection embed when the share is `view`-level so a view-only viewer never reaches saveWithRetry. Audit logs emit `[raid-task] share-write executor=B owner=A cmd=<sub> roster=X` (and `share-preview` for the read-then-confirm flow `handleClear` opens).
+- `/raid-task` `roster` autocomplete now appends rosters shared to the executor with `👥 Name · N chars · M task · shared by Alice` (and `· 👁️ view` for view-level shares so the executor sees they cannot edit even if the roster is pickable). Owner's own rosters keep the existing `📁` icon.
+- `handleSharedAdd` keeps `applyAllRosters: true` scoped to the executor's OWN rosters only. Share grants are guest passes, not full ownership; bulk-applying a shared task across someone else's rosters would overstep the share contract.
+
+### Notes
+- 316/316 tests pass.
+- Side-task toggling on `/raid-status` shared pages (Phase 2d) is still pending: it lives in `raid-status/task-actions.js` and uses a different code path than the slash command surface integrated here.
+- Zero-own viewer support (also Phase 2d) still defers; B with `accounts.length === 0` but incoming shares still hits the "Cậu chưa có roster nào" gate. Fix needs synthesized stub seedDoc + skip refresh-userDoc steps.
+
 ## 2026-05-09 (later)
 
 ### Changed
