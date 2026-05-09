@@ -6,6 +6,7 @@ const {
   setLocalSyncEnabled,
   setBibleAutoSyncEnabled,
   getSyncStatus,
+  mintToken: mintLocalSyncToken,
   RESULT: SYNC_RESULT,
 } = require("../services/local-sync");
 
@@ -185,16 +186,48 @@ function createRaidAutoManageCommand(deps) {
         });
         return;
       }
-      // Success path. Companion site (Phase 3) isn't deployed yet, so the
-      // success embed explicitly tells the user the link will arrive
-      // separately + how to back out. Phase 3 swaps the placeholder
-      // sentence for the actual `?token=<jwt>` URL.
+      // Success path. Mint a 30-min HMAC token and build the personalized
+      // companion URL. Token mint can throw if LOCAL_SYNC_TOKEN_SECRET is
+      // unset or PUBLIC_BASE_URL is missing - in those cases we degrade
+      // gracefully: still show the success embed (the flag is already
+      // flipped) but warn the user the companion link isn't available
+      // yet. Operator should set both env vars + redeploy.
+      const baseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+      let companionUrl = null;
+      let mintError = null;
+      if (baseUrl) {
+        try {
+          const token = mintLocalSyncToken(discordId);
+          companionUrl = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
+        } catch (err) {
+          mintError = err?.message || String(err);
+          console.warn("[raid-auto-manage] local-on token mint failed:", mintError);
+        }
+      }
       const embed = new EmbedBuilder()
         .setColor(UI.colors.success)
         .setTitle(`${UI.icons.done} ${t("raid-auto-manage.localEnable.successTitle", lang)}`)
-        .setDescription(t("raid-auto-manage.localEnable.successDescription", lang))
+        .setDescription(
+          companionUrl
+            ? t("raid-auto-manage.localEnable.successDescriptionWithLink", lang)
+            : t("raid-auto-manage.localEnable.successDescription", lang)
+        )
         .setTimestamp();
-      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      const replyPayload = { embeds: [embed], flags: MessageFlags.Ephemeral };
+      if (companionUrl) {
+        // Link button (URL style) - opens the companion in the user's
+        // browser without firing a Discord interaction we'd have to
+        // handle. Token rides as a query param; the page parses + caches
+        // it for the eventual POST.
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setStyle(ButtonStyle.Link)
+            .setLabel(t("raid-auto-manage.localEnable.openButtonLabel", lang))
+            .setURL(companionUrl)
+        );
+        replyPayload.components = [row];
+      }
+      await interaction.reply(replyPayload);
       return;
     }
     if (action === "local-off") {

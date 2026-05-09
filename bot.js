@@ -113,6 +113,28 @@ async function startBot() {
   // an empty-looking cache that masquerades as "chưa config channel nào".
   await loadMonitorChannelCache();
 
+  // Local-sync HTTP server hosts the web companion (Phase 3) at /sync/*
+  // and will serve POST /api/raid-sync (Phase 4). Listens on PORT (Railway
+  // injects this) so the deploy passes Railway's "service detected" probe.
+  // Disabled when LOCAL_SYNC_HTTP_DISABLED=true so a degraded deploy can
+  // run pure-Discord-only without binding a port.
+  if (process.env.LOCAL_SYNC_HTTP_DISABLED !== "true") {
+    try {
+      const path = require("node:path");
+      const { startLocalSyncHttpServer } = require("./bot/services/local-sync/http-server");
+      startLocalSyncHttpServer({
+        webDir: path.join(__dirname, "web"),
+      });
+    } catch (err) {
+      console.error(
+        "[bot] local-sync HTTP server failed to start (continuing without web companion):",
+        err?.message || err
+      );
+    }
+  } else {
+    console.log("[bot] LOCAL_SYNC_HTTP_DISABLED=true - skipping web companion HTTP server.");
+  }
+
   const intents = [GatewayIntentBits.Guilds];
   if (TEXT_MONITOR_ENABLED) {
     // GuildMessages + MessageContent power the raid-channel text monitor.

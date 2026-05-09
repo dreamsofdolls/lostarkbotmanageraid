@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Artist · Local Sync</title>
+  <link rel="stylesheet" href="/sync/styles.css" />
+</head>
+<body>
+  <main class="container">
+    <header>
+      <h1>Local Sync</h1>
+      <p class="subtitle">Web companion for Artist's <code>/raid-auto-manage local-on</code> mode</p>
+    </header>
+
+    <section id="auth-state" class="card">
+      <h2>1. Identity</h2>
+      <div id="auth-status">Reading link token...</div>
+    </section>
+
+    <section id="file-section" class="card" hidden>
+      <h2>2. Encounters database</h2>
+      <p class="hint">
+        Drag-and-drop your <code>encounters.db</code> file from
+        <code>%localappdata%\LOA Logs\</code>. Browser keeps the permission for
+        next visits (Chrome / Edge only - Brave needs the
+        <code>file-system-access-api</code> flag).
+      </p>
+      <div id="drop-zone" class="drop-zone">
+        <p>Drop <code>encounters.db</code> here</p>
+        <p class="hint">or</p>
+        <button id="pick-file-btn" type="button">Pick file</button>
+      </div>
+      <div id="file-meta" class="meta" hidden></div>
+    </section>
+
+    <section id="preview-section" class="card" hidden>
+      <h2>3. Last 7-day preview (dry-run)</h2>
+      <p class="hint">
+        Phase 3 only previews what would be sent. Phase 4 wires the actual sync POST.
+      </p>
+      <div id="preview-output">Loading sql.js WASM...</div>
+    </section>
+
+    <footer>
+      <p class="hint">
+        Phase 3 of 6. <a href="https://github.com/dreamsofdolls/lostarkbotmanageraid">Source</a>.
+      </p>
+    </footer>
+  </main>
+
+  <!-- sql.js loaded from CDN; small + cached so we avoid bundling 1.5MB of WASM in the bot deploy. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+  <script src="/sync/app.js" type="module"></script>
+</body>
+</html>

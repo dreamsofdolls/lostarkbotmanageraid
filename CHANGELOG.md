@@ -4,6 +4,22 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-10 (Phase 3 - web companion shipped)
+
+### Added (local-sync Phase 3 - web companion + HTTP server)
+- New HTTP server at `bot/services/local-sync/http-server.js` using Node's built-in `http` module (no Express dependency). Listens on `process.env.PORT || 3000`, binds 0.0.0.0 for Railway. Routes: `GET /` and `GET /health` return 200 OK (Railway probe), `GET /sync/*` serves static files from the new `web/` folder, anything else 404. Path traversal sandboxed - resolved paths must stay inside `webDir`.
+- `web/index.html` + `web/app.js` + `web/styles.css` - vanilla web companion. Parses the `?token=` query, decodes the HMAC payload to display "Linked as Discord user X · valid for ~N min", offers drag-and-drop OR `showOpenFilePicker` for `encounters.db`, loads sql.js WASM from cdnjs, queries last-7-day encounters grouped by boss + difficulty + cleared, renders a preview table. **Phase 3 is dry-run only** - no POST yet (Phase 4 wires that).
+- `bot/services/local-sync/tokens.js` - HMAC-SHA256 short-lived tokens (default 30 min TTL) using Node's built-in `crypto`. No `jsonwebtoken` dependency. Constant-time signature compare. 10 new tests cover roundtrip, custom TTL, sub-minute clamp, malformed/forged/payload-tamper/expired rejects, and missing-secret throw.
+- `/raid-auto-manage action:local-on` success embed now mints a token + builds `${PUBLIC_BASE_URL}/sync?token=<jwt>` and adds an "Open Web Companion" link button when `PUBLIC_BASE_URL` and `LOCAL_SYNC_TOKEN_SECRET` env vars are set. Falls back to the existing no-link copy when env is unset (degraded mode - flag still flips, just no companion link).
+- `bot.js` boots the HTTP server alongside the Discord client. Skippable via `LOCAL_SYNC_HTTP_DISABLED=true` for degraded deploys.
+- 6 new locale keys (`localEnable.successDescriptionWithLink` + `localEnable.openButtonLabel` per vi/jp/en).
+- 353/353 tests pass (was 343, +10 token tests).
+
+### New env vars (set in Railway before redeploy)
+- `LOCAL_SYNC_TOKEN_SECRET` - HMAC key for the web-companion link tokens. Required (>= 16 chars). Mint throws if missing/short.
+- `PUBLIC_BASE_URL` - public-facing URL of the Railway deploy, e.g. `https://lostarkbotmanageraid.up.railway.app`. Required for the local-on success embed to include the link button.
+- `LOCAL_SYNC_HTTP_DISABLED` (optional) - set to "true" to skip the HTTP server entirely (degraded deploy mode).
+
 ## 2026-05-09 (later 13)
 
 ### Added (local-sync Phase 2 - /raid-auto-manage extends with local-on / local-off)
