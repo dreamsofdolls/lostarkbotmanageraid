@@ -2,7 +2,7 @@
 
 /**
  * Shared primitives for the roster / character autocomplete flows used
- * across `/raid-set`, `/raid-task`, `/remove-roster`, and `/edit-roster`.
+ * across `/raid-set`, `/raid-task`, `/raid-remove-roster`, and `/raid-edit-roster`.
  *
  * Each command has slightly different label format / suffix / sort
  * preference, so this module exposes building blocks rather than a

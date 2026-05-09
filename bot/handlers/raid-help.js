@@ -23,14 +23,14 @@ const { t, getUserLanguage, resolveLocale } = require("../services/i18n");
 // drives both the overview embed and the dropdown options.
 const SECTION_ORDER = [
   "getting-started",
-  "add-roster",
-  "edit-roster",
+  "raid-add-roster",
+  "raid-edit-roster",
   "raid-status",
   "raid-gold-earner",
   "raid-task",
   "raid-set",
   "raid-check",
-  "remove-roster",
+  "raid-remove-roster",
   "raid-channel",
   "raid-auto-manage",
   "raid-announce",
@@ -43,14 +43,14 @@ const SECTION_ORDER = [
 // `raid-help.sections.<key>.optionDescriptions.<name>` in every locale.
 const SECTION_META = {
   "getting-started": { icon: "🚀", options: [] },
-  "add-roster": {
+  "raid-add-roster": {
     icon: "📥",
     options: [
       { name: "name", required: true },
       { name: "target", required: false },
     ],
   },
-  "edit-roster": {
+  "raid-edit-roster": {
     icon: "📁",
     options: [{ name: "roster", required: true }],
   },
@@ -85,7 +85,7 @@ const SECTION_META = {
     ],
   },
   "raid-check": { icon: "🔍", options: [] },
-  "remove-roster": {
+  "raid-remove-roster": {
     icon: "🗑️",
     options: [
       { name: "roster", required: true },

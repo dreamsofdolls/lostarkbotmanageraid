@@ -259,7 +259,7 @@ function createRaidCheckAutoManageUi(deps) {
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
             title: "User không tồn tại",
-            description: `Artist không thấy user \`${targetDiscordId}\` trong DB nữa (có thể họ đã \`/remove-roster\`). Refresh lại \`/raid-check\` để page sync state mới nha.`,
+            description: `Artist không thấy user \`${targetDiscordId}\` trong DB nữa (có thể họ đã \`/raid-remove-roster\`). Refresh lại \`/raid-check\` để page sync state mới nha.`,
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -394,7 +394,7 @@ function createRaidCheckAutoManageUi(deps) {
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
             title: "Account không tồn tại",
-            description: "Artist không tìm thấy roster của cậu trong DB nữa (có thể đã `/remove-roster` toàn bộ). Không có gì để tắt.",
+            description: "Artist không tìm thấy roster của cậu trong DB nữa (có thể đã `/raid-remove-roster` toàn bộ). Không có gì để tắt.",
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -472,7 +472,7 @@ function createRaidCheckAutoManageUi(deps) {
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
             title: "User không tồn tại",
-            description: `Artist không thấy user \`${targetDiscordId}\` trong DB nữa (có thể họ đã \`/remove-roster\`). Refresh lại \`/raid-check\` để page sync state mới nha.`,
+            description: `Artist không thấy user \`${targetDiscordId}\` trong DB nữa (có thể họ đã \`/raid-remove-roster\`). Refresh lại \`/raid-check\` để page sync state mới nha.`,
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -600,7 +600,7 @@ function createRaidCheckAutoManageUi(deps) {
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
             title: "Account không tồn tại",
-            description: "Artist không tìm thấy roster của cậu trong DB nữa (có thể đã `/remove-roster` toàn bộ). Bật `/add-roster` trước rồi mới opt-in được nha.",
+            description: "Artist không tìm thấy roster của cậu trong DB nữa (có thể đã `/raid-remove-roster` toàn bộ). Bật `/raid-add-roster` trước rồi mới opt-in được nha.",
           }),
         ],
         flags: MessageFlags.Ephemeral,

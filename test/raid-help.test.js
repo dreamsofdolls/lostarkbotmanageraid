@@ -67,14 +67,14 @@ function getAllFieldValues(embedJson) {
 
 const EXPECTED_SECTION_KEYS = [
   "getting-started",
-  "add-roster",
-  "edit-roster",
+  "raid-add-roster",
+  "raid-edit-roster",
   "raid-status",
   "raid-gold-earner",
   "raid-task",
   "raid-set",
   "raid-check",
-  "remove-roster",
+  "raid-remove-roster",
   "raid-channel",
   "raid-auto-manage",
   "raid-announce",
@@ -148,10 +148,10 @@ test("invalid language value falls back to default vi", async () => {
 });
 
 test("detail embed in English: notes with VN: prefix are stripped", async () => {
-  // /add-roster section has paired EN: / VN: notes — under en mode,
+  // /raid-add-roster section has paired EN: / VN: notes — under en mode,
   // the VN-prefixed lines must NOT appear.
   const factory = makeFactory();
-  const interaction = makeSelectInteraction("add-roster", { lang: "en" });
+  const interaction = makeSelectInteraction("raid-add-roster", { lang: "en" });
   await factory.handleRaidHelpSelect(interaction);
 
   const allFields = getAllFieldValues(interaction._calls.update[0].embeds[0].toJSON());
@@ -165,7 +165,7 @@ test("detail embed in English: notes with VN: prefix are stripped", async () => 
 
 test("detail embed in Vietnamese: notes with EN: prefix are stripped", async () => {
   const factory = makeFactory();
-  const interaction = makeSelectInteraction("add-roster", { lang: "vi" });
+  const interaction = makeSelectInteraction("raid-add-roster", { lang: "vi" });
   await factory.handleRaidHelpSelect(interaction);
 
   const allFields = getAllFieldValues(interaction._calls.update[0].embeds[0].toJSON());
@@ -179,11 +179,11 @@ test("detail embed: untagged technical bullets render in BOTH languages", async 
   // technical jargon — they must survive both language filters.
   const factory = makeFactory();
 
-  const enInteraction = makeSelectInteraction("add-roster", { lang: "en" });
+  const enInteraction = makeSelectInteraction("raid-add-roster", { lang: "en" });
   await factory.handleRaidHelpSelect(enInteraction);
   const enFields = getAllFieldValues(enInteraction._calls.update[0].embeds[0].toJSON());
 
-  const viInteraction = makeSelectInteraction("add-roster", { lang: "vi" });
+  const viInteraction = makeSelectInteraction("raid-add-roster", { lang: "vi" });
   await factory.handleRaidHelpSelect(viInteraction);
   const viFields = getAllFieldValues(viInteraction._calls.update[0].embeds[0].toJSON());
 
@@ -214,13 +214,13 @@ test("detail embed in Vietnamese uses 'Không có options' label", async () => {
 
 test("handleRaidHelpSelect: valid section key returns matching detail embed", async () => {
   const factory = makeFactory();
-  const interaction = makeSelectInteraction("add-roster");
+  const interaction = makeSelectInteraction("raid-add-roster");
   await factory.handleRaidHelpSelect(interaction);
 
   assert.equal(interaction._calls.update.length, 1);
   const embedJson = interaction._calls.update[0].embeds[0].toJSON();
-  assert.match(embedJson.title, /add-roster/);
-  // Options field should mention the `name` arg (required for /add-roster).
+  assert.match(embedJson.title, /raid-add-roster/);
+  // Options field should mention the `name` arg (required for /raid-add-roster).
   const allFields = getAllFieldValues(embedJson);
   assert.match(allFields, /`name`/);
 });
@@ -269,11 +269,11 @@ test("detail embed: every field value stays within Discord's 1024-char limit", a
 });
 
 test("detail embed: required-option marker (✅) renders for required args", async () => {
-  // /add-roster's `name` option is required; the detail embed should
+  // /raid-add-roster's `name` option is required; the detail embed should
   // surface that with a ✅ marker so users see at-a-glance which args
   // are mandatory.
   const factory = makeFactory();
-  const interaction = makeSelectInteraction("add-roster");
+  const interaction = makeSelectInteraction("raid-add-roster");
   await factory.handleRaidHelpSelect(interaction);
 
   const allFields = getAllFieldValues(interaction._calls.update[0].embeds[0].toJSON());
@@ -281,9 +281,9 @@ test("detail embed: required-option marker (✅) renders for required args", asy
 });
 
 test("detail embed: optional-option marker (⚪) renders for optional args", async () => {
-  // /add-roster's `target` option is optional → ⚪ marker.
+  // /raid-add-roster's `target` option is optional → ⚪ marker.
   const factory = makeFactory();
-  const interaction = makeSelectInteraction("add-roster");
+  const interaction = makeSelectInteraction("raid-add-roster");
   await factory.handleRaidHelpSelect(interaction);
 
   const allFields = getAllFieldValues(interaction._calls.update[0].embeds[0].toJSON());

@@ -83,7 +83,7 @@ module.exports = {
   "raid-status": {
     notice: {
       noRosterTitle: "まだロスターが無いですわ",
-      noRosterDescription: "DB の中にあなたのロスターが見つかりませんでしたわ～ まず `/add-roster` で最初のロスターを登録してから `/raid-status` で進捗を見てくださいね♪",
+      noRosterDescription: "DB の中にあなたのロスターが見つかりませんでしたわ～ まず `/raid-add-roster` で最初のロスターを登録してから `/raid-status` で進捗を見てくださいね♪",
     },
     freshness: {
       lastUpdated: "最終更新",
@@ -188,11 +188,11 @@ module.exports = {
       ambiguousTitle: "同名ロスターが複数ユーザーに存在しますわ",
       ambiguousDescription: "あなたが代理登録したロスター **{rosterName}** が {count} 個ありますわ ({ownerNames})。アーティストはどのユーザーに設定すべきか判断できないの～ 管理者にリネームか整理を依頼してくださいね。",
       deletedForOtherTitle: "ロスターが削除されていますわ",
-      deletedForOtherDescription: "<@{target}> さんのロスターは削除されたかもう存在しないですわ。アーティストは代わりに編集できないので、<@{target}> さんが自分で `/add-roster` するか、あなたが `/add-roster target:<user>` で再登録してくださいね～",
+      deletedForOtherDescription: "<@{target}> さんのロスターは削除されたかもう存在しないですわ。アーティストは代わりに編集できないので、<@{target}> さんが自分で `/raid-add-roster` するか、あなたが `/raid-add-roster target:<user>` で再登録してくださいね～",
       noRosterTitle: "ロスターがまだ無いですわ",
-      noRosterDescription: "アーティストはあなたのロスターを見つけられませんでした～ まず `/add-roster` で最初のロスターを登録してから `/raid-set` を使ってくださいね♪",
+      noRosterDescription: "アーティストはあなたのロスターを見つけられませんでした～ まず `/raid-add-roster` で最初のロスターを登録してから `/raid-set` を使ってくださいね♪",
       authLostTitle: "ロスター権限が変わりましたわ",
-      authLostDescription: "<@{target}> さんのロスター **{rosterName}** はもうあなたが代理登録した状態じゃないですわ。コマンド実行中に削除→再作成された可能性も。`roster:` オートコンプリートから選び直してね～ 表示されない場合は `/add-roster target:<user>` をもう一度実行してから進捗設定を続けてくださいませ。",
+      authLostDescription: "<@{target}> さんのロスター **{rosterName}** はもうあなたが代理登録した状態じゃないですわ。コマンド実行中に削除→再作成された可能性も。`roster:` オートコンプリートから選び直してね～ 表示されない場合は `/raid-add-roster target:<user>` をもう一度実行してから進捗設定を続けてくださいませ。",
     },
     character: {
       notFoundTitle: "キャラが見つかりませんわ",
@@ -247,7 +247,7 @@ module.exports = {
     },
     common: {
       noRosterTitle: "ロスターがまだ無いですわ",
-      noRosterDescription: "アーティストはあなたのロスターを見つけられませんでしたわ。先に `/add-roster` でロスターを登録してからタスクを登録してね～",
+      noRosterDescription: "アーティストはあなたのロスターを見つけられませんでしたわ。先に `/raid-add-roster` でロスターを登録してからタスクを登録してね～",
       noCharacterTitle: "キャラが見つかりませんわ",
       noCharacterDescription: "アーティストは **{characterName}** をあなたのロスターに見つけられませんでしたわ。`character:` フィールドのオートコンプリートを使うとタイポを避けられますよ♪",
       missingCharacterTitle: "キャラが必要ですわ",
@@ -269,7 +269,7 @@ module.exports = {
     },
     addAll: {
       emptyRosterTitle: "ロスターが空ですわ",
-      emptyRosterDescription: "ロスター **{rosterName}** にはまだキャラが居ませんわ。先に `/add-roster` でキャラを追加してからタスク登録してね～",
+      emptyRosterDescription: "ロスター **{rosterName}** にはまだキャラが居ませんわ。先に `/raid-add-roster` でキャラを追加してからタスク登録してね～",
       nothingTitle: "追加できるものがありませんわ",
       nothingDescription: "このタスクを受け取れるキャラがロスターに居ませんでした (スロット満杯か、同じ名前+サイクルのタスクが既存)。\n\n{skippedSummary}",
       successTitle: "ロスターにタスクを追加しましたわ♪",
@@ -357,31 +357,31 @@ module.exports = {
       "getting-started": {
         label: "🚀 はじめての方へ",
         short: "🌐 はじめての方は3ステップで♪",
-        example: "/add-roster name:<ロスターのキャラ名>",
+        example: "/raid-add-roster name:<ロスターのキャラ名>",
         notes: [
           "アーティストとはじめましてですか？ 3ステップでサクッとスタートできますわ～♪",
           "",
-          "**1️⃣ ロスターを登録**: `/add-roster name:<ロスターのキャラ名>` と入力すれば、アーティストが lostark.bible からあなたのキャラ一覧を取ってきて、ピッカーを開きますわ♪ 追跡したいキャラにチェックを入れて **Confirm** を押してね～",
+          "**1️⃣ ロスターを登録**: `/raid-add-roster name:<ロスターのキャラ名>` と入力すれば、アーティストが lostark.bible からあなたのキャラ一覧を取ってきて、ピッカーを開きますわ♪ 追跡したいキャラにチェックを入れて **Confirm** を押してね～",
           "**2️⃣ 進捗を確認**: `/raid-status` でどのキャラが今週どのレイドをクリアしたか見られますわ～",
           "**3️⃣ 進捗を更新**: 2通りありますわ - (a) `/raid-set` で手動更新、または (b) `/raid-auto-manage action:on` でアーティストが lostark.bible から24時間ごとに自動同期しますわ♪",
           "",
           "**おまけ**: レイドチャンネル (admin が `/raid-channel` で設定) に `<raid> <difficulty> <character>` 形式のメッセージを投稿すると、アーティストが自動で読んで更新して、DMで確認まで送りますわ～♪ 例: `Serca Hard Clauseduk`",
           "",
-          "上級コマンド: `/raid-task` (毎日/毎週のタスク追跡)、`/edit-roster` (登録済ロスターの編集)、`/remove-roster` (削除)。各コマンドの詳細は下のドロップダウンで見られますわ～",
+          "上級コマンド: `/raid-task` (毎日/毎週のタスク追跡)、`/raid-edit-roster` (登録済ロスターの編集)、`/raid-remove-roster` (削除)。各コマンドの詳細は下のドロップダウンで見られますわ～",
           "",
           "🌐 **言語を変えたい？** `/raid-language` でアーティストの言語を Tiếng Việt と 日本語 の間で切り替えられますわ♪",
         ],
       },
-      "add-roster": {
-        label: "/add-roster",
+      "raid-add-roster": {
+        label: "/raid-add-roster",
         short: "ロスターを lostark.bible から登録ですわ～",
-        example: "/add-roster name:Clauseduk",
+        example: "/raid-add-roster name:Clauseduk",
         notes: [
           "キャラ1人の名前を入力すると、アーティストが lostark.bible からロスター全体を取得してピッカーを開きますわ♪ 追跡したいキャラにチェックを入れてくださいね～",
           "",
           "**使うタイミング**: サーバーに初めて入った時、または新しいアカウント (alt) を追加する時ですわ。",
           "**操作の流れ**: チェック後 **Confirm** を押す → アーティストがDBに保存ですわ。**Cancel** か5分タイムアウト → 破棄しますの。",
-          "**ロスター当たり最大20キャラ** (どんなプレイヤーにも十分ですわ)。もし他のアカウントに既に保存されているキャラなら → アーティストが拒否しますわ。`/edit-roster` を使ってね～",
+          "**ロスター当たり最大20キャラ** (どんなプレイヤーにも十分ですわ)。もし他のアカウントに既に保存されているキャラなら → アーティストが拒否しますわ。`/raid-edit-roster` を使ってね～",
           "**Manager のヒント**: `target:` オプションで Manager が他のメンバーの代わりにロスターを登録できますわ♪ Reply embed で対象ユーザーがメンションされますの。",
         ],
         optionDescriptions: {
@@ -389,17 +389,17 @@ module.exports = {
           target: "(Raid Manager) 他のユーザーの代わりにロスターを登録",
         },
       },
-      "edit-roster": {
-        label: "/edit-roster",
+      "raid-edit-roster": {
+        label: "/raid-edit-roster",
         short: "ロスターを編集 (キャラ追加 / 削除) ですわ",
-        example: "/edit-roster roster:Clauseduk",
+        example: "/raid-edit-roster roster:Clauseduk",
         notes: [
           "アーティストが統合ピッカーを開きますわ♪ `🆕` キャラにチェックして追加、保存済キャラのチェックを外して削除。残ったキャラのレイド進捗はそのまま保持されますの。",
           "",
           "**使うタイミング**: まだ追跡していない新キャラを作った時、またはもう遊んでいない alt を外したい時ですわ。",
           "**アイコン**: `🆕` = bible にある新キャラ · `📦` = 保存済だが bible に無いキャラ (リネーム / private log)",
           "**ヒント**: bible が一時的にオフラインの時でも入れますが、削除のみ可能ですわ。新キャラ追加は bible 復活を待ってね～",
-          "**`/add-roster` との違い**: edit-roster は既存ロスターを編集ですわ。完全に新しいロスター (別アカウント) を追加したい時は → `/add-roster` を使ってくださいね♪",
+          "**`/raid-add-roster` との違い**: edit-roster は既存ロスターを編集ですわ。完全に新しいロスター (別アカウント) を追加したい時は → `/raid-add-roster` を使ってくださいね♪",
         ],
         optionDescriptions: {
           roster: "編集する保存済ロスター (オートコンプリート)",
@@ -429,7 +429,7 @@ module.exports = {
           "エフェメラル ピッカー (5分セッション) を開いて各キャラの `💰 isGoldEarner` フラグを切り替えますわ♪ Lost Ark は週6人キャップなので、ピッカーは6チェックで止まりますの。",
           "",
           "**初回オープン**: アカウント全員が gold-earner 未指定 (2026-05-05 以前のデータ) の場合、アーティストが装備レベル順に上位6名を自動チェックして1クリック移行ですわ♪ **Confirm** 前にチェックを外したり付け直したりできますの。",
-          "**新キャラのデフォルト**: 2026-05-05 以降に `/add-roster` で追加されたキャラは gold-earner オンがデフォルトですわ。in-game 選択以外の alt がある場合はこのコマンドでオフにしてね～",
+          "**新キャラのデフォルト**: 2026-05-05 以降に `/raid-add-roster` で追加されたキャラは gold-earner オンがデフォルトですわ。in-game 選択以外の alt がある場合はこのコマンドでオフにしてね～",
           "**キャップ動作**: 7人目をチェックするとエフェメラル通知が出て却下されますわ - 先に他のキャラのチェックを外してくださいね。",
           "**ピッカー外のキャラ**: 20キャラ超のロスター (まれ) は装備レベル上位20名のみピッカーに表示されますわ。21人目以降は既存のフラグ値がそのまま残りますの。",
         ],
@@ -478,7 +478,7 @@ module.exports = {
           "**ヒント**: `roster:` を先に選んでね～ `character:` オートコンプリートはそのロスター内のキャラだけ表示するので、2つのロスターで同名キャラがあっても間違えませんわ♪",
           "**モード切替**: 例えば Serca Nightmare → Hard に変えると古い進捗は消えますわ (週次エントリーがモード単位だから)。",
           "**もっと早い方法**: レイドチャンネルに `Kazeros Hard Nailaduk G1` と投稿すれば、スラッシュコマンドを打たなくても自動更新ですわ♪",
-          "**Manager 代行フロー**: `/add-roster target:U` でユーザー U にロスターを登録した Raid Manager は、自分の `/raid-set` オートコンプリートにそのロスターも表示されますわ (👥 + ユーザー名のラベル付き)。U の進捗を継続的に管理できますの～",
+          "**Manager 代行フロー**: `/raid-add-roster target:U` でユーザー U にロスターを登録した Raid Manager は、自分の `/raid-set` オートコンプリートにそのロスターも表示されますわ (👥 + ユーザー名のラベル付き)。U の進捗を継続的に管理できますの～",
         ],
         optionDescriptions: {
           roster: "キャラを含むロスター (オートコンプリート)",
@@ -502,16 +502,16 @@ module.exports = {
           "**セッション タイムアウト 5分** - 期限切れで全コンポーネントが無効化、もう一度 `/raid-check` で再開ですわ♪",
         ],
       },
-      "remove-roster": {
-        label: "/remove-roster",
+      "raid-remove-roster": {
+        label: "/raid-remove-roster",
         short: "ロスターまたはキャラ1体を削除しますの",
-        example: "/remove-roster roster:Qiylyn action:Remove a single character character:Zywang",
+        example: "/raid-remove-roster roster:Qiylyn action:Remove a single character character:Zywang",
         notes: [
           "アカウントロスター全体、または1キャラだけを削除ですわ。",
           "",
           "**使うタイミング**: もう遊んでいないアカウント/キャラの時ですわ。",
-          "**ヒント**: ロスターをリフレッシュしたい時は → `/remove-roster` してから `/add-roster` で bible から最新データを取り直しですわ♪",
-          "**`/edit-roster` との違い**: edit-roster はチェック付け外しで編集ですわ。Remove-roster は完全削除ですの。",
+          "**ヒント**: ロスターをリフレッシュしたい時は → `/raid-remove-roster` してから `/raid-add-roster` で bible から最新データを取り直しですわ♪",
+          "**`/raid-edit-roster` との違い**: edit-roster はチェック付け外しで編集ですわ。Remove-roster は完全削除ですの。",
         ],
         optionDescriptions: {
           roster: "ロスター名 (オートコンプリート)",

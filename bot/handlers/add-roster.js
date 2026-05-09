@@ -3,7 +3,7 @@
 const crypto = require("crypto");
 const { buildNoticeEmbed } = require("../utils/raid/shared");
 
-// Two-step flow window: from /add-roster invocation to Confirm click. After
+// Two-step flow window: from /raid-add-roster invocation to Confirm click. After
 // 5 minutes the in-memory session is dropped and the embed is updated to
 // "expired"; user must re-run the command to retry. Matches the budget
 // Traine specified.
@@ -74,8 +74,8 @@ function createAddRosterCommand({
   // Module-level cache: sessionId -> session state. Lives in process
   // memory only; bot restart drops every in-flight session, which is
   // acceptable since the user is sitting in front of the embed and can
-  // simply re-run /add-roster. Keying by random sessionId (not by user)
-  // means a user who runs /add-roster twice gets two independent
+  // simply re-run /raid-add-roster. Keying by random sessionId (not by user)
+  // means a user who runs /raid-add-roster twice gets two independent
   // pickers — the older one still works until its 5-minute timer fires.
   const sessions = new Map();
 
@@ -184,7 +184,7 @@ function createAddRosterCommand({
         [
           `Roster: [**${session.seedCharName}**](${buildSeedRosterLink(session.seedCharName)})`,
           "",
-          `Phiên 5 phút đã hết và không có gì được lưu. Chạy lại \`/add-roster\` để thử lại nhé~`,
+          `Phiên 5 phút đã hết và không có gì được lưu. Chạy lại \`/raid-add-roster\` để thử lại nhé~`,
         ].join("\n")
       )
       .setColor(UI.colors.muted)
@@ -198,7 +198,7 @@ function createAddRosterCommand({
         [
           `Roster: [**${session.seedCharName}**](${buildSeedRosterLink(session.seedCharName)})`,
           "",
-          `Không có gì được lưu. Chạy lại \`/add-roster\` khi cậu sẵn sàng.`,
+          `Không có gì được lưu. Chạy lại \`/raid-add-roster\` khi cậu sẵn sàng.`,
         ].join("\n")
       )
       .setColor(UI.colors.muted)
@@ -249,7 +249,7 @@ function createAddRosterCommand({
 
   // Personal DM embed for the Manager-target onboarding flow. Mirrors
   // buildSavedEmbed's content but with a Manager-friendly intro line +
-  // hints at the next-step commands (/raid-status, /edit-roster) so
+  // hints at the next-step commands (/raid-status, /raid-edit-roster) so
   // the target knows what to do without scrolling channel chrome.
   function buildTargetDMEmbed(session, savedAccount, guildName) {
     const summaryLines = savedAccount.characters.map(
@@ -268,7 +268,7 @@ function createAddRosterCommand({
           "",
           "Vài lệnh tiếp theo:",
           "• `/raid-status` → xem tiến độ raid mọi lúc",
-          "• `/edit-roster` → chỉnh sửa nếu có chars sai (thêm/bỏ)",
+          "• `/raid-edit-roster` → chỉnh sửa nếu có chars sai (thêm/bỏ)",
           "• `/raid-help` → tài liệu đầy đủ mọi lệnh",
         ].join("\n")
       )
@@ -320,12 +320,12 @@ function createAddRosterCommand({
   // Throws an Error with code "RACE_DUP_ROSTER" + collidingAccountName
   // when the freshly-loaded userDoc already contains an account whose
   // chars overlap the bible roster we fetched. The Confirm handler
-  // catches this and renders a user-friendly hint pointing to /edit-roster.
+  // catches this and renders a user-friendly hint pointing to /raid-edit-roster.
   async function persistSelectedRoster(session, selectedChars) {
     const rosterNameSet = new Set(selectedChars.map((c) => normalizeName(c.charName)));
     // Full bible char names from the fetch that opened this picker.
     // Used inside the saveWithRetry body to detect a concurrent
-    // /add-roster session that committed first against the same bible
+    // /raid-add-roster session that committed first against the same bible
     // roster (race the command-time guard can't catch). Empty Set is
     // a no-op skip — preserves behavior if a future caller forgets
     // to populate session.bibleNames.
@@ -352,7 +352,7 @@ function createAddRosterCommand({
       // create/merge into. Skip the account we identified above as our
       // target — that's where merging is supposed to happen and any
       // overlap there is by design. Catches the case where two
-      // /add-roster sessions opened pickers concurrently (both passed
+      // /raid-add-roster sessions opened pickers concurrently (both passed
       // the command-time guard against an empty user doc), then the
       // first session committed an account that the second session can
       // no longer ignore.
@@ -366,7 +366,7 @@ function createAddRosterCommand({
         });
         if (collidingAccount) {
           const err = new Error(
-            `Roster đã được saved ở account '${collidingAccount.accountName}' (concurrent /add-roster session committed first).`
+            `Roster đã được saved ở account '${collidingAccount.accountName}' (concurrent /raid-add-roster session committed first).`
           );
           err.code = "RACE_DUP_ROSTER";
           err.collidingAccountName = collidingAccount.accountName;
@@ -382,7 +382,7 @@ function createAddRosterCommand({
         // the live Manager role. Self-add path leaves `registeredBy` null.
         // We only set this on a brand-new account; an existing account's
         // `registeredBy` is preserved (the merge branch below) so a
-        // different Manager re-running /add-roster against an already-
+        // different Manager re-running /raid-add-roster against an already-
         // registered roster cannot silently take over the helper slot.
         const newAccount = {
           accountName: session.seedCharName,
@@ -522,8 +522,8 @@ function createAddRosterCommand({
               description: [
                 `Artist thấy roster cậu đang muốn add đã được saved trong account **${matched.accountName}** từ trước. Không tạo trùng được nha.`,
                 "",
-                `Muốn cập nhật chars trong roster đó: \`/edit-roster roster:${matched.accountName}\``,
-                `Muốn xoá hẳn rồi add lại từ đầu: \`/remove-roster\` rồi \`/add-roster\``,
+                `Muốn cập nhật chars trong roster đó: \`/raid-edit-roster roster:${matched.accountName}\``,
+                `Muốn xoá hẳn rồi add lại từ đầu: \`/raid-remove-roster\` rồi \`/raid-add-roster\``,
               ].join("\n"),
             }),
           ],
@@ -559,13 +559,13 @@ function createAddRosterCommand({
     // (because the account-match logic only inspects the user's selection,
     // not the full bible char list), splitting one bible roster across
     // two accounts and breaking the "1 bible roster = 1 account/user"
-    // invariant that /remove-roster + /raid-set rely on. Direct users to
-    // /edit-roster instead since that's exactly the right tool here.
+    // invariant that /raid-remove-roster + /raid-set rely on. Direct users to
+    // /raid-edit-roster instead since that's exactly the right tool here.
     // Build the bible name set once: used both for the command-time
     // overlap guard below AND stashed into session.bibleNames so
     // persistSelectedRoster can re-run the same overlap check inside
     // saveWithRetry against the FRESH userDoc (catches the race where
-    // a concurrent /add-roster session committed first between command
+    // a concurrent /raid-add-roster session committed first between command
     // time and Confirm).
     const bibleNameSet = new Set(
       rosterCharacters.map((c) => normalizeName(c.charName))
@@ -588,8 +588,8 @@ function createAddRosterCommand({
               description: [
                 `Artist fetch bible xong thấy có chars trùng với account **${collidingAccount.accountName}** đã saved của cậu - tránh tạo split nên Artist từ chối nha.`,
                 "",
-                `Muốn add chars mới: \`/edit-roster roster:${collidingAccount.accountName}\``,
-                `Muốn làm lại từ đầu: \`/remove-roster\` rồi \`/add-roster\``,
+                `Muốn add chars mới: \`/raid-edit-roster roster:${collidingAccount.accountName}\``,
+                `Muốn làm lại từ đầu: \`/raid-remove-roster\` rồi \`/raid-add-roster\``,
               ].join("\n"),
             }),
           ],
@@ -670,7 +670,7 @@ function createAddRosterCommand({
           buildNoticeEmbed(EmbedBuilder, {
             type: "lock",
             title: "Picker này không phải của cậu",
-            description: "Chỉ người gõ lệnh `/add-roster` mới điều khiển được picker đó nha. Cậu muốn add roster của mình thì gõ `/add-roster` riêng.",
+            description: "Chỉ người gõ lệnh `/raid-add-roster` mới điều khiển được picker đó nha. Cậu muốn add roster của mình thì gõ `/raid-add-roster` riêng.",
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -692,7 +692,7 @@ function createAddRosterCommand({
           buildNoticeEmbed(EmbedBuilder, {
             type: "muted",
             title: "Phiên đã hết hạn",
-            description: "Phiên 5 phút đã trôi qua mất rồi. Chạy lại `/add-roster` để Artist mở picker mới cho cậu nha~",
+            description: "Phiên 5 phút đã trôi qua mất rồi. Chạy lại `/raid-add-roster` để Artist mở picker mới cho cậu nha~",
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -779,9 +779,9 @@ function createAddRosterCommand({
       try {
         savedAccount = await persistSelectedRoster(session, selectedChars);
       } catch (err) {
-        // Race-detected duplicate (a concurrent /add-roster session
+        // Race-detected duplicate (a concurrent /raid-add-roster session
         // committed first against the same bible roster). Friendly
-        // hint + steer to /edit-roster instead of a generic error.
+        // hint + steer to /raid-edit-roster instead of a generic error.
         if (err?.code === "RACE_DUP_ROSTER") {
           console.warn(
             `[add-roster] race-detected duplicate roster: ${err.collidingAccountName}`
@@ -794,9 +794,9 @@ function createAddRosterCommand({
                 type: "warn",
                 title: "Có phiên khác vừa save trước",
                 description: [
-                  `Trong lúc cậu đang chọn chars, một phiên \`/add-roster\` khác của cậu vừa save xong roster này ở account **${err.collidingAccountName}**.`,
+                  `Trong lúc cậu đang chọn chars, một phiên \`/raid-add-roster\` khác của cậu vừa save xong roster này ở account **${err.collidingAccountName}**.`,
                   "",
-                  `Dùng \`/edit-roster roster:${err.collidingAccountName}\` để add tiếp chars cậu vừa chọn vào account đó nhé~`,
+                  `Dùng \`/raid-edit-roster roster:${err.collidingAccountName}\` để add tiếp chars cậu vừa chọn vào account đó nhé~`,
                 ].join("\n"),
               }),
             ],
@@ -843,7 +843,7 @@ function createAddRosterCommand({
       // the embed text saying "đã được Manager add giúp <@target>".
       await interaction.editReply({
         content: session.actingForOther
-          ? `<@${session.targetId}> Heya~ Manager <@${session.callerId}> vừa add giúp roster này cho cậu rồi nhé. Check thử xem chars có đúng không, sai thì \`/edit-roster\` sửa được.`
+          ? `<@${session.targetId}> Heya~ Manager <@${session.callerId}> vừa add giúp roster này cho cậu rồi nhé. Check thử xem chars có đúng không, sai thì \`/raid-edit-roster\` sửa được.`
           : null,
         embeds: [buildSavedEmbed(session, savedAccount, dmDelivery)],
         components: [],
@@ -857,7 +857,7 @@ function createAddRosterCommand({
   return {
     handleAddRosterCommand,
     handleAddRosterButton,
-    // Internals exposed for unit tests in test/add-roster.test.js. Not
+    // Internals exposed for unit tests in test/raid-add-roster.test.js. Not
     // part of the public contract — runtime callers go through the
     // handlers above. The session map is exposed read-only-by-convention
     // for tests that need to inject a session before exercising Confirm.

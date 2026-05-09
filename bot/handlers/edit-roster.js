@@ -7,14 +7,14 @@ const {
   truncateChoice,
 } = require("../utils/raid/autocomplete-helpers");
 
-// Same 5-min window as /add-roster picker. Long enough to read + decide,
+// Same 5-min window as /raid-add-roster picker. Long enough to read + decide,
 // short enough that abandoned sessions don't pile up in memory.
 const SESSION_TTL_MS = 5 * 60 * 1000;
 
 // Discord caps a message at 5 ActionRow components. The picker layout
 // reserves 1 row for Confirm + Cancel buttons, leaving 4 rows for
 // per-char toggle buttons at 5 buttons per row = 20 max chars in the
-// picker. Matches the cap used by /add-roster's picker.
+// picker. Matches the cap used by /raid-add-roster's picker.
 const PICKER_MAX_OPTIONS = 20;
 const BUTTONS_PER_ROW = 5;
 
@@ -51,9 +51,9 @@ function createEditRosterCommand({
     const id = typeof getPrimaryManagerId === "function" ? getPrimaryManagerId() : null;
     return id ? `<@${id}>` : "admin";
   })();
-  // sessionId -> session state. Same shape/semantics as the /add-roster
+  // sessionId -> session state. Same shape/semantics as the /raid-add-roster
   // sessions map: in-process only, dropped on bot restart, keyed by a
-  // random 16-hex token so concurrent /edit-roster invocations don't
+  // random 16-hex token so concurrent /raid-edit-roster invocations don't
   // step on each other.
   const sessions = new Map();
 
@@ -190,7 +190,7 @@ function createEditRosterCommand({
     };
   }
 
-  // Mirror /remove-roster's roster autocomplete: list the caller's saved
+  // Mirror /raid-remove-roster's roster autocomplete: list the caller's saved
   // accounts with a char-count hint, fuzzy-filtered by what they've typed.
   async function handleEditRosterAutocomplete(interaction) {
     const focused = interaction.options.getFocused(true);
@@ -247,13 +247,13 @@ function createEditRosterCommand({
     if (session.excludedSavedCount > 0) {
       desc.push("");
       desc.push(
-        `${UI.icons.warn} Roster có saved chars vượt cap picker (${PICKER_MAX_OPTIONS}). **${session.excludedSavedCount}** saved char ngoài cửa sổ sẽ được giữ nguyên không thay đổi - cậu chỉ edit được top ${PICKER_MAX_OPTIONS} chars hiển thị thôi nha. Để dọn hẳn, dùng \`/remove-roster\` rồi \`/add-roster\` lại từ đầu.`
+        `${UI.icons.warn} Roster có saved chars vượt cap picker (${PICKER_MAX_OPTIONS}). **${session.excludedSavedCount}** saved char ngoài cửa sổ sẽ được giữ nguyên không thay đổi - cậu chỉ edit được top ${PICKER_MAX_OPTIONS} chars hiển thị thôi nha. Để dọn hẳn, dùng \`/raid-remove-roster\` rồi \`/raid-add-roster\` lại từ đầu.`
       );
     }
     if (session.excludedBibleOnlyCount > 0) {
       desc.push("");
       desc.push(
-        `${UI.icons.warn} ${session.excludedBibleOnlyCount} char mới ở bible chưa hiện được do cap ${PICKER_MAX_OPTIONS} đầy. Toggle off saved char muốn xoá rồi Confirm trước, sau đó \`/edit-roster\` lần nữa để add tiếp char mới còn lại.`
+        `${UI.icons.warn} ${session.excludedBibleOnlyCount} char mới ở bible chưa hiện được do cap ${PICKER_MAX_OPTIONS} đầy. Toggle off saved char muốn xoá rồi Confirm trước, sau đó \`/raid-edit-roster\` lần nữa để add tiếp char mới còn lại.`
       );
     }
     desc.push(
@@ -322,7 +322,7 @@ function createEditRosterCommand({
         [
           `Roster: **${session.accountName}**`,
           "",
-          `Phiên 5 phút đã hết và không có thay đổi nào được lưu. Chạy lại \`/edit-roster\` để thử lại nhé~`,
+          `Phiên 5 phút đã hết và không có thay đổi nào được lưu. Chạy lại \`/raid-edit-roster\` để thử lại nhé~`,
         ].join("\n")
       )
       .setColor(UI.colors.muted)
@@ -336,7 +336,7 @@ function createEditRosterCommand({
         [
           `Roster: **${session.accountName}**`,
           "",
-          `Không có thay đổi nào được lưu. Chạy lại \`/edit-roster\` khi cậu sẵn sàng.`,
+          `Không có thay đổi nào được lưu. Chạy lại \`/raid-edit-roster\` khi cậu sẵn sàng.`,
         ].join("\n")
       )
       .setColor(UI.colors.muted)
@@ -532,7 +532,7 @@ function createEditRosterCommand({
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
             title: "Cậu chưa có roster nào",
-            description: "Artist không thấy roster nào của cậu trong DB cả. Dùng `/add-roster` để add roster đầu tiên trước, sau đó mới `/edit-roster` được nha~",
+            description: "Artist không thấy roster nào của cậu trong DB cả. Dùng `/raid-add-roster` để add roster đầu tiên trước, sau đó mới `/raid-edit-roster` được nha~",
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -557,13 +557,13 @@ function createEditRosterCommand({
       return;
     }
 
-    // Ephemeral: /edit-roster is a maintenance operation on the caller's
+    // Ephemeral: /raid-edit-roster is a maintenance operation on the caller's
     // own roster — the picker, the diff outcome, and the bible-fetch
     // error states are all only meaningful to the caller. Showing them
     // in-channel would be channel noise + leak roster composition to
     // bystanders. Component interactions (Confirm/Cancel/select) work
     // identically on ephemeral messages, so the contract carries through
-    // the whole 5-min session. Contrast with /add-roster, which stays
+    // the whole 5-min session. Contrast with /raid-add-roster, which stays
     // public on purpose so members can see new rosters being onboarded.
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -606,8 +606,8 @@ function createEditRosterCommand({
               `Roster **${targetAccount.accountName}** không có char nào ở DB, bible cũng không fetch được kết quả.`,
               "",
               "Cậu có thể:",
-              `• \`/remove-roster\` để xoá hẳn account trống này`,
-              `• \`/add-roster\` để tạo lại từ seed char khác`,
+              `• \`/raid-remove-roster\` để xoá hẳn account trống này`,
+              `• \`/raid-add-roster\` để tạo lại từ seed char khác`,
             ].join("\n"),
           }),
         ],
@@ -674,7 +674,7 @@ function createEditRosterCommand({
           buildNoticeEmbed(EmbedBuilder, {
             type: "lock",
             title: "Picker này không phải của cậu",
-            description: "Chỉ người gõ lệnh `/edit-roster` mới điều khiển được picker đó nha. Cậu muốn edit roster của mình thì gõ `/edit-roster` riêng.",
+            description: "Chỉ người gõ lệnh `/raid-edit-roster` mới điều khiển được picker đó nha. Cậu muốn edit roster của mình thì gõ `/raid-edit-roster` riêng.",
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -696,7 +696,7 @@ function createEditRosterCommand({
           buildNoticeEmbed(EmbedBuilder, {
             type: "muted",
             title: "Phiên đã hết hạn",
-            description: "Phiên 5 phút đã trôi qua mất rồi. Chạy lại `/edit-roster` để Artist mở picker mới cho cậu nha~",
+            description: "Phiên 5 phút đã trôi qua mất rồi. Chạy lại `/raid-edit-roster` để Artist mở picker mới cho cậu nha~",
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -735,7 +735,7 @@ function createEditRosterCommand({
 
     if (action === "confirm") {
       if (session.selectedIndices.size === 0) {
-        // Reject 0-select with a hint sang /remove-roster - empty roster
+        // Reject 0-select with a hint sang /raid-remove-roster - empty roster
         // is a different operation (cleanup the whole account) and has its
         // own dedicated command.
         await interaction.reply({
@@ -743,7 +743,7 @@ function createEditRosterCommand({
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
               title: "Phải giữ ít nhất 1 char",
-              description: `Cậu toggle off hết tất cả chars rồi - Artist không cho roster trống. Nếu cậu muốn xoá hẳn roster **${session.accountName}**, dùng \`/remove-roster\` (lệnh dành riêng cho việc xoá hẳn account).`,
+              description: `Cậu toggle off hết tất cả chars rồi - Artist không cho roster trống. Nếu cậu muốn xoá hẳn roster **${session.accountName}**, dùng \`/raid-remove-roster\` (lệnh dành riêng cho việc xoá hẳn account).`,
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -802,7 +802,7 @@ function createEditRosterCommand({
     handleEditRosterAutocomplete,
     handleEditRosterCommand,
     handleEditRosterButton,
-    // Internals exposed for unit tests in test/edit-roster.test.js. Not
+    // Internals exposed for unit tests in test/raid-edit-roster.test.js. Not
     // part of the public contract.
     __test: {
       persistEditedRoster,

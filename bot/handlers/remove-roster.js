@@ -109,7 +109,7 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
         replyEmbed = new EmbedBuilder()
           .setColor(UI.colors.muted)
           .setTitle(`${UI.icons.info} No Roster`)
-          .setDescription(`Cậu chưa có roster nào để xóa. Dùng \`/add-roster\` trước nhé.`);
+          .setDescription(`Cậu chưa có roster nào để xóa. Dùng \`/raid-add-roster\` trước nhé.`);
         return;
       }
       const normalizedRoster = normalizeName(rosterName);
@@ -130,7 +130,7 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
         await userDoc.save();
         // Description-driven layout (no cold field table). Artist voice
         // states what happened + reminds the user the action is
-        // reversible via /add-roster, so the destructive `danger` color
+        // reversible via /raid-add-roster, so the destructive `danger` color
         // is balanced by a recovery hint in the copy.
         const charPart =
           removedCount === 0
@@ -143,7 +143,7 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
             [
               `Artist vừa dọn sạch roster **${account.accountName}** ${charPart} khỏi DB của cậu.`,
               "",
-              `Tất cả tiến độ raid trong account này không còn nữa. Muốn add lại thì chạy \`/add-roster name:<tên-char>\` để Artist mở picker mới nha~`,
+              `Tất cả tiến độ raid trong account này không còn nữa. Muốn add lại thì chạy \`/raid-add-roster name:<tên-char>\` để Artist mở picker mới nha~`,
             ].join("\n")
           )
           .setTimestamp();
@@ -186,7 +186,7 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
       const remaining = account.characters.length;
       const remainingPart =
         remaining === 0
-          ? "Roster giờ trống — cậu có thể `/remove-roster` để xoá hẳn account, hoặc `/edit-roster` để add lại chars mới."
+          ? "Roster giờ trống — cậu có thể `/raid-remove-roster` để xoá hẳn account, hoặc `/raid-edit-roster` để add lại chars mới."
           : `Roster **${account.accountName}** còn lại **${remaining}** character${remaining === 1 ? "" : "s"}.`;
       const embed = new EmbedBuilder()
         .setColor(UI.colors.muted)

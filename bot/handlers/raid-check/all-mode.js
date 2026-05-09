@@ -135,7 +135,7 @@ function createAllModeHandler({
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
             title: "Server chưa có roster nào",
-            description: "Artist không thấy member nào đã `/add-roster` cả nha. Bảo các cậu trong server gõ `/add-roster` trước rồi `/raid-check` mới có data để overview.",
+            description: "Artist không thấy member nào đã `/raid-add-roster` cả nha. Bảo các cậu trong server gõ `/raid-add-roster` trước rồi `/raid-check` mới có data để overview.",
           }),
         ],
       });

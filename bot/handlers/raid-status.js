@@ -155,7 +155,7 @@ function createRaidStatusCommand(deps) {
     const hasOwnAccounts =
       seedDoc && Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
 
-    // Zero-own viewer support: a Discord user with no `/add-roster`
+    // Zero-own viewer support: a Discord user with no `/raid-add-roster`
     // entries of their own can still see /raid-status if a Manager A
     // has run /raid-share grant target:them. Skip the early-exit for
     // the no-own-roster case when there's at least one accessible

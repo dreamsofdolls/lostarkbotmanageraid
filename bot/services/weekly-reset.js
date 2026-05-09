@@ -286,7 +286,7 @@ function getWeeklyResetSchedulerStartedAtMs() {
  * gate-completedDate and task counters and bump the key. Idempotent:
  * when the key already matches the target, this is a no-op and returns false.
  *
- * Call this at the start of every write path (/raid-set, /add-roster)
+ * Call this at the start of every write path (/raid-set, /raid-add-roster)
  * so a command cannot silently set data that the weekly reset job is
  * about to wipe on its next 30-minute tick.
  */

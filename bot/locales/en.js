@@ -84,7 +84,7 @@ module.exports = {
   "raid-status": {
     notice: {
       noRosterTitle: "You don't have any rosters yet",
-      noRosterDescription: "Artist can't find any roster of yours in the DB. Use `/add-roster` to register your first roster, then `/raid-status` will show your progress~",
+      noRosterDescription: "Artist can't find any roster of yours in the DB. Use `/raid-add-roster` to register your first roster, then `/raid-status` will show your progress~",
     },
     freshness: {
       lastUpdated: "Last updated",
@@ -189,11 +189,11 @@ module.exports = {
       ambiguousTitle: "Roster name collision across users",
       ambiguousDescription: "There are {count} rosters named **{rosterName}** that you registered for others ({ownerNames}). Artist can't decide which one to set. Ask an admin to rename or remove duplicates.",
       deletedForOtherTitle: "Roster has been deleted",
-      deletedForOtherDescription: "<@{target}>'s roster has been deleted or no longer exists. Artist can't edit on their behalf - either <@{target}> needs to `/add-roster` themselves, or you can re-register via `/add-roster target:<user>`.",
+      deletedForOtherDescription: "<@{target}>'s roster has been deleted or no longer exists. Artist can't edit on their behalf - either <@{target}> needs to `/raid-add-roster` themselves, or you can re-register via `/raid-add-roster target:<user>`.",
       noRosterTitle: "You don't have any rosters yet",
-      noRosterDescription: "Artist can't see any roster of yours. Use `/add-roster` to register your first roster, then `/raid-set` will work~",
+      noRosterDescription: "Artist can't see any roster of yours. Use `/raid-add-roster` to register your first roster, then `/raid-set` will work~",
       authLostTitle: "Roster permission changed",
-      authLostDescription: "<@{target}>'s roster **{rosterName}** is no longer registered by you, or was deleted+recreated mid-command. Pick again from the `roster:` autocomplete; if it's missing, run `/add-roster target:<user>` again before continuing to set progress.",
+      authLostDescription: "<@{target}>'s roster **{rosterName}** is no longer registered by you, or was deleted+recreated mid-command. Pick again from the `roster:` autocomplete; if it's missing, run `/raid-add-roster target:<user>` again before continuing to set progress.",
     },
     character: {
       notFoundTitle: "Character not found",
@@ -248,7 +248,7 @@ module.exports = {
     },
     common: {
       noRosterTitle: "You don't have any rosters",
-      noRosterDescription: "Artist can't see any roster of yours. Run `/add-roster` first, then register tasks.",
+      noRosterDescription: "Artist can't see any roster of yours. Run `/raid-add-roster` first, then register tasks.",
       noCharacterTitle: "Character not found",
       noCharacterDescription: "Artist couldn't find **{characterName}** in your roster. Use the `character:` autocomplete to avoid typos~",
       missingCharacterTitle: "Character missing",
@@ -270,7 +270,7 @@ module.exports = {
     },
     addAll: {
       emptyRosterTitle: "Roster empty",
-      emptyRosterDescription: "Roster **{rosterName}** has no characters yet. Add chars via `/add-roster` first, then register tasks.",
+      emptyRosterDescription: "Roster **{rosterName}** has no characters yet. Add chars via `/raid-add-roster` first, then register tasks.",
       nothingTitle: "Nothing to add",
       nothingDescription: "No character in this roster could accept the task (caps reached, or duplicate name + cycle).\n\n{skippedSummary}",
       successTitle: "Task added across roster",
@@ -358,31 +358,31 @@ module.exports = {
       "getting-started": {
         label: "🚀 New here - Start with this",
         short: "Quick onboarding flow for new users",
-        example: "/add-roster name:<any-character-from-the-roster>",
+        example: "/raid-add-roster name:<any-character-from-the-roster>",
         notes: [
           "First time meeting Artist? Here's the 3-step starter flow.",
           "",
-          "**1️⃣ Register a roster**: type `/add-roster name:<any-char-from-the-roster>`. Artist fetches your full character list from lostark.bible and opens a picker so you tick the chars you want to track, then click **Confirm**.",
+          "**1️⃣ Register a roster**: type `/raid-add-roster name:<any-char-from-the-roster>`. Artist fetches your full character list from lostark.bible and opens a picker so you tick the chars you want to track, then click **Confirm**.",
           "**2️⃣ View progress**: type `/raid-status` any time to see which char cleared which raid this week.",
           "**3️⃣ Update progress**: 2 ways - (a) `/raid-set` for manual edits, or (b) `/raid-auto-manage action:on` to let Artist auto-sync from lostark.bible every 24h.",
           "",
           "**Bonus**: post text like `<raid> <difficulty> <character>` in the raid channel (admin sets via `/raid-channel`) - Artist auto-parses + updates + DMs you a confirmation. Example: `Serca Hard Clauseduk`.",
           "",
-          "Advanced commands: `/raid-task` (track daily/weekly chores), `/edit-roster` (modify saved roster), `/remove-roster` (delete). Each has its own section in the dropdown below.",
+          "Advanced commands: `/raid-task` (track daily/weekly chores), `/raid-edit-roster` (modify saved roster), `/raid-remove-roster` (delete). Each has its own section in the dropdown below.",
           "",
           "🌐 **Want a different language?** Run `/raid-language` to switch Artist's voice between Tiếng Việt and 日本語.",
         ],
       },
-      "add-roster": {
-        label: "/add-roster",
+      "raid-add-roster": {
+        label: "/raid-add-roster",
         short: "Sync roster from lostark.bible",
-        example: "/add-roster name:Clauseduk",
+        example: "/raid-add-roster name:Clauseduk",
         notes: [
           "Type any character name from your roster - Artist fetches the full account from lostark.bible and opens a picker so you choose which chars to keep.",
           "",
           "**When to use**: first time joining the server, or when you add a new alt account.",
           "**Flow**: click **Confirm** after ticking → Artist saves the roster to DB. **Cancel** or 5-min timeout → discard.",
-          "**Cap 20 char/roster** (plenty for any player). If a char in the roster is already saved under another account → Artist refuses; use `/edit-roster` instead.",
+          "**Cap 20 char/roster** (plenty for any player). If a char in the roster is already saved under another account → Artist refuses; use `/raid-edit-roster` instead.",
           "**Manager tip**: the `target:` option lets a Raid Manager add a roster on behalf of a lazy member. The reply embed pings the target user.",
         ],
         optionDescriptions: {
@@ -390,17 +390,17 @@ module.exports = {
           target: "(Raid Manager) Add a roster on behalf of another user",
         },
       },
-      "edit-roster": {
-        label: "/edit-roster",
+      "raid-edit-roster": {
+        label: "/raid-edit-roster",
         short: "Add new chars or remove saved chars from a roster",
-        example: "/edit-roster roster:Clauseduk",
+        example: "/raid-edit-roster roster:Clauseduk",
         notes: [
           "Opens a merged picker - tick `🆕` to add new chars, untick saved ones to remove them. Raid progress on surviving chars is preserved.",
           "",
           "**When to use**: you just made a new char that isn't tracked yet, or you want to drop an alt you don't play anymore.",
           "**Icons**: `🆕` = new char on bible · `📦` = saved char no longer on bible (renamed / private log).",
           "**Tip**: if bible is temporarily offline, you can still enter but only remove. Wait until bible is back to add new chars.",
-          "**Difference vs `/add-roster`**: edit-roster modifies an existing roster. To add a brand new roster (different account) → use `/add-roster`.",
+          "**Difference vs `/raid-add-roster`**: edit-roster modifies an existing roster. To add a brand new roster (different account) → use `/raid-add-roster`.",
         ],
         optionDescriptions: {
           roster: "The saved roster to edit (autocomplete)",
@@ -430,7 +430,7 @@ module.exports = {
           "Opens an ephemeral picker (5-min session) to flip the `💰 isGoldEarner` flag per character. Lost Ark caps at 6 gold-earners per account per week, so the picker hard-stops at 6 ticks.",
           "",
           "**First-open UX**: if every char in the account is currently non-earner (legacy data from before 2026-05-05), Artist pre-checks the top 6 by iLvl as a one-click migration. You can untick + retick freely before clicking **Confirm**.",
-          "**Default for new chars**: chars added via `/add-roster` after 2026-05-05 default to gold-earner ON. Use this command to flip them off if you have alts beyond the in-game pick.",
+          "**Default for new chars**: chars added via `/raid-add-roster` after 2026-05-05 default to gold-earner ON. Use this command to flip them off if you have alts beyond the in-game pick.",
           "**Cap behavior**: ticking a 7th char surfaces an ephemeral notice and rejects the change - untick someone else first.",
           "**Off-window chars**: rosters with > 20 chars (rare) only show the 20 highest iLvl chars in the picker. The off-window 21st+ chars keep their existing flag value untouched.",
         ],
@@ -479,7 +479,7 @@ module.exports = {
           "**Tip**: pick `roster:` first - the `character:` autocomplete only lists chars in that roster (avoids picking the wrong char when 2 rosters share a name).",
           "**Mode switch**: e.g. Serca Nightmare → Hard wipes the old progress because each weekly entry is mode-scoped.",
           "**Faster alternative**: post text `Kazeros Hard Nailaduk G1` in the raid channel - auto-updates without typing a slash command.",
-          "**Manager helper flow**: a Raid Manager who used `/add-roster target:U` to register a roster for user U also sees that roster in their own `/raid-set` autocomplete (marked with 👥 + the user's display name) and can keep maintaining U's progress on it.",
+          "**Manager helper flow**: a Raid Manager who used `/raid-add-roster target:U` to register a roster for user U also sees that roster in their own `/raid-set` autocomplete (marked with 👥 + the user's display name) and can keep maintaining U's progress on it.",
         ],
         optionDescriptions: {
           roster: "Roster containing the character (autocomplete)",
@@ -503,16 +503,16 @@ module.exports = {
           "**Session timeout 5 minutes** - components disable when expired; type `/raid-check` again to reopen.",
         ],
       },
-      "remove-roster": {
-        label: "/remove-roster",
+      "raid-remove-roster": {
+        label: "/raid-remove-roster",
         short: "Remove a roster or one character from it",
-        example: "/remove-roster roster:Qiylyn action:Remove a single character character:Zywang",
+        example: "/raid-remove-roster roster:Qiylyn action:Remove a single character character:Zywang",
         notes: [
           "Delete an entire roster, or just one character from it.",
           "",
           "**When to use**: an account or character you don't play anymore.",
-          "**Tip**: to refresh a roster → `/remove-roster` then `/add-roster` again to pull fresh data from bible.",
-          "**Difference vs `/edit-roster`**: edit-roster modifies via tick/untick. Remove-roster deletes outright.",
+          "**Tip**: to refresh a roster → `/raid-remove-roster` then `/raid-add-roster` again to pull fresh data from bible.",
+          "**Difference vs `/raid-edit-roster`**: edit-roster modifies via tick/untick. Remove-roster deletes outright.",
         ],
         optionDescriptions: {
           roster: "Roster name (autocomplete)",

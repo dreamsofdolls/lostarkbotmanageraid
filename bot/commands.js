@@ -111,7 +111,7 @@ function loadUserForAutocomplete(discordId) {
 /**
  * Cross-user lookup for /raid-set autocomplete: every user doc that has at
  * least one account with `registeredBy === discordId`. The executor (a
- * Manager who used /add-roster target:) sees their helper-added rosters
+ * Manager who used /raid-add-roster target:) sees their helper-added rosters
  * alongside their own. Same in-flight dedup pattern as
  * `loadUserForAutocomplete` so per-keystroke autocomplete fan-out doesn't
  * stampede Mongo. Projects only the fields the picker label needs
@@ -175,7 +175,7 @@ const {
 const { createSchedulingHelpers } = require("./utils/raid/scheduling");
 
 // Hard cap on characters saved per roster account. Sized to the
-// /add-roster + /edit-roster picker capacity: Discord caps a message
+// /raid-add-roster + /raid-edit-roster picker capacity: Discord caps a message
 // at 5 ActionRow components, the picker layout uses 1 row for
 // Confirm/Cancel + 4 rows of 5 toggle buttons each = 20 max. Real
 // Lost Ark rosters max ~18 chars per account in-game so 20 still has
@@ -456,12 +456,12 @@ async function cacheDiscordIdentityForExistingUser(interaction) {
 
 async function handleRaidManagementCommand(interaction) {
   try {
-    if (interaction.commandName === "add-roster") {
+    if (interaction.commandName === "raid-add-roster") {
       await handleAddRosterCommand(interaction);
       return;
     }
 
-    if (interaction.commandName === "edit-roster") {
+    if (interaction.commandName === "raid-edit-roster") {
       await handleEditRosterCommand(interaction);
       return;
     }
@@ -494,7 +494,7 @@ async function handleRaidManagementCommand(interaction) {
       return;
     }
 
-    if (interaction.commandName === "remove-roster") {
+    if (interaction.commandName === "raid-remove-roster") {
       await handleRemoveRosterCommand(interaction);
       return;
     }
@@ -648,7 +648,7 @@ const autoManageCoreService = createAutoManageCoreService({
 
 const addRosterCommandHandlers = createAddRosterCommand({
   EmbedBuilder,
-  // /add-roster picker = per-char toggle buttons + Confirm/Cancel,
+  // /raid-add-roster picker = per-char toggle buttons + Confirm/Cancel,
   // no StringSelectMenu (the dropdown was visually noisy when
   // default-selected and got replaced with toggle buttons).
   ActionRowBuilder,
