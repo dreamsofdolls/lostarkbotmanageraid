@@ -50,6 +50,22 @@ function createRaidSchedulerService({
   // night, Artist just doesn't patrol.
   const ARTIST_QUIET_START_HOUR_VN = 3;
   const ARTIST_QUIET_END_HOUR_VN = 8;
+  // Per-language tz offset (minutes from UTC) for the persona-event
+  // schedulers below: artist-bedtime fires at 3am LOCAL, artist-wakeup
+  // at 8am LOCAL, quiet-hours window in [3am, 8am) LOCAL. Default-vi
+  // guilds keep the legacy +7h VN clock; jp guilds anchor to JST (+9h);
+  // en guilds anchor to UTC. LA-event-anchored schedulers (weekly reset,
+  // maintenance) are NOT affected by this - those fire at the same
+  // absolute moment for every guild, just rendered in each language's
+  // display tz via the locale strings.
+  const LANG_TZ_OFFSET_MINUTES = {
+    vi: 7 * 60,
+    jp: 9 * 60,
+    en: 0,
+  };
+  function getLangTzOffsetMinutes(lang) {
+    return LANG_TZ_OFFSET_MINUTES[lang] ?? LANG_TZ_OFFSET_MINUTES.vi;
+  }
   const PRIVATE_LOG_NUDGE_TTL_MS = 30 * 60 * 1000; // stuck-user nudge sits 30 min before self-delete
   const PRIVATE_LOG_NUDGE_DEDUP_MS = 7 * 24 * 60 * 60 * 1000; // 7-day per-user dedup
   const AUTO_CLEANUP_TICK_MS = 30 * 60 * 1000;
@@ -109,8 +125,19 @@ function createRaidSchedulerService({
    * key because those ceremonies fire once per calendar day, not per slot.
    */
   function getTargetVNDayKey(now = new Date()) {
-    const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-    return vnTime.toISOString().slice(0, 10);
+    return getTargetDayKeyForLang(now, "vi");
+  }
+
+  /**
+   * Lang-aware variant: returns "YYYY-MM-DD" in the LOCAL calendar of
+   * whatever timezone matches the supplied locale. JP guild's day key
+   * rolls at midnight JST; EN guild's at midnight UTC. Used as dedup key
+   * for once-per-day persona events (bedtime / wakeup).
+   */
+  function getTargetDayKeyForLang(now = new Date(), lang) {
+    const offsetMs = getLangTzOffsetMinutes(lang) * 60 * 1000;
+    const localTime = new Date(now.getTime() + offsetMs);
+    return localTime.toISOString().slice(0, 10);
   }
 
   /**
@@ -119,8 +146,18 @@ function createRaidSchedulerService({
    * helpers stay in lockstep if the UTC offset ever changes.
    */
   function getCurrentVNHour(now = new Date()) {
-    const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-    return vnTime.getUTCHours();
+    return getCurrentHourForLang(now, "vi");
+  }
+
+  /**
+   * Lang-aware variant: returns the local hour (0-23) in the timezone
+   * matching the supplied locale. JP guild's "current hour" reads JST,
+   * EN guild's reads UTC. Default vi keeps the legacy VN behavior.
+   */
+  function getCurrentHourForLang(now = new Date(), lang) {
+    const offsetMs = getLangTzOffsetMinutes(lang) * 60 * 1000;
+    const localTime = new Date(now.getTime() + offsetMs);
+    return localTime.getUTCHours();
   }
 
   /**
@@ -130,7 +167,17 @@ function createRaidSchedulerService({
    * is NOT quiet - the last pre-bedtime cleanup slot at 2:30 runs as usual.
    */
   function isInArtistQuietHours(now = new Date()) {
-    const hour = getCurrentVNHour(now);
+    return isInArtistQuietHoursForLang(now, "vi");
+  }
+
+  /**
+   * Lang-aware quiet-hours check. Per-guild scheduler tick resolves the
+   * guild's lang first, then asks "are we in [3am, 8am) of THAT guild's
+   * local timezone?". Vi guild quiets 3-8 VN; JP guild quiets 3-8 JST;
+   * EN guild quiets 3-8 UTC.
+   */
+  function isInArtistQuietHoursForLang(now = new Date(), lang) {
+    const hour = getCurrentHourForLang(now, lang);
     return hour >= ARTIST_QUIET_START_HOUR_VN && hour < ARTIST_QUIET_END_HOUR_VN;
   }
 
@@ -141,7 +188,15 @@ function createRaidSchedulerService({
    * previous day rhythm and must not trigger the wake-up sweep early.
    */
   function hasReachedArtistWakeupBoundary(now = new Date()) {
-    return getCurrentVNHour(now) >= ARTIST_QUIET_END_HOUR_VN;
+    return hasReachedArtistWakeupBoundaryForLang(now, "vi");
+  }
+
+  /**
+   * Lang-aware wakeup boundary check. Triggered once the local clock
+   * crosses 08:00 in the guild's tz. Same rule as the legacy VN version.
+   */
+  function hasReachedArtistWakeupBoundaryForLang(now = new Date(), lang) {
+    return getCurrentHourForLang(now, lang) >= ARTIST_QUIET_END_HOUR_VN;
   }
 
   /**
@@ -240,8 +295,10 @@ function createRaidSchedulerService({
   async function runAutoCleanupTick(client) {
     const now = new Date();
     const targetKey = getTargetCleanupSlotKey(now);
-    const vnDayKey = getTargetVNDayKey(now);
-    const quiet = isInArtistQuietHours(now);
+    // dayKey + quiet are computed PER cfg below now (not here at tick
+    // start) because each guild can pick its own broadcast language via
+    // /raid-channel set-language, which anchors quiet-hours + bedtime
+    // dedup keys to that guild's local clock instead of always VN.
     let configs;
     try {
       configs = await GuildConfig.find({
@@ -271,24 +328,30 @@ function createRaidSchedulerService({
       // Per-guild broadcast language - resolved once per cfg per tick. Used
       // by every announcement variant pool below (bedtime, wakeup, cleanup)
       // so a JP/EN guild renders in its chosen voice while the legacy
-      // default-VI guilds keep their existing tone.
+      // default-VI guilds keep their existing tone. Also drives the
+      // quiet-hours / wake-up boundary checks below so persona events
+      // anchor to the guild's local clock (3am JST for jp, 3am UTC for
+      // en, 3am VN for vi).
       const guildLang = await getGuildLanguage(cfg.guildId, { GuildConfigModel: GuildConfig });
+      const dayKey = getTargetDayKeyForLang(now, guildLang);
+      const quiet = isInArtistQuietHoursForLang(now, guildLang);
 
-      // Quiet-hours branch: [3:00, 8:00) VN. Artist does NOT sweep and
-      // does NOT post the hourly-cleanup notice. First tick after 3:00
-      // posts one bedtime greeting (if enabled + not yet posted today);
-      // subsequent quiet-hours ticks are silent no-ops. The dedup key is
-      // VN calendar day, not slot, so a bot restart inside [3:00, 8:00)
-      // on the same day won't re-fire bedtime.
+      // Quiet-hours branch: [3:00, 8:00) LOCAL TIME of the guild's
+      // configured language. Artist does NOT sweep and does NOT post the
+      // hourly-cleanup notice. First tick after 3:00 local posts one
+      // bedtime greeting (if enabled + not yet posted today); subsequent
+      // quiet-hours ticks are silent no-ops. The dedup key is the local
+      // calendar day so a bot restart inside [3:00, 8:00) on the same
+      // local day won't re-fire bedtime.
       if (quiet) {
-        if (cfg.lastArtistBedtimeKey === vnDayKey) continue;
+        if (cfg.lastArtistBedtimeKey === dayKey) continue;
         if (!announcements.artistBedtime.enabled) {
           // Bedtime disabled per-guild → still stamp the day key so we
           // don't keep entering this branch; the guild just gets silence.
           try {
             await GuildConfig.findOneAndUpdate(
               { guildId: cfg.guildId },
-              { $set: { lastArtistBedtimeKey: vnDayKey } }
+              { $set: { lastArtistBedtimeKey: dayKey } }
             );
           } catch (err) {
             console.error(
@@ -308,10 +371,10 @@ function createRaidSchedulerService({
           if (sent) {
             await GuildConfig.findOneAndUpdate(
               { guildId: cfg.guildId },
-              { $set: { lastArtistBedtimeKey: vnDayKey } }
+              { $set: { lastArtistBedtimeKey: dayKey } }
             );
             console.log(
-              `[raid-channel] artist-bedtime guild=${cfg.guildId} day=${vnDayKey}`
+              `[raid-channel] artist-bedtime guild=${cfg.guildId} day=${dayKey}`
             );
           }
         } catch (err) {
@@ -328,20 +391,20 @@ function createRaidSchedulerService({
       // and post the combined wake-up+sweep notice. Subsequent ticks that
       // day fall through to the normal hourly-cleanup path because the
       // day key will match.
-      if (hasReachedArtistWakeupBoundary(now) && cfg.lastArtistWakeupKey !== vnDayKey) {
+      if (hasReachedArtistWakeupBoundaryForLang(now, guildLang) && cfg.lastArtistWakeupKey !== dayKey) {
         try {
           const { deleted, skippedOld } = await cleanupRaidChannelMessages(channel);
           await GuildConfig.findOneAndUpdate(
             { guildId: cfg.guildId },
             {
               $set: {
-                lastArtistWakeupKey: vnDayKey,
+                lastArtistWakeupKey: dayKey,
                 lastAutoCleanupKey: targetKey,
               },
             }
           );
           console.log(
-            `[raid-channel] artist-wakeup guild=${cfg.guildId} day=${vnDayKey} deleted=${deleted} skippedOld=${skippedOld}`
+            `[raid-channel] artist-wakeup guild=${cfg.guildId} day=${dayKey} deleted=${deleted} skippedOld=${skippedOld}`
           );
           if (announcements.artistWakeup.enabled) {
             await postChannelAnnouncement(
@@ -615,8 +678,8 @@ function createRaidSchedulerService({
     if (!match) return;
     const { slot, group } = match;
     const vn = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-    const vnDayKey = vn.toISOString().slice(0, 10);
-    const tickKey = `${vnDayKey}:${slot.key}`;
+    const dayKey = vn.toISOString().slice(0, 10);
+    const tickKey = `${dayKey}:${slot.key}`;
     const subdocKey = group === "early" ? "maintenanceEarly" : "maintenanceCountdown";
     const dedupField =
       group === "early" ? "lastMaintenanceEarlyKey" : "lastMaintenanceCountdownKey";
