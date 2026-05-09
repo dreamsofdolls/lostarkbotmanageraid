@@ -126,8 +126,58 @@ function verifyToken(token) {
   return { ok: true, payload };
 }
 
+/**
+ * Mint + persist on User. Used by /raid-auto-manage local-on,
+ * /raid-status local-sync "New link" button, stuck-nudge button -
+ * any flow that explicitly produces a fresh token. Replaces any
+ * existing stored token (rotation semantics: old token still valid
+ * until natural exp, but no longer the "current" one /raid-status
+ * resumes to).
+ *
+ * Returns the minted token string. Throws on mint failure (env unset)
+ * or DB update failure.
+ */
+async function rotateLocalSyncToken(discordId, lang, deps = {}) {
+  const UserModel = deps?.UserModel;
+  if (!UserModel) throw new Error("[local-sync/tokens] rotateLocalSyncToken: UserModel required");
+  const token = mintToken(discordId, undefined, lang);
+  const expAt = Math.floor(Date.now() / 1000) + DEFAULT_TTL_SEC;
+  await UserModel.findOneAndUpdate(
+    { discordId },
+    { $set: { lastLocalSyncToken: token, lastLocalSyncTokenExpAt: expAt } },
+    { new: true }
+  );
+  return token;
+}
+
+/**
+ * Resume helper: returns the stored token if it still has > 60s left,
+ * else mints fresh + saves + returns. Used by /raid-status default
+ * "Open Web Companion" button - so a returning user keeps the same
+ * URL across multiple /raid-status calls within the 30-min TTL,
+ * making bookmarks / open browser tabs continue to work.
+ *
+ * The 60s safety buffer prevents handing out a token that's about to
+ * expire mid-page-load (user clicks button, browser fetches page,
+ * token is dead by the time the file picker opens).
+ */
+async function getOrMintLocalSyncToken(discordId, lang, deps = {}) {
+  const UserModel = deps?.UserModel;
+  if (!UserModel) throw new Error("[local-sync/tokens] getOrMintLocalSyncToken: UserModel required");
+  const stored = await UserModel.findOne({ discordId })
+    .select("lastLocalSyncToken lastLocalSyncTokenExpAt")
+    .lean();
+  const now = Math.floor(Date.now() / 1000);
+  if (stored?.lastLocalSyncToken && Number(stored.lastLocalSyncTokenExpAt) > now + 60) {
+    return stored.lastLocalSyncToken;
+  }
+  return rotateLocalSyncToken(discordId, lang, { UserModel });
+}
+
 module.exports = {
   mintToken,
   verifyToken,
+  rotateLocalSyncToken,
+  getOrMintLocalSyncToken,
   DEFAULT_TTL_SEC,
 };

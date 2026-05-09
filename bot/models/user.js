@@ -203,6 +203,13 @@ const userSchema = new mongoose.Schema(
     // (set on the local-on action, cleared on local-off). Used by the
     // onboarding embed to show "Local sync linked X days ago".
     localSyncLinkedAt: { type: Number, default: null },
+    // Most recently-minted local-sync URL token + its UTC seconds exp.
+    // /raid-status renders a "Resume" button when this is still valid
+    // (stored URL still opens companion with active session). Separate
+    // "New link" button rotates this to a freshly-minted token. Cleared
+    // on local-off so old links can't survive an opt-out.
+    lastLocalSyncToken: { type: String, default: null },
+    lastLocalSyncTokenExpAt: { type: Number, default: null },
     // Preferred display locale for Artist's responses. Drives every
     // user-facing string via bot/services/i18n.js. Default "vi" so
     // pre-existing users see no behavior change after the i18n rollout;

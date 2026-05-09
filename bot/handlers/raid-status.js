@@ -20,7 +20,10 @@ const {
 } = require("../utils/raid/shared-tasks");
 const { getAccessibleAccounts } = require("../services/access-control");
 const { t, getUserLanguage } = require("../services/i18n");
-const { mintToken: mintLocalSyncToken } = require("../services/local-sync");
+const {
+  getOrMintLocalSyncToken,
+  rotateLocalSyncToken,
+} = require("../services/local-sync");
 
 // Build a render-ready accounts array: caller's own subdocs PLUS shared
 // accounts pulled from manager-A User docs via the access-control
@@ -413,37 +416,61 @@ function createRaidStatusCommand(deps) {
         : t("raid-status.sync.buttonReady", lang);
     };
 
-    // Phase 5 button-flip: when the user is in local-sync mode, replace
-    // the bible-driven "Sync ngay" Primary button with an "Open Web
-    // Companion" Link button. Mints a fresh 30-min token at render time
-    // so the URL is always valid for that pageview. Token mint can
-    // throw if env vars unset - fall back to no-companion state which
-    // the showSync gate also catches.
-    const buildLocalSyncButton = () => {
-      const baseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
-      if (!baseUrl) return null;
-      let token;
-      try {
-        // Embed lang so web companion renders in viewer's language.
-        token = mintLocalSyncToken(discordId, undefined, lang);
-      } catch (err) {
-        console.warn("[raid-status] local-sync token mint failed:", err?.message || err);
-        return null;
-      }
-      const url = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
+    // Phase 5 button-flip + Phase 7 resume/rotate: when the user is in
+    // local-sync mode, replace the bible-driven "Sync ngay" Primary
+    // button with an "Open Web Companion" Link button. The link URL
+    // resolves through getOrMintLocalSyncToken so a returning user
+    // keeps the same URL across multiple /raid-status calls within
+    // the 30-min TTL (bookmarks + open tabs continue to work).
+    //
+    // A second "🆕 New link" Primary button rotates - clicked, mints
+    // a fresh token, replies ephemerally with a fresh link button.
+    // This is the explicit "I want a new URL" action; the resume
+    // path is the default. Token resolution is async, so we cache
+    // the resume URL in a closure variable populated at command
+    // entry by hydrateLocalSyncResumeUrl() below; component builders
+    // read it synchronously.
+    let cachedLocalSyncResumeUrl = null;
+    const buildLocalSyncResumeButton = () => {
+      if (!cachedLocalSyncResumeUrl) return null;
       return new ButtonBuilder()
         .setStyle(ButtonStyle.Link)
         .setLabel(t("raid-status.sync.localOpenButtonLabel", lang))
         .setEmoji("🌐")
-        .setURL(url);
+        .setURL(cachedLocalSyncResumeUrl);
+    };
+    const buildLocalSyncNewButton = (disabled) => {
+      if (!cachedLocalSyncResumeUrl) return null; // env unset or mint failed - hide both
+      return new ButtonBuilder()
+        .setCustomId("status:local-new-link")
+        .setLabel(t("raid-status.sync.localNewLinkButtonLabel", lang))
+        .setEmoji("🆕")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(disabled);
     };
 
+    // Pre-fetch the resume URL at command entry. Async; main handler
+    // awaits this before composing components. Returns the array of
+    // buttons (1 or 2) so the row builder can splat them in. Empty
+    // array when local mode but env unset = degraded deploy, hide.
+    async function hydrateLocalSyncResumeUrl() {
+      if (!statusUserMeta.localSyncEnabled) return;
+      const baseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+      if (!baseUrl) return;
+      try {
+        const token = await getOrMintLocalSyncToken(discordId, lang, { UserModel: User });
+        cachedLocalSyncResumeUrl = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
+      } catch (err) {
+        console.warn("[raid-status] local-sync token resolve failed:", err?.message || err);
+      }
+    }
+    await hydrateLocalSyncResumeUrl();
+
     const buildSyncButton = (disabled) => {
-      // Local mode short-circuits before computeSyncLabel/customId paths
-      // because Link buttons in Discord don't have customId or disabled
-      // state; they always open the URL when clicked.
+      // Local mode: returns the resume Link button. The "New link"
+      // companion is added separately by buildSyncRow when applicable.
       if (statusUserMeta.localSyncEnabled) {
-        return buildLocalSyncButton();
+        return buildLocalSyncResumeButton();
       }
       return new ButtonBuilder()
         .setCustomId("status:sync")
@@ -456,7 +483,15 @@ function createRaidStatusCommand(deps) {
     const buildSyncRow = (disabled) => {
       const btn = buildSyncButton(disabled);
       if (!btn) return null;
-      return new ActionRowBuilder().addComponents(btn);
+      const row = new ActionRowBuilder().addComponents(btn);
+      // Local mode: append the "New link" button alongside resume so
+      // the user sees both choices in the same row. Bible mode just
+      // gets the single Sync button (unchanged behavior).
+      if (statusUserMeta.localSyncEnabled) {
+        const newBtn = buildLocalSyncNewButton(disabled);
+        if (newBtn) row.addComponents(newBtn);
+      }
+      return row;
     };
 
     const buildComponents = (disabled) => {
@@ -515,6 +550,13 @@ function createRaidStatusCommand(deps) {
           // matches the autoManage-off case behaviorally.
           const btn = buildSyncButton(disabled);
           if (btn) paginationRow.addComponents(btn);
+          // Local mode also gets the "New link" button alongside resume.
+          // ActionRow caps at 5; with [Prev][Next][Resume][New] = 4,
+          // safely under the cap. Bible mode adds nothing extra.
+          if (statusUserMeta.localSyncEnabled) {
+            const newBtn = buildLocalSyncNewButton(disabled);
+            if (newBtn) paginationRow.addComponents(newBtn);
+          }
         }
         rows.push(paginationRow);
       } else if (showSync) {
@@ -655,6 +697,69 @@ function createRaidStatusCommand(deps) {
         currentPage = Math.max(0, currentPage - 1);
       } else if (id === "status:next") {
         currentPage = Math.min(accounts.length - 1, currentPage + 1);
+      } else if (id === "status:local-new-link") {
+        // Phase 7 rotation: explicit "I want a fresh URL" action.
+        // Mints + persists a new token, replies ephemerally with a
+        // Link button to the new URL. Old URL still works until its
+        // natural exp (30 min from previous mint) - this just decouples
+        // the "current" URL the resume button points at going forward.
+        const baseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+        if (!baseUrl) {
+          await component.reply({
+            embeds: [
+              buildNoticeEmbed(EmbedBuilder, {
+                type: "warn",
+                title: t("raid-status.sync.localNewLinkUnavailableTitle", lang),
+                description: t("raid-status.sync.localNewLinkUnavailableDescription", lang),
+              }),
+            ],
+            flags: MessageFlags.Ephemeral,
+          }).catch(() => {});
+          return;
+        }
+        let freshUrl;
+        try {
+          const token = await rotateLocalSyncToken(discordId, lang, { UserModel: User });
+          freshUrl = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
+        } catch (err) {
+          console.error("[raid-status] rotate local-sync token failed:", err?.message || err);
+          await component.reply({
+            embeds: [
+              buildNoticeEmbed(EmbedBuilder, {
+                type: "error",
+                title: t("raid-status.sync.localNewLinkFailedTitle", lang),
+                description: t("raid-status.sync.localNewLinkFailedDescription", lang, {
+                  error: err?.message || String(err),
+                }),
+              }),
+            ],
+            flags: MessageFlags.Ephemeral,
+          }).catch(() => {});
+          return;
+        }
+        const successEmbed = new EmbedBuilder()
+          .setColor(UI.colors.success)
+          .setTitle(`${UI.icons.done} ${t("raid-status.sync.localNewLinkSuccessTitle", lang)}`)
+          .setDescription(t("raid-status.sync.localNewLinkSuccessDescription", lang))
+          .setTimestamp();
+        const linkRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setStyle(ButtonStyle.Link)
+            .setLabel(t("raid-status.sync.localOpenButtonLabel", lang))
+            .setEmoji("🌐")
+            .setURL(freshUrl)
+        );
+        await component.reply({
+          embeds: [successEmbed],
+          components: [linkRow],
+          flags: MessageFlags.Ephemeral,
+        }).catch(() => {});
+        // Update the cached resume URL so subsequent renders of the
+        // same /raid-status session reflect the rotated token. The
+        // collector recomposes on next page-flip via the existing
+        // recomposeOnEvery* paths.
+        cachedLocalSyncResumeUrl = freshUrl;
+        return;
       } else if (id === "status:sync") {
         // Manual Sync button - same gather+apply pipeline as the open-time
         // piggyback in handleStatusCommand, but triggered on demand.
