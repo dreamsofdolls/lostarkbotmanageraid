@@ -82,10 +82,17 @@ function createRaidSchedulerService({
    * leaves the message permanent (not used currently but left for future
    * callers like persistent markers).
    */
-  async function postChannelAnnouncement(channel, content, ttlMs, logTag = "announcement") {
+  async function postChannelAnnouncement(channel, content, ttlMs, logTag = "announcement", components) {
     let sent = null;
     try {
-      sent = await channel.send({ content });
+      // `components` is optional - older callers pass nothing; the
+      // stuck-private-log nudge (Phase 6) passes a single ActionRow with
+      // the "Switch to Local Sync" button.
+      const payload = { content };
+      if (Array.isArray(components) && components.length > 0) {
+        payload.components = components;
+      }
+      sent = await channel.send(payload);
     } catch (err) {
       console.warn(`[${logTag}] send failed:`, err?.message || err);
       return null;
@@ -928,11 +935,26 @@ function createRaidSchedulerService({
       // incidentally; the audience-of-one (the user with the stuck
       // private log) is who needs to act on it.
       const targetLang = await getUserLanguage(discordId, { UserModel: User });
+      // Phase 6: attach a "Switch to Local Sync" button so stuck users
+      // have an in-place CTA instead of having to type the
+      // /raid-auto-manage action:local-on flow. customId encodes the
+      // target user id so the click handler verifies clicker.id ===
+      // target before flipping (don't let a random member opt someone
+      // else into local-sync). discord.js builders required inline -
+      // schedulers factory doesn't ship them as deps; one-time cost.
+      const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+      const switchBtn = new ButtonBuilder()
+        .setCustomId(`stuck-nudge:switch-to-local:${discordId}`)
+        .setLabel(t("announcements.stuck-nudge.switchButtonLabel", targetLang))
+        .setEmoji("🌐")
+        .setStyle(ButtonStyle.Primary);
+      const components = [new ActionRowBuilder().addComponents(switchBtn)];
       const sent = await postChannelAnnouncement(
         channel,
         t("announcements.stuck-nudge.body", targetLang, { discordId }),
         PRIVATE_LOG_NUDGE_TTL_MS,
-        "auto-manage private-log nudge"
+        "auto-manage private-log nudge",
+        components
       );
       if (sent) {
         try {

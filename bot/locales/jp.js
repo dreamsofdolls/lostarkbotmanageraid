@@ -60,6 +60,16 @@ module.exports = {
     unchangedDescription: "もう **{flag} {label}** を使ってますよ～♪",
     footer: "いつでも /raid-language で変えられますわ♪",
   },
+  "stuck-nudge": {
+    notForYouTitle: "このボタンはあなた用ではありませんわ",
+    notForYouDescription: "**Local Sync に切り替え** ボタンは <@{target}> さん専用ですわ。 押し間違いだと思いますの～",
+    flipFailTitle: "切り替え失敗ですわ",
+    flipFailDescription: "アーティスト、モード切り替えで失敗しましたわ: `{error}`。 代わりに `/raid-auto-manage action:local-on` を試してね♪",
+    switchedTitle: "ローカル同期に切り替えましたわ♪",
+    switchedDescription: "<@{target}> さんは bible 自動同期からローカル同期モードに切り替えましたわ。 アーティストから companion リンクを DM でお送りしましたよ♪",
+    dmTitle: "ローカル同期セットアップ",
+    dmDescription: "下の **Web Companion を開く** ボタンを押して companion ページを開いてくださいませ - `%localappdata%\\LOA Logs\\` (またはあなたが設定したパス) にある `encounters.db` ファイルをドラッグ＆ドロップすればアーティストがデータをプレビューできますわ♪ リンクは30分有効ですわ。",
+  },
   share: {
     accessLevel: {
       edit: "編集可",
@@ -1550,7 +1560,8 @@ module.exports = {
       body: "新しい週が来ましたわね～♪ 今週のレイド進捗をアーティストがリセットしましたわ、皆さんは最初からまた挑戦してくださいませ。素敵なレイド週間をお過ごしくださいね♪ この案内は30分後にお片付けしますの。",
     },
     "stuck-nudge": {
-      body: "<@{discordId}> ちょっとお知らせですわ～♪ あなたのロスターは自動同期を有効化していますが、現在全キャラが非公開ログになっているのでデータを同期できませんの。<https://lostark.bible/me/logs> で同期したいキャラの **Show on Profile** を有効化していただけますか? この案内は30分後に自動でお片付けしますわ。",
+      body: "<@{discordId}> ちょっとお知らせですわ～♪ あなたのロスターは自動同期を有効化していますが、現在全キャラが非公開ログになっているのでデータを同期できませんの。 2つの選択肢ですわ: (1) <https://lostark.bible/me/logs> で同期したいキャラの **Show on Profile** を有効化、または (2) 下の **Switch to Local Sync** ボタンを押す - アーティストがあなたの PC の `encounters.db` ファイルを Web companion 経由で直接読みますわ、Public Log 不要♪ この案内は30分後に自動でお片付けしますわ。",
+      switchButtonLabel: "Local Sync に切り替え",
     },
     "cleanup-volume": {
       empty: [

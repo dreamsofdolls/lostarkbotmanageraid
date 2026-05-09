@@ -62,6 +62,7 @@ const { createRaidHelpCommand } = require("./handlers/raid-help");
 const { createRaidShareCommand } = require("./handlers/raid-share");
 const { createRaidLanguageCommand } = require("./handlers/raid-language");
 const { createRaidSetCommand } = require("./handlers/raid-set");
+const { createStuckNudgeButtonHandler } = require("./handlers/stuck-nudge-button");
 const {
   createRosterRefreshService,
   ROSTER_REFRESH_COOLDOWN_MS,
@@ -1006,6 +1007,16 @@ const raidShareCommandHandlers = createRaidShareCommand({
 });
 ({ handleRaidShareCommand } = raidShareCommandHandlers);
 
+const { handleStuckNudgeButton } = createStuckNudgeButtonHandler({
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  MessageFlags,
+  UI,
+  User,
+});
+
 const raidLanguageCommandHandlers = createRaidLanguageCommand({
   EmbedBuilder,
   StringSelectMenuBuilder,
@@ -1172,6 +1183,7 @@ module.exports = {
   startSideTaskResetScheduler,
   parseRaidMessage,
   applyRaidSetForDiscordId: callApplyRaidSetForDiscordId,
+  handleStuckNudgeButton,
   __test: {
     buildRaidCheckSnapshotFromUsers,
     formatRaidCheckNotEligibleFieldValue,
