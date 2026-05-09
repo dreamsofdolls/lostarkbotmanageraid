@@ -145,7 +145,29 @@ function createRaidStatusCommand(deps) {
   async function handleStatusCommand(interaction) {
     const discordId = interaction.user.id;
     const seedDoc = await User.findOne({ discordId });
-    if (!seedDoc || !Array.isArray(seedDoc.accounts) || seedDoc.accounts.length === 0) {
+    const hasOwnAccounts =
+      seedDoc && Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
+
+    // Zero-own viewer support: a Discord user with no `/add-roster`
+    // entries of their own can still see /raid-status if a Manager A
+    // has run /raid-share grant target:them. Skip the early-exit for
+    // the no-own-roster case when there's at least one accessible
+    // share, and let the merged-accounts flow downstream surface A's
+    // rosters as the entire view.
+    let hasIncomingShare = false;
+    if (!hasOwnAccounts) {
+      try {
+        const accessible = await getAccessibleAccounts(discordId);
+        hasIncomingShare = accessible.some((entry) => !entry.isOwn);
+      } catch (err) {
+        console.warn(
+          "[raid-status] share check failed during zero-own gate:",
+          err?.message || err,
+        );
+      }
+    }
+
+    if (!hasOwnAccounts && !hasIncomingShare) {
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
@@ -161,13 +183,22 @@ function createRaidStatusCommand(deps) {
 
     await interaction.deferReply();
 
-    const {
-      userDoc: refreshedUserDoc,
-      piggybackOutcome,
-    } = await loadStatusUserDoc(discordId, seedDoc);
-    let userDoc = refreshedUserDoc;
+    // Skip the refresh-userDoc dance for the share-only viewer: there's
+    // no own roster to refresh, and loadStatusUserDoc assumes the doc
+    // has at least one account it can iterate. Synthesize a minimal
+    // stub doc so downstream readers (buildStatusUserMeta, raid-filter
+    // aggregate, etc.) can use viewer-scoped fields without NPE.
+    let userDoc;
+    let piggybackOutcome = null;
+    if (hasOwnAccounts) {
+      const refreshed = await loadStatusUserDoc(discordId, seedDoc);
+      userDoc = refreshed.userDoc;
+      piggybackOutcome = refreshed.piggybackOutcome;
+    } else {
+      userDoc = seedDoc || { discordId, accounts: [] };
+    }
 
-    if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+    if (!hasIncomingShare && (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0)) {
       await interaction.editReply({
         content: null,
         embeds: [
