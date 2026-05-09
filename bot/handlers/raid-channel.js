@@ -1,21 +1,23 @@
 "use strict";
 
 const { buildNoticeEmbed } = require("../utils/raid/shared");
+const { t, getUserLanguage } = require("../services/i18n");
 
 const RAID_CHANNEL_GREETING_TTL_MS = 2 * 60 * 1000; // set greeting sits 2 min before self-delete
 
 // Full action catalog for /raid-channel config. Autocomplete handler
 // filters out whichever of schedule-on/schedule-off is redundant given
 // the guild's current autoCleanupEnabled state - admin sees only the
-// toggle that actually changes something.
+// toggle that actually changes something. Labels resolve via i18n at
+// autocomplete time so the dropdown text matches the invoker's locale.
 const RAID_CHANNEL_ACTION_CHOICES = [
-  { name: "show - view current config + health check", value: "show" },
-  { name: "set - register the monitor channel (needs `channel` option)", value: "set" },
-  { name: "clear - disable monitor + reset schedule", value: "clear" },
-  { name: "cleanup - delete all non-pinned messages now", value: "cleanup" },
-  { name: "repin - refresh the pinned welcome embed", value: "repin" },
-  { name: "schedule-on - enable auto-cleanup every 30 min (VN time)", value: "schedule-on" },
-  { name: "schedule-off - disable 30-min auto-cleanup", value: "schedule-off" },
+  { value: "show", labelKey: "show" },
+  { value: "set", labelKey: "set" },
+  { value: "clear", labelKey: "clear" },
+  { value: "cleanup", labelKey: "cleanup" },
+  { value: "repin", labelKey: "repin" },
+  { value: "schedule-on", labelKey: "scheduleOn" },
+  { value: "schedule-off", labelKey: "scheduleOff" },
 ];
 
 function createRaidChannelCommand({
@@ -23,6 +25,7 @@ function createRaidChannelCommand({
   MessageFlags,
   PermissionFlagsBits,
   UI,
+  User,
   GuildConfig,
   normalizeName,
   getCachedMonitorChannelId,
@@ -52,6 +55,7 @@ function createRaidChannelCommand({
         await interaction.respond([]).catch(() => {});
         return;
       }
+      const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
       let autoCleanupEnabled = false;
       if (interaction.guildId) {
         try {
@@ -66,6 +70,13 @@ function createRaidChannelCommand({
         .filter((c) => {
           if (autoCleanupEnabled && c.value === "schedule-on") return false;
           if (!autoCleanupEnabled && c.value === "schedule-off") return false;
+          return true;
+        })
+        .map((c) => ({
+          name: t(`raid-channel.autocomplete.${c.labelKey}`, lang),
+          value: c.value,
+        }))
+        .filter((c) => {
           if (!needle) return true;
           return normalizeName(c.name).includes(needle) || normalizeName(c.value).includes(needle);
         })
@@ -78,13 +89,18 @@ function createRaidChannelCommand({
   }
   async function handleRaidChannelCommand(interaction) {
     const guildId = interaction.guildId;
+    // Slash invoker is the only viewer of every ephemeral reply on this
+    // command. Resolve once and thread through every notice + success
+    // embed. The public greeting also uses the invoker's lang as a stand-in
+    // for guild lang (no per-guild language config exists yet).
+    const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
     if (!guildId) {
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Server only",
-            description: "Cậu phải chạy `/raid-channel config` trong server nha, Artist không config được monitor channel ở DM đâu.",
+            title: t("raid-channel.auth.serverOnlyTitle", lang),
+            description: t("raid-channel.auth.serverOnlyDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -107,8 +123,8 @@ function createRaidChannelCommand({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "lock",
-            title: "Cần Manage Server",
-            description: "Lệnh `/raid-channel config` chỉ dành cho thành viên có quyền **Manage Server** trên Discord. Nhờ admin mở quyền hộ rồi thử lại nha~",
+            title: t("raid-channel.auth.manageGuildTitle", lang),
+            description: t("raid-channel.auth.manageGuildDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -128,8 +144,8 @@ function createRaidChannelCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Thiếu option `channel`",
-              description: "Action `set` cần kèm option `channel:#<tên-kênh>` để Artist biết monitor kênh nào. Ví dụ: `/raid-channel config action:set channel:#raid-clears`.",
+              title: t("raid-channel.set.missingChannelTitle", lang),
+              description: t("raid-channel.set.missingChannelDescription", lang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -144,8 +160,8 @@ function createRaidChannelCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "lock",
-              title: "Text monitor đang tắt ở deploy layer",
-              description: "Env var `TEXT_MONITOR_ENABLED=false` đang khoá MessageCreate listener. Bật env var đó (kèm enable Message Content Intent ở Developer Portal nếu chưa) rồi redeploy, xong mới `/raid-channel config action:set` được nha. Không config sẽ không có effect.",
+              title: t("raid-channel.set.monitorDisabledTitle", lang),
+              description: t("raid-channel.set.monitorDisabledDescription", lang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -163,8 +179,11 @@ function createRaidChannelCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "lock",
-              title: "Bot thiếu permission",
-              description: `Artist không monitor được <#${channel.id}> vì thiếu: **${missing.join(", ")}**. Grant cho bot ở channel đó rồi chạy lại \`/raid-channel config action:set\` nha.`,
+              title: t("raid-channel.set.missingPermsTitle", lang),
+              description: t("raid-channel.set.missingPermsDescription", lang, {
+                channelId: channel.id,
+                missing: missing.join(", "),
+              }),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -182,16 +201,15 @@ function createRaidChannelCommand({
       // and persists the new pin's ID there so repeated `set` or `repin`
       // invocations target the exact bot welcome instead of all bot pins.
       const welcome = await postRaidChannelWelcome(channel, interaction.client.user.id, guildId);
-      const welcomeStatus = welcome.posted
-        ? welcome.pinned ? "posted & pinned" : "posted (pin failed)"
-        : "NOT posted";
       // Ceremonial "Artist arrive" greeting posted in the monitor channel
       // right after the welcome pin lands. Separate from the pinned welcome
       // (long-lived documentation) - the greeting is an ephemeral
       // announcement (TTL 2 min) so channel members actively online see
       // Artist take up residence. Only post when the welcome itself
       // succeeded - if welcome.posted is false, the channel is in a broken
-      // state and a greeting would be misleading.
+      // state and a greeting would be misleading. Greeting is a public
+      // broadcast - no per-guild language config yet, so render with the
+      // invoker's lang (the admin who ran the command).
       if (welcome.posted) {
         // Set greeting can be disabled per-guild via /raid-announce.
         let greetingEnabled = true;
@@ -206,22 +224,40 @@ function createRaidChannelCommand({
         if (greetingEnabled) {
           await postChannelAnnouncement(
             channel,
-            "Ồ, chỗ mới này Artist được mời đến trông coi nhỉ~ Xin chào các cậu, từ giờ cứ post clear raid theo format ở welcome pin phía trên là Artist tự cập nhật progress cho nha. Biển báo này Artist cuỗm đi sau 2 phút, welcome thì giữ nguyên.",
+            t("raid-channel.set.greetingMessage", lang),
             RAID_CHANNEL_GREETING_TTL_MS,
             "raid-channel set greeting"
           );
         }
       }
+      const welcomeIcon = welcome.posted ? UI.icons.done : UI.icons.warn;
+      const welcomeKey = welcome.posted
+        ? welcome.pinned
+          ? "welcomeValuePostedPinned"
+          : "welcomeValuePostedNoPin"
+        : "welcomeValueNotPosted";
       const embed = new EmbedBuilder()
         .setColor(UI.colors.success)
-        .setTitle(`${UI.icons.done} Raid Channel Set`)
+        .setTitle(`${UI.icons.done} ${t("raid-channel.set.successTitle", lang)}`)
         .setDescription(
-          `Bot sẽ monitor <#${channel.id}> và parse message dạng \`<raid> <difficulty> <character> [gate]\`.`
+          t("raid-channel.set.successDescription", lang, { channelId: channel.id })
         )
         .addFields(
-          { name: "Examples", value: "`Serca Nightmare Clauseduk` → mark raid as DONE\n`Serca Nor Soulrano G1` → mark G1 as done" },
-          { name: "Welcome message", value: `${welcome.posted ? UI.icons.done : UI.icons.warn} ${welcomeStatus} in <#${channel.id}>.` },
-          { name: "Nếu cậu đổi channel trước đó", value: "Remember to unpin/delete welcome message ở channel cũ để members không nhầm." },
+          {
+            name: t("raid-channel.set.examplesField", lang),
+            value: t("raid-channel.set.examplesValue", lang),
+          },
+          {
+            name: t("raid-channel.set.welcomeField", lang),
+            value: t(`raid-channel.set.${welcomeKey}`, lang, {
+              icon: welcomeIcon,
+              channelId: channel.id,
+            }),
+          },
+          {
+            name: t("raid-channel.set.changeChannelField", lang),
+            value: t("raid-channel.set.changeChannelValue", lang),
+          },
         )
         .setTimestamp();
       await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
@@ -231,22 +267,28 @@ function createRaidChannelCommand({
       const channelId = getCachedMonitorChannelId(guildId);
       const embed = new EmbedBuilder()
         .setColor(UI.colors.neutral)
-        .setTitle(`${UI.icons.info} Raid Channel`);
+        .setTitle(`${UI.icons.info} ${t("raid-channel.show.title", lang)}`);
       // Deploy-level state warnings regardless of config state.
       const deployNotes = [];
       if (!isTextMonitorEnabled()) {
         deployNotes.push(
-          `${UI.icons.warn} Text monitor đang bị tắt ở deploy layer (\`TEXT_MONITOR_ENABLED=false\`). Bot bỏ qua mọi message đến.`
+          t("raid-channel.show.monitorDisabledNote", lang, { icon: UI.icons.warn })
         );
       }
       const { healthy, error } = getMonitorCacheHealth();
       if (!healthy) {
+        const errorSuffix = error
+          ? t("raid-channel.show.cacheUnhealthyErrorSuffix", lang, { error })
+          : "";
         deployNotes.push(
-          `${UI.icons.warn} Cache config chưa load được ở boot${error ? ` (\`${error}\`)` : ""}. Monitor inactive cho đến khi load lại. Bot cần redeploy hoặc fix kết nối Mongo.`
+          t("raid-channel.show.cacheUnhealthyNote", lang, {
+            icon: UI.icons.warn,
+            errorSuffix,
+          })
         );
       }
       if (!channelId) {
-        const lines = ["Chưa config channel nào. Dùng `/raid-channel config action:set channel:#<channel>` để bật."];
+        const lines = [t("raid-channel.show.noConfigLine", lang)];
         if (deployNotes.length > 0) lines.push("", ...deployNotes);
         embed.setDescription(lines.join("\n"));
       } else {
@@ -263,13 +305,18 @@ function createRaidChannelCommand({
         }
         const botMember = interaction.guild?.members?.me;
         const missing = channel ? getMissingBotChannelPermissions(channel, botMember) : null;
-        const lines = [`Monitoring <#${channelId}>.`];
+        const lines = [t("raid-channel.show.monitoringLine", lang, { channelId })];
         if (!channel) {
-          lines.push(`${UI.icons.warn} Channel không truy cập được (bị xóa hoặc bot không có access).`);
+          lines.push(t("raid-channel.show.channelInaccessibleLine", lang, { icon: UI.icons.warn }));
         } else if (missing && missing.length > 0) {
-          lines.push(`${UI.icons.warn} Bot thiếu permission: **${missing.join(", ")}**. Feature có thể fail im lặng.`);
+          lines.push(
+            t("raid-channel.show.channelMissingPermsLine", lang, {
+              icon: UI.icons.warn,
+              missing: missing.join(", "),
+            })
+          );
         } else {
-          lines.push(`${UI.icons.done} Permissions OK.`);
+          lines.push(t("raid-channel.show.channelOkLine", lang, { icon: UI.icons.done }));
         }
         if (deployNotes.length > 0) lines.push("", ...deployNotes);
         embed.setDescription(lines.join("\n"));
@@ -295,8 +342,8 @@ function createRaidChannelCommand({
       setCachedMonitorChannelId(guildId, null);
       const embed = new EmbedBuilder()
         .setColor(UI.colors.muted)
-        .setTitle(`${UI.icons.reset} Raid Channel Cleared`)
-        .setDescription("Monitor đã được tắt và auto-cleanup schedule cũng bị reset. Bot sẽ không xử lý message text nữa. Dùng `/raid-channel config action:set channel:#<channel>` + `action:schedule-on` để bật lại.");
+        .setTitle(`${UI.icons.reset} ${t("raid-channel.clear.title", lang)}`)
+        .setDescription(t("raid-channel.clear.description", lang));
       await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
       return;
     }
@@ -307,8 +354,8 @@ function createRaidChannelCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Chưa config channel",
-              description: "Cậu chưa set monitor channel nào cho Artist nha. Chạy `/raid-channel config action:set channel:#<tên-kênh>` trước rồi mới dùng action này được.",
+              title: t("raid-channel.cleanup.noConfigTitle", lang),
+              description: t("raid-channel.cleanup.noConfigDescription", lang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -321,8 +368,8 @@ function createRaidChannelCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Channel không truy cập được",
-              description: `Artist không vào được <#${channelId}> (channel có thể đã bị xoá hoặc bot không có access). Cậu kiểm tra lại channel + permission nha, rồi \`/raid-channel config action:set\` lại nếu cần.`,
+              title: t("raid-channel.cleanup.channelGoneTitle", lang),
+              description: t("raid-channel.cleanup.channelGoneDescription", lang, { channelId }),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -334,12 +381,22 @@ function createRaidChannelCommand({
         const { deleted, skippedOld } = await cleanupRaidChannelMessages(channel);
         const embed = new EmbedBuilder()
           .setColor(UI.colors.success)
-          .setTitle(`${UI.icons.done} Channel Cleaned`)
-          .setDescription(`Đã dọn <#${channel.id}>, pinned messages giữ nguyên.`)
-          .addFields({ name: "Deleted", value: `${deleted} message(s)`, inline: true })
+          .setTitle(`${UI.icons.done} ${t("raid-channel.cleanup.successTitle", lang)}`)
+          .setDescription(
+            t("raid-channel.cleanup.successDescription", lang, { channelId: channel.id })
+          )
+          .addFields({
+            name: t("raid-channel.cleanup.deletedField", lang),
+            value: t("raid-channel.cleanup.deletedValue", lang, { count: deleted }),
+            inline: true,
+          })
           .setTimestamp();
         if (skippedOld > 0) {
-          embed.addFields({ name: "Skipped (>14 ngày)", value: `${skippedOld}`, inline: true });
+          embed.addFields({
+            name: t("raid-channel.cleanup.skippedField", lang),
+            value: `${skippedOld}`,
+            inline: true,
+          });
         }
         await interaction.editReply({ embeds: [embed] });
       } catch (err) {
@@ -349,8 +406,10 @@ function createRaidChannelCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "error",
-              title: "Cleanup fail",
-              description: `Artist dọn channel không xong vì \`${err?.message || err}\`. Check bot permission (Manage Messages + Read Message History) rồi thử lại nha.`,
+              title: t("raid-channel.cleanup.failTitle", lang),
+              description: t("raid-channel.cleanup.failDescription", lang, {
+                error: err?.message || err,
+              }),
             }),
           ],
         });
@@ -364,8 +423,8 @@ function createRaidChannelCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Chưa config channel",
-              description: "Cậu chưa set monitor channel nào cho Artist nha. Chạy `/raid-channel config action:set channel:#<tên-kênh>` trước rồi mới dùng action này được.",
+              title: t("raid-channel.cleanup.noConfigTitle", lang),
+              description: t("raid-channel.cleanup.noConfigDescription", lang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -378,8 +437,8 @@ function createRaidChannelCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Channel không truy cập được",
-              description: `Artist không vào được <#${channelId}> (channel có thể đã bị xoá hoặc bot không có access). Cậu kiểm tra lại channel + permission nha, rồi \`/raid-channel config action:set\` lại nếu cần.`,
+              title: t("raid-channel.cleanup.channelGoneTitle", lang),
+              description: t("raid-channel.cleanup.channelGoneDescription", lang, { channelId }),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -388,13 +447,26 @@ function createRaidChannelCommand({
       }
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const welcome = await postRaidChannelWelcome(channel, interaction.client.user.id, guildId);
+      const newKey = welcome.posted
+        ? welcome.pinned
+          ? "newPostedPinned"
+          : "newPostedNoPin"
+        : "newNotPosted";
       const embed = new EmbedBuilder()
         .setColor(welcome.posted && welcome.pinned ? UI.colors.success : UI.colors.progress)
-        .setTitle(`${UI.icons.roster} Welcome Repinned`)
+        .setTitle(`${UI.icons.roster} ${t("raid-channel.repin.title", lang)}`)
         .setDescription(`<#${channel.id}>`)
         .addFields(
-          { name: "Removed old welcome", value: `${welcome.removedOldCount}`, inline: true },
-          { name: "New welcome", value: welcome.posted ? (welcome.pinned ? "posted & pinned" : "posted (pin failed)") : "NOT posted", inline: true },
+          {
+            name: t("raid-channel.repin.removedField", lang),
+            value: `${welcome.removedOldCount}`,
+            inline: true,
+          },
+          {
+            name: t("raid-channel.repin.newField", lang),
+            value: t(`raid-channel.repin.${newKey}`, lang),
+            inline: true,
+          },
         )
         .setTimestamp();
       await interaction.editReply({ embeds: [embed] });
@@ -413,8 +485,13 @@ function createRaidChannelCommand({
             embeds: [
               buildNoticeEmbed(EmbedBuilder, {
                 type: "info",
-                title: "Không có gì đổi",
-                description: `Schedule auto-cleanup đang ở state \`${enabled ? "on" : "off"}\` rồi nha cậu, Artist không stamp lại.`,
+                title: t("raid-channel.schedule.noopTitle", lang),
+                description: t(
+                  enabled
+                    ? "raid-channel.schedule.noopDescriptionOn"
+                    : "raid-channel.schedule.noopDescriptionOff",
+                  lang
+                ),
               }),
             ],
             flags: MessageFlags.Ephemeral,
@@ -434,8 +511,8 @@ function createRaidChannelCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Chưa config channel",
-              description: "Cậu phải `/raid-channel config action:set channel:#<tên-kênh>` trước rồi mới enable schedule được nha. Không thì scheduler không có channel để dọn, thành ra fire vô ích.",
+              title: t("raid-channel.schedule.noChannelTitle", lang),
+              description: t("raid-channel.schedule.noChannelDescription", lang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -461,11 +538,21 @@ function createRaidChannelCommand({
       );
       const embed = new EmbedBuilder()
         .setColor(enabled ? UI.colors.success : UI.colors.muted)
-        .setTitle(`${enabled ? UI.icons.done : UI.icons.reset} Auto-cleanup ${enabled ? "enabled" : "disabled"}`)
+        .setTitle(
+          `${enabled ? UI.icons.done : UI.icons.reset} ${t(
+            enabled
+              ? "raid-channel.schedule.enabledTitle"
+              : "raid-channel.schedule.disabledTitle",
+            lang
+          )}`
+        )
         .setDescription(
-          enabled
-            ? "Mỗi 30 phút (slot :00 và :30 giờ VN), Artist sẽ tự xóa toàn bộ message không được pin trong monitor channel. Welcome pin giữ nguyên. Sau khi dọn, Artist post 1 biển báo 4-bucket (sạch sẵn / 1-5 / 6-20 / 21+ tin) với nhiều variant random pick; biển tự biến mất sau 5 phút. Nếu bot offline qua 1 slot boundary, tick tiếp theo sau khi online sẽ catch-up."
-            : "Auto-cleanup đã tắt. Admin vẫn có thể chạy thủ công qua `/raid-channel config action:cleanup` bất cứ lúc nào."
+          t(
+            enabled
+              ? "raid-channel.schedule.enabledDescription"
+              : "raid-channel.schedule.disabledDescription",
+            lang
+          )
         )
         .setTimestamp();
       await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
