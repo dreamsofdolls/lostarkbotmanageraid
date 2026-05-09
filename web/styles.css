@@ -241,6 +241,69 @@ table th { color: var(--text-dim); font-weight: 600; }
   cursor: not-allowed;
 }
 
+.view-toggle {
+  margin-left: auto;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+.view-toggle:hover {
+  background: var(--accent);
+  color: #1a1c1f;
+}
+
+/* Char-first view: per-char card with raid+mode rows inline. Default
+   view since "what has my char done this week" is the natural mental
+   model when previewing what will sync. Toggle button at the top
+   swaps to raid-first. */
+.char-card {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #1d2024;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.char-card-head {
+  font-size: 13px;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #2a2e35;
+}
+.char-raid-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+.char-raid-row + .char-raid-row {
+  border-top: 1px dashed #2a2e35;
+  margin-top: 2px;
+}
+.char-raid-name {
+  flex: 0 0 90px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+.char-raid-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.char-mode-block {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.char-mode-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .raid-card {
   margin-top: 14px;
   padding: 12px 14px;

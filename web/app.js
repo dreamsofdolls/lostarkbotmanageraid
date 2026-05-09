@@ -437,6 +437,13 @@ async function runPreviewQuery(sqlite3, db) {
     clears: buckets.length,
     schemaDebug: { table, bossCol, tsCol, charCol: charCol || "-" },
   };
+  // Default view = char-first. /raid-status mental model: scan "what
+  // has my char done this week". Toggle to raid-first for manager
+  // scan "who's done raid X". State persists across roster page flips
+  // within the same preview session (re-render reads same window var).
+  if (window.__artistViewMode !== "raid" && window.__artistViewMode !== "char") {
+    window.__artistViewMode = "char";
+  }
   renderDiffPage();
   syncSection.hidden = false;
   syncBtn.disabled = lastDeltas.length === 0;
@@ -469,10 +476,10 @@ function renderDiffPage() {
     html += `<p class="hint" style="margin-top:12px;">${t("preview.noBucketsMatched")}</p>`;
   } else {
     const page = diff[pageIndex];
-    // Roster pagination header: prev / account-name (X/Y) / next. The
-    // counter + buttons hide entirely for single-roster users so the UI
-    // stays uncluttered. Buttons disable at the boundaries instead of
-    // disappearing - prevents layout jumps when paging end-to-end.
+    const viewMode = window.__artistViewMode === "raid" ? "raid" : "char";
+    // Roster pagination header + view toggle. Pagination hides for
+    // single-roster users; toggle always shows so the user sees the
+    // alternate view exists. Layout: [Prev] [Roster name (X/Y)] [Next] | [View toggle]
     html += `<div class="roster-pagination">`;
     if (diff.length > 1) {
       const prevDisabled = pageIndex === 0 ? "disabled" : "";
@@ -484,29 +491,73 @@ function renderDiffPage() {
       const nextDisabled = pageIndex >= diff.length - 1 ? "disabled" : "";
       html += `<button class="page-btn" id="roster-next" ${nextDisabled}>▶</button>`;
     }
+    // View toggle button - label shows the OTHER view (click to switch
+    // TO that view). Single button instead of two-state radio so the
+    // affordance is obvious. /raid-status uses the same one-button
+    // toggle pattern between Raid view and Side tasks view.
+    const toggleLabel = viewMode === "char" ? t("preview.viewToggleToRaid") : t("preview.viewToggleToChar");
+    const toggleEmoji = viewMode === "char" ? "🗂️" : "👤";
+    html += `<button class="page-btn view-toggle" id="view-toggle">${toggleEmoji} ${escapeHtml(toggleLabel)}</button>`;
     html += `</div>`;
-    // Raid cards for the active page. Each card = (raid, mode) header
-    // followed by char rows. Char row layout matches /raid-status:
-    // [class icon] name (ilvl) | [gate badges]. State color comes from
-    // the gate-* CSS class on each badge.
-    for (const card of page.raidCards) {
-      const raidLabel = getRaidLabel(card.raidKey);
-      const modeLabel = getModeLabel(card.modeKey);
-      const cardEmoji = card.modeKey === "nightmare" ? "🌑" : card.modeKey === "hard" ? "⚔️" : "🛡️";
-      html += `<div class="raid-card">`;
-      html += `<h4 class="raid-card-header">${cardEmoji} ${escapeHtml(raidLabel)} ${escapeHtml(modeLabel)} <span class="hint">· ${t("preview.raidGroupCharCount", { n: card.chars.length })}</span></h4>`;
-      for (const char of card.chars) {
-        html += `<div class="raid-card-char">`;
-        html += `<div class="char-info">${formatCharRowHead(char)}</div>`;
-        html += `<div class="gate-badges">`;
-        for (const gate of char.gates) {
-          const state = char.states[gate];
-          html += renderGateBadge(gate, state);
+    // Branch render based on active view mode.
+    if (viewMode === "char") {
+      // Char-first: one card per char with raid+mode rows inline.
+      // Default view since "what has my char done" is the natural
+      // mental model when previewing what's about to sync.
+      for (const character of page.characters) {
+        html += `<div class="char-card">`;
+        html += `<div class="char-card-head">${formatCharRowHead(character)}</div>`;
+        // Group cells by raidKey so the same raid's modes sit on one
+        // row: "Act 4: 🛡️Normal ✓✓  ⚔️Hard ✓✓"
+        const cellsByRaid = new Map();
+        for (const cell of character.cells) {
+          if (!cellsByRaid.has(cell.raidKey)) cellsByRaid.set(cell.raidKey, []);
+          cellsByRaid.get(cell.raidKey).push(cell);
+        }
+        for (const [raidKey, raidCells] of cellsByRaid) {
+          const raidLabel = getRaidLabel(raidKey);
+          html += `<div class="char-raid-row">`;
+          html += `<span class="char-raid-name">${escapeHtml(raidLabel)}</span>`;
+          html += `<div class="char-raid-modes">`;
+          for (const cell of raidCells) {
+            const modeLabel = getModeLabel(cell.modeKey);
+            const modeEmoji = cell.modeKey === "nightmare" ? "🌑" : cell.modeKey === "hard" ? "⚔️" : "🛡️";
+            html += `<div class="char-mode-block">`;
+            html += `<span class="char-mode-label">${modeEmoji} ${escapeHtml(modeLabel)}</span>`;
+            html += `<div class="gate-badges">`;
+            for (const gate of cell.gates) {
+              html += renderGateBadge(gate, cell.states[gate]);
+            }
+            html += `</div>`;
+            html += `</div>`;
+          }
+          html += `</div>`;
+          html += `</div>`;
         }
         html += `</div>`;
+      }
+    } else {
+      // Raid-first: raid-card layout (Phase 7 first cut). Best for
+      // "who in this account cleared raid X" Manager-scan flow.
+      for (const card of page.raidCards) {
+        const raidLabel = getRaidLabel(card.raidKey);
+        const modeLabel = getModeLabel(card.modeKey);
+        const cardEmoji = card.modeKey === "nightmare" ? "🌑" : card.modeKey === "hard" ? "⚔️" : "🛡️";
+        html += `<div class="raid-card">`;
+        html += `<h4 class="raid-card-header">${cardEmoji} ${escapeHtml(raidLabel)} ${escapeHtml(modeLabel)} <span class="hint">· ${t("preview.raidGroupCharCount", { n: card.chars.length })}</span></h4>`;
+        for (const char of card.chars) {
+          html += `<div class="raid-card-char">`;
+          html += `<div class="char-info">${formatCharRowHead(char)}</div>`;
+          html += `<div class="gate-badges">`;
+          for (const gate of char.gates) {
+            const state = char.states[gate];
+            html += renderGateBadge(gate, state);
+          }
+          html += `</div>`;
+          html += `</div>`;
+        }
         html += `</div>`;
       }
-      html += `</div>`;
     }
   }
 
@@ -540,6 +591,16 @@ function renderDiffPage() {
     nextBtn.addEventListener("click", () => {
       const total = (window.__artistDiff || []).length;
       window.__artistRosterPage = Math.min(total - 1, (window.__artistRosterPage || 0) + 1);
+      renderDiffPage();
+    });
+  }
+  // View-toggle button: flip char-first <-> raid-first. Cheap because
+  // the underlying diff already carries both projections (preview-utils
+  // computes them in one pass), render just picks the right one.
+  const viewToggleBtn = document.getElementById("view-toggle");
+  if (viewToggleBtn) {
+    viewToggleBtn.addEventListener("click", () => {
+      window.__artistViewMode = window.__artistViewMode === "raid" ? "char" : "raid";
       renderDiffPage();
     });
   }
@@ -591,8 +652,12 @@ function renderGateBadge(gate, state) {
 }
 
 function renderDiffLegend() {
-  const states = ["synced", "pending", "mode-conflict", "db-other-mode", "empty"];
-  const items = states.map((s) => `<span class="legend-item gate-${s}">${s === "synced" ? "✓" : s === "pending" ? "⏬" : s === "mode-conflict" ? "⚠" : s === "db-other-mode" ? "◐" : "·"} ${escapeHtml(t("diff.state." + s))}</span>`).join("");
+  // 4-state legend (db-other-mode collapsed into empty since it was
+  // user-confusing - char did Hard then saw Normal cards full of
+  // db-other-mode badges asking "why is this here"). Off-mode DB
+  // clears no longer surface as activity at the OTHER mode.
+  const states = ["synced", "pending", "mode-conflict", "empty"];
+  const items = states.map((s) => `<span class="legend-item gate-${s}">${s === "synced" ? "✓" : s === "pending" ? "⏬" : s === "mode-conflict" ? "⚠" : "·"} ${escapeHtml(t("diff.state." + s))}</span>`).join("");
   return `<div class="diff-legend">${items}</div>`;
 }
 

@@ -77,6 +77,8 @@ const VI = {
     colDifficulty: "Difficulty",
     unmappedSummary: "{n} boss không map - không sync (Guardian / Chaos / non-Legion)",
     unmappedReportHint: "Nếu là boss raid Legion mà thấy ở đây, screenshot + báo lại Discord để Artist extend boss-to-raid map.",
+    viewToggleToRaid: "View theo raid",
+    viewToggleToChar: "View theo char",
   },
   sync: {
     section: "4. Sync về Artist",
@@ -182,6 +184,8 @@ const JP = {
     colDifficulty: "難易度",
     unmappedSummary: "{n} 件の未マッピングボス - 同期しませんわ (Guardian / Chaos / non-Legion ですの)",
     unmappedReportHint: "もしレギオンレイドのボスがここに出ていたら、スクショ + Discord で報告してくださいませ。 Artist がマップを拡張しますわ♪",
+    viewToggleToRaid: "レイド別ビュー",
+    viewToggleToChar: "キャラ別ビュー",
   },
   sync: {
     section: "4. Artist へ同期",
@@ -287,6 +291,8 @@ const EN = {
     colDifficulty: "Difficulty",
     unmappedSummary: "{n} unmapped boss(es) - not synced (Guardian / Chaos / non-Legion)",
     unmappedReportHint: "If a Legion raid boss appears here, screenshot + report in Discord so Artist can extend the boss-to-raid map.",
+    viewToggleToRaid: "View by raid",
+    viewToggleToChar: "View by char",
   },
   sync: {
     section: "4. Sync to Artist",
