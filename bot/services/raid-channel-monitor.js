@@ -1,6 +1,7 @@
 "use strict";
 
 const { getArtistEmoji } = require("../models/ArtistEmoji");
+const { findAccessibleCharacter } = require("../services/access-control");
 
 function createRaidChannelMonitorService({
   PermissionFlagsBits,
@@ -788,13 +789,47 @@ function createRaidChannelMonitorService({
     let hadNoRoster = false;
     for (const charName of charNames) {
       try {
+        // Lookup char in author's accessible pool (own + share-received).
+        // When the char belongs to a shared roster (Manager A's roster
+        // shared to author B via /raid-share grant), route the write to
+        // the owner's User doc but stamp executorId=author so the
+        // applyRaidSetForDiscordId auth check picks up the share-edit
+        // path. Falls back to author's own discordId when no share hit
+        // OR the char isn't in any accessible roster (existing
+        // "no roster" / "char not found" behaviors stay intact).
+        let targetDiscordId = message.author.id;
+        let executorId = null;
+        let resolvedRosterName = null;
+        try {
+          const sharedHit = await findAccessibleCharacter(
+            message.author.id,
+            charName,
+          );
+          if (sharedHit && !sharedHit.isOwn) {
+            targetDiscordId = sharedHit.ownerDiscordId;
+            executorId = message.author.id;
+            resolvedRosterName = sharedHit.accountName;
+          }
+        } catch (lookupErr) {
+          console.warn(
+            `[raid-channel] findAccessibleCharacter failed for "${charName}":`,
+            lookupErr?.message || lookupErr,
+          );
+        }
         const r = await applyRaidSetForDiscordId({
-          discordId: message.author.id,
+          discordId: targetDiscordId,
+          executorId,
           characterName: charName,
+          rosterName: resolvedRosterName,
           raidMeta,
           statusType,
           effectiveGates,
         });
+        if (executorId) {
+          console.log(
+            `[raid-channel] share-write executor=${executorId} owner=${targetDiscordId} char=${charName} raid=${raidMeta.raidKey}_${raidMeta.modeKey}`,
+          );
+        }
         results.push({ charName, ...r });
         if (r.noRoster) {
           hadNoRoster = true;

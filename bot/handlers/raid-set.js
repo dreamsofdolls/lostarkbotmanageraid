@@ -4,6 +4,10 @@ const {
   getCharacterMatches,
   truncateChoice,
 } = require("../utils/raid/autocomplete-helpers");
+const {
+  getAccessibleAccounts,
+  canEditAccount,
+} = require("../services/access-control");
 
 function createRaidSetCommand(deps) {
   const {
@@ -109,19 +113,53 @@ function createRaidSetCommand(deps) {
     const matches = flattened.filter(
       (entry) => normalizeName(entry.account.accountName) === target
     );
-    if (matches.length === 0) return null;
+    if (matches.length === 1) {
+      // Surface the full owner doc so autocomplete callers that need the
+      // whole accounts array (character / raid filtering) can reuse the
+      // registered-by query result instead of round-tripping again via
+      // loadUserForAutocomplete(ownerDiscordId).
+      const ownerDoc =
+        Array.isArray(registeredDocs)
+          ? registeredDocs.find((doc) => doc?.discordId === matches[0].ownerDiscordId) || null
+          : null;
+      return { ...matches[0], ownerDoc, actingForOther: true };
+    }
     if (matches.length > 1) {
       return { ambiguous: true, matches };
     }
-    // Surface the full owner doc so autocomplete callers that need the
-    // whole accounts array (character / raid filtering) can reuse the
-    // registered-by query result instead of round-tripping again via
-    // loadUserForAutocomplete(ownerDiscordId).
-    const ownerDoc =
-      Array.isArray(registeredDocs)
-        ? registeredDocs.find((doc) => doc?.discordId === matches[0].ownerDiscordId) || null
-        : null;
-    return { ...matches[0], ownerDoc, actingForOther: true };
+    // Final lookup tier: rosters Manager A has shared with the executor
+    // via /raid-share grant. Distinct from the helper-registered path
+    // above (which keys off `account.registeredBy === executor`); a share
+    // grants access without changing roster ownership. Returns
+    // `actingForOther: true` so the existing executor-not-owner branches
+    // (auth re-check, etc.) trigger naturally.
+    let accessible = [];
+    try {
+      accessible = await getAccessibleAccounts(executorId);
+    } catch (err) {
+      console.warn("[raid-set] getAccessibleAccounts failed:", err.message);
+      return null;
+    }
+    const sharedMatch = accessible.find(
+      (entry) => !entry.isOwn && normalizeName(entry.accountName) === target
+    );
+    if (!sharedMatch) return null;
+
+    const ownerDoc = await User.findOne({ discordId: sharedMatch.ownerDiscordId });
+    if (!ownerDoc || !Array.isArray(ownerDoc.accounts)) return null;
+    const ownerAccount = ownerDoc.accounts.find(
+      (a) => normalizeName(a.accountName) === target
+    );
+    if (!ownerAccount) return null;
+    return {
+      ownerDiscordId: sharedMatch.ownerDiscordId,
+      ownerLabel: sharedMatch.ownerLabel,
+      ownerDoc,
+      account: ownerAccount,
+      actingForOther: true,
+      viaShare: true,
+      shareLevel: sharedMatch.accessLevel,
+    };
   }
 
 // Finds a character by name inside a user doc. Optional `rosterName` narrows
@@ -184,7 +222,36 @@ function createRaidSetCommand(deps) {
         err?.message || err
       );
     }
-    const merged = [...ownChoices, ...helperChoices].slice(0, 25);
+    // Roster shares granted by Manager A to executor via /raid-share grant.
+    // Distinct from helperChoices because share access doesn't change
+    // roster ownership; the autocomplete tag therefore differs ("shared
+    // by" vs "giúp"). View-level shares are tagged so the executor sees
+    // they cannot /raid-set on that roster even if it's pickable.
+    let shareChoices = [];
+    try {
+      const accessible = await getAccessibleAccounts(executorId);
+      shareChoices = accessible
+        .filter(
+          (entry) =>
+            !entry.isOwn &&
+            (!target || normalizeName(entry.accountName).includes(target))
+        )
+        .map((entry) => {
+          const charCount = Array.isArray(entry.account?.characters)
+            ? entry.account.characters.length
+            : 0;
+          const accessTag = entry.accessLevel === "view" ? " · 👁️ view" : "";
+          const label = `👥 ${entry.accountName} · ${charCount} char${charCount === 1 ? "" : "s"} · shared by ${entry.ownerLabel}${accessTag}`;
+          return truncateChoice(label, entry.accountName);
+        });
+    } catch (err) {
+      console.warn(
+        "[raid-set autocomplete] getAccessibleAccounts failed:",
+        err?.message || err
+      );
+    }
+
+    const merged = [...ownChoices, ...helperChoices, ...shareChoices].slice(0, 25);
     await interaction.respond(merged).catch(() => {});
   }
   // Character autocomplete for /raid-set. Reads the upstream `roster` option
@@ -460,7 +527,19 @@ function createRaidSetCommand(deps) {
         const account = userDoc.accounts.find(
           (item) => normalizeName(item.accountName) === rosterTarget
         );
-        if (!account || account.registeredBy !== executorId) {
+        if (!account) {
+          authLost = true;
+          return;
+        }
+        const isHelperManager = account.registeredBy === executorId;
+        // /raid-share edit grant: executor is allowed to edit the
+        // owner's roster because Manager A (the owner) ran
+        // /raid-share grant target:executor permission:edit. View-level
+        // shares are filtered out by canEditAccount so a share-only
+        // viewer can never bypass the helper-Manager auth path.
+        const isShareEdit = !isHelperManager
+          && (await canEditAccount(executorId, discordId));
+        if (!isHelperManager && !isShareEdit) {
           authLost = true;
           return;
         }

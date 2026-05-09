@@ -4,6 +4,18 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-09
+
+### Added (roster-share Phase 2b: /raid-set + text parser write paths)
+- `/raid-set` autocomplete (`roster` field) now lists rosters shared to the executor via `/raid-share grant` alongside their own + helper-registered rosters. Shared entries render with `👥 RosterName · N chars · shared by Alice` (and `· 👁️ view` for view-level shares so the executor sees they cannot edit even if the roster is pickable). `resolveRosterOwner` gained a third tier (after own + helper-registered) that consults `getAccessibleAccounts` to find shared rosters by name and returns the owner's User doc + `viaShare: true` marker so existing executor-not-owner branches inherit naturally.
+- `applyRaidSetForDiscordId` auth check (the `executorId !== discordId` branch) now accepts share-edit access: an executor authorized via `/raid-share grant target:executor permission:edit` passes the gate even though `account.registeredBy !== executor`. View-level shares are filtered out by `canEditAccount` so a view-only viewer can never write through this path. Helper-Manager flow (`registeredBy === executor`) keeps the same precedence so existing helper-add behavior is unchanged.
+- Raid-channel text parser (e.g. posting `Brel Hard Char1`) now resolves the char name across the message author's accessible pool via `findAccessibleCharacter`. When the char belongs to a shared roster (Manager A's roster shared to author B), the write is routed to A's User doc with executorId stamped to B; `applyRaidSetForDiscordId` then takes the share-edit branch. When the char is in B's own roster, behavior is identical to before. Audit log emits `[raid-channel] share-write executor=B owner=A char=X raid=Y` so post-hoc tracing works.
+
+### Notes
+- 316/316 tests pass.
+- Side-task flow (`/raid-task`) is Phase 2c: ~10 distinct `User.findOne({ discordId })` call sites across add / remove / clear / shared-add / shared-remove subcommands, each with different semantics. Splitting Phase 2c into a dedicated commit keeps the side-task refactor reviewable in isolation. For now, `/raid-task` write paths are still scoped to the executor's own User doc; B cannot toggle/add side tasks on A's shared chars yet.
+- Polish remaining (`Phase 2d` style): hide Sync button on shared `/raid-status` pages; allow viewers with zero own rosters to see shared-only views (currently gated by the `accounts.length === 0` early-exit).
+
 ## 2026-05-05 (later 2)
 
 ### Added
