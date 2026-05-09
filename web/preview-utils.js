@@ -289,3 +289,159 @@ export function findUnmappedBosses(rows) {
   }
   return [...set].sort();
 }
+
+// ----- Roster diff (Phase 7: roster-grouped preview) -----
+
+// iLvl gates per (raid, mode). Mirror of bot/models/Raid.js
+// RAID_REQUIREMENTS minItemLevel - kept inline so the diff renderer
+// can decide which raid/mode cells a char is eligible to show
+// without a server round-trip.
+const RAID_MODE_ILVL = {
+  armoche: { normal: 1700, hard: 1720 },
+  kazeros: { normal: 1710, hard: 1730 },
+  serca: { normal: 1710, hard: 1730, nightmare: 1740 },
+};
+
+// Display order: raid then mode.
+const RAID_ORDER = ["armoche", "kazeros", "serca"];
+const MODE_ORDER = ["normal", "hard", "nightmare"];
+
+export function getRaidModeIlvl(raidKey, modeKey) {
+  return RAID_MODE_ILVL[raidKey]?.[modeKey] ?? 0;
+}
+
+export function getEligibleRaidModes(itemLevel) {
+  const ilvl = Number(itemLevel) || 0;
+  const list = [];
+  for (const raidKey of RAID_ORDER) {
+    for (const modeKey of MODE_ORDER) {
+      const min = RAID_MODE_ILVL[raidKey]?.[modeKey];
+      if (typeof min !== "number") continue;
+      if (ilvl >= min) list.push({ raidKey, modeKey });
+    }
+  }
+  return list;
+}
+
+function normalizeDifficultyLabel(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+/**
+ * Resolve cell state for one (char, raid, mode, gate) tuple.
+ *
+ * Inputs:
+ *   - assignedRaids: char's User.assignedRaids[raidKey] sub-doc (may be {})
+ *     shape: { G1: { completedDate, difficulty }, G2: {...} }
+ *   - fileGates: Set of gates the FILE (encounters.db) has cleared for
+ *     this (char, raid, mode) - empty set if no clear
+ *   - modeKey: target mode being evaluated
+ *   - gate: target gate label ("G1", "G2", ...)
+ *
+ * State values:
+ *   "synced"        DB cleared at this gate AND difficulty matches modeKey
+ *   "pending"       file has clear, DB doesn't (or DB has it at THIS mode but
+ *                   somehow file says newer - rare; treat as pending so the
+ *                   user sees the upcoming write)
+ *   "mode-conflict" DB cleared at a different difficulty than modeKey AND
+ *                   file has a clear at modeKey - applyRaidSet will wipe
+ *                   the old mode and write the new one
+ *   "db-other-mode" DB cleared at a different difficulty AND file has no
+ *                   clear at modeKey - represents "char was on Normal,
+ *                   no Hard activity in last 7 days"
+ *   "empty"         neither DB nor file has it
+ */
+export function resolveCellState({ assignedRaids, fileGates, modeKey, gate }) {
+  const dbEntry = assignedRaids?.[gate];
+  const dbCleared = dbEntry && Number(dbEntry.completedDate) > 0;
+  const dbModeKey = normalizeDifficultyLabel(dbEntry?.difficulty);
+  const targetModeLabel = normalizeDifficultyLabel(modeKey);
+  const fileHas = fileGates && fileGates.has(gate);
+  if (dbCleared && (!dbModeKey || dbModeKey === targetModeLabel)) {
+    return "synced";
+  }
+  if (dbCleared && dbModeKey !== targetModeLabel) {
+    return fileHas ? "mode-conflict" : "db-other-mode";
+  }
+  if (fileHas) return "pending";
+  return "empty";
+}
+
+/**
+ * Build a map keyed by `${charNameLower}::${raidKey}::${modeKey}` -> Set
+ * of gates the FILE cleared. Used by resolveCellState. Cumulative gate
+ * expansion already applied by bucketize, so a bucket with gates
+ * ["G1","G2"] populates both gate entries in the set.
+ */
+export function buildFileClearMap(buckets) {
+  const map = new Map();
+  for (const b of buckets) {
+    const key = `${String(b.charName).toLowerCase()}::${b.raidKey}::${b.modeKey}`;
+    map.set(key, new Set(b.gates));
+  }
+  return map;
+}
+
+/**
+ * Build the renderable diff structure: roster -> chars -> raid+mode
+ * cells -> gate states. Filters raid+mode combos by char ilvl
+ * eligibility so a 1700 char doesn't show Kazeros Hard (1730+ only).
+ *
+ * Returns: array of accounts:
+ *   [{
+ *     accountName,
+ *     characters: [{
+ *       name, class, itemLevel,
+ *       cells: [{
+ *         raidKey, modeKey,
+ *         gates: ["G1", "G2"],
+ *         states: { G1: "synced"|"pending"|"mode-conflict"|"db-other-mode"|"empty", G2: ... }
+ *       }, ...]
+ *     }]
+ *   }]
+ *
+ * Empty rows (no synced + no pending across ALL raid/mode/gate) are
+ * filtered out so the user only sees chars with activity. If user
+ * wants full eligibility view, that's a separate "show all" toggle
+ * we can add later.
+ */
+export function buildDiff(rosterAccounts, fileBuckets) {
+  const fileClearMap = buildFileClearMap(fileBuckets || []);
+  const accounts = [];
+  for (const account of rosterAccounts || []) {
+    const accountName = account?.accountName || "(unnamed)";
+    const characters = [];
+    for (const character of account?.characters || []) {
+      const charNameLower = String(character?.name || "").toLowerCase();
+      const eligible = getEligibleRaidModes(character?.itemLevel);
+      const cells = [];
+      let hasAnyActivity = false;
+      for (const { raidKey, modeKey } of eligible) {
+        const gates = getGatesForRaid(raidKey);
+        const states = {};
+        let cellHasActivity = false;
+        const fileGates = fileClearMap.get(`${charNameLower}::${raidKey}::${modeKey}`);
+        const assignedRaids = character?.assignedRaids?.[raidKey];
+        for (const gate of gates) {
+          const state = resolveCellState({ assignedRaids, fileGates, modeKey, gate });
+          states[gate] = state;
+          if (state !== "empty") cellHasActivity = true;
+        }
+        if (cellHasActivity) hasAnyActivity = true;
+        cells.push({ raidKey, modeKey, gates, states });
+      }
+      if (hasAnyActivity) {
+        characters.push({
+          name: character?.name || "",
+          class: character?.class || "",
+          itemLevel: Number(character?.itemLevel) || 0,
+          cells,
+        });
+      }
+    }
+    if (characters.length > 0) {
+      accounts.push({ accountName, characters });
+    }
+  }
+  return accounts;
+}

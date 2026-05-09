@@ -265,7 +265,7 @@ async function runPreviewQuery(sqlite3, db) {
   // Lazy-load preview-utils so the boss->raid map is only parsed when
   // there's actually something to render. Keeps the page-load lighter
   // on first visit (no file dropped yet).
-  const { bucketize, groupByRaid, findUnmappedBosses, getRaidGateForBoss } = await import("/sync/preview-utils.js");
+  const { bucketize, findUnmappedBosses, getRaidGateForBoss, buildDiff } = await import("/sync/preview-utils.js");
   // Build the deltas array for the Sync POST. Server re-validates +
   // re-buckets, but only mapped raid clears are sent. Failed encounters,
   // non-raid content, and rows without a local character stay client-side.
@@ -278,38 +278,67 @@ async function runPreviewQuery(sqlite3, db) {
       charName: r[3],
       lastClearMs: Number(r[5]) || 0,
     }));
-  // Bucketize for the per-raid table render. Each bucket = (char, raid,
-  // mode) collapsed to its highest cleared gate, with cumulative gate
-  // list. This is the EXACT shape the server's apply.js will produce -
-  // the preview here mirrors what gets persisted, no drift.
+  // Bucketize for diff. Each bucket = (char, raid, mode) collapsed to
+  // its highest cleared gate. Server's apply.js does the same - so
+  // the preview = what gets persisted.
   const buckets = bucketize(rows);
-  const groups = groupByRaid(buckets);
   const unmappedBosses = findUnmappedBosses(rows);
+  // Fetch DB roster snapshot in parallel-friendly fashion (we kicked
+  // off the SQLite query already, now we ask the server for current
+  // assignedRaids state). buildDiff merges the two streams into the
+  // roster-grouped view.
+  let rosterAccounts = [];
+  try {
+    const resp = await fetch("/api/me/roster", {
+      headers: { "Authorization": `Bearer ${window.__artistSyncToken}` },
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      rosterAccounts = Array.isArray(data?.accounts) ? data.accounts : [];
+    } else {
+      console.warn("[local-sync] roster fetch failed:", resp.status);
+    }
+  } catch (err) {
+    console.warn("[local-sync] roster fetch threw:", err?.message || err);
+  }
+  const diff = buildDiff(rosterAccounts, buckets);
   // Headline: count of distinct chars + raid clears the sync will apply.
   const distinctChars = new Set(buckets.map((b) => b.charName.toLowerCase())).size;
   let html = `<div class="meta">${t("preview.headlineCount", { chars: distinctChars, clears: buckets.length })} <span class="hint">${t("preview.schemaDebug", { table, bossCol, tsCol, charCol: charCol || "-" })}</span></div>`;
-  // Empty-state when EVERY cleared row was unmapped or had no char name.
-  if (groups.length === 0) {
+  // Legend explains the 4 cell states so user knows what each badge
+  // means before scanning the grid. Compact inline layout - 1 line.
+  html += renderDiffLegend();
+  if (diff.length === 0 && buckets.length === 0) {
     html += `<p class="hint" style="margin-top:12px;">${t("preview.noBucketsMatched")}</p>`;
   }
-  // One table per (raid, mode). Each table shows char + cumulative
-  // gates + latest clear timestamp. Matches the /raid-status raid-card
-  // mental model - "this raid, this difficulty, who cleared, what gates".
-  // Raid + mode labels resolve via i18n at render time so JP user sees
-  // "アクト4 ハード" while EN user sees "Act 4 Hard".
-  for (const group of groups) {
-    const emoji = group.modeKey === "nightmare" ? "🌑" : group.modeKey === "hard" ? "⚔️" : "🛡️";
-    const raidLabel = getRaidLabel(group.raidKey);
-    const modeLabel = getModeLabel(group.modeKey);
-    html += `<div class="raid-group">`;
-    html += `<h3>${emoji} ${escapeHtml(raidLabel)} ${escapeHtml(modeLabel)} <span class="hint">· ${t("preview.raidGroupCharCount", { n: group.buckets.length })}</span></h3>`;
-    html += `<table><thead><tr><th>${t("preview.colChar")}</th><th>${t("preview.colGates")}</th><th>${t("preview.colLatest")}</th></tr></thead><tbody>`;
-    for (const b of group.buckets) {
-      const ts = b.lastClearMs ? new Date(b.lastClearMs).toLocaleString() : "-";
-      html += `<tr><td>${formatCharCell(b)}</td><td><code>${b.gates.join("+")}</code></td><td>${ts}</td></tr>`;
+  // Render roster-grouped layout: one section per account, char rows
+  // inside, each char has a row of raid+mode cells with gate badges.
+  // Mental model matches /raid-status (roster -> char -> raid grid).
+  for (const account of diff) {
+    html += `<section class="roster-block">`;
+    html += `<h3 class="roster-heading">🏛️ ${escapeHtml(account.accountName)} <span class="hint">· ${t("preview.raidGroupCharCount", { n: account.characters.length })}</span></h3>`;
+    for (const character of account.characters) {
+      html += `<div class="char-row">`;
+      html += `<div class="char-row-head">${formatCharRowHead(character)}</div>`;
+      html += `<div class="char-cells">`;
+      for (const cell of character.cells) {
+        const raidLabel = getRaidLabel(cell.raidKey);
+        const modeLabel = getModeLabel(cell.modeKey);
+        const cellEmoji = cell.modeKey === "nightmare" ? "🌑" : cell.modeKey === "hard" ? "⚔️" : "🛡️";
+        html += `<div class="raid-cell">`;
+        html += `<div class="raid-cell-label" title="${escapeHtml(raidLabel + " " + modeLabel)}">${cellEmoji} ${escapeHtml(modeLabel.slice(0, 1).toUpperCase())}</div>`;
+        html += `<div class="gate-badges">`;
+        for (const gate of cell.gates) {
+          const state = cell.states[gate];
+          html += renderGateBadge(gate, state);
+        }
+        html += `</div>`;
+        html += `</div>`;
+      }
+      html += `</div>`;
+      html += `</div>`;
     }
-    html += `</tbody></table>`;
-    html += `</div>`;
+    html += `</section>`;
   }
   // Unmapped folded into <details> at the bottom so the main view
   // stays focused on "what will sync". Manager / debug surface when
@@ -333,6 +362,57 @@ async function runPreviewQuery(sqlite3, db) {
   } else {
     syncOutput.hidden = true;
   }
+}
+
+function formatCharRowHead(character) {
+  const cls = character.class || "";
+  // Class icon path mirrors preview-utils.js getClassInfoForChar - same
+  // /sync/class-icons/<name>.png convention. Class name match is text-
+  // based since the roster character.class field is the human label
+  // (e.g. "Berserker") not the LOA Logs class_id integer.
+  const iconName = CLASS_LABEL_TO_ICON[cls] || "";
+  const icon = iconName
+    ? `<img class="class-icon" src="/sync/class-icons/${iconName}.png" alt="${escapeHtml(cls)}" title="${escapeHtml(cls)}" loading="lazy">`
+    : "";
+  return `<span class="char-cell">${icon}<strong>${escapeHtml(character.name)}</strong> <span class="hint">· ${character.itemLevel}</span></span>`;
+}
+
+// Reverse map: roster character.class is human-readable ("Berserker") but
+// our class-icon files are slugged ("berserker"). Keep this small + in
+// sync with preview-utils.js CLASS_ICON_BY_ID values (same slug set).
+const CLASS_LABEL_TO_ICON = {
+  Berserker: "berserker", Destroyer: "destroyer", Gunlancer: "warlord", Paladin: "holyknight",
+  Slayer: "berserker_female", Valkyrie: "holyknight_female",
+  Arcanist: "arcana", Summoner: "summoner", Bard: "bard", Sorceress: "elemental_master",
+  Wardancer: "battle_master", Scrapper: "infighter", Soulfist: "soulmaster", Glaivier: "lance_master",
+  Striker: "battle_master_male", Breaker: "infighter_male",
+  Deathblade: "blade", Shadowhunter: "demonic", Reaper: "reaper", Souleater: "soul_eater",
+  Sharpshooter: "hawk_eye", Deadeye: "devil_hunter", Artillerist: "blaster", Machinist: "scouter",
+  Gunslinger: "devil_hunter_female",
+  Artist: "yinyangshi", Aeromancer: "weather_artist", Wildsoul: "alchemist",
+  "Guardian Knight": "dragon_knight",
+};
+
+function renderGateBadge(gate, state) {
+  // 5-state legend:
+  //   synced        green checkmark
+  //   pending       yellow down-arrow (will write)
+  //   mode-conflict orange exclamation (will mode-reset + write)
+  //   db-other-mode blue dot (DB cleared at different mode, file silent)
+  //   empty         gray dot
+  const cls = `gate-badge gate-${state}`;
+  const symbol = state === "synced" ? "✓"
+    : state === "pending" ? "⏬"
+    : state === "mode-conflict" ? "⚠"
+    : state === "db-other-mode" ? "◐"
+    : "·";
+  return `<span class="${cls}" title="${escapeHtml(gate)}: ${escapeHtml(t("diff.state." + state))}">${escapeHtml(gate)} ${symbol}</span>`;
+}
+
+function renderDiffLegend() {
+  const states = ["synced", "pending", "mode-conflict", "db-other-mode", "empty"];
+  const items = states.map((s) => `<span class="legend-item gate-${s}">${s === "synced" ? "✓" : s === "pending" ? "⏬" : s === "mode-conflict" ? "⚠" : s === "db-other-mode" ? "◐" : "·"} ${escapeHtml(t("diff.state." + s))}</span>`).join("");
+  return `<div class="diff-legend">${items}</div>`;
 }
 
 function formatCharCell(bucket) {
