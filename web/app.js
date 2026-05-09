@@ -230,7 +230,13 @@ async function runPreviewQuery(sqlite3, db) {
     lastDeltas = [];
     return;
   }
-  // sqlite3.exec passes row values as an array in column order: [boss, difficulty, cleared, char_name, n, last_ms]
+  // Lazy-load preview-utils so the boss->raid map is only parsed when
+  // there's actually something to render. Keeps the page-load lighter
+  // on first visit (no file dropped yet).
+  const { bucketize, groupByRaid, findUnmappedBosses } = await import("/sync/preview-utils.js");
+  // Build the deltas array for the Sync POST (server re-validates +
+  // re-buckets, but we keep the raw cleared rows on the wire so the
+  // server map remains authoritative).
   const cleared = rows.filter((r) => Number(r[2]) === 1);
   const failed = rows.filter((r) => Number(r[2]) !== 1);
   lastDeltas = cleared
@@ -242,15 +248,58 @@ async function runPreviewQuery(sqlite3, db) {
       charName: r[3],
       lastClearMs: Number(r[5]) || 0,
     }));
-  let html = `<div class="meta">Last 7 days: <strong>${cleared.length}</strong> cleared encounter group(s), <strong>${failed.length}</strong> failed. <strong>${lastDeltas.length}</strong> ready to sync. <span class="hint">(table=<code>${escapeHtml(table)}</code> boss=<code>${escapeHtml(bossCol)}</code> ts=<code>${escapeHtml(tsCol)}</code> char=<code>${escapeHtml(charCol || "-")}</code>)</span></div>`;
-  html += `<table><thead><tr><th>Char</th><th>Boss</th><th>Difficulty</th><th>Cleared</th><th>Count</th><th>Latest</th></tr></thead><tbody>`;
-  for (const row of rows) {
-    const [boss, difficulty, isCleared, charName, n, lastMs] = row;
-    const ts = lastMs ? new Date(Number(lastMs)).toLocaleString() : "-";
-    const status = Number(isCleared) === 1 ? "yes" : "no";
-    html += `<tr><td>${escapeHtml(charName || "?")}</td><td>${escapeHtml(boss || "?")}</td><td>${escapeHtml(difficulty)}</td><td>${status}</td><td>${n}</td><td>${ts}</td></tr>`;
+  // Bucketize for the per-raid table render. Each bucket = (char, raid,
+  // mode) collapsed to its highest cleared gate, with cumulative gate
+  // list. This is the EXACT shape the server's apply.js will produce -
+  // the preview here mirrors what gets persisted, no drift.
+  const buckets = bucketize(cleared);
+  const groups = groupByRaid(buckets);
+  const unmappedBosses = findUnmappedBosses(rows);
+  // Headline: count of distinct chars + raid clears the sync will apply.
+  const distinctChars = new Set(buckets.map((b) => b.charName.toLowerCase())).size;
+  let html = `<div class="meta">Last 7 days: <strong>${distinctChars}</strong> character(s), <strong>${buckets.length}</strong> raid clear(s) ready to sync. <span class="hint">(table=<code>${escapeHtml(table)}</code> boss=<code>${escapeHtml(bossCol)}</code> ts=<code>${escapeHtml(tsCol)}</code> char=<code>${escapeHtml(charCol || "-")}</code>)</span></div>`;
+  // Empty-state when EVERY cleared row was unmapped or had no char name.
+  if (groups.length === 0) {
+    html += `<p class="hint" style="margin-top:12px;">No raid clears matched the bot's known boss list. See unmapped bosses below.</p>`;
   }
-  html += `</tbody></table>`;
+  // One table per (raid, mode). Each table shows char + cumulative
+  // gates + latest clear timestamp. Matches the /raid-status raid-card
+  // mental model - "this raid, this difficulty, who cleared, what gates".
+  for (const group of groups) {
+    const emoji = group.modeKey === "nightmare" ? "🌑" : group.modeKey === "hard" ? "⚔️" : "🛡️";
+    html += `<div class="raid-group">`;
+    html += `<h3>${emoji} ${escapeHtml(group.raidLabel)} ${escapeHtml(group.modeLabel)} <span class="hint">· ${group.buckets.length} char(s)</span></h3>`;
+    html += `<table><thead><tr><th>Char</th><th>Gates</th><th>Latest</th></tr></thead><tbody>`;
+    for (const b of group.buckets) {
+      const ts = b.lastClearMs ? new Date(b.lastClearMs).toLocaleString() : "-";
+      html += `<tr><td>${escapeHtml(b.charName)}</td><td><code>${b.gates.join("+")}</code></td><td>${ts}</td></tr>`;
+    }
+    html += `</tbody></table>`;
+    html += `</div>`;
+  }
+  // Failed + unmapped folded into <details> at the bottom so the main
+  // view stays focused on "what will sync". Manager / debug surface
+  // when a user wants to see why their count is lower than expected.
+  if (failed.length > 0) {
+    html += `<details class="footer-details"><summary>${failed.length} failed encounter(s) - not synced</summary>`;
+    html += `<table><thead><tr><th>Char</th><th>Boss</th><th>Difficulty</th><th>Latest</th></tr></thead><tbody>`;
+    for (const row of failed) {
+      const [boss, difficulty, _c, charName, _n, lastMs] = row;
+      const ts = lastMs ? new Date(Number(lastMs)).toLocaleString() : "-";
+      html += `<tr><td>${escapeHtml(charName || "?")}</td><td>${escapeHtml(boss || "?")}</td><td>${escapeHtml(difficulty)}</td><td>${ts}</td></tr>`;
+    }
+    html += `</tbody></table></details>`;
+  }
+  if (unmappedBosses.length > 0) {
+    html += `<details class="footer-details"><summary>${unmappedBosses.length} unmapped boss(es) - not synced (likely Guardian / Chaos / non-Legion content)</summary>`;
+    html += `<ul>`;
+    for (const boss of unmappedBosses) {
+      html += `<li><code>${escapeHtml(boss)}</code></li>`;
+    }
+    html += `</ul>`;
+    html += `<p class="hint">If a Legion raid boss appears here, screenshot + report in Discord so Artist can extend the boss-to-raid map.</p>`;
+    html += `</details>`;
+  }
   previewOutput.innerHTML = html;
   syncSection.hidden = false;
   syncBtn.disabled = lastDeltas.length === 0;

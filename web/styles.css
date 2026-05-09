@@ -124,3 +124,39 @@ table th, table td {
   border-bottom: 1px solid var(--border);
 }
 table th { color: var(--text-dim); font-weight: 600; }
+
+/* Per-raid preview group: each (raid, mode) gets its own card-like
+   block with a heading + small table. Stacks vertically inside the
+   main preview-output container; spacing between groups keeps the
+   visual rhythm clear. */
+.raid-group {
+  margin-top: 18px;
+  padding-top: 6px;
+}
+.raid-group h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--accent);
+  font-weight: 600;
+}
+.raid-group table { margin-top: 4px; }
+
+/* Footer collapsibles for failed + unmapped sections - keep them
+   visually distinct from the main raid groups and hide their detail
+   by default so the focused view is "what will sync". */
+.footer-details {
+  margin-top: 18px;
+  padding: 10px 12px;
+  background: #14171a;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.footer-details summary {
+  cursor: pointer;
+  color: var(--text-dim);
+  font-weight: 600;
+  user-select: none;
+}
+.footer-details summary:hover { color: var(--text); }
+.footer-details ul { margin: 8px 0 0; padding-left: 20px; }
+.footer-details li { margin: 2px 0; }
