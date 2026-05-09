@@ -368,7 +368,16 @@ function createRaidStatusCommand(deps) {
 
     const buildComponents = (disabled) => {
       const rows = [];
-      const showSync = statusUserMeta.autoManageEnabled;
+      // Hide the Sync button when the page being viewed is a shared
+      // roster (Manager A's roster surfaced via /raid-share grant). The
+      // sync action runs against the viewer's own auto-manage record;
+      // firing it from A's page would refresh B's stuff but not A's,
+      // confusing the viewer. Owner A still gets the button on their
+      // own /raid-status. UX: only B's own pages show Sync, so the
+      // button's behavior matches its label.
+      const currentAccount = accounts[currentPage];
+      const currentPageIsShared = !!currentAccount?._sharedFrom;
+      const showSync = statusUserMeta.autoManageEnabled && !currentPageIsShared;
       if (currentView === "task") {
         // Task view layout: pagination (>1 account) + view toggle +
         // char filter (when account has tasks) + task toggle dropdown.
