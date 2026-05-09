@@ -212,6 +212,7 @@ async function runPreviewQuery(sqlite3, db) {
     WHERE ${tsSql} >= ?
       AND ${bossSql} IS NOT NULL
       AND ${bossSql} != ''
+      ${clearedSql ? `AND ${clearedSql} = 1` : ""}
     GROUP BY boss, difficulty, cleared, char_name
     ORDER BY last_ms DESC
     LIMIT 200;
@@ -226,21 +227,19 @@ async function runPreviewQuery(sqlite3, db) {
     return;
   }
   if (rows.length === 0) {
-    previewOutput.innerHTML = `<span class="status-ok">No encounters in the last 7 days.</span> Nothing to sync.`;
+    previewOutput.innerHTML = `<span class="status-ok">No cleared encounters in the last 7 days.</span> Nothing to sync.`;
     lastDeltas = [];
     return;
   }
   // Lazy-load preview-utils so the boss->raid map is only parsed when
   // there's actually something to render. Keeps the page-load lighter
   // on first visit (no file dropped yet).
-  const { bucketize, groupByRaid, findUnmappedBosses } = await import("/sync/preview-utils.js");
+  const { bucketize, groupByRaid, findUnmappedBosses, getRaidGateForBoss } = await import("/sync/preview-utils.js");
   // Build the deltas array for the Sync POST (server re-validates +
-  // re-buckets, but we keep the raw cleared rows on the wire so the
-  // server map remains authoritative).
-  const cleared = rows.filter((r) => Number(r[2]) === 1);
-  const failed = rows.filter((r) => Number(r[2]) !== 1);
-  lastDeltas = cleared
-    .filter((r) => r[3])
+  // re-buckets, but only mapped raid clears are sent. Failed encounters,
+  // non-raid content, and rows without a local character stay client-side.
+  const syncRows = rows.filter((r) => r[3] && getRaidGateForBoss(r[0]));
+  lastDeltas = syncRows
     .map((r) => ({
       boss: r[0],
       difficulty: r[1],
@@ -252,12 +251,12 @@ async function runPreviewQuery(sqlite3, db) {
   // mode) collapsed to its highest cleared gate, with cumulative gate
   // list. This is the EXACT shape the server's apply.js will produce -
   // the preview here mirrors what gets persisted, no drift.
-  const buckets = bucketize(cleared);
+  const buckets = bucketize(rows);
   const groups = groupByRaid(buckets);
   const unmappedBosses = findUnmappedBosses(rows);
   // Headline: count of distinct chars + raid clears the sync will apply.
   const distinctChars = new Set(buckets.map((b) => b.charName.toLowerCase())).size;
-  let html = `<div class="meta">Last 7 days: <strong>${distinctChars}</strong> character(s), <strong>${buckets.length}</strong> raid clear(s) ready to sync. <span class="hint">(table=<code>${escapeHtml(table)}</code> boss=<code>${escapeHtml(bossCol)}</code> ts=<code>${escapeHtml(tsCol)}</code> char=<code>${escapeHtml(charCol || "-")}</code>)</span></div>`;
+  let html = `<div class="meta">Last 7 days: <strong>${distinctChars}</strong> character(s), <strong>${buckets.length}</strong> known raid clear(s) ready to sync. <span class="hint">(table=<code>${escapeHtml(table)}</code> boss=<code>${escapeHtml(bossCol)}</code> ts=<code>${escapeHtml(tsCol)}</code> char=<code>${escapeHtml(charCol || "-")}</code>)</span></div>`;
   // Empty-state when EVERY cleared row was unmapped or had no char name.
   if (groups.length === 0) {
     html += `<p class="hint" style="margin-top:12px;">No raid clears matched the bot's known boss list. See unmapped bosses below.</p>`;
@@ -277,19 +276,9 @@ async function runPreviewQuery(sqlite3, db) {
     html += `</tbody></table>`;
     html += `</div>`;
   }
-  // Failed + unmapped folded into <details> at the bottom so the main
+  // Unmapped folded into <details> at the bottom so the main
   // view stays focused on "what will sync". Manager / debug surface
   // when a user wants to see why their count is lower than expected.
-  if (failed.length > 0) {
-    html += `<details class="footer-details"><summary>${failed.length} failed encounter(s) - not synced</summary>`;
-    html += `<table><thead><tr><th>Char</th><th>Boss</th><th>Difficulty</th><th>Latest</th></tr></thead><tbody>`;
-    for (const row of failed) {
-      const [boss, difficulty, _c, charName, _n, lastMs] = row;
-      const ts = lastMs ? new Date(Number(lastMs)).toLocaleString() : "-";
-      html += `<tr><td>${escapeHtml(charName || "?")}</td><td>${escapeHtml(boss || "?")}</td><td>${escapeHtml(difficulty)}</td><td>${ts}</td></tr>`;
-    }
-    html += `</tbody></table></details>`;
-  }
   if (unmappedBosses.length > 0) {
     html += `<details class="footer-details"><summary>${unmappedBosses.length} unmapped boss(es) - not synced (likely Guardian / Chaos / non-Legion content)</summary>`;
     html += `<ul>`;
@@ -305,7 +294,7 @@ async function runPreviewQuery(sqlite3, db) {
   syncBtn.disabled = lastDeltas.length === 0;
   if (lastDeltas.length === 0) {
     syncOutput.hidden = false;
-    syncOutput.innerHTML = `Nothing to sync (no cleared encounters with a char name in the last 7 days).`;
+    syncOutput.innerHTML = `Nothing to sync (no mapped raid clears with a char name in the last 7 days).`;
   } else {
     syncOutput.hidden = true;
   }

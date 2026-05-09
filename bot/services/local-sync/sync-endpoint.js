@@ -124,7 +124,7 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId }) {
     let userState;
     try {
       userState = await User.findOne({ discordId })
-        .select("localSyncEnabled")
+        .select("localSyncEnabled accounts")
         .lean();
     } catch (err) {
       console.error("[sync-endpoint] state read failed:", err?.message || err);
@@ -145,6 +145,7 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId }) {
       summary = await applyLocalSyncDeltas(discordId, deltas, {
         applyRaidSetForDiscordId,
         getRaidRequirementMap,
+        userDoc: userState,
       });
     } catch (err) {
       console.error("[sync-endpoint] apply failed:", err?.message || err);

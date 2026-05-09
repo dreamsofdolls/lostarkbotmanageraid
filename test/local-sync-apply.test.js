@@ -27,6 +27,17 @@ function makeApplyStub(impl) {
   return fn;
 }
 
+function makeUserDoc(chars = []) {
+  return {
+    accounts: [
+      {
+        accountName: "Roster",
+        characters: chars,
+      },
+    ],
+  };
+}
+
 // ---------- normalizeDifficulty ----------
 
 test("normalizeLocalSyncDifficulty - common variants map to internal modeKey", () => {
@@ -158,6 +169,54 @@ test("applyLocalSyncDeltas - char not in roster -> 'rejected' with reason char_n
   ], { applyRaidSetForDiscordId: applyStub, getRaidRequirementMap });
   assert.equal(result.rejected.length, 1);
   assert.equal(result.rejected[0].reason, "char_not_in_roster");
+});
+
+test("applyLocalSyncDeltas - roster prefilter rejects unknown chars before write", async () => {
+  const applyStub = makeApplyStub();
+  const userDoc = makeUserDoc([
+    { id: "c1", name: "Aki", class: "Artist", itemLevel: 1750, assignedRaids: {} },
+  ]);
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Brelshaza, Ember in the Ashes", difficulty: "Normal", cleared: 1, charName: "Stranger", lastClearMs: 1 },
+  ], { applyRaidSetForDiscordId: applyStub, getRaidRequirementMap, userDoc });
+  assert.equal(result.rejected.length, 1);
+  assert.equal(result.rejected[0].reason, "char_not_in_roster");
+  assert.equal(applyStub.calls.length, 0);
+});
+
+test("applyLocalSyncDeltas - roster prefilter skips already-complete gates before write", async () => {
+  const applyStub = makeApplyStub();
+  const userDoc = makeUserDoc([
+    {
+      id: "c1",
+      name: "Aki",
+      class: "Artist",
+      itemLevel: 1750,
+      assignedRaids: {
+        armoche: {
+          G1: { difficulty: "Normal", completedDate: 1700000000000 },
+        },
+      },
+    },
+  ]);
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Brelshaza, Ember in the Ashes", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 1 },
+  ], { applyRaidSetForDiscordId: applyStub, getRaidRequirementMap, userDoc });
+  assert.equal(result.skipped.length, 1);
+  assert.equal(result.skipped[0].reason, "already_complete");
+  assert.equal(applyStub.calls.length, 0);
+});
+
+test("applyLocalSyncDeltas - roster prefilter still writes eligible incomplete gates", async () => {
+  const applyStub = makeApplyStub(() => ({ matched: true, updated: true, displayName: "Aki" }));
+  const userDoc = makeUserDoc([
+    { id: "c1", name: "Aki", class: "Artist", itemLevel: 1750, assignedRaids: {} },
+  ]);
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Brelshaza, Ember in the Ashes", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 1 },
+  ], { applyRaidSetForDiscordId: applyStub, getRaidRequirementMap, userDoc });
+  assert.equal(result.applied.length, 1);
+  assert.equal(applyStub.calls.length, 1);
 });
 
 test("applyLocalSyncDeltas - ineligibleItemLevel surfaces in 'rejected' with reason ilvl_too_low", async () => {
