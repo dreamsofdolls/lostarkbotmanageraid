@@ -4,6 +4,18 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-09 (later 8)
+
+### Changed (`/raid-status` JP coverage complete)
+- `raid-status/task-ui.js` Side-tasks view now reads every user-visible string from the new `raid-status.taskView.*` keys. Empty-state description, main description, shared-task header, view toggle (📋 Tiến độ raid / 📝 Side tasks), char filter dropdown ("🌐 Tất cả character · X/Y", placeholder, descriptions), bulk/single toggle placeholders, "no task yet" placeholders, and footer counters (`{n}/{total} task chung · daily · weekly · Page X/Y`) all flow through `t()`. JP gets full Senko-flavored copies (デイリー / ウィークリー / 共通タスク with ですわ / ～♪ tone).
+- `raid-status.js` Sync button + sync notice/followup blocks migrated to `raid-status.sync.*`. Covers the dynamic button label (`Sync ngay` / `Sync (X)` cooldown form), the "session-locked" lock notice, the "Cậu chưa bật auto-sync" gate, the cooldown notice, and the 3 followup outcome embeds (applied / synced-no-new / failed) with the success / neutral / failed-trouble titles.
+- `createRaidStatusTaskUi` now takes `lang` via deps; raid-status.js threads the viewer's resolved language down into the factory at command entry time.
+
+### Notes
+- 320/320 tests pass.
+- /raid-status is now fully JP-aware end-to-end (main view + raid filter dropdown + Side tasks view + Sync button + every notice/followup). JP viewers see consistent Artist voice across the entire surface.
+- Remaining surfaces still hardcoded VN that JP viewers will see in VN: `/raid-set` confirmations, `/raid-task` replies, `/raid-share` (deferred per active bug-fix), `/add-roster` / `/edit-roster` / `/remove-roster` pickers, `/raid-channel`, `/raid-announce`, `/raid-auto-manage`, `/raid-check`. These are independent slash commands - migrate one per follow-up commit.
+
 ## 2026-05-09 (later 7)
 
 ### Changed (`/raid-status` raid-filter dropdown locale-aware)
