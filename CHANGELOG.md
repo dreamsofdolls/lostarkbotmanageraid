@@ -4,6 +4,26 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-09 (later 6)
+
+### Added (i18n infrastructure + JP locale + /raid-language)
+- New `bot/locales/{vi,jp,en}.js` packs + `bot/locales/index.js` registry. Vi (default) and JP are first-class locales offered in `/raid-language`; EN is a partial pack used only by the `/raid-help language:en` slash override. Per-locale files (instead of a single dictionary) so adding a language is one new file with no edits to existing packs.
+- `bot/services/i18n.js`: `t(key, lang, vars)` resolver with dot-notation lookup, array-aware `{var}` interpolation, vi fallback for missing keys, and an in-process `getUserLanguage(discordId)` cache invalidated on `setUserLanguage`. `User.language` field added (default `"vi"` so legacy users see no change).
+- New `/raid-language` slash command - ephemeral picker dropdown (🇻🇳 Tiếng Việt · 🇯🇵 日本語) that persists on the User doc and renders confirmation in the freshly-picked language. Wired through `definitions.js`, `commands.js` dispatcher, and `bot.js` select route (`raid-language:select`).
+
+### Changed (`/raid-help` refactor)
+- `bot/handlers/raid-help.js` now holds only language-neutral metadata (`SECTION_ORDER`, `SECTION_META` with icons + option keys + required flags). All labels, shorts, examples, notes, and option descriptions moved to `raid-help.sections.<key>.*` keys in each locale pack so adding KR/CN later means dropping `kr.js` and updating no handler. JP voice for help text is intentionally cuter (です/ますわ/～♪) per Senko-chan flavor brief.
+- `definitions.js` adds `日本語` to the `/raid-help language:` choice list. Slash option still wins as a per-call override; otherwise the viewer's stored `/raid-language` preference selects the locale.
+
+### Added (`/raid-status` JP coverage - view layer)
+- `bot/utils/raid/labels.js` introduces `getRaidLabel`, `getModeLabel`, `getRaidModeLabel` for render-time raid name resolution. Models stay canonical EN; locale lookup happens at format time. JP picks katakana renditions: アクト4 / カゼロス / セルカ + ノーマル / ハード / ナイトメア.
+- `formatRaidStatusLine(raid, lang)` is now lang-aware (back-compat: omitting `lang` falls back to `raid.raidName`). `/raid-status` view (`view.js`) threads `lang` through `buildAccountPageEmbed` / `buildAccountFreshnessLine` / `buildStatusFooterText` / `buildPiggybackOutcomeLine` and reads every user-visible string (freshness lines, gold rollup, no-roster notice, side badges, page footer) via `t(...)`.
+- `/raid-check`'s shared use of `buildAccountPageEmbed` continues to work without lang and renders in vi (the existing default). Migrating raid-check + raid-set autocomplete + raid-filter dropdown to JP is staged for a follow-up commit.
+
+### Notes
+- 319/319 tests pass.
+- `/raid-share` is intentionally not migrated yet - the handler is in active bug-fix; locale keys (`share.*`) are pre-added in vi.js / jp.js so the migration is a one-shot edit when the bug-fix lands.
+
 ## 2026-05-09 (later 5)
 
 ### Fixed

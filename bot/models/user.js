@@ -188,6 +188,11 @@ const userSchema = new mongoose.Schema(
     // posted for this user when every char returned "Logs not enabled".
     // Dedup at 7 days so stuck users aren't spam-tagged each 30-min tick.
     lastPrivateLogNudgeAt: { type: Number, default: null },
+    // Preferred display locale for Artist's responses. Drives every
+    // user-facing string via bot/services/i18n.js. Default "vi" so
+    // pre-existing users see no behavior change after the i18n rollout;
+    // they have to opt in via /raid-language to switch (e.g. "jp").
+    language: { type: String, default: "vi" },
   },
   {
     timestamps: true,

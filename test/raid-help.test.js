@@ -29,6 +29,10 @@ function makeFactory() {
     ActionRowBuilder,
     MessageFlags,
     UI,
+    // DI stub: skip the Mongo round-trip that the production
+    // resolveStoredLanguage default would do. Tests run without a live
+    // mongoose connection so a real User.findOne would hang the suite.
+    resolveStoredLanguage: async () => "vi",
   });
 }
 
@@ -74,6 +78,7 @@ const EXPECTED_SECTION_KEYS = [
   "raid-channel",
   "raid-auto-manage",
   "raid-announce",
+  "raid-language",
 ];
 
 test("handleRaidHelpCommand: replies with overview embed + dropdown, ephemeral", async () => {

@@ -29,6 +29,7 @@ const {
   commands,
   handleRaidManagementCommand,
   handleRaidHelpSelect,
+  handleRaidLanguageSelect,
   handleRaidSetAutocomplete,
   handleRemoveRosterAutocomplete,
   handleRaidChannelAutocomplete,
@@ -207,6 +208,7 @@ async function startBot() {
       "raid-task",
       "raid-gold-earner",
       "raid-share",
+      "raid-language",
     ],
     handleSlashCommand: handleRaidManagementCommand,
     autocompleteHandlers: {
@@ -225,6 +227,8 @@ async function startBot() {
       // suffix: `raid-help:select:<lang>`. Prefix-routing lets the
       // single handler dispatch all language variants.
       { prefix: "raid-help:select:", handle: handleRaidHelpSelect },
+      // /raid-language dropdown - single customId, no suffix needed.
+      { prefix: "raid-language:select", handle: handleRaidLanguageSelect },
     ],
     buttonRoutes: [
       // Phase 2 /raid-check interactive buttons. Custom IDs follow the
