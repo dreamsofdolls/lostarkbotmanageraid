@@ -1,4 +1,4 @@
-// Tests for /remove-roster.
+// Tests for /raid-remove-roster.
 //
 // All write logic is inline in handleRemoveRosterCommand, so tests
 // drive the handler with a minimal mock interaction. Key behaviors

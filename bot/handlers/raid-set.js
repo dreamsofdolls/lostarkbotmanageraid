@@ -762,7 +762,7 @@ function createRaidSetCommand(deps) {
     // Resolve which user actually owns the picked roster. This is the
     // single point where /raid-set decides between self-edit (executor's
     // own roster) and helper-Manager edit (a roster the executor
-    // previously registered for someone else via /add-roster target:).
+    // previously registered for someone else via /raid-add-roster target:).
     // Anything below this line operates on `targetDiscordId`, never
     // `executorId`, so the rest of the handler is owner-agnostic.
     // Deliberately runs AFTER the cheap input validations above so a
@@ -967,7 +967,7 @@ function createRaidSetCommand(deps) {
     }
     // Helper-Manager hint: prepend a line so the executor sees clearly
     // that the write landed on someone else's roster (a roster they
-    // previously registered via /add-roster target:). Reply is
+    // previously registered via /raid-add-roster target:). Reply is
     // ephemeral, so the `<@id>` mention does not ping the target - it
     // just renders as a clickable display-name pill for confirmation.
     if (actingForOther) {

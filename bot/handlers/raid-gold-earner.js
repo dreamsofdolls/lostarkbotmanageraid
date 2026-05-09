@@ -13,7 +13,7 @@ const {
 // Picker session window: from /raid-gold-earner invocation to Confirm
 // click. After 5 minutes the in-memory session is dropped and the embed
 // flips to "expired"; user must re-run the command. Mirrors the
-// /add-roster + /edit-roster TTL so the muscle memory transfers.
+// /raid-add-roster + /raid-edit-roster TTL so the muscle memory transfers.
 const SESSION_TTL_MS = 5 * 60 * 1000;
 
 // Hard cap from Lost Ark: a character only earns weekly gold if it's one
@@ -264,7 +264,7 @@ function createRaidGoldEarnerCommand({
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
             title: "Roster trống",
-            description: `Roster **${target.accountName}** không có char nào. Add char qua \`/edit-roster\` trước rồi quay lại đây nhé~`,
+            description: `Roster **${target.accountName}** không có char nào. Add char qua \`/raid-edit-roster\` trước rồi quay lại đây nhé~`,
           }),
         ],
         flags: MessageFlags.Ephemeral,

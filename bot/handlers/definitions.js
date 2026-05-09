@@ -7,7 +7,7 @@ function createRaidCommandDefinitions({
   announcementTypeEntry,
 }) {
   const addRosterCommand = new SlashCommandBuilder()
-    .setName("add-roster")
+    .setName("raid-add-roster")
     .setDescription("Sync a roster from lostark.bible")
     .addStringOption((option) =>
       option
@@ -90,7 +90,7 @@ function createRaidCommandDefinitions({
     );
 
   const editRosterCommand = new SlashCommandBuilder()
-    .setName("edit-roster")
+    .setName("raid-edit-roster")
     .setDescription("Edit an existing roster: add chars from bible or remove saved chars")
     .addStringOption((option) =>
       option
@@ -112,7 +112,7 @@ function createRaidCommandDefinitions({
     );
 
   const removeRosterCommand = new SlashCommandBuilder()
-    .setName("remove-roster")
+    .setName("raid-remove-roster")
     .setDescription("Remove a roster or a character")
     .addStringOption((option) =>
       option

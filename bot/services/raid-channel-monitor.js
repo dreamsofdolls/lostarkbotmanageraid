@@ -382,8 +382,8 @@ function createRaidChannelMonitorService({
           //     picker, raid, gate, Public Log, DPS, Support, DM
           name: "🚀 Mới vào server? Bắt đầu ở đây",
           value: [
-            "1. `/add-roster name:<tên-char-bất-kỳ>` → Artist lấy roster từ lostark.bible, mở picker để cậu chọn ✅ chars muốn theo dõi rồi bấm **Confirm**.",
-            "2. `/edit-roster roster:<tên>` → sau này muốn thêm chars mới vào roster đã có hoặc bỏ chars không còn chơi.",
+            "1. `/raid-add-roster name:<tên-char-bất-kỳ>` → Artist lấy roster từ lostark.bible, mở picker để cậu chọn ✅ chars muốn theo dõi rồi bấm **Confirm**.",
+            "2. `/raid-edit-roster roster:<tên>` → sau này muốn thêm chars mới vào roster đã có hoặc bỏ chars không còn chơi.",
             "3. `/raid-status` → xem tiến độ raid mọi lúc · `/raid-help` → tài liệu đầy đủ mọi lệnh.",
             "4. 🌐 `/raid-language` → đổi Artist sang 🇯🇵 日本語 (cute hơn~) hoặc giữ 🇻🇳 Tiếng Việt mặc định.",
           ].join("\n"),
@@ -457,7 +457,7 @@ function createRaidChannelMonitorService({
           name: "💰 Track gold raid mỗi tuần",
           value: [
             "Mở `/raid-status` để xem dòng `💰 đã kiếm / tổng G` (unbound) trên mỗi gold-earner + rollup `💰 Earned this week` cộng dồn cả account.",
-            "Pick 6 char nhận gold qua `/raid-gold-earner roster:<tên>` (LA cap 6 / account / tuần). Char mới add bằng `/add-roster` mặc định là gold-earner sẵn rồi nha~",
+            "Pick 6 char nhận gold qua `/raid-gold-earner roster:<tên>` (LA cap 6 / account / tuần). Char mới add bằng `/raid-add-roster` mặc định là gold-earner sẵn rồi nha~",
           ].join("\n"),
         },
         {
@@ -850,7 +850,7 @@ function createRaidChannelMonitorService({
     if (hadNoRoster) {
       await postPersistentHint(
         message,
-        `${UI.icons.info} Cậu chưa có roster. Dùng \`/add-roster\` trước rồi quay lại post clear nha.`
+        `${UI.icons.info} Cậu chưa có roster. Dùng \`/raid-add-roster\` trước rồi quay lại post clear nha.`
       );
       return;
     }

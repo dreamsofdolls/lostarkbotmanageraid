@@ -477,8 +477,8 @@ test("applyRaidSetForDiscordId: complete cumulative — process G2 marks G1 too 
 
 test("normalizeAssignedRaid: auto-upgrades stale Normal stamp to Hard when iLvl now qualifies", () => {
   // Bug surfaced by Traine: char crossed the 1720 Act 4 Hard threshold
-  // but Act 4 still rendered as Normal. Cause: a previous /add-roster
-  // (or /edit-roster Confirm) at sub-threshold iLvl stamped
+  // but Act 4 still rendered as Normal. Cause: a previous /raid-add-roster
+  // (or /raid-edit-roster Confirm) at sub-threshold iLvl stamped
   // assignedRaids.armoche.G1.difficulty="Normal", and bible refresh's
   // iLvl bump never recomputed assignedRaids. normalizeAssignedRaid
   // had been preferring the stored G1.difficulty over the
@@ -535,7 +535,7 @@ test("normalizeAssignedRaid: in-progress completion locks mode against auto-upgr
 // resolveRosterOwner: helper-Manager routing for /raid-set
 // ---------------------------------------------------------------------------
 //
-// Manager M runs `/add-roster target:U` -> account stamped with
+// Manager M runs `/raid-add-roster target:U` -> account stamped with
 // `registeredBy = M`. Later when M runs `/raid-set`, the resolver lets M
 // edit U's progress without re-checking live Manager role. These tests
 // pin the four branches (own match, helper match, miss, ambiguous) so a

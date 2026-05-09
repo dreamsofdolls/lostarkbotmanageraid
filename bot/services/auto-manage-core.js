@@ -119,7 +119,7 @@ function createAutoManageCoreService({
       // stuck fetch holds the `bibleLimiter` slot AND the caller's
       // `inFlightAutoManageSyncs` guard indefinitely, making the user appear
       // "stuck in sync" with no way to recover. Same 15s budget as
-      // /add-roster's roster scrape.
+      // /raid-add-roster's roster scrape.
       signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) {
@@ -576,7 +576,7 @@ function createAutoManageCoreService({
         const gathered = byKey.get(autoManageEntryKey(account.accountName, charName));
         if (!gathered) {
           // Char was added between gather and apply (e.g. concurrent
-          // /add-roster-char). Skip silently - next /raid-auto-manage run
+          // /raid-add-roster-char). Skip silently - next /raid-auto-manage run
           // will pick it up.
           continue;
         }

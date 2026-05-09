@@ -195,13 +195,13 @@ async function startBot() {
   const router = createInteractionRouter({
     MessageFlags,
     allowedCommands: [
-      "add-roster",
-      "edit-roster",
+      "raid-add-roster",
+      "raid-edit-roster",
       "raid-check",
       "raid-set",
       "raid-status",
       "raid-help",
-      "remove-roster",
+      "raid-remove-roster",
       "raid-channel",
       "raid-auto-manage",
       "raid-announce",
@@ -213,8 +213,8 @@ async function startBot() {
     handleSlashCommand: handleRaidManagementCommand,
     autocompleteHandlers: {
       "raid-set": handleRaidSetAutocomplete,
-      "edit-roster": handleEditRosterAutocomplete,
-      "remove-roster": handleRemoveRosterAutocomplete,
+      "raid-edit-roster": handleEditRosterAutocomplete,
+      "raid-remove-roster": handleRemoveRosterAutocomplete,
       "raid-channel": handleRaidChannelAutocomplete,
       "raid-auto-manage": handleRaidAutoManageAutocomplete,
       "raid-announce": handleRaidAnnounceAutocomplete,

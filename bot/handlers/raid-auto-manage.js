@@ -175,7 +175,7 @@ async function handleRaidAutoManageCommand(interaction) {
             .setColor(UI.colors.success)
             .setTitle(`${UI.icons.done} Auto-manage enabled`)
             .setDescription(
-              "Đã bật auto-manage. Chưa có roster nên tớ chưa sync được gì - chạy `/add-roster` trước rồi gọi `/raid-auto-manage action:sync` để pull logs."
+              "Đã bật auto-manage. Chưa có roster nên tớ chưa sync được gì - chạy `/raid-add-roster` trước rồi gọi `/raid-auto-manage action:sync` để pull logs."
             )
             .setTimestamp();
           await interaction.editReply({ embeds: [embed] });
@@ -189,7 +189,7 @@ async function handleRaidAutoManageCommand(interaction) {
             .setColor(UI.colors.success)
             .setTitle(`${UI.icons.done} Auto-manage enabled`)
             .setDescription(
-              "Đã bật auto-manage. Chưa có roster nên tớ chưa sync được gì - chạy `/add-roster` trước rồi gọi `/raid-auto-manage action:sync` để pull logs."
+              "Đã bật auto-manage. Chưa có roster nên tớ chưa sync được gì - chạy `/raid-add-roster` trước rồi gọi `/raid-auto-manage action:sync` để pull logs."
             )
             .setTimestamp();
           await interaction.editReply({ embeds: [embed] });
@@ -386,7 +386,7 @@ async function handleRaidAutoManageCommand(interaction) {
         // retry doesn't re-fire HTTP calls. The acquire guard already
         // prevents concurrent syncs for the same user, so the seedDoc we read
         // here is normally also the doc we save into - but /raid-set or
-        // /add-roster-char could race between read and save, triggering a
+        // /raid-add-roster-char could race between read and save, triggering a
         // VersionError that the retry path can handle in-memory.
         const seedDoc = await User.findOne({ discordId });
         if (!seedDoc || !Array.isArray(seedDoc.accounts) || seedDoc.accounts.length === 0) {
@@ -396,7 +396,7 @@ async function handleRaidAutoManageCommand(interaction) {
               buildNoticeEmbed(EmbedBuilder, {
                 type: "info",
                 title: "Cậu chưa có roster nào",
-                description: "Artist không thấy roster nào của cậu trong DB. Dùng `/add-roster` để add roster đầu tiên rồi mới opt-in auto-manage được nha.",
+                description: "Artist không thấy roster nào của cậu trong DB. Dùng `/raid-add-roster` để add roster đầu tiên rồi mới opt-in auto-manage được nha.",
               }),
             ],
           });
@@ -432,7 +432,7 @@ async function handleRaidAutoManageCommand(interaction) {
               buildNoticeEmbed(EmbedBuilder, {
                 type: "info",
                 title: "Cậu chưa có roster nào",
-                description: "Artist không thấy roster nào của cậu trong DB. Dùng `/add-roster` để add roster đầu tiên rồi mới opt-in auto-manage được nha.",
+                description: "Artist không thấy roster nào của cậu trong DB. Dùng `/raid-add-roster` để add roster đầu tiên rồi mới opt-in auto-manage được nha.",
               }),
             ],
           });

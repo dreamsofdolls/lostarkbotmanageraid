@@ -1,4 +1,4 @@
-// Tests for /add-roster picker flow.
+// Tests for /raid-add-roster picker flow.
 //
 // Focus: persistSelectedRoster's account-match + race-safe overlap guard.
 // These are the two pieces Codex flagged bugs in (commits 4b94664 +
@@ -181,7 +181,7 @@ test("persistSelectedRoster: matches existing account by name and merges new cha
 
 test("persistSelectedRoster: race-safe guard throws RACE_DUP_ROSTER when another account already covers this bible roster", async () => {
   const { factory, docs } = makeFactory();
-  // Concurrent /add-roster session committed first under accountName "Alpha"
+  // Concurrent /raid-add-roster session committed first under accountName "Alpha"
   // with one of the bible chars saved.
   docs.set("user-1", {
     discordId: "user-1",
@@ -230,7 +230,7 @@ test("persistSelectedRoster: race-safe guard throws RACE_DUP_ROSTER when another
 });
 
 test("persistSelectedRoster: race guard does NOT false-positive on the legitimate target account", async () => {
-  // When the user re-runs /add-roster on an EXISTING roster (same seed,
+  // When the user re-runs /raid-add-roster on an EXISTING roster (same seed,
   // same chars), the matched account IS the merge target. The race guard
   // must skip it explicitly — overlap there is by design.
   const { factory, docs } = makeFactory();
@@ -340,7 +340,7 @@ test("persistSelectedRoster: stamps account.lastRefreshedAt for /raid-status laz
 
 test("persistSelectedRoster: matches existing account when selection chars overlap saved chars (different seed)", async () => {
   // Edge case: user had previously saved [Alpha, Beta] under accountName
-  // "Alpha". They now run /add-roster with seed "Charlie" but the bible
+  // "Alpha". They now run /raid-add-roster with seed "Charlie" but the bible
   // roster they see is the SAME one (Alpha's roster), so their selection
   // includes Alpha or Beta. The account-match logic should still find
   // account "Alpha" via the chars-in-selection rule and merge into it.
@@ -383,7 +383,7 @@ test("persistSelectedRoster: matches existing account when selection chars overl
 });
 
 test("persistSelectedRoster: stamps registeredBy with callerId when actingForOther is true", async () => {
-  // /add-roster target:U flow: Manager M acts on User U's behalf, so the
+  // /raid-add-roster target:U flow: Manager M acts on User U's behalf, so the
   // freshly-created account on U's doc must record M's discordId in
   // `registeredBy`. /raid-set later uses this match to authorize M to
   // keep maintaining U's progress.
@@ -445,7 +445,7 @@ test("persistSelectedRoster: leaves registeredBy null when user self-adds", asyn
 });
 
 test("persistSelectedRoster: preserves existing registeredBy on merge into pre-stamped account", async () => {
-  // Edge case: another /add-roster session (or a future re-register flow)
+  // Edge case: another /raid-add-roster session (or a future re-register flow)
   // already created an account with `registeredBy = X`. Running this
   // helper against that account again must NOT overwrite the existing
   // stamp - the original helper Manager keeps their authorization.
@@ -463,7 +463,7 @@ test("persistSelectedRoster: preserves existing registeredBy on merge into pre-s
     ],
   });
 
-  // Session simulates a different caller running /add-roster target:user-2
+  // Session simulates a different caller running /raid-add-roster target:user-2
   // and the merge logic finding the same account.
   const session = {
     sessionId: "sess-other-mgr",

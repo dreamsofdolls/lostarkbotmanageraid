@@ -92,7 +92,7 @@ module.exports = {
   "raid-status": {
     notice: {
       noRosterTitle: "Cậu chưa có roster nào",
-      noRosterDescription: "Artist không thấy roster nào của cậu trong DB. Dùng `/add-roster` để add roster đầu tiên rồi mới `/raid-status` xem progress được nha~",
+      noRosterDescription: "Artist không thấy roster nào của cậu trong DB. Dùng `/raid-add-roster` để add roster đầu tiên rồi mới `/raid-status` xem progress được nha~",
     },
     freshness: {
       lastUpdated: "Last updated",
@@ -197,11 +197,11 @@ module.exports = {
       ambiguousTitle: "Roster trùng tên ở nhiều user",
       ambiguousDescription: "Có {count} roster tên **{rosterName}** mà cậu là người add giúp ({ownerNames}). Artist không quyết được set vào ai. Liên hệ admin để rename hoặc xoá bớt nha.",
       deletedForOtherTitle: "Roster đã bị xoá",
-      deletedForOtherDescription: "Roster của <@{target}> đã bị xoá hoặc không còn nữa. Artist không sửa hộ được - phải đợi <@{target}> tự `/add-roster` lại, hoặc cậu chạy `/add-roster target:<user>` đăng ký giúp lại nha.",
+      deletedForOtherDescription: "Roster của <@{target}> đã bị xoá hoặc không còn nữa. Artist không sửa hộ được - phải đợi <@{target}> tự `/raid-add-roster` lại, hoặc cậu chạy `/raid-add-roster target:<user>` đăng ký giúp lại nha.",
       noRosterTitle: "Cậu chưa có roster nào",
-      noRosterDescription: "Artist không thấy roster nào của cậu. Dùng `/add-roster` để add roster đầu tiên trước, sau đó mới `/raid-set` được nha~",
+      noRosterDescription: "Artist không thấy roster nào của cậu. Dùng `/raid-add-roster` để add roster đầu tiên trước, sau đó mới `/raid-set` được nha~",
       authLostTitle: "Quyền roster đã đổi",
-      authLostDescription: "Roster **{rosterName}** của <@{target}> không còn được đăng ký bởi cậu nữa, hoặc đã bị xoá rồi tạo lại trong lúc command đang chạy. Pick lại từ autocomplete `roster:`; nếu vẫn không thấy thì cần chạy lại `/add-roster target:<user>` trước khi set progress tiếp nha.",
+      authLostDescription: "Roster **{rosterName}** của <@{target}> không còn được đăng ký bởi cậu nữa, hoặc đã bị xoá rồi tạo lại trong lúc command đang chạy. Pick lại từ autocomplete `roster:`; nếu vẫn không thấy thì cần chạy lại `/raid-add-roster target:<user>` trước khi set progress tiếp nha.",
     },
     character: {
       notFoundTitle: "Không tìm thấy character",
@@ -256,7 +256,7 @@ module.exports = {
     },
     common: {
       noRosterTitle: "Cậu chưa có roster",
-      noRosterDescription: "Artist chưa thấy roster nào của cậu. Chạy `/add-roster` trước rồi mới đăng ký task được.",
+      noRosterDescription: "Artist chưa thấy roster nào của cậu. Chạy `/raid-add-roster` trước rồi mới đăng ký task được.",
       noCharacterTitle: "Không tìm thấy character",
       noCharacterDescription: "Artist không tìm thấy **{characterName}** trong roster của cậu. Dùng autocomplete khi gõ field `character:` để tránh sai tên nha.",
       missingCharacterTitle: "Thiếu character",
@@ -278,7 +278,7 @@ module.exports = {
     },
     addAll: {
       emptyRosterTitle: "Roster rỗng",
-      emptyRosterDescription: "Roster **{rosterName}** chưa có character nào. Add char trước qua `/add-roster` rồi mới register task được.",
+      emptyRosterDescription: "Roster **{rosterName}** chưa có character nào. Add char trước qua `/raid-add-roster` rồi mới register task được.",
       nothingTitle: "Không có gì để thêm",
       nothingDescription: "Không có character nào trong roster có thể nhận task này (đầy slot hết hoặc đã có task trùng tên + cycle).\n\n{skippedSummary}",
       successTitle: "Đã thêm task cho roster",
@@ -366,31 +366,31 @@ module.exports = {
       "getting-started": {
         label: "🚀 Mới vào - Bắt đầu ở đây",
         short: "3 bước để track raid lần đầu",
-        example: "/add-roster name:<tên-char-bất-kỳ>",
+        example: "/raid-add-roster name:<tên-char-bất-kỳ>",
         notes: [
           "Mới gặp Artist lần đầu? Đây là 3 bước để bắt đầu nha~",
           "",
-          "**1️⃣ Đăng ký roster**: gõ `/add-roster name:<bất-kỳ-char-trong-roster>`. Artist fetch toàn bộ char từ lostark.bible, hiện picker để cậu tick chọn char muốn track rồi bấm **Confirm**.",
+          "**1️⃣ Đăng ký roster**: gõ `/raid-add-roster name:<bất-kỳ-char-trong-roster>`. Artist fetch toàn bộ char từ lostark.bible, hiện picker để cậu tick chọn char muốn track rồi bấm **Confirm**.",
           "**2️⃣ Xem progress**: gõ `/raid-status` bất cứ lúc nào để xem char nào đã clear raid gì tuần này.",
           "**3️⃣ Update tiến độ**: 2 cách - (a) gõ `/raid-set` chỉnh tay, hoặc (b) gõ `/raid-auto-manage action:on` để Artist tự sync từ lostark.bible mỗi 24h.",
           "",
           "**Bonus**: post text dạng `<raid> <difficulty> <character>` vào channel raid (admin set qua `/raid-channel`) - Artist tự đọc + update + DM xác nhận. Ví dụ: `Serca Hard Clauseduk`.",
           "",
-          "Lệnh nâng cao: `/raid-task` (track chore daily/weekly), `/edit-roster` (sửa roster đã có), `/remove-roster` (xoá). Mỗi lệnh có section riêng ở dropdown phía dưới~",
+          "Lệnh nâng cao: `/raid-task` (track chore daily/weekly), `/raid-edit-roster` (sửa roster đã có), `/raid-remove-roster` (xoá). Mỗi lệnh có section riêng ở dropdown phía dưới~",
           "",
           "🌐 **Muốn đổi ngôn ngữ?** Gõ `/raid-language` để chuyển giọng Artist giữa Tiếng Việt và 日本語.",
         ],
       },
-      "add-roster": {
-        label: "/add-roster",
+      "raid-add-roster": {
+        label: "/raid-add-roster",
         short: "Đăng ký roster từ lostark.bible",
-        example: "/add-roster name:Clauseduk",
+        example: "/raid-add-roster name:Clauseduk",
         notes: [
           "Gõ tên 1 char, Artist fetch toàn bộ roster từ lostark.bible rồi mở picker để cậu tick chọn char muốn track.",
           "",
           "**Khi nào dùng**: lần đầu vào server, hoặc khi cậu thêm account mới (alt account).",
           "**Cách Artist xử lý**: bấm **Confirm** sau khi tick → Artist lưu roster vào DB. Bấm **Cancel** hoặc đợi 5 phút → bỏ qua.",
-          "**Cap 20 char/roster** (đủ cho mọi player). Nếu char trong roster đã saved sẵn ở account khác → Artist từ chối, dùng `/edit-roster` để sửa thay.",
+          "**Cap 20 char/roster** (đủ cho mọi player). Nếu char trong roster đã saved sẵn ở account khác → Artist từ chối, dùng `/raid-edit-roster` để sửa thay.",
           "**Mẹo Manager**: option `target:` cho Manager add giúp member lười tự gõ. Reply embed sẽ ping user kia.",
         ],
         optionDescriptions: {
@@ -398,17 +398,17 @@ module.exports = {
           target: "(Raid Manager) Add roster giúp 1 user khác",
         },
       },
-      "edit-roster": {
-        label: "/edit-roster",
+      "raid-edit-roster": {
+        label: "/raid-edit-roster",
         short: "Thêm char mới / bỏ char trong roster đã có",
-        example: "/edit-roster roster:Clauseduk",
+        example: "/raid-edit-roster roster:Clauseduk",
         notes: [
           "Artist mở picker merged - tick char `🆕` để add char mới, bỏ tick char đã saved để xoá. Tiến độ raid của char survive được giữ nguyên.",
           "",
           "**Khi nào dùng**: cậu vừa tạo char mới chưa được track, hoặc muốn bỏ alt không chơi nữa.",
           "**Icon**: `🆕` = char mới có ở bible · `📦` = char đã saved nhưng không còn ở bible (rename / private log).",
           "**Mẹo**: nếu bible offline tạm, vẫn vào được nhưng chỉ remove được. Đợi bible up rồi add char mới sau.",
-          "**Khác `/add-roster`**: edit-roster sửa roster đã có. Muốn add roster mới hoàn toàn (account khác) → dùng `/add-roster`.",
+          "**Khác `/raid-add-roster`**: edit-roster sửa roster đã có. Muốn add roster mới hoàn toàn (account khác) → dùng `/raid-add-roster`.",
         ],
         optionDescriptions: {
           roster: "Roster cần edit (autocomplete)",
@@ -438,7 +438,7 @@ module.exports = {
           "Mở picker ephemeral (5 phút) để flip flag `💰 isGoldEarner` cho từng char. LA cap 6 gold-earner / account / tuần nên picker chặn ở mức 6 tick.",
           "",
           "**Lần đầu mở**: nếu cả account hiện không có ai là gold-earner (data cũ trước 2026-05-05), Artist tự pre-check top 6 char theo iLvl để migration 1 click. Cậu có thể untick + retick tuỳ ý trước khi bấm **Confirm**.",
-          "**Mặc định cho char mới**: char add qua `/add-roster` sau 2026-05-05 default là gold-earner. Dùng lệnh này để flip OFF nếu cậu có alt ngoài top 6 in-game.",
+          "**Mặc định cho char mới**: char add qua `/raid-add-roster` sau 2026-05-05 default là gold-earner. Dùng lệnh này để flip OFF nếu cậu có alt ngoài top 6 in-game.",
           "**Cap behavior**: tick char thứ 7 sẽ ra notice ephemeral và reject - untick char khác trước rồi mới tick được.",
           "**Char ngoài cap picker**: roster > 20 char (hiếm) chỉ show 20 char iLvl cao nhất ở picker. Char thứ 21+ giữ nguyên flag cũ, không bị đụng.",
         ],
@@ -487,7 +487,7 @@ module.exports = {
           "**Mẹo**: pick `roster:` trước - autocomplete `character:` chỉ list char trong roster đó (đỡ chọn nhầm khi 2 roster cùng tên char).",
           "**Đổi mode**: ví dụ Serca Nightmare → Hard sẽ wipe progress cũ vì raid weekly entry là mode-scoped.",
           "**Alternative nhanh hơn**: post text `Kazeros Hard Nailaduk G1` vào channel raid - tự update không cần gõ slash command.",
-          "**Flow Manager add giúp**: Raid Manager đã dùng `/add-roster target:U` để add roster cho user U cũng sẽ thấy roster đó trong autocomplete `/raid-set` của mình (gắn nhãn 👥 + tên user) và có thể tiếp tục update tiến độ cho U.",
+          "**Flow Manager add giúp**: Raid Manager đã dùng `/raid-add-roster target:U` để add roster cho user U cũng sẽ thấy roster đó trong autocomplete `/raid-set` của mình (gắn nhãn 👥 + tên user) và có thể tiếp tục update tiến độ cho U.",
         ],
         optionDescriptions: {
           roster: "Roster chứa character (autocomplete)",
@@ -511,16 +511,16 @@ module.exports = {
           "**Session timeout 5 phút** - hết hạn disable mọi component, gõ lại `/raid-check` để mở lại.",
         ],
       },
-      "remove-roster": {
-        label: "/remove-roster",
+      "raid-remove-roster": {
+        label: "/raid-remove-roster",
         short: "Xoá roster hoặc 1 character",
-        example: "/remove-roster roster:Qiylyn action:Remove a single character character:Zywang",
+        example: "/raid-remove-roster roster:Qiylyn action:Remove a single character character:Zywang",
         notes: [
           "Xoá toàn bộ account roster, hoặc chỉ 1 char trong đó.",
           "",
           "**Khi nào dùng**: account/char cũ không chơi nữa.",
-          "**Mẹo**: muốn refresh 1 roster → `/remove-roster` rồi `/add-roster` lại để pull data mới từ bible.",
-          "**Khác `/edit-roster`**: edit-roster sửa picker tick/untick. Remove-roster xoá hẳn.",
+          "**Mẹo**: muốn refresh 1 roster → `/raid-remove-roster` rồi `/raid-add-roster` lại để pull data mới từ bible.",
+          "**Khác `/raid-edit-roster`**: edit-roster sửa picker tick/untick. Remove-roster xoá hẳn.",
         ],
         optionDescriptions: {
           roster: "Roster name (autocomplete)",

@@ -1,4 +1,4 @@
-// Tests for /edit-roster picker flow.
+// Tests for /raid-edit-roster picker flow.
 //
 // Focus areas (each maps to a Codex-flagged bug or load-bearing
 // invariant):
@@ -418,7 +418,7 @@ test("fetchBibleRosterWithFallback: all seeds zero-overlap → bibleError set", 
 test("fetchBibleRosterWithFallback: empty savedChars skips overlap check (first success wins)", async () => {
   // Defensive: empty saved roster has no chars to compare against, so
   // the overlap check is moot. First successful fetch wins. (Real-world
-  // path: account left empty by /remove-roster.)
+  // path: account left empty by /raid-remove-roster.)
   let calls = 0;
   const { factory } = makeFactory({
     fetchRosterCharacters: async () => {
@@ -603,7 +603,7 @@ test("persistEditedRoster: preserves per-char state (raid completion, bibleSeria
 test("persistEditedRoster: preserves sideTasks on kept chars (HIGH bug fix)", async () => {
   // Codex round 32 finding #1: Confirm path used buildCharacterRecord
   // which previously didn't copy sideTasks, so any user with /raid-task
-  // entries on a char would silently lose them on /edit-roster Confirm
+  // entries on a char would silently lose them on /raid-edit-roster Confirm
   // even when re-selecting that char. Pin the fix: sideTasks must
   // round-trip through persistEditedRoster intact.
   const { factory, docs } = makeFactory();
@@ -670,7 +670,7 @@ test("persistEditedRoster: preserves sideTasks on kept chars (HIGH bug fix)", as
 
 test("persistEditedRoster: throws when account vanished between command and Confirm", async () => {
   // Mid-session, user (or another concurrent flow) removed the account
-  // via /remove-roster. Confirm should fail loudly so the Confirm
+  // via /raid-remove-roster. Confirm should fail loudly so the Confirm
   // handler can render a friendly error.
   const { factory, docs } = makeFactory();
   docs.set("user-1", {

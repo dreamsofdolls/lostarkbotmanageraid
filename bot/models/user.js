@@ -79,7 +79,7 @@ const characterSchema = new mongoose.Schema(
     class: { type: String, required: true },
     itemLevel: { type: Number, required: true, min: 0 },
     combatScore: { type: String, default: "" },
-    // Default true: chars added via /add-roster opt INTO the gold rollup
+    // Default true: chars added via /raid-add-roster opt INTO the gold rollup
     // by default. The 6-gold-earner-per-account-per-week LA cap is enforced
     // at the picker level in /raid-gold-earner, not here at the schema -
     // the schema just decides what a freshly-saved char should look like
@@ -136,13 +136,13 @@ const accountSchema = new mongoose.Schema(
     // or returns zero-overlap).
     lastRefreshAttemptAt: { type: Number, default: null },
     sharedTasks: { type: [sharedTaskSchema], default: [] },
-    // Discord id of the user who ran /add-roster for this account when
+    // Discord id of the user who ran /raid-add-roster for this account when
     // acting on behalf of someone else (Manager onboarding flow). Null
     // when the owner self-added. Used by /raid-set to authorize the
     // helper Manager to keep maintaining raid progress on the registered
     // user's roster without re-checking the live Manager role - the act
     // of registering (which already gated through isManagerId) is the
-    // authorization. Cleared only by /remove-roster + /add-roster cycle.
+    // authorization. Cleared only by /raid-remove-roster + /raid-add-roster cycle.
     registeredBy: { type: String, default: null },
   },
   { _id: false }

@@ -14,8 +14,8 @@ const mongoose = require("mongoose");
 //
 // accessLevel:
 //   - 'edit'  default: B can /raid-set, /raid-task, post raid-channel
-//             text on A's chars. B still cannot /add-roster, /edit-roster,
-//             /remove-roster, or /raid-auto-manage on A's account; those
+//             text on A's chars. B still cannot /raid-add-roster, /raid-edit-roster,
+//             /raid-remove-roster, or /raid-auto-manage on A's account; those
 //             stay owner-exclusive by design.
 //   - 'view'  read-only: B sees A's rosters in /raid-status etc. but
 //             write paths reject with "View-only share".

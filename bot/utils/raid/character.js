@@ -127,7 +127,7 @@ function sanitizeTasks(tasks) {
 // Sanitize per-character side-task entries (sideTaskSchema in models/user.js).
 // Mirrors sanitizeTasks but maps the sideTaskSchema fields. Treated as
 // user-owned state on par with `tasks`, so buildCharacterRecord must
-// preserve it across roster rebuilds (e.g. /edit-roster Confirm) — without
+// preserve it across roster rebuilds (e.g. /raid-edit-roster Confirm) — without
 // this pass, a Confirm that keeps a char would silently wipe its side
 // tasks because the helper rebuilds the char shape from a minimal field
 // list.
@@ -185,7 +185,7 @@ function normalizeAssignedRaid(assignedRaid, fallbackDifficulty, raidKey) {
   if (diffTally.size === 0) {
     // No completion stamped yet - we have flexibility to pick the right
     // difficulty. Compare the stale stored difficulty (from a previous
-    // /add-roster or /edit-roster when the char was at lower iLvl) to
+    // /raid-add-roster or /raid-edit-roster when the char was at lower iLvl) to
     // `fallbackDifficulty` (the best-eligible mode at the CURRENT iLvl,
     // computed by the caller in ensureAssignedRaids). Auto-upgrade if
     // the stored mode is below the best-eligible mode, otherwise
@@ -288,7 +288,7 @@ function buildCharacterRecord(source, fallbackId) {
     class: getCharacterClass(source),
     itemLevel: Number(source?.itemLevel) || 0,
     // Default true on missing field: matches the schema default. A
-    // freshly-built record from /add-roster (where source has no
+    // freshly-built record from /raid-add-roster (where source has no
     // isGoldEarner key) opts in by default; an explicit `false` (set via
     // /raid-gold-earner) is preserved verbatim. Without the `!== false`
     // guard, `Boolean(undefined)` would silently downgrade every new
