@@ -419,6 +419,12 @@ module.exports = {
       charsSingular: "キャラ",
       charsPlural: "キャラ",
     },
+    statusChoices: {
+      complete: "Complete - レイド全体を完了にマーク",
+      process: "Process - 特定のゲート 1 つを完了にマーク (gate 必要)",
+      reset: "Reset - 全ゲートを 0 にリセット",
+      resetOnly: "Reset (レイド完了済み - リセットのみ可能)",
+    },
     invalid: {
       raidTitle: "レイドオプションが無効ですわ",
       raidDescription: "オートコンプリートのドロップダウンからレイドを選んでね♪ アーティストはリストに無いレイドは認識できませんの。",

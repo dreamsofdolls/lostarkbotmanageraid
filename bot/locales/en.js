@@ -420,6 +420,12 @@ module.exports = {
       charsSingular: "char",
       charsPlural: "chars",
     },
+    statusChoices: {
+      complete: "Complete - mark the whole raid as done",
+      process: "Process - mark one specific gate as done (requires gate)",
+      reset: "Reset - clear all gates back to 0",
+      resetOnly: "Reset (raid already complete - reset is the only option)",
+    },
     invalid: {
       raidTitle: "Raid option invalid",
       raidDescription: "Pick a raid from the autocomplete dropdown - Artist only recognizes raids in the fixed list.",

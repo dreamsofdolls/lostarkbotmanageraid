@@ -434,6 +434,12 @@ module.exports = {
       charsSingular: "char",
       charsPlural: "chars",
     },
+    statusChoices: {
+      complete: "Complete - mark cả raid là done",
+      process: "Process - mark 1 gate cụ thể (cần gate)",
+      reset: "Reset - xoá toàn bộ gate về 0",
+      resetOnly: "Reset (raid đã hoàn thành - chỉ có thể reset)",
+    },
     invalid: {
       raidTitle: "Raid option không hợp lệ",
       raidDescription: "Pick raid trong dropdown autocomplete nhé - Artist chỉ hiểu các raid có trong list cố định.",
