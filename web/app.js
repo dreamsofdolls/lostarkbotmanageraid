@@ -1,15 +1,17 @@
-// Local Sync web companion - Phase 3 (dry-run preview only).
-// Phase 4 will add the POST /api/raid-sync wire-up.
+// Local Sync web companion - Phase 4.5 (streaming SQLite via wa-sqlite).
 //
 // Architecture choices:
-//   - vanilla JS (no React/Next/Vite). The page does 3 things: parse
-//     URL token, FSA permission, sql.js query. Adding a framework would
-//     ship 100kB+ of runtime for ~150 LOC of logic.
-//   - sql.js loaded from CDN (cdnjs) so we don't bundle the 1.5MB WASM
-//     into the bot deploy. Cached aggressively across visits.
-//   - File handle persisted in IndexedDB. The browser already provides
-//     persistent FSA permission ("Allow on every visit"); IndexedDB
-//     just lets us reload the handle reference on next page load.
+//   - vanilla JS (no React/Next/Vite). The page does 4 things: parse
+//     URL token, FSA permission, sql.js query, POST sync. Adding a
+//     framework would ship 100kB+ of runtime for ~250 LOC of logic.
+//   - wa-sqlite (asyncify build) loaded from jsdelivr. We use a custom
+//     async VFS (web/file-vfs.js) that streams from File.slice() so
+//     multi-GB encounters.db files don't blow Chrome's ArrayBuffer cap
+//     (sql.js, the previous library, required full-file load and broke
+//     at 4 GB with NotReadableError).
+//   - SQLite only fetches the B-tree pages it needs - tens of MB even
+//     on a 4 GB DB. Schema-detection via PRAGMA table_info adapts the
+//     query to whichever LOA Logs version wrote the file.
 
 "use strict";
 
@@ -69,15 +71,10 @@ if (!token) {
 
 // ----- 2. FSA file pick / drop -----
 
-let currentFile = null;
-let currentDB = null;
-
 async function loadFile(file) {
-  currentFile = file;
   fileMeta.hidden = false;
   fileMeta.innerHTML = `Selected <strong>${file.name}</strong> · ${formatBytes(file.size)} · modified ${new Date(file.lastModified).toLocaleString()}`;
   previewSection.hidden = false;
-  previewOutput.textContent = "Loading sql.js WASM (one-time, cached after)...";
   await loadAndPreview(file);
 }
 
@@ -127,69 +124,113 @@ pickFileBtn.addEventListener("click", async () => {
   }
 });
 
-// ----- 3. sql.js query -----
+// ----- 3. wa-sqlite query (streaming VFS) -----
+//
+// Replaces the previous sql.js full-file load. wa-sqlite + FileBackedVFS
+// only reads the SQLite B-tree pages our query actually touches (~tens
+// of MB on a 4 GB DB), so file size is no longer a wall. Trade-off: more
+// async coordination + asyncify-built WASM is ~700 KB vs sql.js 1.5 MB,
+// roughly even.
+
+const WA_SQLITE_VERSION = "latest";
+const WA_SQLITE_BASE = `https://cdn.jsdelivr.net/npm/wa-sqlite@${WA_SQLITE_VERSION}`;
 
 async function loadAndPreview(file) {
-  if (typeof window.initSqlJs !== "function") {
-    previewOutput.innerHTML = `<span class="status-err">sql.js failed to load from CDN.</span> Check network / refresh.`;
-    return;
-  }
+  previewOutput.textContent = "Loading SQLite WASM (one-time, cached after)...";
   try {
-    const SQL = await window.initSqlJs({
-      locateFile: (f) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${f}`,
+    // Lazy-import every wa-sqlite piece so the page stays light when
+    // the user hasn't dropped a file yet. ESM imports are deduped by
+    // the browser - downloading once + reusing for subsequent files.
+    const [SQLiteESMFactoryModule, SQLiteAPI, FileVfsModule] = await Promise.all([
+      import(`${WA_SQLITE_BASE}/dist/wa-sqlite-async.mjs`),
+      import(`${WA_SQLITE_BASE}/src/sqlite-api.js`),
+      import("/sync/file-vfs.js"),
+    ]);
+    const SQLiteESMFactory = SQLiteESMFactoryModule.default;
+    const { FileBackedVFS } = FileVfsModule;
+    const module = await SQLiteESMFactory();
+    const sqlite3 = SQLiteAPI.Factory(module);
+    // Register a VFS that maps the virtual filename "encounters.db" to
+    // the real File the user dropped. SQLite asks for byte ranges via
+    // jRead; the VFS streams from file.slice() instead of buffering
+    // the whole file in memory.
+    const vfs = await FileBackedVFS.create("file-vfs", module, {
+      "encounters.db": file,
     });
-    const buf = new Uint8Array(await file.arrayBuffer());
-    currentDB = new SQL.Database(buf);
-    runPreviewQuery(currentDB);
+    sqlite3.vfs_register(vfs, false);
+    const db = await sqlite3.open_v2(
+      "encounters.db",
+      undefined, // default flags = SQLITE_OPEN_READONLY when paired with our refusing-write VFS
+      "file-vfs"
+    );
+    try {
+      await runPreviewQuery(sqlite3, db);
+    } finally {
+      await sqlite3.close(db);
+    }
   } catch (err) {
-    console.error("[local-sync] sql.js init/open failed:", err);
-    previewOutput.innerHTML = `<span class="status-err">Couldn't open the DB.</span> ${err.message || err}`;
+    console.error("[local-sync] sqlite open/query failed:", err);
+    previewOutput.innerHTML = `<span class="status-err">Couldn't open the DB.</span> ${escapeHtml(err.message || String(err))}<br><span class="hint">Open DevTools (F12) -> Console for full stack trace.</span>`;
   }
 }
 
-function runPreviewQuery(db) {
-  // 7-day window. encounter.last_combat_packet is millisecond unix.
+// Query the encounter table. Schema between LOA Logs versions has
+// shifted (e.g. current_boss_name vs current_boss, last_combat_packet
+// vs fight_start), so we PRAGMA table_info first and pick column names
+// that actually exist - graceful across versions.
+async function runPreviewQuery(sqlite3, db) {
+  const cols = await listColumns(sqlite3, db, "encounter");
+  if (cols.size === 0) {
+    previewOutput.innerHTML = `<span class="status-err">No 'encounter' table found.</span> This file might not be a LOA Logs encounters.db.`;
+    lastDeltas = [];
+    return;
+  }
+  // Column-name detection. Newer LOA Logs uses current_boss_name +
+  // last_combat_packet; older builds (and la-utils' Zod schema) use
+  // current_boss + fight_start. Pick whichever exists.
+  const bossCol = cols.has("current_boss_name") ? "current_boss_name" : (cols.has("current_boss") ? "current_boss" : null);
+  const tsCol = cols.has("last_combat_packet") ? "last_combat_packet" : (cols.has("fight_start") ? "fight_start" : null);
+  const charCol = cols.has("local_player") ? "local_player" : (cols.has("local_player_name") ? "local_player_name" : null);
+  const diffCol = cols.has("difficulty") ? "difficulty" : null;
+  const clearedCol = cols.has("cleared") ? "cleared" : null;
+  if (!bossCol || !tsCol) {
+    previewOutput.innerHTML = `<span class="status-err">Encounter table is missing required columns.</span><br>Found: ${[...cols].slice(0, 12).join(", ")}${cols.size > 12 ? "..." : ""}<br><span class="hint">Need at least a boss-name column and a timestamp column. Schema may have changed - report in Discord with this list.</span>`;
+    lastDeltas = [];
+    return;
+  }
   const sevenDaysAgoMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  // GROUP BY boss + difficulty + cleared + local_player so each row in
-  // the preview corresponds to one (boss, difficulty, char) pair the
-  // sync would push. Failed pulls are NOT POSTed but we still show
-  // them so the user has confidence the file is being read.
-  // local_player is the LOA Logs column for the user's main char in
-  // that encounter; fallback to empty string if the column doesn't exist
-  // in older schemas (the WHERE filters those out).
   const sql = `
-    SELECT current_boss_name AS boss,
-           COALESCE(difficulty, 'Normal') AS difficulty,
-           cleared,
-           COALESCE(local_player, '') AS char_name,
+    SELECT ${bossCol} AS boss,
+           ${diffCol ? `COALESCE(${diffCol}, 'Normal')` : `'Normal'`} AS difficulty,
+           ${clearedCol ? clearedCol : `1`} AS cleared,
+           ${charCol ? `COALESCE(${charCol}, '')` : `''`} AS char_name,
            COUNT(*) AS n,
-           MAX(last_combat_packet) AS last_ms
+           MAX(${tsCol}) AS last_ms
     FROM encounter
-    WHERE last_combat_packet >= ?
-      AND current_boss_name IS NOT NULL
-      AND current_boss_name != ''
-    GROUP BY current_boss_name, difficulty, cleared, char_name
+    WHERE ${tsCol} >= ?
+      AND ${bossCol} IS NOT NULL
+      AND ${bossCol} != ''
+    GROUP BY boss, difficulty, cleared, char_name
     ORDER BY last_ms DESC
     LIMIT 200;
   `;
-  let rows;
+  const rows = [];
   try {
-    rows = db.exec(sql, [sevenDaysAgoMs]);
+    await sqlite3.exec(db, sql.replace("?", String(sevenDaysAgoMs)), (row, _columns) => {
+      rows.push(row);
+    });
   } catch (err) {
-    previewOutput.innerHTML = `<span class="status-err">Query failed.</span> ${err.message || err}<br><span class="hint">Schema may have changed in your LOA Logs version. Report this in the Discord.</span>`;
+    previewOutput.innerHTML = `<span class="status-err">Query failed.</span> ${escapeHtml(err.message || String(err))}<br><span class="hint">Boss column: <code>${bossCol}</code>, ts column: <code>${tsCol}</code>. Schema mismatch?</span>`;
     return;
   }
-  if (!rows || rows.length === 0 || !rows[0].values) {
+  if (rows.length === 0) {
     previewOutput.innerHTML = `<span class="status-ok">No encounters in the last 7 days.</span> Nothing to sync.`;
     lastDeltas = [];
     return;
   }
-  const cleared = rows[0].values.filter((r) => r[2] === 1);
-  const failed = rows[0].values.filter((r) => r[2] !== 1);
-  // Build the deltas array NOW so the Sync button has data ready.
-  // Only cleared rows go into deltas - failed pulls don't move raid
-  // progress. Empty char_name is dropped server-side anyway, but skip
-  // here too to save bytes on the wire.
+  // sqlite3.exec passes row values as an array in column order: [boss, difficulty, cleared, char_name, n, last_ms]
+  const cleared = rows.filter((r) => Number(r[2]) === 1);
+  const failed = rows.filter((r) => Number(r[2]) !== 1);
   lastDeltas = cleared
     .filter((r) => r[3])
     .map((r) => ({
@@ -199,17 +240,16 @@ function runPreviewQuery(db) {
       charName: r[3],
       lastClearMs: Number(r[5]) || 0,
     }));
-  let html = `<div class="meta">Last 7 days: <strong>${cleared.length}</strong> cleared encounter group(s), <strong>${failed.length}</strong> failed. <strong>${lastDeltas.length}</strong> ready to sync.</div>`;
+  let html = `<div class="meta">Last 7 days: <strong>${cleared.length}</strong> cleared encounter group(s), <strong>${failed.length}</strong> failed. <strong>${lastDeltas.length}</strong> ready to sync. <span class="hint">(boss=<code>${bossCol}</code> ts=<code>${tsCol}</code> char=<code>${charCol || "—"}</code>)</span></div>`;
   html += `<table><thead><tr><th>Char</th><th>Boss</th><th>Difficulty</th><th>Cleared</th><th>Count</th><th>Latest</th></tr></thead><tbody>`;
-  for (const row of rows[0].values) {
+  for (const row of rows) {
     const [boss, difficulty, isCleared, charName, n, lastMs] = row;
     const ts = lastMs ? new Date(Number(lastMs)).toLocaleString() : "-";
-    const status = isCleared === 1 ? "✓" : "✗";
+    const status = Number(isCleared) === 1 ? "✓" : "✗";
     html += `<tr><td>${escapeHtml(charName || "?")}</td><td>${escapeHtml(boss || "?")}</td><td>${escapeHtml(difficulty)}</td><td>${status}</td><td>${n}</td><td>${ts}</td></tr>`;
   }
   html += `</tbody></table>`;
   previewOutput.innerHTML = html;
-  // Reveal the Sync section + enable button if we have anything to send.
   syncSection.hidden = false;
   syncBtn.disabled = lastDeltas.length === 0;
   if (lastDeltas.length === 0) {
@@ -218,6 +258,23 @@ function runPreviewQuery(db) {
   } else {
     syncOutput.hidden = true;
   }
+}
+
+// PRAGMA-based column lister. Returns a Set of column names present on
+// `tableName`. Used for schema detection so query SQL adapts to whatever
+// LOA Logs version actually wrote the file.
+async function listColumns(sqlite3, db, tableName) {
+  const cols = new Set();
+  try {
+    await sqlite3.exec(db, `PRAGMA table_info(${tableName});`, (row, _columns) => {
+      // PRAGMA table_info row layout: [cid, name, type, notnull, dflt_value, pk]
+      const name = row[1];
+      if (typeof name === "string") cols.add(name);
+    });
+  } catch (err) {
+    console.error("[local-sync] PRAGMA table_info failed:", err);
+  }
+  return cols;
 }
 
 function escapeHtml(s) {
