@@ -39,6 +39,11 @@ module.exports = {
       opensAtShort: "Opens {label}",
     },
   },
+  "task-view": {
+    dailyHeader: "Daily",
+    weeklyHeader: "Weekly",
+    emptyCell: "(no tasks)",
+  },
   "raid-language": {
     title: "🌐 Switch Artist's language",
     description: "Pick the language you want Artist to use. Every command will display in that language going forward.",

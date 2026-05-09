@@ -416,6 +416,7 @@ function createAllModeHandler({
         UI,
         getClassEmoji,
         truncateText,
+        lang,
       });
       const now = new Date();
       const sharedTasks = getVisibleSharedTasks(account, now.getTime());

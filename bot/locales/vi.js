@@ -46,6 +46,15 @@ module.exports = {
       opensAtShort: "Mở {label}",
     },
   },
+  // Per-character body labels rendered by `buildAccountTaskFields` (shared
+  // by /raid-status Side tasks + /raid-check Manager Task view + /raid-check
+  // task-view-ui). VN keeps "Daily"/"Weekly" as gamer loanwords for parity
+  // with the footerDailyDone/footerWeeklyDone keys.
+  "task-view": {
+    dailyHeader: "Daily",
+    weeklyHeader: "Weekly",
+    emptyCell: "(không có task)",
+  },
   "raid-language": {
     title: "🌐 Đổi ngôn ngữ Artist",
     description: "Chọn ngôn ngữ cậu muốn Artist dùng. Tất cả lệnh sẽ hiển thị bằng ngôn ngữ này từ giờ.",

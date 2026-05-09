@@ -463,9 +463,9 @@ function getSharedTaskDisplay(task, now = new Date(), lang) {
     name,
     emoji: preset.emoji,
     completed: !!task?.completed,
-    status: formatSharedResetLabel(task?.reset),
-    optionStatus: formatSharedResetLabel(task?.reset),
-    scheduleText: formatSharedResetLabel(task?.reset),
+    status: formatSharedResetLabel(task?.reset, lang),
+    optionStatus: formatSharedResetLabel(task?.reset, lang),
+    scheduleText: formatSharedResetLabel(task?.reset, lang),
     active: true,
     key: null,
   };

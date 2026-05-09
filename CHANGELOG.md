@@ -4,6 +4,15 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-09 (later 10)
+
+### Fixed (Side tasks view JP/EN locale leak)
+- `bot/utils/raid/task-view.js` per-character body now reads `Daily` / `Weekly` section headers and the `(no tasks)` placeholder from a new `task-view.{dailyHeader,weeklyHeader,emptyCell}` namespace. JP viewers see "デイリー" / "ウィークリー" / "(タスクなし)", EN sees the English forms; VN keeps "Daily" / "Weekly" as gamer loanwords for parity with the existing footer keys.
+- `bot/utils/raid/shared-tasks.js` `getSharedTaskDisplay` now threads `lang` into `formatSharedResetLabel` for the non-scheduled branch (lines 466-468). Previously it dropped the arg, so daily/weekly shared tasks rendered "Mỗi ngày" / "Mỗi tuần" even when the viewer was on JP/EN. Daily tasks like "Stronghold Plants" now render as "毎日" in JP, "Daily" in EN.
+- Threaded `lang` into all 3 `buildAccountTaskFields` callers (raid-status/task-ui, raid-check/all-mode, raid-check/task-view-ui). Helper defaults to `vi` for callers that haven't migrated yet.
+- Note: Discord client renders `<t:N:R>` ("in an hour") and `<t:N:f>` ("May 9, 2026 10:00 PM") in the viewer's Discord locale, not the bot's app-level lang. Those are not bot-controlled.
+- 327/327 tests pass.
+
 ## 2026-05-09 (later 9)
 
 ### Changed (`/raid-channel config action:set-language` reveals current language)

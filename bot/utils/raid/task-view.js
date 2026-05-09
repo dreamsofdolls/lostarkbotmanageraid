@@ -1,6 +1,7 @@
 "use strict";
 
 const { pack2Columns } = require("./shared");
+const { t } = require("../../services/i18n");
 
 const HEADER_SEPARATOR = "\u00A0\u00B7\u00A0";
 
@@ -46,6 +47,12 @@ function buildAccountTaskFields(account, helpers) {
     UI,
     getClassEmoji = () => "",
     truncateText = (s, n) => (s.length > n ? `${s.slice(0, n - 3)}...` : s),
+    // Optional viewer-language. Defaults to "vi" so any caller that
+    // hasn't been migrated yet still produces VN copy (matching the
+    // pre-i18n behavior). The shared helper renders into 3 surfaces:
+    // /raid-status Side tasks, /raid-check Manager Task view, and
+    // /raid-check task-view-ui - all pass lang explicitly post-i18n.
+    lang = "vi",
   } = helpers;
 
   const characters = Array.isArray(account?.characters)
@@ -89,8 +96,10 @@ function buildAccountTaskFields(account, helpers) {
 
     const lines = [];
     if (dailyTasks.length > 0) {
-      const dailyDone = dailyTasks.filter((t) => t.completed).length;
-      lines.push(`**Daily** · ${dailyDone}/${dailyTasks.length}`);
+      const dailyDone = dailyTasks.filter((task) => task.completed).length;
+      lines.push(
+        `**${t("task-view.dailyHeader", lang)}** · ${dailyDone}/${dailyTasks.length}`
+      );
       for (const task of dailyTasks) {
         const icon = task.completed ? UI.icons.done : UI.icons.pending;
         lines.push(`${icon} ${task.name}`);
@@ -98,8 +107,10 @@ function buildAccountTaskFields(account, helpers) {
     }
     if (weeklyTasks.length > 0) {
       if (dailyTasks.length > 0) lines.push("");
-      const weeklyDone = weeklyTasks.filter((t) => t.completed).length;
-      lines.push(`**Weekly** · ${weeklyDone}/${weeklyTasks.length}`);
+      const weeklyDone = weeklyTasks.filter((task) => task.completed).length;
+      lines.push(
+        `**${t("task-view.weeklyHeader", lang)}** · ${weeklyDone}/${weeklyTasks.length}`
+      );
       for (const task of weeklyTasks) {
         const icon = task.completed ? UI.icons.done : UI.icons.pending;
         lines.push(`${icon} ${task.name}`);
@@ -107,7 +118,10 @@ function buildAccountTaskFields(account, helpers) {
     }
     return {
       name: fieldName,
-      value: truncateText(lines.join("\n") || "(không có task)", 1024),
+      value: truncateText(
+        lines.join("\n") || t("task-view.emptyCell", lang),
+        1024
+      ),
       inline: true,
     };
   };

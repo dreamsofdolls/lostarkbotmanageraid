@@ -60,6 +60,7 @@ function createRaidStatusTaskUi(deps) {
         UI,
         getClassEmoji,
         truncateText,
+        lang,
       });
 
       if (totals.charsWithTasks === 0 && sharedTasks.length === 0) {
