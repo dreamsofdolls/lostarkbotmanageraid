@@ -1,6 +1,7 @@
 "use strict";
 
 const { buildNoticeEmbed } = require("../utils/raid/shared");
+const { t, getUserLanguage } = require("../services/i18n");
 
 function createRaidAutoManageCommand(deps) {
   const {
@@ -29,8 +30,13 @@ function createRaidAutoManageCommand(deps) {
     stampAutoManageAttempt,
   } = deps;
 
-async function handleRaidAutoManageCommand(interaction) {
+  async function handleRaidAutoManageCommand(interaction) {
     const discordId = interaction.user.id;
+    // Slash invoker is the only viewer of every ephemeral reply on this
+    // command, so resolve once and thread through every notice + success
+    // embed. DM emitters resolve their own (recipient's) lang separately
+    // via commitAutoManageOn / buildAutoManage* helpers further down.
+    const lang = await getUserLanguage(discordId, { UserModel: User });
     const action = interaction.options.getString("action", true);
     // Autocomplete only offers on/off/sync/status, but users can paste
     // arbitrary strings into slash command args. Reject early with a
@@ -41,8 +47,8 @@ async function handleRaidAutoManageCommand(interaction) {
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Action không hợp lệ",
-            description: `Action \`${action}\` Artist không nhận được. Cho phép: \`on\` · \`off\` · \`sync\` · \`status\`. Autocomplete sẽ gợi ý đúng nha.`,
+            title: t("raid-auto-manage.invalid.actionTitle", lang),
+            description: t("raid-auto-manage.invalid.actionDescription", lang, { action }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -63,8 +69,8 @@ async function handleRaidAutoManageCommand(interaction) {
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "info",
-              title: "Auto-manage đang bật rồi",
-              description: "Cậu đã opt-in từ trước nha. Muốn sync ngay thì action `sync`, hoặc `status` để xem trạng thái cooldown + lần sync gần nhất.",
+              title: t("raid-auto-manage.redundant.alreadyOnTitle", lang),
+              description: t("raid-auto-manage.redundant.alreadyOnDescription", lang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -76,8 +82,8 @@ async function handleRaidAutoManageCommand(interaction) {
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "info",
-              title: "Auto-manage đang tắt sẵn",
-              description: "Cậu chưa opt-in nha, không có flag để disable. Muốn bật thì action `on`.",
+              title: t("raid-auto-manage.redundant.alreadyOffTitle", lang),
+              description: t("raid-auto-manage.redundant.alreadyOffDescription", lang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -93,10 +99,8 @@ async function handleRaidAutoManageCommand(interaction) {
       );
       const embed = new EmbedBuilder()
         .setColor(UI.colors.muted)
-        .setTitle(`${UI.icons.reset} Auto-manage disabled`)
-        .setDescription(
-          "Auto-manage đã tắt. Cậu vẫn có thể trigger sync thủ công qua `/raid-auto-manage action:sync` bất cứ lúc nào."
-        )
+        .setTitle(`${UI.icons.reset} ${t("raid-auto-manage.disable.title", lang)}`)
+        .setDescription(t("raid-auto-manage.disable.description", lang))
         .setTimestamp();
       await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
       return;
@@ -123,8 +127,8 @@ async function handleRaidAutoManageCommand(interaction) {
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "info",
-              title: "Sync khác đang chạy",
-              description: "Cậu có 1 sync khác đang fetch bible cho roster rồi nha, Artist không bật song song được. Đợi nó xong khoảng 5-10 giây rồi gõ lại nhé.",
+              title: t("raid-auto-manage.enable.inFlightTitle", lang),
+              description: t("raid-auto-manage.enable.inFlightDescription", lang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -151,11 +155,11 @@ async function handleRaidAutoManageCommand(interaction) {
           });
           const embed = new EmbedBuilder()
             .setColor(UI.colors.success)
-            .setTitle(`${UI.icons.done} Auto-manage enabled (sync skipped)`)
+            .setTitle(`${UI.icons.done} ${t("raid-auto-manage.enable.cooldownSkipTitle", lang)}`)
             .setDescription(
-              `Flag đã bật. Sync vừa chạy gần đây nên tớ bỏ qua initial sync lần này - đợi **${formatAutoManageCooldownRemaining(
-                guard.remainingMs
-              )}** rồi gõ \`/raid-auto-manage action:sync\` để pull log mới nhất.`
+              t("raid-auto-manage.enable.cooldownSkipDescription", lang, {
+                remain: formatAutoManageCooldownRemaining(guard.remainingMs),
+              })
             )
             .setTimestamp();
           await interaction.editReply({ embeds: [embed] });
@@ -173,10 +177,8 @@ async function handleRaidAutoManageCommand(interaction) {
           );
           const embed = new EmbedBuilder()
             .setColor(UI.colors.success)
-            .setTitle(`${UI.icons.done} Auto-manage enabled`)
-            .setDescription(
-              "Đã bật auto-manage. Chưa có roster nên tớ chưa sync được gì - chạy `/raid-add-roster` trước rồi gọi `/raid-auto-manage action:sync` để pull logs."
-            )
+            .setTitle(`${UI.icons.done} ${t("raid-auto-manage.enable.successTitle", lang)}`)
+            .setDescription(t("raid-auto-manage.enable.noRosterDescription", lang))
             .setTimestamp();
           await interaction.editReply({ embeds: [embed] });
           return;
@@ -187,10 +189,8 @@ async function handleRaidAutoManageCommand(interaction) {
           await probeDoc.save();
           const embed = new EmbedBuilder()
             .setColor(UI.colors.success)
-            .setTitle(`${UI.icons.done} Auto-manage enabled`)
-            .setDescription(
-              "Đã bật auto-manage. Chưa có roster nên tớ chưa sync được gì - chạy `/raid-add-roster` trước rồi gọi `/raid-auto-manage action:sync` để pull logs."
-            )
+            .setTitle(`${UI.icons.done} ${t("raid-auto-manage.enable.successTitle", lang)}`)
+            .setDescription(t("raid-auto-manage.enable.noRosterDescription", lang))
             .setTimestamp();
           await interaction.editReply({ embeds: [embed] });
           return;
@@ -211,10 +211,12 @@ async function handleRaidAutoManageCommand(interaction) {
             weekResetStart,
             probeCollected
           );
-          const syncEmbed = buildAutoManageSyncReportEmbed(finalReport);
+          const syncEmbed = buildAutoManageSyncReportEmbed(finalReport, lang);
           syncEmbed.setTitle(
-            `${UI.icons.done} Auto-manage enabled · initial sync ${
-              (finalReport?.appliedTotal || 0) > 0 ? "complete" : "nothing to apply"
+            `${UI.icons.done} ${
+              (finalReport?.appliedTotal || 0) > 0
+                ? t("raid-auto-manage.enable.initialSyncCompleteTitle", lang)
+                : t("raid-auto-manage.enable.initialSyncNothingTitle", lang)
             }`
           );
           await interaction.editReply({ embeds: [syncEmbed] });
@@ -223,16 +225,17 @@ async function handleRaidAutoManageCommand(interaction) {
         // --- Warn + confirm path: hidden chars detected ---
         const warnEmbed = buildAutoManageHiddenCharsWarningEmbed(
           hiddenChars,
-          probeReport
+          probeReport,
+          lang
         );
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId("auto-manage:confirm-on")
-            .setLabel("Vẫn bật")
+            .setLabel(t("raid-auto-manage.enable.confirmButton", lang))
             .setStyle(ButtonStyle.Primary),
           new ButtonBuilder()
             .setCustomId("auto-manage:cancel-on")
-            .setLabel("Huỷ")
+            .setLabel(t("raid-auto-manage.enable.cancelButton", lang))
             .setStyle(ButtonStyle.Secondary)
         );
         await interaction.editReply({ embeds: [warnEmbed], components: [row] });
@@ -260,10 +263,12 @@ async function handleRaidAutoManageCommand(interaction) {
             weekResetStart,
             probeCollected
           );
-          const syncEmbed = buildAutoManageSyncReportEmbed(finalReport);
+          const syncEmbed = buildAutoManageSyncReportEmbed(finalReport, lang);
           syncEmbed.setTitle(
-            `${UI.icons.done} Auto-manage enabled · initial sync ${
-              (finalReport?.appliedTotal || 0) > 0 ? "complete" : "nothing to apply"
+            `${UI.icons.done} ${
+              (finalReport?.appliedTotal || 0) > 0
+                ? t("raid-auto-manage.enable.initialSyncCompleteTitle", lang)
+                : t("raid-auto-manage.enable.initialSyncNothingTitle", lang)
             }`
           );
           await interaction.editReply({ embeds: [syncEmbed], components: [] });
@@ -275,14 +280,12 @@ async function handleRaidAutoManageCommand(interaction) {
           await stampAutoManageAttempt(discordId);
           const title =
             decision === "timeout"
-              ? "Auto-manage giữ OFF (timeout)"
-              : "Auto-manage giữ OFF";
+              ? t("raid-auto-manage.enable.cancelTimeoutTitle", lang)
+              : t("raid-auto-manage.enable.cancelTitle", lang);
           const cancelEmbed = new EmbedBuilder()
             .setColor(UI.colors.muted)
             .setTitle(`${UI.icons.reset} ${title}`)
-            .setDescription(
-              "Không có gì thay đổi. Bật **Public Log** cho char trên <https://lostark.bible/me/logs> rồi gõ `/raid-auto-manage action:on` lại nhé."
-            )
+            .setDescription(t("raid-auto-manage.enable.cancelDescription", lang))
             .setTimestamp();
           await interaction.editReply({ embeds: [cancelEmbed], components: [] });
         }
@@ -297,8 +300,10 @@ async function handleRaidAutoManageCommand(interaction) {
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "error",
-              title: "Probe/sync fail",
-              description: `Artist gặp lỗi khi probe bible: \`${err?.message || err}\`. Auto-manage **giữ OFF** nha, không bật vì sync đầu chưa thành công. Thử lại sau khoảng 1-2 phút.`,
+              title: t("raid-auto-manage.enable.probeFailTitle", lang),
+              description: t("raid-auto-manage.enable.probeFailDescription", lang, {
+                error: err?.message || err,
+              }),
             }),
           ],
           components: [],
@@ -313,23 +318,36 @@ async function handleRaidAutoManageCommand(interaction) {
       const enabled = !!user?.autoManageEnabled;
       const lastSync = user?.lastAutoManageSyncAt || 0;
       const lastAttempt = user?.lastAutoManageAttemptAt || 0;
+      const optInValue = enabled
+        ? `${UI.icons.done} ${t("raid-auto-manage.status.optInOn", lang)}`
+        : `${UI.icons.reset} ${t("raid-auto-manage.status.optInOff", lang)}`;
+      const lastSuccessValue = lastSync
+        ? `<t:${Math.floor(lastSync / 1000)}:R>`
+        : t("raid-auto-manage.status.lastSuccessNever", lang);
+      let lastAttemptValue;
+      if (!lastAttempt) {
+        lastAttemptValue = t("raid-auto-manage.status.lastAttemptNever", lang);
+      } else if (lastAttempt === lastSync) {
+        lastAttemptValue = t("raid-auto-manage.status.lastAttemptSameAsSuccess", lang);
+      } else {
+        lastAttemptValue = `<t:${Math.floor(lastAttempt / 1000)}:R> - ${t(
+          "raid-auto-manage.status.lastAttemptFailSuffix",
+          lang,
+        )}`;
+      }
       const embed = new EmbedBuilder()
         .setColor(UI.colors.neutral)
-        .setTitle(`${UI.icons.info} Auto-manage Status`)
+        .setTitle(`${UI.icons.info} ${t("raid-auto-manage.status.title", lang)}`)
         .addFields(
-          { name: "Opt-in", value: enabled ? `${UI.icons.done} ON` : `${UI.icons.reset} OFF`, inline: true },
+          { name: t("raid-auto-manage.status.optInLabel", lang), value: optInValue, inline: true },
           {
-            name: "Last success",
-            value: lastSync ? `<t:${Math.floor(lastSync / 1000)}:R>` : "Chưa có lần nào thành công",
+            name: t("raid-auto-manage.status.lastSuccessLabel", lang),
+            value: lastSuccessValue,
             inline: true,
           },
           {
-            name: "Last attempt",
-            value: lastAttempt
-              ? (lastAttempt === lastSync
-                  ? "(= last success)"
-                  : `<t:${Math.floor(lastAttempt / 1000)}:R> - fail`)
-              : "Chưa chạy bao giờ",
+            name: t("raid-auto-manage.status.lastAttemptLabel", lang),
+            value: lastAttemptValue,
             inline: true,
           }
         )
@@ -347,8 +365,8 @@ async function handleRaidAutoManageCommand(interaction) {
             embeds: [
               buildNoticeEmbed(EmbedBuilder, {
                 type: "info",
-                title: "Sync khác đang chạy",
-                description: "Cậu có 1 sync khác của mình đang fetch bible rồi nha, đợi kết quả trước đừng gõ spam~ Artist sẽ DM khi xong.",
+                title: t("raid-auto-manage.sync.inFlightTitle", lang),
+                description: t("raid-auto-manage.sync.inFlightDescription", lang),
               }),
             ],
             flags: MessageFlags.Ephemeral,
@@ -358,20 +376,26 @@ async function handleRaidAutoManageCommand(interaction) {
             typeof getAutoManageCooldownMs === "function"
               ? formatAutoManageCooldownRemaining(getAutoManageCooldownMs(discordId))
               : null;
-          const cooldownDescription = [
-            `Sync vừa chạy gần đây nha cậu, Artist đang giữ cooldown.`,
+          const cooldownLines = [
+            t("raid-auto-manage.sync.cooldownLineIntro", lang),
             "",
-            `**Đợi thêm:** ${formatAutoManageCooldownRemaining(guard.remainingMs)}`,
-            totalCooldownText ? `**Cooldown của cậu:** ${totalCooldownText}` : null,
+            t("raid-auto-manage.sync.cooldownLineWait", lang, {
+              remain: formatAutoManageCooldownRemaining(guard.remainingMs),
+            }),
+            totalCooldownText
+              ? t("raid-auto-manage.sync.cooldownLineTotal", lang, {
+                  totalCooldown: totalCooldownText,
+                })
+              : null,
             "",
-            "Cooldown để tránh gõ bible liên tục, qua ngưỡng đó cậu sync tiếp được nha.",
-          ].filter((line) => line !== null).join("\n");
+            t("raid-auto-manage.sync.cooldownLineNote", lang),
+          ].filter((line) => line !== null);
           await interaction.reply({
             embeds: [
               buildNoticeEmbed(EmbedBuilder, {
                 type: "info",
-                title: "Đang trong cooldown",
-                description: cooldownDescription,
+                title: t("raid-auto-manage.sync.cooldownTitle", lang),
+                description: cooldownLines.join("\n"),
               }),
             ],
             flags: MessageFlags.Ephemeral,
@@ -395,8 +419,8 @@ async function handleRaidAutoManageCommand(interaction) {
             embeds: [
               buildNoticeEmbed(EmbedBuilder, {
                 type: "info",
-                title: "Cậu chưa có roster nào",
-                description: "Artist không thấy roster nào của cậu trong DB. Dùng `/raid-add-roster` để add roster đầu tiên rồi mới opt-in auto-manage được nha.",
+                title: t("raid-auto-manage.sync.noRosterTitle", lang),
+                description: t("raid-auto-manage.sync.noRosterDescription", lang),
               }),
             ],
           });
@@ -431,14 +455,14 @@ async function handleRaidAutoManageCommand(interaction) {
             embeds: [
               buildNoticeEmbed(EmbedBuilder, {
                 type: "info",
-                title: "Cậu chưa có roster nào",
-                description: "Artist không thấy roster nào của cậu trong DB. Dùng `/raid-add-roster` để add roster đầu tiên rồi mới opt-in auto-manage được nha.",
+                title: t("raid-auto-manage.sync.noRosterTitle", lang),
+                description: t("raid-auto-manage.sync.noRosterDescription", lang),
               }),
             ],
           });
           return;
         }
-        const embed = buildAutoManageSyncReportEmbed(report);
+        const embed = buildAutoManageSyncReportEmbed(report, lang);
         await interaction.editReply({ embeds: [embed] });
       } catch (err) {
         console.error("[auto-manage] sync failed:", err?.message || err);
@@ -447,8 +471,10 @@ async function handleRaidAutoManageCommand(interaction) {
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "error",
-              title: "Sync fail",
-              description: `Artist sync không xong vì: \`${err?.message || err}\`. Có thể lostark.bible đang block (Cloudflare 403) hoặc char names có gì sai. Thử lại sau vài phút nha, nếu vẫn fail thì check char ở https://lostark.bible/me/logs.`,
+              title: t("raid-auto-manage.sync.failTitle", lang),
+              description: t("raid-auto-manage.sync.failDescription", lang, {
+                error: err?.message || err,
+              }),
             }),
           ],
         });
@@ -468,12 +494,14 @@ async function handleRaidAutoManageCommand(interaction) {
 
   // /raid-auto-manage `action` autocomplete - filters the four actions by the
   // user's current autoManageEnabled state so the dropdown never shows the
-  // redundant option (e.g. `on` while already ON).
+  // redundant option (e.g. `on` while already ON). Labels resolve via the
+  // executor's locale so the dropdown text matches the rest of the
+  // command's voice.
   const AUTO_MANAGE_ACTION_CHOICES = [
-    { name: "on - enable auto-sync + run an initial sync now", value: "on", showWhenOn: false, showWhenOff: true },
-    { name: "off - disable auto-sync", value: "off", showWhenOn: true, showWhenOff: false },
-    { name: "sync - pull bible logs now and reconcile raid progress", value: "sync", showWhenOn: true, showWhenOff: true },
-    { name: "status - show current opt-in + last sync time", value: "status", showWhenOn: true, showWhenOff: true },
+    { key: "onLabel", value: "on", showWhenOn: false, showWhenOff: true },
+    { key: "offLabel", value: "off", showWhenOn: true, showWhenOff: false },
+    { key: "syncLabel", value: "sync", showWhenOn: true, showWhenOff: true },
+    { key: "statusLabel", value: "status", showWhenOn: true, showWhenOff: true },
   ];
   async function handleRaidAutoManageAutocomplete(interaction) {
     try {
@@ -482,6 +510,7 @@ async function handleRaidAutoManageCommand(interaction) {
         await interaction.respond([]).catch(() => {});
         return;
       }
+      const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
       let enabled = false;
       try {
         const user = await User.findOne(
@@ -495,11 +524,14 @@ async function handleRaidAutoManageCommand(interaction) {
       const needle = normalizeName(focused.value || "");
       const choices = AUTO_MANAGE_ACTION_CHOICES
         .filter((c) => (enabled ? c.showWhenOn : c.showWhenOff))
+        .map((c) => ({
+          name: t(`raid-auto-manage.autocomplete.${c.key}`, lang),
+          value: c.value,
+        }))
         .filter((c) => {
           if (!needle) return true;
           return normalizeName(c.name).includes(needle) || normalizeName(c.value).includes(needle);
         })
-        .map(({ name, value }) => ({ name, value }))
         .slice(0, 25);
       await interaction.respond(choices).catch(() => {});
     } catch (err) {

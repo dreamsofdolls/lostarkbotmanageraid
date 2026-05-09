@@ -4,6 +4,8 @@ const {
   DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS,
   getAutoManageCooldownMs: getAutoManageCooldownMsDefault,
 } = require("./manager");
+const { t } = require("./i18n");
+const { getRaidLabel, getModeLabel } = require("../utils/raid/labels");
 
 function createAutoManageCoreService({
   EmbedBuilder,
@@ -719,44 +721,66 @@ function createAutoManageCoreService({
     return finalReport;
   }
 
-  function buildAutoManageHiddenCharsWarningEmbed(hiddenChars, probeReport) {
+  function buildAutoManageHiddenCharsWarningEmbed(hiddenChars, probeReport, lang = "vi") {
     const visibleApplied = (probeReport?.perChar || []).filter(
       (c) => !c.error && Array.isArray(c.applied) && c.applied.length > 0
     );
-    const lines = hiddenChars.slice(0, 20).map((c) => `• **${c.charName || "?"}**`);
-    const extra = hiddenChars.length > 20 ? `\n• …và ${hiddenChars.length - 20} char khác` : "";
+    const lines = hiddenChars
+      .slice(0, 20)
+      .map((c) =>
+        t("raid-auto-manage.hiddenWarning.charLine", lang, { name: c.charName || "?" }),
+      );
+    const extra =
+      hiddenChars.length > 20
+        ? `\n${t("raid-auto-manage.hiddenWarning.charsExtra", lang, {
+            n: hiddenChars.length - 20,
+          })}`
+        : "";
 
     const description = [
-      `**${hiddenChars.length}/${(probeReport?.perChar || []).length}** char chưa bật **Public Log** trên <https://lostark.bible/me/logs>. Artist sẽ **bỏ qua** các char đó khi sync.`,
+      t("raid-auto-manage.hiddenWarning.descriptionLine1", lang, {
+        hidden: hiddenChars.length,
+        total: (probeReport?.perChar || []).length,
+      }),
       "",
-      "**Char bị skip:**",
+      t("raid-auto-manage.hiddenWarning.charsBlockHeader", lang),
       `${lines.join("\n")}${extra}`,
     ].join("\n");
 
     const embed = new EmbedBuilder()
       .setColor(UI.colors.progress)
-      .setTitle(`${UI.icons.warn} Một vài char chưa bật Public Log`)
+      .setTitle(`${UI.icons.warn} ${t("raid-auto-manage.hiddenWarning.title", lang)}`)
       .setDescription(description)
       .setTimestamp();
 
     if (visibleApplied.length > 0) {
+      const applicableLines = visibleApplied
+        .slice(0, 10)
+        .map((c) =>
+          t("raid-auto-manage.hiddenWarning.applicableLine", lang, {
+            name: c.charName,
+            n: c.applied.length,
+          }),
+        );
+      const applicableExtra =
+        visibleApplied.length > 10
+          ? `\n${t("raid-auto-manage.hiddenWarning.applicableExtra", lang, {
+              n: visibleApplied.length - 10,
+            })}`
+          : "";
       embed.addFields({
-        name: "🟢 Các char sẽ sync được",
-        value: visibleApplied
-          .slice(0, 10)
-          .map((c) => `• **${c.charName}** · ${c.applied.length} raid/gate`)
-          .join("\n") +
-          (visibleApplied.length > 10 ? `\n• …và ${visibleApplied.length - 10} char khác` : ""),
+        name: t("raid-auto-manage.hiddenWarning.applicableHeader", lang),
+        value: applicableLines.join("\n") + applicableExtra,
         inline: false,
       });
     }
 
     embed.addFields({
-      name: "Lựa chọn",
+      name: t("raid-auto-manage.hiddenWarning.optionsHeader", lang),
       value: [
-        "**Vẫn bật** - Artist bật auto-manage và sync các char visible (bỏ qua char private).",
-        "**Huỷ** - giữ OFF. Bật Public Log cho chars cần sync rồi quay lại.",
-        "_60s không bấm → mặc định Huỷ._",
+        t("raid-auto-manage.hiddenWarning.optionConfirm", lang),
+        t("raid-auto-manage.hiddenWarning.optionCancel", lang),
+        t("raid-auto-manage.hiddenWarning.optionTimeout", lang),
       ].join("\n"),
       inline: false,
     });
@@ -807,7 +831,7 @@ function createAutoManageCoreService({
     });
   }
 
-  function buildAutoManageSyncReportEmbed(report) {
+  function buildAutoManageSyncReportEmbed(report, lang = "vi") {
     const appliedTotal = report?.appliedTotal || 0;
     const perChar = Array.isArray(report?.perChar) ? report.perChar : [];
     const errored = perChar.filter((c) => c.error);
@@ -818,16 +842,27 @@ function createAutoManageCoreService({
     // to a Fail field - ambiguous and looked like a bug in Codex review.
     let description;
     if (appliedTotal > 0) {
-      description = `Đã update **${appliedTotal}** gate clear từ lostark.bible logs nha~ 🦊`;
+      description = t("raid-auto-manage.syncReport.descriptionApplied", lang, {
+        n: appliedTotal,
+      });
       if (errored.length > 0) {
-        description += `\n${UI.icons.warn} ${errored.length} char fail sync - chi tiết bên dưới.`;
+        description += `\n${t("raid-auto-manage.syncReport.descriptionAppliedFailsTail", lang, {
+          warnIcon: UI.icons.warn,
+          n: errored.length,
+        })}`;
       }
     } else if (allFailed) {
-      description = `Không apply được gate nào vì **tất cả ${errored.length} char fail** sync. Check Cloudflare / "Logs not enabled" / char name bên dưới.`;
+      description = t("raid-auto-manage.syncReport.descriptionAllFailed", lang, {
+        n: errored.length,
+      });
     } else if (errored.length > 0) {
-      description = `Không có gate clear mới nào để apply. ${UI.icons.warn} ${errored.length}/${perChar.length} char fail - các char còn lại đã match DB.`;
+      description = t("raid-auto-manage.syncReport.descriptionNoNewWithFails", lang, {
+        warnIcon: UI.icons.warn,
+        failed: errored.length,
+        total: perChar.length,
+      });
     } else {
-      description = `Không có gate clear mới nào để sync. Data DB đã match với bible logs tuần này.`;
+      description = t("raid-auto-manage.syncReport.descriptionNoNew", lang);
     }
 
     const embed = new EmbedBuilder()
@@ -838,24 +873,47 @@ function createAutoManageCoreService({
             ? UI.colors.progress
             : UI.colors.neutral
       )
-      .setTitle(`${appliedTotal > 0 ? UI.icons.done : UI.icons.info} Auto-manage Sync`)
+      .setTitle(
+        `${appliedTotal > 0 ? UI.icons.done : UI.icons.info} ${t(
+          "raid-auto-manage.syncReport.title",
+          lang,
+        )}`,
+      )
       .setDescription(description)
       .setTimestamp();
 
     for (const c of withApplied.slice(0, 10)) {
-      const lines = c.applied.map(
-        (a) => `• **${a.raidLabel}** \`${a.gate}\` (${a.difficulty})`
+      const lines = c.applied.map((a) =>
+        t("raid-auto-manage.syncReport.appliedLine", lang, {
+          // raidKey + modeKey are stamped on each applied entry by
+          // applyAutoManageCollected; resolve to the locale-aware label
+          // here so the report reads as "アクト4" / "Act 4" / "Act 4"
+          // depending on the viewer's preference instead of the canonical
+          // English raidLabel snapshot stored on the entry.
+          raidLabel: a.raidKey ? getRaidLabel(a.raidKey, lang) : a.raidLabel,
+          gate: a.gate,
+          // a.difficulty is the canonical EN difficulty string written by
+          // the bible parser; map back to a modeKey when present so we
+          // can surface localized "ハード" / "Hard" / "Hard".
+          difficulty: a.modeKey ? getModeLabel(a.modeKey, lang) : a.difficulty,
+        }),
       );
       embed.addFields({
-        name: `${UI.icons.done} ${c.charName} (${c.accountName})`,
+        name: t("raid-auto-manage.syncReport.appliedFieldName", lang, {
+          icon: UI.icons.done,
+          charName: c.charName,
+          accountName: c.accountName,
+        }),
         value: lines.join("\n"),
         inline: false,
       });
     }
     if (withApplied.length > 10) {
       embed.addFields({
-        name: "… và thêm nhiều char khác",
-        value: `${withApplied.length - 10} char khác cũng có update - xem \`/raid-status\` để thấy đủ.`,
+        name: t("raid-auto-manage.syncReport.moreCharsHeader", lang),
+        value: t("raid-auto-manage.syncReport.moreCharsBody", lang, {
+          n: withApplied.length - 10,
+        }),
       });
     }
 
@@ -874,11 +932,18 @@ function createAutoManageCoreService({
           : raw;
       });
       if (errored.length > DISPLAY_LIMIT) {
-        lines.push(`_… và ${errored.length - DISPLAY_LIMIT} char khác fail - check bot logs cho full error._`);
+        lines.push(
+          t("raid-auto-manage.syncReport.failsExtra", lang, {
+            n: errored.length - DISPLAY_LIMIT,
+          }),
+        );
       }
       addChunkedEmbedField(
         embed,
-        `${UI.icons.warn} Fail (${errored.length})`,
+        t("raid-auto-manage.syncReport.failsHeader", lang, {
+          warnIcon: UI.icons.warn,
+          count: errored.length,
+        }),
         lines.join("\n")
       );
     }
