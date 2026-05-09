@@ -38,6 +38,15 @@ function makeUserDoc(chars = []) {
   };
 }
 
+function makeDeps(applyStub, extra = {}) {
+  return {
+    applyRaidSetForDiscordId: applyStub,
+    getRaidRequirementMap,
+    currentWeekStartMs: 0,
+    ...extra,
+  };
+}
+
 // ---------- normalizeDifficulty ----------
 
 test("normalizeLocalSyncDifficulty - common variants map to internal modeKey", () => {
@@ -124,7 +133,7 @@ test("applyLocalSyncDeltas - happy path: matched+updated rows go into 'applied'"
   const applyStub = makeApplyStub(() => ({ matched: true, updated: true, displayName: "Aki" }));
   const result = await applyLocalSyncDeltas("u1", [
     { boss: "Brelshaza, Ember in the Ashes", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 1 },
-  ], { applyRaidSetForDiscordId: applyStub, getRaidRequirementMap });
+  ], makeDeps(applyStub));
   assert.equal(result.applied.length, 1);
   assert.equal(result.applied[0].charName, "Aki");
   assert.equal(result.applied[0].raidKey, "armoche");
@@ -135,7 +144,7 @@ test("applyLocalSyncDeltas - cumulative gate expansion: G2 cleared writes [G1, G
   const applyStub = makeApplyStub(() => ({ matched: true, updated: true }));
   await applyLocalSyncDeltas("u1", [
     { boss: "Armoche, Sentinel of the Abyss", difficulty: "Hard", cleared: 1, charName: "Aki", lastClearMs: 1 },
-  ], { applyRaidSetForDiscordId: applyStub, getRaidRequirementMap });
+  ], makeDeps(applyStub));
   // The single G2 delta MUST expand into [G1, G2] in the apply call so
   // the raid card shows fully-cleared, not just the top gate.
   assert.deepEqual(applyStub.calls[0].effectiveGates, ["G1", "G2"]);
@@ -146,10 +155,22 @@ test("applyLocalSyncDeltas - unmapped boss bucketed without calling apply", asyn
   const applyStub = makeApplyStub();
   const result = await applyLocalSyncDeltas("u1", [
     { boss: "Phantom Boss", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 1 },
-  ], { applyRaidSetForDiscordId: applyStub, getRaidRequirementMap });
+  ], makeDeps(applyStub));
   assert.equal(result.unmapped.length, 1);
   assert.equal(result.unmapped[0].boss, "Phantom Boss");
   assert.equal(result.applied.length, 0);
+  assert.equal(applyStub.calls.length, 0);
+});
+
+test("applyLocalSyncDeltas - rejects clears before the current raid-week reset", async () => {
+  const applyStub = makeApplyStub();
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Brelshaza, Ember in the Ashes", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 999 },
+  ], makeDeps(applyStub, { currentWeekStartMs: 1000 }));
+  assert.equal(result.applied.length, 0);
+  assert.equal(result.unmapped.length, 0);
+  assert.equal(result.rejected.length, 1);
+  assert.equal(result.rejected[0].reason, "outside_current_week");
   assert.equal(applyStub.calls.length, 0);
 });
 
@@ -157,7 +178,7 @@ test("applyLocalSyncDeltas - matched but not updated -> 'skipped' (already compl
   const applyStub = makeApplyStub(() => ({ matched: true, updated: false }));
   const result = await applyLocalSyncDeltas("u1", [
     { boss: "Brelshaza, Ember in the Ashes", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 1 },
-  ], { applyRaidSetForDiscordId: applyStub, getRaidRequirementMap });
+  ], makeDeps(applyStub));
   assert.equal(result.skipped.length, 1);
   assert.equal(result.skipped[0].reason, "already_complete");
 });
@@ -166,7 +187,7 @@ test("applyLocalSyncDeltas - char not in roster -> 'rejected' with reason char_n
   const applyStub = makeApplyStub(() => ({ matched: false }));
   const result = await applyLocalSyncDeltas("u1", [
     { boss: "Brelshaza, Ember in the Ashes", difficulty: "Normal", cleared: 1, charName: "Stranger", lastClearMs: 1 },
-  ], { applyRaidSetForDiscordId: applyStub, getRaidRequirementMap });
+  ], makeDeps(applyStub));
   assert.equal(result.rejected.length, 1);
   assert.equal(result.rejected[0].reason, "char_not_in_roster");
 });
@@ -178,7 +199,7 @@ test("applyLocalSyncDeltas - roster prefilter rejects unknown chars before write
   ]);
   const result = await applyLocalSyncDeltas("u1", [
     { boss: "Brelshaza, Ember in the Ashes", difficulty: "Normal", cleared: 1, charName: "Stranger", lastClearMs: 1 },
-  ], { applyRaidSetForDiscordId: applyStub, getRaidRequirementMap, userDoc });
+  ], makeDeps(applyStub, { userDoc }));
   assert.equal(result.rejected.length, 1);
   assert.equal(result.rejected[0].reason, "char_not_in_roster");
   assert.equal(applyStub.calls.length, 0);
@@ -201,7 +222,7 @@ test("applyLocalSyncDeltas - roster prefilter skips already-complete gates befor
   ]);
   const result = await applyLocalSyncDeltas("u1", [
     { boss: "Brelshaza, Ember in the Ashes", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 1 },
-  ], { applyRaidSetForDiscordId: applyStub, getRaidRequirementMap, userDoc });
+  ], makeDeps(applyStub, { userDoc }));
   assert.equal(result.skipped.length, 1);
   assert.equal(result.skipped[0].reason, "already_complete");
   assert.equal(applyStub.calls.length, 0);
@@ -214,7 +235,7 @@ test("applyLocalSyncDeltas - roster prefilter still writes eligible incomplete g
   ]);
   const result = await applyLocalSyncDeltas("u1", [
     { boss: "Brelshaza, Ember in the Ashes", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 1 },
-  ], { applyRaidSetForDiscordId: applyStub, getRaidRequirementMap, userDoc });
+  ], makeDeps(applyStub, { userDoc }));
   assert.equal(result.applied.length, 1);
   assert.equal(applyStub.calls.length, 1);
 });
@@ -223,7 +244,7 @@ test("applyLocalSyncDeltas - ineligibleItemLevel surfaces in 'rejected' with rea
   const applyStub = makeApplyStub(() => ({ matched: true, updated: false, ineligibleItemLevel: 1650 }));
   const result = await applyLocalSyncDeltas("u1", [
     { boss: "Armoche, Sentinel of the Abyss", difficulty: "Hard", cleared: 1, charName: "Aki", lastClearMs: 1 },
-  ], { applyRaidSetForDiscordId: applyStub, getRaidRequirementMap });
+  ], makeDeps(applyStub));
   assert.equal(result.rejected.length, 1);
   assert.equal(result.rejected[0].reason, "ilvl_too_low");
   assert.equal(result.rejected[0].ineligibleItemLevel, 1650);
@@ -235,7 +256,7 @@ test("applyLocalSyncDeltas - apply throw -> rejected with reason write_error", a
   });
   const result = await applyLocalSyncDeltas("u1", [
     { boss: "Brelshaza, Ember in the Ashes", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 1 },
-  ], { applyRaidSetForDiscordId: applyStub, getRaidRequirementMap });
+  ], makeDeps(applyStub));
   assert.equal(result.rejected.length, 1);
   assert.equal(result.rejected[0].reason, "write_error");
 });

@@ -74,3 +74,19 @@ test("preview actionable keys exclude clears that are already marked complete", 
   assert.equal(collectDiffStateCounts(diff).synced, 1);
   assert.equal(collectDiffStateCounts(diff).pending, undefined);
 });
+
+test("currentWeeklyResetStartMs follows Wednesday 17:00 VN reset boundary", async () => {
+  const { currentWeeklyResetStartMs } = await loadPreviewUtils();
+  assert.equal(
+    currentWeeklyResetStartMs(new Date(Date.UTC(2026, 3, 22, 9, 59, 0, 0))),
+    Date.UTC(2026, 3, 15, 10, 0, 0, 0)
+  );
+  assert.equal(
+    currentWeeklyResetStartMs(new Date(Date.UTC(2026, 3, 22, 10, 0, 0, 0))),
+    Date.UTC(2026, 3, 22, 10, 0, 0, 0)
+  );
+  assert.equal(
+    currentWeeklyResetStartMs(new Date(Date.UTC(2026, 3, 26, 12, 0, 0, 0))),
+    Date.UTC(2026, 3, 22, 10, 0, 0, 0)
+  );
+});

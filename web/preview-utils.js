@@ -310,6 +310,24 @@ const RAID_MODE_ILVL = {
 const RAID_ORDER = ["armoche", "kazeros", "serca"];
 const MODE_ORDER = ["normal", "hard", "nightmare"];
 
+export function currentWeeklyResetStartMs(now = new Date()) {
+  const cursor = new Date(now.getTime());
+  for (let i = 0; i < 8; i += 1) {
+    const day = cursor.getUTCDay();
+    if (day === 3 && cursor.getUTCHours() >= 10) {
+      return Date.UTC(
+        cursor.getUTCFullYear(),
+        cursor.getUTCMonth(),
+        cursor.getUTCDate(),
+        10, 0, 0, 0
+      );
+    }
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+    cursor.setUTCHours(23, 59, 59, 999);
+  }
+  return now.getTime() - 7 * 24 * 60 * 60 * 1000;
+}
+
 export function getRaidModeIlvl(raidKey, modeKey) {
   return RAID_MODE_ILVL[raidKey]?.[modeKey] ?? 0;
 }
