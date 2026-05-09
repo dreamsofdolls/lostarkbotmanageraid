@@ -383,6 +383,59 @@ function createRaidCommandDefinitions({
         )
     );
 
+  const raidShareCommand = new SlashCommandBuilder()
+    .setName("raid-share")
+    .setDescription("Manager: share roster access with another user")
+    .setDMPermission(false)
+    .addSubcommand((sub) =>
+      sub
+        .setName("grant")
+        .setDescription("Share all your rosters with another user (Manager-only)")
+        .addUserOption((opt) =>
+          opt
+            .setName("target")
+            .setDescription("User to receive share access")
+            .setRequired(true)
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("permission")
+            .setDescription("Access level (default: edit)")
+            .setRequired(false)
+            .addChoices(
+              { name: "edit (read + write)", value: "edit" },
+              { name: "view (read-only)", value: "view" }
+            )
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("revoke")
+        .setDescription("Revoke a previously granted share (Manager-only)")
+        .addUserOption((opt) =>
+          opt
+            .setName("target")
+            .setDescription("User whose share access should be revoked")
+            .setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("list")
+        .setDescription("List shares: outgoing (you grant), incoming (you receive), or both")
+        .addStringOption((opt) =>
+          opt
+            .setName("direction")
+            .setDescription("Which direction to show (default: both)")
+            .setRequired(false)
+            .addChoices(
+              { name: "both", value: "both" },
+              { name: "out (shares you granted)", value: "out" },
+              { name: "in (shares you received)", value: "in" }
+            )
+        )
+    );
+
   const commands = [
     addRosterCommand,
     editRosterCommand,
@@ -396,6 +449,7 @@ function createRaidCommandDefinitions({
     raidAutoManageCommand,
     raidAnnounceCommand,
     raidTaskCommand,
+    raidShareCommand,
   ];
 
   return commands;
