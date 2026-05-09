@@ -266,6 +266,11 @@ table th { color: var(--text-dim); font-weight: 600; }
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 12px;
   margin-top: 12px;
+  /* Without align-items:start, CSS Grid defaults to stretch - so a
+     1-raid card next to a 3-raid card grows vertically to match the
+     taller sibling, leaving empty space at the bottom. start lets
+     each card hug its own content height. */
+  align-items: start;
 }
 .char-card {
   margin-top: 0; /* gap on the wrapper grid handles spacing */
