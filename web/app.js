@@ -175,43 +175,43 @@ async function loadAndPreview(file) {
   }
 }
 
-// Query the encounter table. Schema between LOA Logs versions has
-// shifted (e.g. current_boss_name vs current_boss, last_combat_packet
-// vs fight_start), so we PRAGMA table_info first and pick column names
-// that actually exist - graceful across versions.
+// Query the current LOA Logs preview table first. Recent LOA Logs versions
+// moved boss/char/difficulty/clear metadata from `encounter` into
+// `encounter_preview`; `encounter` now stores mostly raw damage totals.
+// Fall back to the older single-table shape for legacy DBs.
 async function runPreviewQuery(sqlite3, db) {
-  const cols = await listColumns(sqlite3, db, "encounter");
-  if (cols.size === 0) {
-    previewOutput.innerHTML = `<span class="status-err">No 'encounter' table found.</span> This file might not be a LOA Logs encounters.db.`;
+  const previewCols = await listColumns(sqlite3, db, "encounter_preview");
+  const encounterCols = await listColumns(sqlite3, db, "encounter");
+  if (previewCols.size === 0 && encounterCols.size === 0) {
+    previewOutput.innerHTML = `<span class="status-err">No LOA Logs encounter tables found.</span> This file might not be a LOA Logs encounters.db.`;
     lastDeltas = [];
     return;
   }
-  // Column-name detection. Newer LOA Logs uses current_boss_name +
-  // last_combat_packet; older builds (and la-utils' Zod schema) use
-  // current_boss + fight_start. Pick whichever exists.
-  const bossCol = cols.has("current_boss_name") ? "current_boss_name" : (cols.has("current_boss") ? "current_boss" : null);
-  const tsCol = cols.has("last_combat_packet") ? "last_combat_packet" : (cols.has("fight_start") ? "fight_start" : null);
-  const charCol = cols.has("local_player") ? "local_player" : (cols.has("local_player_name") ? "local_player_name" : null);
-  const diffCol = cols.has("difficulty") ? "difficulty" : null;
-  const clearedCol = cols.has("cleared") ? "cleared" : null;
-  if (!bossCol || !tsCol) {
-    const colPreview = [...cols].slice(0, 12).map(escapeHtml).join(", ");
-    previewOutput.innerHTML = `<span class="status-err">Encounter table is missing required columns.</span><br>Found: ${colPreview}${cols.size > 12 ? "..." : ""}<br><span class="hint">Need at least a boss-name column and a timestamp column. Schema may have changed - report in Discord with this list.</span>`;
+  const source = resolveEncounterSource({ previewCols, encounterCols });
+  if (!source) {
+    previewOutput.innerHTML = `<span class="status-err">Encounter tables are missing required columns.</span><br>${formatSchemaPreview("encounter_preview", previewCols)}<br>${formatSchemaPreview("encounter", encounterCols)}<br><span class="hint">Need a boss-name column and a timestamp column. Schema may have changed.</span>`;
     lastDeltas = [];
     return;
   }
+  const { table, bossCol, tsCol, charCol, diffCol, clearedCol } = source;
+  const tableSql = quoteIdent(table);
+  const bossSql = quoteIdent(bossCol);
+  const tsSql = quoteIdent(tsCol);
+  const diffSql = diffCol ? quoteIdent(diffCol) : null;
+  const clearedSql = clearedCol ? quoteIdent(clearedCol) : null;
+  const charSql = charCol ? quoteIdent(charCol) : null;
   const sevenDaysAgoMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const sql = `
-    SELECT ${bossCol} AS boss,
-           ${diffCol ? `COALESCE(${diffCol}, 'Normal')` : `'Normal'`} AS difficulty,
-           ${clearedCol ? clearedCol : `1`} AS cleared,
-           ${charCol ? `COALESCE(${charCol}, '')` : `''`} AS char_name,
+    SELECT ${bossSql} AS boss,
+           ${diffSql ? `COALESCE(${diffSql}, 'Normal')` : `'Normal'`} AS difficulty,
+           ${clearedSql ? clearedSql : `1`} AS cleared,
+           ${charSql ? `COALESCE(${charSql}, '')` : `''`} AS char_name,
            COUNT(*) AS n,
-           MAX(${tsCol}) AS last_ms
-    FROM encounter
-    WHERE ${tsCol} >= ?
-      AND ${bossCol} IS NOT NULL
-      AND ${bossCol} != ''
+           MAX(${tsSql}) AS last_ms
+    FROM ${tableSql}
+    WHERE ${tsSql} >= ?
+      AND ${bossSql} IS NOT NULL
+      AND ${bossSql} != ''
     GROUP BY boss, difficulty, cleared, char_name
     ORDER BY last_ms DESC
     LIMIT 200;
@@ -222,7 +222,7 @@ async function runPreviewQuery(sqlite3, db) {
       rows.push(row);
     });
   } catch (err) {
-    previewOutput.innerHTML = `<span class="status-err">Query failed.</span> ${escapeHtml(err.message || String(err))}<br><span class="hint">Boss column: <code>${bossCol}</code>, ts column: <code>${tsCol}</code>. Schema mismatch?</span>`;
+    previewOutput.innerHTML = `<span class="status-err">Query failed.</span> ${escapeHtml(err.message || String(err))}<br><span class="hint">Table: <code>${escapeHtml(table)}</code>, boss column: <code>${escapeHtml(bossCol)}</code>, ts column: <code>${escapeHtml(tsCol)}</code>. Schema mismatch?</span>`;
     return;
   }
   if (rows.length === 0) {
@@ -242,12 +242,12 @@ async function runPreviewQuery(sqlite3, db) {
       charName: r[3],
       lastClearMs: Number(r[5]) || 0,
     }));
-  let html = `<div class="meta">Last 7 days: <strong>${cleared.length}</strong> cleared encounter group(s), <strong>${failed.length}</strong> failed. <strong>${lastDeltas.length}</strong> ready to sync. <span class="hint">(boss=<code>${escapeHtml(bossCol)}</code> ts=<code>${escapeHtml(tsCol)}</code> char=<code>${escapeHtml(charCol || "—")}</code>)</span></div>`;
+  let html = `<div class="meta">Last 7 days: <strong>${cleared.length}</strong> cleared encounter group(s), <strong>${failed.length}</strong> failed. <strong>${lastDeltas.length}</strong> ready to sync. <span class="hint">(table=<code>${escapeHtml(table)}</code> boss=<code>${escapeHtml(bossCol)}</code> ts=<code>${escapeHtml(tsCol)}</code> char=<code>${escapeHtml(charCol || "-")}</code>)</span></div>`;
   html += `<table><thead><tr><th>Char</th><th>Boss</th><th>Difficulty</th><th>Cleared</th><th>Count</th><th>Latest</th></tr></thead><tbody>`;
   for (const row of rows) {
     const [boss, difficulty, isCleared, charName, n, lastMs] = row;
     const ts = lastMs ? new Date(Number(lastMs)).toLocaleString() : "-";
-    const status = Number(isCleared) === 1 ? "✓" : "✗";
+    const status = Number(isCleared) === 1 ? "yes" : "no";
     html += `<tr><td>${escapeHtml(charName || "?")}</td><td>${escapeHtml(boss || "?")}</td><td>${escapeHtml(difficulty)}</td><td>${status}</td><td>${n}</td><td>${ts}</td></tr>`;
   }
   html += `</tbody></table>`;
@@ -260,6 +260,50 @@ async function runPreviewQuery(sqlite3, db) {
   } else {
     syncOutput.hidden = true;
   }
+}
+
+function resolveEncounterSource({ previewCols, encounterCols }) {
+  const previewBossCol = pickColumn(previewCols, ["current_boss", "current_boss_name"]);
+  const previewTsCol = pickColumn(previewCols, ["fight_start", "last_combat_packet"]);
+  if (previewBossCol && previewTsCol) {
+    return {
+      table: "encounter_preview",
+      bossCol: previewBossCol,
+      tsCol: previewTsCol,
+      charCol: pickColumn(previewCols, ["local_player", "local_player_name"]),
+      diffCol: pickColumn(previewCols, ["difficulty"]),
+      clearedCol: pickColumn(previewCols, ["cleared"]),
+    };
+  }
+
+  const encounterBossCol = pickColumn(encounterCols, ["current_boss_name", "current_boss"]);
+  const encounterTsCol = pickColumn(encounterCols, ["last_combat_packet", "fight_start"]);
+  if (encounterBossCol && encounterTsCol) {
+    return {
+      table: "encounter",
+      bossCol: encounterBossCol,
+      tsCol: encounterTsCol,
+      charCol: pickColumn(encounterCols, ["local_player", "local_player_name"]),
+      diffCol: pickColumn(encounterCols, ["difficulty"]),
+      clearedCol: pickColumn(encounterCols, ["cleared"]),
+    };
+  }
+
+  return null;
+}
+
+function pickColumn(cols, names) {
+  return names.find((name) => cols.has(name)) || null;
+}
+
+function quoteIdent(name) {
+  return `"${String(name).replace(/"/g, '""')}"`;
+}
+
+function formatSchemaPreview(tableName, cols) {
+  if (!cols || cols.size === 0) return `<code>${escapeHtml(tableName)}</code>: not found`;
+  const colPreview = [...cols].slice(0, 16).map(escapeHtml).join(", ");
+  return `<code>${escapeHtml(tableName)}</code>: ${colPreview}${cols.size > 16 ? "..." : ""}`;
 }
 
 // PRAGMA-based column lister. Returns a Set of column names present on
