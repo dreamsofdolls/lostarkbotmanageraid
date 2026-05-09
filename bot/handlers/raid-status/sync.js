@@ -31,8 +31,16 @@ function createRaidStatusSync(deps) {
   const buildStatusUserMeta = (doc, outcome) => ({
     discordId: doc.discordId,
     autoManageEnabled: !!doc.autoManageEnabled,
+    // Phase 5 (local-sync): surface localSyncEnabled here so /raid-status
+    // can swap the bible Sync button for an "Open Web Companion" link
+    // when the user is in local-sync mode. Mutex-enforced at write
+    // time so both flags being true shouldn't happen, but if it does
+    // local takes precedence (matches resolveSyncMode in local-sync
+    // service).
+    localSyncEnabled: !!doc.localSyncEnabled,
     lastAutoManageSyncAt: Number(doc.lastAutoManageSyncAt) || 0,
     lastAutoManageAttemptAt: Number(doc.lastAutoManageAttemptAt) || 0,
+    lastLocalSyncAt: Number(doc.lastLocalSyncAt) || 0,
     piggybackOutcome: outcome,
   });
 

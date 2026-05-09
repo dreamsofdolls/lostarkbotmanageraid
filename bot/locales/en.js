@@ -374,6 +374,7 @@ module.exports = {
     sync: {
       buttonReady: "Sync now",
       buttonCooldown: "Sync ({remain})",
+      localOpenButtonLabel: "Open Web Companion",
       noControlTitle: "Only the command author can drive this view",
       noControlDescription: "This pagination belongs to someone else's `/raid-status` session. Open your own with `/raid-status` to interact.",
       noAutoSyncTitle: "Auto-sync isn't enabled",
@@ -812,6 +813,8 @@ module.exports = {
       userMissingDescription: "Artist can't see user `{target}` in the DB anymore (they may have run `/raid-remove-roster`). Refresh `/raid-check` to sync the page state.",
       alreadyOnTitle: "User has already opted in",
       alreadyOnDescription: "<@{target}> already enabled `/raid-auto-manage` (likely opted in between page render and click, or another Manager clicked first). Refresh `/raid-check` to sync the page state.",
+      localLockedTitle: "User is on local-sync mode",
+      localLockedDescription: "<@{target}> is opted into **local-sync mode** - only one of bible auto-sync or local-sync can be active at a time, so Artist can't enable bible auto-sync on their behalf. They have to run `/raid-auto-manage action:local-off` first to switch.",
       successTitle: "Artist enabled auto-sync on their behalf",
       successLineIntro: "Flag flip succeeded. This user is in the priority batch (`lastAutoManageAttemptAt = null`); the scheduler will pick them up soon (every ~30 minutes, 3 users per tick).",
       successLineTarget: "**Enabled for:** <@{target}>",
@@ -864,6 +867,8 @@ module.exports = {
       flippedDescription: "Artist enabled `/raid-auto-manage` for you. From now on Artist will auto-sync raid progress every 24h. To turn it off, run `/raid-auto-manage action:off`.",
       alreadyOnTitle: "Auto-sync was already on",
       alreadyOnDescription: "You enabled `/raid-auto-manage` previously (via slash command or by clicking this button before). Nothing to change.",
+      localLockedTitle: "You're on local-sync mode",
+      localLockedDescription: "**Local-sync mode** is on - only one mode can be active at a time, so bible auto-sync can't be enabled. To switch to bible, run `/raid-auto-manage action:local-off` first, then `action:on`.",
     },
   },
   "raid-task": {
