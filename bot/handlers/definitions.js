@@ -304,15 +304,16 @@ function createRaidCommandDefinitions({
     .addStringOption((opt) =>
       opt
         .setName("action")
-        .setDescription("on · off · sync · status")
+        .setDescription("on · off · sync · status · local-on · local-off")
         .setDescriptionLocalizations({
-          vi: "on · off · sync · status",
-          ja: "on · off · sync · status",
+          vi: "on · off · sync · status · local-on · local-off",
+          ja: "on · off · sync · status · local-on · local-off",
         })
         .setRequired(true)
-        // Autocomplete (not static choices) so we can hide `on` while already
-        // enabled and hide `off` while already disabled - the redundant action
-        // in each state shouldn't even appear in the dropdown.
+        // Autocomplete (not static choices) so we can hide redundant +
+        // mutex-blocked actions from the dropdown. Six actions total
+        // (bible on/off/sync, local on/off, status); filter logic lives
+        // in handleRaidAutoManageAutocomplete and reads both flags.
         .setAutocomplete(true)
     );
 

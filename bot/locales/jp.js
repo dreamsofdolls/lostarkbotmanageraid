@@ -662,13 +662,31 @@ module.exports = {
   "raid-auto-manage": {
     invalid: {
       actionTitle: "アクションが無効ですわ",
-      actionDescription: "アクション `{action}` は受け付けられませんわ～ 使えるのは: `on` · `off` · `sync` · `status` ですよ♪ オートコンプリートが正しく案内してくれますわ。",
+      actionDescription: "アクション `{action}` は受け付けられませんわ～ 使えるのは: `on` · `off` · `sync` · `status` · `local-on` · `local-off` ですよ♪ オートコンプリートが正しく案内してくれますわ。",
     },
     redundant: {
       alreadyOnTitle: "自動管理はもうオンですわ",
       alreadyOnDescription: "もう前からオプトイン済みですよ～♪ 今すぐ同期したい時はアクション `sync` を、クールダウンや最後の同期時刻を見たい時は `status` を使ってね。",
       alreadyOffTitle: "自動管理はもうオフですわ",
       alreadyOffDescription: "まだオプトインしていないので無効化するフラグがありませんわ～ 有効にしたい時はアクション `on` を使ってくださいね♪",
+      localAlreadyOnTitle: "ローカル同期はもうオンですわ",
+      localAlreadyOnDescription: "もう前からローカル同期にオプトイン済みですよ～♪ 状態を見たい時は `status`、止めたい時は `local-off` を使ってね。",
+      localAlreadyOffTitle: "ローカル同期はもうオフですわ",
+      localAlreadyOffDescription: "まだローカル同期にオプトインしていないので無効化するフラグがありませんわ～ 有効にしたい時は `local-on` を使ってくださいね♪",
+    },
+    mutex: {
+      bibleBlockedByLocalTitle: "先にローカル同期を切ってくださいませ",
+      bibleBlockedByLocalDescription: "今 **ローカル同期** がオンなので bible 自動同期は有効化できませんわ (どちらか1つだけアクティブにできるんですの)。 まず `/raid-auto-manage action:local-off` を実行してから `action:on` を呼んでくださいね♪",
+      localBlockedByBibleTitle: "先に bible 自動同期を切ってくださいませ",
+      localBlockedByBibleDescription: "今 **bible 自動同期** がオンなのでローカル同期は有効化できませんわ (どちらか1つだけアクティブにできるんですの)。 まず `/raid-auto-manage action:off` を実行してから `action:local-on` を呼んでくださいね♪",
+    },
+    localEnable: {
+      successTitle: "ローカル同期を有効にしましたわ♪",
+      successDescription: "ローカル同期モードをオンにしましたわ～♪ Web companion サイトはアーティストが構築中ですの (Phase 3) - 完成したらブラウザで `encounters.db` をドラッグ＆ドロップできる専用リンクを DM で送りますわ♪ それまでは `/raid-set` で手動更新できますわ。 やめたい時は `action:local-off` を呼んでね。",
+    },
+    localDisable: {
+      title: "ローカル同期を無効にしましたわ",
+      description: "ローカル同期モードをオフにしましたわ。 ブラウザのファイルアクセス許可はアーティストから直接消せませんの - 完全にクリーンにしたい時は (Web companion がライブになってから) Web タブで「Clear Access」を押して FSA 権限を取り消してね♪",
     },
     disable: {
       title: "自動管理を無効にしましたわ",
@@ -706,15 +724,19 @@ module.exports = {
     },
     status: {
       title: "自動管理の状態",
-      optInLabel: "オプトイン",
+      optInLabel: "Bible · オプトイン",
       optInOn: "オン",
       optInOff: "オフ",
-      lastSuccessLabel: "最後に成功",
+      lastSuccessLabel: "Bible · 最後に成功",
       lastSuccessNever: "成功した回はまだ無いですわ",
-      lastAttemptLabel: "最後の試行",
+      lastAttemptLabel: "Bible · 最後の試行",
       lastAttemptNever: "まだ一度も走ってないですわ",
       lastAttemptSameAsSuccess: "(= 最後の成功と同じ)",
       lastAttemptFailSuffix: "失敗",
+      localOptInLabel: "ローカル · オプトイン",
+      localOptInOn: "オン",
+      localOptInOff: "オフ",
+      localLastSyncLabel: "ローカル · 最後の同期",
     },
     hiddenWarning: {
       title: "Public Log がまだのキャラがいますわ",
@@ -749,6 +771,8 @@ module.exports = {
       offLabel: "off - 自動同期を無効化",
       syncLabel: "sync - bible ログを今すぐ取得してレイド進捗を整合",
       statusLabel: "status - 現在のオプトイン状態と最後の同期時刻を表示",
+      localOnLabel: "local-on - ローカル同期にオプトイン (Web companion で encounters.db を読み込み)",
+      localOffLabel: "local-off - ローカル同期を無効化",
     },
     dm: {
       enable: {

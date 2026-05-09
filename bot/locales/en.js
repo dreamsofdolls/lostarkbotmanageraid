@@ -663,13 +663,31 @@ module.exports = {
   "raid-auto-manage": {
     invalid: {
       actionTitle: "Invalid action",
-      actionDescription: "Action `{action}` is not supported. Allowed: `on` · `off` · `sync` · `status`. Pick from the autocomplete suggestions.",
+      actionDescription: "Action `{action}` is not supported. Allowed: `on` · `off` · `sync` · `status` · `local-on` · `local-off`. Pick from the autocomplete suggestions.",
     },
     redundant: {
       alreadyOnTitle: "Auto-manage is already on",
       alreadyOnDescription: "You already opted in. Use action `sync` to sync now, or `status` to view cooldown + last sync time.",
       alreadyOffTitle: "Auto-manage is already off",
       alreadyOffDescription: "You haven't opted in - there's no flag to disable. Use action `on` to enable.",
+      localAlreadyOnTitle: "Local-sync is already on",
+      localAlreadyOnDescription: "You already opted into local-sync. Use `status` to view current state, or `local-off` to disable.",
+      localAlreadyOffTitle: "Local-sync is already off",
+      localAlreadyOffDescription: "You haven't opted into local-sync - there's no flag to disable. Use `local-on` to enable.",
+    },
+    mutex: {
+      bibleBlockedByLocalTitle: "Disable local-sync first",
+      bibleBlockedByLocalDescription: "**Local-sync** is currently on, so bible auto-sync can't be enabled (only one mode active at a time). Run `/raid-auto-manage action:local-off` first, then `action:on`.",
+      localBlockedByBibleTitle: "Disable bible auto-sync first",
+      localBlockedByBibleDescription: "**Bible auto-sync** is currently on, so local-sync can't be enabled (only one mode active at a time). Run `/raid-auto-manage action:off` first, then `action:local-on`.",
+    },
+    localEnable: {
+      successTitle: "Local-sync enabled",
+      successDescription: "Local-sync mode is on. The web companion site is still being built (Phase 3) - once it's live, Artist will DM you a personal link to drag-and-drop your `encounters.db` file. Until then, manual `/raid-set` still works. Change your mind? `action:local-off`.",
+    },
+    localDisable: {
+      title: "Local-sync disabled",
+      description: "Local-sync mode is off. Artist can't directly clear the browser file-access permission - if you want a clean slate, open the web companion tab (once it's live) and click \"Clear Access\" to revoke the FSA permission.",
     },
     disable: {
       title: "Auto-manage disabled",
@@ -707,15 +725,19 @@ module.exports = {
     },
     status: {
       title: "Auto-manage status",
-      optInLabel: "Opt-in",
+      optInLabel: "Bible · Opt-in",
       optInOn: "ON",
       optInOff: "OFF",
-      lastSuccessLabel: "Last success",
+      lastSuccessLabel: "Bible · Last success",
       lastSuccessNever: "No successful sync yet",
-      lastAttemptLabel: "Last attempt",
+      lastAttemptLabel: "Bible · Last attempt",
       lastAttemptNever: "Never run",
       lastAttemptSameAsSuccess: "(= last success)",
       lastAttemptFailSuffix: "fail",
+      localOptInLabel: "Local · Opt-in",
+      localOptInOn: "ON",
+      localOptInOff: "OFF",
+      localLastSyncLabel: "Local · Last sync",
     },
     hiddenWarning: {
       title: "Some characters don't have Public Log enabled",
@@ -750,6 +772,8 @@ module.exports = {
       offLabel: "off - disable auto-sync",
       syncLabel: "sync - pull bible logs now and reconcile raid progress",
       statusLabel: "status - show current opt-in + last sync time",
+      localOnLabel: "local-on - opt-in to local-sync (read encounters.db via web)",
+      localOffLabel: "local-off - disable local-sync",
     },
     dm: {
       enable: {
