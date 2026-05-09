@@ -18,12 +18,11 @@ const {
 } = require("../locales");
 
 // First-class locales offered in /raid-language and persisted on User
-// docs. Currently vi + jp.
+// docs. Currently vi + jp + en.
 const SUPPORTED_CODES = new Set(SUPPORTED_LANGUAGES.map((l) => l.code));
-// All locales that exist in TRANSLATIONS - includes partial locales
-// like `en` which is only used by /raid-help's slash-option override.
-// Used to validate t()'s lang argument so we can render `en` content
-// without polluting the picker.
+// All locales that exist in TRANSLATIONS. Used to validate t()'s lang
+// argument and keep rendering resilient if a future locale is staged
+// before becoming first-class.
 const KNOWN_LOCALE_CODES = new Set(Object.keys(TRANSLATIONS));
 
 // In-process cache. Keyed by discordId, value = locale code. Cleared
@@ -43,10 +42,10 @@ const userLanguageCache = new Map();
 const guildLanguageCache = new Map();
 
 /**
- * Coerce arbitrary input into a first-class locale code (vi or jp).
+ * Coerce arbitrary input into a first-class locale code.
  * Used for persistence (user.language) and the /raid-language picker -
- * partial locales like `en` are NOT first-class and round-trip down to
- * the default. For t() rendering, see resolveLocale below.
+ * staged-but-not-first-class locales round-trip down to the default. For
+ * t() rendering, see resolveLocale below.
  */
 function normalizeLanguage(value) {
   const code = typeof value === "string" ? value.toLowerCase() : "";
