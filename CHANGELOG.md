@@ -4,6 +4,16 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-09 (later 3)
+
+### Added (roster-share Phase 2d: zero-own viewer)
+- `/raid-status` no longer hits the "Cậu chưa có roster nào" gate when the caller has zero own rosters but at least one incoming `/raid-share grant`. The early-exit now consults `getAccessibleAccounts(discordId)` and only bails when there are neither own accounts nor any active share. For the share-only path the refresh-userDoc dance (`loadStatusUserDoc`) is skipped because there's no own roster to refresh; a minimal stub doc keeps downstream readers (`buildStatusUserMeta`, raid-filter aggregate, etc.) from NPE-ing on missing fields.
+- The second defensive gate after the refresh step is now share-aware: it only bails when the merged accounts array would still be empty, so a viewer who only ever had shared rosters lands on the rendered embed instead of the "no roster" notice.
+
+### Notes
+- 316/316 tests pass.
+- Side-task toggling on `/raid-status` shared pages (`raid-status/task-actions.js`) is the last remaining piece of the Phase 2 family. Its code path is independent of the slash-command surface integrated in Phase 2c, so it ships as a follow-up.
+
 ## 2026-05-09 (later 2)
 
 ### Added (roster-share Phase 2c: /raid-task integration)
