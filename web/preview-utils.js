@@ -383,64 +383,83 @@ export function buildFileClearMap(buckets) {
 }
 
 /**
- * Build the renderable diff structure: roster -> chars -> raid+mode
- * cells -> gate states. Filters raid+mode combos by char ilvl
- * eligibility so a 1700 char doesn't show Kazeros Hard (1730+ only).
+ * Build the renderable diff structure - mirrors /raid-status's logic:
+ * roster -> raid+mode cards -> char rows with gate states. Pivots away
+ * from the char-first cells layout (Phase 7 first cut) to match the
+ * Discord raid-card mental model the user already knows.
  *
  * Returns: array of accounts:
  *   [{
  *     accountName,
- *     characters: [{
- *       name, class, itemLevel,
- *       cells: [{
- *         raidKey, modeKey,
+ *     raidCards: [{
+ *       raidKey, modeKey,
+ *       chars: [{
+ *         name, class, itemLevel,
  *         gates: ["G1", "G2"],
- *         states: { G1: "synced"|"pending"|"mode-conflict"|"db-other-mode"|"empty", G2: ... }
+ *         states: { G1: "synced"|"pending"|"mode-conflict"|"db-other-mode", G2: ... }
  *       }, ...]
  *     }]
  *   }]
  *
- * Empty rows (no synced + no pending across ALL raid/mode/gate) are
- * filtered out so the user only sees chars with activity. If user
- * wants full eligibility view, that's a separate "show all" toggle
- * we can add later.
+ * Filtering:
+ *   - char ilvl < raid+mode minIlvl -> char skipped from THAT card
+ *   - char with all-empty states for the card -> char skipped (would
+ *     render as a row of "·" badges = noise)
+ *   - card with no chars after filtering -> card skipped
+ *   - account with no cards -> account skipped (pagination won't show it)
  */
 export function buildDiff(rosterAccounts, fileBuckets) {
   const fileClearMap = buildFileClearMap(fileBuckets || []);
   const accounts = [];
   for (const account of rosterAccounts || []) {
     const accountName = account?.accountName || "(unnamed)";
-    const characters = [];
+    // Bucket char rows under their raid+mode key first, then assemble
+    // the cards in display order at the end. This way we get one
+    // pass over chars + a deterministic raid+mode iteration order.
+    const charsByRaidMode = new Map();
     for (const character of account?.characters || []) {
       const charNameLower = String(character?.name || "").toLowerCase();
       const eligible = getEligibleRaidModes(character?.itemLevel);
-      const cells = [];
-      let hasAnyActivity = false;
       for (const { raidKey, modeKey } of eligible) {
         const gates = getGatesForRaid(raidKey);
         const states = {};
-        let cellHasActivity = false;
+        let hasActivity = false;
         const fileGates = fileClearMap.get(`${charNameLower}::${raidKey}::${modeKey}`);
         const assignedRaids = character?.assignedRaids?.[raidKey];
         for (const gate of gates) {
           const state = resolveCellState({ assignedRaids, fileGates, modeKey, gate });
           states[gate] = state;
-          if (state !== "empty") cellHasActivity = true;
+          if (state !== "empty") hasActivity = true;
         }
-        if (cellHasActivity) hasAnyActivity = true;
-        cells.push({ raidKey, modeKey, gates, states });
-      }
-      if (hasAnyActivity) {
-        characters.push({
+        if (!hasActivity) continue;
+        const key = `${raidKey}_${modeKey}`;
+        if (!charsByRaidMode.has(key)) charsByRaidMode.set(key, []);
+        charsByRaidMode.get(key).push({
           name: character?.name || "",
           class: character?.class || "",
           itemLevel: Number(character?.itemLevel) || 0,
-          cells,
+          gates,
+          states,
         });
       }
     }
-    if (characters.length > 0) {
-      accounts.push({ accountName, characters });
+    // Deterministic raid-card order: armoche -> kazeros -> serca,
+    // normal -> hard -> nightmare. Same as /raid-status and matches the
+    // RAID_ORDER / MODE_ORDER constants in this file.
+    const raidCards = [];
+    for (const raidKey of RAID_ORDER) {
+      for (const modeKey of MODE_ORDER) {
+        const key = `${raidKey}_${modeKey}`;
+        const chars = charsByRaidMode.get(key);
+        if (!chars || chars.length === 0) continue;
+        // Sort chars by ilvl desc so the heaviest hitters render first
+        // - matches the bot's roster ordering convention.
+        chars.sort((a, b) => (b.itemLevel - a.itemLevel) || a.name.localeCompare(b.name));
+        raidCards.push({ raidKey, modeKey, chars });
+      }
+    }
+    if (raidCards.length > 0) {
+      accounts.push({ accountName, raidCards });
     }
   }
   return accounts;

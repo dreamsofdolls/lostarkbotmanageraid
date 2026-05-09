@@ -165,60 +165,86 @@ table th { color: var(--text-dim); font-weight: 600; }
 }
 .raid-group table { margin-top: 4px; }
 
-/* Phase 7 roster-grouped diff view: per-account section with char
-   rows. Each char row has identity (icon+name+ilvl) on the left and
-   raid-cell strip on the right, where each cell shows gate badges
-   colored by diff state. Mental model matches /raid-status raid card
-   but flipped to roster-first. */
-.roster-block {
-  margin-top: 20px;
+/* Phase 7 roster-paginated diff view: ONE roster shown at a time with
+   prev/next buttons (when multiple rosters exist). Inside the active
+   roster: stack of raid cards. Each raid card has a (raid + mode)
+   header followed by char rows, mirroring /raid-status raid card
+   structure exactly so the user's mental model carries over. */
+.roster-pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+  margin: 20px 0 12px;
+  padding: 8px 12px;
+  background: #1d2024;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.roster-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent);
+  flex: 1;
+  text-align: center;
+}
+.page-counter {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+}
+.page-btn {
+  background: #2a2e35;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 14px;
+  cursor: pointer;
+  font-weight: 600;
+  margin-top: 0;
+}
+.page-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: #1a1c1f;
+  border-color: var(--accent);
+}
+.page-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.raid-card {
+  margin-top: 14px;
   padding: 12px 14px;
   background: #1d2024;
   border: 1px solid var(--border);
   border-radius: 6px;
 }
-.roster-heading {
-  margin: 0 0 10px;
+.raid-card-header {
+  margin: 0 0 8px;
   font-size: 14px;
   color: var(--accent);
   font-weight: 600;
 }
-.char-row {
+.raid-card-char {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-  padding: 6px 0;
+  padding: 5px 0;
   border-bottom: 1px solid #2a2e35;
 }
-.char-row:last-child { border-bottom: none; }
-.char-row-head {
-  flex: 0 0 200px;
+.raid-card-char:last-child { border-bottom: none; }
+.char-info {
+  flex: 1 1 220px;
   font-size: 13px;
-}
-.char-cells {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.raid-cell {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 4px 6px;
-  background: #14171a;
-  border-radius: 4px;
-  min-width: 60px;
-}
-.raid-cell-label {
-  font-size: 11px;
-  color: var(--text-dim);
-  font-weight: 600;
+  min-width: 0;
 }
 .gate-badges {
   display: flex;
-  gap: 3px;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 .gate-badge {
   font-size: 11px;
