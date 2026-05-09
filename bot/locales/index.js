@@ -3,15 +3,12 @@
 // folder-per-locale layout (vi/index.js, vi/share.js, vi/raid-help.js)
 // later without touching every consumer.
 //
-// Two-tier locale model:
-//   - SUPPORTED_LANGUAGES drives the /raid-language picker. Every entry
-//     here is a "first-class" locale: Artist's voice across the bot is
-//     fully translated. As of 2026-05-09 that's vi (default) + jp.
-//   - TRANSLATIONS may include extra "partial" locales not in the
-//     picker - notably `en`, which is exposed only via /raid-help's
-//     language: slash option as a one-off override. Lookups for keys
-//     outside that locale's coverage transparently fall back to vi via
-//     the resolver in bot/services/i18n.js.
+// SUPPORTED_LANGUAGES drives the /raid-language picker. Every entry
+// here is a "first-class" locale with full Artist-voice coverage
+// across every command. As of 2026-05-09 that's vi (default), jp, en.
+// New locales added here only need a matching <code>.js file; the
+// picker, /raid-help language: option, and per-user persistence pick
+// them up automatically.
 //
 // To add a first-class language:
 //   1. Create bot/locales/<code>.js mirroring vi.js's full tree
@@ -26,11 +23,11 @@ const en = require("./en");
 
 const TRANSLATIONS = { vi, jp, en };
 
-// Order here drives the /raid-language picker option order. EN is
-// intentionally NOT listed - it's a /raid-help-only override locale.
+// Order here drives the /raid-language picker option order.
 const SUPPORTED_LANGUAGES = [
   { code: "vi", label: "Tiếng Việt", flag: "🇻🇳" },
   { code: "jp", label: "日本語", flag: "🇯🇵" },
+  { code: "en", label: "English", flag: "🇬🇧" },
 ];
 
 const DEFAULT_LANGUAGE = "vi";

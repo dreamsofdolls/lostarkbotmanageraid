@@ -20,8 +20,11 @@ module.exports = {
     description: "Chọn ngôn ngữ cậu muốn Artist dùng. Tất cả lệnh sẽ hiển thị bằng ngôn ngữ này từ giờ.",
     currentLine: "Hiện tại: **{flag} {label}**",
     placeholder: "🌐 Chọn ngôn ngữ...",
-    optionVi: "🇻🇳 Tiếng Việt (mặc định)",
-    optionJp: "🇯🇵 日本語 (Artist phiên bản dễ thương hơn~)",
+    options: {
+      vi: "Tiếng Việt (mặc định)",
+      jp: "日本語 (Artist phiên bản dễ thương hơn~)",
+      en: "English (cross-server, công việc)",
+    },
     successTitle: "🌐 Đã đổi ngôn ngữ",
     successDescription: "Từ giờ Artist sẽ trò chuyện với cậu bằng **{flag} {label}** nha~",
     unchangedTitle: "🌐 Ngôn ngữ không đổi",

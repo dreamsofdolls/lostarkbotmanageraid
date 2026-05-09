@@ -1,11 +1,10 @@
-// English translation pack for RaidManage. Partial coverage by design:
-// only `raid-help` is translated. EN is exposed exclusively through the
-// `/raid-help language:en` slash option as a one-off override - it is
-// NOT offered in the /raid-language picker, since the rest of Artist's
-// surfaces stay vi/jp.
+// English translation pack for RaidManage. First-class locale (offered
+// in the /raid-language picker) with full Artist-voice coverage across
+// every command.
 //
-// Any t() lookup outside the raid-help namespace will fall back to vi
-// per the resolver rules in bot/services/i18n.js.
+// Tone for EN is intentionally less syrupy than vi/jp - cross-server
+// users tend to prefer concise, professional Artist copy without the
+// "~" / "ですわ" flavor. Friendly, but not saccharine.
 "use strict";
 
 module.exports = {
@@ -14,6 +13,57 @@ module.exports = {
     flag: "🇬🇧",
     nativeShort: "English",
     code: "en",
+  },
+  "raid-language": {
+    title: "🌐 Switch Artist's language",
+    description: "Pick the language you want Artist to use. Every command will display in that language going forward.",
+    currentLine: "Current: **{flag} {label}**",
+    placeholder: "🌐 Pick a language...",
+    options: {
+      vi: "Tiếng Việt (default)",
+      jp: "日本語 (cuter Senko-flavored Artist)",
+      en: "English (cross-server, professional)",
+    },
+    successTitle: "🌐 Language updated",
+    successDescription: "Artist will speak **{flag} {label}** with you from now on~",
+    unchangedTitle: "🌐 Language unchanged",
+    unchangedDescription: "You're already using **{flag} {label}**.",
+    footer: "Run /raid-language any time to switch back",
+  },
+  // Roster-share embeds (used by /raid-share grant/revoke/list).
+  share: {
+    grant: {
+      botTargetTitle: "Cannot share with a bot",
+      botTargetDescription: "Target must be a real Discord user, not a bot.",
+      selfTargetTitle: "Cannot share with yourself",
+      selfTargetDescription: "Target cannot be yourself - you already manage your own rosters~",
+      successTitleNew: "Share granted",
+      successTitleUpdate: "Share updated",
+      descriptionUpdate: "Updated <@{target}>'s permission from `{previous}` → `{permission}`. Their next /raid-status or /raid-set autocomplete will reflect the new level.",
+      descriptionNewEdit: "From now on <@{target}> will see all your rosters in /raid-status, and (with `edit` permission) can **update progress** via /raid-set, /raid-task, and the text parser. Run `/raid-share revoke` any time to take it back.",
+      descriptionNewView: "From now on <@{target}> will see all your rosters in /raid-status, but with `view` permission they can only **read**, not update. Run `/raid-share revoke` any time to take it back.",
+      footer: "Manager-only command · only RAID_MANAGER_ID accounts can /raid-share",
+    },
+    revoke: {
+      noShareTitle: "No share to revoke",
+      noShareDescription: "<@{target}> hasn't been granted share access by you. Nothing to revoke.",
+      successTitle: "Share revoked",
+      successDescription: "<@{target}> will no longer see your rosters in /raid-status. Their next command will show only their own rosters.",
+    },
+    list: {
+      title: "🔗 Roster Share · Overview",
+      footer: "/raid-share grant target:@... · /raid-share revoke target:@...",
+      outgoingHeader: "**📤 Outgoing shares** (granted by you):",
+      outgoingEmpty: "_No rosters shared with anyone yet._",
+      outgoingSuspendedTag: " ⚠️ (you lost Manager status → share suspended)",
+      incomingHeader: "**📥 Incoming shares** (granted to you):",
+      incomingEmpty: "_No one has shared rosters with you yet._",
+      incomingSuspendedTag: " ⚠️ (owner lost Manager status → share suspended)",
+    },
+    auth: {
+      managerOnlyTitle: "Manager-only command",
+      managerOnlyDescription: "`/raid-share grant` and `/raid-share revoke` are restricted to Raid Managers (env `RAID_MANAGER_ID`). You can still `/raid-share list` to see who has shared rosters with you.",
+    },
   },
   raid: {
     groups: {
@@ -64,6 +114,50 @@ module.exports = {
       allRaidsPending: "All raids ({n} total pending)",
       raidEntryDone: "{label} (DONE)",
       raidEntryPending: "{label} ({n} pending · {supports}🛡️ {dps}⚔️)",
+    },
+    sync: {
+      buttonReady: "Sync now",
+      buttonCooldown: "Sync ({remain})",
+      noControlTitle: "Only the command author can drive this view",
+      noControlDescription: "This pagination belongs to someone else's `/raid-status` session. Open your own with `/raid-status` to interact.",
+      noAutoSyncTitle: "Auto-sync isn't enabled",
+      noAutoSyncDescription: "The Sync button only works after you run `/raid-auto-manage action:on`. Enable it first and come back to click Sync~",
+      cooldownTitle: "On cooldown",
+      cooldownDescription: "You synced recently - wait another **{remain}** before you can click Sync again.",
+      followupApplied: "Artist just synced - **{n}** new gate(s) applied~",
+      followupSyncedNoNew: "Sync done - no new clears compared to cache. The embed has been refreshed~",
+      followupSuccessTitle: "Sync complete",
+      followupNeutralTitle: "Synced",
+      followupFailedTitle: "Sync hit a snag",
+      followupFailedDescription: "Bible is misbehaving - sync couldn't pull fresh data. Cooldown was reset; please retry in a few minutes.",
+      cooldownFallback: "a few seconds",
+    },
+    expiredFooter: "⏱️ Session expired ({seconds}s) · Run /raid-status to reopen",
+    taskView: {
+      embedTitle: "📝 Side tasks · {accountName}",
+      mainDescription: "Use the dropdowns below to toggle each task complete~\n{iconReset} Reset: Daily 17:00 VN · Weekly 17:00 VN Wednesday · Scheduled hourly per UTC-4.",
+      emptyDescription: "No side tasks or roster-level shared tasks for this account yet~\n\n**Side task** (per-character, cap 3 daily + 5 weekly per char):\n`/raid-task add action:single roster:<roster> character:<char> name:<name> reset:<daily|weekly>`\n\n**Shared task** (roster-level, every char shares it - cap 5 daily + 5 weekly + 5 scheduled):\n`/raid-task shared-add roster:<roster> preset:<event_shop|chaos_gate|field_boss|custom>`\n\n{iconReset} Reset: Daily 17:00 VN · Weekly 17:00 VN Wed · Chaos Gate / Field Boss auto-arm hourly per UTC-4.",
+      sharedTasksHeader: "🌟 Roster-shared tasks",
+      moreSharedTasks: "_+{n} more shared task(s)_",
+      moreCharacters: "_+{n} more character(s) with tasks_",
+      footerSharedDone: "{done}/{total} shared",
+      footerDailyDone: "{done}/{total} daily",
+      footerWeeklyDone: "{done}/{total} weekly",
+      footerPage: "Page {current}/{total}",
+      sharedTogglePlaceholder: "Toggle a roster-shared task...",
+      viewToggleRaidLabel: "Raid progress",
+      viewToggleRaidDescription: "View per-character raid clear status",
+      viewToggleTaskLabel: "Side tasks",
+      viewToggleTaskDescription: "View + toggle per-char tasks and roster-shared tasks",
+      viewTogglePlaceholder: "Pick a view...",
+      charFilterAllLabel: "🌐 All characters · {done}/{total}",
+      charFilterAllDescription: "Bulk-toggle one task across every char that has it",
+      charFilterPlaceholder: "Pick a character to toggle tasks for...",
+      noTaskPlaceholder: "No tasks yet - use /raid-task add to add one",
+      noTaskAccountPlaceholder: "This account has no tasks yet",
+      bulkTogglePlaceholder: "Bulk toggle a task across every char...",
+      charNoTaskPlaceholder: "{name} has no tasks - use /raid-task add",
+      charTogglePlaceholder: "Toggle {name}'s tasks...",
     },
   },
   "raid-help": {
