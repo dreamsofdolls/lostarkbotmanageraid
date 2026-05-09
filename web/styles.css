@@ -263,7 +263,7 @@ table th { color: var(--text-dim); font-weight: 600; }
    mobile means we don't have to ship a media query. */
 .char-cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 12px;
   margin-top: 12px;
 }
@@ -280,15 +280,15 @@ table th { color: var(--text-dim); font-weight: 600; }
   padding-bottom: 6px;
   border-bottom: 1px solid #2a2e35;
 }
-/* Raid rows pack 2-up on wide viewports via auto-fit grid. minmax
-   ensures each row has enough horizontal real-estate for raid name +
-   mode label + 2-3 gate badges before wrapping. Single column on
-   narrow viewports (mobile) when one row's min-width can't fit two
-   columns. */
+/* Raid rows stack vertically inside each char card. Outer .char-cards
+   -grid handles the 2-up packing of CHARS; if we also pack raid rows
+   2-up inside, each card becomes too wide for 2-up cards to fit on
+   typical viewports. Vertical stack keeps cards slim so 2 cards fit
+   per row on ~700px+ viewports. */
 .char-raid-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 4px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .char-raid-row {
   display: flex;
