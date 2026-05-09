@@ -99,6 +99,33 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   font-family: ui-monospace, "SF Mono", Consolas, monospace;
 }
 
+/* File-meta row hosts the "Selected ... · ... · modified ..." line on
+   one side and Remove / Restore buttons on the other. Flex layout so
+   the line stays readable + buttons hug the right edge. Wraps on
+   narrow viewports rather than clipping the file name. */
+.file-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.file-meta-row span { flex: 1 1 auto; min-width: 0; }
+.remove-file-btn {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  padding: 4px 10px;
+  margin-top: 0;
+  font-weight: 500;
+}
+.remove-file-btn:hover {
+  background: var(--error);
+  color: white;
+  border-color: var(--error);
+}
+
 .status-ok { color: var(--success); }
 .status-err { color: var(--error); }
 

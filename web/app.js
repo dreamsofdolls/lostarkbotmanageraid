@@ -27,6 +27,11 @@ import {
   getRaidLabel,
   getModeLabel,
 } from "/sync/i18n.js";
+import {
+  saveHandle as savePersistedHandle,
+  clearHandle as clearPersistedHandle,
+  tryRestoreForUser,
+} from "/sync/file-persistence.js";
 
 const $ = (id) => document.getElementById(id);
 const authStatus = $("auth-status");
@@ -103,11 +108,50 @@ if (!token) {
 
 // ----- 2. FSA file pick / drop -----
 
-async function loadFile(file) {
+async function loadFile(file, { handle = null } = {}) {
   fileMeta.hidden = false;
-  fileMeta.innerHTML = `${t("file.selected")} <strong>${escapeHtml(file.name)}</strong> · ${formatBytes(file.size)} · ${t("file.modified")} ${new Date(file.lastModified).toLocaleString()}`;
+  // Render file meta + a "Remove" button so the user can detach the
+  // file (clears persisted handle from IDB so next visit asks for a
+  // fresh pick). Restore action button (when permission was revoked)
+  // hides automatically because we re-render this innerHTML.
+  fileMeta.innerHTML = `<div class="file-meta-row"><span>${t("file.selected")} <strong>${escapeHtml(file.name)}</strong> · ${formatBytes(file.size)} · ${t("file.modified")} ${new Date(file.lastModified).toLocaleString()}</span><button id="remove-file-btn" type="button" class="remove-file-btn">${escapeHtml(t("file.removeBtn"))}</button></div>`;
+  // Wire Remove button - clears persisted handle + resets the UI back
+  // to the dropzone state. Doesn't touch the actual file on disk.
+  const removeBtn = document.getElementById("remove-file-btn");
+  if (removeBtn) {
+    removeBtn.addEventListener("click", handleRemoveFile);
+  }
   previewSection.hidden = false;
+  // Persist the handle for next visit. Plain File (drag-drop without
+  // FSA handle promotion) can't persist - skip silently in that case.
+  if (handle && window.__artistDiscordId) {
+    savePersistedHandle({
+      discordId: window.__artistDiscordId,
+      handle,
+      fileName: file.name,
+    }).catch((err) => {
+      console.warn("[local-sync] saveHandle failed:", err?.message || err);
+    });
+  }
   await loadAndPreview(file);
+}
+
+async function handleRemoveFile() {
+  try {
+    await clearPersistedHandle();
+  } catch (err) {
+    console.warn("[local-sync] clearHandle failed:", err?.message || err);
+  }
+  // Reset UI back to the dropzone state. previewOutput + sync section
+  // hide so user knows nothing's loaded.
+  fileMeta.hidden = true;
+  fileMeta.innerHTML = "";
+  previewSection.hidden = true;
+  previewOutput.innerHTML = "";
+  syncSection.hidden = true;
+  syncOutput.hidden = true;
+  syncOutput.innerHTML = "";
+  lastDeltas = null;
 }
 
 function formatBytes(n) {
@@ -125,13 +169,33 @@ dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover
 dropZone.addEventListener("drop", async (e) => {
   e.preventDefault();
   dropZone.classList.remove("dragover");
-  const file = e.dataTransfer?.files?.[0];
+  // Prefer DataTransferItem.getAsFileSystemHandle() so the resulting
+  // FileSystemFileHandle is persistable in IDB. Falls back to plain
+  // File for browsers without that API (handle stays null, file works
+  // for THIS session but won't survive refresh).
+  const item = e.dataTransfer?.items?.[0];
+  let handle = null;
+  let file = null;
+  if (item && typeof item.getAsFileSystemHandle === "function") {
+    try {
+      const h = await item.getAsFileSystemHandle();
+      if (h && h.kind === "file") {
+        handle = h;
+        file = await h.getFile();
+      }
+    } catch (err) {
+      console.warn("[local-sync] getAsFileSystemHandle failed:", err?.message || err);
+    }
+  }
+  if (!file) {
+    file = e.dataTransfer?.files?.[0];
+  }
   if (!file) return;
   if (!file.name.toLowerCase().endsWith(".db")) {
     alert(t("file.invalidExt"));
     return;
   }
-  await loadFile(file);
+  await loadFile(file, { handle });
 });
 
 pickFileBtn.addEventListener("click", async () => {
@@ -146,13 +210,72 @@ pickFileBtn.addEventListener("click", async () => {
       multiple: false,
     });
     const file = await handle.getFile();
-    await loadFile(file);
+    await loadFile(file, { handle });
   } catch (err) {
     if (err?.name === "AbortError") return;
     console.error("[local-sync] file pick failed:", err);
     alert(`${t("file.pickFailed")}: ${err.message || err}`);
   }
 });
+
+// ----- 2.5. Restore-on-load: try to bring back the previously-picked
+// file when the user refreshes the page with the same token. The
+// browser's persistent FSA permission ("Allow on every visit") makes
+// this seamless when granted; otherwise we surface a Restore button
+// that the user clicks to elevate permission inside a user gesture.
+async function attemptRestoreFromIdb() {
+  if (!window.__artistDiscordId) return;
+  let restore;
+  try {
+    restore = await tryRestoreForUser(window.__artistDiscordId);
+  } catch (err) {
+    console.warn("[local-sync] restore lookup failed:", err?.message || err);
+    return;
+  }
+  if (!restore) return;
+  if (restore.granted) {
+    // Permission still valid - load file immediately.
+    try {
+      const file = await restore.handle.getFile();
+      await loadFile(file, { handle: restore.handle });
+    } catch (err) {
+      console.warn("[local-sync] auto-restore getFile failed:", err?.message || err);
+    }
+    return;
+  }
+  // Permission was "Allow once" + revoked, OR "Ask every time". Show a
+  // Restore banner with a button. The button click is a user gesture,
+  // which lets requestPermission() actually prompt.
+  fileMeta.hidden = false;
+  fileMeta.innerHTML = `<div class="file-meta-row"><span>${escapeHtml(t("file.restoreBanner", { name: restore.fileName || "encounters.db" }))}</span><button id="restore-file-btn" type="button">${escapeHtml(t("file.restoreBtn"))}</button> <button id="remove-file-btn" type="button" class="remove-file-btn">${escapeHtml(t("file.removeBtn"))}</button></div>`;
+  const restoreBtn = document.getElementById("restore-file-btn");
+  if (restoreBtn) {
+    restoreBtn.addEventListener("click", async () => {
+      try {
+        const result = await restore.handle.requestPermission({ mode: "read" });
+        if (result !== "granted") {
+          alert(t("file.restoreDenied"));
+          return;
+        }
+        const file = await restore.handle.getFile();
+        await loadFile(file, { handle: restore.handle });
+      } catch (err) {
+        console.warn("[local-sync] restore-permission failed:", err?.message || err);
+        alert(`${t("file.restoreFailed")}: ${err.message || err}`);
+      }
+    });
+  }
+  const rmBtn = document.getElementById("remove-file-btn");
+  if (rmBtn) rmBtn.addEventListener("click", handleRemoveFile);
+}
+
+// Kick off the restore attempt only when an authenticated session is
+// active (token decoded -> __artistDiscordId set). No-op otherwise.
+if (window.__artistDiscordId) {
+  attemptRestoreFromIdb().catch((err) => {
+    console.warn("[local-sync] restore attempt threw:", err?.message || err);
+  });
+}
 
 // ----- 3. wa-sqlite query (streaming VFS) -----
 //
