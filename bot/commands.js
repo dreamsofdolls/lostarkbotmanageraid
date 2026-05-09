@@ -196,6 +196,7 @@ const {
   MANAGER_IDS: RAID_MANAGER_ID,
   isManagerId,
   getAutoManageCooldownMs,
+  getRosterRefreshCooldownMs,
   getPrimaryManagerId,
 } = require("./services/manager");
 if (RAID_MANAGER_ID.size === 0) {
@@ -784,6 +785,7 @@ const raidStatusCommand = createRaidStatusCommand({
   weekResetStartMs,
   AUTO_MANAGE_SYNC_COOLDOWN_MS,
   getAutoManageCooldownMs,
+  getRosterRefreshCooldownMs,
   isManagerId,
 });
 ({
@@ -1137,9 +1139,11 @@ module.exports = {
     formatRosterRefreshCooldownRemaining,
     ROSTER_REFRESH_COOLDOWN_MS,
     ROSTER_REFRESH_FAILURE_COOLDOWN_MS,
+    MANAGER_ROSTER_REFRESH_COOLDOWN_MS: require("./services/manager").MANAGER_ROSTER_REFRESH_COOLDOWN_MS,
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
     isManagerId,
     getAutoManageCooldownMs,
+    getRosterRefreshCooldownMs,
     getTargetVNDayKey,
     getCurrentVNHour,
     isInArtistQuietHours,

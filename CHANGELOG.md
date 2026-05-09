@@ -4,6 +4,17 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-05
+
+### Changed
+- Manager privilege: roster refresh cooldown drops from **2 hours to 10 minutes** for users in `RAID_MANAGER_ID`. Mirrors the existing manager privilege on `/raid-auto-manage` sync (15s vs 10m). Regular users keep the conservative 2-hour spacing so we don't hammer lostark.bible during long browse sessions.
+- `/raid-status` freshness line (`Last updated <t:R> · Refresh ready <t:R>`) now uses the per-viewer cooldown when computing the next-eligible time. A manager viewing their own /raid-status sees Refresh ready in ~10m, a regular user still sees ~2h. Wording unchanged.
+- `/raid-check` user query (which is restricted to managers by design) widens its stale-roster cutoff from 2h to 10m at the query layer. More recently-stale rosters now surface as candidates so the lazy-refresh path can pull fresh iLvl before scanning, matching the same cooldown the manager would hit on their own /raid-status.
+- New `getRosterRefreshCooldownMs(discordId)` helper in `services/manager.js` is the single source of truth for the per-user value. Wired through `commands.js` -> `handlers/raid-status.js` -> `view.js` deps so the freshness line and the next-eligible <t:R> computation read from one place. `roster-refresh.js` `isAccountRefreshStale` / `hasStaleAccountRefreshes` / `formatRosterRefreshCooldownRemaining` accept an optional `cooldownMs` arg; default unchanged so non-viewer call sites stay on the conservative 2h.
+
+### Tests
+- 307/307 tests pass. Updated the `raid-check user query filters by raid floor while preserving stale refresh candidates` assertion to reference the new `MANAGER_ROSTER_REFRESH_COOLDOWN_MS` constant exposed via `__test`.
+
 ## 2026-05-07
 
 ### Changed

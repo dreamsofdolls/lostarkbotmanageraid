@@ -452,7 +452,12 @@ test("raid-check user query filters by raid floor while preserving stale refresh
                   { lastRefreshedAt: { $exists: false } },
                   {
                     lastRefreshedAt: {
-                      $lt: now - __test.ROSTER_REFRESH_COOLDOWN_MS,
+                      // /raid-check is manager-only by design, so the
+                      // query uses the manager-side 10-min cooldown
+                      // instead of the regular-user 2-hour value. This
+                      // assertion follows the same constant the query
+                      // imports from services/manager.
+                      $lt: now - __test.MANAGER_ROSTER_REFRESH_COOLDOWN_MS,
                     },
                   },
                 ],
