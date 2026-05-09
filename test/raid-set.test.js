@@ -38,11 +38,13 @@ function makeUserModel() {
   class User {
     constructor(data = {}) {
       this.discordId = data.discordId || null;
+      this.localSyncEnabled = !!data.localSyncEnabled;
       this.accounts = JSON.parse(JSON.stringify(data.accounts || []));
     }
     async save() {
       docs.set(this.discordId, {
         discordId: this.discordId,
+        localSyncEnabled: this.localSyncEnabled,
         accounts: JSON.parse(JSON.stringify(this.accounts)),
       });
       return this;
@@ -118,9 +120,10 @@ function makeChar(name, itemLevel, assignedRaids = {}) {
   };
 }
 
-function seedUser(docs, accounts) {
+function seedUser(docs, accounts, extra = {}) {
   docs.set("user-1", {
     discordId: "user-1",
+    ...extra,
     accounts: JSON.parse(JSON.stringify(accounts)),
   });
 }
@@ -327,6 +330,29 @@ test("applyRaidSetForDiscordId: noRoster when user has no accounts", async () =>
   assert.equal(result.noRoster, true);
   assert.equal(result.matched, false);
   assert.equal(result.updated, false);
+});
+
+test("applyRaidSetForDiscordId: local-sync guard blocks stale POST writes after reset", async () => {
+  const { factory, docs } = makeFactory();
+  seedUser(
+    docs,
+    [{ accountName: "Roster", characters: [makeChar("Cyrano", 1730)] }],
+    { localSyncEnabled: false }
+  );
+
+  const result = await factory.applyRaidSetForDiscordId({
+    discordId: "user-1",
+    characterName: "Cyrano",
+    raidMeta: KAZEROS_HARD,
+    statusType: "process",
+    effectiveGates: ["G1"],
+    requireLocalSyncEnabled: true,
+  });
+
+  assert.equal(result.syncDisabled, true);
+  assert.equal(result.updated, false);
+  const stored = docs.get("user-1");
+  assert.equal(stored.accounts[0].characters[0].assignedRaids?.kazeros?.G1, undefined);
 });
 
 test("applyRaidSetForDiscordId: char not found returns matched=false without touching state", async () => {

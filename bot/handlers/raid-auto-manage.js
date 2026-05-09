@@ -6,7 +6,7 @@ const {
   setLocalSyncEnabled,
   setBibleAutoSyncEnabled,
   getSyncStatus,
-  mintToken: mintLocalSyncToken,
+  rotateLocalSyncToken,
   RESULT: SYNC_RESULT,
 } = require("../services/local-sync");
 
@@ -213,7 +213,7 @@ function createRaidAutoManageCommand(deps) {
           // Embed user's lang in the token so the web companion renders
           // in their preferred language without an extra round-trip.
           // `lang` was resolved at handler entry via getUserLanguage.
-          const token = mintLocalSyncToken(discordId, undefined, lang);
+          const token = await rotateLocalSyncToken(discordId, lang, { UserModel: User });
           companionUrl = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
         } catch (err) {
           mintError = err?.message || String(err);
@@ -335,7 +335,24 @@ function createRaidAutoManageCommand(deps) {
         decision = "timeout";
       }
       if (decision === "confirm") {
+        let resetGuard = null;
         try {
+          // Reset must serialize with every bible-sync writer. Otherwise an
+          // already-running sync can gather before this wipe and apply after it.
+          resetGuard = await acquireAutoManageSyncSlot(discordId, { ignoreCooldown: true });
+          if (!resetGuard.acquired) {
+            await interaction.editReply({
+              embeds: [
+                buildNoticeEmbed(EmbedBuilder, {
+                  type: "info",
+                  title: t("raid-auto-manage.reset.inFlightTitle", lang),
+                  description: t("raid-auto-manage.reset.inFlightDescription", lang),
+                }),
+              ],
+              components: [],
+            }).catch(() => {});
+            return;
+          }
           await saveWithRetry(async () => {
             const userDoc = await User.findOne({ discordId });
             if (!userDoc) return;
@@ -380,6 +397,8 @@ function createRaidAutoManageCommand(deps) {
             components: [],
           }).catch(() => {});
           return;
+        } finally {
+          if (resetGuard?.acquired) releaseAutoManageSyncSlot(discordId);
         }
         const successEmbed = new EmbedBuilder()
           .setColor(UI.colors.success)

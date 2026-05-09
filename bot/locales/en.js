@@ -809,6 +809,8 @@ module.exports = {
       successTitle: "Reset complete",
       successDescription: "Your sync state and raid progress are wiped. Roster, characters, tasks are kept. Run `/raid-auto-manage action:on` (bible) or `action:local-on` (web companion) to sync replay from scratch.",
       failTitle: "Reset failed",
+      inFlightTitle: "Reset waiting for another sync",
+      inFlightDescription: "A Bible sync is already running for your roster. Wait for that sync to finish, then reset again so old sync results cannot write back after the wipe.",
       failDescription: "Artist hit an error wiping data: `{error}`. Try again in a few seconds. Current data may be partially wiped - check `/raid-status` to see state.",
     },
     dm: {

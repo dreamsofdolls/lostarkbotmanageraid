@@ -2,10 +2,16 @@ process.env.RAID_MANAGER_ID = "test-manager";
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { EmbedBuilder } = require("discord.js");
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ComponentType,
+} = require("discord.js");
 
 const { createRaidAutoManageCommand } = require("../bot/handlers/raid-auto-manage");
-const { normalizeName } = require("../bot/utils/raid/shared");
+const { UI, normalizeName } = require("../bot/utils/raid/shared");
 
 function makeUserStub(doc) {
   return {
@@ -15,12 +21,21 @@ function makeUserStub(doc) {
   };
 }
 
-function makeCommand(User) {
+function makeCommand(User, overrides = {}) {
   return createRaidAutoManageCommand({
     EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    ComponentType,
     MessageFlags: { Ephemeral: 64 },
+    UI,
     User,
     normalizeName,
+    saveWithRetry: async (op) => op(),
+    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
+    releaseAutoManageSyncSlot: () => {},
+    ...overrides,
   });
 }
 
@@ -72,4 +87,142 @@ test("raid-auto-manage autocomplete hides bible sync while local-sync is active"
     responses[0].map((choice) => choice.value),
     ["status", "local-off", "reset"]
   );
+});
+
+test("raid-auto-manage action:reset serializes with bible sync slot and wipes sync state", async () => {
+  let saved = 0;
+  const doc = {
+    language: "vi",
+    autoManageEnabled: true,
+    localSyncEnabled: true,
+    localSyncLinkedAt: 111,
+    lastAutoManageSyncAt: 222,
+    lastAutoManageAttemptAt: 333,
+    lastLocalSyncAt: 444,
+    lastLocalSyncToken: "old-token",
+    lastLocalSyncTokenExpAt: 999,
+    lastPrivateLogNudgeAt: 555,
+    accounts: [
+      {
+        accountName: "Roster",
+        lastRefreshedAt: 666,
+        lastRefreshAttemptAt: 777,
+        sharedTasks: [{ taskId: "s1" }],
+        characters: [
+          {
+            id: "c1",
+            name: "Aki",
+            class: "Artist",
+            itemLevel: 1750,
+            assignedRaids: { kazeros: { G1: { difficulty: "Hard", completedDate: 123 } } },
+            publicLogDisabled: true,
+            bibleSerial: "serial",
+            bibleCid: 1,
+            bibleRid: 2,
+            sideTasks: [{ taskId: "t1" }],
+          },
+        ],
+      },
+    ],
+    async save() {
+      saved += 1;
+      return this;
+    },
+  };
+  const User = {
+    findOne() {
+      return {
+        lean: async () => ({ language: "vi" }),
+        then(resolve, reject) {
+          return Promise.resolve(doc).then(resolve, reject);
+        },
+      };
+    },
+  };
+  const guardCalls = [];
+  const releases = [];
+  const edits = [];
+  const { handleRaidAutoManageCommand } = makeCommand(User, {
+    acquireAutoManageSyncSlot: async (discordId, opts) => {
+      guardCalls.push({ discordId, opts });
+      return { acquired: true };
+    },
+    releaseAutoManageSyncSlot: (discordId) => releases.push(discordId),
+  });
+
+  await handleRaidAutoManageCommand({
+    user: { id: "u-reset" },
+    options: {
+      getString: (name) => (name === "action" ? "reset" : null),
+    },
+    reply: async () => {},
+    fetchReply: async () => ({
+      awaitMessageComponent: async () => ({
+        user: { id: "u-reset" },
+        customId: "auto-manage:reset-confirm",
+        deferUpdate: async () => {},
+      }),
+    }),
+    editReply: async (payload) => {
+      edits.push(payload);
+    },
+  });
+
+  assert.equal(saved, 1);
+  assert.deepEqual(guardCalls, [{ discordId: "u-reset", opts: { ignoreCooldown: true } }]);
+  assert.deepEqual(releases, ["u-reset"]);
+  assert.equal(doc.autoManageEnabled, false);
+  assert.equal(doc.localSyncEnabled, false);
+  assert.equal(doc.lastLocalSyncToken, null);
+  assert.deepEqual(doc.accounts[0].characters[0].assignedRaids, { armoche: {}, kazeros: {}, serca: {} });
+  assert.equal(doc.accounts[0].characters[0].publicLogDisabled, false);
+  assert.equal(doc.accounts[0].characters[0].bibleSerial, null);
+  assert.equal(doc.accounts[0].characters[0].sideTasks.length, 1);
+  assert.match(edits.at(-1).embeds[0].data.title, /Reset/);
+});
+
+test("raid-auto-manage action:reset refuses while a bible sync is in flight", async () => {
+  let saved = 0;
+  const doc = {
+    language: "vi",
+    accounts: [],
+    async save() {
+      saved += 1;
+    },
+  };
+  const User = {
+    findOne() {
+      return {
+        lean: async () => ({ language: "vi" }),
+        then(resolve, reject) {
+          return Promise.resolve(doc).then(resolve, reject);
+        },
+      };
+    },
+  };
+  const edits = [];
+  const { handleRaidAutoManageCommand } = makeCommand(User, {
+    acquireAutoManageSyncSlot: async () => ({ acquired: false, reason: "in-flight" }),
+  });
+
+  await handleRaidAutoManageCommand({
+    user: { id: "u-reset-busy" },
+    options: {
+      getString: (name) => (name === "action" ? "reset" : null),
+    },
+    reply: async () => {},
+    fetchReply: async () => ({
+      awaitMessageComponent: async () => ({
+        user: { id: "u-reset-busy" },
+        customId: "auto-manage:reset-confirm",
+        deferUpdate: async () => {},
+      }),
+    }),
+    editReply: async (payload) => {
+      edits.push(payload);
+    },
+  });
+
+  assert.equal(saved, 0);
+  assert.match(edits.at(-1).embeds[0].data.title, /Reset/);
 });

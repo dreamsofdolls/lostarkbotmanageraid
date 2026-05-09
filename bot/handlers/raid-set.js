@@ -514,6 +514,7 @@ function createRaidSetCommand(deps) {
     raidMeta,
     statusType,
     effectiveGates,
+    requireLocalSyncEnabled = false,
   }) {
     const gateList = Array.isArray(effectiveGates) ? effectiveGates.filter(Boolean) : [];
     const selectedDifficulty = toModeLabel(raidMeta.modeKey);
@@ -525,6 +526,7 @@ function createRaidSetCommand(deps) {
     let alreadyComplete = false;
     let alreadyReset = false;
     let authLost = false;
+    let syncDisabled = false;
     // The properly-cased character name from the roster - user's input may
     // be lowercase (especially from the text-channel parser which lowercases
     // for alias matching), but the embed should show the name the way the
@@ -541,6 +543,7 @@ function createRaidSetCommand(deps) {
       alreadyComplete = false;
       alreadyReset = false;
       authLost = false;
+      syncDisabled = false;
       displayName = "";
       const userDoc = await User.findOne({ discordId });
       if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
@@ -548,6 +551,10 @@ function createRaidSetCommand(deps) {
         // avoid a duplicate pre-check findOne and stay consistent if the
         // document is created concurrently.
         noRoster = true;
+        return;
+      }
+      if (requireLocalSyncEnabled && !userDoc.localSyncEnabled) {
+        syncDisabled = true;
         return;
       }
       ensureFreshWeek(userDoc);
@@ -670,6 +677,7 @@ function createRaidSetCommand(deps) {
     return {
       noRoster,
       authLost,
+      syncDisabled,
       matched: matchedCount > 0,
       updated: updatedCount > 0,
       alreadyComplete,

@@ -76,6 +76,8 @@ test("roster endpoint returns only the slim roster fields when local-sync is ena
   const User = makeUserStub({
     discordId: "u1",
     localSyncEnabled: true,
+    lastLocalSyncToken: token,
+    lastLocalSyncTokenExpAt: 9999999999,
     accounts: [
       {
         accountName: "Roster",
@@ -114,5 +116,27 @@ test("roster endpoint returns only the slim roster fields when local-sync is ena
         ],
       },
     ],
+  });
+});
+
+test("roster endpoint rejects a rotated-out local-sync token", async () => {
+  const staleToken = mintToken("u1");
+  const currentToken = mintToken("u1");
+  const User = makeUserStub({
+    discordId: "u1",
+    localSyncEnabled: true,
+    lastLocalSyncToken: currentToken,
+    lastLocalSyncTokenExpAt: 9999999999,
+    accounts: [{ accountName: "Roster", characters: [{ name: "Aki" }] }],
+  });
+  const handler = createRosterEndpoint({ User });
+  const res = makeRes();
+
+  await handler(makeReq({ token: staleToken }), res, { query: {} });
+
+  assert.equal(res.status, 401);
+  assert.deepEqual(res.json(), {
+    ok: false,
+    error: "token revoked - open a new local-sync link",
   });
 });

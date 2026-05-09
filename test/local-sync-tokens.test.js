@@ -12,7 +12,12 @@ process.env.LOCAL_SYNC_TOKEN_SECRET = "test-secret-at-least-16-chars-long";
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { mintToken, verifyToken, TOKEN_DEFAULT_TTL_SEC } = require("../bot/services/local-sync");
+const {
+  mintToken,
+  verifyToken,
+  isCurrentStoredToken,
+  TOKEN_DEFAULT_TTL_SEC,
+} = require("../bot/services/local-sync");
 
 test("mintToken + verifyToken roundtrip - returns payload with discordId / iat / exp", () => {
   const token = mintToken("user-123");
@@ -21,10 +26,25 @@ test("mintToken + verifyToken roundtrip - returns payload with discordId / iat /
   assert.equal(result.payload.discordId, "user-123");
   assert.equal(typeof result.payload.iat, "number");
   assert.equal(typeof result.payload.exp, "number");
+  assert.equal(typeof result.payload.nonce, "string");
   // iat = now (within 2s drift), exp = iat + DEFAULT_TTL_SEC
   const now = Math.floor(Date.now() / 1000);
   assert.ok(Math.abs(result.payload.iat - now) <= 2);
   assert.equal(result.payload.exp, result.payload.iat + TOKEN_DEFAULT_TTL_SEC);
+});
+
+test("mintToken - tokens minted in the same second still differ", () => {
+  const first = mintToken("user-123");
+  const second = mintToken("user-123");
+  assert.notEqual(first, second);
+});
+
+test("isCurrentStoredToken - rejects older rotated tokens when a stored token exists", () => {
+  const stale = mintToken("user-123");
+  const current = mintToken("user-123");
+  assert.equal(isCurrentStoredToken({ lastLocalSyncToken: current, lastLocalSyncTokenExpAt: 9999999999 }, current), true);
+  assert.equal(isCurrentStoredToken({ lastLocalSyncToken: current, lastLocalSyncTokenExpAt: 9999999999 }, stale), false);
+  assert.equal(isCurrentStoredToken({ lastLocalSyncToken: null }, stale), true);
 });
 
 test("mintToken with custom ttl - exp reflects override", () => {

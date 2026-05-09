@@ -176,6 +176,7 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
     getRaidRequirementMap,
     userDoc = null,
     currentWeekStartMs: injectedCurrentWeekStartMs,
+    requireLocalSyncEnabled = false,
   } = deps;
   if (typeof applyRaidSetForDiscordId !== "function") {
     throw new Error("[local-sync/apply] applyRaidSetForDiscordId required in deps");
@@ -275,7 +276,18 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
         raidMeta: { ...raidMeta, raidKey: bucket.raidKey, modeKey: bucket.modeKey },
         statusType: "process", // gate-based mark, not full-raid wipe
         effectiveGates,
+        requireLocalSyncEnabled,
       });
+      if (result.syncDisabled) {
+        rejected.push({
+          charName: bucket.charName,
+          reason: "local_sync_disabled",
+          raidKey: bucket.raidKey,
+          modeKey: bucket.modeKey,
+          gates: effectiveGates,
+        });
+        continue;
+      }
       if (result.noRoster) {
         rejected.push({
           charName: bucket.charName,
