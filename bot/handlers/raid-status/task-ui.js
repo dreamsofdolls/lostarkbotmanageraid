@@ -4,6 +4,7 @@ const {
   getVisibleSharedTasks,
   getSharedTaskDisplay,
 } = require("../../utils/raid/shared-tasks");
+const { t } = require("../../services/i18n");
 
 function createRaidStatusTaskUi(deps) {
   const {
@@ -17,6 +18,10 @@ function createRaidStatusTaskUi(deps) {
     getCurrentPage,
     getCurrentView,
     getTaskCharFilter,
+    // Lang resolved once at /raid-status command entry; closed over by
+    // every render path so the user's persistent /raid-language pref
+    // threads through without each builder re-fetching it.
+    lang = "vi",
   } = deps;
 
     // Parse a Discord custom-emoji string `<:name:id>` (or `<a:name:id>`
@@ -47,7 +52,7 @@ function createRaidStatusTaskUi(deps) {
       const accountName = String(account?.accountName || "(unnamed roster)");
       const embed = new EmbedBuilder()
         .setColor(UI.colors.neutral)
-        .setTitle(`📝 Side tasks · ${accountName}`);
+        .setTitle(t("raid-status.taskView.embedTitle", lang, { accountName }));
 
       const now = new Date();
       const sharedTasks = getVisibleSharedTasks(account, now.getTime());
@@ -59,26 +64,17 @@ function createRaidStatusTaskUi(deps) {
 
       if (totals.charsWithTasks === 0 && sharedTasks.length === 0) {
         embed.setDescription(
-          [
-            "Tớ chưa thấy side task / task chung nào ở account này nha~",
-            "",
-            "**Side task** (gắn 1 character, cap 3 daily + 5 weekly mỗi char):",
-            "`/raid-task add action:single roster:<roster> character:<char> name:<tên> reset:<daily|weekly>`",
-            "",
-            "**Task chung** (cấp roster, mọi char trong roster share - cap 5 daily + 5 weekly + 5 scheduled):",
-            "`/raid-task shared-add roster:<roster> preset:<event_shop|chaos_gate|field_boss|custom>`",
-            "",
-            `${UI.icons.reset} Reset: Daily 17:00 VN · Weekly 17:00 VN thứ 4 · Chaos Gate / Field Boss tự bật hourly theo lịch UTC-4.`,
-          ].join("\n")
+          t("raid-status.taskView.emptyDescription", lang, {
+            iconReset: UI.icons.reset,
+          }),
         );
         return embed;
       }
 
       embed.setDescription(
-        [
-          "Bấm dropdown bên dưới để toggle complete cho từng task nha~",
-          `${UI.icons.reset} Reset: Daily 17:00 VN · Weekly 17:00 VN thứ 4 · Scheduled hourly theo lịch UTC-4.`,
-        ].join("\n")
+        t("raid-status.taskView.mainDescription", lang, {
+          iconReset: UI.icons.reset,
+        }),
       );
 
       if (sharedTasks.length > 0) {
@@ -88,10 +84,14 @@ function createRaidStatusTaskUi(deps) {
           return `${icon} ${display.emoji} **${display.name}** · ${display.status}`;
         });
         if (sharedTasks.length > 12) {
-          lines.push(`_+${sharedTasks.length - 12} task chung khác_`);
+          lines.push(
+            t("raid-status.taskView.moreSharedTasks", lang, {
+              n: sharedTasks.length - 12,
+            }),
+          );
         }
         embed.addFields({
-          name: "🌟 Task chung của roster",
+          name: t("raid-status.taskView.sharedTasksHeader", lang),
           value: truncateText(lines.join("\n"), 1024),
           inline: false,
         });
@@ -104,7 +104,9 @@ function createRaidStatusTaskUi(deps) {
               ...fields.slice(0, fieldBudget - 1),
               {
                 name: "…",
-                value: `_+${fields.length - fieldBudget + 1} character có task khác_`,
+                value: t("raid-status.taskView.moreCharacters", lang, {
+                  n: fields.length - fieldBudget + 1,
+                }),
                 inline: false,
               },
             ]
@@ -116,16 +118,36 @@ function createRaidStatusTaskUi(deps) {
         const sharedDone = sharedTasks.filter((task) =>
           getSharedTaskDisplay(task, now).completed
         ).length;
-        footerParts.push(`${UI.icons.done} ${sharedDone}/${sharedTasks.length} task chung`);
+        footerParts.push(
+          `${UI.icons.done} ${t("raid-status.taskView.footerSharedDone", lang, {
+            done: sharedDone,
+            total: sharedTasks.length,
+          })}`,
+        );
       }
       if (totals.daily > 0) {
-        footerParts.push(`${UI.icons.done} ${totals.dailyDone}/${totals.daily} daily`);
+        footerParts.push(
+          `${UI.icons.done} ${t("raid-status.taskView.footerDailyDone", lang, {
+            done: totals.dailyDone,
+            total: totals.daily,
+          })}`,
+        );
       }
       if (totals.weekly > 0) {
-        footerParts.push(`${UI.icons.done} ${totals.weeklyDone}/${totals.weekly} weekly`);
+        footerParts.push(
+          `${UI.icons.done} ${t("raid-status.taskView.footerWeeklyDone", lang, {
+            done: totals.weeklyDone,
+            total: totals.weekly,
+          })}`,
+        );
       }
       if (getAccounts().length > 1) {
-        footerParts.push(`Page ${getCurrentPage() + 1}/${getAccounts().length}`);
+        footerParts.push(
+          t("raid-status.taskView.footerPage", lang, {
+            current: getCurrentPage() + 1,
+            total: getAccounts().length,
+          }),
+        );
       }
       if (footerParts.length > 0) {
         embed.setFooter({ text: footerParts.join(" · ") });
@@ -157,7 +179,7 @@ function createRaidStatusTaskUi(deps) {
       return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("status-task:shared-toggle")
-          .setPlaceholder("Toggle task chung của roster...")
+          .setPlaceholder(t("raid-status.taskView.sharedTogglePlaceholder", lang))
           .setDisabled(disabled)
           .addOptions(options)
       );
@@ -166,15 +188,15 @@ function createRaidStatusTaskUi(deps) {
     const buildViewToggleRow = (disabled) => {
       const options = [
         {
-          label: "Tiến độ raid",
-          description: "Xem progress raid đã/chưa clear theo từng character",
+          label: t("raid-status.taskView.viewToggleRaidLabel", lang),
+          description: t("raid-status.taskView.viewToggleRaidDescription", lang),
           value: "raid",
           emoji: "📋",
           default: getCurrentView() === "raid",
         },
         {
-          label: "Side tasks",
-          description: "Xem + toggle task riêng theo char và task chung của roster",
+          label: t("raid-status.taskView.viewToggleTaskLabel", lang),
+          description: t("raid-status.taskView.viewToggleTaskDescription", lang),
           value: "task",
           emoji: "📝",
           default: getCurrentView() === "task",
@@ -183,7 +205,7 @@ function createRaidStatusTaskUi(deps) {
       return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("status-view:toggle")
-          .setPlaceholder("Chọn view...")
+          .setPlaceholder(t("raid-status.taskView.viewTogglePlaceholder", lang))
           .setDisabled(disabled)
           .addOptions(options)
       );
@@ -300,11 +322,14 @@ function createRaidStatusTaskUi(deps) {
         );
         options.push({
           label: truncateText(
-            `🌐 Tất cả character · ${totalDone}/${totalTaskCount}`,
+            t("raid-status.taskView.charFilterAllLabel", lang, {
+              done: totalDone,
+              total: totalTaskCount,
+            }),
             100
           ),
           value: ALL_CHARS_SENTINEL,
-          description: "Bulk toggle 1 task cho mọi char cùng có nó",
+          description: t("raid-status.taskView.charFilterAllDescription", lang),
           default: activeName === ALL_CHARS_SENTINEL,
         });
       }
@@ -340,7 +365,7 @@ function createRaidStatusTaskUi(deps) {
       return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("status-task:char-filter")
-          .setPlaceholder("Chọn character để toggle task...")
+          .setPlaceholder(t("raid-status.taskView.charFilterPlaceholder", lang))
           .setDisabled(disabled)
           .addOptions(options)
       );
@@ -359,7 +384,7 @@ function createRaidStatusTaskUi(deps) {
         return new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
             .setCustomId("status-task:toggle")
-            .setPlaceholder("Chưa có task nào - dùng /raid-task add để thêm")
+            .setPlaceholder(t("raid-status.taskView.noTaskPlaceholder", lang))
             .setDisabled(true)
             .addOptions([{ label: "(empty)", value: "noop" }])
         );
@@ -377,7 +402,7 @@ function createRaidStatusTaskUi(deps) {
           return new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
               .setCustomId("status-task:toggle")
-              .setPlaceholder("Account chưa có task nào")
+              .setPlaceholder(t("raid-status.taskView.noTaskAccountPlaceholder", lang))
               .setDisabled(true)
               .addOptions([{ label: "(empty)", value: "noop" }])
           );
@@ -400,7 +425,7 @@ function createRaidStatusTaskUi(deps) {
         return new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
             .setCustomId("status-task:toggle")
-            .setPlaceholder("Bulk toggle task cho mọi char...")
+            .setPlaceholder(t("raid-status.taskView.bulkTogglePlaceholder", lang))
             .setDisabled(disabled)
             .addOptions(options)
         );
@@ -419,7 +444,11 @@ function createRaidStatusTaskUi(deps) {
         return new ActionRowBuilder().addComponents(
           new StringSelectMenuBuilder()
             .setCustomId("status-task:toggle")
-            .setPlaceholder(`${activeName} chưa có task - dùng /raid-task add`)
+            .setPlaceholder(
+              t("raid-status.taskView.charNoTaskPlaceholder", lang, {
+                name: activeName,
+              }),
+            )
             .setDisabled(true)
             .addOptions([{ label: "(empty)", value: "noop" }])
         );
@@ -442,7 +471,11 @@ function createRaidStatusTaskUi(deps) {
       return new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId("status-task:toggle")
-          .setPlaceholder(`Toggle task của ${activeName}...`)
+          .setPlaceholder(
+            t("raid-status.taskView.charTogglePlaceholder", lang, {
+              name: activeName,
+            }),
+          )
           .setDisabled(disabled)
           .addOptions(options)
       );

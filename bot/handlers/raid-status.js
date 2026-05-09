@@ -321,6 +321,7 @@ function createRaidStatusCommand(deps) {
       getCurrentPage: () => currentPage,
       getCurrentView: () => currentView,
       getTaskCharFilter: (page) => taskCharFilterByPage.get(page),
+      lang,
     });
 
     // Build the current page's embed given the active (page, raid-filter,
@@ -404,9 +405,11 @@ function createRaidStatusCommand(deps) {
     const computeSyncLabel = () => {
       const remain = formatNextCooldownRemaining(
         Number(statusUserMeta.lastAutoManageAttemptAt) || 0,
-        resolveCooldownMs()
+        resolveCooldownMs(),
       );
-      return remain ? `Sync (${remain})` : "Sync ngay";
+      return remain
+        ? t("raid-status.sync.buttonCooldown", lang, { remain })
+        : t("raid-status.sync.buttonReady", lang);
     };
 
     const buildSyncButton = (disabled) =>
@@ -574,8 +577,8 @@ function createRaidStatusCommand(deps) {
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "lock",
-              title: "Chỉ người mở mới điều khiển được",
-              description: "Pagination này thuộc session `/raid-status` của người khác nha cậu, Artist chỉ cho người chạy lệnh thao tác. Mở session riêng bằng `/raid-status` của mình nhé.",
+              title: t("raid-status.sync.noControlTitle", lang),
+              description: t("raid-status.sync.noControlDescription", lang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -607,8 +610,8 @@ function createRaidStatusCommand(deps) {
             embeds: [
               buildNoticeEmbed(EmbedBuilder, {
                 type: "info",
-                title: "Cậu chưa bật auto-sync",
-                description: "Sync button chỉ chạy được khi cậu đã `/raid-auto-manage action:on`. Gõ lệnh đó trước rồi quay lại bấm Sync nha~",
+                title: t("raid-status.sync.noAutoSyncTitle", lang),
+                description: t("raid-status.sync.noAutoSyncDescription", lang),
               }),
             ],
             flags: MessageFlags.Ephemeral,
@@ -628,13 +631,13 @@ function createRaidStatusCommand(deps) {
             formatNextCooldownRemaining(
               Number(statusUserMeta.lastAutoManageAttemptAt) || 0,
               cooldownMs
-            ) || "vài giây";
+            ) || t("raid-status.sync.cooldownFallback", lang);
           await component.reply({
             embeds: [
               buildNoticeEmbed(EmbedBuilder, {
                 type: "info",
-                title: "Đang trong cooldown",
-                description: `Cậu vừa sync gần đây nha, đợi thêm **${remain}** nữa rồi bấm Sync tiếp được.`,
+                title: t("raid-status.sync.cooldownTitle", lang),
+                description: t("raid-status.sync.cooldownDescription", lang, { remain }),
               }),
             ],
             flags: MessageFlags.Ephemeral,
@@ -670,15 +673,13 @@ function createRaidStatusCommand(deps) {
         let followupType = "info";
         if (manualOutcome.outcome === "applied") {
           const n = manualOutcome.newGatesApplied || 0;
-          followupCopy = `Artist vừa sync xong, có **${n}** gate mới được apply nha~`;
+          followupCopy = t("raid-status.sync.followupApplied", lang, { n });
           followupType = "success";
         } else if (manualOutcome.outcome === "synced-no-new") {
-          followupCopy =
-            "Sync xong rồi, không có gate mới so với cache. Embed đã refresh lại nha~";
+          followupCopy = t("raid-status.sync.followupSyncedNoNew", lang);
           followupType = "info";
         } else if (manualOutcome.outcome === "failed") {
-          followupCopy =
-            "Bible đang dở chứng, sync chưa lấy được data mới. Cooldown đã reset, cậu thử lại sau vài phút giúp tớ nhé~";
+          followupCopy = t("raid-status.sync.followupFailedDescription", lang);
           followupType = "warn";
         }
         if (followupCopy) {
@@ -689,10 +690,10 @@ function createRaidStatusCommand(deps) {
                   type: followupType,
                   title:
                     followupType === "success"
-                      ? "Đã sync xong"
+                      ? t("raid-status.sync.followupSuccessTitle", lang)
                       : followupType === "warn"
-                        ? "Sync gặp trục trặc"
-                        : "Đã sync",
+                        ? t("raid-status.sync.followupFailedTitle", lang)
+                        : t("raid-status.sync.followupNeutralTitle", lang),
                   description: followupCopy,
                 }),
               ],
