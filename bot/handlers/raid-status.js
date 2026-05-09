@@ -490,6 +490,7 @@ function createRaidStatusCommand(deps) {
           totalRaidPending,
           filterRaidId,
           disabled,
+          lang,
         }));
       }
       return rows;

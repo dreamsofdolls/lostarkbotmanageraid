@@ -104,6 +104,13 @@ module.exports = {
       pageSuffix: " · ページ {current}/{total}",
       goldEarnerHint: "_💰 `/raid-gold-earner roster:<名前>` で gold-earner を指定してね♪ (週6人キャップ)_",
     },
+    filter: {
+      placeholder: "レイドで絞り込む...",
+      allRaidsDone: "すべてのレイド (完了♪)",
+      allRaidsPending: "すべてのレイド (未完了 {n} 件)",
+      raidEntryDone: "{label} (完了♪)",
+      raidEntryPending: "{label} (未完了 {n} 件 · {supports}🛡️ {dps}⚔️)",
+    },
   },
   "raid-help": {
     overview: {

@@ -113,6 +113,13 @@ module.exports = {
       pageSuffix: " · Page {current}/{total}",
       goldEarnerHint: "_💰 Mark gold-earner bằng `/raid-gold-earner roster:<tên>` (cap 6 / account / tuần)._",
     },
+    filter: {
+      placeholder: "Lọc theo raid...",
+      allRaidsDone: "Tất cả raids (DONE)",
+      allRaidsPending: "Tất cả raids ({n} chưa clear)",
+      raidEntryDone: "{label} (DONE)",
+      raidEntryPending: "{label} ({n} chưa clear · {supports}🛡️ {dps}⚔️)",
+    },
   },
   "raid-help": {
     overview: {

@@ -1,4 +1,6 @@
 const { isSupportClass } = require("../../models/Class");
+const { t } = require("../../services/i18n");
+const { getRaidModeLabel } = require("../../utils/raid/labels");
 
 const FILTER_ALL_RAIDS = "__all_raids__";
 
@@ -13,6 +15,12 @@ function buildRaidDropdownState(accounts, getRaidsFor) {
         if (!entry) {
           entry = {
             key,
+            // Canonical English label kept here so the secondary
+            // sort below stays stable across locale switches (a
+            // locale-aware sort would re-shuffle entries when the
+            // viewer flips between vi and jp). Render-time labels
+            // come from getRaidModeLabel(raidKey, modeKey, lang) in
+            // buildRaidFilterRow below.
             label: raid.raidName,
             raidKey: raid.raidKey,
             modeKey: raid.modeKey,
@@ -51,14 +59,17 @@ function buildRaidFilterRow(options) {
     totalRaidPending,
     filterRaidId,
     disabled,
+    lang = "vi",
   } = options;
+
+  const allRaidsLabel =
+    totalRaidPending === 0
+      ? t("raid-status.filter.allRaidsDone", lang)
+      : t("raid-status.filter.allRaidsPending", lang, { n: totalRaidPending });
 
   const selectOptions = [
     {
-      label: truncateText(
-        `All raids (${totalRaidPending === 0 ? "DONE" : `${totalRaidPending} total pending`})`,
-        100
-      ),
+      label: truncateText(allRaidsLabel, 100),
       value: FILTER_ALL_RAIDS,
       emoji: "🌐",
       default: filterRaidId === null,
@@ -66,12 +77,22 @@ function buildRaidFilterRow(options) {
   ];
 
   for (const r of raidDropdownEntries.slice(0, 24)) {
-    const suffix =
+    // Resolve the user-visible label per locale. The aggregator above
+    // stored `r.label = raid.raidName` (canonical EN) only for stable
+    // sorting - the actual dropdown label comes from getRaidModeLabel
+    // so JP users see "アクト4 ノーマル" instead of "Act 4".
+    const localizedLabel = getRaidModeLabel(r.raidKey, r.modeKey, lang);
+    const optionLabel =
       r.pending === 0
-        ? "DONE"
-        : `${r.pending} pending · ${r.supports}🛡️ ${r.dps}⚔️`;
+        ? t("raid-status.filter.raidEntryDone", lang, { label: localizedLabel })
+        : t("raid-status.filter.raidEntryPending", lang, {
+            label: localizedLabel,
+            n: r.pending,
+            supports: r.supports,
+            dps: r.dps,
+          });
     selectOptions.push({
-      label: truncateText(`${r.label} (${suffix})`, 100),
+      label: truncateText(optionLabel, 100),
       value: r.key,
       emoji: "⚔️",
       default: filterRaidId === r.key,
@@ -81,7 +102,7 @@ function buildRaidFilterRow(options) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("status-filter:raid")
-      .setPlaceholder("Filter by raid / Lọc theo raid...")
+      .setPlaceholder(t("raid-status.filter.placeholder", lang))
       .setDisabled(disabled)
       .addOptions(selectOptions)
   );

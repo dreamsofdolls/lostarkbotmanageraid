@@ -4,6 +4,16 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-09 (later 7)
+
+### Changed (`/raid-status` raid-filter dropdown locale-aware)
+- `raid-status/raid-filter.js` reads its strings (placeholder, "All raids", per-raid `pending · 🛡️ ⚔️` suffix) from the new `raid-status.filter.*` locale namespace. VN viewers see "Tất cả raids ({n} chưa clear)", JP viewers see "すべてのレイド (未完了 {n} 件)". Closes the gap surfaced by Traine on the live VN view where the dropdown still showed "All raids (33 total pending)" while the surrounding embed had migrated.
+- Each per-raid entry's label now resolves through `getRaidModeLabel(raidKey, modeKey, lang)` so JP users see "アクト4 ノーマル" / "セルカ ハード" in the dropdown instead of the canonical English `raid.raidName`. Internal sort key remains canonical English so the order stays stable across locale switches.
+
+### Notes
+- 320/320 tests pass.
+- Still pending for /raid-status JP coverage: `raid-status/task-ui.js` (Side tasks view labels), `raid-status/sync.js` (Sync button copy), `raid-status/task-actions.js` (toggle reply messages). Those are hardcoded VN today so JP viewers see VN there.
+
 ## 2026-05-09 (later 6)
 
 ### Added (i18n infrastructure + JP locale + /raid-language)
