@@ -261,7 +261,14 @@ function createRaidStatusView(deps) {
     const sharedBadge = isShared
       ? t("raid-status.embed.sharedBySuffix", lang, {
           owner: sharedFrom.ownerLabel || "(unknown)",
-          level: sharedFrom.accessLevel || "edit",
+          // Localize the access level (edit / view) so the badge tail
+          // reads natively in each language - "(編集可)" for JP, "(chỉnh
+          // sửa)" for VN, "(edit)" for EN. Fall back to the raw level
+          // string if the lookup misses (e.g. unknown grant type).
+          level: t(
+            `share.accessLevel.${sharedFrom.accessLevel || "edit"}`,
+            lang,
+          ),
         })
       : "";
     const title = `${titleIcon} ${headerIcon} ${account.accountName}${autoSyncBadge}${sharedBadge}`;

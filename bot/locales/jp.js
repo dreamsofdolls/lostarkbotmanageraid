@@ -31,6 +31,10 @@ module.exports = {
     footer: "いつでも /raid-language で変えられますわ♪",
   },
   share: {
+    accessLevel: {
+      edit: "編集可",
+      view: "閲覧のみ",
+    },
     grant: {
       botTargetTitle: "ボットには共有できませんわ",
       botTargetDescription: "対象は本物の Discord ユーザーじゃないとダメですよ～ ボットはダメ！",
