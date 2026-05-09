@@ -573,12 +573,20 @@ function createRaidStatusCommand(deps) {
 
     collector.on("collect", async (component) => {
       if (component.user.id !== interaction.user.id) {
+        // The rejection embed is delivered ephemerally to the CLICKER,
+        // not the session opener - so it must render in the clicker's
+        // own language. Resolving from interaction.user (the session
+        // opener) would surface the warning in someone else's language
+        // and only the clicker ever reads it. Cache hit makes this ~0ms.
+        const clickerLang = await getUserLanguage(component.user.id, {
+          UserModel: User,
+        });
         await component.reply({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "lock",
-              title: t("raid-status.sync.noControlTitle", lang),
-              description: t("raid-status.sync.noControlDescription", lang),
+              title: t("raid-status.sync.noControlTitle", clickerLang),
+              description: t("raid-status.sync.noControlDescription", clickerLang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
