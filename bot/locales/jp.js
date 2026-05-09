@@ -39,6 +39,11 @@ module.exports = {
       opensAtShort: "{label} 開催",
     },
   },
+  "task-view": {
+    dailyHeader: "デイリー",
+    weeklyHeader: "ウィークリー",
+    emptyCell: "(タスクなし)",
+  },
   "raid-language": {
     title: "🌐 アーティストの言語を変更",
     description: "アーティストが話す言語を選んでね♪ これからすべてのコマンドがこの言語で表示されますわ～",
