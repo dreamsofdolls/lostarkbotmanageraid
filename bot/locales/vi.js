@@ -755,6 +755,8 @@ module.exports = {
       cooldownLineNote: "Cooldown để tránh gõ bible liên tục, qua ngưỡng đó cậu sync tiếp được nha.",
       noRosterTitle: "Cậu chưa có roster nào",
       noRosterDescription: "Artist không thấy roster nào của cậu trong DB. Dùng `/raid-add-roster` để add roster đầu tiên rồi mới opt-in auto-manage được nha.",
+      localLockedTitle: "Cậu đang dùng local-sync",
+      localLockedDescription: "Manual `action:sync` là sync từ lostark.bible, nên tớ chặn khi **local-sync** đang bật. Mở Web Companion từ `/raid-status` hoặc chạy `/raid-auto-manage action:local-off` nếu muốn chuyển lại bible.",
       failTitle: "Sync fail",
       failDescription: "Artist sync không xong vì: `{error}`. Có thể lostark.bible đang block (Cloudflare 403) hoặc char names có gì sai. Thử lại sau vài phút nha, nếu vẫn fail thì check char ở https://lostark.bible/me/logs.",
     },

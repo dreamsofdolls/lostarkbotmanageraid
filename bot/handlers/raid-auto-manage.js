@@ -63,11 +63,11 @@ function createRaidAutoManageCommand(deps) {
       });
       return;
     }
-    // Redundant-state reject for the 4 toggle actions (autocomplete hides
-    // the redundant option, but users can paste the full value). Single
-    // lean read gates all 4 branches with one query - both flags are
-    // independent (mutex enforced at write time, not read).
-    if (["on", "off", "local-on", "local-off"].includes(action)) {
+    // Redundant-state + local-mutex rejects for toggle/manual-sync actions
+    // (autocomplete hides the redundant option, but users can paste the
+    // full value). Single lean read gates all branches with one query -
+    // both flags are independent (mutex enforced at write time, not read).
+    if (["on", "off", "sync", "local-on", "local-off"].includes(action)) {
       const stateUser = await User.findOne(
         { discordId },
         { autoManageEnabled: 1, localSyncEnabled: 1 }
@@ -139,6 +139,19 @@ function createRaidAutoManageCommand(deps) {
               type: "warn",
               title: t("raid-auto-manage.mutex.bibleBlockedByLocalTitle", lang),
               description: t("raid-auto-manage.mutex.bibleBlockedByLocalDescription", lang),
+            }),
+          ],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      if (action === "sync" && localOn) {
+        await interaction.reply({
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: t("raid-auto-manage.sync.localLockedTitle", lang),
+              description: t("raid-auto-manage.sync.localLockedDescription", lang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -698,9 +711,10 @@ function createRaidAutoManageCommand(deps) {
     {
       key: "syncLabel",
       value: "sync",
-      // Preserve legacy behavior: always show. The handler itself surfaces
-      // a more specific notice when bible is off and the user runs sync.
-      show: () => true,
+      // Hide while local-sync is active: manual bible pulls would violate
+      // the "one active source" contract. Handler also rejects stale
+      // pasted values, so autocomplete is just the first UX guard.
+      show: ({ localOn }) => !localOn,
     },
     {
       key: "statusLabel",

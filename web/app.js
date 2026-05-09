@@ -40,7 +40,8 @@ function decodePayload(t) {
   try {
     const parts = t.split(".");
     if (parts.length !== 2) return null;
-    const padded = parts[0].replace(/-/g, "+").replace(/_/g, "/");
+    const normalized = parts[0].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
     return JSON.parse(atob(padded));
   } catch {
     return null;
@@ -60,7 +61,7 @@ if (!token) {
       authStatus.innerHTML = `<span class="status-err">Token expired.</span> Re-run <code>/raid-auto-manage action:local-on</code> for a fresh link.`;
     } else {
       const minsLeft = Math.max(0, Math.floor((expSec - nowSec) / 60));
-      authStatus.innerHTML = `<span class="status-ok">Linked as Discord user <code>${payload.discordId}</code></span> · token valid for ~${minsLeft} min`;
+      authStatus.innerHTML = `<span class="status-ok">Linked as Discord user <code>${escapeHtml(payload.discordId)}</code></span> · token valid for ~${minsLeft} min`;
       // Cache for the eventual POST. Phase 4 reads this back.
       window.__artistSyncToken = token;
       window.__artistDiscordId = payload.discordId;
@@ -73,7 +74,7 @@ if (!token) {
 
 async function loadFile(file) {
   fileMeta.hidden = false;
-  fileMeta.innerHTML = `Selected <strong>${file.name}</strong> · ${formatBytes(file.size)} · modified ${new Date(file.lastModified).toLocaleString()}`;
+  fileMeta.innerHTML = `Selected <strong>${escapeHtml(file.name)}</strong> · ${formatBytes(file.size)} · modified ${new Date(file.lastModified).toLocaleString()}`;
   previewSection.hidden = false;
   await loadAndPreview(file);
 }
@@ -194,7 +195,8 @@ async function runPreviewQuery(sqlite3, db) {
   const diffCol = cols.has("difficulty") ? "difficulty" : null;
   const clearedCol = cols.has("cleared") ? "cleared" : null;
   if (!bossCol || !tsCol) {
-    previewOutput.innerHTML = `<span class="status-err">Encounter table is missing required columns.</span><br>Found: ${[...cols].slice(0, 12).join(", ")}${cols.size > 12 ? "..." : ""}<br><span class="hint">Need at least a boss-name column and a timestamp column. Schema may have changed - report in Discord with this list.</span>`;
+    const colPreview = [...cols].slice(0, 12).map(escapeHtml).join(", ");
+    previewOutput.innerHTML = `<span class="status-err">Encounter table is missing required columns.</span><br>Found: ${colPreview}${cols.size > 12 ? "..." : ""}<br><span class="hint">Need at least a boss-name column and a timestamp column. Schema may have changed - report in Discord with this list.</span>`;
     lastDeltas = [];
     return;
   }
@@ -240,7 +242,7 @@ async function runPreviewQuery(sqlite3, db) {
       charName: r[3],
       lastClearMs: Number(r[5]) || 0,
     }));
-  let html = `<div class="meta">Last 7 days: <strong>${cleared.length}</strong> cleared encounter group(s), <strong>${failed.length}</strong> failed. <strong>${lastDeltas.length}</strong> ready to sync. <span class="hint">(boss=<code>${bossCol}</code> ts=<code>${tsCol}</code> char=<code>${charCol || "—"}</code>)</span></div>`;
+  let html = `<div class="meta">Last 7 days: <strong>${cleared.length}</strong> cleared encounter group(s), <strong>${failed.length}</strong> failed. <strong>${lastDeltas.length}</strong> ready to sync. <span class="hint">(boss=<code>${escapeHtml(bossCol)}</code> ts=<code>${escapeHtml(tsCol)}</code> char=<code>${escapeHtml(charCol || "—")}</code>)</span></div>`;
   html += `<table><thead><tr><th>Char</th><th>Boss</th><th>Difficulty</th><th>Cleared</th><th>Count</th><th>Latest</th></tr></thead><tbody>`;
   for (const row of rows) {
     const [boss, difficulty, isCleared, charName, n, lastMs] = row;
