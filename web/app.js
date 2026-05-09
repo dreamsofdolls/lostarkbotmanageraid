@@ -133,8 +133,8 @@ pickFileBtn.addEventListener("click", async () => {
 // async coordination + asyncify-built WASM is ~700 KB vs sql.js 1.5 MB,
 // roughly even.
 
-const WA_SQLITE_VERSION = "latest";
-const WA_SQLITE_BASE = `https://cdn.jsdelivr.net/npm/wa-sqlite@${WA_SQLITE_VERSION}`;
+const WA_SQLITE_VERSION = "1.3.0";
+const WA_SQLITE_BASE = `https://cdn.jsdelivr.net/npm/@journeyapps/wa-sqlite@${WA_SQLITE_VERSION}`;
 
 async function loadAndPreview(file) {
   previewOutput.textContent = "Loading SQLite WASM (one-time, cached after)...";
