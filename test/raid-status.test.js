@@ -13,6 +13,8 @@ process.env.RAID_MANAGER_ID = "test-manager";
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const {
   EmbedBuilder,
@@ -136,6 +138,20 @@ test("buildStatusFooterText: handles missing progress field defensively", () => 
   const text = buildStatusFooterText({});
   assert.match(text, /0 done/);
   assert.match(text, /0 pending/);
+});
+
+test("REGRESSION: raid-status reload paths preserve merged shared rosters", () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, "..", "bot", "handlers", "raid-status.js"),
+    "utf8"
+  );
+  assert.match(source, /const reloadViewerAccounts = async/);
+  assert.match(
+    source,
+    /accounts = await buildMergedAccounts\(discordId, userDoc\.accounts\)/
+  );
+  assert.doesNotMatch(source, /accounts\s*=\s*userDoc\.accounts/);
+  assert.doesNotMatch(source, /accounts\s*=\s*reloaded\.accounts/);
 });
 
 // --------- buildAccountPageEmbed ---------

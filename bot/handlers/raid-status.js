@@ -264,6 +264,22 @@ function createRaidStatusCommand(deps) {
       totalRaidPending = nextState.totalRaidPending;
     };
 
+    const reloadViewerAccounts = async (nextOwnDoc = null) => {
+      const reloadedOwnDoc = nextOwnDoc || await User.findOne({ discordId });
+      if (reloadedOwnDoc && Array.isArray(reloadedOwnDoc.accounts)) {
+        userDoc = reloadedOwnDoc;
+      } else if (!userDoc || !Array.isArray(userDoc.accounts)) {
+        userDoc = { discordId, accounts: [] };
+      }
+
+      accounts = await buildMergedAccounts(discordId, userDoc.accounts);
+      raidsCache.clear();
+      recomputeRaidAggregate();
+      if (currentPage >= accounts.length) {
+        currentPage = Math.max(0, accounts.length - 1);
+      }
+    };
+
     let currentPage = 0;
     let filterRaidId = null;
     // View toggle: "raid" = default progress page, "task" = per-character
@@ -624,14 +640,8 @@ function createRaidStatusCommand(deps) {
         // baseGetRaidsFor recomputes against the new accounts array.
         const reloaded = manualResult.userDoc;
         if (reloaded && Array.isArray(reloaded.accounts)) {
-          userDoc = reloaded;
-          accounts = userDoc.accounts;
+          await reloadViewerAccounts(reloaded);
           statusUserMeta = buildStatusUserMeta(userDoc, manualOutcome);
-          raidsCache.clear();
-          recomputeRaidAggregate();
-          if (currentPage >= accounts.length) {
-            currentPage = Math.max(0, accounts.length - 1);
-          }
         } else {
           // Doc disappeared somehow - just patch the outcome onto the
           // existing meta so the embed reflects the failed state.
@@ -797,11 +807,7 @@ function createRaidStatusCommand(deps) {
           }
         }
 
-        const reloaded = await User.findOne({ discordId }).lean();
-        if (reloaded && Array.isArray(reloaded.accounts)) {
-          userDoc = reloaded;
-          accounts = userDoc.accounts;
-        }
+        await reloadViewerAccounts();
       } else {
         return;
       }

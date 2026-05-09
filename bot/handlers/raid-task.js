@@ -134,6 +134,36 @@ function findAccountInUser(userDoc, rosterName) {
   );
 }
 
+function resolveTaskWriteTargetFromAccessible(executorId, rosterName, accessible) {
+  if (!rosterName) {
+    return { discordId: executorId, viaShare: false };
+  }
+  const target = normalizeName(rosterName);
+  if (!target) {
+    return { discordId: executorId, viaShare: false };
+  }
+  const entries = Array.isArray(accessible) ? accessible : [];
+  const ownMatch = entries.find(
+    (entry) => entry?.isOwn && normalizeName(entry.accountName) === target,
+  );
+  if (ownMatch) {
+    return { discordId: executorId, viaShare: false };
+  }
+  const sharedMatch = entries.find(
+    (entry) => !entry?.isOwn && normalizeName(entry.accountName) === target,
+  );
+  if (!sharedMatch) {
+    return { discordId: executorId, viaShare: false };
+  }
+  return {
+    discordId: sharedMatch.ownerDiscordId,
+    viaShare: true,
+    ownerLabel: sharedMatch.ownerLabel,
+    accessLevel: sharedMatch.accessLevel,
+    canEdit: sharedMatch.accessLevel === "edit",
+  };
+}
+
 function ensureSideTasks(character) {
   if (!Array.isArray(character.sideTasks)) {
     character.sideTasks = [];
@@ -174,6 +204,14 @@ function createRaidTaskCommand(deps) {
     if (!rosterName) {
       return { discordId: executorId, viaShare: false };
     }
+    try {
+      const ownDoc = await loadUserForAutocomplete(executorId);
+      if (findAccountInUser(ownDoc, rosterName)) {
+        return { discordId: executorId, viaShare: false };
+      }
+    } catch (err) {
+      console.warn("[raid-task] own roster lookup failed:", err?.message || err);
+    }
     let accessible = [];
     try {
       accessible = await getAccessibleAccounts(executorId);
@@ -181,20 +219,21 @@ function createRaidTaskCommand(deps) {
       console.warn("[raid-task] getAccessibleAccounts failed:", err?.message || err);
       return { discordId: executorId, viaShare: false };
     }
-    const target = normalizeName(rosterName);
-    const sharedMatch = accessible.find(
-      (entry) => !entry.isOwn && normalizeName(entry.accountName) === target,
-    );
-    if (!sharedMatch) {
-      return { discordId: executorId, viaShare: false };
+    return resolveTaskWriteTargetFromAccessible(executorId, rosterName, accessible);
+  }
+
+  async function loadUserDocForRosterAutocomplete(executorId, rosterName) {
+    if (!rosterName) {
+      return loadUserForAutocomplete(executorId);
     }
-    return {
-      discordId: sharedMatch.ownerDiscordId,
-      viaShare: true,
-      ownerLabel: sharedMatch.ownerLabel,
-      accessLevel: sharedMatch.accessLevel,
-      canEdit: sharedMatch.accessLevel === "edit",
-    };
+    const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
+    if (writeTarget.viaShare) {
+      const ownerDoc = await loadUserForAutocomplete(writeTarget.discordId);
+      if (ownerDoc && Array.isArray(ownerDoc.accounts)) {
+        return ownerDoc;
+      }
+    }
+    return loadUserForAutocomplete(executorId);
   }
 
   // User-facing rejection embed when a viewer with `permission:view`
@@ -265,9 +304,13 @@ function createRaidTaskCommand(deps) {
   }
 
   async function autocompleteCharacter(interaction, focused) {
-    const userDoc = await loadUserForAutocomplete(interaction.user.id);
+    const rosterInput = interaction.options.getString("roster") || "";
+    const userDoc = await loadUserDocForRosterAutocomplete(
+      interaction.user.id,
+      rosterInput,
+    );
     const entries = getCharacterMatches(userDoc, {
-      rosterFilter: interaction.options.getString("roster") || null,
+      rosterFilter: rosterInput || null,
       needle: focused.value || "",
     });
     const choices = entries.map((entry) => {
@@ -344,7 +387,7 @@ function createRaidTaskCommand(deps) {
       await interaction.respond([]).catch(() => {});
       return;
     }
-    const userDoc = await loadUserForAutocomplete(discordId);
+    const userDoc = await loadUserDocForRosterAutocomplete(discordId, rosterInput);
     const found = findCharacterInUser(userDoc, characterInput, rosterInput || null);
     if (!found) {
       await interaction.respond([]).catch(() => {});
@@ -375,7 +418,7 @@ function createRaidTaskCommand(deps) {
       await interaction.respond([]).catch(() => {});
       return;
     }
-    const userDoc = await loadUserForAutocomplete(discordId);
+    const userDoc = await loadUserDocForRosterAutocomplete(discordId, rosterInput);
     const account = findAccountInUser(userDoc, rosterInput);
     if (!account) {
       await interaction.respond([]).catch(() => {});
@@ -398,7 +441,9 @@ function createRaidTaskCommand(deps) {
   async function autocompleteSharedPreset(interaction, focused) {
     const needle = normalizeName(focused.value || "");
     const rosterInput = interaction.options.getString("roster") || "";
-    const userDoc = await loadUserForAutocomplete(interaction.user.id);
+    const userDoc = rosterInput
+      ? await loadUserDocForRosterAutocomplete(interaction.user.id, rosterInput)
+      : await loadUserForAutocomplete(interaction.user.id);
     const accounts = Array.isArray(userDoc?.accounts) ? userDoc.accounts : [];
     const selectedAccount = rosterInput
       ? findAccountInUser(userDoc, rosterInput)
@@ -1669,6 +1714,7 @@ module.exports = {
   generateTaskId,
   findCharacterInUser,
   findAccountInUser,
+  resolveTaskWriteTargetFromAccessible,
   countByReset,
   ensureSideTasks,
   ensureSharedTasks,
