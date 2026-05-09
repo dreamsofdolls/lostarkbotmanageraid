@@ -4,6 +4,16 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-09 (later 4)
+
+### Added (roster-share Phase 2e: side-task toggle on shared pages)
+- `/raid-status` side-task toggles (bulk row, single row, shared-task row) now route the write to the share owner's `User` doc when the current page is a shared roster. The select handler reads `accounts[currentPage]?._sharedFrom` (set by `buildMergedAccounts` in Phase 2a) and passes the resolved discordId into `toggleSharedTask` / `toggleBulkSideTask` / `toggleSingleSideTask`. When the share is view-level the toggle is silently no-op'd with an audit log line so the embed redraws unchanged - rejecting with an embed mid-`StringSelectInteraction` would clobber the dropdown.
+- Audit log emits `[raid-status side-task toggle] share-write executor=B owner=A kind=<single|bulk|shared>` for every write that crosses owners, and `view-only share rejected` for blocked clicks. Direct toggles on B's own pages stay silent (no audit log) so the channel-monitor stays quiet on the common case.
+
+### Notes
+- 316/316 tests pass.
+- This commit closes out the Phase 2 family. /raid-share grant + revoke + list, plus all main read+write flows (/raid-status render + Sync hide + side-task toggle, /raid-set autocomplete + slash + button, /raid-task autocomplete + every subcommand, raid-channel text parser) now respect the share grant. Manager A who runs `/raid-share grant target:B permission:edit` lets B run effectively all of A's day-to-day raid bookkeeping without any further plumbing.
+
 ## 2026-05-09 (later 3)
 
 ### Added (roster-share Phase 2d: zero-own viewer)

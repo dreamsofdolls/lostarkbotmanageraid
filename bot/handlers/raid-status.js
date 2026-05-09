@@ -718,9 +718,34 @@ function createRaidStatusCommand(deps) {
           return;
         }
 
-        const targetAccountName = accounts[currentPage]?.accountName || "";
+        const targetAccount = accounts[currentPage];
+        const targetAccountName = targetAccount?.accountName || "";
         if (!targetAccountName) {
           return;
+        }
+
+        // Share-aware target: when the current page is a shared roster
+        // (rendered via `_sharedFrom`), the toggle write should mutate
+        // the OWNER's User doc, not B's. View-level shares cannot
+        // toggle (the share doesn't grant write access); the toggle is
+        // silently no-op'd with an audit log so the embed redraws
+        // unchanged. Edit-level shares route the write to A's
+        // discordId; the toggle helpers load and save A's User doc
+        // unchanged.
+        const sharedFrom = targetAccount?._sharedFrom;
+        if (sharedFrom && sharedFrom.accessLevel !== "edit") {
+          console.log(
+            `[raid-status side-task toggle] view-only share rejected ` +
+            `executor=${discordId} owner=${sharedFrom.ownerDiscordId} kind=${parsed.kind}`,
+          );
+          return;
+        }
+        const writeDiscordId = sharedFrom ? sharedFrom.ownerDiscordId : discordId;
+        if (sharedFrom) {
+          console.log(
+            `[raid-status side-task toggle] share-write executor=${discordId} ` +
+            `owner=${writeDiscordId} kind=${parsed.kind}`,
+          );
         }
 
         if (parsed.kind === "shared") {
@@ -728,7 +753,7 @@ function createRaidStatusCommand(deps) {
             await toggleSharedTask({
               User,
               saveWithRetry,
-              discordId,
+              discordId: writeDiscordId,
               targetAccountName,
               taskId: parsed.taskId,
             });
@@ -743,7 +768,7 @@ function createRaidStatusCommand(deps) {
             await toggleBulkSideTask({
               User,
               saveWithRetry,
-              discordId,
+              discordId: writeDiscordId,
               targetAccountName,
               targetReset: parsed.targetReset,
               targetNameLower: parsed.targetNameLower,
@@ -759,7 +784,7 @@ function createRaidStatusCommand(deps) {
             await toggleSingleSideTask({
               User,
               saveWithRetry,
-              discordId,
+              discordId: writeDiscordId,
               targetAccountName,
               targetCharName: parsed.targetCharName,
               targetTaskId: parsed.targetTaskId,
