@@ -85,13 +85,19 @@ async function setLocalSyncEnabled(discordId, enabled, opts = {}, deps = {}) {
     return { ok: false, reason: RESULT.noUser };
   }
 
-  // enabled === false: simple turn-off. No mutex concern.
+  // enabled === false: simple turn-off. No mutex concern. Also wipe
+  // any stored URL token so the old link can't outlive the opt-out
+  // (security: if user disabled local-sync because they shared the
+  // link with someone they shouldn't have, the old token should die
+  // with the flag).
   const updated = await UserModel.findOneAndUpdate(
     { discordId },
     {
       $set: {
         localSyncEnabled: false,
         localSyncLinkedAt: null,
+        lastLocalSyncToken: null,
+        lastLocalSyncTokenExpAt: null,
       },
     },
     { new: true }

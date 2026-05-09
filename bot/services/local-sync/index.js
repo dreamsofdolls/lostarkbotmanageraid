@@ -22,6 +22,8 @@ module.exports = {
   recordLocalSyncSuccess: state.recordLocalSyncSuccess,
   mintToken: tokens.mintToken,
   verifyToken: tokens.verifyToken,
+  rotateLocalSyncToken: tokens.rotateLocalSyncToken,
+  getOrMintLocalSyncToken: tokens.getOrMintLocalSyncToken,
   TOKEN_DEFAULT_TTL_SEC: tokens.DEFAULT_TTL_SEC,
   applyLocalSyncDeltas: apply.applyLocalSyncDeltas,
   resolveLocalSyncTarget: apply.resolveTarget,
