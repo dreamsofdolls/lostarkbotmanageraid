@@ -4,6 +4,16 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-09 (later 12)
+
+### Added (local-sync foundation - Phase 1 of 6)
+- New `bot/services/local-sync/` module with mutex-enforced state helpers for the upcoming local-sync mode (browser companion reads `encounters.db` via FSA API + sql.js, POSTs deltas to bot). Pattern inspired by la-utils.vercel.app.
+- `User.localSyncEnabled` / `lastLocalSyncAt` / `localSyncLinkedAt` schema fields. Mutex with the existing `autoManageEnabled` (bible auto-sync) is enforced at the Mongo write layer via conditional findOneAndUpdate so two concurrent flips can't both succeed.
+- 4 helpers: `setLocalSyncEnabled` (with optional `force` flag for the stuck-private-log "Switch to local sync" CTA), `setBibleAutoSyncEnabled` (mirror with `stampLastAttempt` for the daily-tick race-guard), `getSyncStatus` (read-only snapshot of both modes' freshness), `recordLocalSyncSuccess` (called when web companion POST lands).
+- 16 new tests in `test/local-sync-state.test.js` cover both happy paths, conflict-probe disambiguation (no_user vs conflict), force-mode atomic dual-flip semantics, stale-POST guard, and the missing-UserModel defensive throw.
+- 343/343 tests pass (was 327).
+- No UI / handler changes yet - Phase 2 wires `/raid-auto-manage` actions `local-on` / `local-off` over these primitives.
+
 ## 2026-05-09 (later 11)
 
 ### Changed (text-parser hints + stuck-nudge follow "ping target's lang" rule)
