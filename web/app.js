@@ -161,7 +161,7 @@ async function loadAndPreview(file) {
     sqlite3.vfs_register(vfs, false);
     const db = await sqlite3.open_v2(
       "encounters.db",
-      undefined, // default flags = SQLITE_OPEN_READONLY when paired with our refusing-write VFS
+      SQLiteAPI.SQLITE_OPEN_READONLY,
       "file-vfs"
     );
     try {
