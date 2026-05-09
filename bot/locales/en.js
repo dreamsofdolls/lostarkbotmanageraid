@@ -60,6 +60,16 @@ module.exports = {
     unchangedDescription: "You're already using **{flag} {label}**.",
     footer: "Run /raid-language any time to switch back",
   },
+  "stuck-nudge": {
+    notForYouTitle: "This button isn't for you",
+    notForYouDescription: "The **Switch to Local Sync** button is only for <@{target}>.",
+    flipFailTitle: "Switch failed",
+    flipFailDescription: "Artist hit an error switching modes: `{error}`. Try `/raid-auto-manage action:local-on` manually.",
+    switchedTitle: "Switched to Local Sync",
+    switchedDescription: "<@{target}> moved from bible auto-sync to **local-sync mode**. Artist DM'd you a personalized companion link.",
+    dmTitle: "Local Sync setup",
+    dmDescription: "Click **Open Web Companion** below to open the companion page - drag-and-drop your `encounters.db` file (at `%localappdata%\\LOA Logs\\` or whichever path you set) and Artist previews your data. The link is valid for 30 minutes.",
+  },
   // Roster-share embeds (used by /raid-share grant/revoke/list).
   share: {
     accessLevel: {
@@ -1551,7 +1561,8 @@ module.exports = {
       body: "New week, fresh raid progress. Artist just reset everyone's weekly raid progress - time to start over. Have a good raid week. This notice self-deletes in 30 minutes.",
     },
     "stuck-nudge": {
-      body: "<@{discordId}> heads up - your roster has auto-manage enabled, but every character is currently a private log so Artist can't sync any data. Please enable **Show on Profile** on the characters you want synced at <https://lostark.bible/me/logs>. This notice self-deletes in 30 minutes.",
+      body: "<@{discordId}> heads up - your roster has auto-manage enabled, but every character is currently a private log so Artist can't sync any data. Two options: (1) enable **Show on Profile** on the characters you want synced at <https://lostark.bible/me/logs>, or (2) click **Switch to Local Sync** below - Artist reads your `encounters.db` file directly via the web companion, no public log needed. This notice self-deletes in 30 minutes.",
+      switchButtonLabel: "Switch to Local Sync",
     },
     "cleanup-volume": {
       empty: [

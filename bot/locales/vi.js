@@ -71,6 +71,20 @@ module.exports = {
     unchangedDescription: "Cậu vẫn đang dùng **{flag} {label}** mà~",
     footer: "/raid-language để đổi lại bất cứ lúc nào",
   },
+  // Top-level "stuck-nudge" namespace for the Phase 6 channel-button
+  // click handler. Distinct from `announcements.stuck-nudge.body` (the
+  // broadcast text the scheduler posts) so the two concerns evolve
+  // independently.
+  "stuck-nudge": {
+    notForYouTitle: "Button này không dành cho cậu",
+    notForYouDescription: "Button **Switch to Local Sync** chỉ <@{target}> mới bấm được nha. Cậu nhầm rồi~",
+    flipFailTitle: "Switch fail",
+    flipFailDescription: "Artist gặp lỗi khi flip mode: `{error}`. Thử `/raid-auto-manage action:local-on` thủ công nha.",
+    switchedTitle: "Đã chuyển sang Local Sync",
+    switchedDescription: "<@{target}> đã chuyển từ bible auto-sync sang **local-sync mode**. Artist DM kèm link companion riêng cho cậu rồi nha~",
+    dmTitle: "Local Sync setup",
+    dmDescription: "Bấm nút **Open Web Companion** dưới đây để mở trang companion - drag-drop file `encounters.db` (ở `%localappdata%\\LOA Logs\\` hoặc path cậu setup) vào là Artist preview được data của cậu. Link có hiệu lực 30 phút.",
+  },
   // share.* kept ready for /raid-share migration. /raid-share handler
   // currently still hardcodes its own VN strings (in active bug-fix by
   // the user). Migrate later in one focused commit.
@@ -1579,7 +1593,8 @@ module.exports = {
       body: "Tuần mới đến rồi nhỉ~ Artist vừa reset progress raid tuần này cho các cậu, giờ chỉ việc làm lại từ đầu thôi. Chúc các cậu tuần raid vui vẻ nha, biển báo này Artist cuỗm đi sau 30 phút.",
     },
     "stuck-nudge": {
-      body: "<@{discordId}> nhắc khẽ nhé~ Roster cậu đã bật auto-manage nhưng hiện tại tất cả char đều là private log, Artist không sync được data đâu. Vào https://lostark.bible/me/logs bật **Show on Profile** cho char cần sync giúp tớ nha. Biển báo này Artist cuỗm đi sau 30 phút.",
+      body: "<@{discordId}> nhắc khẽ nhé~ Roster cậu đã bật auto-manage nhưng hiện tại tất cả char đều là private log, Artist không sync được data đâu. Hai cách: (1) bật **Show on Profile** ở https://lostark.bible/me/logs cho char cần sync, hoặc (2) bấm nút **Switch to Local Sync** dưới đây - Artist đọc thẳng file `encounters.db` ở máy cậu qua web companion, không cần public log. Biển báo này Artist cuỗm đi sau 30 phút.",
+      switchButtonLabel: "Switch to Local Sync",
     },
     "cleanup-volume": {
       empty: [

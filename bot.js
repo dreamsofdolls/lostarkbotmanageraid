@@ -44,6 +44,7 @@ const {
   handleEditRosterButton,
   handleRaidGoldEarnerAutocomplete,
   handleRaidGoldEarnerButton,
+  handleStuckNudgeButton,
   loadMonitorChannelCache,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
@@ -280,6 +281,11 @@ async function startBot() {
       // /raid-gold-earner picker buttons: toggle / confirm / cancel.
       // CustomId: "gold-earner:<action>:<sessionId>[:<charIndex>]".
       { prefix: "gold-earner:", handle: handleRaidGoldEarnerButton },
+      // Phase 6 stuck-private-log nudge "Switch to Local Sync" button.
+      // CustomId: "stuck-nudge:switch-to-local:<targetDiscordId>".
+      // Handler verifies clicker.id === target before flipping the
+      // mutex so random clickers can't opt someone else into local-sync.
+      { prefix: "stuck-nudge:", handle: handleStuckNudgeButton },
     ],
   });
 

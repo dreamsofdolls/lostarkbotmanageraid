@@ -4,6 +4,20 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-10 (Phase 6 - stuck-nudge "Switch to Local Sync")
+
+### Added (local-sync rollout COMPLETE - Phase 6 of 6)
+- Stuck-private-log nudge embed now ships with a **"🌐 Switch to Local Sync"** button. Auto-manage daily scheduler keeps posting the nudge when bible detects every char as private; clicking the button atomically flips the user's mode (bible OFF + local ON via `setLocalSyncEnabled(force:true)`) and DMs them a personalized companion link.
+- `bot/handlers/stuck-nudge-button.js` (new) - click handler. customId `stuck-nudge:switch-to-local:<targetDiscordId>`, verifies clicker.id === target before flipping (random members can't opt someone else into local). Updates the channel embed in-place to "Switched" state + removes the button so subsequent viewers don't see a stale CTA.
+- `bot/services/raid-schedulers.js` `postChannelAnnouncement` extended with optional `components` arg (back-compat: existing callers pass nothing). `nudgeStuckPrivateLogUser` now attaches the button row.
+- `bot.js` interaction router gets `{ prefix: "stuck-nudge:", handle: handleStuckNudgeButton }`.
+- `bot/commands.js` instantiates `createStuckNudgeButtonHandler` + exports the handler.
+- 12 new locale keys (vi/jp/en): `announcements.stuck-nudge.{body,switchButtonLabel}` updated copy mentioning the new option, plus a top-level `stuck-nudge.*` namespace for the click handler embeds (notForYou, flipFail, switched, DM).
+- 370/370 tests pass.
+
+### Local-sync rollout summary
+All 6 phases shipped (5711423, 6f54178, 5355dce, 4e6a642, 9d6f78d, 946f0ca, plus this commit). Users now have a complete browser-companion sync path that bypasses the public-log requirement entirely. Mutex enforced at 3 layers (Mongo write, handler pre-check, CAS filter). Streaming SQLite handles multi-GB encounters.db files. UI surfaces (/raid-status Sync button, /raid-check Manager view, stuck-nudge embed) all adapt to the active sync mode.
+
 ## 2026-05-10 (Phase 5 - UI button-flip)
 
 ### Changed (/raid-status + /raid-check adapt to local-sync mode)
