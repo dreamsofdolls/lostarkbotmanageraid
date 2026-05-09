@@ -698,11 +698,21 @@ function createRaidStatusCommand(deps) {
       } else if (id === "status:next") {
         currentPage = Math.min(accounts.length - 1, currentPage + 1);
       } else if (id === "status:local-new-link") {
-        // Phase 7 rotation: explicit "I want a fresh URL" action.
-        // Mints + persists a new token, replies ephemerally with a
-        // Link button to the new URL. Old URL still works until its
-        // natural exp (30 min from previous mint) - this just decouples
-        // the "current" URL the resume button points at going forward.
+        // Phase 7 rotation - in-place update flavor. Click flow:
+        //   1. deferUpdate ack (gives 15-min window for the editReply)
+        //   2. mint+save new token via rotateLocalSyncToken (Mongo write)
+        //   3. push the fresh URL into cachedLocalSyncResumeUrl so the
+        //      buildLocalSyncResumeButton closure picks it up
+        //   4. editReply the ORIGINAL message - buttons in the same row
+        //      now point at the new URL (no separate followup-with-link
+        //      because the user already has the right button in front
+        //      of them, just refreshed)
+        //   5. ephemeral toast confirms the rotate happened (without
+        //      it the click feels silent - button label/URL changed
+        //      but the message visually looks identical)
+        // Old token stays valid until its natural exp (30 min from
+        // previous mint); rotation only decouples which URL the
+        // "current" Resume button points at.
         const baseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
         if (!baseUrl) {
           await component.reply({
@@ -717,13 +727,17 @@ function createRaidStatusCommand(deps) {
           }).catch(() => {});
           return;
         }
+        // deferUpdate ack must come BEFORE the Mongo round-trip so we
+        // don't race the 3-sec ACK window. Subsequent editReply uses
+        // the 15-min followup token.
+        await component.deferUpdate().catch(() => {});
         let freshUrl;
         try {
           const token = await rotateLocalSyncToken(discordId, lang, { UserModel: User });
           freshUrl = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
         } catch (err) {
           console.error("[raid-status] rotate local-sync token failed:", err?.message || err);
-          await component.reply({
+          await component.followUp({
             embeds: [
               buildNoticeEmbed(EmbedBuilder, {
                 type: "error",
@@ -737,28 +751,29 @@ function createRaidStatusCommand(deps) {
           }).catch(() => {});
           return;
         }
-        const successEmbed = new EmbedBuilder()
-          .setColor(UI.colors.success)
-          .setTitle(`${UI.icons.done} ${t("raid-status.sync.localNewLinkSuccessTitle", lang)}`)
-          .setDescription(t("raid-status.sync.localNewLinkSuccessDescription", lang))
-          .setTimestamp();
-        const linkRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setStyle(ButtonStyle.Link)
-            .setLabel(t("raid-status.sync.localOpenButtonLabel", lang))
-            .setEmoji("🌐")
-            .setURL(freshUrl)
-        );
-        await component.reply({
-          embeds: [successEmbed],
-          components: [linkRow],
+        cachedLocalSyncResumeUrl = freshUrl;
+        // Re-render embed + components in place. buildLocalSyncResume
+        // Button reads cachedLocalSyncResumeUrl - now pointing at the
+        // fresh URL.
+        await interaction.editReply({
+          embeds: [buildCurrentEmbed()],
+          components: buildComponents(false),
+        }).catch((err) => {
+          console.warn("[raid-status] local-new-link editReply failed:", err?.message || err);
+        });
+        // Lightweight ephemeral toast - just a confirmation, no link
+        // button since the in-message button already carries the new
+        // URL right above this toast.
+        await component.followUp({
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "success",
+              title: t("raid-status.sync.localNewLinkSuccessTitle", lang),
+              description: t("raid-status.sync.localNewLinkSuccessDescription", lang),
+            }),
+          ],
           flags: MessageFlags.Ephemeral,
         }).catch(() => {});
-        // Update the cached resume URL so subsequent renders of the
-        // same /raid-status session reflect the rotated token. The
-        // collector recomposes on next page-flip via the existing
-        // recomposeOnEvery* paths.
-        cachedLocalSyncResumeUrl = freshUrl;
         return;
       } else if (id === "status:sync") {
         // Manual Sync button - same gather+apply pipeline as the open-time

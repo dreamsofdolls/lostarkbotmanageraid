@@ -391,7 +391,7 @@ module.exports = {
       localNewLinkFailedTitle: "New link failed",
       localNewLinkFailedDescription: "Artist hit an error minting a fresh token: `{error}`. Try again in a few seconds.",
       localNewLinkSuccessTitle: "New link ready",
-      localNewLinkSuccessDescription: "The old token stays valid until its natural TTL (30 minutes from mint), but the **Open Web Companion** button will point at this new URL going forward. Click below to open it now.",
+      localNewLinkSuccessDescription: "The **Open Web Companion** button on the original message just updated in place - click it to open the new URL immediately. The old token stays valid until its natural TTL (30 minutes from previous mint) for any tabs already open with it.",
       noControlTitle: "Only the command author can drive this view",
       noControlDescription: "This pagination belongs to someone else's `/raid-status` session. Open your own with `/raid-status` to interact.",
       noAutoSyncTitle: "Auto-sync isn't enabled",

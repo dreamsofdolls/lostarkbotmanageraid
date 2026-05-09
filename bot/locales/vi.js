@@ -83,7 +83,7 @@ module.exports = {
     switchedTitle: "Đã chuyển sang Local Sync",
     switchedDescription: "<@{target}> đã chuyển từ bible auto-sync sang **local-sync mode**. Artist DM kèm link companion riêng cho cậu rồi nha~",
     dmTitle: "Local Sync setup",
-    dmDescription: "Bấm nút **Open Web Companion** dưới đây để mở trang companion - drag-drop file `encounters.db` (ở `%localappdata%\\LOA Logs\\` hoặc path cậu setup) vào là Artist preview được data của cậu. Link có hiệu lực 30 phút.",
+    dmDescription: "Bấm nút **Mở Web Companion** dưới đây để mở trang companion - drag-drop file `encounters.db` (ở `%localappdata%\\LOA Logs\\` hoặc path cậu setup) vào là Artist preview được data của cậu. Link có hiệu lực 30 phút.",
   },
   // share.* kept ready for /raid-share migration. /raid-share handler
   // currently still hardcodes its own VN strings (in active bug-fix by
@@ -406,14 +406,14 @@ module.exports = {
     sync: {
       buttonReady: "Sync ngay",
       buttonCooldown: "Sync ({remain})",
-      localOpenButtonLabel: "Open Web Companion",
+      localOpenButtonLabel: "Mở Web Companion",
       localNewLinkButtonLabel: "Tạo link mới",
       localNewLinkUnavailableTitle: "Link không khả dụng",
       localNewLinkUnavailableDescription: "Operator chưa set `PUBLIC_BASE_URL` trên Railway nên Artist không build URL được. Báo cho Manager biết để config nhé.",
       localNewLinkFailedTitle: "Tạo link mới fail",
       localNewLinkFailedDescription: "Artist gặp lỗi khi mint token mới: `{error}`. Thử lại sau vài giây nha.",
       localNewLinkSuccessTitle: "Link mới đã sẵn sàng",
-      localNewLinkSuccessDescription: "Token cũ vẫn còn hiệu lực đến hết TTL của nó (30 phút từ lúc mint), nhưng button **Open Web Companion** lần tới sẽ point sang link mới này nha~ Bấm button dưới để mở ngay.",
+      localNewLinkSuccessDescription: "Button **Mở Web Companion** ở message gốc vừa được update tại chỗ - bấm vào là mở link mới luôn. Token cũ vẫn còn hiệu lực đến hết TTL (30 phút từ lúc mint trước) nếu cậu hoặc ai đó đang dùng tab cũ.",
       noControlTitle: "Chỉ người mở mới điều khiển được",
       noControlDescription: "Embed này thuộc session `/raid-status` của người khác nha cậu, Artist chỉ cho người mở session thao tác. Mở session riêng bằng `/raid-status` của mình nhé.",
       noAutoSyncTitle: "Cậu chưa bật auto-sync",
@@ -724,8 +724,8 @@ module.exports = {
     localEnable: {
       successTitle: "Local-sync đã bật",
       successDescription: "Local-sync mode đã bật xong nha~ Web companion site Artist đang xây (Phase 3) - khi xong tớ sẽ DM link cá nhân để cậu drag-drop file `encounters.db`. Trong lúc đó cậu vẫn có thể `/raid-set` thủ công bình thường. Đổi ý thì `action:local-off`.",
-      successDescriptionWithLink: "Local-sync mode đã bật xong nha~ Bấm nút **Open Web Companion** dưới đây để mở trang companion trên browser - drag-drop file `encounters.db` (ở `%localappdata%\\LOA Logs\\`) vào là Artist preview được data của cậu. Link có hiệu lực 30 phút, hết hạn thì gọi lại `action:local-on`. Đổi ý thì `action:local-off`.",
-      openButtonLabel: "Open Web Companion",
+      successDescriptionWithLink: "Local-sync mode đã bật xong nha~ Bấm nút **Mở Web Companion** dưới đây để mở trang companion trên browser - drag-drop file `encounters.db` (ở `%localappdata%\\LOA Logs\\`) vào là Artist preview được data của cậu. Link có hiệu lực 30 phút, hết hạn thì gọi lại `action:local-on`. Đổi ý thì `action:local-off`.",
+      openButtonLabel: "Mở Web Companion",
     },
     localDisable: {
       title: "Local-sync đã tắt",
