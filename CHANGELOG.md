@@ -4,6 +4,19 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-09 (later 13)
+
+### Added (local-sync Phase 2 - /raid-auto-manage extends with local-on / local-off)
+- `/raid-auto-manage` autocomplete now offers 2 new actions: `local-on` (opt-in to local-sync mode) and `local-off` (disable). Filter logic reads BOTH `autoManageEnabled` and `localSyncEnabled` so the dropdown hides redundant + mutex-blocked options (e.g. `local-on` is hidden when bible is already on, since the strict-mode mutex would reject it anyway).
+- `local-on` calls `setLocalSyncEnabled(force:false)` from the new local-sync service module. On mutex conflict (bible auto-sync is on), surfaces a "tắt bible trước" notice with the exact action to run. Success embed explicitly states the web companion site is still being built (Phase 3) so the user knows to expect a follow-up DM.
+- `local-off` clears localSyncEnabled + localSyncLinkedAt. Note in the disable embed reminds the user that browser FSA permission must be cleared from the web tab manually (the bot can't reach into the browser).
+- The existing `on` (bible-enable) path now pre-rejects when `localSyncEnabled` is true - cheaper than letting the probe fire HTTP requests then unwinding.
+- `status` action embed restructured to a 2-row layout: bible mode (Opt-in / Last success / Last attempt - existing fields, now labeled "Bible · …") + local mode (Opt-in / Last sync, with empty 3rd field for row break). One Mongo read via `getSyncStatus`.
+- 22 new locale keys across vi/jp/en covering the new mutex notices, redundant rejects, success/disable embeds, status row, and autocomplete labels. JP gets full Senko-flavor (ですわ / ～♪).
+- `/raid-auto-manage action` description in definitions.js updated to reflect the 6 actions (was 4).
+- 343/343 tests still pass (no new tests this commit; mutex helper already covered in Phase 1).
+- **No-op until Phase 3**: opting in via `local-on` flips the flag but the web companion link doesn't exist yet; user has to wait. Phase 3 ships the link.
+
 ## 2026-05-09 (later 12)
 
 ### Added (local-sync foundation - Phase 1 of 6)

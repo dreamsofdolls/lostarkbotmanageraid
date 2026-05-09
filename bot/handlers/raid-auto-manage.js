@@ -2,6 +2,12 @@
 
 const { buildNoticeEmbed } = require("../utils/raid/shared");
 const { t, getUserLanguage } = require("../services/i18n");
+const {
+  setLocalSyncEnabled,
+  setBibleAutoSyncEnabled,
+  getSyncStatus,
+  RESULT: SYNC_RESULT,
+} = require("../services/local-sync");
 
 function createRaidAutoManageCommand(deps) {
   const {
@@ -38,11 +44,12 @@ function createRaidAutoManageCommand(deps) {
     // via commitAutoManageOn / buildAutoManage* helpers further down.
     const lang = await getUserLanguage(discordId, { UserModel: User });
     const action = interaction.options.getString("action", true);
-    // Autocomplete only offers on/off/sync/status, but users can paste
+    // Autocomplete only offers the valid action set, but users can paste
     // arbitrary strings into slash command args. Reject early with a
     // specific hint - otherwise a typo falls through every branch and
     // Discord times out the interaction with no reply.
-    if (!["on", "off", "sync", "status"].includes(action)) {
+    const VALID_ACTIONS = ["on", "off", "sync", "status", "local-on", "local-off"];
+    if (!VALID_ACTIONS.includes(action)) {
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
@@ -55,16 +62,18 @@ function createRaidAutoManageCommand(deps) {
       });
       return;
     }
-    // Redundant-state reject for manually-typed `on`/`off` (autocomplete
-    // already hides the redundant option, but users can paste the full
-    // option value). Cheap lean read gates both branches with one query.
-    if (action === "on" || action === "off") {
+    // Redundant-state reject for the 4 toggle actions (autocomplete hides
+    // the redundant option, but users can paste the full value). Single
+    // lean read gates all 4 branches with one query - both flags are
+    // independent (mutex enforced at write time, not read).
+    if (["on", "off", "local-on", "local-off"].includes(action)) {
       const stateUser = await User.findOne(
         { discordId },
-        { autoManageEnabled: 1 }
+        { autoManageEnabled: 1, localSyncEnabled: 1 }
       ).lean();
-      const enabled = !!stateUser?.autoManageEnabled;
-      if (action === "on" && enabled) {
+      const bibleOn = !!stateUser?.autoManageEnabled;
+      const localOn = !!stateUser?.localSyncEnabled;
+      if (action === "on" && bibleOn) {
         await interaction.reply({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
@@ -77,13 +86,58 @@ function createRaidAutoManageCommand(deps) {
         });
         return;
       }
-      if (action === "off" && !enabled) {
+      if (action === "off" && !bibleOn) {
         await interaction.reply({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "info",
               title: t("raid-auto-manage.redundant.alreadyOffTitle", lang),
               description: t("raid-auto-manage.redundant.alreadyOffDescription", lang),
+            }),
+          ],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      if (action === "local-on" && localOn) {
+        await interaction.reply({
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "info",
+              title: t("raid-auto-manage.redundant.localAlreadyOnTitle", lang),
+              description: t("raid-auto-manage.redundant.localAlreadyOnDescription", lang),
+            }),
+          ],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      if (action === "local-off" && !localOn) {
+        await interaction.reply({
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "info",
+              title: t("raid-auto-manage.redundant.localAlreadyOffTitle", lang),
+              description: t("raid-auto-manage.redundant.localAlreadyOffDescription", lang),
+            }),
+          ],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      // Mutex pre-reject for the bible-enable path: if local-sync is on,
+      // /raid-auto-manage action:on must reject before the probe HTTPs.
+      // Otherwise a successful probe + flag flip would leave both modes
+      // active until the next save (the probeDoc.save() at line 189 only
+      // sets autoManageEnabled, doesn't touch localSyncEnabled). Cheaper
+      // to reject up front than to undo mid-flow.
+      if (action === "on" && localOn) {
+        await interaction.reply({
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: t("raid-auto-manage.mutex.bibleBlockedByLocalTitle", lang),
+              description: t("raid-auto-manage.mutex.bibleBlockedByLocalDescription", lang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -101,6 +155,79 @@ function createRaidAutoManageCommand(deps) {
         .setColor(UI.colors.muted)
         .setTitle(`${UI.icons.reset} ${t("raid-auto-manage.disable.title", lang)}`)
         .setDescription(t("raid-auto-manage.disable.description", lang))
+        .setTimestamp();
+      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      return;
+    }
+    if (action === "local-on") {
+      // Local-sync opt-in. Goes through the mutex helper so a concurrent
+      // bible-enable on a different surface can't leave both flags on.
+      // Strict (non-force) mode: surfaces a "tắt bible trước" embed when
+      // the user already has bible auto-sync on, instead of silently
+      // overwriting. The stuck-private-log "Switch to Local Sync" button
+      // (Phase 6) uses force=true for one-click upgrade.
+      const result = await setLocalSyncEnabled(
+        discordId,
+        true,
+        { force: false },
+        { UserModel: User }
+      );
+      if (!result.ok && result.reason === SYNC_RESULT.conflict) {
+        await interaction.reply({
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: t("raid-auto-manage.mutex.localBlockedByBibleTitle", lang),
+              description: t("raid-auto-manage.mutex.localBlockedByBibleDescription", lang),
+            }),
+          ],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      // Success path. Companion site (Phase 3) isn't deployed yet, so the
+      // success embed explicitly tells the user the link will arrive
+      // separately + how to back out. Phase 3 swaps the placeholder
+      // sentence for the actual `?token=<jwt>` URL.
+      const embed = new EmbedBuilder()
+        .setColor(UI.colors.success)
+        .setTitle(`${UI.icons.done} ${t("raid-auto-manage.localEnable.successTitle", lang)}`)
+        .setDescription(t("raid-auto-manage.localEnable.successDescription", lang))
+        .setTimestamp();
+      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      return;
+    }
+    if (action === "local-off") {
+      // Mirror of action:off but for the local-sync flag. No mutex concern
+      // (turning OFF can never produce a both-on state). Helper clears
+      // both localSyncEnabled and localSyncLinkedAt so a future opt-in
+      // re-stamps the linkedAt timestamp fresh.
+      const result = await setLocalSyncEnabled(
+        discordId,
+        false,
+        {},
+        { UserModel: User }
+      );
+      if (!result.ok && result.reason === SYNC_RESULT.noUser) {
+        // Defensive: would mean a user invoked the command with no User
+        // doc at all. Not realistic given the redundant-check read above
+        // would have created one, but guard anyway.
+        await interaction.reply({
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "info",
+              title: t("raid-auto-manage.redundant.localAlreadyOffTitle", lang),
+              description: t("raid-auto-manage.redundant.localAlreadyOffDescription", lang),
+            }),
+          ],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      const embed = new EmbedBuilder()
+        .setColor(UI.colors.muted)
+        .setTitle(`${UI.icons.reset} ${t("raid-auto-manage.localDisable.title", lang)}`)
+        .setDescription(t("raid-auto-manage.localDisable.description", lang))
         .setTimestamp();
       await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
       return;
@@ -314,42 +441,66 @@ function createRaidAutoManageCommand(deps) {
       return;
     }
     if (action === "status") {
-      const user = await User.findOne({ discordId }).lean();
-      const enabled = !!user?.autoManageEnabled;
-      const lastSync = user?.lastAutoManageSyncAt || 0;
-      const lastAttempt = user?.lastAutoManageAttemptAt || 0;
-      const optInValue = enabled
+      // Pull both modes' state through the local-sync helper so the embed
+      // shows the user exactly which (if either) sync source is active +
+      // freshness for each. Uses one Mongo read - helper internally
+      // selects only the 6 relevant fields.
+      const status = await getSyncStatus(discordId, { UserModel: User });
+      // Bible mode column (existing behavior, kept).
+      const bibleOptInValue = status.bible.enabled
         ? `${UI.icons.done} ${t("raid-auto-manage.status.optInOn", lang)}`
         : `${UI.icons.reset} ${t("raid-auto-manage.status.optInOff", lang)}`;
-      const lastSuccessValue = lastSync
-        ? `<t:${Math.floor(lastSync / 1000)}:R>`
+      const bibleLastSync = status.bible.lastSyncAt || 0;
+      const bibleLastAttempt = status.bible.lastAttemptAt || 0;
+      const bibleLastSuccessValue = bibleLastSync
+        ? `<t:${Math.floor(bibleLastSync / 1000)}:R>`
         : t("raid-auto-manage.status.lastSuccessNever", lang);
-      let lastAttemptValue;
-      if (!lastAttempt) {
-        lastAttemptValue = t("raid-auto-manage.status.lastAttemptNever", lang);
-      } else if (lastAttempt === lastSync) {
-        lastAttemptValue = t("raid-auto-manage.status.lastAttemptSameAsSuccess", lang);
+      let bibleLastAttemptValue;
+      if (!bibleLastAttempt) {
+        bibleLastAttemptValue = t("raid-auto-manage.status.lastAttemptNever", lang);
+      } else if (bibleLastAttempt === bibleLastSync) {
+        bibleLastAttemptValue = t("raid-auto-manage.status.lastAttemptSameAsSuccess", lang);
       } else {
-        lastAttemptValue = `<t:${Math.floor(lastAttempt / 1000)}:R> - ${t(
+        bibleLastAttemptValue = `<t:${Math.floor(bibleLastAttempt / 1000)}:R> - ${t(
           "raid-auto-manage.status.lastAttemptFailSuffix",
           lang,
         )}`;
       }
+      // Local mode column (new). Only "opt-in" + "last sync" since local
+      // doesn't have a separate attempt timestamp - the web companion
+      // POST is atomic, no probe + commit phases.
+      const localOptInValue = status.local.enabled
+        ? `${UI.icons.done} ${t("raid-auto-manage.status.localOptInOn", lang)}`
+        : `${UI.icons.reset} ${t("raid-auto-manage.status.localOptInOff", lang)}`;
+      const localLastSync = status.local.lastSyncAt || 0;
+      const localLastSyncValue = localLastSync
+        ? `<t:${Math.floor(localLastSync / 1000)}:R>`
+        : t("raid-auto-manage.status.lastSuccessNever", lang);
       const embed = new EmbedBuilder()
         .setColor(UI.colors.neutral)
         .setTitle(`${UI.icons.info} ${t("raid-auto-manage.status.title", lang)}`)
         .addFields(
-          { name: t("raid-auto-manage.status.optInLabel", lang), value: optInValue, inline: true },
+          // Bible row (3 inline fields).
+          { name: t("raid-auto-manage.status.optInLabel", lang), value: bibleOptInValue, inline: true },
           {
             name: t("raid-auto-manage.status.lastSuccessLabel", lang),
-            value: lastSuccessValue,
+            value: bibleLastSuccessValue,
             inline: true,
           },
           {
             name: t("raid-auto-manage.status.lastAttemptLabel", lang),
-            value: lastAttemptValue,
+            value: bibleLastAttemptValue,
             inline: true,
-          }
+          },
+          // Local row (2 inline fields). Empty 3rd field acts as a row
+          // break so Discord renders local on its own line below bible.
+          { name: t("raid-auto-manage.status.localOptInLabel", lang), value: localOptInValue, inline: true },
+          {
+            name: t("raid-auto-manage.status.localLastSyncLabel", lang),
+            value: localLastSyncValue,
+            inline: true,
+          },
+          { name: "​", value: "​", inline: true }
         )
         .setTimestamp();
       await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
@@ -492,16 +643,48 @@ function createRaidAutoManageCommand(deps) {
    * real UX (the cancel/error message itself).
    */
 
-  // /raid-auto-manage `action` autocomplete - filters the four actions by the
-  // user's current autoManageEnabled state so the dropdown never shows the
-  // redundant option (e.g. `on` while already ON). Labels resolve via the
-  // executor's locale so the dropdown text matches the rest of the
-  // command's voice.
+  // /raid-auto-manage `action` autocomplete - filters the action set by the
+  // user's current sync state so the dropdown never shows a redundant or
+  // mutex-blocked option. Six actions total now (bible on/off/sync +
+  // local-on/local-off + status), filtered against TWO independent flags
+  // since the bible/local mutex is only enforced at write time, not state.
+  // Labels resolve via the executor's locale so the dropdown text matches
+  // the rest of the command's voice.
   const AUTO_MANAGE_ACTION_CHOICES = [
-    { key: "onLabel", value: "on", showWhenOn: false, showWhenOff: true },
-    { key: "offLabel", value: "off", showWhenOn: true, showWhenOff: false },
-    { key: "syncLabel", value: "sync", showWhenOn: true, showWhenOff: true },
-    { key: "statusLabel", value: "status", showWhenOn: true, showWhenOff: true },
+    {
+      key: "onLabel",
+      value: "on",
+      // Hide when bible already on (redundant) OR local on (mutex reject).
+      show: ({ bibleOn, localOn }) => !bibleOn && !localOn,
+    },
+    {
+      key: "offLabel",
+      value: "off",
+      show: ({ bibleOn }) => bibleOn,
+    },
+    {
+      key: "syncLabel",
+      value: "sync",
+      // Preserve legacy behavior: always show. The handler itself surfaces
+      // a more specific notice when bible is off and the user runs sync.
+      show: () => true,
+    },
+    {
+      key: "statusLabel",
+      value: "status",
+      show: () => true,
+    },
+    {
+      key: "localOnLabel",
+      value: "local-on",
+      // Mirror of `on`: hide when local already on OR bible on (mutex).
+      show: ({ bibleOn, localOn }) => !bibleOn && !localOn,
+    },
+    {
+      key: "localOffLabel",
+      value: "local-off",
+      show: ({ localOn }) => localOn,
+    },
   ];
   async function handleRaidAutoManageAutocomplete(interaction) {
     try {
@@ -511,19 +694,21 @@ function createRaidAutoManageCommand(deps) {
         return;
       }
       const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      let enabled = false;
+      let bibleOn = false;
+      let localOn = false;
       try {
         const user = await User.findOne(
           { discordId: interaction.user.id },
-          { autoManageEnabled: 1 }
+          { autoManageEnabled: 1, localSyncEnabled: 1 }
         ).lean();
-        enabled = !!user?.autoManageEnabled;
+        bibleOn = !!user?.autoManageEnabled;
+        localOn = !!user?.localSyncEnabled;
       } catch (err) {
         console.warn("[autocomplete] auto-manage state load failed:", err?.message || err);
       }
       const needle = normalizeName(focused.value || "");
       const choices = AUTO_MANAGE_ACTION_CHOICES
-        .filter((c) => (enabled ? c.showWhenOn : c.showWhenOff))
+        .filter((c) => c.show({ bibleOn, localOn }))
         .map((c) => ({
           name: t(`raid-auto-manage.autocomplete.${c.key}`, lang),
           value: c.value,

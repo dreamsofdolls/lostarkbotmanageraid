@@ -681,13 +681,31 @@ module.exports = {
   "raid-auto-manage": {
     invalid: {
       actionTitle: "Action không hợp lệ",
-      actionDescription: "Action `{action}` Artist không nhận được. Cho phép: `on` · `off` · `sync` · `status`. Autocomplete sẽ gợi ý đúng nha.",
+      actionDescription: "Action `{action}` Artist không nhận được. Cho phép: `on` · `off` · `sync` · `status` · `local-on` · `local-off`. Autocomplete sẽ gợi ý đúng nha.",
     },
     redundant: {
       alreadyOnTitle: "Auto-manage đang bật rồi",
       alreadyOnDescription: "Cậu đã opt-in từ trước nha. Muốn sync ngay thì action `sync`, hoặc `status` để xem trạng thái cooldown + lần sync gần nhất.",
       alreadyOffTitle: "Auto-manage đang tắt sẵn",
       alreadyOffDescription: "Cậu chưa opt-in nha, không có flag để disable. Muốn bật thì action `on`.",
+      localAlreadyOnTitle: "Local-sync đang bật rồi",
+      localAlreadyOnDescription: "Cậu đã opt-in local-sync từ trước nha. Muốn xem trạng thái thì `status`, muốn tắt thì `local-off`.",
+      localAlreadyOffTitle: "Local-sync đang tắt sẵn",
+      localAlreadyOffDescription: "Cậu chưa opt-in local-sync nha, không có flag để disable. Muốn bật thì `local-on`.",
+    },
+    mutex: {
+      bibleBlockedByLocalTitle: "Cần tắt local-sync trước",
+      bibleBlockedByLocalDescription: "Cậu đang bật **local-sync** nên không bật được auto-sync bible (chỉ 1 trong 2 chạy 1 lúc thôi). Chạy `/raid-auto-manage action:local-off` rồi mới `action:on` được nha.",
+      localBlockedByBibleTitle: "Cần tắt auto-sync bible trước",
+      localBlockedByBibleDescription: "Cậu đang bật **auto-sync bible** nên không bật được local-sync (chỉ 1 trong 2 chạy 1 lúc thôi). Chạy `/raid-auto-manage action:off` rồi mới `action:local-on` được nha.",
+    },
+    localEnable: {
+      successTitle: "Local-sync đã bật",
+      successDescription: "Local-sync mode đã bật xong nha~ Web companion site Artist đang xây (Phase 3) - khi xong tớ sẽ DM link cá nhân để cậu drag-drop file `encounters.db`. Trong lúc đó cậu vẫn có thể `/raid-set` thủ công bình thường. Đổi ý thì `action:local-off`.",
+    },
+    localDisable: {
+      title: "Local-sync đã tắt",
+      description: "Local-sync mode đã tắt. File access permission ở browser của cậu Artist không xoá được trực tiếp - vào tab web companion (khi nó live) bấm \"Clear Access\" để revoke FSA permission nếu muốn dọn sạch hoàn toàn.",
     },
     disable: {
       title: "Auto-manage disabled",
@@ -725,15 +743,19 @@ module.exports = {
     },
     status: {
       title: "Auto-manage Status",
-      optInLabel: "Opt-in",
+      optInLabel: "Bible · Opt-in",
       optInOn: "ON",
       optInOff: "OFF",
-      lastSuccessLabel: "Last success",
+      lastSuccessLabel: "Bible · Last success",
       lastSuccessNever: "Chưa có lần nào thành công",
-      lastAttemptLabel: "Last attempt",
+      lastAttemptLabel: "Bible · Last attempt",
       lastAttemptNever: "Chưa chạy bao giờ",
       lastAttemptSameAsSuccess: "(= last success)",
       lastAttemptFailSuffix: "fail",
+      localOptInLabel: "Local · Opt-in",
+      localOptInOn: "ON",
+      localOptInOff: "OFF",
+      localLastSyncLabel: "Local · Last sync",
     },
     hiddenWarning: {
       title: "Một vài char chưa bật Public Log",
@@ -768,6 +790,8 @@ module.exports = {
       offLabel: "off - disable auto-sync",
       syncLabel: "sync - pull bible logs now and reconcile raid progress",
       statusLabel: "status - show current opt-in + last sync time",
+      localOnLabel: "local-on - opt-in to local-sync (read encounters.db via web)",
+      localOffLabel: "local-off - disable local-sync",
     },
     dm: {
       enable: {
