@@ -503,7 +503,11 @@ function renderDiffPage() {
     if (viewMode === "char") {
       // Char-first: one card per char with raid+mode rows inline.
       // Default view since "what has my char done" is the natural
-      // mental model when previewing what's about to sync.
+      // mental model when previewing what's about to sync. Cards
+      // pack 2-up via the grid wrapper for wide viewports - chars
+      // list often runs 6-9 chars per roster, vertical stacking
+      // wastes horizontal space.
+      html += `<div class="char-cards-grid">`;
       for (const character of page.characters) {
         html += `<div class="char-card">`;
         html += `<div class="char-card-head">${formatCharRowHead(character)}</div>`;
@@ -541,6 +545,7 @@ function renderDiffPage() {
         html += `</div>`;
         html += `</div>`;
       }
+      html += `</div>`; // close .char-cards-grid
     } else {
       // Raid-first: raid-card layout (Phase 7 first cut). Best for
       // "who in this account cleared raid X" Manager-scan flow.
