@@ -14,8 +14,8 @@
 // jWrite / jTruncate / jSync return SQLITE_READONLY so any accidental
 // write attempt fails loudly instead of silently corrupting.
 
-import { FacadeVFS } from "https://cdn.jsdelivr.net/npm/wa-sqlite@latest/src/FacadeVFS.js";
-import * as VFS from "https://cdn.jsdelivr.net/npm/wa-sqlite@latest/src/VFS.js";
+import { FacadeVFS } from "https://cdn.jsdelivr.net/npm/@journeyapps/wa-sqlite@1.3.0/src/FacadeVFS.js";
+import * as VFS from "https://cdn.jsdelivr.net/npm/@journeyapps/wa-sqlite@1.3.0/src/VFS.js";
 
 export class FileBackedVFS extends FacadeVFS {
   // Two maps mirror MemoryVFS pattern: one keyed by SQLite filename
