@@ -152,6 +152,10 @@ function normalizeCharName(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+export function makeBucketKey(charName, raidKey, modeKey) {
+  return `${String(charName || "").trim().toLowerCase()}::${raidKey}::${modeKey}`;
+}
+
 export function getClassInfoForChar(playersRaw, charName) {
   const target = normalizeCharName(charName);
   if (!target) return null;
@@ -201,7 +205,7 @@ export function bucketize(rows) {
     const gates = getGatesForRaid(gateInfo.raidKey);
     const gateIndex = gates.indexOf(gateInfo.gate);
     if (gateIndex < 0) continue;
-    const bucketKey = `${String(charName).toLowerCase()}::${gateInfo.raidKey}::${modeKey}`;
+    const bucketKey = makeBucketKey(charName, gateInfo.raidKey, modeKey);
     const lastClearMs = Number(lastMs) || 0;
     const classInfo = getClassInfoForChar(playersRaw, charName);
     const existing = map.get(bucketKey);
@@ -380,10 +384,47 @@ export function resolveCellState({ assignedRaids, fileGates, modeKey, gate }) {
 export function buildFileClearMap(buckets) {
   const map = new Map();
   for (const b of buckets) {
-    const key = `${String(b.charName).toLowerCase()}::${b.raidKey}::${b.modeKey}`;
+    const key = makeBucketKey(b.charName, b.raidKey, b.modeKey);
     map.set(key, new Set(b.gates));
   }
   return map;
+}
+
+const ACTIONABLE_STATES = new Set(["pending", "mode-conflict"]);
+
+export function isActionableState(state) {
+  return ACTIONABLE_STATES.has(state);
+}
+
+export function buildActionableBucketKeySet(diffAccounts) {
+  const keys = new Set();
+  for (const account of diffAccounts || []) {
+    for (const character of account?.characters || []) {
+      for (const cell of character?.cells || []) {
+        const hasAction = (cell.gates || []).some((gate) => isActionableState(cell.states?.[gate]));
+        if (hasAction) {
+          keys.add(makeBucketKey(character.name, cell.raidKey, cell.modeKey));
+        }
+      }
+    }
+  }
+  return keys;
+}
+
+export function collectDiffStateCounts(scope) {
+  const counts = {};
+  const accounts = Array.isArray(scope) ? scope : (scope ? [scope] : []);
+  for (const account of accounts) {
+    for (const character of account?.characters || []) {
+      for (const cell of character?.cells || []) {
+        for (const gate of cell.gates || []) {
+          const state = cell.states?.[gate];
+          if (state) counts[state] = (counts[state] || 0) + 1;
+        }
+      }
+    }
+  }
+  return counts;
 }
 
 /**
@@ -418,7 +459,7 @@ export function buildDiff(rosterAccounts, fileBuckets) {
     const charEntries = [];
     const charsByRaidMode = new Map();
     for (const character of account?.characters || []) {
-      const charNameLower = String(character?.name || "").toLowerCase();
+      const charNameLower = String(character?.name || "").trim().toLowerCase();
       const eligible = getEligibleRaidModes(character?.itemLevel);
       const charCells = [];
       for (const { raidKey, modeKey } of eligible) {

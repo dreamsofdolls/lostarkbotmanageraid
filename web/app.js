@@ -388,19 +388,20 @@ async function runPreviewQuery(sqlite3, db) {
   // Lazy-load preview-utils so the boss->raid map is only parsed when
   // there's actually something to render. Keeps the page-load lighter
   // on first visit (no file dropped yet).
-  const { bucketize, findUnmappedBosses, getRaidGateForBoss, buildDiff } = await import("/sync/preview-utils.js");
+  const {
+    bucketize,
+    findUnmappedBosses,
+    getRaidGateForBoss,
+    buildDiff,
+    normalizeDifficulty,
+    makeBucketKey,
+    buildActionableBucketKeySet,
+    collectDiffStateCounts,
+  } = await import("/sync/preview-utils.js");
   // Build the deltas array for the Sync POST. Server re-validates +
   // re-buckets, but only mapped raid clears are sent. Failed encounters,
   // non-raid content, and rows without a local character stay client-side.
   const syncRows = rows.filter((r) => r[3] && getRaidGateForBoss(r[0]));
-  lastDeltas = syncRows
-    .map((r) => ({
-      boss: r[0],
-      difficulty: r[1],
-      cleared: 1,
-      charName: r[3],
-      lastClearMs: Number(r[5]) || 0,
-    }));
   // Bucketize for diff. Each bucket = (char, raid, mode) collapsed to
   // its highest cleared gate. Server's apply.js does the same - so
   // the preview = what gets persisted.
@@ -411,20 +412,38 @@ async function runPreviewQuery(sqlite3, db) {
   // assignedRaids state). buildDiff merges the two streams into the
   // roster-grouped view.
   let rosterAccounts = [];
+  let rosterError = "";
   try {
     const resp = await fetch("/api/me/roster", {
       headers: { "Authorization": `Bearer ${window.__artistSyncToken}` },
     });
+    const data = await resp.json().catch(() => null);
     if (resp.ok) {
-      const data = await resp.json();
       rosterAccounts = Array.isArray(data?.accounts) ? data.accounts : [];
     } else {
-      console.warn("[local-sync] roster fetch failed:", resp.status);
+      rosterError = data?.error || `HTTP ${resp.status}`;
+      console.warn("[local-sync] roster fetch failed:", resp.status, rosterError);
     }
   } catch (err) {
+    rosterError = err?.message || String(err);
     console.warn("[local-sync] roster fetch threw:", err?.message || err);
   }
   const diff = buildDiff(rosterAccounts, buckets);
+  const actionableKeys = buildActionableBucketKeySet(diff);
+  lastDeltas = syncRows
+    .filter((r) => {
+      const gateInfo = getRaidGateForBoss(r[0]);
+      const modeKey = normalizeDifficulty(r[1]) || "normal";
+      return actionableKeys.has(makeBucketKey(r[3], gateInfo.raidKey, modeKey));
+    })
+    .map((r) => ({
+      boss: r[0],
+      difficulty: r[1],
+      cleared: 1,
+      charName: r[3],
+      lastClearMs: Number(r[5]) || 0,
+    }));
+  const syncableBuckets = buckets.filter((b) => actionableKeys.has(makeBucketKey(b.charName, b.raidKey, b.modeKey)));
   // Cache the diff + reset to first page on every fresh preview run.
   // currentRosterPage state lives on window so the pagination buttons
   // (rendered as inline HTML, click-bound after innerHTML write) can
@@ -432,9 +451,13 @@ async function runPreviewQuery(sqlite3, db) {
   window.__artistDiff = diff;
   window.__artistRosterPage = 0;
   window.__artistUnmappedBosses = unmappedBosses;
+  window.__artistRosterError = rosterError;
+  window.__artistCollectDiffStateCounts = collectDiffStateCounts;
   window.__artistMeta = {
-    distinctChars: new Set(buckets.map((b) => b.charName.toLowerCase())).size,
-    clears: buckets.length,
+    distinctChars: new Set(syncableBuckets.map((b) => String(b.charName || "").trim().toLowerCase())).size,
+    clears: syncableBuckets.length,
+    detectedChars: new Set(buckets.map((b) => String(b.charName || "").trim().toLowerCase())).size,
+    detectedClears: buckets.length,
     schemaDebug: { table, bossCol, tsCol, charCol: charCol || "-" },
   };
   // Default view = char-first. /raid-status mental model: scan "what
@@ -464,18 +487,29 @@ function renderDiffPage() {
   const diff = window.__artistDiff || [];
   const meta = window.__artistMeta || { distinctChars: 0, clears: 0, schemaDebug: {} };
   const unmappedBosses = window.__artistUnmappedBosses || [];
+  const rosterError = window.__artistRosterError || "";
   let pageIndex = Number(window.__artistRosterPage) || 0;
   if (pageIndex < 0) pageIndex = 0;
   if (pageIndex >= diff.length) pageIndex = Math.max(0, diff.length - 1);
   window.__artistRosterPage = pageIndex;
 
-  let html = `<div class="meta">${t("preview.headlineCount", { chars: meta.distinctChars, clears: meta.clears })} <span class="hint">${t("preview.schemaDebug", meta.schemaDebug)}</span></div>`;
-  html += renderDiffLegend();
+  const headlineKey = Number(meta.clears) > 0 ? "preview.headlineCount" : "preview.headlineNoSync";
+  let html = `<div class="meta">${t(headlineKey, { chars: meta.distinctChars, clears: meta.clears })} <span class="hint">${t("preview.schemaDebug", meta.schemaDebug)}</span></div>`;
+  if (Number(meta.detectedClears) > Number(meta.clears)) {
+    html += `<div class="hint">${t("preview.detectedCount", { chars: meta.detectedChars || 0, clears: meta.detectedClears || 0 })}</div>`;
+  }
 
   if (diff.length === 0) {
-    html += `<p class="hint" style="margin-top:12px;">${t("preview.noBucketsMatched")}</p>`;
+    if (rosterError) {
+      html += `<p class="hint" style="margin-top:12px;"><span class="status-err">${t("preview.rosterUnavailable")}</span> ${escapeHtml(rosterError)}</p>`;
+    } else if (Number(meta.detectedClears) > 0) {
+      html += `<p class="hint" style="margin-top:12px;">${t("preview.noRosterMatched")}</p>`;
+    } else {
+      html += `<p class="hint" style="margin-top:12px;">${t("preview.noBucketsMatched")}</p>`;
+    }
   } else {
     const page = diff[pageIndex];
+    html += renderDiffLegend(page);
     const viewMode = window.__artistViewMode === "raid" ? "raid" : "char";
     // Roster pagination header + view toggle. Pagination hides for
     // single-roster users; toggle always shows so the user sees the
@@ -661,12 +695,15 @@ function renderGateBadge(gate, state) {
   return `<span class="${cls}" title="${escapeHtml(gate)}: ${escapeHtml(t("diff.state." + state))}">${escapeHtml(gate)} ${symbol}</span>`;
 }
 
-function renderDiffLegend() {
+function renderDiffLegend(scope) {
   // 4-state legend (db-other-mode collapsed into empty since it was
   // user-confusing - char did Hard then saw Normal cards full of
   // db-other-mode badges asking "why is this here"). Off-mode DB
   // clears no longer surface as activity at the OTHER mode.
-  const states = ["synced", "pending", "mode-conflict", "empty"];
+  const collectCounts = window.__artistCollectDiffStateCounts;
+  const counts = typeof collectCounts === "function" ? collectCounts(scope) : {};
+  const states = ["synced", "pending", "mode-conflict", "empty"].filter((s) => counts[s] > 0);
+  if (states.length === 0) return "";
   const items = states.map((s) => `<span class="legend-item gate-${s}">${s === "synced" ? "✓" : s === "pending" ? "⏬" : s === "mode-conflict" ? "⚠" : "·"} ${escapeHtml(t("diff.state." + s))}</span>`).join("");
   return `<div class="diff-legend">${items}</div>`;
 }

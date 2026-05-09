@@ -74,7 +74,7 @@ function createRosterEndpoint({ User }) {
     let userDoc;
     try {
       userDoc = await User.findOne({ discordId })
-        .select("discordId accounts.accountName accounts.characters.name accounts.characters.class accounts.characters.itemLevel accounts.characters.assignedRaids")
+        .select("discordId localSyncEnabled accounts.accountName accounts.characters.name accounts.characters.class accounts.characters.itemLevel accounts.characters.assignedRaids")
         .lean();
     } catch (err) {
       console.error("[roster-endpoint] read failed:", err?.message || err);
@@ -86,6 +86,13 @@ function createRosterEndpoint({ User }) {
       // No User doc yet - return empty roster instead of 404 so the web
       // can render gracefully ("no roster registered").
       send(res, 200, { ok: true, discordId, accounts: [] });
+      return;
+    }
+    if (!userDoc.localSyncEnabled) {
+      send(res, 409, {
+        ok: false,
+        error: "local-sync disabled - run /raid-auto-manage action:local-on to re-enable",
+      });
       return;
     }
 

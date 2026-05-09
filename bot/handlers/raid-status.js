@@ -149,6 +149,7 @@ function createRaidStatusCommand(deps) {
 
   async function handleStatusCommand(interaction) {
     const discordId = interaction.user.id;
+    await interaction.deferReply();
     // Resolve viewer's persistent language preference once at command
     // entry. Threads through every render path (early-exit notice,
     // buildAccountPageEmbed, freshness lines) so the whole interaction
@@ -179,7 +180,7 @@ function createRaidStatusCommand(deps) {
     }
 
     if (!hasOwnAccounts && !hasIncomingShare) {
-      await interaction.reply({
+      await interaction.editReply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
@@ -187,12 +188,9 @@ function createRaidStatusCommand(deps) {
             description: t("raid-status.notice.noRosterDescription", lang),
           }),
         ],
-        flags: MessageFlags.Ephemeral,
       });
       return;
     }
-
-    await interaction.deferReply();
 
     // Skip the refresh-userDoc dance for the share-only viewer: there's
     // no own roster to refresh, and loadStatusUserDoc assumes the doc
@@ -713,9 +711,14 @@ function createRaidStatusCommand(deps) {
         // Old token stays valid until its natural exp (30 min from
         // previous mint); rotation only decouples which URL the
         // "current" Resume button points at.
+        const deferred = await component.deferUpdate().then(() => true).catch((err) => {
+          console.warn("[raid-status] local-new-link defer failed:", err?.message || err);
+          return false;
+        });
+        if (!deferred) return;
         const baseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
         if (!baseUrl) {
-          await component.reply({
+          await component.followUp({
             embeds: [
               buildNoticeEmbed(EmbedBuilder, {
                 type: "warn",
@@ -727,10 +730,6 @@ function createRaidStatusCommand(deps) {
           }).catch(() => {});
           return;
         }
-        // deferUpdate ack must come BEFORE the Mongo round-trip so we
-        // don't race the 3-sec ACK window. Subsequent editReply uses
-        // the 15-min followup token.
-        await component.deferUpdate().catch(() => {});
         let freshUrl;
         try {
           const token = await rotateLocalSyncToken(discordId, lang, { UserModel: User });
