@@ -2,6 +2,7 @@ const User = require("../models/user");
 const { saveWithRetry } = require("../models/user");
 const GuildConfig = require("../models/guildConfig");
 const { RAID_REQUIREMENTS } = require("../models/Raid");
+const { t, getGuildLanguage } = require("./i18n");
 
 const WEEKLY_ANNOUNCEMENT_TTL_MS = 30 * 60 * 1000; // marker sits 30 min before self-delete
 const WEEKLY_RESET_TICK_MS = 30 * 60 * 1000;
@@ -222,9 +223,13 @@ async function postWeeklyResetAnnouncements(client, targetKey) {
     if (!channel) continue;
 
     try {
+      // Per-guild broadcast language - resolved once per guild per tick. JP/
+      // EN guilds opt their weekly-reset announcement into their voice via
+      // /raid-channel config action:set-language; legacy guilds without the
+      // field land on default "vi" through getGuildLanguage's fallback.
+      const guildLang = await getGuildLanguage(cfg.guildId, { GuildConfigModel: GuildConfig });
       const sent = await channel.send({
-        content:
-          "Tuần mới đến rồi nhỉ~ Artist vừa reset progress raid tuần này cho các cậu, giờ chỉ việc làm lại từ đầu thôi. Chúc các cậu tuần raid vui vẻ nha, biển báo này Artist cuỗm đi sau 30 phút.",
+        content: t("announcements.weekly-reset.body", guildLang),
       });
       await GuildConfig.findOneAndUpdate(
         { guildId: cfg.guildId },

@@ -1355,4 +1355,244 @@ module.exports = {
       },
     },
   },
+  // Per-guild language config exposed via /raid-channel config action:set-language.
+  // Persists on GuildConfig.language and is consumed by every public broadcast
+  // firing site (welcome embed, scheduler announcements, text-parser whisper-ack +
+  // raid-update reply embed). Per-user language stays unaffected.
+  "raid-channel-language": {
+    autocompleteLabel: "set-language - đổi ngôn ngữ broadcast của guild (vi/jp/en)",
+    invalidTitle: "Ngôn ngữ không hợp lệ",
+    invalidDescription: "Ngôn ngữ `{lang}` Artist không nhận. Hợp lệ: `vi` · `jp` · `en`.",
+    missingTitle: "Thiếu option `language`",
+    missingDescription: "Action `set-language` cần kèm option `language:` (vi/jp/en). Ví dụ: `/raid-channel config action:set-language language:jp`.",
+    successTitle: "Đã đổi ngôn ngữ broadcast",
+    successDescription: "Từ giờ mọi thông báo public của guild này (welcome, weekly-reset, cleanup, bedtime, wakeup, maintenance, stuck-nudge, whisper-ack, raid-update) sẽ dùng **{flag} {label}** nha~ Per-user `/raid-language` không bị ảnh hưởng.",
+    showCurrentLine: "Ngôn ngữ broadcast: **{flag} {label}**",
+  },
+  // Public-broadcast strings (no single per-user viewer). Resolved with
+  // getGuildLanguage(guildId) at fire time. Multi-line bodies are arrays so
+  // they share one .join("\n") on the consumer side.
+  "text-parser": {
+    multiGate: "{icon} Có nhiều gate ({gates}) trong message. Mỗi lần chỉ update 1 gate - post lại với 1 gate hoặc bỏ gate để đánh DONE cả raid nha.",
+    multiRaid: "{icon} Message chứa nhiều raid khác nhau ({raids}). Chọn đúng 1 raid rồi post lại nha.",
+    multiDifficulty: "{icon} Message chứa nhiều difficulty khác nhau ({difficulties}). Chọn đúng 1 difficulty rồi post lại nha.",
+    invalidCombo: "{icon} Combo `{raidKey} {modeKey}` không tồn tại. Check lại raid + difficulty rồi post lại nha.",
+    invalidGate: "{icon} Gate **{gate}** không có cho **{raidLabel}**. Gates hợp lệ: {validGates}. Post lại với gate đúng nha.",
+    noRoster: "{icon} Cậu chưa có roster. Dùng `/raid-add-roster` trước rồi quay lại post clear nha.",
+    spamWarn: "💢 Này ơi, tớ theo không kịp đâu~ Mỗi tin cách nhau ít nhất 2 giây thôi nhé, không Artist im lặng ignore đấy!",
+    emptyContent: "{icon} Ớ kìa, tin của cậu bay qua rồi nhưng Artist không đọc được chữ nào hết... Không phải lỗi của cậu đâu nha, chắc tớ đang rối mấy cài đặt bên trong. Phiền cậu nhờ chủ bot xem hộ giúp Artist xíu, sửa xong cậu gõ lại là tớ bắt được ngay~",
+    whisperAck: "<@{userId}> ...Artist DM kết quả cho cậu rồi nha~ Channel sẽ tự dọn cả 2 tin nhắn sau 5 giây...",
+    dmFallbackMarkDone: "mark **{scope}** done cho {names}",
+    dmFallbackAlready: "{names} đã clear **{scope}** từ trước",
+    dmFallback: "{icon} <@{userId}> {parts}. _(DM bị tắt - enable \"Allow DMs from server members\" để nhận confirm private.)_",
+    errorNotFound: "{icon} Không tìm thấy trong roster: {names}",
+    errorIneligible: "{icon} Chưa đủ iLvl cho **{raidLabel}** (cần **{minItemLevel}+**): {names}",
+    errorSystem: "{icon} Lỗi hệ thống khi update: {names}",
+    errorPartialNote: "_(Các character hợp lệ khác trong post của bạn đã được update rồi - check DM cho chi tiết.)_",
+    errorRetryNote: "_(Sửa lại rồi post lại nhé, tớ sẽ tự dọn hint cũ.)_",
+    raidUpdateTitle: "Raid Update · {scope}",
+    raidUpdateDescription: "Tớ đã xử lý raid cho {count} character~",
+    raidUpdateAllGates: "All gates",
+    raidUpdateUpdatedField: "{icon} Updated ({count})",
+    raidUpdateAlreadyField: "{icon} Đã DONE từ trước ({count})",
+    raidUpdateNotFoundField: "{icon} Không tìm thấy trong roster ({count})",
+    raidUpdateIneligibleField: "{icon} Chưa đủ iLvl cho {raidLabel} (cần {minItemLevel}+)",
+    raidUpdateErrorField: "{icon} Lỗi hệ thống",
+    raidUpdateFooterServer: "Server: {guildName}",
+    alreadyCompleteTitle: "{icon} Raid đã DONE từ trước rồi~",
+    alreadyCompleteDescription: "**{charName}** đã clear **{scope}** tuần này rồi nhé. Tớ không update lại đâu - để tránh overwriting progress cậu đã có.",
+    alreadyFieldCharacter: "Character",
+    alreadyFieldRaid: "Raid",
+    alreadyFieldGates: "Gates",
+    alreadyFieldResetTitle: "Muốn reset?",
+    alreadyFieldResetValue: "Dùng `/raid-set character:<name> raid:<raid> status:reset` nếu cậu thật sự muốn mark-chưa-done cái này (ví dụ bị write nhầm).",
+    successDmTitleProcessSingle: "{icon} Gate Completed",
+    successDmTitleProcessMulti: "{icon} Gates Completed",
+    successDmTitleComplete: "{icon} Raid Completed",
+    successDmDescription: "Tớ đã update progress cho **{charName}** rồi nha~",
+    successDmFieldCharacter: "Character",
+    successDmFieldRaid: "Raid",
+    successDmFieldGates: "Gates",
+    successDmModeNoteTitle: "{icon} Note",
+    successDmModeNoteValue: "Đã chuyển mode sang **{difficulty}** - progress mode cũ được clear cho state consistent.",
+  },
+  welcome: {
+    title: "{icon} Chào các bạn~ Artist ngồi trông channel này nhé",
+    description: [
+      "Mỗi lần clear raid xong, cứ post 1 tin nhắn ngắn dạng `<raid> <difficulty> <character[, character2, ...]> [gate]` vào đây là Artist sẽ tự đánh dấu progress giúp cậu, xong tớ dọn luôn tin nhắn cho channel khỏi rối nha~",
+      "",
+      "**Artist chỉ update được character trong roster của chính bạn thôi đấy.** Chưa có roster thì xem field bên dưới để biết bắt đầu từ đâu nha.",
+    ],
+    onboardingName: "🚀 Mới vào server? Bắt đầu ở đây",
+    onboardingValue: [
+      "1. `/raid-add-roster name:<tên-char-bất-kỳ>` → Artist lấy roster từ lostark.bible, mở picker để cậu chọn ✅ chars muốn theo dõi rồi bấm **Confirm**.",
+      "2. `/raid-edit-roster roster:<tên>` → sau này muốn thêm chars mới vào roster đã có hoặc bỏ chars không còn chơi.",
+      "3. `/raid-status` → xem tiến độ raid mọi lúc · `/raid-help` → tài liệu đầy đủ mọi lệnh.",
+      "4. 🌐 `/raid-language` → đổi Artist sang 🇯🇵 日本語 (cute hơn~) hoặc giữ 🇻🇳 Tiếng Việt mặc định.",
+    ],
+    examplesName: "📌 Ví dụ cho dễ hình dung",
+    examplesValue: [
+      "`Serca Nightmare Clauseduk` → mark cả Serca Nightmare là DONE (tất cả gate)",
+      "`Kazeros Hard Soulrano G1` → mark G1 của Kazeros Hard (chưa clear tới G2)",
+      "`Serca Nor Soulrano G2` → mark **G1 + G2** của Serca Normal (cumulative - đi tới G2 nghĩa là G1 cũng đã qua)",
+      "`Act4 Hard Priscilladuk, Nailaduk` → mark Act 4 Hard done cho **cả 2 character** trong 1 post (multi-char; dedup tự động)",
+    ],
+    aliasesName: "🏷️ Alias Artist nhận (không phân biệt hoa thường)",
+    aliasesValue: [
+      "**Raid**: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca`",
+      "**Difficulty**: `normal` / `nor` / `nm` · `hard` / `hm` · `nightmare` / `9m`",
+      "**Gate**: `G1`, `G2` - chỉ dùng khi muốn đánh dấu đúng 1 gate",
+      "**Separator**: space, `+`, hay `,` đều xài được hết",
+    ],
+    notesName: "⚠️ Vài chuyện Artist muốn nhắc nhỏ",
+    notesValue: [
+      "• Character phải đủ iLvl cho raid đó, không tớ sẽ nhắc khẽ~",
+      "• Gõ tin nhắn không giống format → tớ im lặng, không spam channel đâu.",
+      "• Gõ đúng nhưng có lỗi (không tìm thấy char, iLvl thiếu, nhiều raid/difficulty/gate lẫn lộn) → Artist ping nhẹ nhàng; tin nhắn đó sẽ tự dọn khi bạn post lại, hoặc sau 5 phút nếu quên.",
+      "• Post đúng → Artist tag bạn ngay trong channel báo nhận được rồi, kèm DM embed confirm riêng; 5 giây sau tớ dọn cả tin gốc lẫn biển tag. Nếu DM bị tắt, tớ sẽ ping public ngắn rồi tự xóa sau 15 giây.",
+      "• Post 1 raid đã clear từ trước → tớ DM notice riêng báo đã DONE rồi, không update lại. Tránh overwrite progress tuần này. Muốn reset thật sự thì dùng `/raid-set` với `status:reset`.",
+      "• Post cách nhau ít nhất **2 giây** nha~ Spam nhanh quá tớ sẽ im lặng bỏ qua và nhắc khéo 1 lần.",
+    ],
+    voiceName: "📣 Artist sẽ tự nói trong channel này khi nào",
+    voiceValue: [
+      "• **Mỗi 30 phút (giờ VN, từ 8h sáng đến 3h đêm)**: Artist tự dọn rác channel, post 1 biển báo tone đổi theo lượng rác (sạch sẵn / nhẹ / bình thường / nhiều), biển tự biến sau 5 phút.",
+      "• **3h đêm (giờ VN)**: Artist đi ngủ, post 1 biển báo gn rồi tạm nghỉ đến 8h sáng - trong khoảng này không dọn rác cũng không ồn ào, nhưng raid clear các cậu post vẫn được ghi nhận bình thường.",
+      "• **8h sáng (giờ VN)**: Artist dậy, sweep 1 lần catch-up đống tin tích đêm qua + post 1 biển báo chào ngày mới, biển tự biến sau 10 phút.",
+      "• **Thứ 4 17:00 VN (mỗi tuần)**: Artist thông báo progress raid vừa được reset tuần mới, biển tự biến sau 30 phút.",
+      "• **Khi có người vừa set channel này**: Artist post 1 dòng chào hỏi, tự biến sau 2 phút (welcome pin thì ở lại).",
+      "• **Khi có member bật `/raid-auto-manage` mà toàn char private log**: Artist sẽ tag khẽ nhắc bật Public Log ở lostark.bible, tối đa 1 lần mỗi 7 ngày.",
+    ],
+    maintenanceName: "🛠️ Lịch bảo trì thứ 4 (14:00 VN)",
+    maintenanceValue: [
+      "Artist nhắc 7 lần quanh giờ tắt server: 3 lần đầu **T-3h / T-2h / T-1h** kèm checklist (shop solo, event, paradise, key hell).",
+      "Ping `@here` ở **T-3h** và **T-1h** để member online thấy. 4 lần countdown **T-15m / T-10m / T-5m / T-1m** không ping, đếm ngược tới giờ tắt.",
+    ],
+    autoManageName: "🤖 Lười post? Bật `/raid-auto-manage` nhé",
+    autoManageValue: [
+      "Gõ `/raid-auto-manage action:on` để tớ tự update raid progress cho cậu, không cần post thủ công nha~",
+      "Nhớ bật **Public Log** cho từng char muốn sync tại <https://lostark.bible/me/logs> trước nha.",
+    ],
+    sideTasksName: "📝 Side tasks - track chore daily/weekly riêng từng char",
+    sideTasksValue: [
+      "Mỗi người đều có checklist riêng để theo dõi chore phụ ngoài raid (Una dailies, Chaos, Guardian, GvG, ...) gắn theo từng character.",
+      "Đăng ký bằng `/raid-task add` (cap **3 daily + 5 weekly** mỗi char), rồi mở `/raid-status` chọn dropdown `📝 Side tasks` để toggle ✅/⬜.",
+      "Auto-reset 17:00 VN mỗi ngày (daily) hoặc thứ 4 17:00 VN (weekly) - tớ tự lo phần đó nha~",
+    ],
+    goldName: "💰 Track gold raid mỗi tuần",
+    goldValue: [
+      "Mở `/raid-status` để xem dòng `💰 đã kiếm / tổng G` (unbound) trên mỗi gold-earner + rollup `💰 Earned this week` cộng dồn cả account.",
+      "Pick 6 char nhận gold qua `/raid-gold-earner roster:<tên>` (LA cap 6 / account / tuần). Char mới add bằng `/raid-add-roster` mặc định là gold-earner sẵn rồi nha~",
+    ],
+    crownName: "👑 Ghi chú bé xíu",
+    crownValue: "Thi thoảng cậu sẽ bắt gặp vài roster đội `👑` thay cho `📁`. Artist quen vài người thôi mà~",
+    iconName: "🛡️ ⚔️ Icon trong dropdown nghĩa là gì?",
+    iconValue: [
+      "Khi cậu xem `/raid-status` hay `/raid-check`, dropdown filter sẽ kèm 2 icon nho nhỏ phân loại pending count:",
+      "• `🛡️` = **Support** (Bard / Paladin / Artist / Valkyrie)",
+      "• `⚔️` = **DPS** (mọi class còn lại)",
+      "Ví dụ `Du (8 pending · 2🛡️ 6⚔️)` = Du còn 8 char chưa clear raid, trong đó 2 sup + 6 DPS. Để Raid Manager nhìn 1 phát biết comp còn thiếu role nào.",
+    ],
+    footer: "Muốn xem hướng dẫn đầy đủ tất cả lệnh? Gõ /raid-help nhé~",
+  },
+  // Scheduled announcement bodies. Multi-variant pools live as arrays so the
+  // firing site can `Math.floor(Math.random() * pool.length)` and pick. {N}
+  // interpolation = sweep count for the cleanup/wakeup variants.
+  announcements: {
+    "weekly-reset": {
+      body: "Tuần mới đến rồi nhỉ~ Artist vừa reset progress raid tuần này cho các cậu, giờ chỉ việc làm lại từ đầu thôi. Chúc các cậu tuần raid vui vẻ nha, biển báo này Artist cuỗm đi sau 30 phút.",
+    },
+    "stuck-nudge": {
+      body: "<@{discordId}> nhắc khẽ nhé~ Roster cậu đã bật auto-manage nhưng hiện tại tất cả char đều là private log, Artist không sync được data đâu. Vào https://lostark.bible/me/logs bật **Show on Profile** cho char cần sync giúp tớ nha. Biển báo này Artist cuỗm đi sau 30 phút.",
+    },
+    "cleanup-volume": {
+      empty: [
+        "Ghé qua thấy chỗ này sạch tinh rồi nhé~ Artist cắm tạm biển ngồi nghỉ 5 phút xong sủi đi thôi, các cậu cứ tiếp tục post clear bình thường nha.",
+        "Hmm, các cậu dọn sẵn sạch gọn quá~ Artist đặt biển ở đây nghỉ tay 5 phút rồi sủi, biển cũng đi theo Artist luôn.",
+        "Chỗ này vẫn ngăn nắp ghê~ Artist cắm biển cảm ơn, tranh thủ nghỉ 5 phút rồi sủi đi làm việc khác, các cậu cứ tự nhiên.",
+      ],
+      trivial: [
+        "Thu gom **{N}** mẩu tin, nhẹ nhàng thôi mà~ Artist cắm tạm biển nghỉ 5 phút xong sủi đi tiếp nhé.",
+        "Ok, **{N}** tin nhỏ xinh Artist đã dọn gọn. Biển báo cắm tạm đây thôi, 5 phút xong hai đứa cùng sủi.",
+        "Có **{N}** mẩu lặt vặt thôi, Artist xử lý xong liền~ Cắm biển ngồi 5 phút rồi sủi, các cậu cứ post clear tiếp nha.",
+      ],
+      normal: [
+        "Đến ca dọn rồi nhé, Artist vừa quét **{N}** tin~ Cắm biển ngồi nghỉ 5 phút xong sủi đi thôi, các cậu cứ post clear bình thường.",
+        "Đúng nhịp dọn dẹp đây~ **{N}** tin đã được Artist thu gọn. Biển cắm tạm ở đây nghỉ 5 phút rồi sủi nha.",
+        "Xong một lượt, **{N}** tin được Artist dọn gọn ghẽ. Artist cắm biển nghỉ chút 5 phút, xong sủi đi, các cậu cứ tiếp tục.",
+      ],
+      heavy: [
+        "Oáp... **{N}** tin phải dọn này, Artist hụt hơi thật~ Cắm biển xuống nghỉ 5 phút đã, xong Artist với biển cùng sủi nha.",
+        "Nhiều rác thật đấy, **{N}** tin lận~ Artist vừa dọn gọn xong, cắm tạm biển ngồi thở 5 phút rồi sủi, các cậu post sôi nổi ghê.",
+        "Artist tăng ca dọn **{N}** tin luôn, mệt ghê~ Cắm biển nghỉ 5 phút rồi sủi đi, các cậu cứ tiếp tục post clear thoải mái nha.",
+      ],
+    },
+    "artist-bedtime": {
+      variants: [
+        "Khuya rồi, Artist đi ngủ đây nhé~ Từ giờ tới 8h sáng tớ tạm nghỉ, không dọn rác cũng không ồn ào gì. Các cậu cứ post clear bình thường, sáng ra Artist dậy xử lý gọn 1 lần. Biển báo này 5 phút tự cuỗm, chúc cả nhà ngủ ngon nha.",
+        "Khuya quá rồi đấy, Artist sập nguồn đây~ Tớ nghỉ tới 8h sáng, kênh này tạm yên tĩnh nhé - các cậu cứ post clear như thường, Artist tỉnh dậy sẽ dọn 1 thể. Ngủ ngon nha, biển báo 5 phút nữa Artist cuỗm theo.",
+        "Tới giờ đi ngủ của Artist rồi~ Tớ tắt đèn đây, tạm biệt mọi người đến 8h sáng nha. Yên tâm, raid clear các cậu post vẫn được Artist ghi nhận bình thường, chỉ là biển báo dọn dẹp nghỉ thôi. Biển này 5 phút nữa cũng đi ngủ theo Artist.",
+      ],
+    },
+    "artist-wakeup": {
+      empty: [
+        "Morning các cậu~ Artist vươn vai dậy đây nè, ghé qua thấy kênh sạch trơn luôn. Không có gì để dọn ngày mới, các cậu ngoan ghê~ Biển báo này 10 phút nữa Artist cuỗm đi.",
+        "Tớ dậy rồi nhé~ Đêm qua cả kênh ngủ ngon, không tin nào bỏ lại cho Artist cả. Bắt đầu ngày mới thôi nào, biển báo 10 phút tự đi ngủ tiếp.",
+        "Chào buổi sáng các cậu~ Artist mới mở mắt, kênh này sạch như chưa có gì xảy ra. Ngày mới các cậu raid vui nha, biển báo này 10 phút nữa sủi.",
+      ],
+      trivial: [
+        "Morning nha~ Artist vừa dậy, ngó lại thấy đêm qua có **{N}** tin thôi - tớ dọn luôn 1 thể cho kênh thoáng. Ngày mới raid khoẻ nha, biển báo 10 phút tự cuỗm.",
+        "Chào ngày mới các cậu~ Đêm qua có **{N}** tin nhỏ xinh, Artist dọn trong lúc đánh răng xong rồi. Giờ Artist làm việc bình thường lại, biển này 10 phút nữa đi.",
+        "Tớ dậy rồi đây~ Đêm qua chỉ có **{N}** tin, Artist gom nhanh 1 cái, xong rồi nè. Các cậu tiếp tục post clear thoải mái nha, biển báo 10 phút nữa tự cuỗm.",
+      ],
+      normal: [
+        "Morning các cậu~ Artist vừa mở mắt, ngó sang kênh thấy **{N}** tin tích đêm qua - dọn 1 thể cho gọn rồi đây. Ngày mới ta lại chiến nha, biển báo 10 phút tự đi.",
+        "Artist dậy rồi nè~ Đêm qua **{N}** tin tích lại, tớ sweep 1 cái cho sạch. Cảm ơn các cậu raid chăm ghê, biển báo này 10 phút nữa cuỗm đi cho khuất mắt.",
+        "Chào buổi sáng~ Artist mở app thấy **{N}** tin đêm qua, gom hết 1 cái cho kênh thoáng. Ngày mới ta làm việc tiếp thôi, biển báo 10 phút nữa Artist mang theo.",
+      ],
+      heavy: [
+        "Oáp... Artist mới dậy đã thấy **{N}** tin tích đêm qua, các cậu raid dữ dội thật. Tớ dọn 1 thể cho gọn rồi đây, hơi mệt nhưng xong rùi~ Biển báo 10 phút tự đi cho khuất mắt Artist.",
+        "Morning... Artist vừa mở mắt đã choáng với **{N}** tin tích đêm qua, các cậu farm không nghỉ luôn hả~ Tớ sweep 1 thể cho gọn, xong mệt muốn đi ngủ tiếp. Biển báo 10 phút nữa Artist cuỗm đi.",
+        "Ớ kìa, Artist mới dậy đã có **{N}** tin đợi sẵn - các cậu raid xuyên đêm thật hả? Tớ dọn 1 cái cho kênh thoáng, thôi vào việc luôn. Biển báo này 10 phút nữa tự cuỗm nha.",
+      ],
+    },
+    "maintenance-early": {
+      "T-3h": [
+        "@here Nee các cậu~ 3 tiếng nữa là tới giờ bảo trì rồi đó. Tranh thủ làm nốt mấy việc nha: shop solo tuần này còn gì hay không thì lượn 1 vòng ngó thử, event đang chạy ai chưa nhận quà thì lấy kẻo phí, paradise với key hell ai chưa đi thì gấp lên đi nốt. Artist nhắc trước cho khỏi quên thôi, biển báo này 30 phút nữa Artist cuỗm đi nha.",
+        "@here Còn 3 tiếng nữa thôi là server bảo trì các cậu ơi~ Mấy việc tuần này nhớ nha: shop solo còn món nào hay thì sắm nhanh, event đang chạy quà nhận luôn cho gọn, paradise với key hell chưa đi thì giờ là lúc thích hợp đó. Artist nhắc đầu giờ thôi, biển báo 30 phút nữa Artist cuỗm theo.",
+        "@here 3 giờ đồng hồ nữa thì bảo trì rồi nhé các cậu. Artist nhắc cho đỡ quên: shop solo tuần này có gì thì rinh về, event đang chạy quà còn dư thì nhặt nốt, paradise với key hell ai còn nợ thì giải quyết luôn cho nhẹ đầu. Biển báo này 30 phút nữa Artist gói lại nha.",
+      ],
+      "T-2h": [
+        "Hai tiếng nữa thì bảo trì rồi nhé các cậu~ Artist nhắc lại cho chắc: shop solo, event, paradise, key hell mấy món hôm nay nhớ chốt nốt nha. Biển báo này 30 phút nữa Artist cuỗm đi.",
+        "Còn 2 tiếng cuối trong giờ làm việc đó~ Ai còn dở shop solo, event, paradise hay key hell thì gấp lên nha, tránh để sát giờ mới làm thì không kịp. Biển báo Artist gói lại sau 30 phút.",
+        "2 tiếng nữa server bảo trì rồi các cậu~ Artist ngó thấy nhiều cậu vẫn online nên nhắc thêm 1 lần: shop solo / event / paradise / key hell mấy món tuần này nhớ làm cho gọn nha. Biển báo cuỗm đi sau 30 phút.",
+      ],
+      "T-1h": [
+        "@here Còn 1 tiếng nữa là tới giờ bảo trì rồi nhé các cậu! Lần nhắc cuối trong giờ làm việc đây, shop solo, event, paradise, key hell ai còn dở thì gấp lên hoàn thành nha, qua 14:00 là cooldown reset hết. Artist gói biển báo này lại sau 30 phút.",
+        "@here 60 phút cuối rồi đó các cậu~ Shop solo, event, paradise, key hell ai chưa xong thì giờ là hạn chót thật rồi nha. Artist nhắc gấp đây, biển báo cuỗm sau 30 phút.",
+        "@here Một tiếng nữa thôi là bảo trì các cậu ơi! Artist giục lần cuối: shop solo, event, paradise, key hell mấy món tuần này ai còn nợ thì gấp lên giải quyết, qua giờ là không quay lại được đâu. Biển báo này 30 phút nữa Artist cuỗm đi.",
+      ],
+    },
+    "maintenance-countdown": {
+      "T-15m": [
+        "15 phút cuối rồi đó các cậu~ Còn dở việc gì thì cố nốt đi nha, sắp tới giờ bảo trì rồi. Artist đếm ngược cùng các cậu đây, biển báo này 10 phút nữa cuỗm đi.",
+        "Một khắc đồng hồ nữa thôi là server tắt nhé~ Ai đang trong raid thì cố clear cho xong, không thì thoát game cho lành. Artist đếm ngược, biển báo 10 phút sau Artist cuỗm theo.",
+        "Còn 15 phút nữa thôi các cậu~ Sắp tới giờ rồi đó, gói gọn lại đi nhé. Artist đứng đếm ngược cùng các cậu, biển báo này Artist gói lại sau 10 phút.",
+      ],
+      "T-10m": [
+        "10 phút nữa thôi các cậu ơi~ Đang dở gì thì xong nốt nhanh đi nha, đừng để sát giờ. Artist đếm tiếp, biển báo 10 phút nữa cuỗm theo.",
+        "Còn 10 phút thôi đó~ Ai đang ở thành phố thì giờ cũng đừng vào raid mới làm gì, tốn tiền vào ra. Artist nhắc nhẹ, biển báo cuỗm sau 10 phút.",
+        "Đếm ngược 10 phút cuối nha các cậu. Sắp tới giờ Artist với server cùng nghỉ rồi đó. Biển báo này Artist mang theo sau 10 phút.",
+      ],
+      "T-5m": [
+        "5 phút cuối rồi nhé các cậu~ Đăng xuất gọn ghẽ thôi, đừng cố raid kẻo tự nhiên mất tiến độ giữa chừng. Artist đếm tiếp, biển báo 10 phút nữa cuỗm đi.",
+        "Còn 5 phút thôi đó~ Ai đang trong raid thì cứ thoát ra cho lành, vào dở mất công. Artist gần ngủ trưa rồi đây, biển báo cuỗm sau 10 phút.",
+        "Đếm ngược 5 phút cuối các cậu ơi! Server sắp tắt rồi nha, ai online thì chuẩn bị thoát game cho gọn. Biển báo này 10 phút nữa Artist mang đi.",
+      ],
+      "T-1m": [
+        "1 phút cuối rồi nha các cậu! Thoát game thôi cho lành, đang dở gì cũng đành dừng đây, server tắt là mất hết đấy. Hẹn gặp lại sau bảo trì nha~",
+        "60 giây cuối các cậu ơi! Lưu rồi thoát thôi, đừng tiếc nuối cố thêm gì, tới rồi là tới rồi. Artist đi nghỉ đây, hẹn các cậu sau bảo trì~",
+        "Một phút thôi đó! Thoát game gấp đi các cậu~ Artist với server cùng đi nghỉ giờ này, biển báo này 5 phút nữa cũng tự đi luôn. Hẹn gặp lại nha.",
+      ],
+    },
+  },
 };

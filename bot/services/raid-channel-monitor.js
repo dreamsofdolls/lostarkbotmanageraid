@@ -2,6 +2,8 @@
 
 const { getArtistEmoji } = require("../models/ArtistEmoji");
 const { findAccessibleCharacter } = require("../services/access-control");
+const User = require("../models/user");
+const { t, getUserLanguage, getGuildLanguage } = require("./i18n");
 
 function createRaidChannelMonitorService({
   PermissionFlagsBits,
@@ -224,8 +226,12 @@ function createRaidChannelMonitorService({
     gates,
     statusType,
     guildName,
+    lang,
   }) {
-    const gatesText = Array.isArray(gates) && gates.length > 0 ? gates.join(", ") : "All gates";
+    const gatesText =
+      Array.isArray(gates) && gates.length > 0
+        ? gates.join(", ")
+        : t("text-parser.raidUpdateAllGates", lang);
     const scopeLabel =
       statusType === "process" && Array.isArray(gates) && gates.length > 0
         ? `${raidMeta.label} · ${gatesText}`
@@ -249,40 +255,55 @@ function createRaidChannelMonitorService({
     const titleIcon = hasProgress ? UI.icons.done : UI.icons.info;
     const embed = new EmbedBuilder()
       .setColor(color)
-      .setTitle(`${titleIcon} Raid Update · ${scopeLabel}`)
-      .setDescription(`Tớ đã xử lý raid cho ${results.length} character~`)
+      .setTitle(`${titleIcon} ${t("text-parser.raidUpdateTitle", lang, { scope: scopeLabel })}`)
+      .setDescription(t("text-parser.raidUpdateDescription", lang, { count: results.length }))
       .setTimestamp();
     if (done.length > 0) {
       embed.addFields({
-        name: `${UI.icons.done} Updated (${done.length})`,
+        name: t("text-parser.raidUpdateUpdatedField", lang, {
+          icon: UI.icons.done,
+          count: done.length,
+        }),
         value: done.map((n) => `**${n}**`).join(", "),
       });
     }
     if (already.length > 0) {
       embed.addFields({
-        name: `${UI.icons.info} Đã DONE từ trước (${already.length})`,
+        name: t("text-parser.raidUpdateAlreadyField", lang, {
+          icon: UI.icons.info,
+          count: already.length,
+        }),
         value: already.map((n) => `**${n}**`).join(", "),
       });
     }
     if (notFound.length > 0) {
       embed.addFields({
-        name: `${UI.icons.warn} Không tìm thấy trong roster (${notFound.length})`,
+        name: t("text-parser.raidUpdateNotFoundField", lang, {
+          icon: UI.icons.warn,
+          count: notFound.length,
+        }),
         value: notFound.map((n) => `\`${n}\``).join(", "),
       });
     }
     if (ineligible.length > 0) {
       embed.addFields({
-        name: `${UI.icons.warn} Chưa đủ iLvl cho ${raidMeta.label} (cần ${raidMeta.minItemLevel}+)`,
+        name: t("text-parser.raidUpdateIneligibleField", lang, {
+          icon: UI.icons.warn,
+          raidLabel: raidMeta.label,
+          minItemLevel: raidMeta.minItemLevel,
+        }),
         value: ineligible.join("\n"),
       });
     }
     if (errored.length > 0) {
       embed.addFields({
-        name: `${UI.icons.warn} Lỗi hệ thống`,
+        name: t("text-parser.raidUpdateErrorField", lang, { icon: UI.icons.warn }),
         value: errored.map((n) => `\`${n}\``).join(", "),
       });
     }
-    if (guildName) embed.setFooter({ text: `Server: ${guildName}` });
+    if (guildName) {
+      embed.setFooter({ text: t("text-parser.raidUpdateFooterServer", lang, { guildName }) });
+    }
     return embed;
   }
   function buildRaidChannelAlreadyCompleteEmbed({
@@ -291,27 +312,33 @@ function createRaidChannelMonitorService({
     gates,
     statusType,
     guildName,
+    lang,
   }) {
-    const gatesText = Array.isArray(gates) && gates.length > 0 ? gates.join(", ") : "All gates";
+    const gatesText =
+      Array.isArray(gates) && gates.length > 0
+        ? gates.join(", ")
+        : t("text-parser.raidUpdateAllGates", lang);
     const isSingleOrPartial = statusType === "process" && Array.isArray(gates) && gates.length > 0;
     const scopeLabel = isSingleOrPartial ? `${raidMeta.label} · ${gatesText}` : raidMeta.label;
     const embed = new EmbedBuilder()
       .setColor(UI.colors.progress)
-      .setTitle(`${UI.icons.info} Raid đã DONE từ trước rồi~`)
+      .setTitle(t("text-parser.alreadyCompleteTitle", lang, { icon: UI.icons.info }))
       .setDescription(
-        `**${charName}** đã clear **${scopeLabel}** tuần này rồi nhé. Tớ không update lại đâu - để tránh overwriting progress cậu đã có.`
+        t("text-parser.alreadyCompleteDescription", lang, { charName, scope: scopeLabel })
       )
       .addFields(
-        { name: "Character", value: `**${charName}**`, inline: true },
-        { name: "Raid", value: `**${raidMeta.label}**`, inline: true },
-        { name: "Gates", value: gatesText, inline: true },
+        { name: t("text-parser.alreadyFieldCharacter", lang), value: `**${charName}**`, inline: true },
+        { name: t("text-parser.alreadyFieldRaid", lang), value: `**${raidMeta.label}**`, inline: true },
+        { name: t("text-parser.alreadyFieldGates", lang), value: gatesText, inline: true },
         {
-          name: "Muốn reset?",
-          value: "Dùng `/raid-set character:<name> raid:<raid> status:reset` nếu cậu thật sự muốn mark-chưa-done cái này (ví dụ bị write nhầm).",
+          name: t("text-parser.alreadyFieldResetTitle", lang),
+          value: t("text-parser.alreadyFieldResetValue", lang),
         }
       )
       .setTimestamp();
-    if (guildName) embed.setFooter({ text: `Server: ${guildName}` });
+    if (guildName) {
+      embed.setFooter({ text: t("text-parser.raidUpdateFooterServer", lang, { guildName }) });
+    }
     return embed;
   }
   function buildRaidChannelSuccessEmbed({
@@ -322,32 +349,49 @@ function createRaidChannelMonitorService({
     selectedDifficulty,
     modeResetCount,
     guildName,
+    lang,
   }) {
     const isProcess = statusType === "process";
+    const isMultiGate = Array.isArray(gates) && gates.length > 1;
     const title = isProcess
-      ? `${UI.icons.done} Gate${Array.isArray(gates) && gates.length > 1 ? "s" : ""} Completed`
-      : `${UI.icons.done} Raid Completed`;
-    const gatesText = Array.isArray(gates) && gates.length > 0 ? gates.join(", ") : "All gates";
+      ? t(
+          isMultiGate
+            ? "text-parser.successDmTitleProcessMulti"
+            : "text-parser.successDmTitleProcessSingle",
+          lang,
+          { icon: UI.icons.done }
+        )
+      : t("text-parser.successDmTitleComplete", lang, { icon: UI.icons.done });
+    const gatesText =
+      Array.isArray(gates) && gates.length > 0
+        ? gates.join(", ")
+        : t("text-parser.raidUpdateAllGates", lang);
     const embed = new EmbedBuilder()
       .setColor(UI.colors.success)
       .setTitle(title)
-      .setDescription(`Tớ đã update progress cho **${charName}** rồi nha~`)
+      .setDescription(t("text-parser.successDmDescription", lang, { charName }))
       .addFields(
-        { name: "Character", value: `**${charName}**`, inline: true },
-        { name: "Raid", value: `**${raidMeta.label}**`, inline: true },
-        { name: "Gates", value: gatesText, inline: true }
+        { name: t("text-parser.successDmFieldCharacter", lang), value: `**${charName}**`, inline: true },
+        { name: t("text-parser.successDmFieldRaid", lang), value: `**${raidMeta.label}**`, inline: true },
+        { name: t("text-parser.successDmFieldGates", lang), value: gatesText, inline: true }
       )
       .setTimestamp();
-    if (guildName) embed.setFooter({ text: `Server: ${guildName}` });
+    if (guildName) {
+      embed.setFooter({ text: t("text-parser.raidUpdateFooterServer", lang, { guildName }) });
+    }
     if (modeResetCount > 0) {
       embed.addFields({
-        name: `${UI.icons.reset} Note`,
-        value: `Đã chuyển mode sang **${selectedDifficulty}** - progress mode cũ được clear cho state consistent.`,
+        name: t("text-parser.successDmModeNoteTitle", lang, { icon: UI.icons.reset }),
+        value: t("text-parser.successDmModeNoteValue", lang, { difficulty: selectedDifficulty }),
       });
     }
     return embed;
   }
-  function buildRaidChannelWelcomeEmbed() {
+  function buildRaidChannelWelcomeEmbed(lang) {
+    // Joiner that respects t()'s array-aware interpolation: `welcome.*` keys
+    // marked as arrays in the locale tree resolve to string[]; we join with
+    // \n on the consumer side so a single tree edit propagates everywhere.
+    const joinIfArray = (val) => (Array.isArray(val) ? val.join("\n") : val);
     return new EmbedBuilder()
       .setColor(UI.colors.neutral)
       // Artist persona emoji (chibi "shy" face) replaces the legacy
@@ -360,121 +404,34 @@ function createRaidChannelMonitorService({
       // Empty-string fallback when the bootstrap hasn't completed yet
       // means the title degrades to "Chào các bạn~..." without an
       // icon prefix - cleaner than rendering literal `<:shy:0>` text.
-      .setTitle(`${getArtistEmoji("shy")} Chào các bạn~ Artist ngồi trông channel này nhé`.trim())
-      .setDescription(
-        [
-          "Mỗi lần clear raid xong, cứ post 1 tin nhắn ngắn dạng `<raid> <difficulty> <character[, character2, ...]> [gate]` vào đây là Artist sẽ tự đánh dấu progress giúp cậu, xong tớ dọn luôn tin nhắn cho channel khỏi rối nha~",
-          "",
-          "**Artist chỉ update được character trong roster của chính bạn thôi đấy.** Chưa có roster thì xem field bên dưới để biết bắt đầu từ đâu nha.",
-        ].join("\n")
-      )
+      .setTitle(t("welcome.title", lang, { icon: getArtistEmoji("shy") }).trim())
+      .setDescription(joinIfArray(t("welcome.description", lang)))
       .addFields(
-        {
-          // Onboarding workflow lives in the first field so a newcomer
-          // scanning the pin top-down hits the 3-step path before the
-          // post-format docs (which only matter once they have a roster).
-          // Copy is Vietnamese (community match), but technical labels
-          // are kept in English so they line up with the actual UI:
-          //   - Discord identifiers: `/command` names, slash option
-          //     names like `language:`
-          //   - Button label that must match the picker UI: "Confirm"
-          //   - Gamer / lostark.bible terms with no clean VN equivalent:
-          //     picker, raid, gate, Public Log, DPS, Support, DM
-          name: "🚀 Mới vào server? Bắt đầu ở đây",
-          value: [
-            "1. `/raid-add-roster name:<tên-char-bất-kỳ>` → Artist lấy roster từ lostark.bible, mở picker để cậu chọn ✅ chars muốn theo dõi rồi bấm **Confirm**.",
-            "2. `/raid-edit-roster roster:<tên>` → sau này muốn thêm chars mới vào roster đã có hoặc bỏ chars không còn chơi.",
-            "3. `/raid-status` → xem tiến độ raid mọi lúc · `/raid-help` → tài liệu đầy đủ mọi lệnh.",
-            "4. 🌐 `/raid-language` → đổi Artist sang 🇯🇵 日本語 (cute hơn~) hoặc giữ 🇻🇳 Tiếng Việt mặc định.",
-          ].join("\n"),
-        },
-        {
-          name: "📌 Ví dụ cho dễ hình dung",
-          value: [
-            "`Serca Nightmare Clauseduk` → mark cả Serca Nightmare là DONE (tất cả gate)",
-            "`Kazeros Hard Soulrano G1` → mark G1 của Kazeros Hard (chưa clear tới G2)",
-            "`Serca Nor Soulrano G2` → mark **G1 + G2** của Serca Normal (cumulative - đi tới G2 nghĩa là G1 cũng đã qua)",
-            "`Act4 Hard Priscilladuk, Nailaduk` → mark Act 4 Hard done cho **cả 2 character** trong 1 post (multi-char; dedup tự động)",
-          ].join("\n"),
-        },
-        {
-          name: "🏷️ Alias Artist nhận (không phân biệt hoa thường)",
-          value: [
-            "**Raid**: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca`",
-            "**Difficulty**: `normal` / `nor` / `nm` · `hard` / `hm` · `nightmare` / `9m`",
-            "**Gate**: `G1`, `G2` - chỉ dùng khi muốn đánh dấu đúng 1 gate",
-            "**Separator**: space, `+`, hay `,` đều xài được hết",
-          ].join("\n"),
-        },
-        {
-          name: "⚠️ Vài chuyện Artist muốn nhắc nhỏ",
-          value: [
-            "• Character phải đủ iLvl cho raid đó, không tớ sẽ nhắc khẽ~",
-            "• Gõ tin nhắn không giống format → tớ im lặng, không spam channel đâu.",
-            "• Gõ đúng nhưng có lỗi (không tìm thấy char, iLvl thiếu, nhiều raid/difficulty/gate lẫn lộn) → Artist ping nhẹ nhàng; tin nhắn đó sẽ tự dọn khi bạn post lại, hoặc sau 5 phút nếu quên.",
-            "• Post đúng → Artist tag bạn ngay trong channel báo nhận được rồi, kèm DM embed confirm riêng; 5 giây sau tớ dọn cả tin gốc lẫn biển tag. Nếu DM bị tắt, tớ sẽ ping public ngắn rồi tự xóa sau 15 giây.",
-            "• Post 1 raid đã clear từ trước → tớ DM notice riêng báo đã DONE rồi, không update lại. Tránh overwrite progress tuần này. Muốn reset thật sự thì dùng `/raid-set` với `status:reset`.",
-            "• Post cách nhau ít nhất **2 giây** nha~ Spam nhanh quá tớ sẽ im lặng bỏ qua và nhắc khéo 1 lần.",
-          ].join("\n"),
-        },
-        {
-          // Split into 2 fields after the maintenance bullet pushed the
-          // single-field version past Discord's 1024-char value cap. Per-
-          // field cap is hard, total embed cap (6000) has plenty of room.
-          name: "📣 Artist sẽ tự nói trong channel này khi nào",
-          value: [
-            "• **Mỗi 30 phút (giờ VN, từ 8h sáng đến 3h đêm)**: Artist tự dọn rác channel, post 1 biển báo tone đổi theo lượng rác (sạch sẵn / nhẹ / bình thường / nhiều), biển tự biến sau 5 phút.",
-            "• **3h đêm (giờ VN)**: Artist đi ngủ, post 1 biển báo gn rồi tạm nghỉ đến 8h sáng - trong khoảng này không dọn rác cũng không ồn ào, nhưng raid clear các cậu post vẫn được ghi nhận bình thường.",
-            "• **8h sáng (giờ VN)**: Artist dậy, sweep 1 lần catch-up đống tin tích đêm qua + post 1 biển báo chào ngày mới, biển tự biến sau 10 phút.",
-            "• **Thứ 4 17:00 VN (mỗi tuần)**: Artist thông báo progress raid vừa được reset tuần mới, biển tự biến sau 30 phút.",
-            "• **Khi có người vừa set channel này**: Artist post 1 dòng chào hỏi, tự biến sau 2 phút (welcome pin thì ở lại).",
-            "• **Khi có member bật `/raid-auto-manage` mà toàn char private log**: Artist sẽ tag khẽ nhắc bật Public Log ở lostark.bible, tối đa 1 lần mỗi 7 ngày.",
-          ].join("\n"),
-        },
-        {
-          name: "🛠️ Lịch bảo trì thứ 4 (14:00 VN)",
-          value: [
-            "Artist nhắc 7 lần quanh giờ tắt server: 3 lần đầu **T-3h / T-2h / T-1h** kèm checklist (shop solo, event, paradise, key hell).",
-            "Ping `@here` ở **T-3h** và **T-1h** để member online thấy. 4 lần countdown **T-15m / T-10m / T-5m / T-1m** không ping, đếm ngược tới giờ tắt.",
-          ].join("\n"),
-        },
-        {
-          name: "🤖 Lười post? Bật `/raid-auto-manage` nhé",
-          value: [
-            "Gõ `/raid-auto-manage action:on` để tớ tự update raid progress cho cậu, không cần post thủ công nha~",
-            "Nhớ bật **Public Log** cho từng char muốn sync tại <https://lostark.bible/me/logs> trước nha.",
-          ].join("\n"),
-        },
-        {
-          name: "📝 Side tasks - track chore daily/weekly riêng từng char",
-          value: [
-            "Mỗi người đều có checklist riêng để theo dõi chore phụ ngoài raid (Una dailies, Chaos, Guardian, GvG, ...) gắn theo từng character.",
-            "Đăng ký bằng `/raid-task add` (cap **3 daily + 5 weekly** mỗi char), rồi mở `/raid-status` chọn dropdown `📝 Side tasks` để toggle ✅/⬜.",
-            "Auto-reset 17:00 VN mỗi ngày (daily) hoặc thứ 4 17:00 VN (weekly) - tớ tự lo phần đó nha~",
-          ].join("\n"),
-        },
-        {
-          name: "💰 Track gold raid mỗi tuần",
-          value: [
-            "Mở `/raid-status` để xem dòng `💰 đã kiếm / tổng G` (unbound) trên mỗi gold-earner + rollup `💰 Earned this week` cộng dồn cả account.",
-            "Pick 6 char nhận gold qua `/raid-gold-earner roster:<tên>` (LA cap 6 / account / tuần). Char mới add bằng `/raid-add-roster` mặc định là gold-earner sẵn rồi nha~",
-          ].join("\n"),
-        },
-        {
-          name: "👑 Ghi chú bé xíu",
-          value: "Thi thoảng cậu sẽ bắt gặp vài roster đội `👑` thay cho `📁`. Artist quen vài người thôi mà~",
-        },
-        {
-          name: "🛡️ ⚔️ Icon trong dropdown nghĩa là gì?",
-          value: [
-            "Khi cậu xem `/raid-status` hay `/raid-check`, dropdown filter sẽ kèm 2 icon nho nhỏ phân loại pending count:",
-            "• `🛡️` = **Support** (Bard / Paladin / Artist / Valkyrie)",
-            "• `⚔️` = **DPS** (mọi class còn lại)",
-            "Ví dụ `Du (8 pending · 2🛡️ 6⚔️)` = Du còn 8 char chưa clear raid, trong đó 2 sup + 6 DPS. Để Raid Manager nhìn 1 phát biết comp còn thiếu role nào.",
-          ].join("\n"),
-        }
+        // Onboarding workflow lives in the first field so a newcomer
+        // scanning the pin top-down hits the 3-step path before the
+        // post-format docs (which only matter once they have a roster).
+        // Technical labels are kept in English in the locale strings so
+        // they line up with the actual UI: /command names, slash option
+        // names like `language:`, button labels ("Confirm"), and
+        // gamer/lostark.bible terms with no clean translation
+        // (picker, raid, gate, Public Log, DPS, Support, DM).
+        { name: t("welcome.onboardingName", lang), value: joinIfArray(t("welcome.onboardingValue", lang)) },
+        { name: t("welcome.examplesName", lang), value: joinIfArray(t("welcome.examplesValue", lang)) },
+        { name: t("welcome.aliasesName", lang), value: joinIfArray(t("welcome.aliasesValue", lang)) },
+        { name: t("welcome.notesName", lang), value: joinIfArray(t("welcome.notesValue", lang)) },
+        // Voice + maintenance live in separate fields after the maintenance
+        // bullet pushed the single-field version past Discord's 1024-char
+        // value cap. Per-field cap is hard, total embed cap (6000) has
+        // plenty of room.
+        { name: t("welcome.voiceName", lang), value: joinIfArray(t("welcome.voiceValue", lang)) },
+        { name: t("welcome.maintenanceName", lang), value: joinIfArray(t("welcome.maintenanceValue", lang)) },
+        { name: t("welcome.autoManageName", lang), value: joinIfArray(t("welcome.autoManageValue", lang)) },
+        { name: t("welcome.sideTasksName", lang), value: joinIfArray(t("welcome.sideTasksValue", lang)) },
+        { name: t("welcome.goldName", lang), value: joinIfArray(t("welcome.goldValue", lang)) },
+        { name: t("welcome.crownName", lang), value: joinIfArray(t("welcome.crownValue", lang)) },
+        { name: t("welcome.iconName", lang), value: joinIfArray(t("welcome.iconValue", lang)) }
       )
-      .setFooter({ text: "Muốn xem hướng dẫn đầy đủ tất cả lệnh? Gõ /raid-help nhé~" });
+      .setFooter({ text: t("welcome.footer", lang) });
   }
   async function postTransientReply(message, content) {
     try {
@@ -494,9 +451,12 @@ function createRaidChannelMonitorService({
     const last = emptyContentWarningAt.get(key) || 0;
     if (now - last < EMPTY_CONTENT_WARNING_COOLDOWN_MS) return;
     emptyContentWarningAt.set(key, now);
+    // Empty-content warning is public (channel reply) but addressed at the
+    // poster - guild's broadcast lang covers both audiences fairly.
+    const lang = await getGuildLanguage(message.guildId, { GuildConfigModel: GuildConfig });
     await postTransientReply(
       message,
-      `${UI.icons.warn} Ớ kìa, tin của cậu bay qua rồi nhưng Artist không đọc được chữ nào hết... Không phải lỗi của cậu đâu nha, chắc tớ đang rối mấy cài đặt bên trong. Phiền cậu nhờ chủ bot xem hộ giúp Artist xíu, sửa xong cậu gõ lại là tớ bắt được ngay~`
+      t("text-parser.emptyContent", lang, { icon: UI.icons.warn })
     );
   }
   // Persistent per-user hint tracker: when a user posts a recoverable-error
@@ -633,8 +593,11 @@ function createRaidChannelMonitorService({
   }
   async function postSpamWarning(message) {
     try {
+      // Spam warning is a public reply seen by everyone in channel - guild
+      // language even though it's reply-style addressed at the spammer.
+      const lang = await getGuildLanguage(message.guildId, { GuildConfigModel: GuildConfig });
       const reply = await message.reply({
-        content: `💢 Này ơi, tớ theo không kịp đâu~ Mỗi tin cách nhau ít nhất 2 giây thôi nhé, không Artist im lặng ignore đấy!`,
+        content: t("text-parser.spamWarn", lang),
       });
       setTimeout(() => {
         reply.delete().catch(() => {});
@@ -730,24 +693,32 @@ function createRaidChannelMonitorService({
       return;
     }
     commitUserMonitorActivity(message, cooldown.viaException);
+    // Resolve guild lang once per message; used for every public hint /
+    // whisper-ack / public DM-fallback post downstream. The DM body itself
+    // uses the recipient's per-user lang (resolved separately below) since
+    // that's a private 1:1 surface.
+    const guildLang = await getGuildLanguage(message.guildId, { GuildConfigModel: GuildConfig });
     if (parsed.error === "multi-gate") {
       await postPersistentHint(
         message,
-        `${UI.icons.warn} Có nhiều gate (${parsed.gates.join(", ")}) trong message. Mỗi lần chỉ update 1 gate - post lại với 1 gate hoặc bỏ gate để đánh DONE cả raid nha.`
+        t("text-parser.multiGate", guildLang, { icon: UI.icons.warn, gates: parsed.gates.join(", ") })
       );
       return;
     }
     if (parsed.error === "multi-raid") {
       await postPersistentHint(
         message,
-        `${UI.icons.warn} Message chứa nhiều raid khác nhau (${parsed.raids.join(", ")}). Chọn đúng 1 raid rồi post lại nha.`
+        t("text-parser.multiRaid", guildLang, { icon: UI.icons.warn, raids: parsed.raids.join(", ") })
       );
       return;
     }
     if (parsed.error === "multi-difficulty") {
       await postPersistentHint(
         message,
-        `${UI.icons.warn} Message chứa nhiều difficulty khác nhau (${parsed.difficulties.join(", ")}). Chọn đúng 1 difficulty rồi post lại nha.`
+        t("text-parser.multiDifficulty", guildLang, {
+          icon: UI.icons.warn,
+          difficulties: parsed.difficulties.join(", "),
+        })
       );
       return;
     }
@@ -755,7 +726,10 @@ function createRaidChannelMonitorService({
     const raidValue = `${raidKey}_${modeKey}`;
     const raidMeta = RAID_REQUIREMENT_MAP[raidValue];
     if (!raidMeta) {
-      await postPersistentHint(message, `${UI.icons.warn} Combo \`${raidKey} ${modeKey}\` không tồn tại. Check lại raid + difficulty rồi post lại nha.`);
+      await postPersistentHint(
+        message,
+        t("text-parser.invalidCombo", guildLang, { icon: UI.icons.warn, raidKey, modeKey })
+      );
       return;
     }
     if (gate) {
@@ -763,7 +737,12 @@ function createRaidChannelMonitorService({
       if (!validGates.includes(gate)) {
         await postPersistentHint(
           message,
-          `${UI.icons.warn} Gate **${gate}** không có cho **${raidMeta.label}**. Gates hợp lệ: ${validGates.map((g) => `\`${g}\``).join(", ")}. Post lại với gate đúng nha.`
+          t("text-parser.invalidGate", guildLang, {
+            icon: UI.icons.warn,
+            gate,
+            raidLabel: raidMeta.label,
+            validGates: validGates.map((g) => `\`${g}\``).join(", "),
+          })
         );
         return;
       }
@@ -850,7 +829,7 @@ function createRaidChannelMonitorService({
     if (hadNoRoster) {
       await postPersistentHint(
         message,
-        `${UI.icons.info} Cậu chưa có roster. Dùng \`/raid-add-roster\` trước rồi quay lại post clear nha.`
+        t("text-parser.noRoster", guildLang, { icon: UI.icons.info })
       );
       return;
     }
@@ -862,6 +841,10 @@ function createRaidChannelMonitorService({
     const hasProgress = successCount > 0 || alreadyCount > 0;
     const hasErrors =
       notFoundResults.length > 0 || ineligibleResults.length > 0 || errorResults.length > 0;
+    // DM body uses the recipient's per-user lang since it's a private 1:1
+    // surface (the poster). Falls back to guild lang on cache miss + no
+    // User doc - DEFAULT_LANGUAGE in i18n.js handles that.
+    const dmLang = await getUserLanguage(message.author.id, { UserModel: User });
     // Build an aggregated embed for DM - covers both single-char and multi-char
     // cases, and groups results by status so the user sees one tidy card.
     const aggregateEmbed = buildRaidChannelMultiResultEmbed({
@@ -870,6 +853,7 @@ function createRaidChannelMonitorService({
       gates: effectiveGates,
       statusType,
       guildName: message.guild?.name,
+      lang: dmLang,
     });
     // DM the aggregate for a private record. Public fallback when DM is
     // disabled. Only attempted if we actually processed something useful
@@ -894,31 +878,36 @@ function createRaidChannelMonitorService({
       const hintLines = [];
       if (notFoundResults.length > 0) {
         hintLines.push(
-          `${UI.icons.warn} Không tìm thấy trong roster: ${notFoundResults
-            .map((r) => `\`${r.charName}\``)
-            .join(", ")}`
+          t("text-parser.errorNotFound", guildLang, {
+            icon: UI.icons.warn,
+            names: notFoundResults.map((r) => `\`${r.charName}\``).join(", "),
+          })
         );
       }
       if (ineligibleResults.length > 0) {
         hintLines.push(
-          `${UI.icons.warn} Chưa đủ iLvl cho **${raidMeta.label}** (cần **${raidMeta.minItemLevel}+**): ${ineligibleResults
-            .map((r) => `**${r.displayName || r.charName}** (iLvl ${r.ineligibleItemLevel})`)
-            .join(", ")}`
+          t("text-parser.errorIneligible", guildLang, {
+            icon: UI.icons.warn,
+            raidLabel: raidMeta.label,
+            minItemLevel: raidMeta.minItemLevel,
+            names: ineligibleResults
+              .map((r) => `**${r.displayName || r.charName}** (iLvl ${r.ineligibleItemLevel})`)
+              .join(", "),
+          })
         );
       }
       if (errorResults.length > 0) {
         hintLines.push(
-          `${UI.icons.warn} Lỗi hệ thống khi update: ${errorResults
-            .map((r) => `\`${r.charName}\``)
-            .join(", ")}`
+          t("text-parser.errorSystem", guildLang, {
+            icon: UI.icons.warn,
+            names: errorResults.map((r) => `\`${r.charName}\``).join(", "),
+          })
         );
       }
       if (hasProgress) {
-        hintLines.push(
-          `_(Các character hợp lệ khác trong post của bạn đã được update rồi - check DM cho chi tiết.)_`
-        );
+        hintLines.push(t("text-parser.errorPartialNote", guildLang));
       } else {
-        hintLines.push(`_(Sửa lại rồi post lại nhé, tớ sẽ tự dọn hint cũ.)_`);
+        hintLines.push(t("text-parser.errorRetryNote", guildLang));
       }
       ops.push(postPersistentHint(message, hintLines.join("\n")));
     }
@@ -953,7 +942,7 @@ function createRaidChannelMonitorService({
           // window (gives the user time to see the ack before both
           // the whisper + the original post vanish).
           whisperMsg = await message.channel.send({
-            content: `<@${message.author.id}> ...Artist DM kết quả cho cậu rồi nha~ Channel sẽ tự dọn cả 2 tin nhắn sau 5 giây...`,
+            content: t("text-parser.whisperAck", guildLang, { userId: message.author.id }),
             allowedMentions: { users: [message.author.id] },
           });
         } catch (err) {
@@ -994,9 +983,17 @@ function createRaidChannelMonitorService({
         .map((r) => `**${r.displayName || r.charName}**`)
         .join(", ");
       const parts = [];
-      if (doneNames) parts.push(`mark **${scope}** done cho ${doneNames}`);
-      if (alreadyNames) parts.push(`${alreadyNames} đã clear **${scope}** từ trước`);
-      const fallbackText = `${UI.icons.done} <@${message.author.id}> ${parts.join("; ")}. _(DM bị tắt - enable "Allow DMs from server members" để nhận confirm private.)_`;
+      if (doneNames) {
+        parts.push(t("text-parser.dmFallbackMarkDone", guildLang, { scope, names: doneNames }));
+      }
+      if (alreadyNames) {
+        parts.push(t("text-parser.dmFallbackAlready", guildLang, { scope, names: alreadyNames }));
+      }
+      const fallbackText = t("text-parser.dmFallback", guildLang, {
+        icon: UI.icons.done,
+        userId: message.author.id,
+        parts: parts.join("; "),
+      });
       ops.push(
         (async () => {
           try {
@@ -1101,17 +1098,28 @@ function createRaidChannelMonitorService({
         const msg = pin?.message;
         if (!msg || msg.author?.id !== botUserId) continue;
         const title = msg.embeds?.[0]?.title || "";
-        // Welcome title signature is stable across versions (kitsune +
-        // "Artist ngồi trông channel này"). Match loose enough to survive
-        // minor wording tweaks but specific enough to miss other bot pins.
-        if (title.includes("Artist ngồi trông channel này")) {
+        // Welcome title signature has been localized - match the per-locale
+        // signature words so JP/EN welcomes still get cleaned up alongside
+        // the legacy VN one. The ja/en titles share a common keyword
+        // ("Artist") that the VN one also contains, but we match each one
+        // explicitly to avoid false positives on unrelated bot pins that
+        // happen to contain "Artist".
+        if (
+          title.includes("Artist ngồi trông channel này") ||
+          title.includes("アーティストがこのチャンネルを見守りますわ") ||
+          title.includes("Artist watches this channel")
+        ) {
           staleIds.add(msg.id);
         }
       }
     } catch (err) {
       console.warn("[raid-channel] fetchPins for stale-welcome scan failed:", err?.message || err);
     }
-    const embed = buildRaidChannelWelcomeEmbed();
+    // Resolve the guild's broadcast language and render in that locale. New
+    // GuildConfig docs (no language field yet) fall back to "vi" via
+    // getGuildLanguage's defaults, matching the legacy behavior.
+    const guildLang = await getGuildLanguage(guildId, { GuildConfigModel: GuildConfig });
+    const embed = buildRaidChannelWelcomeEmbed(guildLang);
     try {
       const sent = await channel.send({ embeds: [embed] });
       outcome.posted = true;

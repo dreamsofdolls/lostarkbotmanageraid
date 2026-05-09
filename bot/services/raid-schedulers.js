@@ -1,5 +1,27 @@
 "use strict";
 
+const { t, getGuildLanguage } = require("./i18n");
+const { TRANSLATIONS, DEFAULT_LANGUAGE } = require("../locales");
+
+// Helper - read an array-shaped locale node (e.g.
+// `announcements.cleanup-volume.empty`). Falls back to the VI tree when the
+// target locale is missing the key OR doesn't return an array, then to an
+// empty array as the absolute last resort. Keeps the variant-pick path
+// safe even if a locale pack adds the namespace incomplete.
+function lookupArray(lang, dottedKey) {
+  const tryPath = (code) => {
+    const tree = TRANSLATIONS[code];
+    if (!tree) return null;
+    let cursor = tree;
+    for (const seg of dottedKey.split(".")) {
+      if (cursor == null || typeof cursor !== "object") return null;
+      cursor = cursor[seg];
+    }
+    return Array.isArray(cursor) ? cursor : null;
+  };
+  return tryPath(lang) || tryPath(DEFAULT_LANGUAGE) || [];
+}
+
 function createRaidSchedulerService({
   GuildConfig,
   User,
@@ -128,107 +150,32 @@ function createRaidSchedulerService({
    * Buckets sized empirically: 0 = silent channel (idle marker), 1-5 = a
    * few stragglers, 6-20 = typical night of posting, 21+ = backlog.
    *
-   * Voice: "cắm tạm biển / nghỉ / sủi" instead of the earlier "tự biến /
-   * tự dọn" phrasing per Traine - the self-delete mechanic reads more
-   * naturally as Artist physically placing a sign, resting a bit, then
-   * slipping away with it. No stage-direction italics per
-   * feedback_no_stage_directions.
+   * Voice (VN default): "cắm tạm biển / nghỉ / sủi" instead of the earlier
+   * "tự biến / tự dọn" phrasing per Traine. JP/EN locales hold their own
+   * tone-equivalent variants. Pools resolve via lookupArray at fire time
+   * with the guild's broadcast language; {N} interp = sweep count.
    */
-  const CLEANUP_NOTICE_VARIANTS_BY_BUCKET = {
-    empty: [
-      "Ghé qua thấy chỗ này sạch tinh rồi nhé~ Artist cắm tạm biển ngồi nghỉ 5 phút xong sủi đi thôi, các cậu cứ tiếp tục post clear bình thường nha.",
-      "Hmm, các cậu dọn sẵn sạch gọn quá~ Artist đặt biển ở đây nghỉ tay 5 phút rồi sủi, biển cũng đi theo Artist luôn.",
-      "Chỗ này vẫn ngăn nắp ghê~ Artist cắm biển cảm ơn, tranh thủ nghỉ 5 phút rồi sủi đi làm việc khác, các cậu cứ tự nhiên.",
-    ],
-    trivial: [
-      "Thu gom **N** mẩu tin, nhẹ nhàng thôi mà~ Artist cắm tạm biển nghỉ 5 phút xong sủi đi tiếp nhé.",
-      "Ok, **N** tin nhỏ xinh Artist đã dọn gọn. Biển báo cắm tạm đây thôi, 5 phút xong hai đứa cùng sủi.",
-      "Có **N** mẩu lặt vặt thôi, Artist xử lý xong liền~ Cắm biển ngồi 5 phút rồi sủi, các cậu cứ post clear tiếp nha.",
-    ],
-    normal: [
-      "Đến ca dọn rồi nhé, Artist vừa quét **N** tin~ Cắm biển ngồi nghỉ 5 phút xong sủi đi thôi, các cậu cứ post clear bình thường.",
-      "Đúng nhịp dọn dẹp đây~ **N** tin đã được Artist thu gọn. Biển cắm tạm ở đây nghỉ 5 phút rồi sủi nha.",
-      "Xong một lượt, **N** tin được Artist dọn gọn ghẽ. Artist cắm biển nghỉ chút 5 phút, xong sủi đi, các cậu cứ tiếp tục.",
-    ],
-    heavy: [
-      "Oáp... **N** tin phải dọn này, Artist hụt hơi thật~ Cắm biển xuống nghỉ 5 phút đã, xong Artist với biển cùng sủi nha.",
-      "Nhiều rác thật đấy, **N** tin lận~ Artist vừa dọn gọn xong, cắm tạm biển ngồi thở 5 phút rồi sủi, các cậu post sôi nổi ghê.",
-      "Artist tăng ca dọn **N** tin luôn, mệt ghê~ Cắm biển nghỉ 5 phút rồi sủi đi, các cậu cứ tiếp tục post clear thoải mái nha.",
-    ],
-  };
-
-  /**
-   * Resolve the notice text for a cleanup tick outcome. Bucketing sized
-   * empirically - 0 triggers the "idle heartbeat" pool, 1-5 the "trivial"
-   * pool, 6-20 the "normal" pool, 21+ the "heavy backlog" pool. Random
-   * pick within the bucket gives variety without falling out of tone.
-   */
-  function pickCleanupNoticeContent(deleted) {
+  function pickCleanupNoticeContent(deleted, lang = DEFAULT_LANGUAGE) {
     let bucket;
     if (deleted <= 0) bucket = "empty";
     else if (deleted <= 5) bucket = "trivial";
     else if (deleted <= 20) bucket = "normal";
     else bucket = "heavy";
-    const pool = CLEANUP_NOTICE_VARIANTS_BY_BUCKET[bucket];
+    const pool = lookupArray(lang, `announcements.cleanup-volume.${bucket}`);
+    if (pool.length === 0) return "";
     const picked = pool[Math.floor(Math.random() * pool.length)];
-    return picked.replace(/\*\*N\*\*/g, `**${deleted}**`);
+    return picked.replace(/\{N\}/g, deleted);
   }
-
-  /**
-   * Bedtime greeting variants. Fired once per VN calendar day at the first
-   * tick inside [3:00, 8:00). Tone: sleepy/peaceful, acknowledges Artist
-   * going quiet but reassures that user posts still work. No bucketing -
-   * the event is the same shape every day (it's ceremonial, not sweep-
-   * scaled), so a flat 3-variant pool keeps the channel from repeating
-   * the exact same line two mornings in a row.
-   */
-  const BEDTIME_NOTICE_VARIANTS = [
-    "Khuya rồi, Artist đi ngủ đây nhé~ Từ giờ tới 8h sáng tớ tạm nghỉ, không dọn rác cũng không ồn ào gì. Các cậu cứ post clear bình thường, sáng ra Artist dậy xử lý gọn 1 lần. Biển báo này 5 phút tự cuỗm, chúc cả nhà ngủ ngon nha.",
-    "Khuya quá rồi đấy, Artist sập nguồn đây~ Tớ nghỉ tới 8h sáng, kênh này tạm yên tĩnh nhé - các cậu cứ post clear như thường, Artist tỉnh dậy sẽ dọn 1 thể. Ngủ ngon nha, biển báo 5 phút nữa Artist cuỗm theo.",
-    "Tới giờ đi ngủ của Artist rồi~ Tớ tắt đèn đây, tạm biệt mọi người đến 8h sáng nha. Yên tâm, raid clear các cậu post vẫn được Artist ghi nhận bình thường, chỉ là biển báo dọn dẹp nghỉ thôi. Biển này 5 phút nữa cũng đi ngủ theo Artist.",
-  ];
-
-  /**
-   * Wake-up + morning-sweep combined-embed variants. Fires once at the
-   * first tick ≥ 8:00 VN. Bucketed by the overnight sweep count because
-   * a 0-message night reads differently from a 40-message backlog. Same
-   * **N** interpolation pattern as the hourly-cleanup pool.
-   *
-   * Tone: Artist just woke, is a bit groggy, acknowledges the sweep.
-   * Explicitly DIFFERENT pool from the hourly "heavy" bucket so 8 AM
-   * doesn't feel like any other heavy cleanup - it's the ceremonial
-   * day-start moment.
-   */
-  const WAKEUP_NOTICE_VARIANTS_BY_BUCKET = {
-    empty: [
-      "Morning các cậu~ Artist vươn vai dậy đây nè, ghé qua thấy kênh sạch trơn luôn. Không có gì để dọn ngày mới, các cậu ngoan ghê~ Biển báo này 10 phút nữa Artist cuỗm đi.",
-      "Tớ dậy rồi nhé~ Đêm qua cả kênh ngủ ngon, không tin nào bỏ lại cho Artist cả. Bắt đầu ngày mới thôi nào, biển báo 10 phút tự đi ngủ tiếp.",
-      "Chào buổi sáng các cậu~ Artist mới mở mắt, kênh này sạch như chưa có gì xảy ra. Ngày mới các cậu raid vui nha, biển báo này 10 phút nữa sủi.",
-    ],
-    trivial: [
-      "Morning nha~ Artist vừa dậy, ngó lại thấy đêm qua có **N** tin thôi - tớ dọn luôn 1 thể cho kênh thoáng. Ngày mới raid khoẻ nha, biển báo 10 phút tự cuỗm.",
-      "Chào ngày mới các cậu~ Đêm qua có **N** tin nhỏ xinh, Artist dọn trong lúc đánh răng xong rồi. Giờ Artist làm việc bình thường lại, biển này 10 phút nữa đi.",
-      "Tớ dậy rồi đây~ Đêm qua chỉ có **N** tin, Artist gom nhanh 1 cái, xong rồi nè. Các cậu tiếp tục post clear thoải mái nha, biển báo 10 phút nữa tự cuỗm.",
-    ],
-    normal: [
-      "Morning các cậu~ Artist vừa mở mắt, ngó sang kênh thấy **N** tin tích đêm qua - dọn 1 thể cho gọn rồi đây. Ngày mới ta lại chiến nha, biển báo 10 phút tự đi.",
-      "Artist dậy rồi nè~ Đêm qua **N** tin tích lại, tớ sweep 1 cái cho sạch. Cảm ơn các cậu raid chăm ghê, biển báo này 10 phút nữa cuỗm đi cho khuất mắt.",
-      "Chào buổi sáng~ Artist mở app thấy **N** tin đêm qua, gom hết 1 cái cho kênh thoáng. Ngày mới ta làm việc tiếp thôi, biển báo 10 phút nữa Artist mang theo.",
-    ],
-    heavy: [
-      "Oáp... Artist mới dậy đã thấy **N** tin tích đêm qua, các cậu raid dữ dội thật. Tớ dọn 1 thể cho gọn rồi đây, hơi mệt nhưng xong rùi~ Biển báo 10 phút tự đi cho khuất mắt Artist.",
-      "Morning... Artist vừa mở mắt đã choáng với **N** tin tích đêm qua, các cậu farm không nghỉ luôn hả~ Tớ sweep 1 thể cho gọn, xong mệt muốn đi ngủ tiếp. Biển báo 10 phút nữa Artist cuỗm đi.",
-      "Ớ kìa, Artist mới dậy đã có **N** tin đợi sẵn - các cậu raid xuyên đêm thật hả? Tớ dọn 1 cái cho kênh thoáng, thôi vào việc luôn. Biển báo này 10 phút nữa tự cuỗm nha.",
-    ],
-  };
 
   /**
    * Random pick from bedtime pool. Flat list (no bucketing) because the
    * event is always the same - Artist is going quiet, sweep count not
-   * relevant at this moment.
+   * relevant at this moment. Pool resolves via lookupArray at fire time
+   * with the guild's broadcast language.
    */
-  function pickBedtimeNoticeContent() {
-    const pool = BEDTIME_NOTICE_VARIANTS;
+  function pickBedtimeNoticeContent(lang = DEFAULT_LANGUAGE) {
+    const pool = lookupArray(lang, "announcements.artist-bedtime.variants");
+    if (pool.length === 0) return "";
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
@@ -239,20 +186,24 @@ function createRaidSchedulerService({
    * never reuses an "afternoon" line - the ceremonial tone matters even
    * when the count matches a regular heavy cleanup.
    */
-  function pickWakeupNoticeContent(deleted) {
+  function pickWakeupNoticeContent(deleted, lang = DEFAULT_LANGUAGE) {
     let bucket;
     if (deleted <= 0) bucket = "empty";
     else if (deleted <= 5) bucket = "trivial";
     else if (deleted <= 20) bucket = "normal";
     else bucket = "heavy";
-    const pool = WAKEUP_NOTICE_VARIANTS_BY_BUCKET[bucket];
+    const pool = lookupArray(lang, `announcements.artist-wakeup.${bucket}`);
+    if (pool.length === 0) return "";
     const picked = pool[Math.floor(Math.random() * pool.length)];
-    return picked.replace(/\*\*N\*\*/g, `**${deleted}**`);
+    return picked.replace(/\{N\}/g, deleted);
   }
 
   // Ordered bucket metadata for rendering the cleanup preview. Pulled out
   // of the pool so preview listing stays stable order (empty -> heavy) and
-  // the label text isn't duplicated in two places.
+  // the label text isn't duplicated in two places. Labels stay VN here
+  // because /raid-announce show is admin-facing and renders alongside
+  // other admin scaffolding that's English; preview body itself comes
+  // from the locale tree (default VI for the admin-facing render).
   const CLEANUP_NOTICE_BUCKETS_ORDERED = [
     { key: "empty", label: "Sạch sẵn (0 tin)" },
     { key: "trivial", label: "Nhẹ (1-5 tin)" },
@@ -262,11 +213,11 @@ function createRaidSchedulerService({
 
   /**
    * Build the /raid-announce show preview text for the hourly-cleanup
-   * type from CLEANUP_NOTICE_VARIANTS_BY_BUCKET so admins see every
-   * variant Artist might actually post. Each variant is truncated to
-   * VARIANT_MAX so the whole field stays under Discord's 1024-char
-   * field value cap - there are up to 4 buckets * 3 variants = 12
-   * lines plus 4 bucket headers, so ~70 chars/variant fits comfortably.
+   * type from the locale variant arrays so admins see every variant
+   * Artist might actually post. Renders in VI (default) since the rest
+   * of /raid-announce show is in admin-facing VI/EN scaffolding. Each
+   * variant is truncated to VARIANT_MAX so the whole field stays under
+   * Discord's 1024-char field value cap.
    */
   function buildCleanupNoticePreview() {
     // 60 chars/variant keeps total under Discord's 1024-char field cap
@@ -274,7 +225,7 @@ function createRaidSchedulerService({
     const VARIANT_MAX = 60;
     const lines = ["Random pick mỗi lần fire theo lượng rác:"];
     for (const { key, label } of CLEANUP_NOTICE_BUCKETS_ORDERED) {
-      const pool = CLEANUP_NOTICE_VARIANTS_BY_BUCKET[key] || [];
+      const pool = lookupArray(DEFAULT_LANGUAGE, `announcements.cleanup-volume.${key}`);
       lines.push("");
       lines.push(`**${label}** - ${pool.length} variants:`);
       for (const variant of pool) {
@@ -317,6 +268,11 @@ function createRaidSchedulerService({
       if (!channel) continue;
 
       const announcements = getAnnouncementsConfig(cfg);
+      // Per-guild broadcast language - resolved once per cfg per tick. Used
+      // by every announcement variant pool below (bedtime, wakeup, cleanup)
+      // so a JP/EN guild renders in its chosen voice while the legacy
+      // default-VI guilds keep their existing tone.
+      const guildLang = await getGuildLanguage(cfg.guildId, { GuildConfigModel: GuildConfig });
 
       // Quiet-hours branch: [3:00, 8:00) VN. Artist does NOT sweep and
       // does NOT post the hourly-cleanup notice. First tick after 3:00
@@ -345,7 +301,7 @@ function createRaidSchedulerService({
         try {
           const sent = await postChannelAnnouncement(
             channel,
-            pickBedtimeNoticeContent(),
+            pickBedtimeNoticeContent(guildLang),
             ARTIST_BEDTIME_NOTICE_TTL_MS,
             "raid-channel artist-bedtime"
           );
@@ -390,7 +346,7 @@ function createRaidSchedulerService({
           if (announcements.artistWakeup.enabled) {
             await postChannelAnnouncement(
               channel,
-              pickWakeupNoticeContent(deleted),
+              pickWakeupNoticeContent(deleted, guildLang),
               ARTIST_WAKEUP_NOTICE_TTL_MS,
               "raid-channel artist-wakeup"
             );
@@ -430,7 +386,7 @@ function createRaidSchedulerService({
         // Cleanup notice can be disabled per-guild via /raid-announce.
         // Cleanup itself still runs; only the announcement is skipped.
         if (announcements.hourlyCleanupNotice.enabled) {
-          const noticeContent = pickCleanupNoticeContent(deleted);
+          const noticeContent = pickCleanupNoticeContent(deleted, guildLang);
           await postChannelAnnouncement(
             channel,
             noticeContent,
@@ -514,51 +470,22 @@ function createRaidSchedulerService({
     { key: "T-1m", minutesBefore: 1, ttlMs: MAINTENANCE_TTL_FINAL_MS, pingHere: false },
   ];
 
-  // Variant pool per slot. 3 variants each so a server doesn't read the
-  // same line two weeks in a row. Tone progression: early = checklist
-  // reminder (shop solo / event / paradise / key hell), countdown =
-  // urgent ticking down, final = "log out now". `@here` baked into the
-  // string for the 2
-  // milestone slots per Traine - bot only needs to send content as-is.
-  // No em-dash anywhere per feedback_no_emdash; LA term game (shop solo,
-  // event, paradise, key hell, raid, clear) preserved per Traine guidance.
-  const MAINTENANCE_VARIANTS = {
-    "T-3h": [
-      "@here Nee các cậu~ 3 tiếng nữa là tới giờ bảo trì rồi đó. Tranh thủ làm nốt mấy việc nha: shop solo tuần này còn gì hay không thì lượn 1 vòng ngó thử, event đang chạy ai chưa nhận quà thì lấy kẻo phí, paradise với key hell ai chưa đi thì gấp lên đi nốt. Artist nhắc trước cho khỏi quên thôi, biển báo này 30 phút nữa Artist cuỗm đi nha.",
-      "@here Còn 3 tiếng nữa thôi là server bảo trì các cậu ơi~ Mấy việc tuần này nhớ nha: shop solo còn món nào hay thì sắm nhanh, event đang chạy quà nhận luôn cho gọn, paradise với key hell chưa đi thì giờ là lúc thích hợp đó. Artist nhắc đầu giờ thôi, biển báo 30 phút nữa Artist cuỗm theo.",
-      "@here 3 giờ đồng hồ nữa thì bảo trì rồi nhé các cậu. Artist nhắc cho đỡ quên: shop solo tuần này có gì thì rinh về, event đang chạy quà còn dư thì nhặt nốt, paradise với key hell ai còn nợ thì giải quyết luôn cho nhẹ đầu. Biển báo này 30 phút nữa Artist gói lại nha.",
-    ],
-    "T-2h": [
-      "Hai tiếng nữa thì bảo trì rồi nhé các cậu~ Artist nhắc lại cho chắc: shop solo, event, paradise, key hell mấy món hôm nay nhớ chốt nốt nha. Biển báo này 30 phút nữa Artist cuỗm đi.",
-      "Còn 2 tiếng cuối trong giờ làm việc đó~ Ai còn dở shop solo, event, paradise hay key hell thì gấp lên nha, tránh để sát giờ mới làm thì không kịp. Biển báo Artist gói lại sau 30 phút.",
-      "2 tiếng nữa server bảo trì rồi các cậu~ Artist ngó thấy nhiều cậu vẫn online nên nhắc thêm 1 lần: shop solo / event / paradise / key hell mấy món tuần này nhớ làm cho gọn nha. Biển báo cuỗm đi sau 30 phút.",
-    ],
-    "T-1h": [
-      "@here Còn 1 tiếng nữa là tới giờ bảo trì rồi nhé các cậu! Lần nhắc cuối trong giờ làm việc đây, shop solo, event, paradise, key hell ai còn dở thì gấp lên hoàn thành nha, qua 14:00 là cooldown reset hết. Artist gói biển báo này lại sau 30 phút.",
-      "@here 60 phút cuối rồi đó các cậu~ Shop solo, event, paradise, key hell ai chưa xong thì giờ là hạn chót thật rồi nha. Artist nhắc gấp đây, biển báo cuỗm sau 30 phút.",
-      "@here Một tiếng nữa thôi là bảo trì các cậu ơi! Artist giục lần cuối: shop solo, event, paradise, key hell mấy món tuần này ai còn nợ thì gấp lên giải quyết, qua giờ là không quay lại được đâu. Biển báo này 30 phút nữa Artist cuỗm đi.",
-    ],
-    "T-15m": [
-      "15 phút cuối rồi đó các cậu~ Còn dở việc gì thì cố nốt đi nha, sắp tới giờ bảo trì rồi. Artist đếm ngược cùng các cậu đây, biển báo này 10 phút nữa cuỗm đi.",
-      "Một khắc đồng hồ nữa thôi là server tắt nhé~ Ai đang trong raid thì cố clear cho xong, không thì thoát game cho lành. Artist đếm ngược, biển báo 10 phút sau Artist cuỗm theo.",
-      "Còn 15 phút nữa thôi các cậu~ Sắp tới giờ rồi đó, gói gọn lại đi nhé. Artist đứng đếm ngược cùng các cậu, biển báo này Artist gói lại sau 10 phút.",
-    ],
-    "T-10m": [
-      "10 phút nữa thôi các cậu ơi~ Đang dở gì thì xong nốt nhanh đi nha, đừng để sát giờ. Artist đếm tiếp, biển báo 10 phút nữa cuỗm theo.",
-      "Còn 10 phút thôi đó~ Ai đang ở thành phố thì giờ cũng đừng vào raid mới làm gì, tốn tiền vào ra. Artist nhắc nhẹ, biển báo cuỗm sau 10 phút.",
-      "Đếm ngược 10 phút cuối nha các cậu. Sắp tới giờ Artist với server cùng nghỉ rồi đó. Biển báo này Artist mang theo sau 10 phút.",
-    ],
-    "T-5m": [
-      "5 phút cuối rồi nhé các cậu~ Đăng xuất gọn ghẽ thôi, đừng cố raid kẻo tự nhiên mất tiến độ giữa chừng. Artist đếm tiếp, biển báo 10 phút nữa cuỗm đi.",
-      "Còn 5 phút thôi đó~ Ai đang trong raid thì cứ thoát ra cho lành, vào dở mất công. Artist gần ngủ trưa rồi đây, biển báo cuỗm sau 10 phút.",
-      "Đếm ngược 5 phút cuối các cậu ơi! Server sắp tắt rồi nha, ai online thì chuẩn bị thoát game cho gọn. Biển báo này 10 phút nữa Artist mang đi.",
-    ],
-    "T-1m": [
-      "1 phút cuối rồi nha các cậu! Thoát game thôi cho lành, đang dở gì cũng đành dừng đây, server tắt là mất hết đấy. Hẹn gặp lại sau bảo trì nha~",
-      "60 giây cuối các cậu ơi! Lưu rồi thoát thôi, đừng tiếc nuối cố thêm gì, tới rồi là tới rồi. Artist đi nghỉ đây, hẹn các cậu sau bảo trì~",
-      "Một phút thôi đó! Thoát game gấp đi các cậu~ Artist với server cùng đi nghỉ giờ này, biển báo này 5 phút nữa cũng tự đi luôn. Hẹn gặp lại nha.",
-    ],
-  };
+  // Maintenance slot keys live in two locale namespaces: early (T-3h/2h/1h)
+  // and countdown (T-15m/10m/5m/1m). 3 variants each so a server doesn't
+  // read the same line two weeks in a row. Tone progression baked into the
+  // strings: early = checklist reminder (shop solo / event / paradise /
+  // key hell), countdown = urgent ticking down, T-1m = "log out now".
+  // `@here` baked into the variant text for the 2 milestone slots per
+  // Traine. Pools resolve via lookupArray at fire time with the guild's
+  // broadcast language.
+  function lookupMaintenanceVariants(slotKey, lang) {
+    if (slotKey?.startsWith("T-") && /^T-\d+(?:h|m)$/.test(slotKey)) {
+      const isEarly = ["T-3h", "T-2h", "T-1h"].includes(slotKey);
+      const ns = isEarly ? "maintenance-early" : "maintenance-countdown";
+      return lookupArray(lang, `announcements.${ns}.${slotKey}`);
+    }
+    return [];
+  }
 
   /**
    * Resolve the maintenance slot (if any) that should fire at the given
@@ -604,9 +531,9 @@ function createRaidSchedulerService({
    * pingHere is baked into the variant text). Caller passes content
    * directly to postChannelAnnouncement.
    */
-  function pickMaintenanceVariant(slotKey) {
-    const pool = MAINTENANCE_VARIANTS[slotKey];
-    if (!pool || pool.length === 0) return "";
+  function pickMaintenanceVariant(slotKey, lang = DEFAULT_LANGUAGE) {
+    const pool = lookupMaintenanceVariants(slotKey, lang);
+    if (pool.length === 0) return "";
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
@@ -625,7 +552,9 @@ function createRaidSchedulerService({
         : "Random pick mỗi mốc (3 variants/mốc, đếm ngược):",
     ];
     for (const s of slots) {
-      const pool = MAINTENANCE_VARIANTS[s.key] || [];
+      // Admin preview renders in the default (VI) locale to match the rest
+      // of /raid-announce show's admin scaffolding.
+      const pool = lookupMaintenanceVariants(s.key, DEFAULT_LANGUAGE);
       lines.push("");
       lines.push(`**${s.key}**${s.pingHere ? " (ping @here)" : ""} - ${pool.length} variants:`);
       for (const variant of pool) {
@@ -729,7 +658,12 @@ function createRaidSchedulerService({
       }
       if (!channel) continue;
 
-      const content = pickMaintenanceVariant(slot.key);
+      // Per-guild broadcast language for the maintenance variant pick. The
+      // pool array itself comes from the locale tree, so a guild on JP/EN
+      // gets its own variant pool while the legacy VN default stays
+      // identical to before this migration.
+      const guildLang = await getGuildLanguage(cfg.guildId, { GuildConfigModel: GuildConfig });
+      const content = pickMaintenanceVariant(slot.key, guildLang);
       if (!content) continue;
 
       // Atomic claim via findOneAndUpdate filter: stamps dedup ONLY if
@@ -925,9 +859,13 @@ function createRaidSchedulerService({
       }
       if (!channel) continue;
 
+      // Nudge is a public broadcast in this guild's monitor channel - use
+      // the guild's broadcast language. The user being tagged sees it but
+      // so does everyone else in the channel.
+      const guildLang = await getGuildLanguage(cfg.guildId, { GuildConfigModel: GuildConfig });
       const sent = await postChannelAnnouncement(
         channel,
-        `<@${discordId}> nhắc khẽ nhé~ Roster cậu đã bật auto-manage nhưng hiện tại tất cả char đều là private log, Artist không sync được data đâu. Vào https://lostark.bible/me/logs bật **Show on Profile** cho char cần sync giúp tớ nha. Biển báo này Artist cuỗm đi sau 30 phút.`,
+        t("announcements.stuck-nudge.body", guildLang, { discordId }),
         PRIVATE_LOG_NUDGE_TTL_MS,
         "auto-manage private-log nudge"
       );

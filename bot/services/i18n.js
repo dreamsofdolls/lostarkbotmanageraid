@@ -34,6 +34,14 @@ const KNOWN_LOCALE_CODES = new Set(Object.keys(TRANSLATIONS));
 // after a switch on a sibling node.
 const userLanguageCache = new Map();
 
+// Same cache shape but keyed by guildId. Lookups are hot-path inside
+// scheduler ticks (cleanup notice / bedtime / wakeup / maintenance /
+// weekly-reset / stuck-nudge) - every 30-min tick fans out across every
+// configured guild, and the cache means each guild's lang is one Mongo
+// hit at boot and zero hits per tick afterwards. Invalidated by
+// setGuildLanguage when admin runs /raid-channel config action:set-language.
+const guildLanguageCache = new Map();
+
 /**
  * Coerce arbitrary input into a first-class locale code (vi or jp).
  * Used for persistence (user.language) and the /raid-language picker -
@@ -149,11 +157,64 @@ function clearUserLanguageCache() {
   userLanguageCache.clear();
 }
 
+/**
+ * Cache-first per-guild language lookup. Used by every public-broadcast
+ * firing site (welcome embed, scheduler announcements, text-parser whisper
+ * ack + raid-update reply embed) since broadcasts have no single per-user
+ * viewer. Pass an optional GuildConfigModel for DI; production callers wire
+ * it from the require'd Mongoose model. Returns DEFAULT_LANGUAGE when:
+ *   - guildId is null/undefined (DM context, scheduler tick with no guild)
+ *   - GuildConfig doc doesn't exist OR `language` field is missing/null
+ *     (legacy guilds before this field landed)
+ *   - Mongo lookup throws (degrade gracefully to "vi" rather than failing
+ *     a whole announcement)
+ */
+async function getGuildLanguage(guildId, { GuildConfigModel } = {}) {
+  if (!guildId) return DEFAULT_LANGUAGE;
+  if (guildLanguageCache.has(guildId)) return guildLanguageCache.get(guildId);
+  if (!GuildConfigModel) return DEFAULT_LANGUAGE;
+  try {
+    const doc = await GuildConfigModel.findOne({ guildId }, { language: 1 }).lean();
+    const lang = normalizeLanguage(doc?.language);
+    guildLanguageCache.set(guildId, lang);
+    return lang;
+  } catch {
+    return DEFAULT_LANGUAGE;
+  }
+}
+
+/**
+ * Persist a new guild language and invalidate the cache. Upserts so a
+ * fresh guild with no GuildConfig doc yet still gets the language stamped
+ * (followed by a `/raid-channel config action:set` to populate the rest).
+ * Returns the resolved code.
+ */
+async function setGuildLanguage(guildId, lang, { GuildConfigModel } = {}) {
+  const code = normalizeLanguage(lang);
+  if (!guildId) return code;
+  if (GuildConfigModel) {
+    await GuildConfigModel.updateOne(
+      { guildId },
+      { $set: { language: code }, $setOnInsert: { guildId } },
+      { upsert: true },
+    );
+  }
+  guildLanguageCache.set(guildId, code);
+  return code;
+}
+
+function clearGuildLanguageCache() {
+  guildLanguageCache.clear();
+}
+
 module.exports = {
   t,
   getUserLanguage,
   setUserLanguage,
   clearUserLanguageCache,
+  getGuildLanguage,
+  setGuildLanguage,
+  clearGuildLanguageCache,
   normalizeLanguage,
   resolveLocale,
   getSupportedLanguages,
