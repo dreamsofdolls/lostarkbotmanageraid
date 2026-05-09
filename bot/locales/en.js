@@ -733,6 +733,8 @@ module.exports = {
       cooldownLineNote: "The cooldown prevents bible spam - once it expires, you can sync again.",
       noRosterTitle: "You don't have any rosters",
       noRosterDescription: "Artist can't see any roster of yours in the DB. Use `/raid-add-roster` to register your first roster, then opt into auto-manage.",
+      localLockedTitle: "You're on local-sync mode",
+      localLockedDescription: "Manual `action:sync` pulls from lostark.bible, so Artist blocks it while **local-sync** is active. Open the Web Companion from `/raid-status`, or run `/raid-auto-manage action:local-off` if you want to switch back to bible.",
       failTitle: "Sync failed",
       failDescription: "Artist couldn't finish the sync: `{error}`. lostark.bible may be blocking (Cloudflare 403) or a character name is off. Try again in a few minutes; if it still fails, check your characters at https://lostark.bible/me/logs.",
     },

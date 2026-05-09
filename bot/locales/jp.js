@@ -732,6 +732,8 @@ module.exports = {
       cooldownLineNote: "bible を連打しないためのクールダウンですわ。それを過ぎればまた同期できますよ♪",
       noRosterTitle: "ロスターがまだ無いですわ",
       noRosterDescription: "DB の中にあなたのロスターが見つかりませんでしたわ～ `/raid-add-roster` で最初のロスターを登録してから自動管理にオプトインしてね♪",
+      localLockedTitle: "ローカル同期モード中ですわ",
+      localLockedDescription: "Manual `action:sync` は lostark.bible から取得する同期なので、**ローカル同期** が有効な間はブロックしますわ。`/raid-status` から Web Companion を開くか、bible に戻したい場合は `/raid-auto-manage action:local-off` を実行してね♪",
       failTitle: "同期に失敗しましたわ",
       failDescription: "アーティスト、同期できませんでしたわ: `{error}`。 lostark.bible が遮断中 (Cloudflare 403) かキャラ名がおかしいかもしれませんわ。数分後に再試行してね、それでもダメなら https://lostark.bible/me/logs でキャラを確認してくださいね～",
     },
