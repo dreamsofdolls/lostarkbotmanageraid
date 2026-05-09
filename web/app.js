@@ -353,7 +353,20 @@ async function runPreviewQuery(sqlite3, db) {
   const clearedSql = clearedCol ? quoteIdent(clearedCol) : null;
   const charSql = charCol ? quoteIdent(charCol) : null;
   const playersSql = playersCol ? quoteIdent(playersCol) : null;
-  const sevenDaysAgoMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  // Lazy-load preview-utils once per preview. The reset-window helper is
+  // needed before SQL so the DB scan only covers the active raid week.
+  const {
+    bucketize,
+    findUnmappedBosses,
+    getRaidGateForBoss,
+    buildDiff,
+    normalizeDifficulty,
+    makeBucketKey,
+    buildActionableBucketKeySet,
+    collectDiffStateCounts,
+    currentWeeklyResetStartMs,
+  } = await import("/sync/preview-utils.js");
+  const currentWeekStartMs = currentWeeklyResetStartMs();
   const sql = `
     SELECT ${bossSql} AS boss,
            ${diffSql ? `COALESCE(${diffSql}, 'Normal')` : `'Normal'`} AS difficulty,
@@ -373,7 +386,7 @@ async function runPreviewQuery(sqlite3, db) {
   `;
   const rows = [];
   try {
-    await sqlite3.exec(db, sql.replace("?", String(sevenDaysAgoMs)), (row, _columns) => {
+    await sqlite3.exec(db, sql.replace("?", String(currentWeekStartMs)), (row, _columns) => {
       rows.push(row);
     });
   } catch (err) {
@@ -385,19 +398,6 @@ async function runPreviewQuery(sqlite3, db) {
     lastDeltas = [];
     return;
   }
-  // Lazy-load preview-utils so the boss->raid map is only parsed when
-  // there's actually something to render. Keeps the page-load lighter
-  // on first visit (no file dropped yet).
-  const {
-    bucketize,
-    findUnmappedBosses,
-    getRaidGateForBoss,
-    buildDiff,
-    normalizeDifficulty,
-    makeBucketKey,
-    buildActionableBucketKeySet,
-    collectDiffStateCounts,
-  } = await import("/sync/preview-utils.js");
   // Build the deltas array for the Sync POST. Server re-validates +
   // re-buckets, but only mapped raid clears are sent. Failed encounters,
   // non-raid content, and rows without a local character stay client-side.

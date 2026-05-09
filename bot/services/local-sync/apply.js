@@ -2,10 +2,11 @@
 
 const { getRaidGateForBoss, getGatesForRaid } = require("../../models/Raid");
 const { getCharacterName, normalizeName, toModeLabel } = require("../../utils/raid/shared");
+const { getCurrentResetStartMs } = require("../weekly-reset");
 
 /**
  * Apply incoming local-sync deltas from the web companion. Each delta
- * came from `encounters.db` filtered to last-7-day cleared rows; this
+ * came from `encounters.db` filtered to the current raid-week cleared rows; this
  * module maps boss + difficulty → (raidKey, modeKey, gateIndex), expands
  * gate cumulatively (G2 cleared implies G1 cleared - matches the text
  * parser's effectiveGates semantics), groups by char + raid+mode, and
@@ -92,6 +93,19 @@ function bucketize(deltas) {
   return [...buckets.values()];
 }
 
+function resolveCurrentWeekStartMs(value) {
+  if (typeof value === "function") {
+    const resolved = Number(value());
+    return Number.isFinite(resolved) ? resolved : getCurrentResetStartMs();
+  }
+  if (Number(value) >= 0) return Number(value);
+  return getCurrentResetStartMs();
+}
+
+function isCurrentWeekDelta(delta, currentWeekStartMs) {
+  return Number(delta?.lastClearMs) >= currentWeekStartMs;
+}
+
 function findRosterCharacter(userDoc, charName) {
   if (!userDoc || !Array.isArray(userDoc.accounts)) return null;
   const target = normalizeName(charName);
@@ -157,7 +171,12 @@ function classifyBucketAgainstRoster(userDoc, bucket, raidMeta, effectiveGates) 
  * group by status without knowing the internal shape.
  */
 async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
-  const { applyRaidSetForDiscordId, getRaidRequirementMap, userDoc = null } = deps;
+  const {
+    applyRaidSetForDiscordId,
+    getRaidRequirementMap,
+    userDoc = null,
+    currentWeekStartMs: injectedCurrentWeekStartMs,
+  } = deps;
   if (typeof applyRaidSetForDiscordId !== "function") {
     throw new Error("[local-sync/apply] applyRaidSetForDiscordId required in deps");
   }
@@ -171,6 +190,8 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
   const skipped = [];
   const unmapped = [];
   const rejected = [];
+  const currentWeekStartMs = resolveCurrentWeekStartMs(injectedCurrentWeekStartMs);
+  const currentWeekDeltas = [];
 
   // Track unmapped bosses BEFORE bucketize so the count reflects the
   // raw stream (10 unmapped clears = 10 entries, not 1 deduped one) -
@@ -178,6 +199,17 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
   // missing aliases for.
   for (const d of deltas) {
     if (!d.cleared) continue;
+    if (!isCurrentWeekDelta(d, currentWeekStartMs)) {
+      rejected.push({
+        boss: d.boss || "(unknown)",
+        difficulty: d.difficulty || "(unknown)",
+        charName: d.charName || "(unknown)",
+        reason: "outside_current_week",
+        lastClearMs: Number(d.lastClearMs) || 0,
+      });
+      continue;
+    }
+    currentWeekDeltas.push(d);
     const target = resolveTarget(d);
     if (!target) {
       unmapped.push({
@@ -188,7 +220,7 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
     }
   }
 
-  const buckets = bucketize(deltas);
+  const buckets = bucketize(currentWeekDeltas);
   const reqMap = getRaidRequirementMap();
 
   for (const bucket of buckets) {
@@ -317,4 +349,5 @@ module.exports = {
   resolveTarget,
   bucketize,
   normalizeDifficulty,
+  isCurrentWeekDelta,
 };

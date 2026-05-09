@@ -25,7 +25,7 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId }) {
     throw new Error("[sync-endpoint] applyRaidSetForDiscordId required");
   }
 
-  // Body size cap: 7 days × ~10 raids × multi-char roster ≈ a few KB at
+  // Body size cap: one raid week × ~10 raids × multi-char roster ≈ a few KB at
   // most. 256 KB ceiling protects against accidental + malicious oversend
   // without stress on the JSON parser.
   const MAX_BODY_BYTES = 256 * 1024;
