@@ -40,18 +40,19 @@ function buildLanguageEmbed({ EmbedBuilder, UI, lang }) {
 
 function buildLanguageDropdown({ StringSelectMenuBuilder, ActionRowBuilder, lang }) {
   const supported = getSupportedLanguages();
-  // Each option's label/description live in the locale pack so the
-  // dropdown reads in the viewer's CURRENT language; switching to JP
-  // re-renders the picker in JP next time it's opened.
-  const optionLabelKey = (code) =>
-    code === "vi" ? "raid-language.optionVi" : "raid-language.optionJp";
-
+  // Each option's label lives at `raid-language.options.<code>` in the
+  // viewer's CURRENT-language pack so the picker reads in their native
+  // tongue (e.g. JP user sees "Tiếng Việt (デフォルト)" / "English
+  // (国際向け)" — option labels narrate what picking that code DOES,
+  // from the current viewer's perspective). The flag emoji rides the
+  // structured `emoji` field; locale strings stay flag-free so a
+  // future entry only needs the descriptor text.
   const menu = new StringSelectMenuBuilder()
     .setCustomId(SELECT_CUSTOM_ID)
     .setPlaceholder(t("raid-language.placeholder", lang))
     .addOptions(
       supported.map((entry) => ({
-        label: t(optionLabelKey(entry.code), lang),
+        label: t(`raid-language.options.${entry.code}`, lang),
         value: entry.code,
         emoji: entry.flag,
         default: entry.code === lang,

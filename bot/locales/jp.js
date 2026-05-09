@@ -19,8 +19,11 @@ module.exports = {
     description: "アーティストが話す言語を選んでね♪ これからすべてのコマンドがこの言語で表示されますわ～",
     currentLine: "今のところ: **{flag} {label}**",
     placeholder: "🌐 言語を選んでください...",
-    optionVi: "🇻🇳 Tiếng Việt (デフォルト)",
-    optionJp: "🇯🇵 日本語 (アーティスト・もっと可愛いバージョン～♪)",
+    options: {
+      vi: "Tiếng Việt (デフォルト)",
+      jp: "日本語 (アーティスト・もっと可愛いバージョン♪)",
+      en: "English (国際向け・お仕事用)",
+    },
     successTitle: "🌐 言語を変更しましたわ♪",
     successDescription: "これからアーティストは **{flag} {label}** でお話しますわ～♪ よろしくね！",
     unchangedTitle: "🌐 言語は変わってないですわ",
