@@ -304,10 +304,10 @@ function createRaidCommandDefinitions({
     .addStringOption((opt) =>
       opt
         .setName("action")
-        .setDescription("on · off · sync · status · local-on · local-off")
+        .setDescription("on · off · sync · status · local-on · local-off · reset")
         .setDescriptionLocalizations({
-          vi: "on · off · sync · status · local-on · local-off",
-          ja: "on · off · sync · status · local-on · local-off",
+          vi: "on · off · sync · status · local-on · local-off · reset",
+          ja: "on · off · sync · status · local-on · local-off · reset",
         })
         .setRequired(true)
         // Autocomplete (not static choices) so we can hide redundant +

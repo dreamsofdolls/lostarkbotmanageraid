@@ -62,8 +62,14 @@ test("raid-auto-manage autocomplete hides bible sync while local-sync is active"
   });
 
   assert.equal(responses.length, 1);
+  // `reset` always shows (its destructive nature is gated by the
+  // in-handler confirmation prompt, not by hiding from autocomplete);
+  // local-on is hidden because local is already on; bible-on path is
+  // hidden because mutex would reject it; sync is also hidden via the
+  // legacy autocomplete filter when bible is off; local-off / status
+  // / reset are the survivors.
   assert.deepEqual(
     responses[0].map((choice) => choice.value),
-    ["status", "local-off"]
+    ["status", "local-off", "reset"]
   );
 });

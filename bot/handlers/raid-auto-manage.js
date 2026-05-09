@@ -49,7 +49,7 @@ function createRaidAutoManageCommand(deps) {
     // arbitrary strings into slash command args. Reject early with a
     // specific hint - otherwise a typo falls through every branch and
     // Discord times out the interaction with no reply.
-    const VALID_ACTIONS = ["on", "off", "sync", "status", "local-on", "local-off"];
+    const VALID_ACTIONS = ["on", "off", "sync", "status", "local-on", "local-off", "reset"];
     if (!VALID_ACTIONS.includes(action)) {
       await interaction.reply({
         embeds: [
@@ -279,6 +279,125 @@ function createRaidAutoManageCommand(deps) {
         .setDescription(t("raid-auto-manage.localDisable.description", lang))
         .setTimestamp();
       await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      return;
+    }
+    if (action === "reset") {
+      // Hard-reset: wipes the user's sync state + raid progress so the
+      // next /raid-auto-manage on / local-on starts a fresh replay
+      // from bible logs / encounters.db. Semantic ~ weekly maintenance
+      // reset but for the SINGLE invoker only - never touches other
+      // users' docs (single-user scope by discordId).
+      //
+      // Wipe scope (only fields tied to sync + raid clears):
+      //   - autoManageEnabled / localSyncEnabled + linkedAt + tokens
+      //   - lastAutoManage{Sync,Attempt}At, lastLocalSyncAt
+      //   - lastPrivateLogNudgeAt (reset 7-day nudge dedup)
+      //   - account.lastRefreshed{At,AttemptAt}
+      //   - char.assignedRaids -> empty per-raid groups
+      //   - char.publicLogDisabled -> false (re-probe next sync)
+      //   - char.bibleSerial/Cid/Rid -> null (re-resolve next sync)
+      //
+      // Preserved: roster + char identity + side/shared tasks +
+      // gold-earner flag + language + registeredBy. Mongo write happens
+      // inside saveWithRetry so a concurrent VersionError retries
+      // cleanly. Two-step confirm gates the destructive write.
+      const warnEmbed = new EmbedBuilder()
+        .setColor(UI.colors.error || 0xff5555)
+        .setTitle(`${UI.icons.warn} ${t("raid-auto-manage.reset.confirmTitle", lang)}`)
+        .setDescription(t("raid-auto-manage.reset.confirmDescription", lang))
+        .setTimestamp();
+      const confirmRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("auto-manage:reset-confirm")
+          .setLabel(t("raid-auto-manage.reset.confirmButton", lang))
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId("auto-manage:reset-cancel")
+          .setLabel(t("raid-auto-manage.reset.cancelButton", lang))
+          .setStyle(ButtonStyle.Secondary)
+      );
+      await interaction.reply({
+        embeds: [warnEmbed],
+        components: [confirmRow],
+        flags: MessageFlags.Ephemeral,
+      });
+      const replyMsg = await interaction.fetchReply();
+      let decision = null;
+      try {
+        const btn = await replyMsg.awaitMessageComponent({
+          filter: (i) => i.user.id === discordId && i.customId.startsWith("auto-manage:reset-"),
+          componentType: ComponentType.Button,
+          time: 60_000,
+        });
+        decision = btn.customId === "auto-manage:reset-confirm" ? "confirm" : "cancel";
+        await btn.deferUpdate().catch(() => {});
+      } catch {
+        decision = "timeout";
+      }
+      if (decision === "confirm") {
+        try {
+          await saveWithRetry(async () => {
+            const userDoc = await User.findOne({ discordId });
+            if (!userDoc) return;
+            userDoc.autoManageEnabled = false;
+            userDoc.localSyncEnabled = false;
+            userDoc.localSyncLinkedAt = null;
+            userDoc.lastAutoManageSyncAt = null;
+            userDoc.lastAutoManageAttemptAt = null;
+            userDoc.lastLocalSyncAt = null;
+            userDoc.lastLocalSyncToken = null;
+            userDoc.lastLocalSyncTokenExpAt = null;
+            userDoc.lastPrivateLogNudgeAt = null;
+            for (const account of userDoc.accounts || []) {
+              account.lastRefreshedAt = null;
+              account.lastRefreshAttemptAt = null;
+              for (const character of account.characters || []) {
+                // Reassigning the whole sub-doc is the simplest way to
+                // wipe; Mongoose path-tracking picks it up without an
+                // explicit markModified call because we replace the
+                // top-level field reference.
+                character.assignedRaids = { armoche: {}, kazeros: {}, serca: {} };
+                character.publicLogDisabled = false;
+                character.bibleSerial = null;
+                character.bibleCid = null;
+                character.bibleRid = null;
+              }
+            }
+            await userDoc.save();
+          });
+        } catch (err) {
+          console.error("[raid-auto-manage] reset failed:", err?.message || err);
+          await interaction.editReply({
+            embeds: [
+              buildNoticeEmbed(EmbedBuilder, {
+                type: "error",
+                title: t("raid-auto-manage.reset.failTitle", lang),
+                description: t("raid-auto-manage.reset.failDescription", lang, {
+                  error: err?.message || String(err),
+                }),
+              }),
+            ],
+            components: [],
+          }).catch(() => {});
+          return;
+        }
+        const successEmbed = new EmbedBuilder()
+          .setColor(UI.colors.success)
+          .setTitle(`${UI.icons.done} ${t("raid-auto-manage.reset.successTitle", lang)}`)
+          .setDescription(t("raid-auto-manage.reset.successDescription", lang))
+          .setTimestamp();
+        await interaction.editReply({ embeds: [successEmbed], components: [] }).catch(() => {});
+      } else {
+        const title = decision === "timeout"
+          ? t("raid-auto-manage.reset.cancelTimeoutTitle", lang)
+          : t("raid-auto-manage.reset.cancelTitle", lang);
+        const cancelEmbed = new EmbedBuilder()
+          .setColor(UI.colors.muted)
+          .setTitle(`${UI.icons.reset} ${title}`)
+          .setDescription(t("raid-auto-manage.reset.cancelDescription", lang))
+          .setTimestamp();
+        await interaction.editReply({ embeds: [cancelEmbed], components: [] }).catch(() => {});
+      }
       return;
     }
     if (action === "on") {
@@ -734,6 +853,14 @@ function createRaidAutoManageCommand(deps) {
       key: "localOffLabel",
       value: "local-off",
       show: ({ localOn }) => localOn,
+    },
+    {
+      key: "resetLabel",
+      value: "reset",
+      // Always shown - the destructive nature is gated by the in-handler
+      // confirmation prompt, not by hiding the entry. User opting in
+      // OR off both have valid reset use cases (fresh re-sync from 0).
+      show: () => true,
     },
   ];
   async function handleRaidAutoManageAutocomplete(interaction) {
