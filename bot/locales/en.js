@@ -32,6 +32,10 @@ module.exports = {
   },
   // Roster-share embeds (used by /raid-share grant/revoke/list).
   share: {
+    accessLevel: {
+      edit: "edit",
+      view: "view",
+    },
     grant: {
       botTargetTitle: "Cannot share with a bot",
       botTargetDescription: "Target must be a real Discord user, not a bot.",

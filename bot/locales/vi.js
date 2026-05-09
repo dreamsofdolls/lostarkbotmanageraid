@@ -35,6 +35,10 @@ module.exports = {
   // currently still hardcodes its own VN strings (in active bug-fix by
   // the user). Migrate later in one focused commit.
   share: {
+    accessLevel: {
+      edit: "chỉnh sửa",
+      view: "chỉ xem",
+    },
     grant: {
       botTargetTitle: "Không share cho bot",
       botTargetDescription: "Target phải là một Discord user thật, không phải bot.",
