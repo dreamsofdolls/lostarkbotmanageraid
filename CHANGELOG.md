@@ -4,6 +4,18 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-10 (Phase 4 - real sync wired)
+
+### Added (local-sync Phase 4 - POST /api/raid-sync wired end-to-end)
+- New `bot/services/local-sync/apply.js` - maps web companion deltas (`{ boss, difficulty, cleared, charName, lastClearMs }`) → `applyRaidSetForDiscordId` calls. Reuses `getRaidGateForBoss` from `bot/models/Raid.js` (the existing bible-side boss→raid table). Cumulative gate expansion (G2 cleared writes [G1, G2]) + char+raid+mode bucketing so 8 raw clears → 1 write per char. Returns structured summary with 4 buckets: `applied / skipped / unmapped / rejected`.
+- New `bot/services/local-sync/sync-endpoint.js` - factory that builds the `POST /api/raid-sync` handler. Auth chain: Bearer token (or `?token=` fallback) → JWT verify → state check (`localSyncEnabled === true`, stale-POST guard returning 409) → apply → stamp `lastLocalSyncAt`. CORS preflight handled. 256 KB body cap. JSON-only.
+- `bot.js` wires the endpoint into the HTTP server's apiHandlers map at boot. Reuses the existing `User` Mongo model and the new `applyRaidSetForDiscordId` thunk export from `bot/commands.js`.
+- `bot/commands.js` exposes `applyRaidSetForDiscordId` as a thunk (let-binding wrapper) so external consumers can take a stable reference at module-load time even though the binding is filled lazily during command-factory init.
+- Web companion (`web/app.js` + `web/index.html`) now actually POSTs. Preview table shows char column, "Sync now" button enables when there's data, success embed shows applied/skipped/unmapped/rejected with per-row reasons. Failed encounters stay in the preview but are NOT POSTed (only `cleared=1` rows go on the wire).
+- 17 new tests in `test/local-sync-apply.test.js` cover difficulty normalization, target resolution (known boss / unknown / fallback), bucketing (dedup, cumulative gate, case-insensitive char match), and the apply pipeline 6-way outcome dispatch (applied / skipped / unmapped / rejected with 4 reason variants).
+- Smoke-tested end-to-end: valid POST returns 200 with structured summary, missing token → 401 "missing token", forged token → 401 "token signature".
+- 370/370 tests pass (was 353, +17 apply tests).
+
 ## 2026-05-10 (Phase 3 - web companion shipped)
 
 ### Added (local-sync Phase 3 - web companion + HTTP server)

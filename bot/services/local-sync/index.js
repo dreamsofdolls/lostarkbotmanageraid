@@ -10,6 +10,7 @@
 
 const state = require("./state");
 const tokens = require("./tokens");
+const apply = require("./apply");
 
 module.exports = {
   SYNC_MODE: state.SYNC_MODE,
@@ -22,4 +23,8 @@ module.exports = {
   mintToken: tokens.mintToken,
   verifyToken: tokens.verifyToken,
   TOKEN_DEFAULT_TTL_SEC: tokens.DEFAULT_TTL_SEC,
+  applyLocalSyncDeltas: apply.applyLocalSyncDeltas,
+  resolveLocalSyncTarget: apply.resolveTarget,
+  bucketizeLocalSyncDeltas: apply.bucketize,
+  normalizeLocalSyncDifficulty: apply.normalizeDifficulty,
 };
