@@ -9,6 +9,7 @@ const {
   getRosterMatches,
   truncateChoice,
 } = require("../utils/raid/autocomplete-helpers");
+const { t, getUserLanguage } = require("../services/i18n");
 
 // Picker session window: from /raid-gold-earner invocation to Confirm
 // click. After 5 minutes the in-memory session is dropped and the embed
@@ -93,6 +94,7 @@ function createRaidGoldEarnerCommand({
   }
 
   function buildSelectionEmbed(session) {
+    const lang = session.lang;
     const lines = session.chars.map((c, i) => {
       const isSelected = session.selectedIndices.has(i);
       const marker = isSelected ? CHECK_ICON : UNCHECK_ICON;
@@ -100,24 +102,39 @@ function createRaidGoldEarnerCommand({
     });
 
     const overflow = session.overflowCount > 0
-      ? `\n${UI.icons.warn} ${session.overflowCount} char ngoài cap ${PICKER_MAX_OPTIONS} không hiện ở picker (bỏ qua isGoldEarner sẽ giữ nguyên).`
+      ? t("raid-gold-earner.picker.overflow", lang, {
+          iconWarn: UI.icons.warn,
+          count: session.overflowCount,
+          cap: PICKER_MAX_OPTIONS,
+        })
       : "";
 
     const desc = [
-      `Roster: **${session.accountName}**`,
-      `Pick tối đa **${GOLD_EARNER_CAP_PER_ACCOUNT}** char nhận gold (LA cap 6 / account / tuần):`,
+      t("raid-gold-earner.picker.rosterLine", lang, { accountName: session.accountName }),
+      t("raid-gold-earner.picker.headerLine", lang, { cap: GOLD_EARNER_CAP_PER_ACCOUNT }),
       "",
       ...lines,
       "",
-      `Đang chọn: **${session.selectedIndices.size}** / ${GOLD_EARNER_CAP_PER_ACCOUNT}`,
-      `${UI.icons.info} Phiên 5 phút - hết giờ sẽ tự huỷ. Bấm **Confirm** để lưu, **Cancel** để bỏ.${overflow}`,
+      t("raid-gold-earner.picker.selectingLine", lang, {
+        selected: session.selectedIndices.size,
+        cap: GOLD_EARNER_CAP_PER_ACCOUNT,
+      }),
+      t("raid-gold-earner.picker.footerHint", lang, {
+        iconInfo: UI.icons.info,
+        overflow,
+      }),
     ];
 
     return new EmbedBuilder()
-      .setTitle(`${CHECK_ICON} Chọn gold-earner cho ${session.accountName}`)
+      .setTitle(
+        t("raid-gold-earner.picker.title", lang, {
+          checkIcon: CHECK_ICON,
+          accountName: session.accountName,
+        })
+      )
       .setDescription(desc.join("\n").slice(0, 4000))
       .setColor(UI.colors.neutral)
-      .setFooter({ text: "Confirm trong 5 phút" });
+      .setFooter({ text: t("raid-gold-earner.picker.footerText", lang) });
   }
 
   function buildSelectionComponents(session) {
@@ -148,7 +165,7 @@ function createRaidGoldEarnerCommand({
 
     const cancelBtn = new ButtonBuilder()
       .setCustomId(`gold-earner:cancel:${session.sessionId}`)
-      .setLabel("Cancel")
+      .setLabel(t("raid-gold-earner.picker.cancelLabel", session.lang))
       .setStyle(ButtonStyle.Danger);
 
     return [
@@ -158,35 +175,42 @@ function createRaidGoldEarnerCommand({
   }
 
   function buildExpiredEmbed(session) {
+    const lang = session.lang;
     return new EmbedBuilder()
-      .setTitle(`${UI.icons.warn} Phiên đã hết hạn`)
+      .setTitle(t("raid-gold-earner.expired.title", lang, { iconWarn: UI.icons.warn }))
       .setDescription(
-        `Roster **${session.accountName}**: phiên 5 phút đã hết, không có gì được lưu. Chạy lại \`/raid-gold-earner\` để thử lại nhé~`
+        t("raid-gold-earner.expired.description", lang, { accountName: session.accountName })
       )
       .setColor(UI.colors.muted);
   }
 
   function buildCancelledEmbed(session) {
+    const lang = session.lang;
     return new EmbedBuilder()
-      .setTitle(`${UI.icons.info} Đã huỷ`)
+      .setTitle(t("raid-gold-earner.cancelled.title", lang, { iconInfo: UI.icons.info }))
       .setDescription(
-        `Roster **${session.accountName}**: không có gì được lưu. Chạy lại \`/raid-gold-earner\` khi cậu sẵn sàng.`
+        t("raid-gold-earner.cancelled.description", lang, { accountName: session.accountName })
       )
       .setColor(UI.colors.muted);
   }
 
   function buildSavedEmbed(session, savedNames) {
+    const lang = session.lang;
     const previewSlice = savedNames.slice(0, GOLD_EARNER_CAP_PER_ACCOUNT);
     const value = previewSlice.length > 0
       ? previewSlice.map((n, i) => `${i + 1}. ${n}`).join("\n")
-      : "_Không có gold-earner nào được chọn._";
+      : t("raid-gold-earner.saved.noneSelected", lang);
     return new EmbedBuilder()
-      .setTitle(`${CHECK_ICON} Đã lưu gold-earner`)
+      .setTitle(t("raid-gold-earner.saved.title", lang, { checkIcon: CHECK_ICON }))
       .setDescription(
-        `Roster **${session.accountName}**: ${savedNames.length}/${GOLD_EARNER_CAP_PER_ACCOUNT} char nhận gold tuần này. Mở \`/raid-status\` để xem rollup mới nha~`
+        t("raid-gold-earner.saved.description", lang, {
+          accountName: session.accountName,
+          count: savedNames.length,
+          cap: GOLD_EARNER_CAP_PER_ACCOUNT,
+        })
       )
       .addFields({
-        name: `Gold-earner (${savedNames.length})`,
+        name: t("raid-gold-earner.saved.charactersField", lang, { count: savedNames.length }),
         value,
         inline: false,
       })
@@ -222,14 +246,15 @@ function createRaidGoldEarnerCommand({
 
   async function handleRaidGoldEarnerCommand(interaction) {
     const discordId = interaction.user.id;
+    const lang = await getUserLanguage(discordId, { UserModel: User });
     const rosterInput = interaction.options.getString("roster", true).trim();
     if (!rosterInput) {
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Cần option `roster`",
-            description: "Gõ thêm field `roster:` rồi đợi autocomplete gợi ý nhé. Cậu chỉ chỉnh được roster của chính mình.",
+            title: t("raid-gold-earner.notice.missingRosterTitle", lang),
+            description: t("raid-gold-earner.notice.missingRosterDescription", lang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -248,8 +273,10 @@ function createRaidGoldEarnerCommand({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Không tìm thấy roster",
-            description: `Artist không thấy roster **${rosterInput}** trong DB của cậu. Pick từ autocomplete hoặc dùng \`/raid-status\` để xem các roster đang có.`,
+            title: t("raid-gold-earner.notice.notFoundTitle", lang),
+            description: t("raid-gold-earner.notice.notFoundDescription", lang, {
+              rosterName: rosterInput,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -263,8 +290,10 @@ function createRaidGoldEarnerCommand({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
-            title: "Roster trống",
-            description: `Roster **${target.accountName}** không có char nào. Add char qua \`/raid-edit-roster\` trước rồi quay lại đây nhé~`,
+            title: t("raid-gold-earner.notice.emptyTitle", lang),
+            description: t("raid-gold-earner.notice.emptyDescription", lang, {
+              accountName: target.accountName,
+            }),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -293,6 +322,7 @@ function createRaidGoldEarnerCommand({
     const session = {
       sessionId,
       callerId: discordId,
+      lang,
       accountName: target.accountName,
       chars: pickerChars,
       selectedIndices: pickInitialSelection(pickerChars),
@@ -336,12 +366,14 @@ function createRaidGoldEarnerCommand({
     if (!session) {
       // Stale button (session expired or bot restarted). Disable the
       // controls so the user doesn't keep clicking into nothing.
+      // Resolve the clicker's lang since session.lang is not available.
+      const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
       await interaction.update({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: "Phiên đã hết",
-            description: "Phiên picker này không còn active (hết 5 phút hoặc bot vừa restart). Chạy lại `/raid-gold-earner` nhé~",
+            title: t("raid-gold-earner.expired.staleSessionTitle", clickerLang),
+            description: t("raid-gold-earner.expired.staleSessionDescription", clickerLang),
           }),
         ],
         components: [],
@@ -353,12 +385,14 @@ function createRaidGoldEarnerCommand({
     // Sessions are caller-scoped and the reply is ephemeral so this is
     // mostly defense-in-depth, but cheap to enforce.
     if (interaction.user.id !== session.callerId) {
+      // Render denial in the clicker's locale, not the session owner's.
+      const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "lock",
-            title: "Không phải session của cậu",
-            description: "Picker này thuộc về người khác. Mở session riêng bằng `/raid-gold-earner` của mình nhé.",
+            title: t("raid-gold-earner.auth.notYourSessionTitle", clickerLang),
+            description: t("raid-gold-earner.auth.notYourSessionDescription", clickerLang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -384,8 +418,12 @@ function createRaidGoldEarnerCommand({
             embeds: [
               buildNoticeEmbed(EmbedBuilder, {
                 type: "warn",
-                title: `Đã chọn đủ ${GOLD_EARNER_CAP_PER_ACCOUNT} char`,
-                description: `Lost Ark cap **${GOLD_EARNER_CAP_PER_ACCOUNT}** gold-earner / account / tuần. Bỏ tick 1 char khác trước đã rồi mới tick char này nha~`,
+                title: t("raid-gold-earner.capWarn.title", session.lang, {
+                  cap: GOLD_EARNER_CAP_PER_ACCOUNT,
+                }),
+                description: t("raid-gold-earner.capWarn.description", session.lang, {
+                  cap: GOLD_EARNER_CAP_PER_ACCOUNT,
+                }),
               }),
             ],
             flags: MessageFlags.Ephemeral,
@@ -453,8 +491,8 @@ function createRaidGoldEarnerCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Lưu thất bại",
-              description: "Artist không lưu được vào DB lần này. Cậu thử lại sau vài giây giúp tớ nhé~",
+              title: t("raid-gold-earner.saveFail.title", session.lang),
+              description: t("raid-gold-earner.saveFail.description", session.lang),
             }),
           ],
           components: [],

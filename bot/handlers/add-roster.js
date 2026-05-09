@@ -2,6 +2,7 @@
 
 const crypto = require("crypto");
 const { buildNoticeEmbed } = require("../utils/raid/shared");
+const { t, getUserLanguage } = require("../services/i18n");
 
 // Two-step flow window: from /raid-add-roster invocation to Confirm click. After
 // 5 minutes the in-memory session is dropped and the embed is updated to
@@ -91,33 +92,45 @@ function createAddRosterCommand({
     // Char list shows stats only — selection state lives on the toggle
     // buttons below (✅/⬜ in the button label) so the embed and the
     // controls don't duplicate the same information visually.
+    const lang = session.lang;
+    const link = buildSeedRosterLink(session.seedCharName);
     const lines = session.chars.map((c, i) => {
       const cp = c.combatScore || "?";
       return `**${i + 1}.** ${c.charName} · ${c.className} · iLvl \`${c.itemLevel}\` · CP \`${cp}\``;
     });
 
     const desc = [
-      `Roster: [**${session.seedCharName}**](${buildSeedRosterLink(session.seedCharName)})`,
-      `Tìm thấy **${session.chars.length}** characters - bấm nút bên dưới để toggle ✅/⬜:`,
+      t("raid-add-roster.picker.rosterLine", lang, {
+        seedName: session.seedCharName,
+        link,
+      }),
+      t("raid-add-roster.picker.foundLine", lang, { count: session.chars.length }),
       "",
       ...lines,
       "",
-      `Đang chọn: **${session.selectedIndices.size}** / ${session.chars.length}`,
-      `${UI.icons.info} Phiên 5 phút - hết giờ sẽ tự huỷ. Bấm **Confirm** để lưu, **Cancel** để bỏ.`,
+      t("raid-add-roster.picker.selectingLine", lang, {
+        selected: session.selectedIndices.size,
+        total: session.chars.length,
+      }),
+      t("raid-add-roster.picker.footerHint", lang, { iconInfo: UI.icons.info }),
     ];
 
     if (session.actingForOther) {
       desc.push("");
       desc.push(
-        `${UI.icons.info} Raid Manager <@${session.callerId}> đang add giúp <@${session.targetId}>.`
+        t("raid-add-roster.picker.managerHelping", lang, {
+          iconInfo: UI.icons.info,
+          callerId: session.callerId,
+          targetId: session.targetId,
+        })
       );
     }
 
     return new EmbedBuilder()
-      .setTitle(`${UI.icons.roster} Chọn characters để add`)
+      .setTitle(t("raid-add-roster.picker.title", lang, { iconRoster: UI.icons.roster }))
       .setDescription(desc.join("\n").slice(0, 4000))
       .setColor(UI.colors.neutral)
-      .setFooter({ text: "Source: lostark.bible · Confirm trong 5 phút" });
+      .setFooter({ text: t("raid-add-roster.picker.footerText", lang) });
   }
 
   function buildSelectionComponents(session) {
@@ -168,7 +181,7 @@ function createAddRosterCommand({
 
     const cancelBtn = new ButtonBuilder()
       .setCustomId(`add-roster:cancel:${session.sessionId}`)
-      .setLabel("Cancel")
+      .setLabel(t("raid-add-roster.picker.cancelLabel", session.lang))
       .setStyle(ButtonStyle.Danger);
 
     return [
@@ -178,72 +191,93 @@ function createAddRosterCommand({
   }
 
   function buildExpiredEmbed(session) {
+    const lang = session.lang;
+    const link = buildSeedRosterLink(session.seedCharName);
     return new EmbedBuilder()
-      .setTitle(`${UI.icons.warn} Phiên đã hết hạn`)
+      .setTitle(t("raid-add-roster.expired.title", lang, { iconWarn: UI.icons.warn }))
       .setDescription(
-        [
-          `Roster: [**${session.seedCharName}**](${buildSeedRosterLink(session.seedCharName)})`,
-          "",
-          `Phiên 5 phút đã hết và không có gì được lưu. Chạy lại \`/raid-add-roster\` để thử lại nhé~`,
-        ].join("\n")
+        t("raid-add-roster.expired.description", lang, {
+          seedName: session.seedCharName,
+          link,
+        })
       )
       .setColor(UI.colors.muted)
-      .setFooter({ text: "Source: lostark.bible" });
+      .setFooter({ text: t("raid-add-roster.expired.footerText", lang) });
   }
 
   function buildCancelledEmbed(session) {
+    const lang = session.lang;
+    const link = buildSeedRosterLink(session.seedCharName);
     return new EmbedBuilder()
-      .setTitle(`${UI.icons.info} Đã huỷ`)
+      .setTitle(t("raid-add-roster.cancelled.title", lang, { iconInfo: UI.icons.info }))
       .setDescription(
-        [
-          `Roster: [**${session.seedCharName}**](${buildSeedRosterLink(session.seedCharName)})`,
-          "",
-          `Không có gì được lưu. Chạy lại \`/raid-add-roster\` khi cậu sẵn sàng.`,
-        ].join("\n")
+        t("raid-add-roster.cancelled.description", lang, {
+          seedName: session.seedCharName,
+          link,
+        })
       )
       .setColor(UI.colors.muted)
-      .setFooter({ text: "Source: lostark.bible" });
+      .setFooter({ text: t("raid-add-roster.cancelled.footerText", lang) });
   }
 
   function buildSavedEmbed(session, savedAccount, dmDelivery = null) {
+    const lang = session.lang;
+    const link = buildSeedRosterLink(session.seedCharName);
     const summaryLines = savedAccount.characters.map(
       (character, index) =>
         `${index + 1}. ${character.name} · ${character.class} · \`${character.itemLevel}\` · \`${character.combatScore || "?"}\``
     );
     const descriptionLines = [
-      `Roster: [**${savedAccount.accountName}**](${buildSeedRosterLink(session.seedCharName)})`,
-      `Saved: **${savedAccount.characters.length}** characters (cậu chọn)`,
+      t("raid-add-roster.saved.rosterLine", lang, {
+        accountName: savedAccount.accountName,
+        link,
+      }),
+      t("raid-add-roster.saved.savedLine", lang, {
+        count: savedAccount.characters.length,
+      }),
     ];
     if (session.actingForOther) {
       descriptionLines.push(
-        `\n${UI.icons.info} Roster này được Raid Manager <@${session.callerId}> add giúp <@${session.targetId}> nha~`
+        t("raid-add-roster.saved.managerHelpingLine", lang, {
+          iconInfo: UI.icons.info,
+          callerId: session.callerId,
+          targetId: session.targetId,
+        })
       );
       // Surface DM-delivery status so the Manager knows whether the
       // target got a private notice or only the channel ping.
       if (dmDelivery?.delivered) {
         descriptionLines.push(
-          `📩 Artist đã DM riêng cho <@${session.targetId}> kèm full chars list.`
+          t("raid-add-roster.saved.dmDelivered", lang, { targetId: session.targetId })
         );
       } else if (dmDelivery?.reason === "dms-disabled") {
         descriptionLines.push(
-          `${UI.icons.warn} Không DM được cho <@${session.targetId}> (target tắt DM từ server members). Channel ping ở trên là backup nha.`
+          t("raid-add-roster.saved.dmDisabled", lang, {
+            iconWarn: UI.icons.warn,
+            targetId: session.targetId,
+          })
         );
       } else if (dmDelivery?.reason === "error") {
         descriptionLines.push(
-          `${UI.icons.warn} DM cho <@${session.targetId}> fail (lỗi khác). Channel ping vẫn ok.`
+          t("raid-add-roster.saved.dmError", lang, {
+            iconWarn: UI.icons.warn,
+            targetId: session.targetId,
+          })
         );
       }
     }
     return new EmbedBuilder()
-      .setTitle(`${UI.icons.roster} Roster Synced`)
+      .setTitle(t("raid-add-roster.saved.title", lang, { iconRoster: UI.icons.roster }))
       .setDescription(descriptionLines.join("\n"))
       .addFields({
-        name: `Characters (${savedAccount.characters.length})`,
+        name: t("raid-add-roster.saved.charactersField", lang, {
+          count: savedAccount.characters.length,
+        }),
         value: summaryLines.join("\n").slice(0, 1024),
         inline: false,
       })
       .setColor(UI.colors.success)
-      .setFooter({ text: "Source: lostark.bible" })
+      .setFooter({ text: t("raid-add-roster.saved.footerText", lang) })
       .setTimestamp();
   }
 
@@ -251,34 +285,37 @@ function createAddRosterCommand({
   // buildSavedEmbed's content but with a Manager-friendly intro line +
   // hints at the next-step commands (/raid-status, /raid-edit-roster) so
   // the target knows what to do without scrolling channel chrome.
-  function buildTargetDMEmbed(session, savedAccount, guildName) {
+  // `targetLang` resolved by caller (recipient's locale, not Manager's).
+  function buildTargetDMEmbed(session, savedAccount, guildName, targetLang) {
+    const lang = targetLang;
+    const link = buildSeedRosterLink(session.seedCharName);
     const summaryLines = savedAccount.characters.map(
       (character, index) =>
         `${index + 1}. ${character.name} · ${character.class} · \`${character.itemLevel}\` · \`${character.combatScore || "?"}\``
     );
-    const guildLine = guildName ? ` trong server **${guildName}**` : "";
+    const guildLine = guildName
+      ? t("raid-add-roster.targetDM.guildLine", lang, { guildName })
+      : "";
     return new EmbedBuilder()
-      .setTitle(`${UI.icons.roster} Roster mới do Manager add giúp cậu`)
+      .setTitle(t("raid-add-roster.targetDM.title", lang, { iconRoster: UI.icons.roster }))
       .setDescription(
-        [
-          `Heya~ Raid Manager <@${session.callerId}> vừa add giúp cậu một roster mới${guildLine}. Artist DM riêng cho cậu xem cho tiện nha.`,
-          "",
-          `Roster: [**${savedAccount.accountName}**](${buildSeedRosterLink(session.seedCharName)})`,
-          `Đã save **${savedAccount.characters.length}** characters.`,
-          "",
-          "Vài lệnh tiếp theo:",
-          "• `/raid-status` → xem tiến độ raid mọi lúc",
-          "• `/raid-edit-roster` → chỉnh sửa nếu có chars sai (thêm/bỏ)",
-          "• `/raid-help` → tài liệu đầy đủ mọi lệnh",
-        ].join("\n")
+        t("raid-add-roster.targetDM.description", lang, {
+          callerId: session.callerId,
+          guildLine,
+          accountName: savedAccount.accountName,
+          link,
+          count: savedAccount.characters.length,
+        })
       )
       .addFields({
-        name: `Characters (${savedAccount.characters.length})`,
+        name: t("raid-add-roster.targetDM.charactersField", lang, {
+          count: savedAccount.characters.length,
+        }),
         value: summaryLines.join("\n").slice(0, 1024),
         inline: false,
       })
       .setColor(UI.colors.success)
-      .setFooter({ text: "Source: lostark.bible · Artist Bot" })
+      .setFooter({ text: t("raid-add-roster.targetDM.footerText", lang) })
       .setTimestamp();
   }
 
@@ -295,9 +332,13 @@ function createAddRosterCommand({
       return { delivered: false, reason: "not-acting-for-other" };
     }
     try {
+      // Resolve recipient's locale: the DM is read by the target user,
+      // not the Manager who clicked Confirm. Falls back to vi if the
+      // target has no language preference.
+      const targetLang = await getUserLanguage(session.targetId, { UserModel: User });
       const targetUser = await client.users.fetch(session.targetId);
       await targetUser.send({
-        embeds: [buildTargetDMEmbed(session, savedAccount, guildName)],
+        embeds: [buildTargetDMEmbed(session, savedAccount, guildName, targetLang)],
       });
       return { delivered: true };
     } catch (err) {
@@ -460,6 +501,12 @@ function createAddRosterCommand({
 
   async function handleAddRosterCommand(interaction) {
     const callerId = interaction.user.id;
+    // Slash invoker (Manager or self-add user) sees every reply on this
+    // command in their own locale — including the Manager-target
+    // onboarding ephemeral, which is the Manager's reply that *mentions*
+    // the target. Target's separate DM uses their own lang (resolved in
+    // tryDeliverTargetDM).
+    const lang = await getUserLanguage(callerId, { UserModel: User });
     const seedCharName = interaction.options.getString("name", true).trim();
 
     // Target option: Raid Manager onboarding for lazy members. When the
@@ -476,8 +523,8 @@ function createAddRosterCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "lock",
-              title: "Chỉ Raid Manager dùng được option `target`",
-              description: "Add roster cho người khác là privilege của Raid Manager nha~ Cậu muốn add cho mình thì bỏ option `target` đi rồi chạy lại là Artist sẽ làm ngay.",
+              title: t("raid-add-roster.auth.managerOnlyTitle", lang),
+              description: t("raid-add-roster.auth.managerOnlyDescription", lang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -489,8 +536,8 @@ function createAddRosterCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Bot không có roster đâu nha~",
-              description: "Bot không chơi Lost Ark được, Artist không add roster cho bot được. Cậu chọn user người chơi thay nhé.",
+              title: t("raid-add-roster.auth.botTargetTitle", lang),
+              description: t("raid-add-roster.auth.botTargetDescription", lang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -518,13 +565,10 @@ function createAddRosterCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Roster này đã có sẵn rồi~",
-              description: [
-                `Artist thấy roster cậu đang muốn add đã được saved trong account **${matched.accountName}** từ trước. Không tạo trùng được nha.`,
-                "",
-                `Muốn cập nhật chars trong roster đó: \`/raid-edit-roster roster:${matched.accountName}\``,
-                `Muốn xoá hẳn rồi add lại từ đầu: \`/raid-remove-roster\` rồi \`/raid-add-roster\``,
-              ].join("\n"),
+              title: t("raid-add-roster.duplicate.preFetchTitle", lang),
+              description: t("raid-add-roster.duplicate.preFetchDescription", lang, {
+                accountName: matched.accountName,
+              }),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -539,13 +583,16 @@ function createAddRosterCommand({
       rosterCharacters = await fetchRosterCharacters(seedCharName);
     } catch (error) {
       await interaction.editReply(
-        `${UI.icons.warn} Không fetch được roster từ lostark.bible: ${error.message}`
+        t("raid-add-roster.fetch.failed", lang, {
+          iconWarn: UI.icons.warn,
+          error: error.message,
+        })
       );
       return;
     }
     if (rosterCharacters.length === 0) {
       await interaction.editReply(
-        `${UI.icons.warn} Không tìm thấy roster hợp lệ. Kiểm tra lại tên character nhé.`
+        t("raid-add-roster.fetch.empty", lang, { iconWarn: UI.icons.warn })
       );
       return;
     }
@@ -584,13 +631,10 @@ function createAddRosterCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Roster này đã saved ở account khác rồi",
-              description: [
-                `Artist fetch bible xong thấy có chars trùng với account **${collidingAccount.accountName}** đã saved của cậu - tránh tạo split nên Artist từ chối nha.`,
-                "",
-                `Muốn add chars mới: \`/raid-edit-roster roster:${collidingAccount.accountName}\``,
-                `Muốn làm lại từ đầu: \`/raid-remove-roster\` rồi \`/raid-add-roster\``,
-              ].join("\n"),
+              title: t("raid-add-roster.duplicate.postFetchTitle", lang),
+              description: t("raid-add-roster.duplicate.postFetchDescription", lang, {
+                accountName: collidingAccount.accountName,
+              }),
             }),
           ],
         });
@@ -621,6 +665,7 @@ function createAddRosterCommand({
     const session = {
       sessionId,
       callerId,
+      lang,
       targetId: targetUser?.id || null,
       discordId,
       actingForOther,
@@ -663,14 +708,16 @@ function createAddRosterCommand({
   // command caller can manipulate or confirm their own session. Manager
   // who used `target:` is still the caller; the target user can't click
   // anything on the picker.
-  function authorizeSession(interaction, session) {
+  async function authorizeSession(interaction, session) {
     if (interaction.user.id !== session.callerId) {
+      // Render denial in clicker's locale, not the session owner's.
+      const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
       return interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "lock",
-            title: "Picker này không phải của cậu",
-            description: "Chỉ người gõ lệnh `/raid-add-roster` mới điều khiển được picker đó nha. Cậu muốn add roster của mình thì gõ `/raid-add-roster` riêng.",
+            title: t("raid-add-roster.auth2.notYourPickerTitle", clickerLang),
+            description: t("raid-add-roster.auth2.notYourPickerDescription", clickerLang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -687,12 +734,14 @@ function createAddRosterCommand({
     const sessionId = parts[2];
     const session = sessions.get(sessionId);
     if (!session) {
+      // Stale session — resolve clicker lang since session is gone.
+      const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
       await interaction.reply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "muted",
-            title: "Phiên đã hết hạn",
-            description: "Phiên 5 phút đã trôi qua mất rồi. Chạy lại `/raid-add-roster` để Artist mở picker mới cho cậu nha~",
+            title: t("raid-add-roster.expired.staleSessionTitle", clickerLang),
+            description: t("raid-add-roster.expired.staleSessionDescription", clickerLang),
           }),
         ],
         flags: MessageFlags.Ephemeral,
@@ -737,8 +786,8 @@ function createAddRosterCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Cần chọn ít nhất 1 char",
-              description: "Cậu chưa toggle char nào - Artist không có gì để save cả. Bấm ít nhất 1 button char (chuyển từ ⬜ sang ✅) rồi Confirm lại nhé.",
+              title: t("raid-add-roster.confirm.noSelectionTitle", session.lang),
+              description: t("raid-add-roster.confirm.noSelectionDescription", session.lang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -759,8 +808,11 @@ function createAddRosterCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "warn",
-              title: "Vượt cap roster",
-              description: `Mỗi roster Artist save được tối đa **${MAX_CHARACTERS_PER_ACCOUNT}** chars (Discord component limit). Cậu đang chọn **${selectedChars.length}** - toggle off bớt vài char rồi Confirm lại nhé.`,
+              title: t("raid-add-roster.confirm.capExceededTitle", session.lang),
+              description: t("raid-add-roster.confirm.capExceededDescription", session.lang, {
+                cap: MAX_CHARACTERS_PER_ACCOUNT,
+                count: selectedChars.length,
+              }),
             }),
           ],
           flags: MessageFlags.Ephemeral,
@@ -792,12 +844,10 @@ function createAddRosterCommand({
             embeds: [
               buildNoticeEmbed(EmbedBuilder, {
                 type: "warn",
-                title: "Có phiên khác vừa save trước",
-                description: [
-                  `Trong lúc cậu đang chọn chars, một phiên \`/raid-add-roster\` khác của cậu vừa save xong roster này ở account **${err.collidingAccountName}**.`,
-                  "",
-                  `Dùng \`/raid-edit-roster roster:${err.collidingAccountName}\` để add tiếp chars cậu vừa chọn vào account đó nhé~`,
-                ].join("\n"),
+                title: t("raid-add-roster.duplicate.raceTitle", session.lang),
+                description: t("raid-add-roster.duplicate.raceDescription", session.lang, {
+                  accountName: err.collidingAccountName,
+                }),
               }),
             ],
           });
@@ -810,8 +860,11 @@ function createAddRosterCommand({
           embeds: [
             buildNoticeEmbed(EmbedBuilder, {
               type: "error",
-              title: "Lưu roster fail",
-              description: `Artist lưu roster không xong: ${err?.message || err}\n\nThử lại sau vài giây nhé. Nếu lặp lại nhiều lần ping ${adminMention} giúp Artist debug~`,
+              title: t("raid-add-roster.persistFail.title", session.lang),
+              description: t("raid-add-roster.persistFail.description", session.lang, {
+                error: err?.message || err,
+                adminMention,
+              }),
             }),
           ],
         });
@@ -841,10 +894,19 @@ function createAddRosterCommand({
       // even with allowedMentions set. Without an explicit content
       // mention here the target wouldn't get any notification despite
       // the embed text saying "đã được Manager add giúp <@target>".
+      // Channel ping content uses the TARGET's lang because the ping
+      // message is read by the target user (the @mention pulls their
+      // attention to the ping; manager already has the embed details).
+      let pingContent = null;
+      if (session.actingForOther) {
+        const targetLang = await getUserLanguage(session.targetId, { UserModel: User });
+        pingContent = t("raid-add-roster.saved.managerPing", targetLang, {
+          targetId: session.targetId,
+          callerId: session.callerId,
+        });
+      }
       await interaction.editReply({
-        content: session.actingForOther
-          ? `<@${session.targetId}> Heya~ Manager <@${session.callerId}> vừa add giúp roster này cho cậu rồi nhé. Check thử xem chars có đúng không, sai thì \`/raid-edit-roster\` sửa được.`
-          : null,
+        content: pingContent,
         embeds: [buildSavedEmbed(session, savedAccount, dmDelivery)],
         components: [],
         allowedMentions: session.actingForOther
