@@ -60,6 +60,7 @@ function createSnapshotHelpers({
       if (!userMeta.has(userDoc.discordId)) {
         userMeta.set(userDoc.discordId, {
           autoManageEnabled: !!userDoc.autoManageEnabled,
+          localSyncEnabled: !!userDoc.localSyncEnabled,
           lastAutoManageSyncAt: Number(userDoc.lastAutoManageSyncAt) || 0,
           lastAutoManageAttemptAt: Number(userDoc.lastAutoManageAttemptAt) || 0,
           // Cached Discord identity strings from the User doc. The Edit

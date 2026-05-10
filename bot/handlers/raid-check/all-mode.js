@@ -306,6 +306,7 @@ function createAllModeHandler({
       const userMeta = {
         discordId: userDoc.discordId,
         autoManageEnabled: !!userDoc.autoManageEnabled,
+        localSyncEnabled: !!userDoc.localSyncEnabled,
         lastAutoManageSyncAt: Number(userDoc.lastAutoManageSyncAt) || 0,
         lastAutoManageAttemptAt: Number(userDoc.lastAutoManageAttemptAt) || 0,
       };

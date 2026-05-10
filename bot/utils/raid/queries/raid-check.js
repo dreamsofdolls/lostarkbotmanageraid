@@ -41,6 +41,7 @@ const RAID_CHECK_USER_QUERY_FIELDS = [
   "discordId",
   "weeklyResetKey",
   "autoManageEnabled",
+  "localSyncEnabled",
   "lastAutoManageSyncAt",
   "lastAutoManageAttemptAt",
   "accounts.accountName",
