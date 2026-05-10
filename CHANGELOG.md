@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-10 (Preview stats redesign: raid-count math + per-char rows + auth pill)
+
+### Changed
+- **Completion math switched from gates to raids** to match `summarizeRaidProgress` in `bot/utils/raid/character.js` (used by `/raid-status`). A raid counts as "cleared" when all its gates have `completedDate > 0`. Field rename in response: `completion.totalGates → totalRaids`. Locale strings updated to display "X/Y raid (50%)" instead of "X/Y (50%)".
+- **Pending list redesigned as per-char rows** (was per (char, raid) flat list). Each row shows `<strong>{charName}</strong> {ilvl}` on the left + raid status pills on the right (one per configured raid: 🟢 done / 🟡 partial / ⚪ pending, with mode label). Field rename: `pendingPostSync → charsAfterSync`. Done chars skip the list so it stays focused on remaining work.
+- **Auth status redesigned as two pills** - profile pill (status dot + avatar + "Linked as" + name) + timer pill (clock + countdown). Status dot replaces the all-text green from v1 so the user's name reads first. Timer pill flips to amber when remaining < 60s (post-sync shrink visual cue). Avatar placeholder (initial-letter) when token has username but no avatar URL.
+- 3 new preview-summary tests cover: gate-difficulty resolver, cross-mode delta projection, fully-cleared raid stays out of charsAfterSync.
+
 ## 2026-05-10 (Preview stats panel + token TTL 30→15 min)
 
 ### Added

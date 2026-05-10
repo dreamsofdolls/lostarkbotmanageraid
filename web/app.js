@@ -157,7 +157,7 @@ function renderPreviewStats(summary) {
   const goldTotal = summary.goldDelta?.total || 0;
   const goldByChar = Array.isArray(summary.goldDelta?.byChar) ? summary.goldDelta.byChar : [];
   const completion = summary.completion || {};
-  const pending = Array.isArray(summary.pendingPostSync) ? summary.pendingPostSync : [];
+  const charsAfterSync = Array.isArray(summary.charsAfterSync) ? summary.charsAfterSync : [];
   const lastSync = summary.lastSync || {};
 
   // Gold chip: show value when > 0, else friendly "no new gold" copy
@@ -182,13 +182,13 @@ function renderPreviewStats(summary) {
     lastSyncStr = `<span class="stat-value">${escapeHtml(formatRelativeTime(ms) || "")} <span class="stat-label">(${escapeHtml(modeLabel)})</span></span>`;
   }
 
-  // Completion chip uses {start} -> {end} interpolation to bold the
+  // Completion chip uses {cleared}/{total} interpolation to bold the
   // numbers via the locale's <strong> tags. innerHTML-safe because we
-  // control the template values (all numbers).
-  const completionStr = completion.totalGates > 0
+  // control the template values (all numbers + the `raid` unit).
+  const completionStr = completion.totalRaids > 0
     ? t("preview.statsCompletionFormat", {
         cleared: completion.cleared,
-        total: completion.totalGates,
+        total: completion.totalRaids,
         percent: completion.percent,
         projectedPercent: completion.projectedPercent,
       })
@@ -197,20 +197,25 @@ function renderPreviewStats(summary) {
   let html = `<div class="stat-row">`;
   html += `<div class="stat"><span class="stat-icon">💰</span><span class="stat-label">${escapeHtml(t("preview.statsGoldLabel"))}:</span> ${goldStr}</div>`;
   html += `<div class="stat"><span class="stat-icon">🕒</span><span class="stat-label">${escapeHtml(t("preview.statsLastSyncLabel"))}:</span> ${lastSyncStr}</div>`;
-  if (completion.totalGates > 0) {
+  if (completion.totalRaids > 0) {
     html += `<div class="stat"><span class="stat-icon">📊</span><span class="stat-label">${escapeHtml(t("preview.statsCompletionLabel"))}:</span> <span class="stat-value">${completionStr}</span></div>`;
   }
   html += `</div>`;
 
-  // Pending gates collapsible. Hidden when zero pending so the panel
-  // doesn't get visually noisy when everything's clear.
-  if (pending.length > 0) {
-    html += `<details><summary>${escapeHtml(t("preview.statsPendingSummary", { n: pending.length }))}</summary><ul>`;
-    for (const p of pending) {
-      const raidLabel = getRaidLabel(p.raidKey);
-      const modeLabel = getModeLabel(p.modeKey);
-      const gateList = (Array.isArray(p.gates) ? p.gates : []).join(", ");
-      html += `<li><strong>${escapeHtml(p.charName || "")}</strong> · ${escapeHtml(raidLabel)} ${escapeHtml(modeLabel)} · ${escapeHtml(gateList)}</li>`;
+  // Per-char raid status list - mirrors the `summarizeRaidProgress`
+  // shape used by /raid-status (one row per char, raids as compact
+  // status pills). Hidden when no chars have pending raids post-sync.
+  if (charsAfterSync.length > 0) {
+    html += `<details><summary>${escapeHtml(t("preview.statsPendingSummary", { n: charsAfterSync.length }))}</summary><ul class="char-pending-list">`;
+    for (const c of charsAfterSync) {
+      const charLabel = `<strong>${escapeHtml(c.charName || "")}</strong>${c.itemLevel ? ` <span class="stat-label">${c.itemLevel}</span>` : ""}`;
+      const pillsHtml = (c.raids || []).map((r) => {
+        const icon = r.status === "done" ? "🟢" : r.status === "partial" ? "🟡" : "⚪";
+        const raidLabel = getRaidLabel(r.raidKey);
+        const modeLabel = getModeLabel(r.modeKey);
+        return `<span class="raid-pill raid-pill--${r.status}">${icon} ${escapeHtml(raidLabel)} <span class="raid-pill-mode">${escapeHtml(modeLabel)}</span></span>`;
+      }).join("");
+      html += `<li class="char-pending-row">${charLabel}<span class="raid-pill-row">${pillsHtml}</span></li>`;
     }
     html += `</ul></details>`;
   }
@@ -295,20 +300,30 @@ function renderAuthStatus() {
   const validStr = remSec >= 60
     ? t("identity.tokenValid", { n: Math.floor(remSec / 60) })
     : t("identity.tokenValidSec", { n: remSec });
-  // Profile chip: avatar + display name. Falls back to anonymous "Linked"
-  // when an older token (pre-profile-mint) carries neither field - we
-  // still want users on stale URLs to see SOMETHING confirming the link.
-  let chip;
+  // Two-pill layout: profile (avatar + name + status dot) on the left,
+  // token timer pill on the right. Status dot replaces the all-text
+  // green from the v1 "status-ok" treatment - keeps "linked + healthy"
+  // signal subtle so the user's name is what reads first, not the verb.
+  // Anonymous fallback (no username + no avatar) still gets the dot
+  // so stale-token users see consistent visual confirmation.
+  let profilePill;
   if (username || avatarUrl) {
     const avatarImg = avatarUrl
       ? `<img class="auth-avatar" src="${escapeHtml(avatarUrl)}" alt="" referrerpolicy="no-referrer">`
+      : `<span class="auth-avatar auth-avatar--placeholder">${escapeHtml((username || "?").slice(0, 1).toUpperCase())}</span>`;
+    const nameSpan = username
+      ? `<span class="auth-name">${escapeHtml(username)}</span>`
       : "";
-    const nameSpan = username ? `<strong>${escapeHtml(username)}</strong>` : "";
-    chip = `<span class="status-ok auth-chip">${avatarImg}${t("identity.linked")} ${nameSpan}</span>`;
+    const linkedLabel = `<span class="auth-linked-label">${escapeHtml(t("identity.linked"))}</span>`;
+    profilePill = `<span class="auth-pill auth-profile-pill"><span class="auth-status-dot"></span>${avatarImg}<span class="auth-pill-text">${linkedLabel}${nameSpan}</span></span>`;
   } else {
-    chip = `<span class="status-ok">${t("identity.linkedAnonymous")}</span>`;
+    profilePill = `<span class="auth-pill auth-profile-pill"><span class="auth-status-dot"></span><span class="auth-pill-text"><span class="auth-name">${escapeHtml(t("identity.linkedAnonymous"))}</span></span></span>`;
   }
-  authStatus.innerHTML = `${chip} · ${validStr}`;
+  // Timer pill: clock glyph + remaining time. Color shifts to warn when
+  // under 60s so the post-sync shrink jumps out visually.
+  const timerClass = remSec < 60 ? "auth-pill auth-timer-pill auth-timer-pill--warn" : "auth-pill auth-timer-pill";
+  const timerStr = `<span class="${timerClass}"><span class="auth-timer-icon">⏱</span><span>${escapeHtml(validStr)}</span></span>`;
+  authStatus.innerHTML = `<div class="auth-row">${profilePill}${timerStr}</div>`;
 }
 
 if (!token) {
