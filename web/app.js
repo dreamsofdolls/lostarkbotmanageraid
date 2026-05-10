@@ -210,11 +210,11 @@ function renderPreviewStats(summary) {
   }
   html += `</div>`;
 
-  // Per-char raid status list - mirrors `/raid-status` (char rows with
-  // raid status pills). Group by accountName so the manager view shows
-  // each roster section explicitly, like the bot embed pages. Class
-  // icon prefix uses the same /sync/class-icons/<slug>.png convention
-  // as the existing per-roster preview cards.
+  // Per-char raid status list - mirrors `/raid-status` for every
+  // eligible character after sync. Group by accountName so the manager
+  // view shows each roster section explicitly, like the bot embed pages.
+  // Class icon prefix uses the same /sync/class-icons/<slug>.png
+  // convention as the existing per-roster preview cards.
   if (charsAfterSync.length > 0) {
     const byRoster = new Map();
     for (const c of charsAfterSync) {
@@ -253,7 +253,7 @@ function renderPreviewStats(summary) {
     html += `</details>`;
   }
   // Per-char gold breakdown - same per-roster sectioning + class icon
-  // treatment as the pending list. Gold value lives on the right as a
+  // treatment as the raid status list. Gold value lives on the right as a
   // standalone pill so the eye scans "char · roster" → "gold" cleanly.
   if (goldByChar.length > 0) {
     const goldByRoster = new Map();

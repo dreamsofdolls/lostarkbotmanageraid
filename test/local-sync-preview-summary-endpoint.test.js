@@ -200,6 +200,70 @@ test("preview summary marks fully-cleared raid as done", () => {
   ]);
 });
 
+test("preview summary keeps fully done sync chars visible beside gold", () => {
+  const buckets = bucketizeLocalSyncDeltas([
+    {
+      boss: "Corvus Tul Rak", // Serca G2 Hard; cumulative rule implies G1 too.
+      difficulty: "Hard",
+      cleared: true,
+      charName: "Aki",
+      lastClearMs: 12345,
+    },
+  ]);
+
+  const summary = projectSummary(makeAccounts({
+    name: "Aki",
+    class: "Artist",
+    itemLevel: 1735,
+    isGoldEarner: true,
+    assignedRaids: {
+      armoche: {
+        G1: { difficulty: "Hard", completedDate: 111 },
+        G2: { difficulty: "Hard", completedDate: 222 },
+      },
+      kazeros: {
+        G1: { difficulty: "Hard", completedDate: 333 },
+        G2: { difficulty: "Hard", completedDate: 444 },
+      },
+      serca: {
+        G1: { difficulty: "Hard", completedDate: null },
+        G2: { difficulty: "Hard", completedDate: null },
+      },
+    },
+  }), buckets);
+
+  assert.deepEqual(summary.completion, {
+    totalRaids: 3,
+    cleared: 2,
+    projected: 3,
+    percent: 67,
+    projectedPercent: 100,
+  });
+  assert.equal(summary.goldDelta.total, 44000);
+  assert.deepEqual(summary.charsAfterSync, [
+    {
+      accountName: "Roster",
+      charName: "Aki",
+      className: "Artist",
+      itemLevel: 1735,
+      raids: [
+        { raidKey: "armoche", modeKey: "hard", status: "done", incoming: false },
+        { raidKey: "kazeros", modeKey: "hard", status: "done", incoming: false },
+        { raidKey: "serca", modeKey: "hard", status: "done", incoming: true },
+      ],
+    },
+  ]);
+  assert.deepEqual(summary.goldDelta.byChar, [
+    {
+      accountName: "Roster",
+      charName: "Aki",
+      className: "Artist",
+      itemLevel: 1735,
+      gold: 44000,
+    },
+  ]);
+});
+
 test("preview summary includes eligible chars with no assigned raid state", () => {
   const summary = projectSummary(makeAccounts({
     name: "Qyoir",
