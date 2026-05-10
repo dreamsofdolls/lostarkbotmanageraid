@@ -694,19 +694,24 @@ async function runPreviewQuery(sqlite3, db) {
     lastDeltas = [];
     return;
   }
-  // Build the deltas array for the Sync POST. Server re-validates +
-  // re-buckets, but only mapped raid clears are sent. Failed encounters,
-  // non-raid content, and rows without a local character stay client-side.
+  // Cache rows + schema for post-sync refresh (refreshDiffAndStats reuses
+  // these without re-parsing SQLite). The query is cheap on a warm DB
+  // but skipping it avoids an unnecessary file-system roundtrip after
+  // the user already committed.
+  window.__artistRows = rows;
+  window.__artistSchemaDebug = { table, bossCol, tsCol, charCol: charCol || "-" };
+  await rebuildDiffFromRows({ rows, schemaDebug: window.__artistSchemaDebug });
+}
+
+// Pure-data half of the preview pipeline: takes already-parsed rows +
+// fetches fresh roster + (re)builds the diff/lastDeltas/state buckets +
+// renders. Extracted so post-sync can refresh the panel without the
+// SQLite layer underneath. Both runPreviewQuery (initial) and the sync
+// success path (post-apply) call this.
+async function rebuildDiffFromRows({ rows, schemaDebug, keepSyncOutput = false }) {
   const syncRows = rows.filter((r) => r[3] && getRaidGateForBoss(r[0]));
-  // Bucketize for diff. Each bucket = (char, raid, mode) collapsed to
-  // its highest cleared gate. Server's apply.js does the same - so
-  // the preview = what gets persisted.
   const buckets = bucketize(rows);
   const unmappedBosses = findUnmappedBosses(rows);
-  // Fetch DB roster snapshot in parallel-friendly fashion (we kicked
-  // off the SQLite query already, now we ask the server for current
-  // assignedRaids state). buildDiff merges the two streams into the
-  // roster-grouped view.
   let rosterAccounts = [];
   let rosterError = "";
   try {
@@ -724,6 +729,10 @@ async function runPreviewQuery(sqlite3, db) {
     rosterError = err?.message || String(err);
     console.warn("[local-sync] roster fetch threw:", err?.message || err);
   }
+  // Cache the roster snapshot so the sync result renderer can resolve
+  // accountName / className / itemLevel for each applied char without
+  // re-fetching. Refreshed on every rebuildDiffFromRows call.
+  window.__artistRosterAccounts = rosterAccounts;
   const diff = buildDiff(rosterAccounts, buckets);
   const actionableKeys = buildActionableBucketKeySet(diff);
   lastDeltas = syncRows
@@ -740,10 +749,6 @@ async function runPreviewQuery(sqlite3, db) {
       lastClearMs: Number(r[5]) || 0,
     }));
   const syncableBuckets = buckets.filter((b) => actionableKeys.has(makeBucketKey(b.charName, b.raidKey, b.modeKey)));
-  // Cache the diff + reset to first page on every fresh preview run.
-  // currentRosterPage state lives on window so the pagination buttons
-  // (rendered as inline HTML, click-bound after innerHTML write) can
-  // mutate it via the helper below.
   window.__artistDiff = diff;
   window.__artistRosterPage = 0;
   window.__artistUnmappedBosses = unmappedBosses;
@@ -754,27 +759,28 @@ async function runPreviewQuery(sqlite3, db) {
     clears: syncableBuckets.length,
     detectedChars: new Set(buckets.map((b) => String(b.charName || "").trim().toLowerCase())).size,
     detectedClears: buckets.length,
-    schemaDebug: { table, bossCol, tsCol, charCol: charCol || "-" },
+    schemaDebug,
   };
-  // Default view = char-first. /raid-status mental model: scan "what
-  // has my char done this week". Toggle to raid-first for manager
-  // scan "who's done raid X". State persists across roster page flips
-  // within the same preview session (re-render reads same window var).
   if (window.__artistViewMode !== "raid" && window.__artistViewMode !== "char") {
     window.__artistViewMode = "char";
   }
   renderDiffPage();
   syncSection.hidden = false;
   syncBtn.disabled = lastDeltas.length === 0;
-  if (lastDeltas.length === 0) {
-    syncOutput.hidden = false;
-    syncOutput.innerHTML = t("sync.nothingToSyncFull");
-  } else {
-    syncOutput.hidden = true;
+  // Post-sync callers pass keepSyncOutput so the success summary they
+  // just rendered stays visible. Initial preview wipes it to either
+  // "nothing to sync" hint or hidden depending on actionable count.
+  if (!keepSyncOutput) {
+    if (lastDeltas.length === 0) {
+      syncOutput.hidden = false;
+      syncOutput.innerHTML = t("sync.nothingToSyncFull");
+    } else {
+      syncOutput.hidden = true;
+    }
   }
-  // Stats panel fires AFTER preview render so the user sees diff cards
-  // immediately; the panel fills in async ~50ms later. Failure is silent
-  // (panel just stays hidden) so a flaky endpoint doesn't break preview.
+  // Stats panel fetch is async + non-blocking. Refreshed on every
+  // rebuildDiffFromRows call so post-sync state reflects new gold/%/
+  // pending immediately.
   fetchPreviewSummary(lastDeltas).then(renderPreviewStats).catch(() => {});
 }
 
@@ -1123,25 +1129,91 @@ syncBtn.addEventListener("click", async () => {
       authState.expSec = data.newExpSec;
       renderAuthStatus();
     }
-    let html = `<span class="status-ok">${t("sync.complete")}</span> ${t("sync.summary", { a, s, u, r })}`;
-    if (a > 0) {
-      html += `<br><br><strong>${t("sync.appliedLabel")}</strong><ul>`;
-      for (const x of data.applied) {
-        const raidLabel = getRaidLabel(x.raidKey);
-        const modeLabel = getModeLabel(x.modeKey);
-        html += `<li>${escapeHtml(x.charName)} - ${escapeHtml(raidLabel)} ${escapeHtml(modeLabel)} ${x.gates.join(",")}</li>`;
+    // Roster lookup for class icon + accountName + itemLevel resolution.
+    // Built from the cached roster snapshot so we don't burn another
+    // /api/me/roster fetch just to render the result list.
+    const charLookup = new Map();
+    for (const acc of (window.__artistRosterAccounts || [])) {
+      for (const ch of (acc.characters || [])) {
+        if (!ch?.name) continue;
+        charLookup.set(String(ch.name).toLowerCase(), {
+          accountName: acc.accountName || "",
+          className: ch.class || "",
+          itemLevel: Number(ch.itemLevel) || 0,
+        });
       }
-      html += `</ul>`;
     }
+
+    let html = `<div class="sync-result-summary"><span class="status-ok">${t("sync.complete")}</span> <span class="sync-summary-line">${t("sync.summary", { a, s, u, r })}</span></div>`;
+
+    // Applied: per-roster grouped char rows with class icon + raid pill.
+    // Same visual language as preview-stats charsAfterSync list - keeps
+    // the user's eye trained on one design across the page.
+    if (a > 0) {
+      const byRoster = new Map();
+      for (const x of data.applied) {
+        const info = charLookup.get(String(x.charName || "").toLowerCase()) || {};
+        const accountName = info.accountName || "";
+        if (!byRoster.has(accountName)) byRoster.set(accountName, []);
+        byRoster.get(accountName).push({ ...x, ...info });
+      }
+      html += `<div class="sync-result-section"><div class="sync-result-section-title">${escapeHtml(t("sync.appliedLabel"))}</div>`;
+      for (const [accountName, charsInRoster] of byRoster) {
+        if (accountName) {
+          html += `<div class="char-pending-roster-header">📁 <strong>${escapeHtml(accountName)}</strong></div>`;
+        }
+        html += `<ul class="char-pending-list">`;
+        for (const x of charsInRoster) {
+          const iconName = CLASS_LABEL_TO_ICON[x.className] || "";
+          const classIcon = iconName
+            ? `<img class="class-icon" src="/sync/class-icons/${iconName}.png" alt="${escapeHtml(x.className)}" title="${escapeHtml(x.className)}" loading="lazy">`
+            : "";
+          const charLabel = `${classIcon}<strong>${escapeHtml(x.charName)}</strong>${x.itemLevel ? ` <span class="stat-label">${x.itemLevel}</span>` : ""}`;
+          const raidLabel = getRaidLabel(x.raidKey);
+          const modeLabel = getModeLabel(x.modeKey);
+          const gateText = (x.gates || []).join("+");
+          const pill = `<span class="raid-pill raid-pill--done">🟢 ${escapeHtml(raidLabel)} <span class="raid-pill-mode">${escapeHtml(modeLabel)} ${escapeHtml(gateText)}</span></span>`;
+          html += `<li class="char-pending-row"><span class="char-pending-head">${charLabel}</span><span class="raid-pill-row">${pill}</span></li>`;
+        }
+        html += `</ul>`;
+      }
+      html += `</div>`;
+    }
+
     if (r > 0) {
-      html += `<br><strong>${t("sync.rejectedLabel")}</strong><ul>`;
-      for (const x of data.rejected) html += `<li>${escapeHtml(x.charName)} - ${escapeHtml(x.reason)}${x.error ? ` (${escapeHtml(x.error)})` : ""}</li>`;
-      html += `</ul>`;
+      html += `<div class="sync-result-section"><div class="sync-result-section-title">${escapeHtml(t("sync.rejectedLabel"))}</div><ul class="char-pending-list">`;
+      for (const x of data.rejected) {
+        const info = charLookup.get(String(x.charName || "").toLowerCase()) || {};
+        const iconName = CLASS_LABEL_TO_ICON[info.className] || "";
+        const classIcon = iconName
+          ? `<img class="class-icon" src="/sync/class-icons/${iconName}.png" alt="${escapeHtml(info.className)}" title="${escapeHtml(info.className)}" loading="lazy">`
+          : "";
+        const charLabel = `${classIcon}<strong>${escapeHtml(x.charName)}</strong>`;
+        const reasonText = x.error ? `${x.reason} (${x.error})` : x.reason;
+        const pill = `<span class="raid-pill raid-pill--rejected">⛔ ${escapeHtml(reasonText)}</span>`;
+        html += `<li class="char-pending-row"><span class="char-pending-head">${charLabel}</span><span class="raid-pill-row">${pill}</span></li>`;
+      }
+      html += `</ul></div>`;
     }
     if (u > 0) {
-      html += `<br><span class="hint">${t("sync.unmappedHint")} ${data.unmapped.slice(0, 5).map((x) => escapeHtml(x.boss)).join(", ")}${u > 5 ? `, ${t("sync.unmappedMore", { n: u - 5 })}` : ""}</span>`;
+      html += `<div class="sync-result-section sync-result-unmapped"><span class="hint">${t("sync.unmappedHint")} ${data.unmapped.slice(0, 5).map((x) => escapeHtml(x.boss)).join(", ")}${u > 5 ? `, ${t("sync.unmappedMore", { n: u - 5 })}` : ""}</span></div>`;
     }
     syncOutput.innerHTML = html;
+    syncOutput.hidden = false;
+
+    // Refresh mục 3 (preview cards + stats panel) after a real apply
+    // so the user sees post-sync state immediately - synced gates flip
+    // from pending to synced, gold drops, completion % climbs. Pass
+    // keepSyncOutput so we don't clobber the success summary above.
+    if (a > 0 && window.__artistRows) {
+      rebuildDiffFromRows({
+        rows: window.__artistRows,
+        schemaDebug: window.__artistSchemaDebug,
+        keepSyncOutput: true,
+      }).catch((err) => {
+        console.warn("[local-sync] post-sync refresh failed:", err?.message || err);
+      });
+    }
   } catch (err) {
     syncOutput.innerHTML = `<span class="status-err">${t("sync.networkError")}</span> ${escapeHtml(err.message || String(err))}`;
     syncBtn.disabled = false;
