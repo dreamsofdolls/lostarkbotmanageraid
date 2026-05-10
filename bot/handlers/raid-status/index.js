@@ -150,7 +150,24 @@ function createRaidStatusCommand(deps) {
 
   async function handleStatusCommand(interaction) {
     const discordId = interaction.user.id;
-    await interaction.deferReply();
+    // Probe localSyncEnabled BEFORE defer so we can flag the reply as
+    // ephemeral when local-sync is on. The Mở Web Companion Link button
+    // carries a signed token URL in its href - public messages would
+    // leak that URL to anyone in the channel who clicks it (Link
+    // buttons bypass bot auth). Ephemeral keeps the URL opener-only.
+    // Lean+select is ~30ms - well under Discord's 3-sec defer deadline.
+    let isLocalSyncMode = false;
+    try {
+      const probe = await User.findOne({ discordId })
+        .select("localSyncEnabled")
+        .lean();
+      isLocalSyncMode = !!probe?.localSyncEnabled;
+    } catch (err) {
+      console.warn("[raid-status] localSync probe failed:", err?.message || err);
+    }
+    await interaction.deferReply(
+      isLocalSyncMode ? { flags: MessageFlags.Ephemeral } : {}
+    );
     // Resolve viewer's persistent language preference once at command
     // entry. Threads through every render path (early-exit notice,
     // buildAccountPageEmbed, freshness lines) so the whole interaction
@@ -430,13 +447,14 @@ function createRaidStatusCommand(deps) {
     // entry by hydrateLocalSyncResumeUrl() below; component builders
     // read it synchronously.
     let cachedLocalSyncResumeUrl = null;
-    const buildLocalSyncResumeButton = () => {
+    const buildLocalSyncResumeButton = (disabled = false) => {
       if (!cachedLocalSyncResumeUrl) return null;
       return new ButtonBuilder()
         .setStyle(ButtonStyle.Link)
         .setLabel(t("raid-status.sync.localOpenButtonLabel", lang))
         .setEmoji("🌐")
-        .setURL(cachedLocalSyncResumeUrl);
+        .setURL(cachedLocalSyncResumeUrl)
+        .setDisabled(disabled);
     };
     const buildLocalSyncNewButton = (disabled) => {
       if (!cachedLocalSyncResumeUrl) return null; // env unset or mint failed - hide both
@@ -482,8 +500,12 @@ function createRaidStatusCommand(deps) {
     const buildSyncButton = (disabled) => {
       // Local mode: returns the resume Link button. The "New link"
       // companion is added separately by buildSyncRow when applicable.
+      // Pass disabled through so collector-end disables it (Link
+      // buttons go straight to URL bypassing the bot, so without
+      // setDisabled the post-session token URL would still be open
+      // for anyone who clicks).
       if (statusUserMeta.localSyncEnabled) {
-        return buildLocalSyncResumeButton();
+        return buildLocalSyncResumeButton(disabled);
       }
       return new ButtonBuilder()
         .setCustomId("status:sync")
