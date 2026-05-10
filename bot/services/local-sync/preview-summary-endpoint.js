@@ -138,11 +138,10 @@ function projectSummary(accounts, deltaBuckets) {
         charRaidStates.push({ raidKey, modeKey: state.modeKey, status, incoming });
       }
 
-      // Only include chars who still have at least one non-done raid
-      // post-sync - "Pending list" stays focused on what's left to do.
-      // Done chars contribute to clearedRaids count but not to the list.
-      // accountName carried so the web can section the list per roster.
-      if (charRaidStates.length > 0 && charRaidStates.some((r) => r.status !== "done")) {
+      // Include every eligible character so the raid-status preview and
+      // gold breakdown stay aligned even when a character becomes fully
+      // done after sync. accountName lets the web section by roster.
+      if (charRaidStates.length > 0) {
         charsAfterSync.push({
           accountName: account?.accountName || "",
           charName: char.name || "",
@@ -177,7 +176,7 @@ function projectSummary(accounts, deltaBuckets) {
 
 /**
  * Build the `POST /api/local-sync/preview-summary` handler. Pre-sync
- * companion stats: gold delta, completion projection, pending gates list,
+ * companion stats: gold delta, completion projection, raid status list,
  * last-sync timestamps. Lets the user see "if I sync, here's what changes"
  * before clicking the Sync button.
  *
