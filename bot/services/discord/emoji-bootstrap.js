@@ -47,8 +47,9 @@ const crypto = require("crypto");
 const { CLASS_NAMES, CLASS_EMOJI_MAP } = require("../../models/Class");
 const { ARTIST_EMOJI_MAP } = require("../../models/ArtistEmoji");
 
-const CLASS_ICONS_DIR = path.resolve(__dirname, "..", "..", "assets", "class-icons");
-const ARTIST_ICONS_DIR = path.resolve(__dirname, "..", "..", "assets", "artist-icons");
+const ROOT_ASSETS_DIR = path.resolve(__dirname, "..", "..", "..", "assets");
+const CLASS_ICONS_DIR = path.join(ROOT_ASSETS_DIR, "class-icons");
+const ARTIST_ICONS_DIR = path.join(ROOT_ASSETS_DIR, "artist-icons");
 
 // Class IDs that share art with another class - upload ONE emoji and
 // point both display names at the same emoji ID. Saves application
@@ -402,8 +403,17 @@ function bootstrapArtistEmoji(client) {
   });
 }
 
+function getEmojiAssetDirs() {
+  return {
+    rootAssetsDir: ROOT_ASSETS_DIR,
+    classIconsDir: CLASS_ICONS_DIR,
+    artistIconsDir: ARTIST_ICONS_DIR,
+  };
+}
+
 module.exports = {
   bootstrapClassEmoji,
   bootstrapArtistEmoji,
   bootstrapEmojiFolder,
+  getEmojiAssetDirs,
 };
