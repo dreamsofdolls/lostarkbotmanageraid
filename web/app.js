@@ -48,6 +48,14 @@ const syncOutput = $("sync-output");
 // Cache the last successful query result so the Sync button can POST it
 // without re-running the SQL. Set on every loadAndPreview() success.
 let lastDeltas = null;
+let previewUtilsPromise = null;
+
+function loadPreviewUtils() {
+  if (!previewUtilsPromise) {
+    previewUtilsPromise = import("/sync/preview-utils.js");
+  }
+  return previewUtilsPromise;
+}
 
 // LA VN raid week boundary helper. Reset is Wed 17:00 VN = 10:00 UTC.
 // Returns {start, endDisplay} as Date objects. start = most recent reset
@@ -651,17 +659,7 @@ async function runPreviewQuery(sqlite3, db) {
   const playersSql = playersCol ? quoteIdent(playersCol) : null;
   // Lazy-load preview-utils once per preview. The reset-window helper is
   // needed before SQL so the DB scan only covers the active raid week.
-  const {
-    bucketize,
-    findUnmappedBosses,
-    getRaidGateForBoss,
-    buildDiff,
-    normalizeDifficulty,
-    makeBucketKey,
-    buildActionableBucketKeySet,
-    collectDiffStateCounts,
-    currentWeeklyResetStartMs,
-  } = await import("/sync/preview-utils.js");
+  const { currentWeeklyResetStartMs } = await loadPreviewUtils();
   const currentWeekStartMs = currentWeeklyResetStartMs();
   const sql = `
     SELECT ${bossSql} AS boss,
@@ -709,6 +707,16 @@ async function runPreviewQuery(sqlite3, db) {
 // SQLite layer underneath. Both runPreviewQuery (initial) and the sync
 // success path (post-apply) call this.
 async function rebuildDiffFromRows({ rows, schemaDebug, keepSyncOutput = false }) {
+  const {
+    bucketize,
+    findUnmappedBosses,
+    getRaidGateForBoss,
+    buildDiff,
+    normalizeDifficulty,
+    makeBucketKey,
+    buildActionableBucketKeySet,
+    collectDiffStateCounts,
+  } = await loadPreviewUtils();
   const syncRows = rows.filter((r) => r[3] && getRaidGateForBoss(r[0]));
   const buckets = bucketize(rows);
   const unmappedBosses = findUnmappedBosses(rows);
