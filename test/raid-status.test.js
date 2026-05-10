@@ -49,6 +49,7 @@ const {
   RAID_REQUIREMENT_MAP,
 } = require("../bot/utils/raid/common/character");
 const { getAutoManageCooldownMs, isManagerId } = require("../bot/services/access/manager");
+const { CLASS_EMOJI_MAP } = require("../bot/models/Class");
 
 function makeFactory() {
   return createRaidStatusCommand({
@@ -229,6 +230,31 @@ test("buildAccountPageEmbed: title icon = 'lock' when no eligible raids exist on
     NOOP_GET_RAIDS_FOR
   );
   assert.match(embed.toJSON().title, /🔒/);
+});
+
+test("buildAccountPageEmbed: character header uses className fallback for class emoji", () => {
+  const oldBardEmoji = CLASS_EMOJI_MAP.Bard;
+  CLASS_EMOJI_MAP.Bard = "<:bard_test:123456789012345678>";
+  try {
+    const char = makeChar("ClassAlias", 1710);
+    delete char.class;
+    char.className = "Bard";
+    const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
+    const embed = buildAccountPageEmbed(
+      account,
+      0,
+      1,
+      { progress: { completed: 0, partial: 0, total: 0 }, characters: 1 },
+      NOOP_GET_RAIDS_FOR
+    );
+
+    assert.match(
+      embed.toJSON().fields[0].name,
+      /^<:bard_test:123456789012345678> ClassAlias/
+    );
+  } finally {
+    CLASS_EMOJI_MAP.Bard = oldBardEmoji;
+  }
 });
 
 test("buildAccountPageEmbed: page counter shows in footer when totalPages > 1", () => {
