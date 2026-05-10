@@ -60,10 +60,16 @@ function projectSummary(accounts, deltaBuckets) {
 
   const goldByChar = new Map();
   let goldTotal = 0;
-  let totalGates = 0;
-  let clearedGates = 0;
-  let projectedCleared = 0;
-  const pendingPostSync = [];
+  // Counts are RAIDS, not gates - mirrors `summarizeRaidProgress` in
+  // bot/utils/raid/character.js so the % matches what /raid-status shows.
+  // A raid is "completed" iff all its gates have completedDate > 0.
+  let totalRaids = 0;
+  let clearedRaids = 0;
+  let projectedClearedRaids = 0;
+  // Per-char rollup for the pending list. Each char carries an array
+  // of (raidKey, modeKey, status) so the web can render compact
+  // "char: 🟢 Act 4 H · 🟡 Kazeros H · ⚪ Serca NM" rows.
+  const charsAfterSync = [];
 
   for (const account of accounts || []) {
     for (const char of account.characters || []) {
@@ -87,7 +93,6 @@ function projectSummary(accounts, deltaBuckets) {
           const gateModeKey = resolveModeKey(raidKey, gateEntry?.difficulty) || modeKey;
           if (gateModeKey !== modeKey) continue;
 
-          clearedGates += 1;
           state.cleared.add(gate);
           dbClearedGates.set(makeGateKey(raidKey, modeKey, gate), true);
         }
@@ -133,28 +138,53 @@ function projectSummary(accounts, deltaBuckets) {
         goldTotal += charGold;
       }
 
-      for (const [raidKey, state] of finalRaidStates.entries()) {
+      // Pre-sync clearedRaids comes from preRaidStates. Use both pre +
+      // final to keep "currently complete vs post-sync complete" math
+      // honest even when post-sync = pre-sync (no applicable deltas).
+      for (const [raidKey, state] of preRaidStates.entries()) {
         const gates = getGatesForRaid(raidKey);
-        totalGates += gates.length;
-        projectedCleared += state.cleared.size;
+        if (state.cleared.size === gates.length) clearedRaids += 1;
+      }
 
-        const stillPending = gates.filter((gate) => !state.cleared.has(gate));
-        if (stillPending.length > 0) {
-          pendingPostSync.push({
-            charName: char.name || "",
-            className: char.class || "",
-            raidKey,
-            modeKey: state.modeKey,
-            gates: stillPending,
-          });
+      // Walk finalRaidStates to count totalRaids + projectedClearedRaids
+      // and build the per-char raid status array. Iterate in canonical
+      // RAID_REQUIREMENTS order so the badge sequence is stable across
+      // chars (Act 4 → Kazeros → Serca).
+      const charRaidStates = [];
+      for (const raidKey of Object.keys(RAID_REQUIREMENTS)) {
+        const state = finalRaidStates.get(raidKey);
+        if (!state) continue;
+        const gates = getGatesForRaid(raidKey);
+        totalRaids += 1;
+        let status;
+        if (state.cleared.size === gates.length) {
+          projectedClearedRaids += 1;
+          status = "done";
+        } else if (state.cleared.size > 0) {
+          status = "partial";
+        } else {
+          status = "pending";
         }
+        charRaidStates.push({ raidKey, modeKey: state.modeKey, status });
+      }
+
+      // Only include chars who still have at least one non-done raid
+      // post-sync - "Pending list" stays focused on what's left to do.
+      // Done chars contribute to clearedRaids count but not to the list.
+      if (charRaidStates.length > 0 && charRaidStates.some((r) => r.status !== "done")) {
+        charsAfterSync.push({
+          charName: char.name || "",
+          className: char.class || "",
+          itemLevel: Number(char.itemLevel) || 0,
+          raids: charRaidStates,
+        });
       }
     }
   }
 
-  const percent = totalGates > 0 ? Math.round((clearedGates / totalGates) * 100) : 0;
-  const projectedPercent = totalGates > 0
-    ? Math.round((projectedCleared / totalGates) * 100)
+  const percent = totalRaids > 0 ? Math.round((clearedRaids / totalRaids) * 100) : 0;
+  const projectedPercent = totalRaids > 0
+    ? Math.round((projectedClearedRaids / totalRaids) * 100)
     : 0;
 
   return {
@@ -163,13 +193,13 @@ function projectSummary(accounts, deltaBuckets) {
       byChar: [...goldByChar.values()].sort((a, b) => b.gold - a.gold),
     },
     completion: {
-      totalGates,
-      cleared: clearedGates,
-      projected: projectedCleared,
+      totalRaids,
+      cleared: clearedRaids,
+      projected: projectedClearedRaids,
       percent,
       projectedPercent,
     },
-    pendingPostSync,
+    charsAfterSync,
   };
 }
 
@@ -264,7 +294,7 @@ function createPreviewSummaryEndpoint({ User }) {
     let userDoc;
     try {
       userDoc = await User.findOne({ discordId })
-        .select("localSyncEnabled lastLocalSyncToken lastLocalSyncTokenExpAt lastLocalSyncAt lastAutoManageSyncAt accounts.accountName accounts.characters.name accounts.characters.class accounts.characters.isGoldEarner accounts.characters.assignedRaids")
+        .select("localSyncEnabled lastLocalSyncToken lastLocalSyncTokenExpAt lastLocalSyncAt lastAutoManageSyncAt accounts.accountName accounts.characters.name accounts.characters.class accounts.characters.itemLevel accounts.characters.isGoldEarner accounts.characters.assignedRaids")
         .lean();
     } catch (err) {
       console.error("[preview-summary] state read failed:", err?.message || err);
@@ -276,8 +306,8 @@ function createPreviewSummaryEndpoint({ User }) {
       send(res, 200, {
         ok: true,
         goldDelta: { total: 0, byChar: [] },
-        completion: { totalGates: 0, cleared: 0, projected: 0, percent: 0, projectedPercent: 0 },
-        pendingPostSync: [],
+        completion: { totalRaids: 0, cleared: 0, projected: 0, percent: 0, projectedPercent: 0 },
+        charsAfterSync: [],
         lastSync: { localSyncAt: null, autoManageSyncAt: null },
       });
       return;

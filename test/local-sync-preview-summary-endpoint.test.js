@@ -19,6 +19,7 @@ test("preview summary reads assigned raid difficulty from gate entries", () => {
   const summary = projectSummary(makeAccounts({
     name: "Aki",
     class: "Artist",
+    itemLevel: 1750,
     isGoldEarner: true,
     assignedRaids: {
       kazeros: {
@@ -29,19 +30,20 @@ test("preview summary reads assigned raid difficulty from gate entries", () => {
   }), []);
 
   assert.deepEqual(summary.completion, {
-    totalGates: 2,
-    cleared: 1,
-    projected: 1,
-    percent: 50,
-    projectedPercent: 50,
+    totalRaids: 1,
+    cleared: 0,
+    projected: 0,
+    percent: 0,
+    projectedPercent: 0,
   });
-  assert.deepEqual(summary.pendingPostSync, [
+  assert.deepEqual(summary.charsAfterSync, [
     {
       charName: "Aki",
       className: "Artist",
-      raidKey: "kazeros",
-      modeKey: "hard",
-      gates: ["G2"],
+      itemLevel: 1750,
+      raids: [
+        { raidKey: "kazeros", modeKey: "hard", status: "partial" },
+      ],
     },
   ]);
 });
@@ -60,6 +62,7 @@ test("preview summary calculates pending gates in the post-sync mode", () => {
   const summary = projectSummary(makeAccounts({
     name: "Aki",
     class: "Artist",
+    itemLevel: 1750,
     isGoldEarner: true,
     assignedRaids: {
       serca: {
@@ -69,21 +72,52 @@ test("preview summary calculates pending gates in the post-sync mode", () => {
     },
   }), buckets);
 
+  // Pre-sync: serca Hard has 1/2 gates cleared - NOT a completed raid.
+  // Post-sync: cross-mode delta resets serca to Nightmare; only G1 cleared
+  // there - still NOT a completed raid. So both percent and projected
+  // percent stay at 0%.
   assert.deepEqual(summary.completion, {
-    totalGates: 2,
-    cleared: 1,
-    projected: 1,
-    percent: 50,
-    projectedPercent: 50,
+    totalRaids: 1,
+    cleared: 0,
+    projected: 0,
+    percent: 0,
+    projectedPercent: 0,
   });
   assert.equal(summary.goldDelta.total, 21000);
-  assert.deepEqual(summary.pendingPostSync, [
+  assert.deepEqual(summary.charsAfterSync, [
     {
       charName: "Aki",
       className: "Artist",
-      raidKey: "serca",
-      modeKey: "nightmare",
-      gates: ["G2"],
+      itemLevel: 1750,
+      raids: [
+        { raidKey: "serca", modeKey: "nightmare", status: "partial" },
+      ],
     },
   ]);
+});
+
+test("preview summary marks fully-cleared raid as done", () => {
+  const summary = projectSummary(makeAccounts({
+    name: "Aki",
+    class: "Artist",
+    itemLevel: 1750,
+    isGoldEarner: true,
+    assignedRaids: {
+      armoche: {
+        G1: { difficulty: "Hard", completedDate: 111 },
+        G2: { difficulty: "Hard", completedDate: 222 },
+      },
+    },
+  }), []);
+
+  assert.deepEqual(summary.completion, {
+    totalRaids: 1,
+    cleared: 1,
+    projected: 1,
+    percent: 100,
+    projectedPercent: 100,
+  });
+  // Done chars are NOT in charsAfterSync - the list focuses on chars
+  // with at least one non-done raid post-sync.
+  assert.deepEqual(summary.charsAfterSync, []);
 });
