@@ -1154,34 +1154,48 @@ syncBtn.addEventListener("click", async () => {
 
     let html = `<div class="sync-result-summary"><span class="status-ok">${t("sync.complete")}</span> <span class="sync-summary-line">${t("sync.summary", { a, s, u, r })}</span></div>`;
 
-    // Applied: per-roster grouped char rows with class icon + raid pill.
-    // Same visual language as preview-stats charsAfterSync list - keeps
-    // the user's eye trained on one design across the page.
+    // Applied: per-roster, then per-char rows with all that char's
+    // applied raids as pills on the same row. A char who synced 3 raids
+    // gets ONE row with 3 pills instead of 3 duplicate rows - mirrors
+    // /raid-status pagination shape (one row = one char, raids inline).
     if (a > 0) {
+      // Two-level group: roster → char → applied entries.
       const byRoster = new Map();
       for (const x of data.applied) {
         const info = charLookup.get(String(x.charName || "").toLowerCase()) || {};
         const accountName = info.accountName || "";
-        if (!byRoster.has(accountName)) byRoster.set(accountName, []);
-        byRoster.get(accountName).push({ ...x, ...info });
+        if (!byRoster.has(accountName)) byRoster.set(accountName, new Map());
+        const charsMap = byRoster.get(accountName);
+        const charKey = String(x.charName || "").toLowerCase();
+        if (!charsMap.has(charKey)) {
+          charsMap.set(charKey, {
+            charName: x.charName,
+            className: info.className || "",
+            itemLevel: info.itemLevel || 0,
+            applied: [],
+          });
+        }
+        charsMap.get(charKey).applied.push(x);
       }
       html += `<div class="sync-result-section"><div class="sync-result-section-title">${escapeHtml(t("sync.appliedLabel"))}</div>`;
-      for (const [accountName, charsInRoster] of byRoster) {
+      for (const [accountName, charsMap] of byRoster) {
         if (accountName) {
           html += `<div class="char-pending-roster-header">📁 <strong>${escapeHtml(accountName)}</strong></div>`;
         }
         html += `<ul class="char-pending-list">`;
-        for (const x of charsInRoster) {
-          const iconName = CLASS_LABEL_TO_ICON[x.className] || "";
+        for (const c of charsMap.values()) {
+          const iconName = CLASS_LABEL_TO_ICON[c.className] || "";
           const classIcon = iconName
-            ? `<img class="class-icon" src="/sync/class-icons/${iconName}.png" alt="${escapeHtml(x.className)}" title="${escapeHtml(x.className)}" loading="lazy">`
+            ? `<img class="class-icon" src="/sync/class-icons/${iconName}.png" alt="${escapeHtml(c.className)}" title="${escapeHtml(c.className)}" loading="lazy">`
             : "";
-          const charLabel = `${classIcon}<strong>${escapeHtml(x.charName)}</strong>${x.itemLevel ? ` <span class="stat-label">${x.itemLevel}</span>` : ""}`;
-          const raidLabel = getRaidLabel(x.raidKey);
-          const modeLabel = getModeLabel(x.modeKey);
-          const gateText = (x.gates || []).join("+");
-          const pill = `<span class="raid-pill raid-pill--done">🟢 ${escapeHtml(raidLabel)} <span class="raid-pill-mode">${escapeHtml(modeLabel)} ${escapeHtml(gateText)}</span></span>`;
-          html += `<li class="char-pending-row"><span class="char-pending-head">${charLabel}</span><span class="raid-pill-row">${pill}</span></li>`;
+          const charLabel = `${classIcon}<strong>${escapeHtml(c.charName)}</strong>${c.itemLevel ? ` <span class="stat-label">${c.itemLevel}</span>` : ""}`;
+          const pillsHtml = c.applied.map((x) => {
+            const raidLabel = getRaidLabel(x.raidKey);
+            const modeLabel = getModeLabel(x.modeKey);
+            const gateText = (x.gates || []).join("+");
+            return `<span class="raid-pill raid-pill--done">🟢 ${escapeHtml(raidLabel)} <span class="raid-pill-mode">${escapeHtml(modeLabel)} ${escapeHtml(gateText)}</span></span>`;
+          }).join("");
+          html += `<li class="char-pending-row"><span class="char-pending-head">${charLabel}</span><span class="raid-pill-row">${pillsHtml}</span></li>`;
         }
         html += `</ul>`;
       }
