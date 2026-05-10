@@ -126,6 +126,7 @@ async function startBot() {
       const { startLocalSyncHttpServer } = require("./bot/services/local-sync/http-server");
       const { createRaidSyncEndpoint } = require("./bot/services/local-sync/sync-endpoint");
       const { createRosterEndpoint } = require("./bot/services/local-sync/roster-endpoint");
+      const { createPreviewSummaryEndpoint } = require("./bot/services/local-sync/preview-summary-endpoint");
       const User = require("./bot/models/user");
       const { applyRaidSetForDiscordId } = require("./bot/commands");
       const raidSyncHandler = createRaidSyncEndpoint({
@@ -133,6 +134,7 @@ async function startBot() {
         applyRaidSetForDiscordId,
       });
       const rosterHandler = createRosterEndpoint({ User });
+      const previewSummaryHandler = createPreviewSummaryEndpoint({ User });
       startLocalSyncHttpServer({
         webDir: path.join(__dirname, "web"),
         classIconsDir: path.join(__dirname, "assets", "class-icons"),
@@ -145,6 +147,12 @@ async function startBot() {
           // per gate cell without spilling private ops metadata.
           "GET /api/me/roster": rosterHandler,
           "OPTIONS /api/me/roster": rosterHandler,
+          // Pre-sync stats panel: gold delta, completion projection,
+          // pending gates, last-sync timestamps. Server computes everything
+          // (single source of truth for gold rates) - body carries deltas
+          // the client already extracted from encounters.db.
+          "POST /api/local-sync/preview-summary": previewSummaryHandler,
+          "OPTIONS /api/local-sync/preview-summary": previewSummaryHandler,
         },
       });
     } catch (err) {

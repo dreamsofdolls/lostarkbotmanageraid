@@ -20,7 +20,7 @@ const crypto = require("node:crypto");
  * and the success embed mints a fresh one.
  */
 
-const DEFAULT_TTL_SEC = 30 * 60; // 30 minutes - enough for the user to read the DM, drop the file, hit sync
+const DEFAULT_TTL_SEC = 15 * 60; // 15 minutes - balances "user reads DM, drops file, hits sync" against tight anti-replay window
 
 function getSecret() {
   const raw = process.env.LOCAL_SYNC_TOKEN_SECRET;
@@ -52,12 +52,13 @@ function sign(payloadB64) {
 
 /**
  * Mint a token for the given Discord user. `ttlSec` is optional; defaults
- * to 30 minutes which is the safe upper bound for "user opens DM, opens
- * link, drops file, hits sync".
+ * to 15 minutes - tight enough that a leaked URL has a small replay
+ * window, generous enough for "user opens DM, opens link, drops file,
+ * hits sync" without rushing.
  *
  * Optional `lang` (Phase i18n): when present, encoded in the payload so
  * the web companion can render in the user's preferred language without
- * a separate round-trip. Stale at most 30 minutes (token TTL) - if user
+ * a separate round-trip. Stale at most 15 minutes (token TTL) - if user
  * runs /raid-language after mint and reuses the URL, the page renders
  * in the old lang until a fresh mint via /raid-auto-manage local-on.
  *
@@ -175,7 +176,7 @@ async function rotateLocalSyncToken(discordId, lang, deps = {}) {
  * Resume helper: returns the stored token if it still has > 60s left,
  * else mints fresh + saves + returns. Used by /raid-status default
  * "Open Web Companion" button - so a returning user keeps the same
- * URL across multiple /raid-status calls within the 30-min TTL,
+ * URL across multiple /raid-status calls within the 15-min TTL,
  * making bookmarks / open browser tabs continue to work.
  *
  * The 60s safety buffer prevents handing out a token that's about to

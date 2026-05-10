@@ -94,6 +94,138 @@ function renderWeekRange() {
   el.hidden = false;
 }
 
+// Relative-time formatter for "last sync 5 min ago" display. Decays
+// through s/min/h/d buckets; everything older than a day shows in days
+// to keep the chip short. Returns null when ms is missing/0 so the
+// caller can swap to "never synced" copy.
+function formatRelativeTime(ms) {
+  if (!ms || typeof ms !== "number") return null;
+  const diff = Date.now() - ms;
+  if (diff < 0) return t("preview.statsRelativeJustNow");
+  const sec = Math.floor(diff / 1000);
+  if (sec < 10) return t("preview.statsRelativeJustNow");
+  if (sec < 60) return t("preview.statsRelativeSec", { n: sec });
+  const min = Math.floor(sec / 60);
+  if (min < 60) return t("preview.statsRelativeMin", { n: min });
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return t("preview.statsRelativeHour", { n: hr });
+  const day = Math.floor(hr / 24);
+  return t("preview.statsRelativeDay", { n: day });
+}
+
+function formatGold(n) {
+  if (!Number.isFinite(n) || n <= 0) return "0G";
+  // Comma thousand-separator works across all 3 locales we ship; LA
+  // community reads "12,500G" everywhere regardless of UI lang.
+  return `${n.toLocaleString("en-US")}G`;
+}
+
+// Pre-sync stats panel. Server is single source of truth for gold rates
+// + completion math; client just renders. Fired off after lastDeltas
+// settles so the panel reflects what THIS sync would do, not stale data.
+async function fetchPreviewSummary(deltas) {
+  if (!window.__artistSyncToken) return null;
+  try {
+    const resp = await fetch("/api/local-sync/preview-summary", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${window.__artistSyncToken}`,
+      },
+      body: JSON.stringify({ deltas: Array.isArray(deltas) ? deltas : [] }),
+    });
+    if (!resp.ok) {
+      console.warn("[local-sync] preview-summary failed:", resp.status);
+      return null;
+    }
+    const data = await resp.json();
+    return data?.ok ? data : null;
+  } catch (err) {
+    console.warn("[local-sync] preview-summary threw:", err?.message || err);
+    return null;
+  }
+}
+
+function renderPreviewStats(summary) {
+  const panel = document.getElementById("preview-stats");
+  if (!panel) return;
+  if (!summary) {
+    panel.hidden = true;
+    panel.innerHTML = "";
+    return;
+  }
+  const goldTotal = summary.goldDelta?.total || 0;
+  const goldByChar = Array.isArray(summary.goldDelta?.byChar) ? summary.goldDelta.byChar : [];
+  const completion = summary.completion || {};
+  const pending = Array.isArray(summary.pendingPostSync) ? summary.pendingPostSync : [];
+  const lastSync = summary.lastSync || {};
+
+  // Gold chip: show value when > 0, else friendly "no new gold" copy
+  // so the panel still shows up (otherwise users wonder if it loaded).
+  const goldStr = goldTotal > 0
+    ? `<span class="stat-value">${escapeHtml(formatGold(goldTotal))}</span>`
+    : `<span class="stat-value">${escapeHtml(t("preview.statsGoldEmpty"))}</span>`;
+
+  // Last sync: pick max of local + bible timestamps; show mode label
+  // so user knows which path the timestamp belongs to.
+  let lastSyncStr;
+  const localMs = Number(lastSync.localSyncAt) || 0;
+  const bibleMs = Number(lastSync.autoManageSyncAt) || 0;
+  if (localMs === 0 && bibleMs === 0) {
+    lastSyncStr = `<span class="stat-value">${escapeHtml(t("preview.statsLastSyncNever"))}</span>`;
+  } else {
+    const useLocal = localMs >= bibleMs;
+    const ms = useLocal ? localMs : bibleMs;
+    const modeLabel = useLocal
+      ? t("preview.statsLastSyncLocalMode")
+      : t("preview.statsLastSyncBibleMode");
+    lastSyncStr = `<span class="stat-value">${escapeHtml(formatRelativeTime(ms) || "")} <span class="stat-label">(${escapeHtml(modeLabel)})</span></span>`;
+  }
+
+  // Completion chip uses {start} -> {end} interpolation to bold the
+  // numbers via the locale's <strong> tags. innerHTML-safe because we
+  // control the template values (all numbers).
+  const completionStr = completion.totalGates > 0
+    ? t("preview.statsCompletionFormat", {
+        cleared: completion.cleared,
+        total: completion.totalGates,
+        percent: completion.percent,
+        projectedPercent: completion.projectedPercent,
+      })
+    : "—";
+
+  let html = `<div class="stat-row">`;
+  html += `<div class="stat"><span class="stat-icon">💰</span><span class="stat-label">${escapeHtml(t("preview.statsGoldLabel"))}:</span> ${goldStr}</div>`;
+  html += `<div class="stat"><span class="stat-icon">🕒</span><span class="stat-label">${escapeHtml(t("preview.statsLastSyncLabel"))}:</span> ${lastSyncStr}</div>`;
+  if (completion.totalGates > 0) {
+    html += `<div class="stat"><span class="stat-icon">📊</span><span class="stat-label">${escapeHtml(t("preview.statsCompletionLabel"))}:</span> <span class="stat-value">${completionStr}</span></div>`;
+  }
+  html += `</div>`;
+
+  // Pending gates collapsible. Hidden when zero pending so the panel
+  // doesn't get visually noisy when everything's clear.
+  if (pending.length > 0) {
+    html += `<details><summary>${escapeHtml(t("preview.statsPendingSummary", { n: pending.length }))}</summary><ul>`;
+    for (const p of pending) {
+      const raidLabel = getRaidLabel(p.raidKey);
+      const modeLabel = getModeLabel(p.modeKey);
+      const gateList = (Array.isArray(p.gates) ? p.gates : []).join(", ");
+      html += `<li><strong>${escapeHtml(p.charName || "")}</strong> · ${escapeHtml(raidLabel)} ${escapeHtml(modeLabel)} · ${escapeHtml(gateList)}</li>`;
+    }
+    html += `</ul></details>`;
+  }
+  // Per-char gold breakdown only when there's anything to break down.
+  if (goldByChar.length > 0) {
+    html += `<details><summary>${escapeHtml(t("preview.statsGoldByCharSummary"))}</summary><ul>`;
+    for (const c of goldByChar) {
+      html += `<li><strong>${escapeHtml(c.charName || "")}</strong>${c.className ? ` <span class="stat-label">(${escapeHtml(c.className)})</span>` : ""} · ${escapeHtml(formatGold(c.gold))}</li>`;
+    }
+    html += `</ul></details>`;
+  }
+  panel.innerHTML = html;
+  panel.hidden = false;
+}
+
 // ----- 1. Token parsing + i18n bootstrap -----
 //
 // Token is decoded inline (no fetch) since it carries Discord ID + lang
@@ -256,6 +388,7 @@ async function handleRemoveFile() {
   fileMeta.innerHTML = "";
   previewSection.hidden = true;
   previewOutput.innerHTML = "";
+  renderPreviewStats(null);
   syncSection.hidden = true;
   syncOutput.hidden = true;
   syncOutput.innerHTML = "";
@@ -584,6 +717,10 @@ async function runPreviewQuery(sqlite3, db) {
   } else {
     syncOutput.hidden = true;
   }
+  // Stats panel fires AFTER preview render so the user sees diff cards
+  // immediately; the panel fills in async ~50ms later. Failure is silent
+  // (panel just stays hidden) so a flaky endpoint doesn't break preview.
+  fetchPreviewSummary(lastDeltas).then(renderPreviewStats).catch(() => {});
 }
 
 // Render the full preview-output panel for the current roster page.

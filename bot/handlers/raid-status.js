@@ -420,7 +420,7 @@ function createRaidStatusCommand(deps) {
     // button with an "Open Web Companion" Link button. The link URL
     // resolves through getOrMintLocalSyncToken so a returning user
     // keeps the same URL across multiple /raid-status calls within
-    // the 30-min TTL (bookmarks + open tabs continue to work).
+    // the 15-min TTL (bookmarks + open tabs continue to work).
     //
     // A second "🆕 New link" Primary button rotates - clicked, mints
     // a fresh token, replies ephemerally with a fresh link button.

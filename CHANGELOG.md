@@ -4,6 +4,17 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-10 (Preview stats panel + token TTL 30→15 min)
+
+### Added
+- **Pre-sync stats panel** under the week range subline: gold delta, last sync (relative time + mode label), week completion projection (X/Y → Z%), and pending-gates collapsible. New `POST /api/local-sync/preview-summary` endpoint accepts the same `{ deltas }` payload as `/api/raid-sync` and returns the four projections; server is single source of truth for gold rates (reuses `getGoldForGate` from `bot/models/Raid.js`).
+- `bot/services/local-sync/preview-summary-endpoint.js` (new): bucketize deltas → walk roster → compute per-char gold (gated on `isGoldEarner`) + total gates / cleared / projected per char's currently-configured raids (where `assignedRaids[raidKey].difficulty` is set) + pending list. Auth chain mirrors sync-endpoint (Bearer JWT, `isCurrentStoredToken`).
+- Web `fetchPreviewSummary(deltas)` fires after `lastDeltas` settles (post-render so the diff cards land first); `renderPreviewStats` writes the panel HTML. Failure silent - panel just stays hidden.
+- 17 new locale keys (vi/jp/en) for stats labels + relative-time variants (s/min/h/d).
+
+### Changed
+- **Token TTL 30 min → 15 min** (`DEFAULT_TTL_SEC` in `bot/services/local-sync/tokens.js`). Tighter anti-replay window without rushing the user. Locale strings (3 langs) + 5 code-comment references updated to match.
+
 ## 2026-05-10 (Privacy: hide Discord ID, JP "Web Companion" full localize)
 
 ### Changed

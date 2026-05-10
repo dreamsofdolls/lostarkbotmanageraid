@@ -68,7 +68,7 @@ module.exports = {
     switchedTitle: "ローカル同期に切り替えましたわ♪",
     switchedDescription: "<@{target}> さんは bible 自動同期からローカル同期モードに切り替えましたわ。 アーティストから companion リンクを DM でお送りしましたよ♪",
     dmTitle: "ローカル同期セットアップ",
-    dmDescription: "下の **ウェブコンパニオンを開く** ボタンを押して companion ページを開いてくださいませ - `%localappdata%\\LOA Logs\\` (またはあなたが設定したパス) にある `encounters.db` ファイルをドラッグ＆ドロップすればアーティストがデータをプレビューできますわ♪ リンクは30分有効ですわ。",
+    dmDescription: "下の **ウェブコンパニオンを開く** ボタンを押して companion ページを開いてくださいませ - `%localappdata%\\LOA Logs\\` (またはあなたが設定したパス) にある `encounters.db` ファイルをドラッグ＆ドロップすればアーティストがデータをプレビューできますわ♪ リンクは15分有効ですわ。",
   },
   share: {
     accessLevel: {
@@ -390,7 +390,7 @@ module.exports = {
       localNewLinkFailedTitle: "新規リンク発行に失敗しましたわ",
       localNewLinkFailedDescription: "アーティスト、新しいトークンの発行で失敗しましたわ: `{error}`。 数秒後にもう一度試してくださいませ～",
       localNewLinkSuccessTitle: "新しいリンクをご用意しましたわ♪",
-      localNewLinkSuccessDescription: "元のメッセージの **ウェブコンパニオンを開く** ボタンがその場で更新されましたわ♪ クリックすればすぐに新しいリンクが開きますの。古いトークンも TTL (前回発行から30分) が終わるまでは有効ですわ。",
+      localNewLinkSuccessDescription: "元のメッセージの **ウェブコンパニオンを開く** ボタンがその場で更新されましたわ♪ クリックすればすぐに新しいリンクが開きますの。古いトークンも TTL (前回発行から15分) が終わるまでは有効ですわ。",
       noControlTitle: "コマンドを実行した人だけが操作できますわ",
       noControlDescription: "このページネーションは別の人の `/raid-status` セッションですわ～ アーティストはコマンド実行者だけに操作させてますの。自分の `/raid-status` を新しく開いてくださいね♪",
       noAutoSyncTitle: "自動同期がまだオフですわ",
@@ -701,7 +701,7 @@ module.exports = {
     localEnable: {
       successTitle: "ローカル同期を有効にしましたわ♪",
       successDescription: "ローカル同期モードをオンにしましたわ～♪ ウェブコンパニオンサイトはアーティストが構築中ですの (Phase 3) - 完成したらブラウザで `encounters.db` をドラッグ＆ドロップできる専用リンクを DM で送りますわ♪ それまでは `/raid-set` で手動更新できますわ。 やめたい時は `action:local-off` を呼んでね。",
-      successDescriptionWithLink: "ローカル同期モードをオンにしましたわ♪ 下の **ウェブコンパニオンを開く** ボタンを押してブラウザで companion ページを開いてくださいませ - `%localappdata%\\LOA Logs\\` の `encounters.db` をドラッグ＆ドロップすればアーティストがデータをプレビューできますわ♪ リンクは30分有効、期限切れたらもう一度 `action:local-on` を呼んでね。 やめたい時は `action:local-off` ですわ。",
+      successDescriptionWithLink: "ローカル同期モードをオンにしましたわ♪ 下の **ウェブコンパニオンを開く** ボタンを押してブラウザで companion ページを開いてくださいませ - `%localappdata%\\LOA Logs\\` の `encounters.db` をドラッグ＆ドロップすればアーティストがデータをプレビューできますわ♪ リンクは15分有効、期限切れたらもう一度 `action:local-on` を呼んでね。 やめたい時は `action:local-off` ですわ。",
       openButtonLabel: "ウェブコンパニオンを開く",
     },
     localDisable: {

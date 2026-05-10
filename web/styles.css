@@ -57,6 +57,19 @@ header h1 {
 .auth-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); }
 .week-range { margin: -2px 0 10px; font-size: 12px; }
 .week-range strong { color: var(--accent); font-weight: 600; }
+.preview-stats { margin: 0 0 14px; padding: 10px 12px; background: #1d2024; border: 1px solid var(--border); border-radius: 6px; }
+.preview-stats .stat-row { display: flex; flex-wrap: wrap; gap: 16px; }
+.preview-stats .stat { display: inline-flex; align-items: baseline; gap: 6px; font-size: 13px; }
+.preview-stats .stat-icon { font-size: 14px; }
+.preview-stats .stat-label { color: var(--text-dim); }
+.preview-stats .stat-value { color: var(--text); font-weight: 600; }
+.preview-stats .stat-value strong { color: var(--accent); }
+.preview-stats details { margin-top: 8px; }
+.preview-stats summary { cursor: pointer; color: var(--text-dim); font-size: 12px; padding: 2px 0; }
+.preview-stats summary:hover { color: var(--text); }
+.preview-stats details ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; color: var(--text-dim); }
+.preview-stats details li { margin: 2px 0; }
+.preview-stats details li strong { color: var(--text); font-weight: 600; }
 
 code {
   background: #14171a;

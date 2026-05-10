@@ -83,7 +83,7 @@ module.exports = {
     switchedTitle: "Đã chuyển sang Local Sync",
     switchedDescription: "<@{target}> đã chuyển từ bible auto-sync sang **local-sync mode**. Artist DM kèm link companion riêng cho cậu rồi nha~",
     dmTitle: "Local Sync setup",
-    dmDescription: "Bấm nút **Mở Web Companion** dưới đây để mở trang companion - drag-drop file `encounters.db` (ở `%localappdata%\\LOA Logs\\` hoặc path cậu setup) vào là Artist preview được data của cậu. Link có hiệu lực 30 phút.",
+    dmDescription: "Bấm nút **Mở Web Companion** dưới đây để mở trang companion - drag-drop file `encounters.db` (ở `%localappdata%\\LOA Logs\\` hoặc path cậu setup) vào là Artist preview được data của cậu. Link có hiệu lực 15 phút.",
   },
   // share.* kept ready for /raid-share migration. /raid-share handler
   // currently still hardcodes its own VN strings (in active bug-fix by
@@ -413,7 +413,7 @@ module.exports = {
       localNewLinkFailedTitle: "Tạo link mới fail",
       localNewLinkFailedDescription: "Artist gặp lỗi khi mint token mới: `{error}`. Thử lại sau vài giây nha.",
       localNewLinkSuccessTitle: "Link mới đã sẵn sàng",
-      localNewLinkSuccessDescription: "Button **Mở Web Companion** ở message gốc vừa được update tại chỗ - bấm vào là mở link mới luôn. Token cũ vẫn còn hiệu lực đến hết TTL (30 phút từ lúc mint trước) nếu cậu hoặc ai đó đang dùng tab cũ.",
+      localNewLinkSuccessDescription: "Button **Mở Web Companion** ở message gốc vừa được update tại chỗ - bấm vào là mở link mới luôn. Token cũ vẫn còn hiệu lực đến hết TTL (15 phút từ lúc mint trước) nếu cậu hoặc ai đó đang dùng tab cũ.",
       noControlTitle: "Chỉ người mở mới điều khiển được",
       noControlDescription: "Embed này thuộc session `/raid-status` của người khác nha cậu, Artist chỉ cho người mở session thao tác. Mở session riêng bằng `/raid-status` của mình nhé.",
       noAutoSyncTitle: "Cậu chưa bật auto-sync",
@@ -724,7 +724,7 @@ module.exports = {
     localEnable: {
       successTitle: "Local-sync đã bật",
       successDescription: "Local-sync mode đã bật xong nha~ Web companion site Artist đang xây (Phase 3) - khi xong tớ sẽ DM link cá nhân để cậu drag-drop file `encounters.db`. Trong lúc đó cậu vẫn có thể `/raid-set` thủ công bình thường. Đổi ý thì `action:local-off`.",
-      successDescriptionWithLink: "Local-sync mode đã bật xong nha~ Bấm nút **Mở Web Companion** dưới đây để mở trang companion trên browser - drag-drop file `encounters.db` (ở `%localappdata%\\LOA Logs\\`) vào là Artist preview được data của cậu. Link có hiệu lực 30 phút, hết hạn thì gọi lại `action:local-on`. Đổi ý thì `action:local-off`.",
+      successDescriptionWithLink: "Local-sync mode đã bật xong nha~ Bấm nút **Mở Web Companion** dưới đây để mở trang companion trên browser - drag-drop file `encounters.db` (ở `%localappdata%\\LOA Logs\\`) vào là Artist preview được data của cậu. Link có hiệu lực 15 phút, hết hạn thì gọi lại `action:local-on`. Đổi ý thì `action:local-off`.",
       openButtonLabel: "Mở Web Companion",
     },
     localDisable: {
@@ -1421,7 +1421,7 @@ module.exports = {
           "**Yêu cầu local-sync**: Chrome/Edge/Opera GX (cần File System Access API). File `encounters.db` ở `%localappdata%\\LOA Logs\\`.",
           "**Cooldown bible**: 15s cho Raid Manager, 10 phút cho user thường.",
           "**`action:on` flow**: probe roster trước, nếu có char private log → warn embed kèm nút `Vẫn bật` / `Huỷ`. Confirm thì kickstart 1 lần sync ngay.",
-          "**`action:local-on` flow**: mint URL signed-token (TTL 30 phút) gửi qua DM. Mở link → drop file → preview tuần raid hiện tại → Sync. Token tự shrink xuống 60s sau mỗi lần sync thành công (anti-replay).",
+          "**`action:local-on` flow**: mint URL signed-token (TTL 15 phút) gửi qua DM. Mở link → drop file → preview tuần raid hiện tại → Sync. Token tự shrink xuống 60s sau mỗi lần sync thành công (anti-replay).",
           "**`action:reset` flow**: 2-step Danger confirm. Wipe sạch progress raid + state sync (assignedRaids, bibleSerial, bibleCid, lastLocalSyncToken, ...) cho riêng cậu - giống reset gate về mới tinh. Dùng khi muốn re-sync sạch sau khi đổi mode hoặc fix data.",
           "**Auto-tick background (bible only)**: opted-in user nào chưa sync 24h → background scheduler tự pull mỗi 30 phút (batch 3 user/tick fair rotation).",
           "**`action:status`**: show state (bible on/off, local-sync on/off) + last success vs last attempt - dễ thấy khi sync đang fail liên tục.",

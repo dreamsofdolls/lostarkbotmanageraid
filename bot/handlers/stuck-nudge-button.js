@@ -18,7 +18,7 @@ const { setLocalSyncEnabled, rotateLocalSyncToken, extractProfileFromUser, RESUL
  *   2. setLocalSyncEnabled(force:true) - atomic mutex flip: bible flag
  *      OFF + local flag ON in one Mongo write. Stuck-nudge IS the user's
  *      explicit consent to swap, so force is appropriate.
- *   3. Mint a 30-min companion-link token + build the URL.
+ *   3. Mint a 15-min companion-link token + build the URL.
  *   4. Update the channel embed to "switched" state + DM the user the
  *      personalized link.
  */
