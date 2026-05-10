@@ -10,8 +10,8 @@ const {
   ComponentType,
 } = require("discord.js");
 
-const { createRaidAutoManageCommand } = require("../bot/handlers/raid-auto-manage");
-const { UI, normalizeName } = require("../bot/utils/raid/shared");
+const { createRaidAutoManageCommand } = require("../bot/handlers/raid/auto-manage");
+const { UI, normalizeName } = require("../bot/utils/raid/common/shared");
 
 function makeUserStub(doc) {
   return {

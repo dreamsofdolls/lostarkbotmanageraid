@@ -21,8 +21,6 @@ const {
   GatewayIntentBits,
   Events,
   MessageFlags,
-  REST,
-  Routes,
 } = require("discord.js");
 const { connectDB } = require("./bot/db");
 const {
@@ -50,10 +48,14 @@ const {
   startAutoManageDailyScheduler,
   startMaintenanceScheduler,
   startSideTaskResetScheduler,
+  applyRaidSetForDiscordId,
 } = require("./bot/commands");
-const { startWeeklyResetJob } = require("./bot/services/weekly-reset");
-const { bootstrapClassEmoji, bootstrapArtistEmoji } = require("./bot/services/emoji-bootstrap");
-const { createInteractionRouter } = require("./bot/services/interaction-router");
+const User = require("./bot/models/user");
+const { startWeeklyResetJob } = require("./bot/services/raid/weekly-reset");
+const { bootstrapClassEmoji, bootstrapArtistEmoji } = require("./bot/services/discord/emoji-bootstrap");
+const { registerSlashCommandsOnBoot } = require("./bot/app/slash-command-registration");
+const { startLocalSyncWebCompanion } = require("./bot/app/local-sync-web");
+const { createRaidInteractionRouter } = require("./bot/app/interaction-router-registry");
 
 const { DISCORD_TOKEN, GUILD_ID } = process.env;
 
@@ -66,37 +68,6 @@ const TEXT_MONITOR_ENABLED = process.env.TEXT_MONITOR_ENABLED !== "false";
 if (!DISCORD_TOKEN) {
   console.error("Missing DISCORD_TOKEN in .env");
   process.exit(1);
-}
-
-/**
- * Register every slash command in `commands[]` with Discord at boot time,
- * scoped to GUILD_ID. This mirrors the pattern in the sibling LostArk_LoaLogs
- * bot so a Railway redeploy alone is enough to push schema changes - no
- * separate `npm run deploy:commands` step required.
- *
- * Failures are logged and swallowed: the bot keeps running with whatever
- * schema Discord currently has cached, so a transient Discord API outage
- * cannot take the bot offline.
- */
-async function registerSlashCommandsOnBoot(client) {
-  if (!GUILD_ID) {
-    console.warn("[bot] GUILD_ID not set - skipping slash command registration on boot.");
-    return;
-  }
-  try {
-    const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
-    const body = commands.map((c) => c.toJSON());
-    await rest.put(
-      Routes.applicationGuildCommands(client.user.id, GUILD_ID),
-      { body }
-    );
-    console.log(`[bot] Registered ${body.length} slash commands for guild ${GUILD_ID}.`);
-  } catch (err) {
-    console.error(
-      "[bot] Failed to register slash commands (continuing anyway):",
-      err?.message || err
-    );
-  }
 }
 
 async function startBot() {
@@ -114,56 +85,11 @@ async function startBot() {
   // an empty-looking cache that masquerades as "chưa config channel nào".
   await loadMonitorChannelCache();
 
-  // Local-sync HTTP server hosts the web companion at /sync/* and the
-  // POST /api/raid-sync endpoint that consumes companion-uploaded
-  // encounters.db deltas. Listens on PORT (Railway injects this) so
-  // the deploy passes Railway's "service detected" probe. Disabled
-  // when LOCAL_SYNC_HTTP_DISABLED=true so a degraded deploy can run
-  // pure-Discord-only without binding a port.
-  if (process.env.LOCAL_SYNC_HTTP_DISABLED !== "true") {
-    try {
-      const path = require("node:path");
-      const { startLocalSyncHttpServer } = require("./bot/services/local-sync/http-server");
-      const { createRaidSyncEndpoint } = require("./bot/services/local-sync/sync-endpoint");
-      const { createRosterEndpoint } = require("./bot/services/local-sync/roster-endpoint");
-      const { createPreviewSummaryEndpoint } = require("./bot/services/local-sync/preview-summary-endpoint");
-      const User = require("./bot/models/user");
-      const { applyRaidSetForDiscordId } = require("./bot/commands");
-      const raidSyncHandler = createRaidSyncEndpoint({
-        User,
-        applyRaidSetForDiscordId,
-      });
-      const rosterHandler = createRosterEndpoint({ User });
-      const previewSummaryHandler = createPreviewSummaryEndpoint({ User });
-      startLocalSyncHttpServer({
-        webDir: path.join(__dirname, "web"),
-        classIconsDir: path.join(__dirname, "assets", "class-icons"),
-        apiHandlers: {
-          "POST /api/raid-sync": raidSyncHandler,
-          "OPTIONS /api/raid-sync": raidSyncHandler, // CORS preflight
-          // Phase 7: roster snapshot for the diff-view preview. Slim
-          // projection of User.accounts[].characters[].assignedRaids so
-          // the web companion can render "synced (DB) vs pending (file)"
-          // per gate cell without spilling private ops metadata.
-          "GET /api/me/roster": rosterHandler,
-          "OPTIONS /api/me/roster": rosterHandler,
-          // Pre-sync stats panel: gold delta, completion projection,
-          // pending gates, last-sync timestamps. Server computes everything
-          // (single source of truth for gold rates) - body carries deltas
-          // the client already extracted from encounters.db.
-          "POST /api/local-sync/preview-summary": previewSummaryHandler,
-          "OPTIONS /api/local-sync/preview-summary": previewSummaryHandler,
-        },
-      });
-    } catch (err) {
-      console.error(
-        "[bot] local-sync HTTP server failed to start (continuing without web companion):",
-        err?.message || err
-      );
-    }
-  } else {
-    console.log("[bot] LOCAL_SYNC_HTTP_DISABLED=true - skipping web companion HTTP server.");
-  }
+  startLocalSyncWebCompanion({
+    rootDir: __dirname,
+    User,
+    applyRaidSetForDiscordId,
+  });
 
   const intents = [GatewayIntentBits.Guilds];
   if (TEXT_MONITOR_ENABLED) {
@@ -180,7 +106,12 @@ async function startBot() {
 
   client.once(Events.ClientReady, async (readyClient) => {
     console.log(`Logged in as ${readyClient.user.tag}`);
-    await registerSlashCommandsOnBoot(readyClient);
+    await registerSlashCommandsOnBoot({
+      client: readyClient,
+      commands,
+      guildId: GUILD_ID,
+      token: DISCORD_TOKEN,
+    });
     // Idempotent: lists existing application emoji, uploads only PNGs
     // that aren't already there. After the first deploy uploads the full
     // set, subsequent restarts are just one GET + skip (~500ms). Failure
@@ -241,69 +172,29 @@ async function startBot() {
     });
   }
 
-  // Routing extracted to ./services/interaction-router.js. Adding a new
-  // command / autocomplete / button / select means updating one of the
-  // registry props below; bot.js stays focused on lifecycle.
-  const router = createInteractionRouter({
+  // Routing registry lives under bot/app so the entrypoint stays focused
+  // on lifecycle and startup wiring.
+  const router = createRaidInteractionRouter({
     MessageFlags,
-    allowedCommands: [
-      "raid-add-roster",
-      "raid-edit-roster",
-      "raid-check",
-      "raid-set",
-      "raid-status",
-      "raid-help",
-      "raid-remove-roster",
-      "raid-channel",
-      "raid-auto-manage",
-      "raid-announce",
-      "raid-task",
-      "raid-gold-earner",
-      "raid-share",
-      "raid-language",
-    ],
-    handleSlashCommand: handleRaidManagementCommand,
-    autocompleteHandlers: {
-      "raid-set": handleRaidSetAutocomplete,
-      "raid-edit-roster": handleEditRosterAutocomplete,
-      "raid-remove-roster": handleRemoveRosterAutocomplete,
-      "raid-channel": handleRaidChannelAutocomplete,
-      "raid-auto-manage": handleRaidAutoManageAutocomplete,
-      "raid-announce": handleRaidAnnounceAutocomplete,
-      "raid-task": handleRaidTaskAutocomplete,
-      "raid-gold-earner": handleRaidGoldEarnerAutocomplete,
+    handlers: {
+      handleRaidManagementCommand,
+      handleRaidHelpSelect,
+      handleRaidLanguageSelect,
+      handleRaidSetAutocomplete,
+      handleRemoveRosterAutocomplete,
+      handleRaidChannelAutocomplete,
+      handleRaidAutoManageAutocomplete,
+      handleRaidTaskAutocomplete,
+      handleRaidAnnounceAutocomplete,
+      handleRaidCheckButton,
+      handleAddRosterButton,
+      handleEditRosterAutocomplete,
+      handleEditRosterButton,
+      handleRaidGoldEarnerAutocomplete,
+      handleRaidGoldEarnerButton,
+      handleRaidTaskButton,
+      handleStuckNudgeButton,
     },
-    selectHandlers: {},
-    selectRoutes: [
-      // /raid-help dropdown customId carries the user's chosen language
-      // suffix: `raid-help:select:<lang>`. Prefix-routing lets the
-      // single handler dispatch all language variants.
-      { prefix: "raid-help:select:", handle: handleRaidHelpSelect },
-      // /raid-language dropdown - single customId, no suffix needed.
-      { prefix: "raid-language:select", handle: handleRaidLanguageSelect },
-    ],
-    buttonRoutes: [
-      // Phase 2 /raid-check interactive buttons. Custom IDs follow the
-      // shape "raid-check:<action>:<raidKey>" - dispatcher handles auth
-      // + action routing, no per-button switch here.
-      { prefix: "raid-check:", handle: handleRaidCheckButton },
-      // /add-roster picker buttons: confirm / cancel / toggle (per-char).
-      // CustomId: "add-roster:<action>:<sessionId>[:<charIndex>]".
-      { prefix: "add-roster:", handle: handleAddRosterButton },
-      // /edit-roster mirrors the /add-roster button shape.
-      { prefix: "edit-roster:", handle: handleEditRosterButton },
-      // /raid-task clear-confirm + clear-cancel buttons. CustomIds:
-      // "raid-task:clear-confirm:<encoded-charname>" or "raid-task:clear-cancel".
-      { prefix: "raid-task:", handle: handleRaidTaskButton },
-      // /raid-gold-earner picker buttons: toggle / confirm / cancel.
-      // CustomId: "gold-earner:<action>:<sessionId>[:<charIndex>]".
-      { prefix: "gold-earner:", handle: handleRaidGoldEarnerButton },
-      // Phase 6 stuck-private-log nudge "Switch to Local Sync" button.
-      // CustomId: "stuck-nudge:switch-to-local:<targetDiscordId>".
-      // Handler verifies clicker.id === target before flipping the
-      // mutex so random clickers can't opt someone else into local-sync.
-      { prefix: "stuck-nudge:", handle: handleStuckNudgeButton },
-    ],
   });
 
   client.on(Events.InteractionCreate, router.handle);

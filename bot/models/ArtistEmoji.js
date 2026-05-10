@@ -4,7 +4,7 @@
  * Map of Artist persona emoji name -> Discord application emoji string.
  *
  * Seeded empty here. The bot's startup bootstrap
- * (`bootstrapArtistEmoji` in `bot/services/emoji-bootstrap.js`) populates
+ * (`bootstrapArtistEmoji` in `bot/services/discord/emoji-bootstrap.js`) populates
  * entries at runtime by uploading PNGs from `assets/artist-icons/` as
  * application emoji (content-addressed naming: `{name}_{md5short}`)
  * and mutating this map with the resulting `<:name:id>` strings keyed

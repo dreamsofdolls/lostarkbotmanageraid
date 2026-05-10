@@ -36,7 +36,7 @@ const {
   waitWithBudget,
   getCharacterName,
   formatGold,
-} = require("../bot/utils/raid/shared");
+} = require("../bot/utils/raid/common/shared");
 const {
   summarizeRaidProgress,
   summarizeAccountGold,
@@ -47,8 +47,8 @@ const {
   getStatusRaidsForCharacter,
   ensureAssignedRaids,
   RAID_REQUIREMENT_MAP,
-} = require("../bot/utils/raid/character");
-const { getAutoManageCooldownMs, isManagerId } = require("../bot/services/manager");
+} = require("../bot/utils/raid/common/character");
+const { getAutoManageCooldownMs, isManagerId } = require("../bot/services/access/manager");
 
 function makeFactory() {
   return createRaidStatusCommand({
@@ -142,7 +142,7 @@ test("buildStatusFooterText: handles missing progress field defensively", () => 
 
 test("REGRESSION: raid-status reload paths preserve merged shared rosters", () => {
   const source = fs.readFileSync(
-    path.join(__dirname, "..", "bot", "handlers", "raid-status.js"),
+    path.join(__dirname, "..", "bot", "handlers", "raid-status", "index.js"),
     "utf8"
   );
   assert.match(source, /const reloadViewerAccounts = async/);

@@ -21,9 +21,9 @@
  * (Edit cascade also resolves display names per editable user).
  */
 
-const { buildNoticeEmbed } = require("../../utils/raid/shared");
+const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
-const { getRaidModeLabel } = require("../../utils/raid/labels");
+const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 
 function createSyncUi({
   EmbedBuilder,

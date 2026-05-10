@@ -1,8 +1,8 @@
 "use strict";
 
 const { getRaidGateForBoss, getGatesForRaid } = require("../../models/Raid");
-const { getCharacterName, normalizeName, toModeLabel } = require("../../utils/raid/shared");
-const { getCurrentResetStartMs } = require("../weekly-reset");
+const { getCharacterName, normalizeName, toModeLabel } = require("../../utils/raid/common/shared");
+const { getCurrentResetStartMs } = require("../raid/weekly-reset");
 
 /**
  * Apply incoming local-sync deltas from the web companion. Each delta

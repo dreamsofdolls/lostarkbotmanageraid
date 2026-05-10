@@ -19,12 +19,12 @@ const {
   MessageFlags,
 } = require("discord.js");
 
-const { UI } = require("../bot/utils/raid/shared");
+const { UI } = require("../bot/utils/raid/common/shared");
 const {
   createRaidGoldEarnerCommand,
   GOLD_EARNER_CAP_PER_ACCOUNT,
   PICKER_MAX_OPTIONS,
-} = require("../bot/handlers/raid-gold-earner");
+} = require("../bot/handlers/roster/gold-earner");
 
 function makeCommand({ User, saveWithRetry, loadUserForAutocomplete } = {}) {
   return createRaidGoldEarnerCommand({

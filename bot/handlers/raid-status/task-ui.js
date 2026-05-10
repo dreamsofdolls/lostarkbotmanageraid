@@ -1,9 +1,9 @@
 const { getClassEmoji } = require("../../models/Class");
-const { buildAccountTaskFields } = require("../../utils/raid/task-view");
+const { buildAccountTaskFields } = require("../../utils/raid/tasks/task-view");
 const {
   getVisibleSharedTasks,
   getSharedTaskDisplay,
-} = require("../../utils/raid/shared-tasks");
+} = require("../../utils/raid/tasks/shared-tasks");
 const { t } = require("../../services/i18n");
 
 function createRaidStatusTaskUi(deps) {

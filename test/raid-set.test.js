@@ -13,21 +13,21 @@ const assert = require("node:assert/strict");
 
 const { EmbedBuilder, MessageFlags } = require("discord.js");
 
-const { createRaidSetCommand } = require("../bot/handlers/raid-set");
+const { createRaidSetCommand } = require("../bot/handlers/raid/set");
 const {
   UI,
   normalizeName,
   getCharacterName,
   getCharacterClass,
   toModeLabel,
-} = require("../bot/utils/raid/shared");
+} = require("../bot/utils/raid/common/shared");
 const {
   createCharacterId,
   ensureAssignedRaids,
   normalizeAssignedRaid,
   getGateKeys,
   RAID_REQUIREMENT_MAP,
-} = require("../bot/utils/raid/character");
+} = require("../bot/utils/raid/common/character");
 const {
   getRaidRequirementList,
   getGatesForRaid,
