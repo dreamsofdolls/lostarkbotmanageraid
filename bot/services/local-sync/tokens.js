@@ -65,7 +65,7 @@ function sign(payloadB64) {
  * propagate to the user as a "feature not configured" error rather than
  * silently fall back to insecure behavior.
  */
-function mintToken(discordId, ttlSec = DEFAULT_TTL_SEC, lang = null) {
+function mintToken(discordId, ttlSec = DEFAULT_TTL_SEC, lang = null, profile = null) {
   if (!discordId || typeof discordId !== "string") {
     throw new Error("[local-sync/tokens] mintToken: discordId required");
   }
@@ -77,6 +77,14 @@ function mintToken(discordId, ttlSec = DEFAULT_TTL_SEC, lang = null) {
     nonce: crypto.randomBytes(8).toString("hex"),
   };
   if (typeof lang === "string" && lang) payload.lang = lang;
+  // Profile fields are display-only - the web companion renders avatar +
+  // name in the auth-status line so the raw Discord snowflake doesn't
+  // leak in the page UI. Backend auth still uses `discordId` for ownership
+  // checks; the profile fields are NEVER trusted server-side.
+  if (profile && typeof profile === "object") {
+    if (typeof profile.username === "string" && profile.username) payload.username = profile.username;
+    if (typeof profile.avatarUrl === "string" && profile.avatarUrl) payload.avatarUrl = profile.avatarUrl;
+  }
   const payloadB64 = base64url(JSON.stringify(payload));
   const sig = sign(payloadB64);
   return `${payloadB64}.${sig}`;
@@ -153,7 +161,7 @@ function isCurrentStoredToken(userDoc, token, nowSec = Math.floor(Date.now() / 1
 async function rotateLocalSyncToken(discordId, lang, deps = {}) {
   const UserModel = deps?.UserModel;
   if (!UserModel) throw new Error("[local-sync/tokens] rotateLocalSyncToken: UserModel required");
-  const token = mintToken(discordId, undefined, lang);
+  const token = mintToken(discordId, undefined, lang, deps?.profile || null);
   const expAt = Math.floor(Date.now() / 1000) + DEFAULT_TTL_SEC;
   await UserModel.findOneAndUpdate(
     { discordId },
@@ -184,7 +192,35 @@ async function getOrMintLocalSyncToken(discordId, lang, deps = {}) {
   if (stored?.lastLocalSyncToken && Number(stored.lastLocalSyncTokenExpAt) > now + 60) {
     return stored.lastLocalSyncToken;
   }
-  return rotateLocalSyncToken(discordId, lang, { UserModel });
+  return rotateLocalSyncToken(discordId, lang, { UserModel, profile: deps?.profile || null });
+}
+
+/**
+ * Extract a display-only profile (username + avatar URL) from a discord.js
+ * User object so callers can pass it through to mintToken without each
+ * one knowing the discord.js shape. Returns null if the user object is
+ * missing - mintToken treats that as "no profile, no UI swap".
+ *
+ * `globalName` is preferred over `username` (the new Discord identity
+ * system surfaces the prettier display name there). `displayAvatarURL`
+ * with size=64 keeps the URL short - the web only renders a 24-32px
+ * avatar inline anyway.
+ */
+function extractProfileFromUser(user) {
+  if (!user) return null;
+  const username = user.globalName || user.username || null;
+  let avatarUrl = null;
+  if (typeof user.displayAvatarURL === "function") {
+    try {
+      avatarUrl = user.displayAvatarURL({ size: 64, extension: "webp" });
+    } catch {
+      avatarUrl = null;
+    }
+  } else if (typeof user.avatar === "string" && user.avatar) {
+    avatarUrl = user.avatar;
+  }
+  if (!username && !avatarUrl) return null;
+  return { username, avatarUrl };
 }
 
 module.exports = {
@@ -193,5 +229,6 @@ module.exports = {
   isCurrentStoredToken,
   rotateLocalSyncToken,
   getOrMintLocalSyncToken,
+  extractProfileFromUser,
   DEFAULT_TTL_SEC,
 };

@@ -4,6 +4,16 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-10 (Privacy: hide Discord ID, JP "Web Companion" full localize)
+
+### Changed
+- **Auth chip swaps Discord snowflake for avatar + display name.** `mintToken` now accepts an optional `profile` (`{ username, avatarUrl }`) baked into the JWT payload. `extractProfileFromUser(user)` reads `globalName` (preferred) → `username` and `displayAvatarURL({size:64, extension:"webp"})` from a discord.js User object. `discordId` stays in the payload for backend auth but is NEVER rendered to the DOM.
+- 3 callers updated: `raid-auto-manage` local-on, `raid-status` resume + new-link buttons, `stuck-nudge-button` switch-to-local. Each passes `extractProfileFromUser(interaction.user)` (or `component.user` / `interaction.user` for click handlers) into the token mint so the right person's profile lands in the URL.
+- Web `renderAuthStatus()` renders `<img class="auth-avatar" src="..."> Linked as <strong>{name}</strong> · token valid for ~N min`. Anonymous fallback ("Linked") for stale pre-profile tokens still on disk.
+- Locale keys `identity.linked` reworded (drop "Discord user"), new `identity.linkedAnonymous` for the no-profile fallback. vi/jp/en synced.
+- **JP "Web Companion" → "ウェブコンパニオン"** across all bot-side locale strings (button labels, DM descriptions, success embeds, help notes, welcome embed, `localOnLabel`). Particle spacing fixed (`を/が/で/サイト` attach without space).
+- 391/391 tests pass.
+
 ## 2026-05-10 (Web companion week range, token shrink-on-sync, doc sync)
 
 ### Added

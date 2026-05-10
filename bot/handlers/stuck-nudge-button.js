@@ -2,7 +2,7 @@
 
 const { buildNoticeEmbed } = require("../utils/raid/shared");
 const { t, getUserLanguage } = require("../services/i18n");
-const { setLocalSyncEnabled, rotateLocalSyncToken, RESULT: SYNC_RESULT } = require("../services/local-sync");
+const { setLocalSyncEnabled, rotateLocalSyncToken, extractProfileFromUser, RESULT: SYNC_RESULT } = require("../services/local-sync");
 
 /**
  * Click handler for the "🌐 Switch to Local Sync" button on the stuck-
@@ -100,7 +100,8 @@ function createStuckNudgeButtonHandler({ EmbedBuilder, ActionRowBuilder, ButtonB
         // clickerLang resolved earlier via getUserLanguage(clickerId);
         // clickerId === targetDiscordId by this point (verified above),
         // so passing clickerLang is correct for the target's preference.
-        const token = await rotateLocalSyncToken(targetDiscordId, clickerLang, { UserModel: User });
+        const profile = extractProfileFromUser(interaction.user);
+        const token = await rotateLocalSyncToken(targetDiscordId, clickerLang, { UserModel: User, profile });
         companionUrl = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
       } catch (err) {
         console.warn("[stuck-nudge] token mint failed:", err?.message || err);

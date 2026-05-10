@@ -7,6 +7,7 @@ const {
   setBibleAutoSyncEnabled,
   getSyncStatus,
   rotateLocalSyncToken,
+  extractProfileFromUser,
   RESULT: SYNC_RESULT,
 } = require("../services/local-sync");
 
@@ -213,7 +214,8 @@ function createRaidAutoManageCommand(deps) {
           // Embed user's lang in the token so the web companion renders
           // in their preferred language without an extra round-trip.
           // `lang` was resolved at handler entry via getUserLanguage.
-          const token = await rotateLocalSyncToken(discordId, lang, { UserModel: User });
+          const profile = extractProfileFromUser(interaction.user);
+          const token = await rotateLocalSyncToken(discordId, lang, { UserModel: User, profile });
           companionUrl = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
         } catch (err) {
           mintError = err?.message || String(err);

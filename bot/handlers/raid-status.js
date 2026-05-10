@@ -23,6 +23,7 @@ const { t, getUserLanguage } = require("../services/i18n");
 const {
   getOrMintLocalSyncToken,
   rotateLocalSyncToken,
+  extractProfileFromUser,
 } = require("../services/local-sync");
 
 // Build a render-ready accounts array: caller's own subdocs PLUS shared
@@ -456,7 +457,8 @@ function createRaidStatusCommand(deps) {
       const baseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
       if (!baseUrl) return;
       try {
-        const token = await getOrMintLocalSyncToken(discordId, lang, { UserModel: User });
+        const profile = extractProfileFromUser(interaction.user);
+        const token = await getOrMintLocalSyncToken(discordId, lang, { UserModel: User, profile });
         cachedLocalSyncResumeUrl = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
       } catch (err) {
         console.warn("[raid-status] local-sync token resolve failed:", err?.message || err);
@@ -732,7 +734,8 @@ function createRaidStatusCommand(deps) {
         }
         let freshUrl;
         try {
-          const token = await rotateLocalSyncToken(discordId, lang, { UserModel: User });
+          const profile = extractProfileFromUser(component.user);
+          const token = await rotateLocalSyncToken(discordId, lang, { UserModel: User, profile });
           freshUrl = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
         } catch (err) {
           console.error("[raid-status] rotate local-sync token failed:", err?.message || err);

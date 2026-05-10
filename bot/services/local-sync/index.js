@@ -25,6 +25,7 @@ module.exports = {
   isCurrentStoredToken: tokens.isCurrentStoredToken,
   rotateLocalSyncToken: tokens.rotateLocalSyncToken,
   getOrMintLocalSyncToken: tokens.getOrMintLocalSyncToken,
+  extractProfileFromUser: tokens.extractProfileFromUser,
   TOKEN_DEFAULT_TTL_SEC: tokens.DEFAULT_TTL_SEC,
   applyLocalSyncDeltas: apply.applyLocalSyncDeltas,
   resolveLocalSyncTarget: apply.resolveTarget,
