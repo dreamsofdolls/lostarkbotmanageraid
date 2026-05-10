@@ -151,7 +151,10 @@ function projectSummary(accounts, deltaBuckets) {
       // Walk finalRaidStates to count totalRaids + projectedClearedRaids
       // and build the per-char raid status array. Iterate in canonical
       // RAID_REQUIREMENTS order so the badge sequence is stable across
-      // chars (Act 4 → Kazeros → Serca).
+      // chars (Act 4 → Kazeros → Serca). `incoming` flags raids that
+      // will change state as a result of THIS sync (any applied gate in
+      // the same raid+mode) so the web UI can highlight them - users
+      // need to know which pills are about to flip vs steady-state.
       const charRaidStates = [];
       for (const raidKey of Object.keys(RAID_REQUIREMENTS)) {
         const state = finalRaidStates.get(raidKey);
@@ -167,7 +170,10 @@ function projectSummary(accounts, deltaBuckets) {
         } else {
           status = "pending";
         }
-        charRaidStates.push({ raidKey, modeKey: state.modeKey, status });
+        const incoming = [...appliedGates.values()].some(
+          (g) => g.raidKey === raidKey && g.modeKey === state.modeKey
+        );
+        charRaidStates.push({ raidKey, modeKey: state.modeKey, status, incoming });
       }
 
       // Only include chars who still have at least one non-done raid

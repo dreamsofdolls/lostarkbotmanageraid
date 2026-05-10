@@ -238,7 +238,13 @@ function renderPreviewStats(summary) {
           const icon = r.status === "done" ? "🟢" : r.status === "partial" ? "🟡" : "⚪";
           const raidLabel = getRaidLabel(r.raidKey);
           const modeLabel = getModeLabel(r.modeKey);
-          return `<span class="raid-pill raid-pill--${r.status}">${icon} ${escapeHtml(raidLabel)} <span class="raid-pill-mode">${escapeHtml(modeLabel)}</span></span>`;
+          // `incoming` = ≥1 gate in this raid+mode is in the delta. ✨
+          // marker + brighter border on those pills so the user can
+          // tell which raids are about to flip from this sync vs
+          // pills that stay steady.
+          const incomingMark = r.incoming ? `<span class="raid-pill-incoming">✨</span> ` : "";
+          const incomingClass = r.incoming ? " raid-pill--incoming" : "";
+          return `<span class="raid-pill raid-pill--${r.status}${incomingClass}">${incomingMark}${icon} ${escapeHtml(raidLabel)} <span class="raid-pill-mode">${escapeHtml(modeLabel)}</span></span>`;
         }).join("");
         html += `<li class="char-pending-row"><span class="char-pending-head">${charLabel}</span><span class="raid-pill-row">${pillsHtml}</span></li>`;
       }
