@@ -30,7 +30,7 @@ test("preview summary reads assigned raid difficulty from gate entries", () => {
   }), []);
 
   assert.deepEqual(summary.completion, {
-    totalRaids: 1,
+    totalRaids: 3,
     cleared: 0,
     projected: 0,
     percent: 0,
@@ -43,7 +43,9 @@ test("preview summary reads assigned raid difficulty from gate entries", () => {
       className: "Artist",
       itemLevel: 1750,
       raids: [
+        { raidKey: "armoche", modeKey: "hard", status: "pending", incoming: false },
         { raidKey: "kazeros", modeKey: "hard", status: "partial", incoming: false },
+        { raidKey: "serca", modeKey: "nightmare", status: "pending", incoming: false },
       ],
     },
   ]);
@@ -78,7 +80,7 @@ test("preview summary calculates pending gates in the post-sync mode", () => {
   // there - still NOT a completed raid. So both percent and projected
   // percent stay at 0%.
   assert.deepEqual(summary.completion, {
-    totalRaids: 1,
+    totalRaids: 3,
     cleared: 0,
     projected: 0,
     percent: 0,
@@ -92,6 +94,8 @@ test("preview summary calculates pending gates in the post-sync mode", () => {
       className: "Artist",
       itemLevel: 1750,
       raids: [
+        { raidKey: "armoche", modeKey: "hard", status: "pending", incoming: false },
+        { raidKey: "kazeros", modeKey: "hard", status: "pending", incoming: false },
         { raidKey: "serca", modeKey: "nightmare", status: "partial", incoming: true },
       ],
     },
@@ -131,19 +135,31 @@ test("preview summary expands cumulative gates when only later gate is logged (L
   // Pre-sync: nothing cleared. Post-sync: kazeros fully cleared via the
   // G2-implies-G1 cumulative rule.
   assert.deepEqual(summary.completion, {
-    totalRaids: 1,
+    totalRaids: 3,
     cleared: 0,
     projected: 1,
     percent: 0,
-    projectedPercent: 100,
+    projectedPercent: 33,
   });
   // Gold credits BOTH gates (Kazeros Hard: G1=17000 + G2=35000) even
   // though only G2 was in the file - this is what we want, otherwise
   // mid-raid log-enable users get cheated out of G1 gold.
   assert.equal(summary.goldDelta.total, 52000);
-  // Done char drops out of the pending list - charsAfterSync only
-  // surfaces chars with at least one non-done raid post-sync.
-  assert.deepEqual(summary.charsAfterSync, []);
+  // The completed incoming raid stays visible because the same character
+  // still has other eligible raids pending after sync.
+  assert.deepEqual(summary.charsAfterSync, [
+    {
+      accountName: "Roster",
+      charName: "Aki",
+      className: "Artist",
+      itemLevel: 1750,
+      raids: [
+        { raidKey: "armoche", modeKey: "hard", status: "pending", incoming: false },
+        { raidKey: "kazeros", modeKey: "hard", status: "done", incoming: true },
+        { raidKey: "serca", modeKey: "nightmare", status: "pending", incoming: false },
+      ],
+    },
+  ]);
 });
 
 test("preview summary marks fully-cleared raid as done", () => {
@@ -161,13 +177,56 @@ test("preview summary marks fully-cleared raid as done", () => {
   }), []);
 
   assert.deepEqual(summary.completion, {
-    totalRaids: 1,
+    totalRaids: 3,
     cleared: 1,
     projected: 1,
-    percent: 100,
-    projectedPercent: 100,
+    percent: 33,
+    projectedPercent: 33,
   });
-  // Done chars are NOT in charsAfterSync - the list focuses on chars
-  // with at least one non-done raid post-sync.
-  assert.deepEqual(summary.charsAfterSync, []);
+  // The character still has other eligible raids pending, so it remains
+  // in charsAfterSync with the completed raid shown as done.
+  assert.deepEqual(summary.charsAfterSync, [
+    {
+      accountName: "Roster",
+      charName: "Aki",
+      className: "Artist",
+      itemLevel: 1750,
+      raids: [
+        { raidKey: "armoche", modeKey: "hard", status: "done", incoming: false },
+        { raidKey: "kazeros", modeKey: "hard", status: "pending", incoming: false },
+        { raidKey: "serca", modeKey: "nightmare", status: "pending", incoming: false },
+      ],
+    },
+  ]);
+});
+
+test("preview summary includes eligible chars with no assigned raid state", () => {
+  const summary = projectSummary(makeAccounts({
+    name: "Qyoir",
+    class: "Artist",
+    itemLevel: 1710,
+    isGoldEarner: true,
+    assignedRaids: {},
+  }), []);
+
+  assert.deepEqual(summary.completion, {
+    totalRaids: 3,
+    cleared: 0,
+    projected: 0,
+    percent: 0,
+    projectedPercent: 0,
+  });
+  assert.deepEqual(summary.charsAfterSync, [
+    {
+      accountName: "Roster",
+      charName: "Qyoir",
+      className: "Artist",
+      itemLevel: 1710,
+      raids: [
+        { raidKey: "armoche", modeKey: "normal", status: "pending", incoming: false },
+        { raidKey: "kazeros", modeKey: "normal", status: "pending", incoming: false },
+        { raidKey: "serca", modeKey: "normal", status: "pending", incoming: false },
+      ],
+    },
+  ]);
 });
