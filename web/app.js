@@ -136,11 +136,16 @@ document.documentElement.setAttribute("lang", window.__artistLang || "vi");
 // authState carries everything renderAuthStatus() needs. The expSec field
 // is mutable - successful sync shrinks it to now+60s server-side, and the
 // sync response hands the new value back so the UI ticks down realtime.
+//
+// `discordId` stays in state because backend POSTs need it via the token,
+// but it is NEVER rendered to the DOM (would leak the user's snowflake to
+// anyone shoulder-surfing). The display uses `username` + `avatarUrl`
+// from the token payload instead - both are public-facing Discord fields.
 let authState = null;
 
 function renderAuthStatus() {
   if (!authState) return;
-  const { kind, expSec, discordId } = authState;
+  const { kind, expSec, username, avatarUrl } = authState;
   if (kind === "noToken") {
     authStatus.innerHTML = `<span class="status-err">${t("identity.noToken")}</span> ${t("identity.noTokenHint")}`;
     return;
@@ -155,12 +160,23 @@ function renderAuthStatus() {
     authStatus.innerHTML = `<span class="status-err">${t("identity.expired")}</span> ${t("identity.expiredHint")}`;
     return;
   }
-  // Show minutes when ≥1min left, switch to seconds for the final stretch
-  // so user sees a real countdown after the post-sync 1-min shrink.
   const validStr = remSec >= 60
     ? t("identity.tokenValid", { n: Math.floor(remSec / 60) })
     : t("identity.tokenValidSec", { n: remSec });
-  authStatus.innerHTML = `<span class="status-ok">${t("identity.linked")} <code>${escapeHtml(discordId)}</code></span> · ${validStr}`;
+  // Profile chip: avatar + display name. Falls back to anonymous "Linked"
+  // when an older token (pre-profile-mint) carries neither field - we
+  // still want users on stale URLs to see SOMETHING confirming the link.
+  let chip;
+  if (username || avatarUrl) {
+    const avatarImg = avatarUrl
+      ? `<img class="auth-avatar" src="${escapeHtml(avatarUrl)}" alt="" referrerpolicy="no-referrer">`
+      : "";
+    const nameSpan = username ? `<strong>${escapeHtml(username)}</strong>` : "";
+    chip = `<span class="status-ok auth-chip">${avatarImg}${t("identity.linked")} ${nameSpan}</span>`;
+  } else {
+    chip = `<span class="status-ok">${t("identity.linkedAnonymous")}</span>`;
+  }
+  authStatus.innerHTML = `${chip} · ${validStr}`;
 }
 
 if (!token) {
@@ -172,11 +188,17 @@ if (!token) {
 } else {
   const expSec = payload.exp || 0;
   const nowSec = Math.floor(Date.now() / 1000);
+  // username + avatarUrl are display-only. discordId stays in state for
+  // POST auth via window.__artistDiscordId but is never read by render.
+  const profileFields = {
+    username: typeof payload.username === "string" ? payload.username : null,
+    avatarUrl: typeof payload.avatarUrl === "string" ? payload.avatarUrl : null,
+  };
   if (expSec && expSec < nowSec) {
-    authState = { kind: "ok", expSec, discordId: payload.discordId };
+    authState = { kind: "ok", expSec, discordId: payload.discordId, ...profileFields };
     renderAuthStatus();
   } else {
-    authState = { kind: "ok", expSec, discordId: payload.discordId };
+    authState = { kind: "ok", expSec, discordId: payload.discordId, ...profileFields };
     renderAuthStatus();
     // Tick every second so the countdown feels live (esp. after the
     // post-sync shrink to ~60s). 1Hz is cheap - just a Date.now() compare

@@ -53,6 +53,8 @@ header h1 {
 }
 
 .hint { color: var(--text-dim); font-size: 13px; margin: 4px 0; }
+.auth-chip { display: inline-flex; align-items: center; gap: 6px; }
+.auth-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); }
 .week-range { margin: -2px 0 10px; font-size: 12px; }
 .week-range strong { color: var(--accent); font-weight: 600; }
 
