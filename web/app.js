@@ -49,6 +49,51 @@ const syncOutput = $("sync-output");
 // without re-running the SQL. Set on every loadAndPreview() success.
 let lastDeltas = null;
 
+// LA VN raid week boundary helper. Reset is Wed 17:00 VN = 10:00 UTC.
+// Returns {start, endDisplay} as Date objects. start = most recent reset
+// moment <= now; endDisplay = 6 days later (the Tue before next reset)
+// so the displayed range reads as a "Wed → Tue" full cycle.
+function getCurrentRaidWeek() {
+  const now = new Date();
+  const dayOfWeek = now.getUTCDay();
+  const utcHour = now.getUTCHours();
+  let daysBack;
+  if (dayOfWeek > 3 || (dayOfWeek === 3 && utcHour >= 10)) {
+    daysBack = dayOfWeek - 3;
+  } else {
+    daysBack = dayOfWeek + 4;
+  }
+  const start = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate() - daysBack,
+    10, 0, 0, 0
+  ));
+  const endDisplay = new Date(start.getTime() + 6 * 24 * 60 * 60 * 1000);
+  return { start, endDisplay };
+}
+
+function formatWeekDate(d, lang) {
+  const localeMap = { vi: "vi-VN", jp: "ja-JP", en: "en-US" };
+  const locale = localeMap[lang] || "vi-VN";
+  return new Intl.DateTimeFormat(locale, {
+    day: "2-digit",
+    month: "2-digit",
+  }).format(d);
+}
+
+function renderWeekRange() {
+  const el = document.getElementById("preview-week-range");
+  if (!el) return;
+  const { start, endDisplay } = getCurrentRaidWeek();
+  const lang = window.__artistLang || "vi";
+  el.innerHTML = t("preview.weekRange", {
+    start: formatWeekDate(start, lang),
+    end: formatWeekDate(endDisplay, lang),
+  });
+  el.hidden = false;
+}
+
 // ----- 1. Token parsing + i18n bootstrap -----
 //
 // Token is decoded inline (no fetch) since it carries Discord ID + lang
@@ -81,24 +126,62 @@ const payload = token ? decodePayload(token) : null;
 //   - token doesn't carry lang (legacy mint before Phase i18n)
 setActiveLang(payload?.lang || "vi");
 applyDomTranslations();
+renderWeekRange();
 
 // Static <html lang> + <body dir> attributes follow the active locale so
 // fonts + line-breaking heuristics match. JP/Chinese-derived glyphs in
 // particular benefit from the right `lang` hint for browser font fallback.
 document.documentElement.setAttribute("lang", window.__artistLang || "vi");
 
+// authState carries everything renderAuthStatus() needs. The expSec field
+// is mutable - successful sync shrinks it to now+60s server-side, and the
+// sync response hands the new value back so the UI ticks down realtime.
+let authState = null;
+
+function renderAuthStatus() {
+  if (!authState) return;
+  const { kind, expSec, discordId } = authState;
+  if (kind === "noToken") {
+    authStatus.innerHTML = `<span class="status-err">${t("identity.noToken")}</span> ${t("identity.noTokenHint")}`;
+    return;
+  }
+  if (kind === "malformed") {
+    authStatus.innerHTML = `<span class="status-err">${t("identity.malformed")}</span> ${t("identity.malformedHint")}`;
+    return;
+  }
+  const nowSec = Math.floor(Date.now() / 1000);
+  const remSec = Math.max(0, expSec - nowSec);
+  if (expSec && remSec === 0) {
+    authStatus.innerHTML = `<span class="status-err">${t("identity.expired")}</span> ${t("identity.expiredHint")}`;
+    return;
+  }
+  // Show minutes when ≥1min left, switch to seconds for the final stretch
+  // so user sees a real countdown after the post-sync 1-min shrink.
+  const validStr = remSec >= 60
+    ? t("identity.tokenValid", { n: Math.floor(remSec / 60) })
+    : t("identity.tokenValidSec", { n: remSec });
+  authStatus.innerHTML = `<span class="status-ok">${t("identity.linked")} <code>${escapeHtml(discordId)}</code></span> · ${validStr}`;
+}
+
 if (!token) {
-  authStatus.innerHTML = `<span class="status-err">${t("identity.noToken")}</span> ${t("identity.noTokenHint")}`;
+  authState = { kind: "noToken" };
+  renderAuthStatus();
 } else if (!payload || !payload.discordId) {
-  authStatus.innerHTML = `<span class="status-err">${t("identity.malformed")}</span> ${t("identity.malformedHint")}`;
+  authState = { kind: "malformed" };
+  renderAuthStatus();
 } else {
   const expSec = payload.exp || 0;
   const nowSec = Math.floor(Date.now() / 1000);
   if (expSec && expSec < nowSec) {
-    authStatus.innerHTML = `<span class="status-err">${t("identity.expired")}</span> ${t("identity.expiredHint")}`;
+    authState = { kind: "ok", expSec, discordId: payload.discordId };
+    renderAuthStatus();
   } else {
-    const minsLeft = Math.max(0, Math.floor((expSec - nowSec) / 60));
-    authStatus.innerHTML = `<span class="status-ok">${t("identity.linked")} <code>${escapeHtml(payload.discordId)}</code></span> · ${t("identity.tokenValid", { n: minsLeft })}`;
+    authState = { kind: "ok", expSec, discordId: payload.discordId };
+    renderAuthStatus();
+    // Tick every second so the countdown feels live (esp. after the
+    // post-sync shrink to ~60s). 1Hz is cheap - just a Date.now() compare
+    // and innerHTML swap.
+    setInterval(renderAuthStatus, 1000);
     // Cache for the eventual POST. Phase 4 reads this back.
     window.__artistSyncToken = token;
     window.__artistDiscordId = payload.discordId;
@@ -122,6 +205,9 @@ async function loadFile(file, { handle = null } = {}) {
     removeBtn.addEventListener("click", handleRemoveFile);
   }
   previewSection.hidden = false;
+  // Refresh week range in case the page was open across a Wed 17:00
+  // VN reset boundary - boot-time render would be stale by then.
+  renderWeekRange();
   // Persist the handle for next visit. Plain File (drag-drop without
   // FSA handle promotion) can't persist - skip silently in that case.
   if (handle && window.__artistDiscordId) {
@@ -817,6 +903,12 @@ syncBtn.addEventListener("click", async () => {
     const s = (data.skipped || []).length;
     const u = (data.unmapped || []).length;
     const r = (data.rejected || []).length;
+    // Server shrinks token TTL to ~60s on a real apply (a > 0). Mirror
+    // that into authState so the countdown reflects reality immediately.
+    if (data.newExpSec && authState && authState.kind === "ok") {
+      authState.expSec = data.newExpSec;
+      renderAuthStatus();
+    }
     let html = `<span class="status-ok">${t("sync.complete")}</span> ${t("sync.summary", { a, s, u, r })}`;
     if (a > 0) {
       html += `<br><br><strong>${t("sync.appliedLabel")}</strong><ul>`;

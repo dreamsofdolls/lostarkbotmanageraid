@@ -34,6 +34,7 @@ const VI = {
     expiredHint: "Chạy lại `/raid-auto-manage action:local-on` để lấy link tươi.",
     linked: "Đã link với Discord user",
     tokenValid: "token còn hiệu lực ~{n} phút",
+    tokenValidSec: "token còn hiệu lực ~{n} giây",
   },
   file: {
     section: "2. Database encounters",
@@ -54,6 +55,7 @@ const VI = {
   },
   preview: {
     section: "3. Preview tuần raid hiện tại",
+    weekRange: "Tuần này: <strong>{start}</strong> → <strong>{end}</strong> · reset Thứ Tư 17h (giờ VN)",
     loadingWasm: "Đang load SQLite WASM (1 lần, sau đó cache)...",
     openFailed: "Không mở được DB.",
     openFailedHint: "Mở DevTools (F12) → Console để xem full stack trace.",
@@ -132,7 +134,7 @@ const JP = {
   },
   header: {
     h1: "ローカル同期",
-    subtitle: "Artist の `/raid-auto-manage local-on` モード用 Web companion ですわ♪",
+    subtitle: "Artist の `/raid-auto-manage local-on` モード用 ウェブコンパニオン ですわ♪",
   },
   identity: {
     section: "1. 認証",
@@ -145,6 +147,7 @@ const JP = {
     expiredHint: "新しいリンクのため `/raid-auto-manage action:local-on` を再実行してね♪",
     linked: "Discord ユーザーとリンク済み",
     tokenValid: "トークン有効期限 約{n}分",
+    tokenValidSec: "トークン有効期限 約{n}秒",
   },
   file: {
     section: "2. Encounters データベース",
@@ -165,6 +168,7 @@ const JP = {
   },
   preview: {
     section: "3. 現在のレイド週プレビュー",
+    weekRange: "今週: <strong>{start}</strong> → <strong>{end}</strong> · 毎週水曜 19時にリセット (日本時間)",
     loadingWasm: "SQLite WASM を読み込み中ですわ (初回のみ、以降キャッシュ)...",
     openFailed: "DB を開けませんでしたわ。",
     openFailedHint: "DevTools (F12) → Console で完全なスタックトレースを確認してくださいませ。",
@@ -256,6 +260,7 @@ const EN = {
     expiredHint: "Re-run `/raid-auto-manage action:local-on` for a fresh link.",
     linked: "Linked as Discord user",
     tokenValid: "token valid for ~{n} min",
+    tokenValidSec: "token valid for ~{n} sec",
   },
   file: {
     section: "2. Encounters database",
@@ -276,6 +281,7 @@ const EN = {
   },
   preview: {
     section: "3. Current raid-week preview",
+    weekRange: "This week: <strong>{start}</strong> → <strong>{end}</strong> · resets Wed 10:00 UTC",
     loadingWasm: "Loading SQLite WASM (one-time, cached after)...",
     openFailed: "Couldn't open the DB.",
     openFailedHint: "Open DevTools (F12) → Console for full stack trace.",
