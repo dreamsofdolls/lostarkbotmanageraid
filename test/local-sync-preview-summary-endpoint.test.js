@@ -38,6 +38,7 @@ test("preview summary reads assigned raid difficulty from gate entries", () => {
   });
   assert.deepEqual(summary.charsAfterSync, [
     {
+      accountName: "Roster",
       charName: "Aki",
       className: "Artist",
       itemLevel: 1750,
@@ -86,6 +87,7 @@ test("preview summary calculates pending gates in the post-sync mode", () => {
   assert.equal(summary.goldDelta.total, 21000);
   assert.deepEqual(summary.charsAfterSync, [
     {
+      accountName: "Roster",
       charName: "Aki",
       className: "Artist",
       itemLevel: 1750,

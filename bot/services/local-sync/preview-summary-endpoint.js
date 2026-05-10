@@ -171,8 +171,10 @@ function projectSummary(accounts, deltaBuckets) {
       // Only include chars who still have at least one non-done raid
       // post-sync - "Pending list" stays focused on what's left to do.
       // Done chars contribute to clearedRaids count but not to the list.
+      // accountName carried so the web can section the list per roster.
       if (charRaidStates.length > 0 && charRaidStates.some((r) => r.status !== "done")) {
         charsAfterSync.push({
+          accountName: account?.accountName || "",
           charName: char.name || "",
           className: char.class || "",
           itemLevel: Number(char.itemLevel) || 0,

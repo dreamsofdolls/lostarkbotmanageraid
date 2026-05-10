@@ -80,9 +80,13 @@ header h1 {
 .preview-stats details ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; color: var(--text-dim); }
 .preview-stats details li { margin: 2px 0; }
 .preview-stats details li strong { color: var(--text); font-weight: 600; }
+.char-pending-roster-header { margin: 10px 0 4px; font-size: 12px; color: var(--text-dim); }
+.char-pending-roster-header strong { color: var(--accent); }
 .char-pending-list { list-style: none !important; padding-left: 0 !important; }
 .char-pending-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 8px; margin: 4px 0 !important; background: #1d2024; border: 1px solid var(--border); border-radius: 6px; }
 .char-pending-row strong { font-size: 13px; }
+.char-pending-head { display: inline-flex; align-items: center; gap: 6px; }
+.char-pending-head .class-icon { width: 22px; height: 22px; }
 .raid-pill-row { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
 .raid-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: #2a2e34; border: 1px solid #3a3e44; }
 .raid-pill--done { background: #1f2e26; border-color: #2f5a48; color: #8edcb4; }

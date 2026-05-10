@@ -202,22 +202,41 @@ function renderPreviewStats(summary) {
   }
   html += `</div>`;
 
-  // Per-char raid status list - mirrors the `summarizeRaidProgress`
-  // shape used by /raid-status (one row per char, raids as compact
-  // status pills). Hidden when no chars have pending raids post-sync.
+  // Per-char raid status list - mirrors `/raid-status` (char rows with
+  // raid status pills). Group by accountName so the manager view shows
+  // each roster section explicitly, like the bot embed pages. Class
+  // icon prefix uses the same /sync/class-icons/<slug>.png convention
+  // as the existing per-roster preview cards.
   if (charsAfterSync.length > 0) {
-    html += `<details><summary>${escapeHtml(t("preview.statsPendingSummary", { n: charsAfterSync.length }))}</summary><ul class="char-pending-list">`;
+    const byRoster = new Map();
     for (const c of charsAfterSync) {
-      const charLabel = `<strong>${escapeHtml(c.charName || "")}</strong>${c.itemLevel ? ` <span class="stat-label">${c.itemLevel}</span>` : ""}`;
-      const pillsHtml = (c.raids || []).map((r) => {
-        const icon = r.status === "done" ? "🟢" : r.status === "partial" ? "🟡" : "⚪";
-        const raidLabel = getRaidLabel(r.raidKey);
-        const modeLabel = getModeLabel(r.modeKey);
-        return `<span class="raid-pill raid-pill--${r.status}">${icon} ${escapeHtml(raidLabel)} <span class="raid-pill-mode">${escapeHtml(modeLabel)}</span></span>`;
-      }).join("");
-      html += `<li class="char-pending-row">${charLabel}<span class="raid-pill-row">${pillsHtml}</span></li>`;
+      const key = c.accountName || "";
+      if (!byRoster.has(key)) byRoster.set(key, []);
+      byRoster.get(key).push(c);
     }
-    html += `</ul></details>`;
+    html += `<details><summary>${escapeHtml(t("preview.statsPendingSummary", { n: charsAfterSync.length }))}</summary>`;
+    for (const [accountName, charsInRoster] of byRoster) {
+      if (accountName) {
+        html += `<div class="char-pending-roster-header">📁 <strong>${escapeHtml(accountName)}</strong></div>`;
+      }
+      html += `<ul class="char-pending-list">`;
+      for (const c of charsInRoster) {
+        const iconName = CLASS_LABEL_TO_ICON[c.className] || "";
+        const classIcon = iconName
+          ? `<img class="class-icon" src="/sync/class-icons/${iconName}.png" alt="${escapeHtml(c.className)}" title="${escapeHtml(c.className)}" loading="lazy">`
+          : "";
+        const charLabel = `${classIcon}<strong>${escapeHtml(c.charName || "")}</strong>${c.itemLevel ? ` <span class="stat-label">${c.itemLevel}</span>` : ""}`;
+        const pillsHtml = (c.raids || []).map((r) => {
+          const icon = r.status === "done" ? "🟢" : r.status === "partial" ? "🟡" : "⚪";
+          const raidLabel = getRaidLabel(r.raidKey);
+          const modeLabel = getModeLabel(r.modeKey);
+          return `<span class="raid-pill raid-pill--${r.status}">${icon} ${escapeHtml(raidLabel)} <span class="raid-pill-mode">${escapeHtml(modeLabel)}</span></span>`;
+        }).join("");
+        html += `<li class="char-pending-row"><span class="char-pending-head">${charLabel}</span><span class="raid-pill-row">${pillsHtml}</span></li>`;
+      }
+      html += `</ul>`;
+    }
+    html += `</details>`;
   }
   // Per-char gold breakdown only when there's anything to break down.
   if (goldByChar.length > 0) {
