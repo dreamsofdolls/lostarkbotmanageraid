@@ -68,7 +68,7 @@ module.exports = {
     switchedTitle: "Switched to Local Sync",
     switchedDescription: "<@{target}> moved from bible auto-sync to **local-sync mode**. Artist DM'd you a personalized companion link.",
     dmTitle: "Local Sync setup",
-    dmDescription: "Click **Open Web Companion** below to open the companion page - drag-and-drop your `encounters.db` file (at `%localappdata%\\LOA Logs\\` or whichever path you set) and Artist previews your data. The link is valid for 30 minutes.",
+    dmDescription: "Click **Open Web Companion** below to open the companion page - drag-and-drop your `encounters.db` file (at `%localappdata%\\LOA Logs\\` or whichever path you set) and Artist previews your data. The link is valid for 15 minutes.",
   },
   // Roster-share embeds (used by /raid-share grant/revoke/list).
   share: {
@@ -391,7 +391,7 @@ module.exports = {
       localNewLinkFailedTitle: "New link failed",
       localNewLinkFailedDescription: "Artist hit an error minting a fresh token: `{error}`. Try again in a few seconds.",
       localNewLinkSuccessTitle: "New link ready",
-      localNewLinkSuccessDescription: "The **Open Web Companion** button on the original message just updated in place - click it to open the new URL immediately. The old token stays valid until its natural TTL (30 minutes from previous mint) for any tabs already open with it.",
+      localNewLinkSuccessDescription: "The **Open Web Companion** button on the original message just updated in place - click it to open the new URL immediately. The old token stays valid until its natural TTL (15 minutes from previous mint) for any tabs already open with it.",
       noControlTitle: "Only the command author can drive this view",
       noControlDescription: "This pagination belongs to someone else's `/raid-status` session. Open your own with `/raid-status` to interact.",
       noAutoSyncTitle: "Auto-sync isn't enabled",
@@ -702,7 +702,7 @@ module.exports = {
     localEnable: {
       successTitle: "Local-sync enabled",
       successDescription: "Local-sync mode is on. The web companion site is still being built (Phase 3) - once it's live, Artist will DM you a personal link to drag-and-drop your `encounters.db` file. Until then, manual `/raid-set` still works. Change your mind? `action:local-off`.",
-      successDescriptionWithLink: "Local-sync mode is on. Click **Open Web Companion** below to open the companion page in your browser - drag-and-drop your `encounters.db` file (at `%localappdata%\\LOA Logs\\`) and Artist previews your data. The link is valid for 30 minutes; if it expires, run `action:local-on` again. Change your mind? `action:local-off`.",
+      successDescriptionWithLink: "Local-sync mode is on. Click **Open Web Companion** below to open the companion page in your browser - drag-and-drop your `encounters.db` file (at `%localappdata%\\LOA Logs\\`) and Artist previews your data. The link is valid for 15 minutes; if it expires, run `action:local-on` again. Change your mind? `action:local-off`.",
       openButtonLabel: "Open Web Companion",
     },
     localDisable: {
@@ -1399,7 +1399,7 @@ module.exports = {
           "**Local-sync requirement**: Chrome / Edge / Opera GX (needs File System Access API). The `encounters.db` file lives at `%localappdata%\\LOA Logs\\`.",
           "**Bible cooldown**: 15s for Raid Managers, 10 min for everyone else.",
           "**`action:on` flow**: probes the roster first, and if any char is private-log → warning embed with confirm/cancel buttons. Confirm kicks off an immediate sync.",
-          "**`action:local-on` flow**: mints a signed-token URL (30-min TTL) sent via DM. Open the link → drop the file → preview the current raid week → Sync. The token auto-shrinks to 60s after every successful sync (anti-replay).",
+          "**`action:local-on` flow**: mints a signed-token URL (15-min TTL) sent via DM. Open the link → drop the file → preview the current raid week → Sync. The token auto-shrinks to 60s after every successful sync (anti-replay).",
           "**`action:reset` flow**: 2-step Danger confirm. Wipes your raid progress + sync state (assignedRaids, bibleSerial, bibleCid, lastLocalSyncToken, ...) - like resetting your gates back to zero. Use when you want a clean re-sync after switching modes or fixing data.",
           "**Background tick (bible only)**: opted-in users who haven't synced in 24h get auto-pulled by a 30-min scheduler (batch of 3 users/tick, fair rotation).",
           "**`action:status`**: shows state (bible on/off, local-sync on/off) + last success vs last attempt - easy to spot when sync is failing repeatedly.",

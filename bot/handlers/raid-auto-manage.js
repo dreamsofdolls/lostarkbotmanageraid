@@ -200,7 +200,7 @@ function createRaidAutoManageCommand(deps) {
         });
         return;
       }
-      // Success path. Mint a 30-min HMAC token and build the personalized
+      // Success path. Mint a 15-min HMAC token and build the personalized
       // companion URL. Token mint can throw if LOCAL_SYNC_TOKEN_SECRET is
       // unset or PUBLIC_BASE_URL is missing - in those cases we degrade
       // gracefully: still show the success embed (the flag is already
