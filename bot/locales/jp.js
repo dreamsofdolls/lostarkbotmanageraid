@@ -369,6 +369,7 @@ module.exports = {
       noCharacters: "_キャラがまだ登録されていませんわ。_",
       allIneligible: "_このロスター内にこのレイドへ参加できるキャラが居ませんわ。_",
       autoSyncOffBadge: " · 📝 自動同期 OFF",
+      localSyncOnBadge: " · 🌐 ローカル同期 ON",
       sharedBySuffix: " · 👥 {owner} さんから共有 ({level})",
       pageSuffix: " · ページ {current}/{total}",
       goldEarnerHint: "_💰 `/raid-gold-earner roster:<名前>` でゴールド受取キャラを指定してね♪ (週6人キャップ)_",

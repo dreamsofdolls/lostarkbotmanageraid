@@ -370,6 +370,7 @@ module.exports = {
       noCharacters: "_No characters saved._",
       allIneligible: "_No character in this roster is eligible for this raid._",
       autoSyncOffBadge: " · 📝 Auto-sync OFF",
+      localSyncOnBadge: " · 🌐 Local-sync ON",
       sharedBySuffix: " · 👥 Shared by {owner} ({level})",
       pageSuffix: " · Page {current}/{total}",
       goldEarnerHint: "_💰 Mark gold-earners via `/raid-gold-earner roster:<name>` (cap 6 / account / week)._",

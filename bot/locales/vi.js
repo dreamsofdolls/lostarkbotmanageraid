@@ -392,6 +392,7 @@ module.exports = {
       noCharacters: "_Chưa có character nào._",
       allIneligible: "_Không có character nào đủ điều kiện cho raid này trong roster._",
       autoSyncOffBadge: " · 📝 Auto-sync TẮT",
+      localSyncOnBadge: " · 🌐 Local-sync BẬT",
       sharedBySuffix: " · 👥 Được {owner} share ({level})",
       pageSuffix: " · Trang {current}/{total}",
       goldEarnerHint: "_💰 Chọn gold-earner bằng `/raid-gold-earner roster:<tên>` (cap 6 / account / tuần)._",

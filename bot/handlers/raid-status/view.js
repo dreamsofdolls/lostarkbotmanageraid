@@ -251,18 +251,25 @@ function createRaidStatusView(deps) {
     const sharedFrom = account._sharedFrom;
     const isShared = !!sharedFrom;
     const headerIcon = isShared ? "👥" : pickRosterHeaderIcon(userMeta?.discordId);
-    // Inline `· 📝 Auto-sync OFF` badge when the rendered subject hasn't
-    // opted into /raid-auto-manage AND isn't running local-sync either.
-    // Strict `=== false` so a missing/unknown flag (legacy doc) doesn't
-    // false-positive into showing OFF. Skipped on shared pages because
-    // the auto-sync flag belongs to owner A. Skipped for local-sync
-    // users because they DO have auto-sync (via web companion) - the
-    // badge would be misleading.
+    // Sync-mode badge. Three rendering paths so the header tells the
+    // viewer at a glance which mode (if any) is active:
+    //   - localSyncOn → 🌐 Local-sync BẬT (explicit positive, so the
+    //     /raid-check + /raid-status manager view doesn't leave a
+    //     local-sync user looking unset)
+    //   - bible auto-sync explicitly disabled → 📝 Auto-sync TẮT
+    //   - otherwise (bible on, or legacy unknown flag) → no badge
+    // Strict `=== false` on autoManageEnabled so a missing/unknown flag
+    // doesn't false-positive into showing OFF. Skipped on shared pages
+    // because the sync flags belong to owner A.
     const localSyncOn = !!userMeta?.localSyncEnabled;
-    const autoSyncBadge =
-      !isShared && userMeta?.autoManageEnabled === false && !localSyncOn
-        ? t("raid-status.embed.autoSyncOffBadge", lang)
-        : "";
+    let autoSyncBadge = "";
+    if (!isShared) {
+      if (localSyncOn) {
+        autoSyncBadge = t("raid-status.embed.localSyncOnBadge", lang);
+      } else if (userMeta?.autoManageEnabled === false) {
+        autoSyncBadge = t("raid-status.embed.autoSyncOffBadge", lang);
+      }
+    }
     const sharedBadge = isShared
       ? t("raid-status.embed.sharedBySuffix", lang, {
           owner: sharedFrom.ownerLabel || "(unknown)",
