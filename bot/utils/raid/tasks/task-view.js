@@ -36,6 +36,10 @@ function getCharacterName(character) {
   return String(character?.name || character?.charName || "").trim();
 }
 
+function getCharacterClass(character) {
+  return String(character?.class || character?.className || "").trim();
+}
+
 function formatItemLevel(character) {
   const raw = character?.itemLevel;
   const text = String(raw ?? "").trim();
@@ -77,7 +81,7 @@ function buildAccountTaskFields(account, helpers) {
 
   const buildCharField = (character) => {
     const charName = getCharacterName(character);
-    const classIcon = getClassEmoji(character.class);
+    const classIcon = getClassEmoji(getCharacterClass(character));
     const namePrefix = classIcon ? `${classIcon} ` : "";
     const fieldName = truncateText(
       `${namePrefix}${charName}${HEADER_SEPARATOR}${formatItemLevel(character)}`,

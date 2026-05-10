@@ -348,7 +348,7 @@ function createRaidStatusTaskUi(deps) {
           `${name} · ${itemLevel} · ${doneCount}/${taskCount}`,
           100
         );
-        const classEmojiObj = parseCustomEmoji(getClassEmoji(character.class));
+        const classEmojiObj = parseCustomEmoji(getClassEmoji(character.class || character.className));
         const option = {
           label,
           value: name.slice(0, 100),

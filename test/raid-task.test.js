@@ -533,7 +533,7 @@ test("buildAccountTaskFields rolls up totals + 2-column packs char fields", () =
       },
       {
         name: "Beta",
-        class: "Bard",
+        className: "Bard",
         itemLevel: 1690,
         sideTasks: [
           { taskId: "3", name: "Guardian", reset: "weekly", completed: true },
@@ -545,6 +545,8 @@ test("buildAccountTaskFields rolls up totals + 2-column packs char fields", () =
   };
   const helpers = {
     UI: { icons: { done: "🟢", pending: "⚪" } },
+    getClassEmoji: (className) =>
+      className === "Bard" ? "<:bard_test:123456789012345678>" : "",
     truncateText: (s) => s,
   };
   const { fields, totals } = buildAccountTaskFields(account, helpers);
@@ -562,7 +564,7 @@ test("buildAccountTaskFields rolls up totals + 2-column packs char fields", () =
   assert.match(fields[0].value, /\*\*Daily\*\* · 1\/2/);
   assert.match(fields[0].value, /🟢 Una/);
   assert.doesNotMatch(fields[0].value, /· daily/);
-  assert.match(fields[2].name, /Beta/);
+  assert.match(fields[2].name, /^<:bard_test:123456789012345678> Beta/);
   assert.match(fields[2].name, /1690/);
   assert.match(fields[2].value, /\*\*Weekly\*\* · 1\/1/);
   assert.match(fields[2].value, /🟢 Guardian/);

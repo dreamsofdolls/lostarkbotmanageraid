@@ -79,7 +79,7 @@ function createRaidStatusView(deps) {
     // Class emoji prepended to char name when the class is mapped in
     // CLASS_EMOJI_MAP. Empty string fallback when unmapped - safe no-op
     // so the field renders cleanly while emoji are still being uploaded.
-    const classIcon = getClassEmoji(character.class);
+    const classIcon = getClassEmoji(character.class || character.className);
     const namePrefix = classIcon ? `${classIcon} ` : "";
     const fieldName = truncateText(`${namePrefix}${name} · ${itemLevel}`, 256);
 
