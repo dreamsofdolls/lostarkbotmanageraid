@@ -1,9 +1,9 @@
-const { buildNoticeEmbed } = require("../../utils/raid/shared");
-const { buildAccountTaskFields } = require("../../utils/raid/task-view");
+const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const { buildAccountTaskFields } = require("../../utils/raid/tasks/task-view");
 const {
   getVisibleSharedTasks,
   getSharedTaskDisplay,
-} = require("../../utils/raid/shared-tasks");
+} = require("../../utils/raid/tasks/shared-tasks");
 const { t, getUserLanguage } = require("../../services/i18n");
 
 function createTaskViewUi(deps) {

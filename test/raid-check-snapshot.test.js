@@ -8,7 +8,7 @@ const assert = require("node:assert/strict");
 
 const { __test, parseRaidMessage } = require("../bot/commands");
 const { createSnapshotHelpers } = require("../bot/handlers/raid-check/snapshot");
-const { ensureFreshWeek, getTargetResetKey } = require("../bot/services/weekly-reset");
+const { ensureFreshWeek, getTargetResetKey } = require("../bot/services/raid/weekly-reset");
 
 function makeCharacter(name, itemLevel, kazeros = {}) {
   return {
@@ -456,7 +456,7 @@ test("raid-check user query filters by raid floor while preserving stale refresh
                       // query uses the manager-side 10-min cooldown
                       // instead of the regular-user 2-hour value. This
                       // assertion follows the same constant the query
-                      // imports from services/manager.
+                      // imports from services/access/manager.
                       $lt: now - __test.MANAGER_ROSTER_REFRESH_COOLDOWN_MS,
                     },
                   },
@@ -1142,7 +1142,7 @@ test("buildAccountFreshnessLine omits sync badge when auto-manage is off", () =>
 });
 
 test("parseManagerIds splits, trims, skips empties, and dedupes", () => {
-  const { parseManagerIds } = require("../bot/services/manager");
+  const { parseManagerIds } = require("../bot/services/access/manager");
   const ids = parseManagerIds("123, 456 ,  ,123,789");
   assert.deepEqual([...ids].sort(), ["123", "456", "789"]);
   assert.equal(parseManagerIds("").size, 0);

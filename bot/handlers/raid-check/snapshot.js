@@ -100,7 +100,7 @@ function createSnapshotHelpers({
             // Carried forward so the /raid-check Edit flow can decide
             // whether a leader is allowed to touch this char despite the
             // owner having auto-sync enabled - see the Edit-flow auth
-            // rule in services/manager-edit-auth or the cascading
+            // rule in services/access/manager-edit-auth or the cascading
             // select builders.
             publicLogDisabled: !!character.publicLogDisabled,
             // Full assignedRaids copy so the Edit flow can show per-gate

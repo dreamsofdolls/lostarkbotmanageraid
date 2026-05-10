@@ -1,6 +1,6 @@
 const { isSupportClass } = require("../../models/Class");
 const { t } = require("../../services/i18n");
-const { getRaidModeLabel } = require("../../utils/raid/labels");
+const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 
 const FILTER_ALL_RAIDS = "__all_raids__";
 

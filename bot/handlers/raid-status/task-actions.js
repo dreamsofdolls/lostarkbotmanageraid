@@ -1,5 +1,5 @@
-const { normalizeName } = require("../../utils/raid/shared");
-const { resolveScheduledSharedTaskState } = require("../../utils/raid/shared-tasks");
+const { normalizeName } = require("../../utils/raid/common/shared");
+const { resolveScheduledSharedTaskState } = require("../../utils/raid/tasks/shared-tasks");
 
 function parseTaskToggleValue(value) {
   if (!value || value === "noop") return { kind: "noop" };

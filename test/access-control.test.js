@@ -5,7 +5,7 @@ const {
   getAccessibleAccounts,
   canEditAccount,
   findAccessibleCharacter,
-} = require("../bot/services/access-control");
+} = require("../bot/services/access/access-control");
 
 // Lightweight in-memory fakes for User + RosterShare so the service
 // tests don't need a real Mongo. Each fake mirrors only the surface

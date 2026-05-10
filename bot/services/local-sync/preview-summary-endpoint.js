@@ -2,7 +2,7 @@
 
 const { verifyToken, isCurrentStoredToken, bucketizeLocalSyncDeltas } = require("./index");
 const { RAID_REQUIREMENTS, getGatesForRaid, getGoldForGate } = require("../../models/Raid");
-const { normalizeName, toModeKey } = require("../../utils/raid/shared");
+const { normalizeName, toModeKey } = require("../../utils/raid/common/shared");
 
 function makeGateKey(raidKey, modeKey, gate) {
   return `${raidKey}::${modeKey}::${gate}`;
@@ -61,7 +61,7 @@ function projectSummary(accounts, deltaBuckets) {
   const goldByChar = new Map();
   let goldTotal = 0;
   // Counts are RAIDS, not gates - mirrors `summarizeRaidProgress` in
-  // bot/utils/raid/character.js so the % matches what /raid-status shows.
+  // bot/utils/raid/common/character.js so the % matches what /raid-status shows.
   // A raid is "completed" iff all its gates have completedDate > 0.
   let totalRaids = 0;
   let clearedRaids = 0;

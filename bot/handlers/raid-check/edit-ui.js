@@ -18,9 +18,9 @@
  * builders) so they all live in the same factory closure.
  */
 
-const { buildNoticeEmbed } = require("../../utils/raid/shared");
+const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
-const { getRaidModeLabel } = require("../../utils/raid/labels");
+const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 
 function createEditUi({
   EmbedBuilder,

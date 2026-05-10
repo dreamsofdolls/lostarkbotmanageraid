@@ -130,7 +130,7 @@ module.exports = {
   // the user (e.g. /raid-status raid lines, /raid-set autocomplete).
   // Canonical raid metadata in models/Raid.js stays English-only - this
   // namespace is the render-time translation lookup. Resolved via the
-  // helpers in bot/utils/raid/labels.js.
+  // helpers in bot/utils/raid/common/labels.js.
   raid: {
     groups: {
       armoche: "Act 4",

@@ -23,9 +23,9 @@ const {
   MessageFlags,
 } = require("discord.js");
 
-const { createEditRosterCommand } = require("../bot/handlers/edit-roster");
-const { UI, normalizeName, parseCombatScore, getCharacterName, getCharacterClass } = require("../bot/utils/raid/shared");
-const { buildCharacterRecord, createCharacterId } = require("../bot/utils/raid/character");
+const { createEditRosterCommand } = require("../bot/handlers/roster/edit");
+const { UI, normalizeName, parseCombatScore, getCharacterName, getCharacterClass } = require("../bot/utils/raid/common/shared");
+const { buildCharacterRecord, createCharacterId } = require("../bot/utils/raid/common/character");
 
 // Same in-memory User stub shape as add-roster.test.js. Kept duplicated
 // (rather than shared via a helper) so each test file is self-contained

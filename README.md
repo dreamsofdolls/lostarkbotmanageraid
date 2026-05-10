@@ -137,44 +137,41 @@ User document example:
 
 ```
 LostArk_RaidManage/
-|-- bot.js                         # Discord client + interaction router + listeners
+|-- bot.js                         # Discord client lifecycle + listeners
 |-- bot/
-|   |-- commands.js                # Compose root: wires every command + service
+|   |-- commands.js                # Compose root: wires every command/service factory
 |   |-- db.js                      # Lazy Mongo connect with DNS fallback
-|   |-- handlers/                  # One file per slash command / interaction family
-|   |   |-- add-roster.js
-|   |   |-- edit-roster.js
-|   |   |-- definitions.js          # SlashCommandBuilder registry
-|   |   |-- raid-announce.js
-|   |   |-- raid-auto-manage.js
-|   |   |-- raid-channel.js
-|   |   |-- raid-check.js            # Scan + button routing orchestrator
-|   |   |-- raid-check/              # Snapshot, edit, sync, task-view, all-mode UI
-|   |   |-- raid-help.js
-|   |   |-- raid-set.js
-|   |   |-- raid-status.js
-|   |   |-- raid-status/             # Status view, task UI, sync, filters
-|   |   |-- raid-task.js
-|   |   `-- remove-roster.js
-|   |-- models/                    # Mongoose schemas + static lookup models
+|   |-- app/                       # Boot-level composition: slash registration, web companion, router registry
+|   |-- domain/                    # Static domain catalog data, e.g. raid requirements/gold
+|   |-- handlers/                  # Slash command / component handlers by feature
+|   |   |-- commands/               # SlashCommandBuilder registry
+|   |   |-- local-sync/             # Local-sync buttons / follow-up actions
+|   |   |-- meta/                   # Help + language commands
+|   |   |-- raid/                   # raid-set/task/share/channel/announce/auto-manage handlers
+|   |   |-- raid-check/             # Scan + edit/sync/task-view/all-mode UI
+|   |   |-- raid-status/            # Status view, task UI, sync, filters
+|   |   `-- roster/                 # Add/edit/remove roster + gold-earner handlers
+|   |-- models/                    # Mongoose schemas + compatibility model exports
 |   |   |-- user.js
 |   |   |-- guildConfig.js
-|   |   |-- Raid.js
+|   |   |-- Raid.js                 # Backward-compatible wrapper for domain/raid-catalog
 |   |   |-- Class.js
 |   |   `-- ArtistEmoji.js
-|   |-- services/                  # Cross-command concerns and schedulers
-|   |   |-- auto-manage-core.js
-|   |   |-- auto-manage-sync.js
-|   |   |-- emoji-bootstrap.js
-|   |   |-- interaction-router.js
-|   |   |-- manager.js
-|   |   |-- raid-channel-monitor.js
-|   |   |-- raid-schedulers.js
-|   |   |-- roster-fetch.js
-|   |   |-- roster-refresh.js
-|   |   `-- weekly-reset.js
+|   |-- services/                  # Cross-command services grouped by concern
+|   |   |-- access/                 # Manager allowlist + roster-share access checks
+|   |   |-- auto-manage/            # Bible auto-sync core/status helpers
+|   |   |-- discord/                # Emoji bootstrap, interaction router, identity cache
+|   |   |-- i18n/                   # Translation resolver + user/guild language cache
+|   |   |-- local-sync/             # Web companion API, tokens, preview, apply logic
+|   |   |-- raid/                   # Schedulers, weekly reset, channel monitor, raid view snapshots
+|   |   `-- roster/                 # Bible roster fetch + refresh cooldown logic
+|   |-- shared/                    # Generic reusable helpers
 |   `-- utils/
-|       `-- raid/                  # Pure raid helpers, registries, query builders
+|       `-- raid/                  # Pure raid helpers grouped by reuse surface
+|           |-- common/             # Names, labels, embeds, character normalization
+|           |-- queries/            # Mongo query builders for raid views
+|           |-- schedule/           # Announcement/schedule registries
+|           `-- tasks/              # Side-task/shared-task helpers + task view layout
 |-- assets/
 |   |-- class-icons/
 |   `-- artist-icons/
@@ -256,7 +253,7 @@ The bot **re-registers slash commands on every boot** (`ClientReady` handler cal
 
 ## Known Limitations
 
-- `/raid-add-roster` scrapes `lostark.bible` HTML + inline SSR JSON. Layout changes upstream will break the regex and DOM selectors in `bot/services/roster-fetch.js`.
+- `/raid-add-roster` scrapes `lostark.bible` HTML + inline SSR JSON. Layout changes upstream will break the regex and DOM selectors in `bot/services/roster/fetch.js`.
 - Slash commands are guild-scoped. Enabling the bot in more servers needs one `deploy-commands` run per `GUILD_ID`.
 - `RAID_MANAGER_ID` rotation requires a redeploy. There's no `/admin add-manager` command.
 - Bible auto-sync can't reach a character with Public Log OFF. The `/raid-check` Edit flow is the only write path for those; `publicLogDisabled` flags them so leaders can still edit.

@@ -9,7 +9,7 @@ const { __test } = require("../bot/commands");
 const {
   announcementOverridableTypeKeys,
   announcementTypeEntry,
-} = require("../bot/utils/raid/announcements");
+} = require("../bot/utils/raid/schedule/announcements");
 
 // Lost Ark VN maintenance: Wednesday 14:00 VN = Wednesday 07:00 UTC.
 // All test instants below use Apr 22 2026 (a Wednesday) for the boundary

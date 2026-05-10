@@ -7,25 +7,27 @@ const assert = require("node:assert/strict");
 
 const { __test } = require("../bot/commands");
 const {
-  TASK_CAP_DAILY,
-  TASK_CAP_WEEKLY,
   SHARED_TASK_CAP_DAILY,
   SHARED_TASK_CAP_WEEKLY,
   SHARED_TASK_CAP_SCHEDULED,
+} = require("../bot/handlers/raid/task");
+const {
+  TASK_CAP_DAILY,
+  TASK_CAP_WEEKLY,
   generateTaskId,
   findCharacterInUser,
   findAccountInUser,
   resolveTaskWriteTargetFromAccessible,
   countByReset,
   ensureSideTasks,
-  ensureSharedTasks,
-} = require("../bot/handlers/raid-task");
+} = require("../bot/utils/raid/tasks/side-tasks");
 const {
+  ensureSharedTasks,
   parseSharedTaskExpiresAt,
   resolveScheduledSharedTaskState,
   getSharedTaskDisplay,
   getNextSharedTaskTransitionMs,
-} = require("../bot/utils/raid/shared-tasks");
+} = require("../bot/utils/raid/tasks/shared-tasks");
 
 // ---------------------------------------------------------------------------
 // dailyResetStartMs - LA daily reset is 17:00 VN = 10:00 UTC
@@ -313,7 +315,7 @@ test("scheduled shared task: next transition helper returns nearest open or clos
 // ---------------------------------------------------------------------------
 
 test("pack2Columns: even count interleaves spacers correctly", () => {
-  const { pack2Columns, INLINE_SPACER } = require("../bot/utils/raid/shared");
+  const { pack2Columns, INLINE_SPACER } = require("../bot/utils/raid/common/shared");
   const A = { name: "A", value: "a", inline: true };
   const B = { name: "B", value: "b", inline: true };
   const C = { name: "C", value: "c", inline: true };
@@ -324,7 +326,7 @@ test("pack2Columns: even count interleaves spacers correctly", () => {
 });
 
 test("pack2Columns: odd count pads trailing card with extra spacer", () => {
-  const { pack2Columns, INLINE_SPACER } = require("../bot/utils/raid/shared");
+  const { pack2Columns, INLINE_SPACER } = require("../bot/utils/raid/common/shared");
   const A = { name: "A", value: "a", inline: true };
   const B = { name: "B", value: "b", inline: true };
   const C = { name: "C", value: "c", inline: true };
@@ -334,12 +336,12 @@ test("pack2Columns: odd count pads trailing card with extra spacer", () => {
 });
 
 test("pack2Columns: empty input returns empty array", () => {
-  const { pack2Columns } = require("../bot/utils/raid/shared");
+  const { pack2Columns } = require("../bot/utils/raid/common/shared");
   assert.deepEqual(pack2Columns([]), []);
 });
 
 test("autocomplete-helpers: getRosterMatches filters by needle + caps 25", () => {
-  const { getRosterMatches } = require("../bot/utils/raid/autocomplete-helpers");
+  const { getRosterMatches } = require("../bot/utils/raid/common/autocomplete");
   const userDoc = {
     accounts: Array.from({ length: 30 }, (_, i) => ({
       accountName: `Roster${i}`,
@@ -357,7 +359,7 @@ test("autocomplete-helpers: getRosterMatches filters by needle + caps 25", () =>
 });
 
 test("autocomplete-helpers: getCharacterMatches respects rosterFilter + dedup + sort", () => {
-  const { getCharacterMatches } = require("../bot/utils/raid/autocomplete-helpers");
+  const { getCharacterMatches } = require("../bot/utils/raid/common/autocomplete");
   const userDoc = {
     accounts: [
       {
@@ -399,7 +401,7 @@ test("autocomplete-helpers: getCharacterMatches respects rosterFilter + dedup + 
 });
 
 test("autocomplete-helpers: truncateChoice caps name + value to 100 chars", () => {
-  const { truncateChoice } = require("../bot/utils/raid/autocomplete-helpers");
+  const { truncateChoice } = require("../bot/utils/raid/common/autocomplete");
   const longName = "A".repeat(150);
   const out = truncateChoice(longName, longName);
   assert.equal(out.name.length, 100);
@@ -408,7 +410,7 @@ test("autocomplete-helpers: truncateChoice caps name + value to 100 chars", () =
 });
 
 test("replyNotice wraps interaction.reply with the notice embed + ephemeral flag", async () => {
-  const { replyNotice } = require("../bot/utils/raid/shared");
+  const { replyNotice } = require("../bot/utils/raid/common/shared");
   const calls = [];
   const interaction = {
     reply: async (payload) => calls.push(payload),
@@ -429,7 +431,7 @@ test("replyNotice wraps interaction.reply with the notice embed + ephemeral flag
 });
 
 test("replyNotice: ephemeral:false omits the flag for channel-broadcast notices", async () => {
-  const { replyNotice } = require("../bot/utils/raid/shared");
+  const { replyNotice } = require("../bot/utils/raid/common/shared");
   const calls = [];
   const interaction = { reply: async (payload) => calls.push(payload) };
   class StubEmbed {
@@ -442,7 +444,7 @@ test("replyNotice: ephemeral:false omits the flag for channel-broadcast notices"
 });
 
 test("updateNotice clears components by default and accepts override via extras", async () => {
-  const { updateNotice } = require("../bot/utils/raid/shared");
+  const { updateNotice } = require("../bot/utils/raid/common/shared");
   const calls = [];
   const component = { update: async (payload) => calls.push(payload) };
   class StubEmbed {
@@ -463,14 +465,14 @@ test("updateNotice clears components by default and accepts override via extras"
 });
 
 test("formatProgressTotals: standard 3-icon line", () => {
-  const { formatProgressTotals } = require("../bot/utils/raid/shared");
+  const { formatProgressTotals } = require("../bot/utils/raid/common/shared");
   const UI = { icons: { done: "🟢", partial: "🟡", pending: "⚪", lock: "🔒" } };
   const out = formatProgressTotals({ done: 2, partial: 1, pending: 4 }, UI);
   assert.equal(out, "🟢 2 done · 🟡 1 partial · ⚪ 4 pending");
 });
 
 test("formatProgressTotals: notEligible suffix only when > 0", () => {
-  const { formatProgressTotals } = require("../bot/utils/raid/shared");
+  const { formatProgressTotals } = require("../bot/utils/raid/common/shared");
   const UI = { icons: { done: "🟢", partial: "🟡", pending: "⚪", lock: "🔒" } };
   const withLock = formatProgressTotals(
     { done: 1, partial: 0, pending: 2, notEligible: 3 },
@@ -485,7 +487,7 @@ test("formatProgressTotals: notEligible suffix only when > 0", () => {
 });
 
 test("formatProgressTotals: missing fields default to 0", () => {
-  const { formatProgressTotals } = require("../bot/utils/raid/shared");
+  const { formatProgressTotals } = require("../bot/utils/raid/common/shared");
   const UI = { icons: { done: "🟢", partial: "🟡", pending: "⚪", lock: "🔒" } };
   assert.equal(
     formatProgressTotals({}, UI),
@@ -498,7 +500,7 @@ test("formatProgressTotals: missing fields default to 0", () => {
 });
 
 test("INLINE_SPACER is frozen so mutation can't poison shared reference", () => {
-  const { INLINE_SPACER } = require("../bot/utils/raid/shared");
+  const { INLINE_SPACER } = require("../bot/utils/raid/common/shared");
   assert.equal(Object.isFrozen(INLINE_SPACER), true);
   // Defensive: setting a property on a frozen object throws in strict
   // mode and silently no-ops in sloppy. Either way, the value can't
@@ -516,7 +518,7 @@ test("INLINE_SPACER is frozen so mutation can't poison shared reference", () => 
 // ---------------------------------------------------------------------------
 
 test("buildAccountTaskFields rolls up totals + 2-column packs char fields", () => {
-  const { buildAccountTaskFields } = require("../bot/utils/raid/task-view");
+  const { buildAccountTaskFields } = require("../bot/utils/raid/tasks/task-view");
   const account = {
     accountName: "main",
     characters: [
@@ -568,7 +570,7 @@ test("buildAccountTaskFields rolls up totals + 2-column packs char fields", () =
 });
 
 test("buildAccountTaskFields renders every task char when roster exceeds 2-column cap", () => {
-  const { PAGE_CHAR_CAP, buildAccountTaskFields } = require("../bot/utils/raid/task-view");
+  const { PAGE_CHAR_CAP, buildAccountTaskFields } = require("../bot/utils/raid/tasks/task-view");
   const account = {
     accountName: "large",
     characters: Array.from({ length: PAGE_CHAR_CAP + 1 }, (_, index) => ({
@@ -602,7 +604,7 @@ test("buildAccountTaskFields renders every task char when roster exceeds 2-colum
 });
 
 test("buildAccountTaskFields returns empty fields when no chars-with-tasks", () => {
-  const { buildAccountTaskFields } = require("../bot/utils/raid/task-view");
+  const { buildAccountTaskFields } = require("../bot/utils/raid/tasks/task-view");
   const account = {
     accountName: "empty",
     characters: [{ name: "X", itemLevel: 1700, sideTasks: [] }],
@@ -616,7 +618,7 @@ test("buildAccountTaskFields returns empty fields when no chars-with-tasks", () 
 });
 
 test("buildAccountTaskFields odd char count pads with spacer to keep 2-column", () => {
-  const { buildAccountTaskFields } = require("../bot/utils/raid/task-view");
+  const { buildAccountTaskFields } = require("../bot/utils/raid/tasks/task-view");
   const account = {
     accountName: "main",
     characters: [
@@ -647,7 +649,7 @@ test("PROJECTION: raid-check all-mode uses the shared raid-check projection", ()
     path.join(__dirname, "..", "bot", "handlers", "raid-check", "all-mode.js"),
     "utf8"
   );
-  const { RAID_CHECK_USER_QUERY_FIELDS } = require("../bot/utils/raid/raid-check-query");
+  const { RAID_CHECK_USER_QUERY_FIELDS } = require("../bot/utils/raid/queries/raid-check");
   assert.ok(
     allModeSrc.includes("RAID_CHECK_USER_QUERY_FIELDS"),
     "all-mode must use the shared /raid-check projection constant"
@@ -704,7 +706,7 @@ test("REGRESSION: raid-check all-mode actions target current page user", () => {
 test("PROJECTION: RAID_CHECK_USER_QUERY_FIELDS allowlist includes sideTasks", () => {
   const {
     RAID_CHECK_USER_QUERY_FIELDS,
-  } = require("../bot/utils/raid/raid-check-query");
+  } = require("../bot/utils/raid/queries/raid-check");
   assert.ok(typeof RAID_CHECK_USER_QUERY_FIELDS === "string");
   assert.ok(
     RAID_CHECK_USER_QUERY_FIELDS.includes("accounts.characters.sideTasks"),
@@ -800,7 +802,7 @@ test("resetExpiredSideTasks issues 2 updateMany calls (daily + weekly) with the 
 
   const {
     createRaidSchedulerService,
-  } = require("../bot/services/raid-schedulers");
+  } = require("../bot/services/raid/schedulers");
   const service = createRaidSchedulerService({
     GuildConfig: {},
     User: userStub,
@@ -900,7 +902,7 @@ test("REGRESSION (Codex #1): newly-added task seeds lastResetAt to current cycle
   };
   const UserStub = { findOne: async () => userDoc };
 
-  const { createRaidTaskCommand } = require("../bot/handlers/raid-task");
+  const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
   const handlers = createRaidTaskCommand({
     EmbedBuilder: class {
       constructor() {
@@ -972,7 +974,7 @@ test("REGRESSION (Codex #1): weekly task seeds lastResetAt to weekResetStartMs",
       savedDoc = JSON.parse(JSON.stringify(this));
     },
   };
-  const { createRaidTaskCommand } = require("../bot/handlers/raid-task");
+  const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
   const handlers = createRaidTaskCommand({
     EmbedBuilder: class {
       setColor() { return this; }
@@ -1136,7 +1138,7 @@ test("add-all: adds task to every char that fits, skips chars at cap + duplicate
     setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
     addFields() { return this; }, setFooter() { return this; },
   };
-  const { createRaidTaskCommand } = require("../bot/handlers/raid-task");
+  const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
   const handlers = createRaidTaskCommand({
     EmbedBuilder: function () { return stubEmbed; },
     ActionRowBuilder: class { addComponents() { return this; } },
@@ -1214,7 +1216,7 @@ test("add-all: skips save() entirely when no char fits (every char dup or cap)",
     setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
     addFields() { return this; }, setFooter() { return this; },
   };
-  const { createRaidTaskCommand } = require("../bot/handlers/raid-task");
+  const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
   const handlers = createRaidTaskCommand({
     EmbedBuilder: function () { return stubEmbed; },
     ActionRowBuilder: class { addComponents() { return this; } },
@@ -1267,7 +1269,7 @@ test("shared-add: adds Chaos Gate as scheduled roster task", async () => {
     setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
     addFields() { return this; }, setFooter() { return this; },
   };
-  const { createRaidTaskCommand } = require("../bot/handlers/raid-task");
+  const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
   const handlers = createRaidTaskCommand({
     EmbedBuilder: function () { return stubEmbed; },
     ActionRowBuilder: class { addComponents() { return this; } },
@@ -1321,7 +1323,7 @@ test("shared-add autocomplete: preset labels show already-added state", async ()
     setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
     addFields() { return this; }, setFooter() { return this; },
   };
-  const { createRaidTaskCommand } = require("../bot/handlers/raid-task");
+  const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
   const handlers = createRaidTaskCommand({
     EmbedBuilder: function () { return stubEmbed; },
     ActionRowBuilder: class { addComponents() { return this; } },
@@ -1378,7 +1380,7 @@ test("shared-add: all_rosters adds missing rosters and skips duplicates", async 
     setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
     addFields() { return this; }, setFooter() { return this; },
   };
-  const { createRaidTaskCommand } = require("../bot/handlers/raid-task");
+  const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
   const handlers = createRaidTaskCommand({
     EmbedBuilder: function () { return stubEmbed; },
     ActionRowBuilder: class { addComponents() { return this; } },
@@ -1436,7 +1438,7 @@ test("shared-remove: deletes one roster shared task by id", async () => {
     setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
     addFields() { return this; }, setFooter() { return this; },
   };
-  const { createRaidTaskCommand } = require("../bot/handlers/raid-task");
+  const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
   const handlers = createRaidTaskCommand({
     EmbedBuilder: function () { return stubEmbed; },
     ActionRowBuilder: class { addComponents() { return this; } },
@@ -1482,7 +1484,7 @@ test("resetExpiredSideTasks reports modifiedCount accurately when Mongo touches 
   };
   const {
     createRaidSchedulerService,
-  } = require("../bot/services/raid-schedulers");
+  } = require("../bot/services/raid/schedulers");
   const service = createRaidSchedulerService({
     GuildConfig: {},
     User: userStub,

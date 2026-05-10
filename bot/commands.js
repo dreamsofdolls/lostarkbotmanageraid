@@ -17,7 +17,7 @@ const {
   getTargetResetKey,
   getWeeklyResetSchedulerStartedAtMs,
   WEEKLY_RESET_TICK_MS,
-} = require("./services/weekly-reset");
+} = require("./services/raid/weekly-reset");
 const {
   ConcurrencyLimiter,
   UI,
@@ -34,13 +34,13 @@ const {
   waitWithBudget,
   buildDiscordIdentityFields,
   formatGold,
-} = require("./utils/raid/shared");
+} = require("./utils/raid/common/shared");
 const {
   announcementTypeKeys,
   announcementTypeEntry,
   announcementSubdocKeys,
   announcementOverridableTypeKeys,
-} = require("./utils/raid/announcements");
+} = require("./utils/raid/schedule/announcements");
 const {
   createRaidStatusCommand,
   STATUS_PAGINATION_SESSION_MS,
@@ -50,29 +50,32 @@ const {
   createRaidCheckCommand,
   RAID_CHECK_PAGINATION_SESSION_MS,
 } = require("./handlers/raid-check");
-const { createAddRosterCommand } = require("./handlers/add-roster");
-const { createRaidGoldEarnerCommand } = require("./handlers/raid-gold-earner");
-const { createEditRosterCommand } = require("./handlers/edit-roster");
-const { createRaidCommandDefinitions } = require("./handlers/definitions");
-const { createRaidAutoManageCommand } = require("./handlers/raid-auto-manage");
-const { createRaidAnnounceCommand } = require("./handlers/raid-announce");
-const { createRemoveRosterCommand } = require("./handlers/remove-roster");
-const { createRaidChannelCommand } = require("./handlers/raid-channel");
-const { createRaidHelpCommand } = require("./handlers/raid-help");
-const { createRaidShareCommand } = require("./handlers/raid-share");
-const { createRaidLanguageCommand } = require("./handlers/raid-language");
-const { createRaidSetCommand } = require("./handlers/raid-set");
-const { createStuckNudgeButtonHandler } = require("./handlers/stuck-nudge-button");
+const { createAddRosterCommand } = require("./handlers/roster/add");
+const { createRaidGoldEarnerCommand } = require("./handlers/roster/gold-earner");
+const { createEditRosterCommand } = require("./handlers/roster/edit");
+const { createRaidCommandDefinitions } = require("./handlers/commands/definitions");
+const { createRaidAutoManageCommand } = require("./handlers/raid/auto-manage");
+const { createRaidAnnounceCommand } = require("./handlers/raid/announce");
+const { createRemoveRosterCommand } = require("./handlers/roster/remove");
+const { createRaidChannelCommand } = require("./handlers/raid/channel");
+const { createRaidHelpCommand } = require("./handlers/meta/help");
+const { createRaidShareCommand } = require("./handlers/raid/share");
+const { createRaidLanguageCommand } = require("./handlers/meta/language");
+const { createRaidSetCommand } = require("./handlers/raid/set");
+const { createStuckNudgeButtonHandler } = require("./handlers/local-sync/stuck-nudge-button");
 const {
   createRosterRefreshService,
   ROSTER_REFRESH_COOLDOWN_MS,
   ROSTER_REFRESH_FAILURE_COOLDOWN_MS,
-} = require("./services/roster-refresh");
-const { createAutoManageSyncService } = require("./services/auto-manage-sync");
-const { createRosterFetchService } = require("./services/roster-fetch");
-const { createAutoManageCoreService } = require("./services/auto-manage-core");
-const { createRaidChannelMonitorService } = require("./services/raid-channel-monitor");
-const { createRaidSchedulerService } = require("./services/raid-schedulers");
+} = require("./services/roster/refresh");
+const { createAutoManageSyncService } = require("./services/auto-manage/sync");
+const { createRosterFetchService } = require("./services/roster/fetch");
+const { createAutoManageCoreService } = require("./services/auto-manage/core");
+const { createRaidViewSnapshotService } = require("./services/raid/view-snapshot");
+const { createRaidChannelMonitorService } = require("./services/raid/channel-monitor");
+const { createRaidSchedulerService } = require("./services/raid/schedulers");
+const { createDiscordIdentityCache } = require("./services/discord/user-identity-cache");
+const { createInFlightLoader } = require("./shared/in-flight-loader");
 
 const bibleLimiter = new ConcurrencyLimiter(2);
 // Discord REST fan-out limiter: caps parallel `client.users.fetch` bursts in
@@ -93,21 +96,9 @@ const rosterFetchService = createRosterFetchService({ bibleLimiter });
 const { fetchRosterCharacters } = rosterFetchService;
 
 
-/**
- * In-flight dedup loader for autocomplete paths. Rapid keystrokes for the
- * same discordId collapse into a single Mongo read - all concurrent handlers
- * await the same promise and the map entry clears once it settles.
- */
-const autocompleteUserInFlight = new Map();
-function loadUserForAutocomplete(discordId) {
-  if (!autocompleteUserInFlight.has(discordId)) {
-    const promise = User.findOne({ discordId })
-      .lean()
-      .finally(() => autocompleteUserInFlight.delete(discordId));
-    autocompleteUserInFlight.set(discordId, promise);
-  }
-  return autocompleteUserInFlight.get(discordId);
-}
+const loadUserForAutocomplete = createInFlightLoader((discordId) =>
+  User.findOne({ discordId }).lean()
+);
 
 /**
  * Cross-user lookup for /raid-set autocomplete: every user doc that has at
@@ -118,25 +109,18 @@ function loadUserForAutocomplete(discordId) {
  * stampede Mongo. Projects only the fields the picker label needs
  * (display-name cache + accounts) to keep result size compact.
  */
-const accountsRegisteredByInFlight = new Map();
-function loadAccountsRegisteredBy(discordId) {
-  if (!accountsRegisteredByInFlight.has(discordId)) {
-    const promise = User.find(
-      { "accounts.registeredBy": discordId },
-      {
-        discordId: 1,
-        discordUsername: 1,
-        discordGlobalName: 1,
-        discordDisplayName: 1,
-        accounts: 1,
-      }
-    )
-      .lean()
-      .finally(() => accountsRegisteredByInFlight.delete(discordId));
-    accountsRegisteredByInFlight.set(discordId, promise);
-  }
-  return accountsRegisteredByInFlight.get(discordId);
-}
+const loadAccountsRegisteredBy = createInFlightLoader((discordId) =>
+  User.find(
+    { "accounts.registeredBy": discordId },
+    {
+      discordId: 1,
+      discordUsername: 1,
+      discordGlobalName: 1,
+      discordDisplayName: 1,
+      accounts: 1,
+    }
+  ).lean()
+);
 const {
   RAID_REQUIREMENTS,
   getRaidRequirementList,
@@ -167,13 +151,13 @@ const {
   summarizeGlobalGold,
   raidCheckGateIcon,
   RAID_REQUIREMENT_MAP,
-} = require("./utils/raid/character");
+} = require("./utils/raid/common/character");
 const {
   RAID_CHECK_USER_QUERY_FIELDS,
   getRaidScanRange,
   buildRaidCheckUserQuery,
-} = require("./utils/raid/raid-check-query");
-const { createSchedulingHelpers } = require("./utils/raid/scheduling");
+} = require("./utils/raid/queries/raid-check");
+const { createSchedulingHelpers } = require("./utils/raid/schedule/scheduling");
 
 // Hard cap on characters saved per roster account. Sized to the
 // /raid-add-roster + /raid-edit-roster picker capacity: Discord caps a message
@@ -193,7 +177,7 @@ const MAX_CHARACTERS_PER_ACCOUNT = 20;
 // happens via redeploy rather than touching Discord role assignments.
 //
 // The same allowlist now also drives manager privileges (shorter auto-manage
-// sync cooldown, on-roster visual tag). Shared helper lives in services/manager.js
+// sync cooldown, on-roster visual tag). Shared helper lives in services/access/manager.js
 // so raid-status / raid-check / auto-manage-core all read from one place.
 const {
   MANAGER_IDS: RAID_MANAGER_ID,
@@ -201,7 +185,7 @@ const {
   getAutoManageCooldownMs,
   getRosterRefreshCooldownMs,
   getPrimaryManagerId,
-} = require("./services/manager");
+} = require("./services/access/manager");
 if (RAID_MANAGER_ID.size === 0) {
   console.warn(
     "[raid-check] RAID_MANAGER_ID env not set or empty - /raid-check will reject every invocation. Set the env var to a comma-separated list of Discord user IDs to enable."
@@ -259,110 +243,6 @@ async function resolveDiscordDisplay(client, discordId) {
 // and rosterRefreshMap so lookups line up across the three structures.
 const ROSTER_KEY_SEP = "\x1f";
 
-function toPlainUserSnapshot(userDoc) {
-  if (!userDoc) return null;
-  return typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
-}
-
-// Shared "render-facing" refresh helper: lazy-refresh stale roster data,
-// optionally piggyback auto-manage, then return a plain object snapshot for
-// commands that only need to read/render the result.
-async function loadFreshUserSnapshotForRaidViews(
-  seedDoc,
-  { allowAutoManage = true, logLabel = "[raid-status]" } = {}
-) {
-  if (!seedDoc) return null;
-  const discordId = seedDoc.discordId;
-  if (!discordId) return toPlainUserSnapshot(seedDoc);
-
-  const hasRoster = Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
-  const didFreshenSeedWeek = ensureFreshWeek(seedDoc);
-
-  if (!hasRoster) {
-    if (!didFreshenSeedWeek) return toPlainUserSnapshot(seedDoc);
-    try {
-      return await saveWithRetry(async () => {
-        const doc = await User.findOne({ discordId });
-        if (!doc) return null;
-        const didFreshenWeek = ensureFreshWeek(doc);
-        if (didFreshenWeek) await doc.save();
-        return doc.toObject();
-      });
-    } catch (err) {
-      console.error(`${logLabel} refresh failed for ${discordId}:`, err?.message || err);
-      return await User.findOne({ discordId }).lean();
-    }
-  }
-
-  let autoManageGuard = null;
-  try {
-    let autoManagePromise = Promise.resolve(null);
-    let autoManageWeekResetStart = null;
-    if (allowAutoManage && seedDoc.autoManageEnabled) {
-      autoManageGuard = await acquireAutoManageSyncSlot(discordId);
-      if (autoManageGuard.acquired) {
-        autoManageWeekResetStart = weekResetStartMs();
-        autoManagePromise = gatherAutoManageLogsForUserDoc(
-          seedDoc,
-          autoManageWeekResetStart
-        ).catch((err) => {
-          console.warn(
-            `${logLabel} auto-manage piggyback gather failed:`,
-            err?.message || err
-          );
-          return null;
-        });
-      }
-    }
-
-    const [refreshCollected, autoManageCollected] = await Promise.all([
-      collectStaleAccountRefreshes(seedDoc),
-      autoManagePromise,
-    ]);
-    const autoManageBibleHit = autoManageGuard?.acquired === true;
-    const needsFreshWrite =
-      didFreshenSeedWeek || refreshCollected.length > 0 || autoManageBibleHit;
-
-    if (!needsFreshWrite) return toPlainUserSnapshot(seedDoc);
-
-    return await saveWithRetry(async () => {
-      const doc = await User.findOne({ discordId });
-      if (!doc) return null;
-      const didFreshenWeek = ensureFreshWeek(doc);
-      const didRefresh = applyStaleAccountRefreshes(doc, refreshCollected);
-
-      let didAutoManage = false;
-      if (autoManageCollected && doc.autoManageEnabled) {
-        const autoReport = applyAutoManageCollected(
-          doc,
-          autoManageWeekResetStart,
-          autoManageCollected
-        );
-        const now = Date.now();
-        doc.lastAutoManageAttemptAt = now;
-        if (autoReport.perChar.some((c) => !c.error)) {
-          doc.lastAutoManageSyncAt = now;
-        }
-        didAutoManage = true;
-      } else if (autoManageBibleHit) {
-        doc.lastAutoManageAttemptAt = Date.now();
-        didAutoManage = true;
-      }
-
-      if (didFreshenWeek || didRefresh || didAutoManage) await doc.save();
-      return doc.toObject();
-    });
-  } catch (err) {
-    console.error(`${logLabel} refresh failed for ${discordId}:`, err?.message || err);
-    if (autoManageGuard?.acquired) {
-      await stampAutoManageAttempt(discordId);
-    }
-    return await User.findOne({ discordId }).lean();
-  } finally {
-    if (autoManageGuard?.acquired) releaseAutoManageSyncSlot(discordId);
-  }
-}
-
 
 let handleAddRosterCommand;
 let handleAddRosterButton;
@@ -392,6 +272,8 @@ let formatRosterRefreshCooldownRemaining;
 let buildAccountFreshnessLine;
 let buildAccountPageEmbed;
 let buildStatusFooterText;
+let loadFreshUserSnapshotForRaidViews;
+let shouldLoadFreshUserSnapshotForRaidViews;
 
 // Generic Prev/Next pagination row builder. Customize customId prefix per
 // command so the same visual/behavioral pattern works without collision:
@@ -434,99 +316,30 @@ let handleRemoveRosterCommand;
 let handleRaidChannelAutocomplete;
 let handleRaidChannelCommand;
 
-async function cacheDiscordIdentityForExistingUser(interaction) {
-  const discordId = interaction?.user?.id;
-  if (!discordId) return;
-
-  const identity = buildDiscordIdentityFields(interaction);
-  if (!Object.values(identity).some(Boolean)) return;
-
-  try {
-    await User.updateOne(
-      {
-        discordId,
-        $or: Object.entries(identity).map(([field, value]) => ({
-          [field]: { $ne: value },
-        })),
-      },
-      { $set: identity }
-    );
-  } catch (err) {
-    console.warn(
-      `[user-cache] failed to cache Discord identity for ${discordId}:`,
-      err?.message || err
-    );
-  }
-}
+const cacheDiscordIdentityForExistingUser = createDiscordIdentityCache({
+  User,
+  buildDiscordIdentityFields,
+});
 
 async function handleRaidManagementCommand(interaction) {
   try {
-    if (interaction.commandName === "raid-add-roster") {
-      await handleAddRosterCommand(interaction);
-      return;
-    }
-
-    if (interaction.commandName === "raid-edit-roster") {
-      await handleEditRosterCommand(interaction);
-      return;
-    }
-
-    if (interaction.commandName === "raid-check") {
-      await handleRaidCheckCommand(interaction);
-      return;
-    }
-
-    if (interaction.commandName === "raid-set") {
-      await handleRaidSetCommand(interaction);
-      return;
-    }
-
-    if (interaction.commandName === "raid-status") {
-      await handleStatusCommand(interaction);
-      return;
-    }
-
-    if (interaction.commandName === "raid-share") {
-      await handleRaidShareCommand(interaction);
-      return;
-    }
-    if (interaction.commandName === "raid-language") {
-      await handleRaidLanguageCommand(interaction);
-      return;
-    }
-    if (interaction.commandName === "raid-help") {
-      await handleRaidHelpCommand(interaction);
-      return;
-    }
-
-    if (interaction.commandName === "raid-remove-roster") {
-      await handleRemoveRosterCommand(interaction);
-      return;
-    }
-
-    if (interaction.commandName === "raid-gold-earner") {
-      await handleRaidGoldEarnerCommand(interaction);
-      return;
-    }
-
-    if (interaction.commandName === "raid-channel") {
-      await handleRaidChannelCommand(interaction);
-      return;
-    }
-
-    if (interaction.commandName === "raid-auto-manage") {
-      await handleRaidAutoManageCommand(interaction);
-      return;
-    }
-
-    if (interaction.commandName === "raid-announce") {
-      await handleRaidAnnounceCommand(interaction);
-      return;
-    }
-
-    if (interaction.commandName === "raid-task") {
-      await handleRaidTaskCommand(interaction);
-    }
+    const handler = {
+      "raid-add-roster": handleAddRosterCommand,
+      "raid-edit-roster": handleEditRosterCommand,
+      "raid-check": handleRaidCheckCommand,
+      "raid-set": handleRaidSetCommand,
+      "raid-status": handleStatusCommand,
+      "raid-share": handleRaidShareCommand,
+      "raid-language": handleRaidLanguageCommand,
+      "raid-help": handleRaidHelpCommand,
+      "raid-remove-roster": handleRemoveRosterCommand,
+      "raid-gold-earner": handleRaidGoldEarnerCommand,
+      "raid-channel": handleRaidChannelCommand,
+      "raid-auto-manage": handleRaidAutoManageCommand,
+      "raid-announce": handleRaidAnnounceCommand,
+      "raid-task": handleRaidTaskCommand,
+    }[interaction.commandName];
+    if (handler) await handler(interaction);
   } finally {
     await cacheDiscordIdentityForExistingUser(interaction);
   }
@@ -740,24 +553,6 @@ const rosterRefreshService = createRosterRefreshService({
   formatRosterRefreshCooldownRemaining,
 } = rosterRefreshService);
 
-function shouldLoadFreshUserSnapshotForRaidViews(
-  seedDoc,
-  { allowAutoManage = true } = {}
-) {
-  if (!seedDoc?.discordId) return false;
-  if (seedDoc.weeklyResetKey !== getTargetResetKey()) return true;
-  const hasRoster =
-    Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
-  if (!hasRoster) return false;
-  if (
-    typeof hasStaleAccountRefreshes === "function" &&
-    hasStaleAccountRefreshes(seedDoc)
-  ) {
-    return true;
-  }
-  return Boolean(allowAutoManage && seedDoc.autoManageEnabled);
-}
-
 const autoManageSyncService = createAutoManageSyncService({
   User,
   saveWithRetry,
@@ -765,6 +560,26 @@ const autoManageSyncService = createAutoManageSyncService({
   applyAutoManageCollected,
 });
 ({ applyAutoManageCollectedForStatus } = autoManageSyncService);
+
+const raidViewSnapshotService = createRaidViewSnapshotService({
+  User,
+  saveWithRetry,
+  ensureFreshWeek,
+  getTargetResetKey,
+  collectStaleAccountRefreshes,
+  hasStaleAccountRefreshes,
+  applyStaleAccountRefreshes,
+  acquireAutoManageSyncSlot,
+  releaseAutoManageSyncSlot,
+  gatherAutoManageLogsForUserDoc,
+  applyAutoManageCollected,
+  stampAutoManageAttempt,
+  weekResetStartMs,
+});
+({
+  loadFreshUserSnapshotForRaidViews,
+  shouldLoadFreshUserSnapshotForRaidViews,
+} = raidViewSnapshotService);
 
 const raidStatusCommand = createRaidStatusCommand({
   EmbedBuilder,
@@ -1099,7 +914,7 @@ const raidAutoManageCommandHandlers = createRaidAutoManageCommand({
   handleRaidAutoManageAutocomplete,
 } = raidAutoManageCommandHandlers);
 
-const { createRaidTaskCommand } = require("./handlers/raid-task");
+const { createRaidTaskCommand } = require("./handlers/raid/task");
 const raidTaskCommandHandlers = createRaidTaskCommand({
   EmbedBuilder,
   ActionRowBuilder,
@@ -1204,7 +1019,7 @@ module.exports = {
     formatRosterRefreshCooldownRemaining,
     ROSTER_REFRESH_COOLDOWN_MS,
     ROSTER_REFRESH_FAILURE_COOLDOWN_MS,
-    MANAGER_ROSTER_REFRESH_COOLDOWN_MS: require("./services/manager").MANAGER_ROSTER_REFRESH_COOLDOWN_MS,
+    MANAGER_ROSTER_REFRESH_COOLDOWN_MS: require("./services/access/manager").MANAGER_ROSTER_REFRESH_COOLDOWN_MS,
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
     isManagerId,
     getAutoManageCooldownMs,

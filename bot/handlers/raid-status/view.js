@@ -1,5 +1,5 @@
 const { getClassEmoji } = require("../../models/Class");
-const { pack2Columns, formatProgressTotals } = require("../../utils/raid/shared");
+const { pack2Columns, formatProgressTotals } = require("../../utils/raid/common/shared");
 const { t } = require("../../services/i18n");
 
 function createRaidStatusView(deps) {
