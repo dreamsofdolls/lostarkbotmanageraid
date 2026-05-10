@@ -447,6 +447,19 @@ function createRaidStatusCommand(deps) {
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(disabled);
     };
+    // Refresh button: re-fetch userDoc from DB + re-render embed in
+    // place. Useful right after the user syncs via web companion - they
+    // can press this instead of re-typing /raid-status to see the new
+    // progress. Local-sync only because bible mode has its own Sync
+    // button which already re-fetches state on click.
+    const buildLocalSyncRefreshButton = (disabled) => {
+      return new ButtonBuilder()
+        .setCustomId("status:local-refresh")
+        .setLabel(t("raid-status.sync.localRefreshButtonLabel", lang))
+        .setEmoji("🔄")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(disabled);
+    };
 
     // Pre-fetch the resume URL at command entry. Async; main handler
     // awaits this before composing components. Returns the array of
@@ -484,12 +497,14 @@ function createRaidStatusCommand(deps) {
       const btn = buildSyncButton(disabled);
       if (!btn) return null;
       const row = new ActionRowBuilder().addComponents(btn);
-      // Local mode: append the "New link" button alongside resume so
-      // the user sees both choices in the same row. Bible mode just
-      // gets the single Sync button (unchanged behavior).
+      // Local mode: append the "New link" + "Refresh" buttons alongside
+      // resume so the user sees all 3 actions in the same row. Bible
+      // mode just gets the single Sync button (unchanged behavior).
+      // Total: [Resume][New link][Refresh] = 3 buttons, well under cap.
       if (statusUserMeta.localSyncEnabled) {
         const newBtn = buildLocalSyncNewButton(disabled);
         if (newBtn) row.addComponents(newBtn);
+        row.addComponents(buildLocalSyncRefreshButton(disabled));
       }
       return row;
     };
@@ -550,12 +565,19 @@ function createRaidStatusCommand(deps) {
           // matches the autoManage-off case behaviorally.
           const btn = buildSyncButton(disabled);
           if (btn) paginationRow.addComponents(btn);
-          // Local mode also gets the "New link" button alongside resume.
-          // ActionRow caps at 5; with [Prev][Next][Resume][New] = 4,
-          // safely under the cap. Bible mode adds nothing extra.
+          // Local mode also gets "New link" + "Refresh" alongside resume.
+          // ActionRow caps at 5; with [Prev][Next][Resume][New][Refresh]
+          // = 5, exactly at the cap. Drop refresh from the inline row
+          // when env-degraded (newBtn null = no companion link, so
+          // refresh isn't useful either - the embed has nothing fresh
+          // to show post-sync because there's no sync UI). Bible mode
+          // adds nothing extra.
           if (statusUserMeta.localSyncEnabled) {
             const newBtn = buildLocalSyncNewButton(disabled);
-            if (newBtn) paginationRow.addComponents(newBtn);
+            if (newBtn) {
+              paginationRow.addComponents(newBtn);
+              paginationRow.addComponents(buildLocalSyncRefreshButton(disabled));
+            }
           }
         }
         rows.push(paginationRow);
@@ -772,6 +794,45 @@ function createRaidStatusCommand(deps) {
               type: "success",
               title: t("raid-status.sync.localNewLinkSuccessTitle", lang),
               description: t("raid-status.sync.localNewLinkSuccessDescription", lang),
+            }),
+          ],
+          flags: MessageFlags.Ephemeral,
+        }).catch(() => {});
+        return;
+      } else if (id === "status:local-refresh") {
+        // Refresh button: re-fetch userDoc + accounts from DB so the
+        // embed reflects post-web-sync state. Replaces "user re-types
+        // /raid-status" with one click. Local-sync only (bible has
+        // its own Sync button which already does this).
+        const deferred = await component.deferUpdate().then(() => true).catch((err) => {
+          console.warn("[raid-status] local-refresh defer failed:", err?.message || err);
+          return false;
+        });
+        if (!deferred) return;
+        try {
+          await reloadViewerAccounts();
+          // Re-read user-level flags too (autoManage/localSync state may
+          // have flipped via /raid-auto-manage in another tab) - keeps
+          // the badge logic consistent with the freshly-read doc.
+          statusUserMeta = buildStatusUserMeta(userDoc, statusUserMeta?.piggybackOutcome || null);
+        } catch (err) {
+          console.error("[raid-status] local-refresh reload failed:", err?.message || err);
+        }
+        await interaction.editReply({
+          embeds: [buildCurrentEmbed()],
+          components: buildComponents(false),
+        }).catch((err) => {
+          console.warn("[raid-status] local-refresh editReply failed:", err?.message || err);
+        });
+        // Ephemeral toast so the click feels acknowledged - the embed
+        // re-render alone is silent if nothing visibly changed (e.g.
+        // user clicked refresh before any sync happened).
+        await component.followUp({
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "success",
+              title: t("raid-status.sync.localRefreshSuccessTitle", lang),
+              description: t("raid-status.sync.localRefreshSuccessDescription", lang),
             }),
           ],
           flags: MessageFlags.Ephemeral,
