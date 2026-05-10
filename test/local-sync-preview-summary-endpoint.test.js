@@ -98,6 +98,54 @@ test("preview summary calculates pending gates in the post-sync mode", () => {
   ]);
 });
 
+test("preview summary expands cumulative gates when only later gate is logged (LOA Logs enabled mid-raid)", () => {
+  // Real-world scenario: user clears G1 with LOA Logs disabled, then
+  // enables Logs and clears G2. encounters.db only has the G2 row.
+  // Cumulative-gate semantics rescues this: a G2 clear is in-game proof
+  // G1 was cleared too (LA gates are strictly sequential per week), so
+  // the projection marks both gates cleared even though only G2 is in
+  // the delta stream.
+  const buckets = bucketizeLocalSyncDeltas([
+    {
+      boss: "Death Incarnate Kazeros", // G2 Hard
+      difficulty: "Hard",
+      cleared: true,
+      charName: "Aki",
+      lastClearMs: 12345,
+    },
+  ]);
+
+  const summary = projectSummary(makeAccounts({
+    name: "Aki",
+    class: "Artist",
+    itemLevel: 1750,
+    isGoldEarner: true,
+    assignedRaids: {
+      kazeros: {
+        G1: { difficulty: "Hard", completedDate: null },
+        G2: { difficulty: "Hard", completedDate: null },
+      },
+    },
+  }), buckets);
+
+  // Pre-sync: nothing cleared. Post-sync: kazeros fully cleared via the
+  // G2-implies-G1 cumulative rule.
+  assert.deepEqual(summary.completion, {
+    totalRaids: 1,
+    cleared: 0,
+    projected: 1,
+    percent: 0,
+    projectedPercent: 100,
+  });
+  // Gold credits BOTH gates (Kazeros Hard: G1=17000 + G2=35000) even
+  // though only G2 was in the file - this is what we want, otherwise
+  // mid-raid log-enable users get cheated out of G1 gold.
+  assert.equal(summary.goldDelta.total, 52000);
+  // Done char drops out of the pending list - charsAfterSync only
+  // surfaces chars with at least one non-done raid post-sync.
+  assert.deepEqual(summary.charsAfterSync, []);
+});
+
 test("preview summary marks fully-cleared raid as done", () => {
   const summary = projectSummary(makeAccounts({
     name: "Aki",
