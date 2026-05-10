@@ -238,13 +238,34 @@ function renderPreviewStats(summary) {
     }
     html += `</details>`;
   }
-  // Per-char gold breakdown only when there's anything to break down.
+  // Per-char gold breakdown - same per-roster sectioning + class icon
+  // treatment as the pending list. Gold value lives on the right as a
+  // standalone pill so the eye scans "char · roster" → "gold" cleanly.
   if (goldByChar.length > 0) {
-    html += `<details><summary>${escapeHtml(t("preview.statsGoldByCharSummary"))}</summary><ul>`;
+    const goldByRoster = new Map();
     for (const c of goldByChar) {
-      html += `<li><strong>${escapeHtml(c.charName || "")}</strong>${c.className ? ` <span class="stat-label">(${escapeHtml(c.className)})</span>` : ""} · ${escapeHtml(formatGold(c.gold))}</li>`;
+      const key = c.accountName || "";
+      if (!goldByRoster.has(key)) goldByRoster.set(key, []);
+      goldByRoster.get(key).push(c);
     }
-    html += `</ul></details>`;
+    html += `<details><summary>${escapeHtml(t("preview.statsGoldByCharSummary"))}</summary>`;
+    for (const [accountName, charsInRoster] of goldByRoster) {
+      if (accountName) {
+        html += `<div class="char-pending-roster-header">📁 <strong>${escapeHtml(accountName)}</strong></div>`;
+      }
+      html += `<ul class="char-pending-list">`;
+      for (const c of charsInRoster) {
+        const iconName = CLASS_LABEL_TO_ICON[c.className] || "";
+        const classIcon = iconName
+          ? `<img class="class-icon" src="/sync/class-icons/${iconName}.png" alt="${escapeHtml(c.className)}" title="${escapeHtml(c.className)}" loading="lazy">`
+          : "";
+        const charLabel = `${classIcon}<strong>${escapeHtml(c.charName || "")}</strong>${c.itemLevel ? ` <span class="stat-label">${c.itemLevel}</span>` : ""}`;
+        const goldPill = `<span class="gold-pill">💰 ${escapeHtml(formatGold(c.gold))}</span>`;
+        html += `<li class="char-pending-row"><span class="char-pending-head">${charLabel}</span><span class="raid-pill-row">${goldPill}</span></li>`;
+      }
+      html += `</ul>`;
+    }
+    html += `</details>`;
   }
   panel.innerHTML = html;
   panel.hidden = false;

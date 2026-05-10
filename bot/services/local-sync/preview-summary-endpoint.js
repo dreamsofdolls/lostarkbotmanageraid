@@ -131,8 +131,10 @@ function projectSummary(accounts, deltaBuckets) {
       }
       if (charGold > 0) {
         goldByChar.set(char.name, {
+          accountName: account?.accountName || "",
           charName: char.name || "",
           className: char.class || "",
+          itemLevel: Number(char.itemLevel) || 0,
           gold: charGold,
         });
         goldTotal += charGold;
