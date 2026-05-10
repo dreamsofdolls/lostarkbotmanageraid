@@ -2,36 +2,11 @@
 
 const { verifyToken, isCurrentStoredToken, bucketizeLocalSyncDeltas } = require("./index");
 const { RAID_REQUIREMENTS, getGatesForRaid, getGoldForGate } = require("../../models/Raid");
-const { normalizeName, toModeKey } = require("../../utils/raid/common/shared");
+const { normalizeName } = require("../../utils/raid/common/shared");
+const { getStatusRaidsForCharacter } = require("../../utils/raid/common/character");
 
 function makeGateKey(raidKey, modeKey, gate) {
   return `${raidKey}::${modeKey}::${gate}`;
-}
-
-function resolveModeKey(raidKey, difficultyLabel) {
-  const raw = String(difficultyLabel || "").trim();
-  if (!raw) return null;
-  const modeKey = toModeKey(raw);
-  return RAID_REQUIREMENTS[raidKey]?.modes?.[modeKey] ? modeKey : null;
-}
-
-function deriveAssignedRaidMode(raidKey, raidEntry) {
-  const counts = new Map();
-  for (const gate of getGatesForRaid(raidKey)) {
-    const modeKey = resolveModeKey(raidKey, raidEntry?.[gate]?.difficulty);
-    if (!modeKey) continue;
-    counts.set(modeKey, (counts.get(modeKey) || 0) + 1);
-  }
-
-  let bestModeKey = null;
-  let bestCount = 0;
-  for (const [modeKey, count] of counts.entries()) {
-    if (count > bestCount) {
-      bestModeKey = modeKey;
-      bestCount = count;
-    }
-  }
-  return bestModeKey;
 }
 
 function cloneRaidStates(raidStates) {
@@ -78,25 +53,12 @@ function projectSummary(accounts, deltaBuckets) {
       const dbClearedGates = new Map();
       const preRaidStates = new Map();
 
-      for (const raidKey of Object.keys(RAID_REQUIREMENTS)) {
-        const raidEntry = char.assignedRaids?.[raidKey];
-        if (!raidEntry || typeof raidEntry !== "object") continue;
-        const modeKey = deriveAssignedRaidMode(raidKey, raidEntry);
-        if (!modeKey) continue;
-
-        const state = { modeKey, cleared: new Set() };
-        for (const gate of getGatesForRaid(raidKey)) {
-          const gateEntry = raidEntry[gate];
-          const completedDate = Number(gateEntry?.completedDate) || 0;
-          if (completedDate <= 0) continue;
-
-          const gateModeKey = resolveModeKey(raidKey, gateEntry?.difficulty) || modeKey;
-          if (gateModeKey !== modeKey) continue;
-
-          state.cleared.add(gate);
-          dbClearedGates.set(makeGateKey(raidKey, modeKey, gate), true);
+      for (const raid of getStatusRaidsForCharacter(char)) {
+        const state = { modeKey: raid.modeKey, cleared: new Set(raid.completedGateKeys || []) };
+        for (const gate of state.cleared) {
+          dbClearedGates.set(makeGateKey(raid.raidKey, raid.modeKey, gate), true);
         }
-        preRaidStates.set(raidKey, state);
+        preRaidStates.set(raid.raidKey, state);
       }
 
       // Simulate the post-sync raid state. Same-mode deltas add gates;
