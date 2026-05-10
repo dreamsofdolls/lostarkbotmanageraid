@@ -4,6 +4,23 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-10 (Web companion week range, token shrink-on-sync, doc sync)
+
+### Added
+- **Week range subline** under the preview h2: shows `DD/MM → DD/MM` of the current LA raid cycle (Wed 10:00 UTC anchor). `getCurrentRaidWeek()` returns inclusive Wed→Tue range, formatted via `Intl.DateTimeFormat` so each locale renders its own date convention. Reset moment is locale-natural (VI "Thứ Tư 17h giờ VN", JP "毎週水曜 19時 日本時間", EN "Wed 10:00 UTC").
+- **Real-time token countdown** in auth status (1Hz `setInterval`). Refactored auth render into `authState` + `renderAuthStatus()`; flips from "~N min" to "~N sec" under 60s so the post-sync shrink shows a live ticker.
+- **Token TTL shrink on successful sync.** `bot/services/local-sync/sync-endpoint.js` sets `lastLocalSyncTokenExpAt = now+60s` when `applied.length > 0` and returns `newExpSec` in the response. Web mirrors it into `authState.expSec` so the countdown jumps immediately. Nothing-to-sync (all skipped/rejected) does NOT shrink so users can retry with a different file.
+
+### Changed
+- **Tightened `.char-raid-row` whitespace** (gap 10→6, modes 16→10, mode-block 6→4, raid-name 70→60px, mode-label 80→64px) - frees ~38px horizontally so future G3 raids fit without truncating gate badges. Mode labels keep full content (Normal/Hard/Nightmare) - this is a pure CSS tightening, no abbreviation.
+- **JP "Web companion" → "ウェブコンパニオン"** in subtitle. VI/EN keep the English term (LA community familiarity).
+
+### Docs (raid-help + welcome embed + README synced for prior local-sync + reset features)
+- `bot/handlers/raid-help.js` SECTION_META: added `action:local-on`, `action:local-off`, `action:reset` to the raid-auto-manage option list. vi/jp/en got 3 new `optionDescriptions` + notes rewritten (8 → 11 bullets) covering bible vs local-sync mutex, reset 2-step confirm, token shrink-on-success.
+- Welcome embed `autoManageValue` (vi/jp/en): 2 lines → 3 lines splitting bible (Public Log) vs local-sync (private + manual file drop) and mentioning `action:reset` for clean re-sync.
+- README.md Features bullet + commands table row reflect the 7-action surface (on/off/sync/status/local-on/local-off/reset) with mutex + reset confirm callouts.
+- 391/391 tests pass.
+
 ## 2026-05-10 (Web companion i18n - vi/jp/en across all surfaces)
 
 ### Added (web companion respects user's /raid-language preference)

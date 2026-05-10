@@ -53,6 +53,8 @@ header h1 {
 }
 
 .hint { color: var(--text-dim); font-size: 13px; margin: 4px 0; }
+.week-range { margin: -2px 0 10px; font-size: 12px; }
+.week-range strong { color: var(--accent); font-weight: 600; }
 
 code {
   background: #14171a;
@@ -299,11 +301,11 @@ table th { color: var(--text-dim); font-weight: 600; }
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   padding: 4px 0;
 }
 .char-raid-name {
-  flex: 0 0 70px;
+  flex: 0 0 60px;
   font-size: 12px;
   color: var(--text-dim);
   font-weight: 600;
@@ -311,12 +313,12 @@ table th { color: var(--text-dim); font-weight: 600; }
 .char-raid-modes {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 10px;
 }
 .char-mode-block {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 .char-mode-label {
   font-size: 11px;
@@ -324,11 +326,10 @@ table th { color: var(--text-dim); font-weight: 600; }
   font-weight: 600;
   white-space: nowrap;
   /* Fixed-width column so gate badges line up vertically across modes
-     of the same raid (Hard vs Normal vs Nightmare have different char
-     counts; without a min-width the G1/G2 badges drift horizontally
-     between rows). 80px fits "🌑 Nightmare" comfortably and right-
-     pads the shorter "⚔️ Hard" label. */
-  min-width: 80px;
+     of the same raid. Tightened from 80px to give G3 future-room while
+     still fitting "🌑 Nightmare" (will wrap on extreme JP-wide variants
+     but Normal/Hard fit cleanly). */
+  min-width: 64px;
 }
 
 .raid-card {

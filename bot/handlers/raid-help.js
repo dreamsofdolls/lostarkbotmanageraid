@@ -107,6 +107,9 @@ const SECTION_META = {
       { name: "action:off", required: false },
       { name: "action:sync", required: false },
       { name: "action:status", required: false },
+      { name: "action:local-on", required: false },
+      { name: "action:local-off", required: false },
+      { name: "action:reset", required: false },
     ],
   },
   "raid-announce": {
