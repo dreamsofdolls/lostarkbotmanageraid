@@ -43,7 +43,7 @@ test("preview summary reads assigned raid difficulty from gate entries", () => {
       className: "Artist",
       itemLevel: 1750,
       raids: [
-        { raidKey: "kazeros", modeKey: "hard", status: "partial" },
+        { raidKey: "kazeros", modeKey: "hard", status: "partial", incoming: false },
       ],
     },
   ]);
@@ -92,7 +92,7 @@ test("preview summary calculates pending gates in the post-sync mode", () => {
       className: "Artist",
       itemLevel: 1750,
       raids: [
-        { raidKey: "serca", modeKey: "nightmare", status: "partial" },
+        { raidKey: "serca", modeKey: "nightmare", status: "partial", incoming: true },
       ],
     },
   ]);
