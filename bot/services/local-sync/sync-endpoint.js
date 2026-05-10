@@ -197,7 +197,7 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId }) {
       const shrunkAt = Math.floor(Date.now() / 1000) + 60;
       try {
         await User.updateOne(
-          { discordId },
+          { discordId, lastLocalSyncToken: token },
           { $set: { lastLocalSyncTokenExpAt: shrunkAt } }
         );
         newExpSec = shrunkAt;

@@ -132,3 +132,69 @@ test("raid-sync endpoint returns 409 when reset disables local-sync during apply
   assert.equal(res.json().ok, false);
   assert.equal(res.json().rejected[0].reason, "local_sync_disabled");
 });
+
+test("raid-sync endpoint only shrinks the token that performed the apply", async () => {
+  const token = mintToken("u1");
+  const updateCalls = [];
+  const User = {
+    findOne() {
+      return {
+        select() {
+          return {
+            lean: async () => ({
+              discordId: "u1",
+              localSyncEnabled: true,
+              lastLocalSyncToken: token,
+              lastLocalSyncTokenExpAt: 9999999999,
+              accounts: [
+                {
+                  accountName: "Roster",
+                  characters: [
+                    { name: "Aki", class: "Artist", itemLevel: 1750, assignedRaids: {} },
+                  ],
+                },
+              ],
+            }),
+          };
+        },
+      };
+    },
+    async findOneAndUpdate() {
+      return { discordId: "u1", localSyncEnabled: true };
+    },
+    async updateOne(filter, update) {
+      updateCalls.push({ filter, update });
+      return { modifiedCount: 1 };
+    },
+  };
+  const handler = createRaidSyncEndpoint({
+    User,
+    applyRaidSetForDiscordId: async () => ({ matched: true, updated: true, displayName: "Aki" }),
+  });
+  const res = makeRes();
+
+  await handler(
+    makeReq({
+      token,
+      body: {
+        deltas: [
+          {
+            boss: "Brelshaza, Ember in the Ashes",
+            difficulty: "Normal",
+            cleared: true,
+            charName: "Aki",
+            lastClearMs: Date.now(),
+          },
+        ],
+      },
+    }),
+    res,
+    { query: {} }
+  );
+
+  assert.equal(res.status, 200);
+  assert.equal(updateCalls.length, 1);
+  assert.deepEqual(updateCalls[0].filter, { discordId: "u1", lastLocalSyncToken: token });
+  assert.equal(typeof updateCalls[0].update.$set.lastLocalSyncTokenExpAt, "number");
+  assert.equal(res.json().newExpSec, updateCalls[0].update.$set.lastLocalSyncTokenExpAt);
+});
