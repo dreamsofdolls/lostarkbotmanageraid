@@ -94,6 +94,12 @@ header h1 {
 .raid-pill--pending { background: #2a2e34; border-color: #3a3e44; color: var(--text-dim); }
 .raid-pill-mode { color: inherit; opacity: 0.75; font-size: 10px; }
 .gold-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; font-size: 11px; background: #2e2918; border: 1px solid #6b5a2c; color: #f0c870; font-weight: 600; }
+.raid-pill--rejected { background: #2e1d1d; border-color: #6b3535; color: #e89090; }
+.sync-result-summary { padding: 8px 12px; background: #1d2024; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 10px; font-size: 13px; }
+.sync-summary-line strong { color: var(--accent); }
+.sync-result-section { margin-top: 12px; }
+.sync-result-section-title { margin: 0 0 6px; font-size: 12px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.sync-result-unmapped { font-size: 12px; }
 
 code {
   background: #14171a;
