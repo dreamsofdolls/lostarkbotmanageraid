@@ -47,6 +47,42 @@ const CLASS_NAMES = {
   alchemist:          'Wildsoul',
 };
 
+// lostark.bible numeric class IDs seen in LOA Logs `encounter_preview.players`
+// payloads. Values point at the canonical bible class ID, which also matches
+// `assets/class-icons/<id>.png`.
+const CLASS_ID_TO_BIBLE_ID = {
+  102: 'berserker',
+  103: 'destroyer',
+  104: 'warlord',
+  105: 'holyknight',
+  112: 'berserker_female',
+  113: 'holyknight_female',
+  202: 'arcana',
+  203: 'summoner',
+  204: 'bard',
+  205: 'elemental_master',
+  302: 'battle_master',
+  303: 'infighter',
+  304: 'soulmaster',
+  305: 'lance_master',
+  312: 'battle_master_male',
+  313: 'infighter_male',
+  402: 'blade',
+  403: 'demonic',
+  404: 'reaper',
+  405: 'soul_eater',
+  502: 'hawk_eye',
+  503: 'devil_hunter',
+  504: 'blaster',
+  505: 'scouter',
+  512: 'devil_hunter_female',
+  602: 'yinyangshi',
+  603: 'weather_artist',
+  604: 'alchemist',
+  701: 'dragon_knight',
+  702: 'dragon_knight',
+};
+
 /**
  * Resolve a lostark.bible class ID to a human-readable display name.
  * Falls back to a title-cased version of the ID if not found.
@@ -56,6 +92,16 @@ const CLASS_NAMES = {
 function getClassName(clsId) {
   if (!clsId) return '';
   return CLASS_NAMES[clsId] ?? clsId.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function getClassInfoByNumericId(classId) {
+  const bibleId = CLASS_ID_TO_BIBLE_ID[String(classId)] || '';
+  if (!bibleId) return { classId: String(classId || ''), bibleId: '', className: '' };
+  return {
+    classId: String(classId),
+    bibleId,
+    className: getClassName(bibleId),
+  };
 }
 
 /**
@@ -148,7 +194,9 @@ function getClassEmoji(className) {
 
 module.exports = {
   CLASS_NAMES,
+  CLASS_ID_TO_BIBLE_ID,
   getClassName,
+  getClassInfoByNumericId,
   SUPPORT_CLASS_NAMES,
   isSupportClass,
   CLASS_EMOJI_MAP,

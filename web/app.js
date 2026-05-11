@@ -52,7 +52,14 @@ let previewUtilsPromise = null;
 
 function loadPreviewUtils() {
   if (!previewUtilsPromise) {
-    previewUtilsPromise = import("/sync/preview-utils.js");
+    previewUtilsPromise = import("/sync/preview-utils.js").then(async (mod) => {
+      await mod.loadCatalog();
+      window.__artistGetClassIconForLabel = mod.getClassIconForLabel;
+      return mod;
+    }).catch((err) => {
+      previewUtilsPromise = null;
+      throw err;
+    });
   }
   return previewUtilsPromise;
 }
@@ -229,10 +236,7 @@ function renderPreviewStats(summary) {
       }
       html += `<ul class="char-pending-list">`;
       for (const c of charsInRoster) {
-        const iconName = CLASS_LABEL_TO_ICON[c.className] || "";
-        const classIcon = iconName
-          ? `<img class="class-icon" src="/sync/class-icons/${iconName}.png" alt="${escapeHtml(c.className)}" title="${escapeHtml(c.className)}" loading="lazy">`
-          : "";
+        const classIcon = renderClassIcon(c.className);
         const charLabel = `${classIcon}<strong>${escapeHtml(c.charName || "")}</strong>${c.itemLevel ? ` <span class="stat-label">${c.itemLevel}</span>` : ""}`;
         const pillsHtml = (c.raids || []).map((r) => {
           const icon = r.status === "done" ? "🟢" : r.status === "partial" ? "🟡" : "⚪";
@@ -269,10 +273,7 @@ function renderPreviewStats(summary) {
       }
       html += `<ul class="char-pending-list">`;
       for (const c of charsInRoster) {
-        const iconName = CLASS_LABEL_TO_ICON[c.className] || "";
-        const classIcon = iconName
-          ? `<img class="class-icon" src="/sync/class-icons/${iconName}.png" alt="${escapeHtml(c.className)}" title="${escapeHtml(c.className)}" loading="lazy">`
-          : "";
+        const classIcon = renderClassIcon(c.className);
         const charLabel = `${classIcon}<strong>${escapeHtml(c.charName || "")}</strong>${c.itemLevel ? ` <span class="stat-label">${c.itemLevel}</span>` : ""}`;
         const goldPill = `<span class="gold-pill">💰 ${escapeHtml(formatGold(c.gold))}</span>`;
         html += `<li class="char-pending-row"><span class="char-pending-head">${charLabel}</span><span class="raid-pill-row">${goldPill}</span></li>`;
@@ -976,28 +977,17 @@ function formatCharRowHead(character) {
   // /sync/class-icons/<name>.png convention. Class name match is text-
   // based since the roster character.class field is the human label
   // (e.g. "Berserker") not the LOA Logs class_id integer.
-  const iconName = CLASS_LABEL_TO_ICON[cls] || "";
-  const icon = iconName
-    ? `<img class="class-icon" src="/sync/class-icons/${iconName}.png" alt="${escapeHtml(cls)}" title="${escapeHtml(cls)}" loading="lazy">`
-    : "";
+  const icon = renderClassIcon(cls);
   return `<span class="char-cell">${icon}<strong>${escapeHtml(character.name)}</strong> <span class="hint">· ${character.itemLevel}</span></span>`;
 }
 
-// Reverse map: roster character.class is human-readable ("Berserker") but
-// our class-icon files are slugged ("berserker"). Keep this small + in
-// sync with preview-utils.js CLASS_ICON_BY_ID values (same slug set).
-const CLASS_LABEL_TO_ICON = {
-  Berserker: "berserker", Destroyer: "destroyer", Gunlancer: "warlord", Paladin: "holyknight",
-  Slayer: "berserker_female", Valkyrie: "holyknight_female",
-  Arcanist: "arcana", Summoner: "summoner", Bard: "bard", Sorceress: "elemental_master",
-  Wardancer: "battle_master", Scrapper: "infighter", Soulfist: "soulmaster", Glaivier: "lance_master",
-  Striker: "battle_master_male", Breaker: "infighter_male",
-  Deathblade: "blade", Shadowhunter: "demonic", Reaper: "reaper", Souleater: "soul_eater",
-  Sharpshooter: "hawk_eye", Deadeye: "devil_hunter", Artillerist: "blaster", Machinist: "scouter",
-  Gunslinger: "devil_hunter_female",
-  Artist: "yinyangshi", Aeromancer: "weather_artist", Wildsoul: "alchemist",
-  "Guardian Knight": "dragon_knight",
-};
+function renderClassIcon(className) {
+  const resolveIcon = window.__artistGetClassIconForLabel;
+  const iconName = typeof resolveIcon === "function" ? resolveIcon(className) : "";
+  return iconName
+    ? `<img class="class-icon" src="/sync/class-icons/${iconName}.png" alt="${escapeHtml(className)}" title="${escapeHtml(className)}" loading="lazy">`
+    : "";
+}
 
 function renderGateBadge(gate, state) {
   // 5-state legend:
@@ -1190,10 +1180,7 @@ syncBtn.addEventListener("click", async () => {
         }
         html += `<ul class="char-pending-list">`;
         for (const c of charsMap.values()) {
-          const iconName = CLASS_LABEL_TO_ICON[c.className] || "";
-          const classIcon = iconName
-            ? `<img class="class-icon" src="/sync/class-icons/${iconName}.png" alt="${escapeHtml(c.className)}" title="${escapeHtml(c.className)}" loading="lazy">`
-            : "";
+          const classIcon = renderClassIcon(c.className);
           const charLabel = `${classIcon}<strong>${escapeHtml(c.charName)}</strong>${c.itemLevel ? ` <span class="stat-label">${c.itemLevel}</span>` : ""}`;
           const pillsHtml = c.applied.map((x) => {
             const raidLabel = getRaidLabel(x.raidKey);
@@ -1212,10 +1199,7 @@ syncBtn.addEventListener("click", async () => {
       html += `<div class="sync-result-section"><div class="sync-result-section-title">${escapeHtml(t("sync.rejectedLabel"))}</div><ul class="char-pending-list">`;
       for (const x of data.rejected) {
         const info = charLookup.get(String(x.charName || "").toLowerCase()) || {};
-        const iconName = CLASS_LABEL_TO_ICON[info.className] || "";
-        const classIcon = iconName
-          ? `<img class="class-icon" src="/sync/class-icons/${iconName}.png" alt="${escapeHtml(info.className)}" title="${escapeHtml(info.className)}" loading="lazy">`
-          : "";
+        const classIcon = renderClassIcon(info.className);
         const charLabel = `${classIcon}<strong>${escapeHtml(x.charName)}</strong>`;
         const reasonText = x.error ? `${x.reason} (${x.error})` : x.reason;
         const pill = `<span class="raid-pill raid-pill--rejected">⛔ ${escapeHtml(reasonText)}</span>`;

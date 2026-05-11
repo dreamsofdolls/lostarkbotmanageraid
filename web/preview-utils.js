@@ -1,139 +1,95 @@
-// Client-side mirror of the bot's boss->raid mapping + bucketize logic.
-// Web companion uses these to render the "ready to sync" preview in the
-// same shape the server's apply.js will actually persist - so the user
-// sees exactly what will land in /raid-status, not raw encounters.db rows.
-//
-// Stays in sync with bot/models/Raid.js BOSS_TO_RAID_GATE +
-// bot/services/local-sync/apply.js bucketize. When LOA Logs ships a new
-// raid (or a new boss-name variant for an existing raid), update BOTH
-// places. The server is authoritative - web previews can be wrong without
-// causing data corruption (server re-maps + filters), but visually
-// they should match.
+// Client-side local-sync preview helpers.
+// The bot exports raid/class/difficulty metadata through
+// /api/local-sync/catalog; this file consumes that catalog so the web preview
+// and server apply path use one source of truth.
 
 "use strict";
 
-// Boss display name (current_boss in encounters.db) -> { raidKey, gate }.
-// Mirrors bot/models/Raid.js BOSS_TO_RAID_GATE. Multi-difficulty bosses
-// (e.g. Kazeros G2 has two boss names depending on Normal vs Hard/Nightmare)
-// list one entry per name; difficulty resolution comes from the
-// `difficulty` column.
-export const BOSS_TO_RAID_GATE = new Map([
-  // Armoche (Act 4)
-  ["Brelshaza, Ember in the Ashes", { raidKey: "armoche", gate: "G1" }],
-  ["Armoche, Sentinel of the Abyss", { raidKey: "armoche", gate: "G2" }],
+export let BOSS_TO_RAID_GATE = new Map();
+export let RAID_LABELS = {};
+export let MODE_LABELS = {};
 
-  // Kazeros - G2 has two boss names depending on difficulty
-  ["Abyss Lord Kazeros", { raidKey: "kazeros", gate: "G1" }],
-  ["Archdemon Kazeros", { raidKey: "kazeros", gate: "G2" }],
-  ["Death Incarnate Kazeros", { raidKey: "kazeros", gate: "G2" }],
+let RAID_GATES = {};
+let CLASS_BY_ID = {};
+let CLASS_ICON_BY_LABEL = {};
+let DIFFICULTY_TO_MODE_KEY = {};
+let RAID_MODE_ILVL = {};
+let RAID_ORDER = [];
+let MODE_ORDER = [];
+let catalogLoaded = false;
 
-  // Serca
-  ["Witch of Agony, Serca", { raidKey: "serca", gate: "G1" }],
-  ["Corvus Tul Rak", { raidKey: "serca", gate: "G2" }],
-]);
+function normalizeClassLabel(value) {
+  return String(value || "").trim().toLowerCase();
+}
 
-// Raid + mode display labels. Match bot/models/Raid.js RAID_REQUIREMENTS
-// label fields so /raid-status raid cards and the web preview read with
-// the same vocabulary.
-export const RAID_LABELS = {
-  armoche: "Act 4",
-  kazeros: "Kazeros",
-  serca: "Serca",
-};
+function buildClassIconByLabel(classesById) {
+  const byLabel = {};
+  for (const info of Object.values(classesById || {})) {
+    const label = normalizeClassLabel(info?.label);
+    if (label && info?.icon) {
+      byLabel[label] = info.icon;
+      byLabel[label.replace(/\s+/g, "")] = info.icon;
+    }
+  }
+  return byLabel;
+}
 
-export const MODE_LABELS = {
-  normal: "Normal",
-  hard: "Hard",
-  nightmare: "Nightmare",
-};
+export function setCatalog(rawCatalog = {}) {
+  const raids = rawCatalog.raids || {};
+  const raidLabels = {};
+  const modeLabels = {};
+  const raidGates = {};
+  const raidModeIlvl = {};
 
-// Each raid's gate ordering. Used for cumulative-gate expansion (G2
-// cleared implies G1 cleared per Lost Ark sequential progression).
-const RAID_GATES = {
-  armoche: ["G1", "G2"],
-  kazeros: ["G1", "G2"],
-  serca: ["G1", "G2"],
-};
+  for (const [raidKey, raid] of Object.entries(raids)) {
+    raidLabels[raidKey] = raid?.label || raidKey;
+    raidGates[raidKey] = Array.isArray(raid?.gates) && raid.gates.length > 0
+      ? [...raid.gates]
+      : ["G1", "G2"];
+    raidModeIlvl[raidKey] = {};
+    for (const [modeKey, mode] of Object.entries(raid?.modes || {})) {
+      modeLabels[modeKey] = mode?.label || modeKey;
+      raidModeIlvl[raidKey][modeKey] = Number(mode?.minItemLevel) || 0;
+    }
+  }
 
-// LOA Logs stores numeric class IDs in encounter_preview.players as
-// "classId:name". Map those IDs to the local PNG assets used by the bot's
-// Discord emoji bootstrap.
-const CLASS_ICON_BY_ID = {
-  102: "berserker",
-  103: "destroyer",
-  104: "warlord",
-  105: "holyknight",
-  112: "berserker_female",
-  113: "holyknight_female",
-  202: "arcana",
-  203: "summoner",
-  204: "bard",
-  205: "elemental_master",
-  302: "battle_master",
-  303: "infighter",
-  304: "soulmaster",
-  305: "lance_master",
-  312: "battle_master_male",
-  313: "infighter_male",
-  402: "blade",
-  403: "demonic",
-  404: "reaper",
-  405: "soul_eater",
-  502: "hawk_eye",
-  503: "devil_hunter",
-  504: "blaster",
-  505: "scouter",
-  512: "devil_hunter_female",
-  602: "yinyangshi",
-  603: "weather_artist",
-  604: "alchemist",
-  701: "dragon_knight",
-  702: "dragon_knight",
-};
+  BOSS_TO_RAID_GATE = new Map((rawCatalog.bossToRaidGate || []).map(([boss, target]) => [
+    boss,
+    { raidKey: target?.raidKey, gate: target?.gate },
+  ]));
+  RAID_LABELS = raidLabels;
+  MODE_LABELS = modeLabels;
+  RAID_GATES = raidGates;
+  RAID_MODE_ILVL = raidModeIlvl;
+  RAID_ORDER = Array.isArray(rawCatalog.raidOrder) && rawCatalog.raidOrder.length > 0
+    ? [...rawCatalog.raidOrder]
+    : Object.keys(raids);
+  MODE_ORDER = Array.isArray(rawCatalog.modeOrder) && rawCatalog.modeOrder.length > 0
+    ? [...rawCatalog.modeOrder]
+    : Object.keys(modeLabels);
+  CLASS_BY_ID = rawCatalog.classesById || {};
+  CLASS_ICON_BY_LABEL = buildClassIconByLabel(CLASS_BY_ID);
+  DIFFICULTY_TO_MODE_KEY = rawCatalog.difficultyToModeKey || {};
+  catalogLoaded = true;
+  return rawCatalog;
+}
 
-const CLASS_LABEL_BY_ID = {
-  102: "Berserker",
-  103: "Destroyer",
-  104: "Gunlancer",
-  105: "Paladin",
-  112: "Slayer",
-  113: "Valkyrie",
-  202: "Arcanist",
-  203: "Summoner",
-  204: "Bard",
-  205: "Sorceress",
-  302: "Wardancer",
-  303: "Scrapper",
-  304: "Soulfist",
-  305: "Glaivier",
-  312: "Striker",
-  313: "Breaker",
-  402: "Deathblade",
-  403: "Shadowhunter",
-  404: "Reaper",
-  405: "Souleater",
-  502: "Sharpshooter",
-  503: "Deadeye",
-  504: "Artillerist",
-  505: "Machinist",
-  512: "Gunslinger",
-  602: "Artist",
-  603: "Aeromancer",
-  604: "Wildsoul",
-  701: "Guardian Knight",
-  702: "Guardian Knight",
-};
+export async function loadCatalog(fetcher = globalThis.fetch) {
+  if (catalogLoaded) return;
+  if (typeof fetcher !== "function") {
+    throw new Error("local-sync catalog fetch is unavailable");
+  }
+  const resp = await fetcher("/api/local-sync/catalog");
+  if (!resp?.ok) {
+    throw new Error(`local-sync catalog failed: HTTP ${resp?.status || 0}`);
+  }
+  const data = await resp.json();
+  setCatalog(data?.catalog || data);
+}
 
-// Difficulty string -> internal modeKey. Permissive on input because
-// LOA Logs has shifted strings between versions (Trial -> Inferno ->
-// Nightmare). Mirror of bot/services/local-sync/apply.js.
-const DIFFICULTY_TO_MODE_KEY = {
-  normal: "normal",
-  hard: "hard",
-  nightmare: "nightmare",
-  trial: "nightmare",
-  inferno: "nightmare",
-};
+export function getClassIconForLabel(classLabel) {
+  return CLASS_ICON_BY_LABEL[normalizeClassLabel(classLabel)] || "";
+}
 
 export function normalizeDifficulty(raw) {
   const text = String(raw || "").trim().toLowerCase();
@@ -164,11 +120,12 @@ export function getClassInfoForChar(playersRaw, charName) {
     if (!match) continue;
     const [, classId, name] = match;
     if (normalizeCharName(name) !== target) continue;
-    const iconName = CLASS_ICON_BY_ID[classId];
-    if (!iconName) return { classId, className: CLASS_LABEL_BY_ID[classId] || "" };
+    const classInfo = CLASS_BY_ID[classId];
+    const iconName = classInfo?.icon || "";
+    if (!iconName) return { classId, className: classInfo?.label || "" };
     return {
       classId,
-      className: CLASS_LABEL_BY_ID[classId] || iconName,
+      className: classInfo?.label || iconName,
       classIcon: `/sync/class-icons/${iconName}.png`,
     };
   }
@@ -257,16 +214,11 @@ export function groupByRaid(buckets) {
     }
     groups.get(key).buckets.push(b);
   }
-  // Stable display order: armoche -> kazeros -> serca, normal ->
-  // hard -> nightmare. Same vocabulary as RAID_LABELS so the preview
-  // mirrors /raid-status raid card ordering.
-  const RAID_ORDER = ["armoche", "kazeros", "serca"];
-  const MODE_ORDER = ["normal", "hard", "nightmare"];
   const arr = [...groups.values()];
   arr.sort((a, b) => {
-    const r = RAID_ORDER.indexOf(a.raidKey) - RAID_ORDER.indexOf(b.raidKey);
+    const r = orderIndex(RAID_ORDER, a.raidKey) - orderIndex(RAID_ORDER, b.raidKey);
     if (r !== 0) return r;
-    return MODE_ORDER.indexOf(a.modeKey) - MODE_ORDER.indexOf(b.modeKey);
+    return orderIndex(MODE_ORDER, a.modeKey) - orderIndex(MODE_ORDER, b.modeKey);
   });
   for (const g of arr) {
     g.buckets.sort((a, b) => b.lastClearMs - a.lastClearMs);
@@ -296,19 +248,12 @@ export function findUnmappedBosses(rows) {
 
 // ----- Roster diff (Phase 7: roster-grouped preview) -----
 
-// iLvl gates per (raid, mode). Mirror of bot/models/Raid.js
-// RAID_REQUIREMENTS minItemLevel - kept inline so the diff renderer
-// can decide which raid/mode cells a char is eligible to show
-// without a server round-trip.
-const RAID_MODE_ILVL = {
-  armoche: { normal: 1700, hard: 1720 },
-  kazeros: { normal: 1710, hard: 1730 },
-  serca: { normal: 1710, hard: 1730, nightmare: 1740 },
-};
-
-// Display order: raid then mode.
-const RAID_ORDER = ["armoche", "kazeros", "serca"];
-const MODE_ORDER = ["normal", "hard", "nightmare"];
+// Roster diff uses the catalog's iLvl gates and display order, mirroring the
+// server raid metadata without duplicating it here.
+function orderIndex(order, key) {
+  const idx = order.indexOf(key);
+  return idx >= 0 ? idx : Number.MAX_SAFE_INTEGER;
+}
 
 export function currentWeeklyResetStartMs(now = new Date()) {
   const cursor = new Date(now.getTime());
