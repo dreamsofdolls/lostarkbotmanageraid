@@ -1,26 +1,32 @@
 "use strict";
 
 const { t, getGuildLanguage, getUserLanguage } = require("../i18n");
-const { TRANSLATIONS, DEFAULT_LANGUAGE } = require("../../locales");
-
-// Helper - read an array-shaped locale node (e.g.
-// `announcements.cleanup-volume.empty`). Falls back to the VI tree when the
-// target locale is missing the key OR doesn't return an array, then to an
-// empty array as the absolute last resort. Keeps the variant-pick path
-// safe even if a locale pack adds the namespace incomplete.
-function lookupArray(lang, dottedKey) {
-  const tryPath = (code) => {
-    const tree = TRANSLATIONS[code];
-    if (!tree) return null;
-    let cursor = tree;
-    for (const seg of dottedKey.split(".")) {
-      if (cursor == null || typeof cursor !== "object") return null;
-      cursor = cursor[seg];
-    }
-    return Array.isArray(cursor) ? cursor : null;
-  };
-  return tryPath(lang) || tryPath(DEFAULT_LANGUAGE) || [];
-}
+const { DEFAULT_LANGUAGE } = require("../../locales");
+const { lookupArray } = require("../../utils/raid/schedule/locale-arrays");
+const {
+  ARTIST_QUIET_START_HOUR_VN,
+  ARTIST_QUIET_END_HOUR_VN,
+  getTargetCleanupSlotKey,
+  getTargetVNDayKey,
+  getTargetDayKeyForLang,
+  getCurrentVNHour,
+  isInArtistQuietHours,
+  isInArtistQuietHoursForLang,
+  hasReachedArtistWakeupBoundary,
+  hasReachedArtistWakeupBoundaryForLang,
+} = require("../../utils/raid/schedule/artist-clock");
+const {
+  MAINTENANCE_DAY_VN,
+  MAINTENANCE_HOUR_VN,
+  MAINTENANCE_MINUTE_VN,
+  MAINTENANCE_TICK_MS,
+  getMaintenanceSlotForNow,
+  pickMaintenanceVariant,
+  buildMaintenancePreview,
+  getMaintenanceSlotConfigSnapshot,
+  buildMaintenanceConfigQuery,
+} = require("../../utils/raid/schedule/maintenance");
+const { dailyResetStartMs } = require("../../utils/raid/schedule/reset-windows");
 
 function createRaidSchedulerService({
   GuildConfig,
@@ -48,24 +54,6 @@ function createRaidSchedulerService({
   // ticks in [QUIET_START_HOUR, QUIET_END_HOUR). Message handling is
   // unaffected - users can still post raid clears in the middle of the
   // night, Artist just doesn't patrol.
-  const ARTIST_QUIET_START_HOUR_VN = 3;
-  const ARTIST_QUIET_END_HOUR_VN = 8;
-  // Per-language tz offset (minutes from UTC) for the persona-event
-  // schedulers below: artist-bedtime fires at 3am LOCAL, artist-wakeup
-  // at 8am LOCAL, quiet-hours window in [3am, 8am) LOCAL. Default-vi
-  // guilds keep the legacy +7h VN clock; jp guilds anchor to JST (+9h);
-  // en guilds anchor to UTC. LA-event-anchored schedulers (weekly reset,
-  // maintenance) are NOT affected by this - those fire at the same
-  // absolute moment for every guild, just rendered in each language's
-  // display tz via the locale strings.
-  const LANG_TZ_OFFSET_MINUTES = {
-    vi: 7 * 60,
-    jp: 9 * 60,
-    en: 0,
-  };
-  function getLangTzOffsetMinutes(lang) {
-    return LANG_TZ_OFFSET_MINUTES[lang] ?? LANG_TZ_OFFSET_MINUTES.vi;
-  }
   const PRIVATE_LOG_NUDGE_TTL_MS = 30 * 60 * 1000; // stuck-user nudge sits 30 min before self-delete
   const PRIVATE_LOG_NUDGE_DEDUP_MS = 7 * 24 * 60 * 60 * 1000; // 7-day per-user dedup
   const AUTO_CLEANUP_TICK_MS = 30 * 60 * 1000;
@@ -103,107 +91,6 @@ function createRaidSchedulerService({
       }, ttlMs);
     }
     return sent;
-  }
-
-  /**
-   * Returns "YYYY-MM-DDTHH:MM" in Vietnam (UTC+7) calendar where MM is
-   * snapped to "00" or "30". Used as the idempotency cursor
-   * `lastAutoCleanupKey`: once a guild runs cleanup for a given VN
-   * half-hour slot, subsequent ticks within the same slot short-circuit.
-   * Crossing a slot boundary produces a new key and the next tick picks
-   * it up.
-   *
-   * Cadence history: daily (YYYY-MM-DD) → hourly (YYYY-MM-DDTHH) →
-   * half-hour (YYYY-MM-DDTHH:MM) per Traine's request. Legacy shorter
-   * keys stored in Mongo will never match the new slot key, so the first
-   * tick after deploy re-runs cleanup once - harmless one-time re-sweep.
-   */
-  function getTargetCleanupSlotKey(now = new Date()) {
-    const vnTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-    const dateHour = vnTime.toISOString().slice(0, 13); // "YYYY-MM-DDTHH"
-    const slotMinute = vnTime.getUTCMinutes() < 30 ? "00" : "30";
-    return `${dateHour}:${slotMinute}`;
-  }
-
-  /**
-   * Returns "YYYY-MM-DD" in VN (UTC+7) calendar. Shared dedup key for
-   * Artist's once-per-day ceremonial moments (bedtime greeting at 3:00 VN,
-   * wake-up + morning sweep at 8:00 VN). Distinct from the half-hour slot
-   * key because those ceremonies fire once per calendar day, not per slot.
-   */
-  function getTargetVNDayKey(now = new Date()) {
-    return getTargetDayKeyForLang(now, "vi");
-  }
-
-  /**
-   * Lang-aware variant: returns "YYYY-MM-DD" in the LOCAL calendar of
-   * whatever timezone matches the supplied locale. JP guild's day key
-   * rolls at midnight JST; EN guild's at midnight UTC. Used as dedup key
-   * for once-per-day persona events (bedtime / wakeup).
-   */
-  function getTargetDayKeyForLang(now = new Date(), lang) {
-    const offsetMs = getLangTzOffsetMinutes(lang) * 60 * 1000;
-    const localTime = new Date(now.getTime() + offsetMs);
-    return localTime.toISOString().slice(0, 10);
-  }
-
-  /**
-   * VN local hour (0-23). Used to decide whether a tick falls inside the
-   * quiet-hours window. The calc mirrors getTargetCleanupSlotKey so both
-   * helpers stay in lockstep if the UTC offset ever changes.
-   */
-  function getCurrentVNHour(now = new Date()) {
-    return getCurrentHourForLang(now, "vi");
-  }
-
-  /**
-   * Lang-aware variant: returns the local hour (0-23) in the timezone
-   * matching the supplied locale. JP guild's "current hour" reads JST,
-   * EN guild's reads UTC. Default vi keeps the legacy VN behavior.
-   */
-  function getCurrentHourForLang(now = new Date(), lang) {
-    const offsetMs = getLangTzOffsetMinutes(lang) * 60 * 1000;
-    const localTime = new Date(now.getTime() + offsetMs);
-    return localTime.getUTCHours();
-  }
-
-  /**
-   * True when the current VN hour is inside Artist's quiet window. The
-   * window is half-open: [QUIET_START_HOUR, QUIET_END_HOUR). Hour 8 is NOT
-   * quiet - it's the wake-up hour where the catch-up cleanup runs. Hour 2
-   * is NOT quiet - the last pre-bedtime cleanup slot at 2:30 runs as usual.
-   */
-  function isInArtistQuietHours(now = new Date()) {
-    return isInArtistQuietHoursForLang(now, "vi");
-  }
-
-  /**
-   * Lang-aware quiet-hours check. Per-guild scheduler tick resolves the
-   * guild's lang first, then asks "are we in [3am, 8am) of THAT guild's
-   * local timezone?". Vi guild quiets 3-8 VN; JP guild quiets 3-8 JST;
-   * EN guild quiets 3-8 UTC.
-   */
-  function isInArtistQuietHoursForLang(now = new Date(), lang) {
-    const hour = getCurrentHourForLang(now, lang);
-    return hour >= ARTIST_QUIET_START_HOUR_VN && hour < ARTIST_QUIET_END_HOUR_VN;
-  }
-
-  /**
-   * True once the VN local clock reaches Artist's 08:00 wake-up boundary.
-   * This must NOT be inferred from `!isInArtistQuietHours()` because
-   * 00:00-02:59 VN is outside quiet hours too, yet still belongs to the
-   * previous day rhythm and must not trigger the wake-up sweep early.
-   */
-  function hasReachedArtistWakeupBoundary(now = new Date()) {
-    return hasReachedArtistWakeupBoundaryForLang(now, "vi");
-  }
-
-  /**
-   * Lang-aware wakeup boundary check. Triggered once the local clock
-   * crosses 08:00 in the guild's tz. Same rule as the legacy VN version.
-   */
-  function hasReachedArtistWakeupBoundaryForLang(now = new Date(), lang) {
-    return getCurrentHourForLang(now, lang) >= ARTIST_QUIET_END_HOUR_VN;
   }
 
   /**
@@ -506,155 +393,7 @@ function createRaidSchedulerService({
   // ---------------------------------------------------------------------------
   // Maintenance reminder scheduler (LA VN weekly maintenance: Wednesday 14:00 VN)
   // ---------------------------------------------------------------------------
-  // Lost Ark VN maintenance is fixed at Wednesday 14:00 VN. Hard-coded
-  // here rather than configurable per guild because (a) the schedule is
-  // tied to the publisher
-  // not the server, (b) a single global truth avoids drift if multiple guilds
-  // ever join, and (c) keeping the value as constants means changing the
-  // schedule is a one-line PR if LA VN ever shifts the boundary.
-  const MAINTENANCE_DAY_VN = 3; // 0=Sun, 3=Wed
-  const MAINTENANCE_HOUR_VN = 14;
-  const MAINTENANCE_MINUTE_VN = 0;
-  const MAINTENANCE_TICK_MS = 60 * 1000; // 1-min cadence to catch every slot
-  // TTL per group: early reminders linger 30 min (members may scroll back),
-  // countdown reminders self-delete faster because the next slot is right behind
-  // them. T-1m TTL is shortest because the server is about to be down anyway.
-  const MAINTENANCE_TTL_EARLY_MS = 30 * 60 * 1000;
-  const MAINTENANCE_TTL_COUNTDOWN_MS = 10 * 60 * 1000;
-  const MAINTENANCE_TTL_FINAL_MS = 5 * 60 * 1000;
   let maintenanceSchedulerStartedAtMs = null;
-
-  // Slot definitions: minutesBefore = minutes before the 14:00 VN boundary. Two
-  // separate arrays so the per-group enabled flag and per-group dedup key
-  // map cleanly to MAINTENANCE_EARLY_SLOTS vs MAINTENANCE_COUNTDOWN_SLOTS.
-  // `pingHere` only true for the 2 milestones Traine flagged (T-3h, T-1h).
-  const MAINTENANCE_EARLY_SLOTS = [
-    { key: "T-3h", minutesBefore: 180, ttlMs: MAINTENANCE_TTL_EARLY_MS, pingHere: true },
-    { key: "T-2h", minutesBefore: 120, ttlMs: MAINTENANCE_TTL_EARLY_MS, pingHere: false },
-    { key: "T-1h", minutesBefore: 60, ttlMs: MAINTENANCE_TTL_EARLY_MS, pingHere: true },
-  ];
-  const MAINTENANCE_COUNTDOWN_SLOTS = [
-    { key: "T-15m", minutesBefore: 15, ttlMs: MAINTENANCE_TTL_COUNTDOWN_MS, pingHere: false },
-    { key: "T-10m", minutesBefore: 10, ttlMs: MAINTENANCE_TTL_COUNTDOWN_MS, pingHere: false },
-    { key: "T-5m", minutesBefore: 5, ttlMs: MAINTENANCE_TTL_COUNTDOWN_MS, pingHere: false },
-    { key: "T-1m", minutesBefore: 1, ttlMs: MAINTENANCE_TTL_FINAL_MS, pingHere: false },
-  ];
-
-  // Maintenance slot keys live in two locale namespaces: early (T-3h/2h/1h)
-  // and countdown (T-15m/10m/5m/1m). 3 variants each so a server doesn't
-  // read the same line two weeks in a row. Tone progression baked into the
-  // strings: early = checklist reminder (shop solo / event / paradise /
-  // key hell), countdown = urgent ticking down, T-1m = "log out now".
-  // `@here` baked into the variant text for the 2 milestone slots per
-  // Traine. Pools resolve via lookupArray at fire time with the guild's
-  // broadcast language.
-  function lookupMaintenanceVariants(slotKey, lang) {
-    if (slotKey?.startsWith("T-") && /^T-\d+(?:h|m)$/.test(slotKey)) {
-      const isEarly = ["T-3h", "T-2h", "T-1h"].includes(slotKey);
-      const ns = isEarly ? "maintenance-early" : "maintenance-countdown";
-      return lookupArray(lang, `announcements.${ns}.${slotKey}`);
-    }
-    return [];
-  }
-
-  /**
-   * Resolve the maintenance slot (if any) that should fire at the given
-   * instant. Returns null when the current VN datetime is NOT inside a
-   * maintenance reminder window: wrong day-of-week, past the boundary, or
-   * the minutesUntil value doesn't exactly match any of the 7 slots.
-   *
-   * Exact-minute match is intentional: tick cadence is 1 minute and the
-   * dedup key prevents double-fire, so a clean equality check is simpler
-   * than a tolerance window (which would have ambiguity between adjacent
-   * countdown slots only 5 minutes apart). Edge case: a tick delayed > 60s
-   * by event-loop pressure can miss its slot, an acceptable trade-off for
-   * code clarity. Restart inside the reminder window resumes from the next
-   * matching slot forward.
-   */
-  function getMaintenanceSlotForNow(now = new Date()) {
-    const vn = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-    const dayOfWeek = vn.getUTCDay();
-    if (dayOfWeek !== MAINTENANCE_DAY_VN) return null;
-    const hour = vn.getUTCHours();
-    const minute = vn.getUTCMinutes();
-    const minutesUntil =
-      (MAINTENANCE_HOUR_VN - hour) * 60 + (MAINTENANCE_MINUTE_VN - minute);
-    if (minutesUntil <= 0) return null;
-    const earlyMatch = MAINTENANCE_EARLY_SLOTS.find(
-      (s) => s.minutesBefore === minutesUntil
-    );
-    if (earlyMatch) {
-      return { slot: earlyMatch, group: "early" };
-    }
-    const countdownMatch = MAINTENANCE_COUNTDOWN_SLOTS.find(
-      (s) => s.minutesBefore === minutesUntil
-    );
-    if (countdownMatch) {
-      return { slot: countdownMatch, group: "countdown" };
-    }
-    return null;
-  }
-
-  /**
-   * Pick a random variant from the pool for the given slot key. Returns
-   * the raw string (already includes `@here` prefix when applicable, since
-   * pingHere is baked into the variant text). Caller passes content
-   * directly to postChannelAnnouncement.
-   */
-  function pickMaintenanceVariant(slotKey, lang = DEFAULT_LANGUAGE) {
-    const pool = lookupMaintenanceVariants(slotKey, lang);
-    if (pool.length === 0) return "";
-    return pool[Math.floor(Math.random() * pool.length)];
-  }
-
-  /**
-   * Build the /raid-announce show preview text for a maintenance group
-   * from MAINTENANCE_VARIANTS so admins see every variant Artist might
-   * actually post per slot. Mirrors the buildCleanupNoticePreview shape:
-   * heading per slot, truncated variants, total under Discord 1024 cap.
-   */
-  function buildMaintenancePreview(group) {
-    const slots = group === "early" ? MAINTENANCE_EARLY_SLOTS : MAINTENANCE_COUNTDOWN_SLOTS;
-    const VARIANT_MAX = 70;
-    const lines = [
-      group === "early"
-        ? "Random pick mỗi mốc (3 variants/mốc):"
-        : "Random pick mỗi mốc (3 variants/mốc, đếm ngược):",
-    ];
-    for (const s of slots) {
-      // Admin preview renders in the default (VI) locale to match the rest
-      // of /raid-announce show's admin scaffolding.
-      const pool = lookupMaintenanceVariants(s.key, DEFAULT_LANGUAGE);
-      lines.push("");
-      lines.push(`**${s.key}**${s.pingHere ? " (ping @here)" : ""} - ${pool.length} variants:`);
-      for (const variant of pool) {
-        const shortened =
-          variant.length > VARIANT_MAX ? variant.slice(0, VARIANT_MAX) + "..." : variant;
-        lines.push(`- ${shortened}`);
-      }
-    }
-    return lines.join("\n");
-  }
-
-  /**
-   * Snapshot of the maintenance schedule's wall-clock shape, exposed so
-   * scheduling.js can compute "Next eligible boundary" for the 2 maintenance
-   * announcement types without re-hard-coding 14:00 VN / Wed / minutesBefore
-   * arrays. Single source of truth: changing the constants or slot lists at
-   * the top of this section automatically flows into /raid-announce show.
-   *
-   * VN to UTC offset is fixed at 7 (Vietnam doesn't observe DST), so the
-   * subtraction is safe. If that ever changes, this is the only line to fix.
-   */
-  function getMaintenanceSlotConfigSnapshot() {
-    return {
-      dayOfWeek: MAINTENANCE_DAY_VN,
-      utcHour: MAINTENANCE_HOUR_VN - 7,
-      utcMinute: MAINTENANCE_MINUTE_VN,
-      earlyMinutes: MAINTENANCE_EARLY_SLOTS.map((s) => s.minutesBefore),
-      countdownMinutes: MAINTENANCE_COUNTDOWN_SLOTS.map((s) => s.minutesBefore),
-    };
-  }
 
   /**
    * Mongo filter for the maintenance scheduler tick. A guild is eligible
@@ -669,16 +408,6 @@ function createRaidSchedulerService({
    * working independent of /raid-channel config action:set. Pattern parity
    * with nudgeStuckPrivateLogUser's $or filter elsewhere in this file.
    */
-  function buildMaintenanceConfigQuery() {
-    return {
-      $or: [
-        { raidChannelId: { $ne: null } },
-        { "announcements.maintenanceEarly.channelId": { $ne: null } },
-        { "announcements.maintenanceCountdown.channelId": { $ne: null } },
-      ],
-    };
-  }
-
   async function runMaintenanceTick(client) {
     const now = new Date();
     const match = getMaintenanceSlotForNow(now);
@@ -1158,21 +887,6 @@ function createRaidSchedulerService({
   const SIDE_TASK_RESET_TICK_MS = 30 * 60 * 1000;
   let sideTaskSchedulerStartedAtMs = null;
   let sideTaskTickInFlight = false;
-
-  function dailyResetStartMs(now = new Date()) {
-    // Snap to the most recent 10:00 UTC boundary that has passed.
-    // LA's daily reset is 17:00 VN = 10:00 UTC (UTC+7 offset).
-    const cursor = new Date(now.getTime());
-    if (cursor.getUTCHours() < 10) {
-      cursor.setUTCDate(cursor.getUTCDate() - 1);
-    }
-    return Date.UTC(
-      cursor.getUTCFullYear(),
-      cursor.getUTCMonth(),
-      cursor.getUTCDate(),
-      10, 0, 0, 0
-    );
-  }
 
   async function resetExpiredSideTasks(now = new Date()) {
     const dailyStart = dailyResetStartMs(now);

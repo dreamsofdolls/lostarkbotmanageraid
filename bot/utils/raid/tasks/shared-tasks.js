@@ -1,5 +1,7 @@
 "use strict";
 
+const { dailyResetStartMs } = require("../schedule/reset-windows");
+
 const SCHEDULE_SOURCE_TIME_ZONE = "Etc/GMT+4"; // Fixed UTC-4; IANA Etc sign is intentionally reversed.
 const SCHEDULE_SOURCE_LABEL = "UTC-4";
 const PACIFIC_TIME_ZONE = SCHEDULE_SOURCE_TIME_ZONE; // Backward-compatible export name.
@@ -224,22 +226,6 @@ function utcDateKey(date) {
     pad2(date.getUTCMonth() + 1),
     pad2(date.getUTCDate()),
   ].join("-");
-}
-
-function dailyResetStartMs(now = new Date()) {
-  const date = now instanceof Date ? now : new Date(now);
-  const boundaryMs = Date.UTC(
-    date.getUTCFullYear(),
-    date.getUTCMonth(),
-    date.getUTCDate(),
-    10,
-    0,
-    0,
-    0
-  );
-  return date.getTime() >= boundaryMs
-    ? boundaryMs
-    : boundaryMs - 24 * 60 * 60 * 1000;
 }
 
 function scheduledTaskKey(task, slotStartAtMs) {
