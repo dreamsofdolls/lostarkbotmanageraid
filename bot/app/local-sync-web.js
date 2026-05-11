@@ -6,6 +6,7 @@ const { startLocalSyncHttpServer } = require("../services/local-sync/http-server
 const { createRaidSyncEndpoint } = require("../services/local-sync/sync-endpoint");
 const { createRosterEndpoint } = require("../services/local-sync/roster-endpoint");
 const { createPreviewSummaryEndpoint } = require("../services/local-sync/preview-summary-endpoint");
+const { createCatalogEndpoint } = require("../services/local-sync/catalog-endpoint");
 
 function createLocalSyncApiHandlers({ User, applyRaidSetForDiscordId }) {
   const raidSyncHandler = createRaidSyncEndpoint({
@@ -14,8 +15,11 @@ function createLocalSyncApiHandlers({ User, applyRaidSetForDiscordId }) {
   });
   const rosterHandler = createRosterEndpoint({ User });
   const previewSummaryHandler = createPreviewSummaryEndpoint({ User });
+  const catalogHandler = createCatalogEndpoint();
 
   return {
+    "GET /api/local-sync/catalog": catalogHandler,
+    "OPTIONS /api/local-sync/catalog": catalogHandler,
     "POST /api/raid-sync": raidSyncHandler,
     "OPTIONS /api/raid-sync": raidSyncHandler,
     "GET /api/me/roster": rosterHandler,

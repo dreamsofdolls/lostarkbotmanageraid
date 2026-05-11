@@ -3,6 +3,7 @@
 const { getRaidGateForBoss, getGatesForRaid } = require("../../models/Raid");
 const { getCharacterName, normalizeName, toModeLabel } = require("../../utils/raid/common/shared");
 const { getCurrentResetStartMs } = require("../raid/weekly-reset");
+const { normalizeDifficulty } = require("./catalog");
 
 /**
  * Apply incoming local-sync deltas from the web companion. Each delta
@@ -22,23 +23,6 @@ const { getCurrentResetStartMs } = require("../raid/weekly-reset");
  * The function is module-level (not closure-bound) so tests can stub
  * applyRaidSetForDiscordId without spinning up the full handler factory.
  */
-
-// LOA Logs encounters.db `difficulty` column values vs our internal modeKey.
-// Permissive on the input side because LOA Logs has shifted difficulty
-// strings between versions (Trial → Inferno → Nightmare). All map to
-// the same raid metadata for our purposes.
-const DIFFICULTY_TO_MODE_KEY = {
-  normal: "normal",
-  hard: "hard",
-  nightmare: "nightmare",
-  trial: "nightmare",
-  inferno: "nightmare",
-};
-
-function normalizeDifficulty(raw) {
-  const text = String(raw || "").trim().toLowerCase();
-  return DIFFICULTY_TO_MODE_KEY[text] || null;
-}
 
 /**
  * Map one raw delta from the web companion to a structured target. Returns

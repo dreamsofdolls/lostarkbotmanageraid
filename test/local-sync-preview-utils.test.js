@@ -2,10 +2,13 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
+const { buildLocalSyncCatalog } = require("../bot/services/local-sync/catalog");
 
 async function loadPreviewUtils() {
   const file = path.join(__dirname, "..", "web", "preview-utils.js");
-  return import(pathToFileURL(file).href);
+  const mod = await import(pathToFileURL(file).href);
+  mod.setCatalog(buildLocalSyncCatalog());
+  return mod;
 }
 
 function makeRoster(character) {
@@ -73,6 +76,17 @@ test("preview actionable keys exclude clears that are already marked complete", 
   assert.equal(keys.size, 0);
   assert.equal(collectDiffStateCounts(diff).synced, 1);
   assert.equal(collectDiffStateCounts(diff).pending, undefined);
+});
+
+test("preview buckets get class info from backend catalog", async () => {
+  const { bucketize } = await loadPreviewUtils();
+  const rows = [
+    ["Witch of Agony, Serca", "Hard", 1, "Aki", 1, 1000, "204:Aki"],
+  ];
+  const [bucket] = bucketize(rows);
+  assert.equal(bucket.classId, "204");
+  assert.equal(bucket.className, "Bard");
+  assert.equal(bucket.classIcon, "/sync/class-icons/bard.png");
 });
 
 test("currentWeeklyResetStartMs follows Wednesday 17:00 VN reset boundary", async () => {
