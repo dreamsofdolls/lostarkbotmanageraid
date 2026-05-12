@@ -178,16 +178,6 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .status-ok { color: var(--success); }
 .status-err { color: var(--error); }
 
-footer {
-  margin-top: 32px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--text-dim);
-}
-
-footer a { color: var(--accent); text-decoration: none; }
-footer a:hover { text-decoration: underline; }
-
 table {
   width: 100%;
   border-collapse: collapse;

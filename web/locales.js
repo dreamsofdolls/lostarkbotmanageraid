@@ -121,9 +121,6 @@ const VI = {
     unmappedHint: "Unmapped boss (cần extend bot-side map):",
     unmappedMore: "+{n}",
   },
-  footer: {
-    text: "Phase 4.5 (streaming SQLite). Source",
-  },
   raidLabels: {
     armoche: "Act 4",
     kazeros: "Kazeros",
@@ -251,9 +248,6 @@ const JP = {
     unmappedHint: "未マッピングのボス (bot 側のマップ拡張が必要ですの):",
     unmappedMore: "+{n}",
   },
-  footer: {
-    text: "Phase 4.5 (streaming SQLite). ソース",
-  },
   raidLabels: {
     armoche: "アクト4",
     kazeros: "カゼロス",
@@ -380,9 +374,6 @@ const EN = {
     rejectedLabel: "Rejected:",
     unmappedHint: "Unmapped bosses (need bot-side aliases):",
     unmappedMore: "+{n}",
-  },
-  footer: {
-    text: "Phase 4.5 (streaming SQLite). Source",
   },
   raidLabels: {
     armoche: "Act 4",
