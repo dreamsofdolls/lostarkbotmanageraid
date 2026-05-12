@@ -160,6 +160,45 @@ test("applyRaidSetForDiscordId: complete on fresh raid marks all gates done", as
   assert.ok(Number(kaz.G2.completedDate) > 0);
 });
 
+test("applyRaidSetBatchForDiscordId: local-sync can apply multiple entries in one write", async () => {
+  const { factory, docs } = makeFactory();
+  seedUser(docs, [
+    {
+      accountName: "Alpha",
+      characters: [makeChar("Cyrano", 1730), makeChar("Lyra", 1735)],
+    },
+  ], { localSyncEnabled: true });
+
+  const results = await factory.applyRaidSetBatchForDiscordId({
+    discordId: "user-1",
+    requireLocalSyncEnabled: true,
+    entries: [
+      {
+        characterName: "Cyrano",
+        rosterName: "Alpha",
+        raidMeta: KAZEROS_HARD,
+        statusType: "process",
+        effectiveGates: ["G1"],
+      },
+      {
+        characterName: "Lyra",
+        rosterName: "Alpha",
+        raidMeta: KAZEROS_HARD,
+        statusType: "process",
+        effectiveGates: ["G1", "G2"],
+      },
+    ],
+  });
+
+  assert.equal(results.length, 2);
+  assert.equal(results[0].updated, true);
+  assert.equal(results[1].updated, true);
+  const [cyrano, lyra] = docs.get("user-1").accounts[0].characters;
+  assert.ok(Number(cyrano.assignedRaids.kazeros.G1.completedDate) > 0);
+  assert.ok(Number(lyra.assignedRaids.kazeros.G1.completedDate) > 0);
+  assert.ok(Number(lyra.assignedRaids.kazeros.G2.completedDate) > 0);
+});
+
 test("applyRaidSetForDiscordId: complete short-circuits to alreadyComplete on no-op re-stamp", async () => {
   // Codex-flagged regression class: re-stamping completedDate would
   // surface a fresh "Raid Completed" DM even though nothing changed.

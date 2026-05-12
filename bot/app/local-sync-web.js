@@ -8,10 +8,11 @@ const { createRosterEndpoint } = require("../services/local-sync/roster-endpoint
 const { createPreviewSummaryEndpoint } = require("../services/local-sync/preview-summary-endpoint");
 const { createCatalogEndpoint } = require("../services/local-sync/catalog-endpoint");
 
-function createLocalSyncApiHandlers({ User, applyRaidSetForDiscordId }) {
+function createLocalSyncApiHandlers({ User, applyRaidSetForDiscordId, applyRaidSetBatchForDiscordId }) {
   const raidSyncHandler = createRaidSyncEndpoint({
     User,
     applyRaidSetForDiscordId,
+    applyRaidSetBatchForDiscordId,
   });
   const rosterHandler = createRosterEndpoint({ User });
   const previewSummaryHandler = createPreviewSummaryEndpoint({ User });
@@ -37,6 +38,7 @@ function startLocalSyncWebCompanion({
   rootDir,
   User,
   applyRaidSetForDiscordId,
+  applyRaidSetBatchForDiscordId,
   env = process.env,
   log = console,
 } = {}) {
@@ -49,7 +51,11 @@ function startLocalSyncWebCompanion({
     return startLocalSyncHttpServer({
       webDir: path.join(rootDir, "web"),
       classIconsDir: path.join(rootDir, "assets", "class-icons"),
-      apiHandlers: createLocalSyncApiHandlers({ User, applyRaidSetForDiscordId }),
+      apiHandlers: createLocalSyncApiHandlers({
+        User,
+        applyRaidSetForDiscordId,
+        applyRaidSetBatchForDiscordId,
+      }),
     });
   } catch (err) {
     log.error(

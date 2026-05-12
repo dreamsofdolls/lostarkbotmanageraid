@@ -11,8 +11,9 @@ const { normalizeDifficulty } = require("./catalog");
  * module maps boss + difficulty → (raidKey, modeKey, gateIndex), expands
  * gate cumulatively (G2 cleared implies G1 cleared - matches the text
  * parser's effectiveGates semantics), groups by char + raid+mode, and
- * delegates to `applyRaidSetForDiscordId` so the resulting writes go
- * through the same auth + retry path as the slash command.
+ * delegates to the raid-set write path (batch when available, single-call
+ * fallback otherwise) so the resulting writes go through the same auth +
+ * retry semantics as the slash command.
  *
  * Returns a structured summary so the web UI can show:
  *   - applied:  per-char raid clears actually written
@@ -139,12 +140,84 @@ function classifyBucketAgainstRoster(userDoc, bucket, raidMeta, effectiveGates) 
   return { action: "apply", displayName: getCharacterName(character) || bucket.charName };
 }
 
+function appendApplyResult(result, bucket, effectiveGates, { applied, skipped, rejected }) {
+  if (!result || typeof result !== "object") {
+    rejected.push({
+      charName: bucket.charName,
+      reason: "write_error",
+      error: "empty apply result",
+      raidKey: bucket.raidKey,
+      modeKey: bucket.modeKey,
+    });
+    return;
+  }
+  if (result.syncDisabled) {
+    rejected.push({
+      charName: bucket.charName,
+      reason: "local_sync_disabled",
+      raidKey: bucket.raidKey,
+      modeKey: bucket.modeKey,
+      gates: effectiveGates,
+    });
+    return;
+  }
+  if (result.noRoster) {
+    rejected.push({
+      charName: bucket.charName,
+      reason: "no_roster",
+      raidKey: bucket.raidKey,
+      modeKey: bucket.modeKey,
+      gates: effectiveGates,
+    });
+    return;
+  }
+  if (!result.matched) {
+    rejected.push({
+      charName: bucket.charName,
+      reason: "char_not_in_roster",
+      raidKey: bucket.raidKey,
+      modeKey: bucket.modeKey,
+      gates: effectiveGates,
+    });
+    return;
+  }
+  if (result.ineligibleItemLevel) {
+    rejected.push({
+      charName: bucket.charName,
+      reason: "ilvl_too_low",
+      ineligibleItemLevel: result.ineligibleItemLevel,
+      raidKey: bucket.raidKey,
+      modeKey: bucket.modeKey,
+      gates: effectiveGates,
+    });
+    return;
+  }
+  if (result.updated) {
+    applied.push({
+      charName: result.displayName || bucket.charName,
+      raidKey: bucket.raidKey,
+      modeKey: bucket.modeKey,
+      gates: effectiveGates,
+      modeResetCount: result.modeResetCount || 0,
+    });
+    return;
+  }
+  skipped.push({
+    charName: result.displayName || bucket.charName,
+    raidKey: bucket.raidKey,
+    modeKey: bucket.modeKey,
+    gates: effectiveGates,
+    reason: "already_complete",
+  });
+}
+
 /**
  * Main entry. `deltas` shape (from web companion):
  *   [{ boss, difficulty, cleared, charName, lastClearMs }]
  *
  * Deps:
- *   - applyRaidSetForDiscordId: the raid-set handler's write path
+ *   - applyRaidSetForDiscordId: the raid-set handler's single write path
+ *   - applyRaidSetBatchForDiscordId: optional one-document batch write path
  *   - getRaidRequirementMap: maps "raidKey_modeKey" to the meta object
  *     applyRaidSetForDiscordId expects (label, minItemLevel, raidKey, modeKey)
  *
@@ -157,6 +230,7 @@ function classifyBucketAgainstRoster(userDoc, bucket, raidMeta, effectiveGates) 
 async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
   const {
     applyRaidSetForDiscordId,
+    applyRaidSetBatchForDiscordId = null,
     getRaidRequirementMap,
     userDoc = null,
     currentWeekStartMs: injectedCurrentWeekStartMs,
@@ -207,6 +281,8 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
 
   const buckets = bucketize(currentWeekDeltas);
   const reqMap = getRaidRequirementMap();
+  const pendingWrites = [];
+  const useBatchApply = typeof applyRaidSetBatchForDiscordId === "function";
 
   for (const bucket of buckets) {
     const metaKey = `${bucket.raidKey}_${bucket.modeKey}`;
@@ -251,76 +327,23 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
         continue;
       }
     }
+    const writeRaidMeta = { ...raidMeta, raidKey: bucket.raidKey, modeKey: bucket.modeKey };
+    if (useBatchApply) {
+      pendingWrites.push({ bucket, effectiveGates, raidMeta: writeRaidMeta });
+      continue;
+    }
     try {
       const result = await applyRaidSetForDiscordId({
         discordId,
         executorId: null, // user is applying their own data; no helper-Manager flow
         characterName: bucket.charName,
         rosterName: null,
-        raidMeta: { ...raidMeta, raidKey: bucket.raidKey, modeKey: bucket.modeKey },
+        raidMeta: writeRaidMeta,
         statusType: "process", // gate-based mark, not full-raid wipe
         effectiveGates,
         requireLocalSyncEnabled,
       });
-      if (result.syncDisabled) {
-        rejected.push({
-          charName: bucket.charName,
-          reason: "local_sync_disabled",
-          raidKey: bucket.raidKey,
-          modeKey: bucket.modeKey,
-          gates: effectiveGates,
-        });
-        continue;
-      }
-      if (result.noRoster) {
-        rejected.push({
-          charName: bucket.charName,
-          reason: "no_roster",
-          raidKey: bucket.raidKey,
-          modeKey: bucket.modeKey,
-          gates: effectiveGates,
-        });
-        continue;
-      }
-      if (!result.matched) {
-        rejected.push({
-          charName: bucket.charName,
-          reason: "char_not_in_roster",
-          raidKey: bucket.raidKey,
-          modeKey: bucket.modeKey,
-          gates: effectiveGates,
-        });
-        continue;
-      }
-      if (result.ineligibleItemLevel) {
-        rejected.push({
-          charName: bucket.charName,
-          reason: "ilvl_too_low",
-          ineligibleItemLevel: result.ineligibleItemLevel,
-          raidKey: bucket.raidKey,
-          modeKey: bucket.modeKey,
-          gates: effectiveGates,
-        });
-        continue;
-      }
-      if (result.updated) {
-        applied.push({
-          charName: result.displayName || bucket.charName,
-          raidKey: bucket.raidKey,
-          modeKey: bucket.modeKey,
-          gates: effectiveGates,
-          modeResetCount: result.modeResetCount || 0,
-        });
-      } else {
-        // matched + !updated = already complete (alreadyComplete flag).
-        skipped.push({
-          charName: result.displayName || bucket.charName,
-          raidKey: bucket.raidKey,
-          modeKey: bucket.modeKey,
-          gates: effectiveGates,
-          reason: "already_complete",
-        });
-      }
+      appendApplyResult(result, bucket, effectiveGates, { applied, skipped, rejected });
     } catch (err) {
       console.error(
         `[local-sync/apply] write failed char=${bucket.charName} raid=${bucket.raidKey}:`,
@@ -333,6 +356,41 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
         raidKey: bucket.raidKey,
         modeKey: bucket.modeKey,
       });
+    }
+  }
+
+  if (pendingWrites.length > 0) {
+    try {
+      const results = await applyRaidSetBatchForDiscordId({
+        discordId,
+        requireLocalSyncEnabled,
+        entries: pendingWrites.map(({ bucket, raidMeta, effectiveGates }) => ({
+          characterName: bucket.charName,
+          rosterName: null,
+          raidMeta,
+          statusType: "process",
+          effectiveGates,
+        })),
+      });
+      for (let i = 0; i < pendingWrites.length; i += 1) {
+        const pending = pendingWrites[i];
+        appendApplyResult(results?.[i], pending.bucket, pending.effectiveGates, {
+          applied,
+          skipped,
+          rejected,
+        });
+      }
+    } catch (err) {
+      console.error("[local-sync/apply] batch write failed:", err?.message || err);
+      for (const pending of pendingWrites) {
+        rejected.push({
+          charName: pending.bucket.charName,
+          reason: "write_error",
+          error: err?.message || String(err),
+          raidKey: pending.bucket.raidKey,
+          modeKey: pending.bucket.modeKey,
+        });
+      }
     }
   }
 

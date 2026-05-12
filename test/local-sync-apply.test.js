@@ -164,6 +164,34 @@ test("applyLocalSyncDeltas - write calls can require local-sync to still be enab
   assert.equal(result.rejected[0].reason, "local_sync_disabled");
 });
 
+test("applyLocalSyncDeltas - uses batch writer when provided", async () => {
+  const applyStub = makeApplyStub(() => {
+    throw new Error("single writer should not be called");
+  });
+  const batchCalls = [];
+  const batchStub = async (args) => {
+    batchCalls.push(args);
+    return args.entries.map((entry) => ({
+      matched: true,
+      updated: true,
+      displayName: entry.characterName,
+    }));
+  };
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Brelshaza, Ember in the Ashes", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 1 },
+    { boss: "Abyss Lord Kazeros", difficulty: "Hard", cleared: 1, charName: "Aki", lastClearMs: 2 },
+  ], makeDeps(applyStub, {
+    applyRaidSetBatchForDiscordId: batchStub,
+    requireLocalSyncEnabled: true,
+  }));
+
+  assert.equal(applyStub.calls.length, 0);
+  assert.equal(batchCalls.length, 1);
+  assert.equal(batchCalls[0].requireLocalSyncEnabled, true);
+  assert.equal(batchCalls[0].entries.length, 2);
+  assert.equal(result.applied.length, 2);
+});
+
 test("applyLocalSyncDeltas - unmapped boss bucketed without calling apply", async () => {
   const applyStub = makeApplyStub();
   const result = await applyLocalSyncDeltas("u1", [

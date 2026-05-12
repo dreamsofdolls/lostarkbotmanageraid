@@ -49,6 +49,7 @@ const {
   startMaintenanceScheduler,
   startSideTaskResetScheduler,
   applyRaidSetForDiscordId,
+  applyRaidSetBatchForDiscordId,
 } = require("./bot/commands");
 const User = require("./bot/models/user");
 const { startWeeklyResetJob } = require("./bot/services/raid/weekly-reset");
@@ -89,6 +90,7 @@ async function startBot() {
     rootDir: __dirname,
     User,
     applyRaidSetForDiscordId,
+    applyRaidSetBatchForDiscordId,
   });
 
   const intents = [GatewayIntentBits.Guilds];

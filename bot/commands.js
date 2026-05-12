@@ -304,6 +304,7 @@ function buildPaginationRow(currentPage, totalPages, disabled, { prevId, nextId,
 let handleRaidSetAutocomplete;
 let handleRaidSetCommand;
 let applyRaidSetForDiscordId;
+let applyRaidSetBatchForDiscordId;
 
 let handleRaidHelpCommand;
 let handleRaidShareCommand;
@@ -719,6 +720,7 @@ const raidSetCommandHandlers = createRaidSetCommand({
   handleRaidSetAutocomplete,
   handleRaidSetCommand,
   applyRaidSetForDiscordId,
+  applyRaidSetBatchForDiscordId,
 } = raidSetCommandHandlers);
 
 const raidChannelMonitorService = createRaidChannelMonitorService({
@@ -972,6 +974,15 @@ async function callApplyRaidSetForDiscordId(args) {
   return applyRaidSetForDiscordId(args);
 }
 
+async function callApplyRaidSetBatchForDiscordId(args) {
+  if (typeof applyRaidSetBatchForDiscordId !== "function") {
+    throw new Error(
+      "[commands] applyRaidSetBatchForDiscordId not initialized yet - command factory hasn't run"
+    );
+  }
+  return applyRaidSetBatchForDiscordId(args);
+}
+
 module.exports = {
   commands,
   handleRaidManagementCommand,
@@ -998,6 +1009,7 @@ module.exports = {
   startSideTaskResetScheduler,
   parseRaidMessage,
   applyRaidSetForDiscordId: callApplyRaidSetForDiscordId,
+  applyRaidSetBatchForDiscordId: callApplyRaidSetBatchForDiscordId,
   handleStuckNudgeButton,
   __test: {
     buildRaidCheckSnapshotFromUsers,
