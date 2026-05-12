@@ -141,7 +141,7 @@ LostArk_RaidManage/
 |-- bot/
 |   |-- commands.js                # Compose root: wires every command/service factory
 |   |-- db.js                      # Lazy Mongo connect with DNS fallback
-|   |-- app/                       # Boot-level composition: slash registration, web companion, router registry
+|   |-- app/                       # Boot composition: slash registration, web companion, router registry
 |   |-- domain/                    # Static domain catalog data, e.g. raid requirements/gold
 |   |-- handlers/                  # Slash command / component handlers by feature
 |   |   |-- commands/               # SlashCommandBuilder registry
@@ -162,7 +162,7 @@ LostArk_RaidManage/
 |   |   |-- auto-manage/            # Bible auto-sync core/status helpers
 |   |   |-- discord/                # Emoji bootstrap, interaction router, identity cache
 |   |   |-- i18n/                   # Translation resolver + user/guild language cache
-|   |   |-- local-sync/             # Web companion API, tokens, preview, apply logic
+|   |   |-- local-sync/             # Web companion API, tokens, catalog, preview, apply logic
 |   |   |-- raid/                   # Schedulers, weekly reset, channel monitor, raid view snapshots
 |   |   `-- roster/                 # Bible roster fetch + refresh cooldown logic
 |   |-- shared/                    # Generic reusable helpers
@@ -170,8 +170,9 @@ LostArk_RaidManage/
 |       `-- raid/                  # Pure raid helpers grouped by reuse surface
 |           |-- common/             # Names, labels, embeds, character normalization
 |           |-- queries/            # Mongo query builders for raid views
-|           |-- schedule/           # Announcement/schedule registries
+|           |-- schedule/           # Announcement registry, maintenance/quiet-hour/reset math
 |           `-- tasks/              # Side-task/shared-task helpers + task view layout
+|-- web/                            # Local Sync companion UI served by local-sync/http-server
 |-- assets/
 |   |-- class-icons/
 |   `-- artist-icons/
@@ -184,11 +185,12 @@ LostArk_RaidManage/
 |-- .env.example
 `-- package.json
 ```
-Three composition principles:
+Four composition principles:
 
 1. **Factory + dep injection.** Every command/service exports `create<Name>(deps)` so `bot/commands.js` wires the object graph once at boot. Tests instantiate with stubs.
 2. **Registry as single source of truth.** `ANNOUNCEMENT_REGISTRY`, `RAID_REQUIREMENTS`, `RAID_MANAGER_ID` all live in exactly one place and are referenced from docs, HELP_SECTIONS, and runtime logic.
-3. **Shared write paths.** `applyRaidSetForDiscordId` is reused by `/raid-set`, the text monitor, and the `/raid-check` Edit flow — new UIs never re-implement raid mutation.
+3. **Services orchestrate, utils calculate.** Long-running DB/Discord flows stay in `services/*`; pure raid math and view helpers live in `utils/raid/*` so `/raid-status`, `/raid-check`, `/raid-task`, schedulers, and Local Sync reuse the same calculations.
+4. **Shared write paths.** `applyRaidSetForDiscordId` is reused by `/raid-set`, the text monitor, `/raid-check` Edit, and Local Sync apply logic - new UIs never re-implement raid mutation.
 
 Interaction flow:
 
