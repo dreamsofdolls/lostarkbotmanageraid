@@ -46,6 +46,7 @@ function createAutoManageCoreService({
   // a small, trusted set so the tighter cadence does not meaningfully raise
   // bible load compared to the existing daily passive scheduler.
   const AUTO_MANAGE_SYNC_COOLDOWN_MS = DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS;
+  const AUTO_MANAGE_GATHER_CHARACTER_CONCURRENCY = 2;
   const inFlightAutoManageSyncs = new Set(); // discordId
 
   /**
@@ -400,6 +401,27 @@ function createAutoManageCoreService({
     return normalizeName(accountName) + "\x1f" + normalizeName(charName);
   }
 
+  async function mapWithConcurrency(items, limit, mapper) {
+    const list = Array.isArray(items) ? items : [];
+    if (list.length === 0) return [];
+
+    const results = new Array(list.length);
+    let nextIndex = 0;
+    const workerCount = Math.min(Math.max(1, limit), list.length);
+
+    await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        while (nextIndex < list.length) {
+          const index = nextIndex;
+          nextIndex += 1;
+          results[index] = await mapper(list[index], index);
+        }
+      })
+    );
+
+    return results;
+  }
+
   function filterLogsForCharacter(logs, expectedName) {
     const expected = normalizeName(expectedName);
     if (!expected || !Array.isArray(logs) || logs.length === 0) {
@@ -447,116 +469,125 @@ function createAutoManageCoreService({
    * can run the bible I/O ONCE, outside saveWithRetry - VersionError retries
    * then skip the I/O and only re-run the in-memory apply.
    */
+  async function gatherAutoManageLogsForCharacter(account, character, weekResetStart, rosterFetchCache) {
+    const charName = getCharacterName(character);
+    const entry = {
+      accountName: account.accountName,
+      charName,
+      // Composite key: accountName + charName. See autoManageEntryKey
+      // jsdoc for why charName alone is insufficient.
+      entryKey: autoManageEntryKey(account.accountName, charName),
+      className: getCharacterClass(character),
+      // `meta` is only set when the char wasn't already cached -
+      // apply phase propagates this into the fresh doc's character.
+      meta: null,
+      canonicalName: null,
+      logs: null,
+      error: null,
+    };
+    try {
+      let serial = character.bibleSerial;
+      let cid = character.bibleCid;
+      let rid = character.bibleRid;
+      if (!serial || !cid || !rid) {
+        const resolved = await resolveBibleMetaForEntry(
+          account,
+          character,
+          entry,
+          rosterFetchCache
+        );
+        if (resolved.canonicalName) {
+          entry.canonicalName = resolved.canonicalName;
+          console.warn(
+            `[auto-manage] resolved bible meta for "${entry.charName}" via ${resolved.source} as "${resolved.canonicalName}".`
+          );
+        }
+        const meta = resolved.meta;
+        serial = meta.sn;
+        cid = meta.cid;
+        rid = meta.rid;
+        entry.meta = { sn: serial, cid, rid };
+      }
+      entry.logs = await fetchBibleLogsSinceWeekReset({
+        serial,
+        cid,
+        rid,
+        className: entry.className,
+        weekResetStart,
+      });
+      const expectedLogName = entry.canonicalName || entry.charName;
+      let filteredLogs = filterLogsForCharacter(entry.logs, expectedLogName);
+      if (filteredLogs.mismatchedNames.length > 0 && filteredLogs.logs.length > 0) {
+        console.warn(
+          `[auto-manage] bible logs for "${entry.charName}" included other character(s): ${filteredLogs.mismatchedNames.join(", ")}; filtering them out.`
+        );
+      }
+      if (
+        filteredLogs.hadNamedLogs &&
+        filteredLogs.logs.length === 0 &&
+        filteredLogs.mismatchedNames.length > 0
+      ) {
+        console.warn(
+          `[auto-manage] bible metadata for "${entry.charName}" returned only other character log(s): ${filteredLogs.mismatchedNames.join(", ")}; refreshing metadata.`
+        );
+        const resolved = await resolveBibleMetaForEntry(
+          account,
+          character,
+          entry,
+          rosterFetchCache
+        );
+        const meta = resolved.meta;
+        serial = meta.sn;
+        cid = meta.cid;
+        rid = meta.rid;
+        entry.meta = { sn: serial, cid, rid };
+        if (resolved.canonicalName) entry.canonicalName = resolved.canonicalName;
+        entry.logs = await fetchBibleLogsSinceWeekReset({
+          serial,
+          cid,
+          rid,
+          className: entry.className,
+          weekResetStart,
+        });
+        const refreshedExpectedName = entry.canonicalName || entry.charName;
+        filteredLogs = filterLogsForCharacter(entry.logs, refreshedExpectedName);
+        if (filteredLogs.mismatchedNames.length > 0 && filteredLogs.logs.length > 0) {
+          console.warn(
+            `[auto-manage] refreshed bible logs for "${entry.charName}" still included other character(s): ${filteredLogs.mismatchedNames.join(", ")}; filtering them out.`
+          );
+        }
+      }
+      entry.logs = filteredLogs.logs;
+    } catch (err) {
+      entry.error = err?.message || String(err);
+      console.warn(
+        `[auto-manage] gather for ${entry.charName} failed:`,
+        err?.message || err
+      );
+    }
+    return entry;
+  }
+
   async function gatherAutoManageLogsForUserDoc(userDoc, weekResetStart, options = {}) {
     const includeEntryKeys = options?.includeEntryKeys
       ? new Set(options.includeEntryKeys)
       : null;
-    const collected = [];
+    const jobs = [];
     for (const account of userDoc.accounts || []) {
       const rosterFetchCache = new Map();
       for (const character of account.characters || []) {
-        const charName = getCharacterName(character);
-        const entryKey = autoManageEntryKey(account.accountName, charName);
+        const entryKey = autoManageEntryKey(account.accountName, getCharacterName(character));
         if (includeEntryKeys && !includeEntryKeys.has(entryKey)) continue;
-
-        const entry = {
-          accountName: account.accountName,
-          charName,
-          // Composite key: accountName + charName. See autoManageEntryKey
-          // jsdoc for why charName alone is insufficient.
-          entryKey,
-          className: getCharacterClass(character),
-          // `meta` is only set when the char wasn't already cached -
-          // apply phase propagates this into the fresh doc's character.
-          meta: null,
-          canonicalName: null,
-          logs: null,
-          error: null,
-        };
-        try {
-          let serial = character.bibleSerial;
-          let cid = character.bibleCid;
-          let rid = character.bibleRid;
-          if (!serial || !cid || !rid) {
-            const resolved = await resolveBibleMetaForEntry(
-              account,
-              character,
-              entry,
-              rosterFetchCache
-            );
-            if (resolved.canonicalName) {
-              entry.canonicalName = resolved.canonicalName;
-              console.warn(
-                `[auto-manage] resolved bible meta for "${entry.charName}" via ${resolved.source} as "${resolved.canonicalName}".`
-              );
-            }
-            const meta = resolved.meta;
-            serial = meta.sn;
-            cid = meta.cid;
-            rid = meta.rid;
-            entry.meta = { sn: serial, cid, rid };
-          }
-          entry.logs = await fetchBibleLogsSinceWeekReset({
-            serial,
-            cid,
-            rid,
-            className: entry.className,
-            weekResetStart,
-          });
-          const expectedLogName = entry.canonicalName || entry.charName;
-          let filteredLogs = filterLogsForCharacter(entry.logs, expectedLogName);
-          if (filteredLogs.mismatchedNames.length > 0 && filteredLogs.logs.length > 0) {
-            console.warn(
-              `[auto-manage] bible logs for "${entry.charName}" included other character(s): ${filteredLogs.mismatchedNames.join(", ")}; filtering them out.`
-            );
-          }
-          if (
-            filteredLogs.hadNamedLogs &&
-            filteredLogs.logs.length === 0 &&
-            filteredLogs.mismatchedNames.length > 0
-          ) {
-            console.warn(
-              `[auto-manage] bible metadata for "${entry.charName}" returned only other character log(s): ${filteredLogs.mismatchedNames.join(", ")}; refreshing metadata.`
-            );
-            const resolved = await resolveBibleMetaForEntry(
-              account,
-              character,
-              entry,
-              rosterFetchCache
-            );
-            const meta = resolved.meta;
-            serial = meta.sn;
-            cid = meta.cid;
-            rid = meta.rid;
-            entry.meta = { sn: serial, cid, rid };
-            if (resolved.canonicalName) entry.canonicalName = resolved.canonicalName;
-            entry.logs = await fetchBibleLogsSinceWeekReset({
-              serial,
-              cid,
-              rid,
-              className: entry.className,
-              weekResetStart,
-            });
-            const refreshedExpectedName = entry.canonicalName || entry.charName;
-            filteredLogs = filterLogsForCharacter(entry.logs, refreshedExpectedName);
-            if (filteredLogs.mismatchedNames.length > 0 && filteredLogs.logs.length > 0) {
-              console.warn(
-                `[auto-manage] refreshed bible logs for "${entry.charName}" still included other character(s): ${filteredLogs.mismatchedNames.join(", ")}; filtering them out.`
-              );
-            }
-          }
-          entry.logs = filteredLogs.logs;
-        } catch (err) {
-          entry.error = err?.message || String(err);
-          console.warn(
-            `[auto-manage] gather for ${entry.charName} failed:`,
-            err?.message || err
-          );
-        }
-        collected.push(entry);
+        jobs.push({ account, character, rosterFetchCache });
       }
     }
-    return collected;
+
+    return mapWithConcurrency(
+      jobs,
+      AUTO_MANAGE_GATHER_CHARACTER_CONCURRENCY,
+      ({ account, character, rosterFetchCache }) =>
+        gatherAutoManageLogsForCharacter(account, character, weekResetStart, rosterFetchCache)
+    );
   }
 
   /**

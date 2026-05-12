@@ -12,7 +12,7 @@ const {
   RAID_REQUIREMENT_MAP,
 } = require("../bot/utils/raid/common/character");
 
-function makeService() {
+function makeService(overrides = {}) {
   return createAutoManageCoreService({
     EmbedBuilder: class {},
     UI,
@@ -33,7 +33,8 @@ function makeService() {
     getGatesForRaid,
     normalizeAssignedRaid,
     ensureAssignedRaids,
-    bibleLimiter: { schedule: async (op) => op() },
+    bibleLimiter: { run: async (op) => op() },
+    ...overrides,
   });
 }
 
@@ -106,4 +107,150 @@ test("auto-manage apply changes modeKey only when a clear log arrives in the new
   assert.equal(kaz.G2.difficulty, "Normal");
   assert.equal(kaz.G1.completedDate, 2000);
   assert.equal(kaz.G2.completedDate, 3000);
+});
+
+function createTestLimiter(limit) {
+  let active = 0;
+  let maxActive = 0;
+  let runCalls = 0;
+  const queue = [];
+
+  function pump() {
+    while (active < limit && queue.length > 0) {
+      const { op, resolve, reject } = queue.shift();
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      Promise.resolve()
+        .then(op)
+        .then(resolve, reject)
+        .finally(() => {
+          active -= 1;
+          pump();
+        });
+    }
+  }
+
+  return {
+    run(op) {
+      runCalls += 1;
+      return new Promise((resolve, reject) => {
+        queue.push({ op, resolve, reject });
+        pump();
+      });
+    },
+    get maxActive() {
+      return maxActive;
+    },
+    get runCalls() {
+      return runCalls;
+    },
+  };
+}
+
+function tick() {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+function createDeferred() {
+  let settled = false;
+  let resolve;
+  const promise = new Promise((res) => {
+    resolve = (value) => {
+      if (settled) return;
+      settled = true;
+      res(value);
+    };
+  });
+  return { promise, resolve };
+}
+
+function emptyBibleResponse() {
+  return {
+    ok: true,
+    json: async () => [],
+  };
+}
+
+function testRosterWithCachedBibleIds() {
+  return {
+    accounts: [
+      {
+        accountName: "Roster",
+        characters: [
+          { name: "Aki", class: "Artist", bibleSerial: "s1", bibleCid: 1, bibleRid: 1 },
+          { name: "Bora", class: "Artist", bibleSerial: "s2", bibleCid: 2, bibleRid: 2 },
+          { name: "Ciel", class: "Artist", bibleSerial: "s3", bibleCid: 3, bibleRid: 3 },
+        ],
+      },
+    ],
+  };
+}
+
+test("auto-manage gather overlaps cached character log fetches through the limiter", async () => {
+  const limiter = createTestLimiter(2);
+  const service = makeService({ bibleLimiter: limiter });
+  const originalFetch = global.fetch;
+  let fetchCalls = 0;
+  global.fetch = async () => {
+    fetchCalls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    return {
+      ok: true,
+      json: async () => [],
+    };
+  };
+
+  try {
+    const collected = await service.gatherAutoManageLogsForUserDoc(
+      testRosterWithCachedBibleIds(),
+      1000
+    );
+
+    assert.equal(fetchCalls, 3);
+    assert.equal(limiter.maxActive, 2);
+    assert.deepEqual(collected.map((entry) => entry.charName), ["Aki", "Bora", "Ciel"]);
+    assert.ok(collected.every((entry) => Array.isArray(entry.logs) && !entry.error));
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("auto-manage gather caps per-user character fan-out instead of flooding the global queue", async () => {
+  const limiter = createTestLimiter(2);
+  const service = makeService({ bibleLimiter: limiter });
+  const originalFetch = global.fetch;
+  const pending = [];
+  let gatherPromise = null;
+
+  global.fetch = async () => {
+    const deferred = createDeferred();
+    pending.push(deferred);
+    return deferred.promise;
+  };
+
+  try {
+    gatherPromise = service.gatherAutoManageLogsForUserDoc(
+      testRosterWithCachedBibleIds(),
+      1000
+    );
+
+    await tick();
+    await tick();
+    assert.equal(limiter.runCalls, 2);
+
+    pending[0].resolve(emptyBibleResponse());
+    await tick();
+    await tick();
+    assert.equal(limiter.runCalls, 3);
+
+    pending[1].resolve(emptyBibleResponse());
+    pending[2].resolve(emptyBibleResponse());
+    const collected = await gatherPromise;
+    assert.deepEqual(collected.map((entry) => entry.charName), ["Aki", "Bora", "Ciel"]);
+  } finally {
+    global.fetch = async () => emptyBibleResponse();
+    for (const deferred of pending) deferred.resolve(emptyBibleResponse());
+    if (gatherPromise) await gatherPromise.catch(() => {});
+    global.fetch = originalFetch;
+  }
 });
