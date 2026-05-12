@@ -366,6 +366,135 @@ function createRaidSetCommand(deps) {
       await interaction.respond([]).catch(() => {});
     }
   }
+
+  function makeRaidSetResult(raidMeta) {
+    return {
+      noRoster: false,
+      authLost: false,
+      syncDisabled: false,
+      matched: false,
+      updated: false,
+      alreadyComplete: false,
+      alreadyReset: false,
+      ineligibleItemLevel: 0,
+      modeResetCount: 0,
+      selectedDifficulty: toModeLabel(raidMeta?.modeKey),
+      displayName: "",
+    };
+  }
+
+  async function applyRaidSetToLoadedUserDoc(userDoc, {
+    discordId,
+    executorId = null,
+    characterName,
+    rosterName = null,
+    raidMeta,
+    statusType,
+    effectiveGates,
+    requireLocalSyncEnabled = false,
+  }, now = Date.now()) {
+    const result = makeRaidSetResult(raidMeta);
+    const gateList = Array.isArray(effectiveGates) ? effectiveGates.filter(Boolean) : [];
+    const selectedDifficulty = result.selectedDifficulty;
+    if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+      result.noRoster = true;
+      return result;
+    }
+    if (requireLocalSyncEnabled && !userDoc.localSyncEnabled) {
+      result.syncDisabled = true;
+      return result;
+    }
+    if (executorId && executorId !== discordId) {
+      const rosterTarget = rosterName ? normalizeName(rosterName) : "";
+      const account = userDoc.accounts.find(
+        (item) => normalizeName(item.accountName) === rosterTarget
+      );
+      if (!account) {
+        result.authLost = true;
+        return result;
+      }
+      const isHelperManager = account.registeredBy === executorId;
+      const isShareEdit = !isHelperManager
+        && (await canEditAccount(executorId, discordId));
+      if (!isHelperManager && !isShareEdit) {
+        result.authLost = true;
+        return result;
+      }
+    }
+
+    const character = findCharacterInUser(userDoc, characterName, rosterName);
+    if (!character) return result;
+    result.matched = true;
+    result.displayName = getCharacterName(character);
+    const charItemLevel = Number(character.itemLevel) || 0;
+    if (charItemLevel < raidMeta.minItemLevel) {
+      result.ineligibleItemLevel = charItemLevel;
+      return result;
+    }
+
+    const normalizedSelectedDiff = normalizeName(selectedDifficulty);
+    const officialGateList = getGatesForRaid(raidMeta.raidKey);
+    const assignedRaids = ensureAssignedRaids(character);
+    const raidData = normalizeAssignedRaid(
+      assignedRaids[raidMeta.raidKey] || {},
+      selectedDifficulty,
+      raidMeta.raidKey
+    );
+    let modeChangeDetected = false;
+    for (const g of officialGateList) {
+      const existingDiff = raidData[g]?.difficulty;
+      if (existingDiff && normalizeName(existingDiff) !== normalizedSelectedDiff) {
+        modeChangeDetected = true;
+        break;
+      }
+    }
+    if (modeChangeDetected) {
+      for (const g of officialGateList) {
+        raidData[g] = { difficulty: selectedDifficulty, completedDate: undefined };
+      }
+      result.modeResetCount = 1;
+    }
+    const gateKeys = gateList.length > 0 ? gateList : getGateKeys(raidData);
+    const shouldMarkDone = statusType === "complete" || statusType === "process";
+    if (shouldMarkDone && !modeChangeDetected) {
+      const everyTargetAlreadyDone = gateKeys.length > 0 && gateKeys.every((g) => {
+        const entry = raidData[g];
+        if (!entry) return false;
+        if (!(Number(entry.completedDate) > 0)) return false;
+        const entryDiff = normalizeName(entry.difficulty || "");
+        return !entryDiff || entryDiff === normalizedSelectedDiff;
+      });
+      if (everyTargetAlreadyDone) {
+        result.alreadyComplete = true;
+        return result;
+      }
+    }
+    if (!shouldMarkDone && !modeChangeDetected) {
+      const everyTargetAlreadyEmpty = gateKeys.length === 0 || gateKeys.every((g) => {
+        const entry = raidData[g];
+        return !entry || !(Number(entry.completedDate) > 0);
+      });
+      if (everyTargetAlreadyEmpty) {
+        result.alreadyReset = true;
+        return result;
+      }
+    }
+
+    for (const gate of gateKeys) {
+      raidData[gate] = {
+        difficulty: selectedDifficulty,
+        completedDate: shouldMarkDone ? now : null,
+      };
+    }
+    assignedRaids[raidMeta.raidKey] = raidData;
+    character.assignedRaids = assignedRaids;
+    if (!character.name) character.name = getCharacterName(character);
+    if (!character.class) character.class = getCharacterClass(character);
+    if (!character.id) character.id = createCharacterId();
+    result.updated = true;
+    return result;
+  }
+
   /**
    * Core raid-set write path shared by `/raid-set` and the channel-monitor
    * text handler. Given a Discord user id and a raid/gate target, load the
@@ -387,178 +516,70 @@ function createRaidSetCommand(deps) {
     effectiveGates,
     requireLocalSyncEnabled = false,
   }) {
-    const gateList = Array.isArray(effectiveGates) ? effectiveGates.filter(Boolean) : [];
-    const selectedDifficulty = toModeLabel(raidMeta.modeKey);
-    let noRoster = false;
-    let updatedCount = 0;
-    let matchedCount = 0;
-    let ineligibleItemLevel = 0;
-    let modeResetCount = 0;
-    let alreadyComplete = false;
-    let alreadyReset = false;
-    let authLost = false;
-    let syncDisabled = false;
-    // The properly-cased character name from the roster - user's input may
-    // be lowercase (especially from the text-channel parser which lowercases
-    // for alias matching), but the embed should show the name the way the
-    // owner registered it.
-    let displayName = "";
+    let result = makeRaidSetResult(raidMeta);
     await saveWithRetry(async () => {
-      // Reset outer counters on each retry attempt so VersionError retries
-      // start from a clean slate of status flags.
-      noRoster = false;
-      updatedCount = 0;
-      matchedCount = 0;
-      ineligibleItemLevel = 0;
-      modeResetCount = 0;
-      alreadyComplete = false;
-      alreadyReset = false;
-      authLost = false;
-      syncDisabled = false;
-      displayName = "";
+      // Reset result on each retry attempt so VersionError retries start
+      // from a clean status object.
+      result = makeRaidSetResult(raidMeta);
       const userDoc = await User.findOne({ discordId });
-      if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
-        // No roster at all - single-read detection inside retry, so we
-        // avoid a duplicate pre-check findOne and stay consistent if the
-        // document is created concurrently.
-        noRoster = true;
-        return;
-      }
-      if (requireLocalSyncEnabled && !userDoc.localSyncEnabled) {
-        syncDisabled = true;
+      if (userDoc) ensureFreshWeek(userDoc);
+      result = await applyRaidSetToLoadedUserDoc(userDoc, {
+        discordId,
+        executorId,
+        characterName,
+        rosterName,
+        raidMeta,
+        statusType,
+        effectiveGates,
+        requireLocalSyncEnabled,
+      });
+      if (result.updated) await userDoc.save();
+    });
+    return result;
+  }
+
+  async function applyRaidSetBatchForDiscordId({
+    discordId,
+    entries,
+    requireLocalSyncEnabled = false,
+  }) {
+    const list = Array.isArray(entries) ? entries : [];
+    let results = list.map((entry) => makeRaidSetResult(entry?.raidMeta));
+    await saveWithRetry(async () => {
+      results = [];
+      const userDoc = await User.findOne({ discordId });
+      if (!userDoc) {
+        results = list.map((entry) => ({
+          ...makeRaidSetResult(entry?.raidMeta),
+          noRoster: true,
+        }));
         return;
       }
       ensureFreshWeek(userDoc);
-      // Helper-Manager slash writes are authorized by account.registeredBy,
-      // which was read once during resolveRosterOwner. Re-check it on the
-      // fresh document inside the retry/write closure so a remove/re-add or
-      // ownership change between resolve and save cannot write into a new
-      // same-named roster.
-      if (executorId && executorId !== discordId) {
-        const rosterTarget = rosterName ? normalizeName(rosterName) : "";
-        const account = userDoc.accounts.find(
-          (item) => normalizeName(item.accountName) === rosterTarget
-        );
-        if (!account) {
-          authLost = true;
-          return;
-        }
-        const isHelperManager = account.registeredBy === executorId;
-        // /raid-share edit grant: executor is allowed to edit the
-        // owner's roster because Manager A (the owner) ran
-        // /raid-share grant target:executor permission:edit. View-level
-        // shares are filtered out by canEditAccount so a share-only
-        // viewer can never bypass the helper-Manager auth path.
-        const isShareEdit = !isHelperManager
-          && (await canEditAccount(executorId, discordId));
-        if (!isHelperManager && !isShareEdit) {
-          authLost = true;
-          return;
-        }
-      }
-      // Resolve exactly ONE character. When rosterName is provided (slash
-      // command path, required field), scope the lookup to that roster so
-      // same-named chars across rosters don't collide. When null (text-
-      // monitor parser path), fall back to first-by-iteration match.
-      const character = findCharacterInUser(userDoc, characterName, rosterName);
-      if (!character) return;
-      matchedCount = 1;
-      displayName = getCharacterName(character);
-      const charItemLevel = Number(character.itemLevel) || 0;
-      if (charItemLevel < raidMeta.minItemLevel) {
-        ineligibleItemLevel = charItemLevel;
-        return;
-      }
       const now = Date.now();
-      const normalizedSelectedDiff = normalizeName(selectedDifficulty);
-      const officialGateList = getGatesForRaid(raidMeta.raidKey);
-      const assignedRaids = ensureAssignedRaids(character);
-      const raidData = normalizeAssignedRaid(
-        assignedRaids[raidMeta.raidKey] || {},
-        selectedDifficulty,
-        raidMeta.raidKey
-      );
-      let modeChangeDetected = false;
-      for (const g of officialGateList) {
-        const existingDiff = raidData[g]?.difficulty;
-        if (existingDiff && normalizeName(existingDiff) !== normalizedSelectedDiff) {
-          modeChangeDetected = true;
-          break;
-        }
+      let didUpdate = false;
+      for (const entry of list) {
+        const result = await applyRaidSetToLoadedUserDoc(userDoc, {
+          discordId,
+          executorId: null,
+          characterName: entry.characterName,
+          rosterName: entry.rosterName || null,
+          raidMeta: entry.raidMeta,
+          statusType: entry.statusType || "process",
+          effectiveGates: entry.effectiveGates,
+          requireLocalSyncEnabled,
+        }, now);
+        results.push(result);
+        if (result.updated) didUpdate = true;
       }
-      if (modeChangeDetected) {
-        for (const g of officialGateList) {
-          raidData[g] = { difficulty: selectedDifficulty, completedDate: undefined };
-        }
-        modeResetCount = 1;
+      if (didUpdate) {
+        if (typeof userDoc.markModified === "function") userDoc.markModified("accounts");
+        await userDoc.save();
       }
-      const gateKeys = gateList.length > 0 ? gateList : getGateKeys(raidData);
-      const shouldMarkDone = statusType === "complete" || statusType === "process";
-      // Short-circuit if the requested mark-done is a complete no-op: every
-      // target gate already has completedDate > 0 for the selected difficulty,
-      // and there's no mode-switch in play. Without this check the caller
-      // would silently re-stamp timestamps and surface a fresh "Raid
-      // Completed" DM - confusing the user into thinking a fresh clear was
-      // recorded. Skip the write and let the handler surface a specific
-      // "already DONE" notice.
-      if (shouldMarkDone && !modeChangeDetected) {
-        const everyTargetAlreadyDone = gateKeys.length > 0 && gateKeys.every((g) => {
-          const entry = raidData[g];
-          if (!entry) return false;
-          if (!(Number(entry.completedDate) > 0)) return false;
-          const entryDiff = normalizeName(entry.difficulty || "");
-          return !entryDiff || entryDiff === normalizedSelectedDiff;
-        });
-        if (everyTargetAlreadyDone) {
-          alreadyComplete = true;
-          return;
-        }
-      }
-      // Symmetric short-circuit for reset: if no mode-change would fire AND
-      // every target gate is already unstamped (completedDate missing or 0),
-      // the reset is a pure no-op. Without this, applyRaidSetForDiscordId
-      // re-writes { completedDate: null } on top of already-null gates, still
-      // returns updated: true, and the /raid-check Edit DM ends up telling
-      // the member "Artist vừa Reset về 0" for a raid they never touched.
-      // Codex flagged this after the Edit DM landed.
-      if (!shouldMarkDone && !modeChangeDetected) {
-        const everyTargetAlreadyEmpty = gateKeys.length === 0 || gateKeys.every((g) => {
-          const entry = raidData[g];
-          return !entry || !(Number(entry.completedDate) > 0);
-        });
-        if (everyTargetAlreadyEmpty) {
-          alreadyReset = true;
-          return;
-        }
-      }
-      for (const gate of gateKeys) {
-        raidData[gate] = {
-          difficulty: selectedDifficulty,
-          completedDate: shouldMarkDone ? now : null,
-        };
-      }
-      assignedRaids[raidMeta.raidKey] = raidData;
-      character.assignedRaids = assignedRaids;
-      if (!character.name) character.name = getCharacterName(character);
-      if (!character.class) character.class = getCharacterClass(character);
-      if (!character.id) character.id = createCharacterId();
-      updatedCount = 1;
-      await userDoc.save();
     });
-    return {
-      noRoster,
-      authLost,
-      syncDisabled,
-      matched: matchedCount > 0,
-      updated: updatedCount > 0,
-      alreadyComplete,
-      alreadyReset,
-      ineligibleItemLevel,
-      modeResetCount,
-      selectedDifficulty,
-      displayName,
-    };
+    return results;
   }
+
   async function handleRaidSetCommand(interaction) {
     const executorId = interaction.user.id;
     // Executor's locale - the slash invoker IS the only viewer of every
@@ -886,6 +907,7 @@ function createRaidSetCommand(deps) {
     handleRaidSetAutocomplete,
     handleRaidSetCommand,
     applyRaidSetForDiscordId,
+    applyRaidSetBatchForDiscordId,
     // Exposed for tests in test/raid-set.test.js so the helper-Manager
     // routing can be exercised without driving the full slash-command
     // handler through a mock Discord interaction.

@@ -19,12 +19,12 @@ const { getRaidRequirementMap } = require("../../models/Raid");
  *   2. Token verify (signature + expiry)
  *   3. Mongo state check: localSyncEnabled === true (rejects if user
  *      opted out between mint and POST - "stale POST" guard)
- *   4. Per-char ownership enforced inside applyRaidSetForDiscordId
+ *   4. Per-char ownership enforced inside the raid-set write path
  *
  * Returns { ok, applied, skipped, unmapped, rejected, lastLocalSyncAt }
  * on success, { ok: false, error } with appropriate HTTP status on failure.
  */
-function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId }) {
+function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId, applyRaidSetBatchForDiscordId = null }) {
   if (!User) throw new Error("[sync-endpoint] User model required");
   if (typeof applyRaidSetForDiscordId !== "function") {
     throw new Error("[sync-endpoint] applyRaidSetForDiscordId required");
@@ -156,6 +156,7 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId }) {
     try {
       summary = await applyLocalSyncDeltas(discordId, deltas, {
         applyRaidSetForDiscordId,
+        applyRaidSetBatchForDiscordId,
         getRaidRequirementMap,
         userDoc: userState,
         requireLocalSyncEnabled: true,
