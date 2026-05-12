@@ -24,6 +24,7 @@ const {
 const {
   createCharacterId,
   ensureAssignedRaids,
+  getStatusRaidsForCharacter,
   normalizeAssignedRaid,
   getGateKeys,
   RAID_REQUIREMENT_MAP,
@@ -32,6 +33,7 @@ const {
   getRaidRequirementList,
   getGatesForRaid,
 } = require("../bot/models/Raid");
+const { clearCharacterProgress } = require("../bot/services/raid/weekly-reset");
 
 function makeUserModel() {
   const docs = new Map();
@@ -131,6 +133,14 @@ function seedUser(docs, accounts, extra = {}) {
 const KAZEROS_HARD = RAID_REQUIREMENT_MAP.kazeros_hard;
 const KAZEROS_NORMAL = RAID_REQUIREMENT_MAP.kazeros_normal;
 
+function getStoredChar(docs, charIndex = 0) {
+  return docs.get("user-1").accounts[0].characters[charIndex];
+}
+
+function getStoredRaid(docs, raidKey, charIndex = 0) {
+  return getStoredChar(docs, charIndex).assignedRaids[raidKey];
+}
+
 test("applyRaidSetForDiscordId: complete on fresh raid marks all gates done", async () => {
   const { factory, docs } = makeFactory();
   seedUser(docs, [
@@ -154,6 +164,7 @@ test("applyRaidSetForDiscordId: complete on fresh raid marks all gates done", as
 
   const stored = docs.get("user-1");
   const kaz = stored.accounts[0].characters[0].assignedRaids.kazeros;
+  assert.equal(kaz.modeKey, "hard");
   assert.equal(kaz.G1.difficulty, "Hard");
   assert.equal(kaz.G2.difficulty, "Hard");
   assert.ok(Number(kaz.G1.completedDate) > 0);
@@ -194,6 +205,8 @@ test("applyRaidSetBatchForDiscordId: local-sync can apply multiple entries in on
   assert.equal(results[0].updated, true);
   assert.equal(results[1].updated, true);
   const [cyrano, lyra] = docs.get("user-1").accounts[0].characters;
+  assert.equal(cyrano.assignedRaids.kazeros.modeKey, "hard");
+  assert.equal(lyra.assignedRaids.kazeros.modeKey, "hard");
   assert.ok(Number(cyrano.assignedRaids.kazeros.G1.completedDate) > 0);
   assert.ok(Number(lyra.assignedRaids.kazeros.G1.completedDate) > 0);
   assert.ok(Number(lyra.assignedRaids.kazeros.G2.completedDate) > 0);
@@ -288,8 +301,11 @@ test("applyRaidSetForDiscordId: reset on completed raid clears every gate", asyn
   assert.equal(result.updated, true);
   assert.equal(result.alreadyReset, false);
   const kaz = docs.get("user-1").accounts[0].characters[0].assignedRaids.kazeros;
+  assert.equal(kaz.modeKey, "hard");
   assert.equal(kaz.G1.completedDate, null);
   assert.equal(kaz.G2.completedDate, null);
+  assert.equal(kaz.G1.difficulty, "Hard");
+  assert.equal(kaz.G2.difficulty, "Hard");
 });
 
 test("applyRaidSetForDiscordId: reset on already-empty raid short-circuits to alreadyReset", async () => {
@@ -312,6 +328,105 @@ test("applyRaidSetForDiscordId: reset on already-empty raid short-circuits to al
 
   assert.equal(result.alreadyReset, true);
   assert.equal(result.updated, false);
+});
+
+test("applyRaidSetForDiscordId: reset preserves the stored mode preference", async () => {
+  const { factory, docs } = makeFactory();
+  seedUser(docs, [
+    {
+      accountName: "Alpha",
+      characters: [
+        makeChar("Cyrano", 1730, {
+          kazeros: {
+            modeKey: "normal",
+            G1: { difficulty: "Normal", completedDate: 111 },
+            G2: { difficulty: "Normal", completedDate: 222 },
+          },
+        }),
+      ],
+    },
+  ]);
+
+  const result = await factory.applyRaidSetForDiscordId({
+    discordId: "user-1",
+    characterName: "Cyrano",
+    rosterName: "Alpha",
+    raidMeta: KAZEROS_HARD,
+    statusType: "reset",
+    effectiveGates: [],
+  });
+
+  assert.equal(result.updated, true);
+  const kaz = docs.get("user-1").accounts[0].characters[0].assignedRaids.kazeros;
+  assert.equal(kaz.modeKey, "normal");
+  assert.equal(kaz.G1.difficulty, "Normal");
+  assert.equal(kaz.G2.difficulty, "Normal");
+  assert.equal(kaz.G1.completedDate, null);
+  assert.equal(kaz.G2.completedDate, null);
+});
+
+test("modeKey lifecycle: Normal clear remains Normal after weekly reset", async () => {
+  const { factory, docs } = makeFactory();
+  seedUser(docs, [
+    { accountName: "Alpha", characters: [makeChar("Cyrano", 1730)] },
+  ]);
+
+  await factory.applyRaidSetForDiscordId({
+    discordId: "user-1",
+    characterName: "Cyrano",
+    rosterName: "Alpha",
+    raidMeta: KAZEROS_NORMAL,
+    statusType: "complete",
+    effectiveGates: [],
+  });
+  clearCharacterProgress(getStoredChar(docs));
+
+  const kaz = getStoredRaid(docs, "kazeros");
+  assert.equal(kaz.modeKey, "normal");
+  assert.equal(kaz.G1.completedDate, null);
+  assert.equal(kaz.G2.completedDate, null);
+  const status = getStatusRaidsForCharacter(getStoredChar(docs)).find(
+    (raid) => raid.raidKey === "kazeros"
+  );
+  assert.equal(status.modeKey, "normal");
+  assert.equal(status.raidName, "Kazeros Normal");
+});
+
+test("modeKey lifecycle: Hard clear then next-week Normal clear makes following week Normal", async () => {
+  const { factory, docs } = makeFactory();
+  seedUser(docs, [
+    { accountName: "Alpha", characters: [makeChar("Cyrano", 1730)] },
+  ]);
+
+  await factory.applyRaidSetForDiscordId({
+    discordId: "user-1",
+    characterName: "Cyrano",
+    rosterName: "Alpha",
+    raidMeta: KAZEROS_HARD,
+    statusType: "complete",
+    effectiveGates: [],
+  });
+  clearCharacterProgress(getStoredChar(docs));
+  assert.equal(getStoredRaid(docs, "kazeros").modeKey, "hard");
+
+  const normalResult = await factory.applyRaidSetForDiscordId({
+    discordId: "user-1",
+    characterName: "Cyrano",
+    rosterName: "Alpha",
+    raidMeta: KAZEROS_NORMAL,
+    statusType: "complete",
+    effectiveGates: [],
+  });
+  assert.equal(normalResult.updated, true);
+  assert.equal(getStoredRaid(docs, "kazeros").modeKey, "normal");
+
+  clearCharacterProgress(getStoredChar(docs));
+  const status = getStatusRaidsForCharacter(getStoredChar(docs)).find(
+    (raid) => raid.raidKey === "kazeros"
+  );
+  assert.equal(status.modeKey, "normal");
+  assert.equal(status.raidName, "Kazeros Normal");
+  assert.deepEqual(status.completedGateKeys, []);
 });
 
 test("applyRaidSetForDiscordId: mode-switch wipes existing different-mode gates and stamps modeResetCount", async () => {
@@ -562,6 +677,18 @@ test("normalizeAssignedRaid: auto-upgrades stale Normal stamp to Hard when iLvl 
   const result = normalizeAssignedRaid(stale, "Hard", "armoche");
   assert.equal(result.G1.difficulty, "Hard");
   assert.equal(result.G2.difficulty, "Hard");
+});
+
+test("normalizeAssignedRaid: raid-level modeKey preserves lower-mode preference after reset", () => {
+  const preferredNormal = {
+    modeKey: "normal",
+    G1: { difficulty: "Normal", completedDate: null },
+    G2: { difficulty: "Normal", completedDate: null },
+  };
+  const result = normalizeAssignedRaid(preferredNormal, "Hard", "armoche");
+  assert.equal(result.modeKey, "normal");
+  assert.equal(result.G1.difficulty, "Normal");
+  assert.equal(result.G2.difficulty, "Normal");
 });
 
 test("normalizeAssignedRaid: preserves over-tier stamped difficulty (no auto-downgrade)", () => {

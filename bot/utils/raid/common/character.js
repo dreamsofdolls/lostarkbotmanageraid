@@ -113,6 +113,16 @@ function getBestEligibleModeKey(raidKey, itemLevel) {
   return modes[0]?.modeKey || null;
 }
 
+function normalizeRaidModeKey(raidKey, modeKey) {
+  const key = normalizeName(modeKey);
+  if (!key) return null;
+  return getRequirementFor(raidKey, key) ? key : null;
+}
+
+function getAssignedRaidModeKey(assignedRaid, raidKey) {
+  return normalizeRaidModeKey(raidKey, assignedRaid?.modeKey);
+}
+
 function sanitizeTasks(tasks) {
   if (!Array.isArray(tasks)) return [];
   return tasks
@@ -182,9 +192,12 @@ function normalizeAssignedRaid(assignedRaid, fallbackDifficulty, raidKey) {
   }
 
   let canonicalDifficulty;
+  let canonicalModeKey = null;
   if (diffTally.size === 0) {
     // No completion stamped yet - we have flexibility to pick the right
-    // difficulty. Compare the stale stored difficulty (from a previous
+    // difficulty. If a raid-level modeKey exists, treat it as the user's
+    // preference from the last clear/manual set and preserve it across
+    // weekly reset. Otherwise compare the stale stored difficulty (from a previous
     // /raid-add-roster or /raid-edit-roster when the char was at lower iLvl) to
     // `fallbackDifficulty` (the best-eligible mode at the CURRENT iLvl,
     // computed by the caller in ensureAssignedRaids). Auto-upgrade if
@@ -197,9 +210,13 @@ function normalizeAssignedRaid(assignedRaid, fallbackDifficulty, raidKey) {
     // difficulty (e.g. Hard stamped via manual /raid-set on a char
     // that's later at sub-threshold iLvl) may be a deliberate manual
     // choice the player wants to keep until weekly reset clears it.
+    const storedModeKey = getAssignedRaidModeKey(assignedRaid, raidKey);
     const existingDifficulty =
       assignedRaid?.G1?.difficulty || assignedRaid?.G2?.difficulty;
-    if (!existingDifficulty) {
+    if (storedModeKey) {
+      canonicalModeKey = storedModeKey;
+      canonicalDifficulty = toModeLabel(storedModeKey);
+    } else if (!existingDifficulty) {
       canonicalDifficulty = fallbackDifficulty;
     } else {
       const existingMin =
@@ -215,10 +232,11 @@ function normalizeAssignedRaid(assignedRaid, fallbackDifficulty, raidKey) {
       if (!best || entry.count > best.count) best = entry;
     }
     canonicalDifficulty = best.raw;
+    canonicalModeKey = normalizeRaidModeKey(raidKey, toModeKey(canonicalDifficulty)) || null;
   }
   const canonicalNorm = normalizeName(canonicalDifficulty);
 
-  const normalized = {};
+  const normalized = canonicalModeKey ? { modeKey: canonicalModeKey } : {};
   for (const gate of keys) {
     const source = assignedRaid?.[gate] || {};
     const sourceDiff = source.difficulty;
@@ -245,7 +263,7 @@ function buildAssignedRaidFromLegacy(legacyRaid) {
 
   const modeLabel = toModeLabel(requirement.modeKey);
   const completedDate = legacyRaid?.isCompleted ? Date.now() : undefined;
-  const data = {};
+  const data = { modeKey: requirement.modeKey };
   for (const gate of getGatesForRaid(requirement.raidKey)) {
     data[gate] = { difficulty: modeLabel, completedDate };
   }
@@ -309,8 +327,8 @@ function ensureRaidEntries(character) {
 
   for (const raidKey of RAID_GROUP_KEYS) {
     const assignedRaid = assignedRaids[raidKey];
-    const difficulty = assignedRaid?.G1?.difficulty || assignedRaid?.G2?.difficulty || "Normal";
-    const modeKey = toModeKey(difficulty);
+    const modeKey = getAssignedRaidModeKey(assignedRaid, raidKey)
+      || toModeKey(assignedRaid?.G1?.difficulty || assignedRaid?.G2?.difficulty || "Normal");
     const requirement = getRequirementFor(raidKey, modeKey) || getRequirementFor(raidKey, "normal");
     if (!requirement) continue;
 
@@ -353,8 +371,8 @@ function getStatusRaidsForCharacter(character) {
 
   for (const raidKey of RAID_GROUP_KEYS) {
     const assignedRaid = assignedRaids[raidKey];
-    const selectedDifficulty = assignedRaid?.G1?.difficulty || assignedRaid?.G2?.difficulty || "Normal";
-    const modeKey = toModeKey(selectedDifficulty);
+    const modeKey = getAssignedRaidModeKey(assignedRaid, raidKey)
+      || toModeKey(assignedRaid?.G1?.difficulty || assignedRaid?.G2?.difficulty || "Normal");
     const completedGateKeys = getCompletedGateKeys(assignedRaid);
 
     const rawGateKeys = getGateKeys(assignedRaid);

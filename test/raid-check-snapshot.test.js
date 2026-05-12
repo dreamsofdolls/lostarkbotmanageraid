@@ -981,11 +981,38 @@ test("Edit flow: applyLocalRaidEditToChar noop Reset leaves untouched gates unch
   );
   const kaz = character.assignedRaids.kazeros;
   assert.ok(kaz);
-  for (const gate of Object.keys(kaz)) {
+  for (const gate of Object.keys(kaz).filter((key) => /^G\d+$/i.test(key))) {
     const entry = kaz[gate];
     assert.equal(entry.difficulty, "Hard");
     assert.ok(!(Number(entry.completedDate) > 0));
   }
+});
+
+test("Edit flow: reset mirror preserves the existing mode preference", () => {
+  const character = {
+    assignedRaids: {
+      kazeros: {
+        modeKey: "normal",
+        G1: { difficulty: "Normal", completedDate: 111 },
+        G2: { difficulty: "Normal", completedDate: 222 },
+      },
+    },
+  };
+
+  __test.applyLocalRaidEditToChar(
+    character,
+    { raidKey: "kazeros", modeKey: "hard" },
+    "reset",
+    [],
+    555
+  );
+
+  const kaz = character.assignedRaids.kazeros;
+  assert.equal(kaz.modeKey, "normal");
+  assert.equal(kaz.G1.difficulty, "Normal");
+  assert.equal(kaz.G2.difficulty, "Normal");
+  assert.equal(kaz.G1.completedDate, null);
+  assert.equal(kaz.G2.completedDate, null);
 });
 
 test("Edit flow: local char state mirrors mode-switch wipe before marking", () => {

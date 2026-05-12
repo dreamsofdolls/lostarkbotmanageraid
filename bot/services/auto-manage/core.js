@@ -340,6 +340,9 @@ function createAutoManageCoreService({
       );
 
       let modeChange = false;
+      if (existingRaid.modeKey && existingRaid.modeKey !== modeKey) {
+        modeChange = true;
+      }
       for (const g of getGatesForRaid(mapping.raidKey)) {
         const existingDiff = existingRaid[g]?.difficulty;
         if (existingDiff && normalizeName(existingDiff) !== normalizedSelectedDiff) {
@@ -352,6 +355,7 @@ function createAutoManageCoreService({
           existingRaid[g] = { difficulty: difficultyLabel, completedDate: undefined };
         }
       }
+      existingRaid.modeKey = modeKey;
 
       // Only advance completedDate if we don't already have a later clear
       // for this gate. Bible sometimes shows multiple clears per week on
@@ -362,6 +366,7 @@ function createAutoManageCoreService({
           difficulty: difficultyLabel,
           completedDate: ts,
         };
+        existingRaid.modeKey = modeKey;
         applied.push({
           raidKey: mapping.raidKey,
           raidLabel: raidMeta.label,

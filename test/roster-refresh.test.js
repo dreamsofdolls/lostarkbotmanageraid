@@ -104,3 +104,39 @@ test("collectStaleAccountRefreshes summarizes repeated HTTP 429 seed failures", 
   assert.match(warnings[0], /account "Alpha" 3 seed\(s\) hit LostArk Bible HTTP 429/);
   assert.doesNotMatch(warnings[0], /seed "Alpha" failed/);
 });
+
+test("applyStaleAccountRefreshes preserves assigned raid mode preference", () => {
+  const service = makeService(async () => []);
+  const user = makeStaleUser();
+  user.accounts[0].characters[0].assignedRaids = {
+    kazeros: {
+      modeKey: "normal",
+      G1: { difficulty: "Normal", completedDate: null },
+      G2: { difficulty: "Normal", completedDate: null },
+    },
+  };
+
+  const didUpdate = service.applyStaleAccountRefreshes(user, [
+    {
+      accountName: "Alpha",
+      attempted: true,
+      resolvedSeed: "Alpha",
+      fetchedChars: [
+        {
+          charName: "Alpha",
+          className: "Bard",
+          itemLevel: 1730,
+          combatScore: "91000",
+        },
+      ],
+    },
+  ]);
+
+  const char = user.accounts[0].characters[0];
+  assert.equal(didUpdate, true);
+  assert.equal(char.itemLevel, 1730);
+  assert.equal(char.combatScore, "91000");
+  assert.equal(char.assignedRaids.kazeros.modeKey, "normal");
+  assert.equal(char.assignedRaids.kazeros.G1.difficulty, "Normal");
+  assert.equal(char.assignedRaids.kazeros.G2.difficulty, "Normal");
+});
