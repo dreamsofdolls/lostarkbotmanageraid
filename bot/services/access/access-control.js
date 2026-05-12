@@ -28,7 +28,7 @@ const { isManagerId } = require("./manager");
 //     accessLevel,          // 'edit' | 'view'
 //     isOwn,                // bool
 //   }
-async function getAccessibleAccounts(viewerDiscordId, { models = {}, helpers = {} } = {}) {
+async function getAccessibleAccounts(viewerDiscordId, { models = {}, helpers = {}, includeOwn = true } = {}) {
   const ResolvedUser = models.User || User;
   const ResolvedShare = models.RosterShare || RosterShare;
   const resolvedIsManagerId = helpers.isManagerId || isManagerId;
@@ -36,17 +36,19 @@ async function getAccessibleAccounts(viewerDiscordId, { models = {}, helpers = {
 
   if (!viewerDiscordId) return accessible;
 
-  const ownDoc = await ResolvedUser.findOne({ discordId: viewerDiscordId });
-  if (ownDoc && Array.isArray(ownDoc.accounts)) {
-    for (const account of ownDoc.accounts) {
-      accessible.push({
-        ownerDiscordId: viewerDiscordId,
-        ownerLabel: pickDisplayLabel(ownDoc),
-        accountName: account.accountName,
-        account,
-        accessLevel: "edit",
-        isOwn: true,
-      });
+  if (includeOwn) {
+    const ownDoc = await ResolvedUser.findOne({ discordId: viewerDiscordId });
+    if (ownDoc && Array.isArray(ownDoc.accounts)) {
+      for (const account of ownDoc.accounts) {
+        accessible.push({
+          ownerDiscordId: viewerDiscordId,
+          ownerLabel: pickDisplayLabel(ownDoc),
+          accountName: account.accountName,
+          account,
+          accessLevel: "edit",
+          isOwn: true,
+        });
+      }
     }
   }
 

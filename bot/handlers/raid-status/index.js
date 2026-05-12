@@ -33,12 +33,14 @@ const {
 // tries to save the merged array later) and stamped with the metadata
 // the view layer reads to render the "shared by" badge on the page
 // title and freshness line.
-async function buildMergedAccounts(viewerDiscordId, ownAccounts) {
+async function buildMergedAccounts(viewerDiscordId, ownAccounts, { accessibleAccounts = null } = {}) {
   const merged = Array.isArray(ownAccounts) ? ownAccounts.slice() : [];
 
   let accessible;
   try {
-    accessible = await getAccessibleAccounts(viewerDiscordId);
+    accessible = Array.isArray(accessibleAccounts)
+      ? accessibleAccounts
+      : await getAccessibleAccounts(viewerDiscordId, { includeOwn: false });
   } catch (err) {
     console.warn("[raid-status] getAccessibleAccounts failed:", err.message);
     return merged;
@@ -185,10 +187,13 @@ function createRaidStatusCommand(deps) {
     // share, and let the merged-accounts flow downstream surface A's
     // rosters as the entire view.
     let hasIncomingShare = false;
+    let incomingSharedAccounts = null;
     if (!hasOwnAccounts) {
       try {
-        const accessible = await getAccessibleAccounts(discordId);
-        hasIncomingShare = accessible.some((entry) => !entry.isOwn);
+        incomingSharedAccounts = await getAccessibleAccounts(discordId, {
+          includeOwn: false,
+        });
+        hasIncomingShare = incomingSharedAccounts.length > 0;
       } catch (err) {
         console.warn(
           "[raid-status] share check failed during zero-own gate:",
@@ -255,7 +260,9 @@ function createRaidStatusCommand(deps) {
     // carry an `_sharedFrom` tag the view layer reads to badge the page
     // title with "Shared by Alice" and skip auto-manage badges B has no
     // control over.
-    let accounts = await buildMergedAccounts(discordId, userDoc.accounts);
+    let accounts = await buildMergedAccounts(discordId, userDoc.accounts, {
+      accessibleAccounts: incomingSharedAccounts,
+    });
     const totalCharacters = accounts.reduce(
       (sum, account) => sum + (Array.isArray(account.characters) ? account.characters.length : 0),
       0
