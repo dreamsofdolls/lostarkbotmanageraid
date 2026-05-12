@@ -494,6 +494,23 @@ test("getStatusRaidsForCharacter: Serca 1740+ shows one mode, switching to the c
     (raid) => raid.raidKey === "serca"
   );
   assert.deepEqual(normalSerca.map((raid) => raid.raidName), ["Serca Normal"]);
+
+  const normalPreferenceAfterReset = {
+    ...makeChar("NormalPreference", 1740),
+    assignedRaids: {
+      armoche: {},
+      kazeros: {},
+      serca: {
+        modeKey: "normal",
+        G1: { difficulty: "Normal", completedDate: null },
+        G2: { difficulty: "Normal", completedDate: null },
+      },
+    },
+  };
+  const preferredNormalSerca = getStatusRaidsForCharacter(normalPreferenceAfterReset).filter(
+    (raid) => raid.raidKey === "serca"
+  );
+  assert.deepEqual(preferredNormalSerca.map((raid) => raid.raidName), ["Serca Normal"]);
 });
 
 test("formatRaidStatusLine: translated raid labels keep the difficulty mode", () => {

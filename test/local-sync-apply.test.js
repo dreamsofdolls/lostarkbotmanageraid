@@ -192,6 +192,35 @@ test("applyLocalSyncDeltas - uses batch writer when provided", async () => {
   assert.equal(result.applied.length, 2);
 });
 
+test("applyLocalSyncDeltas - lower-mode clear after reset is sent as the incoming mode", async () => {
+  const applyStub = makeApplyStub(() => ({ matched: true, updated: true, displayName: "Aki" }));
+  const userDoc = makeUserDoc([
+    {
+      id: "c1",
+      name: "Aki",
+      class: "Artist",
+      itemLevel: 1750,
+      assignedRaids: {
+        kazeros: {
+          modeKey: "hard",
+          G1: { difficulty: "Hard", completedDate: null },
+          G2: { difficulty: "Hard", completedDate: null },
+        },
+      },
+    },
+  ]);
+
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Archdemon Kazeros", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 1 },
+  ], makeDeps(applyStub, { userDoc }));
+
+  assert.equal(result.applied.length, 1);
+  assert.equal(result.applied[0].modeKey, "normal");
+  assert.equal(applyStub.calls.length, 1);
+  assert.equal(applyStub.calls[0].raidMeta.modeKey, "normal");
+  assert.deepEqual(applyStub.calls[0].effectiveGates, ["G1", "G2"]);
+});
+
 test("applyLocalSyncDeltas - unmapped boss bucketed without calling apply", async () => {
   const applyStub = makeApplyStub();
   const result = await applyLocalSyncDeltas("u1", [

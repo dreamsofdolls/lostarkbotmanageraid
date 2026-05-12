@@ -104,12 +104,13 @@ function createEditHelpers({
     const assigned = character?.assignedRaids?.[raidKey] || {};
     const officialGates = getGatesForRaid(raidKey) || [];
     const normalizedPickedMode = normalizeName(toModeLabel(modeKey));
+    const storedRaidMode = assigned?.modeKey ? normalizeName(toModeLabel(assigned.modeKey)) : "";
     let modeChangeNeeded = false;
     const gates = officialGates.map((gate) => {
       const entry = assigned[gate] || {};
       const storedMode = entry.difficulty
         ? String(entry.difficulty).toLowerCase()
-        : null;
+        : (storedRaidMode || null);
       const doneAtSomeMode = Number(entry.completedDate) > 0;
       const doneAtPickedMode =
         doneAtSomeMode && storedMode === normalizedPickedMode;
@@ -162,12 +163,18 @@ function createEditHelpers({
     if (!character.assignedRaids) character.assignedRaids = {};
 
     const raidData = character.assignedRaids[raidMeta.raidKey] || {};
+    const shouldMarkDone = statusType === "complete" || statusType === "process";
     let modeChangeDetected = false;
-    for (const gate of officialGates) {
-      const existingDiff = raidData[gate]?.difficulty;
-      if (existingDiff && normalizeName(existingDiff) !== normalizedSelectedDiff) {
-        modeChangeDetected = true;
-        break;
+    if (shouldMarkDone && raidData.modeKey && raidData.modeKey !== raidMeta.modeKey) {
+      modeChangeDetected = true;
+    }
+    if (shouldMarkDone) {
+      for (const gate of officialGates) {
+        const existingDiff = raidData[gate]?.difficulty;
+        if (existingDiff && normalizeName(existingDiff) !== normalizedSelectedDiff) {
+          modeChangeDetected = true;
+          break;
+        }
       }
     }
     if (modeChangeDetected) {
@@ -175,19 +182,23 @@ function createEditHelpers({
         raidData[gate] = { difficulty: selectedDifficulty, completedDate: undefined };
       }
     }
+    if (shouldMarkDone) raidData.modeKey = raidMeta.modeKey;
 
     const storedGateKeys = getGateKeys(raidData);
     const targetGates =
       gateList.length > 0 ? gateList :
       storedGateKeys.length > 0 ? storedGateKeys :
       officialGates;
-    const shouldMarkDone = statusType === "complete" || statusType === "process";
     for (const gate of targetGates) {
+      const existingEntry = raidData[gate] || {};
       raidData[gate] = {
-        difficulty: selectedDifficulty,
+        difficulty: shouldMarkDone
+          ? selectedDifficulty
+          : (existingEntry.difficulty || selectedDifficulty),
         completedDate: shouldMarkDone ? now : null,
       };
     }
+    if (shouldMarkDone) raidData.modeKey = raidMeta.modeKey;
     character.assignedRaids[raidMeta.raidKey] = raidData;
   }
 
