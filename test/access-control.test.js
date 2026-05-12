@@ -166,6 +166,33 @@ test("getAccessibleAccounts honors view-level access on shared rosters", async (
   assert.equal(shared.accessLevel, "view");
 });
 
+test("getAccessibleAccounts can skip own roster fetch when caller only needs shares", async () => {
+  let ownFetches = 0;
+  const baseUser = buildFakeUser([
+    { discordId: "A", accounts: [ownAccount("AliceMain")] },
+    { discordId: "B", accounts: [ownAccount("BaoMain")] },
+  ]);
+  const User = {
+    async findOne(query) {
+      if (query?.discordId === "B") ownFetches += 1;
+      return baseUser.findOne(query);
+    },
+    find: baseUser.find,
+  };
+  const RosterShare = buildFakeRosterShare([sharedRecord("A", "B", "view")]);
+
+  const accessible = await getAccessibleAccounts("B", {
+    models: { User, RosterShare },
+    helpers: { isManagerId: (id) => id === "A" },
+    includeOwn: false,
+  });
+
+  assert.equal(ownFetches, 0);
+  assert.equal(accessible.length, 1);
+  assert.equal(accessible[0].accountName, "AliceMain");
+  assert.equal(accessible[0].isOwn, false);
+});
+
 test("canEditAccount returns true for the owner short-circuit", async () => {
   const allow = await canEditAccount("B", "B", {
     models: { RosterShare: buildFakeRosterShare([]) },
