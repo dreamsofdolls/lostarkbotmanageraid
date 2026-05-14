@@ -192,6 +192,33 @@ test("applyLocalSyncDeltas - uses batch writer when provided", async () => {
   assert.equal(result.applied.length, 2);
 });
 
+test("applyLocalSyncDeltas - batch writer receives cumulative gates for a later-gate clear", async () => {
+  const applyStub = makeApplyStub(() => {
+    throw new Error("single writer should not be called");
+  });
+  const batchCalls = [];
+  const batchStub = async (args) => {
+    batchCalls.push(args);
+    return args.entries.map((entry) => ({
+      matched: true,
+      updated: true,
+      displayName: entry.characterName,
+    }));
+  };
+
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Armoche, Sentinel of the Abyss", difficulty: "Hard", cleared: 1, charName: "Aki", lastClearMs: 1 },
+  ], makeDeps(applyStub, {
+    applyRaidSetBatchForDiscordId: batchStub,
+    requireLocalSyncEnabled: true,
+  }));
+
+  assert.equal(applyStub.calls.length, 0);
+  assert.equal(batchCalls.length, 1);
+  assert.deepEqual(batchCalls[0].entries[0].effectiveGates, ["G1", "G2"]);
+  assert.deepEqual(result.applied[0].gates, ["G1", "G2"]);
+});
+
 test("applyLocalSyncDeltas - lower-mode clear after reset is sent as the incoming mode", async () => {
   const applyStub = makeApplyStub(() => ({ matched: true, updated: true, displayName: "Aki" }));
   const userDoc = makeUserDoc([
