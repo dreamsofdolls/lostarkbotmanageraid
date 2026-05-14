@@ -109,6 +109,37 @@ test("auto-manage apply changes modeKey only when a clear log arrives in the new
   assert.equal(kaz.G2.completedDate, 3000);
 });
 
+test("auto-manage apply treats a later gate clear as completion of earlier gates", () => {
+  const service = makeService();
+  const userDoc = makeUserDoc({
+    armoche: {
+      modeKey: "hard",
+      G1: { difficulty: "Hard", completedDate: null },
+      G2: { difficulty: "Hard", completedDate: null },
+    },
+  });
+
+  const report = service.applyAutoManageCollected(userDoc, 1000, [
+    {
+      entryKey: service.autoManageEntryKey("Roster", "Aki"),
+      logs: [
+        { boss: "Armoche, Sentinel of the Abyss", difficulty: "Hard", timestamp: 3000 },
+      ],
+    },
+  ]);
+
+  const act4 = userDoc.accounts[0].characters[0].assignedRaids.armoche;
+  assert.equal(report.appliedTotal, 2);
+  assert.deepEqual(report.perChar[0].applied.map((entry) => entry.gate), ["G1", "G2"]);
+  assert.equal(report.perChar[0].applied[0].inferred, true);
+  assert.equal(report.perChar[0].applied[1].inferred, false);
+  assert.equal(act4.modeKey, "hard");
+  assert.equal(act4.G1.difficulty, "Hard");
+  assert.equal(act4.G2.difficulty, "Hard");
+  assert.equal(act4.G1.completedDate, 3000);
+  assert.equal(act4.G2.completedDate, 3000);
+});
+
 function createTestLimiter(limit) {
   let active = 0;
   let maxActive = 0;

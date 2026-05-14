@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-14 (Cumulative gate sync)
+
+### Fixed
+- Auto-manage bible sync now applies cumulative gate completion: if a later gate such as Act 4 G2 is logged but the earlier gate log is missing/corrupt, the earlier gate is filled as completed too. Added a local-sync batch regression to keep the same G2-implies-G1 behavior locked.
+
 ## 2026-05-10 (Preview stats redesign: raid-count math + per-char rows + auth pill)
 
 ### Changed

@@ -358,12 +358,22 @@ function createAutoManageCoreService({
       }
       existingRaid.modeKey = modeKey;
 
-      // Only advance completedDate if we don't already have a later clear
-      // for this gate. Bible sometimes shows multiple clears per week on
-      // the same boss (e.g. practice runs) - latest-ts wins.
-      const priorTs = Number(existingRaid[mapping.gate]?.completedDate) || 0;
-      if (ts > priorTs) {
-        existingRaid[mapping.gate] = {
+      // Lost Ark gates are sequential. A later-gate clear is proof that
+      // earlier gates in the same raid/mode were cleared too, even when
+      // bible missed or corrupted the earlier log row. Fill missing prior
+      // gates, but do not overwrite a real earlier-gate timestamp that was
+      // already captured from its own log.
+      const officialGates = getGatesForRaid(mapping.raidKey);
+      const gateIndex = officialGates.indexOf(mapping.gate);
+      if (gateIndex < 0) continue;
+      const effectiveGates = officialGates.slice(0, gateIndex + 1);
+      for (const gate of effectiveGates) {
+        const isLoggedGate = gate === mapping.gate;
+        const priorTs = Number(existingRaid[gate]?.completedDate) || 0;
+        const shouldStamp = isLoggedGate ? ts > priorTs : priorTs <= 0;
+        if (!shouldStamp) continue;
+
+        existingRaid[gate] = {
           difficulty: difficultyLabel,
           completedDate: ts,
         };
@@ -371,11 +381,12 @@ function createAutoManageCoreService({
         applied.push({
           raidKey: mapping.raidKey,
           raidLabel: raidMeta.label,
-          gate: mapping.gate,
+          gate,
           modeKey,
           difficulty: difficultyLabel,
           timestamp: ts,
           boss: log.boss,
+          inferred: !isLoggedGate,
         });
       }
 
