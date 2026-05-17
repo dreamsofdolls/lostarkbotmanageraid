@@ -2,7 +2,7 @@ const { createRaidStatusView } = require("./view");
 const { createRaidStatusTaskUi } = require("./task-ui");
 const { createRaidStatusSync } = require("./sync");
 const { renderRaidStatusCard } = require("../../services/raid-card");
-const { refreshBackgroundUrl } = require("../raid/bg");
+const { loadBackgroundBuffer } = require("../../services/raid-card/bg-loader");
 const {
   FILTER_ALL_RAIDS,
   buildRaidDropdownState,
@@ -68,6 +68,16 @@ async function buildMergedAccounts(viewerDiscordId, ownAccounts, { accessibleAcc
 const STATUS_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
 const STATUS_TASK_AUTO_REFRESH_GRACE_MS = 1000;
+
+function resolveBackgroundLookup(viewerDiscordId, account) {
+  const accountName = account?.accountName || "";
+  const accountKey = String(accountName).trim().toLowerCase();
+  return {
+    discordId: viewerDiscordId,
+    accountName,
+    cacheKey: `${viewerDiscordId}:${accountKey}`,
+  };
+}
 
 function createRaidStatusCommand(deps) {
   const {
@@ -161,24 +171,11 @@ function createRaidStatusCommand(deps) {
     // buttons bypass bot auth). Ephemeral keeps the URL opener-only.
     // Lean+select is ~30ms - well under Discord's 3-sec defer deadline.
     let isLocalSyncMode = false;
-    // Same Mongo round-trip also pulls the user's /raid-bg refs so the
-    // canvas-card path can render with their chosen background without
-    // a second findOne later in the handler. Cheap join · the document
-    // is small + the fields are flat.
-    let backgroundRefs = null;
     try {
       const probe = await User.findOne({ discordId })
-        .select(
-          "localSyncEnabled backgroundImageMessageId backgroundImageChannelId backgroundImageFilename",
-        )
+        .select("localSyncEnabled")
         .lean();
       isLocalSyncMode = !!probe?.localSyncEnabled;
-      if (probe?.backgroundImageMessageId && probe?.backgroundImageChannelId) {
-        backgroundRefs = {
-          messageId: probe.backgroundImageMessageId,
-          channelId: probe.backgroundImageChannelId,
-        };
-      }
     } catch (err) {
       console.warn("[raid-status] localSync probe failed:", err?.message || err);
     }
@@ -377,25 +374,23 @@ function createRaidStatusCommand(deps) {
     // the current page's account. The raid filter doesn't apply in task
     // view but its state is preserved so toggling back keeps the user's
     // raid filter pick.
-    // Background URL resolution is lazy: the rehosted attachment URL is
-    // re-signed by Discord on every message fetch, so we cache the first
-    // successful resolve for the duration of this command invocation
-    // (pagination + filter clicks reuse the same buffer-attached canvas).
-    // null means "either user didn't opt in OR the rehost message is gone
-    // OR the fetch threw" · all three collapse to "no canvas, just embed".
-    let cachedBackgroundUrl = undefined;
-    const resolveBackgroundUrl = async () => {
-      if (cachedBackgroundUrl !== undefined) return cachedBackgroundUrl;
-      if (!backgroundRefs) {
-        cachedBackgroundUrl = null;
-        return null;
-      }
-      cachedBackgroundUrl = await refreshBackgroundUrl({
-        client: interaction.client,
-        messageId: backgroundRefs.messageId,
-        channelId: backgroundRefs.channelId,
+    // Background buffer resolution is viewer-owned. Even when the current
+    // page is a shared roster, the art comes from the person opening
+    // /raid-status, not from the roster owner. null means "viewer never
+    // opted in OR the lookup threw" · both collapse to "no canvas, just
+    // embed". Cache the resolved buffer in a closure variable so pagination
+    // + filter clicks inside the same handler reuse it without even paying
+    // the bg-loader's updatedAt round-trip.
+    const backgroundBufferCache = new Map();
+    const resolveBackgroundBuffer = async (account) => {
+      const lookup = resolveBackgroundLookup(discordId, account);
+      const { cacheKey } = lookup;
+      if (backgroundBufferCache.has(cacheKey)) return backgroundBufferCache.get(cacheKey);
+      const buffer = await loadBackgroundBuffer(lookup.discordId, {
+        accountName: lookup.accountName,
       });
-      return cachedBackgroundUrl;
+      backgroundBufferCache.set(cacheKey, buffer);
+      return buffer;
     };
 
     // Map the current page's account into the renderRaidStatusCard input
@@ -465,8 +460,9 @@ function createRaidStatusCommand(deps) {
       const embed = buildCurrentEmbed();
       const payload = { embeds: [embed], files: [], attachments: [] };
       if (currentView === "task") return payload;
-      const bgUrl = await resolveBackgroundUrl();
-      if (!bgUrl) return payload;
+      const account = accounts[currentPage];
+      const bgBuffer = await resolveBackgroundBuffer(account);
+      if (!bgBuffer) return payload;
 
       // TODO: include filterRaidId in cache key once buildCanvasInput
       // honors the filter (currently it aggregates every raid). For
@@ -480,11 +476,11 @@ function createRaidStatusCommand(deps) {
       }
 
       try {
-        const canvasInput = buildCanvasInput(accounts[currentPage]);
+        const canvasInput = buildCanvasInput(account);
         if (!canvasInput) return payload;
         const buffer = await renderRaidStatusCard({
           ...canvasInput,
-          backgroundUrl: bgUrl,
+          backgroundSource: bgBuffer,
         });
         canvasBufferCache.set(cacheKey, buffer);
         payload.files = [{ attachment: buffer, name: "raid-status.png" }];
@@ -1264,4 +1260,5 @@ module.exports = {
   createRaidStatusCommand,
   STATUS_PAGINATION_SESSION_MS,
   STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS,
+  _resolveBackgroundLookup: resolveBackgroundLookup,
 };

@@ -215,26 +215,10 @@ const userSchema = new mongoose.Schema(
     // pre-existing users see no behavior change after the i18n rollout;
     // they have to opt in via /raid-language to switch (e.g. "jp").
     language: { type: String, default: "vi" },
-    // Per-user background image for the /raid-status canvas card.
-    // Opt-in feature: users who haven't run `/raid-bg set` see the
-    // existing text embed (no behavior change). Users who upload a
-    // background flip to a pre-rendered PNG card with their art as
-    // the full-bleed backdrop and semi-transparent overlay panels.
-    //
-    // Storage follows the same pattern LoaLogs uses for /la-list add
-    // evidence images: the uploaded attachment is rehosted into a
-    // dedicated channel in the operator guild (env RAID_BG_CHANNEL_ID),
-    // then we store the rehosted message/channel ID instead of the
-    // signed Discord CDN URL · which expires ~24h after issue. The
-    // canvas renderer fetches the message on demand to get a fresh
-    // attachment URL, then composites onto the card.
-    //
-    // Fields stay flat (not a nested sub-schema) so partial updates
-    // via `$set` are atomic against the rest of the user document.
-    backgroundImageMessageId: { type: String, default: "" },
-    backgroundImageChannelId: { type: String, default: "" },
-    backgroundImageFilename: { type: String, default: "" },
-    backgroundImageUpdatedAt: { type: Number, default: null },
+    // NOTE: /raid-bg background image lives on the separate
+    // UserBackground collection (bot/models/userBackground.js) so the
+    // multi-MB Binary payload doesn't bloat User docs that are read by
+    // every command. The User doc holds no bg fields by design.
   },
   {
     timestamps: true,

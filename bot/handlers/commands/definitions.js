@@ -684,20 +684,64 @@ function createRaidCommandDefinitions({
     .addSubcommand((sub) =>
       sub
         .setName("set")
-        .setDescription("Upload a background image (min 1600x900, max 8MB, PNG/JPG/WEBP)")
+        .setDescription("Upload 1-4 roster background images (1600x900+, 8MB each)")
         .setDescriptionLocalizations({
-          vi: "Upload ảnh background (tối thiểu 1600x900, tối đa 8MB, PNG/JPG/WEBP)",
-          ja: "背景画像をアップロード（最小1600x900、最大8MB、PNG/JPG/WEBP）",
+          vi: "Upload 1-4 ảnh background roster (1600x900+, tối đa 8MB mỗi ảnh)",
+          ja: "1-4枚のroster背景画像をアップロード（1600x900以上、各8MBまで）",
         })
         .addAttachmentOption((opt) =>
           opt
             .setName("image")
-            .setDescription("Background image file (PNG/JPG/WEBP, 1600x900+, 8MB max)")
+            .setDescription("First background image file (PNG/JPG/WEBP, 1600x900+, 8MB max)")
             .setDescriptionLocalizations({
-              vi: "File ảnh background (PNG/JPG/WEBP, 1600x900+, max 8MB)",
-              ja: "背景画像ファイル（PNG/JPG/WEBP、1600x900以上、最大8MB）",
+              vi: "File background đầu tiên (PNG/JPG/WEBP, 1600x900+, max 8MB)",
+              ja: "1枚目の背景画像ファイル（PNG/JPG/WEBP、1600x900以上、最大8MB）",
             })
             .setRequired(true),
+        )
+        .addAttachmentOption((opt) =>
+          opt
+            .setName("image_2")
+            .setDescription("Optional second roster background image")
+            .setDescriptionLocalizations({
+              vi: "Ảnh background roster thứ hai (tuỳ chọn)",
+              ja: "任意の2枚目ロスター背景画像",
+            })
+            .setRequired(false)
+        )
+        .addAttachmentOption((opt) =>
+          opt
+            .setName("image_3")
+            .setDescription("Optional third roster background image")
+            .setDescriptionLocalizations({
+              vi: "Ảnh background roster thứ ba (tuỳ chọn)",
+              ja: "任意の3枚目ロスター背景画像",
+            })
+            .setRequired(false)
+        )
+        .addAttachmentOption((opt) =>
+          opt
+            .setName("image_4")
+            .setDescription("Optional fourth roster background image")
+            .setDescriptionLocalizations({
+              vi: "Ảnh background roster thứ tư (tuỳ chọn)",
+              ja: "任意の4枚目ロスター背景画像",
+            })
+            .setRequired(false)
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("mode")
+            .setDescription("How to assign uploaded images to your rosters")
+            .setDescriptionLocalizations({
+              vi: "Cách chia ảnh đã upload cho các roster của cậu",
+              ja: "アップロード画像をロスターへ割り当てる方法",
+            })
+            .setRequired(false)
+            .addChoices(
+              { name: "Even - stable round-robin", value: "even" },
+              { name: "Random - shuffle on save", value: "random" }
+            )
         ),
     )
     .addSubcommand((sub) =>

@@ -222,7 +222,7 @@ Weekly reset runs every 30 minutes (UTC-based trigger: Wed ≥ 10:00 UTC). Per-u
 | `RAID_MANAGER_ID` | ❌ (recommended) | empty | Comma-separated user IDs. Empty = `/raid-check` rejects everyone; manager perks never apply |
 | `AUTO_MANAGE_DAILY_DISABLED` | ❌ | `false` | Killswitch for the 24h passive auto-sync scheduler (no redeploy needed) |
 
-`/raid-bg` (canvas-card background storage) is configured per-guild via `/raid-channel config action:set-bg-channel channel:#<name>` instead of an env var · admin sets it once, every user in that guild can then `/raid-bg set` to upload a personal background.
+`/raid-bg` (canvas-card background storage) needs no admin setup and no env var · uploaded bytes are downscaled + JPEG-compressed (≤ 2 MB per stored image) and persisted on the `userbackgrounds` Mongo collection (separate from the User doc). Users can `/raid-bg set` 1-4 images, capped by the roster count visible to them; the bot maps those images evenly or randomly across rosters. Shared roster pages use the viewer's own background pool, not the roster owner's.
 
 Discord Developer Portal: flip `Bot → Privileged Gateway Intents → Message Content Intent` on to let the text monitor read posts, or set `TEXT_MONITOR_ENABLED=false` to run slash-command-only.
 
