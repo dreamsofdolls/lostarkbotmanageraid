@@ -17,6 +17,7 @@
 
 const { loadImage } = require("@napi-rs/canvas");
 const { t, getUserLanguage } = require("../../services/i18n");
+const GuildConfig = require("../../models/guildConfig");
 
 const RAID_BG_MIN_WIDTH = 1600;
 const RAID_BG_MIN_HEIGHT = 900;
@@ -31,8 +32,26 @@ const RAID_BG_ALLOWED_MIME = new Set([
   "image/webp",
 ]);
 
-function getBgChannelId() {
-  return (process.env.RAID_BG_CHANNEL_ID || "").trim();
+/**
+ * Look up the rehost channel for /raid-bg uploads on the invoking
+ * guild's GuildConfig. Storage moved from env var (`RAID_BG_CHANNEL_ID`)
+ * to per-guild config so admins discover the knob next to the existing
+ * `/raid-channel config action:set` flow instead of hunting through
+ * Railway env vars. Returns empty string when the guild hasn't set one
+ * yet · /raid-bg set rejects with the "ask admin to /raid-channel
+ * config action:set-bg-channel" alert in that path.
+ */
+async function getBgChannelId(guildId) {
+  if (!guildId) return "";
+  try {
+    const cfg = await GuildConfig.findOne({ guildId })
+      .select("raidBgChannelId")
+      .lean();
+    return (cfg?.raidBgChannelId || "").trim();
+  } catch (err) {
+    console.warn(`[raid-bg] GuildConfig lookup failed for ${guildId}:`, err.message);
+    return "";
+  }
 }
 
 /**
@@ -96,8 +115,8 @@ async function validateBgAttachment(attachment, buffer) {
   return { width: img.width, height: img.height, mime };
 }
 
-async function rehostBackground({ client, buffer, attachment, AttachmentBuilder }) {
-  const channelId = getBgChannelId();
+async function rehostBackground({ client, buffer, attachment, AttachmentBuilder, guildId }) {
+  const channelId = await getBgChannelId(guildId);
   if (!channelId) {
     throw new RaidBgError("raidBg.errors.channelMissing");
   }
@@ -174,7 +193,13 @@ async function handleSet({ interaction, deps, lang }) {
   try {
     buffer = await downloadAttachment(attachment);
     dims = await validateBgAttachment(attachment, buffer);
-    rehosted = await rehostBackground({ client, buffer, attachment, AttachmentBuilder });
+    rehosted = await rehostBackground({
+      client,
+      buffer,
+      attachment,
+      AttachmentBuilder,
+      guildId: interaction.guild?.id,
+    });
   } catch (err) {
     if (!(err instanceof RaidBgError)) throw err;
     // Validation errors get a richer reject card with the requirements

@@ -1045,6 +1045,7 @@ module.exports = {
       repin: "repin - ピン留めウェルカム埋め込みを更新",
       scheduleOn: "schedule-on - 30分ごとの自動クリーンアップを有効化 (JST 朝3時～朝8時は静音)",
       scheduleOff: "schedule-off - 30分ごとの自動クリーンアップを無効化",
+      setBgChannel: "set-bg-channel - /raid-bg アップロードの保存先チャンネルを指定",
     },
     auth: {
       serverOnlyTitle: "サーバー専用ですわ",
@@ -1117,6 +1118,14 @@ module.exports = {
       enabledDescription: "JST で 30 分ごと (:00 と :30 のスロット) に、アーティストが監視チャンネル内のピン留め以外のメッセージを自動削除しますわ。ウェルカムピンは残りますの。整理後、4 段階 (空っぽ / 1-5 / 6-20 / 21+ メッセージ) のお知らせバリアントから 1 つ投稿しますわ - 案内は 5 分後に自動消滅しますの。ボットがオフライン中にスロット境界を跨いだ場合は、復帰後の次の周期でまとめて処理しますわ♪",
       disabledTitle: "自動クリーンアップを無効化しましたわ",
       disabledDescription: "自動クリーンアップは無効化されましたわ。管理者はいつでも `/raid-channel config action:cleanup` で手動実行できますの♪",
+    },
+    setBgChannel: {
+      missingChannelTitle: "`channel` オプションが必要ですわ",
+      missingChannelDescription: "Action `set-bg-channel` には `channel:#<名前>` を一緒に指定してくださいませ。例: `/raid-channel config action:set-bg-channel channel:#raid-bg-archive` ですわ♪",
+      missingPermsTitle: "ボットの権限が足りませんわ",
+      missingPermsDescription: "アーティストが <#{channelId}> に画像を投稿できませんの · 不足: **{missing}**。Send Messages と Attach Files をその channel で付与してから再実行してくださいませ。",
+      successTitle: "bg channel を保存しましたわ♪",
+      successDescription: "これからユーザーが `/raid-bg set image:<file>` を実行すると、アーティストが <#{channelId}> へ画像を再アップロードして、`/raid-status` のキャンバスカードが使えるようになりますわ。アーカイブ用の channel (ミュート / メンバーに非表示) を推奨しますの · アップロードごとに 1 メッセージずつ溜まりますので♪",
     },
   },
   "raid-announce": {
@@ -1468,7 +1477,7 @@ module.exports = {
           "**view** — 現在保存中の background をアーティストがお見せしますの。",
           "**remove** — 参照を消して、`/raid-status` を標準テキスト embed に戻しますわ。",
           "",
-          "**保存場所**: Discord CDN の URL は ~24h で期限切れですので、アーティストがオペレーターギルドの専用チャンネル (env RAID_BG_CHANNEL_ID) に再アップロードして、メッセージ参照を保存しますわ。 bot オーナーが Railway で一度設定する必要がありますの。",
+          "**保存場所**: Discord CDN の URL は ~24h で期限切れですので、管理者が `/raid-channel config action:set-bg-channel channel:#<名前>` で指定したチャンネルにアーティストが再アップロードして、メッセージ参照を保存しますわ。サーバーごとに一度設定すれば全員が使えますの♪",
           "**クッキリ + キレイ**: rgba dark 82% のパネルが画像の上に重なって、明るい背景でも暗い背景でもテキストが読みやすくなりますわ。 cover-fit で fullbleed しても比率が崩れませんの～",
         ],
       },
@@ -1721,7 +1730,7 @@ module.exports = {
       tooLarge:
         "画像が大きすぎてアーティスト持てませんわ ({width}x{height})！ 4K の {maxW}x{maxH} までにしてくださいませ、bot が軽く動けますわ～",
       channelMissing:
-        "bot オーナーが Railway で RAID_BG_CHANNEL_ID をまだ設定してませんの、アーティスト画像をどこに置けばいいかわかりませんわ！オーナーに伝えてくださいませ～",
+        "このサーバーはまだ /raid-bg 用のチャンネルが設定されてませんの。管理者に `/raid-channel config action:set-bg-channel channel:#<名前>` を実行してもらってから再試行してくださいませ～",
       channelFetchFailed:
         "アーティストが bg channel {channelId} を見つけられませんの: {message}",
       notTextChannel:

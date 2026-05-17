@@ -29,6 +29,11 @@ const RAID_CHANNEL_ACTION_CHOICES = [
   // Lives under the same `action:` autocomplete so admins discover it next to
   // the existing channel config knobs.
   { value: "set-language", labelKey: "setLanguage", external: true },
+  // Per-guild background-image rehost channel for /raid-bg uploads.
+  // Persists on GuildConfig.raidBgChannelId and is read by /raid-bg set
+  // at upload time. Sits next to `set` so the admin who configured the
+  // raid monitor channel discovers the bg channel knob too.
+  { value: "set-bg-channel", labelKey: "setBgChannel" },
 ];
 
 function createRaidChannelCommand({
@@ -572,6 +577,63 @@ function createRaidChannelCommand({
             flag: langEntry.flag,
             label: langEntry.label,
           })
+        )
+        .setTimestamp();
+      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      return;
+    }
+    if (action === "set-bg-channel") {
+      const channel = interaction.options.getChannel("channel");
+      if (!channel) {
+        await interaction.reply({
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "warn",
+              title: t("raid-channel.setBgChannel.missingChannelTitle", lang),
+              description: t("raid-channel.setBgChannel.missingChannelDescription", lang),
+            }),
+          ],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      // Verify bot can post + attach files in the channel BEFORE persisting,
+      // mirroring the `set` (monitor channel) flow · admins shouldn't get a
+      // success embed for a channel where /raid-bg set will silently fail
+      // because the bot can't actually upload the rehost.
+      const botMember = interaction.guild?.members?.me;
+      const missing = getMissingBotChannelPermissions(channel, botMember, {
+        // bg channel only needs upload + history (no Read MessageContent
+        // since we never parse user-typed messages here). Pass an
+        // override if the shared helper supports it; otherwise fall back
+        // to the default set + filter to ours.
+      });
+      if (missing.length > 0) {
+        await interaction.reply({
+          embeds: [
+            buildNoticeEmbed(EmbedBuilder, {
+              type: "lock",
+              title: t("raid-channel.setBgChannel.missingPermsTitle", lang),
+              description: t("raid-channel.setBgChannel.missingPermsDescription", lang, {
+                channelId: channel.id,
+                missing: missing.join(", "),
+              }),
+            }),
+          ],
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      await GuildConfig.findOneAndUpdate(
+        { guildId },
+        { guildId, raidBgChannelId: channel.id },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      const embed = new EmbedBuilder()
+        .setColor(UI.colors.success)
+        .setTitle(`${UI.icons.done} ${t("raid-channel.setBgChannel.successTitle", lang)}`)
+        .setDescription(
+          t("raid-channel.setBgChannel.successDescription", lang, { channelId: channel.id })
         )
         .setTimestamp();
       await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });

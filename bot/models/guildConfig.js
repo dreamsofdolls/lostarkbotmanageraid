@@ -16,6 +16,15 @@ const guildConfigSchema = new mongoose.Schema(
     // Channel ID the bot monitors for short-text raid-clear messages.
     // null/empty = monitor disabled for this guild.
     raidChannelId: { type: String, default: null },
+    // Channel where /raid-bg set rehosts uploaded background images. Bot
+    // needs Send Messages + Attach Files there. null/empty = /raid-bg
+    // set rejects with a "ask admin to /raid-channel config action:set-bg-channel"
+    // alert, and /raid-status keeps rendering the existing text embed
+    // for everyone in this guild (no behavior change from pre-feature).
+    // Set via /raid-channel config action:set-bg-channel channel:#... ·
+    // mirrors the raidChannelId set flow so admins discover both knobs
+    // under the same command.
+    raidBgChannelId: { type: String, default: null },
     // Toggle for the daily auto-cleanup job. When true, the scheduler
     // deletes every non-pinned message in `raidChannelId` right after
     // the VN-day boundary (00:00 Asia/Ho_Chi_Minh = 17:00 UTC).
