@@ -463,7 +463,7 @@ function createRaidStatusCommand(deps) {
     // still reaches the user.
     const buildEmbedAndCanvas = async () => {
       const embed = buildCurrentEmbed();
-      const payload = { embeds: [embed], files: [] };
+      const payload = { embeds: [embed], files: [], attachments: [] };
       if (currentView === "task") return payload;
       const bgUrl = await resolveBackgroundUrl();
       if (!bgUrl) return payload;
@@ -1244,6 +1244,7 @@ function createRaidStatusCommand(deps) {
         await interaction.editReply({
           embeds: [expiredEmbed],
           components: buildComponents(true),
+          attachments: [],
         });
       } catch {
         // Interaction token may have expired.

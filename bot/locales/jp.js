@@ -1733,6 +1733,8 @@ module.exports = {
         "このサーバーはまだ /raid-bg 用のチャンネルが設定されてませんの。管理者に `/raid-channel config action:set-bg-channel channel:#<名前>` を実行してもらってから再試行してくださいませ～",
       channelFetchFailed:
         "アーティストが bg channel {channelId} を見つけられませんの: {message}",
+      channelSendFailed:
+        "bg channel {channelId} に画像を投稿できませんでしたの: {message}",
       notTextChannel:
         "channel {channelId} はテキストチャンネルじゃないので、アーティスト画像を投稿できませんわ～",
     },

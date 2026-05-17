@@ -92,8 +92,11 @@ function createRaidChannelMonitorService({
     if (!perms) return requiredPerms.map((p) => p.label);
     return requiredPerms.filter((p) => !perms.has(p.flag)).map((p) => p.label);
   }
-  function getMissingBotChannelPermissions(channel, botMember) {
-    return getMissingChannelPermissions(channel, botMember, BOT_CHANNEL_PERMS);
+  function getMissingBotChannelPermissions(channel, botMember, options = {}) {
+    const requiredPerms = Array.isArray(options?.requiredPerms)
+      ? options.requiredPerms
+      : BOT_CHANNEL_PERMS;
+    return getMissingChannelPermissions(channel, botMember, requiredPerms);
   }
   function getMissingAnnouncementChannelPermissions(channel, botMember) {
     return getMissingChannelPermissions(channel, botMember, ANNOUNCEMENT_CHANNEL_PERMS);
