@@ -17,6 +17,7 @@ const RAID_COMMAND_NAMES = Object.freeze([
   "raid-gold-earner",
   "raid-share",
   "raid-language",
+  "raid-bg",
 ]);
 
 function createRaidInteractionRouter({ MessageFlags, handlers }) {
