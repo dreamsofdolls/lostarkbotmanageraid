@@ -1,3 +1,7 @@
 node_modules/
 .env
 npm-debug.log*
+
+# Local render artefacts from scripts/preview-raid-card.js · re-generated
+# every time the prototype runs, no need to track.
+scripts/preview-raid-card.png
