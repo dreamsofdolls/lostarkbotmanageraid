@@ -1724,4 +1724,63 @@ module.exports = {
       ],
     },
   },
+  raidBg: {
+    errors: {
+      downloadFailed:
+        "Artist tải ảnh từ Discord không xong nha (HTTP {status}). Thử upload lại sau chút nhé~",
+      sizeTooBig:
+        "File hơi nặng tay rồi đó cậu ({sizeMb} MB)! Artist chỉ ôm được tối đa {maxMb} MB thôi à~",
+      formatUnsupported:
+        'Định dạng "{mime}" Artist chưa biết đọc đâu! Cho Artist PNG / JPG / WEBP thôi nhé~',
+      decodeFailed:
+        "Artist mở ảnh ra mà thấy nhoè nhoè không decode được: {message}",
+      tooSmall:
+        "Ảnh hơi tí xíu thôi cậu ({width}x{height}). Artist cần tối thiểu {minW}x{minH} để raid card vẫn căng + nét, không thì nhìn mờ tội nghiệp lắm~",
+      tooLarge:
+        "Ảnh khủng quá Artist xách không nổi ({width}x{height})! Cho Artist tối đa {maxW}x{maxH} (4K) thôi nhé, để bot bay nhẹ chút~",
+      channelMissing:
+        "Bot owner chưa set RAID_BG_CHANNEL_ID trên Railway, Artist không biết để ảnh ở đâu! Cậu nhắn họ giúp Artist nhé~",
+      channelFetchFailed:
+        "Artist tìm channel {channelId} không thấy: {message}",
+      notTextChannel:
+        "Channel {channelId} không phải text channel, Artist post ảnh vào không được~",
+    },
+    set: {
+      downloadFailedTitle: "❌ Artist tải ảnh không xong",
+      rejectTitle: "⚠️ Ảnh chưa đạt chuẩn của Artist",
+      requirementsHeader: "Artist cần ảnh có",
+      requirementsLines:
+        "• Kích thước: tối thiểu **{minW}x{minH}**, tối đa **{maxW}x{maxH}**\n• Dung lượng: tối đa **{maxMb} MB**\n• Định dạng: PNG / JPG / WEBP",
+      saveFailedTitle: "❌ Artist lưu ảnh không xong",
+      successTitle: "✅ Background đã yên vị rồi nhé~",
+      successDescription:
+        "Lần kế tiếp cậu chạy `/raid-status`, Artist sẽ render raid card với ảnh này làm background cho cậu. Chờ xem nhé~ ✨",
+      fileLabel: "🖼️ File",
+      dimsLabel: "📐 Kích thước",
+      formatLabel: "💾 Định dạng",
+      footer: "/raid-bg view để Artist show lại · /raid-bg remove khi cậu muốn đổi gió",
+    },
+    view: {
+      noneTitle: "ℹ️ Cậu chưa có background nào hết á",
+      noneDescription:
+        "Cậu chưa upload background lần nào nha~ Chạy `/raid-bg set image:<file>` để cho Artist ảnh đầu tiên nhé!",
+      unavailableTitle: "⚠️ Artist không tìm được ảnh nữa rồi",
+      unavailableDescription:
+        "Ảnh cậu lưu trước đó Artist truy cập không được (chắc channel bị xoá hoặc message bị remove rồi). Cậu chạy `/raid-bg set` để upload lại, hoặc `/raid-bg remove` để Artist revert về text embed nhé~",
+      currentTitle: "🖼️ Background của cậu nè~",
+      currentDescription:
+        "Đây là ảnh Artist đang dùng cho raid card của cậu mỗi lần `/raid-status`.",
+      fileLabel: "📁 File",
+      uploadLabel: "🕐 Cậu upload",
+      uploadUnknown: "không rõ",
+      footer: "/raid-bg set để đổi ảnh khác · /raid-bg remove khi muốn revert",
+    },
+    remove: {
+      nothingTitle: "ℹ️ Không có gì để Artist xoá đâu",
+      nothingDescription: "Cậu chưa upload background lần nào nha~",
+      successTitle: "🗑️ Artist đã cất background đi rồi",
+      successDescription:
+        "Cậu quay về với text embed mặc định cho `/raid-status` rồi đó. Lúc nào muốn có background lại thì `/raid-bg set` Artist nhé~",
+    },
+  },
 };

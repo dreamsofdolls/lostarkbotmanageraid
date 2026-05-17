@@ -1691,4 +1691,63 @@ module.exports = {
       ],
     },
   },
+  raidBg: {
+    errors: {
+      downloadFailed:
+        "アーティストが Discord から画像をうまく取れませんでしたわ (HTTP {status})。少ししてから再アップロードしてみてくださいませ～",
+      sizeTooBig:
+        "ファイルがちょっと重たすぎますわ ({sizeMb} MB)！アーティストが抱えられるのは {maxMb} MB までですの～",
+      formatUnsupported:
+        '"{mime}" 形式はアーティストまだ読めませんの！ PNG / JPG / WEBP だけ受け付けますわ～',
+      decodeFailed:
+        "アーティストが画像を開いてみたら decode できませんでしたの: {message}",
+      tooSmall:
+        "画像が小さすぎますわ ({width}x{height})。 raid card がくっきり映るように最低 {minW}x{minH} 欲しいんですの～",
+      tooLarge:
+        "画像が大きすぎてアーティスト持てませんわ ({width}x{height})！ 4K の {maxW}x{maxH} までにしてくださいませ、bot が軽く動けますわ～",
+      channelMissing:
+        "bot オーナーが Railway で RAID_BG_CHANNEL_ID をまだ設定してませんの、アーティスト画像をどこに置けばいいかわかりませんわ！オーナーに伝えてくださいませ～",
+      channelFetchFailed:
+        "アーティストが bg channel {channelId} を見つけられませんの: {message}",
+      notTextChannel:
+        "channel {channelId} はテキストチャンネルじゃないので、アーティスト画像を投稿できませんわ～",
+    },
+    set: {
+      downloadFailedTitle: "❌ 画像のダウンロード失敗",
+      rejectTitle: "⚠️ アーティストの条件に届きませんの",
+      requirementsHeader: "アーティストが欲しい条件",
+      requirementsLines:
+        "• サイズ: 最低 **{minW}x{minH}**、最大 **{maxW}x{maxH}**\n• 容量: 最大 **{maxMb} MB**\n• 形式: PNG / JPG / WEBP",
+      saveFailedTitle: "❌ 画像の保存失敗",
+      successTitle: "✅ Background をしまっておきましたわ～",
+      successDescription:
+        "次に `/raid-status` を回したとき、アーティストがこの画像を背景にして raid card を描いて差し上げますわ。お楽しみに♪",
+      fileLabel: "🖼️ ファイル",
+      dimsLabel: "📐 サイズ",
+      formatLabel: "💾 形式",
+      footer: "/raid-bg view でプレビュー · /raid-bg remove で取り外し",
+    },
+    view: {
+      noneTitle: "ℹ️ Background はまだ無いですわよ",
+      noneDescription:
+        "まだ background をアップロードされてませんの～ `/raid-bg set image:<file>` で最初の一枚をアーティストに渡してくださいませ♪",
+      unavailableTitle: "⚠️ アーティスト画像を取り出せませんの",
+      unavailableDescription:
+        "保存した画像をアーティストもう取得できませんわ (channel が削除された / message が消えた可能性ですの)。 `/raid-bg set` でもう一度アップロード、または `/raid-bg remove` でテキスト embed に戻してくださいませ～",
+      currentTitle: "🖼️ 今の Background ですわ",
+      currentDescription:
+        "`/raid-status` の raid card 背景として、アーティストが使っている画像ですの。",
+      fileLabel: "📁 ファイル",
+      uploadLabel: "🕐 アップロード",
+      uploadUnknown: "不明",
+      footer: "/raid-bg set で別の画像へ · /raid-bg remove で外す",
+    },
+    remove: {
+      nothingTitle: "ℹ️ 取り外すものがありませんの",
+      nothingDescription: "まだ background をアップロードされてませんわ～",
+      successTitle: "🗑️ Background をしまっておきましたわ",
+      successDescription:
+        "`/raid-status` の標準テキスト embed に戻しましたの。また background が欲しくなったら `/raid-bg set` でアーティストに渡してくださいませ～♪",
+    },
+  },
 };

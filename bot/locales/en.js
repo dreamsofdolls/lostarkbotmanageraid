@@ -1692,4 +1692,62 @@ module.exports = {
       ],
     },
   },
+  raidBg: {
+    errors: {
+      downloadFailed:
+        "Artist couldn't pull that image off Discord (HTTP {status}). Try uploading again in a moment.",
+      sizeTooBig:
+        "File's a bit chunky ({sizeMb} MB). Artist tops out at {maxMb} MB per upload.",
+      formatUnsupported:
+        'Format "{mime}" isn\'t one Artist reads · drop a PNG / JPG / WEBP instead.',
+      decodeFailed:
+        "Artist opened the file but couldn't decode it: {message}",
+      tooSmall:
+        "That's too tiny ({width}x{height}). Artist needs at least {minW}x{minH} so the raid card stays crisp.",
+      tooLarge:
+        "That's bigger than Artist can carry ({width}x{height}). Cap is {maxW}x{maxH} (4K) so the bot keeps moving.",
+      channelMissing:
+        "The bot owner hasn't set RAID_BG_CHANNEL_ID on Railway yet, so Artist has nowhere to stash the image. Poke them about it.",
+      channelFetchFailed:
+        "Artist couldn't reach the bg channel {channelId}: {message}",
+      notTextChannel:
+        "Channel {channelId} isn't a text channel, so Artist can't post the image there.",
+    },
+    set: {
+      downloadFailedTitle: "❌ Download failed",
+      rejectTitle: "⚠️ Image doesn't meet Artist's spec",
+      requirementsHeader: "Artist needs",
+      requirementsLines:
+        "• Dimensions: minimum **{minW}x{minH}**, maximum **{maxW}x{maxH}**\n• Size: maximum **{maxMb} MB**\n• Format: PNG / JPG / WEBP",
+      saveFailedTitle: "❌ Save failed",
+      successTitle: "✅ Background tucked away",
+      successDescription:
+        "Next time you run `/raid-status` Artist will paint your raid card with this as the background. Looking forward to it.",
+      fileLabel: "🖼️ File",
+      dimsLabel: "📐 Dimensions",
+      formatLabel: "💾 Format",
+      footer: "/raid-bg view to peek · /raid-bg remove to clear",
+    },
+    view: {
+      noneTitle: "ℹ️ No background yet",
+      noneDescription:
+        "You haven't handed Artist an image yet. Run `/raid-bg set image:<file>` to drop the first one in.",
+      unavailableTitle: "⚠️ Artist can't reach the image anymore",
+      unavailableDescription:
+        "The reference was saved but the file's gone (channel deleted / message removed). Re-upload via `/raid-bg set`, or `/raid-bg remove` to revert to the text embed.",
+      currentTitle: "🖼️ Current background",
+      currentDescription: "This is what Artist's painting behind your `/raid-status` raid card.",
+      fileLabel: "📁 File",
+      uploadLabel: "🕐 Uploaded",
+      uploadUnknown: "unknown",
+      footer: "/raid-bg set to swap · /raid-bg remove to clear",
+    },
+    remove: {
+      nothingTitle: "ℹ️ Nothing to clear",
+      nothingDescription: "You haven't handed Artist an image yet.",
+      successTitle: "🗑️ Background cleared",
+      successDescription:
+        "You're back on the default text embed for `/raid-status`. Send Artist a new one with `/raid-bg set` any time.",
+    },
+  },
 };
