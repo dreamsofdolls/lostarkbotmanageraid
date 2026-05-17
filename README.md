@@ -221,6 +221,7 @@ Weekly reset runs every 30 minutes (UTC-based trigger: Wed ≥ 10:00 UTC). Per-u
 | `TEXT_MONITOR_ENABLED` | ❌ | `true` | `false` skips the privileged MessageContent intent + listener |
 | `RAID_MANAGER_ID` | ❌ (recommended) | empty | Comma-separated user IDs. Empty = `/raid-check` rejects everyone; manager perks never apply |
 | `AUTO_MANAGE_DAILY_DISABLED` | ❌ | `false` | Killswitch for the 24h passive auto-sync scheduler (no redeploy needed) |
+| `RAID_BG_CHANNEL_ID` | ❌ | empty | Operator-guild channel where `/raid-bg set` rehosts uploaded background images. Empty disables `/raid-bg set` (the canvas card on `/raid-status` requires this channel). Bot needs Send Messages + Attach Files there. |
 
 Discord Developer Portal: flip `Bot → Privileged Gateway Intents → Message Content Intent` on to let the text monitor read posts, or set `TEXT_MONITOR_ENABLED=false` to run slash-command-only.
 

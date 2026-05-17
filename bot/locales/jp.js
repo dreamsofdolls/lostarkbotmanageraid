@@ -1457,6 +1457,21 @@ module.exports = {
           "**その場限りの上書き**: `/raid-help language:en` で保存された設定を変えずに一度だけ別言語で見られますわ～",
         ],
       },
+      "raid-bg": {
+        label: "/raid-bg",
+        short: "/raid-status カードの背景画像を設定 / 表示 / 削除しますわ♪",
+        example: "/raid-bg set image:<file>",
+        notes: [
+          "アニメアート / キャラクターレンダー / 壁紙をアップロードすると、アーティストが /raid-status を回すたびに raid card の背景に描いて差し上げますわ～ オプトイン制ですの、設定してないユーザーはテキスト embed のままで何も変わりませんわ。",
+          "",
+          "**set image:<file>** — 新しい画像をアップロードしますの。アーティストがサイズ (≥ 1600x900 でクッキリ、≤ 3840x2160 で 4K まで)、容量 (≤ 8 MB)、形式 (PNG / JPG / WEBP) を確認してから保存しますわ。",
+          "**view** — 現在保存中の background をアーティストがお見せしますの。",
+          "**remove** — 参照を消して、`/raid-status` を標準テキスト embed に戻しますわ。",
+          "",
+          "**保存場所**: Discord CDN の URL は ~24h で期限切れですので、アーティストがオペレーターギルドの専用チャンネル (env RAID_BG_CHANNEL_ID) に再アップロードして、メッセージ参照を保存しますわ。 bot オーナーが Railway で一度設定する必要がありますの。",
+          "**クッキリ + キレイ**: rgba dark 82% のパネルが画像の上に重なって、明るい背景でも暗い背景でもテキストが読みやすくなりますわ。 cover-fit で fullbleed しても比率が崩れませんの～",
+        ],
+      },
     },
   },
   "raid-channel-language": {
