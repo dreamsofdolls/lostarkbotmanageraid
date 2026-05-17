@@ -27,7 +27,7 @@ const backgroundAssignmentSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// Per-user background pool for the /raid-status canvas card. Lives in a
+// Per-user background pool for the /raid-status embed image. Lives in a
 // dedicated collection so multi-MB Binary payloads never bloat the User doc
 // that every other command reads. A user has one document keyed by discordId,
 // and that document can hold up to the command-level cap of resized JPEGs.
