@@ -1465,7 +1465,7 @@ module.exports = {
         notes: [
           "Upload 1-4 anime art / character render / wallpaper images · Artist maps them across your rosters and paints the selected one behind each /raid-status card. Opt-in per user · anyone who hasn't set one keeps seeing the text embed exactly as before.",
           "",
-          "**set image:<file> [image_2] [image_3] [image_4] [mode]** — upload up to the roster count visible to you, capped at 4 images. Each file may be up to 8 MB at any dimension ≥ 1600x900 in PNG / JPG / WEBP. Artist can split them evenly or shuffle the roster map when saving; shared roster pages still use your own pool.",
+          "**set image:<file> [image_2] [image_3] [image_4] [mode]** — upload up to the roster count visible to you, capped at 4 images. Each file may be up to 8 MB at any dimension ≥ 800x600 in PNG / JPG / WEBP. Artist can split them evenly or shuffle the roster map when saving; shared roster pages still use your own pool.",
           "**view** — Artist shows the currently-stored background pool, roster map, and the size it's taking on disk.",
           "**remove** — drop the stored buffer, revert /raid-status to the default text embed.",
           "",

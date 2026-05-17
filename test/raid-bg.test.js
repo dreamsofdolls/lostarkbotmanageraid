@@ -69,7 +69,7 @@ function makeSetOptions(attachments, mode = null) {
 }
 
 test("raid-bg set persists resized buffer to UserBackground collection", async (t) => {
-  const png = makePngBuffer();
+  const png = makePngBuffer(800, 600);
   const originalFetch = global.fetch;
   const originalUpsert = UserBackground.findOneAndUpdate;
   global.fetch = async () => ({
@@ -118,8 +118,8 @@ test("raid-bg set persists resized buffer to UserBackground collection", async (
   assert.ok(savedUpdate.$set.images[0].imageData.length > 0);
   assert.ok(savedUpdate.$set.images[0].imageData.length <= 2 * 1024 * 1024);
   assert.equal(savedUpdate.$set.images[0].originalFilename, "background.png");
-  assert.equal(savedUpdate.$set.images[0].originalWidth, 1600);
-  assert.equal(savedUpdate.$set.images[0].originalHeight, 900);
+  assert.equal(savedUpdate.$set.images[0].originalWidth, 800);
+  assert.equal(savedUpdate.$set.images[0].originalHeight, 600);
   assert.deepEqual(savedUpdate.$set.assignments, [
     { accountName: "Roster A", accountKey: "roster a", imageIndex: 0 },
   ]);

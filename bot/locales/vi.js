@@ -1487,7 +1487,7 @@ module.exports = {
         notes: [
           "Upload 1-4 ảnh anime art / character render / wallpaper, Artist sẽ map chúng theo từng roster rồi paint đúng ảnh phía sau raid card mỗi lần cậu chạy /raid-status. Opt-in mỗi user · ai chưa set thì /raid-status vẫn render text embed như bình thường, không có gì đổi.",
           "",
-          "**set image:<file> [image_2] [image_3] [image_4] [mode]** — upload tối đa bằng số roster cậu đang thấy, cap 4 ảnh. Mỗi ảnh tối đa 8 MB, kích thước ≥ 1600x900, format PNG / JPG / WEBP. Artist có thể chia đều hoặc random map roster lúc lưu; roster được share vẫn dùng pool ảnh của chính cậu.",
+          "**set image:<file> [image_2] [image_3] [image_4] [mode]** — upload tối đa bằng số roster cậu đang thấy, cap 4 ảnh. Mỗi ảnh tối đa 8 MB, kích thước ≥ 800x600, format PNG / JPG / WEBP. Artist có thể chia đều hoặc random map roster lúc lưu; roster được share vẫn dùng pool ảnh của chính cậu.",
           "**view** — Artist show lại pool background hiện tại, map roster, và dung lượng đang chiếm bao nhiêu.",
           "**remove** — xoá background, revert về text embed mặc định.",
           "",

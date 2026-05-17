@@ -684,18 +684,18 @@ function createRaidCommandDefinitions({
     .addSubcommand((sub) =>
       sub
         .setName("set")
-        .setDescription("Upload 1-4 roster background images (1600x900+, 8MB each)")
+        .setDescription("Upload 1-4 roster background images (800x600+, 8MB each)")
         .setDescriptionLocalizations({
-          vi: "Upload 1-4 ảnh background roster (1600x900+, tối đa 8MB mỗi ảnh)",
-          ja: "1-4枚のroster背景画像をアップロード（1600x900以上、各8MBまで）",
+          vi: "Upload 1-4 ảnh background roster (800x600+, tối đa 8MB mỗi ảnh)",
+          ja: "1-4枚のroster背景画像をアップロード（800x600以上、各8MBまで）",
         })
         .addAttachmentOption((opt) =>
           opt
             .setName("image")
-            .setDescription("First background image file (PNG/JPG/WEBP, 1600x900+, 8MB max)")
+            .setDescription("First background image file (PNG/JPG/WEBP, 800x600+, 8MB max)")
             .setDescriptionLocalizations({
-              vi: "File background đầu tiên (PNG/JPG/WEBP, 1600x900+, max 8MB)",
-              ja: "1枚目の背景画像ファイル（PNG/JPG/WEBP、1600x900以上、最大8MB）",
+              vi: "File background đầu tiên (PNG/JPG/WEBP, 800x600+, max 8MB)",
+              ja: "1枚目の背景画像ファイル（PNG/JPG/WEBP、800x600以上、最大8MB）",
             })
             .setRequired(true),
         )
