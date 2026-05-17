@@ -26,7 +26,10 @@ const {
   MessageFlags,
 } = require("discord.js");
 
-const { createRaidStatusCommand } = require("../bot/handlers/raid-status");
+const {
+  createRaidStatusCommand,
+  _resolveBackgroundLookup,
+} = require("../bot/handlers/raid-status");
 const { createRaidStatusTaskUi } = require("../bot/handlers/raid-status/task-ui");
 const {
   UI,
@@ -165,6 +168,17 @@ test("REGRESSION: raid-status edit payload clears stale canvas attachments", () 
     /const payload = \{ embeds: \[embed\], files: \[\], attachments: \[\] \};/
   );
   assert.match(source, /components: buildComponents\(true\),\s+attachments: \[\],/);
+});
+
+test("REGRESSION: raid-status shared roster background uses the viewer image pool", () => {
+  const lookup = _resolveBackgroundLookup("viewer-b", {
+    accountName: "Shared Roster",
+    _sharedFrom: { ownerDiscordId: "owner-a" },
+  });
+
+  assert.equal(lookup.discordId, "viewer-b");
+  assert.equal(lookup.accountName, "Shared Roster");
+  assert.equal(lookup.cacheKey, "viewer-b:shared roster");
 });
 
 // --------- buildAccountPageEmbed ---------

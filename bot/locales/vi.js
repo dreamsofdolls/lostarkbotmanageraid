@@ -1068,7 +1068,6 @@ module.exports = {
       repin: "repin - refresh the pinned welcome embed",
       scheduleOn: "schedule-on - enable auto-cleanup every 30 min (VN time)",
       scheduleOff: "schedule-off - disable 30-min auto-cleanup",
-      setBgChannel: "set-bg-channel - chọn channel rehost ảnh /raid-bg",
     },
     auth: {
       serverOnlyTitle: "Server only",
@@ -1141,14 +1140,6 @@ module.exports = {
       enabledDescription: "Mỗi 30 phút (slot :00 và :30 giờ VN), Artist sẽ tự xóa toàn bộ message không được pin trong monitor channel. Welcome pin giữ nguyên. Sau khi dọn, Artist post 1 biển báo 4-bucket (sạch sẵn / 1-5 / 6-20 / 21+ tin) với nhiều variant random pick; biển tự biến mất sau 5 phút. Nếu bot offline qua 1 slot boundary, tick tiếp theo sau khi online sẽ catch-up.",
       disabledTitle: "Auto-cleanup disabled",
       disabledDescription: "Auto-cleanup đã tắt. Admin vẫn có thể chạy thủ công qua `/raid-channel config action:cleanup` bất cứ lúc nào.",
-    },
-    setBgChannel: {
-      missingChannelTitle: "Thiếu option `channel`",
-      missingChannelDescription: "Action `set-bg-channel` cần kèm option `channel:#<tên-kênh>` để Artist biết rehost ảnh /raid-bg vào đâu. Ví dụ: `/raid-channel config action:set-bg-channel channel:#raid-bg-archive`.",
-      missingPermsTitle: "Bot thiếu permission",
-      missingPermsDescription: "Artist không upload ảnh vào <#{channelId}> được vì thiếu: **{missing}**. Grant Send Messages + Attach Files cho bot ở channel đó rồi chạy lại nha~",
-      successTitle: "Bg Channel đã set",
-      successDescription: "Từ giờ users chạy `/raid-bg set image:<file>` sẽ thấy Artist rehost ảnh vào <#{channelId}>, sau đó canvas card trên `/raid-status` dùng được. Channel này nên là archive-style (mute / hidden cho members) vì sẽ tích luỹ 1 message per upload theo thời gian.",
     },
   },
   "raid-announce": {
@@ -1494,13 +1485,13 @@ module.exports = {
         short: "Set / xem / xoá ảnh background cho card /raid-status",
         example: "/raid-bg set image:<file>",
         notes: [
-          "Upload 1 ảnh anime art / character render / wallpaper, Artist sẽ paint lên làm background phía sau raid card mỗi lần cậu chạy /raid-status. Opt-in mỗi user · ai chưa set thì /raid-status vẫn render text embed như bình thường, không có gì đổi.",
+          "Upload 1-4 ảnh anime art / character render / wallpaper, Artist sẽ map chúng theo từng roster rồi paint đúng ảnh phía sau raid card mỗi lần cậu chạy /raid-status. Opt-in mỗi user · ai chưa set thì /raid-status vẫn render text embed như bình thường, không có gì đổi.",
           "",
-          "**set image:<file>** — upload ảnh mới. Artist validate kích thước (≥ 1600x900 để nét, ≤ 3840x2160 cho 4K), dung lượng (≤ 8 MB), format (PNG / JPG / WEBP) rồi mới lưu.",
-          "**view** — Artist show lại background hiện tại để cậu nhớ đã set cái gì.",
+          "**set image:<file> [image_2] [image_3] [image_4] [mode]** — upload tối đa bằng số roster cậu đang thấy, cap 4 ảnh. Mỗi ảnh tối đa 8 MB, kích thước ≥ 1600x900, format PNG / JPG / WEBP. Artist có thể chia đều hoặc random map roster lúc lưu; roster được share vẫn dùng pool ảnh của chính cậu.",
+          "**view** — Artist show lại pool background hiện tại, map roster, và dung lượng đang chiếm bao nhiêu.",
           "**remove** — xoá background, revert về text embed mặc định.",
           "",
-          "**Lưu trữ**: Artist rehost ảnh vào channel admin đã set qua `/raid-channel config action:set-bg-channel channel:#<tên>`, lưu reference thay vì URL gốc, vì Discord CDN URL hết hạn ~24h. Admin set channel một lần là dùng cho toàn server.",
+          "**Lưu trữ**: ảnh đi thẳng vào database của bot (collection riêng, không nhồi vào User doc). Không cần admin setup channel gì cả · upload-and-go. Mỗi ảnh đã nén giữ dưới 2 MB nên cap 4 ảnh vẫn nằm dưới giới hạn document Mongo. Cache LRU in-memory hấp thụ render lặp lại nên /raid-status pagination không hit Mongo nhiều lần.",
           "**Đẹp + căng**: panel rgba dark 82% overlay lên ảnh để text vẫn readable trên art sáng hay tối. Cover-fit để full-bleed không bị crop sai tỉ lệ.",
         ],
       },
@@ -1760,45 +1751,52 @@ module.exports = {
         "Artist mở ảnh ra mà thấy nhoè nhoè không decode được: {message}",
       tooSmall:
         "Ảnh hơi tí xíu thôi cậu ({width}x{height}). Artist cần tối thiểu {minW}x{minH} để raid card vẫn căng + nét, không thì nhìn mờ tội nghiệp lắm~",
-      tooLarge:
-        "Ảnh khủng quá Artist xách không nổi ({width}x{height})! Cho Artist tối đa {maxW}x{maxH} (4K) thôi nhé, để bot bay nhẹ chút~",
-      channelMissing:
-        "Server này chưa config bg channel cho /raid-bg đâu nha. Nhờ admin chạy `/raid-channel config action:set-bg-channel channel:#<tên-kênh>` để set rồi cậu thử lại nhé~",
-      channelFetchFailed:
-        "Artist tìm channel {channelId} không thấy: {message}",
-      channelSendFailed:
-        "Artist chưa post được ảnh vào bg channel {channelId}: {message}",
-      notTextChannel:
-        "Channel {channelId} không phải text channel, Artist post ảnh vào không được~",
+      storageFailed:
+        "Artist lưu vào database không xong rồi: {message}. Cậu thử lại sau chút, nếu vẫn lỗi thì báo admin nhe~",
     },
     set: {
       downloadFailedTitle: "❌ Artist tải ảnh không xong",
       rejectTitle: "⚠️ Ảnh chưa đạt chuẩn của Artist",
       requirementsHeader: "Artist cần ảnh có",
       requirementsLines:
-        "• Kích thước: tối thiểu **{minW}x{minH}**, tối đa **{maxW}x{maxH}**\n• Dung lượng: tối đa **{maxMb} MB**\n• Định dạng: PNG / JPG / WEBP",
+        "• Kích thước: tối thiểu **{minW}x{minH}** (lớn hơn cũng OK · Artist tự downscale)\n• Dung lượng upload: tối đa **{maxMb} MB**\n• Định dạng: PNG / JPG / WEBP",
       saveFailedTitle: "❌ Artist lưu ảnh không xong",
       successTitle: "✅ Background đã yên vị rồi nhé~",
       successDescription:
         "Lần kế tiếp cậu chạy `/raid-status`, Artist sẽ render raid card với ảnh này làm background cho cậu. Chờ xem nhé~ ✨",
+      noRosterTitle: "ℹ️ Chưa thấy roster nào",
+      noRosterDescription:
+        "Artist cần ít nhất một roster của chính cậu trước khi lưu background theo roster nha.",
+      tooManyImagesTitle: "⚠️ Nhiều ảnh quá rồi",
+      tooManyImagesDescription:
+        "Cậu gắn {count} ảnh, nhưng với số roster hiện tại Artist chỉ lưu tối đa {max} ảnh thôi.",
+      imagesLabel: "🖼️ Ảnh",
+      imagesValue: "Đã lưu {count}/{max} ảnh · tổng {totalKb} KB",
+      modeLabel: "🔀 Cách chia",
+      mode: {
+        even: "Chia đều",
+        random: "Random lúc lưu",
+      },
+      assignmentLabel: "📌 Map roster",
       fileLabel: "🖼️ File",
       dimsLabel: "📐 Kích thước",
-      formatLabel: "💾 Định dạng",
+      sizeLabel: "💾 Lưu trữ",
       footer: "/raid-bg view để Artist show lại · /raid-bg remove khi cậu muốn đổi gió",
     },
     view: {
       noneTitle: "ℹ️ Cậu chưa có background nào hết á",
       noneDescription:
         "Cậu chưa upload background lần nào nha~ Chạy `/raid-bg set image:<file>` để cho Artist ảnh đầu tiên nhé!",
-      unavailableTitle: "⚠️ Artist không tìm được ảnh nữa rồi",
-      unavailableDescription:
-        "Ảnh cậu lưu trước đó Artist truy cập không được (chắc channel bị xoá hoặc message bị remove rồi). Cậu chạy `/raid-bg set` để upload lại, hoặc `/raid-bg remove` để Artist revert về text embed nhé~",
       currentTitle: "🖼️ Background của cậu nè~",
       currentDescription:
         "Đây là ảnh Artist đang dùng cho raid card của cậu mỗi lần `/raid-status`.",
       fileLabel: "📁 File",
+      dimsLabel: "📐 Đã lưu",
+      imagesLabel: "🖼️ Ảnh",
+      imagesValue: "{count} ảnh · {mode}",
       uploadLabel: "🕐 Cậu upload",
       uploadUnknown: "không rõ",
+      assignmentLabel: "📌 Map roster",
       footer: "/raid-bg set để đổi ảnh khác · /raid-bg remove khi muốn revert",
     },
     remove: {

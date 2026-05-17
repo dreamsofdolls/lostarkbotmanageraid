@@ -57,10 +57,14 @@ const DEFAULT_ACCENT = "#ed4245";
 
 // ─── Background painter ────────────────────────────────────────────────────
 
-async function paintBackground(ctx, backgroundUrl) {
-  if (backgroundUrl) {
+async function paintBackground(ctx, backgroundSource) {
+  // backgroundSource can be Buffer (Mongo-loaded UserBackground.imageData)
+  // or string URL (legacy / external override). loadImage accepts both;
+  // we centralize the decode here so the renderer doesn't care about
+  // where the bytes came from.
+  if (backgroundSource) {
     try {
-      const img = await loadImage(backgroundUrl);
+      const img = await loadImage(backgroundSource);
       const scale = Math.max(CANVAS_W / img.width, CANVAS_H / img.height);
       const w = img.width * scale;
       const h = img.height * scale;
@@ -71,9 +75,9 @@ async function paintBackground(ctx, backgroundUrl) {
       ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
       return;
     } catch (err) {
-      // Background fetch failed (URL expired, network blip). Fall
-      // through to the gradient default · the card still renders so
-      // /raid-status doesn't go down because of one bad URL.
+      // Background decode failed (corrupt bytes, network blip on a URL
+      // source). Fall through to the gradient default · the card still
+      // renders so /raid-status doesn't go down because of one bad source.
       console.warn(`[raid-card] background load failed, using gradient: ${err.message}`);
     }
   }
@@ -301,7 +305,9 @@ function drawFooter(ctx, input) {
  * @param {Object} input.cleared - Aggregate progress badge.
  * @param {number} input.cleared.count
  * @param {number} input.cleared.total
- * @param {string} [input.backgroundUrl] - User-supplied background image URL.
+ * @param {Buffer|string} [input.backgroundSource] - User-supplied background
+ *   image bytes (Buffer from UserBackground) or URL string. Either form is
+ *   accepted by @napi-rs/canvas's loadImage.
  * @param {string} [input.lastUpdatedLabel] - Relative-time string for the footer.
  * @returns {Promise<Buffer>} PNG buffer ready to send as a Discord attachment.
  */
@@ -318,7 +324,7 @@ async function renderRaidStatusCard(input) {
   const canvas = createCanvas(CANVAS_W, CANVAS_H);
   const ctx = canvas.getContext("2d");
 
-  await paintBackground(ctx, input.backgroundUrl || null);
+  await paintBackground(ctx, input.backgroundSource || null);
   drawHeader(ctx, {
     rosterName: input.rosterName,
     raid: input.raid,

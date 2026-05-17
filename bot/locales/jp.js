@@ -1045,7 +1045,6 @@ module.exports = {
       repin: "repin - ピン留めウェルカム埋め込みを更新",
       scheduleOn: "schedule-on - 30分ごとの自動クリーンアップを有効化 (JST 朝3時～朝8時は静音)",
       scheduleOff: "schedule-off - 30分ごとの自動クリーンアップを無効化",
-      setBgChannel: "set-bg-channel - /raid-bg アップロードの保存先チャンネルを指定",
     },
     auth: {
       serverOnlyTitle: "サーバー専用ですわ",
@@ -1118,14 +1117,6 @@ module.exports = {
       enabledDescription: "JST で 30 分ごと (:00 と :30 のスロット) に、アーティストが監視チャンネル内のピン留め以外のメッセージを自動削除しますわ。ウェルカムピンは残りますの。整理後、4 段階 (空っぽ / 1-5 / 6-20 / 21+ メッセージ) のお知らせバリアントから 1 つ投稿しますわ - 案内は 5 分後に自動消滅しますの。ボットがオフライン中にスロット境界を跨いだ場合は、復帰後の次の周期でまとめて処理しますわ♪",
       disabledTitle: "自動クリーンアップを無効化しましたわ",
       disabledDescription: "自動クリーンアップは無効化されましたわ。管理者はいつでも `/raid-channel config action:cleanup` で手動実行できますの♪",
-    },
-    setBgChannel: {
-      missingChannelTitle: "`channel` オプションが必要ですわ",
-      missingChannelDescription: "Action `set-bg-channel` には `channel:#<名前>` を一緒に指定してくださいませ。例: `/raid-channel config action:set-bg-channel channel:#raid-bg-archive` ですわ♪",
-      missingPermsTitle: "ボットの権限が足りませんわ",
-      missingPermsDescription: "アーティストが <#{channelId}> に画像を投稿できませんの · 不足: **{missing}**。Send Messages と Attach Files をその channel で付与してから再実行してくださいませ。",
-      successTitle: "bg channel を保存しましたわ♪",
-      successDescription: "これからユーザーが `/raid-bg set image:<file>` を実行すると、アーティストが <#{channelId}> へ画像を再アップロードして、`/raid-status` のキャンバスカードが使えるようになりますわ。アーカイブ用の channel (ミュート / メンバーに非表示) を推奨しますの · アップロードごとに 1 メッセージずつ溜まりますので♪",
     },
   },
   "raid-announce": {
@@ -1471,13 +1462,13 @@ module.exports = {
         short: "/raid-status カードの背景画像を設定 / 表示 / 削除しますわ♪",
         example: "/raid-bg set image:<file>",
         notes: [
-          "アニメアート / キャラクターレンダー / 壁紙をアップロードすると、アーティストが /raid-status を回すたびに raid card の背景に描いて差し上げますわ～ オプトイン制ですの、設定してないユーザーはテキスト embed のままで何も変わりませんわ。",
+          "アニメアート / キャラクターレンダー / 壁紙を1-4枚アップロードすると、アーティストが roster ごとに割り当てて、/raid-status の raid card 背景に使いますわ～ オプトイン制ですの、設定してないユーザーはテキスト embed のままで何も変わりませんわ。",
           "",
-          "**set image:<file>** — 新しい画像をアップロードしますの。アーティストがサイズ (≥ 1600x900 でクッキリ、≤ 3840x2160 で 4K まで)、容量 (≤ 8 MB)、形式 (PNG / JPG / WEBP) を確認してから保存しますわ。",
-          "**view** — 現在保存中の background をアーティストがお見せしますの。",
-          "**remove** — 参照を消して、`/raid-status` を標準テキスト embed に戻しますわ。",
+          "**set image:<file> [image_2] [image_3] [image_4] [mode]** — 見えている roster 数まで、最大4枚アップロードできますの。各画像は 8 MB まで、1600x900 以上、PNG / JPG / WEBP を受け付けますわ。保存時に均等割り当て、またはランダム割り当てを選べますの。共有 roster でも閲覧者ご自身の pool を使いますわ。",
+          "**view** — 現在保存中の background pool、roster map、容量をアーティストがお見せしますの。",
+          "**remove** — 保存バッファを消して、`/raid-status` を標準テキスト embed に戻しますわ。",
           "",
-          "**保存場所**: Discord CDN の URL は ~24h で期限切れですので、管理者が `/raid-channel config action:set-bg-channel channel:#<名前>` で指定したチャンネルにアーティストが再アップロードして、メッセージ参照を保存しますわ。サーバーごとに一度設定すれば全員が使えますの♪",
+          "**保存場所**: バイトデータは bot のデータベースに直接書き込まれますわ (専用 collection · User doc には載せませんの)。管理者の設定や rehost channel は不要 · アップロードしてすぐ使えますの♪ 各保存画像は 2 MB 以下なので、4枚でも Mongo document limit に収まりますわ。メモリ内 LRU キャッシュがリピート描画を吸収しますの。",
           "**クッキリ + キレイ**: rgba dark 82% のパネルが画像の上に重なって、明るい背景でも暗い背景でもテキストが読みやすくなりますわ。 cover-fit で fullbleed しても比率が崩れませんの～",
         ],
       },
@@ -1727,45 +1718,52 @@ module.exports = {
         "アーティストが画像を開いてみたら decode できませんでしたの: {message}",
       tooSmall:
         "画像が小さすぎますわ ({width}x{height})。 raid card がくっきり映るように最低 {minW}x{minH} 欲しいんですの～",
-      tooLarge:
-        "画像が大きすぎてアーティスト持てませんわ ({width}x{height})！ 4K の {maxW}x{maxH} までにしてくださいませ、bot が軽く動けますわ～",
-      channelMissing:
-        "このサーバーはまだ /raid-bg 用のチャンネルが設定されてませんの。管理者に `/raid-channel config action:set-bg-channel channel:#<名前>` を実行してもらってから再試行してくださいませ～",
-      channelFetchFailed:
-        "アーティストが bg channel {channelId} を見つけられませんの: {message}",
-      channelSendFailed:
-        "bg channel {channelId} に画像を投稿できませんでしたの: {message}",
-      notTextChannel:
-        "channel {channelId} はテキストチャンネルじゃないので、アーティスト画像を投稿できませんわ～",
+      storageFailed:
+        "アーティストがデータベースに保存できませんでしたの: {message}。少し経ってからもう一度試して、まだ失敗するようでしたら管理者にお知らせくださいませ～",
     },
     set: {
       downloadFailedTitle: "❌ 画像のダウンロード失敗",
       rejectTitle: "⚠️ アーティストの条件に届きませんの",
       requirementsHeader: "アーティストが欲しい条件",
       requirementsLines:
-        "• サイズ: 最低 **{minW}x{minH}**、最大 **{maxW}x{maxH}**\n• 容量: 最大 **{maxMb} MB**\n• 形式: PNG / JPG / WEBP",
+        "• サイズ: 最低 **{minW}x{minH}** (大きくても OK · アーティストが自動でダウンスケールしますの)\n• アップロード容量: 最大 **{maxMb} MB**\n• 形式: PNG / JPG / WEBP",
       saveFailedTitle: "❌ 画像の保存失敗",
       successTitle: "✅ Background をしまっておきましたわ～",
       successDescription:
         "次に `/raid-status` を回したとき、アーティストがこの画像を背景にして raid card を描いて差し上げますわ。お楽しみに♪",
+      noRosterTitle: "ℹ️ Roster がまだ見つかりません",
+      noRosterDescription:
+        "Roster ごとの background を保存するには、ご自身の roster が少なくとも1つ必要ですわ。",
+      tooManyImagesTitle: "⚠️ 画像が多すぎますわ",
+      tooManyImagesDescription:
+        "{count} 枚添付されていますが、現在の roster 数では最大 {max} 枚までですの。",
+      imagesLabel: "🖼️ 画像",
+      imagesValue: "{count}/{max} 枚保存 · 合計 {totalKb} KB",
+      modeLabel: "🔀 割り当て",
+      mode: {
+        even: "均等に割り当て",
+        random: "保存時にランダム",
+      },
+      assignmentLabel: "📌 Roster map",
       fileLabel: "🖼️ ファイル",
       dimsLabel: "📐 サイズ",
-      formatLabel: "💾 形式",
+      sizeLabel: "💾 保存容量",
       footer: "/raid-bg view でプレビュー · /raid-bg remove で取り外し",
     },
     view: {
       noneTitle: "ℹ️ Background はまだ無いですわよ",
       noneDescription:
         "まだ background をアップロードされてませんの～ `/raid-bg set image:<file>` で最初の一枚をアーティストに渡してくださいませ♪",
-      unavailableTitle: "⚠️ アーティスト画像を取り出せませんの",
-      unavailableDescription:
-        "保存した画像をアーティストもう取得できませんわ (channel が削除された / message が消えた可能性ですの)。 `/raid-bg set` でもう一度アップロード、または `/raid-bg remove` でテキスト embed に戻してくださいませ～",
       currentTitle: "🖼️ 今の Background ですわ",
       currentDescription:
         "`/raid-status` の raid card 背景として、アーティストが使っている画像ですの。",
       fileLabel: "📁 ファイル",
+      dimsLabel: "📐 保存中",
+      imagesLabel: "🖼️ 画像",
+      imagesValue: "{count} 枚 · {mode}",
       uploadLabel: "🕐 アップロード",
       uploadUnknown: "不明",
+      assignmentLabel: "📌 Roster map",
       footer: "/raid-bg set で別の画像へ · /raid-bg remove で外す",
     },
     remove: {

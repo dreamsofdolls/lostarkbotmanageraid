@@ -7,29 +7,33 @@ const {
   AttachmentBuilder,
   EmbedBuilder,
   MessageFlags,
-  PermissionFlagsBits,
 } = require("discord.js");
 const { createCanvas } = require("@napi-rs/canvas");
 
-const GuildConfig = require("../bot/models/guildConfig");
+const UserBackground = require("../bot/models/userBackground");
+const bgLoader = require("../bot/services/raid-card/bg-loader");
 const { createRaidBgCommand } = require("../bot/handlers/raid/bg");
-const { createRaidChannelCommand } = require("../bot/handlers/raid/channel");
-const { createRaidChannelMonitorService } = require("../bot/services/raid/channel-monitor");
 
-function makeUserModel(language = "en") {
+function makeUserModel(language = "en", accountNames = ["Roster A"]) {
+  const doc = {
+    language,
+    accounts: accountNames.map((accountName) => ({ accountName })),
+  };
   return {
     findOne: () => ({
-      lean: async () => ({ language }),
+      select: () => ({
+        lean: async () => doc,
+      }),
+      lean: async () => doc,
     }),
-    findOneAndUpdate: async () => ({}),
   };
 }
 
-function makePngBuffer() {
-  const canvas = createCanvas(1600, 900);
+function makePngBuffer(width = 1600, height = 900, color = "#223344") {
+  const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#223344";
-  ctx.fillRect(0, 0, 1600, 900);
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, width, height);
   return canvas.toBuffer("image/png");
 }
 
@@ -37,123 +41,55 @@ function arrayBufferFromBuffer(buffer) {
   return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
 }
 
-test("raid-channel set-bg-channel validates attach-file permissions", async () => {
-  let capturedOptions = null;
-  let savedUpdate = null;
-  const channel = { id: "bg-channel" };
-  const User = makeUserModel("en");
-  const command = createRaidChannelCommand({
-    EmbedBuilder,
-    MessageFlags,
-    PermissionFlagsBits,
-    UI: { colors: { success: 0x57f287 }, icons: { done: "OK", reset: "RESET" } },
-    User,
-    GuildConfig: {
-      findOneAndUpdate: async (_filter, update) => {
-        savedUpdate = update;
-      },
-    },
-    normalizeName: (value) => String(value || "").toLowerCase(),
-    getCachedMonitorChannelId: () => null,
-    setCachedMonitorChannelId: () => {},
-    getMonitorCacheHealth: () => ({ healthy: true }),
-    isTextMonitorEnabled: () => true,
-    getMissingBotChannelPermissions: (_channel, _botMember, options) => {
-      capturedOptions = options;
-      return [];
-    },
-    postRaidChannelWelcome: async () => null,
-    postChannelAnnouncement: async () => null,
-    getAnnouncementsConfig: () => ({}),
-    resolveRaidMonitorChannel: async () => null,
-    cleanupRaidChannelMessages: async () => ({ ok: true }),
-    getTargetCleanupSlotKey: () => "slot",
-  });
-
-  await command.handleRaidChannelCommand({
-    guildId: "guild-1",
-    user: { id: "admin-1" },
-    memberPermissions: { has: (flag) => flag === PermissionFlagsBits.ManageGuild },
-    guild: { members: { me: { id: "bot" } } },
-    options: {
-      getString: () => "set-bg-channel",
-      getChannel: () => channel,
-    },
-    reply: async () => {},
-  });
-
-  const labels = capturedOptions.requiredPerms.map((perm) => perm.label);
-  assert.deepEqual(labels, [
-    "View Channel",
-    "Send Messages",
-    "Attach Files",
-    "Read Message History",
-  ]);
-  assert.equal(savedUpdate.raidBgChannelId, "bg-channel");
-});
-
-test("raid channel permission helper honors per-feature permission sets", () => {
-  const service = createRaidChannelMonitorService({
-    PermissionFlagsBits,
-    EmbedBuilder,
-    UI: {},
-    GuildConfig: {},
-    RAID_REQUIREMENT_MAP: {},
-    getGatesForRaid: () => [],
-    applyRaidSetForDiscordId: async () => null,
-    getAnnouncementsConfig: () => ({}),
-    normalizeName: (value) => String(value || "").toLowerCase(),
-  });
-  const allowed = new Set([
-    PermissionFlagsBits.ViewChannel,
-    PermissionFlagsBits.SendMessages,
-    PermissionFlagsBits.ReadMessageHistory,
-  ]);
-  const channel = {
-    permissionsFor: () => ({
-      has: (flag) => allowed.has(flag),
-    }),
+function makeAttachment(buffer, overrides = {}) {
+  return {
+    url: overrides.url || "https://cdn.example/original.png",
+    name: overrides.name || "background.png",
+    contentType: overrides.contentType || "image/png",
+    size: overrides.size ?? buffer.length,
   };
+}
 
-  const missing = service.getMissingBotChannelPermissions(channel, { id: "bot" }, {
-    requiredPerms: [
-      { flag: PermissionFlagsBits.ViewChannel, label: "View Channel" },
-      { flag: PermissionFlagsBits.SendMessages, label: "Send Messages" },
-      { flag: PermissionFlagsBits.AttachFiles, label: "Attach Files" },
-      { flag: PermissionFlagsBits.ReadMessageHistory, label: "Read Message History" },
-    ],
-  });
+function makeSetOptions(attachments, mode = null) {
+  const byName = new Map();
+  for (let i = 0; i < attachments.length; i += 1) {
+    byName.set(i === 0 ? "image" : `image_${i + 1}`, attachments[i]);
+  }
+  return {
+    getSubcommand: () => "set",
+    getAttachment: (name, required = false) => {
+      const attachment = byName.get(name) || null;
+      if (!attachment && required) {
+        throw new Error(`Missing required test attachment: ${name}`);
+      }
+      return attachment;
+    },
+    getString: () => mode,
+  };
+}
 
-  assert.deepEqual(missing, ["Attach Files"]);
-});
-
-test("raid-bg set reports bg channel send failure without saving broken refs", async (t) => {
+test("raid-bg set persists resized buffer to UserBackground collection", async (t) => {
   const png = makePngBuffer();
   const originalFetch = global.fetch;
-  const originalFindOne = GuildConfig.findOne;
+  const originalUpsert = UserBackground.findOneAndUpdate;
   global.fetch = async () => ({
     ok: true,
     arrayBuffer: async () => arrayBufferFromBuffer(png),
   });
-  GuildConfig.findOne = () => ({
-    select: () => ({
-      lean: async () => ({ raidBgChannelId: "bg-channel" }),
-    }),
-  });
+  let savedUpdate = null;
+  UserBackground.findOneAndUpdate = async (_filter, update) => {
+    savedUpdate = update;
+    return { _id: "doc-1", ...update.$set };
+  };
   t.after(() => {
     global.fetch = originalFetch;
-    GuildConfig.findOne = originalFindOne;
+    UserBackground.findOneAndUpdate = originalUpsert;
+    bgLoader.clearBackgroundCache();
   });
 
-  let persisted = false;
   const edits = [];
-  const User = makeUserModel("en");
-  User.findOneAndUpdate = async () => {
-    persisted = true;
-  };
   const command = createRaidBgCommand({
-    User,
-    saveWithRetry: async (op) => op(),
+    User: makeUserModel("en"),
     AttachmentBuilder,
     EmbedBuilder,
     MessageFlags,
@@ -162,61 +98,212 @@ test("raid-bg set reports bg channel send failure without saving broken refs", a
   await command.handleRaidBgCommand({
     guild: { id: "guild-1" },
     user: { id: "user-1" },
-    client: {
-      channels: {
-        fetch: async () => ({
-          id: "bg-channel",
-          isTextBased: () => true,
-          send: async () => {
-            throw new Error("Missing Permissions");
-          },
-        }),
-      },
-    },
-    options: {
-      getSubcommand: () => "set",
-      getAttachment: () => ({
-        url: "https://cdn.example/background.png",
+    options: makeSetOptions([
+      makeAttachment(png, {
+        url: "https://cdn.example/original.png",
         name: "background.png",
-        contentType: "image/png",
-        size: png.length,
       }),
-    },
+    ]),
     deferReply: async () => {},
     editReply: async (payload) => edits.push(payload),
   });
 
-  assert.equal(persisted, false);
-  assert.match(edits[0].embeds[0].data.description, /Missing Permissions/);
+  // The resize pipeline always re-encodes to JPEG, so the stored buffer
+  // and mime should reflect the post-resize state regardless of source.
+  assert.equal(savedUpdate.$set.discordId, "user-1");
+  assert.equal(savedUpdate.$set.mode, "even");
+  assert.equal(savedUpdate.$set.images.length, 1);
+  assert.equal(savedUpdate.$set.images[0].mime, "image/jpeg");
+  assert.ok(Buffer.isBuffer(savedUpdate.$set.images[0].imageData));
+  assert.ok(savedUpdate.$set.images[0].imageData.length > 0);
+  assert.ok(savedUpdate.$set.images[0].imageData.length <= 2 * 1024 * 1024);
+  assert.equal(savedUpdate.$set.images[0].originalFilename, "background.png");
+  assert.equal(savedUpdate.$set.images[0].originalWidth, 1600);
+  assert.equal(savedUpdate.$set.images[0].originalHeight, 900);
+  assert.deepEqual(savedUpdate.$set.assignments, [
+    { accountName: "Roster A", accountKey: "roster a", imageIndex: 0 },
+  ]);
+  assert.equal(savedUpdate.$unset.imageData, "");
+  assert.match(edits[0].embeds[0].data.title, /tucked away|Background/i);
 });
 
-test("raid-bg set previews the rehosted attachment URL", async (t) => {
-  const png = makePngBuffer();
+test("raid-bg set can distribute multiple images across owned rosters", async (t) => {
+  const pngA = makePngBuffer(1600, 900, "#112233");
+  const pngB = makePngBuffer(1600, 900, "#445566");
+  const buffers = new Map([
+    ["https://cdn.example/a.png", pngA],
+    ["https://cdn.example/b.png", pngB],
+  ]);
   const originalFetch = global.fetch;
-  const originalFindOne = GuildConfig.findOne;
-  global.fetch = async () => ({
+  const originalUpsert = UserBackground.findOneAndUpdate;
+  global.fetch = async (url) => ({
     ok: true,
-    arrayBuffer: async () => arrayBufferFromBuffer(png),
+    arrayBuffer: async () => arrayBufferFromBuffer(buffers.get(url)),
   });
-  GuildConfig.findOne = () => ({
-    select: () => ({
-      lean: async () => ({ raidBgChannelId: "bg-channel" }),
-    }),
-  });
+  let savedUpdate = null;
+  UserBackground.findOneAndUpdate = async (_filter, update) => {
+    savedUpdate = update;
+    return { _id: "doc-1", ...update.$set };
+  };
   t.after(() => {
     global.fetch = originalFetch;
-    GuildConfig.findOne = originalFindOne;
+    UserBackground.findOneAndUpdate = originalUpsert;
+    bgLoader.clearBackgroundCache();
   });
 
-  let savedUpdate = null;
   const edits = [];
-  const User = makeUserModel("en");
-  User.findOneAndUpdate = async (_filter, update) => {
-    savedUpdate = update;
-  };
   const command = createRaidBgCommand({
-    User,
-    saveWithRetry: async (op) => op(),
+    User: makeUserModel("en", ["Roster A", "Roster B", "Roster C"]),
+    AttachmentBuilder,
+    EmbedBuilder,
+    MessageFlags,
+  });
+
+  await command.handleRaidBgCommand({
+    guild: { id: "guild-1" },
+    user: { id: "user-multi" },
+    options: makeSetOptions([
+      makeAttachment(pngA, { url: "https://cdn.example/a.png", name: "a.png" }),
+      makeAttachment(pngB, { url: "https://cdn.example/b.png", name: "b.png" }),
+    ], "even"),
+    deferReply: async () => {},
+    editReply: async (payload) => edits.push(payload),
+  });
+
+  assert.equal(savedUpdate.$set.images.length, 2);
+  assert.deepEqual(savedUpdate.$set.assignments.map((entry) => entry.imageIndex), [0, 1, 0]);
+  assert.deepEqual(savedUpdate.$set.assignments.map((entry) => entry.accountKey), [
+    "roster a",
+    "roster b",
+    "roster c",
+  ]);
+  assert.match(edits[0].embeds[0].data.fields[0].value, /2/);
+});
+
+test("raid-bg set counts shared rosters in the viewer's own image pool", async (t) => {
+  const pngA = makePngBuffer(1600, 900, "#112233");
+  const pngB = makePngBuffer(1600, 900, "#445566");
+  const buffers = new Map([
+    ["https://cdn.example/a.png", pngA],
+    ["https://cdn.example/b.png", pngB],
+  ]);
+  const originalFetch = global.fetch;
+  const originalUpsert = UserBackground.findOneAndUpdate;
+  global.fetch = async (url) => ({
+    ok: true,
+    arrayBuffer: async () => arrayBufferFromBuffer(buffers.get(url)),
+  });
+  let savedUpdate = null;
+  UserBackground.findOneAndUpdate = async (_filter, update) => {
+    savedUpdate = update;
+    return { _id: "doc-1", ...update.$set };
+  };
+  t.after(() => {
+    global.fetch = originalFetch;
+    UserBackground.findOneAndUpdate = originalUpsert;
+    bgLoader.clearBackgroundCache();
+  });
+
+  const edits = [];
+  const command = createRaidBgCommand({
+    User: makeUserModel("en", ["Own Roster"]),
+    getAccessibleAccounts: async () => [
+      { accountName: "Own Roster", ownerDiscordId: "viewer", isOwn: true },
+      { accountName: "Shared Roster", ownerDiscordId: "owner-a", isOwn: false },
+    ],
+    AttachmentBuilder,
+    EmbedBuilder,
+    MessageFlags,
+  });
+
+  await command.handleRaidBgCommand({
+    guild: { id: "guild-1" },
+    user: { id: "viewer" },
+    options: makeSetOptions([
+      makeAttachment(pngA, { url: "https://cdn.example/a.png", name: "a.png" }),
+      makeAttachment(pngB, { url: "https://cdn.example/b.png", name: "b.png" }),
+    ]),
+    deferReply: async () => {},
+    editReply: async (payload) => edits.push(payload),
+  });
+
+  assert.equal(savedUpdate.$set.discordId, "viewer");
+  assert.equal(savedUpdate.$set.images.length, 2);
+  assert.deepEqual(savedUpdate.$set.assignments.map((entry) => entry.accountKey), [
+    "own roster",
+    "shared roster",
+  ]);
+  assert.match(edits[0].embeds[0].data.fields[0].value, /2\/2/);
+});
+
+test("raid-bg set rejects more images than visible roster count", async (t) => {
+  const pngA = makePngBuffer(1600, 900, "#112233");
+  const pngB = makePngBuffer(1600, 900, "#445566");
+  const originalFetch = global.fetch;
+  const originalUpsert = UserBackground.findOneAndUpdate;
+  let fetched = false;
+  let persisted = false;
+  global.fetch = async () => {
+    fetched = true;
+    return {
+      ok: true,
+      arrayBuffer: async () => arrayBufferFromBuffer(pngA),
+    };
+  };
+  UserBackground.findOneAndUpdate = async () => {
+    persisted = true;
+  };
+  t.after(() => {
+    global.fetch = originalFetch;
+    UserBackground.findOneAndUpdate = originalUpsert;
+    bgLoader.clearBackgroundCache();
+  });
+
+  const edits = [];
+  const command = createRaidBgCommand({
+    User: makeUserModel("en", ["Only Roster"]),
+    AttachmentBuilder,
+    EmbedBuilder,
+    MessageFlags,
+  });
+
+  await command.handleRaidBgCommand({
+    guild: { id: "guild-1" },
+    user: { id: "user-too-many" },
+    options: makeSetOptions([
+      makeAttachment(pngA, { url: "https://cdn.example/a.png", name: "a.png" }),
+      makeAttachment(pngB, { url: "https://cdn.example/b.png", name: "b.png" }),
+    ]),
+    deferReply: async () => {},
+    editReply: async (payload) => edits.push(payload),
+  });
+
+  assert.equal(fetched, false);
+  assert.equal(persisted, false);
+  assert.match(edits[0].embeds[0].data.description, /maximum|up to|1/i);
+});
+
+test("raid-bg set rejects under-min-dim uploads without writing to the database", async (t) => {
+  const tinyPng = makePngBuffer(400, 300);
+  const originalFetch = global.fetch;
+  const originalUpsert = UserBackground.findOneAndUpdate;
+  global.fetch = async () => ({
+    ok: true,
+    arrayBuffer: async () => arrayBufferFromBuffer(tinyPng),
+  });
+  let persisted = false;
+  UserBackground.findOneAndUpdate = async () => {
+    persisted = true;
+  };
+  t.after(() => {
+    global.fetch = originalFetch;
+    UserBackground.findOneAndUpdate = originalUpsert;
+    bgLoader.clearBackgroundCache();
+  });
+
+  const edits = [];
+  const command = createRaidBgCommand({
+    User: makeUserModel("en"),
     AttachmentBuilder,
     EmbedBuilder,
     MessageFlags,
@@ -225,33 +312,252 @@ test("raid-bg set previews the rehosted attachment URL", async (t) => {
   await command.handleRaidBgCommand({
     guild: { id: "guild-1" },
     user: { id: "user-2" },
-    client: {
-      channels: {
-        fetch: async () => ({
-          id: "bg-channel",
-          isTextBased: () => true,
-          send: async () => ({
-            id: "message-1",
-            attachments: {
-              first: () => ({ url: "https://cdn.example/rehosted.png" }),
-            },
-          }),
-        }),
-      },
-    },
-    options: {
-      getSubcommand: () => "set",
-      getAttachment: () => ({
-        url: "https://cdn.example/original.png",
-        name: "background.png",
-        contentType: "image/png",
-        size: png.length,
+    options: makeSetOptions([
+      makeAttachment(tinyPng, {
+        url: "https://cdn.example/tiny.png",
+        name: "tiny.png",
       }),
-    },
+    ]),
     deferReply: async () => {},
     editReply: async (payload) => edits.push(payload),
   });
 
-  assert.equal(savedUpdate.$set.backgroundImageMessageId, "message-1");
-  assert.equal(edits[0].embeds[0].data.image.url, "https://cdn.example/rehosted.png");
+  assert.equal(persisted, false);
+  assert.match(edits[0].embeds[0].data.description, /too tiny|400x300/i);
+});
+
+test("raid-bg set rejects oversized downloaded bytes even when attachment.size lies", async (t) => {
+  const hugeBuffer = Buffer.alloc(8 * 1024 * 1024 + 1, 0xff);
+  const originalFetch = global.fetch;
+  const originalUpsert = UserBackground.findOneAndUpdate;
+  global.fetch = async () => ({
+    ok: true,
+    arrayBuffer: async () => arrayBufferFromBuffer(hugeBuffer),
+  });
+  let persisted = false;
+  UserBackground.findOneAndUpdate = async () => {
+    persisted = true;
+  };
+  t.after(() => {
+    global.fetch = originalFetch;
+    UserBackground.findOneAndUpdate = originalUpsert;
+    bgLoader.clearBackgroundCache();
+  });
+
+  const edits = [];
+  const command = createRaidBgCommand({
+    User: makeUserModel("en"),
+    AttachmentBuilder,
+    EmbedBuilder,
+    MessageFlags,
+  });
+
+  await command.handleRaidBgCommand({
+    guild: { id: "guild-1" },
+    user: { id: "user-oversize" },
+    options: makeSetOptions([
+      makeAttachment(hugeBuffer, {
+        url: "https://cdn.example/oversize.png",
+        name: "oversize.png",
+        size: 1,
+      }),
+    ]),
+    deferReply: async () => {},
+    editReply: async (payload) => edits.push(payload),
+  });
+
+  assert.equal(persisted, false);
+  assert.match(edits[0].embeds[0].data.description, /chunky|8\.0 MB/i);
+});
+
+test("raid-bg view returns 'no background yet' when the collection is empty", async (t) => {
+  const originalFindOne = UserBackground.findOne;
+  UserBackground.findOne = () => ({
+    lean: async () => null,
+  });
+  t.after(() => {
+    UserBackground.findOne = originalFindOne;
+  });
+
+  const edits = [];
+  const command = createRaidBgCommand({
+    User: makeUserModel("en"),
+    AttachmentBuilder,
+    EmbedBuilder,
+    MessageFlags,
+  });
+
+  await command.handleRaidBgCommand({
+    guild: { id: "guild-1" },
+    user: { id: "user-3" },
+    options: { getSubcommand: () => "view" },
+    deferReply: async () => {},
+    editReply: async (payload) => edits.push(payload),
+  });
+
+  assert.match(edits[0].embeds[0].data.title, /no background/i);
+  assert.equal(edits[0].files, undefined);
+});
+
+test("raid-bg view attaches the stored buffer back to the embed", async (t) => {
+  const png = makePngBuffer(1200, 720);
+  const originalFindOne = UserBackground.findOne;
+  UserBackground.findOne = () => ({
+    lean: async () => ({
+      mode: "even",
+      images: [
+        {
+          imageData: png,
+          width: 1200,
+          height: 720,
+          originalFilename: "stored.png",
+        },
+      ],
+      assignments: [
+        { accountName: "Roster A", accountKey: "roster a", imageIndex: 0 },
+      ],
+      updatedAt: new Date(),
+    }),
+  });
+  t.after(() => {
+    UserBackground.findOne = originalFindOne;
+  });
+
+  const edits = [];
+  const command = createRaidBgCommand({
+    User: makeUserModel("en"),
+    AttachmentBuilder,
+    EmbedBuilder,
+    MessageFlags,
+  });
+
+  await command.handleRaidBgCommand({
+    guild: { id: "guild-1" },
+    user: { id: "user-4" },
+    options: { getSubcommand: () => "view" },
+    deferReply: async () => {},
+    editReply: async (payload) => edits.push(payload),
+  });
+
+  const payload = edits[0];
+  assert.equal(payload.embeds[0].data.image.url, "attachment://background-current-1.jpg");
+  assert.equal(payload.files.length, 1);
+  assert.match(payload.embeds[0].data.title, /Current background|🖼️/i);
+});
+
+test("raid-bg remove deletes the doc and invalidates the cache", async (t) => {
+  const originalFindOne = UserBackground.findOne;
+  const originalDelete = UserBackground.deleteOne;
+  let deleteCalls = 0;
+  UserBackground.findOne = () => ({
+    select: () => ({
+      lean: async () => ({ _id: "doc-existing" }),
+    }),
+  });
+  UserBackground.deleteOne = async () => {
+    deleteCalls += 1;
+  };
+  t.after(() => {
+    UserBackground.findOne = originalFindOne;
+    UserBackground.deleteOne = originalDelete;
+    bgLoader.clearBackgroundCache();
+  });
+
+  const edits = [];
+  const command = createRaidBgCommand({
+    User: makeUserModel("en"),
+    AttachmentBuilder,
+    EmbedBuilder,
+    MessageFlags,
+  });
+
+  await command.handleRaidBgCommand({
+    guild: { id: "guild-1" },
+    user: { id: "user-5" },
+    options: { getSubcommand: () => "remove" },
+    deferReply: async () => {},
+    editReply: async (payload) => edits.push(payload),
+  });
+
+  assert.equal(deleteCalls, 1);
+  assert.match(edits[0].embeds[0].data.title, /cleared|🗑️/i);
+});
+
+test("bg-loader cache returns the same buffer on subsequent calls", async (t) => {
+  const png = makePngBuffer(1600, 900);
+  const ts = new Date();
+  const originalFindOne = UserBackground.findOne;
+  let metaCalls = 0;
+  let dataCalls = 0;
+  UserBackground.findOne = (_filter) => ({
+    select: (proj) => ({
+      lean: async () => {
+        if (String(proj).includes("imageData")) {
+          dataCalls += 1;
+          return {
+            images: [
+              { imageData: png },
+            ],
+            assignments: [
+              { accountName: "Roster A", accountKey: "roster a", imageIndex: 0 },
+            ],
+            mode: "even",
+            updatedAt: ts,
+          };
+        }
+        metaCalls += 1;
+        return { updatedAt: ts };
+      },
+    }),
+  });
+  bgLoader.clearBackgroundCache();
+  t.after(() => {
+    UserBackground.findOne = originalFindOne;
+    bgLoader.clearBackgroundCache();
+  });
+
+  const first = await bgLoader.loadBackgroundBuffer("cache-user", { accountName: "Roster A" });
+  const second = await bgLoader.loadBackgroundBuffer("cache-user", { accountName: "Roster A" });
+
+  assert.ok(Buffer.isBuffer(first));
+  assert.equal(first, second);
+  assert.equal(dataCalls, 1);
+  assert.equal(metaCalls, 2);
+});
+
+test("bg-loader selects the assigned image for the requested roster", async (t) => {
+  const pngA = makePngBuffer(1600, 900, "#112233");
+  const pngB = makePngBuffer(1600, 900, "#445566");
+  const ts = new Date();
+  const originalFindOne = UserBackground.findOne;
+  UserBackground.findOne = () => ({
+    select: (proj) => ({
+      lean: async () => {
+        if (String(proj).includes("imageData")) {
+          return {
+            images: [
+              { imageData: pngA },
+              { imageData: pngB },
+            ],
+            assignments: [
+              { accountName: "Roster A", accountKey: "roster a", imageIndex: 0 },
+              { accountName: "Roster B", accountKey: "roster b", imageIndex: 1 },
+            ],
+            mode: "even",
+            updatedAt: ts,
+          };
+        }
+        return { updatedAt: ts };
+      },
+    }),
+  });
+  bgLoader.clearBackgroundCache();
+  t.after(() => {
+    UserBackground.findOne = originalFindOne;
+    bgLoader.clearBackgroundCache();
+  });
+
+  const selected = await bgLoader.loadBackgroundBuffer("owner-user", { accountName: "Roster B" });
+
+  assert.equal(selected, pngB);
 });

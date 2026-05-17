@@ -1046,7 +1046,6 @@ module.exports = {
       repin: "repin - refresh the pinned welcome embed",
       scheduleOn: "schedule-on - enable auto-cleanup every 30 min (quiet 03:00-08:00 UTC)",
       scheduleOff: "schedule-off - disable 30-min auto-cleanup",
-      setBgChannel: "set-bg-channel - pick the channel where /raid-bg uploads land",
     },
     auth: {
       serverOnlyTitle: "Server only",
@@ -1119,14 +1118,6 @@ module.exports = {
       enabledDescription: "Every 30 minutes (slots :00 and :30 UTC), Artist will auto-delete all non-pinned messages in the monitor channel. The welcome pin stays. After cleanup, Artist posts a 4-bucket notice (clean / 1-5 / 6-20 / 21+ messages) with random variants - the notice self-deletes after 5 minutes. If the bot is offline across a slot boundary, the next tick after restart catches up.",
       disabledTitle: "Auto-cleanup disabled",
       disabledDescription: "Auto-cleanup is off. Admins can still run it manually via `/raid-channel config action:cleanup` anytime.",
-    },
-    setBgChannel: {
-      missingChannelTitle: "Missing `channel` option",
-      missingChannelDescription: "Action `set-bg-channel` needs a `channel:#<name>` so Artist knows where to rehost /raid-bg uploads. Example: `/raid-channel config action:set-bg-channel channel:#raid-bg-archive`.",
-      missingPermsTitle: "Bot missing permissions",
-      missingPermsDescription: "Artist can't post images to <#{channelId}> · missing: **{missing}**. Grant Send Messages + Attach Files in that channel, then re-run.",
-      successTitle: "Bg channel saved",
-      successDescription: "From now on, users running `/raid-bg set image:<file>` will have Artist rehost the upload into <#{channelId}>, and the `/raid-status` canvas card kicks in. Best to use an archive-style channel (muted / hidden) since one message lands per upload over time.",
     },
   },
   "raid-announce": {
@@ -1472,13 +1463,13 @@ module.exports = {
         short: "Set / view / remove the background image for your /raid-status card",
         example: "/raid-bg set image:<file>",
         notes: [
-          "Upload an anime art / character render / wallpaper · Artist paints it behind your raid card every time you run /raid-status. Opt-in per user · anyone who hasn't set one keeps seeing the text embed exactly as before.",
+          "Upload 1-4 anime art / character render / wallpaper images · Artist maps them across your rosters and paints the selected one behind each /raid-status card. Opt-in per user · anyone who hasn't set one keeps seeing the text embed exactly as before.",
           "",
-          "**set image:<file>** — upload a new image. Artist validates dimensions (≥ 1600x900 so it stays sharp, ≤ 3840x2160 4K cap), size (≤ 8 MB), and format (PNG / JPG / WEBP) before saving.",
-          "**view** — Artist shows the currently-stored background so you can confirm what you set.",
-          "**remove** — clear the reference, revert /raid-status to the default text embed.",
+          "**set image:<file> [image_2] [image_3] [image_4] [mode]** — upload up to the roster count visible to you, capped at 4 images. Each file may be up to 8 MB at any dimension ≥ 1600x900 in PNG / JPG / WEBP. Artist can split them evenly or shuffle the roster map when saving; shared roster pages still use your own pool.",
+          "**view** — Artist shows the currently-stored background pool, roster map, and the size it's taking on disk.",
+          "**remove** — drop the stored buffer, revert /raid-status to the default text embed.",
           "",
-          "**Storage**: Artist rehosts the upload into the channel an admin chose via `/raid-channel config action:set-bg-channel channel:#<name>` and stores the message reference instead of the original URL, since Discord CDN URLs expire ~24h. Admin sets it once per server and everyone benefits.",
+          "**Storage**: bytes land in the bot's database (a dedicated collection · not nested on the User doc). No admin setup, no rehost channel · upload-and-go. Each stored image is kept under 2 MB, so the 4-image cap stays below Mongo's document limit. An in-memory LRU cache absorbs repeat-render hits so /raid-status pagination doesn't bounce on Mongo.",
           "**Sharp + clean**: rgba dark 82% panels overlay the art so text reads on both bright and dark backgrounds. Cover-fit keeps full-bleed without distorting the source's aspect ratio.",
         ],
       },
@@ -1728,44 +1719,51 @@ module.exports = {
         "Artist opened the file but couldn't decode it: {message}",
       tooSmall:
         "That's too tiny ({width}x{height}). Artist needs at least {minW}x{minH} so the raid card stays crisp.",
-      tooLarge:
-        "That's bigger than Artist can carry ({width}x{height}). Cap is {maxW}x{maxH} (4K) so the bot keeps moving.",
-      channelMissing:
-        "This server hasn't configured a /raid-bg channel yet. Ask an admin to run `/raid-channel config action:set-bg-channel channel:#<name>` and try again.",
-      channelFetchFailed:
-        "Artist couldn't reach the bg channel {channelId}: {message}",
-      channelSendFailed:
-        "Artist couldn't post the rehost into bg channel {channelId}: {message}",
-      notTextChannel:
-        "Channel {channelId} isn't a text channel, so Artist can't post the image there.",
+      storageFailed:
+        "Artist couldn't save the image to the database: {message}. Try again in a moment; if it keeps failing, ping an admin.",
     },
     set: {
       downloadFailedTitle: "❌ Download failed",
       rejectTitle: "⚠️ Image doesn't meet Artist's spec",
       requirementsHeader: "Artist needs",
       requirementsLines:
-        "• Dimensions: minimum **{minW}x{minH}**, maximum **{maxW}x{maxH}**\n• Size: maximum **{maxMb} MB**\n• Format: PNG / JPG / WEBP",
+        "• Dimensions: minimum **{minW}x{minH}** (larger is fine · Artist auto-downscales)\n• Upload size: maximum **{maxMb} MB**\n• Format: PNG / JPG / WEBP",
       saveFailedTitle: "❌ Save failed",
       successTitle: "✅ Background tucked away",
       successDescription:
         "Next time you run `/raid-status` Artist will paint your raid card with this as the background. Looking forward to it.",
+      noRosterTitle: "ℹ️ No roster found",
+      noRosterDescription:
+        "Artist needs at least one of your own rosters before saving roster backgrounds.",
+      tooManyImagesTitle: "⚠️ Too many images",
+      tooManyImagesDescription:
+        "You attached {count} images, but Artist can save up to {max} for your current roster count.",
+      imagesLabel: "🖼️ Images",
+      imagesValue: "Saved {count}/{max} image(s) · {totalKb} KB total",
+      modeLabel: "🔀 Assignment",
+      mode: {
+        even: "Even split",
+        random: "Random split",
+      },
+      assignmentLabel: "📌 Roster map",
       fileLabel: "🖼️ File",
       dimsLabel: "📐 Dimensions",
-      formatLabel: "💾 Format",
+      sizeLabel: "💾 Storage",
       footer: "/raid-bg view to peek · /raid-bg remove to clear",
     },
     view: {
       noneTitle: "ℹ️ No background yet",
       noneDescription:
         "You haven't handed Artist an image yet. Run `/raid-bg set image:<file>` to drop the first one in.",
-      unavailableTitle: "⚠️ Artist can't reach the image anymore",
-      unavailableDescription:
-        "The reference was saved but the file's gone (channel deleted / message removed). Re-upload via `/raid-bg set`, or `/raid-bg remove` to revert to the text embed.",
       currentTitle: "🖼️ Current background",
       currentDescription: "This is what Artist's painting behind your `/raid-status` raid card.",
       fileLabel: "📁 File",
+      dimsLabel: "📐 Stored",
+      imagesLabel: "🖼️ Images",
+      imagesValue: "{count} image(s) · {mode}",
       uploadLabel: "🕐 Uploaded",
       uploadUnknown: "unknown",
+      assignmentLabel: "📌 Roster map",
       footer: "/raid-bg set to swap · /raid-bg remove to clear",
     },
     remove: {
