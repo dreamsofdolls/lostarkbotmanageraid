@@ -170,6 +170,16 @@ test("REGRESSION: raid-status edit payload clears stale canvas attachments", () 
   assert.match(source, /components: buildComponents\(true\),\s+attachments: \[\],/);
 });
 
+test("REGRESSION: raid-status canvas is embedded instead of floating as an attachment preview", () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, "..", "bot", "handlers", "raid-status", "index.js"),
+    "utf8"
+  );
+  assert.match(source, /const attachCanvasToEmbed = \(buffer\) =>/);
+  assert.match(source, /embed\.setImage\(`attachment:\/\/\$\{name\}`\);/);
+  assert.match(source, /payload\.files = \[\{ attachment: buffer, name \}\];/);
+});
+
 test("REGRESSION: raid-status shared roster background uses the viewer image pool", () => {
   const lookup = _resolveBackgroundLookup("viewer-b", {
     accountName: "Shared Roster",

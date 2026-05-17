@@ -459,6 +459,12 @@ function createRaidStatusCommand(deps) {
     const buildEmbedAndCanvas = async () => {
       const embed = buildCurrentEmbed();
       const payload = { embeds: [embed], files: [], attachments: [] };
+      const attachCanvasToEmbed = (buffer) => {
+        const name = "raid-status.png";
+        embed.setImage(`attachment://${name}`);
+        payload.files = [{ attachment: buffer, name }];
+        return payload;
+      };
       if (currentView === "task") return payload;
       const account = accounts[currentPage];
       const bgBuffer = await resolveBackgroundBuffer(account);
@@ -471,8 +477,7 @@ function createRaidStatusCommand(deps) {
       const cacheKey = String(currentPage);
       const cached = canvasBufferCache.get(cacheKey);
       if (cached) {
-        payload.files = [{ attachment: cached, name: "raid-status.png" }];
-        return payload;
+        return attachCanvasToEmbed(cached);
       }
 
       try {
@@ -483,7 +488,7 @@ function createRaidStatusCommand(deps) {
           backgroundSource: bgBuffer,
         });
         canvasBufferCache.set(cacheKey, buffer);
-        payload.files = [{ attachment: buffer, name: "raid-status.png" }];
+        attachCanvasToEmbed(buffer);
       } catch (err) {
         console.warn("[raid-status] canvas render failed:", err?.message || err);
       }
