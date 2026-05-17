@@ -1,6 +1,8 @@
 const { createRaidStatusView } = require("./view");
 const { createRaidStatusTaskUi } = require("./task-ui");
 const { createRaidStatusSync } = require("./sync");
+const { renderRaidStatusCard } = require("../../services/raid-card");
+const { refreshBackgroundUrl } = require("../raid/bg");
 const {
   FILTER_ALL_RAIDS,
   buildRaidDropdownState,
@@ -159,11 +161,24 @@ function createRaidStatusCommand(deps) {
     // buttons bypass bot auth). Ephemeral keeps the URL opener-only.
     // Lean+select is ~30ms - well under Discord's 3-sec defer deadline.
     let isLocalSyncMode = false;
+    // Same Mongo round-trip also pulls the user's /raid-bg refs so the
+    // canvas-card path can render with their chosen background without
+    // a second findOne later in the handler. Cheap join · the document
+    // is small + the fields are flat.
+    let backgroundRefs = null;
     try {
       const probe = await User.findOne({ discordId })
-        .select("localSyncEnabled")
+        .select(
+          "localSyncEnabled backgroundImageMessageId backgroundImageChannelId backgroundImageFilename",
+        )
         .lean();
       isLocalSyncMode = !!probe?.localSyncEnabled;
+      if (probe?.backgroundImageMessageId && probe?.backgroundImageChannelId) {
+        backgroundRefs = {
+          messageId: probe.backgroundImageMessageId,
+          channelId: probe.backgroundImageChannelId,
+        };
+      }
     } catch (err) {
       console.warn("[raid-status] localSync probe failed:", err?.message || err);
     }
@@ -362,6 +377,96 @@ function createRaidStatusCommand(deps) {
     // the current page's account. The raid filter doesn't apply in task
     // view but its state is preserved so toggling back keeps the user's
     // raid filter pick.
+    // Background URL resolution is lazy: the rehosted attachment URL is
+    // re-signed by Discord on every message fetch, so we cache the first
+    // successful resolve for the duration of this command invocation
+    // (pagination + filter clicks reuse the same buffer-attached canvas).
+    // null means "either user didn't opt in OR the rehost message is gone
+    // OR the fetch threw" · all three collapse to "no canvas, just embed".
+    let cachedBackgroundUrl = undefined;
+    const resolveBackgroundUrl = async () => {
+      if (cachedBackgroundUrl !== undefined) return cachedBackgroundUrl;
+      if (!backgroundRefs) {
+        cachedBackgroundUrl = null;
+        return null;
+      }
+      cachedBackgroundUrl = await refreshBackgroundUrl({
+        client: interaction.client,
+        messageId: backgroundRefs.messageId,
+        channelId: backgroundRefs.channelId,
+      });
+      return cachedBackgroundUrl;
+    };
+
+    // Map the current page's account into the renderRaidStatusCard input
+    // shape. Aggregates "raids cleared" across every eligible raid for
+    // every character so the header badge surfaces a roster-level number
+    // (matching the embed's per-row detail rolled up). Per-character
+    // gate dots represent ONE dot per raid (cleared iff every sub-gate
+    // of that raid is done) · keeps the canvas readable when characters
+    // are eligible for 3-4 raids each. Embed below still carries the
+    // per-gate breakdown for users who want the granular view.
+    const buildCanvasInput = (account) => {
+      if (!account?.characters?.length) return null;
+      let aggregateCleared = 0;
+      let aggregateTotal = 0;
+      const canvasChars = [];
+      for (const ch of account.characters) {
+        const raids = baseGetRaidsFor(ch) || [];
+        const gates = [];
+        for (const raid of raids) {
+          const subgates = Array.isArray(raid?.gates) ? raid.gates : [];
+          const allDone =
+            subgates.length > 0
+            && subgates.every((g) => g?.completedDate || g?.cleared);
+          aggregateTotal += 1;
+          if (allDone) aggregateCleared += 1;
+          gates.push({ cleared: allDone });
+        }
+        canvasChars.push({
+          name: getCharacterName(ch),
+          classId: ch.class || ch.className || "",
+          itemLevel: Number(ch.itemLevel) || 0,
+          gates,
+        });
+      }
+      return {
+        rosterName: account.accountName || "Roster",
+        // No specific raid · the canvas headline summarises across every
+        // eligible raid for this account. When raid-filter narrows the
+        // view, a follow-up commit can swap this to the filtered raid's
+        // name + icon.
+        raid: { name: "Raid Status", icon: "⚔️", color: "#5865f2" },
+        cleared: { count: aggregateCleared, total: aggregateTotal },
+        characters: canvasChars,
+      };
+    };
+
+    // Build the editReply payload with canvas attached when the user
+    // opted into a background AND we're rendering the raid view. Task
+    // view skips the canvas (no raid data to draw) and falls through
+    // to embed-only. Render failures fall through too · the embed
+    // still reaches the user.
+    const buildEmbedAndCanvas = async () => {
+      const embed = buildCurrentEmbed();
+      const payload = { embeds: [embed], files: [] };
+      if (currentView === "task") return payload;
+      const bgUrl = await resolveBackgroundUrl();
+      if (!bgUrl) return payload;
+      try {
+        const canvasInput = buildCanvasInput(accounts[currentPage]);
+        if (!canvasInput) return payload;
+        const buffer = await renderRaidStatusCard({
+          ...canvasInput,
+          backgroundUrl: bgUrl,
+        });
+        payload.files = [{ attachment: buffer, name: "raid-status.png" }];
+      } catch (err) {
+        console.warn("[raid-status] canvas render failed:", err?.message || err);
+      }
+      return payload;
+    };
+
     const buildCurrentEmbed = () => {
       if (currentView === "task") {
         return buildTaskViewEmbed(accounts[currentPage]);
@@ -643,7 +748,7 @@ function createRaidStatusCommand(deps) {
     const initialComponents = buildComponents(false);
 
     await interaction.editReply({
-      embeds: [buildCurrentEmbed()],
+      ...(await buildEmbedAndCanvas()),
       components: initialComponents,
     });
 
@@ -701,7 +806,7 @@ function createRaidStatusCommand(deps) {
         if (collectorEnded || currentView !== "task") return;
         try {
           await interaction.editReply({
-            embeds: [buildCurrentEmbed()],
+            ...(await buildEmbedAndCanvas()),
             components: buildComponents(false),
           });
         } catch (err) {
@@ -809,7 +914,7 @@ function createRaidStatusCommand(deps) {
         // Button reads cachedLocalSyncResumeUrl - now pointing at the
         // fresh URL.
         await interaction.editReply({
-          embeds: [buildCurrentEmbed()],
+          ...(await buildEmbedAndCanvas()),
           components: buildComponents(false),
         }).catch((err) => {
           console.warn("[raid-status] local-new-link editReply failed:", err?.message || err);
@@ -848,7 +953,7 @@ function createRaidStatusCommand(deps) {
           console.error("[raid-status] local-refresh reload failed:", err?.message || err);
         }
         await interaction.editReply({
-          embeds: [buildCurrentEmbed()],
+          ...(await buildEmbedAndCanvas()),
           components: buildComponents(false),
         }).catch((err) => {
           console.warn("[raid-status] local-refresh editReply failed:", err?.message || err);
@@ -928,7 +1033,7 @@ function createRaidStatusCommand(deps) {
         }
 
         await interaction.editReply({
-          embeds: [buildCurrentEmbed()],
+          ...(await buildEmbedAndCanvas()),
           components: buildComponents(false),
         }).catch(() => {});
 
@@ -1090,7 +1195,7 @@ function createRaidStatusCommand(deps) {
       }
 
       const updated = await interaction.editReply({
-        embeds: [buildCurrentEmbed()],
+        ...(await buildEmbedAndCanvas()),
         components: buildComponents(false),
       }).then(() => true).catch((err) => {
         console.warn("[raid-status component] edit failed:", err?.message || err);
