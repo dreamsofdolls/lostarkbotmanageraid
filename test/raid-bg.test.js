@@ -8,11 +8,12 @@ const {
   EmbedBuilder,
   MessageFlags,
 } = require("discord.js");
-const { createCanvas } = require("@napi-rs/canvas");
+const { createCanvas, loadImage } = require("@napi-rs/canvas");
 
 const UserBackground = require("../bot/models/userBackground");
 const bgLoader = require("../bot/services/raid-card/bg-loader");
-const { createRaidBgCommand } = require("../bot/handlers/raid/bg");
+const raidBgModule = require("../bot/handlers/raid/bg");
+const { createRaidBgCommand } = raidBgModule;
 
 function makeUserModel(language = "en", accountNames = ["Roster A"]) {
   const doc = {
@@ -41,6 +42,22 @@ function makeSvgBuffer(width = 800, height = 600, color = "#223344") {
   return Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="${width}" height="${height}" fill="${color}"/></svg>`
   );
+}
+
+function insertPngChunkBeforeIdat(buffer, type, data) {
+  const idatTypeOffset = buffer.indexOf(Buffer.from("IDAT", "ascii"));
+  assert.notEqual(idatTypeOffset, -1, "test PNG should contain IDAT");
+  const insertOffset = idatTypeOffset - 4;
+  const chunk = Buffer.alloc(12 + data.length);
+  chunk.writeUInt32BE(data.length, 0);
+  chunk.write(type, 4, 4, "ascii");
+  data.copy(chunk, 8);
+  chunk.writeUInt32BE(0, 8 + data.length);
+  return Buffer.concat([
+    buffer.subarray(0, insertOffset),
+    chunk,
+    buffer.subarray(insertOffset),
+  ]);
 }
 
 function arrayBufferFromBuffer(buffer) {
@@ -75,6 +92,28 @@ function makeSetOptions(attachments, mode = null) {
     getString: () => mode,
   };
 }
+
+test("raid-bg PNG sanitizer strips unsafe metadata chunks before decode", async () => {
+  const png = makePngBuffer(800, 600);
+  const withCabx = insertPngChunkBeforeIdat(
+    png,
+    "caBX",
+    Buffer.from("c2pa metadata placeholder"),
+  );
+
+  assert.equal(
+    raidBgModule.__test.detectMime({ contentType: "application/octet-stream" }, withCabx),
+    "image/png",
+  );
+
+  const stripped = raidBgModule.__test.stripPngAncillaryChunks(withCabx);
+  assert.ok(stripped.length < withCabx.length);
+  assert.equal(stripped.indexOf(Buffer.from("caBX", "ascii")), -1);
+
+  const decoded = await loadImage(stripped);
+  assert.equal(decoded.width, 800);
+  assert.equal(decoded.height, 600);
+});
 
 test("raid-bg set persists resized buffer to UserBackground collection", async (t) => {
   const png = makePngBuffer(800, 600);
