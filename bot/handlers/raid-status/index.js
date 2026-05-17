@@ -392,76 +392,17 @@ function createRaidStatusCommand(deps) {
       return buffer;
     };
 
-    // Map the current page's account into the renderRaidStatusCard input
-    // shape. Aggregates "raids cleared" across every eligible raid for
-    // every character so the header badge surfaces a roster-level number
-    // (matching the embed's per-row detail rolled up). Per-character
-    // gate dots represent ONE dot per raid (cleared iff every sub-gate
-    // of that raid is done) · keeps the canvas readable when characters
-    // are eligible for 3-4 raids each. Embed below still carries the
-    // per-gate breakdown for users who want the granular view.
-    const buildCanvasInput = (account) => {
-      if (!account?.characters?.length) return null;
-      let aggregateCleared = 0;
-      let aggregateTotal = 0;
-      const canvasChars = [];
-      for (const ch of account.characters) {
-        const raids = baseGetRaidsFor(ch) || [];
-        const gates = [];
-        for (const raid of raids) {
-          const subgates = Array.isArray(raid?.gates) ? raid.gates : [];
-          const allDone =
-            subgates.length > 0
-            && subgates.every((g) => g?.completedDate || g?.cleared);
-          aggregateTotal += 1;
-          if (allDone) aggregateCleared += 1;
-          gates.push({ cleared: allDone });
-        }
-        canvasChars.push({
-          name: getCharacterName(ch),
-          classId: ch.class || ch.className || "",
-          itemLevel: Number(ch.itemLevel) || 0,
-          gates,
-        });
-      }
-      return {
-        rosterName: account.accountName || "Roster",
-        // No specific raid · the canvas headline summarises across every
-        // eligible raid for this account. When raid-filter narrows the
-        // view, a follow-up commit can swap this to the filtered raid's
-        // name + icon.
-        raid: { name: "Raid Status", icon: "⚔️", color: "#5865f2" },
-        cleared: { count: aggregateCleared, total: aggregateTotal },
-        characters: canvasChars,
-      };
-    };
-
-    // Per-invocation canvas cache keyed by `${currentPage}` (the only
-    // dimension that changes content within one command session ·
-    // pagination + view toggle + filter clicks all flow through the
-    // same handler scope). Pagination clicks land instant after the
-    // first visit to each page · re-render only fires when the user
-    // visits a page for the first time during this session.
-    //
-    // The cache is closure-scoped so it dies with the handler · we
-    // never persist a buffer across invocations and never serve stale
-    // data after the user does /raid-set elsewhere. 5-min collector
-    // session means at most 5 minutes of stale buffer reuse, which is
-    // shorter than the ~10 min refresh cooldown anyway.
-    const canvasBufferCache = new Map();
-
-    // Build the editReply payload with canvas attached when the user
-    // opted into a background AND we're rendering the raid view. Task
-    // view skips the canvas (no raid data to draw) and falls through
-    // to embed-only. Render failures fall through too · the embed
-    // still reaches the user.
+    // Build the editReply payload. When the user opted into /raid-bg,
+    // keep the current status embed as the data surface and attach the
+    // stored image as that same embed's image block. Discord renders embed
+    // images below title/description/fields, which matches the intended
+    // "data first, art below" layout without drawing extra canvas chrome.
     const buildEmbedAndCanvas = async () => {
       const embed = buildCurrentEmbed();
       const payload = { embeds: [embed], files: [], attachments: [] };
-      const attachBackgroundEmbed = (buffer) => {
+      const attachBackgroundToStatusEmbed = (buffer) => {
         const name = "raid-background.jpg";
-        const imageEmbed = new EmbedBuilder().setImage(`attachment://${name}`);
-        payload.embeds = [imageEmbed, embed];
+        embed.setImage(`attachment://${name}`);
         payload.files = [{ attachment: buffer, name }];
         return payload;
       };
@@ -469,7 +410,7 @@ function createRaidStatusCommand(deps) {
       const account = accounts[currentPage];
       const bgBuffer = await resolveBackgroundBuffer(account);
       if (!bgBuffer) return payload;
-      return attachBackgroundEmbed(bgBuffer);
+      return attachBackgroundToStatusEmbed(bgBuffer);
     };
 
     const buildCurrentEmbed = () => {

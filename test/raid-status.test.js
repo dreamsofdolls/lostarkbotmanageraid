@@ -170,14 +170,14 @@ test("REGRESSION: raid-status edit payload clears stale canvas attachments", () 
   assert.match(source, /components: buildComponents\(true\),\s+attachments: \[\],/);
 });
 
-test("REGRESSION: raid-status background renders as a separate image embed above status text", () => {
+test("REGRESSION: raid-status background renders inside the status embed below data", () => {
   const source = fs.readFileSync(
     path.join(__dirname, "..", "bot", "handlers", "raid-status", "index.js"),
     "utf8"
   );
-  assert.match(source, /const attachBackgroundEmbed = \(buffer\) =>/);
-  assert.match(source, /const imageEmbed = new EmbedBuilder\(\)\.setImage\(`attachment:\/\/\$\{name\}`\);/);
-  assert.match(source, /payload\.embeds = \[imageEmbed, embed\];/);
+  assert.match(source, /const attachBackgroundToStatusEmbed = \(buffer\) =>/);
+  assert.match(source, /embed\.setImage\(`attachment:\/\/\$\{name\}`\);/);
+  assert.doesNotMatch(source, /payload\.embeds = \[imageEmbed, embed\];/);
   assert.match(source, /payload\.files = \[\{ attachment: buffer, name \}\];/);
 });
 
