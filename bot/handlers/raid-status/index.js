@@ -1,7 +1,6 @@
 const { createRaidStatusView } = require("./view");
 const { createRaidStatusTaskUi } = require("./task-ui");
 const { createRaidStatusSync } = require("./sync");
-const { renderRaidStatusCard } = require("../../services/raid-card");
 const { loadBackgroundBuffer } = require("../../services/raid-card/bg-loader");
 const {
   FILTER_ALL_RAIDS,
@@ -459,9 +458,10 @@ function createRaidStatusCommand(deps) {
     const buildEmbedAndCanvas = async () => {
       const embed = buildCurrentEmbed();
       const payload = { embeds: [embed], files: [], attachments: [] };
-      const attachCanvasToEmbed = (buffer) => {
-        const name = "raid-status.png";
-        embed.setImage(`attachment://${name}`);
+      const attachBackgroundEmbed = (buffer) => {
+        const name = "raid-background.jpg";
+        const imageEmbed = new EmbedBuilder().setImage(`attachment://${name}`);
+        payload.embeds = [imageEmbed, embed];
         payload.files = [{ attachment: buffer, name }];
         return payload;
       };
@@ -469,30 +469,7 @@ function createRaidStatusCommand(deps) {
       const account = accounts[currentPage];
       const bgBuffer = await resolveBackgroundBuffer(account);
       if (!bgBuffer) return payload;
-
-      // TODO: include filterRaidId in cache key once buildCanvasInput
-      // honors the filter (currently it aggregates every raid). For
-      // now currentPage alone covers the cache hit rate for
-      // pagination, which is the common click pattern.
-      const cacheKey = String(currentPage);
-      const cached = canvasBufferCache.get(cacheKey);
-      if (cached) {
-        return attachCanvasToEmbed(cached);
-      }
-
-      try {
-        const canvasInput = buildCanvasInput(account);
-        if (!canvasInput) return payload;
-        const buffer = await renderRaidStatusCard({
-          ...canvasInput,
-          backgroundSource: bgBuffer,
-        });
-        canvasBufferCache.set(cacheKey, buffer);
-        attachCanvasToEmbed(buffer);
-      } catch (err) {
-        console.warn("[raid-status] canvas render failed:", err?.message || err);
-      }
-      return payload;
+      return attachBackgroundEmbed(bgBuffer);
     };
 
     const buildCurrentEmbed = () => {
