@@ -1046,6 +1046,7 @@ module.exports = {
       repin: "repin - refresh the pinned welcome embed",
       scheduleOn: "schedule-on - enable auto-cleanup every 30 min (quiet 03:00-08:00 UTC)",
       scheduleOff: "schedule-off - disable 30-min auto-cleanup",
+      setBgChannel: "set-bg-channel - pick the channel where /raid-bg uploads land",
     },
     auth: {
       serverOnlyTitle: "Server only",
@@ -1118,6 +1119,14 @@ module.exports = {
       enabledDescription: "Every 30 minutes (slots :00 and :30 UTC), Artist will auto-delete all non-pinned messages in the monitor channel. The welcome pin stays. After cleanup, Artist posts a 4-bucket notice (clean / 1-5 / 6-20 / 21+ messages) with random variants - the notice self-deletes after 5 minutes. If the bot is offline across a slot boundary, the next tick after restart catches up.",
       disabledTitle: "Auto-cleanup disabled",
       disabledDescription: "Auto-cleanup is off. Admins can still run it manually via `/raid-channel config action:cleanup` anytime.",
+    },
+    setBgChannel: {
+      missingChannelTitle: "Missing `channel` option",
+      missingChannelDescription: "Action `set-bg-channel` needs a `channel:#<name>` so Artist knows where to rehost /raid-bg uploads. Example: `/raid-channel config action:set-bg-channel channel:#raid-bg-archive`.",
+      missingPermsTitle: "Bot missing permissions",
+      missingPermsDescription: "Artist can't post images to <#{channelId}> · missing: **{missing}**. Grant Send Messages + Attach Files in that channel, then re-run.",
+      successTitle: "Bg channel saved",
+      successDescription: "From now on, users running `/raid-bg set image:<file>` will have Artist rehost the upload into <#{channelId}>, and the `/raid-status` canvas card kicks in. Best to use an archive-style channel (muted / hidden) since one message lands per upload over time.",
     },
   },
   "raid-announce": {
@@ -1469,7 +1478,7 @@ module.exports = {
           "**view** — Artist shows the currently-stored background so you can confirm what you set.",
           "**remove** — clear the reference, revert /raid-status to the default text embed.",
           "",
-          "**Storage**: Artist rehosts the upload into a dedicated channel in the operator guild (env RAID_BG_CHANNEL_ID) and stores the message reference instead of the original URL, since Discord CDN URLs expire ~24h. The bot owner has to set that channel once on Railway before the feature works.",
+          "**Storage**: Artist rehosts the upload into the channel an admin chose via `/raid-channel config action:set-bg-channel channel:#<name>` and stores the message reference instead of the original URL, since Discord CDN URLs expire ~24h. Admin sets it once per server and everyone benefits.",
           "**Sharp + clean**: rgba dark 82% panels overlay the art so text reads on both bright and dark backgrounds. Cover-fit keeps full-bleed without distorting the source's aspect ratio.",
         ],
       },
@@ -1722,7 +1731,7 @@ module.exports = {
       tooLarge:
         "That's bigger than Artist can carry ({width}x{height}). Cap is {maxW}x{maxH} (4K) so the bot keeps moving.",
       channelMissing:
-        "The bot owner hasn't set RAID_BG_CHANNEL_ID on Railway yet, so Artist has nowhere to stash the image. Poke them about it.",
+        "This server hasn't configured a /raid-bg channel yet. Ask an admin to run `/raid-channel config action:set-bg-channel channel:#<name>` and try again.",
       channelFetchFailed:
         "Artist couldn't reach the bg channel {channelId}: {message}",
       notTextChannel:

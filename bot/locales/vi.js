@@ -1068,6 +1068,7 @@ module.exports = {
       repin: "repin - refresh the pinned welcome embed",
       scheduleOn: "schedule-on - enable auto-cleanup every 30 min (VN time)",
       scheduleOff: "schedule-off - disable 30-min auto-cleanup",
+      setBgChannel: "set-bg-channel - chọn channel rehost ảnh /raid-bg",
     },
     auth: {
       serverOnlyTitle: "Server only",
@@ -1140,6 +1141,14 @@ module.exports = {
       enabledDescription: "Mỗi 30 phút (slot :00 và :30 giờ VN), Artist sẽ tự xóa toàn bộ message không được pin trong monitor channel. Welcome pin giữ nguyên. Sau khi dọn, Artist post 1 biển báo 4-bucket (sạch sẵn / 1-5 / 6-20 / 21+ tin) với nhiều variant random pick; biển tự biến mất sau 5 phút. Nếu bot offline qua 1 slot boundary, tick tiếp theo sau khi online sẽ catch-up.",
       disabledTitle: "Auto-cleanup disabled",
       disabledDescription: "Auto-cleanup đã tắt. Admin vẫn có thể chạy thủ công qua `/raid-channel config action:cleanup` bất cứ lúc nào.",
+    },
+    setBgChannel: {
+      missingChannelTitle: "Thiếu option `channel`",
+      missingChannelDescription: "Action `set-bg-channel` cần kèm option `channel:#<tên-kênh>` để Artist biết rehost ảnh /raid-bg vào đâu. Ví dụ: `/raid-channel config action:set-bg-channel channel:#raid-bg-archive`.",
+      missingPermsTitle: "Bot thiếu permission",
+      missingPermsDescription: "Artist không upload ảnh vào <#{channelId}> được vì thiếu: **{missing}**. Grant Send Messages + Attach Files cho bot ở channel đó rồi chạy lại nha~",
+      successTitle: "Bg Channel đã set",
+      successDescription: "Từ giờ users chạy `/raid-bg set image:<file>` sẽ thấy Artist rehost ảnh vào <#{channelId}>, sau đó canvas card trên `/raid-status` dùng được. Channel này nên là archive-style (mute / hidden cho members) vì sẽ tích luỹ 1 message per upload theo thời gian.",
     },
   },
   "raid-announce": {
@@ -1491,7 +1500,7 @@ module.exports = {
           "**view** — Artist show lại background hiện tại để cậu nhớ đã set cái gì.",
           "**remove** — xoá background, revert về text embed mặc định.",
           "",
-          "**Lưu trữ**: Artist rehost ảnh vào channel riêng trong operator guild (env RAID_BG_CHANNEL_ID), lưu reference thay vì URL gốc, vì Discord CDN URL hết hạn ~24h. Bot owner phải set channel này một lần trên Railway trước khi feature work.",
+          "**Lưu trữ**: Artist rehost ảnh vào channel admin đã set qua `/raid-channel config action:set-bg-channel channel:#<tên>`, lưu reference thay vì URL gốc, vì Discord CDN URL hết hạn ~24h. Admin set channel một lần là dùng cho toàn server.",
           "**Đẹp + căng**: panel rgba dark 82% overlay lên ảnh để text vẫn readable trên art sáng hay tối. Cover-fit để full-bleed không bị crop sai tỉ lệ.",
         ],
       },
@@ -1754,7 +1763,7 @@ module.exports = {
       tooLarge:
         "Ảnh khủng quá Artist xách không nổi ({width}x{height})! Cho Artist tối đa {maxW}x{maxH} (4K) thôi nhé, để bot bay nhẹ chút~",
       channelMissing:
-        "Bot owner chưa set RAID_BG_CHANNEL_ID trên Railway, Artist không biết để ảnh ở đâu! Cậu nhắn họ giúp Artist nhé~",
+        "Server này chưa config bg channel cho /raid-bg đâu nha. Nhờ admin chạy `/raid-channel config action:set-bg-channel channel:#<tên-kênh>` để set rồi cậu thử lại nhé~",
       channelFetchFailed:
         "Artist tìm channel {channelId} không thấy: {message}",
       notTextChannel:
