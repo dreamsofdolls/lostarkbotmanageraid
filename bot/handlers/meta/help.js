@@ -35,6 +35,7 @@ const SECTION_ORDER = [
   "raid-auto-manage",
   "raid-announce",
   "raid-language",
+  "raid-bg",
 ];
 
 // Per-section language-neutral metadata. Anything translatable lives in
@@ -121,6 +122,14 @@ const SECTION_META = {
     ],
   },
   "raid-language": { icon: "🌐", options: [] },
+  "raid-bg": {
+    icon: "🖼️",
+    options: [
+      { name: "set image:<file>", required: false },
+      { name: "view", required: false },
+      { name: "remove", required: false },
+    ],
+  },
 };
 
 function createRaidHelpCommand(deps) {

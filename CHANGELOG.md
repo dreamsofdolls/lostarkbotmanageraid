@@ -4,6 +4,19 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-17 (Raid status canvas card · /raid-bg)
+
+### Added
+- **`/raid-bg` command (set / view / remove)** lets each user upload a personal background image that becomes the full-bleed art behind their `/raid-status` raid card. Validates dimensions (1600x900 to 3840x2160), size (≤ 8 MB), and format (PNG / JPG / WEBP) so the card stays sharp. The upload is rehosted into a dedicated channel in the operator guild (env `RAID_BG_CHANNEL_ID`) and the message reference is stored on the user document · Artist refreshes the attachment URL on every render since Discord's signed CDN URLs expire ~24h. Three subcommands: `set image:<file>` uploads + saves, `view` previews what's currently stored, `remove` clears it so `/raid-status` reverts to the text embed.
+- **Canvas-rendered raid card on `/raid-status`** for users who have uploaded a background. 1200x720 PNG attachment with the user's image cover-fit behind semi-transparent rgba dark 82% overlay panels (Arknights Endfield "profile card" aesthetic). Header carries the raid headline + roster name + cleared/total badge, per-character rows show class icon (from `assets/class-icons/<classId>.png`) + name + ilvl + per-raid completion dots + right-side progress bar. The existing text embed still renders below the canvas with all the multi-raid detail / side tasks / gold rollup intact · canvas is the visual splash above, embed is the read-the-data view below. Per-invocation cache keyed by page index keeps pagination clicks instant after the first visit.
+- New env var `RAID_BG_CHANNEL_ID` (operator-side, optional). Points at the channel where `/raid-bg set` uploads are rehosted. When unset, `/raid-bg set` rejects with a clear "ask bot owner" alert; `/raid-status` falls back to the text embed for everyone, matching pre-feature behavior exactly.
+- New dependency: `@napi-rs/canvas` (pure-Node native binary, no cairo system libs · deploys clean on Railway).
+
+### Behavior
+- Opt-in feature. Users who haven't run `/raid-bg set` see no change to `/raid-status` whatsoever · existing text embed, existing components, existing pagination. Canvas rendering only activates after a user uploads a background.
+- Canvas render failures (network blip, missing PNG, decode error) fall through silently to embed-only · `/raid-status` never goes down because of a transient render hiccup.
+- i18n covered across vi (default) + jp + en, all in Artist voice. `/raid-help` gets a `/raid-bg` section in each locale.
+
 ## 2026-05-14 (Cumulative gate sync)
 
 ### Fixed

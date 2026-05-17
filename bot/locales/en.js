@@ -1458,6 +1458,21 @@ module.exports = {
           "**Per-call override**: `/raid-help language:en` still works for one-off views without changing your stored preference.",
         ],
       },
+      "raid-bg": {
+        label: "/raid-bg",
+        short: "Set / view / remove the background image for your /raid-status card",
+        example: "/raid-bg set image:<file>",
+        notes: [
+          "Upload an anime art / character render / wallpaper · Artist paints it behind your raid card every time you run /raid-status. Opt-in per user · anyone who hasn't set one keeps seeing the text embed exactly as before.",
+          "",
+          "**set image:<file>** — upload a new image. Artist validates dimensions (≥ 1600x900 so it stays sharp, ≤ 3840x2160 4K cap), size (≤ 8 MB), and format (PNG / JPG / WEBP) before saving.",
+          "**view** — Artist shows the currently-stored background so you can confirm what you set.",
+          "**remove** — clear the reference, revert /raid-status to the default text embed.",
+          "",
+          "**Storage**: Artist rehosts the upload into a dedicated channel in the operator guild (env RAID_BG_CHANNEL_ID) and stores the message reference instead of the original URL, since Discord CDN URLs expire ~24h. The bot owner has to set that channel once on Railway before the feature works.",
+          "**Sharp + clean**: rgba dark 82% panels overlay the art so text reads on both bright and dark backgrounds. Cover-fit keeps full-bleed without distorting the source's aspect ratio.",
+        ],
+      },
     },
   },
   "raid-channel-language": {

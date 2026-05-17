@@ -79,6 +79,7 @@ const EXPECTED_SECTION_KEYS = [
   "raid-auto-manage",
   "raid-announce",
   "raid-language",
+  "raid-bg",
 ];
 
 test("handleRaidHelpCommand: replies with overview embed + dropdown, ephemeral", async () => {

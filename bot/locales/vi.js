@@ -1480,6 +1480,21 @@ module.exports = {
           "**Override 1 lần**: `/raid-help language:en` vẫn dùng được để xem 1 lần mà không đổi preference cố định.",
         ],
       },
+      "raid-bg": {
+        label: "/raid-bg",
+        short: "Set / xem / xoá ảnh background cho card /raid-status",
+        example: "/raid-bg set image:<file>",
+        notes: [
+          "Upload 1 ảnh anime art / character render / wallpaper, Artist sẽ paint lên làm background phía sau raid card mỗi lần cậu chạy /raid-status. Opt-in mỗi user · ai chưa set thì /raid-status vẫn render text embed như bình thường, không có gì đổi.",
+          "",
+          "**set image:<file>** — upload ảnh mới. Artist validate kích thước (≥ 1600x900 để nét, ≤ 3840x2160 cho 4K), dung lượng (≤ 8 MB), format (PNG / JPG / WEBP) rồi mới lưu.",
+          "**view** — Artist show lại background hiện tại để cậu nhớ đã set cái gì.",
+          "**remove** — xoá background, revert về text embed mặc định.",
+          "",
+          "**Lưu trữ**: Artist rehost ảnh vào channel riêng trong operator guild (env RAID_BG_CHANNEL_ID), lưu reference thay vì URL gốc, vì Discord CDN URL hết hạn ~24h. Bot owner phải set channel này một lần trên Railway trước khi feature work.",
+          "**Đẹp + căng**: panel rgba dark 82% overlay lên ảnh để text vẫn readable trên art sáng hay tối. Cover-fit để full-bleed không bị crop sai tỉ lệ.",
+        ],
+      },
     },
   },
   // Per-guild language config exposed via /raid-channel config action:set-language.
