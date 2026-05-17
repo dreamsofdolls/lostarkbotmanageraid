@@ -673,6 +673,52 @@ function createRaidCommandDefinitions({
         )
     );
 
+  const raidBgCommand = new SlashCommandBuilder()
+    .setName("raid-bg")
+    .setDescription("Set / view / remove background image for your /raid-status card")
+    .setDescriptionLocalizations({
+      vi: "Set / xem / xoá ảnh background cho card /raid-status",
+      ja: "/raid-status カードの背景画像を設定 / 表示 / 削除",
+    })
+    .setDMPermission(false)
+    .addSubcommand((sub) =>
+      sub
+        .setName("set")
+        .setDescription("Upload a background image (min 1600x900, max 8MB, PNG/JPG/WEBP)")
+        .setDescriptionLocalizations({
+          vi: "Upload ảnh background (tối thiểu 1600x900, tối đa 8MB, PNG/JPG/WEBP)",
+          ja: "背景画像をアップロード（最小1600x900、最大8MB、PNG/JPG/WEBP）",
+        })
+        .addAttachmentOption((opt) =>
+          opt
+            .setName("image")
+            .setDescription("Background image file (PNG/JPG/WEBP, 1600x900+, 8MB max)")
+            .setDescriptionLocalizations({
+              vi: "File ảnh background (PNG/JPG/WEBP, 1600x900+, max 8MB)",
+              ja: "背景画像ファイル（PNG/JPG/WEBP、1600x900以上、最大8MB）",
+            })
+            .setRequired(true),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("view")
+        .setDescription("Preview your current background")
+        .setDescriptionLocalizations({
+          vi: "Xem background hiện tại của cậu",
+          ja: "現在の背景を確認",
+        }),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("remove")
+        .setDescription("Remove your background · revert /raid-status to the text embed")
+        .setDescriptionLocalizations({
+          vi: "Xoá background · /raid-status quay về text embed",
+          ja: "背景を削除 · /raid-status をテキスト埋め込みに戻す",
+        }),
+    );
+
   const raidLanguageCommand = new SlashCommandBuilder()
     .setName("raid-language")
     .setDescription("Đổi ngôn ngữ Artist hiển thị cho cậu (Tiếng Việt / 日本語)")
@@ -814,6 +860,7 @@ function createRaidCommandDefinitions({
     raidTaskCommand,
     raidShareCommand,
     raidLanguageCommand,
+    raidBgCommand,
   ];
 
   return commands;

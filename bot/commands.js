@@ -1,4 +1,5 @@
 const {
+  AttachmentBuilder,
   EmbedBuilder,
   StringSelectMenuBuilder,
   ActionRowBuilder,
@@ -61,6 +62,7 @@ const { createRaidChannelCommand } = require("./handlers/raid/channel");
 const { createRaidHelpCommand } = require("./handlers/meta/help");
 const { createRaidShareCommand } = require("./handlers/raid/share");
 const { createRaidLanguageCommand } = require("./handlers/meta/language");
+const { createRaidBgCommand } = require("./handlers/raid/bg");
 const { createRaidSetCommand } = require("./handlers/raid/set");
 const { createStuckNudgeButtonHandler } = require("./handlers/local-sync/stuck-nudge-button");
 const {
@@ -311,6 +313,7 @@ let handleRaidShareCommand;
 let handleRaidHelpSelect;
 let handleRaidLanguageCommand;
 let handleRaidLanguageSelect;
+let handleRaidBgCommand;
 
 let handleRemoveRosterAutocomplete;
 let handleRemoveRosterCommand;
@@ -332,6 +335,7 @@ async function handleRaidManagementCommand(interaction) {
       "raid-status": handleStatusCommand,
       "raid-share": handleRaidShareCommand,
       "raid-language": handleRaidLanguageCommand,
+      "raid-bg": handleRaidBgCommand,
       "raid-help": handleRaidHelpCommand,
       "raid-remove-roster": handleRemoveRosterCommand,
       "raid-gold-earner": handleRaidGoldEarnerCommand,
@@ -845,6 +849,15 @@ const raidLanguageCommandHandlers = createRaidLanguageCommand({
   handleRaidLanguageCommand,
   handleRaidLanguageSelect,
 } = raidLanguageCommandHandlers);
+
+const raidBgCommandHandlers = createRaidBgCommand({
+  User,
+  saveWithRetry,
+  AttachmentBuilder,
+  EmbedBuilder,
+  MessageFlags,
+});
+({ handleRaidBgCommand } = raidBgCommandHandlers);
 
 const removeRosterCommandHandlers = createRemoveRosterCommand({
   EmbedBuilder,
