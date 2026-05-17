@@ -442,6 +442,20 @@ function createRaidStatusCommand(deps) {
       };
     };
 
+    // Per-invocation canvas cache keyed by `${currentPage}` (the only
+    // dimension that changes content within one command session ·
+    // pagination + view toggle + filter clicks all flow through the
+    // same handler scope). Pagination clicks land instant after the
+    // first visit to each page · re-render only fires when the user
+    // visits a page for the first time during this session.
+    //
+    // The cache is closure-scoped so it dies with the handler · we
+    // never persist a buffer across invocations and never serve stale
+    // data after the user does /raid-set elsewhere. 5-min collector
+    // session means at most 5 minutes of stale buffer reuse, which is
+    // shorter than the ~10 min refresh cooldown anyway.
+    const canvasBufferCache = new Map();
+
     // Build the editReply payload with canvas attached when the user
     // opted into a background AND we're rendering the raid view. Task
     // view skips the canvas (no raid data to draw) and falls through
@@ -453,6 +467,18 @@ function createRaidStatusCommand(deps) {
       if (currentView === "task") return payload;
       const bgUrl = await resolveBackgroundUrl();
       if (!bgUrl) return payload;
+
+      // TODO: include filterRaidId in cache key once buildCanvasInput
+      // honors the filter (currently it aggregates every raid). For
+      // now currentPage alone covers the cache hit rate for
+      // pagination, which is the common click pattern.
+      const cacheKey = String(currentPage);
+      const cached = canvasBufferCache.get(cacheKey);
+      if (cached) {
+        payload.files = [{ attachment: cached, name: "raid-status.png" }];
+        return payload;
+      }
+
       try {
         const canvasInput = buildCanvasInput(accounts[currentPage]);
         if (!canvasInput) return payload;
@@ -460,6 +486,7 @@ function createRaidStatusCommand(deps) {
           ...canvasInput,
           backgroundUrl: bgUrl,
         });
+        canvasBufferCache.set(cacheKey, buffer);
         payload.files = [{ attachment: buffer, name: "raid-status.png" }];
       } catch (err) {
         console.warn("[raid-status] canvas render failed:", err?.message || err);
