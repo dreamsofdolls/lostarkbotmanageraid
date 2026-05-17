@@ -16,6 +16,7 @@
 "use strict";
 
 const { createCanvas, loadImage } = require("@napi-rs/canvas");
+const { Resvg } = require("@resvg/resvg-js");
 const { t, getUserLanguage } = require("../../services/i18n");
 const UserBackground = require("../../models/userBackground");
 const {
@@ -36,6 +37,7 @@ const RAID_BG_ALLOWED_MIME = new Set([
   "image/jpeg",
   "image/jpg",
   "image/webp",
+  "image/svg+xml",
 ]);
 
 // Resize target. Canvas card renders at 1200x720 with cover-fit, so anything
@@ -72,6 +74,57 @@ async function downloadAttachment(attachment) {
   return Buffer.from(await response.arrayBuffer());
 }
 
+function looksLikeSvg(buffer) {
+  const sample = buffer.subarray(0, Math.min(buffer.length, 1024)).toString("utf8").trimStart();
+  return sample.startsWith("<svg") || (sample.startsWith("<?xml") && sample.includes("<svg"));
+}
+
+function detectMime(attachment, buffer) {
+  const declared = (attachment.contentType || "").toLowerCase().split(";")[0].trim();
+  if (looksLikeSvg(buffer)) return "image/svg+xml";
+  if (!declared || declared === "application/octet-stream") return "";
+  return declared;
+}
+
+function renderSvgBuffer(buffer) {
+  const svgText = buffer.toString("utf8");
+  const probe = new Resvg(svgText);
+  const sourceWidth = Math.round(probe.width || 0);
+  const sourceHeight = Math.round(probe.height || 0);
+  if (sourceWidth <= 0 || sourceHeight <= 0) {
+    throw new Error("SVG has no readable width/height");
+  }
+
+  let options = null;
+  if (Math.max(sourceWidth, sourceHeight) > RESIZE_MAX_DIM) {
+    options = sourceWidth >= sourceHeight
+      ? { fitTo: { mode: "width", value: RESIZE_MAX_DIM } }
+      : { fitTo: { mode: "height", value: RESIZE_MAX_DIM } };
+  }
+
+  const renderer = options ? new Resvg(svgText, options) : probe;
+  return {
+    buffer: renderer.render().asPng(),
+    width: sourceWidth,
+    height: sourceHeight,
+  };
+}
+
+async function decodeBgImage(buffer, mime) {
+  try {
+    const img = await loadImage(buffer);
+    return { img, width: img.width, height: img.height };
+  } catch (err) {
+    if (mime !== "image/svg+xml" && !looksLikeSvg(buffer)) {
+      throw err;
+    }
+
+    const rendered = renderSvgBuffer(buffer);
+    const img = await loadImage(rendered.buffer);
+    return { img, width: rendered.width, height: rendered.height };
+  }
+}
+
 async function validateBgAttachment(attachment, buffer) {
   const uploadedBytes = Number(attachment.size) || buffer.length;
   if (uploadedBytes > RAID_BG_UPLOAD_MAX_BYTES || buffer.length > RAID_BG_UPLOAD_MAX_BYTES) {
@@ -80,28 +133,28 @@ async function validateBgAttachment(attachment, buffer) {
       maxMb: RAID_BG_UPLOAD_MAX_MB.toFixed(0),
     });
   }
-  const mime = (attachment.contentType || "").toLowerCase().split(";")[0].trim();
+  const mime = detectMime(attachment, buffer);
   if (mime && !RAID_BG_ALLOWED_MIME.has(mime)) {
     throw new RaidBgError("raidBg.errors.formatUnsupported", { mime });
   }
 
-  let img;
+  let decoded;
   try {
-    img = await loadImage(buffer);
+    decoded = await decodeBgImage(buffer, mime);
   } catch (err) {
     throw new RaidBgError("raidBg.errors.decodeFailed", { message: err.message });
   }
 
-  if (img.width < RAID_BG_MIN_WIDTH || img.height < RAID_BG_MIN_HEIGHT) {
+  if (decoded.width < RAID_BG_MIN_WIDTH || decoded.height < RAID_BG_MIN_HEIGHT) {
     throw new RaidBgError("raidBg.errors.tooSmall", {
-      width: img.width,
-      height: img.height,
+      width: decoded.width,
+      height: decoded.height,
       minW: RAID_BG_MIN_WIDTH,
       minH: RAID_BG_MIN_HEIGHT,
     });
   }
 
-  return { img, mime, width: img.width, height: img.height };
+  return { img: decoded.img, mime, width: decoded.width, height: decoded.height };
 }
 
 /**

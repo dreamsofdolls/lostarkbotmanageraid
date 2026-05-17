@@ -37,6 +37,12 @@ function makePngBuffer(width = 1600, height = 900, color = "#223344") {
   return canvas.toBuffer("image/png");
 }
 
+function makeSvgBuffer(width = 800, height = 600, color = "#223344") {
+  return Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="${width}" height="${height}" fill="${color}"/></svg>`
+  );
+}
+
 function arrayBufferFromBuffer(buffer) {
   return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
 }
@@ -45,7 +51,9 @@ function makeAttachment(buffer, overrides = {}) {
   return {
     url: overrides.url || "https://cdn.example/original.png",
     name: overrides.name || "background.png",
-    contentType: overrides.contentType || "image/png",
+    contentType: Object.prototype.hasOwnProperty.call(overrides, "contentType")
+      ? overrides.contentType
+      : "image/png",
     size: overrides.size ?? buffer.length,
   };
 }
@@ -124,6 +132,55 @@ test("raid-bg set persists resized buffer to UserBackground collection", async (
     { accountName: "Roster A", accountKey: "roster a", imageIndex: 0 },
   ]);
   assert.equal(savedUpdate.$unset.imageData, "");
+  assert.match(edits[0].embeds[0].data.title, /tucked away|Background/i);
+});
+
+test("raid-bg set accepts SVG uploads with generic mime and stores them as JPEG", async (t) => {
+  const svg = makeSvgBuffer(800, 600);
+  const originalFetch = global.fetch;
+  const originalUpsert = UserBackground.findOneAndUpdate;
+  global.fetch = async () => ({
+    ok: true,
+    arrayBuffer: async () => arrayBufferFromBuffer(svg),
+  });
+  let savedUpdate = null;
+  UserBackground.findOneAndUpdate = async (_filter, update) => {
+    savedUpdate = update;
+    return { _id: "doc-1", ...update.$set };
+  };
+  t.after(() => {
+    global.fetch = originalFetch;
+    UserBackground.findOneAndUpdate = originalUpsert;
+    bgLoader.clearBackgroundCache();
+  });
+
+  const edits = [];
+  const command = createRaidBgCommand({
+    User: makeUserModel("en"),
+    AttachmentBuilder,
+    EmbedBuilder,
+    MessageFlags,
+  });
+
+  await command.handleRaidBgCommand({
+    guild: { id: "guild-1" },
+    user: { id: "user-svg" },
+    options: makeSetOptions([
+      makeAttachment(svg, {
+        url: "https://cdn.example/background.svg",
+        name: "background.svg",
+        contentType: "application/octet-stream",
+      }),
+    ]),
+    deferReply: async () => {},
+    editReply: async (payload) => edits.push(payload),
+  });
+
+  assert.equal(savedUpdate.$set.images.length, 1);
+  assert.equal(savedUpdate.$set.images[0].mime, "image/jpeg");
+  assert.equal(savedUpdate.$set.images[0].originalMime, "image/svg+xml");
+  assert.equal(savedUpdate.$set.images[0].originalWidth, 800);
+  assert.equal(savedUpdate.$set.images[0].originalHeight, 600);
   assert.match(edits[0].embeds[0].data.title, /tucked away|Background/i);
 });
 

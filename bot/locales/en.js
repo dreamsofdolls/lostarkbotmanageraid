@@ -1465,7 +1465,7 @@ module.exports = {
         notes: [
           "Upload 1-4 anime art / character render / wallpaper images · Artist maps them across your rosters and paints the selected one behind each /raid-status card. Opt-in per user · anyone who hasn't set one keeps seeing the text embed exactly as before.",
           "",
-          "**set image:<file> [image_2] [image_3] [image_4] [mode]** — upload up to the roster count visible to you, capped at 4 images. Each file may be up to 8 MB at any dimension ≥ 800x600 in PNG / JPG / WEBP. Artist can split them evenly or shuffle the roster map when saving; shared roster pages still use your own pool.",
+          "**set image:<file> [image_2] [image_3] [image_4] [mode]** — upload up to the roster count visible to you, capped at 4 images. Each file may be up to 8 MB at any dimension ≥ 800x600 in PNG / JPG / WEBP / SVG. Artist can split them evenly or shuffle the roster map when saving; shared roster pages still use your own pool.",
           "**view** — Artist shows the currently-stored background pool, roster map, and the size it's taking on disk.",
           "**remove** — drop the stored buffer, revert /raid-status to the default text embed.",
           "",
@@ -1714,7 +1714,7 @@ module.exports = {
       sizeTooBig:
         "File's a bit chunky ({sizeMb} MB). Artist tops out at {maxMb} MB per upload.",
       formatUnsupported:
-        'Format "{mime}" isn\'t one Artist reads · drop a PNG / JPG / WEBP instead.',
+        'Format "{mime}" isn\'t one Artist reads · drop a PNG / JPG / WEBP / SVG instead.',
       decodeFailed:
         "Artist opened the file but couldn't decode it: {message}",
       tooSmall:
@@ -1727,7 +1727,7 @@ module.exports = {
       rejectTitle: "⚠️ Image doesn't meet Artist's spec",
       requirementsHeader: "Artist needs",
       requirementsLines:
-        "• Dimensions: minimum **{minW}x{minH}** (larger is fine · Artist auto-downscales)\n• Upload size: maximum **{maxMb} MB**\n• Format: PNG / JPG / WEBP",
+        "• Dimensions: minimum **{minW}x{minH}** (larger is fine · Artist auto-downscales)\n• Upload size: maximum **{maxMb} MB**\n• Format: PNG / JPG / WEBP / SVG",
       saveFailedTitle: "❌ Save failed",
       successTitle: "✅ Background tucked away",
       successDescription:

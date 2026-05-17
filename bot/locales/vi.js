@@ -1487,7 +1487,7 @@ module.exports = {
         notes: [
           "Upload 1-4 ảnh anime art / character render / wallpaper, Artist sẽ map chúng theo từng roster rồi paint đúng ảnh phía sau raid card mỗi lần cậu chạy /raid-status. Opt-in mỗi user · ai chưa set thì /raid-status vẫn render text embed như bình thường, không có gì đổi.",
           "",
-          "**set image:<file> [image_2] [image_3] [image_4] [mode]** — upload tối đa bằng số roster cậu đang thấy, cap 4 ảnh. Mỗi ảnh tối đa 8 MB, kích thước ≥ 800x600, format PNG / JPG / WEBP. Artist có thể chia đều hoặc random map roster lúc lưu; roster được share vẫn dùng pool ảnh của chính cậu.",
+          "**set image:<file> [image_2] [image_3] [image_4] [mode]** — upload tối đa bằng số roster cậu đang thấy, cap 4 ảnh. Mỗi ảnh tối đa 8 MB, kích thước ≥ 800x600, format PNG / JPG / WEBP / SVG. Artist có thể chia đều hoặc random map roster lúc lưu; roster được share vẫn dùng pool ảnh của chính cậu.",
           "**view** — Artist show lại pool background hiện tại, map roster, và dung lượng đang chiếm bao nhiêu.",
           "**remove** — xoá background, revert về text embed mặc định.",
           "",
@@ -1746,7 +1746,7 @@ module.exports = {
       sizeTooBig:
         "File hơi nặng tay rồi đó cậu ({sizeMb} MB)! Artist chỉ ôm được tối đa {maxMb} MB thôi à~",
       formatUnsupported:
-        'Định dạng "{mime}" Artist chưa biết đọc đâu! Cho Artist PNG / JPG / WEBP thôi nhé~',
+        'Định dạng "{mime}" Artist chưa biết đọc đâu! Cho Artist PNG / JPG / WEBP / SVG thôi nhé~',
       decodeFailed:
         "Artist mở ảnh ra mà thấy nhoè nhoè không decode được: {message}",
       tooSmall:
@@ -1759,7 +1759,7 @@ module.exports = {
       rejectTitle: "⚠️ Ảnh chưa đạt chuẩn của Artist",
       requirementsHeader: "Artist cần ảnh có",
       requirementsLines:
-        "• Kích thước: tối thiểu **{minW}x{minH}** (lớn hơn cũng OK · Artist tự downscale)\n• Dung lượng upload: tối đa **{maxMb} MB**\n• Định dạng: PNG / JPG / WEBP",
+        "• Kích thước: tối thiểu **{minW}x{minH}** (lớn hơn cũng OK · Artist tự downscale)\n• Dung lượng upload: tối đa **{maxMb} MB**\n• Định dạng: PNG / JPG / WEBP / SVG",
       saveFailedTitle: "❌ Artist lưu ảnh không xong",
       successTitle: "✅ Background đã yên vị rồi nhé~",
       successDescription:
