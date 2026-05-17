@@ -1766,6 +1766,8 @@ module.exports = {
         "Server này chưa config bg channel cho /raid-bg đâu nha. Nhờ admin chạy `/raid-channel config action:set-bg-channel channel:#<tên-kênh>` để set rồi cậu thử lại nhé~",
       channelFetchFailed:
         "Artist tìm channel {channelId} không thấy: {message}",
+      channelSendFailed:
+        "Artist chưa post được ảnh vào bg channel {channelId}: {message}",
       notTextChannel:
         "Channel {channelId} không phải text channel, Artist post ảnh vào không được~",
     },

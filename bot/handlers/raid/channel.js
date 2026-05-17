@@ -603,10 +603,15 @@ function createRaidChannelCommand({
       // because the bot can't actually upload the rehost.
       const botMember = interaction.guild?.members?.me;
       const missing = getMissingBotChannelPermissions(channel, botMember, {
-        // bg channel only needs upload + history (no Read MessageContent
-        // since we never parse user-typed messages here). Pass an
-        // override if the shared helper supports it; otherwise fall back
-        // to the default set + filter to ours.
+        // bg channel only needs upload + history (no Manage Messages or
+        // Embed Links: /raid-bg only rehosts a file and later fetches that
+        // message's attachment URL).
+        requiredPerms: [
+          { flag: PermissionFlagsBits.ViewChannel, label: "View Channel" },
+          { flag: PermissionFlagsBits.SendMessages, label: "Send Messages" },
+          { flag: PermissionFlagsBits.AttachFiles, label: "Attach Files" },
+          { flag: PermissionFlagsBits.ReadMessageHistory, label: "Read Message History" },
+        ],
       });
       if (missing.length > 0) {
         await interaction.reply({

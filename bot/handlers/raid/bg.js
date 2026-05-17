@@ -4,8 +4,8 @@
  * /raid-bg command · set, view, remove the per-user background image
  * for the /raid-status canvas card. Storage mirrors the LoaLogs evidence
  * rehost pattern: when the user uploads an attachment we re-send it
- * into the operator-guild background channel (env RAID_BG_CHANNEL_ID),
- * then store the rehosted message + channel ID on the user document
+ * into the guild's configured background channel, then store the
+ * rehosted message + channel ID on the user document
  * instead of Discord's signed CDN URL (which expires ~24h).
  *
  * All user-facing strings route through bot/services/i18n so Artist's
@@ -137,16 +137,33 @@ async function rehostBackground({ client, buffer, attachment, AttachmentBuilder,
   const filename = attachment.name || "background.png";
   const file = new AttachmentBuilder(buffer, { name: filename });
 
-  const sent = await channel.send({
-    content: `Background rehost · uploader <t:${Math.floor(Date.now() / 1000)}:f>`,
-    files: [file],
-    allowedMentions: { parse: [] },
-  });
+  let sent;
+  try {
+    sent = await channel.send({
+      content: `Background rehost · uploader <t:${Math.floor(Date.now() / 1000)}:f>`,
+      files: [file],
+      allowedMentions: { parse: [] },
+    });
+  } catch (err) {
+    throw new RaidBgError("raidBg.errors.channelSendFailed", {
+      channelId,
+      message: err?.message || String(err),
+    });
+  }
+
+  const hostedAttachment = sent.attachments?.first?.();
+  if (!hostedAttachment?.url) {
+    throw new RaidBgError("raidBg.errors.channelSendFailed", {
+      channelId,
+      message: "Discord did not return the uploaded attachment",
+    });
+  }
 
   return {
     messageId: sent.id,
     channelId: channel.id,
     filename,
+    url: hostedAttachment.url,
   };
 }
 
@@ -262,7 +279,7 @@ async function handleSet({ interaction, deps, lang }) {
         )
         .setFooter({ text: t("raidBg.set.footer", lang) })
         .setColor(0x57f287)
-        .setImage(attachment.url),
+        .setImage(rehosted.url),
     ],
   });
 }

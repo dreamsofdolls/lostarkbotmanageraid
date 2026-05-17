@@ -1734,6 +1734,8 @@ module.exports = {
         "This server hasn't configured a /raid-bg channel yet. Ask an admin to run `/raid-channel config action:set-bg-channel channel:#<name>` and try again.",
       channelFetchFailed:
         "Artist couldn't reach the bg channel {channelId}: {message}",
+      channelSendFailed:
+        "Artist couldn't post the rehost into bg channel {channelId}: {message}",
       notTextChannel:
         "Channel {channelId} isn't a text channel, so Artist can't post the image there.",
     },

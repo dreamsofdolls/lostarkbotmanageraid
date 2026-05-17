@@ -155,6 +155,18 @@ test("REGRESSION: raid-status reload paths preserve merged shared rosters", () =
   assert.doesNotMatch(source, /accounts\s*=\s*reloaded\.accounts/);
 });
 
+test("REGRESSION: raid-status edit payload clears stale canvas attachments", () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, "..", "bot", "handlers", "raid-status", "index.js"),
+    "utf8"
+  );
+  assert.match(
+    source,
+    /const payload = \{ embeds: \[embed\], files: \[\], attachments: \[\] \};/
+  );
+  assert.match(source, /components: buildComponents\(true\),\s+attachments: \[\],/);
+});
+
 // --------- buildAccountPageEmbed ---------
 
 function makeChar(name, itemLevel, options = {}) {
