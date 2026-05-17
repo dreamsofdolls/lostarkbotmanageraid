@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-17 (Raid status embed image polish)
+
+### Fixed
+- `/raid-bg set` now normalizes newly uploaded images into a wide 1600x900 JPEG frame before storing them, so portrait or odd-ratio backgrounds render at a consistent wide Discord embed width. The full source stays centered on an image-derived backplate instead of being aggressively cropped.
+
 ## 2026-05-17 (Raid status canvas card · /raid-bg)
 
 ### Added

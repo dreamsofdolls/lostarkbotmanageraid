@@ -2,8 +2,8 @@
  * handlers/raid/bg.js
  *
  * /raid-bg command · set / view / remove the per-user background image for
- * the /raid-status canvas card. Storage moved to Mongo: uploaded bytes are
- * downscaled + JPEG-encoded to stay under ~2 MB then written as BSON Binary
+ * the /raid-status embed image. Storage moved to Mongo: uploaded bytes are
+ * normalized + JPEG-encoded to stay under ~2 MB then written as BSON Binary
  * on a dedicated UserBackground collection (separate from the User doc so
  * the per-command hot-path stays light). No rehost channel · no admin
  * setup · upload-and-go.
@@ -40,13 +40,11 @@ const RAID_BG_ALLOWED_MIME = new Set([
   "image/svg+xml",
 ]);
 
-// Resize target. Canvas card renders at 1200x720 with cover-fit, so anything
-// larger than ~1920 on the long axis is wasted bytes. Quality stepdown
-// 85 → 75 → 65 → 60 keeps the typical anime-art / wallpaper upload comfortably
-// under 2 MB · the rare hyper-detailed source that resists JPEG compression
-// drops to the last-resort 70%-scale + quality 60 path so storage stays
-// bounded regardless of source content.
-const RESIZE_MAX_DIM = 1920;
+// Stored embed image target. Discord keeps an embed image's aspect ratio, so
+// portrait uploads render as narrow thumbnails unless Artist normalizes the
+// stored frame. Quality stepdown keeps typical uploads under 2 MB.
+const RAID_BG_OUTPUT_WIDTH = 1600;
+const RAID_BG_OUTPUT_HEIGHT = 900;
 const STORAGE_TARGET_BYTES = 2 * 1024 * 1024;
 const JPEG_QUALITY_LADDER = [85, 75, 65];
 const RAID_BG_MAX_IMAGES = 4;
@@ -162,10 +160,10 @@ function renderSvgBuffer(buffer) {
   }
 
   let options = null;
-  if (Math.max(sourceWidth, sourceHeight) > RESIZE_MAX_DIM) {
+  if (Math.max(sourceWidth, sourceHeight) > RAID_BG_OUTPUT_WIDTH) {
     options = sourceWidth >= sourceHeight
-      ? { fitTo: { mode: "width", value: RESIZE_MAX_DIM } }
-      : { fitTo: { mode: "height", value: RESIZE_MAX_DIM } };
+      ? { fitTo: { mode: "width", value: RAID_BG_OUTPUT_WIDTH } }
+      : { fitTo: { mode: "height", value: RAID_BG_OUTPUT_WIDTH } };
   }
 
   const renderer = options ? new Resvg(svgText, options) : probe;
@@ -231,35 +229,67 @@ async function validateBgAttachment(attachment, buffer) {
   return { img: decoded.img, mime, width: decoded.width, height: decoded.height };
 }
 
+function fitRect(sourceW, sourceH, targetW, targetH, mode) {
+  const scale = mode === "cover"
+    ? Math.max(targetW / sourceW, targetH / sourceH)
+    : Math.min(targetW / sourceW, targetH / sourceH);
+  const width = Math.round(sourceW * scale);
+  const height = Math.round(sourceH * scale);
+  return {
+    x: Math.round((targetW - width) / 2),
+    y: Math.round((targetH - height) / 2),
+    width,
+    height,
+  };
+}
+
+function renderStorageCanvas(img, width, height) {
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "#05070d";
+  ctx.fillRect(0, 0, width, height);
+
+  const backdrop = fitRect(img.width, img.height, width, height, "cover");
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  ctx.drawImage(img, backdrop.x, backdrop.y, backdrop.width, backdrop.height);
+  ctx.restore();
+
+  ctx.fillStyle = "rgba(0, 0, 0, 0.38)";
+  ctx.fillRect(0, 0, width, height);
+
+  const foreground = fitRect(img.width, img.height, width, height, "contain");
+  ctx.drawImage(img, foreground.x, foreground.y, foreground.width, foreground.height);
+
+  return canvas;
+}
+
 /**
- * Downscale + JPEG-encode a decoded image into a buffer <= STORAGE_TARGET_BYTES.
- * Walks the quality ladder first; if quality 65 at maxDim 1920 still stays
- * over budget, keeps scaling down at quality 60 until the stored buffer fits.
+ * Normalize every upload to a 16:9 JPEG buffer <= STORAGE_TARGET_BYTES. The
+ * source is shown whole with an image-derived backplate, so portrait art still
+ * fills Discord's embed width without being aggressively cropped.
  */
 async function resizeForStorage(img) {
-  let { width: w, height: h } = img;
-  if (Math.max(w, h) > RESIZE_MAX_DIM) {
-    const scale = RESIZE_MAX_DIM / Math.max(w, h);
-    w = Math.round(w * scale);
-    h = Math.round(h * scale);
-  }
-
-  const canvas = createCanvas(w, h);
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(img, 0, 0, w, h);
+  const canvas = renderStorageCanvas(img, RAID_BG_OUTPUT_WIDTH, RAID_BG_OUTPUT_HEIGHT);
 
   for (const quality of JPEG_QUALITY_LADDER) {
     const out = await canvas.encode("jpeg", quality);
     if (out.length <= STORAGE_TARGET_BYTES) {
-      return { buffer: out, width: w, height: h, quality, mime: "image/jpeg" };
+      return {
+        buffer: out,
+        width: RAID_BG_OUTPUT_WIDTH,
+        height: RAID_BG_OUTPUT_HEIGHT,
+        quality,
+        mime: "image/jpeg",
+      };
     }
   }
 
-  let fallbackW = Math.max(1, Math.round(w * 0.7));
-  let fallbackH = Math.max(1, Math.round(h * 0.7));
+  let fallbackW = Math.max(1, Math.round(RAID_BG_OUTPUT_WIDTH * 0.7));
+  let fallbackH = Math.max(1, Math.round(RAID_BG_OUTPUT_HEIGHT * 0.7));
   while (true) {
-    const fallbackCanvas = createCanvas(fallbackW, fallbackH);
-    fallbackCanvas.getContext("2d").drawImage(img, 0, 0, fallbackW, fallbackH);
+    const fallbackCanvas = renderStorageCanvas(img, fallbackW, fallbackH);
     const fallback = await fallbackCanvas.encode("jpeg", 60);
     if (fallback.length <= STORAGE_TARGET_BYTES) {
       return {

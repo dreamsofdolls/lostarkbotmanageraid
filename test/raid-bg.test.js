@@ -115,8 +115,8 @@ test("raid-bg PNG sanitizer strips unsafe metadata chunks before decode", async 
   assert.equal(decoded.height, 600);
 });
 
-test("raid-bg set persists resized buffer to UserBackground collection", async (t) => {
-  const png = makePngBuffer(800, 600);
+test("raid-bg set normalizes uploads to a wide embed image", async (t) => {
+  const png = makePngBuffer(800, 1200);
   const originalFetch = global.fetch;
   const originalUpsert = UserBackground.findOneAndUpdate;
   global.fetch = async () => ({
@@ -165,8 +165,13 @@ test("raid-bg set persists resized buffer to UserBackground collection", async (
   assert.ok(savedUpdate.$set.images[0].imageData.length > 0);
   assert.ok(savedUpdate.$set.images[0].imageData.length <= 2 * 1024 * 1024);
   assert.equal(savedUpdate.$set.images[0].originalFilename, "background.png");
+  assert.equal(savedUpdate.$set.images[0].width, 1600);
+  assert.equal(savedUpdate.$set.images[0].height, 900);
   assert.equal(savedUpdate.$set.images[0].originalWidth, 800);
-  assert.equal(savedUpdate.$set.images[0].originalHeight, 600);
+  assert.equal(savedUpdate.$set.images[0].originalHeight, 1200);
+  const storedImage = await loadImage(savedUpdate.$set.images[0].imageData);
+  assert.equal(storedImage.width, 1600);
+  assert.equal(storedImage.height, 900);
   assert.deepEqual(savedUpdate.$set.assignments, [
     { accountName: "Roster A", accountKey: "roster a", imageIndex: 0 },
   ]);
