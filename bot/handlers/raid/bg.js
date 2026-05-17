@@ -51,6 +51,16 @@ const STORAGE_TARGET_BYTES = 2 * 1024 * 1024;
 const JPEG_QUALITY_LADDER = [85, 75, 65];
 const RAID_BG_MAX_IMAGES = 4;
 const RAID_BG_ASSIGNMENT_MODES = new Set(["even", "random"]);
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const PNG_DECODE_SAFE_ANCILLARY = new Set([
+  "tRNS",
+  "gAMA",
+  "cHRM",
+  "sRGB",
+  "pHYs",
+  "sBIT",
+  "bKGD",
+]);
 
 /**
  * Custom Error subclass that carries an i18n key + interpolation params
@@ -79,9 +89,65 @@ function looksLikeSvg(buffer) {
   return sample.startsWith("<svg") || (sample.startsWith("<?xml") && sample.includes("<svg"));
 }
 
+function isPngBuffer(buffer) {
+  return buffer.length >= PNG_SIGNATURE.length && buffer.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE);
+}
+
+function isJpegBuffer(buffer) {
+  return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+}
+
+function isWebpBuffer(buffer) {
+  return buffer.length >= 12
+    && buffer.subarray(0, 4).toString("ascii") === "RIFF"
+    && buffer.subarray(8, 12).toString("ascii") === "WEBP";
+}
+
+function isPngCriticalChunk(type) {
+  return type.length === 4 && type.charCodeAt(0) >= 0x41 && type.charCodeAt(0) <= 0x5a;
+}
+
+function stripPngAncillaryChunks(buffer) {
+  if (!isPngBuffer(buffer)) return buffer;
+
+  const parts = [buffer.subarray(0, PNG_SIGNATURE.length)];
+  let changed = false;
+  let sawIend = false;
+  let offset = PNG_SIGNATURE.length;
+
+  while (offset + 12 <= buffer.length) {
+    const length = buffer.readUInt32BE(offset);
+    const chunkStart = offset;
+    const typeStart = offset + 4;
+    const dataStart = offset + 8;
+    const chunkEnd = dataStart + length + 4;
+    if (chunkEnd > buffer.length) return buffer;
+
+    const type = buffer.subarray(typeStart, typeStart + 4).toString("ascii");
+    const keep = isPngCriticalChunk(type) || PNG_DECODE_SAFE_ANCILLARY.has(type);
+    if (keep) {
+      parts.push(buffer.subarray(chunkStart, chunkEnd));
+    } else {
+      changed = true;
+    }
+
+    offset = chunkEnd;
+    if (type === "IEND") {
+      sawIend = true;
+      break;
+    }
+  }
+
+  if (!changed || !sawIend) return buffer;
+  return Buffer.concat(parts);
+}
+
 function detectMime(attachment, buffer) {
   const declared = (attachment.contentType || "").toLowerCase().split(";")[0].trim();
   if (looksLikeSvg(buffer)) return "image/svg+xml";
+  if (isPngBuffer(buffer)) return "image/png";
+  if (isJpegBuffer(buffer)) return "image/jpeg";
+  if (isWebpBuffer(buffer)) return "image/webp";
   if (!declared || declared === "application/octet-stream") return "";
   return declared;
 }
@@ -115,6 +181,14 @@ async function decodeBgImage(buffer, mime) {
     const img = await loadImage(buffer);
     return { img, width: img.width, height: img.height };
   } catch (err) {
+    if (isPngBuffer(buffer)) {
+      const stripped = stripPngAncillaryChunks(buffer);
+      if (stripped !== buffer) {
+        const img = await loadImage(stripped);
+        return { img, width: img.width, height: img.height };
+      }
+    }
+
     if (mime !== "image/svg+xml" && !looksLikeSvg(buffer)) {
       throw err;
     }
@@ -604,4 +678,8 @@ function createRaidBgCommand(deps) {
 
 module.exports = {
   createRaidBgCommand,
+  __test: {
+    detectMime,
+    stripPngAncillaryChunks,
+  },
 };
