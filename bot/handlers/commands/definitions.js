@@ -692,10 +692,10 @@ function createRaidCommandDefinitions({
         .addAttachmentOption((opt) =>
           opt
             .setName("image")
-            .setDescription("First background image file (PNG/JPG/WEBP, 800x600+, 8MB max)")
+            .setDescription("First background image file (PNG/JPG/WEBP/SVG, 800x600+, 8MB max)")
             .setDescriptionLocalizations({
-              vi: "File background đầu tiên (PNG/JPG/WEBP, 800x600+, max 8MB)",
-              ja: "1枚目の背景画像ファイル（PNG/JPG/WEBP、800x600以上、最大8MB）",
+              vi: "File background đầu tiên (PNG/JPG/WEBP/SVG, 800x600+, max 8MB)",
+              ja: "1枚目の背景画像ファイル（PNG/JPG/WEBP/SVG、800x600以上、最大8MB）",
             })
             .setRequired(true),
         )
