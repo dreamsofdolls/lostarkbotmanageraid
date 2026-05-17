@@ -1464,7 +1464,7 @@ module.exports = {
         notes: [
           "アニメアート / キャラクターレンダー / 壁紙を1-4枚アップロードすると、アーティストが roster ごとに割り当てて、/raid-status の raid card 背景に使いますわ～ オプトイン制ですの、設定してないユーザーはテキスト embed のままで何も変わりませんわ。",
           "",
-          "**set image:<file> [image_2] [image_3] [image_4] [mode]** — 見えている roster 数まで、最大4枚アップロードできますの。各画像は 8 MB まで、1600x900 以上、PNG / JPG / WEBP を受け付けますわ。保存時に均等割り当て、またはランダム割り当てを選べますの。共有 roster でも閲覧者ご自身の pool を使いますわ。",
+          "**set image:<file> [image_2] [image_3] [image_4] [mode]** — 見えている roster 数まで、最大4枚アップロードできますの。各画像は 8 MB まで、800x600 以上、PNG / JPG / WEBP を受け付けますわ。保存時に均等割り当て、またはランダム割り当てを選べますの。共有 roster でも閲覧者ご自身の pool を使いますわ。",
           "**view** — 現在保存中の background pool、roster map、容量をアーティストがお見せしますの。",
           "**remove** — 保存バッファを消して、`/raid-status` を標準テキスト embed に戻しますわ。",
           "",

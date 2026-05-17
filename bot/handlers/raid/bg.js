@@ -29,8 +29,8 @@ const {
 // the resize loop below; this number only gates upload intake.
 const RAID_BG_UPLOAD_MAX_BYTES = 8 * 1024 * 1024;
 const RAID_BG_UPLOAD_MAX_MB = RAID_BG_UPLOAD_MAX_BYTES / 1024 / 1024;
-const RAID_BG_MIN_WIDTH = 1600;
-const RAID_BG_MIN_HEIGHT = 900;
+const RAID_BG_MIN_WIDTH = 800;
+const RAID_BG_MIN_HEIGHT = 600;
 const RAID_BG_ALLOWED_MIME = new Set([
   "image/png",
   "image/jpeg",
