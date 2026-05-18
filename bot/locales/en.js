@@ -1463,14 +1463,14 @@ module.exports = {
         short: "Set / view / remove the background image for your /raid-status card",
         example: "/raid-bg set image:<file>",
         notes: [
-          "Upload 1-4 anime art / character render / wallpaper images · Artist maps them across your rosters and paints the selected one behind each /raid-status card. Opt-in per user · anyone who hasn't set one keeps seeing the text embed exactly as before.",
+          "Upload 1-4 anime art / character render / wallpaper images · Artist maps them across your rosters and attaches the selected one as the /raid-status embed image. Opt-in per user · anyone who hasn't set one keeps seeing the text embed exactly as before.",
           "",
           "**set image:<file> [image_2] [image_3] [image_4] [mode]** — upload up to the roster count visible to you, capped at 4 images. Each file may be up to 8 MB at any dimension ≥ 800x600 in PNG / JPG / WEBP / SVG. Artist can split them evenly or shuffle the roster map when saving; shared roster pages still use your own pool.",
           "**view** — Artist shows the currently-stored background pool, roster map, and the size it's taking on disk.",
           "**remove** — drop the stored buffer, revert /raid-status to the default text embed.",
           "",
           "**Storage**: bytes land in the bot's database (a dedicated collection · not nested on the User doc). No admin setup, no rehost channel · upload-and-go. Each stored image is kept under 2 MB, so the 4-image cap stays below Mongo's document limit. An in-memory LRU cache absorbs repeat-render hits so /raid-status pagination doesn't bounce on Mongo.",
-          "**Sharp + clean**: rgba dark 82% panels overlay the art so text reads on both bright and dark backgrounds. Cover-fit keeps full-bleed without distorting the source's aspect ratio.",
+          "**Sharp + clean**: each upload is normalized to a 16:9 (1600x900 JPEG) frame before storage · a cover-fit backplate fills the canvas while the source stays whole (contain-fit) in the center. Portrait or odd-ratio art still spans the embed's full width without being cropped.",
         ],
       },
     },
@@ -1727,7 +1727,7 @@ module.exports = {
       rejectTitle: "⚠️ Image doesn't meet Artist's spec",
       requirementsHeader: "Artist needs",
       requirementsLines:
-        "• Dimensions: minimum **{minW}x{minH}** (larger is fine · Artist auto-downscales)\n• Upload size: maximum **{maxMb} MB**\n• Format: PNG / JPG / WEBP / SVG",
+        "• Dimensions: minimum **{minW}x{minH}** (Artist auto-normalizes to a 1600x900 frame)\n• Upload size: maximum **{maxMb} MB**\n• Format: PNG / JPG / WEBP / SVG",
       saveFailedTitle: "❌ Save failed",
       successTitle: "✅ Background tucked away",
       successDescription:

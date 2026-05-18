@@ -1462,14 +1462,14 @@ module.exports = {
         short: "/raid-status カードの背景画像を設定 / 表示 / 削除しますわ♪",
         example: "/raid-bg set image:<file>",
         notes: [
-          "アニメアート / キャラクターレンダー / 壁紙を1-4枚アップロードすると、アーティストが roster ごとに割り当てて、/raid-status の raid card 背景に使いますわ～ オプトイン制ですの、設定してないユーザーはテキスト embed のままで何も変わりませんわ。",
+          "アニメアート / キャラクターレンダー / 壁紙を1-4枚アップロードすると、アーティストが roster ごとに割り当てて、/raid-status embed の画像として表示しますわ～ オプトイン制ですの、設定してないユーザーはテキスト embed のままで何も変わりませんわ。",
           "",
           "**set image:<file> [image_2] [image_3] [image_4] [mode]** — 見えている roster 数まで、最大4枚アップロードできますの。各画像は 8 MB まで、800x600 以上、PNG / JPG / WEBP / SVG を受け付けますわ。保存時に均等割り当て、またはランダム割り当てを選べますの。共有 roster でも閲覧者ご自身の pool を使いますわ。",
           "**view** — 現在保存中の background pool、roster map、容量をアーティストがお見せしますの。",
           "**remove** — 保存バッファを消して、`/raid-status` を標準テキスト embed に戻しますわ。",
           "",
           "**保存場所**: バイトデータは bot のデータベースに直接書き込まれますわ (専用 collection · User doc には載せませんの)。管理者の設定や rehost channel は不要 · アップロードしてすぐ使えますの♪ 各保存画像は 2 MB 以下なので、4枚でも Mongo document limit に収まりますわ。メモリ内 LRU キャッシュがリピート描画を吸収しますの。",
-          "**クッキリ + キレイ**: rgba dark 82% のパネルが画像の上に重なって、明るい背景でも暗い背景でもテキストが読みやすくなりますわ。 cover-fit で fullbleed しても比率が崩れませんの～",
+          "**クッキリ + キレイ**: 保存前に 16:9 (1600x900 JPEG) フレームに正規化しますわ · 自身の cover-fit バックプレートが背景を埋めて、source 画像は contain-fit で中央に丸ごと配置されますの。縦長や変則比率でも Discord embed の横幅いっぱいに表示されて、クロップされませんわ～",
         ],
       },
     },
@@ -1726,7 +1726,7 @@ module.exports = {
       rejectTitle: "⚠️ アーティストの条件に届きませんの",
       requirementsHeader: "アーティストが欲しい条件",
       requirementsLines:
-        "• サイズ: 最低 **{minW}x{minH}** (大きくても OK · アーティストが自動でダウンスケールしますの)\n• アップロード容量: 最大 **{maxMb} MB**\n• 形式: PNG / JPG / WEBP / SVG",
+        "• サイズ: 最低 **{minW}x{minH}** (アーティストが 1600x900 フレームに自動で正規化しますの)\n• アップロード容量: 最大 **{maxMb} MB**\n• 形式: PNG / JPG / WEBP / SVG",
       saveFailedTitle: "❌ 画像の保存失敗",
       successTitle: "✅ Background をしまっておきましたわ～",
       successDescription:

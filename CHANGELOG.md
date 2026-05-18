@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-18 (`/raid-bg` help doc sync)
+
+### Fixed
+- `/raid-bg` help notes in `/raid-help` (all 3 locales · vi / en / jp) and the README description were still describing the pre-normalize behavior ("paint behind raid card", "rgba dark 82% panel overlay", "cover-fit full-bleed", "downscale"). They now describe the current flow: each upload is normalized to a 16:9 (1600x900) JPEG frame with an image-derived backplate, the source stays whole inside the frame, and the result is attached as the `/raid-status` embed's image block - no canvas-card composite anymore.
+- Requirements lines (vi / en / jp) updated from "Artist auto-downscales" to "Artist auto-normalizes to a 1600x900 frame", since small uploads are upscaled to fit the frame too, not just shrunk.
+
 ## 2026-05-17 (Raid status embed image polish)
 
 ### Fixed
