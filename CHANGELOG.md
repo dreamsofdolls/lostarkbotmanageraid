@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-18 (Drop dead canvas-card renderer)
+
+### Removed
+- `bot/services/raid-card/index.js` (350 LOC canvas renderer) and `test/raid-card.test.js` (5 tests). Dead code since the `/raid-bg` embed-image migration (commit 4e65eeb / 7da06b1) - `renderRaidStatusCard` had no runtime importers, only the test depended on it. `bot/services/raid-card/bg-loader.js` stays (still loads stored JPEGs for the embed-image attach path in `/raid-status` and cache invalidation in `/raid-bg`).
+
 ## 2026-05-18 (`/raid-bg` help doc sync)
 
 ### Fixed
