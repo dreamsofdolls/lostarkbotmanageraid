@@ -473,6 +473,16 @@ test("replyEmbed wraps an existing embed with the same ephemeral defaults", asyn
   assert.deepEqual(calls[0].embeds, [embed]);
 });
 
+test("replyEmbed accepts multiple embeds without nesting", async () => {
+  const { replyEmbed } = require("../bot/utils/raid/common/shared");
+  const calls = [];
+  const interaction = { reply: async (payload) => calls.push(payload) };
+  const embeds = [{ main: true }, { detail: true }];
+  await replyEmbed(interaction, embeds, { ephemeral: false });
+  assert.equal(calls[0].flags, undefined);
+  assert.deepEqual(calls[0].embeds, embeds);
+});
+
 test("deferEphemeralReply centralizes the ephemeral defer payload", async () => {
   const { deferEphemeralReply } = require("../bot/utils/raid/common/shared");
   const calls = [];
@@ -524,6 +534,16 @@ test("editEmbed wraps an existing embed for deferred replies", async () => {
   const embed = { existing: true };
   await editEmbed(interaction, embed, { content: null });
   assert.deepEqual(calls[0], { content: null, embeds: [embed] });
+});
+
+test("editEmbed accepts multiple embeds for preview payloads", async () => {
+  const { editEmbed } = require("../bot/utils/raid/common/shared");
+  const calls = [];
+  const interaction = { editReply: async (payload) => calls.push(payload) };
+  const embeds = [{ main: true }, { preview: true }];
+  const files = [{ attachment: "background-current-1.jpg" }];
+  await editEmbed(interaction, embeds, { files });
+  assert.deepEqual(calls[0], { files, embeds });
 });
 
 test("formatProgressTotals: standard 3-icon line", () => {

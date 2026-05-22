@@ -265,13 +265,13 @@ function replyNotice(interaction, EmbedBuilder, options, { ephemeral = true, ...
 }
 
 /**
- * Reply with an already-built embed, ephemeral by default. Use this for
+ * Reply with already-built embed(s), ephemeral by default. Use this for
  * richer custom embeds that do not fit the notice shape but still repeat
  * the same `embeds + flags` Discord payload boilerplate.
  */
-function replyEmbed(interaction, embed, { ephemeral = true, ...extras } = {}) {
+function replyEmbed(interaction, embedOrEmbeds, { ephemeral = true, ...extras } = {}) {
   const payload = {
-    embeds: [embed],
+    embeds: Array.isArray(embedOrEmbeds) ? embedOrEmbeds : [embedOrEmbeds],
     ...extras,
   };
   if (ephemeral) payload.flags = MESSAGE_FLAG_EPHEMERAL;
@@ -312,13 +312,13 @@ function editNotice(interaction, EmbedBuilder, options, extras = {}) {
 }
 
 /**
- * editReply with an already-built embed. Pairs with replyEmbed for
+ * editReply with already-built embed(s). Pairs with replyEmbed for
  * deferred branches that build richer custom embeds.
  */
-function editEmbed(interaction, embed, extras = {}) {
+function editEmbed(interaction, embedOrEmbeds, extras = {}) {
   return interaction.editReply({
     ...extras,
-    embeds: [embed],
+    embeds: Array.isArray(embedOrEmbeds) ? embedOrEmbeds : [embedOrEmbeds],
   });
 }
 
