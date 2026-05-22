@@ -1488,8 +1488,8 @@ module.exports = {
           "Upload 1-4 ảnh anime art / character render / wallpaper, Artist sẽ map chúng theo từng roster rồi gắn ảnh tương ứng vào embed /raid-status mỗi lần cậu chạy lệnh. Opt-in mỗi user · ai chưa set thì /raid-status vẫn render text embed như bình thường, không có gì đổi.",
           "",
           "**set image:<file> [image_2] [image_3] [image_4] [mode]** — upload tối đa bằng số roster cậu đang thấy, cap 4 ảnh. Mỗi ảnh tối đa 8 MB, kích thước ≥ 800x600, format PNG / JPG / WEBP / SVG. Artist có thể chia đều hoặc random map roster lúc lưu; roster được share vẫn dùng pool ảnh của chính cậu.",
-          "**view** — Artist show lại pool background hiện tại, map roster, và dung lượng đang chiếm bao nhiêu.",
-          "**remove** — xoá background, revert về text embed mặc định.",
+          "**view** — Artist show lại đủ các slot background hiện tại kèm preview từng ảnh, map roster, và dung lượng đang chiếm bao nhiêu.",
+          "**remove [image:1-4]** — truyền `image` để xoá đúng một slot; bỏ trống thì xoá toàn bộ background và revert về text embed mặc định.",
           "",
           "**Lưu trữ**: ảnh đi thẳng vào database của bot (collection riêng, không nhồi vào User doc). Không cần admin setup channel gì cả · upload-and-go. Mỗi ảnh đã nén giữ dưới 2 MB nên cap 4 ảnh vẫn nằm dưới giới hạn document Mongo. Cache LRU in-memory hấp thụ render lặp lại nên /raid-status pagination không hit Mongo nhiều lần.",
           "**Đẹp + căng**: ảnh được normalize về frame 16:9 (1600x900 JPEG) trước khi lưu, với backplate cover-fit phủ nền + source giữ nguyên (contain-fit) ở giữa. Portrait hay tỉ lệ lạ đều render full chiều rộng embed Discord, không bị crop.",
@@ -1796,6 +1796,7 @@ module.exports = {
       imagesValue: "{count} ảnh · {mode}",
       uploadLabel: "🕐 Cậu upload",
       uploadUnknown: "không rõ",
+      slotsLabel: "🖼️ Slot đã lưu",
       assignmentLabel: "📌 Map roster",
       footer: "/raid-bg set để đổi ảnh khác · /raid-bg remove khi muốn revert",
     },
@@ -1805,6 +1806,12 @@ module.exports = {
       successTitle: "🗑️ Artist đã cất background đi rồi",
       successDescription:
         "Cậu quay về với text embed mặc định cho `/raid-status` rồi đó. Lúc nào muốn có background lại thì `/raid-bg set` Artist nhé~",
+      invalidImageTitle: "⚠️ Không thấy slot background đó",
+      invalidImageDescription:
+        "Slot #{requested} chưa được lưu. Chọn số từ **1** tới **{count}**, hoặc bỏ trống `image` để xoá hết.",
+      partialSuccessTitle: "🗑️ Đã xoá một slot background",
+      partialSuccessDescription:
+        "Artist đã xoá slot **#{index}** rồi. Những slot còn lại ở dưới đây để cậu kiểm tra lại nha.",
     },
   },
 };
