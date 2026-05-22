@@ -252,11 +252,13 @@ const MESSAGE_FLAG_EPHEMERAL = 1 << 6; // 64
  *   });
  *
  * Caller passes EmbedBuilder so this stays decoupled from discord.js
- * imports. Pass `ephemeral: false` to broadcast to the channel.
+ * imports. Pass `ephemeral: false` to broadcast to the channel, and
+ * include extra reply payload fields such as `components` when needed.
  */
-function replyNotice(interaction, EmbedBuilder, options, { ephemeral = true } = {}) {
+function replyNotice(interaction, EmbedBuilder, options, { ephemeral = true, ...extras } = {}) {
   const payload = {
     embeds: [buildNoticeEmbed(EmbedBuilder, options)],
+    ...extras,
   };
   if (ephemeral) payload.flags = MESSAGE_FLAG_EPHEMERAL;
   return interaction.reply(payload);

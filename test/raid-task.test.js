@@ -443,6 +443,26 @@ test("replyNotice: ephemeral:false omits the flag for channel-broadcast notices"
   assert.equal(calls[0].flags, undefined);
 });
 
+test("replyNotice passes through extra reply payload fields", async () => {
+  const { replyNotice } = require("../bot/utils/raid/common/shared");
+  const calls = [];
+  const interaction = { reply: async (payload) => calls.push(payload) };
+  class StubEmbed {
+    setColor() { return this; }
+    setTitle() { return this; }
+    setDescription() { return this; }
+  }
+  const components = [{ custom: "row" }];
+  await replyNotice(
+    interaction,
+    StubEmbed,
+    { type: "warn", title: "Confirm" },
+    { components }
+  );
+  assert.equal(calls[0].flags, 64);
+  assert.deepEqual(calls[0].components, components);
+});
+
 test("followUpNotice wraps interaction.followUp with the same notice payload shape", async () => {
   const { followUpNotice } = require("../bot/utils/raid/common/shared");
   const calls = [];
