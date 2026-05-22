@@ -2,7 +2,11 @@ const RosterShare = require("../../models/RosterShare");
 const User = require("../../models/user");
 const { isManagerId } = require("../../services/access/manager");
 const { t, getUserLanguage } = require("../../services/i18n");
-const { replyEmbed } = require("../../utils/raid/common/shared");
+const {
+  deferEphemeralReply,
+  editEmbed,
+  replyEmbed,
+} = require("../../utils/raid/common/shared");
 
 function buildAlertEmbed({ EmbedBuilder, UI, type = "info", title, description, footer }) {
   const colorKey = type === "error" ? "danger" : type === "success" ? "success" : "neutral";
@@ -32,9 +36,10 @@ function localizedAccessLevel(level, lang) {
 }
 
 function createRaidShareCommand(deps) {
-  const { EmbedBuilder, MessageFlags, UI } = deps;
+  const { EmbedBuilder, UI } = deps;
   const buildShareAlert = (options) => buildAlertEmbed({ EmbedBuilder, UI, ...options });
   const replyShareAlert = (interaction, options) => replyEmbed(interaction, buildShareAlert(options));
+  const editShareAlert = (interaction, options) => editEmbed(interaction, buildShareAlert(options));
 
   // ── /raid-share grant target:@B [permission:view|edit] ──────────────
   // Manager-only (env RAID_MANAGER_ID). Upserts a RosterShare so a
@@ -61,7 +66,7 @@ function createRaidShareCommand(deps) {
       return;
     }
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await deferEphemeralReply(interaction);
 
     // Upsert: same (owner, grantee) pair always maps to one document.
     // Re-running grant with a new permission level swaps it in place.
@@ -105,15 +110,11 @@ function createRaidShareCommand(deps) {
       desc = t("share.grant.descriptionNewView", lang, { target: target.id });
     }
 
-    await interaction.editReply({
-      embeds: [buildAlertEmbed({
-        EmbedBuilder,
-        UI,
-        type: "success",
-        title,
-        description: desc,
-        footer: t("share.grant.footer", lang),
-      })],
+    await editShareAlert(interaction, {
+      type: "success",
+      title,
+      description: desc,
+      footer: t("share.grant.footer", lang),
     });
   }
 
@@ -121,7 +122,7 @@ function createRaidShareCommand(deps) {
   async function handleRevoke(interaction, lang) {
     const target = interaction.options.getUser("target", true);
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await deferEphemeralReply(interaction);
 
     const result = await RosterShare.deleteOne({
       ownerDiscordId: interaction.user.id,
@@ -129,26 +130,18 @@ function createRaidShareCommand(deps) {
     });
 
     if (result.deletedCount === 0) {
-      await interaction.editReply({
-        embeds: [buildAlertEmbed({
-          EmbedBuilder,
-          UI,
-          type: "info",
-          title: t("share.revoke.noShareTitle", lang),
-          description: t("share.revoke.noShareDescription", lang, { target: target.id }),
-        })],
+      await editShareAlert(interaction, {
+        type: "info",
+        title: t("share.revoke.noShareTitle", lang),
+        description: t("share.revoke.noShareDescription", lang, { target: target.id }),
       });
       return;
     }
 
-    await interaction.editReply({
-      embeds: [buildAlertEmbed({
-        EmbedBuilder,
-        UI,
-        type: "success",
-        title: t("share.revoke.successTitle", lang),
-        description: t("share.revoke.successDescription", lang, { target: target.id }),
-      })],
+    await editShareAlert(interaction, {
+      type: "success",
+      title: t("share.revoke.successTitle", lang),
+      description: t("share.revoke.successDescription", lang, { target: target.id }),
     });
   }
 
@@ -158,7 +151,7 @@ function createRaidShareCommand(deps) {
   async function handleList(interaction, lang) {
     const direction = interaction.options.getString("direction") || "both";
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await deferEphemeralReply(interaction);
 
     const showOutgoing = direction === "out" || direction === "both";
     const showIncoming = direction === "in" || direction === "both";
@@ -226,7 +219,7 @@ function createRaidShareCommand(deps) {
       .setDescription(lines.join("\n"))
       .setFooter({ text: t("share.list.footer", lang) });
 
-    await interaction.editReply({ embeds: [embed] });
+    await editEmbed(interaction, embed);
   }
 
   // Top-level dispatch. Permission gate (Manager-only) applies to
@@ -252,9 +245,10 @@ function createRaidShareCommand(deps) {
     if (sub === "revoke") return handleRevoke(interaction, lang);
     if (sub === "list") return handleList(interaction, lang);
 
-    await interaction.reply({
-      content: `Unknown subcommand: ${sub}`,
-      flags: MessageFlags.Ephemeral,
+    await replyShareAlert(interaction, {
+      type: "error",
+      title: "Unknown subcommand",
+      description: `Unknown subcommand: ${sub}`,
     });
   }
 
