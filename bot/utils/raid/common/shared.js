@@ -263,6 +263,19 @@ function replyNotice(interaction, EmbedBuilder, options, { ephemeral = true } = 
 }
 
 /**
+ * Follow up with a notice embed, ephemeral by default. Mirrors
+ * replyNotice for component flows that already used deferUpdate and need
+ * a lightweight toast without re-rendering the source message.
+ */
+function followUpNotice(interaction, EmbedBuilder, options, { ephemeral = true } = {}) {
+  const payload = {
+    embeds: [buildNoticeEmbed(EmbedBuilder, options)],
+  };
+  if (ephemeral) payload.flags = MESSAGE_FLAG_EPHEMERAL;
+  return interaction.followUp(payload);
+}
+
+/**
  * editReply with a notice embed. Used for follow-up edits on a deferred
  * reply or after a slow operation. ephemeral flag is determined by the
  * original deferReply, so this wrapper just edits in place.
@@ -343,6 +356,7 @@ module.exports = {
   formatProgressTotals,
   formatGold,
   replyNotice,
+  followUpNotice,
   editNotice,
   updateNotice,
 };
