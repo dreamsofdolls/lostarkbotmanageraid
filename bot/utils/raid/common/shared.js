@@ -279,6 +279,14 @@ function replyEmbed(interaction, embed, { ephemeral = true, ...extras } = {}) {
 }
 
 /**
+ * Defer an interaction reply as ephemeral. Keeps the raw Discord flag in
+ * one place for longer-running command branches.
+ */
+function deferEphemeralReply(interaction) {
+  return interaction.deferReply({ flags: MESSAGE_FLAG_EPHEMERAL });
+}
+
+/**
  * Follow up with a notice embed, ephemeral by default. Mirrors
  * replyNotice for component flows that already used deferUpdate and need
  * a lightweight toast without re-rendering the source message.
@@ -296,9 +304,21 @@ function followUpNotice(interaction, EmbedBuilder, options, { ephemeral = true }
  * reply or after a slow operation. ephemeral flag is determined by the
  * original deferReply, so this wrapper just edits in place.
  */
-function editNotice(interaction, EmbedBuilder, options) {
+function editNotice(interaction, EmbedBuilder, options, extras = {}) {
   return interaction.editReply({
+    ...extras,
     embeds: [buildNoticeEmbed(EmbedBuilder, options)],
+  });
+}
+
+/**
+ * editReply with an already-built embed. Pairs with replyEmbed for
+ * deferred branches that build richer custom embeds.
+ */
+function editEmbed(interaction, embed, extras = {}) {
+  return interaction.editReply({
+    ...extras,
+    embeds: [embed],
   });
 }
 
@@ -373,7 +393,9 @@ module.exports = {
   formatGold,
   replyNotice,
   replyEmbed,
+  deferEphemeralReply,
   followUpNotice,
   editNotice,
+  editEmbed,
   updateNotice,
 };

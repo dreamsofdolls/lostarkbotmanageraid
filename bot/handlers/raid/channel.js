@@ -1,6 +1,12 @@
 "use strict";
 
-const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const {
+  deferEphemeralReply,
+  editEmbed,
+  editNotice,
+  replyEmbed,
+  replyNotice,
+} = require("../../utils/raid/common/shared");
 const {
   t,
   getUserLanguage,
@@ -33,7 +39,6 @@ const RAID_CHANNEL_ACTION_CHOICES = [
 
 function createRaidChannelCommand({
   EmbedBuilder,
-  MessageFlags,
   PermissionFlagsBits,
   UI,
   User,
@@ -105,20 +110,19 @@ function createRaidChannelCommand({
   async function handleRaidChannelCommand(interaction) {
     const guildId = interaction.guildId;
     // Slash invoker is the only viewer of every ephemeral reply on this
-    // command. Resolve once and thread through every notice + success
-    // embed. The public greeting also uses the invoker's lang as a stand-in
-    // for guild lang (no per-guild language config exists yet).
+    // command. Resolve once and thread through every admin notice + success
+    // embed. Public broadcasts resolve the guild language at their firing
+    // site.
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
+    const replyChannelNotice = (options) => replyNotice(interaction, EmbedBuilder, options);
+    const replyChannelEmbed = (embed) => replyEmbed(interaction, embed);
+    const editChannelNotice = (options, extras) => editNotice(interaction, EmbedBuilder, options, extras);
+    const editChannelEmbed = (embed) => editEmbed(interaction, embed);
     if (!guildId) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-channel.auth.serverOnlyTitle", lang),
-            description: t("raid-channel.auth.serverOnlyDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyChannelNotice({
+        type: "warn",
+        title: t("raid-channel.auth.serverOnlyTitle", lang),
+        description: t("raid-channel.auth.serverOnlyDescription", lang),
       });
       return;
     }
@@ -134,15 +138,10 @@ function createRaidChannelCommand({
       !interaction.memberPermissions ||
       !interaction.memberPermissions.has(PermissionFlagsBits.ManageGuild)
     ) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "lock",
-            title: t("raid-channel.auth.manageGuildTitle", lang),
-            description: t("raid-channel.auth.manageGuildDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyChannelNotice({
+        type: "lock",
+        title: t("raid-channel.auth.manageGuildTitle", lang),
+        description: t("raid-channel.auth.manageGuildDescription", lang),
       });
       return;
     }
@@ -155,15 +154,10 @@ function createRaidChannelCommand({
     if (action === "set") {
       const channel = interaction.options.getChannel("channel");
       if (!channel) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-channel.set.missingChannelTitle", lang),
-              description: t("raid-channel.set.missingChannelDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyChannelNotice({
+          type: "warn",
+          title: t("raid-channel.set.missingChannelTitle", lang),
+          description: t("raid-channel.set.missingChannelDescription", lang),
         });
         return;
       }
@@ -171,15 +165,10 @@ function createRaidChannelCommand({
       // saving config + posting a pinned welcome would mislead members into
       // thinking the channel is active when MessageCreate is silently dropped.
       if (!isTextMonitorEnabled()) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "lock",
-              title: t("raid-channel.set.monitorDisabledTitle", lang),
-              description: t("raid-channel.set.monitorDisabledDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyChannelNotice({
+          type: "lock",
+          title: t("raid-channel.set.monitorDisabledTitle", lang),
+          description: t("raid-channel.set.monitorDisabledDescription", lang),
         });
         return;
       }
@@ -190,18 +179,13 @@ function createRaidChannelCommand({
       const botMember = interaction.guild?.members?.me;
       const missing = getMissingBotChannelPermissions(channel, botMember);
       if (missing.length > 0) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "lock",
-              title: t("raid-channel.set.missingPermsTitle", lang),
-              description: t("raid-channel.set.missingPermsDescription", lang, {
-                channelId: channel.id,
-                missing: missing.join(", "),
-              }),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyChannelNotice({
+          type: "lock",
+          title: t("raid-channel.set.missingPermsTitle", lang),
+          description: t("raid-channel.set.missingPermsDescription", lang, {
+            channelId: channel.id,
+            missing: missing.join(", "),
+          }),
         });
         return;
       }
@@ -276,7 +260,7 @@ function createRaidChannelCommand({
           },
         )
         .setTimestamp();
-      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      await replyChannelEmbed(embed);
       return;
     }
     if (action === "show") {
@@ -358,7 +342,7 @@ function createRaidChannelCommand({
         if (deployNotes.length > 0) lines.push("", ...deployNotes);
         embed.setDescription(lines.join("\n"));
       }
-      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      await replyChannelEmbed(embed);
       return;
     }
     if (action === "clear") {
@@ -381,39 +365,29 @@ function createRaidChannelCommand({
         .setColor(UI.colors.muted)
         .setTitle(`${UI.icons.reset} ${t("raid-channel.clear.title", lang)}`)
         .setDescription(t("raid-channel.clear.description", lang));
-      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      await replyChannelEmbed(embed);
       return;
     }
     if (action === "cleanup") {
       const channelId = getCachedMonitorChannelId(guildId);
       if (!channelId) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-channel.cleanup.noConfigTitle", lang),
-              description: t("raid-channel.cleanup.noConfigDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyChannelNotice({
+          type: "warn",
+          title: t("raid-channel.cleanup.noConfigTitle", lang),
+          description: t("raid-channel.cleanup.noConfigDescription", lang),
         });
         return;
       }
       const channel = await resolveRaidMonitorChannel(interaction, channelId);
       if (!channel) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-channel.cleanup.channelGoneTitle", lang),
-              description: t("raid-channel.cleanup.channelGoneDescription", lang, { channelId }),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyChannelNotice({
+          type: "warn",
+          title: t("raid-channel.cleanup.channelGoneTitle", lang),
+          description: t("raid-channel.cleanup.channelGoneDescription", lang, { channelId }),
         });
         return;
       }
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await deferEphemeralReply(interaction);
       try {
         const { deleted, skippedOld } = await cleanupRaidChannelMessages(channel);
         const embed = new EmbedBuilder()
@@ -435,20 +409,17 @@ function createRaidChannelCommand({
             inline: true,
           });
         }
-        await interaction.editReply({ embeds: [embed] });
+        await editChannelEmbed(embed);
       } catch (err) {
         console.error("[raid-channel] manual cleanup failed:", err?.message || err);
-        await interaction.editReply({
+        await editChannelNotice({
+          type: "error",
+          title: t("raid-channel.cleanup.failTitle", lang),
+          description: t("raid-channel.cleanup.failDescription", lang, {
+            error: err?.message || err,
+          }),
+        }, {
           content: null,
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "error",
-              title: t("raid-channel.cleanup.failTitle", lang),
-              description: t("raid-channel.cleanup.failDescription", lang, {
-                error: err?.message || err,
-              }),
-            }),
-          ],
         });
       }
       return;
@@ -456,33 +427,23 @@ function createRaidChannelCommand({
     if (action === "repin") {
       const channelId = getCachedMonitorChannelId(guildId);
       if (!channelId) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-channel.cleanup.noConfigTitle", lang),
-              description: t("raid-channel.cleanup.noConfigDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyChannelNotice({
+          type: "warn",
+          title: t("raid-channel.cleanup.noConfigTitle", lang),
+          description: t("raid-channel.cleanup.noConfigDescription", lang),
         });
         return;
       }
       const channel = await resolveRaidMonitorChannel(interaction, channelId);
       if (!channel) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-channel.cleanup.channelGoneTitle", lang),
-              description: t("raid-channel.cleanup.channelGoneDescription", lang, { channelId }),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyChannelNotice({
+          type: "warn",
+          title: t("raid-channel.cleanup.channelGoneTitle", lang),
+          description: t("raid-channel.cleanup.channelGoneDescription", lang, { channelId }),
         });
         return;
       }
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await deferEphemeralReply(interaction);
       const welcome = await postRaidChannelWelcome(channel, interaction.client.user.id, guildId);
       const newKey = welcome.posted
         ? welcome.pinned
@@ -506,7 +467,7 @@ function createRaidChannelCommand({
           },
         )
         .setTimestamp();
-      await interaction.editReply({ embeds: [embed] });
+      await editChannelEmbed(embed);
       return;
     }
     if (action === "set-language") {
@@ -535,7 +496,7 @@ function createRaidChannelCommand({
               label: currentEntry.label,
             })
           );
-        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+        await replyChannelEmbed(embed);
         return;
       }
       // Validate against the first-class locale list. Slash choices already
@@ -547,15 +508,10 @@ function createRaidChannelCommand({
       const normalizedRequested = String(requested).toLowerCase();
       const langEntry = SUPPORTED_LANGUAGES.find((l) => l.code === normalizedRequested);
       if (!langEntry) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-channel-language.invalidTitle", lang),
-              description: t("raid-channel-language.invalidDescription", lang, { lang: requested }),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyChannelNotice({
+          type: "warn",
+          title: t("raid-channel-language.invalidTitle", lang),
+          description: t("raid-channel-language.invalidDescription", lang, { lang: requested }),
         });
         return;
       }
@@ -574,7 +530,7 @@ function createRaidChannelCommand({
           })
         )
         .setTimestamp();
-      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      await replyChannelEmbed(embed);
       return;
     }
     if (action === "schedule-on" || action === "schedule-off") {
@@ -586,20 +542,15 @@ function createRaidChannelCommand({
       try {
         const cfg = await GuildConfig.findOne({ guildId }).lean();
         if (cfg && !!cfg.autoCleanupEnabled === enabled) {
-          await interaction.reply({
-            embeds: [
-              buildNoticeEmbed(EmbedBuilder, {
-                type: "info",
-                title: t("raid-channel.schedule.noopTitle", lang),
-                description: t(
-                  enabled
-                    ? "raid-channel.schedule.noopDescriptionOn"
-                    : "raid-channel.schedule.noopDescriptionOff",
-                  lang
-                ),
-              }),
-            ],
-            flags: MessageFlags.Ephemeral,
+          await replyChannelNotice({
+            type: "info",
+            title: t("raid-channel.schedule.noopTitle", lang),
+            description: t(
+              enabled
+                ? "raid-channel.schedule.noopDescriptionOn"
+                : "raid-channel.schedule.noopDescriptionOff",
+              lang
+            ),
           });
           return;
         }
@@ -612,15 +563,10 @@ function createRaidChannelCommand({
       // the scheduler filters on `raidChannelId != null`, so enabling now
       // would give admin a success embed for a job that never runs.
       if (enabled && !getCachedMonitorChannelId(guildId)) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-channel.schedule.noChannelTitle", lang),
-              description: t("raid-channel.schedule.noChannelDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyChannelNotice({
+          type: "warn",
+          title: t("raid-channel.schedule.noChannelTitle", lang),
+          description: t("raid-channel.schedule.noChannelDescription", lang),
         });
         return;
       }
@@ -660,7 +606,7 @@ function createRaidChannelCommand({
           )
         )
         .setTimestamp();
-      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      await replyChannelEmbed(embed);
     }
   }
 

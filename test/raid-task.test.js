@@ -473,6 +473,14 @@ test("replyEmbed wraps an existing embed with the same ephemeral defaults", asyn
   assert.deepEqual(calls[0].embeds, [embed]);
 });
 
+test("deferEphemeralReply centralizes the ephemeral defer payload", async () => {
+  const { deferEphemeralReply } = require("../bot/utils/raid/common/shared");
+  const calls = [];
+  const interaction = { deferReply: async (payload) => calls.push(payload) };
+  await deferEphemeralReply(interaction);
+  assert.deepEqual(calls[0], { flags: 64 });
+});
+
 test("followUpNotice wraps interaction.followUp with the same notice payload shape", async () => {
   const { followUpNotice } = require("../bot/utils/raid/common/shared");
   const calls = [];
@@ -507,6 +515,15 @@ test("updateNotice clears components by default and accepts override via extras"
     { components: [{ keep: "row" }] }
   );
   assert.deepEqual(calls[1].components, [{ keep: "row" }]);
+});
+
+test("editEmbed wraps an existing embed for deferred replies", async () => {
+  const { editEmbed } = require("../bot/utils/raid/common/shared");
+  const calls = [];
+  const interaction = { editReply: async (payload) => calls.push(payload) };
+  const embed = { existing: true };
+  await editEmbed(interaction, embed, { content: null });
+  assert.deepEqual(calls[0], { content: null, embeds: [embed] });
 });
 
 test("formatProgressTotals: standard 3-icon line", () => {
