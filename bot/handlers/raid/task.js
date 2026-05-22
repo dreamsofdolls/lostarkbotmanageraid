@@ -1,6 +1,9 @@
 "use strict";
 
-const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const {
+  replyNotice,
+  updateNotice,
+} = require("../../utils/raid/common/shared");
 const {
   getRosterMatches,
   getCharacterMatches,
@@ -49,7 +52,6 @@ function createRaidTaskCommand(deps) {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    MessageFlags,
     User,
     saveWithRetry,
     loadUserForAutocomplete,
@@ -108,14 +110,26 @@ function createRaidTaskCommand(deps) {
   // share tries to write through a side-task path. Centralized so the
   // 7+ write handlers reject identically. `lang` is the executor's locale -
   // the embed is shown ephemerally to whoever ran the slash command.
-  function buildViewOnlyShareEmbed(target, lang) {
-    return buildNoticeEmbed(EmbedBuilder, {
+  function viewOnlyShareNotice(target, lang) {
+    return {
       type: "error",
       title: t("raid-task.shareViewOnly.title", lang),
       description: t("raid-task.shareViewOnly.description", lang, {
         owner: target.ownerLabel || "(unknown)",
       }),
-    });
+    };
+  }
+
+  function replyTaskNotice(interaction, options, extras = null) {
+    return replyNotice(interaction, EmbedBuilder, options, extras || undefined);
+  }
+
+  function updateTaskNotice(interaction, options, extras) {
+    return updateNotice(interaction, EmbedBuilder, options, extras);
+  }
+
+  function replyViewOnlyShareNotice(interaction, target, lang) {
+    return replyTaskNotice(interaction, viewOnlyShareNotice(target, lang));
   }
 
   async function autocompleteRoster(interaction, focused) {
@@ -437,39 +451,26 @@ function createRaidTaskCommand(deps) {
     const reset = interaction.options.getString("reset", true);
 
     if (!characterName) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.common.missingCharacterTitle", lang),
-            description: t("raid-task.common.missingCharacterDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.common.missingCharacterTitle", lang),
+        description: t("raid-task.common.missingCharacterDescription", lang),
       });
       return;
     }
 
     if (!taskName) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.common.invalidTaskNameTitle", lang),
-            description: t("raid-task.common.invalidTaskNameDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.common.invalidTaskNameTitle", lang),
+        description: t("raid-task.common.invalidTaskNameDescription", lang),
       });
       return;
     }
 
     const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
     if (writeTarget.viaShare && !writeTarget.canEdit) {
-      await interaction.reply({
-        embeds: [buildViewOnlyShareEmbed(writeTarget, lang)],
-        flags: MessageFlags.Ephemeral,
-      });
+      await replyViewOnlyShareNotice(interaction, writeTarget, lang);
       return;
     }
     const discordId = writeTarget.discordId;
@@ -540,83 +541,58 @@ function createRaidTaskCommand(deps) {
       });
     } catch (error) {
       console.error("[raid-task add] save failed:", error?.message || error);
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "error",
-            title: t("raid-task.save.addFailedTitle", lang),
-            description: t("raid-task.save.addFailedDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "error",
+        title: t("raid-task.save.addFailedTitle", lang),
+        description: t("raid-task.save.addFailedDescription", lang),
       });
       return;
     }
 
     if (outcome === "no-roster") {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.common.noRosterTitle", lang),
-            description: t("raid-task.common.noRosterDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.common.noRosterTitle", lang),
+        description: t("raid-task.common.noRosterDescription", lang),
       });
       return;
     }
     if (outcome === "no-character") {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.common.noCharacterTitle", lang),
-            description: t("raid-task.common.noCharacterDescription", lang, {
-              characterName,
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.common.noCharacterTitle", lang),
+        description: t("raid-task.common.noCharacterDescription", lang, {
+          characterName,
+        }),
       });
       return;
     }
     if (outcome === "cap-reached") {
       const cap = reset === "daily" ? TASK_CAP_DAILY : TASK_CAP_WEEKLY;
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.add.capReachedTitle", lang),
-            description: t("raid-task.add.capReachedDescription", lang, {
-              characterName: resolvedCharName,
-              cap,
-              reset,
-              dailyCount,
-              weeklyCount,
-              capDaily: TASK_CAP_DAILY,
-              capWeekly: TASK_CAP_WEEKLY,
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.add.capReachedTitle", lang),
+        description: t("raid-task.add.capReachedDescription", lang, {
+          characterName: resolvedCharName,
+          cap,
+          reset,
+          dailyCount,
+          weeklyCount,
+          capDaily: TASK_CAP_DAILY,
+          capWeekly: TASK_CAP_WEEKLY,
+        }),
       });
       return;
     }
     if (outcome === "duplicate") {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "info",
-            title: t("raid-task.add.duplicateTitle", lang),
-            description: t("raid-task.add.duplicateDescription", lang, {
-              characterName: resolvedCharName,
-              taskName,
-              reset,
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "info",
+        title: t("raid-task.add.duplicateTitle", lang),
+        description: t("raid-task.add.duplicateDescription", lang, {
+          characterName: resolvedCharName,
+          taskName,
+          reset,
+        }),
       });
       return;
     }
@@ -625,21 +601,16 @@ function createRaidTaskCommand(deps) {
       reset === "daily"
         ? t("raid-task.add.cycleDailyLabel", lang)
         : t("raid-task.add.cycleWeeklyLabel", lang);
-    await interaction.reply({
-      embeds: [
-        buildNoticeEmbed(EmbedBuilder, {
-          type: "success",
-          title: t("raid-task.add.successTitle", lang),
-          description: t("raid-task.add.successDescription", lang, {
-            characterName: resolvedCharName,
-            taskName,
-            cycleLabel,
-            remainDaily: TASK_CAP_DAILY - dailyCount,
-            remainWeekly: TASK_CAP_WEEKLY - weeklyCount,
-          }),
-        }),
-      ],
-      flags: MessageFlags.Ephemeral,
+    await replyTaskNotice(interaction, {
+      type: "success",
+      title: t("raid-task.add.successTitle", lang),
+      description: t("raid-task.add.successDescription", lang, {
+        characterName: resolvedCharName,
+        taskName,
+        cycleLabel,
+        remainDaily: TASK_CAP_DAILY - dailyCount,
+        remainWeekly: TASK_CAP_WEEKLY - weeklyCount,
+      }),
     });
   }
 
@@ -657,25 +628,17 @@ function createRaidTaskCommand(deps) {
     const reset = interaction.options.getString("reset", true);
 
     if (!taskName) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.common.invalidTaskNameTitle", lang),
-            description: t("raid-task.common.invalidTaskNameDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.common.invalidTaskNameTitle", lang),
+        description: t("raid-task.common.invalidTaskNameDescription", lang),
       });
       return;
     }
 
     const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
     if (writeTarget.viaShare && !writeTarget.canEdit) {
-      await interaction.reply({
-        embeds: [buildViewOnlyShareEmbed(writeTarget, lang)],
-        flags: MessageFlags.Ephemeral,
-      });
+      await replyViewOnlyShareNotice(interaction, writeTarget, lang);
       return;
     }
     const discordId = writeTarget.discordId;
@@ -756,75 +719,50 @@ function createRaidTaskCommand(deps) {
       });
     } catch (error) {
       console.error("[raid-task add-all] save failed:", error?.message || error);
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "error",
-            title: t("raid-task.save.addFailedTitle", lang),
-            description: t("raid-task.save.addAllFailedDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "error",
+        title: t("raid-task.save.addFailedTitle", lang),
+        description: t("raid-task.save.addAllFailedDescription", lang),
       });
       return;
     }
 
     if (outcome === "no-roster") {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.common.noRosterTitle", lang),
-            description: t("raid-task.common.noRosterDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.common.noRosterTitle", lang),
+        description: t("raid-task.common.noRosterDescription", lang),
       });
       return;
     }
     if (outcome === "no-roster-match") {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.common.rosterNotFoundTitle", lang),
-            description: t("raid-task.common.rosterNotFoundDescription", lang, {
-              rosterName,
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.common.rosterNotFoundTitle", lang),
+        description: t("raid-task.common.rosterNotFoundDescription", lang, {
+          rosterName,
+        }),
       });
       return;
     }
     if (outcome === "empty-roster") {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "info",
-            title: t("raid-task.addAll.emptyRosterTitle", lang),
-            description: t("raid-task.addAll.emptyRosterDescription", lang, {
-              rosterName: resolvedRosterName,
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "info",
+        title: t("raid-task.addAll.emptyRosterTitle", lang),
+        description: t("raid-task.addAll.emptyRosterDescription", lang, {
+          rosterName: resolvedRosterName,
+        }),
       });
       return;
     }
 
     if (added.length === 0 && skippedCap.length === 0 && skippedDup.length === 0) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "info",
-            title: t("raid-task.addAll.noMatchTitle", lang),
-            description: t("raid-task.addAll.noMatchDescription", lang, {
-              rosterName: resolvedRosterName,
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "info",
+        title: t("raid-task.addAll.noMatchTitle", lang),
+        description: t("raid-task.addAll.noMatchDescription", lang, {
+          rosterName: resolvedRosterName,
+        }),
       });
       return;
     }
@@ -877,21 +815,16 @@ function createRaidTaskCommand(deps) {
       added.length > 0
         ? t("raid-task.addAll.successTitle", lang)
         : t("raid-task.addAll.noMatchTitle", lang);
-    await interaction.reply({
-      embeds: [
-        buildNoticeEmbed(EmbedBuilder, {
-          type,
-          title,
-          description: t("raid-task.addAll.successDescription", lang, {
-            rosterName: resolvedRosterName,
-            taskName,
-            cycleLabel,
-            addedNames,
-            skippedSection,
-          }),
-        }),
-      ],
-      flags: MessageFlags.Ephemeral,
+    await replyTaskNotice(interaction, {
+      type,
+      title,
+      description: t("raid-task.addAll.successDescription", lang, {
+        rosterName: resolvedRosterName,
+        taskName,
+        cycleLabel,
+        addedNames,
+        skippedSection,
+      }),
     });
   }
 
@@ -920,55 +853,35 @@ function createRaidTaskCommand(deps) {
       interaction.options.getBoolean("all_rosters", false) === true;
 
     if (!SHARED_TASK_PRESETS[presetKey]) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.sharedAdd.invalidPresetTitle", lang),
-            description: t("raid-task.sharedAdd.invalidPresetDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.sharedAdd.invalidPresetTitle", lang),
+        description: t("raid-task.sharedAdd.invalidPresetDescription", lang),
       });
       return;
     }
 
     if (!taskName) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.sharedAdd.customNeedsNameTitle", lang),
-            description: t("raid-task.sharedAdd.customNeedsNameDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.sharedAdd.customNeedsNameTitle", lang),
+        description: t("raid-task.sharedAdd.customNeedsNameDescription", lang),
       });
       return;
     }
     if (Number.isNaN(expiresAt)) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.sharedAdd.invalidExpiryTitle", lang),
-            description: t("raid-task.sharedAdd.invalidExpiryDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.sharedAdd.invalidExpiryTitle", lang),
+        description: t("raid-task.sharedAdd.invalidExpiryDescription", lang),
       });
       return;
     }
     if (expiresAt && expiresAt < Date.now()) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.sharedAdd.pastExpiryTitle", lang),
-            description: t("raid-task.sharedAdd.pastExpiryDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.sharedAdd.pastExpiryTitle", lang),
+        description: t("raid-task.sharedAdd.pastExpiryDescription", lang),
       });
       return;
     }
@@ -982,10 +895,7 @@ function createRaidTaskCommand(deps) {
     if (!applyAllRosters) {
       writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
       if (writeTarget.viaShare && !writeTarget.canEdit) {
-        await interaction.reply({
-          embeds: [buildViewOnlyShareEmbed(writeTarget, lang)],
-          flags: MessageFlags.Ephemeral,
-        });
+        await replyViewOnlyShareNotice(interaction, writeTarget, lang);
         return;
       }
       if (writeTarget.viaShare) {
@@ -1079,31 +989,21 @@ function createRaidTaskCommand(deps) {
       });
     } catch (error) {
       console.error("[raid-task shared-add] save failed:", error?.message || error);
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "error",
-            title: t("raid-task.save.addFailedTitle", lang),
-            description: t("raid-task.save.sharedAddFailedDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "error",
+        title: t("raid-task.save.addFailedTitle", lang),
+        description: t("raid-task.save.sharedAddFailedDescription", lang),
       });
       return;
     }
 
     if (outcome === "no-roster" || outcome === "no-roster-match") {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.common.rosterNotFoundTitle", lang),
-            description: t("raid-task.common.rosterNotFoundDescription", lang, {
-              rosterName,
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.common.rosterNotFoundTitle", lang),
+        description: t("raid-task.common.rosterNotFoundDescription", lang, {
+          rosterName,
+        }),
       });
       return;
     }
@@ -1141,57 +1041,42 @@ function createRaidTaskCommand(deps) {
         t("raid-task.sharedAdd.noNewRosterRostersChecked", lang, { count: targetRosterCount }),
       ];
       if (skippedSummary) lines.push(skippedSummary);
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "info",
-            title: t("raid-task.sharedAdd.noNewRosterTitle", lang),
-            description: lines.join("\n"),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "info",
+        title: t("raid-task.sharedAdd.noNewRosterTitle", lang),
+        description: lines.join("\n"),
       });
       return;
     }
     if (outcome === "cap-reached") {
       const cap = sharedTaskCapForReset(reset);
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.sharedAdd.capReachedTitle", lang),
-            description: t("raid-task.sharedAdd.capReachedDescriptionSingle", lang, {
-              rosterName: resolvedRosterName,
-              count: countForReset,
-              cap,
-              resetLabel: formatSharedResetDetail(reset, { t, lang }),
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.sharedAdd.capReachedTitle", lang),
+        description: t("raid-task.sharedAdd.capReachedDescriptionSingle", lang, {
+          rosterName: resolvedRosterName,
+          count: countForReset,
+          cap,
+          resetLabel: formatSharedResetDetail(reset, { t, lang }),
+        }),
       });
       return;
     }
     if (outcome === "duplicate") {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "info",
-            title: t("raid-task.sharedAdd.duplicateTitle", lang),
-            description:
-              preset.kind === "scheduled"
-                ? t("raid-task.sharedAdd.duplicateScheduledDescription", lang, {
-                    rosterName: resolvedRosterName,
-                    presetLabel: preset.label,
-                  })
-                : t("raid-task.sharedAdd.duplicateNamedDescription", lang, {
-                    rosterName: resolvedRosterName,
-                    taskName,
-                    resetLabel: formatSharedResetDetail(reset, { t, lang }),
-                  }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "info",
+        title: t("raid-task.sharedAdd.duplicateTitle", lang),
+        description:
+          preset.kind === "scheduled"
+            ? t("raid-task.sharedAdd.duplicateScheduledDescription", lang, {
+                rosterName: resolvedRosterName,
+                presetLabel: preset.label,
+              })
+            : t("raid-task.sharedAdd.duplicateNamedDescription", lang, {
+                rosterName: resolvedRosterName,
+                taskName,
+                resetLabel: formatSharedResetDetail(reset, { t, lang }),
+              }),
       });
       return;
     }
@@ -1239,15 +1124,10 @@ function createRaidTaskCommand(deps) {
       });
     }
 
-    await interaction.reply({
-      embeds: [
-        buildNoticeEmbed(EmbedBuilder, {
-          type: "success",
-          title: t("raid-task.sharedAdd.successTitle", lang),
-          description: descriptionText,
-        }),
-      ],
-      flags: MessageFlags.Ephemeral,
+    await replyTaskNotice(interaction, {
+      type: "success",
+      title: t("raid-task.sharedAdd.successTitle", lang),
+      description: descriptionText,
     });
   }
 
@@ -1259,10 +1139,7 @@ function createRaidTaskCommand(deps) {
 
     const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
     if (writeTarget.viaShare && !writeTarget.canEdit) {
-      await interaction.reply({
-        embeds: [buildViewOnlyShareEmbed(writeTarget, lang)],
-        flags: MessageFlags.Ephemeral,
-      });
+      await replyViewOnlyShareNotice(interaction, writeTarget, lang);
       return;
     }
     const discordId = writeTarget.discordId;
@@ -1301,60 +1178,40 @@ function createRaidTaskCommand(deps) {
       });
     } catch (error) {
       console.error("[raid-task shared-remove] save failed:", error?.message || error);
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "error",
-            title: t("raid-task.save.addFailedTitle", lang),
-            description: t("raid-task.save.sharedRemoveFailedDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "error",
+        title: t("raid-task.save.addFailedTitle", lang),
+        description: t("raid-task.save.sharedRemoveFailedDescription", lang),
       });
       return;
     }
 
     if (outcome === "no-roster" || outcome === "no-roster-match") {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.common.rosterNotFoundTitle", lang),
-            description: t("raid-task.common.rosterNotFoundDescription", lang, {
-              rosterName,
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.common.rosterNotFoundTitle", lang),
+        description: t("raid-task.common.rosterNotFoundDescription", lang, {
+          rosterName,
+        }),
       });
       return;
     }
     if (outcome === "task-not-found") {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.sharedRemove.noTaskTitle", lang),
-            description: t("raid-task.sharedRemove.noTaskDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.sharedRemove.noTaskTitle", lang),
+        description: t("raid-task.sharedRemove.noTaskDescription", lang),
       });
       return;
     }
 
-    await interaction.reply({
-      embeds: [
-        buildNoticeEmbed(EmbedBuilder, {
-          type: "success",
-          title: t("raid-task.sharedRemove.successTitle", lang),
-          description: t("raid-task.sharedRemove.successDescription", lang, {
-            rosterName: resolvedRosterName,
-            taskName: removedTaskName,
-          }),
-        }),
-      ],
-      flags: MessageFlags.Ephemeral,
+    await replyTaskNotice(interaction, {
+      type: "success",
+      title: t("raid-task.sharedRemove.successTitle", lang),
+      description: t("raid-task.sharedRemove.successDescription", lang, {
+        rosterName: resolvedRosterName,
+        taskName: removedTaskName,
+      }),
     });
   }
 
@@ -1367,10 +1224,7 @@ function createRaidTaskCommand(deps) {
 
     const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
     if (writeTarget.viaShare && !writeTarget.canEdit) {
-      await interaction.reply({
-        embeds: [buildViewOnlyShareEmbed(writeTarget, lang)],
-        flags: MessageFlags.Ephemeral,
-      });
+      await replyViewOnlyShareNotice(interaction, writeTarget, lang);
       return;
     }
     const discordId = writeTarget.discordId;
@@ -1409,60 +1263,40 @@ function createRaidTaskCommand(deps) {
       });
     } catch (error) {
       console.error("[raid-task remove] save failed:", error?.message || error);
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "error",
-            title: t("raid-task.save.addFailedTitle", lang),
-            description: t("raid-task.save.removeFailedDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "error",
+        title: t("raid-task.save.addFailedTitle", lang),
+        description: t("raid-task.save.removeFailedDescription", lang),
       });
       return;
     }
 
     if (outcome === "no-roster" || outcome === "no-character") {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.common.noCharacterTitle", lang),
-            description: t("raid-task.common.noCharacterDescription", lang, {
-              characterName,
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.common.noCharacterTitle", lang),
+        description: t("raid-task.common.noCharacterDescription", lang, {
+          characterName,
+        }),
       });
       return;
     }
     if (outcome === "task-not-found") {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.remove.noTaskTitle", lang),
-            description: t("raid-task.remove.noTaskDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.remove.noTaskTitle", lang),
+        description: t("raid-task.remove.noTaskDescription", lang),
       });
       return;
     }
 
-    await interaction.reply({
-      embeds: [
-        buildNoticeEmbed(EmbedBuilder, {
-          type: "success",
-          title: t("raid-task.remove.successTitle", lang),
-          description: t("raid-task.remove.successDescription", lang, {
-            characterName: resolvedCharName,
-            taskName: removedTaskName,
-          }),
-        }),
-      ],
-      flags: MessageFlags.Ephemeral,
+    await replyTaskNotice(interaction, {
+      type: "success",
+      title: t("raid-task.remove.successTitle", lang),
+      description: t("raid-task.remove.successDescription", lang, {
+        characterName: resolvedCharName,
+        taskName: removedTaskName,
+      }),
     });
   }
 
@@ -1474,10 +1308,7 @@ function createRaidTaskCommand(deps) {
 
     const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
     if (writeTarget.viaShare && !writeTarget.canEdit) {
-      await interaction.reply({
-        embeds: [buildViewOnlyShareEmbed(writeTarget, lang)],
-        flags: MessageFlags.Ephemeral,
-      });
+      await replyViewOnlyShareNotice(interaction, writeTarget, lang);
       return;
     }
     const discordId = writeTarget.discordId;
@@ -1492,17 +1323,12 @@ function createRaidTaskCommand(deps) {
       ? findCharacterInUser(userDoc, characterName, rosterName)
       : null;
     if (!found) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.common.noCharacterTitle", lang),
-            description: t("raid-task.common.noCharacterDescription", lang, {
-              characterName,
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.common.noCharacterTitle", lang),
+        description: t("raid-task.common.noCharacterDescription", lang, {
+          characterName,
+        }),
       });
       return;
     }
@@ -1511,17 +1337,12 @@ function createRaidTaskCommand(deps) {
       ? found.character.sideTasks
       : [];
     if (sideTasks.length === 0) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "info",
-            title: t("raid-task.clear.nothingTitle", lang),
-            description: t("raid-task.clear.nothingDescription", lang, {
-              characterName: resolvedCharName,
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyTaskNotice(interaction, {
+        type: "info",
+        title: t("raid-task.clear.nothingTitle", lang),
+        description: t("raid-task.clear.nothingDescription", lang, {
+          characterName: resolvedCharName,
+        }),
       });
       return;
     }
@@ -1543,21 +1364,17 @@ function createRaidTaskCommand(deps) {
         .setStyle(ButtonStyle.Secondary)
     );
 
-    await interaction.reply({
-      embeds: [
-        buildNoticeEmbed(EmbedBuilder, {
-          type: "warn",
-          title: t("raid-task.clear.confirmTitle", lang),
-          description: t("raid-task.clear.confirmDescription", lang, {
-            taskCount: sideTasks.length,
-            characterName: resolvedCharName,
-            dailyCount,
-            weeklyCount,
-          }),
-        }),
-      ],
+    await replyTaskNotice(interaction, {
+      type: "warn",
+      title: t("raid-task.clear.confirmTitle", lang),
+      description: t("raid-task.clear.confirmDescription", lang, {
+        taskCount: sideTasks.length,
+        characterName: resolvedCharName,
+        dailyCount,
+        weeklyCount,
+      }),
+    }, {
       components: [confirmRow],
-      flags: MessageFlags.Ephemeral,
     });
   }
 
@@ -1585,10 +1402,7 @@ function createRaidTaskCommand(deps) {
       ? await resolveTaskWriteTarget(executorId, rosterName)
       : { discordId: executorId, viaShare: false };
     if (writeTarget.viaShare && !writeTarget.canEdit) {
-      await interaction.update({
-        embeds: [buildViewOnlyShareEmbed(writeTarget, lang)],
-        components: [],
-      });
+      await updateTaskNotice(interaction, viewOnlyShareNotice(writeTarget, lang));
       return;
     }
     const discordId = writeTarget.discordId;
@@ -1633,61 +1447,41 @@ function createRaidTaskCommand(deps) {
       });
     } catch (error) {
       console.error("[raid-task clear] save failed:", error?.message || error);
-      await interaction.update({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "error",
-            title: t("raid-task.save.addFailedTitle", lang),
-            description: t("raid-task.save.clearFailedDescription", lang),
-          }),
-        ],
-        components: [],
+      await updateTaskNotice(interaction, {
+        type: "error",
+        title: t("raid-task.save.addFailedTitle", lang),
+        description: t("raid-task.save.clearFailedDescription", lang),
       }).catch(() => {});
       return;
     }
 
     if (outcome === "no-roster" || outcome === "no-character") {
-      await interaction.update({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-task.clear.confirmFailedCharacterTitle", lang),
-            description: t("raid-task.clear.confirmFailedCharacterDescription", lang),
-          }),
-        ],
-        components: [],
+      await updateTaskNotice(interaction, {
+        type: "warn",
+        title: t("raid-task.clear.confirmFailedCharacterTitle", lang),
+        description: t("raid-task.clear.confirmFailedCharacterDescription", lang),
       }).catch(() => {});
       return;
     }
 
-    await interaction.update({
-      embeds: [
-        buildNoticeEmbed(EmbedBuilder, {
-          type: "success",
-          title: t("raid-task.clear.successTitle", lang),
-          description: t("raid-task.clear.successDescription", lang, {
-            taskCount: removedCount,
-            characterName: resolvedCharName,
-            dailyCount: removedDailyCount,
-            weeklyCount: removedWeeklyCount,
-          }),
-        }),
-      ],
-      components: [],
+    await updateTaskNotice(interaction, {
+      type: "success",
+      title: t("raid-task.clear.successTitle", lang),
+      description: t("raid-task.clear.successDescription", lang, {
+        taskCount: removedCount,
+        characterName: resolvedCharName,
+        dailyCount: removedDailyCount,
+        weeklyCount: removedWeeklyCount,
+      }),
     }).catch(() => {});
   }
 
   async function handleClearCancelButton(interaction) {
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
-    await interaction.update({
-      embeds: [
-        buildNoticeEmbed(EmbedBuilder, {
-          type: "muted",
-          title: t("raid-task.clear.cancelledTitle", lang),
-          description: t("raid-task.clear.cancelledDescription", lang),
-        }),
-      ],
-      components: [],
+    await updateTaskNotice(interaction, {
+      type: "muted",
+      title: t("raid-task.clear.cancelledTitle", lang),
+      description: t("raid-task.clear.cancelledDescription", lang),
     }).catch(() => {});
   }
 
@@ -1722,15 +1516,10 @@ function createRaidTaskCommand(deps) {
     // Fallback path: unknown subcommand. Resolve lang lazily here since
     // we never reach this branch on the happy path.
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
-    await interaction.reply({
-      embeds: [
-        buildNoticeEmbed(EmbedBuilder, {
-          type: "warn",
-          title: t("raid-task.invalidSubcommandTitle", lang),
-          description: t("raid-task.invalidSubcommandDescription", lang, { sub }),
-        }),
-      ],
-      flags: MessageFlags.Ephemeral,
+    await replyTaskNotice(interaction, {
+      type: "warn",
+      title: t("raid-task.invalidSubcommandTitle", lang),
+      description: t("raid-task.invalidSubcommandDescription", lang, { sub }),
     });
   }
 
