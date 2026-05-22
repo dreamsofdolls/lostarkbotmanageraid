@@ -1,4 +1,4 @@
-const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const { replyEmbed, replyNotice } = require("../../utils/raid/common/shared");
 const {
   getRosterMatches,
   getCharacterMatches,
@@ -18,7 +18,6 @@ const {
 function createRaidSetCommand(deps) {
   const {
     EmbedBuilder,
-    MessageFlags,
     UI,
     User,
     saveWithRetry,
@@ -601,6 +600,8 @@ function createRaidSetCommand(deps) {
     // ephemeral reply on /raid-set, so this lang threads through every
     // notice + success embed without any clicker-vs-owner split.
     const lang = await getUserLanguage(executorId, { UserModel: User });
+    const replySetNotice = (options, extras) => replyNotice(interaction, EmbedBuilder, options, extras);
+    const replySetEmbed = (embed, extras) => replyEmbed(interaction, embed, extras);
     // Localized raid label ("アクト4 ハード" / "Act 4 Hard") for use in
     // user-facing strings. Models keep canonical EN; locale lookup
     // happens here at render time.
@@ -616,61 +617,41 @@ function createRaidSetCommand(deps) {
     const targetGate = interaction.options.getString("gate") || "";
     const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
     if (!raidMeta) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-set.invalid.raidTitle", lang),
-            description: t("raid-set.invalid.raidDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replySetNotice({
+        type: "warn",
+        title: t("raid-set.invalid.raidTitle", lang),
+        description: t("raid-set.invalid.raidDescription", lang),
       });
       return;
     }
     if (!["complete", "reset", "process"].includes(statusType)) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-set.invalid.statusTitle", lang),
-            description: t("raid-set.invalid.statusDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replySetNotice({
+        type: "warn",
+        title: t("raid-set.invalid.statusTitle", lang),
+        description: t("raid-set.invalid.statusDescription", lang),
       });
       return;
     }
     const effectiveGate = statusType === "process" ? targetGate : "";
     if (statusType === "process") {
       if (!targetGate) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-set.invalid.processNeedsGateTitle", lang),
-              description: t("raid-set.invalid.processNeedsGateDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replySetNotice({
+          type: "warn",
+          title: t("raid-set.invalid.processNeedsGateTitle", lang),
+          description: t("raid-set.invalid.processNeedsGateDescription", lang),
         });
         return;
       }
       const validGates = getGatesForRaid(raidMeta.raidKey);
       if (!validGates.includes(targetGate)) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-set.invalid.gateTitle", lang),
-              description: t("raid-set.invalid.gateDescription", lang, {
-                gate: targetGate,
-                raidLabel: localizedRaidLabel(raidKey),
-                validGates: validGates.map((g) => `\`${g}\``).join(", "),
-              }),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replySetNotice({
+          type: "warn",
+          title: t("raid-set.invalid.gateTitle", lang),
+          description: t("raid-set.invalid.gateDescription", lang, {
+            gate: targetGate,
+            raidLabel: localizedRaidLabel(raidKey),
+            validGates: validGates.map((g) => `\`${g}\``).join(", "),
+          }),
         });
         return;
       }
@@ -686,15 +667,10 @@ function createRaidSetCommand(deps) {
     // trip.
     const resolvedOwner = await resolveRosterOwner(executorId, rosterName);
     if (!resolvedOwner) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-set.roster.notFoundTitle", lang),
-            description: t("raid-set.roster.notFoundDescription", lang, { rosterName }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replySetNotice({
+        type: "warn",
+        title: t("raid-set.roster.notFoundTitle", lang),
+        description: t("raid-set.roster.notFoundDescription", lang, { rosterName }),
       });
       return;
     }
@@ -702,19 +678,14 @@ function createRaidSetCommand(deps) {
       const ownerNames = resolvedOwner.matches
         .map((entry) => entry.ownerLabel)
         .join(", ");
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-set.roster.ambiguousTitle", lang),
-            description: t("raid-set.roster.ambiguousDescription", lang, {
-              count: resolvedOwner.matches.length,
-              rosterName,
-              ownerNames,
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replySetNotice({
+        type: "warn",
+        title: t("raid-set.roster.ambiguousTitle", lang),
+        description: t("raid-set.roster.ambiguousDescription", lang, {
+          count: resolvedOwner.matches.length,
+          rosterName,
+          ownerNames,
+        }),
       });
       return;
     }
@@ -747,50 +718,36 @@ function createRaidSetCommand(deps) {
             target: targetDiscordId,
           })
         : t("raid-set.roster.noRosterDescription", lang);
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "info",
-            title: actingForOther
-              ? t("raid-set.roster.deletedForOtherTitle", lang)
-              : t("raid-set.roster.noRosterTitle", lang),
-            description,
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replySetNotice({
+        type: "info",
+        title: actingForOther
+          ? t("raid-set.roster.deletedForOtherTitle", lang)
+          : t("raid-set.roster.noRosterTitle", lang),
+        description,
       });
       return;
     }
     if (result.authLost) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "lock",
-            title: t("raid-set.roster.authLostTitle", lang),
-            description: t("raid-set.roster.authLostDescription", lang, {
-              rosterName,
-              target: targetDiscordId,
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replySetNotice({
+        type: "lock",
+        title: t("raid-set.roster.authLostTitle", lang),
+        description: t("raid-set.roster.authLostDescription", lang, {
+          rosterName,
+          target: targetDiscordId,
+        }),
+      }, {
         allowedMentions: { parse: [] },
       });
       return;
     }
     if (!result.matched) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-set.character.notFoundTitle", lang),
-            description: t("raid-set.character.notFoundDescription", lang, {
-              characterName,
-              rosterName,
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replySetNotice({
+        type: "warn",
+        title: t("raid-set.character.notFoundTitle", lang),
+        description: t("raid-set.character.notFoundDescription", lang, {
+          characterName,
+          rosterName,
+        }),
       });
       return;
     }
@@ -811,7 +768,7 @@ function createRaidSetCommand(deps) {
           }),
         )
         .setTimestamp();
-      await interaction.reply({ embeds: [alreadyEmbed], flags: MessageFlags.Ephemeral });
+      await replySetEmbed(alreadyEmbed);
       return;
     }
     if (result.alreadyReset) {
@@ -827,26 +784,21 @@ function createRaidSetCommand(deps) {
           }),
         )
         .setTimestamp();
-      await interaction.reply({ embeds: [alreadyResetEmbed], flags: MessageFlags.Ephemeral });
+      await replySetEmbed(alreadyResetEmbed);
       return;
     }
     if (!result.updated) {
       // By this point noRoster / matched / alreadyComplete / alreadyReset are
       // all handled. The only remaining not-updated branch is ineligible iLvl.
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-set.character.notEligibleTitle", lang),
-            description: t("raid-set.character.notEligibleDescription", lang, {
-              characterName,
-              itemLevel: result.ineligibleItemLevel,
-              minItemLevel: raidMeta.minItemLevel,
-              raidLabel: localizedRaidLabel(raidKey),
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replySetNotice({
+        type: "warn",
+        title: t("raid-set.character.notEligibleTitle", lang),
+        description: t("raid-set.character.notEligibleDescription", lang, {
+          characterName,
+          itemLevel: result.ineligibleItemLevel,
+          minItemLevel: raidMeta.minItemLevel,
+          raidLabel: localizedRaidLabel(raidKey),
+        }),
       });
       return;
     }
@@ -909,9 +861,7 @@ function createRaidSetCommand(deps) {
         }),
       });
     }
-    await interaction.reply({
-      embeds: [resultEmbed],
-      flags: MessageFlags.Ephemeral,
+    await replySetEmbed(resultEmbed, {
       // Belt-and-braces: even though ephemeral replies do not fire
       // notifications, suppress mention parse so the target user
       // never gets a phantom ping while the Manager is reviewing.

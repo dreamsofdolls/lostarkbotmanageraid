@@ -2,6 +2,7 @@ const RosterShare = require("../../models/RosterShare");
 const User = require("../../models/user");
 const { isManagerId } = require("../../services/access/manager");
 const { t, getUserLanguage } = require("../../services/i18n");
+const { replyEmbed } = require("../../utils/raid/common/shared");
 
 function buildAlertEmbed({ EmbedBuilder, UI, type = "info", title, description, footer }) {
   const colorKey = type === "error" ? "danger" : type === "success" ? "success" : "neutral";
@@ -32,6 +33,8 @@ function localizedAccessLevel(level, lang) {
 
 function createRaidShareCommand(deps) {
   const { EmbedBuilder, MessageFlags, UI } = deps;
+  const buildShareAlert = (options) => buildAlertEmbed({ EmbedBuilder, UI, ...options });
+  const replyShareAlert = (interaction, options) => replyEmbed(interaction, buildShareAlert(options));
 
   // ── /raid-share grant target:@B [permission:view|edit] ──────────────
   // Manager-only (env RAID_MANAGER_ID). Upserts a RosterShare so a
@@ -42,28 +45,18 @@ function createRaidShareCommand(deps) {
     const permission = interaction.options.getString("permission") || "edit";
 
     if (target.bot) {
-      await interaction.reply({
-        embeds: [buildAlertEmbed({
-          EmbedBuilder,
-          UI,
-          type: "error",
-          title: t("share.grant.botTargetTitle", lang),
-          description: t("share.grant.botTargetDescription", lang),
-        })],
-        flags: MessageFlags.Ephemeral,
+      await replyShareAlert(interaction, {
+        type: "error",
+        title: t("share.grant.botTargetTitle", lang),
+        description: t("share.grant.botTargetDescription", lang),
       });
       return;
     }
     if (target.id === interaction.user.id) {
-      await interaction.reply({
-        embeds: [buildAlertEmbed({
-          EmbedBuilder,
-          UI,
-          type: "error",
-          title: t("share.grant.selfTargetTitle", lang),
-          description: t("share.grant.selfTargetDescription", lang),
-        })],
-        flags: MessageFlags.Ephemeral,
+      await replyShareAlert(interaction, {
+        type: "error",
+        title: t("share.grant.selfTargetTitle", lang),
+        description: t("share.grant.selfTargetDescription", lang),
       });
       return;
     }
@@ -247,15 +240,10 @@ function createRaidShareCommand(deps) {
     const sub = interaction.options.getSubcommand();
 
     if ((sub === "grant" || sub === "revoke") && !isManagerId(interaction.user.id)) {
-      await interaction.reply({
-        embeds: [buildAlertEmbed({
-          EmbedBuilder,
-          UI,
-          type: "error",
-          title: t("share.auth.managerOnlyTitle", lang),
-          description: t("share.auth.managerOnlyDescription", lang),
-        })],
-        flags: MessageFlags.Ephemeral,
+      await replyShareAlert(interaction, {
+        type: "error",
+        title: t("share.auth.managerOnlyTitle", lang),
+        description: t("share.auth.managerOnlyDescription", lang),
       });
       return;
     }

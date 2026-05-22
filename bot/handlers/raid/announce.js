@@ -1,12 +1,11 @@
 "use strict";
 
-const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const { replyEmbed, replyNotice } = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
 
 function createRaidAnnounceCommand(deps) {
   const {
     EmbedBuilder,
-    MessageFlags,
     PermissionFlagsBits,
     UI,
     User,
@@ -30,16 +29,12 @@ async function handleRaidAnnounceCommand(interaction) {
     // that fire on a cron) are localized separately in the scheduler and
     // are out of scope for this handler migration.
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
+    const replyAnnounceNotice = (options) => replyNotice(interaction, EmbedBuilder, options);
     if (!guildId) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-announce.auth.serverOnlyTitle", lang),
-            description: t("raid-announce.auth.serverOnlyDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyAnnounceNotice({
+        type: "warn",
+        title: t("raid-announce.auth.serverOnlyTitle", lang),
+        description: t("raid-announce.auth.serverOnlyDescription", lang),
       });
       return;
     }
@@ -52,15 +47,10 @@ async function handleRaidAnnounceCommand(interaction) {
       !interaction.memberPermissions ||
       !interaction.memberPermissions.has(PermissionFlagsBits.ManageGuild)
     ) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "lock",
-            title: t("raid-announce.auth.manageGuildTitle", lang),
-            description: t("raid-announce.auth.manageGuildDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyAnnounceNotice({
+        type: "lock",
+        title: t("raid-announce.auth.manageGuildTitle", lang),
+        description: t("raid-announce.auth.manageGuildDescription", lang),
       });
       return;
     }
@@ -72,15 +62,10 @@ async function handleRaidAnnounceCommand(interaction) {
     // underneath. Reject typos explicitly so the interaction never falls
     // through to Discord's "application did not respond" timeout.
     if (!validActions.includes(action)) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-announce.invalid.actionTitle", lang),
-            description: t("raid-announce.invalid.actionDescription", lang, { action }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyAnnounceNotice({
+        type: "warn",
+        title: t("raid-announce.invalid.actionTitle", lang),
+        description: t("raid-announce.invalid.actionDescription", lang, { action }),
       });
       return;
     }
@@ -89,15 +74,10 @@ async function handleRaidAnnounceCommand(interaction) {
       // Discord's static choices should prevent this, but guard against
       // future drift (e.g. someone renames a registry key and forgets to
       // redeploy slash commands).
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-announce.invalid.typeTitle", lang),
-            description: t("raid-announce.invalid.typeDescription", lang, { type }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyAnnounceNotice({
+        type: "warn",
+        title: t("raid-announce.invalid.typeTitle", lang),
+        description: t("raid-announce.invalid.typeDescription", lang, { type }),
       });
       return;
     }
@@ -163,7 +143,7 @@ async function handleRaidAnnounceCommand(interaction) {
           { name: t("raid-announce.show.previewLabel", lang), value: previewText, inline: false },
         )
         .setTimestamp();
-      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      await replyEmbed(interaction, embed);
       return;
     }
     if (action === "on" || action === "off") {
@@ -172,18 +152,13 @@ async function handleRaidAnnounceCommand(interaction) {
         ? t("raid-announce.show.enabledOn", lang)
         : t("raid-announce.show.enabledOff", lang);
       if (current.enabled === enabled) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "info",
-              title: t("raid-announce.toggle.noopTitle", lang),
-              description: t("raid-announce.toggle.noopDescription", lang, {
-                type,
-                state: stateText,
-              }),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyAnnounceNotice({
+          type: "info",
+          title: t("raid-announce.toggle.noopTitle", lang),
+          description: t("raid-announce.toggle.noopDescription", lang, {
+            type,
+            state: stateText,
+          }),
         });
         return;
       }
@@ -192,26 +167,21 @@ async function handleRaidAnnounceCommand(interaction) {
         { $set: { [`announcements.${subdocKey}.enabled`]: enabled } },
         { upsert: true, setDefaultsOnInsert: true }
       );
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "success",
-            title: t("raid-announce.toggle.successTitle", lang),
-            description: [
-              t("raid-announce.toggle.successLineType", lang, { type, typeLabel }),
-              t("raid-announce.toggle.successLineState", lang, { state: stateText }),
-              t(
-                enabled
-                  ? "raid-announce.toggle.successLineImpactOn"
-                  : "raid-announce.toggle.successLineImpactOff",
-                lang
-              ),
-              "",
-              t("raid-announce.toggle.successLineCheck", lang),
-            ].join("\n"),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyAnnounceNotice({
+        type: "success",
+        title: t("raid-announce.toggle.successTitle", lang),
+        description: [
+          t("raid-announce.toggle.successLineType", lang, { type, typeLabel }),
+          t("raid-announce.toggle.successLineState", lang, { state: stateText }),
+          t(
+            enabled
+              ? "raid-announce.toggle.successLineImpactOn"
+              : "raid-announce.toggle.successLineImpactOff",
+            lang
+          ),
+          "",
+          t("raid-announce.toggle.successLineCheck", lang),
+        ].join("\n"),
       });
       return;
     }
@@ -225,50 +195,35 @@ async function handleRaidAnnounceCommand(interaction) {
         const overridableList = announcementOverridableTypeKeys()
           .map((k) => `\`${k}\``)
           .join(", ");
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-announce.setChannel.notOverridableTitle", lang),
-              description: t("raid-announce.setChannel.notOverridableDescription", lang, {
-                type,
-                typeLabel,
-                overridableList,
-              }),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyAnnounceNotice({
+          type: "warn",
+          title: t("raid-announce.setChannel.notOverridableTitle", lang),
+          description: t("raid-announce.setChannel.notOverridableDescription", lang, {
+            type,
+            typeLabel,
+            overridableList,
+          }),
         });
         return;
       }
       if (!channel) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-announce.setChannel.missingChannelTitle", lang),
-              description: t("raid-announce.setChannel.missingChannelDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyAnnounceNotice({
+          type: "warn",
+          title: t("raid-announce.setChannel.missingChannelTitle", lang),
+          description: t("raid-announce.setChannel.missingChannelDescription", lang),
         });
         return;
       }
       const botMember = interaction.guild?.members?.me;
       const missing = getMissingAnnouncementChannelPermissions(channel, botMember);
       if (missing.length > 0) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "lock",
-              title: t("raid-announce.setChannel.missingPermsTitle", lang),
-              description: t("raid-announce.setChannel.missingPermsDescription", lang, {
-                channelId: channel.id,
-                missing: missing.join(", "),
-              }),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyAnnounceNotice({
+          type: "lock",
+          title: t("raid-announce.setChannel.missingPermsTitle", lang),
+          description: t("raid-announce.setChannel.missingPermsDescription", lang, {
+            channelId: channel.id,
+            missing: missing.join(", "),
+          }),
         });
         return;
       }
@@ -277,50 +232,35 @@ async function handleRaidAnnounceCommand(interaction) {
         { $set: { [`announcements.${subdocKey}.channelId`]: channel.id } },
         { upsert: true, setDefaultsOnInsert: true }
       );
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "success",
-            title: t("raid-announce.setChannel.successTitle", lang),
-            description: [
-              t("raid-announce.setChannel.successLineIntro", lang),
-              "",
-              t("raid-announce.setChannel.successLineType", lang, { type, typeLabel }),
-              t("raid-announce.setChannel.successLineChannel", lang, { channelId: channel.id }),
-              t("raid-announce.setChannel.successLineImpact", lang),
-              "",
-              t("raid-announce.setChannel.successLineRevert", lang, { type }),
-            ].join("\n"),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyAnnounceNotice({
+        type: "success",
+        title: t("raid-announce.setChannel.successTitle", lang),
+        description: [
+          t("raid-announce.setChannel.successLineIntro", lang),
+          "",
+          t("raid-announce.setChannel.successLineType", lang, { type, typeLabel }),
+          t("raid-announce.setChannel.successLineChannel", lang, { channelId: channel.id }),
+          t("raid-announce.setChannel.successLineImpact", lang),
+          "",
+          t("raid-announce.setChannel.successLineRevert", lang, { type }),
+        ].join("\n"),
       });
       return;
     }
     if (action === "clear-channel") {
       if (!overridable) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-announce.clearChannel.notOverridableTitle", lang),
-              description: t("raid-announce.clearChannel.notOverridableDescription", lang, { type }),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyAnnounceNotice({
+          type: "warn",
+          title: t("raid-announce.clearChannel.notOverridableTitle", lang),
+          description: t("raid-announce.clearChannel.notOverridableDescription", lang, { type }),
         });
         return;
       }
       if (!current.channelId) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "info",
-              title: t("raid-announce.clearChannel.noOverrideTitle", lang),
-              description: t("raid-announce.clearChannel.noOverrideDescription", lang, { type }),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyAnnounceNotice({
+          type: "info",
+          title: t("raid-announce.clearChannel.noOverrideTitle", lang),
+          description: t("raid-announce.clearChannel.noOverrideDescription", lang, { type }),
         });
         return;
       }
@@ -328,23 +268,18 @@ async function handleRaidAnnounceCommand(interaction) {
         { guildId },
         { $set: { [`announcements.${subdocKey}.channelId`]: null } }
       );
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "success",
-            title: t("raid-announce.clearChannel.successTitle", lang),
-            description: [
-              t("raid-announce.clearChannel.successLineIntro", lang),
-              "",
-              t("raid-announce.clearChannel.successLineType", lang, { type, typeLabel }),
-              t("raid-announce.clearChannel.successLineChannel", lang),
-              t("raid-announce.clearChannel.successLineImpact", lang),
-              "",
-              t("raid-announce.clearChannel.successLineRevert", lang),
-            ].join("\n"),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyAnnounceNotice({
+        type: "success",
+        title: t("raid-announce.clearChannel.successTitle", lang),
+        description: [
+          t("raid-announce.clearChannel.successLineIntro", lang),
+          "",
+          t("raid-announce.clearChannel.successLineType", lang, { type, typeLabel }),
+          t("raid-announce.clearChannel.successLineChannel", lang),
+          t("raid-announce.clearChannel.successLineImpact", lang),
+          "",
+          t("raid-announce.clearChannel.successLineRevert", lang),
+        ].join("\n"),
       });
       return;
     }

@@ -463,6 +463,16 @@ test("replyNotice passes through extra reply payload fields", async () => {
   assert.deepEqual(calls[0].components, components);
 });
 
+test("replyEmbed wraps an existing embed with the same ephemeral defaults", async () => {
+  const { replyEmbed } = require("../bot/utils/raid/common/shared");
+  const calls = [];
+  const interaction = { reply: async (payload) => calls.push(payload) };
+  const embed = { existing: true };
+  await replyEmbed(interaction, embed);
+  assert.equal(calls[0].flags, 64);
+  assert.deepEqual(calls[0].embeds, [embed]);
+});
+
 test("followUpNotice wraps interaction.followUp with the same notice payload shape", async () => {
   const { followUpNotice } = require("../bot/utils/raid/common/shared");
   const calls = [];

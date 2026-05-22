@@ -265,6 +265,20 @@ function replyNotice(interaction, EmbedBuilder, options, { ephemeral = true, ...
 }
 
 /**
+ * Reply with an already-built embed, ephemeral by default. Use this for
+ * richer custom embeds that do not fit the notice shape but still repeat
+ * the same `embeds + flags` Discord payload boilerplate.
+ */
+function replyEmbed(interaction, embed, { ephemeral = true, ...extras } = {}) {
+  const payload = {
+    embeds: [embed],
+    ...extras,
+  };
+  if (ephemeral) payload.flags = MESSAGE_FLAG_EPHEMERAL;
+  return interaction.reply(payload);
+}
+
+/**
  * Follow up with a notice embed, ephemeral by default. Mirrors
  * replyNotice for component flows that already used deferUpdate and need
  * a lightweight toast without re-rendering the source message.
@@ -358,6 +372,7 @@ module.exports = {
   formatProgressTotals,
   formatGold,
   replyNotice,
+  replyEmbed,
   followUpNotice,
   editNotice,
   updateNotice,
