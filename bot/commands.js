@@ -736,6 +736,8 @@ const raidChannelMonitorService = createRaidChannelMonitorService({
   RAID_REQUIREMENT_MAP,
   getGatesForRaid,
   applyRaidSetForDiscordId,
+  applyRaidSetBatchForDiscordId,
+  getAccessibleAccounts,
   getAnnouncementsConfig,
   normalizeName,
 });
