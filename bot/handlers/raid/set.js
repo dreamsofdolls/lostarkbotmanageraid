@@ -576,7 +576,7 @@ function createRaidSetCommand(deps) {
       for (const entry of list) {
         const result = await applyRaidSetToLoadedUserDoc(userDoc, {
           discordId,
-          executorId: null,
+          executorId: entry.executorId || null,
           characterName: entry.characterName,
           rosterName: entry.rosterName || null,
           raidMeta: entry.raidMeta,

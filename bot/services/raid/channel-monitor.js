@@ -1,9 +1,173 @@
 "use strict";
 
 const { getArtistEmoji } = require("../../models/ArtistEmoji");
-const { findAccessibleCharacter } = require("../access/access-control");
+const {
+  getAccessibleAccounts: defaultGetAccessibleAccounts,
+} = require("../access/access-control");
 const User = require("../../models/user");
 const { t, getUserLanguage, getGuildLanguage } = require("../i18n");
+
+function getAccessibleCharacterCandidates(character) {
+  return [character?.charName, character?.name, character?.displayName]
+    .filter(Boolean)
+    .map((s) => String(s).trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function findAccessibleCharacterInAccounts(accessibleAccounts, charName) {
+  const target = String(charName || "").trim().toLowerCase();
+  if (!target) return null;
+  for (const entry of accessibleAccounts || []) {
+    const chars = Array.isArray(entry.account?.characters) ? entry.account.characters : [];
+    for (const character of chars) {
+      if (getAccessibleCharacterCandidates(character).includes(target)) {
+        return { ...entry, character };
+      }
+    }
+  }
+  return null;
+}
+
+async function resolveRaidChannelWritePlans({
+  authorId,
+  charNames,
+  getAccessibleAccounts = defaultGetAccessibleAccounts,
+  logger = console,
+}) {
+  let accessibleAccounts = null;
+  try {
+    accessibleAccounts = await getAccessibleAccounts(authorId);
+  } catch (lookupErr) {
+    logger.warn?.(
+      `[raid-channel] getAccessibleAccounts failed for author ${authorId}:`,
+      lookupErr?.message || lookupErr,
+    );
+  }
+
+  return (Array.isArray(charNames) ? charNames : []).map((charName, index) => {
+    const hit = findAccessibleCharacterInAccounts(accessibleAccounts, charName);
+    const plan = {
+      index,
+      charName,
+      discordId: authorId,
+      executorId: null,
+      rosterName: null,
+    };
+    if (hit && !hit.isOwn) {
+      plan.discordId = hit.ownerDiscordId;
+      plan.executorId = authorId;
+      plan.rosterName = hit.accountName;
+    }
+    return plan;
+  });
+}
+
+function getWritePlanSegmentKey(plan) {
+  return `${plan.discordId || ""}\x1f${plan.executorId || ""}`;
+}
+
+function buildWritePlanSegments(plans) {
+  const segments = [];
+  for (const plan of plans || []) {
+    const key = getWritePlanSegmentKey(plan);
+    const previous = segments[segments.length - 1];
+    if (previous && previous.key === key) {
+      previous.plans.push(plan);
+    } else {
+      segments.push({ key, plans: [plan] });
+    }
+  }
+  return segments;
+}
+
+async function applyRaidChannelWritePlans({
+  plans,
+  raidMeta,
+  statusType,
+  effectiveGates,
+  applyRaidSetForDiscordId,
+  applyRaidSetBatchForDiscordId = null,
+  logger = console,
+}) {
+  const list = Array.isArray(plans) ? plans : [];
+  const results = new Array(list.length);
+
+  const assignResult = (plan, result) => {
+    results[plan.index] = { charName: plan.charName, ...result };
+    if (plan.executorId) {
+      logger.log?.(
+        `[raid-channel] share-write executor=${plan.executorId} owner=${plan.discordId} char=${plan.charName} raid=${raidMeta.raidKey}_${raidMeta.modeKey}`,
+      );
+    }
+  };
+
+  const assignError = (plan, err) => {
+    logger.error?.(`[raid-channel] write for "${plan.charName}" failed:`, err?.message || err);
+    results[plan.index] = {
+      charName: plan.charName,
+      error: err?.message || String(err),
+      matched: false,
+      updated: false,
+      alreadyComplete: false,
+    };
+  };
+
+  const runSingle = async (plan) => {
+    try {
+      const result = await applyRaidSetForDiscordId({
+        discordId: plan.discordId,
+        executorId: plan.executorId,
+        characterName: plan.charName,
+        rosterName: plan.rosterName,
+        raidMeta,
+        statusType,
+        effectiveGates,
+      });
+      assignResult(plan, result);
+    } catch (err) {
+      assignError(plan, err);
+    }
+  };
+
+  for (const segment of buildWritePlanSegments(list)) {
+    const segmentPlans = segment.plans;
+    if (
+      segmentPlans.length > 1 &&
+      typeof applyRaidSetBatchForDiscordId === "function"
+    ) {
+      try {
+        const batchResults = await applyRaidSetBatchForDiscordId({
+          discordId: segmentPlans[0].discordId,
+          entries: segmentPlans.map((plan) => ({
+            executorId: plan.executorId,
+            characterName: plan.charName,
+            rosterName: plan.rosterName,
+            raidMeta,
+            statusType,
+            effectiveGates,
+          })),
+        });
+        for (let i = 0; i < segmentPlans.length; i += 1) {
+          assignResult(segmentPlans[i], batchResults?.[i] || {});
+        }
+      } catch (err) {
+        for (const plan of segmentPlans) {
+          assignError(plan, err);
+        }
+      }
+    } else {
+      for (const plan of segmentPlans) {
+        await runSingle(plan);
+      }
+    }
+
+    if (segmentPlans.some((plan) => results[plan.index]?.noRoster)) {
+      break;
+    }
+  }
+
+  return results.filter(Boolean);
+}
 
 function createRaidChannelMonitorService({
   PermissionFlagsBits,
@@ -13,6 +177,8 @@ function createRaidChannelMonitorService({
   RAID_REQUIREMENT_MAP,
   getGatesForRaid,
   applyRaidSetForDiscordId,
+  applyRaidSetBatchForDiscordId = null,
+  getAccessibleAccounts = defaultGetAccessibleAccounts,
   getAnnouncementsConfig,
   // Injected so checkUserMonitorCooldown / clearUserMonitorCooldown can fold
   // message.content into a stable dedup key. Missing this dep in the compose
@@ -786,70 +952,25 @@ function createRaidChannelMonitorService({
       const gateIndex = allGates.indexOf(gate);
       effectiveGates = gateIndex >= 0 ? allGates.slice(0, gateIndex + 1) : [gate];
     }
-    // Process each character in the message. One message → one cooldown
-    // slot regardless of how many chars the user lists; write path runs
-    // per character with shared raid+gate target.
-    const results = [];
-    let hadNoRoster = false;
-    for (const charName of charNames) {
-      try {
-        // Lookup char in author's accessible pool (own + share-received).
-        // When the char belongs to a shared roster (Manager A's roster
-        // shared to author B via /raid-share grant), route the write to
-        // the owner's User doc but stamp executorId=author so the
-        // applyRaidSetForDiscordId auth check picks up the share-edit
-        // path. Falls back to author's own discordId when no share hit
-        // OR the char isn't in any accessible roster (existing
-        // "no roster" / "char not found" behaviors stay intact).
-        let targetDiscordId = message.author.id;
-        let executorId = null;
-        let resolvedRosterName = null;
-        try {
-          const sharedHit = await findAccessibleCharacter(
-            message.author.id,
-            charName,
-          );
-          if (sharedHit && !sharedHit.isOwn) {
-            targetDiscordId = sharedHit.ownerDiscordId;
-            executorId = message.author.id;
-            resolvedRosterName = sharedHit.accountName;
-          }
-        } catch (lookupErr) {
-          console.warn(
-            `[raid-channel] findAccessibleCharacter failed for "${charName}":`,
-            lookupErr?.message || lookupErr,
-          );
-        }
-        const r = await applyRaidSetForDiscordId({
-          discordId: targetDiscordId,
-          executorId,
-          characterName: charName,
-          rosterName: resolvedRosterName,
-          raidMeta,
-          statusType,
-          effectiveGates,
-        });
-        if (executorId) {
-          console.log(
-            `[raid-channel] share-write executor=${executorId} owner=${targetDiscordId} char=${charName} raid=${raidMeta.raidKey}_${raidMeta.modeKey}`,
-          );
-        }
-        results.push({ charName, ...r });
-        if (r.noRoster) {
-          hadNoRoster = true;
-          break; // no point checking more chars when the user has no roster at all
-        }
-      } catch (err) {
-        console.error(`[raid-channel] write for "${charName}" failed:`, err?.message || err);
-        results.push({
-          charName,
-          error: err?.message || String(err),
-          matched: false,
-          updated: false,
-          alreadyComplete: false,
-        });
-      }
-    }
+    // Resolve shares once per message, then batch consecutive writes against
+    // the same owner while preserving noRoster stop order. One message still
+    // consumes one cooldown slot no matter how many chars it lists.
+    const writePlans = await resolveRaidChannelWritePlans({
+      authorId: message.author.id,
+      charNames,
+      getAccessibleAccounts,
+      logger: console,
+    });
+    const results = await applyRaidChannelWritePlans({
+      plans: writePlans,
+      raidMeta,
+      statusType,
+      effectiveGates,
+      applyRaidSetForDiscordId,
+      applyRaidSetBatchForDiscordId,
+      logger: console,
+    });
+    const hadNoRoster = results.some((r) => r.noRoster);
     if (hadNoRoster) {
       await postPersistentHint(
         message,
@@ -1239,4 +1360,10 @@ function createRaidChannelMonitorService({
 
 module.exports = {
   createRaidChannelMonitorService,
+  _test: {
+    findAccessibleCharacterInAccounts,
+    resolveRaidChannelWritePlans,
+    applyRaidChannelWritePlans,
+    buildWritePlanSegments,
+  },
 };
