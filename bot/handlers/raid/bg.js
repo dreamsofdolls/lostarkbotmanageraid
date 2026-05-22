@@ -394,6 +394,150 @@ function formatAssignmentLines(assignments) {
     .join("\n");
 }
 
+function formatImageSlotLines(images) {
+  return images
+    .slice(0, RAID_BG_MAX_IMAGES)
+    .map((image, index) => {
+      const buffer = normalizeStoredBuffer(image.imageData);
+      const sizeKb = buffer?.length ? (buffer.length / 1024).toFixed(0) : "?";
+      const filename = formatInlineCodeText(
+        image.originalFilename,
+        `background-${index + 1}`,
+        80,
+      );
+      return `#${index + 1} ${filename} - \`${image.width || "?"}x${image.height || "?"} · ${sizeKb} KB\``;
+    })
+    .join("\n");
+}
+
+function clampEmbedTitle(value, max = 240) {
+  const text = String(value || "background").replace(/\s+/g, " ").trim();
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+}
+
+function formatInlineCodeText(value, fallback, max = 80) {
+  return `\`${clampEmbedTitle(value || fallback, max).replace(/`/g, "'")}\``;
+}
+
+function buildImagePreviewEmbeds({
+  images,
+  AttachmentBuilder,
+  EmbedBuilder,
+  namePrefix,
+  color,
+}) {
+  const files = [];
+  const embeds = [];
+
+  images.slice(0, RAID_BG_MAX_IMAGES).forEach((image, index) => {
+    const buffer = normalizeStoredBuffer(image.imageData);
+    if (!buffer) return;
+
+    const filename = `${namePrefix}-${index + 1}.jpg`;
+    files.push(new AttachmentBuilder(buffer, { name: filename }));
+    embeds.push(
+      new EmbedBuilder()
+        .setTitle(clampEmbedTitle(`#${index + 1} · ${image.originalFilename || "background"}`))
+        .setColor(color)
+        .setImage(`attachment://${filename}`),
+    );
+  });
+
+  return { files, embeds };
+}
+
+function buildBackgroundPreviewPayload({
+  bg,
+  images,
+  assignments,
+  AttachmentBuilder,
+  EmbedBuilder,
+  lang,
+  title,
+  description,
+  footer,
+  color = 0x5865f2,
+  namePrefix = "background-current",
+}) {
+  const updatedAtTs = bg?.updatedAt
+    ? Math.floor(new Date(bg.updatedAt).getTime() / 1000)
+    : null;
+  const assignmentLines = formatAssignmentLines(assignments);
+  const slotLines = formatImageSlotLines(images);
+  const fields = [
+    {
+      name: t("raidBg.view.imagesLabel", lang),
+      value: t("raidBg.view.imagesValue", lang, {
+        count: images.length,
+        mode: t(`raidBg.set.mode.${bg?.mode || "even"}`, lang),
+      }),
+      inline: true,
+    },
+    {
+      name: t("raidBg.view.uploadLabel", lang),
+      value: updatedAtTs ? `<t:${updatedAtTs}:R>` : t("raidBg.view.uploadUnknown", lang),
+      inline: true,
+    },
+  ];
+
+  if (slotLines) {
+    fields.push({
+      name: t("raidBg.view.slotsLabel", lang),
+      value: slotLines,
+      inline: false,
+    });
+  }
+  if (assignmentLines) {
+    fields.push({
+      name: t("raidBg.view.assignmentLabel", lang),
+      value: assignmentLines,
+      inline: false,
+    });
+  }
+
+  const preview = buildImagePreviewEmbeds({
+    images,
+    AttachmentBuilder,
+    EmbedBuilder,
+    namePrefix,
+    color,
+  });
+
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setTitle(title)
+        .setDescription(description)
+        .addFields(fields)
+        .setFooter({ text: footer })
+        .setColor(color),
+      ...preview.embeds,
+    ],
+    files: preview.files,
+  };
+}
+
+function compactAssignmentsAfterRemove(assignments, removedIndex, imageCount) {
+  if (!Array.isArray(assignments) || assignments.length === 0 || imageCount <= 0) return [];
+  return assignments
+    .filter((entry) => entry && (entry.accountName || entry.accountKey))
+    .map((entry) => {
+      const current = Number.isInteger(entry.imageIndex) ? entry.imageIndex : 0;
+      let imageIndex = current;
+      if (current === removedIndex) {
+        imageIndex = Math.min(removedIndex, imageCount - 1);
+      } else if (current > removedIndex) {
+        imageIndex = current - 1;
+      }
+      if (imageIndex < 0 || imageIndex >= imageCount) imageIndex = 0;
+      return {
+        accountName: entry.accountName || "",
+        accountKey: entry.accountKey || normalizeAccountKey(entry.accountName),
+        imageIndex,
+      };
+    });
+}
+
 async function handleSet({ interaction, deps, lang }) {
   const { User, getAccessibleAccounts, AttachmentBuilder, EmbedBuilder, MessageFlags } = deps;
   const attachments = collectAttachments(interaction);
@@ -533,11 +677,9 @@ async function handleSet({ interaction, deps, lang }) {
 
   clearBackgroundCache(interaction.user.id);
 
-  const first = processed[0];
-  const previewName = "background-preview-1.jpg";
-  const previewFile = new AttachmentBuilder(first.resized.buffer, { name: previewName });
   const totalKb = images.reduce((sum, image) => sum + image.sizeBytes, 0) / 1024;
   const assignmentLines = formatAssignmentLines(assignments);
+  const slotLines = formatImageSlotLines(images);
   const fields = [
     {
       name: t("raidBg.set.imagesLabel", lang),
@@ -555,10 +697,17 @@ async function handleSet({ interaction, deps, lang }) {
     },
     {
       name: t("raidBg.set.dimsLabel", lang),
-      value: `\`${first.validated.width}x${first.validated.height}\` -> \`${first.resized.width}x${first.resized.height}\``,
+      value: `\`${RAID_BG_OUTPUT_WIDTH}x${RAID_BG_OUTPUT_HEIGHT}\``,
       inline: true,
     },
   ];
+  if (slotLines) {
+    fields.push({
+      name: t("raidBg.view.slotsLabel", lang),
+      value: slotLines,
+      inline: false,
+    });
+  }
   if (assignmentLines) {
     fields.push({
       name: t("raidBg.set.assignmentLabel", lang),
@@ -567,6 +716,14 @@ async function handleSet({ interaction, deps, lang }) {
     });
   }
 
+  const preview = buildImagePreviewEmbeds({
+    images,
+    AttachmentBuilder,
+    EmbedBuilder,
+    namePrefix: "background-preview",
+    color: 0x57f287,
+  });
+
   await interaction.editReply({
     embeds: [
       new EmbedBuilder()
@@ -574,10 +731,10 @@ async function handleSet({ interaction, deps, lang }) {
         .setDescription(t("raidBg.set.successDescription", lang))
         .addFields(fields)
         .setFooter({ text: t("raidBg.set.footer", lang) })
-        .setColor(0x57f287)
-        .setImage(`attachment://${previewName}`),
+        .setColor(0x57f287),
+      ...preview.embeds,
     ],
-    files: [previewFile],
+    files: preview.files,
   });
 }
 
@@ -599,68 +756,28 @@ async function handleView({ interaction, deps, lang }) {
     return;
   }
 
-  const preview = images[0];
-  const previewName = "background-current-1.jpg";
-  const previewBuffer = normalizeStoredBuffer(preview.imageData);
-  const previewFile = new AttachmentBuilder(previewBuffer, { name: previewName });
-  const updatedAtTs = bg.updatedAt
-    ? Math.floor(new Date(bg.updatedAt).getTime() / 1000)
-    : null;
-  const sizeKb = previewBuffer.length ? (previewBuffer.length / 1024).toFixed(0) : "?";
-  const assignmentLines = formatAssignmentLines(bg.assignments);
-  const fields = [
-    {
-      name: t("raidBg.view.fileLabel", lang),
-      value: `\`${preview.originalFilename || "background"}\``,
-      inline: true,
-    },
-    {
-      name: t("raidBg.view.dimsLabel", lang),
-      value: `\`${preview.width || "?"}x${preview.height || "?"} · ${sizeKb} KB\``,
-      inline: true,
-    },
-    {
-      name: t("raidBg.view.imagesLabel", lang),
-      value: t("raidBg.view.imagesValue", lang, {
-        count: images.length,
-        mode: t(`raidBg.set.mode.${bg.mode || "even"}`, lang),
-      }),
-      inline: true,
-    },
-    {
-      name: t("raidBg.view.uploadLabel", lang),
-      value: updatedAtTs ? `<t:${updatedAtTs}:R>` : t("raidBg.view.uploadUnknown", lang),
-      inline: true,
-    },
-  ];
-  if (assignmentLines) {
-    fields.push({
-      name: t("raidBg.view.assignmentLabel", lang),
-      value: assignmentLines,
-      inline: false,
-    });
-  }
-
-  await interaction.editReply({
-    embeds: [
-      new EmbedBuilder()
-        .setTitle(t("raidBg.view.currentTitle", lang))
-        .setDescription(t("raidBg.view.currentDescription", lang))
-        .addFields(fields)
-        .setFooter({ text: t("raidBg.view.footer", lang) })
-        .setColor(0x5865f2)
-        .setImage(`attachment://${previewName}`),
-    ],
-    files: [previewFile],
-  });
+  await interaction.editReply(buildBackgroundPreviewPayload({
+    bg,
+    images,
+    assignments: bg.assignments,
+    AttachmentBuilder,
+    EmbedBuilder,
+    lang,
+    title: t("raidBg.view.currentTitle", lang),
+    description: t("raidBg.view.currentDescription", lang),
+    footer: t("raidBg.view.footer", lang),
+  }));
 }
 
 async function handleRemove({ interaction, deps, lang }) {
-  const { EmbedBuilder, MessageFlags } = deps;
+  const { AttachmentBuilder, EmbedBuilder, MessageFlags } = deps;
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const imageOption = typeof interaction.options.getInteger === "function"
+    ? interaction.options.getInteger("image", false)
+    : null;
 
   const existing = await UserBackground.findOne({ discordId: interaction.user.id })
-    .select("_id")
+    .select("_id mode images assignments imageData updatedAt")
     .lean();
   if (!existing) {
     await interaction.editReply({
@@ -671,6 +788,111 @@ async function handleRemove({ interaction, deps, lang }) {
           .setColor(0x5865f2),
       ],
     });
+    return;
+  }
+
+  const images = getStoredImages(existing);
+  if (imageOption != null) {
+    const removeIndex = imageOption - 1;
+    if (!Number.isInteger(removeIndex) || removeIndex < 0 || removeIndex >= images.length) {
+      await interaction.editReply(buildBackgroundPreviewPayload({
+        bg: existing,
+        images,
+        assignments: existing.assignments,
+        AttachmentBuilder,
+        EmbedBuilder,
+        lang,
+        title: t("raidBg.remove.invalidImageTitle", lang),
+        description: t("raidBg.remove.invalidImageDescription", lang, {
+          requested: imageOption,
+          count: Math.max(images.length, 1),
+        }),
+        footer: t("raidBg.view.footer", lang),
+        color: 0xfee75c,
+      }));
+      return;
+    }
+
+    if (images.length <= 1) {
+      await UserBackground.deleteOne({ discordId: interaction.user.id });
+      clearBackgroundCache(interaction.user.id);
+      await interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle(t("raidBg.remove.successTitle", lang))
+            .setDescription(t("raidBg.remove.successDescription", lang))
+            .setColor(0x99aab5),
+        ],
+      });
+      return;
+    }
+
+    const remainingImages = images.filter((_image, index) => index !== removeIndex);
+    const assignments = compactAssignmentsAfterRemove(
+      existing.assignments,
+      removeIndex,
+      remainingImages.length,
+    );
+
+    try {
+      await UserBackground.findOneAndUpdate(
+        { discordId: interaction.user.id },
+        {
+          $set: {
+            discordId: interaction.user.id,
+            mode: existing.mode || "even",
+            images: remainingImages,
+            assignments,
+          },
+          $unset: {
+            imageData: "",
+            mime: "",
+            width: "",
+            height: "",
+            sizeBytes: "",
+            originalWidth: "",
+            originalHeight: "",
+            originalFilename: "",
+            originalMime: "",
+            storageQuality: "",
+          },
+        },
+        { new: true },
+      );
+    } catch (err) {
+      console.error("[raid-bg] slot removal failed:", err?.message || err);
+      await interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle(t("raidBg.set.saveFailedTitle", lang))
+            .setDescription(t("raidBg.errors.storageFailed", lang, {
+              message: err?.message || String(err),
+            }))
+            .setColor(0xed4245),
+        ],
+      });
+      return;
+    }
+
+    clearBackgroundCache(interaction.user.id);
+    await interaction.editReply(buildBackgroundPreviewPayload({
+      bg: {
+        ...existing,
+        mode: existing.mode || "even",
+        updatedAt: new Date(),
+      },
+      images: remainingImages,
+      assignments,
+      AttachmentBuilder,
+      EmbedBuilder,
+      lang,
+      title: t("raidBg.remove.partialSuccessTitle", lang),
+      description: t("raidBg.remove.partialSuccessDescription", lang, {
+        index: imageOption,
+      }),
+      footer: t("raidBg.view.footer", lang),
+      color: 0x99aab5,
+    }));
     return;
   }
 

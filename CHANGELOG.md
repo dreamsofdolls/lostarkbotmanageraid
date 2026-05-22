@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-22 (`/raid-bg` slot preview + single-slot remove)
+
+### Changed
+- `/raid-bg view` now shows every saved background slot with a preview image, not only slot #1, so users can identify which image maps to which roster slot.
+- `/raid-bg remove image:<1-4>` removes one saved slot and keeps the remaining previews visible; omitting `image` still clears the whole background pool as before.
+
 ## 2026-05-18 (Drop dead canvas-card renderer)
 
 ### Removed

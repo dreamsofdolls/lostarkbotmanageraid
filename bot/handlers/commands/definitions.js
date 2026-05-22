@@ -756,11 +756,23 @@ function createRaidCommandDefinitions({
     .addSubcommand((sub) =>
       sub
         .setName("remove")
-        .setDescription("Remove your background · revert /raid-status to the text embed")
+        .setDescription("Remove one saved background slot, or clear all backgrounds")
         .setDescriptionLocalizations({
-          vi: "Xoá background · /raid-status quay về text embed",
-          ja: "背景を削除 · /raid-status をテキスト埋め込みに戻す",
-        }),
+          vi: "Xoá một slot background đã lưu, hoặc xoá tất cả background",
+          ja: "保存済み背景スロットを1つ削除、または全背景を削除",
+        })
+        .addIntegerOption((opt) =>
+          opt
+            .setName("image")
+            .setDescription("Image slot to remove (1-4); leave empty to clear all")
+            .setDescriptionLocalizations({
+              vi: "Slot ảnh cần xoá (1-4); bỏ trống để xoá tất cả",
+              ja: "削除する画像スロット (1-4)。空欄なら全て削除",
+            })
+            .setRequired(false)
+            .setMinValue(1)
+            .setMaxValue(4)
+        ),
     );
 
   const raidLanguageCommand = new SlashCommandBuilder()

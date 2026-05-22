@@ -1465,8 +1465,8 @@ module.exports = {
           "アニメアート / キャラクターレンダー / 壁紙を1-4枚アップロードすると、アーティストが roster ごとに割り当てて、/raid-status embed の画像として表示しますわ～ オプトイン制ですの、設定してないユーザーはテキスト embed のままで何も変わりませんわ。",
           "",
           "**set image:<file> [image_2] [image_3] [image_4] [mode]** — 見えている roster 数まで、最大4枚アップロードできますの。各画像は 8 MB まで、800x600 以上、PNG / JPG / WEBP / SVG を受け付けますわ。保存時に均等割り当て、またはランダム割り当てを選べますの。共有 roster でも閲覧者ご自身の pool を使いますわ。",
-          "**view** — 現在保存中の background pool、roster map、容量をアーティストがお見せしますの。",
-          "**remove** — 保存バッファを消して、`/raid-status` を標準テキスト embed に戻しますわ。",
+          "**view** — 現在保存中の background slot を全て preview 付きで表示し、roster map と容量もお見せしますの。",
+          "**remove [image:1-4]** — `image` を渡すと指定 slot だけ削除、空欄なら background pool 全体を消して `/raid-status` を標準テキスト embed に戻しますわ。",
           "",
           "**保存場所**: バイトデータは bot のデータベースに直接書き込まれますわ (専用 collection · User doc には載せませんの)。管理者の設定や rehost channel は不要 · アップロードしてすぐ使えますの♪ 各保存画像は 2 MB 以下なので、4枚でも Mongo document limit に収まりますわ。メモリ内 LRU キャッシュがリピート描画を吸収しますの。",
           "**クッキリ + キレイ**: 保存前に 16:9 (1600x900 JPEG) フレームに正規化しますわ · 自身の cover-fit バックプレートが背景を埋めて、source 画像は contain-fit で中央に丸ごと配置されますの。縦長や変則比率でも Discord embed の横幅いっぱいに表示されて、クロップされませんわ～",
@@ -1763,6 +1763,7 @@ module.exports = {
       imagesValue: "{count} 枚 · {mode}",
       uploadLabel: "🕐 アップロード",
       uploadUnknown: "不明",
+      slotsLabel: "🖼️ 保存済みスロット",
       assignmentLabel: "📌 Roster map",
       footer: "/raid-bg set で別の画像へ · /raid-bg remove で外す",
     },
@@ -1772,6 +1773,12 @@ module.exports = {
       successTitle: "🗑️ Background をしまっておきましたわ",
       successDescription:
         "`/raid-status` の標準テキスト embed に戻しましたの。また background が欲しくなったら `/raid-bg set` でアーティストに渡してくださいませ～♪",
+      invalidImageTitle: "⚠️ その background slot は見つかりませんわ",
+      invalidImageDescription:
+        "Slot #{requested} は保存されていませんの。**1** から **{count}** を選ぶか、`image` を空欄にすると全部削除できますわ。",
+      partialSuccessTitle: "🗑️ Background slot を削除しましたわ",
+      partialSuccessDescription:
+        "Slot **#{index}** を削除しましたの。残っている slot は下に並べておきますわ。",
     },
   },
 };
