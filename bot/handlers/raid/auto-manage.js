@@ -1,6 +1,12 @@
 "use strict";
 
-const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const {
+  deferEphemeralReply,
+  editEmbed,
+  editNotice,
+  replyEmbed,
+  replyNotice,
+} = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
 const {
   setLocalSyncEnabled,
@@ -18,7 +24,6 @@ function createRaidAutoManageCommand(deps) {
     ButtonBuilder,
     ButtonStyle,
     ComponentType,
-    MessageFlags,
     UI,
     User,
     saveWithRetry,
@@ -45,6 +50,10 @@ function createRaidAutoManageCommand(deps) {
     // embed. DM emitters resolve their own (recipient's) lang separately
     // via commitAutoManageOn / buildAutoManage* helpers further down.
     const lang = await getUserLanguage(discordId, { UserModel: User });
+    const replyAutoNotice = (options, extras) => replyNotice(interaction, EmbedBuilder, options, extras);
+    const replyAutoEmbed = (embed, extras) => replyEmbed(interaction, embed, extras);
+    const editAutoNotice = (options, extras) => editNotice(interaction, EmbedBuilder, options, extras);
+    const editAutoEmbed = (embed, extras) => editEmbed(interaction, embed, extras);
     const action = interaction.options.getString("action", true);
     // Autocomplete only offers the valid action set, but users can paste
     // arbitrary strings into slash command args. Reject early with a
@@ -52,15 +61,10 @@ function createRaidAutoManageCommand(deps) {
     // Discord times out the interaction with no reply.
     const VALID_ACTIONS = ["on", "off", "sync", "status", "local-on", "local-off", "reset"];
     if (!VALID_ACTIONS.includes(action)) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-auto-manage.invalid.actionTitle", lang),
-            description: t("raid-auto-manage.invalid.actionDescription", lang, { action }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyAutoNotice({
+        type: "warn",
+        title: t("raid-auto-manage.invalid.actionTitle", lang),
+        description: t("raid-auto-manage.invalid.actionDescription", lang, { action }),
       });
       return;
     }
@@ -76,54 +80,34 @@ function createRaidAutoManageCommand(deps) {
       const bibleOn = !!stateUser?.autoManageEnabled;
       const localOn = !!stateUser?.localSyncEnabled;
       if (action === "on" && bibleOn) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "info",
-              title: t("raid-auto-manage.redundant.alreadyOnTitle", lang),
-              description: t("raid-auto-manage.redundant.alreadyOnDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyAutoNotice({
+          type: "info",
+          title: t("raid-auto-manage.redundant.alreadyOnTitle", lang),
+          description: t("raid-auto-manage.redundant.alreadyOnDescription", lang),
         });
         return;
       }
       if (action === "off" && !bibleOn) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "info",
-              title: t("raid-auto-manage.redundant.alreadyOffTitle", lang),
-              description: t("raid-auto-manage.redundant.alreadyOffDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyAutoNotice({
+          type: "info",
+          title: t("raid-auto-manage.redundant.alreadyOffTitle", lang),
+          description: t("raid-auto-manage.redundant.alreadyOffDescription", lang),
         });
         return;
       }
       if (action === "local-on" && localOn) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "info",
-              title: t("raid-auto-manage.redundant.localAlreadyOnTitle", lang),
-              description: t("raid-auto-manage.redundant.localAlreadyOnDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyAutoNotice({
+          type: "info",
+          title: t("raid-auto-manage.redundant.localAlreadyOnTitle", lang),
+          description: t("raid-auto-manage.redundant.localAlreadyOnDescription", lang),
         });
         return;
       }
       if (action === "local-off" && !localOn) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "info",
-              title: t("raid-auto-manage.redundant.localAlreadyOffTitle", lang),
-              description: t("raid-auto-manage.redundant.localAlreadyOffDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyAutoNotice({
+          type: "info",
+          title: t("raid-auto-manage.redundant.localAlreadyOffTitle", lang),
+          description: t("raid-auto-manage.redundant.localAlreadyOffDescription", lang),
         });
         return;
       }
@@ -134,28 +118,18 @@ function createRaidAutoManageCommand(deps) {
       // sets autoManageEnabled, doesn't touch localSyncEnabled). Cheaper
       // to reject up front than to undo mid-flow.
       if (action === "on" && localOn) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-auto-manage.mutex.bibleBlockedByLocalTitle", lang),
-              description: t("raid-auto-manage.mutex.bibleBlockedByLocalDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyAutoNotice({
+          type: "warn",
+          title: t("raid-auto-manage.mutex.bibleBlockedByLocalTitle", lang),
+          description: t("raid-auto-manage.mutex.bibleBlockedByLocalDescription", lang),
         });
         return;
       }
       if (action === "sync" && localOn) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-auto-manage.sync.localLockedTitle", lang),
-              description: t("raid-auto-manage.sync.localLockedDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyAutoNotice({
+          type: "warn",
+          title: t("raid-auto-manage.sync.localLockedTitle", lang),
+          description: t("raid-auto-manage.sync.localLockedDescription", lang),
         });
         return;
       }
@@ -171,7 +145,7 @@ function createRaidAutoManageCommand(deps) {
         .setTitle(`${UI.icons.reset} ${t("raid-auto-manage.disable.title", lang)}`)
         .setDescription(t("raid-auto-manage.disable.description", lang))
         .setTimestamp();
-      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      await replyAutoEmbed(embed);
       return;
     }
     if (action === "local-on") {
@@ -188,15 +162,10 @@ function createRaidAutoManageCommand(deps) {
         { UserModel: User }
       );
       if (!result.ok && result.reason === SYNC_RESULT.conflict) {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-auto-manage.mutex.localBlockedByBibleTitle", lang),
-              description: t("raid-auto-manage.mutex.localBlockedByBibleDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyAutoNotice({
+          type: "warn",
+          title: t("raid-auto-manage.mutex.localBlockedByBibleTitle", lang),
+          description: t("raid-auto-manage.mutex.localBlockedByBibleDescription", lang),
         });
         return;
       }
@@ -231,7 +200,7 @@ function createRaidAutoManageCommand(deps) {
             : t("raid-auto-manage.localEnable.successDescription", lang)
         )
         .setTimestamp();
-      const replyPayload = { embeds: [embed], flags: MessageFlags.Ephemeral };
+      const replyExtras = {};
       if (companionUrl) {
         // Link button (URL style) - opens the companion in the user's
         // browser without firing a Discord interaction we'd have to
@@ -243,9 +212,9 @@ function createRaidAutoManageCommand(deps) {
             .setLabel(t("raid-auto-manage.localEnable.openButtonLabel", lang))
             .setURL(companionUrl)
         );
-        replyPayload.components = [row];
+        replyExtras.components = [row];
       }
-      await interaction.reply(replyPayload);
+      await replyAutoEmbed(embed, replyExtras);
       return;
     }
     if (action === "local-off") {
@@ -263,15 +232,10 @@ function createRaidAutoManageCommand(deps) {
         // Defensive: would mean a user invoked the command with no User
         // doc at all. Not realistic given the redundant-check read above
         // would have created one, but guard anyway.
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "info",
-              title: t("raid-auto-manage.redundant.localAlreadyOffTitle", lang),
-              description: t("raid-auto-manage.redundant.localAlreadyOffDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyAutoNotice({
+          type: "info",
+          title: t("raid-auto-manage.redundant.localAlreadyOffTitle", lang),
+          description: t("raid-auto-manage.redundant.localAlreadyOffDescription", lang),
         });
         return;
       }
@@ -280,7 +244,7 @@ function createRaidAutoManageCommand(deps) {
         .setTitle(`${UI.icons.reset} ${t("raid-auto-manage.localDisable.title", lang)}`)
         .setDescription(t("raid-auto-manage.localDisable.description", lang))
         .setTimestamp();
-      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      await replyAutoEmbed(embed);
       return;
     }
     if (action === "reset") {
@@ -318,10 +282,8 @@ function createRaidAutoManageCommand(deps) {
           .setLabel(t("raid-auto-manage.reset.cancelButton", lang))
           .setStyle(ButtonStyle.Secondary)
       );
-      await interaction.reply({
-        embeds: [warnEmbed],
+      await replyAutoEmbed(warnEmbed, {
         components: [confirmRow],
-        flags: MessageFlags.Ephemeral,
       });
       const replyMsg = await interaction.fetchReply();
       let decision = null;
@@ -343,14 +305,11 @@ function createRaidAutoManageCommand(deps) {
           // already-running sync can gather before this wipe and apply after it.
           resetGuard = await acquireAutoManageSyncSlot(discordId, { ignoreCooldown: true });
           if (!resetGuard.acquired) {
-            await interaction.editReply({
-              embeds: [
-                buildNoticeEmbed(EmbedBuilder, {
-                  type: "info",
-                  title: t("raid-auto-manage.reset.inFlightTitle", lang),
-                  description: t("raid-auto-manage.reset.inFlightDescription", lang),
-                }),
-              ],
+            await editAutoNotice({
+              type: "info",
+              title: t("raid-auto-manage.reset.inFlightTitle", lang),
+              description: t("raid-auto-manage.reset.inFlightDescription", lang),
+            }, {
               components: [],
             }).catch(() => {});
             return;
@@ -386,16 +345,13 @@ function createRaidAutoManageCommand(deps) {
           });
         } catch (err) {
           console.error("[raid-auto-manage] reset failed:", err?.message || err);
-          await interaction.editReply({
-            embeds: [
-              buildNoticeEmbed(EmbedBuilder, {
-                type: "error",
-                title: t("raid-auto-manage.reset.failTitle", lang),
-                description: t("raid-auto-manage.reset.failDescription", lang, {
-                  error: err?.message || String(err),
-                }),
-              }),
-            ],
+          await editAutoNotice({
+            type: "error",
+            title: t("raid-auto-manage.reset.failTitle", lang),
+            description: t("raid-auto-manage.reset.failDescription", lang, {
+              error: err?.message || String(err),
+            }),
+          }, {
             components: [],
           }).catch(() => {});
           return;
@@ -407,7 +363,7 @@ function createRaidAutoManageCommand(deps) {
           .setTitle(`${UI.icons.done} ${t("raid-auto-manage.reset.successTitle", lang)}`)
           .setDescription(t("raid-auto-manage.reset.successDescription", lang))
           .setTimestamp();
-        await interaction.editReply({ embeds: [successEmbed], components: [] }).catch(() => {});
+        await editAutoEmbed(successEmbed, { components: [] }).catch(() => {});
       } else {
         const title = decision === "timeout"
           ? t("raid-auto-manage.reset.cancelTimeoutTitle", lang)
@@ -417,7 +373,7 @@ function createRaidAutoManageCommand(deps) {
           .setTitle(`${UI.icons.reset} ${title}`)
           .setDescription(t("raid-auto-manage.reset.cancelDescription", lang))
           .setTimestamp();
-        await interaction.editReply({ embeds: [cancelEmbed], components: [] }).catch(() => {});
+        await editAutoEmbed(cancelEmbed, { components: [] }).catch(() => {});
       }
       return;
     }
@@ -439,20 +395,15 @@ function createRaidAutoManageCommand(deps) {
       //   - cooldown   → flip flag only, skip both probe and sync.
       const guard = await acquireAutoManageSyncSlot(discordId);
       if (!guard.acquired && guard.reason === "in-flight") {
-        await interaction.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "info",
-              title: t("raid-auto-manage.enable.inFlightTitle", lang),
-              description: t("raid-auto-manage.enable.inFlightDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyAutoNotice({
+          type: "info",
+          title: t("raid-auto-manage.enable.inFlightTitle", lang),
+          description: t("raid-auto-manage.enable.inFlightDescription", lang),
         });
         return;
       }
       const cooldownSkip = !guard.acquired && guard.reason === "cooldown";
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await deferEphemeralReply(interaction);
       try {
         // --- Cooldown path: flip flag only, skip sync ---
         if (cooldownSkip) {
@@ -478,7 +429,7 @@ function createRaidAutoManageCommand(deps) {
               })
             )
             .setTimestamp();
-          await interaction.editReply({ embeds: [embed] });
+          await editAutoEmbed(embed);
           return;
         }
         // --- Phase A: probe (no save) ---
@@ -496,7 +447,7 @@ function createRaidAutoManageCommand(deps) {
             .setTitle(`${UI.icons.done} ${t("raid-auto-manage.enable.successTitle", lang)}`)
             .setDescription(t("raid-auto-manage.enable.noRosterDescription", lang))
             .setTimestamp();
-          await interaction.editReply({ embeds: [embed] });
+          await editAutoEmbed(embed);
           return;
         }
         // Roster empty - flag flip only.
@@ -508,7 +459,7 @@ function createRaidAutoManageCommand(deps) {
             .setTitle(`${UI.icons.done} ${t("raid-auto-manage.enable.successTitle", lang)}`)
             .setDescription(t("raid-auto-manage.enable.noRosterDescription", lang))
             .setTimestamp();
-          await interaction.editReply({ embeds: [embed] });
+          await editAutoEmbed(embed);
           return;
         }
         // Run gather + in-memory apply - DO NOT save probeDoc. Keep the
@@ -535,7 +486,7 @@ function createRaidAutoManageCommand(deps) {
                 : t("raid-auto-manage.enable.initialSyncNothingTitle", lang)
             }`
           );
-          await interaction.editReply({ embeds: [syncEmbed] });
+          await editAutoEmbed(syncEmbed);
           return;
         }
         // --- Warn + confirm path: hidden chars detected ---
@@ -554,7 +505,7 @@ function createRaidAutoManageCommand(deps) {
             .setLabel(t("raid-auto-manage.enable.cancelButton", lang))
             .setStyle(ButtonStyle.Secondary)
         );
-        await interaction.editReply({ embeds: [warnEmbed], components: [row] });
+        await editAutoEmbed(warnEmbed, { components: [row] });
         const replyMsg = await interaction.fetchReply();
         let decision = null;
         try {
@@ -587,7 +538,7 @@ function createRaidAutoManageCommand(deps) {
                 : t("raid-auto-manage.enable.initialSyncNothingTitle", lang)
             }`
           );
-          await interaction.editReply({ embeds: [syncEmbed], components: [] });
+          await editAutoEmbed(syncEmbed, { components: [] });
         } else {
           // Probe HTTP already ran - stamp attempt so the cooldown reflects
           // the bible quota we consumed, even though we're not committing the
@@ -603,7 +554,7 @@ function createRaidAutoManageCommand(deps) {
             .setTitle(`${UI.icons.reset} ${title}`)
             .setDescription(t("raid-auto-manage.enable.cancelDescription", lang))
             .setTimestamp();
-          await interaction.editReply({ embeds: [cancelEmbed], components: [] });
+          await editAutoEmbed(cancelEmbed, { components: [] });
         }
       } catch (err) {
         // Same reasoning as the cancel/timeout branch: probe may have already
@@ -611,17 +562,14 @@ function createRaidAutoManageCommand(deps) {
         // in for the next attempt.
         await stampAutoManageAttempt(discordId);
         console.error("[auto-manage] enable-with-sync failed:", err?.message || err);
-        await interaction.editReply({
+        await editAutoNotice({
+          type: "error",
+          title: t("raid-auto-manage.enable.probeFailTitle", lang),
+          description: t("raid-auto-manage.enable.probeFailDescription", lang, {
+            error: err?.message || err,
+          }),
+        }, {
           content: null,
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "error",
-              title: t("raid-auto-manage.enable.probeFailTitle", lang),
-              description: t("raid-auto-manage.enable.probeFailDescription", lang, {
-                error: err?.message || err,
-              }),
-            }),
-          ],
           components: [],
         }).catch(() => {});
       } finally {
@@ -692,7 +640,7 @@ function createRaidAutoManageCommand(deps) {
           { name: "​", value: "​", inline: true }
         )
         .setTimestamp();
-      await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      await replyAutoEmbed(embed);
       return;
     }
     if (action === "sync") {
@@ -701,15 +649,10 @@ function createRaidAutoManageCommand(deps) {
       const guard = await acquireAutoManageSyncSlot(discordId);
       if (!guard.acquired) {
         if (guard.reason === "in-flight") {
-          await interaction.reply({
-            embeds: [
-              buildNoticeEmbed(EmbedBuilder, {
-                type: "info",
-                title: t("raid-auto-manage.sync.inFlightTitle", lang),
-                description: t("raid-auto-manage.sync.inFlightDescription", lang),
-              }),
-            ],
-            flags: MessageFlags.Ephemeral,
+          await replyAutoNotice({
+            type: "info",
+            title: t("raid-auto-manage.sync.inFlightTitle", lang),
+            description: t("raid-auto-manage.sync.inFlightDescription", lang),
           });
         } else {
           const totalCooldownText =
@@ -730,20 +673,15 @@ function createRaidAutoManageCommand(deps) {
             "",
             t("raid-auto-manage.sync.cooldownLineNote", lang),
           ].filter((line) => line !== null);
-          await interaction.reply({
-            embeds: [
-              buildNoticeEmbed(EmbedBuilder, {
-                type: "info",
-                title: t("raid-auto-manage.sync.cooldownTitle", lang),
-                description: cooldownLines.join("\n"),
-              }),
-            ],
-            flags: MessageFlags.Ephemeral,
+          await replyAutoNotice({
+            type: "info",
+            title: t("raid-auto-manage.sync.cooldownTitle", lang),
+            description: cooldownLines.join("\n"),
           });
         }
         return;
       }
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await deferEphemeralReply(interaction);
       try {
         const weekResetStart = weekResetStartMs();
         // Phase A: gather bible data OUTSIDE saveWithRetry so a VersionError
@@ -754,15 +692,12 @@ function createRaidAutoManageCommand(deps) {
         // VersionError that the retry path can handle in-memory.
         const seedDoc = await User.findOne({ discordId });
         if (!seedDoc || !Array.isArray(seedDoc.accounts) || seedDoc.accounts.length === 0) {
-          await interaction.editReply({
+          await editAutoNotice({
+            type: "info",
+            title: t("raid-auto-manage.sync.noRosterTitle", lang),
+            description: t("raid-auto-manage.sync.noRosterDescription", lang),
+          }, {
             content: null,
-            embeds: [
-              buildNoticeEmbed(EmbedBuilder, {
-                type: "info",
-                title: t("raid-auto-manage.sync.noRosterTitle", lang),
-                description: t("raid-auto-manage.sync.noRosterDescription", lang),
-              }),
-            ],
           });
           return;
         }
@@ -790,33 +725,27 @@ function createRaidAutoManageCommand(deps) {
           await userDoc.save();
         });
         if (report?.noRoster) {
-          await interaction.editReply({
+          await editAutoNotice({
+            type: "info",
+            title: t("raid-auto-manage.sync.noRosterTitle", lang),
+            description: t("raid-auto-manage.sync.noRosterDescription", lang),
+          }, {
             content: null,
-            embeds: [
-              buildNoticeEmbed(EmbedBuilder, {
-                type: "info",
-                title: t("raid-auto-manage.sync.noRosterTitle", lang),
-                description: t("raid-auto-manage.sync.noRosterDescription", lang),
-              }),
-            ],
           });
           return;
         }
         const embed = buildAutoManageSyncReportEmbed(report, lang);
-        await interaction.editReply({ embeds: [embed] });
+        await editAutoEmbed(embed);
       } catch (err) {
         console.error("[auto-manage] sync failed:", err?.message || err);
-        await interaction.editReply({
+        await editAutoNotice({
+          type: "error",
+          title: t("raid-auto-manage.sync.failTitle", lang),
+          description: t("raid-auto-manage.sync.failDescription", lang, {
+            error: err?.message || err,
+          }),
+        }, {
           content: null,
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "error",
-              title: t("raid-auto-manage.sync.failTitle", lang),
-              description: t("raid-auto-manage.sync.failDescription", lang, {
-                error: err?.message || err,
-              }),
-            }),
-          ],
         });
       } finally {
         releaseAutoManageSyncSlot(discordId);
