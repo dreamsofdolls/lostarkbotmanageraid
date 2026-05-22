@@ -12,7 +12,7 @@
  */
 
 const { isSupportClass, getClassEmoji } = require("../../models/Class");
-const { buildNoticeEmbed, UI } = require("../../utils/raid/common/shared");
+const { buildNoticeEmbed, replyNotice, UI } = require("../../utils/raid/common/shared");
 const { buildAccountTaskFields } = require("../../utils/raid/tasks/task-view");
 const {
   getVisibleSharedTasks,
@@ -58,15 +58,10 @@ function createAllModeHandler({
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
 
     if (!isRaidLeader(interaction)) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "lock",
-            title: t("raid-check.auth.managerOnlyTitle", lang),
-            description: t("raid-check.auth.managerOnlyDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyNotice(interaction, EmbedBuilder, {
+        type: "lock",
+        title: t("raid-check.auth.managerOnlyTitle", lang),
+        description: t("raid-check.auth.managerOnlyDescription", lang),
       });
       return;
     }
@@ -852,18 +847,11 @@ function createAllModeHandler({
           // Lock message is read by the unauthorized clicker, render in
           // their lang (not session opener's).
           const clickerLang = await getUserLanguage(component.user.id, { UserModel: User });
-          await component
-            .reply({
-              embeds: [
-                buildNoticeEmbed(EmbedBuilder, {
-                  type: "lock",
-                  title: t("raid-check.notice.sessionLockTitle", clickerLang),
-                  description: t("raid-check.notice.sessionLockDescription", clickerLang),
-                }),
-              ],
-              flags: MessageFlags.Ephemeral,
-            })
-            .catch(() => {});
+          await replyNotice(component, EmbedBuilder, {
+            type: "lock",
+            title: t("raid-check.notice.sessionLockTitle", clickerLang),
+            description: t("raid-check.notice.sessionLockDescription", clickerLang),
+          }).catch(() => {});
         }
         return;
       }

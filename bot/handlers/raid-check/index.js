@@ -11,7 +11,7 @@ const {
   buildDisableAutoDmEmbed,
 } = require("./auto-manage");
 const { createTaskViewUi } = require("./task-view-ui");
-const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const { buildNoticeEmbed, replyNotice } = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
 
 const RAID_CHECK_PAGINATION_SESSION_MS = 5 * 60 * 1000;
@@ -195,15 +195,10 @@ function createRaidCheckCommand(deps) {
   async function handleRaidCheckCommand(interaction) {
     if (!isRaidLeader(interaction)) {
       const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "lock",
-            title: t("raid-check.auth.managerOnlyTitle", lang),
-            description: t("raid-check.auth.managerOnlyDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyNotice(interaction, EmbedBuilder, {
+        type: "lock",
+        title: t("raid-check.auth.managerOnlyTitle", lang),
+        description: t("raid-check.auth.managerOnlyDescription", lang),
       });
       return;
     }
@@ -244,15 +239,10 @@ function createRaidCheckCommand(deps) {
     // Everything below requires Raid Manager.
     if (!isRaidLeader(interaction)) {
       const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "lock",
-            title: t("raid-check.auth.buttonManagerOnlyTitle", clickerLang),
-            description: t("raid-check.auth.buttonManagerOnlyDescription", clickerLang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyNotice(interaction, EmbedBuilder, {
+        type: "lock",
+        title: t("raid-check.auth.buttonManagerOnlyTitle", clickerLang),
+        description: t("raid-check.auth.buttonManagerOnlyDescription", clickerLang),
       });
       return;
     }
@@ -307,15 +297,10 @@ function createRaidCheckCommand(deps) {
     const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
     if (!raidMeta) {
       const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-check.staleButton.title", clickerLang),
-            description: t("raid-check.staleButton.raidInvalidDescription", clickerLang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyNotice(interaction, EmbedBuilder, {
+        type: "warn",
+        title: t("raid-check.staleButton.title", clickerLang),
+        description: t("raid-check.staleButton.raidInvalidDescription", clickerLang),
       });
       return;
     }
@@ -331,15 +316,10 @@ function createRaidCheckCommand(deps) {
       await handleRaidCheckEditClick(interaction, raidMeta, raidKey);
     } else {
       const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-check.staleButton.unsupportedActionTitle", clickerLang),
-            description: t("raid-check.staleButton.unsupportedActionDescription", clickerLang, { action }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyNotice(interaction, EmbedBuilder, {
+        type: "warn",
+        title: t("raid-check.staleButton.unsupportedActionTitle", clickerLang),
+        description: t("raid-check.staleButton.unsupportedActionDescription", clickerLang, { action }),
       });
     }
   }

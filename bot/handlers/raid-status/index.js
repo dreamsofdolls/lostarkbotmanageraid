@@ -15,6 +15,8 @@ const {
 } = require("./task-actions");
 const {
   buildNoticeEmbed,
+  followUpNotice,
+  replyNotice,
 } = require("../../utils/raid/common/shared");
 const {
   getNextSharedTaskTransitionMs,
@@ -773,15 +775,10 @@ function createRaidStatusCommand(deps) {
         const clickerLang = await getUserLanguage(component.user.id, {
           UserModel: User,
         });
-        await component.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "lock",
-              title: t("raid-status.sync.noControlTitle", clickerLang),
-              description: t("raid-status.sync.noControlDescription", clickerLang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyNotice(component, EmbedBuilder, {
+          type: "lock",
+          title: t("raid-status.sync.noControlTitle", clickerLang),
+          description: t("raid-status.sync.noControlDescription", clickerLang),
         }).catch(() => {});
         return;
       }
@@ -822,15 +819,10 @@ function createRaidStatusCommand(deps) {
         if (!deferred) return;
         const baseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
         if (!baseUrl) {
-          await component.followUp({
-            embeds: [
-              buildNoticeEmbed(EmbedBuilder, {
-                type: "warn",
-                title: t("raid-status.sync.localNewLinkUnavailableTitle", lang),
-                description: t("raid-status.sync.localNewLinkUnavailableDescription", lang),
-              }),
-            ],
-            flags: MessageFlags.Ephemeral,
+          await followUpNotice(component, EmbedBuilder, {
+            type: "warn",
+            title: t("raid-status.sync.localNewLinkUnavailableTitle", lang),
+            description: t("raid-status.sync.localNewLinkUnavailableDescription", lang),
           }).catch(() => {});
           return;
         }
@@ -841,17 +833,12 @@ function createRaidStatusCommand(deps) {
           freshUrl = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
         } catch (err) {
           console.error("[raid-status] rotate local-sync token failed:", err?.message || err);
-          await component.followUp({
-            embeds: [
-              buildNoticeEmbed(EmbedBuilder, {
-                type: "error",
-                title: t("raid-status.sync.localNewLinkFailedTitle", lang),
-                description: t("raid-status.sync.localNewLinkFailedDescription", lang, {
-                  error: err?.message || String(err),
-                }),
-              }),
-            ],
-            flags: MessageFlags.Ephemeral,
+          await followUpNotice(component, EmbedBuilder, {
+            type: "error",
+            title: t("raid-status.sync.localNewLinkFailedTitle", lang),
+            description: t("raid-status.sync.localNewLinkFailedDescription", lang, {
+              error: err?.message || String(err),
+            }),
           }).catch(() => {});
           return;
         }
@@ -868,15 +855,10 @@ function createRaidStatusCommand(deps) {
         // Lightweight ephemeral toast - just a confirmation, no link
         // button since the in-message button already carries the new
         // URL right above this toast.
-        await component.followUp({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "success",
-              title: t("raid-status.sync.localNewLinkSuccessTitle", lang),
-              description: t("raid-status.sync.localNewLinkSuccessDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await followUpNotice(component, EmbedBuilder, {
+          type: "success",
+          title: t("raid-status.sync.localNewLinkSuccessTitle", lang),
+          description: t("raid-status.sync.localNewLinkSuccessDescription", lang),
         }).catch(() => {});
         return;
       } else if (id === "status:local-refresh") {
@@ -907,15 +889,10 @@ function createRaidStatusCommand(deps) {
         // Ephemeral toast so the click feels acknowledged - the embed
         // re-render alone is silent if nothing visibly changed (e.g.
         // user clicked refresh before any sync happened).
-        await component.followUp({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "success",
-              title: t("raid-status.sync.localRefreshSuccessTitle", lang),
-              description: t("raid-status.sync.localRefreshSuccessDescription", lang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await followUpNotice(component, EmbedBuilder, {
+          type: "success",
+          title: t("raid-status.sync.localRefreshSuccessTitle", lang),
+          description: t("raid-status.sync.localRefreshSuccessDescription", lang),
         }).catch(() => {});
         return;
       } else if (id === "status:sync") {
@@ -925,15 +902,10 @@ function createRaidStatusCommand(deps) {
         // we surface the remaining wait via ephemeral followup so the
         // click feels acknowledged.
         if (!statusUserMeta.autoManageEnabled) {
-          await component.reply({
-            embeds: [
-              buildNoticeEmbed(EmbedBuilder, {
-                type: "info",
-                title: t("raid-status.sync.noAutoSyncTitle", lang),
-                description: t("raid-status.sync.noAutoSyncDescription", lang),
-              }),
-            ],
-            flags: MessageFlags.Ephemeral,
+          await replyNotice(component, EmbedBuilder, {
+            type: "info",
+            title: t("raid-status.sync.noAutoSyncTitle", lang),
+            description: t("raid-status.sync.noAutoSyncDescription", lang),
           }).catch(() => {});
           return;
         }
@@ -951,15 +923,10 @@ function createRaidStatusCommand(deps) {
               Number(statusUserMeta.lastAutoManageAttemptAt) || 0,
               cooldownMs
             ) || t("raid-status.sync.cooldownFallback", lang);
-          await component.reply({
-            embeds: [
-              buildNoticeEmbed(EmbedBuilder, {
-                type: "info",
-                title: t("raid-status.sync.cooldownTitle", lang),
-                description: t("raid-status.sync.cooldownDescription", lang, { remain }),
-              }),
-            ],
-            flags: MessageFlags.Ephemeral,
+          await replyNotice(component, EmbedBuilder, {
+            type: "info",
+            title: t("raid-status.sync.cooldownTitle", lang),
+            description: t("raid-status.sync.cooldownDescription", lang, { remain }),
           }).catch(() => {});
           return;
         }
@@ -1002,23 +969,16 @@ function createRaidStatusCommand(deps) {
           followupType = "warn";
         }
         if (followupCopy) {
-          await component
-            .followUp({
-              embeds: [
-                buildNoticeEmbed(EmbedBuilder, {
-                  type: followupType,
-                  title:
-                    followupType === "success"
-                      ? t("raid-status.sync.followupSuccessTitle", lang)
-                      : followupType === "warn"
-                        ? t("raid-status.sync.followupFailedTitle", lang)
-                        : t("raid-status.sync.followupNeutralTitle", lang),
-                  description: followupCopy,
-                }),
-              ],
-              flags: MessageFlags.Ephemeral,
-            })
-            .catch(() => {});
+          await followUpNotice(component, EmbedBuilder, {
+            type: followupType,
+            title:
+              followupType === "success"
+                ? t("raid-status.sync.followupSuccessTitle", lang)
+                : followupType === "warn"
+                  ? t("raid-status.sync.followupFailedTitle", lang)
+                  : t("raid-status.sync.followupNeutralTitle", lang),
+            description: followupCopy,
+          }).catch(() => {});
         }
         return;
       } else if (id === "status-filter:raid") {

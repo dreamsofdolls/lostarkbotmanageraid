@@ -18,7 +18,7 @@
  * builders) so they all live in the same factory closure.
  */
 
-const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const { buildNoticeEmbed, replyNotice } = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 
@@ -525,15 +525,10 @@ function createEditUi({
       if (component.user.id !== interaction.user.id) {
         // Lock message read by unauthorized clicker - render in their lang.
         const clickerLang = await getUserLanguage(component.user.id, { UserModel: User });
-        await component.reply({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "lock",
-              title: t("raid-check.editFlow.lockOtherTitle", clickerLang),
-              description: t("raid-check.editFlow.lockOtherDescription", clickerLang),
-            }),
-          ],
-          flags: MessageFlags.Ephemeral,
+        await replyNotice(component, EmbedBuilder, {
+          type: "lock",
+          title: t("raid-check.editFlow.lockOtherTitle", clickerLang),
+          description: t("raid-check.editFlow.lockOtherDescription", clickerLang),
         }).catch(() => {});
         return;
       }
