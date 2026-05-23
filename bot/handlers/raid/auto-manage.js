@@ -336,6 +336,7 @@ function createRaidAutoManageCommand(deps) {
                 // top-level field reference.
                 character.assignedRaids = { armoche: {}, kazeros: {}, serca: {} };
                 character.publicLogDisabled = false;
+                character.publicLogDisabledAt = null;
                 character.bibleSerial = null;
                 character.bibleCid = null;
                 character.bibleRid = null;

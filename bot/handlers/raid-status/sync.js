@@ -118,9 +118,11 @@ function createRaidStatusSync(deps) {
             await stampAutoManageAttempt(discordId);
           })
           .finally(() => releaseAutoManageSyncSlot(discordId));
-        console.log(
-          `[raid-status] auto-manage exceeded ${STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS}ms budget for user=${discordId}; rendering cached data and continuing in background`
-        );
+        // Timeout itself is silent here · the `[raid-status] background
+        // auto-manage finished ... outcome=...` log fired by the
+        // .then handler above is the truth signal (no background log
+        // implies no timeout). Keeping a second log line here just
+        // amplified noise on every slow bible response.
       }
 
       userDoc = await saveWithRetry(async () => {

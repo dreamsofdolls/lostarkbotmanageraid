@@ -551,6 +551,9 @@ function createEditRosterCommand({
           if (existing.publicLogDisabled !== undefined) {
             record.publicLogDisabled = existing.publicLogDisabled;
           }
+          if (existing.publicLogDisabledAt !== undefined) {
+            record.publicLogDisabledAt = existing.publicLogDisabledAt;
+          }
         }
         return record;
       });
