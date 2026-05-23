@@ -78,8 +78,10 @@ test("hasStaleAccountRefreshes returns false for fresh accounts and true for exp
   assert.equal(service.hasStaleAccountRefreshes(makeStaleUser()), true);
 });
 
-test("collectStaleAccountRefreshes summarizes repeated HTTP 429 seed failures", async () => {
+test("collectStaleAccountRefreshes aborts seed loop on first HTTP 429", async () => {
+  let fetchCalls = 0;
   const service = makeService(async () => {
+    fetchCalls += 1;
     throw new Error("LostArk Bible HTTP 429");
   });
   const user = makeStaleUser();
@@ -100,9 +102,51 @@ test("collectStaleAccountRefreshes summarizes repeated HTTP 429 seed failures", 
     console.warn = originalWarn;
   }
 
+  // Account has 4 seeds (Alpha account name + Alpha/Beta/Gamma chars; Alpha
+  // dedupes via the `!seeds.includes(name)` guard so 3 unique seeds). The
+  // abort-on-first guard stops the loop after the first throw so subsequent
+  // seeds never burn extra bible requests under the same rate-limit window.
+  assert.equal(fetchCalls, 1);
   assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /account "Alpha" 3 seed\(s\) hit LostArk Bible HTTP 429/);
+  assert.match(warnings[0], /account "Alpha" aborted on first LostArk Bible HTTP 429/);
   assert.doesNotMatch(warnings[0], /seed "Alpha" failed/);
+});
+
+test("collectStaleAccountRefreshes keeps iterating seeds on non-429 errors", async () => {
+  let fetchCalls = 0;
+  const service = makeService(async (seed) => {
+    fetchCalls += 1;
+    if (seed === "Beta") {
+      return [
+        {
+          charName: "Alpha",
+          className: "Bard",
+          itemLevel: 1720,
+          combatScore: "92000",
+        },
+      ];
+    }
+    throw new Error(`seed "${seed}" not found on bible`);
+  });
+  const user = makeStaleUser();
+  user.accounts[0].characters.push({ name: "Beta", class: "Bard", itemLevel: 1700 });
+
+  const originalWarn = console.warn;
+  const warnings = [];
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    const result = await service.collectStaleAccountRefreshes(user);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].attempted, true);
+    assert.equal(result[0].fetchedChars?.length, 1);
+    assert.equal(result[0].fetchedChars[0].itemLevel, 1720);
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  // Alpha seed throws non-rate-limit "not found", loop continues to Beta
+  // which returns the roster successfully. fetchCalls = 2.
+  assert.equal(fetchCalls, 2);
 });
 
 test("applyStaleAccountRefreshes preserves assigned raid mode preference", () => {

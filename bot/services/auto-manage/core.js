@@ -47,6 +47,12 @@ function createAutoManageCoreService({
   // bible load compared to the existing daily passive scheduler.
   const AUTO_MANAGE_SYNC_COOLDOWN_MS = DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS;
   const AUTO_MANAGE_GATHER_CHARACTER_CONCURRENCY = 2;
+  // After a char returns "Logs not enabled" we cache that signal for ~24h
+  // before re-probing. Without this gate every sync cycle re-fetches the
+  // bible logs endpoint for the same hidden char and burns API budget +
+  // log noise on a state only the owner can flip. Reprobe at most daily so
+  // a char that flips public-log ON gets picked up within a day.
+  const PUBLIC_LOG_DISABLED_REPROBE_MS = 24 * 60 * 60 * 1000;
   const inFlightAutoManageSyncs = new Set(); // discordId
 
   /**
@@ -584,11 +590,28 @@ function createAutoManageCoreService({
       ? new Set(options.includeEntryKeys)
       : null;
     const jobs = [];
+    const nowMs = Date.now();
     for (const account of userDoc.accounts || []) {
       const rosterFetchCache = new Map();
       for (const character of account.characters || []) {
         const entryKey = autoManageEntryKey(account.accountName, getCharacterName(character));
         if (includeEntryKeys && !includeEntryKeys.has(entryKey)) continue;
+        // Skip chars flagged "Logs not enabled" within the reprobe window.
+        // Re-probe at most daily so a char that flips public-log back ON
+        // gets picked up by the next gather without manual intervention.
+        // includeEntryKeys overrides the gate so explicit caller selects
+        // (probe path, single-char retries) always run.
+        const flaggedAt = character.publicLogDisabledAt
+          ? new Date(character.publicLogDisabledAt).getTime()
+          : 0;
+        if (
+          !includeEntryKeys &&
+          character.publicLogDisabled &&
+          flaggedAt > 0 &&
+          nowMs - flaggedAt < PUBLIC_LOG_DISABLED_REPROBE_MS
+        ) {
+          continue;
+        }
         jobs.push({ account, character, rosterFetchCache });
       }
     }
@@ -638,6 +661,11 @@ function createAutoManageCoreService({
           // manually move progress the auto-sync path can never reach.
           if (isPublicLogDisabledError(gathered.error)) {
             character.publicLogDisabled = true;
+            // Stamp the timestamp so the 24h reprobe gate in gather can
+            // skip this char until the next probe window. Always refresh
+            // on every 403 hit so the gate resets if the user has not yet
+            // flipped public-log back ON during the previous window.
+            character.publicLogDisabledAt = new Date();
           }
           report.perChar.push(entry);
           continue;
@@ -662,7 +690,10 @@ function createAutoManageCoreService({
           // Successful sync means the owner's public log is ON for this
           // char right now. Clear any stale flag so a char that flipped
           // log-public between syncs stops being marked "manager edit only".
-          if (character.publicLogDisabled) character.publicLogDisabled = false;
+          if (character.publicLogDisabled) {
+            character.publicLogDisabled = false;
+            character.publicLogDisabledAt = null;
+          }
         } catch (err) {
           entry.error = err?.message || String(err);
           console.warn(

@@ -4,6 +4,17 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-23 (Auto-manage gather + refresh hardening)
+
+### Fixed
+- `/raid-auto-manage` sync no longer re-probes chars previously flagged "Logs not enabled" within a 24h window. Added `publicLogDisabledAt: Date` to the character schema; the gather job-builder now skips chars where `publicLogDisabled === true` AND the stamp is younger than 24h. Stamp is refreshed on every 403 hit and cleared on a successful sync, so a char that flips public-log back ON gets re-detected on the next gather. Explicit `includeEntryKeys` callers (probe path, manual retries) bypass the gate so manager-driven rechecks still probe unconditionally. Before this, every hidden char burned a bible logs API request and a `[auto-manage] gather for X failed: Logs not enabled` warning every sync cycle.
+- `[refresh]` seed loop now aborts on the first `LostArk Bible HTTP 429` instead of trying every alt seed under the same rate-limit window. The existing 5-min failure cooldown gates the retry. Removes the thundering-herd amplifier where N opted-in accounts hitting refresh at once each fanned out to ~10 seeds while bible's limiter was already shedding load. Log line changes from `N seed(s) hit ... 429 - suppressed per-seed logs` to `aborted on first ... 429 - retry after the failure cooldown` when this path fires.
+- `[raid-status]` no longer logs an extra `auto-manage exceeded ${BUDGET}ms budget` line on every slow bible response. The follow-up `background auto-manage finished for user=... outcome=...` log already carries the truth signal (no background log = no timeout), so the timeout line was just noise that drowned the surrounding entries.
+
+### Tests
+- `auto-manage-public-log-reprobe.test.js` covers the 5 invariants of the new gate: skip-within-window, reprobe-after-window, explicit-includeEntryKeys override, stamp-on-403, clear-on-success.
+- `roster-refresh.test.js` updated: existing "summarizes repeated 429" test renamed to "aborts seed loop on first 429" and tightened to assert fetch fired exactly once. New "keeps iterating seeds on non-429 errors" test guards against accidental over-broad abort.
+
 ## 2026-05-22 (`/raid-bg` slot preview + single-slot remove)
 
 ### Changed

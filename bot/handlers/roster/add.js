@@ -26,6 +26,7 @@ const PRESERVED_CHARACTER_FIELDS = [
   "bibleCid",
   "bibleRid",
   "publicLogDisabled",
+  "publicLogDisabledAt",
 ];
 
 function preserveExistingCharacterState(record, existing) {

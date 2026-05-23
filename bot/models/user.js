@@ -105,6 +105,12 @@ const characterSchema = new mongoose.Schema(
     // char with public log OFF is never going to be bible-syncable so
     // the leader is the only one who can move its progress.
     publicLogDisabled: { type: Boolean, default: false },
+    // Stamp of the last bible 403 "Logs not enabled" hit for this char.
+    // Gathers skip re-probing a flagged char until ~24h have elapsed so a
+    // one-time public-log-off doesn't burn API budget every sync cycle.
+    // Cleared when publicLogDisabled flips back to false on a successful
+    // sync (gather sees public log is ON again).
+    publicLogDisabledAt: { type: Date, default: null },
     assignedRaids: {
       armoche: { type: assignedRaidSchema, default: () => ({}) },
       kazeros: { type: assignedRaidSchema, default: () => ({}) },

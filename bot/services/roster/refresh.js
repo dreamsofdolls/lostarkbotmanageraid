@@ -93,6 +93,7 @@ function createRosterRefreshService(deps) {
 
     let attempted = false;
     let zeroOverlapCount = 0;
+    let rateLimitedAbort = false;
     const seedFailures = [];
     for (const seed of seeds) {
       try {
@@ -121,7 +122,19 @@ function createRosterRefreshService(deps) {
 
         return { accountName: originalName, fetchedChars: fetched, resolvedSeed, attempted };
       } catch (err) {
-        seedFailures.push({ seed, message: getErrorMessage(err) });
+        const message = getErrorMessage(err);
+        seedFailures.push({ seed, message });
+        // Bible is rate-limiting THIS host right now. Every remaining
+        // seed of this account would hit the same backoff window with no
+        // chance of succeeding, so stop here and let the 5-min failure
+        // cooldown gate the retry. Without this guard a single rate-
+        // limit window burns ~N seeds per account and a thundering-herd
+        // of refresh-eligible accounts amplifies the load on bible just
+        // when its limiter is trying to shed it.
+        if (isRateLimitMessage(message)) {
+          rateLimitedAbort = true;
+          break;
+        }
       }
     }
 
@@ -133,7 +146,11 @@ function createRosterRefreshService(deps) {
     if (seedFailures.length > 0) {
       const rateLimited = seedFailures.filter((entry) => isRateLimitMessage(entry.message));
       const otherFailures = seedFailures.filter((entry) => !isRateLimitMessage(entry.message));
-      if (rateLimited.length > 0) {
+      if (rateLimitedAbort) {
+        console.warn(
+          `[refresh] account "${originalName || "(unnamed roster)"}" aborted on first LostArk Bible HTTP 429 - retry after the failure cooldown.`
+        );
+      } else if (rateLimited.length > 0) {
         console.warn(
           `[refresh] account "${originalName || "(unnamed roster)"}" ${rateLimited.length} seed(s) hit LostArk Bible HTTP 429 - suppressed per-seed logs.`
         );
