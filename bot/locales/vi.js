@@ -71,6 +71,24 @@ module.exports = {
     unchangedDescription: "Cậu vẫn đang dùng **{flag} {label}** mà~",
     footer: "/raid-language để đổi lại bất cứ lúc nào",
   },
+  "raid-auction": {
+    notice: {
+      invalidValueTitle: "{iconWarn} Giá trị không hợp lệ",
+      invalidValueDescription: "Giá thị trường phải là số nguyên dương. Nhập lại giúp Artist nhé.",
+    },
+    result: {
+      title: "💰 Auction Calculator",
+      marketValueField: "Giá thị trường",
+      partyField: "Số người",
+      modeField: "Chế độ",
+      modeProfit: "Có lời (biên 8%)",
+      modeBreakeven: "Hòa vốn",
+      bidField: "💰 Bid số này",
+      eachReceivesField: "Mỗi người còn lại ({count}) nhận",
+      winnerNetField: "Người thắng lời (so với market)",
+      footer: "Công thức từ la-utils · phí bán 5% + chia phần (N-1)/N",
+    },
+  },
   // Top-level "stuck-nudge" namespace for the Phase 6 channel-button
   // click handler. Distinct from `announcements.stuck-nudge.body` (the
   // broadcast text the scheduler posts) so the two concerns evolve
@@ -1307,6 +1325,24 @@ module.exports = {
         ],
         optionDescriptions: {
           roster: "Roster cần config (autocomplete)",
+        },
+      },
+      "raid-auction": {
+        label: "/raid-auction",
+        short: "Tính giá bid đấu giá vật phẩm rớt trong raid",
+        example: "/raid-auction players:8 market_value:293000",
+        notes: [
+          "Tính số vàng nên bid khi đấu giá vật phẩm chung trong raid. Công thức port từ la-utils.vercel.app.",
+          "",
+          "**Công thức**: bid = floor(0.95 × giá_market × (N-1)/N), N = số người. `0.95` = phí bán 5%; `(N-1)/N` = phần chia cho những người còn lại.",
+          "**Profit mode** (mặc định bật): nhân thêm 0.92 (biên lời 8%) để thắng vật phẩm vẫn lời so với mua ngoài market.",
+          "**Output**: số bid (copy-paste vào ô đấu giá in-game), mỗi người còn lại nhận bao nhiêu, và lời ước tính của người thắng.",
+          "**Ephemeral**: kết quả chỉ mình cậu thấy, không spam kênh.",
+        ],
+        optionDescriptions: {
+          players: "Số người chia vật phẩm (4 hoặc 8)",
+          market_value: "Giá thị trường của vật phẩm (vàng)",
+          profit: "Bật biên lời 8% (mặc định: bật)",
         },
       },
       "raid-task": {
