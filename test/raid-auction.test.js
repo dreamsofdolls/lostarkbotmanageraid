@@ -50,14 +50,15 @@ test("computeAuctionBid scales with party size: bigger party -> higher bid", () 
   assert.ok(eight > four, `expected 8-player bid (${eight}) > 4-player (${four})`);
 });
 
-test("handler replies ephemeral with the bid embedded in the result", async () => {
+test("handler replies publicly with the bid embedded in the result", async () => {
   const factory = makeFactory();
   const interaction = makeInteraction({ players: 8, marketValue: 293000 });
   await factory.handleRaidAuctionCommand(interaction);
 
   assert.equal(interaction._calls.length, 1);
   const reply = interaction._calls[0];
-  assert.equal(reply.flags, MessageFlags.Ephemeral);
+  // Public (not ephemeral) so the whole raid party sees the suggested bid.
+  assert.notEqual(reply.flags, MessageFlags.Ephemeral);
 
   const embed = reply.embeds[0].toJSON();
   const expectedBid = computeAuctionBid(293000, 8, true);

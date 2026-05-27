@@ -98,7 +98,11 @@ function createRaidAuctionCommand({ EmbedBuilder, MessageFlags, UI, User }) {
       )
       .setFooter({ text: t("raid-auction.result.footer", lang) });
 
-    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    // Public reply: an auction happens live in the raid party, so the
+    // suggested bid + split should be visible to everyone in the channel,
+    // not just the caller. (The invalid-value notice above stays
+    // ephemeral so input mistakes don't clutter the channel.)
+    await interaction.reply({ embeds: [embed] });
   }
 
   return {

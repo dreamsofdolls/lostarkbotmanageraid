@@ -1315,7 +1315,7 @@ module.exports = {
           "**Formula**: bid = floor(0.95 × market_value × (N-1)/N), N = players. `0.95` = 5% sell fee; `(N-1)/N` = the share owed to the other members.",
           "**Profit mode** (default on): multiplies by 0.92 (8% margin) so winning the item still beats buying it on the market.",
           "**Output**: the bid (copy-paste into the in-game auction box), what each other member receives, and the winner's estimated profit.",
-          "**Ephemeral**: only you see the result, no channel spam.",
+          "**Public**: the result is visible to the whole channel so the party can bid along. Only input errors stay ephemeral.",
         ],
         optionDescriptions: {
           players: "Number of players splitting the loot (4 or 8)",
