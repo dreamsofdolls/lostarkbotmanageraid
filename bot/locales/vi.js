@@ -1337,7 +1337,7 @@ module.exports = {
           "**Công thức**: bid = floor(0.95 × giá_market × (N-1)/N), N = số người. `0.95` = phí bán 5%; `(N-1)/N` = phần chia cho những người còn lại.",
           "**Profit mode** (mặc định bật): nhân thêm 0.92 (biên lời 8%) để thắng vật phẩm vẫn lời so với mua ngoài market.",
           "**Output**: số bid (copy-paste vào ô đấu giá in-game), mỗi người còn lại nhận bao nhiêu, và lời ước tính của người thắng.",
-          "**Ephemeral**: kết quả chỉ mình cậu thấy, không spam kênh.",
+          "**Public**: kết quả hiện cho cả kênh để party bid theo. Riêng lỗi nhập sai thì ẩn (chỉ mình cậu thấy).",
         ],
         optionDescriptions: {
           players: "Số người chia vật phẩm (4 hoặc 8)",
