@@ -901,6 +901,49 @@ function createRaidCommandDefinitions({
         )
     );
 
+  const raidAuctionCommand = new SlashCommandBuilder()
+    .setName("raid-auction")
+    .setDescription("Calculate the auction bid for a raid loot item")
+    .setDescriptionLocalizations({
+      vi: "Tính giá bid đấu giá vật phẩm trong raid",
+      ja: "レイド戦利品の競売入札額を計算",
+    })
+    .addIntegerOption((option) =>
+      option
+        .setName("players")
+        .setDescription("Number of players splitting the loot")
+        .setDescriptionLocalizations({
+          vi: "Số người chia vật phẩm",
+          ja: "戦利品を分ける人数",
+        })
+        .setRequired(true)
+        .addChoices(
+          { name: "4 players", name_localizations: { vi: "4 người", ja: "4人" }, value: 4 },
+          { name: "8 players", name_localizations: { vi: "8 người", ja: "8人" }, value: 8 },
+        )
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName("market_value")
+        .setDescription("Market value of the item in gold")
+        .setDescriptionLocalizations({
+          vi: "Giá trị thị trường của vật phẩm (vàng)",
+          ja: "アイテムの市場価格（ゴールド）",
+        })
+        .setRequired(true)
+        .setMinValue(1)
+    )
+    .addBooleanOption((option) =>
+      option
+        .setName("profit")
+        .setDescription("Apply 8% profit margin (default: on)")
+        .setDescriptionLocalizations({
+          vi: "Áp dụng biên lợi nhuận 8% (mặc định: bật)",
+          ja: "8%の利益マージンを適用（デフォルト: オン）",
+        })
+        .setRequired(false)
+    );
+
   const commands = [
     addRosterCommand,
     editRosterCommand,
@@ -917,6 +960,7 @@ function createRaidCommandDefinitions({
     raidShareCommand,
     raidLanguageCommand,
     raidBgCommand,
+    raidAuctionCommand,
   ];
 
   return commands;

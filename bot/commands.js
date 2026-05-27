@@ -53,6 +53,7 @@ const {
 } = require("./handlers/raid-check");
 const { createAddRosterCommand } = require("./handlers/roster/add");
 const { createRaidGoldEarnerCommand } = require("./handlers/roster/gold-earner");
+const { createRaidAuctionCommand } = require("./handlers/raid/auction");
 const { createEditRosterCommand } = require("./handlers/roster/edit");
 const { createRaidCommandDefinitions } = require("./handlers/commands/definitions");
 const { createRaidAutoManageCommand } = require("./handlers/raid/auto-manage");
@@ -252,6 +253,7 @@ let handleAddRosterButton;
 let handleRaidGoldEarnerCommand;
 let handleRaidGoldEarnerAutocomplete;
 let handleRaidGoldEarnerButton;
+let handleRaidAuctionCommand;
 let handleEditRosterCommand;
 let handleEditRosterAutocomplete;
 let handleEditRosterButton;
@@ -344,6 +346,7 @@ async function handleRaidManagementCommand(interaction) {
       "raid-auto-manage": handleRaidAutoManageCommand,
       "raid-announce": handleRaidAnnounceCommand,
       "raid-task": handleRaidTaskCommand,
+      "raid-auction": handleRaidAuctionCommand,
     }[interaction.commandName];
     if (handler) await handler(interaction);
   } finally {
@@ -515,6 +518,14 @@ const raidGoldEarnerCommandHandlers = createRaidGoldEarnerCommand({
   handleRaidGoldEarnerAutocomplete,
   handleRaidGoldEarnerButton,
 } = raidGoldEarnerCommandHandlers);
+
+const raidAuctionCommandHandlers = createRaidAuctionCommand({
+  EmbedBuilder,
+  MessageFlags,
+  UI,
+  User,
+});
+({ handleRaidAuctionCommand } = raidAuctionCommandHandlers);
 
 const editRosterCommandHandlers = createEditRosterCommand({
   EmbedBuilder,

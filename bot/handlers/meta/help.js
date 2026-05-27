@@ -27,6 +27,7 @@ const SECTION_ORDER = [
   "raid-edit-roster",
   "raid-status",
   "raid-gold-earner",
+  "raid-auction",
   "raid-task",
   "raid-set",
   "raid-check",
@@ -59,6 +60,14 @@ const SECTION_META = {
   "raid-gold-earner": {
     icon: "💰",
     options: [{ name: "roster", required: true }],
+  },
+  "raid-auction": {
+    icon: "🪙",
+    options: [
+      { name: "players", required: true },
+      { name: "market_value", required: true },
+      { name: "profit", required: false },
+    ],
   },
   "raid-task": {
     icon: "📝",

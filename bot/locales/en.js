@@ -60,6 +60,24 @@ module.exports = {
     unchangedDescription: "You're already using **{flag} {label}**.",
     footer: "Run /raid-language any time to switch back",
   },
+  "raid-auction": {
+    notice: {
+      invalidValueTitle: "{iconWarn} Invalid value",
+      invalidValueDescription: "Market value must be a positive integer. Please try again.",
+    },
+    result: {
+      title: "💰 Auction Calculator",
+      marketValueField: "Market value",
+      partyField: "Players",
+      modeField: "Mode",
+      modeProfit: "Profit (8% margin)",
+      modeBreakeven: "Break-even",
+      bidField: "💰 Bid this amount",
+      eachReceivesField: "Each other member ({count}) gets",
+      winnerNetField: "Winner net vs market",
+      footer: "Formula from la-utils · 5% sell fee + (N-1)/N share",
+    },
+  },
   "stuck-nudge": {
     notForYouTitle: "This button isn't for you",
     notForYouDescription: "The **Switch to Local Sync** button is only for <@{target}>.",
@@ -1285,6 +1303,24 @@ module.exports = {
         ],
         optionDescriptions: {
           roster: "Roster (account) to configure (autocomplete)",
+        },
+      },
+      "raid-auction": {
+        label: "/raid-auction",
+        short: "Calculate the auction bid for a raid loot item",
+        example: "/raid-auction players:8 market_value:293000",
+        notes: [
+          "Computes how much gold to bid when auctioning shared raid loot. Formula ported from la-utils.vercel.app.",
+          "",
+          "**Formula**: bid = floor(0.95 × market_value × (N-1)/N), N = players. `0.95` = 5% sell fee; `(N-1)/N` = the share owed to the other members.",
+          "**Profit mode** (default on): multiplies by 0.92 (8% margin) so winning the item still beats buying it on the market.",
+          "**Output**: the bid (copy-paste into the in-game auction box), what each other member receives, and the winner's estimated profit.",
+          "**Ephemeral**: only you see the result, no channel spam.",
+        ],
+        optionDescriptions: {
+          players: "Number of players splitting the loot (4 or 8)",
+          market_value: "Market value of the item in gold",
+          profit: "Apply 8% profit margin (default: on)",
         },
       },
       "raid-task": {

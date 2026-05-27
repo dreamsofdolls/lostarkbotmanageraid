@@ -4,6 +4,17 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-27 (`/raid-auction` bid calculator)
+
+### Added
+- `/raid-auction` slash command: an auction bid calculator for shared raid loot. Options: `players` (choice 4 / 8), `market_value` (positive integer, gold), and optional `profit` (boolean, default on). Replies ephemerally with the recommended bid (raw integer in a code block for copy-paste into the in-game auction box), what each of the other `N-1` members receives, and the winner's estimated profit vs market.
+- Formula ported verbatim from la-utils.vercel.app: `bid = floor(0.95 × marketValue / N × (N-1))`, and with profit mode `floor(0.92 × base)`. `0.95` = 5% market-sell fee, `(N-1)/N` = the share owed to the other party members, `0.92` = an 8% margin so winning still beats buying on market. Verified to match the reference tool to the gold (V=309000 → N4 202549, N8 236307). 16-player was intentionally dropped (Lost Ark raids are 4 or 8).
+- Wired across all surfaces: command definition (vi/ja localized), dispatch map, `/raid-help` section (icon 🪙, between gold-earner and task), README feature bullet + command table, and `raid-auction.*` locale keys in all three packs (vi/en/jp) to satisfy the i18n parity test.
+
+### Tests
+- `raid-auction.test.js`: reference-value parity (profit on/off), party-size scaling, ephemeral reply shape, profit default-on, profit:false break-even, and non-positive market-value rejection.
+- `raid-help.test.js`: added `raid-auction` to `EXPECTED_SECTION_KEYS` so the section-roster assertions account for the new help entry.
+
 ## 2026-05-23 (Auto-manage gather + refresh hardening)
 
 ### Fixed

@@ -60,6 +60,24 @@ module.exports = {
     unchangedDescription: "もう **{flag} {label}** を使ってますよ～♪",
     footer: "いつでも /raid-language で変えられますわ♪",
   },
+  "raid-auction": {
+    notice: {
+      invalidValueTitle: "{iconWarn} 無効な値ですわ",
+      invalidValueDescription: "市場価格は正の整数で入力してくださいね♪",
+    },
+    result: {
+      title: "💰 競売計算機",
+      marketValueField: "市場価格",
+      partyField: "人数",
+      modeField: "モード",
+      modeProfit: "利益あり（8%マージン）",
+      modeBreakeven: "損益分岐",
+      bidField: "💰 この額で入札",
+      eachReceivesField: "他の各メンバー（{count}人）の取り分",
+      winnerNetField: "落札者の利益（市場比）",
+      footer: "計算式は la-utils より · 売却手数料5% +（N-1)/N 分配",
+    },
+  },
   "stuck-nudge": {
     notForYouTitle: "このボタンはあなた用ではありませんわ",
     notForYouDescription: "**Local Sync に切り替え** ボタンは <@{target}> さん専用ですわ。 押し間違いだと思いますの～",
@@ -1284,6 +1302,24 @@ module.exports = {
         ],
         optionDescriptions: {
           roster: "設定するロスター (オートコンプリート)",
+        },
+      },
+      "raid-auction": {
+        label: "/raid-auction",
+        short: "レイドの戦利品の競売入札額を計算しますわ♪",
+        example: "/raid-auction players:8 market_value:293000",
+        notes: [
+          "レイドの共有戦利品を競売する際の入札ゴールドを計算しますわ。計算式は la-utils.vercel.app より移植♪",
+          "",
+          "**計算式**: bid = floor(0.95 × 市場価格 × (N-1)/N)、N = 人数。`0.95` = 売却手数料5%、`(N-1)/N` = 他メンバーへの分配分ですわ。",
+          "**Profitモード**（デフォルトON）: 0.92（8%マージン）を掛けて、落札しても市場購入よりお得になるようにしますの♪",
+          "**出力**: 入札額（ゲーム内の入札欄にコピペできますわ）、他の各メンバーの取り分、落札者の推定利益。",
+          "**Ephemeral**: 結果はあなただけに表示され、チャンネルを荒らしませんわ～",
+        ],
+        optionDescriptions: {
+          players: "戦利品を分ける人数（4または8）",
+          market_value: "アイテムの市場価格（ゴールド）",
+          profit: "8%の利益マージンを適用（デフォルト: ON）",
         },
       },
       "raid-task": {
