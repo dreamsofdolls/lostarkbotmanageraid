@@ -1,3 +1,13 @@
+/**
+ * services/raid/schedulers.js
+ * Periodic scheduler service: fires the per-guild announcement ticks
+ * (stuck-nudge, set-greeting, hourly-cleanup, artist-bedtime/wakeup,
+ * whisper-ack, maintenance-early/countdown). Each tick respects per-
+ * guild enable flags + redirect-channel overrides from GuildConfig
+ * and the per-guild language. Designed to be catch-up safe · a tick
+ * missed across a bot restart fires at the next aligned slot.
+ */
+
 "use strict";
 
 const { t, getGuildLanguage, getUserLanguage } = require("../i18n");
@@ -28,6 +38,17 @@ const {
 } = require("../../utils/raid/schedule/maintenance");
 const { dailyResetStartMs } = require("../../utils/raid/schedule/reset-windows");
 
+/**
+ * Build the per-guild scheduler service.
+ * @param {object} deps - injected dependencies (Discord client +
+ *   builders, Mongoose models, raid-channel + announcement config
+ *   helpers, locale arrays for randomized copy variants · see the
+ *   destructure block for the full shape).
+ * @returns {object} service surface · use `start(client)` to wire up
+ *   every tick (the bot.js boot calls this once). See the return
+ *   literal at the bottom of the function for the full method list
+ *   (start, stop, individual tick handles for tests).
+ */
 function createRaidSchedulerService({
   GuildConfig,
   User,

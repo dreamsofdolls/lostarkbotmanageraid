@@ -1,3 +1,13 @@
+/**
+ * services/raid/weekly-reset.js
+ * Weekly reset service: fires every Wed 17:00 VN (10:00 UTC) · marks
+ * every stale User doc with the new week key, clears raid progress
+ * and per-character side tasks, then posts the per-guild reset-
+ * announcement (the 30-min self-deleting marker). Catch-up safe · if
+ * the bot is offline across the boundary, the next tick rolls every
+ * stale user forward.
+ */
+
 const User = require("../../models/user");
 const { saveWithRetry } = require("../../models/user");
 const GuildConfig = require("../../models/guildConfig");
@@ -102,6 +112,14 @@ function clearCharacterProgress(character, { preserveSinceMs = null } = {}) {
   character.tasks = tasks;
 }
 
+/**
+ * Roll every stale User doc forward to the current week and post the
+ * per-guild reset-announcement. Idempotent · users already on the
+ * current week are skipped, and the announcement marker self-deletes
+ * after WEEKLY_ANNOUNCEMENT_TTL_MS so a missed tick doesn't double-post.
+ * @param {Date} [now=new Date()] - timestamp override for tests
+ * @returns {Promise<void>}
+ */
 async function resetWeekly(now = new Date()) {
   const targetKey = getTargetResetKey(now);
   const resetStartMs = getCurrentResetStartMs(now);
@@ -245,6 +263,15 @@ async function postWeeklyResetAnnouncements(client, targetKey) {
   }
 }
 
+/**
+ * Start the weekly-reset scheduler · runs `resetWeekly` every
+ * WEEKLY_RESET_TICK_MS (30 min) so a bot restart catches up at the
+ * next aligned slot. Stamps the started-at time for ops visibility
+ * via `getWeeklyResetSchedulerStartedAtMs`.
+ * @param {import('discord.js').Client} client - Discord client (the
+ *   announcement post path needs it to fetch channels).
+ * @returns {void}
+ */
 function startWeeklyResetJob(client) {
   weeklyResetSchedulerStartedAtMs = Date.now();
   const run = async () => {

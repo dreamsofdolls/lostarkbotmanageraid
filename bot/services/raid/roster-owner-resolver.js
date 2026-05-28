@@ -1,3 +1,13 @@
+/**
+ * services/raid/roster-owner-resolver.js
+ * Roster-owner resolver for shared rosters: maps a (caller, account-
+ * name) pair to the User doc that actually owns the roster · the
+ * caller themselves for their own accounts, the grantor for accounts
+ * shared via /raid-share. Returns both the owner doc and a display
+ * label so handlers can render "via @Owner" attribution consistently
+ * across /raid-set, /raid-task, and the text-parser.
+ */
+
 "use strict";
 
 function pickOwnerLabel(userDoc) {
@@ -32,6 +42,14 @@ function flattenRegisteredAccounts(userDocs, executorId) {
   return out;
 }
 
+/**
+ * Build the roster-owner resolver service.
+ * @param {object} deps - injected dependencies (Mongoose User +
+ *   RosterShare models, normalizeName helper · see destructure).
+ * @returns {{resolveRosterOwner: Function}} a single helper that
+ *   returns `{ownerDoc, ownerLabel, viaShared, sharePermission}` for
+ *   a (callerDiscordId, accountName) pair.
+ */
 function createRosterOwnerResolver({
   User,
   normalizeName,
