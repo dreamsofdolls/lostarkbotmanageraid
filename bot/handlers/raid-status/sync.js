@@ -1,3 +1,21 @@
+/**
+ * handlers/raid-status/sync.js
+ * Sync layer for /raid-status · runs the stale-roster refresh +
+ * auto-manage piggyback inside a 2500ms budget, returning cached
+ * data on timeout while the background sync continues. Background
+ * apply uses a separate saveWithRetry loop so a VersionError on the
+ * foreground render doesn't fan out.
+ */
+
+/**
+ * Build the /raid-status sync service.
+ * @param {object} deps - injected dependencies (Mongoose User +
+ *   saveWithRetry, ensureFreshWeek, refresh service handles,
+ *   auto-manage service handles, waitWithBudget primitive · see the
+ *   destructure block).
+ * @returns {object} service surface · see the return literal
+ *   (loadStatusUserDoc, applyAutoManageCollectedForStatus, …)
+ */
 function createRaidStatusSync(deps) {
   const {
     User,
