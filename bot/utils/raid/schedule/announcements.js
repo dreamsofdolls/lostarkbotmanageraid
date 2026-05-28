@@ -1,3 +1,13 @@
+/**
+ * utils/raid/schedule/announcements.js
+ * Single source of truth for Artist channel-announcement metadata.
+ * Adding a new announcement type touches: the registry below, a
+ * matching subdoc in GuildConfig.announcements schema, firing-site
+ * code, and (optional) the /raid-announce HELP bullet. channelOverridable
+ * vs channel-bound semantics decide whether /raid-announce set-channel
+ * can redirect the destination.
+ */
+
 "use strict";
 
 // ---------------------------------------------------------------------------
@@ -126,15 +136,35 @@ const ANNOUNCEMENT_REGISTRY = {
 // Derived accessors - cheap object iteration on a small registry. Keeping
 // derivations in-function (rather than top-level computed consts) makes
 // the registry the only place that needs editing when adding a type.
+
+/**
+ * @returns {string[]} all registered announcement type keys (e.g. "weekly-reset")
+ */
 function announcementTypeKeys() {
   return Object.keys(ANNOUNCEMENT_REGISTRY);
 }
+
+/**
+ * @param {string} typeKey - announcement type key
+ * @returns {object|null} registry entry, or null when unknown
+ */
 function announcementTypeEntry(typeKey) {
   return ANNOUNCEMENT_REGISTRY[typeKey] || null;
 }
+
+/**
+ * @returns {string[]} GuildConfig.announcements subdoc field names (e.g. "weeklyReset")
+ */
 function announcementSubdocKeys() {
   return Object.values(ANNOUNCEMENT_REGISTRY).map((r) => r.subdocKey);
 }
+
+/**
+ * Type keys whose destination admins can redirect via /raid-announce
+ * set-channel. Channel-bound types (greeting, cleanup, whisper-ack) are
+ * excluded because their message text refers to the monitor channel.
+ * @returns {string[]}
+ */
 function announcementOverridableTypeKeys() {
   return Object.entries(ANNOUNCEMENT_REGISTRY)
     .filter(([, entry]) => entry.channelOverridable === true)

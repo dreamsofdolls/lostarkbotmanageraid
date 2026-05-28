@@ -1,3 +1,12 @@
+/**
+ * utils/raid/schedule/maintenance.js
+ * Single source of truth for LA VN maintenance schedule (Wed 14:00 VN
+ * fixed). Slot config + reminder pool live here so reminders, previews,
+ * and next-boundary math share one set of constants. NOTE: 14:00 is
+ * maintenance, NOT the daily reset (which is 17:00 VN) - don't conflate
+ * the two.
+ */
+
 "use strict";
 
 const { DEFAULT_LANGUAGE } = require("../../../locales");
@@ -37,6 +46,14 @@ function lookupMaintenanceVariants(slotKey, lang) {
   return [];
 }
 
+/**
+ * Resolve which maintenance reminder slot (if any) matches the current
+ * minute. Wed-only · returns the matching slot + group ("early" or
+ * "countdown") or null when off-cycle. Slot match is exact-minute by
+ * design · scheduler ticks every minute on maintenance day.
+ * @param {Date} [now=new Date()] - test clock
+ * @returns {{slot: object, group: "early"|"countdown"}|null}
+ */
 function getMaintenanceSlotForNow(now = new Date()) {
   const vn = new Date(now.getTime() + 7 * 60 * 60 * 1000);
   const dayOfWeek = vn.getUTCDay();
@@ -65,6 +82,12 @@ function getMaintenanceSlotForNow(now = new Date()) {
   return null;
 }
 
+/**
+ * Random-pick a single message variant from the slot's variant pool.
+ * @param {string} slotKey - one of T-3h/T-2h/T-1h/T-15m/T-10m/T-5m/T-1m
+ * @param {string} [lang=DEFAULT_LANGUAGE] - viewer language for the pool lookup
+ * @returns {string} chosen variant text, or "" when the pool is empty
+ */
 function pickMaintenanceVariant(slotKey, lang = DEFAULT_LANGUAGE) {
   const pool = lookupMaintenanceVariants(slotKey, lang);
   if (pool.length === 0) return "";
@@ -94,6 +117,12 @@ function buildMaintenancePreview(group) {
   return lines.join("\n");
 }
 
+/**
+ * Snapshot of slot config for cross-module consumption (e.g.
+ * scheduling.js `resolveMaintenanceSlotConfig` resolver). UTC hour is
+ * pre-computed (VN-7) so consumers don't need to know the time zone.
+ * @returns {{dayOfWeek: number, utcHour: number, utcMinute: number, earlyMinutes: number[], countdownMinutes: number[]}}
+ */
 function getMaintenanceSlotConfigSnapshot() {
   return {
     dayOfWeek: MAINTENANCE_DAY_VN,
