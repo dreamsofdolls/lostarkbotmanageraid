@@ -1,3 +1,16 @@
+/**
+ * utils/raid/tasks/shared-tasks.js
+ * State machine + preset registry for account-level shared tasks
+ * (Event Shop, Chaos Gate, Field Boss, custom). Scheduled presets use a
+ * fixed UTC-4 anchor with per-preset active days / start hour / slot
+ * size; resolveScheduledSharedTaskState computes the current open slot
+ * and renders the completedForKey signal that drives one-toggle-per-slot
+ * behaviour. Invariant: SCHEDULE_SOURCE_TIME_ZONE is fixed UTC-4 (IANA
+ * `Etc/GMT+4` - sign intentionally reversed per POSIX convention) so
+ * the slot math never shifts when VN DST rolls (LA server schedule is
+ * the contract, not local time).
+ */
+
 "use strict";
 
 const { dailyResetStartMs } = require("../schedule/reset-windows");
@@ -91,6 +104,14 @@ function sharedTaskCapForReset(reset) {
   return SHARED_TASK_CAP_SCHEDULED;
 }
 
+/**
+ * Parse a YYYY-MM-DD expiry-date string from the /raid-task add modal
+ * into an end-of-day UTC ms timestamp. Returns null when the field is
+ * blank (no expiry) and NaN when format is wrong or the date doesn't
+ * round-trip (catches "2026-02-30" type bogus dates).
+ * @param {string} value - raw modal input
+ * @returns {number|null|typeof NaN} ms timestamp, null (empty), or NaN (invalid)
+ */
 function parseSharedTaskExpiresAt(value) {
   const raw = String(value || "").trim();
   if (!raw) return null;
@@ -285,6 +306,20 @@ function resolveActiveScheduleWindow(preset, parts) {
   return null;
 }
 
+/**
+ * Compute the live state of a scheduled shared task. Drives both the
+ * /raid-status badge ("Now open" / "Opens in 2h") and the
+ * completedForKey toggle (one tick per open slot · resets when the slot
+ * advances).
+ *
+ * Returns: { active, key, completed, scheduleText, nextLabel, nextAtMs,
+ * slotStartAtMs, slotEndAtMs, windowEndAtMs, nextTransitionAtMs }. When
+ * `task.preset.kind !== "scheduled"` returns a minimal "not applicable"
+ * shape so callers can treat manual + scheduled uniformly.
+ * @param {object} task - shared task sub-doc
+ * @param {Date} [now=new Date()] - test clock
+ * @returns {object} state snapshot · shape described above
+ */
 function resolveScheduledSharedTaskState(task, now = new Date()) {
   const preset = getSharedTaskPreset(task?.preset);
   if (preset.kind !== "scheduled") {
@@ -396,6 +431,17 @@ function formatSharedResetLabel(reset, lang) {
   return t("shared-task.reset.weekly", lang);
 }
 
+/**
+ * Render one shared task to its display shape for embeds + select-menu
+ * options. Resolves to localized status copy ("Now open", "Opens at ...")
+ * for scheduled presets and the static reset label ("Daily" / "Weekly")
+ * for manual tasks. Caller uses `.optionStatus` in select-menu labels
+ * (shorter) and `.status` in embed body (longer).
+ * @param {object} task - shared task sub-doc
+ * @param {Date} [now=new Date()] - test clock
+ * @param {string} [lang] - viewer language code; falls through to i18n default
+ * @returns {{name: string, emoji: string, completed: boolean, status: string, optionStatus: string, scheduleText: string, active: boolean, key: string|null, nextAtMs?: number, slotStartAtMs?: number, slotEndAtMs?: number, windowEndAtMs?: number}}
+ */
 function getSharedTaskDisplay(task, now = new Date(), lang) {
   const { t } = require("../../../services/i18n");
   const preset = getSharedTaskPreset(task?.preset);
@@ -457,6 +503,15 @@ function getSharedTaskDisplay(task, now = new Date(), lang) {
   };
 }
 
+/**
+ * Find the earliest ms timestamp at which ANY scheduled shared task on
+ * the account changes state (slot ends, or next window opens). Drives
+ * /raid-status auto-refresh scheduling so the embed re-renders right
+ * when a Chaos Gate / Field Boss slot transitions.
+ * @param {object} account - account sub-doc with sharedTasks[]
+ * @param {Date} [now=new Date()] - test clock
+ * @returns {number|null} ms timestamp, or null if nothing scheduled
+ */
 function getNextSharedTaskTransitionMs(account, now = new Date()) {
   const nowMs = now.getTime();
   let nextMs = null;

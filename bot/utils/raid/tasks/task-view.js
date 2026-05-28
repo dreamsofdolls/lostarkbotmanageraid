@@ -1,3 +1,12 @@
+/**
+ * utils/raid/tasks/task-view.js
+ * Shared Task-view renderer for /raid-status (self) + /raid-check
+ * (Manager spot-check). Owns the per-char card layout, 2-column
+ * ZWS-spacer packing, and totals math. Layout switches to one-per-row
+ * past PAGE_CHAR_CAP because the 2-column trick stops fitting under
+ * Discord's 25-field cap.
+ */
+
 "use strict";
 
 const { pack2Columns } = require("../common/shared");
@@ -46,6 +55,14 @@ function formatItemLevel(character) {
   return text || "0";
 }
 
+/**
+ * Build the Discord embed `fields[]` array for one account's task view.
+ * Caller still owns title, description, footer, and any placeholder
+ * fields appended after the char cards.
+ * @param {object} account - account sub-doc (must have characters[])
+ * @param {{UI: object, getClassEmoji?: function, truncateText?: function, lang?: string}} helpers
+ * @returns {{fields: Array, totals: {daily: number, weekly: number, dailyDone: number, weeklyDone: number, charsWithTasks: number, rendered: number}}}
+ */
 function buildAccountTaskFields(account, helpers) {
   const {
     UI,

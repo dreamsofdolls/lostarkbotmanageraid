@@ -1,17 +1,21 @@
 /**
- * scheduling.js
- *
- * Announcement timing + scheduler-tick math extracted from bot/commands.js.
- * Factory pattern because some calculations depend on scheduler state
- * (auto-cleanup tick, auto-manage daily tick) that's only known after
- * the scheduler service is wired up at compose-root boot. The compose
- * root passes getter functions that close over the lazy `let` bindings
- * so the lookups defer until call-time.
- *
- * Used by: bot/commands.js (compose root), handlers/raid/announce.js,
+ * utils/raid/schedule/scheduling.js
+ * Announcement timing + scheduler-tick math extracted from
+ * bot/commands.js. Factory pattern because some calculations depend on
+ * scheduler state (auto-cleanup tick, auto-manage daily tick) that's
+ * only known after the scheduler service is wired at compose-root boot.
+ * Resolver getters close over the lazy `let` bindings so lookups defer
+ * to call-time. Used by: bot/commands.js, handlers/raid/announce.js,
  * handlers/raid/channel.js (via re-export from commands).
  */
 
+/**
+ * Build the scheduling-helpers service from injected scheduler-state
+ * getters. All resolve* fns are getters (not values) so the factory can
+ * compose before the scheduler service finishes wiring at boot.
+ * @param {object} deps - see destructure inside
+ * @returns {{getAnnouncementsConfig: function, nextIntervalTickMs: function, nextAnnouncementEligibleBoundaryMs: function, nextAnnouncementSchedulerCheckMs: function, formatDiscordTimestampPair: function, buildAnnouncementWhenItFiresText: function}}
+ */
 function createSchedulingHelpers({
   // Pure dep - just the registry-key list
   announcementSubdocKeys,
@@ -164,6 +168,17 @@ function createSchedulingHelpers({
     return null; // event-driven
   }
   
+  /**
+   * Next time the scheduler actually wakes up to consider firing this
+   * announcement type. Differs from `nextAnnouncementEligibleBoundaryMs`
+   * because the bot's tick phase (30-min) drifts off wall-clock
+   * boundaries · the eligible boundary is the calendar moment, this is
+   * the next scheduler tick at-or-after.
+   * @param {string} typeKey - announcement type key
+   * @param {Date} [now=new Date()] - test clock
+   * @param {object} [schedulerState={}] - optional overrides for testing
+   * @returns {number|null} next-check ms or null for event-driven types
+   */
   function nextAnnouncementSchedulerCheckMs(typeKey, now = new Date(), schedulerState = {}) {
     const {
       weeklyResetStartedAtMs = resolveWeeklyResetStarted(),
@@ -198,6 +213,20 @@ function createSchedulingHelpers({
     return `<t:${unixSec}:R> (<t:${unixSec}:F>)`;
   }
   
+  /**
+   * Build the multi-line "when does this fire" body for /raid-announce
+   * show. Returns markdown text combining trigger/dedup/TTL (static from
+   * registry) with next eligible boundary + next scheduler check
+   * (dynamic from scheduler state). Handles disabled/missing-channel
+   * fall-throughs so the embed always shows something actionable.
+   * @param {string} typeKey
+   * @param {object} entry - registry entry for typeKey
+   * @param {{enabled?: boolean, channelId?: string}} current - guild's current cfg for this type
+   * @param {object} guildCfg - full guild config (for raidChannelId fallback + autoCleanupEnabled)
+   * @param {Date} [now=new Date()]
+   * @param {object} [schedulerState={}]
+   * @returns {string} markdown body for the embed field
+   */
   function buildAnnouncementWhenItFiresText(typeKey, entry, current, guildCfg, now = new Date(), schedulerState = {}) {
     const {
       autoManageDisabled = process.env.AUTO_MANAGE_DAILY_DISABLED === "true",

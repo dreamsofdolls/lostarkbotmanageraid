@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-28 (comment-spec batch A: utils/raid/schedule + tasks)
+
+### Changed
+- File headers + JSDoc applied to 9 files under `bot/utils/raid/tasks/*` (3) + `bot/utils/raid/schedule/*` (6). High-value targets: the scheduled-task state machine (`shared-tasks.js` · resolveScheduledSharedTaskState, getSharedTaskDisplay, getNextSharedTaskTransitionMs) and the announcement-tick math (`scheduling.js` factory + nextAnnouncementSchedulerCheckMs + buildAnnouncementWhenItFiresText). Existing inline comments preserved · only file-spec header + JSDoc on the exported surface added. No behavior change, 471/471 green across two consecutive runs.
+
 ## 2026-05-27 (`/raid-auction` winner-net fix + visual polish)
 
 ### Fixed
