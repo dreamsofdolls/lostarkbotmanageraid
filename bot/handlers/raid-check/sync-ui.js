@@ -25,6 +25,39 @@ const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 
+/**
+ * Build the /raid-check Sync UI service. Returns three handlers (display
+ * name resolver, DM embed builder, Sync click handler) that the rest of
+ * /raid-check composes on top of.
+ *
+ * Wired BEFORE edit-ui at the compose root because edit-ui consumes
+ * `resolveCachedDisplayName` as a dep (Edit cascade also resolves
+ * display names per editable user).
+ *
+ * @param {object} deps - injected dependencies
+ * @param {Function} deps.EmbedBuilder - discord.js builder
+ * @param {object} deps.MessageFlags - discord.js flags enum
+ * @param {object} deps.UI - shared color/icon palette
+ * @param {object} deps.User - Mongoose User model
+ * @param {Function} deps.ensureFreshWeek - week-reset advancer
+ * @param {Function} deps.saveWithRetry - VersionError-safe save wrapper
+ * @param {Function} deps.weekResetStartMs - current weekly reset epoch
+ * @param {Function} deps.autoManageEntryKey - composite account+char key
+ * @param {Function} deps.gatherAutoManageLogsForUserDoc - bible HTTP gather
+ * @param {Function} deps.applyAutoManageCollected - in-memory reconcile
+ * @param {Function} deps.stampAutoManageAttempt - touch lastAutoManageAttemptAt
+ * @param {Function} deps.acquireAutoManageSyncSlot - per-user mutex
+ * @param {Function} deps.releaseAutoManageSyncSlot - mutex release
+ * @param {object} deps.raidCheckSyncLimiter - per-user concurrency cap
+ * @param {object} deps.discordUserLimiter - Discord REST fan-out limiter
+ * @param {Function} deps.resolveDiscordDisplay - REST display-name resolver
+ * @param {Function} deps.computeRaidCheckSnapshot - snapshot builder
+ * @returns {{
+ *   resolveCachedDisplayName: Function,
+ *   buildRaidCheckSyncDMEmbed: Function,
+ *   handleRaidCheckSyncClick: Function,
+ * }}
+ */
 function createSyncUi({
   EmbedBuilder,
   MessageFlags,

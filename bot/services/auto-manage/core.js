@@ -1,3 +1,16 @@
+/**
+ * services/auto-manage/core.js
+ * Core auto-manage service: gather → reconcile → save flow that backs
+ * every /raid-auto-manage entry point (the slash command, the scheduler
+ * tick, the /raid-check Sync button, the /raid-status piggyback).
+ *
+ * Invariants: bible HTTP I/O lives in a gather phase OUTSIDE the
+ * saveWithRetry loop so VersionError retries don't re-fire HTTP calls;
+ * the apply phase is pure in-memory mutation. Public-log-off characters
+ * are gated by a 24h reprobe window via `publicLogDisabledAt` (see
+ * model + handlers/roster/edit.js carry-forward).
+ */
+
 "use strict";
 
 const {
@@ -7,6 +20,25 @@ const {
 const { t } = require("../i18n");
 const { getRaidLabel, getModeLabel } = require("../../utils/raid/common/labels");
 
+/**
+ * Build the auto-manage core service. Returns a bag of handlers,
+ * constants, and helper predicates that the rest of the bot wires
+ * into slash commands, schedulers, and UI buttons.
+ *
+ * Factory shape mirrors every other RaidManage service: deps are
+ * dependency-injected so unit tests can stub Discord builders,
+ * Mongoose models, and the bible HTTP limiter without a live runtime.
+ *
+ * @param {object} deps - injected dependencies (see the destructure for
+ *   the full list: discord.js EmbedBuilder + UI tokens, Mongoose User
+ *   model + saveWithRetry, character/roster helpers, raid catalogue,
+ *   bibleLimiter, and the per-user cooldown resolver).
+ * @returns {object} service surface · see the `return {...}` literal at
+ *   the bottom of the function for the canonical method/constant list
+ *   (AUTO_MANAGE_SYNC_COOLDOWN_MS, gatherAutoManageLogsForUserDoc,
+ *   applyAutoManageCollected, syncAutoManageForUserDoc,
+ *   commitAutoManageOn, isPublicLogDisabledError, …).
+ */
 function createAutoManageCoreService({
   EmbedBuilder,
   UI,
