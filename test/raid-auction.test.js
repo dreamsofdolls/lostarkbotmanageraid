@@ -99,6 +99,26 @@ test("handler honors profit:false (break-even bid for both sizes)", async () => 
   assert.match(serialized, /256856/, "should use the break-even bid for 8");
 });
 
+test("winner net subtracts the 5% sell fee from the listing (uses 0.95V, not V)", async () => {
+  // Regression guard for the user-spotted bug: the original implementation
+  // rendered V - bid (gross savings if you keep the item), but the bid
+  // formula's 0.95 factor assumes the winner resells the item on the AH
+  // and so the displayed net MUST also apply the 5% fee. Otherwise the
+  // break-even semantics break (everyone should walk away with 0.95V/N
+  // apiece at profit-off).
+  const factory = makeFactory();
+  // V=300000, N=4, profit on. By hand:
+  //   bid          = floor(0.92 * floor(0.95*300000/4*3)) = 196650
+  //   netRealizable= floor(0.95*300000) = 285000
+  //   winnerNet    = 285000 - 196650 = 88350
+  //   gross V-bid  = 300000 - 196650 = 103350 (the WRONG number we used to show)
+  const interaction = makeInteraction({ marketValue: 300000, profit: true });
+  await factory.handleRaidAuctionCommand(interaction);
+  const serialized = JSON.stringify(interaction._calls[0].embeds[0].toJSON());
+  assert.match(serialized, /88,350/, "winner net should reflect 0.95V - bid");
+  assert.doesNotMatch(serialized, /103,350/, "must not show the gross V - bid");
+});
+
 test("handler embeds the market value + mode in the description", async () => {
   const factory = makeFactory();
   const interaction = makeInteraction({ marketValue: 293000, profit: true });

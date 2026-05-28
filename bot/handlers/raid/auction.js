@@ -55,16 +55,23 @@ function createRaidAuctionCommand({ EmbedBuilder, MessageFlags, UI, User }) {
       return;
     }
 
+    // Net realizable value after the 5% AH sell fee. The bid formula
+    // itself assumes the winner will resell the item on the AH (that's
+    // what the 0.95 factor models), so the winner-net display must use
+    // the SAME assumption · otherwise the break-even semantics break
+    // (at profit-off, everyone should walk away with 0.95V/N apiece,
+    // which only holds when winner-net = 0.95V - bid, not V - bid).
+    const netRealizable = Math.floor(0.95 * marketValue);
     const fields = PARTY_SIZES.map((players) => {
       const bid = computeAuctionBid(marketValue, players, isProfit);
       const others = players - 1;
       // When you win, the bid is split equally among the other N-1 members.
-      // (The 0.95 fee is already on the item value, not on this internal
+      // (The 0.95 fee is on the item resale, not on this internal bid
       // distribution, so no second fee is applied here.)
       const eachReceives = Math.floor(bid / others);
-      // Winner gains the item (worth ~marketValue gross before resale fee)
-      // for `bid` gold. Shown gross to match what the caller sees on AH.
-      const winnerNet = marketValue - bid;
+      // Winner pays `bid`, receives an item that nets `netRealizable`
+      // when resold on the AH. Net profit = netRealizable - bid.
+      const winnerNet = netRealizable - bid;
       return {
         name: t("raid-auction.result.partyHeader", lang, { players }),
         value: t("raid-auction.result.partyBlockValue", lang, {
