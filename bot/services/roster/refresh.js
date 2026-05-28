@@ -1,3 +1,16 @@
+/**
+ * services/roster/refresh.js
+ * Stale-roster refresh service: pulls fresh iLvl/CP/class data from
+ * lostark.bible for every account whose lastRefreshedAt is past the
+ * cooldown window. Used by /raid-status piggyback, /raid-check pre-
+ * render, and the /raid-share viewer-scoped paths.
+ *
+ * Invariants: refresh attempts NEVER block the user-facing render ·
+ * stale data is rendered while a background refresh runs. HTTP 429
+ * aborts the per-account seed loop immediately so a single rate-
+ * limit window doesn't fan out to ~N more bible requests.
+ */
+
 const ROSTER_REFRESH_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const ROSTER_REFRESH_FAILURE_COOLDOWN_MS = 5 * 60 * 1000;
 const REFRESH_SEED_FAILURE_DETAIL_LIMIT = 3;
@@ -11,6 +24,33 @@ function isRateLimitMessage(message) {
     /rate.?limit/i.test(String(message || ""));
 }
 
+/**
+ * Build the roster-refresh service. Returns predicates for staleness
+ * (`isAccountRefreshStale`, `hasStaleAccountRefreshes`), the cooldown-
+ * remaining formatter, and the gather/apply pair callers wrap around
+ * their own saveWithRetry loop.
+ *
+ * @param {object} deps - injected helpers
+ * @param {Function} deps.normalizeName - lowercase + trim name normalizer
+ * @param {Function} deps.foldName - NFKD diacritic-strip + lowercase
+ * @param {Function} deps.getCharacterName - per-char name accessor
+ *   (handles legacy `name` vs `charName` field divergence)
+ * @param {Function} deps.formatNextCooldownRemaining - "Nm remaining"
+ *   formatter shared with /raid-auto-manage cooldown UX
+ * @param {Function} deps.buildFetchedRosterIndexes - index builder for
+ *   the parsed bible roster (used by the apply phase)
+ * @param {Function} deps.findFetchedRosterMatchForCharacter - resolves a
+ *   saved character against the fresh bible parse (handles renames)
+ * @param {Function} deps.fetchRosterCharacters - bible HTTP fetcher
+ *   (wrapped in the global bibleLimiter at the compose root)
+ * @returns {{
+ *   isAccountRefreshStale: Function,
+ *   hasStaleAccountRefreshes: Function,
+ *   formatRosterRefreshCooldownRemaining: Function,
+ *   collectStaleAccountRefreshes: Function,
+ *   applyStaleAccountRefreshes: Function,
+ * }}
+ */
 function createRosterRefreshService(deps) {
   const {
     normalizeName,
