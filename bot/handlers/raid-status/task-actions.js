@@ -1,3 +1,12 @@
+/**
+ * handlers/raid-status/task-actions.js
+ * Pure helpers for the /raid-status task-toggle dropdown · parse the
+ * select-menu value into a kind discriminator, resolve scheduled-
+ * shared-task state for time-windowed presets (Chaos Gate, Field
+ * Boss). Kept dep-free so the task-ui module can use them without a
+ * heavy import.
+ */
+
 const { normalizeName } = require("../../utils/raid/common/shared");
 const { resolveScheduledSharedTaskState } = require("../../utils/raid/tasks/shared-tasks");
 

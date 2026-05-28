@@ -1,3 +1,12 @@
+/**
+ * handlers/raid-status/task-ui.js
+ * Side-tasks dropdown + toggle flow for /raid-status. Renders the
+ * task-toggle picker (per-char or 🌐 all-character bulk mode) and
+ * handles the click-to-flip 🟢/⚪ interactions. Shares
+ * buildAccountTaskFields + getVisibleSharedTasks with /raid-check's
+ * task-view-ui so the two surfaces stay identical.
+ */
+
 const { getClassEmoji } = require("../../models/Class");
 const { buildAccountTaskFields } = require("../../utils/raid/tasks/task-view");
 const {
@@ -6,6 +15,12 @@ const {
 } = require("../../utils/raid/tasks/shared-tasks");
 const { t } = require("../../services/i18n");
 
+/**
+ * Build the /raid-status task UI service.
+ * @param {object} deps - injected dependencies (discord.js builders,
+ *   Mongoose User + saveWithRetry, raid catalogue · see destructure)
+ * @returns {object} service surface · see the return literal
+ */
 function createRaidStatusTaskUi(deps) {
   const {
     EmbedBuilder,

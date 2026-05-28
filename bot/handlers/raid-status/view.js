@@ -1,7 +1,24 @@
+/**
+ * handlers/raid-status/view.js
+ * View layer for /raid-status · builds the per-roster embed (one
+ * page per account) with raid progress, weekly gold rollup, side-
+ * task badges, and the navigation/filter components. Localised via
+ * the i18n service so each rendered page reflects the caller's
+ * (or grantee's) preferred language.
+ */
+
 const { getClassEmoji } = require("../../models/Class");
 const { pack2Columns, formatProgressTotals } = require("../../utils/raid/common/shared");
 const { t } = require("../../services/i18n");
 
+/**
+ * Build the /raid-status view service.
+ * @param {object} deps - injected dependencies (discord.js builders +
+ *   UI tokens, raid catalogue, task helpers · see destructure)
+ * @returns {object} service surface · see the return literal for the
+ *   canonical method list (buildStatusEmbed, buildStatusComponents,
+ *   etc.)
+ */
 function createRaidStatusView(deps) {
   const {
     EmbedBuilder,

@@ -1,3 +1,12 @@
+/**
+ * handlers/raid-status/raid-filter.js
+ * Inline raid-filter dropdown for /raid-status · aggregates every
+ * raid currently eligible across the viewer's roster, exposes them
+ * as dropdown options, and filters the rendered embed to the
+ * selected raid. The sentinel FILTER_ALL_RAIDS value lets the user
+ * reset to the cross-raid overview.
+ */
+
 const { isSupportClass } = require("../../models/Class");
 const { t } = require("../../services/i18n");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");

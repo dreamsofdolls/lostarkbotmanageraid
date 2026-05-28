@@ -1,3 +1,12 @@
+/**
+ * handlers/raid-status/index.js
+ * Compose root for /raid-status. Wires the view layer + task UI +
+ * sync (auto-manage piggyback + fresh-roster refresh) + filter into
+ * one handler bag dispatched from commands.js. Owns the timer that
+ * keeps the per-session sync slot from leaking when a user closes
+ * the embed.
+ */
+
 const { createRaidStatusView } = require("./view");
 const { createRaidStatusTaskUi } = require("./task-ui");
 const { createRaidStatusSync } = require("./sync");
@@ -80,6 +89,16 @@ function resolveBackgroundLookup(viewerDiscordId, account) {
   };
 }
 
+/**
+ * Build the /raid-status command handler factory.
+ * @param {object} deps - injected dependencies (discord.js builders +
+ *   MessageFlags, Mongoose User + saveWithRetry, RosterShare,
+ *   auto-manage service handles, refresh service, view/task UI/sync
+ *   sub-factories, raid catalogue · see destructure block).
+ * @returns {object} service surface · see the return literal for the
+ *   canonical handler list (handleStatusCommand + every paginate/
+ *   filter/task-action/sync button + select dispatch entry).
+ */
 function createRaidStatusCommand(deps) {
   const {
     EmbedBuilder,
