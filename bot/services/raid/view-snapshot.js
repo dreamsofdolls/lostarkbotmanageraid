@@ -1,3 +1,12 @@
+/**
+ * services/raid/view-snapshot.js
+ * View-snapshot service: returns a plain-object snapshot of a User
+ * doc for read paths (/raid-status, /raid-check) without mutating the
+ * Mongoose document. Centralises the toObject() unwrap + the
+ * ensureFreshWeek pass so callers don't accidentally render last
+ * week's progress on a stale doc.
+ */
+
 "use strict";
 
 function toPlainUserSnapshot(userDoc) {
@@ -5,6 +14,19 @@ function toPlainUserSnapshot(userDoc) {
   return typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
 }
 
+/**
+ * Build the view-snapshot service.
+ * @param {object} deps - injected dependencies
+ * @param {object} deps.User - Mongoose User model
+ * @param {Function} deps.saveWithRetry - VersionError-safe save wrapper
+ *   (used when ensureFreshWeek actually advances the cursor and the
+ *   advance must persist)
+ *   · plus ensureFreshWeek, normalizeName, getCharacterName, etc.
+ *   see the destructure block.
+ * @returns {object} service surface · see the return literal for the
+ *   canonical method list (computeRaidStatusSnapshot,
+ *   computeRaidCheckSnapshot, etc.).
+ */
 function createRaidViewSnapshotService({
   User,
   saveWithRetry,

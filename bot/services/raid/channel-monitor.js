@@ -1,3 +1,13 @@
+/**
+ * services/raid/channel-monitor.js
+ * Channel-monitor service: watches the registered raid channel for
+ * raid-clear messages (free-form text), parses them via the text-
+ * parser, applies progress to the matching character + roster, and
+ * fires the whisper-ack + raid-update reply. Also drives the 30-min
+ * auto-cleanup tick (clean non-pinned messages, respecting quiet
+ * hours) and the welcome-embed pin maintenance.
+ */
+
 "use strict";
 
 const { getArtistEmoji } = require("../../models/ArtistEmoji");
@@ -169,6 +179,17 @@ async function applyRaidChannelWritePlans({
   return results.filter(Boolean);
 }
 
+/**
+ * Build the channel-monitor service.
+ * @param {object} deps - injected dependencies (Discord client +
+ *   builders, Mongoose User + GuildConfig + ArtistEmoji models, text-
+ *   parser, raid-set/raid-task service handles, scheduler helpers,
+ *   access-control predicates · see the destructure block).
+ * @returns {object} service surface · attach via the boot wiring in
+ *   commands.js; see the return literal at the bottom of the function
+ *   for the canonical method list (setupChannelMonitor, manual ticks
+ *   for testing, the whisper-ack + reply embed builders, etc.).
+ */
 function createRaidChannelMonitorService({
   PermissionFlagsBits,
   EmbedBuilder,
