@@ -14,6 +14,16 @@
 
 const { t } = require("../../services/i18n");
 
+/**
+ * Build the /raid-check snapshot helper service. Computes the pending-
+ * raids snapshot that every /raid-check view (main + filter + edit
+ * cascade) reads from · separated out so the per-view handlers stay
+ * thin and the Mongo aggregation lives in one place.
+ * @param {object} deps - injected dependencies (Mongoose User + query
+ *   builder, raid catalogue, character/raid helpers · see the
+ *   destructure block).
+ * @returns {object} service surface · see the return literal
+ */
 function createSnapshotHelpers({
   // Mongoose + query
   User,

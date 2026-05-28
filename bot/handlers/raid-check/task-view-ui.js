@@ -1,3 +1,11 @@
+/**
+ * handlers/raid-check/task-view-ui.js
+ * Side-task overlay for /raid-check · renders the per-account task
+ * fields + shared-roster tasks on the cross-raid view, sharing the
+ * same field-builders as /raid-status's side-tasks dropdown so the
+ * two surfaces stay visually identical.
+ */
+
 const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
 const { buildAccountTaskFields } = require("../../utils/raid/tasks/task-view");
 const {
@@ -6,6 +14,12 @@ const {
 } = require("../../utils/raid/tasks/shared-tasks");
 const { t, getUserLanguage } = require("../../services/i18n");
 
+/**
+ * Build the /raid-check task-view UI service.
+ * @param {object} deps - injected dependencies (discord.js builders,
+ *   Mongoose User model · see destructure)
+ * @returns {object} service surface · see the return literal
+ */
 function createTaskViewUi(deps) {
   const {
     EmbedBuilder,

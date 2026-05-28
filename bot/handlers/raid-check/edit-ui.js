@@ -22,6 +22,19 @@ const { buildNoticeEmbed, replyNotice } = require("../../utils/raid/common/share
 const { t, getUserLanguage } = require("../../services/i18n");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 
+/**
+ * Build the /raid-check Edit UI service · the cascade flow that lets a
+ * manager edit another user's raid progress (account → char → raid →
+ * mode/status). Reuses resolveCachedDisplayName from sync-ui.js so
+ * every editable user surfaces with their guild-displayed name, not
+ * the raw Discord username handle.
+ * @param {object} deps - injected dependencies (discord.js builders +
+ *   MessageFlags, Mongoose User + saveWithRetry, edit-helpers +
+ *   sync-ui handles, access-control predicates · see destructure)
+ * @returns {object} service surface · see the return literal for the
+ *   canonical handler list (handleRaidCheckEdit* family of buttons +
+ *   selects)
+ */
 function createEditUi({
   EmbedBuilder,
   StringSelectMenuBuilder,

@@ -21,6 +21,17 @@ const {
 const { t, getUserLanguage } = require("../../services/i18n");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 
+/**
+ * Build the /raid-check all-mode handler factory.
+ * @param {object} deps - injected dependencies (discord.js builders,
+ *   MessageFlags, Mongoose User model, snapshot/edit/sync helpers
+ *   from sibling factories, raid catalogue · see destructure block).
+ * @returns {{
+ *   handleRaidCheckAllMode: Function,
+ *   handleRaidCheckAllPage: Function,
+ *   handleRaidCheckAllRaidFilter: Function,
+ * }} handlers wired into the /raid-check button + select dispatch
+ */
 function createAllModeHandler({
   ActionRowBuilder,
   ButtonBuilder,

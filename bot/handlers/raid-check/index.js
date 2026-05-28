@@ -1,3 +1,14 @@
+/**
+ * handlers/raid-check/index.js
+ * Compose root for /raid-check (Manager-only cross-raid overview).
+ * Wires the snapshot helpers + edit cascade + sync flow + all-mode
+ * + auto-manage UI + task-view UI into one handler bag dispatched
+ * from commands.js. Owns the per-session pagination timer.
+ *
+ * Composition order matters: sync-ui must come BEFORE edit-ui
+ * because edit-ui consumes resolveCachedDisplayName as a dep.
+ */
+
 const { createSnapshotHelpers } = require("./snapshot");
 const { createEditHelpers } = require("./edit-helpers");
 const { createAllModeHandler } = require("./all-mode");
@@ -16,6 +27,18 @@ const { t, getUserLanguage } = require("../../services/i18n");
 
 const RAID_CHECK_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 
+/**
+ * Build the /raid-check command handler factory.
+ * @param {object} deps - injected dependencies (discord.js builders +
+ *   MessageFlags, Mongoose User + saveWithRetry, raid catalogue,
+ *   auto-manage service handles, raidCheckRefreshLimiter +
+ *   raidCheckSyncLimiter + discordUserLimiter, RAID_REQUIREMENT_MAP
+ *   · see the destructure block).
+ * @returns {object} service surface · see the return literal for the
+ *   canonical handler list (handleRaidCheckCommand + every button /
+ *   select dispatch entry for the all-mode, edit cascade, sync flow,
+ *   auto-manage UI, and task view).
+ */
 function createRaidCheckCommand(deps) {
   const {
     EmbedBuilder,
