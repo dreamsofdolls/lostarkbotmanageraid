@@ -1,3 +1,16 @@
+/**
+ * handlers/raid/auction.js
+ * /raid-auction: bid calculator for shared raid loot. Takes a single
+ * AH listing price and renders bids for BOTH 4- and 8-player parties
+ * side by side, plus the per-member split and the winner's estimated
+ * net profit (after the 5% AH sell fee on resale).
+ *
+ * Formula ported verbatim from la-utils.vercel.app · see the inline
+ * comment block above computeAuctionBid for the math derivation.
+ * Public reply (whole party sees the suggested bid); invalid-input
+ * notices stay ephemeral.
+ */
+
 "use strict";
 
 const { t, getUserLanguage } = require("../../services/i18n");
@@ -34,6 +47,20 @@ function formatGold(value) {
 // run for. 16 is intentionally omitted (no LA raid uses it).
 const PARTY_SIZES = [4, 8];
 
+/**
+ * Build the /raid-auction command handler.
+ * @param {object} deps - injected dependencies
+ * @param {Function} deps.EmbedBuilder - discord.js EmbedBuilder
+ * @param {object} deps.MessageFlags - discord.js MessageFlags enum
+ * @param {object} deps.UI - shared color/icon palette
+ * @param {object} deps.User - Mongoose User model (used by
+ *   getUserLanguage to render embed copy in the caller's locale)
+ * @returns {{
+ *   handleRaidAuctionCommand: Function,
+ *   __test: {computeAuctionBid: Function, PARTY_SIZES: number[]},
+ * }} handler wired into commands.js dispatch + a test seam exposing
+ *   the pure formula function for unit tests
+ */
 function createRaidAuctionCommand({ EmbedBuilder, MessageFlags, UI, User }) {
   async function handleRaidAuctionCommand(interaction) {
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });

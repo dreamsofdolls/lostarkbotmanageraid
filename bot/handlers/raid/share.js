@@ -1,3 +1,13 @@
+/**
+ * handlers/raid/share.js
+ * /raid-share: Manager-only roster sharing. Grant a viewer all of
+ * your rosters with edit or view permission. Grantee gets read+write
+ * via /raid-status, /raid-set, /raid-task, and the text parser; the
+ * owner keeps exclusive rights on /raid-add-roster, /raid-edit-roster,
+ * /raid-remove-roster, /raid-auto-manage. Backed by the RosterShare
+ * collection (one grant doc per owner↔grantee pair).
+ */
+
 const RosterShare = require("../../models/RosterShare");
 const User = require("../../models/user");
 const { isManagerId } = require("../../services/access/manager");
@@ -35,6 +45,14 @@ function localizedAccessLevel(level, lang) {
   return t(`share.accessLevel.${level || "edit"}`, lang);
 }
 
+/**
+ * Build the /raid-share command handler factory.
+ * @param {object} deps - injected dependencies
+ * @param {Function} deps.EmbedBuilder - discord.js EmbedBuilder
+ * @param {object} deps.UI - shared color/icon palette
+ * @returns {{handleRaidShareCommand: Function}} single dispatch entry
+ *   that internally branches on the `grant`/`revoke`/`list` subcommand
+ */
 function createRaidShareCommand(deps) {
   const { EmbedBuilder, UI } = deps;
   const buildShareAlert = (options) => buildAlertEmbed({ EmbedBuilder, UI, ...options });

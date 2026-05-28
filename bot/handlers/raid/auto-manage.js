@@ -1,3 +1,12 @@
+/**
+ * handlers/raid/auto-manage.js
+ * /raid-auto-manage: user-facing entry to the bible-log clear-sync
+ * service. Subactions: on / off / sync / status / local-on /
+ * local-off / reset. Wires the slash UI to the underlying core
+ * service in services/auto-manage/core.js and the encounters.db
+ * web-companion path in services/local-sync.
+ */
+
 "use strict";
 
 const {
@@ -17,6 +26,16 @@ const {
   RESULT: SYNC_RESULT,
 } = require("../../services/local-sync");
 
+/**
+ * Build the /raid-auto-manage command handler factory.
+ * @param {object} deps - injected dependencies (discord.js builders,
+ *   Mongoose User model, the core auto-manage service handles, local-
+ *   sync helpers, cooldown resolvers · see destructure block).
+ * @returns {{
+ *   handleRaidAutoManageCommand: Function,
+ *   handleRaidAutoManageAutocomplete: Function,
+ * }} handlers wired into commands.js dispatch + autocomplete maps
+ */
 function createRaidAutoManageCommand(deps) {
   const {
     EmbedBuilder,
