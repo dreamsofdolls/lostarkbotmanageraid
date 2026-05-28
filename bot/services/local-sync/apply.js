@@ -1,3 +1,14 @@
+/**
+ * services/local-sync/apply.js
+ * Apply path for local-sync deltas. Map encounters.db rows to (raid,
+ * mode, gate), bucket by char+raid+mode (highest gate wins), expand
+ * cumulatively (G2 cleared implies G1 cleared - matches the text
+ * parser), and delegate to the raid-set write path so auth + retry
+ * semantics stay shared. Returns a 4-way summary
+ * (applied/skipped/unmapped/rejected) so the web UI can group results
+ * without knowing the internal shape.
+ */
+
 "use strict";
 
 const { getRaidGateForBoss, getGatesForRaid } = require("../../models/Raid");

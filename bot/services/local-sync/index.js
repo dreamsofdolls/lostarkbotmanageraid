@@ -1,3 +1,11 @@
+/**
+ * services/local-sync/index.js
+ * Aggregate re-export surface for the local-sync sub-package. Callers
+ * import via `require("./local-sync")` rather than spelunking into
+ * sub-modules · keeps the dependency graph greppable and lets us
+ * relocate internals without touching consumers.
+ */
+
 "use strict";
 
 // Local-sync mode entry point. Future phases add sub-modules here:

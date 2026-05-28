@@ -1,3 +1,12 @@
+/**
+ * services/local-sync/sync-endpoint.js
+ * POST /api/raid-sync handler. Auth chain: Bearer JWT → signature
+ * verify → Mongo localSyncEnabled check → stored-token freshness check
+ * → apply. On any applied row, the stored token's effective expiry is
+ * shrunk to now+60s so a leaked URL post-sync is only useful for ~1
+ * minute (defense in depth · the JWT itself still has its full TTL).
+ */
+
 "use strict";
 
 const {

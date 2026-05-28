@@ -1,3 +1,13 @@
+/**
+ * services/local-sync/tokens.js
+ * HMAC-SHA256 mini-JWT for the local-sync web companion. Short-lived
+ * (15-min default), constant-time verify, secret-rotation by env bump.
+ * Stored token + expAt fields on User allow hard-revocation: minting a
+ * new token (rotateLocalSyncToken) kills all older URLs, and a
+ * successful sync shrinks the stored expiry so a leaked link is only
+ * useful for ~60s after data lands.
+ */
+
 "use strict";
 
 const crypto = require("node:crypto");

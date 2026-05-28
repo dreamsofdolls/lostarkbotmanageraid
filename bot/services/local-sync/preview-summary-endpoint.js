@@ -1,3 +1,12 @@
+/**
+ * services/local-sync/preview-summary-endpoint.js
+ * Pre-sync diff computation for the web companion's "currently synced
+ * vs pending" preview. Pure projection over (accounts × deltaBuckets)
+ * - no DB writes - so the user can preview the impact before clicking
+ * Apply. Mirrors `summarizeRaidProgress` from utils/raid/common so the
+ * percent matches what /raid-status shows post-sync.
+ */
+
 "use strict";
 
 const { verifyToken, isCurrentStoredToken, bucketizeLocalSyncDeltas } = require("./index");

@@ -1,3 +1,13 @@
+/**
+ * services/local-sync/state.js
+ * Local-sync mode state machine + mutex helpers. Two sync sources are
+ * mutually exclusive (bible vs local) - Mongo conditional updates
+ * enforce the mutex at write time so concurrent device flips can't both
+ * land. Invariant: every helper here returns
+ * `{ ok, reason, doc? }` where reason ∈ "ok" | "conflict" | "no_user"
+ * so the callers can render the right error embed without re-querying.
+ */
+
 "use strict";
 
 /**
