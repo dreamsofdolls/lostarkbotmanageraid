@@ -64,7 +64,6 @@ const SECTION_META = {
   "raid-auction": {
     icon: "🪙",
     options: [
-      { name: "players", required: true },
       { name: "market_value", required: true },
       { name: "profit", required: false },
     ],

@@ -7,6 +7,7 @@ const { EmbedBuilder, MessageFlags } = require("discord.js");
 const {
   createRaidAuctionCommand,
   computeAuctionBid,
+  PARTY_SIZES,
 } = require("../bot/handlers/raid/auction");
 const { UI } = require("../bot/utils/raid/common/shared");
 
@@ -18,12 +19,12 @@ function makeFactory() {
   return createRaidAuctionCommand({ EmbedBuilder, MessageFlags, UI, User: UserStub });
 }
 
-function makeInteraction({ players, marketValue, profit = null }) {
+function makeInteraction({ marketValue, profit = null }) {
   const calls = [];
   return {
     user: { id: "auction-user" },
     options: {
-      getInteger: (name) => ({ players, market_value: marketValue }[name]),
+      getInteger: (name) => ({ market_value: marketValue }[name]),
       getBoolean: () => profit,
     },
     reply: async (arg) => calls.push(arg),
@@ -50,48 +51,71 @@ test("computeAuctionBid scales with party size: bigger party -> higher bid", () 
   assert.ok(eight > four, `expected 8-player bid (${eight}) > 4-player (${four})`);
 });
 
-test("handler replies publicly with the bid embedded in the result", async () => {
+test("PARTY_SIZES is exactly [4, 8] (LA raid sizes only)", () => {
+  assert.deepEqual(PARTY_SIZES, [4, 8]);
+});
+
+test("handler renders BOTH 4- and 8-player bids in one public reply", async () => {
   const factory = makeFactory();
-  const interaction = makeInteraction({ players: 8, marketValue: 293000 });
+  const interaction = makeInteraction({ marketValue: 309000 });
   await factory.handleRaidAuctionCommand(interaction);
 
   assert.equal(interaction._calls.length, 1);
   const reply = interaction._calls[0];
-  // Public (not ephemeral) so the whole raid party sees the suggested bid.
+  // Public (not ephemeral) so the whole raid party sees the suggested bids.
   assert.notEqual(reply.flags, MessageFlags.Ephemeral);
 
   const embed = reply.embeds[0].toJSON();
-  const expectedBid = computeAuctionBid(293000, 8, true);
+  // Exactly two party-size fields, in the order 4 then 8.
+  assert.equal(embed.fields.length, 2);
+  assert.match(embed.fields[0].name, /4/);
+  assert.match(embed.fields[1].name, /8/);
+  // Both bid amounts appear (profit-on values for 309000).
   const serialized = JSON.stringify(embed);
-  assert.match(serialized, new RegExp(String(expectedBid)), "bid amount should appear in the embed");
+  assert.match(serialized, /202549/, "4-player bid should appear");
+  assert.match(serialized, /236307/, "8-player bid should appear");
 });
 
 test("handler defaults profit ON when the option is omitted", async () => {
   const factory = makeFactory();
-  const interaction = makeInteraction({ players: 4, marketValue: 309000, profit: null });
+  const interaction = makeInteraction({ marketValue: 309000, profit: null });
   await factory.handleRaidAuctionCommand(interaction);
 
-  const embed = interaction._calls[0].embeds[0].toJSON();
-  const serialized = JSON.stringify(embed);
-  // Profit-on bid for (309000, 4) is 202549; base would be 220162.
-  assert.match(serialized, /202549/, "should use the profit-on bid by default");
-  assert.doesNotMatch(serialized, /220162/, "should not use the base (profit-off) bid");
+  const serialized = JSON.stringify(interaction._calls[0].embeds[0].toJSON());
+  assert.match(serialized, /202549/, "should use the profit-on bid for 4");
+  assert.match(serialized, /236307/, "should use the profit-on bid for 8");
+  // Base (profit-off) bids should NOT appear when profit defaults on.
+  assert.doesNotMatch(serialized, /220162/);
+  assert.doesNotMatch(serialized, /256856/);
 });
 
-test("handler honors profit:false (break-even bid)", async () => {
+test("handler honors profit:false (break-even bid for both sizes)", async () => {
   const factory = makeFactory();
-  const interaction = makeInteraction({ players: 4, marketValue: 309000, profit: false });
+  const interaction = makeInteraction({ marketValue: 309000, profit: false });
+  await factory.handleRaidAuctionCommand(interaction);
+
+  const serialized = JSON.stringify(interaction._calls[0].embeds[0].toJSON());
+  assert.match(serialized, /220162/, "should use the break-even bid for 4");
+  assert.match(serialized, /256856/, "should use the break-even bid for 8");
+});
+
+test("handler embeds the market value + mode in the description", async () => {
+  const factory = makeFactory();
+  const interaction = makeInteraction({ marketValue: 293000, profit: true });
   await factory.handleRaidAuctionCommand(interaction);
 
   const embed = interaction._calls[0].embeds[0].toJSON();
-  assert.match(JSON.stringify(embed), /220162/, "should use the break-even bid");
+  // Listing price appears with thousands separator for readability.
+  assert.match(embed.description, /293,000/);
 });
 
 test("handler rejects a non-positive market value with a danger embed", async () => {
   const factory = makeFactory();
-  const interaction = makeInteraction({ players: 4, marketValue: 0 });
+  const interaction = makeInteraction({ marketValue: 0 });
   await factory.handleRaidAuctionCommand(interaction);
 
-  const embed = interaction._calls[0].embeds[0].toJSON();
-  assert.equal(embed.color, UI.colors.danger);
+  const reply = interaction._calls[0];
+  // Invalid-input notice stays ephemeral so it doesn't clutter the channel.
+  assert.equal(reply.flags, MessageFlags.Ephemeral);
+  assert.equal(reply.embeds[0].toJSON().color, UI.colors.danger);
 });
