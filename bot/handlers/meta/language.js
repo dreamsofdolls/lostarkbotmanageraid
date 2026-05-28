@@ -1,15 +1,13 @@
-// /raid-language - per-user locale switcher.
-//
-// Two-step ephemeral flow:
-//   1. Slash command renders an embed showing the user's current locale
-//      + a select dropdown listing every SUPPORTED_LANGUAGES entry.
-//   2. Selection (customId `raid-language:select`) persists the new
-//      code to the User doc, invalidates the in-process cache, and
-//      replies with confirmation in the NEW language so the user
-//      visually confirms the switch took effect.
-//
-// All replies are ephemeral - the language picker is purely personal
-// state, no value to the rest of the channel.
+/**
+ * handlers/meta/language.js
+ * /raid-language per-user locale switcher. Two-step ephemeral flow:
+ * slash command renders the current locale + a select dropdown of
+ * SUPPORTED_LANGUAGES; selection persists the code to the User doc,
+ * invalidates the in-process cache, and replies in the NEW language so
+ * the user visually confirms the switch took effect. All replies are
+ * ephemeral · the language picker is purely personal state.
+ */
+
 "use strict";
 
 const User = require("../../models/user");

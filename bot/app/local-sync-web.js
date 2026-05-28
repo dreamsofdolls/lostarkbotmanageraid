@@ -1,3 +1,13 @@
+/**
+ * app/local-sync-web.js
+ * Compose-root for the local-sync HTTP server. Wires the catalog +
+ * raid-sync + roster + preview-summary endpoints into the
+ * `apiHandlers` lookup table accepted by http-server.js, then starts
+ * the server. LOCAL_SYNC_HTTP_DISABLED=true env opts out (useful when
+ * running multiple bot instances and only one should host the
+ * companion).
+ */
+
 "use strict";
 
 const path = require("node:path");
@@ -8,6 +18,14 @@ const { createRosterEndpoint } = require("../services/local-sync/roster-endpoint
 const { createPreviewSummaryEndpoint } = require("../services/local-sync/preview-summary-endpoint");
 const { createCatalogEndpoint } = require("../services/local-sync/catalog-endpoint");
 
+/**
+ * Build the `<METHOD> <pathname>` → handler map used by
+ * startLocalSyncHttpServer's `apiHandlers` option. OPTIONS aliases are
+ * registered alongside each verb so CORS preflight hits the same code
+ * path.
+ * @param {{User: object, applyRaidSetForDiscordId: function, applyRaidSetBatchForDiscordId: function}} deps
+ * @returns {Object<string, Function>} handler map
+ */
 function createLocalSyncApiHandlers({ User, applyRaidSetForDiscordId, applyRaidSetBatchForDiscordId }) {
   const raidSyncHandler = createRaidSyncEndpoint({
     User,

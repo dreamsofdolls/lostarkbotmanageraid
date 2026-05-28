@@ -1,10 +1,27 @@
+/**
+ * app/slash-command-registration.js
+ * Boot-time slash-command registration with Discord's REST API. Lives
+ * in app/ because it knows env + Discord wiring but owns no command
+ * behavior. Failure is logged + non-fatal so the bot still starts when
+ * env is partial (helps local dev without a GUILD_ID).
+ */
+
 "use strict";
 
 const { REST, Routes } = require("discord.js");
 
 /**
- * Register slash commands at boot. Kept in app/ because this is deployment
- * wiring: it knows Discord REST + env inputs, but owns no command behavior.
+ * Register slash commands against Discord's REST API at boot time.
+ * Silent skip when DISCORD_TOKEN or GUILD_ID is unset (local dev).
+ * Errors are logged + swallowed so the bot continues coming up · the
+ * Discord client still works without per-guild command refresh.
+ * @param {object} opts
+ * @param {object} opts.client - logged-in discord.js Client
+ * @param {Array} opts.commands - SlashCommandBuilder[] (toJSON-able)
+ * @param {string} [opts.guildId=process.env.GUILD_ID]
+ * @param {string} [opts.token=process.env.DISCORD_TOKEN]
+ * @param {object} [opts.log=console]
+ * @returns {Promise<void>}
  */
 async function registerSlashCommandsOnBoot({
   client,

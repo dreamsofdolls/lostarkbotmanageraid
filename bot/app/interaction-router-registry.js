@@ -1,3 +1,14 @@
+/**
+ * app/interaction-router-registry.js
+ * Allowlist of slash command names this bot owns + route map for
+ * non-slash interactions (autocomplete, select, button). CRITICAL: any
+ * new slash command must be added to RAID_COMMAND_NAMES below or the
+ * router rejects it with "unknown command" - the dispatch map in
+ * commands.js alone is not enough. A parity test in
+ * test/router-registry.test.js asserts every registered slash command
+ * appears here.
+ */
+
 "use strict";
 
 const { createInteractionRouter } = require("../services/discord/interaction-router");
@@ -21,6 +32,14 @@ const RAID_COMMAND_NAMES = Object.freeze([
   "raid-auction",
 ]);
 
+/**
+ * Build the interaction router for the bot's command surface. Wires
+ * the slash dispatcher + per-command autocomplete handlers +
+ * prefix-routed select/button handlers into a single Interaction
+ * dispatcher consumed by lifecycle.js.
+ * @param {{MessageFlags: object, handlers: object}} deps - handlers must expose every method named below
+ * @returns {Function} interaction dispatcher · async (interaction) => void
+ */
 function createRaidInteractionRouter({ MessageFlags, handlers }) {
   return createInteractionRouter({
     MessageFlags,
