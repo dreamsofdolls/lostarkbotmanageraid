@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-28 (comment-spec batch B: services/local-sync)
+
+### Changed
+- File-spec headers added to all 10 files under `bot/services/local-sync/*` (state, apply, catalog, catalog-endpoint, http-server, sync-endpoint, tokens, roster-endpoint, preview-summary-endpoint, index). These files already had strong existing JSDoc · only the standardized 4-7 line top-of-file header was missing. `catalog.js` also picked up JSDoc on `normalizeDifficulty` + `buildLocalSyncCatalog` (the only two exports lacking it). 471/471 green across two consecutive runs.
+
 ## 2026-05-28 (comment-spec batch A: utils/raid/schedule + tasks)
 
 ### Changed

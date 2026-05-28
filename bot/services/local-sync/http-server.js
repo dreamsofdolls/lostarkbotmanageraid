@@ -1,3 +1,13 @@
+/**
+ * services/local-sync/http-server.js
+ * Node-builtin HTTP server hosting the local-sync web companion +
+ * JSON API. Stays Express-free (under 200 LOC) by exposing
+ * `apiHandlers` as a `<METHOD> <pathname>` lookup so callers can wire
+ * additional endpoints without a router. Sandboxed to `webDir` (path
+ * traversal rejected before disk read) and bound to 0.0.0.0 so the
+ * Railway load balancer can reach it.
+ */
+
 "use strict";
 
 const http = require("node:http");

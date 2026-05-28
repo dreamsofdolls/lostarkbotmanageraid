@@ -1,3 +1,12 @@
+/**
+ * services/local-sync/roster-endpoint.js
+ * GET /api/me/roster handler · returns a slim roster snapshot for the
+ * web companion's diff-view preview. Auth mirrors POST /api/raid-sync
+ * (Bearer JWT + stored-token freshness). Projection deliberately
+ * excludes sideTasks/sharedTasks/lastRefreshedAt/registeredBy to keep
+ * the payload tight and avoid leaking ops metadata.
+ */
+
 "use strict";
 
 const { verifyToken, isCurrentStoredToken } = require("./index");

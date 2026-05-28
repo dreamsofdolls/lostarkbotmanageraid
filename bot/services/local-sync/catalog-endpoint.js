@@ -1,3 +1,10 @@
+/**
+ * services/local-sync/catalog-endpoint.js
+ * GET /api/catalog handler. No auth - the catalog is public (just
+ * raid/class metadata) and is shipped with a 5-min Cache-Control so
+ * web companion page loads stay light.
+ */
+
 "use strict";
 
 const { buildLocalSyncCatalog } = require("./catalog");
@@ -13,6 +20,11 @@ function send(res, status, body) {
   res.end(status === 204 ? "" : JSON.stringify(body));
 }
 
+/**
+ * Build the GET /api/catalog handler. Factory shape kept for parity
+ * with the other endpoints even though this one takes no deps.
+ * @returns {Function} async (req, res) handler
+ */
 function createCatalogEndpoint() {
   return async function handleCatalog(req, res) {
     if (req.method === "OPTIONS") {

@@ -1,3 +1,12 @@
+/**
+ * services/local-sync/catalog.js
+ * Server-side catalog snapshot served to the web companion at boot.
+ * Single source of truth for boss→raid mappings + difficulty aliases so
+ * server apply path and browser preview stay in sync. Versioned (v1) so
+ * a future schema bump can be detected client-side without breaking
+ * older companion pages.
+ */
+
 "use strict";
 
 const { RAID_REQUIREMENTS, BOSS_TO_RAID_GATE } = require("../../models/Raid");
@@ -14,11 +23,23 @@ const DIFFICULTY_TO_MODE_KEY = Object.freeze({
   inferno: "nightmare",
 });
 
+/**
+ * Map a LOA Logs `difficulty` value to Artist's internal modeKey.
+ * @param {string} raw - LOA Logs raw difficulty string (e.g. "Hard")
+ * @returns {"normal"|"hard"|"nightmare"|null} normalized mode key, or null when unrecognized
+ */
 function normalizeDifficulty(raw) {
   const text = String(raw || "").trim().toLowerCase();
   return DIFFICULTY_TO_MODE_KEY[text] || null;
 }
 
+/**
+ * Build the catalog snapshot the web companion fetches at page load.
+ * Pure compute over the in-memory raid + class registries · no DB hits,
+ * safe to call on every request (catalog-endpoint also caches via
+ * Cache-Control: max-age=300).
+ * @returns {{version: number, raidOrder: string[], modeOrder: string[], raids: object, bossToRaidGate: Array, difficultyToModeKey: object, classesById: object}}
+ */
 function buildLocalSyncCatalog() {
   const raids = {};
   const modeOrder = [];
