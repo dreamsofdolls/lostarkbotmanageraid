@@ -4,6 +4,23 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-27 (`/raid-auction` winner-net fix + visual polish)
+
+### Fixed
+- Winner net now subtracts the 5% AH sell fee instead of using the raw listing price (`floor(0.95 * marketValue) - bid` rather than `marketValue - bid`). The bid formula's `0.95` factor assumes the winner resells the item on the AH, so the displayed net MUST apply the same fee or the break-even semantics break · at profit-off, every party member (winner + N-1 losers) should walk away with `0.95V/N` apiece, which only holds when winner net uses `0.95V - bid`. Spotted by the user after seeing the gross number looked optimistic for a flip-and-sell scenario. Regression guard added to the test suite. For V=299999, N=8, profit on: winner net was overstated by ~15,000 (5% of V) before this fix.
+
+### Changed
+- Embed visual polish for `/raid-auction`:
+  - Title widened to "💰 Auction Bid Calculator" so the function reads at a glance.
+  - Description gets icon prefixes: 📦 listing + ⚙️ mode, with the gold coin (🪙) appended to the listing value for visual mass.
+  - Profit-mode label shows the sign explicitly ("+8% margin") so the direction of the adjustment is unambiguous.
+  - Each party block now uses an explicit "💰 **Bid**" header above the copy-paste code block (was bare), and the breakdown lines pick up emoji prefixes: 📤 for the per-member share, 💵 for winner net. Reads as a stack with clear hierarchy instead of three loose lines.
+  - Per-block winner-net line labeled "(sau phí bán)" / "(after fee)" / "（手数料込み）" so the 5%-applied assumption is visible at the point of consumption (not just the footer).
+  - Footer rewritten to lead with the fee impact: "5% AH sell fee applied to both the bid and the winner's net" - calls out that the fee is double-applied (once in formula, once in displayed net).
+
+### Tests
+- New regression case in `raid-auction.test.js`: asserts `88,350` (the correct 0.95V - bid for V=300000, N=4, profit on) appears in the embed AND `103,350` (the old wrong gross) does not. Locks in the semantic so a future "simplification" can't accidentally revert.
+
 ## 2026-05-27 (`/raid-auction` redesign: dual-size single input)
 
 ### Changed
