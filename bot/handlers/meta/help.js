@@ -1,21 +1,20 @@
-// /raid-help - drill-down help dropdown.
-//
-// Architecture: this file holds only language-neutral metadata - section
-// order, icons, option key+required structure. All user-facing strings
-// (labels, shorts, notes, option descriptions) live in bot/locales/<lang>.js
-// under the `raid-help` namespace. raid-help.js reads them via the i18n
-// service so adding a new language doesn't require touching this handler.
-//
-// Three locales available here:
-//   - vi (default)      - first-class, exposed via /raid-language
-//   - jp                - first-class, exposed via /raid-language
-//   - en                - partial, exposed only via the slash option
-//                         `/raid-help language:en` as a one-off override
-//
-// Language resolution at command time:
-//   1. explicit `language:` slash option (per-call override) wins
-//   2. otherwise, the viewer's persistent /raid-language preference
-//   3. otherwise, "vi"
+/**
+ * handlers/meta/help.js
+ * /raid-help drill-down dropdown. This file holds language-neutral
+ * metadata only · section order, icons, option key+required structure.
+ * All user-facing strings live in bot/locales/<lang>.js under the
+ * `raid-help` namespace and are pulled at render time via i18n.
+ *
+ * Three locales: vi (default, first-class), jp (first-class), en
+ * (partial, available only via `/raid-help language:en` one-off
+ * override). Language resolution: explicit slash option wins, else the
+ * viewer's persistent /raid-language preference, else "vi".
+ *
+ * Invariant: adding a section here means also adding the matching
+ * `raid-help.sections.<key>.*` keys in every locale pack (the i18n
+ * parity test will fail otherwise).
+ */
+
 const User = require("../../models/user");
 const { t, getUserLanguage, resolveLocale } = require("../../services/i18n");
 

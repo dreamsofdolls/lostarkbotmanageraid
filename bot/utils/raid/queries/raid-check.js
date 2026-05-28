@@ -1,13 +1,13 @@
 /**
- * raid-check-query.js
- *
- * Mongo query construction for /raid-check scans. Pulled out of
- * bot/commands.js so the field projection list and the iLvl-range filter
- * live next to the helper that builds the query, instead of being
- * scattered across 300 lines of compose-root.
- *
- * Used by: services/auto-manage/core.js, commands/raid-check.js,
- * commands/raid-status.js (anything that scans User docs for a raid view).
+ * utils/raid/queries/raid-check.js
+ * Mongo query construction for /raid-check scans. The iLvl-range filter
+ * + field projection live next to the helper that builds the query so
+ * touching one without the other is hard to miss. Invariant: stale
+ * accounts STAY in the candidate set even when cached iLvl is below
+ * the raid floor - /raid-check lazy-refreshes before scanning, so
+ * filtering on cached iLvl alone would hide newly-honed chars.
+ * Used by: services/auto-manage/core.js, handlers/raid-check/*,
+ * handlers/raid-status/* (anything that scans User docs for raid view).
  */
 
 const { RAID_REQUIREMENTS } = require("../../../models/Raid");
@@ -91,6 +91,15 @@ function getRaidScanRange(raidKey, selfMin) {
   return { lowestMin, selfMin, nextMin };
 }
 
+/**
+ * Build the Mongo query used by /raid-check scans. Returns the base
+ * "has at least one account" filter when raidMeta is null; otherwise
+ * adds the iLvl-floor + stale-account union (see file header for the
+ * stale-account invariant).
+ * @param {{raidKey: string, minItemLevel: number}|null} raidMeta - scan target raid
+ * @param {number} [now=Date.now()] - test clock
+ * @returns {object} Mongo query object
+ */
 function buildRaidCheckUserQuery(raidMeta, now = Date.now()) {
   const query = { ...RAID_CHECK_USER_BASE_QUERY };
   if (!raidMeta) return query;

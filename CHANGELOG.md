@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-28 (comment-spec batch C: app + queries + meta)
+
+### Changed
+- File-spec headers + JSDoc added to 6 files: `bot/app/{slash-command-registration,local-sync-web,interaction-router-registry}.js`, `bot/utils/raid/queries/raid-check.js`, and `bot/handlers/meta/{help,language}.js`. The router-registry header calls out the dispatch-map ↔ allowlist invariant captured in [[feedback_raidmanage_command_wiring]] so a future contributor sees the gotcha without spelunking memory. The raid-check query header now states the stale-account-stays-in-candidate-set rule explicitly (was buried in a 12-line inline comment). 471/471 green across two consecutive runs.
+
 ## 2026-05-28 (comment-spec batch B: services/local-sync)
 
 ### Changed
