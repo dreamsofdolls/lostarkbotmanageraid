@@ -4,6 +4,16 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-27 (`/raid-auction` redesign: dual-size single input)
+
+### Changed
+- `/raid-auction` no longer takes a `players` choice. Enter `market_value` (the AH listing price) once and the embed now renders the bid for BOTH 4-player and 8-player parties side by side, mirroring the la-utils web UI. Each per-size block keeps the same breakdown (bid in a copy-paste code block, each other member's cut, winner net vs listing).
+- Locale `raid-auction.result` keys swapped to match the new shape: dropped `marketValueField` / `partyField` / `modeField` / `bidField` / `eachReceivesField` / `winnerNetField`; added `descriptionTemplate` (header line for market + mode), `partyHeader` (per-size field name with `{players}`), and `partyBlockValue` (multi-line template with `{bid}` / `{others}` / `{eachReceives}` / `{winnerNet}`). Done in all three packs to keep the i18n parity test green.
+- Documented explicitly across the command description, locale help notes, README, and footer that the `0.95` factor in the bid formula IS the 5% AH sell fee, so the caller enters the listing price as-is (no manual deduction). This was the user-facing question that prompted the redesign · also confirmed by the break-even math: at profit-off, everyone (winner + N-1 losers) walks away with `0.95V/N` apiece, so the 0.95 is unambiguously the market-sell fee, not a separate auction-distribution fee.
+
+### Tests
+- `raid-auction.test.js` updated for the new shape: dropped per-size handler tests, added `PARTY_SIZES === [4, 8]` invariant, added `handler renders BOTH 4- and 8-player bids in one public reply` (asserts 2 fields with bid values), and `handler embeds the market value + mode in the description`.
+
 ## 2026-05-27 (`/raid-auction` bid calculator)
 
 ### Added

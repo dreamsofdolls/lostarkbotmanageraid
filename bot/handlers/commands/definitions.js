@@ -903,32 +903,18 @@ function createRaidCommandDefinitions({
 
   const raidAuctionCommand = new SlashCommandBuilder()
     .setName("raid-auction")
-    .setDescription("Calculate the auction bid for a raid loot item")
+    .setDescription("Calculate auction bids for 4 and 8 player parties from one market value")
     .setDescriptionLocalizations({
-      vi: "Tính giá bid đấu giá vật phẩm trong raid",
-      ja: "レイド戦利品の競売入札額を計算",
+      vi: "Tính giá bid đấu giá cho cả party 4 và 8 người từ một giá trị thị trường",
+      ja: "市場価格1つから4人・8人パーティの入札額をまとめて計算",
     })
     .addIntegerOption((option) =>
       option
-        .setName("players")
-        .setDescription("Number of players splitting the loot")
-        .setDescriptionLocalizations({
-          vi: "Số người chia vật phẩm",
-          ja: "戦利品を分ける人数",
-        })
-        .setRequired(true)
-        .addChoices(
-          { name: "4 players", name_localizations: { vi: "4 người", ja: "4人" }, value: 4 },
-          { name: "8 players", name_localizations: { vi: "8 người", ja: "8人" }, value: 8 },
-        )
-    )
-    .addIntegerOption((option) =>
-      option
         .setName("market_value")
-        .setDescription("Market value of the item in gold")
+        .setDescription("Market value of the item (the AH listing price; 5% sell fee is auto-deducted)")
         .setDescriptionLocalizations({
-          vi: "Giá trị thị trường của vật phẩm (vàng)",
-          ja: "アイテムの市場価格（ゴールド）",
+          vi: "Giá thị trường của vật phẩm (giá listing trên AH; phí bán 5% tự trừ)",
+          ja: "アイテムの市場価格（AHの掲載価格；売却手数料5%は自動控除）",
         })
         .setRequired(true)
         .setMinValue(1)

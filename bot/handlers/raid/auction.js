@@ -9,8 +9,11 @@ const { t, getUserLanguage } = require("../../services/i18n");
 //   profit = Math.floor(0.92 * base)
 //
 // Meaning:
-//   - 0.95   = 5% market-sell fee on the item value (item nets 0.95*V).
-//   - (N-1)/N = the share owed to the OTHER N-1 party members.
+//   - 0.95   = 5% market-sell fee on the item value. The user enters the
+//              AH LISTING price; the formula automatically deducts the
+//              5% so the bid reflects net realizable value.
+//   - (N-1)/N = the share owed to the OTHER N-1 party members of that
+//              net value.
 //   - 0.92   = an 8% margin so winning the item is profitable vs just
 //              buying it on the market.
 //
@@ -26,11 +29,15 @@ function formatGold(value) {
   return Number(value).toLocaleString("en-US");
 }
 
+// Lost Ark raids are 4 or 8 players; the bot computes both at once and
+// renders them side-by-side so the caller doesn't have to guess which to
+// run for. 16 is intentionally omitted (no LA raid uses it).
+const PARTY_SIZES = [4, 8];
+
 function createRaidAuctionCommand({ EmbedBuilder, MessageFlags, UI, User }) {
   async function handleRaidAuctionCommand(interaction) {
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
 
-    const players = interaction.options.getInteger("players", true);
     const marketValue = interaction.options.getInteger("market_value", true);
     // Default ON to match the reference tool's `isProfit: true` state.
     const isProfit = interaction.options.getBoolean("profit") ?? true;
@@ -48,54 +55,40 @@ function createRaidAuctionCommand({ EmbedBuilder, MessageFlags, UI, User }) {
       return;
     }
 
-    const bid = computeAuctionBid(marketValue, players, isProfit);
-    const others = players - 1;
-    // When you win, the bid is split equally among the other N-1 members.
-    // (The 0.95 fee is already on the item value, not on this internal
-    // distribution, so no second fee is applied here.)
-    const eachReceives = others > 0 ? Math.floor(bid / others) : 0;
-    // You pay `bid`, keep the item worth ~marketValue.
-    const winnerNet = marketValue - bid;
+    const fields = PARTY_SIZES.map((players) => {
+      const bid = computeAuctionBid(marketValue, players, isProfit);
+      const others = players - 1;
+      // When you win, the bid is split equally among the other N-1 members.
+      // (The 0.95 fee is already on the item value, not on this internal
+      // distribution, so no second fee is applied here.)
+      const eachReceives = Math.floor(bid / others);
+      // Winner gains the item (worth ~marketValue gross before resale fee)
+      // for `bid` gold. Shown gross to match what the caller sees on AH.
+      const winnerNet = marketValue - bid;
+      return {
+        name: t("raid-auction.result.partyHeader", lang, { players }),
+        value: t("raid-auction.result.partyBlockValue", lang, {
+          bid,
+          others,
+          eachReceives: formatGold(eachReceives),
+          winnerNet: formatGold(winnerNet),
+        }),
+        inline: true,
+      };
+    });
+
+    const modeText = isProfit
+      ? t("raid-auction.result.modeProfit", lang)
+      : t("raid-auction.result.modeBreakeven", lang);
 
     const embed = new EmbedBuilder()
       .setColor(UI.colors.progress)
       .setTitle(t("raid-auction.result.title", lang))
-      .addFields(
-        {
-          name: t("raid-auction.result.marketValueField", lang),
-          value: `\`${formatGold(marketValue)}\``,
-          inline: true,
-        },
-        {
-          name: t("raid-auction.result.partyField", lang),
-          value: `\`${players}\``,
-          inline: true,
-        },
-        {
-          name: t("raid-auction.result.modeField", lang),
-          value: isProfit
-            ? t("raid-auction.result.modeProfit", lang)
-            : t("raid-auction.result.modeBreakeven", lang),
-          inline: true,
-        },
-        {
-          // Raw integer (no separators) in a code block so it copy-pastes
-          // cleanly into the in-game auction bid box.
-          name: t("raid-auction.result.bidField", lang),
-          value: `\`\`\`\n${bid}\n\`\`\``,
-          inline: false,
-        },
-        {
-          name: t("raid-auction.result.eachReceivesField", lang, { count: others }),
-          value: `~\`${formatGold(eachReceives)}\``,
-          inline: true,
-        },
-        {
-          name: t("raid-auction.result.winnerNetField", lang),
-          value: `~\`${formatGold(winnerNet)}\``,
-          inline: true,
-        },
-      )
+      .setDescription(t("raid-auction.result.descriptionTemplate", lang, {
+        marketValue: formatGold(marketValue),
+        mode: modeText,
+      }))
+      .addFields(fields)
       .setFooter({ text: t("raid-auction.result.footer", lang) });
 
     // Public reply: an auction happens live in the raid party, so the
@@ -108,11 +101,12 @@ function createRaidAuctionCommand({ EmbedBuilder, MessageFlags, UI, User }) {
   return {
     handleRaidAuctionCommand,
     // Test seam: pure formula, no Discord lifecycle needed.
-    __test: { computeAuctionBid },
+    __test: { computeAuctionBid, PARTY_SIZES },
   };
 }
 
 module.exports = {
   createRaidAuctionCommand,
   computeAuctionBid,
+  PARTY_SIZES,
 };
