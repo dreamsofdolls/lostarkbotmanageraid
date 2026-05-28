@@ -1,8 +1,28 @@
+/**
+ * handlers/raid/announce.js
+ * /raid-announce: per-guild config for the 9 announcement types
+ * (weekly-reset, stuck-nudge, set-greeting, hourly-cleanup,
+ * artist-bedtime, artist-wakeup, whisper-ack, maintenance-early,
+ * maintenance-countdown). Admin-only · list / enable / disable /
+ * redirect-channel per type. Wires the slash UI to the per-guild
+ * announcement config stored on GuildConfig.
+ */
+
 "use strict";
 
 const { replyEmbed, replyNotice } = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
 
+/**
+ * Build the /raid-announce command handler factory.
+ * @param {object} deps - injected dependencies (discord.js builders,
+ *   PermissionFlagsBits, UI tokens, GuildConfig Mongoose model, etc.
+ *   · see the destructure block inside the function).
+ * @returns {{
+ *   handleRaidAnnounceCommand: Function,
+ *   handleRaidAnnounceAutocomplete: Function,
+ * }} handlers wired into commands.js dispatch + autocomplete maps
+ */
 function createRaidAnnounceCommand(deps) {
   const {
     EmbedBuilder,

@@ -1,3 +1,12 @@
+/**
+ * handlers/raid/task.js
+ * /raid-task: per-character + roster-level side tasks (Una dailies,
+ * Chaos Gate, Field Boss, custom presets). Subcommands: add / remove
+ * / clear / shared-add / shared-remove. Auto-reset 17:00 VN daily,
+ * Wed 17:00 weekly; scheduled presets follow UTC-4 windows. Toggle
+ * complete via the /raid-status side-tasks dropdown.
+ */
+
 "use strict";
 
 const {
@@ -46,6 +55,19 @@ const {
   countByReset,
 } = require("../../utils/raid/tasks/side-tasks");
 
+/**
+ * Build the /raid-task command handler factory.
+ * @param {object} deps - injected dependencies (discord.js builders +
+ *   MessageFlags, Mongoose User model, saveWithRetry, task helpers
+ *   from utils/raid/tasks/*, access-control + roster-owner-resolver
+ *   for shared rosters · see destructure block).
+ * @returns {{
+ *   handleRaidTaskCommand: Function,
+ *   handleRaidTaskAutocomplete: Function,
+ *   handleRaidTaskButton: Function,
+ * }} handlers wired into commands.js dispatch + autocomplete + button-
+ *   route maps
+ */
 function createRaidTaskCommand(deps) {
   const {
     EmbedBuilder,

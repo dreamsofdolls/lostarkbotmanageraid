@@ -1,3 +1,13 @@
+/**
+ * handlers/raid/set.js
+ * /raid-set: mark a character's progress on one raid · `complete` /
+ * `process` (one gate) / `reset`. Supports manager-on-behalf updates
+ * via the access-control layer · manager-registered rosters surface
+ * in autocomplete with a 👥 marker, and shared rosters resolve via
+ * roster-owner-resolver so the editor and the owner can both update
+ * progress.
+ */
+
 const { replyEmbed, replyNotice } = require("../../utils/raid/common/shared");
 const {
   getRosterMatches,
@@ -15,6 +25,16 @@ const {
   findCharacterInUser: findCharacterEntryInUser,
 } = require("../../utils/raid/tasks/side-tasks");
 
+/**
+ * Build the /raid-set command handler factory.
+ * @param {object} deps - injected dependencies (discord.js builders,
+ *   Mongoose User model, saveWithRetry, raid catalog helpers, access-
+ *   control predicates, RAID_REQUIREMENT_MAP · see destructure block).
+ * @returns {{
+ *   handleRaidSetCommand: Function,
+ *   handleRaidSetAutocomplete: Function,
+ * }} handlers wired into commands.js dispatch + autocomplete maps
+ */
 function createRaidSetCommand(deps) {
   const {
     EmbedBuilder,

@@ -1,3 +1,10 @@
+/**
+ * handlers/raid/channel.js
+ * /raid-channel: admin config for the monitor channel · register the
+ * channel, toggle the auto-cleanup + announcement schedules, repin
+ * the welcome embed, set per-guild language. Reads/writes GuildConfig.
+ */
+
 "use strict";
 
 const {
@@ -37,6 +44,16 @@ const RAID_CHANNEL_ACTION_CHOICES = [
   { value: "set-language", labelKey: "setLanguage", external: true },
 ];
 
+/**
+ * Build the /raid-channel command handler factory.
+ * @param {object} deps - injected dependencies (discord.js builders,
+ *   PermissionFlagsBits, ChannelType, GuildConfig + User Mongoose
+ *   models, scheduler stop/start helpers · see the destructure).
+ * @returns {{
+ *   handleRaidChannelCommand: Function,
+ *   handleRaidChannelAutocomplete: Function,
+ * }} handlers wired into commands.js dispatch + autocomplete maps
+ */
 function createRaidChannelCommand({
   EmbedBuilder,
   PermissionFlagsBits,

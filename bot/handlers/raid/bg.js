@@ -910,6 +910,16 @@ async function handleRemove({ interaction, deps, lang }) {
 
 // ─── Factory ────────────────────────────────────────────────────────────────
 
+/**
+ * Build the /raid-bg command handler factory.
+ * Subcommand-based: `set` (upload 1-4 images), `view` (preview saved
+ * slots), `remove` (drop one slot or clear pool).
+ * @param {object} deps - injected dependencies
+ * @param {object} deps.User - Mongoose User model (locale lookup)
+ *   plus discord.js builders and the userbackgrounds storage layer
+ *   resolved internally · see destructure block.
+ * @returns {{handleRaidBgCommand: Function}}
+ */
 function createRaidBgCommand(deps) {
   const { User } = deps;
   async function handleRaidBgCommand(interaction) {
