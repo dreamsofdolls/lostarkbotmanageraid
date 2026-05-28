@@ -13,6 +13,14 @@
 
 const { t } = require("../../services/i18n");
 
+/**
+ * Build the /raid-check Edit helper service · pure render/filter
+ * helpers shared by the Edit cascade (account picker → char picker →
+ * raid picker) and the Edit flow's confirmation embed.
+ * @param {object} deps - injected helpers (UI tokens, normalizeName,
+ *   raid catalogue · see destructure)
+ * @returns {object} service surface · see the return literal
+ */
 function createEditHelpers({
   UI,
   normalizeName,

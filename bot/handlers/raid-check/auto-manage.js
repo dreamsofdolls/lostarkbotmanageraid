@@ -219,6 +219,17 @@ function buildDisableAutoDmEmbed(EmbedBuilder, { managerId }, lang = "vi") {
     .setDescription(description);
 }
 
+/**
+ * Build the /raid-check auto-manage UI service.
+ * Builds the inline auto-manage status column shown in /raid-check
+ * (per-user opt-in indicator, public-log-off ⚠ markers) plus the
+ * disabled-confirm DM embed sent when /raid-check Sync skips a user
+ * with auto-manage off.
+ * @param {object} deps - injected dependencies (discord.js builders +
+ *   MessageFlags, Mongoose User model · see destructure block)
+ * @returns {object} service surface · see the return literal for the
+ *   canonical method list
+ */
 function createRaidCheckAutoManageUi(deps) {
   const {
     ActionRowBuilder,
