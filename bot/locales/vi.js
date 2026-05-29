@@ -1443,7 +1443,7 @@ module.exports = {
       "raid-schedule": {
         label: "/raid-schedule",
         short: "Tạo board đăng ký raid có slot Support/DPS, waitlist và RSVP",
-        example: "/raid-schedule create raid:armoche mode:hard size:8 when:20:00 title:\"Tối nay\"",
+        example: "/raid-schedule create raid:armoche mode:hard when:20:00 title:\"Tối nay\"",
         notes: [
           "Raid Manager bày một board công khai, rồi member tự bấm chọn character từ roster của mình - Artist lo phần xếp đội.",
           "",
@@ -1456,7 +1456,6 @@ module.exports = {
           create: "Subcommand tạo board mới",
           raid: "Raid cần lập lịch",
           mode: "Độ khó",
-          size: "Party size 4 hoặc 8",
           when: "`HH:MM`, `+2h`, hoặc `+90m`",
           auto_lock: "Tự khóa khi tới giờ bắt đầu (mặc định bật)",
           title: "Tiêu đề board tuỳ chọn",

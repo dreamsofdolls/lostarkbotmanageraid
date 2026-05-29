@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-29 (`/raid-schedule` raid-derived party size)
+
+### Changed
+- `/raid-schedule create` no longer asks for `size`. Party size is derived from the raid catalog instead: Act 4 and Kazeros are 8-player raids; Serca is a 4-player raid.
+
 ## 2026-05-29 (`/raid-schedule` Discord live MVP)
 
 ### Added

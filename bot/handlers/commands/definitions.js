@@ -972,17 +972,6 @@ function createRaidCommandDefinitions({
             .setRequired(true)
             .addChoices(...RAID_SCHEDULE_MODE_CHOICES)
         )
-        .addIntegerOption((option) =>
-          option
-            .setName("size")
-            .setDescription("Party size")
-            .setDescriptionLocalizations({ vi: "Cỡ party", ja: "パーティ人数" })
-            .setRequired(true)
-            .addChoices(
-              { name: "4", value: 4 },
-              { name: "8", value: 8 },
-            )
-        )
         .addStringOption((option) =>
           option
             .setName("when")

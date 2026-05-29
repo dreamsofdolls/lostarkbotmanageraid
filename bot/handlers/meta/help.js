@@ -74,7 +74,6 @@ const SECTION_META = {
       { name: "create", required: true },
       { name: "raid", required: true },
       { name: "mode", required: true },
-      { name: "size", required: true },
       { name: "when", required: true },
       { name: "auto_lock", required: false },
       { name: "title", required: false },
