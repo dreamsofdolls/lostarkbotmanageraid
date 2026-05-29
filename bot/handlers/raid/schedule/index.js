@@ -31,6 +31,9 @@ function createRaidScheduleCommand({
   ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   MessageFlags,
   UI,
   User,
@@ -500,6 +503,223 @@ function createRaidScheduleCommand({
     });
   }
 
+  // Lead-only control panel (ephemeral). Buttons reuse the rse: prefix so
+  // they route back through handleRaidScheduleButton. Kick is intentionally
+  // deferred (it needs a member select route); set-room / edit-time / cancel
+  // cover the rest without touching the shared interaction router.
+  async function handleManage(interaction, event, lang) {
+    if (!isLeadActionAllowed(interaction)) {
+      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
+      return;
+    }
+    if (event.status === "cleared" || event.status === "cancelled") {
+      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
+      return;
+    }
+    const id = String(event._id);
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`rse:setroom:${id}`)
+        .setLabel(t("raid-schedule.btn.setRoom", lang))
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`rse:edittime:${id}`)
+        .setLabel(t("raid-schedule.btn.editTime", lang))
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`rse:cancel:${id}`)
+        .setLabel(t("raid-schedule.btn.cancelEvent", lang))
+        .setStyle(ButtonStyle.Danger),
+    );
+    await interaction.reply({
+      embeds: [
+        noticeEmbed(
+          "info",
+          t("raid-schedule.notice.manageTitle", lang),
+          t("raid-schedule.notice.manageDescription", lang),
+        ),
+      ],
+      components: [row],
+      flags: ephemeralFlag,
+    });
+  }
+
+  // Build a single-line text input row for a modal.
+  function modalTextRow(customId, label, { required, value, maxLength = 100 }) {
+    const input = new TextInputBuilder()
+      .setCustomId(customId)
+      .setLabel(clip(label, 45))
+      .setStyle(TextInputStyle.Short)
+      .setRequired(Boolean(required))
+      .setMaxLength(maxLength);
+    if (value) input.setValue(String(value).slice(0, maxLength));
+    return new ActionRowBuilder().addComponents(input);
+  }
+
+  async function handleSetRoom(interaction, event, lang) {
+    if (!isLeadActionAllowed(interaction)) {
+      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
+      return;
+    }
+    if (event.status === "cleared" || event.status === "cancelled") {
+      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
+      return;
+    }
+    const id = String(event._id);
+    const modalId = `rse:roommodal:${id}`;
+    const modal = new ModalBuilder()
+      .setCustomId(modalId)
+      .setTitle(clip(t("raid-schedule.modal.roomTitle", lang), 45))
+      .addComponents(
+        modalTextRow("room", t("raid-schedule.modal.roomNameLabel", lang), {
+          required: true,
+          value: event.roomName,
+        }),
+        modalTextRow("password", t("raid-schedule.modal.roomPasswordLabel", lang), {
+          required: false,
+          value: event.roomPassword,
+        }),
+      );
+    await interaction.showModal(modal);
+
+    // Promise-based collector instead of router-level modal routing - keeps
+    // this flow self-contained (no shared-router change).
+    const submit = await interaction
+      .awaitModalSubmit({
+        time: 120000,
+        filter: (i) => i.customId === modalId && i.user.id === interaction.user.id,
+      })
+      .catch(() => null);
+    if (!submit) return;
+
+    const roomName = (submit.fields.getTextInputValue("room") || "").trim();
+    const password = (submit.fields.getTextInputValue("password") || "").trim();
+    const fresh = await loadEvent(id);
+    if (!fresh) {
+      await submit.reply(noticePayload(lang, "warn", "missingEventTitle", "missingEventDescription"));
+      return;
+    }
+    fresh.roomName = roomName || null;
+    fresh.roomPassword = password || null;
+    await fresh.save();
+
+    const langForBoard = await boardLang(fresh.guildId);
+    await editBoardMessage(submit, fresh, langForBoard);
+    await submit.reply({
+      embeds: [
+        noticeEmbed(
+          "success",
+          t("raid-schedule.notice.roomSavedTitle", lang),
+          t("raid-schedule.notice.roomSavedDescription", lang, { room: roomName }),
+        ),
+      ],
+      flags: ephemeralFlag,
+    });
+  }
+
+  async function handleEditTime(interaction, event, lang) {
+    if (!isLeadActionAllowed(interaction)) {
+      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
+      return;
+    }
+    if (event.status === "cleared" || event.status === "cancelled") {
+      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
+      return;
+    }
+    const id = String(event._id);
+    const modalId = `rse:timemodal:${id}`;
+    const modal = new ModalBuilder()
+      .setCustomId(modalId)
+      .setTitle(clip(t("raid-schedule.modal.timeTitle", lang), 45))
+      .addComponents(
+        modalTextRow("when", t("raid-schedule.modal.timeLabel", lang), { required: true }),
+      );
+    await interaction.showModal(modal);
+
+    const submit = await interaction
+      .awaitModalSubmit({
+        time: 120000,
+        filter: (i) => i.customId === modalId && i.user.id === interaction.user.id,
+      })
+      .catch(() => null);
+    if (!submit) return;
+
+    const startAt = parseStartTime(submit.fields.getTextInputValue("when"), lang);
+    if (!startAt) {
+      await submit.reply(noticePayload(lang, "danger", "invalidTimeTitle", "invalidTimeDescription"));
+      return;
+    }
+    const fresh = await loadEvent(id);
+    if (!fresh) {
+      await submit.reply(noticePayload(lang, "warn", "missingEventTitle", "missingEventDescription"));
+      return;
+    }
+    fresh.startAt = startAt;
+    await fresh.save();
+
+    const langForBoard = await boardLang(fresh.guildId);
+    await editBoardMessage(submit, fresh, langForBoard);
+    await submit.reply({
+      embeds: [
+        noticeEmbed(
+          "success",
+          t("raid-schedule.notice.timeSavedTitle", lang),
+          t("raid-schedule.notice.timeSavedDescription", lang, {
+            rel: `<t:${Math.floor(startAt.getTime() / 1000)}:R>`,
+            abs: `<t:${Math.floor(startAt.getTime() / 1000)}:f>`,
+          }),
+        ),
+      ],
+      flags: ephemeralFlag,
+    });
+  }
+
+  async function handleCancel(interaction, event, lang) {
+    if (!isLeadActionAllowed(interaction)) {
+      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
+      return;
+    }
+    if (event.status === "cleared" || event.status === "cancelled") {
+      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
+      return;
+    }
+    await interaction.deferUpdate();
+    event.status = "cancelled";
+    event.cancelledAt = new Date();
+    await event.save();
+
+    const langForBoard = await boardLang(event.guildId);
+    await editBoardMessage(interaction, event, langForBoard);
+    // Collapse the ephemeral manage menu the button lives on.
+    await interaction.editReply({
+      embeds: [
+        noticeEmbed(
+          "warn",
+          t("raid-schedule.notice.cancelledTitle", lang),
+          t("raid-schedule.notice.cancelledDescription", lang),
+        ),
+      ],
+      components: [],
+    }).catch(() => {});
+
+    // Ping everyone who signed up, in the public channel (mentions only fire
+    // from message content, not embeds · see feedback_discord_embed_mentions).
+    const ids = [...new Set((event.signups || []).map((s) => s.discordId))];
+    if (ids.length > 0) {
+      try {
+        const channel = await interaction.client.channels.fetch(event.channelId);
+        await channel?.send?.({
+          content: t("raid-schedule.notice.cancelPingContent", langForBoard, {
+            users: ids.map((id) => `<@${id}>`).join(" "),
+            title: event.title || "",
+          }),
+        });
+      } catch (error) {
+        console.warn("[raid-schedule] cancel ping failed:", error?.message || error);
+      }
+    }
+  }
+
   async function handleRaidScheduleButton(interaction) {
     const lang = await userLang(interaction);
     const parsed = parseCustomId(interaction.customId);
@@ -519,10 +739,10 @@ function createRaidScheduleCommand({
     if (parsed.action === "end") return handleEnd(interaction, event, lang);
     if (parsed.action === "room") return handleRoom(interaction, event, lang);
     if (parsed.action === "help") return handleHelp(interaction, lang);
-    if (parsed.action === "manage") {
-      await replyNotice(interaction, lang, "info", "manageTitle", "manageDescription");
-      return;
-    }
+    if (parsed.action === "manage") return handleManage(interaction, event, lang);
+    if (parsed.action === "setroom") return handleSetRoom(interaction, event, lang);
+    if (parsed.action === "edittime") return handleEditTime(interaction, event, lang);
+    if (parsed.action === "cancel") return handleCancel(interaction, event, lang);
     await replyNotice(interaction, lang, "warn", "unknownTitle", "unknownDescription");
   }
 

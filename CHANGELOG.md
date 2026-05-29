@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-29 (raid-schedule: Artist voice + lead manage menu)
+
+### Changed
+- Rewrote every `/raid-schedule` user-facing string in Artist's warm Kitsune voice across vi/en/jp (board, picker, notices, help). VN-ified labels (Room -> Phong, RSVP -> Phan hoi); jp notice/picker/help were English placeholders and are now proper JP. Only string values changed, keys/vars untouched, i18n parity stays green.
+
+### Added
+- Lead `Manage` button now opens a real ephemeral control panel instead of a "coming soon" notice: **Set room** + **Edit time** open Discord modals (via `showModal` + `awaitModalSubmit`, so no shared interaction-router change), and **Cancel event** flips the board to cancelled, edits it in place, and pings every signup in the channel. Room name + password persist to the RaidEvent and surface through the existing comp-gated Room button. Kicking members stays deferred (needs a member-select route). 505 tests green across two runs.
+
 ## 2026-05-29 (`/raid-schedule-preview` command rename)
 
 ### Changed
