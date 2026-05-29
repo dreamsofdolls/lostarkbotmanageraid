@@ -1421,7 +1421,7 @@ module.exports = {
       "raid-schedule": {
         label: "/raid-schedule",
         short: "Create a raid signup board with Support/DPS slots, waitlist, and RSVP",
-        example: "/raid-schedule create raid:armoche mode:hard size:8 when:20:00 title:\"Tonight\"",
+        example: "/raid-schedule create raid:armoche mode:hard when:20:00 title:\"Tonight\"",
         notes: [
           "Raid Managers post a public board, then members pick a character from their own roster - Artist handles the lineup.",
           "",
@@ -1434,7 +1434,6 @@ module.exports = {
           create: "Subcommand that creates a new board",
           raid: "Raid to schedule",
           mode: "Difficulty",
-          size: "Party size, 4 or 8",
           when: "`HH:MM`, `+2h`, or `+90m`",
           auto_lock: "Auto-lock when start time arrives (default on)",
           title: "Optional board title",

@@ -6,6 +6,7 @@
 const RAID_REQUIREMENTS = {
   armoche: {
     label: "Act 4",
+    partySize: 8,
     gates: ["G1", "G2"],
     modes: {
       normal: { label: "Normal", minItemLevel: 1700, gold: { G1: 12500, G2: 20500 } },
@@ -14,6 +15,7 @@ const RAID_REQUIREMENTS = {
   },
   kazeros: {
     label: "Kazeros",
+    partySize: 8,
     gates: ["G1", "G2"],
     modes: {
       normal: { label: "Normal", minItemLevel: 1710, gold: { G1: 14000, G2: 26000 } },
@@ -22,6 +24,7 @@ const RAID_REQUIREMENTS = {
   },
   serca: {
     label: "Serca",
+    partySize: 4,
     gates: ["G1", "G2"],
     modes: {
       normal: { label: "Normal", minItemLevel: 1710, gold: { G1: 14000, G2: 21000 } },
@@ -35,6 +38,12 @@ function getGatesForRaid(raidKey) {
   const raid = RAID_REQUIREMENTS[raidKey];
   if (!raid || !Array.isArray(raid.gates) || raid.gates.length === 0) return ["G1", "G2"];
   return [...raid.gates];
+}
+
+function getRaidPartySize(raidKey) {
+  const size = Number(RAID_REQUIREMENTS[raidKey]?.partySize);
+  if (size === 4 || size === 8) return size;
+  throw new Error(`[raid-catalog] unsupported raid party size for: ${raidKey}`);
 }
 
 function buildRaidRequirementList() {
@@ -103,6 +112,7 @@ module.exports = {
   RAID_REQUIREMENTS,
   getRaidRequirementList,
   getRaidRequirementMap,
+  getRaidPartySize,
   getGatesForRaid,
   getRaidGateForBoss,
   BOSS_TO_RAID_GATE,

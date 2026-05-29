@@ -12,6 +12,7 @@ const {
   RAID_REQUIREMENTS,
   getRaidRequirementMap,
   getGatesForRaid,
+  getRaidPartySize,
 } = require("../../../domain/raid-catalog");
 const { slotCountsForSize } = require("../../../services/raid/schedule/slot-config");
 const { parseStartTime } = require("../../../services/raid/schedule/time-parse");
@@ -264,7 +265,7 @@ function createRaidScheduleCommand({
       return;
     }
 
-    const partySize = interaction.options.getInteger("size", true);
+    const partySize = getRaidPartySize(raidKey);
     const { supSlots, dpsSlots } = slotCountsForSize(partySize);
     const autoLockAtStart = interaction.options.getBoolean("auto_lock") ?? true;
     const title = (interaction.options.getString("title") || `${meta.label}`).trim();

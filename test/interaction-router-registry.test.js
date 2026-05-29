@@ -26,7 +26,7 @@ test("interaction router allowlist includes every registered slash command", () 
   assert.deepEqual(missingFromRouter, []);
 });
 
-test("raid-schedule definition exposes the create options from the spec", () => {
+test("raid-schedule definition derives party size from raid instead of exposing size", () => {
   const command = commands.find((entry) => entry.toJSON().name === "raid-schedule");
   assert.ok(command);
   const json = command.toJSON();
@@ -36,7 +36,6 @@ test("raid-schedule definition exposes the create options from the spec", () => 
   assert.deepEqual(optionNames, [
     "raid",
     "mode",
-    "size",
     "when",
     "auto_lock",
     "title",

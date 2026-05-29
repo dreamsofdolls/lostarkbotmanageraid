@@ -1420,7 +1420,7 @@ module.exports = {
       "raid-schedule": {
         label: "/raid-schedule",
         short: "Support/DPS枠・待機列・RSVP付きのレイド募集ボードを作成",
-        example: "/raid-schedule create raid:armoche mode:hard size:8 when:20:00 title:\"今夜\"",
+        example: "/raid-schedule create raid:armoche mode:hard when:20:00 title:\"今夜\"",
         notes: [
           "Raid Manager が公開ボードを貼って、メンバーは自分のロスターからキャラを選ぶよ。編成は Artist が面倒みるね。",
           "",
@@ -1433,7 +1433,6 @@ module.exports = {
           create: "新しいボードを作るサブコマンド",
           raid: "予定を組むレイド",
           mode: "難易度",
-          size: "パーティ人数（4 または 8）",
           when: "`HH:MM`、`+2h`、または `+90m`",
           auto_lock: "開始時刻に自動ロック（デフォルトON）",
           title: "ボードのタイトル（任意）",
