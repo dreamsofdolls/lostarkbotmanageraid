@@ -1,7 +1,7 @@
 # /raid-schedule - Raid signup board + team-comp manager
 
 - **Date:** 2026-05-29
-- **Status:** Design approved, pending spec review
+- **Status:** Spec approved (Traine, 2026-05-29); ready for implementation plan
 - **Project:** LostArk_RaidManage
 - **Working name:** `raid-schedule-manager` (shortened to `/raid-schedule` for typing - confirm in review)
 
@@ -32,7 +32,8 @@ Time is a label + Discord-native countdown, not a calendar system.
 | **Roster-gated signup** | Player picks a character from their registered roster; only chars with `itemLevel >= raid minItemLevel` are selectable. No registered roster char that qualifies = signup blocked with a clear reason. |
 | **Soft role slots** | Recommended Support/DPS split shown (4-man: 1 sup + 3 dps; 8-man: 2 sup + 6 dps). Role is a tag derived from class via `isSupportClass`; **not hard-enforced** - lead rebalances. |
 | **Lock / kick** | Lead can lock the board (stop new signups) / unlock, and kick a signup. |
-| **Countdown** | Lead sets a start time; board shows Discord-native relative timestamp (auto-localized per viewer, no bot ticking). |
+| **Countdown** | Lead sets a start time (parsed in the lead's **language timezone**, see `/raid-language`); board shows a Discord-native relative timestamp that auto-localizes to each viewer's own region. |
+| **Auto-lock (lead's choice)** | At creation the lead chooses auto-lock (board locks itself when `startAt` is reached) **or** manual-only lock. Auto-lock runs off an existing scheduler tick. |
 | **Lifecycle** | `open -> locked -> cleared` (success) **or** `open/locked -> cancelled` (fell through). |
 | **Waitlist + auto-promote** | When the comp is full, further confirmed signups go to a waitlist; when a slot frees, position #1 of the matching role auto-promotes **and is pinged**. |
 | **RSVP states** | `Tham gia` (confirmed, takes a slot) / `Trễ` / `Có thể` / `Vắng`. Non-confirmed states do not occupy slots; shown in a "Phản hồi" zone. |
@@ -71,7 +72,8 @@ subcommands can be added later without a breaking change). Options:
 | `raid` | choice (required) | Act 4 / Kazeros / Serca (from `RAID_REQUIREMENTS`) |
 | `mode` | choice (required) | Normal / Hard / Nightmare (valid set depends on raid; validated server-side) |
 | `size` | choice (required) | 4 or 8 |
-| `when` | string (required) | Start time. Accepts `HH:MM` (VN time, today or next occurrence) **or** relative `+Nh` / `+Nm`. Ambiguous / unparseable input rejected with an example. |
+| `when` | string (required) | Start time. Accepts `HH:MM` **or** relative `+Nh` / `+Nm`. `HH:MM` is interpreted in the **lead's language timezone** (`/raid-language`: vi -> VN/UTC+7, jp -> JST/UTC+9, en -> UTC) via `artist-clock.getLangTzOffsetMinutes`, then stored as an absolute UTC instant. Relative offsets are tz-independent. Ambiguous / unparseable input rejected with an example. |
+| `auto_lock` | boolean (optional) | If true, the board auto-locks when the start time is reached. Default true. Toggleable later via `⚙️ Quản lý`. |
 | `title` | string (optional) | Free label, e.g. "Roll-call raid tối nay". Defaults to "{Raid} {Mode}". |
 
 Only `RAID_MANAGER_ID` allowlist users (`isManagerId`) may create events. The creator
@@ -143,6 +145,9 @@ the slot (which may trigger a waitlist promote).
 ### 3.5 Lock / end / cancel
 
 - `🔒 Khoá`: status -> `locked`, signup buttons disabled. `🔓 Mở lại` reverts.
+- **Auto-lock:** if `autoLockAtStart` is true, a scheduler tick flips `open -> locked`
+  when `startAt` passes (same effect as the lead pressing `🔒`). Manual lock/unlock
+  still works regardless; auto-lock only fires once, on the first tick past `startAt`.
 - `🏁 Kết thúc`: status -> `cleared`. Auto-write clear (see §5.4), freeze board, remove
   buttons, show duration + "đã ghi clear cho N char".
 - `⚙️ Quản lý -> Huỷ`: status -> `cancelled`. **No** clear written. Board flips to "Đã
@@ -151,8 +156,8 @@ the slot (which may trigger a waitlist promote).
 ### 3.6 `⚙️ Quản lý` menu (lead only, ephemeral)
 
 A small ephemeral control panel: `Đặt phòng` (modal) · `Sửa giờ` (modal, countdown
-updates) · `Kick` (select a signup to remove) · `Đổi/dời slot` (move a signup between
-Support/DPS or reorder) · `Huỷ event`.
+updates) · `Tự khoá: bật/tắt` (toggle `autoLockAtStart`) · `Kick` (select a signup to
+remove) · `Đổi/dời slot` (move a signup between Support/DPS or reorder) · `Huỷ event`.
 
 ---
 
@@ -171,7 +176,8 @@ New, isolated where possible; reuse existing primitives heavily.
 | Handler (signup) | `bot/handlers/raid/schedule/signup.js` | Character picker, slot placement, waitlist, RSVP transitions, promote |
 | Handler (manage) | `bot/handlers/raid/schedule/manage.js` | Lead controls: lock, cancel, kick, slot-move, room modal, reschedule modal |
 | Handler (room/help) | `bot/handlers/raid/schedule/room.js`, `help.js` | Ephemeral password reveal (gated) + just-in-time guide |
-| Service | `bot/services/raid/schedule/` | Pure logic: slot assignment, waitlist promotion, eligibility, time parsing, auto-clear write |
+| Service | `bot/services/raid/schedule/` | Pure logic: slot assignment, waitlist promotion, eligibility, time parsing (lang-tz aware), auto-clear write |
+| Scheduler hook | `bot/services/raid/schedulers.js` (edit) | Each tick, scan `status:"open", autoLockAtStart:true, startAt <= now` -> lock + re-render board. Reuses the existing tick cadence (no new timer). |
 | i18n | `bot/locales/{vi,en,jp}.js` (edit) | `raid-schedule.*` keys (parity test must stay green) |
 | Help/docs | `bot/handlers/meta/help.js` + README (edit) | New `/raid-schedule` help section |
 
@@ -189,7 +195,12 @@ New, isolated where possible; reuse existing primitives heavily.
 - Interaction-router prefix routing (`buttonRoutes`, `selectRoutes`) - component wiring.
 - i18n `t` + `getUserLanguage` + viewer-language rule for ephemeral/DM content
   (`[[feedback_i18n_viewer_language]]`).
-- Discord-native `<t:unix:R>` timestamps - countdown for free, auto-localized.
+- `artist-clock.getLangTzOffsetMinutes` (`utils/raid/schedule/artist-clock.js`) -
+  interpret the lead's `HH:MM` input in their language timezone before storing UTC.
+- Discord-native `<t:unix:R>`/`<t:unix:f>` timestamps - countdown for free,
+  auto-localized to each viewer's region (handles the per-region time display).
+- Existing scheduler tick (`services/raid/schedulers.js`) - host the auto-lock scan;
+  no new timer needed.
 
 ---
 
@@ -210,7 +221,8 @@ RaidEvent {
   supSlots: Number,       // recommended support count (soft)
   dpsSlots: Number,       // recommended dps count (soft)
   title: String,
-  startAt: Date,          // for countdown + optional auto-lock-at-start
+  startAt: Date,            // absolute UTC; input parsed in the lead's language tz (/raid-language)
+  autoLockAtStart: Boolean, // default true; a scheduler tick locks the board at startAt
   roomName: String,       // default null; public on board
   roomPassword: String,   // default null; NEVER logged / never in public render
 
@@ -347,10 +359,12 @@ user-facing string (`[[feedback_no_emdash]]`); no `*italic*` stage directions
 
 - **Service unit tests** (pure, no Discord): slot assignment (4 and 8 size), waitlist
   promote (matching-role only), eligibility gating (iLvl floor, support/dps split),
-  time parser (`HH:MM` + `+Nh`/`+Nm` + reject ambiguous), RSVP transitions vacating
-  slots, auto-clear target selection (confirmed + late only).
+  time parser (per-language tz: vi/jp/en `HH:MM` -> correct UTC instant; `+Nh`/`+Nm`;
+  reject ambiguous), RSVP transitions vacating slots, auto-clear target selection
+  (confirmed + late only).
 - **Lifecycle tests:** open -> locked -> cleared writes clears; open -> cancelled writes
-  none; promote pings only on real promote.
+  none; promote pings only on real promote; auto-lock scan flips only
+  `autoLockAtStart:true` events whose `startAt` has passed, and only once.
 - **Wiring guard:** extend the router-allowlist parity test to assert `raid-schedule`
   + its component prefixes are routed.
 - **i18n parity:** `raid-schedule.*` keys present in all three packs.
@@ -359,15 +373,15 @@ user-facing string (`[[feedback_no_emdash]]`); no `*italic*` stage directions
 
 ---
 
-## 11. Open questions / assumptions (confirm in review)
+## 11. Resolved decisions (Traine, 2026-05-29 review)
 
-1. **Command name:** `/raid-schedule` (shortened from `raid-schedule-manager`). OK?
-2. **`when` input format:** `HH:MM` (VN) + relative `+Nh`/`+Nm` enough for v1, or also
-   accept a raw Discord timestamp?
-3. **Auto-lock at start time:** should reaching `startAt` auto-lock the board, or does
-   lock stay purely manual in v1? (Auto-lock needs a light scheduler scan; manual is
-   zero-cost. Leaning manual for v1.)
-4. **Empty slot rendering:** show "còn trống" placeholders (current mockup) vs hide
-   empty slots. Leaning show, so the comp shape is visible.
-5. **Cleared board verbosity:** keep the full frozen comp (current) vs collapse to a
-   one-line summary.
+1. **Command name:** `/raid-schedule` (shortened from `raid-schedule-manager`). ✅
+2. **`when` input + timezone:** `HH:MM` interpreted in the **lead's language timezone**
+   (`/raid-language` -> `artist-clock.getLangTzOffsetMinutes`: vi UTC+7, jp UTC+9, en
+   UTC), stored as absolute UTC. Display via Discord-native timestamp so each viewer
+   sees their own region's time. Relative `+Nh`/`+Nm` also accepted (tz-independent).
+3. **Auto-lock:** lead's choice per event - an `auto_lock` creation option (default
+   true) + a `⚙️ Quản lý -> Tự khoá` toggle. When on, a scheduler tick locks the board
+   at `startAt`. Manual lock/unlock always available too.
+4. **Empty slots:** show "còn trống" placeholders so the comp shape is visible. ✅
+5. **Cleared board:** keep the full frozen comp as a record. ✅
