@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-29 (raid-schedule: board layout tidy-up)
+
+### Changed
+- The event board fills Discord's full width now: Support / DPS / Waitlist render as three inline columns (waitlist always shows, "-" when empty) instead of two columns leaving the third empty.
+- Board buttons collapsed from 3 rows to 2: row 1 is everyone-facing (Join / Late / Maybe / Absent / Room), row 2 is Help + Manage. Lock/Unlock + End moved INTO the lead Manage menu (now a 5-button panel: Lock-or-Unlock / End / Set room / Edit time / Cancel). Lock/End handlers are context-aware so legacy boards that still carry those buttons keep working (edit in place) while menu clicks update the canonical board by messageId + re-render the ephemeral menu. 505 tests green across two runs.
+
 ## 2026-05-29 (raid-schedule: Artist voice + lead manage menu)
 
 ### Changed

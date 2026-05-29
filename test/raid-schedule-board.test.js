@@ -33,23 +33,29 @@ function customIds(rows) {
   return rows.flatMap((r) => r.components.map((c) => c.data.custom_id));
 }
 
-test("buildScheduleComponents (open) has 3 rows with the rse: scheme", () => {
+test("buildScheduleComponents (open) is 2 tidy rows; lead lock/end live in the menu", () => {
   const rows = buildScheduleComponents(makeEvent(), compDeps);
-  assert.equal(rows.length, 3);
+  assert.equal(rows.length, 2);
   const ids = customIds(rows);
   assert.ok(ids.includes("rse:join:abcdef123456"));
   assert.ok(ids.includes("rse:rsvp:late:abcdef123456"));
   assert.ok(ids.includes("rse:room:abcdef123456"));
-  assert.ok(ids.includes("rse:end:abcdef123456"));
-  assert.ok(ids.includes("rse:lock:abcdef123456"));
+  assert.ok(ids.includes("rse:help:abcdef123456"));
+  assert.ok(ids.includes("rse:manage:abcdef123456"));
+  // Lock/unlock + End are not on the board anymore - they moved into the
+  // ephemeral Manage menu.
+  assert.ok(!ids.includes("rse:end:abcdef123456"));
+  assert.ok(!ids.includes("rse:lock:abcdef123456"));
+  assert.ok(!ids.includes("rse:unlock:abcdef123456"));
 });
 
-test("locked event disables the join button and shows unlock", () => {
+test("locked event disables the join button (lead unlock lives in Manage)", () => {
   const rows = buildScheduleComponents(makeEvent({ status: "locked" }), compDeps);
   const ids = customIds(rows);
-  assert.ok(ids.includes("rse:unlock:abcdef123456"));
   const join = rows[0].components.find((c) => c.data.custom_id === "rse:join:abcdef123456");
   assert.equal(join.data.disabled, true);
+  // Manage is still reachable so the lead can unlock from the menu.
+  assert.ok(ids.includes("rse:manage:abcdef123456"));
 });
 
 test("cleared / cancelled events strip all components", () => {
