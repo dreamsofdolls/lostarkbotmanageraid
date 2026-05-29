@@ -34,6 +34,8 @@ const {
   handleRaidAutoManageAutocomplete,
   handleRaidTaskAutocomplete,
   handleRaidTaskButton,
+  handleRaidScheduleButton,
+  handleRaidScheduleSelect,
   handleRaidAnnounceAutocomplete,
   handleRaidChannelMessage,
   handleRaidCheckButton,
@@ -48,6 +50,7 @@ const {
   startAutoManageDailyScheduler,
   startMaintenanceScheduler,
   startSideTaskResetScheduler,
+  startRaidScheduleAutoLockScheduler,
   applyRaidSetForDiscordId,
   applyRaidSetBatchForDiscordId,
 } = require("./bot/commands");
@@ -162,6 +165,9 @@ async function startBot() {
     // of AUTO_MANAGE_DAILY_DISABLED so player-tracked chores never get
     // stuck "completed forever" even if bible auto-sync is off.
     startSideTaskResetScheduler();
+    // /raid-schedule auto-lock. Per-event autoLockAtStart controls whether
+    // a board locks when its startAt has passed.
+    startRaidScheduleAutoLockScheduler(readyClient);
   });
 
   if (TEXT_MONITOR_ENABLED) {
@@ -195,6 +201,8 @@ async function startBot() {
       handleRaidGoldEarnerAutocomplete,
       handleRaidGoldEarnerButton,
       handleRaidTaskButton,
+      handleRaidScheduleButton,
+      handleRaidScheduleSelect,
       handleStuckNudgeButton,
     },
   });

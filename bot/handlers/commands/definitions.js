@@ -1,6 +1,16 @@
 "use strict";
 
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require("discord.js");
+const { RAID_REQUIREMENTS } = require("../../domain/raid-catalog");
+
+const RAID_SCHEDULE_RAID_CHOICES = Object.entries(RAID_REQUIREMENTS).map(
+  ([key, raid]) => ({ name: raid.label, value: key })
+);
+const RAID_SCHEDULE_MODE_CHOICES = [
+  { name: "Normal", value: "normal" },
+  { name: "Hard", value: "hard" },
+  { name: "Nightmare", value: "nightmare" },
+];
 
 function createRaidCommandDefinitions({
   announcementTypeKeys,
@@ -930,6 +940,82 @@ function createRaidCommandDefinitions({
         .setRequired(false)
     );
 
+  const raidScheduleCommand = new SlashCommandBuilder()
+    .setName("raid-schedule")
+    .setDescription("(Raid Manager) Create and manage raid signup boards")
+    .setDescriptionLocalizations({
+      vi: "(Raid Manager) Tạo và quản lý bảng đăng ký raid",
+      ja: "(Raid Manager) レイド募集ボードを作成・管理",
+    })
+    .setDMPermission(false)
+    .addSubcommand((sub) =>
+      sub
+        .setName("create")
+        .setDescription("Create a raid signup board")
+        .setDescriptionLocalizations({
+          vi: "Tạo bảng đăng ký raid",
+          ja: "レイド募集ボードを作成",
+        })
+        .addStringOption((option) =>
+          option
+            .setName("raid")
+            .setDescription("Raid")
+            .setDescriptionLocalizations({ vi: "Raid", ja: "レイド" })
+            .setRequired(true)
+            .addChoices(...RAID_SCHEDULE_RAID_CHOICES)
+        )
+        .addStringOption((option) =>
+          option
+            .setName("mode")
+            .setDescription("Difficulty")
+            .setDescriptionLocalizations({ vi: "Độ khó", ja: "難易度" })
+            .setRequired(true)
+            .addChoices(...RAID_SCHEDULE_MODE_CHOICES)
+        )
+        .addIntegerOption((option) =>
+          option
+            .setName("size")
+            .setDescription("Party size")
+            .setDescriptionLocalizations({ vi: "Cỡ party", ja: "パーティ人数" })
+            .setRequired(true)
+            .addChoices(
+              { name: "4", value: 4 },
+              { name: "8", value: 8 },
+            )
+        )
+        .addStringOption((option) =>
+          option
+            .setName("when")
+            .setDescription("Start time: HH:MM, +2h, or +90m")
+            .setDescriptionLocalizations({
+              vi: "Giờ bắt đầu: HH:MM, +2h, hoặc +90m",
+              ja: "開始時刻: HH:MM、+2h、または +90m",
+            })
+            .setRequired(true)
+        )
+        .addBooleanOption((option) =>
+          option
+            .setName("auto_lock")
+            .setDescription("Auto-lock at start time (default: true)")
+            .setDescriptionLocalizations({
+              vi: "Tự khóa khi tới giờ bắt đầu (mặc định: bật)",
+              ja: "開始時刻に自動ロック (既定: オン)",
+            })
+            .setRequired(false)
+        )
+        .addStringOption((option) =>
+          option
+            .setName("title")
+            .setDescription("Optional board title")
+            .setDescriptionLocalizations({
+              vi: "Tiêu đề bảng (tuỳ chọn)",
+              ja: "ボードタイトル (任意)",
+            })
+            .setRequired(false)
+            .setMaxLength(80)
+        )
+    );
+
   const commands = [
     addRosterCommand,
     editRosterCommand,
@@ -947,6 +1033,7 @@ function createRaidCommandDefinitions({
     raidLanguageCommand,
     raidBgCommand,
     raidAuctionCommand,
+    raidScheduleCommand,
   ];
 
   return commands;

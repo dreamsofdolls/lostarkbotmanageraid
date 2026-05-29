@@ -4,6 +4,17 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-29 (`/raid-schedule` Discord live MVP)
+
+### Added
+- `/raid-schedule create` is now wired into the bot: slash command definition, command dispatch, router allowlist, `rse:` button/select routes, locale keys, and `/raid-help` section.
+- Live signup board supports Join picker from the user's own roster, Support/DPS slot assignment, waitlist promotion ping, RSVP states, Lock/Unlock, End, Room gate, and Help.
+- End writes clears for the assigned comp through the existing `/raid-set` batch path. Waitlist/tentative/absent players are not credited.
+- Auto-lock scheduler scans due open events every minute and refreshes the board into locked state when `auto_lock` is enabled.
+
+### Tests
+- Added wiring and auto-lock regression tests. Full suite: 503/503 green.
+
 ## 2026-05-29 (raid-schedule phase 1: core logic)
 
 ### Added
