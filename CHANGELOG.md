@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-29 (raid-schedule phase 1: core logic)
+
+### Added
+- Foundation for the upcoming `/raid-schedule` signup board (no user-facing surface yet): `RaidEvent` model (`raid_events`) plus pure service logic under `bot/services/raid/schedule/` - slot-config (party size -> sup/dps counts), time-parse (relative `+Nh`/`+Nm` and lang-tz `HH:MM` -> absolute UTC), eligibility (role + already-cleared + iLvl gate over a roster), slots (confirmed/late assignment + waitlist + promotion), auto-clear target selection (confirmed + late). Fully unit-tested (17 new tests, 488 total green across two consecutive runs); not yet wired into any command. Design spec + plan in `docs/superpowers/`.
+
 ## 2026-05-28 (comment-spec batch C: app + queries + meta)
 
 ### Changed
