@@ -47,4 +47,26 @@ function nextWaitlistPromotion(signups, counts, role) {
   return waitlist.find((s) => s.role === role) || null;
 }
 
-module.exports = { assignSlots, nextWaitlistPromotion, SLOT_STATUSES };
+/**
+ * Who got pulled into the comp between two states. Because placement is
+ * derived (no stored slot index), a leave/vacate implicitly promotes the
+ * next waitlister - this diff finds them so the handler can ping. Usually
+ * 0 or 1 entries.
+ * @param {Array} before - signups before the mutation
+ * @param {Array} after - signups after the mutation
+ * @param {{supSlots: number, dpsSlots: number}} counts
+ * @returns {Array} signups now in the comp that were not before
+ */
+function detectPromotion(before, after, counts) {
+  const compIds = (list) => {
+    const { support, dps } = assignSlots(list, counts);
+    return new Set([...support, ...dps].map((s) => s.discordId));
+  };
+  const beforeComp = compIds(before);
+  const afterSlots = assignSlots(after, counts);
+  return [...afterSlots.support, ...afterSlots.dps].filter(
+    (s) => !beforeComp.has(s.discordId)
+  );
+}
+
+module.exports = { assignSlots, nextWaitlistPromotion, detectPromotion, SLOT_STATUSES };
