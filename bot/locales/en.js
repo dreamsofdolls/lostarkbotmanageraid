@@ -1425,6 +1425,7 @@ module.exports = {
         notes: [
           "Raid Managers post a public board, then members pick a character from their own roster - Artist handles the lineup.",
           "",
+          "**Party size**: Artist derives it from the raid catalog - Act 4/Kazeros are 8-player raids, Serca is a 4-player raid.",
           "**Join**: members click the button, pick an eligible character, and the bot assigns Support/DPS slots or waitlist.",
           "**RSVP**: `Late` keeps the slot; `Maybe` and `Absent` free the slot for waitlist promotion.",
           "**End**: when the lead ends the raid, the bot writes clears for the characters in the comp through the `/raid-set` path.",

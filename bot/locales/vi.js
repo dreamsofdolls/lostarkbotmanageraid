@@ -1447,6 +1447,7 @@ module.exports = {
         notes: [
           "Raid Manager bày một board công khai, rồi member tự bấm chọn character từ roster của mình - Artist lo phần xếp đội.",
           "",
+          "**Party size**: Artist tự suy ra từ raid catalog - Act 4/Kazeros là 8 người, Serca là 4 người.",
           "**Tham gia**: member bấm nút, chọn character đủ iLvl, bot tự xếp Support/DPS và đưa người dư vào hàng chờ.",
           "**RSVP**: `Đến muộn` vẫn giữ slot; `Có thể` và `Vắng` nhường slot cho hàng chờ.",
           "**End**: khi lead end raid, bot ghi clear cho các character đang nằm trong comp qua đường `/raid-set`.",
