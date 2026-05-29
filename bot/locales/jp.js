@@ -131,9 +131,9 @@ module.exports = {
       managerOnlyTitle: "それは lead 用のボタンだよ",
       managerOnlyDescription: "この進行ボタンは lead / Raid Manager 専用なんだ。",
       unknownTitle: "うまく受け取れなかったよ",
-      unknownDescription: "この操作は今の raid-schedule の流れに合っていないみたい。",
+      unknownDescription: "この操作は今の raid-schedule-preview の流れに合っていないみたい。",
       guildOnlyTitle: "サーバー内で使ってね",
-      guildOnlyDescription: "`/raid-schedule` はみんなに見せるボードを貼るのにサーバーのチャンネルが必要なんだ。",
+      guildOnlyDescription: "`/raid-schedule-preview` はみんなに見せるボードを貼るのにサーバーのチャンネルが必要なんだ。",
       invalidModeTitle: "レイドとモードが合っていないよ",
       invalidModeDescription: "選んだレイドにそのモードは無いみたい。もう一度選んでくれる？",
       invalidTimeTitle: "開始時刻の形式が違うみたい",
@@ -1417,10 +1417,10 @@ module.exports = {
           profit: "8%の利益マージンを適用（デフォルト: ON）",
         },
       },
-      "raid-schedule": {
-        label: "/raid-schedule",
-        short: "Support/DPS枠・待機列・RSVP付きのレイド募集ボードを作成",
-        example: "/raid-schedule create raid:armoche mode:hard when:20:00 title:\"今夜\"",
+      "raid-schedule-preview": {
+        label: "/raid-schedule-preview",
+        short: "Preview版: Support/DPS枠・待機列・RSVP付きのレイド募集ボードを作成",
+        example: "/raid-schedule-preview create raid:armoche mode:hard when:20:00 title:\"今夜\"",
         notes: [
           "Raid Manager が公開ボードを貼って、メンバーは自分のロスターからキャラを選ぶよ。編成は Artist が面倒みるね。",
           "",

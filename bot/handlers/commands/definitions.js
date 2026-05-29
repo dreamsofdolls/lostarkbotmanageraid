@@ -941,11 +941,11 @@ function createRaidCommandDefinitions({
     );
 
   const raidScheduleCommand = new SlashCommandBuilder()
-    .setName("raid-schedule")
-    .setDescription("(Raid Manager) Create and manage raid signup boards")
+    .setName("raid-schedule-preview")
+    .setDescription("(Raid Manager, preview) Create and manage raid signup boards")
     .setDescriptionLocalizations({
-      vi: "(Raid Manager) Tạo và quản lý bảng đăng ký raid",
-      ja: "(Raid Manager) レイド募集ボードを作成・管理",
+      vi: "(Raid Manager, preview) Tạo và quản lý bảng đăng ký raid",
+      ja: "(Raid Manager, preview) レイド募集ボードを作成・管理",
     })
     .setDMPermission(false)
     .addSubcommand((sub) =>

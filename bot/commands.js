@@ -353,7 +353,7 @@ async function handleRaidManagementCommand(interaction) {
       "raid-announce": handleRaidAnnounceCommand,
       "raid-task": handleRaidTaskCommand,
       "raid-auction": handleRaidAuctionCommand,
-      "raid-schedule": handleRaidScheduleCommand,
+      "raid-schedule-preview": handleRaidScheduleCommand,
     }[interaction.commandName];
     if (handler) await handler(interaction);
   } finally {

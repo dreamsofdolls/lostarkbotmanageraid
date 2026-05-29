@@ -142,9 +142,9 @@ module.exports = {
       managerOnlyTitle: "Nút này của lead",
       managerOnlyDescription: "Mấy nút điều phối này để lead/Raid Manager bấm thôi nha.",
       unknownTitle: "Artist chưa hiểu thao tác này",
-      unknownDescription: "Interaction này không khớp với flow raid-schedule hiện tại rồi.",
+      unknownDescription: "Interaction này không khớp với flow raid-schedule-preview hiện tại rồi.",
       guildOnlyTitle: "Dùng trong server nha",
-      guildOnlyDescription: "`/raid-schedule` cần một channel trong server để Artist đăng board cho cả nhà cùng thấy.",
+      guildOnlyDescription: "`/raid-schedule-preview` cần một channel trong server để Artist đăng board cho cả nhà cùng thấy.",
       invalidModeTitle: "Raid / mode chưa khớp",
       invalidModeDescription: "Mode này không có cho raid cậu vừa chọn. Chọn lại giúp Artist nhé.",
       invalidTimeTitle: "Giờ bắt đầu chưa đúng kiểu",
@@ -1440,10 +1440,10 @@ module.exports = {
           profit: "Bật biên lời 8% (mặc định: bật)",
         },
       },
-      "raid-schedule": {
-        label: "/raid-schedule",
-        short: "Tạo board đăng ký raid có slot Support/DPS, waitlist và RSVP",
-        example: "/raid-schedule create raid:armoche mode:hard when:20:00 title:\"Tối nay\"",
+      "raid-schedule-preview": {
+        label: "/raid-schedule-preview",
+        short: "Bản preview tạo board đăng ký raid có slot Support/DPS, waitlist và RSVP",
+        example: "/raid-schedule-preview create raid:armoche mode:hard when:20:00 title:\"Tối nay\"",
         notes: [
           "Raid Manager bày một board công khai, rồi member tự bấm chọn character từ roster của mình - Artist lo phần xếp đội.",
           "",
