@@ -1,12 +1,26 @@
 # /raid-schedule - Tiến độ & Luồng hoạt động
 
 > File này để **đọc hiểu**: feature làm gì, luồng chạy ra sao, đã xong tới đâu, còn gì phải làm.
-> Cập nhật: 2026-05-29 · tip `f3d3902` · trạng thái: **nền tảng xong, lớp Discord live chưa làm**.
+> Cập nhật: 2026-05-29 · trạng thái: **Discord live MVP đã bật; còn phase manage modal/smoke live**.
 
 Tài liệu liên quan:
 - Spec (cái gì): `docs/superpowers/specs/2026-05-29-raid-schedule-manager-design.md`
 - Plan Phase 1 (làm thế nào): `docs/superpowers/plans/2026-05-29-raid-schedule-phase1-core-logic.md`
 - Mockup embed (HTML): `E:/LostArkTool/.superpowers/brainstorm/` (mở bằng browser)
+
+---
+
+## 0. Cập nhật mới nhất (2026-05-29)
+
+Discord live MVP đã được bật:
+- `/raid-schedule create` đã có slash definition, dispatch map, allowlist/router.
+- Board public có Join picker, RSVP Late/Maybe/Absent, Lock/Unlock, End, Room gate, Help.
+- End ghi clear cho các character trong comp qua write-path `/raid-set`.
+- Auto-lock có scheduler riêng, tôn trọng `auto_lock` theo từng event.
+- Locale `raid-schedule.*` và `/raid-help` section đã có đủ 3 pack `vi/en/jp`.
+- Test hiện tại: `node --test` = 503 pass.
+
+Vẫn còn lại phase sau: manage modal đầy đủ cho room/password, cancel/kick/edit-time UI, và smoke test live trong Discord sau deploy.
 
 ---
 
@@ -70,16 +84,16 @@ Nút [❓ Hướng dẫn] → ephemeral giải thích theo data event + ngôn ng
 | `bot/services/raid/schedule/auto-clear.js` | Chọn ai được ghi clear khi Kết thúc (chỉ comp thật, KHÔNG ghi waitlist). |
 | `bot/handlers/raid/schedule/board.js` | `buildScheduleEmbed` + `buildScheduleComponents` (render board + 3 hàng nút). |
 
-### Chưa build (lớp Discord live)
+### Đã build thêm (Discord live MVP)
 
-| File (cần tạo/sửa) | Vai trò |
+| File | Vai trò |
 |---|---|
-| `bot/handlers/raid/schedule/index.js` *(tạo)* | Command `create` + handler nút (join picker, rsvp, leave, lock, end, help). |
-| `bot/locales/{vi,en,jp}.js` *(sửa)* | Key `raid-schedule.*` (parity 3 locale). |
-| `bot/handlers/commands/definitions.js` *(sửa)* | Định nghĩa slash command. |
-| `bot/commands.js` *(sửa)* | Wire factory + dispatch map + button route. |
-| `bot/app/interaction-router-registry.js` *(sửa)* | Allowlist + buttonRoutes/selectRoutes prefix `rse:`. |
-| `bot/services/raid/schedulers.js` *(sửa, Phase 3)* | Scan auto-lock khi tới giờ. |
+| `bot/handlers/raid/schedule/index.js` | Command `create` + handler nút/select: join picker, rsvp, lock/unlock, end, room, help. |
+| `bot/services/raid/schedule/auto-lock.js` | Scheduler auto-lock riêng cho event đến giờ. |
+| `bot/locales/{vi,en,jp}.js` | Key `raid-schedule.*` (parity 3 locale). |
+| `bot/handlers/commands/definitions.js` | Định nghĩa slash command. |
+| `bot/commands.js` | Wire factory + dispatch map + scheduler export. |
+| `bot/app/interaction-router-registry.js` | Allowlist + buttonRoutes/selectRoutes prefix `rse:`. |
 
 ---
 
@@ -106,17 +120,10 @@ Nút [❓ Hướng dẫn] → ephemeral giải thích theo data event + ngôn ng
 
 ## 5. Còn lại phải làm (theo thứ tự, mỗi mốc smoke-test trong Discord)
 
-1. **i18n** `raid-schedule.*` 3 locale. Key `board.js` cần: `board.{summary,startLine,
-   leadLine,roomLine,progress,title.<status>,supportHeader,dpsHeader,waitlistHeader,
-   rsvpHeader,rsvpTentative,rsvpAbsent,emptySlot,footer.<status>}` + `btn.{join,late,
-   tentative,absent,room,help,lock,unlock,end,manage}`. (parity test bắt buộc 3 locale khớp leaf)
-2. **`index.js`** - command create + nút + picker. Mốc smoke-test: `/raid-schedule create`
-   post board, bấm Tham gia chọn char vào comp, Trễ/Có thể/Vắng/Khoá/Kết thúc chạy.
-3. **Wiring** 3 file (xem mục 3). **Quan trọng:** thiếu allowlist trong
-   `interaction-router-registry.js` = command đăng ký nhưng im lặng không chạy (đã có
-   test parity bắt lỗi này).
-4. **Phase 3:** room modal + 🔑 reveal (gate comp) + manage menu (kick/huỷ/sửa giờ) +
-   scheduler auto-lock + auto-clear write thật + section `/raid-help` + README.
+1. **Live smoke sau deploy:** `/raid-schedule create` post board, Join picker chọn char vào comp, RSVP, Lock/Unlock, End ghi clear vào `/raid-status`.
+2. **Room/password modal:** hiện tại Room gate có sẵn nhưng chưa có UI set room/password từ Discord.
+3. **Manage menu nâng cao:** cancel event, kick member, sửa giờ/title, và setting nâng cao.
+4. **Polish help theo event:** help hiện là hướng dẫn MVP tĩnh; phase sau có thể render theo trạng thái event hiện tại.
 
 **Verify mỗi push:** `node -e "require('./bot/commands')"` (smoke load) + test i18n parity
 + test router parity + `npm test` xanh 2 lần.
@@ -125,7 +132,8 @@ Nút [❓ Hướng dẫn] → ephemeral giải thích theo data event + ngôn ng
 
 ## 6. Trạng thái hiện tại
 
-- ✅ Nền tảng + logic + renderer: **xong, test, đã push** (`f3d3902`). ~45 test, 499 xanh.
-- ❌ Lớp Discord live: **chưa làm** → `/raid-schedule` chưa dùng được trong Discord.
-- Lý do dừng: lớp live deploy thẳng bot thật + không unit-test được hành vi Discord →
-  nên làm ở phiên tươi + smoke-test song song, không build một cục lớn lúc context đã sâu.
+- ✅ Nền tảng + logic + renderer: xong.
+- ✅ Discord live MVP: đã wire slash command, router `rse:`, handler create/join/RSVP/lock/end/help/room, auto-lock scheduler, auto-clear write qua `/raid-set`.
+- ✅ Verification local: `node -e "require('./bot/commands')"` load được, `node --test` xanh 503/503.
+- ⚠️ Chưa live-smoke trong Discord sau deploy ở phiên này. Cần test thật: create board, Join picker, RSVP, Lock, End, và auto-clear trên một event sandbox.
+- ⏳ Phase còn lại: manage modal room/password, cancel/kick/edit-time UI, và polish hướng dẫn theo event.

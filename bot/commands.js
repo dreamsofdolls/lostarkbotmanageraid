@@ -54,6 +54,7 @@ const {
 const { createAddRosterCommand } = require("./handlers/roster/add");
 const { createRaidGoldEarnerCommand } = require("./handlers/roster/gold-earner");
 const { createRaidAuctionCommand } = require("./handlers/raid/auction");
+const { createRaidScheduleCommand } = require("./handlers/raid/schedule");
 const { createEditRosterCommand } = require("./handlers/roster/edit");
 const { createRaidCommandDefinitions } = require("./handlers/commands/definitions");
 const { createRaidAutoManageCommand } = require("./handlers/raid/auto-manage");
@@ -77,8 +78,10 @@ const { createAutoManageCoreService } = require("./services/auto-manage/core");
 const { createRaidViewSnapshotService } = require("./services/raid/view-snapshot");
 const { createRaidChannelMonitorService } = require("./services/raid/channel-monitor");
 const { createRaidSchedulerService } = require("./services/raid/schedulers");
+const { createRaidScheduleAutoLockService } = require("./services/raid/schedule/auto-lock");
 const { createDiscordIdentityCache } = require("./services/discord/user-identity-cache");
 const { createInFlightLoader } = require("./shared/in-flight-loader");
+const RaidEvent = require("./models/RaidEvent");
 
 const bibleLimiter = new ConcurrencyLimiter(2);
 // Discord REST fan-out limiter: caps parallel `client.users.fetch` bursts in
@@ -254,6 +257,9 @@ let handleRaidGoldEarnerCommand;
 let handleRaidGoldEarnerAutocomplete;
 let handleRaidGoldEarnerButton;
 let handleRaidAuctionCommand;
+let handleRaidScheduleCommand;
+let handleRaidScheduleButton;
+let handleRaidScheduleSelect;
 let handleEditRosterCommand;
 let handleEditRosterAutocomplete;
 let handleEditRosterButton;
@@ -347,6 +353,7 @@ async function handleRaidManagementCommand(interaction) {
       "raid-announce": handleRaidAnnounceCommand,
       "raid-task": handleRaidTaskCommand,
       "raid-auction": handleRaidAuctionCommand,
+      "raid-schedule": handleRaidScheduleCommand,
     }[interaction.commandName];
     if (handler) await handler(interaction);
   } finally {
@@ -390,10 +397,14 @@ let startRaidChannelScheduler;
 let startAutoManageDailyScheduler;
 let startMaintenanceScheduler;
 let startSideTaskResetScheduler;
+let startRaidScheduleAutoLockScheduler;
 let getAutoCleanupSchedulerStartedAtMs;
 let getAutoManageSchedulerStartedAtMs;
 let getMaintenanceSchedulerStartedAtMs;
 let getSideTaskSchedulerStartedAtMs;
+let getRaidScheduleAutoLockSchedulerStartedAtMs;
+let runRaidScheduleAutoLockTick;
+let RAID_SCHEDULE_AUTO_LOCK_TICK_MS;
 
 let loadMonitorChannelCache;
 let getMonitorCacheHealth;
@@ -739,6 +750,42 @@ const raidSetCommandHandlers = createRaidSetCommand({
   applyRaidSetBatchForDiscordId,
 } = raidSetCommandHandlers);
 
+const raidScheduleCommandHandlers = createRaidScheduleCommand({
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder,
+  MessageFlags,
+  UI,
+  User,
+  GuildConfig,
+  RaidEvent,
+  isManagerId,
+  applyRaidSetBatchForDiscordId: (args) => applyRaidSetBatchForDiscordId(args),
+});
+({
+  handleRaidScheduleCommand,
+  handleRaidScheduleButton,
+  handleRaidScheduleSelect,
+} = raidScheduleCommandHandlers);
+
+const raidScheduleAutoLockService = createRaidScheduleAutoLockService({
+  RaidEvent,
+  GuildConfig,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  UI,
+});
+({
+  RAID_SCHEDULE_AUTO_LOCK_TICK_MS,
+  startRaidScheduleAutoLockScheduler,
+  runRaidScheduleAutoLockTick,
+  getRaidScheduleAutoLockSchedulerStartedAtMs,
+} = raidScheduleAutoLockService);
+
 const raidChannelMonitorService = createRaidChannelMonitorService({
   PermissionFlagsBits,
   EmbedBuilder,
@@ -1023,6 +1070,8 @@ module.exports = {
   handleRaidAnnounceAutocomplete,
   handleRaidTaskAutocomplete,
   handleRaidTaskButton,
+  handleRaidScheduleButton,
+  handleRaidScheduleSelect,
   handleRaidChannelMessage,
   handleRaidCheckButton,
   handleAddRosterButton,
@@ -1035,6 +1084,7 @@ module.exports = {
   startAutoManageDailyScheduler,
   startMaintenanceScheduler,
   startSideTaskResetScheduler,
+  startRaidScheduleAutoLockScheduler,
   parseRaidMessage,
   applyRaidSetForDiscordId: callApplyRaidSetForDiscordId,
   applyRaidSetBatchForDiscordId: callApplyRaidSetBatchForDiscordId,
@@ -1082,6 +1132,9 @@ module.exports = {
     MAINTENANCE_MINUTE_VN,
     dailyResetStartMs,
     resetExpiredSideTasks,
+    RAID_SCHEDULE_AUTO_LOCK_TICK_MS,
+    runRaidScheduleAutoLockTick,
+    getRaidScheduleAutoLockSchedulerStartedAtMs,
     buildEditableCharsByUser,
     getEligibleRaidsForChar,
     getCharRaidGateStatus,

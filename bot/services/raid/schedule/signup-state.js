@@ -37,6 +37,7 @@ function applyJoin(signups, payload, now = Date.now()) {
     characterItemLevel: payload.characterItemLevel,
     role: deriveRole(payload.characterClass),
     status: "confirmed",
+    alreadyClearedThisWeek: Boolean(payload.alreadyClearedThisWeek),
     joinedAt,
   });
   return next;

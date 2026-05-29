@@ -30,6 +30,7 @@ const RAID_COMMAND_NAMES = Object.freeze([
   "raid-language",
   "raid-bg",
   "raid-auction",
+  "raid-schedule",
 ]);
 
 /**
@@ -59,8 +60,10 @@ function createRaidInteractionRouter({ MessageFlags, handlers }) {
     selectRoutes: [
       { prefix: "raid-help:select:", handle: handlers.handleRaidHelpSelect },
       { prefix: "raid-language:select", handle: handlers.handleRaidLanguageSelect },
+      { prefix: "rse:pick:", handle: handlers.handleRaidScheduleSelect },
     ],
     buttonRoutes: [
+      { prefix: "rse:", handle: handlers.handleRaidScheduleButton },
       { prefix: "raid-check:", handle: handlers.handleRaidCheckButton },
       { prefix: "add-roster:", handle: handlers.handleAddRosterButton },
       { prefix: "edit-roster:", handle: handlers.handleEditRosterButton },
