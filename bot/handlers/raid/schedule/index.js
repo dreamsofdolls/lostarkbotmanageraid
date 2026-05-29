@@ -426,11 +426,20 @@ function createRaidScheduleCommand({
       await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
       return;
     }
+    const onBoard = onBoardMessage(interaction, event);
     event.status = action === "unlock" ? "open" : "locked";
     await interaction.deferUpdate();
     await event.save();
     const langForBoard = await boardLang(event.guildId);
-    await interaction.editReply(boardPayload(event, langForBoard));
+    if (onBoard) {
+      await interaction.editReply(boardPayload(event, langForBoard));
+      return;
+    }
+    // From the Manage menu: update the canonical board, then re-render the
+    // ephemeral menu so the Lock/Unlock label flips.
+    await editBoardMessage(interaction, event, langForBoard);
+    const menu = manageMenuPayload(event, lang);
+    await interaction.editReply({ embeds: menu.embeds, components: menu.components });
   }
 
   async function handleEnd(interaction, event, lang) {
@@ -450,17 +459,21 @@ function createRaidScheduleCommand({
     await event.save();
 
     const langForBoard = await boardLang(event.guildId);
-    await interaction.editReply(boardPayload(event, langForBoard));
-    await interaction.followUp({
-      embeds: [
-        noticeEmbed(
-          summary.failed > 0 ? "warn" : "success",
-          t("raid-schedule.notice.endedTitle", lang, summary),
-          t("raid-schedule.notice.endedDescription", lang, summary),
-        ),
-      ],
-      flags: ephemeralFlag,
-    }).catch(() => {});
+    const onBoard = onBoardMessage(interaction, event);
+    const summaryEmbed = noticeEmbed(
+      summary.failed > 0 ? "warn" : "success",
+      t("raid-schedule.notice.endedTitle", lang, summary),
+      t("raid-schedule.notice.endedDescription", lang, summary),
+    );
+    if (onBoard) {
+      await interaction.editReply(boardPayload(event, langForBoard));
+      await interaction.followUp({ embeds: [summaryEmbed], flags: ephemeralFlag }).catch(() => {});
+      return;
+    }
+    // From the Manage menu: freeze the canonical board, then collapse the
+    // ephemeral menu down to the end summary.
+    await editBoardMessage(interaction, event, langForBoard);
+    await interaction.editReply({ embeds: [summaryEmbed], components: [] });
   }
 
   async function handleRoom(interaction, event, lang) {
@@ -504,20 +517,22 @@ function createRaidScheduleCommand({
   }
 
   // Lead-only control panel (ephemeral). Buttons reuse the rse: prefix so
-  // they route back through handleRaidScheduleButton. Kick is intentionally
-  // deferred (it needs a member select route); set-room / edit-time / cancel
-  // cover the rest without touching the shared interaction router.
-  async function handleManage(interaction, event, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
-    if (event.status === "cleared" || event.status === "cancelled") {
-      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
+  // they route back through handleRaidScheduleButton. Lock/unlock + End live
+  // HERE (moved off the board to keep it to 2 tidy rows); set-room / edit-time
+  // open modals; cancel ends the event. Kick is still deferred (needs a
+  // member-select route). No shared interaction-router change.
+  function manageMenuPayload(event, lang) {
     const id = String(event._id);
+    const locked = event.status === "locked";
     const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`rse:${locked ? "unlock" : "lock"}:${id}`)
+        .setLabel(t(locked ? "raid-schedule.btn.unlock" : "raid-schedule.btn.lock", lang))
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`rse:end:${id}`)
+        .setLabel(t("raid-schedule.btn.end", lang))
+        .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
         .setCustomId(`rse:setroom:${id}`)
         .setLabel(t("raid-schedule.btn.setRoom", lang))
@@ -531,7 +546,7 @@ function createRaidScheduleCommand({
         .setLabel(t("raid-schedule.btn.cancelEvent", lang))
         .setStyle(ButtonStyle.Danger),
     );
-    await interaction.reply({
+    return {
       embeds: [
         noticeEmbed(
           "info",
@@ -541,7 +556,30 @@ function createRaidScheduleCommand({
       ],
       components: [row],
       flags: ephemeralFlag,
-    });
+    };
+  }
+
+  async function handleManage(interaction, event, lang) {
+    if (!isLeadActionAllowed(interaction)) {
+      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
+      return;
+    }
+    if (event.status === "cleared" || event.status === "cancelled") {
+      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
+      return;
+    }
+    await interaction.reply(manageMenuPayload(event, lang));
+  }
+
+  // Lock/unlock + End are reachable from the Manage menu (ephemeral), and
+  // from legacy boards that still carry those buttons. `onBoardMessage`
+  // distinguishes the two so we edit the right surface: the board in place
+  // when clicked on the board, or the canonical board via messageId + the
+  // ephemeral menu re-render when clicked from the menu.
+  function onBoardMessage(interaction, event) {
+    return Boolean(
+      interaction.message && String(interaction.message.id) === String(event.messageId),
+    );
   }
 
   // Build a single-line text input row for a modal.

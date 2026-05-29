@@ -103,19 +103,19 @@ function buildScheduleEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
       { name: t("raid-schedule.board.dpsHeader", lang, { n: dps.length, slots: event.dpsSlots }), value: dps.map((s, i) => slotLine(i + 1, s)).join("\n") || "-", inline: true }
     );
   } else {
+    // Three inline columns (Support | DPS | Waitlist) so the field row
+    // fills Discord's full embed width instead of leaving the 3rd column
+    // empty. Waitlist always renders (even at 0) to keep the 3-col shape.
+    const waitlistValue = waitlist.length > 0
+      ? waitlist
+          .map((s, i) => `\`#${i + 1}\` ${getClassEmoji(s.characterClass) || "•"} **${s.characterName}** · ${s.characterItemLevel}`)
+          .join("\n")
+      : "-";
     embed.addFields(
       { name: t("raid-schedule.board.supportHeader", lang, { n: support.length, slots: event.supSlots }), value: buildColumn(support, event.supSlots, lang), inline: true },
-      { name: t("raid-schedule.board.dpsHeader", lang, { n: dps.length, slots: event.dpsSlots }), value: buildColumn(dps, event.dpsSlots, lang), inline: true }
+      { name: t("raid-schedule.board.dpsHeader", lang, { n: dps.length, slots: event.dpsSlots }), value: buildColumn(dps, event.dpsSlots, lang), inline: true },
+      { name: t("raid-schedule.board.waitlistHeader", lang, { n: waitlist.length }), value: waitlistValue, inline: true }
     );
-    if (waitlist.length > 0) {
-      embed.addFields({
-        name: t("raid-schedule.board.waitlistHeader", lang, { n: waitlist.length }),
-        value: waitlist
-          .map((s, i) => `\`#${i + 1}\` ${getClassEmoji(s.characterClass) || "•"} **${s.characterName}** · ${s.characterItemLevel}`)
-          .join("\n"),
-        inline: false,
-      });
-    }
     const rsvp = renderRsvpLine(event.signups, lang);
     if (rsvp) {
       embed.addFields({ name: t("raid-schedule.board.rsvpHeader", lang), value: rsvp, inline: false });
@@ -167,22 +167,21 @@ function buildScheduleComponents(event, { ActionRowBuilder, ButtonBuilder, Butto
       .setStyle(style)
       .setDisabled(disabled);
 
+  // Row 1: everyone-facing status + room (5 buttons, the Discord row cap).
+  // Row 2: help + lead's Manage entry. Lock/unlock + End live INSIDE the
+  // Manage menu now (kept off the board to keep it to 2 tidy rows).
   const statusRow = new ActionRowBuilder().addComponents(
     btn("join", t("raid-schedule.btn.join", lang), ButtonStyle.Success, locked),
     btn("rsvp:late", t("raid-schedule.btn.late", lang), ButtonStyle.Secondary, locked),
     btn("rsvp:tentative", t("raid-schedule.btn.tentative", lang), ButtonStyle.Secondary, locked),
-    btn("rsvp:absent", t("raid-schedule.btn.absent", lang), ButtonStyle.Secondary)
+    btn("rsvp:absent", t("raid-schedule.btn.absent", lang), ButtonStyle.Secondary),
+    btn("room", t("raid-schedule.btn.room", lang), ButtonStyle.Secondary)
   );
   const utilityRow = new ActionRowBuilder().addComponents(
-    btn("room", t("raid-schedule.btn.room", lang), ButtonStyle.Secondary),
-    btn("help", t("raid-schedule.btn.help", lang), ButtonStyle.Secondary)
-  );
-  const leadRow = new ActionRowBuilder().addComponents(
-    btn(locked ? "unlock" : "lock", t(locked ? "raid-schedule.btn.unlock" : "raid-schedule.btn.lock", lang), ButtonStyle.Secondary),
-    btn("end", t("raid-schedule.btn.end", lang), ButtonStyle.Danger),
+    btn("help", t("raid-schedule.btn.help", lang), ButtonStyle.Secondary),
     btn("manage", t("raid-schedule.btn.manage", lang), ButtonStyle.Secondary)
   );
-  return [statusRow, utilityRow, leadRow];
+  return [statusRow, utilityRow];
 }
 
 module.exports = {
