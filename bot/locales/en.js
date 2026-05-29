@@ -131,9 +131,9 @@ module.exports = {
       managerOnlyTitle: "That's a lead button",
       managerOnlyDescription: "These coordination buttons are just for the lead / Raid Manager.",
       unknownTitle: "Artist didn't catch that",
-      unknownDescription: "This interaction doesn't match the current raid-schedule flow.",
+      unknownDescription: "This interaction doesn't match the current raid-schedule-preview flow.",
       guildOnlyTitle: "Use this in a server",
-      guildOnlyDescription: "`/raid-schedule` needs a server channel so Artist can post the board for everyone.",
+      guildOnlyDescription: "`/raid-schedule-preview` needs a server channel so Artist can post the board for everyone.",
       invalidModeTitle: "Raid / mode doesn't line up",
       invalidModeDescription: "That mode isn't available for the raid you picked. Mind choosing again for Artist?",
       invalidTimeTitle: "That start time looks off",
@@ -1418,10 +1418,10 @@ module.exports = {
           profit: "Apply 8% profit margin (default: on)",
         },
       },
-      "raid-schedule": {
-        label: "/raid-schedule",
-        short: "Create a raid signup board with Support/DPS slots, waitlist, and RSVP",
-        example: "/raid-schedule create raid:armoche mode:hard when:20:00 title:\"Tonight\"",
+      "raid-schedule-preview": {
+        label: "/raid-schedule-preview",
+        short: "Preview a raid signup board with Support/DPS slots, waitlist, and RSVP",
+        example: "/raid-schedule-preview create raid:armoche mode:hard when:20:00 title:\"Tonight\"",
         notes: [
           "Raid Managers post a public board, then members pick a character from their own roster - Artist handles the lineup.",
           "",

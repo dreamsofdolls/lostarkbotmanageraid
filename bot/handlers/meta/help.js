@@ -27,7 +27,7 @@ const SECTION_ORDER = [
   "raid-status",
   "raid-gold-earner",
   "raid-auction",
-  "raid-schedule",
+  "raid-schedule-preview",
   "raid-task",
   "raid-set",
   "raid-check",
@@ -68,7 +68,7 @@ const SECTION_META = {
       { name: "profit", required: false },
     ],
   },
-  "raid-schedule": {
+  "raid-schedule-preview": {
     icon: "📅",
     options: [
       { name: "create", required: true },

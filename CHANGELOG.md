@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-29 (`/raid-schedule-preview` command rename)
+
+### Changed
+- Renamed the preview signup-board slash command from `/raid-schedule` to `/raid-schedule-preview` so the Discord surface makes its preview status explicit.
+
 ## 2026-05-29 (`/raid-schedule` raid-derived party size)
 
 ### Changed

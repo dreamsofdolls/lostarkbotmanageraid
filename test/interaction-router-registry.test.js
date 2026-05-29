@@ -13,8 +13,9 @@ test("interaction router allowlist includes /raid-bg", () => {
   assert.ok(RAID_COMMAND_NAMES.includes("raid-bg"));
 });
 
-test("interaction router allowlist includes /raid-schedule", () => {
-  assert.ok(RAID_COMMAND_NAMES.includes("raid-schedule"));
+test("interaction router allowlist includes /raid-schedule-preview", () => {
+  assert.ok(RAID_COMMAND_NAMES.includes("raid-schedule-preview"));
+  assert.ok(!RAID_COMMAND_NAMES.includes("raid-schedule"));
 });
 
 test("interaction router allowlist includes every registered slash command", () => {
@@ -26,8 +27,8 @@ test("interaction router allowlist includes every registered slash command", () 
   assert.deepEqual(missingFromRouter, []);
 });
 
-test("raid-schedule definition derives party size from raid instead of exposing size", () => {
-  const command = commands.find((entry) => entry.toJSON().name === "raid-schedule");
+test("raid-schedule-preview definition derives party size from raid instead of exposing size", () => {
+  const command = commands.find((entry) => entry.toJSON().name === "raid-schedule-preview");
   assert.ok(command);
   const json = command.toJSON();
   const create = json.options.find((option) => option.name === "create");
@@ -42,7 +43,7 @@ test("raid-schedule definition derives party size from raid instead of exposing 
   ]);
 });
 
-test("raid-schedule component routes dispatch through rse custom IDs", async () => {
+test("raid-schedule-preview component routes dispatch through rse custom IDs", async () => {
   let buttonCalls = 0;
   let selectCalls = 0;
   const noop = async () => {};
