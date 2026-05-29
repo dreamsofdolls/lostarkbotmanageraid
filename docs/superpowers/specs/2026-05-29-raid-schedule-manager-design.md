@@ -36,7 +36,7 @@ Time is a label + Discord-native countdown, not a calendar system.
 | **Auto-lock (lead's choice)** | At creation the lead chooses auto-lock (board locks itself when `startAt` is reached) **or** manual-only lock. Auto-lock runs off an existing scheduler tick. |
 | **Lifecycle** | `open -> locked -> cleared` (success) **or** `open/locked -> cancelled` (fell through). |
 | **Waitlist + auto-promote** | When the comp is full, further confirmed signups go to a waitlist; when a slot frees, position #1 of the matching role auto-promotes **and is pinged**. |
-| **RSVP states** | `Tham gia` (confirmed, takes a slot) / `Trễ` / `Có thể` / `Vắng`. Non-confirmed states do not occupy slots; shown in a "Phản hồi" zone. |
+| **RSVP states** | `Tham gia` (confirmed) **and** `Trễ` (late) hold a slot; `Có thể` (tentative) / `Vắng` (absent) do not and show in a "Phản hồi" zone. `Trễ` is a flag on an already-held slot (you must have joined first) so a late player still counts for auto-clear; `Có thể`/`Vắng` vacate a held slot. |
 | **Auto-write clear** | On `Kết thúc`, the cleared raid is written into `/raid-status` for **each signup's own character** (consent = the act of signing up with your own char). |
 | **Room + password** | Room name public on the board; password revealed only to comp members via an ephemeral `🔑` button. Lead sets/edits via a modal. |
 | **Just-in-time help** | A `❓ Hướng dẫn` button opens an ephemeral guide that reads this event's real data (raid, iLvl) and renders in the clicker's language. |
@@ -129,9 +129,11 @@ buttons removed (board frozen).
      in the ephemeral confirmation (does not block).
 4. Board message re-renders.
 
-`Trễ` / `Có thể` / `Vắng` set the signup `status` without a character picker (they
-don't occupy a slot). A user with a confirmed slot who presses one of these vacates
-the slot (which may trigger a waitlist promote).
+`Có thể` / `Vắng` set the signup `status` without a character picker and do not occupy
+a slot; a user holding a slot who presses one of these **vacates** it (may trigger a
+waitlist promote). `Trễ` marks an already-held slot as "will be late" - it keeps the
+slot (so the player still counts for auto-clear) and is only offered to someone already
+in the comp. Slot-occupying statuses are therefore `confirmed` + `late`.
 
 ### 3.4 Room + password
 
