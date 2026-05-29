@@ -1424,6 +1424,7 @@ module.exports = {
         notes: [
           "Raid Manager が公開ボードを貼って、メンバーは自分のロスターからキャラを選ぶよ。編成は Artist が面倒みるね。",
           "",
+          "**Party size**: raid catalog から自動判定するよ。Act 4/Kazeros は 8人、Serca は 4人。",
           "**Join**: メンバーがボタンを押して条件を満たすキャラを選ぶと、bot が Support/DPS 枠か待機列に振り分けるよ。",
           "**RSVP**: `Late` は枠を保持、`Maybe` と `Absent` は枠を待機列に回すよ。",
           "**End**: lead がレイドを終了すると、bot が編成内のキャラに `/raid-set` 経由でクリアを記録するよ。",
