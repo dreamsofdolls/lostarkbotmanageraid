@@ -6,6 +6,7 @@ const { UI } = require("../bot/utils/raid/common/shared");
 const {
   buildScheduleEmbed,
   buildScheduleComponents,
+  buildTurnPlanEmbed,
   renderRsvpLine,
 } = require("../bot/handlers/raid/schedule/board");
 
@@ -77,4 +78,22 @@ test("renderRsvpLine lists tentative/absent only (late stays in comp)", () => {
   const line = renderRsvpLine(makeEvent().signups, "vi");
   assert.ok(line.includes("Maybe"));      // tentative
   assert.ok(!line.includes("Morrah"));    // late -> not in RSVP line
+});
+
+test("buildTurnPlanEmbed: one field per turn, member shows mention + class + role chip", () => {
+  const ev = makeEvent({
+    turns: [
+      { name: "Turn 1", memberIds: ["a", "b"] }, // a=Senko(sup), b=Morrah(dps)
+      { name: "Turn 2", memberIds: ["a"] },       // overlap: a in both turns
+    ],
+  });
+  const fields = buildTurnPlanEmbed(ev, deps).data.fields || [];
+  assert.equal(fields.length, 2);
+  assert.equal(fields[0].name, "Turn 1");
+  const t1 = fields[0].value;
+  assert.ok(t1.includes("<@a>"), "player mention rendered");
+  assert.ok(t1.includes("Senko") && t1.includes("SUP"));
+  assert.ok(t1.includes("Morrah") && t1.includes("DPS"));
+  // overlap: 'a' appears in Turn 2 too
+  assert.ok(fields[1].value.includes("<@a>"));
 });

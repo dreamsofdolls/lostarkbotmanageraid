@@ -4,6 +4,13 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-29 (raid-schedule: multi-turn team assignment + show)
+
+### Added
+- Multi-turn (bus) team assignment for `/raid-schedule-preview`. `RaidEvent` gains `turns: [{ name, memberIds }]`; the lead opens Manage -> 🧩 Phân turn to add turns and tick signups into each, and the SAME player can be placed in multiple turns (the Lost Ark bus/carry pattern where a scarce support runs several groups). Members come from the signup pool only (no free-typed pugs).
+- New `show` subcommand: `/raid-schedule-preview show` posts a public turn-plan embed for the channel's active event. Each member line is `{class emoji} {character} · @player · SUP/DPS` - real class icon + Discord mention + role chip, no redundant class name (the icon already conveys class). Read-only, so anyone can run it.
+- Pure turn logic (`services/raid/schedule/turns.js`: addTurn / setTurnMembers / removeTurn / resolveTurnMembers) + `buildTurnPlanEmbed` renderer, unit-tested. Locale strings (vi/en/jp, parity), `/raid-help` section, and README updated in the same change. Select routing broadened to `rse:` so the turn picker + member multi-select route through the existing handler (no shared-router restructure). 510 tests green across two runs.
+
 ## 2026-05-29 (raid-schedule: board layout tidy-up)
 
 ### Changed

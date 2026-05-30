@@ -15,6 +15,7 @@ const { t } = require("../../../services/i18n");
 const { getClassEmoji, isSupportClass } = require("../../../models/Class");
 const { getRaidRequirementMap } = require("../../../domain/raid-catalog");
 const { assignSlots } = require("../../../services/raid/schedule/slots");
+const { resolveTurnMembers } = require("../../../services/raid/schedule/turns");
 
 // Lifecycle -> embed stripe color (mapped onto the shared UI palette).
 function stripeColor(UI, status) {
@@ -184,9 +185,68 @@ function buildScheduleComponents(event, { ActionRowBuilder, ButtonBuilder, Butto
   return [statusRow, utilityRow];
 }
 
+/**
+ * Build the standalone "turn plan" embed shown by /raid-schedule show.
+ * One inline field per turn; each member line is
+ * `{classEmoji} **{char}** · <@player> \`SUP|DPS\`` so it's clear who is
+ * playing which character, which class, and which role (Cách 2 layout).
+ * The same player can appear across turns (bus model).
+ * @param {object} event - RaidEvent (needs turns[] + signups[])
+ * @param {{EmbedBuilder: Function, UI: object, lang?: string}} deps
+ * @returns {object} a discord.js EmbedBuilder instance
+ */
+function buildTurnPlanEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
+  const raidName = rosterLabel(event.raidKey, event.modeKey);
+  const time = discordTime(event.startAt);
+  const turns = Array.isArray(event.turns) ? event.turns : [];
+  const totalMembers = new Set(turns.flatMap((tn) => tn.memberIds || [])).size;
+
+  const desc = [
+    t("raid-schedule.turnPlan.summary", lang, {
+      raid: raidName,
+      lead: `<@${event.creatorId}>`,
+      rel: time.rel,
+    }),
+  ];
+  if (turns.length === 0) desc.push(t("raid-schedule.turnPlan.empty", lang));
+
+  const embed = new EmbedBuilder()
+    .setColor(stripeColor(UI, event.status))
+    .setTitle(t("raid-schedule.turnPlan.title", lang, { title: event.title || raidName }))
+    .setDescription(desc.join("\n"));
+
+  for (const turn of turns) {
+    const members = resolveTurnMembers(event.signups, turn);
+    const lines = members.map((m) => {
+      const emoji = getClassEmoji(m.characterClass) || (m.role === "support" ? "🛡️" : "⚔️");
+      // SUP/DPS are universal role codes - left untranslated on purpose so
+      // the chip renders identically across locales.
+      const chip = m.role === "support" ? "SUP" : "DPS";
+      return `${emoji} **${m.characterName}** · <@${m.discordId}> \`${chip}\``;
+    });
+    const value = lines.join("\n") || t("raid-schedule.board.emptySlot", lang);
+    embed.addFields({
+      name: turn.name,
+      value: value.length > 1024 ? `${value.slice(0, 1020)}…` : value,
+      inline: true,
+    });
+  }
+  if (turns.length > 0) {
+    embed.setFooter({
+      text: t("raid-schedule.turnPlan.footer", lang, {
+        turns: turns.length,
+        members: totalMembers,
+        id: String(event._id || "").slice(-4) || "----",
+      }),
+    });
+  }
+  return embed;
+}
+
 module.exports = {
   buildScheduleEmbed,
   buildScheduleComponents,
+  buildTurnPlanEmbed,
   // exported for unit tests
   renderRsvpLine,
 };

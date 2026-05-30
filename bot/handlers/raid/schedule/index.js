@@ -20,7 +20,8 @@ const { listEligibleCharacters } = require("../../../services/raid/schedule/elig
 const { applyJoin, applyRsvp } = require("../../../services/raid/schedule/signup-state");
 const { assignSlots, detectPromotion } = require("../../../services/raid/schedule/slots");
 const { selectAutoClearTargets } = require("../../../services/raid/schedule/auto-clear");
-const { buildScheduleEmbed, buildScheduleComponents } = require("./board");
+const { addTurn, setTurnMembers } = require("../../../services/raid/schedule/turns");
+const { buildScheduleEmbed, buildScheduleComponents, buildTurnPlanEmbed } = require("./board");
 
 const EPHEMERAL_FLAG = 1 << 6;
 const PICKER_LIMIT = 25;
@@ -235,13 +236,15 @@ function createRaidScheduleCommand({
   }
 
   async function handleRaidScheduleCommand(interaction) {
+    const subcommand = interaction.options.getSubcommand();
+    // `show` is a read-only public display, so anyone can run it.
+    if (subcommand === "show") return handleShowCommand(interaction);
+
     const lang = await userLang(interaction);
     if (!isLeadActionAllowed(interaction)) {
       await replyNotice(interaction, lang, "danger", "notManagerTitle", "notManagerDescription");
       return;
     }
-
-    const subcommand = interaction.options.getSubcommand();
     if (subcommand !== "create") {
       await replyNotice(interaction, lang, "warn", "unknownTitle", "unknownDescription");
       return;
@@ -546,6 +549,12 @@ function createRaidScheduleCommand({
         .setLabel(t("raid-schedule.btn.cancelEvent", lang))
         .setStyle(ButtonStyle.Danger),
     );
+    const teamRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`rse:teams:${id}`)
+        .setLabel(t("raid-schedule.btn.teams", lang))
+        .setStyle(ButtonStyle.Primary),
+    );
     return {
       embeds: [
         noticeEmbed(
@@ -554,7 +563,7 @@ function createRaidScheduleCommand({
           t("raid-schedule.notice.manageDescription", lang),
         ),
       ],
-      components: [row],
+      components: [row, teamRow],
       flags: ephemeralFlag,
     };
   }
@@ -758,6 +767,159 @@ function createRaidScheduleCommand({
     }
   }
 
+  function markTurns(event, turns) {
+    event.turns = turns;
+    if (typeof event.markModified === "function") event.markModified("turns");
+  }
+
+  // Lead control panel for the multi-turn (bus) plan. Lists turns + a
+  // select to pick which turn to edit (or add one). Picking a turn swaps
+  // in a multi-select of the signup pool with current members pre-checked.
+  function teamsPanelPayload(event, lang) {
+    const turns = Array.isArray(event.turns) ? event.turns : [];
+    const lines = turns.length
+      ? turns
+          .map((tn) => t("raid-schedule.teams.turnLine", lang, { name: tn.name, n: (tn.memberIds || []).length }))
+          .join("\n")
+      : t("raid-schedule.teams.none", lang);
+    const options = turns.map((tn, i) => ({
+      label: clip(tn.name, 100),
+      value: String(i),
+      description: clip(t("raid-schedule.teams.memberCount", lang, { n: (tn.memberIds || []).length }), 100),
+    }));
+    options.push({ label: t("raid-schedule.teams.newTurn", lang), value: "new" });
+    const row = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`rse:teamturn:${event._id}`)
+        .setPlaceholder(t("raid-schedule.teams.pickTurn", lang))
+        .addOptions(options.slice(0, 25)),
+    );
+    return {
+      embeds: [
+        noticeEmbed(
+          "info",
+          t("raid-schedule.teams.title", lang),
+          `${t("raid-schedule.teams.intro", lang)}\n\n${lines}`,
+        ),
+      ],
+      components: [row],
+      flags: ephemeralFlag,
+    };
+  }
+
+  function memberSelectPayload(event, turnIndex, lang) {
+    const turn = event.turns[turnIndex];
+    const current = new Set(turn.memberIds || []);
+    const pool = (event.signups || []).slice(0, 25); // Discord select option cap
+    const options = pool.map((s) => ({
+      label: clip(s.characterName, 100),
+      value: s.discordId,
+      description: clip(`${s.characterClass} · ${s.characterItemLevel}`, 100),
+      default: current.has(s.discordId),
+    }));
+    const select = new StringSelectMenuBuilder()
+      .setCustomId(`rse:teammembers:${turnIndex}:${event._id}`)
+      .setPlaceholder(clip(t("raid-schedule.teams.pickMembers", lang, { turn: turn.name }), 150))
+      .setMinValues(0)
+      .setMaxValues(options.length)
+      .addOptions(options);
+    return {
+      embeds: [
+        noticeEmbed(
+          "info",
+          t("raid-schedule.teams.assignTitle", lang, { turn: turn.name }),
+          t("raid-schedule.teams.assignIntro", lang),
+        ),
+      ],
+      components: [new ActionRowBuilder().addComponents(select)],
+    };
+  }
+
+  async function handleTeams(interaction, event, lang) {
+    if (!isLeadActionAllowed(interaction)) {
+      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
+      return;
+    }
+    if (event.status === "cleared" || event.status === "cancelled") {
+      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
+      return;
+    }
+    await interaction.reply(teamsPanelPayload(event, lang));
+  }
+
+  async function handleTeamTurnSelect(interaction, event, lang) {
+    if (!isLeadActionAllowed(interaction)) {
+      await editNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
+      return;
+    }
+    const value = interaction.values?.[0];
+    let turnIndex;
+    if (value === "new") {
+      const turns = addTurn(
+        event.turns,
+        t("raid-schedule.teams.turnNameDefault", lang, { n: (event.turns?.length || 0) + 1 }),
+      );
+      markTurns(event, turns);
+      await event.save();
+      turnIndex = turns.length - 1;
+    } else {
+      turnIndex = Number(value);
+      if (!Number.isInteger(turnIndex) || turnIndex < 0 || turnIndex >= (event.turns?.length || 0)) {
+        await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");
+        return;
+      }
+    }
+    if (!Array.isArray(event.signups) || event.signups.length === 0) {
+      await editNotice(interaction, lang, "warn", "teamsNoPoolTitle", "teamsNoPoolDescription");
+      return;
+    }
+    const payload = memberSelectPayload(event, turnIndex, lang);
+    await interaction.editReply({ embeds: payload.embeds, components: payload.components });
+  }
+
+  async function handleTeamMembersSelect(interaction, event, lang) {
+    if (!isLeadActionAllowed(interaction)) {
+      await editNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
+      return;
+    }
+    const parsed = parseCustomId(interaction.customId);
+    const turnIndex = Number(parsed.action.split(":")[1]);
+    if (!Number.isInteger(turnIndex) || turnIndex < 0 || turnIndex >= (event.turns?.length || 0)) {
+      await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");
+      return;
+    }
+    const turns = setTurnMembers(event.turns, turnIndex, interaction.values || []);
+    markTurns(event, turns);
+    await event.save();
+    const payload = teamsPanelPayload(event, lang);
+    await interaction.editReply({ embeds: payload.embeds, components: payload.components });
+  }
+
+  // /raid-schedule-preview show -> post the public turn plan for the
+  // channel's active event. Read-only, so anyone can run it (no lead gate).
+  async function handleShowCommand(interaction) {
+    const guildId = interaction.guildId || interaction.guild?.id;
+    const channelId = interaction.channelId || interaction.channel?.id;
+    const lang = await userLang(interaction);
+    if (!guildId || !channelId) {
+      await replyNotice(interaction, lang, "danger", "guildOnlyTitle", "guildOnlyDescription");
+      return;
+    }
+    const event = await RaidEvent.findOne({
+      guildId,
+      channelId,
+      status: { $in: ["open", "locked"] },
+    }).sort({ createdAt: -1 });
+    if (!event) {
+      await replyNotice(interaction, lang, "warn", "showNoEventTitle", "showNoEventDescription");
+      return;
+    }
+    const langForBoard = await boardLang(guildId);
+    await interaction.reply({
+      embeds: [buildTurnPlanEmbed(event, { EmbedBuilder, UI, lang: langForBoard })],
+    });
+  }
+
   async function handleRaidScheduleButton(interaction) {
     const lang = await userLang(interaction);
     const parsed = parseCustomId(interaction.customId);
@@ -778,6 +940,7 @@ function createRaidScheduleCommand({
     if (parsed.action === "room") return handleRoom(interaction, event, lang);
     if (parsed.action === "help") return handleHelp(interaction, lang);
     if (parsed.action === "manage") return handleManage(interaction, event, lang);
+    if (parsed.action === "teams") return handleTeams(interaction, event, lang);
     if (parsed.action === "setroom") return handleSetRoom(interaction, event, lang);
     if (parsed.action === "edittime") return handleEditTime(interaction, event, lang);
     if (parsed.action === "cancel") return handleCancel(interaction, event, lang);
@@ -788,12 +951,15 @@ function createRaidScheduleCommand({
     const parsed = parseCustomId(interaction.customId);
     await interaction.deferUpdate();
     const lang = await userLang(interaction);
-    const event = parsed && parsed.action === "pick" ? await loadEvent(parsed.eventId) : null;
+    const event = parsed ? await loadEvent(parsed.eventId) : null;
     if (!event) {
       await editNotice(interaction, lang, "warn", "missingEventTitle", "missingEventDescription");
       return;
     }
-    await handlePick(interaction, event, lang);
+    if (parsed.action === "pick") return handlePick(interaction, event, lang);
+    if (parsed.action === "teamturn") return handleTeamTurnSelect(interaction, event, lang);
+    if (parsed.action.startsWith("teammembers")) return handleTeamMembersSelect(interaction, event, lang);
+    await editNotice(interaction, lang, "warn", "unknownTitle", "unknownDescription");
   }
 
   return {
