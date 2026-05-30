@@ -17,6 +17,14 @@ const {
   buildRaidFilterRow,
 } = require("./raid-filter");
 const {
+  MY_RAIDS_SELECT_ID,
+  findActiveEventsForUser,
+  buildMyRaidsRow,
+  buildMyRaidDetailEmbed,
+} = require("./my-raids");
+const { shapeMyRaidEvents } = require("../../services/raid/schedule/my-raids");
+const RaidEvent = require("../../models/RaidEvent");
+const {
   parseTaskToggleValue,
   toggleBulkSideTask,
   toggleSingleSideTask,
@@ -26,6 +34,7 @@ const {
   buildNoticeEmbed,
   followUpNotice,
   replyNotice,
+  replyEmbed,
 } = require("../../utils/raid/common/shared");
 const {
   getNextSharedTaskTransitionMs,
@@ -610,6 +619,16 @@ function createRaidStatusCommand(deps) {
       return row;
     };
 
+    // "Raid của tôi": active raid-schedule events this viewer is signed up
+    // for (self-join or manager-added), guild-wide. Shaped once; the dropdown
+    // is the same on every page (it is viewer-global, not per-account).
+    const myRaidEvents = await findActiveEventsForUser({
+      RaidEvent,
+      guildId: interaction.guildId,
+      discordId: interaction.user.id,
+    });
+    const myRaidsShaped = shapeMyRaidEvents(myRaidEvents, interaction.user.id);
+
     const buildComponents = (disabled) => {
       const rows = [];
       // Hide the Sync button when the page being viewed is a shared
@@ -705,6 +724,19 @@ function createRaidStatusCommand(deps) {
           raidDropdownEntries,
           totalRaidPending,
           filterRaidId,
+          disabled,
+          lang,
+        }));
+      }
+      // "Raid của tôi" dropdown sits last. Shown in both views (it is viewer-
+      // global). Dropped when the viewer is in zero active events, or when the
+      // message already holds Discord's 5-row max (rare; show/board still cover).
+      if (myRaidsShaped.length > 0 && rows.length < 5) {
+        rows.push(buildMyRaidsRow({
+          ActionRowBuilder,
+          StringSelectMenuBuilder,
+          truncateText,
+          shapedEvents: myRaidsShaped,
           disabled,
           lang,
         }));
@@ -999,6 +1031,27 @@ function createRaidStatusCommand(deps) {
             description: followupCopy,
           }).catch(() => {});
         }
+        return;
+      } else if (id === MY_RAIDS_SELECT_ID) {
+        // Personal detail view - NOT edit-driven (no deferUpdate at the top of
+        // this handler), so the interaction is fresh and we reply ephemerally
+        // without disturbing the roster embed. Re-fetch so turns/room are live.
+        const eventId = Array.isArray(component.values) && component.values.length > 0
+          ? component.values[0]
+          : null;
+        const ev = eventId ? await RaidEvent.findById(eventId).catch(() => null) : null;
+        if (!ev) {
+          await replyNotice(component, EmbedBuilder, {
+            type: "warn",
+            title: t("raid-status.myRaids.notFoundTitle", lang),
+            description: t("raid-status.myRaids.notFoundDescription", lang),
+          }).catch(() => {});
+          return;
+        }
+        await replyEmbed(
+          component,
+          buildMyRaidDetailEmbed(ev, component.user.id, { EmbedBuilder, UI, lang }),
+        ).catch(() => {});
         return;
       } else if (id === "status-filter:raid") {
         const value =
