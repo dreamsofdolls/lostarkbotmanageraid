@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-30 (raid-schedule: lead add-member)
+
+### Added
+- Lead add-member for `/raid-schedule-preview`. Manage menu gains a `➕ Thêm người` button (green, between Phân turn and Kick) that opens a native Discord User Select; picking a user loads their registered roster and shows an iLvl-eligible character Select; picking a character writes the signup on their behalf via the existing `applyJoin` and pings them publicly. Works even when the board is locked (manager-add bypasses the lock gate). Added members are full comp members (auto-cleared on End like everyone). No roster / no eligible char / bot target are handled with gentle notices.
+- Interaction router now routes User Select (component type 5) through the same `selectRoutes` as String Select. Locale strings (vi/en/jp parity), `/raid-help`, and README synced. 515 tests green across two runs.
+
 ## 2026-05-30 (raid-schedule: member kick)
 
 ### Added
