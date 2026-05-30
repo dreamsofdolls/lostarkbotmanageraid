@@ -20,7 +20,11 @@ const { listEligibleCharacters } = require("../../../services/raid/schedule/elig
 const { applyJoin, applyRsvp, applyKick } = require("../../../services/raid/schedule/signup-state");
 const { assignSlots, detectPromotion } = require("../../../services/raid/schedule/slots");
 const { selectAutoClearTargets } = require("../../../services/raid/schedule/auto-clear");
-const { addTurn, setTurnMembers } = require("../../../services/raid/schedule/turns");
+const {
+  addTurn,
+  setTurnMembers,
+  removeMembersFromTurns,
+} = require("../../../services/raid/schedule/turns");
 const { buildScheduleEmbed, buildScheduleComponents, buildTurnPlanEmbed } = require("./board");
 
 const EPHEMERAL_FLAG = 1 << 6;
@@ -832,7 +836,9 @@ function createRaidScheduleCommand({
       await editNotice(interaction, lang, "warn", "kickNoneTitle", "kickNoneDescription");
       return;
     }
+    const removedIds = removed.map((s) => s.discordId);
     markSignups(event, next);
+    markTurns(event, removeMembersFromTurns(event.turns, removedIds));
     await event.save();
 
     const langForBoard = await boardLang(event.guildId);
