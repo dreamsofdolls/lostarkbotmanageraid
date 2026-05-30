@@ -5,6 +5,7 @@ const {
   deriveRole,
   hasClearedRaid,
   listEligibleCharacters,
+  partitionSelectable,
 } = require("../bot/services/raid/schedule/eligibility");
 
 test("deriveRole maps support classes vs dps", () => {
@@ -52,4 +53,30 @@ test("listEligibleCharacters flags iLvl gate, role, deficit, cleared", () => {
   const low = rows.find((r) => r.name === "Lowblade");
   assert.equal(low.eligible, false);
   assert.equal(low.deficit, 5);
+});
+
+test("partitionSelectable drops already-cleared chars (not pointless to re-clear)", () => {
+  const rows = [
+    { name: "A", alreadyCleared: false },
+    { name: "B", alreadyCleared: true },
+    { name: "C", alreadyCleared: false },
+  ];
+  const r = partitionSelectable(rows);
+  assert.deepEqual(r.selectable.map((x) => x.name), ["A", "C"]);
+  assert.equal(r.allCleared, false);
+});
+
+test("partitionSelectable flags allCleared when every eligible char already cleared", () => {
+  const r = partitionSelectable([
+    { name: "B", alreadyCleared: true },
+    { name: "D", alreadyCleared: true },
+  ]);
+  assert.deepEqual(r.selectable, []);
+  assert.equal(r.allCleared, true);
+});
+
+test("partitionSelectable: empty input is a no-eligible case, not all-cleared", () => {
+  const r = partitionSelectable([]);
+  assert.deepEqual(r.selectable, []);
+  assert.equal(r.allCleared, false);
 });

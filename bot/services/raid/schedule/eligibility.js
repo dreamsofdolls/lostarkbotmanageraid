@@ -65,4 +65,20 @@ function listEligibleCharacters(accounts, { raidKey, minItemLevel }) {
   return rows;
 }
 
-module.exports = { deriveRole, hasClearedRaid, listEligibleCharacters };
+/**
+ * Split iLvl-eligible rows into the ones still selectable for a signup (not
+ * yet cleared this week) and flag whether the ONLY reason nothing is
+ * selectable is that every eligible character already cleared. A cleared
+ * character has nothing to gain from signing up for a normal (non-bus) clear,
+ * so it is hidden; the allCleared flag lets callers say "all cleared" instead
+ * of the misleading "no character at iLvl".
+ * @param {Array<{alreadyCleared: boolean}>} eligibleRows - rows already filtered to iLvl-eligible
+ * @returns {{selectable: Array, allCleared: boolean}}
+ */
+function partitionSelectable(eligibleRows) {
+  const list = Array.isArray(eligibleRows) ? eligibleRows : [];
+  const selectable = list.filter((row) => !row.alreadyCleared);
+  return { selectable, allCleared: list.length > 0 && selectable.length === 0 };
+}
+
+module.exports = { deriveRole, hasClearedRaid, listEligibleCharacters, partitionSelectable };
