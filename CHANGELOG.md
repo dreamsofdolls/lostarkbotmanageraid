@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-30 (raid-status: "Raid của tôi" dropdown)
+
+### Added
+- `/raid-status` gains a `🗓️ Raid của tôi` dropdown (beside the raid filter) listing the active `/raid-schedule-preview` events guild-wide that the viewer is signed up for (self-join or manager-added). Picking one opens an ephemeral personal detail: their role, the room (only if they hold a slot), and their turn(s) with teammates (reusing the show member-line format, 2-column compact, no @mention). The roster embed is not disturbed (the branch is not edit-driven). The dropdown is omitted when the viewer is in zero active events.
+- New pure helpers `services/raid/schedule/my-raids.js` (`turnsForMember`, `shapeMyRaidEvents`, `buildMyRaidDetail`, unit-tested) + render/query module `handlers/raid-status/my-raids.js`. `show` is unchanged. i18n vi/en/jp parity. 518 tests green across two runs (+3 my-raids unit tests).
+
 ## 2026-05-30 (raid-schedule: lead add-member)
 
 ### Added
