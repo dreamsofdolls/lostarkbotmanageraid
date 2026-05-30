@@ -199,7 +199,7 @@ function buildTurnPlanEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
   const raidName = rosterLabel(event.raidKey, event.modeKey);
   const time = discordTime(event.startAt);
   const turns = Array.isArray(event.turns) ? event.turns : [];
-  const totalMembers = new Set(turns.flatMap((tn) => tn.memberIds || [])).size;
+  const visibleMembers = new Set();
 
   const desc = [
     t("raid-schedule.turnPlan.summary", lang, {
@@ -217,6 +217,7 @@ function buildTurnPlanEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
 
   for (const turn of turns) {
     const members = resolveTurnMembers(event.signups, turn);
+    for (const member of members) visibleMembers.add(member.discordId);
     const lines = members.map((m) => {
       const emoji = getClassEmoji(m.characterClass) || (m.role === "support" ? "🛡️" : "⚔️");
       // SUP/DPS are universal role codes - left untranslated on purpose so
@@ -235,7 +236,7 @@ function buildTurnPlanEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
     embed.setFooter({
       text: t("raid-schedule.turnPlan.footer", lang, {
         turns: turns.length,
-        members: totalMembers,
+        members: visibleMembers.size,
         id: String(event._id || "").slice(-4) || "----",
       }),
     });

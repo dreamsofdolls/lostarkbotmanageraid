@@ -65,7 +65,9 @@ function resolveTurnMembers(signups, turn) {
       characterName: s.characterName,
       characterClass: s.characterClass,
       characterItemLevel: s.characterItemLevel,
-      role: isSupportClass(s.characterClass) ? "support" : "dps",
+      role: s.role === "support" || s.role === "dps"
+        ? s.role
+        : isSupportClass(s.characterClass) ? "support" : "dps",
     }));
 }
 
