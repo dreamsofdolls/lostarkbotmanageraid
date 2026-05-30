@@ -88,7 +88,10 @@ function createInteractionRouter({
       return;
     }
 
-    if (interaction.isStringSelectMenu()) {
+    // User Select (component type 5) routes through the same selectRoutes as
+    // String Select - the add-member flow uses a native user picker. Optional
+    // call so callers/mocks without the method (older tests) stay safe.
+    if (interaction.isStringSelectMenu() || interaction.isUserSelectMenu?.()) {
       // Exact-match table first (covers static customIds like
       // "raid-help:select"); then prefix-match routes (used when the
       // customId carries dynamic data such as a session ID — same shape
