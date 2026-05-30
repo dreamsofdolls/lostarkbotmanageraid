@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { assignSlots, nextWaitlistPromotion } = require("../bot/services/raid/schedule/slots");
+const { applyJoin } = require("../bot/services/raid/schedule/signup-state");
 
 const sigs = [
   { discordId: "a", role: "support", status: "confirmed", joinedAt: 1 },
@@ -23,4 +24,25 @@ test("nextWaitlistPromotion returns the first waitlisted of the freed role", () 
   assert.equal(nextWaitlistPromotion(sigs, { supSlots: 2, dpsSlots: 6 }, "support").discordId, "c");
   // No dps is waitlisted, so a freed dps slot has no promotion.
   assert.equal(nextWaitlistPromotion(sigs, { supSlots: 2, dpsSlots: 6 }, "dps"), null);
+});
+
+test("manager-added signups follow normal role capacity and can land on waitlist", () => {
+  const existing = [
+    { discordId: "a", role: "dps", status: "confirmed", joinedAt: 1 },
+  ];
+  const afterAdd = applyJoin(
+    existing,
+    {
+      discordId: "b",
+      accountName: "Alt",
+      characterName: "Newdps",
+      characterClass: "Berserker",
+      characterItemLevel: 1720,
+    },
+    2,
+  );
+
+  const { dps, waitlist } = assignSlots(afterAdd, { supSlots: 0, dpsSlots: 1 });
+  assert.deepEqual(dps.map((s) => s.discordId), ["a"]);
+  assert.deepEqual(waitlist.map((s) => s.discordId), ["b"]);
 });

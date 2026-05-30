@@ -1044,10 +1044,24 @@ function createRaidScheduleCommand({
       characterItemLevel: row.itemLevel,
       alreadyClearedThisWeek: row.alreadyCleared,
     });
+    const afterSlots = assignSlots(next, {
+      supSlots: event.supSlots,
+      dpsSlots: event.dpsSlots,
+    });
+    const addedInComp = [...afterSlots.support, ...afterSlots.dps]
+      .some((s) => String(s.discordId) === String(targetId));
     markSignups(event, next);
     await event.save();
 
     const langForBoard = await boardLang(event.guildId);
+    const leadPlacement = t(
+      addedInComp ? "raid-schedule.notice.addedPlacementComp" : "raid-schedule.notice.addedPlacementWaitlist",
+      lang,
+    );
+    const boardPlacement = t(
+      addedInComp ? "raid-schedule.notice.addedPlacementComp" : "raid-schedule.notice.addedPlacementWaitlist",
+      langForBoard,
+    );
     await editBoardMessage(interaction, event, langForBoard);
     await interaction.editReply({
       embeds: [
@@ -1057,6 +1071,7 @@ function createRaidScheduleCommand({
           t("raid-schedule.notice.addedDescription", lang, {
             user: `<@${targetId}>`,
             character: row.name,
+            placement: leadPlacement,
           }),
         ),
       ],
@@ -1072,6 +1087,7 @@ function createRaidScheduleCommand({
           user: `<@${targetId}>`,
           title: event.title || "",
           character: row.name,
+          placement: boardPlacement,
           rel: `<t:${Math.floor(new Date(event.startAt).getTime() / 1000)}:R>`,
         }),
       });

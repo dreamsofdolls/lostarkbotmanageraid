@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-30 (raid-schedule: add-member placement clarity)
+
+### Changed
+- Lead add-member now reports whether the added character is holding a comp slot or sitting on the waitlist. The behavior still follows normal Support/DPS capacity and join-order rules; it does not silently bump an existing slot-holder. Docs, `/raid-help`, and the design spec now state that End auto-clears only actual comp slot-holders. 519 tests green (+1 placement regression).
+
 ## 2026-05-30 (raid-status: "Raid của tôi" dropdown)
 
 ### Added
@@ -13,7 +18,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ## 2026-05-30 (raid-schedule: lead add-member)
 
 ### Added
-- Lead add-member for `/raid-schedule-preview`. Manage menu gains a `➕ Thêm người` button (green, between Phân turn and Kick) that opens a native Discord User Select; picking a user loads their registered roster and shows an iLvl-eligible character Select; picking a character writes the signup on their behalf via the existing `applyJoin` and pings them publicly. Works even when the board is locked (manager-add bypasses the lock gate). Added members are full comp members (auto-cleared on End like everyone). No roster / no eligible char / bot target are handled with gentle notices.
+- Lead add-member for `/raid-schedule-preview`. Manage menu gains a `➕ Thêm người` button (green, between Phân turn and Kick) that opens a native Discord User Select; picking a user loads their registered roster and shows an iLvl-eligible character Select; picking a character writes the signup on their behalf via the existing `applyJoin` and pings them publicly. Works even when the board is locked (manager-add bypasses the lock gate). Placement follows the normal role-capacity rules: if their role has a free slot they enter the comp; if not, they sit on the waitlist. No roster / no eligible char / bot target are handled with gentle notices.
 - Interaction router now routes User Select (component type 5) through the same `selectRoutes` as String Select. Locale strings (vi/en/jp parity), `/raid-help`, and README synced. 515 tests green across two runs.
 
 ## 2026-05-30 (raid-schedule: member kick)
