@@ -167,17 +167,17 @@ function buildScheduleComponents(event, { ActionRowBuilder, ButtonBuilder, Butto
       .setStyle(style)
       .setDisabled(disabled);
 
-  // Row 1: everyone-facing status + room (5 buttons, the Discord row cap).
-  // Row 2: help + lead's Manage entry. Lock/unlock + End live INSIDE the
-  // Manage menu now (kept off the board to keep it to 2 tidy rows).
+  // Grouped by purpose so the board reads cleanly: row 1 is pure status
+  // (join + the RSVP trio), row 2 is utility (room / help / lead Manage).
+  // Lock/unlock + End live INSIDE the Manage menu (off the board).
   const statusRow = new ActionRowBuilder().addComponents(
     btn("join", t("raid-schedule.btn.join", lang), ButtonStyle.Success, locked),
     btn("rsvp:late", t("raid-schedule.btn.late", lang), ButtonStyle.Secondary, locked),
     btn("rsvp:tentative", t("raid-schedule.btn.tentative", lang), ButtonStyle.Secondary, locked),
-    btn("rsvp:absent", t("raid-schedule.btn.absent", lang), ButtonStyle.Secondary),
-    btn("room", t("raid-schedule.btn.room", lang), ButtonStyle.Secondary)
+    btn("rsvp:absent", t("raid-schedule.btn.absent", lang), ButtonStyle.Secondary)
   );
   const utilityRow = new ActionRowBuilder().addComponents(
+    btn("room", t("raid-schedule.btn.room", lang), ButtonStyle.Secondary),
     btn("help", t("raid-schedule.btn.help", lang), ButtonStyle.Secondary),
     btn("manage", t("raid-schedule.btn.manage", lang), ButtonStyle.Secondary)
   );
