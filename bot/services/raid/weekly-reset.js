@@ -11,8 +11,10 @@
 const User = require("../../models/user");
 const { saveWithRetry } = require("../../models/user");
 const GuildConfig = require("../../models/guildConfig");
+const RaidEvent = require("../../models/RaidEvent");
 const { RAID_REQUIREMENTS } = require("../../models/Raid");
 const { t, getGuildLanguage } = require("../i18n");
+const { purgeStaleRaidEvents } = require("./schedule/event-cleanup");
 
 const WEEKLY_ANNOUNCEMENT_TTL_MS = 30 * 60 * 1000; // marker sits 30 min before self-delete
 const WEEKLY_RESET_TICK_MS = 30 * 60 * 1000;
@@ -297,6 +299,23 @@ function startWeeklyResetJob(client) {
       // stale "Tuần mới" posts outside Wed-17-VN → Thu-17-VN entirely.
       if (result.modifiedCount > 0 && isWithinWeeklyResetWindow()) {
         await postWeeklyResetAnnouncements(client, result.resetKey);
+      }
+      // Purge raid-schedule events whose raid week has passed (startAt before
+      // the most recent weekly reset) + their board messages. Runs every tick;
+      // idempotent once nothing is older than the current reset boundary.
+      try {
+        const purged = await purgeStaleRaidEvents({
+          RaidEvent,
+          client,
+          boundaryMs: getCurrentResetStartMs(),
+        });
+        if (purged.deleted > 0) {
+          console.log(
+            `[weekly-reset] purged ${purged.deleted} stale raid event(s), ${purged.boardsDeleted} board(s)`
+          );
+        }
+      } catch (err) {
+        console.error("[weekly-reset] stale event purge failed:", err?.message || err);
       }
     } catch (error) {
       console.error("[weekly-reset] Failed to reset raid completion:", error.message);
