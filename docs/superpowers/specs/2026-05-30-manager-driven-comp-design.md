@@ -24,15 +24,17 @@ a member who was added has no glanceable "what am I in" view.
    manager-registered via `/raid-add-roster target:`). No free-typed character names:
    the iLvl eligibility gate and the End-time auto-clear write both need real roster
    data (discordId + accountName + characterName).
-3. **Consent = manager-added members are full comp members.** They are auto-cleared
-   on End like everyone else (the manager is responsible; Kick before End covers
-   no-shows). Auto-clear logic stays uniform - no special-casing.
+3. **Consent = manager-added members are normal event signups.** They follow the
+   same Support/DPS capacity and waitlist rules as self-joined members. If their
+   role has a free slot they are comp members and can be auto-cleared on End; if
+   the role is full they waitlist until a slot opens. Auto-clear logic stays
+   uniform: only actual comp slot-holders are credited.
 4. **`show` is unchanged** - it stays the public, whole-comp turn plan. The personal
    "my raids" surface is separate (see Phase 2), because the two have different
    audiences (everyone vs one person) and overloading `show` would confuse.
 5. **"Raid của tôi" lives in `/raid-status`** as a third dropdown beside the existing
    "Tiến độ raid" and "Tất cả raids", and is **guild-wide** (lists active events in
-   any channel of the guild that the user is in).
+   any channel of the guild that the session opener is in).
 6. **Teammate rendering reuses the `show` member-line format** (class icon + character
    name + role chip), 2-column compact (inline fields). The @mention is dropped in the
    personal view so lines fit a half-width inline column; `show` keeps mentions.
@@ -64,6 +66,9 @@ Guards / edges:
   an empty list.
 - Target already signed up -> `applyJoin` swaps their character (lets the manager fix
   someone's char too).
+- Placement follows the same derived slot math as Join. Manager-add does not silently
+  bump another member; if the matching role is full, the added member lands on the
+  waitlist and the ping/confirmation says so.
 - Kicking a slot-holder still auto-promotes waitlist (unchanged); adding does not need
   promotion logic (it just fills/overflows like a normal join).
 
@@ -74,9 +79,10 @@ to the command factory deps.
 ## Phase 2 - "Raid của tôi" (the "read" half)
 
 A third dropdown in the `/raid-status` view, beside the two existing ones. It lists
-the active raid-schedule events (status open/locked) in the guild that the displayed
-roster's owner is signed up for (self by default; if a manager is viewing another
-user's roster, it reflects that displayed user, keeping embed + dropdown consistent).
+the active raid-schedule events (status open/locked) in the guild that the session
+opener is signed up for. v1 intentionally follows the literal "my raids" meaning:
+if a manager is paging through someone else's shared roster, the dropdown still shows
+the manager's own scheduled events.
 
 - Dropdown label shows a count, e.g. "🗓️ Raid của tôi (2)". The dropdown is omitted
   entirely when the user is in zero active events (no empty/dead component).
@@ -119,7 +125,8 @@ Artist voice, no em-dash.
   covers the need; revisit only if asked).
 - Per-turn rooms (room stays event-level).
 - Free-typed / off-roster characters in manager-add.
-- A separate "don't auto-clear added members" flag (added = full member for now).
+- A separate "don't auto-clear added members" flag (added members use the same
+  comp-slot auto-clear rule as everyone else).
 
 ## Testing
 
