@@ -593,6 +593,10 @@ function createRaidScheduleCommand({
         .setCustomId(`rse:cancel:${id}`)
         .setLabel(t("raid-schedule.btn.cancelEvent", lang))
         .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`rse:delete:${id}`)
+        .setLabel(t("raid-schedule.btn.deleteEvent", lang))
+        .setStyle(ButtonStyle.Danger),
     );
     return {
       embeds: [
@@ -804,6 +808,118 @@ function createRaidScheduleCommand({
         console.warn("[raid-schedule] cancel ping failed:", error?.message || error);
       }
     }
+  }
+
+  // Best-effort removal of the board message. Unlike editBoardMessage (which
+  // edits in place), this deletes the message entirely - used by manual delete.
+  async function deleteBoardMessage(interaction, event) {
+    if (!event.messageId || !event.channelId || !interaction.client?.channels) return false;
+    try {
+      const channel = await interaction.client.channels.fetch(event.channelId);
+      const message = await channel?.messages?.fetch(event.messageId);
+      if (message) {
+        await message.delete();
+        return true;
+      }
+    } catch (error) {
+      console.warn("[raid-schedule] board delete failed:", error?.message || error);
+    }
+    return false;
+  }
+
+  // Manual hard-delete (lead). Cancel freezes the board as a record; Delete
+  // removes the board message AND the RaidEvent doc. A confirm step guards the
+  // irreversible loss (the auto-purge handles the routine weekly cleanup).
+  function deleteConfirmPayload(event, lang) {
+    const id = String(event._id);
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`rse:delyes:${id}`)
+        .setLabel(t("raid-schedule.btn.deleteConfirmYes", lang))
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`rse:delno:${id}`)
+        .setLabel(t("raid-schedule.btn.deleteConfirmNo", lang))
+        .setStyle(ButtonStyle.Secondary),
+    );
+    return {
+      embeds: [
+        noticeEmbed(
+          "danger",
+          t("raid-schedule.notice.deleteConfirmTitle", lang),
+          t("raid-schedule.notice.deleteConfirmDescription", lang),
+        ),
+      ],
+      components: [row],
+      flags: ephemeralFlag,
+    };
+  }
+
+  async function handleDeletePrompt(interaction, event, lang) {
+    if (!isLeadActionAllowed(interaction)) {
+      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
+      return;
+    }
+    await interaction.reply(deleteConfirmPayload(event, lang));
+  }
+
+  async function handleDeleteConfirm(interaction, event, lang) {
+    if (!isLeadActionAllowed(interaction)) {
+      await editNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
+      return;
+    }
+    await interaction.deferUpdate();
+    // Ping signups only if the event was still active - cleaning up an already
+    // ended/cancelled event has no audience left to notify.
+    const wasActive = event.status === "open" || event.status === "locked";
+    const ids = [...new Set((event.signups || []).map((s) => s.discordId))];
+    const langForBoard = await boardLang(event.guildId);
+
+    await deleteBoardMessage(interaction, event);
+    try {
+      await event.deleteOne();
+    } catch (error) {
+      console.warn("[raid-schedule] event delete failed:", error?.message || error);
+    }
+
+    await interaction.editReply({
+      embeds: [
+        noticeEmbed(
+          "warn",
+          t("raid-schedule.notice.deletedTitle", lang),
+          t("raid-schedule.notice.deletedDescription", lang),
+        ),
+      ],
+      components: [],
+    }).catch(() => {});
+
+    if (wasActive && ids.length > 0) {
+      try {
+        const channel = await interaction.client.channels.fetch(event.channelId);
+        await channel?.send?.({
+          content: t("raid-schedule.notice.cancelPingContent", langForBoard, {
+            users: ids.map((uid) => `<@${uid}>`).join(" "),
+            title: event.title || "",
+          }),
+        });
+      } catch (error) {
+        console.warn("[raid-schedule] delete ping failed:", error?.message || error);
+      }
+    }
+  }
+
+  async function handleDeleteAbort(interaction, event, lang) {
+    await interaction.deferUpdate().catch(() => {});
+    await interaction.editReply({
+      embeds: [
+        noticeEmbed(
+          "info",
+          t("raid-schedule.notice.deleteAbortedTitle", lang),
+          t("raid-schedule.notice.deleteAbortedDescription", lang),
+        ),
+      ],
+      components: [],
+    }).catch(() => {});
   }
 
   // Lead kick panel: a multi-select of the whole signup pool (comp +
@@ -1297,6 +1413,9 @@ function createRaidScheduleCommand({
     if (parsed.action === "setroom") return handleSetRoom(interaction, event, lang);
     if (parsed.action === "edittime") return handleEditTime(interaction, event, lang);
     if (parsed.action === "cancel") return handleCancel(interaction, event, lang);
+    if (parsed.action === "delete") return handleDeletePrompt(interaction, event, lang);
+    if (parsed.action === "delyes") return handleDeleteConfirm(interaction, event, lang);
+    if (parsed.action === "delno") return handleDeleteAbort(interaction, event, lang);
     await replyNotice(interaction, lang, "warn", "unknownTitle", "unknownDescription");
   }
 

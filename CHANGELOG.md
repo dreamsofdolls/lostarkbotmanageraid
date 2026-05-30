@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-31 (raid-schedule: delete mechanism - manual + auto-purge)
+
+### Added
+- Lead manual delete: the Manage menu gains a 🗑️ Xóa button (terminal row) that hard-removes an event - a confirm step, then it deletes the Discord board message AND the RaidEvent doc (unlike Cancel, which freezes the board as a record). If the event was still active with signups, those people are pinged in the channel like a cancel. custom-ids `rse:delete/delyes/delno`.
+- Auto-purge: the weekly-reset job now also deletes raid-schedule events whose `startAt` is before the most recent weekly reset (Wed 17:00 VN) plus their board messages, so finished raid cycles do not pile up in the DB or the channel. New pure `isStaleEvent` + `purgeStaleRaidEvents` (event-cleanup.js, TDD); runs every 30 min, idempotent. i18n vi/en/jp parity, raid-help + README synced. 526 tests green.
+
 ## 2026-05-30 (raid-schedule: hide already-cleared chars in signup pickers)
 
 ### Changed
