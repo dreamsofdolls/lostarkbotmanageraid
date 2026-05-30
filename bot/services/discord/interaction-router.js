@@ -88,7 +88,7 @@ function createInteractionRouter({
       return;
     }
 
-    // User Select (component type 5) routes through the same selectRoutes as
+    // User Select menus route through the same selectRoutes as
     // String Select - the add-member flow uses a native user picker. Optional
     // call so callers/mocks without the method (older tests) stay safe.
     if (interaction.isStringSelectMenu() || interaction.isUserSelectMenu?.()) {
