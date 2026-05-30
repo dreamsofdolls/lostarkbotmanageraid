@@ -35,6 +35,17 @@ const signupSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// A "turn" = one run of the raid in a multi-turn (bus) plan. memberIds
+// reference signup discordIds; the SAME id can appear in multiple turns
+// (a scarce support busing several groups), which is the whole point.
+const turnSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true },
+    memberIds: { type: [String], default: [] },
+  },
+  { _id: false }
+);
+
 const raidEventSchema = new mongoose.Schema(
   {
     guildId: { type: String, required: true, index: true },
@@ -61,6 +72,9 @@ const raidEventSchema = new mongoose.Schema(
       default: "open",
     },
     signups: { type: [signupSchema], default: [] },
+    // Lead-arranged multi-turn plan (bus model). Members come from the
+    // signup pool; overlap across turns is allowed.
+    turns: { type: [turnSchema], default: [] },
     clearedAt: { type: Date, default: null },
     cancelledAt: { type: Date, default: null },
   },

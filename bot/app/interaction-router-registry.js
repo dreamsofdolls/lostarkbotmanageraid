@@ -60,7 +60,7 @@ function createRaidInteractionRouter({ MessageFlags, handlers }) {
     selectRoutes: [
       { prefix: "raid-help:select:", handle: handlers.handleRaidHelpSelect },
       { prefix: "raid-language:select", handle: handlers.handleRaidLanguageSelect },
-      { prefix: "rse:pick:", handle: handlers.handleRaidScheduleSelect },
+      { prefix: "rse:", handle: handlers.handleRaidScheduleSelect },
     ],
     buttonRoutes: [
       { prefix: "rse:", handle: handlers.handleRaidScheduleButton },

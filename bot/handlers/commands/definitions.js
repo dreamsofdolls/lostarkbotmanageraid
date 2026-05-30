@@ -1003,6 +1003,15 @@ function createRaidCommandDefinitions({
             .setRequired(false)
             .setMaxLength(80)
         )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("show")
+        .setDescription("Show the multi-turn team plan for the active board")
+        .setDescriptionLocalizations({
+          vi: "Hiện bảng phân turn của event đang mở",
+          ja: "進行中のボードのターン編成を表示",
+        })
     );
 
   const commands = [
