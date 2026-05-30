@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup · Manager-driven comp + Raid của tôi</title>
+<style>
+  :root{
+    --bg:#1e1f22; --chat:#313338; --embed:#2b2d31; --embed2:#232428;
+    --txt:#dbdee1; --hdr:#f2f3f5; --muted:#949ba4; --link:#00a8fc;
+    --secondary:#4e5058; --primary:#5865f2; --danger:#da373c; --success:#248046;
+    --bar-blue:#5865f2; --bar-green:#3ba55d; --bar-amber:#faa61a; --bar-red:#ed4245; --bar-grey:#80848e;
+    --field:#1e1f22; --border:#3f4147;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:"gg sans","Helvetica Neue",Arial,sans-serif;font-size:15px;line-height:1.4;padding:28px 16px 80px}
+  h1{color:var(--hdr);font-size:22px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 28px}
+  .wrap{max-width:680px;margin:0 auto}
+  .cap{display:flex;align-items:center;gap:8px;margin:34px 0 10px;color:var(--hdr);font-weight:700;font-size:15px}
+  .cap .num{background:var(--primary);color:#fff;width:24px;height:24px;border-radius:50%;
+    display:inline-flex;align-items:center;justify-content:center;font-size:13px;flex:0 0 auto}
+  .cap .tag{font-weight:500;color:var(--muted);font-size:12px;border:1px solid var(--border);border-radius:10px;padding:1px 8px}
+  .note{color:var(--muted);font-size:12.5px;margin:6px 0 0;padding-left:32px}
+
+  /* message */
+  .msg{display:flex;gap:16px;background:var(--chat);padding:14px 16px;border-radius:8px}
+  .ava{width:40px;height:40px;border-radius:50%;flex:0 0 auto;
+    background:radial-gradient(circle at 35% 30%,#f4b860,#e07b39);position:relative;overflow:hidden}
+  .ava::after{content:"🦊";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:20px}
+  .body{flex:1;min-width:0}
+  .nameline{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+  .bot{color:#fff;font-weight:600}
+  .apptag{background:var(--primary);color:#fff;font-size:10px;font-weight:700;border-radius:4px;padding:1px 5px;letter-spacing:.3px}
+  .ts{color:var(--muted);font-size:12px}
+
+  /* embed */
+  .embed{background:var(--embed);border-radius:4px;border-left:4px solid var(--bar-blue);
+    padding:13px 16px 14px;max-width:520px;margin-top:4px}
+  .embed.green{border-left-color:var(--bar-green)}
+  .embed.amber{border-left-color:var(--bar-amber)}
+  .embed.red{border-left-color:var(--bar-red)}
+  .embed.grey{border-left-color:var(--bar-grey)}
+  .e-title{color:var(--hdr);font-weight:700;font-size:15px;margin-bottom:6px}
+  .e-desc{color:var(--txt);font-size:14px}
+  .e-fields{display:flex;flex-wrap:wrap;gap:14px 24px;margin-top:12px}
+  .e-field{min-width:120px}
+  .e-fname{color:var(--hdr);font-weight:700;font-size:13px;margin-bottom:3px}
+  .e-fval{color:var(--txt);font-size:13.5px;white-space:pre-line}
+  .e-foot{color:var(--muted);font-size:12px;margin-top:12px;border-top:0}
+  code{background:#1e1f22;border-radius:4px;padding:1px 5px;font-family:Consolas,monospace;font-size:12.5px;color:#e3e5e8}
+  .mention{background:rgba(88,101,242,.3);color:#c9cdfb;border-radius:3px;padding:0 2px;font-weight:500}
+
+  /* buttons */
+  .btnrow{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .btn{border:none;border-radius:8px;padding:8px 15px;font-size:14px;font-weight:500;color:#fff;cursor:default;display:inline-flex;align-items:center;gap:6px}
+  .b-sec{background:var(--secondary)} .b-pri{background:var(--primary)}
+  .b-dan{background:var(--danger)} .b-suc{background:var(--success)}
+
+  /* select */
+  .select{max-width:520px;margin-top:8px;background:var(--field);border:1px solid var(--border);
+    border-radius:4px;padding:9px 12px;display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:14px}
+  .select .chev{color:var(--muted)}
+  .options{max-width:520px;margin-top:2px;background:#2b2d31;border:1px solid var(--border);border-radius:4px;overflow:hidden}
+  .opt{display:flex;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid #26282c}
+  .opt:last-child{border-bottom:none}
+  .opt:hover{background:#35373c}
+  .opt.sel{background:#3c3f8a33}
+  .opt .ic{width:22px;height:22px;border-radius:5px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;
+    font-size:11px;font-weight:700;color:#fff;background:#5865f2}
+  .opt .ot{flex:1;min-width:0}
+  .opt .olabel{color:var(--hdr);font-size:14px;font-weight:500}
+  .opt .odesc{color:var(--muted);font-size:12px}
+  .opt .check{color:var(--success);font-weight:700}
+  .uava{width:22px;height:22px;border-radius:50%;flex:0 0 auto}
+  .u1{background:linear-gradient(135deg,#43b581,#2d8659)}
+  .u2{background:linear-gradient(135deg,#faa61a,#e07b39)}
+  .u3{background:linear-gradient(135deg,#eb459e,#a32d72)}
+
+  .ephem{color:var(--muted);font-size:12px;margin-top:8px;display:flex;align-items:center;gap:6px}
+  .arrow{color:var(--muted);text-align:center;font-size:20px;margin:6px 0}
+  .legend{background:#26282c;border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin:10px 0 0;font-size:12.5px;color:var(--muted)}
+  .legend b{color:var(--txt)}
+  .pill{display:inline-block;border-radius:4px;padding:1px 7px;font-size:11px;font-weight:700;color:#fff}
+  .p-sup{background:#2d7d9a}.p-dps{background:#9a3d2d}
+  .ici{display:inline-flex;width:18px;height:18px;border-radius:4px;align-items:center;justify-content:center;
+    font-size:9px;font-weight:700;color:#fff;vertical-align:-4px;margin-right:3px}
+  .mline{margin:2px 0}
+  .youtag{color:var(--bar-green);font-size:11px;font-weight:700;margin-left:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🦊 Manager-driven comp + "Raid của tôi"</h1>
+  <p class="sub">Mockup Discord-style · icon class trong mock là placeholder (chữ tắt), bản thật là emoji class đã bootstrap · giọng Artist (VN)</p>
+
+  <!-- ============ NỬA GHI: MANAGER-ADD ============ -->
+  <div class="cap"><span class="num">A</span> NỬA "GHI" — Manager dựng đội</div>
+
+  <!-- 1. Manage menu -->
+  <div class="cap" style="font-size:13.5px"><span class="tag">1</span> Quản lý menu (lead, ephemeral) — thêm nút ➕ Thêm người</div>
+  <div class="msg">
+    <div class="ava"></div>
+    <div class="body">
+      <div class="nameline"><span class="bot">Artist Bot</span><span class="apptag">APP</span><span class="ts">Hôm nay 19:02</span></div>
+      <div class="embed">
+        <div class="e-title">Bảng điều khiển của lead</div>
+        <div class="e-desc">Chọn thao tác cho event này nha~</div>
+      </div>
+      <div class="btnrow"><button class="btn b-sec">Khóa</button><button class="btn b-sec">Đặt phòng</button><button class="btn b-sec">Sửa giờ</button></div>
+      <div class="btnrow"><button class="btn b-pri">🧩 Phân turn</button><button class="btn b-suc">➕ Thêm người</button><button class="btn b-dan">👋 Kick</button></div>
+      <div class="btnrow"><button class="btn b-dan">Kết thúc</button><button class="btn b-dan">Hủy event</button></div>
+      <div class="ephem">👁 Only you can see this · Dismiss message</div>
+    </div>
+  </div>
+  <p class="note">Hàng 2 = nhóm "người": xanh-lá <b>Thêm</b> ↔ đỏ <b>Kick</b> đối xứng add/remove, blurple <b>Phân turn</b> bên trái.</p>
+
+  <div class="arrow">↓ bấm ➕ Thêm người</div>
+
+  <!-- 2. User select -->
+  <div class="cap" style="font-size:13.5px"><span class="tag">2</span> Bước 1 — chọn người (User Select gốc của Discord)</div>
+  <div class="msg">
+    <div class="ava"></div>
+    <div class="body">
+      <div class="nameline"><span class="bot">Artist Bot</span><span class="apptag">APP</span><span class="ts">19:02</span></div>
+      <div class="embed green">
+        <div class="e-title">Thêm người vào đội</div>
+        <div class="e-desc">Chọn member cậu muốn xếp vào raid này nha~ Artist sẽ lấy roster của họ ra cho cậu pick char.</div>
+      </div>
+      <div class="select">Chọn người để thêm... <span class="chev">▾</span></div>
+      <div class="options">
+        <div class="opt"><span class="uava u1"></span><div class="ot"><div class="olabel">@Bao</div></div></div>
+        <div class="opt"><span class="uava u2"></span><div class="ot"><div class="olabel">@Mira</div></div></div>
+        <div class="opt"><span class="uava u3"></span><div class="ot"><div class="olabel">@Kuro</div></div></div>
+      </div>
+      <div class="ephem">👁 Only you can see this</div>
+    </div>
+  </div>
+
+  <div class="arrow">↓ chọn @Bao → Artist tra roster của Bao</div>
+
+  <!-- 3. Char select -->
+  <div class="cap" style="font-size:13.5px"><span class="tag">3</span> Bước 2 — chọn char đủ iLvl (kèm icon class, như picker Tham gia)</div>
+  <div class="msg">
+    <div class="ava"></div>
+    <div class="body">
+      <div class="nameline"><span class="bot">Artist Bot</span><span class="apptag">APP</span><span class="ts">19:02</span></div>
+      <div class="embed green">
+        <div class="e-title">Chọn character cho @Bao</div>
+        <div class="e-desc">Pick một char đủ iLvl trong roster của Bao nha~ Char nào dưới mốc Artist ẩn đi rồi.</div>
+      </div>
+      <div class="select">Chọn character... <span class="chev">▾</span></div>
+      <div class="options">
+        <div class="opt"><span class="ic" style="background:#7a4fb5">AE</span><div class="ot"><div class="olabel">Qiylyn</div><div class="odesc">Qiylyn · 1753 · DPS</div></div></div>
+        <div class="opt"><span class="ic" style="background:#2d7d9a">AR</span><div class="ot"><div class="olabel">Notmeow</div><div class="odesc">Qiylyn · 1740 · Support</div></div></div>
+      </div>
+      <div class="ephem">👁 Only you can see this</div>
+    </div>
+  </div>
+  <p class="note">Chưa có roster / không có char đủ iLvl / là bot → Artist báo nhẹ thay vì list rỗng. Bao đã ở trong đội rồi → đổi char hộ.</p>
+
+  <div class="arrow">↓ chọn Qiylyn → ghi signup hộ + board cập nhật + ping công khai</div>
+
+  <!-- 4. public ping -->
+  <div class="cap" style="font-size:13.5px"><span class="tag">4</span> Ping công khai trong channel (để Bao biết mình được add)</div>
+  <div class="msg">
+    <div class="ava"></div>
+    <div class="body">
+      <div class="nameline"><span class="bot">Artist Bot</span><span class="apptag">APP</span><span class="ts">19:02</span></div>
+      <div class="e-desc"><span class="mention">@Bao</span> cậu vừa được lead xếp vào <b>Act 4 Hard</b> (Qiylyn · DPS), khởi raid <b>trong 58 phút</b> nha~ Mở board hoặc <code>/raid-status</code> để xem chi tiết.</div>
+    </div>
+  </div>
+  <p class="note">Mention nằm trong <b>content</b> nên kêu chuông thật (không phải embed) — đúng pattern auto-promote/cancel sẵn có.</p>
+
+  <!-- ============ NỬA ĐỌC: RAID CỦA TÔI ============ -->
+  <div class="cap" style="margin-top:46px"><span class="num">B</span> NỬA "ĐỌC" — Member tự xem trong /raid-status</div>
+
+  <!-- 5. raid-status with new dropdown -->
+  <div class="cap" style="font-size:13.5px"><span class="tag">5</span> /raid-status — thêm dropdown thứ 3 "🗓️ Raid của tôi"</div>
+  <div class="msg">
+    <div class="ava"></div>
+    <div class="body">
+      <div class="nameline"><span class="bot">Artist Bot</span><span class="apptag">APP</span><span class="ts">19:24</span></div>
+      <div class="embed amber">
+        <div class="e-title">👑 Qiylyn</div>
+        <div class="e-desc">🌐 Tổng tất cả roster: <b>19 char</b> · <b>18/53 raid done</b>  ·  💰 818,000G / 2,151,000G</div>
+        <div class="e-foot">● 18 done · ◐ 0 partial · ● 35 pending · Trang 1/4</div>
+      </div>
+      <div class="btnrow"><button class="btn b-sec">◀ Trước</button><button class="btn b-sec">Sau ▶</button><button class="btn b-pri">🔄 Sync (15s)</button></div>
+      <div class="select">📋 Tiến độ raid <span class="chev">▾</span></div>
+      <div class="select">🌐 Tất cả raids (35 chưa clear) <span class="chev">▾</span></div>
+      <div class="select" style="border-color:#3ba55d">🗓️ Raid của tôi (2) <span class="chev">▾</span></div>
+      <div class="ephem">👁 Only you can see this</div>
+    </div>
+  </div>
+  <p class="note">Dropdown mới nằm cạnh 2 cái sẵn có. Số (2) = số raid-schedule event toàn guild mà Bao đang nằm trong (tự join hoặc bị add).</p>
+
+  <div class="arrow">↓ mở "Raid của tôi"</div>
+
+  <!-- 6. dropdown expanded -->
+  <div class="cap" style="font-size:13.5px"><span class="tag">6</span> Danh sách raid của Bao (toàn guild, mọi channel)</div>
+  <div class="msg">
+    <div class="ava"></div>
+    <div class="body">
+      <div class="options" style="margin-top:0">
+        <div class="opt"><span class="ic" style="background:#3ba55d">🗓</span><div class="ot"><div class="olabel">Act 4 Hard · Qiylyn (DPS)</div><div class="odesc">#raid-act4 · khởi 20:00 hôm nay · turn 1, 3</div></div></div>
+        <div class="opt"><span class="ic" style="background:#3ba55d">🗓</span><div class="ot"><div class="olabel">Kazeros Hard · Notmeow (Support)</div><div class="odesc">#raid-kazeros · khởi 21:30 hôm nay · chưa xếp turn</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">↓ chọn "Act 4 Hard"</div>
+
+  <!-- 7. event detail -->
+  <div class="cap" style="font-size:13.5px"><span class="tag">7</span> Chi tiết raid của Bao (ephemeral, cá nhân hóa)</div>
+  <div class="msg">
+    <div class="ava"></div>
+    <div class="body">
+      <div class="nameline"><span class="bot">Artist Bot</span><span class="apptag">APP</span><span class="ts">19:24</span></div>
+      <div class="embed">
+        <div class="e-title">🗓️ Act 4 Hard · Raid của bạn</div>
+        <div class="e-desc">Khởi raid <b>trong 36 phút</b> · 20:00 hôm nay · ở <b>#raid-act4</b></div>
+        <div class="e-fields">
+          <div class="e-field">
+            <div class="e-fname">Vai của bạn</div>
+            <div class="e-fval">Qiylyn · 1753 · <span class="pill p-dps">DPS</span> · confirmed</div>
+          </div>
+          <div class="e-field">
+            <div class="e-fname">Phòng</div>
+            <div class="e-fval"><code>act4-bus</code> · mk <code>1234</code></div>
+          </div>
+          <div class="e-field" style="flex:1 1 44%;min-width:210px">
+            <div class="e-fname">🧩 Turn 1</div>
+            <div class="e-fval">
+              <div class="mline"><span class="ici" style="background:#7a4fb5">AE</span><b>Qiylyn</b> · <span class="pill p-dps">DPS</span><span class="youtag">← bạn</span></div>
+              <div class="mline"><span class="ici" style="background:#5b8f3a">BA</span><b>Mira</b> · <span class="pill p-sup">SUP</span></div>
+              <div class="mline"><span class="ici" style="background:#9a3d2d">SL</span><b>Kuro</b> · <span class="pill p-dps">DPS</span></div>
+            </div>
+          </div>
+          <div class="e-field" style="flex:1 1 44%;min-width:210px">
+            <div class="e-fname">🧩 Turn 3</div>
+            <div class="e-fval">
+              <div class="mline"><span class="ici" style="background:#7a4fb5">AE</span><b>Qiylyn</b> · <span class="pill p-dps">DPS</span><span class="youtag">← bạn</span></div>
+              <div class="mline"><span class="ici" style="background:#2d7d9a">AR</span><b>Senko</b> · <span class="pill p-sup">SUP</span></div>
+              <div class="mline"><span class="ici" style="background:#8a3a6a">SO</span><b>Lin</b> · <span class="pill p-dps">DPS</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="e-foot">Chỉ hiện turn của bạn (dạng giống /show) · xem full bảng thì /raid-schedule-preview show · ID a1b2c3</div>
+      </div>
+      <div class="ephem">👁 Only you can see this</div>
+    </div>
+  </div>
+  <p class="note">Chưa được xếp turn → thay khối turn bằng "Lead chưa xếp turn cho bạn, hiện bạn ở <b>DPS</b>". Không trong comp (báo vắng/hàng chờ) → ẩn phòng.</p>
+
+  <!-- legend -->
+  <div class="legend">
+    <b>Quyết định đã khóa:</b> 1B (giữ Tham gia + thêm manager-add, add chạy cả khi Khóa) · roster lấy từ roster đã đăng ký của user (không gõ tay) · người bị add = thành viên đầy đủ, auto-clear khi End · <code>show</code> giữ nguyên là bảng turn công khai · "Raid của tôi" gom toàn guild.<br><br>
+    <b>Phase 1</b> = màn 1–4 (manager-add + ping) · <b>Phase 2</b> = màn 5–7 (dropdown "Raid của tôi" trong /raid-status).
+  </div>
+</div>
+</body>
+</html>
