@@ -158,7 +158,7 @@ module.exports = {
     },
     addMember: {
       title: "メンバーを追加",
-      intro: "このレイドに入れたいメンバーを選んでね~ Artist がその人のロスターを出すから char を選んでね。",
+      intro: "このレイドに入れたいメンバーを選んでね~ Artist がその人のロスターを出すから char を選んでね~",
       userPlaceholder: "追加する人を選んでね...",
       charTitle: "character を選ぶ",
       charIntro: "{user} のロスターから iLvl 足りてる char を選んでね~ 足りないのは隠してるよ。",
