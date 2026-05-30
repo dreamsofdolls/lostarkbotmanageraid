@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { applyJoin, applyRsvp, applyLeave } = require("../bot/services/raid/schedule/signup-state");
+const { applyJoin, applyRsvp, applyLeave, applyKick } = require("../bot/services/raid/schedule/signup-state");
 const { detectPromotion } = require("../bot/services/raid/schedule/slots");
 
 const COUNTS = { supSlots: 1, dpsSlots: 1 };
@@ -49,6 +49,40 @@ test("applyLeave removes the signup and reports whether anything changed", () =>
   assert.equal(left.ok, true);
   assert.equal(left.signups.length, 0);
   assert.equal(applyLeave(joined, "ghost").ok, false);
+});
+
+test("applyKick removes one or more signups and reports the dropped records", () => {
+  let signups = applyJoin([], joinPayload("a", "Bard"), 1);
+  signups = applyJoin(signups, joinPayload("b", "Berserker"), 2);
+  signups = applyJoin(signups, joinPayload("c", "Sorceress"), 3);
+
+  const one = applyKick(signups, ["b"]);
+  assert.equal(one.signups.length, 2);
+  assert.deepEqual(one.removed.map((s) => s.discordId), ["b"]);
+  assert.ok(!one.signups.some((s) => s.discordId === "b"));
+
+  const many = applyKick(signups, ["a", "c"]);
+  assert.equal(many.signups.length, 1);
+  assert.deepEqual(many.removed.map((s) => s.discordId).sort(), ["a", "c"]);
+  assert.equal(many.signups[0].discordId, "b");
+});
+
+test("applyKick ignores absent ids and is safe on empty input", () => {
+  const signups = applyJoin([], joinPayload("a", "Bard"), 1);
+  const miss = applyKick(signups, ["ghost"]);
+  assert.equal(miss.signups.length, 1);            // untouched
+  assert.deepEqual(miss.removed, []);              // nothing actually removed
+  assert.deepEqual(applyKick(signups, []).removed, []); // empty selection = no-op
+  assert.deepEqual(applyKick(undefined, ["a"]), { signups: [], removed: [] });
+});
+
+test("applyKick frees a slot so detectPromotion pulls the waitlister", () => {
+  // COUNTS = 1 dps slot: 'a' in slot, 'b' waitlisted.
+  let signups = applyJoin([], joinPayload("a", "Berserker"), 1);
+  signups = applyJoin(signups, joinPayload("b", "Berserker"), 2);
+  const after = applyKick(signups, ["a"]).signups;
+  const promoted = detectPromotion(signups, after, COUNTS);
+  assert.deepEqual(promoted.map((s) => s.discordId), ["b"]);
 });
 
 test("detectPromotion finds the waitlister pulled into a freed slot", () => {

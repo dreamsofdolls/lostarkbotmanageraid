@@ -77,4 +77,24 @@ function applyLeave(signups, discordId) {
   return { signups: list.filter((s) => s.discordId !== discordId), ok };
 }
 
-module.exports = { applyJoin, applyRsvp, applyLeave, RSVP_STATUSES };
+/**
+ * Lead-side removal (kick) of one or more signups by discordId. Unlike
+ * applyLeave (self-service, single id), this drops a whole set in one pass
+ * and reports which signup records were actually present + removed, so the
+ * caller can confirm to the lead and ping any waitlist promotion the freed
+ * slot triggers (via slots.detectPromotion on before/after).
+ * @param {Array} signups
+ * @param {string[]} discordIds - ids the lead selected to remove
+ * @returns {{signups: Array, removed: Array}} removed = the dropped records
+ *   (ids absent from the list are silently skipped, so removed reflects the
+ *   real effect rather than the raw selection)
+ */
+function applyKick(signups, discordIds) {
+  const list = Array.isArray(signups) ? signups : [];
+  const targets = new Set((discordIds || []).map(String));
+  const removed = list.filter((s) => targets.has(String(s.discordId)));
+  const next = list.filter((s) => !targets.has(String(s.discordId)));
+  return { signups: next, removed };
+}
+
+module.exports = { applyJoin, applyRsvp, applyLeave, applyKick, RSVP_STATUSES };

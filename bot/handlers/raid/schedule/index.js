@@ -17,7 +17,7 @@ const {
 const { slotCountsForSize } = require("../../../services/raid/schedule/slot-config");
 const { parseStartTime } = require("../../../services/raid/schedule/time-parse");
 const { listEligibleCharacters } = require("../../../services/raid/schedule/eligibility");
-const { applyJoin, applyRsvp } = require("../../../services/raid/schedule/signup-state");
+const { applyJoin, applyRsvp, applyKick } = require("../../../services/raid/schedule/signup-state");
 const { assignSlots, detectPromotion } = require("../../../services/raid/schedule/slots");
 const { selectAutoClearTargets } = require("../../../services/raid/schedule/auto-clear");
 const { addTurn, setTurnMembers } = require("../../../services/raid/schedule/turns");
@@ -522,8 +522,8 @@ function createRaidScheduleCommand({
   // Lead-only control panel (ephemeral). Buttons reuse the rse: prefix so
   // they route back through handleRaidScheduleButton. Lock/unlock + End live
   // HERE (moved off the board to keep it to 2 tidy rows); set-room / edit-time
-  // open modals; cancel ends the event. Kick is still deferred (needs a
-  // member-select route). No shared interaction-router change.
+  // open modals; cancel ends the event. Row 1 is full (5 = Discord cap), so
+  // Phân turn + Kick sit on row 2. No shared interaction-router change.
   function manageMenuPayload(event, lang) {
     const id = String(event._id);
     const locked = event.status === "locked";
@@ -554,6 +554,10 @@ function createRaidScheduleCommand({
         .setCustomId(`rse:teams:${id}`)
         .setLabel(t("raid-schedule.btn.teams", lang))
         .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`rse:kick:${id}`)
+        .setLabel(t("raid-schedule.btn.kick", lang))
+        .setStyle(ButtonStyle.Danger),
     );
     return {
       embeds: [
@@ -767,6 +771,109 @@ function createRaidScheduleCommand({
     }
   }
 
+  // Lead kick panel: a multi-select of the whole signup pool (comp +
+  // waitlist + RSVP), so the lead can drop anyone. Removing a slot-holder
+  // frees the slot, which detectPromotion turns into a waitlist promotion.
+  function kickSelectPayload(event, lang) {
+    const pool = (event.signups || []).slice(0, 25); // Discord select option cap
+    const options = pool.map((s) => ({
+      label: clip(s.characterName, 100),
+      value: s.discordId,
+      description: clip(`${s.accountName} · ${s.characterClass} · ${s.characterItemLevel}`, 100),
+    }));
+    const select = new StringSelectMenuBuilder()
+      .setCustomId(`rse:kickpick:${event._id}`)
+      .setPlaceholder(t("raid-schedule.kick.placeholder", lang))
+      .setMinValues(1)
+      .setMaxValues(options.length)
+      .addOptions(options);
+    return {
+      embeds: [
+        noticeEmbed(
+          "warn",
+          t("raid-schedule.kick.title", lang),
+          t("raid-schedule.kick.intro", lang),
+        ),
+      ],
+      components: [new ActionRowBuilder().addComponents(select)],
+      flags: ephemeralFlag,
+    };
+  }
+
+  async function handleKick(interaction, event, lang) {
+    if (!isLeadActionAllowed(interaction)) {
+      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
+      return;
+    }
+    if (event.status === "cleared" || event.status === "cancelled") {
+      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
+      return;
+    }
+    if (!Array.isArray(event.signups) || event.signups.length === 0) {
+      await replyNotice(interaction, lang, "warn", "kickEmptyTitle", "kickEmptyDescription");
+      return;
+    }
+    await interaction.reply(kickSelectPayload(event, lang));
+  }
+
+  async function handleKickSelect(interaction, event, lang) {
+    if (!isLeadActionAllowed(interaction)) {
+      await editNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
+      return;
+    }
+    if (event.status === "cleared" || event.status === "cancelled") {
+      await editNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
+      return;
+    }
+    const before = Array.from(event.signups || []);
+    const { signups: next, removed } = applyKick(before, interaction.values || []);
+    if (removed.length === 0) {
+      // Everything selected was already gone (they self-left first).
+      await editNotice(interaction, lang, "warn", "kickNoneTitle", "kickNoneDescription");
+      return;
+    }
+    markSignups(event, next);
+    await event.save();
+
+    const langForBoard = await boardLang(event.guildId);
+    await editBoardMessage(interaction, event, langForBoard);
+    await interaction.editReply({
+      embeds: [
+        noticeEmbed(
+          "success",
+          t("raid-schedule.notice.kickedTitle", lang),
+          t("raid-schedule.notice.kickedDescription", lang, {
+            members: removed.map((s) => s.characterName).join(", "),
+          }),
+        ),
+      ],
+      components: [],
+    });
+
+    // Kicking a slot-holder may pull a waitlister in - ping them publicly so
+    // they actually get notified (mentions only fire from message content,
+    // not embeds · see feedback_discord_embed_mentions).
+    const promoted = detectPromotion(before, next, {
+      supSlots: event.supSlots,
+      dpsSlots: event.dpsSlots,
+    });
+    if (promoted.length > 0) {
+      try {
+        const channel = await interaction.client.channels.fetch(event.channelId);
+        await channel?.send?.({
+          content: promoted
+            .map((s) => t("raid-schedule.notice.promotedPing", langForBoard, {
+              user: `<@${s.discordId}>`,
+              character: s.characterName,
+            }))
+            .join("\n"),
+        });
+      } catch (error) {
+        console.warn("[raid-schedule] kick promote ping failed:", error?.message || error);
+      }
+    }
+  }
+
   function markTurns(event, turns) {
     event.turns = turns;
     if (typeof event.markModified === "function") event.markModified("turns");
@@ -949,6 +1056,7 @@ function createRaidScheduleCommand({
     if (parsed.action === "help") return handleHelp(interaction, lang);
     if (parsed.action === "manage") return handleManage(interaction, event, lang);
     if (parsed.action === "teams") return handleTeams(interaction, event, lang);
+    if (parsed.action === "kick") return handleKick(interaction, event, lang);
     if (parsed.action === "setroom") return handleSetRoom(interaction, event, lang);
     if (parsed.action === "edittime") return handleEditTime(interaction, event, lang);
     if (parsed.action === "cancel") return handleCancel(interaction, event, lang);
@@ -965,6 +1073,7 @@ function createRaidScheduleCommand({
       return;
     }
     if (parsed.action === "pick") return handlePick(interaction, event, lang);
+    if (parsed.action === "kickpick") return handleKickSelect(interaction, event, lang);
     if (parsed.action === "teamturn") return handleTeamTurnSelect(interaction, event, lang);
     if (parsed.action.startsWith("teammembers")) return handleTeamMembersSelect(interaction, event, lang);
     await editNotice(interaction, lang, "warn", "unknownTitle", "unknownDescription");
