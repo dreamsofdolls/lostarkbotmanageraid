@@ -85,3 +85,38 @@ test("raid-schedule-preview component routes dispatch through rse custom IDs", a
   assert.equal(buttonCalls, 1);
   assert.equal(selectCalls, 1);
 });
+
+test("raid-schedule-preview routes a User Select (add-member) through rse selects", async () => {
+  let selectCalls = 0;
+  const noop = async () => {};
+  const handlers = {
+    handleRaidManagementCommand: noop,
+    handleRaidHelpSelect: noop,
+    handleRaidLanguageSelect: noop,
+    handleRaidSetAutocomplete: noop,
+    handleEditRosterAutocomplete: noop,
+    handleRemoveRosterAutocomplete: noop,
+    handleRaidChannelAutocomplete: noop,
+    handleRaidAutoManageAutocomplete: noop,
+    handleRaidAnnounceAutocomplete: noop,
+    handleRaidTaskAutocomplete: noop,
+    handleRaidGoldEarnerAutocomplete: noop,
+    handleRaidScheduleButton: noop,
+    handleRaidScheduleSelect: async () => { selectCalls += 1; },
+  };
+  const router = createRaidInteractionRouter({
+    MessageFlags: { Ephemeral: 64 },
+    handlers,
+  });
+
+  await router.handle({
+    isChatInputCommand: () => false,
+    isAutocomplete: () => false,
+    isStringSelectMenu: () => false,
+    isUserSelectMenu: () => true,
+    isButton: () => false,
+    customId: "rse:adduser:abcdef123456",
+  });
+
+  assert.equal(selectCalls, 1);
+});
