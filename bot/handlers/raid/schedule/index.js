@@ -16,7 +16,7 @@ const {
 } = require("../../../domain/raid-catalog");
 const { slotCountsForSize } = require("../../../services/raid/schedule/slot-config");
 const { parseStartTime } = require("../../../services/raid/schedule/time-parse");
-const { listEligibleCharacters } = require("../../../services/raid/schedule/eligibility");
+const { listEligibleCharacters, partitionSelectable } = require("../../../services/raid/schedule/eligibility");
 const { applyJoin, applyRsvp, applyKick } = require("../../../services/raid/schedule/signup-state");
 const { assignSlots, detectPromotion } = require("../../../services/raid/schedule/slots");
 const { selectAutoClearTargets } = require("../../../services/raid/schedule/auto-clear");
@@ -335,11 +335,19 @@ function createRaidScheduleCommand({
       return;
     }
 
-    const rows = findOwnEligibleRows(userDoc, event);
+    // Already-cleared chars are dropped: re-signing a char that finished this
+    // raid this week is pointless for a normal clear. allCleared lets us say
+    // "all cleared" instead of the misleading "no char at iLvl".
+    const { selectable: rows, allCleared } = partitionSelectable(findOwnEligibleRows(userDoc, event));
     if (rows.length === 0) {
-      await editNotice(interaction, lang, "warn", "noEligibleTitle", "noEligibleDescription", {
-        ilvl: event.minItemLevel,
-      });
+      await editNotice(
+        interaction,
+        lang,
+        "warn",
+        allCleared ? "allClearedTitle" : "noEligibleTitle",
+        allCleared ? "allClearedDescription" : "noEligibleDescription",
+        { ilvl: event.minItemLevel },
+      );
       return;
     }
 
@@ -369,7 +377,7 @@ function createRaidScheduleCommand({
 
     const rowIndex = Number(interaction.values?.[0]);
     const userDoc = await User.findOne({ discordId: interaction.user.id }).lean();
-    const rows = findOwnEligibleRows(userDoc, event);
+    const rows = partitionSelectable(findOwnEligibleRows(userDoc, event)).selectable;
     const row = rows.find((candidate) => candidate.index === rowIndex);
     if (!row) {
       await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");
@@ -999,12 +1007,18 @@ function createRaidScheduleCommand({
       });
       return;
     }
-    const rows = findOwnEligibleRows(userDoc, event);
+    // Same cleared-char rule as self-service Join: a char that already cleared
+    // this raid this week has nothing to gain, so it is not offered.
+    const { selectable: rows, allCleared } = partitionSelectable(findOwnEligibleRows(userDoc, event));
     if (rows.length === 0) {
-      await editNotice(interaction, lang, "warn", "addNoEligibleTitle", "addNoEligibleDescription", {
-        user: `<@${targetId}>`,
-        ilvl: event.minItemLevel,
-      });
+      await editNotice(
+        interaction,
+        lang,
+        "warn",
+        allCleared ? "addAllClearedTitle" : "addNoEligibleTitle",
+        allCleared ? "addAllClearedDescription" : "addNoEligibleDescription",
+        { user: `<@${targetId}>`, ilvl: event.minItemLevel },
+      );
       return;
     }
     const payload = addCharSelectPayload(event, targetId, rows, lang);
@@ -1028,7 +1042,7 @@ function createRaidScheduleCommand({
     }
     const rowIndex = Number(interaction.values?.[0]);
     const userDoc = await User.findOne({ discordId: targetId }).lean();
-    const rows = findOwnEligibleRows(userDoc, event);
+    const rows = partitionSelectable(findOwnEligibleRows(userDoc, event)).selectable;
     const row = rows.find((candidate) => candidate.index === rowIndex);
     if (!row) {
       await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");

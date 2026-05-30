@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-30 (raid-schedule: hide already-cleared chars in signup pickers)
+
+### Changed
+- The self-service Tham gia picker and the lead ➕ Thêm người picker now hide characters that already cleared the event's raid this week (cross-checked against `assignedRaids` gate completions via the existing `hasClearedRaid`) - re-signing a cleared char is pointless for a normal (non-bus) clear. When every iLvl-eligible char has already cleared, a distinct "all cleared" notice replaces the misleading "no character at iLvl". New pure `partitionSelectable` (eligibility.js, unit-tested); validation paths (handlePick / handleAddPickSelect) also reject cleared chars defensively. i18n vi/en/jp parity.
+
 ## 2026-05-30 (raid-schedule: add-member placement clarity)
 
 ### Changed
