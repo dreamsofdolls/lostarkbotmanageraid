@@ -26,6 +26,7 @@ const {
   removeMembersFromTurns,
 } = require("../../../services/raid/schedule/turns");
 const { buildScheduleEmbed, buildScheduleComponents, buildTurnPlanEmbed } = require("./board");
+const { getClassEmoji } = require("../../../models/Class");
 
 const EPHEMERAL_FLAG = 1 << 6;
 const PICKER_LIMIT = 25;
@@ -144,6 +145,16 @@ function createRaidScheduleCommand({
     return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`;
   }
 
+  // Class emojis come from models/Class as `<:name:id>` markup, but a select
+  // option's icon lives in a separate `emoji` field that wants the resolved
+  // {id, name} shape (the raw string would fail builder validation). Returns
+  // null for missing/unbootstrapped classes so the option just shows no icon.
+  function classEmojiOption(className) {
+    const m = /^<(a)?:(\w+):(\d+)>$/.exec(getClassEmoji(className) || "");
+    if (!m) return null;
+    return m[1] ? { id: m[3], name: m[2], animated: true } : { id: m[3], name: m[2] };
+  }
+
   function findOwnEligibleRows(userDoc, event) {
     const rows = listEligibleCharacters(userDoc?.accounts || [], {
       raidKey: event.raidKey,
@@ -160,13 +171,17 @@ function createRaidScheduleCommand({
       const cleared = row.alreadyCleared
         ? ` ${t("raid-schedule.picker.alreadyClearedSuffix", lang)}`
         : "";
+      const emoji = classEmojiOption(row.className);
+      // Class is conveyed by the icon now, so the label is just the character
+      // name; the role chip (Support/DPS) still lives in the description.
       return {
-        label: clip(`${row.name} · ${row.className}`, 100),
+        label: clip(row.name, 100),
         value: String(row.index),
         description: clip(
           `${row.accountName} · ${row.itemLevel} · ${t(`raid-schedule.picker.role.${roleKey}`, lang)}${cleared}`,
           100,
         ),
+        ...(emoji ? { emoji } : {}),
       };
     });
 
@@ -524,22 +539,19 @@ function createRaidScheduleCommand({
   }
 
   // Lead-only control panel (ephemeral). Buttons reuse the rse: prefix so
-  // they route back through handleRaidScheduleButton. Lock/unlock + End live
-  // HERE (moved off the board to keep it to 2 tidy rows); set-room / edit-time
-  // open modals; cancel ends the event. Row 1 is full (5 = Discord cap), so
-  // Phân turn + Kick sit on row 2. No shared interaction-router change.
+  // they route back through handleRaidScheduleButton. Grouped into 3 rows by
+  // purpose so colour follows meaning (the old single 5-button row interleaved
+  // grey + red and read as messy): row 1 = event config (all Secondary), row 2
+  // = people (Phân turn Primary + Kick Danger), row 3 = terminal actions (both
+  // Danger, kept together at the bottom). No shared interaction-router change.
   function manageMenuPayload(event, lang) {
     const id = String(event._id);
     const locked = event.status === "locked";
-    const row = new ActionRowBuilder().addComponents(
+    const configRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`rse:${locked ? "unlock" : "lock"}:${id}`)
         .setLabel(t(locked ? "raid-schedule.btn.unlock" : "raid-schedule.btn.lock", lang))
         .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId(`rse:end:${id}`)
-        .setLabel(t("raid-schedule.btn.end", lang))
-        .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
         .setCustomId(`rse:setroom:${id}`)
         .setLabel(t("raid-schedule.btn.setRoom", lang))
@@ -548,12 +560,8 @@ function createRaidScheduleCommand({
         .setCustomId(`rse:edittime:${id}`)
         .setLabel(t("raid-schedule.btn.editTime", lang))
         .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId(`rse:cancel:${id}`)
-        .setLabel(t("raid-schedule.btn.cancelEvent", lang))
-        .setStyle(ButtonStyle.Danger),
     );
-    const teamRow = new ActionRowBuilder().addComponents(
+    const peopleRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`rse:teams:${id}`)
         .setLabel(t("raid-schedule.btn.teams", lang))
@@ -561,6 +569,16 @@ function createRaidScheduleCommand({
       new ButtonBuilder()
         .setCustomId(`rse:kick:${id}`)
         .setLabel(t("raid-schedule.btn.kick", lang))
+        .setStyle(ButtonStyle.Danger),
+    );
+    const terminalRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`rse:end:${id}`)
+        .setLabel(t("raid-schedule.btn.end", lang))
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`rse:cancel:${id}`)
+        .setLabel(t("raid-schedule.btn.cancelEvent", lang))
         .setStyle(ButtonStyle.Danger),
     );
     return {
@@ -571,7 +589,7 @@ function createRaidScheduleCommand({
           t("raid-schedule.notice.manageDescription", lang),
         ),
       ],
-      components: [row, teamRow],
+      components: [configRow, peopleRow, terminalRow],
       flags: ephemeralFlag,
     };
   }
