@@ -37,6 +37,7 @@ function createRaidScheduleCommand({
   ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
+  UserSelectMenuBuilder,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
@@ -567,6 +568,10 @@ function createRaidScheduleCommand({
         .setLabel(t("raid-schedule.btn.teams", lang))
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
+        .setCustomId(`rse:addmember:${id}`)
+        .setLabel(t("raid-schedule.btn.addMember", lang))
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
         .setCustomId(`rse:kick:${id}`)
         .setLabel(t("raid-schedule.btn.kick", lang))
         .setStyle(ButtonStyle.Danger),
@@ -898,6 +903,183 @@ function createRaidScheduleCommand({
     }
   }
 
+  // Lead add-member: a native User Select picks the target, then a char Select
+  // (the target's eligible roster) writes the signup on their behalf via
+  // applyJoin. Works even when locked (manager-add bypasses the lock gate).
+  function addUserSelectPayload(event, lang) {
+    const select = new UserSelectMenuBuilder()
+      .setCustomId(`rse:adduser:${event._id}`)
+      .setPlaceholder(t("raid-schedule.addMember.userPlaceholder", lang))
+      .setMinValues(1)
+      .setMaxValues(1);
+    return {
+      embeds: [
+        noticeEmbed(
+          "success",
+          t("raid-schedule.addMember.title", lang),
+          t("raid-schedule.addMember.intro", lang),
+        ),
+      ],
+      components: [new ActionRowBuilder().addComponents(select)],
+      flags: ephemeralFlag,
+    };
+  }
+
+  function addCharSelectPayload(event, targetId, rows, lang) {
+    const options = rows.slice(0, PICKER_LIMIT).map((row) => {
+      const roleKey = row.role === "support" ? "support" : "dps";
+      const cleared = row.alreadyCleared
+        ? ` ${t("raid-schedule.picker.alreadyClearedSuffix", lang)}`
+        : "";
+      const emoji = classEmojiOption(row.className);
+      return {
+        label: clip(row.name, 100),
+        value: String(row.index),
+        description: clip(
+          `${row.accountName} · ${row.itemLevel} · ${t(`raid-schedule.picker.role.${roleKey}`, lang)}${cleared}`,
+          100,
+        ),
+        ...(emoji ? { emoji } : {}),
+      };
+    });
+    const select = new StringSelectMenuBuilder()
+      .setCustomId(`rse:addpick:${targetId}:${event._id}`)
+      .setPlaceholder(t("raid-schedule.addMember.charPlaceholder", lang))
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(options);
+    return {
+      embeds: [
+        noticeEmbed(
+          "success",
+          t("raid-schedule.addMember.charTitle", lang),
+          t("raid-schedule.addMember.charIntro", lang, { user: `<@${targetId}>` }),
+        ),
+      ],
+      components: [new ActionRowBuilder().addComponents(select)],
+    };
+  }
+
+  async function handleAddMember(interaction, event, lang) {
+    if (!isLeadActionAllowed(interaction)) {
+      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
+      return;
+    }
+    // No lock check on purpose: manager-add is allowed on a locked board.
+    if (event.status === "cleared" || event.status === "cancelled") {
+      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
+      return;
+    }
+    await interaction.reply(addUserSelectPayload(event, lang));
+  }
+
+  async function handleAddUserSelect(interaction, event, lang) {
+    if (!isLeadActionAllowed(interaction)) {
+      await editNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
+      return;
+    }
+    if (event.status === "cleared" || event.status === "cancelled") {
+      await editNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
+      return;
+    }
+    const targetId = interaction.values?.[0];
+    if (!targetId) {
+      await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");
+      return;
+    }
+    const targetUser = await interaction.client.users.fetch(targetId).catch(() => null);
+    if (targetUser?.bot) {
+      await editNotice(interaction, lang, "warn", "addBotTargetTitle", "addBotTargetDescription");
+      return;
+    }
+    const userDoc = await User.findOne({ discordId: targetId }).lean();
+    if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+      await editNotice(interaction, lang, "warn", "addNoRosterTitle", "addNoRosterDescription", {
+        user: `<@${targetId}>`,
+      });
+      return;
+    }
+    const rows = findOwnEligibleRows(userDoc, event);
+    if (rows.length === 0) {
+      await editNotice(interaction, lang, "warn", "addNoEligibleTitle", "addNoEligibleDescription", {
+        user: `<@${targetId}>`,
+        ilvl: event.minItemLevel,
+      });
+      return;
+    }
+    const payload = addCharSelectPayload(event, targetId, rows, lang);
+    await interaction.editReply({ embeds: payload.embeds, components: payload.components });
+  }
+
+  async function handleAddPickSelect(interaction, event, lang) {
+    if (!isLeadActionAllowed(interaction)) {
+      await editNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
+      return;
+    }
+    if (event.status === "cleared" || event.status === "cancelled") {
+      await editNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
+      return;
+    }
+    const parsed = parseCustomId(interaction.customId);
+    const targetId = parsed.action.split(":")[1];
+    if (!targetId) {
+      await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");
+      return;
+    }
+    const rowIndex = Number(interaction.values?.[0]);
+    const userDoc = await User.findOne({ discordId: targetId }).lean();
+    const rows = findOwnEligibleRows(userDoc, event);
+    const row = rows.find((candidate) => candidate.index === rowIndex);
+    if (!row) {
+      await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");
+      return;
+    }
+
+    const before = Array.from(event.signups || []);
+    const next = applyJoin(before, {
+      discordId: targetId,
+      accountName: row.accountName,
+      characterName: row.name,
+      characterClass: row.className,
+      characterItemLevel: row.itemLevel,
+      alreadyClearedThisWeek: row.alreadyCleared,
+    });
+    markSignups(event, next);
+    await event.save();
+
+    const langForBoard = await boardLang(event.guildId);
+    await editBoardMessage(interaction, event, langForBoard);
+    await interaction.editReply({
+      embeds: [
+        noticeEmbed(
+          "success",
+          t("raid-schedule.notice.addedTitle", lang),
+          t("raid-schedule.notice.addedDescription", lang, {
+            user: `<@${targetId}>`,
+            character: row.name,
+          }),
+        ),
+      ],
+      components: [],
+    });
+
+    // Public ping so the added user actually gets notified (mentions only fire
+    // from message content, not embeds · see feedback_discord_embed_mentions).
+    try {
+      const channel = await interaction.client.channels.fetch(event.channelId);
+      await channel?.send?.({
+        content: t("raid-schedule.notice.addedPing", langForBoard, {
+          user: `<@${targetId}>`,
+          title: event.title || "",
+          character: row.name,
+          rel: `<t:${Math.floor(new Date(event.startAt).getTime() / 1000)}:R>`,
+        }),
+      });
+    } catch (error) {
+      console.warn("[raid-schedule] add-member ping failed:", error?.message || error);
+    }
+  }
+
   function markTurns(event, turns) {
     event.turns = turns;
     if (typeof event.markModified === "function") event.markModified("turns");
@@ -1080,6 +1262,7 @@ function createRaidScheduleCommand({
     if (parsed.action === "help") return handleHelp(interaction, lang);
     if (parsed.action === "manage") return handleManage(interaction, event, lang);
     if (parsed.action === "teams") return handleTeams(interaction, event, lang);
+    if (parsed.action === "addmember") return handleAddMember(interaction, event, lang);
     if (parsed.action === "kick") return handleKick(interaction, event, lang);
     if (parsed.action === "setroom") return handleSetRoom(interaction, event, lang);
     if (parsed.action === "edittime") return handleEditTime(interaction, event, lang);
@@ -1098,6 +1281,8 @@ function createRaidScheduleCommand({
     }
     if (parsed.action === "pick") return handlePick(interaction, event, lang);
     if (parsed.action === "kickpick") return handleKickSelect(interaction, event, lang);
+    if (parsed.action === "adduser") return handleAddUserSelect(interaction, event, lang);
+    if (parsed.action.startsWith("addpick")) return handleAddPickSelect(interaction, event, lang);
     if (parsed.action === "teamturn") return handleTeamTurnSelect(interaction, event, lang);
     if (parsed.action.startsWith("teammembers")) return handleTeamMembersSelect(interaction, event, lang);
     await editNotice(interaction, lang, "warn", "unknownTitle", "unknownDescription");
