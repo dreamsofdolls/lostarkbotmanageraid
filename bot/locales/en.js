@@ -235,7 +235,7 @@ module.exports = {
       kickedDescription: "Artist dropped **{members}** from the event.",
       addedTitle: "Added to the comp~",
       addedDescription: "Artist slotted {user} in with **{character}**.",
-      addedPing: "{user} the lead just slotted you into **{title}** ({character}), raid starts {rel}~ Open the board or /raid-status for details.",
+      addedPing: "{user}, the lead just slotted you into **{title}** ({character}), raid starts {rel}~ Open the board or /raid-status for details.",
       addNoRosterTitle: "No roster for that user",
       addNoRosterDescription: "{user} hasn't registered a roster with Artist, so there's no character to slot. Ask them to /raid-add-roster first (or add it for them via /raid-add-roster target:).",
       addNoEligibleTitle: "No character at iLvl",
