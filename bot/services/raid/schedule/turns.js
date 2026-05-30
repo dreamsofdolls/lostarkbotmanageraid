@@ -49,6 +49,22 @@ function removeTurn(turns, index) {
 }
 
 /**
+ * Remove one or more signup ids from every turn. Used when a lead kicks
+ * members from the signup pool so the saved turn plan stays consistent
+ * with the pool instead of relying on render-time filtering only.
+ * @param {Array} turns
+ * @param {string[]} memberIds - signup discordIds to remove from all turns
+ * @returns {Array} new turns array
+ */
+function removeMembersFromTurns(turns, memberIds) {
+  const targets = new Set((Array.isArray(memberIds) ? memberIds : []).map(String));
+  return (Array.isArray(turns) ? turns : []).map((turn) => ({
+    name: turn.name,
+    memberIds: (turn.memberIds || []).filter((id) => !targets.has(String(id))),
+  }));
+}
+
+/**
  * Map a turn's memberIds to live signup records, dropping anyone no longer
  * in the pool and tagging each with role.
  * @param {Array} signups - event.signups
@@ -71,4 +87,10 @@ function resolveTurnMembers(signups, turn) {
     }));
 }
 
-module.exports = { addTurn, setTurnMembers, removeTurn, resolveTurnMembers };
+module.exports = {
+  addTurn,
+  setTurnMembers,
+  removeTurn,
+  removeMembersFromTurns,
+  resolveTurnMembers,
+};
