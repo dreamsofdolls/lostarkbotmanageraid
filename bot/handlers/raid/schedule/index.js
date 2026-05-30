@@ -852,6 +852,14 @@ function createRaidScheduleCommand({
       await editNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
       return;
     }
+    if (event.status === "cleared" || event.status === "cancelled") {
+      await editNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
+      return;
+    }
+    if (!Array.isArray(event.signups) || event.signups.length === 0) {
+      await editNotice(interaction, lang, "warn", "teamsNoPoolTitle", "teamsNoPoolDescription");
+      return;
+    }
     const value = interaction.values?.[0];
     let turnIndex;
     if (value === "new") {
@@ -869,10 +877,6 @@ function createRaidScheduleCommand({
         return;
       }
     }
-    if (!Array.isArray(event.signups) || event.signups.length === 0) {
-      await editNotice(interaction, lang, "warn", "teamsNoPoolTitle", "teamsNoPoolDescription");
-      return;
-    }
     const payload = memberSelectPayload(event, turnIndex, lang);
     await interaction.editReply({ embeds: payload.embeds, components: payload.components });
   }
@@ -880,6 +884,10 @@ function createRaidScheduleCommand({
   async function handleTeamMembersSelect(interaction, event, lang) {
     if (!isLeadActionAllowed(interaction)) {
       await editNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
+      return;
+    }
+    if (event.status === "cleared" || event.status === "cancelled") {
+      await editNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
       return;
     }
     const parsed = parseCustomId(interaction.customId);

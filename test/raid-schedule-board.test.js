@@ -83,7 +83,7 @@ test("renderRsvpLine lists tentative/absent only (late stays in comp)", () => {
 test("buildTurnPlanEmbed: one field per turn, member shows mention + class + role chip", () => {
   const ev = makeEvent({
     turns: [
-      { name: "Turn 1", memberIds: ["a", "b"] }, // a=Senko(sup), b=Morrah(dps)
+      { name: "Turn 1", memberIds: ["a", "b", "ghost"] }, // ghost is stale and should be dropped
       { name: "Turn 2", memberIds: ["a"] },       // overlap: a in both turns
     ],
   });
@@ -96,4 +96,6 @@ test("buildTurnPlanEmbed: one field per turn, member shows mention + class + rol
   assert.ok(t1.includes("Morrah") && t1.includes("DPS"));
   // overlap: 'a' appears in Turn 2 too
   assert.ok(fields[1].value.includes("<@a>"));
+  assert.ok(!fields[0].value.includes("ghost"));
+  assert.match(buildTurnPlanEmbed(ev, deps).data.footer.text, /2 người/);
 });
