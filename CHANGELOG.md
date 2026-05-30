@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-30 (raid-schedule: member kick)
+
+### Added
+- Lead member kick for `/raid-schedule-preview`. Manage menu gains a 👋 Kick button (row 2, beside 🧩 Phân turn) that opens an ephemeral multi-select of the whole signup pool; the lead drops one or more people in one pass. New pure `applyKick(signups, ids) -> { signups, removed }` (signup-state.js) returns the dropped records so the confirmation can name them; the waitlist promotion reuses the existing `detectPromotion(before, after)`, and promoted players are pinged publicly (mentions fire from message content, not embeds). Kicking is gated to leads + open/locked events.
+- Locale strings (vi/en/jp, parity), `/raid-help`, and README synced in the same change. Routing needed no registry change (Kick/kickpick fall under the existing `rse:` button + select prefixes). 513 tests green across two runs (+3 applyKick unit tests, TDD).
+
 ## 2026-05-29 (raid-schedule: multi-turn team assignment + show)
 
 ### Added
