@@ -1507,34 +1507,44 @@ function createRaidTaskCommand(deps) {
     }).catch(() => {});
   }
 
-  async function handleRaidTaskButton(interaction) {
-    const customId = interaction.customId || "";
-    if (customId.startsWith("raid-task:clear-confirm:")) {
-      await handleClearConfirmButton(interaction);
-      return;
-    }
-    if (customId === "raid-task:clear-cancel") {
-      await handleClearCancelButton(interaction);
-      return;
-    }
+  const BUTTON_ROUTES = Object.freeze([
+    { prefix: "raid-task:clear-confirm:", handle: handleClearConfirmButton },
+    { exact: "raid-task:clear-cancel", handle: handleClearCancelButton },
+  ]);
+
+  function findButtonRoute(customId) {
+    return BUTTON_ROUTES.find((route) => {
+      if (route.exact) return customId === route.exact;
+      return customId.startsWith(route.prefix);
+    });
   }
 
-  async function handleRaidTaskCommand(interaction) {
-    const sub = interaction.options.getSubcommand();
-    if (sub === "add") {
-      // Sub-routing by `action`: single → one specific char (requires
-      // `character` field), all → every char in the roster (no character
-      // field needed). Default to "single" if action is missing for
-      // backward-compat with old test mocks that don't supply it.
+  async function handleRaidTaskButton(interaction) {
+    const customId = interaction.customId || "";
+    const route = findButtonRoute(customId);
+    if (route) await route.handle(interaction);
+  }
+
+  const SUBCOMMAND_HANDLERS = Object.freeze({
+    add: async (interaction) => {
+      // Sub-routing by `action`: single -> one specific char (requires
+      // `character` field), all -> every char in the roster (no character
+      // field needed). Default to "single" if old test mocks omit it.
       const action =
         interaction.options.getString("action", false) || "single";
       if (action === "all") return handleAddAll(interaction);
       return handleAddSingle(interaction);
-    }
-    if (sub === "remove") return handleRemove(interaction);
-    if (sub === "clear") return handleClear(interaction);
-    if (sub === "shared-add") return handleSharedAdd(interaction);
-    if (sub === "shared-remove") return handleSharedRemove(interaction);
+    },
+    remove: handleRemove,
+    clear: handleClear,
+    "shared-add": handleSharedAdd,
+    "shared-remove": handleSharedRemove,
+  });
+
+  async function handleRaidTaskCommand(interaction) {
+    const sub = interaction.options.getSubcommand();
+    const handler = SUBCOMMAND_HANDLERS[sub];
+    if (handler) return handler(interaction);
     // Fallback path: unknown subcommand. Resolve lang lazily here since
     // we never reach this branch on the happy path.
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });

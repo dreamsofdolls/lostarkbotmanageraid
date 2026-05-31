@@ -1443,6 +1443,49 @@ function createRaidScheduleCommand({
     });
   }
 
+  const BUTTON_ACTION_HANDLERS = Object.freeze({
+    join: handleJoin,
+    end: handleEnd,
+    room: handleRoom,
+    help: (interaction, event, lang) => handleHelp(interaction, lang),
+    manage: handleManage,
+    teams: handleTeams,
+    addmember: handleAddMember,
+    kick: handleKick,
+    setroom: handleSetRoom,
+    edittime: handleEditTime,
+    cancel: handleCancel,
+    delete: handleDeletePrompt,
+    delyes: handleDeleteConfirm,
+    delno: handleDeleteAbort,
+  });
+
+  function resolveButtonActionHandler(action) {
+    if (!action) return null;
+    if (action.startsWith("rsvp:")) {
+      return (interaction, event, lang) =>
+        handleRsvp(interaction, event, action.slice("rsvp:".length), lang);
+    }
+    if (action === "lock" || action === "unlock") {
+      return (interaction, event, lang) => handleLockToggle(interaction, event, action, lang);
+    }
+    return BUTTON_ACTION_HANDLERS[action] || null;
+  }
+
+  const SELECT_ACTION_HANDLERS = Object.freeze({
+    pick: handlePick,
+    kickpick: handleKickSelect,
+    adduser: handleAddUserSelect,
+    teamturn: handleTeamTurnSelect,
+  });
+
+  function resolveSelectActionHandler(action) {
+    if (!action) return null;
+    if (action.startsWith("addpick")) return handleAddPickSelect;
+    if (action.startsWith("teammembers")) return handleTeamMembersSelect;
+    return SELECT_ACTION_HANDLERS[action] || null;
+  }
+
   async function handleRaidScheduleButton(interaction) {
     const lang = await userLang(interaction);
     const parsed = parseCustomId(interaction.customId);
@@ -1452,26 +1495,8 @@ function createRaidScheduleCommand({
       return;
     }
 
-    if (parsed.action === "join") return handleJoin(interaction, event, lang);
-    if (parsed.action.startsWith("rsvp:")) {
-      return handleRsvp(interaction, event, parsed.action.slice("rsvp:".length), lang);
-    }
-    if (parsed.action === "lock" || parsed.action === "unlock") {
-      return handleLockToggle(interaction, event, parsed.action, lang);
-    }
-    if (parsed.action === "end") return handleEnd(interaction, event, lang);
-    if (parsed.action === "room") return handleRoom(interaction, event, lang);
-    if (parsed.action === "help") return handleHelp(interaction, lang);
-    if (parsed.action === "manage") return handleManage(interaction, event, lang);
-    if (parsed.action === "teams") return handleTeams(interaction, event, lang);
-    if (parsed.action === "addmember") return handleAddMember(interaction, event, lang);
-    if (parsed.action === "kick") return handleKick(interaction, event, lang);
-    if (parsed.action === "setroom") return handleSetRoom(interaction, event, lang);
-    if (parsed.action === "edittime") return handleEditTime(interaction, event, lang);
-    if (parsed.action === "cancel") return handleCancel(interaction, event, lang);
-    if (parsed.action === "delete") return handleDeletePrompt(interaction, event, lang);
-    if (parsed.action === "delyes") return handleDeleteConfirm(interaction, event, lang);
-    if (parsed.action === "delno") return handleDeleteAbort(interaction, event, lang);
+    const handler = resolveButtonActionHandler(parsed.action);
+    if (handler) return handler(interaction, event, lang);
     await replyNotice(interaction, lang, "warn", "unknownTitle", "unknownDescription");
   }
 
@@ -1484,12 +1509,8 @@ function createRaidScheduleCommand({
       await editNotice(interaction, lang, "warn", "missingEventTitle", "missingEventDescription");
       return;
     }
-    if (parsed.action === "pick") return handlePick(interaction, event, lang);
-    if (parsed.action === "kickpick") return handleKickSelect(interaction, event, lang);
-    if (parsed.action === "adduser") return handleAddUserSelect(interaction, event, lang);
-    if (parsed.action.startsWith("addpick")) return handleAddPickSelect(interaction, event, lang);
-    if (parsed.action === "teamturn") return handleTeamTurnSelect(interaction, event, lang);
-    if (parsed.action.startsWith("teammembers")) return handleTeamMembersSelect(interaction, event, lang);
+    const handler = resolveSelectActionHandler(parsed.action);
+    if (handler) return handler(interaction, event, lang);
     await editNotice(interaction, lang, "warn", "unknownTitle", "unknownDescription");
   }
 
