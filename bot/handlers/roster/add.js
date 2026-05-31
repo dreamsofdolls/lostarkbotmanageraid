@@ -1,7 +1,10 @@
 "use strict";
 
-const crypto = require("crypto");
 const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const {
+  buildTogglePickerComponents,
+  newPickerSessionId,
+} = require("../../utils/raid/roster-picker");
 const { t, getUserLanguage } = require("../../services/i18n");
 
 // Two-step flow window: from /raid-add-roster invocation to Confirm click. After
@@ -81,10 +84,6 @@ function createAddRosterCommand({
   // pickers — the older one still works until its 5-minute timer fires.
   const sessions = new Map();
 
-  function newSessionId() {
-    return crypto.randomBytes(8).toString("hex");
-  }
-
   function buildSeedRosterLink(seedCharName) {
     return `https://lostark.bible/character/NA/${encodeURIComponent(seedCharName)}/roster`;
   }
@@ -146,49 +145,26 @@ function createAddRosterCommand({
     // Layout: 4 rows of up to 5 char buttons (PICKER_MAX_OPTIONS=20)
     // + 1 row of Confirm/Cancel. Discord's hard cap is 5 ActionRows
     // per message, so this is the maximum picker size.
-    const charRows = [];
-    for (let rowStart = 0; rowStart < session.chars.length; rowStart += BUTTONS_PER_ROW) {
-      const row = new ActionRowBuilder();
-      const rowEnd = Math.min(rowStart + BUTTONS_PER_ROW, session.chars.length);
-      for (let i = rowStart; i < rowEnd; i += 1) {
-        const c = session.chars[i];
-        const isSelected = session.selectedIndices.has(i);
+    return buildTogglePickerComponents({
+      session,
+      ActionRowBuilder,
+      ButtonBuilder,
+      ButtonStyle,
+      buttonsPerRow: BUTTONS_PER_ROW,
+      customIdPrefix: "add-roster",
+      confirmLabel: `Confirm (${session.selectedIndices.size})`,
+      confirmDisabled: session.selectedIndices.size === 0,
+      cancelLabel: t("raid-add-roster.picker.cancelLabel", session.lang),
+      describeButton(c, index) {
+        const isSelected = session.selectedIndices.has(index);
         const marker = isSelected ? CHECK_ICON : UNCHECK_ICON;
-        // Button label cap is 80 chars. Keep the index + name + class
-        // visible; truncate the char name first if needed.
-        const baseLabel = `${marker} ${i + 1}. ${c.charName} (${c.className})`;
-        const label = baseLabel.length > 80 ? `${baseLabel.slice(0, 77)}...` : baseLabel;
-        row.addComponents(
-          new ButtonBuilder()
-            .setCustomId(`add-roster:toggle:${session.sessionId}:${i}`)
-            .setLabel(label)
-            .setStyle(isSelected ? ButtonStyle.Success : ButtonStyle.Secondary)
-        );
-      }
-      charRows.push(row);
-    }
+        return {
+          selected: isSelected,
+          label: `${marker} ${index + 1}. ${c.charName} (${c.className})`,
+        };
+      },
+    });
 
-    // Color scheme keeps action buttons visually distinct from toggle
-    // state buttons: Success (green) / Secondary (gray) belong to the
-    // per-char toggles, so Confirm uses Primary (blue) and Cancel uses
-    // Danger (red). Without this split the channel screenshot showed
-    // Confirm visually identical to a selected char and Cancel
-    // identical to an unselected one — hard to scan the action row.
-    const confirmBtn = new ButtonBuilder()
-      .setCustomId(`add-roster:confirm:${session.sessionId}`)
-      .setLabel(`Confirm (${session.selectedIndices.size})`)
-      .setStyle(ButtonStyle.Primary)
-      .setDisabled(session.selectedIndices.size === 0);
-
-    const cancelBtn = new ButtonBuilder()
-      .setCustomId(`add-roster:cancel:${session.sessionId}`)
-      .setLabel(t("raid-add-roster.picker.cancelLabel", session.lang))
-      .setStyle(ButtonStyle.Danger);
-
-    return [
-      ...charRows,
-      new ActionRowBuilder().addComponents(confirmBtn, cancelBtn),
-    ];
   }
 
   function buildExpiredEmbed(session) {
@@ -657,7 +633,7 @@ function createAddRosterCommand({
     const displayChars = sortedChars.slice(0, PICKER_MAX_OPTIONS);
     const truncated = sortedChars.length > PICKER_MAX_OPTIONS;
 
-    const sessionId = newSessionId();
+    const sessionId = newPickerSessionId();
     // Default selection: every char shown. Matches Traine's intent
     // ("user này chơi toàn bộ"). Users with alts they don't play
     // toggle them off via the per-char buttons before confirming.
