@@ -25,7 +25,13 @@ const {
   setTurnMembers,
   removeMembersFromTurns,
 } = require("../../../services/raid/schedule/turns");
-const { buildScheduleEmbed, buildScheduleComponents, buildTurnPlanEmbed } = require("./board");
+const {
+  buildScheduleEmbed,
+  buildScheduleComponents,
+  buildTurnPlanEmbed,
+  renderGauge,
+  STATUS_CODE,
+} = require("./board");
 const { getClassEmoji } = require("../../../models/Class");
 
 const EPHEMERAL_FLAG = 1 << 6;
@@ -497,10 +503,12 @@ function createRaidScheduleCommand({
 
     const langForBoard = await boardLang(event.guildId);
     const onBoard = onBoardMessage(interaction, event);
+    // Gauge of clears written (updated/targets) in front of the warm summary.
+    const endGauge = renderGauge(summary.updated, summary.targets);
     const summaryEmbed = noticeEmbed(
       summary.failed > 0 ? "warn" : "success",
       t("raid-schedule.notice.endedTitle", lang, summary),
-      t("raid-schedule.notice.endedDescription", lang, summary),
+      `${endGauge ? `${endGauge}  ` : ""}${t("raid-schedule.notice.endedDescription", lang, summary)}`,
     );
     if (onBoard) {
       await interaction.editReply(boardPayload(event, langForBoard));
@@ -525,15 +533,16 @@ function createRaidScheduleCommand({
     const passwordLine = event.roomPassword
       ? t("raid-schedule.notice.roomPasswordLine", lang, { password: event.roomPassword })
       : t("raid-schedule.notice.roomNoPasswordLine", lang);
+    const roomRaidLabel = raidMetaFor(event.raidKey, event.modeKey)?.label || `${event.raidKey} ${event.modeKey}`;
     await interaction.reply({
       embeds: [
         noticeEmbed(
           "info",
           t("raid-schedule.notice.roomTitle", lang),
-          t("raid-schedule.notice.roomDescription", lang, {
+          `\`${roomRaidLabel}\`\n${t("raid-schedule.notice.roomDescription", lang, {
             room: event.roomName,
             passwordLine,
-          }),
+          })}`,
         ),
       ],
       flags: ephemeralFlag,
@@ -604,12 +613,23 @@ function createRaidScheduleCommand({
         .setLabel(t("raid-schedule.btn.deleteEvent", lang))
         .setStyle(ButtonStyle.Danger),
     );
+    // HUD status readout so the lead sees the comp state at a glance in their
+    // control panel: mono raid · status line + slot-fill gauge.
+    const slots = assignSlots(event.signups, { supSlots: event.supSlots, dpsSlots: event.dpsSlots });
+    const compCount = slots.support.length + slots.dps.length;
+    const raidLabel = raidMetaFor(event.raidKey, event.modeKey)?.label || `${event.raidKey} ${event.modeKey}`;
+    const gauge = renderGauge(compCount, event.partySize);
+    const manageDesc = [
+      `\`${raidLabel} · ${STATUS_CODE[event.status] || ""}\``,
+      `${gauge ? `${gauge}  ` : ""}**${compCount}/${event.partySize}** · ⏳ ${slots.waitlist.length}`,
+      t("raid-schedule.notice.manageDescription", lang),
+    ].join("\n");
     return {
       embeds: [
         noticeEmbed(
           "info",
           t("raid-schedule.notice.manageTitle", lang),
-          t("raid-schedule.notice.manageDescription", lang),
+          manageDesc,
         ),
       ],
       components: [configRow, peopleRow, terminalRow],
