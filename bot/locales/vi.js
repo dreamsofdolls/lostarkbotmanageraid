@@ -1563,7 +1563,7 @@ module.exports = {
           "**🧩 Phân turn**: kiểu bus - lead xếp người (từ pool signup) vào nhiều turn, 1 người đi nhiều turn được. Quản lý → Phân turn → chọn turn → tick người.",
           "**➕ Thêm người**: lead thêm người vào event (chọn user → chọn char đủ iLvl trong roster họ). Nếu role còn slot thì người đó vào đội; nếu đầy thì vào hàng chờ. Chạy được cả khi board đang Khóa và sẽ ping người được thêm.",
           "**👋 Kick**: lead gỡ một hoặc nhiều người khỏi event. Quản lý → Kick → chọn người. Gỡ người đang giữ slot thì hàng chờ tự được kéo lên.",
-          "**🗑️ Xóa / tự dọn**: Quản lý → 🗑️ Xóa (có xác nhận) để xóa hẳn event - board + dữ liệu mất luôn, khác Hủy (đóng băng giữ record). Event của tuần trước cũng tự được dọn ở mốc reset tuần (Thứ 4 17:00 VN).",
+          "**🗑️ Xóa / tự dọn**: Quản lý → 🗑️ Xóa (có xác nhận) để xóa hẳn event - board + dữ liệu mất luôn, khác Hủy (đóng băng giữ record). Tự dọn: event quá 24h kể từ giờ raid mà chưa End (chưa đánh dấu xong) sẽ tự xóa; event đã End thì giữ tới mốc reset tuần (Thứ 4 17:00 VN) rồi mới dọn.",
           "**show**: `/raid-schedule-preview show` post bảng phân turn công khai (ai cầm char gì, class, sup/dps) cho event đang mở trong channel.",
           "**End**: khi lead end raid, bot ghi clear cho các character đang nằm trong comp qua đường `/raid-set`.",
         ],

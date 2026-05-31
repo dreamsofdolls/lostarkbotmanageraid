@@ -20,6 +20,39 @@ test("isStaleEvent: missing/invalid startAt is not stale (defensive - never dele
   assert.equal(isStaleEvent(null, BOUNDARY), false);
 });
 
+// Rule 2: an event 24h past start that is NOT marked done (cleared) is stale,
+// even when the weekly boundary is far off. Isolate Rule 2 with a far-past boundary.
+test("isStaleEvent: 24h past start + not 'cleared' is stale (abandoned event)", () => {
+  const now = Date.UTC(2026, 4, 31, 0, 0);
+  const farPastBoundary = now - 100 * 24 * 3600 * 1000; // so Rule 1 never triggers here
+  const start25hAgo = new Date(now - 25 * 3600 * 1000);
+  const start10hAgo = new Date(now - 10 * 3600 * 1000);
+
+  assert.equal(isStaleEvent({ startAt: start25hAgo, status: "open" }, farPastBoundary, now), true);
+  assert.equal(isStaleEvent({ startAt: start25hAgo, status: "locked" }, farPastBoundary, now), true);
+  assert.equal(isStaleEvent({ startAt: start25hAgo, status: "cancelled" }, farPastBoundary, now), true);
+  // marked done -> kept (until the weekly reset, Rule 1)
+  assert.equal(isStaleEvent({ startAt: start25hAgo, status: "cleared" }, farPastBoundary, now), false);
+  // only 10h past start -> not yet
+  assert.equal(isStaleEvent({ startAt: start10hAgo, status: "open" }, farPastBoundary, now), false);
+  // no nowMs -> Rule 2 disabled (backward compat)
+  assert.equal(isStaleEvent({ startAt: start25hAgo, status: "open" }, farPastBoundary), false);
+});
+
+test("purgeStaleRaidEvents query carries the 24h-not-cleared rule when nowMs is given", async () => {
+  let findQuery = null;
+  const RaidEvent = {
+    find(q) { findQuery = q; return { select() { return { lean: async () => [] }; } }; },
+    async deleteMany() { return { deletedCount: 0 }; },
+  };
+  const now = Date.UTC(2026, 4, 31, 0, 0);
+  await purgeStaleRaidEvents({ RaidEvent, client: {}, boundaryMs: BOUNDARY, nowMs: now });
+  assert.ok(Array.isArray(findQuery.$or), "query uses $or when both rules apply");
+  const abandoned = findQuery.$or.find((c) => c.status);
+  assert.deepEqual(abandoned.status, { $ne: "cleared" });
+  assert.equal(abandoned.startAt.$lt.getTime(), now - 24 * 3600 * 1000);
+});
+
 test("purgeStaleRaidEvents deletes docs first, then boards by id", async () => {
   const staleDocs = [
     { _id: "e1", channelId: "c1", messageId: "m1" },

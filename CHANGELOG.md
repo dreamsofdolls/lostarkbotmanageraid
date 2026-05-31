@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-31 (raid-schedule: auto-delete abandoned events after 24h)
+
+### Added
+- A second auto-purge rule: an event still un-finished (status not `cleared`) more than **24h past its start time** is now deleted automatically (board + doc), without waiting for the weekly reset. Abandoned events the lead forgot to End no longer linger. Ended (cleared) events are untouched by this rule - they stay until the weekly-reset purge, preserving the record. Implemented in `event-cleanup.js` (`isStaleEvent` + `purgeStaleRaidEvents` take an optional `nowMs`; combined `$or` query); the weekly-reset tick passes `nowMs`. TDD. i18n vi/en/jp + `/raid-help` synced. 537 tests green.
+
 ## 2026-05-31 (raid-schedule: delete safety)
 
 ### Fixed

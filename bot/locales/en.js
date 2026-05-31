@@ -1541,7 +1541,7 @@ module.exports = {
           "**🧩 Turns**: bus model - the lead arranges signups into multiple turns; the same person can run multiple turns. Manage → Turns → pick a turn → tick members.",
           "**➕ Add member**: the lead adds someone to the event (pick a user, then an iLvl-eligible character from their roster). If that role has room they hold a comp slot; if it is full they join the waitlist. Works even when locked and pings the added player.",
           "**👋 Kick**: leads drop one or more people from the event. Manage → Kick → pick people. Dropping a slot-holder auto-pulls the next waitlister in.",
-          "**🗑️ Delete / auto-cleanup**: Manage → 🗑️ Delete (with confirm) removes the event for good - board + data are gone, unlike Cancel (which freezes + keeps a record). Last week's events are also auto-purged at the weekly reset (Wed 17:00 VN).",
+          "**🗑️ Delete / auto-cleanup**: Manage → 🗑️ Delete (with confirm) removes the event for good - board + data are gone, unlike Cancel (which freezes + keeps a record). Auto-cleanup: an event left un-ended (not marked done) more than 24h past its start is purged automatically; ended events are kept until the weekly reset (Wed 17:00 VN).",
           "**show**: `/raid-schedule-preview show` posts the public turn plan (who plays which character, class, sup/dps) for the channel's active event.",
           "**End**: when the lead ends the raid, the bot writes clears for the characters in the comp through the `/raid-set` path.",
         ],

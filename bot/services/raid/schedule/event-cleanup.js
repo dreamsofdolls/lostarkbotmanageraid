@@ -11,16 +11,30 @@
 
 "use strict";
 
+// An event left un-finished (not "cleared") this long after its start is
+// treated as abandoned and purged early, without waiting for the weekly reset.
+const ABANDONED_AFTER_MS = 24 * 60 * 60 * 1000; // 24h
+
 /**
- * Whether an event's raid week has passed (startAt strictly before boundary).
+ * Whether an event is stale enough to purge. Two rules:
+ *   1. startAt before the most recent weekly reset (any status) - the raid week
+ *      has passed.
+ *   2. startAt more than 24h ago AND not marked done (status !== "cleared") -
+ *      an abandoned event the lead never ended. Only checked when nowMs is given.
  * Missing/invalid startAt is treated as NOT stale - never delete blindly.
- * @param {object} event - a RaidEvent doc (needs startAt)
+ * @param {object} event - a RaidEvent doc (needs startAt; status for rule 2)
  * @param {number} boundaryMs - epoch ms of the most recent weekly reset
+ * @param {number} [nowMs] - current epoch ms; enables rule 2 when finite
  * @returns {boolean}
  */
-function isStaleEvent(event, boundaryMs) {
+function isStaleEvent(event, boundaryMs, nowMs) {
   const start = event && event.startAt != null ? new Date(event.startAt).getTime() : NaN;
-  return Number.isFinite(start) && start < boundaryMs;
+  if (!Number.isFinite(start)) return false;
+  if (start < boundaryMs) return true; // rule 1: before the weekly reset
+  if (Number.isFinite(nowMs) && event.status !== "cleared" && start < nowMs - ABANDONED_AFTER_MS) {
+    return true; // rule 2: 24h past start + never marked done
+  }
+  return false;
 }
 
 /**
@@ -28,13 +42,22 @@ function isStaleEvent(event, boundaryMs) {
  * happens before any board message delete so a Mongo failure cannot leave an
  * open/locked ghost event whose board has vanished. Board deletion remains
  * best-effort after the docs are gone.
- * @param {{RaidEvent: object, client: object, boundaryMs: number}} deps
+ * @param {{RaidEvent: object, client: object, boundaryMs: number, nowMs?: number}} deps
  * @returns {Promise<{deleted: number, boardsDeleted: number}>}
  */
-async function purgeStaleRaidEvents({ RaidEvent, client, boundaryMs }) {
+async function purgeStaleRaidEvents({ RaidEvent, client, boundaryMs, nowMs }) {
+  // Rule 1 (weekly boundary) always; rule 2 (24h abandoned) when nowMs is given.
+  const orConds = [{ startAt: { $lt: new Date(boundaryMs) } }];
+  if (Number.isFinite(nowMs)) {
+    orConds.push({
+      startAt: { $lt: new Date(nowMs - ABANDONED_AFTER_MS) },
+      status: { $ne: "cleared" },
+    });
+  }
+  const query = orConds.length > 1 ? { $or: orConds } : orConds[0];
   let stale;
   try {
-    stale = await RaidEvent.find({ startAt: { $lt: new Date(boundaryMs) } })
+    stale = await RaidEvent.find(query)
       .select("_id channelId messageId")
       .lean();
   } catch (error) {
