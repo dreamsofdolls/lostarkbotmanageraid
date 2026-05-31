@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-31 (raid-schedule: guarded auto-cleanup delete)
+
+### Fixed
+- Auto-cleanup now re-checks the stale-event condition inside each Mongo delete before removing the Discord board. This closes a rare race where the 24h abandoned-event scan could find an open event, the lead could End it, and the old `_id`-only `deleteMany` would still remove the newly-cleared record. Board deletion only runs for docs that were actually deleted. Added regression coverage; 539 tests green.
+
 ## 2026-05-31 (raid-schedule: auto-delete abandoned events after 24h)
 
 ### Added
