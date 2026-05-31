@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-31 (raid-schedule: Endfield-HUD embed restyle)
+
+### Changed
+- Restyled the raid-schedule embeds toward an Endfield-HUD feel within Discord's embed limits, keeping the warm Artist voice in the prose. Board / turn-plan / my-raids / notices now carry an author kicker (`// SIGNUP BOARD`, `// TURN PLAN · BUS`, `// MY RAID`, and per-type `// OK` / `// ERROR` / `// HEADS UP` / `// INFO`), a monospace operational line (`Act 4 Hard · iLvl 1720+`), a slot-fill gauge on the board (`▰▰▰▱▱▱▱▱`), uppercase EN-HUD section headers (`🛡 SUPPORT · {n}/{slots}`, `⚔ DPS`, `⏳ WAITLIST`, `📋 RSVP`), and `// STATUS · ...` footers. Class emoji + the warm footer lines are preserved (slots stay in field markdown, never code-blocks which would kill custom emoji). New pure `renderGauge` (board.js, unit-tested). i18n vi/en/jp parity. 532 tests green. Mockup: `docs/superpowers/mockups/raid-schedule-hud-embeds.html`.
+
 ## 2026-05-31 (raid-schedule: forgiving `when` time input)
 
 ### Changed

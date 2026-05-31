@@ -51,6 +51,9 @@ function createRaidScheduleCommand({
 }) {
   const ephemeralFlag = MessageFlags?.Ephemeral ?? EPHEMERAL_FLAG;
 
+  // HUD kicker per notice type - a small `// CODE` line above the title that
+  // gives every schedule confirmation the same operational-console feel.
+  const NOTICE_KICKER = { danger: "// ERROR", success: "// OK", warn: "// HEADS UP", info: "// INFO" };
   function noticeEmbed(type, title, description) {
     const color = type === "danger"
       ? UI.colors.danger
@@ -59,7 +62,10 @@ function createRaidScheduleCommand({
         : type === "warn"
           ? UI.colors.progress
           : UI.colors.neutral;
-    const embed = new EmbedBuilder().setColor(color).setTitle(title);
+    const embed = new EmbedBuilder()
+      .setColor(color)
+      .setAuthor({ name: NOTICE_KICKER[type] || "// INFO" })
+      .setTitle(title);
     if (description) embed.setDescription(description);
     return embed;
   }

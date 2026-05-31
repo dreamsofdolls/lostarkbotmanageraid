@@ -25,6 +25,19 @@ function stripeColor(UI, status) {
   return UI.colors.progress;
 }
 
+// Universal HUD status code for the kicker/footer lines (language-independent,
+// same spirit as the SUP/DPS chips).
+const STATUS_CODE = { open: "OPEN", locked: "LOCKED", cleared: "DONE", cancelled: "CANCELLED" };
+
+// Slot-fill gauge for the HUD header: one block per slot (▰ filled, ▱ empty),
+// "" when there are no slots. Pure - unit-tested.
+function renderGauge(filled, total) {
+  const slots = Math.max(0, Number(total) || 0);
+  if (slots === 0) return "";
+  const on = Math.max(0, Math.min(Number(filled) || 0, slots));
+  return "▰".repeat(on) + "▱".repeat(slots - on);
+}
+
 // Discord native relative + absolute timestamp pair. Auto-localizes to
 // each viewer's own region, so we never compute per-language clock text.
 function discordTime(date) {
@@ -71,11 +84,10 @@ function buildScheduleEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
   const time = discordTime(event.startAt);
   const raidName = rosterLabel(event.raidKey, event.modeKey);
 
+  // HUD operational kicker line (monospace, language-independent) above the
+  // warm Artist prose lines.
   const descLines = [
-    t("raid-schedule.board.summary", lang, {
-      raid: raidName,
-      ilvl: event.minItemLevel,
-    }),
+    `\`${raidName} · iLvl ${event.minItemLevel}+\``,
     t("raid-schedule.board.startLine", lang, { rel: time.rel, abs: time.abs }),
     t("raid-schedule.board.leadLine", lang, { lead: `<@${event.creatorId}>` }),
   ];
@@ -84,16 +96,19 @@ function buildScheduleEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
       t("raid-schedule.board.roomLine", lang, { room: event.roomName })
     );
   }
+  // Slot-fill gauge in front of the progress line.
+  const gauge = renderGauge(compCount, event.partySize);
   descLines.push(
-    t("raid-schedule.board.progress", lang, {
+    `${gauge ? `${gauge}  ` : ""}${t("raid-schedule.board.progress", lang, {
       n: compCount,
       size: event.partySize,
       waitlist: waitlist.length,
-    })
+    })}`
   );
 
   const embed = new EmbedBuilder()
     .setColor(stripeColor(UI, event.status))
+    .setAuthor({ name: "// SIGNUP BOARD" })
     .setTitle(t(`raid-schedule.board.title.${event.status}`, lang, { title: event.title || raidName }))
     .setDescription(descLines.join("\n"));
 
@@ -124,9 +139,9 @@ function buildScheduleEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
   }
 
   embed.setFooter({
-    text: t(`raid-schedule.board.footer.${event.status}`, lang, {
+    text: `// ${STATUS_CODE[event.status] || ""} · ${t(`raid-schedule.board.footer.${event.status}`, lang, {
       id: String(event._id || "").slice(-4) || "----",
-    }),
+    })}`,
   });
   return embed;
 }
@@ -212,6 +227,7 @@ function buildTurnPlanEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
 
   const embed = new EmbedBuilder()
     .setColor(stripeColor(UI, event.status))
+    .setAuthor({ name: "// TURN PLAN · BUS" })
     .setTitle(t("raid-schedule.turnPlan.title", lang, { title: event.title || raidName }))
     .setDescription(desc.join("\n"));
 
@@ -234,11 +250,11 @@ function buildTurnPlanEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
   }
   if (turns.length > 0) {
     embed.setFooter({
-      text: t("raid-schedule.turnPlan.footer", lang, {
+      text: `// ${t("raid-schedule.turnPlan.footer", lang, {
         turns: turns.length,
         members: visibleMembers.size,
         id: String(event._id || "").slice(-4) || "----",
-      }),
+      })}`,
     });
   }
   return embed;
@@ -250,4 +266,5 @@ module.exports = {
   buildTurnPlanEmbed,
   // exported for unit tests
   renderRsvpLine,
+  renderGauge,
 };

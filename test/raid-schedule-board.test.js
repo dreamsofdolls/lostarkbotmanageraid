@@ -8,6 +8,7 @@ const {
   buildScheduleComponents,
   buildTurnPlanEmbed,
   renderRsvpLine,
+  renderGauge,
 } = require("../bot/handlers/raid/schedule/board");
 
 function makeEvent(extra = {}) {
@@ -33,6 +34,15 @@ const compDeps = { ActionRowBuilder, ButtonBuilder, ButtonStyle, lang: "vi" };
 function customIds(rows) {
   return rows.flatMap((r) => r.components.map((c) => c.data.custom_id));
 }
+
+test("renderGauge draws one block per slot (filled vs empty), clamped + safe", () => {
+  assert.equal(renderGauge(5, 8), "▰▰▰▰▰▱▱▱");
+  assert.equal(renderGauge(2, 4), "▰▰▱▱");
+  assert.equal(renderGauge(8, 8), "▰▰▰▰▰▰▰▰");
+  assert.equal(renderGauge(0, 8), "▱▱▱▱▱▱▱▱");
+  assert.equal(renderGauge(10, 8), "▰▰▰▰▰▰▰▰"); // over-fill clamps to total
+  assert.equal(renderGauge(0, 0), "");           // no party size -> no gauge
+});
 
 test("buildScheduleComponents (open) is 2 tidy rows; lead lock/end live in the menu", () => {
   const rows = buildScheduleComponents(makeEvent(), compDeps);
