@@ -953,11 +953,18 @@ function createRaidScheduleCommand({
   // frees the slot, which detectPromotion turns into a waitlist promotion.
   function kickSelectPayload(event, lang) {
     const pool = (event.signups || []).slice(0, 25); // Discord select option cap
-    const options = pool.map((s) => ({
-      label: clip(s.characterName, 100),
-      value: s.discordId,
-      description: clip(`${s.accountName} · ${s.characterClass} · ${s.characterItemLevel}`, 100),
-    }));
+    // Same option shape as the Join / Add-member pickers: class as the icon
+    // (not a name), description `account · ilvl · role`. The icon conveys class.
+    const options = pool.map((s) => {
+      const emoji = classEmojiOption(s.characterClass);
+      const roleKey = s.role === "support" ? "support" : "dps";
+      return {
+        label: clip(s.characterName, 100),
+        value: s.discordId,
+        description: clip(`${s.accountName} · ${s.characterItemLevel} · ${t(`raid-schedule.picker.role.${roleKey}`, lang)}`, 100),
+        ...(emoji ? { emoji } : {}),
+      };
+    });
     const select = new StringSelectMenuBuilder()
       .setCustomId(`rse:kickpick:${event._id}`)
       .setPlaceholder(t("raid-schedule.kick.placeholder", lang))
@@ -1296,12 +1303,19 @@ function createRaidScheduleCommand({
     const turn = event.turns[turnIndex];
     const current = new Set(turn.memberIds || []);
     const pool = (event.signups || []).slice(0, 25); // Discord select option cap
-    const options = pool.map((s) => ({
-      label: clip(s.characterName, 100),
-      value: s.discordId,
-      description: clip(`${s.characterClass} · ${s.characterItemLevel}`, 100),
-      default: current.has(s.discordId),
-    }));
+    // Class icon (not name) + `account · ilvl · role`, consistent with the
+    // Join / Add-member / Kick pickers.
+    const options = pool.map((s) => {
+      const emoji = classEmojiOption(s.characterClass);
+      const roleKey = s.role === "support" ? "support" : "dps";
+      return {
+        label: clip(s.characterName, 100),
+        value: s.discordId,
+        description: clip(`${s.accountName} · ${s.characterItemLevel} · ${t(`raid-schedule.picker.role.${roleKey}`, lang)}`, 100),
+        default: current.has(s.discordId),
+        ...(emoji ? { emoji } : {}),
+      };
+    });
     const select = new StringSelectMenuBuilder()
       .setCustomId(`rse:teammembers:${turnIndex}:${event._id}`)
       .setPlaceholder(clip(t("raid-schedule.teams.pickMembers", lang, { turn: turn.name }), 150))
