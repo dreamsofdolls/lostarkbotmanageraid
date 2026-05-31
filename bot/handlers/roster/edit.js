@@ -2,8 +2,12 @@
 
 const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
 const {
+  authorizePickerSession,
   buildTogglePickerComponents,
+  clearPickerSession,
+  handlePickerSessionTimeout,
   newPickerSessionId,
+  resolveAdminMention,
 } = require("../../utils/raid/roster-picker");
 const {
   getRosterMatches,
@@ -48,13 +52,7 @@ function createEditRosterCommand({
   loadUserForAutocomplete,
   getPrimaryManagerId,
 }) {
-  // Used in error embeds to ping the primary admin (first entry of
-  // RAID_MANAGER_ID env) by mention. Falls back to plain "admin"
-  // text when no manager is configured.
-  const adminMention = (() => {
-    const id = typeof getPrimaryManagerId === "function" ? getPrimaryManagerId() : null;
-    return id ? `<@${id}>` : "admin";
-  })();
+  const adminMention = resolveAdminMention(getPrimaryManagerId);
   // sessionId -> session state. Same shape/semantics as the /raid-add-roster
   // sessions map: in-process only, dropped on bot restart, keyed by a
   // random 16-hex token so concurrent /raid-edit-roster invocations don't
@@ -408,34 +406,6 @@ function createEditRosterCommand({
       .setTimestamp();
   }
 
-  function clearSession(sessionId) {
-    const session = sessions.get(sessionId);
-    if (!session) return null;
-    if (session.expireTimer) {
-      clearTimeout(session.expireTimer);
-      session.expireTimer = null;
-    }
-    sessions.delete(sessionId);
-    return session;
-  }
-
-  async function handleSessionTimeout(sessionId, interaction) {
-    const session = sessions.get(sessionId);
-    if (!session) return;
-    sessions.delete(sessionId);
-    session.expireTimer = null;
-    try {
-      await interaction.editReply({
-        embeds: [buildExpiredEmbed(session)],
-        components: [],
-      });
-    } catch (err) {
-      console.warn(
-        `[edit-roster] timeout edit failed for session ${sessionId}: ${err?.message || err}`
-      );
-    }
-  }
-
   // The diff-apply save: fully replace account.characters[] based on the
   // user's selection, but preserve per-char state (raid completion,
   // bibleSerial/cid/rid, publicLogDisabled, tasks, sideTasks) on chars
@@ -698,26 +668,15 @@ function createEditRosterCommand({
     });
 
     session.expireTimer = setTimeout(
-      () => handleSessionTimeout(sessionId, interaction),
+      () => handlePickerSessionTimeout({
+        sessions,
+        sessionId,
+        interaction,
+        buildExpiredEmbed,
+        logTag: "edit-roster",
+      }),
       SESSION_TTL_MS
     );
-  }
-
-  async function authorizeSession(interaction, session) {
-    if (interaction.user.id !== session.callerId) {
-      const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      return interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "lock",
-            title: t("raid-edit-roster.auth.notYourPickerTitle", clickerLang),
-            description: t("raid-edit-roster.auth.notYourPickerDescription", clickerLang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
-      });
-    }
-    return null;
   }
 
   async function handleEditRosterButton(interaction) {
@@ -741,7 +700,18 @@ function createEditRosterCommand({
       });
       return;
     }
-    const denied = await authorizeSession(interaction, session);
+    const denied = await authorizePickerSession({
+      interaction,
+      session,
+      User,
+      getUserLanguage,
+      buildNoticeEmbed,
+      EmbedBuilder,
+      MessageFlags,
+      t,
+      titleKey: "raid-edit-roster.auth.notYourPickerTitle",
+      descriptionKey: "raid-edit-roster.auth.notYourPickerDescription",
+    });
     if (denied) return;
 
     if (action === "toggle") {
@@ -763,7 +733,7 @@ function createEditRosterCommand({
     }
 
     if (action === "cancel") {
-      clearSession(sessionId);
+      clearPickerSession(sessions, sessionId);
       await interaction.update({
         embeds: [buildCancelledEmbed(session)],
         components: [],
@@ -812,7 +782,7 @@ function createEditRosterCommand({
       }
 
       await interaction.deferUpdate();
-      clearSession(sessionId);
+      clearPickerSession(sessions, sessionId);
 
       let summary;
       try {
