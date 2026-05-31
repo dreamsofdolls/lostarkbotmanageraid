@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-31 (raid-schedule: delete safety)
+
+### Fixed
+- Manual Delete and weekly auto-purge now delete the `RaidEvent` document before deleting the Discord board message. If Mongo deletion fails, the board is left intact and the lead sees a failure notice, preventing ghost events where `/raid-status` still lists an event whose board was already removed. Added handler + purge regression tests. 535 tests green.
+
 ## 2026-05-31 (raid-schedule: Endfield-HUD embed restyle)
 
 ### Changed

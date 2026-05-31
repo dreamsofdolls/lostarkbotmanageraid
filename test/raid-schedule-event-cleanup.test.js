@@ -20,21 +20,61 @@ test("isStaleEvent: missing/invalid startAt is not stale (defensive - never dele
   assert.equal(isStaleEvent(null, BOUNDARY), false);
 });
 
-test("purgeStaleRaidEvents deletes boards (best-effort) then the docs by id", async () => {
+test("purgeStaleRaidEvents deletes docs first, then boards by id", async () => {
   const staleDocs = [
     { _id: "e1", channelId: "c1", messageId: "m1" },
     { _id: "e2", channelId: "c2", messageId: null }, // no board to delete
   ];
   let deleteManyArg = null;
   let boardDeletes = 0;
+  const order = [];
   const RaidEvent = {
     find() {
       return { select() { return { lean: async () => staleDocs }; } };
     },
     async deleteMany(query) {
+      order.push("docs");
       deleteManyArg = query;
       return { deletedCount: staleDocs.length };
     },
+  };
+  const client = {
+    channels: {
+      async fetch() {
+        return {
+          messages: {
+            async fetch() {
+              return { async delete() { order.push("board"); boardDeletes += 1; } };
+            },
+          },
+        };
+      },
+    },
+  };
+
+  const result = await purgeStaleRaidEvents({ RaidEvent, client, boundaryMs: BOUNDARY });
+
+  assert.equal(result.deleted, 2);
+  assert.equal(result.boardsDeleted, 1);                       // only e1 had a messageId
+  assert.deepEqual(deleteManyArg, { _id: { $in: ["e1", "e2"] } });
+  assert.deepEqual(order, ["docs", "board"]);
+});
+
+test("purgeStaleRaidEvents is a no-op when nothing is stale", async () => {
+  const RaidEvent = {
+    find() { return { select() { return { lean: async () => [] }; } }; },
+    async deleteMany() { throw new Error("should not be called"); },
+  };
+  const result = await purgeStaleRaidEvents({ RaidEvent, client: {}, boundaryMs: BOUNDARY });
+  assert.deepEqual(result, { deleted: 0, boardsDeleted: 0 });
+});
+
+test("purgeStaleRaidEvents leaves boards alone when doc deletion fails", async () => {
+  const staleDocs = [{ _id: "e1", channelId: "c1", messageId: "m1" }];
+  let boardDeletes = 0;
+  const RaidEvent = {
+    find() { return { select() { return { lean: async () => staleDocs }; } }; },
+    async deleteMany() { throw new Error("mongo offline"); },
   };
   const client = {
     channels: {
@@ -52,16 +92,6 @@ test("purgeStaleRaidEvents deletes boards (best-effort) then the docs by id", as
 
   const result = await purgeStaleRaidEvents({ RaidEvent, client, boundaryMs: BOUNDARY });
 
-  assert.equal(result.deleted, 2);
-  assert.equal(result.boardsDeleted, 1);                       // only e1 had a messageId
-  assert.deepEqual(deleteManyArg, { _id: { $in: ["e1", "e2"] } });
-});
-
-test("purgeStaleRaidEvents is a no-op when nothing is stale", async () => {
-  const RaidEvent = {
-    find() { return { select() { return { lean: async () => [] }; } }; },
-    async deleteMany() { throw new Error("should not be called"); },
-  };
-  const result = await purgeStaleRaidEvents({ RaidEvent, client: {}, boundaryMs: BOUNDARY });
   assert.deepEqual(result, { deleted: 0, boardsDeleted: 0 });
+  assert.equal(boardDeletes, 0);
 });
