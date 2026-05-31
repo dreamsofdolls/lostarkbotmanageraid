@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-05-31 (raid-schedule: forgiving `when` time input)
+
+### Changed
+- The `when` field (create + edit-time) now accepts far more formats so leads stop getting rejected and re-typing: clock `20:00`, VN `20h` / `21h30` / `21g` / `21g30`, dot `20.30`, bare hour `20`, HHMM digits `2000` / `830`, explicit 12h `8pm` / `8:30 pm`, plus the existing space-tolerant `+2h` / `+90m`. AM/PM is honored only when typed (a bare number is never guessed into PM, so behavior stays predictable). The slash option description, the invalid-time notice, the edit-time modal label, and `/raid-help` now advertise the wider set. `parseStartTime` rewritten with comprehensive unit tests; 531 tests green.
+
 ## 2026-05-31 (raid-schedule: delete mechanism - manual + auto-purge)
 
 ### Added
