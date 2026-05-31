@@ -10,6 +10,10 @@
 "use strict";
 
 const { verifyToken, isCurrentStoredToken } = require("./index");
+const {
+  createJsonSender,
+  extractBearerToken,
+} = require("./http");
 
 /**
  * Build the `GET /api/me/roster` handler. Returns the user's slim roster
@@ -41,22 +45,7 @@ const { verifyToken, isCurrentStoredToken } = require("./index");
 function createRosterEndpoint({ User }) {
   if (!User) throw new Error("[roster-endpoint] User model required");
 
-  function send(res, status, body) {
-    res.writeHead(status, {
-      "Content-Type": "application/json; charset=utf-8",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Authorization, Content-Type",
-    });
-    res.end(JSON.stringify(body));
-  }
-
-  function extractToken(req, parsedUrl) {
-    const auth = req.headers["authorization"] || "";
-    const match = /^Bearer\s+(.+)$/i.exec(auth);
-    if (match) return match[1].trim();
-    return parsedUrl?.query?.token || null;
-  }
+  const send = createJsonSender({ methods: "GET, OPTIONS" });
 
   return async function handleRosterRead(req, res, parsedUrl) {
     if (req.method === "OPTIONS") {
@@ -68,7 +57,7 @@ function createRosterEndpoint({ User }) {
       return;
     }
 
-    const token = extractToken(req, parsedUrl);
+    const token = extractBearerToken(req, parsedUrl);
     if (!token) {
       send(res, 401, { ok: false, error: "missing token" });
       return;

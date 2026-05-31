@@ -8,17 +8,15 @@
 "use strict";
 
 const { buildLocalSyncCatalog } = require("./catalog");
+const { createJsonSender } = require("./http");
 
-function send(res, status, body) {
-  res.writeHead(status, {
-    "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+const send = createJsonSender({
+  methods: "GET, OPTIONS",
+  allowHeaders: "Content-Type",
+  extraHeaders: (status) => ({
     "Cache-Control": status === 200 ? "public, max-age=300" : "no-store",
-  });
-  res.end(status === 204 ? "" : JSON.stringify(body));
-}
+  }),
+});
 
 /**
  * Build the GET /api/catalog handler. Factory shape kept for parity
