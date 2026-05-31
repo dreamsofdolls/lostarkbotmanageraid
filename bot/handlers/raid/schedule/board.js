@@ -264,7 +264,8 @@ module.exports = {
   buildScheduleEmbed,
   buildScheduleComponents,
   buildTurnPlanEmbed,
-  // exported for unit tests
+  // exported for reuse (index.js HUD panels) + unit tests
   renderRsvpLine,
   renderGauge,
+  STATUS_CODE,
 };
