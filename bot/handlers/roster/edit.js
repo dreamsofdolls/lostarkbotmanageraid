@@ -1,7 +1,10 @@
 "use strict";
 
-const crypto = require("crypto");
 const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const {
+  buildTogglePickerComponents,
+  newPickerSessionId,
+} = require("../../utils/raid/roster-picker");
 const {
   getRosterMatches,
   truncateChoice,
@@ -57,10 +60,6 @@ function createEditRosterCommand({
   // random 16-hex token so concurrent /raid-edit-roster invocations don't
   // step on each other.
   const sessions = new Map();
-
-  function newSessionId() {
-    return crypto.randomBytes(8).toString("hex");
-  }
 
   // Build the picker char list from saved + bible. Pure helper extracted
   // so the saved-first sort + truncation contract is unit-testable
@@ -307,46 +306,27 @@ function createEditRosterCommand({
     // Toggle button label carries the ✅/⬜ state, style flips between
     // Success (green) / Secondary (gray). Layout: 4 rows of up to 5
     // char buttons + 1 row of Confirm/Cancel. Discord 5-row hard cap.
-    const charRows = [];
-    for (let rowStart = 0; rowStart < session.chars.length; rowStart += BUTTONS_PER_ROW) {
-      const row = new ActionRowBuilder();
-      const rowEnd = Math.min(rowStart + BUTTONS_PER_ROW, session.chars.length);
-      for (let i = rowStart; i < rowEnd; i += 1) {
-        const c = session.chars[i];
-        const isSelected = session.selectedIndices.has(i);
+    return buildTogglePickerComponents({
+      session,
+      ActionRowBuilder,
+      ButtonBuilder,
+      ButtonStyle,
+      buttonsPerRow: BUTTONS_PER_ROW,
+      customIdPrefix: "edit-roster",
+      confirmLabel: `Confirm (${session.selectedIndices.size})`,
+      confirmDisabled: session.selectedIndices.size === 0,
+      cancelLabel: t("raid-edit-roster.picker.cancelLabel", session.lang),
+      describeButton(c, index) {
+        const isSelected = session.selectedIndices.has(index);
         const marker = isSelected ? CHECK_ICON : UNCHECK_ICON;
         const tag = tagFor(c);
         const tagSuffix = tag ? ` ${tag}` : "";
-        const baseLabel = `${marker} ${i + 1}. ${c.charName}${tagSuffix}`;
-        const label = baseLabel.length > 80 ? `${baseLabel.slice(0, 77)}...` : baseLabel;
-        row.addComponents(
-          new ButtonBuilder()
-            .setCustomId(`edit-roster:toggle:${session.sessionId}:${i}`)
-            .setLabel(label)
-            .setStyle(isSelected ? ButtonStyle.Success : ButtonStyle.Secondary)
-        );
-      }
-      charRows.push(row);
-    }
-
-    // Color scheme: Success/Secondary are reserved for per-char toggle
-    // buttons above. Confirm = Primary (blue), Cancel = Danger (red)
-    // so the action row is visually distinct from the toggle row.
-    const confirmBtn = new ButtonBuilder()
-      .setCustomId(`edit-roster:confirm:${session.sessionId}`)
-      .setLabel(`Confirm (${session.selectedIndices.size})`)
-      .setStyle(ButtonStyle.Primary)
-      .setDisabled(session.selectedIndices.size === 0);
-
-    const cancelBtn = new ButtonBuilder()
-      .setCustomId(`edit-roster:cancel:${session.sessionId}`)
-      .setLabel(t("raid-edit-roster.picker.cancelLabel", session.lang))
-      .setStyle(ButtonStyle.Danger);
-
-    return [
-      ...charRows,
-      new ActionRowBuilder().addComponents(confirmBtn, cancelBtn),
-    ];
+        return {
+          selected: isSelected,
+          label: `${marker} ${index + 1}. ${c.charName}${tagSuffix}`,
+        };
+      },
+    });
   }
 
   function buildExpiredEmbed(session) {
@@ -684,7 +664,7 @@ function createEditRosterCommand({
       if (c.savedKey) selectedIndices.add(i);
     });
 
-    const sessionId = newSessionId();
+    const sessionId = newPickerSessionId();
     const session = {
       sessionId,
       callerId,

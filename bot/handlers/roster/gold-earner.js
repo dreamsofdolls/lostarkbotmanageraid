@@ -1,10 +1,13 @@
 "use strict";
 
-const crypto = require("crypto");
 const {
   buildNoticeEmbed,
   normalizeName,
 } = require("../../utils/raid/common/shared");
+const {
+  buildTogglePickerComponents,
+  newPickerSessionId,
+} = require("../../utils/raid/roster-picker");
 const {
   getRosterMatches,
   truncateChoice,
@@ -51,10 +54,6 @@ function createRaidGoldEarnerCommand({
   // gets two independent pickers; older one keeps working until its
   // 5-minute timer fires.
   const sessions = new Map();
-
-  function newSessionId() {
-    return crypto.randomBytes(8).toString("hex");
-  }
 
   function expireSession(sessionId) {
     const session = sessions.get(sessionId);
@@ -138,40 +137,24 @@ function createRaidGoldEarnerCommand({
   }
 
   function buildSelectionComponents(session) {
-    const charRows = [];
-    for (let rowStart = 0; rowStart < session.chars.length; rowStart += BUTTONS_PER_ROW) {
-      const row = new ActionRowBuilder();
-      const rowEnd = Math.min(rowStart + BUTTONS_PER_ROW, session.chars.length);
-      for (let i = rowStart; i < rowEnd; i += 1) {
-        const c = session.chars[i];
-        const isSelected = session.selectedIndices.has(i);
+    return buildTogglePickerComponents({
+      session,
+      ActionRowBuilder,
+      ButtonBuilder,
+      ButtonStyle,
+      buttonsPerRow: BUTTONS_PER_ROW,
+      customIdPrefix: "gold-earner",
+      confirmLabel: `Confirm (${session.selectedIndices.size})`,
+      cancelLabel: t("raid-gold-earner.picker.cancelLabel", session.lang),
+      describeButton(c, index) {
+        const isSelected = session.selectedIndices.has(index);
         const marker = isSelected ? CHECK_ICON : UNCHECK_ICON;
-        const baseLabel = `${marker} ${i + 1}. ${c.name}`;
-        const label = baseLabel.length > 80 ? `${baseLabel.slice(0, 77)}...` : baseLabel;
-        row.addComponents(
-          new ButtonBuilder()
-            .setCustomId(`gold-earner:toggle:${session.sessionId}:${i}`)
-            .setLabel(label)
-            .setStyle(isSelected ? ButtonStyle.Success : ButtonStyle.Secondary)
-        );
-      }
-      charRows.push(row);
-    }
-
-    const confirmBtn = new ButtonBuilder()
-      .setCustomId(`gold-earner:confirm:${session.sessionId}`)
-      .setLabel(`Confirm (${session.selectedIndices.size})`)
-      .setStyle(ButtonStyle.Primary);
-
-    const cancelBtn = new ButtonBuilder()
-      .setCustomId(`gold-earner:cancel:${session.sessionId}`)
-      .setLabel(t("raid-gold-earner.picker.cancelLabel", session.lang))
-      .setStyle(ButtonStyle.Danger);
-
-    return [
-      ...charRows,
-      new ActionRowBuilder().addComponents(confirmBtn, cancelBtn),
-    ];
+        return {
+          selected: isSelected,
+          label: `${marker} ${index + 1}. ${c.name}`,
+        };
+      },
+    });
   }
 
   function buildExpiredEmbed(session) {
@@ -318,7 +301,7 @@ function createRaidGoldEarnerCommand({
     }));
     const overflowCount = Math.max(0, sortedAll.length - PICKER_MAX_OPTIONS);
 
-    const sessionId = newSessionId();
+    const sessionId = newPickerSessionId();
     const session = {
       sessionId,
       callerId: discordId,
