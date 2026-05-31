@@ -2,10 +2,11 @@
  * services/raid/schedule/event-cleanup.js
  * Auto-purge for stale /raid-schedule-preview events. A raid event whose
  * startAt is before the most recent weekly reset (Wed 10:00 UTC = 17:00 VN)
- * belongs to a finished raid cycle, so it is safe to delete its Discord board
- * message and the RaidEvent doc. Wired into the weekly-reset job tick, so it
- * runs every 30 min and is catch-up safe + idempotent (once purged there is
- * nothing left until the boundary advances next Wednesday).
+ * belongs to a finished raid cycle, so it is safe to delete its RaidEvent doc
+ * and then best-effort remove the Discord board message. Wired into the
+ * weekly-reset job tick, so it runs every 30 min and is catch-up safe +
+ * idempotent (once purged there is nothing left until the boundary advances
+ * next Wednesday).
  */
 
 "use strict";
@@ -23,10 +24,10 @@ function isStaleEvent(event, boundaryMs) {
 }
 
 /**
- * Delete every raid event whose startAt is before the boundary: best-effort
- * removal of each Discord board message, then a single deleteMany of the docs.
- * Each failure path is swallowed + logged so one bad board never blocks the
- * batch.
+ * Delete every raid event whose startAt is before the boundary. The DB delete
+ * happens before any board message delete so a Mongo failure cannot leave an
+ * open/locked ghost event whose board has vanished. Board deletion remains
+ * best-effort after the docs are gone.
  * @param {{RaidEvent: object, client: object, boundaryMs: number}} deps
  * @returns {Promise<{deleted: number, boardsDeleted: number}>}
  */
@@ -44,6 +45,18 @@ async function purgeStaleRaidEvents({ RaidEvent, client, boundaryMs }) {
     return { deleted: 0, boardsDeleted: 0 };
   }
 
+  let deleted = 0;
+  try {
+    const res = await RaidEvent.deleteMany({ _id: { $in: stale.map((e) => e._id) } });
+    deleted = res?.deletedCount || 0;
+  } catch (error) {
+    console.warn("[raid-schedule purge] deleteMany failed:", error?.message || error);
+    return { deleted: 0, boardsDeleted: 0 };
+  }
+  if (deleted <= 0) {
+    return { deleted: 0, boardsDeleted: 0 };
+  }
+
   let boardsDeleted = 0;
   for (const ev of stale) {
     if (!ev.messageId || !ev.channelId || !client?.channels) continue;
@@ -57,14 +70,6 @@ async function purgeStaleRaidEvents({ RaidEvent, client, boundaryMs }) {
     } catch {
       // Board already gone, channel deleted, or missing perms - best-effort.
     }
-  }
-
-  let deleted = 0;
-  try {
-    const res = await RaidEvent.deleteMany({ _id: { $in: stale.map((e) => e._id) } });
-    deleted = res?.deletedCount || 0;
-  } catch (error) {
-    console.warn("[raid-schedule purge] deleteMany failed:", error?.message || error);
   }
   return { deleted, boardsDeleted };
 }

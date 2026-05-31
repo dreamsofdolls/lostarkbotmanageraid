@@ -901,19 +901,35 @@ function createRaidScheduleCommand({
     const ids = [...new Set((event.signups || []).map((s) => s.discordId))];
     const langForBoard = await boardLang(event.guildId);
 
-    await deleteBoardMessage(interaction, event);
     try {
       await event.deleteOne();
     } catch (error) {
       console.warn("[raid-schedule] event delete failed:", error?.message || error);
+      await interaction.editReply({
+        embeds: [
+          noticeEmbed(
+            "danger",
+            t("raid-schedule.notice.deleteFailedTitle", lang),
+            t("raid-schedule.notice.deleteFailedDescription", lang),
+          ),
+        ],
+        components: [],
+      }).catch(() => {});
+      return;
     }
+    const boardDeleted = await deleteBoardMessage(interaction, event);
 
     await interaction.editReply({
       embeds: [
         noticeEmbed(
           "warn",
           t("raid-schedule.notice.deletedTitle", lang),
-          t("raid-schedule.notice.deletedDescription", lang),
+          t(
+            boardDeleted
+              ? "raid-schedule.notice.deletedDescription"
+              : "raid-schedule.notice.deletedBoardMissingDescription",
+            lang,
+          ),
         ),
       ],
       components: [],
