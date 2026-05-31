@@ -2,8 +2,12 @@
 
 const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
 const {
+  authorizePickerSession,
   buildTogglePickerComponents,
+  clearPickerSession,
+  handlePickerSessionTimeout,
   newPickerSessionId,
+  resolveAdminMention,
 } = require("../../utils/raid/roster-picker");
 const { t, getUserLanguage } = require("../../services/i18n");
 
@@ -68,14 +72,7 @@ function createAddRosterCommand({
   isManagerId,
   getPrimaryManagerId,
 }) {
-  // Resolved once at factory boot. Used in error embeds to ping the
-  // primary admin (first entry of RAID_MANAGER_ID env) by mention so
-  // users see a clickable @<id> instead of a generic "ping admin"
-  // string. Falls back to plain text when no manager is configured.
-  const adminMention = (() => {
-    const id = typeof getPrimaryManagerId === "function" ? getPrimaryManagerId() : null;
-    return id ? `<@${id}>` : "admin";
-  })();
+  const adminMention = resolveAdminMention(getPrimaryManagerId);
   // Module-level cache: sessionId -> session state. Lives in process
   // memory only; bot restart drops every in-flight session, which is
   // acceptable since the user is sitting in front of the embed and can
@@ -446,36 +443,6 @@ function createAddRosterCommand({
     return savedAccount;
   }
 
-  function clearSession(sessionId) {
-    const session = sessions.get(sessionId);
-    if (!session) return null;
-    if (session.expireTimer) {
-      clearTimeout(session.expireTimer);
-      session.expireTimer = null;
-    }
-    sessions.delete(sessionId);
-    return session;
-  }
-
-  async function handleSessionTimeout(sessionId, interaction) {
-    const session = sessions.get(sessionId);
-    if (!session) return;
-    sessions.delete(sessionId);
-    session.expireTimer = null;
-    try {
-      await interaction.editReply({
-        embeds: [buildExpiredEmbed(session)],
-        components: [],
-      });
-    } catch (err) {
-      // Original message could be deleted, channel gone, etc. Nothing
-      // to do — the in-memory session is already cleaned up.
-      console.warn(
-        `[add-roster] timeout edit failed for session ${sessionId}: ${err?.message || err}`
-      );
-    }
-  }
-
   async function handleAddRosterCommand(interaction) {
     const callerId = interaction.user.id;
     // Slash invoker (Manager or self-add user) sees every reply on this
@@ -676,31 +643,15 @@ function createAddRosterCommand({
     });
 
     session.expireTimer = setTimeout(
-      () => handleSessionTimeout(sessionId, interaction),
+      () => handlePickerSessionTimeout({
+        sessions,
+        sessionId,
+        interaction,
+        buildExpiredEmbed,
+        logTag: "add-roster",
+      }),
       SESSION_TTL_MS
     );
-  }
-
-  // Auth gate shared by select + button paths: only the original
-  // command caller can manipulate or confirm their own session. Manager
-  // who used `target:` is still the caller; the target user can't click
-  // anything on the picker.
-  async function authorizeSession(interaction, session) {
-    if (interaction.user.id !== session.callerId) {
-      // Render denial in clicker's locale, not the session owner's.
-      const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      return interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "lock",
-            title: t("raid-add-roster.auth2.notYourPickerTitle", clickerLang),
-            description: t("raid-add-roster.auth2.notYourPickerDescription", clickerLang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
-      });
-    }
-    return null;
   }
 
   async function handleAddRosterButton(interaction) {
@@ -725,7 +676,18 @@ function createAddRosterCommand({
       });
       return;
     }
-    const denied = await authorizeSession(interaction, session);
+    const denied = await authorizePickerSession({
+      interaction,
+      session,
+      User,
+      getUserLanguage,
+      buildNoticeEmbed,
+      EmbedBuilder,
+      MessageFlags,
+      t,
+      titleKey: "raid-add-roster.auth2.notYourPickerTitle",
+      descriptionKey: "raid-add-roster.auth2.notYourPickerDescription",
+    });
     if (denied) return;
 
     if (action === "toggle") {
@@ -749,7 +711,7 @@ function createAddRosterCommand({
     }
 
     if (action === "cancel") {
-      clearSession(sessionId);
+      clearPickerSession(sessions, sessionId);
       await interaction.update({
         embeds: [buildCancelledEmbed(session)],
         components: [],
@@ -802,7 +764,7 @@ function createAddRosterCommand({
       // deferUpdate keeps the picker on screen while we work, then
       // editReply swaps it for the final saved embed.
       await interaction.deferUpdate();
-      clearSession(sessionId);
+      clearPickerSession(sessions, sessionId);
 
       let savedAccount;
       try {

@@ -5,7 +5,10 @@ const {
   normalizeName,
 } = require("../../utils/raid/common/shared");
 const {
+  authorizePickerSession,
   buildTogglePickerComponents,
+  clearPickerSession,
+  handlePickerSessionTimeout,
   newPickerSessionId,
 } = require("../../utils/raid/roster-picker");
 const {
@@ -54,17 +57,6 @@ function createRaidGoldEarnerCommand({
   // gets two independent pickers; older one keeps working until its
   // 5-minute timer fires.
   const sessions = new Map();
-
-  function expireSession(sessionId) {
-    const session = sessions.get(sessionId);
-    if (!session) return null;
-    if (session.timer) {
-      clearTimeout(session.timer);
-      session.timer = null;
-    }
-    sessions.delete(sessionId);
-    return session;
-  }
 
   // Decide which char indices should be pre-checked when the picker
   // opens. If at least one char in the account already has
@@ -320,18 +312,17 @@ function createRaidGoldEarnerCommand({
       flags: MessageFlags.Ephemeral,
     });
 
-    session.timer = setTimeout(async () => {
-      const expired = expireSession(sessionId);
-      if (!expired) return;
-      try {
-        await interaction.editReply({
-          embeds: [buildExpiredEmbed(expired)],
-          components: [],
-        });
-      } catch {
-        // Token may have already expired - safe to ignore.
-      }
-    }, SESSION_TTL_MS);
+    session.timer = setTimeout(
+      () => handlePickerSessionTimeout({
+        sessions,
+        sessionId,
+        interaction,
+        buildExpiredEmbed,
+        logTag: "raid-gold-earner",
+        timerField: "timer",
+      }),
+      SESSION_TTL_MS
+    );
   }
 
   // ---------- Button dispatch ----------
@@ -367,19 +358,19 @@ function createRaidGoldEarnerCommand({
     // Ownership guard: only the user who opened the picker can interact.
     // Sessions are caller-scoped and the reply is ephemeral so this is
     // mostly defense-in-depth, but cheap to enforce.
-    if (interaction.user.id !== session.callerId) {
-      // Render denial in the clicker's locale, not the session owner's.
-      const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "lock",
-            title: t("raid-gold-earner.auth.notYourSessionTitle", clickerLang),
-            description: t("raid-gold-earner.auth.notYourSessionDescription", clickerLang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
-      }).catch(() => {});
+    const denied = await authorizePickerSession({
+      interaction,
+      session,
+      User,
+      getUserLanguage,
+      buildNoticeEmbed,
+      EmbedBuilder,
+      MessageFlags,
+      t,
+      titleKey: "raid-gold-earner.auth.notYourSessionTitle",
+      descriptionKey: "raid-gold-earner.auth.notYourSessionDescription",
+    }).catch(() => true);
+    if (denied) {
       return;
     }
 
@@ -424,7 +415,7 @@ function createRaidGoldEarnerCommand({
     }
 
     if (action === "cancel") {
-      expireSession(sessionId);
+      clearPickerSession(sessions, sessionId, { timerField: "timer" });
       await interaction.update({
         embeds: [buildCancelledEmbed(session)],
         components: [],
@@ -483,7 +474,7 @@ function createRaidGoldEarnerCommand({
         return;
       }
 
-      expireSession(sessionId);
+      clearPickerSession(sessions, sessionId, { timerField: "timer" });
       await interaction.update({
         embeds: [buildSavedEmbed(session, savedNames)],
         components: [],

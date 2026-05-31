@@ -69,10 +69,78 @@ function buildTogglePickerComponents(options) {
   ];
 }
 
+function resolveAdminMention(getPrimaryManagerId) {
+  const id = typeof getPrimaryManagerId === "function" ? getPrimaryManagerId() : null;
+  return id ? `<@${id}>` : "admin";
+}
+
+function clearPickerSession(sessions, sessionId, { timerField = "expireTimer" } = {}) {
+  const session = sessions.get(sessionId);
+  if (!session) return null;
+  if (session[timerField]) {
+    clearTimeout(session[timerField]);
+    session[timerField] = null;
+  }
+  sessions.delete(sessionId);
+  return session;
+}
+
+async function handlePickerSessionTimeout({
+  sessions,
+  sessionId,
+  interaction,
+  buildExpiredEmbed,
+  logTag,
+  timerField = "expireTimer",
+}) {
+  const session = clearPickerSession(sessions, sessionId, { timerField });
+  if (!session) return;
+  try {
+    await interaction.editReply({
+      embeds: [buildExpiredEmbed(session)],
+      components: [],
+    });
+  } catch (err) {
+    console.warn(
+      `[${logTag}] timeout edit failed for session ${sessionId}: ${err?.message || err}`
+    );
+  }
+}
+
+async function authorizePickerSession({
+  interaction,
+  session,
+  User,
+  getUserLanguage,
+  buildNoticeEmbed,
+  EmbedBuilder,
+  MessageFlags,
+  t,
+  titleKey,
+  descriptionKey,
+}) {
+  if (interaction.user.id === session.callerId) return null;
+  const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
+  return interaction.reply({
+    embeds: [
+      buildNoticeEmbed(EmbedBuilder, {
+        type: "lock",
+        title: t(titleKey, clickerLang),
+        description: t(descriptionKey, clickerLang),
+      }),
+    ],
+    flags: MessageFlags.Ephemeral,
+  });
+}
+
 module.exports = {
   newPickerSessionId,
   truncateButtonLabel,
   buildToggleButtonRows,
   buildConfirmCancelRow,
   buildTogglePickerComponents,
+  resolveAdminMention,
+  clearPickerSession,
+  handlePickerSessionTimeout,
+  authorizePickerSession,
 };
