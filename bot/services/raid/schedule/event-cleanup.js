@@ -15,6 +15,18 @@
 // treated as abandoned and purged early, without waiting for the weekly reset.
 const ABANDONED_AFTER_MS = 24 * 60 * 60 * 1000; // 24h
 
+function buildStaleQuery(boundaryMs, nowMs) {
+  // Rule 1 (weekly boundary) always; rule 2 (24h abandoned) when nowMs is given.
+  const orConds = [{ startAt: { $lt: new Date(boundaryMs) } }];
+  if (Number.isFinite(nowMs)) {
+    orConds.push({
+      startAt: { $lt: new Date(nowMs - ABANDONED_AFTER_MS) },
+      status: { $ne: "cleared" },
+    });
+  }
+  return orConds.length > 1 ? { $or: orConds } : orConds[0];
+}
+
 /**
  * Whether an event is stale enough to purge. Two rules:
  *   1. startAt before the most recent weekly reset (any status) - the raid week
@@ -46,15 +58,7 @@ function isStaleEvent(event, boundaryMs, nowMs) {
  * @returns {Promise<{deleted: number, boardsDeleted: number}>}
  */
 async function purgeStaleRaidEvents({ RaidEvent, client, boundaryMs, nowMs }) {
-  // Rule 1 (weekly boundary) always; rule 2 (24h abandoned) when nowMs is given.
-  const orConds = [{ startAt: { $lt: new Date(boundaryMs) } }];
-  if (Number.isFinite(nowMs)) {
-    orConds.push({
-      startAt: { $lt: new Date(nowMs - ABANDONED_AFTER_MS) },
-      status: { $ne: "cleared" },
-    });
-  }
-  const query = orConds.length > 1 ? { $or: orConds } : orConds[0];
+  const query = buildStaleQuery(boundaryMs, nowMs);
   let stale;
   try {
     stale = await RaidEvent.find(query)
@@ -69,19 +73,24 @@ async function purgeStaleRaidEvents({ RaidEvent, client, boundaryMs, nowMs }) {
   }
 
   let deleted = 0;
-  try {
-    const res = await RaidEvent.deleteMany({ _id: { $in: stale.map((e) => e._id) } });
-    deleted = res?.deletedCount || 0;
-  } catch (error) {
-    console.warn("[raid-schedule purge] deleteMany failed:", error?.message || error);
-    return { deleted: 0, boardsDeleted: 0 };
+  const deletedEvents = [];
+  for (const ev of stale) {
+    try {
+      const res = await RaidEvent.deleteOne({ _id: ev._id, ...query });
+      if ((res?.deletedCount || 0) > 0) {
+        deleted += 1;
+        deletedEvents.push(ev);
+      }
+    } catch (error) {
+      console.warn("[raid-schedule purge] delete failed:", error?.message || error);
+    }
   }
   if (deleted <= 0) {
     return { deleted: 0, boardsDeleted: 0 };
   }
 
   let boardsDeleted = 0;
-  for (const ev of stale) {
+  for (const ev of deletedEvents) {
     if (!ev.messageId || !ev.channelId || !client?.channels) continue;
     try {
       const channel = await client.channels.fetch(ev.channelId);
