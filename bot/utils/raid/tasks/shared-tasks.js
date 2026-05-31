@@ -14,6 +14,7 @@
 "use strict";
 
 const { dailyResetStartMs } = require("../schedule/reset-windows");
+const { normalizeName } = require("../common/shared");
 
 const SCHEDULE_SOURCE_TIME_ZONE = "Etc/GMT+4"; // Fixed UTC-4; IANA Etc sign is intentionally reversed.
 const SCHEDULE_SOURCE_LABEL = "UTC-4";
@@ -74,10 +75,6 @@ const SHARED_TASK_PRESETS = Object.freeze({
 
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const WEEKDAY_VN = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
-
-function normalizeName(value) {
-  return String(value || "").trim().toLowerCase();
-}
 
 function getSharedTaskPreset(preset) {
   return SHARED_TASK_PRESETS[preset] || SHARED_TASK_PRESETS.custom;

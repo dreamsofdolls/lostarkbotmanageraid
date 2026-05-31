@@ -17,6 +17,7 @@
 
 const User = require("../../models/user");
 const { t, getUserLanguage, resolveLocale } = require("../../services/i18n");
+const { splitEmbedFieldValue } = require("../../utils/raid/common/shared");
 
 // Section order is the only place command listing order is configured -
 // drives both the overview embed and the dropdown options.
@@ -218,34 +219,8 @@ function createRaidHelpCommand(deps) {
   }
 
   const HELP_FIELD_VALUE_LIMIT = 1024; // Discord rejects embed field values above this.
-  function splitHelpFieldValue(value, limit = HELP_FIELD_VALUE_LIMIT) {
-    const chunks = [];
-    let current = "";
-    for (const rawLine of String(value || "").split("\n")) {
-      const lineParts = [];
-      let remaining = rawLine;
-      while (remaining.length > limit) {
-        let cutAt = remaining.lastIndexOf(" ", limit);
-        if (cutAt < Math.floor(limit * 0.6)) cutAt = limit;
-        lineParts.push(remaining.slice(0, cutAt).trimEnd());
-        remaining = remaining.slice(cutAt).trimStart();
-      }
-      lineParts.push(remaining);
-      for (const part of lineParts) {
-        const next = current ? `${current}\n${part}` : part;
-        if (next.length > limit && current) {
-          chunks.push(current);
-          current = part;
-        } else {
-          current = next;
-        }
-      }
-    }
-    if (current) chunks.push(current);
-    return chunks.length > 0 ? chunks : ["_No details_"];
-  }
   function addChunkedHelpField(embed, name, value) {
-    const chunks = splitHelpFieldValue(value);
+    const chunks = splitEmbedFieldValue(value, HELP_FIELD_VALUE_LIMIT);
     chunks.forEach((chunk, index) => {
       embed.addFields({
         name: index === 0 ? name : `${name} (${index + 1})`,

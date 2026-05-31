@@ -138,6 +138,33 @@ function formatNextCooldownRemaining(lastAttemptAt, cooldownMs) {
   return minutes > 0 ? `${hours}h${minutes}m` : `${hours}h`;
 }
 
+function splitEmbedFieldValue(value, limit = 1024) {
+  const chunks = [];
+  let current = "";
+  for (const rawLine of String(value || "").split("\n")) {
+    const lineParts = [];
+    let remaining = rawLine;
+    while (remaining.length > limit) {
+      let cutAt = remaining.lastIndexOf(" ", limit);
+      if (cutAt < Math.floor(limit * 0.6)) cutAt = limit;
+      lineParts.push(remaining.slice(0, cutAt).trimEnd());
+      remaining = remaining.slice(cutAt).trimStart();
+    }
+    lineParts.push(remaining);
+    for (const part of lineParts) {
+      const next = current ? `${current}\n${part}` : part;
+      if (next.length > limit && current) {
+        chunks.push(current);
+        current = part;
+      } else {
+        current = next;
+      }
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks.length > 0 ? chunks : ["_No details_"];
+}
+
 function waitWithBudget(promise, budgetMs) {
   let timeoutId;
   const timeout = new Promise((resolve) => {
@@ -393,6 +420,7 @@ module.exports = {
   truncateText,
   formatShortRelative,
   formatNextCooldownRemaining,
+  splitEmbedFieldValue,
   waitWithBudget,
   buildDiscordIdentityFields,
   INLINE_SPACER,
