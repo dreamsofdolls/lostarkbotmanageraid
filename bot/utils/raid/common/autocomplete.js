@@ -17,9 +17,7 @@
  * map - this module is pure.
  */
 
-function normalizeName(value) {
-  return String(value || "").trim().toLowerCase();
-}
+const { normalizeName } = require("./shared");
 
 function getCharName(character) {
   return String(character?.name || character?.charName || "").trim();

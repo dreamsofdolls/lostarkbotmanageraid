@@ -19,6 +19,7 @@ const {
 } = require("../access/manager");
 const { t } = require("../i18n");
 const { getRaidLabel, getModeLabel } = require("../../utils/raid/common/labels");
+const { splitEmbedFieldValue } = require("../../utils/raid/common/shared");
 
 /**
  * Build the auto-manage core service. Returns a bag of handlers,
@@ -896,38 +897,6 @@ function createAutoManageCoreService({
     });
 
     return embed;
-  }
-
-  const EMBED_FIELD_VALUE_LIMIT = 1024;
-
-  function splitEmbedFieldValue(value, limit = EMBED_FIELD_VALUE_LIMIT) {
-    const chunks = [];
-    let current = "";
-
-    for (const rawLine of String(value || "").split("\n")) {
-      const lineParts = [];
-      let remaining = rawLine;
-      while (remaining.length > limit) {
-        let cutAt = remaining.lastIndexOf(" ", limit);
-        if (cutAt < Math.floor(limit * 0.6)) cutAt = limit;
-        lineParts.push(remaining.slice(0, cutAt).trimEnd());
-        remaining = remaining.slice(cutAt).trimStart();
-      }
-      lineParts.push(remaining);
-
-      for (const part of lineParts) {
-        const next = current ? `${current}\n${part}` : part;
-        if (next.length > limit && current) {
-          chunks.push(current);
-          current = part;
-        } else {
-          current = next;
-        }
-      }
-    }
-
-    if (current) chunks.push(current);
-    return chunks.length > 0 ? chunks : ["_No details_"];
   }
 
   function addChunkedEmbedField(embed, name, value) {
