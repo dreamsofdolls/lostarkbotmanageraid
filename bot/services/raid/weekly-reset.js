@@ -308,6 +308,7 @@ function startWeeklyResetJob(client) {
           RaidEvent,
           client,
           boundaryMs: getCurrentResetStartMs(),
+          nowMs: Date.now(), // enables the 24h-abandoned (not-cleared) rule
         });
         if (purged.deleted > 0) {
           console.log(
