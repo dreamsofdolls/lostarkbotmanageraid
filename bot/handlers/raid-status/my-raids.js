@@ -123,6 +123,7 @@ function buildMyRaidDetailEmbed(event, viewerId, { EmbedBuilder, UI, lang }) {
 
   const embed = new EmbedBuilder()
     .setColor(UI.colors.neutral)
+    .setAuthor({ name: "// MY RAID" })
     .setTitle(t("raid-status.myRaids.detailTitle", lang, { raid: raidLabel }))
     .setDescription(t("raid-status.myRaids.detailIntro", lang, {
       rel: `<t:${startSec}:R>`,
@@ -165,7 +166,7 @@ function buildMyRaidDetailEmbed(event, viewerId, { EmbedBuilder, UI, lang }) {
     });
   }
 
-  embed.setFooter({ text: t("raid-status.myRaids.detailFooter", lang, { id: String(event._id) }) });
+  embed.setFooter({ text: `// ${t("raid-status.myRaids.detailFooter", lang, { id: String(event._id) })}` });
   return embed;
 }
 
