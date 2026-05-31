@@ -58,37 +58,45 @@ function foldName(value) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-function parseItemLevel(rawValue) {
+function parseNumericStat(rawValue) {
   const sanitized = String(rawValue || "0")
     .replace(/,/g, "")
     .replace(/[^\d.-]/g, "");
   const parsed = parseFloat(sanitized);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseItemLevel(rawValue) {
+  return parseNumericStat(rawValue);
 }
 
 function parseCombatScore(rawValue) {
-  const sanitized = String(rawValue || "0")
-    .replace(/,/g, "")
-    .replace(/[^\d.-]/g, "");
-  const parsed = parseFloat(sanitized);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return parseNumericStat(rawValue);
 }
+
+const MODE_LABELS = Object.freeze({
+  hard: "Hard",
+  nightmare: "Nightmare",
+});
 
 function toModeLabel(modeKey) {
   const lower = normalizeName(modeKey);
-  if (lower === "hard") return "Hard";
-  if (lower === "nightmare") return "Nightmare";
-  return "Normal";
+  return MODE_LABELS[lower] || "Normal";
 }
+
+const MODE_KEYS = Object.freeze({
+  hard: "hard",
+  hm: "hard",
+  nightmare: "nightmare",
+  "9m": "nightmare",
+});
 
 function toModeKey(modeLabel) {
   const lower = normalizeName(modeLabel);
-  if (lower === "hard" || lower === "hm") return "hard";
-  if (lower === "nightmare" || lower === "9m") return "nightmare";
   // `nm` moved from nightmare to normal per Traine's alias preference: in
   // this VN community `nm` reads as "nor-mal" more naturally than "9m".
   // Nightmare keeps `9m` as the sole shorthand.
-  return "normal";
+  return MODE_KEYS[lower] || "normal";
 }
 
 function getCharacterName(character) {

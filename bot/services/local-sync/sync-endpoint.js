@@ -15,6 +15,11 @@ const {
   applyLocalSyncDeltas,
   recordLocalSyncSuccess,
 } = require("./index");
+const {
+  createJsonSender,
+  extractBearerToken,
+  readJsonBody,
+} = require("./http");
 const { getRaidRequirementMap } = require("../../models/Raid");
 
 /**
@@ -43,54 +48,7 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId, applyRaidSetBa
   // most. 256 KB ceiling protects against accidental + malicious oversend
   // without stress on the JSON parser.
   const MAX_BODY_BYTES = 256 * 1024;
-
-  async function readJsonBody(req) {
-    return new Promise((resolve, reject) => {
-      let received = 0;
-      const chunks = [];
-      req.on("data", (chunk) => {
-        received += chunk.length;
-        if (received > MAX_BODY_BYTES) {
-          reject(Object.assign(new Error("body too large"), { status: 413 }));
-          req.destroy();
-          return;
-        }
-        chunks.push(chunk);
-      });
-      req.on("end", () => {
-        try {
-          const raw = Buffer.concat(chunks).toString("utf8");
-          if (!raw) return resolve({});
-          resolve(JSON.parse(raw));
-        } catch (err) {
-          reject(Object.assign(new Error("invalid JSON"), { status: 400 }));
-        }
-      });
-      req.on("error", reject);
-    });
-  }
-
-  function extractToken(req, parsedUrl) {
-    const auth = req.headers["authorization"] || "";
-    const match = /^Bearer\s+(.+)$/i.exec(auth);
-    if (match) return match[1].trim();
-    // Query fallback so a quick `curl ".../api/raid-sync?token=..."` works
-    // for ops smoke testing. Production web companion uses the header.
-    return parsedUrl?.query?.token || null;
-  }
-
-  function send(res, status, body) {
-    res.writeHead(status, {
-      "Content-Type": "application/json; charset=utf-8",
-      // CORS: web companion served from the same origin, but be permissive
-      // so a future split (e.g. companion on Vercel, API on Railway)
-      // doesn't break. Restrict origins later if abuse appears.
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Authorization, Content-Type",
-    });
-    res.end(JSON.stringify(body));
-  }
+  const send = createJsonSender({ methods: "POST, OPTIONS" });
 
   return async function handleRaidSync(req, res, parsedUrl) {
     // Preflight - cheap CORS handshake. Same headers as the actual response.
@@ -104,7 +62,7 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId, applyRaidSetBa
     }
 
     // 1. Token extract + verify.
-    const token = extractToken(req, parsedUrl);
+    const token = extractBearerToken(req, parsedUrl);
     if (!token) {
       send(res, 401, { ok: false, error: "missing token" });
       return;
@@ -119,7 +77,7 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId, applyRaidSetBa
     // 2. Body parse.
     let body;
     try {
-      body = await readJsonBody(req);
+      body = await readJsonBody(req, MAX_BODY_BYTES);
     } catch (err) {
       send(res, err.status || 400, { ok: false, error: err.message || "bad body" });
       return;

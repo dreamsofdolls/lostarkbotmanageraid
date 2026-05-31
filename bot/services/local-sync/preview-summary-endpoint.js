@@ -10,6 +10,11 @@
 "use strict";
 
 const { verifyToken, isCurrentStoredToken, bucketizeLocalSyncDeltas } = require("./index");
+const {
+  createJsonSender,
+  extractBearerToken,
+  readJsonBody,
+} = require("./http");
 const { RAID_REQUIREMENTS, getGatesForRaid, getGoldForGate } = require("../../models/Raid");
 const { normalizeName } = require("../../utils/raid/common/shared");
 const { getStatusRaidsForCharacter } = require("../../utils/raid/common/character");
@@ -196,49 +201,7 @@ function createPreviewSummaryEndpoint({ User }) {
   if (!User) throw new Error("[preview-summary] User model required");
 
   const MAX_BODY_BYTES = 256 * 1024;
-
-  async function readJsonBody(req) {
-    return new Promise((resolve, reject) => {
-      let received = 0;
-      const chunks = [];
-      req.on("data", (chunk) => {
-        received += chunk.length;
-        if (received > MAX_BODY_BYTES) {
-          reject(Object.assign(new Error("body too large"), { status: 413 }));
-          req.destroy();
-          return;
-        }
-        chunks.push(chunk);
-      });
-      req.on("end", () => {
-        try {
-          const raw = Buffer.concat(chunks).toString("utf8");
-          if (!raw) return resolve({});
-          resolve(JSON.parse(raw));
-        } catch (err) {
-          reject(Object.assign(new Error("invalid JSON"), { status: 400 }));
-        }
-      });
-      req.on("error", reject);
-    });
-  }
-
-  function extractToken(req, parsedUrl) {
-    const auth = req.headers["authorization"] || "";
-    const match = /^Bearer\s+(.+)$/i.exec(auth);
-    if (match) return match[1].trim();
-    return parsedUrl?.query?.token || null;
-  }
-
-  function send(res, status, body) {
-    res.writeHead(status, {
-      "Content-Type": "application/json; charset=utf-8",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Authorization, Content-Type",
-    });
-    res.end(JSON.stringify(body));
-  }
+  const send = createJsonSender({ methods: "POST, OPTIONS" });
 
   return async function handlePreviewSummary(req, res, parsedUrl) {
     if (req.method === "OPTIONS") {
@@ -250,7 +213,7 @@ function createPreviewSummaryEndpoint({ User }) {
       return;
     }
 
-    const token = extractToken(req, parsedUrl);
+    const token = extractBearerToken(req, parsedUrl);
     if (!token) {
       send(res, 401, { ok: false, error: "missing token" });
       return;
@@ -264,7 +227,7 @@ function createPreviewSummaryEndpoint({ User }) {
 
     let body;
     try {
-      body = await readJsonBody(req);
+      body = await readJsonBody(req, MAX_BODY_BYTES);
     } catch (err) {
       send(res, err.status || 400, { ok: false, error: err.message || "bad body" });
       return;
