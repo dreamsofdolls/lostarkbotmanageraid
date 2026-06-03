@@ -40,8 +40,13 @@ function shapeAllOwnedBoardRows(events, currentEventId) {
         supSlots: event.supSlots,
         dpsSlots: event.dpsSlots,
       });
+      const eventId = String(event._id);
       return {
-        eventId: String(event._id),
+        eventId,
+        // Last 6 hex of the ObjectId - a stable, distinct short code per event
+        // (same source as the board footer's id), shown in the picker label so
+        // same-raid boards are tell-apart-able. No new field / migration.
+        shortId: eventId.slice(-6),
         raidKey: event.raidKey,
         modeKey: event.modeKey,
         channelId: event.channelId,
@@ -51,7 +56,7 @@ function shapeAllOwnedBoardRows(events, currentEventId) {
         compCount: support.length + dps.length,
         partySize: event.partySize,
         waitlistCount: waitlist.length,
-        isCurrent: String(event._id) === current,
+        isCurrent: eventId === current,
       };
     });
 }

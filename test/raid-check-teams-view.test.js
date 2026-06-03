@@ -25,8 +25,9 @@ function makeUi(overrides = {}) {
 // A pre-shaped dropdown row (buildTeamsRows takes already-shaped rows).
 function shaped(id, extra = {}) {
   return {
-    eventId: id, raidKey: "armoche", modeKey: "hard", channelId: "c1", creatorId: "lead",
-    startAt: new Date(1), title: `Board ${id}`, compCount: 4, partySize: 8,
+    eventId: id, shortId: String(id).slice(-6), raidKey: "armoche", modeKey: "hard",
+    channelId: "c1", creatorId: "lead",
+    startAt: new Date(Date.UTC(2026, 5, 3, 14, 0)), title: `Board ${id}`, compCount: 4, partySize: 8,
     waitlistCount: 0, isCurrent: false, leadName: null, ...extra,
   };
 }
@@ -40,6 +41,15 @@ test("buildTeamsRows returns [] when there are no events", () => {
   assert.deepEqual(ui.buildTeamsRows({ shapedEvents: [], maxRows: 3 }), []);
   assert.deepEqual(ui.buildTeamsRows({ shapedEvents: undefined, maxRows: 3 }), []);
   assert.deepEqual(ui.buildTeamsRows({ shapedEvents: [shaped("a")], maxRows: 0 }), []);
+});
+
+test("buildTeamsRows shows the shortId in the label and a start date in the description", () => {
+  const ui = makeUi();
+  const rows = ui.buildTeamsRows({ shapedEvents: [shaped("abc123")], maxRows: 3 });
+  const opt = selectOf(rows[0]).options[0];
+  assert.match(opt.data.label, /abc123$/, "label ends with the shortId");
+  assert.equal(opt.data.emoji.name, "🗓️", "calendar icon present");
+  assert.match(opt.data.description, /\d{2}\/\d{2} \d{2}:\d{2}/, "a DD/MM HH:mm start date is shown");
 });
 
 test("buildTeamsRows builds one select for <= 25 events, values carry eventIds", () => {

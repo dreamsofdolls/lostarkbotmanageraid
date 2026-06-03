@@ -74,6 +74,21 @@ function isInArtistQuietHoursForLang(now = new Date(), lang) {
   return hour >= ARTIST_QUIET_START_HOUR_VN && hour < ARTIST_QUIET_END_HOUR_VN;
 }
 
+/**
+ * Plain-text "DD/MM HH:mm" of an instant in the viewer's language tz. For
+ * select-option descriptions, where Discord won't render `<t:..>` markup, so we
+ * format a fixed local string the same way parseStartTime interprets input.
+ * @param {Date|number|string} date - the instant (UTC)
+ * @param {string} lang - viewer language (drives the tz offset)
+ * @returns {string} e.g. "03/06 21:00"
+ */
+function formatStartShortForLang(date, lang) {
+  const offsetMs = getLangTzOffsetMinutes(lang) * 60 * 1000;
+  const local = new Date(new Date(date).getTime() + offsetMs);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(local.getUTCDate())}/${pad(local.getUTCMonth() + 1)} ${pad(local.getUTCHours())}:${pad(local.getUTCMinutes())}`;
+}
+
 function hasReachedArtistWakeupBoundary(now = new Date()) {
   return hasReachedArtistWakeupBoundaryForLang(now, "vi");
 }
@@ -91,6 +106,7 @@ module.exports = {
   getTargetDayKeyForLang,
   getCurrentVNHour,
   getCurrentHourForLang,
+  formatStartShortForLang,
   isInArtistQuietHours,
   isInArtistQuietHoursForLang,
   hasReachedArtistWakeupBoundary,

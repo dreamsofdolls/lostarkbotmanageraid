@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-03 (raid-schedule + raid-check: shortId + start date + icon in board pickers)
+
+### Changed
+- The board switcher (`🗓 Board khác của lead`) and the `/raid-check` teams dropdown (`📋 Đội đã xếp`) options now carry a **🗓 icon**, a **6-char shortId** in the label (last 6 hex of the event `_id` - distinct per event, no new field/migration, same source as the board footer id) so same-raid boards are tell-apart-able, and the **start date** (plain-text `DD/MM HH:mm` in the viewer's tz) in the description so a lead can see timing without opening the board. New pure `shapeAllOwnedBoardRows` carries `shortId`; new `artist-clock.formatStartShortForLang` (unit-tested). i18n vi/en/jp optionDesc gain `{date}`. 571 tests green.
+
 ## 2026-06-03 (raid-check: "Đội đã xếp" teams dropdown)
 
 ### Added

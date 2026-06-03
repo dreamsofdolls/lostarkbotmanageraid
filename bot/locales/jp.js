@@ -177,7 +177,7 @@ module.exports = {
     show: {
       // Plain text only - select options never render <t:..>/<#channel>.
       switchPlaceholder: "🗓 lead の他のボード ({n})",
-      optionDesc: "{raid} · {comp}/{size} 編成 · 待機 {wait}",
+      optionDesc: "{raid} · {date} · {comp}/{size} 編成 · 待機 {wait}",
     },
     notice: {
       notManagerTitle: "これは Raid Manager 用だよ",
@@ -742,8 +742,8 @@ module.exports = {
       // Plain text only - select options never render <t:..>/<#channel>.
       placeholderSingle: "📋 編成済みチーム ({n})",
       placeholderRange: "📋 編成済みチーム ({a}-{b})",
-      optionDesc: "{raid} · {comp}/{size} · 待機 {wait} · lead {lead}",
-      optionDescNoLead: "{raid} · {comp}/{size} · 待機 {wait}",
+      optionDesc: "{raid} · {date} · {comp}/{size} · 待機 {wait} · lead {lead}",
+      optionDescNoLead: "{raid} · {date} · {comp}/{size} · 待機 {wait}",
       eventGoneTitle: "イベントが見つからないよ",
       eventGoneDescription: "このボードは /raid-check を開いた後に終了/キャンセル/削除されたみたい。/raid-check をもう一度実行して最新の一覧を取ってね～",
     },

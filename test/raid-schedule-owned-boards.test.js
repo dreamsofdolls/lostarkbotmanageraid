@@ -89,6 +89,13 @@ test("shapeAllOwnedBoardRows returns ALL rows (uncapped), still sorted, with cre
   assert.equal(rows[0].creatorId, "c29", "creatorId is shaped through (needed for the teams lead line)");
 });
 
+test("shapeAllOwnedBoardRows derives a 6-char shortId from the last hex of _id", () => {
+  const [row] = shapeAllOwnedBoardRows([ev("507f1f77bcf86cd799439011", new Date(1))], "none");
+  assert.equal(row.shortId, "439011", "last 6 of the ObjectId");
+  // Short ids that are already <= 6 chars pass through unchanged.
+  assert.equal(shapeAllOwnedBoardRows([ev("abc", new Date(1))], "none")[0].shortId, "abc");
+});
+
 test("chunkBoardOptions splits into <= size groups", () => {
   const rows = Array.from({ length: 30 }, (_, i) => ({ eventId: `e${i}` }));
   const chunks = chunkBoardOptions(rows, 25);
