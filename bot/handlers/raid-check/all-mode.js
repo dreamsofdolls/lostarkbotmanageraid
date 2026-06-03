@@ -20,6 +20,7 @@ const {
 } = require("../../utils/raid/tasks/shared-tasks");
 const { t, getUserLanguage } = require("../../services/i18n");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
+const { createTeamsViewUi } = require("./teams-view");
 
 /**
  * Build the /raid-check all-mode handler factory.
@@ -55,7 +56,26 @@ function createAllModeHandler({
   shouldLoadFreshUserSnapshotForRaidViews,
   RAID_CHECK_USER_QUERY_FIELDS,
   RAID_CHECK_PAGINATION_SESSION_MS,
+  // raid-schedule bridge for the "📋 Đội đã xếp" dropdown - isolated in teams-view.js.
+  RaidEvent,
+  buildScheduleEmbed,
+  buildTurnPlanEmbed,
 }) {
+  // The teams dropdown is the one raid-check -> raid-schedule touchpoint; its
+  // query + render + coupling live in teams-view.js (mirrors task-view-ui.js).
+  const teamsView = createTeamsViewUi({
+    EmbedBuilder,
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    MessageFlags,
+    UI,
+    RaidEvent,
+    User,
+    buildScheduleEmbed,
+    buildTurnPlanEmbed,
+    truncateText,
+  });
+
   function toPlainUserDoc(userDoc) {
     if (!userDoc) return null;
     return typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
@@ -817,6 +837,12 @@ function createAllModeHandler({
       );
     };
 
+    // Snapshot the guild's active raid-schedule events ONCE at open (the
+    // per-event detail is re-fetched live on pick). Drives the teams dropdown.
+    const teamsSnapshot = await teamsView.loadActiveEventsForTeams({
+      guildId: interaction.guildId || interaction.guild?.id,
+    });
+
     const buildComponents = (disabled) => {
       const rows = [buildButtonRow(disabled), buildFilterRow(disabled)];
       // Raid filter is irrelevant in Task view (the embed renders
@@ -825,6 +851,16 @@ function createAllModeHandler({
       if (currentView === "raid") {
         rows.push(buildRaidFilterRow(disabled));
       }
+      // "📋 Đội đã xếp" fills whatever of Discord's 5-row budget is left,
+      // spilling > 25 events across extra selects. Omitted when no events.
+      rows.push(
+        ...teamsView.buildTeamsRows({
+          shapedEvents: teamsSnapshot,
+          maxRows: 5 - rows.length,
+          disabled,
+          lang,
+        }),
+      );
       return rows;
     };
 
@@ -853,7 +889,8 @@ function createAllModeHandler({
           customId.startsWith("raid-check-all-page:") ||
           customId === "raid-check-all-filter:user" ||
           customId === "raid-check-all-filter:raid" ||
-          customId.startsWith("raid-check-all:view-toggle:");
+          customId.startsWith("raid-check-all:view-toggle:") ||
+          customId.startsWith(teamsView.TEAMS_SELECT_PREFIX);
         if (ours) {
           // Lock message is read by the unauthorized clicker, render in
           // their lang (not session opener's).
@@ -931,6 +968,19 @@ function createAllModeHandler({
             components: buildComponents(false),
           })
           .catch(() => {});
+        return;
+      }
+
+      if (customId.startsWith(teamsView.TEAMS_SELECT_PREFIX)) {
+        // Read-only spot-check: show the picked event's comp + turn plan
+        // ephemerally (no main-message update) so the public /raid-check
+        // session is undisturbed. Session-locked to the opener, so `lang`
+        // (the opener's) is the right viewer language.
+        const eventId =
+          Array.isArray(component.values) && component.values.length > 0
+            ? component.values[0]
+            : null;
+        await teamsView.handleRaidCheckTeamsSelect(component, eventId, lang);
         return;
       }
 

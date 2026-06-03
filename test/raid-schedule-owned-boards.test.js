@@ -1,7 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { shapeOwnedBoardOptions } = require("../bot/services/raid/schedule/owned-boards");
+const {
+  shapeOwnedBoardOptions,
+  shapeAllOwnedBoardRows,
+  chunkBoardOptions,
+} = require("../bot/services/raid/schedule/owned-boards");
 
 function sup(id, joinedAt = 1) {
   return {
@@ -73,4 +77,26 @@ test("shapeOwnedBoardOptions is safe on empty / missing input", () => {
   assert.deepEqual(shapeOwnedBoardOptions([], "x"), []);
   assert.deepEqual(shapeOwnedBoardOptions(undefined, "x"), []);
   assert.deepEqual(shapeOwnedBoardOptions(null, "x"), []);
+});
+
+test("shapeAllOwnedBoardRows returns ALL rows (uncapped), still sorted, with creatorId", () => {
+  const many = Array.from({ length: 30 }, (_, i) => ev(`e${i}`, new Date(30 - i), { creatorId: `c${i}` }));
+  const rows = shapeAllOwnedBoardRows(many, "none");
+  assert.equal(rows.length, 30, "no 25-cap on the all-variant");
+  // Sorted ascending by startAt -> e29 (date 1) first ... e0 (date 30) last.
+  assert.equal(rows[0].eventId, "e29");
+  assert.equal(rows[29].eventId, "e0");
+  assert.equal(rows[0].creatorId, "c29", "creatorId is shaped through (needed for the teams lead line)");
+});
+
+test("chunkBoardOptions splits into <= size groups", () => {
+  const rows = Array.from({ length: 30 }, (_, i) => ({ eventId: `e${i}` }));
+  const chunks = chunkBoardOptions(rows, 25);
+  assert.equal(chunks.length, 2);
+  assert.equal(chunks[0].length, 25);
+  assert.equal(chunks[1].length, 5);
+  assert.deepEqual(chunkBoardOptions([], 25), []);
+  assert.deepEqual(chunkBoardOptions(undefined, 25), []);
+  // Defensive: a zero/garbage size never infinite-loops.
+  assert.equal(chunkBoardOptions([{ eventId: "a" }], 0).length, 1);
 });

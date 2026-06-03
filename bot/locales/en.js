@@ -739,6 +739,15 @@ module.exports = {
       buttonManagerOnlyTitle: "Raid Manager only",
       buttonManagerOnlyDescription: "This button belongs to the Raid Manager `/raid-check` flow. Other users will be rejected.",
     },
+    teams: {
+      // Plain text only - select options never render <t:..>/<#channel>.
+      placeholderSingle: "📋 Arranged teams ({n})",
+      placeholderRange: "📋 Arranged teams ({a}-{b})",
+      optionDesc: "{raid} · {comp}/{size} · {wait} waiting · lead {lead}",
+      optionDescNoLead: "{raid} · {comp}/{size} · {wait} waiting",
+      eventGoneTitle: "Event no longer available",
+      eventGoneDescription: "This board was ended/cancelled/deleted after you opened /raid-check. Run /raid-check again for a fresh list~",
+    },
     staleButton: {
       title: "Button expired",
       raidInvalidDescription: "The raid in this button is no longer valid (stale session or bot restarted). Run `/raid-check` again to refresh.",
@@ -1630,6 +1639,7 @@ module.exports = {
           "**Filter dropdowns**: user + raid filters inside the embed zoom into one member or one raid×mode without re-running the command. Picking 1 user reveals `Edit progress` / `Bật/Tắt auto-sync hộ`. The `📝 Xem tasks` toggle reads chore progress (read-only).",
           "**🔄 Sync button**: force-syncs bible logs ONLY for opted-in users in the pending list. Non-opted-in users are not touched (privacy-respecting).",
           "**✏️ Edit button**: cascading select to fix another member's progress. Chars opted into auto-sync with bible visible are hidden (sync would overwrite manual edits). Private-log chars are still editable.",
+          "**📋 Arranged teams**: a dropdown lists every active signup board in the guild (any Manager's `/raid-schedule-preview` event). Pick one to see its comp (Support/DPS + waitlist) and bus turn plan, ephemerally. Past 25 events it spills into extra dropdowns.",
           "**Session timeout 5 minutes** - components disable when expired; type `/raid-check` again to reopen.",
         ],
       },

@@ -84,6 +84,10 @@ function createRaidCheckCommand(deps) {
     raidCheckRefreshLimiter,
     raidCheckSyncLimiter,
     discordUserLimiter,
+    // raid-schedule bridge for all-mode's "📋 Đội đã xếp" dropdown.
+    RaidEvent,
+    buildScheduleEmbed,
+    buildTurnPlanEmbed,
   } = deps;
 
   // Snapshot helpers extracted to ./raid-check/snapshot.js. Wired here so
@@ -158,6 +162,9 @@ function createRaidCheckCommand(deps) {
     shouldLoadFreshUserSnapshotForRaidViews,
     RAID_CHECK_USER_QUERY_FIELDS,
     RAID_CHECK_PAGINATION_SESSION_MS,
+    RaidEvent,
+    buildScheduleEmbed,
+    buildTurnPlanEmbed,
   });
 
   // Sync flow + shared display-name resolver extracted to
