@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require("discord.js");
 const { UI } = require("../bot/utils/raid/common/shared");
 const {
   buildScheduleEmbed,
@@ -58,6 +58,33 @@ test("buildScheduleComponents (open) is 2 tidy rows; lead lock/end live in the m
   assert.ok(!ids.includes("rse:end:abcdef123456"));
   assert.ok(!ids.includes("rse:lock:abcdef123456"));
   assert.ok(!ids.includes("rse:unlock:abcdef123456"));
+});
+
+test("buildScheduleComponents includes the turn-plan peek button on the utility row", () => {
+  const ids = customIds(buildScheduleComponents(makeEvent(), compDeps));
+  assert.ok(ids.includes("rse:turnplan:abcdef123456"));
+});
+
+test("switcher row appears only when the lead runs >= 2 boards", () => {
+  const oneBoard = [{ eventId: "abcdef123456", raidKey: "armoche", modeKey: "hard", title: "Tonight", compCount: 1, partySize: 8, waitlistCount: 0, isCurrent: true }];
+  const twoBoards = [
+    ...oneBoard,
+    { eventId: "other999", raidKey: "kazeros", modeKey: "hard", title: "Echidna", compCount: 8, partySize: 8, waitlistCount: 2, isCurrent: false },
+  ];
+  const selDeps = { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, lang: "vi" };
+
+  // 1 board -> no switcher (a one-option dropdown is pointless).
+  const single = buildScheduleComponents(makeEvent(), { ...selDeps, ownedBoardOptions: oneBoard });
+  assert.equal(single.length, 2);
+
+  // 2 boards -> a 3rd row carrying the rse:showpick select, current marked default.
+  const multi = buildScheduleComponents(makeEvent(), { ...selDeps, ownedBoardOptions: twoBoards });
+  assert.equal(multi.length, 3);
+  const select = multi[2].components[0];
+  assert.equal(select.data.custom_id, "rse:showpick:abcdef123456");
+  assert.equal(select.options.length, 2);
+  const current = select.options.find((o) => o.data.value === "abcdef123456");
+  assert.equal(current.data.default, true);
 });
 
 test("locked event disables the join button (lead unlock lives in Manage)", () => {
