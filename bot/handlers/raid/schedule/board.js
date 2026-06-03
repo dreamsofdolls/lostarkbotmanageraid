@@ -307,6 +307,12 @@ function buildTurnPlanEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
   const time = discordTime(event.startAt);
   const turns = Array.isArray(event.turns) ? event.turns : [];
   const visibleMembers = new Set();
+  // Header icons so turns / parties read at a glance (puzzle = turn; blue vs
+  // orange diamond tell the two parties apart). TURN_RULE fills the turn
+  // header's value - the old empty ZWSP left a visible "hở" gap under the name.
+  const TURN_ICON = "🧩";
+  const PARTY_ICONS = ["🔹", "🔸"];
+  const TURN_RULE = "─".repeat(16);
 
   const desc = [
     t("raid-schedule.turnPlan.summary", lang, {
@@ -345,17 +351,18 @@ function buildTurnPlanEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
 
     if (partyCount === 1) {
       embed.addFields({
-        name: turn.name,
+        name: `${TURN_ICON} ${turn.name}`,
         value: partyFieldValue(sups, dpss, supPerParty, dpsPerParty, lang),
         inline: true,
       });
     } else {
-      // Full-width header breaks the inline row so P1/P2 stay paired per turn.
-      // Discord rejects an empty field value, so the header carries a ZWSP.
-      embed.addFields({ name: turn.name, value: "\u200b", inline: false });
+      // Full-width header (icon + a thin rule as its value) breaks the inline
+      // row so P1/P2 stay paired - the rule also fills what used to be an empty
+      // ZWSP gap under the turn name.
+      embed.addFields({ name: `${TURN_ICON} ${turn.name}`, value: TURN_RULE, inline: false });
       for (let p = 0; p < partyCount; p += 1) {
         embed.addFields({
-          name: t("raid-schedule.turnPlan.party", lang, { n: p + 1 }),
+          name: `${PARTY_ICONS[p] || "\u25ab\ufe0f"} ${t("raid-schedule.turnPlan.party", lang, { n: p + 1 })}`,
           value: partyFieldValue(
             sups.slice(p * supPerParty, (p + 1) * supPerParty),
             dpss.slice(p * dpsPerParty, (p + 1) * dpsPerParty),

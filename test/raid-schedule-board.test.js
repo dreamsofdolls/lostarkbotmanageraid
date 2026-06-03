@@ -134,11 +134,12 @@ test("buildTurnPlanEmbed (8-man): each turn = header + Party 1 + Party 2, with p
   const fields = buildTurnPlanEmbed(ev, deps).data.fields || [];
   // 8-man -> 3 fields/turn (header + P1 + P2) x 2 turns = 6.
   assert.equal(fields.length, 6);
-  assert.equal(fields[0].name, "Turn 1");        // full-width header forces the row break
+  assert.match(fields[0].name, /🧩 Turn 1/);      // icon + name; full-width header forces the row break
   assert.equal(fields[0].inline, false);
-  assert.equal(fields[1].name, "Party 1");
+  assert.ok(fields[0].value.includes("─"), "header value is a rule, not an empty gap");
+  assert.match(fields[1].name, /Party 1/);
   assert.equal(fields[1].inline, true);
-  assert.equal(fields[2].name, "Party 2");
+  assert.match(fields[2].name, /Party 2/);
   const p1 = fields[1].value;
   assert.ok(p1.includes("<@a>"), "player mention rendered");
   assert.ok(p1.includes("Senko") && p1.includes("SUP"));
@@ -146,7 +147,7 @@ test("buildTurnPlanEmbed (8-man): each turn = header + Party 1 + Party 2, with p
   assert.ok(p1.includes("trống"), "unfilled dps slots padded");      // 1 of 3 dps filled
   assert.ok(fields[2].value.includes("trống"), "empty Party 2 all padded");
   // overlap: 'a' appears in Turn 2's Party 1 too
-  assert.equal(fields[3].name, "Turn 2");
+  assert.match(fields[3].name, /Turn 2/);
   assert.ok(fields[4].value.includes("<@a>"));
   // stale id never surfaces
   assert.ok(!fields.some((f) => f.value.includes("ghost")));
@@ -160,7 +161,7 @@ test("buildTurnPlanEmbed (4-man): one field per turn, no party split", () => {
   });
   const fields = buildTurnPlanEmbed(ev, deps).data.fields || [];
   assert.equal(fields.length, 1);
-  assert.equal(fields[0].name, "Turn 1");
+  assert.match(fields[0].name, /🧩 Turn 1/);
   assert.equal(fields[0].inline, true);
   const v = fields[0].value;
   assert.ok(v.includes("Senko") && v.includes("SUP"));
