@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-03 (raid-schedule: `show` resurfaces the signup board)
+
+### Changed
+- `/raid-schedule-preview show` now **resurfaces your signup board** to the bottom of its channel instead of posting a turn-plan snapshot. It reposts the full board (every member, identical to create), repoints `messageId`, then deletes the old message - post-before-repoint-before-delete is the anti-ghost invariant, so a buried board is never stranded with buttons that edit it invisibly. Now manager-gated (it deletes + reposts). Targets the board in the current channel if you have one here, else your most recent active board.
+- The board gains a **📊 Xem phân turn** button (anyone, ephemeral peek) - the turn plan moved here, off the now-resurfacing `show`. When a lead runs **2+ active boards**, the board also carries a **🗓 Board khác của lead** switcher that bumps any of them, gated to the boards' creator. New pure `shapeOwnedBoardOptions` (`owned-boards.js`, unit-tested); `boardPayload` is now async (one indexed `creatorId` query per render keeps the switcher live across edits). i18n vi/en/jp + `/raid-help` welcome notes + README synced. 551 tests green.
+
 ## 2026-05-31 (raid-schedule: guarded auto-cleanup delete)
 
 ### Fixed

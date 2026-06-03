@@ -16,6 +16,13 @@ const { getClassEmoji, isSupportClass } = require("../../../models/Class");
 const { getRaidRequirementMap } = require("../../../domain/raid-catalog");
 const { assignSlots } = require("../../../services/raid/schedule/slots");
 const { resolveTurnMembers } = require("../../../services/raid/schedule/turns");
+const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
+
+// Discord caps select option label/description at 100 chars; trim with an ellipsis.
+function clip(value, max) {
+  const text = String(value || "");
+  return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`;
+}
 
 // Lifecycle -> embed stripe color (mapped onto the shared UI palette).
 function stripeColor(UI, status) {
@@ -168,10 +175,15 @@ function renderRsvpLine(signups, lang) {
  * Build the board's component rows. Returns [] for frozen
  * (cleared/cancelled) events so the buttons are stripped.
  * @param {object} event - RaidEvent
- * @param {{ActionRowBuilder: Function, ButtonBuilder: Function, ButtonStyle: object, lang?: string}} deps
- * @returns {Array} discord.js ActionRow instances (0 or 3 rows)
+ * @param {{ActionRowBuilder: Function, ButtonBuilder: Function, ButtonStyle: object, StringSelectMenuBuilder?: Function, ownedBoardOptions?: Array, lang?: string}} deps
+ *   ownedBoardOptions: shaped rows from owned-boards.shapeOwnedBoardOptions - the
+ *   creator's active boards. When >= 2, a "Board khác của lead" switcher row is
+ *   appended (needs StringSelectMenuBuilder).
+ * @returns {Array} discord.js ActionRow instances (0, 2, or 3 rows)
  */
-function buildScheduleComponents(event, { ActionRowBuilder, ButtonBuilder, ButtonStyle, lang = "vi" }) {
+function buildScheduleComponents(event, {
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ownedBoardOptions = [], lang = "vi",
+}) {
   if (event.status === "cleared" || event.status === "cancelled") return [];
   const id = String(event._id);
   const locked = event.status === "locked";
@@ -184,7 +196,7 @@ function buildScheduleComponents(event, { ActionRowBuilder, ButtonBuilder, Butto
       .setDisabled(disabled);
 
   // Grouped by purpose so the board reads cleanly: row 1 is pure status
-  // (join + the RSVP trio), row 2 is utility (room / help / lead Manage).
+  // (join + the RSVP trio), row 2 is utility (room / help / Manage / Turn plan).
   // Lock/unlock + End live INSIDE the Manage menu (off the board).
   const statusRow = new ActionRowBuilder().addComponents(
     btn("join", t("raid-schedule.btn.join", lang), ButtonStyle.Success, locked),
@@ -195,9 +207,50 @@ function buildScheduleComponents(event, { ActionRowBuilder, ButtonBuilder, Butto
   const utilityRow = new ActionRowBuilder().addComponents(
     btn("room", t("raid-schedule.btn.room", lang), ButtonStyle.Secondary),
     btn("help", t("raid-schedule.btn.help", lang), ButtonStyle.Secondary),
-    btn("manage", t("raid-schedule.btn.manage", lang), ButtonStyle.Secondary)
+    btn("manage", t("raid-schedule.btn.manage", lang), ButtonStyle.Secondary),
+    // Read-only turn-plan peek - anyone can click; replies ephemerally.
+    btn("turnplan", t("raid-schedule.btn.turnPlan", lang), ButtonStyle.Secondary)
   );
-  return [statusRow, utilityRow];
+  const rows = [statusRow, utilityRow];
+
+  // Lead-only board switcher: only worth a whole row when the creator runs >= 2
+  // boards, so a single-board lead never sees a one-option dropdown.
+  if (StringSelectMenuBuilder && ownedBoardOptions.length >= 2) {
+    rows.push(buildSwitcherRow(id, ownedBoardOptions, { ActionRowBuilder, StringSelectMenuBuilder, lang }));
+  }
+  return rows;
+}
+
+// The "🗓 Board khác của lead" select. Option labels carry the board title
+// (falling back to the localized raid label); the description is plain text
+// (`raid · X/Y · N chờ`) because select options never render <t:..>/<#..>.
+function buildSwitcherRow(currentId, ownedBoardOptions, { ActionRowBuilder, StringSelectMenuBuilder, lang }) {
+  const options = ownedBoardOptions.map((row) => {
+    const raidLabel = getRaidModeLabel(row.raidKey, row.modeKey, lang);
+    return {
+      label: clip(row.title || raidLabel, 100),
+      value: row.eventId,
+      description: clip(
+        t("raid-schedule.show.optionDesc", lang, {
+          raid: raidLabel,
+          comp: row.compCount,
+          size: row.partySize,
+          wait: row.waitlistCount,
+        }),
+        100,
+      ),
+      // Mark the board the switcher sits on so it reads as "đang xem".
+      default: row.isCurrent,
+    };
+  });
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`rse:showpick:${currentId}`)
+      .setPlaceholder(clip(t("raid-schedule.show.switchPlaceholder", lang, { n: ownedBoardOptions.length }), 150))
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(options)
+  );
 }
 
 /**

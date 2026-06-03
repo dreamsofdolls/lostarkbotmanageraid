@@ -1007,10 +1007,10 @@ function createRaidCommandDefinitions({
     .addSubcommand((sub) =>
       sub
         .setName("show")
-        .setDescription("Show the multi-turn team plan for the active board")
+        .setDescription("Resurface your signup board to the bottom of the channel")
         .setDescriptionLocalizations({
-          vi: "Hiện bảng phân turn của event đang mở",
-          ja: "進行中のボードのターン編成を表示",
+          vi: "Đẩy lại board signup của bạn xuống cuối kênh",
+          ja: "signup ボードをチャンネルの一番下に再表示",
         })
     );
 
