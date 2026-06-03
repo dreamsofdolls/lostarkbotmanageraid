@@ -114,12 +114,14 @@ function createRaidScheduleCommand({
   // Async because the board carries a "Board khác của lead" switcher that must
   // survive every re-render (join/rsvp/kick all funnel through editBoardMessage
   // -> boardPayload). We re-derive the creator's active boards on each render -
-  // one indexed (creatorId) query; board edits are click-driven so the cost is
-  // negligible, and this keeps the switcher correct without stored state.
+  // one guild+channel-scoped creator query; board edits are click-driven so the
+  // cost is negligible, and this keeps the switcher correct without stored state.
   async function boardPayload(event, lang) {
     let ownedBoardOptions = [];
     try {
       const owned = await RaidEvent.find({
+        guildId: event.guildId,
+        channelId: event.channelId,
         creatorId: event.creatorId,
         status: { $in: ["open", "locked"] },
       })
@@ -1479,6 +1481,18 @@ function createRaidScheduleCommand({
       await event.save();
     } catch (error) {
       console.warn("[raid-schedule] resurface save failed:", error?.message || error);
+      event.messageId = oldMessageId;
+      try {
+        if (typeof message.delete === "function") {
+          await message.delete();
+        } else if (message.id && channel.messages?.fetch) {
+          const fresh = await channel.messages.fetch(message.id);
+          if (fresh?.delete) await fresh.delete();
+        }
+      } catch (cleanupError) {
+        console.warn("[raid-schedule] resurface new-delete failed:", cleanupError?.message || cleanupError);
+      }
+      return { ok: false };
     }
     // Best-effort: drop the stale board so only one copy survives. Sending
     // implies we can also delete our own message, so this rarely fails.
@@ -1491,6 +1505,20 @@ function createRaidScheduleCommand({
       }
     }
     return { ok: true, message };
+  }
+
+  async function deleteMessageById(interaction, channelId, messageId) {
+    if (!channelId || !messageId || !interaction.client?.channels) return false;
+    try {
+      const channel = await interaction.client.channels.fetch(channelId);
+      const message = await channel?.messages?.fetch(messageId);
+      if (!message) return false;
+      await message.delete();
+      return true;
+    } catch (error) {
+      console.warn("[raid-schedule] switch old-delete failed:", error?.message || error);
+      return false;
+    }
   }
 
   // Ephemeral confirmation after a resurface, with a jump link to the new board.
@@ -1534,6 +1562,7 @@ function createRaidScheduleCommand({
     }
 
     const mine = await RaidEvent.find({
+      guildId,
       creatorId: interaction.user.id,
       status: { $in: ["open", "locked"] },
     }).sort({ createdAt: -1 });
@@ -1554,10 +1583,11 @@ function createRaidScheduleCommand({
     await interaction.editReply({ embeds: [resurfacedNoticeEmbed(target, lang, res.message)], components: [] });
   }
 
-  // 🗓 Board khác switcher -> resurface the chosen board in its own channel.
-  // The select sits on a public board but is lead-only: gate to the boards'
-  // creator (the `event` passed in is the board the switcher lives on).
-  // handleRaidScheduleSelect already deferUpdate()s, so we use followUp here.
+  // 🗓 Board khác switcher -> switch this visible board message in place.
+  // `/show` is the bump action; the dropdown is a view switcher, so it edits the
+  // message the user clicked, repoints the chosen event to that message, clears
+  // the previous event's messageId, then best-effort deletes the chosen board's
+  // old message to avoid two visible copies.
   async function handleShowPickSelect(interaction, event, lang) {
     if (String(event.creatorId) !== String(interaction.user.id)) {
       await interaction.followUp(noticePayload(lang, "warn", "showpickDeniedTitle", "showpickDeniedDescription"));
@@ -1568,19 +1598,75 @@ function createRaidScheduleCommand({
       await interaction.followUp(noticePayload(lang, "warn", "missingEventTitle", "missingEventDescription"));
       return;
     }
+    if (String(chosen.guildId) !== String(event.guildId)) {
+      await interaction.followUp(noticePayload(lang, "warn", "missingEventTitle", "missingEventDescription"));
+      return;
+    }
+    if (String(chosen.channelId) !== String(event.channelId)) {
+      await interaction.followUp(noticePayload(lang, "warn", "missingEventTitle", "missingEventDescription"));
+      return;
+    }
     // Re-check ownership on the chosen doc (race-safe: the switcher list could
     // be stale if a board changed hands - it can't today, but cheap to guard).
     if (String(chosen.creatorId) !== String(interaction.user.id)) {
       await interaction.followUp(noticePayload(lang, "warn", "showpickDeniedTitle", "showpickDeniedDescription"));
       return;
     }
-    const langForBoard = await boardLang(chosen.guildId);
-    const res = await republishBoard(interaction, chosen, langForBoard);
-    if (!res.ok) {
+    const currentMessageId = interaction.message?.id || event.messageId;
+    if (!currentMessageId) {
       await interaction.followUp(noticePayload(lang, "danger", "resurfaceFailedTitle", "resurfaceFailedDescription"));
       return;
     }
-    await interaction.followUp({ embeds: [resurfacedNoticeEmbed(chosen, lang, res.message)], flags: ephemeralFlag });
+    const langForBoard = await boardLang(chosen.guildId);
+
+    if (String(chosen._id) === String(event._id)) {
+      await interaction.editReply(await boardPayload(chosen, langForBoard));
+      return;
+    }
+
+    const previousEventMessageId = event.messageId;
+    const previousChosenMessageId = chosen.messageId;
+    event.messageId = null;
+    try {
+      await event.save();
+    } catch (error) {
+      console.warn("[raid-schedule] switch current save failed:", error?.message || error);
+      await interaction.followUp(noticePayload(lang, "danger", "resurfaceFailedTitle", "resurfaceFailedDescription"));
+      return;
+    }
+
+    chosen.messageId = currentMessageId;
+    try {
+      await chosen.save();
+    } catch (error) {
+      console.warn("[raid-schedule] switch chosen save failed:", error?.message || error);
+      event.messageId = previousEventMessageId;
+      await event.save().catch((rollbackError) => {
+        console.warn("[raid-schedule] switch rollback current failed:", rollbackError?.message || rollbackError);
+      });
+      await interaction.followUp(noticePayload(lang, "danger", "resurfaceFailedTitle", "resurfaceFailedDescription"));
+      return;
+    }
+
+    try {
+      await interaction.editReply(await boardPayload(chosen, langForBoard));
+    } catch (error) {
+      console.warn("[raid-schedule] switch message edit failed:", error?.message || error);
+      event.messageId = previousEventMessageId;
+      chosen.messageId = previousChosenMessageId;
+      await event.save().catch((rollbackError) => {
+        console.warn("[raid-schedule] switch rollback current failed:", rollbackError?.message || rollbackError);
+      });
+      await chosen.save().catch((rollbackError) => {
+        console.warn("[raid-schedule] switch rollback chosen failed:", rollbackError?.message || rollbackError);
+      });
+      await interaction.followUp(noticePayload(lang, "danger", "resurfaceFailedTitle", "resurfaceFailedDescription"));
+      return;
+    }
+
+    if (previousChosenMessageId && String(previousChosenMessageId) !== String(currentMessageId)) {
+      await deleteMessageById(interaction, chosen.channelId, previousChosenMessageId);
+    }
   }
 
   const BUTTON_ACTION_HANDLERS = Object.freeze({
