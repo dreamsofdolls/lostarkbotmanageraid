@@ -96,7 +96,7 @@ test("show resurfaces the board: post new -> repoint messageId -> delete old (an
   const channel = makeChannel(order);
   let edited = null;
   const interaction = {
-    options: { getSubcommand: () => "show" },
+    options: { getSubcommand: () => "show", getString: () => null },
     user: { id: "lead" }, guildId: "g1", channelId: "c1",
     client: { channels: { async fetch() { return channel; } } },
     async deferReply() { order.push("defer"); },
@@ -115,7 +115,7 @@ test("show with no active boards tells the lead to create one first", async () =
   const command = makeCommand([]);
   let replied = null;
   const interaction = {
-    options: { getSubcommand: () => "show" },
+    options: { getSubcommand: () => "show", getString: () => null },
     user: { id: "lead" }, guildId: "g1", channelId: "c1",
     async reply(payload) { replied = payload; return payload; },
   };
@@ -131,7 +131,7 @@ test("show ignores active boards from another guild", async () => {
   const command = makeCommand([foreign]);
   let replied = null;
   const interaction = {
-    options: { getSubcommand: () => "show" },
+    options: { getSubcommand: () => "show", getString: () => null },
     user: { id: "lead" }, guildId: "g1", channelId: "c1",
     async reply(payload) { replied = payload; return payload; },
   };
@@ -148,7 +148,7 @@ test("show is manager-gated: a non-manager is rejected, no board is touched", as
   const command = makeCommand([board]);
   let replied = null;
   const interaction = {
-    options: { getSubcommand: () => "show" },
+    options: { getSubcommand: () => "show", getString: () => null },
     user: { id: "rando" }, guildId: "g1", channelId: "c1",
     async reply(payload) { replied = payload; return payload; },
   };
@@ -169,7 +169,7 @@ test("show leaves the old board intact when messageId persistence fails", async 
   const channel = makeChannel(order);
   let edited = null;
   const interaction = {
-    options: { getSubcommand: () => "show" },
+    options: { getSubcommand: () => "show", getString: () => null },
     user: { id: "lead" }, guildId: "g1", channelId: "c1",
     client: { channels: { async fetch() { return channel; } } },
     async deferReply() { order.push("defer"); },
@@ -194,7 +194,7 @@ test("resurfaced boards do not show switcher options from another guild or chann
   const command = makeCommand([current, foreign, otherChannel]);
   const channel = makeChannel(order, { sentPayloads });
   const interaction = {
-    options: { getSubcommand: () => "show" },
+    options: { getSubcommand: () => "show", getString: () => null },
     user: { id: "lead" }, guildId: "g1", channelId: "c1",
     client: { channels: { async fetch() { return channel; } } },
     async deferReply() { order.push("defer"); },
@@ -299,4 +299,76 @@ test("the board switcher refuses a chosen board from another channel", async () 
   assert.ok(followed, "a stale/missing notice was sent");
   assert.equal(otherChannel.messageId, "old-msg", "other-channel board was not repointed");
   assert.equal(order.includes("send"), false, "other-channel board was not reposted");
+});
+
+test("show action:turnplan opens an ephemeral dashboard (current-channel board + own-board switcher)", async () => {
+  const a = makeBoard({ _id: "evA", channelId: "c1", title: "Act 4", turns: [{ name: "Turn 1", memberIds: [] }] });
+  const b = makeBoard({ _id: "evB", channelId: "c9", title: "Serca", turns: [] });
+  const command = makeCommand([a, b]);
+  let replied = null;
+  const interaction = {
+    options: { getSubcommand: () => "show", getString: (n) => (n === "action" ? "turnplan" : null) },
+    user: { id: "lead" }, guildId: "g1", channelId: "c1",
+    async reply(payload) { replied = payload; return payload; },
+  };
+
+  await command.handleRaidScheduleCommand(interaction);
+
+  assert.ok(replied, "an ephemeral dashboard was sent");
+  assert.match(replied.embeds[0].data.author.name, /TURN PLAN/);
+  assert.match(replied.embeds[0].data.title, /Act 4/, "defaults to the board in the current channel");
+  const ids = replied.components.flatMap((row) => row.components.map((c) => c.data.custom_id));
+  assert.ok(ids.includes("rse:showtp:evA"), "carries the own-board switcher");
+});
+
+test("show action:turnplan with no boards tells the lead to create one first", async () => {
+  const command = makeCommand([]);
+  let replied = null;
+  const interaction = {
+    options: { getSubcommand: () => "show", getString: () => "turnplan" },
+    user: { id: "lead" }, guildId: "g1", channelId: "c1",
+    async reply(payload) { replied = payload; return payload; },
+  };
+
+  await command.handleRaidScheduleCommand(interaction);
+
+  assert.match(replied.embeds[0].data.title, /no active boards/i);
+});
+
+test("the turn-plan switcher swaps the ephemeral to the chosen own board", async () => {
+  const a = makeBoard({ _id: "evA", channelId: "c1", title: "Act 4", turns: [] });
+  const b = makeBoard({ _id: "evB", channelId: "c9", title: "Serca", turns: [{ name: "Turn 1", memberIds: [] }] });
+  const command = makeCommand([a, b]);
+  let edited = null;
+  const interaction = {
+    customId: "rse:showtp:evA",
+    user: { id: "lead" }, guildId: "g1", channelId: "c1",
+    values: ["evB"],
+    async deferUpdate() {},
+    async editReply(payload) { edited = payload; return payload; },
+  };
+
+  await command.handleRaidScheduleSelect(interaction);
+
+  assert.ok(edited, "the ephemeral was edited in place");
+  assert.match(edited.embeds[0].data.title, /Serca/, "swapped to the chosen board's turn plan");
+});
+
+test("the turn-plan switcher refuses a board the clicker did not create", async () => {
+  const mine = makeBoard({ _id: "evA", channelId: "c1", title: "Act 4" });
+  const foreign = makeBoard({ _id: "evX", creatorId: "someone-else", title: "Not yours" });
+  const command = makeCommand([mine, foreign]);
+  let edited = null;
+  const interaction = {
+    customId: "rse:showtp:evA",
+    user: { id: "lead" }, guildId: "g1", channelId: "c1",
+    values: ["evX"],
+    async deferUpdate() {},
+    async editReply(payload) { edited = payload; return payload; },
+  };
+
+  await command.handleRaidScheduleSelect(interaction);
+
+  assert.ok(edited, "a denial/stale notice was sent");
+  assert.doesNotMatch(edited.embeds[0].data.title || "", /Not yours/, "did not render the foreign board");
 });

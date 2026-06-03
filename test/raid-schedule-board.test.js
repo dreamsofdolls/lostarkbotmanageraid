@@ -60,9 +60,12 @@ test("buildScheduleComponents (open) is 2 tidy rows; lead lock/end live in the m
   assert.ok(!ids.includes("rse:unlock:abcdef123456"));
 });
 
-test("buildScheduleComponents includes the turn-plan peek button on the utility row", () => {
-  const ids = customIds(buildScheduleComponents(makeEvent(), compDeps));
-  assert.ok(ids.includes("rse:turnplan:abcdef123456"));
+test("buildScheduleComponents has no turn-plan button (moved to /show action:turnplan)", () => {
+  const rows = buildScheduleComponents(makeEvent(), compDeps);
+  const ids = customIds(rows);
+  assert.ok(!ids.includes("rse:turnplan:abcdef123456"));
+  // Utility row is a clean room / help / manage trio now.
+  assert.equal(rows[1].components.length, 3);
 });
 
 test("switcher row appears only when the lead runs >= 2 boards", () => {
@@ -121,7 +124,7 @@ test("renderRsvpLine lists tentative/absent only (late stays in comp)", () => {
   assert.ok(!line.includes("Morrah"));    // late -> not in RSVP line
 });
 
-test("buildTurnPlanEmbed: one field per turn, member shows mention + class + role chip", () => {
+test("buildTurnPlanEmbed (8-man): each turn = header + Party 1 + Party 2, with padding", () => {
   const ev = makeEvent({
     turns: [
       { name: "Turn 1", memberIds: ["a", "b", "ghost"] }, // ghost is stale and should be dropped
@@ -129,14 +132,38 @@ test("buildTurnPlanEmbed: one field per turn, member shows mention + class + rol
     ],
   });
   const fields = buildTurnPlanEmbed(ev, deps).data.fields || [];
-  assert.equal(fields.length, 2);
-  assert.equal(fields[0].name, "Turn 1");
-  const t1 = fields[0].value;
-  assert.ok(t1.includes("<@a>"), "player mention rendered");
-  assert.ok(t1.includes("Senko") && t1.includes("SUP"));
-  assert.ok(t1.includes("Morrah") && t1.includes("DPS"));
-  // overlap: 'a' appears in Turn 2 too
-  assert.ok(fields[1].value.includes("<@a>"));
-  assert.ok(!fields[0].value.includes("ghost"));
+  // 8-man -> 3 fields/turn (header + P1 + P2) x 2 turns = 6.
+  assert.equal(fields.length, 6);
+  assert.equal(fields[0].name, "Turn 1");        // full-width header forces the row break
+  assert.equal(fields[0].inline, false);
+  assert.equal(fields[1].name, "Party 1");
+  assert.equal(fields[1].inline, true);
+  assert.equal(fields[2].name, "Party 2");
+  const p1 = fields[1].value;
+  assert.ok(p1.includes("<@a>"), "player mention rendered");
+  assert.ok(p1.includes("Senko") && p1.includes("SUP"));
+  assert.ok(p1.includes("Morrah") && p1.includes("DPS"));
+  assert.ok(p1.includes("trống"), "unfilled dps slots padded");      // 1 of 3 dps filled
+  assert.ok(fields[2].value.includes("trống"), "empty Party 2 all padded");
+  // overlap: 'a' appears in Turn 2's Party 1 too
+  assert.equal(fields[3].name, "Turn 2");
+  assert.ok(fields[4].value.includes("<@a>"));
+  // stale id never surfaces
+  assert.ok(!fields.some((f) => f.value.includes("ghost")));
   assert.match(buildTurnPlanEmbed(ev, deps).data.footer.text, /2 người/);
+});
+
+test("buildTurnPlanEmbed (4-man): one field per turn, no party split", () => {
+  const ev = makeEvent({
+    partySize: 4, supSlots: 1, dpsSlots: 3,
+    turns: [{ name: "Turn 1", memberIds: ["a", "b"] }],
+  });
+  const fields = buildTurnPlanEmbed(ev, deps).data.fields || [];
+  assert.equal(fields.length, 1);
+  assert.equal(fields[0].name, "Turn 1");
+  assert.equal(fields[0].inline, true);
+  const v = fields[0].value;
+  assert.ok(v.includes("Senko") && v.includes("SUP"));
+  assert.ok(v.includes("Morrah") && v.includes("DPS"));
+  assert.ok(v.includes("trống"), "2 unfilled dps slots padded");      // 1 of 3 dps filled
 });

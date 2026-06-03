@@ -124,9 +124,6 @@ module.exports = {
       unlock: "Mở khóa",
       end: "Kết thúc",
       manage: "Quản lý",
-      turnPlan: "📊 Xem phân turn",
-      turnPlanFull: "📊 Đầy đủ",
-      turnPlanCompact: "📋 Thu nhỏ",
       notifyOn: "🔔 Báo: BẬT",
       notifyOff: "🔕 Báo: TẮT",
       teams: "🧩 Phân turn",
@@ -188,14 +185,15 @@ module.exports = {
       summary: "📦 {raid} · 👤 Lead: {lead} · 🕐 bắt đầu {rel}",
       empty: "Lead chưa xếp turn nào. Vào Quản lý → Phân turn để xếp nha~",
       footer: "{turns} turn · {members} người · ID {id}",
+      // Raid 8 người = 2 party trong game; field "Party 1/2" mỗi party 1 sup + 3 dps.
+      party: "Party {n}",
+      moreTurns: "… còn +{n} turn (rút gọn cho vừa)",
     },
     show: {
       // Plain text only - select options never render <t:..>/<#kênh>.
       switchPlaceholder: "🗓 Board khác của lead ({n})",
+      tpSwitchPlaceholder: "🗓 Raid của bạn ({n})",
       optionDesc: "{raid} · {date} · {comp}/{size} vào đội · {wait} chờ",
-    },
-    compact: {
-      compOnly: "🔒 chỉ comp",
     },
     notice: {
       notManagerTitle: "Để Raid Manager bày event nha",
@@ -1593,13 +1591,14 @@ module.exports = {
           "**➕ Thêm người**: lead thêm người vào event (chọn user → chọn char đủ iLvl trong roster họ). Nếu role còn slot thì người đó vào đội; nếu đầy thì vào hàng chờ. Chạy được cả khi board đang Khóa và sẽ ping người được thêm.",
           "**👋 Kick**: lead gỡ một hoặc nhiều người khỏi event. Quản lý → Kick → chọn người. Gỡ người đang giữ slot thì hàng chờ tự được kéo lên.",
           "**🗑️ Xóa / tự dọn**: Quản lý → 🗑️ Xóa (có xác nhận) để xóa hẳn event - board + dữ liệu mất luôn, khác Hủy (đóng băng giữ record). Tự dọn: event quá 24h kể từ giờ raid mà chưa End (chưa đánh dấu xong) sẽ tự xóa; event đã End thì giữ tới mốc reset tuần (Thứ 4 17:00 VN) rồi mới dọn.",
-          "**📊 Xem phân turn**: nút trên board hiện bảng phân turn kiểu bus (ai cầm char gì, class, sup/dps) - ephemeral, ai cũng xem được. Có nút **📋 Thu nhỏ** đổi sang 1 khối console gọn (tất cả turn + phòng/ID/comp); Room ID chỉ hiện cho người trong comp.",
-          "**show**: `/raid-schedule-preview show` đẩy lại board signup của cậu xuống cuối channel (xóa cũ + post lại, không để board ma) - tiện khi board bị trôi. Nếu cậu chạy nhiều board trong cùng channel, dropdown 🗓 trên board sẽ đổi ngay message hiện tại sang board được chọn, không post thêm bản thứ hai. Chỉ Raid Manager.",
+          "**📊 Xem phân turn**: lead gõ `/raid-schedule-preview show` chọn `action: 📊 Xem phân turn` → bảng phân turn ephemeral (ai cầm char gì, class, sup/dps). Raid 8 người chia 2 party (mỗi party 1 sup + 3 dps), slot chưa ai ghi `＋ trống`. Có dropdown 🗓 đổi giữa các board của lead để xem tổng thể nhiều raid cùng lúc. Member muốn xem turn của mình thì dùng `/raid-status` → 'Raid của tôi'.",
+          "**show**: `/raid-schedule-preview show` có trường **action** chọn 1 trong 2 - `📋 Đẩy board lên` (mặc định): đẩy lại board signup xuống cuối channel khi bị trôi (xóa cũ + post lại, không để board ma; dropdown 🗓 trên board đổi message hiện tại sang board khác cùng channel). `📊 Xem phân turn`: như trên. Chỉ Raid Manager.",
           "**End**: khi lead end raid, bot ghi clear cho các character đang nằm trong comp qua đường `/raid-set`.",
         ],
         optionDescriptions: {
           create: "Subcommand tạo board mới",
-          show: "Subcommand đẩy lại board signup của bạn xuống cuối channel",
+          show: "Đẩy lại board, hoặc xem phân turn (chọn ở trường action)",
+          action: "📋 Đẩy board lên (mặc định) hoặc 📊 Xem phân turn",
           raid: "Raid cần lập lịch",
           mode: "Độ khó",
           when: "Giờ bắt đầu: `20:00`, `8pm`, `+2h`; hoặc thứ `thứ 4 20:00` / `t4 20h` / `cn 8pm`; hoặc ngày `5/6 20:00` / `5/6/2026 8pm` (thứ/ngày phải kèm giờ)",

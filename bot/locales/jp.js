@@ -113,9 +113,6 @@ module.exports = {
       unlock: "Unlock",
       end: "End",
       manage: "Manage",
-      turnPlan: "📊 ターン編成",
-      turnPlanFull: "📊 詳細",
-      turnPlanCompact: "📋 コンパクト",
       notifyOn: "🔔 通知: オン",
       notifyOff: "🔕 通知: オフ",
       teams: "🧩 ターン",
@@ -177,14 +174,15 @@ module.exports = {
       summary: "📦 {raid} · 👤 Lead: {lead} · 🕐 開始 {rel}",
       empty: "lead がまだターンを組んでいないよ。管理 → ターン から設定してね～",
       footer: "{turns} ターン · {members} 人 · ID {id}",
+      // 8人レイド = ゲーム内2パーティ; フィールド「Party 1/2」各1sup+3dps。
+      party: "Party {n}",
+      moreTurns: "… 他 +{n} ターン（省略）",
     },
     show: {
       // Plain text only - select options never render <t:..>/<#channel>.
       switchPlaceholder: "🗓 lead の他のボード ({n})",
+      tpSwitchPlaceholder: "🗓 あなたのレイド ({n})",
       optionDesc: "{raid} · {date} · {comp}/{size} 編成 · 待機 {wait}",
-    },
-    compact: {
-      compOnly: "🔒 comp のみ",
     },
     notice: {
       notManagerTitle: "これは Raid Manager 用だよ",
@@ -1570,13 +1568,14 @@ module.exports = {
           "**➕ メンバー追加**: lead がイベントに人を追加できるよ（user を選ぶ → その人のロスターから iLvl 足りてる char を選ぶ）。role の枠が空いていれば編成入り、埋まっていれば待機列。board がロック中でも使えて、追加された人には ping が飛ぶよ。",
           "**👋 Kick**: lead がイベントから1人以上を外せるよ。Manage → Kick → 人を選ぶ。スロット保持者を外すと待機列の次の人が自動で繰り上がるよ。",
           "**🗑️ 削除 / 自動クリーンアップ**: Manage → 🗑️ 削除（確認あり）でイベントを完全に削除 - board + データが消えるよ。Cancel（凍結して記録を残す）とは違うよ。自動クリーンアップ: 開始から24時間たっても End してない（完了マークなし）イベントは自動で削除、End 済みは週リセット（水 17:00 VN）まで残してから片付けるよ。",
-          "**📊 ターン編成**: ボード上のボタンでバス式のターン編成表（誰がどのキャラ・クラス・sup/dps）を表示するよ - ephemeral で誰でも覗けるよ。**📋 コンパクト** ボタンで1ブロックの ANSI コンソール（全ターン + 部屋/ID/編成）に切り替え。Room ID は comp メンバーのみ表示。",
-          "**show**: `/raid-schedule-preview show` は signup ボードをチャンネルの一番下に再表示するよ（古いのを削除して再投稿、ゴーストボードは残さない）- ボードが流れた時に便利。同じチャンネルで複数のボードを動かしているなら、ボード上の 🗓 セレクターは今のメッセージを選んだボードへ切り替えるよ。2つ目のコピーは投稿しない。Raid Manager 専用。",
+          "**📊 ターン編成**: lead が `/raid-schedule-preview show` で `action: 📊 ターン編成` を選ぶと、ephemeral のターン編成表（誰がどのキャラ・クラス・sup/dps）が出るよ。8人レイドは2パーティ（各1sup+3dps）に分かれ、空き枠は `＋ 空き` 表示。🗓 ドロップダウンで lead の各ボードを切り替えて複数レイドをまとめて見られるよ。メンバーは `/raid-status` →「自分のレイド」で自分のターンを確認。",
+          "**show**: `/raid-schedule-preview show` には **action**（1つ選ぶ）があるよ - `📋 ボードを再表示`（デフォルト）: 流れた signup ボードをチャンネルの一番下に再投稿（古いのを削除、ゴースト無し；ボード上の 🗓 セレクターは同チャンネルの別ボードへ今のメッセージを切り替え）。`📊 ターン編成`: 上記参照。Raid Manager 専用。",
           "**End**: lead がレイドを終了すると、bot が編成内のキャラに `/raid-set` 経由でクリアを記録するよ。",
         ],
         optionDescriptions: {
           create: "新しいボードを作るサブコマンド",
-          show: "signup ボードをチャンネルの一番下に再表示するサブコマンド",
+          show: "ボード再表示、またはターン編成を見る（action で選択）",
+          action: "📋 ボードを再表示（デフォルト）または 📊 ターン編成",
           raid: "予定を組むレイド",
           mode: "難易度",
           when: "開始時刻: `20:00`、`8pm`、`+2h`；または曜日 `wed 20:00` / `thứ 4 20:00` / `cn 8pm`；または日付 `5/6 20:00` / `5/6/2026 8pm`（曜日・日付は時刻が必要）",

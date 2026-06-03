@@ -4,6 +4,15 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-03 (raid-schedule: turn plan = show action + signup-board frame + 2-party for 8-man)
+
+### Changed
+- `/raid-schedule-preview show` gains an optional **`action`** choice: `📋 Đẩy board lên` (default, the old resurface/bump behaviour) or `📊 Xem phân turn`. Turn plan now opens an **ephemeral dashboard** scoped to the lead's OWN boards guild-wide, with a `🗓` switcher (`rse:showtp`) to flip between their raids (the cross-channel "overview"). Manager-gated; default selection = the board in the current channel else the soonest.
+- `buildTurnPlanEmbed` now renders in the **signup-board embed frame** and splits **8-man** raids into **two side-by-side parties** per turn (`Party 1` / `Party 2`, each 1 sup + 3 dps; sup spread 1/party, dps 3/party, derived live - the model still stores a flat `memberIds` list, no party assignment). 4-man stays one field per turn. Unfilled positions show `＋ trống` like the board; a full-width turn header forces the row break so P1/P2 stay paired, field budget capped with a `… +N` overflow note.
+
+### Removed
+- The compact "thu nhỏ" ANSI turn plan + its `📋 Thu nhỏ / 📊 Đầy đủ` toggle (`buildCompactTurnPlan`, `ansiColorForName`, `tpcompact`/`tpfull`) and the `📊 Xem phân turn` button on the board. Turn plan moved to `show action:turnplan`; members see their own turns via `/raid-status` -> "Raid của tôi". i18n vi/en/jp + README/help synced. 586 tests green.
+
 ## 2026-06-03 (raid-schedule: skip_notify silent mode)
 
 ### Added

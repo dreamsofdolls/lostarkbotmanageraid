@@ -1019,11 +1019,35 @@ function createRaidCommandDefinitions({
     .addSubcommand((sub) =>
       sub
         .setName("show")
-        .setDescription("Resurface your signup board to the bottom of the channel")
+        .setDescription("Resurface a board, or view your turn plans")
         .setDescriptionLocalizations({
-          vi: "Đẩy lại board signup của bạn xuống cuối kênh",
-          ja: "signup ボードをチャンネルの一番下に再表示",
+          vi: "Đẩy lại board, hoặc xem phân turn các raid của bạn",
+          ja: "ボード再表示、またはターン表を見る",
         })
+        // Optional: default (omitted) = resurface, so plain `show` still bumps
+        // the board exactly as before. turnplan = ephemeral turn-plan dashboard.
+        .addStringOption((option) =>
+          option
+            .setName("action")
+            .setDescription("What to do (default: resurface board)")
+            .setDescriptionLocalizations({
+              vi: "Làm gì (mặc định: đẩy board lên)",
+              ja: "操作 (既定: ボード再表示)",
+            })
+            .setRequired(false)
+            .addChoices(
+              {
+                name: "📋 Resurface board",
+                value: "resurface",
+                name_localizations: { vi: "📋 Đẩy board lên", ja: "📋 ボードを再表示" },
+              },
+              {
+                name: "📊 View turn plan",
+                value: "turnplan",
+                name_localizations: { vi: "📊 Xem phân turn", ja: "📊 ターン表を見る" },
+              }
+            )
+        )
     );
 
   const commands = [

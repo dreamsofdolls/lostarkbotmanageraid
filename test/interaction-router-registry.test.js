@@ -44,6 +44,18 @@ test("raid-schedule-preview definition derives party size from raid instead of e
   ]);
 });
 
+test("raid-schedule-preview show exposes an optional action choice (resurface / turnplan)", () => {
+  const command = commands.find((entry) => entry.toJSON().name === "raid-schedule-preview");
+  const json = command.toJSON();
+  const show = json.options.find((option) => option.name === "show");
+  assert.ok(show, "show subcommand exists");
+  const action = (show.options || []).find((option) => option.name === "action");
+  assert.ok(action, "show carries an action option");
+  assert.equal(Boolean(action.required), false, "action is optional (default = resurface)");
+  const values = (action.choices || []).map((choice) => choice.value).sort();
+  assert.deepEqual(values, ["resurface", "turnplan"]);
+});
+
 test("raid-schedule-preview component routes dispatch through rse custom IDs", async () => {
   let buttonCalls = 0;
   let selectCalls = 0;
