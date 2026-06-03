@@ -63,6 +63,10 @@ const raidEventSchema = new mongoose.Schema(
     // Absolute UTC; input parsed in the lead's language tz (/raid-language).
     startAt: { type: Date, required: true },
     autoLockAtStart: { type: Boolean, default: true },
+    // When true, suppress every public @mention ping (add-member, waitlist
+    // promote, cancel, delete). The board still updates + auto-clear still
+    // writes - only the notifications go silent. Lead-togglable post-create.
+    skipNotify: { type: Boolean, default: false },
     roomName: { type: String, default: null },
     roomPassword: { type: String, default: null },
     signupPolicy: { type: String, enum: ["open", "approval", "whitelist"], default: "open" },

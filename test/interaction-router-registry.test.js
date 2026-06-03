@@ -38,6 +38,7 @@ test("raid-schedule-preview definition derives party size from raid instead of e
     "raid",
     "mode",
     "when",
+    "skip_notify",
     "auto_lock",
     "title",
   ]);
