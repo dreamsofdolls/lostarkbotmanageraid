@@ -30,7 +30,7 @@ const {
   buildScheduleEmbed,
   buildScheduleComponents,
   buildTurnPlanEmbed,
-  buildCompactTurnPlan,
+  buildSwitcherRow,
   renderGauge,
   STATUS_CODE,
 } = require("./board");
@@ -1564,60 +1564,21 @@ function createRaidScheduleCommand({
     );
   }
 
-  // Toggle row for the turn-plan reply: full embed <-> compact ansi console.
-  // Each click is stateless - the button shows the OTHER mode and routes via the
-  // existing rse: prefix (tpcompact / tpfull).
-  function turnPlanToggleRow(mode, id, lang) {
-    const toCompact = mode === "full";
-    return new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`rse:${toCompact ? "tpcompact" : "tpfull"}:${id}`)
-        .setLabel(t(toCompact ? "raid-schedule.btn.turnPlanCompact" : "raid-schedule.btn.turnPlanFull", lang))
-        .setStyle(ButtonStyle.Secondary),
-    );
-  }
-
-  // The compact view's Room ID (= password) is comp-only, so reuse the same gate
-  // as the 🚪 Phòng button: only slot-holders can see it.
-  function canSeeRoom(interaction, event) {
-    return isCompMember(event, interaction.user.id);
-  }
-
-  // 📊 Xem phân turn -> the turn plan, ephemeral (read-only peek). Anyone may
-  // click; renders in the CLICKER's language and never spams the channel. The
-  // toggle button flips to the compact ansi console.
-  async function handleTurnPlan(interaction, event, lang) {
-    await interaction.reply({
-      embeds: [buildTurnPlanEmbed(event, { EmbedBuilder, UI, lang })],
-      components: [turnPlanToggleRow("full", String(event._id), lang)],
-      flags: ephemeralFlag,
-    });
-  }
-
-  // 📋 Thu nhỏ -> swap the ephemeral turn-plan to the compact ansi console
-  // (message content, since ansi colour only renders outside embeds).
-  async function handleTurnPlanCompact(interaction, event, lang) {
-    await interaction.update({
-      content: buildCompactTurnPlan(event, { lang, canSeeRoom: canSeeRoom(interaction, event) }),
-      embeds: [],
-      components: [turnPlanToggleRow("compact", String(event._id), lang)],
-    });
-  }
-
-  // 📊 Đầy đủ -> swap back to the full embed (clears the content block).
-  async function handleTurnPlanFull(interaction, event, lang) {
-    await interaction.update({
-      content: "",
-      embeds: [buildTurnPlanEmbed(event, { EmbedBuilder, UI, lang })],
-      components: [turnPlanToggleRow("full", String(event._id), lang)],
-    });
-  }
-
-  // /raid-schedule-preview show -> resurface the lead's signup board to the
-  // bottom of its channel (delete + repost + repoint messageId). Manager-gated.
-  // Targets the board in the current channel if the lead has one here, else
-  // their most recent active board; the board's switcher reaches the rest.
+  // /raid-schedule-preview show -> branch on the `action` option. Default
+  // (omitted) = resurface, so plain `show` bumps the board exactly as before.
+  // turnplan = ephemeral turn-plan dashboard. Both manager-gated, both scoped
+  // to the lead's OWN boards.
   async function handleShowCommand(interaction) {
+    const action = interaction.options.getString("action") || "resurface";
+    if (action === "turnplan") return handleShowTurnPlan(interaction);
+    return handleShowResurface(interaction);
+  }
+
+  // action: 📋 Đẩy board lên -> resurface the lead's signup board to the bottom
+  // of its channel (delete + repost + repoint messageId). Targets the board in
+  // the current channel if the lead has one here, else their most recent active
+  // board; the board's switcher reaches the rest.
+  async function handleShowResurface(interaction) {
     const lang = await userLang(interaction);
     if (!isLeadActionAllowed(interaction)) {
       await replyNotice(interaction, lang, "danger", "notManagerTitle", "notManagerDescription");
@@ -1650,6 +1611,82 @@ function createRaidScheduleCommand({
       return;
     }
     await interaction.editReply({ embeds: [resurfacedNoticeEmbed(target, lang, res.message)], components: [] });
+  }
+
+  // action: 📊 Xem phân turn -> ephemeral turn-plan dashboard. Lists the lead's
+  // own active boards GUILD-WIDE (cross-channel) and shows one board's turn
+  // plan; the dropdown switches between their raids (the "overview" Traine
+  // asked for). Read-only + ephemeral, so it never disturbs the public board.
+  async function handleShowTurnPlan(interaction) {
+    const lang = await userLang(interaction);
+    if (!isLeadActionAllowed(interaction)) {
+      await replyNotice(interaction, lang, "danger", "notManagerTitle", "notManagerDescription");
+      return;
+    }
+    const guildId = interaction.guildId || interaction.guild?.id;
+    if (!guildId) {
+      await replyNotice(interaction, lang, "danger", "guildOnlyTitle", "guildOnlyDescription");
+      return;
+    }
+    const channelId = interaction.channelId || interaction.channel?.id;
+    const mine = await RaidEvent.find({
+      guildId,
+      creatorId: interaction.user.id,
+      status: { $in: ["open", "locked"] },
+    }).sort({ startAt: 1 });
+    if (mine.length === 0) {
+      await replyNotice(interaction, lang, "warn", "showNoBoardsTitle", "showNoBoardsDescription");
+      return;
+    }
+    // Default selection = the board in the channel the lead stands in, else soonest.
+    const target = mine.find((e) => String(e.channelId) === String(channelId)) || mine[0];
+    await interaction.reply(turnPlanDashboardPayload(target, mine, lang));
+  }
+
+  // The ephemeral dashboard payload: the selected board's turn plan + a board
+  // switcher (only when the lead runs >= 2 boards). Reused verbatim on switch.
+  function turnPlanDashboardPayload(event, ownedEvents, lang) {
+    const components = [];
+    if (ownedEvents.length >= 2) {
+      const rows = shapeOwnedBoardOptions(ownedEvents, String(event._id));
+      components.push(buildSwitcherRow(String(event._id), rows, {
+        ActionRowBuilder,
+        StringSelectMenuBuilder,
+        lang,
+        action: "showtp",
+        placeholderKey: "raid-schedule.show.tpSwitchPlaceholder",
+      }));
+    }
+    return {
+      embeds: [buildTurnPlanEmbed(event, { EmbedBuilder, UI, lang })],
+      components,
+      flags: ephemeralFlag,
+    };
+  }
+
+  // 🗓 dashboard switcher -> swap the ephemeral to the chosen board's turn plan.
+  // Read-only + ephemeral, so no message/messageId juggling like showpick. The
+  // dashboard only ever lists the lead's own boards, re-guarded here race-safe.
+  async function handleShowTpSelect(interaction, event, lang) {
+    const chosen = await loadEvent(interaction.values?.[0]);
+    if (!chosen || (chosen.status !== "open" && chosen.status !== "locked")) {
+      await editNotice(interaction, lang, "warn", "missingEventTitle", "missingEventDescription");
+      return;
+    }
+    if (
+      String(chosen.creatorId) !== String(interaction.user.id) ||
+      String(chosen.guildId) !== String(event.guildId)
+    ) {
+      await editNotice(interaction, lang, "warn", "showpickDeniedTitle", "showpickDeniedDescription");
+      return;
+    }
+    const mine = await RaidEvent.find({
+      guildId: chosen.guildId,
+      creatorId: chosen.creatorId,
+      status: { $in: ["open", "locked"] },
+    }).sort({ startAt: 1 });
+    const payload = turnPlanDashboardPayload(chosen, mine, lang);
+    await interaction.editReply({ embeds: payload.embeds, components: payload.components });
   }
 
   // 🗓 Board khác switcher -> switch this visible board message in place.
@@ -1754,9 +1791,6 @@ function createRaidScheduleCommand({
     delete: handleDeletePrompt,
     delyes: handleDeleteConfirm,
     delno: handleDeleteAbort,
-    turnplan: handleTurnPlan,
-    tpcompact: handleTurnPlanCompact,
-    tpfull: handleTurnPlanFull,
   });
 
   function resolveButtonActionHandler(action) {
@@ -1777,6 +1811,7 @@ function createRaidScheduleCommand({
     adduser: handleAddUserSelect,
     teamturn: handleTeamTurnSelect,
     showpick: handleShowPickSelect,
+    showtp: handleShowTpSelect,
   });
 
   function resolveSelectActionHandler(action) {

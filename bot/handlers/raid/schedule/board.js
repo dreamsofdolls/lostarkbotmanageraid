@@ -205,12 +205,13 @@ function buildScheduleComponents(event, {
     btn("rsvp:tentative", t("raid-schedule.btn.tentative", lang), ButtonStyle.Secondary, locked),
     btn("rsvp:absent", t("raid-schedule.btn.absent", lang), ButtonStyle.Secondary)
   );
+  // Turn plan moved off the board: leads reach it via `/raid-schedule-preview
+  // show action:turnplan` (ephemeral dashboard); members see their own turns in
+  // /raid-status "Raid của tôi". So the board keeps a clean 3-button utility row.
   const utilityRow = new ActionRowBuilder().addComponents(
     btn("room", t("raid-schedule.btn.room", lang), ButtonStyle.Secondary),
     btn("help", t("raid-schedule.btn.help", lang), ButtonStyle.Secondary),
-    btn("manage", t("raid-schedule.btn.manage", lang), ButtonStyle.Secondary),
-    // Read-only turn-plan peek - anyone can click; replies ephemerally.
-    btn("turnplan", t("raid-schedule.btn.turnPlan", lang), ButtonStyle.Secondary)
+    btn("manage", t("raid-schedule.btn.manage", lang), ButtonStyle.Secondary)
   );
   const rows = [statusRow, utilityRow];
 
@@ -225,7 +226,12 @@ function buildScheduleComponents(event, {
 // The "🗓 Board khác của lead" select. Option labels carry the board title
 // (falling back to the localized raid label); the description is plain text
 // (`raid · X/Y · N chờ`) because select options never render <t:..>/<#..>.
-function buildSwitcherRow(currentId, ownedBoardOptions, { ActionRowBuilder, StringSelectMenuBuilder, lang }) {
+// `action`/`placeholderKey` let the same shaping back two surfaces: the board's
+// in-channel switcher (showpick) and the ephemeral turn-plan dashboard (showtp).
+function buildSwitcherRow(currentId, ownedBoardOptions, {
+  ActionRowBuilder, StringSelectMenuBuilder, lang,
+  action = "showpick", placeholderKey = "raid-schedule.show.switchPlaceholder",
+}) {
   const options = ownedBoardOptions.map((row) => {
     const raidLabel = getRaidModeLabel(row.raidKey, row.modeKey, lang);
     return {
@@ -249,21 +255,50 @@ function buildSwitcherRow(currentId, ownedBoardOptions, { ActionRowBuilder, Stri
   });
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId(`rse:showpick:${currentId}`)
-      .setPlaceholder(clip(t("raid-schedule.show.switchPlaceholder", lang, { n: ownedBoardOptions.length }), 150))
+      .setCustomId(`rse:${action}:${currentId}`)
+      .setPlaceholder(clip(t(placeholderKey, lang, { n: ownedBoardOptions.length }), 150))
       .setMinValues(1)
       .setMaxValues(1)
       .addOptions(options)
   );
 }
 
+// One member line: `{classEmoji} **{char}** · <@player> \`SUP|DPS\``. The chip
+// is a universal role code, left untranslated so it renders the same in every
+// locale. Mentions sit in an embed field value, so they render as names but
+// never fire a notification (only `content` mentions ping).
+function turnMemberLine(member) {
+  const emoji = getClassEmoji(member.characterClass) || (member.role === "support" ? "🛡️" : "⚔️");
+  const chip = member.role === "support" ? "SUP" : "DPS";
+  return `${emoji} **${member.characterName}** · <@${member.discordId}> \`${chip}\``;
+}
+
+// One party's field value: `supN` support lines then `dpsN` dps lines, padding
+// unfilled positions with "＋ trống" (board-style) so a half-built party still
+// reads as "needs 1 more SUP". Chip on the empty line says which role is short.
+function partyFieldValue(sups, dpss, supN, dpsN, lang) {
+  const empty = t("raid-schedule.board.emptySlot", lang);
+  const lines = [];
+  for (let i = 0; i < supN; i += 1) {
+    lines.push(sups[i] ? turnMemberLine(sups[i]) : `＋ *${empty}* \`SUP\``);
+  }
+  for (let i = 0; i < dpsN; i += 1) {
+    lines.push(dpss[i] ? turnMemberLine(dpss[i]) : `＋ *${empty}* \`DPS\``);
+  }
+  const value = lines.join("\n") || empty;
+  return value.length > 1024 ? `${value.slice(0, 1020)}…` : value;
+}
+
 /**
- * Build the standalone "turn plan" embed shown by /raid-schedule show.
- * One inline field per turn; each member line is
- * `{classEmoji} **{char}** · <@player> \`SUP|DPS\`` so it's clear who is
- * playing which character, which class, and which role (Cách 2 layout).
- * The same player can appear across turns (bus model).
- * @param {object} event - RaidEvent (needs turns[] + signups[])
+ * Build the standalone "turn plan" embed (signup-board frame: author kicker +
+ * status stripe + footer). 8-man raids render each turn as TWO side-by-side
+ * party fields (1 sup + 3 dps each) preceded by a full-width turn header that
+ * forces a row break so Discord keeps Party 1 / Party 2 paired; 4-man raids
+ * render one field per turn (1 sup + 3 dps). Unfilled positions show "＋ trống".
+ * Party split is derived live (sup spread 1/party, dps 3/party) - the model
+ * stores a flat memberIds list, not a party assignment. Same player may appear
+ * across turns (bus model).
+ * @param {object} event - RaidEvent (needs turns[], signups[], partySize, supSlots, dpsSlots)
  * @param {{EmbedBuilder: Function, UI: object, lang?: string}} deps
  * @returns {object} a discord.js EmbedBuilder instance
  */
@@ -288,23 +323,60 @@ function buildTurnPlanEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
     .setTitle(t("raid-schedule.turnPlan.title", lang, { title: event.title || raidName }))
     .setDescription(desc.join("\n"));
 
+  // 8-man = 2 in-game parties (each 1 sup + 3 dps); anything else = single party.
+  const partyCount = event.partySize === 8 ? 2 : 1;
+  const supPerParty = Math.ceil((event.supSlots || 0) / partyCount);
+  const dpsPerParty = Math.ceil((event.dpsSlots || 0) / partyCount);
+  // Reserve the last field slot for the "… +N" overflow note (no silent caps).
+  const FIELD_BUDGET = 24;
+  const perTurnFields = partyCount === 1 ? 1 : 1 + partyCount; // 4-man: 1; 8-man: header + 2
+  let usedFields = 0;
+  let droppedTurns = 0;
+
   for (const turn of turns) {
     const members = resolveTurnMembers(event.signups, turn);
     for (const member of members) visibleMembers.add(member.discordId);
-    const lines = members.map((m) => {
-      const emoji = getClassEmoji(m.characterClass) || (m.role === "support" ? "🛡️" : "⚔️");
-      // SUP/DPS are universal role codes - left untranslated on purpose so
-      // the chip renders identically across locales.
-      const chip = m.role === "support" ? "SUP" : "DPS";
-      return `${emoji} **${m.characterName}** · <@${m.discordId}> \`${chip}\``;
-    });
-    const value = lines.join("\n") || t("raid-schedule.board.emptySlot", lang);
+    if (usedFields + perTurnFields > FIELD_BUDGET) {
+      droppedTurns += 1;
+      continue;
+    }
+    const sups = members.filter((m) => m.role === "support");
+    const dpss = members.filter((m) => m.role !== "support");
+
+    if (partyCount === 1) {
+      embed.addFields({
+        name: turn.name,
+        value: partyFieldValue(sups, dpss, supPerParty, dpsPerParty, lang),
+        inline: true,
+      });
+    } else {
+      // Full-width header breaks the inline row so P1/P2 stay paired per turn.
+      // Discord rejects an empty field value, so the header carries a ZWSP.
+      embed.addFields({ name: turn.name, value: "\u200b", inline: false });
+      for (let p = 0; p < partyCount; p += 1) {
+        embed.addFields({
+          name: t("raid-schedule.turnPlan.party", lang, { n: p + 1 }),
+          value: partyFieldValue(
+            sups.slice(p * supPerParty, (p + 1) * supPerParty),
+            dpss.slice(p * dpsPerParty, (p + 1) * dpsPerParty),
+            supPerParty,
+            dpsPerParty,
+            lang,
+          ),
+          inline: true,
+        });
+      }
+    }
+    usedFields += perTurnFields;
+  }
+  if (droppedTurns > 0) {
     embed.addFields({
-      name: turn.name,
-      value: value.length > 1024 ? `${value.slice(0, 1020)}…` : value,
-      inline: true,
+      name: "\u200b",
+      value: t("raid-schedule.turnPlan.moreTurns", lang, { n: droppedTurns }),
+      inline: false,
     });
   }
+
   if (turns.length > 0) {
     embed.setFooter({
       text: `// ${t("raid-schedule.turnPlan.footer", lang, {
@@ -317,114 +389,11 @@ function buildTurnPlanEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
   return embed;
 }
 
-// ─── Compact turn plan (Ops Brief · ANSI code block) ───────────────────
-// A ```ansi block renders only in MESSAGE CONTENT (not embeds), so this
-// returns a fenced string, not an embed. 8 fg colours only; gray (30) is
-// reserved for chrome + "trống", names get one of the other 7 by a stable
-// hash so a player keeps the same colour across turns.
-
-const ANSI_GRAY = 30;
-const ANSI_NAME_FG = [31, 32, 33, 34, 35, 36, 37];
-const COMPACT_MAX_LEN = 1850; // Discord content cap is 2000; leave room for fences + footer.
-
-/**
- * Stable ANSI fg code (31-37) for a name, so the same character is always the
- * same colour. Gray (30) is excluded (reserved for chrome / empty slots).
- * @param {string} name
- * @returns {number} an ANSI foreground code
- */
-function ansiColorForName(name) {
-  const s = String(name || "");
-  let h = 0;
-  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return ANSI_NAME_FG[h % ANSI_NAME_FG.length];
-}
-
-function esc(code, text) {
-  return `[${code}m${text}[0m`;
-}
-
-// One role column for a turn: filled names (coloured per character) padded to
-// `slots` with gray "trống", joined by gray middots - so every turn shows the
-// same number of cells and unfilled positions read like the signup board.
-function compactRoleCells(members, slots, emptyLabel) {
-  const cells = members.map((m) => esc(ansiColorForName(m.characterName), m.characterName));
-  for (let i = members.length; i < slots; i += 1) cells.push(esc(ANSI_GRAY, emptyLabel));
-  return cells.join(esc(ANSI_GRAY, " · "));
-}
-
-/**
- * Build the compact "thu nhỏ" turn plan as a ```ansi code-block string (message
- * content). Ops-Brief layout: header (raid + status), ROOM/ID (id = password,
- * gated), TIME/COMP, then one line per turn (DPS · DPS │ SUP). Empty slots show
- * "trống". Caps length to stay under Discord's 2000-char content limit.
- * @param {object} event - RaidEvent (needs turns[], signups[], room*, slots, status)
- * @param {{lang?: string, canSeeRoom?: boolean}} opts - canSeeRoom reveals the room password
- * @returns {string} a fenced ```ansi block ready to send as message content
- */
-function buildCompactTurnPlan(event, { lang = "vi", canSeeRoom = false } = {}) {
-  const raidLabel = getRaidModeLabel(event.raidKey, event.modeKey, lang);
-  const statusCode = STATUS_CODE[event.status] || "";
-  const { support, dps, waitlist } = assignSlots(event.signups, {
-    supSlots: event.supSlots,
-    dpsSlots: event.dpsSlots,
-  });
-  const compCount = support.length + dps.length;
-  const empty = t("raid-schedule.board.emptySlot", lang);
-  const turns = Array.isArray(event.turns) ? event.turns : [];
-
-  const head = [];
-  head.push(
-    esc(33, `// OPS BRIEF · ${String(raidLabel).toUpperCase()}`) +
-      (statusCode ? `   ${esc(31, `[${statusCode}]`)}` : ""),
-  );
-  head.push(esc(ANSI_GRAY, "═".repeat(42)));
-
-  const roomName = event.roomName ? esc(36, event.roomName) : esc(ANSI_GRAY, "—");
-  const idCell = !event.roomPassword
-    ? esc(ANSI_GRAY, "—")
-    : canSeeRoom
-      ? esc(33, event.roomPassword)
-      : esc(ANSI_GRAY, t("raid-schedule.compact.compOnly", lang));
-  head.push(`  ${esc(ANSI_GRAY, "ROOM")}  ${roomName}    ${esc(ANSI_GRAY, "ID")}  ${idCell}`);
-
-  const compStr = `${compCount}/${event.partySize}` + (waitlist.length ? ` · ⏳${waitlist.length}` : "");
-  head.push(`  ${esc(ANSI_GRAY, "TIME")}  ${esc(37, formatStartShortForLang(event.startAt, lang))}    ${esc(ANSI_GRAY, "COMP")}  ${esc(37, compStr)}`);
-  head.push(esc(ANSI_GRAY, "──────────────── SQUADS ──────────────────"));
-
-  const body = [];
-  let dropped = 0;
-  let used = head.join("\n").length;
-  if (turns.length === 0) {
-    body.push(esc(ANSI_GRAY, `  ${t("raid-schedule.turnPlan.empty", lang)}`));
-  } else {
-    for (const turn of turns) {
-      const members = resolveTurnMembers(event.signups, turn);
-      const turnSup = members.filter((m) => m.role === "support");
-      const turnDps = members.filter((m) => m.role !== "support");
-      const line =
-        `  ${esc(37, `S${turn.name}`)}  ${compactRoleCells(turnDps, event.dpsSlots, empty)}` +
-        `  ${esc(ANSI_GRAY, "‖")} ${esc(ANSI_GRAY, "SUP")} ${compactRoleCells(turnSup, event.supSlots, empty)}`;
-      if (used + line.length > COMPACT_MAX_LEN) {
-        dropped += 1;
-        continue;
-      }
-      body.push(line);
-      used += line.length + 1;
-    }
-    if (dropped > 0) body.push(esc(ANSI_GRAY, `  … +${dropped}`));
-  }
-
-  const foot = esc(33, `// ${raidLabel}`) + esc(ANSI_GRAY, ` · #${String(event._id || "").slice(-6) || "------"}`);
-  return ["```ansi", ...head, ...body, foot, "```"].join("\n");
-}
-
 module.exports = {
   buildScheduleEmbed,
   buildScheduleComponents,
   buildTurnPlanEmbed,
-  buildCompactTurnPlan,
-  ansiColorForName,
+  buildSwitcherRow,
   // exported for reuse (index.js HUD panels) + unit tests
   renderRsvpLine,
   renderGauge,

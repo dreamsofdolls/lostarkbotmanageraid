@@ -113,9 +113,6 @@ module.exports = {
       unlock: "Unlock",
       end: "End",
       manage: "Manage",
-      turnPlan: "📊 Turn plan",
-      turnPlanFull: "📊 Full",
-      turnPlanCompact: "📋 Compact",
       notifyOn: "🔔 Notify: on",
       notifyOff: "🔕 Notify: off",
       teams: "🧩 Turns",
@@ -177,14 +174,15 @@ module.exports = {
       summary: "📦 {raid} · 👤 Lead: {lead} · 🕐 starts {rel}",
       empty: "The lead hasn't arranged any turns yet. Open Manage → Turns to set them up~",
       footer: "{turns} turns · {members} people · ID {id}",
+      // 8-man = 2 in-game parties; field "Party 1/2", each 1 sup + 3 dps.
+      party: "Party {n}",
+      moreTurns: "… +{n} more turns (trimmed to fit)",
     },
     show: {
       // Plain text only - select options never render <t:..>/<#channel>.
       switchPlaceholder: "🗓 Lead's other boards ({n})",
+      tpSwitchPlaceholder: "🗓 Your raids ({n})",
       optionDesc: "{raid} · {date} · {comp}/{size} in comp · {wait} waiting",
-    },
-    compact: {
-      compOnly: "🔒 comp only",
     },
     notice: {
       notManagerTitle: "Raid Managers set these up",
@@ -1571,13 +1569,14 @@ module.exports = {
           "**➕ Add member**: the lead adds someone to the event (pick a user, then an iLvl-eligible character from their roster). If that role has room they hold a comp slot; if it is full they join the waitlist. Works even when locked and pings the added player.",
           "**👋 Kick**: leads drop one or more people from the event. Manage → Kick → pick people. Dropping a slot-holder auto-pulls the next waitlister in.",
           "**🗑️ Delete / auto-cleanup**: Manage → 🗑️ Delete (with confirm) removes the event for good - board + data are gone, unlike Cancel (which freezes + keeps a record). Auto-cleanup: an event left un-ended (not marked done) more than 24h past its start is purged automatically; ended events are kept until the weekly reset (Wed 17:00 VN).",
-          "**📊 Turn plan**: a button on the board shows the bus turn plan (who plays which character, class, sup/dps) - ephemeral, anyone can peek. A **📋 Compact** toggle switches to a one-block ANSI console (all turns + room/ID/comp); the Room ID is shown only to comp members.",
-          "**show**: `/raid-schedule-preview show` resurfaces your signup board to the bottom of its channel (delete + repost, so no stale ghost board) - handy when the board scrolled away. If you run several active boards in the same channel, the 🗓 switcher swaps the current message to the selected board instead of posting a second copy. Raid Manager only.",
+          "**📊 Turn plan**: the lead runs `/raid-schedule-preview show` with `action: 📊 Turn plan` → an ephemeral turn plan (who plays which character, class, sup/dps). 8-man raids split into 2 parties (each 1 sup + 3 dps); unfilled positions read `＋ empty`. A 🗓 dropdown switches between the lead's boards for an across-raids overview. Members see their own turns via `/raid-status` → 'My raids'.",
+          "**show**: `/raid-schedule-preview show` takes an **action** (pick one) - `📋 Resurface board` (default): repost your signup board at the channel bottom when it scrolled away (delete + repost, no ghost board; the 🗓 switcher on the board swaps the current message to another board in the same channel). `📊 Turn plan`: see above. Raid Manager only.",
           "**End**: when the lead ends the raid, the bot writes clears for the characters in the comp through the `/raid-set` path.",
         ],
         optionDescriptions: {
           create: "Subcommand that creates a new board",
-          show: "Subcommand that resurfaces your signup board to the channel bottom",
+          show: "Resurface a board, or view your turn plans (pick via the action option)",
+          action: "📋 Resurface board (default) or 📊 Turn plan",
           raid: "Raid to schedule",
           mode: "Difficulty",
           when: "Start time: `20:00`, `8pm`, `+2h`; or a weekday `wed 20:00` / `thứ 4 20:00` / `cn 8pm`; or a date `5/6 20:00` / `5/6/2026 8pm` (weekday/date needs a time)",
