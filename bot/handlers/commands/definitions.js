@@ -975,10 +975,10 @@ function createRaidCommandDefinitions({
         .addStringOption((option) =>
           option
             .setName("when")
-            .setDescription("Start time: 20:00, 20h, 8pm, 2000, +2h, +90m...")
+            .setDescription("Start: 20:00, 8pm, +2h, 'wed 20:00', 'thứ 4 20:00', '5/6 20:00'")
             .setDescriptionLocalizations({
-              vi: "Giờ bắt đầu: 20:00, 20h, 21h30, 8pm, 2000, +2h...",
-              ja: "開始時刻: 20:00、20h、8pm、2000、+2h、+90m...",
+              vi: "Giờ: 20:00, 20h, 8pm, +2h, 'thứ 4 20:00', 'cn 20h', '5/6 20:00'",
+              ja: "開始: 20:00、8pm、+2h、'thứ 4 20:00'、'wed 20:00'、'5/6 20:00'",
             })
             .setRequired(true)
         )
