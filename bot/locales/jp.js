@@ -738,6 +738,15 @@ module.exports = {
       buttonManagerOnlyTitle: "レイドマネージャー専用ですわ",
       buttonManagerOnlyDescription: "このボタンはレイドマネージャー用の `/raid-check` フローのものですわ。他の人が押すとアーティストはお断りしますの～",
     },
+    teams: {
+      // Plain text only - select options never render <t:..>/<#channel>.
+      placeholderSingle: "📋 編成済みチーム ({n})",
+      placeholderRange: "📋 編成済みチーム ({a}-{b})",
+      optionDesc: "{raid} · {comp}/{size} · 待機 {wait} · lead {lead}",
+      optionDescNoLead: "{raid} · {comp}/{size} · 待機 {wait}",
+      eventGoneTitle: "イベントが見つからないよ",
+      eventGoneDescription: "このボードは /raid-check を開いた後に終了/キャンセル/削除されたみたい。/raid-check をもう一度実行して最新の一覧を取ってね～",
+    },
     staleButton: {
       title: "ボタンが期限切れですわ",
       raidInvalidDescription: "ボタン内のレイドが無効ですわ (古いセッションかボット再起動の可能性)。もう一度 `/raid-check` を実行して更新してね♪",
@@ -1629,6 +1638,7 @@ module.exports = {
           "**フィルタードロップダウン**: 埋め込み内のユーザー + レイドフィルターで、コマンドを再実行せずに 1 メンバーや 1 レイド × モードに絞り込めますわ♪ 1 ユーザーを選ぶと `進捗を編集` / `自動同期をオン/オフ` ボタンが出ますの。`📝 タスクを見る` トグルでタスク進捗を閲覧専用で確認できますわ。",
           "**🔄 同期ボタン**: 未完了リストの中で自動同期にオプトインしているユーザーだけ bible ログを強制同期ですわ。オプトインしていないユーザーは触りませんの (プライバシー尊重)。",
           "**✏️ 編集ボタン**: 連動セレクトで他メンバーの進捗を修正ですわ。自動同期オプトイン + bible 公開のキャラは隠されますの (同期で手動編集が上書きされちゃうから)。プライベートログのキャラは編集可能ですわ。",
+          "**📋 編成済みチーム**: ギルド内で進行中の全 signup ボード（どの Manager の `/raid-schedule-preview` イベントでも）を一覧するドロップダウンですわ。1 つ選ぶと編成（Support/DPS + 待機）とバスのターン編成表をエフェメラルで表示しますの。25 件を超えると追加のドロップダウンに溢れますわ。",
           "**セッションタイムアウト 5 分** - 期限切れで全コンポーネントが無効化、もう一度 `/raid-check` で再開ですわ♪",
         ],
       },

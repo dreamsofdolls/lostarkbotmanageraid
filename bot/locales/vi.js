@@ -761,6 +761,15 @@ module.exports = {
       buttonManagerOnlyTitle: "Chỉ Raid Manager mới dùng được",
       buttonManagerOnlyDescription: "Button này thuộc về flow `/raid-check` của Raid Manager nha cậu. Người khác bấm Artist từ chối luôn.",
     },
+    teams: {
+      // Plain text only - select options never render <t:..>/<#kênh>.
+      placeholderSingle: "📋 Đội đã xếp ({n})",
+      placeholderRange: "📋 Đội đã xếp ({a}-{b})",
+      optionDesc: "{raid} · {comp}/{size} · {wait} chờ · lead {lead}",
+      optionDescNoLead: "{raid} · {comp}/{size} · {wait} chờ",
+      eventGoneTitle: "Event không còn nữa",
+      eventGoneDescription: "Board này vừa bị end/hủy/xóa sau khi cậu mở /raid-check. Gõ lại /raid-check để lấy danh sách mới nha~",
+    },
     staleButton: {
       title: "Button đã hết hạn",
       raidInvalidDescription: "Raid trong button không còn hợp lệ (có thể session cũ hoặc bot vừa restart). Gõ `/raid-check` lại để refresh nha.",
@@ -1652,6 +1661,7 @@ module.exports = {
           "**Filter dropdown**: dropdown user + raid trong embed để zoom 1 member hay 1 raid×mode mà không phải gõ lại lệnh. Pick 1 user → button `Edit progress` / `Bật/Tắt auto-sync hộ`. Toggle `📝 Xem tasks` để xem chore (read-only).",
           "**🔄 Sync button**: force-sync bible logs CHỈ cho user đã opt-in auto-sync trong list pending. Non-opted-in user không bị động đến (privacy-respecting).",
           "**✏️ Edit button**: cascading select để fix progress của member khác. Char đã opt-in auto-sync + bible visible bị ẩn (sync sẽ ghi đè manual edit). Char private log → vẫn edit được.",
+          "**📋 Đội đã xếp**: dropdown liệt kê mọi board signup đang chạy trong guild (event `/raid-schedule-preview` của bất kỳ Manager nào). Chọn 1 để xem comp (Support/DPS + waitlist) và bảng phân turn, dạng ephemeral. Quá 25 event thì tràn sang dropdown phụ.",
           "**Session timeout 5 phút** - hết hạn disable mọi component, gõ lại `/raid-check` để mở lại.",
         ],
       },

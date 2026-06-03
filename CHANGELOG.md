@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-03 (raid-check: "Đội đã xếp" teams dropdown)
+
+### Added
+- `/raid-check` (the Manager hub) gains a **📋 Đội đã xếp** dropdown listing every active signup board in the guild (any Manager's `/raid-schedule-preview` event). Picking one shows that event's **comp + bus turn plan** as two embeds in one **ephemeral** reply (re-fetched live; ephemeral like the existing `view-tasks` so it never leaks into the public /raid-check session). Past Discord's 25-option cap the list **spills into extra dropdowns** up to the 5-row budget (beyond that, the dropped count is logged - never silently truncated).
+- Isolated the raid-check -> raid-schedule coupling in a new `handlers/raid-check/teams-view.js` (mirrors `task-view-ui.js`); the active-event list is snapshotted once at open while the detail is re-fetched live on pick. Reuses `buildScheduleEmbed` + `buildTurnPlanEmbed` + new pure `shapeAllOwnedBoardRows`/`chunkBoardOptions` (`owned-boards.js`, unit-tested). i18n vi/en/jp + `/raid-help` welcome notes + README synced. 566 tests green.
+
 ## 2026-06-03 (raid-schedule: `show` resurfaces the signup board)
 
 ### Changed

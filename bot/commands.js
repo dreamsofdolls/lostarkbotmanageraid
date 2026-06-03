@@ -59,6 +59,8 @@ const { createAddRosterCommand } = require("./handlers/roster/add");
 const { createRaidGoldEarnerCommand } = require("./handlers/roster/gold-earner");
 const { createRaidAuctionCommand } = require("./handlers/raid/auction");
 const { createRaidScheduleCommand } = require("./handlers/raid/schedule");
+// Board embed builders reused by /raid-check's "📋 Đội đã xếp" dropdown.
+const { buildScheduleEmbed, buildTurnPlanEmbed } = require("./handlers/raid/schedule/board");
 const { createEditRosterCommand } = require("./handlers/roster/edit");
 const { createRaidCommandDefinitions } = require("./handlers/commands/definitions");
 const { createRaidAutoManageCommand } = require("./handlers/raid/auto-manage");
@@ -711,6 +713,10 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   raidCheckRefreshLimiter,
   raidCheckSyncLimiter,
   discordUserLimiter,
+  // raid-schedule bridge for the "📋 Đội đã xếp" dropdown (teams-view.js).
+  RaidEvent,
+  buildScheduleEmbed,
+  buildTurnPlanEmbed,
 });
 ({
   buildRaidCheckSnapshotFromUsers,
