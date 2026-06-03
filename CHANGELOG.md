@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-03 (raid-schedule: compact "thu nhỏ" turn plan)
+
+### Added
+- The 📊 Xem phân turn reply gains a **📋 Thu nhỏ / 📊 Đầy đủ** toggle. Compact mode renders **all turns in one ```ansi code block** (Ops-Brief layout): header `// OPS BRIEF · RAID [STATUS]`, a `ROOM` + `ID` row, `TIME` + `COMP`, then one line per turn `S<name> dps · dps · dps ‖ SUP sup`, footer `// RAID · #<shortId>`. Character names are coloured by a stable per-name hash (track a player across turns); empty slots show **"trống"** like the signup board.
+- **Room ID = the room password**, gated: shown only to comp members / the lead (`isCompMember || isManager`), otherwise `🔒 chỉ comp` - the room name stays visible to all. Keeps the "password never public" invariant. New pure `buildCompactTurnPlan` + `ansiColorForName` (`board.js`, unit-tested); the compact block is message content (ansi colour doesn't render inside embeds) and is length-capped under Discord's 2000-char limit (overflow turns → `… +N`). i18n vi/en/jp. 577 tests green.
+
 ## 2026-06-03 (raid-schedule + raid-check: shortId + start date + icon in board pickers)
 
 ### Changed

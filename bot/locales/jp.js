@@ -114,6 +114,8 @@ module.exports = {
       end: "End",
       manage: "Manage",
       turnPlan: "📊 ターン編成",
+      turnPlanFull: "📊 詳細",
+      turnPlanCompact: "📋 コンパクト",
       teams: "🧩 ターン",
       kick: "👋 Kick",
       addMember: "➕ メンバー追加",
@@ -178,6 +180,9 @@ module.exports = {
       // Plain text only - select options never render <t:..>/<#channel>.
       switchPlaceholder: "🗓 lead の他のボード ({n})",
       optionDesc: "{raid} · {date} · {comp}/{size} 編成 · 待機 {wait}",
+    },
+    compact: {
+      compOnly: "🔒 comp のみ",
     },
     notice: {
       notManagerTitle: "これは Raid Manager 用だよ",
@@ -1562,7 +1567,7 @@ module.exports = {
           "**➕ メンバー追加**: lead がイベントに人を追加できるよ（user を選ぶ → その人のロスターから iLvl 足りてる char を選ぶ）。role の枠が空いていれば編成入り、埋まっていれば待機列。board がロック中でも使えて、追加された人には ping が飛ぶよ。",
           "**👋 Kick**: lead がイベントから1人以上を外せるよ。Manage → Kick → 人を選ぶ。スロット保持者を外すと待機列の次の人が自動で繰り上がるよ。",
           "**🗑️ 削除 / 自動クリーンアップ**: Manage → 🗑️ 削除（確認あり）でイベントを完全に削除 - board + データが消えるよ。Cancel（凍結して記録を残す）とは違うよ。自動クリーンアップ: 開始から24時間たっても End してない（完了マークなし）イベントは自動で削除、End 済みは週リセット（水 17:00 VN）まで残してから片付けるよ。",
-          "**📊 ターン編成**: ボード上のボタンでバス式のターン編成表（誰がどのキャラ・クラス・sup/dps）を表示するよ - ephemeral で誰でも覗けるよ。",
+          "**📊 ターン編成**: ボード上のボタンでバス式のターン編成表（誰がどのキャラ・クラス・sup/dps）を表示するよ - ephemeral で誰でも覗けるよ。**📋 コンパクト** ボタンで1ブロックの ANSI コンソール（全ターン + 部屋/ID/編成）に切り替え。Room ID は comp メンバーのみ表示。",
           "**show**: `/raid-schedule-preview show` は signup ボードをチャンネルの一番下に再表示するよ（古いのを削除して再投稿、ゴーストボードは残さない）- ボードが流れた時に便利。同じチャンネルで複数のボードを動かしているなら、ボード上の 🗓 セレクターは今のメッセージを選んだボードへ切り替えるよ。2つ目のコピーは投稿しない。Raid Manager 専用。",
           "**End**: lead がレイドを終了すると、bot が編成内のキャラに `/raid-set` 経由でクリアを記録するよ。",
         ],
