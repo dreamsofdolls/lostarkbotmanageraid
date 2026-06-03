@@ -340,6 +340,7 @@ function createRaidScheduleCommand({
     const partySize = getRaidPartySize(raidKey);
     const { supSlots, dpsSlots } = slotCountsForSize(partySize);
     const autoLockAtStart = interaction.options.getBoolean("auto_lock") ?? true;
+    const skipNotify = interaction.options.getBoolean("skip_notify") ?? false;
     const title = (interaction.options.getString("title") || `${meta.label}`).trim();
 
     await interaction.deferReply();
@@ -357,6 +358,7 @@ function createRaidScheduleCommand({
       title,
       startAt,
       autoLockAtStart,
+      skipNotify,
       status: "open",
       signups: [],
     });
@@ -481,7 +483,7 @@ function createRaidScheduleCommand({
       supSlots: event.supSlots,
       dpsSlots: event.dpsSlots,
     });
-    if (promoted.length > 0) {
+    if (promoted.length > 0 && !event.skipNotify) {
       await interaction.followUp({
         content: promoted
           .map((s) => t("raid-schedule.notice.promotedPing", langForBoard, {
@@ -618,6 +620,10 @@ function createRaidScheduleCommand({
         .setCustomId(`rse:edittime:${id}`)
         .setLabel(t("raid-schedule.btn.editTime", lang))
         .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`rse:notify:${id}`)
+        .setLabel(t(event.skipNotify ? "raid-schedule.btn.notifyOff" : "raid-schedule.btn.notifyOn", lang))
+        .setStyle(ButtonStyle.Secondary),
     );
     const peopleRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -681,6 +687,25 @@ function createRaidScheduleCommand({
       return;
     }
     await interaction.reply(manageMenuPayload(event, lang));
+  }
+
+  // Flip silent mode from the Manage menu, then re-render so the button label
+  // updates (🔔 Báo BẬT <-> 🔕 Báo TẮT). Lead-only. Only the ping behaviour
+  // changes - signups, board, auto-clear are untouched.
+  async function handleToggleNotify(interaction, event, lang) {
+    if (!isLeadActionAllowed(interaction)) {
+      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
+      return;
+    }
+    if (event.status === "cleared" || event.status === "cancelled") {
+      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
+      return;
+    }
+    event.skipNotify = !event.skipNotify;
+    await interaction.deferUpdate();
+    await event.save();
+    const menu = manageMenuPayload(event, lang);
+    await interaction.editReply({ embeds: menu.embeds, components: menu.components });
   }
 
   // Lock/unlock + End are reachable from the Manage menu (ephemeral), and
@@ -855,7 +880,7 @@ function createRaidScheduleCommand({
     // Ping everyone who signed up, in the public channel (mentions only fire
     // from message content, not embeds · see feedback_discord_embed_mentions).
     const ids = [...new Set((event.signups || []).map((s) => s.discordId))];
-    if (ids.length > 0) {
+    if (ids.length > 0 && !event.skipNotify) {
       try {
         const channel = await interaction.client.channels.fetch(event.channelId);
         await channel?.send?.({
@@ -969,7 +994,7 @@ function createRaidScheduleCommand({
       components: [],
     }).catch(() => {});
 
-    if (wasActive && ids.length > 0) {
+    if (wasActive && ids.length > 0 && !event.skipNotify) {
       try {
         const channel = await interaction.client.channels.fetch(event.channelId);
         await channel?.send?.({
@@ -1093,7 +1118,7 @@ function createRaidScheduleCommand({
       supSlots: event.supSlots,
       dpsSlots: event.dpsSlots,
     });
-    if (promoted.length > 0) {
+    if (promoted.length > 0 && !event.skipNotify) {
       try {
         const channel = await interaction.client.channels.fetch(event.channelId);
         await channel?.send?.({
@@ -1293,6 +1318,9 @@ function createRaidScheduleCommand({
 
     // Public ping so the added user actually gets notified (mentions only fire
     // from message content, not embeds · see feedback_discord_embed_mentions).
+    // Silent mode (skipNotify) suppresses it - the member is still added + the
+    // board updated above, just no @mention. This ping is the last statement.
+    if (event.skipNotify) return;
     try {
       const channel = await interaction.client.channels.fetch(event.channelId);
       await channel?.send?.({
@@ -1721,6 +1749,7 @@ function createRaidScheduleCommand({
     kick: handleKick,
     setroom: handleSetRoom,
     edittime: handleEditTime,
+    notify: handleToggleNotify,
     cancel: handleCancel,
     delete: handleDeletePrompt,
     delyes: handleDeleteConfirm,

@@ -982,6 +982,18 @@ function createRaidCommandDefinitions({
             })
             .setRequired(true)
         )
+        // Required, and declared before the optional options (Discord rejects a
+        // required option after an optional one).
+        .addBooleanOption((option) =>
+          option
+            .setName("skip_notify")
+            .setDescription("Silent mode: on = no pings to anyone (add/promote/cancel)")
+            .setDescriptionLocalizations({
+              vi: "Tắt thông báo: bật = không ping ai (add/kéo chờ/hủy)",
+              ja: "サイレント: オン = 誰にも通知しない (追加/繰上/キャンセル)",
+            })
+            .setRequired(true)
+        )
         .addBooleanOption((option) =>
           option
             .setName("auto_lock")

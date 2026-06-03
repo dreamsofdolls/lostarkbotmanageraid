@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-03 (raid-schedule: skip_notify silent mode)
+
+### Added
+- `create` gains a **required** `skip_notify` boolean. When on, the event runs **silent**: every public @mention ping is suppressed - add-member, waitlist promote (from RSVP and from kick), cancel, and delete. Signups, the board, waitlist promotion, and auto-clear all still happen; only the notifications go quiet. New `RaidEvent.skipNotify` field.
+- The lead Manage menu gains a **🔔 Báo: BẬT / 🔕 Báo: TẮT** toggle (`rse:notify`) to flip silent mode after creation (re-renders the menu). i18n vi/en/jp + tests (cancel ping suppressed/sent, toggle flips). 586 tests green.
+
 ## 2026-06-03 (raid-schedule: `when` accepts weekday + date)
 
 ### Changed
