@@ -26,11 +26,20 @@ function queryResult(arr) {
   };
 }
 
+function matchesQuery(board, query = {}) {
+  return Object.entries(query).every(([key, expected]) => {
+    if (expected && typeof expected === "object" && Array.isArray(expected.$in)) {
+      return expected.$in.includes(board[key]);
+    }
+    return String(board[key]) === String(expected);
+  });
+}
+
 function makeCommand(boards) {
   const User = { findOne: () => ({ lean: async () => ({ language: "en" }) }) };
   const GuildConfig = { findOne: () => ({ lean: async () => null }) };
   const RaidEvent = {
-    find: () => queryResult(boards),
+    find: (query) => queryResult(boards.filter((board) => matchesQuery(board, query))),
     async findById(id) {
       return boards.find((b) => String(b._id) === String(id)) || null;
     },
@@ -58,11 +67,24 @@ function makeBoard(overrides = {}) {
 
 // A channel whose send/delete record their call order, so we can assert the
 // anti-ghost invariant (post the new board BEFORE deleting the old one).
-function makeChannel(order) {
+function makeChannel(order, options = {}) {
+  const sentPayloads = options.sentPayloads || [];
   return {
-    async send() { order.push("send"); return { id: "new-msg", url: "https://discord/new-msg" }; },
+    async send(payload) {
+      sentPayloads.push(payload);
+      order.push("send");
+      return {
+        id: "new-msg",
+        url: "https://discord/new-msg",
+        async delete() { order.push("delete-new"); },
+      };
+    },
     messages: {
-      async fetch() { return { async delete() { order.push("delete"); } }; },
+      async fetch(id) {
+        return {
+          async delete() { order.push(id === "new-msg" ? "delete-new-fetch" : "delete"); },
+        };
+      },
     },
   };
 }
@@ -103,6 +125,23 @@ test("show with no active boards tells the lead to create one first", async () =
   assert.match(replied.embeds[0].data.title, /no active boards/i);
 });
 
+test("show ignores active boards from another guild", async () => {
+  const order = [];
+  const foreign = makeBoard({ _id: "foreign", guildId: "g2", channelId: "c2", order });
+  const command = makeCommand([foreign]);
+  let replied = null;
+  const interaction = {
+    options: { getSubcommand: () => "show" },
+    user: { id: "lead" }, guildId: "g1", channelId: "c1",
+    async reply(payload) { replied = payload; return payload; },
+  };
+
+  await command.handleRaidScheduleCommand(interaction);
+
+  assert.match(replied.embeds[0].data.title, /no active boards/i);
+  assert.equal(order.includes("send"), false, "foreign-guild board was not reposted");
+});
+
 test("show is manager-gated: a non-manager is rejected, no board is touched", async () => {
   const order = [];
   const board = makeBoard({ order });
@@ -118,6 +157,56 @@ test("show is manager-gated: a non-manager is rejected, no board is touched", as
 
   assert.ok(replied, "a notice was sent");
   assert.equal(order.includes("send"), false, "no board was reposted");
+});
+
+test("show leaves the old board intact when messageId persistence fails", async () => {
+  const order = [];
+  const board = makeBoard({
+    order,
+    async save() { order.push("save"); throw new Error("mongo offline"); },
+  });
+  const command = makeCommand([board]);
+  const channel = makeChannel(order);
+  let edited = null;
+  const interaction = {
+    options: { getSubcommand: () => "show" },
+    user: { id: "lead" }, guildId: "g1", channelId: "c1",
+    client: { channels: { async fetch() { return channel; } } },
+    async deferReply() { order.push("defer"); },
+    async editReply(payload) { edited = payload; order.push("edit"); return payload; },
+  };
+
+  await command.handleRaidScheduleCommand(interaction);
+
+  assert.equal(board.messageId, "old-msg", "messageId restored to the old board");
+  assert.equal(order.includes("send"), true, "fresh board was posted before save failed");
+  assert.equal(order.includes("delete"), false, "old board was not deleted after save failed");
+  assert.equal(order.includes("delete-new"), true, "fresh orphan board was cleaned up best-effort");
+  assert.match(edited.embeds[0].data.title, /couldn't bump/i);
+});
+
+test("resurfaced boards do not show switcher options from another guild or channel", async () => {
+  const order = [];
+  const sentPayloads = [];
+  const current = makeBoard({ _id: "cur1", guildId: "g1", channelId: "c1", order });
+  const foreign = makeBoard({ _id: "foreign2", guildId: "g2", channelId: "c2", title: "Other guild", order });
+  const otherChannel = makeBoard({ _id: "chan2", guildId: "g1", channelId: "c2", title: "Other channel", order });
+  const command = makeCommand([current, foreign, otherChannel]);
+  const channel = makeChannel(order, { sentPayloads });
+  const interaction = {
+    options: { getSubcommand: () => "show" },
+    user: { id: "lead" }, guildId: "g1", channelId: "c1",
+    client: { channels: { async fetch() { return channel; } } },
+    async deferReply() { order.push("defer"); },
+    async editReply(payload) { order.push("edit"); return payload; },
+  };
+
+  await command.handleRaidScheduleCommand(interaction);
+
+  assert.equal(sentPayloads.length, 1);
+  assert.equal(sentPayloads[0].components.length, 2, "only the normal board rows render");
+  const customIds = sentPayloads[0].components.flatMap((row) => row.components.map((component) => component.data.custom_id));
+  assert.equal(customIds.some((id) => id.startsWith("rse:showpick:")), false);
 });
 
 test("the board switcher rejects anyone who is not the boards' creator", async () => {
@@ -140,26 +229,74 @@ test("the board switcher rejects anyone who is not the boards' creator", async (
   assert.equal(order.includes("send"), false, "no board was reposted for the intruder");
 });
 
-test("the board switcher resurfaces the chosen board for its creator", async () => {
+test("the board switcher switches the current message in place for its creator", async () => {
   const order = [];
   const current = makeBoard({ _id: "cur1", channelId: "c1", order });
-  const other = makeBoard({ _id: "other2", channelId: "c2", messageId: "old2", title: "Echidna", order });
+  const other = makeBoard({ _id: "other2", channelId: "c1", messageId: "old2", title: "Echidna", order });
   const command = makeCommand([current, other]);
   const channel = makeChannel(order);
+  let edited = null;
   let followed = null;
   const interaction = {
     customId: "rse:showpick:cur1",
     user: { id: "lead" }, guildId: "g1", channelId: "c1",
     values: ["other2"],
+    message: { id: "old-msg" },
     client: { channels: { async fetch() { return channel; } } },
+    async deferUpdate() { order.push("defer"); },
+    async editReply(payload) { edited = payload; order.push("edit"); return payload; },
+    async followUp(payload) { followed = payload; return payload; },
+  };
+
+  await command.handleRaidScheduleSelect(interaction);
+
+  assert.equal(other.messageId, "old-msg", "the chosen board now owns the visible message");
+  assert.equal(current.messageId, null, "the previous board no longer points at the visible message");
+  assert.equal(order.includes("send"), false, "switching does not post a second board");
+  assert.equal(order.includes("edit"), true, "the current message was edited in place");
+  assert.equal(order.includes("delete"), true, "the chosen board's old message was removed best-effort");
+  assert.equal(followed, null, "no extra notice is needed when the message visibly switches");
+  assert.match(edited.embeds[0].data.title, /Echidna/);
+});
+
+test("the board switcher refuses a chosen board from another guild", async () => {
+  const order = [];
+  const current = makeBoard({ _id: "cur1", guildId: "g1", channelId: "c1", order });
+  const foreign = makeBoard({ _id: "foreign2", guildId: "g2", channelId: "c2", title: "Other guild", order });
+  const command = makeCommand([current, foreign]);
+  let followed = null;
+  const interaction = {
+    customId: "rse:showpick:cur1",
+    user: { id: "lead" }, guildId: "g1", channelId: "c1",
+    values: ["foreign2"],
     async deferUpdate() { order.push("defer"); },
     async followUp(payload) { followed = payload; return payload; },
   };
 
   await command.handleRaidScheduleSelect(interaction);
 
-  assert.equal(other.messageId, "new-msg", "the chosen board was repointed");
-  assert.equal(current.messageId, "old-msg", "the board the switcher sat on is untouched");
-  assert.ok(order.indexOf("send") < order.indexOf("delete"), "post before delete on the chosen board");
-  assert.match(followed.embeds[0].data.title, /bumped/i);
+  assert.ok(followed, "a stale/missing notice was sent");
+  assert.equal(foreign.messageId, "old-msg", "foreign-guild board was not repointed");
+  assert.equal(order.includes("send"), false, "foreign-guild board was not reposted");
+});
+
+test("the board switcher refuses a chosen board from another channel", async () => {
+  const order = [];
+  const current = makeBoard({ _id: "cur1", guildId: "g1", channelId: "c1", order });
+  const otherChannel = makeBoard({ _id: "chan2", guildId: "g1", channelId: "c2", title: "Other channel", order });
+  const command = makeCommand([current, otherChannel]);
+  let followed = null;
+  const interaction = {
+    customId: "rse:showpick:cur1",
+    user: { id: "lead" }, guildId: "g1", channelId: "c1",
+    values: ["chan2"],
+    async deferUpdate() { order.push("defer"); },
+    async followUp(payload) { followed = payload; return payload; },
+  };
+
+  await command.handleRaidScheduleSelect(interaction);
+
+  assert.ok(followed, "a stale/missing notice was sent");
+  assert.equal(otherChannel.messageId, "old-msg", "other-channel board was not repointed");
+  assert.equal(order.includes("send"), false, "other-channel board was not reposted");
 });

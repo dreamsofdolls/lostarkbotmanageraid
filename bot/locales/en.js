@@ -1555,7 +1555,7 @@ module.exports = {
           "**👋 Kick**: leads drop one or more people from the event. Manage → Kick → pick people. Dropping a slot-holder auto-pulls the next waitlister in.",
           "**🗑️ Delete / auto-cleanup**: Manage → 🗑️ Delete (with confirm) removes the event for good - board + data are gone, unlike Cancel (which freezes + keeps a record). Auto-cleanup: an event left un-ended (not marked done) more than 24h past its start is purged automatically; ended events are kept until the weekly reset (Wed 17:00 VN).",
           "**📊 Turn plan**: a button on the board shows the bus turn plan (who plays which character, class, sup/dps) - ephemeral, anyone can peek.",
-          "**show**: `/raid-schedule-preview show` resurfaces your signup board to the bottom of its channel (delete + repost, so no stale ghost board) - handy when the board scrolled away. If you run several active boards, a 🗓 switcher on the board bumps any of them. Raid Manager only.",
+          "**show**: `/raid-schedule-preview show` resurfaces your signup board to the bottom of its channel (delete + repost, so no stale ghost board) - handy when the board scrolled away. If you run several active boards in the same channel, the 🗓 switcher swaps the current message to the selected board instead of posting a second copy. Raid Manager only.",
           "**End**: when the lead ends the raid, the bot writes clears for the characters in the comp through the `/raid-set` path.",
         ],
         optionDescriptions: {

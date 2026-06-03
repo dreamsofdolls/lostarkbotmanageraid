@@ -1577,7 +1577,7 @@ module.exports = {
           "**👋 Kick**: lead gỡ một hoặc nhiều người khỏi event. Quản lý → Kick → chọn người. Gỡ người đang giữ slot thì hàng chờ tự được kéo lên.",
           "**🗑️ Xóa / tự dọn**: Quản lý → 🗑️ Xóa (có xác nhận) để xóa hẳn event - board + dữ liệu mất luôn, khác Hủy (đóng băng giữ record). Tự dọn: event quá 24h kể từ giờ raid mà chưa End (chưa đánh dấu xong) sẽ tự xóa; event đã End thì giữ tới mốc reset tuần (Thứ 4 17:00 VN) rồi mới dọn.",
           "**📊 Xem phân turn**: nút trên board hiện bảng phân turn kiểu bus (ai cầm char gì, class, sup/dps) - ephemeral, ai cũng xem được.",
-          "**show**: `/raid-schedule-preview show` đẩy lại board signup của cậu xuống cuối channel (xóa cũ + post lại, không để board ma) - tiện khi board bị trôi. Nếu cậu chạy nhiều board, dropdown 🗓 trên board cho cậu bump board nào cũng được. Chỉ Raid Manager.",
+          "**show**: `/raid-schedule-preview show` đẩy lại board signup của cậu xuống cuối channel (xóa cũ + post lại, không để board ma) - tiện khi board bị trôi. Nếu cậu chạy nhiều board trong cùng channel, dropdown 🗓 trên board sẽ đổi ngay message hiện tại sang board được chọn, không post thêm bản thứ hai. Chỉ Raid Manager.",
           "**End**: khi lead end raid, bot ghi clear cho các character đang nằm trong comp qua đường `/raid-set`.",
         ],
         optionDescriptions: {

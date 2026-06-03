@@ -177,8 +177,8 @@ function renderRsvpLine(signups, lang) {
  * @param {object} event - RaidEvent
  * @param {{ActionRowBuilder: Function, ButtonBuilder: Function, ButtonStyle: object, StringSelectMenuBuilder?: Function, ownedBoardOptions?: Array, lang?: string}} deps
  *   ownedBoardOptions: shaped rows from owned-boards.shapeOwnedBoardOptions - the
- *   creator's active boards. When >= 2, a "Board khác của lead" switcher row is
- *   appended (needs StringSelectMenuBuilder).
+ *   creator's active boards in this channel. When >= 2, a "Board khác của lead"
+ *   switcher row is appended (needs StringSelectMenuBuilder).
  * @returns {Array} discord.js ActionRow instances (0, 2, or 3 rows)
  */
 function buildScheduleComponents(event, {
@@ -214,7 +214,7 @@ function buildScheduleComponents(event, {
   const rows = [statusRow, utilityRow];
 
   // Lead-only board switcher: only worth a whole row when the creator runs >= 2
-  // boards, so a single-board lead never sees a one-option dropdown.
+  // boards in this channel, so a single-board lead never sees a one-option dropdown.
   if (StringSelectMenuBuilder && ownedBoardOptions.length >= 2) {
     rows.push(buildSwitcherRow(id, ownedBoardOptions, { ActionRowBuilder, StringSelectMenuBuilder, lang }));
   }
