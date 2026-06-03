@@ -61,6 +61,47 @@ test("a bare hour earlier than now rolls to the next day", () => {
   assert.equal(parseStartTime("830", "vi", NOW).getTime(), Date.UTC(2026, 4, 30, 1, 30));
 });
 
+// NOW (2026-05-29) is a Friday in VN local time.
+test("VN weekday + time -> next occurrence of that weekday", () => {
+  // Fri -> next Wed (thứ 4) is 2026-06-03; 20:00 VN = 13:00 UTC.
+  assert.equal(parseStartTime("thứ 4 20:00", "vi", NOW).getTime(), Date.UTC(2026, 5, 3, 13, 0));
+  assert.equal(parseStartTime("t4 20h", "vi", NOW).getTime(), Date.UTC(2026, 5, 3, 13, 0));
+  // chủ nhật / cn = Sunday -> 2026-05-31.
+  assert.equal(parseStartTime("cn 8pm", "vi", NOW).getTime(), Date.UTC(2026, 4, 31, 13, 0));
+  assert.equal(parseStartTime("chủ nhật 20h", "vi", NOW).getTime(), Date.UTC(2026, 4, 31, 13, 0));
+});
+
+test("English weekday + time, and 'thu' is Thursday (not VN thứ-2)", () => {
+  assert.equal(parseStartTime("wed 21h30", "vi", NOW).getTime(), Date.UTC(2026, 5, 3, 14, 30));
+  assert.equal(parseStartTime("thu 20:00", "vi", NOW).getTime(), Date.UTC(2026, 5, 4, 13, 0)); // next Thu
+  assert.equal(parseStartTime("sunday 8pm", "vi", NOW).getTime(), Date.UTC(2026, 4, 31, 13, 0));
+});
+
+test("weekday today: future time stays today, passed time rolls a week", () => {
+  // NOW is Friday 12:00 VN. thứ 6 = Friday.
+  assert.equal(parseStartTime("thứ 6 20:00", "vi", NOW).getTime(), Date.UTC(2026, 4, 29, 13, 0)); // today
+  assert.equal(parseStartTime("thứ 6 08:00", "vi", NOW).getTime(), Date.UTC(2026, 5, 5, 1, 0));   // +1 week
+});
+
+test("date + time -> that calendar date (next year if already past)", () => {
+  assert.equal(parseStartTime("5/6 20:00", "vi", NOW).getTime(), Date.UTC(2026, 5, 5, 13, 0));
+  assert.equal(parseStartTime("05/06 20h", "vi", NOW).getTime(), Date.UTC(2026, 5, 5, 13, 0));
+  assert.equal(parseStartTime("5/6/2026 8pm", "vi", NOW).getTime(), Date.UTC(2026, 5, 5, 13, 0));
+  assert.equal(parseStartTime("1/1 20:00", "vi", NOW).getTime(), Date.UTC(2027, 0, 1, 13, 0)); // Jan 1 already past -> 2027
+});
+
+test("day-anchor honors the lead timezone", () => {
+  assert.equal(parseStartTime("thứ 4 20:00", "jp", NOW).getTime(), Date.UTC(2026, 5, 3, 11, 0)); // 20:00 JST
+  assert.equal(parseStartTime("5/6 20:00", "en", NOW).getTime(), Date.UTC(2026, 5, 5, 20, 0));   // 20:00 UTC
+});
+
+test("day-anchor without a time, impossible dates, and bad weekdays are null", () => {
+  assert.equal(parseStartTime("thứ 4", "vi", NOW), null);       // weekday, no time
+  assert.equal(parseStartTime("5/6", "vi", NOW), null);          // date, no time
+  assert.equal(parseStartTime("31/2 20:00", "vi", NOW), null);   // Feb 31 doesn't exist
+  assert.equal(parseStartTime("thứ 8 20:00", "vi", NOW), null);  // no thứ-8
+});
+
 test("relative tolerates surrounding spaces", () => {
   assert.equal(parseStartTime(" + 2h ", "vi", NOW).getTime(), Date.UTC(2026, 4, 29, 7, 0));
 });

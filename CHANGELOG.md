@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-03 (raid-schedule: `when` accepts weekday + date)
+
+### Changed
+- The `create` / edit-time `when` field now also accepts a **weekday + time** (`thứ 4 20:00`, `t4 20h`, `cn 8pm`, `wed 21h30`, `sunday 8pm`) resolving to the next occurrence of that weekday, and a **date + time** (`5/6 20:00`, `05/06 20h`, `5/6/2026 8pm`) resolving to that calendar date (this year, or next year if already past). A weekday/date must be followed by a time; resolved in the lead's `/raid-language` timezone. VN `thứ 2`..`thứ 7` + `chủ nhật`/`cn` (and `t2`..`t7`) plus EN `mon`..`sun`. `parseStartTime` refactored (shared `parseTimeOfDay` + weekday/date resolvers, the `\b` after `thứ N` keeps `thu 20:00` reading as Thursday); slash hint + invalid-time notice + `/raid-help` updated. i18n vi/en/jp. 583 tests green.
+
 ## 2026-06-03 (raid-schedule: compact "thu nhỏ" turn plan)
 
 ### Added
