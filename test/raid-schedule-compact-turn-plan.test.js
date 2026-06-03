@@ -1,8 +1,22 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder,
+  UserSelectMenuBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  MessageFlags,
+} = require("discord.js");
 
 const { buildCompactTurnPlan, ansiColorForName } = require("../bot/handlers/raid/schedule/board");
+const { createRaidScheduleCommand } = require("../bot/handlers/raid/schedule");
 const { t } = require("../bot/services/i18n");
+const { UI } = require("../bot/utils/raid/common/shared");
 
 const plain = (s) => s.replace(/\[[0-9]*m/g, ""); // strip ANSI for content asserts
 const EMPTY = t("raid-schedule.board.emptySlot", "vi");
@@ -24,6 +38,34 @@ function makeEvent(extra = {}) {
     turns: [{ name: "1-4", memberIds: ["u1", "u3", "u2"] }, { name: "5", memberIds: ["u1"] }],
     ...extra,
   };
+}
+
+function makeCommand(event) {
+  const User = { findOne: () => ({ lean: async () => ({ language: "vi" }) }) };
+  const GuildConfig = { findOne: () => ({ lean: async () => null }) };
+  const RaidEvent = {
+    async findById(id) {
+      return String(id) === String(event._id) ? event : null;
+    },
+  };
+  return createRaidScheduleCommand({
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    StringSelectMenuBuilder,
+    UserSelectMenuBuilder,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle,
+    MessageFlags,
+    UI,
+    User,
+    GuildConfig,
+    RaidEvent,
+    isManagerId: (id) => id === "lead",
+    applyRaidSetBatchForDiscordId: async () => [],
+  });
 }
 
 test("buildCompactTurnPlan is a fenced ```ansi block with header, turns, footer", () => {
@@ -55,6 +97,25 @@ test("buildCompactTurnPlan gates the room password (id) behind comp membership",
   assert.ok(!hidden.includes("7421"), "non-comp does NOT see the room id");
   assert.ok(hidden.includes(COMP_ONLY), "shows the comp-only lock instead");
   assert.ok(hidden.includes("act4-bus"), "room NAME stays visible to everyone");
+});
+
+test("tpcompact keeps room password hidden from a non-comp manager", async () => {
+  const event = makeEvent({ creatorId: "lead", guildId: "g1", channelId: "c1" });
+  const command = makeCommand(event);
+  let payload = null;
+
+  await command.handleRaidScheduleButton({
+    customId: `rse:tpcompact:${event._id}`,
+    user: { id: "lead" },
+    async update(next) {
+      payload = next;
+    },
+  });
+
+  const text = plain(payload.content);
+  assert.ok(!text.includes("7421"), "manager outside comp does not see room id");
+  assert.ok(text.includes(COMP_ONLY), "manager outside comp gets the comp-only marker");
+  assert.ok(text.includes("act4-bus"), "room name remains visible");
 });
 
 test("ansiColorForName is stable per name and always a non-gray fg code", () => {

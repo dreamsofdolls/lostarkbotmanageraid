@@ -1578,9 +1578,9 @@ function createRaidScheduleCommand({
   }
 
   // The compact view's Room ID (= password) is comp-only, so reuse the same gate
-  // as the 🚪 Phòng button: a slot-holder OR a manager can see it.
+  // as the 🚪 Phòng button: only slot-holders can see it.
   function canSeeRoom(interaction, event) {
-    return isCompMember(event, interaction.user.id) || isLeadActionAllowed(interaction);
+    return isCompMember(event, interaction.user.id);
   }
 
   // 📊 Xem phân turn -> the turn plan, ephemeral (read-only peek). Anyone may
