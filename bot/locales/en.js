@@ -114,6 +114,8 @@ module.exports = {
       end: "End",
       manage: "Manage",
       turnPlan: "📊 Turn plan",
+      turnPlanFull: "📊 Full",
+      turnPlanCompact: "📋 Compact",
       teams: "🧩 Turns",
       kick: "👋 Kick",
       addMember: "➕ Add member",
@@ -178,6 +180,9 @@ module.exports = {
       // Plain text only - select options never render <t:..>/<#channel>.
       switchPlaceholder: "🗓 Lead's other boards ({n})",
       optionDesc: "{raid} · {date} · {comp}/{size} in comp · {wait} waiting",
+    },
+    compact: {
+      compOnly: "🔒 comp only",
     },
     notice: {
       notManagerTitle: "Raid Managers set these up",
@@ -1563,7 +1568,7 @@ module.exports = {
           "**➕ Add member**: the lead adds someone to the event (pick a user, then an iLvl-eligible character from their roster). If that role has room they hold a comp slot; if it is full they join the waitlist. Works even when locked and pings the added player.",
           "**👋 Kick**: leads drop one or more people from the event. Manage → Kick → pick people. Dropping a slot-holder auto-pulls the next waitlister in.",
           "**🗑️ Delete / auto-cleanup**: Manage → 🗑️ Delete (with confirm) removes the event for good - board + data are gone, unlike Cancel (which freezes + keeps a record). Auto-cleanup: an event left un-ended (not marked done) more than 24h past its start is purged automatically; ended events are kept until the weekly reset (Wed 17:00 VN).",
-          "**📊 Turn plan**: a button on the board shows the bus turn plan (who plays which character, class, sup/dps) - ephemeral, anyone can peek.",
+          "**📊 Turn plan**: a button on the board shows the bus turn plan (who plays which character, class, sup/dps) - ephemeral, anyone can peek. A **📋 Compact** toggle switches to a one-block ANSI console (all turns + room/ID/comp); the Room ID is shown only to comp members.",
           "**show**: `/raid-schedule-preview show` resurfaces your signup board to the bottom of its channel (delete + repost, so no stale ghost board) - handy when the board scrolled away. If you run several active boards in the same channel, the 🗓 switcher swaps the current message to the selected board instead of posting a second copy. Raid Manager only.",
           "**End**: when the lead ends the raid, the bot writes clears for the characters in the comp through the `/raid-set` path.",
         ],
