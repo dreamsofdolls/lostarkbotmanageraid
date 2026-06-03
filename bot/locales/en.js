@@ -177,7 +177,7 @@ module.exports = {
     show: {
       // Plain text only - select options never render <t:..>/<#channel>.
       switchPlaceholder: "🗓 Lead's other boards ({n})",
-      optionDesc: "{raid} · {comp}/{size} in comp · {wait} waiting",
+      optionDesc: "{raid} · {date} · {comp}/{size} in comp · {wait} waiting",
     },
     notice: {
       notManagerTitle: "Raid Managers set these up",
@@ -743,8 +743,8 @@ module.exports = {
       // Plain text only - select options never render <t:..>/<#channel>.
       placeholderSingle: "📋 Arranged teams ({n})",
       placeholderRange: "📋 Arranged teams ({a}-{b})",
-      optionDesc: "{raid} · {comp}/{size} · {wait} waiting · lead {lead}",
-      optionDescNoLead: "{raid} · {comp}/{size} · {wait} waiting",
+      optionDesc: "{raid} · {date} · {comp}/{size} · {wait} waiting · lead {lead}",
+      optionDescNoLead: "{raid} · {date} · {comp}/{size} · {wait} waiting",
       eventGoneTitle: "Event no longer available",
       eventGoneDescription: "This board was ended/cancelled/deleted after you opened /raid-check. Run /raid-check again for a fresh list~",
     },

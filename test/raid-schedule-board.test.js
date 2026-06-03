@@ -66,10 +66,10 @@ test("buildScheduleComponents includes the turn-plan peek button on the utility 
 });
 
 test("switcher row appears only when the lead runs >= 2 boards", () => {
-  const oneBoard = [{ eventId: "abcdef123456", raidKey: "armoche", modeKey: "hard", title: "Tonight", compCount: 1, partySize: 8, waitlistCount: 0, isCurrent: true }];
+  const oneBoard = [{ eventId: "abcdef123456", shortId: "123456", raidKey: "armoche", modeKey: "hard", title: "Tonight", startAt: new Date(Date.UTC(2026, 5, 3, 14, 0)), compCount: 1, partySize: 8, waitlistCount: 0, isCurrent: true }];
   const twoBoards = [
     ...oneBoard,
-    { eventId: "other999", raidKey: "kazeros", modeKey: "hard", title: "Echidna", compCount: 8, partySize: 8, waitlistCount: 2, isCurrent: false },
+    { eventId: "other999", shortId: "her999", raidKey: "kazeros", modeKey: "hard", title: "Echidna", startAt: new Date(Date.UTC(2026, 5, 4, 13, 0)), compCount: 8, partySize: 8, waitlistCount: 2, isCurrent: false },
   ];
   const selDeps = { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, lang: "vi" };
 
@@ -85,6 +85,10 @@ test("switcher row appears only when the lead runs >= 2 boards", () => {
   assert.equal(select.options.length, 2);
   const current = select.options.find((o) => o.data.value === "abcdef123456");
   assert.equal(current.data.default, true);
+  // shortId in the label, calendar icon, and a plain-text start date in the desc.
+  assert.match(current.data.label, /123456$/);
+  assert.equal(current.data.emoji.name, "🗓️");
+  assert.match(current.data.description, /\d{2}\/\d{2} \d{2}:\d{2}/);
 });
 
 test("locked event disables the join button (lead unlock lives in Manage)", () => {

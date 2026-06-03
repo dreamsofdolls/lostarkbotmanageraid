@@ -19,6 +19,7 @@
 
 const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
+const { formatStartShortForLang } = require("../../utils/raid/schedule/artist-clock");
 const {
   shapeAllOwnedBoardRows,
   chunkBoardOptions,
@@ -102,12 +103,14 @@ function createTeamsViewUi(deps) {
     const raidLabel = getRaidModeLabel(row.raidKey, row.modeKey, lang);
     const descKey = row.leadName ? "raid-check.teams.optionDesc" : "raid-check.teams.optionDescNoLead";
     return {
-      label: truncateText(row.title || raidLabel, 100),
+      // shortId in the label so same-raid events across managers are distinct.
+      label: truncateText(`${row.title || raidLabel} · ${row.shortId}`, 100),
       value: row.eventId,
       emoji: "🗓️",
       description: truncateText(
         t(descKey, lang, {
           raid: raidLabel,
+          date: formatStartShortForLang(row.startAt, lang),
           comp: row.compCount,
           size: row.partySize,
           wait: row.waitlistCount,

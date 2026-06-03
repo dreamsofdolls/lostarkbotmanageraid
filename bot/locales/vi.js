@@ -188,7 +188,7 @@ module.exports = {
     show: {
       // Plain text only - select options never render <t:..>/<#kênh>.
       switchPlaceholder: "🗓 Board khác của lead ({n})",
-      optionDesc: "{raid} · {comp}/{size} vào đội · {wait} chờ",
+      optionDesc: "{raid} · {date} · {comp}/{size} vào đội · {wait} chờ",
     },
     notice: {
       notManagerTitle: "Để Raid Manager bày event nha",
@@ -765,8 +765,8 @@ module.exports = {
       // Plain text only - select options never render <t:..>/<#kênh>.
       placeholderSingle: "📋 Đội đã xếp ({n})",
       placeholderRange: "📋 Đội đã xếp ({a}-{b})",
-      optionDesc: "{raid} · {comp}/{size} · {wait} chờ · lead {lead}",
-      optionDescNoLead: "{raid} · {comp}/{size} · {wait} chờ",
+      optionDesc: "{raid} · {date} · {comp}/{size} · {wait} chờ · lead {lead}",
+      optionDescNoLead: "{raid} · {date} · {comp}/{size} · {wait} chờ",
       eventGoneTitle: "Event không còn nữa",
       eventGoneDescription: "Board này vừa bị end/hủy/xóa sau khi cậu mở /raid-check. Gõ lại /raid-check để lấy danh sách mới nha~",
     },

@@ -17,6 +17,7 @@ const { getRaidRequirementMap } = require("../../../domain/raid-catalog");
 const { assignSlots } = require("../../../services/raid/schedule/slots");
 const { resolveTurnMembers } = require("../../../services/raid/schedule/turns");
 const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
+const { formatStartShortForLang } = require("../../../utils/raid/schedule/artist-clock");
 
 // Discord caps select option label/description at 100 chars; trim with an ellipsis.
 function clip(value, max) {
@@ -228,11 +229,14 @@ function buildSwitcherRow(currentId, ownedBoardOptions, { ActionRowBuilder, Stri
   const options = ownedBoardOptions.map((row) => {
     const raidLabel = getRaidModeLabel(row.raidKey, row.modeKey, lang);
     return {
-      label: clip(row.title || raidLabel, 100),
+      // shortId in the label so two same-raid boards are tell-apart-able.
+      label: clip(`${row.title || raidLabel} · ${row.shortId}`, 100),
       value: row.eventId,
+      emoji: "🗓️",
       description: clip(
         t("raid-schedule.show.optionDesc", lang, {
           raid: raidLabel,
+          date: formatStartShortForLang(row.startAt, lang),
           comp: row.compCount,
           size: row.partySize,
           wait: row.waitlistCount,
