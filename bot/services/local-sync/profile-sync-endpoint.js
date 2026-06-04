@@ -20,6 +20,7 @@ const MAX_RAID_BREAKDOWNS_PER_CHAR = 40;
 const MAX_TOP_SKILLS_PER_CHAR = 8;
 const MAX_TOP_SOURCES_PER_CHAR = 8;
 const MAX_ENGRAVINGS_PER_CHAR = 8;
+const MAX_ARK_PASSIVE_NODES_PER_TREE = 40;
 
 function normalizeKey(value) {
   return String(value || "").trim().toLowerCase();
@@ -47,8 +48,15 @@ function cleanNumberObject(raw, allowedKeys, opts = {}) {
 
 function roleForClass(className, fallback = "unknown") {
   const key = normalizeKey(className).replace(/\s+/g, "");
-  if (key === "bard" || key === "paladin" || key === "artist") return "support";
+  if (key === "bard" || key === "paladin" || key === "artist" || key === "valkyrie" || key === "holyknight") {
+    return "support";
+  }
   if (className) return "dps";
+  return fallback === "support" || fallback === "dps" ? fallback : "unknown";
+}
+
+function cleanRole(value, fallback = "unknown") {
+  if (value === "support" || value === "dps") return value;
   return fallback === "support" || fallback === "dps" ? fallback : "unknown";
 }
 
@@ -173,10 +181,36 @@ function cleanEngraving(raw) {
 
 function cleanArkPassiveSummary(raw) {
   if (!raw || typeof raw !== "object") return null;
-  const cleanTree = (value) => ({
-    count: clampNumber(value?.count, { max: 100 }),
-    points: clampNumber(value?.points, { max: 1000 }),
-  });
+  const cleanNode = (value) => {
+    if (!value || typeof value !== "object") return null;
+    const id = Math.round(clampNumber(value.id, { max: 9999999 }));
+    const level = Math.round(clampNumber(value.level ?? value.lv, { max: 100 }));
+    if (!id || !level) return null;
+    return {
+      id,
+      level,
+      name: cleanShortString(value.name, 96),
+      tier: Math.round(clampNumber(value.tier, { max: 10 })),
+      position: Math.round(clampNumber(value.position, { max: 100 })),
+      maxLevel: Math.round(clampNumber(value.maxLevel, { max: 100 })),
+      points: clampNumber(value.points, { max: 1000 }),
+    };
+  };
+  const cleanTree = (value) => {
+    const nodes = (Array.isArray(value?.nodes) ? value.nodes : [])
+      .slice(0, MAX_ARK_PASSIVE_NODES_PER_TREE)
+      .map(cleanNode)
+      .filter(Boolean);
+    const tree = {
+      count: clampNumber(value?.count, { max: 100, fallback: nodes.length }),
+      points: clampNumber(value?.points, { max: 1000 }),
+      spentPoints: clampNumber(value?.spentPoints, { max: 1000 }),
+      nodes,
+    };
+    const spec = cleanShortString(value?.spec, 80);
+    if (spec) tree.spec = spec;
+    return tree;
+  };
   return {
     evolution: cleanTree(raw.evolution),
     enlightenment: cleanTree(raw.enlightenment),
@@ -207,6 +241,12 @@ function cleanCharacterProfile(rawChar, rosterEntry) {
 
   const stats = cleanNumberObject(rawChar.stats, [
     "encounters",
+    "allEncounterCount",
+    "supportLogCount",
+    "dpsBuildLogCount",
+    "supportLogRate",
+    "dpsBuildLogRate",
+    "primaryRoleRate",
     "firstFightStart",
     "lastFightStart",
     "avgDps",
@@ -279,6 +319,12 @@ function cleanCharacterProfile(rawChar, rosterEntry) {
   if ("latestGearScore" in stats) stats.latestGearScore = clampNumber(stats.latestGearScore, { max: 9999 });
   if ("arkPassiveRate" in stats) stats.arkPassiveRate = clampNumber(stats.arkPassiveRate, { max: 100 });
   if ("buildVariantCount" in stats) stats.buildVariantCount = clampNumber(stats.buildVariantCount, { max: 1000 });
+  for (const key of ["supportLogRate", "dpsBuildLogRate", "primaryRoleRate"]) {
+    if (key in stats) stats[key] = clampNumber(stats[key], { max: 100 });
+  }
+  for (const key of ["allEncounterCount", "supportLogCount", "dpsBuildLogCount"]) {
+    if (key in stats) stats[key] = clampNumber(stats[key], { max: 100000 });
+  }
   for (const key of [
     "avgSupportBuffedShare",
     "avgSupportDebuffedShare",
@@ -331,11 +377,13 @@ function cleanCharacterProfile(rawChar, rosterEntry) {
     .filter(Boolean);
 
   const className = rosterEntry.character?.class || cleanShortString(rawChar.class, 80);
+  const classRole = roleForClass(className, rawChar.classRole);
   return {
     name: rosterEntry.charName,
     class: className,
     itemLevel: clampNumber(rosterEntry.character?.itemLevel, { max: 9999 }),
-    role: roleForClass(className, rawChar.role),
+    classRole,
+    role: cleanRole(rawChar.role, classRole),
     stats,
     scores,
     build: cleanBuild(rawChar.build),
@@ -410,6 +458,7 @@ function sanitizeSnapshotPayload(payload, userDoc) {
       clearedOnly: true,
       supportedBossesOnly: true,
       minDurationMs: 180000,
+      modernProfileStatsOnly: payload.criteria?.modernProfileStatsOnly !== false,
       source: "encounters.db",
     },
     db: {

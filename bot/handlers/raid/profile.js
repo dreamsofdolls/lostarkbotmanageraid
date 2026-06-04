@@ -55,6 +55,30 @@ function arkPassiveSummary(arkPassive) {
   return `Evo ${evolution} / Enl ${enlightenment} / Leap ${leap}`;
 }
 
+function arkPassiveNodeSummary(nodes, limit = 5) {
+  const entries = [...(nodes || [])]
+    .filter((node) => node?.id)
+    .slice(0, limit)
+    .map((node) => {
+      const name = shortLabel(node.name || `#${node.id}`, 26);
+      const level = Math.round(Number(node.level) || 0);
+      return level ? `${name} Lv.${level}` : name;
+    });
+  if (!entries.length) return "N/A";
+  const extra = Math.max(0, (nodes || []).length - entries.length);
+  return extra ? `${entries.join(", ")} (+${extra})` : entries.join(", ");
+}
+
+function enlightenmentSummary(arkPassive, fallbackSpec) {
+  const tree = arkPassive?.enlightenment;
+  if (!tree) return "N/A";
+  const spec = shortLabel(tree.spec || fallbackSpec || "", 30);
+  const nodes = arkPassiveNodeSummary(tree.nodes);
+  if (spec && nodes !== "N/A") return `**${spec}** - ${nodes}`;
+  if (spec) return `**${spec}**`;
+  return nodes;
+}
+
 function ratePct(value) {
   const n = Number(value) || 0;
   const normalized = n > 1 ? n / 100 : n;
@@ -67,9 +91,53 @@ function attackStyleLabel(value) {
   return "Hit Master";
 }
 
+function roleLabel(character) {
+  if (character?.classRole === "support" && character?.role === "dps") return "DPS build";
+  if (character?.role === "support") return "SUP";
+  if (character?.role === "dps") return "DPS";
+  return "Unknown";
+}
+
+function roleEmoji(character) {
+  return character?.role === "support" ? "🛡️" : "⚔️";
+}
+
 function score(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n.toFixed(1) : "0.0";
+}
+
+function renderGauge(value, { suffix = "" } = {}) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "`▱▱▱▱▱▱▱▱▱▱` **N/A**";
+  const clamped = Math.max(0, Math.min(100, n));
+  const filled = Math.round(clamped / 10);
+  const empty = Math.max(0, 10 - filled);
+  return `\`${"▰".repeat(filled)}${"▱".repeat(empty)}\` **${score(n)}${suffix}**`;
+}
+
+function renderPercentGauge(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "`▱▱▱▱▱▱▱▱▱▱` **N/A**";
+  return renderGauge(Math.max(0, Math.min(100, n)), { suffix: "%" });
+}
+
+function scoreLine(label, value) {
+  return `${label}: ${renderGauge(value)}`;
+}
+
+function hudFieldName(label) {
+  return `// ${String(label || "").trim().toUpperCase()}`;
+}
+
+function latestSnapshotMs(entries) {
+  return Math.max(0, ...(entries || []).map((entry) => Number(entry?.receivedAt || entry?.generatedAt) || 0));
+}
+
+function footerTimestamp(ms) {
+  const n = Number(ms) || 0;
+  if (!n) return "SNAPSHOT N/A";
+  return `SNAPSHOT ${new Date(n).toISOString().replace(".000Z", "Z")}`;
 }
 
 function formatDateMs(ms) {
@@ -120,11 +188,13 @@ function aggregateCharacters(chars) {
   const list = Array.isArray(chars) ? chars : [];
   const dpsChars = list.filter((c) => c.role !== "support");
   const supportChars = list.filter((c) => c.role === "support");
-  const logs = list.reduce((sum, c) => sum + (Number(c?.stats?.encounters) || 0), 0);
+  const scoredLogs = list.reduce((sum, c) => sum + (Number(c?.stats?.encounters) || 0), 0);
+  const logs = list.reduce((sum, c) => sum + (Number(c?.stats?.allEncounterCount) || Number(c?.stats?.encounters) || 0), 0);
   const lastFightStart = Math.max(0, ...list.map((c) => Number(c?.stats?.lastFightStart) || 0));
   return {
     charCount: list.length,
     logs,
+    scoredLogs,
     lastFightStart,
     overall: weightedAverage(list, (c) => c?.scores?.overall),
     mvp: weightedAverage(list, (c) => c?.scores?.mvp),
@@ -185,37 +255,39 @@ function buildOverallEmbed({ EmbedBuilder, UI }, session) {
   const topMvp = pickTopChar(chars, "mvp");
   const embed = new EmbedBuilder()
     .setColor(UI.colors.neutral)
-    .setTitle("Raid Profile")
+    .setAuthor({ name: "// RAID PROFILE · OVERALL" })
+    .setTitle("Hồ sơ raid của cậu nè~")
     .setDescription([
-      "Nguồn: local encounters.db profile snapshot.",
-      "Chỉ tính boss raid đang được RaidManage hỗ trợ, clear thành công, duration > 3 phút.",
+      "Artist gom từ `encounters.db` của cậu.",
+      "Chỉ tính boss raid RaidManage hỗ trợ, clear thành công, duration > 3 phút.",
     ].join("\n"))
     .addFields(
       {
-        name: "Tổng quan",
+        name: hudFieldName("scope"),
         value: [
           `Roster: **${session.entries.length}**`,
           `Character: **${agg.charCount}**`,
           `Log hợp lệ: **${agg.logs}**`,
+          `Scored logs: **${agg.scoredLogs}**`,
           `Lần mới nhất: ${formatDateMs(agg.lastFightStart)}`,
         ].join("\n"),
         inline: true,
       },
       {
-        name: "Điểm tổng hợp",
+        name: hudFieldName("aggregate score"),
         value: [
-          `Overall: **${score(agg.overall)}**`,
-          `MVP chance: **${score(agg.mvp)}**`,
-          `DPS avg: **${agg.dpsCount ? score(agg.dpsOverall) : "N/A"}**`,
-          `SUP avg: **${agg.supportCount ? score(agg.supportOverall) : "N/A"}**`,
+          scoreLine("Overall", agg.overall),
+          scoreLine("MVP", agg.mvp),
+          agg.dpsCount ? scoreLine("DPS avg", agg.dpsOverall) : "DPS avg: **N/A**",
+          agg.supportCount ? scoreLine("SUP avg", agg.supportOverall) : "SUP avg: **N/A**",
         ].join("\n"),
         inline: true,
       },
       {
-        name: "Top nổi bật",
+        name: hudFieldName("top"),
         value: [
-          topOverall ? `Overall: **${topOverall.name}** (${score(topOverall.scores.overall)})` : "Overall: N/A",
-          topMvp ? `MVP: **${topMvp.name}** (${score(topMvp.scores.mvp)})` : "MVP: N/A",
+          topOverall ? `★ Overall: **${topOverall.name}** ${renderGauge(topOverall.scores.overall)}` : "Overall: N/A",
+          topMvp ? `★ MVP: **${topMvp.name}** ${renderGauge(topMvp.scores.mvp)}` : "MVP: N/A",
         ].join("\n"),
         inline: false,
       }
@@ -227,9 +299,12 @@ function buildOverallEmbed({ EmbedBuilder, UI }, session) {
     return `\`${index + 1}.\` **${getEntryLabel(entry)}** · ${prefix} · ${rosterAgg.charCount} char · ${rosterAgg.logs} log · score ${score(rosterAgg.overall)}`;
   });
   embed.addFields({
-    name: "Roster",
+    name: hudFieldName("roster"),
     value: rosterLines.length ? rosterLines.join("\n") : "Chưa có profile snapshot.",
     inline: false,
+  });
+  embed.setFooter({
+    text: `// ${footerTimestamp(latestSnapshotMs(session.entries))} · ${agg.logs} LOG · ${agg.scoredLogs} SCORED · CONF ${confidenceForLogs(agg.scoredLogs).toUpperCase()}`,
   });
 
   return embed;
@@ -240,6 +315,7 @@ function buildRosterEmbed({ EmbedBuilder, UI }, session, entry) {
   const topOverall = pickTopChar(entry.characters, "overall");
   const embed = new EmbedBuilder()
     .setColor(entry.isOwn ? UI.colors.neutral : UI.colors.progress)
+    .setAuthor({ name: "// RAID PROFILE · ROSTER" })
     .setTitle(`Raid Profile · ${entry.accountName}`)
     .setDescription([
       entry.isOwn
@@ -249,21 +325,22 @@ function buildRosterEmbed({ EmbedBuilder, UI }, session, entry) {
     ].join("\n"))
     .addFields(
       {
-        name: "Tổng quan roster",
+        name: hudFieldName("scope"),
         value: [
           `Character: **${agg.charCount}**`,
           `Log hợp lệ: **${agg.logs}**`,
-          `Overall: **${score(agg.overall)}**`,
-          `MVP chance: **${score(agg.mvp)}**`,
+          `Scored logs: **${agg.scoredLogs}**`,
+          scoreLine("Overall", agg.overall),
+          scoreLine("MVP", agg.mvp),
         ].join("\n"),
         inline: true,
       },
       {
-        name: "Role split",
+        name: hudFieldName("role split"),
         value: [
           `DPS: **${agg.dpsCount}** · ${agg.dpsCount ? score(agg.dpsOverall) : "N/A"}`,
           `SUP: **${agg.supportCount}** · ${agg.supportCount ? score(agg.supportOverall) : "N/A"}`,
-          topOverall ? `Top: **${topOverall.name}** (${score(topOverall.scores.overall)})` : "Top: N/A",
+          topOverall ? `Top: **${topOverall.name}** ${renderGauge(topOverall.scores.overall)}` : "Top: N/A",
         ].join("\n"),
         inline: true,
       }
@@ -273,14 +350,16 @@ function buildRosterEmbed({ EmbedBuilder, UI }, session, entry) {
     .sort((a, b) => Number(b?.scores?.overall || 0) - Number(a?.scores?.overall || 0))
     .slice(0, 12)
     .map((character, index) => {
-      const role = character.role === "support" ? "SUP" : "DPS";
       const logs = Number(character?.stats?.encounters) || 0;
-      return `\`${index + 1}.\` **${character.name}** · ${role} · ${logs} log · score ${score(character?.scores?.overall)} · MVP ${score(character?.scores?.mvp)}`;
-    });
+      return `\`${index + 1}.\` **${character.name}** · ${roleLabel(character)} · ${logs} scored · score ${score(character?.scores?.overall)} · MVP ${score(character?.scores?.mvp)}`;
+  });
   embed.addFields({
-    name: "Character",
+    name: hudFieldName("character"),
     value: lines.length ? lines.join("\n") : "Roster này chưa có character snapshot.",
     inline: false,
+  });
+  embed.setFooter({
+    text: `// ${entry.isOwn ? "OWN" : "SHARED"} · ${footerTimestamp(entry.receivedAt || entry.generatedAt)} · ${agg.logs} LOG · ${agg.scoredLogs} SCORED · CONF ${confidenceForLogs(agg.scoredLogs).toUpperCase()}`,
   });
 
   return embed;
@@ -292,30 +371,31 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
   const isSupport = character.role === "support";
   const embed = new EmbedBuilder()
     .setColor(isSupport ? UI.colors.success : UI.colors.neutral)
+    .setAuthor({ name: "// RAID PROFILE · CHARACTER" })
     .setTitle(`Raid Profile · ${character.name}`)
     .setDescription([
       `Roster: **${getEntryLabel(entry)}**`,
-      `Class: **${character.class || "Unknown"}** · iLvl **${character.itemLevel || 0}** · ${isSupport ? "SUP" : "DPS"}`,
-      `Confidence: **${confidenceForLogs(stats.encounters)}** (${stats.encounters || 0} log)`,
+      `Class: **${character.class || "Unknown"}** · iLvl **${character.itemLevel || 0}** · ${roleLabel(character)}`,
+      `Confidence: **${confidenceForLogs(stats.encounters)}** (${stats.encounters || 0} scored log)`,
     ].join("\n"))
     .addFields(
       {
-        name: "Score",
+        name: hudFieldName("score"),
         value: [
-          `Overall: **${score(scores.overall)}**`,
-          `MVP chance: **${score(scores.mvp)}**`,
-          `Survival: **${score(scores.survival)}**`,
-          `Consistency: **${score(scores.consistency)}**`,
+          scoreLine("Overall", scores.overall),
+          scoreLine("MVP", scores.mvp),
+          scoreLine("Survival", scores.survival),
+          scoreLine("Consistency", scores.consistency),
         ].join("\n"),
         inline: true,
       },
       {
-        name: isSupport ? "SUP detail" : "DPS detail",
+        name: hudFieldName(isSupport ? "SUP detail" : "DPS detail"),
         value: isSupport
           ? [
-              `Uptime: **${score(scores.supportUptime)}**`,
-              `Raid contribution: **${score(scores.raidContribution)}**`,
-              `Protection: **${score(scores.protection)}**`,
+              scoreLine("Uptime", scores.supportUptime),
+              scoreLine("Raid contribution", scores.raidContribution),
+              scoreLine("Protection", scores.protection),
               `Shield/min: **${shortNumber(stats.avgProtectionPerMinute)}**`,
               `Synergy/min: **${shortNumber(stats.avgSynergyGivenPerMinute)}**`,
               `AP/Brand: ${ratePct(stats.avgSupportAp)} / ${ratePct(stats.avgSupportBrand)}`,
@@ -324,13 +404,13 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
           : [
               `Avg DPS: **${shortNumber(stats.avgDps)}**`,
               `Median DPS: **${shortNumber(stats.medianDps)}**`,
-              `Damage share: **${pct(stats.avgDamageShare)}**`,
+              `Damage share: **${pct(stats.avgDamageShare)}** · ${renderGauge(scores.damageShare)}`,
               `Top rate: **${pct(stats.topRate)}**`,
             ].join("\n"),
         inline: true,
       },
       {
-        name: "Combat shape",
+        name: hudFieldName("combat shape"),
         value: [
           `Style: **${attackStyleLabel(stats.attackStyle)}**`,
           `Crit: **${pct(stats.avgCritRate)}**`,
@@ -342,9 +422,9 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
         inline: false,
       },
       {
-        name: "Reliability",
+        name: hudFieldName("reliability"),
         value: [
-          `Deathless: **${pct(stats.deathlessRate)}**`,
+          `Deathless: ${renderPercentGauge(stats.deathlessRate)}`,
           `Death rate: **${pct(stats.deathRate)}**`,
           `Deaths: **${Math.round(Number(stats.totalDeaths) || 0)}** total · avg ${score(stats.avgDeaths)}`,
           `Avg rank: **${score(stats.avgRank)}**`,
@@ -357,8 +437,21 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
       }
     );
 
+  if (character.classRole === "support") {
+    embed.addFields({
+      name: hudFieldName("role detection"),
+      value: [
+        `Class role: **SUP** · scored as **${roleLabel(character)}**`,
+        `SUP logs: **${Math.round(Number(stats.supportLogCount) || 0)}** (${pct(stats.supportLogRate)})`,
+        `DPS-build logs: **${Math.round(Number(stats.dpsBuildLogCount) || 0)}** (${pct(stats.dpsBuildLogRate)})`,
+        `Used for score: **${Math.round(Number(stats.encounters) || 0)} / ${Math.round(Number(stats.allEncounterCount) || Number(stats.encounters) || 0)}** (${pct(stats.primaryRoleRate || 100)})`,
+      ].join("\n"),
+      inline: false,
+    });
+  }
+
   embed.addFields({
-    name: "Buff profile",
+    name: hudFieldName("buff profile"),
     value: [
       `Party attr buff/debuff: **${pct(stats.avgPartyBuffedShare)}** / **${pct(stats.avgPartyDebuffedShare)}**`,
       `Self attr / battle item: **${pct(stats.avgSelfBuffedShare)}** / **${pct(stats.avgBattleItemDebuffedShare)}**`,
@@ -373,7 +466,7 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
   const build = character.build || {};
   if (build.spec || build.gearScore || build.combatPower || build.engravings?.length || build.arkPassive) {
     embed.addFields({
-      name: "Build",
+      name: hudFieldName("build"),
       value: [
         `Spec: **${build.spec || "N/A"}**`,
         `Gear/CP: **${build.gearScore ? score(build.gearScore) : "N/A"}** / **${build.combatPower ? score(build.combatPower) : "N/A"}**`,
@@ -381,6 +474,7 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
         `Build variants: **${Math.round(Number(stats.buildVariantCount) || 0)}**`,
         `Engravings: ${engravingSummary(build.engravings)}`,
         `Ark points: ${arkPassiveSummary(build.arkPassive)}`,
+        `Enlightenment: ${enlightenmentSummary(build.arkPassive, build.spec)}`,
       ].join("\n"),
       inline: false,
     });
@@ -389,11 +483,11 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
   const skillLines = [...(character.topSkills || [])]
     .slice(0, 5)
     .map((skill, index) => (
-      `\`${index + 1}.\` **${skill.name || "Unknown"}** · ${pct(skill.share)} · crit ${pct(skill.critRate)}`
+      `\`${index + 1}.\` **${skill.name || "Unknown"}** · ${renderPercentGauge(skill.share)} · crit ${pct(skill.critRate)}`
     ));
   if (skillLines.length) {
     embed.addFields({
-      name: "Top skills",
+      name: hudFieldName("top skills"),
       value: skillLines.join("\n"),
       inline: false,
     });
@@ -406,9 +500,12 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
       return `**${raid.raidKey} ${raid.modeKey}** · ${raid.boss || "?"} · ${raid.encounters || 0} log · DPS ${shortNumber(raid.medianDps)} · share ${pct(raid.avgDamageShare)} · top ${pct(raid.topRate)}`;
     });
   embed.addFields({
-    name: "Raid breakdown",
+    name: hudFieldName("raid breakdown"),
     value: raidLines.length ? raidLines.join("\n") : "Chưa có breakdown đủ điều kiện.",
     inline: false,
+  });
+  embed.setFooter({
+    text: `// ${String(character.class || "UNKNOWN").toUpperCase()} · ${roleLabel(character).toUpperCase()} · ${stats.encounters || 0} SCORED · CONF ${confidenceForLogs(stats.encounters).toUpperCase()} · ${footerTimestamp(entry.receivedAt || entry.generatedAt)}`,
   });
 
   return embed;
@@ -463,12 +560,11 @@ function buildComponents(deps, session) {
     ? [
         selectOption("Tổng quan roster", "overview", "Xem thống kê gộp của roster", "📁", session.charIndex < 0),
         ...selectedEntry.characters.slice(0, 24).map((character, index) => {
-          const role = character.role === "support" ? "SUP" : "DPS";
           return selectOption(
             character.name,
             String(index),
-            `${role} · ${character.stats?.encounters || 0} log · score ${score(character.scores?.overall)}`,
-            role === "SUP" ? "🛡️" : "⚔️",
+            `${roleLabel(character)} · ${character.stats?.encounters || 0} scored · score ${score(character.scores?.overall)}`,
+            roleEmoji(character),
             session.charIndex === index
           );
         }),
@@ -562,14 +658,13 @@ function createRaidProfileCommand(deps) {
     });
 
     if (!accessible.length) {
+      const embed = buildNoticeEmbed(EmbedBuilder, {
+        type: "info",
+        title: "Artist chưa thấy roster nào của cậu hết á~",
+        description: "Cậu `/raid-add-roster` trước nha, hoặc nhờ manager share roster cho cậu. Sau đó mở Web Companion cho Artist đọc `encounters.db`, xong là Artist dựng hồ sơ raid cho cậu liền~",
+      }).setAuthor({ name: "// RAID PROFILE · HEADS UP" });
       await interaction.editReply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "info",
-            title: "Chưa có roster",
-            description: "Cậu cần `/raid-add-roster` trước, hoặc nhận roster share từ manager, rồi mở web companion để profile auto-sync đọc encounters.db.",
-          }),
-        ],
+        embeds: [embed],
       });
       return;
     }
@@ -580,16 +675,15 @@ function createRaidProfileCommand(deps) {
         .lean()
         .catch(() => null);
       const hint = userDoc?.localSyncEnabled
-        ? "Local-sync đang bật rồi. Mở Web Companion từ `/raid-status`, chọn/restore encounters.db, đợi dòng profile auto-sync báo xong rồi chạy lại `/raid-profile`."
-        : "Bật `/raid-auto-manage action:local-on`, mở Web Companion, chọn encounters.db để tạo profile snapshot trước.";
+        ? "Local-sync bật rồi đó! Cậu mở Web Companion từ `/raid-status`, chọn hoặc restore `encounters.db`, đợi dòng profile auto-sync báo xong, rồi gọi lại `/raid-profile` là Artist gom hồ sơ cho nha~"
+        : "Cậu bật `/raid-auto-manage action:local-on`, mở Web Companion, rồi chọn `encounters.db` để tạo profile snapshot trước nha.";
+      const embed = buildNoticeEmbed(EmbedBuilder, {
+        type: "info",
+        title: "Hồ sơ còn trống trơn nè",
+        description: hint,
+      }).setAuthor({ name: "// RAID PROFILE · HEADS UP" });
       await interaction.editReply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "info",
-            title: "Chưa có profile snapshot",
-            description: hint,
-          }),
-        ],
+        embeds: [embed],
       });
       return;
     }
