@@ -1,7 +1,7 @@
 /**
  * handlers/raid/bg.js
  *
- * /raid-bg command · set / view / remove the per-user background image for
+ * /raid-bg command · set / view / edit the per-user background image for
  * the /raid-status embed image. Storage moved to Mongo: uploaded bytes are
  * normalized + JPEG-encoded to stay under ~2 MB then written as BSON Binary
  * on a dedicated UserBackground collection (separate from the User doc so
@@ -806,6 +806,15 @@ function buildSceneBrowserPayload({
   return { embeds: [embed], files: [new AttachmentBuilder(buffer, { name: filename })], components };
 }
 
+function sceneBrowserUpdatePayload(payload) {
+  return {
+    embeds: payload.embeds,
+    files: payload.files,
+    attachments: [],
+    components: payload.components,
+  };
+}
+
 /**
  * Persist the full library back (extend / replace / per-slot delete). Mirrors
  * handleSet's write so the legacy single-image fields stay unset.
@@ -853,9 +862,7 @@ async function handleView({ interaction, deps, lang }) {
     AttachmentBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
   });
   const payload = render();
-  const message = await editEmbed(interaction, payload.embeds, {
-    files: payload.files, components: payload.components,
-  });
+  const message = await editEmbed(interaction, payload.embeds, sceneBrowserUpdatePayload(payload));
 
   // Single scene -> nothing to page through, so skip the collector.
   if (images.length < 2 || !message?.createMessageComponentCollector) return;
@@ -868,7 +875,7 @@ async function handleView({ interaction, deps, lang }) {
     else if (id === "raidbg:next") index = Math.min(images.length - 1, index + 1);
     else return;
     const next = render();
-    await component.update({ embeds: next.embeds, files: next.files, components: next.components });
+    await component.update(sceneBrowserUpdatePayload(next));
   });
   collector.on("end", async () => {
     try { await interaction.editReply({ components: [] }); } catch { /* message gone */ }
@@ -932,14 +939,13 @@ async function handleEdit({ interaction, deps, lang }) {
     AttachmentBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
   });
   const payload = render();
-  const message = await editEmbed(interaction, payload.embeds, {
-    files: payload.files, components: payload.components,
-  });
+  const message = await editEmbed(interaction, payload.embeds, sceneBrowserUpdatePayload(payload));
   if (!message?.createMessageComponentCollector) return;
 
   const finalNotice = (component, opts) => component.update({
     embeds: [buildRaidBgEmbed(EmbedBuilder, opts)],
     files: [],
+    attachments: [],
     components: [],
   });
 
@@ -950,7 +956,7 @@ async function handleEdit({ interaction, deps, lang }) {
       if (id === "raidbg:scene") {
         index = Number(component.values?.[0]) || 0;
         const next = render();
-        await component.update({ embeds: next.embeds, files: next.files, components: next.components });
+        await component.update(sceneBrowserUpdatePayload(next));
         return;
       }
       if (id === "raidbg:doreplace") {
@@ -984,7 +990,7 @@ async function handleEdit({ interaction, deps, lang }) {
         await saveLibrary(interaction.user.id, images, assignments, mode);
         clearBackgroundCache(interaction.user.id);
         const next = render();
-        await component.update({ embeds: next.embeds, files: next.files, components: next.components });
+        await component.update(sceneBrowserUpdatePayload(next));
         return;
       }
     } catch (err) {
