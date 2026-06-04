@@ -81,6 +81,23 @@ function makeAttachment(buffer, overrides = {}) {
   };
 }
 
+function makeCollectorHarness() {
+  const handlers = {};
+  const collector = {
+    on(event, handler) {
+      handlers[event] = handler;
+      return collector;
+    },
+    stop(reason) {
+      Promise.resolve(handlers.end?.([], reason)).catch(() => {});
+    },
+  };
+  return {
+    handlers,
+    message: { createMessageComponentCollector: () => collector },
+  };
+}
+
 function makeSetOptions(attachments, mode = null, action = null) {
   const byName = new Map();
   for (let i = 0; i < attachments.length; i += 1) {
@@ -613,6 +630,54 @@ test("raid-bg view renders a single-scene browser (image + scene dropdown + page
   assert.ok(customIds.includes("raidbg:prev") && customIds.includes("raidbg:next"), "pager present");
 });
 
+test("raid-bg view clears stale attachments when paging scenes", async (t) => {
+  const pngA = makePngBuffer(1200, 720, "#112233");
+  const pngB = makePngBuffer(1200, 720, "#445566");
+  const originalFindOne = UserBackground.findOne;
+  UserBackground.findOne = () => ({
+    lean: async () => ({
+      mode: "even",
+      images: [
+        { imageData: pngA, width: 1200, height: 720, originalFilename: "stored-a.png" },
+        { imageData: pngB, width: 1200, height: 720, originalFilename: "stored-b.png" },
+      ],
+      assignments: [],
+      updatedAt: new Date(),
+    }),
+  });
+  t.after(() => {
+    UserBackground.findOne = originalFindOne;
+  });
+
+  const harness = makeCollectorHarness();
+  const command = createRaidBgCommand({
+    User: makeUserModel("en"),
+    AttachmentBuilder,
+    EmbedBuilder,
+    MessageFlags,
+    ...COMPONENT_DEPS,
+  });
+
+  await command.handleRaidBgCommand({
+    guild: { id: "guild-1" },
+    user: { id: "user-view-page" },
+    options: { getSubcommand: () => "view" },
+    deferReply: async () => {},
+    editReply: async () => harness.message,
+  });
+
+  assert.equal(typeof harness.handlers.collect, "function");
+  let updatePayload = null;
+  await harness.handlers.collect({
+    customId: "raidbg:next",
+    update: async (payload) => { updatePayload = payload; },
+  });
+
+  assert.deepEqual(updatePayload.attachments, []);
+  assert.equal(updatePayload.files.length, 1);
+  assert.equal(updatePayload.files[0].name, "raid-bg-scene.jpg");
+});
+
 test("raid-bg edit (no image) opens the delete picker", async (t) => {
   const pngA = makePngBuffer(1200, 720, "#112233");
   const pngB = makePngBuffer(1200, 720, "#445566");
@@ -658,6 +723,64 @@ test("raid-bg edit (no image) opens the delete picker", async (t) => {
   assert.ok(customIds.includes("raidbg:dodelete"), "delete-this button present");
   assert.ok(customIds.includes("raidbg:deleteall"), "delete-all button present");
   assert.ok(!customIds.includes("raidbg:doreplace"), "no replace button in delete mode");
+});
+
+test("raid-bg edit delete-all clears stale scene attachments", async (t) => {
+  const pngA = makePngBuffer(1200, 720, "#112233");
+  const pngB = makePngBuffer(1200, 720, "#445566");
+  const originalFindOne = UserBackground.findOne;
+  const originalDeleteOne = UserBackground.deleteOne;
+  let deleteFilter = null;
+  UserBackground.findOne = () => ({
+    lean: async () => ({
+      _id: "doc-existing",
+      mode: "even",
+      images: [
+        { imageData: pngA, width: 1200, height: 720, originalFilename: "a.png" },
+        { imageData: pngB, width: 1200, height: 720, originalFilename: "b.png" },
+      ],
+      assignments: [],
+      updatedAt: new Date(),
+    }),
+  });
+  UserBackground.deleteOne = async (filter) => {
+    deleteFilter = filter;
+    return { deletedCount: 1 };
+  };
+  t.after(() => {
+    UserBackground.findOne = originalFindOne;
+    UserBackground.deleteOne = originalDeleteOne;
+    bgLoader.clearBackgroundCache();
+  });
+
+  const harness = makeCollectorHarness();
+  const command = createRaidBgCommand({
+    User: makeUserModel("en"),
+    AttachmentBuilder,
+    EmbedBuilder,
+    MessageFlags,
+    ...COMPONENT_DEPS,
+  });
+
+  await command.handleRaidBgCommand({
+    guild: { id: "guild-1" },
+    user: { id: "user-edit-delete-all" },
+    options: { getSubcommand: () => "edit", getAttachment: () => null },
+    deferReply: async () => {},
+    editReply: async () => harness.message,
+  });
+
+  assert.equal(typeof harness.handlers.collect, "function");
+  let updatePayload = null;
+  await harness.handlers.collect({
+    customId: "raidbg:deleteall",
+    update: async (payload) => { updatePayload = payload; },
+  });
+
+  assert.deepEqual(deleteFilter, { discordId: "user-edit-delete-all" });
+  assert.deepEqual(updatePayload.files, []);
+  assert.deepEqual(updatePayload.attachments, []);
+  assert.deepEqual(updatePayload.components, []);
 });
 
 test("compactAssignmentsAfterRemove reindexes assignments after a slot is removed", () => {
