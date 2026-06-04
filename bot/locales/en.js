@@ -2033,9 +2033,9 @@ module.exports = {
       noRosterTitle: "ℹ️ No roster found",
       noRosterDescription:
         "Artist needs at least one of your own rosters before saving roster backgrounds.",
-      tooManyImagesTitle: "⚠️ Too many images",
+      tooManyImagesTitle: "⚠️ Library full",
       tooManyImagesDescription:
-        "You attached {count} images, but Artist can save up to {max} for your current roster count.",
+        "The library holds up to **{max}** scenes. You already have {existing}, so this would overflow. Use `/raid-bg edit` to clear some first, then try again~",
       imagesLabel: "🖼️ Images",
       imagesValue: "Saved {count}/{max} image(s) · {totalKb} KB total",
       modeLabel: "🔀 Assignment",
@@ -2047,7 +2047,33 @@ module.exports = {
       fileLabel: "🖼️ File",
       dimsLabel: "📐 Dimensions",
       sizeLabel: "💾 Storage",
-      footer: "/raid-bg view to peek · /raid-bg remove to clear",
+      footer: "/raid-bg view to browse · /raid-bg edit to replace/delete",
+    },
+    browse: {
+      viewTitle: "🖼️ Background library · scene #{index}/{total}",
+      viewDesc: "Viewing **{file}**",
+      replaceTitle: "✏️ Edit library · pick a scene to REPLACE",
+      replaceDesc: "Your new image will replace the **{file}** scene you select.",
+      deleteTitle: "🗑️ Tidy library · pick a scene to delete",
+      deleteDesc: "Pick one scene to delete, or clear the whole library. Assigned accounts shift down automatically.",
+      dimsLabel: "📐 Dimensions",
+      modeLabel: "🔀 Mode",
+      assignedLabel: "📌 Assigned to",
+      assignedNone: "_no account assigned_",
+      selectPlaceholder: "🗓 Pick a scene to view…",
+    },
+    edit: {
+      nothingTitle: "ℹ️ Nothing to edit",
+      nothingDescription:
+        "You haven't uploaded a background yet~ Run `/raid-bg set image:<file>` first!",
+      replaceBtn: "🔁 Replace scene #{index} with the new image",
+      deleteBtn: "🗑 Delete scene #{index}",
+      deleteAllBtn: "🗑 Delete all",
+      replacedTitle: "✅ Scene replaced",
+      replacedDescription: "Artist swapped scene **#{index}** for the new image~",
+      clearedTitle: "🗑️ Library cleared",
+      clearedDescription:
+        "You're back to the default text embed for `/raid-status`. Want a background again? `/raid-bg set`~",
     },
     view: {
       noneTitle: "ℹ️ No background yet",

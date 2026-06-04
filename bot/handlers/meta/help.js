@@ -145,9 +145,9 @@ const SECTION_META = {
   "raid-bg": {
     icon: "🖼️",
     options: [
-      { name: "set image:<file>", required: false },
+      { name: "set image:<file> action:<overwrite|extend>", required: false },
       { name: "view", required: false },
-      { name: "remove", required: false },
+      { name: "edit image:<file>", required: false },
     ],
   },
 };
