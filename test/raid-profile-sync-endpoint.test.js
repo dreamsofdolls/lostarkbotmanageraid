@@ -131,6 +131,7 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
       body: {
         generatedAt: 1000,
         db: { fileName: "encounters.db", size: 4096, lastModified: 999 },
+        criteria: { modernProfileStatsOnly: true },
         accounts: [
           {
             accountName: "Roster",
@@ -141,6 +142,12 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
                 role: "dps",
                 stats: {
                   encounters: 12,
+                  allEncounterCount: 20,
+                  supportLogCount: 8,
+                  dpsBuildLogCount: 12,
+                  supportLogRate: 40,
+                  dpsBuildLogRate: 60,
+                  primaryRoleRate: 60,
                   avgDps: 123,
                   lastFightStart: 3000,
                   deathlessRate: 75,
@@ -182,7 +189,23 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
                   ],
                   arkPassive: {
                     evolution: { count: 2, points: 40 },
-                    enlightenment: { count: 1, points: 3 },
+                    enlightenment: {
+                      count: 1,
+                      points: 3,
+                      spentPoints: 24,
+                      spec: "Full Bloom",
+                      nodes: [
+                        {
+                          id: 2310000,
+                          level: 1,
+                          name: "Setting Moon",
+                          tier: 1,
+                          position: 1,
+                          maxLevel: 1,
+                          points: 24,
+                        },
+                      ],
+                    },
                     leap: { count: 1, points: 5 },
                   },
                 },
@@ -237,8 +260,13 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
   assert.equal(saved.accounts[0].characters.length, 1);
   assert.equal(saved.accounts[0].characters[0].name, "Aki");
   assert.equal(saved.accounts[0].characters[0].class, "Artist");
-  assert.equal(saved.accounts[0].characters[0].role, "support");
+  assert.equal(saved.accounts[0].characters[0].classRole, "support");
+  assert.equal(saved.accounts[0].characters[0].role, "dps");
   assert.equal(saved.accounts[0].characters[0].stats.encounters, 12);
+  assert.equal(saved.accounts[0].characters[0].stats.allEncounterCount, 20);
+  assert.equal(saved.accounts[0].characters[0].stats.supportLogCount, 8);
+  assert.equal(saved.accounts[0].characters[0].stats.dpsBuildLogCount, 12);
+  assert.equal(saved.accounts[0].characters[0].stats.primaryRoleRate, 60);
   assert.equal(saved.accounts[0].characters[0].stats.totalDeaths, 3);
   assert.equal(saved.accounts[0].characters[0].stats.avgDeaths, 0.25);
   assert.equal(saved.accounts[0].characters[0].stats.deathRate, 25);
@@ -255,6 +283,9 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
   assert.equal(saved.accounts[0].characters[0].build.spec, "Full Bloom");
   assert.equal(saved.accounts[0].characters[0].build.engravings.length, 2);
   assert.equal(saved.accounts[0].characters[0].build.arkPassive.evolution.points, 40);
+  assert.equal(saved.accounts[0].characters[0].build.arkPassive.enlightenment.spec, "Full Bloom");
+  assert.equal(saved.accounts[0].characters[0].build.arkPassive.enlightenment.spentPoints, 24);
+  assert.equal(saved.accounts[0].characters[0].build.arkPassive.enlightenment.nodes[0].name, "Setting Moon");
   assert.equal(saved.accounts[0].characters[0].topSkills.length, 1);
   assert.equal(saved.accounts[0].characters[0].topSkills[0].name, "Main Skill");
   assert.equal(saved.accounts[0].characters[0].topSkills[0].share, 42.5);
@@ -262,6 +293,7 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
   assert.equal(saved.accounts[0].characters[0].topDebuffSources[0].category, "battleitem");
   assert.equal(saved.accounts[0].characters[0].topShieldGivenSources[0].target, "OTHER");
   assert.equal(saved.accounts[0].characters[0].topShieldReceivedSources[0].share, 45.6);
+  assert.equal(saved.criteria.modernProfileStatsOnly, true);
   assert.equal(saved.totals.encounterCount, 12);
   assert.equal(userUpdates.length, 1);
   assert.deepEqual(userUpdates[0].filter, {

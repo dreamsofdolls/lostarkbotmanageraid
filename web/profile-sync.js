@@ -6,6 +6,10 @@ import {
   getRaidGateForBoss,
   normalizeDifficulty,
 } from "/sync/preview-utils.js";
+import {
+  getArkPassiveNodeMeta,
+  getSpecFromArkPassiveNodes,
+} from "/sync/ark-passive-data.js";
 import { t } from "/sync/i18n.js";
 
 const WA_SQLITE_VERSION = "1.3.0";
@@ -13,8 +17,11 @@ const WA_SQLITE_BASE = `https://cdn.jsdelivr.net/npm/@journeyapps/wa-sqlite@${WA
 const PROFILE_SESSION_STORAGE_KEY = "artist-profile-sync-session";
 const PROFILE_AUTO_SYNC_INTERVAL_MS = 10 * 60 * 1000;
 const MIN_DURATION_MS = 180000;
-const SUPPORT_CLASSES = new Set(["bard", "paladin", "artist"]);
+const SUPPORT_CLASSES = new Set(["bard", "paladin", "artist", "valkyrie", "holyknight"]);
 const SUPPORT_PROTECTION_P90_PER_MIN = 10000000;
+const SUPPORT_LOG_UPTIME_THRESHOLD = 25;
+const SUPPORT_LOG_PROTECTION_PER_MIN_THRESHOLD = 500000;
+const SUPPORT_LOG_RDPS_GIVEN_PER_MIN_THRESHOLD = 500000;
 const STAGGER_P90_PER_MIN = 3500;
 const POSITIONAL_ATTACK_RATE_THRESHOLD = 45;
 
@@ -319,7 +326,7 @@ async function queryProfileRows(file, rosterAccounts) {
       });
     });
     await enrichProfileRows(rows);
-    return rows;
+    return rows.filter(isModernProfileRow);
   });
 }
 
@@ -512,12 +519,34 @@ function summarizeEngravings(raw) {
 function summarizeArkPassive(raw) {
   const parsed = parseJsonObject(raw);
   if (!parsed) return null;
-  const summarizeTree = (name) => {
-    const nodes = Array.isArray(parsed[name]) ? parsed[name] : [];
+  const summarizeNode = (node) => {
+    const id = Number(node?.id) || 0;
+    const level = Number(node?.lv ?? node?.level) || 0;
+    if (!id || !level) return null;
+    const meta = getArkPassiveNodeMeta(id);
+    const pointsPerLevel = Number(meta?.pointsPerLevel) || 0;
     return {
-      count: nodes.length,
-      points: nodes.reduce((sum, node) => sum + (Number(node?.lv) || 0), 0),
+      id,
+      level,
+      name: cleanBuildName(meta?.name),
+      tier: meta ? Number(meta.tier) + 1 : 0,
+      position: meta ? Number(meta.position) : 0,
+      maxLevel: Number(meta?.maxLevel) || 0,
+      points: pointsPerLevel ? level * pointsPerLevel : 0,
     };
+  };
+  const summarizeTree = (name) => {
+    const nodes = (Array.isArray(parsed[name]) ? parsed[name] : [])
+      .map(summarizeNode)
+      .filter(Boolean);
+    const tree = {
+      count: nodes.length,
+      points: nodes.reduce((sum, node) => sum + (Number(node.level) || 0), 0),
+      spentPoints: nodes.reduce((sum, node) => sum + (Number(node.points) || 0), 0),
+      nodes,
+    };
+    if (name === "enlightenment") tree.spec = getSpecFromArkPassiveNodes(nodes);
+    return tree;
   };
   return {
     evolution: summarizeTree("evolution"),
@@ -820,7 +849,17 @@ async function enrichProfileRows(rows) {
     row.synergyReceived = contribution.synergyReceived;
     row.synergyGivenPerMinute = durationMin > 0 ? contribution.synergyGiven / durationMin : 0;
     row.synergyReceivedShare = contribution.synergyReceivedShare;
+    row.damageShare = row.partyDps > 0 ? (row.dps / row.partyDps) * 100 : 0;
+    row.classRole = roleForClass(row.className);
+    row.logRole = classifyLogRole(row);
   }));
+}
+
+function isModernProfileRow(row) {
+  return !!row?.hasDamageStats &&
+    (Number(row.damageDealt) || 0) > 0 &&
+    (Number(row.hits) || 0) > 0 &&
+    (Number(row.skillCount) || 0) > 0;
 }
 
 function summarizeGroup(rows) {
@@ -972,6 +1011,38 @@ function round2(n) {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
+function supportUptimeScoreFromStats(stats) {
+  const supportAp = normalizeRate(stats.avgSupportAp);
+  const supportBrand = normalizeRate(stats.avgSupportBrand);
+  const supportIdentity = normalizeRate(stats.avgSupportIdentity);
+  const supportHyper = normalizeRate(stats.avgSupportHyper);
+  return clampScore(
+    (supportAp * 0.3 +
+      supportBrand * 0.3 +
+      supportIdentity * 0.25 +
+      supportHyper * 0.15) * 100
+  );
+}
+
+function supportUptimeScoreFromRow(row) {
+  return supportUptimeScoreFromStats({
+    avgSupportAp: row.supportAp,
+    avgSupportBrand: row.supportBrand,
+    avgSupportIdentity: row.supportIdentity,
+    avgSupportHyper: row.supportHyper,
+  });
+}
+
+function classifyLogRole(row) {
+  if (row.classRole !== "support") return row.classRole || "unknown";
+  const supportUptime = supportUptimeScoreFromRow(row);
+  const hasSupportEvidence =
+    supportUptime >= SUPPORT_LOG_UPTIME_THRESHOLD ||
+    (Number(row.protectionPerMinute) || 0) >= SUPPORT_LOG_PROTECTION_PER_MIN_THRESHOLD ||
+    (Number(row.rdpsDamageGivenPerMinute) || 0) >= SUPPORT_LOG_RDPS_GIVEN_PER_MIN_THRESHOLD;
+  return hasSupportEvidence ? "support" : "dps";
+}
+
 function computeScores(stats, role) {
   const expectedShare = stats.partyCountAvg > 0 ? 100 / stats.partyCountAvg : 20;
   const damageShareScore = clampScore((stats.avgDamageShare / Math.max(1, expectedShare)) * 70);
@@ -984,16 +1055,7 @@ function computeScores(stats, role) {
   const mechanicsScore = computeMechanicsScore(stats);
 
   if (role === "support") {
-    const supportAp = normalizeRate(stats.avgSupportAp);
-    const supportBrand = normalizeRate(stats.avgSupportBrand);
-    const supportIdentity = normalizeRate(stats.avgSupportIdentity);
-    const supportHyper = normalizeRate(stats.avgSupportHyper);
-    const uptimeScore = clampScore(
-      (supportAp * 0.3 +
-        supportBrand * 0.3 +
-        supportIdentity * 0.25 +
-        supportHyper * 0.15) * 100
-    );
+    const uptimeScore = supportUptimeScoreFromStats(stats);
     const raidContribution = clampScore((stats.avgRdps / Math.max(1, (stats.avgRdps || 0) + (stats.avgDps || 0))) * 100);
     const protectionScore = stats.avgProtectionPerMinute > 0
       ? clampScore((stats.avgProtectionPerMinute / SUPPORT_PROTECTION_P90_PER_MIN) * 100)
@@ -1080,40 +1142,57 @@ function buildProfileSnapshot(rows, rosterAccounts, file) {
   }
 
   const accountsByName = new Map();
-  for (const [charKey, charRows] of byChar) {
-    const sample = charRows[0];
-    const latestRow = charRows.reduce((best, row) => ((row.fightStart || 0) > (best.fightStart || 0) ? row : best), sample);
-    const role = roleForClass(sample.className);
-    const dps = charRows.map((r) => r.dps);
-    const rdps = charRows.map((r) => r.rdps);
-    const ndps = charRows.map((r) => r.ndps);
-    const shares = charRows.map((r) => r.partyDps > 0 ? (r.dps / r.partyDps) * 100 : 0);
-    const ranks = charRows.map((r) => r.damageRank).filter((n) => n > 0);
-    const counters = charRows.map((r) => r.counters);
-    const damageRows = charRows.filter((r) => r.hasDamageStats);
-    const protections = charRows.map((r) => r.protection).filter((n) => n > 0);
-    const protectionPerMinute = charRows.map((r) => r.protectionPerMinute).filter((n) => n > 0);
-    const deathCounts = charRows.map((r) => Number(r.deathCount) || 0);
+  for (const [, allCharRows] of byChar) {
+    const classRole = roleForClass(allCharRows[0]?.className);
+    const supportRows = allCharRows.filter((row) => row.logRole === "support");
+    const dpsBuildRows = allCharRows.filter((row) => row.logRole === "dps");
+    const role = classRole === "support"
+      ? (supportRows.length >= dpsBuildRows.length ? "support" : "dps")
+      : classRole;
+    const charRows = classRole === "support"
+      ? (role === "support" ? supportRows : dpsBuildRows)
+      : allCharRows;
+    const profileRows = charRows.length ? charRows : allCharRows;
+    const sample = profileRows[0];
+    const latestRow = profileRows.reduce((best, row) => ((row.fightStart || 0) > (best.fightStart || 0) ? row : best), sample);
+    const dps = profileRows.map((r) => r.dps);
+    const rdps = profileRows.map((r) => r.rdps);
+    const ndps = profileRows.map((r) => r.ndps);
+    const shares = profileRows.map((r) => r.damageShare);
+    const ranks = profileRows.map((r) => r.damageRank).filter((n) => n > 0);
+    const counters = profileRows.map((r) => r.counters);
+    const damageRows = profileRows.filter((r) => r.hasDamageStats);
+    const protections = profileRows.map((r) => r.protection).filter((n) => n > 0);
+    const protectionPerMinute = profileRows.map((r) => r.protectionPerMinute).filter((n) => n > 0);
+    const deathCounts = profileRows.map((r) => Number(r.deathCount) || 0);
     const totalDeaths = deathCounts.reduce((sum, n) => sum + n, 0);
     const deathRows = deathCounts.filter((n) => n > 0).length;
-    const avgBackAttackRate = round1(average(charRows.map((r) => r.backAttackRate)));
-    const avgFrontAttackRate = round1(average(charRows.map((r) => r.frontAttackRate)));
-    const topSkills = mergeTopSkills(charRows);
-    const topBuffSources = mergeTopSources(charRows, "topBuffSources", (r) => r.damageDealt);
-    const topDebuffSources = mergeTopSources(charRows, "topDebuffSources", (r) => r.damageDealt);
-    const topShieldGivenSources = mergeTopSources(charRows, "topShieldGivenSources", (r) => r.protection);
+    const avgBackAttackRate = round1(average(profileRows.map((r) => r.backAttackRate)));
+    const avgFrontAttackRate = round1(average(profileRows.map((r) => r.frontAttackRate)));
+    const topSkills = mergeTopSkills(profileRows);
+    const topBuffSources = mergeTopSources(profileRows, "topBuffSources", (r) => r.damageDealt);
+    const topDebuffSources = mergeTopSources(profileRows, "topDebuffSources", (r) => r.damageDealt);
+    const topShieldGivenSources = mergeTopSources(profileRows, "topShieldGivenSources", (r) => r.protection);
     const topShieldReceivedSources = mergeTopSources(
-      charRows,
+      profileRows,
       "topShieldReceivedSources",
       (r) => r.shieldsReceived + r.damageAbsorbed
     );
-    const arkRows = charRows.filter((r) => r.arkPassiveActive !== null);
-    const buildVariantKeys = new Set(charRows.map(buildVariantKey).filter(Boolean));
+    const arkRows = profileRows.filter((r) => r.arkPassiveActive !== null);
+    const buildVariantKeys = new Set(profileRows.map(buildVariantKey).filter(Boolean));
     const coeff = average(dps) > 0 ? stddev(dps) / average(dps) : 1;
     const stats = {
-      encounters: charRows.length,
-      firstFightStart: minPositive(charRows.map((r) => r.fightStart)),
-      lastFightStart: maxPositive(charRows.map((r) => r.fightStart)),
+      encounters: profileRows.length,
+      allEncounterCount: allCharRows.length,
+      supportLogCount: supportRows.length,
+      dpsBuildLogCount: classRole === "support" ? dpsBuildRows.length : 0,
+      supportLogRate: allCharRows.length ? round1((supportRows.length / allCharRows.length) * 100) : 0,
+      dpsBuildLogRate: classRole === "support" && allCharRows.length
+        ? round1((dpsBuildRows.length / allCharRows.length) * 100)
+        : 0,
+      primaryRoleRate: allCharRows.length ? round1((profileRows.length / allCharRows.length) * 100) : 0,
+      firstFightStart: minPositive(profileRows.map((r) => r.fightStart)),
+      lastFightStart: maxPositive(profileRows.map((r) => r.fightStart)),
       avgDps: Math.round(average(dps)),
       medianDps: Math.round(percentile(dps, 50)),
       p75Dps: Math.round(percentile(dps, 75)),
@@ -1124,17 +1203,17 @@ function buildProfileSnapshot(rows, rosterAccounts, file) {
       medianNdps: Math.round(percentile(ndps, 50)),
       avgDamageShare: round1(average(shares)),
       medianDamageShare: round1(percentile(shares, 50)),
-      topRate: round1((charRows.filter((r) => r.damageRank === 1).length / charRows.length) * 100),
+      topRate: round1((profileRows.filter((r) => r.damageRank === 1).length / profileRows.length) * 100),
       avgRank: round2(average(ranks)),
-      partyCountAvg: round2(average(charRows.map((r) => r.partyCount).filter((n) => n > 0))),
-      deathlessRate: round1(((charRows.length - deathRows) / charRows.length) * 100),
-      deathRate: round1((deathRows / charRows.length) * 100),
+      partyCountAvg: round2(average(profileRows.map((r) => r.partyCount).filter((n) => n > 0))),
+      deathlessRate: round1(((profileRows.length - deathRows) / profileRows.length) * 100),
+      deathRate: round1((deathRows / profileRows.length) * 100),
       totalDeaths,
       avgDeaths: round2(average(deathCounts)),
       avgCounters: round2(average(counters)),
-      avgCastsPerMinute: round2(average(charRows.map((r) => r.castsPerMinute))),
-      avgHitsPerMinute: round2(average(charRows.map((r) => r.hitsPerMinute))),
-      avgCritRate: round1(average(charRows.map((r) => r.critRate))),
+      avgCastsPerMinute: round2(average(profileRows.map((r) => r.castsPerMinute))),
+      avgHitsPerMinute: round2(average(profileRows.map((r) => r.hitsPerMinute))),
+      avgCritRate: round1(average(profileRows.map((r) => r.critRate))),
       avgBackAttackRate,
       avgFrontAttackRate,
       attackStyle: classifyAttackStyle(avgBackAttackRate, avgFrontAttackRate),
@@ -1155,24 +1234,24 @@ function buildProfileSnapshot(rows, rosterAccounts, file) {
       avgSelfBuffedShare: round1(average(damageRows.map((r) => r.selfBuffedShare))),
       avgPartyDebuffedShare: round1(average(damageRows.map((r) => r.partyDebuffedShare))),
       avgBattleItemDebuffedShare: round1(average(damageRows.map((r) => r.battleItemDebuffedShare))),
-      avgSkillCount: round1(average(charRows.map((r) => r.skillCount))),
-      avgTopSkillShare: round1(average(charRows.map((r) => r.topSkillShare))),
-      avgRdpsDamageGiven: Math.round(average(charRows.map((r) => r.rdpsDamageGiven).filter((n) => n > 0))),
-      avgRdpsDamageGivenPerMinute: Math.round(average(charRows.map((r) => r.rdpsDamageGivenPerMinute).filter((n) => n > 0))),
-      avgRdpsDamageReceivedSupport: Math.round(average(charRows.map((r) => r.rdpsDamageReceivedSupport).filter((n) => n > 0))),
-      avgRdpsDamageReceivedSupportPerMinute: Math.round(average(charRows.map((r) => r.rdpsDamageReceivedSupportPerMinute).filter((n) => n > 0))),
-      avgSynergyGiven: Math.round(average(charRows.map((r) => r.synergyGiven).filter((n) => n > 0))),
-      avgSynergyGivenPerMinute: Math.round(average(charRows.map((r) => r.synergyGivenPerMinute).filter((n) => n > 0))),
-      avgSynergyReceivedShare: round1(average(charRows.map((r) => r.synergyReceivedShare).filter((n) => n > 0))),
-      avgSupportAp: round2(average(charRows.map((r) => r.supportAp))),
-      avgSupportBrand: round2(average(charRows.map((r) => r.supportBrand))),
-      avgSupportIdentity: round2(average(charRows.map((r) => r.supportIdentity))),
-      avgSupportHyper: round2(average(charRows.map((r) => r.supportHyper))),
+      avgSkillCount: round1(average(profileRows.map((r) => r.skillCount))),
+      avgTopSkillShare: round1(average(profileRows.map((r) => r.topSkillShare))),
+      avgRdpsDamageGiven: Math.round(average(profileRows.map((r) => r.rdpsDamageGiven).filter((n) => n > 0))),
+      avgRdpsDamageGivenPerMinute: Math.round(average(profileRows.map((r) => r.rdpsDamageGivenPerMinute).filter((n) => n > 0))),
+      avgRdpsDamageReceivedSupport: Math.round(average(profileRows.map((r) => r.rdpsDamageReceivedSupport).filter((n) => n > 0))),
+      avgRdpsDamageReceivedSupportPerMinute: Math.round(average(profileRows.map((r) => r.rdpsDamageReceivedSupportPerMinute).filter((n) => n > 0))),
+      avgSynergyGiven: Math.round(average(profileRows.map((r) => r.synergyGiven).filter((n) => n > 0))),
+      avgSynergyGivenPerMinute: Math.round(average(profileRows.map((r) => r.synergyGivenPerMinute).filter((n) => n > 0))),
+      avgSynergyReceivedShare: round1(average(profileRows.map((r) => r.synergyReceivedShare).filter((n) => n > 0))),
+      avgSupportAp: round2(average(profileRows.map((r) => r.supportAp))),
+      avgSupportBrand: round2(average(profileRows.map((r) => r.supportBrand))),
+      avgSupportIdentity: round2(average(profileRows.map((r) => r.supportIdentity))),
+      avgSupportHyper: round2(average(profileRows.map((r) => r.supportHyper))),
       avgProtection: Math.round(average(protections)),
       avgProtectionPerMinute: Math.round(average(protectionPerMinute)),
-      avgGearScore: round2(average(charRows.map((r) => r.gearScore).filter((n) => n > 0))),
+      avgGearScore: round2(average(profileRows.map((r) => r.gearScore).filter((n) => n > 0))),
       latestGearScore: round2(latestRow.gearScore),
-      avgCombatPower: round2(average(charRows.map((r) => r.combatPower).filter((n) => n > 0))),
+      avgCombatPower: round2(average(profileRows.map((r) => r.combatPower).filter((n) => n > 0))),
       latestCombatPower: round2(latestRow.combatPower),
       arkPassiveRate: arkRows.length
         ? round1((arkRows.filter((r) => r.arkPassiveActive).length / arkRows.length) * 100)
@@ -1183,7 +1262,7 @@ function buildProfileSnapshot(rows, rosterAccounts, file) {
 
     const build = {
       classId: latestRow.classId || 0,
-      spec: cleanBuildName(latestRow.spec),
+      spec: cleanBuildName(latestRow.spec || latestRow.arkPassive?.enlightenment?.spec),
       gearScore: round2(latestRow.gearScore),
       combatPower: round2(latestRow.combatPower),
       arkPassiveActive: latestRow.arkPassiveActive === null ? null : !!latestRow.arkPassiveActive,
@@ -1192,7 +1271,7 @@ function buildProfileSnapshot(rows, rosterAccounts, file) {
     };
 
     const raidGroups = new Map();
-    for (const row of charRows) {
+    for (const row of profileRows) {
       const gate = getRaidGateForBoss(row.boss);
       if (!gate) continue;
       const modeKey = normalizeDifficulty(row.difficulty) || "normal";
@@ -1219,6 +1298,7 @@ function buildProfileSnapshot(rows, rosterAccounts, file) {
       name: sample.localPlayer,
       class: sample.className,
       itemLevel: sample.itemLevel,
+      classRole,
       role,
       stats,
       scores: computeScores(stats, role),
@@ -1249,6 +1329,7 @@ function buildProfileSnapshot(rows, rosterAccounts, file) {
       clearedOnly: true,
       supportedBossesOnly: true,
       minDurationMs: MIN_DURATION_MS,
+      modernProfileStatsOnly: true,
     },
   };
 }

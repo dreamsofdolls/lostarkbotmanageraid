@@ -5,6 +5,7 @@ const raidProfileCharacterSchema = new mongoose.Schema(
     name: { type: String, required: true },
     class: { type: String, default: "" },
     itemLevel: { type: Number, default: 0 },
+    classRole: { type: String, enum: ["dps", "support", "unknown"], default: "unknown" },
     role: { type: String, enum: ["dps", "support", "unknown"], default: "unknown" },
     stats: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     scores: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
