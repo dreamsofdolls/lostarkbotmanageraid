@@ -121,6 +121,15 @@ const VI = {
     unmappedHint: "Unmapped boss (cần extend bot-side map):",
     unmappedMore: "+{n}",
   },
+  profileSync: {
+    sessionPreparing: "Đang chuẩn bị phiên auto-sync profile...",
+    waitingRoster: "Profile auto-sync đang chờ dữ liệu roster đã đăng ký.",
+    scanning: "Đang quét log profile...",
+    checking: "Đang kiểm tra log profile...",
+    idle: "Profile auto-sync đang chờ log mới - đã quét {n} log raid hợp lệ.",
+    synced: "Profile auto-sync xong {logs} log raid trên {chars} character.",
+    localTokenUnavailable: "Không có local-sync token để tạo phiên profile.",
+  },
   raidLabels: {
     armoche: "Act 4",
     kazeros: "Kazeros",
@@ -248,6 +257,15 @@ const JP = {
     unmappedHint: "未マッピングのボス (bot 側のマップ拡張が必要ですの):",
     unmappedMore: "+{n}",
   },
+  profileSync: {
+    sessionPreparing: "プロフィール自動同期セッションを準備中ですわ...",
+    waitingRoster: "プロフィール自動同期は登録済みロスター情報を待っていますわ。",
+    scanning: "プロフィール用ログをスキャン中ですわ...",
+    checking: "プロフィール用ログを確認中ですわ...",
+    idle: "プロフィール自動同期は新しいログ待ちですわ - 有効なレイドログ {n} 件を確認済み。",
+    synced: "プロフィール自動同期完了: {chars} 体 / {logs} 件のレイドログ。",
+    localTokenUnavailable: "プロフィールセッション作成用の local-sync トークンがありませんわ。",
+  },
   raidLabels: {
     armoche: "アクト4",
     kazeros: "カゼロス",
@@ -374,6 +392,15 @@ const EN = {
     rejectedLabel: "Rejected:",
     unmappedHint: "Unmapped bosses (need bot-side aliases):",
     unmappedMore: "+{n}",
+  },
+  profileSync: {
+    sessionPreparing: "Preparing profile auto-sync session...",
+    waitingRoster: "Profile auto-sync is waiting for registered roster data.",
+    scanning: "Scanning profile logs...",
+    checking: "Checking profile logs...",
+    idle: "Profile auto-sync idle - {n} eligible raid log(s) scanned.",
+    synced: "Profile auto-synced {logs} raid log(s) across {chars} character(s).",
+    localTokenUnavailable: "No local-sync token available for the profile session.",
   },
   raidLabels: {
     armoche: "Act 4",

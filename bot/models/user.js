@@ -216,6 +216,12 @@ const userSchema = new mongoose.Schema(
     // on local-off so old links can't survive an opt-out.
     lastLocalSyncToken: { type: String, default: null },
     lastLocalSyncTokenExpAt: { type: Number, default: null },
+    // Longer-lived, opaque browser-device token for raid-profile analytics
+    // auto-sync. Kept separate from lastLocalSyncToken because raid progress
+    // sync intentionally shrinks that URL token to ~60s after a write.
+    localProfileSyncTokenHash: { type: String, default: null },
+    localProfileSyncTokenExpAt: { type: Number, default: null },
+    lastLocalProfileSyncAt: { type: Number, default: null },
     // Preferred display locale for Artist's responses. Drives every
     // user-facing string via bot/services/i18n.js. Default "vi" so
     // pre-existing users see no behavior change after the i18n rollout;
@@ -263,6 +269,14 @@ userSchema.index(
   {
     name: "auto_manage_daily_scan",
     partialFilterExpression: { autoManageEnabled: true },
+  }
+);
+
+userSchema.index(
+  { localProfileSyncTokenHash: 1 },
+  {
+    name: "local_profile_sync_token_lookup",
+    partialFilterExpression: { localProfileSyncTokenHash: { $type: "string" } },
   }
 );
 

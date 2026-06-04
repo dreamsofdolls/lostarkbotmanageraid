@@ -108,6 +108,8 @@ async function setLocalSyncEnabled(discordId, enabled, opts = {}, deps = {}) {
         localSyncLinkedAt: null,
         lastLocalSyncToken: null,
         lastLocalSyncTokenExpAt: null,
+        localProfileSyncTokenHash: null,
+        localProfileSyncTokenExpAt: null,
       },
     },
     { new: true }

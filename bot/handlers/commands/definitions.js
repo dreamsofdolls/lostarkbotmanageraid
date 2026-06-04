@@ -128,6 +128,14 @@ function createRaidCommandDefinitions({
       ja: "あなたのレイド進捗を表示",
     });
 
+  const raidProfileCommand = new SlashCommandBuilder()
+    .setName("raid-profile")
+    .setDescription("View combat profile stats from local LOA Logs")
+    .setDescriptionLocalizations({
+      vi: "Xem bảng chỉ số combat từ LOA Logs local",
+      ja: "LOA Logs ローカルから戦闘プロフィール統計を表示",
+    });
+
   const raidHelpCommand = new SlashCommandBuilder()
     .setName("raid-help")
     .setDescription("Show help for all raid commands")
@@ -1076,6 +1084,7 @@ function createRaidCommandDefinitions({
     raidCheckCommand,
     raidSetCommand,
     statusCommand,
+    raidProfileCommand,
     raidHelpCommand,
     raidGoldEarnerCommand,
     removeRosterCommand,

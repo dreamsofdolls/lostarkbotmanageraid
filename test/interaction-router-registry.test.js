@@ -74,6 +74,7 @@ test("raid-schedule-preview component routes dispatch through rse custom IDs", a
     handleRaidGoldEarnerAutocomplete: noop,
     handleRaidScheduleButton: async () => { buttonCalls += 1; },
     handleRaidScheduleSelect: async () => { selectCalls += 1; },
+    handleRaidProfileComponent: noop,
   };
   const router = createRaidInteractionRouter({
     MessageFlags: { Ephemeral: 64 },
@@ -116,6 +117,7 @@ test("raid-schedule-preview routes a User Select (add-member) through rse select
     handleRaidGoldEarnerAutocomplete: noop,
     handleRaidScheduleButton: noop,
     handleRaidScheduleSelect: async () => { selectCalls += 1; },
+    handleRaidProfileComponent: noop,
   };
   const router = createRaidInteractionRouter({
     MessageFlags: { Ephemeral: 64 },
@@ -132,4 +134,48 @@ test("raid-schedule-preview routes a User Select (add-member) through rse select
   });
 
   assert.equal(selectCalls, 1);
+});
+
+test("raid-profile components route through profile handler", async () => {
+  let profileCalls = 0;
+  const noop = async () => {};
+  const handlers = {
+    handleRaidManagementCommand: noop,
+    handleRaidHelpSelect: noop,
+    handleRaidLanguageSelect: noop,
+    handleRaidSetAutocomplete: noop,
+    handleEditRosterAutocomplete: noop,
+    handleRemoveRosterAutocomplete: noop,
+    handleRaidChannelAutocomplete: noop,
+    handleRaidAutoManageAutocomplete: noop,
+    handleRaidAnnounceAutocomplete: noop,
+    handleRaidTaskAutocomplete: noop,
+    handleRaidGoldEarnerAutocomplete: noop,
+    handleRaidScheduleButton: noop,
+    handleRaidScheduleSelect: noop,
+    handleRaidProfileComponent: async () => { profileCalls += 1; },
+  };
+  const router = createRaidInteractionRouter({
+    MessageFlags: { Ephemeral: 64 },
+    handlers,
+  });
+
+  await router.handle({
+    isChatInputCommand: () => false,
+    isAutocomplete: () => false,
+    isStringSelectMenu: () => true,
+    isUserSelectMenu: () => false,
+    isButton: () => false,
+    customId: "raid-profile:roster:session",
+  });
+  await router.handle({
+    isChatInputCommand: () => false,
+    isAutocomplete: () => false,
+    isStringSelectMenu: () => false,
+    isUserSelectMenu: () => false,
+    isButton: () => true,
+    customId: "raid-profile:next:session",
+  });
+
+  assert.equal(profileCalls, 2);
 });

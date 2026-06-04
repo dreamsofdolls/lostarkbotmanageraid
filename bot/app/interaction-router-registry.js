@@ -29,6 +29,7 @@ const RAID_COMMAND_NAMES = Object.freeze([
   "raid-share",
   "raid-language",
   "raid-bg",
+  "raid-profile",
   "raid-auction",
   "raid-schedule-preview",
 ]);
@@ -61,6 +62,7 @@ function createRaidInteractionRouter({ MessageFlags, handlers }) {
       { prefix: "raid-help:select:", handle: handlers.handleRaidHelpSelect },
       { prefix: "raid-language:select", handle: handlers.handleRaidLanguageSelect },
       { prefix: "rse:", handle: handlers.handleRaidScheduleSelect },
+      { prefix: "raid-profile:", handle: handlers.handleRaidProfileComponent },
     ],
     buttonRoutes: [
       { prefix: "rse:", handle: handlers.handleRaidScheduleButton },
@@ -69,6 +71,7 @@ function createRaidInteractionRouter({ MessageFlags, handlers }) {
       { prefix: "edit-roster:", handle: handlers.handleEditRosterButton },
       { prefix: "raid-task:", handle: handlers.handleRaidTaskButton },
       { prefix: "gold-earner:", handle: handlers.handleRaidGoldEarnerButton },
+      { prefix: "raid-profile:", handle: handlers.handleRaidProfileComponent },
       { prefix: "stuck-nudge:", handle: handlers.handleStuckNudgeButton },
     ],
   });
