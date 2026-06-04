@@ -19,6 +19,7 @@
 const state = require("./state");
 const tokens = require("./tokens");
 const apply = require("./apply");
+const profileDeviceToken = require("./profile-device-token");
 
 module.exports = {
   SYNC_MODE: state.SYNC_MODE,
@@ -35,6 +36,10 @@ module.exports = {
   getOrMintLocalSyncToken: tokens.getOrMintLocalSyncToken,
   extractProfileFromUser: tokens.extractProfileFromUser,
   TOKEN_DEFAULT_TTL_SEC: tokens.DEFAULT_TTL_SEC,
+  rotateLocalProfileSyncToken: profileDeviceToken.rotateLocalProfileSyncToken,
+  isCurrentProfileDeviceToken: profileDeviceToken.isCurrentProfileDeviceToken,
+  hashProfileDeviceToken: profileDeviceToken.hashProfileDeviceToken,
+  PROFILE_DEVICE_TTL_SEC: profileDeviceToken.DEFAULT_PROFILE_DEVICE_TTL_SEC,
   applyLocalSyncDeltas: apply.applyLocalSyncDeltas,
   resolveLocalSyncTarget: apply.resolveTarget,
   bucketizeLocalSyncDeltas: apply.bucketize,

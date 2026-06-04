@@ -32,6 +32,10 @@ import {
   clearHandle as clearPersistedHandle,
   tryRestoreForUser,
 } from "/sync/file-persistence.js";
+import {
+  startProfileAutoSync,
+  stopProfileAutoSync,
+} from "/sync/profile-sync.js";
 
 const $ = (id) => document.getElementById(id);
 const authStatus = $("auth-status");
@@ -44,6 +48,7 @@ const previewOutput = $("preview-output");
 const syncSection = $("sync-section");
 const syncBtn = $("sync-btn");
 const syncOutput = $("sync-output");
+const profileSyncOutput = $("profile-sync-output");
 
 // Cache the last successful query result so the Sync button can POST it
 // without re-running the SQL. Set on every loadAndPreview() success.
@@ -159,6 +164,34 @@ async function fetchPreviewSummary(deltas) {
     console.warn("[local-sync] preview-summary threw:", err?.message || err);
     return null;
   }
+}
+
+async function getRosterAccountsForProfile() {
+  if (Array.isArray(window.__artistRosterAccounts)) {
+    return window.__artistRosterAccounts;
+  }
+  if (!window.__artistSyncToken) return [];
+  const resp = await fetch("/api/me/roster", {
+    headers: { "Authorization": `Bearer ${window.__artistSyncToken}` },
+  });
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok || !data?.ok) {
+    throw new Error(data?.error || `roster fetch failed HTTP ${resp.status}`);
+  }
+  window.__artistRosterAccounts = Array.isArray(data.accounts) ? data.accounts : [];
+  return window.__artistRosterAccounts;
+}
+
+function renderProfileSyncStatus(kind, message) {
+  if (!profileSyncOutput) return;
+  if (!kind || !message) {
+    profileSyncOutput.hidden = true;
+    profileSyncOutput.innerHTML = "";
+    return;
+  }
+  const cls = kind === "err" ? "status-err" : kind === "ok" ? "status-ok" : "hint";
+  profileSyncOutput.hidden = false;
+  profileSyncOutput.innerHTML = `<span class="${cls}">${escapeHtml(message)}</span>`;
 }
 
 function renderPreviewStats(summary) {
@@ -444,6 +477,13 @@ async function loadFile(file, { handle = null } = {}) {
     });
   }
   await loadAndPreview(file);
+  startProfileAutoSync({
+    file,
+    getDiscordId: () => window.__artistDiscordId,
+    getLocalToken: () => window.__artistSyncToken,
+    getRosterAccounts: getRosterAccountsForProfile,
+    renderStatus: renderProfileSyncStatus,
+  });
 }
 
 async function handleRemoveFile() {
@@ -463,6 +503,8 @@ async function handleRemoveFile() {
   syncOutput.hidden = true;
   syncOutput.innerHTML = "";
   lastDeltas = null;
+  stopProfileAutoSync();
+  renderProfileSyncStatus(null, "");
 }
 
 function formatBytes(n) {

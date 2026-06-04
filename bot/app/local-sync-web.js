@@ -17,16 +17,20 @@ const { createRaidSyncEndpoint } = require("../services/local-sync/sync-endpoint
 const { createRosterEndpoint } = require("../services/local-sync/roster-endpoint");
 const { createPreviewSummaryEndpoint } = require("../services/local-sync/preview-summary-endpoint");
 const { createCatalogEndpoint } = require("../services/local-sync/catalog-endpoint");
+const {
+  createProfileSessionEndpoint,
+  createRaidProfileSyncEndpoint,
+} = require("../services/local-sync/profile-sync-endpoint");
 
 /**
  * Build the `<METHOD> <pathname>` → handler map used by
  * startLocalSyncHttpServer's `apiHandlers` option. OPTIONS aliases are
  * registered alongside each verb so CORS preflight hits the same code
  * path.
- * @param {{User: object, applyRaidSetForDiscordId: function, applyRaidSetBatchForDiscordId: function}} deps
+ * @param {{User: object, RaidProfileSnapshot: object, applyRaidSetForDiscordId: function, applyRaidSetBatchForDiscordId: function}} deps
  * @returns {Object<string, Function>} handler map
  */
-function createLocalSyncApiHandlers({ User, applyRaidSetForDiscordId, applyRaidSetBatchForDiscordId }) {
+function createLocalSyncApiHandlers({ User, RaidProfileSnapshot, applyRaidSetForDiscordId, applyRaidSetBatchForDiscordId }) {
   const raidSyncHandler = createRaidSyncEndpoint({
     User,
     applyRaidSetForDiscordId,
@@ -35,12 +39,18 @@ function createLocalSyncApiHandlers({ User, applyRaidSetForDiscordId, applyRaidS
   const rosterHandler = createRosterEndpoint({ User });
   const previewSummaryHandler = createPreviewSummaryEndpoint({ User });
   const catalogHandler = createCatalogEndpoint();
+  const profileSessionHandler = createProfileSessionEndpoint({ User });
+  const raidProfileSyncHandler = createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot });
 
   return {
     "GET /api/local-sync/catalog": catalogHandler,
     "OPTIONS /api/local-sync/catalog": catalogHandler,
     "POST /api/raid-sync": raidSyncHandler,
     "OPTIONS /api/raid-sync": raidSyncHandler,
+    "POST /api/local-sync/profile-session": profileSessionHandler,
+    "OPTIONS /api/local-sync/profile-session": profileSessionHandler,
+    "POST /api/raid-profile-sync": raidProfileSyncHandler,
+    "OPTIONS /api/raid-profile-sync": raidProfileSyncHandler,
     "GET /api/me/roster": rosterHandler,
     "OPTIONS /api/me/roster": rosterHandler,
     "POST /api/local-sync/preview-summary": previewSummaryHandler,
@@ -55,6 +65,7 @@ function createLocalSyncApiHandlers({ User, applyRaidSetForDiscordId, applyRaidS
 function startLocalSyncWebCompanion({
   rootDir,
   User,
+  RaidProfileSnapshot,
   applyRaidSetForDiscordId,
   applyRaidSetBatchForDiscordId,
   env = process.env,
@@ -71,6 +82,7 @@ function startLocalSyncWebCompanion({
       classIconsDir: path.join(rootDir, "assets", "class-icons"),
       apiHandlers: createLocalSyncApiHandlers({
         User,
+        RaidProfileSnapshot,
         applyRaidSetForDiscordId,
         applyRaidSetBatchForDiscordId,
       }),

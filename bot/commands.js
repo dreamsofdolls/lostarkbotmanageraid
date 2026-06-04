@@ -71,6 +71,7 @@ const { createRaidHelpCommand } = require("./handlers/meta/help");
 const { createRaidShareCommand } = require("./handlers/raid/share");
 const { createRaidLanguageCommand } = require("./handlers/meta/language");
 const { createRaidBgCommand } = require("./handlers/raid/bg");
+const { createRaidProfileCommand } = require("./handlers/raid/profile");
 const { createRaidSetCommand } = require("./handlers/raid/set");
 const { createStuckNudgeButtonHandler } = require("./handlers/local-sync/stuck-nudge-button");
 const {
@@ -88,6 +89,7 @@ const { createRaidScheduleAutoLockService } = require("./services/raid/schedule/
 const { createDiscordIdentityCache } = require("./services/discord/user-identity-cache");
 const { createInFlightLoader } = require("./shared/in-flight-loader");
 const RaidEvent = require("./models/RaidEvent");
+const RaidProfileSnapshot = require("./models/RaidProfileSnapshot");
 
 const bibleLimiter = new ConcurrencyLimiter(2);
 // Discord REST fan-out limiter: caps parallel `client.users.fetch` bursts in
@@ -329,6 +331,8 @@ let handleRaidHelpSelect;
 let handleRaidLanguageCommand;
 let handleRaidLanguageSelect;
 let handleRaidBgCommand;
+let handleRaidProfileCommand;
+let handleRaidProfileComponent;
 
 let handleRemoveRosterAutocomplete;
 let handleRemoveRosterCommand;
@@ -348,6 +352,7 @@ async function handleRaidManagementCommand(interaction) {
       "raid-check": handleRaidCheckCommand,
       "raid-set": handleRaidSetCommand,
       "raid-status": handleStatusCommand,
+      "raid-profile": handleRaidProfileCommand,
       "raid-share": handleRaidShareCommand,
       "raid-language": handleRaidLanguageCommand,
       "raid-bg": handleRaidBgCommand,
@@ -939,6 +944,22 @@ const raidBgCommandHandlers = createRaidBgCommand({
 });
 ({ handleRaidBgCommand } = raidBgCommandHandlers);
 
+const raidProfileCommandHandlers = createRaidProfileCommand({
+  EmbedBuilder,
+  StringSelectMenuBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  MessageFlags,
+  UI,
+  User,
+  RaidProfileSnapshot,
+});
+({
+  handleRaidProfileCommand,
+  handleRaidProfileComponent,
+} = raidProfileCommandHandlers);
+
 const removeRosterCommandHandlers = createRemoveRosterCommand({
   EmbedBuilder,
   MessageFlags,
@@ -1090,6 +1111,7 @@ module.exports = {
   handleRaidTaskButton,
   handleRaidScheduleButton,
   handleRaidScheduleSelect,
+  handleRaidProfileComponent,
   handleRaidChannelMessage,
   handleRaidCheckButton,
   handleAddRosterButton,
