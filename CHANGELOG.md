@@ -4,6 +4,18 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-04 (raid-bg: 6-scene library + interactive view browser + edit; set overwrite/extend)
+
+### Added
+- `/raid-bg set` gains an **`action`** choice: `📥 overwrite` (default, replace the library) or `➕ extend` (append the upload). The library now holds up to **6 scenes**, decoupled from roster count (extra scenes are spares; random mode draws from the whole library). Over-cap extend is rejected with a "use edit to clear some first" notice.
+- `/raid-bg edit` (replaces `remove`): attach an image -> REPLACE mode (pick a scene from a dropdown, confirm to swap its bytes); no image -> DELETE mode (pick a scene to delete, or clear all). Ephemeral, self-contained collector.
+
+### Changed
+- `/raid-bg view` is now an interactive **scene browser**: one large scene at a time + a scene dropdown and `◀ page ▶` pager, updated in place (was N stacked preview embeds). Single-scene libraries skip the collector.
+
+### Removed
+- `/raid-bg remove` (folded into `edit`) + dead preview-builder helpers. New pure `buildSceneBrowserPayload` + `saveLibrary`; `compactAssignmentsAfterRemove` now unit-tested. i18n vi/en/jp + README + `/raid-help` synced. 588 tests green.
+
 ## 2026-06-03 (raid-schedule: turn plan = show action + signup-board frame + 2-party for 8-man)
 
 ### Changed

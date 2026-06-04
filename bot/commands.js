@@ -932,6 +932,10 @@ const raidBgCommandHandlers = createRaidBgCommand({
   AttachmentBuilder,
   EmbedBuilder,
   MessageFlags,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder,
 });
 ({ handleRaidBgCommand } = raidBgCommandHandlers);
 

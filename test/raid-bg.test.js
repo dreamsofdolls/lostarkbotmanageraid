@@ -7,7 +7,13 @@ const {
   AttachmentBuilder,
   EmbedBuilder,
   MessageFlags,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder,
 } = require("discord.js");
+
+const COMPONENT_DEPS = { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder };
 const { createCanvas, loadImage } = require("@napi-rs/canvas");
 
 const UserBackground = require("../bot/models/userBackground");
@@ -75,7 +81,7 @@ function makeAttachment(buffer, overrides = {}) {
   };
 }
 
-function makeSetOptions(attachments, mode = null) {
+function makeSetOptions(attachments, mode = null, action = null) {
   const byName = new Map();
   for (let i = 0; i < attachments.length; i += 1) {
     byName.set(i === 0 ? "image" : `image_${i + 1}`, attachments[i]);
@@ -89,7 +95,7 @@ function makeSetOptions(attachments, mode = null) {
       }
       return attachment;
     },
-    getString: () => mode,
+    getString: (name) => (name === "action" ? action : mode),
   };
 }
 
@@ -334,25 +340,27 @@ test("raid-bg set counts shared rosters in the viewer's own image pool", async (
     "own roster",
     "shared roster",
   ]);
-  assert.match(edits[0].embeds[0].data.fields[0].value, /2\/2/);
+  // Count now shows scenes / library cap (6), not / roster count.
+  assert.match(edits[0].embeds[0].data.fields[0].value, /2\/6/);
 });
 
-test("raid-bg set rejects more images than visible roster count", async (t) => {
+test("raid-bg set saves more images than roster count (library decoupled from rosters)", async (t) => {
   const pngA = makePngBuffer(1600, 900, "#112233");
   const pngB = makePngBuffer(1600, 900, "#445566");
+  const buffers = new Map([
+    ["https://cdn.example/a.png", pngA],
+    ["https://cdn.example/b.png", pngB],
+  ]);
   const originalFetch = global.fetch;
   const originalUpsert = UserBackground.findOneAndUpdate;
-  let fetched = false;
-  let persisted = false;
-  global.fetch = async () => {
-    fetched = true;
-    return {
-      ok: true,
-      arrayBuffer: async () => arrayBufferFromBuffer(pngA),
-    };
-  };
-  UserBackground.findOneAndUpdate = async () => {
-    persisted = true;
+  global.fetch = async (url) => ({
+    ok: true,
+    arrayBuffer: async () => arrayBufferFromBuffer(buffers.get(url)),
+  });
+  let savedUpdate = null;
+  UserBackground.findOneAndUpdate = async (_filter, update) => {
+    savedUpdate = update;
+    return { _id: "doc-1", ...update.$set };
   };
   t.after(() => {
     global.fetch = originalFetch;
@@ -370,7 +378,7 @@ test("raid-bg set rejects more images than visible roster count", async (t) => {
 
   await command.handleRaidBgCommand({
     guild: { id: "guild-1" },
-    user: { id: "user-too-many" },
+    user: { id: "user-decoupled" },
     options: makeSetOptions([
       makeAttachment(pngA, { url: "https://cdn.example/a.png", name: "a.png" }),
       makeAttachment(pngB, { url: "https://cdn.example/b.png", name: "b.png" }),
@@ -379,9 +387,63 @@ test("raid-bg set rejects more images than visible roster count", async (t) => {
     editReply: async (payload) => edits.push(payload),
   });
 
-  assert.equal(fetched, false);
-  assert.equal(persisted, false);
-  assert.match(edits[0].embeds[0].data.description, /maximum|up to|1/i);
+  // Library no longer caps by roster count: 2 scenes save even with 1 roster.
+  assert.equal(savedUpdate.$set.images.length, 2);
+  // The single roster maps to scene #1; scene #2 is a spare.
+  assert.deepEqual(savedUpdate.$set.assignments.map((entry) => entry.imageIndex), [0]);
+});
+
+test("raid-bg set action:extend appends the upload to the existing library", async (t) => {
+  const existingPng = makePngBuffer(1600, 900, "#111111");
+  const newPng = makePngBuffer(1600, 900, "#222222");
+  const originalFetch = global.fetch;
+  const originalFindOne = UserBackground.findOne;
+  const originalUpsert = UserBackground.findOneAndUpdate;
+  global.fetch = async () => ({ ok: true, arrayBuffer: async () => arrayBufferFromBuffer(newPng) });
+  UserBackground.findOne = () => ({
+    lean: async () => ({
+      mode: "even",
+      images: [
+        { imageData: existingPng, width: 1600, height: 900, originalFilename: "old.png", mime: "image/jpeg", sizeBytes: existingPng.length },
+      ],
+      assignments: [{ accountName: "Roster A", accountKey: "roster a", imageIndex: 0 }],
+    }),
+  });
+  let savedUpdate = null;
+  UserBackground.findOneAndUpdate = async (_filter, update) => {
+    savedUpdate = update;
+    return { _id: "doc-1", ...update.$set };
+  };
+  t.after(() => {
+    global.fetch = originalFetch;
+    UserBackground.findOne = originalFindOne;
+    UserBackground.findOneAndUpdate = originalUpsert;
+    bgLoader.clearBackgroundCache();
+  });
+
+  const edits = [];
+  const command = createRaidBgCommand({
+    User: makeUserModel("en", ["Roster A", "Roster B"]),
+    AttachmentBuilder,
+    EmbedBuilder,
+    MessageFlags,
+  });
+
+  await command.handleRaidBgCommand({
+    guild: { id: "guild-1" },
+    user: { id: "user-extend" },
+    options: makeSetOptions(
+      [makeAttachment(newPng, { url: "https://cdn.example/new.png", name: "new.png" })],
+      null,
+      "extend",
+    ),
+    deferReply: async () => {},
+    editReply: async (payload) => edits.push(payload),
+  });
+
+  // existing 1 + new 1 = 2 scenes, old kept first.
+  assert.equal(savedUpdate.$set.images.length, 2);
+  assert.deepEqual(savedUpdate.$set.images.map((image) => image.originalFilename), ["old.png", "new.png"]);
 });
 
 test("raid-bg set rejects under-min-dim uploads without writing to the database", async (t) => {
@@ -500,7 +562,7 @@ test("raid-bg view returns 'no background yet' when the collection is empty", as
   assert.equal(edits[0].files, undefined);
 });
 
-test("raid-bg view attaches every stored buffer back to preview embeds", async (t) => {
+test("raid-bg view renders a single-scene browser (image + scene dropdown + pager)", async (t) => {
   const pngA = makePngBuffer(1200, 720, "#112233");
   const pngB = makePngBuffer(1200, 720, "#445566");
   const originalFindOne = UserBackground.findOne;
@@ -508,18 +570,8 @@ test("raid-bg view attaches every stored buffer back to preview embeds", async (
     lean: async () => ({
       mode: "even",
       images: [
-        {
-          imageData: pngA,
-          width: 1200,
-          height: 720,
-          originalFilename: "stored-a.png",
-        },
-        {
-          imageData: pngB,
-          width: 1200,
-          height: 720,
-          originalFilename: "stored-b.png",
-        },
+        { imageData: pngA, width: 1200, height: 720, originalFilename: "stored-a.png" },
+        { imageData: pngB, width: 1200, height: 720, originalFilename: "stored-b.png" },
       ],
       assignments: [
         { accountName: "Roster A", accountKey: "roster a", imageIndex: 0 },
@@ -538,6 +590,7 @@ test("raid-bg view attaches every stored buffer back to preview embeds", async (
     AttachmentBuilder,
     EmbedBuilder,
     MessageFlags,
+    ...COMPONENT_DEPS,
   });
 
   await command.handleRaidBgCommand({
@@ -545,58 +598,42 @@ test("raid-bg view attaches every stored buffer back to preview embeds", async (
     user: { id: "user-4" },
     options: { getSubcommand: () => "view" },
     deferReply: async () => {},
-    editReply: async (payload) => edits.push(payload),
+    // No createMessageComponentCollector on the return -> handler renders the
+    // first frame and returns (no live collector needed for this assertion).
+    editReply: async (payload) => { edits.push(payload); return payload; },
   });
 
   const payload = edits[0];
-  assert.equal(payload.embeds[1].data.image.url, "attachment://background-current-1.jpg");
-  assert.equal(payload.embeds[2].data.image.url, "attachment://background-current-2.jpg");
-  assert.equal(payload.files.length, 2);
-  assert.match(payload.embeds[0].data.fields[2].value, /#1 `stored-a\.png`/);
-  assert.match(payload.embeds[0].data.fields[2].value, /#2 `stored-b\.png`/);
-  assert.match(payload.embeds[0].data.title, /Current background|🖼️/i);
+  // One scene shown as the embed image (not N stacked preview embeds).
+  assert.equal(payload.embeds.length, 1);
+  assert.equal(payload.embeds[0].data.image.url, "attachment://raid-bg-scene.jpg");
+  assert.equal(payload.files.length, 1);
+  const customIds = payload.components.flatMap((row) => row.components.map((c) => c.data.custom_id));
+  assert.ok(customIds.includes("raidbg:scene"), "scene dropdown present");
+  assert.ok(customIds.includes("raidbg:prev") && customIds.includes("raidbg:next"), "pager present");
 });
 
-test("raid-bg remove image deletes one slot and keeps remaining previews visible", async (t) => {
+test("raid-bg edit (no image) opens the delete picker", async (t) => {
   const pngA = makePngBuffer(1200, 720, "#112233");
   const pngB = makePngBuffer(1200, 720, "#445566");
-  const pngC = makePngBuffer(1200, 720, "#778899");
   const originalFindOne = UserBackground.findOne;
-  const originalUpdate = UserBackground.findOneAndUpdate;
-  const originalDelete = UserBackground.deleteOne;
-  let savedUpdate = null;
-  let deleteCalls = 0;
   UserBackground.findOne = () => ({
-    select: () => ({
-      lean: async () => ({
-        _id: "doc-existing",
-        mode: "even",
-        images: [
-          { imageData: pngA, width: 1200, height: 720, originalFilename: "a.png" },
-          { imageData: pngB, width: 1200, height: 720, originalFilename: "b.png" },
-          { imageData: pngC, width: 1200, height: 720, originalFilename: "c.png" },
-        ],
-        assignments: [
-          { accountName: "Roster A", accountKey: "roster a", imageIndex: 0 },
-          { accountName: "Roster B", accountKey: "roster b", imageIndex: 1 },
-          { accountName: "Roster C", accountKey: "roster c", imageIndex: 2 },
-        ],
-        updatedAt: new Date(),
-      }),
+    lean: async () => ({
+      _id: "doc-existing",
+      mode: "even",
+      images: [
+        { imageData: pngA, width: 1200, height: 720, originalFilename: "a.png" },
+        { imageData: pngB, width: 1200, height: 720, originalFilename: "b.png" },
+      ],
+      assignments: [
+        { accountName: "Roster A", accountKey: "roster a", imageIndex: 0 },
+        { accountName: "Roster B", accountKey: "roster b", imageIndex: 1 },
+      ],
+      updatedAt: new Date(),
     }),
   });
-  UserBackground.findOneAndUpdate = async (_filter, update) => {
-    savedUpdate = update;
-    return { _id: "doc-existing", ...update.$set };
-  };
-  UserBackground.deleteOne = async () => {
-    deleteCalls += 1;
-  };
   t.after(() => {
     UserBackground.findOne = originalFindOne;
-    UserBackground.findOneAndUpdate = originalUpdate;
-    UserBackground.deleteOne = originalDelete;
-    bgLoader.clearBackgroundCache();
   });
 
   const edits = [];
@@ -605,47 +642,58 @@ test("raid-bg remove image deletes one slot and keeps remaining previews visible
     AttachmentBuilder,
     EmbedBuilder,
     MessageFlags,
+    ...COMPONENT_DEPS,
   });
 
   await command.handleRaidBgCommand({
     guild: { id: "guild-1" },
-    user: { id: "user-remove-slot" },
-    options: {
-      getSubcommand: () => "remove",
-      getInteger: () => 2,
-    },
+    user: { id: "user-edit-del" },
+    options: { getSubcommand: () => "edit", getAttachment: () => null },
     deferReply: async () => {},
-    editReply: async (payload) => edits.push(payload),
+    editReply: async (payload) => { edits.push(payload); return payload; },
   });
 
-  assert.equal(deleteCalls, 0);
-  assert.equal(savedUpdate.$set.images.length, 2);
-  assert.deepEqual(
-    savedUpdate.$set.images.map((image) => image.originalFilename),
-    ["a.png", "c.png"],
-  );
-  assert.deepEqual(savedUpdate.$set.assignments.map((entry) => entry.imageIndex), [0, 1, 1]);
-  assert.equal(edits[0].files.length, 2);
-  assert.equal(edits[0].embeds[1].data.image.url, "attachment://background-current-1.jpg");
-  assert.equal(edits[0].embeds[2].data.image.url, "attachment://background-current-2.jpg");
-  assert.match(edits[0].embeds[0].data.description, /#2/);
+  const customIds = edits[0].components.flatMap((row) => row.components.map((c) => c.data.custom_id));
+  assert.ok(customIds.includes("raidbg:scene"), "scene picker present");
+  assert.ok(customIds.includes("raidbg:dodelete"), "delete-this button present");
+  assert.ok(customIds.includes("raidbg:deleteall"), "delete-all button present");
+  assert.ok(!customIds.includes("raidbg:doreplace"), "no replace button in delete mode");
 });
 
-test("raid-bg remove deletes the doc and invalidates the cache", async (t) => {
+test("compactAssignmentsAfterRemove reindexes assignments after a slot is removed", () => {
+  const { compactAssignmentsAfterRemove } = raidBgModule.__test;
+  const assignments = [
+    { accountName: "A", accountKey: "a", imageIndex: 0 },
+    { accountName: "B", accountKey: "b", imageIndex: 1 },
+    { accountName: "C", accountKey: "c", imageIndex: 2 },
+  ];
+  // Drop image index 1 (2 scenes remain): the >1 index shifts down, the ==1
+  // index clamps into range.
+  const out = compactAssignmentsAfterRemove(assignments, 1, 2);
+  assert.deepEqual(out.map((entry) => entry.imageIndex), [0, 1, 1]);
+});
+
+test("raid-bg edit (with image) validates the new upload then opens the replace picker", async (t) => {
+  const stored = makePngBuffer(1200, 720, "#112233");
+  const incoming = makePngBuffer(1600, 900, "#445566");
   const originalFindOne = UserBackground.findOne;
-  const originalDelete = UserBackground.deleteOne;
-  let deleteCalls = 0;
+  const originalFetch = global.fetch;
   UserBackground.findOne = () => ({
-    select: () => ({
-      lean: async () => ({ _id: "doc-existing" }),
+    lean: async () => ({
+      _id: "doc-existing",
+      mode: "even",
+      images: [{ imageData: stored, width: 1200, height: 720, originalFilename: "old.png" }],
+      assignments: [{ accountName: "Roster A", accountKey: "roster a", imageIndex: 0 }],
+      updatedAt: new Date(),
     }),
   });
-  UserBackground.deleteOne = async () => {
-    deleteCalls += 1;
-  };
+  global.fetch = async () => ({
+    ok: true,
+    arrayBuffer: async () => arrayBufferFromBuffer(incoming),
+  });
   t.after(() => {
     UserBackground.findOne = originalFindOne;
-    UserBackground.deleteOne = originalDelete;
+    global.fetch = originalFetch;
     bgLoader.clearBackgroundCache();
   });
 
@@ -655,18 +703,23 @@ test("raid-bg remove deletes the doc and invalidates the cache", async (t) => {
     AttachmentBuilder,
     EmbedBuilder,
     MessageFlags,
+    ...COMPONENT_DEPS,
   });
 
   await command.handleRaidBgCommand({
     guild: { id: "guild-1" },
-    user: { id: "user-5" },
-    options: { getSubcommand: () => "remove" },
+    user: { id: "user-edit-rep" },
+    options: {
+      getSubcommand: () => "edit",
+      getAttachment: () => makeAttachment(incoming, { url: "https://cdn.example/new.png", name: "new.png" }),
+    },
     deferReply: async () => {},
-    editReply: async (payload) => edits.push(payload),
+    editReply: async (payload) => { edits.push(payload); return payload; },
   });
 
-  assert.equal(deleteCalls, 1);
-  assert.match(edits[0].embeds[0].data.title, /cleared|🗑️/i);
+  const customIds = edits[0].components.flatMap((row) => row.components.map((c) => c.data.custom_id));
+  assert.ok(customIds.includes("raidbg:doreplace"), "replace button present");
+  assert.ok(!customIds.includes("raidbg:deleteall"), "no delete controls in replace mode");
 });
 
 test("bg-loader cache returns the same buffer on subsequent calls", async (t) => {

@@ -51,7 +51,7 @@ const RAID_BG_OUTPUT_WIDTH = 1600;
 const RAID_BG_OUTPUT_HEIGHT = 900;
 const STORAGE_TARGET_BYTES = 2 * 1024 * 1024;
 const JPEG_QUALITY_LADDER = [85, 75, 65];
-const RAID_BG_MAX_IMAGES = 4;
+const RAID_BG_MAX_IMAGES = 6;
 const RAID_BG_ASSIGNMENT_MODES = new Set(["even", "random"]);
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const PNG_DECODE_SAFE_ANCILLARY = new Set([
@@ -384,6 +384,25 @@ function normalizeStoredBuffer(value) {
   return Buffer.from(value.buffer || value);
 }
 
+// Re-shape a stored image sub-doc (from a .lean() read) into a clean,
+// schema-shaped object with a real Buffer so `set action:extend` can re-save
+// the existing scenes alongside freshly-processed uploads.
+function normalizeStoredImage(image) {
+  const buffer = normalizeStoredBuffer(image.imageData);
+  return {
+    imageData: buffer,
+    mime: image.mime || "image/jpeg",
+    width: image.width || 0,
+    height: image.height || 0,
+    sizeBytes: image.sizeBytes || (buffer ? buffer.length : 0),
+    originalWidth: image.originalWidth || 0,
+    originalHeight: image.originalHeight || 0,
+    originalFilename: image.originalFilename || "",
+    originalMime: image.originalMime || "",
+    storageQuality: image.storageQuality || 85,
+  };
+}
+
 function getStoredImages(bg) {
   if (Array.isArray(bg?.images) && bg.images.length > 0) return bg.images;
   if (bg?.imageData) return [bg];
@@ -466,82 +485,6 @@ function buildRaidBgEmbed(EmbedBuilder, {
   return embed;
 }
 
-function buildBackgroundPreviewPayload({
-  bg,
-  images,
-  assignments,
-  AttachmentBuilder,
-  EmbedBuilder,
-  lang,
-  title,
-  description,
-  footer,
-  color = 0x5865f2,
-  namePrefix = "background-current",
-}) {
-  const updatedAtTs = bg?.updatedAt
-    ? Math.floor(new Date(bg.updatedAt).getTime() / 1000)
-    : null;
-  const assignmentLines = formatAssignmentLines(assignments);
-  const slotLines = formatImageSlotLines(images);
-  const fields = [
-    {
-      name: t("raidBg.view.imagesLabel", lang),
-      value: t("raidBg.view.imagesValue", lang, {
-        count: images.length,
-        mode: t(`raidBg.set.mode.${bg?.mode || "even"}`, lang),
-      }),
-      inline: true,
-    },
-    {
-      name: t("raidBg.view.uploadLabel", lang),
-      value: updatedAtTs ? `<t:${updatedAtTs}:R>` : t("raidBg.view.uploadUnknown", lang),
-      inline: true,
-    },
-  ];
-
-  if (slotLines) {
-    fields.push({
-      name: t("raidBg.view.slotsLabel", lang),
-      value: slotLines,
-      inline: false,
-    });
-  }
-  if (assignmentLines) {
-    fields.push({
-      name: t("raidBg.view.assignmentLabel", lang),
-      value: assignmentLines,
-      inline: false,
-    });
-  }
-
-  const preview = buildImagePreviewEmbeds({
-    images,
-    AttachmentBuilder,
-    EmbedBuilder,
-    namePrefix,
-    color,
-  });
-
-  return {
-    embeds: [
-      new EmbedBuilder()
-        .setTitle(title)
-        .setDescription(description)
-        .addFields(fields)
-        .setFooter({ text: footer })
-        .setColor(color),
-      ...preview.embeds,
-    ],
-    files: preview.files,
-  };
-}
-
-function editBackgroundPreview(interaction, options) {
-  const payload = buildBackgroundPreviewPayload(options);
-  return editEmbed(interaction, payload.embeds, { files: payload.files });
-}
-
 function compactAssignmentsAfterRemove(assignments, removedIndex, imageCount) {
   if (!Array.isArray(assignments) || assignments.length === 0 || imageCount <= 0) return [];
   return assignments
@@ -567,7 +510,8 @@ async function handleSet({ interaction, deps, lang }) {
   const { User, getAccessibleAccounts, AttachmentBuilder, EmbedBuilder } = deps;
   const attachments = collectAttachments(interaction);
   const modeOption = interaction.options.getString("mode", false);
-  const mode = RAID_BG_ASSIGNMENT_MODES.has(modeOption) ? modeOption : "even";
+  const actionOption = interaction.options.getString("action", false);
+  const action = actionOption === "extend" ? "extend" : "overwrite";
 
   await deferEphemeralReply(interaction);
 
@@ -585,13 +529,24 @@ async function handleSet({ interaction, deps, lang }) {
     return;
   }
 
-  const maxImages = Math.min(RAID_BG_MAX_IMAGES, rosterNames.length);
-  if (attachments.length > maxImages) {
+  // Extend appends to the existing library; overwrite replaces it. The pool
+  // caps at RAID_BG_MAX_IMAGES regardless of roster count (extra scenes are
+  // spares the auto-assigner / random mode draws from).
+  const existing = action === "extend"
+    ? await UserBackground.findOne({ discordId: interaction.user.id }).lean()
+    : null;
+  const existingImages = action === "extend" ? getStoredImages(existing) : [];
+  const mode = RAID_BG_ASSIGNMENT_MODES.has(modeOption)
+    ? modeOption
+    : RAID_BG_ASSIGNMENT_MODES.has(existing?.mode) ? existing.mode : "even";
+
+  if (existingImages.length + attachments.length > RAID_BG_MAX_IMAGES) {
     await editEmbed(interaction, buildRaidBgEmbed(EmbedBuilder, {
       title: t("raidBg.set.tooManyImagesTitle", lang),
       description: t("raidBg.set.tooManyImagesDescription", lang, {
-        count: attachments.length,
-        max: maxImages,
+        count: existingImages.length + attachments.length,
+        max: RAID_BG_MAX_IMAGES,
+        existing: existingImages.length,
       }),
       color: 0xfee75c,
     }));
@@ -640,7 +595,7 @@ async function handleSet({ interaction, deps, lang }) {
     return;
   }
 
-  const images = processed.map(({ filename, validated, resized }) => ({
+  const newImages = processed.map(({ filename, validated, resized }) => ({
     imageData: resized.buffer,
     mime: resized.mime,
     width: resized.width,
@@ -652,6 +607,11 @@ async function handleSet({ interaction, deps, lang }) {
     originalMime: validated.mime || "",
     storageQuality: resized.quality,
   }));
+  // Extend keeps the existing scenes (re-shaped to real Buffers) and appends
+  // the new ones; overwrite uses only the fresh uploads.
+  const images = action === "extend"
+    ? [...existingImages.map(normalizeStoredImage), ...newImages]
+    : newImages;
   const assignments = buildAssignments(rosterNames, images.length, mode);
 
   try {
@@ -702,7 +662,7 @@ async function handleSet({ interaction, deps, lang }) {
       value: t("raidBg.set.imagesValue", lang, {
         count: images.length,
         totalKb: totalKb.toFixed(0),
-        max: maxImages,
+        max: RAID_BG_MAX_IMAGES,
       }),
       inline: true,
     },
@@ -752,8 +712,128 @@ async function handleSet({ interaction, deps, lang }) {
   ], { files: preview.files });
 }
 
+// Browser session length for the interactive view / edit collectors.
+const RAID_BG_BROWSER_MS = 3 * 60 * 1000;
+
+/**
+ * One ephemeral "scene browser" frame: a big image + info, a scene dropdown
+ * (only when >= 2 scenes) and a variant-specific control row. `variant` drives
+ * the chrome: "view" gets ◀ page ▶ nav, "replace"/"delete" get action buttons.
+ * Pure - returns { embeds, files, components } for the given scene index.
+ * @param {object} opts
+ * @returns {{embeds: object[], files: object[], components: object[]}}
+ */
+function buildSceneBrowserPayload({
+  images, assignments, mode, index, variant, lang,
+  AttachmentBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
+}) {
+  const total = images.length;
+  const i = Math.max(0, Math.min(Number(index) || 0, total - 1));
+  const image = images[i];
+  const buffer = normalizeStoredBuffer(image.imageData);
+  const filename = "raid-bg-scene.jpg";
+  const sizeKb = buffer?.length ? (buffer.length / 1024).toFixed(0) : "?";
+
+  const assignedHere = (assignments || [])
+    .filter((entry) => (entry.imageIndex || 0) === i)
+    .map((entry) => entry.accountName || entry.accountKey)
+    .filter(Boolean);
+
+  const meta = {
+    view: { color: 0x5865f2, titleKey: "raidBg.browse.viewTitle", descKey: "raidBg.browse.viewDesc" },
+    replace: { color: 0xfaa61a, titleKey: "raidBg.browse.replaceTitle", descKey: "raidBg.browse.replaceDesc" },
+    delete: { color: 0xed4245, titleKey: "raidBg.browse.deleteTitle", descKey: "raidBg.browse.deleteDesc" },
+  }[variant] || { color: 0x5865f2, titleKey: "raidBg.browse.viewTitle", descKey: "raidBg.browse.viewDesc" };
+
+  const embed = new EmbedBuilder()
+    .setColor(meta.color)
+    .setTitle(t(meta.titleKey, lang, { index: i + 1, total }))
+    .setDescription(t(meta.descKey, lang, { file: image.originalFilename || `background-${i + 1}` }))
+    .setImage(`attachment://${filename}`)
+    .addFields(
+      {
+        name: t("raidBg.browse.dimsLabel", lang),
+        value: `\`${image.width || "?"}x${image.height || "?"} · ${sizeKb} KB\``,
+        inline: true,
+      },
+      {
+        name: t("raidBg.browse.modeLabel", lang),
+        value: `${t(`raidBg.set.mode.${mode || "even"}`, lang)} · ${total}`,
+        inline: true,
+      },
+      {
+        name: t("raidBg.browse.assignedLabel", lang),
+        value: assignedHere.length
+          ? assignedHere.map((name) => `\`${name}\``).join(", ")
+          : t("raidBg.browse.assignedNone", lang),
+        inline: false,
+      },
+    );
+
+  const components = [];
+  if (total >= 2) {
+    components.push(new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId("raidbg:scene")
+        .setPlaceholder(t("raidBg.browse.selectPlaceholder", lang))
+        .addOptions(images.map((img, idx) => ({
+          label: clampEmbedTitle(`#${idx + 1} · ${img.originalFilename || "background"}`, 100),
+          value: String(idx),
+          default: idx === i,
+        }))),
+    ));
+  }
+
+  if (variant === "view") {
+    if (total >= 2) {
+      components.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("raidbg:prev").setLabel("◀").setStyle(ButtonStyle.Secondary).setDisabled(i === 0),
+        new ButtonBuilder().setCustomId("raidbg:page").setLabel(`${i + 1}/${total}`).setStyle(ButtonStyle.Secondary).setDisabled(true),
+        new ButtonBuilder().setCustomId("raidbg:next").setLabel("▶").setStyle(ButtonStyle.Secondary).setDisabled(i === total - 1),
+      ));
+    }
+  } else if (variant === "replace") {
+    components.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("raidbg:doreplace").setLabel(t("raidBg.edit.replaceBtn", lang, { index: i + 1 })).setStyle(ButtonStyle.Primary),
+    ));
+  } else {
+    components.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("raidbg:dodelete").setLabel(t("raidBg.edit.deleteBtn", lang, { index: i + 1 })).setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId("raidbg:deleteall").setLabel(t("raidBg.edit.deleteAllBtn", lang)).setStyle(ButtonStyle.Secondary),
+    ));
+  }
+
+  return { embeds: [embed], files: [new AttachmentBuilder(buffer, { name: filename })], components };
+}
+
+/**
+ * Persist the full library back (extend / replace / per-slot delete). Mirrors
+ * handleSet's write so the legacy single-image fields stay unset.
+ * @param {string} discordId
+ * @param {Array} images - schema-shaped image sub-docs
+ * @param {Array} assignments - account -> imageIndex rows
+ * @param {string} mode - "even" | "random"
+ * @returns {Promise<void>}
+ */
+async function saveLibrary(discordId, images, assignments, mode) {
+  await UserBackground.findOneAndUpdate(
+    { discordId },
+    {
+      $set: { discordId, mode: mode || "even", images, assignments },
+      $unset: {
+        imageData: "", mime: "", width: "", height: "", sizeBytes: "",
+        originalWidth: "", originalHeight: "", originalFilename: "",
+        originalMime: "", storageQuality: "",
+      },
+    },
+    { new: true },
+  );
+}
+
 async function handleView({ interaction, deps, lang }) {
-  const { AttachmentBuilder, EmbedBuilder } = deps;
+  const {
+    AttachmentBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
+  } = deps;
   await deferEphemeralReply(interaction);
 
   const bg = await UserBackground.findOne({ discordId: interaction.user.id }).lean();
@@ -767,153 +847,170 @@ async function handleView({ interaction, deps, lang }) {
     return;
   }
 
-  await editBackgroundPreview(interaction, {
-    bg,
-    images,
-    assignments: bg.assignments,
-    AttachmentBuilder,
-    EmbedBuilder,
-    lang,
-    title: t("raidBg.view.currentTitle", lang),
-    description: t("raidBg.view.currentDescription", lang),
-    footer: t("raidBg.view.footer", lang),
+  let index = 0;
+  const render = () => buildSceneBrowserPayload({
+    images, assignments: bg.assignments, mode: bg.mode, index, variant: "view", lang,
+    AttachmentBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
+  });
+  const payload = render();
+  const message = await editEmbed(interaction, payload.embeds, {
+    files: payload.files, components: payload.components,
+  });
+
+  // Single scene -> nothing to page through, so skip the collector.
+  if (images.length < 2 || !message?.createMessageComponentCollector) return;
+
+  const collector = message.createMessageComponentCollector({ time: RAID_BG_BROWSER_MS });
+  collector.on("collect", async (component) => {
+    const id = component.customId;
+    if (id === "raidbg:scene") index = Number(component.values?.[0]) || 0;
+    else if (id === "raidbg:prev") index = Math.max(0, index - 1);
+    else if (id === "raidbg:next") index = Math.min(images.length - 1, index + 1);
+    else return;
+    const next = render();
+    await component.update({ embeds: next.embeds, files: next.files, components: next.components });
+  });
+  collector.on("end", async () => {
+    try { await interaction.editReply({ components: [] }); } catch { /* message gone */ }
   });
 }
 
-async function handleRemove({ interaction, deps, lang }) {
-  const { AttachmentBuilder, EmbedBuilder } = deps;
+async function handleEdit({ interaction, deps, lang }) {
+  const {
+    AttachmentBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
+  } = deps;
+  // A new image at invocation = REPLACE mode (Discord can't prompt for a file
+  // mid-interaction); no image = DELETE mode.
+  const replaceAttachment = interaction.options.getAttachment("image", false);
   await deferEphemeralReply(interaction);
-  const imageOption = typeof interaction.options.getInteger === "function"
-    ? interaction.options.getInteger("image", false)
-    : null;
 
-  const existing = await UserBackground.findOne({ discordId: interaction.user.id })
-    .select("_id mode images assignments imageData updatedAt")
-    .lean();
-  if (!existing) {
+  const bg = await UserBackground.findOne({ discordId: interaction.user.id }).lean();
+  const baseImages = getStoredImages(bg);
+  if (baseImages.length === 0) {
     await editEmbed(interaction, buildRaidBgEmbed(EmbedBuilder, {
-      title: t("raidBg.remove.nothingTitle", lang),
-      description: t("raidBg.remove.nothingDescription", lang),
+      title: t("raidBg.edit.nothingTitle", lang),
+      description: t("raidBg.edit.nothingDescription", lang),
       color: 0x5865f2,
     }));
     return;
   }
 
-  const images = getStoredImages(existing);
-  if (imageOption != null) {
-    const removeIndex = imageOption - 1;
-    if (!Number.isInteger(removeIndex) || removeIndex < 0 || removeIndex >= images.length) {
-      await editBackgroundPreview(interaction, {
-        bg: existing,
-        images,
-        assignments: existing.assignments,
-        AttachmentBuilder,
-        EmbedBuilder,
-        lang,
-        title: t("raidBg.remove.invalidImageTitle", lang),
-        description: t("raidBg.remove.invalidImageDescription", lang, {
-          requested: imageOption,
-          count: Math.max(images.length, 1),
-        }),
-        footer: t("raidBg.view.footer", lang),
-        color: 0xfee75c,
-      });
-      return;
-    }
+  const variant = replaceAttachment ? "replace" : "delete";
 
-    if (images.length <= 1) {
-      await UserBackground.deleteOne({ discordId: interaction.user.id });
-      clearBackgroundCache(interaction.user.id);
-      await editEmbed(interaction, buildRaidBgEmbed(EmbedBuilder, {
-        title: t("raidBg.remove.successTitle", lang),
-        description: t("raidBg.remove.successDescription", lang),
-        color: 0x99aab5,
-      }));
-      return;
-    }
-
-    const remainingImages = images.filter((_image, index) => index !== removeIndex);
-    const assignments = compactAssignmentsAfterRemove(
-      existing.assignments,
-      removeIndex,
-      remainingImages.length,
-    );
-
+  // Validate + resize the replacement up front so the picker only commits a
+  // known-good image when the lead presses the button.
+  let replacement = null;
+  if (variant === "replace") {
     try {
-      await UserBackground.findOneAndUpdate(
-        { discordId: interaction.user.id },
-        {
-          $set: {
-            discordId: interaction.user.id,
-            mode: existing.mode || "even",
-            images: remainingImages,
-            assignments,
-          },
-          $unset: {
-            imageData: "",
-            mime: "",
-            width: "",
-            height: "",
-            sizeBytes: "",
-            originalWidth: "",
-            originalHeight: "",
-            originalFilename: "",
-            originalMime: "",
-            storageQuality: "",
-          },
-        },
-        { new: true },
-      );
+      const buffer = await downloadAttachment(replaceAttachment);
+      const validated = await validateBgAttachment(replaceAttachment, buffer);
+      const resized = await resizeForStorage(validated.img);
+      replacement = {
+        imageData: resized.buffer, mime: resized.mime, width: resized.width, height: resized.height,
+        sizeBytes: resized.buffer.length, originalWidth: validated.width, originalHeight: validated.height,
+        originalFilename: replaceAttachment.name || "background.jpg", originalMime: validated.mime || "",
+        storageQuality: resized.quality,
+      };
     } catch (err) {
-      console.error("[raid-bg] slot removal failed:", err?.message || err);
+      if (!(err instanceof RaidBgError)) throw err;
       await editEmbed(interaction, buildRaidBgEmbed(EmbedBuilder, {
-        title: t("raidBg.set.saveFailedTitle", lang),
-        description: t("raidBg.errors.storageFailed", lang, {
-          message: err?.message || String(err),
-        }),
-        color: 0xed4245,
+        title: t("raidBg.set.rejectTitle", lang),
+        description: t(err.key, lang, err.params),
+        color: 0xfee75c,
       }));
       return;
     }
-
-    clearBackgroundCache(interaction.user.id);
-    await editBackgroundPreview(interaction, {
-      bg: {
-        ...existing,
-        mode: existing.mode || "even",
-        updatedAt: new Date(),
-      },
-      images: remainingImages,
-      assignments,
-      AttachmentBuilder,
-      EmbedBuilder,
-      lang,
-      title: t("raidBg.remove.partialSuccessTitle", lang),
-      description: t("raidBg.remove.partialSuccessDescription", lang, {
-        index: imageOption,
-      }),
-      footer: t("raidBg.view.footer", lang),
-      color: 0x99aab5,
-    });
-    return;
   }
 
-  await UserBackground.deleteOne({ discordId: interaction.user.id });
-  clearBackgroundCache(interaction.user.id);
+  let images = baseImages.map(normalizeStoredImage);
+  let assignments = (bg.assignments || []).map((entry) => ({ ...entry }));
+  const mode = RAID_BG_ASSIGNMENT_MODES.has(bg?.mode) ? bg.mode : "even";
+  let index = 0;
 
-  await editEmbed(interaction, buildRaidBgEmbed(EmbedBuilder, {
-    title: t("raidBg.remove.successTitle", lang),
-    description: t("raidBg.remove.successDescription", lang),
-    color: 0x99aab5,
-  }));
+  const render = () => buildSceneBrowserPayload({
+    images, assignments, mode, index, variant, lang,
+    AttachmentBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
+  });
+  const payload = render();
+  const message = await editEmbed(interaction, payload.embeds, {
+    files: payload.files, components: payload.components,
+  });
+  if (!message?.createMessageComponentCollector) return;
+
+  const finalNotice = (component, opts) => component.update({
+    embeds: [buildRaidBgEmbed(EmbedBuilder, opts)],
+    files: [],
+    components: [],
+  });
+
+  const collector = message.createMessageComponentCollector({ time: RAID_BG_BROWSER_MS });
+  collector.on("collect", async (component) => {
+    const id = component.customId;
+    try {
+      if (id === "raidbg:scene") {
+        index = Number(component.values?.[0]) || 0;
+        const next = render();
+        await component.update({ embeds: next.embeds, files: next.files, components: next.components });
+        return;
+      }
+      if (id === "raidbg:doreplace") {
+        images[index] = replacement;
+        await saveLibrary(interaction.user.id, images, assignments, mode);
+        clearBackgroundCache(interaction.user.id);
+        collector.stop("done");
+        await finalNotice(component, {
+          title: t("raidBg.edit.replacedTitle", lang),
+          description: t("raidBg.edit.replacedDescription", lang, { index: index + 1 }),
+          color: 0x57f287,
+        });
+        return;
+      }
+      if (id === "raidbg:deleteall" || (id === "raidbg:dodelete" && images.length <= 1)) {
+        await UserBackground.deleteOne({ discordId: interaction.user.id });
+        clearBackgroundCache(interaction.user.id);
+        collector.stop("done");
+        await finalNotice(component, {
+          title: t("raidBg.edit.clearedTitle", lang),
+          description: t("raidBg.edit.clearedDescription", lang),
+          color: 0x99aab5,
+        });
+        return;
+      }
+      if (id === "raidbg:dodelete") {
+        const removed = index;
+        images = images.filter((_image, idx) => idx !== removed);
+        assignments = compactAssignmentsAfterRemove(assignments, removed, images.length);
+        if (index >= images.length) index = images.length - 1;
+        await saveLibrary(interaction.user.id, images, assignments, mode);
+        clearBackgroundCache(interaction.user.id);
+        const next = render();
+        await component.update({ embeds: next.embeds, files: next.files, components: next.components });
+        return;
+      }
+    } catch (err) {
+      console.error("[raid-bg] edit action failed:", err?.message || err);
+      try {
+        await finalNotice(component, {
+          title: t("raidBg.set.saveFailedTitle", lang),
+          description: t("raidBg.errors.storageFailed", lang, { message: err?.message || String(err) }),
+          color: 0xed4245,
+        });
+      } catch { /* ignore */ }
+    }
+  });
+  collector.on("end", async () => {
+    try { await interaction.editReply({ components: [] }); } catch { /* message gone */ }
+  });
 }
 
 // ─── Factory ────────────────────────────────────────────────────────────────
 
 /**
  * Build the /raid-bg command handler factory.
- * Subcommand-based: `set` (upload 1-4 images), `view` (preview saved
- * slots), `remove` (drop one slot or clear pool).
+ * Subcommand-based: `set` (upload 1-4 images, overwrite/extend the library),
+ * `view` (interactive scene browser), `edit` (replace a scene with an attached
+ * image, or delete scenes). Interactive subcommands need the discord.js
+ * component builders (ActionRow/Button/ButtonStyle/StringSelectMenu) in deps.
  * @param {object} deps - injected dependencies
  * @param {object} deps.User - Mongoose User model (locale lookup)
  *   plus discord.js builders and the userbackgrounds storage layer
@@ -929,7 +1026,7 @@ function createRaidBgCommand(deps) {
     const sub = interaction.options.getSubcommand();
     if (sub === "set") return handleSet({ interaction, deps, lang });
     if (sub === "view") return handleView({ interaction, deps, lang });
-    if (sub === "remove") return handleRemove({ interaction, deps, lang });
+    if (sub === "edit") return handleEdit({ interaction, deps, lang });
   }
 
   return {
@@ -942,5 +1039,8 @@ module.exports = {
   __test: {
     detectMime,
     stripPngAncillaryChunks,
+    compactAssignmentsAfterRemove,
+    buildSceneBrowserPayload,
+    RAID_BG_MAX_IMAGES,
   },
 };

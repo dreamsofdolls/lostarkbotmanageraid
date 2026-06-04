@@ -2065,9 +2065,9 @@ module.exports = {
       noRosterTitle: "ℹ️ Chưa thấy roster nào",
       noRosterDescription:
         "Artist cần ít nhất một roster của chính cậu trước khi lưu background theo roster nha.",
-      tooManyImagesTitle: "⚠️ Nhiều ảnh quá rồi",
+      tooManyImagesTitle: "⚠️ Thư viện đầy rồi",
       tooManyImagesDescription:
-        "Cậu gắn {count} ảnh, nhưng với số roster hiện tại Artist chỉ lưu tối đa {max} ảnh thôi.",
+        "Thư viện chỉ chứa tối đa **{max}** cảnh. Hiện đã có {existing}, thêm nữa sẽ vượt mất. Dùng `/raid-bg edit` để dọn bớt rồi thử lại nhé~",
       imagesLabel: "🖼️ Ảnh",
       imagesValue: "Đã lưu {count}/{max} ảnh · tổng {totalKb} KB",
       modeLabel: "🔀 Cách chia",
@@ -2079,7 +2079,33 @@ module.exports = {
       fileLabel: "🖼️ File",
       dimsLabel: "📐 Kích thước",
       sizeLabel: "💾 Lưu trữ",
-      footer: "/raid-bg view để Artist show lại · /raid-bg remove khi cậu muốn đổi gió",
+      footer: "/raid-bg view để xem lại · /raid-bg edit để thay/xoá cảnh",
+    },
+    browse: {
+      viewTitle: "🖼️ Thư viện nền · cảnh #{index}/{total}",
+      viewDesc: "Đang xem **{file}**",
+      replaceTitle: "✏️ Sửa thư viện · chọn cảnh để THAY",
+      replaceDesc: "Ảnh mới sẽ thay vào cảnh **{file}** cậu đang chọn.",
+      deleteTitle: "🗑️ Dọn thư viện · chọn cảnh để xoá",
+      deleteDesc: "Chọn 1 cảnh để xoá, hoặc xoá cả thư viện. Account đang gán sẽ tự dồn lại.",
+      dimsLabel: "📐 Kích thước",
+      modeLabel: "🔀 Chế độ",
+      assignedLabel: "📌 Đang gán cho",
+      assignedNone: "_chưa gán account nào_",
+      selectPlaceholder: "🗓 Chọn cảnh để xem…",
+    },
+    edit: {
+      nothingTitle: "ℹ️ Chưa có gì để sửa",
+      nothingDescription:
+        "Cậu chưa upload background lần nào nha~ Chạy `/raid-bg set image:<file>` trước nhé!",
+      replaceBtn: "🔁 Thay cảnh #{index} bằng ảnh vừa up",
+      deleteBtn: "🗑 Xoá cảnh #{index}",
+      deleteAllBtn: "🗑 Xoá hết",
+      replacedTitle: "✅ Đã thay cảnh",
+      replacedDescription: "Artist đã thay cảnh **#{index}** bằng ảnh mới rồi nha~",
+      clearedTitle: "🗑️ Đã dọn thư viện",
+      clearedDescription:
+        "Cậu quay về text embed mặc định cho `/raid-status` rồi đó. Muốn có background lại thì `/raid-bg set` nhé~",
     },
     view: {
       noneTitle: "ℹ️ Cậu chưa có background nào hết á",

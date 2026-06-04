@@ -2032,9 +2032,9 @@ module.exports = {
       noRosterTitle: "ℹ️ Roster がまだ見つかりません",
       noRosterDescription:
         "Roster ごとの background を保存するには、ご自身の roster が少なくとも1つ必要ですわ。",
-      tooManyImagesTitle: "⚠️ 画像が多すぎますわ",
+      tooManyImagesTitle: "⚠️ ライブラリが満杯ですわ",
       tooManyImagesDescription:
-        "{count} 枚添付されていますが、現在の roster 数では最大 {max} 枚までですの。",
+        "ライブラリは最大 **{max}** シーンまでですの。既に {existing} 枚あるので溢れてしまいますわ。`/raid-bg edit` で減らしてから再試行してくださいまし~",
       imagesLabel: "🖼️ 画像",
       imagesValue: "{count}/{max} 枚保存 · 合計 {totalKb} KB",
       modeLabel: "🔀 割り当て",
@@ -2046,7 +2046,33 @@ module.exports = {
       fileLabel: "🖼️ ファイル",
       dimsLabel: "📐 サイズ",
       sizeLabel: "💾 保存容量",
-      footer: "/raid-bg view でプレビュー · /raid-bg remove で取り外し",
+      footer: "/raid-bg view で閲覧 · /raid-bg edit で差し替え/削除",
+    },
+    browse: {
+      viewTitle: "🖼️ 背景ライブラリ · シーン #{index}/{total}",
+      viewDesc: "**{file}** を表示中",
+      replaceTitle: "✏️ ライブラリ編集 · 差し替えるシーンを選択",
+      replaceDesc: "選んだ **{file}** シーンに新しい画像が差し替わりますわ。",
+      deleteTitle: "🗑️ ライブラリ整理 · 削除するシーンを選択",
+      deleteDesc: "1 シーンを削除、またはライブラリ全体を削除。割当済みアカウントは自動で詰められますわ。",
+      dimsLabel: "📐 サイズ",
+      modeLabel: "🔀 モード",
+      assignedLabel: "📌 割当先",
+      assignedNone: "_アカウント未割当_",
+      selectPlaceholder: "🗓 表示するシーンを選択…",
+    },
+    edit: {
+      nothingTitle: "ℹ️ 編集するものがありませんわ",
+      nothingDescription:
+        "まだ background をアップロードしていませんわ~ 先に `/raid-bg set image:<file>` を実行してくださいまし!",
+      replaceBtn: "🔁 シーン #{index} を新しい画像に差し替え",
+      deleteBtn: "🗑 シーン #{index} を削除",
+      deleteAllBtn: "🗑 全削除",
+      replacedTitle: "✅ シーンを差し替えました",
+      replacedDescription: "Artist がシーン **#{index}** を新しい画像に差し替えましたわ~",
+      clearedTitle: "🗑️ ライブラリを空にしました",
+      clearedDescription:
+        "`/raid-status` は既定のテキスト埋め込みに戻りましたわ。また背景が欲しければ `/raid-bg set` を~",
     },
     view: {
       noneTitle: "ℹ️ Background はまだ無いですわよ",

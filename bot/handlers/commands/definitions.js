@@ -685,19 +685,19 @@ function createRaidCommandDefinitions({
 
   const raidBgCommand = new SlashCommandBuilder()
     .setName("raid-bg")
-    .setDescription("Set / view / remove background image for your /raid-status card")
+    .setDescription("Set / view / edit background images for your /raid-status card")
     .setDescriptionLocalizations({
-      vi: "Set / xem / xoá ảnh background cho card /raid-status",
-      ja: "/raid-status カードの背景画像を設定 / 表示 / 削除",
+      vi: "Set / xem / sửa ảnh background cho card /raid-status",
+      ja: "/raid-status カードの背景画像を設定 / 表示 / 編集",
     })
     .setDMPermission(false)
     .addSubcommand((sub) =>
       sub
         .setName("set")
-        .setDescription("Upload 1-4 roster background images (800x600+, 8MB each)")
+        .setDescription("Upload 1-4 background images (overwrite or extend; library holds up to 6)")
         .setDescriptionLocalizations({
-          vi: "Upload 1-4 ảnh background roster (800x600+, tối đa 8MB mỗi ảnh)",
-          ja: "1-4枚のroster背景画像をアップロード（800x600以上、各8MBまで）",
+          vi: "Upload 1-4 ảnh background (ghi đè hoặc mở rộng; thư viện tối đa 6)",
+          ja: "1-4枚の背景画像をアップロード（上書き or 追加; ライブラリ最大6枚）",
         })
         .addAttachmentOption((opt) =>
           opt
@@ -752,6 +752,28 @@ function createRaidCommandDefinitions({
               { name: "Even - stable round-robin", value: "even" },
               { name: "Random - shuffle on save", value: "random" }
             )
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("action")
+            .setDescription("Overwrite the whole library or extend it (default: overwrite)")
+            .setDescriptionLocalizations({
+              vi: "Ghi đè cả thư viện hay mở rộng (mặc định: ghi đè)",
+              ja: "ライブラリ全体を上書き or 追加（既定: 上書き）",
+            })
+            .setRequired(false)
+            .addChoices(
+              {
+                name: "📥 Overwrite",
+                value: "overwrite",
+                name_localizations: { vi: "📥 Ghi đè", ja: "📥 上書き" },
+              },
+              {
+                name: "➕ Extend",
+                value: "extend",
+                name_localizations: { vi: "➕ Mở rộng", ja: "➕ 追加" },
+              }
+            )
         ),
     )
     .addSubcommand((sub) =>
@@ -765,23 +787,21 @@ function createRaidCommandDefinitions({
     )
     .addSubcommand((sub) =>
       sub
-        .setName("remove")
-        .setDescription("Remove one saved background slot, or clear all backgrounds")
+        .setName("edit")
+        .setDescription("Edit your library: replace a scene (attach an image) or delete scenes")
         .setDescriptionLocalizations({
-          vi: "Xoá một slot background đã lưu, hoặc xoá tất cả background",
-          ja: "保存済み背景スロットを1つ削除、または全背景を削除",
+          vi: "Sửa thư viện: thay 1 cảnh (kèm ảnh) hoặc xoá cảnh",
+          ja: "ライブラリを編集: シーンを差し替え（画像添付）または削除",
         })
-        .addIntegerOption((opt) =>
+        .addAttachmentOption((opt) =>
           opt
             .setName("image")
-            .setDescription("Image slot to remove (1-4); leave empty to clear all")
+            .setDescription("New image to replace a scene with (omit to delete scenes instead)")
             .setDescriptionLocalizations({
-              vi: "Slot ảnh cần xoá (1-4); bỏ trống để xoá tất cả",
-              ja: "削除する画像スロット (1-4)。空欄なら全て削除",
+              vi: "Ảnh mới để thay vào 1 cảnh (bỏ trống để chuyển sang chế độ xoá)",
+              ja: "シーンを差し替える新しい画像（省略すると削除モード）",
             })
             .setRequired(false)
-            .setMinValue(1)
-            .setMaxValue(4)
         ),
     );
 
