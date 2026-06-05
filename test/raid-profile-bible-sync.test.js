@@ -7,7 +7,7 @@ const {
   createBibleProfileSyncService,
   durationToMs,
   roleForLog,
-} = require("../bot/services/auto-manage/profile-sync");
+} = require("../bot/services/auto-manage/profile/sync");
 const { getRaidGateForBoss, getRaidRequirementMap } = require("../bot/models/Raid");
 const { getCharacterName, getCharacterClass } = require("../bot/utils/raid/common/shared");
 

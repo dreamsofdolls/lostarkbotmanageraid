@@ -6,7 +6,7 @@
  * accounts STAY in the candidate set even when cached iLvl is below
  * the raid floor - /raid-check lazy-refreshes before scanning, so
  * filtering on cached iLvl alone would hide newly-honed chars.
- * Used by: services/auto-manage/core.js, handlers/raid-check/*,
+ * Used by: services/auto-manage/runtime/core.js, handlers/raid-check/*,
  * handlers/raid-status/* (anything that scans User docs for raid view).
  */
 

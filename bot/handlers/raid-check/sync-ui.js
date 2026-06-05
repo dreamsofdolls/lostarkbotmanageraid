@@ -29,7 +29,7 @@ const {
   stampAutoManageAttemptFromReport,
   toPlainUserDoc,
   syncRaidProfileAfterAutoManageReport,
-} = require("../../services/auto-manage/report-utils");
+} = require("../../services/auto-manage/reports/utils");
 
 /**
  * Build the /raid-check Sync UI service. Returns three handlers (display

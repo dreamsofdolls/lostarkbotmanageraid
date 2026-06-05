@@ -12,7 +12,7 @@
 const {
   stampAutoManageAttemptFromReport,
   syncRaidProfileAfterAutoManageReport,
-} = require("../auto-manage/report-utils");
+} = require("../auto-manage/reports/utils");
 
 function toPlainUserSnapshot(userDoc) {
   if (!userDoc) return null;

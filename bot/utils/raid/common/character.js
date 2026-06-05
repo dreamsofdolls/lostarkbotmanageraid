@@ -7,7 +7,7 @@
  * them trivially unit-testable in isolation.
  *
  * Used by: bot/commands.js (compose root), handlers/raid-status.js,
- * handlers/raid-check.js, services/auto-manage/core.js (indirectly via
+ * handlers/raid-check.js, services/auto-manage/runtime/core.js (indirectly via
  * commands.__test exports).
  */
 

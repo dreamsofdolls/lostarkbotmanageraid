@@ -6,7 +6,7 @@ const {
   finiteNumber,
   normalizeDifficultyToModeKey,
   normalizeKey,
-} = require("../bible-log-utils");
+} = require("../bible/log-utils");
 const {
   MIN_PROFILE_DURATION_MS,
 } = require("./constants");

@@ -5,7 +5,7 @@ const {
   stampAutoManageAttemptFromReport,
   toPlainUserDoc,
   syncRaidProfileAfterAutoManageReport,
-} = require("./report-utils");
+} = require("../reports/utils");
 
 function createAutoManageSyncService(deps) {
   const {
