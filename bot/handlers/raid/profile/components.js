@@ -4,10 +4,12 @@ const { t } = require("../../../services/i18n");
 const {
   aggregateCharacters,
   getEntryLabel,
+} = require("./aggregate");
+const {
   roleEmoji,
   roleLabel,
   score,
-} = require("./view-helpers");
+} = require("./display");
 
 const MAX_SELECT_OPTIONS = 25;
 const MAX_CHARACTER_SELECT_OPTIONS = MAX_SELECT_OPTIONS - 1;
