@@ -293,7 +293,10 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
   assert.equal(saved.accounts[0].characters[0].topDebuffSources[0].category, "battleitem");
   assert.equal(saved.accounts[0].characters[0].topShieldGivenSources[0].target, "OTHER");
   assert.equal(saved.accounts[0].characters[0].topShieldReceivedSources[0].share, 45.6);
+  assert.equal(saved.rangeType, "full");
   assert.equal(saved.criteria.modernProfileStatsOnly, true);
+  assert.equal(saved.criteria.range.type, "full");
+  assert.equal(saved["rangeSnapshots.full"].criteria.range.type, "full");
   assert.equal(saved.totals.encounterCount, 12);
   assert.equal(userUpdates.length, 1);
   assert.deepEqual(userUpdates[0].filter, {
@@ -301,4 +304,108 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
     localProfileSyncTokenHash: tokenHash,
   });
   assert.equal(typeof userUpdates[0].update.$set.lastLocalProfileSyncAt, "number");
+});
+
+test("weekly raid-profile sync stores range snapshot without overwriting an existing full profile", async () => {
+  const profileToken = "profile-device-token-weekly";
+  const tokenHash = hashProfileDeviceToken(profileToken);
+  const savedSnapshots = [];
+  const User = {
+    findOne(query) {
+      assert.deepEqual(query, { localProfileSyncTokenHash: tokenHash });
+      return {
+        select() {
+          return {
+            lean: async () => ({
+              discordId: "u1",
+              localSyncEnabled: true,
+              localProfileSyncTokenHash: tokenHash,
+              localProfileSyncTokenExpAt: 9999999999,
+              accounts: [
+                {
+                  accountName: "Roster",
+                  characters: [
+                    { name: "Aki", class: "Artist", itemLevel: 1750 },
+                  ],
+                },
+              ],
+            }),
+          };
+        },
+      };
+    },
+    async updateOne() {
+      return { modifiedCount: 1 };
+    },
+  };
+  const RaidProfileSnapshot = {
+    findOne(query) {
+      assert.deepEqual(query, { discordId: "u1" });
+      return {
+        select() {
+          return {
+            lean: async () => ({
+              discordId: "u1",
+              rangeType: "full",
+              criteria: { range: { type: "full" } },
+              accounts: [
+                {
+                  accountName: "Roster",
+                  characters: [{ name: "Aki", stats: { encounters: 20 } }],
+                },
+              ],
+            }),
+          };
+        },
+      };
+    },
+    async findOneAndUpdate(filter, update, options) {
+      savedSnapshots.push({ filter, update, options });
+      return { discordId: filter.discordId };
+    },
+  };
+  const handler = createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot });
+  const res = makeRes();
+
+  await handler(
+    makeReq({
+      token: profileToken,
+      body: {
+        generatedAt: 5000,
+        criteria: {
+          modernProfileStatsOnly: true,
+          range: { type: "weekly", minFightStartMs: 123456789 },
+        },
+        accounts: [
+          {
+            accountName: "Roster",
+            characters: [
+              {
+                name: "Aki",
+                stats: { encounters: 2, lastFightStart: 123999999 },
+                scores: { overall: 60 },
+              },
+            ],
+          },
+        ],
+      },
+    }),
+    res,
+    { query: {} }
+  );
+
+  assert.equal(res.status, 200);
+  assert.equal(res.json().totals.encounterCount, 2);
+  assert.equal(savedSnapshots.length, 1);
+  const saved = savedSnapshots[0].update.$set;
+  assert.equal(saved.discordId, "u1");
+  assert.equal(saved.accounts, undefined);
+  assert.equal(saved.rangeType, undefined);
+  assert.equal(saved.criteria, undefined);
+  const weekly = saved["rangeSnapshots.weekly"];
+  assert.equal(weekly.rangeType, "weekly");
+  assert.equal(weekly.criteria.range.type, "weekly");
+  assert.equal(weekly.criteria.range.minFightStartMs, 123456789);
+  assert.equal(weekly.accounts[0].characters[0].name, "Aki");
+  assert.equal(weekly.accounts[0].characters[0].stats.encounters, 2);
 });

@@ -36,18 +36,18 @@
     </section>
 
     <section id="sync-mode-section" class="card" hidden>
-      <h2 data-i18n="syncMode.section">3. Sync mode</h2>
+      <h2 data-i18n="syncMode.section">3. Choose local sync mode</h2>
       <p class="hint" data-i18n="syncMode.hint">
-        Choose one local-sync surface for this file session. The other tab locks until you remove or re-pick the file.
+        Both modes use the same local file, but with different ranges. Weekly sync handles the current raid week; profile import scans deeper for a fuller snapshot.
       </p>
       <div class="sync-tabs" role="tablist" aria-label="Local sync mode">
         <button id="weekly-mode-tab" class="sync-tab" type="button" role="tab" aria-selected="false" aria-controls="preview-section">
           <span data-i18n="syncMode.weeklyTitle">Weekly local sync</span>
-          <small data-i18n="syncMode.weeklyDesc">Read current raid week clears and send gate progress to Artist.</small>
+          <small data-i18n="syncMode.weeklyDesc">Send current-week clears plus raid-profile stats from the same week.</small>
         </button>
         <button id="profile-mode-tab" class="sync-tab" type="button" role="tab" aria-selected="false" aria-controls="profile-section">
-          <span data-i18n="syncMode.profileTitle">Raid profile import</span>
-          <small data-i18n="syncMode.profileDesc">Read eligible cleared raid logs into profile statistics.</small>
+          <span data-i18n="syncMode.profileTitle">Full profile import</span>
+          <small data-i18n="syncMode.profileDesc">Scan all eligible raid logs in the file and build a profile snapshot.</small>
         </button>
       </div>
       <p id="sync-mode-lock" class="hint sync-mode-lock" hidden></p>
@@ -57,7 +57,7 @@
       <h2 data-i18n="preview.section">4. Current raid-week preview</h2>
       <p class="hint week-range" id="preview-week-range" hidden></p>
       <div id="preview-stats" class="preview-stats" hidden></div>
-      <div id="preview-output" data-i18n="preview.loadingWasm">Loading SQLite WASM...</div>
+      <div id="preview-output" data-i18n="preview.loadingWasm">Loading SQLite WASM (one-time, cached after)...</div>
     </section>
 
     <section id="sync-section" class="card" hidden>
@@ -70,9 +70,9 @@
     </section>
 
     <section id="profile-section" class="card" hidden>
-      <h2 data-i18n="profilePanel.section">4. Raid profile import</h2>
+      <h2 data-i18n="profilePanel.section">4. Full profile import</h2>
       <p class="hint" data-i18n="profilePanel.hint">
-        Imports only successful supported raid logs for registered roster characters and shared rosters.
+        Scans successful supported raid logs over 3 minutes that match registered or shared rosters. Picking this mode auto-scans and sends; no Sync button needed.
       </p>
       <div id="profile-sync-output" class="meta" hidden></div>
     </section>
