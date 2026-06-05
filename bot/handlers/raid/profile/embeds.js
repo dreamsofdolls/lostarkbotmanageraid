@@ -38,15 +38,16 @@ const {
 const {
   sliceMapWithOverflow,
 } = require("./list-lines");
+const { PROFILE_COLORS } = require("./colors");
 
-function buildOverallEmbed({ EmbedBuilder, UI }, session) {
+function buildOverallEmbed({ EmbedBuilder }, session) {
   const lang = session.lang || "vi";
   const chars = flattenCharacters(session.entries);
   const agg = aggregateCharacters(chars);
   const topOverall = pickTopChar(chars, "overall");
   const topMvp = pickTopChar(chars, "mvp");
   const embed = new EmbedBuilder()
-    .setColor(UI.colors.neutral)
+    .setColor(PROFILE_COLORS.amber)
     .setAuthor({ name: "// RAID PROFILE · OVERALL" })
     .setTitle(t("raidProfile.overallTitle", lang))
     .setDescription(t("raidProfile.overallDesc", lang))
@@ -99,12 +100,12 @@ function buildOverallEmbed({ EmbedBuilder, UI }, session) {
   return embed;
 }
 
-function buildRosterEmbed({ EmbedBuilder, UI }, session, entry) {
+function buildRosterEmbed({ EmbedBuilder }, session, entry) {
   const lang = session.lang || "vi";
   const agg = aggregateCharacters(entry.characters);
   const topOverall = pickTopChar(entry.characters, "overall");
   const embed = new EmbedBuilder()
-    .setColor(entry.isOwn ? UI.colors.neutral : UI.colors.progress)
+    .setColor(entry.isOwn ? PROFILE_COLORS.amber : PROFILE_COLORS.shared)
     .setAuthor({ name: "// RAID PROFILE · ROSTER" })
     .setTitle(t("raidProfile.rosterTitle", lang, { account: entry.accountName }))
     .setDescription([
@@ -154,7 +155,7 @@ function buildRosterEmbed({ EmbedBuilder, UI }, session, entry) {
   return embed;
 }
 
-function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
+function buildCharacterEmbed({ EmbedBuilder }, session, entry, character) {
   const lang = session.lang || "vi";
   const stats = character.stats || {};
   const scores = character.scores || {};
@@ -168,7 +169,7 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
   // icon lives on the identity line, not the title.
   const classEmoji = getClassEmoji(character.class) || (isSupport ? "🛡️" : "⚔️");
   const embed = new EmbedBuilder()
-    .setColor(isSupport ? UI.colors.success : UI.colors.neutral)
+    .setColor(isSupport ? PROFILE_COLORS.support : PROFILE_COLORS.amber)
     .setAuthor({ name: "// RAID PROFILE · CHARACTER" })
     .setTitle(character.name)
     .setDescription([
