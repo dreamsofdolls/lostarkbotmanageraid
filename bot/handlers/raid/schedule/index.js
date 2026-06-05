@@ -41,6 +41,7 @@ const {
   characterSelectOptions,
   signupSelectOptions,
 } = require("./select-options");
+const { createScheduleNoticeHelpers } = require("./notices");
 
 const EPHEMERAL_FLAG = 1 << 6;
 const CLOSED_EVENT_STATUSES = new Set(["cleared", "cancelled"]);
@@ -64,51 +65,12 @@ function createRaidScheduleCommand({
   applyRaidSetBatchForDiscordId,
 }) {
   const ephemeralFlag = MessageFlags?.Ephemeral ?? EPHEMERAL_FLAG;
-
-  // HUD kicker per notice type - a small `// CODE` line above the title that
-  // gives every schedule confirmation the same operational-console feel.
-  const NOTICE_KICKER = { danger: "// ERROR", success: "// OK", warn: "// HEADS UP", info: "// INFO" };
-  function noticeEmbed(type, title, description) {
-    const color = type === "danger"
-      ? UI.colors.danger
-      : type === "success"
-        ? UI.colors.success
-        : type === "warn"
-          ? UI.colors.progress
-          : UI.colors.neutral;
-    const embed = new EmbedBuilder()
-      .setColor(color)
-      .setAuthor({ name: NOTICE_KICKER[type] || "// INFO" })
-      .setTitle(title);
-    if (description) embed.setDescription(description);
-    return embed;
-  }
-
-  function noticePayload(lang, type, titleKey, descriptionKey, vars = {}) {
-    return {
-      embeds: [
-        noticeEmbed(
-          type,
-          t(`raid-schedule.notice.${titleKey}`, lang, vars),
-          descriptionKey ? t(`raid-schedule.notice.${descriptionKey}`, lang, vars) : "",
-        ),
-      ],
-      flags: ephemeralFlag,
-    };
-  }
-
-  async function replyNotice(interaction, lang, type, titleKey, descriptionKey, vars = {}) {
-    const payload = noticePayload(lang, type, titleKey, descriptionKey, vars);
-    if (interaction.deferred || interaction.replied) return interaction.followUp(payload);
-    return interaction.reply(payload);
-  }
-
-  async function editNotice(interaction, lang, type, titleKey, descriptionKey, vars = {}) {
-    return interaction.editReply({
-      embeds: noticePayload(lang, type, titleKey, descriptionKey, vars).embeds,
-      components: [],
-    });
-  }
+  const {
+    noticeEmbed,
+    noticePayload,
+    replyNotice,
+    editNotice,
+  } = createScheduleNoticeHelpers({ EmbedBuilder, UI, ephemeralFlag });
 
   async function userLang(interaction) {
     return getUserLanguage(interaction.user?.id, { UserModel: User });
