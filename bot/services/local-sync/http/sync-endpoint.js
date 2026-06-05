@@ -10,17 +10,19 @@
 "use strict";
 
 const {
-  verifyToken,
-  isCurrentStoredToken,
   TOKEN_POST_SYNC_TTL_SEC,
   applyLocalSyncDeltas,
   recordLocalSyncSuccess,
 } = require("..");
 const {
   createJsonSender,
-  extractBearerToken,
   readJsonBody,
 } = require("./json");
+const {
+  guardHttpMethod,
+  readVerifiedLocalSyncToken,
+  requireCurrentLocalSyncUser,
+} = require("./request-gates");
 const { getRaidRequirementMap } = require("../../../models/Raid");
 
 /**
@@ -52,28 +54,10 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId, applyRaidSetBa
   const send = createJsonSender({ methods: "POST, OPTIONS" });
 
   return async function handleRaidSync(req, res, parsedUrl) {
-    // Preflight - cheap CORS handshake. Same headers as the actual response.
-    if (req.method === "OPTIONS") {
-      send(res, 204, "");
-      return;
-    }
-    if (req.method !== "POST") {
-      send(res, 405, { ok: false, error: "method not allowed" });
-      return;
-    }
-
-    // 1. Token extract + verify.
-    const token = extractBearerToken(req, parsedUrl);
-    if (!token) {
-      send(res, 401, { ok: false, error: "missing token" });
-      return;
-    }
-    const verified = verifyToken(token);
-    if (!verified.ok) {
-      send(res, 401, { ok: false, error: `token ${verified.reason}` });
-      return;
-    }
-    const discordId = verified.payload.discordId;
+    if (!guardHttpMethod({ req, res, send, method: "POST" })) return;
+    const auth = readVerifiedLocalSyncToken({ req, res, parsedUrl, send });
+    if (!auth) return;
+    const { token, discordId } = auth;
 
     // 2. Body parse.
     let body;
@@ -104,20 +88,7 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId, applyRaidSetBa
       send(res, 500, { ok: false, error: "state read failed" });
       return;
     }
-    if (!userState?.localSyncEnabled) {
-      send(res, 409, {
-        ok: false,
-        error: "local-sync disabled - run /raid-auto-manage action:local-on to re-enable",
-      });
-      return;
-    }
-    if (!isCurrentStoredToken(userState, token)) {
-      send(res, 401, {
-        ok: false,
-        error: "token revoked - open a new local-sync link",
-      });
-      return;
-    }
+    if (!requireCurrentLocalSyncUser({ userDoc: userState, token, res, send })) return;
 
     // 4. Apply.
     let summary;

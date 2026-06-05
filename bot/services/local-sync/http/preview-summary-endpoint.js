@@ -9,12 +9,16 @@
 
 "use strict";
 
-const { verifyToken, isCurrentStoredToken, bucketizeLocalSyncDeltas } = require("..");
+const { bucketizeLocalSyncDeltas } = require("..");
 const {
   createJsonSender,
-  extractBearerToken,
   readJsonBody,
 } = require("./json");
+const {
+  guardHttpMethod,
+  readVerifiedLocalSyncToken,
+  requireCurrentLocalSyncUser,
+} = require("./request-gates");
 const { RAID_REQUIREMENTS, getGatesForRaid, getGoldForGate } = require("../../../models/Raid");
 const { normalizeName } = require("../../../utils/raid/common/shared");
 const { getStatusRaidsForCharacter } = require("../../../utils/raid/common/character");
@@ -204,26 +208,10 @@ function createPreviewSummaryEndpoint({ User }) {
   const send = createJsonSender({ methods: "POST, OPTIONS" });
 
   return async function handlePreviewSummary(req, res, parsedUrl) {
-    if (req.method === "OPTIONS") {
-      send(res, 204, "");
-      return;
-    }
-    if (req.method !== "POST") {
-      send(res, 405, { ok: false, error: "method not allowed" });
-      return;
-    }
-
-    const token = extractBearerToken(req, parsedUrl);
-    if (!token) {
-      send(res, 401, { ok: false, error: "missing token" });
-      return;
-    }
-    const verified = verifyToken(token);
-    if (!verified.ok) {
-      send(res, 401, { ok: false, error: `token ${verified.reason}` });
-      return;
-    }
-    const discordId = verified.payload.discordId;
+    if (!guardHttpMethod({ req, res, send, method: "POST" })) return;
+    const auth = readVerifiedLocalSyncToken({ req, res, parsedUrl, send });
+    if (!auth) return;
+    const { token, discordId } = auth;
 
     let body;
     try {
@@ -255,20 +243,7 @@ function createPreviewSummaryEndpoint({ User }) {
       });
       return;
     }
-    if (!userDoc.localSyncEnabled) {
-      send(res, 409, {
-        ok: false,
-        error: "local-sync disabled - run /raid-auto-manage action:local-on to re-enable",
-      });
-      return;
-    }
-    if (!isCurrentStoredToken(userDoc, token)) {
-      send(res, 401, {
-        ok: false,
-        error: "token revoked - open a new local-sync link",
-      });
-      return;
-    }
+    if (!requireCurrentLocalSyncUser({ userDoc, token, res, send })) return;
 
     const buckets = bucketizeLocalSyncDeltas(deltas);
     const summary = projectSummary(userDoc.accounts || [], buckets);
