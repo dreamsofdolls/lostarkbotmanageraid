@@ -4,7 +4,7 @@ const { PassThrough } = require("node:stream");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { mintToken } = require("../bot/services/local-sync");
+const { mintToken, TOKEN_POST_SYNC_TTL_SEC } = require("../bot/services/local-sync");
 const { hashProfileDeviceToken } = require("../bot/services/local-sync/profile/device-token");
 const {
   createProfileSessionEndpoint,
@@ -12,10 +12,11 @@ const {
   MAX_BODY_BYTES,
 } = require("../bot/services/local-sync/profile/sync-endpoint");
 
-function makeReq({ token, method = "POST", body = null } = {}) {
+function makeReq({ token, method = "POST", body = null, headers = {} } = {}) {
   const req = new PassThrough();
   req.method = method;
-  req.headers = token ? { authorization: `Bearer ${token}` } : {};
+  req.headers = { ...headers };
+  if (token) req.headers.authorization = `Bearer ${token}`;
   process.nextTick(() => {
     if (body === null) req.end();
     else req.end(JSON.stringify(body));
@@ -549,6 +550,88 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
     localProfileSyncTokenHash: tokenHash,
   });
   assert.equal(typeof userUpdates[0].update.$set.lastLocalProfileSyncAt, "number");
+});
+
+test("raid-profile-sync endpoint shrinks the current local-sync URL token after save", async () => {
+  const localToken = mintToken("u-shrink");
+  const profileToken = "profile-device-token-shrink";
+  const tokenHash = hashProfileDeviceToken(profileToken);
+  const userUpdates = [];
+  const User = {
+    findOne(query) {
+      assert.deepEqual(query, { localProfileSyncTokenHash: tokenHash });
+      return {
+        select() {
+          return {
+            lean: async () => ({
+              discordId: "u-shrink",
+              localSyncEnabled: true,
+              localProfileSyncTokenHash: tokenHash,
+              localProfileSyncTokenExpAt: 9999999999,
+              accounts: [
+                {
+                  accountName: "Roster",
+                  characters: [
+                    { name: "Aki", class: "Artist", itemLevel: 1750 },
+                  ],
+                },
+              ],
+            }),
+          };
+        },
+      };
+    },
+    async updateOne(filter, update) {
+      userUpdates.push({ filter, update });
+      return { matchedCount: 1, modifiedCount: 1 };
+    },
+  };
+  const RaidProfileSnapshot = {
+    async findOneAndUpdate(filter) {
+      return { discordId: filter.discordId };
+    },
+  };
+  const handler = createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot });
+  const before = Math.floor(Date.now() / 1000);
+  const res = makeRes();
+
+  await handler(
+    makeReq({
+      token: profileToken,
+      headers: { "x-artist-local-sync-token": localToken },
+      body: {
+        generatedAt: Date.now(),
+        db: { fileName: "encounters.db", size: 4096, lastModified: Date.now() },
+        criteria: { modernProfileStatsOnly: true },
+        accounts: [
+          {
+            accountName: "Roster",
+            characters: [
+              {
+                name: "Aki",
+                class: "Artist",
+                role: "support",
+                stats: { encounters: 1, lastFightStart: 1234 },
+                scores: { overall: 10 },
+              },
+            ],
+          },
+        ],
+      },
+    }),
+    res,
+    { query: {} }
+  );
+
+  assert.equal(res.status, 200);
+  const body = res.json();
+  assert.equal(body.ok, true);
+  assert.equal(typeof body.newExpSec, "number");
+  assert.ok(body.newExpSec >= before + TOKEN_POST_SYNC_TTL_SEC);
+  assert.ok(body.newExpSec <= Math.floor(Date.now() / 1000) + TOKEN_POST_SYNC_TTL_SEC + 1);
+  const shrinkCall = userUpdates.find((call) => call.filter.lastLocalSyncToken === localToken);
+  assert.deepEqual(shrinkCall.filter, { discordId: "u-shrink", lastLocalSyncToken: localToken });
+  assert.equal(shrinkCall.update.$set.lastLocalSyncTokenExpAt, body.newExpSec);
 });
 
 test("raid-profile-sync endpoint ignores empty profile snapshots without writing shells", async () => {

@@ -44,6 +44,21 @@ test("profile process log updates scan heartbeat in place and appends final stat
   assert.match(container.innerHTML, /status-ok/);
 });
 
+test("profile process log updates upload heartbeat in place", async () => {
+  const { createProfileProcessLogRenderer } = await import("../web/js/profile/profile-process-log.js");
+  const container = makeContainer();
+  const renderer = createProfileProcessLogRenderer({ container });
+
+  renderer.render("info", "Đang gửi snapshot lên server... JSON 2.50 MB.");
+  renderer.render("info", "Đang chờ server ghi raid-profile vào MongoDB... 1s");
+  renderer.render("info", "Đang chờ server ghi raid-profile vào MongoDB... 2s");
+  renderer.render("info", "MongoDB ghi xong: snapshot chính + 120 encounter summary (10 mới, 110 cập nhật).");
+
+  const entries = renderer.getEntries();
+  assert.equal(entries.length, 3);
+  assert.equal(entries[1].message, "Đang chờ server ghi raid-profile vào MongoDB... 2s");
+});
+
 test("profile process log reset hides and clears the container", async () => {
   const { createProfileProcessLogRenderer } = await import("../web/js/profile/profile-process-log.js");
   const container = makeContainer();

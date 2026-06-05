@@ -3,6 +3,7 @@
 const {
   verifyToken,
   isCurrentStoredToken,
+  TOKEN_POST_SYNC_TTL_SEC,
   rotateLocalProfileSyncToken,
   hashProfileDeviceToken,
 } = require("..");
@@ -95,12 +96,34 @@ function createProfileSessionEndpoint({ User, isDevUser = () => true }) {
   };
 }
 
+function extractLocalSyncTokenHeader(req) {
+  const raw = req?.headers?.["x-artist-local-sync-token"];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== "string") return "";
+  const token = value.trim();
+  return token.length <= 4096 ? token : "";
+}
+
+async function shrinkLocalSyncTokenAfterProfileUpload({ User, discordId, localSyncToken }) {
+  if (!localSyncToken) return null;
+  const shrunkAt = Math.floor(Date.now() / 1000) + TOKEN_POST_SYNC_TTL_SEC;
+  const result = await User.updateOne(
+    { discordId, lastLocalSyncToken: localSyncToken },
+    { $set: { lastLocalSyncTokenExpAt: shrunkAt } }
+  );
+  const matched = Number(result?.matchedCount ?? result?.n ?? result?.modifiedCount ?? 0);
+  return matched > 0 ? shrunkAt : null;
+}
+
 function createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot, RaidProfileEncounter = null, isDevUser = () => true }) {
   if (!User) throw new Error("[raid-profile-sync-endpoint] User model required");
   if (!RaidProfileSnapshot) {
     throw new Error("[raid-profile-sync-endpoint] RaidProfileSnapshot model required");
   }
-  const send = createJsonSender({ methods: "POST, OPTIONS" });
+  const send = createJsonSender({
+    methods: "POST, OPTIONS",
+    allowHeaders: "Authorization, Content-Type, X-Artist-Local-Sync-Token",
+  });
 
   return async function handleRaidProfileSync(req, res) {
     if (req.method === "OPTIONS") {
@@ -119,6 +142,7 @@ function createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot, RaidProfileE
       send(res, 401, { ok: false, error: "missing profile token" });
       return;
     }
+    const localSyncToken = extractLocalSyncTokenHeader(req);
 
     let body;
     try {
@@ -206,9 +230,22 @@ function createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot, RaidProfileE
       return;
     }
 
+    let newExpSec = null;
+    try {
+      newExpSec = await shrinkLocalSyncTokenAfterProfileUpload({
+        User,
+        discordId: userDoc.discordId,
+        localSyncToken,
+      });
+    } catch (err) {
+      console.warn("[raid-profile-sync-endpoint] local token shrink failed:", err?.message || err);
+    }
+
     send(res, 200, {
       ok: true,
       discordId: userDoc.discordId,
+      newExpSec,
+      encounterWrite,
       totals: {
         ...clean.totals,
         encounterSummaries: encounterWrite.received,
@@ -224,4 +261,5 @@ module.exports = {
   createRaidProfileSyncEndpoint,
   sanitizeSnapshotPayload,
   upsertEncounterSummaries,
+  shrinkLocalSyncTokenAfterProfileUpload,
 };
