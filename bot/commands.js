@@ -203,6 +203,7 @@ const {
   getPrimaryManagerId,
 } = require("./services/access/manager");
 const { getAccessibleAccounts } = require("./services/access/access-control");
+const { isDevUser } = require("./services/access/dev-preview");
 if (RAID_MANAGER_ID.size === 0) {
   console.warn(
     "[raid-check] RAID_MANAGER_ID env not set or empty - /raid-check will reject every invocation. Set the env var to a comma-separated list of Discord user IDs to enable."
@@ -467,6 +468,7 @@ const bibleProfileSyncService = createBibleProfileSyncService({
   getCharacterClass,
   getRaidGateForBoss,
   RAID_REQUIREMENT_MAP,
+  isDevUser,
 });
 ({ syncRaidProfileFromBibleCollected } = bibleProfileSyncService);
 

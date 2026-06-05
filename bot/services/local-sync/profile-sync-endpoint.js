@@ -24,7 +24,7 @@ const {
   upsertEncounterSummaries,
 } = require("./profile-storage");
 
-function createProfileSessionEndpoint({ User }) {
+function createProfileSessionEndpoint({ User, isDevUser = () => true }) {
   if (!User) throw new Error("[profile-session-endpoint] User model required");
   const send = createJsonSender({ methods: "POST, OPTIONS" });
 
@@ -49,6 +49,11 @@ function createProfileSessionEndpoint({ User }) {
       return;
     }
     const discordId = verified.payload.discordId;
+    // Preview gate: only DEV_USER allowlist may mint a profile-sync token.
+    if (!isDevUser(discordId)) {
+      send(res, 403, { ok: false, error: "raid-profile is in preview" });
+      return;
+    }
 
     let userDoc;
     try {
@@ -90,7 +95,7 @@ function createProfileSessionEndpoint({ User }) {
   };
 }
 
-function createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot, RaidProfileEncounter = null }) {
+function createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot, RaidProfileEncounter = null, isDevUser = () => true }) {
   if (!User) throw new Error("[raid-profile-sync-endpoint] User model required");
   if (!RaidProfileSnapshot) {
     throw new Error("[raid-profile-sync-endpoint] RaidProfileSnapshot model required");
@@ -142,6 +147,11 @@ function createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot, RaidProfileE
     }
     if (!((Number(userDoc.localProfileSyncTokenExpAt) || 0) >= Math.floor(Date.now() / 1000))) {
       send(res, 401, { ok: false, error: "profile token expired" });
+      return;
+    }
+    // Preview gate: reject profile uploads from outside the DEV_USER allowlist.
+    if (!isDevUser(userDoc.discordId)) {
+      send(res, 403, { ok: false, error: "raid-profile is in preview" });
       return;
     }
 

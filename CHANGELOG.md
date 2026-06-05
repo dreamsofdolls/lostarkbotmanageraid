@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-05 (raid-profile: gate the whole surface behind DEV_USER preview)
+
+### Changed
+- raid-profile is now preview-gated to a `DEV_USER` allowlist (comma/space-separated Discord IDs, quote-tolerant, fail-closed; mirrors `RAID_MANAGER_ID`, intentionally NOT in env.example). `/raid-profile` view + reset shows a "preview only" notice to non-allowlisted users; the local-sync `profile-session` + `raid-profile-sync` endpoints return 403; the bible profile-light upsert no-ops. Build-side gates take an injected `isDevUser` (permissive default for tests) wired to the real allowlist in production. 660 tests green.
+
 ## 2026-06-05 (raid-profile: self-reset action + render polish)
 
 ### Added
