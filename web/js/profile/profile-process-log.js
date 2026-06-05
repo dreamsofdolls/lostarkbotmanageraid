@@ -1,6 +1,30 @@
 "use strict";
 
 const DEFAULT_LIMIT = 16;
+const STATUS_CLASS_BY_KIND = new Map([
+  ["err", "status-err"],
+  ["ok", "status-ok"],
+  ["warn", "status-warn"],
+]);
+const ROW_KIND_SET = new Set(["err", "ok", "warn"]);
+const ROLLING_PROGRESS_GROUPS = [
+  {
+    group: "snapshot-copy",
+    matches: (text) => /^Copying encounters\.db snapshot\.\.\./i.test(text),
+  },
+  {
+    group: "scan-heartbeat",
+    matches: (text) => /encounters\.db/i.test(text) && /\.\.\./.test(text) && /\d+s\b/.test(text),
+  },
+  {
+    group: "upload-heartbeat",
+    matches: (text) => /MongoDB/i.test(text) && /\d+s\b/.test(text),
+  },
+  {
+    group: "snapshot-copy",
+    matches: (text) => /encounters\.db/i.test(text) && /\d+(?:\.\d+)?%/.test(text),
+  },
+];
 
 function defaultEscapeHtml(value) {
   return String(value ?? "")
@@ -12,15 +36,11 @@ function defaultEscapeHtml(value) {
 }
 
 function statusClass(kind) {
-  if (kind === "err") return "status-err";
-  if (kind === "ok") return "status-ok";
-  if (kind === "warn") return "status-warn";
-  return "hint";
+  return STATUS_CLASS_BY_KIND.get(kind) || "hint";
 }
 
 function rowKind(kind) {
-  if (kind === "err" || kind === "ok" || kind === "warn") return kind;
-  return "info";
+  return ROW_KIND_SET.has(kind) ? kind : "info";
 }
 
 function formatProcessTime(date) {
@@ -33,19 +53,7 @@ function formatProcessTime(date) {
 
 function rollingProgressGroup(message) {
   const text = String(message || "");
-  if (/^Copying encounters\.db snapshot\.\.\./i.test(text)) {
-    return "snapshot-copy";
-  }
-  if (/encounters\.db/i.test(text) && /\.\.\./.test(text) && /\d+s\b/.test(text)) {
-    return "scan-heartbeat";
-  }
-  if (/MongoDB/i.test(text) && /\d+s\b/.test(text)) {
-    return "upload-heartbeat";
-  }
-  if (/encounters\.db/i.test(text) && /\d+(?:\.\d+)?%/.test(text)) {
-    return "snapshot-copy";
-  }
-  return "";
+  return ROLLING_PROGRESS_GROUPS.find((rule) => rule.matches(text))?.group || "";
 }
 
 function makeEntry({ kind, message, now, sequence }) {
@@ -144,6 +152,7 @@ export function createProfileProcessLogRenderer({
 
 export const __test = {
   rollingProgressGroup,
+  rowKind,
   statusClass,
   formatProcessTime,
 };

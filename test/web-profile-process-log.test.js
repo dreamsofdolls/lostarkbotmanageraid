@@ -27,6 +27,21 @@ test("profile process log updates rolling copy progress in place", async () => {
   assert.equal(container.hidden, false);
 });
 
+test("profile process log helper classifiers keep unknown states safe", async () => {
+  const { __test } = await import("../web/js/profile/profile-process-log.js");
+
+  assert.equal(__test.statusClass("err"), "status-err");
+  assert.equal(__test.statusClass("ok"), "status-ok");
+  assert.equal(__test.statusClass("warn"), "status-warn");
+  assert.equal(__test.statusClass("info"), "hint");
+  assert.equal(__test.rowKind("warn"), "warn");
+  assert.equal(__test.rowKind("info"), "info");
+  assert.equal(__test.rollingProgressGroup("Copying encounters.db snapshot... 10.0% / ~4.5 GB"), "snapshot-copy");
+  assert.equal(__test.rollingProgressGroup("Scanning encounters.db (~4.5 GB)... 2s"), "scan-heartbeat");
+  assert.equal(__test.rollingProgressGroup("Waiting for MongoDB write... 2s"), "upload-heartbeat");
+  assert.equal(__test.rollingProgressGroup("Profile import complete."), "");
+});
+
 test("profile process log updates scan heartbeat in place and appends final state", async () => {
   const { createProfileProcessLogRenderer } = await import("../web/js/profile/profile-process-log.js");
   const container = makeContainer();
