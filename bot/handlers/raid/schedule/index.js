@@ -39,6 +39,10 @@ const {
 } = require("./select-options");
 const { createScheduleNoticeHelpers } = require("./notices");
 const { createSchedulePanelBuilders } = require("./panels");
+const {
+  parseScheduleCustomId,
+  resolveScheduleActionHandler,
+} = require("./router");
 
 const EPHEMERAL_FLAG = 1 << 6;
 const CLOSED_EVENT_STATUSES = new Set(["cleared", "cancelled"]);
@@ -136,15 +140,6 @@ function createRaidScheduleCommand({
         ownedBoardOptions,
         lang,
       }),
-    };
-  }
-
-  function parseCustomId(customId) {
-    const parts = String(customId || "").split(":");
-    if (parts[0] !== "rse" || parts.length < 3) return null;
-    return {
-      eventId: parts[parts.length - 1],
-      action: parts.slice(1, -1).join(":"),
     };
   }
 
@@ -1348,19 +1343,17 @@ function createRaidScheduleCommand({
     delete: handleDeletePrompt,
     delyes: handleDeleteConfirm,
     delno: handleDeleteAbort,
+    lock: (interaction, event, lang) => handleLockToggle(interaction, event, "lock", lang),
+    unlock: (interaction, event, lang) => handleLockToggle(interaction, event, "unlock", lang),
   });
 
-  function resolveButtonActionHandler(action) {
-    if (!action) return null;
-    if (action.startsWith("rsvp:")) {
-      return (interaction, event, lang) =>
-        handleRsvp(interaction, event, action.slice("rsvp:".length), lang);
-    }
-    if (action === "lock" || action === "unlock") {
-      return (interaction, event, lang) => handleLockToggle(interaction, event, action, lang);
-    }
-    return BUTTON_ACTION_HANDLERS[action] || null;
-  }
+  const BUTTON_PREFIX_HANDLERS = Object.freeze([
+    {
+      prefix: "rsvp:",
+      create: (action) => (interaction, event, lang) =>
+        handleRsvp(interaction, event, action.slice("rsvp:".length), lang),
+    },
+  ]);
 
   const SELECT_ACTION_HANDLERS = Object.freeze({
     pick: handlePick,
@@ -1371,29 +1364,31 @@ function createRaidScheduleCommand({
     showtp: handleShowTpSelect,
   });
 
-  function resolveSelectActionHandler(action) {
-    if (!action) return null;
-    if (action.startsWith("addpick")) return handleAddPickSelect;
-    if (action.startsWith("teammembers")) return handleTeamMembersSelect;
-    return SELECT_ACTION_HANDLERS[action] || null;
-  }
+  const SELECT_PREFIX_HANDLERS = Object.freeze([
+    { prefix: "addpick", create: () => handleAddPickSelect },
+    { prefix: "teammembers", create: () => handleTeamMembersSelect },
+  ]);
 
   async function handleRaidScheduleButton(interaction) {
     const lang = await userLang(interaction);
-    const parsed = parseCustomId(interaction.customId);
+    const parsed = parseScheduleCustomId(interaction.customId);
     const event = parsed ? await loadEvent(parsed.eventId) : null;
     if (!event) {
       await replyNotice(interaction, lang, "warn", "missingEventTitle", "missingEventDescription");
       return;
     }
 
-    const handler = resolveButtonActionHandler(parsed.action);
+    const handler = resolveScheduleActionHandler(
+      parsed.action,
+      BUTTON_ACTION_HANDLERS,
+      BUTTON_PREFIX_HANDLERS,
+    );
     if (handler) return handler(interaction, event, lang);
     await replyNotice(interaction, lang, "warn", "unknownTitle", "unknownDescription");
   }
 
   async function handleRaidScheduleSelect(interaction) {
-    const parsed = parseCustomId(interaction.customId);
+    const parsed = parseScheduleCustomId(interaction.customId);
     await interaction.deferUpdate();
     const lang = await userLang(interaction);
     const event = parsed ? await loadEvent(parsed.eventId) : null;
@@ -1401,7 +1396,11 @@ function createRaidScheduleCommand({
       await editNotice(interaction, lang, "warn", "missingEventTitle", "missingEventDescription");
       return;
     }
-    const handler = resolveSelectActionHandler(parsed.action);
+    const handler = resolveScheduleActionHandler(
+      parsed.action,
+      SELECT_ACTION_HANDLERS,
+      SELECT_PREFIX_HANDLERS,
+    );
     if (handler) return handler(interaction, event, lang);
     await editNotice(interaction, lang, "warn", "unknownTitle", "unknownDescription");
   }
