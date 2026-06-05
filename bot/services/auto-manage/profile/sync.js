@@ -2,7 +2,7 @@
 
 const {
   upsertEncounterSummaries,
-} = require("../local-sync/profile/storage");
+} = require("../../local-sync/profile/storage");
 
 const {
   BIBLE_PROFILE_SOURCE,
@@ -15,7 +15,7 @@ const {
   durationToMs,
   normalizeDifficultyToModeKey,
   roleForLog,
-} = require("./bible-profile-builder");
+} = require("./bible-builder");
 
 async function readExistingSnapshotMeta(discordId, RaidProfileSnapshot) {
   const existing = await RaidProfileSnapshot.findOne({ discordId })

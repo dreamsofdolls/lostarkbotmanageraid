@@ -2,7 +2,7 @@
 
 const {
   finiteNumber,
-} = require("../bible-log-utils");
+} = require("../bible/log-utils");
 
 function round1(value) {
   return Math.round((finiteNumber(value) || 0) * 10) / 10;

@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { parseDevUserIds, isDevUser } = require("../bot/services/access/dev-preview");
-const { createBibleProfileSyncService } = require("../bot/services/auto-manage/profile-sync");
+const { createBibleProfileSyncService } = require("../bot/services/auto-manage/profile/sync");
 
 test("dev-preview parses comma/space-separated ids and checks membership", () => {
   const ids = parseDevUserIds(" 111 , 222 ,,333  444 ");

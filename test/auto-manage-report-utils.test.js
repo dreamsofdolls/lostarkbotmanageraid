@@ -12,7 +12,7 @@ const {
   stampAutoManageAttemptFromReport,
   toPlainUserDoc,
   syncRaidProfileAfterAutoManageReport,
-} = require("../bot/services/auto-manage/report-utils");
+} = require("../bot/services/auto-manage/reports/utils");
 
 test("auto-manage report helpers normalize missing and malformed report entries", () => {
   assert.deepEqual(getAutoManageEntries(null), []);

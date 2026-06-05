@@ -6,7 +6,7 @@ const {
 const {
   finiteNumber,
   normalizeKey,
-} = require("../bible-log-utils");
+} = require("../bible/log-utils");
 const {
   BIBLE_PROFILE_SOURCE,
   ENTRY_SEP,

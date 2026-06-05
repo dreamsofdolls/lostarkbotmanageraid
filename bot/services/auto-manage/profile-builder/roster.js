@@ -3,7 +3,7 @@
 const {
   finiteNumber,
   normalizeKey,
-} = require("../bible-log-utils");
+} = require("../bible/log-utils");
 const {
   ENTRY_SEP,
 } = require("./constants");

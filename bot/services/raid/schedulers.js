@@ -41,7 +41,7 @@ const {
   stampAutoManageAttemptFromReport,
   toPlainUserDoc,
   syncRaidProfileAfterAutoManageReport,
-} = require("../auto-manage/report-utils");
+} = require("../auto-manage/reports/utils");
 
 /**
  * Build the per-guild scheduler service.

@@ -2,7 +2,7 @@
 
 const {
   normalizeKey,
-} = require("../bible-log-utils");
+} = require("../bible/log-utils");
 
 const SUPPORT_CLASS_KEYS = new Set([
   "artist",

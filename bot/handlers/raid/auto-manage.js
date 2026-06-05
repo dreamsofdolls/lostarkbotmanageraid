@@ -3,7 +3,7 @@
  * /raid-auto-manage: user-facing entry to the bible-log clear-sync
  * service. Subactions: on / off / sync / status / local-on /
  * local-off / reset. Wires the slash UI to the underlying core
- * service in services/auto-manage/core.js and the encounters.db
+ * service in services/auto-manage/runtime/core.js and the encounters.db
  * web-companion path in services/local-sync.
  */
 
@@ -29,7 +29,7 @@ const {
   stampAutoManageAttemptFromReport,
   toPlainUserDoc,
   syncRaidProfileAfterAutoManageReport,
-} = require("../../services/auto-manage/report-utils");
+} = require("../../services/auto-manage/reports/utils");
 
 /**
  * Build the /raid-auto-manage command handler factory.

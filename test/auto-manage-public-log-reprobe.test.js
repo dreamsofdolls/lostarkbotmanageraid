@@ -3,7 +3,7 @@ process.env.RAID_MANAGER_ID = "test-manager";
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { createAutoManageCoreService } = require("../bot/services/auto-manage/core");
+const { createAutoManageCoreService } = require("../bot/services/auto-manage/runtime/core");
 const {
   UI,
   normalizeName,

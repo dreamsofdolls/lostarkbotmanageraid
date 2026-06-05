@@ -5,27 +5,27 @@ const {
   durationToMs,
   finiteNumber,
   normalizeDifficultyToModeKey,
-} = require("./bible-log-utils");
+} = require("../bible/log-utils");
 const {
   BIBLE_PROFILE_SOURCE,
   MIN_PROFILE_DURATION_MS,
-} = require("./profile-builder/constants");
+} = require("../profile-builder/constants");
 const {
   roleForLog,
-} = require("./profile-builder/role");
+} = require("../profile-builder/role");
 const {
   buildRosterIndex,
   filterSummariesForCurrentRoster,
-} = require("./profile-builder/roster");
+} = require("../profile-builder/roster");
 const {
   encounterSummaryToRow,
   logToProfileRow,
   rowToEncounterSummary,
-} = require("./profile-builder/rows");
+} = require("../profile-builder/rows");
 const {
   buildSnapshotFromRows,
   summarizeTimeline,
-} = require("./profile-builder/snapshot");
+} = require("../profile-builder/snapshot");
 
 function buildBibleProfileSnapshot({ discordId, userDoc, weekResetStart, collected, deps, nowMs = Date.now() }) {
   const {

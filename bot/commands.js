@@ -79,15 +79,15 @@ const {
   ROSTER_REFRESH_COOLDOWN_MS,
   ROSTER_REFRESH_FAILURE_COOLDOWN_MS,
 } = require("./services/roster/refresh");
-const { createAutoManageSyncService } = require("./services/auto-manage/sync");
+const { createAutoManageSyncService } = require("./services/auto-manage/runtime/sync");
 const { createRosterFetchService } = require("./services/roster/fetch");
-const { createAutoManageCoreService } = require("./services/auto-manage/core");
+const { createAutoManageCoreService } = require("./services/auto-manage/runtime/core");
 const { createRaidViewSnapshotService } = require("./services/raid/view-snapshot");
 const { createRaidChannelMonitorService } = require("./services/raid/channel-monitor");
 const { createRaidSchedulerService } = require("./services/raid/schedulers");
 const { createRaidScheduleAutoLockService } = require("./services/raid/schedule/auto-lock");
 const { createDiscordIdentityCache } = require("./services/discord/user-identity-cache");
-const { createBibleProfileSyncService } = require("./services/auto-manage/profile-sync");
+const { createBibleProfileSyncService } = require("./services/auto-manage/profile/sync");
 const { createInFlightLoader } = require("./shared/in-flight-loader");
 const RaidEvent = require("./models/RaidEvent");
 const RaidProfileSnapshot = require("./models/RaidProfileSnapshot");

@@ -1,5 +1,5 @@
 /**
- * services/auto-manage/core.js
+ * services/auto-manage/runtime/core.js
  * Core auto-manage service: gather → reconcile → save flow that backs
  * every /raid-auto-manage entry point (the slash command, the scheduler
  * tick, the /raid-check Sync button, the /raid-status piggyback).
@@ -16,17 +16,17 @@
 const {
   DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS,
   getAutoManageCooldownMs: getAutoManageCooldownMsDefault,
-} = require("../access/manager");
-const { createBibleClient } = require("./bible-client");
-const { normalizeDifficultyToModeKey } = require("./bible-log-utils");
+} = require("../../access/manager");
+const { createBibleClient } = require("../bible/client");
+const { normalizeDifficultyToModeKey } = require("../bible/log-utils");
 const {
   stampAutoManageAttemptFromReport,
   toPlainUserDoc,
   syncRaidProfileAfterAutoManageReport,
-} = require("./report-utils");
-const { t } = require("../i18n");
-const { getRaidLabel, getModeLabel } = require("../../utils/raid/common/labels");
-const { splitEmbedFieldValue } = require("../../utils/raid/common/shared");
+} = require("../reports/utils");
+const { t } = require("../../i18n");
+const { getRaidLabel, getModeLabel } = require("../../../utils/raid/common/labels");
+const { splitEmbedFieldValue } = require("../../../utils/raid/common/shared");
 
 /**
  * Build the auto-manage core service. Returns a bag of handlers,
