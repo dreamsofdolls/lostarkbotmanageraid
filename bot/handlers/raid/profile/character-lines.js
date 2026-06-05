@@ -2,9 +2,11 @@
 
 const { t } = require("../../../services/i18n");
 const {
-  attackStyleLabel,
   bibleOutputLines,
   burstProfileLines,
+} = require("./view-helpers");
+const {
+  attackStyleLabel,
   formatDateMs,
   formatDurationMs,
   pct,
@@ -15,7 +17,7 @@ const {
   score,
   scoreLine,
   shortNumber,
-} = require("./view-helpers");
+} = require("./display");
 
 function roleDetailLines(stats, scores, { isSupport, isBibleSummary }) {
   if (isBibleSummary) return bibleOutputLines(stats, scores, isSupport);

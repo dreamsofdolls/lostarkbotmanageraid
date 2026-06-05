@@ -5,21 +5,25 @@ const { getClassEmoji } = require("../../../models/Class");
 const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
 const {
   aggregateCharacters,
+  flattenCharacters,
+  getEntryLabel,
+  pickTopChar,
+} = require("./aggregate");
+const {
   arkPassiveSummary,
   buildVariantSummary,
-  confidenceForLogs,
   contextScoreLine,
   engravingSummary,
   enlightenmentSummary,
-  flattenCharacters,
+} = require("./view-helpers");
+const {
+  confidenceForLogs,
   footerTimestamp,
   formatDateMs,
-  getEntryLabel,
   hudFieldName,
   isBibleSummaryProfile,
   latestSnapshotMs,
   pct,
-  pickTopChar,
   rangeTag,
   renderGauge,
   renderPercentGauge,
@@ -30,7 +34,7 @@ const {
   sourceSummary,
   sourceSummaryForEntries,
   sourceTag,
-} = require("./view-helpers");
+} = require("./display");
 const {
   reliabilityLines,
   roleDetailLines,
