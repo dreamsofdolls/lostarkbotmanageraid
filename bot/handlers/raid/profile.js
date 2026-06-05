@@ -86,7 +86,13 @@ function createRaidProfileCommand(deps) {
   }
 
   async function handleRaidProfileCommand(interaction) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    // Visibility: default hide (ephemeral, only the caller sees it). `show`
+    // posts the profile publicly in the channel. Reset always stays ephemeral
+    // (it's a self-confirm), so `show` only affects the actual profile view.
+    const isPublic =
+      interaction.options?.getString?.("visibility") === "show" &&
+      interaction.options?.getString?.("action") !== "reset";
+    await interaction.deferReply(isPublic ? {} : { flags: MessageFlags.Ephemeral });
     const viewerDiscordId = interaction.user.id;
     const lang = await getUserLanguage(viewerDiscordId, { UserModel: User });
 
