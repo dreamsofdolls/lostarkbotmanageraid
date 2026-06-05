@@ -13,6 +13,8 @@ const {
   getRosterMatches,
   getCharacterMatches,
   truncateChoice,
+  buildRosterAutocompleteChoices,
+  buildSharedRosterAutocompleteChoices,
 } = require("../../utils/raid/common/autocomplete");
 const {
   getAccessibleAccounts,
@@ -91,17 +93,14 @@ function createRaidSetCommand(deps) {
       t(
         n === 1 ? "raid-set.autocomplete.charsSingular" : "raid-set.autocomplete.charsPlural",
         lang,
-      );
+    );
     const ownDoc = await loadUserForAutocomplete(executorId);
     const ownMatches = getRosterMatches(ownDoc, needle);
-    const ownChoices = ownMatches.map((a) => {
-      const charCount = Array.isArray(a.characters) ? a.characters.length : 0;
-      const label = t("raid-set.autocomplete.ownChoice", lang, {
-        name: a.accountName,
-        charCount,
-        charsWord: charsWord(charCount),
-      });
-      return truncateChoice(label, a.accountName);
+    const ownChoices = buildRosterAutocompleteChoices(ownMatches, {
+      lang,
+      t,
+      choiceKey: "raid-set.autocomplete.ownChoice",
+      charsWord,
     });
     let helperChoices = [];
     try {
@@ -142,31 +141,14 @@ function createRaidSetCommand(deps) {
     let shareChoices = [];
     try {
       const accessible = await getAccessibleAccounts(executorId);
-      shareChoices = accessible
-        .filter(
-          (entry) =>
-            !entry.isOwn &&
-            (!target || normalizeName(entry.accountName).includes(target))
-        )
-        .map((entry) => {
-          const charCount = Array.isArray(entry.account?.characters)
-            ? entry.account.characters.length
-            : 0;
-          const accessTag =
-            entry.accessLevel === "view"
-              ? t("raid-set.autocomplete.sharedAccessTagView", lang, {
-                  viewLabel: t("share.accessLevel.view", lang),
-                })
-              : "";
-          const label = t("raid-set.autocomplete.sharedChoice", lang, {
-            name: entry.accountName,
-            charCount,
-            charsWord: charsWord(charCount),
-            owner: entry.ownerLabel,
-            accessTag,
-          });
-          return truncateChoice(label, entry.accountName);
-        });
+      shareChoices = buildSharedRosterAutocompleteChoices(accessible, {
+        needle,
+        lang,
+        t,
+        choiceKey: "raid-set.autocomplete.sharedChoice",
+        accessTagKey: "raid-set.autocomplete.sharedAccessTagView",
+        charsWord,
+      });
     } catch (err) {
       console.warn(
         "[raid-set autocomplete] getAccessibleAccounts failed:",

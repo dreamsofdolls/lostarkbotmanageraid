@@ -27,6 +27,18 @@ function getCharClass(character) {
   return String(character?.class || character?.className || "").trim();
 }
 
+function getAccountCharacters(account) {
+  return Array.isArray(account?.characters) ? account.characters : [];
+}
+
+function countAccountSideTasks(account) {
+  return getAccountCharacters(account).reduce(
+    (sum, character) =>
+      sum + (Array.isArray(character?.sideTasks) ? character.sideTasks.length : 0),
+    0,
+  );
+}
+
 /**
  * Filter the user's accounts by an optional needle and cap to 25 (the
  * Discord StringSelectMenu / autocomplete option limit). Returns an
@@ -121,8 +133,74 @@ function truncateChoice(label, value, max = 100) {
   };
 }
 
+function buildRosterAutocompleteChoices(accounts, options) {
+  const {
+    lang,
+    t,
+    choiceKey,
+    charsWord,
+    taskSuffixFor = null,
+  } = options;
+
+  return (Array.isArray(accounts) ? accounts : []).map((account) => {
+    const chars = getAccountCharacters(account);
+    const vars = {
+      name: account?.accountName || "",
+      charCount: chars.length,
+      charsWord: charsWord(chars.length),
+    };
+    if (taskSuffixFor) {
+      vars.taskSuffix = taskSuffixFor(countAccountSideTasks(account));
+    }
+    return truncateChoice(t(choiceKey, lang, vars), account?.accountName || "");
+  });
+}
+
+function buildSharedRosterAutocompleteChoices(entries, options) {
+  const {
+    needle = "",
+    lang,
+    t,
+    choiceKey,
+    accessTagKey,
+    charsWord,
+    taskSuffixFor = null,
+  } = options;
+  const target = normalizeName(needle);
+
+  return (Array.isArray(entries) ? entries : [])
+    .filter((entry) => {
+      if (entry?.isOwn) return false;
+      const accountName = entry?.accountName || entry?.account?.accountName || "";
+      return !target || normalizeName(accountName).includes(target);
+    })
+    .map((entry) => {
+      const account = entry?.account || {};
+      const accountName = entry?.accountName || account.accountName || "";
+      const chars = getAccountCharacters(account);
+      const vars = {
+        name: accountName,
+        charCount: chars.length,
+        charsWord: charsWord(chars.length),
+        owner: entry?.ownerLabel || "",
+        accessTag:
+          entry?.accessLevel === "view" && accessTagKey
+            ? t(accessTagKey, lang, {
+                viewLabel: t("share.accessLevel.view", lang),
+              })
+            : "",
+      };
+      if (taskSuffixFor) {
+        vars.taskSuffix = taskSuffixFor(countAccountSideTasks(account));
+      }
+      return truncateChoice(t(choiceKey, lang, vars), accountName);
+    });
+}
+
 module.exports = {
   getRosterMatches,
   getCharacterMatches,
   truncateChoice,
+  buildRosterAutocompleteChoices,
+  buildSharedRosterAutocompleteChoices,
 };
