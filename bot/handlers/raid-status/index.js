@@ -56,6 +56,9 @@ const {
   buildLocalSyncRefreshButton: makeLocalSyncRefreshButton,
   buildBibleSyncButton: makeBibleSyncButton,
 } = require("./local-sync-controls");
+const {
+  buildManualSyncFollowupPayload,
+} = require("./sync-followup");
 
 const STATUS_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
@@ -970,31 +973,8 @@ function createRaidStatusCommand(deps) {
         // Followup is ephemeral so it auto-dismisses for the user
         // without cluttering the channel for others (the original
         // /raid-status reply isn't ephemeral by default).
-        let followupCopy = null;
-        let followupType = "info";
-        if (manualOutcome.outcome === "applied") {
-          const n = manualOutcome.newGatesApplied || 0;
-          followupCopy = t("raid-status.sync.followupApplied", lang, { n });
-          followupType = "success";
-        } else if (manualOutcome.outcome === "synced-no-new") {
-          followupCopy = t("raid-status.sync.followupSyncedNoNew", lang);
-          followupType = "info";
-        } else if (manualOutcome.outcome === "failed") {
-          followupCopy = t("raid-status.sync.followupFailedDescription", lang);
-          followupType = "warn";
-        }
-        if (followupCopy) {
-          await followUpNotice(component, EmbedBuilder, {
-            type: followupType,
-            title:
-              followupType === "success"
-                ? t("raid-status.sync.followupSuccessTitle", lang)
-                : followupType === "warn"
-                  ? t("raid-status.sync.followupFailedTitle", lang)
-                  : t("raid-status.sync.followupNeutralTitle", lang),
-            description: followupCopy,
-          }).catch(() => {});
-        }
+        const followupPayload = buildManualSyncFollowupPayload(manualOutcome, lang);
+        if (followupPayload) await followUpNotice(component, EmbedBuilder, followupPayload).catch(() => {});
         return;
       } else if (id === MY_RAIDS_SELECT_ID) {
         // Personal detail view - NOT edit-driven (no deferUpdate at the top of
