@@ -3,6 +3,13 @@
 const {
   PROFILE_VERSION,
 } = require("../local-sync/profile-payload-sanitizer");
+const {
+  booleanFlag,
+  durationToMs,
+  finiteNumber,
+  normalizeDifficultyToModeKey,
+  normalizeKey,
+} = require("./bible-log-utils");
 
 const MIN_PROFILE_DURATION_MS = 3 * 60 * 1000;
 const BIBLE_PROFILE_SOURCE = "bible";
@@ -29,17 +36,8 @@ const SUPPORT_DPS_SPEC_KEYS = new Set([
   "shiningknight",
 ]);
 
-function normalizeKey(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
 function compactKey(value) {
   return normalizeKey(value).replace(/[^a-z0-9]/g, "");
-}
-
-function finiteNumber(value, fallback = 0) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
 }
 
 function round1(value) {
@@ -80,15 +78,6 @@ function parseBibleBuffs(value) {
   };
 }
 
-function booleanFlag(value) {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value !== 0;
-  const key = normalizeKey(value);
-  if (!key || key === "false" || key === "0" || key === "no" || key === "n") return false;
-  if (key === "true" || key === "1" || key === "yes" || key === "y") return true;
-  return Boolean(value);
-}
-
 function average(values) {
   const nums = (values || []).map((v) => Number(v)).filter(Number.isFinite);
   if (!nums.length) return 0;
@@ -124,31 +113,6 @@ function consistencyScore(values) {
   const variance = nums.reduce((sum, n) => sum + (n - mean) ** 2, 0) / nums.length;
   const cv = Math.sqrt(variance) / mean;
   return clampScore(100 - cv * 140);
-}
-
-function durationToMs(value) {
-  if (typeof value === "string") {
-    const text = value.trim();
-    const mmss = /^(\d+):(\d{1,2})(?::(\d{1,2}))?$/.exec(text);
-    if (mmss) {
-      if (mmss[3] !== undefined) {
-        return ((Number(mmss[1]) * 60 * 60) + (Number(mmss[2]) * 60) + Number(mmss[3])) * 1000;
-      }
-      return ((Number(mmss[1]) * 60) + Number(mmss[2])) * 1000;
-    }
-  }
-
-  const n = finiteNumber(value, 0);
-  if (n <= 0) return 0;
-  return n < 10000 ? Math.round(n * 1000) : Math.round(n);
-}
-
-function normalizeDifficultyToModeKey(difficulty) {
-  const key = normalizeKey(difficulty);
-  if (key === "nightmare" || key === "9m") return "nightmare";
-  if (key === "hard" || key === "hm") return "hard";
-  if (key === "normal" || key === "nor" || key === "nm") return "normal";
-  return null;
 }
 
 function classRoleFor(className) {
