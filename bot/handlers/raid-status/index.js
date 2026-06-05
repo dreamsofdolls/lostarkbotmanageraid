@@ -61,7 +61,7 @@ const {
 } = require("./sync-followup");
 const {
   firstSelectValue,
-} = require("./component-values");
+} = require("../../utils/discord/component-values");
 
 const STATUS_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
