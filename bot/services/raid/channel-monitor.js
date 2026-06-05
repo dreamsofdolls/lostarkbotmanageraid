@@ -10,13 +10,13 @@
 
 "use strict";
 
-const { getArtistEmoji } = require("../../models/ArtistEmoji");
 const {
   applyRaidChannelWritePlans,
   buildWritePlanSegments,
   findAccessibleCharacterInAccounts,
   resolveRaidChannelWritePlans,
 } = require("./channel-monitor-write-plans");
+const { createRaidChannelEmbedBuilders } = require("./channel-monitor-embeds");
 const { parseRaidMessage } = require("./channel-monitor-parser");
 const User = require("../../models/user");
 const { t, getUserLanguage, getGuildLanguage } = require("../i18n");
@@ -130,226 +130,10 @@ function createRaidChannelMonitorService({
   function getMissingAnnouncementChannelPermissions(channel, botMember) {
     return getMissingChannelPermissions(channel, botMember, ANNOUNCEMENT_CHANNEL_PERMS);
   }
-  /**
-   * Build a single aggregated embed summarizing the outcome of applying one
-   * raid update across multiple characters in one channel message. Buckets
-   * results by status (done / already complete / not found / ineligible /
-   * errored) so the user reads one tidy card instead of N separate DMs -
-   * works equally well when N === 1 (single-char) since buckets collapse.
-   */
-  function buildRaidChannelMultiResultEmbed({
-    results,
-    raidMeta,
-    gates,
-    statusType,
-    guildName,
-    lang,
-  }) {
-    const gatesText =
-      Array.isArray(gates) && gates.length > 0
-        ? gates.join(", ")
-        : t("text-parser.raidUpdateAllGates", lang);
-    const scopeLabel =
-      statusType === "process" && Array.isArray(gates) && gates.length > 0
-        ? `${raidMeta.label} · ${gatesText}`
-        : raidMeta.label;
-    const done = [];
-    const already = [];
-    const notFound = [];
-    const ineligible = [];
-    const errored = [];
-    for (const r of results) {
-      const display = r.displayName || r.charName;
-      if (r.error) errored.push(r.charName);
-      else if (r.updated) done.push(display);
-      else if (r.alreadyComplete) already.push(display);
-      else if (!r.matched) notFound.push(r.charName);
-      else ineligible.push(`${display} (iLvl ${r.ineligibleItemLevel})`);
-    }
-    const hasProgress = done.length > 0 || already.length > 0;
-    const anyError = notFound.length > 0 || ineligible.length > 0 || errored.length > 0;
-    const color = hasProgress && !anyError ? UI.colors.success : UI.colors.progress;
-    const titleIcon = hasProgress ? UI.icons.done : UI.icons.info;
-    const embed = new EmbedBuilder()
-      .setColor(color)
-      .setTitle(`${titleIcon} ${t("text-parser.raidUpdateTitle", lang, { scope: scopeLabel })}`)
-      .setDescription(t("text-parser.raidUpdateDescription", lang, { count: results.length }))
-      .setTimestamp();
-    if (done.length > 0) {
-      embed.addFields({
-        name: t("text-parser.raidUpdateUpdatedField", lang, {
-          icon: UI.icons.done,
-          count: done.length,
-        }),
-        value: done.map((n) => `**${n}**`).join(", "),
-      });
-    }
-    if (already.length > 0) {
-      embed.addFields({
-        name: t("text-parser.raidUpdateAlreadyField", lang, {
-          icon: UI.icons.info,
-          count: already.length,
-        }),
-        value: already.map((n) => `**${n}**`).join(", "),
-      });
-    }
-    if (notFound.length > 0) {
-      embed.addFields({
-        name: t("text-parser.raidUpdateNotFoundField", lang, {
-          icon: UI.icons.warn,
-          count: notFound.length,
-        }),
-        value: notFound.map((n) => `\`${n}\``).join(", "),
-      });
-    }
-    if (ineligible.length > 0) {
-      embed.addFields({
-        name: t("text-parser.raidUpdateIneligibleField", lang, {
-          icon: UI.icons.warn,
-          raidLabel: raidMeta.label,
-          minItemLevel: raidMeta.minItemLevel,
-        }),
-        value: ineligible.join("\n"),
-      });
-    }
-    if (errored.length > 0) {
-      embed.addFields({
-        name: t("text-parser.raidUpdateErrorField", lang, { icon: UI.icons.warn }),
-        value: errored.map((n) => `\`${n}\``).join(", "),
-      });
-    }
-    if (guildName) {
-      embed.setFooter({ text: t("text-parser.raidUpdateFooterServer", lang, { guildName }) });
-    }
-    return embed;
-  }
-  function buildRaidChannelAlreadyCompleteEmbed({
-    charName,
-    raidMeta,
-    gates,
-    statusType,
-    guildName,
-    lang,
-  }) {
-    const gatesText =
-      Array.isArray(gates) && gates.length > 0
-        ? gates.join(", ")
-        : t("text-parser.raidUpdateAllGates", lang);
-    const isSingleOrPartial = statusType === "process" && Array.isArray(gates) && gates.length > 0;
-    const scopeLabel = isSingleOrPartial ? `${raidMeta.label} · ${gatesText}` : raidMeta.label;
-    const embed = new EmbedBuilder()
-      .setColor(UI.colors.progress)
-      .setTitle(t("text-parser.alreadyCompleteTitle", lang, { icon: UI.icons.info }))
-      .setDescription(
-        t("text-parser.alreadyCompleteDescription", lang, { charName, scope: scopeLabel })
-      )
-      .addFields(
-        { name: t("text-parser.alreadyFieldCharacter", lang), value: `**${charName}**`, inline: true },
-        { name: t("text-parser.alreadyFieldRaid", lang), value: `**${raidMeta.label}**`, inline: true },
-        { name: t("text-parser.alreadyFieldGates", lang), value: gatesText, inline: true },
-        {
-          name: t("text-parser.alreadyFieldResetTitle", lang),
-          value: t("text-parser.alreadyFieldResetValue", lang),
-        }
-      )
-      .setTimestamp();
-    if (guildName) {
-      embed.setFooter({ text: t("text-parser.raidUpdateFooterServer", lang, { guildName }) });
-    }
-    return embed;
-  }
-  function buildRaidChannelSuccessEmbed({
-    charName,
-    raidMeta,
-    gates,
-    statusType,
-    selectedDifficulty,
-    modeResetCount,
-    guildName,
-    lang,
-  }) {
-    const isProcess = statusType === "process";
-    const isMultiGate = Array.isArray(gates) && gates.length > 1;
-    const title = isProcess
-      ? t(
-          isMultiGate
-            ? "text-parser.successDmTitleProcessMulti"
-            : "text-parser.successDmTitleProcessSingle",
-          lang,
-          { icon: UI.icons.done }
-        )
-      : t("text-parser.successDmTitleComplete", lang, { icon: UI.icons.done });
-    const gatesText =
-      Array.isArray(gates) && gates.length > 0
-        ? gates.join(", ")
-        : t("text-parser.raidUpdateAllGates", lang);
-    const embed = new EmbedBuilder()
-      .setColor(UI.colors.success)
-      .setTitle(title)
-      .setDescription(t("text-parser.successDmDescription", lang, { charName }))
-      .addFields(
-        { name: t("text-parser.successDmFieldCharacter", lang), value: `**${charName}**`, inline: true },
-        { name: t("text-parser.successDmFieldRaid", lang), value: `**${raidMeta.label}**`, inline: true },
-        { name: t("text-parser.successDmFieldGates", lang), value: gatesText, inline: true }
-      )
-      .setTimestamp();
-    if (guildName) {
-      embed.setFooter({ text: t("text-parser.raidUpdateFooterServer", lang, { guildName }) });
-    }
-    if (modeResetCount > 0) {
-      embed.addFields({
-        name: t("text-parser.successDmModeNoteTitle", lang, { icon: UI.icons.reset }),
-        value: t("text-parser.successDmModeNoteValue", lang, { difficulty: selectedDifficulty }),
-      });
-    }
-    return embed;
-  }
-  function buildRaidChannelWelcomeEmbed(lang) {
-    // Joiner that respects t()'s array-aware interpolation: `welcome.*` keys
-    // marked as arrays in the locale tree resolve to string[]; we join with
-    // \n on the consumer side so a single tree edit propagates everywhere.
-    const joinIfArray = (val) => (Array.isArray(val) ? val.join("\n") : val);
-    return new EmbedBuilder()
-      .setColor(UI.colors.neutral)
-      // Artist persona emoji (chibi "shy" face) replaces the legacy
-      // generic 🦊 fox. Resolved at render-time from the ARTIST_EMOJI_MAP
-      // that the artist-emoji bootstrap populates on ClientReady - so
-      // the actual emoji ID is bot-application-owned (works in every
-      // guild the bot joins) and refreshes automatically when the
-      // source PNG content changes.
-      //
-      // Empty-string fallback when the bootstrap hasn't completed yet
-      // means the title degrades to "Chào các bạn~..." without an
-      // icon prefix - cleaner than rendering literal `<:shy:0>` text.
-      .setTitle(t("welcome.title", lang, { icon: getArtistEmoji("shy") }).trim())
-      .setDescription(joinIfArray(t("welcome.description", lang)))
-      .addFields(
-        // Onboarding workflow lives in the first field so a newcomer
-        // scanning the pin top-down hits the 3-step path before the
-        // post-format docs (which only matter once they have a roster).
-        // Technical labels are kept in English in the locale strings so
-        // they line up with the actual UI: /command names, slash option
-        // names like `language:`, button labels ("Confirm"), and
-        // gamer/lostark.bible terms with no clean translation
-        // (picker, raid, gate, Public Log, DPS, Support, DM).
-        { name: t("welcome.onboardingName", lang), value: joinIfArray(t("welcome.onboardingValue", lang)) },
-        { name: t("welcome.examplesName", lang), value: joinIfArray(t("welcome.examplesValue", lang)) },
-        { name: t("welcome.aliasesName", lang), value: joinIfArray(t("welcome.aliasesValue", lang)) },
-        { name: t("welcome.notesName", lang), value: joinIfArray(t("welcome.notesValue", lang)) },
-        // Voice + maintenance live in separate fields after the maintenance
-        // bullet pushed the single-field version past Discord's 1024-char
-        // value cap. Per-field cap is hard, total embed cap (6000) has
-        // plenty of room.
-        { name: t("welcome.voiceName", lang), value: joinIfArray(t("welcome.voiceValue", lang)) },
-        { name: t("welcome.maintenanceName", lang), value: joinIfArray(t("welcome.maintenanceValue", lang)) },
-        { name: t("welcome.autoManageName", lang), value: joinIfArray(t("welcome.autoManageValue", lang)) },
-        { name: t("welcome.sideTasksName", lang), value: joinIfArray(t("welcome.sideTasksValue", lang)) },
-        { name: t("welcome.goldName", lang), value: joinIfArray(t("welcome.goldValue", lang)) },
-        { name: t("welcome.crownName", lang), value: joinIfArray(t("welcome.crownValue", lang)) },
-        { name: t("welcome.iconName", lang), value: joinIfArray(t("welcome.iconValue", lang)) }
-      )
-      .setFooter({ text: t("welcome.footer", lang) });
-  }
+  const {
+    buildRaidChannelMultiResultEmbed,
+    buildRaidChannelWelcomeEmbed,
+  } = createRaidChannelEmbedBuilders({ EmbedBuilder, UI });
   async function postTransientReply(message, content) {
     try {
       const reply = await message.reply({ content, allowedMentions: { repliedUser: false } });
