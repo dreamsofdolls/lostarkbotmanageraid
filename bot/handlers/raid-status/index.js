@@ -46,57 +46,22 @@ const {
   rotateLocalSyncToken,
   extractProfileFromUser,
 } = require("../../services/local-sync");
-
-// Build a render-ready accounts array: caller's own subdocs PLUS shared
-// accounts pulled from manager-A User docs via the access-control
-// helper. Shared subdocs are converted to plain objects (so the local
-// _sharedFrom badge field doesn't risk Mongoose validation if anything
-// tries to save the merged array later) and stamped with the metadata
-// the view layer reads to render the "shared by" badge on the page
-// title and freshness line.
-async function buildMergedAccounts(viewerDiscordId, ownAccounts, { accessibleAccounts = null } = {}) {
-  const merged = Array.isArray(ownAccounts) ? ownAccounts.slice() : [];
-
-  let accessible;
-  try {
-    accessible = Array.isArray(accessibleAccounts)
-      ? accessibleAccounts
-      : await getAccessibleAccounts(viewerDiscordId, { includeOwn: false });
-  } catch (err) {
-    console.warn("[raid-status] getAccessibleAccounts failed:", err.message);
-    return merged;
-  }
-
-  for (const entry of accessible) {
-    if (entry.isOwn) continue;
-    const sourceAccount = entry.account;
-    const plainAccount = sourceAccount && typeof sourceAccount.toObject === "function"
-      ? sourceAccount.toObject({ depopulate: true })
-      : { ...sourceAccount };
-    plainAccount._sharedFrom = {
-      ownerDiscordId: entry.ownerDiscordId,
-      ownerLabel: entry.ownerLabel,
-      accessLevel: entry.accessLevel,
-    };
-    merged.push(plainAccount);
-  }
-
-  return merged;
-}
+const {
+  buildMergedAccounts,
+  resolveBackgroundLookup,
+} = require("./accounts");
+const {
+  publicBaseUrl,
+  buildLocalSyncUrl,
+  buildLocalSyncResumeButton: makeLocalSyncResumeButton,
+  buildLocalSyncNewButton: makeLocalSyncNewButton,
+  buildLocalSyncRefreshButton: makeLocalSyncRefreshButton,
+  buildBibleSyncButton: makeBibleSyncButton,
+} = require("./local-sync-controls");
 
 const STATUS_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
 const STATUS_TASK_AUTO_REFRESH_GRACE_MS = 1000;
-
-function resolveBackgroundLookup(viewerDiscordId, account) {
-  const accountName = account?.accountName || "";
-  const accountKey = String(accountName).trim().toLowerCase();
-  return {
-    discordId: viewerDiscordId,
-    accountName,
-    cacheKey: `${viewerDiscordId}:${accountKey}`,
-  };
-}
 
 /**
  * Build the /raid-status command handler factory.
@@ -537,37 +502,36 @@ function createRaidStatusCommand(deps) {
     // entry by hydrateLocalSyncResumeUrl() below; component builders
     // read it synchronously.
     let cachedLocalSyncResumeUrl = null;
-    const buildLocalSyncResumeButton = (disabled = false) => {
-      if (!cachedLocalSyncResumeUrl) return null;
-      return new ButtonBuilder()
-        .setStyle(ButtonStyle.Link)
-        .setLabel(t("raid-status.sync.localOpenButtonLabel", lang))
-        .setEmoji("🌐")
-        .setURL(cachedLocalSyncResumeUrl)
-        .setDisabled(disabled);
-    };
-    const buildLocalSyncNewButton = (disabled) => {
-      if (!cachedLocalSyncResumeUrl) return null; // env unset or mint failed - hide both
-      return new ButtonBuilder()
-        .setCustomId("status:local-new-link")
-        .setLabel(t("raid-status.sync.localNewLinkButtonLabel", lang))
-        .setEmoji("🆕")
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(disabled);
-    };
+    const buildLocalSyncResumeButton = (disabled = false) => makeLocalSyncResumeButton({
+      ButtonBuilder,
+      ButtonStyle,
+      t,
+      lang,
+      url: cachedLocalSyncResumeUrl,
+      disabled,
+    });
+
+    const buildLocalSyncNewButton = (disabled) => makeLocalSyncNewButton({
+      ButtonBuilder,
+      ButtonStyle,
+      t,
+      lang,
+      url: cachedLocalSyncResumeUrl,
+      disabled,
+    });
+
     // Refresh button: re-fetch userDoc from DB + re-render embed in
     // place. Useful right after the user syncs via web companion - they
     // can press this instead of re-typing /raid-status to see the new
     // progress. Local-sync only because bible mode has its own Sync
     // button which already re-fetches state on click.
-    const buildLocalSyncRefreshButton = (disabled) => {
-      return new ButtonBuilder()
-        .setCustomId("status:local-refresh")
-        .setLabel(t("raid-status.sync.localRefreshButtonLabel", lang))
-        .setEmoji("🔄")
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(disabled);
-    };
+    const buildLocalSyncRefreshButton = (disabled) => makeLocalSyncRefreshButton({
+      ButtonBuilder,
+      ButtonStyle,
+      t,
+      lang,
+      disabled,
+    });
 
     // Pre-fetch the resume URL at command entry. Async; main handler
     // awaits this before composing components. Returns the array of
@@ -575,12 +539,12 @@ function createRaidStatusCommand(deps) {
     // array when local mode but env unset = degraded deploy, hide.
     async function hydrateLocalSyncResumeUrl() {
       if (!statusUserMeta.localSyncEnabled) return;
-      const baseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+      const baseUrl = publicBaseUrl();
       if (!baseUrl) return;
       try {
         const profile = extractProfileFromUser(interaction.user);
         const token = await getOrMintLocalSyncToken(discordId, lang, { UserModel: User, profile });
-        cachedLocalSyncResumeUrl = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
+        cachedLocalSyncResumeUrl = buildLocalSyncUrl(token, baseUrl);
       } catch (err) {
         console.warn("[raid-status] local-sync token resolve failed:", err?.message || err);
       }
@@ -597,12 +561,12 @@ function createRaidStatusCommand(deps) {
       if (statusUserMeta.localSyncEnabled) {
         return buildLocalSyncResumeButton(disabled);
       }
-      return new ButtonBuilder()
-        .setCustomId("status:sync")
-        .setLabel(computeSyncLabel())
-        .setEmoji("🔄")
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(disabled);
+      return makeBibleSyncButton({
+        ButtonBuilder,
+        ButtonStyle,
+        label: computeSyncLabel(),
+        disabled,
+      });
     };
 
     const buildSyncRow = (disabled) => {
@@ -870,7 +834,7 @@ function createRaidStatusCommand(deps) {
           return false;
         });
         if (!deferred) return;
-        const baseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
+        const baseUrl = publicBaseUrl();
         if (!baseUrl) {
           await followUpNotice(component, EmbedBuilder, {
             type: "warn",
@@ -883,7 +847,7 @@ function createRaidStatusCommand(deps) {
         try {
           const profile = extractProfileFromUser(component.user);
           const token = await rotateLocalSyncToken(discordId, lang, { UserModel: User, profile });
-          freshUrl = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
+          freshUrl = buildLocalSyncUrl(token, baseUrl);
         } catch (err) {
           console.error("[raid-status] rotate local-sync token failed:", err?.message || err);
           await followUpNotice(component, EmbedBuilder, {
