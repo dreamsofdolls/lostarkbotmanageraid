@@ -598,6 +598,16 @@ test("Artist quiet hours: wake-up pool interpolates N and buckets correctly", ()
   assert.match(heavy, /\*\*42\*\*/);
 });
 
+test("Artist cleanup count bucket boundaries are shared by hourly and wake-up notices", () => {
+  assert.equal(__test.cleanupCountBucket(-1), "empty");
+  assert.equal(__test.cleanupCountBucket(0), "empty");
+  assert.equal(__test.cleanupCountBucket(1), "trivial");
+  assert.equal(__test.cleanupCountBucket(5), "trivial");
+  assert.equal(__test.cleanupCountBucket(6), "normal");
+  assert.equal(__test.cleanupCountBucket(20), "normal");
+  assert.equal(__test.cleanupCountBucket(21), "heavy");
+});
+
 test("Artist quiet hours: wake-up pool is disjoint from the hourly-cleanup pool", () => {
   // Regression guard: a future refactor might merge the two pools by accident.
   // The wake-up moment is ceremonial (morning) and the hourly one is not, so
