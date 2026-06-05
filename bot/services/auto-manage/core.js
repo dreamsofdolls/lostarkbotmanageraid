@@ -17,6 +17,8 @@ const {
   DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS,
   getAutoManageCooldownMs: getAutoManageCooldownMsDefault,
 } = require("../access/manager");
+const { createBibleClient } = require("./bible-client");
+const { normalizeDifficultyToModeKey } = require("./bible-log-utils");
 const { t } = require("../i18n");
 const { getRaidLabel, getModeLabel } = require("../../utils/raid/common/labels");
 const { splitEmbedFieldValue } = require("../../utils/raid/common/shared");
@@ -88,6 +90,10 @@ function createAutoManageCoreService({
   // a char that flips public-log ON gets picked up within a day.
   const PUBLIC_LOG_DISABLED_REPROBE_MS = 24 * 60 * 60 * 1000;
   const inFlightAutoManageSyncs = new Set(); // discordId
+  const {
+    fetchBibleCharacterMetaWithLimiter,
+    fetchBibleLogsSinceWeekReset,
+  } = createBibleClient({ bibleLimiter });
 
   /**
    * Atomically claim a sync slot for this user. The slot is reserved
@@ -143,95 +149,6 @@ function createAutoManageCoreService({
     const mins = Math.floor(secs / 60);
     const rem = secs - mins * 60;
     return rem > 0 ? `${mins}m${rem}s` : `${mins}m`;
-  }
-
-  /**
-   * Fetch a character's lostark.bible identifiers (serial / cid / rid) by
-   * loading their roster page and regex-extracting the SSR SvelteKit bootstrap
-   * data. These IDs are required to call the logs API but only need to be
-   * fetched once per character - caller caches them on the character doc.
-   */
-  async function fetchBibleCharacterMeta(charName) {
-    const url = `https://lostark.bible/character/NA/${encodeURIComponent(charName)}/roster`;
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; LostArkRaidManageBot/1.0)",
-        Accept: "text/html",
-      },
-      // Timeout guards against bible hanging the connection: without it, a
-      // stuck fetch holds the `bibleLimiter` slot AND the caller's
-      // `inFlightAutoManageSyncs` guard indefinitely, making the user appear
-      // "stuck in sync" with no way to recover. Same 15s budget as
-      // /raid-add-roster's roster scrape.
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!res.ok) {
-      throw new Error(`Bible roster page returned HTTP ${res.status} for "${charName}"`);
-    }
-    const html = await res.text();
-    // SSR SvelteKit bootstrap data: {header:{id:<cid>,sn:"<serial>",rid:<rid>,...}}
-    const match = html.match(/header:\{id:(\d+),sn:"([^"]+)",rid:(\d+)/);
-    if (!match) {
-      throw new Error(`Could not parse bible metadata for "${charName}" (page shape changed?)`);
-    }
-    return { cid: Number(match[1]), sn: match[2], rid: Number(match[3]) };
-  }
-
-  /**
-   * Call lostark.bible's logs REST API. Returns the raw array of log entries
-   * (max 25 per page). Each entry shape: { id, name, boss, difficulty, dps,
-   * class, spec, gearScore, combatPower, percentile, duration, timestamp,
-   * isBus, isDead }.
-   */
-  async function fetchBibleCharacterLogs({ serial, cid, rid, className, page = 1 }) {
-    const url = "https://lostark.bible/api/character/logs";
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (compatible; LostArkRaidManageBot/1.0)",
-      },
-      body: JSON.stringify({
-        region: "NA",
-        characterSerial: serial,
-        className,
-        cid,
-        rid,
-        page,
-      }),
-      // See fetchBibleCharacterMeta - same hang-protection rationale.
-      signal: AbortSignal.timeout(15000),
-    });
-    if (!res.ok) {
-      // Read body so callers can distinguish "Logs not enabled" (private char,
-      // user action fixes it) from Cloudflare/block 403s (bot-infra issue,
-      // toggling Public Log won't help). See reference_bible_api.md.
-      let bodyText = "";
-      try {
-        bodyText = await res.text();
-      } catch {
-        bodyText = "";
-      }
-      const snippet = bodyText ? ` - ${bodyText.slice(0, 200).replace(/\s+/g, " ").trim()}` : "";
-      const err = new Error(`Bible logs API returned HTTP ${res.status}${snippet}`);
-      err.status = res.status;
-      err.bodyText = bodyText;
-      throw err;
-    }
-    const data = await res.json();
-    return Array.isArray(data) ? data : [];
-  }
-
-  async function fetchBibleLogsWithLimiter({ serial, cid, rid, className, page = 1 }) {
-    return bibleLimiter.run(() => fetchBibleCharacterLogs({ serial, cid, rid, className, page }));
-  }
-
-  // Route the meta HTML scrape through the same limiter the logs API uses so a
-  // cold-cache sync (N chars, each needing both meta + logs) can't double
-  // bible's effective concurrency - max 2 in-flight across both endpoints
-  // combined, matching the UX promise in HELP_SECTIONS.
-  async function fetchBibleCharacterMetaWithLimiter(charName) {
-    return bibleLimiter.run(() => fetchBibleCharacterMeta(charName));
   }
 
   async function resolveBibleCharacterMetaViaRoster(account, character, rosterFetchCache = null) {
@@ -297,48 +214,6 @@ function createAutoManageCoreService({
       };
     }
 
-    return null;
-  }
-
-  /**
-   * Paginate bible's logs API until we see an entry older than
-   * `weekResetStart`, get an empty page, or hit `maxPages`. Bible returns
-   * newest-first with 25 entries per page, so one pre-reset entry in a
-   * page means every deeper page is irrelevant. Keeps us from missing
-   * clears when a char has > 25 weekly-relevant log rows (practice runs,
-   * multi-account sharing etc).
-   */
-  async function fetchBibleLogsSinceWeekReset({ serial, cid, rid, className, weekResetStart, maxPages = 10 }) {
-    const all = [];
-    const seenLogIds = new Set();
-    for (let page = 1; page <= maxPages; page += 1) {
-      const logs = await fetchBibleLogsWithLimiter({ serial, cid, rid, className, page });
-      if (!Array.isArray(logs) || logs.length === 0) break;
-      const freshLogs = [];
-      for (const log of logs) {
-        const id = String(log?.id || "").trim();
-        const dedupeKey = id || `${log?.timestamp || ""}:${log?.name || ""}:${log?.boss || ""}`;
-        if (!dedupeKey || seenLogIds.has(dedupeKey)) continue;
-        seenLogIds.add(dedupeKey);
-        freshLogs.push(log);
-      }
-      if (freshLogs.length === 0) break;
-      all.push(...freshLogs);
-      // If any log in this page is before the reset boundary, deeper
-      // pages only contain older entries - stop early.
-      const hasPreReset = freshLogs.some((l) => Number(l?.timestamp) < weekResetStart);
-      if (hasPreReset) break;
-      // Partial page = last page bible has.
-      if (logs.length < 25) break;
-    }
-    return all;
-  }
-
-  function normalizeDifficultyToModeKey(difficulty) {
-    const normalized = normalizeName(difficulty || "");
-    if (normalized === "nightmare" || normalized === "9m") return "nightmare";
-    if (normalized === "hard" || normalized === "hm") return "hard";
-    if (normalized === "normal" || normalized === "nor" || normalized === "nm") return "normal";
     return null;
   }
 
