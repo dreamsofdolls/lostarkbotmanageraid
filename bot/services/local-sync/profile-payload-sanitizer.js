@@ -1,5 +1,11 @@
 "use strict";
 
+const {
+  CHARACTER_PROFILE_STATS_KEYS,
+  CHARACTER_PROFILE_STATS_CLAMP_RULES,
+  CHARACTER_PROFILE_SCORE_KEYS,
+} = require("./profile-sanitize-rules");
+
 const PROFILE_VERSION = 1;
 const MAX_BODY_BYTES = 24 * 1024 * 1024;
 const MAX_ACCOUNTS = 25;
@@ -35,6 +41,13 @@ function cleanNumberObject(raw, allowedKeys, opts = {}) {
     out[key] = clampNumber(raw[key], opts);
   }
   return out;
+}
+
+function cleanLimitedList(raw, max, cleanItem) {
+  return (Array.isArray(raw) ? raw : [])
+    .slice(0, max)
+    .map(cleanItem)
+    .filter(Boolean);
 }
 
 function clampObjectKeys(target, keys, opts = {}) {
@@ -488,214 +501,19 @@ function cleanBuild(raw) {
 function cleanCharacterProfile(rawChar, rosterEntry) {
   if (!rawChar || typeof rawChar !== "object" || !rosterEntry) return null;
 
-  const stats = cleanNumberObject(rawChar.stats, [
-    "encounters",
-    "allEncounterCount",
-    "supportLogCount",
-    "dpsBuildLogCount",
-    "supportLogRate",
-    "dpsBuildLogRate",
-    "primaryRoleRate",
-    "firstFightStart",
-    "lastFightStart",
-    "avgDurationMs",
-    "avgActiveDurationMs",
-    "avgIntermissionMs",
-    "avgActiveTimeRate",
-    "avgDps",
-    "medianDps",
-    "p75Dps",
-    "p90Dps",
-    "avgPeak10sDps",
-    "p90Peak10sDps",
-    "avgBurstRatio",
-    "avgRdps",
-    "medianRdps",
-    "avgNdps",
-    "medianNdps",
-    "avgDamageShare",
-    "medianDamageShare",
-    "avgTopDamageProximity",
-    "contextCoverageRate",
-    "contextSampleCountAvg",
-    "avgContextPerformancePercentile",
-    "avgContextDamageSharePercentile",
-    "avgContextTopDamageProximityPercentile",
-    "avgContextSupportPercentile",
-    "topRate",
-    "avgRank",
-    "partyCountAvg",
-    "deathlessRate",
-    "deathRate",
-    "totalDeaths",
-    "avgDeaths",
-    "totalDeadTimeMs",
-    "avgDeadTimeMs",
-    "avgDeadTimeRate",
-    "rdpsValidCount",
-    "rdpsValidRate",
-    "avgSupporterPercent",
-    "medianSupporterPercent",
-    "radiantSupportCount",
-    "radiantSupportRate",
-    "avgSupporterDamageGivenPerMinute",
-    "supporterRankValidCount",
-    "supporterCompetitiveCount",
-    "avgSupporterRank",
-    "supporterCountAvg",
-    "supporterTopRate",
-    "avgCounters",
-    "avgCastsPerMinute",
-    "avgHitsPerMinute",
-    "avgCritRate",
-    "avgCritDamageShare",
-    "avgBackAttackRate",
-    "avgFrontAttackRate",
-    "avgBackAttackDamageShare",
-    "avgFrontAttackDamageShare",
-    "avgPositionalDamageShare",
-    "avgDamageTaken",
-    "avgDamageTakenPerMinute",
-    "damageTakenShareValidCount",
-    "avgDamageTakenShare",
-    "avgDamageAbsorbedPerMinute",
-    "avgShieldReceivedPerMinute",
-    "avgStagger",
-    "avgStaggerPerMinute",
-    "avgIncapacitations",
-    "avgIncapacitationsPerMinute",
-    "avgHyperShare",
-    "avgUnbuffedShare",
-    "avgUnbuffedDps",
-    "avgSupportBuffedShare",
-    "avgSupportDebuffedShare",
-    "avgPartyBuffedShare",
-    "avgSelfBuffedShare",
-    "avgPartyDebuffedShare",
-    "avgBattleItemDebuffedShare",
-    "avgSkillCount",
-    "avgTopSkillShare",
-    "avgRdpsDamageGiven",
-    "avgRdpsDamageGivenPerMinute",
-    "avgRdpsDamageReceivedSupport",
-    "avgRdpsDamageReceivedSupportPerMinute",
-    "avgSynergyGiven",
-    "avgSynergyGivenPerMinute",
-    "avgSynergyReceivedShare",
-    "avgSupportAp",
-    "avgSupportBrand",
-    "avgSupportIdentity",
-    "avgSupportHyper",
-    "avgProtection",
-    "avgProtectionPerMinute",
-    "avgGearScore",
-    "latestGearScore",
-    "avgCombatPower",
-    "latestCombatPower",
-    "arkPassiveRate",
-    "buildVariantCount",
-    "unclassifiedBuildLogCount",
-    "consistency",
-  ], { max: 9999999999999 });
-  applyClampRules(stats, [
-    [[
-      "deathRate",
-      "avgTopDamageProximity",
-      "contextCoverageRate",
-      "avgContextPerformancePercentile",
-      "avgContextDamageSharePercentile",
-      "avgContextTopDamageProximityPercentile",
-      "avgContextSupportPercentile",
-      "avgBurstRatio",
-      "avgDeadTimeRate",
-      "rdpsValidRate",
-      "avgSupporterPercent",
-      "medianSupporterPercent",
-      "radiantSupportRate",
-      "avgActiveTimeRate",
-      "supporterTopRate",
-      "avgCritDamageShare",
-      "avgBackAttackDamageShare",
-      "avgFrontAttackDamageShare",
-      "avgPositionalDamageShare",
-      "avgDamageTakenShare",
-      "arkPassiveRate",
-      "supportLogRate",
-      "dpsBuildLogRate",
-      "primaryRoleRate",
-    ], { max: 100 }],
-    [[
-      "contextSampleCountAvg",
-      "totalDeaths",
-      "rdpsValidCount",
-      "radiantSupportCount",
-      "supporterRankValidCount",
-      "supporterCompetitiveCount",
-      "damageTakenShareValidCount",
-      "unclassifiedBuildLogCount",
-      "allEncounterCount",
-      "supportLogCount",
-      "dpsBuildLogCount",
-    ], { max: 100000 }],
-    [["avgDeaths", "avgSupporterRank", "supporterCountAvg", "buildVariantCount"], { max: 1000 }],
-    [["totalDeadTimeMs", "avgDeadTimeMs"], { max: 9999999999999 }],
-    [["avgDurationMs", "avgActiveDurationMs", "avgIntermissionMs"], { max: 24 * 60 * 60 * 1000 }],
-    [["avgGearScore", "latestGearScore"], { max: 9999 }],
-    [[
-      "avgSupportBuffedShare",
-      "avgSupportDebuffedShare",
-      "avgPartyBuffedShare",
-      "avgSelfBuffedShare",
-      "avgPartyDebuffedShare",
-      "avgBattleItemDebuffedShare",
-    ], { max: 999 }],
-  ]);
+  const stats = cleanNumberObject(rawChar.stats, CHARACTER_PROFILE_STATS_KEYS, { max: 9999999999999 });
+  applyClampRules(stats, CHARACTER_PROFILE_STATS_CLAMP_RULES);
   stats.attackStyle = cleanAttackStyle(rawChar.stats?.attackStyle);
 
-  const scores = cleanNumberObject(rawChar.scores, [
-    "overall",
-    "mvp",
-    "output",
-    "damageShare",
-    "rank",
-    "context",
-    "consistency",
-    "survival",
-    "mechanics",
-    "supportUptime",
-    "raidContribution",
-    "supportRank",
-    "protection",
-  ], { max: 100 });
+  const scores = cleanNumberObject(rawChar.scores, CHARACTER_PROFILE_SCORE_KEYS, { max: 100 });
 
-  const raids = (Array.isArray(rawChar.raids) ? rawChar.raids : [])
-    .slice(0, MAX_RAID_BREAKDOWNS_PER_CHAR)
-    .map(cleanRaidBreakdown)
-    .filter(Boolean);
-  const topSkills = (Array.isArray(rawChar.topSkills) ? rawChar.topSkills : [])
-    .slice(0, MAX_TOP_SKILLS_PER_CHAR)
-    .map(cleanTopSkill)
-    .filter(Boolean);
-  const topBuffSources = (Array.isArray(rawChar.topBuffSources) ? rawChar.topBuffSources : [])
-    .slice(0, MAX_TOP_SOURCES_PER_CHAR)
-    .map(cleanTopSource)
-    .filter(Boolean);
-  const topDebuffSources = (Array.isArray(rawChar.topDebuffSources) ? rawChar.topDebuffSources : [])
-    .slice(0, MAX_TOP_SOURCES_PER_CHAR)
-    .map(cleanTopSource)
-    .filter(Boolean);
-  const topShieldGivenSources = (Array.isArray(rawChar.topShieldGivenSources) ? rawChar.topShieldGivenSources : [])
-    .slice(0, MAX_TOP_SOURCES_PER_CHAR)
-    .map(cleanTopSource)
-    .filter(Boolean);
-  const topShieldReceivedSources = (Array.isArray(rawChar.topShieldReceivedSources) ? rawChar.topShieldReceivedSources : [])
-    .slice(0, MAX_TOP_SOURCES_PER_CHAR)
-    .map(cleanTopSource)
-    .filter(Boolean);
-  const buildVariants = (Array.isArray(rawChar.buildVariants) ? rawChar.buildVariants : [])
-    .slice(0, MAX_BUILD_VARIANTS_PER_CHAR)
-    .map(cleanBuildVariant)
-    .filter(Boolean);
+  const raids = cleanLimitedList(rawChar.raids, MAX_RAID_BREAKDOWNS_PER_CHAR, cleanRaidBreakdown);
+  const topSkills = cleanLimitedList(rawChar.topSkills, MAX_TOP_SKILLS_PER_CHAR, cleanTopSkill);
+  const topBuffSources = cleanLimitedList(rawChar.topBuffSources, MAX_TOP_SOURCES_PER_CHAR, cleanTopSource);
+  const topDebuffSources = cleanLimitedList(rawChar.topDebuffSources, MAX_TOP_SOURCES_PER_CHAR, cleanTopSource);
+  const topShieldGivenSources = cleanLimitedList(rawChar.topShieldGivenSources, MAX_TOP_SOURCES_PER_CHAR, cleanTopSource);
+  const topShieldReceivedSources = cleanLimitedList(rawChar.topShieldReceivedSources, MAX_TOP_SOURCES_PER_CHAR, cleanTopSource);
+  const buildVariants = cleanLimitedList(rawChar.buildVariants, MAX_BUILD_VARIANTS_PER_CHAR, cleanBuildVariant);
 
   const className = rosterEntry.character?.class || cleanShortString(rawChar.class, 80);
   const classRole = roleForClass(className, rawChar.classRole);
