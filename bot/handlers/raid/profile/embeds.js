@@ -2,7 +2,6 @@
 
 const { t } = require("../../../services/i18n");
 const { getClassEmoji } = require("../../../models/Class");
-const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
 const {
   aggregateCharacters,
   flattenCharacters,
@@ -10,11 +9,7 @@ const {
   pickTopChar,
 } = require("./aggregate");
 const {
-  arkPassiveSummary,
-  buildVariantSummary,
   contextScoreLine,
-  engravingSummary,
-  enlightenmentSummary,
 } = require("./view-helpers");
 const {
   confidenceForLogs,
@@ -26,12 +21,9 @@ const {
   pct,
   rangeTag,
   renderGauge,
-  renderPercentGauge,
   roleLabel,
   score,
   scoreLine,
-  shortNumber,
-  sourceSummary,
   sourceSummaryForEntries,
   sourceTag,
 } = require("./display");
@@ -40,18 +32,12 @@ const {
   roleDetailLines,
   sourceOrCombatShapeLines,
 } = require("./character-lines");
-
-function appendOverflowLine(lines, total, limit, label = "more") {
-  const extra = Math.max(0, Number(total) - Number(limit));
-  if (extra > 0) lines.push(`\`…\` +${extra} ${label}`);
-  return lines;
-}
-
-function sliceMapWithOverflow(items, limit, mapper, label = "more") {
-  const list = Array.isArray(items) ? items : [];
-  const lines = list.slice(0, limit).map(mapper);
-  return appendOverflowLine(lines, list.length, limit, label);
-}
+const {
+  buildCharacterExtraFields,
+} = require("./character-fields");
+const {
+  sliceMapWithOverflow,
+} = require("./list-lines");
 
 function buildOverallEmbed({ EmbedBuilder, UI }, session) {
   const lang = session.lang || "vi";
@@ -219,79 +205,7 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
       }
     );
 
-  if (character.classRole === "support") {
-    embed.addFields({
-      name: hudFieldName("role detection"),
-      value: [
-        `Class role: **SUP** · scored as **${roleLabel(character)}**`,
-        `SUP logs: **${Math.round(Number(stats.supportLogCount) || 0)}** (${pct(stats.supportLogRate)})`,
-        `DPS-build logs: **${Math.round(Number(stats.dpsBuildLogCount) || 0)}** (${pct(stats.dpsBuildLogRate)})`,
-        `Used for score: **${Math.round(Number(stats.encounters) || 0)} / ${Math.round(Number(stats.allEncounterCount) || Number(stats.encounters) || 0)}** (${pct(stats.primaryRoleRate || 100)})`,
-      ].join("\n"),
-      inline: false,
-    });
-  }
-
-  if (!isBibleSummary) {
-    embed.addFields({
-      name: hudFieldName("buff profile"),
-      value: [
-        `Party attr buff/debuff: **${pct(stats.avgPartyBuffedShare)}** / **${pct(stats.avgPartyDebuffedShare)}**`,
-        `Self attr / battle item: **${pct(stats.avgSelfBuffedShare)}** / **${pct(stats.avgBattleItemDebuffedShare)}**`,
-        `Top buff: ${sourceSummary(character.topBuffSources)}`,
-        `Top debuff: ${sourceSummary(character.topDebuffSources)}`,
-        `Shield given: ${sourceSummary(character.topShieldGivenSources, 2)}`,
-        `Shield received: ${sourceSummary(character.topShieldReceivedSources, 2)}`,
-      ].join("\n"),
-      inline: false,
-    });
-  }
-
-  const build = character.build || {};
-  if (build.spec || build.gearScore || build.combatPower || build.engravings?.length || build.arkPassive || character.buildVariants?.length) {
-    embed.addFields({
-      name: hudFieldName("build"),
-      value: [
-        // combatPower is a raw magnitude (~millions) - format like DPS via
-        // shortNumber, not score() which is the 0-100 gauge formatter.
-        `CP: **${build.combatPower ? shortNumber(build.combatPower) : "N/A"}**`,
-        `Ark passive: **${build.arkPassiveActive === null || build.arkPassiveActive === undefined ? "N/A" : build.arkPassiveActive ? "ON" : "OFF"}** / rate ${pct(stats.arkPassiveRate)}`,
-        `Build variants: **${Math.round(Number(stats.buildVariantCount) || 0)}**`,
-        `Unclassified build logs: **${Math.round(Number(stats.unclassifiedBuildLogCount) || 0)}**`,
-        `Variant split: ${buildVariantSummary(character.buildVariants)}`,
-        `Engravings: ${engravingSummary(build.engravings)}`,
-        `Ark points: ${arkPassiveSummary(build.arkPassive)}`,
-        `Enlightenment: ${enlightenmentSummary(build.arkPassive, build.spec)}`,
-      ].join("\n"),
-      inline: false,
-    });
-  }
-
-  const skillLines = sliceMapWithOverflow(character.topSkills || [], 5, (skill, index) => (
-    `\`${index + 1}.\` **${skill.name || "Unknown"}** · ${renderPercentGauge(skill.share)} · crit ${pct(skill.critRate)}`
-  ));
-  if (skillLines.length) {
-    embed.addFields({
-      name: hudFieldName("top skills"),
-      value: skillLines.join("\n"),
-      inline: false,
-    });
-  }
-
-  const sortedRaids = [...(character.raids || [])]
-    .sort((a, b) => Number(b?.encounters || 0) - Number(a?.encounters || 0));
-  const raidLines = sliceMapWithOverflow(sortedRaids, 8, (raid) => {
-    const raidLabel = getRaidModeLabel(raid.raidKey, raid.modeKey, lang) || `${raid.raidKey} ${raid.modeKey}`;
-    if (isBibleSummary) {
-      return `**${raidLabel}** · ${raid.boss || "?"} · ${raid.encounters || 0} log · DPS ${shortNumber(raid.medianDps)} · Bible pct ${pct(raid.avgBiblePercentile)} · deathless ${pct(raid.deathlessRate)}`;
-    }
-    return `**${raidLabel}** · ${raid.boss || "?"} · ${raid.encounters || 0} log · DPS ${shortNumber(raid.medianDps)} · share ${pct(raid.avgDamageShare)} · top ${pct(raid.topRate)}`;
-  });
-  embed.addFields({
-    name: hudFieldName("raid breakdown"),
-    value: raidLines.length ? raidLines.join("\n") : t("raidProfile.noRaidBreakdown", lang),
-    inline: false,
-  });
+  embed.addFields(...buildCharacterExtraFields(character, { lang, isBibleSummary }));
   embed.setFooter({
     text: `// ${sourceTag(entry.source)} ${rangeTag(entry.rangeType)} · ${String(character.class || "UNKNOWN").toUpperCase()} · ${roleLabel(character).toUpperCase()} · ${stats.encounters || 0} SCORED · CONF ${confidenceForLogs(stats.encounters).toUpperCase()} · ${footerTimestamp(entry.receivedAt || entry.generatedAt)}`,
   });
