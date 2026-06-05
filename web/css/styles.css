@@ -1,58 +1,123 @@
 :root {
-  --bg: #1a1c1f;
-  --card: #232629;
-  --border: #3a3e44;
-  --text: #e6e8ea;
-  --text-dim: #9aa0a6;
+  /* Cosmic-dark base with the companion's signature amber. The functional
+     preview/sync classes further down all read these vars, so refining the
+     palette here cascades the new look through the whole page. */
+  --bg: #15171b;
+  --bg-deep: #101216;
+  --card: #1e2127;
+  --card-top: #23262d;
+  --border: #33373e;
+  --border-soft: #2a2e34;
+  --text: #e8eaed;
+  --text-dim: #969ca5;
   --accent: #f5a623;
+  --accent-bright: #ffc35e;
   --accent-dim: #c98517;
-  --success: #4caf50;
-  --error: #ef5350;
+  --accent-ink: #16181c;
+  --success: #57c98c;
+  --error: #ef5d57;
+  --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --font-body: "Work Sans", -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-mono: "Space Mono", ui-monospace, "SF Mono", Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-  background: var(--bg);
+  font-family: var(--font-body);
   color: var(--text);
-  line-height: 1.55;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  /* Layered radials = depth/atmosphere instead of a flat fill; fixed so it
+     stays put while the page scrolls. */
+  background:
+    radial-gradient(1100px 620px at 88% -12%, rgba(245, 166, 35, 0.07), transparent 62%),
+    radial-gradient(900px 540px at 6% 112%, rgba(86, 124, 196, 0.05), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
 }
 
 .container {
-  max-width: 720px;
+  position: relative;
+  max-width: 740px;
   margin: 0 auto;
-  padding: 32px 20px 80px;
+  padding: 40px 22px 96px;
 }
 
-header h1 {
-  margin: 0 0 4px;
-  font-size: 28px;
+/* ── editorial masthead: mono kicker over a serif title ── */
+header { margin-bottom: 30px; }
+header::before {
+  content: "// ARTIST · LOCAL SYNC COMPANION";
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2.4px;
   color: var(--accent);
+  margin-bottom: 10px;
 }
-
+header h1 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 40px;
+  line-height: 1.02;
+  letter-spacing: -0.5px;
+  color: var(--text);
+}
 .subtitle {
-  margin: 0 0 24px;
+  margin: 0;
+  max-width: 56ch;
   color: var(--text-dim);
   font-size: 14px;
 }
 
+/* ── HUD card: gradient material, corner brackets, reveal-on-show ── */
 .card {
-  background: var(--card);
+  position: relative;
+  background: linear-gradient(180deg, var(--card-top), var(--card));
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 18px 20px;
-  margin-bottom: 16px;
+  border-radius: 12px;
+  padding: 22px 24px;
+  margin-bottom: 18px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.025),
+    0 18px 40px -28px rgba(0, 0, 0, 0.9);
+  animation: card-in 0.5s cubic-bezier(0.22, 0.7, 0.2, 1) backwards;
+}
+/* retrofuture corner brackets (decorative; never intercept clicks) */
+.card::before,
+.card::after {
+  content: "";
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  opacity: 0.45;
+  pointer-events: none;
+}
+.card::before { top: 9px; right: 9px; border-top: 1.5px solid var(--accent); border-right: 1.5px solid var(--accent); }
+.card::after { bottom: 9px; left: 9px; border-bottom: 1.5px solid var(--accent); border-left: 1.5px solid var(--accent); }
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card { animation: none; }
 }
 
 .card h2 {
-  margin: 0 0 10px;
-  font-size: 16px;
-  color: var(--accent);
+  margin: 0 0 14px;
+  padding-bottom: 11px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 19px;
+  letter-spacing: 0.2px;
+  color: var(--text);
+  border-bottom: 1px dotted var(--border);
 }
 
-.hint { color: var(--text-dim); font-size: 13px; margin: 4px 0; }
+.hint { color: var(--text-dim); font-size: 13px; line-height: 1.55; margin: 6px 0; }
 .auth-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .auth-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #1d2024; border: 1px solid var(--border); font-size: 12px; }
 .auth-profile-pill { padding-left: 8px; }
@@ -104,40 +169,64 @@ header h1 {
 .sync-result-unmapped { font-size: 12px; }
 
 code {
-  background: #14171a;
+  font-family: var(--font-mono);
+  background: var(--bg-deep);
   padding: 1px 6px;
-  border-radius: 3px;
-  font-size: 13px;
-  color: #ffd28b;
+  border-radius: 4px;
+  font-size: 12.5px;
+  color: var(--accent-bright);
+  border: 1px solid var(--border-soft);
 }
 
 .drop-zone {
-  border: 2px dashed var(--border);
-  border-radius: 8px;
-  padding: 28px 20px;
+  border: 1.5px dashed var(--border);
+  border-radius: 10px;
+  padding: 34px 20px;
   text-align: center;
-  transition: border-color 0.15s, background 0.15s;
+  background: rgba(255, 255, 255, 0.012);
+  transition: border-color 0.2s, background 0.2s, transform 0.2s;
   cursor: pointer;
+}
+.drop-zone:hover {
+  border-color: var(--accent-dim);
+  background: rgba(245, 166, 35, 0.04);
 }
 .drop-zone.dragover {
   border-color: var(--accent);
-  background: rgba(245, 166, 35, 0.06);
+  background: rgba(245, 166, 35, 0.09);
+  transform: translateY(-1px);
 }
 .drop-zone p { margin: 4px 0; }
 
 button {
+  font-family: var(--font-body);
   background: var(--accent);
-  color: #1a1c1f;
+  color: var(--accent-ink);
   border: 0;
-  border-radius: 4px;
-  padding: 8px 14px;
+  border-radius: 7px;
+  padding: 9px 16px;
   font-weight: 600;
   cursor: pointer;
   font-size: 14px;
-  margin-top: 6px;
+  margin-top: 8px;
+  transition: transform 0.12s ease, filter 0.12s ease;
 }
-button:hover { background: var(--accent-dim); }
-button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:hover:not(:disabled) { filter: brightness(1.07); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Primary CTAs get the crafted gradient + lift; specialized buttons
+   (.remove-file-btn / .page-btn / .view-toggle / .sync-tab) keep their own
+   looks since they override background/border further down. */
+#pick-file-btn,
+#sync-btn {
+  background: linear-gradient(180deg, var(--accent-bright), var(--accent));
+  box-shadow: 0 2px 0 var(--accent-dim), 0 8px 18px -10px rgba(245, 166, 35, 0.55);
+}
+#pick-file-btn:hover,
+#sync-btn:hover:not(:disabled) { transform: translateY(-1px); }
+#pick-file-btn:active,
+#sync-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--accent-dim); }
+#sync-btn:disabled { box-shadow: none; filter: grayscale(0.3); }
 
 .sync-tabs {
   display: grid;
@@ -168,10 +257,10 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 
 .sync-tab.is-active {
-  background: #2d2618;
+  background: linear-gradient(180deg, #2f2718, #241f15);
   border-color: #6b5424;
   border-left-color: var(--accent);
-  box-shadow: 0 0 0 1px rgba(245, 166, 35, 0.12);
+  box-shadow: 0 0 0 1px rgba(245, 166, 35, 0.18), 0 10px 24px -16px rgba(245, 166, 35, 0.4);
 }
 
 .sync-tab span {
@@ -195,12 +284,14 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 
 .meta {
-  margin-top: 12px;
-  padding: 10px 12px;
-  background: #14171a;
-  border-radius: 4px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
   font-size: 13px;
-  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
 }
 
 /* File-meta row hosts the "Selected ... · ... · modified ..." line on

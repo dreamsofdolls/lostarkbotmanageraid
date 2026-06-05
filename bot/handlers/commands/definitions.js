@@ -156,6 +156,28 @@ function createRaidCommandDefinitions({
             value: "reset",
           }
         )
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName("visibility")
+        .setDescription("hide (default, only you) · show (visible to the channel)")
+        .setDescriptionLocalizations({
+          vi: "ẩn (mặc định, chỉ mình cậu) · hiện (cả channel thấy)",
+          ja: "非表示 (既定、自分のみ) · 表示 (チャンネルに公開)",
+        })
+        .setRequired(false)
+        .addChoices(
+          {
+            name: "🔒 Hide (only me)",
+            name_localizations: { vi: "🔒 Ẩn (chỉ mình tôi)", ja: "🔒 非表示 (自分のみ)" },
+            value: "hide",
+          },
+          {
+            name: "👁 Show (visible to channel)",
+            name_localizations: { vi: "👁 Hiện (cả channel thấy)", ja: "👁 表示 (チャンネルに公開)" },
+            value: "show",
+          }
+        )
     );
 
   const raidHelpCommand = new SlashCommandBuilder()
