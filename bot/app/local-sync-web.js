@@ -27,10 +27,10 @@ const {
  * startLocalSyncHttpServer's `apiHandlers` option. OPTIONS aliases are
  * registered alongside each verb so CORS preflight hits the same code
  * path.
- * @param {{User: object, RaidProfileSnapshot: object, applyRaidSetForDiscordId: function, applyRaidSetBatchForDiscordId: function}} deps
+ * @param {{User: object, RaidProfileSnapshot: object, RaidProfileEncounter?: object, applyRaidSetForDiscordId: function, applyRaidSetBatchForDiscordId: function}} deps
  * @returns {Object<string, Function>} handler map
  */
-function createLocalSyncApiHandlers({ User, RaidProfileSnapshot, applyRaidSetForDiscordId, applyRaidSetBatchForDiscordId }) {
+function createLocalSyncApiHandlers({ User, RaidProfileSnapshot, RaidProfileEncounter, applyRaidSetForDiscordId, applyRaidSetBatchForDiscordId }) {
   const raidSyncHandler = createRaidSyncEndpoint({
     User,
     applyRaidSetForDiscordId,
@@ -40,7 +40,7 @@ function createLocalSyncApiHandlers({ User, RaidProfileSnapshot, applyRaidSetFor
   const previewSummaryHandler = createPreviewSummaryEndpoint({ User });
   const catalogHandler = createCatalogEndpoint();
   const profileSessionHandler = createProfileSessionEndpoint({ User });
-  const raidProfileSyncHandler = createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot });
+  const raidProfileSyncHandler = createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot, RaidProfileEncounter });
 
   return {
     "GET /api/local-sync/catalog": catalogHandler,
@@ -66,6 +66,7 @@ function startLocalSyncWebCompanion({
   rootDir,
   User,
   RaidProfileSnapshot,
+  RaidProfileEncounter,
   applyRaidSetForDiscordId,
   applyRaidSetBatchForDiscordId,
   env = process.env,
@@ -83,6 +84,7 @@ function startLocalSyncWebCompanion({
       apiHandlers: createLocalSyncApiHandlers({
         User,
         RaidProfileSnapshot,
+        RaidProfileEncounter,
         applyRaidSetForDiscordId,
         applyRaidSetBatchForDiscordId,
       }),

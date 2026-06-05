@@ -16,12 +16,13 @@ const WA_SQLITE_VERSION = "1.3.0";
 const WA_SQLITE_BASE = `https://cdn.jsdelivr.net/npm/@journeyapps/wa-sqlite@${WA_SQLITE_VERSION}`;
 const PROFILE_SESSION_STORAGE_KEY = "artist-profile-sync-session";
 const PROFILE_AUTO_SYNC_INTERVAL_MS = 10 * 60 * 1000;
+const MAX_PROFILE_ENCOUNTER_SUMMARIES = 5000;
 const MIN_DURATION_MS = 180000;
 const SUPPORT_CLASSES = new Set(["bard", "paladin", "artist", "valkyrie", "holyknight"]);
 const SUPPORT_PROTECTION_P90_PER_MIN = 10000000;
-const SUPPORT_LOG_UPTIME_THRESHOLD = 25;
-const SUPPORT_LOG_PROTECTION_PER_MIN_THRESHOLD = 500000;
-const SUPPORT_LOG_RDPS_GIVEN_PER_MIN_THRESHOLD = 500000;
+const SUPPORT_RDPS_GIVEN_P90_PER_MIN = 50000000000;
+const SUPPORT_DPS_BUILD_SPECS = new Set(["judgment", "truecourage", "recurrence", "shiningknight"]);
+const SUPPORT_MAIN_BUILD_SPECS = new Set(["blessedaura", "desperatesalvation", "fullbloom", "liberator"]);
 const STAGGER_P90_PER_MIN = 3500;
 const POSITIONAL_ATTACK_RATE_THRESHOLD = 45;
 
@@ -147,33 +148,35 @@ async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = 
     const encounterBuffsExpr = hasEncounterTable && encounterCols.has("buffs") ? `enc.${quoteIdent("buffs")}` : "NULL";
     const encounterDebuffsExpr = hasEncounterTable && encounterCols.has("debuffs") ? `enc.${quoteIdent("debuffs")}` : "NULL";
     const encounterShieldBuffsExpr = hasEncounterTable && encounterCols.has("applied_shield_buffs") ? `enc.${quoteIdent("applied_shield_buffs")}` : "NULL";
+    const encounterTotalDamageExpr = hasEncounterTable && encounterCols.has("total_damage_dealt") ? `COALESCE(enc.${quoteIdent("total_damage_dealt")}, 0)` : "0";
 
     const eCol = (name) => `e.${quoteIdent(name)}`;
-    const classExpr = entityCols.has("class") ? `COALESCE(${eCol("class")}, '')` : "''";
-    const rdpsExpr = entityCols.has("rdps") ? `COALESCE(${eCol("rdps")}, 0)` : "0";
-    const ndpsExpr = entityCols.has("ndps") ? `COALESCE(${eCol("ndps")}, 0)` : "0";
-    const isDeadExpr = entityCols.has("is_dead") ? `COALESCE(${eCol("is_dead")}, 0)` : "0";
-    const supportApExpr = entityCols.has("support_ap") ? `COALESCE(${eCol("support_ap")}, 0)` : "0";
-    const supportBrandExpr = entityCols.has("support_brand") ? `COALESCE(${eCol("support_brand")}, 0)` : "0";
-    const supportIdentityExpr = entityCols.has("support_identity") ? `COALESCE(${eCol("support_identity")}, 0)` : "0";
-    const supportHyperExpr = entityCols.has("support_hyper") ? `COALESCE(${eCol("support_hyper")}, 0)` : "0";
-    const skillStatsExpr = entityCols.has("skill_stats") ? `COALESCE(${eCol("skill_stats")}, '')` : "''";
-    const rdpsDamageGivenExpr = entityCols.has("rdps_damage_given") ? `COALESCE(${eCol("rdps_damage_given")}, 0)` : "0";
-    const rdpsDamageReceivedExpr = entityCols.has("rdps_damage_received") ? `COALESCE(${eCol("rdps_damage_received")}, 0)` : "0";
-    const rdpsDamageReceivedSupportExpr = entityCols.has("rdps_damage_received_support") ? `COALESCE(${eCol("rdps_damage_received_support")}, 0)` : "0";
-    const damageStatsExpr = entityCols.has("damage_stats") ? eCol("damage_stats") : "NULL";
-    const skillsExpr = entityCols.has("skills") ? eCol("skills") : "NULL";
-    const classIdExpr = entityCols.has("class_id") ? eCol("class_id") : "NULL";
-    const gearScoreExpr = entityCols.has("gear_score") ? eCol("gear_score") : "NULL";
-    const combatPowerExpr = entityCols.has("combat_power") ? eCol("combat_power") : "NULL";
-    const arkPassiveActiveExpr = entityCols.has("ark_passive_active") ? eCol("ark_passive_active") : "NULL";
-    const engravingsExpr = entityCols.has("engravings") ? eCol("engravings") : "NULL";
-    const specExpr = entityCols.has("spec") ? eCol("spec") : "NULL";
-    const arkPassiveDataExpr = entityCols.has("ark_passive_data") ? eCol("ark_passive_data") : "NULL";
-    const gearHashExpr = entityCols.has("gear_hash") ? eCol("gear_hash") : "NULL";
-    const loadoutHashExpr = entityCols.has("loadout_hash") ? eCol("loadout_hash") : "NULL";
-    const entityUnbuffedDamageExpr = entityCols.has("unbuffed_damage") ? `COALESCE(${eCol("unbuffed_damage")}, 0)` : "0";
-    const entityUnbuffedDpsExpr = entityCols.has("unbuffed_dps") ? `COALESCE(${eCol("unbuffed_dps")}, 0)` : "0";
+    const leCol = (name) => `le.${quoteIdent(name)}`;
+    const classExpr = entityCols.has("class") ? `COALESCE(${leCol("class")}, '')` : "''";
+    const rdpsExpr = entityCols.has("rdps") ? `COALESCE(${leCol("rdps")}, 0)` : "0";
+    const ndpsExpr = entityCols.has("ndps") ? `COALESCE(${leCol("ndps")}, 0)` : "0";
+    const isDeadExpr = entityCols.has("is_dead") ? `COALESCE(${leCol("is_dead")}, 0)` : "0";
+    const supportApExpr = entityCols.has("support_ap") ? `COALESCE(${leCol("support_ap")}, 0)` : "0";
+    const supportBrandExpr = entityCols.has("support_brand") ? `COALESCE(${leCol("support_brand")}, 0)` : "0";
+    const supportIdentityExpr = entityCols.has("support_identity") ? `COALESCE(${leCol("support_identity")}, 0)` : "0";
+    const supportHyperExpr = entityCols.has("support_hyper") ? `COALESCE(${leCol("support_hyper")}, 0)` : "0";
+    const skillStatsExpr = entityCols.has("skill_stats") ? `COALESCE(${leCol("skill_stats")}, '')` : "''";
+    const rdpsDamageGivenExpr = entityCols.has("rdps_damage_given") ? `COALESCE(${leCol("rdps_damage_given")}, 0)` : "0";
+    const rdpsDamageReceivedExpr = entityCols.has("rdps_damage_received") ? `COALESCE(${leCol("rdps_damage_received")}, 0)` : "0";
+    const rdpsDamageReceivedSupportExpr = entityCols.has("rdps_damage_received_support") ? `COALESCE(${leCol("rdps_damage_received_support")}, 0)` : "0";
+    const damageStatsExpr = entityCols.has("damage_stats") ? leCol("damage_stats") : "NULL";
+    const skillsExpr = entityCols.has("skills") ? leCol("skills") : "NULL";
+    const classIdExpr = entityCols.has("class_id") ? leCol("class_id") : "NULL";
+    const gearScoreExpr = entityCols.has("gear_score") ? leCol("gear_score") : "NULL";
+    const combatPowerExpr = entityCols.has("combat_power") ? leCol("combat_power") : "NULL";
+    const arkPassiveActiveExpr = entityCols.has("ark_passive_active") ? leCol("ark_passive_active") : "NULL";
+    const engravingsExpr = entityCols.has("engravings") ? leCol("engravings") : "NULL";
+    const specExpr = entityCols.has("spec") ? leCol("spec") : "NULL";
+    const arkPassiveDataExpr = entityCols.has("ark_passive_data") ? leCol("ark_passive_data") : "NULL";
+    const gearHashExpr = entityCols.has("gear_hash") ? leCol("gear_hash") : "NULL";
+    const loadoutHashExpr = entityCols.has("loadout_hash") ? leCol("loadout_hash") : "NULL";
+    const entityUnbuffedDamageExpr = entityCols.has("unbuffed_damage") ? `COALESCE(${leCol("unbuffed_damage")}, 0)` : "0";
+    const entityUnbuffedDpsExpr = entityCols.has("unbuffed_dps") ? `COALESCE(${leCol("unbuffed_dps")}, 0)` : "0";
 
     const sql = `
       WITH eligible AS (
@@ -187,7 +190,8 @@ async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = 
                ${encounterMiscExpr} AS encounter_misc,
                ${encounterBuffsExpr} AS encounter_buffs,
                ${encounterDebuffsExpr} AS encounter_debuffs,
-               ${encounterShieldBuffsExpr} AS encounter_shield_buffs
+               ${encounterShieldBuffsExpr} AS encounter_shield_buffs,
+               ${encounterTotalDamageExpr} AS encounter_total_damage_dealt
         FROM encounter_preview ep
         ${encounterJoin}
         WHERE ${clearedSql} = 1
@@ -200,38 +204,13 @@ async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = 
       ranked AS (
         SELECT ${eCol("encounter_id")} AS encounter_id,
                ${eCol("name")} AS name,
-               ${classExpr} AS class_name,
                COALESCE(${eCol("dps")}, 0) AS dps,
-               ${rdpsExpr} AS rdps,
-               ${ndpsExpr} AS ndps,
-               ${isDeadExpr} AS is_dead,
-               ${supportApExpr} AS support_ap,
-               ${supportBrandExpr} AS support_brand,
-               ${supportIdentityExpr} AS support_identity,
-               ${supportHyperExpr} AS support_hyper,
-               ${skillStatsExpr} AS skill_stats,
-               ${rdpsDamageGivenExpr} AS rdps_damage_given,
-               ${rdpsDamageReceivedExpr} AS rdps_damage_received,
-               ${rdpsDamageReceivedSupportExpr} AS rdps_damage_received_support,
-                ${damageStatsExpr} AS damage_stats,
-                ${skillsExpr} AS skills,
-                SUM(COALESCE(${eCol("dps")}, 0)) OVER (PARTITION BY ${eCol("encounter_id")}) AS party_dps,
-                RANK() OVER (PARTITION BY ${eCol("encounter_id")} ORDER BY COALESCE(${eCol("dps")}, 0) DESC) AS damage_rank,
-                COUNT(*) OVER (PARTITION BY ${eCol("encounter_id")}) AS party_count,
-                ${classIdExpr} AS class_id,
-                ${gearScoreExpr} AS gear_score,
-                ${combatPowerExpr} AS combat_power,
-                ${arkPassiveActiveExpr} AS ark_passive_active,
-                ${engravingsExpr} AS engravings,
-                ${specExpr} AS spec,
-                ${arkPassiveDataExpr} AS ark_passive_data,
-                ${gearHashExpr} AS gear_hash,
-                ${loadoutHashExpr} AS loadout_hash,
-                ${entityUnbuffedDamageExpr} AS entity_unbuffed_damage,
-                ${entityUnbuffedDpsExpr} AS entity_unbuffed_dps
-         FROM entity e
-         JOIN eligible ep ON ep.id = ${eCol("encounter_id")}
-         WHERE ${eCol("entity_type")} = 'PLAYER'
+               SUM(COALESCE(${eCol("dps")}, 0)) OVER (PARTITION BY ${eCol("encounter_id")}) AS party_dps,
+               RANK() OVER (PARTITION BY ${eCol("encounter_id")} ORDER BY COALESCE(${eCol("dps")}, 0) DESC) AS damage_rank,
+               COUNT(*) OVER (PARTITION BY ${eCol("encounter_id")}) AS party_count
+          FROM entity e
+          JOIN eligible ep ON ep.id = ${eCol("encounter_id")}
+          WHERE ${eCol("entity_type")} = 'PLAYER'
       )
       SELECT ep.id,
              ep.fight_start,
@@ -241,40 +220,43 @@ async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = 
              ep.duration_ms,
              ep.players,
              ep.encounter_misc,
-             ep.encounter_buffs,
-             ep.encounter_debuffs,
-             ep.encounter_shield_buffs,
-             r.class_name,
-             r.dps,
-             r.rdps,
-             r.ndps,
-             r.is_dead,
-             r.support_ap,
-             r.support_brand,
-             r.support_identity,
-             r.support_hyper,
-             r.skill_stats,
-             r.rdps_damage_given,
-             r.rdps_damage_received,
-             r.rdps_damage_received_support,
-             r.damage_stats,
-              r.skills,
+              ep.encounter_buffs,
+              ep.encounter_debuffs,
+              ep.encounter_shield_buffs,
+              ${classExpr},
+              r.dps,
+              ${rdpsExpr},
+              ${ndpsExpr},
+              ${isDeadExpr},
+              ${supportApExpr},
+              ${supportBrandExpr},
+              ${supportIdentityExpr},
+              ${supportHyperExpr},
+              ${skillStatsExpr},
+              ${rdpsDamageGivenExpr},
+              ${rdpsDamageReceivedExpr},
+              ${rdpsDamageReceivedSupportExpr},
+              ${damageStatsExpr},
+              ${skillsExpr},
               r.party_dps,
               r.damage_rank,
               r.party_count,
-              r.class_id,
-              r.gear_score,
-              r.combat_power,
-              r.ark_passive_active,
-              r.engravings,
-              r.spec,
-              r.ark_passive_data,
-              r.gear_hash,
-              r.loadout_hash,
-              r.entity_unbuffed_damage,
-              r.entity_unbuffed_dps
+              ${classIdExpr},
+              ${gearScoreExpr},
+              ${combatPowerExpr},
+              ${arkPassiveActiveExpr},
+              ${engravingsExpr},
+              ${specExpr},
+              ${arkPassiveDataExpr},
+              ${gearHashExpr},
+              ${loadoutHashExpr},
+              ${entityUnbuffedDamageExpr},
+              ${entityUnbuffedDpsExpr},
+              ep.encounter_total_damage_dealt
       FROM eligible ep
+      JOIN entity le ON le.${quoteIdent("encounter_id")} = ep.id AND le.${quoteIdent("name")} = ep.local_player
       JOIN ranked r ON r.encounter_id = ep.id AND r.name = ep.local_player
+      WHERE le.${quoteIdent("entity_type")} = 'PLAYER'
       ORDER BY ep.fight_start DESC;
     `;
 
@@ -324,6 +306,7 @@ async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = 
         loadoutHash: row[37] || "",
         entityUnbuffedDamage: Number(row[38]) || 0,
         entityUnbuffedDps: Number(row[39]) || 0,
+        encounterTotalDamageDealt: Number(row[40]) || 0,
         accountName: rosterInfo.accountName,
         itemLevel: rosterInfo.itemLevel,
       });
@@ -467,6 +450,14 @@ function classifyAttackStyle(backRate, frontRate) {
   return "hit_master";
 }
 
+function classifySupporterTier(percent) {
+  const n = Number(percent) || 0;
+  if (n >= 25) return "radiant";
+  if (n >= 15) return "noble";
+  if (n > 0) return "supporter";
+  return "none";
+}
+
 function parseEncounterMisc(raw) {
   if (!raw || typeof raw !== "string") return null;
   try {
@@ -484,6 +475,14 @@ function parseJsonObject(raw) {
   } catch {
     return null;
   }
+}
+
+function sumDeathDowntimeMs(stats) {
+  const deathInfo = Array.isArray(stats?.deathInfo) ? stats.deathInfo : [];
+  return deathInfo.reduce((sum, entry) => {
+    const deadFor = Number(entry?.deadFor) || 0;
+    return sum + Math.max(0, deadFor);
+  }, 0);
 }
 
 function cleanBuildName(value) {
@@ -565,6 +564,10 @@ function buildVariantKey(row) {
   const specKey = normalizeName(row.spec);
   if (!engravingKey && !specKey) return "";
   return `${specKey}\x1f${engravingKey}\x1f${row.arkPassiveActive ?? ""}`;
+}
+
+function normalizeSpecKey(value) {
+  return normalizeName(cleanBuildName(value)).replace(/[^a-z0-9]/g, "");
 }
 
 function extractContributionMetrics(misc, localPlayer, damageDealt) {
@@ -759,10 +762,14 @@ async function enrichProfileRows(rows) {
     row.engravingsRaw = undefined;
     row.arkPassiveDataRaw = undefined;
     const durationMin = row.durationMs > 0 ? row.durationMs / 60000 : 0;
+    row.rdpsValid = misc?.rdpsValid === true;
     const deathInfoCount = Array.isArray(stats?.deathInfo) ? stats.deathInfo.length : 0;
     const parsedDeaths = Number(stats?.deaths) || 0;
     row.deathCount = Math.max(parsedDeaths, deathInfoCount, row.isDead ? 1 : 0);
     row.isDead = row.deathCount > 0 ? 1 : row.isDead;
+    row.deadTimeMs = sumDeathDowntimeMs(stats);
+    row.deadTimePerMinute = durationMin > 0 ? row.deadTimeMs / durationMin : 0;
+    row.deadTimeRate = row.durationMs > 0 ? (row.deadTimeMs / row.durationMs) * 100 : 0;
     row.counters = skill.counters;
     row.casts = skill.casts;
     row.hits = skill.hits;
@@ -855,6 +862,15 @@ async function enrichProfileRows(rows) {
     row.damageShare = row.partyDps > 0 ? (row.dps / row.partyDps) * 100 : 0;
     row.classRole = roleForClass(row.className);
     row.logRole = classifyLogRole(row);
+    row.encounterDamageDealt = row.encounterTotalDamageDealt ||
+      (row.partyDps > 0 && row.durationMs > 0 ? Math.round(row.partyDps * (row.durationMs / 1000)) : 0);
+    const supportLog = row.classRole === "support" && row.logRole === "support" && row.rdpsValid;
+    row.supporterDamageGiven = supportLog ? Math.max(0, Number(row.rdpsDamageGiven) || 0) : 0;
+    row.supporterDamageGivenPerMinute = durationMin > 0 ? row.supporterDamageGiven / durationMin : 0;
+    row.supporterPercent = row.supporterDamageGiven > 0 && row.encounterDamageDealt > 0
+      ? (row.supporterDamageGiven / row.encounterDamageDealt) * 100
+      : 0;
+    row.supporterTier = classifySupporterTier(row.supporterPercent);
   }));
 }
 
@@ -874,6 +890,11 @@ function summarizeGroup(rows) {
   const deathCounts = rows.map((r) => Number(r.deathCount) || 0);
   const totalDeaths = deathCounts.reduce((sum, n) => sum + n, 0);
   const deathRows = deathCounts.filter((n) => n > 0).length;
+  const deadTimes = rows.map((r) => Number(r.deadTimeMs) || 0);
+  const totalDeadTimeMs = deadTimes.reduce((sum, n) => sum + n, 0);
+  const rdpsValidCount = rows.filter((r) => r.rdpsValid).length;
+  const supporterPercents = rows.map((r) => Number(r.supporterPercent) || 0);
+  const radiantSupportCount = rows.filter((r) => r.supporterTier === "radiant").length;
   const avgBackAttackRate = round1(average(rows.map((r) => r.backAttackRate)));
   const avgFrontAttackRate = round1(average(rows.map((r) => r.frontAttackRate)));
   const arkRows = rows.filter((r) => r.arkPassiveActive !== null);
@@ -890,6 +911,16 @@ function summarizeGroup(rows) {
     deathRate: round1((deathRows / rows.length) * 100),
     totalDeaths,
     avgDeaths: round2(average(deathCounts)),
+    totalDeadTimeMs: Math.round(totalDeadTimeMs),
+    avgDeadTimeMs: Math.round(average(deadTimes)),
+    avgDeadTimeRate: round1(average(rows.map((r) => r.deadTimeRate))),
+    rdpsValidCount,
+    rdpsValidRate: round1((rdpsValidCount / rows.length) * 100),
+    avgSupporterPercent: round1(average(supporterPercents)),
+    medianSupporterPercent: round1(percentile(supporterPercents, 50)),
+    radiantSupportCount,
+    radiantSupportRate: round1((radiantSupportCount / rows.length) * 100),
+    avgSupporterDamageGivenPerMinute: Math.round(average(rows.map((r) => r.supporterDamageGivenPerMinute).filter((n) => n > 0))),
     avgCritRate: round1(average(rows.map((r) => r.critRate))),
     avgBackAttackRate,
     avgFrontAttackRate,
@@ -1027,23 +1058,27 @@ function supportUptimeScoreFromStats(stats) {
   );
 }
 
-function supportUptimeScoreFromRow(row) {
-  return supportUptimeScoreFromStats({
-    avgSupportAp: row.supportAp,
-    avgSupportBrand: row.supportBrand,
-    avgSupportIdentity: row.supportIdentity,
-    avgSupportHyper: row.supportHyper,
-  });
-}
-
 function classifyLogRole(row) {
   if (row.classRole !== "support") return row.classRole || "unknown";
-  const supportUptime = supportUptimeScoreFromRow(row);
-  const hasSupportEvidence =
-    supportUptime >= SUPPORT_LOG_UPTIME_THRESHOLD ||
-    (Number(row.protectionPerMinute) || 0) >= SUPPORT_LOG_PROTECTION_PER_MIN_THRESHOLD ||
-    (Number(row.rdpsDamageGivenPerMinute) || 0) >= SUPPORT_LOG_RDPS_GIVEN_PER_MIN_THRESHOLD;
-  return hasSupportEvidence ? "support" : "dps";
+  const partyCount = Number(row.partyCount) || 0;
+  const damageShare = Number(row.damageShare) || 0;
+  const damageRank = Number(row.damageRank) || 0;
+  const expectedShare = partyCount > 0 ? 100 / partyCount : 12.5;
+  const specKey = normalizeSpecKey(row.spec || row.arkPassive?.enlightenment?.spec);
+  const hasDpsBuildSpec = SUPPORT_DPS_BUILD_SPECS.has(specKey);
+  const hasSupportBuildSpec = SUPPORT_MAIN_BUILD_SPECS.has(specKey);
+  const shareLooksDps = damageShare >= Math.max(6, expectedShare * 0.45);
+  const rankLooksDps =
+    partyCount > 1 &&
+    damageRank > 0 &&
+    damageRank <= Math.ceil(partyCount * 0.5) &&
+    damageShare >= Math.max(4, expectedShare * 0.25);
+  if (hasDpsBuildSpec && (shareLooksDps || rankLooksDps || damageShare >= Math.max(4, expectedShare * 0.25))) {
+    return "dps";
+  }
+  if (shareLooksDps || rankLooksDps) return "dps";
+  if (hasSupportBuildSpec) return "support";
+  return "support";
 }
 
 function computeScores(stats, role) {
@@ -1058,32 +1093,43 @@ function computeScores(stats, role) {
   const mechanicsScore = computeMechanicsScore(stats);
 
   if (role === "support") {
-    const uptimeScore = supportUptimeScoreFromStats(stats);
-    const raidContribution = clampScore((stats.avgRdps / Math.max(1, (stats.avgRdps || 0) + (stats.avgDps || 0))) * 100);
+    const legacyUptimeScore = supportUptimeScoreFromStats(stats);
+    const rdpsImpactScore = stats.avgRdpsDamageGivenPerMinute > 0
+      ? clampScore((stats.avgRdpsDamageGivenPerMinute / SUPPORT_RDPS_GIVEN_P90_PER_MIN) * 100)
+      : 0;
+    const supporterPercentScore = stats.avgSupporterPercent > 0
+      ? clampScore((stats.avgSupporterPercent / 35) * 100)
+      : 0;
+    const impactScore = supporterPercentScore > 0
+      ? supporterPercentScore
+      : rdpsImpactScore > 0 ? rdpsImpactScore : legacyUptimeScore;
+    const rdpsCoverage = clampScore(Number(stats.rdpsValidRate) || 0) / 100;
+    const confidenceScale = rdpsImpactScore > 0 ? 0.6 + rdpsCoverage * 0.4 : 0.6;
+    const raidContribution = clampScore(impactScore * confidenceScale);
     const protectionScore = stats.avgProtectionPerMinute > 0
       ? clampScore((stats.avgProtectionPerMinute / SUPPORT_PROTECTION_P90_PER_MIN) * 100)
       : 50;
     const overall = clampScore(
-      raidContribution * 0.3 +
-      uptimeScore * 0.25 +
-      protectionScore * 0.15 +
+      raidContribution * 0.35 +
+      impactScore * 0.15 +
+      protectionScore * 0.2 +
       consistencyScore * 0.1 +
       mechanicsScore * 0.1 +
       survivalScore * 0.1
     );
     const mvp = clampScore(
-      raidContribution * 0.3 +
-      uptimeScore * 0.25 +
-      protectionScore * 0.15 +
+      raidContribution * 0.4 +
+      impactScore * 0.15 +
+      protectionScore * 0.2 +
       mechanicsScore * 0.1 +
       consistencyScore * 0.1 +
-      survivalScore * 0.1
+      survivalScore * 0.05
     );
     return {
       overall: round1(overall),
       mvp: round1(mvp),
       raidContribution: round1(raidContribution),
-      supportUptime: round1(uptimeScore),
+      supportUptime: round1(impactScore),
       protection: round1(protectionScore),
       consistency: round1(consistencyScore),
       survival: round1(survivalScore),
@@ -1124,7 +1170,8 @@ function computeSurvivalScore(stats) {
   const derivedDeathRate = Number.isFinite(deathlessRate) ? 100 - deathlessRate : 0;
   const deathRate = Number.isFinite(Number(stats.deathRate)) ? Number(stats.deathRate) : derivedDeathRate;
   const avgDeaths = Number(stats.avgDeaths) || 0;
-  return clampScore(100 - deathRate * 1.1 - avgDeaths * 15);
+  const deadTimeRate = Number(stats.avgDeadTimeRate) || 0;
+  return clampScore(100 - deathRate * 1.1 - avgDeaths * 15 - deadTimeRate * 0.5);
 }
 
 function computeMechanicsScore(stats) {
@@ -1170,6 +1217,11 @@ function buildProfileSnapshot(rows, rosterAccounts, file, { range = null } = {})
     const deathCounts = profileRows.map((r) => Number(r.deathCount) || 0);
     const totalDeaths = deathCounts.reduce((sum, n) => sum + n, 0);
     const deathRows = deathCounts.filter((n) => n > 0).length;
+    const deadTimes = profileRows.map((r) => Number(r.deadTimeMs) || 0);
+    const totalDeadTimeMs = deadTimes.reduce((sum, n) => sum + n, 0);
+    const rdpsValidCount = profileRows.filter((r) => r.rdpsValid).length;
+    const supporterPercents = profileRows.map((r) => Number(r.supporterPercent) || 0);
+    const radiantSupportCount = profileRows.filter((r) => r.supporterTier === "radiant").length;
     const avgBackAttackRate = round1(average(profileRows.map((r) => r.backAttackRate)));
     const avgFrontAttackRate = round1(average(profileRows.map((r) => r.frontAttackRate)));
     const topSkills = mergeTopSkills(profileRows);
@@ -1213,6 +1265,16 @@ function buildProfileSnapshot(rows, rosterAccounts, file, { range = null } = {})
       deathRate: round1((deathRows / profileRows.length) * 100),
       totalDeaths,
       avgDeaths: round2(average(deathCounts)),
+      totalDeadTimeMs: Math.round(totalDeadTimeMs),
+      avgDeadTimeMs: Math.round(average(deadTimes)),
+      avgDeadTimeRate: round1(average(profileRows.map((r) => r.deadTimeRate))),
+      rdpsValidCount,
+      rdpsValidRate: round1((rdpsValidCount / profileRows.length) * 100),
+      avgSupporterPercent: round1(average(supporterPercents)),
+      medianSupporterPercent: round1(percentile(supporterPercents, 50)),
+      radiantSupportCount,
+      radiantSupportRate: round1((radiantSupportCount / profileRows.length) * 100),
+      avgSupporterDamageGivenPerMinute: Math.round(average(profileRows.map((r) => r.supporterDamageGivenPerMinute).filter((n) => n > 0))),
       avgCounters: round2(average(counters)),
       avgCastsPerMinute: round2(average(profileRows.map((r) => r.castsPerMinute))),
       avgHitsPerMinute: round2(average(profileRows.map((r) => r.hitsPerMinute))),
@@ -1338,6 +1400,109 @@ function buildProfileSnapshot(rows, rosterAccounts, file, { range = null } = {})
   };
 }
 
+function compactEncounterArkPassive(arkPassive) {
+  const compactTree = (tree = {}) => ({
+    count: Number(tree.count) || 0,
+    points: Number(tree.points) || 0,
+    spentPoints: Number(tree.spentPoints) || 0,
+    spec: cleanBuildName(tree.spec),
+  });
+  if (!arkPassive) return null;
+  return {
+    evolution: compactTree(arkPassive.evolution),
+    enlightenment: compactTree(arkPassive.enlightenment),
+    leap: compactTree(arkPassive.leap),
+  };
+}
+
+function buildProfileEncounterSummaries(rows, file, { range = null } = {}) {
+  return (rows || []).slice(0, MAX_PROFILE_ENCOUNTER_SUMMARIES).map((row) => {
+    const gate = getRaidGateForBoss(row.boss);
+    if (!gate) return null;
+    const modeKey = normalizeDifficulty(row.difficulty) || "normal";
+    return {
+      encounterId: String(row.encounterId || `${row.fightStart}:${row.localPlayer}:${row.boss}`),
+      accountName: row.accountName || "",
+      characterName: row.localPlayer || "",
+      class: row.className || "",
+      itemLevel: Number(row.itemLevel) || 0,
+      classRole: row.classRole || "unknown",
+      role: row.logRole || row.classRole || "unknown",
+      fightStart: Number(row.fightStart) || 0,
+      durationMs: Math.round(Number(row.durationMs) || 0),
+      boss: row.boss || "",
+      raidKey: gate.raidKey || "",
+      modeKey,
+      difficulty: row.difficulty || "",
+      rangeType: range?.type === "weekly" ? "weekly" : "full",
+      build: {
+        classId: Number(row.classId) || 0,
+        spec: cleanBuildName(row.spec || row.arkPassive?.enlightenment?.spec),
+        gearScore: round2(row.gearScore),
+        combatPower: round2(row.combatPower),
+        arkPassiveActive: row.arkPassiveActive === null ? null : !!row.arkPassiveActive,
+        engravings: (row.engravings || []).slice(0, 4),
+        arkPassive: compactEncounterArkPassive(row.arkPassive),
+      },
+      metrics: {
+        dps: Math.round(Number(row.dps) || 0),
+        rdps: Math.round(Number(row.rdps) || 0),
+        ndps: Math.round(Number(row.ndps) || 0),
+        rdpsValid: row.rdpsValid === true,
+        damageDealt: Math.round(Number(row.damageDealt) || 0),
+        damageShare: round1(row.damageShare),
+        damageRank: Number(row.damageRank) || 0,
+        partyCount: Number(row.partyCount) || 0,
+        deathCount: Number(row.deathCount) || 0,
+        deadTimeMs: Math.round(Number(row.deadTimeMs) || 0),
+        deadTimeRate: round1(row.deadTimeRate),
+        counters: Number(row.counters) || 0,
+        castsPerMinute: round2(row.castsPerMinute),
+        hitsPerMinute: round2(row.hitsPerMinute),
+        critRate: round1(row.critRate),
+        backAttackRate: round1(row.backAttackRate),
+        frontAttackRate: round1(row.frontAttackRate),
+        topSkillShare: round1(row.topSkillShare),
+        damageTakenPerMinute: Math.round(Number(row.damageTakenPerMinute) || 0),
+        shieldReceivedPerMinute: Math.round(Number(row.shieldReceivedPerMinute) || 0),
+        staggerPerMinute: Math.round(Number(row.staggerPerMinute) || 0),
+        incapacitations: Number(row.incapacitations) || 0,
+        incapacitationsPerMinute: round2(row.incapacitationsPerMinute),
+        hyperShare: round1(row.hyperShare),
+        unbuffedShare: round1(row.unbuffedShare),
+        supportBuffedShare: round1(row.supportBuffedShare),
+        supportDebuffedShare: round1(row.supportDebuffedShare),
+        partyBuffedShare: round1(row.partyBuffedShare),
+        selfBuffedShare: round1(row.selfBuffedShare),
+        partyDebuffedShare: round1(row.partyDebuffedShare),
+        battleItemDebuffedShare: round1(row.battleItemDebuffedShare),
+        protectionPerMinute: Math.round(Number(row.protectionPerMinute) || 0),
+        rdpsDamageGivenPerMinute: Math.round(Number(row.rdpsDamageGivenPerMinute) || 0),
+        rdpsDamageReceivedSupportPerMinute: Math.round(Number(row.rdpsDamageReceivedSupportPerMinute) || 0),
+        supporterDamageGiven: Math.round(Number(row.supporterDamageGiven) || 0),
+        supporterDamageGivenPerMinute: Math.round(Number(row.supporterDamageGivenPerMinute) || 0),
+        supporterPercent: round1(row.supporterPercent),
+        supporterTier: row.supporterTier || "none",
+        synergyGivenPerMinute: Math.round(Number(row.synergyGivenPerMinute) || 0),
+        synergyReceivedShare: round1(row.synergyReceivedShare),
+      },
+      topSkills: (row.topSkills || []).slice(0, 5).map((skill) => ({
+        id: String(skill.id || "").slice(0, 32),
+        name: cleanBuildName(skill.name),
+        damage: Math.round(Number(skill.damage) || 0),
+        share: round1(skill.share),
+        casts: Math.round(Number(skill.casts) || 0),
+        hits: Math.round(Number(skill.hits) || 0),
+        critRate: round1(skill.critRate),
+        backAttackRate: round1(skill.backAttackRate),
+        frontAttackRate: round1(skill.frontAttackRate),
+        stagger: Math.round(Number(skill.stagger) || 0),
+        isHyperAwakening: !!skill.isHyperAwakening,
+      })),
+    };
+  }).filter(Boolean);
+}
+
 function fingerprintSnapshot(snapshot) {
   const parts = [];
   for (const account of snapshot.accounts || []) {
@@ -1349,6 +1514,18 @@ function fingerprintSnapshot(snapshot) {
         character.stats?.lastFightStart || 0,
       ].join(":"));
     }
+  }
+  for (const encounter of snapshot.encounters || []) {
+    parts.push([
+      "enc",
+      encounter.encounterId,
+      encounter.characterName,
+      encounter.fightStart,
+      encounter.metrics?.dps || 0,
+      encounter.metrics?.rdps || 0,
+      encounter.metrics?.rdpsValid ? 1 : 0,
+      encounter.metrics?.deadTimeMs || 0,
+    ].join(":"));
   }
   return parts.sort().join("|");
 }
@@ -1449,6 +1626,9 @@ async function runProfileSnapshotSync({
       range: minFightStartMs > 0
         ? { type: "weekly", minFightStartMs: Number(minFightStartMs) || 0 }
         : { type: "full" },
+    });
+    snapshot.encounters = buildProfileEncounterSummaries(rows, file, {
+      range: snapshot.criteria?.range,
     });
     const fp = fingerprintSnapshot(snapshot);
     const weeklyReason = reason === "weekly";

@@ -149,6 +149,16 @@ function formatDateMs(ms) {
   return `<t:${Math.floor(n / 1000)}:R>`;
 }
 
+function formatDurationMs(ms) {
+  const n = Math.max(0, Number(ms) || 0);
+  if (!n) return "0s";
+  const totalSeconds = Math.round(n / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (!minutes) return `${seconds}s`;
+  return `${minutes}m ${seconds}s`;
+}
+
 function confidenceForLogs(logs) {
   const n = Number(logs) || 0;
   if (n >= 20) return "High";
@@ -416,10 +426,12 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
         name: hudFieldName(isSupport ? "SUP detail" : "DPS detail"),
         value: isSupport
           ? [
-              scoreLine("Uptime", scores.supportUptime),
+              scoreLine("rDPS impact", scores.supportUptime),
               scoreLine("Raid contribution", scores.raidContribution),
               scoreLine("Protection", scores.protection),
               `Shield/min: **${shortNumber(stats.avgProtectionPerMinute)}**`,
+              `rDPS given/min: **${shortNumber(stats.avgRdpsDamageGivenPerMinute)}**`,
+              `Supporter: **${pct(stats.avgSupporterPercent)}** · Radiant ${pct(stats.radiantSupportRate)}`,
               `Synergy/min: **${shortNumber(stats.avgSynergyGivenPerMinute)}**`,
               `AP/Brand: ${ratePct(stats.avgSupportAp)} / ${ratePct(stats.avgSupportBrand)}`,
               `Identity/Hyper: ${ratePct(stats.avgSupportIdentity)} / ${ratePct(stats.avgSupportHyper)}`,
@@ -450,6 +462,8 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
           `Deathless: ${renderPercentGauge(stats.deathlessRate)}`,
           `Death rate: **${pct(stats.deathRate)}**`,
           `Deaths: **${Math.round(Number(stats.totalDeaths) || 0)}** total · avg ${score(stats.avgDeaths)}`,
+          `Dead time: **${formatDurationMs(stats.totalDeadTimeMs)}** total - avg ${formatDurationMs(stats.avgDeadTimeMs)}`,
+          `rDPS valid: **${pct(stats.rdpsValidRate)}** (${Math.round(Number(stats.rdpsValidCount) || 0)}/${Math.round(Number(stats.encounters) || 0)})`,
           `Avg rank: **${score(stats.avgRank)}**`,
           `Counters/Stagger: **${score(stats.avgCounters)}** / ${shortNumber(stats.avgStaggerPerMinute)}/min`,
           `Taken/Shielded: ${shortNumber(stats.avgDamageTakenPerMinute)}/min / ${shortNumber(stats.avgShieldReceivedPerMinute)}/min`,

@@ -57,6 +57,7 @@ const {
 } = require("./bot/commands");
 const User = require("./bot/models/user");
 const RaidProfileSnapshot = require("./bot/models/RaidProfileSnapshot");
+const RaidProfileEncounter = require("./bot/models/RaidProfileEncounter");
 const { startWeeklyResetJob } = require("./bot/services/raid/weekly-reset");
 const { bootstrapClassEmoji, bootstrapArtistEmoji } = require("./bot/services/discord/emoji-bootstrap");
 const { registerSlashCommandsOnBoot } = require("./bot/app/slash-command-registration");
@@ -95,6 +96,7 @@ async function startBot() {
     rootDir: __dirname,
     User,
     RaidProfileSnapshot,
+    RaidProfileEncounter,
     applyRaidSetForDiscordId,
     applyRaidSetBatchForDiscordId,
   });
