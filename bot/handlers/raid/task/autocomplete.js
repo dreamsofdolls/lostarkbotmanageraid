@@ -4,6 +4,8 @@ const {
   getRosterMatches,
   getCharacterMatches,
   truncateChoice,
+  buildRosterAutocompleteChoices,
+  buildSharedRosterAutocompleteChoices,
 } = require("../../../utils/raid/common/autocomplete");
 const { getAccessibleAccounts } = require("../../../services/access/access-control");
 const { t, getUserLanguage } = require("../../../services/i18n");
@@ -52,55 +54,26 @@ function createRaidTaskAutocompleteHandlers({
       n > 0 ? t("raid-task.autocomplete.taskSuffix", lang, { n }) : "";
     const userDoc = await loadUserForAutocomplete(executorId);
     const matches = getRosterMatches(userDoc, focused.value || "");
-    const choices = matches.map((a) => {
-      const chars = Array.isArray(a.characters) ? a.characters : [];
-      const taskTotal = chars.reduce(
-        (sum, c) => sum + (Array.isArray(c.sideTasks) ? c.sideTasks.length : 0),
-        0,
-      );
-      const label = t("raid-task.autocomplete.ownChoice", lang, {
-        name: a.accountName,
-        charCount: chars.length,
-        charsWord: charsWord(chars.length),
-        taskSuffix: taskSuffixFor(taskTotal),
-      });
-      return truncateChoice(label, a.accountName);
+    const choices = buildRosterAutocompleteChoices(matches, {
+      lang,
+      t,
+      choiceKey: "raid-task.autocomplete.ownChoice",
+      charsWord,
+      taskSuffixFor,
     });
 
-    const target = focused.value ? focused.value.toLowerCase() : "";
     let shareChoices = [];
     try {
       const accessible = await getAccessibleAccounts(executorId);
-      shareChoices = accessible
-        .filter(
-          (entry) =>
-            !entry.isOwn &&
-            (!target || (entry.accountName || "").toLowerCase().includes(target)),
-        )
-        .map((entry) => {
-          const chars = Array.isArray(entry.account?.characters)
-            ? entry.account.characters
-            : [];
-          const taskTotal = chars.reduce(
-            (sum, c) => sum + (Array.isArray(c.sideTasks) ? c.sideTasks.length : 0),
-            0,
-          );
-          const accessTag =
-            entry.accessLevel === "view"
-              ? t("raid-task.autocomplete.sharedAccessTagView", lang, {
-                  viewLabel: t("share.accessLevel.view", lang),
-                })
-              : "";
-          const label = t("raid-task.autocomplete.sharedChoice", lang, {
-            name: entry.accountName,
-            charCount: chars.length,
-            charsWord: charsWord(chars.length),
-            taskSuffix: taskSuffixFor(taskTotal),
-            owner: entry.ownerLabel,
-            accessTag,
-          });
-          return truncateChoice(label, entry.accountName);
-        });
+      shareChoices = buildSharedRosterAutocompleteChoices(accessible, {
+        needle: focused.value || "",
+        lang,
+        t,
+        choiceKey: "raid-task.autocomplete.sharedChoice",
+        accessTagKey: "raid-task.autocomplete.sharedAccessTagView",
+        charsWord,
+        taskSuffixFor,
+      });
     } catch (err) {
       console.warn(
         "[raid-task autocomplete] getAccessibleAccounts failed:",
