@@ -154,7 +154,7 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId, applyRaidSetBa
 
     // 6. On successful apply (anything written), shrink the stored token's
     // effective expiry to now+60s. The JWT itself stays valid for the rest
-    // of its 15-min TTL but isCurrentStoredToken() will reject it after
+    // of its natural TTL but isCurrentStoredToken() will reject it after
     // 60s, so a leaked URL post-sync is only useful for ~1 minute.
     // "Successful" = at least one applied row; nothing-to-sync (all skipped
     // or all rejected) does NOT shrink because the user may still want
