@@ -1,5 +1,5 @@
 /**
- * services/local-sync/catalog.js
+ * services/local-sync/core/catalog.js
  * Server-side catalog snapshot served to the web companion at boot.
  * Single source of truth for boss→raid mappings + difficulty aliases so
  * server apply path and browser preview stay in sync. Versioned (v1) so
@@ -9,8 +9,8 @@
 
 "use strict";
 
-const { RAID_REQUIREMENTS, BOSS_TO_RAID_GATE } = require("../../models/Raid");
-const { CLASS_ID_TO_BIBLE_ID, getClassInfoByNumericId } = require("../../models/Class");
+const { RAID_REQUIREMENTS, BOSS_TO_RAID_GATE } = require("../../../models/Raid");
+const { CLASS_ID_TO_BIBLE_ID, getClassInfoByNumericId } = require("../../../models/Class");
 
 // LOA Logs encounters.db `difficulty` values vs Artist's internal modeKey.
 // Kept here so the server apply path and the web companion catalog share one

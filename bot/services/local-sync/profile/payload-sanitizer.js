@@ -4,7 +4,7 @@ const {
   CHARACTER_PROFILE_STATS_KEYS,
   CHARACTER_PROFILE_STATS_CLAMP_RULES,
   CHARACTER_PROFILE_SCORE_KEYS,
-} = require("./profile-sanitize-rules");
+} = require("./sanitize-rules");
 
 const PROFILE_VERSION = 1;
 const MAX_BODY_BYTES = 24 * 1024 * 1024;

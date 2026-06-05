@@ -1,5 +1,5 @@
 /**
- * services/local-sync/preview-summary-endpoint.js
+ * services/local-sync/http/preview-summary-endpoint.js
  * Pre-sync diff computation for the web companion's "currently synced
  * vs pending" preview. Pure projection over (accounts × deltaBuckets)
  * - no DB writes - so the user can preview the impact before clicking
@@ -9,15 +9,15 @@
 
 "use strict";
 
-const { verifyToken, isCurrentStoredToken, bucketizeLocalSyncDeltas } = require("./index");
+const { verifyToken, isCurrentStoredToken, bucketizeLocalSyncDeltas } = require("..");
 const {
   createJsonSender,
   extractBearerToken,
   readJsonBody,
-} = require("./http");
-const { RAID_REQUIREMENTS, getGatesForRaid, getGoldForGate } = require("../../models/Raid");
-const { normalizeName } = require("../../utils/raid/common/shared");
-const { getStatusRaidsForCharacter } = require("../../utils/raid/common/character");
+} = require("./json");
+const { RAID_REQUIREMENTS, getGatesForRaid, getGoldForGate } = require("../../../models/Raid");
+const { normalizeName } = require("../../../utils/raid/common/shared");
+const { getStatusRaidsForCharacter } = require("../../../utils/raid/common/character");
 
 function makeGateKey(raidKey, modeKey, gate) {
   return `${raidKey}::${modeKey}::${gate}`;

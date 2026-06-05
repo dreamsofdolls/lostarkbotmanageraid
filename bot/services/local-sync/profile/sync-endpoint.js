@@ -5,24 +5,24 @@ const {
   isCurrentStoredToken,
   rotateLocalProfileSyncToken,
   hashProfileDeviceToken,
-} = require("./index");
+} = require("..");
 const {
   createJsonSender,
   extractBearerToken,
   readJsonBody,
-} = require("./http");
+} = require("../http/json");
 
 const {
   PROFILE_VERSION,
   MAX_BODY_BYTES,
   sanitizeSnapshotPayload,
-} = require("./profile-payload-sanitizer");
+} = require("./payload-sanitizer");
 
 const {
   shouldPromoteSnapshot,
   buildSnapshotUpdate,
   upsertEncounterSummaries,
-} = require("./profile-storage");
+} = require("./storage");
 
 function createProfileSessionEndpoint({ User, isDevUser = () => true }) {
   if (!User) throw new Error("[profile-session-endpoint] User model required");

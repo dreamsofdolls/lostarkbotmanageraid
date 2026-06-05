@@ -1,5 +1,5 @@
 /**
- * services/local-sync/sync-endpoint.js
+ * services/local-sync/http/sync-endpoint.js
  * POST /api/raid-sync handler. Auth chain: Bearer JWT → signature
  * verify → Mongo localSyncEnabled check → stored-token freshness check
  * → apply. On any applied row, the stored token's effective expiry is
@@ -14,13 +14,13 @@ const {
   isCurrentStoredToken,
   applyLocalSyncDeltas,
   recordLocalSyncSuccess,
-} = require("./index");
+} = require("..");
 const {
   createJsonSender,
   extractBearerToken,
   readJsonBody,
-} = require("./http");
-const { getRaidRequirementMap } = require("../../models/Raid");
+} = require("./json");
+const { getRaidRequirementMap } = require("../../../models/Raid");
 
 /**
  * Build the POST /api/raid-sync handler. Factory pattern so bot.js can

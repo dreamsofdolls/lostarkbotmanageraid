@@ -16,10 +16,10 @@
 // Re-exports stay explicit so a `require("./local-sync")` import surface
 // is greppable from any caller without spelunking through sub-modules.
 
-const state = require("./state");
-const tokens = require("./tokens");
-const apply = require("./apply");
-const profileDeviceToken = require("./profile-device-token");
+const state = require("./core/state");
+const tokens = require("./core/tokens");
+const apply = require("./core/apply");
+const profileDeviceToken = require("./profile/device-token");
 
 module.exports = {
   SYNC_MODE: state.SYNC_MODE,

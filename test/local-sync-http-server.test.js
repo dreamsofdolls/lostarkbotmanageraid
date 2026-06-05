@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const { once } = require("node:events");
 
-const { startLocalSyncHttpServer } = require("../bot/services/local-sync/http-server");
+const { startLocalSyncHttpServer } = require("../bot/services/local-sync/http/server");
 
 async function startTestServer() {
   const { server, stop } = startLocalSyncHttpServer({

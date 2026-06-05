@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
-const { buildLocalSyncCatalog } = require("../bot/services/local-sync/catalog");
+const { buildLocalSyncCatalog } = require("../bot/services/local-sync/core/catalog");
 
 async function loadPreviewUtils() {
   const file = path.join(__dirname, "..", "web", "js", "sync", "preview-utils.js");

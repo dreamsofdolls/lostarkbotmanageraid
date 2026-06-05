@@ -1,5 +1,5 @@
 /**
- * services/local-sync/apply.js
+ * services/local-sync/core/apply.js
  * Apply path for local-sync deltas. Map encounters.db rows to (raid,
  * mode, gate), bucket by char+raid+mode (highest gate wins), expand
  * cumulatively (G2 cleared implies G1 cleared - matches the text
@@ -11,9 +11,9 @@
 
 "use strict";
 
-const { getRaidGateForBoss, getGatesForRaid } = require("../../models/Raid");
-const { getCharacterName, normalizeName, toModeLabel } = require("../../utils/raid/common/shared");
-const { getCurrentResetStartMs } = require("../raid/weekly-reset");
+const { getRaidGateForBoss, getGatesForRaid } = require("../../../models/Raid");
+const { getCharacterName, normalizeName, toModeLabel } = require("../../../utils/raid/common/shared");
+const { getCurrentResetStartMs } = require("../../raid/weekly-reset");
 const { normalizeDifficulty } = require("./catalog");
 
 /**
