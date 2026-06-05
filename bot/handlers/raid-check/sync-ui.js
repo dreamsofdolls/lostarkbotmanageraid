@@ -45,6 +45,7 @@ const { getRaidModeLabel } = require("../../utils/raid/common/labels");
  * @param {Function} deps.autoManageEntryKey - composite account+char key
  * @param {Function} deps.gatherAutoManageLogsForUserDoc - bible HTTP gather
  * @param {Function} deps.applyAutoManageCollected - in-memory reconcile
+ * @param {Function} deps.syncRaidProfileFromBibleCollected - optional profile-light upsert
  * @param {Function} deps.stampAutoManageAttempt - touch lastAutoManageAttemptAt
  * @param {Function} deps.acquireAutoManageSyncSlot - per-user mutex
  * @param {Function} deps.releaseAutoManageSyncSlot - mutex release
@@ -69,6 +70,7 @@ function createSyncUi({
   autoManageEntryKey,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
+  syncRaidProfileFromBibleCollected = async () => null,
   stampAutoManageAttempt,
   acquireAutoManageSyncSlot,
   releaseAutoManageSyncSlot,
@@ -211,9 +213,11 @@ function createSyncUi({
 
             let outcome = "attempted-only";
             let delta = null;
+            let profileUserDoc = null;
             await saveWithRetry(async () => {
               const fresh = await User.findOne({ discordId });
               if (!fresh || !Array.isArray(fresh.accounts) || fresh.accounts.length === 0) return;
+              profileUserDoc = null;
 
               ensureFreshWeek(fresh);
               if (!fresh.autoManageEnabled) {
@@ -234,10 +238,20 @@ function createSyncUi({
               );
               if (appliedEntries.length > 0) delta = appliedEntries;
               await fresh.save();
+              profileUserDoc = typeof fresh.toObject === "function" ? fresh.toObject() : fresh;
             });
 
             if (outcome === "synced") syncedCount += 1;
             else attemptedOnlyCount += 1;
+            if (outcome === "synced" && profileUserDoc) {
+              await syncRaidProfileFromBibleCollected({
+                discordId,
+                userDoc: profileUserDoc,
+                weekResetStart,
+                collected,
+                logLabel: "[raid-check sync]",
+              });
+            }
             if (delta) deltasPerUser.set(discordId, delta);
           } catch (err) {
             failedCount += 1;

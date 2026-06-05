@@ -61,6 +61,7 @@ function createRaidSchedulerService({
   releaseAutoManageSyncSlot,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
+  syncRaidProfileFromBibleCollected = async () => null,
   isPublicLogDisabledError,
   stampAutoManageAttempt,
 }) {
@@ -808,9 +809,11 @@ function createRaidSchedulerService({
         // can read it (saveWithRetry may run its closure multiple times on
         // VersionError; we want the last committed pass).
         let latestReport = null;
+        let profileUserDoc = null;
         await saveWithRetry(async () => {
           const fresh = await User.findOne({ discordId });
           if (!fresh || !Array.isArray(fresh.accounts) || fresh.accounts.length === 0) return;
+          profileUserDoc = null;
           ensureFreshWeek(fresh);
           // Same opt-out re-check as Phase 2 piggyback (Codex round 26 #1):
           // user can toggle off during the long bible HTTP. Stamp attempt
@@ -829,9 +832,19 @@ function createRaidSchedulerService({
             outcome = "synced";
           }
           await fresh.save();
+          profileUserDoc = typeof fresh.toObject === "function" ? fresh.toObject() : fresh;
         });
         if (outcome === "synced") syncedCount += 1;
         else attemptedOnlyCount += 1;
+        if (outcome === "synced" && profileUserDoc) {
+          await syncRaidProfileFromBibleCollected({
+            discordId,
+            userDoc: profileUserDoc,
+            weekResetStart,
+            collected,
+            logLabel: "[auto-manage daily]",
+          });
+        }
 
         // Stuck private-log detection: every char in this user's roster
         // returned "Logs not enabled" from bible. Post a 7-day-deduped

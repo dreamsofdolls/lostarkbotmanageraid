@@ -8,6 +8,9 @@ const { getClassEmoji } = require("../../models/Class");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 
 const PROFILE_SESSION_TTL_MS = 5 * 60 * 1000;
+const MAX_SELECT_OPTIONS = 25;
+const MAX_CHARACTER_SELECT_OPTIONS = MAX_SELECT_OPTIONS - 1;
+const ROSTER_PAGE_SIZE = MAX_SELECT_OPTIONS - 1;
 const profileSessions = new Map();
 
 function normalizeName(value) {
@@ -166,6 +169,88 @@ function confidenceForLogs(logs) {
   return "Low";
 }
 
+function isBibleSummaryProfile(entry, character = null) {
+  return entry?.source === "bible" || character?.stats?.profileDataDepth === "bible-summary";
+}
+
+function sourceTag(source) {
+  return source === "bible" ? "BIBLE" : "LOCAL";
+}
+
+function rangeTag(rangeType) {
+  return rangeType === "weekly" ? "WEEKLY" : "FULL";
+}
+
+function rangeLabel(entry) {
+  return entry?.rangeType === "weekly" ? "weekly" : "full";
+}
+
+function sourceSummaryForEntries(entries) {
+  const tags = [...new Set((entries || []).map((entry) => sourceTag(entry?.source)))];
+  return tags.length ? tags.join("+") : "N/A";
+}
+
+function contextScoreLine(entry, character) {
+  const stats = character?.stats || {};
+  const scores = character?.scores || {};
+  if (isBibleSummaryProfile(entry, character)) {
+    return scoreLine("Bible pct", scores.context);
+  }
+  const coverage = Number(stats.contextCoverageRate) || 0;
+  const sampleCount = Number(stats.contextSampleCountAvg) || 0;
+  const contextScore = Number(scores.context);
+  if (coverage > 0 || sampleCount > 0 || Number.isFinite(contextScore) && contextScore > 0) {
+    return scoreLine("Context", scores.context);
+  }
+  return "Context: **N/A**";
+}
+
+function burstProfileLines(stats) {
+  const peak = Number(stats?.avgPeak10sDps) || 0;
+  if (peak <= 0) return [];
+  const p90Peak = Number(stats?.p90Peak10sDps) || 0;
+  const ratio = Number(stats?.avgBurstRatio) || 0;
+  return [`Peak 10s: **${shortNumber(peak)}** - p90 ${shortNumber(p90Peak)} - burst x${score(ratio)}`];
+}
+
+function bibleOutputLines(stats, scores, isSupport = false) {
+  const lines = [
+    `Bible pct: **${pct(stats.avgBiblePercentile)}** · overall ${pct(stats.avgOverallBiblePercentile)} · cover ${pct(stats.biblePercentileCoverageRate)}`,
+    `Avg DPS: **${shortNumber(stats.avgDps)}** · median ${shortNumber(stats.medianDps)} · p90 ${shortNumber(stats.p90Dps)}`,
+  ];
+  if (Number(stats.avgRdps) > 0 || Number(stats.avgNdps) > 0) {
+    lines.push(`rDPS/nDPS: **${shortNumber(stats.avgRdps)}** / ${shortNumber(stats.avgNdps)}`);
+  }
+  if (Number(stats.avgUdps) > 0) {
+    lines.push(`uDPS: **${shortNumber(stats.avgUdps)}**`);
+  }
+  if (isSupport && Number(stats.supportBuffCoverageRate) > 0) {
+    lines.push(`AP/Brand: ${ratePct(stats.avgSupportAp)} / ${ratePct(stats.avgSupportBrand)}`);
+    lines.push(`Identity/Hyper: ${ratePct(stats.avgSupportIdentity)} / ${ratePct(stats.avgSupportHyper)}`);
+  }
+  lines.push(`Duration: avg **${formatDurationMs(stats.avgDurationMs)}**`);
+  lines.push(`Bus logs: **${Math.round(Number(stats.busCount) || 0)}** (${pct(stats.busRate)})`);
+  lines.push(`Source confidence: **${pct(scores.sourceConfidence)}**`);
+  return lines;
+}
+
+function buildVariantSummary(variants, { limit = 4 } = {}) {
+  const lines = [...(variants || [])]
+    .filter((variant) => variant?.name)
+    .sort((a, b) =>
+      Number(b?.encounters || 0) - Number(a?.encounters || 0) ||
+      Number(b?.lastFightStart || 0) - Number(a?.lastFightStart || 0)
+    )
+    .slice(0, limit)
+    .map((variant) => {
+      const pctText = Number(variant.avgOverallBiblePercentile || variant.avgBiblePercentile || variant.avgContextPerformancePercentile) > 0
+        ? ` · pct ${pct(variant.avgOverallBiblePercentile || variant.avgBiblePercentile || variant.avgContextPerformancePercentile)}`
+        : "";
+      return `${shortLabel(variant.name, 22)} ${Math.round(Number(variant.encounters) || 0)} log · DPS ${shortNumber(variant.medianDps || variant.avgDps)}${pctText}`;
+    });
+  return lines.length ? lines.join("\n") : "N/A";
+}
+
 function charWeight(character) {
   const logs = Number(character?.stats?.encounters) || 0;
   if (logs >= 20) return 1;
@@ -229,9 +314,37 @@ function getEntryLabel(entry) {
   return `${entry.ownerLabel || entry.ownerDiscordId} / ${entry.accountName}`;
 }
 
+function snapshotHasCharacters(snapshot) {
+  return (snapshot?.accounts || []).some((account) =>
+    Array.isArray(account?.characters) && account.characters.length > 0
+  );
+}
+
+function snapshotDataRank(snapshot) {
+  if (!snapshotHasCharacters(snapshot)) return 0;
+  const source = snapshot?.source || "";
+  const criteriaSource = snapshot?.criteria?.source || "";
+  const dataDepth = snapshot?.criteria?.dataDepth || "";
+  if (source === "local" || criteriaSource === "encounters.db") return 3;
+  if (source === "bible" || criteriaSource === "lostark.bible" || dataDepth === "bible-summary") return 1;
+  return 2;
+}
+
+function shouldUseFullSnapshot(root, full) {
+  if (!snapshotHasCharacters(full)) return false;
+  if (!snapshotHasCharacters(root)) return true;
+  const rootRank = snapshotDataRank(root);
+  const fullRank = snapshotDataRank(full);
+  if (fullRank < rootRank) return false;
+  if (fullRank > rootRank) return true;
+  const rootRange = root?.rangeType || root?.criteria?.range?.type || "full";
+  const fullRange = full?.rangeType || full?.criteria?.range?.type || "full";
+  return fullRange === "full" && rootRange !== "full";
+}
+
 function preferredSnapshotView(snapshot) {
   const full = snapshot?.rangeSnapshots?.full;
-  if (full && Array.isArray(full.accounts) && full.accounts.length > 0) {
+  if (shouldUseFullSnapshot(snapshot, full)) {
     return {
       ...snapshot,
       ...full,
@@ -267,6 +380,7 @@ async function buildAccessibleProfileEntries(viewerDiscordId, { RaidProfileSnaps
       generatedAt: snapshot.generatedAt,
       receivedAt: snapshot.receivedAt,
       source: snapshot.source || "local",
+      rangeType: snapshot.rangeType || snapshot.criteria?.range?.type || "full",
       characters: account.characters,
     });
   }
@@ -328,7 +442,7 @@ function buildOverallEmbed({ EmbedBuilder, UI }, session) {
     inline: false,
   });
   embed.setFooter({
-    text: `// ${footerTimestamp(latestSnapshotMs(session.entries))} · ${agg.logs} LOG · ${agg.scoredLogs} SCORED · CONF ${confidenceForLogs(agg.scoredLogs).toUpperCase()}`,
+    text: `// ${sourceSummaryForEntries(session.entries)} · ${footerTimestamp(latestSnapshotMs(session.entries))} · ${agg.logs} LOG · ${agg.scoredLogs} SCORED · CONF ${confidenceForLogs(agg.scoredLogs).toUpperCase()}`,
   });
 
   return embed;
@@ -384,7 +498,7 @@ function buildRosterEmbed({ EmbedBuilder, UI }, session, entry) {
     inline: false,
   });
   embed.setFooter({
-    text: `// ${entry.isOwn ? "OWN" : "SHARED"} · ${footerTimestamp(entry.receivedAt || entry.generatedAt)} · ${agg.logs} LOG · ${agg.scoredLogs} SCORED · CONF ${confidenceForLogs(agg.scoredLogs).toUpperCase()}`,
+    text: `// ${entry.isOwn ? "OWN" : "SHARED"} · ${sourceTag(entry.source)} ${rangeTag(entry.rangeType)} · ${footerTimestamp(entry.receivedAt || entry.generatedAt)} · ${agg.logs} LOG · ${agg.scoredLogs} SCORED · CONF ${confidenceForLogs(agg.scoredLogs).toUpperCase()}`,
   });
 
   return embed;
@@ -395,6 +509,7 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
   const stats = character.stats || {};
   const scores = character.scores || {};
   const isSupport = character.role === "support";
+  const isBibleSummary = isBibleSummaryProfile(entry, character);
   // Playstyle/spec comes from the enlightenment node (getSpecFromArkPassiveNodes);
   // fall back to the raw build.spec, then nothing. Surfaced as a badge in the
   // header (inline code) instead of a buried Build line.
@@ -417,6 +532,7 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
         value: [
           scoreLine("Overall", scores.overall),
           scoreLine("MVP", scores.mvp),
+          contextScoreLine(entry, character),
           scoreLine("Survival", scores.survival),
           scoreLine("Consistency", scores.consistency),
         ].join("\n"),
@@ -424,7 +540,9 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
       },
       {
         name: hudFieldName(isSupport ? "SUP detail" : "DPS detail"),
-        value: isSupport
+        value: isBibleSummary
+          ? bibleOutputLines(stats, scores, isSupport).join("\n")
+          : isSupport
           ? [
               scoreLine("rDPS impact", scores.supportUptime),
               scoreLine("Raid contribution", scores.raidContribution),
@@ -432,6 +550,8 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
               `Shield/min: **${shortNumber(stats.avgProtectionPerMinute)}**`,
               `rDPS given/min: **${shortNumber(stats.avgRdpsDamageGivenPerMinute)}**`,
               `Supporter: **${pct(stats.avgSupporterPercent)}** · Radiant ${pct(stats.radiantSupportRate)}`,
+              `Support rank: **${stats.supporterRankValidCount ? `${score(stats.avgSupporterRank)}/${score(stats.supporterCountAvg)}` : "N/A"}** · top ${pct(stats.supporterTopRate)}`,
+              `Context pct: **${pct(stats.avgContextSupportPercentile || stats.avgContextPerformancePercentile)}** · cover ${pct(stats.contextCoverageRate)} n~${score(stats.contextSampleCountAvg)}`,
               `Synergy/min: **${shortNumber(stats.avgSynergyGivenPerMinute)}**`,
               `AP/Brand: ${ratePct(stats.avgSupportAp)} / ${ratePct(stats.avgSupportBrand)}`,
               `Identity/Hyper: ${ratePct(stats.avgSupportIdentity)} / ${ratePct(stats.avgSupportHyper)}`,
@@ -439,37 +559,59 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
           : [
               `Avg DPS: **${shortNumber(stats.avgDps)}**`,
               `Median DPS: **${shortNumber(stats.medianDps)}**`,
+              ...burstProfileLines(stats),
               `Damage share: **${pct(stats.avgDamageShare)}** · ${renderGauge(scores.damageShare)}`,
+              `Top proximity: **${pct(stats.avgTopDamageProximity)}**`,
+              `Context pct: **${pct(stats.avgContextPerformancePercentile)}** · cover ${pct(stats.contextCoverageRate)} n~${score(stats.contextSampleCountAvg)}`,
               `Top rate: **${pct(stats.topRate)}**`,
             ].join("\n"),
         inline: true,
       },
       {
-        name: hudFieldName("combat shape"),
-        value: [
-          `Style: **${attackStyleLabel(stats.attackStyle)}**`,
-          `Crit: **${pct(stats.avgCritRate)}**`,
-          `Back/Front: ${pct(stats.avgBackAttackRate)} / ${pct(stats.avgFrontAttackRate)}`,
-          `Hyper share: **${pct(stats.avgHyperShare)}**`,
-          `Skills/top share: **${score(stats.avgSkillCount)}** / ${pct(stats.avgTopSkillShare)}`,
-          `SUP buff/debuff: ${pct(stats.avgSupportBuffedShare)} / ${pct(stats.avgSupportDebuffedShare)}`,
-        ].join("\n"),
+        name: hudFieldName(isBibleSummary ? "source detail" : "combat shape"),
+        value: isBibleSummary
+          ? [
+              "Data depth: **lostark.bible summary**",
+              "Local-only metrics such as skills, buffs, rDPS share, damage taken, and support radiant rank need encounters.db sync.",
+              `Profile range: **${rangeLabel(entry)}** · min duration **3m+**`,
+              `Last fight: ${formatDateMs(stats.lastFightStart)}`,
+            ].join("\n")
+          : [
+              `Style: **${attackStyleLabel(stats.attackStyle)}**`,
+              `Crit: **${pct(stats.avgCritRate)}**`,
+              `Back/Front: ${pct(stats.avgBackAttackRate)} / ${pct(stats.avgFrontAttackRate)}`,
+              `Damage crit/pos: **${pct(stats.avgCritDamageShare)}** · ${pct(stats.avgPositionalDamageShare)}`,
+              `Damage back/front: ${pct(stats.avgBackAttackDamageShare)} / ${pct(stats.avgFrontAttackDamageShare)}`,
+              `Hyper share: **${pct(stats.avgHyperShare)}**`,
+              `Skills/top share: **${score(stats.avgSkillCount)}** / ${pct(stats.avgTopSkillShare)}`,
+              `SUP buff/debuff: ${pct(stats.avgSupportBuffedShare)} / ${pct(stats.avgSupportDebuffedShare)}`,
+            ].join("\n"),
         inline: false,
       },
       {
         name: hudFieldName("reliability"),
-        value: [
-          `Deathless: ${renderPercentGauge(stats.deathlessRate)}`,
-          `Death rate: **${pct(stats.deathRate)}**`,
-          `Deaths: **${Math.round(Number(stats.totalDeaths) || 0)}** total · avg ${score(stats.avgDeaths)}`,
-          `Dead time: **${formatDurationMs(stats.totalDeadTimeMs)}** total - avg ${formatDurationMs(stats.avgDeadTimeMs)}`,
-          `rDPS valid: **${pct(stats.rdpsValidRate)}** (${Math.round(Number(stats.rdpsValidCount) || 0)}/${Math.round(Number(stats.encounters) || 0)})`,
-          `Avg rank: **${score(stats.avgRank)}**`,
-          `Counters/Stagger: **${score(stats.avgCounters)}** / ${shortNumber(stats.avgStaggerPerMinute)}/min`,
-          `Taken/Shielded: ${shortNumber(stats.avgDamageTakenPerMinute)}/min / ${shortNumber(stats.avgShieldReceivedPerMinute)}/min`,
-          `Incap: **${score(stats.avgIncapacitations)}** avg`,
-          `${t("raidProfile.lastFight", lang)}: ${formatDateMs(stats.lastFightStart)}`,
-        ].join("\n"),
+        value: isBibleSummary
+          ? [
+              `Deathless: ${renderPercentGauge(stats.deathlessRate)}`,
+              `Death rate: **${pct(stats.deathRate)}**`,
+              `Deaths: **${Math.round(Number(stats.totalDeaths) || 0)}** total · avg ${score(stats.avgDeaths)}`,
+              `Active time: avg **${formatDurationMs(stats.avgDurationMs)}**`,
+              `${t("raidProfile.lastFight", lang)}: ${formatDateMs(stats.lastFightStart)}`,
+            ].join("\n")
+          : [
+              `Deathless: ${renderPercentGauge(stats.deathlessRate)}`,
+              `Death rate: **${pct(stats.deathRate)}**`,
+              `Deaths: **${Math.round(Number(stats.totalDeaths) || 0)}** total · avg ${score(stats.avgDeaths)}`,
+              `Dead time: **${formatDurationMs(stats.totalDeadTimeMs)}** total - avg ${formatDurationMs(stats.avgDeadTimeMs)}`,
+              `Active time: avg **${formatDurationMs(stats.avgActiveDurationMs || stats.avgDurationMs)}** · ${pct(stats.avgActiveTimeRate || 100)}`,
+              `rDPS valid: **${pct(stats.rdpsValidRate)}** (${Math.round(Number(stats.rdpsValidCount) || 0)}/${Math.round(Number(stats.encounters) || 0)})`,
+              `Avg rank: **${score(stats.avgRank)}**`,
+              `Counters/Stagger: **${score(stats.avgCounters)}** / ${shortNumber(stats.avgStaggerPerMinute)}/min`,
+              `Taken: ${shortNumber(stats.avgDamageTakenPerMinute)}/min · share ${pct(stats.avgDamageTakenShare)}`,
+              `Shielded: ${shortNumber(stats.avgShieldReceivedPerMinute)}/min`,
+              `Incap: **${score(stats.avgIncapacitations)}** avg`,
+              `${t("raidProfile.lastFight", lang)}: ${formatDateMs(stats.lastFightStart)}`,
+            ].join("\n"),
         inline: false,
       }
     );
@@ -487,27 +629,31 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
     });
   }
 
-  embed.addFields({
-    name: hudFieldName("buff profile"),
-    value: [
-      `Party attr buff/debuff: **${pct(stats.avgPartyBuffedShare)}** / **${pct(stats.avgPartyDebuffedShare)}**`,
-      `Self attr / battle item: **${pct(stats.avgSelfBuffedShare)}** / **${pct(stats.avgBattleItemDebuffedShare)}**`,
-      `Top buff: ${sourceSummary(character.topBuffSources)}`,
-      `Top debuff: ${sourceSummary(character.topDebuffSources)}`,
-      `Shield given: ${sourceSummary(character.topShieldGivenSources, 2)}`,
-      `Shield received: ${sourceSummary(character.topShieldReceivedSources, 2)}`,
-    ].join("\n"),
-    inline: false,
-  });
+  if (!isBibleSummary) {
+    embed.addFields({
+      name: hudFieldName("buff profile"),
+      value: [
+        `Party attr buff/debuff: **${pct(stats.avgPartyBuffedShare)}** / **${pct(stats.avgPartyDebuffedShare)}**`,
+        `Self attr / battle item: **${pct(stats.avgSelfBuffedShare)}** / **${pct(stats.avgBattleItemDebuffedShare)}**`,
+        `Top buff: ${sourceSummary(character.topBuffSources)}`,
+        `Top debuff: ${sourceSummary(character.topDebuffSources)}`,
+        `Shield given: ${sourceSummary(character.topShieldGivenSources, 2)}`,
+        `Shield received: ${sourceSummary(character.topShieldReceivedSources, 2)}`,
+      ].join("\n"),
+      inline: false,
+    });
+  }
 
   const build = character.build || {};
-  if (build.spec || build.gearScore || build.combatPower || build.engravings?.length || build.arkPassive) {
+  if (build.spec || build.gearScore || build.combatPower || build.engravings?.length || build.arkPassive || character.buildVariants?.length) {
     embed.addFields({
       name: hudFieldName("build"),
       value: [
         `CP: **${build.combatPower ? score(build.combatPower) : "N/A"}**`,
         `Ark passive: **${build.arkPassiveActive === null || build.arkPassiveActive === undefined ? "N/A" : build.arkPassiveActive ? "ON" : "OFF"}** / rate ${pct(stats.arkPassiveRate)}`,
         `Build variants: **${Math.round(Number(stats.buildVariantCount) || 0)}**`,
+        `Unclassified build logs: **${Math.round(Number(stats.unclassifiedBuildLogCount) || 0)}**`,
+        `Variant split: ${buildVariantSummary(character.buildVariants)}`,
         `Engravings: ${engravingSummary(build.engravings)}`,
         `Ark points: ${arkPassiveSummary(build.arkPassive)}`,
         `Enlightenment: ${enlightenmentSummary(build.arkPassive, build.spec)}`,
@@ -533,7 +679,10 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
     .sort((a, b) => Number(b?.encounters || 0) - Number(a?.encounters || 0))
     .slice(0, 8)
     .map((raid) => {
-      const raidLabel = getRaidModeLabel(raid.raidKey, raid.modeKey, "vi") || `${raid.raidKey} ${raid.modeKey}`;
+      const raidLabel = getRaidModeLabel(raid.raidKey, raid.modeKey, lang) || `${raid.raidKey} ${raid.modeKey}`;
+      if (isBibleSummary) {
+        return `**${raidLabel}** · ${raid.boss || "?"} · ${raid.encounters || 0} log · DPS ${shortNumber(raid.medianDps)} · Bible pct ${pct(raid.avgBiblePercentile)} · deathless ${pct(raid.deathlessRate)}`;
+      }
       return `**${raidLabel}** · ${raid.boss || "?"} · ${raid.encounters || 0} log · DPS ${shortNumber(raid.medianDps)} · share ${pct(raid.avgDamageShare)} · top ${pct(raid.topRate)}`;
     });
   embed.addFields({
@@ -542,7 +691,7 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
     inline: false,
   });
   embed.setFooter({
-    text: `// ${String(character.class || "UNKNOWN").toUpperCase()} · ${roleLabel(character).toUpperCase()} · ${stats.encounters || 0} SCORED · CONF ${confidenceForLogs(stats.encounters).toUpperCase()} · ${footerTimestamp(entry.receivedAt || entry.generatedAt)}`,
+    text: `// ${sourceTag(entry.source)} ${rangeTag(entry.rangeType)} · ${String(character.class || "UNKNOWN").toUpperCase()} · ${roleLabel(character).toUpperCase()} · ${stats.encounters || 0} SCORED · CONF ${confidenceForLogs(stats.encounters).toUpperCase()} · ${footerTimestamp(entry.receivedAt || entry.generatedAt)}`,
   });
 
   return embed;
@@ -559,6 +708,12 @@ function selectOption(label, value, description, emoji, isDefault = false) {
   return option;
 }
 
+function clampPage(page, totalItems, pageSize) {
+  const maxPage = Math.max(0, Math.ceil(Math.max(0, totalItems) / pageSize) - 1);
+  const n = Number(page) || 0;
+  return Math.max(0, Math.min(maxPage, Math.floor(n)));
+}
+
 function buildComponents(deps, session) {
   const {
     StringSelectMenuBuilder,
@@ -572,10 +727,15 @@ function buildComponents(deps, session) {
   const selectedChar = selectedEntry && session.charIndex >= 0
     ? selectedEntry.characters[session.charIndex]
     : null;
+  const rosterPage = selectedEntry
+    ? Math.floor(session.rosterIndex / ROSTER_PAGE_SIZE)
+    : clampPage(session.rosterPage, session.entries.length, ROSTER_PAGE_SIZE);
+  const rosterPageStart = rosterPage * ROSTER_PAGE_SIZE;
 
   const rosterOptions = [
     selectOption(t("raidProfile.optOverall", lang), "overall", t("raidProfile.optOverallDesc", lang), "📊", session.rosterIndex < 0),
-    ...session.entries.slice(0, 24).map((entry, index) => {
+    ...session.entries.slice(rosterPageStart, rosterPageStart + ROSTER_PAGE_SIZE).map((entry, offset) => {
+      const index = rosterPageStart + offset;
       const agg = aggregateCharacters(entry.characters);
       return selectOption(
         getEntryLabel(entry),
@@ -594,10 +754,14 @@ function buildComponents(deps, session) {
       .addOptions(rosterOptions)
   );
 
+  const charPageStart = selectedEntry && session.charIndex >= 0
+    ? Math.floor(session.charIndex / MAX_CHARACTER_SELECT_OPTIONS) * MAX_CHARACTER_SELECT_OPTIONS
+    : 0;
   const charOptions = selectedEntry
     ? [
         selectOption(t("raidProfile.optRosterOverview", lang), "overview", t("raidProfile.optRosterOverviewDesc", lang), "📁", session.charIndex < 0),
-        ...selectedEntry.characters.slice(0, 24).map((character, index) => {
+        ...selectedEntry.characters.slice(charPageStart, charPageStart + MAX_CHARACTER_SELECT_OPTIONS).map((character, offset) => {
+          const index = charPageStart + offset;
           return selectOption(
             character.name,
             String(index),
@@ -617,7 +781,9 @@ function buildComponents(deps, session) {
       .addOptions(charOptions)
   );
 
-  const canPage = !!selectedEntry && selectedEntry.characters.length > 0;
+  const canPageChars = !!selectedEntry && selectedEntry.characters.length > 0;
+  const canPageRosters = !selectedEntry && session.entries.length > ROSTER_PAGE_SIZE;
+  const canPage = canPageChars || canPageRosters;
   const buttonRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`raid-profile:prev:${sid}`)
@@ -739,6 +905,7 @@ function createRaidProfileCommand(deps) {
       lang,
       entries,
       rosterIndex: -1,
+      rosterPage: 0,
       charIndex: -1,
       expiresAt: Date.now() + PROFILE_SESSION_TTL_MS,
     };
@@ -775,6 +942,7 @@ function createRaidProfileCommand(deps) {
           const idx = Number(value);
           if (Number.isInteger(idx) && session.entries[idx]) {
             session.rosterIndex = idx;
+            session.rosterPage = Math.floor(idx / ROSTER_PAGE_SIZE);
             session.charIndex = -1;
           }
         }
@@ -798,6 +966,11 @@ function createRaidProfileCommand(deps) {
       if (action === "overview") {
         if (session.rosterIndex >= 0) session.charIndex = -1;
         else session.rosterIndex = -1;
+      } else if (!entry && session.entries.length > ROSTER_PAGE_SIZE) {
+        const totalPages = Math.ceil(session.entries.length / ROSTER_PAGE_SIZE);
+        const current = clampPage(session.rosterPage, session.entries.length, ROSTER_PAGE_SIZE);
+        if (action === "prev") session.rosterPage = (current - 1 + totalPages) % totalPages;
+        if (action === "next") session.rosterPage = (current + 1) % totalPages;
       } else if (entry?.characters?.length) {
         const total = entry.characters.length;
         const current = session.charIndex >= 0 ? session.charIndex : 0;
@@ -814,6 +987,7 @@ function createRaidProfileCommand(deps) {
     __test: {
       aggregateCharacters,
       buildAccessibleProfileEntries,
+      preferredSnapshotView,
       renderSessionPayload,
     },
   };

@@ -11,6 +11,12 @@ import {
   getSpecFromArkPassiveNodes,
 } from "/sync/ark-passive-data.js";
 import { t } from "/sync/i18n.js";
+import {
+  classifyProfileLogRole,
+  roleForProfileClass,
+  SUPPORT_DPS_PROFILE_SPEC_KEYS,
+} from "/sync/profile-role.js";
+import { computeProfileConsistency } from "/sync/profile-metrics.js";
 
 const WA_SQLITE_VERSION = "1.3.0";
 const WA_SQLITE_BASE = `https://cdn.jsdelivr.net/npm/@journeyapps/wa-sqlite@${WA_SQLITE_VERSION}`;
@@ -18,13 +24,11 @@ const PROFILE_SESSION_STORAGE_KEY = "artist-profile-sync-session";
 const PROFILE_AUTO_SYNC_INTERVAL_MS = 10 * 60 * 1000;
 const MAX_PROFILE_ENCOUNTER_SUMMARIES = 5000;
 const MIN_DURATION_MS = 180000;
-const SUPPORT_CLASSES = new Set(["bard", "paladin", "artist", "valkyrie", "holyknight"]);
 const SUPPORT_PROTECTION_P90_PER_MIN = 10000000;
 const SUPPORT_RDPS_GIVEN_P90_PER_MIN = 50000000000;
-const SUPPORT_DPS_BUILD_SPECS = new Set(["judgment", "truecourage", "recurrence", "shiningknight"]);
-const SUPPORT_MAIN_BUILD_SPECS = new Set(["blessedaura", "desperatesalvation", "fullbloom", "liberator"]);
 const STAGGER_P90_PER_MIN = 3500;
 const POSITIONAL_ATTACK_RATE_THRESHOLD = 45;
+const MIN_CONTEXT_SAMPLE_COUNT = 10;
 
 let profileSyncTimer = null;
 let profileSyncInFlight = false;
@@ -34,14 +38,12 @@ function normalizeName(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-function roleForClass(className) {
-  const key = normalizeName(className).replace(/\s+/g, "");
-  if (SUPPORT_CLASSES.has(key)) return "support";
-  return className ? "dps" : "unknown";
-}
-
 function sqlString(value) {
   return `'${String(value || "").replace(/'/g, "''")}'`;
+}
+
+function sqlStringList(values) {
+  return (values || []).map(sqlString).join(", ");
 }
 
 function quoteIdent(name) {
@@ -149,9 +151,12 @@ async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = 
     const encounterDebuffsExpr = hasEncounterTable && encounterCols.has("debuffs") ? `enc.${quoteIdent("debuffs")}` : "NULL";
     const encounterShieldBuffsExpr = hasEncounterTable && encounterCols.has("applied_shield_buffs") ? `enc.${quoteIdent("applied_shield_buffs")}` : "NULL";
     const encounterTotalDamageExpr = hasEncounterTable && encounterCols.has("total_damage_dealt") ? `COALESCE(enc.${quoteIdent("total_damage_dealt")}, 0)` : "0";
+    const encounterTopDamageExpr = hasEncounterTable && encounterCols.has("top_damage_dealt") ? `COALESCE(enc.${quoteIdent("top_damage_dealt")}, 0)` : "0";
+    const encounterTotalDamageTakenExpr = hasEncounterTable && encounterCols.has("total_damage_taken") ? `COALESCE(enc.${quoteIdent("total_damage_taken")}, 0)` : "0";
 
     const eCol = (name) => `e.${quoteIdent(name)}`;
     const leCol = (name) => `le.${quoteIdent(name)}`;
+    const entityClassExpr = entityCols.has("class") ? eCol("class") : "''";
     const classExpr = entityCols.has("class") ? `COALESCE(${leCol("class")}, '')` : "''";
     const rdpsExpr = entityCols.has("rdps") ? `COALESCE(${leCol("rdps")}, 0)` : "0";
     const ndpsExpr = entityCols.has("ndps") ? `COALESCE(${leCol("ndps")}, 0)` : "0";
@@ -177,6 +182,42 @@ async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = 
     const loadoutHashExpr = entityCols.has("loadout_hash") ? leCol("loadout_hash") : "NULL";
     const entityUnbuffedDamageExpr = entityCols.has("unbuffed_damage") ? `COALESCE(${leCol("unbuffed_damage")}, 0)` : "0";
     const entityUnbuffedDpsExpr = entityCols.has("unbuffed_dps") ? `COALESCE(${leCol("unbuffed_dps")}, 0)` : "0";
+    const supportSpecList = sqlStringList(SUPPORT_DPS_PROFILE_SPEC_KEYS);
+    const supportClassKeyExpr = (alias) => `LOWER(REPLACE(COALESCE(${alias}.${quoteIdent("class")}, ''), ' ', ''))`;
+    const supportClassPredicate = (alias) => (
+      `${supportClassKeyExpr(alias)} IN ('bard', 'paladin', 'artist', 'valkyrie', 'holyknight')`
+    );
+    const supportSpecKeyExpr = (alias) => (
+      `LOWER(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(${alias}.${quoteIdent("spec")}, ''), ' ', ''), '&nbsp;', ''), '-', ''), '_', ''))`
+    );
+    const supportMainBuildPredicate = (alias) => entityCols.has("spec")
+      ? `${supportSpecKeyExpr(alias)} NOT IN (${supportSpecList})`
+      : "1 = 1";
+    const contextRoleExpr = (alias) => entityCols.has("class")
+      ? `CASE WHEN ${supportClassPredicate(alias)} AND ${supportMainBuildPredicate(alias)} THEN 'support' ELSE 'dps' END`
+      : "'dps'";
+    const supportRankExpr = entityCols.has("class") && entityCols.has("rdps_damage_given")
+      ? `1 + (
+          SELECT COUNT(*)
+            FROM entity se
+           WHERE se.${quoteIdent("encounter_id")} = ep.id
+             AND se.${quoteIdent("entity_type")} = 'PLAYER'
+             AND ${supportClassPredicate("se")}
+             AND ${supportMainBuildPredicate("se")}
+             AND COALESCE(se.${quoteIdent("rdps_damage_given")}, 0) > COALESCE(${leCol("rdps_damage_given")}, 0)
+        )`
+      : "0";
+    const supportCountExpr = entityCols.has("class") && entityCols.has("rdps_damage_given")
+      ? `(
+          SELECT COUNT(*)
+            FROM entity se
+           WHERE se.${quoteIdent("encounter_id")} = ep.id
+             AND se.${quoteIdent("entity_type")} = 'PLAYER'
+             AND ${supportClassPredicate("se")}
+             AND ${supportMainBuildPredicate("se")}
+             AND COALESCE(se.${quoteIdent("rdps_damage_given")}, 0) > 0
+        )`
+      : "0";
 
     const sql = `
       WITH eligible AS (
@@ -191,7 +232,9 @@ async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = 
                ${encounterBuffsExpr} AS encounter_buffs,
                ${encounterDebuffsExpr} AS encounter_debuffs,
                ${encounterShieldBuffsExpr} AS encounter_shield_buffs,
-               ${encounterTotalDamageExpr} AS encounter_total_damage_dealt
+               ${encounterTotalDamageExpr} AS encounter_total_damage_dealt,
+               ${encounterTopDamageExpr} AS encounter_top_damage_dealt,
+               ${encounterTotalDamageTakenExpr} AS encounter_total_damage_taken
         FROM encounter_preview ep
         ${encounterJoin}
         WHERE ${clearedSql} = 1
@@ -201,16 +244,79 @@ async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = 
           AND ${charSql} IS NOT NULL
           AND ${charSql} != ''
       ),
-      ranked AS (
+      player_base AS (
         SELECT ${eCol("encounter_id")} AS encounter_id,
                ${eCol("name")} AS name,
+               ep.boss AS boss,
+               ep.difficulty AS difficulty,
+               LOWER(REPLACE(COALESCE(${entityClassExpr}, ''), ' ', '')) AS class_key,
+               ${entityCols.has("spec") ? supportSpecKeyExpr("e") : "''"} AS spec_key,
+               ${contextRoleExpr("e")} AS context_role,
                COALESCE(${eCol("dps")}, 0) AS dps,
-               SUM(COALESCE(${eCol("dps")}, 0)) OVER (PARTITION BY ${eCol("encounter_id")}) AS party_dps,
-               RANK() OVER (PARTITION BY ${eCol("encounter_id")} ORDER BY COALESCE(${eCol("dps")}, 0) DESC) AS damage_rank,
-               COUNT(*) OVER (PARTITION BY ${eCol("encounter_id")}) AS party_count
+               ${rdpsDamageGivenExpr.replaceAll("le.", "e.")} AS rdps_damage_given,
+               ep.encounter_total_damage_dealt AS encounter_total_damage_dealt,
+               CASE WHEN COALESCE(ep.encounter_misc, '') LIKE '%"rdpsValid":true%' THEN 1 ELSE 0 END AS rdps_valid
           FROM entity e
           JOIN eligible ep ON ep.id = ${eCol("encounter_id")}
           WHERE ${eCol("entity_type")} = 'PLAYER'
+            AND COALESCE(${eCol("dps")}, 0) > 0
+            AND COALESCE(${entityClassExpr}, '') != ''
+      ),
+      ranked AS (
+        SELECT pb.*,
+               SUM(pb.dps) OVER (PARTITION BY pb.encounter_id) AS party_dps,
+               MAX(pb.dps) OVER (PARTITION BY pb.encounter_id) AS top_dps,
+               RANK() OVER (PARTITION BY pb.encounter_id ORDER BY pb.dps DESC) AS damage_rank,
+               COUNT(*) OVER (PARTITION BY pb.encounter_id) AS party_count,
+               CASE WHEN pb.encounter_total_damage_dealt > 0
+                    THEN (pb.rdps_damage_given * 100.0) / pb.encounter_total_damage_dealt
+                    ELSE 0
+               END AS support_percent_context
+          FROM player_base pb
+      ),
+      dps_context AS (
+        SELECT encounter_id,
+               name,
+               CASE WHEN spec_key != '' THEN COUNT(*) OVER (PARTITION BY boss, difficulty, class_key, spec_key, context_role) ELSE 0 END AS spec_context_sample_count,
+               CASE WHEN spec_key != '' THEN PERCENT_RANK() OVER (
+                 PARTITION BY boss, difficulty, class_key, spec_key, context_role
+                 ORDER BY CASE WHEN party_dps > 0 THEN (dps * 100.0) / party_dps ELSE 0 END
+               ) * 100 ELSE 0 END AS spec_damage_share_percentile,
+               CASE WHEN spec_key != '' THEN PERCENT_RANK() OVER (
+                 PARTITION BY boss, difficulty, class_key, spec_key, context_role
+                 ORDER BY CASE WHEN top_dps > 0 THEN (dps * 100.0) / top_dps ELSE 0 END
+               ) * 100 ELSE 0 END AS spec_top_damage_proximity_percentile,
+               COUNT(*) OVER (PARTITION BY boss, difficulty, class_key, context_role) AS class_context_sample_count,
+               PERCENT_RANK() OVER (
+                 PARTITION BY boss, difficulty, class_key, context_role
+                 ORDER BY CASE WHEN party_dps > 0 THEN (dps * 100.0) / party_dps ELSE 0 END
+               ) * 100 AS class_damage_share_percentile,
+               PERCENT_RANK() OVER (
+                 PARTITION BY boss, difficulty, class_key, context_role
+                 ORDER BY CASE WHEN top_dps > 0 THEN (dps * 100.0) / top_dps ELSE 0 END
+               ) * 100 AS class_top_damage_proximity_percentile
+          FROM ranked
+          WHERE context_role = 'dps'
+            AND party_dps > 0
+            AND top_dps > 0
+      ),
+      support_context AS (
+        SELECT encounter_id,
+               name,
+               CASE WHEN spec_key != '' THEN COUNT(*) OVER (PARTITION BY boss, difficulty, class_key, spec_key, context_role) ELSE 0 END AS spec_context_sample_count,
+               CASE WHEN spec_key != '' THEN PERCENT_RANK() OVER (
+                 PARTITION BY boss, difficulty, class_key, spec_key, context_role
+                 ORDER BY support_percent_context
+               ) * 100 ELSE 0 END AS spec_support_percentile,
+               COUNT(*) OVER (PARTITION BY boss, difficulty, class_key, context_role) AS class_context_sample_count,
+               PERCENT_RANK() OVER (
+                 PARTITION BY boss, difficulty, class_key, context_role
+                 ORDER BY support_percent_context
+               ) * 100 AS class_support_percentile
+          FROM ranked
+          WHERE context_role = 'support'
+            AND rdps_valid = 1
+            AND support_percent_context > 0
       )
       SELECT ep.id,
              ep.fight_start,
@@ -241,6 +347,8 @@ async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = 
               r.party_dps,
               r.damage_rank,
               r.party_count,
+              ${supportRankExpr},
+              ${supportCountExpr},
               ${classIdExpr},
               ${gearScoreExpr},
               ${combatPowerExpr},
@@ -252,10 +360,24 @@ async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = 
               ${loadoutHashExpr},
               ${entityUnbuffedDamageExpr},
               ${entityUnbuffedDpsExpr},
-              ep.encounter_total_damage_dealt
+              ep.encounter_total_damage_dealt,
+              ep.encounter_top_damage_dealt,
+              ep.encounter_total_damage_taken,
+              COALESCE(dps_context.spec_context_sample_count, 0),
+              COALESCE(dps_context.spec_damage_share_percentile, 0),
+              COALESCE(dps_context.spec_top_damage_proximity_percentile, 0),
+              COALESCE(dps_context.class_context_sample_count, 0),
+              COALESCE(dps_context.class_damage_share_percentile, 0),
+              COALESCE(dps_context.class_top_damage_proximity_percentile, 0),
+              COALESCE(support_context.spec_context_sample_count, 0),
+              COALESCE(support_context.spec_support_percentile, 0),
+              COALESCE(support_context.class_context_sample_count, 0),
+              COALESCE(support_context.class_support_percentile, 0)
       FROM eligible ep
       JOIN entity le ON le.${quoteIdent("encounter_id")} = ep.id AND le.${quoteIdent("name")} = ep.local_player
       JOIN ranked r ON r.encounter_id = ep.id AND r.name = ep.local_player
+      LEFT JOIN dps_context ON dps_context.encounter_id = ep.id AND dps_context.name = ep.local_player
+      LEFT JOIN support_context ON support_context.encounter_id = ep.id AND support_context.name = ep.local_player
       WHERE le.${quoteIdent("entity_type")} = 'PLAYER'
       ORDER BY ep.fight_start DESC;
     `;
@@ -295,18 +417,32 @@ async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = 
         partyDps: Number(row[26]) || 0,
         damageRank: Number(row[27]) || 0,
         partyCount: Number(row[28]) || 0,
-        classId: Number(row[29]) || 0,
-        gearScore: Number(row[30]) || 0,
-        combatPower: Number(row[31]) || 0,
-        arkPassiveActive: row[32] === null || row[32] === undefined ? null : Number(row[32]) ? 1 : 0,
-        engravingsRaw: row[33] || "",
-        spec: row[34] || "",
-        arkPassiveDataRaw: row[35] || "",
-        gearHash: row[36] || "",
-        loadoutHash: row[37] || "",
-        entityUnbuffedDamage: Number(row[38]) || 0,
-        entityUnbuffedDps: Number(row[39]) || 0,
-        encounterTotalDamageDealt: Number(row[40]) || 0,
+        supporterRank: Number(row[29]) || 0,
+        supporterCount: Number(row[30]) || 0,
+        classId: Number(row[31]) || 0,
+        gearScore: Number(row[32]) || 0,
+        combatPower: Number(row[33]) || 0,
+        arkPassiveActive: row[34] === null || row[34] === undefined ? null : Number(row[34]) ? 1 : 0,
+        engravingsRaw: row[35] || "",
+        spec: row[36] || "",
+        arkPassiveDataRaw: row[37] || "",
+        gearHash: row[38] || "",
+        loadoutHash: row[39] || "",
+        entityUnbuffedDamage: Number(row[40]) || 0,
+        entityUnbuffedDps: Number(row[41]) || 0,
+        encounterTotalDamageDealt: Number(row[42]) || 0,
+        encounterTopDamageDealt: Number(row[43]) || 0,
+        encounterTotalDamageTaken: Number(row[44]) || 0,
+        dpsContextSpecSampleCount: Number(row[45]) || 0,
+        dpsContextSpecDamageSharePercentile: Number(row[46]) || 0,
+        dpsContextSpecTopDamageProximityPercentile: Number(row[47]) || 0,
+        dpsContextClassSampleCount: Number(row[48]) || 0,
+        dpsContextClassDamageSharePercentile: Number(row[49]) || 0,
+        dpsContextClassTopDamageProximityPercentile: Number(row[50]) || 0,
+        supportContextSpecSampleCount: Number(row[51]) || 0,
+        supportContextSpecPercentile: Number(row[52]) || 0,
+        supportContextClassSampleCount: Number(row[53]) || 0,
+        supportContextClassPercentile: Number(row[54]) || 0,
         accountName: rosterInfo.accountName,
         itemLevel: rosterInfo.itemLevel,
       });
@@ -329,14 +465,6 @@ function percentile(values, p) {
   return nums[idx];
 }
 
-function stddev(values) {
-  const nums = values.filter((n) => Number.isFinite(n));
-  if (nums.length <= 1) return 0;
-  const avg = average(nums);
-  const variance = average(nums.map((n) => (n - avg) ** 2));
-  return Math.sqrt(variance);
-}
-
 function minPositive(values) {
   const nums = values.filter((n) => Number.isFinite(n) && n > 0);
   return nums.length ? Math.min(...nums) : 0;
@@ -345,6 +473,11 @@ function minPositive(values) {
 function maxPositive(values) {
   const nums = values.filter((n) => Number.isFinite(n) && n > 0);
   return nums.length ? Math.max(...nums) : 0;
+}
+
+function maxPositiveSeries(values) {
+  if (!Array.isArray(values)) return 0;
+  return maxPositive(values.map((value) => Number(value)));
 }
 
 function clampScore(value) {
@@ -458,6 +591,63 @@ function classifySupporterTier(percent) {
   return "none";
 }
 
+function selectContextPercentiles(row, role) {
+  if (role === "support") {
+    const specSamples = Number(row.supportContextSpecSampleCount) || 0;
+    const classSamples = Number(row.supportContextClassSampleCount) || 0;
+    const useSpec = specSamples >= MIN_CONTEXT_SAMPLE_COUNT;
+    const useClass = !useSpec && classSamples >= MIN_CONTEXT_SAMPLE_COUNT;
+    if (!useSpec && !useClass) {
+      return {
+        contextSource: "none",
+        contextSampleCount: 0,
+        contextDamageSharePercentile: 0,
+        contextTopDamageProximityPercentile: 0,
+        contextSupportPercentile: 0,
+        contextPerformancePercentile: 0,
+      };
+    }
+    const percentile = clampScore(useSpec ? row.supportContextSpecPercentile : row.supportContextClassPercentile);
+    return {
+      contextSource: useSpec ? "spec" : "class",
+      contextSampleCount: useSpec ? specSamples : classSamples,
+      contextDamageSharePercentile: 0,
+      contextTopDamageProximityPercentile: 0,
+      contextSupportPercentile: round1(percentile),
+      contextPerformancePercentile: round1(percentile),
+    };
+  }
+
+  const specSamples = Number(row.dpsContextSpecSampleCount) || 0;
+  const classSamples = Number(row.dpsContextClassSampleCount) || 0;
+  const useSpec = specSamples >= MIN_CONTEXT_SAMPLE_COUNT;
+  const useClass = !useSpec && classSamples >= MIN_CONTEXT_SAMPLE_COUNT;
+  if (!useSpec && !useClass) {
+    return {
+      contextSource: "none",
+      contextSampleCount: 0,
+      contextDamageSharePercentile: 0,
+      contextTopDamageProximityPercentile: 0,
+      contextSupportPercentile: 0,
+      contextPerformancePercentile: 0,
+    };
+  }
+  const damageSharePercentile = clampScore(
+    useSpec ? row.dpsContextSpecDamageSharePercentile : row.dpsContextClassDamageSharePercentile
+  );
+  const topDamageProximityPercentile = clampScore(
+    useSpec ? row.dpsContextSpecTopDamageProximityPercentile : row.dpsContextClassTopDamageProximityPercentile
+  );
+  return {
+    contextSource: useSpec ? "spec" : "class",
+    contextSampleCount: useSpec ? specSamples : classSamples,
+    contextDamageSharePercentile: round1(damageSharePercentile),
+    contextTopDamageProximityPercentile: round1(topDamageProximityPercentile),
+    contextSupportPercentile: 0,
+    contextPerformancePercentile: round1(damageSharePercentile * 0.55 + topDamageProximityPercentile * 0.45),
+  };
+}
+
 function parseEncounterMisc(raw) {
   if (!raw || typeof raw !== "string") return null;
   try {
@@ -483,6 +673,14 @@ function sumDeathDowntimeMs(stats) {
     const deadFor = Number(entry?.deadFor) || 0;
     return sum + Math.max(0, deadFor);
   }, 0);
+}
+
+function extractIntermissionMs(misc, durationMs) {
+  const duration = Math.max(0, Number(durationMs) || 0);
+  const start = Number(misc?.intermissionStart);
+  const end = Number(misc?.intermissionEnd);
+  if (!duration || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) return 0;
+  return Math.min(duration, Math.max(0, end - start));
 }
 
 function cleanBuildName(value) {
@@ -558,16 +756,70 @@ function summarizeArkPassive(raw) {
 }
 
 function buildVariantKey(row) {
-  if (row.loadoutHash) return `loadout:${row.loadoutHash}`;
-  if (row.gearHash) return `gear:${row.gearHash}`;
-  const engravingKey = (row.engravings || []).map((entry) => `${entry.id}:${entry.level}`).join(",");
-  const specKey = normalizeName(row.spec);
-  if (!engravingKey && !specKey) return "";
-  return `${specKey}\x1f${engravingKey}\x1f${row.arkPassiveActive ?? ""}`;
+  const identity = buildVariantIdentity(row);
+  return identity.known ? identity.key : "";
 }
 
-function normalizeSpecKey(value) {
-  return normalizeName(cleanBuildName(value)).replace(/[^a-z0-9]/g, "");
+function buildVariantIdentity(row) {
+  const spec = cleanBuildName(row?.arkPassive?.enlightenment?.spec || row?.spec || "");
+  if (spec) return { key: `spec:${normalizeName(spec)}`, name: spec, known: true };
+  const classEngraving = (row?.engravings || []).find((entry) => entry?.isClass && entry?.name);
+  if (classEngraving?.name) {
+    const name = cleanBuildName(classEngraving.name);
+    return { key: `class:${normalizeName(name)}`, name, known: true };
+  }
+  return { key: "unknown", name: "Unknown build", known: false };
+}
+
+function buildVariantName(row) {
+  return buildVariantIdentity(row).name;
+}
+
+function countUnclassifiedBuildRows(rows) {
+  return (rows || []).filter((row) => !buildVariantIdentity(row).known).length;
+}
+
+function summarizeBuildVariants(rows, { limit = 6 } = {}) {
+  const groups = new Map();
+  let hasKnownVariant = false;
+  for (const row of rows || []) {
+    const identity = buildVariantIdentity(row);
+    if (identity.known) hasKnownVariant = true;
+    if (!groups.has(identity.key)) groups.set(identity.key, { identity, rows: [] });
+    groups.get(identity.key).rows.push(row);
+  }
+  return [...groups.values()]
+    .filter((group) => group.identity.known || !hasKnownVariant)
+    .map((group) => {
+      const groupRows = group.rows;
+      const latest = groupRows.reduce((best, row) =>
+        (Number(row.fightStart) || 0) > (Number(best.fightStart) || 0) ? row : best
+      , groupRows[0]);
+      const dps = groupRows.map((row) => row.dps);
+      return {
+        name: group.identity.name || buildVariantName(latest),
+        spec: group.identity.name || buildVariantName(latest),
+        role: latest.logRole || latest.classRole || "unknown",
+        encounters: groupRows.length,
+        firstFightStart: minPositive(groupRows.map((row) => row.fightStart)),
+        lastFightStart: maxPositive(groupRows.map((row) => row.fightStart)),
+        avgDps: Math.round(average(dps)),
+        medianDps: Math.round(percentile(dps, 50)),
+        p90Dps: Math.round(percentile(dps, 90)),
+        avgDamageShare: round1(average(groupRows.map((row) => row.damageShare))),
+        avgTopDamageProximity: round1(average(groupRows.map((row) => row.topDamageProximity))),
+        avgContextPerformancePercentile: round1(average(groupRows.map((row) => row.contextPerformancePercentile))),
+        avgCritRate: round1(average(groupRows.map((row) => row.critRate))),
+        avgBackAttackDamageShare: round1(average(groupRows.map((row) => row.backAttackDamageShare))),
+        avgFrontAttackDamageShare: round1(average(groupRows.map((row) => row.frontAttackDamageShare))),
+      };
+    })
+    .sort((a, b) =>
+      b.encounters - a.encounters ||
+      (b.lastFightStart || 0) - (a.lastFightStart || 0) ||
+      a.name.localeCompare(b.name)
+    )
+    .slice(0, limit);
 }
 
 function extractContributionMetrics(misc, localPlayer, damageDealt) {
@@ -761,14 +1013,18 @@ async function enrichProfileRows(rows) {
     row.arkPassive = summarizeArkPassive(row.arkPassiveDataRaw);
     row.engravingsRaw = undefined;
     row.arkPassiveDataRaw = undefined;
+    row.intermissionMs = extractIntermissionMs(misc, row.durationMs);
+    row.activeDurationMs = Math.max(0, (Number(row.durationMs) || 0) - row.intermissionMs);
+    row.activeTimeRate = row.durationMs > 0 ? (row.activeDurationMs / row.durationMs) * 100 : 0;
     const durationMin = row.durationMs > 0 ? row.durationMs / 60000 : 0;
+    const activeDurationMin = row.activeDurationMs > 0 ? row.activeDurationMs / 60000 : durationMin;
     row.rdpsValid = misc?.rdpsValid === true;
     const deathInfoCount = Array.isArray(stats?.deathInfo) ? stats.deathInfo.length : 0;
     const parsedDeaths = Number(stats?.deaths) || 0;
     row.deathCount = Math.max(parsedDeaths, deathInfoCount, row.isDead ? 1 : 0);
     row.isDead = row.deathCount > 0 ? 1 : row.isDead;
     row.deadTimeMs = sumDeathDowntimeMs(stats);
-    row.deadTimePerMinute = durationMin > 0 ? row.deadTimeMs / durationMin : 0;
+    row.deadTimePerMinute = activeDurationMin > 0 ? row.deadTimeMs / activeDurationMin : 0;
     row.deadTimeRate = row.durationMs > 0 ? (row.deadTimeMs / row.durationMs) * 100 : 0;
     row.counters = skill.counters;
     row.casts = skill.casts;
@@ -776,15 +1032,34 @@ async function enrichProfileRows(rows) {
     row.critRate = skill.critRate;
     row.backAttackRate = skill.backAttackRate;
     row.frontAttackRate = skill.frontAttackRate;
-    row.castsPerMinute = durationMin > 0 ? skill.casts / durationMin : 0;
-    row.hitsPerMinute = durationMin > 0 ? skill.hits / durationMin : 0;
-    row.attackStyle = classifyAttackStyle(row.backAttackRate, row.frontAttackRate);
+    row.castsPerMinute = activeDurationMin > 0 ? skill.casts / activeDurationMin : 0;
+    row.hitsPerMinute = activeDurationMin > 0 ? skill.hits / activeDurationMin : 0;
     row.damageDealt = Number(stats?.damageDealt) || Math.round(row.dps * durationMin * 60) || 0;
+    row.peak10sDps = Math.round(maxPositiveSeries(stats?.dpsRolling10sAvg));
+    row.burstRatio = row.dps > 0 && row.peak10sDps > 0 ? row.peak10sDps / row.dps : 0;
+    row.topDamageProximity = row.encounterTopDamageDealt > 0
+      ? Math.min(100, (row.damageDealt / row.encounterTopDamageDealt) * 100)
+      : row.damageRank === 1 ? 100 : 0;
+    row.critDamageShare = row.damageDealt > 0
+      ? ((Number(stats?.critDamage) || Number(stats?.damageDoneFromCrits) || 0) / row.damageDealt) * 100
+      : 0;
+    row.backAttackDamageShare = row.damageDealt > 0
+      ? ((Number(stats?.backAttackDamage) || 0) / row.damageDealt) * 100
+      : 0;
+    row.frontAttackDamageShare = row.damageDealt > 0
+      ? ((Number(stats?.frontAttackDamage) || 0) / row.damageDealt) * 100
+      : 0;
+    row.positionalDamageShare = row.backAttackDamageShare + row.frontAttackDamageShare;
+    row.attackStyle = classifyAttackStyle(row.backAttackDamageShare || row.backAttackRate, row.frontAttackDamageShare || row.frontAttackRate);
     const skillBreakdown = parseSkillBreakdown(skills, row.damageDealt);
     row.skillCount = skillBreakdown.skillCount;
     row.topSkillShare = skillBreakdown.topSkillShare;
     row.topSkills = skillBreakdown.topSkills;
     row.damageTaken = Number(stats?.damageTaken) || 0;
+    row.damageTakenShareValid = row.encounterTotalDamageTaken > 0;
+    row.damageTakenShare = row.encounterTotalDamageTaken > 0
+      ? (row.damageTaken / row.encounterTotalDamageTaken) * 100
+      : 0;
     row.damageAbsorbed = Number(stats?.damageAbsorbed) || 0;
     row.shieldsReceived = Number(stats?.shieldsReceived) || 0;
     row.stagger = Number(stats?.stagger) || 0;
@@ -795,11 +1070,11 @@ async function enrichProfileRows(rows) {
     row.debuffedBySupport = Number(stats?.debuffedBySupport) || 0;
     const incapacitations = Array.isArray(stats?.incapacitations) ? stats.incapacitations.length : 0;
     row.incapacitations = incapacitations;
-    row.damageTakenPerMinute = durationMin > 0 ? row.damageTaken / durationMin : 0;
-    row.damageAbsorbedPerMinute = durationMin > 0 ? row.damageAbsorbed / durationMin : 0;
-    row.shieldReceivedPerMinute = durationMin > 0 ? row.shieldsReceived / durationMin : 0;
-    row.staggerPerMinute = durationMin > 0 ? row.stagger / durationMin : 0;
-    row.incapacitationsPerMinute = durationMin > 0 ? row.incapacitations / durationMin : 0;
+    row.damageTakenPerMinute = activeDurationMin > 0 ? row.damageTaken / activeDurationMin : 0;
+    row.damageAbsorbedPerMinute = activeDurationMin > 0 ? row.damageAbsorbed / activeDurationMin : 0;
+    row.shieldReceivedPerMinute = activeDurationMin > 0 ? row.shieldsReceived / activeDurationMin : 0;
+    row.staggerPerMinute = activeDurationMin > 0 ? row.stagger / activeDurationMin : 0;
+    row.incapacitationsPerMinute = activeDurationMin > 0 ? row.incapacitations / activeDurationMin : 0;
     row.hyperShare = row.damageDealt > 0 ? (row.hyperAwakeningDamage / row.damageDealt) * 100 : 0;
     row.unbuffedShare = row.damageDealt > 0 ? (row.unbuffedDamage / row.damageDealt) * 100 : 0;
     row.supportBuffedShare = row.damageDealt > 0 ? (row.buffedBySupport / row.damageDealt) * 100 : 0;
@@ -809,7 +1084,7 @@ async function enrichProfileRows(rows) {
     row.shieldsGiven = shieldsGiven;
     row.damageAbsorbedOnOthers = absorbedOnOthers;
     row.protection = shieldsGiven + absorbedOnOthers;
-    row.protectionPerMinute = durationMin > 0 ? row.protection / durationMin : 0;
+    row.protectionPerMinute = activeDurationMin > 0 ? row.protection / activeDurationMin : 0;
     const buffedBy = normalizeAmountMap(stats?.buffedBy);
     const debuffedBy = normalizeAmountMap(stats?.debuffedBy);
     const shieldGivenBy = combineAmountMaps(stats?.shieldsGivenBy, stats?.damageAbsorbedOnOthersBy);
@@ -851,26 +1126,30 @@ async function enrichProfileRows(rows) {
       8,
       { category: "buff", allowUnknown: true }
     );
-    row.rdpsDamageGivenPerMinute = durationMin > 0 ? row.rdpsDamageGiven / durationMin : 0;
-    row.rdpsDamageReceivedSupportPerMinute = durationMin > 0 ? row.rdpsDamageReceivedSupport / durationMin : 0;
+    row.rdpsDamageGivenPerMinute = activeDurationMin > 0 ? row.rdpsDamageGiven / activeDurationMin : 0;
+    row.rdpsDamageReceivedSupportPerMinute = activeDurationMin > 0 ? row.rdpsDamageReceivedSupport / activeDurationMin : 0;
     const contribution = extractContributionMetrics(misc, row.localPlayer, row.damageDealt);
     row.partyNumber = Number.isFinite(contribution.partyNumber) ? contribution.partyNumber : null;
     row.synergyGiven = contribution.synergyGiven;
     row.synergyReceived = contribution.synergyReceived;
-    row.synergyGivenPerMinute = durationMin > 0 ? contribution.synergyGiven / durationMin : 0;
+    row.synergyGivenPerMinute = activeDurationMin > 0 ? contribution.synergyGiven / activeDurationMin : 0;
     row.synergyReceivedShare = contribution.synergyReceivedShare;
     row.damageShare = row.partyDps > 0 ? (row.dps / row.partyDps) * 100 : 0;
-    row.classRole = roleForClass(row.className);
-    row.logRole = classifyLogRole(row);
+    row.classRole = roleForProfileClass(row.className);
+    row.logRole = classifyProfileLogRole(row);
     row.encounterDamageDealt = row.encounterTotalDamageDealt ||
       (row.partyDps > 0 && row.durationMs > 0 ? Math.round(row.partyDps * (row.durationMs / 1000)) : 0);
     const supportLog = row.classRole === "support" && row.logRole === "support" && row.rdpsValid;
+    row.supporterRank = supportLog ? Math.max(0, Number(row.supporterRank) || 0) : 0;
+    row.supporterCount = supportLog ? Math.max(0, Number(row.supporterCount) || 0) : 0;
+    row.supporterTop = row.supporterCount > 1 && row.supporterRank === 1 ? 1 : 0;
     row.supporterDamageGiven = supportLog ? Math.max(0, Number(row.rdpsDamageGiven) || 0) : 0;
-    row.supporterDamageGivenPerMinute = durationMin > 0 ? row.supporterDamageGiven / durationMin : 0;
+    row.supporterDamageGivenPerMinute = activeDurationMin > 0 ? row.supporterDamageGiven / activeDurationMin : 0;
     row.supporterPercent = row.supporterDamageGiven > 0 && row.encounterDamageDealt > 0
       ? (row.supporterDamageGiven / row.encounterDamageDealt) * 100
       : 0;
     row.supporterTier = classifySupporterTier(row.supporterPercent);
+    Object.assign(row, selectContextPercentiles(row, row.logRole));
   }));
 }
 
@@ -883,28 +1162,54 @@ function isModernProfileRow(row) {
 
 function summarizeGroup(rows) {
   const dps = rows.map((r) => r.dps);
+  const peak10sDps = rows.map((r) => r.peak10sDps).filter((n) => n > 0);
+  const burstRatios = rows.map((r) => r.burstRatio).filter((n) => n > 0);
   const shares = rows.map((r) => r.partyDps > 0 ? (r.dps / r.partyDps) * 100 : 0);
   const ranks = rows.map((r) => r.damageRank).filter((n) => n > 0);
-  const protections = rows.map((r) => r.protectionPerMinute).filter((n) => n > 0);
+  const protectionPerMinute = rows.map((r) => r.protectionPerMinute);
   const damageRows = rows.filter((r) => r.hasDamageStats);
   const deathCounts = rows.map((r) => Number(r.deathCount) || 0);
   const totalDeaths = deathCounts.reduce((sum, n) => sum + n, 0);
   const deathRows = deathCounts.filter((n) => n > 0).length;
   const deadTimes = rows.map((r) => Number(r.deadTimeMs) || 0);
   const totalDeadTimeMs = deadTimes.reduce((sum, n) => sum + n, 0);
-  const rdpsValidCount = rows.filter((r) => r.rdpsValid).length;
-  const supporterPercents = rows.map((r) => Number(r.supporterPercent) || 0);
-  const radiantSupportCount = rows.filter((r) => r.supporterTier === "radiant").length;
+  const damageTakenShareRows = damageRows.filter((r) => r.damageTakenShareValid);
+  const rdpsRows = rows.filter((r) => r.rdpsValid);
+  const rdpsValidCount = rdpsRows.length;
+  const supporterRows = rdpsRows.length ? rdpsRows : rows;
+  const supporterPercents = supporterRows.map((r) => Number(r.supporterPercent) || 0);
+  const radiantSupportCount = supporterRows.filter((r) => r.supporterTier === "radiant").length;
+  const supporterRankRows = supporterRows.filter((r) => (Number(r.supporterRank) || 0) > 0 && (Number(r.supporterCount) || 0) > 0);
+  const supporterCompetitiveRows = supporterRankRows.filter((r) => (Number(r.supporterCount) || 0) > 1);
+  const contextRows = rows.filter((r) => (Number(r.contextSampleCount) || 0) >= MIN_CONTEXT_SAMPLE_COUNT && r.contextSource !== "none");
+  const dpsContextRows = contextRows.filter((r) => r.logRole !== "support");
+  const supportContextRows = contextRows.filter((r) => r.logRole === "support");
   const avgBackAttackRate = round1(average(rows.map((r) => r.backAttackRate)));
   const avgFrontAttackRate = round1(average(rows.map((r) => r.frontAttackRate)));
+  const avgBackAttackDamageShare = round1(average(rows.map((r) => r.backAttackDamageShare)));
+  const avgFrontAttackDamageShare = round1(average(rows.map((r) => r.frontAttackDamageShare)));
   const arkRows = rows.filter((r) => r.arkPassiveActive !== null);
   return {
     encounters: rows.length,
     firstFightStart: minPositive(rows.map((r) => r.fightStart)),
     lastFightStart: maxPositive(rows.map((r) => r.fightStart)),
+    avgDurationMs: Math.round(average(rows.map((r) => r.durationMs))),
+    avgActiveDurationMs: Math.round(average(rows.map((r) => r.activeDurationMs))),
+    avgIntermissionMs: Math.round(average(rows.map((r) => r.intermissionMs))),
+    avgActiveTimeRate: round1(average(rows.map((r) => r.activeTimeRate))),
     avgDps: Math.round(average(dps)),
     medianDps: Math.round(percentile(dps, 50)),
+    avgPeak10sDps: Math.round(average(peak10sDps)),
+    p90Peak10sDps: Math.round(percentile(peak10sDps, 90)),
+    avgBurstRatio: round2(average(burstRatios)),
     avgDamageShare: round1(average(shares)),
+    avgTopDamageProximity: round1(average(rows.map((r) => r.topDamageProximity))),
+    contextCoverageRate: round1((contextRows.length / rows.length) * 100),
+    contextSampleCountAvg: round1(average(contextRows.map((r) => r.contextSampleCount))),
+    avgContextPerformancePercentile: round1(average(contextRows.map((r) => r.contextPerformancePercentile))),
+    avgContextDamageSharePercentile: round1(average(dpsContextRows.map((r) => r.contextDamageSharePercentile))),
+    avgContextTopDamageProximityPercentile: round1(average(dpsContextRows.map((r) => r.contextTopDamageProximityPercentile))),
+    avgContextSupportPercentile: round1(average(supportContextRows.map((r) => r.contextSupportPercentile))),
     topRate: round1((rows.filter((r) => r.damageRank === 1).length / rows.length) * 100),
     avgRank: round2(average(ranks)),
     deathlessRate: round1(((rows.length - deathRows) / rows.length) * 100),
@@ -919,13 +1224,26 @@ function summarizeGroup(rows) {
     avgSupporterPercent: round1(average(supporterPercents)),
     medianSupporterPercent: round1(percentile(supporterPercents, 50)),
     radiantSupportCount,
-    radiantSupportRate: round1((radiantSupportCount / rows.length) * 100),
-    avgSupporterDamageGivenPerMinute: Math.round(average(rows.map((r) => r.supporterDamageGivenPerMinute).filter((n) => n > 0))),
+    radiantSupportRate: round1(supporterRows.length ? (radiantSupportCount / supporterRows.length) * 100 : 0),
+    avgSupporterDamageGivenPerMinute: Math.round(average(supporterRows.map((r) => r.supporterDamageGivenPerMinute))),
+    supporterRankValidCount: supporterRankRows.length,
+    supporterCompetitiveCount: supporterCompetitiveRows.length,
+    avgSupporterRank: round2(average(supporterRankRows.map((r) => r.supporterRank))),
+    supporterCountAvg: round2(average(supporterRankRows.map((r) => r.supporterCount))),
+    supporterTopRate: round1(supporterCompetitiveRows.length
+      ? (supporterCompetitiveRows.filter((r) => r.supporterRank === 1).length / supporterCompetitiveRows.length) * 100
+      : 0),
     avgCritRate: round1(average(rows.map((r) => r.critRate))),
+    avgCritDamageShare: round1(average(rows.map((r) => r.critDamageShare))),
     avgBackAttackRate,
     avgFrontAttackRate,
-    attackStyle: classifyAttackStyle(avgBackAttackRate, avgFrontAttackRate),
+    avgBackAttackDamageShare,
+    avgFrontAttackDamageShare,
+    avgPositionalDamageShare: round1(average(rows.map((r) => r.positionalDamageShare))),
+    attackStyle: classifyAttackStyle(avgBackAttackDamageShare || avgBackAttackRate, avgFrontAttackDamageShare || avgFrontAttackRate),
     avgDamageTakenPerMinute: Math.round(average(damageRows.map((r) => r.damageTakenPerMinute))),
+    damageTakenShareValidCount: damageTakenShareRows.length,
+    avgDamageTakenShare: round1(average(damageTakenShareRows.map((r) => r.damageTakenShare))),
     avgShieldReceivedPerMinute: Math.round(average(damageRows.map((r) => r.shieldReceivedPerMinute))),
     avgStaggerPerMinute: Math.round(average(damageRows.map((r) => r.staggerPerMinute))),
     avgIncapacitations: round2(average(damageRows.map((r) => r.incapacitations))),
@@ -942,7 +1260,7 @@ function summarizeGroup(rows) {
     avgSynergyReceivedShare: round1(average(rows.map((r) => r.synergyReceivedShare))),
     avgSkillCount: round1(average(rows.map((r) => r.skillCount))),
     avgTopSkillShare: round1(average(rows.map((r) => r.topSkillShare))),
-    avgProtectionPerMinute: Math.round(average(protections)),
+    avgProtectionPerMinute: Math.round(average(protectionPerMinute)),
     avgGearScore: round2(average(rows.map((r) => r.gearScore).filter((n) => n > 0))),
     avgCombatPower: round2(average(rows.map((r) => r.combatPower).filter((n) => n > 0))),
     arkPassiveRate: arkRows.length
@@ -1058,29 +1376,6 @@ function supportUptimeScoreFromStats(stats) {
   );
 }
 
-function classifyLogRole(row) {
-  if (row.classRole !== "support") return row.classRole || "unknown";
-  const partyCount = Number(row.partyCount) || 0;
-  const damageShare = Number(row.damageShare) || 0;
-  const damageRank = Number(row.damageRank) || 0;
-  const expectedShare = partyCount > 0 ? 100 / partyCount : 12.5;
-  const specKey = normalizeSpecKey(row.spec || row.arkPassive?.enlightenment?.spec);
-  const hasDpsBuildSpec = SUPPORT_DPS_BUILD_SPECS.has(specKey);
-  const hasSupportBuildSpec = SUPPORT_MAIN_BUILD_SPECS.has(specKey);
-  const shareLooksDps = damageShare >= Math.max(6, expectedShare * 0.45);
-  const rankLooksDps =
-    partyCount > 1 &&
-    damageRank > 0 &&
-    damageRank <= Math.ceil(partyCount * 0.5) &&
-    damageShare >= Math.max(4, expectedShare * 0.25);
-  if (hasDpsBuildSpec && (shareLooksDps || rankLooksDps || damageShare >= Math.max(4, expectedShare * 0.25))) {
-    return "dps";
-  }
-  if (shareLooksDps || rankLooksDps) return "dps";
-  if (hasSupportBuildSpec) return "support";
-  return "support";
-}
-
 function computeScores(stats, role) {
   const expectedShare = stats.partyCountAvg > 0 ? 100 / stats.partyCountAvg : 20;
   const damageShareScore = clampScore((stats.avgDamageShare / Math.max(1, expectedShare)) * 70);
@@ -1088,6 +1383,15 @@ function computeScores(stats, role) {
     ? clampScore(100 - ((stats.avgRank - 1) / (stats.partyCountAvg - 1)) * 100)
     : 50;
   const outputScore = clampScore(damageShareScore * 0.65 + rankScore * 0.35);
+  const topDamageProximityScore = stats.avgTopDamageProximity > 0
+    ? clampScore(stats.avgTopDamageProximity)
+    : (stats.topRate || 0);
+  const hasContextScore = (Number(stats.contextCoverageRate) || 0) > 0 &&
+    (Number(stats.contextSampleCountAvg) || 0) >= MIN_CONTEXT_SAMPLE_COUNT;
+  const contextScore = hasContextScore ? clampScore(Number(stats.avgContextPerformancePercentile) || 0) : null;
+  const contextualOutputScore = contextScore === null
+    ? outputScore
+    : clampScore(outputScore * 0.75 + contextScore * 0.25);
   const consistencyScore = clampScore(stats.consistency);
   const survivalScore = computeSurvivalScore(stats);
   const mechanicsScore = computeMechanicsScore(stats);
@@ -1100,18 +1404,33 @@ function computeScores(stats, role) {
     const supporterPercentScore = stats.avgSupporterPercent > 0
       ? clampScore((stats.avgSupporterPercent / 35) * 100)
       : 0;
-    const impactScore = supporterPercentScore > 0
+    const baseImpactScore = supporterPercentScore > 0
       ? supporterPercentScore
       : rdpsImpactScore > 0 ? rdpsImpactScore : legacyUptimeScore;
+    const rankPositionScore = stats.supporterCountAvg > 1 && stats.avgSupporterRank > 0
+      ? clampScore(100 - ((stats.avgSupporterRank - 1) / (stats.supporterCountAvg - 1)) * 100)
+      : 0;
+    const supportRankScore = stats.supporterCompetitiveCount > 0
+      ? clampScore(rankPositionScore * 0.6 + (stats.supporterTopRate || 0) * 0.4)
+      : 0;
+    const impactScore = supportRankScore > 0
+      ? clampScore(baseImpactScore * 0.85 + supportRankScore * 0.15)
+      : baseImpactScore;
+    const supportContextScore = hasContextScore
+      ? clampScore(Number(stats.avgContextSupportPercentile) || Number(stats.avgContextPerformancePercentile) || 0)
+      : null;
+    const contextualImpactScore = supportContextScore === null
+      ? impactScore
+      : clampScore(impactScore * 0.85 + supportContextScore * 0.15);
     const rdpsCoverage = clampScore(Number(stats.rdpsValidRate) || 0) / 100;
     const confidenceScale = rdpsImpactScore > 0 ? 0.6 + rdpsCoverage * 0.4 : 0.6;
-    const raidContribution = clampScore(impactScore * confidenceScale);
+    const raidContribution = clampScore(contextualImpactScore * confidenceScale);
     const protectionScore = stats.avgProtectionPerMinute > 0
       ? clampScore((stats.avgProtectionPerMinute / SUPPORT_PROTECTION_P90_PER_MIN) * 100)
       : 50;
     const overall = clampScore(
       raidContribution * 0.35 +
-      impactScore * 0.15 +
+      contextualImpactScore * 0.15 +
       protectionScore * 0.2 +
       consistencyScore * 0.1 +
       mechanicsScore * 0.1 +
@@ -1119,7 +1438,7 @@ function computeScores(stats, role) {
     );
     const mvp = clampScore(
       raidContribution * 0.4 +
-      impactScore * 0.15 +
+      contextualImpactScore * 0.15 +
       protectionScore * 0.2 +
       mechanicsScore * 0.1 +
       consistencyScore * 0.1 +
@@ -1129,7 +1448,9 @@ function computeScores(stats, role) {
       overall: round1(overall),
       mvp: round1(mvp),
       raidContribution: round1(raidContribution),
-      supportUptime: round1(impactScore),
+      supportUptime: round1(contextualImpactScore),
+      supportRank: round1(supportRankScore),
+      context: round1(supportContextScore ?? 0),
       protection: round1(protectionScore),
       consistency: round1(consistencyScore),
       survival: round1(survivalScore),
@@ -1138,27 +1459,30 @@ function computeScores(stats, role) {
   }
 
   const mvp = clampScore(
-    damageShareScore * 0.35 +
-    (stats.topRate || 0) * 0.25 +
-    outputScore * 0.15 +
+    damageShareScore * 0.3 +
+    (stats.topRate || 0) * 0.2 +
+    topDamageProximityScore * 0.15 +
+    contextualOutputScore * 0.15 +
     consistencyScore * 0.1 +
-    survivalScore * 0.1 +
-    mechanicsScore * 0.05
+    survivalScore * 0.07 +
+    mechanicsScore * 0.03
   );
   const overall = clampScore(
-    outputScore * 0.35 +
-    damageShareScore * 0.2 +
-    (rankScore * 0.6 + (stats.topRate || 0) * 0.4) * 0.15 +
-    consistencyScore * 0.15 +
-    survivalScore * 0.1 +
-    mechanicsScore * 0.05
+    contextualOutputScore * 0.33 +
+    damageShareScore * 0.18 +
+    (rankScore * 0.6 + (stats.topRate || 0) * 0.4) * 0.14 +
+    topDamageProximityScore * 0.08 +
+    consistencyScore * 0.14 +
+    survivalScore * 0.09 +
+    mechanicsScore * 0.04
   );
   return {
     overall: round1(overall),
     mvp: round1(mvp),
-    output: round1(outputScore),
+    output: round1(contextualOutputScore),
     damageShare: round1(damageShareScore),
     rank: round1(rankScore),
+    context: round1(contextScore ?? 0),
     consistency: round1(consistencyScore),
     survival: round1(survivalScore),
     mechanics: round1(mechanicsScore),
@@ -1171,7 +1495,19 @@ function computeSurvivalScore(stats) {
   const deathRate = Number.isFinite(Number(stats.deathRate)) ? Number(stats.deathRate) : derivedDeathRate;
   const avgDeaths = Number(stats.avgDeaths) || 0;
   const deadTimeRate = Number(stats.avgDeadTimeRate) || 0;
-  return clampScore(100 - deathRate * 1.1 - avgDeaths * 15 - deadTimeRate * 0.5);
+  const baseScore = clampScore(100 - deathRate * 1.1 - avgDeaths * 15 - deadTimeRate * 0.5);
+  const damageTakenShare = Number(stats.avgDamageTakenShare) || 0;
+  const validDamageTakenShares = Number(stats.damageTakenShareValidCount) || 0;
+  if (!validDamageTakenShares || damageTakenShare <= 0) return baseScore;
+
+  const partyCount = Math.max(1, Number(stats.partyCountAvg) || 8);
+  const expectedShare = 100 / partyCount;
+  const graceShare = expectedShare * 1.15;
+  const highPressureShare = expectedShare * 2.8;
+  const pressureScore = damageTakenShare <= graceShare
+    ? 100
+    : clampScore(100 - ((damageTakenShare - graceShare) / Math.max(1, highPressureShare - graceShare)) * 100);
+  return clampScore(baseScore * 0.75 + pressureScore * 0.25);
 }
 
 function computeMechanicsScore(stats) {
@@ -1193,7 +1529,7 @@ function buildProfileSnapshot(rows, rosterAccounts, file, { range = null } = {})
 
   const accountsByName = new Map();
   for (const [, allCharRows] of byChar) {
-    const classRole = roleForClass(allCharRows[0]?.className);
+    const classRole = roleForProfileClass(allCharRows[0]?.className);
     const supportRows = allCharRows.filter((row) => row.logRole === "support");
     const dpsBuildRows = allCharRows.filter((row) => row.logRole === "dps");
     const role = classRole === "support"
@@ -1206,24 +1542,36 @@ function buildProfileSnapshot(rows, rosterAccounts, file, { range = null } = {})
     const sample = profileRows[0];
     const latestRow = profileRows.reduce((best, row) => ((row.fightStart || 0) > (best.fightStart || 0) ? row : best), sample);
     const dps = profileRows.map((r) => r.dps);
+    const peak10sDps = profileRows.map((r) => r.peak10sDps).filter((n) => n > 0);
+    const burstRatios = profileRows.map((r) => r.burstRatio).filter((n) => n > 0);
     const rdps = profileRows.map((r) => r.rdps);
     const ndps = profileRows.map((r) => r.ndps);
     const shares = profileRows.map((r) => r.damageShare);
     const ranks = profileRows.map((r) => r.damageRank).filter((n) => n > 0);
     const counters = profileRows.map((r) => r.counters);
     const damageRows = profileRows.filter((r) => r.hasDamageStats);
-    const protections = profileRows.map((r) => r.protection).filter((n) => n > 0);
-    const protectionPerMinute = profileRows.map((r) => r.protectionPerMinute).filter((n) => n > 0);
+    const protections = profileRows.map((r) => r.protection);
+    const protectionPerMinute = profileRows.map((r) => r.protectionPerMinute);
     const deathCounts = profileRows.map((r) => Number(r.deathCount) || 0);
     const totalDeaths = deathCounts.reduce((sum, n) => sum + n, 0);
     const deathRows = deathCounts.filter((n) => n > 0).length;
     const deadTimes = profileRows.map((r) => Number(r.deadTimeMs) || 0);
     const totalDeadTimeMs = deadTimes.reduce((sum, n) => sum + n, 0);
-    const rdpsValidCount = profileRows.filter((r) => r.rdpsValid).length;
-    const supporterPercents = profileRows.map((r) => Number(r.supporterPercent) || 0);
-    const radiantSupportCount = profileRows.filter((r) => r.supporterTier === "radiant").length;
+    const damageTakenShareRows = damageRows.filter((r) => r.damageTakenShareValid);
+    const rdpsValidRows = profileRows.filter((r) => r.rdpsValid);
+    const rdpsValidCount = rdpsValidRows.length;
+    const supporterRows = rdpsValidRows.length ? rdpsValidRows : profileRows;
+    const supporterPercents = supporterRows.map((r) => Number(r.supporterPercent) || 0);
+    const radiantSupportCount = supporterRows.filter((r) => r.supporterTier === "radiant").length;
+    const supporterRankRows = supporterRows.filter((r) => (Number(r.supporterRank) || 0) > 0 && (Number(r.supporterCount) || 0) > 0);
+    const supporterCompetitiveRows = supporterRankRows.filter((r) => (Number(r.supporterCount) || 0) > 1);
+    const contextRows = profileRows.filter((r) => (Number(r.contextSampleCount) || 0) >= MIN_CONTEXT_SAMPLE_COUNT && r.contextSource !== "none");
+    const dpsContextRows = contextRows.filter((r) => r.logRole !== "support");
+    const supportContextRows = contextRows.filter((r) => r.logRole === "support");
     const avgBackAttackRate = round1(average(profileRows.map((r) => r.backAttackRate)));
     const avgFrontAttackRate = round1(average(profileRows.map((r) => r.frontAttackRate)));
+    const avgBackAttackDamageShare = round1(average(profileRows.map((r) => r.backAttackDamageShare)));
+    const avgFrontAttackDamageShare = round1(average(profileRows.map((r) => r.frontAttackDamageShare)));
     const topSkills = mergeTopSkills(profileRows);
     const topBuffSources = mergeTopSources(profileRows, "topBuffSources", (r) => r.damageDealt);
     const topDebuffSources = mergeTopSources(profileRows, "topDebuffSources", (r) => r.damageDealt);
@@ -1235,7 +1583,8 @@ function buildProfileSnapshot(rows, rosterAccounts, file, { range = null } = {})
     );
     const arkRows = profileRows.filter((r) => r.arkPassiveActive !== null);
     const buildVariantKeys = new Set(profileRows.map(buildVariantKey).filter(Boolean));
-    const coeff = average(dps) > 0 ? stddev(dps) / average(dps) : 1;
+    const buildVariants = summarizeBuildVariants(profileRows);
+    const unclassifiedBuildLogCount = countUnclassifiedBuildRows(profileRows);
     const stats = {
       encounters: profileRows.length,
       allEncounterCount: allCharRows.length,
@@ -1248,16 +1597,30 @@ function buildProfileSnapshot(rows, rosterAccounts, file, { range = null } = {})
       primaryRoleRate: allCharRows.length ? round1((profileRows.length / allCharRows.length) * 100) : 0,
       firstFightStart: minPositive(profileRows.map((r) => r.fightStart)),
       lastFightStart: maxPositive(profileRows.map((r) => r.fightStart)),
+      avgDurationMs: Math.round(average(profileRows.map((r) => r.durationMs))),
+      avgActiveDurationMs: Math.round(average(profileRows.map((r) => r.activeDurationMs))),
+      avgIntermissionMs: Math.round(average(profileRows.map((r) => r.intermissionMs))),
+      avgActiveTimeRate: round1(average(profileRows.map((r) => r.activeTimeRate))),
       avgDps: Math.round(average(dps)),
       medianDps: Math.round(percentile(dps, 50)),
       p75Dps: Math.round(percentile(dps, 75)),
       p90Dps: Math.round(percentile(dps, 90)),
+      avgPeak10sDps: Math.round(average(peak10sDps)),
+      p90Peak10sDps: Math.round(percentile(peak10sDps, 90)),
+      avgBurstRatio: round2(average(burstRatios)),
       avgRdps: Math.round(average(rdps)),
       medianRdps: Math.round(percentile(rdps, 50)),
       avgNdps: Math.round(average(ndps)),
       medianNdps: Math.round(percentile(ndps, 50)),
       avgDamageShare: round1(average(shares)),
       medianDamageShare: round1(percentile(shares, 50)),
+      avgTopDamageProximity: round1(average(profileRows.map((r) => r.topDamageProximity))),
+      contextCoverageRate: round1((contextRows.length / profileRows.length) * 100),
+      contextSampleCountAvg: round1(average(contextRows.map((r) => r.contextSampleCount))),
+      avgContextPerformancePercentile: round1(average(contextRows.map((r) => r.contextPerformancePercentile))),
+      avgContextDamageSharePercentile: round1(average(dpsContextRows.map((r) => r.contextDamageSharePercentile))),
+      avgContextTopDamageProximityPercentile: round1(average(dpsContextRows.map((r) => r.contextTopDamageProximityPercentile))),
+      avgContextSupportPercentile: round1(average(supportContextRows.map((r) => r.contextSupportPercentile))),
       topRate: round1((profileRows.filter((r) => r.damageRank === 1).length / profileRows.length) * 100),
       avgRank: round2(average(ranks)),
       partyCountAvg: round2(average(profileRows.map((r) => r.partyCount).filter((n) => n > 0))),
@@ -1273,17 +1636,30 @@ function buildProfileSnapshot(rows, rosterAccounts, file, { range = null } = {})
       avgSupporterPercent: round1(average(supporterPercents)),
       medianSupporterPercent: round1(percentile(supporterPercents, 50)),
       radiantSupportCount,
-      radiantSupportRate: round1((radiantSupportCount / profileRows.length) * 100),
-      avgSupporterDamageGivenPerMinute: Math.round(average(profileRows.map((r) => r.supporterDamageGivenPerMinute).filter((n) => n > 0))),
+      radiantSupportRate: round1(supporterRows.length ? (radiantSupportCount / supporterRows.length) * 100 : 0),
+      avgSupporterDamageGivenPerMinute: Math.round(average(supporterRows.map((r) => r.supporterDamageGivenPerMinute))),
+      supporterRankValidCount: supporterRankRows.length,
+      supporterCompetitiveCount: supporterCompetitiveRows.length,
+      avgSupporterRank: round2(average(supporterRankRows.map((r) => r.supporterRank))),
+      supporterCountAvg: round2(average(supporterRankRows.map((r) => r.supporterCount))),
+      supporterTopRate: round1(supporterCompetitiveRows.length
+        ? (supporterCompetitiveRows.filter((r) => r.supporterRank === 1).length / supporterCompetitiveRows.length) * 100
+        : 0),
       avgCounters: round2(average(counters)),
       avgCastsPerMinute: round2(average(profileRows.map((r) => r.castsPerMinute))),
       avgHitsPerMinute: round2(average(profileRows.map((r) => r.hitsPerMinute))),
       avgCritRate: round1(average(profileRows.map((r) => r.critRate))),
+      avgCritDamageShare: round1(average(profileRows.map((r) => r.critDamageShare))),
       avgBackAttackRate,
       avgFrontAttackRate,
-      attackStyle: classifyAttackStyle(avgBackAttackRate, avgFrontAttackRate),
+      avgBackAttackDamageShare,
+      avgFrontAttackDamageShare,
+      avgPositionalDamageShare: round1(average(profileRows.map((r) => r.positionalDamageShare))),
+      attackStyle: classifyAttackStyle(avgBackAttackDamageShare || avgBackAttackRate, avgFrontAttackDamageShare || avgFrontAttackRate),
       avgDamageTaken: Math.round(average(damageRows.map((r) => r.damageTaken))),
       avgDamageTakenPerMinute: Math.round(average(damageRows.map((r) => r.damageTakenPerMinute))),
+      damageTakenShareValidCount: damageTakenShareRows.length,
+      avgDamageTakenShare: round1(average(damageTakenShareRows.map((r) => r.damageTakenShare))),
       avgDamageAbsorbedPerMinute: Math.round(average(damageRows.map((r) => r.damageAbsorbedPerMinute))),
       avgShieldReceivedPerMinute: Math.round(average(damageRows.map((r) => r.shieldReceivedPerMinute))),
       avgStagger: Math.round(average(damageRows.map((r) => r.stagger))),
@@ -1301,13 +1677,13 @@ function buildProfileSnapshot(rows, rosterAccounts, file, { range = null } = {})
       avgBattleItemDebuffedShare: round1(average(damageRows.map((r) => r.battleItemDebuffedShare))),
       avgSkillCount: round1(average(profileRows.map((r) => r.skillCount))),
       avgTopSkillShare: round1(average(profileRows.map((r) => r.topSkillShare))),
-      avgRdpsDamageGiven: Math.round(average(profileRows.map((r) => r.rdpsDamageGiven).filter((n) => n > 0))),
-      avgRdpsDamageGivenPerMinute: Math.round(average(profileRows.map((r) => r.rdpsDamageGivenPerMinute).filter((n) => n > 0))),
-      avgRdpsDamageReceivedSupport: Math.round(average(profileRows.map((r) => r.rdpsDamageReceivedSupport).filter((n) => n > 0))),
-      avgRdpsDamageReceivedSupportPerMinute: Math.round(average(profileRows.map((r) => r.rdpsDamageReceivedSupportPerMinute).filter((n) => n > 0))),
-      avgSynergyGiven: Math.round(average(profileRows.map((r) => r.synergyGiven).filter((n) => n > 0))),
-      avgSynergyGivenPerMinute: Math.round(average(profileRows.map((r) => r.synergyGivenPerMinute).filter((n) => n > 0))),
-      avgSynergyReceivedShare: round1(average(profileRows.map((r) => r.synergyReceivedShare).filter((n) => n > 0))),
+      avgRdpsDamageGiven: Math.round(average(rdpsValidRows.map((r) => r.rdpsDamageGiven))),
+      avgRdpsDamageGivenPerMinute: Math.round(average(rdpsValidRows.map((r) => r.rdpsDamageGivenPerMinute))),
+      avgRdpsDamageReceivedSupport: Math.round(average(rdpsValidRows.map((r) => r.rdpsDamageReceivedSupport))),
+      avgRdpsDamageReceivedSupportPerMinute: Math.round(average(rdpsValidRows.map((r) => r.rdpsDamageReceivedSupportPerMinute))),
+      avgSynergyGiven: Math.round(average(profileRows.map((r) => r.synergyGiven))),
+      avgSynergyGivenPerMinute: Math.round(average(profileRows.map((r) => r.synergyGivenPerMinute))),
+      avgSynergyReceivedShare: round1(average(profileRows.map((r) => r.synergyReceivedShare))),
       avgSupportAp: round2(average(profileRows.map((r) => r.supportAp))),
       avgSupportBrand: round2(average(profileRows.map((r) => r.supportBrand))),
       avgSupportIdentity: round2(average(profileRows.map((r) => r.supportIdentity))),
@@ -1321,13 +1697,14 @@ function buildProfileSnapshot(rows, rosterAccounts, file, { range = null } = {})
       arkPassiveRate: arkRows.length
         ? round1((arkRows.filter((r) => r.arkPassiveActive).length / arkRows.length) * 100)
         : 0,
-      buildVariantCount: buildVariantKeys.size,
-      consistency: round1(clampScore(100 - coeff * 100)),
+      buildVariantCount: Math.max(buildVariantKeys.size, buildVariants.length),
+      unclassifiedBuildLogCount,
+      consistency: computeProfileConsistency(profileRows, role),
     };
 
     const build = {
       classId: latestRow.classId || 0,
-      spec: cleanBuildName(latestRow.spec || latestRow.arkPassive?.enlightenment?.spec),
+      spec: cleanBuildName(latestRow.arkPassive?.enlightenment?.spec || latestRow.spec),
       gearScore: round2(latestRow.gearScore),
       combatPower: round2(latestRow.combatPower),
       arkPassiveActive: latestRow.arkPassiveActive === null ? null : !!latestRow.arkPassiveActive,
@@ -1373,6 +1750,7 @@ function buildProfileSnapshot(rows, rosterAccounts, file, { range = null } = {})
       topDebuffSources,
       topShieldGivenSources,
       topShieldReceivedSources,
+      buildVariants,
       raids,
     });
   }
@@ -1437,7 +1815,7 @@ function buildProfileEncounterSummaries(rows, file, { range = null } = {}) {
       rangeType: range?.type === "weekly" ? "weekly" : "full",
       build: {
         classId: Number(row.classId) || 0,
-        spec: cleanBuildName(row.spec || row.arkPassive?.enlightenment?.spec),
+        spec: cleanBuildName(row.arkPassive?.enlightenment?.spec || row.spec),
         gearScore: round2(row.gearScore),
         combatPower: round2(row.combatPower),
         arkPassiveActive: row.arkPassiveActive === null ? null : !!row.arkPassiveActive,
@@ -1448,9 +1826,21 @@ function buildProfileEncounterSummaries(rows, file, { range = null } = {}) {
         dps: Math.round(Number(row.dps) || 0),
         rdps: Math.round(Number(row.rdps) || 0),
         ndps: Math.round(Number(row.ndps) || 0),
+        peak10sDps: Math.round(Number(row.peak10sDps) || 0),
+        burstRatio: round2(row.burstRatio),
         rdpsValid: row.rdpsValid === true,
+        activeDurationMs: Math.round(Number(row.activeDurationMs) || 0),
+        intermissionMs: Math.round(Number(row.intermissionMs) || 0),
+        activeTimeRate: round1(row.activeTimeRate),
         damageDealt: Math.round(Number(row.damageDealt) || 0),
         damageShare: round1(row.damageShare),
+        topDamageProximity: round1(row.topDamageProximity),
+        contextSampleCount: Number(row.contextSampleCount) || 0,
+        contextSource: row.contextSource || "none",
+        contextPerformancePercentile: round1(row.contextPerformancePercentile),
+        contextDamageSharePercentile: round1(row.contextDamageSharePercentile),
+        contextTopDamageProximityPercentile: round1(row.contextTopDamageProximityPercentile),
+        contextSupportPercentile: round1(row.contextSupportPercentile),
         damageRank: Number(row.damageRank) || 0,
         partyCount: Number(row.partyCount) || 0,
         deathCount: Number(row.deathCount) || 0,
@@ -1460,10 +1850,15 @@ function buildProfileEncounterSummaries(rows, file, { range = null } = {}) {
         castsPerMinute: round2(row.castsPerMinute),
         hitsPerMinute: round2(row.hitsPerMinute),
         critRate: round1(row.critRate),
+        critDamageShare: round1(row.critDamageShare),
         backAttackRate: round1(row.backAttackRate),
         frontAttackRate: round1(row.frontAttackRate),
+        backAttackDamageShare: round1(row.backAttackDamageShare),
+        frontAttackDamageShare: round1(row.frontAttackDamageShare),
+        positionalDamageShare: round1(row.positionalDamageShare),
         topSkillShare: round1(row.topSkillShare),
         damageTakenPerMinute: Math.round(Number(row.damageTakenPerMinute) || 0),
+        damageTakenShare: round1(row.damageTakenShare),
         shieldReceivedPerMinute: Math.round(Number(row.shieldReceivedPerMinute) || 0),
         staggerPerMinute: Math.round(Number(row.staggerPerMinute) || 0),
         incapacitations: Number(row.incapacitations) || 0,
@@ -1483,6 +1878,8 @@ function buildProfileEncounterSummaries(rows, file, { range = null } = {}) {
         supporterDamageGivenPerMinute: Math.round(Number(row.supporterDamageGivenPerMinute) || 0),
         supporterPercent: round1(row.supporterPercent),
         supporterTier: row.supporterTier || "none",
+        supporterRank: Number(row.supporterRank) || 0,
+        supporterCount: Number(row.supporterCount) || 0,
         synergyGivenPerMinute: Math.round(Number(row.synergyGivenPerMinute) || 0),
         synergyReceivedShare: round1(row.synergyReceivedShare),
       },
@@ -1505,26 +1902,108 @@ function buildProfileEncounterSummaries(rows, file, { range = null } = {}) {
 
 function fingerprintSnapshot(snapshot) {
   const parts = [];
+  parts.push([
+    "range",
+    snapshot.criteria?.range?.type || "",
+    snapshot.criteria?.range?.minFightStartMs || 0,
+  ].join(":"));
   for (const account of snapshot.accounts || []) {
     for (const character of account.characters || []) {
+      const stats = character.stats || {};
+      const scores = character.scores || {};
       parts.push([
+        "char",
         account.accountName,
         character.name,
-        character.stats?.encounters || 0,
-        character.stats?.lastFightStart || 0,
+        character.role || "",
+        stats.encounters || 0,
+        stats.lastFightStart || 0,
+        stats.avgDps || 0,
+        stats.medianDps || 0,
+        stats.buildVariantCount || 0,
+        stats.unclassifiedBuildLogCount || 0,
+        stats.avgPeak10sDps || 0,
+        stats.p90Peak10sDps || 0,
+        stats.avgBurstRatio || 0,
+        stats.avgDamageShare || 0,
+        stats.avgTopDamageProximity || 0,
+        stats.contextCoverageRate || 0,
+        stats.contextSampleCountAvg || 0,
+        stats.avgContextPerformancePercentile || 0,
+        stats.avgContextDamageSharePercentile || 0,
+        stats.avgContextTopDamageProximityPercentile || 0,
+        stats.avgContextSupportPercentile || 0,
+        stats.avgSupporterPercent || 0,
+        stats.radiantSupportRate || 0,
+        stats.avgSupporterRank || 0,
+        stats.supporterCountAvg || 0,
+        stats.supporterTopRate || 0,
+        stats.avgCritDamageShare || 0,
+        stats.avgBackAttackDamageShare || 0,
+        stats.avgFrontAttackDamageShare || 0,
+        stats.avgPositionalDamageShare || 0,
+        stats.avgActiveDurationMs || 0,
+        stats.avgIntermissionMs || 0,
+        stats.avgActiveTimeRate || 0,
+        stats.avgDamageTakenShare || 0,
+        stats.damageTakenShareValidCount || 0,
+        stats.totalDeaths || 0,
+        stats.totalDeadTimeMs || 0,
+        scores.overall || 0,
+        scores.mvp || 0,
+        (character.buildVariants || [])
+          .map((variant) => `${variant.name}:${variant.encounters}:${variant.avgDps}:${variant.avgContextPerformancePercentile || 0}`)
+          .join(","),
       ].join(":"));
     }
   }
   for (const encounter of snapshot.encounters || []) {
+    const metrics = encounter.metrics || {};
     parts.push([
       "enc",
       encounter.encounterId,
       encounter.characterName,
       encounter.fightStart,
-      encounter.metrics?.dps || 0,
-      encounter.metrics?.rdps || 0,
-      encounter.metrics?.rdpsValid ? 1 : 0,
-      encounter.metrics?.deadTimeMs || 0,
+      metrics.dps || 0,
+      metrics.rdps || 0,
+      metrics.ndps || 0,
+      metrics.peak10sDps || 0,
+      metrics.burstRatio || 0,
+      metrics.rdpsValid ? 1 : 0,
+      metrics.activeDurationMs || 0,
+      metrics.intermissionMs || 0,
+      metrics.activeTimeRate || 0,
+      metrics.damageDealt || 0,
+      metrics.damageShare || 0,
+      metrics.topDamageProximity || 0,
+      metrics.contextSampleCount || 0,
+      metrics.contextSource || "",
+      metrics.contextPerformancePercentile || 0,
+      metrics.contextDamageSharePercentile || 0,
+      metrics.contextTopDamageProximityPercentile || 0,
+      metrics.contextSupportPercentile || 0,
+      metrics.damageRank || 0,
+      metrics.deathCount || 0,
+      metrics.deadTimeMs || 0,
+      metrics.counters || 0,
+      metrics.critRate || 0,
+      metrics.critDamageShare || 0,
+      metrics.backAttackDamageShare || 0,
+      metrics.frontAttackDamageShare || 0,
+      metrics.positionalDamageShare || 0,
+      metrics.topSkillShare || 0,
+      metrics.protectionPerMinute || 0,
+      metrics.damageTakenShare || 0,
+      metrics.rdpsDamageGivenPerMinute || 0,
+      metrics.supporterDamageGiven || 0,
+      metrics.supporterPercent || 0,
+      metrics.supporterTier || "",
+      metrics.supporterRank || 0,
+      metrics.supporterCount || 0,
+      (encounter.topSkills || [])
+        .slice(0, 5)
+        .map((skill) => `${skill.id || skill.name || ""}:${skill.damage || 0}:${skill.share || 0}`)
+        .join(","),
     ].join(":"));
   }
   return parts.sort().join("|");
@@ -1622,6 +2101,11 @@ async function runProfileSnapshotSync({
     }
     renderStatus?.("info", reason === "initial" ? t("profileSync.scanning") : t("profileSync.checking"));
     const rows = await queryProfileRows(file, rosterAccounts, { minFightStartMs });
+    const weeklyReason = reason === "weekly";
+    if (rows.length === 0) {
+      renderStatus?.("ok", t(weeklyReason ? "profileSync.weeklyIdle" : "profileSync.idle", { n: 0 }));
+      return { ok: true, sent: false, rows: 0 };
+    }
     const snapshot = buildProfileSnapshot(rows, rosterAccounts, file, {
       range: minFightStartMs > 0
         ? { type: "weekly", minFightStartMs: Number(minFightStartMs) || 0 }
@@ -1630,8 +2114,7 @@ async function runProfileSnapshotSync({
     snapshot.encounters = buildProfileEncounterSummaries(rows, file, {
       range: snapshot.criteria?.range,
     });
-    const fp = fingerprintSnapshot(snapshot);
-    const weeklyReason = reason === "weekly";
+    const fp = `${discordId}\x1f${fingerprintSnapshot(snapshot)}`;
     if (!fp || fp === lastProfileFingerprint) {
       renderStatus?.("ok", t(weeklyReason ? "profileSync.weeklyIdle" : "profileSync.idle", { n: rows.length }));
       return { ok: true, sent: false, rows: rows.length };
@@ -1642,6 +2125,10 @@ async function runProfileSnapshotSync({
       renderStatus,
     });
     const result = await sendProfileSnapshot(snapshot, session);
+    if (result?.skipped === "empty-profile") {
+      renderStatus?.("ok", t(weeklyReason ? "profileSync.weeklyIdle" : "profileSync.idle", { n: rows.length }));
+      return { ok: true, sent: false, rows: rows.length, skipped: result.skipped };
+    }
     lastProfileFingerprint = fp;
     const chars = result?.totals?.characterCount || 0;
     const logs = result?.totals?.encounterCount || 0;

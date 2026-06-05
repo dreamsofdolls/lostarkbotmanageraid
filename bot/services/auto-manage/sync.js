@@ -4,6 +4,7 @@ function createAutoManageSyncService(deps) {
     saveWithRetry,
     ensureFreshWeek,
     applyAutoManageCollected,
+    syncRaidProfileFromBibleCollected = async () => null,
   } = deps;
 
   async function applyAutoManageCollectedForStatus(
@@ -12,9 +13,13 @@ function createAutoManageSyncService(deps) {
     collected,
     logLabel
   ) {
-    return await saveWithRetry(async () => {
+    let savedSnapshot = null;
+    let shouldSyncProfile = false;
+    const result = await saveWithRetry(async () => {
       const doc = await User.findOne({ discordId });
       if (!doc) return null;
+      savedSnapshot = null;
+      shouldSyncProfile = false;
 
       const didFreshenWeek = ensureFreshWeek(doc);
       let didAutoManage = false;
@@ -26,6 +31,7 @@ function createAutoManageSyncService(deps) {
         doc.lastAutoManageAttemptAt = now;
         if (autoReport.perChar.some((c) => !c.error)) {
           doc.lastAutoManageSyncAt = now;
+          shouldSyncProfile = true;
           outcome = autoReport.perChar.some(
             (c) => Array.isArray(c.applied) && c.applied.length > 0
           )
@@ -41,11 +47,22 @@ function createAutoManageSyncService(deps) {
       }
 
       if (didFreshenWeek || didAutoManage) await doc.save();
+      savedSnapshot = typeof doc.toObject === "function" ? doc.toObject() : doc;
       console.log(
         `[raid-status] ${logLabel} auto-manage finished for user=${discordId} outcome=${outcome}`
       );
-      return doc.toObject();
+      return savedSnapshot;
     });
+    if (savedSnapshot && shouldSyncProfile) {
+      await syncRaidProfileFromBibleCollected({
+        discordId,
+        userDoc: savedSnapshot,
+        weekResetStart,
+        collected,
+        logLabel: `[raid-status:${logLabel || "sync"}]`,
+      });
+    }
+    return result;
   }
 
   return {
