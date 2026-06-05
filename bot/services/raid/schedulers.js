@@ -131,12 +131,15 @@ function createRaidSchedulerService({
    * tone-equivalent variants. Pools resolve via lookupArray at fire time
    * with the guild's broadcast language; {N} interp = sweep count.
    */
+  function cleanupCountBucket(deleted) {
+    if (deleted <= 0) return "empty";
+    if (deleted <= 5) return "trivial";
+    if (deleted <= 20) return "normal";
+    return "heavy";
+  }
+
   function pickCleanupNoticeContent(deleted, lang = DEFAULT_LANGUAGE) {
-    let bucket;
-    if (deleted <= 0) bucket = "empty";
-    else if (deleted <= 5) bucket = "trivial";
-    else if (deleted <= 20) bucket = "normal";
-    else bucket = "heavy";
+    const bucket = cleanupCountBucket(deleted);
     const pool = lookupArray(lang, `announcements.cleanup-volume.${bucket}`);
     if (pool.length === 0) return "";
     const picked = pool[Math.floor(Math.random() * pool.length)];
@@ -163,11 +166,7 @@ function createRaidSchedulerService({
    * when the count matches a regular heavy cleanup.
    */
   function pickWakeupNoticeContent(deleted, lang = DEFAULT_LANGUAGE) {
-    let bucket;
-    if (deleted <= 0) bucket = "empty";
-    else if (deleted <= 5) bucket = "trivial";
-    else if (deleted <= 20) bucket = "normal";
-    else bucket = "heavy";
+    const bucket = cleanupCountBucket(deleted);
     const pool = lookupArray(lang, `announcements.artist-wakeup.${bucket}`);
     if (pool.length === 0) return "";
     const picked = pool[Math.floor(Math.random() * pool.length)];
@@ -1086,6 +1085,7 @@ function createRaidSchedulerService({
     isInArtistQuietHours,
     hasReachedArtistWakeupBoundary,
     buildCleanupNoticePreview,
+    cleanupCountBucket,
     pickBedtimeNoticeContent,
     pickWakeupNoticeContent,
     getMaintenanceSlotForNow,

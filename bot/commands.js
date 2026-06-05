@@ -406,6 +406,7 @@ let MAINTENANCE_TICK_MS;
 let postChannelAnnouncement;
 let getTargetCleanupSlotKey;
 let buildCleanupNoticePreview;
+let cleanupCountBucket;
 let buildMaintenancePreview;
 let startRaidChannelScheduler;
 let startAutoManageDailyScheduler;
@@ -875,6 +876,7 @@ const raidSchedulerService = createRaidSchedulerService({
   postChannelAnnouncement,
   getTargetCleanupSlotKey,
   buildCleanupNoticePreview,
+  cleanupCountBucket,
   buildMaintenancePreview,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
@@ -1180,6 +1182,7 @@ module.exports = {
     getCurrentVNHour,
     isInArtistQuietHours,
     hasReachedArtistWakeupBoundary,
+    cleanupCountBucket,
     pickBedtimeNoticeContent,
     pickWakeupNoticeContent,
     ARTIST_QUIET_START_HOUR_VN,
