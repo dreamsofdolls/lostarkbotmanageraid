@@ -19,6 +19,7 @@
  */
 
 const { buildNoticeEmbed, replyNotice } = require("../../utils/raid/common/shared");
+const { firstSelectValue } = require("../../utils/discord/component-values");
 const { t, getUserLanguage } = require("../../services/i18n");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 
@@ -555,7 +556,7 @@ function createEditUi({
         // can render against real data. Ack immediately with deferUpdate
         // so Discord doesn't time out the 3-second interaction window
         // while computeRaidCheckSnapshot hits the DB.
-        const pickedRaidKey = component.values[0];
+        const pickedRaidKey = firstSelectValue(component, "");
         const pickedRaidMeta = RAID_REQUIREMENT_MAP[pickedRaidKey];
         if (!pickedRaidMeta) {
           state.warning = t("raid-check.editFlow.raidInvalidWarning", lang, {
@@ -637,7 +638,7 @@ function createEditUi({
       }
 
       if (action === "user") {
-        state.selectedUser = component.values[0];
+        state.selectedUser = firstSelectValue(component);
         state.selectedChar = null;
         // selectedRaid stays locked to raidMeta.raidKey (the raid the
         // leader opened /raid-check against) through every re-pick.
@@ -651,7 +652,7 @@ function createEditUi({
       }
       if (action === "char") {
         const group = state.editableByUser.get(state.selectedUser);
-        const [accountName, charName] = (component.values[0] || "").split("||");
+        const [accountName, charName] = firstSelectValue(component, "").split("||");
         const picked = (group?.chars || []).find(
           (c) => c.accountName === accountName && c.charName === charName
         );

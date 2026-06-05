@@ -14,6 +14,7 @@
 const { isSupportClass, getClassEmoji } = require("../../models/Class");
 const { buildNoticeEmbed, replyNotice, UI } = require("../../utils/raid/common/shared");
 const { buildAccountTaskFields } = require("../../utils/raid/tasks/task-view");
+const { firstSelectValue } = require("../../utils/discord/component-values");
 const {
   getVisibleSharedTasks,
   getSharedTaskDisplay,
@@ -906,10 +907,7 @@ function createAllModeHandler({
       const customId = component.customId || "";
 
       if (customId === "raid-check-all-filter:user") {
-        const value =
-          Array.isArray(component.values) && component.values.length > 0
-            ? component.values[0]
-            : FILTER_ALL;
+        const value = firstSelectValue(component, FILTER_ALL);
         applyUserFilter(value);
         await component
           .update({
@@ -921,10 +919,7 @@ function createAllModeHandler({
       }
 
       if (customId === "raid-check-all-filter:raid") {
-        const value =
-          Array.isArray(component.values) && component.values.length > 0
-            ? component.values[0]
-            : FILTER_ALL_RAIDS;
+        const value = firstSelectValue(component, FILTER_ALL_RAIDS);
         filterRaidId = value === FILTER_ALL_RAIDS ? null : value;
         // Deliberately NOT resetting currentLocalPage - raid filter is
         // orthogonal to page structure (unlike user filter, which shrinks
@@ -976,10 +971,7 @@ function createAllModeHandler({
         // ephemerally (no main-message update) so the public /raid-check
         // session is undisturbed. Session-locked to the opener, so `lang`
         // (the opener's) is the right viewer language.
-        const eventId =
-          Array.isArray(component.values) && component.values.length > 0
-            ? component.values[0]
-            : null;
+        const eventId = firstSelectValue(component);
         await teamsView.handleRaidCheckTeamsSelect(component, eventId, lang);
         return;
       }
