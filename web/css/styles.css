@@ -352,42 +352,75 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .process-current-message {
   min-width: 0;
   overflow-wrap: anywhere;
+  line-height: 1.45;
 }
 
 .process-log {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   max-height: 260px;
   margin: 0;
-  padding: 0;
+  padding: 0 8px 0 0;
   list-style: none;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-color: #4a4f55 #14171c;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.process-log::-webkit-scrollbar {
+  width: 9px;
+}
+
+.process-log::-webkit-scrollbar-track {
+  background: #14171c;
+  border-radius: 999px;
+}
+
+.process-log::-webkit-scrollbar-thumb {
+  background: #4a4f55;
+  border: 2px solid #14171c;
+  border-radius: 999px;
+}
+
+.process-log::-webkit-scrollbar-thumb:hover {
+  background: #5a6068;
 }
 
 .process-log-row {
   display: grid;
   grid-template-columns: 58px 8px minmax(0, 1fr);
-  align-items: baseline;
+  align-items: start;
   gap: 8px;
-  min-height: 20px;
+  min-height: 0;
+  padding: 2px 0;
   color: var(--text-dim);
+  line-height: 1.45;
 }
 
 .process-log-row time {
   color: #717781;
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+  white-space: nowrap;
 }
 
 .process-log-dot {
+  align-self: start;
   width: 7px;
   height: 7px;
+  margin-top: 7px;
   border-radius: 50%;
   background: var(--text-dim);
   box-shadow: 0 0 0 3px rgba(150, 156, 165, 0.08);
 }
 
 .process-log-message {
+  display: block;
   min-width: 0;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
