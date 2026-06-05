@@ -1,7 +1,7 @@
 /**
  * services/local-sync/core/tokens.js
  * HMAC-SHA256 mini-JWT for the local-sync web companion. Short-lived
- * (15-min default), constant-time verify, secret-rotation by env bump.
+ * (30-min default), constant-time verify, secret-rotation by env bump.
  * Stored token + expAt fields on User allow hard-revocation: minting a
  * new token (rotateLocalSyncToken) kills all older URLs, and a
  * successful sync shrinks the stored expiry so a leaked link is only
@@ -30,7 +30,7 @@ const crypto = require("node:crypto");
  * and the success embed mints a fresh one.
  */
 
-const DEFAULT_TTL_SEC = 15 * 60; // 15 minutes - balances "user reads DM, drops file, hits sync" against tight anti-replay window
+const DEFAULT_TTL_SEC = 30 * 60; // 30 minutes - gives large profile imports room while keeping a bounded replay window
 
 function getSecret() {
   const raw = process.env.LOCAL_SYNC_TOKEN_SECRET;
@@ -62,13 +62,13 @@ function sign(payloadB64) {
 
 /**
  * Mint a token for the given Discord user. `ttlSec` is optional; defaults
- * to 15 minutes - tight enough that a leaked URL has a small replay
- * window, generous enough for "user opens DM, opens link, drops file,
- * hits sync" without rushing.
+ * to 30 minutes - tight enough that a leaked URL has a bounded replay
+ * window, generous enough for "user opens DM, opens link, drops a large
+ * file, hits sync" without racing the clock.
  *
  * Optional `lang` (Phase i18n): when present, encoded in the payload so
  * the web companion can render in the user's preferred language without
- * a separate round-trip. Stale at most 15 minutes (token TTL) - if user
+ * a separate round-trip. Stale at most 30 minutes (token TTL) - if user
  * runs /raid-language after mint and reuses the URL, the page renders
  * in the old lang until a fresh mint via /raid-auto-manage local-on.
  *
@@ -186,7 +186,7 @@ async function rotateLocalSyncToken(discordId, lang, deps = {}) {
  * Resume helper: returns the stored token if it still has > 60s left,
  * else mints fresh + saves + returns. Used by /raid-status default
  * "Open Web Companion" button - so a returning user keeps the same
- * URL across multiple /raid-status calls within the 15-min TTL,
+ * URL across multiple /raid-status calls within the 30-min TTL,
  * making bookmarks / open browser tabs continue to work.
  *
  * The 60s safety buffer prevents handing out a token that's about to

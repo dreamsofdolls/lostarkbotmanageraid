@@ -534,6 +534,11 @@ async function runProfileSnapshotSync({
       renderStatus?.("warn", t("profileSync.waitingRoster"));
       return { ok: false, skipped: "no-roster" };
     }
+    const session = await ensureProfileSession({
+      discordId,
+      localToken: getLocalToken?.(),
+      renderStatus,
+    });
     renderStatus?.("info", reason === "initial" ? t("profileSync.scanning") : t("profileSync.checking"));
     // A multi-GB encounters.db scan runs for many seconds inside a single
     // SQLite query with no natural progress event. Tick an elapsed counter
@@ -573,11 +578,6 @@ async function runProfileSnapshotSync({
       renderStatus?.("ok", t(weeklyReason ? "profileSync.weeklyIdle" : "profileSync.idle", { n: rows.length }));
       return { ok: true, sent: false, rows: rows.length };
     }
-    const session = await ensureProfileSession({
-      discordId,
-      localToken: getLocalToken?.(),
-      renderStatus,
-    });
     const result = await sendProfileSnapshot(snapshot, session);
     if (result?.skipped === "empty-profile") {
       renderStatus?.("ok", t(weeklyReason ? "profileSync.weeklyIdle" : "profileSync.idle", { n: rows.length }));
