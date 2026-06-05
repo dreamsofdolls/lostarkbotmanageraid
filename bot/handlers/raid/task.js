@@ -9,16 +9,11 @@
 
 "use strict";
 
-const {
-  replyNotice,
-  updateNotice,
-} = require("../../utils/raid/common/shared");
-const {
-  getAccessibleAccounts,
-  canEditAccount,
-} = require("../../services/access/access-control");
+const { getAccessibleAccounts } = require("../../services/access/access-control");
 const { t, getUserLanguage } = require("../../services/i18n");
 const { createRaidTaskAutocompleteHandlers } = require("./task/autocomplete");
+const { createRaidTaskNoticeHelpers } = require("./task/notices");
+const { createRaidTaskWriteTargetResolver } = require("./task/write-target");
 const {
   SCHEDULED_RESET,
   SHARED_TASK_PRESETS,
@@ -74,60 +69,16 @@ function createRaidTaskCommand(deps) {
     weekResetStartMs,
   } = deps;
 
-  // Resolve the discordId whose User doc the side-task write should
-  // mutate. When `rosterName` matches a roster shared to the executor
-  // via /raid-share grant, the helper returns the OWNER's discordId
-  // and a `viaShare` marker so the saveWithRetry closure naturally
-  // loads the right document. View-level shares come back with
-  // `canEdit: false` so callers can short-circuit before the retry
-  // and surface a permission embed.
-  //
-  // Returns either:
-  //   { discordId, viaShare: false }  (own roster, or no rosterName)
-  //   { discordId, viaShare: true, ownerLabel, accessLevel, canEdit }
-  async function resolveTaskWriteTarget(executorId, rosterName) {
-    if (!rosterName) {
-      return { discordId: executorId, viaShare: false };
-    }
-    try {
-      const ownDoc = await loadUserForAutocomplete(executorId);
-      if (findAccountInUser(ownDoc, rosterName)) {
-        return { discordId: executorId, viaShare: false };
-      }
-    } catch (err) {
-      console.warn("[raid-task] own roster lookup failed:", err?.message || err);
-    }
-    let accessible = [];
-    try {
-      accessible = await getAccessibleAccounts(executorId);
-    } catch (err) {
-      console.warn("[raid-task] getAccessibleAccounts failed:", err?.message || err);
-      return { discordId: executorId, viaShare: false };
-    }
-    return resolveTaskWriteTargetFromAccessible(executorId, rosterName, accessible);
-  }
-
-  function viewOnlyShareNotice(target, lang) {
-    return {
-      type: "error",
-      title: t("raid-task.shareViewOnly.title", lang),
-      description: t("raid-task.shareViewOnly.description", lang, {
-        owner: target.ownerLabel || "(unknown)",
-      }),
-    };
-  }
-
-  function replyTaskNotice(interaction, options, extras = null) {
-    return replyNotice(interaction, EmbedBuilder, options, extras || undefined);
-  }
-
-  function updateTaskNotice(interaction, options, extras) {
-    return updateNotice(interaction, EmbedBuilder, options, extras);
-  }
-
-  function replyViewOnlyShareNotice(interaction, target, lang) {
-    return replyTaskNotice(interaction, viewOnlyShareNotice(target, lang));
-  }
+  const resolveTaskWriteTarget = createRaidTaskWriteTargetResolver({
+    loadUserForAutocomplete,
+    getAccessibleAccounts,
+  });
+  const {
+    replyTaskNotice,
+    updateTaskNotice,
+    replyViewOnlyShareNotice,
+    viewOnlyShareNotice,
+  } = createRaidTaskNoticeHelpers({ EmbedBuilder });
 
   const { handleRaidTaskAutocomplete } = createRaidTaskAutocompleteHandlers({
     User,
