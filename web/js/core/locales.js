@@ -4,7 +4,7 @@
 //
 // The active language is passed in via the URL token (encoded by
 // mintToken on the bot side based on the user's /raid-language pref);
-// web/i18n.js reads it at boot. Default falls back to "vi" matching
+// web/js/core/i18n.js reads it at boot. Default falls back to "vi" matching
 // User.language schema default.
 //
 // Boss names ("Brelshaza, Ember in the Ashes", "Archdemon Kazeros")

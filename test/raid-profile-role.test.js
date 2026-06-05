@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 test("raid-profile support role detection trusts explicit support and DPS specs before damage fallback", async () => {
-  const { classifyProfileLogRole, normalizeProfileSpecKey, roleForProfileClass } = await import("../web/profile-role.js");
+  const { classifyProfileLogRole, normalizeProfileSpecKey, roleForProfileClass } = await import("../web/js/profile/profile-role.js");
 
   assert.equal(roleForProfileClass("Bard"), "support");
   assert.equal(roleForProfileClass("Aeromancer"), "dps");

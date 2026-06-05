@@ -38,6 +38,7 @@ const { getClassEmoji } = require("../../../models/Class");
 
 const EPHEMERAL_FLAG = 1 << 6;
 const PICKER_LIMIT = 25;
+const CLOSED_EVENT_STATUSES = new Set(["cleared", "cancelled"]);
 
 function createRaidScheduleCommand({
   EmbedBuilder,
@@ -180,6 +181,33 @@ function createRaidScheduleCommand({
     return Boolean(interaction.user?.id && isManagerId(interaction.user.id));
   }
 
+  function isClosedEvent(event) {
+    return CLOSED_EVENT_STATUSES.has(event?.status);
+  }
+
+  async function rejectUnlessLead(
+    interaction,
+    lang,
+    respond = replyNotice,
+    titleKey = "managerOnlyTitle",
+    descriptionKey = "managerOnlyDescription",
+  ) {
+    if (isLeadActionAllowed(interaction)) return false;
+    await respond(interaction, lang, "danger", titleKey, descriptionKey);
+    return true;
+  }
+
+  async function rejectIfEventClosed(interaction, event, lang, respond = replyNotice) {
+    if (!isClosedEvent(event)) return false;
+    await respond(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
+    return true;
+  }
+
+  async function rejectUnlessLeadMutable(interaction, event, lang, respond = replyNotice) {
+    if (await rejectUnlessLead(interaction, lang, respond)) return true;
+    return rejectIfEventClosed(interaction, event, lang, respond);
+  }
+
   function markSignups(event, signups) {
     event.signups = signups;
     if (typeof event.markModified === "function") event.markModified("signups");
@@ -307,10 +335,7 @@ function createRaidScheduleCommand({
     if (subcommand === "show") return handleShowCommand(interaction);
 
     const lang = await userLang(interaction);
-    if (!isLeadActionAllowed(interaction)) {
-      await replyNotice(interaction, lang, "danger", "notManagerTitle", "notManagerDescription");
-      return;
-    }
+    if (await rejectUnlessLead(interaction, lang, replyNotice, "notManagerTitle", "notManagerDescription")) return;
     if (subcommand !== "create") {
       await replyNotice(interaction, lang, "warn", "unknownTitle", "unknownDescription");
       return;
@@ -457,7 +482,7 @@ function createRaidScheduleCommand({
   }
 
   async function handleRsvp(interaction, event, status, lang) {
-    if (event.status === "cleared" || event.status === "cancelled") {
+    if (isClosedEvent(event)) {
       await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
       return;
     }
@@ -497,14 +522,7 @@ function createRaidScheduleCommand({
   }
 
   async function handleLockToggle(interaction, event, action, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
-    if (event.status === "cleared" || event.status === "cancelled") {
-      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
+    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
     const onBoard = onBoardMessage(interaction, event);
     event.status = action === "unlock" ? "open" : "locked";
     await interaction.deferUpdate();
@@ -522,14 +540,7 @@ function createRaidScheduleCommand({
   }
 
   async function handleEnd(interaction, event, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
-    if (event.status === "cleared" || event.status === "cancelled") {
-      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
+    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
 
     await interaction.deferUpdate();
     const summary = await writeAutoClears(interaction, event);
@@ -678,14 +689,7 @@ function createRaidScheduleCommand({
   }
 
   async function handleManage(interaction, event, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
-    if (event.status === "cleared" || event.status === "cancelled") {
-      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
+    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
     await interaction.reply(manageMenuPayload(event, lang));
   }
 
@@ -693,14 +697,7 @@ function createRaidScheduleCommand({
   // updates (🔔 Báo BẬT <-> 🔕 Báo TẮT). Lead-only. Only the ping behaviour
   // changes - signups, board, auto-clear are untouched.
   async function handleToggleNotify(interaction, event, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
-    if (event.status === "cleared" || event.status === "cancelled") {
-      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
+    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
     event.skipNotify = !event.skipNotify;
     await interaction.deferUpdate();
     await event.save();
@@ -732,14 +729,7 @@ function createRaidScheduleCommand({
   }
 
   async function handleSetRoom(interaction, event, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
-    if (event.status === "cleared" || event.status === "cancelled") {
-      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
+    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
     const id = String(event._id);
     const modalId = `rse:roommodal:${id}`;
     const modal = new ModalBuilder()
@@ -793,14 +783,7 @@ function createRaidScheduleCommand({
   }
 
   async function handleEditTime(interaction, event, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
-    if (event.status === "cleared" || event.status === "cancelled") {
-      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
+    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
     const id = String(event._id);
     const modalId = `rse:timemodal:${id}`;
     const modal = new ModalBuilder()
@@ -850,14 +833,7 @@ function createRaidScheduleCommand({
   }
 
   async function handleCancel(interaction, event, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
-    if (event.status === "cleared" || event.status === "cancelled") {
-      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
+    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
     await interaction.deferUpdate();
     event.status = "cancelled";
     event.cancelledAt = new Date();
@@ -941,18 +917,12 @@ function createRaidScheduleCommand({
   }
 
   async function handleDeletePrompt(interaction, event, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
+    if (await rejectUnlessLead(interaction, lang)) return;
     await interaction.reply(deleteConfirmPayload(event, lang));
   }
 
   async function handleDeleteConfirm(interaction, event, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await editNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
+    if (await rejectUnlessLead(interaction, lang, editNotice)) return;
     await interaction.deferUpdate();
     // Ping signups only if the event was still active - cleaning up an already
     // ended/cancelled event has no audience left to notify.
@@ -1060,14 +1030,7 @@ function createRaidScheduleCommand({
   }
 
   async function handleKick(interaction, event, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
-    if (event.status === "cleared" || event.status === "cancelled") {
-      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
+    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
     if (!Array.isArray(event.signups) || event.signups.length === 0) {
       await replyNotice(interaction, lang, "warn", "kickEmptyTitle", "kickEmptyDescription");
       return;
@@ -1076,14 +1039,7 @@ function createRaidScheduleCommand({
   }
 
   async function handleKickSelect(interaction, event, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await editNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
-    if (event.status === "cleared" || event.status === "cancelled") {
-      await editNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
+    if (await rejectUnlessLeadMutable(interaction, event, lang, editNotice)) return;
     const before = Array.from(event.signups || []);
     const { signups: next, removed } = applyKick(before, interaction.values || []);
     if (removed.length === 0) {
@@ -1193,27 +1149,13 @@ function createRaidScheduleCommand({
   }
 
   async function handleAddMember(interaction, event, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
     // No lock check on purpose: manager-add is allowed on a locked board.
-    if (event.status === "cleared" || event.status === "cancelled") {
-      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
+    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
     await interaction.reply(addUserSelectPayload(event, lang));
   }
 
   async function handleAddUserSelect(interaction, event, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await editNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
-    if (event.status === "cleared" || event.status === "cancelled") {
-      await editNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
+    if (await rejectUnlessLeadMutable(interaction, event, lang, editNotice)) return;
     const targetId = interaction.values?.[0];
     if (!targetId) {
       await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");
@@ -1250,14 +1192,7 @@ function createRaidScheduleCommand({
   }
 
   async function handleAddPickSelect(interaction, event, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await editNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
-    if (event.status === "cleared" || event.status === "cancelled") {
-      await editNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
+    if (await rejectUnlessLeadMutable(interaction, event, lang, editNotice)) return;
     const parsed = parseCustomId(interaction.customId);
     const targetId = parsed.action.split(":")[1];
     if (!targetId) {
@@ -1413,26 +1348,12 @@ function createRaidScheduleCommand({
   }
 
   async function handleTeams(interaction, event, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await replyNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
-    if (event.status === "cleared" || event.status === "cancelled") {
-      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
+    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
     await interaction.reply(teamsPanelPayload(event, lang));
   }
 
   async function handleTeamTurnSelect(interaction, event, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await editNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
-    if (event.status === "cleared" || event.status === "cancelled") {
-      await editNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
+    if (await rejectUnlessLeadMutable(interaction, event, lang, editNotice)) return;
     if (!Array.isArray(event.signups) || event.signups.length === 0) {
       await editNotice(interaction, lang, "warn", "teamsNoPoolTitle", "teamsNoPoolDescription");
       return;
@@ -1459,14 +1380,7 @@ function createRaidScheduleCommand({
   }
 
   async function handleTeamMembersSelect(interaction, event, lang) {
-    if (!isLeadActionAllowed(interaction)) {
-      await editNotice(interaction, lang, "danger", "managerOnlyTitle", "managerOnlyDescription");
-      return;
-    }
-    if (event.status === "cleared" || event.status === "cancelled") {
-      await editNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
+    if (await rejectUnlessLeadMutable(interaction, event, lang, editNotice)) return;
     const parsed = parseCustomId(interaction.customId);
     const turnIndex = Number(parsed.action.split(":")[1]);
     if (!Number.isInteger(turnIndex) || turnIndex < 0 || turnIndex >= (event.turns?.length || 0)) {
@@ -1580,10 +1494,7 @@ function createRaidScheduleCommand({
   // board; the board's switcher reaches the rest.
   async function handleShowResurface(interaction) {
     const lang = await userLang(interaction);
-    if (!isLeadActionAllowed(interaction)) {
-      await replyNotice(interaction, lang, "danger", "notManagerTitle", "notManagerDescription");
-      return;
-    }
+    if (await rejectUnlessLead(interaction, lang, replyNotice, "notManagerTitle", "notManagerDescription")) return;
     const guildId = interaction.guildId || interaction.guild?.id;
     const channelId = interaction.channelId || interaction.channel?.id;
     if (!guildId || !channelId) {
@@ -1619,10 +1530,7 @@ function createRaidScheduleCommand({
   // asked for). Read-only + ephemeral, so it never disturbs the public board.
   async function handleShowTurnPlan(interaction) {
     const lang = await userLang(interaction);
-    if (!isLeadActionAllowed(interaction)) {
-      await replyNotice(interaction, lang, "danger", "notManagerTitle", "notManagerDescription");
-      return;
-    }
+    if (await rejectUnlessLead(interaction, lang, replyNotice, "notManagerTitle", "notManagerDescription")) return;
     const guildId = interaction.guildId || interaction.guild?.id;
     if (!guildId) {
       await replyNotice(interaction, lang, "danger", "guildOnlyTitle", "guildOnlyDescription");
