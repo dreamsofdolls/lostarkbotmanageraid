@@ -4,8 +4,8 @@ const assert = require("node:assert/strict");
 const {
   buildLocalSyncCatalog,
   normalizeDifficulty,
-} = require("../bot/services/local-sync/catalog");
-const { createCatalogEndpoint } = require("../bot/services/local-sync/catalog-endpoint");
+} = require("../bot/services/local-sync/core/catalog");
+const { createCatalogEndpoint } = require("../bot/services/local-sync/http/catalog-endpoint");
 
 function makeRes() {
   return {

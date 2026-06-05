@@ -1,5 +1,5 @@
 /**
- * services/local-sync/state.js
+ * services/local-sync/core/state.js
  * Local-sync mode state machine + mutex helpers. Two sync sources are
  * mutually exclusive (bible vs local) - Mongo conditional updates
  * enforce the mutex at write time so concurrent device flips can't both

@@ -1,5 +1,5 @@
 /**
- * services/local-sync/tokens.js
+ * services/local-sync/core/tokens.js
  * HMAC-SHA256 mini-JWT for the local-sync web companion. Short-lived
  * (15-min default), constant-time verify, secret-rotation by env bump.
  * Stored token + expAt fields on User allow hard-revocation: minting a

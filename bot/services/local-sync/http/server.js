@@ -1,5 +1,5 @@
 /**
- * services/local-sync/http-server.js
+ * services/local-sync/http/server.js
  * Node-builtin HTTP server hosting the local-sync web companion +
  * JSON API. Stays Express-free (under 200 LOC) by exposing
  * `apiHandlers` as a `<METHOD> <pathname>` lookup so callers can wire

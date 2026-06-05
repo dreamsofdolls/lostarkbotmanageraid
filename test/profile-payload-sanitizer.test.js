@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 
 const {
   sanitizeSnapshotPayload,
-} = require("../bot/services/local-sync/profile-payload-sanitizer");
+} = require("../bot/services/local-sync/profile/payload-sanitizer");
 
 test("sanitizeSnapshotPayload applies character profile rules and filters off-roster chars", () => {
   const userDoc = {

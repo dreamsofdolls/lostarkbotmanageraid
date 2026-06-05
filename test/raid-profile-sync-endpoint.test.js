@@ -5,12 +5,12 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { mintToken } = require("../bot/services/local-sync");
-const { hashProfileDeviceToken } = require("../bot/services/local-sync/profile-device-token");
+const { hashProfileDeviceToken } = require("../bot/services/local-sync/profile/device-token");
 const {
   createProfileSessionEndpoint,
   createRaidProfileSyncEndpoint,
   MAX_BODY_BYTES,
-} = require("../bot/services/local-sync/profile-sync-endpoint");
+} = require("../bot/services/local-sync/profile/sync-endpoint");
 
 function makeReq({ token, method = "POST", body = null } = {}) {
   const req = new PassThrough();

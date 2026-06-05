@@ -2,7 +2,7 @@
 
 const {
   PROFILE_VERSION,
-} = require("../local-sync/profile-payload-sanitizer");
+} = require("../local-sync/profile/payload-sanitizer");
 const {
   booleanFlag,
   durationToMs,

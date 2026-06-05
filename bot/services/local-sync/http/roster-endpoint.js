@@ -1,5 +1,5 @@
 /**
- * services/local-sync/roster-endpoint.js
+ * services/local-sync/http/roster-endpoint.js
  * GET /api/me/roster handler · returns a slim roster snapshot for the
  * web companion's diff-view preview. Auth mirrors POST /api/raid-sync
  * (Bearer JWT + stored-token freshness). Projection deliberately
@@ -9,11 +9,11 @@
 
 "use strict";
 
-const { verifyToken, isCurrentStoredToken } = require("./index");
+const { verifyToken, isCurrentStoredToken } = require("..");
 const {
   createJsonSender,
   extractBearerToken,
-} = require("./http");
+} = require("./json");
 
 /**
  * Build the `GET /api/me/roster` handler. Returns the user's slim roster

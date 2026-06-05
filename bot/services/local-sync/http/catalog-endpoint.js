@@ -1,5 +1,5 @@
 /**
- * services/local-sync/catalog-endpoint.js
+ * services/local-sync/http/catalog-endpoint.js
  * GET /api/catalog handler. No auth - the catalog is public (just
  * raid/class metadata) and is shipped with a 5-min Cache-Control so
  * web companion page loads stay light.
@@ -7,8 +7,8 @@
 
 "use strict";
 
-const { buildLocalSyncCatalog } = require("./catalog");
-const { createJsonSender } = require("./http");
+const { buildLocalSyncCatalog } = require("../core/catalog");
+const { createJsonSender } = require("./json");
 
 const send = createJsonSender({
   methods: "GET, OPTIONS",
