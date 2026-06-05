@@ -38,6 +38,18 @@ const {
   sourceTag,
 } = require("./view-helpers");
 
+function appendOverflowLine(lines, total, limit, label = "more") {
+  const extra = Math.max(0, Number(total) - Number(limit));
+  if (extra > 0) lines.push(`\`…\` +${extra} ${label}`);
+  return lines;
+}
+
+function sliceMapWithOverflow(items, limit, mapper, label = "more") {
+  const list = Array.isArray(items) ? items : [];
+  const lines = list.slice(0, limit).map(mapper);
+  return appendOverflowLine(lines, list.length, limit, label);
+}
+
 function buildOverallEmbed({ EmbedBuilder, UI }, session) {
   const lang = session.lang || "vi";
   const chars = flattenCharacters(session.entries);
@@ -81,15 +93,11 @@ function buildOverallEmbed({ EmbedBuilder, UI }, session) {
       }
     );
 
-  const rosterLines = session.entries.slice(0, 10).map((entry, index) => {
+  const rosterLines = sliceMapWithOverflow(session.entries, 10, (entry, index) => {
     const rosterAgg = aggregateCharacters(entry.characters);
     const prefix = entry.isOwn ? "Own" : "Shared";
     return `\`${index + 1}.\` **${getEntryLabel(entry)}** · ${prefix} · ${rosterAgg.charCount} char · ${rosterAgg.logs} log · score ${score(rosterAgg.overall)}`;
   });
-  // Surface the truncated tail instead of silently dropping rosters past the cap.
-  if (session.entries.length > 10) {
-    rosterLines.push(`\`…\` +${session.entries.length - 10} more`);
-  }
   embed.addFields({
     name: hudFieldName("roster"),
     value: rosterLines.length ? rosterLines.join("\n") : t("raidProfile.noProfiles", lang),
@@ -139,17 +147,12 @@ function buildRosterEmbed({ EmbedBuilder, UI }, session, entry) {
       }
     );
 
-  const lines = [...entry.characters]
-    .sort((a, b) => Number(b?.scores?.overall || 0) - Number(a?.scores?.overall || 0))
-    .slice(0, 12)
-    .map((character, index) => {
-      const logs = Number(character?.stats?.encounters) || 0;
-      return `\`${index + 1}.\` **${character.name}** · ${roleLabel(character)} · ${logs} scored · score ${score(character?.scores?.overall)} · MVP ${score(character?.scores?.mvp)}`;
+  const sortedCharacters = [...entry.characters]
+    .sort((a, b) => Number(b?.scores?.overall || 0) - Number(a?.scores?.overall || 0));
+  const lines = sliceMapWithOverflow(sortedCharacters, 12, (character, index) => {
+    const logs = Number(character?.stats?.encounters) || 0;
+    return `\`${index + 1}.\` **${character.name}** · ${roleLabel(character)} · ${logs} scored · score ${score(character?.scores?.overall)} · MVP ${score(character?.scores?.mvp)}`;
   });
-  // Many accounts run >12 alts; show the dropped count rather than hiding them.
-  if (entry.characters.length > 12) {
-    lines.push(`\`…\` +${entry.characters.length - 12} more`);
-  }
   embed.addFields({
     name: hudFieldName("character"),
     value: lines.length ? lines.join("\n") : t("raidProfile.noChars", lang),
@@ -160,6 +163,82 @@ function buildRosterEmbed({ EmbedBuilder, UI }, session, entry) {
   });
 
   return embed;
+}
+
+function roleDetailLines(stats, scores, { isSupport, isBibleSummary }) {
+  if (isBibleSummary) return bibleOutputLines(stats, scores, isSupport);
+  if (isSupport) {
+    return [
+      scoreLine("rDPS impact", scores.supportUptime),
+      scoreLine("Raid contribution", scores.raidContribution),
+      scoreLine("Protection", scores.protection),
+      `Shield/min: **${shortNumber(stats.avgProtectionPerMinute)}**`,
+      `rDPS given/min: **${shortNumber(stats.avgRdpsDamageGivenPerMinute)}**`,
+      `Supporter: **${pct(stats.avgSupporterPercent)}** · Radiant ${pct(stats.radiantSupportRate)}`,
+      `Support rank: **${stats.supporterRankValidCount ? `${score(stats.avgSupporterRank)}/${score(stats.supporterCountAvg)}` : "N/A"}** · top ${pct(stats.supporterTopRate)}`,
+      `Context pct: **${pct(stats.avgContextSupportPercentile || stats.avgContextPerformancePercentile)}** · cover ${pct(stats.contextCoverageRate)} n~${Math.round(Number(stats.contextSampleCountAvg) || 0)}`,
+      `Synergy/min: **${shortNumber(stats.avgSynergyGivenPerMinute)}**`,
+      `AP/Brand: ${ratePct(stats.avgSupportAp)} / ${ratePct(stats.avgSupportBrand)}`,
+      `Identity/Hyper: ${ratePct(stats.avgSupportIdentity)} / ${ratePct(stats.avgSupportHyper)}`,
+    ];
+  }
+  return [
+    `Avg DPS: **${shortNumber(stats.avgDps)}**`,
+    `Median DPS: **${shortNumber(stats.medianDps)}**`,
+    ...burstProfileLines(stats),
+    `Damage share: **${pct(stats.avgDamageShare)}** · ${renderGauge(scores.damageShare)}`,
+    `Top proximity: **${pct(stats.avgTopDamageProximity)}**`,
+    `Context pct: **${pct(stats.avgContextPerformancePercentile)}** · cover ${pct(stats.contextCoverageRate)} n~${Math.round(Number(stats.contextSampleCountAvg) || 0)}`,
+    `Top rate: **${pct(stats.topRate)}**`,
+  ];
+}
+
+function sourceOrCombatShapeLines(entry, stats, { isBibleSummary }) {
+  if (isBibleSummary) {
+    return [
+      "Data depth: **lostark.bible summary**",
+      "Local-only metrics such as skills, buffs, rDPS share, damage taken, and support radiant rank need encounters.db sync.",
+      `Profile range: **${rangeLabel(entry)}** · min duration **3m+**`,
+      `Last fight: ${formatDateMs(stats.lastFightStart)}`,
+    ];
+  }
+  return [
+    `Style: **${attackStyleLabel(stats.attackStyle)}**`,
+    `Crit: **${pct(stats.avgCritRate)}**`,
+    `Back/Front: ${pct(stats.avgBackAttackRate)} / ${pct(stats.avgFrontAttackRate)}`,
+    `Damage crit/pos: **${pct(stats.avgCritDamageShare)}** · ${pct(stats.avgPositionalDamageShare)}`,
+    `Damage back/front: ${pct(stats.avgBackAttackDamageShare)} / ${pct(stats.avgFrontAttackDamageShare)}`,
+    `Hyper share: **${pct(stats.avgHyperShare)}**`,
+    `Skills/top share: **${score(stats.avgSkillCount)}** / ${pct(stats.avgTopSkillShare)}`,
+    `SUP buff/debuff: ${pct(stats.avgSupportBuffedShare)} / ${pct(stats.avgSupportDebuffedShare)}`,
+  ];
+}
+
+function reliabilityLines(stats, { isBibleSummary, lang }) {
+  const common = [
+    `Deathless: ${renderPercentGauge(stats.deathlessRate)}`,
+    `Death rate: **${pct(stats.deathRate)}**`,
+    `Deaths: **${Math.round(Number(stats.totalDeaths) || 0)}** total · avg ${score(stats.avgDeaths)}`,
+  ];
+  if (isBibleSummary) {
+    return [
+      ...common,
+      `Active time: avg **${formatDurationMs(stats.avgDurationMs)}**`,
+      `${t("raidProfile.lastFight", lang)}: ${formatDateMs(stats.lastFightStart)}`,
+    ];
+  }
+  return [
+    ...common,
+    `Dead time: **${formatDurationMs(stats.totalDeadTimeMs)}** total - avg ${formatDurationMs(stats.avgDeadTimeMs)}`,
+    `Active time: avg **${formatDurationMs(stats.avgActiveDurationMs || stats.avgDurationMs)}** · ${pct(stats.avgActiveTimeRate || 100)}`,
+    `rDPS valid: **${pct(stats.rdpsValidRate)}** (${Math.round(Number(stats.rdpsValidCount) || 0)}/${Math.round(Number(stats.encounters) || 0)})`,
+    `Avg rank: **${score(stats.avgRank)}**`,
+    `Counters/Stagger: **${score(stats.avgCounters)}** / ${shortNumber(stats.avgStaggerPerMinute)}/min`,
+    `Taken: ${shortNumber(stats.avgDamageTakenPerMinute)}/min · share ${pct(stats.avgDamageTakenShare)}`,
+    `Shielded: ${shortNumber(stats.avgShieldReceivedPerMinute)}/min`,
+    `Incap: **${score(stats.avgIncapacitations)}** avg`,
+    `${t("raidProfile.lastFight", lang)}: ${formatDateMs(stats.lastFightStart)}`,
+  ];
 }
 
 function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
@@ -198,78 +277,17 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
       },
       {
         name: hudFieldName(isSupport ? "SUP detail" : "DPS detail"),
-        value: isBibleSummary
-          ? bibleOutputLines(stats, scores, isSupport).join("\n")
-          : isSupport
-          ? [
-              scoreLine("rDPS impact", scores.supportUptime),
-              scoreLine("Raid contribution", scores.raidContribution),
-              scoreLine("Protection", scores.protection),
-              `Shield/min: **${shortNumber(stats.avgProtectionPerMinute)}**`,
-              `rDPS given/min: **${shortNumber(stats.avgRdpsDamageGivenPerMinute)}**`,
-              `Supporter: **${pct(stats.avgSupporterPercent)}** · Radiant ${pct(stats.radiantSupportRate)}`,
-              `Support rank: **${stats.supporterRankValidCount ? `${score(stats.avgSupporterRank)}/${score(stats.supporterCountAvg)}` : "N/A"}** · top ${pct(stats.supporterTopRate)}`,
-              `Context pct: **${pct(stats.avgContextSupportPercentile || stats.avgContextPerformancePercentile)}** · cover ${pct(stats.contextCoverageRate)} n~${Math.round(Number(stats.contextSampleCountAvg) || 0)}`,
-              `Synergy/min: **${shortNumber(stats.avgSynergyGivenPerMinute)}**`,
-              `AP/Brand: ${ratePct(stats.avgSupportAp)} / ${ratePct(stats.avgSupportBrand)}`,
-              `Identity/Hyper: ${ratePct(stats.avgSupportIdentity)} / ${ratePct(stats.avgSupportHyper)}`,
-            ].join("\n")
-          : [
-              `Avg DPS: **${shortNumber(stats.avgDps)}**`,
-              `Median DPS: **${shortNumber(stats.medianDps)}**`,
-              ...burstProfileLines(stats),
-              `Damage share: **${pct(stats.avgDamageShare)}** · ${renderGauge(scores.damageShare)}`,
-              `Top proximity: **${pct(stats.avgTopDamageProximity)}**`,
-              `Context pct: **${pct(stats.avgContextPerformancePercentile)}** · cover ${pct(stats.contextCoverageRate)} n~${Math.round(Number(stats.contextSampleCountAvg) || 0)}`,
-              `Top rate: **${pct(stats.topRate)}**`,
-            ].join("\n"),
+        value: roleDetailLines(stats, scores, { isSupport, isBibleSummary }).join("\n"),
         inline: true,
       },
       {
         name: hudFieldName(isBibleSummary ? "source detail" : "combat shape"),
-        value: isBibleSummary
-          ? [
-              "Data depth: **lostark.bible summary**",
-              "Local-only metrics such as skills, buffs, rDPS share, damage taken, and support radiant rank need encounters.db sync.",
-              `Profile range: **${rangeLabel(entry)}** · min duration **3m+**`,
-              `Last fight: ${formatDateMs(stats.lastFightStart)}`,
-            ].join("\n")
-          : [
-              `Style: **${attackStyleLabel(stats.attackStyle)}**`,
-              `Crit: **${pct(stats.avgCritRate)}**`,
-              `Back/Front: ${pct(stats.avgBackAttackRate)} / ${pct(stats.avgFrontAttackRate)}`,
-              `Damage crit/pos: **${pct(stats.avgCritDamageShare)}** · ${pct(stats.avgPositionalDamageShare)}`,
-              `Damage back/front: ${pct(stats.avgBackAttackDamageShare)} / ${pct(stats.avgFrontAttackDamageShare)}`,
-              `Hyper share: **${pct(stats.avgHyperShare)}**`,
-              `Skills/top share: **${score(stats.avgSkillCount)}** / ${pct(stats.avgTopSkillShare)}`,
-              `SUP buff/debuff: ${pct(stats.avgSupportBuffedShare)} / ${pct(stats.avgSupportDebuffedShare)}`,
-            ].join("\n"),
+        value: sourceOrCombatShapeLines(entry, stats, { isBibleSummary }).join("\n"),
         inline: false,
       },
       {
         name: hudFieldName("reliability"),
-        value: isBibleSummary
-          ? [
-              `Deathless: ${renderPercentGauge(stats.deathlessRate)}`,
-              `Death rate: **${pct(stats.deathRate)}**`,
-              `Deaths: **${Math.round(Number(stats.totalDeaths) || 0)}** total · avg ${score(stats.avgDeaths)}`,
-              `Active time: avg **${formatDurationMs(stats.avgDurationMs)}**`,
-              `${t("raidProfile.lastFight", lang)}: ${formatDateMs(stats.lastFightStart)}`,
-            ].join("\n")
-          : [
-              `Deathless: ${renderPercentGauge(stats.deathlessRate)}`,
-              `Death rate: **${pct(stats.deathRate)}**`,
-              `Deaths: **${Math.round(Number(stats.totalDeaths) || 0)}** total · avg ${score(stats.avgDeaths)}`,
-              `Dead time: **${formatDurationMs(stats.totalDeadTimeMs)}** total - avg ${formatDurationMs(stats.avgDeadTimeMs)}`,
-              `Active time: avg **${formatDurationMs(stats.avgActiveDurationMs || stats.avgDurationMs)}** · ${pct(stats.avgActiveTimeRate || 100)}`,
-              `rDPS valid: **${pct(stats.rdpsValidRate)}** (${Math.round(Number(stats.rdpsValidCount) || 0)}/${Math.round(Number(stats.encounters) || 0)})`,
-              `Avg rank: **${score(stats.avgRank)}**`,
-              `Counters/Stagger: **${score(stats.avgCounters)}** / ${shortNumber(stats.avgStaggerPerMinute)}/min`,
-              `Taken: ${shortNumber(stats.avgDamageTakenPerMinute)}/min · share ${pct(stats.avgDamageTakenShare)}`,
-              `Shielded: ${shortNumber(stats.avgShieldReceivedPerMinute)}/min`,
-              `Incap: **${score(stats.avgIncapacitations)}** avg`,
-              `${t("raidProfile.lastFight", lang)}: ${formatDateMs(stats.lastFightStart)}`,
-            ].join("\n"),
+        value: reliabilityLines(stats, { isBibleSummary, lang }).join("\n"),
         inline: false,
       }
     );
@@ -322,14 +340,9 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
     });
   }
 
-  const skillLines = [...(character.topSkills || [])]
-    .slice(0, 5)
-    .map((skill, index) => (
-      `\`${index + 1}.\` **${skill.name || "Unknown"}** · ${renderPercentGauge(skill.share)} · crit ${pct(skill.critRate)}`
-    ));
-  if ((character.topSkills || []).length > 5) {
-    skillLines.push(`\`…\` +${(character.topSkills || []).length - 5} more`);
-  }
+  const skillLines = sliceMapWithOverflow(character.topSkills || [], 5, (skill, index) => (
+    `\`${index + 1}.\` **${skill.name || "Unknown"}** · ${renderPercentGauge(skill.share)} · crit ${pct(skill.critRate)}`
+  ));
   if (skillLines.length) {
     embed.addFields({
       name: hudFieldName("top skills"),
@@ -338,19 +351,15 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
     });
   }
 
-  const raidLines = [...(character.raids || [])]
-    .sort((a, b) => Number(b?.encounters || 0) - Number(a?.encounters || 0))
-    .slice(0, 8)
-    .map((raid) => {
-      const raidLabel = getRaidModeLabel(raid.raidKey, raid.modeKey, lang) || `${raid.raidKey} ${raid.modeKey}`;
-      if (isBibleSummary) {
-        return `**${raidLabel}** · ${raid.boss || "?"} · ${raid.encounters || 0} log · DPS ${shortNumber(raid.medianDps)} · Bible pct ${pct(raid.avgBiblePercentile)} · deathless ${pct(raid.deathlessRate)}`;
-      }
-      return `**${raidLabel}** · ${raid.boss || "?"} · ${raid.encounters || 0} log · DPS ${shortNumber(raid.medianDps)} · share ${pct(raid.avgDamageShare)} · top ${pct(raid.topRate)}`;
-    });
-  if ((character.raids || []).length > 8) {
-    raidLines.push(`\`…\` +${(character.raids || []).length - 8} more`);
-  }
+  const sortedRaids = [...(character.raids || [])]
+    .sort((a, b) => Number(b?.encounters || 0) - Number(a?.encounters || 0));
+  const raidLines = sliceMapWithOverflow(sortedRaids, 8, (raid) => {
+    const raidLabel = getRaidModeLabel(raid.raidKey, raid.modeKey, lang) || `${raid.raidKey} ${raid.modeKey}`;
+    if (isBibleSummary) {
+      return `**${raidLabel}** · ${raid.boss || "?"} · ${raid.encounters || 0} log · DPS ${shortNumber(raid.medianDps)} · Bible pct ${pct(raid.avgBiblePercentile)} · deathless ${pct(raid.deathlessRate)}`;
+    }
+    return `**${raidLabel}** · ${raid.boss || "?"} · ${raid.encounters || 0} log · DPS ${shortNumber(raid.medianDps)} · share ${pct(raid.avgDamageShare)} · top ${pct(raid.topRate)}`;
+  });
   embed.addFields({
     name: hudFieldName("raid breakdown"),
     value: raidLines.length ? raidLines.join("\n") : t("raidProfile.noRaidBreakdown", lang),
