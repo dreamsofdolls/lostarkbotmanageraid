@@ -1,0 +1,101 @@
+/**
+ * services/raid/channel-monitor-parser.js
+ * Pure parser for short raid-clear messages posted in the configured raid
+ * monitor channel. Keep this free of Discord/Mongo dependencies so parser
+ * aliases can be tested without constructing the channel-monitor service.
+ */
+
+"use strict";
+
+const RAID_ALIASES = new Map([
+  ["armoche", "armoche"],
+  ["act4", "armoche"],
+  ["kazeros", "kazeros"],
+  ["kaz", "kazeros"],
+  ["serca", "serca"],
+  ["secra", "serca"],
+  // Native JP raid names. Token lower-casing does not affect katakana, so exact
+  // aliases are enough once separator normalization has run.
+  ["アクト4", "armoche"],
+  ["カゼロス", "kazeros"],
+  ["セルカ", "serca"],
+]);
+
+const DIFFICULTY_ALIASES = new Map([
+  ["nightmare", "nightmare"],
+  ["9m", "nightmare"],
+  ["hard", "hard"],
+  ["hm", "hard"],
+  ["normal", "normal"],
+  ["nor", "normal"],
+  // VN-community preference: nm reads as normal. Nightmare shorthand is 9m.
+  ["nm", "normal"],
+  ["ノーマル", "normal"],
+  ["ハード", "hard"],
+  ["ナイトメア", "nightmare"],
+]);
+
+const GATE_TOKEN_RE = /^g([1-9])$/;
+
+function normalizeRaidChannelContent(content) {
+  return String(content || "")
+    .trim()
+    .replace(/act\s+4/gi, "act4")
+    .replace(/[+,]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Parse a raid monitor message into a raid-set intent.
+ * @param {string} content
+ * @returns {null|object}
+ */
+function parseRaidMessage(content) {
+  const normalized = normalizeRaidChannelContent(content);
+  if (!normalized) return null;
+  const tokens = normalized.toLowerCase().split(" ").filter(Boolean);
+  if (tokens.length < 3) return null;
+
+  const raidSet = new Set();
+  const diffSet = new Set();
+  const gateSet = new Set();
+  const leftover = [];
+
+  for (const tok of tokens) {
+    if (RAID_ALIASES.has(tok)) {
+      raidSet.add(RAID_ALIASES.get(tok));
+      continue;
+    }
+    if (DIFFICULTY_ALIASES.has(tok)) {
+      diffSet.add(DIFFICULTY_ALIASES.get(tok));
+      continue;
+    }
+    const gateMatch = tok.match(GATE_TOKEN_RE);
+    if (gateMatch) {
+      gateSet.add(`G${gateMatch[1]}`);
+      continue;
+    }
+    leftover.push(tok);
+  }
+
+  if (raidSet.size === 0 || diffSet.size === 0) return null;
+  if (leftover.length === 0) return null;
+  if (raidSet.size > 1) return { error: "multi-raid", raids: [...raidSet] };
+  if (diffSet.size > 1) return { error: "multi-difficulty", difficulties: [...diffSet] };
+  if (gateSet.size > 1) return { error: "multi-gate", gates: [...gateSet] };
+
+  return {
+    raidKey: [...raidSet][0],
+    modeKey: [...diffSet][0],
+    charNames: [...new Set(leftover.filter(Boolean))],
+    gate: [...gateSet][0] || null,
+  };
+}
+
+module.exports = {
+  DIFFICULTY_ALIASES,
+  RAID_ALIASES,
+  normalizeRaidChannelContent,
+  parseRaidMessage,
+};
