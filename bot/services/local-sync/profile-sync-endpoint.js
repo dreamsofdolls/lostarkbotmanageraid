@@ -49,6 +49,19 @@ function cleanNumberObject(raw, allowedKeys, opts = {}) {
   return out;
 }
 
+function clampObjectKeys(target, keys, opts = {}) {
+  if (!target || typeof target !== "object") return target;
+  for (const key of Array.isArray(keys) ? keys : [keys]) {
+    if (key in target) target[key] = clampNumber(target[key], opts);
+  }
+  return target;
+}
+
+function applyClampRules(target, rules) {
+  for (const [keys, opts] of rules) clampObjectKeys(target, keys, opts);
+  return target;
+}
+
 function roleForClass(className, fallback = "unknown") {
   const key = normalizeKey(className).replace(/\s+/g, "");
   if (key === "bard" || key === "paladin" || key === "artist" || key === "valkyrie" || key === "holyknight") {
@@ -262,43 +275,38 @@ function cleanEncounterMetrics(raw) {
   metrics.rdpsValid = raw?.rdpsValid === true;
   metrics.supporterTier = cleanSupporterTier(raw?.supporterTier);
   metrics.contextSource = ["spec", "class"].includes(raw?.contextSource) ? raw.contextSource : "none";
-  for (const key of [
-    "damageShare",
-    "topDamageProximity",
-    "contextPerformancePercentile",
-    "contextDamageSharePercentile",
-    "contextTopDamageProximityPercentile",
-    "contextSupportPercentile",
-    "deadTimeRate",
-    "critRate",
-    "critDamageShare",
-    "backAttackRate",
-    "frontAttackRate",
-    "backAttackDamageShare",
-    "frontAttackDamageShare",
-    "positionalDamageShare",
-    "topSkillShare",
-    "damageTakenShare",
-    "hyperShare",
-    "unbuffedShare",
-    "supportBuffedShare",
-    "supportDebuffedShare",
-    "partyBuffedShare",
-    "selfBuffedShare",
-    "partyDebuffedShare",
-    "battleItemDebuffedShare",
-    "supporterPercent",
-    "synergyReceivedShare",
-  ]) {
-    if (key in metrics) metrics[key] = clampNumber(metrics[key], { max: 999 });
-  }
-  if ("activeTimeRate" in metrics) metrics.activeTimeRate = clampNumber(metrics.activeTimeRate, { max: 100 });
-  if ("burstRatio" in metrics) metrics.burstRatio = clampNumber(metrics.burstRatio, { max: 100 });
-  if ("topDamageProximity" in metrics) metrics.topDamageProximity = clampNumber(metrics.topDamageProximity, { max: 100 });
-  if ("contextSampleCount" in metrics) metrics.contextSampleCount = clampNumber(metrics.contextSampleCount, { max: 100000 });
-  for (const key of ["damageRank", "partyCount", "deathCount", "counters", "incapacitations", "supporterRank", "supporterCount"]) {
-    if (key in metrics) metrics[key] = clampNumber(metrics[key], { max: 1000 });
-  }
+  applyClampRules(metrics, [
+    [[
+      "damageShare",
+      "contextPerformancePercentile",
+      "contextDamageSharePercentile",
+      "contextTopDamageProximityPercentile",
+      "contextSupportPercentile",
+      "deadTimeRate",
+      "critRate",
+      "critDamageShare",
+      "backAttackRate",
+      "frontAttackRate",
+      "backAttackDamageShare",
+      "frontAttackDamageShare",
+      "positionalDamageShare",
+      "topSkillShare",
+      "damageTakenShare",
+      "hyperShare",
+      "unbuffedShare",
+      "supportBuffedShare",
+      "supportDebuffedShare",
+      "partyBuffedShare",
+      "selfBuffedShare",
+      "partyDebuffedShare",
+      "battleItemDebuffedShare",
+      "supporterPercent",
+      "synergyReceivedShare",
+    ], { max: 999 }],
+    [["activeTimeRate", "burstRatio", "topDamageProximity"], { max: 100 }],
+    ["contextSampleCount", { max: 100000 }],
+    [["damageRank", "partyCount", "deathCount", "counters", "incapacitations", "supporterRank", "supporterCount"], { max: 1000 }],
+  ]);
   return metrics;
 }
 
@@ -601,66 +609,59 @@ function cleanCharacterProfile(rawChar, rosterEntry) {
     "unclassifiedBuildLogCount",
     "consistency",
   ], { max: 9999999999999 });
-  if ("deathRate" in stats) stats.deathRate = clampNumber(stats.deathRate, { max: 100 });
-  if ("avgTopDamageProximity" in stats) stats.avgTopDamageProximity = clampNumber(stats.avgTopDamageProximity, { max: 100 });
-  if ("contextCoverageRate" in stats) stats.contextCoverageRate = clampNumber(stats.contextCoverageRate, { max: 100 });
-  if ("contextSampleCountAvg" in stats) stats.contextSampleCountAvg = clampNumber(stats.contextSampleCountAvg, { max: 100000 });
-  for (const key of [
-    "avgContextPerformancePercentile",
-    "avgContextDamageSharePercentile",
-    "avgContextTopDamageProximityPercentile",
-    "avgContextSupportPercentile",
-  ]) {
-    if (key in stats) stats[key] = clampNumber(stats[key], { max: 100 });
-  }
-  if ("avgDeaths" in stats) stats.avgDeaths = clampNumber(stats.avgDeaths, { max: 1000 });
-  if ("avgBurstRatio" in stats) stats.avgBurstRatio = clampNumber(stats.avgBurstRatio, { max: 100 });
-  if ("totalDeaths" in stats) stats.totalDeaths = clampNumber(stats.totalDeaths, { max: 100000 });
-  if ("totalDeadTimeMs" in stats) stats.totalDeadTimeMs = clampNumber(stats.totalDeadTimeMs, { max: 9999999999999 });
-  if ("avgDeadTimeMs" in stats) stats.avgDeadTimeMs = clampNumber(stats.avgDeadTimeMs, { max: 9999999999999 });
-  if ("avgDeadTimeRate" in stats) stats.avgDeadTimeRate = clampNumber(stats.avgDeadTimeRate, { max: 100 });
-  if ("rdpsValidCount" in stats) stats.rdpsValidCount = clampNumber(stats.rdpsValidCount, { max: 100000 });
-  if ("rdpsValidRate" in stats) stats.rdpsValidRate = clampNumber(stats.rdpsValidRate, { max: 100 });
-  if ("avgSupporterPercent" in stats) stats.avgSupporterPercent = clampNumber(stats.avgSupporterPercent, { max: 100 });
-  if ("medianSupporterPercent" in stats) stats.medianSupporterPercent = clampNumber(stats.medianSupporterPercent, { max: 100 });
-  if ("radiantSupportCount" in stats) stats.radiantSupportCount = clampNumber(stats.radiantSupportCount, { max: 100000 });
-  if ("radiantSupportRate" in stats) stats.radiantSupportRate = clampNumber(stats.radiantSupportRate, { max: 100 });
-  if ("avgDurationMs" in stats) stats.avgDurationMs = clampNumber(stats.avgDurationMs, { max: 24 * 60 * 60 * 1000 });
-  if ("avgActiveDurationMs" in stats) stats.avgActiveDurationMs = clampNumber(stats.avgActiveDurationMs, { max: 24 * 60 * 60 * 1000 });
-  if ("avgIntermissionMs" in stats) stats.avgIntermissionMs = clampNumber(stats.avgIntermissionMs, { max: 24 * 60 * 60 * 1000 });
-  if ("avgActiveTimeRate" in stats) stats.avgActiveTimeRate = clampNumber(stats.avgActiveTimeRate, { max: 100 });
-  if ("supporterRankValidCount" in stats) stats.supporterRankValidCount = clampNumber(stats.supporterRankValidCount, { max: 100000 });
-  if ("supporterCompetitiveCount" in stats) stats.supporterCompetitiveCount = clampNumber(stats.supporterCompetitiveCount, { max: 100000 });
-  if ("avgSupporterRank" in stats) stats.avgSupporterRank = clampNumber(stats.avgSupporterRank, { max: 1000 });
-  if ("supporterCountAvg" in stats) stats.supporterCountAvg = clampNumber(stats.supporterCountAvg, { max: 1000 });
-  if ("supporterTopRate" in stats) stats.supporterTopRate = clampNumber(stats.supporterTopRate, { max: 100 });
-  if ("avgCritDamageShare" in stats) stats.avgCritDamageShare = clampNumber(stats.avgCritDamageShare, { max: 100 });
-  if ("avgBackAttackDamageShare" in stats) stats.avgBackAttackDamageShare = clampNumber(stats.avgBackAttackDamageShare, { max: 100 });
-  if ("avgFrontAttackDamageShare" in stats) stats.avgFrontAttackDamageShare = clampNumber(stats.avgFrontAttackDamageShare, { max: 100 });
-  if ("avgPositionalDamageShare" in stats) stats.avgPositionalDamageShare = clampNumber(stats.avgPositionalDamageShare, { max: 100 });
-  if ("damageTakenShareValidCount" in stats) stats.damageTakenShareValidCount = clampNumber(stats.damageTakenShareValidCount, { max: 100000 });
-  if ("avgDamageTakenShare" in stats) stats.avgDamageTakenShare = clampNumber(stats.avgDamageTakenShare, { max: 100 });
-  if ("avgGearScore" in stats) stats.avgGearScore = clampNumber(stats.avgGearScore, { max: 9999 });
-  if ("latestGearScore" in stats) stats.latestGearScore = clampNumber(stats.latestGearScore, { max: 9999 });
-  if ("arkPassiveRate" in stats) stats.arkPassiveRate = clampNumber(stats.arkPassiveRate, { max: 100 });
-  if ("buildVariantCount" in stats) stats.buildVariantCount = clampNumber(stats.buildVariantCount, { max: 1000 });
-  if ("unclassifiedBuildLogCount" in stats) stats.unclassifiedBuildLogCount = clampNumber(stats.unclassifiedBuildLogCount, { max: 100000 });
-  for (const key of ["supportLogRate", "dpsBuildLogRate", "primaryRoleRate"]) {
-    if (key in stats) stats[key] = clampNumber(stats[key], { max: 100 });
-  }
-  for (const key of ["allEncounterCount", "supportLogCount", "dpsBuildLogCount"]) {
-    if (key in stats) stats[key] = clampNumber(stats[key], { max: 100000 });
-  }
-  for (const key of [
-    "avgSupportBuffedShare",
-    "avgSupportDebuffedShare",
-    "avgPartyBuffedShare",
-    "avgSelfBuffedShare",
-    "avgPartyDebuffedShare",
-    "avgBattleItemDebuffedShare",
-  ]) {
-    if (key in stats) stats[key] = clampNumber(stats[key], { max: 999 });
-  }
+  applyClampRules(stats, [
+    [[
+      "deathRate",
+      "avgTopDamageProximity",
+      "contextCoverageRate",
+      "avgContextPerformancePercentile",
+      "avgContextDamageSharePercentile",
+      "avgContextTopDamageProximityPercentile",
+      "avgContextSupportPercentile",
+      "avgBurstRatio",
+      "avgDeadTimeRate",
+      "rdpsValidRate",
+      "avgSupporterPercent",
+      "medianSupporterPercent",
+      "radiantSupportRate",
+      "avgActiveTimeRate",
+      "supporterTopRate",
+      "avgCritDamageShare",
+      "avgBackAttackDamageShare",
+      "avgFrontAttackDamageShare",
+      "avgPositionalDamageShare",
+      "avgDamageTakenShare",
+      "arkPassiveRate",
+      "supportLogRate",
+      "dpsBuildLogRate",
+      "primaryRoleRate",
+    ], { max: 100 }],
+    [[
+      "contextSampleCountAvg",
+      "totalDeaths",
+      "rdpsValidCount",
+      "radiantSupportCount",
+      "supporterRankValidCount",
+      "supporterCompetitiveCount",
+      "damageTakenShareValidCount",
+      "unclassifiedBuildLogCount",
+      "allEncounterCount",
+      "supportLogCount",
+      "dpsBuildLogCount",
+    ], { max: 100000 }],
+    [["avgDeaths", "avgSupporterRank", "supporterCountAvg", "buildVariantCount"], { max: 1000 }],
+    [["totalDeadTimeMs", "avgDeadTimeMs"], { max: 9999999999999 }],
+    [["avgDurationMs", "avgActiveDurationMs", "avgIntermissionMs"], { max: 24 * 60 * 60 * 1000 }],
+    [["avgGearScore", "latestGearScore"], { max: 9999 }],
+    [[
+      "avgSupportBuffedShare",
+      "avgSupportDebuffedShare",
+      "avgPartyBuffedShare",
+      "avgSelfBuffedShare",
+      "avgPartyDebuffedShare",
+      "avgBattleItemDebuffedShare",
+    ], { max: 999 }],
+  ]);
   stats.attackStyle = cleanAttackStyle(rawChar.stats?.attackStyle);
 
   const scores = cleanNumberObject(rawChar.scores, [

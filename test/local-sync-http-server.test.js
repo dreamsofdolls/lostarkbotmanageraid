@@ -24,6 +24,7 @@ test("local-sync web server serves raid-profile browser helper modules", async (
     for (const [route, expectedExport] of [
       ["/sync/profile-role.js", "classifyProfileLogRole"],
       ["/sync/profile-metrics.js", "computeProfileConsistency"],
+      ["/sync/profile-score.js", "computeProfileScores"],
     ]) {
       const resp = await fetch(`${baseUrl}${route}`);
       assert.equal(resp.status, 200, `${route} should be served`);
