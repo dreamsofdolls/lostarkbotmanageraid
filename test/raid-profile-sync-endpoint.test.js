@@ -86,6 +86,7 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
   const profileToken = "profile-device-token";
   const tokenHash = hashProfileDeviceToken(profileToken);
   const savedSnapshots = [];
+  const savedEncounterWrites = [];
   const userUpdates = [];
   const User = {
     findOne(query) {
@@ -122,7 +123,13 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
       return { discordId: filter.discordId };
     },
   };
-  const handler = createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot });
+  const RaidProfileEncounter = {
+    async bulkWrite(ops, options) {
+      savedEncounterWrites.push({ ops, options });
+      return { upsertedCount: ops.length, modifiedCount: 0 };
+    },
+  };
+  const handler = createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot, RaidProfileEncounter });
   const res = makeRes();
 
   await handler(
@@ -154,6 +161,16 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
                   deathRate: 25,
                   totalDeaths: 3,
                   avgDeaths: 0.25,
+                  totalDeadTimeMs: 42000,
+                  avgDeadTimeMs: 3500,
+                  avgDeadTimeRate: 1.4,
+                  rdpsValidCount: 9,
+                  rdpsValidRate: 75,
+                  avgSupporterPercent: 30.4,
+                  medianSupporterPercent: 29.1,
+                  radiantSupportCount: 6,
+                  radiantSupportRate: 50,
+                  avgSupporterDamageGivenPerMinute: 50100000000,
                   avgCritRate: 82.5,
                   avgBackAttackRate: 48,
                   avgFrontAttackRate: 3,
@@ -244,6 +261,58 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
             ],
           },
         ],
+        encounters: [
+          {
+            encounterId: "enc-1",
+            accountName: "Roster",
+            characterName: "Aki",
+            class: "Wrong Client Class",
+            role: "dps",
+            fightStart: 3000,
+            durationMs: 420000,
+            boss: "Abyss Lord Kazeros",
+            raidKey: "kazeros",
+            modeKey: "normal",
+            difficulty: "Normal",
+            build: {
+              classId: 314,
+              spec: "Full Bloom",
+              gearScore: 1755,
+              combatPower: 1300.25,
+              arkPassiveActive: true,
+              engravings: [{ id: "315", name: "Full Bloom", level: 3, isClass: true }],
+              arkPassive: {
+                evolution: { count: 2, points: 40, spentPoints: 40 },
+                enlightenment: { count: 1, points: 3, spentPoints: 24, spec: "Full Bloom" },
+                leap: { count: 1, points: 5, spentPoints: 5 },
+              },
+            },
+            metrics: {
+              dps: 123,
+              rdps: 456,
+              rdpsValid: true,
+              damageShare: 12.3,
+              deathCount: 1,
+              deadTimeMs: 42000,
+              deadTimeRate: 10,
+              rdpsDamageGivenPerMinute: 987654,
+              supporterDamageGiven: 123456789,
+              supporterDamageGivenPerMinute: 50100000000,
+              supporterPercent: 30.4,
+              supporterTier: "radiant",
+            },
+            topSkills: [{ id: "123", name: "Main Skill", damage: 987, share: 42.5 }],
+          },
+          {
+            encounterId: "enc-off",
+            accountName: "Roster",
+            characterName: "OffRoster",
+            fightStart: 3001,
+            boss: "Abyss Lord Kazeros",
+            raidKey: "kazeros",
+            modeKey: "normal",
+          },
+        ],
       },
     }),
     res,
@@ -270,6 +339,16 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
   assert.equal(saved.accounts[0].characters[0].stats.totalDeaths, 3);
   assert.equal(saved.accounts[0].characters[0].stats.avgDeaths, 0.25);
   assert.equal(saved.accounts[0].characters[0].stats.deathRate, 25);
+  assert.equal(saved.accounts[0].characters[0].stats.totalDeadTimeMs, 42000);
+  assert.equal(saved.accounts[0].characters[0].stats.avgDeadTimeMs, 3500);
+  assert.equal(saved.accounts[0].characters[0].stats.avgDeadTimeRate, 1.4);
+  assert.equal(saved.accounts[0].characters[0].stats.rdpsValidCount, 9);
+  assert.equal(saved.accounts[0].characters[0].stats.rdpsValidRate, 75);
+  assert.equal(saved.accounts[0].characters[0].stats.avgSupporterPercent, 30.4);
+  assert.equal(saved.accounts[0].characters[0].stats.medianSupporterPercent, 29.1);
+  assert.equal(saved.accounts[0].characters[0].stats.radiantSupportCount, 6);
+  assert.equal(saved.accounts[0].characters[0].stats.radiantSupportRate, 50);
+  assert.equal(saved.accounts[0].characters[0].stats.avgSupporterDamageGivenPerMinute, 50100000000);
   assert.equal(saved.accounts[0].characters[0].stats.attackStyle, "back");
   assert.equal(saved.accounts[0].characters[0].stats.avgCritRate, 82.5);
   assert.equal(saved.accounts[0].characters[0].stats.avgSynergyGivenPerMinute, 12345);
@@ -297,7 +376,27 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
   assert.equal(saved.criteria.modernProfileStatsOnly, true);
   assert.equal(saved.criteria.range.type, "full");
   assert.equal(saved["rangeSnapshots.full"].criteria.range.type, "full");
+  assert.equal(saved["rangeSnapshots.full"].encounterSummaries, undefined);
   assert.equal(saved.totals.encounterCount, 12);
+  assert.equal(saved.totals.encounterSummaryCount, 1);
+  assert.equal(savedEncounterWrites.length, 1);
+  assert.equal(savedEncounterWrites[0].ops.length, 1);
+  assert.equal(savedEncounterWrites[0].options.ordered, false);
+  const encounterOp = savedEncounterWrites[0].ops[0].updateOne;
+  assert.deepEqual(encounterOp.filter, {
+    discordId: "u1",
+    encounterId: "enc-1",
+    characterNameKey: "aki",
+  });
+  assert.equal(encounterOp.update.$set.accountName, "Roster");
+  assert.equal(encounterOp.update.$set.characterName, "Aki");
+  assert.equal(encounterOp.update.$set.class, "Artist");
+  assert.equal(encounterOp.update.$set.role, "dps");
+  assert.equal(encounterOp.update.$set.metrics.rdpsValid, true);
+  assert.equal(encounterOp.update.$set.metrics.deadTimeMs, 42000);
+  assert.equal(encounterOp.update.$set.metrics.supporterPercent, 30.4);
+  assert.equal(encounterOp.update.$set.metrics.supporterTier, "radiant");
+  assert.equal(encounterOp.update.$set.topSkills[0].name, "Main Skill");
   assert.equal(userUpdates.length, 1);
   assert.deepEqual(userUpdates[0].filter, {
     discordId: "u1",

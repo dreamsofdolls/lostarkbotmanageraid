@@ -21,6 +21,8 @@ const MAX_TOP_SKILLS_PER_CHAR = 8;
 const MAX_TOP_SOURCES_PER_CHAR = 8;
 const MAX_ENGRAVINGS_PER_CHAR = 8;
 const MAX_ARK_PASSIVE_NODES_PER_TREE = 40;
+const MAX_ENCOUNTER_SUMMARIES_PER_SYNC = 5000;
+const MAX_TOP_SKILLS_PER_ENCOUNTER = 5;
 
 function normalizeKey(value) {
   return String(value || "").trim().toLowerCase();
@@ -62,6 +64,10 @@ function cleanRole(value, fallback = "unknown") {
 
 function cleanAttackStyle(value) {
   return value === "back" || value === "front" || value === "hit_master" ? value : "hit_master";
+}
+
+function cleanSupporterTier(value) {
+  return value === "radiant" || value === "noble" || value === "supporter" ? value : "none";
 }
 
 function buildRosterIndexes(userDoc) {
@@ -106,6 +112,16 @@ function cleanRaidBreakdown(raw) {
     deathRate: clampNumber(raw.deathRate, { max: 100 }),
     totalDeaths: clampNumber(raw.totalDeaths, { max: 100000 }),
     avgDeaths: clampNumber(raw.avgDeaths, { max: 1000 }),
+    totalDeadTimeMs: clampNumber(raw.totalDeadTimeMs, { max: 9999999999999 }),
+    avgDeadTimeMs: clampNumber(raw.avgDeadTimeMs, { max: 9999999999999 }),
+    avgDeadTimeRate: clampNumber(raw.avgDeadTimeRate, { max: 100 }),
+    rdpsValidCount: clampNumber(raw.rdpsValidCount, { max: 100000 }),
+    rdpsValidRate: clampNumber(raw.rdpsValidRate, { max: 100 }),
+    avgSupporterPercent: clampNumber(raw.avgSupporterPercent, { max: 100 }),
+    medianSupporterPercent: clampNumber(raw.medianSupporterPercent, { max: 100 }),
+    radiantSupportCount: clampNumber(raw.radiantSupportCount, { max: 100000 }),
+    radiantSupportRate: clampNumber(raw.radiantSupportRate, { max: 100 }),
+    avgSupporterDamageGivenPerMinute: clampNumber(raw.avgSupporterDamageGivenPerMinute),
     avgCritRate: clampNumber(raw.avgCritRate, { max: 100 }),
     avgBackAttackRate: clampNumber(raw.avgBackAttackRate, { max: 100 }),
     avgFrontAttackRate: clampNumber(raw.avgFrontAttackRate, { max: 100 }),
@@ -132,6 +148,155 @@ function cleanRaidBreakdown(raw) {
     avgCombatPower: clampNumber(raw.avgCombatPower),
     arkPassiveRate: clampNumber(raw.arkPassiveRate, { max: 100 }),
   };
+}
+
+function cleanEncounterBuild(raw) {
+  const build = cleanBuild(raw);
+  const arkPassive = build.arkPassive || {};
+  const compactTree = (tree = {}) => ({
+    count: clampNumber(tree.count, { max: MAX_ARK_PASSIVE_NODES_PER_TREE }),
+    points: clampNumber(tree.points, { max: 999 }),
+    spentPoints: clampNumber(tree.spentPoints, { max: 999 }),
+    spec: cleanShortString(tree.spec, 80),
+  });
+  return {
+    classId: build.classId || 0,
+    spec: build.spec || "",
+    gearScore: build.gearScore || 0,
+    combatPower: build.combatPower || 0,
+    arkPassiveActive: build.arkPassiveActive,
+    engravings: (build.engravings || []).slice(0, 4),
+    arkPassive: {
+      evolution: compactTree(arkPassive.evolution),
+      enlightenment: compactTree(arkPassive.enlightenment),
+      leap: compactTree(arkPassive.leap),
+    },
+  };
+}
+
+function cleanEncounterMetrics(raw) {
+  const metrics = cleanNumberObject(raw, [
+    "dps",
+    "rdps",
+    "ndps",
+    "damageDealt",
+    "damageShare",
+    "damageRank",
+    "partyCount",
+    "deathCount",
+    "deadTimeMs",
+    "deadTimeRate",
+    "counters",
+    "castsPerMinute",
+    "hitsPerMinute",
+    "critRate",
+    "backAttackRate",
+    "frontAttackRate",
+    "topSkillShare",
+    "damageTakenPerMinute",
+    "shieldReceivedPerMinute",
+    "staggerPerMinute",
+    "incapacitations",
+    "incapacitationsPerMinute",
+    "hyperShare",
+    "unbuffedShare",
+    "supportBuffedShare",
+    "supportDebuffedShare",
+    "partyBuffedShare",
+    "selfBuffedShare",
+    "partyDebuffedShare",
+    "battleItemDebuffedShare",
+    "protectionPerMinute",
+    "rdpsDamageGivenPerMinute",
+    "rdpsDamageReceivedSupportPerMinute",
+    "supporterDamageGiven",
+    "supporterDamageGivenPerMinute",
+    "supporterPercent",
+    "synergyGivenPerMinute",
+    "synergyReceivedShare",
+  ], { max: 9999999999999 });
+  metrics.rdpsValid = raw?.rdpsValid === true;
+  metrics.supporterTier = cleanSupporterTier(raw?.supporterTier);
+  for (const key of [
+    "damageShare",
+    "deadTimeRate",
+    "critRate",
+    "backAttackRate",
+    "frontAttackRate",
+    "topSkillShare",
+    "hyperShare",
+    "unbuffedShare",
+    "supportBuffedShare",
+    "supportDebuffedShare",
+    "partyBuffedShare",
+    "selfBuffedShare",
+    "partyDebuffedShare",
+    "battleItemDebuffedShare",
+    "supporterPercent",
+    "synergyReceivedShare",
+  ]) {
+    if (key in metrics) metrics[key] = clampNumber(metrics[key], { max: 999 });
+  }
+  for (const key of ["damageRank", "partyCount", "deathCount", "counters", "incapacitations"]) {
+    if (key in metrics) metrics[key] = clampNumber(metrics[key], { max: 1000 });
+  }
+  return metrics;
+}
+
+function cleanProfileEncounterSummary(raw, indexes, range, db) {
+  if (!raw || typeof raw !== "object") return null;
+  const accountName = cleanShortString(raw.accountName, 80);
+  const characterName = cleanShortString(raw.characterName || raw.localPlayer || raw.name, 80);
+  const rosterEntry = resolveRosterCharacter(indexes, accountName, characterName);
+  if (!rosterEntry) return null;
+  const fightStart = clampNumber(raw.fightStart, { max: 9999999999999 });
+  if (!fightStart) return null;
+  const boss = cleanShortString(raw.boss, 120);
+  const raidKey = cleanShortString(raw.raidKey, 32);
+  const modeKey = cleanShortString(raw.modeKey, 32);
+  if (!boss || !raidKey || !modeKey) return null;
+  const fallbackEncounterId = `${fightStart}:${boss}:${rosterEntry.charName}`;
+  const encounterId = cleanShortString(raw.encounterId || fallbackEncounterId, 120);
+  const className = rosterEntry.character?.class || cleanShortString(raw.class, 80);
+  const classRole = roleForClass(className, raw.classRole);
+  return {
+    encounterId,
+    accountName: rosterEntry.accountName,
+    characterName: rosterEntry.charName,
+    characterNameKey: normalizeKey(rosterEntry.charName),
+    class: className,
+    itemLevel: clampNumber(rosterEntry.character?.itemLevel, { max: 9999 }),
+    classRole,
+    role: cleanRole(raw.role, classRole),
+    fightStart,
+    durationMs: clampNumber(raw.durationMs, { max: 24 * 60 * 60 * 1000 }),
+    boss,
+    raidKey,
+    modeKey,
+    difficulty: cleanShortString(raw.difficulty, 80),
+    rangeType: range.type,
+    db,
+    build: cleanEncounterBuild(raw.build),
+    metrics: cleanEncounterMetrics(raw.metrics),
+    topSkills: (Array.isArray(raw.topSkills) ? raw.topSkills : [])
+      .slice(0, MAX_TOP_SKILLS_PER_ENCOUNTER)
+      .map(cleanTopSkill)
+      .filter(Boolean),
+  };
+}
+
+function cleanProfileEncounterSummaries(rawList, indexes, range, db) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of (Array.isArray(rawList) ? rawList : []).slice(0, MAX_ENCOUNTER_SUMMARIES_PER_SYNC)) {
+    const clean = cleanProfileEncounterSummary(raw, indexes, range, db);
+    if (!clean) continue;
+    const key = `${clean.encounterId}\x1f${clean.characterNameKey}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(clean);
+  }
+  return out;
 }
 
 function cleanTopSkill(raw) {
@@ -266,6 +431,16 @@ function cleanCharacterProfile(rawChar, rosterEntry) {
     "deathRate",
     "totalDeaths",
     "avgDeaths",
+    "totalDeadTimeMs",
+    "avgDeadTimeMs",
+    "avgDeadTimeRate",
+    "rdpsValidCount",
+    "rdpsValidRate",
+    "avgSupporterPercent",
+    "medianSupporterPercent",
+    "radiantSupportCount",
+    "radiantSupportRate",
+    "avgSupporterDamageGivenPerMinute",
     "avgCounters",
     "avgCastsPerMinute",
     "avgHitsPerMinute",
@@ -315,6 +490,15 @@ function cleanCharacterProfile(rawChar, rosterEntry) {
   if ("deathRate" in stats) stats.deathRate = clampNumber(stats.deathRate, { max: 100 });
   if ("avgDeaths" in stats) stats.avgDeaths = clampNumber(stats.avgDeaths, { max: 1000 });
   if ("totalDeaths" in stats) stats.totalDeaths = clampNumber(stats.totalDeaths, { max: 100000 });
+  if ("totalDeadTimeMs" in stats) stats.totalDeadTimeMs = clampNumber(stats.totalDeadTimeMs, { max: 9999999999999 });
+  if ("avgDeadTimeMs" in stats) stats.avgDeadTimeMs = clampNumber(stats.avgDeadTimeMs, { max: 9999999999999 });
+  if ("avgDeadTimeRate" in stats) stats.avgDeadTimeRate = clampNumber(stats.avgDeadTimeRate, { max: 100 });
+  if ("rdpsValidCount" in stats) stats.rdpsValidCount = clampNumber(stats.rdpsValidCount, { max: 100000 });
+  if ("rdpsValidRate" in stats) stats.rdpsValidRate = clampNumber(stats.rdpsValidRate, { max: 100 });
+  if ("avgSupporterPercent" in stats) stats.avgSupporterPercent = clampNumber(stats.avgSupporterPercent, { max: 100 });
+  if ("medianSupporterPercent" in stats) stats.medianSupporterPercent = clampNumber(stats.medianSupporterPercent, { max: 100 });
+  if ("radiantSupportCount" in stats) stats.radiantSupportCount = clampNumber(stats.radiantSupportCount, { max: 100000 });
+  if ("radiantSupportRate" in stats) stats.radiantSupportRate = clampNumber(stats.radiantSupportRate, { max: 100 });
   if ("avgGearScore" in stats) stats.avgGearScore = clampNumber(stats.avgGearScore, { max: 9999 });
   if ("latestGearScore" in stats) stats.latestGearScore = clampNumber(stats.latestGearScore, { max: 9999 });
   if ("arkPassiveRate" in stats) stats.arkPassiveRate = clampNumber(stats.arkPassiveRate, { max: 100 });
@@ -457,6 +641,13 @@ function sanitizeSnapshotPayload(payload, userDoc) {
     }
   }
 
+  const db = {
+    fileName: cleanShortString(payload.db?.fileName, 160),
+    size: clampNumber(payload.db?.size, { max: 100 * 1024 * 1024 * 1024 }),
+    lastModified: clampNumber(payload.db?.lastModified, { max: 9999999999999, fallback: null }),
+  };
+  const encounterSummaries = cleanProfileEncounterSummaries(payload.encounters, indexes, range, db);
+
   return {
     version: PROFILE_VERSION,
     source: "local",
@@ -471,20 +662,18 @@ function sanitizeSnapshotPayload(payload, userDoc) {
       source: "encounters.db",
       range,
     },
-    db: {
-      fileName: cleanShortString(payload.db?.fileName, 160),
-      size: clampNumber(payload.db?.size, { max: 100 * 1024 * 1024 * 1024 }),
-      lastModified: clampNumber(payload.db?.lastModified, { max: 9999999999999, fallback: null }),
-    },
+    db,
     totals: {
       accountCount: accounts.length,
       characterCount,
       encounterCount,
+      encounterSummaryCount: encounterSummaries.length,
       firstFightStart,
       lastFightStart,
       rejectedCharacters: rejected,
     },
     accounts,
+    encounterSummaries,
   };
 }
 
@@ -501,18 +690,49 @@ async function shouldPromoteSnapshot(clean, discordId, RaidProfileSnapshot) {
 
 function buildSnapshotUpdate({ discordId, clean, promotePrimary }) {
   const rangeType = clean?.criteria?.range?.type === "weekly" ? "weekly" : "full";
+  const { encounterSummaries: _encounterSummaries, ...snapshot } = clean || {};
   const set = {
     discordId,
-    [`rangeSnapshots.${rangeType}`]: clean,
+    [`rangeSnapshots.${rangeType}`]: snapshot,
   };
   if (promotePrimary) {
     Object.assign(set, {
-      ...clean,
+      ...snapshot,
       discordId,
       rangeType,
     });
   }
   return set;
+}
+
+async function upsertEncounterSummaries({ discordId, summaries, RaidProfileEncounter }) {
+  if (!RaidProfileEncounter || !Array.isArray(summaries) || summaries.length === 0) {
+    return { received: Array.isArray(summaries) ? summaries.length : 0, upserted: 0, modified: 0 };
+  }
+  const receivedAt = Date.now();
+  const ops = summaries.map((summary) => ({
+    updateOne: {
+      filter: {
+        discordId,
+        encounterId: summary.encounterId,
+        characterNameKey: summary.characterNameKey,
+      },
+      update: {
+        $set: {
+          ...summary,
+          discordId,
+          receivedAt,
+        },
+      },
+      upsert: true,
+    },
+  }));
+  const result = await RaidProfileEncounter.bulkWrite(ops, { ordered: false });
+  return {
+    received: summaries.length,
+    upserted: result?.upsertedCount || 0,
+    modified: result?.modifiedCount || 0,
+  };
 }
 
 function createProfileSessionEndpoint({ User }) {
@@ -581,7 +801,7 @@ function createProfileSessionEndpoint({ User }) {
   };
 }
 
-function createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot }) {
+function createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot, RaidProfileEncounter = null }) {
   if (!User) throw new Error("[raid-profile-sync-endpoint] User model required");
   if (!RaidProfileSnapshot) {
     throw new Error("[raid-profile-sync-endpoint] RaidProfileSnapshot model required");
@@ -653,12 +873,18 @@ function createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot }) {
       return;
     }
 
+    let encounterWrite = { received: clean.encounterSummaries?.length || 0, upserted: 0, modified: 0 };
     try {
       await RaidProfileSnapshot.findOneAndUpdate(
         { discordId: userDoc.discordId },
         { $set: buildSnapshotUpdate({ discordId: userDoc.discordId, clean, promotePrimary }) },
         { upsert: true, setDefaultsOnInsert: true, new: true }
       );
+      encounterWrite = await upsertEncounterSummaries({
+        discordId: userDoc.discordId,
+        summaries: clean.encounterSummaries,
+        RaidProfileEncounter,
+      });
       await User.updateOne(
         { discordId: userDoc.discordId, localProfileSyncTokenHash: userDoc.localProfileSyncTokenHash },
         { $set: { lastLocalProfileSyncAt: Date.now() } }
@@ -672,7 +898,10 @@ function createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot }) {
     send(res, 200, {
       ok: true,
       discordId: userDoc.discordId,
-      totals: clean.totals,
+      totals: {
+        ...clean.totals,
+        encounterSummaries: encounterWrite.received,
+      },
     });
   };
 }
@@ -682,4 +911,5 @@ module.exports = {
   createProfileSessionEndpoint,
   createRaidProfileSyncEndpoint,
   sanitizeSnapshotPayload,
+  upsertEncounterSummaries,
 };
