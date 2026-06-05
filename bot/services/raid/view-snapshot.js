@@ -9,6 +9,11 @@
 
 "use strict";
 
+const {
+  stampAutoManageAttemptFromReport,
+  syncRaidProfileAfterAutoManageReport,
+} = require("../auto-manage/report-utils");
+
 function toPlainUserSnapshot(userDoc) {
   if (!userDoc) return null;
   return typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
@@ -78,6 +83,7 @@ function createRaidViewSnapshotService({
 
     let autoManageGuard = null;
     let profileCollected = null;
+    let profileReport = null;
     let profileWeekResetStart = null;
     let shouldSyncProfile = false;
     try {
@@ -114,6 +120,7 @@ function createRaidViewSnapshotService({
         const doc = await User.findOne({ discordId });
         if (!doc) return null;
         profileCollected = null;
+        profileReport = null;
         profileWeekResetStart = null;
         shouldSyncProfile = false;
         const didFreshenWeek = ensureFreshWeek(doc);
@@ -126,10 +133,9 @@ function createRaidViewSnapshotService({
             autoManageWeekResetStart,
             autoManageCollected
           );
+          profileReport = autoReport;
           const now = Date.now();
-          doc.lastAutoManageAttemptAt = now;
-          if (autoReport.perChar.some((c) => !c.error)) {
-            doc.lastAutoManageSyncAt = now;
+          if (stampAutoManageAttemptFromReport(doc, autoReport, now)) {
             shouldSyncProfile = true;
             profileCollected = autoManageCollected;
             profileWeekResetStart = autoManageWeekResetStart;
@@ -143,8 +149,10 @@ function createRaidViewSnapshotService({
         if (didFreshenWeek || didRefresh || didAutoManage) await doc.save();
         return doc.toObject();
       });
-      if (snapshot && shouldSyncProfile) {
-        await syncRaidProfileFromBibleCollected({
+      if (shouldSyncProfile) {
+        await syncRaidProfileAfterAutoManageReport({
+          syncRaidProfileFromBibleCollected,
+          report: profileReport,
           discordId,
           userDoc: snapshot,
           weekResetStart: profileWeekResetStart,

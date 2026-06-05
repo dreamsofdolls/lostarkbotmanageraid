@@ -19,6 +19,11 @@ const {
 } = require("../access/manager");
 const { createBibleClient } = require("./bible-client");
 const { normalizeDifficultyToModeKey } = require("./bible-log-utils");
+const {
+  stampAutoManageAttemptFromReport,
+  toPlainUserDoc,
+  syncRaidProfileAfterAutoManageReport,
+} = require("./report-utils");
 const { t } = require("../i18n");
 const { getRaidLabel, getModeLabel } = require("../../utils/raid/common/labels");
 const { splitEmbedFieldValue } = require("../../utils/raid/common/shared");
@@ -711,22 +716,19 @@ function createAutoManageCoreService({
       ensureFreshWeek(fresh);
       finalReport = applyAutoManageCollected(fresh, weekResetStart, collected);
       const now = Date.now();
-      fresh.lastAutoManageAttemptAt = now;
-      if (finalReport.perChar.some((c) => !c.error)) {
-        fresh.lastAutoManageSyncAt = now;
-      }
+      stampAutoManageAttemptFromReport(fresh, finalReport, now);
       await fresh.save();
-      finalUserDocSnapshot = typeof fresh.toObject === "function" ? fresh.toObject() : fresh;
+      finalUserDocSnapshot = toPlainUserDoc(fresh);
     });
-    if (finalUserDocSnapshot && finalReport?.perChar?.some((c) => !c.error)) {
-      await syncRaidProfileFromBibleCollected({
-        discordId,
-        userDoc: finalUserDocSnapshot,
-        weekResetStart,
-        collected,
-        logLabel: "[auto-manage:on]",
-      });
-    }
+    await syncRaidProfileAfterAutoManageReport({
+      syncRaidProfileFromBibleCollected,
+      report: finalReport,
+      discordId,
+      userDoc: finalUserDocSnapshot,
+      weekResetStart,
+      collected,
+      logLabel: "[auto-manage:on]",
+    });
     return finalReport;
   }
 

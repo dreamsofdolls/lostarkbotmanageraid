@@ -16,6 +16,13 @@
  * @returns {object} service surface · see the return literal
  *   (loadStatusUserDoc, applyAutoManageCollectedForStatus, …)
  */
+const {
+  countAppliedAutoManageGates,
+  stampAutoManageAttemptFromReport,
+  toPlainUserDoc,
+  syncRaidProfileAfterAutoManageReport,
+} = require("../../services/auto-manage/report-utils");
+
 function createRaidStatusSync(deps) {
   const {
     User,
@@ -40,13 +47,6 @@ function createRaidStatusSync(deps) {
     newGatesApplied: 0,
   });
 
-  const countNewGates = (report) =>
-    (Array.isArray(report?.perChar) ? report.perChar : []).reduce(
-      (sum, entry) =>
-        sum + (Array.isArray(entry.applied) ? entry.applied.length : 0),
-      0
-    );
-
   const buildStatusUserMeta = (doc, outcome) => ({
     discordId: doc.discordId,
     autoManageEnabled: !!doc.autoManageEnabled,
@@ -68,6 +68,7 @@ function createRaidStatusSync(deps) {
     let autoManageGuard = null;
     let autoManageReleaseInBackground = false;
     let profileCollected = null;
+    let profileReport = null;
     let profileWeekResetStart = null;
     let shouldSyncProfile = false;
     const piggybackOutcome = createOutcome();
@@ -151,6 +152,7 @@ function createRaidStatusSync(deps) {
         const doc = await User.findOne({ discordId });
         if (!doc) return null;
         profileCollected = null;
+        profileReport = null;
         profileWeekResetStart = null;
         shouldSyncProfile = false;
 
@@ -164,15 +166,14 @@ function createRaidStatusSync(deps) {
             autoManageWeekResetStart,
             autoManageCollected
           );
+          profileReport = autoReport;
           const now = Date.now();
-          doc.lastAutoManageAttemptAt = now;
-          if (autoReport.perChar.some((c) => !c.error)) {
-            doc.lastAutoManageSyncAt = now;
+          if (stampAutoManageAttemptFromReport(doc, autoReport, now)) {
             shouldSyncProfile = true;
             profileCollected = autoManageCollected;
             profileWeekResetStart = autoManageWeekResetStart;
           }
-          const newGates = countNewGates(autoReport);
+          const newGates = countAppliedAutoManageGates(autoReport);
           piggybackOutcome.newGatesApplied = newGates;
           piggybackOutcome.outcome =
             newGates > 0 ? "applied" : "synced-no-new";
@@ -183,10 +184,12 @@ function createRaidStatusSync(deps) {
         }
 
         if (didFreshenWeek || didRefresh || didAutoManage) await doc.save();
-        return doc.toObject();
+        return toPlainUserDoc(doc);
       });
-      if (userDoc && shouldSyncProfile) {
-        await syncRaidProfileFromBibleCollected({
+      if (shouldSyncProfile) {
+        await syncRaidProfileAfterAutoManageReport({
+          syncRaidProfileFromBibleCollected,
+          report: profileReport,
           discordId,
           userDoc,
           weekResetStart: profileWeekResetStart,
@@ -213,6 +216,7 @@ function createRaidStatusSync(deps) {
     const { onAcquired } = options;
     let manualGuard = null;
     let profileCollected = null;
+    let profileReport = null;
     let profileUserDoc = null;
     let profileWeekResetStart = null;
     let shouldSyncProfile = false;
@@ -255,6 +259,7 @@ function createRaidStatusSync(deps) {
             const fresh = await User.findOne({ discordId });
             if (!fresh) return;
             profileCollected = null;
+            profileReport = null;
             profileUserDoc = null;
             profileWeekResetStart = null;
             shouldSyncProfile = false;
@@ -270,20 +275,19 @@ function createRaidStatusSync(deps) {
               weekResetStart,
               collectedLocal
             );
+            profileReport = report;
             const now = Date.now();
-            fresh.lastAutoManageAttemptAt = now;
-            if (report.perChar.some((c) => !c.error)) {
-              fresh.lastAutoManageSyncAt = now;
+            if (stampAutoManageAttemptFromReport(fresh, report, now)) {
               shouldSyncProfile = true;
               profileCollected = collectedLocal;
               profileWeekResetStart = weekResetStart;
             }
-            const newGates = countNewGates(report);
+            const newGates = countAppliedAutoManageGates(report);
             manualOutcome.newGatesApplied = newGates;
             manualOutcome.outcome =
               newGates > 0 ? "applied" : "synced-no-new";
             await fresh.save();
-            profileUserDoc = typeof fresh.toObject === "function" ? fresh.toObject() : fresh;
+            profileUserDoc = toPlainUserDoc(fresh);
           });
         }
       }
@@ -299,8 +303,10 @@ function createRaidStatusSync(deps) {
     }
 
     const userDoc = await User.findOne({ discordId }).lean();
-    if ((profileUserDoc || userDoc) && shouldSyncProfile) {
-      await syncRaidProfileFromBibleCollected({
+    if (shouldSyncProfile) {
+      await syncRaidProfileAfterAutoManageReport({
+        syncRaidProfileFromBibleCollected,
+        report: profileReport,
         discordId,
         userDoc: profileUserDoc || userDoc,
         weekResetStart: profileWeekResetStart,

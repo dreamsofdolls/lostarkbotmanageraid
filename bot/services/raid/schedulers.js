@@ -37,6 +37,11 @@ const {
   buildMaintenanceConfigQuery,
 } = require("../../utils/raid/schedule/maintenance");
 const { dailyResetStartMs } = require("../../utils/raid/schedule/reset-windows");
+const {
+  stampAutoManageAttemptFromReport,
+  toPlainUserDoc,
+  syncRaidProfileAfterAutoManageReport,
+} = require("../auto-manage/report-utils");
 
 /**
  * Build the per-guild scheduler service.
@@ -810,10 +815,12 @@ function createRaidSchedulerService({
         // VersionError; we want the last committed pass).
         let latestReport = null;
         let profileUserDoc = null;
+        let profileReport = null;
         await saveWithRetry(async () => {
           const fresh = await User.findOne({ discordId });
           if (!fresh || !Array.isArray(fresh.accounts) || fresh.accounts.length === 0) return;
           profileUserDoc = null;
+          profileReport = null;
           ensureFreshWeek(fresh);
           // Same opt-out re-check as Phase 2 piggyback (Codex round 26 #1):
           // user can toggle off during the long bible HTTP. Stamp attempt
@@ -825,26 +832,25 @@ function createRaidSchedulerService({
           }
           const report = applyAutoManageCollected(fresh, weekResetStart, collected);
           latestReport = report;
+          profileReport = report;
           const now = Date.now();
-          fresh.lastAutoManageAttemptAt = now;
-          if (report.perChar.some((c) => !c.error)) {
-            fresh.lastAutoManageSyncAt = now;
+          if (stampAutoManageAttemptFromReport(fresh, report, now)) {
             outcome = "synced";
           }
           await fresh.save();
-          profileUserDoc = typeof fresh.toObject === "function" ? fresh.toObject() : fresh;
+          profileUserDoc = toPlainUserDoc(fresh);
         });
         if (outcome === "synced") syncedCount += 1;
         else attemptedOnlyCount += 1;
-        if (outcome === "synced" && profileUserDoc) {
-          await syncRaidProfileFromBibleCollected({
-            discordId,
-            userDoc: profileUserDoc,
-            weekResetStart,
-            collected,
-            logLabel: "[auto-manage daily]",
-          });
-        }
+        await syncRaidProfileAfterAutoManageReport({
+          syncRaidProfileFromBibleCollected,
+          report: profileReport,
+          discordId,
+          userDoc: profileUserDoc,
+          weekResetStart,
+          collected,
+          logLabel: "[auto-manage daily]",
+        });
 
         // Stuck private-log detection: every char in this user's roster
         // returned "Logs not enabled" from bible. Post a 7-day-deduped
