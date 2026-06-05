@@ -222,12 +222,11 @@ const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
 
 function isRaidLeader(interaction) {
   // Env-allowlist check against the invoker's Discord user ID. Set is
-  // built once at module load (see RAID_MANAGER_ID) so this is O(1)
+  // built once at module load (see services/access/manager.js) so this is O(1)
   // per call. interaction.user.id is always present on slash commands -
   // no need to defensive-check member or guild context.
   const userId = interaction.user?.id;
-  if (!userId) return false;
-  return RAID_MANAGER_ID.has(userId);
+  return isManagerId(userId);
 }
 
 const commands = createRaidCommandDefinitions({
