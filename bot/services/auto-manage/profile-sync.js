@@ -2,8 +2,10 @@
 
 const {
   PROFILE_VERSION,
+} = require("../local-sync/profile-payload-sanitizer");
+const {
   upsertEncounterSummaries,
-} = require("../local-sync/profile-sync-endpoint");
+} = require("../local-sync/profile-storage");
 
 const MIN_PROFILE_DURATION_MS = 3 * 60 * 1000;
 const BIBLE_PROFILE_SOURCE = "bible";
