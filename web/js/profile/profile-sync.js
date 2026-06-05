@@ -4,6 +4,7 @@ import {
   loadCatalog,
   BOSS_TO_RAID_GATE,
 } from "/sync/js/sync/preview-utils.js";
+import { createStableFileSnapshot } from "/sync/js/sync/file-snapshot.js";
 import { t } from "/sync/js/core/i18n.js";
 import { SUPPORT_DPS_PROFILE_SPEC_KEYS } from "/sync/js/profile/profile-role.js";
 import {
@@ -25,6 +26,8 @@ const MIN_DURATION_MS = 180000;
 let profileSyncTimer = null;
 let profileSyncInFlight = false;
 let lastProfileFingerprint = "";
+let stableProfileSourceFile = null;
+let stableProfileSnapshotFile = null;
 
 function normalizeName(value) {
   return String(value || "").trim().toLowerCase();
@@ -511,6 +514,55 @@ export function stopProfileAutoSync() {
   }
 }
 
+function formatSnapshotPercent({ written, total }) {
+  const totalBytes = Number(total) || 0;
+  if (totalBytes <= 0) return "0";
+  return Math.min(100, Math.max(0, (Number(written) || 0) / totalBytes * 100)).toFixed(1);
+}
+
+function formatSnapshotGb(total) {
+  return (Number(total || 0) / 1e9).toFixed(1);
+}
+
+async function getStableProfileScanFile(file, renderStatus) {
+  if (stableProfileSourceFile === file && stableProfileSnapshotFile) {
+    return stableProfileSnapshotFile;
+  }
+
+  let lastStatusMs = 0;
+  const result = await createStableFileSnapshot(file, {
+    onProgress(event) {
+      if (!renderStatus) return;
+      const now = Date.now();
+      if (event.phase === "starting") {
+        renderStatus("info", "Creating a stable encounters.db snapshot before profile scan...");
+        lastStatusMs = now;
+        return;
+      }
+      if (event.phase === "copying") {
+        if (now - lastStatusMs < 1000 && Number(event.written) < Number(event.total)) return;
+        lastStatusMs = now;
+        renderStatus(
+          "info",
+          `Copying encounters.db snapshot... ${formatSnapshotPercent(event)}% / ~${formatSnapshotGb(event.total)} GB`
+        );
+        return;
+      }
+      if (event.phase === "ready") {
+        renderStatus("info", "Snapshot ready, starting profile scan...");
+      }
+    },
+  });
+
+  if (!result.snapshot) {
+    renderStatus?.("warn", "Browser storage snapshot unavailable; if scanning fails, pick a static copied file.");
+    return result.file;
+  }
+  stableProfileSourceFile = file;
+  stableProfileSnapshotFile = result.file;
+  return stableProfileSnapshotFile;
+}
+
 async function runProfileSnapshotSync({
   file,
   getDiscordId,
@@ -539,13 +591,16 @@ async function runProfileSnapshotSync({
       localToken: getLocalToken?.(),
       renderStatus,
     });
+    const scanFile = Number(minFightStartMs) > 0
+      ? file
+      : await getStableProfileScanFile(file, renderStatus);
     renderStatus?.("info", reason === "initial" ? t("profileSync.scanning") : t("profileSync.checking"));
     // A multi-GB encounters.db scan runs for many seconds inside a single
     // SQLite query with no natural progress event. Tick an elapsed counter
     // (the asyncify VFS yields between chunk reads, so the DOM repaints) so
     // the user can see the scan is alive rather than hung.
     const scanStartMs = Date.now();
-    const scanGb = (Number(file?.size) / 1e9).toFixed(1);
+    const scanGb = (Number(scanFile?.size) / 1e9).toFixed(1);
     let scanHeartbeat = null;
     if (renderStatus) {
       scanHeartbeat = setInterval(() => {
@@ -555,7 +610,7 @@ async function runProfileSnapshotSync({
     }
     let rows;
     try {
-      rows = await queryProfileRows(file, rosterAccounts, { minFightStartMs });
+      rows = await queryProfileRows(scanFile, rosterAccounts, { minFightStartMs });
     } finally {
       if (scanHeartbeat) clearInterval(scanHeartbeat);
     }
@@ -564,13 +619,13 @@ async function runProfileSnapshotSync({
       renderStatus?.("ok", t(weeklyReason ? "profileSync.weeklyIdle" : "profileSync.idle", { n: 0 }));
       return { ok: true, sent: false, rows: 0 };
     }
-    const snapshot = buildProfileSnapshot(rows, rosterAccounts, file, {
+    const snapshot = buildProfileSnapshot(rows, rosterAccounts, scanFile, {
       range: minFightStartMs > 0
         ? { type: "weekly", minFightStartMs: Number(minFightStartMs) || 0 }
         : { type: "full" },
       minDurationMs: MIN_DURATION_MS,
     });
-    snapshot.encounters = buildProfileEncounterSummaries(rows, file, {
+    snapshot.encounters = buildProfileEncounterSummaries(rows, scanFile, {
       range: snapshot.criteria?.range,
     });
     const fp = `${discordId}\x1f${fingerprintSnapshot(snapshot)}`;
