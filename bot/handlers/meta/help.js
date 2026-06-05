@@ -17,6 +17,7 @@
 
 const User = require("../../models/user");
 const { t, getUserLanguage, resolveLocale } = require("../../services/i18n");
+const { customIdPart } = require("../../utils/discord/custom-id");
 const { splitEmbedFieldValue } = require("../../utils/raid/common/shared");
 
 // Section order is the only place command listing order is configured -
@@ -300,7 +301,7 @@ function createRaidHelpCommand(deps) {
   async function handleRaidHelpSelect(interaction) {
     // CustomId shape: `raid-help:select:<lang>` - lang baked in by the
     // dropdown builder so the detail embed stays monolingual.
-    const lang = resolveLocale(interaction.customId.split(":")[2]);
+    const lang = resolveLocale(customIdPart(interaction.customId, 2));
     const sectionKey = interaction.values?.[0];
     await interaction.update({
       embeds: [buildHelpDetailEmbed(sectionKey, lang)],

@@ -14,6 +14,7 @@
 const { isSupportClass, getClassEmoji } = require("../../models/Class");
 const { buildNoticeEmbed, replyNotice, UI } = require("../../utils/raid/common/shared");
 const { buildAccountTaskFields } = require("../../utils/raid/tasks/task-view");
+const { customIdPart } = require("../../utils/discord/custom-id");
 const { firstSelectValue } = require("../../utils/discord/component-values");
 const {
   getVisibleSharedTasks,
@@ -940,7 +941,7 @@ function createAllModeHandler({
         // CustomId shape `raid-check-all:view-toggle:<target>` where
         // target = "task" or "raid". Page index stays so the Manager's
         // current account in focus carries across views.
-        const target = customId.split(":")[2];
+        const target = customIdPart(customId, 2);
         currentView = target === "task" ? "task" : "raid";
         await component
           .update({
@@ -952,7 +953,7 @@ function createAllModeHandler({
       }
 
       if (customId.startsWith("raid-check-all-page:")) {
-        const action = customId.split(":")[1];
+        const action = customIdPart(customId, 1);
         const localTotal = filteredIndices.length;
         if (action === "prev") currentLocalPage = Math.max(0, currentLocalPage - 1);
         else if (action === "next") currentLocalPage = Math.min(localTotal - 1, currentLocalPage + 1);
