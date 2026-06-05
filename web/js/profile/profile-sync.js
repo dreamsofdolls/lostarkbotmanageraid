@@ -535,7 +535,25 @@ async function runProfileSnapshotSync({
       return { ok: false, skipped: "no-roster" };
     }
     renderStatus?.("info", reason === "initial" ? t("profileSync.scanning") : t("profileSync.checking"));
-    const rows = await queryProfileRows(file, rosterAccounts, { minFightStartMs });
+    // A multi-GB encounters.db scan runs for many seconds inside a single
+    // SQLite query with no natural progress event. Tick an elapsed counter
+    // (the asyncify VFS yields between chunk reads, so the DOM repaints) so
+    // the user can see the scan is alive rather than hung.
+    const scanStartMs = Date.now();
+    const scanGb = (Number(file?.size) / 1e9).toFixed(1);
+    let scanHeartbeat = null;
+    if (renderStatus) {
+      scanHeartbeat = setInterval(() => {
+        const secs = Math.floor((Date.now() - scanStartMs) / 1000);
+        renderStatus("info", t("profileSync.scanningElapsed", { gb: scanGb, secs }));
+      }, 1000);
+    }
+    let rows;
+    try {
+      rows = await queryProfileRows(file, rosterAccounts, { minFightStartMs });
+    } finally {
+      if (scanHeartbeat) clearInterval(scanHeartbeat);
+    }
     const weeklyReason = reason === "weekly";
     if (rows.length === 0) {
       renderStatus?.("ok", t(weeklyReason ? "profileSync.weeklyIdle" : "profileSync.idle", { n: 0 }));
