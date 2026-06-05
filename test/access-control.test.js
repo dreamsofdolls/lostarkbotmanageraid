@@ -123,6 +123,33 @@ test("getAccessibleAccounts merges shared accounts when manager A has granted ac
   assert.equal(shared.accessLevel, "edit");
 });
 
+test("getAccessibleAccounts returns shared rosters even when viewer has no own roster", async () => {
+  const User = buildFakeUser([
+    {
+      discordId: "A",
+      discordDisplayName: "Alice",
+      accounts: [ownAccount("AliceMain")],
+    },
+    {
+      discordId: "B",
+      discordDisplayName: "Bao",
+      accounts: [],
+    },
+  ]);
+  const RosterShare = buildFakeRosterShare([sharedRecord("A", "B", "view")]);
+
+  const accessible = await getAccessibleAccounts("B", {
+    models: { User, RosterShare },
+    helpers: { isManagerId: (id) => id === "A" },
+  });
+
+  assert.equal(accessible.length, 1);
+  assert.equal(accessible[0].accountName, "AliceMain");
+  assert.equal(accessible[0].ownerDiscordId, "A");
+  assert.equal(accessible[0].isOwn, false);
+  assert.equal(accessible[0].accessLevel, "view");
+});
+
 test("getAccessibleAccounts auto-suspends shares when owner is no longer manager", async () => {
   const User = buildFakeUser([
     {

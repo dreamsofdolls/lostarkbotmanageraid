@@ -39,6 +39,7 @@ function createRaidViewSnapshotService({
   releaseAutoManageSyncSlot,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
+  syncRaidProfileFromBibleCollected = async () => null,
   stampAutoManageAttempt,
   weekResetStartMs,
   log = console,
@@ -76,6 +77,9 @@ function createRaidViewSnapshotService({
     }
 
     let autoManageGuard = null;
+    let profileCollected = null;
+    let profileWeekResetStart = null;
+    let shouldSyncProfile = false;
     try {
       let autoManagePromise = Promise.resolve(null);
       let autoManageWeekResetStart = null;
@@ -106,9 +110,12 @@ function createRaidViewSnapshotService({
 
       if (!needsFreshWrite) return toPlainUserSnapshot(seedDoc);
 
-      return await saveWithRetry(async () => {
+      const snapshot = await saveWithRetry(async () => {
         const doc = await User.findOne({ discordId });
         if (!doc) return null;
+        profileCollected = null;
+        profileWeekResetStart = null;
+        shouldSyncProfile = false;
         const didFreshenWeek = ensureFreshWeek(doc);
         const didRefresh = applyStaleAccountRefreshes(doc, refreshCollected);
 
@@ -123,6 +130,9 @@ function createRaidViewSnapshotService({
           doc.lastAutoManageAttemptAt = now;
           if (autoReport.perChar.some((c) => !c.error)) {
             doc.lastAutoManageSyncAt = now;
+            shouldSyncProfile = true;
+            profileCollected = autoManageCollected;
+            profileWeekResetStart = autoManageWeekResetStart;
           }
           didAutoManage = true;
         } else if (autoManageBibleHit) {
@@ -133,6 +143,16 @@ function createRaidViewSnapshotService({
         if (didFreshenWeek || didRefresh || didAutoManage) await doc.save();
         return doc.toObject();
       });
+      if (snapshot && shouldSyncProfile) {
+        await syncRaidProfileFromBibleCollected({
+          discordId,
+          userDoc: snapshot,
+          weekResetStart: profileWeekResetStart,
+          collected: profileCollected,
+          logLabel: `${logLabel}:profile`,
+        });
+      }
+      return snapshot;
     } catch (err) {
       log.error(`${logLabel} refresh failed for ${discordId}:`, err?.message || err);
       if (autoManageGuard?.acquired) {

@@ -29,6 +29,7 @@ function createRaidStatusSync(deps) {
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
     applyAutoManageCollectedForStatus,
+    syncRaidProfileFromBibleCollected = async () => null,
     stampAutoManageAttempt,
     weekResetStartMs,
     STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS,
@@ -66,6 +67,9 @@ function createRaidStatusSync(deps) {
     let userDoc = null;
     let autoManageGuard = null;
     let autoManageReleaseInBackground = false;
+    let profileCollected = null;
+    let profileWeekResetStart = null;
+    let shouldSyncProfile = false;
     const piggybackOutcome = createOutcome();
 
     try {
@@ -146,6 +150,9 @@ function createRaidStatusSync(deps) {
       userDoc = await saveWithRetry(async () => {
         const doc = await User.findOne({ discordId });
         if (!doc) return null;
+        profileCollected = null;
+        profileWeekResetStart = null;
+        shouldSyncProfile = false;
 
         const didFreshenWeek = ensureFreshWeek(doc);
         const didRefresh = applyStaleAccountRefreshes(doc, refreshCollected);
@@ -161,6 +168,9 @@ function createRaidStatusSync(deps) {
           doc.lastAutoManageAttemptAt = now;
           if (autoReport.perChar.some((c) => !c.error)) {
             doc.lastAutoManageSyncAt = now;
+            shouldSyncProfile = true;
+            profileCollected = autoManageCollected;
+            profileWeekResetStart = autoManageWeekResetStart;
           }
           const newGates = countNewGates(autoReport);
           piggybackOutcome.newGatesApplied = newGates;
@@ -175,6 +185,15 @@ function createRaidStatusSync(deps) {
         if (didFreshenWeek || didRefresh || didAutoManage) await doc.save();
         return doc.toObject();
       });
+      if (userDoc && shouldSyncProfile) {
+        await syncRaidProfileFromBibleCollected({
+          discordId,
+          userDoc,
+          weekResetStart: profileWeekResetStart,
+          collected: profileCollected,
+          logLabel: "[raid-status:piggyback]",
+        });
+      }
     } catch (err) {
       console.error("[raid-status] lazy refresh failed:", err?.message || err);
       if (autoManageGuard?.acquired) {
@@ -193,6 +212,10 @@ function createRaidStatusSync(deps) {
   async function runManualStatusSync(discordId, options = {}) {
     const { onAcquired } = options;
     let manualGuard = null;
+    let profileCollected = null;
+    let profileUserDoc = null;
+    let profileWeekResetStart = null;
+    let shouldSyncProfile = false;
     const manualOutcome = createOutcome();
 
     try {
@@ -231,6 +254,10 @@ function createRaidStatusSync(deps) {
           await saveWithRetry(async () => {
             const fresh = await User.findOne({ discordId });
             if (!fresh) return;
+            profileCollected = null;
+            profileUserDoc = null;
+            profileWeekResetStart = null;
+            shouldSyncProfile = false;
             ensureFreshWeek(fresh);
             if (!fresh.autoManageEnabled) {
               fresh.lastAutoManageAttemptAt = Date.now();
@@ -247,12 +274,16 @@ function createRaidStatusSync(deps) {
             fresh.lastAutoManageAttemptAt = now;
             if (report.perChar.some((c) => !c.error)) {
               fresh.lastAutoManageSyncAt = now;
+              shouldSyncProfile = true;
+              profileCollected = collectedLocal;
+              profileWeekResetStart = weekResetStart;
             }
             const newGates = countNewGates(report);
             manualOutcome.newGatesApplied = newGates;
             manualOutcome.outcome =
               newGates > 0 ? "applied" : "synced-no-new";
             await fresh.save();
+            profileUserDoc = typeof fresh.toObject === "function" ? fresh.toObject() : fresh;
           });
         }
       }
@@ -268,6 +299,15 @@ function createRaidStatusSync(deps) {
     }
 
     const userDoc = await User.findOne({ discordId }).lean();
+    if ((profileUserDoc || userDoc) && shouldSyncProfile) {
+      await syncRaidProfileFromBibleCollected({
+        discordId,
+        userDoc: profileUserDoc || userDoc,
+        weekResetStart: profileWeekResetStart,
+        collected: profileCollected,
+        logLabel: "[raid-status:manual]",
+      });
+    }
     return {
       status: "completed",
       outcome: manualOutcome,

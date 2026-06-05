@@ -55,6 +55,7 @@ function createRaidAutoManageCommand(deps) {
     weekResetStartMs,
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
+    syncRaidProfileFromBibleCollected = async () => null,
     isPublicLogDisabledError,
     commitAutoManageOn,
     buildAutoManageSyncReportEmbed,
@@ -725,8 +726,10 @@ function createRaidAutoManageCommand(deps) {
         const collected = await gatherAutoManageLogsForUserDoc(seedDoc, weekResetStart);
         // Phase B: apply to fresh doc inside saveWithRetry - pure in-memory.
         let report;
+        let profileUserDoc = null;
         await saveWithRetry(async () => {
           const userDoc = await User.findOne({ discordId });
+          profileUserDoc = null;
           if (!userDoc) {
             report = { noRoster: true };
             return;
@@ -743,6 +746,7 @@ function createRaidAutoManageCommand(deps) {
             userDoc.lastAutoManageSyncAt = now;
           }
           await userDoc.save();
+          profileUserDoc = typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
         });
         if (report?.noRoster) {
           await editAutoNotice({
@@ -753,6 +757,15 @@ function createRaidAutoManageCommand(deps) {
             content: null,
           });
           return;
+        }
+        if (profileUserDoc && report?.perChar?.some((c) => !c.error)) {
+          await syncRaidProfileFromBibleCollected({
+            discordId,
+            userDoc: profileUserDoc,
+            weekResetStart,
+            collected,
+            logLabel: "[raid-auto-manage:sync]",
+          });
         }
         const embed = buildAutoManageSyncReportEmbed(report, lang);
         await editAutoEmbed(embed);

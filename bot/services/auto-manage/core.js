@@ -59,6 +59,7 @@ function createAutoManageCoreService({
   normalizeAssignedRaid,
   ensureAssignedRaids,
   bibleLimiter,
+  syncRaidProfileFromBibleCollected = async () => null,
   // Injected so tests can stub per-user cooldown logic without touching env.
   // Falls back to the real manager.js helper (env-driven) in production.
   getAutoManageCooldownMs = getAutoManageCooldownMsDefault,
@@ -821,9 +822,11 @@ function createAutoManageCoreService({
     }
 
     let finalReport;
+    let finalUserDocSnapshot = null;
     await saveWithRetry(async () => {
       const fresh = await User.findOne({ discordId });
       if (!fresh) return;
+      finalUserDocSnapshot = null;
       fresh.autoManageEnabled = true;
       if (!Array.isArray(fresh.accounts) || fresh.accounts.length === 0) {
         fresh.lastAutoManageAttemptAt = Date.now();
@@ -838,7 +841,17 @@ function createAutoManageCoreService({
         fresh.lastAutoManageSyncAt = now;
       }
       await fresh.save();
+      finalUserDocSnapshot = typeof fresh.toObject === "function" ? fresh.toObject() : fresh;
     });
+    if (finalUserDocSnapshot && finalReport?.perChar?.some((c) => !c.error)) {
+      await syncRaidProfileFromBibleCollected({
+        discordId,
+        userDoc: finalUserDocSnapshot,
+        weekResetStart,
+        collected,
+        logLabel: "[auto-manage:on]",
+      });
+    }
     return finalReport;
   }
 

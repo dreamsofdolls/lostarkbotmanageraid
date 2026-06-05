@@ -925,7 +925,7 @@ async function rebuildDiffFromRows({ rows, schemaDebug, keepSyncOutput = false }
   }
   renderDiffPage();
   syncSection.hidden = false;
-  syncBtn.disabled = lastDeltas.length === 0;
+  syncBtn.disabled = lastDeltas.length === 0 && !((window.__artistRows || []).length > 0);
   // Post-sync callers pass keepSyncOutput so the success summary they
   // just rendered stays visible. Initial preview wipes it to either
   // "nothing to sync" hint or hidden depending on actionable count.
@@ -1246,7 +1246,19 @@ syncBtn.addEventListener("click", async () => {
   }
   if (!Array.isArray(lastDeltas) || lastDeltas.length === 0) {
     syncOutput.hidden = false;
-    syncOutput.innerHTML = t("sync.nothingToSync");
+    if (!((window.__artistRows || []).length > 0)) {
+      syncOutput.innerHTML = t("sync.nothingToSync");
+      return;
+    }
+    syncBtn.disabled = true;
+    syncOutput.innerHTML = `<div class="sync-result-summary">${t("sync.nothingToSync")}</div><div class="sync-result-section"><div class="sync-result-section-title">${escapeHtml(t("sync.profileStatsLabel"))}</div><div id="weekly-profile-sync-status"><span class="hint">${escapeHtml(t("sync.profileStatsQueued"))}</span></div></div>`;
+    try {
+      await syncProfileStatsAfterWeeklySync();
+    } catch (err) {
+      renderWeeklyProfileSyncStatus("err", err?.message || String(err));
+    } finally {
+      syncBtn.disabled = false;
+    }
     return;
   }
   syncBtn.disabled = true;

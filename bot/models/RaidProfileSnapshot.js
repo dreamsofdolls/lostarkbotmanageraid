@@ -15,6 +15,7 @@ const raidProfileCharacterSchema = new mongoose.Schema(
     topDebuffSources: { type: [mongoose.Schema.Types.Mixed], default: [] },
     topShieldGivenSources: { type: [mongoose.Schema.Types.Mixed], default: [] },
     topShieldReceivedSources: { type: [mongoose.Schema.Types.Mixed], default: [] },
+    buildVariants: { type: [mongoose.Schema.Types.Mixed], default: [] },
     raids: { type: [mongoose.Schema.Types.Mixed], default: [] },
   },
   { _id: false }
@@ -31,7 +32,7 @@ const raidProfileAccountSchema = new mongoose.Schema(
 const raidProfileSnapshotSchema = new mongoose.Schema(
   {
     discordId: { type: String, required: true, unique: true, index: true },
-    source: { type: String, enum: ["local"], default: "local" },
+    source: { type: String, enum: ["local", "bible"], default: "local" },
     rangeType: { type: String, enum: ["full", "weekly"], default: "full" },
     version: { type: Number, default: 1 },
     generatedAt: { type: Number, default: null },

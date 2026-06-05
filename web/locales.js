@@ -66,7 +66,7 @@ const VI = {
   },
   profilePanel: {
     section: "4. Import profile đầy đủ",
-    hint: "Quét log clear thành công, thuộc raid đang hỗ trợ, trận dài hơn 3 phút, và match roster đã đăng ký/share. Chọn nhánh này là Artist tự quét và gửi, không cần bấm Sync.",
+    hint: "Quét log clear thành công, thuộc raid đang hỗ trợ, trận dài hơn 3 phút, và match roster cậu đã đăng ký. Roster share sẽ hiển thị trong /raid-profile từ snapshot của owner.",
   },
   preview: {
     section: "4. Preview tuần raid hiện tại",
@@ -220,7 +220,7 @@ const JP = {
   },
   profilePanel: {
     section: "4. 完全 profile import",
-    hint: "対応済みレイド、成功クリア、3分超の戦闘、登録/共有ロスターに一致するログをスキャンしますわ。このモードを選ぶと自動でスキャンして送信します。",
+    hint: "対応済みレイドの3分超クリアログのうち、登録済みロスターに一致するものをスキャンします。共有ロスターは owner の synced snapshot から /raid-profile に表示されます。",
   },
   preview: {
     section: "4. 現在のレイド週プレビュー",
@@ -374,7 +374,7 @@ const EN = {
   },
   profilePanel: {
     section: "4. Full profile import",
-    hint: "Scans successful supported raid logs over 3 minutes that match registered or shared rosters. Picking this mode auto-scans and sends; no Sync button needed.",
+    hint: "Scans successful supported raid logs over 3 minutes that match your registered roster. Shared rosters are included in /raid-profile from the owner's synced snapshot.",
   },
   preview: {
     section: "4. Current raid-week preview",

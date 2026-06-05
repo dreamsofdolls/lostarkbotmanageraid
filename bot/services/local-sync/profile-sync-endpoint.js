@@ -13,12 +13,13 @@ const {
 } = require("./http");
 
 const PROFILE_VERSION = 1;
-const MAX_BODY_BYTES = 8 * 1024 * 1024;
+const MAX_BODY_BYTES = 24 * 1024 * 1024;
 const MAX_ACCOUNTS = 25;
 const MAX_CHARACTERS_PER_ACCOUNT = 25;
 const MAX_RAID_BREAKDOWNS_PER_CHAR = 40;
 const MAX_TOP_SKILLS_PER_CHAR = 8;
 const MAX_TOP_SOURCES_PER_CHAR = 8;
+const MAX_BUILD_VARIANTS_PER_CHAR = 8;
 const MAX_ENGRAVINGS_PER_CHAR = 8;
 const MAX_ARK_PASSIVE_NODES_PER_TREE = 40;
 const MAX_ENCOUNTER_SUMMARIES_PER_SYNC = 5000;
@@ -104,9 +105,23 @@ function cleanRaidBreakdown(raw) {
     encounters: clampNumber(raw.encounters, { max: 100000 }),
     firstFightStart: clampNumber(raw.firstFightStart, { max: 9999999999999, fallback: null }),
     lastFightStart: clampNumber(raw.lastFightStart, { max: 9999999999999, fallback: null }),
+    avgDurationMs: clampNumber(raw.avgDurationMs, { max: 24 * 60 * 60 * 1000 }),
+    avgActiveDurationMs: clampNumber(raw.avgActiveDurationMs, { max: 24 * 60 * 60 * 1000 }),
+    avgIntermissionMs: clampNumber(raw.avgIntermissionMs, { max: 24 * 60 * 60 * 1000 }),
+    avgActiveTimeRate: clampNumber(raw.avgActiveTimeRate, { max: 100 }),
     avgDps: clampNumber(raw.avgDps),
     medianDps: clampNumber(raw.medianDps),
+    avgPeak10sDps: clampNumber(raw.avgPeak10sDps),
+    p90Peak10sDps: clampNumber(raw.p90Peak10sDps),
+    avgBurstRatio: clampNumber(raw.avgBurstRatio, { max: 100 }),
     avgDamageShare: clampNumber(raw.avgDamageShare, { max: 100 }),
+    avgTopDamageProximity: clampNumber(raw.avgTopDamageProximity, { max: 100 }),
+    contextCoverageRate: clampNumber(raw.contextCoverageRate, { max: 100 }),
+    contextSampleCountAvg: clampNumber(raw.contextSampleCountAvg, { max: 100000 }),
+    avgContextPerformancePercentile: clampNumber(raw.avgContextPerformancePercentile, { max: 100 }),
+    avgContextDamageSharePercentile: clampNumber(raw.avgContextDamageSharePercentile, { max: 100 }),
+    avgContextTopDamageProximityPercentile: clampNumber(raw.avgContextTopDamageProximityPercentile, { max: 100 }),
+    avgContextSupportPercentile: clampNumber(raw.avgContextSupportPercentile, { max: 100 }),
     topRate: clampNumber(raw.topRate, { max: 100 }),
     deathlessRate: clampNumber(raw.deathlessRate, { max: 100 }),
     deathRate: clampNumber(raw.deathRate, { max: 100 }),
@@ -122,11 +137,22 @@ function cleanRaidBreakdown(raw) {
     radiantSupportCount: clampNumber(raw.radiantSupportCount, { max: 100000 }),
     radiantSupportRate: clampNumber(raw.radiantSupportRate, { max: 100 }),
     avgSupporterDamageGivenPerMinute: clampNumber(raw.avgSupporterDamageGivenPerMinute),
+    supporterRankValidCount: clampNumber(raw.supporterRankValidCount, { max: 100000 }),
+    supporterCompetitiveCount: clampNumber(raw.supporterCompetitiveCount, { max: 100000 }),
+    avgSupporterRank: clampNumber(raw.avgSupporterRank, { max: 1000 }),
+    supporterCountAvg: clampNumber(raw.supporterCountAvg, { max: 1000 }),
+    supporterTopRate: clampNumber(raw.supporterTopRate, { max: 100 }),
     avgCritRate: clampNumber(raw.avgCritRate, { max: 100 }),
+    avgCritDamageShare: clampNumber(raw.avgCritDamageShare, { max: 100 }),
     avgBackAttackRate: clampNumber(raw.avgBackAttackRate, { max: 100 }),
     avgFrontAttackRate: clampNumber(raw.avgFrontAttackRate, { max: 100 }),
+    avgBackAttackDamageShare: clampNumber(raw.avgBackAttackDamageShare, { max: 100 }),
+    avgFrontAttackDamageShare: clampNumber(raw.avgFrontAttackDamageShare, { max: 100 }),
+    avgPositionalDamageShare: clampNumber(raw.avgPositionalDamageShare, { max: 100 }),
     attackStyle: cleanAttackStyle(raw.attackStyle),
     avgDamageTakenPerMinute: clampNumber(raw.avgDamageTakenPerMinute),
+    damageTakenShareValidCount: clampNumber(raw.damageTakenShareValidCount, { max: 100000 }),
+    avgDamageTakenShare: clampNumber(raw.avgDamageTakenShare, { max: 100 }),
     avgShieldReceivedPerMinute: clampNumber(raw.avgShieldReceivedPerMinute),
     avgStaggerPerMinute: clampNumber(raw.avgStaggerPerMinute),
     avgIncapacitations: clampNumber(raw.avgIncapacitations, { max: 1000 }),
@@ -179,8 +205,19 @@ function cleanEncounterMetrics(raw) {
     "dps",
     "rdps",
     "ndps",
+    "peak10sDps",
+    "burstRatio",
+    "activeDurationMs",
+    "intermissionMs",
+    "activeTimeRate",
     "damageDealt",
     "damageShare",
+    "topDamageProximity",
+    "contextSampleCount",
+    "contextPerformancePercentile",
+    "contextDamageSharePercentile",
+    "contextTopDamageProximityPercentile",
+    "contextSupportPercentile",
     "damageRank",
     "partyCount",
     "deathCount",
@@ -190,10 +227,15 @@ function cleanEncounterMetrics(raw) {
     "castsPerMinute",
     "hitsPerMinute",
     "critRate",
+    "critDamageShare",
     "backAttackRate",
     "frontAttackRate",
+    "backAttackDamageShare",
+    "frontAttackDamageShare",
+    "positionalDamageShare",
     "topSkillShare",
     "damageTakenPerMinute",
+    "damageTakenShare",
     "shieldReceivedPerMinute",
     "staggerPerMinute",
     "incapacitations",
@@ -212,18 +254,31 @@ function cleanEncounterMetrics(raw) {
     "supporterDamageGiven",
     "supporterDamageGivenPerMinute",
     "supporterPercent",
+    "supporterRank",
+    "supporterCount",
     "synergyGivenPerMinute",
     "synergyReceivedShare",
   ], { max: 9999999999999 });
   metrics.rdpsValid = raw?.rdpsValid === true;
   metrics.supporterTier = cleanSupporterTier(raw?.supporterTier);
+  metrics.contextSource = ["spec", "class"].includes(raw?.contextSource) ? raw.contextSource : "none";
   for (const key of [
     "damageShare",
+    "topDamageProximity",
+    "contextPerformancePercentile",
+    "contextDamageSharePercentile",
+    "contextTopDamageProximityPercentile",
+    "contextSupportPercentile",
     "deadTimeRate",
     "critRate",
+    "critDamageShare",
     "backAttackRate",
     "frontAttackRate",
+    "backAttackDamageShare",
+    "frontAttackDamageShare",
+    "positionalDamageShare",
     "topSkillShare",
+    "damageTakenShare",
     "hyperShare",
     "unbuffedShare",
     "supportBuffedShare",
@@ -237,7 +292,11 @@ function cleanEncounterMetrics(raw) {
   ]) {
     if (key in metrics) metrics[key] = clampNumber(metrics[key], { max: 999 });
   }
-  for (const key of ["damageRank", "partyCount", "deathCount", "counters", "incapacitations"]) {
+  if ("activeTimeRate" in metrics) metrics.activeTimeRate = clampNumber(metrics.activeTimeRate, { max: 100 });
+  if ("burstRatio" in metrics) metrics.burstRatio = clampNumber(metrics.burstRatio, { max: 100 });
+  if ("topDamageProximity" in metrics) metrics.topDamageProximity = clampNumber(metrics.topDamageProximity, { max: 100 });
+  if ("contextSampleCount" in metrics) metrics.contextSampleCount = clampNumber(metrics.contextSampleCount, { max: 100000 });
+  for (const key of ["damageRank", "partyCount", "deathCount", "counters", "incapacitations", "supporterRank", "supporterCount"]) {
     if (key in metrics) metrics[key] = clampNumber(metrics[key], { max: 1000 });
   }
   return metrics;
@@ -332,6 +391,35 @@ function cleanTopSource(raw) {
   };
 }
 
+function cleanBuildVariant(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const name = cleanShortString(raw.name || raw.spec, 80);
+  if (!name) return null;
+  return {
+    name,
+    spec: cleanShortString(raw.spec || name, 80),
+    role: cleanRole(raw.role),
+    encounters: clampNumber(raw.encounters, { max: 100000 }),
+    firstFightStart: clampNumber(raw.firstFightStart, { max: 9999999999999, fallback: null }),
+    lastFightStart: clampNumber(raw.lastFightStart, { max: 9999999999999, fallback: null }),
+    avgDps: clampNumber(raw.avgDps),
+    medianDps: clampNumber(raw.medianDps),
+    p90Dps: clampNumber(raw.p90Dps),
+    avgRdps: clampNumber(raw.avgRdps),
+    medianRdps: clampNumber(raw.medianRdps),
+    avgNdps: clampNumber(raw.avgNdps),
+    medianNdps: clampNumber(raw.medianNdps),
+    avgDamageShare: clampNumber(raw.avgDamageShare, { max: 100 }),
+    avgTopDamageProximity: clampNumber(raw.avgTopDamageProximity, { max: 100 }),
+    avgBiblePercentile: clampNumber(raw.avgBiblePercentile, { max: 100 }),
+    avgOverallBiblePercentile: clampNumber(raw.avgOverallBiblePercentile, { max: 100 }),
+    avgContextPerformancePercentile: clampNumber(raw.avgContextPerformancePercentile, { max: 100 }),
+    avgCritRate: clampNumber(raw.avgCritRate, { max: 100 }),
+    avgBackAttackDamageShare: clampNumber(raw.avgBackAttackDamageShare, { max: 100 }),
+    avgFrontAttackDamageShare: clampNumber(raw.avgFrontAttackDamageShare, { max: 100 }),
+  };
+}
+
 function cleanEngraving(raw) {
   if (!raw || typeof raw !== "object") return null;
   const name = cleanShortString(raw.name, 80);
@@ -414,16 +502,30 @@ function cleanCharacterProfile(rawChar, rosterEntry) {
     "primaryRoleRate",
     "firstFightStart",
     "lastFightStart",
+    "avgDurationMs",
+    "avgActiveDurationMs",
+    "avgIntermissionMs",
+    "avgActiveTimeRate",
     "avgDps",
     "medianDps",
     "p75Dps",
     "p90Dps",
+    "avgPeak10sDps",
+    "p90Peak10sDps",
+    "avgBurstRatio",
     "avgRdps",
     "medianRdps",
     "avgNdps",
     "medianNdps",
     "avgDamageShare",
     "medianDamageShare",
+    "avgTopDamageProximity",
+    "contextCoverageRate",
+    "contextSampleCountAvg",
+    "avgContextPerformancePercentile",
+    "avgContextDamageSharePercentile",
+    "avgContextTopDamageProximityPercentile",
+    "avgContextSupportPercentile",
     "topRate",
     "avgRank",
     "partyCountAvg",
@@ -441,14 +543,25 @@ function cleanCharacterProfile(rawChar, rosterEntry) {
     "radiantSupportCount",
     "radiantSupportRate",
     "avgSupporterDamageGivenPerMinute",
+    "supporterRankValidCount",
+    "supporterCompetitiveCount",
+    "avgSupporterRank",
+    "supporterCountAvg",
+    "supporterTopRate",
     "avgCounters",
     "avgCastsPerMinute",
     "avgHitsPerMinute",
     "avgCritRate",
+    "avgCritDamageShare",
     "avgBackAttackRate",
     "avgFrontAttackRate",
+    "avgBackAttackDamageShare",
+    "avgFrontAttackDamageShare",
+    "avgPositionalDamageShare",
     "avgDamageTaken",
     "avgDamageTakenPerMinute",
+    "damageTakenShareValidCount",
+    "avgDamageTakenShare",
     "avgDamageAbsorbedPerMinute",
     "avgShieldReceivedPerMinute",
     "avgStagger",
@@ -485,10 +598,23 @@ function cleanCharacterProfile(rawChar, rosterEntry) {
     "latestCombatPower",
     "arkPassiveRate",
     "buildVariantCount",
+    "unclassifiedBuildLogCount",
     "consistency",
   ], { max: 9999999999999 });
   if ("deathRate" in stats) stats.deathRate = clampNumber(stats.deathRate, { max: 100 });
+  if ("avgTopDamageProximity" in stats) stats.avgTopDamageProximity = clampNumber(stats.avgTopDamageProximity, { max: 100 });
+  if ("contextCoverageRate" in stats) stats.contextCoverageRate = clampNumber(stats.contextCoverageRate, { max: 100 });
+  if ("contextSampleCountAvg" in stats) stats.contextSampleCountAvg = clampNumber(stats.contextSampleCountAvg, { max: 100000 });
+  for (const key of [
+    "avgContextPerformancePercentile",
+    "avgContextDamageSharePercentile",
+    "avgContextTopDamageProximityPercentile",
+    "avgContextSupportPercentile",
+  ]) {
+    if (key in stats) stats[key] = clampNumber(stats[key], { max: 100 });
+  }
   if ("avgDeaths" in stats) stats.avgDeaths = clampNumber(stats.avgDeaths, { max: 1000 });
+  if ("avgBurstRatio" in stats) stats.avgBurstRatio = clampNumber(stats.avgBurstRatio, { max: 100 });
   if ("totalDeaths" in stats) stats.totalDeaths = clampNumber(stats.totalDeaths, { max: 100000 });
   if ("totalDeadTimeMs" in stats) stats.totalDeadTimeMs = clampNumber(stats.totalDeadTimeMs, { max: 9999999999999 });
   if ("avgDeadTimeMs" in stats) stats.avgDeadTimeMs = clampNumber(stats.avgDeadTimeMs, { max: 9999999999999 });
@@ -499,10 +625,26 @@ function cleanCharacterProfile(rawChar, rosterEntry) {
   if ("medianSupporterPercent" in stats) stats.medianSupporterPercent = clampNumber(stats.medianSupporterPercent, { max: 100 });
   if ("radiantSupportCount" in stats) stats.radiantSupportCount = clampNumber(stats.radiantSupportCount, { max: 100000 });
   if ("radiantSupportRate" in stats) stats.radiantSupportRate = clampNumber(stats.radiantSupportRate, { max: 100 });
+  if ("avgDurationMs" in stats) stats.avgDurationMs = clampNumber(stats.avgDurationMs, { max: 24 * 60 * 60 * 1000 });
+  if ("avgActiveDurationMs" in stats) stats.avgActiveDurationMs = clampNumber(stats.avgActiveDurationMs, { max: 24 * 60 * 60 * 1000 });
+  if ("avgIntermissionMs" in stats) stats.avgIntermissionMs = clampNumber(stats.avgIntermissionMs, { max: 24 * 60 * 60 * 1000 });
+  if ("avgActiveTimeRate" in stats) stats.avgActiveTimeRate = clampNumber(stats.avgActiveTimeRate, { max: 100 });
+  if ("supporterRankValidCount" in stats) stats.supporterRankValidCount = clampNumber(stats.supporterRankValidCount, { max: 100000 });
+  if ("supporterCompetitiveCount" in stats) stats.supporterCompetitiveCount = clampNumber(stats.supporterCompetitiveCount, { max: 100000 });
+  if ("avgSupporterRank" in stats) stats.avgSupporterRank = clampNumber(stats.avgSupporterRank, { max: 1000 });
+  if ("supporterCountAvg" in stats) stats.supporterCountAvg = clampNumber(stats.supporterCountAvg, { max: 1000 });
+  if ("supporterTopRate" in stats) stats.supporterTopRate = clampNumber(stats.supporterTopRate, { max: 100 });
+  if ("avgCritDamageShare" in stats) stats.avgCritDamageShare = clampNumber(stats.avgCritDamageShare, { max: 100 });
+  if ("avgBackAttackDamageShare" in stats) stats.avgBackAttackDamageShare = clampNumber(stats.avgBackAttackDamageShare, { max: 100 });
+  if ("avgFrontAttackDamageShare" in stats) stats.avgFrontAttackDamageShare = clampNumber(stats.avgFrontAttackDamageShare, { max: 100 });
+  if ("avgPositionalDamageShare" in stats) stats.avgPositionalDamageShare = clampNumber(stats.avgPositionalDamageShare, { max: 100 });
+  if ("damageTakenShareValidCount" in stats) stats.damageTakenShareValidCount = clampNumber(stats.damageTakenShareValidCount, { max: 100000 });
+  if ("avgDamageTakenShare" in stats) stats.avgDamageTakenShare = clampNumber(stats.avgDamageTakenShare, { max: 100 });
   if ("avgGearScore" in stats) stats.avgGearScore = clampNumber(stats.avgGearScore, { max: 9999 });
   if ("latestGearScore" in stats) stats.latestGearScore = clampNumber(stats.latestGearScore, { max: 9999 });
   if ("arkPassiveRate" in stats) stats.arkPassiveRate = clampNumber(stats.arkPassiveRate, { max: 100 });
   if ("buildVariantCount" in stats) stats.buildVariantCount = clampNumber(stats.buildVariantCount, { max: 1000 });
+  if ("unclassifiedBuildLogCount" in stats) stats.unclassifiedBuildLogCount = clampNumber(stats.unclassifiedBuildLogCount, { max: 100000 });
   for (const key of ["supportLogRate", "dpsBuildLogRate", "primaryRoleRate"]) {
     if (key in stats) stats[key] = clampNumber(stats[key], { max: 100 });
   }
@@ -527,11 +669,13 @@ function cleanCharacterProfile(rawChar, rosterEntry) {
     "output",
     "damageShare",
     "rank",
+    "context",
     "consistency",
     "survival",
     "mechanics",
     "supportUptime",
     "raidContribution",
+    "supportRank",
     "protection",
   ], { max: 100 });
 
@@ -559,6 +703,10 @@ function cleanCharacterProfile(rawChar, rosterEntry) {
     .slice(0, MAX_TOP_SOURCES_PER_CHAR)
     .map(cleanTopSource)
     .filter(Boolean);
+  const buildVariants = (Array.isArray(rawChar.buildVariants) ? rawChar.buildVariants : [])
+    .slice(0, MAX_BUILD_VARIANTS_PER_CHAR)
+    .map(cleanBuildVariant)
+    .filter(Boolean);
 
   const className = rosterEntry.character?.class || cleanShortString(rawChar.class, 80);
   const classRole = roleForClass(className, rawChar.classRole);
@@ -576,6 +724,7 @@ function cleanCharacterProfile(rawChar, rosterEntry) {
     topDebuffSources,
     topShieldGivenSources,
     topShieldReceivedSources,
+    buildVariants,
     raids,
   };
 }
@@ -683,9 +832,11 @@ async function shouldPromoteSnapshot(clean, discordId, RaidProfileSnapshot) {
     .select("criteria accounts rangeType")
     .lean();
   if (!existing) return true;
-  const existingHasAccounts = Array.isArray(existing.accounts) && existing.accounts.length > 0;
+  const existingHasCharacters = (existing.accounts || []).some((account) =>
+    Array.isArray(account?.characters) && account.characters.length > 0
+  );
   const existingRangeType = existing.rangeType || existing.criteria?.range?.type || "full";
-  return !existingHasAccounts || existingRangeType !== "full";
+  return !existingHasCharacters || existingRangeType !== "full";
 }
 
 function buildSnapshotUpdate({ discordId, clean, promotePrimary }) {
@@ -710,23 +861,32 @@ async function upsertEncounterSummaries({ discordId, summaries, RaidProfileEncou
     return { received: Array.isArray(summaries) ? summaries.length : 0, upserted: 0, modified: 0 };
   }
   const receivedAt = Date.now();
-  const ops = summaries.map((summary) => ({
-    updateOne: {
-      filter: {
+  const ops = summaries.map((summary) => {
+    const { rangeType, ...summaryFields } = summary;
+    const update = {
+      $set: {
+        ...summaryFields,
         discordId,
-        encounterId: summary.encounterId,
-        characterNameKey: summary.characterNameKey,
+        receivedAt,
       },
-      update: {
-        $set: {
-          ...summary,
+    };
+    if (rangeType === "full") {
+      update.$set.rangeType = "full";
+    } else {
+      update.$setOnInsert = { rangeType: "weekly" };
+    }
+    return {
+      updateOne: {
+        filter: {
           discordId,
-          receivedAt,
+          encounterId: summary.encounterId,
+          characterNameKey: summary.characterNameKey,
         },
+        update,
+        upsert: true,
       },
-      upsert: true,
-    },
-  }));
+    };
+  });
   const result = await RaidProfileEncounter.bulkWrite(ops, { ordered: false });
   return {
     received: summaries.length,
@@ -863,6 +1023,18 @@ function createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot, RaidProfileE
       send(res, err.status || 400, { ok: false, error: err.message || "invalid profile payload" });
       return;
     }
+    if (!clean.totals.characterCount || !clean.totals.encounterCount) {
+      send(res, 200, {
+        ok: true,
+        skipped: "empty-profile",
+        discordId: userDoc.discordId,
+        totals: {
+          ...clean.totals,
+          encounterSummaries: clean.encounterSummaries?.length || 0,
+        },
+      });
+      return;
+    }
 
     let promotePrimary;
     try {
@@ -908,6 +1080,7 @@ function createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot, RaidProfileE
 
 module.exports = {
   PROFILE_VERSION,
+  MAX_BODY_BYTES,
   createProfileSessionEndpoint,
   createRaidProfileSyncEndpoint,
   sanitizeSnapshotPayload,

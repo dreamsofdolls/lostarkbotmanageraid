@@ -87,9 +87,11 @@ const { createRaidChannelMonitorService } = require("./services/raid/channel-mon
 const { createRaidSchedulerService } = require("./services/raid/schedulers");
 const { createRaidScheduleAutoLockService } = require("./services/raid/schedule/auto-lock");
 const { createDiscordIdentityCache } = require("./services/discord/user-identity-cache");
+const { createBibleProfileSyncService } = require("./services/auto-manage/profile-sync");
 const { createInFlightLoader } = require("./shared/in-flight-loader");
 const RaidEvent = require("./models/RaidEvent");
 const RaidProfileSnapshot = require("./models/RaidProfileSnapshot");
+const RaidProfileEncounter = require("./models/RaidProfileEncounter");
 
 const bibleLimiter = new ConcurrencyLimiter(2);
 // Discord REST fan-out limiter: caps parallel `client.users.fetch` bursts in
@@ -390,6 +392,7 @@ let autoManageEntryKey;
 let gatherAutoManageLogsForUserDoc;
 let applyAutoManageCollected;
 let syncAutoManageForUserDoc;
+let syncRaidProfileFromBibleCollected;
 let stampAutoManageAttempt;
 let isPublicLogDisabledError;
 let commitAutoManageOn;
@@ -457,6 +460,16 @@ const {
   resolveMaintenanceSlotConfig: () => getMaintenanceSlotConfigSnapshot?.(),
 });
 
+const bibleProfileSyncService = createBibleProfileSyncService({
+  RaidProfileSnapshot,
+  RaidProfileEncounter,
+  getCharacterName,
+  getCharacterClass,
+  getRaidGateForBoss,
+  RAID_REQUIREMENT_MAP,
+});
+({ syncRaidProfileFromBibleCollected } = bibleProfileSyncService);
+
 const autoManageCoreService = createAutoManageCoreService({
   EmbedBuilder,
   UI,
@@ -476,6 +489,7 @@ const autoManageCoreService = createAutoManageCoreService({
   normalizeAssignedRaid,
   ensureAssignedRaids,
   bibleLimiter,
+  syncRaidProfileFromBibleCollected,
 });
 ({
   AUTO_MANAGE_SYNC_COOLDOWN_MS,
@@ -597,6 +611,7 @@ const autoManageSyncService = createAutoManageSyncService({
   saveWithRetry,
   ensureFreshWeek,
   applyAutoManageCollected,
+  syncRaidProfileFromBibleCollected,
 });
 ({ applyAutoManageCollectedForStatus } = autoManageSyncService);
 
@@ -612,6 +627,7 @@ const raidViewSnapshotService = createRaidViewSnapshotService({
   releaseAutoManageSyncSlot,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
+  syncRaidProfileFromBibleCollected,
   stampAutoManageAttempt,
   weekResetStartMs,
 });
@@ -653,6 +669,7 @@ const raidStatusCommand = createRaidStatusCommand({
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
   applyAutoManageCollectedForStatus,
+  syncRaidProfileFromBibleCollected,
   stampAutoManageAttempt,
   weekResetStartMs,
   AUTO_MANAGE_SYNC_COOLDOWN_MS,
@@ -701,6 +718,7 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   autoManageEntryKey,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
+  syncRaidProfileFromBibleCollected,
   stampAutoManageAttempt,
   weekResetStartMs,
   isRaidLeader,
@@ -845,6 +863,7 @@ const raidSchedulerService = createRaidSchedulerService({
   releaseAutoManageSyncSlot,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
+  syncRaidProfileFromBibleCollected,
   isPublicLogDisabledError,
   stampAutoManageAttempt,
 });
@@ -1019,6 +1038,7 @@ const raidAutoManageCommandHandlers = createRaidAutoManageCommand({
   weekResetStartMs,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
+  syncRaidProfileFromBibleCollected,
   isPublicLogDisabledError,
   commitAutoManageOn,
   buildAutoManageSyncReportEmbed,

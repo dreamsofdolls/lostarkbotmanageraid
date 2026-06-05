@@ -174,7 +174,9 @@ function startLocalSyncHttpServer({ port = getEnvPort(), webDir, classIconsDir =
     }
   });
   server.listen(port, "0.0.0.0", () => {
-    console.log(`[local-sync/http-server] listening on 0.0.0.0:${port} (webDir=${webDir})`);
+    const address = server.address();
+    const actualPort = address && typeof address === "object" ? address.port : port;
+    console.log(`[local-sync/http-server] listening on 0.0.0.0:${actualPort} (webDir=${webDir})`);
   });
   return {
     server,
