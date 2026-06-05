@@ -19,6 +19,7 @@
  */
 
 const { buildNoticeEmbed, replyNotice } = require("../../utils/raid/common/shared");
+const { disableComponentRows } = require("../../utils/discord/component-rows");
 const { firstSelectValue } = require("../../utils/discord/component-values");
 const { t, getUserLanguage } = require("../../services/i18n");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
@@ -693,12 +694,7 @@ function createEditUi({
               text: t("raid-check.editFlow.footerClosed", lang),
             }),
           ],
-          components: buildEditComponents(state).map((row) => {
-            for (const c of row.components) {
-              if (typeof c.setDisabled === "function") c.setDisabled(true);
-            }
-            return row;
-          }),
+          components: disableComponentRows(buildEditComponents(state)),
         }).catch(() => {});
         collector.stop("cancelled");
         return;
@@ -715,12 +711,7 @@ function createEditUi({
               text: t("raid-check.editFlow.footerExpired", lang),
             }),
           ],
-          components: buildEditComponents(state).map((row) => {
-            for (const c of row.components) {
-              if (typeof c.setDisabled === "function") c.setDisabled(true);
-            }
-            return row;
-          }),
+          components: disableComponentRows(buildEditComponents(state)),
         });
         refreshed = true;
       } catch (err) {
