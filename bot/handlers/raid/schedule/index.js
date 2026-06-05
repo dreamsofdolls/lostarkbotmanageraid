@@ -16,7 +16,7 @@ const {
 } = require("../../../domain/raid-catalog");
 const { slotCountsForSize } = require("../../../services/raid/schedule/slot-config");
 const { parseStartTime } = require("../../../services/raid/schedule/time-parse");
-const { listEligibleCharacters, partitionSelectable } = require("../../../services/raid/schedule/eligibility");
+const { partitionSelectable } = require("../../../services/raid/schedule/eligibility");
 const { applyJoin, applyRsvp, applyKick } = require("../../../services/raid/schedule/signup-state");
 const { assignSlots, detectPromotion } = require("../../../services/raid/schedule/slots");
 const { selectAutoClearTargets } = require("../../../services/raid/schedule/auto-clear");
@@ -34,10 +34,15 @@ const {
   renderGauge,
   STATUS_CODE,
 } = require("./board");
-const { getClassEmoji } = require("../../../models/Class");
+const {
+  PICKER_LIMIT,
+  clip,
+  findOwnEligibleRows,
+  characterSelectOptions,
+  signupSelectOptions,
+} = require("./select-options");
 
 const EPHEMERAL_FLAG = 1 << 6;
-const PICKER_LIMIT = 25;
 const CLOSED_EVENT_STATUSES = new Set(["cleared", "cancelled"]);
 
 function createRaidScheduleCommand({
@@ -213,58 +218,14 @@ function createRaidScheduleCommand({
     if (typeof event.markModified === "function") event.markModified("signups");
   }
 
-  function clip(value, max) {
-    const text = String(value || "");
-    return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`;
-  }
-
-  // Class emojis come from models/Class as `<:name:id>` markup, but a select
-  // option's icon lives in a separate `emoji` field that wants the resolved
-  // {id, name} shape (the raw string would fail builder validation). Returns
-  // null for missing/unbootstrapped classes so the option just shows no icon.
-  function classEmojiOption(className) {
-    const m = /^<(a)?:(\w+):(\d+)>$/.exec(getClassEmoji(className) || "");
-    if (!m) return null;
-    return m[1] ? { id: m[3], name: m[2], animated: true } : { id: m[3], name: m[2] };
-  }
-
-  function findOwnEligibleRows(userDoc, event) {
-    const rows = listEligibleCharacters(userDoc?.accounts || [], {
-      raidKey: event.raidKey,
-      minItemLevel: event.minItemLevel,
-    });
-    return rows
-      .map((row, index) => ({ ...row, index }))
-      .filter((row) => row.eligible);
-  }
-
   function pickerRowFor(event, rows, lang) {
-    const options = rows.slice(0, PICKER_LIMIT).map((row) => {
-      const roleKey = row.role === "support" ? "support" : "dps";
-      const cleared = row.alreadyCleared
-        ? ` ${t("raid-schedule.picker.alreadyClearedSuffix", lang)}`
-        : "";
-      const emoji = classEmojiOption(row.className);
-      // Class is conveyed by the icon now, so the label is just the character
-      // name; the role chip (Support/DPS) still lives in the description.
-      return {
-        label: clip(row.name, 100),
-        value: String(row.index),
-        description: clip(
-          `${row.accountName} · ${row.itemLevel} · ${t(`raid-schedule.picker.role.${roleKey}`, lang)}${cleared}`,
-          100,
-        ),
-        ...(emoji ? { emoji } : {}),
-      };
-    });
-
     return new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId(`rse:pick:${event._id}`)
         .setPlaceholder(t("raid-schedule.picker.placeholder", lang))
         .setMinValues(1)
         .setMaxValues(1)
-        .addOptions(options),
+        .addOptions(characterSelectOptions(rows, lang)),
     );
   }
 
@@ -997,19 +958,7 @@ function createRaidScheduleCommand({
   // waitlist + RSVP), so the lead can drop anyone. Removing a slot-holder
   // frees the slot, which detectPromotion turns into a waitlist promotion.
   function kickSelectPayload(event, lang) {
-    const pool = (event.signups || []).slice(0, 25); // Discord select option cap
-    // Same option shape as the Join / Add-member pickers: class as the icon
-    // (not a name), description `account · ilvl · role`. The icon conveys class.
-    const options = pool.map((s) => {
-      const emoji = classEmojiOption(s.characterClass);
-      const roleKey = s.role === "support" ? "support" : "dps";
-      return {
-        label: clip(s.characterName, 100),
-        value: s.discordId,
-        description: clip(`${s.accountName} · ${s.characterItemLevel} · ${t(`raid-schedule.picker.role.${roleKey}`, lang)}`, 100),
-        ...(emoji ? { emoji } : {}),
-      };
-    });
+    const options = signupSelectOptions(event.signups, lang);
     const select = new StringSelectMenuBuilder()
       .setCustomId(`rse:kickpick:${event._id}`)
       .setPlaceholder(t("raid-schedule.kick.placeholder", lang))
@@ -1114,28 +1063,12 @@ function createRaidScheduleCommand({
   }
 
   function addCharSelectPayload(event, targetId, rows, lang) {
-    const options = rows.slice(0, PICKER_LIMIT).map((row) => {
-      const roleKey = row.role === "support" ? "support" : "dps";
-      const cleared = row.alreadyCleared
-        ? ` ${t("raid-schedule.picker.alreadyClearedSuffix", lang)}`
-        : "";
-      const emoji = classEmojiOption(row.className);
-      return {
-        label: clip(row.name, 100),
-        value: String(row.index),
-        description: clip(
-          `${row.accountName} · ${row.itemLevel} · ${t(`raid-schedule.picker.role.${roleKey}`, lang)}${cleared}`,
-          100,
-        ),
-        ...(emoji ? { emoji } : {}),
-      };
-    });
     const select = new StringSelectMenuBuilder()
       .setCustomId(`rse:addpick:${targetId}:${event._id}`)
       .setPlaceholder(t("raid-schedule.addMember.charPlaceholder", lang))
       .setMinValues(1)
       .setMaxValues(1)
-      .addOptions(options);
+      .addOptions(characterSelectOptions(rows, lang));
     return {
       embeds: [
         noticeEmbed(
@@ -1315,20 +1248,7 @@ function createRaidScheduleCommand({
   function memberSelectPayload(event, turnIndex, lang) {
     const turn = event.turns[turnIndex];
     const current = new Set(turn.memberIds || []);
-    const pool = (event.signups || []).slice(0, 25); // Discord select option cap
-    // Class icon (not name) + `account · ilvl · role`, consistent with the
-    // Join / Add-member / Kick pickers.
-    const options = pool.map((s) => {
-      const emoji = classEmojiOption(s.characterClass);
-      const roleKey = s.role === "support" ? "support" : "dps";
-      return {
-        label: clip(s.characterName, 100),
-        value: s.discordId,
-        description: clip(`${s.accountName} · ${s.characterItemLevel} · ${t(`raid-schedule.picker.role.${roleKey}`, lang)}`, 100),
-        default: current.has(s.discordId),
-        ...(emoji ? { emoji } : {}),
-      };
-    });
+    const options = signupSelectOptions(event.signups, lang, current);
     const select = new StringSelectMenuBuilder()
       .setCustomId(`rse:teammembers:${turnIndex}:${event._id}`)
       .setPlaceholder(clip(t("raid-schedule.teams.pickMembers", lang, { turn: turn.name }), 150))
