@@ -523,3 +523,39 @@ test("raid-profile component state reducers page roster lists circularly", () =>
   assert.equal(session.rosterIndex, 29);
   assert.equal(session.rosterPage, 1);
 });
+
+test("raid-profile reset wipes only the caller's own snapshot + encounters", async () => {
+  const calls = {};
+  const deps = {
+    ...makeDeps(),
+    RaidProfileSnapshot: {
+      deleteOne: async (query) => {
+        calls.snapshot = query;
+        return { deletedCount: 1 };
+      },
+    },
+    RaidProfileEncounter: {
+      deleteMany: async (query) => {
+        calls.encounter = query;
+        return { deletedCount: 42 };
+      },
+    },
+  };
+  const command = createRaidProfileCommand(deps);
+
+  let replied;
+  const interaction = {
+    user: { id: "u1" },
+    editReply: async (payload) => {
+      replied = payload;
+    },
+  };
+  await command.__test.resetOwnProfile(interaction, "u1", "vi");
+
+  // Both deletes are scoped to the caller's discordId only - never a blanket wipe.
+  assert.deepEqual(calls.snapshot, { discordId: "u1" });
+  assert.deepEqual(calls.encounter, { discordId: "u1" });
+  const embed = replied.embeds[0].toJSON();
+  assert.equal(embed.author.name, "// RAID PROFILE · RESET");
+  assert.match(embed.description, /42/);
+});

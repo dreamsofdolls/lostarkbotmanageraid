@@ -28,11 +28,14 @@ function sourceSummary(sources, limit = 3) {
 }
 
 function engravingSummary(engravings, limit = 5) {
-  const lines = [...(engravings || [])]
-    .filter((engraving) => engraving?.name)
+  const valid = [...(engravings || [])].filter((engraving) => engraving?.name);
+  const lines = valid
     .slice(0, limit)
     .map((engraving) => `${shortLabel(engraving.name, 22)} ${engraving.level || 0}`);
-  return lines.length ? lines.join(", ") : "N/A";
+  if (!lines.length) return "N/A";
+  // Match arkPassiveNodeSummary: flag the dropped tail instead of hiding it.
+  const extra = valid.length - lines.length;
+  return extra > 0 ? `${lines.join(", ")} (+${extra})` : lines.join(", ");
 }
 
 function arkPassiveSummary(arkPassive) {

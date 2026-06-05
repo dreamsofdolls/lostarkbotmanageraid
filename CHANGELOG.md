@@ -4,6 +4,15 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-05 (raid-profile: self-reset action + render polish)
+
+### Added
+- `/raid-profile` gains an **`action`** choice: `📊 view` (default) or `🧹 reset`. Reset wipes ONLY the caller's own `RaidProfileSnapshot` + `RaidProfileEncounter` docs (re-sync via the Web Companion rebuilds), and reports the deleted counts. i18n vi/en/jp.
+
+### Fixed
+- Profile embeds: CP went through the 0-100 score formatter (`2100000.0`); now `shortNumber` (`2.1M`). Context sample `n~6.0` -> `n~6`. Unmapped raid-label fallback capitalizes (`aegir` -> `Aegir`).
+- Silent list truncation now shows a `+N more` tail on roster (cap 10) / character (12) / top-skills (5) / raid-breakdown (8); `engravingSummary` gains a `(+N)` overflow marker like `arkPassiveNodeSummary`. 658 tests green.
+
 ## 2026-06-04 (raid-bg: 6-scene library + interactive view browser + edit; set overwrite/extend)
 
 ### Added

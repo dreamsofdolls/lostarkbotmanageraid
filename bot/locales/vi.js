@@ -2178,5 +2178,9 @@ module.exports = {
     btnNext: "Sau",
     btnOverall: "Tổng quan",
     btnRosterOverview: "Tổng quan roster",
+    resetDoneTitle: "Đã reset hồ sơ raid-profile",
+    resetDoneDesc: "Artist xoá xong **{snapshots}** snapshot + **{encounters}** encounter log của cậu. Sync lại qua Web Companion để dựng hồ sơ mới.",
+    resetEmptyTitle: "Chưa có gì để reset",
+    resetEmptyDesc: "Cậu chưa có hồ sơ raid-profile nào. Sync qua Web Companion để tạo trước đã.",
   },
 };

@@ -2145,5 +2145,9 @@ module.exports = {
     btnNext: "Next",
     btnOverall: "Overview",
     btnRosterOverview: "Roster overview",
+    resetDoneTitle: "Raid profile reset",
+    resetDoneDesc: "Cleared **{snapshots}** snapshot + **{encounters}** encounter log(s). Re-sync via the Web Companion to rebuild your profile.",
+    resetEmptyTitle: "Nothing to reset",
+    resetEmptyDesc: "You have no raid profile yet. Sync via the Web Companion to create one first.",
   },
 };
