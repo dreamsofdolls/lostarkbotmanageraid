@@ -86,6 +86,10 @@ function buildOverallEmbed({ EmbedBuilder, UI }, session) {
     const prefix = entry.isOwn ? "Own" : "Shared";
     return `\`${index + 1}.\` **${getEntryLabel(entry)}** · ${prefix} · ${rosterAgg.charCount} char · ${rosterAgg.logs} log · score ${score(rosterAgg.overall)}`;
   });
+  // Surface the truncated tail instead of silently dropping rosters past the cap.
+  if (session.entries.length > 10) {
+    rosterLines.push(`\`…\` +${session.entries.length - 10} more`);
+  }
   embed.addFields({
     name: hudFieldName("roster"),
     value: rosterLines.length ? rosterLines.join("\n") : t("raidProfile.noProfiles", lang),
@@ -142,6 +146,10 @@ function buildRosterEmbed({ EmbedBuilder, UI }, session, entry) {
       const logs = Number(character?.stats?.encounters) || 0;
       return `\`${index + 1}.\` **${character.name}** · ${roleLabel(character)} · ${logs} scored · score ${score(character?.scores?.overall)} · MVP ${score(character?.scores?.mvp)}`;
   });
+  // Many accounts run >12 alts; show the dropped count rather than hiding them.
+  if (entry.characters.length > 12) {
+    lines.push(`\`…\` +${entry.characters.length - 12} more`);
+  }
   embed.addFields({
     name: hudFieldName("character"),
     value: lines.length ? lines.join("\n") : t("raidProfile.noChars", lang),
@@ -201,7 +209,7 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
               `rDPS given/min: **${shortNumber(stats.avgRdpsDamageGivenPerMinute)}**`,
               `Supporter: **${pct(stats.avgSupporterPercent)}** · Radiant ${pct(stats.radiantSupportRate)}`,
               `Support rank: **${stats.supporterRankValidCount ? `${score(stats.avgSupporterRank)}/${score(stats.supporterCountAvg)}` : "N/A"}** · top ${pct(stats.supporterTopRate)}`,
-              `Context pct: **${pct(stats.avgContextSupportPercentile || stats.avgContextPerformancePercentile)}** · cover ${pct(stats.contextCoverageRate)} n~${score(stats.contextSampleCountAvg)}`,
+              `Context pct: **${pct(stats.avgContextSupportPercentile || stats.avgContextPerformancePercentile)}** · cover ${pct(stats.contextCoverageRate)} n~${Math.round(Number(stats.contextSampleCountAvg) || 0)}`,
               `Synergy/min: **${shortNumber(stats.avgSynergyGivenPerMinute)}**`,
               `AP/Brand: ${ratePct(stats.avgSupportAp)} / ${ratePct(stats.avgSupportBrand)}`,
               `Identity/Hyper: ${ratePct(stats.avgSupportIdentity)} / ${ratePct(stats.avgSupportHyper)}`,
@@ -212,7 +220,7 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
               ...burstProfileLines(stats),
               `Damage share: **${pct(stats.avgDamageShare)}** · ${renderGauge(scores.damageShare)}`,
               `Top proximity: **${pct(stats.avgTopDamageProximity)}**`,
-              `Context pct: **${pct(stats.avgContextPerformancePercentile)}** · cover ${pct(stats.contextCoverageRate)} n~${score(stats.contextSampleCountAvg)}`,
+              `Context pct: **${pct(stats.avgContextPerformancePercentile)}** · cover ${pct(stats.contextCoverageRate)} n~${Math.round(Number(stats.contextSampleCountAvg) || 0)}`,
               `Top rate: **${pct(stats.topRate)}**`,
             ].join("\n"),
         inline: true,
@@ -299,7 +307,9 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
     embed.addFields({
       name: hudFieldName("build"),
       value: [
-        `CP: **${build.combatPower ? score(build.combatPower) : "N/A"}**`,
+        // combatPower is a raw magnitude (~millions) - format like DPS via
+        // shortNumber, not score() which is the 0-100 gauge formatter.
+        `CP: **${build.combatPower ? shortNumber(build.combatPower) : "N/A"}**`,
         `Ark passive: **${build.arkPassiveActive === null || build.arkPassiveActive === undefined ? "N/A" : build.arkPassiveActive ? "ON" : "OFF"}** / rate ${pct(stats.arkPassiveRate)}`,
         `Build variants: **${Math.round(Number(stats.buildVariantCount) || 0)}**`,
         `Unclassified build logs: **${Math.round(Number(stats.unclassifiedBuildLogCount) || 0)}**`,
@@ -317,6 +327,9 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
     .map((skill, index) => (
       `\`${index + 1}.\` **${skill.name || "Unknown"}** · ${renderPercentGauge(skill.share)} · crit ${pct(skill.critRate)}`
     ));
+  if ((character.topSkills || []).length > 5) {
+    skillLines.push(`\`…\` +${(character.topSkills || []).length - 5} more`);
+  }
   if (skillLines.length) {
     embed.addFields({
       name: hudFieldName("top skills"),
@@ -335,6 +348,9 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
       }
       return `**${raidLabel}** · ${raid.boss || "?"} · ${raid.encounters || 0} log · DPS ${shortNumber(raid.medianDps)} · share ${pct(raid.avgDamageShare)} · top ${pct(raid.topRate)}`;
     });
+  if ((character.raids || []).length > 8) {
+    raidLines.push(`\`…\` +${(character.raids || []).length - 8} more`);
+  }
   embed.addFields({
     name: hudFieldName("raid breakdown"),
     value: raidLines.length ? raidLines.join("\n") : t("raidProfile.noRaidBreakdown", lang),

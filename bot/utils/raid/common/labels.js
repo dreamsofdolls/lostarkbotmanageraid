@@ -24,7 +24,10 @@ function getRaidLabel(raidKey, lang) {
   // raw `raid.groups.<key>` lookup will hit. Belt-and-suspenders:
   // if a brand-new raid is added to the model before vi.js is updated,
   // surface its English label instead of "raid.groups.foo".
-  const fallback = RAID_REQUIREMENTS[raidKey]?.label ?? raidKey;
+  // Capitalize a bare key as the last-ditch fallback (mirrors getModeLabel)
+  // so an unmapped raidKey renders "Aegir", never raw lowercase "aegir".
+  const titleCase = raidKey ? raidKey[0].toUpperCase() + raidKey.slice(1) : raidKey;
+  const fallback = RAID_REQUIREMENTS[raidKey]?.label ?? titleCase;
   const resolved = t(`raid.groups.${raidKey}`, lang);
   if (resolved === `raid.groups.${raidKey}`) return fallback;
   return resolved;

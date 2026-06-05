@@ -973,6 +973,7 @@ const raidProfileCommandHandlers = createRaidProfileCommand({
   UI,
   User,
   RaidProfileSnapshot,
+  RaidProfileEncounter,
 });
 ({
   handleRaidProfileCommand,

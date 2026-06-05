@@ -134,7 +134,29 @@ function createRaidCommandDefinitions({
     .setDescriptionLocalizations({
       vi: "Xem bảng chỉ số combat từ LOA Logs local",
       ja: "LOA Logs ローカルから戦闘プロフィール統計を表示",
-    });
+    })
+    .addStringOption((opt) =>
+      opt
+        .setName("action")
+        .setDescription("view (default) · reset (wipe your own profile to re-sync)")
+        .setDescriptionLocalizations({
+          vi: "view (mặc định) · reset (xoá hồ sơ của chính cậu để sync lại)",
+          ja: "view (既定) · reset (自分のプロフィールを消去して再同期)",
+        })
+        .setRequired(false)
+        .addChoices(
+          {
+            name: "📊 View profile",
+            name_localizations: { vi: "📊 Xem hồ sơ", ja: "📊 プロフィール表示" },
+            value: "view",
+          },
+          {
+            name: "🧹 Reset my profile",
+            name_localizations: { vi: "🧹 Reset hồ sơ của tôi", ja: "🧹 自分のプロフィールをリセット" },
+            value: "reset",
+          }
+        )
+    );
 
   const raidHelpCommand = new SlashCommandBuilder()
     .setName("raid-help")

@@ -2145,5 +2145,9 @@ module.exports = {
     btnNext: "次へ",
     btnOverall: "総合",
     btnRosterOverview: "ロスター総合",
+    resetDoneTitle: "レイドプロフィールをリセットしましたわ",
+    resetDoneDesc: "**{snapshots}** 件のスナップショット + **{encounters}** 件のエンカウンターログを削除しましたわ。Web Companion で再同期してプロフィールを作り直してくださいませ。",
+    resetEmptyTitle: "リセットするものがありません",
+    resetEmptyDesc: "まだレイドプロフィールがありませんわ。Web Companion で同期して先に作成してくださいませ。",
   },
 };

@@ -314,14 +314,41 @@ function createRaidProfileCommand(deps) {
     UI,
     User,
     RaidProfileSnapshot,
+    RaidProfileEncounter,
   } = deps;
 
   const renderDeps = { ...deps, EmbedBuilder, UI };
+
+  async function resetOwnProfile(interaction, viewerDiscordId, lang) {
+    // Self-service wipe: only the caller's own snapshot + per-encounter docs.
+    // Re-syncing via the Web Companion rebuilds the profile from encounters.db.
+    const [snapshotResult, encounterResult] = await Promise.all([
+      RaidProfileSnapshot.deleteOne({ discordId: viewerDiscordId }),
+      RaidProfileEncounter.deleteMany({ discordId: viewerDiscordId }),
+    ]);
+    const snapshots = Number(snapshotResult?.deletedCount) || 0;
+    const encounters = Number(encounterResult?.deletedCount) || 0;
+    const cleared = snapshots > 0 || encounters > 0;
+    const embed = buildNoticeEmbed(EmbedBuilder, {
+      type: cleared ? "success" : "info",
+      title: cleared ? t("raidProfile.resetDoneTitle", lang) : t("raidProfile.resetEmptyTitle", lang),
+      description: cleared
+        ? t("raidProfile.resetDoneDesc", lang, { snapshots, encounters })
+        : t("raidProfile.resetEmptyDesc", lang),
+    }).setAuthor({ name: "// RAID PROFILE · RESET" });
+    await interaction.editReply({ embeds: [embed] });
+  }
 
   async function handleRaidProfileCommand(interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const viewerDiscordId = interaction.user.id;
     const lang = await getUserLanguage(viewerDiscordId, { UserModel: User });
+
+    if (interaction.options?.getString?.("action") === "reset") {
+      await resetOwnProfile(interaction, viewerDiscordId, lang);
+      return;
+    }
+
     const { accessible, entries } = await buildAccessibleProfileEntries(viewerDiscordId, {
       RaidProfileSnapshot,
     });
@@ -419,6 +446,7 @@ function createRaidProfileCommand(deps) {
       renderSessionPayload,
       applyProfileButton,
       applyProfileSelect,
+      resetOwnProfile,
     },
   };
 }
