@@ -3,6 +3,9 @@
 const { randomUUID } = require("node:crypto");
 const { getAccessibleAccounts } = require("../../services/access/access-control");
 const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const { t, getUserLanguage } = require("../../services/i18n");
+const { getClassEmoji } = require("../../models/Class");
+const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 
 const PROFILE_SESSION_TTL_MS = 5 * 60 * 1000;
 const profileSessions = new Map();
@@ -249,6 +252,7 @@ async function buildAccessibleProfileEntries(viewerDiscordId, { RaidProfileSnaps
 }
 
 function buildOverallEmbed({ EmbedBuilder, UI }, session) {
+  const lang = session.lang || "vi";
   const chars = flattenCharacters(session.entries);
   const agg = aggregateCharacters(chars);
   const topOverall = pickTopChar(chars, "overall");
@@ -256,20 +260,17 @@ function buildOverallEmbed({ EmbedBuilder, UI }, session) {
   const embed = new EmbedBuilder()
     .setColor(UI.colors.neutral)
     .setAuthor({ name: "// RAID PROFILE · OVERALL" })
-    .setTitle("Hồ sơ raid của cậu nè~")
-    .setDescription([
-      "Artist gom từ `encounters.db` của cậu.",
-      "Chỉ tính boss raid RaidManage hỗ trợ, clear thành công, duration > 3 phút.",
-    ].join("\n"))
+    .setTitle(t("raidProfile.overallTitle", lang))
+    .setDescription(t("raidProfile.overallDesc", lang))
     .addFields(
       {
         name: hudFieldName("scope"),
         value: [
           `Roster: **${session.entries.length}**`,
           `Character: **${agg.charCount}**`,
-          `Log hợp lệ: **${agg.logs}**`,
+          `${t("raidProfile.validLogs", lang)}: **${agg.logs}**`,
           `Scored logs: **${agg.scoredLogs}**`,
-          `Lần mới nhất: ${formatDateMs(agg.lastFightStart)}`,
+          `${t("raidProfile.lastFight", lang)}: ${formatDateMs(agg.lastFightStart)}`,
         ].join("\n"),
         inline: true,
       },
@@ -300,7 +301,7 @@ function buildOverallEmbed({ EmbedBuilder, UI }, session) {
   });
   embed.addFields({
     name: hudFieldName("roster"),
-    value: rosterLines.length ? rosterLines.join("\n") : "Chưa có profile snapshot.",
+    value: rosterLines.length ? rosterLines.join("\n") : t("raidProfile.noProfiles", lang),
     inline: false,
   });
   embed.setFooter({
@@ -311,24 +312,25 @@ function buildOverallEmbed({ EmbedBuilder, UI }, session) {
 }
 
 function buildRosterEmbed({ EmbedBuilder, UI }, session, entry) {
+  const lang = session.lang || "vi";
   const agg = aggregateCharacters(entry.characters);
   const topOverall = pickTopChar(entry.characters, "overall");
   const embed = new EmbedBuilder()
     .setColor(entry.isOwn ? UI.colors.neutral : UI.colors.progress)
     .setAuthor({ name: "// RAID PROFILE · ROSTER" })
-    .setTitle(`Raid Profile · ${entry.accountName}`)
+    .setTitle(t("raidProfile.rosterTitle", lang, { account: entry.accountName }))
     .setDescription([
       entry.isOwn
-        ? "Roster của cậu."
-        : `Roster được share bởi **${entry.ownerLabel || entry.ownerDiscordId}** (${entry.accessLevel}).`,
-      `Snapshot: ${formatDateMs(entry.receivedAt || entry.generatedAt)}`,
+        ? t("raidProfile.rosterOwn", lang)
+        : t("raidProfile.rosterShared", lang, { owner: entry.ownerLabel || entry.ownerDiscordId, level: entry.accessLevel }),
+      t("raidProfile.updatedAt", lang, { date: formatDateMs(entry.receivedAt || entry.generatedAt) }),
     ].join("\n"))
     .addFields(
       {
         name: hudFieldName("scope"),
         value: [
           `Character: **${agg.charCount}**`,
-          `Log hợp lệ: **${agg.logs}**`,
+          `${t("raidProfile.validLogs", lang)}: **${agg.logs}**`,
           `Scored logs: **${agg.scoredLogs}**`,
           scoreLine("Overall", agg.overall),
           scoreLine("MVP", agg.mvp),
@@ -355,7 +357,7 @@ function buildRosterEmbed({ EmbedBuilder, UI }, session, entry) {
   });
   embed.addFields({
     name: hudFieldName("character"),
-    value: lines.length ? lines.join("\n") : "Roster này chưa có character snapshot.",
+    value: lines.length ? lines.join("\n") : t("raidProfile.noChars", lang),
     inline: false,
   });
   embed.setFooter({
@@ -366,17 +368,25 @@ function buildRosterEmbed({ EmbedBuilder, UI }, session, entry) {
 }
 
 function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
+  const lang = session.lang || "vi";
   const stats = character.stats || {};
   const scores = character.scores || {};
   const isSupport = character.role === "support";
+  // Playstyle/spec comes from the enlightenment node (getSpecFromArkPassiveNodes);
+  // fall back to the raw build.spec, then nothing. Surfaced as a badge in the
+  // header (inline code) instead of a buried Build line.
+  const spec = character.build?.arkPassive?.enlightenment?.spec || character.build?.spec || "";
+  // Custom class emoji renders in the description (not in titles), so the class
+  // icon lives on the identity line, not the title.
+  const classEmoji = getClassEmoji(character.class) || (isSupport ? "🛡️" : "⚔️");
   const embed = new EmbedBuilder()
     .setColor(isSupport ? UI.colors.success : UI.colors.neutral)
     .setAuthor({ name: "// RAID PROFILE · CHARACTER" })
-    .setTitle(`Raid Profile · ${character.name}`)
+    .setTitle(character.name)
     .setDescription([
+      `${classEmoji} **${character.class || "Unknown"}** · ${roleLabel(character)} · iLvl **${character.itemLevel || 0}**${spec ? ` · \`${spec}\`` : ""}`,
       `Roster: **${getEntryLabel(entry)}**`,
-      `Class: **${character.class || "Unknown"}** · iLvl **${character.itemLevel || 0}** · ${roleLabel(character)}`,
-      `Confidence: **${confidenceForLogs(stats.encounters)}** (${stats.encounters || 0} scored log)`,
+      t("raidProfile.confidence", lang, { conf: confidenceForLogs(stats.encounters), n: stats.encounters || 0 }),
     ].join("\n"))
     .addFields(
       {
@@ -431,7 +441,7 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
           `Counters/Stagger: **${score(stats.avgCounters)}** / ${shortNumber(stats.avgStaggerPerMinute)}/min`,
           `Taken/Shielded: ${shortNumber(stats.avgDamageTakenPerMinute)}/min / ${shortNumber(stats.avgShieldReceivedPerMinute)}/min`,
           `Incap: **${score(stats.avgIncapacitations)}** avg`,
-          `Lần mới nhất: ${formatDateMs(stats.lastFightStart)}`,
+          `${t("raidProfile.lastFight", lang)}: ${formatDateMs(stats.lastFightStart)}`,
         ].join("\n"),
         inline: false,
       }
@@ -468,8 +478,7 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
     embed.addFields({
       name: hudFieldName("build"),
       value: [
-        `Spec: **${build.spec || "N/A"}**`,
-        `Gear/CP: **${build.gearScore ? score(build.gearScore) : "N/A"}** / **${build.combatPower ? score(build.combatPower) : "N/A"}**`,
+        `CP: **${build.combatPower ? score(build.combatPower) : "N/A"}**`,
         `Ark passive: **${build.arkPassiveActive === null || build.arkPassiveActive === undefined ? "N/A" : build.arkPassiveActive ? "ON" : "OFF"}** / rate ${pct(stats.arkPassiveRate)}`,
         `Build variants: **${Math.round(Number(stats.buildVariantCount) || 0)}**`,
         `Engravings: ${engravingSummary(build.engravings)}`,
@@ -497,11 +506,12 @@ function buildCharacterEmbed({ EmbedBuilder, UI }, session, entry, character) {
     .sort((a, b) => Number(b?.encounters || 0) - Number(a?.encounters || 0))
     .slice(0, 8)
     .map((raid) => {
-      return `**${raid.raidKey} ${raid.modeKey}** · ${raid.boss || "?"} · ${raid.encounters || 0} log · DPS ${shortNumber(raid.medianDps)} · share ${pct(raid.avgDamageShare)} · top ${pct(raid.topRate)}`;
+      const raidLabel = getRaidModeLabel(raid.raidKey, raid.modeKey, "vi") || `${raid.raidKey} ${raid.modeKey}`;
+      return `**${raidLabel}** · ${raid.boss || "?"} · ${raid.encounters || 0} log · DPS ${shortNumber(raid.medianDps)} · share ${pct(raid.avgDamageShare)} · top ${pct(raid.topRate)}`;
     });
   embed.addFields({
     name: hudFieldName("raid breakdown"),
-    value: raidLines.length ? raidLines.join("\n") : "Chưa có breakdown đủ điều kiện.",
+    value: raidLines.length ? raidLines.join("\n") : t("raidProfile.noRaidBreakdown", lang),
     inline: false,
   });
   embed.setFooter({
@@ -530,13 +540,14 @@ function buildComponents(deps, session) {
     ButtonStyle,
   } = deps;
   const sid = session.id;
+  const lang = session.lang || "vi";
   const selectedEntry = session.rosterIndex >= 0 ? session.entries[session.rosterIndex] : null;
   const selectedChar = selectedEntry && session.charIndex >= 0
     ? selectedEntry.characters[session.charIndex]
     : null;
 
   const rosterOptions = [
-    selectOption("Tổng quan", "overall", "Gộp toàn bộ roster có quyền xem", "📊", session.rosterIndex < 0),
+    selectOption(t("raidProfile.optOverall", lang), "overall", t("raidProfile.optOverallDesc", lang), "📊", session.rosterIndex < 0),
     ...session.entries.slice(0, 24).map((entry, index) => {
       const agg = aggregateCharacters(entry.characters);
       return selectOption(
@@ -552,13 +563,13 @@ function buildComponents(deps, session) {
   const rosterRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`raid-profile:roster:${sid}`)
-      .setPlaceholder("Chọn roster...")
+      .setPlaceholder(t("raidProfile.rosterPlaceholder", lang))
       .addOptions(rosterOptions)
   );
 
   const charOptions = selectedEntry
     ? [
-        selectOption("Tổng quan roster", "overview", "Xem thống kê gộp của roster", "📁", session.charIndex < 0),
+        selectOption(t("raidProfile.optRosterOverview", lang), "overview", t("raidProfile.optRosterOverviewDesc", lang), "📁", session.charIndex < 0),
         ...selectedEntry.characters.slice(0, 24).map((character, index) => {
           return selectOption(
             character.name,
@@ -569,12 +580,12 @@ function buildComponents(deps, session) {
           );
         }),
       ]
-    : [selectOption("Chọn roster trước", "disabled", "Dropdown này sẽ load character của roster", "📁", true)];
+    : [selectOption(t("raidProfile.optPickRosterFirst", lang), "disabled", t("raidProfile.optPickRosterFirstDesc", lang), "📁", true)];
 
   const charRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId(`raid-profile:char:${sid}`)
-      .setPlaceholder("Chọn character...")
+      .setPlaceholder(t("raidProfile.charPlaceholder", lang))
       .setDisabled(!selectedEntry)
       .addOptions(charOptions)
   );
@@ -583,17 +594,17 @@ function buildComponents(deps, session) {
   const buttonRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`raid-profile:prev:${sid}`)
-      .setLabel("Trước")
+      .setLabel(t("raidProfile.btnPrev", lang))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(!canPage),
     new ButtonBuilder()
       .setCustomId(`raid-profile:overview:${sid}`)
-      .setLabel(selectedChar ? "Tổng quan roster" : "Tổng quan")
+      .setLabel(selectedChar ? t("raidProfile.btnRosterOverview", lang) : t("raidProfile.btnOverall", lang))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(!selectedEntry),
     new ButtonBuilder()
       .setCustomId(`raid-profile:next:${sid}`)
-      .setLabel("Sau")
+      .setLabel(t("raidProfile.btnNext", lang))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(!canPage)
   );
@@ -653,6 +664,7 @@ function createRaidProfileCommand(deps) {
   async function handleRaidProfileCommand(interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const viewerDiscordId = interaction.user.id;
+    const lang = await getUserLanguage(viewerDiscordId, { UserModel: User });
     const { accessible, entries } = await buildAccessibleProfileEntries(viewerDiscordId, {
       RaidProfileSnapshot,
     });
@@ -660,8 +672,8 @@ function createRaidProfileCommand(deps) {
     if (!accessible.length) {
       const embed = buildNoticeEmbed(EmbedBuilder, {
         type: "info",
-        title: "Artist chưa thấy roster nào của cậu hết á~",
-        description: "Cậu `/raid-add-roster` trước nha, hoặc nhờ manager share roster cho cậu. Sau đó mở Web Companion cho Artist đọc `encounters.db`, xong là Artist dựng hồ sơ raid cho cậu liền~",
+        title: t("raidProfile.noRosterTitle", lang),
+        description: t("raidProfile.noRosterDesc", lang),
       }).setAuthor({ name: "// RAID PROFILE · HEADS UP" });
       await interaction.editReply({
         embeds: [embed],
@@ -671,15 +683,20 @@ function createRaidProfileCommand(deps) {
 
     if (!entries.length) {
       const userDoc = await User.findOne({ discordId: viewerDiscordId })
-        .select("localSyncEnabled lastLocalProfileSyncAt lastLocalSyncAt")
+        .select("autoManageEnabled localSyncEnabled lastLocalProfileSyncAt lastLocalSyncAt")
         .lean()
         .catch(() => null);
-      const hint = userDoc?.localSyncEnabled
-        ? "Local-sync bật rồi đó! Cậu mở Web Companion từ `/raid-status`, chọn hoặc restore `encounters.db`, đợi dòng profile auto-sync báo xong, rồi gọi lại `/raid-profile` là Artist gom hồ sơ cho nha~"
-        : "Cậu bật `/raid-auto-manage action:local-on`, mở Web Companion, rồi chọn `encounters.db` để tạo profile snapshot trước nha.";
+      let hint;
+      if (userDoc?.localSyncEnabled) {
+        hint = t("raidProfile.noSnapshotHintOn", lang);
+      } else if (userDoc?.autoManageEnabled) {
+        hint = t("raidProfile.noSnapshotHintBible", lang);
+      } else {
+        hint = t("raidProfile.noSnapshotHintOff", lang);
+      }
       const embed = buildNoticeEmbed(EmbedBuilder, {
         type: "info",
-        title: "Hồ sơ còn trống trơn nè",
+        title: t("raidProfile.noSnapshotTitle", lang),
         description: hint,
       }).setAuthor({ name: "// RAID PROFILE · HEADS UP" });
       await interaction.editReply({
@@ -692,6 +709,7 @@ function createRaidProfileCommand(deps) {
     const session = {
       id: sid,
       viewerDiscordId,
+      lang,
       entries,
       rosterIndex: -1,
       charIndex: -1,
@@ -704,15 +722,16 @@ function createRaidProfileCommand(deps) {
   async function handleRaidProfileComponent(interaction) {
     const { action, session, forbidden } = getSessionForInteraction(interaction);
     if (!session) {
+      const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
       await interaction.reply({
         flags: MessageFlags.Ephemeral,
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
-            title: forbidden ? "Không phải profile của cậu" : "Profile view đã hết hạn",
+            title: forbidden ? t("raidProfile.forbiddenTitle", lang) : t("raidProfile.expiredTitle", lang),
             description: forbidden
-              ? "Component này thuộc phiên `/raid-profile` của người khác."
-              : "Chạy lại `/raid-profile` để mở phiên mới.",
+              ? t("raidProfile.forbiddenDesc", lang)
+              : t("raidProfile.expiredDesc", lang),
           }),
         ],
       });

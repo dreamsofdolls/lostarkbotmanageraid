@@ -309,13 +309,23 @@ function createAutoManageCoreService({
    */
   async function fetchBibleLogsSinceWeekReset({ serial, cid, rid, className, weekResetStart, maxPages = 10 }) {
     const all = [];
+    const seenLogIds = new Set();
     for (let page = 1; page <= maxPages; page += 1) {
       const logs = await fetchBibleLogsWithLimiter({ serial, cid, rid, className, page });
       if (!Array.isArray(logs) || logs.length === 0) break;
-      all.push(...logs);
+      const freshLogs = [];
+      for (const log of logs) {
+        const id = String(log?.id || "").trim();
+        const dedupeKey = id || `${log?.timestamp || ""}:${log?.name || ""}:${log?.boss || ""}`;
+        if (!dedupeKey || seenLogIds.has(dedupeKey)) continue;
+        seenLogIds.add(dedupeKey);
+        freshLogs.push(log);
+      }
+      if (freshLogs.length === 0) break;
+      all.push(...freshLogs);
       // If any log in this page is before the reset boundary, deeper
       // pages only contain older entries - stop early.
-      const hasPreReset = logs.some((l) => Number(l?.timestamp) < weekResetStart);
+      const hasPreReset = freshLogs.some((l) => Number(l?.timestamp) < weekResetStart);
       if (hasPreReset) break;
       // Partial page = last page bible has.
       if (logs.length < 25) break;

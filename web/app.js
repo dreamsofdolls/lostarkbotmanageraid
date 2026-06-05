@@ -40,6 +40,10 @@ import {
 const $ = (id) => document.getElementById(id);
 const authStatus = $("auth-status");
 const fileSection = $("file-section");
+const syncModeSection = $("sync-mode-section");
+const weeklyModeTab = $("weekly-mode-tab");
+const profileModeTab = $("profile-mode-tab");
+const syncModeLock = $("sync-mode-lock");
 const previewSection = $("preview-section");
 const dropZone = $("drop-zone");
 const pickFileBtn = $("pick-file-btn");
@@ -48,12 +52,15 @@ const previewOutput = $("preview-output");
 const syncSection = $("sync-section");
 const syncBtn = $("sync-btn");
 const syncOutput = $("sync-output");
+const profileSection = $("profile-section");
 const profileSyncOutput = $("profile-sync-output");
 
 // Cache the last successful query result so the Sync button can POST it
 // without re-running the SQL. Set on every loadAndPreview() success.
 let lastDeltas = null;
 let previewUtilsPromise = null;
+let selectedLocalFile = null;
+let lockedSyncMode = null;
 
 function loadPreviewUtils() {
   if (!previewUtilsPromise) {
@@ -192,6 +199,80 @@ function renderProfileSyncStatus(kind, message) {
   const cls = kind === "err" ? "status-err" : kind === "ok" ? "status-ok" : "hint";
   profileSyncOutput.hidden = false;
   profileSyncOutput.innerHTML = `<span class="${cls}">${escapeHtml(message)}</span>`;
+}
+
+function renderSyncModeTabs() {
+  if (!syncModeSection || !weeklyModeTab || !profileModeTab) return;
+  const weeklyActive = lockedSyncMode === "weekly";
+  const profileActive = lockedSyncMode === "profile";
+  weeklyModeTab.classList.toggle("is-active", weeklyActive);
+  profileModeTab.classList.toggle("is-active", profileActive);
+  weeklyModeTab.setAttribute("aria-selected", weeklyActive ? "true" : "false");
+  profileModeTab.setAttribute("aria-selected", profileActive ? "true" : "false");
+  weeklyModeTab.disabled = profileActive;
+  profileModeTab.disabled = weeklyActive;
+  if (syncModeLock) {
+    if (!lockedSyncMode) {
+      syncModeLock.hidden = true;
+      syncModeLock.textContent = "";
+    } else {
+      syncModeLock.hidden = false;
+      syncModeLock.textContent = t(weeklyActive ? "syncMode.lockedWeekly" : "syncMode.lockedProfile");
+    }
+  }
+}
+
+function clearWeeklySurface() {
+  previewSection.hidden = true;
+  previewOutput.innerHTML = "";
+  renderPreviewStats(null);
+  syncSection.hidden = true;
+  syncBtn.disabled = true;
+  syncOutput.hidden = true;
+  syncOutput.innerHTML = "";
+  lastDeltas = null;
+}
+
+function clearProfileSurface() {
+  stopProfileAutoSync();
+  profileSection.hidden = true;
+  renderProfileSyncStatus(null, "");
+}
+
+function resetSyncModeChoice({ keepFile = true } = {}) {
+  lockedSyncMode = null;
+  if (!keepFile) selectedLocalFile = null;
+  clearWeeklySurface();
+  clearProfileSurface();
+  if (syncModeSection) syncModeSection.hidden = !selectedLocalFile;
+  renderSyncModeTabs();
+}
+
+async function activateWeeklyMode() {
+  if (!selectedLocalFile || lockedSyncMode === "profile") return;
+  lockedSyncMode = "weekly";
+  clearProfileSurface();
+  renderSyncModeTabs();
+  previewSection.hidden = false;
+  syncSection.hidden = true;
+  previewOutput.textContent = t("preview.loadingWasm");
+  renderWeekRange();
+  await loadAndPreview(selectedLocalFile);
+}
+
+function activateProfileMode() {
+  if (!selectedLocalFile || lockedSyncMode === "weekly") return;
+  lockedSyncMode = "profile";
+  clearWeeklySurface();
+  renderSyncModeTabs();
+  profileSection.hidden = false;
+  startProfileAutoSync({
+    file: selectedLocalFile,
+    getDiscordId: () => window.__artistDiscordId,
+    getLocalToken: () => window.__artistSyncToken,
+    getRosterAccounts: getRosterAccountsForProfile,
+    renderStatus: renderProfileSyncStatus,
+  });
 }
 
 function renderPreviewStats(summary) {
@@ -449,6 +530,7 @@ if (!token) {
 // ----- 2. FSA file pick / drop -----
 
 async function loadFile(file, { handle = null } = {}) {
+  selectedLocalFile = file;
   fileMeta.hidden = false;
   // Render file meta + a "Remove" button so the user can detach the
   // file (clears persisted handle from IDB so next visit asks for a
@@ -461,10 +543,10 @@ async function loadFile(file, { handle = null } = {}) {
   if (removeBtn) {
     removeBtn.addEventListener("click", handleRemoveFile);
   }
-  previewSection.hidden = false;
   // Refresh week range in case the page was open across a Wed 17:00
   // VN reset boundary - boot-time render would be stale by then.
   renderWeekRange();
+  resetSyncModeChoice();
   // Persist the handle for next visit. Plain File (drag-drop without
   // FSA handle promotion) can't persist - skip silently in that case.
   if (handle && window.__artistDiscordId) {
@@ -476,14 +558,6 @@ async function loadFile(file, { handle = null } = {}) {
       console.warn("[local-sync] saveHandle failed:", err?.message || err);
     });
   }
-  await loadAndPreview(file);
-  startProfileAutoSync({
-    file,
-    getDiscordId: () => window.__artistDiscordId,
-    getLocalToken: () => window.__artistSyncToken,
-    getRosterAccounts: getRosterAccountsForProfile,
-    renderStatus: renderProfileSyncStatus,
-  });
 }
 
 async function handleRemoveFile() {
@@ -496,15 +570,7 @@ async function handleRemoveFile() {
   // hide so user knows nothing's loaded.
   fileMeta.hidden = true;
   fileMeta.innerHTML = "";
-  previewSection.hidden = true;
-  previewOutput.innerHTML = "";
-  renderPreviewStats(null);
-  syncSection.hidden = true;
-  syncOutput.hidden = true;
-  syncOutput.innerHTML = "";
-  lastDeltas = null;
-  stopProfileAutoSync();
-  renderProfileSyncStatus(null, "");
+  resetSyncModeChoice({ keepFile: false });
 }
 
 function formatBytes(n) {
@@ -512,6 +578,20 @@ function formatBytes(n) {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
   return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+if (weeklyModeTab) {
+  weeklyModeTab.addEventListener("click", () => {
+    activateWeeklyMode().catch((err) => {
+      console.error("[local-sync] weekly mode failed:", err);
+      previewSection.hidden = false;
+      previewOutput.innerHTML = `<span class="status-err">${t("preview.openFailed")}</span> ${escapeHtml(err.message || String(err))}`;
+    });
+  });
+}
+
+if (profileModeTab) {
+  profileModeTab.addEventListener("click", activateProfileMode);
 }
 
 dropZone.addEventListener("dragover", (e) => {
