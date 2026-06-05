@@ -24,6 +24,12 @@
 const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
+const {
+  getAppliedAutoManageEntries,
+  stampAutoManageAttemptFromReport,
+  toPlainUserDoc,
+  syncRaidProfileAfterAutoManageReport,
+} = require("../../services/auto-manage/report-utils");
 
 /**
  * Build the /raid-check Sync UI service. Returns three handlers (display
@@ -214,10 +220,12 @@ function createSyncUi({
             let outcome = "attempted-only";
             let delta = null;
             let profileUserDoc = null;
+            let profileReport = null;
             await saveWithRetry(async () => {
               const fresh = await User.findOne({ discordId });
               if (!fresh || !Array.isArray(fresh.accounts) || fresh.accounts.length === 0) return;
               profileUserDoc = null;
+              profileReport = null;
 
               ensureFreshWeek(fresh);
               if (!fresh.autoManageEnabled) {
@@ -227,31 +235,28 @@ function createSyncUi({
               }
 
               const report = applyAutoManageCollected(fresh, weekResetStart, collected);
+              profileReport = report;
               const now = Date.now();
-              fresh.lastAutoManageAttemptAt = now;
-              if (report.perChar.some((c) => !c.error)) {
-                fresh.lastAutoManageSyncAt = now;
+              if (stampAutoManageAttemptFromReport(fresh, report, now)) {
                 outcome = "synced";
               }
-              const appliedEntries = report.perChar.filter(
-                (entry) => Array.isArray(entry.applied) && entry.applied.length > 0
-              );
+              const appliedEntries = getAppliedAutoManageEntries(report);
               if (appliedEntries.length > 0) delta = appliedEntries;
               await fresh.save();
-              profileUserDoc = typeof fresh.toObject === "function" ? fresh.toObject() : fresh;
+              profileUserDoc = toPlainUserDoc(fresh);
             });
 
             if (outcome === "synced") syncedCount += 1;
             else attemptedOnlyCount += 1;
-            if (outcome === "synced" && profileUserDoc) {
-              await syncRaidProfileFromBibleCollected({
-                discordId,
-                userDoc: profileUserDoc,
-                weekResetStart,
-                collected,
-                logLabel: "[raid-check sync]",
-              });
-            }
+            await syncRaidProfileAfterAutoManageReport({
+              syncRaidProfileFromBibleCollected,
+              report: profileReport,
+              discordId,
+              userDoc: profileUserDoc,
+              weekResetStart,
+              collected,
+              logLabel: "[raid-check sync]",
+            });
             if (delta) deltasPerUser.set(discordId, delta);
           } catch (err) {
             failedCount += 1;

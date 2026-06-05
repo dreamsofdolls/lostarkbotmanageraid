@@ -25,6 +25,11 @@ const {
   extractProfileFromUser,
   RESULT: SYNC_RESULT,
 } = require("../../services/local-sync");
+const {
+  stampAutoManageAttemptFromReport,
+  toPlainUserDoc,
+  syncRaidProfileAfterAutoManageReport,
+} = require("../../services/auto-manage/report-utils");
 
 /**
  * Build the /raid-auto-manage command handler factory.
@@ -741,12 +746,9 @@ function createRaidAutoManageCommand(deps) {
           ensureFreshWeek(userDoc);
           report = applyAutoManageCollected(userDoc, weekResetStart, collected);
           const now = Date.now();
-          userDoc.lastAutoManageAttemptAt = now;
-          if (report.perChar.some((c) => !c.error)) {
-            userDoc.lastAutoManageSyncAt = now;
-          }
+          stampAutoManageAttemptFromReport(userDoc, report, now);
           await userDoc.save();
-          profileUserDoc = typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
+          profileUserDoc = toPlainUserDoc(userDoc);
         });
         if (report?.noRoster) {
           await editAutoNotice({
@@ -758,15 +760,15 @@ function createRaidAutoManageCommand(deps) {
           });
           return;
         }
-        if (profileUserDoc && report?.perChar?.some((c) => !c.error)) {
-          await syncRaidProfileFromBibleCollected({
-            discordId,
-            userDoc: profileUserDoc,
-            weekResetStart,
-            collected,
-            logLabel: "[raid-auto-manage:sync]",
-          });
-        }
+        await syncRaidProfileAfterAutoManageReport({
+          syncRaidProfileFromBibleCollected,
+          report,
+          discordId,
+          userDoc: profileUserDoc,
+          weekResetStart,
+          collected,
+          logLabel: "[raid-auto-manage:sync]",
+        });
         const embed = buildAutoManageSyncReportEmbed(report, lang);
         await editAutoEmbed(embed);
       } catch (err) {

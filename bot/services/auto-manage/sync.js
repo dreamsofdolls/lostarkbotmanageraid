@@ -1,3 +1,12 @@
+"use strict";
+
+const {
+  hasAppliedAutoManageDelta,
+  stampAutoManageAttemptFromReport,
+  toPlainUserDoc,
+  syncRaidProfileAfterAutoManageReport,
+} = require("./report-utils");
+
 function createAutoManageSyncService(deps) {
   const {
     User,
@@ -14,11 +23,13 @@ function createAutoManageSyncService(deps) {
     logLabel
   ) {
     let savedSnapshot = null;
+    let profileReport = null;
     let shouldSyncProfile = false;
     const result = await saveWithRetry(async () => {
       const doc = await User.findOne({ discordId });
       if (!doc) return null;
       savedSnapshot = null;
+      profileReport = null;
       shouldSyncProfile = false;
 
       const didFreshenWeek = ensureFreshWeek(doc);
@@ -27,14 +38,11 @@ function createAutoManageSyncService(deps) {
 
       if (collected && doc.autoManageEnabled) {
         const autoReport = applyAutoManageCollected(doc, weekResetStart, collected);
+        profileReport = autoReport;
         const now = Date.now();
-        doc.lastAutoManageAttemptAt = now;
-        if (autoReport.perChar.some((c) => !c.error)) {
-          doc.lastAutoManageSyncAt = now;
+        if (stampAutoManageAttemptFromReport(doc, autoReport, now)) {
           shouldSyncProfile = true;
-          outcome = autoReport.perChar.some(
-            (c) => Array.isArray(c.applied) && c.applied.length > 0
-          )
+          outcome = hasAppliedAutoManageDelta(autoReport)
             ? "synced-with-delta"
             : "synced-no-delta";
         } else {
@@ -47,14 +55,16 @@ function createAutoManageSyncService(deps) {
       }
 
       if (didFreshenWeek || didAutoManage) await doc.save();
-      savedSnapshot = typeof doc.toObject === "function" ? doc.toObject() : doc;
+      savedSnapshot = toPlainUserDoc(doc);
       console.log(
         `[raid-status] ${logLabel} auto-manage finished for user=${discordId} outcome=${outcome}`
       );
       return savedSnapshot;
     });
-    if (savedSnapshot && shouldSyncProfile) {
-      await syncRaidProfileFromBibleCollected({
+    if (shouldSyncProfile) {
+      await syncRaidProfileAfterAutoManageReport({
+        syncRaidProfileFromBibleCollected,
+        report: profileReport,
         discordId,
         userDoc: savedSnapshot,
         weekResetStart,
