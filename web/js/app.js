@@ -39,6 +39,7 @@ import {
   syncProfileSnapshotOnce,
   stopProfileAutoSync,
 } from "/sync/js/profile/profile-sync.js";
+import { createProfileProcessLogRenderer } from "/sync/js/profile/profile-process-log.js";
 import { escapeHtml } from "/sync/js/core/html.js";
 import { formatBytes } from "/sync/js/core/format.js";
 import {
@@ -75,6 +76,10 @@ const syncBtn = $("sync-btn");
 const syncOutput = $("sync-output");
 const profileSection = $("profile-section");
 const profileSyncOutput = $("profile-sync-output");
+const profileProcessLog = createProfileProcessLogRenderer({
+  container: profileSyncOutput,
+  escapeHtml,
+});
 
 // Cache the last successful query result so the Sync button can POST it
 // without re-running the SQL. Set on every loadAndPreview() success.
@@ -185,15 +190,7 @@ async function getRosterAccountsForProfile() {
 }
 
 function renderProfileSyncStatus(kind, message) {
-  if (!profileSyncOutput) return;
-  if (!kind || !message) {
-    profileSyncOutput.hidden = true;
-    profileSyncOutput.innerHTML = "";
-    return;
-  }
-  const cls = kind === "err" ? "status-err" : kind === "ok" ? "status-ok" : "hint";
-  profileSyncOutput.hidden = false;
-  profileSyncOutput.innerHTML = `<span class="${cls}">${escapeHtml(message)}</span>`;
+  profileProcessLog.render(kind, message);
 }
 
 function renderWeeklyProfileSyncStatus(kind, message) {
