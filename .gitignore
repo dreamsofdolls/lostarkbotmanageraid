@@ -9,3 +9,7 @@ scripts/preview-raid-card.png
 # Design scratch (brainstorm mockups / specs / plans) is local-only - not pushed.
 # Already-tracked files under docs/ stay tracked; this only stops NEW ones.
 docs/
+
+# Claude Code local workspace: worktrees, settings, and design scratch moved
+# under .claude/superpowers (mockups/specs/plans). Local-only, never pushed.
+.claude/
