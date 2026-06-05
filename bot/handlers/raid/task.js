@@ -14,6 +14,7 @@ const { t, getUserLanguage } = require("../../services/i18n");
 const { createRaidTaskAutocompleteHandlers } = require("./task/autocomplete");
 const { createRaidTaskNoticeHelpers } = require("./task/notices");
 const { createRaidTaskWriteTargetResolver } = require("./task/write-target");
+const { resolveEditableTaskWriteAccess } = require("./task/write-access");
 const {
   SCHEDULED_RESET,
   SHARED_TASK_PRESETS,
@@ -120,17 +121,15 @@ function createRaidTaskCommand(deps) {
       return;
     }
 
-    const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
-    if (writeTarget.viaShare && !writeTarget.canEdit) {
-      await replyViewOnlyShareNotice(interaction, writeTarget, lang);
-      return;
-    }
-    const discordId = writeTarget.discordId;
-    if (writeTarget.viaShare) {
-      console.log(
-        `[raid-task] share-write executor=${executorId} owner=${discordId} cmd=add-single roster=${rosterName}`,
-      );
-    }
+    const access = await resolveEditableTaskWriteAccess({
+      executorId,
+      rosterName,
+      commandName: "add-single",
+      resolveTaskWriteTarget,
+      denyViewOnly: (writeTarget) => replyViewOnlyShareNotice(interaction, writeTarget, lang),
+    });
+    if (!access.ok) return;
+    const discordId = access.discordId;
 
     let outcome = "added";
     let resolvedCharName = "";
@@ -288,17 +287,15 @@ function createRaidTaskCommand(deps) {
       return;
     }
 
-    const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
-    if (writeTarget.viaShare && !writeTarget.canEdit) {
-      await replyViewOnlyShareNotice(interaction, writeTarget, lang);
-      return;
-    }
-    const discordId = writeTarget.discordId;
-    if (writeTarget.viaShare) {
-      console.log(
-        `[raid-task] share-write executor=${executorId} owner=${discordId} cmd=add-all roster=${rosterName}`,
-      );
-    }
+    const access = await resolveEditableTaskWriteAccess({
+      executorId,
+      rosterName,
+      commandName: "add-all",
+      resolveTaskWriteTarget,
+      denyViewOnly: (writeTarget) => replyViewOnlyShareNotice(interaction, writeTarget, lang),
+    });
+    if (!access.ok) return;
+    const discordId = access.discordId;
 
     const added = [];
     const skippedCap = [];
@@ -545,16 +542,15 @@ function createRaidTaskCommand(deps) {
     // overstep the share contract).
     let writeTarget = { discordId: executorId, viaShare: false };
     if (!applyAllRosters) {
-      writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
-      if (writeTarget.viaShare && !writeTarget.canEdit) {
-        await replyViewOnlyShareNotice(interaction, writeTarget, lang);
-        return;
-      }
-      if (writeTarget.viaShare) {
-        console.log(
-          `[raid-task] share-write executor=${executorId} owner=${writeTarget.discordId} cmd=shared-add roster=${rosterName}`,
-        );
-      }
+      const access = await resolveEditableTaskWriteAccess({
+        executorId,
+        rosterName,
+        commandName: "shared-add",
+        resolveTaskWriteTarget,
+        denyViewOnly: (target) => replyViewOnlyShareNotice(interaction, target, lang),
+      });
+      if (!access.ok) return;
+      writeTarget = access.writeTarget;
     }
     const discordId = writeTarget.discordId;
 
@@ -789,17 +785,15 @@ function createRaidTaskCommand(deps) {
     const rosterName = interaction.options.getString("roster", true);
     const taskId = interaction.options.getString("task", true);
 
-    const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
-    if (writeTarget.viaShare && !writeTarget.canEdit) {
-      await replyViewOnlyShareNotice(interaction, writeTarget, lang);
-      return;
-    }
-    const discordId = writeTarget.discordId;
-    if (writeTarget.viaShare) {
-      console.log(
-        `[raid-task] share-write executor=${executorId} owner=${discordId} cmd=shared-remove roster=${rosterName}`,
-      );
-    }
+    const access = await resolveEditableTaskWriteAccess({
+      executorId,
+      rosterName,
+      commandName: "shared-remove",
+      resolveTaskWriteTarget,
+      denyViewOnly: (writeTarget) => replyViewOnlyShareNotice(interaction, writeTarget, lang),
+    });
+    if (!access.ok) return;
+    const discordId = access.discordId;
 
     let outcome = "removed";
     let resolvedRosterName = rosterName;
@@ -874,17 +868,15 @@ function createRaidTaskCommand(deps) {
     const characterName = interaction.options.getString("character", true);
     const taskId = interaction.options.getString("task", true);
 
-    const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
-    if (writeTarget.viaShare && !writeTarget.canEdit) {
-      await replyViewOnlyShareNotice(interaction, writeTarget, lang);
-      return;
-    }
-    const discordId = writeTarget.discordId;
-    if (writeTarget.viaShare) {
-      console.log(
-        `[raid-task] share-write executor=${executorId} owner=${discordId} cmd=remove roster=${rosterName}`,
-      );
-    }
+    const access = await resolveEditableTaskWriteAccess({
+      executorId,
+      rosterName,
+      commandName: "remove",
+      resolveTaskWriteTarget,
+      denyViewOnly: (writeTarget) => replyViewOnlyShareNotice(interaction, writeTarget, lang),
+    });
+    if (!access.ok) return;
+    const discordId = access.discordId;
 
     let outcome = "removed";
     let resolvedCharName = "";
@@ -958,17 +950,16 @@ function createRaidTaskCommand(deps) {
     const rosterName = interaction.options.getString("roster", true);
     const characterName = interaction.options.getString("character", true);
 
-    const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
-    if (writeTarget.viaShare && !writeTarget.canEdit) {
-      await replyViewOnlyShareNotice(interaction, writeTarget, lang);
-      return;
-    }
-    const discordId = writeTarget.discordId;
-    if (writeTarget.viaShare) {
-      console.log(
-        `[raid-task] share-preview executor=${executorId} owner=${discordId} cmd=clear roster=${rosterName}`,
-      );
-    }
+    const access = await resolveEditableTaskWriteAccess({
+      executorId,
+      rosterName,
+      commandName: "clear",
+      logKind: "share-preview",
+      resolveTaskWriteTarget,
+      denyViewOnly: (writeTarget) => replyViewOnlyShareNotice(interaction, writeTarget, lang),
+    });
+    if (!access.ok) return;
+    const discordId = access.discordId;
 
     const userDoc = await User.findOne({ discordId }).lean();
     const found = userDoc
@@ -1050,19 +1041,18 @@ function createRaidTaskCommand(deps) {
     // share the user picked when they originally ran /raid-task clear -
     // a re-resolve here keeps the write routing to the same owner doc
     // even if the share changed mid-flight.
-    const writeTarget = parts[3]
-      ? await resolveTaskWriteTarget(executorId, rosterName)
-      : { discordId: executorId, viaShare: false };
-    if (writeTarget.viaShare && !writeTarget.canEdit) {
-      await updateTaskNotice(interaction, viewOnlyShareNotice(writeTarget, lang));
-      return;
-    }
-    const discordId = writeTarget.discordId;
-    if (writeTarget.viaShare) {
-      console.log(
-        `[raid-task] share-write executor=${executorId} owner=${discordId} cmd=clear-confirm roster=${rosterName}`,
-      );
-    }
+    const access = parts[3]
+      ? await resolveEditableTaskWriteAccess({
+          executorId,
+          rosterName,
+          commandName: "clear-confirm",
+          resolveTaskWriteTarget,
+          denyViewOnly: (writeTarget) =>
+            updateTaskNotice(interaction, viewOnlyShareNotice(writeTarget, lang)),
+        })
+      : { ok: true, discordId: executorId };
+    if (!access.ok) return;
+    const discordId = access.discordId;
 
     let outcome = "cleared";
     let resolvedCharName = characterName;
