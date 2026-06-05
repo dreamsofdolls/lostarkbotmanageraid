@@ -246,6 +246,48 @@ test("auto-manage gather overlaps cached character log fetches through the limit
   }
 });
 
+test("auto-manage gather stops when bible pagination repeats the same log page", async () => {
+  const service = makeService();
+  const originalFetch = global.fetch;
+  const repeatedPage = Array.from({ length: 25 }, (_, index) => ({
+    id: `log-${index + 1}`,
+    name: "Aki",
+    boss: "Witch of Agony, Serca",
+    difficulty: "Hard",
+    timestamp: 2000 + index,
+    duration: 300000,
+  }));
+  const requestedPages = [];
+
+  global.fetch = async (_url, options = {}) => {
+    const body = JSON.parse(options.body || "{}");
+    requestedPages.push(body.page);
+    return {
+      ok: true,
+      json: async () => repeatedPage,
+    };
+  };
+
+  try {
+    const roster = testRosterWithCachedBibleIds();
+    roster.accounts[0].characters = [roster.accounts[0].characters[0]];
+    const collected = await service.gatherAutoManageLogsForUserDoc(
+      roster,
+      1000
+    );
+
+    assert.deepEqual(requestedPages, [1, 2]);
+    assert.equal(collected.length, 1);
+    assert.equal(collected[0].logs.length, 25);
+    assert.deepEqual(
+      collected[0].logs.map((log) => log.id),
+      repeatedPage.map((log) => log.id)
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("auto-manage gather caps per-user character fan-out instead of flooding the global queue", async () => {
   const limiter = createTestLimiter(2);
   const service = makeService({ bibleLimiter: limiter });
