@@ -9,11 +9,12 @@
 
 "use strict";
 
-const { verifyToken, isCurrentStoredToken } = require("..");
+const { createJsonSender } = require("./json");
 const {
-  createJsonSender,
-  extractBearerToken,
-} = require("./json");
+  guardHttpMethod,
+  readVerifiedLocalSyncToken,
+  requireCurrentLocalSyncUser,
+} = require("./request-gates");
 
 /**
  * Build the `GET /api/me/roster` handler. Returns the user's slim roster
@@ -48,26 +49,10 @@ function createRosterEndpoint({ User }) {
   const send = createJsonSender({ methods: "GET, OPTIONS" });
 
   return async function handleRosterRead(req, res, parsedUrl) {
-    if (req.method === "OPTIONS") {
-      send(res, 204, "");
-      return;
-    }
-    if (req.method !== "GET") {
-      send(res, 405, { ok: false, error: "method not allowed" });
-      return;
-    }
-
-    const token = extractBearerToken(req, parsedUrl);
-    if (!token) {
-      send(res, 401, { ok: false, error: "missing token" });
-      return;
-    }
-    const verified = verifyToken(token);
-    if (!verified.ok) {
-      send(res, 401, { ok: false, error: `token ${verified.reason}` });
-      return;
-    }
-    const discordId = verified.payload.discordId;
+    if (!guardHttpMethod({ req, res, send, method: "GET" })) return;
+    const auth = readVerifiedLocalSyncToken({ req, res, parsedUrl, send });
+    if (!auth) return;
+    const { token, discordId } = auth;
 
     let userDoc;
     try {
@@ -86,20 +71,7 @@ function createRosterEndpoint({ User }) {
       send(res, 200, { ok: true, discordId, accounts: [] });
       return;
     }
-    if (!userDoc.localSyncEnabled) {
-      send(res, 409, {
-        ok: false,
-        error: "local-sync disabled - run /raid-auto-manage action:local-on to re-enable",
-      });
-      return;
-    }
-    if (!isCurrentStoredToken(userDoc, token)) {
-      send(res, 401, {
-        ok: false,
-        error: "token revoked - open a new local-sync link",
-      });
-      return;
-    }
+    if (!requireCurrentLocalSyncUser({ userDoc, token, res, send })) return;
 
     const accounts = (Array.isArray(userDoc.accounts) ? userDoc.accounts : [])
       .map((account) => ({

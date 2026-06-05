@@ -9,6 +9,7 @@
 
 const { buildLocalSyncCatalog } = require("../core/catalog");
 const { createJsonSender } = require("./json");
+const { guardHttpMethod } = require("./request-gates");
 
 const send = createJsonSender({
   methods: "GET, OPTIONS",
@@ -25,14 +26,7 @@ const send = createJsonSender({
  */
 function createCatalogEndpoint() {
   return async function handleCatalog(req, res) {
-    if (req.method === "OPTIONS") {
-      send(res, 204, "");
-      return;
-    }
-    if (req.method !== "GET") {
-      send(res, 405, { ok: false, error: "method not allowed" });
-      return;
-    }
+    if (!guardHttpMethod({ req, res, send, method: "GET" })) return;
     send(res, 200, {
       ok: true,
       catalog: buildLocalSyncCatalog(),
