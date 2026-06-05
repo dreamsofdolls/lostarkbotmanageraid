@@ -714,6 +714,106 @@ function clampPage(page, totalItems, pageSize) {
   return Math.max(0, Math.min(maxPage, Math.floor(n)));
 }
 
+function selectedProfileEntry(session) {
+  return session.rosterIndex >= 0 ? session.entries[session.rosterIndex] : null;
+}
+
+function parseProfileIndex(value) {
+  const idx = Number(value);
+  return Number.isInteger(idx) ? idx : -1;
+}
+
+function showProfileOverall(session) {
+  session.rosterIndex = -1;
+  session.charIndex = -1;
+}
+
+function applyRosterSelection(session, value) {
+  if (value === "overall") {
+    showProfileOverall(session);
+    return true;
+  }
+
+  const idx = parseProfileIndex(value);
+  if (!session.entries[idx]) return false;
+  session.rosterIndex = idx;
+  session.rosterPage = Math.floor(idx / ROSTER_PAGE_SIZE);
+  session.charIndex = -1;
+  return true;
+}
+
+function applyCharacterSelection(session, value) {
+  if (value === "overview") {
+    session.charIndex = -1;
+    return true;
+  }
+
+  const entry = selectedProfileEntry(session);
+  const idx = parseProfileIndex(value);
+  if (!entry?.characters?.[idx]) return false;
+  session.charIndex = idx;
+  return true;
+}
+
+const PROFILE_SELECT_ACTIONS = {
+  roster: applyRosterSelection,
+  char: applyCharacterSelection,
+};
+
+function applyProfileSelect(session, action, value) {
+  const handler = PROFILE_SELECT_ACTIONS[action];
+  return handler ? handler(session, value) : false;
+}
+
+function moveCircularIndex(current, total, action) {
+  if (action === "prev") return (current - 1 + total) % total;
+  if (action === "next") return (current + 1) % total;
+  return current;
+}
+
+function applyOverviewButton(session) {
+  if (session.rosterIndex >= 0) {
+    session.charIndex = -1;
+  } else {
+    showProfileOverall(session);
+  }
+  return true;
+}
+
+function applyRosterPageButton(session, action) {
+  if (session.entries.length <= ROSTER_PAGE_SIZE) return false;
+  const totalPages = Math.ceil(session.entries.length / ROSTER_PAGE_SIZE);
+  const current = clampPage(session.rosterPage, session.entries.length, ROSTER_PAGE_SIZE);
+  session.rosterPage = moveCircularIndex(current, totalPages, action);
+  return action === "prev" || action === "next";
+}
+
+function applyCharacterPageButton(session, action, entry) {
+  const total = entry?.characters?.length || 0;
+  if (!total) return false;
+  const current = session.charIndex >= 0 ? session.charIndex : 0;
+  session.charIndex = moveCircularIndex(current, total, action);
+  return action === "prev" || action === "next";
+}
+
+function applyPagingButton(session, action) {
+  const entry = selectedProfileEntry(session);
+  return entry
+    ? applyCharacterPageButton(session, action, entry)
+    : applyRosterPageButton(session, action);
+}
+
+const PROFILE_BUTTON_ACTIONS = {
+  overview: applyOverviewButton,
+  prev: applyPagingButton,
+  next: applyPagingButton,
+};
+
+function applyProfileButton(session, action) {
+  const handler = PROFILE_BUTTON_ACTIONS[action];
+  return handler ? handler(session, action) : false;
+}
+
 function buildComponents(deps, session) {
   const {
     StringSelectMenuBuilder,
@@ -723,7 +823,7 @@ function buildComponents(deps, session) {
   } = deps;
   const sid = session.id;
   const lang = session.lang || "vi";
-  const selectedEntry = session.rosterIndex >= 0 ? session.entries[session.rosterIndex] : null;
+  const selectedEntry = selectedProfileEntry(session);
   const selectedChar = selectedEntry && session.charIndex >= 0
     ? selectedEntry.characters[session.charIndex]
     : null;
@@ -934,49 +1034,13 @@ function createRaidProfileCommand(deps) {
 
     if (interaction.isStringSelectMenu?.()) {
       const value = interaction.values?.[0] || "";
-      if (action === "roster") {
-        if (value === "overall") {
-          session.rosterIndex = -1;
-          session.charIndex = -1;
-        } else {
-          const idx = Number(value);
-          if (Number.isInteger(idx) && session.entries[idx]) {
-            session.rosterIndex = idx;
-            session.rosterPage = Math.floor(idx / ROSTER_PAGE_SIZE);
-            session.charIndex = -1;
-          }
-        }
-      } else if (action === "char") {
-        if (value === "overview") {
-          session.charIndex = -1;
-        } else {
-          const idx = Number(value);
-          const entry = session.entries[session.rosterIndex];
-          if (Number.isInteger(idx) && entry?.characters?.[idx]) {
-            session.charIndex = idx;
-          }
-        }
-      }
+      applyProfileSelect(session, action, value);
       await interaction.update(renderSessionPayload(renderDeps, session));
       return;
     }
 
     if (interaction.isButton?.()) {
-      const entry = session.entries[session.rosterIndex];
-      if (action === "overview") {
-        if (session.rosterIndex >= 0) session.charIndex = -1;
-        else session.rosterIndex = -1;
-      } else if (!entry && session.entries.length > ROSTER_PAGE_SIZE) {
-        const totalPages = Math.ceil(session.entries.length / ROSTER_PAGE_SIZE);
-        const current = clampPage(session.rosterPage, session.entries.length, ROSTER_PAGE_SIZE);
-        if (action === "prev") session.rosterPage = (current - 1 + totalPages) % totalPages;
-        if (action === "next") session.rosterPage = (current + 1) % totalPages;
-      } else if (entry?.characters?.length) {
-        const total = entry.characters.length;
-        const current = session.charIndex >= 0 ? session.charIndex : 0;
-        if (action === "prev") session.charIndex = (current - 1 + total) % total;
-        if (action === "next") session.charIndex = (current + 1) % total;
-      }
+      applyProfileButton(session, action);
       await interaction.update(renderSessionPayload(renderDeps, session));
     }
   }
@@ -989,6 +1053,8 @@ function createRaidProfileCommand(deps) {
       buildAccessibleProfileEntries,
       preferredSnapshotView,
       renderSessionPayload,
+      applyProfileButton,
+      applyProfileSelect,
     },
   };
 }

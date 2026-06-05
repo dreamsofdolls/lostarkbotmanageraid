@@ -469,3 +469,57 @@ test("raid-profile roster dropdown pages beyond the first 24 rosters", () => {
   assert.equal(buttons[0].disabled, false);
   assert.equal(buttons[2].disabled, false);
 });
+
+test("raid-profile component state reducers handle selects and paging", () => {
+  const deps = makeDeps();
+  const command = createRaidProfileCommand(deps);
+  const session = makeSession();
+
+  assert.equal(command.__test.applyProfileSelect(session, "roster", "0"), true);
+  assert.equal(session.rosterIndex, 0);
+  assert.equal(session.rosterPage, 0);
+  assert.equal(session.charIndex, -1);
+
+  assert.equal(command.__test.applyProfileSelect(session, "char", "1"), true);
+  assert.equal(session.charIndex, 1);
+  assert.equal(command.__test.applyProfileButton(session, "overview"), true);
+  assert.equal(session.rosterIndex, 0);
+  assert.equal(session.charIndex, -1);
+
+  assert.equal(command.__test.applyProfileButton(session, "prev"), true);
+  assert.equal(session.charIndex, 1);
+  assert.equal(command.__test.applyProfileButton(session, "next"), true);
+  assert.equal(session.charIndex, 0);
+
+  assert.equal(command.__test.applyProfileSelect(session, "roster", "missing"), false);
+  assert.equal(session.rosterIndex, 0);
+  assert.equal(command.__test.applyProfileSelect(session, "roster", "overall"), true);
+  assert.equal(session.rosterIndex, -1);
+  assert.equal(session.charIndex, -1);
+});
+
+test("raid-profile component state reducers page roster lists circularly", () => {
+  const deps = makeDeps();
+  const command = createRaidProfileCommand(deps);
+  const session = {
+    id: "profile-state-page-test",
+    viewerDiscordId: "u1",
+    rosterIndex: -1,
+    rosterPage: 0,
+    charIndex: -1,
+    expiresAt: Date.now() + 60_000,
+    entries: Array.from({ length: 30 }, (_, index) => ({
+      accountName: `Roster${index}`,
+      isOwn: index === 0,
+      characters: [{ name: `Char${index}`, stats: { encounters: 1 }, scores: {} }],
+    })),
+  };
+
+  assert.equal(command.__test.applyProfileButton(session, "prev"), true);
+  assert.equal(session.rosterPage, 1);
+  assert.equal(command.__test.applyProfileButton(session, "next"), true);
+  assert.equal(session.rosterPage, 0);
+  assert.equal(command.__test.applyProfileSelect(session, "roster", "29"), true);
+  assert.equal(session.rosterIndex, 29);
+  assert.equal(session.rosterPage, 1);
+});
