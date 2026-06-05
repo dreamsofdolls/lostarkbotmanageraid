@@ -59,6 +59,9 @@ const {
 const {
   buildManualSyncFollowupPayload,
 } = require("./sync-followup");
+const {
+  firstSelectValue,
+} = require("./component-values");
 
 const STATUS_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
@@ -980,9 +983,7 @@ function createRaidStatusCommand(deps) {
         // Personal detail view - NOT edit-driven (no deferUpdate at the top of
         // this handler), so the interaction is fresh and we reply ephemerally
         // without disturbing the roster embed. Re-fetch so turns/room are live.
-        const eventId = Array.isArray(component.values) && component.values.length > 0
-          ? component.values[0]
-          : null;
+        const eventId = firstSelectValue(component);
         const ev = eventId ? await RaidEvent.findById(eventId).catch(() => null) : null;
         if (!ev) {
           await replyNotice(component, EmbedBuilder, {
@@ -998,10 +999,7 @@ function createRaidStatusCommand(deps) {
         ).catch(() => {});
         return;
       } else if (id === "status-filter:raid") {
-        const value =
-          Array.isArray(component.values) && component.values.length > 0
-            ? component.values[0]
-            : FILTER_ALL_RAIDS;
+        const value = firstSelectValue(component, FILTER_ALL_RAIDS);
         filterRaidId = value === FILTER_ALL_RAIDS ? null : value;
         // Do NOT reset currentPage - raid filter is orthogonal to page
         // structure (pages still map 1:1 to accounts, only what each
@@ -1009,24 +1007,15 @@ function createRaidStatusCommand(deps) {
         // filter pick would feel broken: "I was viewing account 3, why
         // did I jump back to account 1 just because I filtered a raid?"
       } else if (id === "status-view:toggle") {
-        const picked =
-          Array.isArray(component.values) && component.values.length > 0
-            ? component.values[0]
-            : "raid";
+        const picked = firstSelectValue(component, "raid");
         currentView = picked === "task" ? "task" : "raid";
       } else if (id === "status-task:char-filter") {
-        const picked =
-          Array.isArray(component.values) && component.values.length > 0
-            ? component.values[0]
-            : "";
+        const picked = firstSelectValue(component, "");
         if (picked) {
           taskCharFilterByPage.set(currentPage, picked);
         }
       } else if (id === "status-task:shared-toggle" || id === "status-task:toggle") {
-        const value =
-          Array.isArray(component.values) && component.values.length > 0
-            ? component.values[0]
-            : "";
+        const value = firstSelectValue(component, "");
         const parsed = parseTaskToggleValue(value);
         if (parsed.kind === "noop" || parsed.kind === "invalid") {
           return;
