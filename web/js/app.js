@@ -26,6 +26,10 @@ import {
   t,
 } from "/sync/js/core/i18n.js";
 import {
+  bootstrapAuthSession,
+  decodePayload,
+} from "/sync/js/core/auth.js";
+import {
   saveHandle as savePersistedHandle,
   clearHandle as clearPersistedHandle,
   tryRestoreForUser,
@@ -289,25 +293,13 @@ function activateProfileMode() {
 
 // ----- 1. Token parsing + i18n bootstrap -----
 //
-// Token is decoded inline (no fetch) since it carries Discord ID + lang
+// Token is decoded client-side (no fetch) since it carries Discord ID + lang
 // + expiry signed by the bot's HMAC secret. The decode is presentational
 // only (server re-verifies on every POST) so we just need the payload
 // fields, not crypto-trust.
 
 const params = new URLSearchParams(window.location.search);
 const token = params.get("token");
-
-function decodePayload(t) {
-  try {
-    const parts = t.split(".");
-    if (parts.length !== 2) return null;
-    const normalized = parts[0].replace(/-/g, "+").replace(/_/g, "/");
-    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
-    return JSON.parse(atob(padded));
-  } catch {
-    return null;
-  }
-}
 
 const payload = token ? decodePayload(token) : null;
 
@@ -326,93 +318,14 @@ renderWeekRange();
 // particular benefit from the right `lang` hint for browser font fallback.
 document.documentElement.setAttribute("lang", window.__artistLang || "vi");
 
-// authState carries everything renderAuthStatus() needs. The expSec field
-// is mutable - successful sync shrinks it to now+60s server-side, and the
-// sync response hands the new value back so the UI ticks down realtime.
-//
-// `discordId` stays in state because backend POSTs need it via the token,
-// but it is NEVER rendered to the DOM (would leak the user's snowflake to
-// anyone shoulder-surfing). The display uses `username` + `avatarUrl`
-// from the token payload instead - both are public-facing Discord fields.
-let authState = null;
-
-function renderAuthStatus() {
-  if (!authState) return;
-  const { kind, expSec, username, avatarUrl } = authState;
-  if (kind === "noToken") {
-    authStatus.innerHTML = `<span class="status-err">${t("identity.noToken")}</span> ${t("identity.noTokenHint")}`;
-    return;
-  }
-  if (kind === "malformed") {
-    authStatus.innerHTML = `<span class="status-err">${t("identity.malformed")}</span> ${t("identity.malformedHint")}`;
-    return;
-  }
-  const nowSec = Math.floor(Date.now() / 1000);
-  const remSec = Math.max(0, expSec - nowSec);
-  if (expSec && remSec === 0) {
-    authStatus.innerHTML = `<span class="status-err">${t("identity.expired")}</span> ${t("identity.expiredHint")}`;
-    return;
-  }
-  const validStr = remSec >= 60
-    ? t("identity.tokenValid", { n: Math.floor(remSec / 60) })
-    : t("identity.tokenValidSec", { n: remSec });
-  // Two-pill layout: profile (avatar + name + status dot) on the left,
-  // token timer pill on the right. Status dot replaces the all-text
-  // green from the v1 "status-ok" treatment - keeps "linked + healthy"
-  // signal subtle so the user's name is what reads first, not the verb.
-  // Anonymous fallback (no username + no avatar) still gets the dot
-  // so stale-token users see consistent visual confirmation.
-  let profilePill;
-  if (username || avatarUrl) {
-    const avatarImg = avatarUrl
-      ? `<img class="auth-avatar" src="${escapeHtml(avatarUrl)}" alt="" referrerpolicy="no-referrer">`
-      : `<span class="auth-avatar auth-avatar--placeholder">${escapeHtml((username || "?").slice(0, 1).toUpperCase())}</span>`;
-    const nameSpan = username
-      ? `<span class="auth-name">${escapeHtml(username)}</span>`
-      : "";
-    const linkedLabel = `<span class="auth-linked-label">${escapeHtml(t("identity.linked"))}</span>`;
-    profilePill = `<span class="auth-pill auth-profile-pill"><span class="auth-status-dot"></span>${avatarImg}<span class="auth-pill-text">${linkedLabel}${nameSpan}</span></span>`;
-  } else {
-    profilePill = `<span class="auth-pill auth-profile-pill"><span class="auth-status-dot"></span><span class="auth-pill-text"><span class="auth-name">${escapeHtml(t("identity.linkedAnonymous"))}</span></span></span>`;
-  }
-  // Timer pill: clock glyph + remaining time. Color shifts to warn when
-  // under 60s so the post-sync shrink jumps out visually.
-  const timerClass = remSec < 60 ? "auth-pill auth-timer-pill auth-timer-pill--warn" : "auth-pill auth-timer-pill";
-  const timerStr = `<span class="${timerClass}"><span class="auth-timer-icon">⏱</span><span>${escapeHtml(validStr)}</span></span>`;
-  authStatus.innerHTML = `<div class="auth-row">${profilePill}${timerStr}</div>`;
-}
-
-if (!token) {
-  authState = { kind: "noToken" };
-  renderAuthStatus();
-} else if (!payload || !payload.discordId) {
-  authState = { kind: "malformed" };
-  renderAuthStatus();
-} else {
-  const expSec = payload.exp || 0;
-  const nowSec = Math.floor(Date.now() / 1000);
-  // username + avatarUrl are display-only. discordId stays in state for
-  // POST auth via window.__artistDiscordId but is never read by render.
-  const profileFields = {
-    username: typeof payload.username === "string" ? payload.username : null,
-    avatarUrl: typeof payload.avatarUrl === "string" ? payload.avatarUrl : null,
-  };
-  if (expSec && expSec < nowSec) {
-    authState = { kind: "ok", expSec, discordId: payload.discordId, ...profileFields };
-    renderAuthStatus();
-  } else {
-    authState = { kind: "ok", expSec, discordId: payload.discordId, ...profileFields };
-    renderAuthStatus();
-    // Tick every second so the countdown feels live (esp. after the
-    // post-sync shrink to ~60s). 1Hz is cheap - just a Date.now() compare
-    // and innerHTML swap.
-    setInterval(renderAuthStatus, 1000);
-    // Cache for the eventual POST. Phase 4 reads this back.
-    window.__artistSyncToken = token;
-    window.__artistDiscordId = payload.discordId;
-    fileSection.hidden = false;
-  }
-}
+const authSession = bootstrapAuthSession({
+  token,
+  payload,
+  authStatus,
+  fileSection,
+  t,
+  escapeHtml,
+});
 
 // ----- 2. FSA file pick / drop -----
 
@@ -848,11 +761,8 @@ syncBtn.addEventListener("click", async () => {
     }
     const { applied: a } = summarizeSyncResult(data);
     // Server shrinks token TTL to ~60s on a real apply (a > 0). Mirror
-    // that into authState so the countdown reflects reality immediately.
-    if (data.newExpSec && authState && authState.kind === "ok") {
-      authState.expSec = data.newExpSec;
-      renderAuthStatus();
-    }
+    // that into the auth pill so the countdown reflects reality immediately.
+    authSession.updateExpSec(data.newExpSec);
     syncOutput.innerHTML = renderSyncApplyResult(data, window.__artistRosterAccounts || []);
     syncOutput.hidden = false;
     const profileStatsPromise = syncProfileStatsAfterWeeklySync();

@@ -32,6 +32,7 @@ test("local-sync web server serves raid-profile browser helper modules", async (
     }
 
     for (const [route, expectedExport] of [
+      ["/sync/js/core/auth.js", "bootstrapAuthSession"],
       ["/sync/js/core/html.js", "escapeHtml"],
       ["/sync/js/core/format.js", "formatBytes"],
       ["/sync/js/profile/profile-role.js", "classifyProfileLogRole"],
