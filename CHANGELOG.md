@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-06 (raid-profile: embed palette matches the Endfield mock)
+
+### Changed
+- `/raid-profile` embeds now carry the Endfield-mock palette on their left rail: amber `#c9a23a` (overall / own roster / DPS character), warm green `#3ba55d` (SUP character), orange `#faa61a` (shared roster), replacing the bot-wide Discord blurple/neon. The palette lives in `handlers/raid/profile/colors.js`, deliberately kept out of the shared `UI.colors` so no other command is recolored. Field order/grouping already matched the mock; the leftover visual gap (dashed section rules, corner brackets, two-tone `▰▱` gauges) is a hard Discord-embed limit, not a divergence. 27 profile tests green.
+
 ## 2026-06-05 (local-sync companion: profile-import scan heartbeat)
 
 ### Changed
