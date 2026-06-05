@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-05 (local-sync companion: profile-import scan heartbeat)
+
+### Changed
+- The "Import profile đầy đủ" panel now ticks a live elapsed counter (`Đang quét encounters.db (~X GB)... Ns`) while the single SQLite scan query runs, so a multi-GB `encounters.db` no longer looks frozen on a static "Đang quét log profile...". Counter clears in a `finally`; i18n vi/en/jp.
+
 ## 2026-06-05 (raid-profile: gate the whole surface behind DEV_USER preview)
 
 ### Changed
