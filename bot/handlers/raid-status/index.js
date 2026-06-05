@@ -26,9 +26,7 @@ const { shapeMyRaidEvents } = require("../../services/raid/schedule/my-raids");
 const RaidEvent = require("../../models/RaidEvent");
 const {
   parseTaskToggleValue,
-  toggleBulkSideTask,
-  toggleSingleSideTask,
-  toggleSharedTask,
+  toggleParsedSideTask,
 } = require("./task-actions");
 const {
   buildNoticeEmbed,
@@ -1084,54 +1082,13 @@ function createRaidStatusCommand(deps) {
           );
         }
 
-        if (parsed.kind === "shared") {
-          try {
-            await toggleSharedTask({
-              User,
-              saveWithRetry,
-              discordId: writeDiscordId,
-              targetAccountName,
-              taskId: parsed.taskId,
-            });
-          } catch (err) {
-            console.error(
-              "[raid-status shared-task toggle] save failed:",
-              err?.message || err
-            );
-          }
-        } else if (parsed.kind === "bulk") {
-          try {
-            await toggleBulkSideTask({
-              User,
-              saveWithRetry,
-              discordId: writeDiscordId,
-              targetAccountName,
-              targetReset: parsed.targetReset,
-              targetNameLower: parsed.targetNameLower,
-            });
-          } catch (err) {
-            console.error(
-              "[raid-status side-task bulk-toggle] save failed:",
-              err?.message || err
-            );
-          }
-        } else if (parsed.kind === "single") {
-          try {
-            await toggleSingleSideTask({
-              User,
-              saveWithRetry,
-              discordId: writeDiscordId,
-              targetAccountName,
-              targetCharName: parsed.targetCharName,
-              targetTaskId: parsed.targetTaskId,
-            });
-          } catch (err) {
-            console.error(
-              "[raid-status side-task toggle] save failed:",
-              err?.message || err
-            );
-          }
-        }
+        await toggleParsedSideTask({
+          User,
+          saveWithRetry,
+          discordId: writeDiscordId,
+          targetAccountName,
+          parsed,
+        });
 
         await reloadViewerAccounts();
       } else {

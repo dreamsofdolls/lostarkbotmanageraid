@@ -156,8 +156,65 @@ async function toggleSharedTask(options) {
   });
 }
 
+const TASK_TOGGLE_RUNNERS = Object.freeze({
+  shared: {
+    errorLabel: "[raid-status shared-task toggle] save failed:",
+    run: ({ User, saveWithRetry, discordId, targetAccountName, parsed, now }) =>
+      toggleSharedTask({
+        User,
+        saveWithRetry,
+        discordId,
+        targetAccountName,
+        taskId: parsed.taskId,
+        now,
+      }),
+  },
+  bulk: {
+    errorLabel: "[raid-status side-task bulk-toggle] save failed:",
+    run: ({ User, saveWithRetry, discordId, targetAccountName, parsed }) =>
+      toggleBulkSideTask({
+        User,
+        saveWithRetry,
+        discordId,
+        targetAccountName,
+        targetReset: parsed.targetReset,
+        targetNameLower: parsed.targetNameLower,
+      }),
+  },
+  single: {
+    errorLabel: "[raid-status side-task toggle] save failed:",
+    run: ({ User, saveWithRetry, discordId, targetAccountName, parsed }) =>
+      toggleSingleSideTask({
+        User,
+        saveWithRetry,
+        discordId,
+        targetAccountName,
+        targetCharName: parsed.targetCharName,
+        targetTaskId: parsed.targetTaskId,
+      }),
+  },
+});
+
+async function toggleParsedSideTask(options) {
+  const {
+    parsed,
+    logger = console,
+  } = options;
+  const runner = TASK_TOGGLE_RUNNERS[parsed?.kind];
+  if (!runner) return { handled: false, ok: false };
+
+  try {
+    await runner.run(options);
+    return { handled: true, ok: true };
+  } catch (err) {
+    logger.error?.(runner.errorLabel, err?.message || err);
+    return { handled: true, ok: false, error: err };
+  }
+}
+
 module.exports = {
   parseTaskToggleValue,
+  toggleParsedSideTask,
   toggleBulkSideTask,
   toggleSingleSideTask,
   toggleSharedTask,
