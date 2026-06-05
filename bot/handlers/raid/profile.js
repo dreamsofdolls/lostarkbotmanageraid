@@ -2,6 +2,7 @@
 
 const { randomUUID } = require("node:crypto");
 const { getAccessibleAccounts } = require("../../services/access/access-control");
+const { isDevUser } = require("../../services/access/dev-preview");
 const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
 const {
@@ -344,6 +345,18 @@ function createRaidProfileCommand(deps) {
     const viewerDiscordId = interaction.user.id;
     const lang = await getUserLanguage(viewerDiscordId, { UserModel: User });
 
+    // Preview gate: the whole /raid-profile surface (view + reset) is dev-only
+    // for now (DEV_USER allowlist). Checked before any data work.
+    if (!isDevUser(viewerDiscordId)) {
+      const embed = buildNoticeEmbed(EmbedBuilder, {
+        type: "info",
+        title: t("raidProfile.previewOnlyTitle", lang),
+        description: t("raidProfile.previewOnlyDesc", lang),
+      }).setAuthor({ name: "// RAID PROFILE · PREVIEW" });
+      await interaction.editReply({ embeds: [embed] });
+      return;
+    }
+
     if (interaction.options?.getString?.("action") === "reset") {
       await resetOwnProfile(interaction, viewerDiscordId, lang);
       return;
@@ -405,6 +418,22 @@ function createRaidProfileCommand(deps) {
   }
 
   async function handleRaidProfileComponent(interaction) {
+    // Preview gate: reject component interactions from non-preview users
+    // defensively (e.g. a stale component minted before the gate shipped).
+    if (!isDevUser(interaction.user?.id)) {
+      const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
+      await interaction.reply({
+        flags: MessageFlags.Ephemeral,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "info",
+            title: t("raidProfile.previewOnlyTitle", lang),
+            description: t("raidProfile.previewOnlyDesc", lang),
+          }),
+        ],
+      });
+      return;
+    }
     const { action, session, forbidden } = getSessionForInteraction(interaction);
     if (!session) {
       const lang = await getUserLanguage(interaction.user.id, { UserModel: User });

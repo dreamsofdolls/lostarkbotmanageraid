@@ -21,6 +21,7 @@ const {
   createProfileSessionEndpoint,
   createRaidProfileSyncEndpoint,
 } = require("../services/local-sync/profile-sync-endpoint");
+const { isDevUser } = require("../services/access/dev-preview");
 
 /**
  * Build the `<METHOD> <pathname>` → handler map used by
@@ -39,8 +40,8 @@ function createLocalSyncApiHandlers({ User, RaidProfileSnapshot, RaidProfileEnco
   const rosterHandler = createRosterEndpoint({ User });
   const previewSummaryHandler = createPreviewSummaryEndpoint({ User });
   const catalogHandler = createCatalogEndpoint();
-  const profileSessionHandler = createProfileSessionEndpoint({ User });
-  const raidProfileSyncHandler = createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot, RaidProfileEncounter });
+  const profileSessionHandler = createProfileSessionEndpoint({ User, isDevUser });
+  const raidProfileSyncHandler = createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot, RaidProfileEncounter, isDevUser });
 
   return {
     "GET /api/local-sync/catalog": catalogHandler,

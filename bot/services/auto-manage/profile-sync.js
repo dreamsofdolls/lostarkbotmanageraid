@@ -117,6 +117,7 @@ function createBibleProfileSyncService({
   getRaidGateForBoss,
   RAID_REQUIREMENT_MAP,
   log = console,
+  isDevUser = () => true,
 }) {
   if (!RaidProfileSnapshot) {
     throw new Error("[auto-manage-profile-sync] RaidProfileSnapshot model required");
@@ -137,6 +138,10 @@ function createBibleProfileSyncService({
   }) {
     if (!discordId || !userDoc || !Array.isArray(collected) || collected.length === 0) {
       return { ok: false, reason: "empty" };
+    }
+    // Preview gate: skip the profile-light upsert for non-preview users.
+    if (!isDevUser(discordId)) {
+      return { ok: false, reason: "preview-gated" };
     }
 
     const built = buildBibleProfileSnapshot({

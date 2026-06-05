@@ -2182,5 +2182,7 @@ module.exports = {
     resetDoneDesc: "Artist xoá xong **{snapshots}** snapshot + **{encounters}** encounter log của cậu. Sync lại qua Web Companion để dựng hồ sơ mới.",
     resetEmptyTitle: "Chưa có gì để reset",
     resetEmptyDesc: "Cậu chưa có hồ sơ raid-profile nào. Sync qua Web Companion để tạo trước đã.",
+    previewOnlyTitle: "Tính năng đang preview",
+    previewOnlyDesc: "raid-profile đang trong giai đoạn preview, mới mở cho một nhóm nhỏ. Artist sẽ bật cho mọi người sau.",
   },
 };

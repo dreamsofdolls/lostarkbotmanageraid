@@ -2149,5 +2149,7 @@ module.exports = {
     resetDoneDesc: "Cleared **{snapshots}** snapshot + **{encounters}** encounter log(s). Re-sync via the Web Companion to rebuild your profile.",
     resetEmptyTitle: "Nothing to reset",
     resetEmptyDesc: "You have no raid profile yet. Sync via the Web Companion to create one first.",
+    previewOnlyTitle: "Preview only",
+    previewOnlyDesc: "raid-profile is in a limited preview right now. It will open to everyone soon.",
   },
 };
