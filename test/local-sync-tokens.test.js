@@ -17,7 +17,13 @@ const {
   verifyToken,
   isCurrentStoredToken,
   TOKEN_DEFAULT_TTL_SEC,
+  TOKEN_POST_SYNC_TTL_SEC,
 } = require("../bot/services/local-sync");
+
+test("token TTL constants match the import window and post-sync shrink", () => {
+  assert.equal(TOKEN_DEFAULT_TTL_SEC, 60 * 60);
+  assert.equal(TOKEN_POST_SYNC_TTL_SEC, 60);
+});
 
 test("mintToken + verifyToken roundtrip - returns payload with discordId / iat / exp", () => {
   const token = mintToken("user-123");

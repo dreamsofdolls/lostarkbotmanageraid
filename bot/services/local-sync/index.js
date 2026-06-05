@@ -36,6 +36,7 @@ module.exports = {
   getOrMintLocalSyncToken: tokens.getOrMintLocalSyncToken,
   extractProfileFromUser: tokens.extractProfileFromUser,
   TOKEN_DEFAULT_TTL_SEC: tokens.DEFAULT_TTL_SEC,
+  TOKEN_POST_SYNC_TTL_SEC: tokens.POST_SYNC_TTL_SEC,
   rotateLocalProfileSyncToken: profileDeviceToken.rotateLocalProfileSyncToken,
   isCurrentProfileDeviceToken: profileDeviceToken.isCurrentProfileDeviceToken,
   hashProfileDeviceToken: profileDeviceToken.hashProfileDeviceToken,

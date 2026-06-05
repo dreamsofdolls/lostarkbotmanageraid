@@ -1,6 +1,6 @@
 "use strict";
 
-const DEFAULT_LIMIT = 9;
+const DEFAULT_LIMIT = 16;
 
 function defaultEscapeHtml(value) {
   return String(value ?? "")
@@ -38,6 +38,9 @@ function rollingProgressGroup(message) {
   }
   if (/encounters\.db/i.test(text) && /\.\.\./.test(text) && /\d+s\b/.test(text)) {
     return "scan-heartbeat";
+  }
+  if (/MongoDB/i.test(text) && /\d+s\b/.test(text)) {
+    return "upload-heartbeat";
   }
   if (/encounters\.db/i.test(text) && /\d+(?:\.\d+)?%/.test(text)) {
     return "snapshot-copy";

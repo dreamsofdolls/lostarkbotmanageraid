@@ -209,6 +209,7 @@ async function syncProfileStatsAfterWeeklySync() {
     getLocalToken: () => window.__artistSyncToken,
     getRosterAccounts: getRosterAccountsForProfile,
     renderStatus: renderWeeklyProfileSyncStatus,
+    updateLocalTokenExpSec: (newExpSec) => authSession.updateExpSec(newExpSec),
     reason: "weekly",
     minFightStartMs: currentWeeklyResetStartMs(),
   });
@@ -285,6 +286,7 @@ function activateProfileMode() {
     getLocalToken: () => window.__artistSyncToken,
     getRosterAccounts: getRosterAccountsForProfile,
     renderStatus: renderProfileSyncStatus,
+    updateLocalTokenExpSec: (newExpSec) => authSession.updateExpSec(newExpSec),
   });
 }
 

@@ -357,7 +357,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .process-log {
   display: grid;
   gap: 6px;
-  max-height: 190px;
+  max-height: 260px;
   margin: 0;
   padding: 0;
   list-style: none;

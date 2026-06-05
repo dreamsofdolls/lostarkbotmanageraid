@@ -468,9 +468,30 @@ function saveStoredProfileSession(session) {
   }
 }
 
+function countRosterCharacters(accounts) {
+  return (Array.isArray(accounts) ? accounts : []).reduce(
+    (sum, account) => sum + (Array.isArray(account?.characters) ? account.characters.length : 0),
+    0
+  );
+}
+
+function formatCount(value) {
+  return Number(value || 0).toLocaleString();
+}
+
+function formatJsonSize(json) {
+  const bytes = new Blob([json]).size;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${bytes} B`;
+}
+
 async function ensureProfileSession({ discordId, localToken, renderStatus }) {
   const stored = loadStoredProfileSession(discordId);
-  if (stored?.profileToken) return stored;
+  if (stored?.profileToken) {
+    renderStatus?.("info", "Dùng lại profile upload session đã cache trong browser.");
+    return stored;
+  }
   if (!localToken) throw new Error(t("profileSync.localTokenUnavailable"));
 
   renderStatus?.("info", t("profileSync.sessionPreparing"));
@@ -488,22 +509,57 @@ async function ensureProfileSession({ discordId, localToken, renderStatus }) {
     expSec: data.expSec,
   };
   saveStoredProfileSession(session);
+  renderStatus?.("info", `Profile upload session sẵn sàng; token session còn khoảng ${Math.max(0, Math.floor((Number(data.expSec || 0) - Date.now() / 1000) / 60))} phút.`);
   return session;
 }
 
-async function sendProfileSnapshot(snapshot, session) {
-  const resp = await fetch("/api/raid-profile-sync", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${session.profileToken}`,
-    },
-    body: JSON.stringify(snapshot),
-  });
-  const data = await resp.json().catch(() => null);
+async function sendProfileSnapshot(snapshot, session, {
+  localToken = "",
+  renderStatus = null,
+  updateLocalTokenExpSec = null,
+} = {}) {
+  const body = JSON.stringify(snapshot);
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${session.profileToken}`,
+  };
+  if (localToken) {
+    headers["X-Artist-Local-Sync-Token"] = localToken;
+  }
+  renderStatus?.("info", `Đang gửi snapshot lên server... JSON ${formatJsonSize(body)}.`);
+  const uploadStartMs = Date.now();
+  let uploadHeartbeat = null;
+  if (renderStatus) {
+    uploadHeartbeat = setInterval(() => {
+      const secs = Math.floor((Date.now() - uploadStartMs) / 1000);
+      renderStatus("info", `Đang chờ server ghi raid-profile vào MongoDB... ${secs}s`);
+    }, 1000);
+  }
+  let resp;
+  try {
+    resp = await fetch("/api/raid-profile-sync", {
+      method: "POST",
+      headers,
+      body,
+    });
+  } finally {
+    if (uploadHeartbeat) clearInterval(uploadHeartbeat);
+  }
+  let data = null;
+  try {
+    data = await resp.json();
+  } catch {
+    data = null;
+  }
   if (!resp.ok || !data?.ok) {
     throw new Error(data?.error || `profile sync failed HTTP ${resp.status}`);
   }
+  if (data.newExpSec) {
+    updateLocalTokenExpSec?.(data.newExpSec);
+    renderStatus?.("info", "Server đã ghi xong; local link token được rút còn khoảng 60s.");
+  }
+  const write = data.encounterWrite || {};
+  renderStatus?.("info", `MongoDB ghi xong: snapshot chính + ${formatCount(write.received || data.totals?.encounterSummaries)} encounter summary (${formatCount(write.upserted)} mới, ${formatCount(write.modified)} cập nhật).`);
   return data;
 }
 
@@ -526,6 +582,7 @@ function formatSnapshotGb(total) {
 
 async function getStableProfileScanFile(file, renderStatus) {
   if (stableProfileSourceFile === file && stableProfileSnapshotFile) {
+    renderStatus?.("info", `Dùng lại stable snapshot đã tạo sẵn (~${formatSnapshotGb(stableProfileSnapshotFile.size)} GB).`);
     return stableProfileSnapshotFile;
   }
 
@@ -569,6 +626,7 @@ async function runProfileSnapshotSync({
   getLocalToken,
   getRosterAccounts,
   renderStatus,
+  updateLocalTokenExpSec,
   reason = "auto",
   minFightStartMs = 0,
 } = {}) {
@@ -586,14 +644,19 @@ async function runProfileSnapshotSync({
       renderStatus?.("warn", t("profileSync.waitingRoster"));
       return { ok: false, skipped: "no-roster" };
     }
+    const rosterCharCount = countRosterCharacters(rosterAccounts);
+    renderStatus?.("info", `Roster sẵn sàng: ${formatCount(rosterAccounts.length)} account, ${formatCount(rosterCharCount)} character đã đăng ký.`);
+    const localToken = getLocalToken?.();
     const session = await ensureProfileSession({
       discordId,
-      localToken: getLocalToken?.(),
+      localToken,
       renderStatus,
     });
+    const fullImport = Number(minFightStartMs) <= 0;
     const scanFile = Number(minFightStartMs) > 0
       ? file
       : await getStableProfileScanFile(file, renderStatus);
+    renderStatus?.("info", `Mở SQLite ở chế độ read-only: ${scanFile?.name || "encounters.db"} (~${formatSnapshotGb(scanFile?.size)} GB).`);
     renderStatus?.("info", reason === "initial" ? t("profileSync.scanning") : t("profileSync.checking"));
     // A multi-GB encounters.db scan runs for many seconds inside a single
     // SQLite query with no natural progress event. Tick an elapsed counter
@@ -614,26 +677,35 @@ async function runProfileSnapshotSync({
     } finally {
       if (scanHeartbeat) clearInterval(scanHeartbeat);
     }
+    renderStatus?.("info", `Quét xong: ${formatCount(rows.length)} log raid hợp lệ match roster / ${formatCount(rosterCharCount)} character đã đăng ký.`);
     const weeklyReason = reason === "weekly";
     if (rows.length === 0) {
       renderStatus?.("ok", t(weeklyReason ? "profileSync.weeklyIdle" : "profileSync.idle", { n: 0 }));
       return { ok: true, sent: false, rows: 0 };
     }
+    renderStatus?.("info", `Đang dựng snapshot theo character từ ${formatCount(rows.length)} log...`);
     const snapshot = buildProfileSnapshot(rows, rosterAccounts, scanFile, {
       range: minFightStartMs > 0
         ? { type: "weekly", minFightStartMs: Number(minFightStartMs) || 0 }
         : { type: "full" },
       minDurationMs: MIN_DURATION_MS,
     });
+    renderStatus?.("info", `Đang dựng encounter summaries để /raid-profile xem drill-down...`);
     snapshot.encounters = buildProfileEncounterSummaries(rows, scanFile, {
       range: snapshot.criteria?.range,
     });
+    renderStatus?.("info", `Snapshot sẵn sàng: ${formatCount(snapshot.totals?.characterCount)} character, ${formatCount(snapshot.totals?.encounterCount)} log, ${formatCount(snapshot.encounters?.length)} encounter summary.`);
     const fp = `${discordId}\x1f${fingerprintSnapshot(snapshot)}`;
     if (!fp || fp === lastProfileFingerprint) {
+      renderStatus?.("info", `Snapshot không đổi so với lần gửi trước; bỏ qua upload sau khi quét ${formatCount(rows.length)} log.`);
       renderStatus?.("ok", t(weeklyReason ? "profileSync.weeklyIdle" : "profileSync.idle", { n: rows.length }));
       return { ok: true, sent: false, rows: rows.length };
     }
-    const result = await sendProfileSnapshot(snapshot, session);
+    const result = await sendProfileSnapshot(snapshot, session, {
+      localToken: fullImport ? localToken : "",
+      renderStatus,
+      updateLocalTokenExpSec,
+    });
     if (result?.skipped === "empty-profile") {
       renderStatus?.("ok", t(weeklyReason ? "profileSync.weeklyIdle" : "profileSync.idle", { n: rows.length }));
       return { ok: true, sent: false, rows: rows.length, skipped: result.skipped };
@@ -662,6 +734,7 @@ export function startProfileAutoSync({
   getLocalToken,
   getRosterAccounts,
   renderStatus,
+  updateLocalTokenExpSec,
   intervalMs = PROFILE_AUTO_SYNC_INTERVAL_MS,
 } = {}) {
   stopProfileAutoSync();
@@ -673,6 +746,7 @@ export function startProfileAutoSync({
     getLocalToken,
     getRosterAccounts,
     renderStatus,
+    updateLocalTokenExpSec,
     reason,
   });
 

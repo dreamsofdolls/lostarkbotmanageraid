@@ -12,6 +12,7 @@
 const {
   verifyToken,
   isCurrentStoredToken,
+  TOKEN_POST_SYNC_TTL_SEC,
   applyLocalSyncDeltas,
   recordLocalSyncSuccess,
 } = require("..");
@@ -162,7 +163,7 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId, applyRaidSetBa
     let newExpSec = null;
     const appliedCount = Array.isArray(summary?.applied) ? summary.applied.length : 0;
     if (appliedCount > 0) {
-      const shrunkAt = Math.floor(Date.now() / 1000) + 60;
+      const shrunkAt = Math.floor(Date.now() / 1000) + TOKEN_POST_SYNC_TTL_SEC;
       try {
         await User.updateOne(
           { discordId, lastLocalSyncToken: token },
