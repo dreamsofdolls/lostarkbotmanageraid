@@ -24,8 +24,6 @@ import {
   setActiveLang,
   applyDomTranslations,
   t,
-  getRaidLabel,
-  getModeLabel,
 } from "/sync/js/core/i18n.js";
 import {
   saveHandle as savePersistedHandle,
@@ -40,10 +38,14 @@ import {
 import { escapeHtml } from "/sync/js/core/html.js";
 import { formatBytes } from "/sync/js/core/format.js";
 import {
-  renderClassIcon,
   renderDiffPage,
   renderPreviewStats,
 } from "/sync/js/sync/preview-renderer.js";
+import {
+  renderNoDeltaProfileStatsQueuedResult,
+  renderSyncApplyResult,
+  summarizeSyncResult,
+} from "/sync/js/sync/sync-result-renderer.js";
 import {
   formatSchemaPreview,
   listColumns,
@@ -816,7 +818,7 @@ syncBtn.addEventListener("click", async () => {
       return;
     }
     syncBtn.disabled = true;
-    syncOutput.innerHTML = `<div class="sync-result-summary">${t("sync.nothingToSync")}</div><div class="sync-result-section"><div class="sync-result-section-title">${escapeHtml(t("sync.profileStatsLabel"))}</div><div id="weekly-profile-sync-status"><span class="hint">${escapeHtml(t("sync.profileStatsQueued"))}</span></div></div>`;
+    syncOutput.innerHTML = renderNoDeltaProfileStatsQueuedResult();
     try {
       await syncProfileStatsAfterWeeklySync();
     } catch (err) {
@@ -844,99 +846,18 @@ syncBtn.addEventListener("click", async () => {
       syncBtn.disabled = false;
       return;
     }
-    const a = (data.applied || []).length;
-    const s = (data.skipped || []).length;
-    const u = (data.unmapped || []).length;
-    const r = (data.rejected || []).length;
+    const { applied: a } = summarizeSyncResult(data);
     // Server shrinks token TTL to ~60s on a real apply (a > 0). Mirror
     // that into authState so the countdown reflects reality immediately.
     if (data.newExpSec && authState && authState.kind === "ok") {
       authState.expSec = data.newExpSec;
       renderAuthStatus();
     }
-    // Roster lookup for class icon + accountName + itemLevel resolution.
-    // Built from the cached roster snapshot so we don't burn another
-    // /api/me/roster fetch just to render the result list.
-    const charLookup = new Map();
-    for (const acc of (window.__artistRosterAccounts || [])) {
-      for (const ch of (acc.characters || [])) {
-        if (!ch?.name) continue;
-        charLookup.set(String(ch.name).toLowerCase(), {
-          accountName: acc.accountName || "",
-          className: ch.class || "",
-          itemLevel: Number(ch.itemLevel) || 0,
-        });
-      }
-    }
-
-    let html = `<div class="sync-result-summary"><span class="status-ok">${t("sync.complete")}</span> <span class="sync-summary-line">${t("sync.summary", { a, s, u, r })}</span></div>`;
-
-    // Applied: per-roster, then per-char rows with all that char's
-    // applied raids as pills on the same row. A char who synced 3 raids
-    // gets ONE row with 3 pills instead of 3 duplicate rows - mirrors
-    // /raid-status pagination shape (one row = one char, raids inline).
-    if (a > 0) {
-      // Two-level group: roster → char → applied entries.
-      const byRoster = new Map();
-      for (const x of data.applied) {
-        const info = charLookup.get(String(x.charName || "").toLowerCase()) || {};
-        const accountName = info.accountName || "";
-        if (!byRoster.has(accountName)) byRoster.set(accountName, new Map());
-        const charsMap = byRoster.get(accountName);
-        const charKey = String(x.charName || "").toLowerCase();
-        if (!charsMap.has(charKey)) {
-          charsMap.set(charKey, {
-            charName: x.charName,
-            className: info.className || "",
-            itemLevel: info.itemLevel || 0,
-            applied: [],
-          });
-        }
-        charsMap.get(charKey).applied.push(x);
-      }
-      html += `<div class="sync-result-section"><div class="sync-result-section-title">${escapeHtml(t("sync.appliedLabel"))}</div>`;
-      for (const [accountName, charsMap] of byRoster) {
-        if (accountName) {
-          html += `<div class="char-pending-roster-header">📁 <strong>${escapeHtml(accountName)}</strong></div>`;
-        }
-        html += `<ul class="char-pending-list">`;
-        for (const c of charsMap.values()) {
-          const classIcon = renderClassIcon(c.className);
-          const charLabel = `${classIcon}<strong>${escapeHtml(c.charName)}</strong>${c.itemLevel ? ` <span class="stat-label">${c.itemLevel}</span>` : ""}`;
-          const pillsHtml = c.applied.map((x) => {
-            const raidLabel = getRaidLabel(x.raidKey);
-            const modeLabel = getModeLabel(x.modeKey);
-            const gateText = (x.gates || []).join("+");
-            return `<span class="raid-pill raid-pill--done">🟢 ${escapeHtml(raidLabel)} <span class="raid-pill-mode">${escapeHtml(modeLabel)} ${escapeHtml(gateText)}</span></span>`;
-          }).join("");
-          html += `<li class="char-pending-row"><span class="char-pending-head">${charLabel}</span><span class="raid-pill-row">${pillsHtml}</span></li>`;
-        }
-        html += `</ul>`;
-      }
-      html += `</div>`;
-    }
-
-    if (r > 0) {
-      html += `<div class="sync-result-section"><div class="sync-result-section-title">${escapeHtml(t("sync.rejectedLabel"))}</div><ul class="char-pending-list">`;
-      for (const x of data.rejected) {
-        const info = charLookup.get(String(x.charName || "").toLowerCase()) || {};
-        const classIcon = renderClassIcon(info.className);
-        const charLabel = `${classIcon}<strong>${escapeHtml(x.charName)}</strong>`;
-        const reasonText = x.error ? `${x.reason} (${x.error})` : x.reason;
-        const pill = `<span class="raid-pill raid-pill--rejected">⛔ ${escapeHtml(reasonText)}</span>`;
-        html += `<li class="char-pending-row"><span class="char-pending-head">${charLabel}</span><span class="raid-pill-row">${pill}</span></li>`;
-      }
-      html += `</ul></div>`;
-    }
-    if (u > 0) {
-      html += `<div class="sync-result-section sync-result-unmapped"><span class="hint">${t("sync.unmappedHint")} ${data.unmapped.slice(0, 5).map((x) => escapeHtml(x.boss)).join(", ")}${u > 5 ? `, ${t("sync.unmappedMore", { n: u - 5 })}` : ""}</span></div>`;
-    }
-    html += `<div class="sync-result-section"><div class="sync-result-section-title">${escapeHtml(t("sync.profileStatsLabel"))}</div><div id="weekly-profile-sync-status"><span class="hint">${escapeHtml(t("sync.profileStatsQueued"))}</span></div></div>`;
-    syncOutput.innerHTML = html;
+    syncOutput.innerHTML = renderSyncApplyResult(data, window.__artistRosterAccounts || []);
     syncOutput.hidden = false;
     const profileStatsPromise = syncProfileStatsAfterWeeklySync();
 
-    // Refresh mục 3 (preview cards + stats panel) after a real apply
+    // Refresh section 3 (preview cards + stats panel) after a real apply
     // so the user sees post-sync state immediately - synced gates flip
     // from pending to synced, gold drops, completion % climbs. Pass
     // keepSyncOutput so we don't clobber the success summary above.
