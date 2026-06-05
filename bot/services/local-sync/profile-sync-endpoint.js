@@ -400,6 +400,14 @@ function sanitizeSnapshotPayload(payload, userDoc) {
   if (!payload || typeof payload !== "object") {
     throw Object.assign(new Error("profile payload required"), { status: 400 });
   }
+  const rawRange = payload.criteria?.range || {};
+  const minFightStartMs = clampNumber(rawRange.minFightStartMs, { max: 9999999999999, fallback: null });
+  const range = rawRange?.type === "weekly" && minFightStartMs > 0
+    ? {
+        type: "weekly",
+        minFightStartMs,
+      }
+    : { type: "full" };
   const indexes = buildRosterIndexes(userDoc);
   const accountsByName = new Map();
   let rejected = 0;
@@ -452,6 +460,7 @@ function sanitizeSnapshotPayload(payload, userDoc) {
   return {
     version: PROFILE_VERSION,
     source: "local",
+    rangeType: range.type,
     generatedAt: clampNumber(payload.generatedAt, { max: 9999999999999, fallback: Date.now() }),
     receivedAt: Date.now(),
     criteria: {
@@ -460,6 +469,7 @@ function sanitizeSnapshotPayload(payload, userDoc) {
       minDurationMs: 180000,
       modernProfileStatsOnly: payload.criteria?.modernProfileStatsOnly !== false,
       source: "encounters.db",
+      range,
     },
     db: {
       fileName: cleanShortString(payload.db?.fileName, 160),
@@ -476,6 +486,33 @@ function sanitizeSnapshotPayload(payload, userDoc) {
     },
     accounts,
   };
+}
+
+async function shouldPromoteSnapshot(clean, discordId, RaidProfileSnapshot) {
+  if (clean?.criteria?.range?.type !== "weekly") return true;
+  const existing = await RaidProfileSnapshot.findOne({ discordId })
+    .select("criteria accounts rangeType")
+    .lean();
+  if (!existing) return true;
+  const existingHasAccounts = Array.isArray(existing.accounts) && existing.accounts.length > 0;
+  const existingRangeType = existing.rangeType || existing.criteria?.range?.type || "full";
+  return !existingHasAccounts || existingRangeType !== "full";
+}
+
+function buildSnapshotUpdate({ discordId, clean, promotePrimary }) {
+  const rangeType = clean?.criteria?.range?.type === "weekly" ? "weekly" : "full";
+  const set = {
+    discordId,
+    [`rangeSnapshots.${rangeType}`]: clean,
+  };
+  if (promotePrimary) {
+    Object.assign(set, {
+      ...clean,
+      discordId,
+      rangeType,
+    });
+  }
+  return set;
 }
 
 function createProfileSessionEndpoint({ User }) {
@@ -607,10 +644,19 @@ function createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot }) {
       return;
     }
 
+    let promotePrimary;
+    try {
+      promotePrimary = await shouldPromoteSnapshot(clean, userDoc.discordId, RaidProfileSnapshot);
+    } catch (err) {
+      console.error("[raid-profile-sync-endpoint] existing snapshot read failed:", err?.message || err);
+      send(res, 500, { ok: false, error: "profile state read failed" });
+      return;
+    }
+
     try {
       await RaidProfileSnapshot.findOneAndUpdate(
         { discordId: userDoc.discordId },
-        { $set: { discordId: userDoc.discordId, ...clean } },
+        { $set: buildSnapshotUpdate({ discordId: userDoc.discordId, clean, promotePrimary }) },
         { upsert: true, setDefaultsOnInsert: true, new: true }
       );
       await User.updateOne(

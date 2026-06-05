@@ -34,6 +34,7 @@ import {
 } from "/sync/file-persistence.js";
 import {
   startProfileAutoSync,
+  syncProfileSnapshotOnce,
   stopProfileAutoSync,
 } from "/sync/profile-sync.js";
 
@@ -199,6 +200,27 @@ function renderProfileSyncStatus(kind, message) {
   const cls = kind === "err" ? "status-err" : kind === "ok" ? "status-ok" : "hint";
   profileSyncOutput.hidden = false;
   profileSyncOutput.innerHTML = `<span class="${cls}">${escapeHtml(message)}</span>`;
+}
+
+function renderWeeklyProfileSyncStatus(kind, message) {
+  const el = document.getElementById("weekly-profile-sync-status");
+  if (!el || !message) return;
+  const cls = kind === "err" ? "status-err" : kind === "ok" ? "status-ok" : "hint";
+  el.innerHTML = `<span class="${cls}">${escapeHtml(message)}</span>`;
+}
+
+async function syncProfileStatsAfterWeeklySync() {
+  if (!selectedLocalFile) return Promise.resolve(null);
+  const { currentWeeklyResetStartMs } = await loadPreviewUtils();
+  return syncProfileSnapshotOnce({
+    file: selectedLocalFile,
+    getDiscordId: () => window.__artistDiscordId,
+    getLocalToken: () => window.__artistSyncToken,
+    getRosterAccounts: getRosterAccountsForProfile,
+    renderStatus: renderWeeklyProfileSyncStatus,
+    reason: "weekly",
+    minFightStartMs: currentWeeklyResetStartMs(),
+  });
 }
 
 function renderSyncModeTabs() {
@@ -1332,8 +1354,10 @@ syncBtn.addEventListener("click", async () => {
     if (u > 0) {
       html += `<div class="sync-result-section sync-result-unmapped"><span class="hint">${t("sync.unmappedHint")} ${data.unmapped.slice(0, 5).map((x) => escapeHtml(x.boss)).join(", ")}${u > 5 ? `, ${t("sync.unmappedMore", { n: u - 5 })}` : ""}</span></div>`;
     }
+    html += `<div class="sync-result-section"><div class="sync-result-section-title">${escapeHtml(t("sync.profileStatsLabel"))}</div><div id="weekly-profile-sync-status"><span class="hint">${escapeHtml(t("sync.profileStatsQueued"))}</span></div></div>`;
     syncOutput.innerHTML = html;
     syncOutput.hidden = false;
+    const profileStatsPromise = syncProfileStatsAfterWeeklySync();
 
     // Refresh mục 3 (preview cards + stats panel) after a real apply
     // so the user sees post-sync state immediately - synced gates flip
@@ -1348,6 +1372,7 @@ syncBtn.addEventListener("click", async () => {
         console.warn("[local-sync] post-sync refresh failed:", err?.message || err);
       });
     }
+    await profileStatsPromise;
   } catch (err) {
     syncOutput.innerHTML = `<span class="status-err">${t("sync.networkError")}</span> ${escapeHtml(err.message || String(err))}`;
     syncBtn.disabled = false;

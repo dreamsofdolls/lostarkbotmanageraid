@@ -219,13 +219,26 @@ function getEntryLabel(entry) {
   return `${entry.ownerLabel || entry.ownerDiscordId} / ${entry.accountName}`;
 }
 
+function preferredSnapshotView(snapshot) {
+  const full = snapshot?.rangeSnapshots?.full;
+  if (full && Array.isArray(full.accounts) && full.accounts.length > 0) {
+    return {
+      ...snapshot,
+      ...full,
+      discordId: snapshot.discordId,
+      rangeSnapshots: snapshot.rangeSnapshots,
+    };
+  }
+  return snapshot;
+}
+
 async function buildAccessibleProfileEntries(viewerDiscordId, { RaidProfileSnapshot }) {
   const accessible = await getAccessibleAccounts(viewerDiscordId, { includeOwn: true });
   if (!accessible.length) return { accessible, entries: [] };
 
   const ownerIds = [...new Set(accessible.map((entry) => entry.ownerDiscordId).filter(Boolean))];
   const snapshots = await RaidProfileSnapshot.find({ discordId: { $in: ownerIds } }).lean();
-  const snapshotByOwner = new Map(snapshots.map((snapshot) => [snapshot.discordId, snapshot]));
+  const snapshotByOwner = new Map(snapshots.map((snapshot) => [snapshot.discordId, preferredSnapshotView(snapshot)]));
   const entries = [];
 
   for (const access of accessible) {

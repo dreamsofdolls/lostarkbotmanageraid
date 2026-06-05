@@ -32,12 +32,14 @@ const raidProfileSnapshotSchema = new mongoose.Schema(
   {
     discordId: { type: String, required: true, unique: true, index: true },
     source: { type: String, enum: ["local"], default: "local" },
+    rangeType: { type: String, enum: ["full", "weekly"], default: "full" },
     version: { type: Number, default: 1 },
     generatedAt: { type: Number, default: null },
     receivedAt: { type: Number, default: () => Date.now() },
     criteria: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     db: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     totals: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
+    rangeSnapshots: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     accounts: { type: [raidProfileAccountSchema], default: [] },
   },
   {

@@ -106,7 +106,7 @@ function buildRosterLookup(accounts) {
   return byName;
 }
 
-async function queryProfileRows(file, rosterAccounts) {
+async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = {}) {
   await loadCatalog();
   const rosterByName = buildRosterLookup(rosterAccounts);
   if (rosterByName.size === 0 || BOSS_TO_RAID_GATE.size === 0) return [];
@@ -138,6 +138,8 @@ async function queryProfileRows(file, rosterAccounts) {
     const durationSql = pCol(durationCol);
     const playersSql = playersCol ? pCol(playersCol) : "''";
     const supportedBosses = [...BOSS_TO_RAID_GATE.keys()].map(sqlString).join(", ");
+    const minFightStart = Number(minFightStartMs) || 0;
+    const minFightStartFilter = minFightStart > 0 ? `AND ${tsSql} >= ${Math.floor(minFightStart)}` : "";
     const durationMsExpr = `CASE WHEN ${durationSql} > 0 AND ${durationSql} < 10000 THEN ${durationSql} * 1000 ELSE ${durationSql} END`;
     const hasEncounterTable = encounterCols.has("id");
     const encounterJoin = hasEncounterTable ? "LEFT JOIN encounter enc ON enc.id = ep.id" : "";
@@ -190,6 +192,7 @@ async function queryProfileRows(file, rosterAccounts) {
         ${encounterJoin}
         WHERE ${clearedSql} = 1
           AND ${durationMsExpr} > ${MIN_DURATION_MS}
+          ${minFightStartFilter}
           AND ${bossSql} IN (${supportedBosses})
           AND ${charSql} IS NOT NULL
           AND ${charSql} != ''
@@ -1133,7 +1136,7 @@ function computeMechanicsScore(stats) {
   return clampScore(counterScore * 0.35 + staggerScore * 0.35 + controlScore * 0.3);
 }
 
-function buildProfileSnapshot(rows, rosterAccounts, file) {
+function buildProfileSnapshot(rows, rosterAccounts, file, { range = null } = {}) {
   const byChar = new Map();
   for (const row of rows) {
     const key = normalizeName(row.localPlayer);
@@ -1330,6 +1333,7 @@ function buildProfileSnapshot(rows, rosterAccounts, file) {
       supportedBossesOnly: true,
       minDurationMs: MIN_DURATION_MS,
       modernProfileStatsOnly: true,
+      range,
     },
   };
 }
@@ -1416,6 +1420,66 @@ export function stopProfileAutoSync() {
   }
 }
 
+async function runProfileSnapshotSync({
+  file,
+  getDiscordId,
+  getLocalToken,
+  getRosterAccounts,
+  renderStatus,
+  reason = "auto",
+  minFightStartMs = 0,
+} = {}) {
+  if (profileSyncInFlight) {
+    return { ok: false, skipped: "in-flight" };
+  }
+  const discordId = getDiscordId?.();
+  if (!file || !discordId) {
+    return { ok: false, skipped: "missing-context" };
+  }
+  profileSyncInFlight = true;
+  try {
+    const rosterAccounts = await getRosterAccounts?.();
+    if (!Array.isArray(rosterAccounts) || rosterAccounts.length === 0) {
+      renderStatus?.("warn", t("profileSync.waitingRoster"));
+      return { ok: false, skipped: "no-roster" };
+    }
+    renderStatus?.("info", reason === "initial" ? t("profileSync.scanning") : t("profileSync.checking"));
+    const rows = await queryProfileRows(file, rosterAccounts, { minFightStartMs });
+    const snapshot = buildProfileSnapshot(rows, rosterAccounts, file, {
+      range: minFightStartMs > 0
+        ? { type: "weekly", minFightStartMs: Number(minFightStartMs) || 0 }
+        : { type: "full" },
+    });
+    const fp = fingerprintSnapshot(snapshot);
+    const weeklyReason = reason === "weekly";
+    if (!fp || fp === lastProfileFingerprint) {
+      renderStatus?.("ok", t(weeklyReason ? "profileSync.weeklyIdle" : "profileSync.idle", { n: rows.length }));
+      return { ok: true, sent: false, rows: rows.length };
+    }
+    const session = await ensureProfileSession({
+      discordId,
+      localToken: getLocalToken?.(),
+      renderStatus,
+    });
+    const result = await sendProfileSnapshot(snapshot, session);
+    lastProfileFingerprint = fp;
+    const chars = result?.totals?.characterCount || 0;
+    const logs = result?.totals?.encounterCount || 0;
+    renderStatus?.("ok", t(weeklyReason ? "profileSync.weeklySynced" : "profileSync.synced", { logs, chars }));
+    return { ok: true, sent: true, rows: rows.length, chars, logs };
+  } catch (err) {
+    const message = err?.message || String(err);
+    renderStatus?.("err", message);
+    return { ok: false, error: message };
+  } finally {
+    profileSyncInFlight = false;
+  }
+}
+
+export function syncProfileSnapshotOnce(options = {}) {
+  return runProfileSnapshotSync({ ...options, reason: options.reason || "manual" });
+}
+
 export function startProfileAutoSync({
   file,
   getDiscordId,
@@ -1427,41 +1491,14 @@ export function startProfileAutoSync({
   stopProfileAutoSync();
   if (!file) return;
 
-  const run = async (reason = "auto") => {
-    if (profileSyncInFlight) return;
-    const discordId = getDiscordId?.();
-    if (!discordId) return;
-    profileSyncInFlight = true;
-    try {
-      const rosterAccounts = await getRosterAccounts?.();
-      if (!Array.isArray(rosterAccounts) || rosterAccounts.length === 0) {
-        renderStatus?.("warn", t("profileSync.waitingRoster"));
-        return;
-      }
-      renderStatus?.("info", reason === "initial" ? t("profileSync.scanning") : t("profileSync.checking"));
-      const rows = await queryProfileRows(file, rosterAccounts);
-      const snapshot = buildProfileSnapshot(rows, rosterAccounts, file);
-      const fp = fingerprintSnapshot(snapshot);
-      if (!fp || fp === lastProfileFingerprint) {
-        renderStatus?.("ok", t("profileSync.idle", { n: rows.length }));
-        return;
-      }
-      const session = await ensureProfileSession({
-        discordId,
-        localToken: getLocalToken?.(),
-        renderStatus,
-      });
-      const result = await sendProfileSnapshot(snapshot, session);
-      lastProfileFingerprint = fp;
-      const chars = result?.totals?.characterCount || 0;
-      const logs = result?.totals?.encounterCount || 0;
-      renderStatus?.("ok", t("profileSync.synced", { logs, chars }));
-    } catch (err) {
-      renderStatus?.("err", err?.message || String(err));
-    } finally {
-      profileSyncInFlight = false;
-    }
-  };
+  const run = (reason = "auto") => runProfileSnapshotSync({
+    file,
+    getDiscordId,
+    getLocalToken,
+    getRosterAccounts,
+    renderStatus,
+    reason,
+  });
 
   run("initial");
   profileSyncTimer = setInterval(() => run("auto"), intervalMs);
