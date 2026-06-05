@@ -1,12 +1,34 @@
-# Lost Ark Raid Management Bot
+# Artist — Lost Ark Raid Management Bot
 
-Discord bot tracking weekly raid progress for a small Lost Ark roster. Syncs characters from `lostark.bible`, parses raid-clear posts in a configured channel, auto-reconciles progress against bible clear-logs, and handles the Wednesday 17:00 VN weekly reset.
+![Node](https://img.shields.io/badge/Node-20-339933?logo=node.js&logoColor=white)
+![discord.js](https://img.shields.io/badge/discord.js-5865F2?logo=discord&logoColor=white)
+![MongoDB](https://img.shields.io/badge/MongoDB-47A248?logo=mongodb&logoColor=white)
+![Railway](https://img.shields.io/badge/Railway-deploy-635BFF?logo=railway&logoColor=white)
+![Languages](https://img.shields.io/badge/i18n-vi%20%C2%B7%20ja%20%C2%B7%20en-informational)
+
+**Artist** automates weekly raid-progress tracking for a Lost Ark guild — no more shared spreadsheets. It syncs each member's roster from `lostark.bible`, records raid-gate completion from chat posts or automatic reconciliation against the clear-logs, shows at a glance who still owes which raid, and resets the entire guild every Wednesday at 17:00 VN. Every surface is available in Vietnamese, Japanese, and English.
+
+Beyond progress tracking, Artist ships a **zero-upload web companion** that reads your local `encounters.db` in the browser to power weekly-clear sync and per-character combat profiles, plus raid signup boards, an auction-bid calculator, per-character side-tasks, and weekly gold management — one bot for the entire raid week.
+
+## Contents
+
+- [Features](#features)
+- [Commands](#commands)
+- [Text-monitor format](#text-monitor-format)
+- [Data Model](#data-model)
+- [Architecture](#architecture)
+- [Environment Variables](#environment-variables)
+- [Run Local](#run-local)
+- [Railway Deploy](#railway-deploy)
+- [Development](#development)
+- [Known Limitations](#known-limitations)
 
 ## Features
 
 - Slash commands for roster sync, progress view, per-char update, and manager scan
 - Text-channel monitor: post `<raid> <difficulty> <character> [gate]`, bot parses + updates + DM confirms
 - Auto-sync from lostark.bible logs (opt-in via `/raid-auto-manage action:on`) with a passive 24h scheduler, OR local-sync mode (`action:local-on`) that reads `encounters.db` via a web companion (SQLite-in-browser, deltas-only POST, no file upload)
+- Combat profiles (`/raid-profile`): per-character DPS/SUP analytics - scores with `▰▱` gauges, reliability, build/enlightenment, top skills, raid breakdown - built from local `encounters.db` (deep, via the companion's profile-import mode) or a lighter `lostark.bible` summary; 3-tier drill-down (overall → roster → character), ephemeral by default with `visibility:show` to post publicly and `action:reset` to wipe + re-sync. Preview-gated to a `DEV_USER` allowlist for now
 - Per-character side-task tracker + roster-level shared-task tracker (`/raid-task`) with auto-reset at 17:00 VN daily / Wed 17:00 VN weekly (Chaos Gate / Field Boss follow UTC-4 schedule)
 - Per-character + per-account weekly gold-earned tracker (unbound), with `/raid-gold-earner` picker to mark which 6 chars/account earn gold (per Lost Ark's cap)
 - Auction bid calculator (`/raid-auction`): given an item's AH listing price (5% sell fee auto-deducted), computes the recommended bid for BOTH 4- and 8-player parties in one embed plus each member's cut and the winner's estimated profit
@@ -20,11 +42,15 @@ Discord bot tracking weekly raid progress for a small Lost Ark roster. Syncs cha
 
 ## Commands
 
+All replies are ephemeral (visible only to the caller) unless a command's row notes otherwise.
+
 | Command | Who | What |
 |---|---|---|
 | `/raid-add-roster` | anyone (self); Raid Manager (`target:` for others) | Fetch a roster from `lostark.bible`, open an interactive picker (per-char toggle buttons + Confirm/Cancel, 5-min session), then save the chosen chars (cap 20/roster) |
 | `/raid-edit-roster` | anyone (self) | Edit an existing saved roster: re-fetches bible + opens a merged picker (saved ∪ bible) so you can add new chars or untick saved ones in one shot. Preserves per-char raid completion state. |
 | `/raid-status` | anyone (self) | View raid progress, paginated 1 roster/page; lazy iLvl refresh (2h cache); per-char + per-account weekly gold rollup (unbound, gated on `isGoldEarner`); a `🗓️ Raid của tôi` dropdown lists the `/raid-schedule-preview` events you are in (self-join or manager-added) and opens a personal detail (time, room if in comp, your turns + teammates) |
+| `/raid-profile` | anyone (`DEV_USER` preview) | Combat-profile drill-down (overall → roster → character): score gauges, DPS/SUP detail, reliability, build + enlightenment, top skills, raid breakdown. Shows your own rosters + ones shared to you. Source per snapshot = local `encounters.db` (full detail) or `lostark.bible` (summary). `action:` view (default) / reset (wipe your own snapshot + encounters to re-sync). `visibility:` hide (default, ephemeral) / show (public in channel; components stay caller-locked). Preview-gated to the `DEV_USER` allowlist for now. |
+| `/raid-bg` | anyone (self) | Per-user background-image library for `/raid-status` card embeds: `set` (upload 1-4, `action:overwrite` or `extend`, up to a 6-scene library), `view` (interactive one-scene-at-a-time browser with pager), `edit` (replace one scene with a new image, or delete scenes). Storage + sizing details in the Environment Variables section. |
 | `/raid-gold-earner` | anyone (self) | Picker to flip the per-character `isGoldEarner` flag (cap 6/account/week per LA). Pre-checks top 6 by iLvl on first open for legacy data; new chars default to ON. |
 | `/raid-auction` | anyone (self) | Auction bid calculator for shared raid loot. `market_value:<AH listing in gold>` (+ optional `profit`, default on). Renders bids for BOTH 4- and 8-player parties side by side from one input. Formula ported from la-utils: `floor(0.95 × listing × (N-1)/N)`, ×0.92 in profit mode. The 5% AH sell fee is already baked into the bid (enter listing price as-is). Replies publicly so the whole party sees the bids; input errors stay ephemeral. |
 | `/raid-schedule-preview` | `create`/manage/`show`: Raid Manager | Preview command for a public raid signup board. `create`: `raid`, `mode`, `when`, required `skip_notify` (silent mode), optional `auto_lock`/`title` (party size derived from the catalog: Act 4/Kazeros = 8, Serca = 4). Members join from saved rosters (characters that already cleared this raid this week are hidden from both the Join and Add member pickers); the board manages Support/DPS slots, waitlist, RSVP, room visibility, and a lead-only Manage menu for Lock/Unlock, End, Set room, Edit time, Cancel, 🧩 Turns, ➕ Add member, 👋 Kick, and 🗑️ Delete. **Turns** = bus model: the lead arranges signups into multiple turns (the same player can run several) by ticking the signup pool. **Add member** lets the lead add someone directly (pick a user, then an iLvl-eligible character from their roster; works while locked; pings whether they are in comp or waitlist). If that role is full, the added player follows the normal waitlist rules rather than bumping an existing slot-holder. **Kick** drops one or more people (multi-select); dropping a slot-holder auto-promotes the next waitlister. **Delete** hard-removes the event (board + doc, with a confirm) unlike Cancel which freezes a record; last week's events are also auto-purged at the weekly reset. `show` takes an `action`: `📋 Resurface board` (default) reposts your signup board at the channel bottom (delete + repost + repoint, never a stale ghost board; with several active boards in the same channel a `🗓 board switcher` swaps the visible message in-place, and the full board is reposted with every member shown just like create); `📊 Turn plan` opens an ephemeral turn-plan dashboard scoped to your own boards, with a `🗓` dropdown to switch between your raids (an across-raids overview). The turn plan uses the signup-board embed frame; 8-man raids render each turn as two side-by-side parties (1 sup + 3 dps each, unfilled = `＋ trống`), 4-man as one. Members see their own turns via `/raid-status` → `🗓️ Raid của tôi`. End writes clears through `/raid-set` for current comp slot-holders only. |
