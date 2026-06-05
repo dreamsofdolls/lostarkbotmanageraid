@@ -18,15 +18,26 @@ const {
   getAutoManageCooldownMs: getAutoManageCooldownMsDefault,
 } = require("../../access/manager");
 const { createBibleClient } = require("../bible/client");
-const { normalizeDifficultyToModeKey } = require("../bible/log-utils");
 const {
   stampAutoManageAttemptFromReport,
   toPlainUserDoc,
   syncRaidProfileAfterAutoManageReport,
 } = require("../reports/utils");
-const { t } = require("../../i18n");
-const { getRaidLabel, getModeLabel } = require("../../../utils/raid/common/labels");
-const { splitEmbedFieldValue } = require("../../../utils/raid/common/shared");
+const { createAutoManageReportEmbeds } = require("../reports/embeds");
+const {
+  AUTO_MANAGE_GATHER_CHARACTER_CONCURRENCY,
+  PUBLIC_LOG_DISABLED_REPROBE_MS,
+} = require("./constants");
+const {
+  filterLogsForCharacter,
+  mapWithConcurrency,
+} = require("./helpers");
+const {
+  createAutoManageSyncSlotManager,
+} = require("./slot");
+const {
+  createAutoManageReconciler,
+} = require("./reconcile");
 
 /**
  * Build the auto-manage core service. Returns a bag of handlers,
@@ -75,86 +86,35 @@ function createAutoManageCoreService({
   // /raid-auto-manage - lostark.bible clear-log sync
   // ---------------------------------------------------------------------------
 
-  // Per-user throttle for /raid-auto-manage sync runs. bibleLimiter already
-  // caps concurrency across the whole process, but a single user spamming
-  // action:sync still queues N-roster × M-char HTTP calls each time. Two
-  // guards combine: in-flight Set rejects parallel runs, cooldown rejects
-  // rapid-sequential runs based on User.lastAutoManageAttemptAt.
-  //
-  // Cooldown is now per-user: non-manager = 10m (the ceiling protecting
-  // bible.lostark from spam), manager (in RAID_MANAGER_ID) = 15s so the 2-3
-  // operators can resync quickly after reconciling a raid clear. Managers are
-  // a small, trusted set so the tighter cadence does not meaningfully raise
-  // bible load compared to the existing daily passive scheduler.
-  const AUTO_MANAGE_SYNC_COOLDOWN_MS = DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS;
-  const AUTO_MANAGE_GATHER_CHARACTER_CONCURRENCY = 2;
-  // After a char returns "Logs not enabled" we cache that signal for ~24h
-  // before re-probing. Without this gate every sync cycle re-fetches the
-  // bible logs endpoint for the same hidden char and burns API budget +
-  // log noise on a state only the owner can flip. Reprobe at most daily so
-  // a char that flips public-log ON gets picked up within a day.
-  const PUBLIC_LOG_DISABLED_REPROBE_MS = 24 * 60 * 60 * 1000;
-  const inFlightAutoManageSyncs = new Set(); // discordId
   const {
     fetchBibleCharacterMetaWithLimiter,
     fetchBibleLogsSinceWeekReset,
   } = createBibleClient({ bibleLimiter });
-
-  /**
-   * Atomically claim a sync slot for this user. The slot is reserved
-   * BEFORE any `await` so two concurrent interactions racing into this
-   * function can't both observe an empty Set - exactly one gets in-flight
-   * acquired, the other gets `in-flight` reject. If the DB cooldown check
-   * rejects, the slot is released before returning so `on`'s "flip flag
-   * only" path doesn't block future sync attempts.
-   *
-   * Caller contract:
-   *   - `acquired: true`  → caller MUST releaseAutoManageSyncSlot() in finally.
-   *   - `acquired: false` → slot is NOT held; caller must not release.
-   */
-  async function acquireAutoManageSyncSlot(discordId, { ignoreCooldown = false } = {}) {
-    if (inFlightAutoManageSyncs.has(discordId)) {
-      return { acquired: false, reason: "in-flight" };
-    }
-    // Reserve synchronously - this is the TOCTOU-safe step. Any second
-    // caller that reaches this function before we release will see the
-    // Set populated and reject.
-    inFlightAutoManageSyncs.add(discordId);
-    try {
-      const user = await User.findOne(
-        { discordId },
-        { lastAutoManageAttemptAt: 1 }
-      ).lean();
-      const lastAttempt = user?.lastAutoManageAttemptAt || 0;
-      const elapsed = Date.now() - lastAttempt;
-      const effectiveCooldownMs = getAutoManageCooldownMs(discordId);
-      if (!ignoreCooldown && lastAttempt && elapsed < effectiveCooldownMs) {
-        inFlightAutoManageSyncs.delete(discordId);
-        return {
-          acquired: false,
-          reason: "cooldown",
-          remainingMs: effectiveCooldownMs - elapsed,
-        };
-      }
-      return { acquired: true };
-    } catch (err) {
-      // DB blip - release so the user isn't permanently stuck in the Set.
-      inFlightAutoManageSyncs.delete(discordId);
-      throw err;
-    }
-  }
-
-  function releaseAutoManageSyncSlot(discordId) {
-    inFlightAutoManageSyncs.delete(discordId);
-  }
-
-  function formatAutoManageCooldownRemaining(remainingMs) {
-    const secs = Math.max(1, Math.ceil(remainingMs / 1000));
-    if (secs < 60) return `${secs}s`;
-    const mins = Math.floor(secs / 60);
-    const rem = secs - mins * 60;
-    return rem > 0 ? `${mins}m${rem}s` : `${mins}m`;
-  }
+  const {
+    AUTO_MANAGE_SYNC_COOLDOWN_MS,
+    acquireAutoManageSyncSlot,
+    releaseAutoManageSyncSlot,
+    formatAutoManageCooldownRemaining,
+  } = createAutoManageSyncSlotManager({
+    User,
+    getAutoManageCooldownMs,
+    defaultCooldownMs: DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS,
+  });
+  const {
+    buildAutoManageHiddenCharsWarningEmbed,
+    buildAutoManageSyncReportEmbed,
+  } = createAutoManageReportEmbeds({ EmbedBuilder, UI });
+  const {
+    reconcileCharacterFromLogs,
+  } = createAutoManageReconciler({
+    ensureAssignedRaids,
+    getRaidGateForBoss,
+    RAID_REQUIREMENT_MAP,
+    toModeLabel,
+    normalizeName,
+    normalizeAssignedRaid,
+    getGatesForRaid,
+  });
 
   async function resolveBibleCharacterMetaViaRoster(account, character, rosterFetchCache = null) {
     const seeds = [];
@@ -223,111 +183,6 @@ function createAutoManageCoreService({
   }
 
   /**
-   * Given a character doc + array of bible log entries + the current week's
-   * reset boundary, mutate `character.assignedRaids` in place to reflect
-   * every clear that: (a) belongs to a raid in RAID_REQUIREMENTS, (b)
-   * happened at-or-after the week-reset, (c) maps to a known boss via
-   * `getRaidGateForBoss`. Returns an array of applied updates for the
-   * caller to build a confirmation embed.
-   */
-  function reconcileCharacterFromLogs(character, logs, weekResetStart) {
-    const applied = [];
-    if (!Array.isArray(logs) || logs.length === 0) return applied;
-
-    const assignedRaids = ensureAssignedRaids(character);
-
-    // Bible returns newest-first. Process oldest-first so mode-switch
-    // wipes always use the *latest* mode as source of truth. Without this,
-    // an older Serca Hard clear could wipe a newer Nightmare clear simply
-    // because it appears later in the API's newest-first stream.
-    const sortedLogs = [...logs].sort(
-      (a, b) => (Number(a?.timestamp) || 0) - (Number(b?.timestamp) || 0)
-    );
-
-    for (const log of sortedLogs) {
-      const ts = Number(log?.timestamp);
-      if (!(ts >= weekResetStart)) continue;
-
-      const mapping = getRaidGateForBoss(log.boss);
-      if (!mapping) continue;
-
-      const modeKey = normalizeDifficultyToModeKey(log.difficulty);
-      if (!modeKey) continue;
-
-      const raidMeta = RAID_REQUIREMENT_MAP[`${mapping.raidKey}_${modeKey}`];
-      if (!raidMeta) continue; // e.g. Kazeros Nightmare if we ever see it but don't track it
-
-      const difficultyLabel = toModeLabel(modeKey);
-      const normalizedSelectedDiff = normalizeName(difficultyLabel);
-
-      // Normalize existing raid data + detect mode mismatch (if user cleared
-      // Serca Hard earlier but bible also logs a Nightmare clear this week,
-      // bible is the source of truth - let the latest-mode win by wiping
-      // the raid before writing the new gate).
-      const existingRaid = normalizeAssignedRaid(
-        assignedRaids[mapping.raidKey] || {},
-        difficultyLabel,
-        mapping.raidKey
-      );
-
-      let modeChange = false;
-      if (existingRaid.modeKey && existingRaid.modeKey !== modeKey) {
-        modeChange = true;
-      }
-      for (const g of getGatesForRaid(mapping.raidKey)) {
-        const existingDiff = existingRaid[g]?.difficulty;
-        if (existingDiff && normalizeName(existingDiff) !== normalizedSelectedDiff) {
-          modeChange = true;
-          break;
-        }
-      }
-      if (modeChange) {
-        for (const g of getGatesForRaid(mapping.raidKey)) {
-          existingRaid[g] = { difficulty: difficultyLabel, completedDate: undefined };
-        }
-      }
-      existingRaid.modeKey = modeKey;
-
-      // Lost Ark gates are sequential. A later-gate clear is proof that
-      // earlier gates in the same raid/mode were cleared too, even when
-      // bible missed or corrupted the earlier log row. Fill missing prior
-      // gates, but do not overwrite a real earlier-gate timestamp that was
-      // already captured from its own log.
-      const officialGates = getGatesForRaid(mapping.raidKey);
-      const gateIndex = officialGates.indexOf(mapping.gate);
-      if (gateIndex < 0) continue;
-      const effectiveGates = officialGates.slice(0, gateIndex + 1);
-      for (const gate of effectiveGates) {
-        const isLoggedGate = gate === mapping.gate;
-        const priorTs = Number(existingRaid[gate]?.completedDate) || 0;
-        const shouldStamp = isLoggedGate ? ts > priorTs : priorTs <= 0;
-        if (!shouldStamp) continue;
-
-        existingRaid[gate] = {
-          difficulty: difficultyLabel,
-          completedDate: ts,
-        };
-        existingRaid.modeKey = modeKey;
-        applied.push({
-          raidKey: mapping.raidKey,
-          raidLabel: raidMeta.label,
-          gate,
-          modeKey,
-          difficulty: difficultyLabel,
-          timestamp: ts,
-          boss: log.boss,
-          inferred: !isLoggedGate,
-        });
-      }
-
-      assignedRaids[mapping.raidKey] = existingRaid;
-    }
-
-    character.assignedRaids = assignedRaids;
-    return applied;
-  }
-
-  /**
    * Build the identity key used to match a gathered entry back to its
    * character in the apply phase. Composite of normalized accountName +
    * normalized charName so two same-name chars across different rosters
@@ -340,47 +195,6 @@ function createAutoManageCoreService({
    */
   function autoManageEntryKey(accountName, charName) {
     return normalizeName(accountName) + "\x1f" + normalizeName(charName);
-  }
-
-  async function mapWithConcurrency(items, limit, mapper) {
-    const list = Array.isArray(items) ? items : [];
-    if (list.length === 0) return [];
-
-    const results = new Array(list.length);
-    let nextIndex = 0;
-    const workerCount = Math.min(Math.max(1, limit), list.length);
-
-    await Promise.all(
-      Array.from({ length: workerCount }, async () => {
-        while (nextIndex < list.length) {
-          const index = nextIndex;
-          nextIndex += 1;
-          results[index] = await mapper(list[index], index);
-        }
-      })
-    );
-
-    return results;
-  }
-
-  function filterLogsForCharacter(logs, expectedName) {
-    const expected = normalizeName(expectedName);
-    if (!expected || !Array.isArray(logs) || logs.length === 0) {
-      return { logs: Array.isArray(logs) ? logs : [], mismatchedNames: [], hadNamedLogs: false };
-    }
-    const namedLogs = logs.filter((log) => normalizeName(log?.name));
-    if (namedLogs.length === 0) {
-      return { logs, mismatchedNames: [], hadNamedLogs: false };
-    }
-    const filtered = namedLogs.filter((log) => normalizeName(log?.name) === expected);
-    const mismatchedNames = [
-      ...new Set(
-        namedLogs
-          .map((log) => log?.name)
-          .filter((name) => normalizeName(name) !== expected)
-      ),
-    ];
-    return { logs: filtered, mismatchedNames, hadNamedLogs: true };
   }
 
   async function resolveBibleMetaForEntry(account, character, entry, rosterFetchCache) {
@@ -457,7 +271,7 @@ function createAutoManageCoreService({
         weekResetStart,
       });
       const expectedLogName = entry.canonicalName || entry.charName;
-      let filteredLogs = filterLogsForCharacter(entry.logs, expectedLogName);
+      let filteredLogs = filterLogsForCharacter(entry.logs, expectedLogName, normalizeName);
       if (filteredLogs.mismatchedNames.length > 0 && filteredLogs.logs.length > 0) {
         console.warn(
           `[auto-manage] bible logs for "${entry.charName}" included other character(s): ${filteredLogs.mismatchedNames.join(", ")}; filtering them out.`
@@ -491,7 +305,7 @@ function createAutoManageCoreService({
           weekResetStart,
         });
         const refreshedExpectedName = entry.canonicalName || entry.charName;
-        filteredLogs = filterLogsForCharacter(entry.logs, refreshedExpectedName);
+        filteredLogs = filterLogsForCharacter(entry.logs, refreshedExpectedName, normalizeName);
         if (filteredLogs.mismatchedNames.length > 0 && filteredLogs.logs.length > 0) {
           console.warn(
             `[auto-manage] refreshed bible logs for "${entry.charName}" still included other character(s): ${filteredLogs.mismatchedNames.join(", ")}; filtering them out.`
@@ -730,204 +544,6 @@ function createAutoManageCoreService({
       logLabel: "[auto-manage:on]",
     });
     return finalReport;
-  }
-
-  function buildAutoManageHiddenCharsWarningEmbed(hiddenChars, probeReport, lang = "vi") {
-    const visibleApplied = (probeReport?.perChar || []).filter(
-      (c) => !c.error && Array.isArray(c.applied) && c.applied.length > 0
-    );
-    const lines = hiddenChars
-      .slice(0, 20)
-      .map((c) =>
-        t("raid-auto-manage.hiddenWarning.charLine", lang, { name: c.charName || "?" }),
-      );
-    const extra =
-      hiddenChars.length > 20
-        ? `\n${t("raid-auto-manage.hiddenWarning.charsExtra", lang, {
-            n: hiddenChars.length - 20,
-          })}`
-        : "";
-
-    const description = [
-      t("raid-auto-manage.hiddenWarning.descriptionLine1", lang, {
-        hidden: hiddenChars.length,
-        total: (probeReport?.perChar || []).length,
-      }),
-      "",
-      t("raid-auto-manage.hiddenWarning.charsBlockHeader", lang),
-      `${lines.join("\n")}${extra}`,
-    ].join("\n");
-
-    const embed = new EmbedBuilder()
-      .setColor(UI.colors.progress)
-      .setTitle(`${UI.icons.warn} ${t("raid-auto-manage.hiddenWarning.title", lang)}`)
-      .setDescription(description)
-      .setTimestamp();
-
-    if (visibleApplied.length > 0) {
-      const applicableLines = visibleApplied
-        .slice(0, 10)
-        .map((c) =>
-          t("raid-auto-manage.hiddenWarning.applicableLine", lang, {
-            name: c.charName,
-            n: c.applied.length,
-          }),
-        );
-      const applicableExtra =
-        visibleApplied.length > 10
-          ? `\n${t("raid-auto-manage.hiddenWarning.applicableExtra", lang, {
-              n: visibleApplied.length - 10,
-            })}`
-          : "";
-      embed.addFields({
-        name: t("raid-auto-manage.hiddenWarning.applicableHeader", lang),
-        value: applicableLines.join("\n") + applicableExtra,
-        inline: false,
-      });
-    }
-
-    embed.addFields({
-      name: t("raid-auto-manage.hiddenWarning.optionsHeader", lang),
-      value: [
-        t("raid-auto-manage.hiddenWarning.optionConfirm", lang),
-        t("raid-auto-manage.hiddenWarning.optionCancel", lang),
-        t("raid-auto-manage.hiddenWarning.optionTimeout", lang),
-      ].join("\n"),
-      inline: false,
-    });
-
-    return embed;
-  }
-
-  function addChunkedEmbedField(embed, name, value) {
-    const chunks = splitEmbedFieldValue(value);
-    chunks.forEach((chunk, index) => {
-      embed.addFields({
-        name: index === 0 ? name : `${name} (${index + 1})`,
-        value: chunk,
-        inline: false,
-      });
-    });
-  }
-
-  function buildAutoManageSyncReportEmbed(report, lang = "vi") {
-    const appliedTotal = report?.appliedTotal || 0;
-    const perChar = Array.isArray(report?.perChar) ? report.perChar : [];
-    const errored = perChar.filter((c) => c.error);
-    const withApplied = perChar.filter((c) => c.applied.length > 0);
-    const allFailed = perChar.length > 0 && errored.length === perChar.length;
-
-    // Three-state description so the user never sees "DB đã match" stapled
-    // to a Fail field - ambiguous and looked like a bug in Codex review.
-    let description;
-    if (appliedTotal > 0) {
-      description = t("raid-auto-manage.syncReport.descriptionApplied", lang, {
-        n: appliedTotal,
-      });
-      if (errored.length > 0) {
-        description += `\n${t("raid-auto-manage.syncReport.descriptionAppliedFailsTail", lang, {
-          warnIcon: UI.icons.warn,
-          n: errored.length,
-        })}`;
-      }
-    } else if (allFailed) {
-      description = t("raid-auto-manage.syncReport.descriptionAllFailed", lang, {
-        n: errored.length,
-      });
-    } else if (errored.length > 0) {
-      description = t("raid-auto-manage.syncReport.descriptionNoNewWithFails", lang, {
-        warnIcon: UI.icons.warn,
-        failed: errored.length,
-        total: perChar.length,
-      });
-    } else {
-      description = t("raid-auto-manage.syncReport.descriptionNoNew", lang);
-    }
-
-    const embed = new EmbedBuilder()
-      .setColor(
-        appliedTotal > 0
-          ? UI.colors.success
-          : allFailed
-            ? UI.colors.progress
-            : UI.colors.neutral
-      )
-      .setTitle(
-        `${appliedTotal > 0 ? UI.icons.done : UI.icons.info} ${t(
-          "raid-auto-manage.syncReport.title",
-          lang,
-        )}`,
-      )
-      .setDescription(description)
-      .setTimestamp();
-
-    for (const c of withApplied.slice(0, 10)) {
-      const lines = c.applied.map((a) =>
-        t("raid-auto-manage.syncReport.appliedLine", lang, {
-          // raidKey + modeKey are stamped on each applied entry by
-          // applyAutoManageCollected; resolve to the locale-aware label
-          // here so the report reads as "アクト4" / "Act 4" / "Act 4"
-          // depending on the viewer's preference instead of the canonical
-          // English raidLabel snapshot stored on the entry.
-          raidLabel: a.raidKey ? getRaidLabel(a.raidKey, lang) : a.raidLabel,
-          gate: a.gate,
-          // a.difficulty is the canonical EN difficulty string written by
-          // the bible parser; map back to a modeKey when present so we
-          // can surface localized "ハード" / "Hard" / "Hard".
-          difficulty: a.modeKey ? getModeLabel(a.modeKey, lang) : a.difficulty,
-        }),
-      );
-      embed.addFields({
-        name: t("raid-auto-manage.syncReport.appliedFieldName", lang, {
-          icon: UI.icons.done,
-          charName: c.charName,
-          accountName: c.accountName,
-        }),
-        value: lines.join("\n"),
-        inline: false,
-      });
-    }
-    if (withApplied.length > 10) {
-      embed.addFields({
-        name: t("raid-auto-manage.syncReport.moreCharsHeader", lang),
-        value: t("raid-auto-manage.syncReport.moreCharsBody", lang, {
-          n: withApplied.length - 10,
-        }),
-      });
-    }
-
-    if (errored.length > 0) {
-      // Per-line hard cap so one HTML-heavy Cloudflare 403 body (fetch now
-      // embeds up to 200 chars of response body into err.message) can't blow
-      // past Discord's 1024-char field limit on its own. addChunkedHelpField
-      // below handles the aggregate case (many errors) by splitting into
-      // continuation fields.
-      const MAX_ERROR_LINE = 180;
-      const DISPLAY_LIMIT = 10;
-      const lines = errored.slice(0, DISPLAY_LIMIT).map((c) => {
-        const raw = `\`${c.charName}\`: ${c.error}`;
-        return raw.length > MAX_ERROR_LINE
-          ? `${raw.slice(0, MAX_ERROR_LINE - 1)}…`
-          : raw;
-      });
-      if (errored.length > DISPLAY_LIMIT) {
-        lines.push(
-          t("raid-auto-manage.syncReport.failsExtra", lang, {
-            n: errored.length - DISPLAY_LIMIT,
-          }),
-        );
-      }
-      addChunkedEmbedField(
-        embed,
-        t("raid-auto-manage.syncReport.failsHeader", lang, {
-          warnIcon: UI.icons.warn,
-          count: errored.length,
-        }),
-        lines.join("\n")
-      );
-    }
-
-    return embed;
   }
 
   function weekResetStartMs(now = new Date()) {
