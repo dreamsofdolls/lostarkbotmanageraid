@@ -29,19 +29,16 @@ const {
 const {
   buildScheduleEmbed,
   buildScheduleComponents,
-  buildTurnPlanEmbed,
-  buildSwitcherRow,
   renderGauge,
-  STATUS_CODE,
 } = require("./board");
 const {
   PICKER_LIMIT,
   clip,
   findOwnEligibleRows,
   characterSelectOptions,
-  signupSelectOptions,
 } = require("./select-options");
 const { createScheduleNoticeHelpers } = require("./notices");
+const { createSchedulePanelBuilders } = require("./panels");
 
 const EPHEMERAL_FLAG = 1 << 6;
 const CLOSED_EVENT_STATUSES = new Set(["cleared", "cancelled"]);
@@ -71,6 +68,26 @@ function createRaidScheduleCommand({
     replyNotice,
     editNotice,
   } = createScheduleNoticeHelpers({ EmbedBuilder, UI, ephemeralFlag });
+  const {
+    manageMenuPayload,
+    deleteConfirmPayload,
+    kickSelectPayload,
+    addUserSelectPayload,
+    addCharSelectPayload,
+    teamsPanelPayload,
+    memberSelectPayload,
+    turnPlanDashboardPayload,
+  } = createSchedulePanelBuilders({
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    StringSelectMenuBuilder,
+    UserSelectMenuBuilder,
+    EmbedBuilder,
+    UI,
+    ephemeralFlag,
+    noticeEmbed,
+  });
 
   async function userLang(interaction) {
     return getUserLanguage(interaction.user?.id, { UserModel: User });
@@ -532,85 +549,6 @@ function createRaidScheduleCommand({
     });
   }
 
-  // Lead-only control panel (ephemeral). Buttons reuse the rse: prefix so
-  // they route back through handleRaidScheduleButton. Grouped into 3 rows by
-  // purpose so colour follows meaning (the old single 5-button row interleaved
-  // grey + red and read as messy): row 1 = event config (all Secondary), row 2
-  // = people (Phân turn Primary + Kick Danger), row 3 = terminal actions (both
-  // Danger, kept together at the bottom). No shared interaction-router change.
-  function manageMenuPayload(event, lang) {
-    const id = String(event._id);
-    const locked = event.status === "locked";
-    const configRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`rse:${locked ? "unlock" : "lock"}:${id}`)
-        .setLabel(t(locked ? "raid-schedule.btn.unlock" : "raid-schedule.btn.lock", lang))
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId(`rse:setroom:${id}`)
-        .setLabel(t("raid-schedule.btn.setRoom", lang))
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId(`rse:edittime:${id}`)
-        .setLabel(t("raid-schedule.btn.editTime", lang))
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId(`rse:notify:${id}`)
-        .setLabel(t(event.skipNotify ? "raid-schedule.btn.notifyOff" : "raid-schedule.btn.notifyOn", lang))
-        .setStyle(ButtonStyle.Secondary),
-    );
-    const peopleRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`rse:teams:${id}`)
-        .setLabel(t("raid-schedule.btn.teams", lang))
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId(`rse:addmember:${id}`)
-        .setLabel(t("raid-schedule.btn.addMember", lang))
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`rse:kick:${id}`)
-        .setLabel(t("raid-schedule.btn.kick", lang))
-        .setStyle(ButtonStyle.Danger),
-    );
-    const terminalRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`rse:end:${id}`)
-        .setLabel(t("raid-schedule.btn.end", lang))
-        .setStyle(ButtonStyle.Danger),
-      new ButtonBuilder()
-        .setCustomId(`rse:cancel:${id}`)
-        .setLabel(t("raid-schedule.btn.cancelEvent", lang))
-        .setStyle(ButtonStyle.Danger),
-      new ButtonBuilder()
-        .setCustomId(`rse:delete:${id}`)
-        .setLabel(t("raid-schedule.btn.deleteEvent", lang))
-        .setStyle(ButtonStyle.Danger),
-    );
-    // HUD status readout so the lead sees the comp state at a glance in their
-    // control panel: mono raid · status line + slot-fill gauge.
-    const slots = assignSlots(event.signups, { supSlots: event.supSlots, dpsSlots: event.dpsSlots });
-    const compCount = slots.support.length + slots.dps.length;
-    const raidLabel = raidMetaFor(event.raidKey, event.modeKey)?.label || `${event.raidKey} ${event.modeKey}`;
-    const gauge = renderGauge(compCount, event.partySize);
-    const manageDesc = [
-      `\`${raidLabel} · ${STATUS_CODE[event.status] || ""}\``,
-      `${gauge ? `${gauge}  ` : ""}**${compCount}/${event.partySize}** · ⏳ ${slots.waitlist.length}`,
-      t("raid-schedule.notice.manageDescription", lang),
-    ].join("\n");
-    return {
-      embeds: [
-        noticeEmbed(
-          "info",
-          t("raid-schedule.notice.manageTitle", lang),
-          manageDesc,
-        ),
-      ],
-      components: [configRow, peopleRow, terminalRow],
-      flags: ephemeralFlag,
-    };
-  }
-
   async function handleManage(interaction, event, lang) {
     if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
     await interaction.reply(manageMenuPayload(event, lang));
@@ -811,34 +749,6 @@ function createRaidScheduleCommand({
     return false;
   }
 
-  // Manual hard-delete (lead). Cancel freezes the board as a record; Delete
-  // removes the board message AND the RaidEvent doc. A confirm step guards the
-  // irreversible loss (the auto-purge handles the routine weekly cleanup).
-  function deleteConfirmPayload(event, lang) {
-    const id = String(event._id);
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`rse:delyes:${id}`)
-        .setLabel(t("raid-schedule.btn.deleteConfirmYes", lang))
-        .setStyle(ButtonStyle.Danger),
-      new ButtonBuilder()
-        .setCustomId(`rse:delno:${id}`)
-        .setLabel(t("raid-schedule.btn.deleteConfirmNo", lang))
-        .setStyle(ButtonStyle.Secondary),
-    );
-    return {
-      embeds: [
-        noticeEmbed(
-          "danger",
-          t("raid-schedule.notice.deleteConfirmTitle", lang),
-          t("raid-schedule.notice.deleteConfirmDescription", lang),
-        ),
-      ],
-      components: [row],
-      flags: ephemeralFlag,
-    };
-  }
-
   async function handleDeletePrompt(interaction, event, lang) {
     if (await rejectUnlessLead(interaction, lang)) return;
     await interaction.reply(deleteConfirmPayload(event, lang));
@@ -916,30 +826,6 @@ function createRaidScheduleCommand({
     }).catch(() => {});
   }
 
-  // Lead kick panel: a multi-select of the whole signup pool (comp +
-  // waitlist + RSVP), so the lead can drop anyone. Removing a slot-holder
-  // frees the slot, which detectPromotion turns into a waitlist promotion.
-  function kickSelectPayload(event, lang) {
-    const options = signupSelectOptions(event.signups, lang);
-    const select = new StringSelectMenuBuilder()
-      .setCustomId(`rse:kickpick:${event._id}`)
-      .setPlaceholder(t("raid-schedule.kick.placeholder", lang))
-      .setMinValues(1)
-      .setMaxValues(options.length)
-      .addOptions(options);
-    return {
-      embeds: [
-        noticeEmbed(
-          "warn",
-          t("raid-schedule.kick.title", lang),
-          t("raid-schedule.kick.intro", lang),
-        ),
-      ],
-      components: [new ActionRowBuilder().addComponents(select)],
-      flags: ephemeralFlag,
-    };
-  }
-
   async function handleKick(interaction, event, lang) {
     if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
     if (!Array.isArray(event.signups) || event.signups.length === 0) {
@@ -1000,47 +886,6 @@ function createRaidScheduleCommand({
         console.warn("[raid-schedule] kick promote ping failed:", error?.message || error);
       }
     }
-  }
-
-  // Lead add-member: a native User Select picks the target, then a char Select
-  // (the target's eligible roster) writes the signup on their behalf via
-  // applyJoin. Works even when locked (manager-add bypasses the lock gate).
-  function addUserSelectPayload(event, lang) {
-    const select = new UserSelectMenuBuilder()
-      .setCustomId(`rse:adduser:${event._id}`)
-      .setPlaceholder(t("raid-schedule.addMember.userPlaceholder", lang))
-      .setMinValues(1)
-      .setMaxValues(1);
-    return {
-      embeds: [
-        noticeEmbed(
-          "success",
-          t("raid-schedule.addMember.title", lang),
-          t("raid-schedule.addMember.intro", lang),
-        ),
-      ],
-      components: [new ActionRowBuilder().addComponents(select)],
-      flags: ephemeralFlag,
-    };
-  }
-
-  function addCharSelectPayload(event, targetId, rows, lang) {
-    const select = new StringSelectMenuBuilder()
-      .setCustomId(`rse:addpick:${targetId}:${event._id}`)
-      .setPlaceholder(t("raid-schedule.addMember.charPlaceholder", lang))
-      .setMinValues(1)
-      .setMaxValues(1)
-      .addOptions(characterSelectOptions(rows, lang));
-    return {
-      embeds: [
-        noticeEmbed(
-          "success",
-          t("raid-schedule.addMember.charTitle", lang),
-          t("raid-schedule.addMember.charIntro", lang, { user: `<@${targetId}>` }),
-        ),
-      ],
-      components: [new ActionRowBuilder().addComponents(select)],
-    };
   }
 
   async function handleAddMember(interaction, event, lang) {
@@ -1170,63 +1015,6 @@ function createRaidScheduleCommand({
   function markTurns(event, turns) {
     event.turns = turns;
     if (typeof event.markModified === "function") event.markModified("turns");
-  }
-
-  // Lead control panel for the multi-turn (bus) plan. Lists turns + a
-  // select to pick which turn to edit (or add one). Picking a turn swaps
-  // in a multi-select of the signup pool with current members pre-checked.
-  function teamsPanelPayload(event, lang) {
-    const turns = Array.isArray(event.turns) ? event.turns : [];
-    const lines = turns.length
-      ? turns
-          .map((tn) => t("raid-schedule.teams.turnLine", lang, { name: tn.name, n: (tn.memberIds || []).length }))
-          .join("\n")
-      : t("raid-schedule.teams.none", lang);
-    const options = turns.map((tn, i) => ({
-      label: clip(tn.name, 100),
-      value: String(i),
-      description: clip(t("raid-schedule.teams.memberCount", lang, { n: (tn.memberIds || []).length }), 100),
-    }));
-    options.push({ label: t("raid-schedule.teams.newTurn", lang), value: "new" });
-    const row = new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId(`rse:teamturn:${event._id}`)
-        .setPlaceholder(t("raid-schedule.teams.pickTurn", lang))
-        .addOptions(options.slice(0, 25)),
-    );
-    return {
-      embeds: [
-        noticeEmbed(
-          "info",
-          t("raid-schedule.teams.title", lang),
-          `${t("raid-schedule.teams.intro", lang)}\n\n${lines}`,
-        ),
-      ],
-      components: [row],
-      flags: ephemeralFlag,
-    };
-  }
-
-  function memberSelectPayload(event, turnIndex, lang) {
-    const turn = event.turns[turnIndex];
-    const current = new Set(turn.memberIds || []);
-    const options = signupSelectOptions(event.signups, lang, current);
-    const select = new StringSelectMenuBuilder()
-      .setCustomId(`rse:teammembers:${turnIndex}:${event._id}`)
-      .setPlaceholder(clip(t("raid-schedule.teams.pickMembers", lang, { turn: turn.name }), 150))
-      .setMinValues(0)
-      .setMaxValues(options.length)
-      .addOptions(options);
-    return {
-      embeds: [
-        noticeEmbed(
-          "info",
-          t("raid-schedule.teams.assignTitle", lang, { turn: turn.name }),
-          t("raid-schedule.teams.assignIntro", lang),
-        ),
-      ],
-      components: [new ActionRowBuilder().addComponents(select)],
-    };
   }
 
   async function handleTeams(interaction, event, lang) {
@@ -1431,27 +1219,6 @@ function createRaidScheduleCommand({
     // Default selection = the board in the channel the lead stands in, else soonest.
     const target = mine.find((e) => String(e.channelId) === String(channelId)) || mine[0];
     await interaction.reply(turnPlanDashboardPayload(target, mine, lang));
-  }
-
-  // The ephemeral dashboard payload: the selected board's turn plan + a board
-  // switcher (only when the lead runs >= 2 boards). Reused verbatim on switch.
-  function turnPlanDashboardPayload(event, ownedEvents, lang) {
-    const components = [];
-    if (ownedEvents.length >= 2) {
-      const rows = shapeOwnedBoardOptions(ownedEvents, String(event._id));
-      components.push(buildSwitcherRow(String(event._id), rows, {
-        ActionRowBuilder,
-        StringSelectMenuBuilder,
-        lang,
-        action: "showtp",
-        placeholderKey: "raid-schedule.show.tpSwitchPlaceholder",
-      }));
-    }
-    return {
-      embeds: [buildTurnPlanEmbed(event, { EmbedBuilder, UI, lang })],
-      components,
-      flags: ephemeralFlag,
-    };
   }
 
   // 🗓 dashboard switcher -> swap the ephemeral to the chosen board's turn plan.
