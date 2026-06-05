@@ -21,6 +21,7 @@
 const { buildNoticeEmbed, replyNotice } = require("../../utils/raid/common/shared");
 const { disableComponentRows } = require("../../utils/discord/component-rows");
 const { firstSelectValue } = require("../../utils/discord/component-values");
+const { splitCustomId } = require("../../utils/discord/custom-id");
 const { t, getUserLanguage } = require("../../services/i18n");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 
@@ -547,7 +548,7 @@ function createEditUi({
         }).catch(() => {});
         return;
       }
-      const parts = (component.customId || "").split(":");
+      const parts = splitCustomId(component.customId);
       // parts[0] = "raid-check-edit", parts[1] = action, parts[2] = value (if any)
       const action = parts[1];
 
