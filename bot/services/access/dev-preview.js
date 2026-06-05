@@ -9,19 +9,17 @@
 // the preview = every gated surface rejects, matching RAID_MANAGER_ID.
 "use strict";
 
+const {
+  parseEnvAllowlistIds,
+  createEnvAllowlistChecker,
+} = require("./env-allowlist");
+
 function parseDevUserIds(rawEnvValue) {
-  const raw = typeof rawEnvValue === "string" ? rawEnvValue : (process.env.DEV_USER || "");
-  return new Set(
-    raw
-      .split(/[\s,]+/)
-      // Strip surrounding quotes per token: a `.env` value like
-      // DEV_USER="123,456" may reach us still quoted depending on the loader.
-      .map((s) => s.trim().replace(/^["']+|["']+$/g, ""))
-      .filter(Boolean)
-  );
+  return parseEnvAllowlistIds(rawEnvValue, { envName: "DEV_USER" });
 }
 
 const DEV_USER_IDS = parseDevUserIds();
+const isDevUserId = createEnvAllowlistChecker(DEV_USER_IDS);
 
 /**
  * Whether a Discord user is in the dev-preview allowlist (DEV_USER env).
@@ -29,8 +27,7 @@ const DEV_USER_IDS = parseDevUserIds();
  * @returns {boolean} true only if the id is explicitly allowlisted
  */
 function isDevUser(discordId) {
-  if (!discordId) return false;
-  return DEV_USER_IDS.has(String(discordId));
+  return isDevUserId(discordId);
 }
 
 module.exports = {

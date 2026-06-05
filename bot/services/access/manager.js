@@ -9,6 +9,11 @@
 // privilege config across env + DB. Consistent with AUTO_MANAGE_DAILY_DISABLED
 // and other boot-time toggles.
 
+const {
+  parseEnvAllowlistIds,
+  createEnvAllowlistChecker,
+} = require("./env-allowlist");
+
 const DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS = 10 * 60 * 1000;
 const MANAGER_AUTO_MANAGE_SYNC_COOLDOWN_MS = 15 * 1000;
 
@@ -23,20 +28,14 @@ const DEFAULT_ROSTER_REFRESH_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const MANAGER_ROSTER_REFRESH_COOLDOWN_MS = 10 * 60 * 1000;
 
 function parseManagerIds(rawEnvValue) {
-  const raw = typeof rawEnvValue === "string" ? rawEnvValue : (process.env.RAID_MANAGER_ID || "");
-  return new Set(
-    raw
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean)
-  );
+  return parseEnvAllowlistIds(rawEnvValue, { envName: "RAID_MANAGER_ID" });
 }
 
 const MANAGER_IDS = parseManagerIds();
+const isAllowlistedManagerId = createEnvAllowlistChecker(MANAGER_IDS);
 
 function isManagerId(discordId) {
-  if (!discordId) return false;
-  return MANAGER_IDS.has(String(discordId));
+  return isAllowlistedManagerId(discordId);
 }
 
 function getAutoManageCooldownMs(discordId) {
