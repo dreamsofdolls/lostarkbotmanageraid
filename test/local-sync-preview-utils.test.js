@@ -5,7 +5,7 @@ const { pathToFileURL } = require("node:url");
 const { buildLocalSyncCatalog } = require("../bot/services/local-sync/catalog");
 
 async function loadPreviewUtils() {
-  const file = path.join(__dirname, "..", "web", "preview-utils.js");
+  const file = path.join(__dirname, "..", "web", "js", "sync", "preview-utils.js");
   const mod = await import(pathToFileURL(file).href);
   mod.setCatalog(buildLocalSyncCatalog());
   return mod;

@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 test("raid-profile score module computes bounded DPS and support score sets", async () => {
-  const { computeProfileScores, MIN_CONTEXT_SAMPLE_COUNT } = await import("../web/profile-score.js");
+  const { computeProfileScores, MIN_CONTEXT_SAMPLE_COUNT } = await import("../web/js/profile/profile-score.js");
 
   assert.equal(MIN_CONTEXT_SAMPLE_COUNT, 10);
 

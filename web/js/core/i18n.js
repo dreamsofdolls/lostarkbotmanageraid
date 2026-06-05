@@ -10,7 +10,7 @@
 
 "use strict";
 
-import { TRANSLATIONS, DEFAULT_LANG, SUPPORTED_LANGS } from "/sync/locales.js";
+import { TRANSLATIONS, DEFAULT_LANG, SUPPORTED_LANGS } from "/sync/js/core/locales.js";
 
 export function normalizeLang(raw) {
   if (typeof raw !== "string") return DEFAULT_LANG;

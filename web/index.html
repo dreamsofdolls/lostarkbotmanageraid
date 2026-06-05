@@ -6,7 +6,7 @@
   <!-- title gets overwritten in app.js once the active lang is resolved
        from the URL token; data-i18n keeps the key wired up. -->
   <title data-i18n="meta.pageTitle">Artist · Local Sync</title>
-  <link rel="stylesheet" href="/sync/styles.css" />
+  <link rel="stylesheet" href="/sync/css/styles.css" />
 </head>
 <body>
   <main class="container">
@@ -82,6 +82,6 @@
   <!-- wa-sqlite (asyncify build) loaded lazily by app.js when a file is dropped.
        We use the streaming VFS pattern so multi-GB encounters.db files work
        (sql.js needed full-file ArrayBuffer; Chrome caps that at ~2GB). -->
-  <script src="/sync/app.js" type="module"></script>
+  <script src="/sync/js/app.js" type="module"></script>
 </body>
 </html>

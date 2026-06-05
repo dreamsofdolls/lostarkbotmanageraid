@@ -21,16 +21,28 @@ async function startTestServer() {
 test("local-sync web server serves raid-profile browser helper modules", async () => {
   const { baseUrl, stop } = await startTestServer();
   try {
+    for (const [route, expectedContentType] of [
+      ["/sync", /text\/html/],
+      ["/sync/css/styles.css", /text\/css/],
+      ["/sync/js/app.js", /application\/javascript/],
+    ]) {
+      const resp = await fetch(`${baseUrl}${route}`);
+      assert.equal(resp.status, 200, `${route} should be served`);
+      assert.match(resp.headers.get("content-type") || "", expectedContentType);
+    }
+
     for (const [route, expectedExport] of [
-      ["/sync/profile-role.js", "classifyProfileLogRole"],
-      ["/sync/profile-metrics.js", "computeProfileConsistency"],
-      ["/sync/profile-score.js", "computeProfileScores"],
+      ["/sync/js/profile/profile-role.js", "classifyProfileLogRole"],
+      ["/sync/js/profile/profile-metrics.js", "computeProfileConsistency"],
+      ["/sync/js/profile/profile-score.js", "computeProfileScores"],
+      ["/sync/js/profile/profile-row-enrich.js", "enrichProfileRows"],
+      ["/sync/js/profile/profile-snapshot.js", "buildProfileSnapshot"],
     ]) {
       const resp = await fetch(`${baseUrl}${route}`);
       assert.equal(resp.status, 200, `${route} should be served`);
       assert.match(resp.headers.get("content-type") || "", /application\/javascript/);
       const body = await resp.text();
-      assert.match(body, new RegExp(`export function ${expectedExport}`));
+      assert.match(body, new RegExp(`export (?:async )?function ${expectedExport}`));
     }
   } finally {
     await stop();

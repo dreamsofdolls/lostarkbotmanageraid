@@ -6,7 +6,7 @@
 //     POST sync. Adding a framework would ship 100kB+ of runtime for
 //     ~280 LOC of logic.
 //   - wa-sqlite (asyncify build) loaded from jsdelivr. We use a custom
-//     async VFS (web/file-vfs.js) that streams from File.slice() so
+//     async VFS (web/js/sync/file-vfs.js) that streams from File.slice() so
 //     multi-GB encounters.db files don't blow Chrome's ArrayBuffer cap
 //     (sql.js, the previous library, required full-file load and broke
 //     at 4 GB with NotReadableError).
@@ -14,7 +14,7 @@
 //     on a 4 GB DB. Schema-detection via PRAGMA table_info adapts the
 //     query to whichever LOA Logs version wrote the file.
 //   - Active locale comes from the JWT token payload (`lang` field
-//     minted by the bot). web/i18n.js + web/locales.js power the
+//     minted by the bot). web/js/core/i18n.js + web/js/core/locales.js power the
 //     vi/jp/en string swap. data-i18n attributes in index.html drive
 //     the static-text swap; dynamic UI strings call t() inline.
 
@@ -26,17 +26,17 @@ import {
   t,
   getRaidLabel,
   getModeLabel,
-} from "/sync/i18n.js";
+} from "/sync/js/core/i18n.js";
 import {
   saveHandle as savePersistedHandle,
   clearHandle as clearPersistedHandle,
   tryRestoreForUser,
-} from "/sync/file-persistence.js";
+} from "/sync/js/sync/file-persistence.js";
 import {
   startProfileAutoSync,
   syncProfileSnapshotOnce,
   stopProfileAutoSync,
-} from "/sync/profile-sync.js";
+} from "/sync/js/profile/profile-sync.js";
 
 const $ = (id) => document.getElementById(id);
 const authStatus = $("auth-status");
@@ -65,7 +65,7 @@ let lockedSyncMode = null;
 
 function loadPreviewUtils() {
   if (!previewUtilsPromise) {
-    previewUtilsPromise = import("/sync/preview-utils.js").then(async (mod) => {
+    previewUtilsPromise = import("/sync/js/sync/preview-utils.js").then(async (mod) => {
       await mod.loadCatalog();
       window.__artistGetClassIconForLabel = mod.getClassIconForLabel;
       return mod;
@@ -752,7 +752,7 @@ async function loadAndPreview(file) {
     const [SQLiteESMFactoryModule, SQLiteAPI, FileVfsModule] = await Promise.all([
       import(`${WA_SQLITE_BASE}/dist/wa-sqlite-async.mjs`),
       import(`${WA_SQLITE_BASE}/src/sqlite-api.js`),
-      import("/sync/file-vfs.js"),
+      import("/sync/js/sync/file-vfs.js"),
     ]);
     const SQLiteESMFactory = SQLiteESMFactoryModule.default;
     const { FileBackedVFS } = FileVfsModule;
