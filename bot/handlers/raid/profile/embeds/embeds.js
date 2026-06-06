@@ -15,6 +15,7 @@ const {
   confidenceForLogs,
   footerTimestamp,
   formatDateMs,
+  gaugeBar,
   hudFieldName,
   isBibleSummaryProfile,
   latestSnapshotMs,
@@ -40,59 +41,71 @@ const {
 } = require("../helpers/list-lines");
 const { PROFILE_COLORS } = require("../helpers/colors");
 
+// Compact code-block roster table for the OVERALL view (ops-brief look). A
+// fenced code block is the only way to get true column alignment in a Discord
+// embed - proportional field text drifts. Per-row gauge kept (wider, ~46 cols,
+// may scroll on mobile); rows cap at 10 with an overflow tail.
+function buildRosterTable(entries, lang) {
+  if (!entries.length) return t("raidProfile.noProfiles", lang);
+  const NAME_W = 14;
+  const CAP = 10;
+  const fitName = (value) => {
+    const str = String(value || "");
+    return str.length > NAME_W ? `${str.slice(0, NAME_W - 1)}…` : str.padEnd(NAME_W);
+  };
+  const header = `${"#".padStart(2)} ${"NAME".padEnd(NAME_W)} ${"CHAR".padStart(4)} ${"LOG".padStart(5)}  SCORE`;
+  const rows = entries.slice(0, CAP).map((entry, index) => {
+    const agg = aggregateCharacters(entry.characters);
+    return `${String(index + 1).padStart(2)} ${fitName(getEntryLabel(entry))} ${String(agg.charCount).padStart(4)} ${String(agg.logs).padStart(5)}  ${gaugeBar(agg.overall)} ${score(agg.overall)}`;
+  });
+  if (entries.length > CAP) {
+    rows.push(`   +${entries.length - CAP} roster…`);
+  }
+  return `\`\`\`\n${[header, ...rows].join("\n")}\n\`\`\``;
+}
+
 function buildOverallEmbed({ EmbedBuilder }, session) {
   const lang = session.lang || "vi";
   const chars = flattenCharacters(session.entries);
   const agg = aggregateCharacters(chars);
   const topOverall = pickTopChar(chars, "overall");
-  const topMvp = pickTopChar(chars, "mvp");
+  // Roster + character counts move up into the kicker so the SCOPE field can
+  // shed its two count rows and share the top row with AGGREGATE 50/50.
   const embed = new EmbedBuilder()
     .setColor(PROFILE_COLORS.amber)
-    .setAuthor({ name: "// RAID PROFILE · OVERALL" })
+    .setAuthor({
+      name: `// RAID PROFILE · OVERALL · ${session.entries.length} ROSTER · ${agg.charCount} CHAR`,
+    })
     .setTitle(t("raidProfile.overallTitle", lang))
-    .setDescription(t("raidProfile.overallDesc", lang))
     .addFields(
       {
         name: hudFieldName("scope"),
         value: [
-          `Roster: **${session.entries.length}**`,
-          `Character: **${agg.charCount}**`,
-          `${t("raidProfile.validLogs", lang)}: **${agg.logs}**`,
-          `Scored logs: **${agg.scoredLogs}**`,
+          `Log / scored: **${agg.logs} / ${agg.scoredLogs}**`,
           `${t("raidProfile.lastFight", lang)}: ${formatDateMs(agg.lastFightStart)}`,
+          topOverall
+            ? `★ top: **${topOverall.name}** ${score(topOverall.scores.overall)}`
+            : "★ top: **N/A**",
         ].join("\n"),
         inline: true,
       },
       {
-        name: hudFieldName("aggregate score"),
+        name: hudFieldName("aggregate"),
         value: [
-          scoreLine("Overall", agg.overall),
+          scoreLine("Ov", agg.overall),
           scoreLine("MVP", agg.mvp),
-          agg.dpsCount ? scoreLine("DPS avg", agg.dpsOverall) : "DPS avg: **N/A**",
-          agg.supportCount ? scoreLine("SUP avg", agg.supportOverall) : "SUP avg: **N/A**",
+          agg.dpsCount ? scoreLine("DPS", agg.dpsOverall) : "DPS: **N/A**",
+          agg.supportCount ? scoreLine("SUP", agg.supportOverall) : "SUP: **N/A**",
         ].join("\n"),
         inline: true,
       },
       {
-        name: hudFieldName("top"),
-        value: [
-          topOverall ? `★ Overall: **${topOverall.name}** ${renderGauge(topOverall.scores.overall)}` : "Overall: N/A",
-          topMvp ? `★ MVP: **${topMvp.name}** ${renderGauge(topMvp.scores.mvp)}` : "MVP: N/A",
-        ].join("\n"),
+        name: hudFieldName("roster"),
+        value: buildRosterTable(session.entries, lang),
         inline: false,
       }
     );
 
-  const rosterLines = sliceMapWithOverflow(session.entries, 10, (entry, index) => {
-    const rosterAgg = aggregateCharacters(entry.characters);
-    const prefix = entry.isOwn ? "Own" : "Shared";
-    return `\`${index + 1}.\` **${getEntryLabel(entry)}** · ${prefix} · ${rosterAgg.charCount} char · ${rosterAgg.logs} log · score ${score(rosterAgg.overall)}`;
-  });
-  embed.addFields({
-    name: hudFieldName("roster"),
-    value: rosterLines.length ? rosterLines.join("\n") : t("raidProfile.noProfiles", lang),
-    inline: false,
-  });
   embed.setFooter({
     text: `// ${sourceSummaryForEntries(session.entries)} · ${footerTimestamp(latestSnapshotMs(session.entries))} · ${agg.logs} LOG · ${agg.scoredLogs} SCORED · CONF ${confidenceForLogs(agg.scoredLogs).toUpperCase()}`,
   });
