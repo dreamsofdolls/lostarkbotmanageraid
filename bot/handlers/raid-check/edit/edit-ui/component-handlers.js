@@ -1,9 +1,9 @@
 "use strict";
 
-const { disableComponentRows } = require("../../../utils/discord/component-rows");
-const { firstSelectValue } = require("../../../utils/discord/component-values");
-const { t } = require("../../../services/i18n");
-const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
+const { disableComponentRows } = require("../../../../utils/discord/component-rows");
+const { firstSelectValue } = require("../../../../utils/discord/component-values");
+const { t } = require("../../../../services/i18n");
+const { getRaidModeLabel } = require("../../../../utils/raid/common/labels");
 const { RAID_CHECK_EDIT_COMPONENT_ACTION } = require("./component-routes");
 const { loadEditableRaidContext } = require("./session");
 

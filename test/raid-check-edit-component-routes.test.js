@@ -7,7 +7,7 @@ const {
   RAID_CHECK_EDIT_COMPONENT_ACTION,
   getRaidCheckEditComponentRoute,
   parseRaidCheckEditComponentCustomId,
-} = require("../bot/handlers/raid-check/edit-ui/component-routes");
+} = require("../bot/handlers/raid-check/edit/edit-ui/component-routes");
 
 test("raid-check edit component parser keeps prefix, action, and value slots", () => {
   assert.deepEqual(parseRaidCheckEditComponentCustomId("raid-check-edit:gate:G2"), {

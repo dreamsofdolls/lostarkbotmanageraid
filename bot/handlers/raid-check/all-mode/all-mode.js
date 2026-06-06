@@ -3,7 +3,7 @@
 const { buildNoticeEmbed, replyNotice, UI } = require("../../../utils/raid/common/shared");
 const { firstSelectValue } = require("../../../utils/discord/component-values");
 const { t, getUserLanguage } = require("../../../services/i18n");
-const { createTeamsViewUi } = require("../teams-view");
+const { createTeamsViewUi } = require("../views/teams-view");
 const { computeAllModePendingAggregate } = require("./all-mode-aggregate");
 const { addAllModeActionButtons } = require("./all-mode-buttons");
 const {

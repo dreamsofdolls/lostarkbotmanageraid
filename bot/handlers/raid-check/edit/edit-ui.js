@@ -1,8 +1,8 @@
 "use strict";
 
-const { buildNoticeEmbed, replyNotice } = require("../../utils/raid/common/shared");
-const { disableComponentRows } = require("../../utils/discord/component-rows");
-const { t, getUserLanguage } = require("../../services/i18n");
+const { buildNoticeEmbed, replyNotice } = require("../../../utils/raid/common/shared");
+const { disableComponentRows } = require("../../../utils/discord/component-rows");
+const { t, getUserLanguage } = require("../../../services/i18n");
 const {
   getRaidCheckEditComponentRoute,
 } = require("./edit-ui/component-routes");

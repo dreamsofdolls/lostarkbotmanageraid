@@ -1,7 +1,7 @@
 "use strict";
 
-const { t } = require("../../../services/i18n");
-const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
+const { t } = require("../../../../services/i18n");
+const { getRaidModeLabel } = require("../../../../utils/raid/common/labels");
 
 const EDIT_DM_ACTION_BUILDERS = {
   complete: ({ lang }) => t("raid-check.editDm.actionComplete", lang),

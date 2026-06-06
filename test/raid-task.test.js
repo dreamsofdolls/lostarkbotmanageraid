@@ -815,7 +815,7 @@ test("PROJECTION: RAID_CHECK_USER_QUERY_FIELDS allowlist includes sideTasks", ()
 });
 
 test("raid-check task view renders roster shared tasks even without side tasks", async () => {
-  const { createTaskViewUi } = require("../bot/handlers/raid-check/task-view-ui");
+  const { createTaskViewUi } = require("../bot/handlers/raid-check/views/task-view-ui");
   let selectedFields = "";
   const userDoc = {
     discordId: "u1",

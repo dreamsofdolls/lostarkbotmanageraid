@@ -6,7 +6,7 @@ const assert = require("node:assert/strict");
 const {
   resolvePickedRaidLabel,
   resolveRaidCheckEditEmbedState,
-} = require("../bot/handlers/raid-check/edit-ui/state");
+} = require("../bot/handlers/raid-check/edit/edit-ui/state");
 
 const raidRequirementMap = {
   act4_normal: {

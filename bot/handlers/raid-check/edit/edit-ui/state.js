@@ -1,7 +1,7 @@
 "use strict";
 
-const { t } = require("../../../services/i18n");
-const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
+const { t } = require("../../../../services/i18n");
+const { getRaidModeLabel } = require("../../../../utils/raid/common/labels");
 
 const DOT = "\u00b7";
 const LOCK = "\u{1f512}";

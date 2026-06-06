@@ -1259,19 +1259,19 @@ test("REGRESSION: raid-check Sync/Edit flows request fresh snapshot data", () =>
   const fs = require("fs");
   const path = require("path");
   const syncSrc = fs.readFileSync(
-    path.join(__dirname, "..", "bot", "handlers", "raid-check", "sync-ui.js"),
+    path.join(__dirname, "..", "bot", "handlers", "raid-check", "views", "sync-ui.js"),
     "utf8"
   );
   const editSrc = fs.readFileSync(
-    path.join(__dirname, "..", "bot", "handlers", "raid-check", "edit-ui.js"),
+    path.join(__dirname, "..", "bot", "handlers", "raid-check", "edit", "edit-ui.js"),
     "utf8"
   );
   const editSessionSrc = fs.readFileSync(
-    path.join(__dirname, "..", "bot", "handlers", "raid-check", "edit-ui", "session.js"),
+    path.join(__dirname, "..", "bot", "handlers", "raid-check", "edit", "edit-ui", "session.js"),
     "utf8"
   );
   const editHandlersSrc = fs.readFileSync(
-    path.join(__dirname, "..", "bot", "handlers", "raid-check", "edit-ui", "component-handlers.js"),
+    path.join(__dirname, "..", "bot", "handlers", "raid-check", "edit", "edit-ui", "component-handlers.js"),
     "utf8"
   );
 

@@ -7,7 +7,7 @@ const {
   MessageFlags,
 } = require("discord.js");
 
-const { createTeamsViewUi } = require("../bot/handlers/raid-check/teams-view");
+const { createTeamsViewUi } = require("../bot/handlers/raid-check/views/teams-view");
 const { buildScheduleEmbed, buildTurnPlanEmbed } = require("../bot/handlers/raid/schedule/view/board");
 const { UI } = require("../bot/utils/raid/common/shared");
 
