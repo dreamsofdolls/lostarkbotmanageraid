@@ -228,6 +228,161 @@ function round2(n) {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
+// Minimum logs in the secondary (off-meta) build before a support-class
+// character is treated as flex and its alt build gets its own score.
+const MIN_ALT_BUILD_LOGS = 3;
+
+// Per-build performance stats for one set of rows (one build of one character).
+// Extracted verbatim from the inline block so the primary path and the flex
+// alt build share identical math. Char-level fields that depend on the FULL log
+// set (allEncounterCount, the support/dps split counts/rates) are added by the
+// caller, not here - this function only sees one build's rows.
+function computeBuildStats(profileRows, role, buildVariants) {
+  const latestRow = profileRows.reduce((best, row) => ((row.fightStart || 0) > (best.fightStart || 0) ? row : best), profileRows[0]);
+  const dps = profileRows.map((r) => r.dps);
+  const peak10sDps = profileRows.map((r) => r.peak10sDps).filter((n) => n > 0);
+  const burstRatios = profileRows.map((r) => r.burstRatio).filter((n) => n > 0);
+  const rdps = profileRows.map((r) => r.rdps);
+  const ndps = profileRows.map((r) => r.ndps);
+  const shares = profileRows.map((r) => r.damageShare);
+  const ranks = profileRows.map((r) => r.damageRank).filter((n) => n > 0);
+  const counters = profileRows.map((r) => r.counters);
+  const damageRows = profileRows.filter((r) => r.hasDamageStats);
+  const protections = profileRows.map((r) => r.protection);
+  const protectionPerMinute = profileRows.map((r) => r.protectionPerMinute);
+  const deathCounts = profileRows.map((r) => Number(r.deathCount) || 0);
+  const totalDeaths = deathCounts.reduce((sum, n) => sum + n, 0);
+  const deathRows = deathCounts.filter((n) => n > 0).length;
+  const deadTimes = profileRows.map((r) => Number(r.deadTimeMs) || 0);
+  const totalDeadTimeMs = deadTimes.reduce((sum, n) => sum + n, 0);
+  const damageTakenShareRows = damageRows.filter((r) => r.damageTakenShareValid);
+  const rdpsValidRows = profileRows.filter((r) => r.rdpsValid);
+  const rdpsValidCount = rdpsValidRows.length;
+  const supporterRows = rdpsValidRows.length ? rdpsValidRows : profileRows;
+  const supporterPercents = supporterRows.map((r) => Number(r.supporterPercent) || 0);
+  const radiantSupportCount = supporterRows.filter((r) => r.supporterTier === "radiant").length;
+  const supporterRankRows = supporterRows.filter((r) => (Number(r.supporterRank) || 0) > 0 && (Number(r.supporterCount) || 0) > 0);
+  const supporterCompetitiveRows = supporterRankRows.filter((r) => (Number(r.supporterCount) || 0) > 1);
+  const contextRows = profileRows.filter((r) => (Number(r.contextSampleCount) || 0) >= MIN_CONTEXT_SAMPLE_COUNT && r.contextSource !== "none");
+  const dpsContextRows = contextRows.filter((r) => r.logRole !== "support");
+  const supportContextRows = contextRows.filter((r) => r.logRole === "support");
+  const avgBackAttackRate = round1(average(profileRows.map((r) => r.backAttackRate)));
+  const avgFrontAttackRate = round1(average(profileRows.map((r) => r.frontAttackRate)));
+  const avgBackAttackDamageShare = round1(average(profileRows.map((r) => r.backAttackDamageShare)));
+  const avgFrontAttackDamageShare = round1(average(profileRows.map((r) => r.frontAttackDamageShare)));
+  const arkRows = profileRows.filter((r) => r.arkPassiveActive !== null);
+  const buildVariantKeys = new Set(profileRows.map(buildVariantKey).filter(Boolean));
+  const unclassifiedBuildLogCount = countUnclassifiedBuildRows(profileRows);
+  return {
+    encounters: profileRows.length,
+    firstFightStart: minPositive(profileRows.map((r) => r.fightStart)),
+    lastFightStart: maxPositive(profileRows.map((r) => r.fightStart)),
+    avgDurationMs: Math.round(average(profileRows.map((r) => r.durationMs))),
+    avgActiveDurationMs: Math.round(average(profileRows.map((r) => r.activeDurationMs))),
+    avgIntermissionMs: Math.round(average(profileRows.map((r) => r.intermissionMs))),
+    avgActiveTimeRate: round1(average(profileRows.map((r) => r.activeTimeRate))),
+    avgDps: Math.round(average(dps)),
+    medianDps: Math.round(percentile(dps, 50)),
+    p75Dps: Math.round(percentile(dps, 75)),
+    p90Dps: Math.round(percentile(dps, 90)),
+    avgPeak10sDps: Math.round(average(peak10sDps)),
+    p90Peak10sDps: Math.round(percentile(peak10sDps, 90)),
+    avgBurstRatio: round2(average(burstRatios)),
+    avgRdps: Math.round(average(rdps)),
+    medianRdps: Math.round(percentile(rdps, 50)),
+    avgNdps: Math.round(average(ndps)),
+    medianNdps: Math.round(percentile(ndps, 50)),
+    avgDamageShare: round1(average(shares)),
+    medianDamageShare: round1(percentile(shares, 50)),
+    avgTopDamageProximity: round1(average(profileRows.map((r) => r.topDamageProximity))),
+    contextCoverageRate: round1((contextRows.length / profileRows.length) * 100),
+    contextSampleCountAvg: round1(average(contextRows.map((r) => r.contextSampleCount))),
+    avgContextPerformancePercentile: round1(average(contextRows.map((r) => r.contextPerformancePercentile))),
+    avgContextDamageSharePercentile: round1(average(dpsContextRows.map((r) => r.contextDamageSharePercentile))),
+    avgContextTopDamageProximityPercentile: round1(average(dpsContextRows.map((r) => r.contextTopDamageProximityPercentile))),
+    avgContextSupportPercentile: round1(average(supportContextRows.map((r) => r.contextSupportPercentile))),
+    topRate: round1((profileRows.filter((r) => r.damageRank === 1).length / profileRows.length) * 100),
+    avgRank: round2(average(ranks)),
+    partyCountAvg: round2(average(profileRows.map((r) => r.partyCount).filter((n) => n > 0))),
+    deathlessRate: round1(((profileRows.length - deathRows) / profileRows.length) * 100),
+    deathRate: round1((deathRows / profileRows.length) * 100),
+    totalDeaths,
+    avgDeaths: round2(average(deathCounts)),
+    totalDeadTimeMs: Math.round(totalDeadTimeMs),
+    avgDeadTimeMs: Math.round(average(deadTimes)),
+    avgDeadTimeRate: round1(average(profileRows.map((r) => r.deadTimeRate))),
+    rdpsValidCount,
+    rdpsValidRate: round1((rdpsValidCount / profileRows.length) * 100),
+    avgSupporterPercent: round1(average(supporterPercents)),
+    medianSupporterPercent: round1(percentile(supporterPercents, 50)),
+    radiantSupportCount,
+    radiantSupportRate: round1(supporterRows.length ? (radiantSupportCount / supporterRows.length) * 100 : 0),
+    avgSupporterDamageGivenPerMinute: Math.round(average(supporterRows.map((r) => r.supporterDamageGivenPerMinute))),
+    supporterRankValidCount: supporterRankRows.length,
+    supporterCompetitiveCount: supporterCompetitiveRows.length,
+    avgSupporterRank: round2(average(supporterRankRows.map((r) => r.supporterRank))),
+    supporterCountAvg: round2(average(supporterRankRows.map((r) => r.supporterCount))),
+    supporterTopRate: round1(supporterCompetitiveRows.length
+      ? (supporterCompetitiveRows.filter((r) => r.supporterRank === 1).length / supporterCompetitiveRows.length) * 100
+      : 0),
+    avgCounters: round2(average(counters)),
+    avgCastsPerMinute: round2(average(profileRows.map((r) => r.castsPerMinute))),
+    avgHitsPerMinute: round2(average(profileRows.map((r) => r.hitsPerMinute))),
+    avgCritRate: round1(average(profileRows.map((r) => r.critRate))),
+    avgCritDamageShare: round1(average(profileRows.map((r) => r.critDamageShare))),
+    avgBackAttackRate,
+    avgFrontAttackRate,
+    avgBackAttackDamageShare,
+    avgFrontAttackDamageShare,
+    avgPositionalDamageShare: round1(average(profileRows.map((r) => r.positionalDamageShare))),
+    attackStyle: classifyAttackStyle(avgBackAttackDamageShare || avgBackAttackRate, avgFrontAttackDamageShare || avgFrontAttackRate),
+    avgDamageTaken: Math.round(average(damageRows.map((r) => r.damageTaken))),
+    avgDamageTakenPerMinute: Math.round(average(damageRows.map((r) => r.damageTakenPerMinute))),
+    damageTakenShareValidCount: damageTakenShareRows.length,
+    avgDamageTakenShare: round1(average(damageTakenShareRows.map((r) => r.damageTakenShare))),
+    avgDamageAbsorbedPerMinute: Math.round(average(damageRows.map((r) => r.damageAbsorbedPerMinute))),
+    avgShieldReceivedPerMinute: Math.round(average(damageRows.map((r) => r.shieldReceivedPerMinute))),
+    avgStagger: Math.round(average(damageRows.map((r) => r.stagger))),
+    avgStaggerPerMinute: Math.round(average(damageRows.map((r) => r.staggerPerMinute))),
+    avgIncapacitations: round2(average(damageRows.map((r) => r.incapacitations))),
+    avgIncapacitationsPerMinute: round2(average(damageRows.map((r) => r.incapacitationsPerMinute))),
+    avgHyperShare: round1(average(damageRows.map((r) => r.hyperShare))),
+    avgUnbuffedShare: round1(average(damageRows.map((r) => r.unbuffedShare))),
+    avgUnbuffedDps: Math.round(average(damageRows.map((r) => r.unbuffedDps).filter((n) => n > 0))),
+    avgSupportBuffedShare: round1(average(damageRows.map((r) => r.supportBuffedShare))),
+    avgSupportDebuffedShare: round1(average(damageRows.map((r) => r.supportDebuffedShare))),
+    avgPartyBuffedShare: round1(average(damageRows.map((r) => r.partyBuffedShare))),
+    avgSelfBuffedShare: round1(average(damageRows.map((r) => r.selfBuffedShare))),
+    avgPartyDebuffedShare: round1(average(damageRows.map((r) => r.partyDebuffedShare))),
+    avgBattleItemDebuffedShare: round1(average(damageRows.map((r) => r.battleItemDebuffedShare))),
+    avgSkillCount: round1(average(profileRows.map((r) => r.skillCount))),
+    avgTopSkillShare: round1(average(profileRows.map((r) => r.topSkillShare))),
+    avgRdpsDamageGiven: Math.round(average(rdpsValidRows.map((r) => r.rdpsDamageGiven))),
+    avgRdpsDamageGivenPerMinute: Math.round(average(rdpsValidRows.map((r) => r.rdpsDamageGivenPerMinute))),
+    avgRdpsDamageReceivedSupport: Math.round(average(rdpsValidRows.map((r) => r.rdpsDamageReceivedSupport))),
+    avgRdpsDamageReceivedSupportPerMinute: Math.round(average(rdpsValidRows.map((r) => r.rdpsDamageReceivedSupportPerMinute))),
+    avgSynergyGiven: Math.round(average(profileRows.map((r) => r.synergyGiven))),
+    avgSynergyGivenPerMinute: Math.round(average(profileRows.map((r) => r.synergyGivenPerMinute))),
+    avgSynergyReceivedShare: round1(average(profileRows.map((r) => r.synergyReceivedShare))),
+    avgSupportAp: round2(average(profileRows.map((r) => r.supportAp))),
+    avgSupportBrand: round2(average(profileRows.map((r) => r.supportBrand))),
+    avgSupportIdentity: round2(average(profileRows.map((r) => r.supportIdentity))),
+    avgSupportHyper: round2(average(profileRows.map((r) => r.supportHyper))),
+    avgProtection: Math.round(average(protections)),
+    avgProtectionPerMinute: Math.round(average(protectionPerMinute)),
+    avgGearScore: round2(average(profileRows.map((r) => r.gearScore).filter((n) => n > 0))),
+    latestGearScore: round2(latestRow.gearScore),
+    avgCombatPower: round2(average(profileRows.map((r) => r.combatPower).filter((n) => n > 0))),
+    latestCombatPower: round2(latestRow.combatPower),
+    arkPassiveRate: arkRows.length
+      ? round1((arkRows.filter((r) => r.arkPassiveActive).length / arkRows.length) * 100)
+      : 0,
+    buildVariantCount: Math.max(buildVariantKeys.size, buildVariants.length),
+    unclassifiedBuildLogCount,
+    consistency: computeProfileConsistency(profileRows, role),
+  };
+}
+
 export function buildProfileSnapshot(rows, rosterAccounts, file, {
   range = null,
   minDurationMs = MIN_DURATION_MS,
@@ -253,37 +408,6 @@ export function buildProfileSnapshot(rows, rosterAccounts, file, {
     const profileRows = charRows.length ? charRows : allCharRows;
     const sample = profileRows[0];
     const latestRow = profileRows.reduce((best, row) => ((row.fightStart || 0) > (best.fightStart || 0) ? row : best), sample);
-    const dps = profileRows.map((r) => r.dps);
-    const peak10sDps = profileRows.map((r) => r.peak10sDps).filter((n) => n > 0);
-    const burstRatios = profileRows.map((r) => r.burstRatio).filter((n) => n > 0);
-    const rdps = profileRows.map((r) => r.rdps);
-    const ndps = profileRows.map((r) => r.ndps);
-    const shares = profileRows.map((r) => r.damageShare);
-    const ranks = profileRows.map((r) => r.damageRank).filter((n) => n > 0);
-    const counters = profileRows.map((r) => r.counters);
-    const damageRows = profileRows.filter((r) => r.hasDamageStats);
-    const protections = profileRows.map((r) => r.protection);
-    const protectionPerMinute = profileRows.map((r) => r.protectionPerMinute);
-    const deathCounts = profileRows.map((r) => Number(r.deathCount) || 0);
-    const totalDeaths = deathCounts.reduce((sum, n) => sum + n, 0);
-    const deathRows = deathCounts.filter((n) => n > 0).length;
-    const deadTimes = profileRows.map((r) => Number(r.deadTimeMs) || 0);
-    const totalDeadTimeMs = deadTimes.reduce((sum, n) => sum + n, 0);
-    const damageTakenShareRows = damageRows.filter((r) => r.damageTakenShareValid);
-    const rdpsValidRows = profileRows.filter((r) => r.rdpsValid);
-    const rdpsValidCount = rdpsValidRows.length;
-    const supporterRows = rdpsValidRows.length ? rdpsValidRows : profileRows;
-    const supporterPercents = supporterRows.map((r) => Number(r.supporterPercent) || 0);
-    const radiantSupportCount = supporterRows.filter((r) => r.supporterTier === "radiant").length;
-    const supporterRankRows = supporterRows.filter((r) => (Number(r.supporterRank) || 0) > 0 && (Number(r.supporterCount) || 0) > 0);
-    const supporterCompetitiveRows = supporterRankRows.filter((r) => (Number(r.supporterCount) || 0) > 1);
-    const contextRows = profileRows.filter((r) => (Number(r.contextSampleCount) || 0) >= MIN_CONTEXT_SAMPLE_COUNT && r.contextSource !== "none");
-    const dpsContextRows = contextRows.filter((r) => r.logRole !== "support");
-    const supportContextRows = contextRows.filter((r) => r.logRole === "support");
-    const avgBackAttackRate = round1(average(profileRows.map((r) => r.backAttackRate)));
-    const avgFrontAttackRate = round1(average(profileRows.map((r) => r.frontAttackRate)));
-    const avgBackAttackDamageShare = round1(average(profileRows.map((r) => r.backAttackDamageShare)));
-    const avgFrontAttackDamageShare = round1(average(profileRows.map((r) => r.frontAttackDamageShare)));
     const topSkills = mergeTopSkills(profileRows);
     const topBuffSources = mergeTopSources(profileRows, "topBuffSources", (r) => r.damageDealt);
     const topDebuffSources = mergeTopSources(profileRows, "topDebuffSources", (r) => r.damageDealt);
@@ -293,12 +417,9 @@ export function buildProfileSnapshot(rows, rosterAccounts, file, {
       "topShieldReceivedSources",
       (r) => r.shieldsReceived + r.damageAbsorbed
     );
-    const arkRows = profileRows.filter((r) => r.arkPassiveActive !== null);
-    const buildVariantKeys = new Set(profileRows.map(buildVariantKey).filter(Boolean));
     const buildVariants = summarizeBuildVariants(profileRows);
-    const unclassifiedBuildLogCount = countUnclassifiedBuildRows(profileRows);
     const stats = {
-      encounters: profileRows.length,
+      ...computeBuildStats(profileRows, role, buildVariants),
       allEncounterCount: allCharRows.length,
       supportLogCount: supportRows.length,
       dpsBuildLogCount: classRole === "support" ? dpsBuildRows.length : 0,
@@ -307,112 +428,20 @@ export function buildProfileSnapshot(rows, rosterAccounts, file, {
         ? round1((dpsBuildRows.length / allCharRows.length) * 100)
         : 0,
       primaryRoleRate: allCharRows.length ? round1((profileRows.length / allCharRows.length) * 100) : 0,
-      firstFightStart: minPositive(profileRows.map((r) => r.fightStart)),
-      lastFightStart: maxPositive(profileRows.map((r) => r.fightStart)),
-      avgDurationMs: Math.round(average(profileRows.map((r) => r.durationMs))),
-      avgActiveDurationMs: Math.round(average(profileRows.map((r) => r.activeDurationMs))),
-      avgIntermissionMs: Math.round(average(profileRows.map((r) => r.intermissionMs))),
-      avgActiveTimeRate: round1(average(profileRows.map((r) => r.activeTimeRate))),
-      avgDps: Math.round(average(dps)),
-      medianDps: Math.round(percentile(dps, 50)),
-      p75Dps: Math.round(percentile(dps, 75)),
-      p90Dps: Math.round(percentile(dps, 90)),
-      avgPeak10sDps: Math.round(average(peak10sDps)),
-      p90Peak10sDps: Math.round(percentile(peak10sDps, 90)),
-      avgBurstRatio: round2(average(burstRatios)),
-      avgRdps: Math.round(average(rdps)),
-      medianRdps: Math.round(percentile(rdps, 50)),
-      avgNdps: Math.round(average(ndps)),
-      medianNdps: Math.round(percentile(ndps, 50)),
-      avgDamageShare: round1(average(shares)),
-      medianDamageShare: round1(percentile(shares, 50)),
-      avgTopDamageProximity: round1(average(profileRows.map((r) => r.topDamageProximity))),
-      contextCoverageRate: round1((contextRows.length / profileRows.length) * 100),
-      contextSampleCountAvg: round1(average(contextRows.map((r) => r.contextSampleCount))),
-      avgContextPerformancePercentile: round1(average(contextRows.map((r) => r.contextPerformancePercentile))),
-      avgContextDamageSharePercentile: round1(average(dpsContextRows.map((r) => r.contextDamageSharePercentile))),
-      avgContextTopDamageProximityPercentile: round1(average(dpsContextRows.map((r) => r.contextTopDamageProximityPercentile))),
-      avgContextSupportPercentile: round1(average(supportContextRows.map((r) => r.contextSupportPercentile))),
-      topRate: round1((profileRows.filter((r) => r.damageRank === 1).length / profileRows.length) * 100),
-      avgRank: round2(average(ranks)),
-      partyCountAvg: round2(average(profileRows.map((r) => r.partyCount).filter((n) => n > 0))),
-      deathlessRate: round1(((profileRows.length - deathRows) / profileRows.length) * 100),
-      deathRate: round1((deathRows / profileRows.length) * 100),
-      totalDeaths,
-      avgDeaths: round2(average(deathCounts)),
-      totalDeadTimeMs: Math.round(totalDeadTimeMs),
-      avgDeadTimeMs: Math.round(average(deadTimes)),
-      avgDeadTimeRate: round1(average(profileRows.map((r) => r.deadTimeRate))),
-      rdpsValidCount,
-      rdpsValidRate: round1((rdpsValidCount / profileRows.length) * 100),
-      avgSupporterPercent: round1(average(supporterPercents)),
-      medianSupporterPercent: round1(percentile(supporterPercents, 50)),
-      radiantSupportCount,
-      radiantSupportRate: round1(supporterRows.length ? (radiantSupportCount / supporterRows.length) * 100 : 0),
-      avgSupporterDamageGivenPerMinute: Math.round(average(supporterRows.map((r) => r.supporterDamageGivenPerMinute))),
-      supporterRankValidCount: supporterRankRows.length,
-      supporterCompetitiveCount: supporterCompetitiveRows.length,
-      avgSupporterRank: round2(average(supporterRankRows.map((r) => r.supporterRank))),
-      supporterCountAvg: round2(average(supporterRankRows.map((r) => r.supporterCount))),
-      supporterTopRate: round1(supporterCompetitiveRows.length
-        ? (supporterCompetitiveRows.filter((r) => r.supporterRank === 1).length / supporterCompetitiveRows.length) * 100
-        : 0),
-      avgCounters: round2(average(counters)),
-      avgCastsPerMinute: round2(average(profileRows.map((r) => r.castsPerMinute))),
-      avgHitsPerMinute: round2(average(profileRows.map((r) => r.hitsPerMinute))),
-      avgCritRate: round1(average(profileRows.map((r) => r.critRate))),
-      avgCritDamageShare: round1(average(profileRows.map((r) => r.critDamageShare))),
-      avgBackAttackRate,
-      avgFrontAttackRate,
-      avgBackAttackDamageShare,
-      avgFrontAttackDamageShare,
-      avgPositionalDamageShare: round1(average(profileRows.map((r) => r.positionalDamageShare))),
-      attackStyle: classifyAttackStyle(avgBackAttackDamageShare || avgBackAttackRate, avgFrontAttackDamageShare || avgFrontAttackRate),
-      avgDamageTaken: Math.round(average(damageRows.map((r) => r.damageTaken))),
-      avgDamageTakenPerMinute: Math.round(average(damageRows.map((r) => r.damageTakenPerMinute))),
-      damageTakenShareValidCount: damageTakenShareRows.length,
-      avgDamageTakenShare: round1(average(damageTakenShareRows.map((r) => r.damageTakenShare))),
-      avgDamageAbsorbedPerMinute: Math.round(average(damageRows.map((r) => r.damageAbsorbedPerMinute))),
-      avgShieldReceivedPerMinute: Math.round(average(damageRows.map((r) => r.shieldReceivedPerMinute))),
-      avgStagger: Math.round(average(damageRows.map((r) => r.stagger))),
-      avgStaggerPerMinute: Math.round(average(damageRows.map((r) => r.staggerPerMinute))),
-      avgIncapacitations: round2(average(damageRows.map((r) => r.incapacitations))),
-      avgIncapacitationsPerMinute: round2(average(damageRows.map((r) => r.incapacitationsPerMinute))),
-      avgHyperShare: round1(average(damageRows.map((r) => r.hyperShare))),
-      avgUnbuffedShare: round1(average(damageRows.map((r) => r.unbuffedShare))),
-      avgUnbuffedDps: Math.round(average(damageRows.map((r) => r.unbuffedDps).filter((n) => n > 0))),
-      avgSupportBuffedShare: round1(average(damageRows.map((r) => r.supportBuffedShare))),
-      avgSupportDebuffedShare: round1(average(damageRows.map((r) => r.supportDebuffedShare))),
-      avgPartyBuffedShare: round1(average(damageRows.map((r) => r.partyBuffedShare))),
-      avgSelfBuffedShare: round1(average(damageRows.map((r) => r.selfBuffedShare))),
-      avgPartyDebuffedShare: round1(average(damageRows.map((r) => r.partyDebuffedShare))),
-      avgBattleItemDebuffedShare: round1(average(damageRows.map((r) => r.battleItemDebuffedShare))),
-      avgSkillCount: round1(average(profileRows.map((r) => r.skillCount))),
-      avgTopSkillShare: round1(average(profileRows.map((r) => r.topSkillShare))),
-      avgRdpsDamageGiven: Math.round(average(rdpsValidRows.map((r) => r.rdpsDamageGiven))),
-      avgRdpsDamageGivenPerMinute: Math.round(average(rdpsValidRows.map((r) => r.rdpsDamageGivenPerMinute))),
-      avgRdpsDamageReceivedSupport: Math.round(average(rdpsValidRows.map((r) => r.rdpsDamageReceivedSupport))),
-      avgRdpsDamageReceivedSupportPerMinute: Math.round(average(rdpsValidRows.map((r) => r.rdpsDamageReceivedSupportPerMinute))),
-      avgSynergyGiven: Math.round(average(profileRows.map((r) => r.synergyGiven))),
-      avgSynergyGivenPerMinute: Math.round(average(profileRows.map((r) => r.synergyGivenPerMinute))),
-      avgSynergyReceivedShare: round1(average(profileRows.map((r) => r.synergyReceivedShare))),
-      avgSupportAp: round2(average(profileRows.map((r) => r.supportAp))),
-      avgSupportBrand: round2(average(profileRows.map((r) => r.supportBrand))),
-      avgSupportIdentity: round2(average(profileRows.map((r) => r.supportIdentity))),
-      avgSupportHyper: round2(average(profileRows.map((r) => r.supportHyper))),
-      avgProtection: Math.round(average(protections)),
-      avgProtectionPerMinute: Math.round(average(protectionPerMinute)),
-      avgGearScore: round2(average(profileRows.map((r) => r.gearScore).filter((n) => n > 0))),
-      latestGearScore: round2(latestRow.gearScore),
-      avgCombatPower: round2(average(profileRows.map((r) => r.combatPower).filter((n) => n > 0))),
-      latestCombatPower: round2(latestRow.combatPower),
-      arkPassiveRate: arkRows.length
-        ? round1((arkRows.filter((r) => r.arkPassiveActive).length / arkRows.length) * 100)
-        : 0,
-      buildVariantCount: Math.max(buildVariantKeys.size, buildVariants.length),
-      unclassifiedBuildLogCount,
-      consistency: computeProfileConsistency(profileRows, role),
     };
+
+    // Flex characters (support class that also ran a DPS build, or vice versa)
+    // get a second score for the off-meta build. Primary scoring above is
+    // untouched; altBuild is only added when the minority build is well sampled.
+    let altBuild = null;
+    if (classRole === "support") {
+      const altRole = role === "support" ? "dps" : "support";
+      const altRows = role === "support" ? dpsBuildRows : supportRows;
+      if (altRows.length >= MIN_ALT_BUILD_LOGS) {
+        const altStats = computeBuildStats(altRows, altRole, summarizeBuildVariants(altRows));
+        altBuild = { role: altRole, encounters: altRows.length, scores: computeScores(altStats, altRole) };
+      }
+    }
 
     const build = {
       classId: latestRow.classId || 0,
@@ -456,6 +485,7 @@ export function buildProfileSnapshot(rows, rosterAccounts, file, {
       role,
       stats,
       scores: computeScores(stats, role),
+      altBuild,
       build,
       topSkills,
       topBuffSources,

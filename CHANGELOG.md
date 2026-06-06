@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-06 (raid-profile: flex dual-build scoring)
+
+### Added
+- Flex characters (a support class that also ran a DPS build, or vice versa) now get a second score for the off-meta build. Both scorers (local `web/.../profile-snapshot.js`, bible `profile-builder/stats/snapshot.js`) compute `altBuild = {role, encounters, scores}` for the minority build when it has >=3 logs; the primary majority-build scoring is untouched (additive). `/raid-profile` ROSTER list tags these chars `flex·<primary role>`; the CHARACTER detail view adds an `// ALT BUILD` field with the off-meta build's score + MVP + log count. Persisted via the sanitizer whitelist + a new optional `altBuild` schema field (snapshots without it render fine, no migration). Extracted `computeBuildStats(rows, role)` from the local scorer's inline block so primary and alt share identical math. 856 tests green (added flex render + scorer coverage).
+
 ## 2026-06-06 (raid-profile ROSTER: icon-list redesign)
 
 ### Changed

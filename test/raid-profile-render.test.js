@@ -243,6 +243,68 @@ test("raid-profile render uses Endfield HUD author, gauges, and Enlightenment bu
   assert.match(support.fields.map((field) => field.value).join("\n"), /Support rank: \*\*1\.4\/2\.0\*\* · top 75\.0%/);
 });
 
+test("raid-profile renders a flex char: roster flex tag + detail ALT BUILD field", () => {
+  const deps = makeDeps();
+  const command = createRaidProfileCommand(deps);
+  const session = {
+    id: "profile-flex-test",
+    viewerDiscordId: "u1",
+    rosterIndex: 0,
+    rosterPage: 0,
+    charIndex: -1,
+    expiresAt: Date.now() + 60_000,
+    entries: [
+      {
+        ownerDiscordId: "u1",
+        ownerLabel: "Traine",
+        accessLevel: "owner",
+        isOwn: true,
+        accountName: "Clauseduk",
+        generatedAt: 1710000000000,
+        receivedAt: 1710000005000,
+        source: "bible",
+        rangeType: "full",
+        characters: [
+          {
+            name: "Notmeow",
+            class: "Artist",
+            itemLevel: 1680,
+            classRole: "support",
+            role: "dps",
+            stats: {
+              encounters: 47,
+              allEncounterCount: 56,
+              supportLogCount: 9,
+              dpsBuildLogCount: 47,
+              profileDataDepth: "bible-summary",
+            },
+            scores: { overall: 24.1, mvp: 20.5 },
+            altBuild: { role: "support", encounters: 9, scores: { overall: 71.0, mvp: 68.4 } },
+            build: { spec: "Aria" },
+            raids: [],
+            topSkills: [],
+          },
+        ],
+      },
+    ],
+  };
+
+  // Roster list: the flex char is tagged `flex·DPS` (primary role); the full
+  // both-build breakdown lives in the detail view, not here.
+  const roster = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
+  const charField = roster.fields.find((field) => field.name === "// CHARACTER");
+  assert.match(charField.value, /Notmeow/);
+  assert.match(charField.value, /flex·DPS/);
+
+  // Character detail: a dedicated ALT BUILD field shows the off-meta build score.
+  session.charIndex = 0;
+  const character = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
+  const altField = character.fields.find((field) => field.name === "// ALT BUILD");
+  assert.ok(altField, "expected an // ALT BUILD field for the flex char");
+  assert.match(altField.value, /Support · 9 log · score \*\*71\.0\*\*/);
+  assert.match(altField.value, /MVP 68\.4/);
+});
+
 test("raid-profile render marks bible summary metrics without local-only fields", () => {
   const deps = makeDeps();
   const command = createRaidProfileCommand(deps);

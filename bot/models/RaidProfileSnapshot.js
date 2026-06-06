@@ -9,6 +9,7 @@ const raidProfileCharacterSchema = new mongoose.Schema(
     role: { type: String, enum: ["dps", "support", "unknown"], default: "unknown" },
     stats: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     scores: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
+    altBuild: { type: mongoose.Schema.Types.Mixed, default: null },
     build: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     topSkills: { type: [mongoose.Schema.Types.Mixed], default: [] },
     topBuffSources: { type: [mongoose.Schema.Types.Mixed], default: [] },

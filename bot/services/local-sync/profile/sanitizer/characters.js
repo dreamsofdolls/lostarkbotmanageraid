@@ -31,6 +31,20 @@ const {
   cleanTopSource,
 } = require("./items");
 
+// Flex characters carry a second build's score (e.g. a support class that also
+// ran a DPS build). Keep only role + log count + the same score whitelist as
+// the primary; null when absent or malformed.
+function cleanAltBuild(rawAlt) {
+  if (!rawAlt || typeof rawAlt !== "object") return null;
+  const role = rawAlt.role === "support" ? "support" : rawAlt.role === "dps" ? "dps" : null;
+  if (!role) return null;
+  return {
+    role,
+    encounters: clampNumber(rawAlt.encounters, { max: 100000 }),
+    scores: cleanNumberObject(rawAlt.scores, CHARACTER_PROFILE_SCORE_KEYS, { max: 100 }),
+  };
+}
+
 function cleanCharacterProfile(rawChar, rosterEntry) {
   if (!rawChar || typeof rawChar !== "object" || !rosterEntry) return null;
 
@@ -58,6 +72,7 @@ function cleanCharacterProfile(rawChar, rosterEntry) {
     role: cleanRole(rawChar.role, classRole),
     stats,
     scores,
+    altBuild: cleanAltBuild(rawChar.altBuild),
     build: cleanBuild(rawChar.build),
     topSkills,
     topBuffSources,
