@@ -3,13 +3,13 @@
 import {
   getArkPassiveNodeMeta,
   getSpecFromArkPassiveNodes,
-} from "/sync/js/profile/ark-passive-data.js";
+} from "/sync/js/profile/data/ark-passive-data.js";
 import {
   classifyProfileLogRole,
   roleForProfileClass,
   stripMarkup,
 } from "/sync/js/profile/profile-role.js";
-import { MIN_CONTEXT_SAMPLE_COUNT } from "/sync/js/profile/profile-score.js";
+import { MIN_CONTEXT_SAMPLE_COUNT } from "/sync/js/profile/metrics/profile-score.js";
 
 const POSITIONAL_ATTACK_RATE_THRESHOLD = 45;
 export function normalizeName(value) {
