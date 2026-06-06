@@ -1,6 +1,7 @@
 import { t, getRaidLabel, getModeLabel } from "/sync/js/core/i18n.js";
 import { escapeHtml } from "/sync/js/core/html.js";
 import { formatGold, formatRelativeTime } from "/sync/js/core/format.js";
+import { renderCharPendingLabel, renderCharPendingRow } from "/sync/js/sync/char-row.js";
 
 export function renderPreviewStats(panel, summary) {
   if (!panel) return;
@@ -77,7 +78,7 @@ export function renderPreviewStats(panel, summary) {
       html += `<ul class="char-pending-list">`;
       for (const c of charsInRoster) {
         const classIcon = renderClassIcon(c.className);
-        const charLabel = `${classIcon}<strong>${escapeHtml(c.charName || "")}</strong>${c.itemLevel ? ` <span class="stat-label">${c.itemLevel}</span>` : ""}`;
+        const charLabel = renderCharPendingLabel(classIcon, c);
         const pillsHtml = (c.raids || []).map((r) => {
           const icon = r.status === "done" ? "🟢" : r.status === "partial" ? "🟡" : "⚪";
           const raidLabel = getRaidLabel(r.raidKey);
@@ -90,7 +91,7 @@ export function renderPreviewStats(panel, summary) {
           const incomingClass = r.incoming ? " raid-pill--incoming" : "";
           return `<span class="raid-pill raid-pill--${r.status}${incomingClass}">${incomingMark}${icon} ${escapeHtml(raidLabel)} <span class="raid-pill-mode">${escapeHtml(modeLabel)}</span></span>`;
         }).join("");
-        html += `<li class="char-pending-row"><span class="char-pending-head">${charLabel}</span><span class="raid-pill-row">${pillsHtml}</span></li>`;
+        html += renderCharPendingRow(charLabel, pillsHtml);
       }
       html += `</ul>`;
     }
@@ -114,9 +115,9 @@ export function renderPreviewStats(panel, summary) {
       html += `<ul class="char-pending-list">`;
       for (const c of charsInRoster) {
         const classIcon = renderClassIcon(c.className);
-        const charLabel = `${classIcon}<strong>${escapeHtml(c.charName || "")}</strong>${c.itemLevel ? ` <span class="stat-label">${c.itemLevel}</span>` : ""}`;
+        const charLabel = renderCharPendingLabel(classIcon, c);
         const goldPill = `<span class="gold-pill">💰 ${escapeHtml(formatGold(c.gold))}</span>`;
-        html += `<li class="char-pending-row"><span class="char-pending-head">${charLabel}</span><span class="raid-pill-row">${goldPill}</span></li>`;
+        html += renderCharPendingRow(charLabel, goldPill);
       }
       html += `</ul>`;
     }

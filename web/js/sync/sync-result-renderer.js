@@ -1,6 +1,7 @@
 import { t, getRaidLabel, getModeLabel } from "/sync/js/core/i18n.js";
 import { escapeHtml } from "/sync/js/core/html.js";
 import { renderClassIcon } from "/sync/js/sync/preview-renderer.js";
+import { renderCharPendingLabel, renderCharPendingRow } from "/sync/js/sync/char-row.js";
 
 const ICON_FOLDER = "\u{1F4C1}";
 const ICON_DONE = "\u{1F7E2}";
@@ -68,9 +69,9 @@ function renderAppliedSection(applied, charLookup) {
     html += `<ul class="char-pending-list">`;
     for (const c of charsMap.values()) {
       const classIcon = renderClassIcon(c.className);
-      const charLabel = `${classIcon}<strong>${escapeHtml(c.charName || "")}</strong>${c.itemLevel ? ` <span class="stat-label">${c.itemLevel}</span>` : ""}`;
+      const charLabel = renderCharPendingLabel(classIcon, c);
       const pillsHtml = c.applied.map(renderAppliedRaidPill).join("");
-      html += `<li class="char-pending-row"><span class="char-pending-head">${charLabel}</span><span class="raid-pill-row">${pillsHtml}</span></li>`;
+      html += renderCharPendingRow(charLabel, pillsHtml);
     }
     html += `</ul>`;
   }
@@ -112,10 +113,10 @@ function renderRejectedSection(rejected, charLookup) {
   for (const entry of rejected) {
     const info = charLookup.get(String(entry.charName || "").toLowerCase()) || {};
     const classIcon = renderClassIcon(info.className);
-    const charLabel = `${classIcon}<strong>${escapeHtml(entry.charName || "")}</strong>`;
+    const charLabel = renderCharPendingLabel(classIcon, entry, { withItemLevel: false });
     const reasonText = entry.error ? `${entry.reason} (${entry.error})` : entry.reason;
     const pill = `<span class="raid-pill raid-pill--rejected">${ICON_REJECTED} ${escapeHtml(reasonText)}</span>`;
-    html += `<li class="char-pending-row"><span class="char-pending-head">${charLabel}</span><span class="raid-pill-row">${pill}</span></li>`;
+    html += renderCharPendingRow(charLabel, pill);
   }
   return `${html}</ul></div>`;
 }

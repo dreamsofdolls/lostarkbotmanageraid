@@ -10,7 +10,15 @@ function normalizeName(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-function stripMarkup(value) {
+/**
+ * Strip HTML tags + decode the common named entities Lost Ark Bible emits
+ * inside skill / source names. Shared by profile-role (spec-key normalize)
+ * and profile-row-enrich (clean source name) so the tag/entity list stays
+ * defined once.
+ * @param {string} value - raw markup string (nullable)
+ * @returns {string} plain text, entities decoded, whitespace collapsed + trimmed
+ */
+export function stripMarkup(value) {
   return String(value || "")
     .replace(/<[^>]*>/g, "")
     .replace(/&nbsp;/gi, " ")
