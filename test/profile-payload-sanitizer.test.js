@@ -37,6 +37,7 @@ test("sanitizeSnapshotPayload applies character profile rules and filters off-ro
               attackStyle: "front",
             },
             scores: { overall: 150, supportUptime: 85 },
+            altBuild: { role: "support", encounters: 9, scores: { overall: 150, mvp: 68.4 } },
             topBuffSources: Array.from({ length: 12 }, (_, index) => ({
               id: `buff-${index}`,
               name: `Buff ${index}`,
@@ -72,4 +73,9 @@ test("sanitizeSnapshotPayload applies character profile rules and filters off-ro
   assert.equal(character.scores.overall, 100);
   assert.equal(character.scores.supportUptime, 85);
   assert.equal(character.topBuffSources.length, 8);
+  // Flex altBuild survives sanitization (local persist path) and its scores clamp.
+  assert.equal(character.altBuild.role, "support");
+  assert.equal(character.altBuild.encounters, 9);
+  assert.equal(character.altBuild.scores.overall, 100);
+  assert.equal(character.altBuild.scores.mvp, 68.4);
 });
