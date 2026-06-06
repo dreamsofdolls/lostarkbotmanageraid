@@ -31,6 +31,50 @@ const {
 } = require("../helpers/list-lines");
 const { PROFILE_COLORS } = require("../helpers/colors");
 
+function buildSpecName(build, fallback = "") {
+  return String(build?.arkPassive?.enlightenment?.spec || build?.spec || fallback || "").trim();
+}
+
+function roleTagForBuild(role) {
+  return role === "support" ? "SUP" : "DPS";
+}
+
+function totalCharacterLogs(character) {
+  const primary = Number(character?.stats?.encounters) || 0;
+  const alt = Number(character?.altBuild?.encounters) || 0;
+  const all = Number(character?.stats?.allEncounterCount) || 0;
+  return Math.round(Math.max(primary + alt, primary, all));
+}
+
+function buildDisplayBuilds(character) {
+  const builds = [{
+    source: "primary",
+    role: character?.role === "support" ? "support" : "dps",
+    encounters: Number(character?.stats?.encounters) || 0,
+    stats: character?.stats || {},
+    scores: character?.scores || {},
+    build: character?.build || null,
+    spec: buildSpecName(character?.build, character?.build?.spec || ""),
+  }];
+  const altBuild = character?.altBuild || null;
+  if (altBuild) {
+    builds.push({
+      source: "alt",
+      role: altBuild.role === "support" ? "support" : "dps",
+      encounters: Number(altBuild.encounters) || Number(altBuild.stats?.encounters) || 0,
+      stats: altBuild.stats || {},
+      scores: altBuild.scores || {},
+      build: altBuild.build || null,
+      spec: buildSpecName(altBuild.build, altBuild.spec || ""),
+    });
+    builds.sort((a, b) =>
+      b.encounters - a.encounters ||
+      (a.source === "primary" ? -1 : 1)
+    );
+  }
+  return builds;
+}
+
 // Compact code-block roster table for the OVERALL view (ops-brief look). A
 // fenced code block is the only way to get true column alignment in a Discord
 // embed - proportional field text drifts. Ranked best-first; the numeric score
@@ -176,49 +220,48 @@ function buildRosterEmbed({ EmbedBuilder }, session, entry) {
 }
 
 function buildCharacterEmbed({ EmbedBuilder }, session, entry, character) {
-  const lang = session.lang || "vi";
-  const stats = character.stats || {};
-  const scores = character.scores || {};
-  const isSupport = character.role === "support";
   const isBibleSummary = isBibleSummaryProfile(entry, character);
-  // Playstyle/spec from the enlightenment node, falling back to raw build.spec.
-  const spec = character.build?.arkPassive?.enlightenment?.spec || character.build?.spec || "";
-  const classEmoji = getClassEmoji(character.class) || (isSupport ? "🛡️" : "⚔️");
+  const spec = buildSpecName(character.build, character.build?.spec || "");
   const altBuild = character.altBuild || null;
-  const roleTag = isSupport ? "SUP" : "DPS";
+  const displayBuilds = buildDisplayBuilds(character);
+  const primaryDisplay = displayBuilds[0] || {};
+  const roleTag = altBuild ? "FLEX" : roleTagForBuild(primaryDisplay.role || character.role);
+  const totalLogs = totalCharacterLogs(character);
+  const classEmoji = getClassEmoji(character.class) || (primaryDisplay.role === "support" ? "🛡️" : "⚔️");
 
   const embed = new EmbedBuilder()
-    .setColor(isSupport ? PROFILE_COLORS.support : PROFILE_COLORS.amber)
-    .setAuthor({ name: `// RAID PROFILE · CHARACTER · ${altBuild ? "FLEX" : roleTag}` })
+    .setColor(primaryDisplay.role === "support" && !altBuild ? PROFILE_COLORS.support : PROFILE_COLORS.amber)
+    .setAuthor({ name: `// RAID PROFILE · CHARACTER · ${String(character.name || "UNKNOWN").toUpperCase()} · ${roleTag}` })
     .setTitle(`${classEmoji} ${character.name}`)
     .setDescription([
-      `${character.class || "Unknown"} · ${roleLabel(character)} · iLvl **${character.itemLevel || 0}**${spec ? ` · \`${spec}\`` : ""}`,
-      `${getEntryLabel(entry)} · ${t("raidProfile.confidence", lang, { conf: confidenceForLogs(stats.encounters), n: stats.encounters || 0 })}`,
+      [
+        character.class || "Unknown",
+        `iLvl **${character.itemLevel || 0}**`,
+        !altBuild && spec ? `\`${spec}\`` : null,
+        `**${totalLogs}** log`,
+        `CONF **${confidenceForLogs(totalLogs).toUpperCase()}**`,
+      ].filter(Boolean).join(" · "),
+      getEntryLabel(entry),
     ].join("\n"));
 
-  // Flex characters get a labelled header before each build's table so the two
-  // builds read as distinct; a non-flex character shows the single table bare.
-  if (altBuild) {
-    embed.addFields({
-      name: `// PRIMARY · ${roleTag} BUILD`,
-      value: `**${Math.round(Number(stats.encounters) || 0)}** log`,
-      inline: false,
-    });
-  }
-  embed.addFields(...buildBuildFields(character.role, stats, scores, { spec, isBibleSummary }));
-
-  if (altBuild) {
-    const altTag = altBuild.role === "support" ? "SUP" : "DPS";
-    embed.addFields({
-      name: `// ALT BUILD · ${altTag} BUILD`,
-      value: `**${Math.round(Number(altBuild.encounters) || 0)}** log`,
-      inline: false,
-    });
-    embed.addFields(...buildBuildFields(altBuild.role, altBuild.stats || {}, altBuild.scores || {}, { isBibleSummary }));
-  }
+  displayBuilds.forEach((build, index) => {
+    if (altBuild) {
+      const specLabel = build.spec ? ` · \`${build.spec}\`` : "";
+      embed.addFields({
+        name: `// ${index === 0 ? "PRIMARY" : "ALT BUILD"} · ${roleTagForBuild(build.role)} BUILD`,
+        value: `**${Math.round(Number(build.encounters) || 0)}** log${specLabel}`,
+        inline: false,
+      });
+    }
+    embed.addFields(...buildBuildFields(build.role, build.stats, build.scores, {
+      spec: build.spec,
+      build: build.build,
+      isBibleSummary,
+    }));
+  });
 
   embed.setFooter({
-    text: `// ${sourceTag(entry.source)} ${rangeTag(entry.rangeType)} · ${String(character.class || "UNKNOWN").toUpperCase()} · ${altBuild ? "FLEX" : roleLabel(character).toUpperCase()} · ${stats.encounters || 0} SCORED · CONF ${confidenceForLogs(stats.encounters).toUpperCase()} · ${footerTimestamp(entry.receivedAt || entry.generatedAt)}`,
+    text: `// ${sourceTag(entry.source)} ${rangeTag(entry.rangeType)} · ${String(character.class || "UNKNOWN").toUpperCase()} · ${roleTag} · ${totalLogs} SCORED · CONF ${confidenceForLogs(totalLogs).toUpperCase()} · ${footerTimestamp(entry.receivedAt || entry.generatedAt)}`,
   });
 
   return embed;

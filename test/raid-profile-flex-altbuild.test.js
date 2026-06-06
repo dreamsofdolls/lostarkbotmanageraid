@@ -66,6 +66,7 @@ test("bible scorer computes altBuild for a flex char above the log threshold", (
   assert.equal(char.altBuild.encounters, 4);
   assert.ok(Number.isFinite(char.altBuild.scores.overall));
   assert.equal(char.altBuild.stats.encounters, 4, "altBuild carries its own full stats for the alt table");
+  assert.equal(char.altBuild.build.spec, "judgment", "altBuild carries its own build metadata for the render header");
   // Primary scoring reflects only the support-build logs.
   assert.equal(char.stats.encounters, 3);
   assert.equal(char.stats.supportLogCount, 3);

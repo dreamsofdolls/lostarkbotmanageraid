@@ -383,6 +383,20 @@ function computeBuildStats(profileRows, role, buildVariants) {
   };
 }
 
+function buildProfileBuild(row) {
+  return {
+    classId: row?.classId || 0,
+    spec: cleanBuildName(row?.arkPassive?.enlightenment?.spec || row?.spec),
+    gearScore: round2(row?.gearScore),
+    combatPower: round2(row?.combatPower),
+    arkPassiveActive: row?.arkPassiveActive === null || row?.arkPassiveActive === undefined
+      ? null
+      : !!row?.arkPassiveActive,
+    engravings: row?.engravings || [],
+    arkPassive: row?.arkPassive || null,
+  };
+}
+
 export function buildProfileSnapshot(rows, rosterAccounts, file, {
   range = null,
   minDurationMs = MIN_DURATION_MS,
@@ -443,19 +457,18 @@ export function buildProfileSnapshot(rows, rosterAccounts, file, {
       const altRows = role === "support" ? dpsBuildRows : supportRows;
       if (altRows.length >= MIN_ALT_BUILD_LOGS) {
         const altStats = computeBuildStats(altRows, altRole, summarizeBuildVariants(altRows));
-        altBuild = { role: altRole, encounters: altRows.length, stats: altStats, scores: computeScores(altStats, altRole) };
+        const altLatestRow = altRows.reduce((best, row) => ((row.fightStart || 0) > (best.fightStart || 0) ? row : best), altRows[0]);
+        altBuild = {
+          role: altRole,
+          encounters: altRows.length,
+          stats: altStats,
+          scores: computeScores(altStats, altRole),
+          build: buildProfileBuild(altLatestRow),
+        };
       }
     }
 
-    const build = {
-      classId: latestRow.classId || 0,
-      spec: cleanBuildName(latestRow.arkPassive?.enlightenment?.spec || latestRow.spec),
-      gearScore: round2(latestRow.gearScore),
-      combatPower: round2(latestRow.combatPower),
-      arkPassiveActive: latestRow.arkPassiveActive === null ? null : !!latestRow.arkPassiveActive,
-      engravings: latestRow.engravings || [],
-      arkPassive: latestRow.arkPassive || null,
-    };
+    const build = buildProfileBuild(latestRow);
 
     const raidGroups = new Map();
     for (const row of profileRows) {
