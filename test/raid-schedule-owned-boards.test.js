@@ -5,7 +5,7 @@ const {
   shapeOwnedBoardOptions,
   shapeAllOwnedBoardRows,
   chunkBoardOptions,
-} = require("../bot/services/raid/schedule/owned-boards");
+} = require("../bot/services/raid/schedule/boards/owned-boards");
 
 function sup(id, joinedAt = 1) {
   return {

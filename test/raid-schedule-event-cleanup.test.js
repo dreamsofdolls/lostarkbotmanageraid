@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const {
   isStaleEvent,
   purgeStaleRaidEvents,
-} = require("../bot/services/raid/schedule/event-cleanup");
+} = require("../bot/services/raid/schedule/lifecycle/event-cleanup");
 
 const BOUNDARY = Date.UTC(2026, 4, 27, 10, 0); // a Wed 10:00 UTC (= 17:00 VN reset)
 

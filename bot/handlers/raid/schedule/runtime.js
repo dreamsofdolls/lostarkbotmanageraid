@@ -5,9 +5,9 @@ const {
   getRaidRequirementMap,
   getGatesForRaid,
 } = require("../../../domain/raid-catalog");
-const { assignSlots } = require("../../../services/raid/schedule/slots");
-const { selectAutoClearTargets } = require("../../../services/raid/schedule/auto-clear");
-const { shapeOwnedBoardOptions } = require("../../../services/raid/schedule/owned-boards");
+const { assignSlots } = require("../../../services/raid/schedule/slots/slots");
+const { selectAutoClearTargets } = require("../../../services/raid/schedule/lifecycle/auto-clear");
+const { shapeOwnedBoardOptions } = require("../../../services/raid/schedule/boards/owned-boards");
 
 const CLOSED_EVENT_STATUSES = new Set(["cleared", "cancelled"]);
 

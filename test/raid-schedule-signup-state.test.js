@@ -1,8 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { applyJoin, applyRsvp, applyLeave, applyKick } = require("../bot/services/raid/schedule/signup-state");
-const { detectPromotion } = require("../bot/services/raid/schedule/slots");
+const { applyJoin, applyRsvp, applyLeave, applyKick } = require("../bot/services/raid/schedule/slots/signup-state");
+const { detectPromotion } = require("../bot/services/raid/schedule/slots/slots");
 
 const COUNTS = { supSlots: 1, dpsSlots: 1 };
 

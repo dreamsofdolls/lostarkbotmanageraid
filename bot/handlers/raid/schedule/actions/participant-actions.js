@@ -1,9 +1,9 @@
 "use strict";
 
 const { t } = require("../../../../services/i18n");
-const { partitionSelectable } = require("../../../../services/raid/schedule/eligibility");
-const { applyJoin, applyRsvp } = require("../../../../services/raid/schedule/signup-state");
-const { detectPromotion } = require("../../../../services/raid/schedule/slots");
+const { partitionSelectable } = require("../../../../services/raid/schedule/slots/eligibility");
+const { applyJoin, applyRsvp } = require("../../../../services/raid/schedule/slots/signup-state");
+const { detectPromotion } = require("../../../../services/raid/schedule/slots/slots");
 const {
   PICKER_LIMIT,
   findOwnEligibleRows,

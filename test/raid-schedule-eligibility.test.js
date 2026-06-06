@@ -6,7 +6,7 @@ const {
   hasClearedRaid,
   listEligibleCharacters,
   partitionSelectable,
-} = require("../bot/services/raid/schedule/eligibility");
+} = require("../bot/services/raid/schedule/slots/eligibility");
 
 test("deriveRole maps support classes vs dps", () => {
   assert.equal(deriveRole("Bard"), "support");

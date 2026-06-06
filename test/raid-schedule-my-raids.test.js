@@ -5,7 +5,7 @@ const {
   turnsForMember,
   shapeMyRaidEvents,
   buildMyRaidDetail,
-} = require("../bot/services/raid/schedule/my-raids");
+} = require("../bot/services/raid/schedule/boards/my-raids");
 
 function sup(id, name) {
   return {

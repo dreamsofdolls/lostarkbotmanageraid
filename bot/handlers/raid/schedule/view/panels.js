@@ -9,8 +9,8 @@
 
 const { t } = require("../../../../services/i18n");
 const { getRaidRequirementMap } = require("../../../../domain/raid-catalog");
-const { assignSlots } = require("../../../../services/raid/schedule/slots");
-const { shapeOwnedBoardOptions } = require("../../../../services/raid/schedule/owned-boards");
+const { assignSlots } = require("../../../../services/raid/schedule/slots/slots");
+const { shapeOwnedBoardOptions } = require("../../../../services/raid/schedule/boards/owned-boards");
 const {
   buildTurnPlanEmbed,
   buildSwitcherRow,

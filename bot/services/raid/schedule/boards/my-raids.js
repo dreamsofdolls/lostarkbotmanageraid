@@ -9,7 +9,7 @@
 
 "use strict";
 
-const { assignSlots } = require("./slots");
+const { assignSlots } = require("../slots/slots");
 
 /**
  * The turns a given member belongs to.

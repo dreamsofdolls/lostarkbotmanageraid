@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { slotCountsForSize } = require("../bot/services/raid/schedule/slot-config");
+const { slotCountsForSize } = require("../bot/services/raid/schedule/slots/slot-config");
 
 test("slotCountsForSize: 4-man is 1 support + 3 dps", () => {
   assert.deepEqual(slotCountsForSize(4), { supSlots: 1, dpsSlots: 3 });
