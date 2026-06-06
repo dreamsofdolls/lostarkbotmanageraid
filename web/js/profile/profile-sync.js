@@ -4,7 +4,7 @@ import {
   loadCatalog,
   BOSS_TO_RAID_GATE,
 } from "/sync/js/sync/preview-utils.js";
-import { createStableFileSnapshot } from "/sync/js/sync/file-snapshot.js";
+import { createStableFileSnapshot } from "/sync/js/sync/file/file-snapshot.js";
 import { quoteIdent, pickColumn } from "/sync/js/sync/sqlite-schema.js";
 import { t } from "/sync/js/core/i18n.js";
 import { SUPPORT_DPS_PROFILE_SPEC_KEYS } from "/sync/js/profile/profile-role.js";
@@ -46,7 +46,7 @@ async function withSqliteDb(file, fn) {
   const [SQLiteESMFactoryModule, SQLiteAPI, FileVfsModule] = await Promise.all([
     import(`${WA_SQLITE_BASE}/dist/wa-sqlite-async.mjs`),
     import(`${WA_SQLITE_BASE}/src/sqlite-api.js`),
-    import("/sync/js/sync/file-vfs.js"),
+    import("/sync/js/sync/file/file-vfs.js"),
   ]);
   const SQLiteESMFactory = SQLiteESMFactoryModule.default;
   const { FileBackedVFS } = FileVfsModule;
