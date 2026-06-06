@@ -7,7 +7,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ## 2026-06-06 (raid-profile OVERALL: compact ops-brief redesign)
 
 ### Changed
-- `/raid-profile` OVERALL view restyled to a compact ops-brief. Roster + character counts move into the kicker (`// RAID PROFILE · OVERALL · N ROSTER · M CHAR`); `// SCOPE` + `// AGGREGATE` share the top row as two inline fields (short gauge labels Ov/MVP/DPS/SUP); the roster list becomes a fenced **code-block table** with aligned columns + a per-row score gauge (`# NAME CHAR LOG ▰▱ SCORE`). New `gaugeBar()` helper renders the raw 10-cell bar for use inside the code block (no surrounding backticks/bold). For density, the 2-line description, the per-roster Own/Shared tag, and the separate ★ MVP-top line are dropped (Overall-top folded into the SCOPE `★ top` row). Locale unchanged. 852 tests green.
+- `/raid-profile` OVERALL view restyled to a compact ops-brief. Roster + character counts move into the kicker (`// RAID PROFILE · OVERALL · N ROSTER · M CHAR`); `// SCOPE` + `// AGGREGATE` share the top row as two inline fields (short gauge labels Ov/MVP/DPS/SUP); the roster list becomes a fenced **code-block table** with aligned columns, ranked best-first (`# NAME CHAR LOG SCORE`). Numeric score only - a per-row gauge pushes the line past the ~42-col embed code-block wrap point and detaches the score onto the next line. For density, the 2-line description, the per-roster Own/Shared tag, and the separate ★ MVP-top line are dropped (Overall-top folded into the SCOPE `★ top` row). Locale unchanged. 852 tests green.
 
 ## 2026-06-06 (RaidManage: function-grouped subfolders + shared-helper dedup)
 

@@ -205,9 +205,12 @@ test("raid-profile render uses Endfield HUD author, gauges, and Enlightenment bu
   assert.match(overall.author.name, /^\/\/ RAID PROFILE · OVERALL · \d+ ROSTER · \d+ CHAR$/);
   assert.ok(overall.fields.some((field) => field.name === "// AGGREGATE"));
   assert.match(overall.fields.map((field) => field.value).join("\n"), /▰/);
-  // Roster is a fenced code-block table now (aligned columns + per-row gauge).
+  // Roster is a fenced code-block table now: aligned CHAR/LOG/SCORE columns,
+  // no per-row gauge (it would wrap past the ~42-col embed code-block width).
   const rosterField = overall.fields.find((field) => field.name === "// ROSTER");
-  assert.ok(rosterField.value.startsWith("```") && /NAME/.test(rosterField.value));
+  assert.ok(rosterField.value.startsWith("```"));
+  assert.match(rosterField.value, /NAME\s+CHAR\s+LOG\s+SCORE/);
+  assert.ok(!rosterField.value.includes("▰"), "roster table must stay gauge-free to avoid wrap");
   assert.match(overall.footer.text, /CONF HIGH/);
 
   session.rosterIndex = 0;

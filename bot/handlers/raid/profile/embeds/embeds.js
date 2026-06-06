@@ -15,7 +15,6 @@ const {
   confidenceForLogs,
   footerTimestamp,
   formatDateMs,
-  gaugeBar,
   hudFieldName,
   isBibleSummaryProfile,
   latestSnapshotMs,
@@ -43,8 +42,10 @@ const { PROFILE_COLORS } = require("../helpers/colors");
 
 // Compact code-block roster table for the OVERALL view (ops-brief look). A
 // fenced code block is the only way to get true column alignment in a Discord
-// embed - proportional field text drifts. Per-row gauge kept (wider, ~46 cols,
-// may scroll on mobile); rows cap at 10 with an overflow tail.
+// embed - proportional field text drifts. Ranked best-first; the numeric score
+// carries the signal because a per-row gauge would push the line past the
+// ~42-col embed code-block wrap point and detach the score onto the next line.
+// Rows cap at 10 with an overflow tail.
 function buildRosterTable(entries, lang) {
   if (!entries.length) return t("raidProfile.noProfiles", lang);
   const NAME_W = 14;
@@ -53,10 +54,12 @@ function buildRosterTable(entries, lang) {
     const str = String(value || "");
     return str.length > NAME_W ? `${str.slice(0, NAME_W - 1)}…` : str.padEnd(NAME_W);
   };
-  const header = `${"#".padStart(2)} ${"NAME".padEnd(NAME_W)} ${"CHAR".padStart(4)} ${"LOG".padStart(5)}  SCORE`;
-  const rows = entries.slice(0, CAP).map((entry, index) => {
-    const agg = aggregateCharacters(entry.characters);
-    return `${String(index + 1).padStart(2)} ${fitName(getEntryLabel(entry))} ${String(agg.charCount).padStart(4)} ${String(agg.logs).padStart(5)}  ${gaugeBar(agg.overall)} ${score(agg.overall)}`;
+  const ranked = entries
+    .map((entry) => ({ entry, agg: aggregateCharacters(entry.characters) }))
+    .sort((a, b) => Number(b.agg.overall || 0) - Number(a.agg.overall || 0));
+  const header = `${"#".padStart(2)} ${"NAME".padEnd(NAME_W)} ${"CHAR".padStart(4)} ${"LOG".padStart(5)}  ${"SCORE".padStart(5)}`;
+  const rows = ranked.slice(0, CAP).map(({ entry, agg }, index) => {
+    return `${String(index + 1).padStart(2)} ${fitName(getEntryLabel(entry))} ${String(agg.charCount).padStart(4)} ${String(agg.logs).padStart(5)}  ${score(agg.overall).padStart(5)}`;
   });
   if (entries.length > CAP) {
     rows.push(`   +${entries.length - CAP} roster…`);
