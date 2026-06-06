@@ -37,7 +37,7 @@ test("sanitizeSnapshotPayload applies character profile rules and filters off-ro
               attackStyle: "front",
             },
             scores: { overall: 150, supportUptime: 85 },
-            altBuild: { role: "support", encounters: 9, scores: { overall: 150, mvp: 68.4 } },
+            altBuild: { role: "support", encounters: 9, stats: { encounters: 9, avgDps: 12345, deathRate: 999 }, scores: { overall: 150, mvp: 68.4 } },
             topBuffSources: Array.from({ length: 12 }, (_, index) => ({
               id: `buff-${index}`,
               name: `Buff ${index}`,
@@ -78,4 +78,8 @@ test("sanitizeSnapshotPayload applies character profile rules and filters off-ro
   assert.equal(character.altBuild.encounters, 9);
   assert.equal(character.altBuild.scores.overall, 100);
   assert.equal(character.altBuild.scores.mvp, 68.4);
+  // altBuild.stats survives + clamps like the primary stats (alt table needs it).
+  assert.equal(character.altBuild.stats.encounters, 9);
+  assert.equal(character.altBuild.stats.avgDps, 12345);
+  assert.equal(character.altBuild.stats.deathRate, 100);
 });

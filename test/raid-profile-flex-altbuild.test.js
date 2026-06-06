@@ -43,10 +43,10 @@ function bibleRow(overrides = {}) {
 
 test("bible scorer computes altBuild for a flex char above the log threshold", () => {
   const rows = [
-    // 4 DPS-build logs (majority) -> primary role dps
+    // 4 DPS-build logs -> become the ALT build (support is always primary here)
     ...Array.from({ length: 4 }, (_, i) =>
       bibleRow({ fightStart: 2000 + i, role: "dps" })),
-    // 3 support-build logs (minority, == threshold) -> altBuild support
+    // 3 support-build logs (>= threshold) -> PRIMARY (support class scored on support)
     ...Array.from({ length: 3 }, (_, i) =>
       bibleRow({
         fightStart: 1000 + i,
@@ -60,34 +60,37 @@ test("bible scorer computes altBuild for a flex char above the log threshold", (
   const { snapshot } = buildSnapshotFromRows({ rows, rangeType: "full" });
   const char = snapshot.accounts[0].characters[0];
 
-  assert.equal(char.role, "dps", "majority build wins the primary role");
+  assert.equal(char.role, "support", "support class is scored on its support build, not the majority build");
   assert.ok(char.altBuild, "flex char should carry an altBuild");
-  assert.equal(char.altBuild.role, "support");
-  assert.equal(char.altBuild.encounters, 3);
+  assert.equal(char.altBuild.role, "dps");
+  assert.equal(char.altBuild.encounters, 4);
   assert.ok(Number.isFinite(char.altBuild.scores.overall));
-  // Primary scoring still reflects only the DPS-build logs.
-  assert.equal(char.stats.encounters, 4);
+  assert.equal(char.altBuild.stats.encounters, 4, "altBuild carries its own full stats for the alt table");
+  // Primary scoring reflects only the support-build logs.
+  assert.equal(char.stats.encounters, 3);
   assert.equal(char.stats.supportLogCount, 3);
 });
 
-test("bible scorer omits altBuild when the off-meta build is below the threshold", () => {
+test("bible scorer omits altBuild when the off-meta DPS build is below the threshold", () => {
   const rows = [
-    ...Array.from({ length: 4 }, (_, i) =>
-      bibleRow({ fightStart: 2000 + i, role: "dps" })),
-    // only 2 support logs (< 3) -> no second score
-    ...Array.from({ length: 2 }, (_, i) =>
+    // 5 support logs -> support is primary
+    ...Array.from({ length: 5 }, (_, i) =>
       bibleRow({
-        fightStart: 1000 + i,
+        fightStart: 2000 + i,
         role: "support",
         hasSupportBuffs: true,
         build: { spec: "blessedaura", gearScore: 1680, combatPower: 0 },
       })),
+    // only 2 DPS-build logs (< 3) -> no alt
+    ...Array.from({ length: 2 }, (_, i) =>
+      bibleRow({ fightStart: 1000 + i, role: "dps" })),
   ];
 
   const { snapshot } = buildSnapshotFromRows({ rows, rangeType: "full" });
   const char = snapshot.accounts[0].characters[0];
 
-  assert.equal(char.role, "dps");
+  assert.equal(char.role, "support");
+  assert.equal(char.stats.encounters, 5);
   assert.equal(char.altBuild, null);
 });
 

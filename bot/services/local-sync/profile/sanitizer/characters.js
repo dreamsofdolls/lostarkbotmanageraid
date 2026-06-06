@@ -31,16 +31,21 @@ const {
   cleanTopSource,
 } = require("./items");
 
-// Flex characters carry a second build's score (e.g. a support class that also
-// ran a DPS build). Keep only role + log count + the same score whitelist as
-// the primary; null when absent or malformed.
+// Flex characters carry a second build's full profile (e.g. a support class
+// that also ran a DPS build). Keep role + log count + the same stats/score
+// whitelist as the primary so the alt build can render its own metric table;
+// null when absent or malformed.
 function cleanAltBuild(rawAlt) {
   if (!rawAlt || typeof rawAlt !== "object") return null;
   const role = rawAlt.role === "support" ? "support" : rawAlt.role === "dps" ? "dps" : null;
   if (!role) return null;
+  const stats = cleanNumberObject(rawAlt.stats, CHARACTER_PROFILE_STATS_KEYS, { max: 9999999999999 });
+  applyClampRules(stats, CHARACTER_PROFILE_STATS_CLAMP_RULES);
+  stats.attackStyle = cleanAttackStyle(rawAlt.stats?.attackStyle);
   return {
     role,
     encounters: clampNumber(rawAlt.encounters, { max: 100000 }),
+    stats,
     scores: cleanNumberObject(rawAlt.scores, CHARACTER_PROFILE_SCORE_KEYS, { max: 100 }),
   };
 }

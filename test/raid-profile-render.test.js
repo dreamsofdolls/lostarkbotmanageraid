@@ -196,7 +196,7 @@ function makeSession() {
   };
 }
 
-test("raid-profile render uses Endfield HUD author, gauges, and Enlightenment build line", () => {
+test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + SUP)", () => {
   const deps = makeDeps();
   const command = createRaidProfileCommand(deps);
   const session = makeSession();
@@ -219,31 +219,30 @@ test("raid-profile render uses Endfield HUD author, gauges, and Enlightenment bu
   session.rosterIndex = 0;
   session.charIndex = 0;
   const character = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
-  assert.equal(character.author.name, "// RAID PROFILE · CHARACTER");
+  assert.equal(character.author.name, "// RAID PROFILE · CHARACTER · DPS");
   assert.ok(character.fields.some((field) => field.name === "// SCORE"));
-  assert.ok(character.fields.some((field) => field.name === "// BUILD" && /Enlightenment:/.test(field.value)));
-  assert.match(character.fields.map((field) => field.value).join("\n"), /Dead time:/);
-  assert.match(character.fields.map((field) => field.value).join("\n"), /Active time: avg \*\*9m 30s\*\* · 95\.0%/);
-  assert.match(character.fields.map((field) => field.value).join("\n"), /Damage crit\/pos: \*\*88\.2%\*\* · 92\.1%/);
-  assert.match(character.fields.map((field) => field.value).join("\n"), /Damage back\/front: 91\.4% \/ 0\.7%/);
-  assert.match(character.fields.map((field) => field.value).join("\n"), /Peak 10s: \*\*78\.0M\*\* - p90 91\.0M - burst x1\.7/);
-  assert.match(character.fields.map((field) => field.value).join("\n"), /Unclassified build logs: \*\*3\*\*/);
-  assert.match(character.fields.map((field) => field.value).join("\n"), /Variant split: Wind Fury 18 log[\s\S]*Drizzle 6 log/);
-  assert.match(character.fields.map((field) => field.value).join("\n"), /Top proximity: \*\*87\.8%\*\*/);
-  assert.match(character.fields.map((field) => field.value).join("\n"), /Taken: 321\.0K\/min .* share 13\.4%/);
-  assert.match(character.fields.map((field) => field.value).join("\n"), /Shielded: 456\.0K\/min/);
-  assert.match(character.fields.map((field) => field.value).join("\n"), /rDPS valid:/);
-  assert.match(character.fields.find((field) => field.name === "// SCORE").value, /Context: \*\*N\/A\*\*/);
-  assert.match(character.fields.map((field) => field.value).join("\n"), /▰/);
+  assert.ok(character.fields.some((field) => field.name === "// OUTPUT"));
+  const charText = character.fields.map((field) => field.value).join("\n");
+  assert.match(charText, /Damage share: \*\*24\.8%\*\*/);
+  assert.match(charText, /CPM/);
+  assert.match(charText, /Deathless \*\*79\.2%\*\*/);
+  assert.match(charText, /Taken \*\*321\.0K\*\*\/min·13\.4%/); // tank metric Traine asked for
+  assert.match(charText, /Incap/);
+  assert.match(charText, /Build: `Wind Fury`/);
+  assert.match(charText, /▰/);
 
   session.charIndex = 1;
   const support = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
-  assert.match(support.fields.map((field) => field.value).join("\n"), /Supporter:/);
-  assert.match(support.fields.map((field) => field.value).join("\n"), /Radiant 66\.7%/);
-  assert.match(support.fields.map((field) => field.value).join("\n"), /Support rank: \*\*1\.4\/2\.0\*\* · top 75\.0%/);
+  assert.equal(support.author.name, "// RAID PROFILE · CHARACTER · SUP");
+  assert.ok(support.fields.some((field) => field.name === "// SUPPORT"));
+  const supText = support.fields.map((field) => field.value).join("\n");
+  assert.match(supText, /Supporter: \*\*30\.4%\*\* · Radiant 66\.7%/);
+  assert.match(supText, /Sup rank: \*\*1\.4\/2\.0\*\*/);
+  assert.match(supText, /rDPS imp/);
+  assert.match(supText, /Synergy/);
 });
 
-test("raid-profile renders a flex char: roster flex tag + detail ALT BUILD field", () => {
+test("raid-profile renders a flex char: roster flex·SUP tag + two build tables", () => {
   const deps = makeDeps();
   const command = createRaidProfileCommand(deps);
   const session = {
@@ -262,24 +261,41 @@ test("raid-profile renders a flex char: roster flex tag + detail ALT BUILD field
         accountName: "Clauseduk",
         generatedAt: 1710000000000,
         receivedAt: 1710000005000,
-        source: "bible",
+        source: "local",
         rangeType: "full",
         characters: [
           {
+            // Support class: SUPPORT build is primary, DPS build is the alt.
             name: "Notmeow",
             class: "Artist",
             itemLevel: 1680,
             classRole: "support",
-            role: "dps",
+            role: "support",
             stats: {
-              encounters: 47,
+              encounters: 9,
               allEncounterCount: 56,
               supportLogCount: 9,
               dpsBuildLogCount: 47,
-              profileDataDepth: "bible-summary",
+              avgSupporterPercent: 25.4,
+              radiantSupportRate: 60,
+              deathlessRate: 95,
+              avgActiveTimeRate: 96,
             },
-            scores: { overall: 24.1, mvp: 20.5 },
-            altBuild: { role: "support", encounters: 9, scores: { overall: 71.0, mvp: 68.4 } },
+            scores: { overall: 71.0, mvp: 68.4, survival: 90, consistency: 75, supportUptime: 70 },
+            altBuild: {
+              role: "dps",
+              encounters: 47,
+              stats: {
+                encounters: 47,
+                avgDamageShare: 8.1,
+                avgDps: 15200000,
+                deathlessRate: 85,
+                avgDamageTakenPerMinute: 280000,
+                avgDamageTakenShare: 11,
+                avgActiveTimeRate: 93,
+              },
+              scores: { overall: 24.1, mvp: 20.5, survival: 85, consistency: 60 },
+            },
             build: { spec: "Aria" },
             raids: [],
             topSkills: [],
@@ -289,20 +305,23 @@ test("raid-profile renders a flex char: roster flex tag + detail ALT BUILD field
     ],
   };
 
-  // Roster list: the flex char is tagged `flex·DPS` (primary role); the full
-  // both-build breakdown lives in the detail view, not here.
+  // Roster list: the flex char is tagged `flex·SUP` (support is primary).
   const roster = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
   const charField = roster.fields.find((field) => field.name === "// CHARACTER");
   assert.match(charField.value, /Notmeow/);
-  assert.match(charField.value, /flex·DPS/);
+  assert.match(charField.value, /flex·SUP/);
 
-  // Character detail: a dedicated ALT BUILD field shows the off-meta build score.
+  // Character detail: two full build tables - PRIMARY support + ALT dps.
   session.charIndex = 0;
   const character = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
-  const altField = character.fields.find((field) => field.name === "// ALT BUILD");
-  assert.ok(altField, "expected an // ALT BUILD field for the flex char");
-  assert.match(altField.value, /Support · 9 log · score \*\*71\.0\*\*/);
-  assert.match(altField.value, /MVP 68\.4/);
+  assert.equal(character.author.name, "// RAID PROFILE · CHARACTER · FLEX");
+  assert.ok(character.fields.some((field) => field.name === "// PRIMARY · SUP BUILD"));
+  assert.ok(character.fields.some((field) => field.name === "// ALT BUILD · DPS BUILD"));
+  assert.ok(character.fields.some((field) => field.name === "// SUPPORT"), "primary build renders the support table");
+  assert.ok(character.fields.some((field) => field.name === "// OUTPUT"), "alt build renders the dps table");
+  const text = character.fields.map((field) => field.value).join("\n");
+  assert.match(text, /Supporter: \*\*25\.4%\*\*/); // primary support metric
+  assert.match(text, /Damage share: \*\*8\.1%\*\*/); // alt dps metric from altBuild.stats
 });
 
 test("raid-profile render marks bible summary metrics without local-only fields", () => {
@@ -380,16 +399,15 @@ test("raid-profile render marks bible summary metrics without local-only fields"
   const character = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
   const text = character.fields.map((field) => field.value).join("\n");
   assert.match(character.footer.text, /^\/\/ BIBLE FULL/);
-  assert.match(character.fields.find((field) => field.name === "// SCORE").value, /Bible pct:/);
-  assert.match(text, /Data depth: \*\*lostark\.bible summary\*\*/);
-  assert.match(text, /Profile range: \*\*full\*\*/);
-  assert.match(text, /Bible pct: \*\*86\.0%\*\* .* overall 91\.0%/);
-  assert.match(text, /rDPS\/nDPS: \*\*132\.0M\*\* \/ 101\.0M/);
-  assert.match(text, /uDPS: \*\*115\.0M\*\*/);
-  assert.match(text, /Variant split: Igniter 1 log[\s\S]*Reflux 1 log/);
+  assert.equal(character.author.name, "// RAID PROFILE · CHARACTER · DPS");
+  assert.ok(character.fields.some((field) => field.name === "// OUTPUT"));
+  assert.match(text, /Bible pct: \*\*91\.0%\*\*/);
+  assert.match(text, /Avg DPS: \*\*120\.0M\*\*/);
+  assert.match(text, /Deathless \*\*50\.0%\*\*/);
+  // bible-summary hides local-only metrics instead of showing N/A noise
   assert.doesNotMatch(text, /Peak 10s:/);
-  assert.doesNotMatch(character.fields.map((field) => field.name).join("\n"), /BUFF PROFILE/);
-  assert.doesNotMatch(text, /rDPS valid:/);
+  assert.doesNotMatch(text, /CPM/);
+  assert.doesNotMatch(text, /Taken \*\*/);
 });
 
 test("raid-profile prefers local detailed snapshot over bible full-lite", () => {

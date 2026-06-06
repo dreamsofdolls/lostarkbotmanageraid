@@ -4,6 +4,16 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-06 (raid-profile CHARACTER: trimmed #3-rich + flex two-table)
+
+### Changed
+- `/raid-profile` CHARACTER view rebuilt as a compact #3-rich dashboard: a SCORE | role-driver 2-column row + a full-width detail line per build (was ~50-60 lines across 9-11 fields). Curated set keeps the headline scores, the role drivers (DPS: context / damage-share / DPS; SUP: rDPS-impact / supporter% / radiant), and CPM + damage-taken (tank) + incap + counters/stagger + deathless. Dropped combat shape, buff profile, top skills, raid breakdown, role detection, the Ark-passive line, and the deep reliability dump.
+- Support classes are now scored on their support build by default (any support log -> support is primary: SUP role + headline score; a DPS build becomes the alt). The old majority-vote mis-scored a DPS-heavy support as DPS; this also flips such characters to SUP in the roster list + aggregate.
+- Flex characters render two full build tables (PRIMARY + ALT BUILD), each role-aware, instead of a one-line alt summary. `altBuild` now stores its full `stats` (both scorers + the sanitizer whitelist) so the alt table renders.
+
+### Removed
+- Deleted the now-dead `embeds/character-fields.js` + `helpers/view-helpers.js` (the old verbose character-field builders).
+
 ## 2026-06-06 (raid-profile: overview button fix + nav icons)
 
 ### Fixed

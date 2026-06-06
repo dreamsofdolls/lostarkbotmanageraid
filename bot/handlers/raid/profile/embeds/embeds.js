@@ -9,16 +9,12 @@ const {
   pickTopChar,
 } = require("../helpers/aggregate");
 const {
-  contextScoreLine,
-} = require("../helpers/view-helpers");
-const {
   confidenceForLogs,
   footerTimestamp,
   formatDateMs,
   hudFieldName,
   isBibleSummaryProfile,
   latestSnapshotMs,
-  pct,
   rangeTag,
   roleEmoji,
   roleLabel,
@@ -28,13 +24,8 @@ const {
   sourceTag,
 } = require("../helpers/display");
 const {
-  reliabilityLines,
-  roleDetailLines,
-  sourceOrCombatShapeLines,
+  buildBuildFields,
 } = require("./character-lines");
-const {
-  buildCharacterExtraFields,
-} = require("./character-fields");
 const {
   sliceMapWithOverflow,
 } = require("../helpers/list-lines");
@@ -190,64 +181,44 @@ function buildCharacterEmbed({ EmbedBuilder }, session, entry, character) {
   const scores = character.scores || {};
   const isSupport = character.role === "support";
   const isBibleSummary = isBibleSummaryProfile(entry, character);
-  // Playstyle/spec comes from the enlightenment node (getSpecFromArkPassiveNodes);
-  // fall back to the raw build.spec, then nothing. Surfaced as a badge in the
-  // header (inline code) instead of a buried Build line.
+  // Playstyle/spec from the enlightenment node, falling back to raw build.spec.
   const spec = character.build?.arkPassive?.enlightenment?.spec || character.build?.spec || "";
-  // Custom class emoji renders in the description (not in titles), so the class
-  // icon lives on the identity line, not the title.
   const classEmoji = getClassEmoji(character.class) || (isSupport ? "🛡️" : "⚔️");
-  // Flex: the off-meta build's own score, shown as its own field next to the
-  // primary SCORE. Empty array when the char isn't flex so the spread is a no-op.
-  const altBuildFields = character.altBuild
-    ? [{
-        name: hudFieldName("alt build"),
-        value: `${character.altBuild.role === "support" ? "Support" : "DPS"} · ${character.altBuild.encounters} log · score **${score(character.altBuild.scores?.overall)}** · MVP ${score(character.altBuild.scores?.mvp)}`,
-        inline: false,
-      }]
-    : [];
+  const altBuild = character.altBuild || null;
+  const roleTag = isSupport ? "SUP" : "DPS";
+
   const embed = new EmbedBuilder()
     .setColor(isSupport ? PROFILE_COLORS.support : PROFILE_COLORS.amber)
-    .setAuthor({ name: "// RAID PROFILE · CHARACTER" })
-    .setTitle(character.name)
+    .setAuthor({ name: `// RAID PROFILE · CHARACTER · ${altBuild ? "FLEX" : roleTag}` })
+    .setTitle(`${classEmoji} ${character.name}`)
     .setDescription([
-      `${classEmoji} **${character.class || "Unknown"}** · ${roleLabel(character)} · iLvl **${character.itemLevel || 0}**${spec ? ` · \`${spec}\`` : ""}`,
-      `Roster: **${getEntryLabel(entry)}**`,
-      t("raidProfile.confidence", lang, { conf: confidenceForLogs(stats.encounters), n: stats.encounters || 0 }),
-    ].join("\n"))
-    .addFields(
-      {
-        name: hudFieldName("score"),
-        value: [
-          scoreLine("Overall", scores.overall),
-          scoreLine("MVP", scores.mvp),
-          contextScoreLine(entry, character),
-          scoreLine("Survival", scores.survival),
-          scoreLine("Consistency", scores.consistency),
-        ].join("\n"),
-        inline: true,
-      },
-      {
-        name: hudFieldName(isSupport ? "SUP detail" : "DPS detail"),
-        value: roleDetailLines(stats, scores, { isSupport, isBibleSummary }).join("\n"),
-        inline: true,
-      },
-      ...altBuildFields,
-      {
-        name: hudFieldName(isBibleSummary ? "source detail" : "combat shape"),
-        value: sourceOrCombatShapeLines(entry, stats, { isBibleSummary }).join("\n"),
-        inline: false,
-      },
-      {
-        name: hudFieldName("reliability"),
-        value: reliabilityLines(stats, { isBibleSummary, lang }).join("\n"),
-        inline: false,
-      }
-    );
+      `${character.class || "Unknown"} · ${roleLabel(character)} · iLvl **${character.itemLevel || 0}**${spec ? ` · \`${spec}\`` : ""}`,
+      `${getEntryLabel(entry)} · ${t("raidProfile.confidence", lang, { conf: confidenceForLogs(stats.encounters), n: stats.encounters || 0 })}`,
+    ].join("\n"));
 
-  embed.addFields(...buildCharacterExtraFields(character, { lang, isBibleSummary }));
+  // Flex characters get a labelled header before each build's table so the two
+  // builds read as distinct; a non-flex character shows the single table bare.
+  if (altBuild) {
+    embed.addFields({
+      name: `// PRIMARY · ${roleTag} BUILD`,
+      value: `**${Math.round(Number(stats.encounters) || 0)}** log`,
+      inline: false,
+    });
+  }
+  embed.addFields(...buildBuildFields(character.role, stats, scores, { spec, isBibleSummary }));
+
+  if (altBuild) {
+    const altTag = altBuild.role === "support" ? "SUP" : "DPS";
+    embed.addFields({
+      name: `// ALT BUILD · ${altTag} BUILD`,
+      value: `**${Math.round(Number(altBuild.encounters) || 0)}** log`,
+      inline: false,
+    });
+    embed.addFields(...buildBuildFields(altBuild.role, altBuild.stats || {}, altBuild.scores || {}, { isBibleSummary }));
+  }
+
   embed.setFooter({
-    text: `// ${sourceTag(entry.source)} ${rangeTag(entry.rangeType)} · ${String(character.class || "UNKNOWN").toUpperCase()} · ${roleLabel(character).toUpperCase()} · ${stats.encounters || 0} SCORED · CONF ${confidenceForLogs(stats.encounters).toUpperCase()} · ${footerTimestamp(entry.receivedAt || entry.generatedAt)}`,
+    text: `// ${sourceTag(entry.source)} ${rangeTag(entry.rangeType)} · ${String(character.class || "UNKNOWN").toUpperCase()} · ${altBuild ? "FLEX" : roleLabel(character).toUpperCase()} · ${stats.encounters || 0} SCORED · CONF ${confidenceForLogs(stats.encounters).toUpperCase()} · ${footerTimestamp(entry.receivedAt || entry.generatedAt)}`,
   });
 
   return embed;
