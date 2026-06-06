@@ -7,7 +7,7 @@ const {
   ROSTER_PICKER_ACTION,
   getRosterPickerRoute,
   parseRosterPickerCustomId,
-} = require("../bot/handlers/roster/picker-routes");
+} = require("../bot/handlers/roster/picker/picker-routes");
 
 test("roster picker parser keeps prefix, action, session id, and index slots", () => {
   assert.deepEqual(parseRosterPickerCustomId("gold-earner:toggle:sess1:6"), {

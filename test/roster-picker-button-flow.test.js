@@ -5,7 +5,7 @@ const {
   handleRosterPickerToggle,
   loadRosterPickerButtonContext,
   selectedRosterPickerChars,
-} = require("../bot/handlers/roster/button-flow");
+} = require("../bot/handlers/roster/picker/button-flow");
 
 function makeInteraction(customId, userId = "user-1") {
   return {

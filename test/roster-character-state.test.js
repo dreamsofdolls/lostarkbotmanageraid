@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 
 const {
   preserveRosterCharacterState,
-} = require("../bot/handlers/roster/character-state");
+} = require("../bot/handlers/roster/picker/character-state");
 
 test("preserveRosterCharacterState carries bible and public-log fields only when present", () => {
   const record = { name: "Qiylyn" };

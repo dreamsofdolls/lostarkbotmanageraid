@@ -17,10 +17,10 @@ const {
   handleRosterPickerCancel,
   handleRosterPickerToggle,
   loadRosterPickerButtonContext,
-} = require("./button-flow");
+} = require("./picker/button-flow");
 const {
   preserveRosterCharacterState,
-} = require("./character-state");
+} = require("./picker/character-state");
 const {
   buildEditRosterPickerChars: buildEditRosterPickerCharsCore,
 } = require("./edit/edit-picker-chars");
