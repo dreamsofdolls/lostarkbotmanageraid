@@ -86,3 +86,32 @@ test("profile process log reset hides and clears the container", async () => {
   assert.equal(container.hidden, true);
   assert.equal(container.innerHTML, "");
 });
+
+test("profile process log render preserves page scroll across heartbeat rerenders", async () => {
+  const { createProfileProcessLogRenderer } = await import("../web/js/profile/profile-process-log.js");
+  const calls = [];
+  const view = {
+    scrollX: 12,
+    scrollY: 420,
+    scrollTo(x, y) {
+      calls.push([x, y]);
+      this.scrollX = x;
+      this.scrollY = y;
+    },
+  };
+  const container = {
+    hidden: true,
+    innerHTML: "",
+    ownerDocument: { defaultView: view },
+  };
+  const renderer = createProfileProcessLogRenderer({ container });
+
+  renderer.render("info", "Scanning encounters.db (~4.5 GB)... 1s");
+  view.scrollY = 777;
+  renderer.render("info", "Scanning encounters.db (~4.5 GB)... 2s");
+
+  assert.deepEqual(calls, [
+    [12, 420],
+    [12, 777],
+  ]);
+});
