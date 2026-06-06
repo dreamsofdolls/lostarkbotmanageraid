@@ -7,9 +7,9 @@
  * (or grantee's) preferred language.
  */
 
-const { getClassEmoji } = require("../../models/Class");
-const { pack2Columns, formatProgressTotals } = require("../../utils/raid/common/shared");
-const { t } = require("../../services/i18n");
+const { getClassEmoji } = require("../../../models/Class");
+const { pack2Columns, formatProgressTotals } = require("../../../utils/raid/common/shared");
+const { t } = require("../../../services/i18n");
 
 /**
  * Build the /raid-status view service.

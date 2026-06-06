@@ -1,7 +1,7 @@
 "use strict";
 
-const { getAccessibleAccounts } = require("../../services/access/access-control");
-const { getUserLanguage } = require("../../services/i18n");
+const { getAccessibleAccounts } = require("../../../services/access/access-control");
+const { getUserLanguage } = require("../../../services/i18n");
 
 async function probeLocalSyncMode({ User, discordId }) {
   try {

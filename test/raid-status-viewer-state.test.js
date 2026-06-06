@@ -6,7 +6,7 @@ const assert = require("node:assert/strict");
 const {
   loadStatusViewerState,
   probeLocalSyncMode,
-} = require("../bot/handlers/raid-status/viewer-state");
+} = require("../bot/handlers/raid-status/state/viewer-state");
 const {
   clearUserLanguageCache,
 } = require("../bot/services/i18n");

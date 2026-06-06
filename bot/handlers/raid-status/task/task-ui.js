@@ -1,12 +1,12 @@
 "use strict";
 
-const { getClassEmoji } = require("../../models/Class");
-const { buildAccountTaskFields } = require("../../utils/raid/tasks/task-view");
+const { getClassEmoji } = require("../../../models/Class");
+const { buildAccountTaskFields } = require("../../../utils/raid/tasks/task-view");
 const {
   getVisibleSharedTasks,
   getSharedTaskDisplay,
-} = require("../../utils/raid/tasks/shared-tasks");
-const { t } = require("../../services/i18n");
+} = require("../../../utils/raid/tasks/shared-tasks");
+const { t } = require("../../../services/i18n");
 const { createTaskFilterState } = require("./task-ui/filters");
 const { createTaskViewEmbedBuilder } = require("./task-ui/embed");
 const { createSharedTaskToggleRow } = require("./task-ui/shared-row");
