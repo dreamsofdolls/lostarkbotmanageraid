@@ -7,46 +7,37 @@
 
 "use strict";
 
-const { t, getUserLanguage, getGuildLanguage } = require("../../../services/i18n");
+const { t } = require("../../../services/i18n");
 const {
   RAID_REQUIREMENTS,
-  getRaidRequirementMap,
-  getGatesForRaid,
-  getRaidPartySize,
 } = require("../../../domain/raid-catalog");
-const { slotCountsForSize } = require("../../../services/raid/schedule/slot-config");
-const { parseStartTime } = require("../../../services/raid/schedule/time-parse");
-const { partitionSelectable } = require("../../../services/raid/schedule/eligibility");
-const { applyJoin, applyRsvp, applyKick } = require("../../../services/raid/schedule/signup-state");
-const { assignSlots, detectPromotion } = require("../../../services/raid/schedule/slots");
-const { selectAutoClearTargets } = require("../../../services/raid/schedule/auto-clear");
-const { shapeOwnedBoardOptions } = require("../../../services/raid/schedule/owned-boards");
 const {
   addTurn,
   setTurnMembers,
-  removeMembersFromTurns,
 } = require("../../../services/raid/schedule/turns");
 const {
   buildScheduleEmbed,
   buildScheduleComponents,
-  renderGauge,
-} = require("./board");
+} = require("./view/board");
 const {
-  PICKER_LIMIT,
   clip,
-  findOwnEligibleRows,
-  characterSelectOptions,
-} = require("./select-options");
-const { createScheduleNoticeHelpers } = require("./notices");
-const { createSchedulePanelBuilders } = require("./panels");
+} = require("./view/select-options");
+const { createScheduleNoticeHelpers } = require("./view/notices");
+const { createSchedulePanelBuilders } = require("./view/panels");
 const {
   parseScheduleCustomId,
   resolveScheduleActionHandler,
 } = require("./router");
+const { createScheduleRuntimeHelpers } = require("./runtime");
+const { createScheduleCoreActions } = require("./actions/core-actions");
+const { createScheduleCancelActions } = require("./actions/cancel-actions");
+const { createScheduleDeleteActions } = require("./actions/delete-actions");
+const { createScheduleModalActions } = require("./actions/modal-actions");
+const { createScheduleShowActions } = require("./show/show-actions");
+const { createScheduleParticipantActions } = require("./actions/participant-actions");
+const { createScheduleMemberActions } = require("./actions/member-actions");
 
 const EPHEMERAL_FLAG = 1 << 6;
-const CLOSED_EVENT_STATUSES = new Set(["cleared", "cancelled"]);
-
 function createRaidScheduleCommand({
   EmbedBuilder,
   ActionRowBuilder,
@@ -93,924 +84,82 @@ function createRaidScheduleCommand({
     noticeEmbed,
   });
 
-  async function userLang(interaction) {
-    return getUserLanguage(interaction.user?.id, { UserModel: User });
-  }
-
-  async function boardLang(guildId) {
-    return getGuildLanguage(guildId, { GuildConfigModel: GuildConfig });
-  }
-
-  // Async because the board carries a "Board khác của lead" switcher that must
-  // survive every re-render (join/rsvp/kick all funnel through editBoardMessage
-  // -> boardPayload). We re-derive the creator's active boards on each render -
-  // one guild+channel-scoped creator query; board edits are click-driven so the
-  // cost is negligible, and this keeps the switcher correct without stored state.
-  async function boardPayload(event, lang) {
-    let ownedBoardOptions = [];
-    try {
-      const owned = await RaidEvent.find({
-        guildId: event.guildId,
-        channelId: event.channelId,
-        creatorId: event.creatorId,
-        status: { $in: ["open", "locked"] },
-      })
-        .sort({ startAt: 1 })
-        .lean();
-      if (owned.length >= 2) {
-        ownedBoardOptions = shapeOwnedBoardOptions(owned, String(event._id));
-        // No silent caps: shapeOwnedBoardOptions trims to Discord's 25-option
-        // limit, so flag when a busy lead has more boards than the switcher shows.
-        if (owned.length > ownedBoardOptions.length) {
-          console.warn(
-            `[raid-schedule] board switcher capped: ${owned.length} owned boards, showing ${ownedBoardOptions.length}`,
-          );
-        }
-      }
-    } catch (error) {
-      console.warn("[raid-schedule] owned-board query failed:", error?.message || error);
-    }
-    return {
-      embeds: [buildScheduleEmbed(event, { EmbedBuilder, UI, lang })],
-      components: buildScheduleComponents(event, {
-        ActionRowBuilder,
-        ButtonBuilder,
-        ButtonStyle,
-        StringSelectMenuBuilder,
-        ownedBoardOptions,
-        lang,
-      }),
-    };
-  }
-
-  async function loadEvent(eventId) {
-    if (!eventId) return null;
-    try {
-      return await RaidEvent.findById(eventId);
-    } catch {
-      return null;
-    }
-  }
-
-  function raidMetaFor(raidKey, modeKey) {
-    return getRaidRequirementMap()[`${raidKey}_${modeKey}`] || null;
-  }
-
-  function isLeadActionAllowed(interaction) {
-    return Boolean(interaction.user?.id && isManagerId(interaction.user.id));
-  }
-
-  function isClosedEvent(event) {
-    return CLOSED_EVENT_STATUSES.has(event?.status);
-  }
-
-  async function rejectUnlessLead(
-    interaction,
-    lang,
-    respond = replyNotice,
-    titleKey = "managerOnlyTitle",
-    descriptionKey = "managerOnlyDescription",
-  ) {
-    if (isLeadActionAllowed(interaction)) return false;
-    await respond(interaction, lang, "danger", titleKey, descriptionKey);
-    return true;
-  }
-
-  async function rejectIfEventClosed(interaction, event, lang, respond = replyNotice) {
-    if (!isClosedEvent(event)) return false;
-    await respond(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-    return true;
-  }
-
-  async function rejectUnlessLeadMutable(interaction, event, lang, respond = replyNotice) {
-    if (await rejectUnlessLead(interaction, lang, respond)) return true;
-    return rejectIfEventClosed(interaction, event, lang, respond);
-  }
-
-  function markSignups(event, signups) {
-    event.signups = signups;
-    if (typeof event.markModified === "function") event.markModified("signups");
-  }
-
-  function pickerRowFor(event, rows, lang) {
-    return new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId(`rse:pick:${event._id}`)
-        .setPlaceholder(t("raid-schedule.picker.placeholder", lang))
-        .setMinValues(1)
-        .setMaxValues(1)
-        .addOptions(characterSelectOptions(rows, lang)),
-    );
-  }
-
-  async function editBoardMessage(interaction, event, lang) {
-    if (!event.messageId || !event.channelId || !interaction.client?.channels) return false;
-    try {
-      const channel = await interaction.client.channels.fetch(event.channelId);
-      const message = await channel?.messages?.fetch(event.messageId);
-      if (!message) return false;
-      await message.edit(await boardPayload(event, lang));
-      return true;
-    } catch (error) {
-      console.warn("[raid-schedule] board edit failed:", error?.message || error);
-      return false;
-    }
-  }
-
-  function isCompMember(event, discordId) {
-    const slots = assignSlots(event.signups, {
-      supSlots: event.supSlots,
-      dpsSlots: event.dpsSlots,
-    });
-    return [...slots.support, ...slots.dps].some((s) => s.discordId === discordId);
-  }
-
-  async function writeAutoClears(interaction, event) {
-    const targets = selectAutoClearTargets(event);
-    if (targets.length === 0 || typeof applyRaidSetBatchForDiscordId !== "function") {
-      return { targets: targets.length, updated: 0, failed: 0 };
-    }
-
-    const raidMeta = raidMetaFor(event.raidKey, event.modeKey);
-    const effectiveGates = getGatesForRaid(event.raidKey);
-    const byUser = new Map();
-    for (const target of targets) {
-      const list = byUser.get(target.discordId) || [];
-      list.push({
-        executorId: interaction.user.id,
-        rosterName: target.accountName,
-        characterName: target.characterName,
-        raidMeta,
-        statusType: "complete",
-        effectiveGates,
-      });
-      byUser.set(target.discordId, list);
-    }
-
-    let updated = 0;
-    let failed = 0;
-    for (const [discordId, entries] of byUser.entries()) {
-      try {
-        const results = await applyRaidSetBatchForDiscordId({ discordId, entries });
-        updated += results.filter((r) => r.updated).length;
-        failed += results.filter((r) => !r.updated).length;
-      } catch (error) {
-        failed += entries.length;
-        console.warn("[raid-schedule] auto-clear write failed:", error?.message || error);
-      }
-    }
-    return { targets: targets.length, updated, failed };
-  }
-
+  const {
+    boardLang,
+    boardPayload,
+    editBoardMessage,
+    isClosedEvent,
+    isCompMember,
+    loadEvent,
+    markSignups,
+    markTurns,
+    onBoardMessage,
+    raidMetaFor,
+    rejectUnlessLead,
+    rejectUnlessLeadMutable,
+    userLang,
+    writeAutoClears,
+  } = createScheduleRuntimeHelpers({
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    StringSelectMenuBuilder,
+    EmbedBuilder,
+    UI,
+    User,
+    GuildConfig,
+    RaidEvent,
+    isManagerId,
+    applyRaidSetBatchForDiscordId,
+    buildScheduleEmbed,
+    buildScheduleComponents,
+    replyNotice,
+  });
   async function handleRaidScheduleCommand(interaction) {
     const subcommand = interaction.options.getSubcommand();
-    // `show` resurfaces the lead's signup board (delete + repost = a lead
-    // action), so it gates itself inside handleShowCommand. Routed early to
-    // skip the create-only reject below.
-    if (subcommand === "show") return handleShowCommand(interaction);
+    const handler = SCHEDULE_COMMAND_HANDLERS[subcommand];
+    if (handler) return handler(interaction);
 
     const lang = await userLang(interaction);
-    if (await rejectUnlessLead(interaction, lang, replyNotice, "notManagerTitle", "notManagerDescription")) return;
-    if (subcommand !== "create") {
-      await replyNotice(interaction, lang, "warn", "unknownTitle", "unknownDescription");
-      return;
-    }
-
-    const guildId = interaction.guildId || interaction.guild?.id;
-    const channelId = interaction.channelId || interaction.channel?.id;
-    if (!guildId || !channelId) {
-      await replyNotice(interaction, lang, "danger", "guildOnlyTitle", "guildOnlyDescription");
-      return;
-    }
-
-    const raidKey = interaction.options.getString("raid", true);
-    const modeKey = interaction.options.getString("mode", true);
-    const meta = raidMetaFor(raidKey, modeKey);
-    if (!meta) {
-      await replyNotice(interaction, lang, "danger", "invalidModeTitle", "invalidModeDescription");
-      return;
-    }
-
-    const startAt = parseStartTime(interaction.options.getString("when", true), lang);
-    if (!startAt) {
-      await replyNotice(interaction, lang, "danger", "invalidTimeTitle", "invalidTimeDescription");
-      return;
-    }
-
-    const partySize = getRaidPartySize(raidKey);
-    const { supSlots, dpsSlots } = slotCountsForSize(partySize);
-    const autoLockAtStart = interaction.options.getBoolean("auto_lock") ?? true;
-    const skipNotify = interaction.options.getBoolean("skip_notify") ?? false;
-    const title = (interaction.options.getString("title") || `${meta.label}`).trim();
-
-    await interaction.deferReply();
-
-    const event = new RaidEvent({
-      guildId,
-      channelId,
-      creatorId: interaction.user.id,
-      raidKey,
-      modeKey,
-      minItemLevel: meta.minItemLevel,
-      partySize,
-      supSlots,
-      dpsSlots,
-      title,
-      startAt,
-      autoLockAtStart,
-      skipNotify,
-      status: "open",
-      signups: [],
-    });
-    await event.save();
-
-    const langForBoard = await boardLang(guildId);
-    const message = await interaction.editReply(await boardPayload(event, langForBoard));
-    const savedMessage = message?.id ? message : await interaction.fetchReply();
-    event.messageId = savedMessage?.id || null;
-    await event.save();
+    await replyNotice(interaction, lang, "warn", "unknownTitle", "unknownDescription");
   }
 
-  async function handleJoin(interaction, event, lang) {
-    if (event.status !== "open") {
-      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
-    await interaction.deferReply({ flags: ephemeralFlag });
-    const userDoc = await User.findOne({ discordId: interaction.user.id }).lean();
-    if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
-      await editNotice(interaction, lang, "warn", "noRosterTitle", "noRosterDescription");
-      return;
-    }
-
-    // Already-cleared chars are dropped: re-signing a char that finished this
-    // raid this week is pointless for a normal clear. allCleared lets us say
-    // "all cleared" instead of the misleading "no char at iLvl".
-    const { selectable: rows, allCleared } = partitionSelectable(findOwnEligibleRows(userDoc, event));
-    if (rows.length === 0) {
-      await editNotice(
-        interaction,
-        lang,
-        "warn",
-        allCleared ? "allClearedTitle" : "noEligibleTitle",
-        allCleared ? "allClearedDescription" : "noEligibleDescription",
-        { ilvl: event.minItemLevel },
-      );
-      return;
-    }
-
-    const descriptionKey = rows.length > PICKER_LIMIT
-      ? "pickerDescriptionLimited"
-      : "pickerDescription";
-    await interaction.editReply({
-      embeds: [
-        noticeEmbed(
-          "info",
-          t("raid-schedule.picker.title", lang),
-          t(`raid-schedule.picker.${descriptionKey}`, lang, {
-            count: rows.length,
-            limit: PICKER_LIMIT,
-          }),
-        ),
-      ],
-      components: [pickerRowFor(event, rows, lang)],
-    });
-  }
-
-  async function handlePick(interaction, event, lang) {
-    if (event.status !== "open") {
-      await editNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
-
-    const rowIndex = Number(interaction.values?.[0]);
-    const userDoc = await User.findOne({ discordId: interaction.user.id }).lean();
-    const rows = partitionSelectable(findOwnEligibleRows(userDoc, event)).selectable;
-    const row = rows.find((candidate) => candidate.index === rowIndex);
-    if (!row) {
-      await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");
-      return;
-    }
-
-    const before = Array.from(event.signups || []);
-    const next = applyJoin(before, {
-      discordId: interaction.user.id,
-      accountName: row.accountName,
-      characterName: row.name,
-      characterClass: row.className,
-      characterItemLevel: row.itemLevel,
-      alreadyClearedThisWeek: row.alreadyCleared,
-    });
-    markSignups(event, next);
-    await event.save();
-
-    const langForBoard = await boardLang(event.guildId);
-    const refreshed = await editBoardMessage(interaction, event, langForBoard);
-    await editNotice(
-      interaction,
-      lang,
-      refreshed ? "success" : "warn",
-      refreshed ? "joinedTitle" : "joinedRefreshFailedTitle",
-      refreshed ? "joinedDescription" : "joinedRefreshFailedDescription",
-      { character: row.name },
-    );
-  }
-
-  async function handleRsvp(interaction, event, status, lang) {
-    if (isClosedEvent(event)) {
-      await replyNotice(interaction, lang, "warn", "eventClosedTitle", "eventClosedDescription");
-      return;
-    }
-    if (event.status === "locked" && status !== "absent") {
-      await replyNotice(interaction, lang, "warn", "lockedTitle", "lockedDescription");
-      return;
-    }
-
-    const before = Array.from(event.signups || []);
-    const result = applyRsvp(before, interaction.user.id, status);
-    if (!result.ok) {
-      await replyNotice(interaction, lang, "warn", "notJoinedTitle", "notJoinedDescription");
-      return;
-    }
-
-    markSignups(event, result.signups);
-    await interaction.deferUpdate();
-    await event.save();
-    const langForBoard = await boardLang(event.guildId);
-    await interaction.editReply(await boardPayload(event, langForBoard));
-
-    const promoted = detectPromotion(before, result.signups, {
-      supSlots: event.supSlots,
-      dpsSlots: event.dpsSlots,
-    });
-    if (promoted.length > 0 && !event.skipNotify) {
-      await interaction.followUp({
-        content: promoted
-          .map((s) => t("raid-schedule.notice.promotedPing", langForBoard, {
-            user: `<@${s.discordId}>`,
-            character: s.characterName,
-          }))
-          .join("\n"),
-        flags: ephemeralFlag,
-      }).catch(() => {});
-    }
-  }
-
-  async function handleLockToggle(interaction, event, action, lang) {
-    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
-    const onBoard = onBoardMessage(interaction, event);
-    event.status = action === "unlock" ? "open" : "locked";
-    await interaction.deferUpdate();
-    await event.save();
-    const langForBoard = await boardLang(event.guildId);
-    if (onBoard) {
-      await interaction.editReply(await boardPayload(event, langForBoard));
-      return;
-    }
-    // From the Manage menu: update the canonical board, then re-render the
-    // ephemeral menu so the Lock/Unlock label flips.
-    await editBoardMessage(interaction, event, langForBoard);
-    const menu = manageMenuPayload(event, lang);
-    await interaction.editReply({ embeds: menu.embeds, components: menu.components });
-  }
-
-  async function handleEnd(interaction, event, lang) {
-    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
-
-    await interaction.deferUpdate();
-    const summary = await writeAutoClears(interaction, event);
-    event.status = "cleared";
-    event.clearedAt = new Date();
-    await event.save();
-
-    const langForBoard = await boardLang(event.guildId);
-    const onBoard = onBoardMessage(interaction, event);
-    // Gauge of clears written (updated/targets) in front of the warm summary.
-    const endGauge = renderGauge(summary.updated, summary.targets);
-    const summaryEmbed = noticeEmbed(
-      summary.failed > 0 ? "warn" : "success",
-      t("raid-schedule.notice.endedTitle", lang, summary),
-      `${endGauge ? `${endGauge}  ` : ""}${t("raid-schedule.notice.endedDescription", lang, summary)}`,
-    );
-    if (onBoard) {
-      await interaction.editReply(await boardPayload(event, langForBoard));
-      await interaction.followUp({ embeds: [summaryEmbed], flags: ephemeralFlag }).catch(() => {});
-      return;
-    }
-    // From the Manage menu: freeze the canonical board, then collapse the
-    // ephemeral menu down to the end summary.
-    await editBoardMessage(interaction, event, langForBoard);
-    await interaction.editReply({ embeds: [summaryEmbed], components: [] });
-  }
-
-  async function handleRoom(interaction, event, lang) {
-    if (!isCompMember(event, interaction.user.id)) {
-      await replyNotice(interaction, lang, "warn", "roomDeniedTitle", "roomDeniedDescription");
-      return;
-    }
-    if (!event.roomName) {
-      await replyNotice(interaction, lang, "info", "roomEmptyTitle", "roomEmptyDescription");
-      return;
-    }
-    const passwordLine = event.roomPassword
-      ? t("raid-schedule.notice.roomPasswordLine", lang, { password: event.roomPassword })
-      : t("raid-schedule.notice.roomNoPasswordLine", lang);
-    const roomRaidLabel = raidMetaFor(event.raidKey, event.modeKey)?.label || `${event.raidKey} ${event.modeKey}`;
-    await interaction.reply({
-      embeds: [
-        noticeEmbed(
-          "info",
-          t("raid-schedule.notice.roomTitle", lang),
-          `\`${roomRaidLabel}\`\n${t("raid-schedule.notice.roomDescription", lang, {
-            room: event.roomName,
-            passwordLine,
-          })}`,
-        ),
-      ],
-      flags: ephemeralFlag,
-    });
-  }
-
-  async function handleHelp(interaction, lang) {
-    await interaction.reply({
-      embeds: [
-        noticeEmbed(
-          "info",
-          t("raid-schedule.notice.helpTitle", lang),
-          t("raid-schedule.notice.helpDescription", lang),
-        ),
-      ],
-      flags: ephemeralFlag,
-    });
-  }
-
-  async function handleManage(interaction, event, lang) {
-    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
-    await interaction.reply(manageMenuPayload(event, lang));
-  }
-
-  // Flip silent mode from the Manage menu, then re-render so the button label
-  // updates (🔔 Báo BẬT <-> 🔕 Báo TẮT). Lead-only. Only the ping behaviour
-  // changes - signups, board, auto-clear are untouched.
-  async function handleToggleNotify(interaction, event, lang) {
-    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
-    event.skipNotify = !event.skipNotify;
-    await interaction.deferUpdate();
-    await event.save();
-    const menu = manageMenuPayload(event, lang);
-    await interaction.editReply({ embeds: menu.embeds, components: menu.components });
-  }
-
-  // Lock/unlock + End are reachable from the Manage menu (ephemeral), and
-  // from legacy boards that still carry those buttons. `onBoardMessage`
-  // distinguishes the two so we edit the right surface: the board in place
-  // when clicked on the board, or the canonical board via messageId + the
-  // ephemeral menu re-render when clicked from the menu.
-  function onBoardMessage(interaction, event) {
-    return Boolean(
-      interaction.message && String(interaction.message.id) === String(event.messageId),
-    );
-  }
-
-  // Build a single-line text input row for a modal.
-  function modalTextRow(customId, label, { required, value, maxLength = 100 }) {
-    const input = new TextInputBuilder()
-      .setCustomId(customId)
-      .setLabel(clip(label, 45))
-      .setStyle(TextInputStyle.Short)
-      .setRequired(Boolean(required))
-      .setMaxLength(maxLength);
-    if (value) input.setValue(String(value).slice(0, maxLength));
-    return new ActionRowBuilder().addComponents(input);
-  }
-
-  async function handleSetRoom(interaction, event, lang) {
-    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
-    const id = String(event._id);
-    const modalId = `rse:roommodal:${id}`;
-    const modal = new ModalBuilder()
-      .setCustomId(modalId)
-      .setTitle(clip(t("raid-schedule.modal.roomTitle", lang), 45))
-      .addComponents(
-        modalTextRow("room", t("raid-schedule.modal.roomNameLabel", lang), {
-          required: true,
-          value: event.roomName,
-        }),
-        modalTextRow("password", t("raid-schedule.modal.roomPasswordLabel", lang), {
-          required: false,
-          value: event.roomPassword,
-        }),
-      );
-    await interaction.showModal(modal);
-
-    // Promise-based collector instead of router-level modal routing - keeps
-    // this flow self-contained (no shared-router change).
-    const submit = await interaction
-      .awaitModalSubmit({
-        time: 120000,
-        filter: (i) => i.customId === modalId && i.user.id === interaction.user.id,
-      })
-      .catch(() => null);
-    if (!submit) return;
-
-    const roomName = (submit.fields.getTextInputValue("room") || "").trim();
-    const password = (submit.fields.getTextInputValue("password") || "").trim();
-    const fresh = await loadEvent(id);
-    if (!fresh) {
-      await submit.reply(noticePayload(lang, "warn", "missingEventTitle", "missingEventDescription"));
-      return;
-    }
-    fresh.roomName = roomName || null;
-    fresh.roomPassword = password || null;
-    await fresh.save();
-
-    const langForBoard = await boardLang(fresh.guildId);
-    await editBoardMessage(submit, fresh, langForBoard);
-    await submit.reply({
-      embeds: [
-        noticeEmbed(
-          "success",
-          t("raid-schedule.notice.roomSavedTitle", lang),
-          t("raid-schedule.notice.roomSavedDescription", lang, { room: roomName }),
-        ),
-      ],
-      flags: ephemeralFlag,
-    });
-  }
-
-  async function handleEditTime(interaction, event, lang) {
-    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
-    const id = String(event._id);
-    const modalId = `rse:timemodal:${id}`;
-    const modal = new ModalBuilder()
-      .setCustomId(modalId)
-      .setTitle(clip(t("raid-schedule.modal.timeTitle", lang), 45))
-      .addComponents(
-        modalTextRow("when", t("raid-schedule.modal.timeLabel", lang), { required: true }),
-      );
-    await interaction.showModal(modal);
-
-    const submit = await interaction
-      .awaitModalSubmit({
-        time: 120000,
-        filter: (i) => i.customId === modalId && i.user.id === interaction.user.id,
-      })
-      .catch(() => null);
-    if (!submit) return;
-
-    const startAt = parseStartTime(submit.fields.getTextInputValue("when"), lang);
-    if (!startAt) {
-      await submit.reply(noticePayload(lang, "danger", "invalidTimeTitle", "invalidTimeDescription"));
-      return;
-    }
-    const fresh = await loadEvent(id);
-    if (!fresh) {
-      await submit.reply(noticePayload(lang, "warn", "missingEventTitle", "missingEventDescription"));
-      return;
-    }
-    fresh.startAt = startAt;
-    await fresh.save();
-
-    const langForBoard = await boardLang(fresh.guildId);
-    await editBoardMessage(submit, fresh, langForBoard);
-    await submit.reply({
-      embeds: [
-        noticeEmbed(
-          "success",
-          t("raid-schedule.notice.timeSavedTitle", lang),
-          t("raid-schedule.notice.timeSavedDescription", lang, {
-            rel: `<t:${Math.floor(startAt.getTime() / 1000)}:R>`,
-            abs: `<t:${Math.floor(startAt.getTime() / 1000)}:f>`,
-          }),
-        ),
-      ],
-      flags: ephemeralFlag,
-    });
-  }
-
-  async function handleCancel(interaction, event, lang) {
-    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
-    await interaction.deferUpdate();
-    event.status = "cancelled";
-    event.cancelledAt = new Date();
-    await event.save();
-
-    const langForBoard = await boardLang(event.guildId);
-    await editBoardMessage(interaction, event, langForBoard);
-    // Collapse the ephemeral manage menu the button lives on.
-    await interaction.editReply({
-      embeds: [
-        noticeEmbed(
-          "warn",
-          t("raid-schedule.notice.cancelledTitle", lang),
-          t("raid-schedule.notice.cancelledDescription", lang),
-        ),
-      ],
-      components: [],
-    }).catch(() => {});
-
-    // Ping everyone who signed up, in the public channel (mentions only fire
-    // from message content, not embeds · see feedback_discord_embed_mentions).
-    const ids = [...new Set((event.signups || []).map((s) => s.discordId))];
-    if (ids.length > 0 && !event.skipNotify) {
-      try {
-        const channel = await interaction.client.channels.fetch(event.channelId);
-        await channel?.send?.({
-          content: t("raid-schedule.notice.cancelPingContent", langForBoard, {
-            users: ids.map((id) => `<@${id}>`).join(" "),
-            title: event.title || "",
-          }),
-        });
-      } catch (error) {
-        console.warn("[raid-schedule] cancel ping failed:", error?.message || error);
-      }
-    }
-  }
-
-  // Best-effort removal of the board message. Unlike editBoardMessage (which
-  // edits in place), this deletes the message entirely - used by manual delete.
-  async function deleteBoardMessage(interaction, event) {
-    if (!event.messageId || !event.channelId || !interaction.client?.channels) return false;
-    try {
-      const channel = await interaction.client.channels.fetch(event.channelId);
-      const message = await channel?.messages?.fetch(event.messageId);
-      if (message) {
-        await message.delete();
-        return true;
-      }
-    } catch (error) {
-      console.warn("[raid-schedule] board delete failed:", error?.message || error);
-    }
-    return false;
-  }
-
-  async function handleDeletePrompt(interaction, event, lang) {
-    if (await rejectUnlessLead(interaction, lang)) return;
-    await interaction.reply(deleteConfirmPayload(event, lang));
-  }
-
-  async function handleDeleteConfirm(interaction, event, lang) {
-    if (await rejectUnlessLead(interaction, lang, editNotice)) return;
-    await interaction.deferUpdate();
-    // Ping signups only if the event was still active - cleaning up an already
-    // ended/cancelled event has no audience left to notify.
-    const wasActive = event.status === "open" || event.status === "locked";
-    const ids = [...new Set((event.signups || []).map((s) => s.discordId))];
-    const langForBoard = await boardLang(event.guildId);
-
-    try {
-      await event.deleteOne();
-    } catch (error) {
-      console.warn("[raid-schedule] event delete failed:", error?.message || error);
-      await interaction.editReply({
-        embeds: [
-          noticeEmbed(
-            "danger",
-            t("raid-schedule.notice.deleteFailedTitle", lang),
-            t("raid-schedule.notice.deleteFailedDescription", lang),
-          ),
-        ],
-        components: [],
-      }).catch(() => {});
-      return;
-    }
-    const boardDeleted = await deleteBoardMessage(interaction, event);
-
-    await interaction.editReply({
-      embeds: [
-        noticeEmbed(
-          "warn",
-          t("raid-schedule.notice.deletedTitle", lang),
-          t(
-            boardDeleted
-              ? "raid-schedule.notice.deletedDescription"
-              : "raid-schedule.notice.deletedBoardMissingDescription",
-            lang,
-          ),
-        ),
-      ],
-      components: [],
-    }).catch(() => {});
-
-    if (wasActive && ids.length > 0 && !event.skipNotify) {
-      try {
-        const channel = await interaction.client.channels.fetch(event.channelId);
-        await channel?.send?.({
-          content: t("raid-schedule.notice.cancelPingContent", langForBoard, {
-            users: ids.map((uid) => `<@${uid}>`).join(" "),
-            title: event.title || "",
-          }),
-        });
-      } catch (error) {
-        console.warn("[raid-schedule] delete ping failed:", error?.message || error);
-      }
-    }
-  }
-
-  async function handleDeleteAbort(interaction, event, lang) {
-    await interaction.deferUpdate().catch(() => {});
-    await interaction.editReply({
-      embeds: [
-        noticeEmbed(
-          "info",
-          t("raid-schedule.notice.deleteAbortedTitle", lang),
-          t("raid-schedule.notice.deleteAbortedDescription", lang),
-        ),
-      ],
-      components: [],
-    }).catch(() => {});
-  }
-
-  async function handleKick(interaction, event, lang) {
-    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
-    if (!Array.isArray(event.signups) || event.signups.length === 0) {
-      await replyNotice(interaction, lang, "warn", "kickEmptyTitle", "kickEmptyDescription");
-      return;
-    }
-    await interaction.reply(kickSelectPayload(event, lang));
-  }
-
-  async function handleKickSelect(interaction, event, lang) {
-    if (await rejectUnlessLeadMutable(interaction, event, lang, editNotice)) return;
-    const before = Array.from(event.signups || []);
-    const { signups: next, removed } = applyKick(before, interaction.values || []);
-    if (removed.length === 0) {
-      // Everything selected was already gone (they self-left first).
-      await editNotice(interaction, lang, "warn", "kickNoneTitle", "kickNoneDescription");
-      return;
-    }
-    const removedIds = removed.map((s) => s.discordId);
-    markSignups(event, next);
-    markTurns(event, removeMembersFromTurns(event.turns, removedIds));
-    await event.save();
-
-    const langForBoard = await boardLang(event.guildId);
-    await editBoardMessage(interaction, event, langForBoard);
-    await interaction.editReply({
-      embeds: [
-        noticeEmbed(
-          "success",
-          t("raid-schedule.notice.kickedTitle", lang),
-          t("raid-schedule.notice.kickedDescription", lang, {
-            members: removed.map((s) => s.characterName).join(", "),
-          }),
-        ),
-      ],
-      components: [],
-    });
-
-    // Kicking a slot-holder may pull a waitlister in - ping them publicly so
-    // they actually get notified (mentions only fire from message content,
-    // not embeds · see feedback_discord_embed_mentions).
-    const promoted = detectPromotion(before, next, {
-      supSlots: event.supSlots,
-      dpsSlots: event.dpsSlots,
-    });
-    if (promoted.length > 0 && !event.skipNotify) {
-      try {
-        const channel = await interaction.client.channels.fetch(event.channelId);
-        await channel?.send?.({
-          content: promoted
-            .map((s) => t("raid-schedule.notice.promotedPing", langForBoard, {
-              user: `<@${s.discordId}>`,
-              character: s.characterName,
-            }))
-            .join("\n"),
-        });
-      } catch (error) {
-        console.warn("[raid-schedule] kick promote ping failed:", error?.message || error);
-      }
-    }
-  }
-
-  async function handleAddMember(interaction, event, lang) {
-    // No lock check on purpose: manager-add is allowed on a locked board.
-    if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
-    await interaction.reply(addUserSelectPayload(event, lang));
-  }
-
-  async function handleAddUserSelect(interaction, event, lang) {
-    if (await rejectUnlessLeadMutable(interaction, event, lang, editNotice)) return;
-    const targetId = interaction.values?.[0];
-    if (!targetId) {
-      await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");
-      return;
-    }
-    const targetUser = await interaction.client.users.fetch(targetId).catch(() => null);
-    if (targetUser?.bot) {
-      await editNotice(interaction, lang, "warn", "addBotTargetTitle", "addBotTargetDescription");
-      return;
-    }
-    const userDoc = await User.findOne({ discordId: targetId }).lean();
-    if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
-      await editNotice(interaction, lang, "warn", "addNoRosterTitle", "addNoRosterDescription", {
-        user: `<@${targetId}>`,
-      });
-      return;
-    }
-    // Same cleared-char rule as self-service Join: a char that already cleared
-    // this raid this week has nothing to gain, so it is not offered.
-    const { selectable: rows, allCleared } = partitionSelectable(findOwnEligibleRows(userDoc, event));
-    if (rows.length === 0) {
-      await editNotice(
-        interaction,
-        lang,
-        "warn",
-        allCleared ? "addAllClearedTitle" : "addNoEligibleTitle",
-        allCleared ? "addAllClearedDescription" : "addNoEligibleDescription",
-        { user: `<@${targetId}>`, ilvl: event.minItemLevel },
-      );
-      return;
-    }
-    const payload = addCharSelectPayload(event, targetId, rows, lang);
-    await interaction.editReply({ embeds: payload.embeds, components: payload.components });
-  }
-
-  async function handleAddPickSelect(interaction, event, lang) {
-    if (await rejectUnlessLeadMutable(interaction, event, lang, editNotice)) return;
-    const parsed = parseCustomId(interaction.customId);
-    const targetId = parsed.action.split(":")[1];
-    if (!targetId) {
-      await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");
-      return;
-    }
-    const rowIndex = Number(interaction.values?.[0]);
-    const userDoc = await User.findOne({ discordId: targetId }).lean();
-    const rows = partitionSelectable(findOwnEligibleRows(userDoc, event)).selectable;
-    const row = rows.find((candidate) => candidate.index === rowIndex);
-    if (!row) {
-      await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");
-      return;
-    }
-
-    const before = Array.from(event.signups || []);
-    const next = applyJoin(before, {
-      discordId: targetId,
-      accountName: row.accountName,
-      characterName: row.name,
-      characterClass: row.className,
-      characterItemLevel: row.itemLevel,
-      alreadyClearedThisWeek: row.alreadyCleared,
-    });
-    const afterSlots = assignSlots(next, {
-      supSlots: event.supSlots,
-      dpsSlots: event.dpsSlots,
-    });
-    const addedInComp = [...afterSlots.support, ...afterSlots.dps]
-      .some((s) => String(s.discordId) === String(targetId));
-    markSignups(event, next);
-    await event.save();
-
-    const langForBoard = await boardLang(event.guildId);
-    const leadPlacement = t(
-      addedInComp ? "raid-schedule.notice.addedPlacementComp" : "raid-schedule.notice.addedPlacementWaitlist",
-      lang,
-    );
-    const boardPlacement = t(
-      addedInComp ? "raid-schedule.notice.addedPlacementComp" : "raid-schedule.notice.addedPlacementWaitlist",
-      langForBoard,
-    );
-    await editBoardMessage(interaction, event, langForBoard);
-    await interaction.editReply({
-      embeds: [
-        noticeEmbed(
-          "success",
-          t("raid-schedule.notice.addedTitle", lang),
-          t("raid-schedule.notice.addedDescription", lang, {
-            user: `<@${targetId}>`,
-            character: row.name,
-            placement: leadPlacement,
-          }),
-        ),
-      ],
-      components: [],
-    });
-
-    // Public ping so the added user actually gets notified (mentions only fire
-    // from message content, not embeds · see feedback_discord_embed_mentions).
-    // Silent mode (skipNotify) suppresses it - the member is still added + the
-    // board updated above, just no @mention. This ping is the last statement.
-    if (event.skipNotify) return;
-    try {
-      const channel = await interaction.client.channels.fetch(event.channelId);
-      await channel?.send?.({
-        content: t("raid-schedule.notice.addedPing", langForBoard, {
-          user: `<@${targetId}>`,
-          title: event.title || "",
-          character: row.name,
-          placement: boardPlacement,
-          rel: `<t:${Math.floor(new Date(event.startAt).getTime() / 1000)}:R>`,
-        }),
-      });
-    } catch (error) {
-      console.warn("[raid-schedule] add-member ping failed:", error?.message || error);
-    }
-  }
-
-  function markTurns(event, turns) {
-    event.turns = turns;
-    if (typeof event.markModified === "function") event.markModified("turns");
-  }
+  const {
+    handleCreateCommand,
+    handleEnd,
+    handleHelp,
+    handleLockToggle,
+    handleManage,
+    handleRoom,
+    handleToggleNotify,
+  } = createScheduleCoreActions({
+    RaidEvent,
+    ephemeralFlag,
+    userLang,
+    boardLang,
+    boardPayload,
+    editBoardMessage,
+    isCompMember,
+    onBoardMessage,
+    raidMetaFor,
+    rejectUnlessLead,
+    rejectUnlessLeadMutable,
+    writeAutoClears,
+    manageMenuPayload,
+    noticeEmbed,
+    replyNotice,
+  });
+  const {
+    handleDeleteAbort,
+    handleDeleteConfirm,
+    handleDeletePrompt,
+  } = createScheduleDeleteActions({
+    boardLang,
+    rejectUnlessLead,
+    editNotice,
+    deleteConfirmPayload,
+    noticeEmbed,
+  });
 
   async function handleTeams(interaction, event, lang) {
     if (await rejectUnlessLeadMutable(interaction, event, lang)) return;
@@ -1046,8 +195,8 @@ function createRaidScheduleCommand({
 
   async function handleTeamMembersSelect(interaction, event, lang) {
     if (await rejectUnlessLeadMutable(interaction, event, lang, editNotice)) return;
-    const parsed = parseCustomId(interaction.customId);
-    const turnIndex = Number(parsed.action.split(":")[1]);
+    const parsed = parseScheduleCustomId(interaction.customId);
+    const turnIndex = Number(parsed?.action.split(":")[1]);
     if (!Number.isInteger(turnIndex) || turnIndex < 0 || turnIndex >= (event.turns?.length || 0)) {
       await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");
       return;
@@ -1059,273 +208,96 @@ function createRaidScheduleCommand({
     await interaction.editReply({ embeds: payload.embeds, components: payload.components });
   }
 
-  // Resurface a board: post a fresh copy at the bottom of its channel, repoint
-  // messageId to it, THEN delete the old message. The post -> repoint -> delete
-  // ORDER is the anti-ghost invariant: a failed post leaves the old board (and
-  // its messageId) untouched, so we never strand a board the buttons edit
-  // invisibly. `lang` is the guild board language.
-  async function republishBoard(interaction, event, lang) {
-    if (!event.channelId || !interaction.client?.channels) return { ok: false };
-    let channel;
-    try {
-      channel = await interaction.client.channels.fetch(event.channelId);
-    } catch (error) {
-      console.warn("[raid-schedule] resurface channel fetch failed:", error?.message || error);
-      return { ok: false };
-    }
-    if (!channel?.send) return { ok: false };
+  const { handleCancel } = createScheduleCancelActions({
+    boardLang,
+    editBoardMessage,
+    rejectUnlessLeadMutable,
+    noticeEmbed,
+    ephemeralFlag,
+  });
 
-    let message;
-    try {
-      message = await channel.send(await boardPayload(event, lang));
-    } catch (error) {
-      console.warn("[raid-schedule] resurface post failed:", error?.message || error);
-      return { ok: false }; // keep the old messageId - nothing moved
-    }
+  const {
+    handleEditTime,
+    handleSetRoom,
+  } = createScheduleModalActions({
+    ActionRowBuilder,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle,
+    clip,
+    ephemeralFlag,
+    boardLang,
+    loadEvent,
+    editBoardMessage,
+    rejectUnlessLeadMutable,
+    noticePayload,
+    noticeEmbed,
+  });
 
-    const oldMessageId = event.messageId;
-    event.messageId = message.id;
-    try {
-      await event.save();
-    } catch (error) {
-      console.warn("[raid-schedule] resurface save failed:", error?.message || error);
-      event.messageId = oldMessageId;
-      try {
-        if (typeof message.delete === "function") {
-          await message.delete();
-        } else if (message.id && channel.messages?.fetch) {
-          const fresh = await channel.messages.fetch(message.id);
-          if (fresh?.delete) await fresh.delete();
-        }
-      } catch (cleanupError) {
-        console.warn("[raid-schedule] resurface new-delete failed:", cleanupError?.message || cleanupError);
-      }
-      return { ok: false };
-    }
-    // Best-effort: drop the stale board so only one copy survives. Sending
-    // implies we can also delete our own message, so this rarely fails.
-    if (oldMessageId && oldMessageId !== message.id) {
-      try {
-        const old = await channel.messages.fetch(oldMessageId);
-        if (old) await old.delete();
-      } catch (error) {
-        console.warn("[raid-schedule] resurface old-delete failed:", error?.message || error);
-      }
-    }
-    return { ok: true, message };
-  }
+  const {
+    handleShowCommand,
+    handleShowPickSelect,
+    handleShowTpSelect,
+  } = createScheduleShowActions({
+    RaidEvent,
+    ephemeralFlag,
+    userLang,
+    boardLang,
+    boardPayload,
+    loadEvent,
+    raidMetaFor,
+    rejectUnlessLead,
+    replyNotice,
+    editNotice,
+    noticePayload,
+    noticeEmbed,
+    turnPlanDashboardPayload,
+  });
 
-  async function deleteMessageById(interaction, channelId, messageId) {
-    if (!channelId || !messageId || !interaction.client?.channels) return false;
-    try {
-      const channel = await interaction.client.channels.fetch(channelId);
-      const message = await channel?.messages?.fetch(messageId);
-      if (!message) return false;
-      await message.delete();
-      return true;
-    } catch (error) {
-      console.warn("[raid-schedule] switch old-delete failed:", error?.message || error);
-      return false;
-    }
-  }
+  const {
+    handleJoin,
+    handlePick,
+    handleRsvp,
+  } = createScheduleParticipantActions({
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    User,
+    ephemeralFlag,
+    boardLang,
+    boardPayload,
+    editBoardMessage,
+    isClosedEvent,
+    markSignups,
+    replyNotice,
+    editNotice,
+    noticeEmbed,
+  });
 
-  // Ephemeral confirmation after a resurface, with a jump link to the new board.
-  function resurfacedNoticeEmbed(event, lang, message) {
-    const raidLabel = raidMetaFor(event.raidKey, event.modeKey)?.label || `${event.raidKey} ${event.modeKey}`;
-    return noticeEmbed(
-      "success",
-      t("raid-schedule.notice.resurfacedTitle", lang),
-      t("raid-schedule.notice.resurfacedDescription", lang, {
-        raid: raidLabel,
-        channel: `<#${event.channelId}>`,
-        link: message.url,
-      }),
-    );
-  }
+  const {
+    handleKick,
+    handleKickSelect,
+    handleAddMember,
+    handleAddUserSelect,
+    handleAddPickSelect,
+  } = createScheduleMemberActions({
+    User,
+    boardLang,
+    editBoardMessage,
+    rejectUnlessLeadMutable,
+    replyNotice,
+    editNotice,
+    noticeEmbed,
+    kickSelectPayload,
+    addUserSelectPayload,
+    addCharSelectPayload,
+    markSignups,
+    markTurns,
+  });
 
-  // /raid-schedule-preview show -> branch on the `action` option. Default
-  // (omitted) = resurface, so plain `show` bumps the board exactly as before.
-  // turnplan = ephemeral turn-plan dashboard. Both manager-gated, both scoped
-  // to the lead's OWN boards.
-  async function handleShowCommand(interaction) {
-    const action = interaction.options.getString("action") || "resurface";
-    if (action === "turnplan") return handleShowTurnPlan(interaction);
-    return handleShowResurface(interaction);
-  }
-
-  // action: 📋 Đẩy board lên -> resurface the lead's signup board to the bottom
-  // of its channel (delete + repost + repoint messageId). Targets the board in
-  // the current channel if the lead has one here, else their most recent active
-  // board; the board's switcher reaches the rest.
-  async function handleShowResurface(interaction) {
-    const lang = await userLang(interaction);
-    if (await rejectUnlessLead(interaction, lang, replyNotice, "notManagerTitle", "notManagerDescription")) return;
-    const guildId = interaction.guildId || interaction.guild?.id;
-    const channelId = interaction.channelId || interaction.channel?.id;
-    if (!guildId || !channelId) {
-      await replyNotice(interaction, lang, "danger", "guildOnlyTitle", "guildOnlyDescription");
-      return;
-    }
-
-    const mine = await RaidEvent.find({
-      guildId,
-      creatorId: interaction.user.id,
-      status: { $in: ["open", "locked"] },
-    }).sort({ createdAt: -1 });
-    if (mine.length === 0) {
-      await replyNotice(interaction, lang, "warn", "showNoBoardsTitle", "showNoBoardsDescription");
-      return;
-    }
-    // Prefer the board in the channel the lead is standing in; else most recent.
-    const target = mine.find((e) => String(e.channelId) === String(channelId)) || mine[0];
-
-    await interaction.deferReply({ flags: ephemeralFlag });
-    const langForBoard = await boardLang(target.guildId);
-    const res = await republishBoard(interaction, target, langForBoard);
-    if (!res.ok) {
-      await editNotice(interaction, lang, "danger", "resurfaceFailedTitle", "resurfaceFailedDescription");
-      return;
-    }
-    await interaction.editReply({ embeds: [resurfacedNoticeEmbed(target, lang, res.message)], components: [] });
-  }
-
-  // action: 📊 Xem phân turn -> ephemeral turn-plan dashboard. Lists the lead's
-  // own active boards GUILD-WIDE (cross-channel) and shows one board's turn
-  // plan; the dropdown switches between their raids (the "overview" Traine
-  // asked for). Read-only + ephemeral, so it never disturbs the public board.
-  async function handleShowTurnPlan(interaction) {
-    const lang = await userLang(interaction);
-    if (await rejectUnlessLead(interaction, lang, replyNotice, "notManagerTitle", "notManagerDescription")) return;
-    const guildId = interaction.guildId || interaction.guild?.id;
-    if (!guildId) {
-      await replyNotice(interaction, lang, "danger", "guildOnlyTitle", "guildOnlyDescription");
-      return;
-    }
-    const channelId = interaction.channelId || interaction.channel?.id;
-    const mine = await RaidEvent.find({
-      guildId,
-      creatorId: interaction.user.id,
-      status: { $in: ["open", "locked"] },
-    }).sort({ startAt: 1 });
-    if (mine.length === 0) {
-      await replyNotice(interaction, lang, "warn", "showNoBoardsTitle", "showNoBoardsDescription");
-      return;
-    }
-    // Default selection = the board in the channel the lead stands in, else soonest.
-    const target = mine.find((e) => String(e.channelId) === String(channelId)) || mine[0];
-    await interaction.reply(turnPlanDashboardPayload(target, mine, lang));
-  }
-
-  // 🗓 dashboard switcher -> swap the ephemeral to the chosen board's turn plan.
-  // Read-only + ephemeral, so no message/messageId juggling like showpick. The
-  // dashboard only ever lists the lead's own boards, re-guarded here race-safe.
-  async function handleShowTpSelect(interaction, event, lang) {
-    const chosen = await loadEvent(interaction.values?.[0]);
-    if (!chosen || (chosen.status !== "open" && chosen.status !== "locked")) {
-      await editNotice(interaction, lang, "warn", "missingEventTitle", "missingEventDescription");
-      return;
-    }
-    if (
-      String(chosen.creatorId) !== String(interaction.user.id) ||
-      String(chosen.guildId) !== String(event.guildId)
-    ) {
-      await editNotice(interaction, lang, "warn", "showpickDeniedTitle", "showpickDeniedDescription");
-      return;
-    }
-    const mine = await RaidEvent.find({
-      guildId: chosen.guildId,
-      creatorId: chosen.creatorId,
-      status: { $in: ["open", "locked"] },
-    }).sort({ startAt: 1 });
-    const payload = turnPlanDashboardPayload(chosen, mine, lang);
-    await interaction.editReply({ embeds: payload.embeds, components: payload.components });
-  }
-
-  // 🗓 Board khác switcher -> switch this visible board message in place.
-  // `/show` is the bump action; the dropdown is a view switcher, so it edits the
-  // message the user clicked, repoints the chosen event to that message, clears
-  // the previous event's messageId, then best-effort deletes the chosen board's
-  // old message to avoid two visible copies.
-  async function handleShowPickSelect(interaction, event, lang) {
-    if (String(event.creatorId) !== String(interaction.user.id)) {
-      await interaction.followUp(noticePayload(lang, "warn", "showpickDeniedTitle", "showpickDeniedDescription"));
-      return;
-    }
-    const chosen = await loadEvent(interaction.values?.[0]);
-    if (!chosen || (chosen.status !== "open" && chosen.status !== "locked")) {
-      await interaction.followUp(noticePayload(lang, "warn", "missingEventTitle", "missingEventDescription"));
-      return;
-    }
-    if (String(chosen.guildId) !== String(event.guildId)) {
-      await interaction.followUp(noticePayload(lang, "warn", "missingEventTitle", "missingEventDescription"));
-      return;
-    }
-    if (String(chosen.channelId) !== String(event.channelId)) {
-      await interaction.followUp(noticePayload(lang, "warn", "missingEventTitle", "missingEventDescription"));
-      return;
-    }
-    // Re-check ownership on the chosen doc (race-safe: the switcher list could
-    // be stale if a board changed hands - it can't today, but cheap to guard).
-    if (String(chosen.creatorId) !== String(interaction.user.id)) {
-      await interaction.followUp(noticePayload(lang, "warn", "showpickDeniedTitle", "showpickDeniedDescription"));
-      return;
-    }
-    const currentMessageId = interaction.message?.id || event.messageId;
-    if (!currentMessageId) {
-      await interaction.followUp(noticePayload(lang, "danger", "resurfaceFailedTitle", "resurfaceFailedDescription"));
-      return;
-    }
-    const langForBoard = await boardLang(chosen.guildId);
-
-    if (String(chosen._id) === String(event._id)) {
-      await interaction.editReply(await boardPayload(chosen, langForBoard));
-      return;
-    }
-
-    const previousEventMessageId = event.messageId;
-    const previousChosenMessageId = chosen.messageId;
-    event.messageId = null;
-    try {
-      await event.save();
-    } catch (error) {
-      console.warn("[raid-schedule] switch current save failed:", error?.message || error);
-      await interaction.followUp(noticePayload(lang, "danger", "resurfaceFailedTitle", "resurfaceFailedDescription"));
-      return;
-    }
-
-    chosen.messageId = currentMessageId;
-    try {
-      await chosen.save();
-    } catch (error) {
-      console.warn("[raid-schedule] switch chosen save failed:", error?.message || error);
-      event.messageId = previousEventMessageId;
-      await event.save().catch((rollbackError) => {
-        console.warn("[raid-schedule] switch rollback current failed:", rollbackError?.message || rollbackError);
-      });
-      await interaction.followUp(noticePayload(lang, "danger", "resurfaceFailedTitle", "resurfaceFailedDescription"));
-      return;
-    }
-
-    try {
-      await interaction.editReply(await boardPayload(chosen, langForBoard));
-    } catch (error) {
-      console.warn("[raid-schedule] switch message edit failed:", error?.message || error);
-      event.messageId = previousEventMessageId;
-      chosen.messageId = previousChosenMessageId;
-      await event.save().catch((rollbackError) => {
-        console.warn("[raid-schedule] switch rollback current failed:", rollbackError?.message || rollbackError);
-      });
-      await chosen.save().catch((rollbackError) => {
-        console.warn("[raid-schedule] switch rollback chosen failed:", rollbackError?.message || rollbackError);
-      });
-      await interaction.followUp(noticePayload(lang, "danger", "resurfaceFailedTitle", "resurfaceFailedDescription"));
-      return;
-    }
-
-    if (previousChosenMessageId && String(previousChosenMessageId) !== String(currentMessageId)) {
-      await deleteMessageById(interaction, chosen.channelId, previousChosenMessageId);
-    }
-  }
+  const SCHEDULE_COMMAND_HANDLERS = Object.freeze({
+    create: handleCreateCommand,
+    show: handleShowCommand,
+  });
 
   const BUTTON_ACTION_HANDLERS = Object.freeze({
     join: handleJoin,
@@ -1369,10 +341,16 @@ function createRaidScheduleCommand({
     { prefix: "teammembers", create: () => handleTeamMembersSelect },
   ]);
 
-  async function handleRaidScheduleButton(interaction) {
-    const lang = await userLang(interaction);
+  async function loadScheduleComponentContext(interaction, { beforeLoad = null } = {}) {
     const parsed = parseScheduleCustomId(interaction.customId);
+    if (typeof beforeLoad === "function") await beforeLoad();
+    const lang = await userLang(interaction);
     const event = parsed ? await loadEvent(parsed.eventId) : null;
+    return { parsed, lang, event };
+  }
+
+  async function handleRaidScheduleButton(interaction) {
+    const { parsed, lang, event } = await loadScheduleComponentContext(interaction);
     if (!event) {
       await replyNotice(interaction, lang, "warn", "missingEventTitle", "missingEventDescription");
       return;
@@ -1388,10 +366,9 @@ function createRaidScheduleCommand({
   }
 
   async function handleRaidScheduleSelect(interaction) {
-    const parsed = parseScheduleCustomId(interaction.customId);
-    await interaction.deferUpdate();
-    const lang = await userLang(interaction);
-    const event = parsed ? await loadEvent(parsed.eventId) : null;
+    const { parsed, lang, event } = await loadScheduleComponentContext(interaction, {
+      beforeLoad: () => interaction.deferUpdate(),
+    });
     if (!event) {
       await editNotice(interaction, lang, "warn", "missingEventTitle", "missingEventDescription");
       return;

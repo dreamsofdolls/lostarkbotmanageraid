@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 
 const {
   buildManualSyncFollowupPayload,
-} = require("../bot/handlers/raid-status/sync-followup");
+} = require("../bot/handlers/raid-status/sync/sync-followup");
 
 function fakeT(key, lang, vars = {}) {
   const suffix = vars && Object.keys(vars).length

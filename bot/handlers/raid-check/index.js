@@ -11,7 +11,7 @@
 
 const { createSnapshotHelpers } = require("./snapshot");
 const { createEditHelpers } = require("./edit-helpers");
-const { createAllModeHandler } = require("./all-mode");
+const { createAllModeHandler } = require("./all-mode/all-mode");
 const { createEditUi } = require("./edit-ui");
 const { createSyncUi } = require("./sync-ui");
 const {
@@ -20,10 +20,15 @@ const {
   tryDisableAutoManage,
   buildEnableAutoDmEmbed,
   buildDisableAutoDmEmbed,
-} = require("./auto-manage");
+} = require("./auto-manage/auto-manage");
 const { createTaskViewUi } = require("./task-view-ui");
 const { buildNoticeEmbed, replyNotice } = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
+const {
+  RAID_CHECK_BUTTON_HANDLER,
+  RAID_CHECK_BUTTON_SCOPE,
+  getRaidCheckButtonRoute,
+} = require("./button-routes");
 
 const RAID_CHECK_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 
@@ -247,24 +252,33 @@ function createRaidCheckCommand(deps) {
   }
 
   async function handleRaidCheckButton(interaction) {
-    const parts = interaction.customId.split(":");
-    const action = parts[1];
-    const raidKey = parts[2];
+    const route = getRaidCheckButtonRoute(interaction.customId);
 
-    // Self-only actions bypass the Manager gate. Both ship as buttons
-    // INSIDE DMs that the Manager sent to the target after the
-    // on-behalf flow ran; the target (a regular member, not necessarily
-    // a Manager) needs to be able to click these to revert the
-    // Manager's action. Handler enforces clicker == target instead of
-    // Manager allowlist.
-    if (action === "disable-auto-self") {
-      const targetDiscordId = parts[2] || null;
-      await handleRaidCheckDisableAutoSelfClick(interaction, targetDiscordId);
-      return;
-    }
-    if (action === "enable-auto-self") {
-      const targetDiscordId = parts[2] || null;
-      await handleRaidCheckEnableAutoSelfClick(interaction, targetDiscordId);
+    const selfButtonHandlers = {
+      [RAID_CHECK_BUTTON_HANDLER.disableAutoSelf]: () =>
+        handleRaidCheckDisableAutoSelfClick(interaction, route.targetDiscordId),
+      [RAID_CHECK_BUTTON_HANDLER.enableAutoSelf]: () =>
+        handleRaidCheckEnableAutoSelfClick(interaction, route.targetDiscordId),
+    };
+    const managerButtonHandlers = {
+      [RAID_CHECK_BUTTON_HANDLER.editAll]: () =>
+        handleRaidCheckEditClick(interaction, null, null, route.preSelectedUserId),
+      [RAID_CHECK_BUTTON_HANDLER.enableAutoOne]: () =>
+        handleRaidCheckEnableAutoOneClick(interaction, route.targetDiscordId),
+      [RAID_CHECK_BUTTON_HANDLER.disableAutoOne]: () =>
+        handleRaidCheckDisableAutoOneClick(interaction, route.targetDiscordId),
+      [RAID_CHECK_BUTTON_HANDLER.viewTasks]: () =>
+        handleRaidCheckViewTasksClick(interaction, route.targetDiscordId),
+    };
+    const raidButtonHandlers = {
+      [RAID_CHECK_BUTTON_HANDLER.sync]: (raidMeta) =>
+        handleRaidCheckSyncClick(interaction, raidMeta),
+      [RAID_CHECK_BUTTON_HANDLER.edit]: (raidMeta) =>
+        handleRaidCheckEditClick(interaction, raidMeta, route.raidKey),
+    };
+
+    if (route.scope === RAID_CHECK_BUTTON_SCOPE.self) {
+      await selfButtonHandlers[route.handler]();
       return;
     }
 
@@ -279,54 +293,13 @@ function createRaidCheckCommand(deps) {
       return;
     }
 
-    // edit-all has no raidKey in the customId because the raid is picked
-    // inside the Edit UI via a dropdown. Handle it before the raidMeta
-    // validation gate below, which would otherwise reject the missing
-    // raidKey as "invalid raid".
-    //
-    // parts[2] carries the discordId of the user currently shown on the
-    // source page (the all-mode Edit button rebuilds its customId per
-    // page flip). Used as pre-select so clicking Edit while viewing
-    // Bao's page opens with Bao pre-picked once the leader chooses a
-    // raid. Empty string / falsy means no pre-select (defensive - the
-    // all-mode code always includes a discordId today).
-    if (action === "edit-all") {
-      const preSelectedUserId = parts[2] || null;
-      await handleRaidCheckEditClick(interaction, null, null, preSelectedUserId);
+    if (route.scope === RAID_CHECK_BUTTON_SCOPE.manager) {
+      const handler = managerButtonHandlers[route.handler];
+      if (handler) await handler();
       return;
     }
 
-    // enable-auto-one: customId is `raid-check:enable-auto-one:<discordId>`
-    // (no raidKey, since flipping the auto-manage flag is raid-agnostic).
-    // /raid-check button flows reach this
-    // button when their user filter narrows to the target. Handle it before
-    // the raidMeta gate below since parts[2] holds the discordId, not a
-    // raidKey.
-    if (action === "enable-auto-one") {
-      const targetDiscordId = parts[2] || null;
-      await handleRaidCheckEnableAutoOneClick(interaction, targetDiscordId);
-      return;
-    }
-    if (action === "disable-auto-one") {
-      const targetDiscordId = parts[2] || null;
-      await handleRaidCheckDisableAutoOneClick(interaction, targetDiscordId);
-      return;
-    }
-
-    // view-tasks: customId is `raid-check:view-tasks:<discordId>`. Read-
-    // only Manager spot-check of a member's per-char side tasks. Lives
-    // ONLY in /raid-check (the cross-raid overview button row
-    // adds it) and only when user filter narrows to one user. Renders
-    // an ephemeral followup so the embed dismisses on its own and
-    // doesn't leak member task data into the raid-check pagination
-    // session that other people in the channel can also see.
-    if (action === "view-tasks") {
-      const targetDiscordId = parts[2] || null;
-      await handleRaidCheckViewTasksClick(interaction, targetDiscordId);
-      return;
-    }
-
-    const raidMeta = RAID_REQUIREMENT_MAP[raidKey];
+    const raidMeta = RAID_REQUIREMENT_MAP[route.raidKey];
     if (!raidMeta) {
       const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
       await replyNotice(interaction, EmbedBuilder, {
@@ -337,23 +310,20 @@ function createRaidCheckCommand(deps) {
       return;
     }
 
-    if (action === "sync") {
-      await handleRaidCheckSyncClick(interaction, raidMeta);
-    } else if (action === "edit") {
-      // Pass the combined `raid_mode` key (the RAID_REQUIREMENT_MAP key)
-      // alongside raidMeta so the Edit flow can lock selectedRaid to the
-      // same key the map uses. raidMeta.raidKey alone is just the raid
-      // portion ("serca") and would break every RAID_REQUIREMENT_MAP
-      // lookup downstream.
-      await handleRaidCheckEditClick(interaction, raidMeta, raidKey);
-    } else {
-      const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      await replyNotice(interaction, EmbedBuilder, {
-        type: "warn",
-        title: t("raid-check.staleButton.unsupportedActionTitle", clickerLang),
-        description: t("raid-check.staleButton.unsupportedActionDescription", clickerLang, { action }),
-      });
+    const raidHandler = raidButtonHandlers[route.handler];
+    if (raidHandler) {
+      await raidHandler(raidMeta);
+      return;
     }
+
+    const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
+    await replyNotice(interaction, EmbedBuilder, {
+      type: "warn",
+      title: t("raid-check.staleButton.unsupportedActionTitle", clickerLang),
+      description: t("raid-check.staleButton.unsupportedActionDescription", clickerLang, {
+        action: route.action,
+      }),
+    });
   }
 
   const RAID_CHECK_EDIT_SESSION_MS = 3 * 60 * 1000;

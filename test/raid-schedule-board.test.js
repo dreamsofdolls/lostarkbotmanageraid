@@ -9,7 +9,7 @@ const {
   buildTurnPlanEmbed,
   renderRsvpLine,
   renderGauge,
-} = require("../bot/handlers/raid/schedule/board");
+} = require("../bot/handlers/raid/schedule/view/board");
 
 function makeEvent(extra = {}) {
   return {

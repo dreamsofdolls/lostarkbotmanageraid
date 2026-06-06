@@ -7,7 +7,7 @@ const {
     applyRaidChannelWritePlans,
     buildWritePlanSegments,
   },
-} = require("../bot/services/raid/channel-monitor");
+} = require("../bot/services/raid/channel-monitor/channel-monitor");
 
 const silentLogger = {
   warn() {},

@@ -6,13 +6,13 @@ const {
   buildCharacterEmbed,
   buildOverallEmbed,
   buildRosterEmbed,
-} = require("./embeds");
+} = require("./embeds/embeds");
 const {
   ROSTER_PAGE_SIZE,
   buildComponents,
   clampPage,
   selectedProfileEntry,
-} = require("./components");
+} = require("./embeds/components");
 
 const PROFILE_SESSION_TTL_MS = 5 * 60 * 1000;
 

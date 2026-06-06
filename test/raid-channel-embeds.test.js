@@ -6,7 +6,7 @@ const { UI } = require("../bot/utils/raid/common/shared");
 const {
   createRaidChannelEmbedBuilders,
   joinIfArray,
-} = require("../bot/services/raid/channel-monitor-embeds");
+} = require("../bot/services/raid/channel-monitor/channel-monitor-embeds");
 
 const raidMeta = {
   raidKey: "kazeros",

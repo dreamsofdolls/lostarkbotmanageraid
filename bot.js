@@ -58,7 +58,7 @@ const {
 const User = require("./bot/models/user");
 const RaidProfileSnapshot = require("./bot/models/RaidProfileSnapshot");
 const RaidProfileEncounter = require("./bot/models/RaidProfileEncounter");
-const { startWeeklyResetJob } = require("./bot/services/raid/weekly-reset");
+const { startWeeklyResetJob } = require("./bot/services/raid/schedulers/weekly-reset");
 const { bootstrapClassEmoji, bootstrapArtistEmoji } = require("./bot/services/discord/emoji-bootstrap");
 const { registerSlashCommandsOnBoot } = require("./bot/app/slash-command-registration");
 const { startLocalSyncWebCompanion } = require("./bot/app/local-sync-web");

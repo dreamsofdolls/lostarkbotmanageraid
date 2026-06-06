@@ -16,29 +16,21 @@ const {
   truncateChoice,
 } = require("../../utils/raid/common/autocomplete");
 const { t, getUserLanguage } = require("../../services/i18n");
-
-// Picker session window: from /raid-gold-earner invocation to Confirm
-// click. After 5 minutes the in-memory session is dropped and the embed
-// flips to "expired"; user must re-run the command. Mirrors the
-// /raid-add-roster + /raid-edit-roster TTL so the muscle memory transfers.
-const SESSION_TTL_MS = 5 * 60 * 1000;
-
-// Hard cap from Lost Ark: a character only earns weekly gold if it's one
-// of (up to) 6 chars an account has marked as gold-earners in-game. The
-// picker enforces this cap visually (clicking a 7th unselected char is a
-// no-op + a transient ephemeral notice) so the bot's totals never imply
-// gold the player can't actually receive.
-const GOLD_EARNER_CAP_PER_ACCOUNT = 6;
-
-// Discord caps a message at 5 ActionRows. Reserve 1 row for Confirm +
-// Cancel, leaving 4 rows × 5 buttons = 20 char slots. Real LA accounts
-// max ~18 chars so 20 is comfortable; rosters beyond the cap get the
-// CP-sorted prefix and a warning surfaced in the embed.
-const PICKER_MAX_OPTIONS = 20;
-const BUTTONS_PER_ROW = 5;
-
-const CHECK_ICON = "💰";
-const UNCHECK_ICON = "⬜";
+const {
+  ROSTER_PICKER_ACTION,
+  getRosterPickerRoute,
+} = require("./picker-routes");
+const {
+  SESSION_TTL_MS,
+  GOLD_EARNER_CAP_PER_ACCOUNT,
+  PICKER_MAX_OPTIONS,
+} = require("./gold-earner/constants");
+const {
+  pickInitialSelection,
+  findAccountByRoster,
+  buildPickerCharacters,
+} = require("./gold-earner/selection");
+const { createGoldEarnerRenderers } = require("./gold-earner/render");
 
 function createRaidGoldEarnerCommand({
   EmbedBuilder,
@@ -51,149 +43,33 @@ function createRaidGoldEarnerCommand({
   saveWithRetry,
   loadUserForAutocomplete,
 }) {
-  // Session cache lives in process memory only; bot restart drops every
-  // in-flight picker. Acceptable - user can simply re-run the command.
-  // Keyed by random sessionId so a user running /raid-gold-earner twice
-  // gets two independent pickers; older one keeps working until its
-  // 5-minute timer fires.
   const sessions = new Map();
+  const {
+    buildSelectionEmbed,
+    buildSelectionComponents,
+    buildExpiredEmbed,
+    buildCancelledEmbed,
+    buildSavedEmbed,
+  } = createGoldEarnerRenderers({
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    UI,
+    t,
+    buildTogglePickerComponents,
+  });
 
-  // Decide which char indices should be pre-checked when the picker
-  // opens. If at least one char in the account already has
-  // isGoldEarner=true, mirror that state verbatim (the user has already
-  // configured this roster - don't second-guess them). Otherwise
-  // (legacy data: every char `false` from the pre-flag-default-true
-  // world), pre-check the top 6 by iLvl as a UX nudge so the user can
-  // Confirm in one click instead of ticking 6 boxes manually.
-  //
-  // Tie-break on iLvl uses original index order (stable sort behavior of
-  // Array.prototype.sort in V8) so identical iLvls don't shuffle on
-  // repeat opens.
-  function pickInitialSelection(chars) {
-    const anyExisting = chars.some((c) => c.isGoldEarner);
-    if (anyExisting) {
-      return new Set(
-        chars.map((c, i) => (c.isGoldEarner ? i : -1)).filter((i) => i >= 0)
-      );
-    }
-    // Migration path: rank by iLvl desc, take top 6.
-    const ranked = chars
-      .map((c, i) => ({ i, itemLevel: Number(c.itemLevel) || 0 }))
-      .sort((a, b) => b.itemLevel - a.itemLevel)
-      .slice(0, GOLD_EARNER_CAP_PER_ACCOUNT);
-    return new Set(ranked.map((r) => r.i));
+  function buildNotice({ type, title, description }) {
+    return buildNoticeEmbed(EmbedBuilder, { type, title, description });
   }
 
-  function buildSelectionEmbed(session) {
-    const lang = session.lang;
-    const lines = session.chars.map((c, i) => {
-      const isSelected = session.selectedIndices.has(i);
-      const marker = isSelected ? CHECK_ICON : UNCHECK_ICON;
-      return `${marker} **${i + 1}.** ${c.name} · ${c.class} · iLvl \`${c.itemLevel}\``;
-    });
-
-    const overflow = session.overflowCount > 0
-      ? t("raid-gold-earner.picker.overflow", lang, {
-          iconWarn: UI.icons.warn,
-          count: session.overflowCount,
-          cap: PICKER_MAX_OPTIONS,
-        })
-      : "";
-
-    const desc = [
-      t("raid-gold-earner.picker.rosterLine", lang, { accountName: session.accountName }),
-      t("raid-gold-earner.picker.headerLine", lang, { cap: GOLD_EARNER_CAP_PER_ACCOUNT }),
-      "",
-      ...lines,
-      "",
-      t("raid-gold-earner.picker.selectingLine", lang, {
-        selected: session.selectedIndices.size,
-        cap: GOLD_EARNER_CAP_PER_ACCOUNT,
-      }),
-      t("raid-gold-earner.picker.footerHint", lang, {
-        iconInfo: UI.icons.info,
-        overflow,
-      }),
-    ];
-
-    return new EmbedBuilder()
-      .setTitle(
-        t("raid-gold-earner.picker.title", lang, {
-          checkIcon: CHECK_ICON,
-          accountName: session.accountName,
-        })
-      )
-      .setDescription(desc.join("\n").slice(0, 4000))
-      .setColor(UI.colors.neutral)
-      .setFooter({ text: t("raid-gold-earner.picker.footerText", lang) });
-  }
-
-  function buildSelectionComponents(session) {
-    return buildTogglePickerComponents({
-      session,
-      ActionRowBuilder,
-      ButtonBuilder,
-      ButtonStyle,
-      buttonsPerRow: BUTTONS_PER_ROW,
-      customIdPrefix: "gold-earner",
-      confirmLabel: `Confirm (${session.selectedIndices.size})`,
-      cancelLabel: t("raid-gold-earner.picker.cancelLabel", session.lang),
-      describeButton(c, index) {
-        const isSelected = session.selectedIndices.has(index);
-        const marker = isSelected ? CHECK_ICON : UNCHECK_ICON;
-        return {
-          selected: isSelected,
-          label: `${marker} ${index + 1}. ${c.name}`,
-        };
-      },
+  async function replyNotice(interaction, { type, title, description }) {
+    await interaction.reply({
+      embeds: [buildNotice({ type, title, description })],
+      flags: MessageFlags.Ephemeral,
     });
   }
-
-  function buildExpiredEmbed(session) {
-    const lang = session.lang;
-    return new EmbedBuilder()
-      .setTitle(t("raid-gold-earner.expired.title", lang, { iconWarn: UI.icons.warn }))
-      .setDescription(
-        t("raid-gold-earner.expired.description", lang, { accountName: session.accountName })
-      )
-      .setColor(UI.colors.muted);
-  }
-
-  function buildCancelledEmbed(session) {
-    const lang = session.lang;
-    return new EmbedBuilder()
-      .setTitle(t("raid-gold-earner.cancelled.title", lang, { iconInfo: UI.icons.info }))
-      .setDescription(
-        t("raid-gold-earner.cancelled.description", lang, { accountName: session.accountName })
-      )
-      .setColor(UI.colors.muted);
-  }
-
-  function buildSavedEmbed(session, savedNames) {
-    const lang = session.lang;
-    const previewSlice = savedNames.slice(0, GOLD_EARNER_CAP_PER_ACCOUNT);
-    const value = previewSlice.length > 0
-      ? previewSlice.map((n, i) => `${i + 1}. ${n}`).join("\n")
-      : t("raid-gold-earner.saved.noneSelected", lang);
-    return new EmbedBuilder()
-      .setTitle(t("raid-gold-earner.saved.title", lang, { checkIcon: CHECK_ICON }))
-      .setDescription(
-        t("raid-gold-earner.saved.description", lang, {
-          accountName: session.accountName,
-          count: savedNames.length,
-          cap: GOLD_EARNER_CAP_PER_ACCOUNT,
-        })
-      )
-      .addFields({
-        name: t("raid-gold-earner.saved.charactersField", lang, { count: savedNames.length }),
-        value,
-        inline: false,
-      })
-      .setColor(UI.colors.success)
-      .setTimestamp();
-  }
-
-  // ---------- Autocomplete (roster name) ----------
 
   async function handleRaidGoldEarnerAutocomplete(interaction) {
     try {
@@ -203,12 +79,15 @@ function createRaidGoldEarnerCommand({
         return;
       }
       const userDoc = await loadUserForAutocomplete(interaction.user.id);
-      const matches = getRosterMatches(userDoc, focused.value || "");
-      const choices = matches.map((a) => {
-        const charCount = Array.isArray(a.characters) ? a.characters.length : 0;
-        const earnerCount = (a.characters || []).filter((c) => c.isGoldEarner).length;
-        const label = `📁 ${a.accountName} · ${earnerCount}/${charCount} earner`;
-        return truncateChoice(label, a.accountName);
+      const choices = getRosterMatches(userDoc, focused.value || "").map((account) => {
+        const charCount = Array.isArray(account.characters)
+          ? account.characters.length
+          : 0;
+        const earnerCount = (account.characters || []).filter(
+          (character) => character.isGoldEarner
+        ).length;
+        const label = `\uD83D\uDCC1 ${account.accountName} \u00B7 ${earnerCount}/${charCount} earner`;
+        return truncateChoice(label, account.accountName);
       });
       await interaction.respond(choices).catch(() => {});
     } catch (error) {
@@ -217,82 +96,48 @@ function createRaidGoldEarnerCommand({
     }
   }
 
-  // ---------- Slash command entry ----------
-
   async function handleRaidGoldEarnerCommand(interaction) {
     const discordId = interaction.user.id;
     const lang = await getUserLanguage(discordId, { UserModel: User });
     const rosterInput = interaction.options.getString("roster", true).trim();
+
     if (!rosterInput) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-gold-earner.notice.missingRosterTitle", lang),
-            description: t("raid-gold-earner.notice.missingRosterDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyNotice(interaction, {
+        type: "warn",
+        title: t("raid-gold-earner.notice.missingRosterTitle", lang),
+        description: t("raid-gold-earner.notice.missingRosterDescription", lang),
       });
       return;
     }
 
     const userDoc = await User.findOne({ discordId });
     const accounts = Array.isArray(userDoc?.accounts) ? userDoc.accounts : [];
-    const target = accounts.find(
-      (a) => normalizeName(a.accountName) === normalizeName(rosterInput)
-    );
+    const target = findAccountByRoster(accounts, rosterInput, normalizeName);
 
     if (!target) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-gold-earner.notice.notFoundTitle", lang),
-            description: t("raid-gold-earner.notice.notFoundDescription", lang, {
-              rosterName: rosterInput,
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyNotice(interaction, {
+        type: "warn",
+        title: t("raid-gold-earner.notice.notFoundTitle", lang),
+        description: t("raid-gold-earner.notice.notFoundDescription", lang, {
+          rosterName: rosterInput,
+        }),
       });
       return;
     }
 
     const allChars = Array.isArray(target.characters) ? target.characters : [];
     if (allChars.length === 0) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "info",
-            title: t("raid-gold-earner.notice.emptyTitle", lang),
-            description: t("raid-gold-earner.notice.emptyDescription", lang, {
-              accountName: target.accountName,
-            }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await replyNotice(interaction, {
+        type: "info",
+        title: t("raid-gold-earner.notice.emptyTitle", lang),
+        description: t("raid-gold-earner.notice.emptyDescription", lang, {
+          accountName: target.accountName,
+        }),
       });
       return;
     }
 
-    // Cap to PICKER_MAX_OPTIONS by iLvl desc so the picker fits Discord's
-    // 5-row component limit. Realistic LA rosters max ~18 chars so the
-    // tail is rare; when it triggers, the off-window chars keep their
-    // existing isGoldEarner state untouched (we only write to the chars
-    // shown in the picker on Confirm).
-    const sortedAll = [...allChars].sort(
-      (a, b) => (Number(b.itemLevel) || 0) - (Number(a.itemLevel) || 0)
-    );
-    const pickerChars = sortedAll.slice(0, PICKER_MAX_OPTIONS).map((c) => ({
-      id: c.id,
-      name: c.name,
-      class: c.class,
-      itemLevel: Number(c.itemLevel) || 0,
-      isGoldEarner: !!c.isGoldEarner,
-    }));
-    const overflowCount = Math.max(0, sortedAll.length - PICKER_MAX_OPTIONS);
-
+    const { chars: pickerChars, overflowCount } = buildPickerCharacters(allChars);
     const sessionId = newPickerSessionId();
     const session = {
       sessionId,
@@ -325,40 +170,22 @@ function createRaidGoldEarnerCommand({
     );
   }
 
-  // ---------- Button dispatch ----------
+  async function renderStaleSession(interaction) {
+    const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
+    await interaction.update({
+      embeds: [
+        buildNotice({
+          type: "warn",
+          title: t("raid-gold-earner.expired.staleSessionTitle", clickerLang),
+          description: t("raid-gold-earner.expired.staleSessionDescription", clickerLang),
+        }),
+      ],
+      components: [],
+    }).catch(() => {});
+  }
 
-  async function handleRaidGoldEarnerButton(interaction) {
-    // CustomId shapes:
-    //   gold-earner:toggle:<sid>:<idx>
-    //   gold-earner:confirm:<sid>
-    //   gold-earner:cancel:<sid>
-    const parts = String(interaction.customId || "").split(":");
-    const action = parts[1];
-    const sessionId = parts[2];
-    const session = sessions.get(sessionId);
-
-    if (!session) {
-      // Stale button (session expired or bot restarted). Disable the
-      // controls so the user doesn't keep clicking into nothing.
-      // Resolve the clicker's lang since session.lang is not available.
-      const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      await interaction.update({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-gold-earner.expired.staleSessionTitle", clickerLang),
-            description: t("raid-gold-earner.expired.staleSessionDescription", clickerLang),
-          }),
-        ],
-        components: [],
-      }).catch(() => {});
-      return;
-    }
-
-    // Ownership guard: only the user who opened the picker can interact.
-    // Sessions are caller-scoped and the reply is ephemeral so this is
-    // mostly defense-in-depth, but cheap to enforce.
-    const denied = await authorizePickerSession({
+  async function enforceSessionOwner(interaction, session) {
+    return authorizePickerSession({
       interaction,
       session,
       User,
@@ -370,127 +197,137 @@ function createRaidGoldEarnerCommand({
       titleKey: "raid-gold-earner.auth.notYourSessionTitle",
       descriptionKey: "raid-gold-earner.auth.notYourSessionDescription",
     }).catch(() => true);
-    if (denied) {
+  }
+
+  async function handleToggleAction(interaction, route, session) {
+    const idx = route.index;
+    if (!Number.isInteger(idx) || idx < 0 || idx >= session.chars.length) {
+      await interaction.deferUpdate().catch(() => {});
       return;
     }
 
-    if (action === "toggle") {
-      const idx = Number(parts[3]);
-      if (!Number.isInteger(idx) || idx < 0 || idx >= session.chars.length) {
-        await interaction.deferUpdate().catch(() => {});
-        return;
-      }
-      const isSelected = session.selectedIndices.has(idx);
-      if (isSelected) {
-        session.selectedIndices.delete(idx);
-      } else {
-        // Cap-6 enforcement at toggle time. A 7th tick is rejected with
-        // an ephemeral followup so the user understands why nothing
-        // changed (silent no-op would feel like a broken button).
-        if (session.selectedIndices.size >= GOLD_EARNER_CAP_PER_ACCOUNT) {
-          await interaction.reply({
-            embeds: [
-              buildNoticeEmbed(EmbedBuilder, {
-                type: "warn",
-                title: t("raid-gold-earner.capWarn.title", session.lang, {
-                  cap: GOLD_EARNER_CAP_PER_ACCOUNT,
-                }),
-                description: t("raid-gold-earner.capWarn.description", session.lang, {
-                  cap: GOLD_EARNER_CAP_PER_ACCOUNT,
-                }),
-              }),
-            ],
-            flags: MessageFlags.Ephemeral,
-          }).catch(() => {});
-          return;
-        }
-        session.selectedIndices.add(idx);
-      }
-
-      await interaction.update({
-        embeds: [buildSelectionEmbed(session)],
-        components: buildSelectionComponents(session),
-      }).catch(() => {});
-      return;
-    }
-
-    if (action === "cancel") {
-      clearPickerSession(sessions, sessionId, { timerField: "timer" });
-      await interaction.update({
-        embeds: [buildCancelledEmbed(session)],
-        components: [],
-      }).catch(() => {});
-      return;
-    }
-
-    if (action === "confirm") {
-      // Persist isGoldEarner per char in the target account. Off-window
-      // chars (overflowCount > 0 case) are NOT touched - we only write
-      // to chars that appeared in the picker. This preserves the
-      // semantic that the picker is the sole authority over what it
-      // displayed and nothing else.
-      const selectedIds = new Set(
-        Array.from(session.selectedIndices).map((i) => session.chars[i]?.id).filter(Boolean)
-      );
-      const pickerCharIds = new Set(session.chars.map((c) => c.id));
-
-      let savedNames = [];
-      try {
-        await saveWithRetry(async () => {
-          const doc = await User.findOne({ discordId: session.callerId });
-          if (!doc) return;
-          const account = (doc.accounts || []).find(
-            (a) => a.accountName === session.accountName
-          );
-          if (!account) return;
-          const out = [];
-          for (const character of account.characters || []) {
-            if (!pickerCharIds.has(character.id)) continue; // off-window
-            character.isGoldEarner = selectedIds.has(character.id);
-            if (character.isGoldEarner) out.push(character.name);
-          }
-          // Maintain canonical ordering by iLvl desc for the saved
-          // summary list so the embed matches what the picker showed.
-          out.sort((a, b) => {
-            const ai = (account.characters || []).find((c) => c.name === a)?.itemLevel || 0;
-            const bi = (account.characters || []).find((c) => c.name === b)?.itemLevel || 0;
-            return (Number(bi) || 0) - (Number(ai) || 0);
-          });
-          savedNames = out;
-          await doc.save();
-        });
-      } catch (err) {
-        console.error("[raid-gold-earner confirm] save failed:", err?.message || err);
-        await interaction.update({
-          embeds: [
-            buildNoticeEmbed(EmbedBuilder, {
-              type: "warn",
-              title: t("raid-gold-earner.saveFail.title", session.lang),
-              description: t("raid-gold-earner.saveFail.description", session.lang),
-            }),
-          ],
-          components: [],
+    if (session.selectedIndices.has(idx)) {
+      session.selectedIndices.delete(idx);
+    } else {
+      if (session.selectedIndices.size >= GOLD_EARNER_CAP_PER_ACCOUNT) {
+        await replyNotice(interaction, {
+          type: "warn",
+          title: t("raid-gold-earner.capWarn.title", session.lang, {
+            cap: GOLD_EARNER_CAP_PER_ACCOUNT,
+          }),
+          description: t("raid-gold-earner.capWarn.description", session.lang, {
+            cap: GOLD_EARNER_CAP_PER_ACCOUNT,
+          }),
         }).catch(() => {});
         return;
       }
+      session.selectedIndices.add(idx);
+    }
 
-      clearPickerSession(sessions, sessionId, { timerField: "timer" });
+    await interaction.update({
+      embeds: [buildSelectionEmbed(session)],
+      components: buildSelectionComponents(session),
+    }).catch(() => {});
+  }
+
+  async function persistGoldEarnerSelection(session) {
+    const selectedIds = new Set(
+      Array.from(session.selectedIndices)
+        .map((index) => session.chars[index]?.id)
+        .filter(Boolean)
+    );
+    const pickerCharIds = new Set(session.chars.map((character) => character.id));
+    let savedNames = [];
+
+    await saveWithRetry(async () => {
+      const doc = await User.findOne({ discordId: session.callerId });
+      if (!doc) return;
+      const account = (doc.accounts || []).find(
+        (candidate) => candidate.accountName === session.accountName
+      );
+      if (!account) return;
+
+      const itemLevelByName = new Map();
+      const out = [];
+      for (const character of account.characters || []) {
+        itemLevelByName.set(character.name, Number(character.itemLevel) || 0);
+        if (!pickerCharIds.has(character.id)) continue;
+        character.isGoldEarner = selectedIds.has(character.id);
+        if (character.isGoldEarner) out.push(character.name);
+      }
+
+      out.sort((a, b) => (itemLevelByName.get(b) || 0) - (itemLevelByName.get(a) || 0));
+      savedNames = out;
+      await doc.save();
+    });
+
+    return savedNames;
+  }
+
+  async function handleConfirmAction(interaction, session, sessionId) {
+    let savedNames = [];
+    try {
+      savedNames = await persistGoldEarnerSelection(session);
+    } catch (err) {
+      console.error("[raid-gold-earner confirm] save failed:", err?.message || err);
       await interaction.update({
-        embeds: [buildSavedEmbed(session, savedNames)],
+        embeds: [
+          buildNotice({
+            type: "warn",
+            title: t("raid-gold-earner.saveFail.title", session.lang),
+            description: t("raid-gold-earner.saveFail.description", session.lang),
+          }),
+        ],
         components: [],
       }).catch(() => {});
       return;
     }
 
-    await interaction.deferUpdate().catch(() => {});
+    clearPickerSession(sessions, sessionId, { timerField: "timer" });
+    await interaction.update({
+      embeds: [buildSavedEmbed(session, savedNames)],
+      components: [],
+    }).catch(() => {});
+  }
+
+  async function handleRaidGoldEarnerButton(interaction) {
+    const route = getRosterPickerRoute(interaction.customId, { prefix: "gold-earner" });
+    const sessionId = route?.sessionId || "";
+    const session = sessions.get(sessionId);
+
+    if (!session) {
+      await renderStaleSession(interaction);
+      return;
+    }
+
+    if (await enforceSessionOwner(interaction, session)) {
+      return;
+    }
+
+    const pickerActionHandlers = {
+      [ROSTER_PICKER_ACTION.toggle]: () => handleToggleAction(interaction, route, session),
+      [ROSTER_PICKER_ACTION.cancel]: async () => {
+        clearPickerSession(sessions, sessionId, { timerField: "timer" });
+        await interaction.update({
+          embeds: [buildCancelledEmbed(session)],
+          components: [],
+        }).catch(() => {});
+      },
+      [ROSTER_PICKER_ACTION.confirm]: () => handleConfirmAction(interaction, session, sessionId),
+    };
+
+    const handler = route ? pickerActionHandlers[route.action] : null;
+    if (!handler) {
+      await interaction.deferUpdate().catch(() => {});
+      return;
+    }
+    await handler();
   }
 
   return {
     handleRaidGoldEarnerCommand,
     handleRaidGoldEarnerAutocomplete,
     handleRaidGoldEarnerButton,
-    // Test seam: lets unit tests inspect picker session state without
-    // exercising the full Discord interaction lifecycle.
     __test: {
       sessions,
       pickInitialSelection,

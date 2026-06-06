@@ -22,7 +22,7 @@ const {
   getTargetResetKey,
   getWeeklyResetSchedulerStartedAtMs,
   WEEKLY_RESET_TICK_MS,
-} = require("./services/raid/weekly-reset");
+} = require("./services/raid/schedulers/weekly-reset");
 const {
   ConcurrencyLimiter,
   UI,
@@ -60,7 +60,7 @@ const { createRaidGoldEarnerCommand } = require("./handlers/roster/gold-earner")
 const { createRaidAuctionCommand } = require("./handlers/raid/auction");
 const { createRaidScheduleCommand } = require("./handlers/raid/schedule");
 // Board embed builders reused by /raid-check's "📋 Đội đã xếp" dropdown.
-const { buildScheduleEmbed, buildTurnPlanEmbed } = require("./handlers/raid/schedule/board");
+const { buildScheduleEmbed, buildTurnPlanEmbed } = require("./handlers/raid/schedule/view/board");
 const { createEditRosterCommand } = require("./handlers/roster/edit");
 const { createRaidCommandDefinitions } = require("./handlers/commands/definitions");
 const { createRaidAutoManageCommand } = require("./handlers/raid/auto-manage");
@@ -83,8 +83,8 @@ const { createAutoManageSyncService } = require("./services/auto-manage/runtime/
 const { createRosterFetchService } = require("./services/roster/fetch");
 const { createAutoManageCoreService } = require("./services/auto-manage/runtime/core");
 const { createRaidViewSnapshotService } = require("./services/raid/view-snapshot");
-const { createRaidChannelMonitorService } = require("./services/raid/channel-monitor");
-const { createRaidSchedulerService } = require("./services/raid/schedulers");
+const { createRaidChannelMonitorService } = require("./services/raid/channel-monitor/channel-monitor");
+const { createRaidSchedulerService } = require("./services/raid/schedulers/schedulers");
 const { createRaidScheduleAutoLockService } = require("./services/raid/schedule/auto-lock");
 const { createDiscordIdentityCache } = require("./services/discord/user-identity-cache");
 const { createBibleProfileSyncService } = require("./services/auto-manage/profile/sync");

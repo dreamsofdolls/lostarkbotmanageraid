@@ -145,34 +145,42 @@ test("buildStatusFooterText: handles missing progress field defensively", () => 
 });
 
 test("REGRESSION: raid-status reload paths preserve merged shared rosters", () => {
-  const source = fs.readFileSync(
+  const indexSource = fs.readFileSync(
     path.join(__dirname, "..", "bot", "handlers", "raid-status", "index.js"),
     "utf8"
   );
-  assert.match(source, /const reloadViewerAccounts = async/);
+  const stateSource = fs.readFileSync(
+    path.join(__dirname, "..", "bot", "handlers", "raid-status", "session-state.js"),
+    "utf8"
+  );
+  assert.match(indexSource, /const reloadViewerAccounts = async/);
   assert.match(
-    source,
+    stateSource,
     /accounts = await buildMergedAccounts\(discordId, userDoc\.accounts\)/
   );
-  assert.doesNotMatch(source, /accounts\s*=\s*userDoc\.accounts/);
-  assert.doesNotMatch(source, /accounts\s*=\s*reloaded\.accounts/);
+  assert.doesNotMatch(stateSource, /accounts\s*=\s*userDoc\.accounts/);
+  assert.doesNotMatch(stateSource, /accounts\s*=\s*reloaded\.accounts/);
 });
 
 test("REGRESSION: raid-status edit payload clears stale canvas attachments", () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, "..", "bot", "handlers", "raid-status", "index.js"),
+  const renderSource = fs.readFileSync(
+    path.join(__dirname, "..", "bot", "handlers", "raid-status", "render-payload.js"),
+    "utf8"
+  );
+  const collectorSource = fs.readFileSync(
+    path.join(__dirname, "..", "bot", "handlers", "raid-status", "components", "component-collector.js"),
     "utf8"
   );
   assert.match(
-    source,
+    renderSource,
     /const payload = \{ embeds: \[embed\], files: \[\], attachments: \[\] \};/
   );
-  assert.match(source, /components: buildComponents\(true\),\s+attachments: \[\],/);
+  assert.match(collectorSource, /components: buildComponents\(true\),\s+attachments: \[\],/);
 });
 
 test("REGRESSION: raid-status background renders inside the status embed below data", () => {
   const source = fs.readFileSync(
-    path.join(__dirname, "..", "bot", "handlers", "raid-status", "index.js"),
+    path.join(__dirname, "..", "bot", "handlers", "raid-status", "render-payload.js"),
     "utf8"
   );
   assert.match(source, /const attachBackgroundToStatusEmbed = \(buffer\) =>/);

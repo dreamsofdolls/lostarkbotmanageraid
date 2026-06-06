@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { createScheduleNoticeHelpers } = require("../bot/handlers/raid/schedule/notices");
+const { createScheduleNoticeHelpers } = require("../bot/handlers/raid/schedule/view/notices");
 
 class StubEmbed {
   constructor() {
