@@ -6,7 +6,7 @@ const assert = require("node:assert/strict");
 const {
   parseTaskToggleValue,
   toggleParsedSideTask,
-} = require("../bot/handlers/raid-status/task-actions");
+} = require("../bot/handlers/raid-status/task/task-actions");
 
 function makeUserModel(userDoc) {
   return {

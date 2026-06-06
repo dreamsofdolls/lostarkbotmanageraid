@@ -30,7 +30,7 @@ const {
   createRaidStatusCommand,
   _resolveBackgroundLookup,
 } = require("../bot/handlers/raid-status");
-const { createRaidStatusTaskUi } = require("../bot/handlers/raid-status/task-ui");
+const { createRaidStatusTaskUi } = require("../bot/handlers/raid-status/task/task-ui");
 const {
   UI,
   truncateText,
@@ -150,7 +150,7 @@ test("REGRESSION: raid-status reload paths preserve merged shared rosters", () =
     "utf8"
   );
   const stateSource = fs.readFileSync(
-    path.join(__dirname, "..", "bot", "handlers", "raid-status", "session-state.js"),
+    path.join(__dirname, "..", "bot", "handlers", "raid-status", "state", "session-state.js"),
     "utf8"
   );
   assert.match(indexSource, /const reloadViewerAccounts = async/);
@@ -164,7 +164,7 @@ test("REGRESSION: raid-status reload paths preserve merged shared rosters", () =
 
 test("REGRESSION: raid-status edit payload clears stale canvas attachments", () => {
   const renderSource = fs.readFileSync(
-    path.join(__dirname, "..", "bot", "handlers", "raid-status", "render-payload.js"),
+    path.join(__dirname, "..", "bot", "handlers", "raid-status", "view", "render-payload.js"),
     "utf8"
   );
   const collectorSource = fs.readFileSync(
@@ -180,7 +180,7 @@ test("REGRESSION: raid-status edit payload clears stale canvas attachments", () 
 
 test("REGRESSION: raid-status background renders inside the status embed below data", () => {
   const source = fs.readFileSync(
-    path.join(__dirname, "..", "bot", "handlers", "raid-status", "render-payload.js"),
+    path.join(__dirname, "..", "bot", "handlers", "raid-status", "view", "render-payload.js"),
     "utf8"
   );
   assert.match(source, /const attachBackgroundToStatusEmbed = \(buffer\) =>/);

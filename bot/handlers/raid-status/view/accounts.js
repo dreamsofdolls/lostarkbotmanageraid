@@ -1,6 +1,6 @@
 "use strict";
 
-const { getAccessibleAccounts } = require("../../services/access/access-control");
+const { getAccessibleAccounts } = require("../../../services/access/access-control");
 
 async function buildMergedAccounts(viewerDiscordId, ownAccounts, { accessibleAccounts = null } = {}) {
   const merged = Array.isArray(ownAccounts) ? ownAccounts.slice() : [];

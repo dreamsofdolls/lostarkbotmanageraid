@@ -1,6 +1,6 @@
 "use strict";
 
-const { loadBackgroundBuffer } = require("../../services/raid-card/bg-loader");
+const { loadBackgroundBuffer } = require("../../../services/raid-card/bg-loader");
 const { resolveBackgroundLookup } = require("./accounts");
 
 function createRaidStatusRenderPayload({

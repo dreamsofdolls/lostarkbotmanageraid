@@ -10,7 +10,7 @@ const {
 const {
   parseTaskToggleValue,
   toggleParsedSideTask,
-} = require("../task-actions");
+} = require("../task/task-actions");
 const {
   followUpNotice,
   replyNotice,

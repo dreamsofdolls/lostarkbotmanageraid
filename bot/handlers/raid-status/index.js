@@ -7,11 +7,11 @@
  * the embed.
  */
 
-const { createRaidStatusView } = require("./view");
-const { createRaidStatusTaskUi } = require("./task-ui");
+const { createRaidStatusView } = require("./view/view");
+const { createRaidStatusTaskUi } = require("./task/task-ui");
 const { createRaidStatusSync } = require("./sync/sync");
 const { createRaidStatusComponentLayout } = require("./components/component-layout");
-const { createRaidStatusRenderPayload } = require("./render-payload");
+const { createRaidStatusRenderPayload } = require("./view/render-payload");
 const {
   buildRaidDropdownState,
   buildRaidFilterRow,
@@ -30,7 +30,7 @@ const { t } = require("../../services/i18n");
 const {
   buildMergedAccounts,
   resolveBackgroundLookup,
-} = require("./accounts");
+} = require("./view/accounts");
 const {
   createRaidStatusSyncControls,
 } = require("./sync/sync-controls");
@@ -40,14 +40,14 @@ const {
 const {
   loadStatusViewerState,
   probeLocalSyncMode,
-} = require("./viewer-state");
+} = require("./state/viewer-state");
 const {
   attachRaidStatusComponentCollector,
 } = require("./components/component-collector");
 const {
   createRaidStatusComponentSession,
   createRaidStatusSessionState,
-} = require("./session-state");
+} = require("./state/session-state");
 
 const STATUS_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
