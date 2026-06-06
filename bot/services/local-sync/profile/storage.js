@@ -15,13 +15,19 @@ async function shouldPromoteSnapshot(clean, discordId, RaidProfileSnapshot) {
   return !existingHasCharacters || existingRangeType !== "full";
 }
 
-function buildSnapshotUpdate({ discordId, clean, promotePrimary }) {
+function buildSnapshotUpdate({ discordId, clean, promotePrimary, extraRangeSnapshots = {} }) {
   const rangeType = clean?.criteria?.range?.type === "weekly" ? "weekly" : "full";
   const { encounterSummaries: _encounterSummaries, ...snapshot } = clean || {};
   const set = {
     discordId,
     [`rangeSnapshots.${rangeType}`]: snapshot,
   };
+  for (const [extraRangeType, extraSnapshot] of Object.entries(extraRangeSnapshots || {})) {
+    if (!extraSnapshot || typeof extraSnapshot !== "object") continue;
+    if (extraRangeType !== "weekly" && extraRangeType !== "full") continue;
+    const { encounterSummaries: _extraEncounterSummaries, ...extraSnapshotDoc } = extraSnapshot;
+    set[`rangeSnapshots.${extraRangeType}`] = extraSnapshotDoc;
+  }
   if (promotePrimary) {
     Object.assign(set, {
       ...snapshot,

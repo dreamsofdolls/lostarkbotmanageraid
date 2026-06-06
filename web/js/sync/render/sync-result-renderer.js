@@ -16,10 +16,6 @@ export function summarizeSyncResult(data = {}) {
   };
 }
 
-export function renderNoDeltaProfileStatsQueuedResult() {
-  return `<div class="sync-result-summary">${t("sync.nothingToSync")}</div>${renderProfileStatsQueuedSection()}`;
-}
-
 export function renderSyncApplyResult(data = {}, rosterAccounts = []) {
   const counts = summarizeSyncResult(data);
   let html = `<div class="sync-result-summary"><span class="status-ok">${t("sync.complete")}</span> <span class="sync-summary-line">${t("sync.summary", {

@@ -24,6 +24,10 @@ const {
   buildSnapshotUpdate,
   upsertEncounterSummaries,
 } = require("./storage");
+const {
+  rebuildFullSnapshotFromStoredSummaries,
+  rebuildWeeklySnapshotFromStoredSummaries,
+} = require("./summary-snapshot-builder");
 
 function createProfileSessionEndpoint({ User, isDevUser = () => true }) {
   if (!User) throw new Error("[profile-session-endpoint] User model required");
@@ -199,27 +203,65 @@ function createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot, RaidProfileE
       return;
     }
 
+    let encounterWrite = { received: clean.encounterSummaries?.length || 0, upserted: 0, modified: 0 };
+    let effectiveClean = clean;
+    let extraRangeSnapshots = {};
+    try {
+      encounterWrite = await upsertEncounterSummaries({
+        discordId: userDoc.discordId,
+        summaries: clean.encounterSummaries,
+        RaidProfileEncounter,
+      });
+      const rebuiltWeekly = await rebuildWeeklySnapshotFromStoredSummaries({
+        discordId: userDoc.discordId,
+        clean,
+        userDoc,
+        RaidProfileEncounter,
+      });
+      const rebuiltFull = rebuiltWeekly
+        ? await rebuildFullSnapshotFromStoredSummaries({
+            discordId: userDoc.discordId,
+            clean,
+            userDoc,
+            RaidProfileEncounter,
+          })
+        : null;
+      if (rebuiltFull?.totals?.characterCount && rebuiltFull?.totals?.encounterCount) {
+        effectiveClean = rebuiltFull;
+        if (rebuiltWeekly?.totals?.characterCount && rebuiltWeekly?.totals?.encounterCount) {
+          extraRangeSnapshots = { weekly: rebuiltWeekly };
+        }
+      } else if (rebuiltWeekly?.totals?.characterCount && rebuiltWeekly?.totals?.encounterCount) {
+        effectiveClean = rebuiltWeekly;
+      }
+    } catch (err) {
+      console.error("[raid-profile-sync-endpoint] encounter summary save/rebuild failed:", err?.message || err);
+      send(res, 500, { ok: false, error: "profile summary save failed" });
+      return;
+    }
+
     let promotePrimary;
     try {
-      promotePrimary = await shouldPromoteSnapshot(clean, userDoc.discordId, RaidProfileSnapshot);
+      promotePrimary = await shouldPromoteSnapshot(effectiveClean, userDoc.discordId, RaidProfileSnapshot);
     } catch (err) {
       console.error("[raid-profile-sync-endpoint] existing snapshot read failed:", err?.message || err);
       send(res, 500, { ok: false, error: "profile state read failed" });
       return;
     }
 
-    let encounterWrite = { received: clean.encounterSummaries?.length || 0, upserted: 0, modified: 0 };
     try {
       await RaidProfileSnapshot.findOneAndUpdate(
         { discordId: userDoc.discordId },
-        { $set: buildSnapshotUpdate({ discordId: userDoc.discordId, clean, promotePrimary }) },
+        {
+          $set: buildSnapshotUpdate({
+            discordId: userDoc.discordId,
+            clean: effectiveClean,
+            promotePrimary,
+            extraRangeSnapshots,
+          }),
+        },
         { upsert: true, setDefaultsOnInsert: true, new: true }
       );
-      encounterWrite = await upsertEncounterSummaries({
-        discordId: userDoc.discordId,
-        summaries: clean.encounterSummaries,
-        RaidProfileEncounter,
-      });
       await User.updateOne(
         { discordId: userDoc.discordId, localProfileSyncTokenHash: userDoc.localProfileSyncTokenHash },
         { $set: { lastLocalProfileSyncAt: Date.now() } }
@@ -247,7 +289,7 @@ function createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot, RaidProfileE
       newExpSec,
       encounterWrite,
       totals: {
-        ...clean.totals,
+        ...effectiveClean.totals,
         encounterSummaries: encounterWrite.received,
       },
     });

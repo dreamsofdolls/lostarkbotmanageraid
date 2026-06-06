@@ -133,7 +133,7 @@ test("raid-sync endpoint returns 409 when reset disables local-sync during apply
   assert.equal(res.json().rejected[0].reason, "local_sync_disabled");
 });
 
-test("raid-sync endpoint only shrinks the token that performed the apply", async () => {
+test("raid-sync endpoint leaves token expiry open for chained profile upload", async () => {
   const token = mintToken("u1");
   const updateCalls = [];
   const User = {
@@ -193,8 +193,6 @@ test("raid-sync endpoint only shrinks the token that performed the apply", async
   );
 
   assert.equal(res.status, 200);
-  assert.equal(updateCalls.length, 1);
-  assert.deepEqual(updateCalls[0].filter, { discordId: "u1", lastLocalSyncToken: token });
-  assert.equal(typeof updateCalls[0].update.$set.lastLocalSyncTokenExpAt, "number");
-  assert.equal(res.json().newExpSec, updateCalls[0].update.$set.lastLocalSyncTokenExpAt);
+  assert.equal(updateCalls.length, 0);
+  assert.equal(res.json().newExpSec, null);
 });

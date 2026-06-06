@@ -3,6 +3,8 @@
 import {
   loadCatalog,
   BOSS_TO_RAID_GATE,
+  makeBucketKey,
+  normalizeDifficulty,
 } from "/sync/js/sync/preview-utils.js";
 import { createStableFileSnapshot } from "/sync/js/sync/file/file-snapshot.js";
 import { quoteIdent, pickColumn } from "/sync/js/sync/sqlite-schema.js";
@@ -40,6 +42,26 @@ function sqlString(value) {
 
 function sqlStringList(values) {
   return (values || []).map(sqlString).join(", ");
+}
+
+function parseProfileScopeKeys(scopeKeys) {
+  const keys = new Set();
+  const charKeys = new Set();
+  const raidKeys = new Set();
+  for (const raw of Array.isArray(scopeKeys) ? scopeKeys : []) {
+    const text = String(raw || "").trim();
+    const parts = text.split("::");
+    if (parts.length !== 3 || !parts[0] || !parts[1] || !parts[2]) continue;
+    const key = `${parts[0].trim().toLowerCase()}::${parts[1].trim()}::${parts[2].trim()}`;
+    keys.add(key);
+    charKeys.add(parts[0].trim().toLowerCase());
+    raidKeys.add(parts[1].trim());
+  }
+  const bosses = new Set();
+  for (const [bossName, gate] of BOSS_TO_RAID_GATE.entries()) {
+    if (raidKeys.has(gate?.raidKey)) bosses.add(bossName);
+  }
+  return { keys, charKeys, raidKeys, bosses };
 }
 
 async function withSqliteDb(file, fn) {
@@ -97,10 +119,12 @@ function buildRosterLookup(accounts) {
   return byName;
 }
 
-async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = {}) {
+async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0, scopeKeys = [] } = {}) {
   await loadCatalog();
   const rosterByName = buildRosterLookup(rosterAccounts);
   if (rosterByName.size === 0 || BOSS_TO_RAID_GATE.size === 0) return [];
+  const scope = parseProfileScopeKeys(scopeKeys);
+  const hasScope = scope.keys.size > 0;
 
   return withSqliteDb(file, async (sqlite3, db) => {
     const previewCols = await listColumns(sqlite3, db, "encounter_preview");
@@ -131,6 +155,12 @@ async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = 
     const supportedBosses = [...BOSS_TO_RAID_GATE.keys()].map(sqlString).join(", ");
     const minFightStart = Number(minFightStartMs) || 0;
     const minFightStartFilter = minFightStart > 0 ? `AND ${tsSql} >= ${Math.floor(minFightStart)}` : "";
+    const scopeCharFilter = hasScope && scope.charKeys.size
+      ? `AND LOWER(TRIM(COALESCE(${charSql}, ''))) IN (${sqlStringList([...scope.charKeys])})`
+      : "";
+    const scopeBossFilter = hasScope
+      ? (scope.bosses.size ? `AND ${bossSql} IN (${sqlStringList([...scope.bosses])})` : "AND 1 = 0")
+      : "";
     const durationMsExpr = `CASE WHEN ${durationSql} > 0 AND ${durationSql} < 10000 THEN ${durationSql} * 1000 ELSE ${durationSql} END`;
     const hasEncounterTable = encounterCols.has("id");
     const encounterJoin = hasEncounterTable ? "LEFT JOIN encounter enc ON enc.id = ep.id" : "";
@@ -228,6 +258,8 @@ async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = 
         WHERE ${clearedSql} = 1
           AND ${durationMsExpr} > ${MIN_DURATION_MS}
           ${minFightStartFilter}
+          ${scopeCharFilter}
+          ${scopeBossFilter}
           AND ${bossSql} IN (${supportedBosses})
           AND ${charSql} IS NOT NULL
           AND ${charSql} != ''
@@ -375,11 +407,15 @@ async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = 
       const localName = row[4];
       const rosterInfo = rosterByName.get(normalizeName(localName));
       if (!rosterInfo) return;
+      const gateInfo = BOSS_TO_RAID_GATE.get(row[2] || "");
+      const modeKey = normalizeDifficulty(row[3]) || "normal";
       rows.push({
         encounterId: row[0],
         fightStart: Number(row[1]) || 0,
         boss: row[2] || "",
         difficulty: row[3] || "Normal",
+        raidKey: gateInfo?.raidKey || "",
+        modeKey,
         localPlayer: localName || "",
         durationMs: Number(row[5]) || 0,
         players: row[6] || "",
@@ -436,7 +472,11 @@ async function queryProfileRows(file, rosterAccounts, { minFightStartMs = 0 } = 
       });
     });
     await enrichProfileRows(rows);
-    return rows.filter(isModernProfileRow);
+    const modernRows = rows.filter(isModernProfileRow);
+    if (!hasScope) return modernRows;
+    return modernRows.filter((row) =>
+      scope.keys.has(makeBucketKey(row.localPlayer, row.raidKey, row.modeKey))
+    );
   });
 }
 
@@ -549,7 +589,7 @@ async function sendProfileSnapshot(snapshot, session, {
   }
   if (data.newExpSec) {
     updateLocalTokenExpSec?.(data.newExpSec);
-    renderStatus?.("info", "Server đã ghi xong; local link token được rút còn khoảng 60s.");
+    renderStatus?.("info", "Server đã ghi xong; local link token được rút còn khoảng 1 phút.");
   }
   const write = data.encounterWrite || {};
   renderStatus?.("info", `MongoDB ghi xong: snapshot chính + ${formatCount(write.received || data.totals?.encounterSummaries)} encounter summary (${formatCount(write.upserted)} mới, ${formatCount(write.modified)} cập nhật).`);
@@ -622,6 +662,7 @@ async function runProfileSnapshotSync({
   updateLocalTokenExpSec,
   reason = "auto",
   minFightStartMs = 0,
+  scopeKeys = [],
 } = {}) {
   if (profileSyncInFlight) {
     return { ok: false, skipped: "in-flight" };
@@ -646,10 +687,13 @@ async function runProfileSnapshotSync({
       renderStatus,
     });
     const fullImport = Number(minFightStartMs) <= 0;
-    const scanFile = Number(minFightStartMs) > 0
-      ? file
-      : await getStableProfileScanFile(file, renderStatus);
+    const scanFile = fullImport
+      ? await getStableProfileScanFile(file, renderStatus)
+      : file;
     renderStatus?.("info", `Mở SQLite ở chế độ read-only: ${scanFile?.name || "encounters.db"} (~${formatSnapshotGb(scanFile?.size)} GB).`);
+    if (!fullImport && Array.isArray(scopeKeys) && scopeKeys.length > 0) {
+      renderStatus?.("info", `Giới hạn profile scan trong ${formatCount(scopeKeys.length)} raid/mode chưa sync từ preview tuần.`);
+    }
     renderStatus?.("info", reason === "initial" ? t("profileSync.scanning") : t("profileSync.checking"));
     // A multi-GB encounters.db scan runs for many seconds inside a single
     // SQLite query with no natural progress event. Tick an elapsed counter
@@ -666,7 +710,10 @@ async function runProfileSnapshotSync({
     }
     let rows;
     try {
-      rows = await queryProfileRows(scanFile, rosterAccounts, { minFightStartMs });
+      rows = await queryProfileRows(scanFile, rosterAccounts, {
+        minFightStartMs,
+        scopeKeys: Number(minFightStartMs) > 0 ? scopeKeys : [],
+      });
     } finally {
       if (scanHeartbeat) clearInterval(scanHeartbeat);
     }
@@ -695,7 +742,7 @@ async function runProfileSnapshotSync({
       return { ok: true, sent: false, rows: rows.length };
     }
     const result = await sendProfileSnapshot(snapshot, session, {
-      localToken: fullImport ? localToken : "",
+      localToken,
       renderStatus,
       updateLocalTokenExpSec,
     });

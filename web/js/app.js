@@ -46,7 +46,6 @@ import {
   renderPreviewStats,
 } from "/sync/js/sync/render/preview-renderer.js";
 import {
-  renderNoDeltaProfileStatsQueuedResult,
   renderSyncApplyResult,
   summarizeSyncResult,
 } from "/sync/js/sync/render/sync-result-renderer.js";
@@ -201,6 +200,13 @@ function renderWeeklyProfileSyncStatus(kind, message) {
 
 async function syncProfileStatsAfterWeeklySync() {
   if (!selectedLocalFile) return Promise.resolve(null);
+  const scopeKeys = Array.isArray(window.__artistWeeklyProfileScopeKeys)
+    ? [...window.__artistWeeklyProfileScopeKeys]
+    : [];
+  if (scopeKeys.length === 0) {
+    renderWeeklyProfileSyncStatus("ok", t("sync.nothingToSyncFull"));
+    return { ok: true, skipped: "no-weekly-profile-scope" };
+  }
   const { currentWeeklyResetStartMs } = await loadPreviewUtils();
   return syncProfileSnapshotOnce({
     file: selectedLocalFile,
@@ -211,6 +217,7 @@ async function syncProfileStatsAfterWeeklySync() {
     updateLocalTokenExpSec: (newExpSec) => authSession.updateExpSec(newExpSec),
     reason: "weekly",
     minFightStartMs: currentWeeklyResetStartMs(),
+    scopeKeys,
   });
 }
 
@@ -244,6 +251,7 @@ function clearWeeklySurface() {
   syncOutput.hidden = true;
   syncOutput.innerHTML = "";
   lastDeltas = null;
+  window.__artistWeeklyProfileScopeKeys = [];
 }
 
 function clearProfileSurface() {
@@ -569,12 +577,14 @@ async function runPreviewQuery(sqlite3, db) {
   if (previewCols.size === 0 && encounterCols.size === 0) {
     previewOutput.innerHTML = `<span class="status-err">${t("preview.noTable")}</span> ${t("preview.noTableHint")}`;
     lastDeltas = [];
+    window.__artistWeeklyProfileScopeKeys = [];
     return;
   }
   const source = resolveEncounterSource({ previewCols, encounterCols });
   if (!source) {
     previewOutput.innerHTML = `<span class="status-err">${t("preview.missingCols")}</span><br>${formatSchemaPreview("encounter_preview", previewCols)}<br>${formatSchemaPreview("encounter", encounterCols)}<br><span class="hint">${t("preview.missingColsHint")}</span>`;
     lastDeltas = [];
+    window.__artistWeeklyProfileScopeKeys = [];
     return;
   }
   const { table, bossCol, tsCol, charCol, diffCol, clearedCol, playersCol } = source;
@@ -613,11 +623,13 @@ async function runPreviewQuery(sqlite3, db) {
     });
   } catch (err) {
     previewOutput.innerHTML = `<span class="status-err">${t("preview.queryFailed")}</span> ${escapeHtml(err.message || String(err))}<br><span class="hint">Table: <code>${escapeHtml(table)}</code>, boss column: <code>${escapeHtml(bossCol)}</code>, ts column: <code>${escapeHtml(tsCol)}</code>. ${t("preview.queryFailedHint")}</span>`;
+    window.__artistWeeklyProfileScopeKeys = [];
     return;
   }
   if (rows.length === 0) {
     previewOutput.innerHTML = `<span class="status-ok">${t("preview.noRecent")}</span> ${t("preview.nothingToSync")}`;
     lastDeltas = [];
+    window.__artistWeeklyProfileScopeKeys = [];
     return;
   }
   // Cache rows + schema for post-sync refresh (refreshDiffAndStats reuses
@@ -671,6 +683,7 @@ async function rebuildDiffFromRows({ rows, schemaDebug, keepSyncOutput = false }
   window.__artistRosterAccounts = rosterAccounts;
   const diff = buildDiff(rosterAccounts, buckets);
   const actionableKeys = buildActionableBucketKeySet(diff);
+  window.__artistWeeklyProfileScopeKeys = [...actionableKeys];
   lastDeltas = syncRows
     .filter((r) => {
       const gateInfo = getRaidGateForBoss(r[0]);
@@ -702,7 +715,7 @@ async function rebuildDiffFromRows({ rows, schemaDebug, keepSyncOutput = false }
   }
   renderDiffPage(previewOutput);
   syncSection.hidden = false;
-  syncBtn.disabled = lastDeltas.length === 0 && !((window.__artistRows || []).length > 0);
+  syncBtn.disabled = lastDeltas.length === 0;
   // Post-sync callers pass keepSyncOutput so the success summary they
   // just rendered stays visible. Initial preview wipes it to either
   // "nothing to sync" hint or hidden depending on actionable count.
@@ -732,19 +745,7 @@ syncBtn.addEventListener("click", async () => {
   }
   if (!Array.isArray(lastDeltas) || lastDeltas.length === 0) {
     syncOutput.hidden = false;
-    if (!((window.__artistRows || []).length > 0)) {
-      syncOutput.innerHTML = t("sync.nothingToSync");
-      return;
-    }
-    syncBtn.disabled = true;
-    syncOutput.innerHTML = renderNoDeltaProfileStatsQueuedResult();
-    try {
-      await syncProfileStatsAfterWeeklySync();
-    } catch (err) {
-      renderWeeklyProfileSyncStatus("err", err?.message || String(err));
-    } finally {
-      syncBtn.disabled = false;
-    }
+    syncOutput.innerHTML = t((window.__artistRows || []).length > 0 ? "sync.nothingToSyncFull" : "sync.nothingToSync");
     return;
   }
   syncBtn.disabled = true;
@@ -766,8 +767,8 @@ syncBtn.addEventListener("click", async () => {
       return;
     }
     const { applied: a } = summarizeSyncResult(data);
-    // Server shrinks token TTL to ~60s on a real apply (a > 0). Mirror
-    // that into the auth pill so the countdown reflects reality immediately.
+    // raid-sync keeps the token alive for the chained profile upload. If the
+    // server ever returns a new expiry here, mirror it into the auth pill.
     authSession.updateExpSec(data.newExpSec);
     syncOutput.innerHTML = renderSyncApplyResult(data, window.__artistRosterAccounts || []);
     syncOutput.hidden = false;

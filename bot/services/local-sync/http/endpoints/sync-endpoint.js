@@ -1,16 +1,15 @@
 /**
  * services/local-sync/http/sync-endpoint.js
- * POST /api/raid-sync handler. Auth chain: Bearer JWT → signature
- * verify → Mongo localSyncEnabled check → stored-token freshness check
- * → apply. On any applied row, the stored token's effective expiry is
- * shrunk to now+60s so a leaked URL post-sync is only useful for ~1
- * minute (defense in depth · the JWT itself still has its full TTL).
+ * POST /api/raid-sync handler. Auth chain: Bearer JWT -> signature
+ * verify -> Mongo localSyncEnabled check -> stored-token freshness check
+ * -> apply. Token expiry stays open here so the web companion can upload
+ * raid-profile stats after weekly clear-sync; /api/raid-profile-sync
+ * shrinks the stored token once profile data lands.
  */
 
 "use strict";
 
 const {
-  TOKEN_POST_SYNC_TTL_SEC,
   applyLocalSyncDeltas,
   recordLocalSyncSuccess,
 } = require("../..");
@@ -124,27 +123,11 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId, applyRaidSetBa
       console.warn("[sync-endpoint] timestamp stamp failed:", err?.message || err);
     }
 
-    // 6. On successful apply (anything written), shrink the stored token's
-    // effective expiry to now+60s. The JWT itself stays valid for the rest
-    // of its natural TTL but isCurrentStoredToken() will reject it after
-    // 60s, so a leaked URL post-sync is only useful for ~1 minute.
-    // "Successful" = at least one applied row; nothing-to-sync (all skipped
-    // or all rejected) does NOT shrink because the user may still want
-    // those minutes to retry with a different file.
-    let newExpSec = null;
-    const appliedCount = Array.isArray(summary?.applied) ? summary.applied.length : 0;
-    if (appliedCount > 0) {
-      const shrunkAt = Math.floor(Date.now() / 1000) + TOKEN_POST_SYNC_TTL_SEC;
-      try {
-        await User.updateOne(
-          { discordId, lastLocalSyncToken: token },
-          { $set: { lastLocalSyncTokenExpAt: shrunkAt } }
-        );
-        newExpSec = shrunkAt;
-      } catch (err) {
-        console.warn("[sync-endpoint] token shrink failed:", err?.message || err);
-      }
-    }
+    // 6. Do not shrink the local-sync token here. Weekly clear-sync chains
+    // a raid-profile upload after applying deltas; closing the token at this
+    // point can strand that profile upload. /api/raid-profile-sync owns the
+    // post-profile shrink instead.
+    const newExpSec = null;
 
     send(res, 200, {
       ok: true,
