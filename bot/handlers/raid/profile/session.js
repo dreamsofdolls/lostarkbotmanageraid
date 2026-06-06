@@ -70,12 +70,19 @@ function moveCircularIndex(current, total, action) {
 }
 
 function applyOverviewButton(session) {
-  if (session.rosterIndex >= 0) {
+  // Step up exactly one level, matching the button's own label (components.js):
+  // from a character -> the roster view; from the roster view -> the overall
+  // view. Previously this always reset charIndex, so pressing it in the roster
+  // view (charIndex already -1) was a silent no-op.
+  if (session.charIndex >= 0) {
     session.charIndex = -1;
-  } else {
-    showProfileOverall(session);
+    return true;
   }
-  return true;
+  if (session.rosterIndex >= 0) {
+    showProfileOverall(session);
+    return true;
+  }
+  return false;
 }
 
 function applyRosterPageButton(session, action) {
