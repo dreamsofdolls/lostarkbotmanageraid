@@ -68,6 +68,25 @@ function makeEntry({ kind, message, now, sequence }) {
   };
 }
 
+function getContainerWindow(container) {
+  return container?.ownerDocument?.defaultView || globalThis.window || null;
+}
+
+function preservePageScroll(container, fn) {
+  const win = getContainerWindow(container);
+  const canRestore = !!win
+    && typeof win.scrollTo === "function"
+    && Number.isFinite(Number(win.scrollY));
+  if (!canRestore) {
+    fn();
+    return;
+  }
+  const scrollX = Number(win.scrollX) || 0;
+  const scrollY = Number(win.scrollY) || 0;
+  fn();
+  win.scrollTo(scrollX, scrollY);
+}
+
 export function renderProfileProcessLogHtml(entries, current, kind, {
   escapeHtml = defaultEscapeHtml,
 } = {}) {
@@ -139,8 +158,10 @@ export function createProfileProcessLogRenderer({
       if (entries.length > limit) entries = entries.slice(-limit);
     }
 
-    container.hidden = false;
-    container.innerHTML = renderProfileProcessLogHtml(entries, next.message, kind, { escapeHtml });
+    preservePageScroll(container, () => {
+      container.hidden = false;
+      container.innerHTML = renderProfileProcessLogHtml(entries, next.message, kind, { escapeHtml });
+    });
   }
 
   return {
@@ -151,6 +172,7 @@ export function createProfileProcessLogRenderer({
 }
 
 export const __test = {
+  preservePageScroll,
   rollingProgressGroup,
   rowKind,
   statusClass,

@@ -35,7 +35,6 @@ import {
   tryRestoreForUser,
 } from "/sync/js/sync/file/file-persistence.js";
 import {
-  startProfileAutoSync,
   syncProfileSnapshotOnce,
   stopProfileAutoSync,
 } from "/sync/js/profile/profile-sync.js";
@@ -274,19 +273,22 @@ async function activateWeeklyMode() {
   await loadAndPreview(selectedLocalFile);
 }
 
-function activateProfileMode() {
-  if (!selectedLocalFile || lockedSyncMode === "weekly") return;
+async function activateProfileMode() {
+  if (!selectedLocalFile || lockedSyncMode === "weekly" || lockedSyncMode === "profile") return;
   lockedSyncMode = "profile";
+  stopProfileAutoSync();
   clearWeeklySurface();
   renderSyncModeTabs();
   profileSection.hidden = false;
-  startProfileAutoSync({
+  renderProfileSyncStatus(null, "");
+  await syncProfileSnapshotOnce({
     file: selectedLocalFile,
     getDiscordId: () => window.__artistDiscordId,
     getLocalToken: () => window.__artistSyncToken,
     getRosterAccounts: getRosterAccountsForProfile,
     renderStatus: renderProfileSyncStatus,
     updateLocalTokenExpSec: (newExpSec) => authSession.updateExpSec(newExpSec),
+    reason: "initial",
   });
 }
 
@@ -383,7 +385,12 @@ if (weeklyModeTab) {
 }
 
 if (profileModeTab) {
-  profileModeTab.addEventListener("click", activateProfileMode);
+  profileModeTab.addEventListener("click", () => {
+    activateProfileMode().catch((err) => {
+      console.error("[local-sync] profile import failed:", err);
+      renderProfileSyncStatus("err", err?.message || String(err));
+    });
+  });
 }
 
 dropZone.addEventListener("dragover", (e) => {
