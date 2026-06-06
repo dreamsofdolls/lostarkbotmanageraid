@@ -47,6 +47,7 @@ function cleanAltBuild(rawAlt) {
     encounters: clampNumber(rawAlt.encounters, { max: 100000 }),
     stats,
     scores: cleanNumberObject(rawAlt.scores, CHARACTER_PROFILE_SCORE_KEYS, { max: 100 }),
+    build: cleanBuild(rawAlt.build),
   };
 }
 

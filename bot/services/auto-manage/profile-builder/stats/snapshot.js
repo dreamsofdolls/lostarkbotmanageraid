@@ -209,6 +209,17 @@ function summarizeBuildVariants(rows, { limit = 6 } = {}) {
     .slice(0, limit);
 }
 
+function buildProfileBuild(row) {
+  return {
+    spec: row?.build?.spec || "",
+    gearScore: row?.build?.gearScore || 0,
+    combatPower: row?.build?.combatPower || 0,
+    arkPassiveActive: null,
+    engravings: [],
+    arkPassive: null,
+  };
+}
+
 function summarizeTimeline(rows) {
   const list = Array.isArray(rows) ? rows : [];
   return {
@@ -258,14 +269,7 @@ function buildSnapshotFromRows({ rows, summaries = [], rangeType = "weekly", ran
     }
 
     const latest = rowsForStats[0];
-    const build = {
-      spec: latest?.build?.spec || "",
-      gearScore: latest?.build?.gearScore || 0,
-      combatPower: latest?.build?.combatPower || 0,
-      arkPassiveActive: null,
-      engravings: [],
-      arkPassive: null,
-    };
+    const build = buildProfileBuild(latest);
 
     const raidGroups = new Map();
     for (const row of rowsForStats) {
@@ -289,11 +293,15 @@ function buildSnapshotFromRows({ rows, summaries = [], rangeType = "weekly", ran
       const altRows = role === "support" ? dpsRows : supportRows;
       if (altRows.length >= MIN_ALT_BUILD_LOGS) {
         const altStats = summarizeRows(altRows);
+        const altLatest = altRows.reduce((best, row) =>
+          (Number(row.fightStart) || 0) > (Number(best.fightStart) || 0) ? row : best
+        , altRows[0]);
         altBuild = {
           role: altRole,
           encounters: altRows.length,
           stats: altStats,
           scores: computeBibleScores(altStats, altRole),
+          build: buildProfileBuild(altLatest),
         };
       }
     }
