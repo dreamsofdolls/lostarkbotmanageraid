@@ -4,7 +4,7 @@ const {
   getCharacterName,
   normalizeName,
   toModeLabel,
-} = require("../../../utils/raid/common/shared");
+} = require("../../../../utils/raid/common/shared");
 
 function findRosterCharacter(userDoc, charName) {
   if (!userDoc || !Array.isArray(userDoc.accounts)) return null;

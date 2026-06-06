@@ -1,8 +1,8 @@
 "use strict";
 
-const { getRaidGateForBoss, getGatesForRaid } = require("../../../models/Raid");
-const { getCurrentResetStartMs } = require("../../raid/schedulers/weekly-reset");
-const { normalizeDifficulty } = require("./catalog");
+const { getRaidGateForBoss, getGatesForRaid } = require("../../../../models/Raid");
+const { getCurrentResetStartMs } = require("../../../raid/schedulers/weekly-reset");
+const { normalizeDifficulty } = require("../catalog");
 
 function resolveTarget(delta) {
   const bossInfo = getRaidGateForBoss(delta.boss);

@@ -9,19 +9,19 @@
 
 "use strict";
 
-const { bucketizeLocalSyncDeltas } = require("..");
+const { bucketizeLocalSyncDeltas } = require("../..");
 const {
   createJsonSender,
   readJsonBody,
-} = require("./json");
+} = require("../json");
 const {
   guardHttpMethod,
   readVerifiedLocalSyncToken,
   requireCurrentLocalSyncUser,
-} = require("./request-gates");
-const { RAID_REQUIREMENTS, getGatesForRaid, getGoldForGate } = require("../../../models/Raid");
-const { normalizeName } = require("../../../utils/raid/common/shared");
-const { getStatusRaidsForCharacter } = require("../../../utils/raid/common/character");
+} = require("../request-gates");
+const { RAID_REQUIREMENTS, getGatesForRaid, getGoldForGate } = require("../../../../models/Raid");
+const { normalizeName } = require("../../../../utils/raid/common/shared");
+const { getStatusRaidsForCharacter } = require("../../../../utils/raid/common/character");
 
 function makeGateKey(raidKey, modeKey, gate) {
   return `${raidKey}::${modeKey}::${gate}`;

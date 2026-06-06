@@ -18,7 +18,7 @@
 
 const state = require("./core/state");
 const tokens = require("./core/tokens");
-const apply = require("./core/apply");
+const apply = require("./core/apply/apply");
 const profileDeviceToken = require("./profile/device-token");
 
 module.exports = {

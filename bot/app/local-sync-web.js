@@ -13,10 +13,10 @@
 const path = require("node:path");
 
 const { startLocalSyncHttpServer } = require("../services/local-sync/http/server");
-const { createRaidSyncEndpoint } = require("../services/local-sync/http/sync-endpoint");
-const { createRosterEndpoint } = require("../services/local-sync/http/roster-endpoint");
-const { createPreviewSummaryEndpoint } = require("../services/local-sync/http/preview-summary-endpoint");
-const { createCatalogEndpoint } = require("../services/local-sync/http/catalog-endpoint");
+const { createRaidSyncEndpoint } = require("../services/local-sync/http/endpoints/sync-endpoint");
+const { createRosterEndpoint } = require("../services/local-sync/http/endpoints/roster-endpoint");
+const { createPreviewSummaryEndpoint } = require("../services/local-sync/http/endpoints/preview-summary-endpoint");
+const { createCatalogEndpoint } = require("../services/local-sync/http/endpoints/catalog-endpoint");
 const {
   createProfileSessionEndpoint,
   createRaidProfileSyncEndpoint,

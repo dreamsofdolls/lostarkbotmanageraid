@@ -6,7 +6,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { mintToken } = require("../bot/services/local-sync");
-const { createRaidSyncEndpoint } = require("../bot/services/local-sync/http/sync-endpoint");
+const { createRaidSyncEndpoint } = require("../bot/services/local-sync/http/endpoints/sync-endpoint");
 
 function makeReq({ token, method = "POST", body = { deltas: [] } } = {}) {
   const req = new PassThrough();

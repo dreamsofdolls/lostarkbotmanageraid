@@ -5,7 +5,7 @@ const {
   buildLocalSyncCatalog,
   normalizeDifficulty,
 } = require("../bot/services/local-sync/core/catalog");
-const { createCatalogEndpoint } = require("../bot/services/local-sync/http/catalog-endpoint");
+const { createCatalogEndpoint } = require("../bot/services/local-sync/http/endpoints/catalog-endpoint");
 
 function makeRes() {
   return {
