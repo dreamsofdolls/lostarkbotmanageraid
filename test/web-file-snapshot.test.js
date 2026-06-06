@@ -77,7 +77,7 @@ function makeFakeStorage() {
 }
 
 test("createStableFileSnapshot copies source file into browser storage", async () => {
-  const { createStableFileSnapshot, __test } = await import("../web/js/sync/file-snapshot.js");
+  const { createStableFileSnapshot, __test } = await import("../web/js/sync/file/file-snapshot.js");
   const fake = makeFakeStorage();
   const source = makeStreamFile([[1, 2, 3], [4, 5]]);
   const progress = [];
@@ -100,7 +100,7 @@ test("createStableFileSnapshot copies source file into browser storage", async (
 });
 
 test("createStableFileSnapshot falls back when OPFS is unavailable", async () => {
-  const { createStableFileSnapshot } = await import("../web/js/sync/file-snapshot.js");
+  const { createStableFileSnapshot } = await import("../web/js/sync/file/file-snapshot.js");
   const source = makeStreamFile([[1]]);
 
   const result = await createStableFileSnapshot(source, { storage: null });

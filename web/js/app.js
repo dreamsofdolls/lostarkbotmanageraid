@@ -6,7 +6,7 @@
 //     POST sync. Adding a framework would ship 100kB+ of runtime for
 //     ~280 LOC of logic.
 //   - wa-sqlite (asyncify build) loaded from jsdelivr. We use a custom
-//     async VFS (web/js/sync/file-vfs.js) that streams from File.slice() so
+//     async VFS (web/js/sync/file/file-vfs.js) that streams from File.slice() so
 //     multi-GB encounters.db files don't blow Chrome's ArrayBuffer cap
 //     (sql.js, the previous library, required full-file load and broke
 //     at 4 GB with NotReadableError).
@@ -33,7 +33,7 @@ import {
   saveHandle as savePersistedHandle,
   clearHandle as clearPersistedHandle,
   tryRestoreForUser,
-} from "/sync/js/sync/file-persistence.js";
+} from "/sync/js/sync/file/file-persistence.js";
 import {
   startProfileAutoSync,
   syncProfileSnapshotOnce,
@@ -45,12 +45,12 @@ import { formatBytes } from "/sync/js/core/format.js";
 import {
   renderDiffPage,
   renderPreviewStats,
-} from "/sync/js/sync/preview-renderer.js";
+} from "/sync/js/sync/render/preview-renderer.js";
 import {
   renderNoDeltaProfileStatsQueuedResult,
   renderSyncApplyResult,
   summarizeSyncResult,
-} from "/sync/js/sync/sync-result-renderer.js";
+} from "/sync/js/sync/render/sync-result-renderer.js";
 import {
   formatSchemaPreview,
   listColumns,
@@ -522,7 +522,7 @@ async function loadAndPreview(file) {
     const [SQLiteESMFactoryModule, SQLiteAPI, FileVfsModule] = await Promise.all([
       import(`${WA_SQLITE_BASE}/dist/wa-sqlite-async.mjs`),
       import(`${WA_SQLITE_BASE}/src/sqlite-api.js`),
-      import("/sync/js/sync/file-vfs.js"),
+      import("/sync/js/sync/file/file-vfs.js"),
     ]);
     const SQLiteESMFactory = SQLiteESMFactoryModule.default;
     const { FileBackedVFS } = FileVfsModule;

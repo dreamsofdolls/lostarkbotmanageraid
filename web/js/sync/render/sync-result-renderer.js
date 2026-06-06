@@ -1,7 +1,7 @@
 import { t, getRaidLabel, getModeLabel } from "/sync/js/core/i18n.js";
 import { escapeHtml } from "/sync/js/core/html.js";
-import { renderClassIcon } from "/sync/js/sync/preview-renderer.js";
-import { renderCharPendingLabel, renderCharPendingRow } from "/sync/js/sync/char-row.js";
+import { renderClassIcon } from "/sync/js/sync/render/preview-renderer.js";
+import { renderCharPendingLabel, renderCharPendingRow } from "/sync/js/sync/render/char-row.js";
 
 const ICON_FOLDER = "\u{1F4C1}";
 const ICON_DONE = "\u{1F7E2}";

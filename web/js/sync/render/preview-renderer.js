@@ -1,7 +1,7 @@
 import { t, getRaidLabel, getModeLabel } from "/sync/js/core/i18n.js";
 import { escapeHtml } from "/sync/js/core/html.js";
 import { formatGold, formatRelativeTime } from "/sync/js/core/format.js";
-import { renderCharPendingLabel, renderCharPendingRow } from "/sync/js/sync/char-row.js";
+import { renderCharPendingLabel, renderCharPendingRow } from "/sync/js/sync/render/char-row.js";
 
 export function renderPreviewStats(panel, summary) {
   if (!panel) return;
