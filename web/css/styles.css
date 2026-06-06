@@ -396,7 +396,8 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
    reads as a sequence of steps rather than a flat list. */
 .process-log {
   position: relative;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 2px;
   max-height: 280px;
   margin: 0;
@@ -446,7 +447,7 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   grid-template-columns: 58px 16px minmax(0, 1fr);
   align-items: start;
   gap: 10px;
-  min-height: 0;
+  flex-shrink: 0;
   padding: 3px 0;
   color: var(--text-dim);
   line-height: 1.45;
