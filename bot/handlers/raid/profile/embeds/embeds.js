@@ -9,7 +9,7 @@ const {
   pickTopChar,
 } = require("../helpers/aggregate");
 const {
-  confidenceForLogs,
+  confidenceLabelForLogs,
   footerTimestamp,
   formatDateMs,
   hudFieldName,
@@ -35,8 +35,14 @@ function buildSpecName(build, fallback = "") {
   return String(build?.arkPassive?.enlightenment?.spec || build?.spec || fallback || "").trim();
 }
 
-function roleTagForBuild(role) {
-  return role === "support" ? "SUP" : "DPS";
+function roleTagForBuild(role, lang = "vi") {
+  return role === "support"
+    ? t("raidProfile.labels.supportBuild", lang)
+    : t("raidProfile.labels.dps", lang);
+}
+
+function footerText(parts) {
+  return `// ${parts.filter(Boolean).join(" · ")}`;
 }
 
 function totalCharacterLogs(character) {
@@ -92,12 +98,12 @@ function buildRosterTable(entries, lang) {
   const ranked = entries
     .map((entry) => ({ entry, agg: aggregateCharacters(entry.characters) }))
     .sort((a, b) => Number(b.agg.overall || 0) - Number(a.agg.overall || 0));
-  const header = `${"#".padStart(2)} ${"ROSTER NAME".padEnd(NAME_W)} ${"CHAR".padStart(4)} ${"LOG".padStart(5)}  ${"SCORE".padStart(5)}`;
+  const header = `${"#".padStart(2)} ${t("raidProfile.table.rosterName", lang).padEnd(NAME_W)} ${t("raidProfile.table.characters", lang).padStart(6)} ${t("raidProfile.table.logs", lang).padStart(5)}  ${t("raidProfile.table.score", lang).padStart(5)}`;
   const rows = ranked.slice(0, CAP).map(({ entry, agg }, index) => {
     return `${String(index + 1).padStart(2)} ${fitName(getEntryLabel(entry))} ${String(agg.charCount).padStart(4)} ${String(agg.logs).padStart(5)}  ${score(agg.overall).padStart(5)}`;
   });
   if (entries.length > CAP) {
-    rows.push(`   +${entries.length - CAP} roster…`);
+    rows.push(t("raidProfile.table.moreRosters", lang, { count: entries.length - CAP }));
   }
   return `\`\`\`\n${[header, ...rows].join("\n")}\n\`\`\``;
 }
@@ -112,40 +118,46 @@ function buildOverallEmbed({ EmbedBuilder }, session) {
   const embed = new EmbedBuilder()
     .setColor(PROFILE_COLORS.amber)
     .setAuthor({
-      name: `// RAID PROFILE · OVERALL · ${session.entries.length} ROSTER · ${agg.charCount} CHAR`,
+      name: t("raidProfile.author.overall", lang, { rosters: session.entries.length, characters: agg.charCount }),
     })
     .setTitle(t("raidProfile.overallTitle", lang))
     .addFields(
       {
-        name: hudFieldName("scope"),
+        name: hudFieldName(t("raidProfile.sections.scope", lang)),
         value: [
-          `Log / scored: **${agg.logs} / ${agg.scoredLogs}**`,
+          t("raidProfile.lines.logScored", lang, { logs: agg.logs, scored: agg.scoredLogs }),
           `${t("raidProfile.lastFight", lang)}: ${formatDateMs(agg.lastFightStart)}`,
           topOverall
-            ? `★ top: ${getClassEmoji(topOverall.class) || roleEmoji(topOverall)} **${topOverall.name}** ${score(topOverall.scores.overall)}`
-            : "★ top: **N/A**",
+            ? t("raidProfile.lines.topCharacter", lang, { icon: getClassEmoji(topOverall.class) || roleEmoji(topOverall), name: topOverall.name, score: score(topOverall.scores.overall) })
+            : t("raidProfile.lines.topMissing", lang),
         ].join("\n"),
         inline: true,
       },
       {
-        name: hudFieldName("aggregate"),
+        name: hudFieldName(t("raidProfile.sections.aggregate", lang)),
         value: [
-          scoreLine("Ov", agg.overall),
-          scoreLine("MVP", agg.mvp),
-          agg.dpsCount ? scoreLine("DPS", agg.dpsOverall) : "DPS: **N/A**",
-          agg.supportCount ? scoreLine("SUP", agg.supportOverall) : "SUP: **N/A**",
+          scoreLine(t("raidProfile.labels.scoreOverall", lang), agg.overall),
+          scoreLine(t("raidProfile.labels.scoreMvp", lang), agg.mvp),
+          agg.dpsCount ? scoreLine(t("raidProfile.labels.dps", lang), agg.dpsOverall) : `${t("raidProfile.labels.dps", lang)}: **N/A**`,
+          agg.supportCount ? scoreLine(roleTagForBuild("support", lang), agg.supportOverall) : `${roleTagForBuild("support", lang)}: **N/A**`,
         ].join("\n"),
         inline: true,
       },
       {
-        name: hudFieldName("roster"),
+        name: hudFieldName(t("raidProfile.sections.roster", lang)),
         value: buildRosterTable(session.entries, lang),
         inline: false,
       }
     );
 
   embed.setFooter({
-    text: `// ${sourceSummaryForEntries(session.entries)} · ${footerTimestamp(latestSnapshotMs(session.entries))} · ${agg.logs} LOG · ${agg.scoredLogs} SCORED · CONF ${confidenceForLogs(agg.scoredLogs).toUpperCase()}`,
+    text: footerText([
+      sourceSummaryForEntries(session.entries, lang),
+      footerTimestamp(latestSnapshotMs(session.entries), lang),
+      t("raidProfile.footer.logCount", lang, { logs: agg.logs }),
+      t("raidProfile.footer.scoredCount", lang, { scored: agg.scoredLogs }),
+      t("raidProfile.footer.confidence", lang, { confidence: confidenceLabelForLogs(agg.scoredLogs, lang) }),
+    ]),
   });
 
   return embed;
@@ -165,28 +177,32 @@ function buildRosterEmbed({ EmbedBuilder }, session, entry) {
   const embed = new EmbedBuilder()
     .setColor(entry.isOwn ? PROFILE_COLORS.amber : PROFILE_COLORS.shared)
     .setAuthor({
-      name: `// RAID PROFILE · ROSTER · ${String(entry.accountName || "").toUpperCase()} · ${agg.charCount} CHAR · ${entry.isOwn ? "OWN" : "SHARED"}`,
+      name: t("raidProfile.author.roster", lang, {
+        account: String(entry.accountName || "").toUpperCase(),
+        characters: agg.charCount,
+        ownership: entry.isOwn ? t("raidProfile.owner.own", lang) : t("raidProfile.owner.shared", lang),
+      }),
     })
     .setTitle(t("raidProfile.rosterTitle", lang, { account: entry.accountName }))
     .setDescription(metaLine)
     .addFields(
       {
-        name: hudFieldName("scope"),
+        name: hudFieldName(t("raidProfile.sections.scope", lang)),
         value: [
-          `Log / scored: **${agg.logs} / ${agg.scoredLogs}**`,
-          scoreLine("Ov", agg.overall),
-          scoreLine("MVP", agg.mvp),
+          t("raidProfile.lines.logScored", lang, { logs: agg.logs, scored: agg.scoredLogs }),
+          scoreLine(t("raidProfile.labels.scoreOverall", lang), agg.overall),
+          scoreLine(t("raidProfile.labels.scoreMvp", lang), agg.mvp),
         ].join("\n"),
         inline: true,
       },
       {
-        name: hudFieldName("role split"),
+        name: hudFieldName(t("raidProfile.sections.roleSplit", lang)),
         value: [
-          `DPS: **${agg.dpsCount}** · ${agg.dpsCount ? score(agg.dpsOverall) : "N/A"}`,
-          `SUP: **${agg.supportCount}** · ${agg.supportCount ? score(agg.supportOverall) : "N/A"}`,
+          `${t("raidProfile.labels.dps", lang)}: **${agg.dpsCount}** · ${agg.dpsCount ? score(agg.dpsOverall) : "N/A"}`,
+          `${roleTagForBuild("support", lang)}: **${agg.supportCount}** · ${agg.supportCount ? score(agg.supportOverall) : "N/A"}`,
           topOverall
-            ? `★ top: ${getClassEmoji(topOverall.class) || roleEmoji(topOverall)} **${topOverall.name}** ${score(topOverall.scores.overall)}`
-            : "★ top: N/A",
+            ? t("raidProfile.lines.topCharacter", lang, { icon: getClassEmoji(topOverall.class) || roleEmoji(topOverall), name: topOverall.name, score: score(topOverall.scores.overall) })
+            : t("raidProfile.lines.topMissing", lang),
         ].join("\n"),
         inline: true,
       }
@@ -203,17 +219,24 @@ function buildRosterEmbed({ EmbedBuilder }, session, entry) {
     // Flex chars (a second scored build) are tagged `flex·<primary role>`; the
     // full both-build breakdown lives in the CHARACTER detail view.
     const roleTag = character.altBuild
-      ? `flex·${character.role === "support" ? "SUP" : "DPS"}`
-      : roleLabel(character);
-    return `\`${index + 1}.\` ${icon} **${character.name}** \`${roleTag}\` · ${logs} scored · MVP ${score(character?.scores?.mvp)} · **${score(character?.scores?.overall)}**`;
+      ? t("raidProfile.labels.flexRole", lang, { role: roleTagForBuild(character.role, lang) })
+      : roleLabel(character, lang);
+    return `\`${index + 1}.\` ${icon} **${character.name}** \`${roleTag}\` · ${t("raidProfile.lines.scoredLogs", lang, { logs })} · ${t("raidProfile.labels.scoreMvp", lang)} ${score(character?.scores?.mvp)} · **${score(character?.scores?.overall)}**`;
   });
   embed.addFields({
-    name: hudFieldName("character"),
+    name: hudFieldName(t("raidProfile.sections.character", lang)),
     value: lines.length ? lines.join("\n") : t("raidProfile.noChars", lang),
     inline: false,
   });
   embed.setFooter({
-    text: `// ${entry.isOwn ? "OWN" : "SHARED"} · ${sourceTag(entry.source)} ${rangeTag(entry.rangeType)} · ${footerTimestamp(entry.receivedAt || entry.generatedAt)} · ${agg.logs} LOG · ${agg.scoredLogs} SCORED · CONF ${confidenceForLogs(agg.scoredLogs).toUpperCase()}`,
+    text: footerText([
+      entry.isOwn ? t("raidProfile.owner.own", lang) : t("raidProfile.owner.shared", lang),
+      `${sourceTag(entry.source, lang)} · ${rangeTag(entry.rangeType, lang)}`,
+      footerTimestamp(entry.receivedAt || entry.generatedAt, lang),
+      t("raidProfile.footer.logCount", lang, { logs: agg.logs }),
+      t("raidProfile.footer.scoredCount", lang, { scored: agg.scoredLogs }),
+      t("raidProfile.footer.confidence", lang, { confidence: confidenceLabelForLogs(agg.scoredLogs, lang) }),
+    ]),
   });
 
   return embed;
@@ -226,26 +249,26 @@ function buildCharacterEmbed({ EmbedBuilder }, session, entry, character) {
   const altBuild = character.altBuild || null;
   const displayBuilds = buildDisplayBuilds(character);
   const primaryDisplay = displayBuilds[0] || {};
-  const roleTag = altBuild ? "FLEX" : roleTagForBuild(primaryDisplay.role || character.role);
+  const roleTag = altBuild ? t("raidProfile.labels.flex", lang) : roleTagForBuild(primaryDisplay.role || character.role, lang);
   const totalLogs = totalCharacterLogs(character);
   const classEmoji = getClassEmoji(character.class) || (primaryDisplay.role === "support" ? "🛡️" : "⚔️");
 
   const embed = new EmbedBuilder()
     .setColor(primaryDisplay.role === "support" && !altBuild ? PROFILE_COLORS.support : PROFILE_COLORS.amber)
-    .setAuthor({ name: `// RAID PROFILE · CHARACTER · ${String(character.name || "UNKNOWN").toUpperCase()} · ${roleTag}` })
+    .setAuthor({ name: t("raidProfile.author.character", lang, { character: String(character.name || "UNKNOWN").toUpperCase(), role: roleTag }) })
     .setTitle(`${classEmoji} ${character.name}`)
     .setDescription([
       `iLvl **${character.itemLevel || 0}**`,
       !altBuild && spec ? `\`${spec}\`` : null,
       `**${totalLogs}** log`,
-      `CONF **${confidenceForLogs(totalLogs).toUpperCase()}**`,
+      t("raidProfile.lines.confidence", lang, { confidence: confidenceLabelForLogs(totalLogs, lang) }),
     ].filter(Boolean).join(" · "));
 
   displayBuilds.forEach((build, index) => {
     if (altBuild) {
       const specLabel = build.spec ? ` · \`${build.spec}\`` : "";
       embed.addFields({
-        name: `// ${index === 0 ? "PRIMARY" : "ALT BUILD"} · ${roleTagForBuild(build.role)} BUILD`,
+        name: hudFieldName(`${index === 0 ? t("raidProfile.sections.primaryBuild", lang) : t("raidProfile.sections.altBuild", lang)} · ${roleTagForBuild(build.role, lang)}`),
         value: `**${Math.round(Number(build.encounters) || 0)}** log${specLabel}`,
         inline: false,
       });
@@ -258,7 +281,13 @@ function buildCharacterEmbed({ EmbedBuilder }, session, entry, character) {
   });
 
   embed.setFooter({
-    text: `// ${sourceTag(entry.source)} ${rangeTag(entry.rangeType)} · ${String(character.class || "UNKNOWN").toUpperCase()} · ${roleTag} · ${totalLogs} SCORED · CONF ${confidenceForLogs(totalLogs).toUpperCase()}`,
+    text: footerText([
+      `${sourceTag(entry.source, lang)} · ${rangeTag(entry.rangeType, lang)}`,
+      String(character.class || "UNKNOWN").toUpperCase(),
+      roleTag,
+      t("raidProfile.footer.scoredCount", lang, { scored: totalLogs }),
+      t("raidProfile.footer.confidence", lang, { confidence: confidenceLabelForLogs(totalLogs, lang) }),
+    ]),
   });
 
   return embed;

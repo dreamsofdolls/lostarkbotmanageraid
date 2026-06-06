@@ -1,5 +1,7 @@
 "use strict";
 
+const { t } = require("../../../../services/i18n");
+
 function shortNumber(value) {
   const n = Number(value) || 0;
   if (Math.abs(n) >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
@@ -39,11 +41,11 @@ function attackStyleLabel(value) {
   return "Hit Master";
 }
 
-function roleLabel(character) {
-  if (character?.classRole === "support" && character?.role === "dps") return "DPS build";
-  if (character?.role === "support") return "SUP";
-  if (character?.role === "dps") return "DPS";
-  return "Unknown";
+function roleLabel(character, lang = "vi") {
+  if (character?.classRole === "support" && character?.role === "dps") return t("raidProfile.labels.dpsBuild", lang);
+  if (character?.role === "support") return t("raidProfile.labels.supportBuild", lang);
+  if (character?.role === "dps") return t("raidProfile.labels.dps", lang);
+  return t("raidProfile.labels.unknown", lang);
 }
 
 function roleEmoji(character) {
@@ -83,10 +85,10 @@ function latestSnapshotMs(entries) {
   return Math.max(0, ...(entries || []).map((entry) => Number(entry?.receivedAt || entry?.generatedAt) || 0));
 }
 
-function footerTimestamp(ms) {
+function footerTimestamp(ms, lang = "vi") {
   const n = Number(ms) || 0;
-  if (!n) return "SNAPSHOT N/A";
-  return `SNAPSHOT ${new Date(n).toISOString().replace(".000Z", "Z")}`;
+  if (!n) return t("raidProfile.footer.snapshotMissing", lang);
+  return t("raidProfile.footer.snapshotAt", lang, { date: new Date(n).toISOString().replace(".000Z", "Z") });
 }
 
 function formatDateMs(ms) {
@@ -112,29 +114,39 @@ function confidenceForLogs(logs) {
   return "Low";
 }
 
+function confidenceLabelForLogs(logs, lang = "vi") {
+  const key = confidenceForLogs(logs).toLowerCase();
+  return t(`raidProfile.confidenceLevels.${key}`, lang);
+}
+
 function isBibleSummaryProfile(entry, character = null) {
   return entry?.source === "bible" || character?.stats?.profileDataDepth === "bible-summary";
 }
 
-function sourceTag(source) {
-  return source === "bible" ? "BIBLE" : "LOCAL";
+function sourceTag(source, lang = "vi") {
+  return source === "bible"
+    ? t("raidProfile.source.bible", lang)
+    : t("raidProfile.source.local", lang);
 }
 
-function rangeTag(rangeType) {
-  return rangeType === "weekly" ? "WEEKLY" : "FULL";
+function rangeTag(rangeType, lang = "vi") {
+  return rangeType === "weekly"
+    ? t("raidProfile.range.weekly", lang)
+    : t("raidProfile.range.full", lang);
 }
 
 function rangeLabel(entry) {
   return entry?.rangeType === "weekly" ? "weekly" : "full";
 }
 
-function sourceSummaryForEntries(entries) {
-  const tags = [...new Set((entries || []).map((entry) => sourceTag(entry?.source)))];
-  return tags.length ? tags.join("+") : "N/A";
+function sourceSummaryForEntries(entries, lang = "vi") {
+  const tags = [...new Set((entries || []).map((entry) => sourceTag(entry?.source, lang)))];
+  return tags.length ? tags.join(" + ") : "N/A";
 }
 
 module.exports = {
   attackStyleLabel,
+  confidenceLabelForLogs,
   confidenceForLogs,
   footerTimestamp,
   formatDateMs,

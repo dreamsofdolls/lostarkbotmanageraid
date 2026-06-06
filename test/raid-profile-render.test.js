@@ -196,30 +196,30 @@ function makeSession() {
   };
 }
 
-test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + SUP)", () => {
+test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + Support)", () => {
   const deps = makeDeps();
   const command = createRaidProfileCommand(deps);
   const session = makeSession();
 
   const overall = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
-  assert.match(overall.author.name, /^\/\/ RAID PROFILE · OVERALL · \d+ ROSTER · \d+ CHAR$/);
-  assert.ok(overall.fields.some((field) => field.name === "// AGGREGATE"));
+  assert.match(overall.author.name, /^\/\/ RAID PROFILE · TỔNG QUAN · \d+ roster · \d+ nhân vật$/);
+  assert.ok(overall.fields.some((field) => field.name === "// TỔNG HỢP"));
   assert.match(overall.fields.map((field) => field.value).join("\n"), /▰/);
-  // Roster is a fenced code-block table now: aligned CHAR/LOG/SCORE columns,
+  // Roster is a fenced code-block table now: aligned character/log/score columns,
   // no per-row gauge (it would wrap past the ~42-col embed code-block width).
   const rosterField = overall.fields.find((field) => field.name === "// ROSTER");
   assert.ok(rosterField.value.startsWith("```"));
-  assert.match(rosterField.value, /ROSTER NAME\s+CHAR\s+LOG\s+SCORE/);
+  assert.match(rosterField.value, /ROSTER\s+NHÂN VẬT\s+LOG\s+ĐIỂM/);
   assert.ok(!rosterField.value.includes("▰"), "roster table must stay gauge-free to avoid wrap");
-  // SCOPE ★ top line prefixes the class icon (custom emoji) or a weapon-emoji fallback.
-  const scopeField = overall.fields.find((field) => field.name === "// SCOPE");
-  assert.match(scopeField.value, /★ top: (⚔️|🛡️|<:[a-z0-9_]+:\d+>) \*\*/);
-  assert.match(overall.footer.text, /CONF HIGH/);
+  // Scope top line prefixes the class icon (custom emoji) or a weapon-emoji fallback.
+  const scopeField = overall.fields.find((field) => field.name === "// PHẠM VI");
+  assert.match(scopeField.value, /★ nổi bật: (⚔️|🛡️|<:[a-z0-9_]+:\d+>) \*\*/);
+  assert.match(overall.footer.text, /Độ tin cậy cao/);
 
   session.rosterIndex = 0;
   session.charIndex = 0;
   const character = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
-  assert.equal(character.author.name, "// RAID PROFILE · CHARACTER · QIYLYN · DPS");
+  assert.equal(character.author.name, "// RAID PROFILE · NHÂN VẬT · QIYLYN · DPS");
   assert.deepEqual(character.fields.slice(0, 7).map((field) => field.name), [
     "// SCORE",
     INLINE_SPACER.name,
@@ -229,7 +229,7 @@ test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + S
     "// SURVIVAL · TANK",
     "// BUILD",
   ]);
-  assert.match(character.description, /iLvl \*\*1680\*\* · `Wind Fury` · \*\*24\*\* log · CONF \*\*HIGH\*\*/);
+  assert.match(character.description, /iLvl \*\*1680\*\* · `Wind Fury` · \*\*24\*\* log · Độ tin cậy \*\*cao\*\*/);
   assert.doesNotMatch(character.description, /Aeromancer/);
   assert.doesNotMatch(character.description, /Clauseduk/);
   assert.doesNotMatch(character.description, /\n/);
@@ -258,7 +258,7 @@ test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + S
 
   session.charIndex = 1;
   const support = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
-  assert.equal(support.author.name, "// RAID PROFILE · CHARACTER · CANAMEOW · SUP");
+  assert.equal(support.author.name, "// RAID PROFILE · NHÂN VẬT · CANAMEOW · Support");
   assert.ok(support.fields.some((field) => field.name === "// SUPPORT"));
   assert.ok(support.fields.some((field) => field.name === "// UPTIME"));
   assert.ok(support.fields.some((field) => field.name === "// SURVIVAL · TANK"));
@@ -270,7 +270,7 @@ test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + S
   assert.match(supText, /Synergy\/min/);
 });
 
-test("raid-profile renders a flex char: roster flex·SUP tag + two build tables", () => {
+test("raid-profile renders a flex char: roster flex support tag + two build tables", () => {
   const deps = makeDeps();
   const command = createRaidProfileCommand(deps);
   const session = {
@@ -334,19 +334,19 @@ test("raid-profile renders a flex char: roster flex·SUP tag + two build tables"
     ],
   };
 
-  // Roster list: the flex char is tagged `flex·SUP` (support is primary).
+  // Roster list: the flex char is tagged with its primary role (support).
   const roster = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
-  const charField = roster.fields.find((field) => field.name === "// CHARACTER");
+  const charField = roster.fields.find((field) => field.name === "// NHÂN VẬT");
   assert.match(charField.value, /Notmeow/);
-  assert.match(charField.value, /flex·SUP/);
+  assert.match(charField.value, /flex · Support/);
 
   // Character detail: two full build tables. Display primary follows the
-  // larger sampled build, so a 47-log DPS build appears above the 9-log SUP.
+  // larger sampled build, so a 47-log DPS build appears above the 9-log support build.
   session.charIndex = 0;
   const character = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
-  assert.equal(character.author.name, "// RAID PROFILE · CHARACTER · NOTMEOW · FLEX");
-  assert.ok(character.fields.some((field) => field.name === "// PRIMARY · DPS BUILD"));
-  assert.ok(character.fields.some((field) => field.name === "// ALT BUILD · SUP BUILD"));
+  assert.equal(character.author.name, "// RAID PROFILE · NHÂN VẬT · NOTMEOW · Flex");
+  assert.ok(character.fields.some((field) => field.name === "// BUILD CHÍNH · DPS"));
+  assert.ok(character.fields.some((field) => field.name === "// BUILD PHỤ · SUPPORT"));
   assert.ok(character.fields.some((field) => field.name === "// SUPPORT"), "support build renders its support table");
   assert.ok(character.fields.some((field) => field.name === "// OUTPUT"), "dps build renders its output table");
   const text = character.fields.map((field) => field.value).join("\n");
@@ -430,10 +430,10 @@ test("raid-profile render marks bible summary metrics without local-only fields"
 
   const character = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
   const text = character.fields.map((field) => field.value).join("\n");
-  assert.match(character.footer.text, /^\/\/ BIBLE FULL/);
+  assert.match(character.footer.text, /^\/\/ Bible sync · Dữ liệu đầy đủ/);
   assert.doesNotMatch(character.footer.text, /SNAPSHOT/);
-  assert.equal(character.author.name, "// RAID PROFILE · CHARACTER · QIYLYN · DPS");
-  assert.match(character.description, /iLvl \*\*1735\*\* · `Igniter` · \*\*2\*\* log · CONF \*\*LOW\*\*/);
+  assert.equal(character.author.name, "// RAID PROFILE · NHÂN VẬT · QIYLYN · DPS");
+  assert.match(character.description, /iLvl \*\*1735\*\* · `Igniter` · \*\*2\*\* log · Độ tin cậy \*\*thấp\*\*/);
   assert.doesNotMatch(character.description, /Sorceress/);
   assert.doesNotMatch(character.description, /Main/);
   assert.ok(character.fields.some((field) => field.name === "// OUTPUT"));
