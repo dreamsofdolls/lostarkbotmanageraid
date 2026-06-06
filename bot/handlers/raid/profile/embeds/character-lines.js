@@ -40,7 +40,7 @@ function label(key, lang) {
 }
 
 function localizedScoreLine(key, value, lang) {
-  return scoreLine(label(key, lang), value);
+  return scoreLine(label(key, lang), value, { width: 8 });
 }
 
 function buildSurvivalLines(stats, lang) {
@@ -89,8 +89,8 @@ function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = 
     }
     driverField = { name: hudFieldName(label("supportSection", lang)), value: drivers.join("\n"), inline: true };
     const uptimeLines = [
-      valueLine(label("apBrand", lang), `${ratePct(s.avgSupportAp)} / ${ratePct(s.avgSupportBrand)}`),
-      valueLine(label("identityHyper", lang), `${ratePct(s.avgSupportIdentity)} / ${ratePct(s.avgSupportHyper)}`),
+      valueLine(label("apBrand", lang), `${ratePct(s.avgSupportAp)}/${ratePct(s.avgSupportBrand)}`),
+      valueLine(label("identityHyper", lang), `${ratePct(s.avgSupportIdentity)}/${ratePct(s.avgSupportHyper)}`),
     ];
     if (!isBibleSummary) {
       uptimeLines.push(
@@ -110,8 +110,8 @@ function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = 
     } else {
       out.push(
         valueLine(label("damageShare", lang), pct(s.avgDamageShare)),
-        valueLine(label("avgMedianDps", lang), `${shortNumber(s.avgDps)} / ${shortNumber(s.medianDps)}`),
-        valueLine(label("peakBurst", lang), `${shortNumber(s.avgPeak10sDps)} x${score(s.avgBurstRatio)}`),
+        valueLine(label("avgMedianDps", lang), `${shortNumber(s.avgDps)}/${shortNumber(s.medianDps)}`),
+        valueLine(label("peakBurst", lang), `${shortNumber(s.avgPeak10sDps)}x${score(s.avgBurstRatio)}`),
       );
     }
     driverField = { name: hudFieldName(label("outputSection", lang)), value: out.join("\n"), inline: true };

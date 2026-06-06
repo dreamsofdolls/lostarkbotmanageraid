@@ -242,15 +242,18 @@ test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + S
   assert.doesNotMatch(buildField.value, /Wind Fury/);
   assert.doesNotMatch(character.footer.text, /SNAPSHOT/);
   const charText = character.fields.map((field) => field.value).join("\n");
+  assert.match(charText, /Overall: `(?:▰|▱){8}`/);
   assert.match(charText, /Overall:/);
-  assert.match(charText, /Consistency:/);
-  assert.match(charText, /Context percentile:/);
+  assert.match(charText, /Stability:/);
+  assert.match(charText, /Context %:/);
   assert.match(charText, /Damage share: \*\*24\.8%\*\*/);
-  assert.match(charText, /Skill casts per minute/);
-  assert.match(charText, /Deathless rate: \*\*79\.2%\*\*/);
-  assert.match(charText, /Damage taken per minute: \*\*321\.0K\*\*/); // tank metric Traine asked for
-  assert.match(charText, /Damage taken share: \*\*13\.4%\*\*/);
-  assert.match(charText, /Average incapacitations/);
+  assert.match(charText, /Avg\/median DPS: \*\*48\.2M\/45\.1M\*\*/);
+  assert.match(charText, /Casts\/min/);
+  assert.match(charText, /Deathless: \*\*79\.2%\*\*/);
+  assert.match(charText, /Taken\/min: \*\*321\.0K\*\*/); // tank metric Traine asked for
+  assert.match(charText, /Taken share: \*\*13\.4%\*\*/);
+  assert.match(charText, /Incap avg/);
+  assert.doesNotMatch(charText, /Context percentile|Skill casts per minute|Damage taken per minute|Average incapacitations/);
   assert.match(charText, /▰/);
 
   session.charIndex = 1;
@@ -260,11 +263,11 @@ test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + S
   assert.ok(support.fields.some((field) => field.name === "// UPTIME"));
   assert.ok(support.fields.some((field) => field.name === "// SURVIVAL · TANK"));
   const supText = support.fields.map((field) => field.value).join("\n");
-  assert.match(supText, /Supporter percent: \*\*30\.4%\*\*/);
-  assert.match(supText, /Radiant percent: \*\*66\.7%\*\*/);
+  assert.match(supText, /Supporter %: \*\*30\.4%\*\*/);
+  assert.match(supText, /Radiant %: \*\*66\.7%\*\*/);
   assert.match(supText, /Support rank: \*\*1\.4 \/ 2\.0\*\*/);
-  assert.match(supText, /rDPS impact/);
-  assert.match(supText, /Synergy per minute/);
+  assert.match(supText, /rDPS:/);
+  assert.match(supText, /Synergy\/min/);
 });
 
 test("raid-profile renders a flex char: roster flex·SUP tag + two build tables", () => {
@@ -349,7 +352,7 @@ test("raid-profile renders a flex char: roster flex·SUP tag + two build tables"
   const text = character.fields.map((field) => field.value).join("\n");
   assert.match(text, /Judgment/);
   assert.match(text, /Blessed Aura/);
-  assert.match(text, /Supporter percent: \*\*25\.4%\*\*/); // support metric from the smaller build
+  assert.match(text, /Supporter %: \*\*25\.4%\*\*/); // support metric from the smaller build
   assert.match(text, /Damage share: \*\*8\.1%\*\*/); // dps metric from altBuild.stats
 });
 
@@ -434,13 +437,13 @@ test("raid-profile render marks bible summary metrics without local-only fields"
   assert.doesNotMatch(character.description, /Sorceress/);
   assert.doesNotMatch(character.description, /Main/);
   assert.ok(character.fields.some((field) => field.name === "// OUTPUT"));
-  assert.match(text, /Bible percentile: \*\*91\.0%\*\*/);
-  assert.match(text, /Average DPS: \*\*120\.0M\*\*/);
-  assert.match(text, /Deathless rate: \*\*50\.0%\*\*/);
+  assert.match(text, /Bible %: \*\*91\.0%\*\*/);
+  assert.match(text, /Avg DPS: \*\*120\.0M\*\*/);
+  assert.match(text, /Deathless: \*\*50\.0%\*\*/);
   // bible-summary hides local-only metrics instead of showing N/A noise
   assert.doesNotMatch(text, /Peak 10s:/);
-  assert.doesNotMatch(text, /Skill casts per minute/);
-  assert.doesNotMatch(text, /Damage taken per minute/);
+  assert.doesNotMatch(text, /Casts\/min/);
+  assert.doesNotMatch(text, /Taken\/min/);
 });
 
 test("raid-profile character metric labels honor non-vi locale", () => {
@@ -455,8 +458,8 @@ test("raid-profile character metric labels honor non-vi locale", () => {
   const text = character.fields.map((field) => field.value).join("\n");
   assert.ok(character.fields.some((field) => field.name === "// スコア"));
   assert.ok(character.fields.some((field) => field.name === "// 火力"));
-  assert.match(text, /総合スコア:/);
-  assert.match(text, /同条件パーセンタイル:/);
+  assert.match(text, /総合:/);
+  assert.match(text, /同条件%:/);
   assert.match(text, /ダメージ比率: \*\*24\.8%\*\*/);
 });
 

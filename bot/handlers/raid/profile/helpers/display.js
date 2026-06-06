@@ -55,12 +55,13 @@ function score(value) {
   return Number.isFinite(n) ? n.toFixed(1) : "0.0";
 }
 
-function renderGauge(value, { suffix = "" } = {}) {
+function renderGauge(value, { suffix = "", width = 10 } = {}) {
+  const cells = Math.max(4, Math.min(10, Math.round(Number(width) || 10)));
   const n = Number(value);
-  if (!Number.isFinite(n)) return "`▱▱▱▱▱▱▱▱▱▱` **N/A**";
+  if (!Number.isFinite(n)) return `\`${"▱".repeat(cells)}\` **N/A**`;
   const clamped = Math.max(0, Math.min(100, n));
-  const filled = Math.round(clamped / 10);
-  const empty = Math.max(0, 10 - filled);
+  const filled = Math.round((clamped / 100) * cells);
+  const empty = Math.max(0, cells - filled);
   return `\`${"▰".repeat(filled)}${"▱".repeat(empty)}\` **${score(n)}${suffix}**`;
 }
 
@@ -70,8 +71,8 @@ function renderPercentGauge(value) {
   return renderGauge(Math.max(0, Math.min(100, n)), { suffix: "%" });
 }
 
-function scoreLine(label, value) {
-  return `${label}: ${renderGauge(value)}`;
+function scoreLine(label, value, opts) {
+  return `${label}: ${renderGauge(value, opts)}`;
 }
 
 function hudFieldName(label) {
