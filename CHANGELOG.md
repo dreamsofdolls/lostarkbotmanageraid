@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-06 (Web Companion: profile-import progress redesign)
+
+### Changed
+- The Web Companion profile-import progress panel is restyled to a **timeline rail** (CSS-only, `web/css/styles.css`; renderer markup + tests unchanged). The `Current` box becomes a live hero - spinner ring + amber `// CURRENT` kicker + message + an indeterminate sweep bar so long waits (the MongoDB write, the 1800s+ scan) read as "working" rather than frozen. The log becomes one continuous vertical rail with kind-coloured nodes (ok = filled green, info = hollow, warn/err tinted); the latest entry pulses amber as the active step. Monospace timestamps; `prefers-reduced-motion` disables the animations.
+
 ## 2026-06-06 (raid-profile: flex dual-build scoring)
 
 ### Added
