@@ -233,8 +233,12 @@ function buildSnapshotFromRows({ rows, summaries = [], rangeType = "weekly", ran
     const classRole = allCharRows[0]?.classRole || "unknown";
     const supportRows = allCharRows.filter((row) => row.role === "support");
     const dpsRows = allCharRows.filter((row) => row.role === "dps");
+    // A support class is scored on its support build whenever it played support
+    // at all (any support log), not whichever build has more logs - a support's
+    // identity (and headline score) is its support play; the DPS build, if any,
+    // becomes the alt. Only a support that never played support is scored as DPS.
     const role = classRole === "support"
-      ? (supportRows.length >= dpsRows.length ? "support" : "dps")
+      ? (supportRows.length > 0 ? "support" : "dps")
       : classRole;
     const profileRows = classRole === "support"
       ? (role === "support" ? supportRows : dpsRows)
@@ -284,10 +288,12 @@ function buildSnapshotFromRows({ rows, summaries = [], rangeType = "weekly", ran
       const altRole = role === "support" ? "dps" : "support";
       const altRows = role === "support" ? dpsRows : supportRows;
       if (altRows.length >= MIN_ALT_BUILD_LOGS) {
+        const altStats = summarizeRows(altRows);
         altBuild = {
           role: altRole,
           encounters: altRows.length,
-          scores: computeBibleScores(summarizeRows(altRows), altRole),
+          stats: altStats,
+          scores: computeBibleScores(altStats, altRole),
         };
       }
     }
