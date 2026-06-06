@@ -8,6 +8,9 @@ const {
   scoreLine,
   shortNumber,
 } = require("../helpers/display");
+const {
+  pack2Columns,
+} = require("../../../../utils/raid/common/shared");
 
 /**
  * embeds/character-lines.js
@@ -153,7 +156,7 @@ function buildBuildFields(role, stats, scores, { spec = "", build = null, isBibl
     inline: false,
   };
 
-  return [scoreField, driverField, secondaryField, survivalField, buildField];
+  return [...pack2Columns([scoreField, driverField, secondaryField, survivalField]), buildField];
 }
 
 module.exports = {
