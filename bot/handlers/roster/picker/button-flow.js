@@ -3,7 +3,7 @@
 const {
   authorizePickerSession,
   clearPickerSession,
-} = require("../../utils/raid/roster-picker");
+} = require("../../../utils/raid/roster-picker");
 const {
   getRosterPickerRoute,
 } = require("./picker-routes");

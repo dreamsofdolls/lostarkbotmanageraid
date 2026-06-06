@@ -19,7 +19,7 @@ const { t, getUserLanguage } = require("../../services/i18n");
 const {
   ROSTER_PICKER_ACTION,
   getRosterPickerRoute,
-} = require("./picker-routes");
+} = require("./picker/picker-routes");
 const {
   SESSION_TTL_MS,
   GOLD_EARNER_CAP_PER_ACCOUNT,

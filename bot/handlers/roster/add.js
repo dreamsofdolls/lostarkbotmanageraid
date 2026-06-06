@@ -12,10 +12,10 @@ const {
   handleRosterPickerCancel,
   handleRosterPickerToggle,
   loadRosterPickerButtonContext,
-} = require("./button-flow");
+} = require("./picker/button-flow");
 const {
   preserveRosterCharacterState,
-} = require("./character-state");
+} = require("./picker/character-state");
 const {
   createAddRosterViewBuilders,
 } = require("./add/view");
