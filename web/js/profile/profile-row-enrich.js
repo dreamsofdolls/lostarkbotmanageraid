@@ -7,6 +7,7 @@ import {
 import {
   classifyProfileLogRole,
   roleForProfileClass,
+  stripMarkup,
 } from "/sync/js/profile/profile-role.js";
 import { MIN_CONTEXT_SAMPLE_COUNT } from "/sync/js/profile/profile-score.js";
 
@@ -406,19 +407,6 @@ function extractContributionMetrics(misc, localPlayer, damageDealt) {
     synergyReceived,
     synergyReceivedShare: damageDealt > 0 ? (synergyReceived / damageDealt) * 100 : 0,
   };
-}
-
-function stripMarkup(value) {
-  return String(value || "")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/gi, "\"")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 function cleanSourceName(meta, id) {

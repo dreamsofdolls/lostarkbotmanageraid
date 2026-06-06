@@ -5,6 +5,7 @@ import {
   BOSS_TO_RAID_GATE,
 } from "/sync/js/sync/preview-utils.js";
 import { createStableFileSnapshot } from "/sync/js/sync/file-snapshot.js";
+import { quoteIdent, pickColumn } from "/sync/js/sync/sqlite-schema.js";
 import { t } from "/sync/js/core/i18n.js";
 import { SUPPORT_DPS_PROFILE_SPEC_KEYS } from "/sync/js/profile/profile-role.js";
 import {
@@ -39,10 +40,6 @@ function sqlString(value) {
 
 function sqlStringList(values) {
   return (values || []).map(sqlString).join(", ");
-}
-
-function quoteIdent(name) {
-  return `"${String(name).replace(/"/g, '""')}"`;
 }
 
 async function withSqliteDb(file, fn) {
@@ -81,10 +78,6 @@ async function listColumns(sqlite3, db, tableName) {
     // Caller treats missing required columns as "profile sync unavailable".
   }
   return cols;
-}
-
-function pickColumn(cols, names) {
-  return names.find((name) => cols.has(name)) || null;
 }
 
 function buildRosterLookup(accounts) {
