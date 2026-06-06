@@ -4,7 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { bucketizeLocalSyncDeltas } = require("../bot/services/local-sync");
-const { projectSummary } = require("../bot/services/local-sync/http/preview-summary-endpoint");
+const { projectSummary } = require("../bot/services/local-sync/http/endpoints/preview-summary-endpoint");
 
 function makeAccounts(character) {
   return [

@@ -9,12 +9,12 @@
 
 "use strict";
 
-const { createJsonSender } = require("./json");
+const { createJsonSender } = require("../json");
 const {
   guardHttpMethod,
   readVerifiedLocalSyncToken,
   requireCurrentLocalSyncUser,
-} = require("./request-gates");
+} = require("../request-gates");
 
 /**
  * Build the `GET /api/me/roster` handler. Returns the user's slim roster

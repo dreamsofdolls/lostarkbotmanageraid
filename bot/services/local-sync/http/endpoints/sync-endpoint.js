@@ -13,17 +13,17 @@ const {
   TOKEN_POST_SYNC_TTL_SEC,
   applyLocalSyncDeltas,
   recordLocalSyncSuccess,
-} = require("..");
+} = require("../..");
 const {
   createJsonSender,
   readJsonBody,
-} = require("./json");
+} = require("../json");
 const {
   guardHttpMethod,
   readVerifiedLocalSyncToken,
   requireCurrentLocalSyncUser,
-} = require("./request-gates");
-const { getRaidRequirementMap } = require("../../../models/Raid");
+} = require("../request-gates");
+const { getRaidRequirementMap } = require("../../../../models/Raid");
 
 /**
  * Build the POST /api/raid-sync handler. Factory pattern so bot.js can

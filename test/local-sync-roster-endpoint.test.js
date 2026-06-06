@@ -5,7 +5,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { mintToken } = require("../bot/services/local-sync");
-const { createRosterEndpoint } = require("../bot/services/local-sync/http/roster-endpoint");
+const { createRosterEndpoint } = require("../bot/services/local-sync/http/endpoints/roster-endpoint");
 
 function makeReq({ token, method = "GET" } = {}) {
   return {

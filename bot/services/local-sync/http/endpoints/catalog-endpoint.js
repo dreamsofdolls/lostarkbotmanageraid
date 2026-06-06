@@ -7,9 +7,9 @@
 
 "use strict";
 
-const { buildLocalSyncCatalog } = require("../core/catalog");
-const { createJsonSender } = require("./json");
-const { guardHttpMethod } = require("./request-gates");
+const { buildLocalSyncCatalog } = require("../../core/catalog");
+const { createJsonSender } = require("../json");
+const { guardHttpMethod } = require("../request-gates");
 
 const send = createJsonSender({
   methods: "GET, OPTIONS",
