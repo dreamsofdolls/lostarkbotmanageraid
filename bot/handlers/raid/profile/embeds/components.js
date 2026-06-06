@@ -19,6 +19,8 @@ const EMOJI = {
   chart: "\u{1F4CA}",
   folder: "\u{1F4C1}",
   people: "\u{1F465}",
+  prev: "◀️",
+  next: "▶️",
 };
 
 function selectedProfileEntry(session) {
@@ -123,16 +125,19 @@ function buildComponents(deps, session) {
   const buttonRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`raid-profile:prev:${sid}`)
+      .setEmoji(EMOJI.prev)
       .setLabel(t("raidProfile.btnPrev", lang))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(!canPage),
     new ButtonBuilder()
       .setCustomId(`raid-profile:overview:${sid}`)
+      .setEmoji(selectedChar ? EMOJI.folder : EMOJI.chart)
       .setLabel(selectedChar ? t("raidProfile.btnRosterOverview", lang) : t("raidProfile.btnOverall", lang))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(!selectedEntry),
     new ButtonBuilder()
       .setCustomId(`raid-profile:next:${sid}`)
+      .setEmoji(EMOJI.next)
       .setLabel(t("raidProfile.btnNext", lang))
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(!canPage)

@@ -569,6 +569,29 @@ test("raid-profile component state reducers handle selects and paging", () => {
   assert.equal(session.charIndex, -1);
 });
 
+test("raid-profile overview button steps up one level: char -> roster -> overall", () => {
+  const deps = makeDeps();
+  const command = createRaidProfileCommand(deps);
+  const session = makeSession();
+
+  command.__test.applyProfileSelect(session, "roster", "0");
+  command.__test.applyProfileSelect(session, "char", "1");
+  assert.equal(session.charIndex, 1);
+
+  // character view -> roster view
+  assert.equal(command.__test.applyProfileButton(session, "overview"), true);
+  assert.equal(session.rosterIndex, 0);
+  assert.equal(session.charIndex, -1);
+
+  // roster view -> overall view (previously a silent no-op in this state)
+  assert.equal(command.__test.applyProfileButton(session, "overview"), true);
+  assert.equal(session.rosterIndex, -1);
+  assert.equal(session.charIndex, -1);
+
+  // already overall -> no-op (the button is disabled here in the UI anyway)
+  assert.equal(command.__test.applyProfileButton(session, "overview"), false);
+});
+
 test("raid-profile component state reducers page roster lists circularly", () => {
   const deps = makeDeps();
   const command = createRaidProfileCommand(deps);

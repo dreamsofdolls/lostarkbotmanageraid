@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-06 (raid-profile: overview button fix + nav icons)
+
+### Fixed
+- `/raid-profile` "Tổng quan" (overview) button did nothing when pressed from the roster view. The handler only ever reset `charIndex`, so in the roster view (already `charIndex = -1`) it was a silent no-op. It now steps up exactly one level, matching its own label: character -> roster view, roster -> overall view (and is a no-op only when already on overall, where the button is disabled anyway).
+
+### Changed
+- The Prev / Overview / Next buttons gain icons (◀️ / 📊 or 📁 / ▶️) to match the icons already on the roster + character select options. The overview icon reflects its target - chart for the overall view, folder for the roster view.
+
 ## 2026-06-06 (Web Companion: profile-import progress redesign)
 
 ### Changed
