@@ -209,8 +209,11 @@ test("raid-profile render uses Endfield HUD author, gauges, and Enlightenment bu
   // no per-row gauge (it would wrap past the ~42-col embed code-block width).
   const rosterField = overall.fields.find((field) => field.name === "// ROSTER");
   assert.ok(rosterField.value.startsWith("```"));
-  assert.match(rosterField.value, /NAME\s+CHAR\s+LOG\s+SCORE/);
+  assert.match(rosterField.value, /ROSTER NAME\s+CHAR\s+LOG\s+SCORE/);
   assert.ok(!rosterField.value.includes("▰"), "roster table must stay gauge-free to avoid wrap");
+  // SCOPE ★ top line prefixes the class icon (custom emoji) or a weapon-emoji fallback.
+  const scopeField = overall.fields.find((field) => field.name === "// SCOPE");
+  assert.match(scopeField.value, /★ top: (⚔️|🛡️|<:[a-z0-9_]+:\d+>) \*\*/);
   assert.match(overall.footer.text, /CONF HIGH/);
 
   session.rosterIndex = 0;

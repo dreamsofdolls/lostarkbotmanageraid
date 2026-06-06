@@ -21,6 +21,7 @@ const {
   pct,
   rangeTag,
   renderGauge,
+  roleEmoji,
   roleLabel,
   score,
   scoreLine,
@@ -57,7 +58,7 @@ function buildRosterTable(entries, lang) {
   const ranked = entries
     .map((entry) => ({ entry, agg: aggregateCharacters(entry.characters) }))
     .sort((a, b) => Number(b.agg.overall || 0) - Number(a.agg.overall || 0));
-  const header = `${"#".padStart(2)} ${"NAME".padEnd(NAME_W)} ${"CHAR".padStart(4)} ${"LOG".padStart(5)}  ${"SCORE".padStart(5)}`;
+  const header = `${"#".padStart(2)} ${"ROSTER NAME".padEnd(NAME_W)} ${"CHAR".padStart(4)} ${"LOG".padStart(5)}  ${"SCORE".padStart(5)}`;
   const rows = ranked.slice(0, CAP).map(({ entry, agg }, index) => {
     return `${String(index + 1).padStart(2)} ${fitName(getEntryLabel(entry))} ${String(agg.charCount).padStart(4)} ${String(agg.logs).padStart(5)}  ${score(agg.overall).padStart(5)}`;
   });
@@ -87,7 +88,7 @@ function buildOverallEmbed({ EmbedBuilder }, session) {
           `Log / scored: **${agg.logs} / ${agg.scoredLogs}**`,
           `${t("raidProfile.lastFight", lang)}: ${formatDateMs(agg.lastFightStart)}`,
           topOverall
-            ? `★ top: **${topOverall.name}** ${score(topOverall.scores.overall)}`
+            ? `★ top: ${getClassEmoji(topOverall.class) || roleEmoji(topOverall)} **${topOverall.name}** ${score(topOverall.scores.overall)}`
             : "★ top: **N/A**",
         ].join("\n"),
         inline: true,
