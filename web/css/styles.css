@@ -327,38 +327,78 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .process-panel {
   display: grid;
-  gap: 10px;
+  gap: 13px;
 }
 
+/* Live "current" hero: a spinner ring + amber kicker + message, with an
+   indeterminate sweep bar along the bottom so even a long wait (the MongoDB
+   write, the 1800s+ scan) still reads as "working" rather than frozen. */
 .process-current {
+  position: relative;
   display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 8px 10px;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 14px 14px;
   background: #1a1d22;
-  border: 1px solid var(--border-soft);
-  border-radius: 6px;
+  border: 1px solid var(--accent-dim);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.process-current::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(245, 166, 35, 0.22);
+  border-top-color: var(--accent);
+  animation: process-spin 0.9s linear infinite;
+}
+
+.process-current::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: -40%;
+  width: 40%;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: process-indet 1.6s ease-in-out infinite;
 }
 
 .process-current-label {
   flex: 0 0 auto;
-  font-size: 10px;
+  align-self: center;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
   font-weight: 700;
-  letter-spacing: 0.8px;
+  letter-spacing: 1.6px;
   text-transform: uppercase;
   color: var(--accent);
 }
 
 .process-current-message {
+  flex: 1 1 auto;
   min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--text);
   overflow-wrap: anywhere;
-  line-height: 1.45;
 }
 
+.process-current-message.status-ok { color: var(--success); }
+.process-current-message.status-err { color: var(--error); }
+.process-current-message.status-warn { color: var(--accent-bright); }
+
+/* Timeline rail: one continuous line behind kind-coloured nodes, so the log
+   reads as a sequence of steps rather than a flat list. */
 .process-log {
+  position: relative;
   display: grid;
-  gap: 4px;
-  max-height: 260px;
+  gap: 2px;
+  max-height: 280px;
   margin: 0;
   padding: 0 8px 0 0;
   list-style: none;
@@ -367,6 +407,17 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   scrollbar-color: #4a4f55 #14171c;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
+}
+
+.process-log::before {
+  content: "";
+  position: absolute;
+  left: 75px;
+  top: 13px;
+  bottom: 13px;
+  width: 2px;
+  background: var(--border);
+  z-index: 0;
 }
 
 .process-log::-webkit-scrollbar {
@@ -389,12 +440,14 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 
 .process-log-row {
+  position: relative;
+  z-index: 1;
   display: grid;
-  grid-template-columns: 58px 8px minmax(0, 1fr);
+  grid-template-columns: 58px 16px minmax(0, 1fr);
   align-items: start;
-  gap: 8px;
+  gap: 10px;
   min-height: 0;
-  padding: 2px 0;
+  padding: 3px 0;
   color: var(--text-dim);
   line-height: 1.45;
 }
@@ -402,53 +455,87 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .process-log-row time {
   color: #717781;
   font-size: 11px;
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  line-height: 1.45;
+  line-height: 1.6;
   white-space: nowrap;
 }
 
 .process-log-dot {
+  justify-self: center;
   align-self: start;
-  width: 7px;
-  height: 7px;
-  margin-top: 7px;
+  width: 12px;
+  height: 12px;
+  margin-top: 4px;
   border-radius: 50%;
-  background: var(--text-dim);
-  box-shadow: 0 0 0 3px rgba(150, 156, 165, 0.08);
+  background: var(--bg-deep);
+  border: 2px solid #4a4f55;
 }
 
 .process-log-message {
   display: block;
   min-width: 0;
-  line-height: 1.45;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
 .process-log-row--ok .process-log-dot {
   background: var(--success);
-  box-shadow: 0 0 0 3px rgba(87, 201, 140, 0.1);
+  border-color: var(--success);
+}
+
+.process-log-row--ok .process-log-message {
+  color: #c7ccd2;
 }
 
 .process-log-row--err .process-log-dot {
   background: var(--error);
-  box-shadow: 0 0 0 3px rgba(239, 93, 87, 0.1);
+  border-color: var(--error);
 }
 
 .process-log-row--warn .process-log-dot {
   background: var(--accent-bright);
-  box-shadow: 0 0 0 3px rgba(255, 195, 94, 0.12);
+  border-color: var(--accent-bright);
+}
+
+/* Latest entry = the live step: amber node with a gentle outward pulse. */
+.process-log-row:last-child .process-log-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  animation: process-pulse 1.8s ease-out infinite;
+}
+
+@keyframes process-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes process-indet {
+  0% { left: -40%; }
+  100% { left: 100%; }
+}
+
+@keyframes process-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(245, 166, 35, 0.5); }
+  70% { box-shadow: 0 0 0 9px rgba(245, 166, 35, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 166, 35, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .process-current::before,
+  .process-current::after,
+  .process-log-row:last-child .process-log-dot {
+    animation: none;
+  }
 }
 
 @media (max-width: 520px) {
-  .process-current {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 4px;
-  }
+  .process-current { gap: 9px; }
+
+  .process-log::before { left: 67px; }
 
   .process-log-row {
-    grid-template-columns: 52px 8px minmax(0, 1fr);
-    gap: 7px;
+    grid-template-columns: 52px 16px minmax(0, 1fr);
+    gap: 8px;
   }
 }
 
