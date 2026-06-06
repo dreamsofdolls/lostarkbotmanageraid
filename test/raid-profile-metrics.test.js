@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 test("raid-profile DPS consistency uses normalized output signals over raw boss DPS", async () => {
-  const { computeProfileConsistency } = await import("../web/js/profile/profile-metrics.js");
+  const { computeProfileConsistency } = await import("../web/js/profile/metrics/profile-metrics.js");
 
   const score = computeProfileConsistency([
     { dps: 12000000, damageShare: 24.0, topDamageProximity: 88.0 },
@@ -15,7 +15,7 @@ test("raid-profile DPS consistency uses normalized output signals over raw boss 
 });
 
 test("raid-profile support consistency ignores noisy raw DPS when support output is stable", async () => {
-  const { computeProfileConsistency } = await import("../web/js/profile/profile-metrics.js");
+  const { computeProfileConsistency } = await import("../web/js/profile/metrics/profile-metrics.js");
 
   const score = computeProfileConsistency([
     { dps: 100000, rdpsValid: true, supporterPercent: 30.0, protectionPerMinute: 8800000, supportAp: 0.9, supportBrand: 0.88, supportIdentity: 0.42, supportHyper: 0.18 },
@@ -28,7 +28,7 @@ test("raid-profile support consistency ignores noisy raw DPS when support output
 });
 
 test("raid-profile consistency drops when normalized output is volatile", async () => {
-  const { computeProfileConsistency } = await import("../web/js/profile/profile-metrics.js");
+  const { computeProfileConsistency } = await import("../web/js/profile/metrics/profile-metrics.js");
 
   const score = computeProfileConsistency([
     { dps: 25000000, damageShare: 30.0, topDamageProximity: 100.0 },

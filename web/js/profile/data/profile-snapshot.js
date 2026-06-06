@@ -17,9 +17,9 @@ import {
   normalizeName,
   percentile,
   summarizeBuildVariants,
-} from "/sync/js/profile/profile-row-enrich.js";
-import { computeProfileConsistency } from "/sync/js/profile/profile-metrics.js";
-import { computeProfileScores as computeScores, MIN_CONTEXT_SAMPLE_COUNT } from "/sync/js/profile/profile-score.js";
+} from "/sync/js/profile/data/profile-row-enrich.js";
+import { computeProfileConsistency } from "/sync/js/profile/metrics/profile-metrics.js";
+import { computeProfileScores as computeScores, MIN_CONTEXT_SAMPLE_COUNT } from "/sync/js/profile/metrics/profile-score.js";
 import { roleForProfileClass } from "/sync/js/profile/profile-role.js";
 
 const MAX_PROFILE_ENCOUNTER_SUMMARIES = 5000;

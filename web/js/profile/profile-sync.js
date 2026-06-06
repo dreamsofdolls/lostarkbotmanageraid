@@ -12,11 +12,11 @@ import {
   buildProfileEncounterSummaries,
   buildProfileSnapshot,
   fingerprintSnapshot,
-} from "/sync/js/profile/profile-snapshot.js";
+} from "/sync/js/profile/data/profile-snapshot.js";
 import {
   enrichProfileRows,
   isModernProfileRow,
-} from "/sync/js/profile/profile-row-enrich.js";
+} from "/sync/js/profile/data/profile-row-enrich.js";
 
 const WA_SQLITE_VERSION = "1.3.0";
 const WA_SQLITE_BASE = `https://cdn.jsdelivr.net/npm/@journeyapps/wa-sqlite@${WA_SQLITE_VERSION}`;
