@@ -21,6 +21,9 @@ const {
   buildRosterIndexes,
   resolveRosterCharacter,
 } = require("./sanitizer/roster");
+const {
+  hydrateAltBuildsFromEncounterSummaries,
+} = require("./sanitizer/alt-build-hydrator");
 
 function cleanSyncRange(payload) {
   const rawRange = payload.criteria?.range || {};
@@ -111,9 +114,10 @@ function sanitizeSnapshotPayload(payload, userDoc) {
   const range = cleanSyncRange(payload);
   const indexes = buildRosterIndexes(userDoc);
   const { accounts, rejected } = collectAccounts(payload, indexes);
-  const accountSummary = summarizeAccounts(accounts);
   const db = cleanDbInfo(payload);
   const encounterSummaries = cleanProfileEncounterSummaries(payload.encounters, indexes, range, db);
+  hydrateAltBuildsFromEncounterSummaries(accounts, encounterSummaries);
+  const accountSummary = summarizeAccounts(accounts);
 
   return {
     version: PROFILE_VERSION,
