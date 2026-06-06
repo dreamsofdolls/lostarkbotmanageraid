@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { selectAutoClearTargets } = require("../bot/services/raid/schedule/auto-clear");
+const { selectAutoClearTargets } = require("../bot/services/raid/schedule/lifecycle/auto-clear");
 
 test("selectAutoClearTargets credits the filled comp (confirmed + late in a slot)", () => {
   const event = {

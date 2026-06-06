@@ -1,7 +1,7 @@
 "use strict";
 
 const { t } = require("../../../../services/i18n");
-const { listEligibleCharacters } = require("../../../../services/raid/schedule/eligibility");
+const { listEligibleCharacters } = require("../../../../services/raid/schedule/slots/eligibility");
 const { getClassEmoji } = require("../../../../models/Class");
 
 const PICKER_LIMIT = 25;

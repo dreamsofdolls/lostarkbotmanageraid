@@ -14,7 +14,7 @@ const GuildConfig = require("../../../models/guildConfig");
 const RaidEvent = require("../../../models/RaidEvent");
 const { RAID_REQUIREMENTS } = require("../../../models/Raid");
 const { t, getGuildLanguage } = require("../../i18n");
-const { purgeStaleRaidEvents } = require("../schedule/event-cleanup");
+const { purgeStaleRaidEvents } = require("../schedule/lifecycle/event-cleanup");
 const { resolveGuildChannel } = require("../../discord/resolve-guild-channel");
 
 const WEEKLY_ANNOUNCEMENT_TTL_MS = 30 * 60 * 1000; // marker sits 30 min before self-delete

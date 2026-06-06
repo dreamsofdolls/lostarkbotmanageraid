@@ -21,7 +21,7 @@ const {
   buildMyRaidsRow,
   buildMyRaidDetailEmbed,
 } = require("./my-raids");
-const { shapeMyRaidEvents } = require("../../services/raid/schedule/my-raids");
+const { shapeMyRaidEvents } = require("../../services/raid/schedule/boards/my-raids");
 const RaidEvent = require("../../models/RaidEvent");
 const {
   buildNoticeEmbed,

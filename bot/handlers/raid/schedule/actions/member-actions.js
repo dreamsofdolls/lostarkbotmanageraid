@@ -1,9 +1,9 @@
 "use strict";
 
 const { t } = require("../../../../services/i18n");
-const { partitionSelectable } = require("../../../../services/raid/schedule/eligibility");
-const { applyJoin, applyKick } = require("../../../../services/raid/schedule/signup-state");
-const { assignSlots, detectPromotion } = require("../../../../services/raid/schedule/slots");
+const { partitionSelectable } = require("../../../../services/raid/schedule/slots/eligibility");
+const { applyJoin, applyKick } = require("../../../../services/raid/schedule/slots/signup-state");
+const { assignSlots, detectPromotion } = require("../../../../services/raid/schedule/slots/slots");
 const { removeMembersFromTurns } = require("../../../../services/raid/schedule/turns");
 const { findOwnEligibleRows } = require("../view/select-options");
 const { parseScheduleCustomId } = require("../router");

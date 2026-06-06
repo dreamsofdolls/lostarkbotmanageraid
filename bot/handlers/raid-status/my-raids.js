@@ -18,7 +18,7 @@ const { t } = require("../../services/i18n");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 const { getClassEmoji } = require("../../models/Class");
 const { resolveTurnMembers } = require("../../services/raid/schedule/turns");
-const { buildMyRaidDetail } = require("../../services/raid/schedule/my-raids");
+const { buildMyRaidDetail } = require("../../services/raid/schedule/boards/my-raids");
 
 const MY_RAIDS_SELECT_ID = "status-myraids:select";
 

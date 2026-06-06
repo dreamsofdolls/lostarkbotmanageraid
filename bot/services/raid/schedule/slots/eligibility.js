@@ -10,8 +10,8 @@
 
 "use strict";
 
-const { isSupportClass } = require("../../../models/Class");
-const { getGatesForRaid } = require("../../../domain/raid-catalog");
+const { isSupportClass } = require("../../../../models/Class");
+const { getGatesForRaid } = require("../../../../domain/raid-catalog");
 
 /**
  * Derive a slot role from a class display name.

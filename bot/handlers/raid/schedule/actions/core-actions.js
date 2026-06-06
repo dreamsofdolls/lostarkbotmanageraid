@@ -2,7 +2,7 @@
 
 const { t } = require("../../../../services/i18n");
 const { getRaidPartySize } = require("../../../../domain/raid-catalog");
-const { slotCountsForSize } = require("../../../../services/raid/schedule/slot-config");
+const { slotCountsForSize } = require("../../../../services/raid/schedule/slots/slot-config");
 const { parseStartTime } = require("../../../../services/raid/schedule/time-parse");
 const { renderGauge } = require("../view/board");
 

@@ -16,7 +16,7 @@
 
 "use strict";
 
-const { assignSlots } = require("./slots");
+const { assignSlots } = require("../slots/slots");
 
 // Discord caps a select menu at 25 options.
 const SWITCHER_OPTION_CAP = 25;

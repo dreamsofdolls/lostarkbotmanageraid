@@ -12,8 +12,8 @@
 
 "use strict";
 
-const { getGatesForRaid } = require("../../../domain/raid-catalog");
-const { assignSlots } = require("./slots");
+const { getGatesForRaid } = require("../../../../domain/raid-catalog");
+const { assignSlots } = require("../slots/slots");
 
 /**
  * Build the list of clear-write targets for a finished event. Credits

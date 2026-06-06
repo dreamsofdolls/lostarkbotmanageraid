@@ -1,8 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { assignSlots, nextWaitlistPromotion } = require("../bot/services/raid/schedule/slots");
-const { applyJoin } = require("../bot/services/raid/schedule/signup-state");
+const { assignSlots, nextWaitlistPromotion } = require("../bot/services/raid/schedule/slots/slots");
+const { applyJoin } = require("../bot/services/raid/schedule/slots/signup-state");
 
 const sigs = [
   { discordId: "a", role: "support", status: "confirmed", joinedAt: 1 },

@@ -14,7 +14,7 @@
 const { t } = require("../../../../services/i18n");
 const { getClassEmoji, isSupportClass } = require("../../../../models/Class");
 const { getRaidRequirementMap } = require("../../../../domain/raid-catalog");
-const { assignSlots } = require("../../../../services/raid/schedule/slots");
+const { assignSlots } = require("../../../../services/raid/schedule/slots/slots");
 const { resolveTurnMembers } = require("../../../../services/raid/schedule/turns");
 const { getRaidModeLabel } = require("../../../../utils/raid/common/labels");
 const { formatStartShortForLang } = require("../../../../utils/raid/schedule/artist-clock");

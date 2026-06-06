@@ -24,7 +24,7 @@ const {
   shapeAllOwnedBoardRows,
   chunkBoardOptions,
   SWITCHER_OPTION_CAP,
-} = require("../../services/raid/schedule/owned-boards");
+} = require("../../services/raid/schedule/boards/owned-boards");
 const { t } = require("../../services/i18n");
 
 // Selects in this surface share the `raid-check-all-teams:<chunkIndex>` prefix;

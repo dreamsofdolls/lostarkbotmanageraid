@@ -7,11 +7,11 @@
 
 "use strict";
 
-const { getGuildLanguage } = require("../../i18n");
+const { getGuildLanguage } = require("../../../i18n");
 const {
   buildScheduleEmbed,
   buildScheduleComponents,
-} = require("../../../handlers/raid/schedule/view/board");
+} = require("../../../../handlers/raid/schedule/view/board");
 
 const RAID_SCHEDULE_AUTO_LOCK_TICK_MS = 60 * 1000;
 const RAID_SCHEDULE_AUTO_LOCK_BATCH_SIZE = 25;

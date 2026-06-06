@@ -7,7 +7,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("
 const { UI } = require("../bot/utils/raid/common/shared");
 const {
   createRaidScheduleAutoLockService,
-} = require("../bot/services/raid/schedule/auto-lock");
+} = require("../bot/services/raid/schedule/lifecycle/auto-lock");
 
 function makeEvent(extra = {}) {
   return {
