@@ -234,15 +234,11 @@ function buildCharacterEmbed({ EmbedBuilder }, session, entry, character) {
     .setAuthor({ name: `// RAID PROFILE · CHARACTER · ${String(character.name || "UNKNOWN").toUpperCase()} · ${roleTag}` })
     .setTitle(`${classEmoji} ${character.name}`)
     .setDescription([
-      [
-        character.class || "Unknown",
-        `iLvl **${character.itemLevel || 0}**`,
-        !altBuild && spec ? `\`${spec}\`` : null,
-        `**${totalLogs}** log`,
-        `CONF **${confidenceForLogs(totalLogs).toUpperCase()}**`,
-      ].filter(Boolean).join(" · "),
-      getEntryLabel(entry),
-    ].join("\n"));
+      `iLvl **${character.itemLevel || 0}**`,
+      !altBuild && spec ? `\`${spec}\`` : null,
+      `**${totalLogs}** log`,
+      `CONF **${confidenceForLogs(totalLogs).toUpperCase()}**`,
+    ].filter(Boolean).join(" · "));
 
   displayBuilds.forEach((build, index) => {
     if (altBuild) {
@@ -254,14 +250,13 @@ function buildCharacterEmbed({ EmbedBuilder }, session, entry, character) {
       });
     }
     embed.addFields(...buildBuildFields(build.role, build.stats, build.scores, {
-      spec: build.spec,
       build: build.build,
       isBibleSummary,
     }));
   });
 
   embed.setFooter({
-    text: `// ${sourceTag(entry.source)} ${rangeTag(entry.rangeType)} · ${String(character.class || "UNKNOWN").toUpperCase()} · ${roleTag} · ${totalLogs} SCORED · CONF ${confidenceForLogs(totalLogs).toUpperCase()} · ${footerTimestamp(entry.receivedAt || entry.generatedAt)}`,
+    text: `// ${sourceTag(entry.source)} ${rangeTag(entry.rangeType)} · ${String(character.class || "UNKNOWN").toUpperCase()} · ${roleTag} · ${totalLogs} SCORED · CONF ${confidenceForLogs(totalLogs).toUpperCase()}`,
   });
 
   return embed;

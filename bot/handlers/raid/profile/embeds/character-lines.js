@@ -19,10 +19,6 @@ const {
  * build from `character.altBuild.{stats,scores}`.
  */
 
-function buildSpecName(build, fallback = "") {
-  return String(build?.arkPassive?.enlightenment?.spec || build?.spec || fallback || "").trim();
-}
-
 function buildArkLine(build, stats) {
   if (build?.arkPassiveActive === true) return "Ark **ON**";
   if (build?.arkPassiveActive === false) return "Ark **OFF**";
@@ -52,14 +48,13 @@ function buildSurvivalLines(stats) {
  * @param {string} role - "support" or "dps" (the build's role, not the class)
  * @param {object} stats - the build's stats object
  * @param {object} scores - the build's scores object
- * @param {{spec?: string, build?: object, isBibleSummary?: boolean}} [opts]
+ * @param {{build?: object, isBibleSummary?: boolean}} [opts]
  * @returns {Array<{name: string, value: string, inline: boolean}>}
  */
-function buildBuildFields(role, stats, scores, { spec = "", build = null, isBibleSummary = false } = {}) {
+function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = false } = {}) {
   const isSupport = role === "support";
   const s = stats || {};
   const sc = scores || {};
-  const buildSpec = buildSpecName(build, spec);
 
   const scoreField = {
     name: hudFieldName("score"),
@@ -135,7 +130,6 @@ function buildBuildFields(role, stats, scores, { spec = "", build = null, isBibl
   // combatPower is a raw magnitude (~millions) -> shortNumber, not score().
   const cp = Number(build?.combatPower) || Number(s.latestCombatPower) || Number(s.avgCombatPower) || 0;
   const buildBits = [
-    buildSpec ? `\`${buildSpec}\`` : null,
     cp ? `CP **${shortNumber(cp)}**` : null,
     buildArkLine(build, s),
     `Active **${pct(s.avgActiveTimeRate != null ? s.avgActiveTimeRate : 100)}**`,
