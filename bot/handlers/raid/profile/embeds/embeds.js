@@ -165,7 +165,12 @@ function buildRosterEmbed({ EmbedBuilder }, session, entry) {
     // is meaningful here); falls back to the role weapon emoji. Renders because
     // this is a plain field value, not a code block.
     const icon = getClassEmoji(character.class) || roleEmoji(character);
-    return `\`${index + 1}.\` ${icon} **${character.name}** \`${roleLabel(character)}\` · ${logs} scored · MVP ${score(character?.scores?.mvp)} · **${score(character?.scores?.overall)}**`;
+    // Flex chars (a second scored build) are tagged `flex·<primary role>`; the
+    // full both-build breakdown lives in the CHARACTER detail view.
+    const roleTag = character.altBuild
+      ? `flex·${character.role === "support" ? "SUP" : "DPS"}`
+      : roleLabel(character);
+    return `\`${index + 1}.\` ${icon} **${character.name}** \`${roleTag}\` · ${logs} scored · MVP ${score(character?.scores?.mvp)} · **${score(character?.scores?.overall)}**`;
   });
   embed.addFields({
     name: hudFieldName("character"),
@@ -192,6 +197,15 @@ function buildCharacterEmbed({ EmbedBuilder }, session, entry, character) {
   // Custom class emoji renders in the description (not in titles), so the class
   // icon lives on the identity line, not the title.
   const classEmoji = getClassEmoji(character.class) || (isSupport ? "🛡️" : "⚔️");
+  // Flex: the off-meta build's own score, shown as its own field next to the
+  // primary SCORE. Empty array when the char isn't flex so the spread is a no-op.
+  const altBuildFields = character.altBuild
+    ? [{
+        name: hudFieldName("alt build"),
+        value: `${character.altBuild.role === "support" ? "Support" : "DPS"} · ${character.altBuild.encounters} log · score **${score(character.altBuild.scores?.overall)}** · MVP ${score(character.altBuild.scores?.mvp)}`,
+        inline: false,
+      }]
+    : [];
   const embed = new EmbedBuilder()
     .setColor(isSupport ? PROFILE_COLORS.support : PROFILE_COLORS.amber)
     .setAuthor({ name: "// RAID PROFILE · CHARACTER" })
@@ -218,6 +232,7 @@ function buildCharacterEmbed({ EmbedBuilder }, session, entry, character) {
         value: roleDetailLines(stats, scores, { isSupport, isBibleSummary }).join("\n"),
         inline: true,
       },
+      ...altBuildFields,
       {
         name: hudFieldName(isBibleSummary ? "source detail" : "combat shape"),
         value: sourceOrCombatShapeLines(entry, stats, { isBibleSummary }).join("\n"),

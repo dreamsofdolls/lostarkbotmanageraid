@@ -26,6 +26,11 @@ const {
   compactKey,
 } = require("./role");
 
+// Minimum logs in the secondary (off-meta) build before a support-class
+// character is treated as flex and its alt build is scored on its own. Below
+// this the sample is too thin to be worth a second score line.
+const MIN_ALT_BUILD_LOGS = 3;
+
 function summarizeRows(rows) {
   const dps = rows.map((row) => row.dps);
   const rdps = rows.map((row) => row.rdps).filter((n) => n > 0);
@@ -271,6 +276,22 @@ function buildSnapshotFromRows({ rows, summaries = [], rangeType = "weekly", ran
       ...summarizeRaidGroup(groupRows),
     })).sort((a, b) => (b.lastFightStart || 0) - (a.lastFightStart || 0));
 
+    // Flex characters (support class that also played a DPS build, or vice
+    // versa) get a second score for the off-meta build so /raid-profile can
+    // show both. Primary scoring above is untouched; this is additive.
+    let altBuild = null;
+    if (classRole === "support") {
+      const altRole = role === "support" ? "dps" : "support";
+      const altRows = role === "support" ? dpsRows : supportRows;
+      if (altRows.length >= MIN_ALT_BUILD_LOGS) {
+        altBuild = {
+          role: altRole,
+          encounters: altRows.length,
+          scores: computeBibleScores(summarizeRows(altRows), altRole),
+        };
+      }
+    }
+
     const accountName = sample.accountName;
     if (!accountsByName.has(accountName)) {
       accountsByName.set(accountName, { accountName, characters: [] });
@@ -283,6 +304,7 @@ function buildSnapshotFromRows({ rows, summaries = [], rangeType = "weekly", ran
       role,
       stats,
       scores: computeBibleScores(stats, role),
+      altBuild,
       build,
       topSkills: [],
       topBuffSources: [],
