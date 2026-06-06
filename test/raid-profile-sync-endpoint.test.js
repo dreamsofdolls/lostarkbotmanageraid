@@ -43,6 +43,75 @@ function makeRes() {
   };
 }
 
+function makeLocalEncounterSummary({
+  encounterId,
+  fightStart,
+  dps,
+  damageShare = 20,
+  damageRank = 1,
+} = {}) {
+  return {
+    encounterId: encounterId || `enc-${fightStart}`,
+    accountName: "Roster",
+    characterName: "Aki",
+    characterNameKey: "aki",
+    class: "Breaker",
+    itemLevel: 1750,
+    classRole: "dps",
+    role: "dps",
+    fightStart,
+    durationMs: 300000,
+    boss: "Brelshaza, Ember in the Ashes",
+    raidKey: "brelshaza2",
+    modeKey: "normal",
+    difficulty: "Normal",
+    rangeType: "weekly",
+    db: { fileName: "encounters.db", source: "encounters.db", size: 4096, lastModified: 999 },
+    build: {
+      spec: "Brawl King Storm",
+      gearScore: 1750,
+      combatPower: 4000000,
+      arkPassiveActive: true,
+      engravings: [],
+      arkPassive: {
+        evolution: { count: 0, points: 0, spentPoints: 0, spec: "" },
+        enlightenment: { count: 0, points: 0, spentPoints: 0, spec: "Brawl King Storm" },
+        leap: { count: 0, points: 0, spentPoints: 0, spec: "" },
+      },
+    },
+    metrics: {
+      dps,
+      rdps: dps,
+      ndps: Math.round(dps * 0.95),
+      peak10sDps: Math.round(dps * 1.4),
+      burstRatio: 1.4,
+      rdpsValid: true,
+      activeDurationMs: 285000,
+      activeTimeRate: 95,
+      damageDealt: dps * 300,
+      damageShare,
+      topDamageProximity: 90,
+      contextSampleCount: 12,
+      contextSource: "class",
+      contextPerformancePercentile: 80,
+      contextDamageSharePercentile: 78,
+      contextTopDamageProximityPercentile: 82,
+      damageRank,
+      partyCount: 8,
+      deathCount: 0,
+      counters: 1,
+      castsPerMinute: 35,
+      hitsPerMinute: 120,
+      critRate: 70,
+      critDamageShare: 75,
+      staggerPerMinute: 2500,
+    },
+    topSkills: [
+      { id: "s1", name: "Main Skill", damage: dps * 120, share: 40, casts: 10, hits: 20, critRate: 80 },
+    ],
+  };
+}
+
 test("profile-session endpoint mints a device token from a current local-sync token", async () => {
   const localToken = mintToken("u1");
   const updateCalls = [];
@@ -809,6 +878,244 @@ test("weekly raid-profile sync stores range snapshot without overwriting an exis
   assert.equal(weekly.criteria.range.minFightStartMs, 123456789);
   assert.equal(weekly.accounts[0].characters[0].name, "Aki");
   assert.equal(weekly.accounts[0].characters[0].stats.encounters, 2);
+});
+
+test("weekly raid-profile sync rebuilds the range snapshot from stored local encounter summaries", async () => {
+  const profileToken = "profile-device-token-weekly-rebuild";
+  const tokenHash = hashProfileDeviceToken(profileToken);
+  const savedSnapshots = [];
+  const savedEncounterWrites = [];
+  const storedSummaries = [
+    makeLocalEncounterSummary({ encounterId: "old-weekly", fightStart: 123500000, dps: 10000000, damageShare: 18, damageRank: 2 }),
+    makeLocalEncounterSummary({ encounterId: "new-weekly", fightStart: 123999999, dps: 14000000, damageShare: 24, damageRank: 1 }),
+  ];
+  const summaryFindQueries = [];
+  const User = {
+    findOne(query) {
+      assert.deepEqual(query, { localProfileSyncTokenHash: tokenHash });
+      return {
+        select() {
+          return {
+            lean: async () => ({
+              discordId: "u1",
+              localSyncEnabled: true,
+              localProfileSyncTokenHash: tokenHash,
+              localProfileSyncTokenExpAt: 9999999999,
+              accounts: [
+                {
+                  accountName: "Roster",
+                  characters: [{ name: "Aki", class: "Breaker", itemLevel: 1750 }],
+                },
+              ],
+            }),
+          };
+        },
+      };
+    },
+    async updateOne() {
+      return { modifiedCount: 1 };
+    },
+  };
+  const RaidProfileSnapshot = {
+    findOne(query) {
+      assert.deepEqual(query, { discordId: "u1" });
+      return {
+        select() {
+          return {
+            lean: async () => ({
+              discordId: "u1",
+              rangeType: "full",
+              criteria: { range: { type: "full" } },
+              accounts: [
+                {
+                  accountName: "Roster",
+                  characters: [{ name: "Aki", stats: { encounters: 20 } }],
+                },
+              ],
+            }),
+          };
+        },
+      };
+    },
+    async findOneAndUpdate(filter, update, options) {
+      savedSnapshots.push({ filter, update, options });
+      return { discordId: filter.discordId };
+    },
+  };
+  const RaidProfileEncounter = {
+    async bulkWrite(ops, options) {
+      savedEncounterWrites.push({ ops, options });
+      return { upsertedCount: 1, modifiedCount: 0 };
+    },
+    find(query) {
+      summaryFindQueries.push(query);
+      return {
+        sort(sort) {
+          assert.deepEqual(sort, { fightStart: 1 });
+          return {
+            lean: async () => storedSummaries,
+          };
+        },
+      };
+    },
+  };
+  const handler = createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot, RaidProfileEncounter });
+  const res = makeRes();
+
+  await handler(
+    makeReq({
+      token: profileToken,
+      body: {
+        generatedAt: 5000,
+        db: { fileName: "encounters.db", size: 4096, lastModified: 999 },
+        criteria: {
+          modernProfileStatsOnly: true,
+          range: { type: "weekly", minFightStartMs: 123456789 },
+        },
+        accounts: [
+          {
+            accountName: "Roster",
+            characters: [
+              {
+                name: "Aki",
+                stats: { encounters: 1, lastFightStart: 123999999 },
+                scores: { overall: 60 },
+              },
+            ],
+          },
+        ],
+        encounters: [
+          makeLocalEncounterSummary({ encounterId: "new-weekly", fightStart: 123999999, dps: 14000000, damageShare: 24, damageRank: 1 }),
+        ],
+      },
+    }),
+    res,
+    { query: {} }
+  );
+
+  assert.equal(res.status, 200);
+  assert.equal(savedEncounterWrites.length, 1);
+  assert.equal(summaryFindQueries[0].discordId, "u1");
+  assert.deepEqual(summaryFindQueries[0].fightStart, { $gte: 123456789 });
+  assert.equal(summaryFindQueries[1].discordId, "u1");
+  assert.equal(summaryFindQueries[1].fightStart, undefined);
+  assert.equal(savedSnapshots.length, 1);
+  const saved = savedSnapshots[0].update.$set;
+  assert.equal(saved.accounts, undefined);
+  const weekly = saved["rangeSnapshots.weekly"];
+  assert.equal(weekly.rangeType, "weekly");
+  assert.equal(weekly.totals.encounterCount, 2);
+  assert.equal(weekly.accounts[0].characters[0].stats.encounters, 2);
+  assert.equal(weekly.accounts[0].characters[0].stats.avgDps, 12000000);
+  assert.equal(res.json().totals.encounterCount, 2);
+  assert.equal(res.json().encounterWrite.received, 1);
+});
+
+test("weekly raid-profile sync rebuilds full primary snapshot when stored full summaries exist", async () => {
+  const profileToken = "profile-device-token-weekly-full-rebuild";
+  const tokenHash = hashProfileDeviceToken(profileToken);
+  const savedSnapshots = [];
+  const storedSummaries = [
+    { ...makeLocalEncounterSummary({ encounterId: "old-full", fightStart: 100000000, dps: 9000000, damageShare: 16, damageRank: 3 }), rangeType: "full" },
+    makeLocalEncounterSummary({ encounterId: "new-weekly", fightStart: 123999999, dps: 15000000, damageShare: 25, damageRank: 1 }),
+  ];
+  const User = {
+    findOne(query) {
+      assert.deepEqual(query, { localProfileSyncTokenHash: tokenHash });
+      return {
+        select() {
+          return {
+            lean: async () => ({
+              discordId: "u1",
+              localSyncEnabled: true,
+              localProfileSyncTokenHash: tokenHash,
+              localProfileSyncTokenExpAt: 9999999999,
+              accounts: [
+                {
+                  accountName: "Roster",
+                  characters: [{ name: "Aki", class: "Breaker", itemLevel: 1750 }],
+                },
+              ],
+            }),
+          };
+        },
+      };
+    },
+    async updateOne() {
+      return { modifiedCount: 1 };
+    },
+  };
+  const RaidProfileSnapshot = {
+    findOne(query) {
+      assert.deepEqual(query, { discordId: "u1" });
+      return {
+        select() {
+          return {
+            lean: async () => ({
+              discordId: "u1",
+              rangeType: "full",
+              criteria: { source: "encounters.db", range: { type: "full" } },
+              accounts: [{ accountName: "Roster", characters: [{ name: "Aki", stats: { encounters: 1 } }] }],
+            }),
+          };
+        },
+      };
+    },
+    async findOneAndUpdate(filter, update, options) {
+      savedSnapshots.push({ filter, update, options });
+      return { discordId: filter.discordId };
+    },
+  };
+  const RaidProfileEncounter = {
+    async bulkWrite() {
+      return { upsertedCount: 1, modifiedCount: 0 };
+    },
+    find(query) {
+      const min = Number(query?.fightStart?.$gte) || 0;
+      return {
+        sort() {
+          return {
+            lean: async () => storedSummaries.filter((summary) => (Number(summary.fightStart) || 0) >= min),
+          };
+        },
+      };
+    },
+  };
+  const handler = createRaidProfileSyncEndpoint({ User, RaidProfileSnapshot, RaidProfileEncounter });
+  const res = makeRes();
+
+  await handler(
+    makeReq({
+      token: profileToken,
+      body: {
+        generatedAt: 5000,
+        db: { fileName: "encounters.db", size: 4096, lastModified: 999 },
+        criteria: {
+          modernProfileStatsOnly: true,
+          range: { type: "weekly", minFightStartMs: 123456789 },
+        },
+        accounts: [
+          {
+            accountName: "Roster",
+            characters: [{ name: "Aki", stats: { encounters: 1 }, scores: { overall: 60 } }],
+          },
+        ],
+        encounters: [
+          makeLocalEncounterSummary({ encounterId: "new-weekly", fightStart: 123999999, dps: 15000000, damageShare: 25, damageRank: 1 }),
+        ],
+      },
+    }),
+    res,
+    { query: {} }
+  );
+
+  assert.equal(res.status, 200);
+  const saved = savedSnapshots[0].update.$set;
+  assert.equal(saved.rangeType, "full");
+  assert.equal(saved.accounts[0].characters[0].stats.encounters, 2);
+  assert.equal(saved["rangeSnapshots.full"].totals.encounterCount, 2);
+  assert.equal(saved["rangeSnapshots.weekly"].totals.encounterCount, 1);
+  assert.equal(res.json().totals.encounterCount, 2);
 });
 
 test("weekly raid-profile sync can promote over an empty full snapshot shell", async () => {

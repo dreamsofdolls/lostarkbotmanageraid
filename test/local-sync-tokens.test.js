@@ -21,7 +21,7 @@ const {
 } = require("../bot/services/local-sync");
 
 test("token TTL constants match the import window and post-sync shrink", () => {
-  assert.equal(TOKEN_DEFAULT_TTL_SEC, 60 * 60);
+  assert.equal(TOKEN_DEFAULT_TTL_SEC, 30 * 60);
   assert.equal(TOKEN_POST_SYNC_TTL_SEC, 60);
 });
 
