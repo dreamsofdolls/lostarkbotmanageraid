@@ -13,20 +13,20 @@ const {
 const { createAutoManageReportEmbeds } = require("../reports/embeds");
 const {
   createAutoManageApplier,
-} = require("./apply");
+} = require("./pipeline/apply");
 const {
   createAutoManageEntryKey,
-} = require("./entry-key");
+} = require("./support/entry-key");
 const {
   createAutoManageGatherer,
-} = require("./gather");
+} = require("./pipeline/gather");
 const {
   createAutoManageSyncSlotManager,
-} = require("./slot");
+} = require("./support/slot");
 const {
   createAutoManageReconciler,
-} = require("./reconcile");
-const { weekResetStartMs } = require("./week-reset");
+} = require("./pipeline/reconcile");
+const { weekResetStartMs } = require("./support/week-reset");
 
 function isPublicLogDisabledError(err) {
   if (!err) return false;
