@@ -6,13 +6,13 @@
  * two surfaces stay visually identical.
  */
 
-const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
-const { buildAccountTaskFields } = require("../../utils/raid/tasks/task-view");
+const { buildNoticeEmbed } = require("../../../utils/raid/common/shared");
+const { buildAccountTaskFields } = require("../../../utils/raid/tasks/task-view");
 const {
   getVisibleSharedTasks,
   getSharedTaskDisplay,
-} = require("../../utils/raid/tasks/shared-tasks");
-const { t, getUserLanguage } = require("../../services/i18n");
+} = require("../../../utils/raid/tasks/shared-tasks");
+const { t, getUserLanguage } = require("../../../services/i18n");
 
 /**
  * Build the /raid-check task-view UI service.

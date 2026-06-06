@@ -11,7 +11,7 @@
  * outer compose root.
  */
 
-const { t } = require("../../services/i18n");
+const { t } = require("../../../services/i18n");
 
 /**
  * Build the /raid-check Edit helper service · pure render/filter

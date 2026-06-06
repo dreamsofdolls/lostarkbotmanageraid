@@ -21,15 +21,15 @@
  * (Edit cascade also resolves display names per editable user).
  */
 
-const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
-const { t, getUserLanguage } = require("../../services/i18n");
-const { getRaidModeLabel } = require("../../utils/raid/common/labels");
+const { buildNoticeEmbed } = require("../../../utils/raid/common/shared");
+const { t, getUserLanguage } = require("../../../services/i18n");
+const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
 const {
   getAppliedAutoManageEntries,
   stampAutoManageAttemptFromReport,
   toPlainUserDoc,
   syncRaidProfileAfterAutoManageReport,
-} = require("../../services/auto-manage/reports/utils");
+} = require("../../../services/auto-manage/reports/utils");
 
 /**
  * Build the /raid-check Sync UI service. Returns three handlers (display

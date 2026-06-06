@@ -1,6 +1,6 @@
 "use strict";
 
-const { t, getUserLanguage } = require("../../../services/i18n");
+const { t, getUserLanguage } = require("../../../../services/i18n");
 const {
   buildRaidCheckEditDMEmbed: buildRaidCheckEditDMEmbedPayload,
 } = require("./dm");

@@ -10,10 +10,10 @@
  */
 
 const { createSnapshotHelpers } = require("./snapshot");
-const { createEditHelpers } = require("./edit-helpers");
+const { createEditHelpers } = require("./edit/edit-helpers");
 const { createAllModeHandler } = require("./all-mode/all-mode");
-const { createEditUi } = require("./edit-ui");
-const { createSyncUi } = require("./sync-ui");
+const { createEditUi } = require("./edit/edit-ui");
+const { createSyncUi } = require("./views/sync-ui");
 const {
   createRaidCheckAutoManageUi,
   tryEnableAutoManage,
@@ -21,7 +21,7 @@ const {
   buildEnableAutoDmEmbed,
   buildDisableAutoDmEmbed,
 } = require("./auto-manage/auto-manage");
-const { createTaskViewUi } = require("./task-view-ui");
+const { createTaskViewUi } = require("./views/task-view-ui");
 const { buildNoticeEmbed, replyNotice } = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
 const {

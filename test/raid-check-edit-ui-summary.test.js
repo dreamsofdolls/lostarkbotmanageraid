@@ -6,7 +6,7 @@ const assert = require("node:assert/strict");
 const {
   buildRaidCheckEditApplySummary,
   getRaidCheckEditStatusLabel,
-} = require("../bot/handlers/raid-check/edit-ui/summary");
+} = require("../bot/handlers/raid-check/edit/edit-ui/summary");
 
 const UI = {
   icons: {

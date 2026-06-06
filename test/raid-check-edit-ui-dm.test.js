@@ -6,7 +6,7 @@ const assert = require("node:assert/strict");
 const {
   buildRaidCheckEditDMEmbed,
   getRaidCheckEditDmActionLine,
-} = require("../bot/handlers/raid-check/edit-ui/dm");
+} = require("../bot/handlers/raid-check/edit/edit-ui/dm");
 
 class FakeEmbedBuilder {
   constructor() {

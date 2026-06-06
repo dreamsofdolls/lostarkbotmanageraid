@@ -17,15 +17,15 @@
 
 "use strict";
 
-const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
-const { getRaidModeLabel } = require("../../utils/raid/common/labels");
-const { formatStartShortForLang } = require("../../utils/raid/schedule/artist-clock");
+const { buildNoticeEmbed } = require("../../../utils/raid/common/shared");
+const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
+const { formatStartShortForLang } = require("../../../utils/raid/schedule/artist-clock");
 const {
   shapeAllOwnedBoardRows,
   chunkBoardOptions,
   SWITCHER_OPTION_CAP,
-} = require("../../services/raid/schedule/boards/owned-boards");
-const { t } = require("../../services/i18n");
+} = require("../../../services/raid/schedule/boards/owned-boards");
+const { t } = require("../../../services/i18n");
 
 // Selects in this surface share the `raid-check-all-teams:<chunkIndex>` prefix;
 // the chunk index only keeps custom-ids unique across overflow dropdowns - the

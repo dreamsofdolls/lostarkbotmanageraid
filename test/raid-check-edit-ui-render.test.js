@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 
 const {
   createRaidCheckEditRenderer,
-} = require("../bot/handlers/raid-check/edit-ui/render");
+} = require("../bot/handlers/raid-check/edit/edit-ui/render");
 
 class FakeEmbedBuilder {
   constructor() {

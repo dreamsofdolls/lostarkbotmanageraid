@@ -1,7 +1,7 @@
 "use strict";
 
-const { t } = require("../../../services/i18n");
-const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
+const { t } = require("../../../../services/i18n");
+const { getRaidModeLabel } = require("../../../../utils/raid/common/labels");
 
 function getRaidCheckEditStatusLabel({ statusType, gate, lang }) {
   if (statusType === "complete") {
