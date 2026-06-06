@@ -202,9 +202,12 @@ test("raid-profile render uses Endfield HUD author, gauges, and Enlightenment bu
   const session = makeSession();
 
   const overall = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
-  assert.equal(overall.author.name, "// RAID PROFILE · OVERALL");
-  assert.ok(overall.fields.some((field) => field.name === "// AGGREGATE SCORE"));
+  assert.match(overall.author.name, /^\/\/ RAID PROFILE · OVERALL · \d+ ROSTER · \d+ CHAR$/);
+  assert.ok(overall.fields.some((field) => field.name === "// AGGREGATE"));
   assert.match(overall.fields.map((field) => field.value).join("\n"), /▰/);
+  // Roster is a fenced code-block table now (aligned columns + per-row gauge).
+  const rosterField = overall.fields.find((field) => field.name === "// ROSTER");
+  assert.ok(rosterField.value.startsWith("```") && /NAME/.test(rosterField.value));
   assert.match(overall.footer.text, /CONF HIGH/);
 
   session.rosterIndex = 0;

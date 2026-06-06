@@ -64,6 +64,16 @@ function renderGauge(value, { suffix = "" } = {}) {
   return `\`${"▰".repeat(filled)}${"▱".repeat(empty)}\` **${score(n)}${suffix}**`;
 }
 
+// Raw 10-cell bar (no surrounding code-span / bold) for embedding INSIDE a
+// fenced code block, where the table is already monospace and backticks would
+// render literally. Same fill math as renderGauge (round(score/10)).
+function gaugeBar(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "▱▱▱▱▱▱▱▱▱▱";
+  const filled = Math.round(Math.max(0, Math.min(100, n)) / 10);
+  return `${"▰".repeat(filled)}${"▱".repeat(Math.max(0, 10 - filled))}`;
+}
+
 function renderPercentGauge(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return "`▱▱▱▱▱▱▱▱▱▱` **N/A**";
@@ -138,6 +148,7 @@ module.exports = {
   footerTimestamp,
   formatDateMs,
   formatDurationMs,
+  gaugeBar,
   hudFieldName,
   isBibleSummaryProfile,
   latestSnapshotMs,
