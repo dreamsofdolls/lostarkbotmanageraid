@@ -229,11 +229,18 @@ test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + S
     "// SURVIVAL · TANK",
     "// BUILD",
   ]);
+  assert.match(character.description, /iLvl \*\*1680\*\* · `Wind Fury` · \*\*24\*\* log · CONF \*\*HIGH\*\*/);
+  assert.doesNotMatch(character.description, /Aeromancer/);
+  assert.doesNotMatch(character.description, /Clauseduk/);
+  assert.doesNotMatch(character.description, /\n/);
   assert.ok(character.fields.some((field) => field.name === "// SCORE"));
   assert.ok(character.fields.some((field) => field.name === "// OUTPUT"));
   assert.ok(character.fields.some((field) => field.name === "// MECHANICS"));
   assert.ok(character.fields.some((field) => field.name === "// SURVIVAL · TANK"));
   assert.ok(character.fields.some((field) => field.name === "// BUILD"));
+  const buildField = character.fields.find((field) => field.name === "// BUILD");
+  assert.doesNotMatch(buildField.value, /Wind Fury/);
+  assert.doesNotMatch(character.footer.text, /SNAPSHOT/);
   const charText = character.fields.map((field) => field.value).join("\n");
   assert.match(charText, /Damage share: \*\*24\.8%\*\*/);
   assert.match(charText, /CPM/);
@@ -241,7 +248,6 @@ test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + S
   assert.match(charText, /Taken\/min: \*\*321\.0K\*\*/); // tank metric Traine asked for
   assert.match(charText, /Taken share: \*\*13\.4%\*\*/);
   assert.match(charText, /Incap/);
-  assert.match(charText, /`Wind Fury`/);
   assert.match(charText, /▰/);
 
   session.charIndex = 1;
@@ -419,7 +425,11 @@ test("raid-profile render marks bible summary metrics without local-only fields"
   const character = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
   const text = character.fields.map((field) => field.value).join("\n");
   assert.match(character.footer.text, /^\/\/ BIBLE FULL/);
+  assert.doesNotMatch(character.footer.text, /SNAPSHOT/);
   assert.equal(character.author.name, "// RAID PROFILE · CHARACTER · QIYLYN · DPS");
+  assert.match(character.description, /iLvl \*\*1735\*\* · `Igniter` · \*\*2\*\* log · CONF \*\*LOW\*\*/);
+  assert.doesNotMatch(character.description, /Sorceress/);
+  assert.doesNotMatch(character.description, /Main/);
   assert.ok(character.fields.some((field) => field.name === "// OUTPUT"));
   assert.match(text, /Bible pct: \*\*91\.0%\*\*/);
   assert.match(text, /Avg DPS: \*\*120\.0M\*\*/);
