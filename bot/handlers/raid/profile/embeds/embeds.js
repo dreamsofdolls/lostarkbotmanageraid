@@ -20,7 +20,6 @@ const {
   latestSnapshotMs,
   pct,
   rangeTag,
-  renderGauge,
   roleEmoji,
   roleLabel,
   score,
@@ -121,24 +120,26 @@ function buildRosterEmbed({ EmbedBuilder }, session, entry) {
   const lang = session.lang || "vi";
   const agg = aggregateCharacters(entry.characters);
   const topOverall = pickTopChar(entry.characters, "overall");
+  // Counts + own/shared move into the kicker (ops-brief, mirrors the OVERALL
+  // view); SCOPE keeps just the scored headline + gauges. Shared rosters still
+  // surface owner+access in the meta line since that carries real info.
+  const updated = t("raidProfile.updatedAt", lang, { date: formatDateMs(entry.receivedAt || entry.generatedAt) });
+  const metaLine = entry.isOwn
+    ? updated
+    : `${t("raidProfile.rosterShared", lang, { owner: entry.ownerLabel || entry.ownerDiscordId, level: entry.accessLevel })} · ${updated}`;
   const embed = new EmbedBuilder()
     .setColor(entry.isOwn ? PROFILE_COLORS.amber : PROFILE_COLORS.shared)
-    .setAuthor({ name: "// RAID PROFILE · ROSTER" })
+    .setAuthor({
+      name: `// RAID PROFILE · ROSTER · ${String(entry.accountName || "").toUpperCase()} · ${agg.charCount} CHAR · ${entry.isOwn ? "OWN" : "SHARED"}`,
+    })
     .setTitle(t("raidProfile.rosterTitle", lang, { account: entry.accountName }))
-    .setDescription([
-      entry.isOwn
-        ? t("raidProfile.rosterOwn", lang)
-        : t("raidProfile.rosterShared", lang, { owner: entry.ownerLabel || entry.ownerDiscordId, level: entry.accessLevel }),
-      t("raidProfile.updatedAt", lang, { date: formatDateMs(entry.receivedAt || entry.generatedAt) }),
-    ].join("\n"))
+    .setDescription(metaLine)
     .addFields(
       {
         name: hudFieldName("scope"),
         value: [
-          `Character: **${agg.charCount}**`,
-          `${t("raidProfile.validLogs", lang)}: **${agg.logs}**`,
-          `Scored logs: **${agg.scoredLogs}**`,
-          scoreLine("Overall", agg.overall),
+          `Log / scored: **${agg.logs} / ${agg.scoredLogs}**`,
+          scoreLine("Ov", agg.overall),
           scoreLine("MVP", agg.mvp),
         ].join("\n"),
         inline: true,
@@ -148,7 +149,9 @@ function buildRosterEmbed({ EmbedBuilder }, session, entry) {
         value: [
           `DPS: **${agg.dpsCount}** · ${agg.dpsCount ? score(agg.dpsOverall) : "N/A"}`,
           `SUP: **${agg.supportCount}** · ${agg.supportCount ? score(agg.supportOverall) : "N/A"}`,
-          topOverall ? `Top: **${topOverall.name}** ${renderGauge(topOverall.scores.overall)}` : "Top: N/A",
+          topOverall
+            ? `★ top: ${getClassEmoji(topOverall.class) || roleEmoji(topOverall)} **${topOverall.name}** ${score(topOverall.scores.overall)}`
+            : "★ top: N/A",
         ].join("\n"),
         inline: true,
       }
@@ -158,7 +161,11 @@ function buildRosterEmbed({ EmbedBuilder }, session, entry) {
     .sort((a, b) => Number(b?.scores?.overall || 0) - Number(a?.scores?.overall || 0));
   const lines = sliceMapWithOverflow(sortedCharacters, 12, (character, index) => {
     const logs = Number(character?.stats?.encounters) || 0;
-    return `\`${index + 1}.\` **${character.name}** · ${roleLabel(character)} · ${logs} scored · score ${score(character?.scores?.overall)} · MVP ${score(character?.scores?.mvp)}`;
+    // Per-character class icon (each row is one char = one class, so the icon
+    // is meaningful here); falls back to the role weapon emoji. Renders because
+    // this is a plain field value, not a code block.
+    const icon = getClassEmoji(character.class) || roleEmoji(character);
+    return `\`${index + 1}.\` ${icon} **${character.name}** \`${roleLabel(character)}\` · ${logs} scored · MVP ${score(character?.scores?.mvp)} · **${score(character?.scores?.overall)}**`;
   });
   embed.addFields({
     name: hudFieldName("character"),

@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-06 (raid-profile ROSTER: icon-list redesign)
+
+### Changed
+- `/raid-profile` ROSTER view restyled to match the OVERALL ops-brief. Char count + own/shared move into the kicker (`// RAID PROFILE · ROSTER · {ACCOUNT} · N CHAR · OWN`); SCOPE drops the count rows for a single `Log / scored` headline + Ov/MVP gauges; the ROLE SPLIT `★ top` line gains the class icon. The CHARACTER list becomes an **icon list** - each row prefixes the character's class icon (each row is one char = one class), role in `code`, then scored + MVP + bold overall score, ranked best-first. Renders because the list is a plain field value, not a code block. Dropped the now-unused `renderGauge` import from embeds.js. 852 tests green.
+
 ## 2026-06-06 (raid-profile OVERALL: compact ops-brief redesign)
 
 ### Changed
