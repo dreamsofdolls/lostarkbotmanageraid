@@ -1,5 +1,6 @@
 "use strict";
 
+const { t } = require("../../../../services/i18n");
 const {
   hudFieldName,
   pct,
@@ -19,11 +20,11 @@ const {
  * build from `character.altBuild.{stats,scores}`.
  */
 
-function buildArkLine(build, stats) {
-  if (build?.arkPassiveActive === true) return "Ark **ON**";
-  if (build?.arkPassiveActive === false) return "Ark **OFF**";
+function buildArkLine(build, stats, lang) {
+  if (build?.arkPassiveActive === true) return `${label("arkPassive", lang)} **${label("on", lang)}**`;
+  if (build?.arkPassiveActive === false) return `${label("arkPassive", lang)} **${label("off", lang)}**`;
   const rate = Number(stats?.arkPassiveRate);
-  return Number.isFinite(rate) && rate > 0 ? `Ark **${pct(rate)}**` : null;
+  return Number.isFinite(rate) && rate > 0 ? `${label("arkPassive", lang)} **${pct(rate)}**` : null;
 }
 
 function valueLine(label, value) {
@@ -34,12 +35,20 @@ function statScoreLine(label, value) {
   return valueLine(label, score(value));
 }
 
-function buildSurvivalLines(stats) {
+function label(key, lang) {
+  return t(`raidProfile.labels.${key}`, lang);
+}
+
+function localizedScoreLine(key, value, lang) {
+  return scoreLine(label(key, lang), value);
+}
+
+function buildSurvivalLines(stats, lang) {
   return [
-    valueLine("Deathless", pct(stats.deathlessRate)),
-    valueLine("Taken/min", shortNumber(stats.avgDamageTakenPerMinute)),
-    valueLine("Taken share", pct(stats.avgDamageTakenShare)),
-    valueLine("Incap (avg)", score(stats.avgIncapacitations)),
+    valueLine(label("deathless", lang), pct(stats.deathlessRate)),
+    valueLine(label("takenPerMin", lang), shortNumber(stats.avgDamageTakenPerMinute)),
+    valueLine(label("takenShare", lang), pct(stats.avgDamageTakenShare)),
+    valueLine(label("incapAvg", lang), score(stats.avgIncapacitations)),
   ];
 }
 
@@ -48,21 +57,21 @@ function buildSurvivalLines(stats) {
  * @param {string} role - "support" or "dps" (the build's role, not the class)
  * @param {object} stats - the build's stats object
  * @param {object} scores - the build's scores object
- * @param {{build?: object, isBibleSummary?: boolean}} [opts]
+ * @param {{build?: object, isBibleSummary?: boolean, lang?: string}} [opts]
  * @returns {Array<{name: string, value: string, inline: boolean}>}
  */
-function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = false } = {}) {
+function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = false, lang = "vi" } = {}) {
   const isSupport = role === "support";
   const s = stats || {};
   const sc = scores || {};
 
   const scoreField = {
-    name: hudFieldName("score"),
+    name: hudFieldName(label("scoreSection", lang)),
     value: [
-      scoreLine("Ov", sc.overall),
-      scoreLine("MVP", sc.mvp),
-      scoreLine("Surv", sc.survival),
-      scoreLine("Consist", sc.consistency),
+      localizedScoreLine("scoreOverall", sc.overall, lang),
+      localizedScoreLine("scoreMvp", sc.mvp, lang),
+      localizedScoreLine("scoreSurvival", sc.survival, lang),
+      localizedScoreLine("scoreConsistency", sc.consistency, lang),
     ].join("\n"),
     inline: true,
   };
@@ -70,58 +79,58 @@ function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = 
   let driverField;
   let secondaryField;
   if (isSupport) {
-    const drivers = [scoreLine("rDPS imp", sc.raidContribution || sc.supportUptime)];
+    const drivers = [localizedScoreLine("supportImpact", sc.raidContribution || sc.supportUptime, lang)];
     if (!isBibleSummary) {
       drivers.push(
-        valueLine("Supporter%", pct(s.avgSupporterPercent)),
-        valueLine("Radiant%", pct(s.radiantSupportRate)),
-        valueLine("Sup rank", s.supporterRankValidCount ? `${score(s.avgSupporterRank)} / ${score(s.supporterCountAvg)}` : "N/A"),
+        valueLine(label("supporterPercent", lang), pct(s.avgSupporterPercent)),
+        valueLine(label("radiantPercent", lang), pct(s.radiantSupportRate)),
+        valueLine(label("supportRank", lang), s.supporterRankValidCount ? `${score(s.avgSupporterRank)} / ${score(s.supporterCountAvg)}` : "N/A"),
       );
     }
-    driverField = { name: hudFieldName("support"), value: drivers.join("\n"), inline: true };
+    driverField = { name: hudFieldName(label("supportSection", lang)), value: drivers.join("\n"), inline: true };
     const uptimeLines = [
-      valueLine("AP / Brand", `${ratePct(s.avgSupportAp)} / ${ratePct(s.avgSupportBrand)}`),
-      valueLine("Identity/Hyper", `${ratePct(s.avgSupportIdentity)} / ${ratePct(s.avgSupportHyper)}`),
+      valueLine(label("apBrand", lang), `${ratePct(s.avgSupportAp)} / ${ratePct(s.avgSupportBrand)}`),
+      valueLine(label("identityHyper", lang), `${ratePct(s.avgSupportIdentity)} / ${ratePct(s.avgSupportHyper)}`),
     ];
     if (!isBibleSummary) {
       uptimeLines.push(
-        valueLine("Synergy/min", shortNumber(s.avgSynergyGivenPerMinute)),
-        valueLine("Protection", score(sc.protection)),
+        valueLine(label("synergyPerMin", lang), shortNumber(s.avgSynergyGivenPerMinute)),
+        valueLine(label("protection", lang), score(sc.protection)),
       );
     }
-    secondaryField = { name: hudFieldName("uptime"), value: uptimeLines.join("\n"), inline: true };
+    secondaryField = { name: hudFieldName(label("uptimeSection", lang)), value: uptimeLines.join("\n"), inline: true };
   } else {
-    const out = [scoreLine("CTX pct", s.avgContextPerformancePercentile)];
+    const out = [localizedScoreLine("contextPercentile", s.avgContextPerformancePercentile, lang)];
     if (isBibleSummary) {
       out.push(
-        `Bible pct: **${pct(s.avgOverallBiblePercentile || s.avgBiblePercentile)}**`,
-        `Avg DPS: **${shortNumber(s.avgDps)}**`,
-        `Median: **${shortNumber(s.medianDps)}**`,
+        valueLine(label("biblePercentile", lang), pct(s.avgOverallBiblePercentile || s.avgBiblePercentile)),
+        valueLine(label("avgDps", lang), shortNumber(s.avgDps)),
+        valueLine(label("medianDps", lang), shortNumber(s.medianDps)),
       );
     } else {
       out.push(
-        valueLine("Damage share", pct(s.avgDamageShare)),
-        valueLine("Avg / median DPS", `${shortNumber(s.avgDps)} / ${shortNumber(s.medianDps)}`),
-        valueLine("Peak 10s · burst", `${shortNumber(s.avgPeak10sDps)} x${score(s.avgBurstRatio)}`),
+        valueLine(label("damageShare", lang), pct(s.avgDamageShare)),
+        valueLine(label("avgMedianDps", lang), `${shortNumber(s.avgDps)} / ${shortNumber(s.medianDps)}`),
+        valueLine(label("peakBurst", lang), `${shortNumber(s.avgPeak10sDps)} x${score(s.avgBurstRatio)}`),
       );
     }
-    driverField = { name: hudFieldName("output"), value: out.join("\n"), inline: true };
+    driverField = { name: hudFieldName(label("outputSection", lang)), value: out.join("\n"), inline: true };
     secondaryField = isBibleSummary
       ? {
-          name: hudFieldName("sample"),
+          name: hudFieldName(label("sampleSection", lang)),
           value: [
-            valueLine("Context cov", pct(s.contextCoverageRate || s.biblePercentileCoverageRate || s.overallBiblePercentileCoverageRate)),
-            valueLine("Logs", Math.round(Number(s.encounters) || 0)),
+            valueLine(label("contextCoverage", lang), pct(s.contextCoverageRate || s.biblePercentileCoverageRate || s.overallBiblePercentileCoverageRate)),
+            valueLine(label("logs", lang), Math.round(Number(s.encounters) || 0)),
           ].join("\n"),
           inline: true,
         }
       : {
-          name: hudFieldName("mechanics"),
+          name: hudFieldName(label("mechanicsSection", lang)),
           value: [
-            statScoreLine("Casts/min (CPM)", s.avgCastsPerMinute),
-            valueLine("Crit rate", pct(s.avgCritRate)),
-            statScoreLine("Counters", s.avgCounters),
-            valueLine("Stagger/min", shortNumber(s.avgStaggerPerMinute)),
+            statScoreLine(label("castsPerMin", lang), s.avgCastsPerMinute),
+            valueLine(label("critRate", lang), pct(s.avgCritRate)),
+            statScoreLine(label("counters", lang), s.avgCounters),
+            valueLine(label("staggerPerMin", lang), shortNumber(s.avgStaggerPerMinute)),
           ].join("\n"),
           inline: true,
         };
@@ -130,22 +139,22 @@ function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = 
   // combatPower is a raw magnitude (~millions) -> shortNumber, not score().
   const cp = Number(build?.combatPower) || Number(s.latestCombatPower) || Number(s.avgCombatPower) || 0;
   const buildBits = [
-    cp ? `CP **${shortNumber(cp)}**` : null,
-    buildArkLine(build, s),
-    `Active **${pct(s.avgActiveTimeRate != null ? s.avgActiveTimeRate : 100)}**`,
-    !isBibleSummary ? `rank **${Number(s.avgRank) > 0 ? score(s.avgRank) : "—"}**` : null,
+    cp ? `${label("combatPower", lang)} **${shortNumber(cp)}**` : null,
+    buildArkLine(build, s, lang),
+    `${label("activeTime", lang)} **${pct(s.avgActiveTimeRate != null ? s.avgActiveTimeRate : 100)}**`,
+    !isBibleSummary ? `${label("rank", lang)} **${Number(s.avgRank) > 0 ? score(s.avgRank) : "—"}**` : null,
   ].filter(Boolean);
 
   const survivalField = {
-    name: hudFieldName("survival · tank"),
+    name: hudFieldName(label("survivalTankSection", lang)),
     value: (isBibleSummary
-      ? [valueLine("Deathless", pct(s.deathlessRate)), valueLine("Deaths", score(s.avgDeaths))]
-      : buildSurvivalLines(s)).join("\n"),
+      ? [valueLine(label("deathless", lang), pct(s.deathlessRate)), valueLine(label("deaths", lang), score(s.avgDeaths))]
+      : buildSurvivalLines(s, lang)).join("\n"),
     inline: true,
   };
 
   const buildField = {
-    name: hudFieldName("build"),
+    name: hudFieldName(label("buildSection", lang)),
     value: buildBits.length ? buildBits.join(" · ") : "N/A",
     inline: false,
   };

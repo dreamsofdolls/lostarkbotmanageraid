@@ -242,12 +242,15 @@ test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + S
   assert.doesNotMatch(buildField.value, /Wind Fury/);
   assert.doesNotMatch(character.footer.text, /SNAPSHOT/);
   const charText = character.fields.map((field) => field.value).join("\n");
+  assert.match(charText, /Overall:/);
+  assert.match(charText, /Consistency:/);
+  assert.match(charText, /Context percentile:/);
   assert.match(charText, /Damage share: \*\*24\.8%\*\*/);
-  assert.match(charText, /CPM/);
-  assert.match(charText, /Deathless: \*\*79\.2%\*\*/);
-  assert.match(charText, /Taken\/min: \*\*321\.0K\*\*/); // tank metric Traine asked for
-  assert.match(charText, /Taken share: \*\*13\.4%\*\*/);
-  assert.match(charText, /Incap/);
+  assert.match(charText, /Skill casts per minute/);
+  assert.match(charText, /Deathless rate: \*\*79\.2%\*\*/);
+  assert.match(charText, /Damage taken per minute: \*\*321\.0K\*\*/); // tank metric Traine asked for
+  assert.match(charText, /Damage taken share: \*\*13\.4%\*\*/);
+  assert.match(charText, /Average incapacitations/);
   assert.match(charText, /▰/);
 
   session.charIndex = 1;
@@ -257,11 +260,11 @@ test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + S
   assert.ok(support.fields.some((field) => field.name === "// UPTIME"));
   assert.ok(support.fields.some((field) => field.name === "// SURVIVAL · TANK"));
   const supText = support.fields.map((field) => field.value).join("\n");
-  assert.match(supText, /Supporter%: \*\*30\.4%\*\*/);
-  assert.match(supText, /Radiant%: \*\*66\.7%\*\*/);
-  assert.match(supText, /Sup rank: \*\*1\.4 \/ 2\.0\*\*/);
-  assert.match(supText, /rDPS imp/);
-  assert.match(supText, /Synergy/);
+  assert.match(supText, /Supporter percent: \*\*30\.4%\*\*/);
+  assert.match(supText, /Radiant percent: \*\*66\.7%\*\*/);
+  assert.match(supText, /Support rank: \*\*1\.4 \/ 2\.0\*\*/);
+  assert.match(supText, /rDPS impact/);
+  assert.match(supText, /Synergy per minute/);
 });
 
 test("raid-profile renders a flex char: roster flex·SUP tag + two build tables", () => {
@@ -346,7 +349,7 @@ test("raid-profile renders a flex char: roster flex·SUP tag + two build tables"
   const text = character.fields.map((field) => field.value).join("\n");
   assert.match(text, /Judgment/);
   assert.match(text, /Blessed Aura/);
-  assert.match(text, /Supporter%: \*\*25\.4%\*\*/); // support metric from the smaller build
+  assert.match(text, /Supporter percent: \*\*25\.4%\*\*/); // support metric from the smaller build
   assert.match(text, /Damage share: \*\*8\.1%\*\*/); // dps metric from altBuild.stats
 });
 
@@ -431,13 +434,30 @@ test("raid-profile render marks bible summary metrics without local-only fields"
   assert.doesNotMatch(character.description, /Sorceress/);
   assert.doesNotMatch(character.description, /Main/);
   assert.ok(character.fields.some((field) => field.name === "// OUTPUT"));
-  assert.match(text, /Bible pct: \*\*91\.0%\*\*/);
-  assert.match(text, /Avg DPS: \*\*120\.0M\*\*/);
-  assert.match(text, /Deathless: \*\*50\.0%\*\*/);
+  assert.match(text, /Bible percentile: \*\*91\.0%\*\*/);
+  assert.match(text, /Average DPS: \*\*120\.0M\*\*/);
+  assert.match(text, /Deathless rate: \*\*50\.0%\*\*/);
   // bible-summary hides local-only metrics instead of showing N/A noise
   assert.doesNotMatch(text, /Peak 10s:/);
-  assert.doesNotMatch(text, /CPM/);
-  assert.doesNotMatch(text, /Taken \*\*/);
+  assert.doesNotMatch(text, /Skill casts per minute/);
+  assert.doesNotMatch(text, /Damage taken per minute/);
+});
+
+test("raid-profile character metric labels honor non-vi locale", () => {
+  const deps = makeDeps();
+  const command = createRaidProfileCommand(deps);
+  const session = makeSession();
+  session.lang = "jp";
+  session.rosterIndex = 0;
+  session.charIndex = 0;
+
+  const character = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
+  const text = character.fields.map((field) => field.value).join("\n");
+  assert.ok(character.fields.some((field) => field.name === "// スコア"));
+  assert.ok(character.fields.some((field) => field.name === "// 火力"));
+  assert.match(text, /総合スコア:/);
+  assert.match(text, /同条件パーセンタイル:/);
+  assert.match(text, /ダメージ比率: \*\*24\.8%\*\*/);
 });
 
 test("raid-profile prefers local detailed snapshot over bible full-lite", () => {

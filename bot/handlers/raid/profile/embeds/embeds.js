@@ -220,6 +220,7 @@ function buildRosterEmbed({ EmbedBuilder }, session, entry) {
 }
 
 function buildCharacterEmbed({ EmbedBuilder }, session, entry, character) {
+  const lang = session.lang || "vi";
   const isBibleSummary = isBibleSummaryProfile(entry, character);
   const spec = buildSpecName(character.build, character.build?.spec || "");
   const altBuild = character.altBuild || null;
@@ -252,6 +253,7 @@ function buildCharacterEmbed({ EmbedBuilder }, session, entry, character) {
     embed.addFields(...buildBuildFields(build.role, build.stats, build.scores, {
       build: build.build,
       isBibleSummary,
+      lang,
     }));
   });
 
