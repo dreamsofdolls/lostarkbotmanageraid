@@ -10,6 +10,7 @@ const {
   createProfileSessionEndpoint,
   createRaidProfileSyncEndpoint,
   MAX_BODY_BYTES,
+  upsertEncounterSummaries,
 } = require("../bot/services/local-sync/profile/sync-endpoint");
 
 function makeReq({ token, method = "POST", body = null, headers = {} } = {}) {
@@ -1001,4 +1002,47 @@ test("weekly raid-profile encounter summaries do not downgrade existing full enc
   assert.equal(encounterOp.update.$set.rangeType, undefined);
   assert.deepEqual(encounterOp.update.$setOnInsert, { rangeType: "weekly" });
   assert.equal(encounterOp.update.$set.metrics.dps, 123);
+});
+
+test("upsertEncounterSummaries chunks large encounter imports and totals results", async () => {
+  const writes = [];
+  const RaidProfileEncounter = {
+    async bulkWrite(ops, options) {
+      writes.push({ ops, options });
+      return {
+        upsertedCount: ops.length === 1 ? 1 : 0,
+        modifiedCount: ops.length,
+      };
+    },
+  };
+  const summaries = Array.from({ length: 5 }, (_, index) => ({
+    encounterId: `enc-${index}`,
+    characterNameKey: "aki",
+    characterName: "Aki",
+    accountName: "Roster",
+    fightStart: 1000 + index,
+    rangeType: index === 0 ? "full" : "weekly",
+    metrics: { dps: 100 + index },
+  }));
+
+  const result = await upsertEncounterSummaries({
+    discordId: "u-batch",
+    summaries,
+    RaidProfileEncounter,
+    batchSize: 2,
+  });
+
+  assert.deepEqual(writes.map((write) => write.ops.length), [2, 2, 1]);
+  assert.deepEqual(writes.map((write) => write.options), [
+    { ordered: false },
+    { ordered: false },
+    { ordered: false },
+  ]);
+  assert.equal(result.received, 5);
+  assert.equal(result.upserted, 1);
+  assert.equal(result.modified, 5);
+  assert.equal(writes[0].ops[0].updateOne.update.$set.rangeType, "full");
+  assert.deepEqual(writes[0].ops[1].updateOne.update.$setOnInsert, {
+    rangeType: "weekly",
+  });
 });
