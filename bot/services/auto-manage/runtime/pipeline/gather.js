@@ -3,11 +3,11 @@
 const {
   AUTO_MANAGE_GATHER_CHARACTER_CONCURRENCY,
   PUBLIC_LOG_DISABLED_REPROBE_MS,
-} = require("./constants");
+} = require("../support/constants");
 const {
   filterLogsForCharacter,
   mapWithConcurrency,
-} = require("./helpers");
+} = require("../support/helpers");
 
 function createAutoManageGatherer({
   autoManageEntryKey,

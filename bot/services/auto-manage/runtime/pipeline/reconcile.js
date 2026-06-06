@@ -1,6 +1,6 @@
 "use strict";
 
-const { normalizeDifficultyToModeKey } = require("../bible/log-utils");
+const { normalizeDifficultyToModeKey } = require("../../bible/log-utils");
 
 function createAutoManageReconciler({
   ensureAssignedRaids,
