@@ -730,7 +730,7 @@ test("PROJECTION: raid-check all-mode uses the shared raid-check projection", ()
   const fs = require("fs");
   const path = require("path");
   const allModeSrc = fs.readFileSync(
-    path.join(__dirname, "..", "bot", "handlers", "raid-check", "all-mode.js"),
+    path.join(__dirname, "..", "bot", "handlers", "raid-check", "all-mode", "all-mode.js"),
     "utf8"
   );
   const { RAID_CHECK_USER_QUERY_FIELDS } = require("../bot/utils/raid/queries/raid-check");
@@ -768,7 +768,19 @@ test("REGRESSION: raid-check all-mode actions target current page user", () => {
   const fs = require("fs");
   const path = require("path");
   const allModeSrc = fs.readFileSync(
-    path.join(__dirname, "..", "bot", "handlers", "raid-check", "all-mode.js"),
+    path.join(__dirname, "..", "bot", "handlers", "raid-check", "all-mode", "all-mode.js"),
+    "utf8"
+  );
+  const allModeButtonsSrc = fs.readFileSync(
+    path.join(
+      __dirname,
+      "..",
+      "bot",
+      "handlers",
+      "raid-check",
+      "all-mode",
+      "all-mode-buttons.js"
+    ),
     "utf8"
   );
 
@@ -777,8 +789,8 @@ test("REGRESSION: raid-check all-mode actions target current page user", () => {
     "all-mode action buttons must fall back to the currently visible user"
   );
   assert.ok(
-    allModeSrc.includes("raid-check:enable-auto-one:${actionUserId}") &&
-      allModeSrc.includes("raid-check:disable-auto-one:${actionUserId}"),
+    allModeButtonsSrc.includes("raid-check:enable-auto-one:${actionUserId}") &&
+      allModeButtonsSrc.includes("raid-check:disable-auto-one:${actionUserId}"),
     "auto-sync buttons must target the currently visible user"
   );
   assert.ok(
@@ -886,7 +898,7 @@ test("resetExpiredSideTasks issues 2 updateMany calls (daily + weekly) with the 
 
   const {
     createRaidSchedulerService,
-  } = require("../bot/services/raid/schedulers");
+  } = require("../bot/services/raid/schedulers/schedulers");
   const service = createRaidSchedulerService({
     GuildConfig: {},
     User: userStub,
@@ -1558,6 +1570,62 @@ test("shared-remove: deletes one roster shared task by id", async () => {
   );
 });
 
+test("clear-confirm button clears roster-scoped side tasks", async () => {
+  let savedDoc = null;
+  let updatePayload = null;
+  const userDoc = {
+    discordId: "u1",
+    accounts: [
+      {
+        accountName: "main",
+        characters: [
+          {
+            name: "Alpha",
+            class: "Berserker",
+            itemLevel: 1700,
+            sideTasks: [
+              { taskId: "daily-1", name: "Una", reset: "daily", completed: true },
+              { taskId: "weekly-1", name: "Cube", reset: "weekly", completed: false },
+            ],
+          },
+        ],
+      },
+    ],
+    save: async function () {
+      savedDoc = JSON.parse(JSON.stringify(this));
+    },
+  };
+  const stubEmbed = {
+    setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
+    addFields() { return this; }, setFooter() { return this; },
+  };
+  const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
+  const handlers = createRaidTaskCommand({
+    EmbedBuilder: function () { return stubEmbed; },
+    ActionRowBuilder: class { addComponents() { return this; } },
+    ButtonBuilder: class { setCustomId() { return this; } setLabel() { return this; } setStyle() { return this; } },
+    ButtonStyle: { Danger: 4, Secondary: 2 },
+    MessageFlags: { Ephemeral: 64 },
+    User: { findOne: async () => userDoc },
+    saveWithRetry: async (fn) => fn(),
+    loadUserForAutocomplete: async () => userDoc,
+    dailyResetStartMs: () => 0,
+    weekResetStartMs: () => 0,
+  });
+
+  await handlers.handleRaidTaskButton({
+    user: { id: "u1" },
+    customId: "raid-task:clear-confirm:main:Alpha",
+    update: async (payload) => {
+      updatePayload = payload;
+    },
+  });
+
+  assert.ok(savedDoc, "expected save() to be called");
+  assert.deepEqual(savedDoc.accounts[0].characters[0].sideTasks, []);
+  assert.ok(updatePayload, "expected the button reply to be updated");
+});
+
 test("resetExpiredSideTasks reports modifiedCount accurately when Mongo touches docs", async () => {
   const userStub = {
     updateMany: async (filter, update, options) => {
@@ -1568,7 +1636,7 @@ test("resetExpiredSideTasks reports modifiedCount accurately when Mongo touches 
   };
   const {
     createRaidSchedulerService,
-  } = require("../bot/services/raid/schedulers");
+  } = require("../bot/services/raid/schedulers/schedulers");
   const service = createRaidSchedulerService({
     GuildConfig: {},
     User: userStub,

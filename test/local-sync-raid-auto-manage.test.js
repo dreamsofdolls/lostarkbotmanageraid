@@ -89,6 +89,81 @@ test("raid-auto-manage autocomplete hides bible sync while local-sync is active"
   );
 });
 
+test("raid-auto-manage action:off dispatches through the basic action handler", async () => {
+  const updates = [];
+  const replies = [];
+  const doc = { language: "vi", autoManageEnabled: true, localSyncEnabled: false };
+  const User = {
+    findOne() {
+      return {
+        lean: async () => doc,
+        select() {
+          return { lean: async () => doc };
+        },
+      };
+    },
+    async findOneAndUpdate(filter, update, options) {
+      updates.push({ filter, update, options });
+      return { ...doc, ...update.$set };
+    },
+  };
+  const { handleRaidAutoManageCommand } = makeCommand(User);
+
+  await handleRaidAutoManageCommand({
+    user: { id: "u-off" },
+    options: {
+      getString: (name) => (name === "action" ? "off" : null),
+    },
+    reply: async (payload) => {
+      replies.push(payload);
+    },
+  });
+
+  assert.deepEqual(updates[0].filter, { discordId: "u-off" });
+  assert.deepEqual(updates[0].update, { $set: { autoManageEnabled: false } });
+  assert.equal(replies.length, 1);
+  assert.match(replies[0].embeds[0].data.title, /Auto-manage disabled|Tắt/i);
+});
+
+test("raid-auto-manage action:status dispatches through the basic action handler", async () => {
+  const replies = [];
+  const doc = {
+    language: "vi",
+    autoManageEnabled: true,
+    localSyncEnabled: false,
+    lastAutoManageSyncAt: 1_700_000_000_000,
+    lastAutoManageAttemptAt: 1_700_000_000_000,
+    lastLocalSyncAt: null,
+    localSyncLinkedAt: null,
+  };
+  const User = {
+    findOne() {
+      return {
+        lean: async () => doc,
+        select() {
+          return { lean: async () => doc };
+        },
+      };
+    },
+  };
+  const { handleRaidAutoManageCommand } = makeCommand(User);
+
+  await handleRaidAutoManageCommand({
+    user: { id: "u-status" },
+    options: {
+      getString: (name) => (name === "action" ? "status" : null),
+    },
+    reply: async (payload) => {
+      replies.push(payload);
+    },
+  });
+
+  assert.equal(replies.length, 1);
+  const fields = replies[0].embeds[0].data.fields;
+  assert.ok(fields.some((field) => /Auto-sync|Bible/i.test(field.name)));
+  assert.ok(fields.some((field) => /Local/i.test(field.name)));
+});
+
 test("raid-auto-manage action:reset serializes with bible sync slot and wipes sync state", async () => {
   let saved = 0;
   const doc = {

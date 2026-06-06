@@ -8,7 +8,7 @@ const assert = require("node:assert/strict");
 
 const { __test, parseRaidMessage } = require("../bot/commands");
 const { createSnapshotHelpers } = require("../bot/handlers/raid-check/snapshot");
-const { ensureFreshWeek, getTargetResetKey } = require("../bot/services/raid/weekly-reset");
+const { ensureFreshWeek, getTargetResetKey } = require("../bot/services/raid/schedulers/weekly-reset");
 
 function makeCharacter(name, itemLevel, kazeros = {}) {
   return {
@@ -1266,6 +1266,14 @@ test("REGRESSION: raid-check Sync/Edit flows request fresh snapshot data", () =>
     path.join(__dirname, "..", "bot", "handlers", "raid-check", "edit-ui.js"),
     "utf8"
   );
+  const editSessionSrc = fs.readFileSync(
+    path.join(__dirname, "..", "bot", "handlers", "raid-check", "edit-ui", "session.js"),
+    "utf8"
+  );
+  const editHandlersSrc = fs.readFileSync(
+    path.join(__dirname, "..", "bot", "handlers", "raid-check", "edit-ui", "component-handlers.js"),
+    "utf8"
+  );
 
   assert.match(
     syncSrc,
@@ -1273,13 +1281,18 @@ test("REGRESSION: raid-check Sync/Edit flows request fresh snapshot data", () =>
     "Sync button must refresh stale roster/log data before computing pending chars"
   );
   assert.match(
-    editSrc,
+    editSessionSrc,
     /computeRaidCheckSnapshot\(\s*raidMeta\s*,\s*\{\s*syncFreshData:\s*true\s*,?\s*\}\s*\)/,
     "Specific-raid Edit must refresh stale roster/log data before building editable chars"
   );
   assert.match(
     editSrc,
-    /computeRaidCheckSnapshot\(\s*pickedRaidMeta\s*,\s*\{\s*syncFreshData:\s*true\s*,?\s*\}\s*\)/,
+    /loadEditableRaidContext\(\{\s*raidMeta\s*,/,
+    "Specific-raid Edit must route through the fresh snapshot helper"
+  );
+  assert.match(
+    editHandlersSrc,
+    /loadEditableRaidContext\(\{\s*raidMeta:\s*pickedRaidMeta\s*,/,
     "Scope-all Edit raid picker must refresh stale roster/log data for the picked raid"
   );
 });

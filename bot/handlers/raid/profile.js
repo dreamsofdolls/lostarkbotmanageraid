@@ -6,10 +6,10 @@ const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
 const {
   aggregateCharacters,
-} = require("./profile/aggregate");
+} = require("./profile/helpers/aggregate");
 const {
   preferredSnapshotView,
-} = require("./profile/snapshot-view");
+} = require("./profile/helpers/snapshot-view");
 const {
   applyProfileButton,
   applyProfileSelect,

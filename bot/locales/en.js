@@ -425,6 +425,7 @@ module.exports = {
       emptyMergedDescription: "Roster **{accountName}** has no characters in the DB and bible returned no results either.\n\nOptions:\n• `/raid-remove-roster` to delete this empty account\n• `/raid-add-roster` to recreate from a different seed character",
     },
     autocomplete: {
+      choice: "📁 {name} · {charCount} {charsWord}",
       charsSingular: "char",
       charsPlural: "chars",
     },
@@ -560,6 +561,11 @@ module.exports = {
       remaining: "Roster **{accountName}** has **{count}** character{plural} left.",
       description: "Artist just removed **{characterName}** from roster **{accountName}**.\n\n{remainingPart}",
       reseededFooter: 'Seed roster changed to "{newSeed}" so /raid-status refresh keeps working.',
+    },
+    autocomplete: {
+      choice: "📁 {name} · {charCount} {charsWord}",
+      charsSingular: "char",
+      charsPlural: "chars",
     },
   },
   "raid-status": {

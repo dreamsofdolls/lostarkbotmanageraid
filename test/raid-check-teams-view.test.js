@@ -8,7 +8,7 @@ const {
 } = require("discord.js");
 
 const { createTeamsViewUi } = require("../bot/handlers/raid-check/teams-view");
-const { buildScheduleEmbed, buildTurnPlanEmbed } = require("../bot/handlers/raid/schedule/board");
+const { buildScheduleEmbed, buildTurnPlanEmbed } = require("../bot/handlers/raid/schedule/view/board");
 const { UI } = require("../bot/utils/raid/common/shared");
 
 const truncateText = (s, n) => (String(s).length <= n ? String(s) : String(s).slice(0, n));

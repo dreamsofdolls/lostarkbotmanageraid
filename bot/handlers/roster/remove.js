@@ -1,5 +1,6 @@
 const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
 const {
+  buildRosterAutocompleteChoices,
   getRosterMatches,
   getCharacterMatches,
   truncateChoice,
@@ -24,10 +25,19 @@ function createRemoveRosterCommand(deps) {
 async function autocompleteRemoveRosterRoster(interaction, focused) {
     const userDoc = await loadUserForAutocomplete(interaction.user.id);
     const matches = getRosterMatches(userDoc, focused.value || "");
-    const choices = matches.map((a) => {
-      const charCount = Array.isArray(a.characters) ? a.characters.length : 0;
-      const label = `📁 ${a.accountName} · ${charCount} char${charCount === 1 ? "" : "s"}`;
-      return truncateChoice(label, a.accountName);
+    const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
+    const charsWord = (count) =>
+      t(
+        count === 1
+          ? "raid-remove-roster.autocomplete.charsSingular"
+          : "raid-remove-roster.autocomplete.charsPlural",
+        lang,
+      );
+    const choices = buildRosterAutocompleteChoices(matches, {
+      lang,
+      t,
+      choiceKey: "raid-remove-roster.autocomplete.choice",
+      charsWord,
     });
     await interaction.respond(choices).catch(() => {});
   }

@@ -10,8 +10,8 @@ const {
   UserSelectMenuBuilder,
 } = require("discord.js");
 const { UI } = require("../bot/utils/raid/common/shared");
-const { createScheduleNoticeHelpers } = require("../bot/handlers/raid/schedule/notices");
-const { createSchedulePanelBuilders } = require("../bot/handlers/raid/schedule/panels");
+const { createScheduleNoticeHelpers } = require("../bot/handlers/raid/schedule/view/notices");
+const { createSchedulePanelBuilders } = require("../bot/handlers/raid/schedule/view/panels");
 
 const EVENT_ID = "abcdef123456";
 

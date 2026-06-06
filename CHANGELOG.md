@@ -4,6 +4,15 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-06 (RaidManage: function-grouped subfolders + shared-helper dedup)
+
+### Changed
+- Reorganized the largest flat handler/service folders into function subfolders (no behavior change): `raid/schedule` -> `actions/ show/ view/`; `raid-check` -> `all-mode/ auto-manage/`; `services/raid` -> `channel-monitor/` (12 files) + `schedulers/` (8); plus `task/{add,shared}`, `profile/{embeds,helpers}`, `bg/actions`, `raid-status/{components,sync}`, `roster/edit`. All imports rewired (tests + `readFileSync` source-reads included); 852 tests green.
+- Deduped shared helpers: `resolveGuildChannel` (4 scheduler sites), `guardPickerConfirm` (add/edit roster picker confirm-guard), `renderCharPendingLabel/Row` (8 sync-renderer sites), `stripMarkup` + sqlite `quoteIdent/pickColumn` (web profile/sync).
+
+### Fixed
+- `/raid-remove-roster` autocomplete now localizes the char-count word (was hardcoded English "char/chars"); JP users see "キャラ". Routed through the shared `buildRosterAutocompleteChoices` like the other roster commands.
+
 ## 2026-06-06 (raid-profile: embed palette matches the Endfield mock)
 
 ### Changed

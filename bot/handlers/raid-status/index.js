@@ -9,15 +9,14 @@
 
 const { createRaidStatusView } = require("./view");
 const { createRaidStatusTaskUi } = require("./task-ui");
-const { createRaidStatusSync } = require("./sync");
-const { loadBackgroundBuffer } = require("../../services/raid-card/bg-loader");
+const { createRaidStatusSync } = require("./sync/sync");
+const { createRaidStatusComponentLayout } = require("./components/component-layout");
+const { createRaidStatusRenderPayload } = require("./render-payload");
 const {
-  FILTER_ALL_RAIDS,
   buildRaidDropdownState,
   buildRaidFilterRow,
 } = require("./raid-filter");
 const {
-  MY_RAIDS_SELECT_ID,
   findActiveEventsForUser,
   buildMyRaidsRow,
   buildMyRaidDetailEmbed,
@@ -25,43 +24,30 @@ const {
 const { shapeMyRaidEvents } = require("../../services/raid/schedule/my-raids");
 const RaidEvent = require("../../models/RaidEvent");
 const {
-  parseTaskToggleValue,
-  toggleParsedSideTask,
-} = require("./task-actions");
-const {
   buildNoticeEmbed,
-  followUpNotice,
-  replyNotice,
-  replyEmbed,
 } = require("../../utils/raid/common/shared");
-const {
-  getNextSharedTaskTransitionMs,
-} = require("../../utils/raid/tasks/shared-tasks");
-const { getAccessibleAccounts } = require("../../services/access/access-control");
-const { t, getUserLanguage } = require("../../services/i18n");
-const {
-  getOrMintLocalSyncToken,
-  rotateLocalSyncToken,
-  extractProfileFromUser,
-} = require("../../services/local-sync");
+const { t } = require("../../services/i18n");
 const {
   buildMergedAccounts,
   resolveBackgroundLookup,
 } = require("./accounts");
 const {
-  publicBaseUrl,
-  buildLocalSyncUrl,
-  buildLocalSyncResumeButton: makeLocalSyncResumeButton,
-  buildLocalSyncNewButton: makeLocalSyncNewButton,
-  buildLocalSyncRefreshButton: makeLocalSyncRefreshButton,
-  buildBibleSyncButton: makeBibleSyncButton,
-} = require("./local-sync-controls");
+  createRaidStatusSyncControls,
+} = require("./sync/sync-controls");
 const {
-  buildManualSyncFollowupPayload,
-} = require("./sync-followup");
+  createStatusComponentRouteHandlers,
+} = require("./components/component-handlers");
 const {
-  firstSelectValue,
-} = require("../../utils/discord/component-values");
+  loadStatusViewerState,
+  probeLocalSyncMode,
+} = require("./viewer-state");
+const {
+  attachRaidStatusComponentCollector,
+} = require("./components/component-collector");
+const {
+  createRaidStatusComponentSession,
+  createRaidStatusSessionState,
+} = require("./session-state");
 
 const STATUS_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
@@ -170,79 +156,24 @@ function createRaidStatusCommand(deps) {
     // leak that URL to anyone in the channel who clicks it (Link
     // buttons bypass bot auth). Ephemeral keeps the URL opener-only.
     // Lean+select is ~30ms - well under Discord's 3-sec defer deadline.
-    let isLocalSyncMode = false;
-    try {
-      const probe = await User.findOne({ discordId })
-        .select("localSyncEnabled")
-        .lean();
-      isLocalSyncMode = !!probe?.localSyncEnabled;
-    } catch (err) {
-      console.warn("[raid-status] localSync probe failed:", err?.message || err);
-    }
+    const isLocalSyncMode = await probeLocalSyncMode({ User, discordId });
     await interaction.deferReply(
       isLocalSyncMode ? { flags: MessageFlags.Ephemeral } : {}
     );
-    // Resolve viewer's persistent language preference once at command
-    // entry. Threads through every render path (early-exit notice,
-    // buildAccountPageEmbed, freshness lines) so the whole interaction
-    // renders monolingual. Falls back to default vi when no preference
-    // is stored.
-    const lang = await getUserLanguage(discordId, { UserModel: User });
-    const seedDoc = await User.findOne({ discordId });
-    const hasOwnAccounts =
-      seedDoc && Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
+    const viewerState = await loadStatusViewerState({
+      User,
+      discordId,
+      loadStatusUserDoc,
+    });
+    const {
+      lang,
+      hasIncomingShare,
+      incomingSharedAccounts,
+      piggybackOutcome,
+    } = viewerState;
+    let userDoc = viewerState.userDoc;
 
-    // Zero-own viewer support: a Discord user with no `/raid-add-roster`
-    // entries of their own can still see /raid-status if a Manager A
-    // has run /raid-share grant target:them. Skip the early-exit for
-    // the no-own-roster case when there's at least one accessible
-    // share, and let the merged-accounts flow downstream surface A's
-    // rosters as the entire view.
-    let hasIncomingShare = false;
-    let incomingSharedAccounts = null;
-    if (!hasOwnAccounts) {
-      try {
-        incomingSharedAccounts = await getAccessibleAccounts(discordId, {
-          includeOwn: false,
-        });
-        hasIncomingShare = incomingSharedAccounts.length > 0;
-      } catch (err) {
-        console.warn(
-          "[raid-status] share check failed during zero-own gate:",
-          err?.message || err,
-        );
-      }
-    }
-
-    if (!hasOwnAccounts && !hasIncomingShare) {
-      await interaction.editReply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "info",
-            title: t("raid-status.notice.noRosterTitle", lang),
-            description: t("raid-status.notice.noRosterDescription", lang),
-          }),
-        ],
-      });
-      return;
-    }
-
-    // Skip the refresh-userDoc dance for the share-only viewer: there's
-    // no own roster to refresh, and loadStatusUserDoc assumes the doc
-    // has at least one account it can iterate. Synthesize a minimal
-    // stub doc so downstream readers (buildStatusUserMeta, raid-filter
-    // aggregate, etc.) can use viewer-scoped fields without NPE.
-    let userDoc;
-    let piggybackOutcome = null;
-    if (hasOwnAccounts) {
-      const refreshed = await loadStatusUserDoc(discordId, seedDoc);
-      userDoc = refreshed.userDoc;
-      piggybackOutcome = refreshed.piggybackOutcome;
-    } else {
-      userDoc = seedDoc || { discordId, accounts: [] };
-    }
-
-    if (!hasIncomingShare && (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0)) {
+    if (viewerState.noRoster) {
       await interaction.editReply({
         content: null,
         embeds: [
@@ -256,15 +187,15 @@ function createRaidStatusCommand(deps) {
       return;
     }
 
-    const raidsCache = new Map();
-    const baseGetRaidsFor = (character) => {
-      let result = raidsCache.get(character);
-      if (!result) {
-        result = getStatusRaidsForCharacter(character);
-        raidsCache.set(character, result);
-      }
-      return result;
-    };
+    const statusState = await createRaidStatusSessionState({
+      User,
+      discordId,
+      userDoc,
+      incomingSharedAccounts,
+      buildMergedAccounts,
+      getStatusRaidsForCharacter,
+      buildRaidDropdownState,
+    });
 
     // Merge in accounts shared from manager-A users (RAID_MANAGER_ID
     // allowlist) so /raid-status renders both B's own rosters AND any
@@ -272,14 +203,6 @@ function createRaidStatusCommand(deps) {
     // carry an `_sharedFrom` tag the view layer reads to badge the page
     // title with "Shared by Alice" and skip auto-manage badges B has no
     // control over.
-    let accounts = await buildMergedAccounts(discordId, userDoc.accounts, {
-      accessibleAccounts: incomingSharedAccounts,
-    });
-    const totalCharacters = accounts.reduce(
-      (sum, account) => sum + (Array.isArray(account.characters) ? account.characters.length : 0),
-      0
-    );
-
     let statusUserMeta = buildStatusUserMeta(userDoc, piggybackOutcome);
 
     // Raid-filter aggregate for the caller's own roster. Parallel to the
@@ -295,44 +218,14 @@ function createRaidStatusCommand(deps) {
     // at a glance whether a raid's backlog is composition-blocking (no
     // supports left) or just queue depth. Hard-support classes are Bard
     // / Paladin / Artist / Valkyrie; everyone else counts as DPS.
-    let {
-      raidDropdownEntries,
-      totalRaidPending,
-    } = buildRaidDropdownState(accounts, baseGetRaidsFor);
-
-    // Repopulates raidAggregate / raidDropdownEntries / totalRaidPending
-    // from the current `accounts` array. Called after the Sync button
-    // reloads userDoc so the per-raid dropdown counts reflect any newly-
-    // applied gates.
-    const recomputeRaidAggregate = () => {
-      const nextState = buildRaidDropdownState(accounts, baseGetRaidsFor);
-      raidDropdownEntries = nextState.raidDropdownEntries;
-      totalRaidPending = nextState.totalRaidPending;
-    };
-
     const reloadViewerAccounts = async (nextOwnDoc = null) => {
-      const reloadedOwnDoc = nextOwnDoc || await User.findOne({ discordId });
-      if (reloadedOwnDoc && Array.isArray(reloadedOwnDoc.accounts)) {
-        userDoc = reloadedOwnDoc;
-      } else if (!userDoc || !Array.isArray(userDoc.accounts)) {
-        userDoc = { discordId, accounts: [] };
-      }
-
-      accounts = await buildMergedAccounts(discordId, userDoc.accounts);
-      raidsCache.clear();
-      recomputeRaidAggregate();
-      if (currentPage >= accounts.length) {
-        currentPage = Math.max(0, accounts.length - 1);
-      }
+      userDoc = await statusState.reloadViewerAccounts(nextOwnDoc);
     };
 
-    let currentPage = 0;
-    let filterRaidId = null;
     // View toggle: "raid" = default progress page, "task" = per-character
     // side-task list (registered via /raid-task). Dropdown swaps the embed
     // body + the third action row but keeps pagination semantics so the
     // user stays on the same account when toggling views.
-    let currentView = "raid";
     // Char filter for Task view's toggle dropdown. Stored per-page (Map
     // keyed by currentPage) so navigating across accounts doesn't lose
     // the user's per-account char focus. null = "auto-pick first char
@@ -340,8 +233,6 @@ function createRaidStatusCommand(deps) {
     // at least one task on the account. Codex round 28 finding #2:
     // without scoping, accounts with > 25 total tasks (4+ chars × cap 8)
     // would silently drop tail entries from the toggle dropdown.
-    const taskCharFilterByPage = new Map();
-
     const {
       ALL_CHARS_SENTINEL,
       buildTaskViewEmbed,
@@ -356,238 +247,50 @@ function createRaidStatusCommand(deps) {
       UI,
       getCharacterName,
       truncateText,
-      getAccounts: () => accounts,
-      getCurrentPage: () => currentPage,
-      getCurrentView: () => currentView,
-      getTaskCharFilter: (page) => taskCharFilterByPage.get(page),
+      getAccounts: () => statusState.accounts,
+      getCurrentPage: () => statusState.currentPage,
+      getCurrentView: () => statusState.currentView,
+      getTaskCharFilter: (page) => statusState.getTaskCharFilter(page),
       lang,
     });
 
-    // Build the current page's embed given the active (page, raid-filter,
-    // view) triple. Rebuilt on every state change instead of pre-baking a
-    // pages[] array because any filter pick invalidates every pre-built
-    // embed - /raid-status's roster count is small enough (<10 accounts
-    // typical) that one buildAccountPageEmbed per interaction is zero-cost.
-    //
-    // When currentView === "task", dispatch to buildTaskViewEmbed (defined
-    // further below) which renders the per-character side-task list for
-    // the current page's account. The raid filter doesn't apply in task
-    // view but its state is preserved so toggling back keeps the user's
-    // raid filter pick.
-    // Background buffer resolution is viewer-owned. Even when the current
-    // page is a shared roster, the art comes from the person opening
-    // /raid-status, not from the roster owner. null means "viewer never
-    // opted in OR the lookup threw" · both collapse to "no canvas, just
-    // embed". Cache the resolved buffer in a closure variable so pagination
-    // + filter clicks inside the same handler reuse it without even paying
-    // the bg-loader's updatedAt round-trip.
-    const backgroundBufferCache = new Map();
-    const resolveBackgroundBuffer = async (account) => {
-      const lookup = resolveBackgroundLookup(discordId, account);
-      const { cacheKey } = lookup;
-      if (backgroundBufferCache.has(cacheKey)) return backgroundBufferCache.get(cacheKey);
-      const buffer = await loadBackgroundBuffer(lookup.discordId, {
-        accountName: lookup.accountName,
-      });
-      backgroundBufferCache.set(cacheKey, buffer);
-      return buffer;
-    };
+    const {
+      buildCurrentEmbed,
+      buildEmbedAndCanvas,
+    } = createRaidStatusRenderPayload({
+      discordId,
+      getAccounts: () => statusState.accounts,
+      getCurrentPage: () => statusState.currentPage,
+      getCurrentView: () => statusState.currentView,
+      getFilterRaidId: () => statusState.filterRaidId,
+      getStatusUserMeta: () => statusUserMeta,
+      baseGetRaidsFor: statusState.baseGetRaidsFor,
+      totalCharacters: statusState.totalCharacters,
+      summarizeRaidProgress,
+      summarizeGlobalGold,
+      buildAccountPageEmbed,
+      buildTaskViewEmbed,
+      lang,
+    });
 
-    // Build the editReply payload. When the user opted into /raid-bg,
-    // keep the current status embed as the data surface and attach the
-    // stored image as that same embed's image block. Discord renders embed
-    // images below title/description/fields, which matches the intended
-    // "data first, art below" layout without drawing extra canvas chrome.
-    const buildEmbedAndCanvas = async () => {
-      const embed = buildCurrentEmbed();
-      const payload = { embeds: [embed], files: [], attachments: [] };
-      const attachBackgroundToStatusEmbed = (buffer) => {
-        const name = "raid-background.jpg";
-        embed.setImage(`attachment://${name}`);
-        payload.files = [{ attachment: buffer, name }];
-        return payload;
-      };
-      if (currentView === "task") return payload;
-      const account = accounts[currentPage];
-      const bgBuffer = await resolveBackgroundBuffer(account);
-      if (!bgBuffer) return payload;
-      return attachBackgroundToStatusEmbed(bgBuffer);
-    };
+    // Sync controls own auto-manage cooldown labels plus local-sync resume,
+    // rotate, and refresh buttons. Keep the mutable URL cache inside the
+    // control service so component handlers can update it after rotation.
+    const syncControls = createRaidStatusSyncControls({
+      ActionRowBuilder,
+      ButtonBuilder,
+      ButtonStyle,
+      User,
+      discordId,
+      lang,
+      formatNextCooldownRemaining,
+      getAutoManageCooldownMs,
+      AUTO_MANAGE_SYNC_COOLDOWN_MS,
+      getStatusUserMeta: () => statusUserMeta,
+    });
 
-    const buildCurrentEmbed = () => {
-      if (currentView === "task") {
-        return buildTaskViewEmbed(accounts[currentPage]);
-      }
-      const getRaidsFor = filterRaidId
-        ? (ch) =>
-            baseGetRaidsFor(ch).filter(
-              (r) => `${r.raidKey}:${r.modeKey}` === filterRaidId
-            )
-        : baseGetRaidsFor;
-
-      // Recompute globalTotals against the filtered view so the footer
-      // (and the cross-account rollup line, when >1 account) reflect
-      // only the picked raid's done/partial/pending when a filter is
-      // active. Characters count stays at totalCharacters regardless -
-      // "12 chars in roster" is a static fact of the roster, not
-      // something the filter narrows.
-      const filteredEntries = [];
-      for (const a of accounts) {
-        for (const c of a.characters || []) {
-          filteredEntries.push(...getRaidsFor(c));
-        }
-      }
-      // Cross-account gold tail on the 🌐 line uses summarizeGlobalGold,
-      // which inherits the active raid filter via the same getRaidsFor
-      // closure - so picking a single raid narrows the cross-account
-      // gold sum in lockstep with the chars/raids-done tail.
-      const filteredTotals = {
-        characters: totalCharacters,
-        progress: summarizeRaidProgress(filteredEntries),
-        gold: summarizeGlobalGold(accounts, getRaidsFor),
-      };
-
-      return buildAccountPageEmbed(
-        accounts[currentPage],
-        currentPage,
-        accounts.length,
-        filteredTotals,
-        getRaidsFor,
-        statusUserMeta,
-        { hideIneligibleChars: !!filterRaidId, lang }
-      );
-    };
-
-    // Sync button: shown only when caller is opted-in to /raid-auto-manage.
-    // Click triggers the same gather + apply pipeline as the open-time
-    // piggyback but on demand; the embed updates in place so the user
-    // doesn't have to re-issue /raid-status to see fresh data. Cooldown
-    // is enforced by acquireAutoManageSyncSlot - if the slot rejects,
-    // the outcome line at the bottom of the embed surfaces "cooldown"
-    // (silent skip in the current outcome-line policy) - here we instead
-    // surface the remaining cooldown via an ephemeral followup so the
-    // click feedback is explicit.
-    // Resolve the per-user cooldown ms via the manager allowlist (15s
-    // for Manager, 10m for everyone else). Falls back to the legacy
-    // module constant if the helper isn't injected.
-    const resolveCooldownMs = () =>
-      typeof getAutoManageCooldownMs === "function"
-        ? getAutoManageCooldownMs(discordId)
-        : AUTO_MANAGE_SYNC_COOLDOWN_MS;
-
-    // Compose the Sync button label dynamically: when the user is
-    // currently within the per-user cooldown window, embed the
-    // remaining wait directly in the label so they can see "how
-    // long until I can re-sync" at a glance without clicking. When
-    // the cooldown has elapsed (or never started), label collapses
-    // to the cleaner "Sync ngay" call-to-action.
-    const computeSyncLabel = () => {
-      const remain = formatNextCooldownRemaining(
-        Number(statusUserMeta.lastAutoManageAttemptAt) || 0,
-        resolveCooldownMs(),
-      );
-      return remain
-        ? t("raid-status.sync.buttonCooldown", lang, { remain })
-        : t("raid-status.sync.buttonReady", lang);
-    };
-
-    // Phase 5 button-flip + Phase 7 resume/rotate: when the user is in
-    // local-sync mode, replace the bible-driven "Sync ngay" Primary
-    // button with an "Open Web Companion" Link button. The link URL
-    // resolves through getOrMintLocalSyncToken so a returning user
-    // keeps the same URL across multiple /raid-status calls within
-    // the 1-hour TTL (bookmarks + open tabs continue to work).
-    //
     // A second "🆕 New link" Primary button rotates - clicked, mints
-    // a fresh token, replies ephemerally with a fresh link button.
-    // This is the explicit "I want a new URL" action; the resume
-    // path is the default. Token resolution is async, so we cache
-    // the resume URL in a closure variable populated at command
-    // entry by hydrateLocalSyncResumeUrl() below; component builders
-    // read it synchronously.
-    let cachedLocalSyncResumeUrl = null;
-    const buildLocalSyncResumeButton = (disabled = false) => makeLocalSyncResumeButton({
-      ButtonBuilder,
-      ButtonStyle,
-      t,
-      lang,
-      url: cachedLocalSyncResumeUrl,
-      disabled,
-    });
-
-    const buildLocalSyncNewButton = (disabled) => makeLocalSyncNewButton({
-      ButtonBuilder,
-      ButtonStyle,
-      t,
-      lang,
-      url: cachedLocalSyncResumeUrl,
-      disabled,
-    });
-
-    // Refresh button: re-fetch userDoc from DB + re-render embed in
-    // place. Useful right after the user syncs via web companion - they
-    // can press this instead of re-typing /raid-status to see the new
-    // progress. Local-sync only because bible mode has its own Sync
-    // button which already re-fetches state on click.
-    const buildLocalSyncRefreshButton = (disabled) => makeLocalSyncRefreshButton({
-      ButtonBuilder,
-      ButtonStyle,
-      t,
-      lang,
-      disabled,
-    });
-
-    // Pre-fetch the resume URL at command entry. Async; main handler
-    // awaits this before composing components. Returns the array of
-    // buttons (1 or 2) so the row builder can splat them in. Empty
-    // array when local mode but env unset = degraded deploy, hide.
-    async function hydrateLocalSyncResumeUrl() {
-      if (!statusUserMeta.localSyncEnabled) return;
-      const baseUrl = publicBaseUrl();
-      if (!baseUrl) return;
-      try {
-        const profile = extractProfileFromUser(interaction.user);
-        const token = await getOrMintLocalSyncToken(discordId, lang, { UserModel: User, profile });
-        cachedLocalSyncResumeUrl = buildLocalSyncUrl(token, baseUrl);
-      } catch (err) {
-        console.warn("[raid-status] local-sync token resolve failed:", err?.message || err);
-      }
-    }
-    await hydrateLocalSyncResumeUrl();
-
-    const buildSyncButton = (disabled) => {
-      // Local mode: returns the resume Link button. The "New link"
-      // companion is added separately by buildSyncRow when applicable.
-      // Pass disabled through so collector-end disables it (Link
-      // buttons go straight to URL bypassing the bot, so without
-      // setDisabled the post-session token URL would still be open
-      // for anyone who clicks).
-      if (statusUserMeta.localSyncEnabled) {
-        return buildLocalSyncResumeButton(disabled);
-      }
-      return makeBibleSyncButton({
-        ButtonBuilder,
-        ButtonStyle,
-        label: computeSyncLabel(),
-        disabled,
-      });
-    };
-
-    const buildSyncRow = (disabled) => {
-      const btn = buildSyncButton(disabled);
-      if (!btn) return null;
-      const row = new ActionRowBuilder().addComponents(btn);
-      // Local mode: append the "New link" + "Refresh" buttons alongside
-      // resume so the user sees all 3 actions in the same row. Bible
-      // mode just gets the single Sync button (unchanged behavior).
-      // Total: [Resume][New link][Refresh] = 3 buttons, well under cap.
-      if (statusUserMeta.localSyncEnabled) {
-        const newBtn = buildLocalSyncNewButton(disabled);
-        if (newBtn) row.addComponents(newBtn);
-        row.addComponents(buildLocalSyncRefreshButton(disabled));
-      }
-      return row;
-    };
+    await syncControls.hydrateLocalSyncResumeUrl(interaction.user);
 
     // "Raid của tôi": active raid-schedule events this viewer is signed up
     // for (self-join or manager-added), guild-wide. Shaped once; the dropdown
@@ -599,120 +302,31 @@ function createRaidStatusCommand(deps) {
     });
     const myRaidsShaped = shapeMyRaidEvents(myRaidEvents, interaction.user.id);
 
-    const buildComponents = (disabled) => {
-      const rows = [];
-      // Hide the Sync button when the page being viewed is a shared
-      // roster (Manager A's roster surfaced via /raid-share grant). The
-      // sync action runs against the viewer's own auto-manage record;
-      // firing it from A's page would refresh B's stuff but not A's,
-      // confusing the viewer. Owner A still gets the button on their
-      // own /raid-status. UX: only B's own pages show Sync, so the
-      // button's behavior matches its label.
-      //
-      // Phase 5: showSync flips on for EITHER mode (bible OR local),
-      // since each renders its own button shape via buildSyncButton.
-      const currentAccount = accounts[currentPage];
-      const currentPageIsShared = !!currentAccount?._sharedFrom;
-      const anySyncMode = statusUserMeta.autoManageEnabled || statusUserMeta.localSyncEnabled;
-      const showSync = anySyncMode && !currentPageIsShared;
-      if (currentView === "task") {
-        // Task view layout: pagination (>1 account) + view toggle +
-        // char filter (when account has tasks) + task toggle dropdown.
-        // The char filter is the round-28 fix for the > 25-task cap -
-        // it scopes the toggle to one char so the dropdown always fits
-        // Discord's 25-option ceiling.
-        if (accounts.length > 1) {
-          rows.push(
-            buildPaginationRow(currentPage, accounts.length, disabled, {
-              prevId: "status:prev",
-              nextId: "status:next",
-              lang,
-            })
-          );
-        }
-        rows.push(buildViewToggleRow(disabled));
-        const sharedTaskRow = buildSharedTaskToggleRow(disabled);
-        if (sharedTaskRow) rows.push(sharedTaskRow);
-        const charFilterRow = buildTaskCharFilterRow(disabled);
-        if (charFilterRow) rows.push(charFilterRow);
-        rows.push(buildTaskToggleRow(disabled));
-        return rows;
-      }
-      if (accounts.length > 1) {
-        // Append Sync into the same row as Prev/Next so the 3 buttons
-        // sit on a single line ([◀ Previous] [Next ▶] [🔄 Sync (Xm)])
-        // instead of taking 2 rows. ActionRow caps at 5 buttons; we
-        // use 3 max so plenty of headroom.
-        const paginationRow = buildPaginationRow(currentPage, accounts.length, disabled, {
-          prevId: "status:prev",
-          nextId: "status:next",
-          lang,
-        });
-        if (showSync) {
-          // buildSyncButton returns null when local mode is enabled but
-          // PUBLIC_BASE_URL/LOCAL_SYNC_TOKEN_SECRET env unset (degraded
-          // deploy). Skip silently - the user will see no Sync button,
-          // matches the autoManage-off case behaviorally.
-          const btn = buildSyncButton(disabled);
-          if (btn) paginationRow.addComponents(btn);
-          // Local mode also gets "New link" + "Refresh" alongside resume.
-          // ActionRow caps at 5; with [Prev][Next][Resume][New][Refresh]
-          // = 5, exactly at the cap. Drop refresh from the inline row
-          // when env-degraded (newBtn null = no companion link, so
-          // refresh isn't useful either - the embed has nothing fresh
-          // to show post-sync because there's no sync UI). Bible mode
-          // adds nothing extra.
-          if (statusUserMeta.localSyncEnabled) {
-            const newBtn = buildLocalSyncNewButton(disabled);
-            if (newBtn) {
-              paginationRow.addComponents(newBtn);
-              paginationRow.addComponents(buildLocalSyncRefreshButton(disabled));
-            }
-          }
-        }
-        rows.push(paginationRow);
-      } else if (showSync) {
-        // Single account: no pagination row to merge into, so Sync gets
-        // its own dedicated row (otherwise the button would be missing
-        // entirely for users with 1 roster).
-        const row = buildSyncRow(disabled);
-        if (row) rows.push(row);
-      }
-      // View toggle row sits BEFORE the raid filter so the visual hierarchy
-      // is "navigation (page/sync) → mode (raid/task view) → in-mode filter
-      // (raid filter)". Toggle is always shown so the user can discover the
-      // task view even when the raid roster is empty.
-      rows.push(buildViewToggleRow(disabled));
-      // Skip the raid-filter row when the caller has no eligible raids
-      // at all (empty roster / all chars below minItemLevel gates) -
-      // dropdown with only the All-raids entry is just noise.
-      if (raidDropdownEntries.length > 0) {
-        rows.push(buildRaidFilterRow({
-          ActionRowBuilder,
-          StringSelectMenuBuilder,
-          truncateText,
-          raidDropdownEntries,
-          totalRaidPending,
-          filterRaidId,
-          disabled,
-          lang,
-        }));
-      }
-      // "Raid của tôi" dropdown sits last. Shown in both views (it is viewer-
-      // global). Dropped when the viewer is in zero active events, or when the
-      // message already holds Discord's 5-row max (rare; show/board still cover).
-      if (myRaidsShaped.length > 0 && rows.length < 5) {
-        rows.push(buildMyRaidsRow({
-          ActionRowBuilder,
-          StringSelectMenuBuilder,
-          truncateText,
-          shapedEvents: myRaidsShaped,
-          disabled,
-          lang,
-        }));
-      }
-      return rows;
-    };
+    const { buildComponents } = createRaidStatusComponentLayout({
+      ActionRowBuilder,
+      StringSelectMenuBuilder,
+      truncateText,
+      lang,
+      buildPaginationRow,
+      buildViewToggleRow,
+      buildSharedTaskToggleRow,
+      buildTaskCharFilterRow,
+      buildTaskToggleRow,
+      buildSyncButton: syncControls.buildSyncButton,
+      buildSyncRow: syncControls.buildSyncRow,
+      buildLocalSyncNewButton: syncControls.buildLocalSyncNewButton,
+      buildLocalSyncRefreshButton: syncControls.buildLocalSyncRefreshButton,
+      buildRaidFilterRow,
+      buildMyRaidsRow,
+      getAccounts: () => statusState.accounts,
+      getCurrentPage: () => statusState.currentPage,
+      getCurrentView: () => statusState.currentView,
+      getStatusUserMeta: () => statusUserMeta,
+      getRaidDropdownEntries: () => statusState.raidDropdownEntries,
+      getTotalRaidPending: () => statusState.totalRaidPending,
+      getFilterRaidId: () => statusState.filterRaidId,
+      getMyRaidsShaped: () => myRaidsShaped,
+    });
 
     const initialComponents = buildComponents(false);
 
@@ -726,372 +340,51 @@ function createRaidStatusCommand(deps) {
     // spin for STATUS_PAGINATION_SESSION_MS doing nothing.
     if (initialComponents.length === 0) return;
 
+    const componentSession = createRaidStatusComponentSession({
+      state: statusState,
+      getStatusUserMeta: () => statusUserMeta,
+      setStatusUserMeta: (value) => {
+        statusUserMeta = value;
+      },
+      syncControls,
+    });
+
+    const componentRouteHandlers = createStatusComponentRouteHandlers({
+      session: componentSession,
+      EmbedBuilder,
+      UI,
+      User,
+      saveWithRetry,
+      interaction,
+      discordId,
+      lang,
+      buildStatusUserMeta,
+      reloadViewerAccounts,
+      buildEmbedAndCanvas,
+      buildComponents,
+      runManualStatusSync,
+      formatNextCooldownRemaining,
+      getAutoManageCooldownMs,
+      AUTO_MANAGE_SYNC_COOLDOWN_MS,
+      buildMyRaidDetailEmbed,
+    });
+
     const message = await interaction.fetchReply();
-
-    // No componentType filter - collector must listen to both Button
-    // (prev/next) AND StringSelect (raid filter) interactions.
-    const collector = message.createMessageComponentCollector({
-      time: STATUS_PAGINATION_SESSION_MS,
-    });
-    const editDrivenComponentIds = new Set([
-      "status:prev",
-      "status:next",
-      "status-filter:raid",
-      "status-view:toggle",
-      "status-task:char-filter",
-      "status-task:shared-toggle",
-      "status-task:toggle",
-    ]);
-    const sessionExpiresAtMs = Date.now() + STATUS_PAGINATION_SESSION_MS;
-    let collectorEnded = false;
-    let taskAutoRefreshTimer = null;
-
-    const clearTaskAutoRefresh = () => {
-      if (taskAutoRefreshTimer) {
-        clearTimeout(taskAutoRefreshTimer);
-        taskAutoRefreshTimer = null;
-      }
-    };
-
-    const scheduleTaskAutoRefresh = () => {
-      clearTaskAutoRefresh();
-      if (collectorEnded || currentView !== "task") return;
-
-      const nextTransitionMs = getNextSharedTaskTransitionMs(
-        accounts[currentPage],
-        new Date()
-      );
-      if (!nextTransitionMs) return;
-
-      const fireAtMs = nextTransitionMs + STATUS_TASK_AUTO_REFRESH_GRACE_MS;
-      if (fireAtMs >= sessionExpiresAtMs) return;
-
-      const delayMs = Math.max(
-        STATUS_TASK_AUTO_REFRESH_GRACE_MS,
-        fireAtMs - Date.now()
-      );
-      taskAutoRefreshTimer = setTimeout(async () => {
-        taskAutoRefreshTimer = null;
-        if (collectorEnded || currentView !== "task") return;
-        try {
-          await interaction.editReply({
-            ...(await buildEmbedAndCanvas()),
-            components: buildComponents(false),
-          });
-        } catch (err) {
-          console.warn("[raid-status task auto-refresh] edit failed:", err?.message || err);
-          return;
-        }
-        scheduleTaskAutoRefresh();
-      }, delayMs);
-    };
-
-    collector.on("collect", async (component) => {
-      if (component.user.id !== interaction.user.id) {
-        // The rejection embed is delivered ephemerally to the CLICKER,
-        // not the session opener - so it must render in the clicker's
-        // own language. Resolving from interaction.user (the session
-        // opener) would surface the warning in someone else's language
-        // and only the clicker ever reads it. Cache hit makes this ~0ms.
-        const clickerLang = await getUserLanguage(component.user.id, {
-          UserModel: User,
-        });
-        await replyNotice(component, EmbedBuilder, {
-          type: "lock",
-          title: t("raid-status.sync.noControlTitle", clickerLang),
-          description: t("raid-status.sync.noControlDescription", clickerLang),
-        }).catch(() => {});
-        return;
-      }
-
-      const id = component.customId || "";
-      if (editDrivenComponentIds.has(id)) {
-        const deferred = await component.deferUpdate().then(() => true).catch((err) => {
-          console.warn("[raid-status component] defer failed:", err?.message || err);
-          return false;
-        });
-        if (!deferred) return;
-      }
-
-      if (id === "status:prev") {
-        currentPage = Math.max(0, currentPage - 1);
-      } else if (id === "status:next") {
-        currentPage = Math.min(accounts.length - 1, currentPage + 1);
-      } else if (id === "status:local-new-link") {
-        // Phase 7 rotation - in-place update flavor. Click flow:
-        //   1. deferUpdate ack (gives 15-min window for the editReply)
-        //   2. mint+save new token via rotateLocalSyncToken (Mongo write)
-        //   3. push the fresh URL into cachedLocalSyncResumeUrl so the
-        //      buildLocalSyncResumeButton closure picks it up
-        //   4. editReply the ORIGINAL message - buttons in the same row
-        //      now point at the new URL (no separate followup-with-link
-        //      because the user already has the right button in front
-        //      of them, just refreshed)
-        //   5. ephemeral toast confirms the rotate happened (without
-        //      it the click feels silent - button label/URL changed
-        //      but the message visually looks identical)
-        // Old token stays valid until its natural exp (30 min from
-        // previous mint); rotation only decouples which URL the
-        // "current" Resume button points at.
-        const deferred = await component.deferUpdate().then(() => true).catch((err) => {
-          console.warn("[raid-status] local-new-link defer failed:", err?.message || err);
-          return false;
-        });
-        if (!deferred) return;
-        const baseUrl = publicBaseUrl();
-        if (!baseUrl) {
-          await followUpNotice(component, EmbedBuilder, {
-            type: "warn",
-            title: t("raid-status.sync.localNewLinkUnavailableTitle", lang),
-            description: t("raid-status.sync.localNewLinkUnavailableDescription", lang),
-          }).catch(() => {});
-          return;
-        }
-        let freshUrl;
-        try {
-          const profile = extractProfileFromUser(component.user);
-          const token = await rotateLocalSyncToken(discordId, lang, { UserModel: User, profile });
-          freshUrl = buildLocalSyncUrl(token, baseUrl);
-        } catch (err) {
-          console.error("[raid-status] rotate local-sync token failed:", err?.message || err);
-          await followUpNotice(component, EmbedBuilder, {
-            type: "error",
-            title: t("raid-status.sync.localNewLinkFailedTitle", lang),
-            description: t("raid-status.sync.localNewLinkFailedDescription", lang, {
-              error: err?.message || String(err),
-            }),
-          }).catch(() => {});
-          return;
-        }
-        cachedLocalSyncResumeUrl = freshUrl;
-        // Re-render embed + components in place. buildLocalSyncResume
-        // Button reads cachedLocalSyncResumeUrl - now pointing at the
-        // fresh URL.
-        await interaction.editReply({
-          ...(await buildEmbedAndCanvas()),
-          components: buildComponents(false),
-        }).catch((err) => {
-          console.warn("[raid-status] local-new-link editReply failed:", err?.message || err);
-        });
-        // Lightweight ephemeral toast - just a confirmation, no link
-        // button since the in-message button already carries the new
-        // URL right above this toast.
-        await followUpNotice(component, EmbedBuilder, {
-          type: "success",
-          title: t("raid-status.sync.localNewLinkSuccessTitle", lang),
-          description: t("raid-status.sync.localNewLinkSuccessDescription", lang),
-        }).catch(() => {});
-        return;
-      } else if (id === "status:local-refresh") {
-        // Refresh button: re-fetch userDoc + accounts from DB so the
-        // embed reflects post-web-sync state. Replaces "user re-types
-        // /raid-status" with one click. Local-sync only (bible has
-        // its own Sync button which already does this).
-        const deferred = await component.deferUpdate().then(() => true).catch((err) => {
-          console.warn("[raid-status] local-refresh defer failed:", err?.message || err);
-          return false;
-        });
-        if (!deferred) return;
-        try {
-          await reloadViewerAccounts();
-          // Re-read user-level flags too (autoManage/localSync state may
-          // have flipped via /raid-auto-manage in another tab) - keeps
-          // the badge logic consistent with the freshly-read doc.
-          statusUserMeta = buildStatusUserMeta(userDoc, statusUserMeta?.piggybackOutcome || null);
-        } catch (err) {
-          console.error("[raid-status] local-refresh reload failed:", err?.message || err);
-        }
-        await interaction.editReply({
-          ...(await buildEmbedAndCanvas()),
-          components: buildComponents(false),
-        }).catch((err) => {
-          console.warn("[raid-status] local-refresh editReply failed:", err?.message || err);
-        });
-        // Ephemeral toast so the click feels acknowledged - the embed
-        // re-render alone is silent if nothing visibly changed (e.g.
-        // user clicked refresh before any sync happened).
-        await followUpNotice(component, EmbedBuilder, {
-          type: "success",
-          title: t("raid-status.sync.localRefreshSuccessTitle", lang),
-          description: t("raid-status.sync.localRefreshSuccessDescription", lang),
-        }).catch(() => {});
-        return;
-      } else if (id === "status:sync") {
-        // Manual Sync button - same gather+apply pipeline as the open-time
-        // piggyback in handleStatusCommand, but triggered on demand.
-        // Cooldown still gates via acquireAutoManageSyncSlot; on reject
-        // we surface the remaining wait via ephemeral followup so the
-        // click feels acknowledged.
-        if (!statusUserMeta.autoManageEnabled) {
-          await replyNotice(component, EmbedBuilder, {
-            type: "info",
-            title: t("raid-status.sync.noAutoSyncTitle", lang),
-            description: t("raid-status.sync.noAutoSyncDescription", lang),
-          }).catch(() => {});
-          return;
-        }
-        const manualResult = await runManualStatusSync(discordId, {
-          onAcquired: () => component.deferUpdate().catch(() => {}),
-        });
-        const manualOutcome = manualResult.outcome;
-        if (manualResult.status === "cooldown") {
-          const cooldownMs =
-            typeof getAutoManageCooldownMs === "function"
-              ? getAutoManageCooldownMs(discordId)
-              : AUTO_MANAGE_SYNC_COOLDOWN_MS;
-          const remain =
-            formatNextCooldownRemaining(
-              Number(statusUserMeta.lastAutoManageAttemptAt) || 0,
-              cooldownMs
-            ) || t("raid-status.sync.cooldownFallback", lang);
-          await replyNotice(component, EmbedBuilder, {
-            type: "info",
-            title: t("raid-status.sync.cooldownTitle", lang),
-            description: t("raid-status.sync.cooldownDescription", lang, { remain }),
-          }).catch(() => {});
-          return;
-        }
-
-        // Reload userDoc fresh + recompute everything dependent on it.
-        // The raidsCache holds per-character refs; .clear() invalidates
-        // entries pointing at the old (pre-reload) character objects so
-        // baseGetRaidsFor recomputes against the new accounts array.
-        const reloaded = manualResult.userDoc;
-        if (reloaded && Array.isArray(reloaded.accounts)) {
-          await reloadViewerAccounts(reloaded);
-          statusUserMeta = buildStatusUserMeta(userDoc, manualOutcome);
-        } else {
-          // Doc disappeared somehow - just patch the outcome onto the
-          // existing meta so the embed reflects the failed state.
-          statusUserMeta = { ...statusUserMeta, piggybackOutcome: manualOutcome };
-        }
-
-        await interaction.editReply({
-          ...(await buildEmbedAndCanvas()),
-          components: buildComponents(false),
-        }).catch(() => {});
-
-        // Explicit click feedback: the embed re-render alone doesn't
-        // tell the user whether the click succeeded or what changed.
-        // Followup is ephemeral so it auto-dismisses for the user
-        // without cluttering the channel for others (the original
-        // /raid-status reply isn't ephemeral by default).
-        const followupPayload = buildManualSyncFollowupPayload(manualOutcome, lang);
-        if (followupPayload) await followUpNotice(component, EmbedBuilder, followupPayload).catch(() => {});
-        return;
-      } else if (id === MY_RAIDS_SELECT_ID) {
-        // Personal detail view - NOT edit-driven (no deferUpdate at the top of
-        // this handler), so the interaction is fresh and we reply ephemerally
-        // without disturbing the roster embed. Re-fetch so turns/room are live.
-        const eventId = firstSelectValue(component);
-        const ev = eventId ? await RaidEvent.findById(eventId).catch(() => null) : null;
-        if (!ev) {
-          await replyNotice(component, EmbedBuilder, {
-            type: "warn",
-            title: t("raid-status.myRaids.notFoundTitle", lang),
-            description: t("raid-status.myRaids.notFoundDescription", lang),
-          }).catch(() => {});
-          return;
-        }
-        await replyEmbed(
-          component,
-          buildMyRaidDetailEmbed(ev, component.user.id, { EmbedBuilder, UI, lang }),
-        ).catch(() => {});
-        return;
-      } else if (id === "status-filter:raid") {
-        const value = firstSelectValue(component, FILTER_ALL_RAIDS);
-        filterRaidId = value === FILTER_ALL_RAIDS ? null : value;
-        // Do NOT reset currentPage - raid filter is orthogonal to page
-        // structure (pages still map 1:1 to accounts, only what each
-        // page displays internally changes). Resetting to page 0 on
-        // filter pick would feel broken: "I was viewing account 3, why
-        // did I jump back to account 1 just because I filtered a raid?"
-      } else if (id === "status-view:toggle") {
-        const picked = firstSelectValue(component, "raid");
-        currentView = picked === "task" ? "task" : "raid";
-      } else if (id === "status-task:char-filter") {
-        const picked = firstSelectValue(component, "");
-        if (picked) {
-          taskCharFilterByPage.set(currentPage, picked);
-        }
-      } else if (id === "status-task:shared-toggle" || id === "status-task:toggle") {
-        const value = firstSelectValue(component, "");
-        const parsed = parseTaskToggleValue(value);
-        if (parsed.kind === "noop" || parsed.kind === "invalid") {
-          return;
-        }
-
-        const targetAccount = accounts[currentPage];
-        const targetAccountName = targetAccount?.accountName || "";
-        if (!targetAccountName) {
-          return;
-        }
-
-        // Share-aware target: when the current page is a shared roster
-        // (rendered via `_sharedFrom`), the toggle write should mutate
-        // the OWNER's User doc, not B's. View-level shares cannot
-        // toggle (the share doesn't grant write access); the toggle is
-        // silently no-op'd with an audit log so the embed redraws
-        // unchanged. Edit-level shares route the write to A's
-        // discordId; the toggle helpers load and save A's User doc
-        // unchanged.
-        const sharedFrom = targetAccount?._sharedFrom;
-        if (sharedFrom && sharedFrom.accessLevel !== "edit") {
-          console.log(
-            `[raid-status side-task toggle] view-only share rejected ` +
-            `executor=${discordId} owner=${sharedFrom.ownerDiscordId} kind=${parsed.kind}`,
-          );
-          return;
-        }
-        const writeDiscordId = sharedFrom ? sharedFrom.ownerDiscordId : discordId;
-        if (sharedFrom) {
-          console.log(
-            `[raid-status side-task toggle] share-write executor=${discordId} ` +
-            `owner=${writeDiscordId} kind=${parsed.kind}`,
-          );
-        }
-
-        await toggleParsedSideTask({
-          User,
-          saveWithRetry,
-          discordId: writeDiscordId,
-          targetAccountName,
-          parsed,
-        });
-
-        await reloadViewerAccounts();
-      } else {
-        return;
-      }
-
-      const updated = await interaction.editReply({
-        ...(await buildEmbedAndCanvas()),
-        components: buildComponents(false),
-      }).then(() => true).catch((err) => {
-        console.warn("[raid-status component] edit failed:", err?.message || err);
-        return false;
-      });
-      if (updated) scheduleTaskAutoRefresh();
-    });
-
-    collector.on("end", async () => {
-      collectorEnded = true;
-      clearTaskAutoRefresh();
-      try {
-        const expiredFooter = t("raid-status.expiredFooter", lang, {
-          seconds: STATUS_PAGINATION_SESSION_MS / 1000,
-        });
-        const expiredEmbed = EmbedBuilder.from(buildCurrentEmbed()).setFooter({
-          text: expiredFooter,
-        });
-        await interaction.editReply({
-          embeds: [expiredEmbed],
-          components: buildComponents(true),
-          attachments: [],
-        });
-      } catch {
-        // Interaction token may have expired.
-      }
+    attachRaidStatusComponentCollector({
+      EmbedBuilder,
+      User,
+      interaction,
+      message,
+      lang,
+      sessionMs: STATUS_PAGINATION_SESSION_MS,
+      taskAutoRefreshGraceMs: STATUS_TASK_AUTO_REFRESH_GRACE_MS,
+      getAccounts: () => statusState.accounts,
+      getCurrentPage: () => statusState.currentPage,
+      getCurrentView: () => statusState.currentView,
+      buildCurrentEmbed,
+      buildEmbedAndCanvas,
+      buildComponents,
+      componentRouteHandlers,
     });
   }
 

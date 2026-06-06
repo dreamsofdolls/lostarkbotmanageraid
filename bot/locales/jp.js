@@ -424,6 +424,7 @@ module.exports = {
       emptyMergedDescription: "ロスター **{accountName}** は DB にキャラが無く、bible からも結果が取得できませんでしたわ。\n\n選択肢:\n• `/raid-remove-roster` で空のアカウントを削除\n• `/raid-add-roster` で別の seed キャラから作り直し",
     },
     autocomplete: {
+      choice: "📁 {name} · {charCount} {charsWord}",
       charsSingular: "キャラ",
       charsPlural: "キャラ",
     },
@@ -559,6 +560,11 @@ module.exports = {
       remaining: "ロスター **{accountName}** に残り **{count}** キャラですわ。",
       description: "アーティスト、ロスター **{accountName}** から **{characterName}** を削除しましたわ。\n\n{remainingPart}",
       reseededFooter: 'シードキャラを "{newSeed}" に変更しましたわ - /raid-status のリフレッシュが引き続き動くようにですの。',
+    },
+    autocomplete: {
+      choice: "📁 {name} · {charCount} {charsWord}",
+      charsSingular: "キャラ",
+      charsPlural: "キャラ",
     },
   },
   "raid-status": {

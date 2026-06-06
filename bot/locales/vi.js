@@ -447,6 +447,7 @@ module.exports = {
       emptyMergedDescription: "Roster **{accountName}** không có char nào ở DB, bible cũng không fetch được kết quả.\n\nCậu có thể:\n• `/raid-remove-roster` để xoá hẳn account trống này\n• `/raid-add-roster` để tạo lại từ seed char khác",
     },
     autocomplete: {
+      choice: "📁 {name} · {charCount} {charsWord}",
       charsSingular: "char",
       charsPlural: "chars",
     },
@@ -582,6 +583,11 @@ module.exports = {
       remaining: "Roster **{accountName}** còn lại **{count}** character{plural}.",
       description: "Artist vừa xoá **{characterName}** khỏi roster **{accountName}** nha.\n\n{remainingPart}",
       reseededFooter: 'Seed roster đổi sang "{newSeed}" để /raid-status refresh tiếp tục hoạt động.',
+    },
+    autocomplete: {
+      choice: "📁 {name} · {charCount} {charsWord}",
+      charsSingular: "char",
+      charsPlural: "chars",
     },
   },
   "raid-status": {

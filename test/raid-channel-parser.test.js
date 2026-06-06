@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const {
   normalizeRaidChannelContent,
   parseRaidMessage,
-} = require("../bot/services/raid/channel-monitor-parser");
+} = require("../bot/services/raid/channel-monitor/channel-monitor-parser");
 
 test("raid-channel parser normalizes separators and act 4 spacing", () => {
   assert.equal(normalizeRaidChannelContent("Act   4 + HM, Qiylyn G2"), "act4 HM Qiylyn G2");

@@ -14,24 +14,36 @@
 const { randomUUID } = require("node:crypto");
 const {
   UI,
-  normalizeName,
-  foldName,
-  toModeLabel,
   toModeKey,
   getCharacterName,
   getCharacterClass,
 } = require("./shared");
 const {
-  RAID_REQUIREMENTS,
-  getRaidRequirementList,
-  getRaidRequirementMap,
   getGatesForRaid,
   getGoldForGate,
-  getGoldForRaid,
 } = require("../../../models/Raid");
-
-const RAID_REQUIREMENT_MAP = getRaidRequirementMap();
-const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
+const {
+  RAID_GROUP_KEYS,
+  RAID_REQUIREMENT_MAP,
+  buildAssignedRaidFromLegacy,
+  ensureAssignedRaids,
+  getAssignedRaidModeKey,
+  getBestEligibleModeKey,
+  getCompletedGateKeys,
+  getGateKeys,
+  getRequirementFor,
+  isAssignedRaidCompleted,
+  normalizeAssignedRaid,
+} = require("./character/assigned-raids");
+const {
+  buildFetchedRosterIndexes,
+  findFetchedRosterMatchForCharacter,
+  pickUniqueFetchedRosterCandidate,
+} = require("./character/roster-matching");
+const {
+  sanitizeSideTasks,
+  sanitizeTasks,
+} = require("./character/task-sanitizers");
 
 function createCharacterId() {
   try {
@@ -39,264 +51,6 @@ function createCharacterId() {
   } catch {
     return `char_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
   }
-}
-
-function buildFetchedRosterIndexes(fetchedChars) {
-  const byName = new Map();
-  const byFoldedName = new Map();
-
-  for (const fetched of fetchedChars || []) {
-    const charName = fetched?.charName;
-    const normalized = normalizeName(charName);
-    if (!normalized) continue;
-
-    byName.set(normalized, fetched);
-
-    const folded = foldName(charName);
-    if (!folded) continue;
-    if (!byFoldedName.has(folded)) byFoldedName.set(folded, []);
-    byFoldedName.get(folded).push(fetched);
-  }
-
-  return { byName, byFoldedName };
-}
-
-function pickUniqueFetchedRosterCandidate(candidates, character) {
-  if (!Array.isArray(candidates) || candidates.length === 0) return null;
-  if (candidates.length === 1) return candidates[0];
-
-  const storedClass = normalizeName(getCharacterClass(character));
-  const classMatches = storedClass
-    ? candidates.filter((c) => normalizeName(c?.className) === storedClass)
-    : [];
-  if (classMatches.length === 1) return classMatches[0];
-
-  const narrowed = classMatches.length > 0 ? classMatches : candidates;
-  const storedItemLevel = Number(character?.itemLevel) || 0;
-  if (storedItemLevel > 0) {
-    const closeMatches = narrowed.filter((c) => {
-      const fetchedItemLevel = Number(c?.itemLevel) || 0;
-      return fetchedItemLevel > 0 && Math.abs(fetchedItemLevel - storedItemLevel) < 2;
-    });
-    if (closeMatches.length === 1) return closeMatches[0];
-  }
-
-  return null;
-}
-
-function findFetchedRosterMatchForCharacter(character, indexes) {
-  const currentName = getCharacterName(character);
-  const exact = indexes?.byName?.get(normalizeName(currentName));
-  if (exact) return { match: exact, matchType: "exact" };
-
-  const folded = foldName(currentName);
-  if (!folded) return null;
-
-  const foldedCandidates = indexes?.byFoldedName?.get(folded) || [];
-  const foldedMatch = pickUniqueFetchedRosterCandidate(foldedCandidates, character);
-  if (!foldedMatch) return null;
-
-  return { match: foldedMatch, matchType: "folded" };
-}
-
-function getRequirementFor(raidKey, modeKey) {
-  const value = `${raidKey}_${modeKey}`;
-  return RAID_REQUIREMENT_MAP[value] || null;
-}
-
-function getBestEligibleModeKey(raidKey, itemLevel) {
-  const modes = Object.entries(RAID_REQUIREMENTS[raidKey]?.modes || {})
-    .map(([modeKey, mode]) => ({ modeKey, minItemLevel: Number(mode.minItemLevel) || 0 }))
-    .filter((item) => Number(itemLevel) >= item.minItemLevel)
-    .sort((a, b) => b.minItemLevel - a.minItemLevel);
-
-  return modes[0]?.modeKey || null;
-}
-
-function normalizeRaidModeKey(raidKey, modeKey) {
-  const key = normalizeName(modeKey);
-  if (!key) return null;
-  return getRequirementFor(raidKey, key) ? key : null;
-}
-
-function getAssignedRaidModeKey(assignedRaid, raidKey) {
-  return normalizeRaidModeKey(raidKey, assignedRaid?.modeKey);
-}
-
-function sanitizeTasks(tasks) {
-  if (!Array.isArray(tasks)) return [];
-  return tasks
-    .filter((task) => task && task.id)
-    .map((task) => ({
-      id: String(task.id),
-      completions: Number(task.completions) || 0,
-      completionDate: Number(task.completionDate) || undefined,
-    }));
-}
-
-// Sanitize per-character side-task entries (sideTaskSchema in models/user.js).
-// Mirrors sanitizeTasks but maps the sideTaskSchema fields. Treated as
-// user-owned state on par with `tasks`, so buildCharacterRecord must
-// preserve it across roster rebuilds (e.g. /raid-edit-roster Confirm) — without
-// this pass, a Confirm that keeps a char would silently wipe its side
-// tasks because the helper rebuilds the char shape from a minimal field
-// list.
-function sanitizeSideTasks(sideTasks) {
-  if (!Array.isArray(sideTasks)) return [];
-  return sideTasks
-    .filter((task) => task && task.taskId && task.name)
-    .map((task) => ({
-      taskId: String(task.taskId),
-      name: String(task.name),
-      reset: task.reset === "weekly" ? "weekly" : "daily",
-      completed: Boolean(task.completed),
-      lastResetAt: Number(task.lastResetAt) || 0,
-      createdAt: Number(task.createdAt) || Date.now(),
-    }));
-}
-
-function getGateKeys(assignedRaid) {
-  return Object.keys(assignedRaid || {})
-    .filter((key) => /^G\d+$/i.test(key))
-    .sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
-}
-
-function normalizeAssignedRaid(assignedRaid, fallbackDifficulty, raidKey) {
-  // Drop any gate keys that are not part of the raid's current official
-  // gate list (e.g. legacy Serca G3 stored before the metadata correction).
-  // This ensures status counts match reality and lets DB self-heal on next
-  // save, since callers reassign `character.assignedRaids = <normalized>`.
-  const officialGates = getGatesForRaid(raidKey);
-  const rawGateKeys = getGateKeys(assignedRaid).filter((k) => officialGates.includes(k));
-  const keys = rawGateKeys.length > 0 ? rawGateKeys : officialGates;
-
-  // Self-heal legacy mixed-mode records (e.g. G1=Nightmare + G2=Hard created
-  // before the write-path mode-coherence fix). Pick one canonical difficulty
-  // so downstream reads - /raid-status, /raid-set autocomplete - all agree
-  // on the raid's mode and count completions correctly.
-  //
-  // Rule: prefer the difficulty that carries the most `completedDate > 0`
-  // gates (conservation of progress), then G1's stored difficulty, then the
-  // caller's fallback. Non-canonical completions are dropped because Lost
-  // Ark weekly entries are mode-scoped - progress on a "minority" mode is
-  // a corrupted claim from the old process bug.
-  const diffTally = new Map();
-  for (const gate of keys) {
-    const source = assignedRaid?.[gate];
-    if (!source?.difficulty) continue;
-    if (!(Number(source.completedDate) > 0)) continue;
-    const key = normalizeName(source.difficulty);
-    const entry = diffTally.get(key) || { count: 0, raw: source.difficulty };
-    entry.count += 1;
-    diffTally.set(key, entry);
-  }
-
-  let canonicalDifficulty;
-  let canonicalModeKey = null;
-  if (diffTally.size === 0) {
-    // No completion stamped yet - we have flexibility to pick the right
-    // difficulty. If a raid-level modeKey exists, treat it as the user's
-    // preference from the last clear/manual set and preserve it across
-    // weekly reset. Otherwise compare the stale stored difficulty (from a previous
-    // /raid-add-roster or /raid-edit-roster when the char was at lower iLvl) to
-    // `fallbackDifficulty` (the best-eligible mode at the CURRENT iLvl,
-    // computed by the caller in ensureAssignedRaids). Auto-upgrade if
-    // the stored mode is below the best-eligible mode, otherwise
-    // preserve the stored choice. This is what unblocks the "char hit
-    // 1720, Act 4 should bump Normal -> Hard" UX gap users hit after
-    // a bible-side iLvl bump that didn't recompute assignedRaids.
-    //
-    // Auto-upgrade only (never auto-downgrade): an over-tier stored
-    // difficulty (e.g. Hard stamped via manual /raid-set on a char
-    // that's later at sub-threshold iLvl) may be a deliberate manual
-    // choice the player wants to keep until weekly reset clears it.
-    const storedModeKey = getAssignedRaidModeKey(assignedRaid, raidKey);
-    const existingDifficulty =
-      assignedRaid?.G1?.difficulty || assignedRaid?.G2?.difficulty;
-    if (storedModeKey) {
-      canonicalModeKey = storedModeKey;
-      canonicalDifficulty = toModeLabel(storedModeKey);
-    } else if (!existingDifficulty) {
-      canonicalDifficulty = fallbackDifficulty;
-    } else {
-      const existingMin =
-        getRequirementFor(raidKey, toModeKey(existingDifficulty))?.minItemLevel || 0;
-      const fallbackMin =
-        getRequirementFor(raidKey, toModeKey(fallbackDifficulty))?.minItemLevel || 0;
-      canonicalDifficulty =
-        fallbackMin > existingMin ? fallbackDifficulty : existingDifficulty;
-    }
-  } else {
-    let best = null;
-    for (const entry of diffTally.values()) {
-      if (!best || entry.count > best.count) best = entry;
-    }
-    canonicalDifficulty = best.raw;
-    canonicalModeKey = normalizeRaidModeKey(raidKey, toModeKey(canonicalDifficulty)) || null;
-  }
-  const canonicalNorm = normalizeName(canonicalDifficulty);
-
-  const normalized = canonicalModeKey ? { modeKey: canonicalModeKey } : {};
-  for (const gate of keys) {
-    const source = assignedRaid?.[gate] || {};
-    const sourceDiff = source.difficulty;
-    const sourceMatchesCanonical =
-      !sourceDiff || normalizeName(sourceDiff) === canonicalNorm;
-    normalized[gate] = {
-      difficulty: canonicalDifficulty,
-      completedDate: sourceMatchesCanonical ? (Number(source.completedDate) || undefined) : undefined,
-    };
-  }
-
-  return normalized;
-}
-
-function getCompletedGateKeys(assignedRaid) {
-  return getGateKeys(assignedRaid).filter((gate) => Number(assignedRaid?.[gate]?.completedDate) > 0);
-}
-
-function buildAssignedRaidFromLegacy(legacyRaid) {
-  const requirement = getRaidRequirementList().find(
-    (raid) => normalizeName(raid.label) === normalizeName(legacyRaid?.raidName)
-  );
-  if (!requirement) return null;
-
-  const modeLabel = toModeLabel(requirement.modeKey);
-  const completedDate = legacyRaid?.isCompleted ? Date.now() : undefined;
-  const data = { modeKey: requirement.modeKey };
-  for (const gate of getGatesForRaid(requirement.raidKey)) {
-    data[gate] = { difficulty: modeLabel, completedDate };
-  }
-  return { raidKey: requirement.raidKey, data };
-}
-
-function ensureAssignedRaids(character) {
-  const itemLevel = Number(character?.itemLevel) || 0;
-  const existing = character?.assignedRaids || {};
-  const legacyRaids = Array.isArray(character?.raids) ? character.raids : [];
-  const assigned = {};
-
-  for (const raidKey of RAID_GROUP_KEYS) {
-    const bestModeKey = getBestEligibleModeKey(raidKey, itemLevel) || "normal";
-    const fallbackDifficulty = toModeLabel(bestModeKey);
-    const sourceRaid = existing[raidKey] || {};
-
-    assigned[raidKey] = normalizeAssignedRaid(sourceRaid, fallbackDifficulty, raidKey);
-  }
-
-  for (const legacyRaid of legacyRaids) {
-    const converted = buildAssignedRaidFromLegacy(legacyRaid);
-    if (!converted) continue;
-    assigned[converted.raidKey] = converted.data;
-  }
-
-  return assigned;
-}
-
-function isAssignedRaidCompleted(assignedRaid) {
-  const gates = getGateKeys(assignedRaid);
-  if (gates.length === 0) return false;
-  return gates.every((gate) => Number(assignedRaid?.[gate]?.completedDate) > 0);
 }
 
 function buildCharacterRecord(source, fallbackId) {

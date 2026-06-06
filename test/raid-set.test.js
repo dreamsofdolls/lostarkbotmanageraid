@@ -33,7 +33,7 @@ const {
   getRaidRequirementList,
   getGatesForRaid,
 } = require("../bot/models/Raid");
-const { clearCharacterProgress } = require("../bot/services/raid/weekly-reset");
+const { clearCharacterProgress } = require("../bot/services/raid/schedulers/weekly-reset");
 
 function makeUserModel() {
   const docs = new Map();
@@ -132,6 +132,25 @@ function seedUser(docs, accounts, extra = {}) {
 
 const KAZEROS_HARD = RAID_REQUIREMENT_MAP.kazeros_hard;
 const KAZEROS_NORMAL = RAID_REQUIREMENT_MAP.kazeros_normal;
+
+function makeRaidSetInteraction(values, userId = "user-1") {
+  const replies = [];
+  return {
+    replies,
+    user: { id: userId },
+    options: {
+      getString(name) {
+        return Object.prototype.hasOwnProperty.call(values, name)
+          ? values[name]
+          : null;
+      },
+    },
+    async reply(payload) {
+      replies.push(payload);
+      return payload;
+    },
+  };
+}
 
 function getStoredChar(docs, charIndex = 0) {
   return docs.get("user-1").accounts[0].characters[charIndex];
@@ -268,6 +287,30 @@ test("applyRaidSetForDiscordId: process gate marks only that gate done", async (
   });
 
   assert.equal(result.updated, true);
+  const kaz = docs.get("user-1").accounts[0].characters[0].assignedRaids.kazeros;
+  assert.ok(Number(kaz.G1.completedDate) > 0, "G1 should be stamped");
+  assert.ok(!(Number(kaz.G2.completedDate) > 0), "G2 should remain unstamped");
+});
+
+test("handleRaidSetCommand: process gate writes progress and replies with success embed", async () => {
+  const { factory, docs } = makeFactory();
+  seedUser(docs, [
+    { accountName: "Alpha", characters: [makeChar("Cyrano", 1730)] },
+  ]);
+  const interaction = makeRaidSetInteraction({
+    roster: "Alpha",
+    character: "Cyrano",
+    raid: "kazeros_hard",
+    status: "process",
+    gate: "G1",
+  });
+
+  await factory.handleRaidSetCommand(interaction);
+
+  assert.equal(interaction.replies.length, 1);
+  const [embed] = interaction.replies[0].embeds;
+  assert.match(embed.data.description, /Cyrano/);
+  assert.match(embed.data.description, /G1/);
   const kaz = docs.get("user-1").accounts[0].characters[0].assignedRaids.kazeros;
   assert.ok(Number(kaz.G1.completedDate) > 0, "G1 should be stamped");
   assert.ok(!(Number(kaz.G2.completedDate) > 0), "G2 should remain unstamped");
