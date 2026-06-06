@@ -10,7 +10,7 @@ const {
 } = require("discord.js");
 
 const { createRaidProfileCommand } = require("../bot/handlers/raid/profile");
-const { UI } = require("../bot/utils/raid/common/shared");
+const { INLINE_SPACER, UI } = require("../bot/utils/raid/common/shared");
 
 function makeDeps() {
   return {
@@ -220,6 +220,15 @@ test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + S
   session.charIndex = 0;
   const character = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
   assert.equal(character.author.name, "// RAID PROFILE · CHARACTER · QIYLYN · DPS");
+  assert.deepEqual(character.fields.slice(0, 7).map((field) => field.name), [
+    "// SCORE",
+    INLINE_SPACER.name,
+    "// OUTPUT",
+    "// MECHANICS",
+    INLINE_SPACER.name,
+    "// SURVIVAL · TANK",
+    "// BUILD",
+  ]);
   assert.ok(character.fields.some((field) => field.name === "// SCORE"));
   assert.ok(character.fields.some((field) => field.name === "// OUTPUT"));
   assert.ok(character.fields.some((field) => field.name === "// MECHANICS"));
