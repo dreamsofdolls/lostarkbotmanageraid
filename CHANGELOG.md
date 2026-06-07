@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-06 (raid-profile: roster table cleanup + terse footers + class-icon dropdown)
+
+### Changed
+- OVERALL roster table drops the rank `#` column, switches to EN-short headers (Roster / Char / Log / Score), and gains a header rule under the labels for readability.
+- Terser footers across all three views (overall / roster / character): log + scored + confidence are dropped from the footer because they already appear in the SCOPE field (overall/roster) or the description line (character). Footers keep source · range · snapshot (+ ownership / class · role).
+- Roster character list drops the per-row DPS/SUP tag (the class icon already conveys role); flex chars keep a `Flex` tag since that's build info the icon can't show.
+- Character select dropdown: each option now shows the character's class icon (custom emoji parsed to a partial `{id,name}` so the snowflake id survives; falls back to the role weapon emoji when the class emoji isn't bootstrapped), plus a clearer description (`{logs} log · điểm {score}`) with the redundant role and the "scored/score" near-duplication removed. i18n vi/en/jp. 1451 tests green.
+
 ## 2026-06-06 (raid-profile CHARACTER: trimmed #3-rich + flex two-table)
 
 ### Changed

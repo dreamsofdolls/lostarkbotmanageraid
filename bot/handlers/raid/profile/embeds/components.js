@@ -1,13 +1,13 @@
 "use strict";
 
 const { t } = require("../../../../services/i18n");
+const { getClassEmoji } = require("../../../../models/Class");
 const {
   aggregateCharacters,
   getEntryLabel,
 } = require("../helpers/aggregate");
 const {
   roleEmoji,
-  roleLabel,
   score,
 } = require("../helpers/display");
 
@@ -42,6 +42,17 @@ function selectOption(label, value, description, emoji, isDefault = false) {
   if (description) option.description = description.slice(0, 100);
   if (emoji) option.emoji = emoji;
   return option;
+}
+
+// A select-menu option's emoji must be a partial { id, name } object: a raw
+// `<:name:id>` string only renders when discord.js happens to keep the id, so
+// parse the class emoji explicitly. Falls back to the unicode role weapon when
+// the class emoji isn't bootstrapped yet (getClassEmoji returns "").
+function classOptionEmoji(character) {
+  const match = /^<(a?):(\w+):(\d+)>$/.exec(getClassEmoji(character.class));
+  return match
+    ? { id: match[3], name: match[2], animated: Boolean(match[1]) }
+    : roleEmoji(character);
 }
 
 function buildRosterOptions(session, lang) {
@@ -82,8 +93,11 @@ function buildCharacterOptions(session, selectedEntry, lang) {
       return selectOption(
         character.name,
         String(index),
-        `${roleLabel(character)} \u00B7 ${character.stats?.encounters || 0} scored \u00B7 score ${score(character.scores?.overall)}`,
-        roleEmoji(character),
+        t("raidProfile.optCharacterDesc", lang, {
+          logs: character.stats?.encounters || 0,
+          score: score(character.scores?.overall),
+        }),
+        classOptionEmoji(character),
         session.charIndex === index
       );
     }),
