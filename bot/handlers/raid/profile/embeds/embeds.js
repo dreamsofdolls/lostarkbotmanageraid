@@ -17,7 +17,6 @@ const {
   latestSnapshotMs,
   rangeTag,
   roleEmoji,
-  roleLabel,
   score,
   scoreLine,
   sourceSummaryForEntries,
@@ -86,10 +85,16 @@ function buildDisplayBuilds(character) {
 // embed - proportional field text drifts. Ranked best-first; the numeric score
 // carries the signal because a per-row gauge would push the line past the
 // ~42-col embed code-block wrap point and detach the score onto the next line.
-// Rows cap at 10 with an overflow tail.
+// No rank column (the row order already conveys rank); a header rule separates
+// labels from data. Rows cap at 10 with an overflow tail.
 function buildRosterTable(entries, lang) {
   if (!entries.length) return t("raidProfile.noProfiles", lang);
-  const NAME_W = 14;
+  // Widths sum to 37, under the ~42-col embed code-block wrap point. The
+  // numeric columns' padStart includes the inter-column gap.
+  const NAME_W = 16;
+  const CHAR_W = 6;
+  const LOG_W = 7;
+  const SCORE_W = 8;
   const CAP = 10;
   const fitName = (value) => {
     const str = String(value || "");
@@ -98,14 +103,22 @@ function buildRosterTable(entries, lang) {
   const ranked = entries
     .map((entry) => ({ entry, agg: aggregateCharacters(entry.characters) }))
     .sort((a, b) => Number(b.agg.overall || 0) - Number(a.agg.overall || 0));
-  const header = `${"#".padStart(2)} ${t("raidProfile.table.rosterName", lang).padEnd(NAME_W)} ${t("raidProfile.table.characters", lang).padStart(6)} ${t("raidProfile.table.logs", lang).padStart(5)}  ${t("raidProfile.table.score", lang).padStart(5)}`;
-  const rows = ranked.slice(0, CAP).map(({ entry, agg }, index) => {
-    return `${String(index + 1).padStart(2)} ${fitName(getEntryLabel(entry))} ${String(agg.charCount).padStart(4)} ${String(agg.logs).padStart(5)}  ${score(agg.overall).padStart(5)}`;
-  });
+  const header =
+    t("raidProfile.table.rosterName", lang).padEnd(NAME_W) +
+    t("raidProfile.table.characters", lang).padStart(CHAR_W) +
+    t("raidProfile.table.logs", lang).padStart(LOG_W) +
+    t("raidProfile.table.score", lang).padStart(SCORE_W);
+  const rule = "─".repeat(NAME_W + CHAR_W + LOG_W + SCORE_W);
+  const rows = ranked.slice(0, CAP).map(({ entry, agg }) =>
+    fitName(getEntryLabel(entry)) +
+    String(agg.charCount).padStart(CHAR_W) +
+    String(agg.logs).padStart(LOG_W) +
+    score(agg.overall).padStart(SCORE_W)
+  );
   if (entries.length > CAP) {
     rows.push(t("raidProfile.table.moreRosters", lang, { count: entries.length - CAP }));
   }
-  return `\`\`\`\n${[header, ...rows].join("\n")}\n\`\`\``;
+  return `\`\`\`\n${[header, rule, ...rows].join("\n")}\n\`\`\``;
 }
 
 function buildOverallEmbed({ EmbedBuilder }, session) {
@@ -150,13 +163,12 @@ function buildOverallEmbed({ EmbedBuilder }, session) {
       }
     );
 
+  // Footer stays terse: source + snapshot only. Log/scored/confidence already
+  // live in the SCOPE field, so repeating them here was redundant noise.
   embed.setFooter({
     text: footerText([
       sourceSummaryForEntries(session.entries, lang),
       footerTimestamp(latestSnapshotMs(session.entries), lang),
-      t("raidProfile.footer.logCount", lang, { logs: agg.logs }),
-      t("raidProfile.footer.scoredCount", lang, { scored: agg.scoredLogs }),
-      t("raidProfile.footer.confidence", lang, { confidence: confidenceLabelForLogs(agg.scoredLogs, lang) }),
     ]),
   });
 
@@ -216,26 +228,24 @@ function buildRosterEmbed({ EmbedBuilder }, session, entry) {
     // is meaningful here); falls back to the role weapon emoji. Renders because
     // this is a plain field value, not a code block.
     const icon = getClassEmoji(character.class) || roleEmoji(character);
-    // Flex chars (a second scored build) are tagged `flex·<primary role>`; the
-    // full both-build breakdown lives in the CHARACTER detail view.
-    const roleTag = character.altBuild
-      ? t("raidProfile.labels.flexRole", lang, { role: roleTagForBuild(character.role, lang) })
-      : roleLabel(character, lang);
-    return `\`${index + 1}.\` ${icon} **${character.name}** \`${roleTag}\` · ${t("raidProfile.lines.scoredLogs", lang, { logs })} · ${t("raidProfile.labels.scoreMvp", lang)} ${score(character?.scores?.mvp)} · **${score(character?.scores?.overall)}**`;
+    // The class icon already conveys role, so only flex chars (a second scored
+    // build) carry a tag - that's build info the icon can't show. Full both-build
+    // breakdown lives in the CHARACTER detail view.
+    const flexTag = character.altBuild ? ` \`${t("raidProfile.labels.flex", lang)}\`` : "";
+    return `\`${index + 1}.\` ${icon} **${character.name}**${flexTag} · ${t("raidProfile.lines.scoredLogs", lang, { logs })} · ${t("raidProfile.labels.scoreMvp", lang)} ${score(character?.scores?.mvp)} · **${score(character?.scores?.overall)}**`;
   });
   embed.addFields({
     name: hudFieldName(t("raidProfile.sections.character", lang)),
     value: lines.length ? lines.join("\n") : t("raidProfile.noChars", lang),
     inline: false,
   });
+  // Footer: ownership + source/range + snapshot. Log/scored/confidence already
+  // live in the SCOPE field above, so they're dropped here to keep it terse.
   embed.setFooter({
     text: footerText([
       entry.isOwn ? t("raidProfile.owner.own", lang) : t("raidProfile.owner.shared", lang),
       `${sourceTag(entry.source, lang)} · ${rangeTag(entry.rangeType, lang)}`,
       footerTimestamp(entry.receivedAt || entry.generatedAt, lang),
-      t("raidProfile.footer.logCount", lang, { logs: agg.logs }),
-      t("raidProfile.footer.scoredCount", lang, { scored: agg.scoredLogs }),
-      t("raidProfile.footer.confidence", lang, { confidence: confidenceLabelForLogs(agg.scoredLogs, lang) }),
     ]),
   });
 
@@ -280,13 +290,13 @@ function buildCharacterEmbed({ EmbedBuilder }, session, entry, character) {
     }));
   });
 
+  // Footer: source/range + class + role. Log count + confidence already show in
+  // the description line, so they're dropped here to keep the footer terse.
   embed.setFooter({
     text: footerText([
       `${sourceTag(entry.source, lang)} · ${rangeTag(entry.rangeType, lang)}`,
       String(character.class || "UNKNOWN").toUpperCase(),
       roleTag,
-      t("raidProfile.footer.scoredCount", lang, { scored: totalLogs }),
-      t("raidProfile.footer.confidence", lang, { confidence: confidenceLabelForLogs(totalLogs, lang) }),
     ]),
   });
 

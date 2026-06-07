@@ -209,12 +209,17 @@ test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + S
   // no per-row gauge (it would wrap past the ~42-col embed code-block width).
   const rosterField = overall.fields.find((field) => field.name === "// ROSTER");
   assert.ok(rosterField.value.startsWith("```"));
-  assert.match(rosterField.value, /ROSTER\s+NHÂN VẬT\s+LOG\s+ĐIỂM/);
+  // No rank column; EN-short headers + a header rule separating labels from data.
+  assert.match(rosterField.value, /Roster\s+Char\s+Log\s+Score/);
+  assert.match(rosterField.value, /─/);
   assert.ok(!rosterField.value.includes("▰"), "roster table must stay gauge-free to avoid wrap");
   // Scope top line prefixes the class icon (custom emoji) or a weapon-emoji fallback.
   const scopeField = overall.fields.find((field) => field.name === "// PHẠM VI");
   assert.match(scopeField.value, /★ nổi bật: (⚔️|🛡️|<:[a-z0-9_]+:\d+>) \*\*/);
-  assert.match(overall.footer.text, /Độ tin cậy cao/);
+  // Footer is terse now: source + snapshot only. Log/scored/confidence already
+  // live in the SCOPE field, so they no longer repeat in the footer.
+  assert.match(overall.footer.text, /Snapshot/);
+  assert.doesNotMatch(overall.footer.text, /Độ tin cậy|chấm điểm/);
 
   session.rosterIndex = 0;
   session.charIndex = 0;
@@ -334,11 +339,13 @@ test("raid-profile renders a flex char: roster flex support tag + two build tabl
     ],
   };
 
-  // Roster list: the flex char is tagged with its primary role (support).
+  // Roster list: flex chars carry a "Flex" tag (build info the class icon can't
+  // show); the role itself is conveyed by the class icon, so it's not spelled out.
   const roster = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
   const charField = roster.fields.find((field) => field.name === "// NHÂN VẬT");
   assert.match(charField.value, /Notmeow/);
-  assert.match(charField.value, /flex · Support/);
+  assert.match(charField.value, /`Flex`/);
+  assert.doesNotMatch(charField.value, /flex · Support/);
 
   // Character detail: two full build tables. Display primary follows the
   // larger sampled build, so a 47-log DPS build appears above the 9-log support build.
