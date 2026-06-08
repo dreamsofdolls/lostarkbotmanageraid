@@ -96,7 +96,7 @@ function applyRosterPageButton(session, action) {
 function applyCharacterPageButton(session, action, entry) {
   const total = entry?.characters?.length || 0;
   if (!total) return false;
-  const current = session.charIndex >= 0 ? session.charIndex : 0;
+  const current = session.charIndex >= 0 ? session.charIndex : action === "next" ? -1 : 0;
   session.charIndex = moveCircularIndex(current, total, action);
   return action === "prev" || action === "next";
 }

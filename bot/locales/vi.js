@@ -2262,6 +2262,7 @@ module.exports = {
     },
     validLogs: "Log hợp lệ",
     lastFight: "Lần mới nhất",
+    dateMissing: "N/A",
     noProfiles: "Chưa có hồ sơ nào cả.",
     noChars: "Roster này chưa có char nào trong hồ sơ.",
     noRaidBreakdown: "Chưa đủ log để tách theo raid.",
