@@ -103,6 +103,7 @@ function cleanEncounterMetrics(raw) {
     "battleItemDebuffedShare",
     "protectionPerMinute",
     "rdpsDamageGivenPerMinute",
+    "rdpsDamageGivenShare",
     "rdpsDamageReceivedSupportPerMinute",
     "supporterDamageGiven",
     "supporterDamageGivenPerMinute",
@@ -110,6 +111,7 @@ function cleanEncounterMetrics(raw) {
     "supporterRank",
     "supporterCount",
     "synergyGivenPerMinute",
+    "synergyGivenShare",
     "synergyReceivedShare",
   ], { max: 9999999999999 });
   metrics.rdpsValid = raw?.rdpsValid === true;
@@ -145,6 +147,8 @@ function cleanEncounterMetrics(raw) {
       "partyDebuffedShare",
       "battleItemDebuffedShare",
       "supporterPercent",
+      "rdpsDamageGivenShare",
+      "synergyGivenShare",
       "synergyReceivedShare",
     ], { max: 999 }],
     [["activeTimeRate", "burstRatio", "topDamageProximity"], { max: 100 }],

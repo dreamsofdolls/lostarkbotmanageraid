@@ -152,7 +152,9 @@ function makeSession() {
               supporterTopRate: 75,
               avgProtectionPerMinute: 9000000,
               avgRdpsDamageGivenPerMinute: 50100000000,
+              avgRdpsDamageGivenShare: 34.5,
               avgSynergyGivenPerMinute: 123456,
+              avgSynergyGivenShare: 12.3,
               avgSupportAp: 0.92,
               avgSupportBrand: 0.88,
               avgSupportIdentity: 0.44,
@@ -272,8 +274,8 @@ test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + S
   assert.ok(support.fields.some((field) => field.name === "// MECHANICS"));
   assert.ok(support.fields.some((field) => field.name === "// SURVIVAL · TANK"));
   const supText = support.fields.map((field) => field.value).join("\n");
-  assert.match(supText, /Contribution: \*\*123\.5K\*\*/);
-  assert.match(supText, /rContribution: \*\*50\.1B\*\*/);
+  assert.match(supText, /Contribution %: \*\*12\.3%\*\*/);
+  assert.match(supText, /rContribution %: \*\*34\.5%\*\*/);
   assert.match(supText, /Supporter %: \*\*30\.4%\*\*/);
   assert.match(supText, /Radiant %: \*\*66\.7%\*\*/);
   assert.match(supText, /Support rank: \*\*1\.4 \/ 2\.0\*\*/);

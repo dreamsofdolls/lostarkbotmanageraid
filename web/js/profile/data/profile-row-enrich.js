@@ -665,28 +665,32 @@ export async function enrichProfileRows(rows) {
       8,
       { category: "buff", allowUnknown: true }
     );
+    row.encounterDamageDealt = row.encounterTotalDamageDealt ||
+      (row.partyDps > 0 && row.durationMs > 0 ? Math.round(row.partyDps * (row.durationMs / 1000)) : 0);
     row.rdpsDamageGivenPerMinute = activeDurationMin > 0 ? row.rdpsDamageGiven / activeDurationMin : 0;
     row.rdpsDamageReceivedSupportPerMinute = activeDurationMin > 0 ? row.rdpsDamageReceivedSupport / activeDurationMin : 0;
+    row.rdpsDamageGivenShare = row.encounterDamageDealt > 0
+      ? (row.rdpsDamageGiven / row.encounterDamageDealt) * 100
+      : 0;
     const contribution = extractContributionMetrics(misc, row.localPlayer, row.damageDealt);
     row.partyNumber = Number.isFinite(contribution.partyNumber) ? contribution.partyNumber : null;
     row.synergyGiven = contribution.synergyGiven;
     row.synergyReceived = contribution.synergyReceived;
     row.synergyGivenPerMinute = activeDurationMin > 0 ? contribution.synergyGiven / activeDurationMin : 0;
+    row.synergyGivenShare = row.encounterDamageDealt > 0
+      ? (contribution.synergyGiven / row.encounterDamageDealt) * 100
+      : 0;
     row.synergyReceivedShare = contribution.synergyReceivedShare;
     row.damageShare = row.partyDps > 0 ? (row.dps / row.partyDps) * 100 : 0;
     row.classRole = roleForProfileClass(row.className);
     row.logRole = classifyProfileLogRole(row);
-    row.encounterDamageDealt = row.encounterTotalDamageDealt ||
-      (row.partyDps > 0 && row.durationMs > 0 ? Math.round(row.partyDps * (row.durationMs / 1000)) : 0);
     const supportLog = row.classRole === "support" && row.logRole === "support" && row.rdpsValid;
     row.supporterRank = supportLog ? Math.max(0, Number(row.supporterRank) || 0) : 0;
     row.supporterCount = supportLog ? Math.max(0, Number(row.supporterCount) || 0) : 0;
     row.supporterTop = row.supporterCount > 1 && row.supporterRank === 1 ? 1 : 0;
     row.supporterDamageGiven = supportLog ? Math.max(0, Number(row.rdpsDamageGiven) || 0) : 0;
     row.supporterDamageGivenPerMinute = activeDurationMin > 0 ? row.supporterDamageGiven / activeDurationMin : 0;
-    row.supporterPercent = row.supporterDamageGiven > 0 && row.encounterDamageDealt > 0
-      ? (row.supporterDamageGiven / row.encounterDamageDealt) * 100
-      : 0;
+    row.supporterPercent = supportLog ? row.rdpsDamageGivenShare : 0;
     row.supporterTier = classifySupporterTier(row.supporterPercent);
     Object.assign(row, selectContextPercentiles(row, row.logRole));
   }));
