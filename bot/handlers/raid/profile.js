@@ -16,6 +16,9 @@ const {
   createProfileSessionStore,
   renderSessionPayload,
 } = require("./profile/session");
+const {
+  buildExplainEmbed,
+} = require("./profile/embeds/explain");
 
 function normalizeName(value) {
   return String(value || "").trim().toLowerCase();
@@ -206,6 +209,16 @@ function createRaidProfileCommand(deps) {
     }
 
     if (interaction.isButton?.()) {
+      if (action === "explain") {
+        // Read-only popup: a separate ephemeral message so the profile embed +
+        // navigation stay put. The session is owner-locked (getForInteraction
+        // rejects other users), so session.lang is the clicker's language.
+        await interaction.reply({
+          flags: MessageFlags.Ephemeral,
+          embeds: [buildExplainEmbed(session, session.lang, renderDeps)],
+        });
+        return;
+      }
       applyProfileButton(session, action);
       await interaction.update(renderSessionPayload(renderDeps, session));
     }
