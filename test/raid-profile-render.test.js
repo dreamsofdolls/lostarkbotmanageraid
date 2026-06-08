@@ -387,6 +387,10 @@ test("raid-profile renders a flex char: roster flex support tag + two build tabl
   assert.match(text, /Judgment/);
   assert.match(text, /Blessed Aura/);
   assert.match(text, /Supporter %: \*\*25\.4%\*\*/); // support metric from the smaller build
+  assert.match(text, /(?:^|\n)Contribution %: \*\*N\/A\*\*/);
+  assert.match(text, /(?:^|\n)rContribution %: \*\*N\/A\*\*/);
+  assert.doesNotMatch(text, /(?:^|\n)Contribution %: \*\*25\.4%\*\*/);
+  assert.doesNotMatch(text, /(?:^|\n)rContribution %: \*\*25\.4%\*\*/);
   assert.match(text, /Damage share: \*\*8\.1%\*\*/); // dps metric from altBuild.stats
 });
 

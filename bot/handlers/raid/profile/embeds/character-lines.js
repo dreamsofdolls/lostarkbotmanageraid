@@ -43,20 +43,14 @@ function localizedScoreLine(key, value, lang) {
   return scoreLine(label(key, lang), value, { width: 8 });
 }
 
-function firstFinite(...values) {
-  for (const value of values) {
-    const number = Number(value);
-    if (Number.isFinite(number)) return number;
-  }
-  return 0;
+function hasOwn(value, key) {
+  return Object.prototype.hasOwnProperty.call(value || {}, key);
 }
 
-function firstPositiveFinite(...values) {
-  for (const value of values) {
-    const number = Number(value);
-    if (Number.isFinite(number) && number > 0) return number;
-  }
-  return firstFinite(...values);
+function optionalPct(stats, key) {
+  if (!hasOwn(stats, key)) return "N/A";
+  const number = Number(stats[key]);
+  return Number.isFinite(number) ? pct(number) : "N/A";
 }
 
 function buildSurvivalLines(stats, lang) {
@@ -107,11 +101,9 @@ function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = 
   if (isSupport) {
     const drivers = [localizedScoreLine("supportImpact", sc.raidContribution || sc.supportUptime, lang)];
     if (!isBibleSummary) {
-      const contributionShare = firstPositiveFinite(s.avgSynergyGivenShare, s.avgSupporterPercent);
-      const rContributionShare = firstPositiveFinite(s.avgRdpsDamageGivenShare, s.avgSupporterPercent);
       drivers.push(
-        valueLine(label("contribution", lang), pct(contributionShare)),
-        valueLine(label("rContribution", lang), pct(rContributionShare)),
+        valueLine(label("contribution", lang), optionalPct(s, "avgSynergyGivenShare")),
+        valueLine(label("rContribution", lang), optionalPct(s, "avgRdpsDamageGivenShare")),
       );
       supportRankField = {
         name: hudFieldName(label("supporterSection", lang)),
