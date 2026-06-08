@@ -85,32 +85,51 @@ function latestSnapshotMs(entries) {
   return Math.max(0, ...(entries || []).map((entry) => Number(entry?.receivedAt || entry?.generatedAt) || 0));
 }
 
-const PROFILE_DISPLAY_TZ_OFFSET_MS = 7 * 60 * 60 * 1000;
-
-function pad2(value) {
-  return String(value).padStart(2, "0");
-}
+// Snapshot footer renders in the VIEWER's timezone (keyed off their language),
+// since an embed footer can't carry a live Discord <t:..> tag. vi -> VN,
+// jp -> Tokyo, en -> UTC (English has no single region, so the neutral
+// reference). Offsets are derived by Intl, not hardcoded; none of these zones
+// observe DST.
+const PROFILE_SNAPSHOT_TZ_BY_LANG = {
+  vi: { locale: "vi-VN", timeZone: "Asia/Ho_Chi_Minh" },
+  jp: { locale: "ja-JP", timeZone: "Asia/Tokyo" },
+  en: { locale: "en-GB", timeZone: "UTC" },
+};
 
 function validTimestampMs(ms) {
   const n = Number(ms);
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-function formatSnapshotDateMs(ms) {
+function snapshotOffsetLabel(when, timeZone) {
+  // Pull just the "GMT+7" token from a formatted date and show it as "UTC+7"
+  // (UTC reads more universally than GMT); a UTC zone stays "UTC".
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "shortOffset" }).formatToParts(when);
+  const token = parts.find((part) => part.type === "timeZoneName")?.value || "UTC";
+  return token.replace("GMT", "UTC");
+}
+
+function formatSnapshotDateMs(ms, lang = "vi") {
   const n = validTimestampMs(ms);
   if (!n) return "N/A";
-  const date = new Date(n + PROFILE_DISPLAY_TZ_OFFSET_MS);
-  return [
-    `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`,
-    `${pad2(date.getUTCHours())}:${pad2(date.getUTCMinutes())}`,
-    "UTC+7",
-  ].join(" ");
+  // Absolute string (footers don't render <t:..>). Date + time are built
+  // separately so the (UTC+N) marker lands at the end rather than mid-string,
+  // where Intl's own timeZoneName option would awkwardly place it.
+  const { locale, timeZone } = PROFILE_SNAPSHOT_TZ_BY_LANG[lang] || PROFILE_SNAPSHOT_TZ_BY_LANG.vi;
+  const when = new Date(n);
+  const day = new Intl.DateTimeFormat(locale, {
+    day: "2-digit", month: "2-digit", year: "numeric", timeZone,
+  }).format(when);
+  const time = new Intl.DateTimeFormat(locale, {
+    hour: "2-digit", minute: "2-digit", hour12: false, timeZone,
+  }).format(when);
+  return `${day} ${time} (${snapshotOffsetLabel(when, timeZone)})`;
 }
 
 function footerTimestamp(ms, lang = "vi") {
   const n = validTimestampMs(ms);
   if (!n) return t("raidProfile.footer.snapshotMissing", lang);
-  return t("raidProfile.footer.snapshotAt", lang, { date: formatSnapshotDateMs(n) });
+  return t("raidProfile.footer.snapshotAt", lang, { date: formatSnapshotDateMs(n, lang) });
 }
 
 function formatDateMs(ms) {
