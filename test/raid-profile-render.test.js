@@ -270,9 +270,21 @@ test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + S
   const support = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
   assert.equal(support.author.name, "// RAID PROFILE · NHÂN VẬT · CANAMEOW · Support");
   assert.ok(support.fields.some((field) => field.name === "// SUPPORT"));
+  assert.ok(support.fields.some((field) => field.name === "// SUPPORTER"));
   assert.ok(support.fields.some((field) => field.name === "// UPTIME"));
   assert.ok(support.fields.some((field) => field.name === "// MECHANICS"));
   assert.ok(support.fields.some((field) => field.name === "// SURVIVAL · TANK"));
+  const supportLayout = support.fields
+    .filter((field) => field.name !== "\u200B" && field.name !== "// BUILD")
+    .map((field) => field.name);
+  assert.deepEqual(supportLayout, [
+    "// SCORE",
+    "// SUPPORT",
+    "// UPTIME",
+    "// SUPPORTER",
+    "// MECHANICS",
+    "// SURVIVAL · TANK",
+  ]);
   const supText = support.fields.map((field) => field.value).join("\n");
   assert.match(supText, /Contribution %: \*\*12\.3%\*\*/);
   assert.match(supText, /rContribution %: \*\*34\.5%\*\*/);

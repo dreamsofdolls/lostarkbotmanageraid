@@ -2202,6 +2202,7 @@ module.exports = {
       supportImpact: "rDPS",
       contribution: "Contribution %",
       rContribution: "rContribution %",
+      supporterSection: "SUPPORTER",
       supporterPercent: "Supporter %",
       radiantPercent: "Radiant %",
       supportRank: "Support rank",

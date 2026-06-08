@@ -103,6 +103,7 @@ function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = 
   let driverField;
   let secondaryField;
   let mechanicsField = null;
+  let supportRankField = null;
   if (isSupport) {
     const drivers = [localizedScoreLine("supportImpact", sc.raidContribution || sc.supportUptime, lang)];
     if (!isBibleSummary) {
@@ -111,10 +112,16 @@ function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = 
       drivers.push(
         valueLine(label("contribution", lang), pct(contributionShare)),
         valueLine(label("rContribution", lang), pct(rContributionShare)),
-        valueLine(label("supporterPercent", lang), pct(s.avgSupporterPercent)),
-        valueLine(label("radiantPercent", lang), pct(s.radiantSupportRate)),
-        valueLine(label("supportRank", lang), s.supporterRankValidCount ? `${score(s.avgSupporterRank)} / ${score(s.supporterCountAvg)}` : "N/A"),
       );
+      supportRankField = {
+        name: hudFieldName(label("supporterSection", lang)),
+        value: [
+          valueLine(label("supporterPercent", lang), pct(s.avgSupporterPercent)),
+          valueLine(label("radiantPercent", lang), pct(s.radiantSupportRate)),
+          valueLine(label("supportRank", lang), s.supporterRankValidCount ? `${score(s.avgSupporterRank)} / ${score(s.supporterCountAvg)}` : "N/A"),
+        ].join("\n"),
+        inline: true,
+      };
     }
     driverField = { name: hudFieldName(label("supportSection", lang)), value: drivers.join("\n"), inline: true };
     const uptimeLines = [
@@ -193,7 +200,14 @@ function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = 
   };
 
   return [
-    ...pack2Columns([scoreField, driverField, secondaryField, mechanicsField, survivalField].filter(Boolean)),
+    ...pack2Columns([
+      scoreField,
+      driverField,
+      secondaryField,
+      supportRankField,
+      mechanicsField,
+      survivalField,
+    ].filter(Boolean)),
     buildField,
   ];
 }
