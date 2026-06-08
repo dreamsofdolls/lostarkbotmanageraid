@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-06 (raid-profile: snapshot footer date in the viewer's timezone)
+
+### Changed
+- The `/raid-profile` footer snapshot timestamp now renders in the viewer's timezone + locale instead of a hardcoded `YYYY-MM-DD HH:MM UTC+7`: vi -> VN `DD/MM/YYYY HH:MM (UTC+7)`, jp -> Tokyo `YYYY/MM/DD HH:MM (UTC+9)` (can roll to the next day), en -> `DD/MM/YYYY HH:MM (UTC)`. Built with `Intl.DateTimeFormat` so the offset is derived, not hand-added. Footers can't carry a live Discord `<t:..>` tag, so it stays an absolute string. raid-profile scope only.
+
 ## 2026-06-06 (Web Companion: sync-result panel redesign - HUD ledger)
 
 ### Changed

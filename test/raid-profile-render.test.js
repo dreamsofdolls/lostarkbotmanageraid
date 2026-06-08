@@ -10,6 +10,7 @@ const {
 } = require("discord.js");
 
 const { createRaidProfileCommand } = require("../bot/handlers/raid/profile");
+const { formatSnapshotDateMs } = require("../bot/handlers/raid/profile/helpers/display");
 const { INLINE_SPACER, UI } = require("../bot/utils/raid/common/shared");
 
 function makeDeps() {
@@ -224,7 +225,8 @@ test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + S
   // Footer is terse now: source + snapshot only. Log/scored/confidence already
   // live in the SCOPE field, so they no longer repeat in the footer.
   assert.match(overall.footer.text, /Snapshot/);
-  assert.match(overall.footer.text, /Snapshot 2024-03-09 23:00 UTC\+7/);
+  // VN day-first absolute format (embeds can't render Discord <t:..> in footers).
+  assert.match(overall.footer.text, /Snapshot 09\/03\/2024 23:00 \(UTC\+7\)/);
   assert.doesNotMatch(overall.footer.text, /\d{4}-\d{2}-\d{2}T/);
   assert.doesNotMatch(overall.footer.text, /Z\b/);
   assert.doesNotMatch(overall.footer.text, /Độ tin cậy|chấm điểm/);
@@ -755,4 +757,15 @@ test("raid-profile reset wipes only the caller's own snapshot + encounters", asy
   const embed = replied.embeds[0].toJSON();
   assert.equal(embed.author.name, "// RAID PROFILE · RESET");
   assert.match(embed.description, /42/);
+});
+
+test("snapshot footer date follows the viewer's timezone + locale", () => {
+  const ms = 1710000005000; // 2024-03-09T16:00:05Z
+  // vi -> VN (UTC+7), jp -> Tokyo (UTC+9, rolls to next day), en -> UTC.
+  assert.equal(formatSnapshotDateMs(ms, "vi"), "09/03/2024 23:00 (UTC+7)");
+  assert.equal(formatSnapshotDateMs(ms, "jp"), "2024/03/10 01:00 (UTC+9)");
+  assert.equal(formatSnapshotDateMs(ms, "en"), "09/03/2024 16:00 (UTC)");
+  assert.equal(formatSnapshotDateMs(0, "vi"), "N/A");
+  // Unknown lang falls back to the VN reference rather than throwing.
+  assert.equal(formatSnapshotDateMs(ms, "zz"), "09/03/2024 23:00 (UTC+7)");
 });
