@@ -34,6 +34,8 @@ test("sanitizeSnapshotPayload applies character profile rules and filters off-ro
               supportLogCount: 999999,
               avgGearScore: 99999,
               avgPartyBuffedShare: 5000,
+              avgSynergyGivenShare: 12.3,
+              avgRdpsDamageGivenShare: 34.5,
               attackStyle: "front",
             },
             scores: { overall: 150, supportUptime: 85 },
@@ -52,6 +54,16 @@ test("sanitizeSnapshotPayload applies character profile rules and filters off-ro
               amount: 1000 + index,
               share: 10,
             })),
+            raids: [
+              {
+                raidKey: "aegir",
+                modeKey: "hard",
+                boss: "Aegir",
+                encounters: 3,
+                avgSynergyGivenShare: 12.3,
+                avgRdpsDamageGivenShare: 34.5,
+              },
+            ],
           },
           {
             name: "NotInRoster",
@@ -75,10 +87,14 @@ test("sanitizeSnapshotPayload applies character profile rules and filters off-ro
   assert.equal(character.stats.supportLogCount, 100000);
   assert.equal(character.stats.avgGearScore, 9999);
   assert.equal(character.stats.avgPartyBuffedShare, 999);
+  assert.equal(character.stats.avgSynergyGivenShare, 12.3);
+  assert.equal(character.stats.avgRdpsDamageGivenShare, 34.5);
   assert.equal(character.stats.attackStyle, "front");
   assert.equal(character.scores.overall, 100);
   assert.equal(character.scores.supportUptime, 85);
   assert.equal(character.topBuffSources.length, 8);
+  assert.equal(character.raids[0].avgSynergyGivenShare, 12.3);
+  assert.equal(character.raids[0].avgRdpsDamageGivenShare, 34.5);
   // Flex altBuild survives sanitization (local persist path) and its scores clamp.
   assert.equal(character.altBuild.role, "support");
   assert.equal(character.altBuild.encounters, 9);
