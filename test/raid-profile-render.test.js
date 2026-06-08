@@ -11,6 +11,7 @@ const {
 
 const { createRaidProfileCommand } = require("../bot/handlers/raid/profile");
 const { formatSnapshotDateMs } = require("../bot/handlers/raid/profile/helpers/display");
+const { buildExplainEmbed, resolveExplainView } = require("../bot/handlers/raid/profile/embeds/explain");
 const { INLINE_SPACER, UI } = require("../bot/utils/raid/common/shared");
 
 function makeDeps() {
@@ -793,6 +794,48 @@ test("raid-profile reset wipes only the caller's own snapshot + encounters", asy
   const embed = replied.embeds[0].toJSON();
   assert.equal(embed.author.name, "// RAID PROFILE · RESET");
   assert.match(embed.description, /42/);
+});
+
+test("explain popup: view resolution + per-view hard-metric glossary, no raw i18n keys", () => {
+  const deps = makeDeps();
+  const command = createRaidProfileCommand(deps);
+  const session = makeSession(); // vi, overall
+
+  // The explain button exists in the button row.
+  const payload = command.__test.renderSessionPayload(deps, session);
+  const buttonRow = payload.components[2].toJSON();
+  assert.ok(buttonRow.components.some((c) => c.custom_id?.includes(":explain:")), "explain button present");
+
+  // Overall view: aggregate scores only.
+  assert.equal(resolveExplainView(session), "overall");
+  let e = buildExplainEmbed(session, session.lang, deps).toJSON();
+  assert.equal(e.author.name, "// RAID PROFILE · GIẢI THÍCH");
+  assert.match(e.description, /\*\*Overall\*\*/);
+  assert.match(e.description, /\*\*MVP\*\*/);
+  assert.doesNotMatch(e.description, /raidProfile\./, "all i18n keys resolved");
+  assert.doesNotMatch(e.description, /Crit rate/, "obvious raw stats are not explained");
+
+  session.rosterIndex = 0;
+  session.charIndex = -1;
+  assert.equal(resolveExplainView(session), "roster");
+
+  // Character DPS (Qiylyn): output metrics, no support metrics.
+  session.charIndex = 0;
+  assert.equal(resolveExplainView(session), "characterDps");
+  e = buildExplainEmbed(session, session.lang, deps).toJSON();
+  assert.match(e.description, /Context %/);
+  assert.match(e.description, /Damage share/);
+  assert.doesNotMatch(e.description, /rDPS/, "DPS view omits support-only metrics");
+
+  // Character Support (Canameow): support metrics, no dps-output metrics.
+  session.charIndex = 1;
+  assert.equal(resolveExplainView(session), "characterSup");
+  e = buildExplainEmbed(session, session.lang, deps).toJSON();
+  assert.match(e.description, /rDPS/);
+  assert.match(e.description, /Supporter %/);
+  assert.match(e.description, /Radiant %/);
+  assert.doesNotMatch(e.description, /Damage share/, "Support view omits dps-output metrics");
+  assert.doesNotMatch(e.description, /raidProfile\./);
 });
 
 test("snapshot footer date follows the viewer's timezone + locale", () => {

@@ -21,6 +21,7 @@ const EMOJI = {
   people: "\u{1F465}",
   prev: "◀️",
   next: "▶️",
+  explain: "❓",
 };
 
 function selectedProfileEntry(session) {
@@ -154,7 +155,14 @@ function buildComponents(deps, session) {
       .setEmoji(EMOJI.next)
       .setLabel(t("raidProfile.btnNext", lang))
       .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!canPage)
+      .setDisabled(!canPage),
+    // Explain: read-only popup glossary of the current view's hard metrics.
+    // Always enabled - explanations are available on every view.
+    new ButtonBuilder()
+      .setCustomId(`raid-profile:explain:${sid}`)
+      .setEmoji(EMOJI.explain)
+      .setLabel(t("raidProfile.btnExplain", lang))
+      .setStyle(ButtonStyle.Secondary)
   );
 
   return [rosterRow, charRow, buttonRow];

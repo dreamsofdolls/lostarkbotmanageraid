@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-06 (raid-profile: "Giải thích" button - per-view metric glossary)
+
+### Added
+- `/raid-profile` gains a `❓ Giải thích` button (4th in the button row). It pops up an ephemeral glossary explaining ONLY the hard/derived metrics of the view you're currently on (overall/roster aggregate scores vs character DPS-output vs character Support-impact), leaving the profile embed + navigation untouched. Content is a shared definition pool + per-view key lists in `embeds/explain.js`, reusing the existing metric labels so each term matches what's shown. i18n vi/en/jp; glossary lines use `Name: def` (no em-dash). 1455 tests green.
+
 ## 2026-06-06 (raid-profile: snapshot footer date in the viewer's timezone)
 
 ### Changed
