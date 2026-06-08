@@ -224,6 +224,9 @@ test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + S
   // Footer is terse now: source + snapshot only. Log/scored/confidence already
   // live in the SCOPE field, so they no longer repeat in the footer.
   assert.match(overall.footer.text, /Snapshot/);
+  assert.match(overall.footer.text, /Snapshot 2024-03-09 23:00 UTC\+7/);
+  assert.doesNotMatch(overall.footer.text, /\d{4}-\d{2}-\d{2}T/);
+  assert.doesNotMatch(overall.footer.text, /Z\b/);
   assert.doesNotMatch(overall.footer.text, /Độ tin cậy|chấm điểm/);
 
   session.rosterIndex = 0;

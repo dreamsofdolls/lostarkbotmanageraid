@@ -85,14 +85,36 @@ function latestSnapshotMs(entries) {
   return Math.max(0, ...(entries || []).map((entry) => Number(entry?.receivedAt || entry?.generatedAt) || 0));
 }
 
+const PROFILE_DISPLAY_TZ_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function validTimestampMs(ms) {
+  const n = Number(ms);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function formatSnapshotDateMs(ms) {
+  const n = validTimestampMs(ms);
+  if (!n) return "N/A";
+  const date = new Date(n + PROFILE_DISPLAY_TZ_OFFSET_MS);
+  return [
+    `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`,
+    `${pad2(date.getUTCHours())}:${pad2(date.getUTCMinutes())}`,
+    "UTC+7",
+  ].join(" ");
+}
+
 function footerTimestamp(ms, lang = "vi") {
-  const n = Number(ms) || 0;
+  const n = validTimestampMs(ms);
   if (!n) return t("raidProfile.footer.snapshotMissing", lang);
-  return t("raidProfile.footer.snapshotAt", lang, { date: new Date(n).toISOString().replace(".000Z", "Z") });
+  return t("raidProfile.footer.snapshotAt", lang, { date: formatSnapshotDateMs(n) });
 }
 
 function formatDateMs(ms) {
-  const n = Number(ms) || 0;
+  const n = validTimestampMs(ms);
   if (!n) return "chưa có";
   return `<t:${Math.floor(n / 1000)}:R>`;
 }
@@ -150,6 +172,7 @@ module.exports = {
   confidenceForLogs,
   footerTimestamp,
   formatDateMs,
+  formatSnapshotDateMs,
   formatDurationMs,
   hudFieldName,
   isBibleSummaryProfile,
