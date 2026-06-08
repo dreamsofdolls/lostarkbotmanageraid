@@ -262,6 +262,8 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
                   avgSupporterRank: 1.4,
                   supporterCountAvg: 2,
                   supporterTopRate: 71.4,
+                  avgCounters: 1.2,
+                  avgCastsPerMinute: 28.4,
                   avgCritRate: 82.5,
                   avgCritDamageShare: 91.2,
                   avgBackAttackRate: 48,
@@ -518,6 +520,9 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
   assert.equal(saved.accounts[0].characters[0].stats.avgSupporterRank, 1.4);
   assert.equal(saved.accounts[0].characters[0].stats.supporterCountAvg, 2);
   assert.equal(saved.accounts[0].characters[0].stats.supporterTopRate, 71.4);
+  assert.equal(saved.accounts[0].characters[0].stats.avgCounters, 1.2);
+  assert.equal(saved.accounts[0].characters[0].stats.avgCastsPerMinute, 28.4);
+  assert.equal(saved.accounts[0].characters[0].stats.avgStaggerPerMinute, 1600);
   assert.equal(saved.accounts[0].characters[0].stats.attackStyle, "back");
   assert.equal(saved.accounts[0].characters[0].stats.avgTopDamageProximity, 87.8);
   assert.equal(saved.accounts[0].characters[0].stats.contextCoverageRate, 83.3);

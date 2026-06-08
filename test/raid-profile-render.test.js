@@ -157,6 +157,9 @@ function makeSession() {
               avgSupportBrand: 0.88,
               avgSupportIdentity: 0.44,
               avgSupportHyper: 0.18,
+              avgCastsPerMinute: 28.4,
+              avgCounters: 1.2,
+              avgStaggerPerMinute: 2100,
               deathlessRate: 91.7,
               deathRate: 8.3,
               totalDeaths: 1,
@@ -266,13 +269,18 @@ test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + S
   assert.equal(support.author.name, "// RAID PROFILE · NHÂN VẬT · CANAMEOW · Support");
   assert.ok(support.fields.some((field) => field.name === "// SUPPORT"));
   assert.ok(support.fields.some((field) => field.name === "// UPTIME"));
+  assert.ok(support.fields.some((field) => field.name === "// MECHANICS"));
   assert.ok(support.fields.some((field) => field.name === "// SURVIVAL · TANK"));
   const supText = support.fields.map((field) => field.value).join("\n");
+  assert.match(supText, /Contribution: \*\*123\.5K\*\*/);
+  assert.match(supText, /rContribution: \*\*50\.1B\*\*/);
   assert.match(supText, /Supporter %: \*\*30\.4%\*\*/);
   assert.match(supText, /Radiant %: \*\*66\.7%\*\*/);
   assert.match(supText, /Support rank: \*\*1\.4 \/ 2\.0\*\*/);
   assert.match(supText, /rDPS:/);
-  assert.match(supText, /Synergy\/min/);
+  assert.match(supText, /Casts\/min: \*\*28\.4\*\*/);
+  assert.match(supText, /Counters: \*\*1\.2\*\*/);
+  assert.match(supText, /Stagger\/min: \*\*2\.1K\*\*/);
 });
 
 test("raid-profile renders a flex char: roster flex support tag + two build tables", () => {

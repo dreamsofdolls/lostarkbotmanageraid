@@ -2200,6 +2200,8 @@ module.exports = {
       avgMedianDps: "平均/中央値DPS",
       peakBurst: "Peak/burst",
       supportImpact: "rDPS",
+      contribution: "Contribution",
+      rContribution: "rContribution",
       supporterPercent: "Supporter%",
       radiantPercent: "Radiant%",
       supportRank: "支援順位",

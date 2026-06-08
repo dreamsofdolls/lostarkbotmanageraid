@@ -52,6 +52,14 @@ function buildSurvivalLines(stats, lang) {
   ];
 }
 
+function buildMechanicsLines(stats, lang) {
+  return [
+    statScoreLine(label("castsPerMin", lang), stats.avgCastsPerMinute),
+    statScoreLine(label("counters", lang), stats.avgCounters),
+    valueLine(label("staggerPerMin", lang), shortNumber(stats.avgStaggerPerMinute)),
+  ];
+}
+
 /**
  * Build the embed fields for a single build's metric table.
  * @param {string} role - "support" or "dps" (the build's role, not the class)
@@ -78,10 +86,13 @@ function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = 
 
   let driverField;
   let secondaryField;
+  let mechanicsField = null;
   if (isSupport) {
     const drivers = [localizedScoreLine("supportImpact", sc.raidContribution || sc.supportUptime, lang)];
     if (!isBibleSummary) {
       drivers.push(
+        valueLine(label("contribution", lang), shortNumber(s.avgSynergyGivenPerMinute)),
+        valueLine(label("rContribution", lang), shortNumber(s.avgSupporterDamageGivenPerMinute || s.avgRdpsDamageGivenPerMinute)),
         valueLine(label("supporterPercent", lang), pct(s.avgSupporterPercent)),
         valueLine(label("radiantPercent", lang), pct(s.radiantSupportRate)),
         valueLine(label("supportRank", lang), s.supporterRankValidCount ? `${score(s.avgSupporterRank)} / ${score(s.supporterCountAvg)}` : "N/A"),
@@ -94,9 +105,13 @@ function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = 
     ];
     if (!isBibleSummary) {
       uptimeLines.push(
-        valueLine(label("synergyPerMin", lang), shortNumber(s.avgSynergyGivenPerMinute)),
         valueLine(label("protection", lang), score(sc.protection)),
       );
+      mechanicsField = {
+        name: hudFieldName(label("mechanicsSection", lang)),
+        value: buildMechanicsLines(s, lang).join("\n"),
+        inline: true,
+      };
     }
     secondaryField = { name: hudFieldName(label("uptimeSection", lang)), value: uptimeLines.join("\n"), inline: true };
   } else {
@@ -115,6 +130,7 @@ function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = 
       );
     }
     driverField = { name: hudFieldName(label("outputSection", lang)), value: out.join("\n"), inline: true };
+    const mechanicsLines = buildMechanicsLines(s, lang);
     secondaryField = isBibleSummary
       ? {
           name: hudFieldName(label("sampleSection", lang)),
@@ -127,10 +143,9 @@ function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = 
       : {
           name: hudFieldName(label("mechanicsSection", lang)),
           value: [
-            statScoreLine(label("castsPerMin", lang), s.avgCastsPerMinute),
+            mechanicsLines[0],
             valueLine(label("critRate", lang), pct(s.avgCritRate)),
-            statScoreLine(label("counters", lang), s.avgCounters),
-            valueLine(label("staggerPerMin", lang), shortNumber(s.avgStaggerPerMinute)),
+            ...mechanicsLines.slice(1),
           ].join("\n"),
           inline: true,
         };
@@ -159,7 +174,10 @@ function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = 
     inline: false,
   };
 
-  return [...pack2Columns([scoreField, driverField, secondaryField, survivalField]), buildField];
+  return [
+    ...pack2Columns([scoreField, driverField, secondaryField, mechanicsField, survivalField].filter(Boolean)),
+    buildField,
+  ];
 }
 
 module.exports = {
