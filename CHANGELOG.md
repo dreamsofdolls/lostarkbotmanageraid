@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-06 (Web Companion: sync-result panel redesign - HUD ledger)
+
+### Changed
+- The "Kết quả sau khi Sync" panel (`renderSyncApplyResult`) is restyled to a HUD ledger: a pulsing status LED + `// SYNC COMPLETE` kicker, then four status-colored count cells (applied / skipped / unmapped / rejected) for an at-a-glance read before the per-char detail. Sections get an accent rail + `//` mono kicker titles (red rail on rejected), char rows hover-lift, unmapped becomes a dashed amber box, and the profile-queued section a dimmed rail. Output is wrapped in `.sync-result` so the post-sync confirmation reads heavier than the lighter preview (which reuses the same `.char-pending-row` / `.raid-pill` classes, left untouched). `prefers-reduced-motion` disables the LED pulse + row hover. Same data/fields; web i18n vi/en/jp gain 4 short stat-cell labels and drop the trailing colons on the section labels.
+
 ## 2026-06-06 (raid-profile: roster table cleanup + terse footers + class-icon dropdown)
 
 ### Changed

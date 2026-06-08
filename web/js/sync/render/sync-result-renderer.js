@@ -18,19 +18,28 @@ export function summarizeSyncResult(data = {}) {
 
 export function renderSyncApplyResult(data = {}, rosterAccounts = []) {
   const counts = summarizeSyncResult(data);
-  let html = `<div class="sync-result-summary"><span class="status-ok">${t("sync.complete")}</span> <span class="sync-summary-line">${t("sync.summary", {
-    a: counts.applied,
-    s: counts.skipped,
-    u: counts.unmapped,
-    r: counts.rejected,
-  })}</span></div>`;
+  // HUD-ledger header: status LED + // SYNC COMPLETE kicker, then four
+  // status-colored count cells (applied / skipped / unmapped / rejected) for an
+  // at-a-glance read before the per-char detail sections below.
+  let html = `<div class="sync-result">`;
+  html += `<div class="sync-result-head"><span class="sync-led"></span><span class="sync-result-kicker">${escapeHtml(t("sync.complete"))}</span></div>`;
+  html += `<div class="sync-stat-cells">`
+    + statCell("ok", counts.applied, t("sync.cellApplied"))
+    + statCell("dim", counts.skipped, t("sync.cellSkipped"))
+    + statCell("amb", counts.unmapped, t("sync.cellUnmapped"))
+    + statCell("err", counts.rejected, t("sync.cellRejected"))
+    + `</div>`;
 
   const charLookup = buildRosterCharacterLookup(rosterAccounts);
   html += renderAppliedSection(asArray(data.applied), charLookup);
   html += renderRejectedSection(asArray(data.rejected), charLookup);
   html += renderUnmappedSection(asArray(data.unmapped));
   html += renderProfileStatsQueuedSection();
-  return html;
+  return `${html}</div>`;
+}
+
+function statCell(kind, count, label) {
+  return `<div class="sync-cell sync-cell--${kind}"><span class="n">${Number(count) || 0}</span><span class="l">${escapeHtml(label)}</span></div>`;
 }
 
 function asArray(value) {
@@ -38,7 +47,7 @@ function asArray(value) {
 }
 
 function renderProfileStatsQueuedSection() {
-  return `<div class="sync-result-section"><div class="sync-result-section-title">${escapeHtml(t("sync.profileStatsLabel"))}</div><div id="weekly-profile-sync-status"><span class="hint">${escapeHtml(t("sync.profileStatsQueued"))}</span></div></div>`;
+  return `<div class="sync-result-section sync-result-queued"><div class="sync-result-section-title">${escapeHtml(t("sync.profileStatsLabel"))}</div><div id="weekly-profile-sync-status"><span class="hint">${escapeHtml(t("sync.profileStatsQueued"))}</span></div></div>`;
 }
 
 function buildRosterCharacterLookup(rosterAccounts = []) {
@@ -105,7 +114,7 @@ function renderAppliedRaidPill(entry) {
 
 function renderRejectedSection(rejected, charLookup) {
   if (!rejected.length) return "";
-  let html = `<div class="sync-result-section"><div class="sync-result-section-title">${escapeHtml(t("sync.rejectedLabel"))}</div><ul class="char-pending-list">`;
+  let html = `<div class="sync-result-section sync-result-section--rejected"><div class="sync-result-section-title">${escapeHtml(t("sync.rejectedLabel"))}</div><ul class="char-pending-list">`;
   for (const entry of rejected) {
     const info = charLookup.get(String(entry.charName || "").toLowerCase()) || {};
     const classIcon = renderClassIcon(info.className);
