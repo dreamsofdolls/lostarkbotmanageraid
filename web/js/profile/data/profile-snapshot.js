@@ -669,6 +669,20 @@ export function buildProfileEncounterSummaries(rows, file, { range = null } = {}
   }).filter(Boolean);
 }
 
+function fingerprintValue(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "number") return Number.isFinite(value) ? round2(value) : "";
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (Array.isArray(value)) return `[${value.map(fingerprintValue).join(",")}]`;
+  if (typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${key}=${fingerprintValue(value[key])}`)
+      .join(",")}}`;
+  }
+  return String(value);
+}
+
 export function fingerprintSnapshot(snapshot) {
   const parts = [];
   parts.push([
@@ -720,6 +734,10 @@ export function fingerprintSnapshot(snapshot) {
         stats.totalDeadTimeMs || 0,
         scores.overall || 0,
         scores.mvp || 0,
+        fingerprintValue(stats),
+        fingerprintValue(scores),
+        fingerprintValue(character.build),
+        fingerprintValue(character.altBuild),
         (character.buildVariants || [])
           .map((variant) => `${variant.name}:${variant.encounters}:${variant.avgDps}:${variant.avgContextPerformancePercentile || 0}`)
           .join(","),
@@ -769,6 +787,7 @@ export function fingerprintSnapshot(snapshot) {
       metrics.supporterTier || "",
       metrics.supporterRank || 0,
       metrics.supporterCount || 0,
+      fingerprintValue(metrics),
       (encounter.topSkills || [])
         .slice(0, 5)
         .map((skill) => `${skill.id || skill.name || ""}:${skill.damage || 0}:${skill.share || 0}`)
