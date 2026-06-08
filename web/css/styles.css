@@ -162,11 +162,55 @@ header h1 {
 .raid-pill--rejected { background: #2e1d1d; border-color: #6b3535; color: #e89090; }
 .raid-pill--incoming { box-shadow: 0 0 0 1px var(--accent), 0 0 8px rgba(244, 174, 83, 0.3); }
 .raid-pill-incoming { font-size: 10px; }
-.sync-result-summary { padding: 8px 12px; background: #1d2024; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 10px; font-size: 13px; }
-.sync-summary-line strong { color: var(--accent); }
-.sync-result-section { margin-top: 12px; }
-.sync-result-section-title { margin: 0 0 6px; font-size: 12px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-.sync-result-unmapped { font-size: 12px; }
+/* ── Sync result panel · "HUD Ledger". Scoped under .sync-result so the
+   post-sync confirmation reads heavier (ops-brief) than the lighter preview,
+   which reuses the bare .char-pending-row / .raid-pill classes. ── */
+.sync-result { font-family: var(--font-body); color: var(--text); }
+/* Promote the host #sync-output box to a bracketed card while it holds a
+   result. :has is widely supported now; browsers without it just keep the
+   plain .meta box (graceful degrade). */
+#sync-output:has(.sync-result) { position: relative; background: linear-gradient(180deg, var(--card-top), var(--card)); border-color: var(--border); padding: 18px 20px; }
+#sync-output:has(.sync-result)::before { content: ""; position: absolute; top: 8px; right: 8px; width: 12px; height: 12px; border-top: 1.5px solid var(--accent); border-right: 1.5px solid var(--accent); }
+#sync-output:has(.sync-result)::after { content: ""; position: absolute; bottom: 8px; left: 8px; width: 12px; height: 12px; border-bottom: 1.5px solid var(--accent); border-left: 1.5px solid var(--accent); }
+
+.sync-result-head { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; }
+.sync-led { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; background: var(--success); box-shadow: 0 0 0 3px rgba(87, 201, 140, 0.18), 0 0 10px rgba(87, 201, 140, 0.5); animation: sync-led-pulse 2.4s ease-in-out infinite; }
+@keyframes sync-led-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+.sync-result-kicker { font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.6px; color: var(--accent); text-transform: uppercase; }
+
+/* Four status-colored count cells: at-a-glance read before the per-char detail. */
+.sync-stat-cells { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 20px; }
+.sync-cell { background: var(--bg-deep); border: 1px solid var(--border); border-top-width: 2px; border-radius: 7px; padding: 9px 10px 8px; }
+.sync-cell--ok { border-top-color: var(--success); }
+.sync-cell--dim { border-top-color: var(--border); }
+.sync-cell--amb { border-top-color: var(--accent); }
+.sync-cell--err { border-top-color: var(--error); }
+.sync-cell .n { display: block; font-family: var(--font-display); font-size: 24px; font-weight: 600; line-height: 1; color: var(--text); }
+.sync-cell--ok .n { color: var(--success); }
+.sync-cell--amb .n { color: var(--accent-bright); }
+.sync-cell--err .n { color: var(--error); }
+.sync-cell .l { display: block; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.8px; color: var(--text-dim); text-transform: uppercase; margin-top: 4px; }
+
+/* Sections gain an accent rail + a // mono kicker title. */
+.sync-result .sync-result-section { margin-top: 18px; padding-left: 13px; border-left: 2px solid var(--accent-dim); }
+.sync-result .sync-result-section--rejected { border-left-color: #6b3535; }
+.sync-result .sync-result-section-title { margin: 0 0 9px; font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 1.4px; color: var(--accent); text-transform: uppercase; }
+.sync-result .sync-result-section-title::before { content: "// "; color: var(--text-dim); }
+.sync-result .sync-result-section--rejected .sync-result-section-title { color: #e89090; }
+.sync-result .char-pending-roster-header { margin: 11px 0 6px; }
+.sync-result .char-pending-row { background: #1b1e23; transition: border-color 0.15s ease, transform 0.15s ease; }
+.sync-result .char-pending-row:hover { border-color: var(--accent-dim); transform: translateX(2px); }
+
+.sync-result .sync-result-unmapped { margin-top: 16px; font-size: 12px; background: var(--bg-deep); border: 1px dashed #5a4d2c; border-radius: 7px; padding: 8px 12px; }
+.sync-result .sync-result-queued { border-left-color: var(--border); }
+.sync-result .sync-result-queued .sync-result-section-title { color: var(--text-dim); }
+.sync-result .sync-result-queued .sync-result-section-title::before { color: var(--border); }
+
+@media (prefers-reduced-motion: reduce) {
+  .sync-led { animation: none; }
+  .sync-result .char-pending-row { transition: none; }
+  .sync-result .char-pending-row:hover { transform: none; }
+}
 
 code {
   font-family: var(--font-mono);
