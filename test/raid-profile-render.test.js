@@ -796,46 +796,57 @@ test("raid-profile reset wipes only the caller's own snapshot + encounters", asy
   assert.match(embed.description, /42/);
 });
 
-test("explain popup: view resolution + per-view hard-metric glossary, no raw i18n keys", () => {
+test("explain popup: grouped per-view glossary (embed fields), no raw i18n keys", () => {
   const deps = makeDeps();
   const command = createRaidProfileCommand(deps);
   const session = makeSession(); // vi, overall
+
+  const fieldText = (e) => (e.fields || []).map((f) => `${f.name}\n${f.value}`).join("\n");
+  const fieldNames = (e) => (e.fields || []).map((f) => f.name);
+  // Discord caps field values at 1024 chars; guard against future metric growth.
+  const withinLimits = (e) => (e.fields || []).every((f) => f.value.length <= 1024 && f.name.length <= 256);
 
   // The explain button exists in the button row.
   const payload = command.__test.renderSessionPayload(deps, session);
   const buttonRow = payload.components[2].toJSON();
   assert.ok(buttonRow.components.some((c) => c.custom_id?.includes(":explain:")), "explain button present");
 
-  // Overall view: aggregate scores only.
+  // Overall view: a single aggregate group.
   assert.equal(resolveExplainView(session), "overall");
   let e = buildExplainEmbed(session, session.lang, deps).toJSON();
   assert.equal(e.author.name, "// RAID PROFILE · GIẢI THÍCH");
-  assert.match(e.description, /\*\*Overall\*\*/);
-  assert.match(e.description, /\*\*MVP\*\*/);
-  assert.doesNotMatch(e.description, /raidProfile\./, "all i18n keys resolved");
-  assert.doesNotMatch(e.description, /Crit rate/, "obvious raw stats are not explained");
+  assert.ok((e.fields || []).length >= 1, "renders grouped fields, not a flat description");
+  assert.ok(withinLimits(e));
+  assert.match(fieldText(e), /\*\*Overall\*\*/);
+  assert.match(fieldText(e), /\*\*MVP\*\*/);
+  assert.doesNotMatch(fieldText(e), /raidProfile\./, "all i18n keys resolved");
+  assert.doesNotMatch(fieldText(e), /Crit rate/, "obvious raw stats are not explained");
 
   session.rosterIndex = 0;
   session.charIndex = -1;
   assert.equal(resolveExplainView(session), "roster");
 
-  // Character DPS (Qiylyn): output metrics, no support metrics.
+  // Character DPS (Qiylyn): split into groups, output metrics, no support metrics.
   session.charIndex = 0;
   assert.equal(resolveExplainView(session), "characterDps");
   e = buildExplainEmbed(session, session.lang, deps).toJSON();
-  assert.match(e.description, /Context %/);
-  assert.match(e.description, /Damage share/);
-  assert.doesNotMatch(e.description, /rDPS/, "DPS view omits support-only metrics");
+  assert.ok((e.fields || []).length >= 2, "DPS view is split into multiple groups");
+  assert.ok(withinLimits(e));
+  assert.match(fieldText(e), /Context %/);
+  assert.match(fieldText(e), /Damage share/);
+  assert.doesNotMatch(fieldText(e), /rDPS/, "DPS view omits support-only metrics");
 
-  // Character Support (Canameow): support metrics, no dps-output metrics.
+  // Character Support (Canameow): grouped, a // SUPPORT field, no dps output.
   session.charIndex = 1;
   assert.equal(resolveExplainView(session), "characterSup");
   e = buildExplainEmbed(session, session.lang, deps).toJSON();
-  assert.match(e.description, /rDPS/);
-  assert.match(e.description, /Supporter %/);
-  assert.match(e.description, /Radiant %/);
-  assert.doesNotMatch(e.description, /Damage share/, "Support view omits dps-output metrics");
-  assert.doesNotMatch(e.description, /raidProfile\./);
+  assert.ok(withinLimits(e), "support group value stays under Discord's 1024 field cap");
+  assert.ok(fieldNames(e).some((n) => /SUPPORT/.test(n)), "support group header present");
+  assert.match(fieldText(e), /rDPS/);
+  assert.match(fieldText(e), /Supporter %/);
+  assert.match(fieldText(e), /Radiant %/);
+  assert.doesNotMatch(fieldText(e), /Damage share/, "Support view omits dps-output metrics");
+  assert.doesNotMatch(fieldText(e), /raidProfile\./);
 });
 
 test("snapshot footer date follows the viewer's timezone + locale", () => {

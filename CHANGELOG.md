@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-06 (raid-profile: explain popup grouped into fields)
+
+### Changed
+- The `/raid-profile` "Giải thích" popup no longer renders one flat wall of lines (the dense Support view was ~14). Metrics are grouped into embed fields under `// SCORE` / `// OUTPUT` (or `// SUPPORT`) / `// SURVIVAL · TANK` headers that reuse the profile's own section labels, so each group lines up with the field the user just saw. Same 18 definitions, no content change; vi/en/jp. A test guards the support group against the 1024-char field cap. 1455 tests green.
+
 ## 2026-06-06 (raid-profile: "Giải thích" button - per-view metric glossary)
 
 ### Added

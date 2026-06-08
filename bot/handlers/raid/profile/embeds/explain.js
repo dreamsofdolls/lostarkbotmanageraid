@@ -2,6 +2,7 @@
 
 const { t } = require("../../../../services/i18n");
 const { PROFILE_COLORS } = require("../helpers/colors");
+const { hudFieldName } = require("../helpers/display");
 
 /**
  * embeds/explain.js
@@ -36,14 +37,28 @@ const EXPLAIN_DEFS = {
   identityHyper: { name: "raidProfile.labels.identityHyper",     def: "raidProfile.explain.defs.identityHyper" },
 };
 
-// Hard metrics actually rendered per view (kept in sync with embeds.js +
-// character-lines.js). Overall/roster show aggregate scores; character views
-// split by role (DPS output vs Support impact metrics).
+// Hard metrics per view, grouped so the popup renders one embed FIELD per group
+// instead of a flat wall of lines. Group headers REUSE the profile's own
+// section labels (Score / Output / Support / Survival·Tank / Aggregate), so the
+// popup's "// SUPPORT" header lines up with the same field the user just saw -
+// no new i18n keys, 1:1 mapping. Kept in sync with embeds.js + character-lines.js.
 const EXPLAIN_VIEWS = {
-  overall: ["overallScore", "mvpScore", "roleAvg"],
-  roster: ["overallScore", "mvpScore", "roleAvg"],
-  characterDps: ["overallScore", "mvpScore", "survival", "stability", "contextPct", "damageShare", "peakBurst", "deathless"],
-  characterSup: ["overallScore", "mvpScore", "survival", "stability", "rdpsImpact", "contribution", "rContribution", "supporterPct", "radiantPct", "supportRank", "protection", "apBrand", "identityHyper", "deathless"],
+  overall: [
+    { header: "raidProfile.sections.aggregate", keys: ["overallScore", "mvpScore", "roleAvg"] },
+  ],
+  roster: [
+    { header: "raidProfile.sections.aggregate", keys: ["overallScore", "mvpScore", "roleAvg"] },
+  ],
+  characterDps: [
+    { header: "raidProfile.labels.scoreSection", keys: ["overallScore", "mvpScore", "survival", "stability"] },
+    { header: "raidProfile.labels.outputSection", keys: ["contextPct", "damageShare", "peakBurst"] },
+    { header: "raidProfile.labels.survivalTankSection", keys: ["deathless"] },
+  ],
+  characterSup: [
+    { header: "raidProfile.labels.scoreSection", keys: ["overallScore", "mvpScore", "survival", "stability"] },
+    { header: "raidProfile.labels.supportSection", keys: ["rdpsImpact", "contribution", "rContribution", "supporterPct", "radiantPct", "supportRank", "protection", "apBrand", "identityHyper"] },
+    { header: "raidProfile.labels.survivalTankSection", keys: ["deathless"] },
+  ],
 };
 
 /**
@@ -70,17 +85,24 @@ function resolveExplainView(session) {
  */
 function buildExplainEmbed(session, lang = "vi", { EmbedBuilder }) {
   const view = resolveExplainView(session);
-  const keys = EXPLAIN_VIEWS[view] || EXPLAIN_VIEWS.overall;
-  // Colon-separated glossary line; no em-dash per the repo's no-emdash rule.
-  const lines = keys
-    .map((key) => EXPLAIN_DEFS[key])
-    .filter(Boolean)
-    .map((entry) => `**${t(entry.name, lang)}**: ${t(entry.def, lang)}`);
-  return new EmbedBuilder()
+  const groups = EXPLAIN_VIEWS[view] || EXPLAIN_VIEWS.overall;
+  const embed = new EmbedBuilder()
     .setColor(PROFILE_COLORS.amber)
     .setAuthor({ name: t("raidProfile.author.explain", lang) })
-    .setTitle(t("raidProfile.explain.title", lang))
-    .setDescription(lines.join("\n"));
+    .setTitle(t("raidProfile.explain.title", lang));
+  // One field per group; the field name is a // HUD header matching the profile's
+  // own section labels. Lines are `**Name**: def` (colon, no em-dash per rule).
+  for (const group of groups) {
+    const value = group.keys
+      .map((key) => EXPLAIN_DEFS[key])
+      .filter(Boolean)
+      .map((entry) => `**${t(entry.name, lang)}**: ${t(entry.def, lang)}`)
+      .join("\n");
+    if (value) {
+      embed.addFields({ name: hudFieldName(t(group.header, lang)), value, inline: false });
+    }
+  }
+  return embed;
 }
 
 module.exports = {
