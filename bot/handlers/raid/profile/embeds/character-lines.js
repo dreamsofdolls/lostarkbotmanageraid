@@ -43,6 +43,22 @@ function localizedScoreLine(key, value, lang) {
   return scoreLine(label(key, lang), value, { width: 8 });
 }
 
+function firstFinite(...values) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
+  }
+  return 0;
+}
+
+function firstPositiveFinite(...values) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number) && number > 0) return number;
+  }
+  return firstFinite(...values);
+}
+
 function buildSurvivalLines(stats, lang) {
   return [
     valueLine(label("deathless", lang), pct(stats.deathlessRate)),
@@ -90,9 +106,11 @@ function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = 
   if (isSupport) {
     const drivers = [localizedScoreLine("supportImpact", sc.raidContribution || sc.supportUptime, lang)];
     if (!isBibleSummary) {
+      const contributionShare = firstPositiveFinite(s.avgSynergyGivenShare, s.avgSupporterPercent);
+      const rContributionShare = firstPositiveFinite(s.avgRdpsDamageGivenShare, s.avgSupporterPercent);
       drivers.push(
-        valueLine(label("contribution", lang), shortNumber(s.avgSynergyGivenPerMinute)),
-        valueLine(label("rContribution", lang), shortNumber(s.avgSupporterDamageGivenPerMinute || s.avgRdpsDamageGivenPerMinute)),
+        valueLine(label("contribution", lang), pct(contributionShare)),
+        valueLine(label("rContribution", lang), pct(rContributionShare)),
         valueLine(label("supporterPercent", lang), pct(s.avgSupporterPercent)),
         valueLine(label("radiantPercent", lang), pct(s.radiantSupportRate)),
         valueLine(label("supportRank", lang), s.supporterRankValidCount ? `${score(s.avgSupporterRank)} / ${score(s.supporterCountAvg)}` : "N/A"),

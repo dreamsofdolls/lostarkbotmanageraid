@@ -257,6 +257,7 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
                   radiantSupportCount: 6,
                   radiantSupportRate: 50,
                   avgSupporterDamageGivenPerMinute: 50100000000,
+                  avgRdpsDamageGivenShare: 34.5,
                   supporterRankValidCount: 9,
                   supporterCompetitiveCount: 7,
                   avgSupporterRank: 1.4,
@@ -279,6 +280,7 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
                   avgShieldReceivedPerMinute: 900000,
                   avgIncapacitations: 0.5,
                   avgSynergyGivenPerMinute: 12345,
+                  avgSynergyGivenShare: 12.3,
                   avgProtection: 123456,
                   avgProtectionPerMinute: 456789,
                   avgPartyBuffedShare: 133.7,
@@ -453,12 +455,14 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
               deadTimeMs: 42000,
               deadTimeRate: 10,
               rdpsDamageGivenPerMinute: 987654,
+              rdpsDamageGivenShare: 34.5,
               supporterDamageGiven: 123456789,
               supporterDamageGivenPerMinute: 50100000000,
               supporterPercent: 30.4,
               supporterTier: "radiant",
               supporterRank: 1,
               supporterCount: 2,
+              synergyGivenShare: 12.3,
             },
             topSkills: [{ id: "123", name: "Main Skill", damage: 987, share: 42.5 }],
           },
@@ -515,6 +519,7 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
   assert.equal(saved.accounts[0].characters[0].stats.radiantSupportCount, 6);
   assert.equal(saved.accounts[0].characters[0].stats.radiantSupportRate, 50);
   assert.equal(saved.accounts[0].characters[0].stats.avgSupporterDamageGivenPerMinute, 50100000000);
+  assert.equal(saved.accounts[0].characters[0].stats.avgRdpsDamageGivenShare, 34.5);
   assert.equal(saved.accounts[0].characters[0].stats.supporterRankValidCount, 9);
   assert.equal(saved.accounts[0].characters[0].stats.supporterCompetitiveCount, 7);
   assert.equal(saved.accounts[0].characters[0].stats.avgSupporterRank, 1.4);
@@ -539,6 +544,7 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
   assert.equal(saved.accounts[0].characters[0].stats.damageTakenShareValidCount, 12);
   assert.equal(saved.accounts[0].characters[0].stats.avgDamageTakenShare, 13.4);
   assert.equal(saved.accounts[0].characters[0].stats.avgSynergyGivenPerMinute, 12345);
+  assert.equal(saved.accounts[0].characters[0].stats.avgSynergyGivenShare, 12.3);
   assert.equal(saved.accounts[0].characters[0].stats.avgProtectionPerMinute, 456789);
   assert.equal(saved.accounts[0].characters[0].stats.avgPartyBuffedShare, 133.7);
   assert.equal(saved.accounts[0].characters[0].stats.avgPartyDebuffedShare, 101.2);
@@ -614,10 +620,12 @@ test("raid-profile-sync endpoint stores only registered roster characters", asyn
   assert.equal(encounterOp.update.$set.metrics.frontAttackDamageShare, 4.4);
   assert.equal(encounterOp.update.$set.metrics.positionalDamageShare, 58.7);
   assert.equal(encounterOp.update.$set.metrics.deadTimeMs, 42000);
+  assert.equal(encounterOp.update.$set.metrics.rdpsDamageGivenShare, 34.5);
   assert.equal(encounterOp.update.$set.metrics.supporterPercent, 30.4);
   assert.equal(encounterOp.update.$set.metrics.supporterTier, "radiant");
   assert.equal(encounterOp.update.$set.metrics.supporterRank, 1);
   assert.equal(encounterOp.update.$set.metrics.supporterCount, 2);
+  assert.equal(encounterOp.update.$set.metrics.synergyGivenShare, 12.3);
   assert.equal(encounterOp.update.$set.topSkills[0].name, "Main Skill");
   assert.equal(userUpdates.length, 1);
   assert.deepEqual(userUpdates[0].filter, {
