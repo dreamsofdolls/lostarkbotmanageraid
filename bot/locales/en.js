@@ -2229,6 +2229,7 @@ module.exports = {
     },
     validLogs: "Valid logs",
     lastFight: "Last fight",
+    dateMissing: "N/A",
     noProfiles: "No profiles yet.",
     noChars: "This roster has no characters in the profile yet.",
     noRaidBreakdown: "Not enough logs to break this down by raid yet.",

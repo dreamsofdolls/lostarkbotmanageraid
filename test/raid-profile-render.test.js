@@ -300,6 +300,11 @@ test("raid-profile render: HUD author, gauges, #3-rich character tables (DPS + S
   assert.match(supText, /Casts\/min: \*\*28\.4\*\*/);
   assert.match(supText, /Counters: \*\*1\.2\*\*/);
   assert.match(supText, /Stagger\/min: \*\*2\.1K\*\*/);
+
+  session.entries[0].characters[1].scores.raidContribution = 0;
+  const zeroImpactSupport = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
+  const zeroImpactText = zeroImpactSupport.fields.map((field) => field.value).join("\n");
+  assert.match(zeroImpactText, /rDPS: .*\*\*0\.0\*\*/);
 });
 
 test("raid-profile renders a flex char: roster flex support tag + two build tables", () => {
@@ -501,6 +506,28 @@ test("raid-profile character metric labels honor non-vi locale", () => {
   assert.match(text, /ダメージ比率: \*\*24\.8%\*\*/);
 });
 
+test("raid-profile missing dates do not leak vi fallback in non-vi locale", () => {
+  const deps = makeDeps();
+  const command = createRaidProfileCommand(deps);
+  const session = makeSession();
+  session.lang = "en";
+  session.entries[0].receivedAt = 0;
+  session.entries[0].generatedAt = 0;
+  for (const character of session.entries[0].characters) {
+    character.stats.lastFightStart = 0;
+  }
+
+  const overall = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
+  const scopeField = overall.fields.find((field) => field.name === "// SCOPE");
+  assert.match(scopeField.value, /Last fight: N\/A/);
+  assert.doesNotMatch(scopeField.value, /chưa|chÆ/);
+
+  session.rosterIndex = 0;
+  const roster = command.__test.renderSessionPayload(deps, session).embeds[0].toJSON();
+  assert.match(roster.description, /Updated N\/A/);
+  assert.doesNotMatch(roster.description, /chưa|chÆ/);
+});
+
 test("raid-profile prefers local detailed snapshot over bible full-lite", () => {
   const deps = makeDeps();
   const command = createRaidProfileCommand(deps);
@@ -664,6 +691,11 @@ test("raid-profile component state reducers handle selects and paging", () => {
   assert.equal(session.charIndex, 1);
   assert.equal(command.__test.applyProfileButton(session, "overview"), true);
   assert.equal(session.rosterIndex, 0);
+  assert.equal(session.charIndex, -1);
+
+  assert.equal(command.__test.applyProfileButton(session, "next"), true);
+  assert.equal(session.charIndex, 0);
+  assert.equal(command.__test.applyProfileButton(session, "overview"), true);
   assert.equal(session.charIndex, -1);
 
   assert.equal(command.__test.applyProfileButton(session, "prev"), true);

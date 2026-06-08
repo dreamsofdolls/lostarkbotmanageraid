@@ -43,6 +43,14 @@ function localizedScoreLine(key, value, lang) {
   return scoreLine(label(key, lang), value, { width: 8 });
 }
 
+function firstFiniteValue(...values) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
+  }
+  return undefined;
+}
+
 function hasOwn(value, key) {
   return Object.prototype.hasOwnProperty.call(value || {}, key);
 }
@@ -99,7 +107,7 @@ function buildBuildFields(role, stats, scores, { build = null, isBibleSummary = 
   let mechanicsField = null;
   let supportRankField = null;
   if (isSupport) {
-    const drivers = [localizedScoreLine("supportImpact", sc.raidContribution || sc.supportUptime, lang)];
+    const drivers = [localizedScoreLine("supportImpact", firstFiniteValue(sc.raidContribution, sc.supportUptime), lang)];
     if (!isBibleSummary) {
       drivers.push(
         valueLine(label("contribution", lang), optionalPct(s, "avgSynergyGivenShare")),

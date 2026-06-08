@@ -2229,6 +2229,7 @@ module.exports = {
     },
     validLogs: "有効ログ",
     lastFight: "最終戦闘",
+    dateMissing: "N/A",
     noProfiles: "まだプロフィールがありませんわ。",
     noChars: "このロスターにはまだプロフィール対象のキャラが居ませんわ。",
     noRaidBreakdown: "レイド別に分けるにはログが足りませんわ。",

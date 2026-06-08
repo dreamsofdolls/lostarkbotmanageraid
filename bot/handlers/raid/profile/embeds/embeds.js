@@ -139,7 +139,7 @@ function buildOverallEmbed({ EmbedBuilder }, session) {
         name: hudFieldName(t("raidProfile.sections.scope", lang)),
         value: [
           t("raidProfile.lines.logScored", lang, { logs: agg.logs, scored: agg.scoredLogs }),
-          `${t("raidProfile.lastFight", lang)}: ${formatDateMs(agg.lastFightStart)}`,
+          `${t("raidProfile.lastFight", lang)}: ${formatDateMs(agg.lastFightStart, lang)}`,
           topOverall
             ? t("raidProfile.lines.topCharacter", lang, { icon: getClassEmoji(topOverall.class) || roleEmoji(topOverall), name: topOverall.name, score: score(topOverall.scores.overall) })
             : t("raidProfile.lines.topMissing", lang),
@@ -182,7 +182,7 @@ function buildRosterEmbed({ EmbedBuilder }, session, entry) {
   // Counts + own/shared move into the kicker (ops-brief, mirrors the OVERALL
   // view); SCOPE keeps just the scored headline + gauges. Shared rosters still
   // surface owner+access in the meta line since that carries real info.
-  const updated = t("raidProfile.updatedAt", lang, { date: formatDateMs(entry.receivedAt || entry.generatedAt) });
+  const updated = t("raidProfile.updatedAt", lang, { date: formatDateMs(entry.receivedAt || entry.generatedAt, lang) });
   const metaLine = entry.isOwn
     ? updated
     : `${t("raidProfile.rosterShared", lang, { owner: entry.ownerLabel || entry.ownerDiscordId, level: entry.accessLevel })} · ${updated}`;

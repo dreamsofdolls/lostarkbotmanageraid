@@ -132,9 +132,9 @@ function footerTimestamp(ms, lang = "vi") {
   return t("raidProfile.footer.snapshotAt", lang, { date: formatSnapshotDateMs(n, lang) });
 }
 
-function formatDateMs(ms) {
+function formatDateMs(ms, lang = "vi") {
   const n = validTimestampMs(ms);
-  if (!n) return "chưa có";
+  if (!n) return t("raidProfile.dateMissing", lang);
   return `<t:${Math.floor(n / 1000)}:R>`;
 }
 
