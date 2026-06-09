@@ -592,7 +592,6 @@ module.exports = {
       earnedThisWeek: "💰 今週の獲得: **{earned}** / **{total}**{boundTail}",
       goldRollup: "💰 **{earned} / {total}**{boundTail}",
       goldBoundTail: " · 🔒 **{bound}** 拘束",
-      goldBoundLine: "🔒 **{bound}** 拘束",
       notEligible: "_まだ参加できませんわ_",
       noCharacters: "_キャラがまだ登録されていませんわ。_",
       allIneligible: "_このロスター内にこのレイドへ参加できるキャラが居ませんわ。_",
