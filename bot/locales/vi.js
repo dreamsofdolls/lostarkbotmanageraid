@@ -615,7 +615,6 @@ module.exports = {
       earnedThisWeek: "💰 Tuần này đã kiếm: **{earned}** / **{total}**{boundTail}",
       goldRollup: "💰 **{earned} / {total}**{boundTail}",
       goldBoundTail: " · 🔒 **{bound}** khóa",
-      goldBoundLine: "🔒 **{bound}** khóa",
       notEligible: "_Chưa đủ điều kiện_",
       noCharacters: "_Chưa có character nào._",
       allIneligible: "_Không có character nào đủ điều kiện cho raid này trong roster._",

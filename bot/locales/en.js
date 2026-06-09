@@ -593,7 +593,6 @@ module.exports = {
       earnedThisWeek: "💰 Earned this week: **{earned}** / **{total}**{boundTail}",
       goldRollup: "💰 **{earned} / {total}**{boundTail}",
       goldBoundTail: " · 🔒 **{bound}** bound",
-      goldBoundLine: "🔒 **{bound}** bound",
       notEligible: "_Not eligible yet_",
       noCharacters: "_No characters saved._",
       allIneligible: "_No character in this roster is eligible for this raid._",

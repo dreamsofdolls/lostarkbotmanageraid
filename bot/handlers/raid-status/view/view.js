@@ -90,13 +90,12 @@ function createRaidStatusView(deps) {
       if (raid?.goldBound) earnedBound += e;
     }
     if (total <= 0) return [];
-    // Narrow 2-col card: show just the gold actually earned (not earned/total),
-    // and put the bound amount on its own line so neither wraps.
-    const goldLines = [`💰 ${formatGold(earned)}`];
-    if (earnedBound > 0) {
-      goldLines.push(t("raid-status.embed.goldBoundLine", lang, { bound: formatGold(earnedBound) }));
-    }
-    return goldLines;
+    // Narrow 2-col card: show just the gold actually earned (not earned/total).
+    // The bound tail fits inline now that the /total half is gone.
+    const boundTail = earnedBound > 0
+      ? t("raid-status.embed.goldBoundTail", lang, { bound: formatGold(earnedBound) })
+      : "";
+    return [`💰 ${formatGold(earned)}${boundTail}`];
   }
 
   function buildCharacterField(character, getRaidsFor, lang) {
