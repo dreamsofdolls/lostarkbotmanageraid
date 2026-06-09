@@ -19,7 +19,7 @@ const {
   readVerifiedLocalSyncToken,
   requireCurrentLocalSyncUser,
 } = require("../request-gates");
-const { RAID_REQUIREMENTS, getGatesForRaid, getGoldForGate } = require("../../../../models/Raid");
+const { RAID_REQUIREMENTS, getGatesForRaid, getGoldForGate, isGoldBound } = require("../../../../models/Raid");
 const { normalizeName } = require("../../../../utils/raid/common/shared");
 const { getStatusRaidsForCharacter } = require("../../../../utils/raid/common/character");
 
@@ -53,6 +53,7 @@ function projectSummary(accounts, deltaBuckets) {
 
   const goldByChar = new Map();
   let goldTotal = 0;
+  let goldBoundTotal = 0;
   // Counts are RAIDS, not gates - mirrors `summarizeRaidProgress` in
   // bot/utils/raid/common/character.js so the % matches what /raid-status shows.
   // A raid is "completed" iff all its gates have completedDate > 0.
@@ -104,9 +105,12 @@ function projectSummary(accounts, deltaBuckets) {
       }
 
       let charGold = 0;
+      let charGoldBound = 0;
       for (const { raidKey, modeKey, gate } of appliedGates.values()) {
         if (char.isGoldEarner !== false) {
-          charGold += getGoldForGate(raidKey, modeKey, gate);
+          const g = getGoldForGate(raidKey, modeKey, gate);
+          charGold += g;
+          if (isGoldBound(raidKey, modeKey)) charGoldBound += g;
         }
       }
       if (charGold > 0) {
@@ -116,8 +120,10 @@ function projectSummary(accounts, deltaBuckets) {
           className: char.class || "",
           itemLevel: Number(char.itemLevel) || 0,
           gold: charGold,
+          goldBound: charGoldBound,
         });
         goldTotal += charGold;
+        goldBoundTotal += charGoldBound;
       }
 
       // Pre-sync clearedRaids comes from preRaidStates. Use both pre +
@@ -179,6 +185,7 @@ function projectSummary(accounts, deltaBuckets) {
   return {
     goldDelta: {
       total: goldTotal,
+      boundTotal: goldBoundTotal,
       byChar: [...goldByChar.values()].sort((a, b) => b.gold - a.gold),
     },
     completion: {
@@ -236,7 +243,7 @@ function createPreviewSummaryEndpoint({ User }) {
     if (!userDoc) {
       send(res, 200, {
         ok: true,
-        goldDelta: { total: 0, byChar: [] },
+        goldDelta: { total: 0, boundTotal: 0, byChar: [] },
         completion: { totalRaids: 0, cleared: 0, projected: 0, percent: 0, projectedPercent: 0 },
         charsAfterSync: [],
         lastSync: { localSyncAt: null, autoManageSyncAt: null },
