@@ -2,7 +2,12 @@
 
 const { getAccessibleAccounts } = require("../../services/access/access-control");
 const { isDevUser } = require("../../services/access/dev-preview");
-const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const {
+  buildNoticeEmbed,
+  deferEphemeralReply,
+  editEmbed,
+  replyEmbed,
+} = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
 const {
   aggregateCharacters,
@@ -60,7 +65,6 @@ async function buildAccessibleProfileEntries(viewerDiscordId, { RaidProfileSnaps
 function createRaidProfileCommand(deps) {
   const {
     EmbedBuilder,
-    MessageFlags,
     UI,
     User,
     RaidProfileSnapshot,
@@ -87,7 +91,7 @@ function createRaidProfileCommand(deps) {
         ? t("raidProfile.resetDoneDesc", lang, { snapshots, encounters })
         : t("raidProfile.resetEmptyDesc", lang),
     }).setAuthor({ name: "// RAID PROFILE · RESET" });
-    await interaction.editReply({ embeds: [embed] });
+    await editEmbed(interaction, embed);
   }
 
   async function handleRaidProfileCommand(interaction) {
@@ -97,7 +101,11 @@ function createRaidProfileCommand(deps) {
     const isPublic =
       interaction.options?.getString?.("visibility") === "show" &&
       interaction.options?.getString?.("action") !== "reset";
-    await interaction.deferReply(isPublic ? {} : { flags: MessageFlags.Ephemeral });
+    if (isPublic) {
+      await interaction.deferReply({});
+    } else {
+      await deferEphemeralReply(interaction);
+    }
     const viewerDiscordId = interaction.user.id;
     const lang = await getUserLanguage(viewerDiscordId, { UserModel: User });
 
@@ -109,7 +117,7 @@ function createRaidProfileCommand(deps) {
         title: t("raidProfile.previewOnlyTitle", lang),
         description: t("raidProfile.previewOnlyDesc", lang),
       }).setAuthor({ name: "// RAID PROFILE · PREVIEW" });
-      await interaction.editReply({ embeds: [embed] });
+      await editEmbed(interaction, embed);
       return;
     }
 
@@ -128,9 +136,7 @@ function createRaidProfileCommand(deps) {
         title: t("raidProfile.noRosterTitle", lang),
         description: t("raidProfile.noRosterDesc", lang),
       }).setAuthor({ name: "// RAID PROFILE · HEADS UP" });
-      await interaction.editReply({
-        embeds: [embed],
-      });
+      await editEmbed(interaction, embed);
       return;
     }
 
@@ -152,9 +158,7 @@ function createRaidProfileCommand(deps) {
         title: t("raidProfile.noSnapshotTitle", lang),
         description: hint,
       }).setAuthor({ name: "// RAID PROFILE · HEADS UP" });
-      await interaction.editReply({
-        embeds: [embed],
-      });
+      await editEmbed(interaction, embed);
       return;
     }
 
@@ -171,33 +175,23 @@ function createRaidProfileCommand(deps) {
     // defensively (e.g. a stale component minted before the gate shipped).
     if (!isDevUser(interaction.user?.id)) {
       const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      await interaction.reply({
-        flags: MessageFlags.Ephemeral,
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "info",
-            title: t("raidProfile.previewOnlyTitle", lang),
-            description: t("raidProfile.previewOnlyDesc", lang),
-          }),
-        ],
-      });
+      await replyEmbed(interaction, buildNoticeEmbed(EmbedBuilder, {
+        type: "info",
+        title: t("raidProfile.previewOnlyTitle", lang),
+        description: t("raidProfile.previewOnlyDesc", lang),
+      }));
       return;
     }
     const { action, session, forbidden } = sessionStore.getForInteraction(interaction);
     if (!session) {
       const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      await interaction.reply({
-        flags: MessageFlags.Ephemeral,
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: forbidden ? t("raidProfile.forbiddenTitle", lang) : t("raidProfile.expiredTitle", lang),
-            description: forbidden
-              ? t("raidProfile.forbiddenDesc", lang)
-              : t("raidProfile.expiredDesc", lang),
-          }),
-        ],
-      });
+      await replyEmbed(interaction, buildNoticeEmbed(EmbedBuilder, {
+        type: "warn",
+        title: forbidden ? t("raidProfile.forbiddenTitle", lang) : t("raidProfile.expiredTitle", lang),
+        description: forbidden
+          ? t("raidProfile.forbiddenDesc", lang)
+          : t("raidProfile.expiredDesc", lang),
+      }));
       return;
     }
 
@@ -213,10 +207,7 @@ function createRaidProfileCommand(deps) {
         // Read-only popup: a separate ephemeral message so the profile embed +
         // navigation stay put. The session is owner-locked (getForInteraction
         // rejects other users), so session.lang is the clicker's language.
-        await interaction.reply({
-          flags: MessageFlags.Ephemeral,
-          embeds: [buildExplainEmbed(session, session.lang, renderDeps)],
-        });
+        await replyEmbed(interaction, buildExplainEmbed(session, session.lang, renderDeps));
         return;
       }
       applyProfileButton(session, action);
