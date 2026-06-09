@@ -40,6 +40,7 @@ const {
   getCharacterName,
   formatGold,
 } = require("../bot/utils/raid/common/shared");
+const { getGoldForGate, isGoldBound } = require("../bot/domain/raid-catalog");
 const {
   summarizeRaidProgress,
   summarizeAccountGold,
@@ -481,6 +482,42 @@ test("computeRaidGold: returns 0 earned when no gates cleared, full total still 
   assert.equal(gold.earnedGold, 0);
   // Serca Nightmare G1=21000 + G2=33000 = 54000.
   assert.equal(gold.totalGold, 54000);
+});
+
+test("raid-catalog: normal gold is base*boundGold.factor (halved) + bound; hard stays full + unbound", () => {
+  // Base armoche normal G1=12500 -> *0.5 = 6250; hard G1=15000 unchanged.
+  assert.equal(getGoldForGate("armoche", "normal", "G1"), 6250);
+  assert.equal(getGoldForGate("armoche", "normal", "G2"), 10250);
+  assert.equal(getGoldForGate("armoche", "hard", "G1"), 15000);
+  assert.equal(isGoldBound("armoche", "normal"), true);
+  assert.equal(isGoldBound("kazeros", "normal"), true);
+  assert.equal(isGoldBound("armoche", "hard"), false);
+  assert.equal(isGoldBound("serca", "nightmare"), false);
+});
+
+test("computeRaidGold: tags normal entries goldBound (halved values), hard entries unbound", () => {
+  const normal = computeRaidGold("armoche", "normal", ["G1"], ["G1", "G2"]);
+  assert.equal(normal.earnedGold, 6250); // 12500 * 0.5
+  assert.equal(normal.totalGold, 16500); // (12500 + 20500) * 0.5
+  assert.equal(normal.goldBound, true);
+  const hard = computeRaidGold("kazeros", "hard", ["G1", "G2"], ["G1", "G2"]);
+  assert.equal(hard.totalGold, 52000);
+  assert.equal(hard.goldBound, false);
+});
+
+test("summarizeCharacterGold: splits earned/total into bound vs unbound (back-compat totals intact)", () => {
+  const raids = [
+    { earnedGold: 6250, totalGold: 16500, goldBound: true },   // normal (bound)
+    { earnedGold: 17000, totalGold: 52000, goldBound: false }, // hard (unbound)
+  ];
+  const g = summarizeCharacterGold(raids);
+  assert.equal(g.earned, 23250); // grand total unchanged shape
+  assert.equal(g.total, 68500);
+  assert.equal(g.earnedBound, 6250);
+  assert.equal(g.earnedUnbound, 17000);
+  assert.equal(g.totalBound, 16500);
+  assert.equal(g.totalUnbound, 52000);
+  assert.equal(g.earnedBound + g.earnedUnbound, g.earned);
 });
 
 test("getStatusRaidsForCharacter: decorates each raid entry with earnedGold + totalGold", () => {

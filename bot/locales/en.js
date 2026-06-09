@@ -590,7 +590,8 @@ module.exports = {
     },
     embed: {
       allAccounts: "🌐 All accounts: **{chars}** chars · **{done}/{total}** raids done{goldTail}",
-      earnedThisWeek: "💰 Earned this week: **{earned}** / **{total}**",
+      earnedThisWeek: "💰 Earned this week: **{earned}** / **{total}**{boundTail}",
+      goldBoundTail: " · 🔒 **{bound}** bound",
       notEligible: "_Not eligible yet_",
       noCharacters: "_No characters saved._",
       allIneligible: "_No character in this roster is eligible for this raid._",

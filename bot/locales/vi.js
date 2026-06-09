@@ -612,7 +612,8 @@ module.exports = {
     },
     embed: {
       allAccounts: "🌐 Tổng tất cả roster: **{chars}** char · **{done}/{total}** raid done{goldTail}",
-      earnedThisWeek: "💰 Tuần này đã kiếm: **{earned}** / **{total}**",
+      earnedThisWeek: "💰 Tuần này đã kiếm: **{earned}** / **{total}**{boundTail}",
+      goldBoundTail: " · 🔒 **{bound}** khóa",
       notEligible: "_Chưa đủ điều kiện_",
       noCharacters: "_Chưa có character nào._",
       allIneligible: "_Không có character nào đủ điều kiện cho raid này trong roster._",
