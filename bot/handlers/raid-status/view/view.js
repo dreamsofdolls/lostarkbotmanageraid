@@ -77,17 +77,23 @@ function createRaidStatusView(deps) {
   // least one eligible raid this week. Non-earners emit no line at all:
   // the header already carries the 💰 marker (its absence signals "not
   // gold-earner") so a dedicated body line would just clutter the card.
-  function buildCharacterGoldLine(character, raids) {
+  function buildCharacterGoldLine(character, raids, lang) {
     if (!Array.isArray(raids) || raids.length === 0) return null;
     if (!character?.isGoldEarner) return null;
     let earned = 0;
     let total = 0;
+    let earnedBound = 0;
     for (const raid of raids) {
-      earned += Number(raid?.earnedGold) || 0;
+      const e = Number(raid?.earnedGold) || 0;
+      earned += e;
       total += Number(raid?.totalGold) || 0;
+      if (raid?.goldBound) earnedBound += e;
     }
     if (total <= 0) return null;
-    return `💰 ${formatGold(earned)} / ${formatGold(total)}`;
+    const boundTail = earnedBound > 0
+      ? t("raid-status.embed.goldBoundTail", lang, { bound: formatGold(earnedBound) })
+      : "";
+    return `💰 ${formatGold(earned)} / ${formatGold(total)}${boundTail}`;
   }
 
   function buildCharacterField(character, getRaidsFor, lang) {
@@ -105,7 +111,7 @@ function createRaidStatusView(deps) {
       ? [`${UI.icons.lock} ${t("raid-status.embed.notEligible", lang)}`]
       : raids.map((raid) => formatRaidStatusLine(raid, lang));
 
-    const goldLine = buildCharacterGoldLine(character, raids);
+    const goldLine = buildCharacterGoldLine(character, raids, lang);
     if (goldLine) lines.push(goldLine);
 
     return {
