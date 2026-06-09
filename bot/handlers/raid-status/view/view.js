@@ -78,8 +78,8 @@ function createRaidStatusView(deps) {
   // the header already carries the 💰 marker (its absence signals "not
   // gold-earner") so a dedicated body line would just clutter the card.
   function buildCharacterGoldLine(character, raids, lang) {
-    if (!Array.isArray(raids) || raids.length === 0) return null;
-    if (!character?.isGoldEarner) return null;
+    if (!Array.isArray(raids) || raids.length === 0) return [];
+    if (!character?.isGoldEarner) return [];
     let earned = 0;
     let total = 0;
     let earnedBound = 0;
@@ -89,11 +89,14 @@ function createRaidStatusView(deps) {
       total += Number(raid?.totalGold) || 0;
       if (raid?.goldBound) earnedBound += e;
     }
-    if (total <= 0) return null;
-    const boundTail = earnedBound > 0
-      ? t("raid-status.embed.goldBoundTail", lang, { bound: formatGold(earnedBound) })
-      : "";
-    return `💰 ${formatGold(earned)} / ${formatGold(total)}${boundTail}`;
+    if (total <= 0) return [];
+    // Narrow 2-col card: show just the gold actually earned (not earned/total),
+    // and put the bound amount on its own line so neither wraps.
+    const goldLines = [`💰 ${formatGold(earned)}`];
+    if (earnedBound > 0) {
+      goldLines.push(t("raid-status.embed.goldBoundLine", lang, { bound: formatGold(earnedBound) }));
+    }
+    return goldLines;
   }
 
   function buildCharacterField(character, getRaidsFor, lang) {
@@ -111,8 +114,7 @@ function createRaidStatusView(deps) {
       ? [`${UI.icons.lock} ${t("raid-status.embed.notEligible", lang)}`]
       : raids.map((raid) => formatRaidStatusLine(raid, lang));
 
-    const goldLine = buildCharacterGoldLine(character, raids, lang);
-    if (goldLine) lines.push(goldLine);
+    lines.push(...buildCharacterGoldLine(character, raids, lang));
 
     return {
       name: fieldName,
@@ -318,17 +320,24 @@ function createRaidStatusView(deps) {
       const globalBoundTail = globalGoldBound > 0
         ? t("raid-status.embed.goldBoundTail", lang, { bound: formatGold(globalGoldBound) })
         : "";
-      const globalGoldTail = globalGoldTotal > 0
-        ? ` · 💰 **${formatGold(globalGoldEarned)} / ${formatGold(globalGoldTotal)}**${globalBoundTail}`
-        : "";
       descriptionLines.push(
         t("raid-status.embed.allAccounts", lang, {
           chars: globalTotals.characters,
           done: globalTotals.progress.completed,
           total: globalTotals.progress.total,
-          goldTail: globalGoldTail,
         }),
       );
+      // Gold on its own line: cramming it onto the counts line above ran long
+      // once the bound tail was added, wrapping the bound onto an orphan line.
+      if (globalGoldTotal > 0) {
+        descriptionLines.push(
+          t("raid-status.embed.goldRollup", lang, {
+            earned: formatGold(globalGoldEarned),
+            total: formatGold(globalGoldTotal),
+            boundTail: globalBoundTail,
+          }),
+        );
+      }
     }
     // Per-account gold rollup. Always emitted on accounts with at least
     // one gold-earner.

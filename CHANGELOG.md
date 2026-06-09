@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-06 (raid-status: gold layout - own-line rollup + earned-only per-char)
+
+### Changed
+- Fixed the gold lines crowding once the bound tail was added. The cross-roster rollup gold moves to its **own line** (it was crammed onto the char/raid-count line, which then wrapped the bound onto an orphan line). Per-character cards (narrow 2-col) now show just the gold **actually earned** (`💰 79,500G`, not earned/total - the per-card 2/2 raid lines already convey completion), with the roster-bound amount on **its own line below** (`🔒 37,500G khóa`). i18n vi/en/jp (`goldRollup`, `goldBoundLine`; dropped the now-unused `allAccounts` goldTail). 1459 tests green.
+
 ## 2026-06-06 (gold: normal-raid gold halved + roster-bound)
 
 ### Changed
