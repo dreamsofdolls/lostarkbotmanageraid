@@ -21,6 +21,7 @@ const {
 const {
   getGatesForRaid,
   getGoldForGate,
+  isGoldBound,
 } = require("../../../models/Raid");
 const {
   RAID_GROUP_KEYS,
@@ -115,7 +116,9 @@ function computeRaidGold(raidKey, modeKey, completedGateKeys, allGateKeys) {
   for (const gate of allGateKeys || []) {
     total += getGoldForGate(raidKey, modeKey, gate);
   }
-  return { earnedGold: earned, totalGold: total };
+  // goldBound tags the whole entry: a mode's gold is wholly bound or unbound,
+  // so the rollup can bucket earned/total without re-querying the catalog.
+  return { earnedGold: earned, totalGold: total, goldBound: isGoldBound(raidKey, modeKey) };
 }
 
 function getStatusRaidsForCharacter(character) {
@@ -198,14 +201,32 @@ function formatRaidStatusLine(raid, lang) {
 // composes with the per-char card path (which always renders, gated by
 // `isGoldEarner` at the view layer to swap in the muted "Not gold-earner"
 // line).
+// Returns the grand totals (earned/total, unchanged shape for back-compat) plus
+// a bound/unbound breakdown so callers can show how much of the gold is
+// roster-bound. earned === earnedBound + earnedUnbound (same for total).
 function summarizeCharacterGold(raids) {
   let earned = 0;
   let total = 0;
+  let earnedBound = 0;
+  let totalBound = 0;
   for (const raid of raids || []) {
-    earned += Number(raid?.earnedGold) || 0;
-    total += Number(raid?.totalGold) || 0;
+    const e = Number(raid?.earnedGold) || 0;
+    const t = Number(raid?.totalGold) || 0;
+    earned += e;
+    total += t;
+    if (raid?.goldBound) {
+      earnedBound += e;
+      totalBound += t;
+    }
   }
-  return { earned, total };
+  return {
+    earned,
+    total,
+    earnedBound,
+    totalBound,
+    earnedUnbound: earned - earnedBound,
+    totalUnbound: total - totalBound,
+  };
 }
 
 // Sum gold for a whole account, gating per-character on `isGoldEarner`.
@@ -217,13 +238,24 @@ function summarizeCharacterGold(raids) {
 function summarizeAccountGold(account, getRaidsFor) {
   let earned = 0;
   let total = 0;
+  let earnedBound = 0;
+  let totalBound = 0;
   for (const character of account?.characters || []) {
     if (!character?.isGoldEarner) continue;
     const sub = summarizeCharacterGold(getRaidsFor(character));
     earned += sub.earned;
     total += sub.total;
+    earnedBound += sub.earnedBound;
+    totalBound += sub.totalBound;
   }
-  return { earned, total };
+  return {
+    earned,
+    total,
+    earnedBound,
+    totalBound,
+    earnedUnbound: earned - earnedBound,
+    totalUnbound: total - totalBound,
+  };
 }
 
 // Cross-account variant for the multi-roster rollup line. Wraps
@@ -231,12 +263,23 @@ function summarizeAccountGold(account, getRaidsFor) {
 function summarizeGlobalGold(accounts, getRaidsFor) {
   let earned = 0;
   let total = 0;
+  let earnedBound = 0;
+  let totalBound = 0;
   for (const account of accounts || []) {
     const sub = summarizeAccountGold(account, getRaidsFor);
     earned += sub.earned;
     total += sub.total;
+    earnedBound += sub.earnedBound;
+    totalBound += sub.totalBound;
   }
-  return { earned, total };
+  return {
+    earned,
+    total,
+    earnedBound,
+    totalBound,
+    earnedUnbound: earned - earnedBound,
+    totalUnbound: total - totalBound,
+  };
 }
 
 function summarizeRaidProgress(allRaids) {

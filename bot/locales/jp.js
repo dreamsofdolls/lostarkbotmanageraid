@@ -589,7 +589,8 @@ module.exports = {
     },
     embed: {
       allAccounts: "🌐 全アカウント: **{chars}** キャラ · **{done}/{total}** レイド完了{goldTail}",
-      earnedThisWeek: "💰 今週の獲得: **{earned}** / **{total}**",
+      earnedThisWeek: "💰 今週の獲得: **{earned}** / **{total}**{boundTail}",
+      goldBoundTail: " · 🔒 **{bound}** 拘束",
       notEligible: "_まだ参加できませんわ_",
       noCharacters: "_キャラがまだ登録されていませんわ。_",
       allIneligible: "_このロスター内にこのレイドへ参加できるキャラが居ませんわ。_",

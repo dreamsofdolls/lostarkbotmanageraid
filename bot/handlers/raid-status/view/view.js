@@ -308,8 +308,12 @@ function createRaidStatusView(deps) {
       // all-non-earner roster doesn't render a misleading "💰 0G / 0G".
       const globalGoldTotal = Number(globalTotals?.gold?.total) || 0;
       const globalGoldEarned = Number(globalTotals?.gold?.earned) || 0;
+      const globalGoldBound = Number(globalTotals?.gold?.earnedBound) || 0;
+      const globalBoundTail = globalGoldBound > 0
+        ? t("raid-status.embed.goldBoundTail", lang, { bound: formatGold(globalGoldBound) })
+        : "";
       const globalGoldTail = globalGoldTotal > 0
-        ? ` · 💰 **${formatGold(globalGoldEarned)} / ${formatGold(globalGoldTotal)}**`
+        ? ` · 💰 **${formatGold(globalGoldEarned)} / ${formatGold(globalGoldTotal)}**${globalBoundTail}`
         : "";
       descriptionLines.push(
         t("raid-status.embed.allAccounts", lang, {
@@ -329,6 +333,9 @@ function createRaidStatusView(deps) {
           t("raid-status.embed.earnedThisWeek", lang, {
             earned: formatGold(accountGold.earned),
             total: formatGold(accountGold.total),
+            boundTail: accountGold.earnedBound > 0
+              ? t("raid-status.embed.goldBoundTail", lang, { bound: formatGold(accountGold.earnedBound) })
+              : "",
           }),
         );
       }

@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-06 (gold: normal-raid gold halved + roster-bound)
+
+### Changed
+- Normal-mode raid gold is now halved and roster-bound (Smilegate's anti-inflation change); hard/nightmare stay full + tradeable. Modeled declaratively in `raid-catalog.js`: the base (intrinsic) gold is preserved and a `boundGold: { factor }` modifier applies the cut + bound flag, so a future round of cuts is a one-field edit (not a re-hardcode that loses the original). `getGoldForGate` applies the factor; new `isGoldBound`. The gold rollups (`summarizeCharacter/Account/GlobalGold`) now carry an earned/total **bound-vs-unbound breakdown** (grand totals keep their shape for back-compat), and `/raid-status` surfaces the bound portion (`🔒 N khóa`). i18n vi/en/jp. (Web Companion sync-preview already shows the halved values automatically; its bound label is a follow-up.) 1458 tests green.
+
 ## 2026-06-06 (raid-profile: explain popup grouped into fields)
 
 ### Changed
