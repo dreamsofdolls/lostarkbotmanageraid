@@ -240,6 +240,7 @@ test("preview summary keeps fully done sync chars visible beside gold", () => {
     projectedPercent: 100,
   });
   assert.equal(summary.goldDelta.total, 44000);
+  assert.equal(summary.goldDelta.boundTotal, 0); // all-Hard clears = unbound
   assert.deepEqual(summary.charsAfterSync, [
     {
       accountName: "Roster",
@@ -260,6 +261,7 @@ test("preview summary keeps fully done sync chars visible beside gold", () => {
       className: "Artist",
       itemLevel: 1735,
       gold: 44000,
+      goldBound: 0,
     },
   ]);
 });

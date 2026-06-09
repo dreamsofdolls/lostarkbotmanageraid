@@ -11,6 +11,7 @@ export function renderPreviewStats(panel, summary) {
     return;
   }
   const goldTotal = summary.goldDelta?.total || 0;
+  const goldBound = summary.goldDelta?.boundTotal || 0;
   const goldByChar = Array.isArray(summary.goldDelta?.byChar) ? summary.goldDelta.byChar : [];
   const completion = summary.completion || {};
   const charsAfterSync = Array.isArray(summary.charsAfterSync) ? summary.charsAfterSync : [];
@@ -18,8 +19,12 @@ export function renderPreviewStats(panel, summary) {
 
   // Gold chip: show value when > 0, else friendly "no new gold" copy
   // so the panel still shows up (otherwise users wonder if it loaded).
+  // When some of it is roster-bound (normal raids), surface that portion.
+  const goldBoundStr = goldBound > 0
+    ? ` <span class="stat-label">(🔒 ${escapeHtml(formatGold(goldBound))} ${escapeHtml(t("preview.statsGoldBound"))})</span>`
+    : "";
   const goldStr = goldTotal > 0
-    ? `<span class="stat-value">${escapeHtml(formatGold(goldTotal))}</span>`
+    ? `<span class="stat-value">${escapeHtml(formatGold(goldTotal))}${goldBoundStr}</span>`
     : `<span class="stat-value">${escapeHtml(t("preview.statsGoldEmpty"))}</span>`;
 
   // Last sync: pick max of local + bible timestamps; show mode label
