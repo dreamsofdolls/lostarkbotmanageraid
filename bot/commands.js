@@ -346,28 +346,36 @@ const cacheDiscordIdentityForExistingUser = createDiscordIdentityCache({
   buildDiscordIdentityFields,
 });
 
+function getRaidCommandHandlerMap() {
+  return {
+    "raid-add-roster": handleAddRosterCommand,
+    "raid-edit-roster": handleEditRosterCommand,
+    "raid-check": handleRaidCheckCommand,
+    "raid-set": handleRaidSetCommand,
+    "raid-status": handleStatusCommand,
+    "raid-profile": handleRaidProfileCommand,
+    "raid-share": handleRaidShareCommand,
+    "raid-language": handleRaidLanguageCommand,
+    "raid-bg": handleRaidBgCommand,
+    "raid-help": handleRaidHelpCommand,
+    "raid-remove-roster": handleRemoveRosterCommand,
+    "raid-gold-earner": handleRaidGoldEarnerCommand,
+    "raid-channel": handleRaidChannelCommand,
+    "raid-auto-manage": handleRaidAutoManageCommand,
+    "raid-announce": handleRaidAnnounceCommand,
+    "raid-task": handleRaidTaskCommand,
+    "raid-auction": handleRaidAuctionCommand,
+    "raid-schedule-preview": handleRaidScheduleCommand,
+  };
+}
+
+function getRaidCommandDispatchNames() {
+  return Object.keys(getRaidCommandHandlerMap());
+}
+
 async function handleRaidManagementCommand(interaction) {
   try {
-    const handler = {
-      "raid-add-roster": handleAddRosterCommand,
-      "raid-edit-roster": handleEditRosterCommand,
-      "raid-check": handleRaidCheckCommand,
-      "raid-set": handleRaidSetCommand,
-      "raid-status": handleStatusCommand,
-      "raid-profile": handleRaidProfileCommand,
-      "raid-share": handleRaidShareCommand,
-      "raid-language": handleRaidLanguageCommand,
-      "raid-bg": handleRaidBgCommand,
-      "raid-help": handleRaidHelpCommand,
-      "raid-remove-roster": handleRemoveRosterCommand,
-      "raid-gold-earner": handleRaidGoldEarnerCommand,
-      "raid-channel": handleRaidChannelCommand,
-      "raid-auto-manage": handleRaidAutoManageCommand,
-      "raid-announce": handleRaidAnnounceCommand,
-      "raid-task": handleRaidTaskCommand,
-      "raid-auction": handleRaidAuctionCommand,
-      "raid-schedule-preview": handleRaidScheduleCommand,
-    }[interaction.commandName];
+    const handler = getRaidCommandHandlerMap()[interaction.commandName];
     if (handler) await handler(interaction);
   } finally {
     await cacheDiscordIdentityForExistingUser(interaction);
@@ -1205,5 +1213,6 @@ module.exports = {
     getCharRaidGateStatus,
     applyLocalRaidEditToChar,
     buildRaidCheckEditDMEmbed,
+    getRaidCommandDispatchNames,
   },
 };

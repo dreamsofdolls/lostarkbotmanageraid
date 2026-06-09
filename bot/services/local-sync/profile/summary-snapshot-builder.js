@@ -1,5 +1,8 @@
 "use strict";
 
+const path = require("node:path");
+const { pathToFileURL } = require("node:url");
+
 const {
   PROFILE_VERSION,
 } = require("./payload-sanitizer");
@@ -9,10 +12,31 @@ const {
 } = require("./sanitizer/common");
 
 const MIN_ALT_BUILD_LOGS = 3;
-const MIN_CONTEXT_SAMPLE_COUNT = 10;
-const SUPPORT_PROTECTION_P90_PER_MIN = 10000000;
-const SUPPORT_RDPS_GIVEN_P90_PER_MIN = 50000000000;
-const STAGGER_P90_PER_MIN = 3500;
+
+const PROFILE_METRICS_MODULE_URL = pathToFileURL(path.join(
+  __dirname,
+  "../../../../web/js/profile/metrics/profile-metrics.js"
+)).href;
+const PROFILE_SCORE_MODULE_URL = pathToFileURL(path.join(
+  __dirname,
+  "../../../../web/js/profile/metrics/profile-score.js"
+)).href;
+
+let profileScoringModulesPromise = null;
+
+function loadProfileScoringModules() {
+  if (!profileScoringModulesPromise) {
+    profileScoringModulesPromise = Promise.all([
+      import(PROFILE_METRICS_MODULE_URL),
+      import(PROFILE_SCORE_MODULE_URL),
+    ]).then(([metrics, score]) => ({
+      computeProfileConsistency: metrics.computeProfileConsistency,
+      computeScores: score.computeProfileScores,
+      MIN_CONTEXT_SAMPLE_COUNT: score.MIN_CONTEXT_SAMPLE_COUNT,
+    }));
+  }
+  return profileScoringModulesPromise;
+}
 
 function finite(value, fallback = 0) {
   const n = Number(value);
@@ -48,208 +72,6 @@ function minPositive(values) {
 function maxPositive(values) {
   const nums = (values || []).map(Number).filter((n) => Number.isFinite(n) && n > 0);
   return nums.length ? Math.max(...nums) : null;
-}
-
-function clampScore(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 0;
-  return Math.max(0, Math.min(100, n));
-}
-
-function stddev(values) {
-  const nums = (values || []).map(Number).filter(Number.isFinite);
-  if (nums.length <= 1) return 0;
-  const avg = average(nums);
-  const variance = nums.reduce((sum, n) => sum + (n - avg) ** 2, 0) / nums.length;
-  return Math.sqrt(variance);
-}
-
-function consistencyScoreFromValues(values, { minSamples = 3, includeZero = true } = {}) {
-  const nums = (values || [])
-    .map(Number)
-    .filter((n) => Number.isFinite(n) && (includeZero ? n >= 0 : n > 0));
-  if (nums.length < minSamples) return null;
-  const avg = average(nums);
-  if (avg <= 0) return null;
-  return clampScore(100 - (stddev(nums) / avg) * 100);
-}
-
-function weightedScore(parts, fallback = 50) {
-  let total = 0;
-  let weight = 0;
-  for (const part of parts) {
-    if (!Number.isFinite(part?.score)) continue;
-    const partWeight = Number(part.weight) || 0;
-    if (partWeight <= 0) continue;
-    total += part.score * partWeight;
-    weight += partWeight;
-  }
-  return round1(weight ? total / weight : fallback);
-}
-
-function supportUptimePercent(row) {
-  return (
-    (Number(row?.supportAp) || 0) * 0.3 +
-    (Number(row?.supportBrand) || 0) * 0.3 +
-    (Number(row?.supportIdentity) || 0) * 0.25 +
-    (Number(row?.supportHyper) || 0) * 0.15
-  ) * 100;
-}
-
-function computeProfileConsistency(rows, role = "dps") {
-  const profileRows = Array.isArray(rows) ? rows : [];
-  const rawDpsScore = consistencyScoreFromValues(profileRows.map((row) => row.dps), { includeZero: false });
-  if (role === "support") {
-    const rdpsRows = profileRows.filter((row) => row?.rdpsValid === true);
-    return weightedScore([
-      {
-        score: consistencyScoreFromValues(rdpsRows.map((row) => row.supporterPercent), { includeZero: true }),
-        weight: 0.5,
-      },
-      {
-        score: consistencyScoreFromValues(profileRows.map((row) => row.protectionPerMinute), { includeZero: true }),
-        weight: 0.25,
-      },
-      {
-        score: consistencyScoreFromValues(profileRows.map(supportUptimePercent), { includeZero: true }),
-        weight: 0.25,
-      },
-      { score: rawDpsScore, weight: 0.05 },
-    ], rawDpsScore ?? 50);
-  }
-  return weightedScore([
-    {
-      score: consistencyScoreFromValues(profileRows.map((row) => row.damageShare), { includeZero: true }),
-      weight: 0.45,
-    },
-    {
-      score: consistencyScoreFromValues(profileRows.map((row) => row.topDamageProximity), { includeZero: true }),
-      weight: 0.4,
-    },
-    { score: rawDpsScore, weight: 0.15 },
-  ], rawDpsScore ?? 50);
-}
-
-function normalizeRate(value) {
-  const n = Number(value) || 0;
-  if (n > 1 && n <= 100) return n / 100;
-  return Math.max(0, Math.min(1, n));
-}
-
-function supportUptimeScoreFromStats(stats) {
-  return clampScore((
-    normalizeRate(stats.avgSupportAp) * 0.3 +
-    normalizeRate(stats.avgSupportBrand) * 0.3 +
-    normalizeRate(stats.avgSupportIdentity) * 0.25 +
-    normalizeRate(stats.avgSupportHyper) * 0.15
-  ) * 100);
-}
-
-function computeSurvivalScore(stats) {
-  const deathlessRate = Number(stats.deathlessRate);
-  const derivedDeathRate = Number.isFinite(deathlessRate) ? 100 - deathlessRate : 0;
-  const deathRate = Number.isFinite(Number(stats.deathRate)) ? Number(stats.deathRate) : derivedDeathRate;
-  const baseScore = clampScore(
-    100 - deathRate * 1.1 - (Number(stats.avgDeaths) || 0) * 15 - (Number(stats.avgDeadTimeRate) || 0) * 0.5
-  );
-  const damageTakenShare = Number(stats.avgDamageTakenShare) || 0;
-  if (!(Number(stats.damageTakenShareValidCount) || 0) || damageTakenShare <= 0) return baseScore;
-  const partyCount = Math.max(1, Number(stats.partyCountAvg) || 8);
-  const expectedShare = 100 / partyCount;
-  const graceShare = expectedShare * 1.15;
-  const highPressureShare = expectedShare * 2.8;
-  const pressureScore = damageTakenShare <= graceShare
-    ? 100
-    : clampScore(100 - ((damageTakenShare - graceShare) / Math.max(1, highPressureShare - graceShare)) * 100);
-  return clampScore(baseScore * 0.75 + pressureScore * 0.25);
-}
-
-function computeMechanicsScore(stats) {
-  const counterScore = stats.avgCounters > 0 ? clampScore(stats.avgCounters * 25) : 50;
-  const staggerScore = stats.avgStaggerPerMinute > 0
-    ? clampScore((stats.avgStaggerPerMinute / STAGGER_P90_PER_MIN) * 100)
-    : 50;
-  const controlScore = clampScore(100 - (Number(stats.avgIncapacitationsPerMinute) || 0) * 40);
-  return clampScore(counterScore * 0.35 + staggerScore * 0.35 + controlScore * 0.3);
-}
-
-function computeScores(stats, role) {
-  const expectedShare = stats.partyCountAvg > 0 ? 100 / stats.partyCountAvg : 20;
-  const damageShareScore = clampScore((stats.avgDamageShare / Math.max(1, expectedShare)) * 70);
-  const rankScore = stats.partyCountAvg > 1
-    ? clampScore(100 - ((stats.avgRank - 1) / (stats.partyCountAvg - 1)) * 100)
-    : 50;
-  const outputScore = clampScore(damageShareScore * 0.65 + rankScore * 0.35);
-  const topDamageProximityScore = stats.avgTopDamageProximity > 0
-    ? clampScore(stats.avgTopDamageProximity)
-    : (stats.topRate || 0);
-  const hasContextScore = (Number(stats.contextCoverageRate) || 0) > 0 &&
-    (Number(stats.contextSampleCountAvg) || 0) >= MIN_CONTEXT_SAMPLE_COUNT;
-  const contextScore = hasContextScore ? clampScore(Number(stats.avgContextPerformancePercentile) || 0) : null;
-  const contextualOutputScore = contextScore === null
-    ? outputScore
-    : clampScore(outputScore * 0.75 + contextScore * 0.25);
-  const consistencyScore = clampScore(stats.consistency);
-  const survivalScore = computeSurvivalScore(stats);
-  const mechanicsScore = computeMechanicsScore(stats);
-
-  if (role === "support") {
-    const legacyUptimeScore = supportUptimeScoreFromStats(stats);
-    const rdpsImpactScore = stats.avgRdpsDamageGivenPerMinute > 0
-      ? clampScore((stats.avgRdpsDamageGivenPerMinute / SUPPORT_RDPS_GIVEN_P90_PER_MIN) * 100)
-      : 0;
-    const supporterPercentScore = stats.avgSupporterPercent > 0
-      ? clampScore((stats.avgSupporterPercent / 35) * 100)
-      : 0;
-    const baseImpactScore = supporterPercentScore > 0
-      ? supporterPercentScore
-      : rdpsImpactScore > 0 ? rdpsImpactScore : legacyUptimeScore;
-    const rankPositionScore = stats.supporterCountAvg > 1 && stats.avgSupporterRank > 0
-      ? clampScore(100 - ((stats.avgSupporterRank - 1) / (stats.supporterCountAvg - 1)) * 100)
-      : 0;
-    const supportRankScore = stats.supporterCompetitiveCount > 0
-      ? clampScore(rankPositionScore * 0.6 + (stats.supporterTopRate || 0) * 0.4)
-      : 0;
-    const impactScore = supportRankScore > 0
-      ? clampScore(baseImpactScore * 0.85 + supportRankScore * 0.15)
-      : baseImpactScore;
-    const supportContextScore = hasContextScore
-      ? clampScore(Number(stats.avgContextSupportPercentile) || Number(stats.avgContextPerformancePercentile) || 0)
-      : null;
-    const contextualImpactScore = supportContextScore === null
-      ? impactScore
-      : clampScore(impactScore * 0.85 + supportContextScore * 0.15);
-    const rdpsCoverage = clampScore(Number(stats.rdpsValidRate) || 0) / 100;
-    const confidenceScale = rdpsImpactScore > 0 ? 0.6 + rdpsCoverage * 0.4 : 0.6;
-    const raidContribution = clampScore(contextualImpactScore * confidenceScale);
-    const protectionScore = stats.avgProtectionPerMinute > 0
-      ? clampScore((stats.avgProtectionPerMinute / SUPPORT_PROTECTION_P90_PER_MIN) * 100)
-      : 50;
-    return {
-      overall: round1(raidContribution * 0.35 + contextualImpactScore * 0.15 + protectionScore * 0.2 + consistencyScore * 0.1 + mechanicsScore * 0.1 + survivalScore * 0.1),
-      mvp: round1(raidContribution * 0.4 + contextualImpactScore * 0.15 + protectionScore * 0.2 + mechanicsScore * 0.1 + consistencyScore * 0.1 + survivalScore * 0.05),
-      raidContribution: round1(raidContribution),
-      supportUptime: round1(contextualImpactScore),
-      supportRank: round1(supportRankScore),
-      context: round1(supportContextScore ?? 0),
-      protection: round1(protectionScore),
-      consistency: round1(consistencyScore),
-      survival: round1(survivalScore),
-      mechanics: round1(mechanicsScore),
-    };
-  }
-
-  return {
-    overall: round1(contextualOutputScore * 0.33 + damageShareScore * 0.18 + (rankScore * 0.6 + (stats.topRate || 0) * 0.4) * 0.14 + topDamageProximityScore * 0.08 + consistencyScore * 0.14 + survivalScore * 0.09 + mechanicsScore * 0.04),
-    mvp: round1(damageShareScore * 0.3 + (stats.topRate || 0) * 0.2 + topDamageProximityScore * 0.15 + contextualOutputScore * 0.15 + consistencyScore * 0.1 + survivalScore * 0.07 + mechanicsScore * 0.03),
-    output: round1(contextualOutputScore),
-    damageShare: round1(damageShareScore),
-    rank: round1(rankScore),
-    context: round1(contextScore ?? 0),
-    consistency: round1(consistencyScore),
-    survival: round1(survivalScore),
-    mechanics: round1(mechanicsScore),
-  };
 }
 
 function cleanBuildName(value) {
@@ -488,7 +310,7 @@ function mergeTopSkills(rows) {
     }));
 }
 
-function summarizeGroup(rows) {
+function summarizeGroup(rows, minContextSampleCount) {
   const dps = rows.map((r) => r.dps);
   const peak10sDps = rows.map((r) => r.peak10sDps).filter((n) => n > 0);
   const burstRatios = rows.map((r) => r.burstRatio).filter((n) => n > 0);
@@ -507,7 +329,7 @@ function summarizeGroup(rows) {
   const radiantSupportCount = supporterRows.filter((r) => r.supporterTier === "radiant").length;
   const supporterRankRows = supporterRows.filter((r) => (Number(r.supporterRank) || 0) > 0 && (Number(r.supporterCount) || 0) > 0);
   const supporterCompetitiveRows = supporterRankRows.filter((r) => (Number(r.supporterCount) || 0) > 1);
-  const contextRows = rows.filter((r) => (Number(r.contextSampleCount) || 0) >= MIN_CONTEXT_SAMPLE_COUNT && r.contextSource !== "none");
+  const contextRows = rows.filter((r) => (Number(r.contextSampleCount) || 0) >= minContextSampleCount && r.contextSource !== "none");
   const dpsContextRows = contextRows.filter((r) => r.logRole !== "support");
   const supportContextRows = contextRows.filter((r) => r.logRole === "support");
   const avgBackAttackRate = round1(average(rows.map((r) => r.backAttackRate)));
@@ -622,11 +444,12 @@ function summarizeGroup(rows) {
   };
 }
 
-function computeBuildStats(rows, role, buildVariants) {
-  const stats = summarizeGroup(rows);
+async function computeBuildStats(rows, role, buildVariants, scoring = null) {
+  const profileScoring = scoring || await loadProfileScoringModules();
+  const stats = summarizeGroup(rows, profileScoring.MIN_CONTEXT_SAMPLE_COUNT);
   stats.buildVariantCount = Math.max(new Set(rows.map(buildVariantKey).filter(Boolean)).size, buildVariants.length);
   stats.unclassifiedBuildLogCount = countUnclassifiedBuildRows(rows);
-  stats.consistency = computeProfileConsistency(rows, role);
+  stats.consistency = profileScoring.computeProfileConsistency(rows, role);
   return stats;
 }
 
@@ -642,16 +465,16 @@ function buildProfileBuild(row) {
   };
 }
 
-function summarizeRaidGroup(rows) {
+function summarizeRaidGroup(rows, scoring) {
   return {
     raidKey: rows[0]?.raidKey || "",
     modeKey: rows[0]?.modeKey || "",
     boss: rows[0]?.boss || "",
-    ...summarizeGroup(rows),
+    ...summarizeGroup(rows, scoring.MIN_CONTEXT_SAMPLE_COUNT),
   };
 }
 
-function buildSnapshotFromEncounterSummaries({
+async function buildSnapshotFromEncounterSummaries({
   summaries,
   base,
   rangeType = "weekly",
@@ -661,6 +484,7 @@ function buildSnapshotFromEncounterSummaries({
   const rows = (summaries || []).map(summaryToRow).filter((row) => row.localPlayer && row.fightStart);
   if (!rows.length) return null;
 
+  const scoring = await loadProfileScoringModules();
   const byChar = new Map();
   for (const row of rows) {
     const key = `${normalizeKey(row.accountName)}\x1f${normalizeKey(row.localPlayer)}`;
@@ -687,7 +511,7 @@ function buildSnapshotFromEncounterSummaries({
     , sample);
     const buildVariants = summarizeBuildVariants(profileRows);
     const stats = {
-      ...computeBuildStats(profileRows, role, buildVariants),
+      ...await computeBuildStats(profileRows, role, buildVariants, scoring),
       allEncounterCount: allCharRows.length,
       supportLogCount: supportRows.length,
       dpsBuildLogCount: classRole === "support" ? dpsBuildRows.length : 0,
@@ -701,7 +525,7 @@ function buildSnapshotFromEncounterSummaries({
       const altRole = role === "support" ? "dps" : "support";
       const altRows = role === "support" ? dpsBuildRows : supportRows;
       if (altRows.length >= MIN_ALT_BUILD_LOGS) {
-        const altStats = computeBuildStats(altRows, altRole, summarizeBuildVariants(altRows));
+        const altStats = await computeBuildStats(altRows, altRole, summarizeBuildVariants(altRows), scoring);
         const altLatestRow = altRows.reduce((best, row) =>
           (Number(row.fightStart) || 0) > (Number(best.fightStart) || 0) ? row : best
         , altRows[0]);
@@ -709,7 +533,7 @@ function buildSnapshotFromEncounterSummaries({
           role: altRole,
           encounters: altRows.length,
           stats: altStats,
-          scores: computeScores(altStats, altRole),
+          scores: scoring.computeScores(altStats, altRole),
           build: buildProfileBuild(altLatestRow),
         };
       }
@@ -722,7 +546,7 @@ function buildSnapshotFromEncounterSummaries({
       raidGroups.get(groupKey).push(row);
     }
     const raids = [...raidGroups.values()]
-      .map(summarizeRaidGroup)
+      .map((raidRows) => summarizeRaidGroup(raidRows, scoring))
       .sort((a, b) => (b.lastFightStart || 0) - (a.lastFightStart || 0));
 
     const accountName = sample.accountName || "";
@@ -734,7 +558,7 @@ function buildSnapshotFromEncounterSummaries({
       classRole,
       role,
       stats,
-      scores: computeScores(stats, role),
+      scores: scoring.computeScores(stats, role),
       altBuild,
       build: buildProfileBuild(latestRow),
       topSkills: mergeTopSkills(profileRows),
@@ -857,7 +681,7 @@ async function rebuildWeeklySnapshotFromStoredSummaries({
   });
   const summaries = filterSummariesForRoster(stored, userDoc);
   if (!summaries.length) return null;
-  const snapshot = buildSnapshotFromEncounterSummaries({
+  const snapshot = await buildSnapshotFromEncounterSummaries({
     summaries,
     base: clean,
     rangeType: "weekly",
@@ -884,7 +708,7 @@ async function rebuildFullSnapshotFromStoredSummaries({
   });
   const summaries = filterSummariesForRoster(stored, userDoc);
   if (!summaries.some((summary) => summary?.rangeType === "full")) return null;
-  const snapshot = buildSnapshotFromEncounterSummaries({
+  const snapshot = await buildSnapshotFromEncounterSummaries({
     summaries,
     base: {
       ...clean,
@@ -904,6 +728,9 @@ async function rebuildFullSnapshotFromStoredSummaries({
 }
 
 module.exports = {
+  __test: {
+    loadProfileScoringModules,
+  },
   buildSnapshotFromEncounterSummaries,
   rebuildFullSnapshotFromStoredSummaries,
   rebuildWeeklySnapshotFromStoredSummaries,

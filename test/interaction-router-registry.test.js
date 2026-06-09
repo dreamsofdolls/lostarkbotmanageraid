@@ -7,7 +7,10 @@ const {
   RAID_COMMAND_NAMES,
   createRaidInteractionRouter,
 } = require("../bot/app/interaction-router-registry");
-const { commands } = require("../bot/commands");
+const {
+  commands,
+  __test: commandsTest,
+} = require("../bot/commands");
 
 test("interaction router allowlist includes /raid-bg", () => {
   assert.ok(RAID_COMMAND_NAMES.includes("raid-bg"));
@@ -25,6 +28,15 @@ test("interaction router allowlist includes every registered slash command", () 
   );
 
   assert.deepEqual(missingFromRouter, []);
+});
+
+test("registered slash commands, router allowlist, and dispatcher stay aligned", () => {
+  const registeredCommandNames = commands.map((command) => command.toJSON().name).sort();
+  const routedCommandNames = [...RAID_COMMAND_NAMES].sort();
+  const dispatchedCommandNames = commandsTest.getRaidCommandDispatchNames().sort();
+
+  assert.deepEqual(routedCommandNames, registeredCommandNames);
+  assert.deepEqual(dispatchedCommandNames, registeredCommandNames);
 });
 
 test("raid-schedule-preview definition derives party size from raid instead of exposing size", () => {
