@@ -652,9 +652,10 @@ test("summarizeGlobalGold: composes summarizeAccountGold across multiple account
   assert.equal(result.total, 138000 * 2);
 });
 
-test("buildAccountPageEmbed: per-character field appends '💰 X / Y' for gold-earner with eligible raids", () => {
-  // Synthetic raid entry with a single gate done out of two (so total
-  // surfaces but earned is non-zero).
+test("buildAccountPageEmbed: per-character field shows '💰 earned' (earned-only, no /total) for a gold-earner", () => {
+  // Single gate done of two: earned is the gold actually banked (17000), and
+  // the per-char line shows just that - not earned/total (that lives in the
+  // rollup; the card's 2/2 raid lines already convey completion).
   const char = makeChar("Earner", 1730, { isGoldEarner: true });
   const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
   const fakeRaid = {
@@ -679,7 +680,8 @@ test("buildAccountPageEmbed: per-character field appends '💰 X / Y' for gold-e
   const json = embed.toJSON();
   const charField = json.fields.find((f) => /Earner/.test(f.name));
   assert.ok(charField, "char field should be present");
-  assert.match(charField.value, /💰 17,000G \/ 52,000G/);
+  assert.match(charField.value, /💰 17,000G/);
+  assert.doesNotMatch(charField.value, /52,000G/); // earned-only; no "/ total"
 });
 
 test("buildAccountPageEmbed: per-character field omits the gold body line for non-earners (header 💰 absence is the signal)", () => {
@@ -740,8 +742,39 @@ test("buildAccountPageEmbed: per-character header does NOT carry a 💰 suffix -
   const charField = embed.toJSON().fields.find((f) => /Earner/.test(f.name));
   // Header is just `<class-icon> Name · iLvl`, no 💰 suffix.
   assert.doesNotMatch(charField.name, /💰/);
-  // Body MUST still carry the 💰 line for an earner with eligible raids.
-  assert.match(charField.value, /💰 0G \/ 52,000G/);
+  // Body MUST still carry the 💰 line for an earner with eligible raids (even at
+  // 0 earned); earned-only format now, no "/ total".
+  assert.match(charField.value, /💰 0G/);
+  assert.doesNotMatch(charField.value, /52,000G/);
+});
+
+test("buildAccountPageEmbed: per-character bound gold renders on its own line below the earned gold", () => {
+  const char = makeChar("Bound", 1730, { isGoldEarner: true });
+  const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
+  // Act 4 Normal cleared: earned 16,500 and all of it is roster-bound.
+  const fakeRaid = {
+    raidName: "Act 4 Normal",
+    raidKey: "armoche",
+    modeKey: "normal",
+    completedGateKeys: ["G1", "G2"],
+    allGateKeys: ["G1", "G2"],
+    isCompleted: true,
+    earnedGold: 16500,
+    totalGold: 16500,
+    goldBound: true,
+  };
+  const getRaidsFor = () => [fakeRaid];
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 1, partial: 0, total: 1 }, characters: 1 },
+    getRaidsFor
+  );
+  const charField = embed.toJSON().fields.find((f) => /Bound/.test(f.name));
+  const valueLines = charField.value.split("\n");
+  assert.ok(valueLines.includes("💰 16,500G"), "earned-only gold line");
+  assert.ok(valueLines.some((l) => /🔒 \*\*16,500G\*\* khóa/.test(l)), "bound on its own line");
 });
 
 test("buildAccountPageEmbed: shows '/raid-gold-earner' hint when account has at least one eligible non-earner char", () => {

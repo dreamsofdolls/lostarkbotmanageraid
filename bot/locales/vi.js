@@ -611,9 +611,11 @@ module.exports = {
       failed: "Bible đang dở chứng, Artist tạm xem cache. Cậu thử lại sau vài phút giúp tớ nhé~",
     },
     embed: {
-      allAccounts: "🌐 Tổng tất cả roster: **{chars}** char · **{done}/{total}** raid done{goldTail}",
+      allAccounts: "🌐 Tổng tất cả roster: **{chars}** char · **{done}/{total}** raid done",
       earnedThisWeek: "💰 Tuần này đã kiếm: **{earned}** / **{total}**{boundTail}",
+      goldRollup: "💰 **{earned} / {total}**{boundTail}",
       goldBoundTail: " · 🔒 **{bound}** khóa",
+      goldBoundLine: "🔒 **{bound}** khóa",
       notEligible: "_Chưa đủ điều kiện_",
       noCharacters: "_Chưa có character nào._",
       allIneligible: "_Không có character nào đủ điều kiện cho raid này trong roster._",
