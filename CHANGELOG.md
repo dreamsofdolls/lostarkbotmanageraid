@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-12 (raid-status: forced bound gold reads as a normal gold line)
+
+### Changed
+- A force-included bound raid in the "Gold nhận" view no longer shows the confusing `🔒 #1 Horizon Level 3 - 50,000G · locked ép nhận gold` tail (two tags - `boundShort` "· locked" + `manualOn` "ép nhận gold" - mashed together, with "locked" colliding with the same word used for auto-skipped raids). It now reads like any receiving line - `💰 #1 Horizon Level 3 - 🔒 50,000G` - with the lock moved to right before the amount to flag that the slot's gold is roster-bound. The leading 💰 stays consistent so forced raids never look excluded. Convention is now: leading 💰 = receiving, leading 🔒 = not receiving, 🔒 before the amount = bound gold. Dropped the now-unused `boundShort` + `manualOn` locale keys (vi/en/jp). 902 tests green.
+
 ## 2026-06-12 (raid-status: fix gold-receive toggle not persisting)
 
 ### Fixed

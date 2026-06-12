@@ -1224,7 +1224,7 @@ test("raid-status gold view renders auto-bound status and setup dropdowns", () =
   assert.ok(toggleOptions.some((option) => /auto bỏ qua locked/.test(option.label)));
 });
 
-test("raid-status gold view renders forced locked gold with lock icon", () => {
+test("raid-status gold view renders forced bound gold as a normal gold line with a lock before the amount", () => {
   const char = {
     ...makeChar("LockedGold", 1700, { isGoldEarner: true }),
     assignedRaids: {
@@ -1255,6 +1255,10 @@ test("raid-status gold view renders forced locked gold with lock icon", () => {
 
   const embedJson = goldUi.buildGoldViewEmbed(accounts[0]).toJSON();
   const goldField = embedJson.fields.find((field) => /LockedGold/.test(field.name));
-  assert.match(goldField.value, new RegExp(`${UI.icons.lock} #1 Horizon Level 1 - 30,000G`));
-  assert.doesNotMatch(goldField.value, /💰 #1 Horizon Level 1/);
+  // Forced bound gold reads like any receiving line (💰 #slot label - amount),
+  // with the lock moved to right before the amount to flag the bound gold.
+  assert.match(goldField.value, new RegExp(`💰 #1 Horizon Level 1 - ${UI.icons.lock} 30,000G`));
+  // No leading lock and no leftover "forced on"/"locked" tag on the line.
+  assert.doesNotMatch(goldField.value, new RegExp(`${UI.icons.lock} #1 Horizon Level 1`));
+  assert.doesNotMatch(goldField.value, /ép nhận|locked/);
 });
