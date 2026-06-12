@@ -1,4 +1,4 @@
-import { t, getRaidLabel, getModeLabel } from "/sync/js/core/i18n.js";
+import { t, getRaidLabel, getRaidSpecificModeLabel } from "/sync/js/core/i18n.js";
 import { escapeHtml } from "/sync/js/core/html.js";
 import { renderClassIcon } from "/sync/js/sync/render/preview-renderer.js";
 import { renderCharPendingLabel, renderCharPendingRow } from "/sync/js/sync/render/char-row.js";
@@ -107,7 +107,7 @@ function groupAppliedByRoster(applied, charLookup) {
 
 function renderAppliedRaidPill(entry) {
   const raidLabel = getRaidLabel(entry.raidKey);
-  const modeLabel = getModeLabel(entry.modeKey);
+  const modeLabel = getRaidSpecificModeLabel(entry.raidKey, entry.modeKey);
   const gateText = (entry.gates || []).join("+");
   return `<span class="raid-pill raid-pill--done">${ICON_DONE} ${escapeHtml(raidLabel)} <span class="raid-pill-mode">${escapeHtml(modeLabel)} ${escapeHtml(gateText)}</span></span>`;
 }

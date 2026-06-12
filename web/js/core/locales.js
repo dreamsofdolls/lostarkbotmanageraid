@@ -158,12 +158,19 @@ const VI = {
     armoche: "Act 4",
     kazeros: "Kazeros",
     serca: "Serca",
-    horizon: "Horizon Cathedral",
+    horizon: "Horizon",
   },
   modeLabels: {
     normal: "Normal",
     hard: "Hard",
     nightmare: "Nightmare",
+  },
+  raidModeLabels: {
+    horizon: {
+      normal: "Level 1",
+      hard: "Level 2",
+      nightmare: "Level 3",
+    },
   },
   diff: {
     state: {
@@ -319,12 +326,19 @@ const JP = {
     armoche: "アクト4",
     kazeros: "カゼロス",
     serca: "セルカ",
-    horizon: "Horizon Cathedral",
+    horizon: "Horizon",
   },
   modeLabels: {
     normal: "ノーマル",
     hard: "ハード",
     nightmare: "ナイトメア",
+  },
+  raidModeLabels: {
+    horizon: {
+      normal: "Level 1",
+      hard: "Level 2",
+      nightmare: "Level 3",
+    },
   },
   diff: {
     state: {
@@ -480,12 +494,19 @@ const EN = {
     armoche: "Act 4",
     kazeros: "Kazeros",
     serca: "Serca",
-    horizon: "Horizon Cathedral",
+    horizon: "Horizon",
   },
   modeLabels: {
     normal: "Normal",
     hard: "Hard",
     nightmare: "Nightmare",
+  },
+  raidModeLabels: {
+    horizon: {
+      normal: "Level 1",
+      hard: "Level 2",
+      nightmare: "Level 3",
+    },
   },
   diff: {
     state: {

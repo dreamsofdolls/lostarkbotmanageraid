@@ -8,6 +8,7 @@
 //   getRaidLabel(raidKey, lang)            → "Act 4" / "アクト4"
 //   getModeLabel(modeKey, lang)            → "Normal" / "ノーマル"
 //   getRaidModeLabel(raidKey, modeKey, l)  → "Act 4 Hard" / "アクト4 ハード"
+//                                             or raid-specific "Horizon Level 2"
 //
 // All three fall back to the canonical RAID_REQUIREMENTS labels when a
 // locale doesn't have a key (i18n.t() handles that internally), so a
@@ -42,9 +43,16 @@ function getModeLabel(modeKey, lang) {
   return resolved;
 }
 
+function getRaidSpecificModeLabel(raidKey, modeKey, lang) {
+  const overrideKey = `raid.modeOverrides.${raidKey}.${modeKey}`;
+  const override = t(overrideKey, lang);
+  if (override !== overrideKey) return override;
+  return getModeLabel(modeKey, lang);
+}
+
 function getRaidModeLabel(raidKey, modeKey, lang) {
   const raid = getRaidLabel(raidKey, lang);
-  const mode = getModeLabel(modeKey, lang);
+  const mode = getRaidSpecificModeLabel(raidKey, modeKey, lang);
   if (!mode) return raid;
   return `${raid} ${mode}`;
 }
@@ -53,4 +61,5 @@ module.exports = {
   getRaidLabel,
   getModeLabel,
   getRaidModeLabel,
+  getRaidSpecificModeLabel,
 };

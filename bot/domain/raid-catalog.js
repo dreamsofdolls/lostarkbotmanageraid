@@ -40,13 +40,13 @@ const RAID_REQUIREMENTS = {
     },
   },
   horizon: {
-    label: "Horizon Cathedral",
+    label: "Horizon",
     partySize: 4,
     gates: ["G1", "G2"],
     modes: {
-      normal: { label: "Normal", minItemLevel: 1700, gold: { G1: 13500, G2: 16500 }, boundGold: CHARACTER_BOUND_GOLD },
-      hard: { label: "Hard", minItemLevel: 1720, gold: { G1: 16000, G2: 24000 }, boundGold: CHARACTER_BOUND_GOLD },
-      nightmare: { label: "Nightmare", minItemLevel: 1750, gold: { G1: 20000, G2: 30000 }, boundGold: CHARACTER_BOUND_GOLD },
+      normal: { label: "Level 1", minItemLevel: 1700, gold: { G1: 13500, G2: 16500 }, boundGold: CHARACTER_BOUND_GOLD },
+      hard: { label: "Level 2", minItemLevel: 1720, gold: { G1: 16000, G2: 24000 }, boundGold: CHARACTER_BOUND_GOLD },
+      nightmare: { label: "Level 3", minItemLevel: 1750, gold: { G1: 20000, G2: 30000 }, boundGold: CHARACTER_BOUND_GOLD },
     },
   },
 };

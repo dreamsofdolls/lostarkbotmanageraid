@@ -332,12 +332,19 @@ module.exports = {
       armoche: "アクト4",
       kazeros: "カゼロス",
       serca: "セルカ",
-      horizon: "Horizon Cathedral",
+      horizon: "Horizon",
     },
     modes: {
       normal: "ノーマル",
       hard: "ハード",
       nightmare: "ナイトメア",
+    },
+    modeOverrides: {
+      horizon: {
+        normal: "Level 1",
+        hard: "Level 2",
+        nightmare: "Level 3",
+      },
     },
   },
   "raid-add-roster": {
@@ -1714,7 +1721,7 @@ module.exports = {
           "• `セルカ ハード Clauseduk` (レイド全体を完了にマーク)",
           "• `カゼロス ハード Soulrano G1` (G1 のみマーク - G_N まで累積)",
           "• 複数キャラ: `アクト4 ハード A, B, C`",
-          "**エイリアス**: アクト4/act4/armoche · カゼロス/kazeros/kaz · セルカ/serca · horizon/cathedral/hc · ノーマル/normal/nor/nm · ハード/hard/hm · ナイトメア/nightmare/9m。注意: `nm` = Normal (Nightmare じゃないですわ!)",
+          "**エイリアス**: アクト4/act4/armoche · カゼロス/kazeros/kaz · セルカ/serca · horizon/cathedral/hc · ノーマル/normal/nor/nm/level1/l1 · ハード/hard/hm/level2/l2 · ナイトメア/nightmare/9m/level3/l3。注意: `nm` = Normal (Nightmare じゃないですわ!)",
           "**自動クリーンアップ 30 分ごと** (JST 朝3時 - 朝8時の静音時間帯以外): ボットがピン留め以外を削除 + ゴミの量に応じてトーンが変わる通知を投稿ですわ。静音時間帯 JST 朝3時 - 朝8時: 掃除なし、騒音なし。",
           "**必要な権限**: View Channel、Send Messages、Manage Messages、Read Message History、Embed Links。5 つのうち 1 つでも欠けたら → action:set はお断りしますわ。",
           "**管理者限定**: `サーバー管理` 権限が必要ですわ。",

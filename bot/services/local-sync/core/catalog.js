@@ -17,8 +17,17 @@ const { CLASS_ID_TO_BIBLE_ID, getClassInfoByNumericId } = require("../../../mode
 // source instead of drifting when LOA Logs changes wording.
 const DIFFICULTY_TO_MODE_KEY = Object.freeze({
   normal: "normal",
+  "level 1": "normal",
+  level1: "normal",
+  l1: "normal",
   hard: "hard",
+  "level 2": "hard",
+  level2: "hard",
+  l2: "hard",
   nightmare: "nightmare",
+  "level 3": "nightmare",
+  level3: "nightmare",
+  l3: "nightmare",
   trial: "nightmare",
   inferno: "nightmare",
 });

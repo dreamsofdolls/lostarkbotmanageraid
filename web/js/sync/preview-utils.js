@@ -8,6 +8,7 @@
 export let BOSS_TO_RAID_GATE = new Map();
 export let RAID_LABELS = {};
 export let MODE_LABELS = {};
+export let RAID_MODE_LABELS = {};
 
 let RAID_GATES = {};
 let CLASS_BY_ID = {};
@@ -38,6 +39,7 @@ export function setCatalog(rawCatalog = {}) {
   const raids = rawCatalog.raids || {};
   const raidLabels = {};
   const modeLabels = {};
+  const raidModeLabels = {};
   const raidGates = {};
   const raidModeIlvl = {};
 
@@ -47,8 +49,10 @@ export function setCatalog(rawCatalog = {}) {
       ? [...raid.gates]
       : ["G1", "G2"];
     raidModeIlvl[raidKey] = {};
+    raidModeLabels[raidKey] = {};
     for (const [modeKey, mode] of Object.entries(raid?.modes || {})) {
-      modeLabels[modeKey] = mode?.label || modeKey;
+      if (!modeLabels[modeKey]) modeLabels[modeKey] = mode?.label || modeKey;
+      raidModeLabels[raidKey][modeKey] = mode?.label || modeKey;
       raidModeIlvl[raidKey][modeKey] = Number(mode?.minItemLevel) || 0;
     }
   }
@@ -59,6 +63,7 @@ export function setCatalog(rawCatalog = {}) {
   ]));
   RAID_LABELS = raidLabels;
   MODE_LABELS = modeLabels;
+  RAID_MODE_LABELS = raidModeLabels;
   RAID_GATES = raidGates;
   RAID_MODE_ILVL = raidModeIlvl;
   RAID_ORDER = Array.isArray(rawCatalog.raidOrder) && rawCatalog.raidOrder.length > 0
@@ -177,7 +182,7 @@ export function bucketize(rows) {
         gateIndex,
         gates: gates.slice(0, gateIndex + 1),
         raidLabel: RAID_LABELS[gateInfo.raidKey] || gateInfo.raidKey,
-        modeLabel: MODE_LABELS[modeKey] || modeKey,
+        modeLabel: RAID_MODE_LABELS[gateInfo.raidKey]?.[modeKey] || MODE_LABELS[modeKey] || modeKey,
         lastClearMs,
       });
     } else if (gateIndex === existing.gateIndex && lastClearMs > existing.lastClearMs) {

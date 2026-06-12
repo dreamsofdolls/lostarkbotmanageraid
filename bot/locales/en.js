@@ -333,12 +333,19 @@ module.exports = {
       armoche: "Act 4",
       kazeros: "Kazeros",
       serca: "Serca",
-      horizon: "Horizon Cathedral",
+      horizon: "Horizon",
     },
     modes: {
       normal: "Normal",
       hard: "Hard",
       nightmare: "Nightmare",
+    },
+    modeOverrides: {
+      horizon: {
+        normal: "Level 1",
+        hard: "Level 2",
+        nightmare: "Level 3",
+      },
     },
   },
   "raid-add-roster": {
@@ -1715,7 +1722,7 @@ module.exports = {
           "• `Serca Hard Clauseduk` (mark whole raid done)",
           "• `Kazeros Hard Soulrano G1` (mark G1 only - cumulative through G_N)",
           "• Multi-char: `Act4 Hard A, B, C`",
-          "**Aliases**: act4/armoche · kazeros/kaz · serca · horizon/cathedral/hc · normal/nor/nm · hard/hm · nightmare/9m. Note: `nm` = Normal (NOT Nightmare).",
+          "**Aliases**: act4/armoche · kazeros/kaz · serca · horizon/cathedral/hc · normal/nor/nm/level1/l1 · hard/hm/level2/l2 · nightmare/9m/level3/l3. Note: `nm` = Normal (NOT Nightmare).",
           "**Auto-cleanup every 30 min** (active outside 03:00-08:00 UTC quiet hours): bot deletes non-pinned + posts a tone-shifting notice based on cleanup volume. Quiet hours 03:00-08:00 UTC: no sweeping, no noise.",
           "**Permissions required**: View Channel, Send Messages, Manage Messages, Read Message History, Embed Links. Missing any of the 5 → action:set rejects.",
           "**Admin-only**: requires `Manage Server` permission.",
