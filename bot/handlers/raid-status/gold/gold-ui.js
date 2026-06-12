@@ -2,7 +2,6 @@
 
 const { getClassEmoji } = require("../../../models/Class");
 const { t } = require("../../../services/i18n");
-const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
 const { pack2Columns } = require("../../../utils/raid/common/shared");
 const {
   GOLD_RAID_CAP_PER_CHARACTER,
@@ -11,6 +10,12 @@ const {
   summarizeGlobalGold,
 } = require("../../../utils/raid/common/character");
 const { parseCustomEmoji } = require("../task/task-ui/toggle-rows");
+const {
+  GOLD_RECEIVE_ICON,
+  goldReceiveIcon,
+  localizedRaidLabel,
+  rawGoldTotal,
+} = require("./gold-formatting");
 
 const PAGE_CHAR_CAP = 11;
 
@@ -72,16 +77,8 @@ function createRaidStatusGoldUi(deps) {
       : "";
   }
 
-  function localizedRaidLabel(raid) {
-    return getRaidModeLabel(raid.raidKey, raid.modeKey, lang) || raid.raidName;
-  }
-
-  function rawGoldTotal(raid) {
-    return Number(raid?.rawTotalGold ?? raid?.totalGold) || 0;
-  }
-
   function formatGoldRaidLine(raid) {
-    const label = localizedRaidLabel(raid);
+    const label = localizedRaidLabel(raid, lang);
     if (!raid.goldReceives) {
       // Not receiving. The leading lock means ONE thing everywhere: this raid's
       // gold is roster-bound (matches the raid view's 🔒). A raid that simply
@@ -95,7 +92,7 @@ function createRaidStatusGoldUi(deps) {
       return `${icon} ${label} - ${reason}`;
     }
 
-    // A receiving raid reads as a plain gold line (\uD83D\uDCB0 #slot label - amount),
+    // A receiving raid reads as a plain gold line (gold icon #slot label - amount),
     // whether the slot was auto-picked or force-included - that distinction is
     // not useful once a raid holds a slot. Bound gold gets a lock right before
     // the amount so the player can tell the slot's gold is roster-bound; the
@@ -104,7 +101,7 @@ function createRaidStatusGoldUi(deps) {
     const slot = rank > 0 ? `#${rank} ` : "";
     const goldStr = formatGold(rawGoldTotal(raid));
     const amount = raid.goldBound ? `${UI.icons.lock} ${goldStr}` : goldStr;
-    return `\uD83D\uDCB0 ${slot}${label} - ${amount}`;
+    return `${GOLD_RECEIVE_ICON} ${slot}${label} - ${amount}`;
   }
 
   function buildGoldCharacterField(character) {
@@ -256,11 +253,11 @@ function createRaidStatusGoldUi(deps) {
     }
 
     const options = raids.slice(0, 25).map((raid) => {
-      const label = localizedRaidLabel(raid);
-      let icon = raid.goldReceives ? (raid.goldBound ? UI.icons.lock : "\uD83D\uDCB0") : UI.icons.pending;
+      const label = localizedRaidLabel(raid, lang);
+      let icon = raid.goldReceives ? goldReceiveIcon(raid, UI) : UI.icons.pending;
       let status;
       if (raid.goldOverride === "include") {
-        icon = raid.goldBound ? UI.icons.lock : "\uD83D\uDCB0";
+        icon = goldReceiveIcon(raid, UI);
         status = t("raid-status.goldView.toggleManualOn", lang);
       } else if (raid.goldDisabled) {
         icon = UI.icons.lock;

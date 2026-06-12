@@ -13,9 +13,14 @@ const {
 } = require("../task/task-actions");
 const {
   parseGoldToggleValue,
-  replaceRaidGoldSelection,
   toggleParsedGoldRaid,
 } = require("../gold/gold-actions");
+const {
+  createGoldReplacementFlow,
+} = require("../gold/gold-replacement-flow");
+const {
+  localizedRaidLabel,
+} = require("../gold/gold-formatting");
 const {
   followUpNotice,
   replyNotice,
@@ -38,9 +43,6 @@ const {
 const {
   t,
 } = require("../../../services/i18n");
-const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
-
-const GOLD_REPLACE_SELECT_ID = "status-gold:replace";
 
 function noRedraw() {
   return { redraw: false };
@@ -73,156 +75,20 @@ function createStatusComponentRouteHandlers(ctx) {
     getAutoManageCooldownMs,
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
   } = ctx;
-  const goldReplacementSessions = new Map();
-
-  function localizedRaidLabel(raid) {
-    return getRaidModeLabel(raid?.raidKey, raid?.modeKey, lang) || raid?.raidName || raid?.raidKey || "";
-  }
-
-  function rawGoldTotal(raid) {
-    return Number(raid?.rawTotalGold ?? raid?.totalGold) || 0;
-  }
-
-  function buildGoldReplacePrompt(replacement, selectId) {
-    const targetRaid = localizedRaidLabel(replacement.targetRaid);
-    const embed = new EmbedBuilder()
-      .setColor(UI.colors.progress)
-      .setTitle(`${UI.icons.lock} ${t("raid-status.goldView.replaceRequiredTitle", lang, {
-        cap: replacement.cap,
-      })}`)
-      .setDescription(t("raid-status.goldView.replaceRequiredDescription", lang, {
-        cap: replacement.cap,
-        characterName: replacement.targetCharName,
-        targetRaid,
-      }));
-
-    const options = (replacement.options || []).slice(0, 25).map((raid) => {
-      const icon = raid.goldBound ? UI.icons.lock : "\uD83D\uDCB0";
-      const rank = Number(raid.goldSlotRank) || 0;
-      const rankPrefix = rank > 0 ? `#${rank} ` : "";
-      return {
-        label: truncateText(`${icon} ${rankPrefix}${localizedRaidLabel(raid)}`, 100),
-        description: truncateText(formatGold(rawGoldTotal(raid)), 100),
-        value: raid.raidKey,
-      };
-    });
-
-    const row = new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId(selectId)
-        .setPlaceholder(t("raid-status.goldView.replacePlaceholder", lang))
-        .addOptions(options.length > 0 ? options : [{ label: "(empty)", value: "noop" }])
-        .setDisabled(options.length === 0)
-    );
-
-    return { embed, row, targetRaid };
-  }
-
-  function makeGoldReplaceSelectId() {
-    const token = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-    return `${GOLD_REPLACE_SELECT_ID}:${token}`;
-  }
-
-  function goldReplaceTokenFromId(customId) {
-    const prefix = `${GOLD_REPLACE_SELECT_ID}:`;
-    const id = String(customId || "");
-    return id.startsWith(prefix) ? id.slice(prefix.length) : "";
-  }
-
-  async function promptGoldReplacement({
-    component,
-    replacement,
-    writeDiscordId,
-    targetAccountName,
-  }) {
-    const selectId = makeGoldReplaceSelectId();
-    const token = goldReplaceTokenFromId(selectId);
-    const { embed, row } = buildGoldReplacePrompt(replacement, selectId);
-    goldReplacementSessions.set(token, {
-      replacement,
-      writeDiscordId,
-      targetAccountName,
-    });
-
-    const edited = await interaction.editReply({
-      embeds: [embed],
-      components: [row],
-      attachments: [],
-      files: [],
-    }).then(() => true).catch((err) => {
-      console.warn("[raid-status gold replace] prompt edit failed:", err?.message || err);
-      return false;
-    });
-
-    if (!edited) {
-      goldReplacementSessions.delete(token);
-      await followUpNotice(component, EmbedBuilder, {
-        type: "warn",
-        title: t("raid-status.goldView.toggleFailedTitle", lang),
-        description: t("raid-status.goldView.toggleFailedDescription", lang),
-      }).catch(() => {});
-    }
-    return noRedraw();
-  }
-
-  async function completeGoldReplacement(component) {
-    const token = goldReplaceTokenFromId(component?.customId);
-    const pending = token ? goldReplacementSessions.get(token) : null;
-    if (!pending) {
-      await followUpNotice(component, EmbedBuilder, {
-        type: "warn",
-        title: t("raid-status.goldView.toggleFailedTitle", lang),
-        description: t("raid-status.goldView.toggleFailedDescription", lang),
-      }).catch(() => {});
-      return redraw();
-    }
-
-    const removedRaidKey = firstSelectValue(component, "");
-    if (!removedRaidKey || removedRaidKey === "noop") {
-      return noRedraw();
-    }
-
-    goldReplacementSessions.delete(token);
-    const { replacement, writeDiscordId, targetAccountName } = pending;
-    const targetRaid = localizedRaidLabel(replacement.targetRaid);
-    const removedRaid = (replacement.options || []).find((raid) => raid.raidKey === removedRaidKey);
-    let replaceResult;
-    try {
-      replaceResult = await replaceRaidGoldSelection({
-        User,
-        saveWithRetry,
-        discordId: writeDiscordId,
-        targetAccountName,
-        targetCharName: replacement.targetCharName,
-        includeRaidKey: replacement.targetRaid.raidKey,
-        excludeRaidKey: removedRaidKey,
-      });
-    } catch (err) {
-      console.warn("[raid-status gold replace] save failed:", err?.message || err);
-      replaceResult = { ok: false };
-    }
-
-    if (!replaceResult.ok) {
-      await followUpNotice(component, EmbedBuilder, {
-        type: "warn",
-        title: t("raid-status.goldView.toggleFailedTitle", lang),
-        description: t("raid-status.goldView.toggleFailedDescription", lang),
-      }).catch(() => {});
-      return redraw();
-    }
-
-    await reloadViewerAccounts(writeDiscordId === discordId ? replaceResult.userDoc : null);
-    await followUpNotice(component, EmbedBuilder, {
-      type: "success",
-      title: t("raid-status.goldView.replaceSuccessTitle", lang),
-      description: t("raid-status.goldView.replaceSuccessDescription", lang, {
-        characterName: replacement.targetCharName,
-        targetRaid,
-        removedRaid: localizedRaidLabel(removedRaid),
-      }),
-    }).catch(() => {});
-    return redraw();
-  }
+  const goldReplacementFlow = createGoldReplacementFlow({
+    EmbedBuilder,
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    UI,
+    User,
+    saveWithRetry,
+    interaction,
+    discordId,
+    lang,
+    reloadViewerAccounts,
+    formatGold,
+    truncateText,
+  });
 
   return {
     [STATUS_COMPONENT_ACTION.prev]: async () => {
@@ -460,7 +326,7 @@ function createStatusComponentRouteHandlers(ctx) {
     },
 
     [STATUS_COMPONENT_ACTION.goldReplace]: async (component) => {
-      return completeGoldReplacement(component);
+      return goldReplacementFlow.complete(component);
     },
 
     [STATUS_COMPONENT_ACTION.goldToggle]: async (component) => {
@@ -500,7 +366,7 @@ function createStatusComponentRouteHandlers(ctx) {
         parsed,
       });
       if (toggleResult.needsReplacement) {
-        return promptGoldReplacement({
+        return goldReplacementFlow.prompt({
           component,
           replacement: toggleResult.replacement,
           writeDiscordId,
@@ -523,7 +389,7 @@ function createStatusComponentRouteHandlers(ctx) {
           title: t("raid-status.goldView.toggleSuccessTitle", lang),
           description: t("raid-status.goldView.toggleSuccessDescription", lang, {
             characterName: parsed.targetCharName,
-            raidLabel: localizedRaidLabel(toggleResult.targetRaid) || parsed.raidKey,
+            raidLabel: localizedRaidLabel(toggleResult.targetRaid, lang) || parsed.raidKey,
           }),
         }).catch(() => {});
       }

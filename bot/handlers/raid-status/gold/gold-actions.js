@@ -49,49 +49,82 @@ function parseGoldToggleValue(value) {
   };
 }
 
-async function toggleRaidGoldDisabled(options) {
+function findGoldWriteTarget(userDocFresh, targetAccountName, targetCharName) {
+  if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return null;
+  const accountName = normalizeName(targetAccountName);
+  const charName = normalizeName(targetCharName);
+  const account = userDocFresh.accounts.find(
+    (a) => normalizeName(a?.accountName) === accountName
+  );
+  if (!account || !Array.isArray(account.characters)) return null;
+
+  const character = account.characters.find(
+    (c) => normalizeName(c?.name || c?.charName) === charName
+  );
+  if (!character) return null;
+  if (!character.assignedRaids) character.assignedRaids = {};
+  return { account, character };
+}
+
+function markAccountsModified(userDocFresh) {
+  if (typeof userDocFresh?.markModified === "function") {
+    userDocFresh.markModified("accounts");
+  }
+}
+
+async function updateGoldWriteTarget(options, applyUpdate) {
   const {
     User,
     saveWithRetry,
     discordId,
     targetAccountName,
     targetCharName,
+  } = options;
+
+  let saved = false;
+  let savedUserDoc = null;
+  await saveWithRetry(async () => {
+    const userDocFresh = await User.findOne({ discordId });
+    const target = findGoldWriteTarget(userDocFresh, targetAccountName, targetCharName);
+    if (!target) return;
+
+    const shouldSave = await applyUpdate({
+      userDoc: userDocFresh,
+      account: target.account,
+      character: target.character,
+    });
+    if (!shouldSave) return;
+
+    markAccountsModified(userDocFresh);
+    await userDocFresh.save();
+    saved = true;
+    savedUserDoc = userDocFresh;
+  });
+
+  return { saved, userDoc: savedUserDoc };
+}
+
+async function toggleRaidGoldDisabled(options) {
+  const {
     raidKey,
   } = options;
 
   let nextOverride = null;
   let targetRaid = null;
-  let saved = false;
   let replacement = null;
-  await saveWithRetry(async () => {
-    const userDocFresh = await User.findOne({ discordId });
-    if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return;
-    const account = userDocFresh.accounts.find(
-      (a) => normalizeName(a?.accountName) === normalizeName(targetAccountName)
-    );
-    if (!account || !Array.isArray(account.characters)) return;
-
-    const target = account.characters.find(
-      (c) => normalizeName(c?.name || c?.charName) === normalizeName(targetCharName)
-    );
-    if (!target) return;
-    if (!target.assignedRaids) target.assignedRaids = {};
+  const update = await updateGoldWriteTarget(options, ({ character: target }) => {
     const raidData = target.assignedRaids[raidKey] || {};
     nextOverride = getNextGoldOverride(raidKey, raidData, target);
     const raids = getStatusRaidsForCharacter(target);
     targetRaid = summarizeGoldRaidEntry(raids.find((raid) => raid.raidKey === raidKey));
     replacement = getGoldReplacementRequirement(target, raidKey, nextOverride, raids);
-    if (replacement?.required) return;
+    if (replacement?.required) return false;
 
     writeAssignedRaidOverride(target, raidKey, nextOverride);
-    if (typeof userDocFresh.markModified === "function") {
-      userDocFresh.markModified("accounts");
-    }
-    await userDocFresh.save();
-    saved = true;
+    return true;
   });
   return {
-    ok: saved,
+    ok: update.saved,
     override: nextOverride,
     disabled: nextOverride === "exclude",
     needsReplacement: !!replacement?.required,
@@ -102,11 +135,6 @@ async function toggleRaidGoldDisabled(options) {
 
 async function replaceRaidGoldSelection(options) {
   const {
-    User,
-    saveWithRetry,
-    discordId,
-    targetAccountName,
-    targetCharName,
     includeRaidKey,
     excludeRaidKey,
   } = options;
@@ -115,34 +143,13 @@ async function replaceRaidGoldSelection(options) {
     return { ok: false };
   }
 
-  let saved = false;
-  let savedUserDoc = null;
-  await saveWithRetry(async () => {
-    const userDocFresh = await User.findOne({ discordId });
-    if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return;
-    const account = userDocFresh.accounts.find(
-      (a) => normalizeName(a?.accountName) === normalizeName(targetAccountName)
-    );
-    if (!account || !Array.isArray(account.characters)) return;
-
-    const target = account.characters.find(
-      (c) => normalizeName(c?.name || c?.charName) === normalizeName(targetCharName)
-    );
-    if (!target) return;
-    if (!target.assignedRaids) target.assignedRaids = {};
-
+  const update = await updateGoldWriteTarget(options, ({ character: target }) => {
     writeAssignedRaidOverride(target, includeRaidKey, "include");
     writeAssignedRaidOverride(target, excludeRaidKey, "exclude");
-
-    if (typeof userDocFresh.markModified === "function") {
-      userDocFresh.markModified("accounts");
-    }
-    await userDocFresh.save();
-    saved = true;
-    savedUserDoc = userDocFresh;
+    return true;
   });
 
-  return { ok: saved, userDoc: savedUserDoc };
+  return { ok: update.saved, userDoc: update.userDoc };
 }
 
 async function toggleParsedGoldRaid(options) {
