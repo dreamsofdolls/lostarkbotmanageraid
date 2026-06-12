@@ -110,7 +110,7 @@ function createRaidStatusGoldUi(deps) {
     const namePrefix = classIcon ? `${classIcon} ` : "";
     const itemLevel = Number(character.itemLevel) || 0;
     const counted = raids.filter((raid) => raid.goldReceives).length;
-    const header = `${namePrefix}${name} \u00B7 ${counted}/${GOLD_RAID_CAP_PER_CHARACTER} \u00B7 ${itemLevel}`;
+    const header = `${namePrefix}${name} \u00B7 ${itemLevel} \u00B7 ${counted}/${GOLD_RAID_CAP_PER_CHARACTER}`;
     const lines = raids.length === 0
       ? [`${UI.icons.lock} ${t("raid-status.embed.notEligible", lang)}`]
       : raids.map(formatGoldRaidLine);

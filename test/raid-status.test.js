@@ -1167,7 +1167,7 @@ test("raid-status gold view renders auto-bound status and setup dropdowns", () =
   assert.match(embedJson.title, /Gold nhận/);
   const goldField = embedJson.fields.find((field) => /Goldie/.test(field.name));
   assert.ok(goldField, "gold character field should render");
-  assert.match(goldField.name, /Goldie\s*\u00B7\s*3\/3\s*\u00B7\s*1730/);
+  assert.match(goldField.name, /Goldie\s*\u00B7\s*1730\s*\u00B7\s*3\/3/);
   assert.doesNotMatch(goldField.value, /\b3\/3\b/);
   assert.match(goldField.value, /Act 4 Hard - 42,000G/);
   assert.doesNotMatch(goldField.value, /0G\s*\/\s*\d/);
