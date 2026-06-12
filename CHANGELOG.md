@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-12 (raid-status + raid-check: order the raid filter by progression)
+
+### Changed
+- The raid-filter dropdown ("Tất cả raids") no longer sorts by pending count, which scattered raids by backlog and split a raid's modes apart (e.g. Serca Normal at the top, Serca Hard four rows down). It now follows canonical progression - Act 4 -> Kazeros -> Serca -> Horizon, and within each raid Normal -> Hard -> Nightmare - so modes of the same raid sit together and the list reads predictably. Shared `compareRaidModeOrder` helper in `raid-catalog.js` drives both the `/raid-status` filter and the `/raid-check` all-mode filter. 906 tests green.
+
 ## 2026-06-12 (raid-status: 🔒 means only bound gold in the gold view)
 
 ### Changed

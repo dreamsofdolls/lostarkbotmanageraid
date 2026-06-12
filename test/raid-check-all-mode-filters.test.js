@@ -95,9 +95,12 @@ test("all-mode raid filter scopes counts by the selected user and marks selected
       assert.equal(userFilter, "u1");
       return {
         totalPending: 3,
+        // Inserted in reverse-canonical order on purpose: the dropdown must
+        // re-order them into raid-progression order (Act 4 before Kazeros),
+        // not keep insertion order or sort by pending count.
         perRaidPending: new Map([
-          ["act4:normal", { key: "act4:normal", label: "Act 4 Normal", pending: 0, supports: 0, dps: 0 }],
-          ["kazeros:hard", { key: "kazeros:hard", label: "Kazeros Hard", pending: 3, supports: 1, dps: 2 }],
+          ["kazeros:hard", { key: "kazeros:hard", label: "Kazeros Hard", raidKey: "kazeros", modeKey: "hard", pending: 3, supports: 1, dps: 2 }],
+          ["armoche:normal", { key: "armoche:normal", label: "Act 4 Normal", raidKey: "armoche", modeKey: "normal", pending: 0, supports: 0, dps: 0 }],
         ]),
       };
     },
@@ -113,6 +116,9 @@ test("all-mode raid filter scopes counts by the selected user and marks selected
   assert.equal(menu.customId, "raid-check-all-filter:raid");
   assert.equal(menu.disabled, true);
   assert.equal(menu.options[0].value, FILTER_ALL_RAIDS);
-  assert.equal(menu.options[1].value, "kazeros:hard");
-  assert.equal(menu.options[1].default, true);
+  // Canonical progression order: Act 4 (armoche) before Kazeros, regardless
+  // of pending count or insertion order.
+  assert.equal(menu.options[1].value, "armoche:normal");
+  assert.equal(menu.options[2].value, "kazeros:hard");
+  assert.equal(menu.options[2].default, true);
 });

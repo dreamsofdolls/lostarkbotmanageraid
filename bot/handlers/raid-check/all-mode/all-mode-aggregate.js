@@ -23,6 +23,10 @@ function getRaidEntry({ perRaidPending, raid, lang }) {
     entry = {
       key,
       label: getRaidModeLabel(raid.raidKey, raid.modeKey, lang),
+      // raidKey/modeKey kept so the raid dropdown can sort by canonical
+      // progression order (compareRaidModeOrder) instead of pending count.
+      raidKey: raid.raidKey,
+      modeKey: raid.modeKey,
       pending: 0,
       supports: 0,
       dps: 0,

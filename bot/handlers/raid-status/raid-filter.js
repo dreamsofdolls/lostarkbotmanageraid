@@ -8,6 +8,7 @@
  */
 
 const { isSupportClass } = require("../../models/Class");
+const { compareRaidModeOrder } = require("../../models/Raid");
 const { t } = require("../../services/i18n");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 
@@ -24,12 +25,10 @@ function buildRaidDropdownState(accounts, getRaidsFor) {
         if (!entry) {
           entry = {
             key,
-            // Canonical English label kept here so the secondary
-            // sort below stays stable across locale switches (a
-            // locale-aware sort would re-shuffle entries when the
-            // viewer flips between vi and jp). Render-time labels
-            // come from getRaidModeLabel(raidKey, modeKey, lang) in
-            // buildRaidFilterRow below.
+            // Canonical English label kept for back-compat / debugging.
+            // Render-time labels come from getRaidModeLabel(raidKey,
+            // modeKey, lang) in buildRaidFilterRow; ordering is by
+            // raidKey/modeKey via compareRaidModeOrder below.
             label: raid.raidName,
             raidKey: raid.raidKey,
             modeKey: raid.modeKey,
@@ -48,9 +47,11 @@ function buildRaidDropdownState(accounts, getRaidsFor) {
     }
   }
 
-  const raidDropdownEntries = [...raidAggregate.values()].sort(
-    (a, b) => b.pending - a.pending || a.label.localeCompare(b.label)
-  );
+  // Order by canonical raid progression + difficulty (Act 4 -> Kazeros ->
+  // Serca -> Horizon, Normal -> Hard -> Nightmare) so the same raid's modes
+  // sit together and the list reads predictably. The old pending-desc sort
+  // shuffled raids by backlog, which split a raid's modes apart.
+  const raidDropdownEntries = [...raidAggregate.values()].sort(compareRaidModeOrder);
   const totalRaidPending = raidDropdownEntries.reduce(
     (sum, r) => sum + r.pending,
     0

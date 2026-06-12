@@ -1,5 +1,7 @@
 "use strict";
 
+const { compareRaidModeOrder } = require("../../../models/Raid");
+
 const FILTER_ALL = "__all__";
 const FILTER_ALL_RAIDS = "__all_raids__";
 
@@ -88,9 +90,9 @@ function buildAllModeRaidFilterRow({
     raidFilter: null,
     userFilter: filterUserId,
   });
-  const raidEntries = [...perRaidPending.values()].sort(
-    (a, b) => b.pending - a.pending || a.label.localeCompare(b.label)
-  );
+  // Canonical raid progression + difficulty order (shared with /raid-status's
+  // filter) so a raid's modes stay grouped instead of scattering by backlog.
+  const raidEntries = [...perRaidPending.values()].sort(compareRaidModeOrder);
   const options = [
     {
       label: truncateText(
