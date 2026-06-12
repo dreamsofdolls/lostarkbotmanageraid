@@ -13,6 +13,7 @@ const STATUS_COMPONENT_ACTION = Object.freeze({
   taskToggle: "taskToggle",
   goldCharFilter: "goldCharFilter",
   goldToggle: "goldToggle",
+  goldReplace: "goldReplace",
 });
 
 const STATUS_COMPONENT_ROUTES = Object.freeze([
@@ -100,6 +101,14 @@ function getStatusComponentRoute(customId, { myRaidsSelectId = "" } = {}) {
       action: STATUS_COMPONENT_ACTION.myRaidsSelect,
       editDriven: false,
       redraw: false,
+    });
+  }
+  if (id.startsWith("status-gold:replace:")) {
+    return Object.freeze({
+      customId: id,
+      action: STATUS_COMPONENT_ACTION.goldReplace,
+      editDriven: true,
+      redraw: true,
     });
   }
   return ROUTES_BY_CUSTOM_ID.get(id) || null;
