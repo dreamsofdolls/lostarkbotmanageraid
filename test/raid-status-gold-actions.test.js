@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 
 const {
   parseGoldToggleValue,
+  replaceRaidGoldSelection,
   toggleRaidGoldDisabled,
   getNextGoldOverride,
 } = require("../bot/handlers/raid-status/gold/gold-actions");
@@ -122,4 +123,64 @@ test("raid-status gold actions toggle full-bound Horizon auto raid to manual inc
     G1: { difficulty: "Level 1", completedDate: null },
     G2: { difficulty: "Level 1", completedDate: null },
   }, { itemLevel: 1710 }), "include");
+});
+
+test("raid-status gold actions require replacement before including locked raid at 3/3", async () => {
+  let saved = 0;
+  const doc = {
+    accounts: [
+      {
+        accountName: "Roster",
+        characters: [
+          {
+            name: "Aki",
+            itemLevel: 1730,
+            assignedRaids: {
+              horizon: {
+                modeKey: "hard",
+                G1: { difficulty: "Level 2", completedDate: null },
+                G2: { difficulty: "Level 2", completedDate: null },
+              },
+            },
+          },
+        ],
+      },
+    ],
+    markModified() {},
+    async save() {
+      saved += 1;
+    },
+  };
+
+  const result = await toggleRaidGoldDisabled({
+    User: makeUserModel(doc),
+    saveWithRetry: async (op) => op(),
+    discordId: "user-1",
+    targetAccountName: "Roster",
+    targetCharName: "Aki",
+    raidKey: "horizon",
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.needsReplacement, true);
+  assert.equal(saved, 0);
+  assert.deepEqual(
+    result.replacement.options.map((raid) => raid.raidKey),
+    ["armoche", "kazeros", "serca"],
+  );
+
+  const replace = await replaceRaidGoldSelection({
+    User: makeUserModel(doc),
+    saveWithRetry: async (op) => op(),
+    discordId: "user-1",
+    targetAccountName: "Roster",
+    targetCharName: "Aki",
+    includeRaidKey: "horizon",
+    excludeRaidKey: "armoche",
+  });
+
+  assert.equal(replace.ok, true);
+  assert.equal(doc.accounts[0].characters[0].assignedRaids.horizon.goldOverride, "include");
+  assert.equal(doc.accounts[0].characters[0].assignedRaids.armoche.goldOverride, "exclude");
+  assert.equal(saved, 1);
 });

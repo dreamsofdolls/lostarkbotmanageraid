@@ -2,6 +2,10 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const {
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
+} = require("discord.js");
 
 const {
   STATUS_COMPONENT_ACTION,
@@ -12,6 +16,11 @@ const {
 const {
   FILTER_ALL_RAIDS,
 } = require("../bot/handlers/raid-status/raid-filter");
+const {
+  UI,
+  formatGold,
+  truncateText,
+} = require("../bot/utils/raid/common/shared");
 
 class FakeEmbedBuilder {
   setColor(value) {
@@ -57,7 +66,9 @@ function createHandlerHarness(overrides = {}) {
   const handlers = createStatusComponentRouteHandlers({
     session,
     EmbedBuilder: FakeEmbedBuilder,
-    UI: {},
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    UI,
     User: overrides.User || {},
     saveWithRetry: overrides.saveWithRetry || (async (fn) => fn()),
     interaction: { editReply: async () => {} },
@@ -71,6 +82,8 @@ function createHandlerHarness(overrides = {}) {
     buildComponents: () => [],
     runManualStatusSync: async () => ({ outcome: null }),
     formatNextCooldownRemaining: () => "",
+    formatGold,
+    truncateText,
     getAutoManageCooldownMs: () => 0,
     AUTO_MANAGE_SYNC_COOLDOWN_MS: 0,
     buildMyRaidDetailEmbed: () => ({}),
@@ -121,12 +134,12 @@ test("raid-status component handlers persist gold toggle and request redraw", as
         characters: [
           {
             name: "Goldie",
-            itemLevel: 1739,
+            itemLevel: 1700,
             assignedRaids: {
               horizon: {
-                modeKey: "hard",
-                G1: { difficulty: "Hard", completedDate: 1 },
-                G2: { difficulty: "Hard", completedDate: 1 },
+                modeKey: "normal",
+                G1: { difficulty: "Level 1", completedDate: 1 },
+                G2: { difficulty: "Level 1", completedDate: 1 },
               },
             },
           },
@@ -148,9 +161,13 @@ test("raid-status component handlers persist gold toggle and request redraw", as
       },
     },
   });
+  let followUpPayload = null;
 
   const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldToggle]({
     values: ["Goldie::horizon"],
+    async followUp(payload) {
+      followUpPayload = payload;
+    },
   });
 
   assert.deepEqual(result, { redraw: true });
@@ -158,6 +175,85 @@ test("raid-status component handlers persist gold toggle and request redraw", as
   assert.equal(markedPath, "accounts");
   assert.equal(saved, 1);
   assert.equal(harness.reloadCount, 1);
+  assert.match(followUpPayload.embeds[0].title, /Đã cập nhật gold nhận/);
+});
+
+test("raid-status component handlers prompt for a gold replacement when locked raid would exceed 3/3", async () => {
+  let saved = 0;
+  const doc = {
+    accounts: [
+      {
+        accountName: "Roster B",
+        characters: [
+          {
+            name: "Goldie",
+            itemLevel: 1730,
+            assignedRaids: {
+              horizon: {
+                modeKey: "hard",
+                G1: { difficulty: "Level 2", completedDate: null },
+                G2: { difficulty: "Level 2", completedDate: null },
+              },
+            },
+          },
+        ],
+      },
+    ],
+    markModified(path) {
+      assert.equal(path, "accounts");
+    },
+    async save() {
+      saved += 1;
+    },
+  };
+  const harness = createHandlerHarness({
+    User: {
+      async findOne(query) {
+        assert.deepEqual(query, { discordId: "viewer" });
+        return doc;
+      },
+    },
+  });
+  let promptPayload = null;
+  let finalPromptPayload = null;
+  const prompt = {
+    async awaitMessageComponent(options) {
+      assert.equal(typeof options.filter, "function");
+      assert.equal(options.filter({
+        customId: "status-gold:replace",
+        user: { id: "viewer" },
+      }), true);
+      return {
+        customId: "status-gold:replace",
+        user: { id: "viewer" },
+        values: ["armoche"],
+        async deferUpdate() {},
+      };
+    },
+    async edit(payload) {
+      finalPromptPayload = payload;
+    },
+  };
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldToggle]({
+    values: ["Goldie::horizon"],
+    user: { id: "viewer" },
+    async followUp(payload) {
+      promptPayload = payload;
+      return prompt;
+    },
+  });
+
+  assert.deepEqual(result, { redraw: true });
+  assert.equal(promptPayload.flags, 64);
+  assert.equal(promptPayload.components.length, 1);
+  assert.match(promptPayload.embeds[0].title, /3\/3/);
+  assert.equal(doc.accounts[0].characters[0].assignedRaids.horizon.goldOverride, "include");
+  assert.equal(doc.accounts[0].characters[0].assignedRaids.armoche.goldOverride, "exclude");
+  assert.equal(saved, 1);
+  assert.equal(harness.reloadCount, 1);
+  assert.match(finalPromptPayload.embeds[0].title, /Đổi gold nhận xong/);
+  assert.equal(finalPromptPayload.components.length, 0);
 });
 
 test("raid-status component handlers warn when gold toggle cannot be saved", async () => {

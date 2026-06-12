@@ -1207,7 +1207,8 @@ test("raid-status gold view renders auto-bound status and setup dropdowns", () =
   assert.match(goldField.value, /Act 4 Hard - 42,000G/);
   assert.doesNotMatch(goldField.value, /0G\s*\/\s*\d/);
   assert.doesNotMatch(goldField.value, /42,000G\s*\/\s*42,000G/);
-  assert.match(goldField.value, /gold bound/);
+  assert.match(goldField.value, /Horizon Level 2 - locked/);
+  assert.doesNotMatch(goldField.value, /gold bound/);
   assert.doesNotMatch(goldField.value, /auto bỏ qua vì/i);
 
   const rows = [
@@ -1220,5 +1221,40 @@ test("raid-status gold view renders auto-bound status and setup dropdowns", () =
   );
   const toggleOptions = rows[1].toJSON().components[0].options;
   assert.equal(toggleOptions.length, 4);
-  assert.ok(toggleOptions.some((option) => /auto bỏ qua bound/.test(option.label)));
+  assert.ok(toggleOptions.some((option) => /auto bỏ qua locked/.test(option.label)));
+});
+
+test("raid-status gold view renders forced locked gold with lock icon", () => {
+  const char = {
+    ...makeChar("LockedGold", 1700, { isGoldEarner: true }),
+    assignedRaids: {
+      armoche: {},
+      horizon: {
+        goldOverride: "include",
+        modeKey: "normal",
+        G1: { difficulty: "Level 1", completedDate: 100 },
+        G2: { difficulty: "Level 1", completedDate: 100 },
+      },
+    },
+  };
+  const accounts = [{ accountName: "Alpha", characters: [char], lastRefreshedAt: 0 }];
+  const goldUi = createRaidStatusGoldUi({
+    EmbedBuilder,
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    UI,
+    getCharacterName,
+    truncateText,
+    formatGold,
+    getAccounts: () => accounts,
+    getCurrentPage: () => 0,
+    getGoldCharFilter: () => undefined,
+    getRaidsFor: getStatusRaidsForCharacter,
+    lang: "vi",
+  });
+
+  const embedJson = goldUi.buildGoldViewEmbed(accounts[0]).toJSON();
+  const goldField = embedJson.fields.find((field) => /LockedGold/.test(field.name));
+  assert.match(goldField.value, new RegExp(`${UI.icons.lock} #1 Horizon Level 1 - 30,000G`));
+  assert.doesNotMatch(goldField.value, /💰 #1 Horizon Level 1/);
 });
