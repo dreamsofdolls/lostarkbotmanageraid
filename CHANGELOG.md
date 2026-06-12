@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-12 (raid-status: bound-gold lock on the main progress view)
+
+### Changed
+- The main `/raid-status` progress view now appends a 🔒 after the gate count on raids whose gold is roster-bound (`⚪ Horizon Level 3 · 0/2 🔒`), so the player can tell at a glance which raids don't feed the account's tradeable weekly gold. Unbound raids are unchanged. Mirrors the 🔒 = bound-gold convention used in the gold view. 903 tests green.
+
 ## 2026-06-12 (raid-status: forced bound gold reads as a normal gold line)
 
 ### Changed
