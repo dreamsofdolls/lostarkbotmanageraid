@@ -1897,6 +1897,7 @@ module.exports = {
     aliasesValue: [
       "**Raid**: `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca` · `horizon` / `cathedral` / `hc`",
       "**Difficulty**: `normal` / `nor` / `nm` · `hard` / `hm` · `nightmare` / `9m`",
+      "**Horizon level**: `level1` / `l1` · `level2` / `l2` · `level3` / `l3`",
       "**Gate**: `G1`, `G2` - 1ゲートだけマークしたい時に使ってね♪",
       "**Separator**: スペース、`+`、`,` どれでも OK ですわ。",
     ],
