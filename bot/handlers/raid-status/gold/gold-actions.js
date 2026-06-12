@@ -33,6 +33,7 @@ async function toggleRaidGoldDisabled(options) {
   } = options;
 
   let nextOverride = null;
+  let saved = false;
   await saveWithRetry(async () => {
     const userDocFresh = await User.findOne({ discordId });
     if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return;
@@ -57,8 +58,10 @@ async function toggleRaidGoldDisabled(options) {
       userDocFresh.markModified("accounts");
     }
     await userDocFresh.save();
+    saved = true;
   });
   return {
+    ok: saved,
     override: nextOverride,
     disabled: nextOverride === "exclude",
   };
@@ -73,7 +76,7 @@ async function toggleParsedGoldRaid(options) {
       targetCharName: parsed.targetCharName,
       raidKey: parsed.raidKey,
     });
-    return { handled: true, ok: true, ...result };
+    return { handled: true, ...result };
   } catch (err) {
     logger.error?.("[raid-status gold toggle] save failed:", err?.message || err);
     return { handled: true, ok: false, error: err };
