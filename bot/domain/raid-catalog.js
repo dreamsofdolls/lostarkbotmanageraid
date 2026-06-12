@@ -133,6 +133,28 @@ function isGoldBound(raidKey, modeKey) {
   return !!RAID_REQUIREMENTS[raidKey]?.modes?.[modeKey]?.boundGold;
 }
 
+// Canonical progression order: raid groups follow their catalog declaration
+// order (Act 4 -> Kazeros -> Serca -> Horizon), and modes follow theirs
+// (normal -> hard -> nightmare). Used to keep raid dropdowns grouped by raid
+// and ordered by difficulty instead of shuffling by pending count.
+const RAID_ORDER = Object.keys(RAID_REQUIREMENTS);
+
+function raidModeSortRank(raidKey, modeKey) {
+  const raidIdx = RAID_ORDER.indexOf(raidKey);
+  const modeKeys = Object.keys(RAID_REQUIREMENTS[raidKey]?.modes || {});
+  const modeIdx = modeKeys.indexOf(modeKey);
+  return (raidIdx < 0 ? 99 : raidIdx) * 100 + (modeIdx < 0 ? 99 : modeIdx);
+}
+
+// Comparator for entries carrying { raidKey, modeKey } - sorts into the
+// canonical raid+mode order above.
+function compareRaidModeOrder(a, b) {
+  return (
+    raidModeSortRank(a?.raidKey, a?.modeKey) -
+    raidModeSortRank(b?.raidKey, b?.modeKey)
+  );
+}
+
 module.exports = {
   RAID_REQUIREMENTS,
   getRaidRequirementList,
@@ -144,4 +166,6 @@ module.exports = {
   getGoldForGate,
   getGoldForRaid,
   isGoldBound,
+  raidModeSortRank,
+  compareRaidModeOrder,
 };

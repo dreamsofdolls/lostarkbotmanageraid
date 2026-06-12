@@ -41,7 +41,8 @@ const {
   getCharacterName,
   formatGold,
 } = require("../bot/utils/raid/common/shared");
-const { getGoldForGate, isGoldBound } = require("../bot/domain/raid-catalog");
+const { getGoldForGate, isGoldBound, compareRaidModeOrder } = require("../bot/domain/raid-catalog");
+const { buildRaidDropdownState } = require("../bot/handlers/raid-status/raid-filter");
 const { getRaidModeLabel } = require("../bot/utils/raid/common/labels");
 const {
   summarizeRaidProgress,
@@ -746,6 +747,44 @@ test("formatRaidStatusLine: translated raid labels keep the difficulty mode", ()
   assert.match(formatRaidStatusLine(raid, "jp"), /カゼロス ハード · 1\/2/);
   // Unbound raid: no trailing lock.
   assert.doesNotMatch(formatRaidStatusLine(raid, "vi"), new RegExp(`${UI.icons.lock}$`));
+});
+
+test("compareRaidModeOrder: canonical raid progression + difficulty order", () => {
+  const shuffled = [
+    { raidKey: "serca", modeKey: "hard" },
+    { raidKey: "horizon", modeKey: "hard" },
+    { raidKey: "armoche", modeKey: "hard" },
+    { raidKey: "serca", modeKey: "normal" },
+    { raidKey: "kazeros", modeKey: "normal" },
+    { raidKey: "armoche", modeKey: "normal" },
+  ];
+  const ordered = [...shuffled].sort(compareRaidModeOrder).map((r) => `${r.raidKey}:${r.modeKey}`);
+  assert.deepEqual(ordered, [
+    "armoche:normal",
+    "armoche:hard",
+    "kazeros:normal",
+    "serca:normal",
+    "serca:hard",
+    "horizon:hard",
+  ]);
+});
+
+test("buildRaidDropdownState: orders the filter dropdown by raid progression, not pending count", () => {
+  // High-backlog Serca Normal must NOT jump above Act 4 / Kazeros; a raid's
+  // modes stay grouped (Serca Normal then Serca Hard).
+  const raids = [
+    { raidKey: "serca", modeKey: "normal", raidName: "Serca Normal", isCompleted: false },
+    { raidKey: "serca", modeKey: "hard", raidName: "Serca Hard", isCompleted: false },
+    { raidKey: "armoche", modeKey: "hard", raidName: "Act 4 Hard", isCompleted: false },
+    { raidKey: "kazeros", modeKey: "normal", raidName: "Kazeros Normal", isCompleted: false },
+    { raidKey: "horizon", modeKey: "hard", raidName: "Horizon Level 2", isCompleted: false },
+  ];
+  const accounts = [{ characters: [{ class: "Sorceress" }] }];
+  const { raidDropdownEntries } = buildRaidDropdownState(accounts, () => raids);
+  assert.deepEqual(
+    raidDropdownEntries.map((r) => r.key),
+    ["armoche:hard", "kazeros:normal", "serca:normal", "serca:hard", "horizon:hard"],
+  );
 });
 
 test("formatRaidStatusLine: bound-gold raids get a trailing lock", () => {
