@@ -207,6 +207,26 @@ function createStatusComponentRouteHandlers(ctx) {
     return false;
   }
 
+  async function refreshStatusReplyAfterGoldReplace(nextOwnDoc = null) {
+    try {
+      await reloadViewerAccounts(nextOwnDoc);
+    } catch (err) {
+      console.warn("[raid-status gold replace] reload failed:", err?.message || err);
+      return false;
+    }
+
+    try {
+      await interaction.editReply({
+        ...(await buildEmbedAndCanvas()),
+        components: buildComponents(false),
+      });
+      return true;
+    } catch (err) {
+      console.warn("[raid-status gold replace] status edit failed:", err?.message || err);
+      return false;
+    }
+  }
+
   async function promptGoldReplacement({
     component,
     replacement,
@@ -282,7 +302,9 @@ function createStatusComponentRouteHandlers(ctx) {
       return noRedraw();
     }
 
-    await reloadViewerAccounts();
+    const refreshed = await refreshStatusReplyAfterGoldReplace(
+      writeDiscordId === discordId ? replaceResult.userDoc : null,
+    );
     await editGoldReplacementPrompt(picked, prompt, {
       embeds: [buildGoldNoticeEmbed(
         "success",
@@ -295,7 +317,7 @@ function createStatusComponentRouteHandlers(ctx) {
       )],
       components: [],
     }, wasDeferred);
-    return redraw();
+    return refreshed ? noRedraw() : redraw();
   }
 
   return {

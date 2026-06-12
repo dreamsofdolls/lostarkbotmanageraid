@@ -97,6 +97,7 @@ async function replaceRaidGoldSelection(options) {
   }
 
   let saved = false;
+  let savedUserDoc = null;
   await saveWithRetry(async () => {
     const userDocFresh = await User.findOne({ discordId });
     if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return;
@@ -128,9 +129,10 @@ async function replaceRaidGoldSelection(options) {
     }
     await userDocFresh.save();
     saved = true;
+    savedUserDoc = userDocFresh;
   });
 
-  return { ok: saved };
+  return { ok: saved, userDoc: savedUserDoc };
 }
 
 async function toggleParsedGoldRaid(options) {
