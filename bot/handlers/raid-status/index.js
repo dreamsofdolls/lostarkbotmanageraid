@@ -50,7 +50,7 @@ const {
   createRaidStatusSessionState,
 } = require("./state/session-state");
 
-const STATUS_PAGINATION_SESSION_MS = 5 * 60 * 1000;
+const STATUS_PAGINATION_SESSION_MS = 10 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
 const STATUS_TASK_AUTO_REFRESH_GRACE_MS = 1000;
 

@@ -88,6 +88,20 @@ test("raid-status gold actions cycle bound raid through include, exclude, auto",
   assert.equal(saved, 3);
 });
 
+test("raid-status gold actions report ok=false when target cannot be saved", async () => {
+  const result = await toggleRaidGoldDisabled({
+    User: makeUserModel({ accounts: [] }),
+    saveWithRetry: async (op) => op(),
+    discordId: "user-1",
+    targetAccountName: "Roster",
+    targetCharName: "Aki",
+    raidKey: "horizon",
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.override, null);
+});
+
 test("raid-status gold actions toggle unbound auto raid to manual exclude", () => {
   assert.equal(getNextGoldOverride("kazeros", {
     modeKey: "hard",

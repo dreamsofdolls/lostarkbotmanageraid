@@ -109,13 +109,12 @@ function createRaidStatusGoldUi(deps) {
 
   function buildGoldCharacterField(character) {
     const raids = getRaidsFor(character);
-    const totals = summarizeCharacterGold(raids);
     const name = getCharacterName(character);
     const classIcon = getClassEmoji(character.class || character.className);
     const namePrefix = classIcon ? `${classIcon} ` : "";
     const itemLevel = Number(character.itemLevel) || 0;
     const counted = raids.filter((raid) => raid.goldReceives).length;
-    const header = `${namePrefix}${name} \u00B7 ${itemLevel} \u00B7 ${formatGold(totals.earned)} / ${formatGold(totals.total)}`;
+    const header = `${namePrefix}${name} \u00B7 ${itemLevel}`;
     const lines = raids.length === 0
       ? [`${UI.icons.lock} ${t("raid-status.embed.notEligible", lang)}`]
       : [

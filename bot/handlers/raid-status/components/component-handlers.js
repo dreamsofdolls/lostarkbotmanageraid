@@ -330,13 +330,21 @@ function createStatusComponentRouteHandlers(ctx) {
         );
       }
 
-      await toggleParsedGoldRaid({
+      const toggleResult = await toggleParsedGoldRaid({
         User,
         saveWithRetry,
         discordId: writeDiscordId,
         targetAccountName,
         parsed,
       });
+      if (!toggleResult.ok) {
+        await followUpNotice(component, EmbedBuilder, {
+          type: "warn",
+          title: t("raid-status.goldView.toggleFailedTitle", lang),
+          description: t("raid-status.goldView.toggleFailedDescription", lang),
+        }).catch(() => {});
+        return noRedraw();
+      }
 
       await reloadViewerAccounts();
       return redraw();
