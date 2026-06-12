@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-12 (raid-status: fix gold-receive toggle not persisting)
+
+### Fixed
+- The `/raid-status` "Gold nhận" toggle (force-include a bound raid / exclude a slot, and the 3/3 replacement picker) saved nothing: clicking confirmed ("đã chuyển gold...") but the icon + locked reason never changed and the data stayed put. Root cause was a Mongoose write bug - `goldOverride` is a dynamic field on the strict:false `assignedRaids` subdoc, and assigning it straight onto the live subdoc (`subdoc.goldOverride = x`) bypasses the setter, so the value never reaches `_doc` and is dropped on serialize. Fixed by rebuilding the raid entry as a plain object and re-assigning it (forces a re-cast that carries the field through). Both the direct toggle and the include/exclude replacement now persist. The old unit tests passed because they mocked the doc as a plain object (no Mongoose serialization); added two regression tests that drive a real `User` document and assert via `toObject()`. 902 tests green.
+
 ## 2026-06-06 (raid-status: gold layout - own-line rollup + earned-only per-char)
 
 ### Changed
