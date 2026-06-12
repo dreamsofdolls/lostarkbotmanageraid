@@ -100,7 +100,8 @@ function createRaidStatusGoldUi(deps) {
     const manual = raid.goldOverride === "include"
       ? ` ${t("raid-status.goldView.manualOn", lang)}`
       : "";
-    return `\uD83D\uDCB0 ${slot}${label} - ${formatGold(rawGoldTotal(raid))}${bound}${manual}`;
+    const receiveIcon = raid.goldBound ? UI.icons.lock : "\uD83D\uDCB0";
+    return `${receiveIcon} ${slot}${label} - ${formatGold(rawGoldTotal(raid))}${bound}${manual}`;
   }
 
   function buildGoldCharacterField(character) {
@@ -253,10 +254,10 @@ function createRaidStatusGoldUi(deps) {
 
     const options = raids.slice(0, 25).map((raid) => {
       const label = localizedRaidLabel(raid);
-      let icon = raid.goldReceives ? "\uD83D\uDCB0" : UI.icons.pending;
+      let icon = raid.goldReceives ? (raid.goldBound ? UI.icons.lock : "\uD83D\uDCB0") : UI.icons.pending;
       let status;
       if (raid.goldOverride === "include") {
-        icon = "\uD83D\uDCB0";
+        icon = raid.goldBound ? UI.icons.lock : "\uD83D\uDCB0";
         status = t("raid-status.goldView.toggleManualOn", lang);
       } else if (raid.goldDisabled) {
         icon = UI.icons.lock;

@@ -375,6 +375,8 @@ function createRaidStatusCommand(deps) {
     const componentRouteHandlers = createStatusComponentRouteHandlers({
       session: componentSession,
       EmbedBuilder,
+      ActionRowBuilder,
+      StringSelectMenuBuilder,
       UI,
       User,
       saveWithRetry,
@@ -387,6 +389,8 @@ function createRaidStatusCommand(deps) {
       buildComponents,
       runManualStatusSync,
       formatNextCooldownRemaining,
+      formatGold,
+      truncateText,
       getAutoManageCooldownMs,
       AUTO_MANAGE_SYNC_COOLDOWN_MS,
       buildMyRaidDetailEmbed,

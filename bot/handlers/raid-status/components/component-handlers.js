@@ -13,6 +13,7 @@ const {
 } = require("../task/task-actions");
 const {
   parseGoldToggleValue,
+  replaceRaidGoldSelection,
   toggleParsedGoldRaid,
 } = require("../gold/gold-actions");
 const {
@@ -37,6 +38,10 @@ const {
 const {
   t,
 } = require("../../../services/i18n");
+const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
+
+const GOLD_REPLACE_SELECT_ID = "status-gold:replace";
+const EPHEMERAL_FLAG = 1 << 6;
 
 function noRedraw() {
   return { redraw: false };
@@ -50,6 +55,8 @@ function createStatusComponentRouteHandlers(ctx) {
   const {
     session,
     EmbedBuilder,
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
     UI,
     User,
     saveWithRetry,
@@ -62,9 +69,156 @@ function createStatusComponentRouteHandlers(ctx) {
     buildComponents,
     runManualStatusSync,
     formatNextCooldownRemaining,
+    formatGold,
+    truncateText,
     getAutoManageCooldownMs,
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
   } = ctx;
+
+  function localizedRaidLabel(raid) {
+    return getRaidModeLabel(raid?.raidKey, raid?.modeKey, lang) || raid?.raidName || raid?.raidKey || "";
+  }
+
+  function rawGoldTotal(raid) {
+    return Number(raid?.rawTotalGold ?? raid?.totalGold) || 0;
+  }
+
+  function buildGoldReplacePrompt(replacement) {
+    const targetRaid = localizedRaidLabel(replacement.targetRaid);
+    const embed = new EmbedBuilder()
+      .setColor(UI.colors.progress)
+      .setTitle(`${UI.icons.lock} ${t("raid-status.goldView.replaceRequiredTitle", lang, {
+        cap: replacement.cap,
+      })}`)
+      .setDescription(t("raid-status.goldView.replaceRequiredDescription", lang, {
+        cap: replacement.cap,
+        characterName: replacement.targetCharName,
+        targetRaid,
+      }));
+
+    const options = (replacement.options || []).slice(0, 25).map((raid) => {
+      const icon = raid.goldBound ? UI.icons.lock : "\uD83D\uDCB0";
+      const rank = Number(raid.goldSlotRank) || 0;
+      const rankPrefix = rank > 0 ? `#${rank} ` : "";
+      return {
+        label: truncateText(`${icon} ${rankPrefix}${localizedRaidLabel(raid)}`, 100),
+        description: truncateText(formatGold(rawGoldTotal(raid)), 100),
+        value: raid.raidKey,
+      };
+    });
+
+    const row = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(GOLD_REPLACE_SELECT_ID)
+        .setPlaceholder(t("raid-status.goldView.replacePlaceholder", lang))
+        .addOptions(options.length > 0 ? options : [{ label: "(empty)", value: "noop" }])
+        .setDisabled(options.length === 0)
+    );
+
+    return { embed, row, targetRaid };
+  }
+
+  function buildGoldNoticeEmbed(type, title, description) {
+    const color = type === "success"
+      ? UI.colors.success
+      : type === "warn"
+        ? UI.colors.progress
+        : UI.colors.neutral;
+    const icon = type === "success"
+      ? UI.icons.done
+      : type === "warn"
+        ? UI.icons.warn
+        : UI.icons.info;
+    return new EmbedBuilder()
+      .setColor(color)
+      .setTitle(`${icon} ${title}`)
+      .setDescription(description);
+  }
+
+  async function promptGoldReplacement({
+    component,
+    replacement,
+    writeDiscordId,
+    targetAccountName,
+  }) {
+    const { embed, row, targetRaid } = buildGoldReplacePrompt(replacement);
+    const prompt = await component.followUp({
+      embeds: [embed],
+      components: [row],
+      flags: EPHEMERAL_FLAG,
+    }).catch((err) => {
+      console.warn("[raid-status gold replace] prompt failed:", err?.message || err);
+      return null;
+    });
+
+    if (!prompt || typeof prompt.awaitMessageComponent !== "function") {
+      return noRedraw();
+    }
+
+    let picked;
+    try {
+      picked = await prompt.awaitMessageComponent({
+        time: 45_000,
+        filter: (select) =>
+          select?.customId === GOLD_REPLACE_SELECT_ID &&
+          select?.user?.id === component.user.id,
+      });
+    } catch {
+      await prompt.edit({
+        embeds: [buildGoldNoticeEmbed(
+          "warn",
+          t("raid-status.goldView.replaceTimeoutTitle", lang),
+          t("raid-status.goldView.replaceTimeoutDescription", lang, { targetRaid }),
+        )],
+        components: [],
+      }).catch(() => {});
+      return noRedraw();
+    }
+
+    const removedRaidKey = firstSelectValue(picked, "");
+    if (typeof picked.deferUpdate === "function") {
+      await picked.deferUpdate().catch(() => {});
+    }
+    if (!removedRaidKey || removedRaidKey === "noop") return noRedraw();
+
+    const removedRaid = (replacement.options || []).find((raid) => raid.raidKey === removedRaidKey);
+    const replaceResult = await replaceRaidGoldSelection({
+      User,
+      saveWithRetry,
+      discordId: writeDiscordId,
+      targetAccountName,
+      targetCharName: replacement.targetCharName,
+      includeRaidKey: replacement.targetRaid.raidKey,
+      excludeRaidKey: removedRaidKey,
+    });
+
+    if (!replaceResult.ok) {
+      await prompt.edit({
+        embeds: [buildGoldNoticeEmbed(
+          "warn",
+          t("raid-status.goldView.toggleFailedTitle", lang),
+          t("raid-status.goldView.toggleFailedDescription", lang),
+        )],
+        components: [],
+      }).catch(() => {});
+      return noRedraw();
+    }
+
+    await reloadViewerAccounts();
+    await prompt.edit({
+      embeds: [buildGoldNoticeEmbed(
+        "success",
+        t("raid-status.goldView.replaceSuccessTitle", lang),
+        t("raid-status.goldView.replaceSuccessDescription", lang, {
+          characterName: replacement.targetCharName,
+          targetRaid,
+          removedRaid: localizedRaidLabel(removedRaid),
+        }),
+      )],
+      components: [],
+    }).catch(() => {});
+    return redraw();
+  }
 
   return {
     [STATUS_COMPONENT_ACTION.prev]: async () => {
@@ -337,6 +491,14 @@ function createStatusComponentRouteHandlers(ctx) {
         targetAccountName,
         parsed,
       });
+      if (toggleResult.needsReplacement) {
+        return promptGoldReplacement({
+          component,
+          replacement: toggleResult.replacement,
+          writeDiscordId,
+          targetAccountName,
+        });
+      }
       if (!toggleResult.ok) {
         await followUpNotice(component, EmbedBuilder, {
           type: "warn",
@@ -347,6 +509,16 @@ function createStatusComponentRouteHandlers(ctx) {
       }
 
       await reloadViewerAccounts();
+      if (toggleResult.override === "include" && typeof component.followUp === "function") {
+        await followUpNotice(component, EmbedBuilder, {
+          type: "success",
+          title: t("raid-status.goldView.toggleSuccessTitle", lang),
+          description: t("raid-status.goldView.toggleSuccessDescription", lang, {
+            characterName: parsed.targetCharName,
+            raidLabel: localizedRaidLabel(toggleResult.targetRaid) || parsed.raidKey,
+          }),
+        }).catch(() => {});
+      }
       return redraw();
     },
   };
