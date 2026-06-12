@@ -41,7 +41,6 @@ const {
 const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
 
 const GOLD_REPLACE_SELECT_ID = "status-gold:replace";
-const EPHEMERAL_FLAG = 1 << 6;
 
 function noRedraw() {
   return { redraw: false };
@@ -74,6 +73,7 @@ function createStatusComponentRouteHandlers(ctx) {
     getAutoManageCooldownMs,
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
   } = ctx;
+  const goldReplacementSessions = new Map();
 
   function localizedRaidLabel(raid) {
     return getRaidModeLabel(raid?.raidKey, raid?.modeKey, lang) || raid?.raidName || raid?.raidKey || "";
@@ -123,108 +123,10 @@ function createStatusComponentRouteHandlers(ctx) {
     return `${GOLD_REPLACE_SELECT_ID}:${token}`;
   }
 
-  function buildGoldNoticeEmbed(type, title, description) {
-    const color = type === "success"
-      ? UI.colors.success
-      : type === "warn"
-        ? UI.colors.progress
-        : UI.colors.neutral;
-    const icon = type === "success"
-      ? UI.icons.done
-      : type === "warn"
-        ? UI.icons.warn
-        : UI.icons.info;
-    return new EmbedBuilder()
-      .setColor(color)
-      .setTitle(`${icon} ${title}`)
-      .setDescription(description);
-  }
-
-  function awaitGoldReplacementSelection({ component, prompt, selectId }) {
-    const userId = component?.user?.id;
-    const client = component?.client;
-    if (client && typeof client.on === "function" && typeof client.off === "function") {
-      return new Promise((resolve, reject) => {
-        let settled = false;
-        let timer = null;
-        const cleanup = () => {
-          if (timer) clearTimeout(timer);
-          client.off("interactionCreate", onInteraction);
-        };
-        const finish = (fn, value) => {
-          if (settled) return;
-          settled = true;
-          cleanup();
-          fn(value);
-        };
-        const onInteraction = (select) => {
-          if (select?.customId !== selectId) return;
-          if (userId && select?.user?.id !== userId) return;
-          finish(resolve, select);
-        };
-        timer = setTimeout(() => finish(reject, new Error("timeout")), 45_000);
-        client.on("interactionCreate", onInteraction);
-      });
-    }
-
-    return prompt.awaitMessageComponent({
-      time: 45_000,
-      filter: (select) =>
-        select?.customId === selectId &&
-        select?.user?.id === userId,
-    });
-  }
-
-  async function acknowledgeGoldReplacement(select) {
-    if (typeof select?.deferUpdate !== "function") return false;
-    return select.deferUpdate().then(() => true).catch((err) => {
-      console.warn("[raid-status gold replace] defer failed:", err?.message || err);
-      return false;
-    });
-  }
-
-  async function editGoldReplacementPrompt(select, prompt, payload, wasDeferred) {
-    if (wasDeferred && typeof select?.editReply === "function") {
-      const edited = await select.editReply(payload).then(() => true).catch((err) => {
-        console.warn("[raid-status gold replace] editReply failed:", err?.message || err);
-        return false;
-      });
-      if (edited) return true;
-    }
-    if (!wasDeferred && typeof select?.update === "function") {
-      const updated = await select.update(payload).then(() => true).catch((err) => {
-        console.warn("[raid-status gold replace] update failed:", err?.message || err);
-        return false;
-      });
-      if (updated) return true;
-    }
-    if (prompt && typeof prompt.edit === "function") {
-      return prompt.edit(payload).then(() => true).catch((err) => {
-        console.warn("[raid-status gold replace] prompt edit failed:", err?.message || err);
-        return false;
-      });
-    }
-    return false;
-  }
-
-  async function refreshStatusReplyAfterGoldReplace(nextOwnDoc = null) {
-    try {
-      await reloadViewerAccounts(nextOwnDoc);
-    } catch (err) {
-      console.warn("[raid-status gold replace] reload failed:", err?.message || err);
-      return false;
-    }
-
-    try {
-      await interaction.editReply({
-        ...(await buildEmbedAndCanvas()),
-        components: buildComponents(false),
-      });
-      return true;
-    } catch (err) {
-      console.warn("[raid-status gold replace] status edit failed:", err?.message || err);
-      return false;
-    }
+  function goldReplaceTokenFromId(customId) {
+    const prefix = `${GOLD_REPLACE_SELECT_ID}:`;
+    const id = String(customId || "");
+    return id.startsWith(prefix) ? id.slice(prefix.length) : "";
   }
 
   async function promptGoldReplacement({
@@ -234,45 +136,55 @@ function createStatusComponentRouteHandlers(ctx) {
     targetAccountName,
   }) {
     const selectId = makeGoldReplaceSelectId();
-    const { embed, row, targetRaid } = buildGoldReplacePrompt(replacement, selectId);
-    const prompt = await component.followUp({
-      embeds: [embed],
-      components: [row],
-      flags: EPHEMERAL_FLAG,
-    }).catch((err) => {
-      console.warn("[raid-status gold replace] prompt failed:", err?.message || err);
-      return null;
+    const token = goldReplaceTokenFromId(selectId);
+    const { embed, row } = buildGoldReplacePrompt(replacement, selectId);
+    goldReplacementSessions.set(token, {
+      replacement,
+      writeDiscordId,
+      targetAccountName,
     });
 
-    const canAwaitPrompt = typeof prompt?.awaitMessageComponent === "function";
-    const canAwaitClient = !!(
-      component?.client &&
-      typeof component.client.on === "function" &&
-      typeof component.client.off === "function"
-    );
-    if (!prompt || (!canAwaitPrompt && !canAwaitClient)) {
-      return noRedraw();
-    }
+    const edited = await interaction.editReply({
+      embeds: [embed],
+      components: [row],
+      attachments: [],
+      files: [],
+    }).then(() => true).catch((err) => {
+      console.warn("[raid-status gold replace] prompt edit failed:", err?.message || err);
+      return false;
+    });
 
-    let picked;
-    try {
-      picked = await awaitGoldReplacementSelection({ component, prompt, selectId });
-    } catch {
-      await prompt.edit({
-        embeds: [buildGoldNoticeEmbed(
-          "warn",
-          t("raid-status.goldView.replaceTimeoutTitle", lang),
-          t("raid-status.goldView.replaceTimeoutDescription", lang, { targetRaid }),
-        )],
-        components: [],
+    if (!edited) {
+      goldReplacementSessions.delete(token);
+      await followUpNotice(component, EmbedBuilder, {
+        type: "warn",
+        title: t("raid-status.goldView.toggleFailedTitle", lang),
+        description: t("raid-status.goldView.toggleFailedDescription", lang),
       }).catch(() => {});
+    }
+    return noRedraw();
+  }
+
+  async function completeGoldReplacement(component) {
+    const token = goldReplaceTokenFromId(component?.customId);
+    const pending = token ? goldReplacementSessions.get(token) : null;
+    if (!pending) {
+      await followUpNotice(component, EmbedBuilder, {
+        type: "warn",
+        title: t("raid-status.goldView.toggleFailedTitle", lang),
+        description: t("raid-status.goldView.toggleFailedDescription", lang),
+      }).catch(() => {});
+      return redraw();
+    }
+
+    const removedRaidKey = firstSelectValue(component, "");
+    if (!removedRaidKey || removedRaidKey === "noop") {
       return noRedraw();
     }
 
-    const removedRaidKey = firstSelectValue(picked, "");
-    const wasDeferred = await acknowledgeGoldReplacement(picked);
-    if (!removedRaidKey || removedRaidKey === "noop") return noRedraw();
-
+    goldReplacementSessions.delete(token);
+    const { replacement, writeDiscordId, targetAccountName } = pending;
+    const targetRaid = localizedRaidLabel(replacement.targetRaid);
     const removedRaid = (replacement.options || []).find((raid) => raid.raidKey === removedRaidKey);
     let replaceResult;
     try {
@@ -291,33 +203,25 @@ function createStatusComponentRouteHandlers(ctx) {
     }
 
     if (!replaceResult.ok) {
-      await editGoldReplacementPrompt(picked, prompt, {
-        embeds: [buildGoldNoticeEmbed(
-          "warn",
-          t("raid-status.goldView.toggleFailedTitle", lang),
-          t("raid-status.goldView.toggleFailedDescription", lang),
-        )],
-        components: [],
-      }, wasDeferred);
-      return noRedraw();
+      await followUpNotice(component, EmbedBuilder, {
+        type: "warn",
+        title: t("raid-status.goldView.toggleFailedTitle", lang),
+        description: t("raid-status.goldView.toggleFailedDescription", lang),
+      }).catch(() => {});
+      return redraw();
     }
 
-    const refreshed = await refreshStatusReplyAfterGoldReplace(
-      writeDiscordId === discordId ? replaceResult.userDoc : null,
-    );
-    await editGoldReplacementPrompt(picked, prompt, {
-      embeds: [buildGoldNoticeEmbed(
-        "success",
-        t("raid-status.goldView.replaceSuccessTitle", lang),
-        t("raid-status.goldView.replaceSuccessDescription", lang, {
-          characterName: replacement.targetCharName,
-          targetRaid,
-          removedRaid: localizedRaidLabel(removedRaid),
-        }),
-      )],
-      components: [],
-    }, wasDeferred);
-    return refreshed ? noRedraw() : redraw();
+    await reloadViewerAccounts(writeDiscordId === discordId ? replaceResult.userDoc : null);
+    await followUpNotice(component, EmbedBuilder, {
+      type: "success",
+      title: t("raid-status.goldView.replaceSuccessTitle", lang),
+      description: t("raid-status.goldView.replaceSuccessDescription", lang, {
+        characterName: replacement.targetCharName,
+        targetRaid,
+        removedRaid: localizedRaidLabel(removedRaid),
+      }),
+    }).catch(() => {});
+    return redraw();
   }
 
   return {
@@ -553,6 +457,10 @@ function createStatusComponentRouteHandlers(ctx) {
         session.setGoldCharFilterForPage(session.currentPage, picked);
       }
       return redraw();
+    },
+
+    [STATUS_COMPONENT_ACTION.goldReplace]: async (component) => {
+      return completeGoldReplacement(component);
     },
 
     [STATUS_COMPONENT_ACTION.goldToggle]: async (component) => {

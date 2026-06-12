@@ -55,6 +55,15 @@ test("raid-status component routes resolve gold setup dropdowns", () => {
     getStatusComponentRoute("status-gold:toggle").action,
     STATUS_COMPONENT_ACTION.goldToggle,
   );
+  assert.deepEqual(
+    getStatusComponentRoute("status-gold:replace:abc123"),
+    {
+      customId: "status-gold:replace:abc123",
+      action: STATUS_COMPONENT_ACTION.goldReplace,
+      editDriven: true,
+      redraw: true,
+    },
+  );
 });
 
 test("raid-status component routes resolve dynamic my-raids select id", () => {
