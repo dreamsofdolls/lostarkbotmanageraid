@@ -27,10 +27,16 @@ const RAID_ALIASES = new Map([
 const DIFFICULTY_ALIASES = new Map([
   ["nightmare", "nightmare"],
   ["9m", "nightmare"],
+  ["level3", "nightmare"],
+  ["l3", "nightmare"],
   ["hard", "hard"],
   ["hm", "hard"],
+  ["level2", "hard"],
+  ["l2", "hard"],
   ["normal", "normal"],
   ["nor", "normal"],
+  ["level1", "normal"],
+  ["l1", "normal"],
   // VN-community preference: nm reads as normal. Nightmare shorthand is 9m.
   ["nm", "normal"],
   ["ノーマル", "normal"],
@@ -45,6 +51,9 @@ function normalizeRaidChannelContent(content) {
     .trim()
     .replace(/act\s+4/gi, "act4")
     .replace(/horizon\s+cathedral/gi, "horizon")
+    .replace(/\blevel\s*1\b/gi, "level1")
+    .replace(/\blevel\s*2\b/gi, "level2")
+    .replace(/\blevel\s*3\b/gi, "level3")
     .replace(/[+,]/g, " ")
     .replace(/\s+/g, " ")
     .trim();

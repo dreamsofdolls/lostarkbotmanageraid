@@ -42,6 +42,7 @@ const {
   formatGold,
 } = require("../bot/utils/raid/common/shared");
 const { getGoldForGate, isGoldBound } = require("../bot/domain/raid-catalog");
+const { getRaidModeLabel } = require("../bot/utils/raid/common/labels");
 const {
   summarizeRaidProgress,
   summarizeAccountGold,
@@ -514,6 +515,13 @@ test("computeRaidGold: tags normal entries goldBound (halved values), hard entri
   assert.equal(horizon.earnedGold, 20000);
   assert.equal(horizon.totalGold, 50000);
   assert.equal(horizon.goldBound, true);
+});
+
+test("raid labels: Horizon renders with level labels only", () => {
+  assert.equal(getRaidModeLabel("horizon", "normal", "vi"), "Horizon Level 1");
+  assert.equal(getRaidModeLabel("horizon", "hard", "vi"), "Horizon Level 2");
+  assert.equal(getRaidModeLabel("horizon", "nightmare", "vi"), "Horizon Level 3");
+  assert.equal(getRaidModeLabel("kazeros", "hard", "vi"), "Kazeros Hard");
 });
 
 test("summarizeCharacterGold: splits earned/total into bound vs unbound (back-compat totals intact)", () => {

@@ -6,12 +6,19 @@ const {
   buildBibleProfileSnapshotFromEncounterSummaries,
   createBibleProfileSyncService,
   durationToMs,
+  normalizeDifficultyToModeKey,
   roleForLog,
 } = require("../bot/services/auto-manage/profile/sync");
 const { getRaidGateForBoss, getRaidRequirementMap } = require("../bot/models/Raid");
 const { getCharacterName, getCharacterClass } = require("../bot/utils/raid/common/shared");
 
 const RAID_REQUIREMENT_MAP = getRaidRequirementMap();
+
+test("bible profile difficulty normalization accepts Horizon level labels", () => {
+  assert.equal(normalizeDifficultyToModeKey("Level 1"), "normal");
+  assert.equal(normalizeDifficultyToModeKey("level2"), "hard");
+  assert.equal(normalizeDifficultyToModeKey("L3"), "nightmare");
+});
 
 function entryKey(accountName, charName) {
   return `${String(accountName).trim().toLowerCase()}\x1f${String(charName).trim().toLowerCase()}`;

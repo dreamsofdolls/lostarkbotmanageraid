@@ -88,6 +88,20 @@ export function getModeLabel(modeKey) {
   return labels[modeKey] || modeKey;
 }
 
+export function getRaidSpecificModeLabel(raidKey, modeKey) {
+  const lang = getActiveLang();
+  const tree = TRANSLATIONS[lang] || TRANSLATIONS[DEFAULT_LANG];
+  const fallbackTree = TRANSLATIONS[DEFAULT_LANG] || {};
+  const labels = tree.raidModeLabels?.[raidKey] || fallbackTree.raidModeLabels?.[raidKey] || {};
+  return labels[modeKey] || getModeLabel(modeKey);
+}
+
+export function getRaidModeLabel(raidKey, modeKey) {
+  const raid = getRaidLabel(raidKey);
+  const mode = getRaidSpecificModeLabel(raidKey, modeKey);
+  return mode ? `${raid} ${mode}` : raid;
+}
+
 /**
  * Apply translations to every element in the DOM that has a
  * `data-i18n="some.key"` attribute. Called once at boot after the

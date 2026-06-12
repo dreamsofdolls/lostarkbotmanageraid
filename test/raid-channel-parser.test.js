@@ -29,6 +29,9 @@ test("raid-channel parser dedupes multi-character targets", () => {
 test("raid-channel parser preserves existing alias semantics", () => {
   assert.equal(parseRaidMessage("Serca nm Qiylyn").modeKey, "normal");
   assert.equal(parseRaidMessage("Serca 9m Qiylyn").modeKey, "nightmare");
+  assert.equal(parseRaidMessage("Cathedral Level 1 Qiylyn").modeKey, "normal");
+  assert.equal(parseRaidMessage("Cathedral l2 Qiylyn").modeKey, "hard");
+  assert.equal(parseRaidMessage("Cathedral l3 Qiylyn").modeKey, "nightmare");
   assert.deepEqual(parseRaidMessage("Horizon Cathedral 9m Qiylyn G2"), {
     raidKey: "horizon",
     modeKey: "nightmare",

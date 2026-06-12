@@ -1,4 +1,4 @@
-import { t, getRaidLabel, getModeLabel } from "/sync/js/core/i18n.js";
+import { t, getRaidLabel, getRaidSpecificModeLabel } from "/sync/js/core/i18n.js";
 import { escapeHtml } from "/sync/js/core/html.js";
 import { formatGold, formatRelativeTime } from "/sync/js/core/format.js";
 import { renderCharPendingLabel, renderCharPendingRow } from "/sync/js/sync/render/char-row.js";
@@ -87,7 +87,7 @@ export function renderPreviewStats(panel, summary) {
         const pillsHtml = (c.raids || []).map((r) => {
           const icon = r.status === "done" ? "🟢" : r.status === "partial" ? "🟡" : "⚪";
           const raidLabel = getRaidLabel(r.raidKey);
-          const modeLabel = getModeLabel(r.modeKey);
+          const modeLabel = getRaidSpecificModeLabel(r.raidKey, r.modeKey);
           // `incoming` = ≥1 gate in this raid+mode is in the delta. ✨
           // marker + brighter border on those pills so the user can
           // tell which raids are about to flip from this sync vs
@@ -218,7 +218,7 @@ export function renderDiffPage(previewOutput) {
           html += `<span class="char-raid-name">${escapeHtml(raidLabel)}</span>`;
           html += `<div class="char-raid-modes">`;
           for (const cell of raidCells) {
-            const modeLabel = getModeLabel(cell.modeKey);
+            const modeLabel = getRaidSpecificModeLabel(cell.raidKey, cell.modeKey);
             const modeEmoji = cell.modeKey === "nightmare" ? "🌑" : cell.modeKey === "hard" ? "⚔️" : "🛡️";
             html += `<div class="char-mode-block">`;
             html += `<span class="char-mode-label">${modeEmoji} ${escapeHtml(modeLabel)}</span>`;
@@ -241,7 +241,7 @@ export function renderDiffPage(previewOutput) {
       // "who in this account cleared raid X" Manager-scan flow.
       for (const card of page.raidCards) {
         const raidLabel = getRaidLabel(card.raidKey);
-        const modeLabel = getModeLabel(card.modeKey);
+        const modeLabel = getRaidSpecificModeLabel(card.raidKey, card.modeKey);
         const cardEmoji = card.modeKey === "nightmare" ? "🌑" : card.modeKey === "hard" ? "⚔️" : "🛡️";
         html += `<div class="raid-card">`;
         html += `<h4 class="raid-card-header">${cardEmoji} ${escapeHtml(raidLabel)} ${escapeHtml(modeLabel)} <span class="hint">· ${t("preview.raidGroupCharCount", { n: card.chars.length })}</span></h4>`;

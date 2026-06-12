@@ -355,12 +355,19 @@ module.exports = {
       armoche: "Act 4",
       kazeros: "Kazeros",
       serca: "Serca",
-      horizon: "Horizon Cathedral",
+      horizon: "Horizon",
     },
     modes: {
       normal: "Normal",
       hard: "Hard",
       nightmare: "Nightmare",
+    },
+    modeOverrides: {
+      horizon: {
+        normal: "Level 1",
+        hard: "Level 2",
+        nightmare: "Level 3",
+      },
     },
   },
   "raid-add-roster": {
@@ -1737,7 +1744,7 @@ module.exports = {
           "• `Serca Hard Clauseduk` (mark whole raid done)",
           "• `Kazeros Hard Soulrano G1` (mark G1 only - cumulative đến G_N)",
           "• Multi-char: `Act4 Hard A, B, C`",
-          "**Aliases**: act4/armoche · kazeros/kaz · serca · horizon/cathedral/hc · normal/nor/nm · hard/hm · nightmare/9m. Lưu ý `nm` = Normal (không phải Nightmare).",
+          "**Aliases**: act4/armoche · kazeros/kaz · serca · horizon/cathedral/hc · normal/nor/nm/level1/l1 · hard/hm/level2/l2 · nightmare/9m/level3/l3. Lưu ý `nm` = Normal (không phải Nightmare).",
           "**Auto-cleanup mỗi 30 phút** (giờ VN, từ 8h-3h sáng): bot xoá non-pinned + post biển báo tone đổi theo lượng rác. Quiet hours 3h-8h sáng VN: không dọn, không ồn.",
           "**Permissions cần**: View Channel, Send Messages, Manage Messages, Read Message History, Embed Links. Thiếu 1 trong 5 → action:set reject.",
           "**Admin-only**: cần permission `Manage Server`.",
