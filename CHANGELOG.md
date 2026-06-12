@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-12 (raid-status: 🔒 means only bound gold in the gold view)
+
+### Changed
+- The gold view's non-receiving lines no longer use the lock as an "excluded" marker. Before, a force-excluded UNBOUND raid (e.g. Act 4 Hard dropped to free a slot for a bound raid) rendered `🔒 Act 4 Hard - không nhận gold`, while the raid view never locked it - so the two views disagreed. The lock is now reserved for roster-bound gold everywhere: an unbound raid that is turned off or pushed past the cap renders neutral `⚪`, and 🔒 appears only on bound raids (`🔒 Horizon Level 2 - locked`, and `💰 #N ... - 🔒 amount` when forced). This keeps the gold view, the main progress view, and /raid-check (shared `buildAccountPageEmbed`) all using one 🔒 = bound-gold convention. 904 tests green.
+
 ## 2026-06-12 (raid-status: bound-gold lock on the main progress view)
 
 ### Changed
