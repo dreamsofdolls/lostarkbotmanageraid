@@ -94,14 +94,16 @@ function createRaidStatusGoldUi(deps) {
       })}`;
     }
 
+    // A receiving raid reads as a plain gold line (\uD83D\uDCB0 #slot label - amount),
+    // whether the slot was auto-picked or force-included - that distinction is
+    // not useful once a raid holds a slot. Bound gold gets a lock right before
+    // the amount so the player can tell the slot's gold is roster-bound; the
+    // leading \uD83D\uDCB0 stays consistent so forced raids never look excluded.
     const rank = Number(raid.goldSlotRank) || 0;
     const slot = rank > 0 ? `#${rank} ` : "";
-    const bound = raid.goldBound ? ` ${t("raid-status.goldView.boundShort", lang)}` : "";
-    const manual = raid.goldOverride === "include"
-      ? ` ${t("raid-status.goldView.manualOn", lang)}`
-      : "";
-    const receiveIcon = raid.goldBound ? UI.icons.lock : "\uD83D\uDCB0";
-    return `${receiveIcon} ${slot}${label} - ${formatGold(rawGoldTotal(raid))}${bound}${manual}`;
+    const goldStr = formatGold(rawGoldTotal(raid));
+    const amount = raid.goldBound ? `${UI.icons.lock} ${goldStr}` : goldStr;
+    return `\uD83D\uDCB0 ${slot}${label} - ${amount}`;
   }
 
   function buildGoldCharacterField(character) {
