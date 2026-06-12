@@ -80,10 +80,6 @@ function createRaidStatusGoldUi(deps) {
     return Number(raid?.rawTotalGold ?? raid?.totalGold) || 0;
   }
 
-  function rawGoldEarned(raid) {
-    return Number(raid?.rawEarnedGold ?? raid?.earnedGold) || 0;
-  }
-
   function formatGoldRaidLine(raid) {
     const label = localizedRaidLabel(raid);
     if (raid.goldDisabled) {
@@ -104,7 +100,7 @@ function createRaidStatusGoldUi(deps) {
     const manual = raid.goldOverride === "include"
       ? ` ${t("raid-status.goldView.manualOn", lang)}`
       : "";
-    return `\uD83D\uDCB0 ${slot}${label} - ${formatGold(rawGoldEarned(raid))} / ${formatGold(rawGoldTotal(raid))}${bound}${manual}`;
+    return `\uD83D\uDCB0 ${slot}${label} - ${formatGold(rawGoldTotal(raid))}${bound}${manual}`;
   }
 
   function buildGoldCharacterField(character) {
@@ -114,16 +110,10 @@ function createRaidStatusGoldUi(deps) {
     const namePrefix = classIcon ? `${classIcon} ` : "";
     const itemLevel = Number(character.itemLevel) || 0;
     const counted = raids.filter((raid) => raid.goldReceives).length;
-    const header = `${namePrefix}${name} \u00B7 ${itemLevel}`;
+    const header = `${namePrefix}${name} \u00B7 ${counted}/${GOLD_RAID_CAP_PER_CHARACTER} \u00B7 ${itemLevel}`;
     const lines = raids.length === 0
       ? [`${UI.icons.lock} ${t("raid-status.embed.notEligible", lang)}`]
-      : [
-          t("raid-status.goldView.charSummary", lang, {
-            counted,
-            cap: GOLD_RAID_CAP_PER_CHARACTER,
-          }),
-          ...raids.map(formatGoldRaidLine),
-        ];
+      : raids.map(formatGoldRaidLine);
     return {
       name: truncateText(header, 256),
       value: truncateText(lines.join("\n"), 1024),
@@ -283,10 +273,7 @@ function createRaidStatusGoldUi(deps) {
       }
       return {
         label: truncateText(`${icon} ${label} \u00B7 ${status}`, 100),
-        description: truncateText(
-          `${formatGold(rawGoldEarned(raid))} / ${formatGold(rawGoldTotal(raid))}`,
-          100
-        ),
+        description: truncateText(formatGold(rawGoldTotal(raid)), 100),
         value: `${activeName}::${raid.raidKey}`.slice(0, 100),
       };
     });
