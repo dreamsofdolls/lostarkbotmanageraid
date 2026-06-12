@@ -13,6 +13,29 @@ const {
 
 const VALID_RAID_KEYS = new Set(Object.keys(RAID_REQUIREMENTS));
 
+// Persist a gold override onto a single assigned-raid entry. assignedRaids
+// subdocs use a strict:false Mongoose subschema, and `goldOverride` is a
+// dynamic (non-schema) field. Assigning it straight onto the live subdoc
+// (`subdoc.goldOverride = x`) bypasses Mongoose's setter: the value lands on
+// the wrapper object, never reaches the document's _doc, and is silently
+// dropped on serialize - so the save no-ops and the override never sticks
+// (verified: toObject() omits the field). Rebuilding the entry as a plain
+// object and re-assigning it forces Mongoose to re-cast a fresh subdoc that
+// carries the field through to the DB. Plain-object callers (unit-test mocks)
+// have no toObject(); the spread fallback handles them.
+function writeAssignedRaidOverride(target, raidKey, overrideValue) {
+  if (!target.assignedRaids) target.assignedRaids = {};
+  const current = target.assignedRaids[raidKey];
+  const plain = current && typeof current.toObject === "function"
+    ? current.toObject()
+    : { ...(current || {}) };
+  delete plain.goldDisabled;
+  delete plain.goldForced;
+  if (overrideValue) plain.goldOverride = overrideValue;
+  else delete plain.goldOverride;
+  target.assignedRaids[raidKey] = plain;
+}
+
 function parseGoldToggleValue(value) {
   if (!value || value === "noop") return { kind: "noop" };
   const sepIdx = String(value).indexOf("::");
@@ -60,11 +83,7 @@ async function toggleRaidGoldDisabled(options) {
     replacement = getGoldReplacementRequirement(target, raidKey, nextOverride, raids);
     if (replacement?.required) return;
 
-    delete raidData.goldDisabled;
-    delete raidData.goldForced;
-    if (nextOverride) raidData.goldOverride = nextOverride;
-    else delete raidData.goldOverride;
-    target.assignedRaids[raidKey] = raidData;
+    writeAssignedRaidOverride(target, raidKey, nextOverride);
     if (typeof userDocFresh.markModified === "function") {
       userDocFresh.markModified("accounts");
     }
@@ -112,17 +131,8 @@ async function replaceRaidGoldSelection(options) {
     if (!target) return;
     if (!target.assignedRaids) target.assignedRaids = {};
 
-    const includeRaid = target.assignedRaids[includeRaidKey] || {};
-    delete includeRaid.goldDisabled;
-    delete includeRaid.goldForced;
-    includeRaid.goldOverride = "include";
-    target.assignedRaids[includeRaidKey] = includeRaid;
-
-    const excludeRaid = target.assignedRaids[excludeRaidKey] || {};
-    delete excludeRaid.goldDisabled;
-    delete excludeRaid.goldForced;
-    excludeRaid.goldOverride = "exclude";
-    target.assignedRaids[excludeRaidKey] = excludeRaid;
+    writeAssignedRaidOverride(target, includeRaidKey, "include");
+    writeAssignedRaidOverride(target, excludeRaidKey, "exclude");
 
     if (typeof userDocFresh.markModified === "function") {
       userDocFresh.markModified("accounts");
