@@ -77,15 +77,15 @@ function createHandlerHarness(overrides = {}) {
     UI,
     User: overrides.User || {},
     saveWithRetry: overrides.saveWithRetry || (async (fn) => fn()),
-    interaction: { editReply: async () => {} },
+    interaction: overrides.interaction || { editReply: async () => {} },
     discordId: "viewer",
     lang: "vi",
     buildStatusUserMeta: () => ({}),
     reloadViewerAccounts: overrides.reloadViewerAccounts || (async () => {
       reloadCount += 1;
     }),
-    buildEmbedAndCanvas: async () => ({}),
-    buildComponents: () => [],
+    buildEmbedAndCanvas: overrides.buildEmbedAndCanvas || (async () => ({})),
+    buildComponents: overrides.buildComponents || (() => []),
     runManualStatusSync: async () => ({ outcome: null }),
     formatNextCooldownRemaining: () => "",
     formatGold,
@@ -251,7 +251,7 @@ test("raid-status component handlers prompt for a gold replacement when locked r
     },
   });
 
-  assert.deepEqual(result, { redraw: true });
+  assert.deepEqual(result, { redraw: false });
   assert.equal(promptPayload.flags, 64);
   assert.equal(promptPayload.components.length, 1);
   assert.match(promptPayload.embeds[0].title, /3\/3/);
@@ -265,6 +265,9 @@ test("raid-status component handlers prompt for a gold replacement when locked r
 
 test("raid-status component handlers accept gold replacement from interactionCreate and edit the picked interaction", async () => {
   let saved = 0;
+  let reloadCount = 0;
+  let reloadedDoc = null;
+  let originalEditPayload = null;
   const doc = {
     accounts: [
       {
@@ -298,6 +301,17 @@ test("raid-status component handlers accept gold replacement from interactionCre
         return doc;
       },
     },
+    async reloadViewerAccounts(nextOwnDoc) {
+      reloadCount += 1;
+      reloadedDoc = nextOwnDoc;
+    },
+    interaction: {
+      async editReply(payload) {
+        originalEditPayload = payload;
+      },
+    },
+    buildEmbedAndCanvas: async () => ({ embeds: [{ title: "fresh gold view" }] }),
+    buildComponents: () => ["fresh components"],
   });
   const client = new EventEmitter();
   let promptPayload = null;
@@ -339,12 +353,15 @@ test("raid-status component handlers accept gold replacement from interactionCre
 
   const result = await resultPromise;
 
-  assert.deepEqual(result, { redraw: true });
+  assert.deepEqual(result, { redraw: false });
   assert.equal(deferred, 1);
   assert.equal(doc.accounts[0].characters[0].assignedRaids.horizon.goldOverride, "include");
   assert.equal(doc.accounts[0].characters[0].assignedRaids.armoche.goldOverride, "exclude");
   assert.equal(saved, 1);
-  assert.equal(harness.reloadCount, 1);
+  assert.equal(reloadCount, 1);
+  assert.equal(reloadedDoc, doc);
+  assert.deepEqual(originalEditPayload.embeds, [{ title: "fresh gold view" }]);
+  assert.deepEqual(originalEditPayload.components, ["fresh components"]);
   assert.match(finalEditPayload.embeds[0].title, /Đổi gold nhận xong/);
   assert.equal(finalEditPayload.components.length, 0);
 });
