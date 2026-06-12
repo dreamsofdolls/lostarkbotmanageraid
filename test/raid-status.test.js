@@ -31,6 +31,7 @@ const {
   _resolveBackgroundLookup,
 } = require("../bot/handlers/raid-status");
 const { createRaidStatusTaskUi } = require("../bot/handlers/raid-status/task/task-ui");
+const { createRaidStatusGoldUi } = require("../bot/handlers/raid-status/gold/gold-ui");
 const {
   UI,
   truncateText,
@@ -493,6 +494,12 @@ test("raid-catalog: normal gold is base*boundGold.factor (halved) + bound; hard 
   assert.equal(isGoldBound("kazeros", "normal"), true);
   assert.equal(isGoldBound("armoche", "hard"), false);
   assert.equal(isGoldBound("serca", "nightmare"), false);
+  assert.equal(isGoldBound("horizon", "normal"), true);
+  assert.equal(isGoldBound("horizon", "hard"), true);
+  assert.equal(isGoldBound("horizon", "nightmare"), true);
+  assert.equal(getGoldForGate("horizon", "normal", "G1"), 13500);
+  assert.equal(getGoldForGate("horizon", "hard", "G2"), 24000);
+  assert.equal(getGoldForGate("horizon", "nightmare", "G1"), 20000);
 });
 
 test("computeRaidGold: tags normal entries goldBound (halved values), hard entries unbound", () => {
@@ -503,6 +510,10 @@ test("computeRaidGold: tags normal entries goldBound (halved values), hard entri
   const hard = computeRaidGold("kazeros", "hard", ["G1", "G2"], ["G1", "G2"]);
   assert.equal(hard.totalGold, 52000);
   assert.equal(hard.goldBound, false);
+  const horizon = computeRaidGold("horizon", "nightmare", ["G1"], ["G1", "G2"]);
+  assert.equal(horizon.earnedGold, 20000);
+  assert.equal(horizon.totalGold, 50000);
+  assert.equal(horizon.goldBound, true);
 });
 
 test("summarizeCharacterGold: splits earned/total into bound vs unbound (back-compat totals intact)", () => {
@@ -521,18 +532,116 @@ test("summarizeCharacterGold: splits earned/total into bound vs unbound (back-co
 });
 
 test("getStatusRaidsForCharacter: decorates each raid entry with earnedGold + totalGold", () => {
-  // 1730 char defaults to Hard across all 3 raids per
-  // getBestEligibleModeKey logic. Sum at this iLvl: Act 4 Hard 42000 +
-  // Kazeros Hard 52000 + Serca Hard 44000 = 138000G total.
+  // 1730 char defaults to Hard across all 4 raids per
+  // getBestEligibleModeKey logic, but only 3 raids can count gold.
+  // Default un-cleared setup takes the first 3 display slots:
+  // Act 4 Hard 42000 + Kazeros Hard 52000 + Serca Hard 44000 = 138000G.
   const char = makeChar("Maxlevel", 1730);
   const raids = getStatusRaidsForCharacter(char);
-  assert.equal(raids.length, 3);
+  assert.equal(raids.length, 4);
   for (const raid of raids) {
     assert.ok(typeof raid.earnedGold === "number", `raid ${raid.raidName} missing earnedGold`);
     assert.ok(typeof raid.totalGold === "number", `raid ${raid.raidName} missing totalGold`);
+    assert.ok(typeof raid.rawTotalGold === "number", `raid ${raid.raidName} missing rawTotalGold`);
   }
   const sum = raids.reduce((acc, r) => acc + r.totalGold, 0);
   assert.equal(sum, 138000);
+  const horizon = raids.find((raid) => raid.raidKey === "horizon");
+  assert.equal(horizon.rawTotalGold, 40000);
+  assert.equal(horizon.totalGold, 0);
+  assert.equal(horizon.goldExcludedReason, "bound");
+});
+
+test("getStatusRaidsForCharacter: counts the first 3 completed raids by completion time", () => {
+  const char = {
+    ...makeChar("FourDone", 1730),
+    assignedRaids: {
+      armoche: {
+        modeKey: "hard",
+        G1: { difficulty: "Hard", completedDate: 200 },
+        G2: { difficulty: "Hard", completedDate: 200 },
+      },
+      kazeros: {
+        modeKey: "hard",
+        G1: { difficulty: "Hard", completedDate: 300 },
+        G2: { difficulty: "Hard", completedDate: 300 },
+      },
+      serca: {
+        modeKey: "hard",
+        G1: { difficulty: "Hard", completedDate: 400 },
+        G2: { difficulty: "Hard", completedDate: 400 },
+      },
+      horizon: {
+        modeKey: "hard",
+        G1: { difficulty: "Hard", completedDate: 100 },
+        G2: { difficulty: "Hard", completedDate: 100 },
+      },
+    },
+  };
+
+  const raids = getStatusRaidsForCharacter(char);
+  assert.deepEqual(
+    raids.filter((raid) => raid.goldReceives).map((raid) => raid.raidKey),
+    ["armoche", "kazeros", "serca"],
+  );
+  assert.equal(raids.find((raid) => raid.raidKey === "horizon").goldExcludedReason, "bound");
+  assert.equal(summarizeCharacterGold(raids).earned, 138000);
+});
+
+test("getStatusRaidsForCharacter: manual goldOverride exclude keeps that raid out of gold slots", () => {
+  const char = {
+    ...makeChar("ManualNoGold", 1730),
+    assignedRaids: {
+      armoche: {},
+      kazeros: {},
+      serca: {},
+      horizon: {
+        goldOverride: "exclude",
+        modeKey: "hard",
+        G1: { difficulty: "Hard", completedDate: 100 },
+        G2: { difficulty: "Hard", completedDate: 100 },
+      },
+    },
+  };
+
+  const raids = getStatusRaidsForCharacter(char);
+  const horizon = raids.find((raid) => raid.raidKey === "horizon");
+  assert.equal(horizon.goldDisabled, true);
+  assert.equal(horizon.goldReceives, false);
+  assert.equal(horizon.goldExcludedReason, "manual");
+  assert.deepEqual(
+    raids.filter((raid) => raid.goldReceives).map((raid) => raid.raidKey),
+    ["armoche", "kazeros", "serca"],
+  );
+});
+
+test("getStatusRaidsForCharacter: manual goldOverride include can count a bound raid", () => {
+  const char = {
+    ...makeChar("ManualBoundGold", 1730),
+    assignedRaids: {
+      armoche: {},
+      kazeros: {},
+      serca: {},
+      horizon: {
+        goldOverride: "include",
+        modeKey: "hard",
+        G1: { difficulty: "Hard", completedDate: 100 },
+        G2: { difficulty: "Hard", completedDate: 100 },
+      },
+    },
+  };
+
+  const raids = getStatusRaidsForCharacter(char);
+  const horizon = raids.find((raid) => raid.raidKey === "horizon");
+  assert.equal(horizon.goldOverride, "include");
+  assert.equal(horizon.goldReceives, true);
+  assert.equal(horizon.goldSlotRank, 1);
+  assert.equal(raids.find((raid) => raid.raidKey === "serca").goldExcludedReason, "cap");
+  assert.deepEqual(
+    raids.filter((raid) => raid.goldReceives).map((raid) => raid.raidKey),
+    ["armoche", "kazeros", "horizon"],
+  );
+  assert.equal(summarizeCharacterGold(raids).total, 134000);
 });
 
 test("getStatusRaidsForCharacter: Serca 1740+ shows one mode, switching to the cleared lower mode", () => {
@@ -873,7 +982,7 @@ test("buildAccountPageEmbed: appends per-account 'Tuần này đã kiếm' rollu
     getStatusRaidsForCharacter
   );
   const desc = embed.toJSON().description || "";
-  // 1730 gold-earner = 138000G total potential, 0 earned.
+  // 1730 gold-earner has 4 eligible raids, but only 3 raid-gold slots.
   assert.match(desc, /💰 Tuần này đã kiếm:/);
   assert.match(desc, /138,000G/);
 });
@@ -995,4 +1104,73 @@ test("raid-status task view uses unique custom ids for shared and side task drop
     "status-task:toggle",
   ]);
   assert.equal(new Set(customIds).size, customIds.length);
+});
+
+test("raid-status view toggle includes the received-gold screen", () => {
+  const taskUi = createRaidStatusTaskUi({
+    EmbedBuilder,
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    UI,
+    getCharacterName,
+    truncateText,
+    getAccounts: () => [],
+    getCurrentPage: () => 0,
+    getCurrentView: () => "gold",
+    getTaskCharFilter: () => undefined,
+  });
+
+  const options = taskUi.buildViewToggleRow(false).toJSON().components[0].options;
+  assert.deepEqual(options.map((option) => option.value), ["raid", "task", "gold"]);
+  assert.equal(options.find((option) => option.value === "gold").default, true);
+});
+
+test("raid-status gold view renders auto-bound status and setup dropdowns", () => {
+  const char = {
+    ...makeChar("Goldie", 1730, { isGoldEarner: true }),
+    assignedRaids: {
+      armoche: {},
+      kazeros: {},
+      serca: {},
+      horizon: {
+        modeKey: "hard",
+        G1: { difficulty: "Hard", completedDate: 100 },
+        G2: { difficulty: "Hard", completedDate: 100 },
+      },
+    },
+  };
+  const accounts = [{ accountName: "Alpha", characters: [char], lastRefreshedAt: 0 }];
+  const goldUi = createRaidStatusGoldUi({
+    EmbedBuilder,
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    UI,
+    getCharacterName,
+    truncateText,
+    formatGold,
+    getAccounts: () => accounts,
+    getCurrentPage: () => 0,
+    getGoldCharFilter: () => undefined,
+    getRaidsFor: getStatusRaidsForCharacter,
+    lang: "vi",
+  });
+
+  const embedJson = goldUi.buildGoldViewEmbed(accounts[0]).toJSON();
+  assert.match(embedJson.title, /Gold nhận/);
+  const goldField = embedJson.fields.find((field) => /Goldie/.test(field.name));
+  assert.ok(goldField, "gold character field should render");
+  assert.match(goldField.value, /Đang tính gold 3\/3/);
+  assert.match(goldField.value, /auto bỏ qua vì gold bound/);
+
+  const rows = [
+    goldUi.buildGoldCharFilterRow(false),
+    goldUi.buildGoldToggleRow(false),
+  ].filter(Boolean);
+  assert.deepEqual(
+    rows.map((row) => row.toJSON().components[0].custom_id),
+    ["status-gold:char-filter", "status-gold:toggle"],
+  );
+  const toggleOptions = rows[1].toJSON().components[0].options;
+  assert.equal(toggleOptions.length, 4);
+  assert.ok(toggleOptions.some((option) => /auto bỏ qua bound/.test(option.label)));
 });

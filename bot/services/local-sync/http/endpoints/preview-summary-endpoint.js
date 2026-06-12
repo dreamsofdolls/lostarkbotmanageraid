@@ -20,7 +20,7 @@ const {
   requireCurrentLocalSyncUser,
 } = require("../request-gates");
 const { RAID_REQUIREMENTS, getGatesForRaid, getGoldForGate, isGoldBound } = require("../../../../models/Raid");
-const { normalizeName } = require("../../../../utils/raid/common/shared");
+const { normalizeName, toModeLabel } = require("../../../../utils/raid/common/shared");
 const { getStatusRaidsForCharacter } = require("../../../../utils/raid/common/character");
 
 function makeGateKey(raidKey, modeKey, gate) {
@@ -32,10 +32,32 @@ function cloneRaidStates(raidStates) {
   for (const [raidKey, state] of raidStates.entries()) {
     cloned.set(raidKey, {
       modeKey: state.modeKey,
-      cleared: new Set(state.cleared),
+      cleared: new Map(state.cleared),
     });
   }
   return cloned;
+}
+
+function buildSimulatedAssignedRaids(char, finalRaidStates) {
+  const assignedRaids = { ...(char?.assignedRaids || {}) };
+  for (const [raidKey, state] of finalRaidStates.entries()) {
+    const source = char?.assignedRaids?.[raidKey] || {};
+    const modeLabel = toModeLabel(state.modeKey);
+    const raidData = { modeKey: state.modeKey };
+    if (source.goldOverride === "include" || source.goldForced === true) {
+      raidData.goldOverride = "include";
+    } else if (source.goldOverride === "exclude" || source.goldDisabled === true) {
+      raidData.goldOverride = "exclude";
+    }
+    for (const gate of getGatesForRaid(raidKey)) {
+      raidData[gate] = {
+        difficulty: modeLabel,
+        completedDate: state.cleared.get(gate) || null,
+      };
+    }
+    assignedRaids[raidKey] = raidData;
+  }
+  return assignedRaids;
 }
 
 /**
@@ -73,8 +95,14 @@ function projectSummary(accounts, deltaBuckets) {
       const preRaidStates = new Map();
 
       for (const raid of getStatusRaidsForCharacter(char)) {
-        const state = { modeKey: raid.modeKey, cleared: new Set(raid.completedGateKeys || []) };
-        for (const gate of state.cleared) {
+        const state = { modeKey: raid.modeKey, cleared: new Map() };
+        for (const gate of raid.completedGateKeys || []) {
+          state.cleared.set(
+            gate,
+            Number(char?.assignedRaids?.[raid.raidKey]?.[gate]?.completedDate) ||
+              Number(raid.completedAt) ||
+              0
+          );
           dbClearedGates.set(makeGateKey(raid.raidKey, raid.modeKey, gate), true);
         }
         preRaidStates.set(raid.raidKey, state);
@@ -90,7 +118,7 @@ function projectSummary(accounts, deltaBuckets) {
         const gates = getGatesForRaid(bucket.raidKey);
         let state = finalRaidStates.get(bucket.raidKey);
         if (!state || state.modeKey !== bucket.modeKey) {
-          state = { modeKey: bucket.modeKey, cleared: new Set() };
+          state = { modeKey: bucket.modeKey, cleared: new Map() };
           finalRaidStates.set(bucket.raidKey, state);
         }
 
@@ -100,14 +128,22 @@ function projectSummary(accounts, deltaBuckets) {
           if (!dbClearedGates.has(dbKey)) {
             appliedGates.set(dbKey, { raidKey: bucket.raidKey, modeKey: bucket.modeKey, gate });
           }
-          state.cleared.add(gate);
+          state.cleared.set(gate, Number(bucket.lastClearMs) || Date.now());
         }
       }
 
+      const simulatedChar = {
+        ...char,
+        assignedRaids: buildSimulatedAssignedRaids(char, finalRaidStates),
+      };
+      const finalRaidEntriesByKey = new Map(
+        getStatusRaidsForCharacter(simulatedChar).map((raid) => [raid.raidKey, raid])
+      );
       let charGold = 0;
       let charGoldBound = 0;
       for (const { raidKey, modeKey, gate } of appliedGates.values()) {
-        if (char.isGoldEarner !== false) {
+        const finalRaid = finalRaidEntriesByKey.get(raidKey);
+        if (char.isGoldEarner !== false && finalRaid?.goldReceives) {
           const g = getGoldForGate(raidKey, modeKey, gate);
           charGold += g;
           if (isGoldBound(raidKey, modeKey)) charGoldBound += g;
@@ -137,7 +173,7 @@ function projectSummary(accounts, deltaBuckets) {
       // Walk finalRaidStates to count totalRaids + projectedClearedRaids
       // and build the per-char raid status array. Iterate in canonical
       // RAID_REQUIREMENTS order so the badge sequence is stable across
-      // chars (Act 4 → Kazeros → Serca). `incoming` flags raids that
+      // chars (Act 4 → Kazeros → Serca → Horizon). `incoming` flags raids that
       // will change state as a result of THIS sync (any applied gate in
       // the same raid+mode) so the web UI can highlight them - users
       // need to know which pills are about to flip vs steady-state.

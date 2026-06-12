@@ -30,6 +30,7 @@ const {
   ensureAssignedRaids,
   getAssignedRaidModeKey,
   getBestEligibleModeKey,
+  getAssignedRaidCompletedAt,
   getCompletedGateKeys,
   getGateKeys,
   getRequirementFor,
@@ -45,6 +46,9 @@ const {
   sanitizeSideTasks,
   sanitizeTasks,
 } = require("./character/task-sanitizers");
+
+const GOLD_RAID_CAP_PER_CHARACTER = 3;
+const RAID_DISPLAY_ORDER = Object.freeze({ armoche: 0, kazeros: 1, serca: 2, horizon: 3 });
 
 function createCharacterId() {
   try {
@@ -104,9 +108,8 @@ function ensureRaidEntries(character) {
 // sums the gold reward of every gate already cleared this week at the
 // raid's selected mode; totalGold sums every official gate of that mode.
 // Both values are raid-intrinsic - they do NOT account for the
-// character's `isGoldEarner` flag, since LA's 6-gold-earner cap is a
-// per-roster constraint applied by the rollup layer (see
-// summarizeAccountGold).
+// character's `isGoldEarner` flag or the 3-raid gold cap. Those are
+// user/account semantics applied after the raid entry has its raw value.
 function computeRaidGold(raidKey, modeKey, completedGateKeys, allGateKeys) {
   let earned = 0;
   for (const gate of completedGateKeys || []) {
@@ -119,6 +122,74 @@ function computeRaidGold(raidKey, modeKey, completedGateKeys, allGateKeys) {
   // goldBound tags the whole entry: a mode's gold is wholly bound or unbound,
   // so the rollup can bucket earned/total without re-querying the catalog.
   return { earnedGold: earned, totalGold: total, goldBound: isGoldBound(raidKey, modeKey) };
+}
+
+function raidDisplayRank(raid) {
+  return RAID_DISPLAY_ORDER[raid?.raidKey] ?? 99;
+}
+
+function compareGoldSlotPriority(a, b) {
+  const aCompletedAt = Number(a?.completedAt) || 0;
+  const bCompletedAt = Number(b?.completedAt) || 0;
+  const aComplete = aCompletedAt > 0;
+  const bComplete = bCompletedAt > 0;
+  if (aComplete && bComplete && aCompletedAt !== bCompletedAt) {
+    return aCompletedAt - bCompletedAt;
+  }
+  if (aComplete !== bComplete) return aComplete ? -1 : 1;
+
+  const aPartial = Array.isArray(a?.completedGateKeys) && a.completedGateKeys.length > 0;
+  const bPartial = Array.isArray(b?.completedGateKeys) && b.completedGateKeys.length > 0;
+  if (aPartial !== bPartial) return aPartial ? -1 : 1;
+
+  const orderDiff = raidDisplayRank(a) - raidDisplayRank(b);
+  if (orderDiff !== 0) return orderDiff;
+  return (Number(a?.minItemLevel) || 0) - (Number(b?.minItemLevel) || 0);
+}
+
+function getGoldOverride(source) {
+  if (source?.goldOverride === "include" || source?.goldForced === true) return "include";
+  if (source?.goldOverride === "exclude" || source?.goldDisabled === true) return "exclude";
+  return null;
+}
+
+function applyCharacterGoldCap(raids) {
+  const candidates = (raids || [])
+    .filter((raid) => {
+      if (!(Number(raid.rawTotalGold) > 0)) return false;
+      if (raid.goldOverride === "include") return true;
+      if (raid.goldOverride === "exclude") return false;
+      return raid.goldAutoEligible === true;
+    })
+    .sort((a, b) => {
+      const aManual = a.goldOverride === "include";
+      const bManual = b.goldOverride === "include";
+      if (aManual !== bManual) return aManual ? -1 : 1;
+      return compareGoldSlotPriority(a, b);
+    });
+  const selectedRanks = new Map();
+  candidates.slice(0, GOLD_RAID_CAP_PER_CHARACTER).forEach((raid, index) => {
+    selectedRanks.set(raid, index + 1);
+  });
+
+  return (raids || []).map((raid) => {
+    const rank = selectedRanks.get(raid) || 0;
+    const receivesGold = rank > 0;
+    let goldExcludedReason = null;
+    if (!receivesGold) {
+      if (raid.goldOverride === "exclude") goldExcludedReason = "manual";
+      else if (raid.goldOverride !== "include" && raid.goldBound) goldExcludedReason = "bound";
+      else goldExcludedReason = "cap";
+    }
+    return {
+      ...raid,
+      goldReceives: receivesGold,
+      goldSlotRank: rank || null,
+      goldExcludedReason,
+      earnedGold: receivesGold ? raid.rawEarnedGold : 0,
+      totalGold: receivesGold ? raid.rawTotalGold : 0,
+    };
+  });
 }
 
 function getStatusRaidsForCharacter(character) {
@@ -137,6 +208,8 @@ function getStatusRaidsForCharacter(character) {
 
     const requirement = getRequirementFor(raidKey, modeKey);
     if (!requirement || itemLevel < requirement.minItemLevel) continue;
+    const raidGold = computeRaidGold(raidKey, modeKey, completedGateKeys, allGateKeys);
+    const goldOverride = getGoldOverride(assignedRaid);
 
     selected.push({
       raidName: requirement.label,
@@ -146,20 +219,29 @@ function getStatusRaidsForCharacter(character) {
       allGateKeys,
       completedGateKeys,
       isCompleted: isAssignedRaidCompleted(assignedRaid),
-      ...computeRaidGold(raidKey, modeKey, completedGateKeys, allGateKeys),
+      completedAt: getAssignedRaidCompletedAt(assignedRaid, allGateKeys),
+      goldOverride,
+      goldForced: goldOverride === "include",
+      goldDisabled: goldOverride === "exclude",
+      goldAutoEligible: goldOverride == null && !raidGold.goldBound,
+      rawEarnedGold: raidGold.earnedGold,
+      rawTotalGold: raidGold.totalGold,
+      earnedGold: raidGold.earnedGold,
+      totalGold: raidGold.totalGold,
+      goldBound: raidGold.goldBound,
     });
   }
 
-  // Display order: Act 4 → Kazeros (Final) → Serca, top-to-bottom per
+  // Display order: Act 4 -> Kazeros (Final) -> Serca -> Horizon, top-to-bottom per
   // character card. Each raid contributes at most one mode; Serca follows
   // the same lockout model as Kazeros: default to the best eligible mode,
   // then show the mode actually cleared when the player runs a lower tier.
-  const raidDisplayOrder = { armoche: 0, kazeros: 1, serca: 2 };
-  return selected.sort((a, b) => {
-    const orderDiff = (raidDisplayOrder[a.raidKey] ?? 99) - (raidDisplayOrder[b.raidKey] ?? 99);
+  const sorted = selected.sort((a, b) => {
+    const orderDiff = raidDisplayRank(a) - raidDisplayRank(b);
     if (orderDiff !== 0) return orderDiff;
     return (Number(a.minItemLevel) || 0) - (Number(b.minItemLevel) || 0);
   });
+  return applyCharacterGoldCap(sorted);
 }
 
 // 3-state aggregate icon for a (done, total) pair. Shared by /raid-status's
@@ -230,11 +312,11 @@ function summarizeCharacterGold(raids) {
 }
 
 // Sum gold for a whole account, gating per-character on `isGoldEarner`.
-// Lost Ark caps gold-earners at 6 per account/week, so chars without the
-// flag are excluded entirely from the rollup. `getRaidsFor` is the same
-// callable the view layer uses (already filter-scoped when the caller
-// has a raid filter active), so this function inherits the active filter
-// without taking it as a separate argument.
+// Lost Ark caps gold-earner characters at 6 per account/week; the
+// per-character 3-raid gold cap is already baked into each raid entry by
+// getStatusRaidsForCharacter. `getRaidsFor` is the same callable the view
+// layer uses (already filter-scoped when the caller has a raid filter active),
+// so this function inherits the active filter without taking it separately.
 function summarizeAccountGold(account, getRaidsFor) {
   let earned = 0;
   let total = 0;
@@ -318,6 +400,7 @@ module.exports = {
   findFetchedRosterMatchForCharacter,
   getRequirementFor,
   getBestEligibleModeKey,
+  getAssignedRaidCompletedAt,
   sanitizeTasks,
   sanitizeSideTasks,
   getGateKeys,
@@ -336,6 +419,9 @@ module.exports = {
   summarizeAccountGold,
   summarizeGlobalGold,
   computeRaidGold,
+  applyCharacterGoldCap,
+  getGoldOverride,
+  GOLD_RAID_CAP_PER_CHARACTER,
   raidCheckGateIcon,
   RAID_REQUIREMENT_MAP,
 };

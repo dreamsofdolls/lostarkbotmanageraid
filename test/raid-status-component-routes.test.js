@@ -31,6 +31,7 @@ test("raid-status component routes resolve edit-driven controls", () => {
     },
   );
   assert.equal(editDrivenIds.has("status:prev"), true);
+  assert.equal(editDrivenIds.has("status-gold:toggle"), true);
   assert.equal(editDrivenIds.has("status:sync"), false);
 });
 
@@ -42,6 +43,17 @@ test("raid-status component routes keep task toggle ids on one action", () => {
   assert.equal(
     getStatusComponentRoute("status-task:shared-toggle").action,
     STATUS_COMPONENT_ACTION.taskToggle,
+  );
+});
+
+test("raid-status component routes resolve gold setup dropdowns", () => {
+  assert.equal(
+    getStatusComponentRoute("status-gold:char-filter").action,
+    STATUS_COMPONENT_ACTION.goldCharFilter,
+  );
+  assert.equal(
+    getStatusComponentRoute("status-gold:toggle").action,
+    STATUS_COMPONENT_ACTION.goldToggle,
   );
 });
 

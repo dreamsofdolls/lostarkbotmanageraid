@@ -9,6 +9,7 @@
 
 const { createRaidStatusView } = require("./view/view");
 const { createRaidStatusTaskUi } = require("./task/task-ui");
+const { createRaidStatusGoldUi } = require("./gold/gold-ui");
 const { createRaidStatusSync } = require("./sync/sync");
 const { createRaidStatusComponentLayout } = require("./components/component-layout");
 const { createRaidStatusRenderPayload } = require("./view/render-payload");
@@ -255,6 +256,25 @@ function createRaidStatusCommand(deps) {
     });
 
     const {
+      buildGoldViewEmbed,
+      buildGoldCharFilterRow,
+      buildGoldToggleRow,
+    } = createRaidStatusGoldUi({
+      EmbedBuilder,
+      ActionRowBuilder,
+      StringSelectMenuBuilder,
+      UI,
+      getCharacterName,
+      truncateText,
+      formatGold,
+      getAccounts: () => statusState.accounts,
+      getCurrentPage: () => statusState.currentPage,
+      getGoldCharFilter: (page) => statusState.getGoldCharFilter(page),
+      getRaidsFor: statusState.baseGetRaidsFor,
+      lang,
+    });
+
+    const {
       buildCurrentEmbed,
       buildEmbedAndCanvas,
     } = createRaidStatusRenderPayload({
@@ -269,6 +289,7 @@ function createRaidStatusCommand(deps) {
       summarizeRaidProgress,
       summarizeGlobalGold,
       buildAccountPageEmbed,
+      buildGoldViewEmbed,
       buildTaskViewEmbed,
       lang,
     });
@@ -312,6 +333,8 @@ function createRaidStatusCommand(deps) {
       buildSharedTaskToggleRow,
       buildTaskCharFilterRow,
       buildTaskToggleRow,
+      buildGoldCharFilterRow,
+      buildGoldToggleRow,
       buildSyncButton: syncControls.buildSyncButton,
       buildSyncRow: syncControls.buildSyncRow,
       buildLocalSyncNewButton: syncControls.buildLocalSyncNewButton,

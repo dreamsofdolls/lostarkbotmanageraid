@@ -15,6 +15,7 @@ function createRaidStatusRenderPayload({
   summarizeRaidProgress,
   summarizeGlobalGold,
   buildAccountPageEmbed,
+  buildGoldViewEmbed,
   buildTaskViewEmbed,
   lang,
 }) {
@@ -39,6 +40,9 @@ function createRaidStatusRenderPayload({
 
     if (currentView === "task") {
       return buildTaskViewEmbed(accounts[currentPage]);
+    }
+    if (currentView === "gold") {
+      return buildGoldViewEmbed(accounts[currentPage]);
     }
 
     const getRaidsFor = filterRaidId

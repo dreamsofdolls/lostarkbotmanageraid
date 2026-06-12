@@ -28,6 +28,13 @@ function createViewToggleRow({
             emoji: "\uD83D\uDCDD",
             default: getCurrentView() === "task",
           },
+          {
+            label: t("raid-status.taskView.viewToggleGoldLabel", lang),
+            description: t("raid-status.taskView.viewToggleGoldDescription", lang),
+            value: "gold",
+            emoji: "\uD83D\uDCB0",
+            default: getCurrentView() === "gold",
+          },
         ])
     );
   };

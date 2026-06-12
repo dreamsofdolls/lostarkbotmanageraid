@@ -249,7 +249,7 @@ test("raid-auto-manage action:reset serializes with bible sync slot and wipes sy
   assert.equal(doc.autoManageEnabled, false);
   assert.equal(doc.localSyncEnabled, false);
   assert.equal(doc.lastLocalSyncToken, null);
-  assert.deepEqual(doc.accounts[0].characters[0].assignedRaids, { armoche: {}, kazeros: {}, serca: {} });
+  assert.deepEqual(doc.accounts[0].characters[0].assignedRaids, { armoche: {}, kazeros: {}, serca: {}, horizon: {} });
   assert.equal(doc.accounts[0].characters[0].publicLogDisabled, false);
   assert.equal(doc.accounts[0].characters[0].bibleSerial, null);
   assert.equal(doc.accounts[0].characters[0].sideTasks.length, 1);

@@ -11,6 +11,8 @@ const STATUS_COMPONENT_ACTION = Object.freeze({
   viewToggle: "viewToggle",
   taskCharFilter: "taskCharFilter",
   taskToggle: "taskToggle",
+  goldCharFilter: "goldCharFilter",
+  goldToggle: "goldToggle",
 });
 
 const STATUS_COMPONENT_ROUTES = Object.freeze([
@@ -71,6 +73,18 @@ const STATUS_COMPONENT_ROUTES = Object.freeze([
   {
     customId: "status-task:toggle",
     action: STATUS_COMPONENT_ACTION.taskToggle,
+    editDriven: true,
+    redraw: true,
+  },
+  {
+    customId: "status-gold:char-filter",
+    action: STATUS_COMPONENT_ACTION.goldCharFilter,
+    editDriven: true,
+    redraw: true,
+  },
+  {
+    customId: "status-gold:toggle",
+    action: STATUS_COMPONENT_ACTION.goldToggle,
     editDriven: true,
     redraw: true,
   },
