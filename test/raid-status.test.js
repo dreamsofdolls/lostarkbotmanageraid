@@ -486,13 +486,13 @@ test("computeRaidGold: returns 0 earned when no gates cleared, full total still 
   assert.equal(gold.totalGold, 54000);
 });
 
-test("raid-catalog: normal gold is base*boundGold.factor (halved) + bound; hard stays full + unbound", () => {
+test("raid-catalog: normal gold is reduced but unbound; Horizon is full-bound", () => {
   // Base armoche normal G1=12500 -> *0.5 = 6250; hard G1=15000 unchanged.
   assert.equal(getGoldForGate("armoche", "normal", "G1"), 6250);
   assert.equal(getGoldForGate("armoche", "normal", "G2"), 10250);
   assert.equal(getGoldForGate("armoche", "hard", "G1"), 15000);
-  assert.equal(isGoldBound("armoche", "normal"), true);
-  assert.equal(isGoldBound("kazeros", "normal"), true);
+  assert.equal(isGoldBound("armoche", "normal"), false);
+  assert.equal(isGoldBound("kazeros", "normal"), false);
   assert.equal(isGoldBound("armoche", "hard"), false);
   assert.equal(isGoldBound("serca", "nightmare"), false);
   assert.equal(isGoldBound("horizon", "normal"), true);
@@ -503,11 +503,11 @@ test("raid-catalog: normal gold is base*boundGold.factor (halved) + bound; hard 
   assert.equal(getGoldForGate("horizon", "nightmare", "G1"), 20000);
 });
 
-test("computeRaidGold: tags normal entries goldBound (halved values), hard entries unbound", () => {
+test("computeRaidGold: tags reduced normal entries unbound and Horizon full-bound", () => {
   const normal = computeRaidGold("armoche", "normal", ["G1"], ["G1", "G2"]);
   assert.equal(normal.earnedGold, 6250); // 12500 * 0.5
   assert.equal(normal.totalGold, 16500); // (12500 + 20500) * 0.5
-  assert.equal(normal.goldBound, true);
+  assert.equal(normal.goldBound, false);
   const hard = computeRaidGold("kazeros", "hard", ["G1", "G2"], ["G1", "G2"]);
   assert.equal(hard.totalGold, 52000);
   assert.equal(hard.goldBound, false);
@@ -526,7 +526,7 @@ test("raid labels: Horizon renders with level labels only", () => {
 
 test("summarizeCharacterGold: splits earned/total into bound vs unbound (back-compat totals intact)", () => {
   const raids = [
-    { earnedGold: 6250, totalGold: 16500, goldBound: true },   // normal (bound)
+    { earnedGold: 6250, totalGold: 16500, goldBound: true },   // full-bound raid
     { earnedGold: 17000, totalGold: 52000, goldBound: false }, // hard (unbound)
   ];
   const g = summarizeCharacterGold(raids);
@@ -558,6 +558,25 @@ test("getStatusRaidsForCharacter: decorates each raid entry with earnedGold + to
   assert.equal(horizon.rawTotalGold, 40000);
   assert.equal(horizon.totalGold, 0);
   assert.equal(horizon.goldExcludedReason, "bound");
+});
+
+test("getStatusRaidsForCharacter: reduced normal raids still auto-count because they have unbound gold", () => {
+  const char = makeChar("Qiaoli", 1710, { isGoldEarner: true });
+  const raids = getStatusRaidsForCharacter(char);
+
+  assert.deepEqual(
+    raids.filter((raid) => raid.goldReceives).map((raid) => raid.raidKey),
+    ["armoche", "kazeros", "serca"],
+  );
+  const horizon = raids.find((raid) => raid.raidKey === "horizon");
+  assert.equal(horizon.goldReceives, false);
+  assert.equal(horizon.goldExcludedReason, "bound");
+
+  const totals = summarizeCharacterGold(raids);
+  assert.equal(totals.earned, 0);
+  assert.equal(totals.total, 54000);
+  assert.equal(totals.totalBound, 0);
+  assert.equal(totals.totalUnbound, 54000);
 });
 
 test("getStatusRaidsForCharacter: counts the first 3 completed raids by completion time", () => {
@@ -865,19 +884,35 @@ test("buildAccountPageEmbed: per-character header does NOT carry a 💰 suffix -
   assert.doesNotMatch(charField.value, /52,000G/);
 });
 
+test("buildAccountPageEmbed: real 1710 gold-earner with no clears still shows 0G", () => {
+  const char = makeChar("Qiaoli", 1710, { isGoldEarner: true });
+  const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
+
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 4 }, characters: 1 },
+    getStatusRaidsForCharacter
+  );
+  const charField = embed.toJSON().fields.find((f) => /Qiaoli/.test(f.name));
+  assert.ok(charField, "char field should be present");
+  assert.match(charField.value, /💰 0G/);
+});
+
 test("buildAccountPageEmbed: per-character bound gold renders inline after the earned gold", () => {
   const char = makeChar("Bound", 1730, { isGoldEarner: true });
   const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
-  // Act 4 Normal cleared: earned 16,500 and all of it is roster-bound.
+  // Horizon Level 2 cleared: earned 40,000 and all of it is character-bound.
   const fakeRaid = {
-    raidName: "Act 4 Normal",
-    raidKey: "armoche",
-    modeKey: "normal",
+    raidName: "Horizon Level 2",
+    raidKey: "horizon",
+    modeKey: "hard",
     completedGateKeys: ["G1", "G2"],
     allGateKeys: ["G1", "G2"],
     isCompleted: true,
-    earnedGold: 16500,
-    totalGold: 16500,
+    earnedGold: 40000,
+    totalGold: 40000,
     goldBound: true,
   };
   const getRaidsFor = () => [fakeRaid];
@@ -890,7 +925,7 @@ test("buildAccountPageEmbed: per-character bound gold renders inline after the e
   );
   const charField = embed.toJSON().fields.find((f) => /Bound/.test(f.name));
   // earned-only gold + bound inline on the same line (short enough now /total is gone).
-  assert.match(charField.value, /💰 16,500G · 🔒 \*\*16,500G\*\* khóa/);
+  assert.match(charField.value, /💰 40,000G · 🔒 \*\*40,000G\*\* khóa/);
 });
 
 test("buildAccountPageEmbed: shows '/raid-gold-earner' hint when account has at least one eligible non-earner char", () => {

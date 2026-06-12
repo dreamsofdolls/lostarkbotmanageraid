@@ -104,9 +104,22 @@ test("raid-status gold actions report ok=false when target cannot be saved", asy
 
 test("raid-status gold actions toggle unbound auto raid to manual exclude", () => {
   assert.equal(getNextGoldOverride("kazeros", {
+    modeKey: "normal",
+    G1: { difficulty: "Normal", completedDate: null },
+    G2: { difficulty: "Normal", completedDate: null },
+  }, { itemLevel: 1710 }), "exclude");
+  assert.equal(getNextGoldOverride("kazeros", {
     modeKey: "hard",
     G1: { difficulty: "Hard", completedDate: null },
     G2: { difficulty: "Hard", completedDate: null },
   }), "exclude");
   assert.equal(getNextGoldOverride("kazeros", {}, { itemLevel: 1730 }), "exclude");
+});
+
+test("raid-status gold actions toggle full-bound Horizon auto raid to manual include", () => {
+  assert.equal(getNextGoldOverride("horizon", {
+    modeKey: "normal",
+    G1: { difficulty: "Level 1", completedDate: null },
+    G2: { difficulty: "Level 1", completedDate: null },
+  }, { itemLevel: 1710 }), "include");
 });

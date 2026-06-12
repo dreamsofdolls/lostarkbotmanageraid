@@ -1,13 +1,9 @@
 "use strict";
 
-// `gold` per (raid, mode, gate) is the raid's INTRINSIC (full, tradeable) weekly
-// gold - kept as the base value so it survives policy changes. `boundGold`, when
-// present, is the current roster-bound conversion applied on top: the gold a
-// character actually earns becomes `base * boundGold.factor` and is roster-bound
-// (can't be traded/sold/sent). Smilegate periodically halves normal-raid gold to
-// bound to curb inflation; if a future round changes the cut, edit only the
-// factor (or add `boundGold` to more modes) - the base stays put. Absent =
-// full, unbound. Only chars with `isGoldEarner=true` actually receive the gold.
+// `gold` per (raid, mode, gate) is the raid's base weekly gold. `goldFactor`
+// keeps older reduced-gold modes from losing their original values. `boundGold`
+// is reserved for modes whose paid gold is fully character/roster-bound
+// (unbound value = 0), so auto gold-slot logic can skip only those modes.
 const CHARACTER_BOUND_GOLD = Object.freeze({ factor: 1 });
 
 const RAID_REQUIREMENTS = {
@@ -16,7 +12,7 @@ const RAID_REQUIREMENTS = {
     partySize: 8,
     gates: ["G1", "G2"],
     modes: {
-      normal: { label: "Normal", minItemLevel: 1700, gold: { G1: 12500, G2: 20500 }, boundGold: { factor: 0.5 } },
+      normal: { label: "Normal", minItemLevel: 1700, gold: { G1: 12500, G2: 20500 }, goldFactor: 0.5 },
       hard: { label: "Hard", minItemLevel: 1720, gold: { G1: 15000, G2: 27000 } },
     },
   },
@@ -25,7 +21,7 @@ const RAID_REQUIREMENTS = {
     partySize: 8,
     gates: ["G1", "G2"],
     modes: {
-      normal: { label: "Normal", minItemLevel: 1710, gold: { G1: 14000, G2: 26000 }, boundGold: { factor: 0.5 } },
+      normal: { label: "Normal", minItemLevel: 1710, gold: { G1: 14000, G2: 26000 }, goldFactor: 0.5 },
       hard: { label: "Hard", minItemLevel: 1730, gold: { G1: 17000, G2: 35000 } },
     },
   },
@@ -34,7 +30,7 @@ const RAID_REQUIREMENTS = {
     partySize: 4,
     gates: ["G1", "G2"],
     modes: {
-      normal: { label: "Normal", minItemLevel: 1710, gold: { G1: 14000, G2: 21000 }, boundGold: { factor: 0.5 } },
+      normal: { label: "Normal", minItemLevel: 1710, gold: { G1: 14000, G2: 21000 }, goldFactor: 0.5 },
       hard: { label: "Hard", minItemLevel: 1730, gold: { G1: 17500, G2: 26500 } },
       nightmare: { label: "Nightmare", minItemLevel: 1740, gold: { G1: 21000, G2: 33000 } },
     },
@@ -119,9 +115,9 @@ function getGoldForGate(raidKey, modeKey, gate) {
   const mode = RAID_REQUIREMENTS[raidKey]?.modes?.[modeKey];
   if (!mode || !mode.gold) return 0;
   const base = Number(mode.gold[gate]) || 0;
-  // Apply the bound-conversion factor when present (e.g. normal raids at 0.5).
-  // Round to whole gold; all current base*factor pairs are already integers.
-  const factor = mode.boundGold ? Number(mode.boundGold.factor) : 1;
+  // Apply reduction/full-bound factors when present. Round defensively; all
+  // current base*factor pairs are already whole gold.
+  const factor = Number(mode.goldFactor ?? mode.boundGold?.factor ?? 1);
   return Math.round(base * (Number.isFinite(factor) ? factor : 1));
 }
 
@@ -132,9 +128,7 @@ function getGoldForRaid(raidKey, modeKey) {
   return total;
 }
 
-// Whether a (raid, mode)'s gold is roster-bound (non-tradeable). Boundness is a
-// property of the whole mode (driven by the presence of a `boundGold` conversion),
-// not a per-gate split, so a single check is enough.
+// Whether a (raid, mode)'s paid gold is fully bound (unbound value = 0).
 function isGoldBound(raidKey, modeKey) {
   return !!RAID_REQUIREMENTS[raidKey]?.modes?.[modeKey]?.boundGold;
 }
