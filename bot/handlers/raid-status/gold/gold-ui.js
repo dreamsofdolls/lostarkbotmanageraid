@@ -82,16 +82,17 @@ function createRaidStatusGoldUi(deps) {
 
   function formatGoldRaidLine(raid) {
     const label = localizedRaidLabel(raid);
-    if (raid.goldDisabled) {
-      return `${UI.icons.lock} ${label} - ${t("raid-status.goldView.manualOff", lang)}`;
-    }
     if (!raid.goldReceives) {
-      if (raid.goldExcludedReason === "bound") {
-        return `${UI.icons.lock} ${label} - ${t("raid-status.goldView.autoBound", lang)}`;
-      }
-      return `${UI.icons.pending} ${label} - ${t("raid-status.goldView.outsideCap", lang, {
-        cap: GOLD_RAID_CAP_PER_CHARACTER,
-      })}`;
+      // Not receiving. The leading lock means ONE thing everywhere: this raid's
+      // gold is roster-bound (matches the raid view's 🔒). A raid that simply
+      // got turned off or pushed out of the cap but is unbound stays neutral ⚪,
+      // so 🔒 never doubles as an "excluded" marker.
+      let reason;
+      if (raid.goldDisabled) reason = t("raid-status.goldView.manualOff", lang);
+      else if (raid.goldExcludedReason === "bound") reason = t("raid-status.goldView.autoBound", lang);
+      else reason = t("raid-status.goldView.outsideCap", lang, { cap: GOLD_RAID_CAP_PER_CHARACTER });
+      const icon = raid.goldBound ? UI.icons.lock : UI.icons.pending;
+      return `${icon} ${label} - ${reason}`;
     }
 
     // A receiving raid reads as a plain gold line (\uD83D\uDCB0 #slot label - amount),

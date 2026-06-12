@@ -1278,3 +1278,41 @@ test("raid-status gold view renders forced bound gold as a normal gold line with
   assert.doesNotMatch(goldField.value, new RegExp(`${UI.icons.lock} #1 Horizon Level 1`));
   assert.doesNotMatch(goldField.value, /ép nhận|locked/);
 });
+
+test("raid-status gold view: an excluded UNBOUND raid stays neutral (no lock)", () => {
+  // Act 4 (unbound) is force-excluded so Horizon (bound) can take its slot.
+  // The lock must NOT appear on the unbound excluded raid - 🔒 is reserved for
+  // bound gold so it stays in sync with the raid view (which only locks bound).
+  const char = {
+    ...makeChar("MixGold", 1730, { isGoldEarner: true }),
+    assignedRaids: {
+      armoche: { goldOverride: "exclude", modeKey: "hard", G1: { difficulty: "Hard", completedDate: 100 }, G2: { difficulty: "Hard", completedDate: 100 } },
+      kazeros: { modeKey: "hard" },
+      serca: { modeKey: "hard" },
+      horizon: { goldOverride: "include", modeKey: "hard" },
+    },
+  };
+  const accounts = [{ accountName: "Alpha", characters: [char], lastRefreshedAt: 0 }];
+  const goldUi = createRaidStatusGoldUi({
+    EmbedBuilder,
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    UI,
+    getCharacterName,
+    truncateText,
+    formatGold,
+    getAccounts: () => accounts,
+    getCurrentPage: () => 0,
+    getGoldCharFilter: () => undefined,
+    getRaidsFor: getStatusRaidsForCharacter,
+    lang: "vi",
+  });
+
+  const goldField = goldUi.buildGoldViewEmbed(accounts[0]).toJSON().fields.find((f) => /MixGold/.test(f.name));
+  const act4Line = goldField.value.split("\n").find((l) => /Act 4 Hard/.test(l));
+  assert.match(act4Line, new RegExp(`^${UI.icons.pending} Act 4 Hard`));
+  assert.doesNotMatch(act4Line, new RegExp(UI.icons.lock));
+  // Horizon (bound, forced) still carries the lock before its amount.
+  const horizonLine = goldField.value.split("\n").find((l) => /Horizon/.test(l));
+  assert.match(horizonLine, new RegExp(UI.icons.lock));
+});
