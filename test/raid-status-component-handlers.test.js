@@ -2,6 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { EventEmitter } = require("node:events");
 const {
   ActionRowBuilder,
   StringSelectMenuBuilder,
@@ -37,6 +38,11 @@ class FakeEmbedBuilder {
     this.description = value;
     return this;
   }
+}
+
+function getSelectCustomId(row) {
+  const select = row?.components?.[0];
+  return select?.data?.custom_id || select?.data?.customId || select?.customId || "";
 }
 
 function createHandlerHarness(overrides = {}) {
@@ -219,12 +225,13 @@ test("raid-status component handlers prompt for a gold replacement when locked r
   const prompt = {
     async awaitMessageComponent(options) {
       assert.equal(typeof options.filter, "function");
+      const selectId = getSelectCustomId(promptPayload.components[0]);
       assert.equal(options.filter({
-        customId: "status-gold:replace",
+        customId: selectId,
         user: { id: "viewer" },
       }), true);
       return {
-        customId: "status-gold:replace",
+        customId: selectId,
         user: { id: "viewer" },
         values: ["armoche"],
         async deferUpdate() {},
@@ -254,6 +261,92 @@ test("raid-status component handlers prompt for a gold replacement when locked r
   assert.equal(harness.reloadCount, 1);
   assert.match(finalPromptPayload.embeds[0].title, /Đổi gold nhận xong/);
   assert.equal(finalPromptPayload.components.length, 0);
+});
+
+test("raid-status component handlers accept gold replacement from interactionCreate and edit the picked interaction", async () => {
+  let saved = 0;
+  const doc = {
+    accounts: [
+      {
+        accountName: "Roster B",
+        characters: [
+          {
+            name: "Goldie",
+            itemLevel: 1730,
+            assignedRaids: {
+              horizon: {
+                modeKey: "hard",
+                G1: { difficulty: "Level 2", completedDate: null },
+                G2: { difficulty: "Level 2", completedDate: null },
+              },
+            },
+          },
+        ],
+      },
+    ],
+    markModified(path) {
+      assert.equal(path, "accounts");
+    },
+    async save() {
+      saved += 1;
+    },
+  };
+  const harness = createHandlerHarness({
+    User: {
+      async findOne(query) {
+        assert.deepEqual(query, { discordId: "viewer" });
+        return doc;
+      },
+    },
+  });
+  const client = new EventEmitter();
+  let promptPayload = null;
+  let finalEditPayload = null;
+  let deferred = 0;
+
+  const resultPromise = harness.handlers[STATUS_COMPONENT_ACTION.goldToggle]({
+    values: ["Goldie::horizon"],
+    user: { id: "viewer" },
+    client,
+    async followUp(payload) {
+      promptPayload = payload;
+      return {
+        async edit() {
+          assert.fail("prompt.edit should not be needed when selected interaction can editReply");
+        },
+      };
+    },
+  });
+
+  while (!promptPayload) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const selectId = getSelectCustomId(promptPayload.components[0]);
+  assert.match(selectId, /^status-gold:replace:/);
+  client.emit("interactionCreate", {
+    customId: selectId,
+    user: { id: "viewer" },
+    values: ["armoche"],
+    async deferUpdate() {
+      deferred += 1;
+    },
+    async editReply(payload) {
+      finalEditPayload = payload;
+    },
+  });
+
+  const result = await resultPromise;
+
+  assert.deepEqual(result, { redraw: true });
+  assert.equal(deferred, 1);
+  assert.equal(doc.accounts[0].characters[0].assignedRaids.horizon.goldOverride, "include");
+  assert.equal(doc.accounts[0].characters[0].assignedRaids.armoche.goldOverride, "exclude");
+  assert.equal(saved, 1);
+  assert.equal(harness.reloadCount, 1);
+  assert.match(finalEditPayload.embeds[0].title, /Đổi gold nhận xong/);
+  assert.equal(finalEditPayload.components.length, 0);
 });
 
 test("raid-status component handlers warn when gold toggle cannot be saved", async () => {
