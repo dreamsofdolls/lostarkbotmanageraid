@@ -744,6 +744,22 @@ test("formatRaidStatusLine: translated raid labels keep the difficulty mode", ()
   assert.match(formatRaidStatusLine(raid), /Kazeros Hard · 1\/2/);
   assert.match(formatRaidStatusLine(raid, "vi"), /Kazeros Hard · 1\/2/);
   assert.match(formatRaidStatusLine(raid, "jp"), /カゼロス ハード · 1\/2/);
+  // Unbound raid: no trailing lock.
+  assert.doesNotMatch(formatRaidStatusLine(raid, "vi"), new RegExp(`${UI.icons.lock}$`));
+});
+
+test("formatRaidStatusLine: bound-gold raids get a trailing lock", () => {
+  const raid = {
+    raidName: "Horizon Level 3",
+    raidKey: "horizon",
+    modeKey: "nightmare",
+    completedGateKeys: [],
+    allGateKeys: ["G1", "G2"],
+    isCompleted: false,
+    goldBound: true,
+  };
+  // The lock sits after the gate count so the main view flags roster-bound gold.
+  assert.match(formatRaidStatusLine(raid, "vi"), new RegExp(`Horizon Level 3 · 0/2 ${UI.icons.lock}$`));
 });
 
 test("summarizeCharacterGold: sums earnedGold + totalGold across raid entries", () => {
