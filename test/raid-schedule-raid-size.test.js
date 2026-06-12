@@ -9,6 +9,7 @@ test("raid-schedule derives party size from the raid catalog", () => {
   assert.equal(getRaidPartySize("armoche"), 8);
   assert.equal(getRaidPartySize("kazeros"), 8);
   assert.equal(getRaidPartySize("serca"), 4);
+  assert.equal(getRaidPartySize("horizon"), 4);
 });
 
 test("raid-schedule rejects unknown raid party size metadata", () => {

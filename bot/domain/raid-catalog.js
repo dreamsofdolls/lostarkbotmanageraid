@@ -8,6 +8,8 @@
 // bound to curb inflation; if a future round changes the cut, edit only the
 // factor (or add `boundGold` to more modes) - the base stays put. Absent =
 // full, unbound. Only chars with `isGoldEarner=true` actually receive the gold.
+const CHARACTER_BOUND_GOLD = Object.freeze({ factor: 1 });
+
 const RAID_REQUIREMENTS = {
   armoche: {
     label: "Act 4",
@@ -35,6 +37,16 @@ const RAID_REQUIREMENTS = {
       normal: { label: "Normal", minItemLevel: 1710, gold: { G1: 14000, G2: 21000 }, boundGold: { factor: 0.5 } },
       hard: { label: "Hard", minItemLevel: 1730, gold: { G1: 17500, G2: 26500 } },
       nightmare: { label: "Nightmare", minItemLevel: 1740, gold: { G1: 21000, G2: 33000 } },
+    },
+  },
+  horizon: {
+    label: "Horizon Cathedral",
+    partySize: 4,
+    gates: ["G1", "G2"],
+    modes: {
+      normal: { label: "Normal", minItemLevel: 1700, gold: { G1: 13500, G2: 16500 }, boundGold: CHARACTER_BOUND_GOLD },
+      hard: { label: "Hard", minItemLevel: 1720, gold: { G1: 16000, G2: 24000 }, boundGold: CHARACTER_BOUND_GOLD },
+      nightmare: { label: "Nightmare", minItemLevel: 1750, gold: { G1: 20000, G2: 30000 }, boundGold: CHARACTER_BOUND_GOLD },
     },
   },
 };
@@ -94,6 +106,9 @@ const BOSS_TO_RAID_GATE = new Map([
 
   ["Witch of Agony, Serca", { raidKey: "serca", gate: "G1" }],
   ["Corvus Tul Rak", { raidKey: "serca", gate: "G2" }],
+
+  ["Archbishop Arcenos", { raidKey: "horizon", gate: "G1" }],
+  ["Arcenos, Vanguard of Fanaticism", { raidKey: "horizon", gate: "G2" }],
 ]);
 
 function getRaidGateForBoss(bossName) {

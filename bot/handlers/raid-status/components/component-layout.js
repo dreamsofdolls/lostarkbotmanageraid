@@ -10,6 +10,8 @@ function createRaidStatusComponentLayout({
   buildSharedTaskToggleRow,
   buildTaskCharFilterRow,
   buildTaskToggleRow,
+  buildGoldCharFilterRow,
+  buildGoldToggleRow,
   buildSyncButton,
   buildSyncRow,
   buildLocalSyncNewButton,
@@ -44,6 +46,29 @@ function createRaidStatusComponentLayout({
     const charFilterRow = buildTaskCharFilterRow(disabled);
     if (charFilterRow) rows.push(charFilterRow);
     rows.push(buildTaskToggleRow(disabled));
+  };
+
+  const addGoldViewRows = (rows, disabled) => {
+    const accounts = getAccounts();
+    const currentPage = getCurrentPage();
+    if (accounts.length > 1) {
+      rows.push(
+        buildPaginationRow(currentPage, accounts.length, disabled, {
+          prevId: "status:prev",
+          nextId: "status:next",
+          lang,
+        })
+      );
+    }
+
+    rows.push(buildViewToggleRow(disabled));
+    const charFilterRow = buildGoldCharFilterRow(disabled);
+    if (charFilterRow) rows.push(charFilterRow);
+
+    const currentAccount = accounts[currentPage];
+    const sharedFrom = currentAccount?._sharedFrom;
+    const goldToggleDisabled = disabled || (!!sharedFrom && sharedFrom.accessLevel !== "edit");
+    rows.push(buildGoldToggleRow(goldToggleDisabled));
   };
 
   const addRaidViewNavigationRows = (rows, disabled, showSync) => {
@@ -113,6 +138,10 @@ function createRaidStatusComponentLayout({
 
     if (getCurrentView() === "task") {
       addTaskViewRows(rows, disabled);
+      return rows;
+    }
+    if (getCurrentView() === "gold") {
+      addGoldViewRows(rows, disabled);
       return rows;
     }
 

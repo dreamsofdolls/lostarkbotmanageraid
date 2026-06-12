@@ -81,7 +81,7 @@ Aliases (case-insensitive):
 
 | Kind | Values |
 |---|---|
-| Raid | `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca` (typo `secra`) |
+| Raid | `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca` (typo `secra`) · `horizon` / `cathedral` / `hc` |
 | Difficulty | `normal` / `nor` / `nm` · `hard` / `hm` · `nightmare` / `9m` |
 | Gate | `G1`, `G2`, ... (validated per raid) |
 | Separator | space, `+`, or `,` |

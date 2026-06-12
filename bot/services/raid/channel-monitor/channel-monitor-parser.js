@@ -14,6 +14,9 @@ const RAID_ALIASES = new Map([
   ["kaz", "kazeros"],
   ["serca", "serca"],
   ["secra", "serca"],
+  ["horizon", "horizon"],
+  ["cathedral", "horizon"],
+  ["hc", "horizon"],
   // Native JP raid names. Token lower-casing does not affect katakana, so exact
   // aliases are enough once separator normalization has run.
   ["アクト4", "armoche"],
@@ -41,6 +44,7 @@ function normalizeRaidChannelContent(content) {
   return String(content || "")
     .trim()
     .replace(/act\s+4/gi, "act4")
+    .replace(/horizon\s+cathedral/gi, "horizon")
     .replace(/[+,]/g, " ")
     .replace(/\s+/g, " ")
     .trim();

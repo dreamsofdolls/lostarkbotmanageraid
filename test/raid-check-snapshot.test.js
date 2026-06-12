@@ -757,15 +757,15 @@ test("Edit flow: buildEditableCharsByUser sorts chars by iLvl descending", () =>
 test("Edit flow: getEligibleRaidsForChar filters raids by active mode range", () => {
   assert.deepEqual(
     __test.getEligibleRaidsForChar(1710).map(({ raidKey }) => raidKey),
-    ["armoche_normal", "kazeros_normal", "serca_normal"]
+    ["armoche_normal", "horizon_normal", "kazeros_normal", "serca_normal"]
   );
   assert.deepEqual(
     __test.getEligibleRaidsForChar(1730).map(({ raidKey }) => raidKey),
-    ["armoche_hard", "kazeros_hard", "serca_hard"]
+    ["armoche_hard", "horizon_hard", "kazeros_hard", "serca_hard"]
   );
   assert.deepEqual(
     __test.getEligibleRaidsForChar(1740).map(({ raidKey }) => raidKey),
-    ["armoche_hard", "kazeros_hard", "serca_nightmare"]
+    ["armoche_hard", "horizon_hard", "kazeros_hard", "serca_nightmare"]
   );
   assert.deepEqual(__test.getEligibleRaidsForChar(0), []);
 });

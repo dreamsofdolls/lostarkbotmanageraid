@@ -114,6 +114,11 @@ function normalizeAssignedRaid(assignedRaid, fallbackDifficulty, raidKey) {
 
   const canonicalNorm = normalizeName(canonicalDifficulty);
   const normalized = canonicalModeKey ? { modeKey: canonicalModeKey } : {};
+  if (assignedRaid?.goldOverride === "include" || assignedRaid?.goldForced === true) {
+    normalized.goldOverride = "include";
+  } else if (assignedRaid?.goldOverride === "exclude" || assignedRaid?.goldDisabled === true) {
+    normalized.goldOverride = "exclude";
+  }
   for (const gate of keys) {
     const source = assignedRaid?.[gate] || {};
     const sourceDiff = source.difficulty;
@@ -176,11 +181,27 @@ function isAssignedRaidCompleted(assignedRaid) {
   return gates.every((gate) => Number(assignedRaid?.[gate]?.completedDate) > 0);
 }
 
+function getAssignedRaidCompletedAt(assignedRaid, gates = null) {
+  const gateKeys = Array.isArray(gates) && gates.length > 0
+    ? gates
+    : getGateKeys(assignedRaid);
+  if (gateKeys.length === 0) return null;
+
+  let latest = 0;
+  for (const gate of gateKeys) {
+    const ts = Number(assignedRaid?.[gate]?.completedDate) || 0;
+    if (ts <= 0) return null;
+    if (ts > latest) latest = ts;
+  }
+  return latest > 0 ? latest : null;
+}
+
 module.exports = {
   RAID_GROUP_KEYS,
   RAID_REQUIREMENT_MAP,
   buildAssignedRaidFromLegacy,
   ensureAssignedRaids,
+  getAssignedRaidCompletedAt,
   getAssignedRaidModeKey,
   getBestEligibleModeKey,
   getCompletedGateKeys,

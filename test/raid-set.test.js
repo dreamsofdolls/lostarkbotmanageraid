@@ -734,6 +734,52 @@ test("normalizeAssignedRaid: raid-level modeKey preserves lower-mode preference 
   assert.equal(result.G2.difficulty, "Normal");
 });
 
+test("normalizeAssignedRaid: normalizes legacy goldDisabled to goldOverride exclude", () => {
+  const source = {
+    modeKey: "hard",
+    goldDisabled: true,
+    G1: { difficulty: "Hard", completedDate: null },
+    G2: { difficulty: "Hard", completedDate: null },
+  };
+  const result = normalizeAssignedRaid(source, "Hard", "armoche");
+  assert.equal(result.goldOverride, "exclude");
+  assert.equal(result.modeKey, "hard");
+});
+
+test("normalizeAssignedRaid: preserves raid-level goldOverride include", () => {
+  const source = {
+    modeKey: "hard",
+    goldOverride: "include",
+    G1: { difficulty: "Hard", completedDate: null },
+    G2: { difficulty: "Hard", completedDate: null },
+  };
+  const result = normalizeAssignedRaid(source, "Hard", "armoche");
+  assert.equal(result.goldOverride, "include");
+  assert.equal(result.modeKey, "hard");
+});
+
+test("clearCharacterProgress: clears weekly gold override setup flags", () => {
+  const character = {
+    assignedRaids: {
+      armoche: {
+        goldOverride: "include",
+        goldDisabled: true,
+        goldForced: true,
+        G1: { difficulty: "Hard", completedDate: 111 },
+        G2: { difficulty: "Hard", completedDate: 222 },
+      },
+    },
+    tasks: [],
+  };
+
+  clearCharacterProgress(character);
+  assert.equal(character.assignedRaids.armoche.goldOverride, undefined);
+  assert.equal(character.assignedRaids.armoche.goldDisabled, undefined);
+  assert.equal(character.assignedRaids.armoche.goldForced, undefined);
+  assert.equal(character.assignedRaids.armoche.G1.completedDate, null);
+  assert.equal(character.assignedRaids.armoche.G2.completedDate, null);
+});
+
 test("normalizeAssignedRaid: preserves over-tier stamped difficulty (no auto-downgrade)", () => {
   // Inverse of the auto-upgrade case: an over-tier stored difficulty
   // (e.g. Hard manually stamped via /raid-set on a 1700 char that

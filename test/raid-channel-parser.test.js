@@ -8,6 +8,7 @@ const {
 
 test("raid-channel parser normalizes separators and act 4 spacing", () => {
   assert.equal(normalizeRaidChannelContent("Act   4 + HM, Qiylyn G2"), "act4 HM Qiylyn G2");
+  assert.equal(normalizeRaidChannelContent("Horizon   Cathedral + HM, Qiylyn G2"), "horizon HM Qiylyn G2");
   assert.deepEqual(parseRaidMessage("Act   4 + HM, Qiylyn G2"), {
     raidKey: "armoche",
     modeKey: "hard",
@@ -28,6 +29,12 @@ test("raid-channel parser dedupes multi-character targets", () => {
 test("raid-channel parser preserves existing alias semantics", () => {
   assert.equal(parseRaidMessage("Serca nm Qiylyn").modeKey, "normal");
   assert.equal(parseRaidMessage("Serca 9m Qiylyn").modeKey, "nightmare");
+  assert.deepEqual(parseRaidMessage("Horizon Cathedral 9m Qiylyn G2"), {
+    raidKey: "horizon",
+    modeKey: "nightmare",
+    charNames: ["qiylyn"],
+    gate: "G2",
+  });
   assert.deepEqual(parseRaidMessage("セルカ ハード Soulrano"), {
     raidKey: "serca",
     modeKey: "hard",

@@ -12,6 +12,10 @@ const {
   toggleParsedSideTask,
 } = require("../task/task-actions");
 const {
+  parseGoldToggleValue,
+  toggleParsedGoldRaid,
+} = require("../gold/gold-actions");
+const {
   followUpNotice,
   replyNotice,
   replyEmbed,
@@ -236,7 +240,7 @@ function createStatusComponentRouteHandlers(ctx) {
 
     [STATUS_COMPONENT_ACTION.viewToggle]: async (component) => {
       const picked = firstSelectValue(component, "raid");
-      session.currentView = picked === "task" ? "task" : "raid";
+      session.currentView = picked === "task" || picked === "gold" ? picked : "raid";
       return redraw();
     },
 
@@ -278,6 +282,55 @@ function createStatusComponentRouteHandlers(ctx) {
       }
 
       await toggleParsedSideTask({
+        User,
+        saveWithRetry,
+        discordId: writeDiscordId,
+        targetAccountName,
+        parsed,
+      });
+
+      await reloadViewerAccounts();
+      return redraw();
+    },
+
+    [STATUS_COMPONENT_ACTION.goldCharFilter]: async (component) => {
+      const picked = firstSelectValue(component, "");
+      if (picked) {
+        session.setGoldCharFilterForPage(session.currentPage, picked);
+      }
+      return redraw();
+    },
+
+    [STATUS_COMPONENT_ACTION.goldToggle]: async (component) => {
+      const value = firstSelectValue(component, "");
+      const parsed = parseGoldToggleValue(value);
+      if (parsed.kind === "noop" || parsed.kind === "invalid") {
+        return noRedraw();
+      }
+
+      const targetAccount = session.accounts[session.currentPage];
+      const targetAccountName = targetAccount?.accountName || "";
+      if (!targetAccountName) {
+        return noRedraw();
+      }
+
+      const sharedFrom = targetAccount?._sharedFrom;
+      if (sharedFrom && sharedFrom.accessLevel !== "edit") {
+        console.log(
+          `[raid-status gold toggle] view-only share rejected ` +
+          `executor=${discordId} owner=${sharedFrom.ownerDiscordId} raid=${parsed.raidKey}`,
+        );
+        return noRedraw();
+      }
+      const writeDiscordId = sharedFrom ? sharedFrom.ownerDiscordId : discordId;
+      if (sharedFrom) {
+        console.log(
+          `[raid-status gold toggle] share-write executor=${discordId} ` +
+          `owner=${writeDiscordId} raid=${parsed.raidKey}`,
+        );
+      }
+
+      await toggleParsedGoldRaid({
         User,
         saveWithRetry,
         discordId: writeDiscordId,

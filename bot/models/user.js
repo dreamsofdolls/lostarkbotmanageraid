@@ -115,6 +115,7 @@ const characterSchema = new mongoose.Schema(
       armoche: { type: assignedRaidSchema, default: () => ({}) },
       kazeros: { type: assignedRaidSchema, default: () => ({}) },
       serca: { type: assignedRaidSchema, default: () => ({}) },
+      horizon: { type: assignedRaidSchema, default: () => ({}) },
     },
     tasks: { type: [characterTaskSchema], default: [] },
     // Per-character side tasks (daily/weekly chores). Cap is enforced at

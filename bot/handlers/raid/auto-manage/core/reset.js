@@ -81,7 +81,7 @@ function wipeAutoManageState(userDoc) {
     account.lastRefreshedAt = null;
     account.lastRefreshAttemptAt = null;
     for (const character of account.characters || []) {
-      character.assignedRaids = { armoche: {}, kazeros: {}, serca: {} };
+      character.assignedRaids = { armoche: {}, kazeros: {}, serca: {}, horizon: {} };
       character.publicLogDisabled = false;
       character.publicLogDisabledAt = null;
       character.bibleSerial = null;

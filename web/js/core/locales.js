@@ -158,6 +158,7 @@ const VI = {
     armoche: "Act 4",
     kazeros: "Kazeros",
     serca: "Serca",
+    horizon: "Horizon Cathedral",
   },
   modeLabels: {
     normal: "Normal",
@@ -318,6 +319,7 @@ const JP = {
     armoche: "アクト4",
     kazeros: "カゼロス",
     serca: "セルカ",
+    horizon: "Horizon Cathedral",
   },
   modeLabels: {
     normal: "ノーマル",
@@ -478,6 +480,7 @@ const EN = {
     armoche: "Act 4",
     kazeros: "Kazeros",
     serca: "Serca",
+    horizon: "Horizon Cathedral",
   },
   modeLabels: {
     normal: "Normal",

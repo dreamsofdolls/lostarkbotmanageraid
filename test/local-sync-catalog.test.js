@@ -30,9 +30,17 @@ test("local-sync catalog exposes raid metadata used by the web preview", () => {
   assert.equal(catalog.raids.serca.label, "Serca");
   assert.equal(catalog.raids.serca.modes.nightmare.minItemLevel, 1740);
   assert.deepEqual(catalog.raids.serca.gates, ["G1", "G2"]);
+  assert.equal(catalog.raids.horizon.label, "Horizon Cathedral");
+  assert.equal(catalog.raids.horizon.modes.normal.minItemLevel, 1700);
+  assert.equal(catalog.raids.horizon.modes.hard.minItemLevel, 1720);
+  assert.equal(catalog.raids.horizon.modes.nightmare.minItemLevel, 1750);
   assert.deepEqual(
     catalog.bossToRaidGate.find(([boss]) => boss === "Witch of Agony, Serca"),
     ["Witch of Agony, Serca", { raidKey: "serca", gate: "G1" }]
+  );
+  assert.deepEqual(
+    catalog.bossToRaidGate.find(([boss]) => boss === "Archbishop Arcenos"),
+    ["Archbishop Arcenos", { raidKey: "horizon", gate: "G1" }]
   );
 });
 
@@ -55,5 +63,6 @@ test("local-sync catalog endpoint returns public metadata", async () => {
   assert.equal(res.headers["Access-Control-Allow-Origin"], "*");
   assert.equal(body.ok, true);
   assert.equal(body.catalog.raids.kazeros.label, "Kazeros");
+  assert.equal(body.catalog.raids.horizon.modes.nightmare.minItemLevel, 1750);
   assert.equal(body.catalog.classesById["204"].icon, "bard");
 });

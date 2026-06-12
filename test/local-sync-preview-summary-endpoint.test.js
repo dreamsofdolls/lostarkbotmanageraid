@@ -30,7 +30,7 @@ test("preview summary reads assigned raid difficulty from gate entries", () => {
   }), []);
 
   assert.deepEqual(summary.completion, {
-    totalRaids: 3,
+    totalRaids: 4,
     cleared: 0,
     projected: 0,
     percent: 0,
@@ -46,6 +46,7 @@ test("preview summary reads assigned raid difficulty from gate entries", () => {
         { raidKey: "armoche", modeKey: "hard", status: "pending", incoming: false },
         { raidKey: "kazeros", modeKey: "hard", status: "partial", incoming: false },
         { raidKey: "serca", modeKey: "nightmare", status: "pending", incoming: false },
+        { raidKey: "horizon", modeKey: "nightmare", status: "pending", incoming: false },
       ],
     },
   ]);
@@ -80,7 +81,7 @@ test("preview summary calculates pending gates in the post-sync mode", () => {
   // there - still NOT a completed raid. So both percent and projected
   // percent stay at 0%.
   assert.deepEqual(summary.completion, {
-    totalRaids: 3,
+    totalRaids: 4,
     cleared: 0,
     projected: 0,
     percent: 0,
@@ -97,6 +98,7 @@ test("preview summary calculates pending gates in the post-sync mode", () => {
         { raidKey: "armoche", modeKey: "hard", status: "pending", incoming: false },
         { raidKey: "kazeros", modeKey: "hard", status: "pending", incoming: false },
         { raidKey: "serca", modeKey: "nightmare", status: "partial", incoming: true },
+        { raidKey: "horizon", modeKey: "nightmare", status: "pending", incoming: false },
       ],
     },
   ]);
@@ -135,11 +137,11 @@ test("preview summary expands cumulative gates when only later gate is logged (L
   // Pre-sync: nothing cleared. Post-sync: kazeros fully cleared via the
   // G2-implies-G1 cumulative rule.
   assert.deepEqual(summary.completion, {
-    totalRaids: 3,
+    totalRaids: 4,
     cleared: 0,
     projected: 1,
     percent: 0,
-    projectedPercent: 33,
+    projectedPercent: 25,
   });
   // Gold credits BOTH gates (Kazeros Hard: G1=17000 + G2=35000) even
   // though only G2 was in the file - this is what we want, otherwise
@@ -157,9 +159,104 @@ test("preview summary expands cumulative gates when only later gate is logged (L
         { raidKey: "armoche", modeKey: "hard", status: "pending", incoming: false },
         { raidKey: "kazeros", modeKey: "hard", status: "done", incoming: true },
         { raidKey: "serca", modeKey: "nightmare", status: "pending", incoming: false },
+        { raidKey: "horizon", modeKey: "nightmare", status: "pending", incoming: false },
       ],
     },
   ]);
+});
+
+test("preview summary does not auto-count incoming full-bound raid gold", () => {
+  const buckets = bucketizeLocalSyncDeltas([
+    {
+      boss: "Arcenos, Vanguard of Fanaticism",
+      difficulty: "Hard",
+      cleared: true,
+      charName: "Aki",
+      lastClearMs: 12345,
+    },
+  ]);
+
+  const summary = projectSummary(makeAccounts({
+    name: "Aki",
+    class: "Artist",
+    itemLevel: 1730,
+    isGoldEarner: true,
+    assignedRaids: {},
+  }), buckets);
+
+  assert.equal(summary.goldDelta.total, 0);
+  assert.equal(summary.goldDelta.boundTotal, 0);
+  assert.deepEqual(summary.goldDelta.byChar, []);
+});
+
+test("preview summary counts incoming full-bound raid when manually forced on", () => {
+  const buckets = bucketizeLocalSyncDeltas([
+    {
+      boss: "Arcenos, Vanguard of Fanaticism",
+      difficulty: "Hard",
+      cleared: true,
+      charName: "Aki",
+      lastClearMs: 12345,
+    },
+  ]);
+
+  const summary = projectSummary(makeAccounts({
+    name: "Aki",
+    class: "Artist",
+    itemLevel: 1730,
+    isGoldEarner: true,
+    assignedRaids: {
+      horizon: {
+        goldOverride: "include",
+        modeKey: "hard",
+        G1: { difficulty: "Hard", completedDate: null },
+        G2: { difficulty: "Hard", completedDate: null },
+      },
+    },
+  }), buckets);
+
+  assert.equal(summary.goldDelta.total, 40000);
+  assert.deepEqual(summary.goldDelta.byChar, [
+    {
+      accountName: "Roster",
+      charName: "Aki",
+      className: "Artist",
+      itemLevel: 1730,
+      gold: 40000,
+      goldBound: 40000,
+    },
+  ]);
+});
+
+test("preview summary skips gold for a raid manually marked as no-gold", () => {
+  const buckets = bucketizeLocalSyncDeltas([
+    {
+      boss: "Arcenos, Vanguard of Fanaticism",
+      difficulty: "Hard",
+      cleared: true,
+      charName: "Aki",
+      lastClearMs: 12345,
+    },
+  ]);
+
+  const summary = projectSummary(makeAccounts({
+    name: "Aki",
+    class: "Artist",
+    itemLevel: 1730,
+    isGoldEarner: true,
+    assignedRaids: {
+      horizon: {
+        goldOverride: "exclude",
+        modeKey: "hard",
+        G1: { difficulty: "Hard", completedDate: null },
+        G2: { difficulty: "Hard", completedDate: null },
+      },
+    },
+  }), buckets);
+
+  assert.equal(summary.goldDelta.total, 0);
+  assert.equal(summary.goldDelta.boundTotal, 0);
+  assert.deepEqual(summary.goldDelta.byChar, []);
 });
 
 test("preview summary marks fully-cleared raid as done", () => {
@@ -177,11 +274,11 @@ test("preview summary marks fully-cleared raid as done", () => {
   }), []);
 
   assert.deepEqual(summary.completion, {
-    totalRaids: 3,
+    totalRaids: 4,
     cleared: 1,
     projected: 1,
-    percent: 33,
-    projectedPercent: 33,
+    percent: 25,
+    projectedPercent: 25,
   });
   // The character still has other eligible raids pending, so it remains
   // in charsAfterSync with the completed raid shown as done.
@@ -195,6 +292,7 @@ test("preview summary marks fully-cleared raid as done", () => {
         { raidKey: "armoche", modeKey: "hard", status: "done", incoming: false },
         { raidKey: "kazeros", modeKey: "hard", status: "pending", incoming: false },
         { raidKey: "serca", modeKey: "nightmare", status: "pending", incoming: false },
+        { raidKey: "horizon", modeKey: "nightmare", status: "pending", incoming: false },
       ],
     },
   ]);
@@ -233,11 +331,11 @@ test("preview summary keeps fully done sync chars visible beside gold", () => {
   }), buckets);
 
   assert.deepEqual(summary.completion, {
-    totalRaids: 3,
+    totalRaids: 4,
     cleared: 2,
     projected: 3,
-    percent: 67,
-    projectedPercent: 100,
+    percent: 50,
+    projectedPercent: 75,
   });
   assert.equal(summary.goldDelta.total, 44000);
   assert.equal(summary.goldDelta.boundTotal, 0); // all-Hard clears = unbound
@@ -251,6 +349,7 @@ test("preview summary keeps fully done sync chars visible beside gold", () => {
         { raidKey: "armoche", modeKey: "hard", status: "done", incoming: false },
         { raidKey: "kazeros", modeKey: "hard", status: "done", incoming: false },
         { raidKey: "serca", modeKey: "hard", status: "done", incoming: true },
+        { raidKey: "horizon", modeKey: "hard", status: "pending", incoming: false },
       ],
     },
   ]);
@@ -276,7 +375,7 @@ test("preview summary includes eligible chars with no assigned raid state", () =
   }), []);
 
   assert.deepEqual(summary.completion, {
-    totalRaids: 3,
+    totalRaids: 4,
     cleared: 0,
     projected: 0,
     percent: 0,
@@ -292,6 +391,7 @@ test("preview summary includes eligible chars with no assigned raid state", () =
         { raidKey: "armoche", modeKey: "normal", status: "pending", incoming: false },
         { raidKey: "kazeros", modeKey: "normal", status: "pending", incoming: false },
         { raidKey: "serca", modeKey: "normal", status: "pending", incoming: false },
+        { raidKey: "horizon", modeKey: "normal", status: "pending", incoming: false },
       ],
     },
   ]);

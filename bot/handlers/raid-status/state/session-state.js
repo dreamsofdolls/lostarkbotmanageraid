@@ -39,6 +39,7 @@ async function createRaidStatusSessionState({
   let raidDropdownEntries = [];
   let totalRaidPending = 0;
   const taskCharFilterByPage = new Map();
+  const goldCharFilterByPage = new Map();
   const raidGetter = createRaidGetter({ getStatusRaidsForCharacter });
   const totalCharacters = countCharacters(accounts);
 
@@ -106,7 +107,13 @@ async function createRaidStatusSessionState({
     getTaskCharFilter(page) {
       return taskCharFilterByPage.get(page);
     },
+    getGoldCharFilter(page) {
+      return goldCharFilterByPage.get(page);
+    },
     reloadViewerAccounts,
+    setGoldCharFilterForPage(page, value) {
+      goldCharFilterByPage.set(page, value);
+    },
     setTaskCharFilterForPage(page, value) {
       taskCharFilterByPage.set(page, value);
     },
@@ -149,6 +156,9 @@ function createRaidStatusComponentSession({
     },
     setTaskCharFilterForPage(page, value) {
       state.setTaskCharFilterForPage(page, value);
+    },
+    setGoldCharFilterForPage(page, value) {
+      state.setGoldCharFilterForPage(page, value);
     },
   };
 }

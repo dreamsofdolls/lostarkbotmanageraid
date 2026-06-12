@@ -15,6 +15,7 @@ const {
 
 function createHandlerHarness() {
   const taskFilters = new Map();
+  const goldFilters = new Map();
   const session = {
     accounts: [{ accountName: "Roster A" }, { accountName: "Roster B" }],
     currentPage: 1,
@@ -28,6 +29,9 @@ function createHandlerHarness() {
     },
     setTaskCharFilterForPage(page, value) {
       taskFilters.set(page, value);
+    },
+    setGoldCharFilterForPage(page, value) {
+      goldFilters.set(page, value);
     },
   };
 
@@ -51,7 +55,7 @@ function createHandlerHarness() {
     buildMyRaidDetailEmbed: () => ({}),
   });
 
-  return { handlers, session, taskFilters };
+  return { handlers, session, taskFilters, goldFilters };
 }
 
 test("raid-status component handlers move pagination through session state", async () => {
@@ -65,7 +69,7 @@ test("raid-status component handlers move pagination through session state", asy
 });
 
 test("raid-status component handlers update filter and task view state", async () => {
-  const { handlers, session, taskFilters } = createHandlerHarness();
+  const { handlers, session, taskFilters, goldFilters } = createHandlerHarness();
 
   await handlers[STATUS_COMPONENT_ACTION.raidFilter]({ values: ["serca"] });
   assert.equal(session.filterRaidId, "serca");
@@ -78,4 +82,10 @@ test("raid-status component handlers update filter and task view state", async (
 
   await handlers[STATUS_COMPONENT_ACTION.taskCharFilter]({ values: ["Aki"] });
   assert.equal(taskFilters.get(session.currentPage), "Aki");
+
+  await handlers[STATUS_COMPONENT_ACTION.viewToggle]({ values: ["gold"] });
+  assert.equal(session.currentView, "gold");
+
+  await handlers[STATUS_COMPONENT_ACTION.goldCharFilter]({ values: ["Goldie"] });
+  assert.equal(goldFilters.get(session.currentPage), "Goldie");
 });

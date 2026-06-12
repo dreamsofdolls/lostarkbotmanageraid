@@ -89,6 +89,9 @@ function clearCharacterProgress(character, { preserveSinceMs = null } = {}) {
   const assignedRaids = character.assignedRaids || {};
   for (const raidKey of RAID_GROUP_KEYS) {
     if (!assignedRaids[raidKey]) continue;
+    delete assignedRaids[raidKey].goldOverride;
+    delete assignedRaids[raidKey].goldDisabled;
+    delete assignedRaids[raidKey].goldForced;
     const gateKeys = Object.keys(assignedRaids[raidKey] || {}).filter((gate) => /^G\d+$/i.test(gate));
     for (const gate of gateKeys) {
       if (!assignedRaids[raidKey][gate]) continue;
