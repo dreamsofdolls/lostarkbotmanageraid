@@ -250,12 +250,16 @@ function createRaidStatusView(deps) {
     // Lang threads through every render path. Default to the system
     // default ("vi") so older callers that haven't been migrated yet
     // still get sensible output - i18n.t() falls back gracefully.
-    const { hideIneligibleChars = false, lang = "vi" } = options;
+    const {
+      hideIneligibleChars = false,
+      getProgressRaidsFor = getRaidsFor,
+      lang = "vi",
+    } = options;
     const characters = Array.isArray(account.characters) ? account.characters : [];
 
     const accountRaids = [];
     for (const character of characters) {
-      accountRaids.push(...getRaidsFor(character));
+      accountRaids.push(...getProgressRaidsFor(character));
     }
     const accountProgress = summarizeRaidProgress(accountRaids);
 

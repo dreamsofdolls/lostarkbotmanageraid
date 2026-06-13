@@ -47,7 +47,13 @@ function createRaidStatusRenderPayload({
     }
 
     const getProgressRaidsFor = (ch) => baseGetRaidsFor(ch).filter(isGoldProgressRaid);
-    const getRaidsFor = filterRaidId
+    const getDisplayRaidsFor = filterRaidId
+      ? (ch) =>
+          baseGetRaidsFor(ch).filter(
+            (r) => `${r.raidKey}:${r.modeKey}` === filterRaidId
+          )
+      : baseGetRaidsFor;
+    const getCountRaidsFor = filterRaidId
       ? (ch) =>
           getProgressRaidsFor(ch).filter(
             (r) => `${r.raidKey}:${r.modeKey}` === filterRaidId
@@ -57,14 +63,14 @@ function createRaidStatusRenderPayload({
     const filteredEntries = [];
     for (const account of accounts) {
       for (const character of account.characters || []) {
-        filteredEntries.push(...getRaidsFor(character));
+        filteredEntries.push(...getCountRaidsFor(character));
       }
     }
 
     const filteredTotals = {
       characters: totalCharacters,
       progress: summarizeRaidProgress(filteredEntries),
-      gold: summarizeGlobalGold(accounts, getRaidsFor),
+      gold: summarizeGlobalGold(accounts, getDisplayRaidsFor),
     };
 
     return buildAccountPageEmbed(
@@ -72,9 +78,13 @@ function createRaidStatusRenderPayload({
       currentPage,
       accounts.length,
       filteredTotals,
-      getRaidsFor,
+      getDisplayRaidsFor,
       getStatusUserMeta(),
-      { hideIneligibleChars: !!filterRaidId, lang }
+      {
+        hideIneligibleChars: !!filterRaidId,
+        getProgressRaidsFor: getCountRaidsFor,
+        lang,
+      }
     );
   };
 
