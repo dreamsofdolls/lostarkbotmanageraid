@@ -208,7 +208,7 @@ test("REGRESSION: raid-status shared roster background uses the viewer image poo
   assert.equal(lookup.cacheKey, "viewer-b:shared roster");
 });
 
-test("REGRESSION: raid-status progress view excludes raids that do not receive gold", () => {
+test("REGRESSION: raid-status progress view displays all raids but counts only gold slots", () => {
   const character = { name: "Aki" };
   const accounts = [{ accountName: "Alpha", characters: [character] }];
   const raids = [
@@ -217,6 +217,7 @@ test("REGRESSION: raid-status progress view excludes raids that do not receive g
   ];
   let capturedTotals = null;
   let capturedRaids = null;
+  let capturedProgressRaids = null;
 
   const { buildCurrentEmbed } = createRaidStatusRenderPayload({
     discordId: "viewer",
@@ -229,9 +230,10 @@ test("REGRESSION: raid-status progress view excludes raids that do not receive g
     totalCharacters: 1,
     summarizeRaidProgress: (entries) => ({ completed: 0, partial: 0, total: entries.length }),
     summarizeGlobalGold: () => ({ earned: 0, total: 0 }),
-    buildAccountPageEmbed: (account, pageIndex, totalPages, globalTotals, getRaidsFor) => {
+    buildAccountPageEmbed: (account, pageIndex, totalPages, globalTotals, getRaidsFor, userMeta, options) => {
       capturedTotals = globalTotals;
       capturedRaids = getRaidsFor(character);
+      capturedProgressRaids = options.getProgressRaidsFor(character);
       return {};
     },
     buildGoldViewEmbed: () => ({}),
@@ -241,7 +243,8 @@ test("REGRESSION: raid-status progress view excludes raids that do not receive g
 
   buildCurrentEmbed();
 
-  assert.deepEqual(capturedRaids.map((raid) => raid.raidKey), ["armoche"]);
+  assert.deepEqual(capturedRaids.map((raid) => raid.raidKey), ["armoche", "horizon"]);
+  assert.deepEqual(capturedProgressRaids.map((raid) => raid.raidKey), ["armoche"]);
   assert.equal(capturedTotals.progress.total, 1);
 });
 
@@ -1017,11 +1020,13 @@ test("buildAccountPageEmbed: real 1710 gold-earner with no clears still shows 0G
     0,
     1,
     { progress: { completed: 0, partial: 0, total: 3 }, characters: 1 },
-    getStatusProgressRaidsForCharacter
+    getStatusRaidsForCharacter,
+    null,
+    { getProgressRaidsFor: getStatusProgressRaidsForCharacter }
   );
   const charField = embed.toJSON().fields.find((f) => /Qiaoli/.test(f.name));
   assert.ok(charField, "char field should be present");
-  assert.doesNotMatch(charField.value, /Horizon/);
+  assert.match(charField.value, /Horizon/);
   assert.match(charField.value, /💰 0G/);
 });
 
