@@ -1,15 +1,16 @@
 /**
  * handlers/raid-status/raid-filter.js
  * Inline raid-filter dropdown for /raid-status · aggregates every
- * raid currently eligible across the viewer's roster, exposes them
- * as dropdown options, and filters the rendered embed to the
- * selected raid. The sentinel FILTER_ALL_RAIDS value lets the user
- * reset to the cross-raid overview.
+ * gold-receiving raid currently visible in the viewer's progress
+ * roster, exposes them as dropdown options, and filters the rendered
+ * embed to the selected raid. The sentinel FILTER_ALL_RAIDS value
+ * lets the user reset to the cross-raid overview.
  */
 
 const { isSupportClass } = require("../../models/Class");
 const { compareRaidModeOrder } = require("../../models/Raid");
 const { t } = require("../../services/i18n");
+const { isGoldProgressRaid } = require("../../utils/raid/common/character");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 
 const FILTER_ALL_RAIDS = "__all_raids__";
@@ -20,6 +21,7 @@ function buildRaidDropdownState(accounts, getRaidsFor) {
     for (const ch of account.characters || []) {
       const charIsSupport = isSupportClass(ch?.class);
       for (const raid of getRaidsFor(ch)) {
+        if (!isGoldProgressRaid(raid)) continue;
         const key = `${raid.raidKey}:${raid.modeKey}`;
         let entry = raidAggregate.get(key);
         if (!entry) {

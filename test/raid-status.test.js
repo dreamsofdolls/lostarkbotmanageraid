@@ -30,6 +30,9 @@ const {
   createRaidStatusCommand,
   _resolveBackgroundLookup,
 } = require("../bot/handlers/raid-status");
+const {
+  createRaidStatusRenderPayload,
+} = require("../bot/handlers/raid-status/view/render-payload");
 const { createRaidStatusTaskUi } = require("../bot/handlers/raid-status/task/task-ui");
 const { createRaidStatusGoldUi } = require("../bot/handlers/raid-status/gold/gold-ui");
 const {
@@ -52,6 +55,7 @@ const {
   computeRaidGold,
   formatRaidStatusLine,
   getStatusRaidsForCharacter,
+  getStatusProgressRaidsForCharacter,
   ensureAssignedRaids,
   RAID_REQUIREMENT_MAP,
 } = require("../bot/utils/raid/common/character");
@@ -202,6 +206,43 @@ test("REGRESSION: raid-status shared roster background uses the viewer image poo
   assert.equal(lookup.discordId, "viewer-b");
   assert.equal(lookup.accountName, "Shared Roster");
   assert.equal(lookup.cacheKey, "viewer-b:shared roster");
+});
+
+test("REGRESSION: raid-status progress view excludes raids that do not receive gold", () => {
+  const character = { name: "Aki" };
+  const accounts = [{ accountName: "Alpha", characters: [character] }];
+  const raids = [
+    { raidKey: "armoche", modeKey: "normal", raidName: "Act 4 Normal", isCompleted: false, goldReceives: true },
+    { raidKey: "horizon", modeKey: "normal", raidName: "Horizon Level 1", isCompleted: false, goldReceives: false },
+  ];
+  let capturedTotals = null;
+  let capturedRaids = null;
+
+  const { buildCurrentEmbed } = createRaidStatusRenderPayload({
+    discordId: "viewer",
+    getAccounts: () => accounts,
+    getCurrentPage: () => 0,
+    getCurrentView: () => "raid",
+    getFilterRaidId: () => null,
+    getStatusUserMeta: () => ({}),
+    baseGetRaidsFor: () => raids,
+    totalCharacters: 1,
+    summarizeRaidProgress: (entries) => ({ completed: 0, partial: 0, total: entries.length }),
+    summarizeGlobalGold: () => ({ earned: 0, total: 0 }),
+    buildAccountPageEmbed: (account, pageIndex, totalPages, globalTotals, getRaidsFor) => {
+      capturedTotals = globalTotals;
+      capturedRaids = getRaidsFor(character);
+      return {};
+    },
+    buildGoldViewEmbed: () => ({}),
+    buildTaskViewEmbed: () => ({}),
+    lang: "vi",
+  });
+
+  buildCurrentEmbed();
+
+  assert.deepEqual(capturedRaids.map((raid) => raid.raidKey), ["armoche"]);
+  assert.equal(capturedTotals.progress.total, 1);
 });
 
 // --------- buildAccountPageEmbed ---------
@@ -580,6 +621,19 @@ test("getStatusRaidsForCharacter: reduced normal raids still auto-count because 
   assert.equal(totals.totalUnbound, 54000);
 });
 
+test("getStatusProgressRaidsForCharacter: 1700 chars auto-count the only unbound gold raid", () => {
+  const char = makeChar("Fresh1700", 1700, { isGoldEarner: true });
+  const allRaids = getStatusRaidsForCharacter(char);
+  const progressRaids = getStatusProgressRaidsForCharacter(char);
+
+  assert.ok(allRaids.find((raid) => raid.raidKey === "horizon"), "gold setup still sees Horizon");
+  assert.deepEqual(
+    progressRaids.map((raid) => raid.raidKey),
+    ["armoche"],
+  );
+  assert.equal(progressRaids[0].goldReceives, true);
+});
+
 test("getStatusRaidsForCharacter: counts the first 3 completed raids by completion time", () => {
   const char = {
     ...makeChar("FourDone", 1730),
@@ -787,6 +841,21 @@ test("buildRaidDropdownState: orders the filter dropdown by raid progression, no
   );
 });
 
+test("buildRaidDropdownState: excludes raids that do not receive gold", () => {
+  const raids = [
+    { raidKey: "armoche", modeKey: "normal", raidName: "Act 4 Normal", isCompleted: false, goldReceives: true },
+    { raidKey: "horizon", modeKey: "normal", raidName: "Horizon Level 1", isCompleted: false, goldReceives: false },
+  ];
+  const accounts = [{ characters: [{ class: "Sorceress" }] }];
+  const { raidDropdownEntries, totalRaidPending } = buildRaidDropdownState(accounts, () => raids);
+
+  assert.deepEqual(
+    raidDropdownEntries.map((r) => r.key),
+    ["armoche:normal"],
+  );
+  assert.equal(totalRaidPending, 1);
+});
+
 test("formatRaidStatusLine: bound-gold raids get a trailing lock", () => {
   const raid = {
     raidName: "Horizon Level 3",
@@ -947,11 +1016,12 @@ test("buildAccountPageEmbed: real 1710 gold-earner with no clears still shows 0G
     account,
     0,
     1,
-    { progress: { completed: 0, partial: 0, total: 4 }, characters: 1 },
-    getStatusRaidsForCharacter
+    { progress: { completed: 0, partial: 0, total: 3 }, characters: 1 },
+    getStatusProgressRaidsForCharacter
   );
   const charField = embed.toJSON().fields.find((f) => /Qiaoli/.test(f.name));
   assert.ok(charField, "char field should be present");
+  assert.doesNotMatch(charField.value, /Horizon/);
   assert.match(charField.value, /💰 0G/);
 });
 
