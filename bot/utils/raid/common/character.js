@@ -244,6 +244,14 @@ function getStatusRaidsForCharacter(character) {
   return applyCharacterGoldCap(sorted);
 }
 
+function isGoldProgressRaid(raid) {
+  return raid?.goldReceives !== false;
+}
+
+function getStatusProgressRaidsForCharacter(character) {
+  return getStatusRaidsForCharacter(character).filter(isGoldProgressRaid);
+}
+
 // 3-state aggregate icon for a (done, total) pair. Shared by /raid-status's
 // per-raid line AND /raid-check's per-char card so both commands surface the
 // same visual vocabulary: 🟢 = all done, 🟡 = at least 1 done but not all,
@@ -418,6 +426,8 @@ module.exports = {
   buildCharacterRecord,
   ensureRaidEntries,
   getStatusRaidsForCharacter,
+  getStatusProgressRaidsForCharacter,
+  isGoldProgressRaid,
   pickProgressIcon,
   formatRaidStatusLine,
   summarizeRaidProgress,

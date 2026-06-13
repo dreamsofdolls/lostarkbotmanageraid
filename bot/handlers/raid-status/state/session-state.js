@@ -47,6 +47,9 @@ async function createRaidStatusSessionState({
     const nextState = buildRaidDropdownState(accounts, raidGetter.getRaidsFor);
     raidDropdownEntries = nextState.raidDropdownEntries;
     totalRaidPending = nextState.totalRaidPending;
+    if (filterRaidId && !raidDropdownEntries.some((entry) => entry.key === filterRaidId)) {
+      filterRaidId = null;
+    }
   };
   recomputeRaidAggregate();
 
