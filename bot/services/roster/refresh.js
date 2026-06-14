@@ -48,6 +48,7 @@ function isRateLimitMessage(message) {
  *   hasStaleAccountRefreshes: Function,
  *   formatRosterRefreshCooldownRemaining: Function,
  *   collectStaleAccountRefreshes: Function,
+ *   collectAccountRefresh: Function,
  *   applyStaleAccountRefreshes: Function,
  * }}
  */
@@ -105,6 +106,12 @@ function createRosterRefreshService(deps) {
     const accountName = normalizeName(account?.accountName);
     if (!discordId || !accountName) return null;
     return `${discordId}:${accountName}`;
+  }
+
+  function findAccountByName(userDoc, accountName) {
+    const target = normalizeName(accountName);
+    if (!target || !Array.isArray(userDoc?.accounts)) return null;
+    return userDoc.accounts.find((account) => normalizeName(account?.accountName) === target) || null;
   }
 
   async function collectOneStaleAccountRefresh(userDoc, account, otherAccountNames) {
@@ -248,6 +255,23 @@ function createRosterRefreshService(deps) {
     return collected;
   }
 
+  async function collectAccountRefresh(userDoc, accountName) {
+    const originalName = String(accountName || "").trim();
+    const account = findAccountByName(userDoc, originalName);
+    if (!account) {
+      return {
+        accountName: originalName,
+        fetchedChars: null,
+        resolvedSeed: null,
+        attempted: false,
+        missing: true,
+      };
+    }
+
+    const otherAccountNames = userDoc.accounts.map((a) => normalizeName(a?.accountName));
+    return collectOneStaleAccountRefreshDeduped(userDoc, account, otherAccountNames);
+  }
+
   function applyStaleAccountRefreshes(userDoc, collected) {
     if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
       return false;
@@ -319,6 +343,7 @@ function createRosterRefreshService(deps) {
     hasStaleAccountRefreshes,
     formatRosterRefreshCooldownRemaining,
     collectStaleAccountRefreshes,
+    collectAccountRefresh,
     applyStaleAccountRefreshes,
   };
 }

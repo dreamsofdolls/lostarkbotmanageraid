@@ -83,6 +83,7 @@ function createRaidStatusRenderPayload({
       {
         hideIneligibleChars: !!filterRaidId,
         getProgressRaidsFor: getCountRaidsFor,
+        showCharacterGold: !filterRaidId,
         lang,
       }
     );

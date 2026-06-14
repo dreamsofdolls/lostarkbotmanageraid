@@ -98,7 +98,8 @@ function createRaidStatusView(deps) {
     return [`💰 ${formatGold(earned)}${boundTail}`];
   }
 
-  function buildCharacterField(character, getRaidsFor, lang) {
+  function buildCharacterField(character, getRaidsFor, lang, options = {}) {
+    const { showGold = true } = options;
     const name = getCharacterName(character);
     const itemLevel = Number(character.itemLevel) || 0;
     // Class emoji prepended to char name when the class is mapped in
@@ -113,7 +114,9 @@ function createRaidStatusView(deps) {
       ? [`${UI.icons.lock} ${t("raid-status.embed.notEligible", lang)}`]
       : raids.map((raid) => formatRaidStatusLine(raid, lang));
 
-    lines.push(...buildCharacterGoldLine(character, raids, lang));
+    if (showGold) {
+      lines.push(...buildCharacterGoldLine(character, raids, lang));
+    }
 
     return {
       name: fieldName,
@@ -253,6 +256,7 @@ function createRaidStatusView(deps) {
     const {
       hideIneligibleChars = false,
       getProgressRaidsFor = getRaidsFor,
+      showCharacterGold = true,
       lang = "vi",
     } = options;
     const characters = Array.isArray(account.characters) ? account.characters : [];
@@ -416,7 +420,11 @@ function createRaidStatusView(deps) {
     }
 
     embed.addFields(
-      ...pack2Columns(visibleChars.map((c) => buildCharacterField(c, getRaidsFor, lang)))
+      ...pack2Columns(
+        visibleChars.map((c) =>
+          buildCharacterField(c, getRaidsFor, lang, { showGold: showCharacterGold })
+        )
+      )
     );
 
     appendOutcomeField();

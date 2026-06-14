@@ -52,6 +52,37 @@ function redraw() {
   return { redraw: true };
 }
 
+function buildRosterRefreshFollowupPayload(result, lang) {
+  const accountName = result?.accountName || "?";
+  if (result?.status === "updated") {
+    return {
+      type: "success",
+      title: t("raid-status.sync.rosterRefreshSuccessTitle", lang),
+      description: t("raid-status.sync.rosterRefreshSuccessDescription", lang, {
+        accountName,
+      }),
+    };
+  }
+
+  if (result?.status === "attempted" || result?.status === "skipped") {
+    return {
+      type: "warn",
+      title: t("raid-status.sync.rosterRefreshNoUpdateTitle", lang),
+      description: t("raid-status.sync.rosterRefreshNoUpdateDescription", lang, {
+        accountName,
+      }),
+    };
+  }
+
+  return {
+    type: "warn",
+    title: t("raid-status.sync.rosterRefreshMissingTitle", lang),
+    description: t("raid-status.sync.rosterRefreshMissingDescription", lang, {
+      accountName,
+    }),
+  };
+}
+
 function createStatusComponentRouteHandlers(ctx) {
   const {
     session,
@@ -69,6 +100,7 @@ function createStatusComponentRouteHandlers(ctx) {
     buildEmbedAndCanvas,
     buildComponents,
     runManualStatusSync,
+    runManualRosterRefresh,
     formatNextCooldownRemaining,
     formatGold,
     truncateText,
@@ -182,6 +214,79 @@ function createStatusComponentRouteHandlers(ctx) {
         title: t("raid-status.sync.localRefreshSuccessTitle", lang),
         description: t("raid-status.sync.localRefreshSuccessDescription", lang),
       }).catch(() => {});
+      return noRedraw();
+    },
+
+    [STATUS_COMPONENT_ACTION.rosterRefresh]: async (component) => {
+      const targetAccount = session.accounts[session.currentPage];
+      const targetAccountName = targetAccount?.accountName || "";
+      const sharedFrom = targetAccount?._sharedFrom;
+      if (!targetAccountName) {
+        await replyNotice(component, EmbedBuilder, {
+          type: "warn",
+          title: t("raid-status.sync.rosterRefreshMissingTitle", lang),
+          description: t("raid-status.sync.rosterRefreshMissingDescription", lang, {
+            accountName: "?",
+          }),
+        }).catch(() => {});
+        return noRedraw();
+      }
+      if (sharedFrom && sharedFrom.accessLevel !== "edit") {
+        await replyNotice(component, EmbedBuilder, {
+          type: "lock",
+          title: t("raid-status.sync.rosterRefreshSharedLockedTitle", lang),
+          description: t("raid-status.sync.rosterRefreshSharedLockedDescription", lang),
+        }).catch(() => {});
+        return noRedraw();
+      }
+      if (typeof runManualRosterRefresh !== "function") {
+        await replyNotice(component, EmbedBuilder, {
+          type: "error",
+          title: t("raid-status.sync.rosterRefreshFailedTitle", lang),
+          description: t("raid-status.sync.rosterRefreshFailedDescription", lang, {
+            error: "manual refresh service unavailable",
+          }),
+        }).catch(() => {});
+        return noRedraw();
+      }
+
+      const deferred = await component.deferUpdate().then(() => true).catch((err) => {
+        console.warn("[raid-status] roster-refresh defer failed:", err?.message || err);
+        return false;
+      });
+      if (!deferred) return noRedraw();
+
+      const writeDiscordId = sharedFrom ? sharedFrom.ownerDiscordId : discordId;
+      try {
+        const result = await runManualRosterRefresh(writeDiscordId, targetAccountName);
+        await reloadViewerAccounts(writeDiscordId === discordId ? result.userDoc : null);
+        session.statusUserMeta = buildStatusUserMeta(
+          session.userDoc,
+          session.statusUserMeta?.piggybackOutcome || null
+        );
+
+        await interaction.editReply({
+          ...(await buildEmbedAndCanvas()),
+          components: buildComponents(false),
+        }).catch((err) => {
+          console.warn("[raid-status] roster-refresh editReply failed:", err?.message || err);
+        });
+
+        await followUpNotice(
+          component,
+          EmbedBuilder,
+          buildRosterRefreshFollowupPayload(result, lang)
+        ).catch(() => {});
+      } catch (err) {
+        console.error("[raid-status] roster-refresh failed:", err?.message || err);
+        await followUpNotice(component, EmbedBuilder, {
+          type: "error",
+          title: t("raid-status.sync.rosterRefreshFailedTitle", lang),
+          description: t("raid-status.sync.rosterRefreshFailedDescription", lang, {
+            error: err?.message || String(err),
+          }),
+        }).catch(() => {});
+      }
       return noRedraw();
     },
 

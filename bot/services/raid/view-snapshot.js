@@ -13,6 +13,9 @@ const {
   stampAutoManageAttemptFromReport,
   syncRaidProfileAfterAutoManageReport,
 } = require("../auto-manage/reports/utils");
+const {
+  isAutoManageAttemptStale,
+} = require("../auto-manage/runtime/support/freshness");
 
 function toPlainUserSnapshot(userDoc) {
   if (!userDoc) return null;
@@ -89,7 +92,11 @@ function createRaidViewSnapshotService({
     try {
       let autoManagePromise = Promise.resolve(null);
       let autoManageWeekResetStart = null;
-      if (allowAutoManage && seedDoc.autoManageEnabled) {
+      if (
+        allowAutoManage &&
+        seedDoc.autoManageEnabled &&
+        isAutoManageAttemptStale(seedDoc)
+      ) {
         autoManageGuard = await acquireAutoManageSyncSlot(discordId);
         if (autoManageGuard.acquired) {
           autoManageWeekResetStart = weekResetStartMs();
@@ -187,7 +194,11 @@ function createRaidViewSnapshotService({
     ) {
       return true;
     }
-    return Boolean(allowAutoManage && seedDoc.autoManageEnabled);
+    return Boolean(
+      allowAutoManage &&
+        seedDoc.autoManageEnabled &&
+        isAutoManageAttemptStale(seedDoc)
+    );
   }
 
   return {

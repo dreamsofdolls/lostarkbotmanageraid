@@ -93,6 +93,42 @@ function buildViewToggleButton({
   return createButton({ ButtonBuilder, disabled, ...configs[targetView] });
 }
 
+function buildRosterRefreshButton({
+  ButtonBuilder,
+  ButtonStyle,
+  t,
+  lang,
+  disabled,
+}) {
+  return createButton({
+    ButtonBuilder,
+    customId: "raid-check-all:roster-refresh",
+    label: t("raid-check.buttons.refreshRoster", lang),
+    emoji: "\u{1f504}",
+    style: ButtonStyle.Secondary,
+    disabled,
+  });
+}
+
+function buildAllModeRosterRefreshRow({
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  t,
+  lang,
+  disabled,
+}) {
+  return new ActionRowBuilder().addComponents(
+    buildRosterRefreshButton({
+      ButtonBuilder,
+      ButtonStyle,
+      t,
+      lang,
+      disabled,
+    })
+  );
+}
+
 function addAllModeActionButtons({
   row,
   ButtonBuilder,
@@ -152,6 +188,8 @@ function addAllModeActionButtons({
 
 module.exports = {
   addAllModeActionButtons,
+  buildAllModeRosterRefreshRow,
   buildAutoSyncButton,
+  buildRosterRefreshButton,
   buildViewToggleButton,
 };

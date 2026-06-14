@@ -5,20 +5,22 @@ const {
   toPlainUserDoc,
   syncRaidProfileAfterAutoManageReport,
 } = require("../../auto-manage/reports/utils");
+const {
+  AUTO_MANAGE_BACKGROUND_STALE_MS,
+  buildAutoManageAttemptStaleFilter,
+} = require("../../auto-manage/runtime/support/freshness");
 const { createNonOverlappingIntervalRunner } = require("./scheduler-runner");
 
 const AUTO_MANAGE_DAILY_TICK_MS = 30 * 60 * 1000;
-const AUTO_MANAGE_DAILY_CUTOFF_MS = 24 * 60 * 60 * 1000;
-const AUTO_MANAGE_DAILY_BATCH_SIZE = 3;
+const AUTO_MANAGE_DAILY_CUTOFF_MS = AUTO_MANAGE_BACKGROUND_STALE_MS;
+const AUTO_MANAGE_DAILY_BATCH_SIZE = 6;
 
 function buildAutoManageDailyCandidateQuery(cutoff) {
   return {
     autoManageEnabled: true,
+    localSyncEnabled: { $ne: true },
     "accounts.0": { $exists: true },
-    $or: [
-      { lastAutoManageSyncAt: null },
-      { lastAutoManageSyncAt: { $lt: cutoff } },
-    ],
+    ...buildAutoManageAttemptStaleFilter(cutoff),
   };
 }
 
@@ -163,7 +165,7 @@ function createAutoManageDailySchedulerService({
   async function runAutoManageDailyTick(client) {
     if (processEnv.AUTO_MANAGE_DAILY_DISABLED === "true") return;
 
-    const cutoff = Date.now() - AUTO_MANAGE_DAILY_CUTOFF_MS;
+    const cutoff = Date.now() - AUTO_MANAGE_BACKGROUND_STALE_MS;
     const candidates = await User.find(buildAutoManageDailyCandidateQuery(cutoff))
       .sort({ lastAutoManageAttemptAt: 1 })
       .limit(AUTO_MANAGE_DAILY_BATCH_SIZE)
@@ -221,6 +223,7 @@ module.exports = {
   AUTO_MANAGE_DAILY_TICK_MS,
   AUTO_MANAGE_DAILY_CUTOFF_MS,
   AUTO_MANAGE_DAILY_BATCH_SIZE,
+  AUTO_MANAGE_BACKGROUND_STALE_MS,
   buildAutoManageDailyCandidateQuery,
   createAutoManageDailySchedulerService,
   shouldNudgePrivateLogUser,

@@ -1,11 +1,19 @@
 "use strict";
 
-const { buildNoticeEmbed, replyNotice, UI } = require("../../../utils/raid/common/shared");
+const {
+  buildNoticeEmbed,
+  followUpNotice,
+  replyNotice,
+  UI,
+} = require("../../../utils/raid/common/shared");
 const { firstSelectValue } = require("../../../utils/discord/component-values");
 const { t, getUserLanguage } = require("../../../services/i18n");
 const { createTeamsViewUi } = require("../views/teams-view");
 const { computeAllModePendingAggregate } = require("./all-mode-aggregate");
-const { addAllModeActionButtons } = require("./all-mode-buttons");
+const {
+  addAllModeActionButtons,
+  buildAllModeRosterRefreshRow,
+} = require("./all-mode-buttons");
 const {
   FILTER_ALL,
   FILTER_ALL_RAIDS,
@@ -24,6 +32,39 @@ const {
   RAID_CHECK_ALL_COMPONENT_ACTION,
   getRaidCheckAllComponentRoute,
 } = require("./all-mode-routes");
+
+function buildRaidCheckRosterRefreshNoticePayload(result, lang) {
+  const accountName = result?.accountName || "?";
+  const target = result?.discordId ? `<@${result.discordId}>` : "?";
+  if (result?.status === "updated") {
+    return {
+      type: "success",
+      title: t("raid-check.refreshFlow.successTitle", lang),
+      description: t("raid-check.refreshFlow.successDescription", lang, {
+        accountName,
+        target,
+      }),
+    };
+  }
+  if (result?.status === "attempted" || result?.status === "skipped") {
+    return {
+      type: "warn",
+      title: t("raid-check.refreshFlow.noUpdateTitle", lang),
+      description: t("raid-check.refreshFlow.noUpdateDescription", lang, {
+        accountName,
+        target,
+      }),
+    };
+  }
+  return {
+    type: "warn",
+    title: t("raid-check.refreshFlow.missingTitle", lang),
+    description: t("raid-check.refreshFlow.missingDescription", lang, {
+      accountName,
+      target,
+    }),
+  };
+}
 
 function createAllModeHandler({
   ActionRowBuilder,
@@ -46,6 +87,7 @@ function createAllModeHandler({
   raidCheckRefreshLimiter,
   loadFreshUserSnapshotForRaidViews,
   shouldLoadFreshUserSnapshotForRaidViews,
+  runManualRosterRefresh,
   RAID_CHECK_USER_QUERY_FIELDS,
   RAID_CHECK_PAGINATION_SESSION_MS,
   RaidEvent,
@@ -160,6 +202,18 @@ function createAllModeHandler({
     const renderEmbed = (pageIndex) =>
       currentView === "task" ? buildTaskPage(pageIndex) : buildRaidPage(pageIndex);
 
+    const applyRefreshedUserDoc = (userDoc) => {
+      if (!userDoc?.discordId || !Array.isArray(userDoc.accounts)) return;
+      const userIndex = users.findIndex((user) => user.discordId === userDoc.discordId);
+      if (userIndex >= 0) users[userIndex] = userDoc;
+      for (const page of pagesData) {
+        if (page.userDoc?.discordId !== userDoc.discordId) continue;
+        page.userDoc = userDoc;
+        const freshAccount = userDoc.accounts[page.accountIdx];
+        if (freshAccount) page.account = freshAccount;
+      }
+    };
+
     const applyUserFilter = (pickedValue) => {
       filterUserId = pickedValue === FILTER_ALL ? null : pickedValue;
       if (filterUserId === null) {
@@ -210,6 +264,18 @@ function createAllModeHandler({
       return row;
     };
 
+    const buildRosterRefreshRow = (disabled) => {
+      if (currentView !== "raid") return null;
+      return buildAllModeRosterRefreshRow({
+        ActionRowBuilder,
+        ButtonBuilder,
+        ButtonStyle,
+        t,
+        lang,
+        disabled,
+      });
+    };
+
     const buildFilterRow = (disabled) =>
       buildAllModeUserFilterRow({
         ActionRowBuilder,
@@ -242,7 +308,10 @@ function createAllModeHandler({
       guildId: interaction.guildId || interaction.guild?.id,
     });
     const buildComponents = (disabled) => {
-      const rows = [buildButtonRow(disabled), buildFilterRow(disabled)];
+      const rows = [buildButtonRow(disabled)];
+      const refreshRow = buildRosterRefreshRow(disabled);
+      if (refreshRow) rows.push(refreshRow);
+      rows.push(buildFilterRow(disabled));
       if (currentView === "raid") {
         rows.push(buildRaidFilterRow(disabled));
       }
@@ -297,6 +366,66 @@ function createAllModeHandler({
           return;
         }
         await updateAllModeMessage(component);
+      },
+      [RAID_CHECK_ALL_COMPONENT_ACTION.rosterRefresh]: async (component) => {
+        const page = pagesData[currentAbsoluteIndex()];
+        const targetDiscordId = page?.userDoc?.discordId || "";
+        const targetAccountName = page?.account?.accountName || "";
+        if (!targetDiscordId || !targetAccountName) {
+          await replyNotice(component, EmbedBuilder, {
+            type: "warn",
+            title: t("raid-check.refreshFlow.missingTitle", lang),
+            description: t("raid-check.refreshFlow.missingDescription", lang, {
+              accountName: targetAccountName || "?",
+              target: targetDiscordId ? `<@${targetDiscordId}>` : "?",
+            }),
+          }).catch(() => {});
+          return;
+        }
+        if (typeof runManualRosterRefresh !== "function") {
+          await replyNotice(component, EmbedBuilder, {
+            type: "error",
+            title: t("raid-check.refreshFlow.failedTitle", lang),
+            description: t("raid-check.refreshFlow.failedDescription", lang, {
+              error: "manual refresh service unavailable",
+            }),
+          }).catch(() => {});
+          return;
+        }
+
+        const deferred = await component.deferUpdate().then(() => true).catch((err) => {
+          console.warn("[raid-check all] roster-refresh defer failed:", err?.message || err);
+          return false;
+        });
+        if (!deferred) return;
+
+        try {
+          const result = await runManualRosterRefresh(targetDiscordId, targetAccountName);
+          applyRefreshedUserDoc(result.userDoc);
+          await interaction.editReply({
+            embeds: [renderEmbed(currentAbsoluteIndex())],
+            components: buildComponents(false),
+          }).catch((err) => {
+            console.warn("[raid-check all] roster-refresh editReply failed:", err?.message || err);
+          });
+          await followUpNotice(
+            component,
+            EmbedBuilder,
+            buildRaidCheckRosterRefreshNoticePayload(
+              { ...result, discordId: targetDiscordId },
+              lang
+            )
+          ).catch(() => {});
+        } catch (err) {
+          console.error("[raid-check all] roster-refresh failed:", err?.message || err);
+          await followUpNotice(component, EmbedBuilder, {
+            type: "error",
+            title: t("raid-check.refreshFlow.failedTitle", lang),
+            description: t("raid-check.refreshFlow.failedDescription", lang, {
+              error: err?.message || String(err),
+            }),
+          }).catch(() => {});
+        }
       },
       [RAID_CHECK_ALL_COMPONENT_ACTION.teamsSelect]: async (component) => {
         const eventId = firstSelectValue(component);

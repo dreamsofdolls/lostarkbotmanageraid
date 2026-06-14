@@ -58,6 +58,21 @@ function buildLocalSyncRefreshButton({
     .setDisabled(disabled);
 }
 
+function buildRosterRefreshButton({
+  ButtonBuilder,
+  ButtonStyle,
+  t,
+  lang,
+  disabled,
+}) {
+  return new ButtonBuilder()
+    .setCustomId("status:roster-refresh")
+    .setLabel(t("raid-status.sync.rosterRefreshButtonLabel", lang))
+    .setEmoji("\u{1f504}")
+    .setStyle(ButtonStyle.Secondary)
+    .setDisabled(disabled);
+}
+
 function buildBibleSyncButton({
   ButtonBuilder,
   ButtonStyle,
@@ -78,5 +93,6 @@ module.exports = {
   buildLocalSyncResumeButton,
   buildLocalSyncNewButton,
   buildLocalSyncRefreshButton,
+  buildRosterRefreshButton,
   buildBibleSyncButton,
 };

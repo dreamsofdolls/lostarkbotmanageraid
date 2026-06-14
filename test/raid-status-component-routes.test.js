@@ -33,6 +33,16 @@ test("raid-status component routes resolve edit-driven controls", () => {
   assert.equal(editDrivenIds.has("status:prev"), true);
   assert.equal(editDrivenIds.has("status-gold:toggle"), true);
   assert.equal(editDrivenIds.has("status:sync"), false);
+  assert.deepEqual(
+    getStatusComponentRoute("status:roster-refresh"),
+    {
+      customId: "status:roster-refresh",
+      action: STATUS_COMPONENT_ACTION.rosterRefresh,
+      editDriven: false,
+      redraw: false,
+    },
+  );
+  assert.equal(editDrivenIds.has("status:roster-refresh"), false);
 });
 
 test("raid-status component routes keep task toggle ids on one action", () => {

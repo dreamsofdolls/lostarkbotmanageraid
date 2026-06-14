@@ -16,6 +16,7 @@ function createRaidStatusComponentLayout({
   buildSyncRow,
   buildLocalSyncNewButton,
   buildLocalSyncRefreshButton,
+  buildRosterRefreshButton,
   buildRaidFilterRow,
   buildMyRaidsRow,
   getAccounts,
@@ -27,6 +28,23 @@ function createRaidStatusComponentLayout({
   getFilterRaidId,
   getMyRaidsShaped,
 }) {
+  const getRowComponentCount = (row) => {
+    if (Array.isArray(row?.components)) return row.components.length;
+    if (Array.isArray(row?.data?.components)) return row.data.components.length;
+    return 0;
+  };
+
+  const addButtonToBestRow = (rows, button) => {
+    if (!button) return;
+    const lastRow = rows[rows.length - 1];
+    if (lastRow && getRowComponentCount(lastRow) < 5) {
+      lastRow.addComponents(button);
+      return;
+    }
+    if (rows.length >= 5) return;
+    rows.push(new ActionRowBuilder().addComponents(button));
+  };
+
   const addTaskViewRows = (rows, disabled) => {
     const accounts = getAccounts();
     const currentPage = getCurrentPage();
@@ -103,6 +121,11 @@ function createRaidStatusComponentLayout({
     }
   };
 
+  const addRosterRefreshRow = (rows, disabled, showRosterRefresh) => {
+    if (!showRosterRefresh) return;
+    addButtonToBestRow(rows, buildRosterRefreshButton(disabled));
+  };
+
   const addRaidFilterRow = (rows, disabled) => {
     const raidDropdownEntries = getRaidDropdownEntries();
     if (raidDropdownEntries.length === 0) return;
@@ -146,12 +169,17 @@ function createRaidStatusComponentLayout({
     }
 
     const currentAccount = accounts[currentPage];
-    const currentPageIsShared = !!currentAccount?._sharedFrom;
+    const sharedFrom = currentAccount?._sharedFrom;
+    const currentPageIsShared = !!sharedFrom;
+    const showRosterRefresh =
+      !!currentAccount?.accountName &&
+      (!sharedFrom || sharedFrom.accessLevel === "edit");
     const statusUserMeta = getStatusUserMeta();
     const anySyncMode = statusUserMeta.autoManageEnabled || statusUserMeta.localSyncEnabled;
     const showSync = anySyncMode && !currentPageIsShared;
 
     addRaidViewNavigationRows(rows, disabled, showSync);
+    addRosterRefreshRow(rows, disabled, showRosterRefresh);
     rows.push(buildViewToggleRow(disabled));
     addRaidFilterRow(rows, disabled);
     addMyRaidsRow(rows, disabled);

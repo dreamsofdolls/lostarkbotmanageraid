@@ -34,6 +34,11 @@ test("raid-check all-mode routes view toggle and pagination payloads", () => {
     pageAction: "next",
     updatesMainMessage: true,
   });
+  assert.deepEqual(getRaidCheckAllComponentRoute("raid-check-all:roster-refresh"), {
+    customId: "raid-check-all:roster-refresh",
+    action: RAID_CHECK_ALL_COMPONENT_ACTION.rosterRefresh,
+    updatesMainMessage: true,
+  });
 });
 
 test("raid-check all-mode routes team selects only when prefix is supplied", () => {

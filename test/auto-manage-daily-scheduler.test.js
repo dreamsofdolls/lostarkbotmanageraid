@@ -4,7 +4,9 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  AUTO_MANAGE_BACKGROUND_STALE_MS,
   AUTO_MANAGE_DAILY_BATCH_SIZE,
+  AUTO_MANAGE_DAILY_CUTOFF_MS,
   buildAutoManageDailyCandidateQuery,
   createAutoManageDailySchedulerService,
   shouldNudgePrivateLogUser,
@@ -42,12 +44,18 @@ test("auto-manage daily scheduler builds the stale opted-in user query", () => {
 
   assert.deepEqual(query, {
     autoManageEnabled: true,
+    localSyncEnabled: { $ne: true },
     "accounts.0": { $exists: true },
     $or: [
-      { lastAutoManageSyncAt: null },
-      { lastAutoManageSyncAt: { $lt: 12345 } },
+      { lastAutoManageAttemptAt: null },
+      { lastAutoManageAttemptAt: { $lte: 12345 } },
     ],
   });
+});
+
+test("auto-manage daily scheduler uses the shared background stale window", () => {
+  assert.equal(AUTO_MANAGE_DAILY_CUTOFF_MS, AUTO_MANAGE_BACKGROUND_STALE_MS);
+  assert.equal(AUTO_MANAGE_BACKGROUND_STALE_MS, 30 * 60 * 1000);
 });
 
 test("auto-manage daily scheduler skips DB work when deploy killswitch is on", async () => {
@@ -212,6 +220,7 @@ test("auto-manage daily scheduler exposes the batch size used by the query chain
 
   return service.runAutoManageDailyTick({}).then(() => {
     assert.equal(chain.limitArg, AUTO_MANAGE_DAILY_BATCH_SIZE);
+    assert.equal(AUTO_MANAGE_DAILY_BATCH_SIZE, 6);
     assert.deepEqual(chain.sortArg, { lastAutoManageAttemptAt: 1 });
     assert.equal(chain.selectArg, "discordId");
   });
