@@ -22,6 +22,12 @@ const {
   toPlainUserDoc,
   syncRaidProfileAfterAutoManageReport,
 } = require("../../../services/auto-manage/reports/utils");
+const {
+  AUTO_MANAGE_BACKGROUND_STALE_MS,
+  isAutoManageAttemptStale,
+} = require("../../../services/auto-manage/runtime/support/freshness");
+
+const STATUS_AUTO_MANAGE_PIGGYBACK_STALE_MS = AUTO_MANAGE_BACKGROUND_STALE_MS;
 
 function createRaidStatusSync(deps) {
   const {
@@ -80,7 +86,13 @@ function createRaidStatusSync(deps) {
       let autoManageWeekResetStart = null;
       const hasRoster =
         Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
-      if (seedDoc.autoManageEnabled && hasRoster) {
+      if (
+        seedDoc.autoManageEnabled &&
+        hasRoster &&
+        isAutoManageAttemptStale(seedDoc, {
+          staleMs: STATUS_AUTO_MANAGE_PIGGYBACK_STALE_MS,
+        })
+      ) {
         autoManageGuard = await acquireAutoManageSyncSlot(discordId);
         if (autoManageGuard.acquired) {
           autoManageWeekResetStart = weekResetStartMs();

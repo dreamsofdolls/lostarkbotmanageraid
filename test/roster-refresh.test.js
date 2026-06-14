@@ -78,6 +78,30 @@ test("hasStaleAccountRefreshes returns false for fresh accounts and true for exp
   assert.equal(service.hasStaleAccountRefreshes(makeStaleUser()), true);
 });
 
+test("collectAccountRefresh bypasses stale cooldown for manual button refresh", async () => {
+  let fetchCalls = 0;
+  const service = makeService(async () => {
+    fetchCalls += 1;
+    return [
+      {
+        charName: "Alpha",
+        className: "Bard",
+        itemLevel: 1715,
+        combatScore: "91000",
+      },
+    ];
+  });
+  const user = makeStaleUser();
+  user.accounts[0].lastRefreshedAt = Date.now();
+
+  assert.deepEqual(await service.collectStaleAccountRefreshes(user), []);
+
+  const result = await service.collectAccountRefresh(user, "Alpha");
+  assert.equal(fetchCalls, 1);
+  assert.equal(result.attempted, true);
+  assert.equal(result.fetchedChars?.[0]?.itemLevel, 1715);
+});
+
 test("collectStaleAccountRefreshes aborts seed loop on first HTTP 429", async () => {
   let fetchCalls = 0;
   const service = makeService(async () => {

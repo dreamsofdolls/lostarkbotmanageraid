@@ -947,6 +947,37 @@ test("buildAccountPageEmbed: per-character field shows '💰 earned' (earned-onl
   assert.doesNotMatch(charField.value, /52,000G/); // earned-only; no "/ total"
 });
 
+test("buildAccountPageEmbed: can hide per-character gold lines for filtered raid view", () => {
+  const char = makeChar("Filtered", 1730, { isGoldEarner: true });
+  const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
+  const fakeRaid = {
+    raidName: "Serca Hard",
+    raidKey: "serca",
+    modeKey: "hard",
+    completedGateKeys: ["G1", "G2"],
+    allGateKeys: ["G1", "G2"],
+    isCompleted: true,
+    earnedGold: 44000,
+    totalGold: 44000,
+  };
+  const getRaidsFor = () => [fakeRaid];
+
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 1, partial: 0, total: 1 }, characters: 1 },
+    getRaidsFor,
+    null,
+    { showCharacterGold: false }
+  );
+  const charField = embed.toJSON().fields.find((f) => /Filtered/.test(f.name));
+
+  assert.match(charField.value, /Serca Hard/);
+  assert.doesNotMatch(charField.value, /💰/);
+  assert.doesNotMatch(charField.value, /44,000G/);
+});
+
 test("buildAccountPageEmbed: per-character field omits the gold body line for non-earners (header 💰 absence is the signal)", () => {
   // Non-earner card: no 💰 anywhere in the body. Header marker is the
   // sole indicator (absence = not earning). Body line was removed in

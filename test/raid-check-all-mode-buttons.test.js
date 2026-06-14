@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 
 const {
   addAllModeActionButtons,
+  buildAllModeRosterRefreshRow,
 } = require("../bot/handlers/raid-check/all-mode/all-mode-buttons");
 
 class FakeButtonBuilder {
@@ -105,4 +106,22 @@ test("raid-check all-mode buttons only add back-to-raid toggle in task view", ()
   assert.deepEqual(addButtons({ currentView: "task" }), [
     "raid-check-all:view-toggle:raid",
   ]);
+});
+
+test("raid-check all-mode roster refresh row uses all-mode collector id", () => {
+  const row = buildAllModeRosterRefreshRow({
+    ActionRowBuilder: function ActionRowBuilder() {
+      return createRow();
+    },
+    ButtonBuilder: FakeButtonBuilder,
+    ButtonStyle,
+    t,
+    lang: "en",
+    disabled: false,
+  });
+
+  assert.deepEqual(
+    row.components.map((component) => component.data.customId),
+    ["raid-check-all:roster-refresh"]
+  );
 });

@@ -11,6 +11,7 @@ const {
   buildLocalSyncResumeButton: makeLocalSyncResumeButton,
   buildLocalSyncNewButton: makeLocalSyncNewButton,
   buildLocalSyncRefreshButton: makeLocalSyncRefreshButton,
+  buildRosterRefreshButton: makeRosterRefreshButton,
   buildBibleSyncButton: makeBibleSyncButton,
 } = require("../local-sync-controls");
 
@@ -92,6 +93,15 @@ function createRaidStatusSyncControls({
       disabled,
     });
 
+  const buildRosterRefreshButton = (disabled) =>
+    makeRosterRefreshButton({
+      ButtonBuilder,
+      ButtonStyle,
+      t,
+      lang,
+      disabled,
+    });
+
   const buildSyncButton = (disabled) => {
     if (getStatusUserMeta().localSyncEnabled) {
       return buildLocalSyncResumeButton(disabled);
@@ -119,6 +129,7 @@ function createRaidStatusSyncControls({
   return {
     buildLocalSyncNewButton,
     buildLocalSyncRefreshButton,
+    buildRosterRefreshButton,
     buildSyncButton,
     buildSyncRow,
     hydrateLocalSyncResumeUrl,

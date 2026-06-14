@@ -79,6 +79,7 @@ const {
   ROSTER_REFRESH_COOLDOWN_MS,
   ROSTER_REFRESH_FAILURE_COOLDOWN_MS,
 } = require("./services/roster/refresh");
+const { createManualRosterRefreshRunner } = require("./services/roster/manual-refresh");
 const { createAutoManageSyncService } = require("./services/auto-manage/runtime/sync");
 const { createRosterFetchService } = require("./services/roster/fetch");
 const { createAutoManageCoreService } = require("./services/auto-manage/runtime/core");
@@ -287,9 +288,11 @@ let handleRaidCheckButton;
 let handleStatusCommand;
 let applyAutoManageCollectedForStatus;
 let collectStaleAccountRefreshes;
+let collectAccountRefresh;
 let hasStaleAccountRefreshes;
 let applyStaleAccountRefreshes;
 let formatRosterRefreshCooldownRemaining;
+let runManualRosterRefresh;
 let buildAccountFreshnessLine;
 let buildAccountPageEmbed;
 let buildStatusFooterText;
@@ -611,10 +614,20 @@ const rosterRefreshService = createRosterRefreshService({
 });
 ({
   collectStaleAccountRefreshes,
+  collectAccountRefresh,
   hasStaleAccountRefreshes,
   applyStaleAccountRefreshes,
   formatRosterRefreshCooldownRemaining,
 } = rosterRefreshService);
+
+({ runManualRosterRefresh } = createManualRosterRefreshRunner({
+  User,
+  saveWithRetry,
+  ensureFreshWeek,
+  normalizeName,
+  collectAccountRefresh,
+  applyStaleAccountRefreshes,
+}));
 
 const autoManageSyncService = createAutoManageSyncService({
   User,
@@ -672,6 +685,7 @@ const raidStatusCommand = createRaidStatusCommand({
   buildPaginationRow,
   collectStaleAccountRefreshes,
   applyStaleAccountRefreshes,
+  runManualRosterRefresh,
   formatRosterRefreshCooldownRemaining,
   ROSTER_REFRESH_COOLDOWN_MS,
   acquireAutoManageSyncSlot,
@@ -723,6 +737,7 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   resolveDiscordDisplay,
   loadFreshUserSnapshotForRaidViews,
   shouldLoadFreshUserSnapshotForRaidViews,
+  runManualRosterRefresh,
   acquireAutoManageSyncSlot,
   releaseAutoManageSyncSlot,
   autoManageEntryKey,

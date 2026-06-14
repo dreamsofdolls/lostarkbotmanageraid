@@ -257,10 +257,10 @@ userSchema.index(
   { name: "raid_check_refresh_scan" }
 );
 
-// Phase 3 daily auto-manage tick filters to opted-in users, narrows by stale
-// `lastAutoManageSyncAt`, then sorts by `lastAutoManageAttemptAt` for fair
-// rotation. Partial index keeps the structure compact because only opted-in
-// users participate in that scheduler path.
+// Phase 3 background auto-manage tick filters to opted-in users, narrows by
+// stale `lastAutoManageSyncAt`, then sorts by `lastAutoManageAttemptAt` for
+// fair rotation. Kept for older deployments/query plans; the attempt-scan
+// index below is the current scheduler path.
 userSchema.index(
   {
     autoManageEnabled: 1,
@@ -269,6 +269,21 @@ userSchema.index(
   },
   {
     name: "auto_manage_daily_scan",
+    partialFilterExpression: { autoManageEnabled: true },
+  }
+);
+
+// Current background auto-manage scan: a user is eligible when the bot has
+// not attempted bible reconciliation recently. Attempt freshness is a better
+// queue cursor than success freshness because all-failed/private-log users
+// should still back off instead of being retried every scheduler tick.
+userSchema.index(
+  {
+    autoManageEnabled: 1,
+    lastAutoManageAttemptAt: 1,
+  },
+  {
+    name: "auto_manage_background_attempt_scan",
     partialFilterExpression: { autoManageEnabled: true },
   }
 );
