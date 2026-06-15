@@ -98,6 +98,15 @@ function createRaidStatusView(deps) {
     return [`💰 ${formatGold(earned)}${boundTail}`];
   }
 
+  function buildBoundGoldTail(gold, lang) {
+    const totalBound = Number(gold?.totalBound) || 0;
+    if (totalBound <= 0) return "";
+    const earnedBound = Number(gold?.earnedBound) || 0;
+    return t("raid-status.embed.goldBoundTail", lang, {
+      bound: `${formatGold(earnedBound)} / ${formatGold(totalBound)}`,
+    });
+  }
+
   function buildCharacterField(character, getRaidsFor, lang, options = {}) {
     const { showGold = true } = options;
     const name = getCharacterName(character);
@@ -323,10 +332,7 @@ function createRaidStatusView(deps) {
       // all-non-earner roster doesn't render a misleading "💰 0G / 0G".
       const globalGoldTotal = Number(globalTotals?.gold?.total) || 0;
       const globalGoldEarned = Number(globalTotals?.gold?.earned) || 0;
-      const globalGoldBound = Number(globalTotals?.gold?.earnedBound) || 0;
-      const globalBoundTail = globalGoldBound > 0
-        ? t("raid-status.embed.goldBoundTail", lang, { bound: formatGold(globalGoldBound) })
-        : "";
+      const globalBoundTail = buildBoundGoldTail(globalTotals?.gold, lang);
       descriptionLines.push(
         t("raid-status.embed.allAccounts", lang, {
           chars: globalTotals.characters,
@@ -355,9 +361,7 @@ function createRaidStatusView(deps) {
           t("raid-status.embed.earnedThisWeek", lang, {
             earned: formatGold(accountGold.earned),
             total: formatGold(accountGold.total),
-            boundTail: accountGold.earnedBound > 0
-              ? t("raid-status.embed.goldBoundTail", lang, { bound: formatGold(accountGold.earnedBound) })
-              : "",
+            boundTail: buildBoundGoldTail(accountGold, lang),
           }),
         );
       }

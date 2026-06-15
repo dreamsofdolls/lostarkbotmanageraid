@@ -1,9 +1,10 @@
 "use strict";
 
 // `gold` per (raid, mode, gate) is the raid's base weekly gold. `goldFactor`
-// keeps older reduced-gold modes from losing their original values. `boundGold`
-// is reserved for modes whose paid gold is fully character/roster-bound
-// (unbound value = 0), so auto gold-slot logic can skip only those modes.
+// marks the unbound/tradeable share for reduced normal modes; the remainder is
+// still paid as bound gold. `boundGold` is reserved for modes whose paid gold is
+// fully character/roster-bound (unbound value = 0), so auto gold-slot logic can
+// skip only those modes.
 const CHARACTER_BOUND_GOLD = Object.freeze({ factor: 1 });
 
 const RAID_REQUIREMENTS = {
@@ -111,14 +112,28 @@ function getRaidGateForBoss(bossName) {
   return BOSS_TO_RAID_GATE.get(bossName) || null;
 }
 
-function getGoldForGate(raidKey, modeKey, gate) {
+function getBaseGoldForGate(raidKey, modeKey, gate) {
   const mode = RAID_REQUIREMENTS[raidKey]?.modes?.[modeKey];
   if (!mode || !mode.gold) return 0;
-  const base = Number(mode.gold[gate]) || 0;
-  // Apply reduction/full-bound factors when present. Round defensively; all
-  // current base*factor pairs are already whole gold.
+  return Number(mode.gold[gate]) || 0;
+}
+
+function getGoldForGate(raidKey, modeKey, gate) {
+  const mode = RAID_REQUIREMENTS[raidKey]?.modes?.[modeKey];
+  const base = getBaseGoldForGate(raidKey, modeKey, gate);
+  if (base <= 0) return 0;
+  // Apply the unbound/tradeable share when present. Fully bound modes keep the
+  // current return shape for forced/manual paths; callers can use
+  // getBoundGoldForGate to split the amount for display.
   const factor = Number(mode.goldFactor ?? mode.boundGold?.factor ?? 1);
   return Math.round(base * (Number.isFinite(factor) ? factor : 1));
+}
+
+function getBoundGoldForGate(raidKey, modeKey, gate) {
+  const base = getBaseGoldForGate(raidKey, modeKey, gate);
+  if (base <= 0) return 0;
+  if (isGoldBound(raidKey, modeKey)) return base;
+  return Math.max(0, base - getGoldForGate(raidKey, modeKey, gate));
 }
 
 function getGoldForRaid(raidKey, modeKey) {
@@ -164,6 +179,8 @@ module.exports = {
   getRaidGateForBoss,
   BOSS_TO_RAID_GATE,
   getGoldForGate,
+  getBaseGoldForGate,
+  getBoundGoldForGate,
   getGoldForRaid,
   isGoldBound,
   raidModeSortRank,

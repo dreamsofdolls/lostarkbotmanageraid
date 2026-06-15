@@ -104,6 +104,39 @@ test("preview summary calculates pending gates in the post-sync mode", () => {
   ]);
 });
 
+test("preview summary splits reduced normal gold into unbound and bound shares", () => {
+  const buckets = bucketizeLocalSyncDeltas([
+    {
+      boss: "Witch of Agony, Serca",
+      difficulty: "Normal",
+      cleared: true,
+      charName: "Aki",
+      lastClearMs: 12345,
+    },
+  ]);
+
+  const summary = projectSummary(makeAccounts({
+    name: "Aki",
+    class: "Artist",
+    itemLevel: 1710,
+    isGoldEarner: true,
+    assignedRaids: {},
+  }), buckets);
+
+  assert.equal(summary.goldDelta.total, 14000);
+  assert.equal(summary.goldDelta.boundTotal, 7000);
+  assert.deepEqual(summary.goldDelta.byChar, [
+    {
+      accountName: "Roster",
+      charName: "Aki",
+      className: "Artist",
+      itemLevel: 1710,
+      gold: 14000,
+      goldBound: 7000,
+    },
+  ]);
+});
+
 test("preview summary expands cumulative gates when only later gate is logged (LOA Logs enabled mid-raid)", () => {
   // Real-world scenario: user clears G1 with LOA Logs disabled, then
   // enables Logs and clears G2. encounters.db only has the G2 row.

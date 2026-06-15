@@ -1590,7 +1590,7 @@ module.exports = {
           "**🔄 Sync now button**: only visible when you've enabled `/raid-auto-manage action:on`. Click to pull bible logs/progress immediately (cooldown 15s for Raid Managers, 10 min for regular users).",
           "**Filters**: raid filter dropdown to zoom into one specific raid. Toggle `📝 Side tasks` to view daily/weekly chores registered via `/raid-task`.",
           "**🗓️ My raids**: a dropdown listing the `/raid-schedule-preview` events across the server you joined or were added to by a manager. Pick one to see the time, room (if you hold a slot), and your turn(s) with teammates. Only shown when you are in at least one event.",
-          "**💰 Gold tracking**: all-raid view shows `💰 earned / total G` (unbound) on each gold-earner card, plus a per-account rollup line in the description. LA caps at 6 gold-earners/account/week - mark them via `/raid-gold-earner roster:<name>`. When you filter to one raid, per-character gold lines are hidden to keep the card clean, while the raid-scoped rollup stays in the description.",
+          "**💰 Gold tracking**: all-raid view shows `💰 earned / total G` on each gold-earner card, plus a per-account rollup line in the description. The `🔒 ... bound` tail is the bound share inside that total (normal Act 4/Kazeros/Serca split half bound). LA caps at 6 gold-earners/account/week - mark them via `/raid-gold-earner roster:<name>`. When you filter to one raid, per-character gold lines are hidden to keep the card clean, while the raid-scoped rollup stays in the description.",
           "**Real-time countdown**: the `Last updated`, `Last synced`, `Sync ready` lines tick down automatically (Discord native timestamp), no need to refresh the embed.",
         ],
       },
@@ -1968,7 +1968,7 @@ module.exports = {
     ],
     goldName: "💰 Track weekly raid gold",
     goldValue: [
-      "Open `/raid-status` all-raid view to see `💰 earned / total G` (unbound) per gold-earner plus the `💰 Earned this week` rollup across the whole account. When filtering to one raid, per-character gold lines are hidden while the rollup stays visible.",
+      "Open `/raid-status` all-raid view to see `💰 earned / total G` per gold-earner plus the `💰 Earned this week` rollup across the whole account. The `🔒 ... bound` tail shows how much of that total is bound gold. When filtering to one raid, per-character gold lines are hidden while the rollup stays visible.",
       "Pick 6 gold-earners via `/raid-gold-earner roster:<name>` (LA cap is 6 / account / week). New characters added by `/raid-add-roster` start as gold-earners.",
     ],
     crownName: "👑 Tiny note",

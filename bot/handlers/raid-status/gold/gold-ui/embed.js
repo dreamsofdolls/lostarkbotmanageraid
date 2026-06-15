@@ -32,10 +32,13 @@ function createGoldViewEmbedBuilder({
     goldCharactersOnPage,
   } = filterState;
 
-  function goldBoundTail(amount) {
-    return amount > 0
-      ? t("raid-status.embed.goldBoundTail", lang, { bound: formatGold(amount) })
-      : "";
+  function goldBoundTail(gold) {
+    const totalBound = Number(gold?.totalBound) || 0;
+    if (totalBound <= 0) return "";
+    const earnedBound = Number(gold?.earnedBound) || 0;
+    return t("raid-status.embed.goldBoundTail", lang, {
+      bound: `${formatGold(earnedBound)} / ${formatGold(totalBound)}`,
+    });
   }
 
   function formatGoldRaidLine(raid) {
@@ -101,13 +104,13 @@ function createGoldViewEmbedBuilder({
       descriptionLines.push(t("raid-status.goldView.allAccounts", lang, {
         earned: formatGold(globalGold.earned),
         total: formatGold(globalGold.total),
-        boundTail: goldBoundTail(globalGold.earnedBound),
+        boundTail: goldBoundTail(globalGold),
       }));
     }
     descriptionLines.push(t("raid-status.goldView.accountLine", lang, {
       earned: formatGold(accountGold.earned),
       total: formatGold(accountGold.total),
-      boundTail: goldBoundTail(accountGold.earnedBound),
+      boundTail: goldBoundTail(accountGold),
     }));
     descriptionLines.push(t("raid-status.goldView.mainDescription", lang, {
       cap: GOLD_RAID_CAP_PER_CHARACTER,
@@ -134,9 +137,9 @@ function createGoldViewEmbedBuilder({
         total: formatGold(accountGold.total),
       }),
     ];
-    if (accountGold.earnedBound > 0) {
+    if (accountGold.totalBound > 0) {
       footerParts.push(t("raid-status.goldView.footerBound", lang, {
-        bound: formatGold(accountGold.earnedBound),
+        bound: `${formatGold(accountGold.earnedBound)} / ${formatGold(accountGold.totalBound)}`,
       }));
     }
     if (getAccounts().length > 1) {

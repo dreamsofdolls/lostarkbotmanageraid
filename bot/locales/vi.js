@@ -1612,7 +1612,7 @@ module.exports = {
           "**🔄 Sync ngay button**: chỉ hiện khi đã `/raid-auto-manage action:on`. Bấm để pull bible logs/progress ngay (cooldown 15s cho Raid Manager, 10 phút cho user thường).",
           "**Filter**: dropdown raid filter để zoom 1 raid cụ thể. Toggle `📝 Side tasks` để xem checklist chore daily/weekly đã đăng ký qua `/raid-task`.",
           "**🗓️ Raid của tôi**: dropdown liệt kê các event `/raid-schedule-preview` toàn server mà cậu đã đăng ký hoặc bị manager add. Chọn 1 để xem giờ, phòng (nếu cậu trong đội), và turn của cậu kèm đồng đội. Chỉ hiện khi cậu đang nằm trong ít nhất 1 event.",
-          "**💰 Track gold**: all-raid view hiện dòng `💰 đã kiếm / tổng G` (unbound) trên từng gold-earner, kèm rollup per-account ở description cộng dồn mọi gold-earner. LA cap 6 gold-earner/account/tuần - mark bằng `/raid-gold-earner roster:<tên>`. Khi filter 1 raid cụ thể, Artist ẩn dòng gold từng char để card gọn hơn, còn rollup theo raid vẫn nằm ở description.",
+          "**💰 Track gold**: all-raid view hiện dòng `💰 đã kiếm / tổng G` trên từng gold-earner, kèm rollup per-account ở description cộng dồn mọi gold-earner. Phần `🔒 ... khóa` là gold bound nằm trong tổng đó (normal Act 4/Kazeros/Serca có nửa bound). LA cap 6 gold-earner/account/tuần - mark bằng `/raid-gold-earner roster:<tên>`. Khi filter 1 raid cụ thể, Artist ẩn dòng gold từng char để card gọn hơn, còn rollup theo raid vẫn nằm ở description.",
           "**Real-time countdown**: dòng `Last updated`, `Last synced`, `Sync ready` đếm ngược tự động (Discord native timestamp), không cần refresh embed.",
         ],
       },
@@ -1997,7 +1997,7 @@ module.exports = {
     ],
     goldName: "💰 Track gold raid mỗi tuần",
     goldValue: [
-      "Mở `/raid-status` all-raid view để xem dòng `💰 đã kiếm / tổng G` (unbound) trên mỗi gold-earner + rollup `💰 Earned this week` cộng dồn cả account. Khi lọc 1 raid cụ thể, dòng gold từng char sẽ ẩn đi cho gọn, còn rollup vẫn được giữ.",
+      "Mở `/raid-status` all-raid view để xem dòng `💰 đã kiếm / tổng G` trên mỗi gold-earner + rollup `💰 Earned this week` cộng dồn cả account. Phần `🔒 ... khóa` cho biết lượng gold bound trong tổng đó. Khi lọc 1 raid cụ thể, dòng gold từng char sẽ ẩn đi cho gọn, còn rollup vẫn được giữ.",
       "Pick 6 char nhận gold qua `/raid-gold-earner roster:<tên>` (LA cap 6 / account / tuần). Char mới add bằng `/raid-add-roster` mặc định là gold-earner sẵn rồi nha~",
     ],
     crownName: "👑 Ghi chú bé xíu",
