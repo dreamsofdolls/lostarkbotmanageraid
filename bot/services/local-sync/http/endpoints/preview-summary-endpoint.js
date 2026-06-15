@@ -19,7 +19,13 @@ const {
   readVerifiedLocalSyncToken,
   requireCurrentLocalSyncUser,
 } = require("../request-gates");
-const { RAID_REQUIREMENTS, getGatesForRaid, getGoldForGate, isGoldBound } = require("../../../../models/Raid");
+const {
+  RAID_REQUIREMENTS,
+  getGatesForRaid,
+  getGoldForGate,
+  getBoundGoldForGate,
+  isGoldBound,
+} = require("../../../../models/Raid");
 const { normalizeName, toModeLabel } = require("../../../../utils/raid/common/shared");
 const { getStatusRaidsForCharacter } = require("../../../../utils/raid/common/character");
 
@@ -144,9 +150,13 @@ function projectSummary(accounts, deltaBuckets) {
       for (const { raidKey, modeKey, gate } of appliedGates.values()) {
         const finalRaid = finalRaidEntriesByKey.get(raidKey);
         if (char.isGoldEarner !== false && finalRaid?.goldReceives) {
-          const g = getGoldForGate(raidKey, modeKey, gate);
+          const bound = getBoundGoldForGate(raidKey, modeKey, gate);
+          const unbound = isGoldBound(raidKey, modeKey)
+            ? 0
+            : getGoldForGate(raidKey, modeKey, gate);
+          const g = unbound + bound;
           charGold += g;
-          if (isGoldBound(raidKey, modeKey)) charGoldBound += g;
+          charGoldBound += bound;
         }
       }
       if (charGold > 0) {

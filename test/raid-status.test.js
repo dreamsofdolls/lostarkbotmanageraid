@@ -44,7 +44,7 @@ const {
   getCharacterName,
   formatGold,
 } = require("../bot/utils/raid/common/shared");
-const { getGoldForGate, isGoldBound, compareRaidModeOrder } = require("../bot/domain/raid-catalog");
+const { getGoldForGate, getBoundGoldForGate, isGoldBound, compareRaidModeOrder } = require("../bot/domain/raid-catalog");
 const { buildRaidDropdownState } = require("../bot/handlers/raid-status/raid-filter");
 const { getRaidModeLabel } = require("../bot/utils/raid/common/labels");
 const {
@@ -531,11 +531,14 @@ test("computeRaidGold: returns 0 earned when no gates cleared, full total still 
   assert.equal(gold.totalGold, 54000);
 });
 
-test("raid-catalog: normal gold is reduced but unbound; Horizon is full-bound", () => {
-  // Base armoche normal G1=12500 -> *0.5 = 6250; hard G1=15000 unchanged.
+test("raid-catalog: normal gold splits unbound/bound; Horizon is full-bound", () => {
+  // Base armoche normal G1=12500 -> 6250 unbound + 6250 bound.
   assert.equal(getGoldForGate("armoche", "normal", "G1"), 6250);
+  assert.equal(getBoundGoldForGate("armoche", "normal", "G1"), 6250);
   assert.equal(getGoldForGate("armoche", "normal", "G2"), 10250);
+  assert.equal(getBoundGoldForGate("armoche", "normal", "G2"), 10250);
   assert.equal(getGoldForGate("armoche", "hard", "G1"), 15000);
+  assert.equal(getBoundGoldForGate("armoche", "hard", "G1"), 0);
   assert.equal(isGoldBound("armoche", "normal"), false);
   assert.equal(isGoldBound("kazeros", "normal"), false);
   assert.equal(isGoldBound("armoche", "hard"), false);
@@ -544,21 +547,27 @@ test("raid-catalog: normal gold is reduced but unbound; Horizon is full-bound", 
   assert.equal(isGoldBound("horizon", "hard"), true);
   assert.equal(isGoldBound("horizon", "nightmare"), true);
   assert.equal(getGoldForGate("horizon", "normal", "G1"), 13500);
+  assert.equal(getBoundGoldForGate("horizon", "normal", "G1"), 13500);
   assert.equal(getGoldForGate("horizon", "hard", "G2"), 24000);
   assert.equal(getGoldForGate("horizon", "nightmare", "G1"), 20000);
 });
 
-test("computeRaidGold: tags reduced normal entries unbound and Horizon full-bound", () => {
+test("computeRaidGold: carries reduced normal bound half and Horizon full-bound", () => {
   const normal = computeRaidGold("armoche", "normal", ["G1"], ["G1", "G2"]);
-  assert.equal(normal.earnedGold, 6250); // 12500 * 0.5
-  assert.equal(normal.totalGold, 16500); // (12500 + 20500) * 0.5
+  assert.equal(normal.earnedGold, 12500); // 6250 unbound + 6250 bound
+  assert.equal(normal.totalGold, 33000); // full base total, split in breakdown
+  assert.equal(normal.earnedBoundGold, 6250);
+  assert.equal(normal.totalBoundGold, 16500);
   assert.equal(normal.goldBound, false);
   const hard = computeRaidGold("kazeros", "hard", ["G1", "G2"], ["G1", "G2"]);
   assert.equal(hard.totalGold, 52000);
+  assert.equal(hard.totalBoundGold, 0);
   assert.equal(hard.goldBound, false);
   const horizon = computeRaidGold("horizon", "nightmare", ["G1"], ["G1", "G2"]);
   assert.equal(horizon.earnedGold, 20000);
   assert.equal(horizon.totalGold, 50000);
+  assert.equal(horizon.earnedBoundGold, 20000);
+  assert.equal(horizon.totalBoundGold, 50000);
   assert.equal(horizon.goldBound, true);
 });
 
@@ -619,8 +628,8 @@ test("getStatusRaidsForCharacter: reduced normal raids still auto-count because 
 
   const totals = summarizeCharacterGold(raids);
   assert.equal(totals.earned, 0);
-  assert.equal(totals.total, 54000);
-  assert.equal(totals.totalBound, 0);
+  assert.equal(totals.total, 108000);
+  assert.equal(totals.totalBound, 54000);
   assert.equal(totals.totalUnbound, 54000);
 });
 
@@ -1189,6 +1198,22 @@ test("buildAccountPageEmbed: appends per-account 'Tuần này đã kiếm' rollu
   // 1730 gold-earner has 4 eligible raids, but only 3 raid-gold slots.
   assert.match(desc, /💰 Tuần này đã kiếm:/);
   assert.match(desc, /138,000G/);
+});
+
+test("buildAccountPageEmbed: per-account rollup shows reduced-normal bound total", () => {
+  const char = makeChar("NormalGold", 1710, { isGoldEarner: true });
+  const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 3 }, characters: 1 },
+    getStatusRaidsForCharacter
+  );
+  const desc = embed.toJSON().description || "";
+  assert.match(desc, /💰 Tuần này đã kiếm:/);
+  assert.match(desc, /108,000G/);
+  assert.match(desc, /🔒 \*\*0G \/ 54,000G\*\* khóa/);
 });
 
 test("buildAccountPageEmbed: omits per-account rollup when account has no gold-earners", () => {

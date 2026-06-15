@@ -21,6 +21,7 @@ const {
 const {
   getGatesForRaid,
   getGoldForGate,
+  getBoundGoldForGate,
   isGoldBound,
 } = require("../../../models/Raid");
 const {
@@ -111,17 +112,33 @@ function ensureRaidEntries(character) {
 // character's `isGoldEarner` flag or the 3-raid gold cap. Those are
 // user/account semantics applied after the raid entry has its raw value.
 function computeRaidGold(raidKey, modeKey, completedGateKeys, allGateKeys) {
+  const fullBound = isGoldBound(raidKey, modeKey);
   let earned = 0;
+  let earnedBound = 0;
   for (const gate of completedGateKeys || []) {
-    earned += getGoldForGate(raidKey, modeKey, gate);
+    const bound = getBoundGoldForGate(raidKey, modeKey, gate);
+    const unbound = fullBound ? 0 : getGoldForGate(raidKey, modeKey, gate);
+    earned += unbound + bound;
+    earnedBound += bound;
   }
   let total = 0;
+  let totalBound = 0;
   for (const gate of allGateKeys || []) {
-    total += getGoldForGate(raidKey, modeKey, gate);
+    const bound = getBoundGoldForGate(raidKey, modeKey, gate);
+    const unbound = fullBound ? 0 : getGoldForGate(raidKey, modeKey, gate);
+    total += unbound + bound;
+    totalBound += bound;
   }
-  // goldBound tags the whole entry: a mode's gold is wholly bound or unbound,
-  // so the rollup can bucket earned/total without re-querying the catalog.
-  return { earnedGold: earned, totalGold: total, goldBound: isGoldBound(raidKey, modeKey) };
+  // goldBound tags fully bound modes (Horizon) so auto-slot logic can skip
+  // them. Reduced normal modes stay auto-eligible but still carry
+  // earnedBoundGold/totalBoundGold for the locked half.
+  return {
+    earnedGold: earned,
+    totalGold: total,
+    earnedBoundGold: earnedBound,
+    totalBoundGold: totalBound,
+    goldBound: fullBound,
+  };
 }
 
 function raidDisplayRank(raid) {
@@ -188,6 +205,8 @@ function applyCharacterGoldCap(raids) {
       goldExcludedReason,
       earnedGold: receivesGold ? raid.rawEarnedGold : 0,
       totalGold: receivesGold ? raid.rawTotalGold : 0,
+      earnedBoundGold: receivesGold ? raid.rawEarnedBoundGold : 0,
+      totalBoundGold: receivesGold ? raid.rawTotalBoundGold : 0,
     };
   });
 }
@@ -226,8 +245,12 @@ function getStatusRaidsForCharacter(character) {
       goldAutoEligible: goldOverride == null && !raidGold.goldBound,
       rawEarnedGold: raidGold.earnedGold,
       rawTotalGold: raidGold.totalGold,
+      rawEarnedBoundGold: raidGold.earnedBoundGold,
+      rawTotalBoundGold: raidGold.totalBoundGold,
       earnedGold: raidGold.earnedGold,
       totalGold: raidGold.totalGold,
+      earnedBoundGold: raidGold.earnedBoundGold,
+      totalBoundGold: raidGold.totalBoundGold,
       goldBound: raidGold.goldBound,
     });
   }
@@ -310,10 +333,8 @@ function summarizeCharacterGold(raids) {
     const t = Number(raid?.totalGold) || 0;
     earned += e;
     total += t;
-    if (raid?.goldBound) {
-      earnedBound += e;
-      totalBound += t;
-    }
+    earnedBound += Number(raid?.earnedBoundGold) || (raid?.goldBound ? e : 0);
+    totalBound += Number(raid?.totalBoundGold) || (raid?.goldBound ? t : 0);
   }
   return {
     earned,
