@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-12 (raid-status: raid-view lock follows gold-slot state, not bound-ness)
+
+### Fixed
+- The trailing 🔒 on the main progress view (and /raid-check, shared `formatRaidStatusLine`) was keyed on `goldBound`, so a bound raid kept its lock even after being force-included to receive gold - and the raid it bumped out of the gold cap showed no lock. It now follows `goldReceives`: the lock marks the raid that is NOT taking a gold slot this week (the gold you won't actually get). Force Horizon on and the lock moves off Horizon onto the bumped Act 4, matching what the player just did. Bare-raid callers (no gold-slot data) get no mark. 918 tests green.
+
 ## 2026-06-12 (raid-status + raid-check: order the raid filter by progression)
 
 ### Changed
