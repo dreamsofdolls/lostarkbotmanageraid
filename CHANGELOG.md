@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-06-12 (raid-status: split bound gold into its own bucket, not an overlapping subset)
+
+### Changed
+- Gold figures across raid-status (per-character card, per-account + cross-roster rollups, and the dedicated gold view) now show the tradeable (unbound) and roster-bound buckets as DISJOINT amounts instead of "total + bound-subset". Before, `💰 138,000G · 🔒 50,000G khóa` meant 138,000 already INCLUDED the 50,000 bound - easy to misread as additive. Now `💰` carries only the tradeable share and `🔒 ... khóa` the bound share, so the two sum to the total (`💰 88,000G · 🔒 50,000G khóa`). Also fixed the per-character card under-counting bound gold: it used the whole-raid `goldBound` flag, which missed the bound half of reduced-normal raids - it now uses the per-raid `earnedBoundGold` split like the rollups do. Locale strings unchanged (only the numbers passed in). 918 tests green.
+
 ## 2026-06-12 (raid-status: raid-view lock follows gold-slot state, not bound-ness)
 
 ### Fixed

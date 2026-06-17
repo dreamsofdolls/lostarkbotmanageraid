@@ -99,17 +99,19 @@ function createGoldViewEmbedBuilder({
       return embed;
     }
 
+    // Disjoint buckets: 💰 shows the tradeable (unbound) gold, the bound tail
+    // shows the roster-bound gold; they never overlap.
     const descriptionLines = [];
     if (getAccounts().length > 1) {
       descriptionLines.push(t("raid-status.goldView.allAccounts", lang, {
-        earned: formatGold(globalGold.earned),
-        total: formatGold(globalGold.total),
+        earned: formatGold(globalGold.earnedUnbound),
+        total: formatGold(globalGold.totalUnbound),
         boundTail: goldBoundTail(globalGold),
       }));
     }
     descriptionLines.push(t("raid-status.goldView.accountLine", lang, {
-      earned: formatGold(accountGold.earned),
-      total: formatGold(accountGold.total),
+      earned: formatGold(accountGold.earnedUnbound),
+      total: formatGold(accountGold.totalUnbound),
       boundTail: goldBoundTail(accountGold),
     }));
     descriptionLines.push(t("raid-status.goldView.mainDescription", lang, {
@@ -133,8 +135,8 @@ function createGoldViewEmbedBuilder({
 
     const footerParts = [
       t("raid-status.goldView.footerGold", lang, {
-        earned: formatGold(accountGold.earned),
-        total: formatGold(accountGold.total),
+        earned: formatGold(accountGold.earnedUnbound),
+        total: formatGold(accountGold.totalUnbound),
       }),
     ];
     if (accountGold.totalBound > 0) {
