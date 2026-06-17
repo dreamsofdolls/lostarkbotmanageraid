@@ -868,8 +868,8 @@ test("buildRaidDropdownState: excludes raids that do not receive gold", () => {
   assert.equal(totalRaidPending, 1);
 });
 
-test("formatRaidStatusLine: bound-gold raids get a trailing lock", () => {
-  const raid = {
+test("formatRaidStatusLine: a raid not receiving gold gets a trailing lock", () => {
+  const base = {
     raidName: "Horizon Level 3",
     raidKey: "horizon",
     modeKey: "nightmare",
@@ -878,8 +878,17 @@ test("formatRaidStatusLine: bound-gold raids get a trailing lock", () => {
     isCompleted: false,
     goldBound: true,
   };
-  // The lock sits after the gate count so the main view flags roster-bound gold.
-  assert.match(formatRaidStatusLine(raid, "vi"), new RegExp(`Horizon Level 3 · 0/2 ${UI.icons.lock}$`));
+  // Lock follows the gold-slot state, not bound-ness: a raid NOT receiving gold
+  // gets the lock after the gate count...
+  assert.match(
+    formatRaidStatusLine({ ...base, goldReceives: false }, "vi"),
+    new RegExp(`Horizon Level 3 · 0/2 ${UI.icons.lock}$`),
+  );
+  // ...and a bound raid that IS receiving (force-included) loses the lock.
+  assert.doesNotMatch(
+    formatRaidStatusLine({ ...base, goldReceives: true }, "vi"),
+    new RegExp(`${UI.icons.lock}$`),
+  );
 });
 
 test("summarizeCharacterGold: sums earnedGold + totalGold across raid entries", () => {

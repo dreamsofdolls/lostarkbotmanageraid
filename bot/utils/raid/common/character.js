@@ -305,13 +305,14 @@ function formatRaidStatusLine(raid, lang) {
     const { getRaidModeLabel } = require("./labels");
     label = getRaidModeLabel(raid.raidKey, raid.modeKey, lang) || raid.raidName;
   }
-  // Trailing lock marks raids whose gold is roster-bound (Horizon), so the
-  // main progress view shows at a glance which raids don't feed the account's
-  // tradeable weekly gold by default. Mirrors the 🔒 = bound-gold convention
-  // in the gold view. goldBound is undefined for callers that pass a bare raid
-  // (older tests) - those simply get no mark.
-  const boundMark = raid.goldBound ? ` ${UI.icons.lock}` : "";
-  return `${icon} ${label} · ${done}/${total}${boundMark}`;
+  // Trailing lock marks a raid that is NOT taking a gold slot this week - the
+  // gold the character won't actually receive. It follows the gold-slot state,
+  // not bound-ness: a bound raid that's force-included loses the lock, and the
+  // raid it bumped out of the cap takes the lock instead. `goldReceives` is
+  // only set on full status-raid entries; bare raids from older callers/tests
+  // leave it undefined and get no mark.
+  const notReceivingMark = raid.goldReceives === false ? ` ${UI.icons.lock}` : "";
+  return `${icon} ${label} · ${done}/${total}${notReceivingMark}`;
 }
 
 // Sum (earned, total) gold across an array of raid entries already
