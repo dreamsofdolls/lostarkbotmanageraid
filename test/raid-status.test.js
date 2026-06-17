@@ -1103,8 +1103,10 @@ test("buildAccountPageEmbed: per-character bound gold renders inline after the e
     getRaidsFor
   );
   const charField = embed.toJSON().fields.find((f) => /Bound/.test(f.name));
-  // earned-only gold + bound inline on the same line (short enough now /total is gone).
-  assert.match(charField.value, /💰 40,000G · 🔒 \*\*40,000G\*\* khóa/);
+  // Disjoint buckets: 💰 = tradeable (unbound), 🔒 = bound. This char's only
+  // earnings are a fully-bound raid, so the tradeable bucket is 0 and all
+  // 40,000 sits in the bound bucket - the two no longer overlap.
+  assert.match(charField.value, /💰 0G · 🔒 \*\*40,000G\*\* khóa/);
 });
 
 test("buildAccountPageEmbed: shows '/raid-gold-earner' hint when account has at least one eligible non-earner char", () => {
@@ -1221,8 +1223,13 @@ test("buildAccountPageEmbed: per-account rollup shows reduced-normal bound total
   );
   const desc = embed.toJSON().description || "";
   assert.match(desc, /💰 Tuần này đã kiếm:/);
-  assert.match(desc, /108,000G/);
+  // Disjoint: 💰 shows the tradeable (unbound) half, 🔒 the bound half. The
+  // three reduced-normal raids split 108,000 total into 54,000 / 54,000, so
+  // the 💰 number is now 54,000 (the tradeable bucket), not the 108,000 grand
+  // total it used to overlap with the bound figure.
+  assert.match(desc, /💰 Tuần này đã kiếm: \*\*0G\*\* \/ \*\*54,000G\*\*/);
   assert.match(desc, /🔒 \*\*0G \/ 54,000G\*\* khóa/);
+  assert.doesNotMatch(desc, /108,000G/);
 });
 
 test("buildAccountPageEmbed: omits per-account rollup when account has no gold-earners", () => {
@@ -1241,12 +1248,11 @@ test("buildAccountPageEmbed: omits per-account rollup when account has no gold-e
   assert.doesNotMatch(desc, /Tuần này đã kiếm/);
 });
 
-test("buildAccountPageEmbed: cross-account 🌐 line tails the GRAND total gold across every roster when paginating", () => {
+test("buildAccountPageEmbed: cross-account 🌐 gold line shows the tradeable bucket across every roster when paginating", () => {
   // The per-account 'Tuần này đã kiếm' line below shows the current
-  // page's account only; the 🌐 tail is the cross-account aggregate.
-  // Both can show the same number when only one account has earners,
-  // but with multiple accounts marked the tail diverges and acts as
-  // the user's at-a-glance grand total.
+  // page's account only; the 🌐 line is the cross-account aggregate.
+  // The 💰 figure is the tradeable (unbound) bucket; an all-unbound
+  // roster has no bound tail.
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
   const embed = buildAccountPageEmbed(
     account,
@@ -1255,14 +1261,14 @@ test("buildAccountPageEmbed: cross-account 🌐 line tails the GRAND total gold 
     {
       progress: { completed: 5, partial: 1, total: 8 },
       characters: 12,
-      gold: { earned: 50000, total: 200000 },
+      gold: { earned: 50000, total: 200000, earnedUnbound: 50000, totalUnbound: 200000, earnedBound: 0, totalBound: 0 },
     },
     NOOP_GET_RAIDS_FOR
   );
   const desc = embed.toJSON().description || "";
   assert.match(desc, /Tổng tất cả roster/);
   assert.match(desc, /5\/8/);
-  // 🌐 line carries the gold tail in bold form for the grand total.
+  // 🌐 line carries the tradeable (unbound) gold in bold; no bound tail here.
   assert.match(desc, /💰 \*\*50,000G \/ 200,000G\*\*/);
 });
 

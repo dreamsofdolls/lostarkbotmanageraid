@@ -87,15 +87,20 @@ function createRaidStatusView(deps) {
       const e = Number(raid?.earnedGold) || 0;
       earned += e;
       total += Number(raid?.totalGold) || 0;
-      if (raid?.goldBound) earnedBound += e;
+      // Mirror summarizeCharacterGold: a reduced-normal raid pays half its gold
+      // bound, so use the per-raid earnedBoundGold split. Falling back to the
+      // whole-raid amount only for fully-bound modes / bare test raids that
+      // predate the split field - otherwise the bound half goes uncounted.
+      earnedBound += Number(raid?.earnedBoundGold) || (raid?.goldBound ? e : 0);
     }
     if (total <= 0) return [];
-    // Narrow 2-col card: show just the gold actually earned (not earned/total).
-    // The bound tail fits inline now that the /total half is gone.
+    // Disjoint buckets: 💰 = tradeable (unbound) gold, 🔒 = roster-bound gold.
+    // The two amounts never overlap (they sum to the total) so the bound part
+    // reads as separate, not as a slice of the 💰 number.
     const boundTail = earnedBound > 0
       ? t("raid-status.embed.goldBoundTail", lang, { bound: formatGold(earnedBound) })
       : "";
-    return [`💰 ${formatGold(earned)}${boundTail}`];
+    return [`💰 ${formatGold(earned - earnedBound)}${boundTail}`];
   }
 
   function buildBoundGoldTail(gold, lang) {
@@ -331,7 +336,10 @@ function createRaidStatusView(deps) {
       // Cross-account rollup. Suppressed when total <= 0 so an
       // all-non-earner roster doesn't render a misleading "💰 0G / 0G".
       const globalGoldTotal = Number(globalTotals?.gold?.total) || 0;
-      const globalGoldEarned = Number(globalTotals?.gold?.earned) || 0;
+      // 💰 shows the tradeable (unbound) bucket; the bound tail carries the
+      // roster-bound bucket. Disjoint so the two never look additive.
+      const globalGoldEarnedUnbound = Number(globalTotals?.gold?.earnedUnbound) || 0;
+      const globalGoldTotalUnbound = Number(globalTotals?.gold?.totalUnbound) || 0;
       const globalBoundTail = buildBoundGoldTail(globalTotals?.gold, lang);
       descriptionLines.push(
         t("raid-status.embed.allAccounts", lang, {
@@ -345,8 +353,8 @@ function createRaidStatusView(deps) {
       if (globalGoldTotal > 0) {
         descriptionLines.push(
           t("raid-status.embed.goldRollup", lang, {
-            earned: formatGold(globalGoldEarned),
-            total: formatGold(globalGoldTotal),
+            earned: formatGold(globalGoldEarnedUnbound),
+            total: formatGold(globalGoldTotalUnbound),
             boundTail: globalBoundTail,
           }),
         );
@@ -359,8 +367,9 @@ function createRaidStatusView(deps) {
       if (accountGold.total > 0) {
         descriptionLines.push(
           t("raid-status.embed.earnedThisWeek", lang, {
-            earned: formatGold(accountGold.earned),
-            total: formatGold(accountGold.total),
+            // 💰 = tradeable (unbound); the bound tail carries the bound bucket.
+            earned: formatGold(accountGold.earnedUnbound),
+            total: formatGold(accountGold.totalUnbound),
             boundTail: buildBoundGoldTail(accountGold, lang),
           }),
         );
