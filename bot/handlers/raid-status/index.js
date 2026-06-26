@@ -40,7 +40,7 @@ const {
 } = require("./components/component-handlers");
 const {
   loadStatusViewerState,
-  probeLocalSyncMode,
+  probeLocalSyncModeWithBudget,
 } = require("./state/viewer-state");
 const {
   attachRaidStatusComponentCollector,
@@ -158,7 +158,11 @@ function createRaidStatusCommand(deps) {
     // leak that URL to anyone in the channel who clicks it (Link
     // buttons bypass bot auth). Ephemeral keeps the URL opener-only.
     // Lean+select is ~30ms - well under Discord's 3-sec defer deadline.
-    const isLocalSyncMode = await probeLocalSyncMode({ User, discordId });
+    const isLocalSyncMode = await probeLocalSyncModeWithBudget({
+      User,
+      discordId,
+      waitWithBudget,
+    });
     await interaction.deferReply(
       isLocalSyncMode ? { flags: MessageFlags.Ephemeral } : {}
     );

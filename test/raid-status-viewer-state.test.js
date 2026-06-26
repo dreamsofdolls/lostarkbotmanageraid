@@ -6,6 +6,7 @@ const assert = require("node:assert/strict");
 const {
   loadStatusViewerState,
   probeLocalSyncMode,
+  probeLocalSyncModeWithBudget,
 } = require("../bot/handlers/raid-status/state/viewer-state");
 const {
   clearUserLanguageCache,
@@ -79,4 +80,30 @@ test("raid-status local-sync probe returns the saved localSyncEnabled flag", asy
   });
 
   assert.equal(await probeLocalSyncMode({ User, discordId: "user-1" }), true);
+});
+
+test("raid-status local-sync probe times out safe-ephemeral before Discord ack deadline", async () => {
+  const warnings = [];
+  const User = {
+    findOne() {
+      return {
+        select: () => ({ lean: () => new Promise(() => {}) }),
+      };
+    },
+  };
+  const waitWithBudget = (_promise, budgetMs) =>
+    new Promise((resolve) =>
+      setTimeout(() => resolve({ timedOut: true, value: null }), budgetMs)
+    );
+
+  const result = await probeLocalSyncModeWithBudget({
+    User,
+    discordId: "user-1",
+    waitWithBudget,
+    budgetMs: 5,
+    log: { warn: (message) => warnings.push(message) },
+  });
+
+  assert.equal(result, true);
+  assert.match(warnings[0], /local-sync probe exceeded 5ms/);
 });
