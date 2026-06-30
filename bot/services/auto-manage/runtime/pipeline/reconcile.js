@@ -43,12 +43,20 @@ function createAutoManageReconciler({
         difficultyLabel,
         mapping.raidKey
       );
+      const officialGates = getGatesForRaid(mapping.raidKey);
+      const raidAlreadyComplete = officialGates.length > 0 && officialGates.every((gate) => (
+        Number(existingRaid?.[gate]?.completedDate) > 0
+      ));
+      if (raidAlreadyComplete) {
+        assignedRaids[mapping.raidKey] = existingRaid;
+        continue;
+      }
 
       let modeChange = false;
       if (existingRaid.modeKey && existingRaid.modeKey !== modeKey) {
         modeChange = true;
       }
-      for (const g of getGatesForRaid(mapping.raidKey)) {
+      for (const g of officialGates) {
         const existingDiff = existingRaid[g]?.difficulty;
         if (existingDiff && normalizeName(existingDiff) !== normalizedSelectedDiff) {
           modeChange = true;
@@ -56,7 +64,7 @@ function createAutoManageReconciler({
         }
       }
       if (modeChange) {
-        for (const g of getGatesForRaid(mapping.raidKey)) {
+        for (const g of officialGates) {
           existingRaid[g] = { difficulty: difficultyLabel, completedDate: undefined };
         }
       }
@@ -65,7 +73,6 @@ function createAutoManageReconciler({
       // Lost Ark gates are sequential. A later-gate clear is proof that prior
       // gates in the same raid/mode were cleared too. Fill missing prior gates
       // without overwriting a timestamp captured from its own log.
-      const officialGates = getGatesForRaid(mapping.raidKey);
       const gateIndex = officialGates.indexOf(mapping.gate);
       if (gateIndex < 0) continue;
       const effectiveGates = officialGates.slice(0, gateIndex + 1);

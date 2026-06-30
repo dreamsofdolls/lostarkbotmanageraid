@@ -5,6 +5,7 @@ const {
   normalizeName,
   toModeLabel,
 } = require("../../../../utils/raid/common/shared");
+const { getGatesForRaid } = require("../../../../models/Raid");
 
 function findRosterCharacter(userDoc, charName) {
   if (!userDoc || !Array.isArray(userDoc.accounts)) return null;
@@ -21,6 +22,14 @@ function findRosterCharacter(userDoc, charName) {
 
 function getAssignedRaid(character, raidKey) {
   return character?.assignedRaids?.[raidKey] || {};
+}
+
+function raidAlreadyComplete(character, raidKey) {
+  const assignedRaid = getAssignedRaid(character, raidKey);
+  const gates = getGatesForRaid(raidKey);
+  return gates.length > 0 && gates.every((gate) => (
+    Number(assignedRaid?.[gate]?.completedDate) > 0
+  ));
 }
 
 function gatesAlreadyComplete(character, bucket, effectiveGates) {
@@ -48,6 +57,14 @@ function classifyBucketAgainstRoster(userDoc, bucket, raidMeta, effectiveGates) 
     return { action: "reject", reason: "ilvl_too_low", ineligibleItemLevel: charItemLevel };
   }
 
+  if (raidAlreadyComplete(character, bucket.raidKey)) {
+    return {
+      action: "skip",
+      reason: "already_complete",
+      displayName: getCharacterName(character) || bucket.charName,
+    };
+  }
+
   if (gatesAlreadyComplete(character, bucket, effectiveGates)) {
     return {
       action: "skip",
@@ -63,4 +80,5 @@ module.exports = {
   classifyBucketAgainstRoster,
   findRosterCharacter,
   gatesAlreadyComplete,
+  raidAlreadyComplete,
 };

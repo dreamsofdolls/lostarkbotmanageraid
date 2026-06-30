@@ -109,6 +109,36 @@ test("auto-manage apply changes modeKey only when a clear log arrives in the new
   assert.equal(kaz.G2.completedDate, 3000);
 });
 
+test("auto-manage apply skips cross-mode logs when the raid is already done", () => {
+  const service = makeService();
+  const userDoc = makeUserDoc({
+    kazeros: {
+      modeKey: "hard",
+      G1: { difficulty: "Hard", completedDate: 111 },
+      G2: { difficulty: "Hard", completedDate: 222 },
+    },
+  });
+
+  const report = service.applyAutoManageCollected(userDoc, 1000, [
+    {
+      entryKey: service.autoManageEntryKey("Roster", "Aki"),
+      logs: [
+        { boss: "Abyss Lord Kazeros", difficulty: "Normal", timestamp: 2000 },
+        { boss: "Archdemon Kazeros", difficulty: "Normal", timestamp: 3000 },
+      ],
+    },
+  ]);
+
+  const kaz = userDoc.accounts[0].characters[0].assignedRaids.kazeros;
+  assert.equal(report.appliedTotal, 0);
+  assert.deepEqual(report.perChar[0].applied, []);
+  assert.equal(kaz.modeKey, "hard");
+  assert.equal(kaz.G1.difficulty, "Hard");
+  assert.equal(kaz.G2.difficulty, "Hard");
+  assert.equal(kaz.G1.completedDate, 111);
+  assert.equal(kaz.G2.completedDate, 222);
+});
+
 test("auto-manage apply treats a later gate clear as completion of earlier gates", () => {
   const service = makeService();
   const userDoc = makeUserDoc({
