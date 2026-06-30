@@ -248,6 +248,36 @@ test("applyLocalSyncDeltas - lower-mode clear after reset is sent as the incomin
   assert.deepEqual(applyStub.calls[0].effectiveGates, ["G1", "G2"]);
 });
 
+test("applyLocalSyncDeltas - skips cross-mode incoming clears when the raid is already done", async () => {
+  const applyStub = makeApplyStub();
+  const userDoc = makeUserDoc([
+    {
+      id: "c1",
+      name: "Aki",
+      class: "Artist",
+      itemLevel: 1750,
+      assignedRaids: {
+        kazeros: {
+          modeKey: "hard",
+          G1: { difficulty: "Hard", completedDate: 111 },
+          G2: { difficulty: "Hard", completedDate: 222 },
+        },
+      },
+    },
+  ]);
+
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Archdemon Kazeros", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 333 },
+  ], makeDeps(applyStub, { userDoc }));
+
+  assert.equal(result.applied.length, 0);
+  assert.equal(result.skipped.length, 1);
+  assert.equal(result.skipped[0].reason, "already_complete");
+  assert.equal(result.skipped[0].raidKey, "kazeros");
+  assert.equal(result.skipped[0].modeKey, "normal");
+  assert.equal(applyStub.calls.length, 0);
+});
+
 test("applyLocalSyncDeltas - unmapped boss bucketed without calling apply", async () => {
   const applyStub = makeApplyStub();
   const result = await applyLocalSyncDeltas("u1", [
