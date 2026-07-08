@@ -4,12 +4,17 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  parseGoldModeValue,
   parseGoldToggleValue,
   replaceRaidGoldSelection,
+  setParsedGoldRaidMode,
   toggleRaidGoldDisabled,
   getNextGoldOverride,
 } = require("../bot/handlers/raid-status/gold/gold-actions");
-const User = require("../bot/models/User");
+const {
+  getTargetResetKey,
+} = require("../bot/services/raid/schedulers/weekly-reset");
+const User = require("../bot/models/user");
 
 function makeUserModel(doc) {
   return {
@@ -24,24 +29,32 @@ function makeUserModel(doc) {
 // would let `subdoc.goldOverride = x` "work" and hide the persistence bug the
 // live bot hit · the override field was being dropped on save because it was
 // assigned straight onto a Mongoose subdoc instead of through a re-cast.
-function makeMongooseUserDoc({ itemLevel = 1753, horizonModeKey = "nightmare" } = {}) {
+function makeMongooseUserDoc({
+  accountName = "Roster",
+  charName = "Aki",
+  itemLevel = 1753,
+  horizonModeKey = "nightmare",
+  assignedRaids = null,
+} = {}) {
+  const defaultAssignedRaids = {
+    armoche: { modeKey: "hard", G1: { difficulty: "Hard", completedDate: 1 }, G2: { difficulty: "Hard", completedDate: 1 } },
+    kazeros: { modeKey: "hard", G1: { difficulty: "Hard", completedDate: 1 }, G2: { difficulty: "Hard", completedDate: 1 } },
+    serca: { modeKey: "hard", G1: { difficulty: "Hard", completedDate: 1 }, G2: { difficulty: "Hard", completedDate: 1 } },
+    horizon: { modeKey: horizonModeKey },
+  };
   const doc = new User({
     discordId: "user-1",
+    weeklyResetKey: getTargetResetKey(),
     accounts: [
       {
-        accountName: "Roster",
+        accountName,
         characters: [
           {
             id: "c1",
-            name: "Aki",
+            name: charName,
             class: "Aeromancer",
             itemLevel,
-            assignedRaids: {
-              armoche: { modeKey: "hard", G1: { difficulty: "Hard", completedDate: 1 }, G2: { difficulty: "Hard", completedDate: 1 } },
-              kazeros: { modeKey: "hard", G1: { difficulty: "Hard", completedDate: 1 }, G2: { difficulty: "Hard", completedDate: 1 } },
-              serca: { modeKey: "hard", G1: { difficulty: "Hard", completedDate: 1 }, G2: { difficulty: "Hard", completedDate: 1 } },
-              horizon: { modeKey: horizonModeKey },
-            },
+            assignedRaids: assignedRaids || defaultAssignedRaids,
           },
         ],
       },
@@ -65,6 +78,124 @@ test("raid-status gold actions parse valid raid toggle values", () => {
   });
   assert.deepEqual(parseGoldToggleValue("Aki::missing"), { kind: "invalid" });
   assert.deepEqual(parseGoldToggleValue("noop"), { kind: "noop" });
+});
+
+test("raid-status gold actions parse valid mode values", () => {
+  assert.deepEqual(parseGoldModeValue("Aki::armoche::hard"), {
+    kind: "single",
+    targetCharName: "Aki",
+    raidKey: "armoche",
+    modeKey: "hard",
+  });
+  assert.deepEqual(parseGoldModeValue("Aki::missing::hard"), { kind: "invalid" });
+  assert.deepEqual(parseGoldModeValue("bad::x"), { kind: "invalid" });
+  assert.deepEqual(parseGoldModeValue("noop"), { kind: "noop" });
+});
+
+test("raid-status gold mode applies immediately when the raid has not run this week", async () => {
+  const doc = makeMongooseUserDoc({
+    itemLevel: 1720,
+    assignedRaids: {
+      armoche: { modeKey: "normal", G1: {}, G2: {} },
+    },
+  });
+
+  const result = await setParsedGoldRaidMode({
+    User: makeUserModel(doc),
+    saveWithRetry: async (op) => op(),
+    discordId: "user-1",
+    targetAccountName: "Roster",
+    targetCharName: "Aki",
+    raidKey: "armoche",
+    modeKey: "hard",
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.outcome, "immediate");
+  const raid = doc.toObject().accounts[0].characters[0].assignedRaids.armoche;
+  assert.equal(raid.modeKey, "hard");
+  assert.equal(raid.pendingModeKey, undefined);
+  assert.equal(raid.G1.difficulty, "Hard");
+});
+
+test("raid-status gold mode defers when the raid already ran this week", async () => {
+  const doc = makeMongooseUserDoc({
+    itemLevel: 1720,
+    assignedRaids: {
+      armoche: {
+        modeKey: "normal",
+        G1: { difficulty: "Normal", completedDate: 99 },
+        G2: {},
+      },
+    },
+  });
+
+  const result = await setParsedGoldRaidMode({
+    User: makeUserModel(doc),
+    saveWithRetry: async (op) => op(),
+    discordId: "user-1",
+    targetAccountName: "Roster",
+    targetCharName: "Aki",
+    raidKey: "armoche",
+    modeKey: "hard",
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.outcome, "deferred");
+  const raid = doc.toObject().accounts[0].characters[0].assignedRaids.armoche;
+  assert.equal(raid.modeKey, "normal");
+  assert.equal(raid.pendingModeKey, "hard");
+});
+
+test("raid-status gold mode to the current mode cancels a pending change", async () => {
+  const doc = makeMongooseUserDoc({
+    itemLevel: 1720,
+    assignedRaids: {
+      armoche: {
+        modeKey: "normal",
+        pendingModeKey: "hard",
+        G1: { difficulty: "Normal", completedDate: 99 },
+        G2: {},
+      },
+    },
+  });
+
+  const result = await setParsedGoldRaidMode({
+    User: makeUserModel(doc),
+    saveWithRetry: async (op) => op(),
+    discordId: "user-1",
+    targetAccountName: "Roster",
+    targetCharName: "Aki",
+    raidKey: "armoche",
+    modeKey: "normal",
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.outcome, "cancelled");
+  const raid = doc.toObject().accounts[0].characters[0].assignedRaids.armoche;
+  assert.equal(raid.pendingModeKey, undefined);
+});
+
+test("raid-status gold mode rejects a mode above the character item level", async () => {
+  const doc = makeMongooseUserDoc({
+    itemLevel: 1700,
+    assignedRaids: {
+      armoche: { modeKey: "normal", G1: {}, G2: {} },
+    },
+  });
+
+  const result = await setParsedGoldRaidMode({
+    User: makeUserModel(doc),
+    saveWithRetry: async (op) => op(),
+    discordId: "user-1",
+    targetAccountName: "Roster",
+    targetCharName: "Aki",
+    raidKey: "armoche",
+    modeKey: "hard",
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.outcome, "ineligible");
 });
 
 test("raid-status gold actions cycle bound raid through include, exclude, auto", async () => {

@@ -1,11 +1,14 @@
 "use strict";
 
-const { RAID_REQUIREMENTS, isGoldBound } = require("../../../models/Raid");
-const { normalizeName, toModeKey } = require("../../../utils/raid/common/shared");
+const { RAID_REQUIREMENTS, isGoldBound, getGatesForRaid } = require("../../../models/Raid");
+const { normalizeName, toModeKey, toModeLabel } = require("../../../utils/raid/common/shared");
 const {
   getAssignedRaidModeKey,
   getBestEligibleModeKey,
+  getCompletedGateKeys,
+  getRequirementFor,
 } = require("../../../utils/raid/common/character/assigned-raids");
+const { ensureFreshWeek } = require("../../../services/raid/schedulers/weekly-reset");
 const {
   GOLD_RAID_CAP_PER_CHARACTER,
   getStatusRaidsForCharacter,
@@ -49,6 +52,28 @@ function parseGoldToggleValue(value) {
   };
 }
 
+function parseGoldModeValue(value) {
+  if (!value || value === "noop") return { kind: "noop" };
+  const parts = String(value).split("::");
+  if (parts.length < 3) return { kind: "invalid" };
+  const modeKey = parts.pop();
+  const raidKey = parts.pop();
+  const targetCharName = parts.join("::");
+  if (
+    !targetCharName ||
+    !VALID_RAID_KEYS.has(raidKey) ||
+    !RAID_REQUIREMENTS[raidKey]?.modes?.[modeKey]
+  ) {
+    return { kind: "invalid" };
+  }
+  return {
+    kind: "single",
+    targetCharName,
+    raidKey,
+    modeKey,
+  };
+}
+
 function findGoldWriteTarget(userDocFresh, targetAccountName, targetCharName) {
   if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return null;
   const accountName = normalizeName(targetAccountName);
@@ -85,15 +110,26 @@ async function updateGoldWriteTarget(options, applyUpdate) {
   let savedUserDoc = null;
   await saveWithRetry(async () => {
     const userDocFresh = await User.findOne({ discordId });
+    const didFreshenWeek = options.freshenWeek && userDocFresh
+      ? ensureFreshWeek(userDocFresh)
+      : false;
     const target = findGoldWriteTarget(userDocFresh, targetAccountName, targetCharName);
-    if (!target) return;
+    if (!target) {
+      if (didFreshenWeek) {
+        markAccountsModified(userDocFresh);
+        await userDocFresh.save();
+        saved = true;
+        savedUserDoc = userDocFresh;
+      }
+      return;
+    }
 
     const shouldSave = await applyUpdate({
       userDoc: userDocFresh,
       account: target.account,
       character: target.character,
     });
-    if (!shouldSave) return;
+    if (!shouldSave && !didFreshenWeek) return;
 
     markAccountsModified(userDocFresh);
     await userDocFresh.save();
@@ -168,8 +204,81 @@ async function toggleParsedGoldRaid(options) {
   }
 }
 
+async function setParsedGoldRaidMode(options) {
+  const {
+    raidKey,
+    modeKey,
+  } = options;
+  const modeMeta = RAID_REQUIREMENTS[raidKey]?.modes?.[modeKey];
+  const requirement = getRequirementFor(raidKey, modeKey);
+  const raidLabel = RAID_REQUIREMENTS[raidKey]?.label || raidKey;
+  const modeLabel = modeMeta?.label || toModeLabel(modeKey);
+  if (!VALID_RAID_KEYS.has(raidKey) || !modeMeta || !requirement) {
+    return { ok: false, outcome: "invalid", raidKey, modeKey, raidLabel, modeLabel };
+  }
+
+  let outcome = "noop";
+  let touchedTarget = false;
+  const update = await updateGoldWriteTarget(
+    { ...options, freshenWeek: true },
+    ({ character: target }) => {
+      touchedTarget = true;
+      const itemLevel = Number(target?.itemLevel) || 0;
+      if (itemLevel < requirement.minItemLevel) {
+        outcome = "ineligible";
+        return false;
+      }
+
+      const raidData = target.assignedRaids[raidKey] || {};
+      const currentMode = getAssignedRaidModeKey(raidData, raidKey)
+        || getBestEligibleModeKey(raidKey, itemLevel)
+        || "normal";
+      const hasRun = getCompletedGateKeys(raidData).length > 0;
+      const plain = raidData && typeof raidData.toObject === "function"
+        ? raidData.toObject()
+        : { ...raidData };
+
+      if (!hasRun) {
+        if (modeKey === currentMode && !plain.pendingModeKey) {
+          outcome = "noop";
+          return false;
+        }
+        plain.modeKey = modeKey;
+        delete plain.pendingModeKey;
+        const label = toModeLabel(modeKey);
+        for (const gate of getGatesForRaid(raidKey)) {
+          plain[gate] = { difficulty: label, completedDate: null };
+        }
+        outcome = "immediate";
+      } else if (modeKey === currentMode) {
+        if (!plain.pendingModeKey) {
+          outcome = "noop";
+          return false;
+        }
+        delete plain.pendingModeKey;
+        outcome = "cancelled";
+      } else {
+        plain.pendingModeKey = modeKey;
+        outcome = "deferred";
+      }
+
+      target.assignedRaids[raidKey] = plain;
+      return true;
+    }
+  );
+
+  const ok = touchedTarget
+    && update.saved
+    && outcome !== "ineligible"
+    && outcome !== "invalid"
+    && outcome !== "noop";
+  return { ok, outcome, raidKey, modeKey, raidLabel, modeLabel, userDoc: update.userDoc };
+}
+
 module.exports = {
+  parseGoldModeValue,
   parseGoldToggleValue,
+  setParsedGoldRaidMode,
   toggleParsedGoldRaid,
   toggleRaidGoldDisabled,
   replaceRaidGoldSelection,

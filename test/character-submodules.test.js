@@ -28,6 +28,34 @@ test("character facade re-exports extracted assigned-raid helpers", () => {
   assert.equal(characterFacade.RAID_REQUIREMENT_MAP, assignedRaids.RAID_REQUIREMENT_MAP);
 });
 
+test("normalizeAssignedRaid preserves a valid pendingModeKey through a rebuild", () => {
+  const out = assignedRaids.normalizeAssignedRaid(
+    {
+      modeKey: "normal",
+      pendingModeKey: "hard",
+      G1: { difficulty: "Normal" },
+      G2: { difficulty: "Normal" },
+    },
+    "Normal",
+    "armoche"
+  );
+  assert.equal(out.pendingModeKey, "hard");
+});
+
+test("normalizeAssignedRaid drops an invalid pendingModeKey", () => {
+  const out = assignedRaids.normalizeAssignedRaid(
+    {
+      modeKey: "normal",
+      pendingModeKey: "banana",
+      G1: {},
+      G2: {},
+    },
+    "Normal",
+    "armoche"
+  );
+  assert.equal(out.pendingModeKey, undefined);
+});
+
 test("roster matching narrows folded candidates by class and item level", () => {
   const candidates = [
     { charName: "Qiylyn", className: "Bard", itemLevel: 1710 },

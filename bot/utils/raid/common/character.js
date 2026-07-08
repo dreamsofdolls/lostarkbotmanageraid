@@ -19,6 +19,7 @@ const {
   getCharacterClass,
 } = require("./shared");
 const {
+  RAID_REQUIREMENTS,
   getGatesForRaid,
   getGoldForGate,
   getBoundGoldForGate,
@@ -37,6 +38,7 @@ const {
   getRequirementFor,
   isAssignedRaidCompleted,
   normalizeAssignedRaid,
+  normalizeRaidModeKey,
 } = require("./character/assigned-raids");
 const {
   buildFetchedRosterIndexes,
@@ -96,6 +98,7 @@ function ensureRaidEntries(character) {
       raidName: requirement.label,
       raidKey,
       modeKey,
+      pendingModeKey: normalizeRaidModeKey(raidKey, assignedRaid?.pendingModeKey) || null,
       minItemLevel: requirement.minItemLevel,
       completedGateKeys: getCompletedGateKeys(assignedRaid),
       isCompleted: isAssignedRaidCompleted(assignedRaid),
@@ -234,6 +237,7 @@ function getStatusRaidsForCharacter(character) {
       raidName: requirement.label,
       raidKey,
       modeKey,
+      pendingModeKey: normalizeRaidModeKey(raidKey, assignedRaid?.pendingModeKey) || null,
       minItemLevel: requirement.minItemLevel,
       allGateKeys,
       completedGateKeys,
@@ -312,7 +316,16 @@ function formatRaidStatusLine(raid, lang) {
   // only set on full status-raid entries; bare raids from older callers/tests
   // leave it undefined and get no mark.
   const notReceivingMark = raid.goldReceives === false ? ` ${UI.icons.lock}` : "";
-  return `${icon} ${label} · ${done}/${total}${notReceivingMark}`;
+  let pendingMark = "";
+  if (lang && raid.pendingModeKey && raid.pendingModeKey !== raid.modeKey) {
+    const { t } = require("../../../services/i18n");
+    const { getRaidSpecificModeLabel } = require("./labels");
+    const modeLabel = getRaidSpecificModeLabel(raid.raidKey, raid.pendingModeKey, lang)
+      || RAID_REQUIREMENTS[raid.raidKey]?.modes?.[raid.pendingModeKey]?.label
+      || raid.pendingModeKey;
+    pendingMark = ` ${t("raid-status.raidView.pendingModeMark", lang, { mode: modeLabel })}`;
+  }
+  return `${icon} ${label} · ${done}/${total}${notReceivingMark}${pendingMark}`;
 }
 
 // Sum (earned, total) gold across an array of raid entries already
