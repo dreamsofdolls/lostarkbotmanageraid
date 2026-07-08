@@ -42,25 +42,6 @@ function toPlainUserDoc(userDoc) {
   return typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
 }
 
-async function syncRaidProfileAfterAutoManageReport({
-  syncRaidProfileFromBibleCollected = async () => null,
-  report,
-  discordId,
-  userDoc,
-  weekResetStart,
-  collected,
-  logLabel,
-}) {
-  if (!userDoc || !hasSuccessfulAutoManageReport(report)) return null;
-  return syncRaidProfileFromBibleCollected({
-    discordId,
-    userDoc,
-    weekResetStart,
-    collected,
-    logLabel,
-  });
-}
-
 module.exports = {
   getAutoManageEntries,
   isSuccessfulAutoManageEntry,
@@ -70,5 +51,4 @@ module.exports = {
   countAppliedAutoManageGates,
   stampAutoManageAttemptFromReport,
   toPlainUserDoc,
-  syncRaidProfileAfterAutoManageReport,
 };

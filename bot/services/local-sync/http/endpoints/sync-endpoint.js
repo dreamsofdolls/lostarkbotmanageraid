@@ -2,9 +2,8 @@
  * services/local-sync/http/sync-endpoint.js
  * POST /api/raid-sync handler. Auth chain: Bearer JWT -> signature
  * verify -> Mongo localSyncEnabled check -> stored-token freshness check
- * -> apply. Token expiry stays open here so the web companion can upload
- * raid-profile stats after weekly clear-sync; /api/raid-profile-sync
- * shrinks the stored token once profile data lands.
+ * -> apply. Successful writes shrink the stored token expiry so a leaked
+ * URL has only a short replay window after data lands.
  */
 
 "use strict";
@@ -12,6 +11,7 @@
 const {
   applyLocalSyncDeltas,
   recordLocalSyncSuccess,
+  TOKEN_POST_SYNC_TTL_SEC,
 } = require("../..");
 const {
   createJsonSender,
@@ -23,6 +23,17 @@ const {
   requireCurrentLocalSyncUser,
 } = require("../request-gates");
 const { getRaidRequirementMap } = require("../../../../models/Raid");
+
+async function shrinkLocalSyncTokenAfterWrite({ User, discordId, token }) {
+  if (!token) return null;
+  const newExpSec = Math.floor(Date.now() / 1000) + TOKEN_POST_SYNC_TTL_SEC;
+  const result = await User.updateOne(
+    { discordId, lastLocalSyncToken: token },
+    { $set: { lastLocalSyncTokenExpAt: newExpSec } }
+  );
+  const matched = Number(result?.matchedCount ?? result?.n ?? result?.modifiedCount ?? 0);
+  return matched > 0 ? newExpSec : null;
+}
 
 /**
  * Build the POST /api/raid-sync handler. Factory pattern so bot.js can
@@ -123,11 +134,17 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId, applyRaidSetBa
       console.warn("[sync-endpoint] timestamp stamp failed:", err?.message || err);
     }
 
-    // 6. Do not shrink the local-sync token here. Weekly clear-sync chains
-    // a raid-profile upload after applying deltas; closing the token at this
-    // point can strand that profile upload. /api/raid-profile-sync owns the
-    // post-profile shrink instead.
-    const newExpSec = null;
+    // 6. Shrink the local-sync token after a real write. All-skipped or
+    // rejected posts keep the remaining window so the user can retry with
+    // a corrected file/link flow.
+    let newExpSec = null;
+    if (Array.isArray(summary?.applied) && summary.applied.length > 0) {
+      try {
+        newExpSec = await shrinkLocalSyncTokenAfterWrite({ User, discordId, token });
+      } catch (err) {
+        console.warn("[sync-endpoint] token shrink failed:", err?.message || err);
+      }
+    }
 
     send(res, 200, {
       ok: true,

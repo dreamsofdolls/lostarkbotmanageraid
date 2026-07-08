@@ -8,7 +8,6 @@ const {
   createEnvAllowlistChecker,
 } = require("../bot/services/access/env-allowlist");
 const { parseManagerIds } = require("../bot/services/access/manager");
-const { parseDevUserIds } = require("../bot/services/access/dev-preview");
 
 test("parseEnvAllowlistIds supports comma, whitespace, empties, dedupe, and quotes", () => {
   const ids = parseEnvAllowlistIds(" 111,222  333,, '444' \"555\" 111 ");
@@ -40,7 +39,6 @@ test("createEnvAllowlistChecker fails closed and stringifies ids", () => {
   assert.equal(isAllowlisted(undefined), false);
 });
 
-test("manager and dev-preview parsers share the env allowlist rules", () => {
+test("manager parser shares the env allowlist rules", () => {
   assert.deepEqual([...parseManagerIds(" 123, '456' 789 ")], ["123", "456", "789"]);
-  assert.deepEqual([...parseDevUserIds(" 123, '456' 789 ")], ["123", "456", "789"]);
 });

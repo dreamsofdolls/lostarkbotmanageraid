@@ -11,7 +11,6 @@
 
 const {
   stampAutoManageAttemptFromReport,
-  syncRaidProfileAfterAutoManageReport,
 } = require("../auto-manage/reports/utils");
 const {
   isAutoManageAttemptStale,
@@ -47,7 +46,6 @@ function createRaidViewSnapshotService({
   releaseAutoManageSyncSlot,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
-  syncRaidProfileFromBibleCollected = async () => null,
   stampAutoManageAttempt,
   weekResetStartMs,
   log = console,
@@ -85,10 +83,6 @@ function createRaidViewSnapshotService({
     }
 
     let autoManageGuard = null;
-    let profileCollected = null;
-    let profileReport = null;
-    let profileWeekResetStart = null;
-    let shouldSyncProfile = false;
     try {
       let autoManagePromise = Promise.resolve(null);
       let autoManageWeekResetStart = null;
@@ -126,10 +120,6 @@ function createRaidViewSnapshotService({
       const snapshot = await saveWithRetry(async () => {
         const doc = await User.findOne({ discordId });
         if (!doc) return null;
-        profileCollected = null;
-        profileReport = null;
-        profileWeekResetStart = null;
-        shouldSyncProfile = false;
         const didFreshenWeek = ensureFreshWeek(doc);
         const didRefresh = applyStaleAccountRefreshes(doc, refreshCollected);
 
@@ -140,13 +130,8 @@ function createRaidViewSnapshotService({
             autoManageWeekResetStart,
             autoManageCollected
           );
-          profileReport = autoReport;
           const now = Date.now();
-          if (stampAutoManageAttemptFromReport(doc, autoReport, now)) {
-            shouldSyncProfile = true;
-            profileCollected = autoManageCollected;
-            profileWeekResetStart = autoManageWeekResetStart;
-          }
+          stampAutoManageAttemptFromReport(doc, autoReport, now);
           didAutoManage = true;
         } else if (autoManageBibleHit) {
           doc.lastAutoManageAttemptAt = Date.now();
@@ -156,17 +141,6 @@ function createRaidViewSnapshotService({
         if (didFreshenWeek || didRefresh || didAutoManage) await doc.save();
         return doc.toObject();
       });
-      if (shouldSyncProfile) {
-        await syncRaidProfileAfterAutoManageReport({
-          syncRaidProfileFromBibleCollected,
-          report: profileReport,
-          discordId,
-          userDoc: snapshot,
-          weekResetStart: profileWeekResetStart,
-          collected: profileCollected,
-          logLabel: `${logLabel}:profile`,
-        });
-      }
       return snapshot;
     } catch (err) {
       log.error(`${logLabel} refresh failed for ${discordId}:`, err?.message || err);

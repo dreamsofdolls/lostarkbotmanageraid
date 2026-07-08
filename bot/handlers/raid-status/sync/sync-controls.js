@@ -3,7 +3,7 @@
 const { t } = require("../../../services/i18n");
 const {
   getOrMintLocalSyncToken,
-  extractProfileFromUser,
+  extractIdentityFromUser,
 } = require("../../../services/local-sync");
 const {
   publicBaseUrl,
@@ -49,10 +49,10 @@ function createRaidStatusSyncControls({
     const baseUrl = publicBaseUrl();
     if (!baseUrl) return;
     try {
-      const profile = extractProfileFromUser(interactionUser);
+      const identity = extractIdentityFromUser(interactionUser);
       const token = await getOrMintLocalSyncToken(discordId, lang, {
         UserModel: User,
-        profile,
+        identity,
       });
       cachedLocalSyncResumeUrl = buildLocalSyncUrl(token, baseUrl);
     } catch (err) {

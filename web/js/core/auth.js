@@ -34,7 +34,7 @@ function renderAuthStatus({ authStatus, authState, t, escapeHtml }) {
   const validStr = remSec >= 60
     ? t("identity.tokenValid", { n: Math.floor(remSec / 60) })
     : t("identity.tokenValidSec", { n: remSec });
-  let profilePill;
+  let identityPill;
   if (username || avatarUrl) {
     const avatarImg = avatarUrl
       ? `<img class="auth-avatar" src="${escapeHtml(avatarUrl)}" alt="" referrerpolicy="no-referrer">`
@@ -43,16 +43,16 @@ function renderAuthStatus({ authStatus, authState, t, escapeHtml }) {
       ? `<span class="auth-name">${escapeHtml(username)}</span>`
       : "";
     const linkedLabel = `<span class="auth-linked-label">${escapeHtml(t("identity.linked"))}</span>`;
-    profilePill = `<span class="auth-pill auth-profile-pill"><span class="auth-status-dot"></span>${avatarImg}<span class="auth-pill-text">${linkedLabel}${nameSpan}</span></span>`;
+    identityPill = `<span class="auth-pill auth-identity-pill"><span class="auth-status-dot"></span>${avatarImg}<span class="auth-pill-text">${linkedLabel}${nameSpan}</span></span>`;
   } else {
-    profilePill = `<span class="auth-pill auth-profile-pill"><span class="auth-status-dot"></span><span class="auth-pill-text"><span class="auth-name">${escapeHtml(t("identity.linkedAnonymous"))}</span></span></span>`;
+    identityPill = `<span class="auth-pill auth-identity-pill"><span class="auth-status-dot"></span><span class="auth-pill-text"><span class="auth-name">${escapeHtml(t("identity.linkedAnonymous"))}</span></span></span>`;
   }
 
   const timerClass = remSec < 60
     ? "auth-pill auth-timer-pill auth-timer-pill--warn"
     : "auth-pill auth-timer-pill";
   const timerStr = `<span class="${timerClass}"><span class="auth-timer-icon">&#9201;</span><span>${escapeHtml(validStr)}</span></span>`;
-  authStatus.innerHTML = `<div class="auth-row">${profilePill}${timerStr}</div>`;
+  authStatus.innerHTML = `<div class="auth-row">${identityPill}${timerStr}</div>`;
 }
 
 export function bootstrapAuthSession({
@@ -80,11 +80,11 @@ export function bootstrapAuthSession({
   } else {
     const expSec = payload.exp || 0;
     const nowSec = Math.floor(Date.now() / 1000);
-    const profileFields = {
+    const identityFields = {
       username: typeof payload.username === "string" ? payload.username : null,
       avatarUrl: typeof payload.avatarUrl === "string" ? payload.avatarUrl : null,
     };
-    authState = { kind: "ok", expSec, discordId: payload.discordId, ...profileFields };
+    authState = { kind: "ok", expSec, discordId: payload.discordId, ...identityFields };
     render();
 
     if (!(expSec && expSec < nowSec)) {

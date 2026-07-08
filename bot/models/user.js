@@ -96,8 +96,8 @@ const characterSchema = new mongoose.Schema(
     bibleCid: { type: Number, default: null },
     bibleRid: { type: Number, default: null },
     // Set true when the most recent auto-manage sync for this character
-    // returned "Logs not enabled" from lostark.bible (public log OFF in
-    // the player's bible profile), cleared to false when a subsequent
+    // returned "Logs not enabled" from lostark.bible (public logs OFF for
+    // that player), cleared to false when a subsequent
     // sync fetches logs successfully. Used by the /raid-check Edit flow
     // to carve out a per-char exception: normally the leader Edit button
     // skips chars that belong to opted-in (auto-sync) users because any
@@ -217,12 +217,6 @@ const userSchema = new mongoose.Schema(
     // on local-off so old links can't survive an opt-out.
     lastLocalSyncToken: { type: String, default: null },
     lastLocalSyncTokenExpAt: { type: Number, default: null },
-    // Longer-lived, opaque browser-device token for raid-profile analytics
-    // auto-sync. Kept separate from lastLocalSyncToken because raid progress
-    // sync intentionally shrinks that URL token to ~60s after a write.
-    localProfileSyncTokenHash: { type: String, default: null },
-    localProfileSyncTokenExpAt: { type: Number, default: null },
-    lastLocalProfileSyncAt: { type: Number, default: null },
     // Preferred display locale for Artist's responses. Drives every
     // user-facing string via bot/services/i18n.js. Default "vi" so
     // pre-existing users see no behavior change after the i18n rollout;
@@ -285,14 +279,6 @@ userSchema.index(
   {
     name: "auto_manage_background_attempt_scan",
     partialFilterExpression: { autoManageEnabled: true },
-  }
-);
-
-userSchema.index(
-  { localProfileSyncTokenHash: 1 },
-  {
-    name: "local_profile_sync_token_lookup",
-    partialFilterExpression: { localProfileSyncTokenHash: { $type: "string" } },
   }
 );
 

@@ -20,7 +20,6 @@ const {
   countAppliedAutoManageGates,
   stampAutoManageAttemptFromReport,
   toPlainUserDoc,
-  syncRaidProfileAfterAutoManageReport,
 } = require("../../../services/auto-manage/reports/utils");
 const {
   AUTO_MANAGE_BACKGROUND_STALE_MS,
@@ -42,7 +41,6 @@ function createRaidStatusSync(deps) {
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
     applyAutoManageCollectedForStatus,
-    syncRaidProfileFromBibleCollected = async () => null,
     stampAutoManageAttempt,
     weekResetStartMs,
     STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS,
@@ -73,10 +71,6 @@ function createRaidStatusSync(deps) {
     let userDoc = null;
     let autoManageGuard = null;
     let autoManageReleaseInBackground = false;
-    let profileCollected = null;
-    let profileReport = null;
-    let profileWeekResetStart = null;
-    let shouldSyncProfile = false;
     const piggybackOutcome = createOutcome();
 
     try {
@@ -163,10 +157,6 @@ function createRaidStatusSync(deps) {
       userDoc = await saveWithRetry(async () => {
         const doc = await User.findOne({ discordId });
         if (!doc) return null;
-        profileCollected = null;
-        profileReport = null;
-        profileWeekResetStart = null;
-        shouldSyncProfile = false;
 
         const didFreshenWeek = ensureFreshWeek(doc);
         const didRefresh = applyStaleAccountRefreshes(doc, refreshCollected);
@@ -178,13 +168,8 @@ function createRaidStatusSync(deps) {
             autoManageWeekResetStart,
             autoManageCollected
           );
-          profileReport = autoReport;
           const now = Date.now();
-          if (stampAutoManageAttemptFromReport(doc, autoReport, now)) {
-            shouldSyncProfile = true;
-            profileCollected = autoManageCollected;
-            profileWeekResetStart = autoManageWeekResetStart;
-          }
+          stampAutoManageAttemptFromReport(doc, autoReport, now);
           const newGates = countAppliedAutoManageGates(autoReport);
           piggybackOutcome.newGatesApplied = newGates;
           piggybackOutcome.outcome =
@@ -198,17 +183,6 @@ function createRaidStatusSync(deps) {
         if (didFreshenWeek || didRefresh || didAutoManage) await doc.save();
         return toPlainUserDoc(doc);
       });
-      if (shouldSyncProfile) {
-        await syncRaidProfileAfterAutoManageReport({
-          syncRaidProfileFromBibleCollected,
-          report: profileReport,
-          discordId,
-          userDoc,
-          weekResetStart: profileWeekResetStart,
-          collected: profileCollected,
-          logLabel: "[raid-status:piggyback]",
-        });
-      }
     } catch (err) {
       console.error("[raid-status] lazy refresh failed:", err?.message || err);
       if (autoManageGuard?.acquired) {
@@ -227,11 +201,6 @@ function createRaidStatusSync(deps) {
   async function runManualStatusSync(discordId, options = {}) {
     const { onAcquired } = options;
     let manualGuard = null;
-    let profileCollected = null;
-    let profileReport = null;
-    let profileUserDoc = null;
-    let profileWeekResetStart = null;
-    let shouldSyncProfile = false;
     const manualOutcome = createOutcome();
 
     try {
@@ -270,11 +239,6 @@ function createRaidStatusSync(deps) {
           await saveWithRetry(async () => {
             const fresh = await User.findOne({ discordId });
             if (!fresh) return;
-            profileCollected = null;
-            profileReport = null;
-            profileUserDoc = null;
-            profileWeekResetStart = null;
-            shouldSyncProfile = false;
             ensureFreshWeek(fresh);
             if (!fresh.autoManageEnabled) {
               fresh.lastAutoManageAttemptAt = Date.now();
@@ -287,19 +251,13 @@ function createRaidStatusSync(deps) {
               weekResetStart,
               collectedLocal
             );
-            profileReport = report;
             const now = Date.now();
-            if (stampAutoManageAttemptFromReport(fresh, report, now)) {
-              shouldSyncProfile = true;
-              profileCollected = collectedLocal;
-              profileWeekResetStart = weekResetStart;
-            }
+            stampAutoManageAttemptFromReport(fresh, report, now);
             const newGates = countAppliedAutoManageGates(report);
             manualOutcome.newGatesApplied = newGates;
             manualOutcome.outcome =
               newGates > 0 ? "applied" : "synced-no-new";
             await fresh.save();
-            profileUserDoc = toPlainUserDoc(fresh);
           });
         }
       }
@@ -315,17 +273,6 @@ function createRaidStatusSync(deps) {
     }
 
     const userDoc = await User.findOne({ discordId }).lean();
-    if (shouldSyncProfile) {
-      await syncRaidProfileAfterAutoManageReport({
-        syncRaidProfileFromBibleCollected,
-        report: profileReport,
-        discordId,
-        userDoc: profileUserDoc || userDoc,
-        weekResetStart: profileWeekResetStart,
-        collected: profileCollected,
-        logLabel: "[raid-status:manual]",
-      });
-    }
     return {
       status: "completed",
       outcome: manualOutcome,

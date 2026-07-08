@@ -34,11 +34,6 @@ import {
   clearHandle as clearPersistedHandle,
   tryRestoreForUser,
 } from "/sync/js/sync/file/file-persistence.js";
-import {
-  syncProfileSnapshotOnce,
-  stopProfileAutoSync,
-} from "/sync/js/profile/profile-sync.js";
-import { createProfileProcessLogRenderer } from "/sync/js/profile/profile-process-log.js";
 import { escapeHtml } from "/sync/js/core/html.js";
 import { formatBytes } from "/sync/js/core/format.js";
 import {
@@ -59,10 +54,6 @@ import {
 const $ = (id) => document.getElementById(id);
 const authStatus = $("auth-status");
 const fileSection = $("file-section");
-const syncModeSection = $("sync-mode-section");
-const weeklyModeTab = $("weekly-mode-tab");
-const profileModeTab = $("profile-mode-tab");
-const syncModeLock = $("sync-mode-lock");
 const previewSection = $("preview-section");
 const dropZone = $("drop-zone");
 const pickFileBtn = $("pick-file-btn");
@@ -72,19 +63,12 @@ const previewStats = $("preview-stats");
 const syncSection = $("sync-section");
 const syncBtn = $("sync-btn");
 const syncOutput = $("sync-output");
-const profileSection = $("profile-section");
-const profileSyncOutput = $("profile-sync-output");
-const profileProcessLog = createProfileProcessLogRenderer({
-  container: profileSyncOutput,
-  escapeHtml,
-});
 
 // Cache the last successful query result so the Sync button can POST it
 // without re-running the SQL. Set on every loadAndPreview() success.
 let lastDeltas = null;
 let previewUtilsPromise = null;
 let selectedLocalFile = null;
-let lockedSyncMode = null;
 
 function loadPreviewUtils() {
   if (!previewUtilsPromise) {
@@ -171,78 +155,7 @@ async function fetchPreviewSummary(deltas) {
   }
 }
 
-async function getRosterAccountsForProfile() {
-  if (Array.isArray(window.__artistRosterAccounts)) {
-    return window.__artistRosterAccounts;
-  }
-  if (!window.__artistSyncToken) return [];
-  const resp = await fetch("/api/me/roster", {
-    headers: { "Authorization": `Bearer ${window.__artistSyncToken}` },
-  });
-  const data = await resp.json().catch(() => null);
-  if (!resp.ok || !data?.ok) {
-    throw new Error(data?.error || `roster fetch failed HTTP ${resp.status}`);
-  }
-  window.__artistRosterAccounts = Array.isArray(data.accounts) ? data.accounts : [];
-  return window.__artistRosterAccounts;
-}
-
-function renderProfileSyncStatus(kind, message) {
-  profileProcessLog.render(kind, message);
-}
-
-function renderWeeklyProfileSyncStatus(kind, message) {
-  const el = document.getElementById("weekly-profile-sync-status");
-  if (!el || !message) return;
-  const cls = kind === "err" ? "status-err" : kind === "ok" ? "status-ok" : "hint";
-  el.innerHTML = `<span class="${cls}">${escapeHtml(message)}</span>`;
-}
-
-async function syncProfileStatsAfterWeeklySync() {
-  if (!selectedLocalFile) return Promise.resolve(null);
-  const scopeKeys = Array.isArray(window.__artistWeeklyProfileScopeKeys)
-    ? [...window.__artistWeeklyProfileScopeKeys]
-    : [];
-  if (scopeKeys.length === 0) {
-    renderWeeklyProfileSyncStatus("ok", t("sync.nothingToSyncFull"));
-    return { ok: true, skipped: "no-weekly-profile-scope" };
-  }
-  const { currentWeeklyResetStartMs } = await loadPreviewUtils();
-  return syncProfileSnapshotOnce({
-    file: selectedLocalFile,
-    getDiscordId: () => window.__artistDiscordId,
-    getLocalToken: () => window.__artistSyncToken,
-    getRosterAccounts: getRosterAccountsForProfile,
-    renderStatus: renderWeeklyProfileSyncStatus,
-    updateLocalTokenExpSec: (newExpSec) => authSession.updateExpSec(newExpSec),
-    reason: "weekly",
-    minFightStartMs: currentWeeklyResetStartMs(),
-    scopeKeys,
-  });
-}
-
-function renderSyncModeTabs() {
-  if (!syncModeSection || !weeklyModeTab || !profileModeTab) return;
-  const weeklyActive = lockedSyncMode === "weekly";
-  const profileActive = lockedSyncMode === "profile";
-  weeklyModeTab.classList.toggle("is-active", weeklyActive);
-  profileModeTab.classList.toggle("is-active", profileActive);
-  weeklyModeTab.setAttribute("aria-selected", weeklyActive ? "true" : "false");
-  profileModeTab.setAttribute("aria-selected", profileActive ? "true" : "false");
-  weeklyModeTab.disabled = profileActive;
-  profileModeTab.disabled = weeklyActive;
-  if (syncModeLock) {
-    if (!lockedSyncMode) {
-      syncModeLock.hidden = true;
-      syncModeLock.textContent = "";
-    } else {
-      syncModeLock.hidden = false;
-      syncModeLock.textContent = t(weeklyActive ? "syncMode.lockedWeekly" : "syncMode.lockedProfile");
-    }
-  }
-}
-
-function clearWeeklySurface() {
+function clearSyncSurface() {
   previewSection.hidden = true;
   previewOutput.innerHTML = "";
   renderPreviewStats(previewStats, null);
@@ -251,53 +164,20 @@ function clearWeeklySurface() {
   syncOutput.hidden = true;
   syncOutput.innerHTML = "";
   lastDeltas = null;
-  window.__artistWeeklyProfileScopeKeys = [];
 }
 
-function clearProfileSurface() {
-  stopProfileAutoSync();
-  profileSection.hidden = true;
-  renderProfileSyncStatus(null, "");
-}
-
-function resetSyncModeChoice({ keepFile = true } = {}) {
-  lockedSyncMode = null;
+function resetSyncSurface({ keepFile = true } = {}) {
   if (!keepFile) selectedLocalFile = null;
-  clearWeeklySurface();
-  clearProfileSurface();
-  if (syncModeSection) syncModeSection.hidden = !selectedLocalFile;
-  renderSyncModeTabs();
+  clearSyncSurface();
 }
 
-async function activateWeeklyMode() {
-  if (!selectedLocalFile || lockedSyncMode === "profile") return;
-  lockedSyncMode = "weekly";
-  clearProfileSurface();
-  renderSyncModeTabs();
+async function activateSyncPreview() {
+  if (!selectedLocalFile) return;
   previewSection.hidden = false;
   syncSection.hidden = true;
   previewOutput.textContent = t("preview.loadingWasm");
   renderWeekRange();
   await loadAndPreview(selectedLocalFile);
-}
-
-async function activateProfileMode() {
-  if (!selectedLocalFile || lockedSyncMode === "weekly" || lockedSyncMode === "profile") return;
-  lockedSyncMode = "profile";
-  stopProfileAutoSync();
-  clearWeeklySurface();
-  renderSyncModeTabs();
-  profileSection.hidden = false;
-  renderProfileSyncStatus(null, "");
-  await syncProfileSnapshotOnce({
-    file: selectedLocalFile,
-    getDiscordId: () => window.__artistDiscordId,
-    getLocalToken: () => window.__artistSyncToken,
-    getRosterAccounts: getRosterAccountsForProfile,
-    renderStatus: renderProfileSyncStatus,
-    updateLocalTokenExpSec: (newExpSec) => authSession.updateExpSec(newExpSec),
-    reason: "initial",
-  });
 }
 
 // ----- 1. Token parsing + i18n bootstrap -----
@@ -355,7 +235,8 @@ async function loadFile(file, { handle = null } = {}) {
   // Refresh week range in case the page was open across a Wed 17:00
   // VN reset boundary - boot-time render would be stale by then.
   renderWeekRange();
-  resetSyncModeChoice();
+  resetSyncSurface();
+  await activateSyncPreview();
   // Persist the handle for next visit. Plain File (drag-drop without
   // FSA handle promotion) can't persist - skip silently in that case.
   if (handle && window.__artistDiscordId) {
@@ -379,26 +260,7 @@ async function handleRemoveFile() {
   // hide so user knows nothing's loaded.
   fileMeta.hidden = true;
   fileMeta.innerHTML = "";
-  resetSyncModeChoice({ keepFile: false });
-}
-
-if (weeklyModeTab) {
-  weeklyModeTab.addEventListener("click", () => {
-    activateWeeklyMode().catch((err) => {
-      console.error("[local-sync] weekly mode failed:", err);
-      previewSection.hidden = false;
-      previewOutput.innerHTML = `<span class="status-err">${t("preview.openFailed")}</span> ${escapeHtml(err.message || String(err))}`;
-    });
-  });
-}
-
-if (profileModeTab) {
-  profileModeTab.addEventListener("click", () => {
-    activateProfileMode().catch((err) => {
-      console.error("[local-sync] profile import failed:", err);
-      renderProfileSyncStatus("err", err?.message || String(err));
-    });
-  });
+  resetSyncSurface({ keepFile: false });
 }
 
 dropZone.addEventListener("dragover", (e) => {
@@ -577,14 +439,12 @@ async function runPreviewQuery(sqlite3, db) {
   if (previewCols.size === 0 && encounterCols.size === 0) {
     previewOutput.innerHTML = `<span class="status-err">${t("preview.noTable")}</span> ${t("preview.noTableHint")}`;
     lastDeltas = [];
-    window.__artistWeeklyProfileScopeKeys = [];
     return;
   }
   const source = resolveEncounterSource({ previewCols, encounterCols });
   if (!source) {
     previewOutput.innerHTML = `<span class="status-err">${t("preview.missingCols")}</span><br>${formatSchemaPreview("encounter_preview", previewCols)}<br>${formatSchemaPreview("encounter", encounterCols)}<br><span class="hint">${t("preview.missingColsHint")}</span>`;
     lastDeltas = [];
-    window.__artistWeeklyProfileScopeKeys = [];
     return;
   }
   const { table, bossCol, tsCol, charCol, diffCol, clearedCol, playersCol } = source;
@@ -623,13 +483,11 @@ async function runPreviewQuery(sqlite3, db) {
     });
   } catch (err) {
     previewOutput.innerHTML = `<span class="status-err">${t("preview.queryFailed")}</span> ${escapeHtml(err.message || String(err))}<br><span class="hint">Table: <code>${escapeHtml(table)}</code>, boss column: <code>${escapeHtml(bossCol)}</code>, ts column: <code>${escapeHtml(tsCol)}</code>. ${t("preview.queryFailedHint")}</span>`;
-    window.__artistWeeklyProfileScopeKeys = [];
     return;
   }
   if (rows.length === 0) {
     previewOutput.innerHTML = `<span class="status-ok">${t("preview.noRecent")}</span> ${t("preview.nothingToSync")}`;
     lastDeltas = [];
-    window.__artistWeeklyProfileScopeKeys = [];
     return;
   }
   // Cache rows + schema for post-sync refresh (refreshDiffAndStats reuses
@@ -683,7 +541,6 @@ async function rebuildDiffFromRows({ rows, schemaDebug, keepSyncOutput = false }
   window.__artistRosterAccounts = rosterAccounts;
   const diff = buildDiff(rosterAccounts, buckets);
   const actionableKeys = buildActionableBucketKeySet(diff);
-  window.__artistWeeklyProfileScopeKeys = [...actionableKeys];
   lastDeltas = syncRows
     .filter((r) => {
       const gateInfo = getRaidGateForBoss(r[0]);
@@ -767,12 +624,11 @@ syncBtn.addEventListener("click", async () => {
       return;
     }
     const { applied: a } = summarizeSyncResult(data);
-    // raid-sync keeps the token alive for the chained profile upload. If the
-    // server ever returns a new expiry here, mirror it into the auth pill.
+    // Successful raid-sync writes shrink the stored token expiry server-side.
+    // Mirror the new expiry into the auth pill so the countdown updates now.
     authSession.updateExpSec(data.newExpSec);
     syncOutput.innerHTML = renderSyncApplyResult(data, window.__artistRosterAccounts || []);
     syncOutput.hidden = false;
-    const profileStatsPromise = syncProfileStatsAfterWeeklySync();
 
     // Refresh section 3 (preview cards + stats panel) after a real apply
     // so the user sees post-sync state immediately - synced gates flip
@@ -787,7 +643,6 @@ syncBtn.addEventListener("click", async () => {
         console.warn("[local-sync] post-sync refresh failed:", err?.message || err);
       });
     }
-    await profileStatsPromise;
   } catch (err) {
     syncOutput.innerHTML = `<span class="status-err">${t("sync.networkError")}</span> ${escapeHtml(err.message || String(err))}`;
     syncBtn.disabled = false;

@@ -4,7 +4,6 @@ const {
   hasAppliedAutoManageDelta,
   stampAutoManageAttemptFromReport,
   toPlainUserDoc,
-  syncRaidProfileAfterAutoManageReport,
 } = require("../reports/utils");
 
 function createAutoManageSyncService(deps) {
@@ -13,7 +12,6 @@ function createAutoManageSyncService(deps) {
     saveWithRetry,
     ensureFreshWeek,
     applyAutoManageCollected,
-    syncRaidProfileFromBibleCollected = async () => null,
   } = deps;
 
   async function applyAutoManageCollectedForStatus(
@@ -23,14 +21,10 @@ function createAutoManageSyncService(deps) {
     logLabel
   ) {
     let savedSnapshot = null;
-    let profileReport = null;
-    let shouldSyncProfile = false;
     const result = await saveWithRetry(async () => {
       const doc = await User.findOne({ discordId });
       if (!doc) return null;
       savedSnapshot = null;
-      profileReport = null;
-      shouldSyncProfile = false;
 
       const didFreshenWeek = ensureFreshWeek(doc);
       let didAutoManage = false;
@@ -38,10 +32,8 @@ function createAutoManageSyncService(deps) {
 
       if (collected && doc.autoManageEnabled) {
         const autoReport = applyAutoManageCollected(doc, weekResetStart, collected);
-        profileReport = autoReport;
         const now = Date.now();
         if (stampAutoManageAttemptFromReport(doc, autoReport, now)) {
-          shouldSyncProfile = true;
           outcome = hasAppliedAutoManageDelta(autoReport)
             ? "synced-with-delta"
             : "synced-no-delta";
@@ -61,17 +53,6 @@ function createAutoManageSyncService(deps) {
       );
       return savedSnapshot;
     });
-    if (shouldSyncProfile) {
-      await syncRaidProfileAfterAutoManageReport({
-        syncRaidProfileFromBibleCollected,
-        report: profileReport,
-        discordId,
-        userDoc: savedSnapshot,
-        weekResetStart,
-        collected,
-        logLabel: `[raid-status:${logLabel || "sync"}]`,
-      });
-    }
     return result;
   }
 

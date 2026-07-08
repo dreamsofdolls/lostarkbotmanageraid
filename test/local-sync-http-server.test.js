@@ -18,7 +18,7 @@ async function startTestServer() {
   };
 }
 
-test("local-sync web server serves raid-profile browser helper modules", async () => {
+test("local-sync web server serves browser helper modules", async () => {
   const { baseUrl, stop } = await startTestServer();
   try {
     for (const [route, expectedContentType] of [
@@ -35,11 +35,6 @@ test("local-sync web server serves raid-profile browser helper modules", async (
       ["/sync/js/core/auth.js", "bootstrapAuthSession"],
       ["/sync/js/core/html.js", "escapeHtml"],
       ["/sync/js/core/format.js", "formatBytes"],
-      ["/sync/js/profile/profile-role.js", "classifyProfileLogRole"],
-      ["/sync/js/profile/metrics/profile-metrics.js", "computeProfileConsistency"],
-      ["/sync/js/profile/metrics/profile-score.js", "computeProfileScores"],
-      ["/sync/js/profile/data/profile-row-enrich.js", "enrichProfileRows"],
-      ["/sync/js/profile/data/profile-snapshot.js", "buildProfileSnapshot"],
       ["/sync/js/sync/render/preview-renderer.js", "renderDiffPage"],
       ["/sync/js/sync/sqlite-schema.js", "resolveEncounterSource"],
     ]) {
