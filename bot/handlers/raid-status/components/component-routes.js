@@ -13,6 +13,7 @@ const STATUS_COMPONENT_ACTION = Object.freeze({
   taskCharFilter: "taskCharFilter",
   taskToggle: "taskToggle",
   goldCharFilter: "goldCharFilter",
+  goldMode: "goldMode",
   goldToggle: "goldToggle",
   goldReplace: "goldReplace",
 });
@@ -93,6 +94,12 @@ const STATUS_COMPONENT_ROUTES = Object.freeze([
   {
     customId: "status-gold:toggle",
     action: STATUS_COMPONENT_ACTION.goldToggle,
+    editDriven: true,
+    redraw: true,
+  },
+  {
+    customId: "status-gold:mode",
+    action: STATUS_COMPONENT_ACTION.goldMode,
     editDriven: true,
     redraw: true,
   },

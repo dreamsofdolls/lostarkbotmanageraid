@@ -11,6 +11,7 @@ function createRaidStatusComponentLayout({
   buildTaskCharFilterRow,
   buildTaskToggleRow,
   buildGoldCharFilterRow,
+  buildGoldModeRow,
   buildGoldToggleRow,
   buildSyncButton,
   buildSyncRow,
@@ -87,6 +88,10 @@ function createRaidStatusComponentLayout({
     const sharedFrom = currentAccount?._sharedFrom;
     const goldToggleDisabled = disabled || (!!sharedFrom && sharedFrom.accessLevel !== "edit");
     rows.push(buildGoldToggleRow(goldToggleDisabled));
+    const modeRow = typeof buildGoldModeRow === "function"
+      ? buildGoldModeRow(goldToggleDisabled)
+      : null;
+    if (modeRow && rows.length < 5) rows.push(modeRow);
   };
 
   const addRaidViewNavigationRows = (rows, disabled, showSync) => {

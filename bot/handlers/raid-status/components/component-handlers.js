@@ -12,7 +12,9 @@ const {
   toggleParsedSideTask,
 } = require("../task/task-actions");
 const {
+  parseGoldModeValue,
   parseGoldToggleValue,
+  setParsedGoldRaidMode,
   toggleParsedGoldRaid,
 } = require("../gold/gold-actions");
 const {
@@ -432,6 +434,97 @@ function createStatusComponentRouteHandlers(ctx) {
 
     [STATUS_COMPONENT_ACTION.goldReplace]: async (component) => {
       return goldReplacementFlow.complete(component);
+    },
+
+    [STATUS_COMPONENT_ACTION.goldMode]: async (component) => {
+      const value = firstSelectValue(component, "");
+      const parsed = parseGoldModeValue(value);
+      if (parsed.kind === "noop" || parsed.kind === "invalid") {
+        return noRedraw();
+      }
+
+      const targetAccount = session.accounts[session.currentPage];
+      const targetAccountName = targetAccount?.accountName || "";
+      if (!targetAccountName) {
+        return noRedraw();
+      }
+
+      const sharedFrom = targetAccount?._sharedFrom;
+      if (sharedFrom && sharedFrom.accessLevel !== "edit") {
+        console.log(
+          `[raid-status gold mode] view-only share rejected ` +
+          `executor=${discordId} owner=${sharedFrom.ownerDiscordId} raid=${parsed.raidKey}`,
+        );
+        return noRedraw();
+      }
+      const writeDiscordId = sharedFrom ? sharedFrom.ownerDiscordId : discordId;
+      if (sharedFrom) {
+        console.log(
+          `[raid-status gold mode] share-write executor=${discordId} ` +
+          `owner=${writeDiscordId} raid=${parsed.raidKey}`,
+        );
+      }
+
+      let result;
+      try {
+        result = await setParsedGoldRaidMode({
+          User,
+          saveWithRetry,
+          discordId: writeDiscordId,
+          targetAccountName,
+          targetCharName: parsed.targetCharName,
+          raidKey: parsed.raidKey,
+          modeKey: parsed.modeKey,
+        });
+      } catch (err) {
+        console.warn("[raid-status gold mode] save failed:", err?.message || err);
+        await followUpNotice(component, EmbedBuilder, {
+          type: "warn",
+          title: t("raid-status.goldView.modeFailedTitle", lang),
+          description: t("raid-status.goldView.modeFailedDescription", lang),
+        }).catch(() => {});
+        return noRedraw();
+      }
+
+      if (result.outcome === "ineligible") {
+        await followUpNotice(component, EmbedBuilder, {
+          type: "warn",
+          title: t("raid-status.goldView.modeIneligibleTitle", lang),
+          description: t("raid-status.goldView.modeIneligibleDescription", lang, {
+            mode: result.modeLabel,
+            raidLabel: result.raidLabel,
+          }),
+        }).catch(() => {});
+        return noRedraw();
+      }
+      if (result.outcome === "noop") return noRedraw();
+      if (!result.ok) {
+        await followUpNotice(component, EmbedBuilder, {
+          type: "warn",
+          title: t("raid-status.goldView.modeFailedTitle", lang),
+          description: t("raid-status.goldView.modeFailedDescription", lang),
+        }).catch(() => {});
+        return noRedraw();
+      }
+
+      await reloadViewerAccounts(writeDiscordId === discordId ? result.userDoc : null);
+      if (typeof component.followUp === "function") {
+        const noticeKey = result.outcome === "immediate"
+          ? "modeApplied"
+          : result.outcome === "cancelled"
+            ? "modeCancelled"
+            : "modeDeferred";
+        await followUpNotice(component, EmbedBuilder, {
+          type: "success",
+          title: t(`raid-status.goldView.${noticeKey}Title`, lang),
+          description: t(`raid-status.goldView.${noticeKey}Description`, lang, {
+            characterName: parsed.targetCharName,
+            raidLabel: result.raidLabel,
+            mode: result.modeLabel,
+          }),
+        }).catch(() => {});
+      }
+      return redraw();
     },
 
     [STATUS_COMPONENT_ACTION.goldToggle]: async (component) => {

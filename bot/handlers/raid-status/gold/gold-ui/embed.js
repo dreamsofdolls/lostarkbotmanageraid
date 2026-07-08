@@ -41,8 +41,20 @@ function createGoldViewEmbedBuilder({
     });
   }
 
+  // Pending-mode tail for the gold view. Reuses the raid-view marker string so
+  // both surfaces read the same "-> {mode} (sau reset)" vocabulary. Only shows
+  // when a change is queued (raid ran this week so modeKey was not flipped yet).
+  function goldPendingTail(raid) {
+    if (!raid.pendingModeKey || raid.pendingModeKey === raid.modeKey) return "";
+    const { getRaidSpecificModeLabel } = require("../../../../utils/raid/common/labels");
+    const modeLabel = getRaidSpecificModeLabel(raid.raidKey, raid.pendingModeKey, lang)
+      || raid.pendingModeKey;
+    return ` ${t("raid-status.raidView.pendingModeMark", lang, { mode: modeLabel })}`;
+  }
+
   function formatGoldRaidLine(raid) {
     const label = localizedRaidLabel(raid, lang);
+    const pendingTail = goldPendingTail(raid);
     if (!raid.goldReceives) {
       // Not receiving. The leading lock only means roster-bound gold; an
       // unbound raid outside the cap stays neutral so lock never doubles as
@@ -52,7 +64,7 @@ function createGoldViewEmbedBuilder({
       else if (raid.goldExcludedReason === "bound") reason = t("raid-status.goldView.autoBound", lang);
       else reason = t("raid-status.goldView.outsideCap", lang, { cap: GOLD_RAID_CAP_PER_CHARACTER });
       const icon = raid.goldBound ? UI.icons.lock : UI.icons.pending;
-      return `${icon} ${label} - ${reason}`;
+      return `${icon} ${label} - ${reason}${pendingTail}`;
     }
 
     // Receiving raids keep the gold icon as the leading marker. Bound gold
@@ -61,7 +73,7 @@ function createGoldViewEmbedBuilder({
     const slot = rank > 0 ? `#${rank} ` : "";
     const goldStr = formatGold(rawGoldTotal(raid));
     const amount = raid.goldBound ? `${UI.icons.lock} ${goldStr}` : goldStr;
-    return `${GOLD_RECEIVE_ICON} ${slot}${label} - ${amount}`;
+    return `${GOLD_RECEIVE_ICON} ${slot}${label} - ${amount}${pendingTail}`;
   }
 
   function buildGoldCharacterField(character) {

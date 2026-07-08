@@ -21,6 +21,9 @@ const {
   formatGold,
   truncateText,
 } = require("../bot/utils/raid/common/shared");
+const {
+  getTargetResetKey,
+} = require("../bot/services/raid/schedulers/weekly-reset");
 
 class FakeEmbedBuilder {
   setColor(value) {
@@ -181,6 +184,94 @@ test("raid-status component handlers persist gold toggle and request redraw", as
   assert.equal(saved, 1);
   assert.equal(harness.reloadCount, 1);
   assert.match(followUpPayload.embeds[0].title, /Đã cập nhật gold nhận/);
+});
+
+test("raid-status component handlers persist gold mode and request redraw", async () => {
+  let saved = 0;
+  let markedPath = "";
+  const doc = {
+    weeklyResetKey: getTargetResetKey(),
+    accounts: [
+      {
+        accountName: "Roster B",
+        characters: [
+          {
+            name: "Goldie",
+            itemLevel: 1720,
+            assignedRaids: {
+              armoche: {
+                modeKey: "normal",
+                G1: { difficulty: "Normal", completedDate: 1 },
+                G2: { difficulty: "Normal", completedDate: null },
+              },
+            },
+          },
+        ],
+      },
+    ],
+    markModified(path) {
+      markedPath = path;
+    },
+    async save() {
+      saved += 1;
+    },
+  };
+  const harness = createHandlerHarness({
+    User: {
+      async findOne(query) {
+        assert.deepEqual(query, { discordId: "viewer" });
+        return doc;
+      },
+    },
+  });
+  let followUpPayload = null;
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldMode]({
+    values: ["Goldie::armoche::hard"],
+    async followUp(payload) {
+      followUpPayload = payload;
+    },
+  });
+
+  assert.deepEqual(result, { redraw: true });
+  assert.equal(doc.accounts[0].characters[0].assignedRaids.armoche.modeKey, "normal");
+  assert.equal(doc.accounts[0].characters[0].assignedRaids.armoche.pendingModeKey, "hard");
+  assert.equal(markedPath, "accounts");
+  assert.equal(saved, 1);
+  assert.equal(harness.reloadCount, 1);
+  assert.ok(followUpPayload, "expected success follow-up for mode change");
+  assert.equal(followUpPayload.flags, 64);
+  assert.doesNotMatch(followUpPayload.embeds[0].title, /raid-status\.goldView/);
+});
+
+test("raid-status component handlers reject gold mode writes on view-only shares", async () => {
+  let queried = false;
+  const harness = createHandlerHarness({
+    session: {
+      accounts: [
+        { accountName: "Own" },
+        {
+          accountName: "Shared",
+          _sharedFrom: { ownerDiscordId: "owner-1", accessLevel: "view" },
+        },
+      ],
+      currentPage: 1,
+    },
+    User: {
+      async findOne() {
+        queried = true;
+        return null;
+      },
+    },
+  });
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.goldMode]({
+    values: ["Goldie::armoche::hard"],
+  });
+
+  assert.deepEqual(result, { redraw: false });
+  assert.equal(queried, false);
+  assert.equal(harness.reloadCount, 0);
 });
 
 test("raid-status component handlers prompt for a gold replacement when locked raid would exceed 3/3", async () => {

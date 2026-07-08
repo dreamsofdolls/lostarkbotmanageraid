@@ -12,8 +12,13 @@ const User = require("../../../models/user");
 const { saveWithRetry } = require("../../../models/user");
 const GuildConfig = require("../../../models/guildConfig");
 const RaidEvent = require("../../../models/RaidEvent");
-const { RAID_REQUIREMENTS } = require("../../../models/Raid");
+const { RAID_REQUIREMENTS, getGatesForRaid } = require("../../../models/Raid");
 const { t, getGuildLanguage } = require("../../i18n");
+const { toModeLabel } = require("../../../utils/raid/common/shared");
+const {
+  getRequirementFor,
+  normalizeRaidModeKey,
+} = require("../../../utils/raid/common/character/assigned-raids");
 const { purgeStaleRaidEvents } = require("../schedule/lifecycle/event-cleanup");
 const { resolveGuildChannel } = require("../../discord/resolve-guild-channel");
 
@@ -85,6 +90,35 @@ function shouldPreserveCurrentWeekCompletion(timestamp, preserveSinceMs) {
   return Number(timestamp) >= preserveSinceMs;
 }
 
+function applyPendingModeAfterGateClear(character, assignedRaids, raidKey) {
+  const raid = assignedRaids?.[raidKey];
+  const pendingModeKey = normalizeRaidModeKey(raidKey, raid?.pendingModeKey);
+  if (!raid?.pendingModeKey) return;
+
+  const plain = raid && typeof raid.toObject === "function"
+    ? raid.toObject()
+    : { ...(raid || {}) };
+  const requirement = pendingModeKey ? getRequirementFor(raidKey, pendingModeKey) : null;
+  const itemLevel = Number(character?.itemLevel) || 0;
+  const hasPreservedClear = Object.keys(plain).some((gate) => (
+    /^G\d+$/i.test(gate) && Number(plain[gate]?.completedDate) > 0
+  ));
+
+  if (!requirement || itemLevel < requirement.minItemLevel || hasPreservedClear) {
+    delete plain.pendingModeKey;
+    assignedRaids[raidKey] = plain;
+    return;
+  }
+
+  plain.modeKey = pendingModeKey;
+  delete plain.pendingModeKey;
+  const label = toModeLabel(pendingModeKey);
+  for (const gate of getGatesForRaid(raidKey)) {
+    plain[gate] = { difficulty: label, completedDate: null };
+  }
+  assignedRaids[raidKey] = plain;
+}
+
 function clearCharacterProgress(character, { preserveSinceMs = null } = {}) {
   const assignedRaids = character.assignedRaids || {};
   for (const raidKey of RAID_GROUP_KEYS) {
@@ -103,6 +137,7 @@ function clearCharacterProgress(character, { preserveSinceMs = null } = {}) {
       }
       assignedRaids[raidKey][gate].completedDate = null;
     }
+    applyPendingModeAfterGateClear(character, assignedRaids, raidKey);
   }
 
   const tasks = Array.isArray(character.tasks) ? character.tasks : [];

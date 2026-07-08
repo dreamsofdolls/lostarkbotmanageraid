@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-07-08 (raid-status: set raid difficulty from Gold view)
+
+### Added
+- `/raid-status` Gold view now has a per-character difficulty dropdown. If the selected raid has not run this week, the mode changes immediately; if it already has clears, the bot queues `pendingModeKey` and applies it during the next weekly reset.
+- Raid progress lines and the Gold view show a `-> Mode (after reset)` marker while a mode change is pending, and the pending field survives assigned-raid normalization so sync and roster refresh paths do not wipe it.
+- Weekly reset applies queued modes through the existing reset chokepoint, drops no-longer-eligible queued modes, and avoids relabeling preserved current-week clears.
+- Auth follows the existing gold toggle path: owners and edit-share viewers can write; view-only shares cannot.
+
 ## 2026-06-12 (raid-status: split bound gold into its own bucket, not an overlapping subset)
 
 ### Changed

@@ -263,6 +263,7 @@ function createRaidStatusCommand(deps) {
     const {
       buildGoldViewEmbed,
       buildGoldCharFilterRow,
+      buildGoldModeRow,
       buildGoldToggleRow,
     } = createRaidStatusGoldUi({
       EmbedBuilder,
@@ -339,6 +340,7 @@ function createRaidStatusCommand(deps) {
       buildTaskCharFilterRow,
       buildTaskToggleRow,
       buildGoldCharFilterRow,
+      buildGoldModeRow,
       buildGoldToggleRow,
       buildSyncButton: syncControls.buildSyncButton,
       buildSyncRow: syncControls.buildSyncRow,

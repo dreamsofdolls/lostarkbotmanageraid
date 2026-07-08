@@ -66,6 +66,15 @@ test("raid-status component routes resolve gold setup dropdowns", () => {
     STATUS_COMPONENT_ACTION.goldToggle,
   );
   assert.deepEqual(
+    getStatusComponentRoute("status-gold:mode"),
+    {
+      customId: "status-gold:mode",
+      action: STATUS_COMPONENT_ACTION.goldMode,
+      editDriven: true,
+      redraw: true,
+    },
+  );
+  assert.deepEqual(
     getStatusComponentRoute("status-gold:replace:abc123"),
     {
       customId: "status-gold:replace:abc123",

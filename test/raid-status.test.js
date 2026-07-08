@@ -815,6 +815,51 @@ test("formatRaidStatusLine: translated raid labels keep the difficulty mode", ()
   assert.doesNotMatch(formatRaidStatusLine(raid, "vi"), new RegExp(`${UI.icons.lock}$`));
 });
 
+test("getStatusRaidsForCharacter carries a valid pending mode key", () => {
+  const char = makeChar("PendingMode", 1720);
+  char.assignedRaids = {
+    armoche: {
+      modeKey: "normal",
+      pendingModeKey: "hard",
+      G1: { difficulty: "Normal", completedDate: 123 },
+      G2: { difficulty: "Normal", completedDate: null },
+    },
+  };
+
+  const raid = getStatusRaidsForCharacter(char).find((entry) => entry.raidKey === "armoche");
+  assert.equal(raid.pendingModeKey, "hard");
+});
+
+test("formatRaidStatusLine appends a pending-mode marker when deferred", () => {
+  const line = formatRaidStatusLine({
+    raidName: "Act 4 Normal",
+    raidKey: "armoche",
+    modeKey: "normal",
+    pendingModeKey: "hard",
+    completedGateKeys: ["G1", "G2"],
+    allGateKeys: ["G1", "G2"],
+    isCompleted: true,
+    goldReceives: true,
+  }, "en");
+
+  assert.match(line, /-> Hard \(after reset\)$/);
+});
+
+test("formatRaidStatusLine omits the pending-mode marker when it matches current mode", () => {
+  const line = formatRaidStatusLine({
+    raidName: "Act 4 Hard",
+    raidKey: "armoche",
+    modeKey: "hard",
+    pendingModeKey: "hard",
+    completedGateKeys: [],
+    allGateKeys: ["G1", "G2"],
+    isCompleted: false,
+    goldReceives: true,
+  }, "en");
+
+  assert.doesNotMatch(line, /after reset/);
+});
+
 test("compareRaidModeOrder: canonical raid progression + difficulty order", () => {
   const shuffled = [
     { raidKey: "serca", modeKey: "hard" },

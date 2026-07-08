@@ -119,6 +119,8 @@ function normalizeAssignedRaid(assignedRaid, fallbackDifficulty, raidKey) {
   } else if (assignedRaid?.goldOverride === "exclude" || assignedRaid?.goldDisabled === true) {
     normalized.goldOverride = "exclude";
   }
+  const pendingModeKey = normalizeRaidModeKey(raidKey, assignedRaid?.pendingModeKey);
+  if (pendingModeKey) normalized.pendingModeKey = pendingModeKey;
   for (const gate of keys) {
     const source = assignedRaid?.[gate] || {};
     const sourceDiff = source.difficulty;
