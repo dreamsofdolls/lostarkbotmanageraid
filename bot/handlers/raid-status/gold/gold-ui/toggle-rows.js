@@ -3,7 +3,7 @@
 const {
   summarizeCharacterGold,
 } = require("../../../../utils/raid/common/character");
-const { RAID_REQUIREMENTS, compareRaidModeOrder } = require("../../../../models/Raid");
+const { RAID_REQUIREMENTS, compareRaidModeOrder, raidModeSortRank } = require("../../../../models/Raid");
 const { parseCustomEmoji } = require("../../../../utils/discord/emoji");
 const {
   getRaidLabel,
@@ -20,16 +20,34 @@ function computeGoldModeOptions(activeName, raids, itemLevel) {
   const out = [];
   for (const raid of raids || []) {
     const modes = RAID_REQUIREMENTS[raid.raidKey]?.modes || {};
+    const currentModeKey = raid.modeKey;
     const effectiveTarget = raid.pendingModeKey || raid.modeKey;
+    // A raid with clears this week defers the change to the next reset;
+    // otherwise it lands immediately. Same value for every option of one raid.
+    const deferred = Array.isArray(raid.completedGateKeys) && raid.completedGateKeys.length > 0;
+    const currentRank = raidModeSortRank(raid.raidKey, currentModeKey);
     for (const [modeKey, mode] of Object.entries(modes)) {
       if (modeKey === effectiveTarget) continue;
       if (Number(itemLevel) < Number(mode.minItemLevel)) continue;
+      const isCancel = !!raid.pendingModeKey && modeKey === currentModeKey;
+      // Mode declaration order is difficulty order (normal < hard < nightmare),
+      // so a higher rank than the current mode is an upgrade.
+      const direction = isCancel
+        ? "cancel"
+        : (raidModeSortRank(raid.raidKey, modeKey) > currentRank ? "up" : "down");
+      const goldTotal = Object.values(mode.gold || {})
+        .reduce((sum, value) => sum + (Number(value) || 0), 0);
       out.push({
         raidKey: raid.raidKey,
         modeKey,
-        isCancel: !!raid.pendingModeKey && modeKey === raid.modeKey,
+        currentModeKey,
+        isCancel,
+        direction,
+        deferred,
+        goldTotal,
         raidLabel: RAID_REQUIREMENTS[raid.raidKey]?.label || raid.raidName || raid.raidKey,
         modeLabel: mode.label,
+        currentModeLabel: modes[currentModeKey]?.label || currentModeKey,
         value: `${activeName}::${raid.raidKey}::${modeKey}`.slice(0, 100),
       });
     }
@@ -175,18 +193,35 @@ function createGoldToggleRows({
         .setDisabled(disabled)
         .addOptions(options.map((option) => {
           const raidLabel = getRaidLabel(option.raidKey, lang) || option.raidLabel;
-          const modeLabel = getRaidSpecificModeLabel(option.raidKey, option.modeKey, lang)
+          const targetLabel = getRaidSpecificModeLabel(option.raidKey, option.modeKey, lang)
             || option.modeLabel;
+          // Directional emoji is the fast visual scan (up = harder, down =
+          // easier, back = cancel a queued change); the grey description line
+          // carries the current->target transition, timing, and gold so the
+          // bold label stays a clean "Raid -> Mode".
+          const emoji = option.direction === "up"
+            ? "⬆️"
+            : option.direction === "down" ? "⬇️" : "↩️";
+          let description;
+          if (option.isCancel) {
+            description = t("raid-status.goldView.modeCancelDesc", lang);
+          } else {
+            const currentLabel = getRaidSpecificModeLabel(option.raidKey, option.currentModeKey, lang)
+              || option.currentModeLabel;
+            const timing = option.deferred
+              ? t("raid-status.goldView.modeTimingReset", lang)
+              : t("raid-status.goldView.modeTimingNow", lang);
+            description = t("raid-status.goldView.modeOptionDesc", lang, {
+              current: currentLabel,
+              target: targetLabel,
+              timing,
+              gold: formatGold(option.goldTotal),
+            });
+          }
           return {
-            label: truncateText(
-              option.isCancel
-                ? t("raid-status.goldView.modeCancelOption", lang, {
-                  raid: raidLabel,
-                  mode: modeLabel,
-                })
-                : `${raidLabel} → ${modeLabel}`,
-              100
-            ),
+            emoji: { name: emoji },
+            label: truncateText(`${raidLabel} → ${targetLabel}`, 100),
+            description: truncateText(description, 100),
             value: option.value,
           };
         }))
