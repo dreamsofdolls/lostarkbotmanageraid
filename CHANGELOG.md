@@ -9,6 +9,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ### Added
 - `/raid-status` Gold view now has a per-character difficulty dropdown. If the selected raid has not run this week, the mode changes immediately; if it already has clears, the bot queues `pendingModeKey` and applies it during the next weekly reset.
 - Each dropdown option carries a directional emoji (up = harder, down = easier, back = cancel a queued change) plus a description line showing the current mode, the target mode, whether it applies now or after reset, and the mode's weekly gold, so the bold label stays a clean `Raid -> Mode`.
+- Renamed the Gold view to "Gold & difficulty" (view-toggle option, its description, and the embed title, across vi/en/jp) so the difficulty dropdown is discoverable from the view list instead of hiding behind a gold-only name.
 - Raid progress lines and the Gold view show a `-> Mode (after reset)` marker while a mode change is pending, and the pending field survives assigned-raid normalization so sync and roster refresh paths do not wipe it.
 - Weekly reset applies queued modes through the existing reset chokepoint, drops no-longer-eligible queued modes, and avoids relabeling preserved current-week clears.
 - Auth follows the existing gold toggle path: owners and edit-share viewers can write; view-only shares cannot.
