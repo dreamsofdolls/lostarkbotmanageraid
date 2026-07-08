@@ -14,8 +14,8 @@ function createPage(discordId, characters) {
   };
 }
 
-function raid(raidKey, modeKey, isCompleted = false) {
-  return { raidKey, modeKey, isCompleted };
+function raid(raidKey, modeKey, isCompleted = false, extras = {}) {
+  return { raidKey, modeKey, isCompleted, ...extras };
 }
 
 const pagesData = [
@@ -114,4 +114,40 @@ test("raid-check all-mode aggregate scopes raid dropdown counts by active user f
   assert.equal(aggregate.totalPending, 1);
   assert.equal(aggregate.perRaidPending.get("act4:normal").pending, 1);
   assert.equal(aggregate.perRaidPending.has("serca:hard"), false);
+});
+
+test("raid-check all-mode aggregate excludes raids that do not receive gold", () => {
+  const aggregate = computeAllModePendingAggregate({
+    pagesData: [
+      createPage("user-a", [
+        {
+          class: "Artist",
+          raids: [
+            raid("act4", "hard", false, { goldReceives: false }),
+            raid("kazeros", "hard", false, { goldReceives: true }),
+          ],
+        },
+      ]),
+      createPage("user-b", [
+        {
+          class: "Slayer",
+          raids: [
+            raid("act4", "hard", false, { goldReceives: false }),
+          ],
+        },
+      ]),
+    ],
+    getStatusRaidsForCharacter,
+    lang: "en",
+  });
+
+  assert.equal(aggregate.totalPending, 1);
+  assert.deepEqual(aggregate.perUserPending.get("user-a"), {
+    count: 1,
+    supports: 1,
+    dps: 0,
+  });
+  assert.equal(aggregate.perUserPending.has("user-b"), false);
+  assert.equal(aggregate.perRaidPending.has("act4:hard"), false);
+  assert.equal(aggregate.perRaidPending.get("kazeros:hard").pending, 1);
 });

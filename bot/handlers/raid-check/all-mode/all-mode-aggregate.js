@@ -2,6 +2,7 @@
 
 const { isSupportClass } = require("../../../models/Class");
 const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
+const { isGoldProgressRaid } = require("../../../utils/raid/common/character");
 
 function createRoleTally() {
   return { count: 0, supports: 0, dps: 0 };
@@ -58,6 +59,7 @@ function computeAllModePendingAggregate({
     for (const character of chars) {
       const charIsSupport = isSupportClass(character?.class);
       for (const raid of getStatusRaidsForCharacter(character) || []) {
+        if (!isGoldProgressRaid(raid)) continue;
         const raidEntry = getRaidEntry({ perRaidPending, raid, lang });
         if (raidFilter && raidEntry.key !== raidFilter) continue;
         if (raid.isCompleted) continue;
