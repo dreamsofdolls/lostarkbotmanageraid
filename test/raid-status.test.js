@@ -1445,7 +1445,7 @@ test("raid-status gold view renders auto-bound status and setup dropdowns", () =
   });
 
   const embedJson = goldUi.buildGoldViewEmbed(accounts[0]).toJSON();
-  assert.match(embedJson.title, /Gold nhận/);
+  assert.match(embedJson.title, /Gold & độ khó/);
   const goldField = embedJson.fields.find((field) => /Goldie/.test(field.name));
   assert.ok(goldField, "gold character field should render");
   assert.match(goldField.name, /Goldie\s*\u00B7\s*1730\s*\u00B7\s*3\/3/);
