@@ -5,7 +5,7 @@ const { PassThrough } = require("node:stream");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { mintToken } = require("../bot/services/local-sync");
+const { mintToken, TOKEN_POST_SYNC_TTL_SEC } = require("../bot/services/local-sync");
 const { createRaidSyncEndpoint } = require("../bot/services/local-sync/http/endpoints/sync-endpoint");
 
 function makeReq({ token, method = "POST", body = { deltas: [] } } = {}) {
@@ -133,7 +133,7 @@ test("raid-sync endpoint returns 409 when reset disables local-sync during apply
   assert.equal(res.json().rejected[0].reason, "local_sync_disabled");
 });
 
-test("raid-sync endpoint leaves token expiry open for chained profile upload", async () => {
+test("raid-sync endpoint shrinks token expiry after a successful write", async () => {
   const token = mintToken("u1");
   const updateCalls = [];
   const User = {
@@ -193,6 +193,9 @@ test("raid-sync endpoint leaves token expiry open for chained profile upload", a
   );
 
   assert.equal(res.status, 200);
-  assert.equal(updateCalls.length, 0);
-  assert.equal(res.json().newExpSec, null);
+  assert.equal(updateCalls.length, 1);
+  assert.deepEqual(updateCalls[0].filter, { discordId: "u1", lastLocalSyncToken: token });
+  assert.equal(updateCalls[0].update.$set.lastLocalSyncTokenExpAt, res.json().newExpSec);
+  assert.ok(res.json().newExpSec >= Math.floor(Date.now() / 1000));
+  assert.ok(res.json().newExpSec <= Math.floor(Date.now() / 1000) + TOKEN_POST_SYNC_TTL_SEC + 1);
 });

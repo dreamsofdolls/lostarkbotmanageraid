@@ -2,8 +2,6 @@
 
 const {
   stampAutoManageAttemptFromReport,
-  toPlainUserDoc,
-  syncRaidProfileAfterAutoManageReport,
 } = require("../../auto-manage/reports/utils");
 const {
   AUTO_MANAGE_BACKGROUND_STALE_MS,
@@ -54,7 +52,6 @@ async function syncCandidate({
     releaseAutoManageSyncSlot,
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
-    syncRaidProfileFromBibleCollected,
     isPublicLogDisabledError,
     stampAutoManageAttempt,
     nudgeStuckPrivateLogUser,
@@ -82,13 +79,9 @@ async function syncCandidate({
 
     let outcome = "attempted-only";
     let latestReport = null;
-    let profileUserDoc = null;
-    let profileReport = null;
     await saveWithRetry(async () => {
       const fresh = await User.findOne({ discordId });
       if (!fresh || !Array.isArray(fresh.accounts) || fresh.accounts.length === 0) return;
-      profileUserDoc = null;
-      profileReport = null;
       ensureFreshWeek(fresh);
       if (!fresh.autoManageEnabled) {
         fresh.lastAutoManageAttemptAt = Date.now();
@@ -97,23 +90,11 @@ async function syncCandidate({
       }
       const report = applyAutoManageCollected(fresh, weekResetStart, collected);
       latestReport = report;
-      profileReport = report;
       const now = Date.now();
       if (stampAutoManageAttemptFromReport(fresh, report, now)) {
         outcome = "synced";
       }
       await fresh.save();
-      profileUserDoc = toPlainUserDoc(fresh);
-    });
-
-    await syncRaidProfileAfterAutoManageReport({
-      syncRaidProfileFromBibleCollected,
-      report: profileReport,
-      discordId,
-      userDoc: profileUserDoc,
-      weekResetStart,
-      collected,
-      logLabel: "[auto-manage daily]",
     });
 
     if (
@@ -156,7 +137,6 @@ function createAutoManageDailySchedulerService({
   releaseAutoManageSyncSlot,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
-  syncRaidProfileFromBibleCollected = async () => null,
   isPublicLogDisabledError,
   stampAutoManageAttempt,
   nudgeStuckPrivateLogUser,
@@ -188,7 +168,6 @@ function createAutoManageDailySchedulerService({
           releaseAutoManageSyncSlot,
           gatherAutoManageLogsForUserDoc,
           applyAutoManageCollected,
-          syncRaidProfileFromBibleCollected,
           isPublicLogDisabledError,
           stampAutoManageAttempt,
           nudgeStuckPrivateLogUser,

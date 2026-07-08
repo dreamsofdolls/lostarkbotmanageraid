@@ -4,8 +4,6 @@ const { deferEphemeralReply } = require("../../../../utils/raid/common/shared");
 const { t } = require("../../../../services/i18n");
 const {
   stampAutoManageAttemptFromReport,
-  toPlainUserDoc,
-  syncRaidProfileAfterAutoManageReport,
 } = require("../../../../services/auto-manage/reports/utils");
 
 function buildSyncCooldownDescription({
@@ -89,10 +87,8 @@ async function applyManualSync({
   collected,
 }) {
   let report;
-  let profileUserDoc = null;
   await saveWithRetry(async () => {
     const userDoc = await User.findOne({ discordId });
-    profileUserDoc = null;
     if (!hasSyncableRoster(userDoc)) {
       report = { noRoster: true };
       return;
@@ -101,9 +97,8 @@ async function applyManualSync({
     report = applyAutoManageCollected(userDoc, weekResetStart, collected);
     stampAutoManageAttemptFromReport(userDoc, report, Date.now());
     await userDoc.save();
-    profileUserDoc = toPlainUserDoc(userDoc);
   });
-  return { report, profileUserDoc };
+  return { report };
 }
 
 function createAutoManageSyncHandler({
@@ -117,7 +112,6 @@ function createAutoManageSyncHandler({
   weekResetStartMs,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
-  syncRaidProfileFromBibleCollected = async () => null,
   buildAutoManageSyncReportEmbed,
 }) {
   return async function handleSync({
@@ -155,7 +149,7 @@ function createAutoManageSyncHandler({
         seedDoc,
         weekResetStart
       );
-      const { report, profileUserDoc } = await applyManualSync({
+      const { report } = await applyManualSync({
         User,
         saveWithRetry,
         ensureFreshWeek,
@@ -170,15 +164,6 @@ function createAutoManageSyncHandler({
         return;
       }
 
-      await syncRaidProfileAfterAutoManageReport({
-        syncRaidProfileFromBibleCollected,
-        report,
-        discordId,
-        userDoc: profileUserDoc,
-        weekResetStart,
-        collected,
-        logLabel: "[raid-auto-manage:sync]",
-      });
       await editAutoEmbed(buildAutoManageSyncReportEmbed(report, lang));
     } catch (err) {
       console.error("[auto-manage] sync failed:", err?.message || err);

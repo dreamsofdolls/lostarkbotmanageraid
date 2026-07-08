@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-07-08 (raid-profile: remove subsystem)
+
+### Removed
+- Removed the retired raid-profile subsystem end to end: slash command/component wiring, profile snapshot/encounter models, local-sync profile-session/profile-upload endpoints, bible profile-light builders, Web Companion profile-import UI/modules, profile locale keys, and dedicated profile tests are gone.
+- Local-sync now shrinks the signed URL token after successful `/api/raid-sync` writes again, because there is no chained profile upload to keep the token open for.
+
 ## 2026-07-08 (raid-status: set raid difficulty from Gold view)
 
 ### Added

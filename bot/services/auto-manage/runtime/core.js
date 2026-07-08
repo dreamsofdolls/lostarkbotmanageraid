@@ -7,8 +7,6 @@ const {
 const { createBibleClient } = require("../bible/client");
 const {
   stampAutoManageAttemptFromReport,
-  toPlainUserDoc,
-  syncRaidProfileAfterAutoManageReport,
 } = require("../reports/utils");
 const { createAutoManageReportEmbeds } = require("../reports/embeds");
 const {
@@ -52,7 +50,6 @@ function createAutoManageCoreService({
   normalizeAssignedRaid,
   ensureAssignedRaids,
   bibleLimiter,
-  syncRaidProfileFromBibleCollected = async () => null,
   getAutoManageCooldownMs = getAutoManageCooldownMsDefault,
 }) {
   const {
@@ -155,11 +152,9 @@ function createAutoManageCoreService({
     }
 
     let finalReport;
-    let finalUserDocSnapshot = null;
     await saveWithRetry(async () => {
       const fresh = await User.findOne({ discordId });
       if (!fresh) return;
-      finalUserDocSnapshot = null;
       fresh.autoManageEnabled = true;
       if (!Array.isArray(fresh.accounts) || fresh.accounts.length === 0) {
         fresh.lastAutoManageAttemptAt = Date.now();
@@ -171,18 +166,8 @@ function createAutoManageCoreService({
       const now = Date.now();
       stampAutoManageAttemptFromReport(fresh, finalReport, now);
       await fresh.save();
-      finalUserDocSnapshot = toPlainUserDoc(fresh);
     });
 
-    await syncRaidProfileAfterAutoManageReport({
-      syncRaidProfileFromBibleCollected,
-      report: finalReport,
-      discordId,
-      userDoc: finalUserDocSnapshot,
-      weekResetStart,
-      collected,
-      logLabel: "[auto-manage:on]",
-    });
     return finalReport;
   }
 

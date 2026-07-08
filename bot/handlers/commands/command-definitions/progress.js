@@ -93,65 +93,8 @@ function createStatusCommandDefinition() {
   return statusCommand;
 }
 
-function createRaidProfileCommandDefinition() {
-  const raidProfileCommand = new SlashCommandBuilder()
-    .setName("raid-profile")
-    .setDescription("View combat profile stats from local LOA Logs")
-    .setDescriptionLocalizations({
-      vi: "Xem bảng chỉ số combat từ LOA Logs local",
-      ja: "LOA Logs ローカルから戦闘プロフィール統計を表示",
-    })
-    .addStringOption((opt) =>
-      opt
-        .setName("action")
-        .setDescription("view (default) · reset (wipe your own profile to re-sync)")
-        .setDescriptionLocalizations({
-          vi: "view (mặc định) · reset (xoá hồ sơ của chính cậu để sync lại)",
-          ja: "view (既定) · reset (自分のプロフィールを消去して再同期)",
-        })
-        .setRequired(false)
-        .addChoices(
-          {
-            name: "📊 View profile",
-            name_localizations: { vi: "📊 Xem hồ sơ", ja: "📊 プロフィール表示" },
-            value: "view",
-          },
-          {
-            name: "🧹 Reset my profile",
-            name_localizations: { vi: "🧹 Reset hồ sơ của tôi", ja: "🧹 自分のプロフィールをリセット" },
-            value: "reset",
-          }
-        )
-    )
-    .addStringOption((opt) =>
-      opt
-        .setName("visibility")
-        .setDescription("hide (default, only you) · show (visible to the channel)")
-        .setDescriptionLocalizations({
-          vi: "ẩn (mặc định, chỉ mình cậu) · hiện (cả channel thấy)",
-          ja: "非表示 (既定、自分のみ) · 表示 (チャンネルに公開)",
-        })
-        .setRequired(false)
-        .addChoices(
-          {
-            name: "🔒 Hide (only me)",
-            name_localizations: { vi: "🔒 Ẩn (chỉ mình tôi)", ja: "🔒 非表示 (自分のみ)" },
-            value: "hide",
-          },
-          {
-            name: "👁 Show (visible to channel)",
-            name_localizations: { vi: "👁 Hiện (cả channel thấy)", ja: "👁 表示 (チャンネルに公開)" },
-            value: "show",
-          }
-        )
-    );
-
-  return raidProfileCommand;
-}
-
 module.exports = {
   createRaidCheckCommandDefinition,
   createRaidSetCommandDefinition,
   createStatusCommandDefinition,
-  createRaidProfileCommandDefinition,
 };

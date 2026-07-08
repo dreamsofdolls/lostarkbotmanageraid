@@ -74,7 +74,6 @@ test("auto-manage daily scheduler skips DB work when deploy killswitch is on", a
     releaseAutoManageSyncSlot: () => {},
     gatherAutoManageLogsForUserDoc: async () => ({}),
     applyAutoManageCollected: () => ({ perChar: [] }),
-    syncRaidProfileFromBibleCollected: async () => null,
     isPublicLogDisabledError: () => false,
     stampAutoManageAttempt: async () => {},
     nudgeStuckPrivateLogUser: async () => {},
@@ -93,7 +92,6 @@ test("auto-manage daily scheduler syncs one stale user and releases the slot", a
   try {
     const savedDocs = [];
     const releases = [];
-    const profileSyncs = [];
     const seedDoc = {
       discordId: "100",
       autoManageEnabled: true,
@@ -129,9 +127,6 @@ test("auto-manage daily scheduler syncs one stale user and releases the slot", a
       applyAutoManageCollected: () => ({
         perChar: [{ charName: "Qiylyn", applied: ["G1"] }],
       }),
-      syncRaidProfileFromBibleCollected: async (payload) => {
-        profileSyncs.push(payload);
-      },
       isPublicLogDisabledError: () => false,
       stampAutoManageAttempt: async () => {
         throw new Error("stamp fallback should not run on success");
@@ -149,9 +144,6 @@ test("auto-manage daily scheduler syncs one stale user and releases the slot", a
     assert.equal(typeof savedDocs[0].lastAutoManageAttemptAt, "number");
     assert.equal(typeof savedDocs[0].lastAutoManageSyncAt, "number");
     assert.deepEqual(releases, ["100"]);
-    assert.equal(profileSyncs.length, 1);
-    assert.equal(profileSyncs[0].discordId, "100");
-    assert.equal(profileSyncs[0].weekResetStart, 777);
     assert.match(logs[0], /1 candidate\(s\).*synced 1/);
   } finally {
     console.log = originalLog;
@@ -211,7 +203,6 @@ test("auto-manage daily scheduler exposes the batch size used by the query chain
     releaseAutoManageSyncSlot: () => {},
     gatherAutoManageLogsForUserDoc: async () => ({}),
     applyAutoManageCollected: () => ({ perChar: [] }),
-    syncRaidProfileFromBibleCollected: async () => null,
     isPublicLogDisabledError: () => false,
     stampAutoManageAttempt: async () => {},
     nudgeStuckPrivateLogUser: async () => {},

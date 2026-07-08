@@ -10,7 +10,6 @@ const {
   createRaidCheckCommandDefinition,
   createRaidSetCommandDefinition,
   createStatusCommandDefinition,
-  createRaidProfileCommandDefinition,
 } = require("./progress");
 const {
   createRaidHelpCommandDefinition,
@@ -37,7 +36,6 @@ function createRaidCommandDefinitions({
     createRaidCheckCommandDefinition(),
     createRaidSetCommandDefinition(),
     createStatusCommandDefinition(),
-    createRaidProfileCommandDefinition(),
     createRaidHelpCommandDefinition(),
     createRaidGoldEarnerCommandDefinition(),
     createRemoveRosterCommandDefinition(),

@@ -120,7 +120,7 @@ header h1 {
 .hint { color: var(--text-dim); font-size: 13px; line-height: 1.55; margin: 6px 0; }
 .auth-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .auth-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #1d2024; border: 1px solid var(--border); font-size: 12px; }
-.auth-profile-pill { padding-left: 8px; }
+.auth-identity-pill { padding-left: 8px; }
 .auth-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #5ec88f; box-shadow: 0 0 6px rgba(94, 200, 143, 0.5); flex-shrink: 0; }
 .auth-avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); flex-shrink: 0; }
 .auth-avatar--placeholder { display: inline-flex; align-items: center; justify-content: center; background: #2a2e34; color: var(--text-dim); font-size: 11px; font-weight: 600; }
@@ -259,7 +259,7 @@ button:hover:not(:disabled) { filter: brightness(1.07); }
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* Primary CTAs get the crafted gradient + lift; specialized buttons
-   (.remove-file-btn / .page-btn / .view-toggle / .sync-tab) keep their own
+   (.remove-file-btn / .page-btn / .view-toggle) keep their own
    looks since they override background/border further down. */
 #pick-file-btn,
 #sync-btn {
@@ -271,61 +271,6 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 #pick-file-btn:active,
 #sync-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 var(--accent-dim); }
 #sync-btn:disabled { box-shadow: none; filter: grayscale(0.3); }
-
-.sync-tabs {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.sync-tab {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  min-height: 86px;
-  margin-top: 0;
-  padding: 12px 14px;
-  color: var(--text);
-  background: #1d2024;
-  border: 1px solid var(--border);
-  border-left: 3px solid transparent;
-  border-radius: 6px;
-  text-align: left;
-}
-
-.sync-tab:hover:not(:disabled) {
-  background: #2a2e34;
-  border-color: #4a4f55;
-}
-
-.sync-tab.is-active {
-  background: linear-gradient(180deg, #2f2718, #241f15);
-  border-color: #6b5424;
-  border-left-color: var(--accent);
-  box-shadow: 0 0 0 1px rgba(245, 166, 35, 0.18), 0 10px 24px -16px rgba(245, 166, 35, 0.4);
-}
-
-.sync-tab span {
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.sync-tab small {
-  color: var(--text-dim);
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.sync-tab:disabled {
-  background: #181b1f;
-  border-color: #30343a;
-}
-
-.sync-mode-lock {
-  margin-top: 10px;
-}
 
 .meta {
   margin-top: 14px;
@@ -368,221 +313,6 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .status-ok { color: var(--success); }
 .status-err { color: var(--error); }
 .status-warn { color: var(--accent-bright); }
-
-.process-panel {
-  display: grid;
-  gap: 13px;
-}
-
-/* Live "current" hero: a spinner ring + amber kicker + message, with an
-   indeterminate sweep bar along the bottom so even a long wait (the MongoDB
-   write, the 1800s+ scan) still reads as "working" rather than frozen. */
-.process-current {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 11px 14px 14px;
-  background: #1a1d22;
-  border: 1px solid var(--accent-dim);
-  border-radius: 9px;
-  overflow: hidden;
-}
-
-.process-current::before {
-  content: "";
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 2px solid rgba(245, 166, 35, 0.22);
-  border-top-color: var(--accent);
-  animation: process-spin 0.9s linear infinite;
-}
-
-.process-current::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  left: -40%;
-  width: 40%;
-  height: 3px;
-  background: linear-gradient(90deg, transparent, var(--accent), transparent);
-  animation: process-indet 1.6s ease-in-out infinite;
-}
-
-.process-current-label {
-  flex: 0 0 auto;
-  align-self: center;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 1.6px;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-
-.process-current-message {
-  flex: 1 1 auto;
-  min-width: 0;
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.35;
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-
-.process-current-message.status-ok { color: var(--success); }
-.process-current-message.status-err { color: var(--error); }
-.process-current-message.status-warn { color: var(--accent-bright); }
-
-/* Timeline rail: one continuous line behind kind-coloured nodes, so the log
-   reads as a sequence of steps rather than a flat list. */
-.process-log {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: 280px;
-  margin: 0;
-  padding: 0 8px 0 0;
-  list-style: none;
-  overflow-x: hidden;
-  overflow-y: auto;
-  scrollbar-color: #4a4f55 #14171c;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-}
-
-.process-log::before {
-  content: "";
-  position: absolute;
-  left: 75px;
-  top: 13px;
-  bottom: 13px;
-  width: 2px;
-  background: var(--border);
-  z-index: 0;
-}
-
-.process-log::-webkit-scrollbar {
-  width: 9px;
-}
-
-.process-log::-webkit-scrollbar-track {
-  background: #14171c;
-  border-radius: 999px;
-}
-
-.process-log::-webkit-scrollbar-thumb {
-  background: #4a4f55;
-  border: 2px solid #14171c;
-  border-radius: 999px;
-}
-
-.process-log::-webkit-scrollbar-thumb:hover {
-  background: #5a6068;
-}
-
-.process-log-row {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: 58px 16px minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
-  flex-shrink: 0;
-  padding: 3px 0;
-  color: var(--text-dim);
-  line-height: 1.45;
-}
-
-.process-log-row time {
-  color: #717781;
-  font-size: 11px;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.6;
-  white-space: nowrap;
-}
-
-.process-log-dot {
-  justify-self: center;
-  align-self: start;
-  width: 12px;
-  height: 12px;
-  margin-top: 4px;
-  border-radius: 50%;
-  background: var(--bg-deep);
-  border: 2px solid #4a4f55;
-}
-
-.process-log-message {
-  display: block;
-  min-width: 0;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.process-log-row--ok .process-log-dot {
-  background: var(--success);
-  border-color: var(--success);
-}
-
-.process-log-row--ok .process-log-message {
-  color: #c7ccd2;
-}
-
-.process-log-row--err .process-log-dot {
-  background: var(--error);
-  border-color: var(--error);
-}
-
-.process-log-row--warn .process-log-dot {
-  background: var(--accent-bright);
-  border-color: var(--accent-bright);
-}
-
-/* Latest entry = the live step: amber node with a gentle outward pulse. */
-.process-log-row:last-child .process-log-dot {
-  background: var(--accent);
-  border-color: var(--accent);
-  animation: process-pulse 1.8s ease-out infinite;
-}
-
-@keyframes process-spin {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes process-indet {
-  0% { left: -40%; }
-  100% { left: 100%; }
-}
-
-@keyframes process-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(245, 166, 35, 0.5); }
-  70% { box-shadow: 0 0 0 9px rgba(245, 166, 35, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(245, 166, 35, 0); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .process-current::before,
-  .process-current::after,
-  .process-log-row:last-child .process-log-dot {
-    animation: none;
-  }
-}
-
-@media (max-width: 520px) {
-  .process-current { gap: 9px; }
-
-  .process-log::before { left: 67px; }
-
-  .process-log-row {
-    grid-template-columns: 52px 16px minmax(0, 1fr);
-    gap: 8px;
-  }
-}
 
 table {
   width: 100%;
@@ -878,9 +608,3 @@ table th { color: var(--text-dim); font-weight: 600; }
 .footer-details summary:hover { color: var(--text); }
 .footer-details ul { margin: 8px 0 0; padding-left: 20px; }
 .footer-details li { margin: 2px 0; }
-
-@media (max-width: 560px) {
-  .sync-tabs {
-    grid-template-columns: 1fr;
-  }
-}

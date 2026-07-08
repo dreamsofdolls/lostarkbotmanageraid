@@ -38,46 +38,20 @@
       <div id="file-meta" class="meta" hidden></div>
     </section>
 
-    <section id="sync-mode-section" class="card" hidden>
-      <h2 data-i18n="syncMode.section">3. Choose local sync mode</h2>
-      <p class="hint" data-i18n="syncMode.hint">
-        Both modes use the same local file, but with different ranges. Weekly sync handles the current raid week; profile import scans deeper for a fuller snapshot.
-      </p>
-      <div class="sync-tabs" role="tablist" aria-label="Local sync mode">
-        <button id="weekly-mode-tab" class="sync-tab" type="button" role="tab" aria-selected="false" aria-controls="preview-section">
-          <span data-i18n="syncMode.weeklyTitle">Weekly local sync</span>
-          <small data-i18n="syncMode.weeklyDesc">Send current-week clears plus raid-profile stats from the same week.</small>
-        </button>
-        <button id="profile-mode-tab" class="sync-tab" type="button" role="tab" aria-selected="false" aria-controls="profile-section">
-          <span data-i18n="syncMode.profileTitle">Full profile import</span>
-          <small data-i18n="syncMode.profileDesc">Scan all eligible raid logs in the file and build a profile snapshot.</small>
-        </button>
-      </div>
-      <p id="sync-mode-lock" class="hint sync-mode-lock" hidden></p>
-    </section>
-
     <section id="preview-section" class="card" hidden>
-      <h2 data-i18n="preview.section">4. Current raid-week preview</h2>
+      <h2 data-i18n="preview.section">3. Current raid-week preview</h2>
       <p class="hint week-range" id="preview-week-range" hidden></p>
       <div id="preview-stats" class="preview-stats" hidden></div>
       <div id="preview-output" data-i18n="preview.loadingWasm">Loading SQLite WASM (one-time, cached after)...</div>
     </section>
 
     <section id="sync-section" class="card" hidden>
-      <h2 data-i18n="sync.section">5. Sync to Artist</h2>
+      <h2 data-i18n="sync.section">4. Sync to Artist</h2>
       <p class="hint" data-i18n="sync.hint">
         Sends the cleared encounters above to the bot. Per-character ownership is enforced server-side - chars not in your roster are skipped.
       </p>
       <button id="sync-btn" type="button" disabled data-i18n="sync.btnReady">Sync now</button>
       <div id="sync-output" class="meta" hidden></div>
-    </section>
-
-    <section id="profile-section" class="card" hidden>
-      <h2 data-i18n="profilePanel.section">4. Full profile import</h2>
-      <p class="hint" data-i18n="profilePanel.hint">
-        Scans successful supported raid logs over 3 minutes that match your registered roster. Shared rosters are included in /raid-profile from the owner's synced snapshot.
-      </p>
-      <div id="profile-sync-output" class="meta" hidden></div>
     </section>
 
   </main>

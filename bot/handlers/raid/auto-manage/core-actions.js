@@ -27,7 +27,6 @@ function createAutoManageCoreActionHandlers({
   weekResetStartMs,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
-  syncRaidProfileFromBibleCollected = async () => null,
   isPublicLogDisabledError,
   commitAutoManageOn,
   buildAutoManageSyncReportEmbed,
@@ -80,7 +79,6 @@ function createAutoManageCoreActionHandlers({
       weekResetStartMs,
       gatherAutoManageLogsForUserDoc,
       applyAutoManageCollected,
-      syncRaidProfileFromBibleCollected,
       buildAutoManageSyncReportEmbed,
     }),
   };

@@ -51,7 +51,6 @@ function createRaidSchedulerService({
   releaseAutoManageSyncSlot,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
-  syncRaidProfileFromBibleCollected = async () => null,
   isPublicLogDisabledError,
   stampAutoManageAttempt,
 }) {
@@ -94,7 +93,6 @@ function createRaidSchedulerService({
     releaseAutoManageSyncSlot,
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
-    syncRaidProfileFromBibleCollected,
     isPublicLogDisabledError,
     stampAutoManageAttempt,
     nudgeStuckPrivateLogUser,

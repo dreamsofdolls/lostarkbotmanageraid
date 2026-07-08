@@ -27,8 +27,6 @@ const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
 const {
   getAppliedAutoManageEntries,
   stampAutoManageAttemptFromReport,
-  toPlainUserDoc,
-  syncRaidProfileAfterAutoManageReport,
 } = require("../../../services/auto-manage/reports/utils");
 
 /**
@@ -51,7 +49,6 @@ const {
  * @param {Function} deps.autoManageEntryKey - composite account+char key
  * @param {Function} deps.gatherAutoManageLogsForUserDoc - bible HTTP gather
  * @param {Function} deps.applyAutoManageCollected - in-memory reconcile
- * @param {Function} deps.syncRaidProfileFromBibleCollected - optional profile-light upsert
  * @param {Function} deps.stampAutoManageAttempt - touch lastAutoManageAttemptAt
  * @param {Function} deps.acquireAutoManageSyncSlot - per-user mutex
  * @param {Function} deps.releaseAutoManageSyncSlot - mutex release
@@ -76,7 +73,6 @@ function createSyncUi({
   autoManageEntryKey,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
-  syncRaidProfileFromBibleCollected = async () => null,
   stampAutoManageAttempt,
   acquireAutoManageSyncSlot,
   releaseAutoManageSyncSlot,
@@ -219,13 +215,9 @@ function createSyncUi({
 
             let outcome = "attempted-only";
             let delta = null;
-            let profileUserDoc = null;
-            let profileReport = null;
             await saveWithRetry(async () => {
               const fresh = await User.findOne({ discordId });
               if (!fresh || !Array.isArray(fresh.accounts) || fresh.accounts.length === 0) return;
-              profileUserDoc = null;
-              profileReport = null;
 
               ensureFreshWeek(fresh);
               if (!fresh.autoManageEnabled) {
@@ -235,7 +227,6 @@ function createSyncUi({
               }
 
               const report = applyAutoManageCollected(fresh, weekResetStart, collected);
-              profileReport = report;
               const now = Date.now();
               if (stampAutoManageAttemptFromReport(fresh, report, now)) {
                 outcome = "synced";
@@ -243,20 +234,10 @@ function createSyncUi({
               const appliedEntries = getAppliedAutoManageEntries(report);
               if (appliedEntries.length > 0) delta = appliedEntries;
               await fresh.save();
-              profileUserDoc = toPlainUserDoc(fresh);
             });
 
             if (outcome === "synced") syncedCount += 1;
             else attemptedOnlyCount += 1;
-            await syncRaidProfileAfterAutoManageReport({
-              syncRaidProfileFromBibleCollected,
-              report: profileReport,
-              discordId,
-              userDoc: profileUserDoc,
-              weekResetStart,
-              collected,
-              logLabel: "[raid-check sync]",
-            });
             if (delta) deltasPerUser.set(discordId, delta);
           } catch (err) {
             failedCount += 1;

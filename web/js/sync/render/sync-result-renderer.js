@@ -34,7 +34,6 @@ export function renderSyncApplyResult(data = {}, rosterAccounts = []) {
   html += renderAppliedSection(asArray(data.applied), charLookup);
   html += renderRejectedSection(asArray(data.rejected), charLookup);
   html += renderUnmappedSection(asArray(data.unmapped));
-  html += renderProfileStatsQueuedSection();
   return `${html}</div>`;
 }
 
@@ -44,10 +43,6 @@ function statCell(kind, count, label) {
 
 function asArray(value) {
   return Array.isArray(value) ? value : [];
-}
-
-function renderProfileStatsQueuedSection() {
-  return `<div class="sync-result-section sync-result-queued"><div class="sync-result-section-title">${escapeHtml(t("sync.profileStatsLabel"))}</div><div id="weekly-profile-sync-status"><span class="hint">${escapeHtml(t("sync.profileStatsQueued"))}</span></div></div>`;
 }
 
 function buildRosterCharacterLookup(rosterAccounts = []) {

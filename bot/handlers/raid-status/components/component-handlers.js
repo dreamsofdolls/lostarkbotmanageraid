@@ -30,7 +30,7 @@ const {
 } = require("../../../utils/raid/common/shared");
 const {
   rotateLocalSyncToken,
-  extractProfileFromUser,
+  extractIdentityFromUser,
 } = require("../../../services/local-sync");
 const {
   publicBaseUrl,
@@ -156,8 +156,8 @@ function createStatusComponentRouteHandlers(ctx) {
 
       let freshUrl;
       try {
-        const profile = extractProfileFromUser(component.user);
-        const token = await rotateLocalSyncToken(discordId, lang, { UserModel: User, profile });
+        const identity = extractIdentityFromUser(component.user);
+        const token = await rotateLocalSyncToken(discordId, lang, { UserModel: User, identity });
         freshUrl = buildLocalSyncUrl(token, baseUrl);
       } catch (err) {
         console.error("[raid-status] rotate local-sync token failed:", err?.message || err);

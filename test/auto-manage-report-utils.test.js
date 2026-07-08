@@ -11,7 +11,6 @@ const {
   countAppliedAutoManageGates,
   stampAutoManageAttemptFromReport,
   toPlainUserDoc,
-  syncRaidProfileAfterAutoManageReport,
 } = require("../bot/services/auto-manage/reports/utils");
 
 test("auto-manage report helpers normalize missing and malformed report entries", () => {
@@ -55,47 +54,6 @@ test("stampAutoManageAttemptFromReport stamps sync only when at least one char s
   );
   assert.equal(syncedDoc.lastAutoManageAttemptAt, 456);
   assert.equal(syncedDoc.lastAutoManageSyncAt, 456);
-});
-
-test("syncRaidProfileAfterAutoManageReport gates profile sync on successful reports", async () => {
-  const calls = [];
-  const syncRaidProfileFromBibleCollected = async (payload) => {
-    calls.push(payload);
-    return { synced: true };
-  };
-
-  assert.equal(
-    await syncRaidProfileAfterAutoManageReport({
-      syncRaidProfileFromBibleCollected,
-      report: { perChar: [{ error: "private" }] },
-      discordId: "u1",
-      userDoc: { discordId: "u1" },
-      weekResetStart: 100,
-      collected: ["log"],
-      logLabel: "[test]",
-    }),
-    null
-  );
-
-  const result = await syncRaidProfileAfterAutoManageReport({
-    syncRaidProfileFromBibleCollected,
-    report: { perChar: [{ error: null }] },
-    discordId: "u1",
-    userDoc: { discordId: "u1" },
-    weekResetStart: 100,
-    collected: ["log"],
-    logLabel: "[test]",
-  });
-
-  assert.deepEqual(result, { synced: true });
-  assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0], {
-    discordId: "u1",
-    userDoc: { discordId: "u1" },
-    weekResetStart: 100,
-    collected: ["log"],
-    logLabel: "[test]",
-  });
 });
 
 test("toPlainUserDoc unwraps mongoose-like docs and leaves plain docs untouched", () => {

@@ -5,7 +5,7 @@ const {
   setLocalSyncEnabled,
   getSyncStatus,
   rotateLocalSyncToken,
-  extractProfileFromUser,
+  extractIdentityFromUser,
   RESULT: SYNC_RESULT,
 } = require("../../../services/local-sync");
 
@@ -51,8 +51,8 @@ function createAutoManageBasicActionHandlers({
     let companionUrl = null;
     if (baseUrl) {
       try {
-        const profile = extractProfileFromUser(interaction.user);
-        const token = await rotateLocalSyncToken(discordId, lang, { UserModel: User, profile });
+        const identity = extractIdentityFromUser(interaction.user);
+        const token = await rotateLocalSyncToken(discordId, lang, { UserModel: User, identity });
         companionUrl = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
       } catch (err) {
         console.warn("[raid-auto-manage] local-on token mint failed:", err?.message || String(err));
