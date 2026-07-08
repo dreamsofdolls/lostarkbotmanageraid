@@ -12,12 +12,13 @@ const User = require("../../../models/user");
 const { saveWithRetry } = require("../../../models/user");
 const GuildConfig = require("../../../models/guildConfig");
 const RaidEvent = require("../../../models/RaidEvent");
-const { RAID_REQUIREMENTS, getGatesForRaid } = require("../../../models/Raid");
+const { RAID_REQUIREMENTS } = require("../../../models/Raid");
 const { t, getGuildLanguage } = require("../../i18n");
-const { toModeLabel } = require("../../../utils/raid/common/shared");
 const {
   getRequirementFor,
   normalizeRaidModeKey,
+  setAssignedRaidMode,
+  toPlainAssignedRaid,
 } = require("../../../utils/raid/common/character/assigned-raids");
 const { purgeStaleRaidEvents } = require("../schedule/lifecycle/event-cleanup");
 const { resolveGuildChannel } = require("../../discord/resolve-guild-channel");
@@ -95,9 +96,7 @@ function applyPendingModeAfterGateClear(character, assignedRaids, raidKey) {
   const pendingModeKey = normalizeRaidModeKey(raidKey, raid?.pendingModeKey);
   if (!raid?.pendingModeKey) return;
 
-  const plain = raid && typeof raid.toObject === "function"
-    ? raid.toObject()
-    : { ...(raid || {}) };
+  const plain = toPlainAssignedRaid(raid);
   const requirement = pendingModeKey ? getRequirementFor(raidKey, pendingModeKey) : null;
   const itemLevel = Number(character?.itemLevel) || 0;
   const hasPreservedClear = Object.keys(plain).some((gate) => (
@@ -110,13 +109,7 @@ function applyPendingModeAfterGateClear(character, assignedRaids, raidKey) {
     return;
   }
 
-  plain.modeKey = pendingModeKey;
-  delete plain.pendingModeKey;
-  const label = toModeLabel(pendingModeKey);
-  for (const gate of getGatesForRaid(raidKey)) {
-    plain[gate] = { difficulty: label, completedDate: null };
-  }
-  assignedRaids[raidKey] = plain;
+  assignedRaids[raidKey] = setAssignedRaidMode(plain, raidKey, pendingModeKey);
 }
 
 function clearCharacterProgress(character, { preserveSinceMs = null } = {}) {

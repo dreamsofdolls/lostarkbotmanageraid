@@ -132,6 +132,7 @@ function seedUser(docs, accounts, extra = {}) {
 
 const KAZEROS_HARD = RAID_REQUIREMENT_MAP.kazeros_hard;
 const KAZEROS_NORMAL = RAID_REQUIREMENT_MAP.kazeros_normal;
+const ARMOCHE_NORMAL = RAID_REQUIREMENT_MAP.armoche_normal;
 
 function makeRaidSetInteraction(values, userId = "user-1") {
   const replies = [];
@@ -509,6 +510,42 @@ test("applyRaidSetForDiscordId: mode-switch wipes existing different-mode gates 
   assert.equal(kaz.G2.difficulty, "Hard");
   assert.ok(Number(kaz.G1.completedDate) > 0);
   assert.ok(Number(kaz.G2.completedDate) > 0);
+});
+
+test("applyRaidSetForDiscordId: same-mode write preserves a queued pending mode", async () => {
+  const { factory, docs } = makeFactory();
+  seedUser(docs, [
+    {
+      accountName: "Alpha",
+      characters: [
+        makeChar("Cyrano", 1730, {
+          armoche: {
+            modeKey: "normal",
+            pendingModeKey: "hard",
+            G1: { difficulty: "Normal", completedDate: null },
+            G2: { difficulty: "Normal", completedDate: null },
+          },
+        }),
+      ],
+    },
+  ]);
+
+  const result = await factory.applyRaidSetForDiscordId({
+    discordId: "user-1",
+    characterName: "Cyrano",
+    rosterName: "Alpha",
+    raidMeta: ARMOCHE_NORMAL,
+    statusType: "process",
+    effectiveGates: ["G1"],
+  });
+
+  assert.equal(result.updated, true);
+  const raid = docs.get("user-1").accounts[0].characters[0].assignedRaids.armoche;
+  assert.equal(raid.modeKey, "normal");
+  assert.equal(raid.pendingModeKey, "hard");
+  assert.equal(raid.G1.difficulty, "Normal");
+  assert.ok(Number(raid.G1.completedDate) > 0);
+  assert.equal(raid.G2.completedDate, undefined);
 });
 
 test("applyRaidSetForDiscordId: noRoster when user has no accounts", async () => {

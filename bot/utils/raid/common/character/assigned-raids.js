@@ -35,6 +35,26 @@ function normalizeRaidModeKey(raidKey, modeKey) {
   return getRequirementFor(raidKey, key) ? key : null;
 }
 
+function toPlainAssignedRaid(assignedRaid) {
+  return assignedRaid && typeof assignedRaid.toObject === "function"
+    ? assignedRaid.toObject()
+    : { ...(assignedRaid || {}) };
+}
+
+function setAssignedRaidMode(assignedRaid, raidKey, modeKey, { completedDate = null } = {}) {
+  const normalizedModeKey = normalizeRaidModeKey(raidKey, modeKey);
+  const plain = toPlainAssignedRaid(assignedRaid);
+  if (!normalizedModeKey) return plain;
+
+  plain.modeKey = normalizedModeKey;
+  delete plain.pendingModeKey;
+  const label = toModeLabel(normalizedModeKey);
+  for (const gate of getGatesForRaid(raidKey)) {
+    plain[gate] = { difficulty: label, completedDate };
+  }
+  return plain;
+}
+
 function getAssignedRaidModeKey(assignedRaid, raidKey) {
   return normalizeRaidModeKey(raidKey, assignedRaid?.modeKey);
 }
@@ -214,5 +234,7 @@ module.exports = {
   normalizeRaidModeKey,
   pickCanonicalDifficultyFromCompletions,
   resolveEmptyCompletionDifficulty,
+  setAssignedRaidMode,
   tallyCompletedDifficulties,
+  toPlainAssignedRaid,
 };

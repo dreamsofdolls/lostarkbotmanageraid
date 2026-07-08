@@ -1,12 +1,14 @@
 "use strict";
 
-const { RAID_REQUIREMENTS, isGoldBound, getGatesForRaid } = require("../../../models/Raid");
+const { RAID_REQUIREMENTS, isGoldBound } = require("../../../models/Raid");
 const { normalizeName, toModeKey, toModeLabel } = require("../../../utils/raid/common/shared");
 const {
   getAssignedRaidModeKey,
   getBestEligibleModeKey,
   getCompletedGateKeys,
   getRequirementFor,
+  setAssignedRaidMode,
+  toPlainAssignedRaid,
 } = require("../../../utils/raid/common/character/assigned-raids");
 const { ensureFreshWeek } = require("../../../services/raid/schedulers/weekly-reset");
 const {
@@ -234,21 +236,14 @@ async function setParsedGoldRaidMode(options) {
         || getBestEligibleModeKey(raidKey, itemLevel)
         || "normal";
       const hasRun = getCompletedGateKeys(raidData).length > 0;
-      const plain = raidData && typeof raidData.toObject === "function"
-        ? raidData.toObject()
-        : { ...raidData };
+      const plain = toPlainAssignedRaid(raidData);
 
       if (!hasRun) {
         if (modeKey === currentMode && !plain.pendingModeKey) {
           outcome = "noop";
           return false;
         }
-        plain.modeKey = modeKey;
-        delete plain.pendingModeKey;
-        const label = toModeLabel(modeKey);
-        for (const gate of getGatesForRaid(raidKey)) {
-          plain[gate] = { difficulty: label, completedDate: null };
-        }
+        target.assignedRaids[raidKey] = setAssignedRaidMode(plain, raidKey, modeKey);
         outcome = "immediate";
       } else if (modeKey === currentMode) {
         if (!plain.pendingModeKey) {
@@ -256,13 +251,14 @@ async function setParsedGoldRaidMode(options) {
           return false;
         }
         delete plain.pendingModeKey;
+        target.assignedRaids[raidKey] = plain;
         outcome = "cancelled";
       } else {
         plain.pendingModeKey = modeKey;
+        target.assignedRaids[raidKey] = plain;
         outcome = "deferred";
       }
 
-      target.assignedRaids[raidKey] = plain;
       return true;
     }
   );
