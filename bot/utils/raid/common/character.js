@@ -39,6 +39,8 @@ const {
   isAssignedRaidCompleted,
   normalizeAssignedRaid,
   normalizeRaidModeKey,
+  setAssignedRaidMode,
+  toPlainAssignedRaid,
 } = require("./character/assigned-raids");
 const {
   buildFetchedRosterIndexes,
@@ -457,6 +459,8 @@ module.exports = {
   getCompletedGateKeys,
   buildAssignedRaidFromLegacy,
   ensureAssignedRaids,
+  setAssignedRaidMode,
+  toPlainAssignedRaid,
   isAssignedRaidCompleted,
   buildCharacterRecord,
   ensureRaidEntries,

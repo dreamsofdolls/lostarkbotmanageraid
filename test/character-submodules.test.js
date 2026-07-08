@@ -25,6 +25,8 @@ test("character facade re-exports extracted assigned-raid helpers", () => {
   assert.equal(characterFacade.ensureAssignedRaids, assignedRaids.ensureAssignedRaids);
   assert.equal(characterFacade.getCompletedGateKeys, assignedRaids.getCompletedGateKeys);
   assert.equal(characterFacade.normalizeAssignedRaid, assignedRaids.normalizeAssignedRaid);
+  assert.equal(characterFacade.setAssignedRaidMode, assignedRaids.setAssignedRaidMode);
+  assert.equal(characterFacade.toPlainAssignedRaid, assignedRaids.toPlainAssignedRaid);
   assert.equal(characterFacade.RAID_REQUIREMENT_MAP, assignedRaids.RAID_REQUIREMENT_MAP);
 });
 
@@ -54,6 +56,26 @@ test("normalizeAssignedRaid drops an invalid pendingModeKey", () => {
     "armoche"
   );
   assert.equal(out.pendingModeKey, undefined);
+});
+
+test("setAssignedRaidMode relabels official gates and clears pending mode", () => {
+  const out = assignedRaids.setAssignedRaidMode(
+    {
+      modeKey: "normal",
+      pendingModeKey: "hard",
+      goldOverride: "include",
+      G1: { difficulty: "Normal", completedDate: 123 },
+      G2: { difficulty: "Normal", completedDate: 456 },
+    },
+    "armoche",
+    "hard"
+  );
+
+  assert.equal(out.modeKey, "hard");
+  assert.equal(out.pendingModeKey, undefined);
+  assert.equal(out.goldOverride, "include");
+  assert.deepEqual(out.G1, { difficulty: "Hard", completedDate: null });
+  assert.deepEqual(out.G2, { difficulty: "Hard", completedDate: null });
 });
 
 test("roster matching narrows folded candidates by class and item level", () => {
