@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-07-08 (raid-check: sync gold-receive state with raid-status)
+
+### Fixed
+- /raid-check pending + progress counts now exclude raids a character turned gold off on (goldReceives === false), matching /raid-status. The per-char card still lists those raids with the trailing lock; only the counts (per-raid dropdown, per-user pending, progress totals) drop them, via the shared isGoldProgressRaid filter + buildAccountPageEmbed's getProgressRaidsFor hook.
+
 ## 2026-07-08 (raid-profile: remove subsystem)
 
 ### Removed

@@ -88,3 +88,62 @@ test("all-mode task page renders current account identity and read-only footer",
   assert.deepEqual(embed.data.author, { name: "Fetched", iconURL: "avatar.png" });
   assert.ok(embed.data.footer.text.length > 0);
 });
+
+test("all-mode raid page displays gold-locked raids but excludes them from progress counts", () => {
+  const character = {
+    name: "Goldie",
+    raids: [
+      { raidKey: "act4", modeKey: "hard", isCompleted: false, goldReceives: true },
+      { raidKey: "horizon", modeKey: "normal", isCompleted: false, goldReceives: false },
+    ],
+  };
+  const pagesData = [
+    {
+      userDoc: {
+        discordId: "u1",
+        accounts: [{ accountName: "Roster", characters: [character] }],
+      },
+      account: { accountName: "Roster", characters: [character] },
+    },
+  ];
+  let capturedDisplayRaids = null;
+  let capturedProgressRaids = null;
+  let capturedGlobalTotals = null;
+
+  const { buildRaidPage } = createAllModePageRenderers({
+    EmbedBuilder: FakeEmbedBuilder,
+    UI: { icons: { done: "done", pending: "pending", reset: "reset" } },
+    authorMeta: new Map(),
+    buildAccountPageEmbed: (account, pageIndex, totalPages, globalTotals, getRaidsFor, userMeta, options) => {
+      capturedDisplayRaids = getRaidsFor(character);
+      capturedProgressRaids = options.getProgressRaidsFor(character);
+      capturedGlobalTotals = globalTotals;
+      return new FakeEmbedBuilder().setTitle(account.accountName);
+    },
+    buildStatusFooterText: (globalTotals) =>
+      `${globalTotals.progress.completed}/${globalTotals.progress.total}`,
+    getState: () => ({
+      currentLocalPage: 0,
+      filterRaidId: null,
+      filterUserId: null,
+      filteredIndices: [0],
+      totalPages: 1,
+    }),
+    getStatusRaidsForCharacter: (ch) => ch.raids,
+    isManagerId: () => false,
+    lang: "en",
+    pagesData,
+    summarizeRaidProgress: (entries) => ({
+      completed: entries.filter((entry) => entry.isCompleted).length,
+      total: entries.length,
+    }),
+    truncateText: (value) => String(value),
+  });
+
+  const embed = buildRaidPage(0);
+
+  assert.deepEqual(capturedDisplayRaids.map((raid) => raid.raidKey), ["act4", "horizon"]);
+  assert.deepEqual(capturedProgressRaids.map((raid) => raid.raidKey), ["act4"]);
+  assert.deepEqual(capturedGlobalTotals.progress, { completed: 0, total: 1 });
+  assert.equal(embed.data.footer.text, "0/1");
+});

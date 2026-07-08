@@ -6,6 +6,7 @@ const {
   getVisibleSharedTasks,
   getSharedTaskDisplay,
 } = require("../../../utils/raid/tasks/shared-tasks");
+const { isGoldProgressRaid } = require("../../../utils/raid/common/character");
 const { t } = require("../../../services/i18n");
 
 function displayNameForUser(userDoc, meta) {
@@ -48,6 +49,7 @@ function createAllModePageRenderers({
             (raid) => `${raid.raidKey}:${raid.modeKey}` === filterRaidId
           )
       : rawGetRaidsFor;
+    const getProgressRaidsFor = (character) => getRaidsFor(character).filter(isGoldProgressRaid);
 
     const userAccounts = Array.isArray(userDoc.accounts) ? userDoc.accounts : [];
     const userTotalChars = userAccounts.reduce(
@@ -57,12 +59,13 @@ function createAllModePageRenderers({
     const allRaidEntries = [];
     for (const account of userAccounts) {
       for (const character of account.characters || []) {
-        allRaidEntries.push(...getRaidsFor(character));
+        allRaidEntries.push(...getProgressRaidsFor(character));
       }
     }
     return {
       allRaidEntries,
       getRaidsFor,
+      getProgressRaidsFor,
       userAccounts,
       userTotalChars,
     };
@@ -74,6 +77,7 @@ function createAllModePageRenderers({
     const {
       allRaidEntries,
       getRaidsFor,
+      getProgressRaidsFor,
       userAccounts,
       userTotalChars,
     } = raidsForPage(userDoc, filterRaidId);
@@ -96,7 +100,7 @@ function createAllModePageRenderers({
       globalTotals,
       getRaidsFor,
       userMeta,
-      { hideIneligibleChars: !!filterRaidId, lang }
+      { hideIneligibleChars: !!filterRaidId, getProgressRaidsFor, lang }
     );
 
     if (isManagerId && isManagerId(userDoc.discordId)) {
