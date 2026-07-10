@@ -90,7 +90,9 @@ async function runWakeupPhase(context) {
   } = context;
 
   try {
-    const { deleted, skippedOld } = await cleanupRaidChannelMessages(channel);
+    const { deleted, skippedOld } = await cleanupRaidChannelMessages(channel, {
+      protectedMessageIds: [cfg.welcomeMessageId].filter(Boolean),
+    });
     await GuildConfig.findOneAndUpdate(
       { guildId: cfg.guildId },
       {
@@ -132,7 +134,9 @@ async function runNormalCleanupPhase(context) {
   } = context;
 
   try {
-    const { deleted, skippedOld } = await cleanupRaidChannelMessages(channel);
+    const { deleted, skippedOld } = await cleanupRaidChannelMessages(channel, {
+      protectedMessageIds: [cfg.welcomeMessageId].filter(Boolean),
+    });
     await GuildConfig.findOneAndUpdate(
       { guildId: cfg.guildId },
       { $set: { lastAutoCleanupKey: targetKey } }

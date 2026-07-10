@@ -81,6 +81,20 @@ function createRaidChannelCoreActions({
     }
   }
 
+  async function loadProtectedWelcomeIds(guildId, channelId) {
+    try {
+      const cfg = await GuildConfig.findOne({ guildId })
+        .select("welcomeMessageId welcomeChannelId")
+        .lean();
+      if (!cfg?.welcomeMessageId) return [];
+      if (cfg.welcomeChannelId && cfg.welcomeChannelId !== channelId) return [];
+      return [cfg.welcomeMessageId];
+    } catch (err) {
+      console.warn("[raid-channel] welcome protection read failed:", err?.message || err);
+      return [];
+    }
+  }
+
   async function postSetGreetingIfEnabled({ channel, guildId, guildLang }) {
     const greetingEnabled = await loadSetGreetingEnabled(guildId);
     if (!greetingEnabled) return;
@@ -127,6 +141,7 @@ function createRaidChannelCoreActions({
       return;
     }
 
+    const previousChannelId = getCachedMonitorChannelId(guildId);
     await GuildConfig.findOneAndUpdate(
       { guildId },
       { guildId, raidChannelId: channel.id },
@@ -134,7 +149,15 @@ function createRaidChannelCoreActions({
     );
     setCachedMonitorChannelId(guildId, channel.id);
 
-    const welcome = await postRaidChannelWelcome(channel, interaction.client.user.id, guildId);
+    const welcome = await postRaidChannelWelcome(
+      channel,
+      interaction.client.user.id,
+      guildId,
+      {
+        client: interaction.client,
+        previousChannelId,
+      }
+    );
     if (welcome.posted) {
       const guildLang = await getGuildLanguage(guildId, { GuildConfigModel: GuildConfig });
       await postSetGreetingIfEnabled({ channel, guildId, guildLang });
@@ -262,7 +285,10 @@ function createRaidChannelCoreActions({
 
     await deferEphemeralReply(interaction);
     try {
-      const { deleted, skippedOld } = await cleanupRaidChannelMessages(channel);
+      const protectedMessageIds = await loadProtectedWelcomeIds(guildId, channel.id);
+      const { deleted, skippedOld } = await cleanupRaidChannelMessages(channel, {
+        protectedMessageIds,
+      });
       const embed = new EmbedBuilder()
         .setColor(UI.colors.success)
         .setTitle(`${UI.icons.done} ${t("raid-channel.cleanup.successTitle", lang)}`)
@@ -305,7 +331,12 @@ function createRaidChannelCoreActions({
     if (!channel) return;
 
     await deferEphemeralReply(interaction);
-    const welcome = await postRaidChannelWelcome(channel, interaction.client.user.id, guildId);
+    const welcome = await postRaidChannelWelcome(
+      channel,
+      interaction.client.user.id,
+      guildId,
+      { client: interaction.client }
+    );
     const newKey = welcome.posted
       ? welcome.pinned
         ? "newPostedPinned"

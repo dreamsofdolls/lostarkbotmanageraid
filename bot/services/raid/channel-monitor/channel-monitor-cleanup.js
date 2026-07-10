@@ -1,28 +1,42 @@
 "use strict";
 
-async function cleanupRaidChannelMessages(channel) {
-  const MAX_ITERATIONS = 20;
-  let totalDeleted = 0;
-  let totalSkippedOld = 0;
-  let before;
+const { raidChannelGuard } = require("./channel-monitor-guard");
 
-  for (let iter = 0; iter < MAX_ITERATIONS; iter += 1) {
-    const fetchOpts = { limit: 100 };
-    if (before) fetchOpts.before = before;
-    const fetched = await channel.messages.fetch(fetchOpts);
-    if (fetched.size === 0) break;
+const MAX_ITERATIONS = 20;
 
-    before = fetched.last()?.id;
-    const toDelete = fetched.filter((message) => !message.pinned);
-    if (toDelete.size > 0) {
-      const deleted = await channel.bulkDelete(toDelete, true);
-      totalDeleted += deleted.size;
-      totalSkippedOld += toDelete.size - deleted.size;
+async function cleanupRaidChannelMessages(channel, {
+  protectedMessageIds = [],
+  channelGuard = raidChannelGuard,
+} = {}) {
+  return channelGuard.runExclusive(channel?.id, async () => {
+    const protectedIds = new Set([
+      ...Array.from(protectedMessageIds || []),
+      ...channelGuard.getProtectedMessageIds(channel?.id),
+    ].filter(Boolean).map(String));
+    let totalDeleted = 0;
+    let totalSkippedOld = 0;
+    let before;
+
+    for (let iter = 0; iter < MAX_ITERATIONS; iter += 1) {
+      const fetchOpts = { limit: 100 };
+      if (before) fetchOpts.before = before;
+      const fetched = await channel.messages.fetch(fetchOpts);
+      if (fetched.size === 0) break;
+
+      before = fetched.last()?.id;
+      const toDelete = fetched.filter(
+        (message) => !message.pinned && !protectedIds.has(String(message.id))
+      );
+      if (toDelete.size > 0) {
+        const deleted = await channel.bulkDelete(toDelete, true);
+        totalDeleted += deleted.size;
+        totalSkippedOld += toDelete.size - deleted.size;
+      }
+      if (fetched.size < 100) break;
     }
-    if (fetched.size < 100) break;
-  }
 
-  return { deleted: totalDeleted, skippedOld: totalSkippedOld };
+    return { deleted: totalDeleted, skippedOld: totalSkippedOld };
+  });
 }
 
 async function resolveRaidMonitorChannel(interaction, channelId) {
