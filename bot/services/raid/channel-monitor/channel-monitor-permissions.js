@@ -5,6 +5,7 @@ function createRaidChannelPermissionHelpers({ PermissionFlagsBits }) {
     { flag: PermissionFlagsBits.ViewChannel, label: "View Channel" },
     { flag: PermissionFlagsBits.SendMessages, label: "Send Messages" },
     { flag: PermissionFlagsBits.ManageMessages, label: "Manage Messages" },
+    { flag: PermissionFlagsBits.PinMessages, label: "Pin Messages" },
     { flag: PermissionFlagsBits.ReadMessageHistory, label: "Read Message History" },
     { flag: PermissionFlagsBits.EmbedLinks, label: "Embed Links" },
   ];
