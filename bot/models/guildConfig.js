@@ -25,11 +25,13 @@ const guildConfigSchema = new mongoose.Schema(
     // VN day short-circuits. Missed days (bot offline) catch up on the
     // next tick regardless of day of week.
     lastAutoCleanupKey: { type: String, default: null },
-    // Discord message ID of the pinned welcome embed this bot posted in
-    // the monitor channel. Stored so `/raid-channel config action:repin`
-    // can unpin the exact stored message instead of scanning every
-    // bot-authored pin (which would remove unrelated bot pins).
+    // Discord message ID of the pinned welcome embed this bot posted.
+    // Stored so repin/channel moves can delete the exact old welcome without
+    // touching unrelated bot-authored pins.
     welcomeMessageId: { type: String, default: null },
+    // Channel containing `welcomeMessageId`. Keeping the pair lets a channel
+    // move remove the old welcome from its original channel safely.
+    welcomeChannelId: { type: String, default: null },
     // Per-guild dedup for the weekly reset announcement. Set to the target
     // ISO week key (e.g. "2026-W17") once the post-reset announcement has
     // been posted in this guild's monitor channel. Subsequent weekly-reset

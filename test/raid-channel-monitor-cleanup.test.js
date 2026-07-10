@@ -7,6 +7,9 @@ const {
   cleanupRaidChannelMessages,
   resolveRaidMonitorChannel,
 } = require("../bot/services/raid/channel-monitor/channel-monitor-cleanup");
+const {
+  createRaidChannelGuard,
+} = require("../bot/services/raid/channel-monitor/channel-monitor-guard");
 
 function makeBatch(messages) {
   return {
@@ -33,6 +36,7 @@ test("raid-channel cleanup paginates, skips pinned messages, and counts old-mess
     makeBatch([{ id: "0", pinned: false }]),
   ];
   const channel = {
+    id: "channel-1",
     messages: {
       fetch: async (opts) => {
         fetches.push(opts);
@@ -50,6 +54,48 @@ test("raid-channel cleanup paginates, skips pinned messages, and counts old-mess
   assert.deepEqual(fetches, [{ limit: 100 }, { limit: 100, before: "1" }]);
   assert.deepEqual(bulkDeletes, [["3", "1"], ["0"]]);
   assert.deepEqual(report, { deleted: 1, skippedOld: 2 });
+});
+
+test("raid-channel cleanup protects the welcome ID even with a stale unpinned snapshot", async () => {
+  const bulkDeletes = [];
+  const batches = [
+    makeBatch([
+      { id: "welcome", pinned: false },
+      { id: "regular", pinned: false },
+    ]),
+  ];
+  const channel = {
+    id: "channel-1",
+    messages: {
+      fetch: async () => batches.shift() || makeBatch([]),
+    },
+    bulkDelete: async (collection) => {
+      bulkDeletes.push(collection.map((message) => message.id));
+      return { size: collection.size };
+    },
+  };
+
+  const report = await cleanupRaidChannelMessages(channel, {
+    protectedMessageIds: ["welcome"],
+    channelGuard: createRaidChannelGuard(),
+  });
+
+  assert.deepEqual(bulkDeletes, [["regular"]]);
+  assert.deepEqual(report, { deleted: 1, skippedOld: 0 });
+});
+
+test("raid-channel guard releases the channel after a failed task", async () => {
+  const guard = createRaidChannelGuard();
+
+  await assert.rejects(
+    guard.runExclusive("channel-1", async () => {
+      throw new Error("first task failed");
+    }),
+    /first task failed/
+  );
+
+  const result = await guard.runExclusive("channel-1", async () => "next task ran");
+  assert.equal(result, "next task ran");
 });
 
 test("raid-channel monitor channel resolver falls back to guild fetch", async () => {

@@ -24,10 +24,12 @@ test("auto-cleanup scheduler runs normal cleanup and stamps the slot key", async
   const updates = [];
   const posts = [];
   let cleanedChannel = null;
+  let cleanupOptions = null;
   const channel = {};
   const cfg = {
     guildId: "guild-1",
     raidChannelId: "channel-1",
+    welcomeMessageId: "welcome-1",
     lastArtistWakeupKey: getTargetDayKeyForLang(now, "vi"),
     lastAutoCleanupKey: "old-slot",
   };
@@ -51,8 +53,9 @@ test("auto-cleanup scheduler runs normal cleanup and stamps the slot key", async
       artistBedtime: { enabled: true },
       artistWakeup: { enabled: true },
     }),
-    cleanupRaidChannelMessages: async (target) => {
+    cleanupRaidChannelMessages: async (target, options) => {
       cleanedChannel = target;
+      cleanupOptions = options;
       return { deleted: 2, skippedOld: 1 };
     },
     getGuildLanguage: async () => "vi",
@@ -68,6 +71,7 @@ test("auto-cleanup scheduler runs normal cleanup and stamps the slot key", async
   });
 
   assert.equal(cleanedChannel, channel);
+  assert.deepEqual(cleanupOptions, { protectedMessageIds: ["welcome-1"] });
   assert.equal(updates.length, 1);
   assert.deepEqual(updates[0].filter, { guildId: "guild-1" });
   assert.ok(updates[0].update.$set.lastAutoCleanupKey);

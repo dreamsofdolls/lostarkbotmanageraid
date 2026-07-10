@@ -85,6 +85,40 @@ test("raid-channel clear action resets monitor channel and schedule state", asyn
   assert.equal(replies.embeds.length, 1);
 });
 
+test("raid-channel set forwards the previous channel so legacy welcome pins can be removed", async () => {
+  const replies = makeReplyCollectors();
+  const client = { user: { id: "bot" } };
+  const targetChannel = { id: "new-channel" };
+  let welcomeArgs = null;
+  const { handleSetChannel } = createCoreActions({
+    getCachedMonitorChannelId: () => "old-channel",
+    postRaidChannelWelcome: async (...args) => {
+      welcomeArgs = args;
+      return { posted: false, pinned: false, removedOldCount: 0 };
+    },
+  });
+
+  await handleSetChannel({
+    interaction: {
+      options: { getChannel: () => targetChannel },
+      guild: { members: { me: {} } },
+      client,
+    },
+    guildId: "guild1",
+    lang: "en",
+    replyChannelEmbed: replies.replyChannelEmbed.bind(replies),
+    replyChannelNotice: replies.replyChannelNotice.bind(replies),
+  });
+
+  assert.deepEqual(welcomeArgs, [
+    targetChannel,
+    "bot",
+    "guild1",
+    { client, previousChannelId: "old-channel" },
+  ]);
+  assert.equal(replies.embeds.length, 1);
+});
+
 test("raid-channel cleanup action warns before deferring when no monitor channel exists", async () => {
   let deferred = false;
   const replies = makeReplyCollectors();
@@ -114,6 +148,43 @@ test("raid-channel cleanup action warns before deferring when no monitor channel
   assert.equal(deferred, false);
   assert.equal(replies.notices.length, 1);
   assert.equal(replies.notices[0].type, "warn");
+});
+
+test("raid-channel manual cleanup forwards the tracked welcome ID as protected", async () => {
+  const replies = makeReplyCollectors();
+  let cleanupArgs = null;
+  const { handleCleanupChannel } = createCoreActions({
+    GuildConfig: {
+      findOne: () => ({
+        select() {
+          return this;
+        },
+        lean: async () => ({
+          welcomeMessageId: "welcome-1",
+          welcomeChannelId: "chan1",
+        }),
+      }),
+    },
+    cleanupRaidChannelMessages: async (...args) => {
+      cleanupArgs = args;
+      return { deleted: 0, skippedOld: 0 };
+    },
+  });
+
+  await handleCleanupChannel({
+    interaction: { deferReply: async () => {} },
+    guildId: "guild1",
+    lang: "en",
+    replyChannelNotice: replies.replyChannelNotice.bind(replies),
+    editChannelEmbed: replies.replyChannelEmbed.bind(replies),
+    editChannelNotice: replies.replyChannelNotice.bind(replies),
+  });
+
+  assert.deepEqual(cleanupArgs, [
+    { id: "chan1" },
+    { protectedMessageIds: ["welcome-1"] },
+  ]);
+  assert.equal(replies.embeds.length, 1);
 });
 
 test("raid-channel schedule action rejects redundant no-op toggles", async () => {
