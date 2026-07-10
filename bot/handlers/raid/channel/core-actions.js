@@ -17,7 +17,7 @@ function createRaidChannelCoreActions({
   postChannelAnnouncement,
   getAnnouncementsConfig,
   resolveRaidMonitorChannel,
-  cleanupRaidChannelMessages,
+  cleanupAndRefreshRaidChannel,
   getGuildLanguage,
   SUPPORTED_LANGUAGES,
   t,
@@ -286,7 +286,10 @@ function createRaidChannelCoreActions({
     await deferEphemeralReply(interaction);
     try {
       const protectedMessageIds = await loadProtectedWelcomeIds(guildId, channel.id);
-      const { deleted, skippedOld } = await cleanupRaidChannelMessages(channel, {
+      const { deleted, skippedOld } = await cleanupAndRefreshRaidChannel(channel, {
+        botUserId: interaction.client.user.id,
+        client: interaction.client,
+        guildId,
         protectedMessageIds,
       });
       const embed = new EmbedBuilder()

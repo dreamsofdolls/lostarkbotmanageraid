@@ -58,7 +58,7 @@ function createRaidChannelCommand({
   postChannelAnnouncement,
   getAnnouncementsConfig,
   resolveRaidMonitorChannel,
-  cleanupRaidChannelMessages,
+  cleanupAndRefreshRaidChannel,
   getTargetCleanupSlotKey,
 }) {
   /**
@@ -115,7 +115,7 @@ function createRaidChannelCommand({
     postChannelAnnouncement,
     getAnnouncementsConfig,
     resolveRaidMonitorChannel,
-    cleanupRaidChannelMessages,
+    cleanupAndRefreshRaidChannel,
     getGuildLanguage,
     SUPPORTED_LANGUAGES,
     t,

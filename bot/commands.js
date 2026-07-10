@@ -433,7 +433,7 @@ let getMissingBotChannelPermissions;
 let getMissingAnnouncementChannelPermissions;
 let parseRaidMessage;
 let handleRaidChannelMessage;
-let cleanupRaidChannelMessages;
+let cleanupAndRefreshRaidChannel;
 let postRaidChannelWelcome;
 let resolveRaidMonitorChannel;
 
@@ -848,7 +848,7 @@ const raidChannelMonitorService = createRaidChannelMonitorService({
   getMissingAnnouncementChannelPermissions,
   parseRaidMessage,
   handleRaidChannelMessage,
-  cleanupRaidChannelMessages,
+  cleanupAndRefreshRaidChannel,
   postRaidChannelWelcome,
   resolveRaidMonitorChannel,
 } = raidChannelMonitorService);
@@ -859,7 +859,7 @@ const raidSchedulerService = createRaidSchedulerService({
   saveWithRetry,
   ensureFreshWeek,
   getAnnouncementsConfig,
-  cleanupRaidChannelMessages,
+  cleanupAndRefreshRaidChannel,
   weekResetStartMs,
   acquireAutoManageSyncSlot,
   releaseAutoManageSyncSlot,
@@ -1071,7 +1071,7 @@ const raidChannelCommandHandlers = createRaidChannelCommand({
   postChannelAnnouncement,
   getAnnouncementsConfig,
   resolveRaidMonitorChannel,
-  cleanupRaidChannelMessages,
+  cleanupAndRefreshRaidChannel,
   getTargetCleanupSlotKey,
 });
 ({

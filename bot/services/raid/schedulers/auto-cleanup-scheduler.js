@@ -82,7 +82,7 @@ async function runWakeupPhase(context) {
     cfg,
     channel,
     announcements,
-    cleanupRaidChannelMessages,
+    cleanupAndRefreshRaidChannel,
     dayKey,
     targetKey,
     guildLang,
@@ -90,7 +90,10 @@ async function runWakeupPhase(context) {
   } = context;
 
   try {
-    const { deleted, skippedOld } = await cleanupRaidChannelMessages(channel, {
+    const { deleted, skippedOld } = await cleanupAndRefreshRaidChannel(channel, {
+      botUserId: context.client.user.id,
+      client: context.client,
+      guildId: cfg.guildId,
       protectedMessageIds: [cfg.welcomeMessageId].filter(Boolean),
     });
     await GuildConfig.findOneAndUpdate(
@@ -127,14 +130,17 @@ async function runNormalCleanupPhase(context) {
     cfg,
     channel,
     announcements,
-    cleanupRaidChannelMessages,
+    cleanupAndRefreshRaidChannel,
     targetKey,
     guildLang,
     postChannelAnnouncement,
   } = context;
 
   try {
-    const { deleted, skippedOld } = await cleanupRaidChannelMessages(channel, {
+    const { deleted, skippedOld } = await cleanupAndRefreshRaidChannel(channel, {
+      botUserId: context.client.user.id,
+      client: context.client,
+      guildId: cfg.guildId,
       protectedMessageIds: [cfg.welcomeMessageId].filter(Boolean),
     });
     await GuildConfig.findOneAndUpdate(
@@ -184,7 +190,7 @@ const CLEANUP_PHASES = [
 function createAutoCleanupSchedulerService({
   GuildConfig,
   getAnnouncementsConfig,
-  cleanupRaidChannelMessages,
+  cleanupAndRefreshRaidChannel,
   getGuildLanguage,
   postChannelAnnouncement,
   nowDate = () => new Date(),
@@ -213,8 +219,9 @@ function createAutoCleanupSchedulerService({
         GuildConfig,
         cfg,
         channel,
+        client,
         announcements: getAnnouncementsConfig(cfg),
-        cleanupRaidChannelMessages,
+        cleanupAndRefreshRaidChannel,
         dayKey: getTargetDayKeyForLang(now, guildLang),
         guildLang,
         now,

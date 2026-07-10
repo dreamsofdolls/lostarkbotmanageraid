@@ -45,7 +45,7 @@ function createRaidSchedulerService({
   saveWithRetry,
   ensureFreshWeek,
   getAnnouncementsConfig,
-  cleanupRaidChannelMessages,
+  cleanupAndRefreshRaidChannel,
   weekResetStartMs,
   acquireAutoManageSyncSlot,
   releaseAutoManageSyncSlot,
@@ -72,7 +72,7 @@ function createRaidSchedulerService({
   const autoCleanupService = createAutoCleanupSchedulerService({
     GuildConfig,
     getAnnouncementsConfig,
-    cleanupRaidChannelMessages,
+    cleanupAndRefreshRaidChannel,
     getGuildLanguage,
     postChannelAnnouncement,
   });
