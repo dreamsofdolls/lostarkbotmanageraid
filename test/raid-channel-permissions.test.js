@@ -11,6 +11,7 @@ const PermissionFlagsBits = {
   ManageMessages: 4,
   ReadMessageHistory: 8,
   EmbedLinks: 16,
+  PinMessages: 32,
 };
 
 function channelWithPermissions(allowedFlags) {
@@ -36,7 +37,23 @@ test("raid-channel permission helper reports missing bot-channel permissions", (
     { id: "bot" }
   );
 
-  assert.deepEqual(missing, ["Manage Messages", "Read Message History"]);
+  assert.deepEqual(missing, ["Manage Messages", "Pin Messages", "Read Message History"]);
+});
+
+test("raid-channel permission helper requires Discord Pin Messages separately", () => {
+  const helpers = createRaidChannelPermissionHelpers({ PermissionFlagsBits });
+  const missing = helpers.getMissingBotChannelPermissions(
+    channelWithPermissions([
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ManageMessages,
+      PermissionFlagsBits.ReadMessageHistory,
+      PermissionFlagsBits.EmbedLinks,
+    ]),
+    { id: "bot" }
+  );
+
+  assert.deepEqual(missing, ["Pin Messages"]);
 });
 
 test("raid-channel permission helper supports custom required permission sets", () => {
