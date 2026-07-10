@@ -1,6 +1,10 @@
 "use strict";
 
-const { buildNoticeEmbed, replyNotice } = require("../../../utils/raid/common/shared");
+const {
+  buildNoticeEmbed,
+  deferEphemeralReply,
+  editNotice,
+} = require("../../../utils/raid/common/shared");
 const { disableComponentRows } = require("../../../utils/discord/component-rows");
 const { t, getUserLanguage } = require("../../../services/i18n");
 const {
@@ -24,7 +28,6 @@ function createEditUi({
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  MessageFlags,
   UI,
   User,
   truncateText,
@@ -76,8 +79,8 @@ function createEditUi({
 
   async function handleRaidCheckEditClick(interaction, raidMeta, raidKey, preSelectedUserId = null) {
     const started = Date.now();
+    await deferEphemeralReply(interaction);
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const scopeAll = !raidMeta;
     const preSelectedDisplayName = await resolvePreSelectedDisplayName({
@@ -159,8 +162,12 @@ function createEditUi({
 
     collector.on("collect", async (component) => {
       if (component.user.id !== interaction.user.id) {
+        const deferred = await deferEphemeralReply(component)
+          .then(() => true)
+          .catch(() => false);
+        if (!deferred) return;
         const clickerLang = await getUserLanguage(component.user.id, { UserModel: User });
-        await replyNotice(component, EmbedBuilder, {
+        await editNotice(component, EmbedBuilder, {
           type: "lock",
           title: t("raid-check.editFlow.lockOtherTitle", clickerLang),
           description: t("raid-check.editFlow.lockOtherDescription", clickerLang),

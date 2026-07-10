@@ -66,6 +66,33 @@ test("buildRaidCheckSnapshotFromUsers keeps roster freshness metadata and counts
   assert.equal(snapshot.pendingChars[0]?.charName, "StillPending");
 });
 
+test("buildRaidCheckSnapshotFromUsers omits stored Solo raids from Normal Sync/Edit scans", () => {
+  const snapshot = __test.buildRaidCheckSnapshotFromUsers(
+    [
+      {
+        discordId: "solo-user",
+        weeklyResetKey: getTargetResetKey(new Date()),
+        accounts: [
+          {
+            accountName: "Solo Roster",
+            characters: [
+              makeCharacter("SoloOnly", 1720, {
+                modeKey: "solo",
+                G1: { difficulty: "Solo", completedDate: 1 },
+                G2: { difficulty: "Solo", completedDate: 2 },
+              }),
+            ],
+          },
+        ],
+      },
+    ],
+    { raidKey: "kazeros", modeKey: "normal", minItemLevel: 1710 }
+  );
+
+  assert.deepEqual(snapshot.allChars, []);
+  assert.deepEqual(snapshot.pendingChars, []);
+});
+
 test("buildRaidCheckSnapshotFromUsers filters higher-mode clears above the next mode threshold", () => {
   const snapshot = __test.buildRaidCheckSnapshotFromUsers(
     [

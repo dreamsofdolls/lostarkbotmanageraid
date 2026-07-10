@@ -865,9 +865,18 @@ test("raid-check task view renders roster shared tasks even without side tasks",
     RAID_CHECK_PAGINATION_SESSION_MS: 1,
   });
 
+  const events = [];
   let replyPayload = null;
   const interaction = {
-    reply: async (payload) => { replyPayload = payload; },
+    deferReply: async () => { events.push("defer"); },
+    editReply: async (payload) => {
+      events.push("edit");
+      replyPayload = payload;
+    },
+    reply: async (payload) => {
+      events.push("reply");
+      replyPayload = payload;
+    },
   };
 
   await handlers.handleRaidCheckViewTasksClick(interaction, "u1");
@@ -876,7 +885,7 @@ test("raid-check task view renders roster shared tasks even without side tasks",
   const embed = replyPayload.embeds[0];
   assert.ok(embed.fields.some((field) => /Task chung/.test(field.name)));
   assert.ok(embed.fields.some((field) => /Event Shop/.test(field.value)));
-  assert.equal(replyPayload.flags, 64);
+  assert.deepEqual(events, ["defer", "edit"]);
 });
 
 // ---------------------------------------------------------------------------
@@ -1570,11 +1579,79 @@ test("shared-remove: deletes one roster shared task by id", async () => {
   );
 });
 
-test("clear-confirm button clears roster-scoped side tasks", async () => {
-  let savedDoc = null;
-  let updatePayload = null;
+test("clear preview defers ephemerally before language and roster access", async () => {
+  const events = [];
+  let editPayload = null;
   const userDoc = {
-    discordId: "u1",
+    discordId: "raid-task-preview-ack",
+    accounts: [
+      {
+        accountName: "main",
+        characters: [
+          {
+            name: "Alpha",
+            class: "Berserker",
+            itemLevel: 1700,
+            sideTasks: [{ taskId: "daily-1", name: "Una", reset: "daily" }],
+          },
+        ],
+      },
+    ],
+  };
+  const stubEmbed = {
+    setColor() { return this; }, setTitle() { return this; }, setDescription() { return this; },
+  };
+  const { createRaidTaskCommand } = require("../bot/handlers/raid/task");
+  const handlers = createRaidTaskCommand({
+    EmbedBuilder: function () { return stubEmbed; },
+    ActionRowBuilder: class { addComponents() { return this; } },
+    ButtonBuilder: class {
+      setCustomId() { return this; } setLabel() { return this; }
+      setStyle() { return this; }
+    },
+    ButtonStyle: { Danger: 4, Secondary: 2 },
+    User: {
+      findOne: (query, projection) => {
+        events.push("findOne");
+        return {
+          lean: async () => (projection ? { language: "en" } : userDoc),
+        };
+      },
+    },
+    saveWithRetry: async (fn) => fn(),
+    loadUserForAutocomplete: async () => {
+      events.push("accessLookup");
+      return userDoc;
+    },
+    dailyResetStartMs: () => 0,
+    weekResetStartMs: () => 0,
+  });
+  const interaction = {
+    user: { id: "raid-task-preview-ack" },
+    options: {
+      getSubcommand: () => "clear",
+      getString: (name) => (name === "roster" ? "main" : "Alpha"),
+    },
+    deferReply: async () => { events.push("deferReply"); },
+    editReply: async (payload) => {
+      events.push("editReply");
+      editPayload = payload;
+    },
+    reply: async () => { events.push("reply"); },
+  };
+
+  await handlers.handleRaidTaskCommand(interaction);
+
+  assert.equal(events[0], "deferReply", "preview must acknowledge before data access");
+  assert.ok(editPayload, "preview should finish by editing the deferred reply");
+});
+
+test("clear-confirm button clears roster-scoped side tasks", async () => {
+  const events = [];
+  let savedDoc = null;
+  let editPayload = null;
+  const userDoc = {
+    discordId: "raid-task-confirm-ack",
     accounts: [
       {
         accountName: "main",
@@ -1606,24 +1683,39 @@ test("clear-confirm button clears roster-scoped side tasks", async () => {
     ButtonBuilder: class { setCustomId() { return this; } setLabel() { return this; } setStyle() { return this; } },
     ButtonStyle: { Danger: 4, Secondary: 2 },
     MessageFlags: { Ephemeral: 64 },
-    User: { findOne: async () => userDoc },
+    User: {
+      findOne: (query, projection) => {
+        events.push(projection ? "languageLookup" : "saveLookup");
+        if (projection) return { lean: async () => ({ language: "en" }) };
+        return Promise.resolve(userDoc);
+      },
+    },
     saveWithRetry: async (fn) => fn(),
-    loadUserForAutocomplete: async () => userDoc,
+    loadUserForAutocomplete: async () => {
+      events.push("accessLookup");
+      return userDoc;
+    },
     dailyResetStartMs: () => 0,
     weekResetStartMs: () => 0,
   });
 
   await handlers.handleRaidTaskButton({
-    user: { id: "u1" },
+    user: { id: "raid-task-confirm-ack" },
     customId: "raid-task:clear-confirm:main:Alpha",
-    update: async (payload) => {
-      updatePayload = payload;
+    deferUpdate: async () => {
+      events.push("deferUpdate");
+    },
+    editReply: async (payload) => {
+      events.push("editReply");
+      editPayload = payload;
     },
   });
 
+  assert.equal(events[0], "deferUpdate", "confirm must acknowledge before data access");
   assert.ok(savedDoc, "expected save() to be called");
   assert.deepEqual(savedDoc.accounts[0].characters[0].sideTasks, []);
-  assert.ok(updatePayload, "expected the button reply to be updated");
+  assert.ok(editPayload, "expected the deferred button reply to be edited");
+  assert.deepEqual(editPayload.components, [], "resolved clear buttons should be removed");
 });
 
 test("resetExpiredSideTasks reports modifiedCount accurately when Mongo touches docs", async () => {

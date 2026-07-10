@@ -22,7 +22,7 @@ const {
 } = require("../bot/utils/raid/common/shared");
 const { createCharacterId } = require("../bot/utils/raid/common/character");
 
-function makeUserModel() {
+function makeUserModel(events = null) {
   const docs = new Map();
   class User {
     constructor(data = {}) {
@@ -37,6 +37,7 @@ function makeUserModel() {
       return this;
     }
     static findOne(query) {
+      events?.push("findOne");
       const data = docs.get(query.discordId);
       return {
         async lean() {
@@ -52,8 +53,8 @@ function makeUserModel() {
   return { User, docs };
 }
 
-function makeFactory() {
-  const { User, docs } = makeUserModel();
+function makeFactory({ events = null } = {}) {
+  const { User, docs } = makeUserModel(events);
   const factory = createRemoveRosterCommand({
     EmbedBuilder,
     MessageFlags,
@@ -70,13 +71,12 @@ function makeFactory() {
   return { factory, docs };
 }
 
-// Mock interaction that records every reply call and exposes its args.
+// Mock interaction that records the deferred reply lifecycle and exposes its args.
 // Mirrors discord.js's interaction surface enough for handler tests:
-// `options.getString` reads from a literal options object, `reply`
-// captures the call instead of dispatching to Discord. Each call appends
-// to `_calls.reply` so tests can assert on the embed shape.
-function makeInteraction({ user = "user-1", options = {} } = {}) {
-  const calls = { reply: [] };
+// `options.getString` reads from a literal options object; deferReply/editReply
+// capture calls instead of dispatching to Discord.
+function makeInteraction({ user = "user-1", options = {}, events = null } = {}) {
+  const calls = { deferReply: [], editReply: [] };
   return {
     user: { id: user },
     options: {
@@ -86,8 +86,13 @@ function makeInteraction({ user = "user-1", options = {} } = {}) {
         return val == null ? null : String(val);
       },
     },
-    reply: async (arg) => {
-      calls.reply.push(arg);
+    deferReply: async (arg) => {
+      events?.push("deferReply");
+      calls.deferReply.push(arg);
+    },
+    editReply: async (arg) => {
+      events?.push("editReply");
+      calls.editReply.push(arg);
     },
     _calls: calls,
   };
@@ -129,7 +134,7 @@ test("remove-roster: remove_roster deletes the entire account", async () => {
   // Reply embed should reference the removed account in the
   // Artist-voice description (cold field table dropped — content lives
   // in the description sentence now).
-  const replyArg = interaction._calls.reply[0];
+  const replyArg = interaction._calls.editReply[0];
   const embedJson = replyArg.embeds[0].toJSON();
   assert.match(embedJson.title, /Đã xoá roster/);
   assert.match(embedJson.description, /Alpha/);
@@ -219,8 +224,9 @@ test("remove-roster: rejects unknown action without touching state", async () =>
   const stored = docs.get("user-1");
   assert.equal(stored.accounts[0].characters.length, 1);
   // Ephemeral rejection emitted as a notice embed (Artist persona).
-  const replyArg = interaction._calls.reply[0];
-  assert.equal(replyArg.flags, MessageFlags.Ephemeral);
+  const deferArg = interaction._calls.deferReply[0];
+  const replyArg = interaction._calls.editReply[0];
+  assert.equal(deferArg.flags, MessageFlags.Ephemeral);
   const embedJson = replyArg.embeds[0].toJSON();
   assert.match(embedJson.title, /không hợp lệ/i);
 });
@@ -238,8 +244,9 @@ test("remove-roster: rejects remove_char without a character argument", async ()
 
   const stored = docs.get("user-1");
   assert.equal(stored.accounts[0].characters.length, 1);
-  const replyArg = interaction._calls.reply[0];
-  assert.equal(replyArg.flags, MessageFlags.Ephemeral);
+  const deferArg = interaction._calls.deferReply[0];
+  const replyArg = interaction._calls.editReply[0];
+  assert.equal(deferArg.flags, MessageFlags.Ephemeral);
   const embedJson = replyArg.embeds[0].toJSON();
   assert.match(embedJson.title, /character/i);
 });
@@ -253,7 +260,7 @@ test("remove-roster: surfaces 'Chưa có roster' when user has no accounts", asy
   });
   await factory.handleRemoveRosterCommand(interaction);
 
-  const replyArg = interaction._calls.reply[0];
+  const replyArg = interaction._calls.editReply[0];
   const embedJson = replyArg.embeds[0].toJSON();
   assert.match(embedJson.title, /Chưa có roster/);
 });
@@ -269,7 +276,7 @@ test("remove-roster: surfaces 'Không tìm thấy roster' when accountName misma
   });
   await factory.handleRemoveRosterCommand(interaction);
 
-  const replyArg = interaction._calls.reply[0];
+  const replyArg = interaction._calls.editReply[0];
   const embedJson = replyArg.embeds[0].toJSON();
   assert.match(embedJson.title, /Không tìm thấy roster/);
   // Original account untouched.
@@ -287,7 +294,7 @@ test("remove-roster: surfaces 'Character Not Found' when char missing in roster"
   });
   await factory.handleRemoveRosterCommand(interaction);
 
-  const replyArg = interaction._calls.reply[0];
+  const replyArg = interaction._calls.editReply[0];
   const embedJson = replyArg.embeds[0].toJSON();
   assert.match(embedJson.title, /Không tìm thấy character/);
   // Roster + char untouched.
@@ -307,4 +314,25 @@ test("remove-roster: roster name match is case-insensitive (normalizeName)", asy
 
   const stored = docs.get("user-1");
   assert.equal(stored.accounts.length, 0);
+});
+
+test("remove-roster: defers ephemerally before language and roster DB lookups", async () => {
+  const events = [];
+  const { factory, docs } = makeFactory({ events });
+  docs.set("remove-ack-user", {
+    discordId: "remove-ack-user",
+    language: "en",
+    accounts: [{ accountName: "Alpha", characters: [makeChar("Cyrano")] }],
+  });
+  const interaction = makeInteraction({
+    user: "remove-ack-user",
+    options: { roster: "Alpha", action: "remove_roster" },
+    events,
+  });
+
+  await factory.handleRemoveRosterCommand(interaction);
+
+  assert.equal(events[0], "deferReply", "must acknowledge before the first DB lookup");
+  assert.equal(interaction._calls.deferReply[0].flags, MessageFlags.Ephemeral);
+  assert.ok(interaction._calls.editReply[0], "should finish through editReply");
 });

@@ -94,3 +94,55 @@ test("auto-lock tick flips due open events and refreshes the board", async () =>
   );
   assert.equal(joinButton.data.disabled, true);
 });
+
+test("auto-lock scheduler skips an interval while the previous tick is running", async () => {
+  const originalSetInterval = global.setInterval;
+  const originalWarn = console.warn;
+  let intervalFn = null;
+  let releaseFirstTick = null;
+  let findCalls = 0;
+  const firstTick = new Promise((resolve) => {
+    releaseFirstTick = resolve;
+  });
+  const RaidEvent = {
+    find() {
+      return {
+        limit() {
+          findCalls += 1;
+          return findCalls === 1 ? firstTick : Promise.resolve([]);
+        },
+      };
+    },
+  };
+  global.setInterval = (fn) => {
+    intervalFn = fn;
+    return { unref() {} };
+  };
+  console.warn = () => {};
+
+  try {
+    const service = createRaidScheduleAutoLockService({
+      RaidEvent,
+      GuildConfig: null,
+      EmbedBuilder,
+      ActionRowBuilder,
+      ButtonBuilder,
+      ButtonStyle,
+      UI,
+    });
+    service.startRaidScheduleAutoLockScheduler({});
+    assert.equal(findCalls, 1);
+
+    await intervalFn();
+    assert.equal(findCalls, 1);
+
+    releaseFirstTick([]);
+    await new Promise((resolve) => setImmediate(resolve));
+    await intervalFn();
+    assert.equal(findCalls, 2);
+  } finally {
+    global.setInterval = originalSetInterval;
+    console.warn = originalWarn;
+    releaseFirstTick([]);
+  }
+});

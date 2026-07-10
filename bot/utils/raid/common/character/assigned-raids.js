@@ -23,6 +23,7 @@ function getRequirementFor(raidKey, modeKey) {
 function getBestEligibleModeKey(raidKey, itemLevel) {
   const modes = Object.entries(RAID_REQUIREMENTS[raidKey]?.modes || {})
     .map(([modeKey, mode]) => ({ modeKey, minItemLevel: Number(mode.minItemLevel) || 0 }))
+    .filter(({ modeKey }) => RAID_REQUIREMENTS[raidKey]?.modes?.[modeKey]?.manualOnly !== true)
     .filter((item) => Number(itemLevel) >= item.minItemLevel)
     .sort((a, b) => b.minItemLevel - a.minItemLevel);
 

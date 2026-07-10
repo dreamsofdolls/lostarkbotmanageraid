@@ -2,6 +2,7 @@
 
 const { t } = require("../../../services/i18n");
 const {
+  editNotice,
   replyNotice,
   updateNotice,
 } = require("../../../utils/raid/common/shared");
@@ -25,11 +26,24 @@ function createRaidTaskNoticeHelpers({ EmbedBuilder }) {
     return updateNotice(interaction, EmbedBuilder, options, extras);
   }
 
+  function editTaskNotice(interaction, options, extras = null) {
+    return editNotice(interaction, EmbedBuilder, options, {
+      components: [],
+      ...(extras || {}),
+    });
+  }
+
   function replyViewOnlyShareNotice(interaction, target, lang) {
     return replyTaskNotice(interaction, viewOnlyShareNotice(target, lang));
   }
 
+  function editViewOnlyShareNotice(interaction, target, lang) {
+    return editTaskNotice(interaction, viewOnlyShareNotice(target, lang));
+  }
+
   return {
+    editTaskNotice,
+    editViewOnlyShareNotice,
     replyTaskNotice,
     updateTaskNotice,
     replyViewOnlyShareNotice,

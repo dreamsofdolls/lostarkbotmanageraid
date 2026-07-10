@@ -135,15 +135,21 @@ function createSyncUi({
 
   async function handleRaidCheckSyncClick(interaction, raidMeta) {
     const started = Date.now();
-    // Manager (clicker) views the ephemeral report - use their lang.
-    const managerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
-    const raidModeLabel = getRaidModeLabel(raidMeta.raidKey, raidMeta.modeKey, managerLang);
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    // Manager (clicker) views the ephemeral report - use their lang.
     const snapshotStarted = Date.now();
-    const snapshot = await computeRaidCheckSnapshot(raidMeta, {
-      syncFreshData: true,
-    });
+    const [managerLang, snapshot] = await Promise.all([
+      getUserLanguage(interaction.user.id, { UserModel: User }),
+      computeRaidCheckSnapshot(raidMeta, {
+        syncFreshData: true,
+      }),
+    ]);
     const snapshotMs = Date.now() - snapshotStarted;
+    const raidModeLabel = getRaidModeLabel(
+      raidMeta.raidKey,
+      raidMeta.modeKey,
+      managerLang
+    );
 
     const pendingEntryKeysByDiscordId = new Map();
     for (const pendingChar of snapshot.pendingChars) {

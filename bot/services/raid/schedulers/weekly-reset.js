@@ -22,6 +22,9 @@ const {
 } = require("../../../utils/raid/common/character/assigned-raids");
 const { purgeStaleRaidEvents } = require("../schedule/lifecycle/event-cleanup");
 const { resolveGuildChannel } = require("../../discord/resolve-guild-channel");
+const {
+  createNonOverlappingIntervalRunner,
+} = require("./scheduler-runner");
 
 const WEEKLY_ANNOUNCEMENT_TTL_MS = 30 * 60 * 1000; // marker sits 30 min before self-delete
 const WEEKLY_RESET_TICK_MS = 30 * 60 * 1000;
@@ -295,7 +298,7 @@ async function postWeeklyResetAnnouncements(client, targetKey) {
  * via `getWeeklyResetSchedulerStartedAtMs`.
  * @param {import('discord.js').Client} client - Discord client (the
  *   announcement post path needs it to fetch channels).
- * @returns {void}
+ * @returns {NodeJS.Timeout} interval handle
  */
 function startWeeklyResetJob(client) {
   weeklyResetSchedulerStartedAtMs = Date.now();
@@ -346,8 +349,12 @@ function startWeeklyResetJob(client) {
     }
   };
 
-  run().catch(() => {});
-  return setInterval(run, WEEKLY_RESET_TICK_MS);
+  const runner = createNonOverlappingIntervalRunner({
+    tickMs: WEEKLY_RESET_TICK_MS,
+    runTick: run,
+    overlapMessage: "[weekly-reset] skipped overlapping tick",
+  });
+  return runner.start();
 }
 
 function getWeeklyResetSchedulerStartedAtMs() {

@@ -77,6 +77,7 @@ function parseCombatScore(rawValue) {
 const MODE_LABELS = Object.freeze({
   hard: "Hard",
   nightmare: "Nightmare",
+  solo: "Solo",
 });
 
 function toModeLabel(modeKey) {
@@ -89,6 +90,8 @@ const MODE_KEYS = Object.freeze({
   hm: "hard",
   nightmare: "nightmare",
   "9m": "nightmare",
+  solo: "solo",
+  "solo mode": "solo",
 });
 
 function toModeKey(modeLabel) {

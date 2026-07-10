@@ -13,6 +13,7 @@
  */
 
 const { t } = require("../../services/i18n");
+const { isRaidCheckVisibleMode } = require("./visibility");
 
 /**
  * Build the /raid-check snapshot helper service. Computes the pending-
@@ -97,6 +98,11 @@ function createSnapshotHelpers({
           if (characterItemLevel < lowestMin) continue;
 
           const assignedRaids = ensureAssignedRaids(character);
+          const assigned = assignedRaids[raidMeta.raidKey] || {};
+          const storedModeKey =
+            assigned.modeKey || assigned.G1?.difficulty || assigned.G2?.difficulty || "";
+          if (!isRaidCheckVisibleMode(storedModeKey)) continue;
+
           const baseEntry = {
             discordId: userDoc.discordId,
             accountName: account.accountName || "(no name)",
@@ -125,7 +131,6 @@ function createSnapshotHelpers({
             assignedRaids,
           };
 
-          const assigned = assignedRaids[raidMeta.raidKey] || {};
           const storedGateKeys = getGateKeys(assigned);
           const officialGates =
             storedGateKeys.length > 0 ? storedGateKeys : getGatesForRaid(raidMeta.raidKey);

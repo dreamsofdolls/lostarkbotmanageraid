@@ -1,8 +1,16 @@
 "use strict";
 
-const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const {
+  deferEphemeralReply,
+  editNotice,
+  followUpNotice,
+} = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
-const { setLocalSyncEnabled, rotateLocalSyncToken, extractIdentityFromUser, RESULT: SYNC_RESULT } = require("../../services/local-sync");
+const {
+  setLocalSyncEnabled,
+  rotateLocalSyncToken,
+  extractIdentityFromUser,
+} = require("../../services/local-sync");
 
 /**
  * Click handler for the "🌐 Switch to Local Sync" button on the stuck-
@@ -22,34 +30,45 @@ const { setLocalSyncEnabled, rotateLocalSyncToken, extractIdentityFromUser, RESU
  *   4. Update the channel embed to "switched" state + DM the user the
  *      personalized link.
  */
-function createStuckNudgeButtonHandler({ EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, UI, User }) {
+function createStuckNudgeButtonHandler({
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  MessageFlags,
+  UI,
+  User,
+  getUserLanguageFn = getUserLanguage,
+  setLocalSyncEnabledFn = setLocalSyncEnabled,
+  rotateLocalSyncTokenFn = rotateLocalSyncToken,
+}) {
   async function handleStuckNudgeButton(interaction) {
     const customId = interaction.customId || "";
     const m = /^stuck-nudge:switch-to-local:(\d+)$/.exec(customId);
     if (!m) {
-      // Unknown shape - swallow silently. The router shouldn't dispatch
-      // this if it doesn't match, but guard anyway.
+      // The router should not dispatch unknown shapes, but acknowledge
+      // defensively so a stale/malformed component never spins forever.
+      await interaction.deferUpdate().catch(() => {});
       return;
     }
     const targetDiscordId = m[1];
     const clickerId = interaction.user.id;
-    const clickerLang = await getUserLanguage(clickerId, { UserModel: User });
 
     if (clickerId !== targetDiscordId) {
       // Wrong audience. Quiet ephemeral reply - don't escalate channel
       // noise on a button that's already mention-targeted.
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "lock",
-            title: t("stuck-nudge.notForYouTitle", clickerLang),
-            description: t("stuck-nudge.notForYouDescription", clickerLang, { target: targetDiscordId }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await deferEphemeralReply(interaction);
+      const clickerLang = await getUserLanguageFn(clickerId, { UserModel: User });
+      await editNotice(interaction, EmbedBuilder, {
+        type: "lock",
+        title: t("stuck-nudge.notForYouTitle", clickerLang),
+        description: t("stuck-nudge.notForYouDescription", clickerLang, { target: targetDiscordId }),
       }).catch(() => {});
       return;
     }
+
+    await interaction.deferUpdate();
+    const clickerLang = await getUserLanguageFn(clickerId, { UserModel: User });
 
     // Force-flip mutex: bible auto-sync OFF + local-sync ON in one
     // atomic Mongo write. The stuck-nudge embed message stays in
@@ -57,7 +76,7 @@ function createStuckNudgeButtonHandler({ EmbedBuilder, ActionRowBuilder, ButtonB
     // scheduler tick won't re-nudge.
     let flipResult;
     try {
-      flipResult = await setLocalSyncEnabled(
+      flipResult = await setLocalSyncEnabledFn(
         targetDiscordId,
         true,
         { force: true },
@@ -65,28 +84,18 @@ function createStuckNudgeButtonHandler({ EmbedBuilder, ActionRowBuilder, ButtonB
       );
     } catch (err) {
       console.error(`[stuck-nudge] flip failed user=${targetDiscordId}:`, err?.message || err);
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "error",
-            title: t("stuck-nudge.flipFailTitle", clickerLang),
-            description: t("stuck-nudge.flipFailDescription", clickerLang, { error: err?.message || String(err) }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await followUpNotice(interaction, EmbedBuilder, {
+        type: "error",
+        title: t("stuck-nudge.flipFailTitle", clickerLang),
+        description: t("stuck-nudge.flipFailDescription", clickerLang, { error: err?.message || String(err) }),
       }).catch(() => {});
       return;
     }
     if (!flipResult.ok) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "error",
-            title: t("stuck-nudge.flipFailTitle", clickerLang),
-            description: t("stuck-nudge.flipFailDescription", clickerLang, { error: flipResult.reason || "unknown" }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await followUpNotice(interaction, EmbedBuilder, {
+        type: "error",
+        title: t("stuck-nudge.flipFailTitle", clickerLang),
+        description: t("stuck-nudge.flipFailDescription", clickerLang, { error: flipResult.reason || "unknown" }),
       }).catch(() => {});
       return;
     }
@@ -101,7 +110,7 @@ function createStuckNudgeButtonHandler({ EmbedBuilder, ActionRowBuilder, ButtonB
         // clickerId === targetDiscordId by this point (verified above),
         // so passing clickerLang is correct for the target's preference.
         const identity = extractIdentityFromUser(interaction.user);
-        const token = await rotateLocalSyncToken(targetDiscordId, clickerLang, { UserModel: User, identity });
+        const token = await rotateLocalSyncTokenFn(targetDiscordId, clickerLang, { UserModel: User, identity });
         companionUrl = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
       } catch (err) {
         console.warn("[stuck-nudge] token mint failed:", err?.message || err);
@@ -110,8 +119,8 @@ function createStuckNudgeButtonHandler({ EmbedBuilder, ActionRowBuilder, ButtonB
 
     // Update the original channel embed to "switched" state - removes
     // the now-irrelevant button and reframes the nudge as success.
-    // Using update() instead of reply() so the public embed reflects
-    // the resolution + button disappears for any later viewer.
+    // The component was already deferred above; editReply resolves the
+    // public message and removes the stale button for later viewers.
     const switchedEmbed = new EmbedBuilder()
       .setColor(UI.colors.success)
       .setTitle(`${UI.icons.done} ${t("stuck-nudge.switchedTitle", clickerLang)}`)
@@ -119,11 +128,12 @@ function createStuckNudgeButtonHandler({ EmbedBuilder, ActionRowBuilder, ButtonB
       .setTimestamp();
     const updatePayload = { content: "", embeds: [switchedEmbed], components: [] };
     try {
-      await interaction.update(updatePayload);
+      await interaction.editReply(updatePayload);
     } catch (err) {
-      console.warn("[stuck-nudge] interaction.update failed:", err?.message || err);
-      // Best-effort: still try to reply ephemerally so user sees confirmation.
-      await interaction.reply({
+      console.warn("[stuck-nudge] interaction.editReply failed:", err?.message || err);
+      // Best-effort: the interaction is already acknowledged, so surface
+      // confirmation as a private follow-up instead of attempting reply().
+      await interaction.followUp({
         embeds: [switchedEmbed],
         flags: MessageFlags.Ephemeral,
       }).catch(() => {});

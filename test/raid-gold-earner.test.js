@@ -118,6 +118,7 @@ test("constants: cap-6-per-account + 20-char picker cap match LA + Discord limit
 // --------- handleRaidGoldEarnerCommand happy path ---------
 
 test("handleRaidGoldEarnerCommand: opens picker with session keyed by random sessionId", async () => {
+  const order = [];
   const userDoc = {
     discordId: "user-1",
     accounts: [
@@ -131,23 +132,38 @@ test("handleRaidGoldEarnerCommand: opens picker with session keyed by random ses
     ],
   };
   const cmd = makeCommand({
-    User: { findOne: async () => userDoc },
+    User: {
+      findOne: (query, projection) => {
+        order.push("db");
+        if (projection) {
+          return { lean: async () => ({ language: "en" }) };
+        }
+        return Promise.resolve(userDoc);
+      },
+    },
   });
 
-  let replyArg = null;
+  let deferArg = null;
+  let editArg = null;
   const interaction = {
-    user: { id: "user-1" },
+    user: { id: "gold-ack-user" },
     options: { getString: (name) => (name === "roster" ? "Alpha" : null) },
-    reply: async (arg) => {
-      replyArg = arg;
+    deferReply: async (arg) => {
+      order.push("deferReply");
+      deferArg = arg;
     },
-    editReply: async () => {},
+    editReply: async (arg) => {
+      order.push("editReply");
+      editArg = arg;
+    },
   };
 
   await cmd.handleRaidGoldEarnerCommand(interaction);
 
-  assert.ok(replyArg, "should reply with picker embed");
-  assert.equal(replyArg.embeds.length, 1);
+  assert.equal(order[0], "deferReply", "must acknowledge before the first DB lookup");
+  assert.equal(deferArg.flags, MessageFlags.Ephemeral);
+  assert.ok(editArg, "should edit the deferred reply with the picker embed");
+  assert.equal(editArg.embeds.length, 1);
   // 5-min ephemeral picker - exactly one session was created in cache.
   assert.equal(cmd.__test.sessions.size, 1);
   // Drain the session timer so the test process can exit.
@@ -161,16 +177,15 @@ test("handleRaidGoldEarnerCommand: rejects with notice embed when roster name do
   const cmd = makeCommand({
     User: { findOne: async () => ({ accounts: [{ accountName: "Alpha", characters: [] }] }) },
   });
-  let replyArg = null;
+  let editArg = null;
   const interaction = {
     user: { id: "user-1" },
     options: { getString: (name) => (name === "roster" ? "Bravo" : null) },
-    reply: async (arg) => {
-      replyArg = arg;
-    },
+    deferReply: async () => {},
+    editReply: async (arg) => { editArg = arg; },
   };
   await cmd.handleRaidGoldEarnerCommand(interaction);
-  assert.ok(replyArg, "should reply with rejection notice");
+  assert.ok(editArg, "should edit the deferred reply with a rejection notice");
   // Empty session cache - no picker was opened.
   assert.equal(cmd.__test.sessions.size, 0);
 });
@@ -179,16 +194,15 @@ test("handleRaidGoldEarnerCommand: rejects with notice embed when roster is empt
   const cmd = makeCommand({
     User: { findOne: async () => ({ accounts: [{ accountName: "Empty", characters: [] }] }) },
   });
-  let replyArg = null;
+  let editArg = null;
   const interaction = {
     user: { id: "user-1" },
     options: { getString: () => "Empty" },
-    reply: async (arg) => {
-      replyArg = arg;
-    },
+    deferReply: async () => {},
+    editReply: async (arg) => { editArg = arg; },
   };
   await cmd.handleRaidGoldEarnerCommand(interaction);
-  assert.ok(replyArg, "should reply with rejection notice");
+  assert.ok(editArg, "should edit the deferred reply with a rejection notice");
   assert.equal(cmd.__test.sessions.size, 0);
 });
 
@@ -283,17 +297,23 @@ test("handleRaidGoldEarnerButton: untick frees a slot, allows tick again", async
 
 test("handleRaidGoldEarnerButton: stale sessionId (not in cache) renders 'phiên đã hết' embed", async () => {
   const cmd = makeCommand();
-  let updateArg = null;
+  const order = [];
+  let editArg = null;
   const interaction = {
-    user: { id: "user-1" },
+    user: { id: "gold-stale-ack-user" },
     customId: "gold-earner:cancel:does-not-exist",
-    update: async (arg) => {
-      updateArg = arg;
+    deferUpdate: async () => {
+      order.push("deferUpdate");
+    },
+    editReply: async (arg) => {
+      order.push("editReply");
+      editArg = arg;
     },
   };
   await cmd.handleRaidGoldEarnerButton(interaction);
-  assert.ok(updateArg, "stale button should swap to expired-session embed");
-  assert.equal(updateArg.components.length, 0);
+  assert.equal(order[0], "deferUpdate");
+  assert.ok(editArg, "stale button should swap to expired-session embed");
+  assert.equal(editArg.components.length, 0);
 });
 
 test("handleRaidGoldEarnerButton: ownership guard blocks a second user from clicking another user's session", async () => {
@@ -308,12 +328,19 @@ test("handleRaidGoldEarnerButton: ownership guard blocks a second user from clic
     timer: null,
   });
 
-  let replyArg = null;
+  const order = [];
+  let deferArg = null;
+  let editArg = null;
   const interaction = {
-    user: { id: "user-2" }, // different user
+    user: { id: "gold-foreign-user" }, // different user
     customId: "gold-earner:toggle:sess1:0",
-    reply: async (arg) => {
-      replyArg = arg;
+    deferReply: async (arg) => {
+      order.push("deferReply");
+      deferArg = arg;
+    },
+    editReply: async (arg) => {
+      order.push("editReply");
+      editArg = arg;
     },
     update: async () => {
       throw new Error("update should not be called for foreign user");
@@ -321,8 +348,9 @@ test("handleRaidGoldEarnerButton: ownership guard blocks a second user from clic
     deferUpdate: async () => {},
   };
   await cmd.handleRaidGoldEarnerButton(interaction);
-  assert.ok(replyArg, "should send lock notice");
-  assert.equal(replyArg.flags, MessageFlags.Ephemeral);
+  assert.equal(order[0], "deferReply");
+  assert.equal(deferArg.flags, MessageFlags.Ephemeral);
+  assert.ok(editArg, "should edit the deferred lock notice");
 
   cmd.__test.sessions.clear();
 });
@@ -372,15 +400,22 @@ test("handleRaidGoldEarnerButton confirm: writes isGoldEarner=true on selected, 
     timer: null,
   });
 
+  const order = [];
   let confirmEmbedArg = null;
   const interaction = {
     user: { id: "user-1" },
     customId: "gold-earner:confirm:sess1",
-    update: async (arg) => {
+    deferUpdate: async () => {
+      order.push("deferUpdate");
+    },
+    editReply: async (arg) => {
+      order.push("editReply");
       confirmEmbedArg = arg;
     },
   };
   await cmd.handleRaidGoldEarnerButton(interaction);
+
+  assert.equal(order[0], "deferUpdate", "confirm must acknowledge before saving");
 
   // First 6 picker chars → true.
   for (let i = 0; i < 6; i += 1) {

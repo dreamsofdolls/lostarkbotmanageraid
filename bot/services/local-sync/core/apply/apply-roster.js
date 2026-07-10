@@ -5,7 +5,10 @@ const {
   normalizeName,
   toModeLabel,
 } = require("../../../../utils/raid/common/shared");
-const { getGatesForRaid } = require("../../../../models/Raid");
+const {
+  getGatesForRaid,
+  preserveManualRaidModePreference,
+} = require("../../../../models/Raid");
 
 function findRosterCharacter(userDoc, charName) {
   if (!userDoc || !Array.isArray(userDoc.accounts)) return null;
@@ -22,6 +25,16 @@ function findRosterCharacter(userDoc, charName) {
 
 function getAssignedRaid(character, raidKey) {
   return character?.assignedRaids?.[raidKey] || {};
+}
+
+function resolveBucketModePreference(userDoc, bucket) {
+  const character = findRosterCharacter(userDoc, bucket?.charName);
+  if (!character) return bucket;
+  const storedModeKey = getAssignedRaid(character, bucket.raidKey)?.modeKey;
+  const modeKey = preserveManualRaidModePreference(storedModeKey, bucket.modeKey);
+  return modeKey && modeKey !== bucket.modeKey
+    ? { ...bucket, modeKey }
+    : bucket;
 }
 
 function raidAlreadyComplete(character, raidKey) {
@@ -81,4 +94,5 @@ module.exports = {
   findRosterCharacter,
   gatesAlreadyComplete,
   raidAlreadyComplete,
+  resolveBucketModePreference,
 };

@@ -22,7 +22,11 @@ const {
   buildDisableAutoDmEmbed,
 } = require("./auto-manage/auto-manage");
 const { createTaskViewUi } = require("./views/task-view-ui");
-const { buildNoticeEmbed, replyNotice } = require("../../utils/raid/common/shared");
+const { filterRaidCheckRequirementMap } = require("./visibility");
+const {
+  deferEphemeralReply,
+  editNotice,
+} = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
 const {
   RAID_CHECK_BUTTON_HANDLER,
@@ -84,7 +88,7 @@ function createRaidCheckCommand(deps) {
     isRaidLeader,
     isManagerId,
     applyRaidSetForDiscordId,
-    RAID_REQUIREMENT_MAP,
+    RAID_REQUIREMENT_MAP: FULL_RAID_REQUIREMENT_MAP,
     RAID_CHECK_USER_QUERY_FIELDS,
     ROSTER_KEY_SEP,
     raidCheckRefreshLimiter,
@@ -95,6 +99,10 @@ function createRaidCheckCommand(deps) {
     buildScheduleEmbed,
     buildTurnPlanEmbed,
   } = deps;
+
+  const RAID_REQUIREMENT_MAP = filterRaidCheckRequirementMap(
+    FULL_RAID_REQUIREMENT_MAP
+  );
 
   // Snapshot helpers extracted to ./raid-check/snapshot.js. Wired here so
   // the inner handlers below can call them directly without threading deps.
@@ -214,14 +222,11 @@ function createRaidCheckCommand(deps) {
     ButtonBuilder,
     ButtonStyle,
     EmbedBuilder,
-    MessageFlags,
     User,
-    buildNoticeEmbed,
   });
 
   const { handleRaidCheckViewTasksClick } = createTaskViewUi({
     EmbedBuilder,
-    MessageFlags,
     UI,
     User,
     truncateText,
@@ -230,16 +235,6 @@ function createRaidCheckCommand(deps) {
   });
 
   async function handleRaidCheckCommand(interaction) {
-    if (!isRaidLeader(interaction)) {
-      const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      await replyNotice(interaction, EmbedBuilder, {
-        type: "lock",
-        title: t("raid-check.auth.managerOnlyTitle", lang),
-        description: t("raid-check.auth.managerOnlyDescription", lang),
-      });
-      return;
-    }
-
     // Round-32: /raid-check is now a single entry point that always lands
     // in the cross-raid overview (all-mode). The previous per-raid render
     // path + open-time piggyback have been removed because the inline
@@ -284,8 +279,9 @@ function createRaidCheckCommand(deps) {
 
     // Everything below requires Raid Manager.
     if (!isRaidLeader(interaction)) {
+      await deferEphemeralReply(interaction);
       const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      await replyNotice(interaction, EmbedBuilder, {
+      await editNotice(interaction, EmbedBuilder, {
         type: "lock",
         title: t("raid-check.auth.buttonManagerOnlyTitle", clickerLang),
         description: t("raid-check.auth.buttonManagerOnlyDescription", clickerLang),
@@ -301,8 +297,9 @@ function createRaidCheckCommand(deps) {
 
     const raidMeta = RAID_REQUIREMENT_MAP[route.raidKey];
     if (!raidMeta) {
+      await deferEphemeralReply(interaction);
       const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      await replyNotice(interaction, EmbedBuilder, {
+      await editNotice(interaction, EmbedBuilder, {
         type: "warn",
         title: t("raid-check.staleButton.title", clickerLang),
         description: t("raid-check.staleButton.raidInvalidDescription", clickerLang),
@@ -316,8 +313,9 @@ function createRaidCheckCommand(deps) {
       return;
     }
 
+    await deferEphemeralReply(interaction);
     const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
-    await replyNotice(interaction, EmbedBuilder, {
+    await editNotice(interaction, EmbedBuilder, {
       type: "warn",
       title: t("raid-check.staleButton.unsupportedActionTitle", clickerLang),
       description: t("raid-check.staleButton.unsupportedActionDescription", clickerLang, {
@@ -343,7 +341,6 @@ function createRaidCheckCommand(deps) {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    MessageFlags,
     UI,
     User,
     normalizeName,

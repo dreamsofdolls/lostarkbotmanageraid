@@ -2,6 +2,9 @@
 
 const {
   buildNoticeEmbed,
+  deferEphemeralReply,
+  editEmbed,
+  editNotice,
   normalizeName,
 } = require("../../utils/raid/common/shared");
 const {
@@ -71,6 +74,10 @@ function createRaidGoldEarnerCommand({
     });
   }
 
+  function editPickerNotice(interaction, notice, extras = {}) {
+    return editNotice(interaction, EmbedBuilder, notice, extras);
+  }
+
   async function handleRaidGoldEarnerAutocomplete(interaction) {
     try {
       const focused = interaction.options.getFocused(true);
@@ -98,11 +105,13 @@ function createRaidGoldEarnerCommand({
 
   async function handleRaidGoldEarnerCommand(interaction) {
     const discordId = interaction.user.id;
-    const lang = await getUserLanguage(discordId, { UserModel: User });
     const rosterInput = interaction.options.getString("roster", true).trim();
+    await deferEphemeralReply(interaction);
+    const langPromise = getUserLanguage(discordId, { UserModel: User });
 
     if (!rosterInput) {
-      await replyNotice(interaction, {
+      const lang = await langPromise;
+      await editPickerNotice(interaction, {
         type: "warn",
         title: t("raid-gold-earner.notice.missingRosterTitle", lang),
         description: t("raid-gold-earner.notice.missingRosterDescription", lang),
@@ -110,12 +119,15 @@ function createRaidGoldEarnerCommand({
       return;
     }
 
-    const userDoc = await User.findOne({ discordId });
+    const [lang, userDoc] = await Promise.all([
+      langPromise,
+      User.findOne({ discordId }),
+    ]);
     const accounts = Array.isArray(userDoc?.accounts) ? userDoc.accounts : [];
     const target = findAccountByRoster(accounts, rosterInput, normalizeName);
 
     if (!target) {
-      await replyNotice(interaction, {
+      await editPickerNotice(interaction, {
         type: "warn",
         title: t("raid-gold-earner.notice.notFoundTitle", lang),
         description: t("raid-gold-earner.notice.notFoundDescription", lang, {
@@ -127,7 +139,7 @@ function createRaidGoldEarnerCommand({
 
     const allChars = Array.isArray(target.characters) ? target.characters : [];
     if (allChars.length === 0) {
-      await replyNotice(interaction, {
+      await editPickerNotice(interaction, {
         type: "info",
         title: t("raid-gold-earner.notice.emptyTitle", lang),
         description: t("raid-gold-earner.notice.emptyDescription", lang, {
@@ -151,10 +163,8 @@ function createRaidGoldEarnerCommand({
     };
     sessions.set(sessionId, session);
 
-    await interaction.reply({
-      embeds: [buildSelectionEmbed(session)],
+    await editEmbed(interaction, buildSelectionEmbed(session), {
       components: buildSelectionComponents(session),
-      flags: MessageFlags.Ephemeral,
     });
 
     session.timer = setTimeout(
@@ -171,15 +181,13 @@ function createRaidGoldEarnerCommand({
   }
 
   async function renderStaleSession(interaction) {
+    await interaction.deferUpdate();
     const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
-    await interaction.update({
-      embeds: [
-        buildNotice({
-          type: "warn",
-          title: t("raid-gold-earner.expired.staleSessionTitle", clickerLang),
-          description: t("raid-gold-earner.expired.staleSessionDescription", clickerLang),
-        }),
-      ],
+    await editPickerNotice(interaction, {
+      type: "warn",
+      title: t("raid-gold-earner.expired.staleSessionTitle", clickerLang),
+      description: t("raid-gold-earner.expired.staleSessionDescription", clickerLang),
+    }, {
       components: [],
     }).catch(() => {});
   }
@@ -265,27 +273,24 @@ function createRaidGoldEarnerCommand({
   }
 
   async function handleConfirmAction(interaction, session, sessionId) {
+    await interaction.deferUpdate();
+    clearPickerSession(sessions, sessionId, { timerField: "timer" });
     let savedNames = [];
     try {
       savedNames = await persistGoldEarnerSelection(session);
     } catch (err) {
       console.error("[raid-gold-earner confirm] save failed:", err?.message || err);
-      await interaction.update({
-        embeds: [
-          buildNotice({
-            type: "warn",
-            title: t("raid-gold-earner.saveFail.title", session.lang),
-            description: t("raid-gold-earner.saveFail.description", session.lang),
-          }),
-        ],
+      await editPickerNotice(interaction, {
+        type: "warn",
+        title: t("raid-gold-earner.saveFail.title", session.lang),
+        description: t("raid-gold-earner.saveFail.description", session.lang),
+      }, {
         components: [],
       }).catch(() => {});
       return;
     }
 
-    clearPickerSession(sessions, sessionId, { timerField: "timer" });
-    await interaction.update({
-      embeds: [buildSavedEmbed(session, savedNames)],
+    await editEmbed(interaction, buildSavedEmbed(session, savedNames), {
       components: [],
     }).catch(() => {});
   }

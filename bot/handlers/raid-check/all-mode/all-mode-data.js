@@ -103,9 +103,12 @@ async function resolveAllModeAuthorMeta({
 }) {
   const visibleUserIds = [...new Set(pagesData.map((page) => page.userDoc.discordId))];
   const authorMeta = new Map();
+  const usersByDiscordId = new Map(
+    users.map((user) => [user.discordId, user])
+  );
   await Promise.all(
     visibleUserIds.map(async (discordId) => {
-      const userDoc = users.find((user) => user.discordId === discordId);
+      const userDoc = usersByDiscordId.get(discordId);
       const cachedDisplayName =
         userDoc?.discordDisplayName ||
         userDoc?.discordGlobalName ||
@@ -115,7 +118,9 @@ async function resolveAllModeAuthorMeta({
       let avatarURL = null;
       try {
         let userObj = interaction.client.users.cache.get(discordId);
-        if (!userObj) {
+        // A persisted name already covers every text surface. Avoid a Discord
+        // REST fan-out solely for an optional avatar on a cold client cache.
+        if (!userObj && !cachedDisplayName) {
           userObj = await discordUserLimiter.run(() =>
             interaction.client.users.fetch(discordId)
           );

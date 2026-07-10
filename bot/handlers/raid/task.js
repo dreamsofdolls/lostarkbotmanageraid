@@ -70,8 +70,9 @@ function createRaidTaskCommand(deps) {
     getAccessibleAccounts,
   });
   const {
+    editTaskNotice,
+    editViewOnlyShareNotice,
     replyTaskNotice,
-    updateTaskNotice,
     replyViewOnlyShareNotice,
     viewOnlyShareNotice,
   } = createRaidTaskNoticeHelpers({ EmbedBuilder });
@@ -117,9 +118,8 @@ function createRaidTaskCommand(deps) {
     User,
     saveWithRetry,
     resolveTaskWriteTarget,
-    replyTaskNotice,
-    updateTaskNotice,
-    replyViewOnlyShareNotice,
+    editTaskNotice,
+    editViewOnlyShareNotice,
     viewOnlyShareNotice,
   });
 

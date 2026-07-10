@@ -12,6 +12,9 @@ const {
   buildScheduleEmbed,
   buildScheduleComponents,
 } = require("../../../../handlers/raid/schedule/view/board");
+const {
+  createNonOverlappingIntervalRunner,
+} = require("../../schedulers/scheduler-runner");
 
 const RAID_SCHEDULE_AUTO_LOCK_TICK_MS = 60 * 1000;
 const RAID_SCHEDULE_AUTO_LOCK_BATCH_SIZE = 25;
@@ -25,7 +28,6 @@ function createRaidScheduleAutoLockService({
   ButtonStyle,
   UI,
 }) {
-  let schedulerStartedAtMs = null;
   let interval = null;
 
   async function editBoard(client, event) {
@@ -72,21 +74,21 @@ function createRaidScheduleAutoLockService({
     return { scanned: dueEvents.length, locked };
   }
 
+  const schedulerRunner = createNonOverlappingIntervalRunner({
+    tickMs: RAID_SCHEDULE_AUTO_LOCK_TICK_MS,
+    runTick: runRaidScheduleAutoLockTick,
+    overlapMessage: "[raid-schedule] auto-lock skipped overlapping tick",
+    errorMessage: "[raid-schedule] auto-lock scheduler error:",
+  });
+
   function startRaidScheduleAutoLockScheduler(client) {
     if (interval) return;
-    schedulerStartedAtMs = Date.now();
-    const tick = () => {
-      runRaidScheduleAutoLockTick(client).catch((error) => {
-        console.error("[raid-schedule] auto-lock scheduler error:", error);
-      });
-    };
-    tick();
-    interval = setInterval(tick, RAID_SCHEDULE_AUTO_LOCK_TICK_MS);
+    interval = schedulerRunner.start(client);
     if (typeof interval.unref === "function") interval.unref();
   }
 
   function getRaidScheduleAutoLockSchedulerStartedAtMs() {
-    return schedulerStartedAtMs;
+    return schedulerRunner.getStartedAtMs();
   }
 
   return {

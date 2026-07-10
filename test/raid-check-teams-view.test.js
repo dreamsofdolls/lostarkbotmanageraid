@@ -104,13 +104,17 @@ test("handleRaidCheckTeamsSelect shows comp + turn plan as two ephemeral embeds"
     turns: [{ name: "Turn 1", memberIds: ["a"] }],
   };
   const ui = makeUi({ RaidEvent: { async findById(id) { return id === "ev1" ? event : null; } } });
+  let deferPayload = null;
   let payload = null;
-  const interaction = { async reply(p) { payload = p; return p; } };
+  const interaction = {
+    async deferReply(p) { deferPayload = p; },
+    async editReply(p) { payload = p; return p; },
+  };
 
   await ui.handleRaidCheckTeamsSelect(interaction, "ev1", "en");
 
+  assert.equal(deferPayload.flags, MessageFlags.Ephemeral);
   assert.equal(payload.embeds.length, 2, "comp embed + turn-plan embed");
-  assert.equal(payload.flags, MessageFlags.Ephemeral);
   assert.equal(payload.embeds[0].data.author.name, "// SIGNUP BOARD");
   assert.equal(payload.embeds[1].data.author.name, "// TURN PLAN · BUS");
 });
@@ -120,17 +124,49 @@ test("handleRaidCheckTeamsSelect warns when the picked event is gone or closed",
   const ui = makeUi({ RaidEvent: { async findById(id) { return id === "ev2" ? cleared : null; } } });
 
   for (const id of ["ev2", "missing"]) {
+    let deferPayload = null;
     let payload = null;
-    await ui.handleRaidCheckTeamsSelect({ async reply(p) { payload = p; } }, id, "en");
+    await ui.handleRaidCheckTeamsSelect({
+      async deferReply(p) { deferPayload = p; },
+      async editReply(p) { payload = p; },
+    }, id, "en");
+    assert.equal(deferPayload.flags, MessageFlags.Ephemeral);
     assert.equal(payload.embeds.length, 1, `${id}: single notice embed`);
-    assert.equal(payload.flags, MessageFlags.Ephemeral);
   }
+});
+
+test("handleRaidCheckTeamsSelect acknowledges before the live event query", async () => {
+  const events = [];
+  const ui = makeUi({
+    RaidEvent: {
+      async findById() {
+        events.push("query");
+        return null;
+      },
+    },
+  });
+  const interaction = {
+    async deferReply() {
+      events.push("defer");
+    },
+    async editReply() {
+      events.push("edit");
+    },
+    async reply() {
+      events.push("reply");
+    },
+  };
+
+  await ui.handleRaidCheckTeamsSelect(interaction, "missing", "en");
+
+  assert.deepEqual(events, ["defer", "query", "edit"]);
 });
 
 test("loadActiveEventsForTeams queries active events, shapes them, attaches lead names", async () => {
   const docs = [
     { _id: "ev1", guildId: "g1", channelId: "c1", creatorId: "lead1", raidKey: "armoche", modeKey: "hard", partySize: 8, supSlots: 2, dpsSlots: 6, title: "A", startAt: new Date(2), signups: [] },
     { _id: "ev2", guildId: "g1", channelId: "c2", creatorId: "lead2", raidKey: "kazeros", modeKey: "hard", partySize: 8, supSlots: 2, dpsSlots: 6, title: "B", startAt: new Date(1), signups: [] },
+    { _id: "solo1", guildId: "g1", channelId: "c3", creatorId: "lead3", raidKey: "serca", modeKey: "solo", partySize: 4, supSlots: 1, dpsSlots: 3, title: "Solo", startAt: new Date(0), signups: [] },
   ];
   const RaidEvent = { find: () => ({ sort: () => ({ lean: async () => docs }) }) };
   const User = { find: () => ({ select: () => ({ lean: async () => [{ discordId: "lead1", discordDisplayName: "Bao" }] }) }) };
@@ -138,6 +174,7 @@ test("loadActiveEventsForTeams queries active events, shapes them, attaches lead
 
   const rows = await ui.loadActiveEventsForTeams({ guildId: "g1" });
   assert.equal(rows.length, 2);
+  assert.equal(rows.some((row) => row.modeKey === "solo"), false);
   // Sorted by startAt asc -> ev2 (date 1) first.
   assert.equal(rows[0].eventId, "ev2");
   assert.equal(rows[1].eventId, "ev1");

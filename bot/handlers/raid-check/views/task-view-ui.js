@@ -6,7 +6,11 @@
  * two surfaces stay visually identical.
  */
 
-const { buildNoticeEmbed } = require("../../../utils/raid/common/shared");
+const {
+  deferEphemeralReply,
+  editEmbed,
+  editNotice,
+} = require("../../../utils/raid/common/shared");
 const { buildAccountTaskFields } = require("../../../utils/raid/tasks/task-view");
 const {
   getVisibleSharedTasks,
@@ -23,7 +27,6 @@ const { t, getUserLanguage } = require("../../../services/i18n");
 function createTaskViewUi(deps) {
   const {
     EmbedBuilder,
-    MessageFlags,
     UI,
     User,
     truncateText,
@@ -42,39 +45,36 @@ function createTaskViewUi(deps) {
   // data). Reply is ephemeral so the data never lands in the channel
   // transcript - members aren't notified when a Manager spot-checks.
   async function handleRaidCheckViewTasksClick(interaction, targetDiscordId) {
+    await deferEphemeralReply(interaction);
     // Manager (clicker) is the viewer here - read-only spot-check.
-    const lang = await getUserLanguage(interaction.user?.id, { UserModel: User });
+    const langPromise = getUserLanguage(interaction.user?.id, { UserModel: User });
 
     if (!targetDiscordId) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-check.staleButton.title", lang),
-            description: t("raid-check.staleButton.taskViewDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      const lang = await langPromise;
+      await editNotice(interaction, EmbedBuilder, {
+        type: "warn",
+        title: t("raid-check.staleButton.title", lang),
+        description: t("raid-check.staleButton.taskViewDescription", lang),
       });
       return;
     }
 
-    const userDoc = await User.findOne({ discordId: targetDiscordId })
-      .select(
-        "discordId discordUsername discordGlobalName discordDisplayName accounts.accountName accounts.sharedTasks accounts.characters.name accounts.characters.class accounts.characters.itemLevel accounts.characters.sideTasks"
-      )
-      .lean();
+    const [lang, userDoc] = await Promise.all([
+      langPromise,
+      User.findOne({ discordId: targetDiscordId })
+        .select(
+          "discordId discordUsername discordGlobalName discordDisplayName accounts.accountName accounts.sharedTasks accounts.characters.name accounts.characters.class accounts.characters.itemLevel accounts.characters.sideTasks"
+        )
+        .lean(),
+    ]);
 
     if (!userDoc) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-check.taskView.noUserTitle", lang),
-            description: t("raid-check.taskView.noUserDescription", lang, { target: targetDiscordId }),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await editNotice(interaction, EmbedBuilder, {
+        type: "warn",
+        title: t("raid-check.taskView.noUserTitle", lang),
+        description: t("raid-check.taskView.noUserDescription", lang, {
+          target: targetDiscordId,
+        }),
       });
       return;
     }
@@ -89,18 +89,15 @@ function createTaskViewUi(deps) {
     });
 
     if (accountsWithTasks.length === 0) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "info",
-            title: t("raid-check.taskView.noTasksTitle", lang, { target: targetDiscordId }),
-            description: [
-              t("raid-check.taskView.noTasksLine1", lang, { target: targetDiscordId }),
-              t("raid-check.taskView.noTasksLine2", lang),
-            ].join("\n"),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+      await editNotice(interaction, EmbedBuilder, {
+        type: "info",
+        title: t("raid-check.taskView.noTasksTitle", lang, {
+          target: targetDiscordId,
+        }),
+        description: [
+          t("raid-check.taskView.noTasksLine1", lang, { target: targetDiscordId }),
+          t("raid-check.taskView.noTasksLine2", lang),
+        ].join("\n"),
       });
       return;
     }
@@ -207,10 +204,8 @@ function createTaskViewUi(deps) {
       ];
     };
 
-    await interaction.reply({
-      embeds: [buildAccountEmbed(accountsWithTasks[0], 0)],
+    await editEmbed(interaction, buildAccountEmbed(accountsWithTasks[0], 0), {
       components: buildComponents(false),
-      flags: MessageFlags.Ephemeral,
     });
 
     if (totalPages <= 1) return;

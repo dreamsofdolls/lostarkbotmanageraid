@@ -213,3 +213,42 @@ test("all-mode data resolves author meta from cache, fetch, and cached doc names
     avatarURL: "avatar-200",
   });
 });
+
+test("all-mode author meta skips Discord REST when Mongo already has a display name", async () => {
+  const fetched = [];
+  const users = [
+    {
+      discordId: "300",
+      discordDisplayName: "Persisted Name",
+      accounts: [{ accountName: "C" }],
+    },
+  ];
+  const pagesData = buildAllModePagesData(users);
+  const interaction = {
+    client: {
+      users: {
+        cache: new Map(),
+        fetch: async (discordId) => {
+          fetched.push(discordId);
+          return {
+            username: `Fetched ${discordId}`,
+            displayAvatarURL: () => `avatar-${discordId}`,
+          };
+        },
+      },
+    },
+  };
+
+  const { authorMeta } = await resolveAllModeAuthorMeta({
+    interaction,
+    users,
+    pagesData,
+    discordUserLimiter: { run: (fn) => fn() },
+  });
+
+  assert.deepEqual(fetched, []);
+  assert.deepEqual(authorMeta.get("300"), {
+    displayName: "Persisted Name",
+    avatarURL: null,
+  });
+});
