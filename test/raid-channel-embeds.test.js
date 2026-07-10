@@ -52,6 +52,25 @@ test("raid-channel aggregate embed buckets mixed write results", () => {
   assert.match(embed.footer.text, /Raid Guild/);
 });
 
+test("raid-channel aggregate embed renders reset outcomes distinctly", () => {
+  const embed = builders().buildRaidChannelMultiResultEmbed({
+    results: [
+      { charName: "ResetRaw", displayName: "ResetDone", updated: true, matched: true },
+      { charName: "EmptyRaw", displayName: "AlreadyEmpty", alreadyReset: true, matched: true },
+    ],
+    raidMeta: { ...raidMeta, label: "Kazeros" },
+    gates: [],
+    statusType: "reset",
+    guildName: "Raid Guild",
+    lang: "en",
+  }).toJSON();
+
+  assert.equal(embed.color, UI.colors.muted);
+  assert.match(embed.title, /Raid Reset/);
+  assert.ok(embed.fields.some((field) => /Reset/.test(field.name) && field.value.includes("**ResetDone**")));
+  assert.ok(embed.fields.some((field) => /Already empty/.test(field.name) && field.value.includes("**AlreadyEmpty**")));
+});
+
 test("raid-channel welcome embed renders the configured onboarding field set", () => {
   const embed = builders().buildRaidChannelWelcomeEmbed("en").toJSON();
 

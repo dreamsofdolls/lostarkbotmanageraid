@@ -33,6 +33,7 @@ function createRaidChannelMessageHandler({
   getAnnouncementsConfig,
   getCachedMonitorChannelId,
   getGatesForRaid,
+  getRaidLabel,
   getUserLanguage,
   hintKey,
   parseRaidMessage,
@@ -122,11 +123,20 @@ function createRaidChannelMessageHandler({
     }, 5_000);
   }
 
-  function enqueueDmFallback({ ops, message, results, raidMeta, effectiveGates, authorLang }) {
+  function enqueueDmFallback({
+    ops,
+    message,
+    results,
+    raidMeta,
+    effectiveGates,
+    statusType,
+    authorLang,
+  }) {
     const fallbackText = buildRaidChannelDmFallbackText({
       results,
       raidMeta,
       effectiveGates,
+      statusType,
       authorLang,
       UI,
       userId: message.author.id,
@@ -172,6 +182,7 @@ function createRaidChannelMessageHandler({
       parsed,
       RAID_REQUIREMENT_MAP,
       getGatesForRaid,
+      getRaidLabel,
       UI,
       lang: authorLang,
     });
@@ -241,6 +252,7 @@ function createRaidChannelMessageHandler({
         results,
         raidMeta,
         effectiveGates,
+        statusType,
         authorLang,
       });
     }

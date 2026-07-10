@@ -21,6 +21,7 @@ function createRaidChannelEmbedBuilders({ EmbedBuilder, UI }) {
     guildName,
     lang,
   }) {
+    const isReset = statusType === "reset";
     const gatesText =
       Array.isArray(gates) && gates.length > 0
         ? gates.join(", ")
@@ -38,25 +39,29 @@ function createRaidChannelEmbedBuilders({ EmbedBuilder, UI }) {
       const display = result.displayName || result.charName;
       if (result.error) errored.push(result.charName);
       else if (result.updated) done.push(display);
-      else if (result.alreadyComplete) already.push(display);
+      else if (isReset ? result.alreadyReset : result.alreadyComplete) already.push(display);
       else if (!result.matched) notFound.push(result.charName);
       else ineligible.push(`${display} (iLvl ${result.ineligibleItemLevel})`);
     }
 
     const hasProgress = done.length > 0 || already.length > 0;
     const anyError = notFound.length > 0 || ineligible.length > 0 || errored.length > 0;
-    const color = hasProgress && !anyError ? UI.colors.success : UI.colors.progress;
-    const titleIcon = hasProgress ? UI.icons.done : UI.icons.info;
+    const color = hasProgress && !anyError
+      ? (isReset ? UI.colors.muted : UI.colors.success)
+      : UI.colors.progress;
+    const titleIcon = hasProgress
+      ? (isReset ? UI.icons.reset : UI.icons.done)
+      : UI.icons.info;
     const embed = new EmbedBuilder()
       .setColor(color)
-      .setTitle(`${titleIcon} ${t("text-parser.raidUpdateTitle", lang, { scope: scopeLabel })}`)
-      .setDescription(t("text-parser.raidUpdateDescription", lang, { count: results.length }))
+      .setTitle(`${titleIcon} ${t(isReset ? "text-parser.raidResetTitle" : "text-parser.raidUpdateTitle", lang, { scope: scopeLabel })}`)
+      .setDescription(t(isReset ? "text-parser.raidResetDescription" : "text-parser.raidUpdateDescription", lang, { count: results.length }))
       .setTimestamp();
 
     if (done.length > 0) {
       embed.addFields({
-        name: t("text-parser.raidUpdateUpdatedField", lang, {
-          icon: UI.icons.done,
+        name: t(isReset ? "text-parser.raidResetUpdatedField" : "text-parser.raidUpdateUpdatedField", lang, {
+          icon: isReset ? UI.icons.reset : UI.icons.done,
           count: done.length,
         }),
         value: done.map((name) => `**${name}**`).join(", "),
@@ -64,7 +69,7 @@ function createRaidChannelEmbedBuilders({ EmbedBuilder, UI }) {
     }
     if (already.length > 0) {
       embed.addFields({
-        name: t("text-parser.raidUpdateAlreadyField", lang, {
+        name: t(isReset ? "text-parser.raidResetAlreadyField" : "text-parser.raidUpdateAlreadyField", lang, {
           icon: UI.icons.info,
           count: already.length,
         }),

@@ -27,6 +27,7 @@ function makeHandler(overrides = {}) {
     getAnnouncementsConfig: () => ({ whisperAck: { enabled: true } }),
     getCachedMonitorChannelId: () => "channel-1",
     getGatesForRaid: () => [],
+    getRaidLabel: (raidKey) => raidKey,
     getUserLanguage: async () => "vi",
     hintKey: () => "hint-key",
     parseRaidMessage: () => {
@@ -82,4 +83,70 @@ test("raid-channel message handler warns on empty monitor messages before parsin
 
   assert.equal(calls.emptyWarnings, 1);
   assert.equal(calls.parses, 0);
+});
+
+test("raid-channel message handler carries reset intent through write and DM rendering", async () => {
+  const writes = [];
+  const rendered = [];
+  const publicMessages = [];
+  const { handler } = makeHandler({
+    GuildConfig: {
+      findOne: () => ({
+        select: () => ({
+          lean: async () => ({ announcements: { whisperAck: { enabled: false } } }),
+        }),
+      }),
+    },
+    RAID_REQUIREMENT_MAP: {
+      armoche_normal: {
+        raidKey: "armoche",
+        modeKey: "normal",
+        label: "Act 4 Normal",
+        minItemLevel: 1700,
+      },
+    },
+    getRaidLabel: () => "Act 4",
+    parseRaidMessage: () => ({
+      raidKey: "armoche",
+      modeKey: null,
+      action: "reset",
+      charNames: ["qiylyn"],
+      gate: null,
+    }),
+    applyRaidSetForDiscordId: async (args) => {
+      writes.push(args);
+      return { matched: true, updated: true, displayName: "Qiylyn" };
+    },
+    buildRaidChannelMultiResultEmbed: (args) => {
+      rendered.push(args);
+      return { data: { title: "reset" } };
+    },
+  });
+
+  await handler.handleRaidChannelMessage(makeMessage({
+    guild: { name: "Raid Guild" },
+    content: "act4 rs Qiylyn",
+    author: {
+      id: "user-1",
+      bot: false,
+      send: async () => {
+        throw new Error("DMs disabled");
+      },
+    },
+    channel: {
+      send: async (payload) => {
+        publicMessages.push(payload);
+        return { delete: async () => {} };
+      },
+    },
+  }));
+
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].statusType, "reset");
+  assert.deepEqual(writes[0].effectiveGates, []);
+  assert.equal(writes[0].raidMeta.label, "Act 4");
+  assert.equal(rendered.length, 1);
+  assert.equal(rendered[0].statusType, "reset");
+  assert.equal(publicMessages.length, 1);
+  assert.match(publicMessages[0].content, /đã reset toàn bộ progress/i);
 });

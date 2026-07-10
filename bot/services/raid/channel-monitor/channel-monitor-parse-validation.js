@@ -18,7 +18,31 @@ const PARSE_ERROR_HINTS = {
       icon: UI.icons.warn,
       difficulties: parsed.difficulties.join(", "),
     }),
+  "reset-with-difficulty": ({ UI, lang, t }) =>
+    t("text-parser.resetWithDifficulty", lang, { icon: UI.icons.warn }),
+  "reset-with-gate": ({ UI, lang, t }) =>
+    t("text-parser.resetWithGate", lang, { icon: UI.icons.warn }),
 };
+
+function resolveRaidLevelResetMeta({ raidKey, RAID_REQUIREMENT_MAP, getRaidLabel }) {
+  const candidates = Object.values(RAID_REQUIREMENT_MAP || {})
+    .filter((meta) => meta?.raidKey === raidKey);
+  const candidate = candidates.find((meta) => meta.modeKey === "normal")
+    || candidates.find((meta) => meta.modeKey !== "solo")
+    || candidates[0];
+  if (!candidate) return null;
+
+  return {
+    ...candidate,
+    label: typeof getRaidLabel === "function"
+      ? getRaidLabel(raidKey)
+      : candidate.label,
+    // Reset is raid-level and must not be blocked by an arbitrary mode's
+    // item-level threshold. applyRaidSet preserves the stored mode because a
+    // reset never writes raidData.modeKey.
+    minItemLevel: 0,
+  };
+}
 
 function expandRaidChannelEffectiveGates({ gate, raidMeta, getGatesForRaid }) {
   if (!gate) return [];
@@ -31,6 +55,7 @@ function resolveParsedRaidUpdate({
   parsed,
   RAID_REQUIREMENT_MAP,
   getGatesForRaid,
+  getRaidLabel,
   UI,
   lang,
   t = translate,
@@ -45,7 +70,36 @@ function resolveParsedRaidUpdate({
     };
   }
 
-  const { raidKey, modeKey, charNames, gate } = parsed;
+  const { raidKey, modeKey, charNames, gate, action } = parsed;
+  if (!Array.isArray(charNames) || charNames.length === 0) {
+    return { action: "ignore" };
+  }
+
+  if (action === "reset") {
+    const raidMeta = resolveRaidLevelResetMeta({
+      raidKey,
+      RAID_REQUIREMENT_MAP,
+      getRaidLabel,
+    });
+    if (!raidMeta) {
+      return {
+        action: "hint",
+        content: t("text-parser.invalidCombo", lang, {
+          icon: UI.icons.warn,
+          raidKey,
+          modeKey: "reset",
+        }),
+      };
+    }
+    return {
+      action: "update",
+      raidMeta,
+      charNames,
+      statusType: "reset",
+      effectiveGates: [],
+    };
+  }
+
   const raidValue = `${raidKey}_${modeKey}`;
   const raidMeta = RAID_REQUIREMENT_MAP[raidValue];
   if (!raidMeta) {
@@ -74,10 +128,6 @@ function resolveParsedRaidUpdate({
     }
   }
 
-  if (!Array.isArray(charNames) || charNames.length === 0) {
-    return { action: "ignore" };
-  }
-
   return {
     action: "update",
     raidMeta,
@@ -93,5 +143,6 @@ function resolveParsedRaidUpdate({
 
 module.exports = {
   expandRaidChannelEffectiveGates,
+  resolveRaidLevelResetMeta,
   resolveParsedRaidUpdate,
 };
