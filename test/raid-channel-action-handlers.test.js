@@ -52,7 +52,7 @@ function createCoreActions(overrides = {}) {
     postChannelAnnouncement: async () => {},
     getAnnouncementsConfig: () => ({ setGreeting: { enabled: true } }),
     resolveRaidMonitorChannel: async () => ({ id: "chan1" }),
-    cleanupRaidChannelMessages: async () => ({ deleted: 0, skippedOld: 0 }),
+    cleanupAndRefreshRaidChannel: async () => ({ deleted: 0, skippedOld: 0 }),
     getGuildLanguage: async () => "vi",
     SUPPORTED_LANGUAGES: [{ code: "vi", flag: "VI", label: "Vietnamese" }],
     t,
@@ -127,7 +127,7 @@ test("raid-channel cleanup action warns before deferring when no monitor channel
     resolveRaidMonitorChannel: async () => {
       throw new Error("should not resolve channel");
     },
-    cleanupRaidChannelMessages: async () => {
+    cleanupAndRefreshRaidChannel: async () => {
       throw new Error("should not cleanup");
     },
   });
@@ -165,14 +165,17 @@ test("raid-channel manual cleanup forwards the tracked welcome ID as protected",
         }),
       }),
     },
-    cleanupRaidChannelMessages: async (...args) => {
+    cleanupAndRefreshRaidChannel: async (...args) => {
       cleanupArgs = args;
       return { deleted: 0, skippedOld: 0 };
     },
   });
 
   await handleCleanupChannel({
-    interaction: { deferReply: async () => {} },
+    interaction: {
+      client: { user: { id: "bot" } },
+      deferReply: async () => {},
+    },
     guildId: "guild1",
     lang: "en",
     replyChannelNotice: replies.replyChannelNotice.bind(replies),
@@ -182,7 +185,12 @@ test("raid-channel manual cleanup forwards the tracked welcome ID as protected",
 
   assert.deepEqual(cleanupArgs, [
     { id: "chan1" },
-    { protectedMessageIds: ["welcome-1"] },
+    {
+      botUserId: "bot",
+      client: { user: { id: "bot" } },
+      guildId: "guild1",
+      protectedMessageIds: ["welcome-1"],
+    },
   ]);
   assert.equal(replies.embeds.length, 1);
 });

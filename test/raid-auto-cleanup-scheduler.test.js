@@ -53,10 +53,14 @@ test("auto-cleanup scheduler runs normal cleanup and stamps the slot key", async
       artistBedtime: { enabled: true },
       artistWakeup: { enabled: true },
     }),
-    cleanupRaidChannelMessages: async (target, options) => {
+    cleanupAndRefreshRaidChannel: async (target, options) => {
       cleanedChannel = target;
       cleanupOptions = options;
-      return { deleted: 2, skippedOld: 1 };
+      return {
+        deleted: 2,
+        skippedOld: 1,
+        welcome: { pinned: true, persisted: true },
+      };
     },
     getGuildLanguage: async () => "vi",
     postChannelAnnouncement: async (...args) => {
@@ -66,12 +70,19 @@ test("auto-cleanup scheduler runs normal cleanup and stamps the slot key", async
     nowDate: () => now,
   });
 
-  await service.runAutoCleanupTick({
+  const client = {
+    user: { id: "bot" },
     guilds: { cache: new Map([["guild-1", makeGuild(channel)]]) },
-  });
+  };
+  await service.runAutoCleanupTick(client);
 
   assert.equal(cleanedChannel, channel);
-  assert.deepEqual(cleanupOptions, { protectedMessageIds: ["welcome-1"] });
+  assert.deepEqual(cleanupOptions, {
+    botUserId: "bot",
+    client,
+    guildId: "guild-1",
+    protectedMessageIds: ["welcome-1"],
+  });
   assert.equal(updates.length, 1);
   assert.deepEqual(updates[0].filter, { guildId: "guild-1" });
   assert.ok(updates[0].update.$set.lastAutoCleanupKey);

@@ -10,7 +10,7 @@ function createServiceWithGuildConfig(GuildConfig) {
     saveWithRetry: async (fn) => fn(),
     ensureFreshWeek: () => {},
     getAnnouncementsConfig: () => ({}),
-    cleanupRaidChannelMessages: async () => ({ deleted: 0, skippedOld: 0 }),
+    cleanupAndRefreshRaidChannel: async () => ({ deleted: 0, skippedOld: 0 }),
     weekResetStartMs: () => 0,
     acquireAutoManageSyncSlot: async () => ({ acquired: false }),
     releaseAutoManageSyncSlot: () => {},

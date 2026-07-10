@@ -17,6 +17,7 @@ const {
   createRaidChannelMessageHandler,
 } = require("./channel-monitor-message-handler");
 const { createRaidChannelPermissionHelpers } = require("./channel-monitor-permissions");
+const { createRaidChannelResetService } = require("./channel-monitor-reset");
 const { createRaidChannelWelcomeService } = require("./channel-monitor-welcome");
 const { parseRaidMessage } = require("./channel-monitor-parser");
 const User = require("../../../models/user");
@@ -56,6 +57,11 @@ function createRaidChannelMonitorService({
     getGuildLanguage,
     buildRaidChannelWelcomeEmbed,
   });
+
+  const { cleanupAndRefreshRaidChannel } = createRaidChannelResetService({
+    cleanupRaidChannelMessages,
+    postRaidChannelWelcome,
+  });
   const hintService = createRaidChannelHintService({
     UI,
     UserModel: User,
@@ -91,6 +97,7 @@ function createRaidChannelMonitorService({
     getMissingAnnouncementChannelPermissions,
     parseRaidMessage,
     handleRaidChannelMessage,
+    cleanupAndRefreshRaidChannel,
     cleanupRaidChannelMessages,
     postRaidChannelWelcome,
     resolveRaidMonitorChannel,
