@@ -120,8 +120,9 @@ async function authorizePickerSession({
   descriptionKey,
 }) {
   if (interaction.user.id === session.callerId) return null;
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const clickerLang = await getUserLanguage(interaction.user.id, { UserModel: User });
-  return interaction.reply({
+  await interaction.editReply({
     embeds: [
       buildNoticeEmbed(EmbedBuilder, {
         type: "lock",
@@ -129,8 +130,8 @@ async function authorizePickerSession({
         description: t(descriptionKey, clickerLang),
       }),
     ],
-    flags: MessageFlags.Ephemeral,
   });
+  return true;
 }
 
 module.exports = {

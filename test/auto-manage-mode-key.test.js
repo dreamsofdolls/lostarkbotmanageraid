@@ -109,6 +109,32 @@ test("auto-manage apply changes modeKey only when a clear log arrives in the new
   assert.equal(kaz.G2.completedDate, 3000);
 });
 
+test("auto-manage keeps a stored Solo preference when upstream reports Normal", () => {
+  const service = makeService();
+  const userDoc = makeUserDoc({
+    armoche: {
+      modeKey: "solo",
+      G1: { difficulty: "Solo", completedDate: null },
+      G2: { difficulty: "Solo", completedDate: null },
+    },
+  });
+
+  const report = service.applyAutoManageCollected(userDoc, 1000, [
+    {
+      entryKey: service.autoManageEntryKey("Roster", "Aki"),
+      logs: [
+        { boss: "Armoche, Sentinel of the Abyss", difficulty: "Normal", timestamp: 3000 },
+      ],
+    },
+  ]);
+
+  const act4 = userDoc.accounts[0].characters[0].assignedRaids.armoche;
+  assert.equal(report.appliedTotal, 2);
+  assert.equal(act4.modeKey, "solo");
+  assert.equal(act4.G1.difficulty, "Solo");
+  assert.equal(act4.G2.difficulty, "Solo");
+});
+
 test("auto-manage apply skips cross-mode logs when the raid is already done", () => {
   const service = makeService();
   const userDoc = makeUserDoc({

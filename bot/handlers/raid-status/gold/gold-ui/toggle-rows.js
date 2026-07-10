@@ -3,7 +3,12 @@
 const {
   summarizeCharacterGold,
 } = require("../../../../utils/raid/common/character");
-const { RAID_REQUIREMENTS, compareRaidModeOrder, raidModeSortRank } = require("../../../../models/Raid");
+const {
+  RAID_REQUIREMENTS,
+  areEquivalentRaidModes,
+  compareRaidModeOrder,
+  raidModeSortRank,
+} = require("../../../../models/Raid");
 const { parseCustomEmoji } = require("../../../../utils/discord/emoji");
 const {
   getRaidLabel,
@@ -30,11 +35,13 @@ function computeGoldModeOptions(activeName, raids, itemLevel) {
       if (modeKey === effectiveTarget) continue;
       if (Number(itemLevel) < Number(mode.minItemLevel)) continue;
       const isCancel = !!raid.pendingModeKey && modeKey === currentModeKey;
-      // Mode declaration order is difficulty order (normal < hard < nightmare),
-      // so a higher rank than the current mode is an upgrade.
+      // Mode declaration order is difficulty order. Normal and Solo share one
+      // tier, so switching between them is lateral rather than up/down.
       const direction = isCancel
         ? "cancel"
-        : (raidModeSortRank(raid.raidKey, modeKey) > currentRank ? "up" : "down");
+        : areEquivalentRaidModes(currentModeKey, modeKey)
+          ? "side"
+          : (raidModeSortRank(raid.raidKey, modeKey) > currentRank ? "up" : "down");
       const goldTotal = Object.values(mode.gold || {})
         .reduce((sum, value) => sum + (Number(value) || 0), 0);
       out.push({
@@ -199,7 +206,9 @@ function createGoldToggleRows({
           // easier, back = cancel a queued change); the grey description line
           // carries the current->target transition, timing, and gold so the
           // bold label stays a clean "Raid -> Mode".
-          const emoji = option.direction === "up"
+          const emoji = option.direction === "side"
+            ? "\u2194\ufe0f"
+            : option.direction === "up"
             ? "⬆️"
             : option.direction === "down" ? "⬇️" : "↩️";
           let description;

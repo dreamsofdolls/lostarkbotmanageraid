@@ -17,8 +17,13 @@
 
 "use strict";
 
-const { buildNoticeEmbed } = require("../../../utils/raid/common/shared");
+const {
+  deferEphemeralReply,
+  editEmbed,
+  editNotice,
+} = require("../../../utils/raid/common/shared");
 const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
+const { isRaidCheckVisibleRaid } = require("../visibility");
 const { formatStartShortForLang } = require("../../../utils/raid/schedule/artist-clock");
 const {
   shapeAllOwnedBoardRows,
@@ -35,7 +40,7 @@ const TEAMS_SELECT_PREFIX = "raid-check-all-teams:";
 /**
  * Build the /raid-check teams-view UI service.
  * @param {object} deps - injected dependencies (discord.js builders +
- *   MessageFlags, UI palette, RaidEvent + User models, the two schedule board
+ *   UI palette, RaidEvent + User models, the two schedule board
  *   embed builders, truncateText · see destructure)
  * @returns {{TEAMS_SELECT_PREFIX: string, loadActiveEventsForTeams: Function, buildTeamsRows: Function, handleRaidCheckTeamsSelect: Function}}
  */
@@ -44,7 +49,6 @@ function createTeamsViewUi(deps) {
     EmbedBuilder,
     ActionRowBuilder,
     StringSelectMenuBuilder,
-    MessageFlags,
     UI,
     RaidEvent,
     User,
@@ -94,7 +98,10 @@ function createTeamsViewUi(deps) {
       console.warn("[raid-check teams] event query failed:", error?.message || error);
       return [];
     }
-    const rows = shapeAllOwnedBoardRows(events, ""); // no "current" board in raid-check
+    const rows = shapeAllOwnedBoardRows(
+      events.filter(isRaidCheckVisibleRaid),
+      ""
+    ); // no "current" board in raid-check
     const leadNames = await resolveLeadNames(rows.map((r) => r.creatorId));
     return rows.map((row) => ({ ...row, leadName: leadNames.get(String(row.creatorId)) || null }));
   }
@@ -169,32 +176,32 @@ function createTeamsViewUi(deps) {
    * @returns {Promise<void>}
    */
   async function handleRaidCheckTeamsSelect(interaction, eventId, lang) {
+    await deferEphemeralReply(interaction);
     let event = null;
     try {
       event = eventId ? await RaidEvent.findById(eventId) : null;
     } catch {
       event = null;
     }
-    if (!event || (event.status !== "open" && event.status !== "locked")) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-check.teams.eventGoneTitle", lang),
-            description: t("raid-check.teams.eventGoneDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
+    if (
+      !event ||
+      !isRaidCheckVisibleRaid(event) ||
+      (event.status !== "open" && event.status !== "locked")
+    ) {
+      await editNotice(interaction, EmbedBuilder, {
+        type: "warn",
+        title: t("raid-check.teams.eventGoneTitle", lang),
+        description: t("raid-check.teams.eventGoneDescription", lang),
       }).catch(() => {});
       return;
     }
-    await interaction.reply({
-      embeds: [
+    await editEmbed(
+      interaction,
+      [
         buildScheduleEmbed(event, { EmbedBuilder, UI, lang }),
         buildTurnPlanEmbed(event, { EmbedBuilder, UI, lang }),
       ],
-      flags: MessageFlags.Ephemeral,
-    }).catch(() => {});
+    ).catch(() => {});
   }
 
   return {

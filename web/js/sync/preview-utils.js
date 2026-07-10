@@ -15,6 +15,8 @@ let CLASS_BY_ID = {};
 let CLASS_ICON_BY_LABEL = {};
 let DIFFICULTY_TO_MODE_KEY = {};
 let RAID_MODE_ILVL = {};
+let RAID_MODE_BASE = {};
+let RAID_MODE_MANUAL_ONLY = {};
 let RAID_ORDER = [];
 let MODE_ORDER = [];
 let catalogLoaded = false;
@@ -42,6 +44,8 @@ export function setCatalog(rawCatalog = {}) {
   const raidModeLabels = {};
   const raidGates = {};
   const raidModeIlvl = {};
+  const raidModeBase = {};
+  const raidModeManualOnly = {};
 
   for (const [raidKey, raid] of Object.entries(raids)) {
     raidLabels[raidKey] = raid?.label || raidKey;
@@ -49,11 +53,15 @@ export function setCatalog(rawCatalog = {}) {
       ? [...raid.gates]
       : ["G1", "G2"];
     raidModeIlvl[raidKey] = {};
+    raidModeBase[raidKey] = {};
+    raidModeManualOnly[raidKey] = {};
     raidModeLabels[raidKey] = {};
     for (const [modeKey, mode] of Object.entries(raid?.modes || {})) {
       if (!modeLabels[modeKey]) modeLabels[modeKey] = mode?.label || modeKey;
       raidModeLabels[raidKey][modeKey] = mode?.label || modeKey;
       raidModeIlvl[raidKey][modeKey] = Number(mode?.minItemLevel) || 0;
+      raidModeBase[raidKey][modeKey] = mode?.baseModeKey || null;
+      raidModeManualOnly[raidKey][modeKey] = mode?.manualOnly === true;
     }
   }
 
@@ -66,6 +74,8 @@ export function setCatalog(rawCatalog = {}) {
   RAID_MODE_LABELS = raidModeLabels;
   RAID_GATES = raidGates;
   RAID_MODE_ILVL = raidModeIlvl;
+  RAID_MODE_BASE = raidModeBase;
+  RAID_MODE_MANUAL_ONLY = raidModeManualOnly;
   RAID_ORDER = Array.isArray(rawCatalog.raidOrder) && rawCatalog.raidOrder.length > 0
     ? [...rawCatalog.raidOrder]
     : Object.keys(raids);
@@ -289,6 +299,7 @@ export function getEligibleRaidModes(itemLevel) {
     for (const modeKey of MODE_ORDER) {
       const min = RAID_MODE_ILVL[raidKey]?.[modeKey];
       if (typeof min !== "number") continue;
+      if (RAID_MODE_MANUAL_ONLY[raidKey]?.[modeKey]) continue;
       if (ilvl >= min) list.push({ raidKey, modeKey });
     }
   }
@@ -372,6 +383,9 @@ export function buildActionableBucketKeySet(diffAccounts) {
         const hasAction = (cell.gates || []).some((gate) => isActionableState(cell.states?.[gate]));
         if (hasAction) {
           keys.add(makeBucketKey(character.name, cell.raidKey, cell.modeKey));
+          if (cell.sourceModeKey && cell.sourceModeKey !== cell.modeKey) {
+            keys.add(makeBucketKey(character.name, cell.raidKey, cell.sourceModeKey));
+          }
         }
       }
     }
@@ -428,13 +442,25 @@ export function buildDiff(rosterAccounts, fileBuckets) {
     const charsByRaidMode = new Map();
     for (const character of account?.characters || []) {
       const charNameLower = String(character?.name || "").trim().toLowerCase();
-      const eligible = getEligibleRaidModes(character?.itemLevel);
+      const eligible = getEligibleRaidModes(character?.itemLevel).map((entry) => {
+        const preferredModeKey = character?.assignedRaids?.[entry.raidKey]?.modeKey;
+        const preferredBase = RAID_MODE_BASE[entry.raidKey]?.[preferredModeKey];
+        return preferredBase === entry.modeKey
+          ? { raidKey: entry.raidKey, modeKey: preferredModeKey }
+          : entry;
+      });
       const charCells = [];
       for (const { raidKey, modeKey } of eligible) {
         const gates = getGatesForRaid(raidKey);
         const states = {};
         let hasActivity = false;
-        const fileGates = fileClearMap.get(`${charNameLower}::${raidKey}::${modeKey}`);
+        let sourceModeKey = modeKey;
+        let fileGates = fileClearMap.get(`${charNameLower}::${raidKey}::${modeKey}`);
+        const baseModeKey = RAID_MODE_BASE[raidKey]?.[modeKey];
+        if (!fileGates && baseModeKey) {
+          sourceModeKey = baseModeKey;
+          fileGates = fileClearMap.get(`${charNameLower}::${raidKey}::${baseModeKey}`);
+        }
         const assignedRaids = character?.assignedRaids?.[raidKey];
         for (const gate of gates) {
           const state = resolveCellState({ assignedRaids, fileGates, modeKey, gate });
@@ -445,6 +471,7 @@ export function buildDiff(rosterAccounts, fileBuckets) {
         const cell = {
           raidKey,
           modeKey,
+          sourceModeKey,
           gates,
           states,
         };

@@ -4,6 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  createAllModePendingAggregateCache,
   computeAllModePendingAggregate,
 } = require("../bot/handlers/raid-check/all-mode/all-mode-aggregate");
 
@@ -150,4 +151,50 @@ test("raid-check all-mode aggregate excludes raids that do not receive gold", ()
   assert.equal(aggregate.perUserPending.has("user-b"), false);
   assert.equal(aggregate.perRaidPending.has("act4:hard"), false);
   assert.equal(aggregate.perRaidPending.get("kazeros:hard").pending, 1);
+});
+
+test("raid-check all-mode aggregate excludes Solo raids even when they receive gold", () => {
+  const aggregate = computeAllModePendingAggregate({
+    pagesData: [
+      createPage("user-a", [
+        {
+          class: "Artist",
+          raids: [
+            raid("act4", "solo", false, { goldReceives: true }),
+            raid("kazeros", "normal", false, { goldReceives: true }),
+          ],
+        },
+      ]),
+    ],
+    getStatusRaidsForCharacter,
+    lang: "en",
+  });
+
+  assert.equal(aggregate.totalPending, 1);
+  assert.equal(aggregate.perRaidPending.has("act4:solo"), false);
+  assert.equal(aggregate.perRaidPending.get("kazeros:normal").pending, 1);
+});
+
+test("raid-check all-mode aggregate cache reuses scans and character raid derivation", () => {
+  let raidReads = 0;
+  const cache = createAllModePendingAggregateCache({
+    pagesData,
+    getStatusRaidsForCharacter: (character) => {
+      raidReads += 1;
+      return character.raids;
+    },
+    lang: "en",
+  });
+
+  const first = cache.compute({ raidFilter: null, userFilter: null });
+  const repeated = cache.compute({ raidFilter: null, userFilter: null });
+  assert.strictEqual(repeated, first);
+  assert.equal(raidReads, 3);
+
+  cache.compute({ raidFilter: "act4:normal", userFilter: null });
+  assert.equal(raidReads, 3);
+
+  cache.clear();
+  cache.compute({ raidFilter: null, userFilter: null });
+  assert.equal(raidReads, 6);
 });

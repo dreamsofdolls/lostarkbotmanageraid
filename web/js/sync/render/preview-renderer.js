@@ -150,7 +150,9 @@ export function renderDiffPage(previewOutput) {
   window.__artistRosterPage = pageIndex;
 
   const headlineKey = Number(meta.clears) > 0 ? "preview.headlineCount" : "preview.headlineNoSync";
-  let html = `<div class="meta">${t(headlineKey, { chars: meta.distinctChars, clears: meta.clears })} <span class="hint">${t("preview.schemaDebug", meta.schemaDebug)}</span></div>`;
+  // SQLite identifiers come from the selected file and are untrusted even
+  // though the companion is local. Escape them before the innerHTML sink.
+  let html = `<div class="meta">${t(headlineKey, { chars: meta.distinctChars, clears: meta.clears })} <span class="hint">${escapeHtml(t("preview.schemaDebug", meta.schemaDebug))}</span></div>`;
   if (Number(meta.detectedClears) > Number(meta.clears)) {
     html += `<div class="hint">${t("preview.detectedCount", { chars: meta.detectedChars || 0, clears: meta.detectedClears || 0 })}</div>`;
   }

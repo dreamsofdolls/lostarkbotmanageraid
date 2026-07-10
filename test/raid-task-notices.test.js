@@ -49,6 +49,7 @@ test("raid-task notice helpers wrap reply and update payloads", async () => {
   });
   const replies = [];
   const updates = [];
+  const edits = [];
   const interaction = {
     reply: async (payload) => {
       replies.push(payload);
@@ -56,6 +57,10 @@ test("raid-task notice helpers wrap reply and update payloads", async () => {
     },
     update: async (payload) => {
       updates.push(payload);
+      return payload;
+    },
+    editReply: async (payload) => {
+      edits.push(payload);
       return payload;
     },
   };
@@ -70,6 +75,11 @@ test("raid-task notice helpers wrap reply and update payloads", async () => {
     title: "Check",
     description: "Task needs attention",
   });
+  await helpers.editTaskNotice(interaction, {
+    type: "success",
+    title: "Finished",
+    description: "Deferred task action completed",
+  });
 
   assert.equal(replies.length, 1);
   assert.equal(replies[0].flags, 64);
@@ -82,4 +92,8 @@ test("raid-task notice helpers wrap reply and update payloads", async () => {
   assert.equal(updates[0].embeds.length, 1);
   assert.match(updates[0].embeds[0].data.title, /Check/);
   assert.equal(updates[0].embeds[0].data.description, "Task needs attention");
+
+  assert.equal(edits.length, 1);
+  assert.deepEqual(edits[0].components, []);
+  assert.match(edits[0].embeds[0].data.title, /Finished/);
 });

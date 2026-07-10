@@ -79,7 +79,7 @@ async function resolveClearConfirmAccess({
   executorId,
   lang,
   resolveTaskWriteTarget,
-  updateTaskNotice,
+  editTaskNotice,
   viewOnlyShareNotice,
 }) {
   if (!route.hasRoster) return { ok: true, discordId: executorId };
@@ -89,7 +89,7 @@ async function resolveClearConfirmAccess({
     commandName: "clear-confirm",
     resolveTaskWriteTarget,
     denyViewOnly: (writeTarget) =>
-      updateTaskNotice(interaction, viewOnlyShareNotice(writeTarget, lang)),
+      editTaskNotice(interaction, viewOnlyShareNotice(writeTarget, lang)),
   });
 }
 
@@ -97,11 +97,12 @@ function createClearConfirmHandler({
   User,
   saveWithRetry,
   resolveTaskWriteTarget,
-  updateTaskNotice,
+  editTaskNotice,
   viewOnlyShareNotice,
 }) {
   return async function handleClearConfirmButton(interaction, route) {
     const executorId = interaction.user.id;
+    await interaction.deferUpdate();
     const lang = await getUserLanguage(executorId, { UserModel: User });
     const access = await resolveClearConfirmAccess({
       interaction,
@@ -109,7 +110,7 @@ function createClearConfirmHandler({
       executorId,
       lang,
       resolveTaskWriteTarget,
-      updateTaskNotice,
+      editTaskNotice,
       viewOnlyShareNotice,
     });
     if (!access.ok) return;
@@ -124,21 +125,22 @@ function createClearConfirmHandler({
       });
     } catch (error) {
       console.error("[raid-task clear] save failed:", error?.message || error);
-      await updateTaskNotice(interaction, buildClearSaveFailedNotice(lang)).catch(() => {});
+      await editTaskNotice(interaction, buildClearSaveFailedNotice(lang)).catch(() => {});
       return;
     }
 
-    await updateTaskNotice(interaction, buildClearConfirmNotice(result, lang)).catch(() => {});
+    await editTaskNotice(interaction, buildClearConfirmNotice(result, lang)).catch(() => {});
   };
 }
 
 function createClearCancelHandler({
   User,
-  updateTaskNotice,
+  editTaskNotice,
 }) {
   return async function handleClearCancelButton(interaction) {
+    await interaction.deferUpdate();
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
-    await updateTaskNotice(interaction, {
+    await editTaskNotice(interaction, {
       type: "muted",
       title: t("raid-task.clear.cancelledTitle", lang),
       description: t("raid-task.clear.cancelledDescription", lang),

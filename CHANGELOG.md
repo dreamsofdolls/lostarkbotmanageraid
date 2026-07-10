@@ -4,6 +4,20 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-07-08 (raid: Solo mode, raid-check visibility, interaction-ack hardening)
+
+### Added
+- Solo mode on every raid: a manual-only alias of Normal that reuses Normal's item-level floor and gold (base, bound, and unbound) while keeping its own stored key and localized label. Auto-eligibility never selects it (`manualOnly`), and both sync paths (bible reconcile + local-sync apply-roster) run `preserveManualRaidModePreference`, so a sync reporting Normal no longer overwrites a manually-set Solo.
+- The /raid-status difficulty dropdown renders a Normal <-> Solo switch as a lateral move (`↔️`) instead of an upgrade or downgrade, since the two share one tier.
+- Solo raids are hidden from /raid-check (a solo clear needs no team comp) via a new raid-check visibility filter that strips Solo entries without mutating the shared requirement map. Applied to the all-mode aggregate, the raid page, the command entry, and the teams view.
+
+### Fixed
+- Discord 3-second interaction timeouts: the /raid-check command, its denied-user button, sync, and edit paths, plus the local-sync stuck-nudge button, now acknowledge or defer BEFORE any language lookup, state read, token mint, or snapshot DB work.
+- The weekly-reset scheduler no longer stacks ticks; an interval fires only once the previous tick has finished (`createNonOverlappingIntervalRunner`).
+
+### Changed
+- /raid-status sync reuses the freshly loaded seed document instead of issuing a second Mongo read when the snapshot is already current; a week change still enters the retry write path.
+
 ## 2026-07-08 (raid-check: sync gold-receive state with raid-status)
 
 ### Fixed

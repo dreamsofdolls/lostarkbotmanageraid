@@ -6,6 +6,57 @@
 // fully character/roster-bound (unbound value = 0), so auto gold-slot logic can
 // skip only those modes.
 const CHARACTER_BOUND_GOLD = Object.freeze({ factor: 1 });
+const NORMAL_MODE_KEY = "normal";
+const SOLO_MODE_KEY = "solo";
+
+function buildSoloMode(normalMode) {
+  return {
+    ...(normalMode || {}),
+    label: "Solo",
+    gold: { ...(normalMode?.gold || {}) },
+    baseModeKey: NORMAL_MODE_KEY,
+    manualOnly: true,
+  };
+}
+
+function installSoloModes(raidRequirements) {
+  for (const raid of Object.values(raidRequirements || {})) {
+    const normalMode = raid?.modes?.[NORMAL_MODE_KEY];
+    if (!normalMode || raid.modes[SOLO_MODE_KEY]) continue;
+    const { normal, ...otherModes } = raid.modes;
+    raid.modes = {
+      normal,
+      solo: buildSoloMode(normalMode),
+      ...otherModes,
+    };
+  }
+  return raidRequirements;
+}
+
+function normalizeModeKey(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isSoloModeKey(modeKey) {
+  return normalizeModeKey(modeKey) === SOLO_MODE_KEY;
+}
+
+function areEquivalentRaidModes(left, right) {
+  const a = normalizeModeKey(left);
+  const b = normalizeModeKey(right);
+  if (a === b) return true;
+  return (
+    (a === NORMAL_MODE_KEY && b === SOLO_MODE_KEY) ||
+    (a === SOLO_MODE_KEY && b === NORMAL_MODE_KEY)
+  );
+}
+
+function preserveManualRaidModePreference(storedModeKey, incomingModeKey) {
+  const stored = normalizeModeKey(storedModeKey);
+  const incoming = normalizeModeKey(incomingModeKey);
+  if (stored === SOLO_MODE_KEY && incoming === NORMAL_MODE_KEY) return SOLO_MODE_KEY;
+  return incoming || null;
+}
 
 const RAID_REQUIREMENTS = {
   armoche: {
@@ -47,6 +98,11 @@ const RAID_REQUIREMENTS = {
     },
   },
 };
+
+// Solo is derived instead of copied into every raid block: this temporary
+// mode shares Normal's gates, iLvl, gold, and bound split. `manualOnly`
+// prevents roster normalization from auto-selecting it.
+installSoloModes(RAID_REQUIREMENTS);
 
 function getGatesForRaid(raidKey) {
   const raid = RAID_REQUIREMENTS[raidKey];
@@ -150,7 +206,7 @@ function isGoldBound(raidKey, modeKey) {
 
 // Canonical progression order: raid groups follow their catalog declaration
 // order (Act 4 -> Kazeros -> Serca -> Horizon), and modes follow theirs
-// (normal -> hard -> nightmare). Used to keep raid dropdowns grouped by raid
+// (normal -> solo -> hard -> nightmare). Used to keep raid dropdowns grouped by raid
 // and ordered by difficulty instead of shuffling by pending count.
 const RAID_ORDER = Object.keys(RAID_REQUIREMENTS);
 
@@ -171,7 +227,10 @@ function compareRaidModeOrder(a, b) {
 }
 
 module.exports = {
+  NORMAL_MODE_KEY,
+  SOLO_MODE_KEY,
   RAID_REQUIREMENTS,
+  areEquivalentRaidModes,
   getRaidRequirementList,
   getRaidRequirementMap,
   getRaidPartySize,
@@ -183,6 +242,8 @@ module.exports = {
   getBoundGoldForGate,
   getGoldForRaid,
   isGoldBound,
+  isSoloModeKey,
+  preserveManualRaidModePreference,
   raidModeSortRank,
   compareRaidModeOrder,
 };

@@ -48,3 +48,18 @@ test("local-sync web server serves browser helper modules", async () => {
     await stop();
   }
 });
+
+test("local-sync preview escapes SQLite schema metadata before innerHTML", async () => {
+  const { baseUrl, stop } = await startTestServer();
+  try {
+    const resp = await fetch(`${baseUrl}/sync/js/sync/render/preview-renderer.js`);
+    assert.equal(resp.status, 200);
+    const body = await resp.text();
+    assert.match(
+      body,
+      /escapeHtml\(t\("preview\.schemaDebug", meta\.schemaDebug\)\)/
+    );
+  } finally {
+    await stop();
+  }
+});

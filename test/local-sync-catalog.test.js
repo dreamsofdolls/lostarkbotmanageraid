@@ -37,6 +37,8 @@ test("local-sync catalog exposes raid metadata used by the web preview", () => {
   assert.equal(catalog.raids.horizon.modes.normal.minItemLevel, 1700);
   assert.equal(catalog.raids.horizon.modes.hard.minItemLevel, 1720);
   assert.equal(catalog.raids.horizon.modes.nightmare.minItemLevel, 1750);
+  assert.equal(catalog.raids.armoche.modes.solo.label, "Solo");
+  assert.equal(catalog.raids.armoche.modes.solo.manualOnly, true);
   assert.deepEqual(
     catalog.bossToRaidGate.find(([boss]) => boss === "Witch of Agony, Serca"),
     ["Witch of Agony, Serca", { raidKey: "serca", gate: "G1" }]
@@ -54,6 +56,8 @@ test("local-sync catalog shares difficulty and class mappings", () => {
   assert.equal(normalizeDifficulty("Level 1"), "normal");
   assert.equal(normalizeDifficulty("level2"), "hard");
   assert.equal(normalizeDifficulty("L3"), "nightmare");
+  assert.equal(normalizeDifficulty("Solo"), "solo");
+  assert.equal(normalizeDifficulty("Solo Mode"), "solo");
   assert.equal(catalog.classesById["204"].label, "Bard");
   assert.equal(catalog.classesById["204"].icon, "bard");
 });

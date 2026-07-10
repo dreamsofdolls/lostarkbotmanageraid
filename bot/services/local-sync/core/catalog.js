@@ -17,6 +17,8 @@ const { CLASS_ID_TO_BIBLE_ID, getClassInfoByNumericId } = require("../../../mode
 // source instead of drifting when LOA Logs changes wording.
 const DIFFICULTY_TO_MODE_KEY = Object.freeze({
   normal: "normal",
+  solo: "solo",
+  "solo mode": "solo",
   "level 1": "normal",
   level1: "normal",
   l1: "normal",
@@ -35,7 +37,7 @@ const DIFFICULTY_TO_MODE_KEY = Object.freeze({
 /**
  * Map a LOA Logs `difficulty` value to Artist's internal modeKey.
  * @param {string} raw - LOA Logs raw difficulty string (e.g. "Hard")
- * @returns {"normal"|"hard"|"nightmare"|null} normalized mode key, or null when unrecognized
+ * @returns {"normal"|"solo"|"hard"|"nightmare"|null} normalized mode key, or null when unrecognized
  */
 function normalizeDifficulty(raw) {
   const text = String(raw || "").trim().toLowerCase();
@@ -59,6 +61,8 @@ function buildLocalSyncCatalog() {
       modes[modeKey] = {
         label: mode.label,
         minItemLevel: Number(mode.minItemLevel) || 0,
+        baseModeKey: mode.baseModeKey || null,
+        manualOnly: mode.manualOnly === true,
       };
     }
     raids[raidKey] = {

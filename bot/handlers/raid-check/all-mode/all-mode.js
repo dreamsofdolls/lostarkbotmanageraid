@@ -2,6 +2,8 @@
 
 const {
   buildNoticeEmbed,
+  deferEphemeralReply,
+  editNotice,
   followUpNotice,
   replyNotice,
   UI,
@@ -9,7 +11,9 @@ const {
 const { firstSelectValue } = require("../../../utils/discord/component-values");
 const { t, getUserLanguage } = require("../../../services/i18n");
 const { createTeamsViewUi } = require("../views/teams-view");
-const { computeAllModePendingAggregate } = require("./all-mode-aggregate");
+const {
+  createAllModePendingAggregateCache,
+} = require("./all-mode-aggregate");
 const {
   addAllModeActionButtons,
   buildAllModeRosterRefreshRow,
@@ -98,7 +102,6 @@ function createAllModeHandler({
     EmbedBuilder,
     ActionRowBuilder,
     StringSelectMenuBuilder,
-    MessageFlags,
     UI,
     RaidEvent,
     User,
@@ -108,31 +111,41 @@ function createAllModeHandler({
   });
 
   async function handleRaidCheckAllCommand(interaction) {
-    const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
+    const started = Date.now();
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const langPromise = getUserLanguage(interaction.user.id, { UserModel: User });
     if (!isRaidLeader(interaction)) {
-      await replyNotice(interaction, EmbedBuilder, {
-        type: "lock",
-        title: t("raid-check.auth.managerOnlyTitle", lang),
-        description: t("raid-check.auth.managerOnlyDescription", lang),
+      const lang = await langPromise;
+      await interaction.editReply({
+        content: null,
+        embeds: [
+          buildNoticeEmbed(EmbedBuilder, {
+            type: "lock",
+            title: t("raid-check.auth.managerOnlyTitle", lang),
+            description: t("raid-check.auth.managerOnlyDescription", lang),
+          }),
+        ],
       });
       return;
     }
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const started = Date.now();
+    const [lang, allModeUsers] = await Promise.all([
+      langPromise,
+      loadAllModeUsers({
+        User,
+        ensureFreshWeek,
+        RAID_CHECK_USER_QUERY_FIELDS,
+        raidCheckRefreshLimiter,
+        loadFreshUserSnapshotForRaidViews,
+        shouldLoadFreshUserSnapshotForRaidViews,
+      }),
+    ]);
     const {
       users,
       refreshQueued,
       freshBypass,
       canRefreshFreshData,
-    } = await loadAllModeUsers({
-      User,
-      ensureFreshWeek,
-      RAID_CHECK_USER_QUERY_FIELDS,
-      raidCheckRefreshLimiter,
-      loadFreshUserSnapshotForRaidViews,
-      shouldLoadFreshUserSnapshotForRaidViews,
-    });
+    } = allModeUsers;
     if (canRefreshFreshData) {
       console.log(
         `[raid-check all] refreshQueued=${refreshQueued} freshBypass=${freshBypass}`
@@ -185,6 +198,11 @@ function createAllModeHandler({
       filteredIndices,
       totalPages,
     });
+    const pendingAggregateCache = createAllModePendingAggregateCache({
+      pagesData,
+      getStatusRaidsForCharacter,
+      lang,
+    });
     const { buildRaidPage, buildTaskPage } = createAllModePageRenderers({
       EmbedBuilder,
       UI,
@@ -192,7 +210,7 @@ function createAllModeHandler({
       buildAccountPageEmbed,
       buildStatusFooterText,
       getState: getRenderState,
-      getStatusRaidsForCharacter,
+      getStatusRaidsForCharacter: pendingAggregateCache.getRaidsForCharacter,
       isManagerId,
       lang,
       pagesData,
@@ -212,6 +230,7 @@ function createAllModeHandler({
         const freshAccount = userDoc.accounts[page.accountIdx];
         if (freshAccount) page.account = freshAccount;
       }
+      pendingAggregateCache.clear();
     };
 
     const applyUserFilter = (pickedValue) => {
@@ -230,13 +249,7 @@ function createAllModeHandler({
     };
 
     const computePendingAggregate = ({ raidFilter, userFilter }) =>
-      computeAllModePendingAggregate({
-        pagesData,
-        raidFilter,
-        userFilter,
-        getStatusRaidsForCharacter,
-        lang,
-      });
+      pendingAggregateCache.compute({ raidFilter, userFilter });
 
     const buildButtonRow = (disabled) => {
       const row = buildPaginationRow(currentLocalPage, filteredIndices.length, disabled, {
@@ -442,8 +455,12 @@ function createAllModeHandler({
       });
       if (component.user.id !== interaction.user.id) {
         if (route) {
+          const deferred = await deferEphemeralReply(component)
+            .then(() => true)
+            .catch(() => false);
+          if (!deferred) return;
           const clickerLang = await getUserLanguage(component.user.id, { UserModel: User });
-          await replyNotice(component, EmbedBuilder, {
+          await editNotice(component, EmbedBuilder, {
             type: "lock",
             title: t("raid-check.notice.sessionLockTitle", clickerLang),
             description: t("raid-check.notice.sessionLockDescription", clickerLang),

@@ -1,6 +1,9 @@
 "use strict";
 
 const { normalizeDifficultyToModeKey } = require("../../bible/log-utils");
+const {
+  preserveManualRaidModePreference,
+} = require("../../../../models/Raid");
 
 function createAutoManageReconciler({
   ensureAssignedRaids,
@@ -30,8 +33,12 @@ function createAutoManageReconciler({
       const mapping = getRaidGateForBoss(log.boss);
       if (!mapping) continue;
 
-      const modeKey = normalizeDifficultyToModeKey(log.difficulty);
-      if (!modeKey) continue;
+      const incomingModeKey = normalizeDifficultyToModeKey(log.difficulty);
+      if (!incomingModeKey) continue;
+      const modeKey = preserveManualRaidModePreference(
+        assignedRaids[mapping.raidKey]?.modeKey,
+        incomingModeKey
+      );
 
       const raidMeta = RAID_REQUIREMENT_MAP[`${mapping.raidKey}_${modeKey}`];
       if (!raidMeta) continue;

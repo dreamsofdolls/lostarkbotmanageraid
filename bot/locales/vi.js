@@ -358,6 +358,7 @@ module.exports = {
       horizon: "Horizon",
     },
     modes: {
+      solo: "Solo",
       normal: "Normal",
       hard: "Hard",
       nightmare: "Nightmare",

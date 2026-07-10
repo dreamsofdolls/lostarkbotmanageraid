@@ -89,6 +89,34 @@ test("preview buckets get class info from backend catalog", async () => {
   assert.equal(bucket.classIcon, "/sync/class-icons/bard.png");
 });
 
+test("preview renders incoming Normal clears as Solo for a stored Solo raid", async () => {
+  const { bucketize, buildDiff, buildActionableBucketKeySet } = await loadPreviewUtils();
+  const buckets = bucketize([
+    ["Armoche, Sentinel of the Abyss", "Normal", 1, "Aki", 1, 1000, ""],
+  ]);
+  const diff = buildDiff(makeRoster({
+    name: "Aki",
+    class: "Bard",
+    itemLevel: 1700,
+    assignedRaids: {
+      armoche: {
+        modeKey: "solo",
+        G1: { completedDate: null, difficulty: "Solo" },
+        G2: { completedDate: null, difficulty: "Solo" },
+      },
+    },
+  }), buckets);
+
+  assert.equal(diff[0].characters[0].cells.length, 1);
+  const [cell] = diff[0].characters[0].cells;
+  assert.equal(cell.raidKey, "armoche");
+  assert.equal(cell.modeKey, "solo");
+  assert.equal(cell.sourceModeKey, "normal");
+  const actionableKeys = buildActionableBucketKeySet(diff);
+  assert.equal(actionableKeys.has("aki::armoche::solo"), true);
+  assert.equal(actionableKeys.has("aki::armoche::normal"), true);
+});
+
 test("currentWeeklyResetStartMs follows Wednesday 17:00 VN reset boundary", async () => {
   const { currentWeeklyResetStartMs } = await loadPreviewUtils();
   assert.equal(

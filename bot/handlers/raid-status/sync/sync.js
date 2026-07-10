@@ -74,7 +74,7 @@ function createRaidStatusSync(deps) {
     const piggybackOutcome = createOutcome();
 
     try {
-      ensureFreshWeek(seedDoc);
+      const didFreshenSeedWeek = ensureFreshWeek(seedDoc);
 
       let autoManagePromise = Promise.resolve(null);
       let autoManageWeekResetStart = null;
@@ -154,35 +154,45 @@ function createRaidStatusSync(deps) {
         // amplified noise on every slow bible response.
       }
 
-      userDoc = await saveWithRetry(async () => {
-        const doc = await User.findOne({ discordId });
-        if (!doc) return null;
+      const hasCollectedRefresh =
+        Array.isArray(refreshCollected) && refreshCollected.length > 0;
+      // The common read-only path can render from the seed snapshot. Enter the
+      // retry loop only when this request has state that may need persistence.
+      const needsFreshWrite =
+        didFreshenSeedWeek || hasCollectedRefresh || autoManageBibleHit;
+      if (!needsFreshWrite) {
+        userDoc = toPlainUserDoc(seedDoc);
+      } else {
+        userDoc = await saveWithRetry(async () => {
+          const doc = await User.findOne({ discordId });
+          if (!doc) return null;
 
-        const didFreshenWeek = ensureFreshWeek(doc);
-        const didRefresh = applyStaleAccountRefreshes(doc, refreshCollected);
+          const didFreshenWeek = ensureFreshWeek(doc);
+          const didRefresh = applyStaleAccountRefreshes(doc, refreshCollected);
 
-        let didAutoManage = false;
-        if (autoManageCollected && doc.autoManageEnabled) {
-          const autoReport = applyAutoManageCollected(
-            doc,
-            autoManageWeekResetStart,
-            autoManageCollected
-          );
-          const now = Date.now();
-          stampAutoManageAttemptFromReport(doc, autoReport, now);
-          const newGates = countAppliedAutoManageGates(autoReport);
-          piggybackOutcome.newGatesApplied = newGates;
-          piggybackOutcome.outcome =
-            newGates > 0 ? "applied" : "synced-no-new";
-          didAutoManage = true;
-        } else if (autoManageBibleHit) {
-          doc.lastAutoManageAttemptAt = Date.now();
-          didAutoManage = true;
-        }
+          let didAutoManage = false;
+          if (autoManageCollected && doc.autoManageEnabled) {
+            const autoReport = applyAutoManageCollected(
+              doc,
+              autoManageWeekResetStart,
+              autoManageCollected
+            );
+            const now = Date.now();
+            stampAutoManageAttemptFromReport(doc, autoReport, now);
+            const newGates = countAppliedAutoManageGates(autoReport);
+            piggybackOutcome.newGatesApplied = newGates;
+            piggybackOutcome.outcome =
+              newGates > 0 ? "applied" : "synced-no-new";
+            didAutoManage = true;
+          } else if (autoManageBibleHit) {
+            doc.lastAutoManageAttemptAt = Date.now();
+            didAutoManage = true;
+          }
 
-        if (didFreshenWeek || didRefresh || didAutoManage) await doc.save();
-        return toPlainUserDoc(doc);
-      });
+          if (didFreshenWeek || didRefresh || didAutoManage) await doc.save();
+          return toPlainUserDoc(doc);
+        });
+      }
     } catch (err) {
       console.error("[raid-status] lazy refresh failed:", err?.message || err);
       if (autoManageGuard?.acquired) {

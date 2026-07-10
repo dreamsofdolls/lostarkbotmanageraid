@@ -1,6 +1,7 @@
 "use strict";
 
 const { t, getUserLanguage } = require("../../../../services/i18n");
+const { deferEphemeralReply } = require("../../../../utils/raid/common/shared");
 const { resolveEditableTaskWriteAccess } = require("../write-access");
 const {
   getCharacterDisplayName,
@@ -52,11 +53,12 @@ function createClearPreviewHandler({
   ButtonStyle,
   User,
   resolveTaskWriteTarget,
-  replyTaskNotice,
-  replyViewOnlyShareNotice,
+  editTaskNotice,
+  editViewOnlyShareNotice,
 }) {
   return async function handleClear(interaction) {
     const executorId = interaction.user.id;
+    await deferEphemeralReply(interaction);
     const lang = await getUserLanguage(executorId, { UserModel: User });
     const rosterName = interaction.options.getString("roster", true);
     const characterName = interaction.options.getString("character", true);
@@ -67,7 +69,7 @@ function createClearPreviewHandler({
       commandName: "clear",
       logKind: "share-preview",
       resolveTaskWriteTarget,
-      denyViewOnly: (writeTarget) => replyViewOnlyShareNotice(interaction, writeTarget, lang),
+      denyViewOnly: (writeTarget) => editViewOnlyShareNotice(interaction, writeTarget, lang),
     });
     if (!access.ok) return;
 
@@ -77,7 +79,7 @@ function createClearPreviewHandler({
       : null;
     const notice = buildClearPreviewNotice(found, characterName, lang);
     if (!found || !Array.isArray(found.character?.sideTasks) || found.character.sideTasks.length === 0) {
-      await replyTaskNotice(interaction, notice);
+      await editTaskNotice(interaction, notice);
       return;
     }
 
@@ -90,7 +92,7 @@ function createClearPreviewHandler({
       lang,
     });
 
-    await replyTaskNotice(interaction, notice, {
+    await editTaskNotice(interaction, notice, {
       components: [confirmRow],
     });
   };

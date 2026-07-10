@@ -1,4 +1,8 @@
-const { buildNoticeEmbed } = require("../../utils/raid/common/shared");
+const {
+  buildNoticeEmbed,
+  deferEphemeralReply,
+  editEmbed,
+} = require("../../utils/raid/common/shared");
 const {
   buildRosterAutocompleteChoices,
   getRosterMatches,
@@ -10,7 +14,6 @@ const { t, getUserLanguage } = require("../../services/i18n");
 function createRemoveRosterCommand(deps) {
   const {
     EmbedBuilder,
-    MessageFlags,
     UI,
     User,
     saveWithRetry,
@@ -84,34 +87,31 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
   }
   async function handleRemoveRosterCommand(interaction) {
     const discordId = interaction.user.id;
-    const lang = await getUserLanguage(discordId, { UserModel: User });
     const rosterName = interaction.options.getString("roster", true).trim();
     const action = interaction.options.getString("action", true);
     const characterName = (interaction.options.getString("character") || "").trim();
+    await deferEphemeralReply(interaction);
+    const lang = await getUserLanguage(discordId, { UserModel: User });
     if (action !== "remove_roster" && action !== "remove_char") {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-remove-roster.invalid.actionTitle", lang),
-            description: t("raid-remove-roster.invalid.actionDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
-      });
+      await editEmbed(
+        interaction,
+        buildNoticeEmbed(EmbedBuilder, {
+          type: "warn",
+          title: t("raid-remove-roster.invalid.actionTitle", lang),
+          description: t("raid-remove-roster.invalid.actionDescription", lang),
+        })
+      );
       return;
     }
     if (action === "remove_char" && !characterName) {
-      await interaction.reply({
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "warn",
-            title: t("raid-remove-roster.invalid.missingCharTitle", lang),
-            description: t("raid-remove-roster.invalid.missingCharDescription", lang),
-          }),
-        ],
-        flags: MessageFlags.Ephemeral,
-      });
+      await editEmbed(
+        interaction,
+        buildNoticeEmbed(EmbedBuilder, {
+          type: "warn",
+          title: t("raid-remove-roster.invalid.missingCharTitle", lang),
+          description: t("raid-remove-roster.invalid.missingCharDescription", lang),
+        })
+      );
       return;
     }
     let replyEmbed = null;
@@ -248,7 +248,7 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
       replyEmbed = embed;
     });
     if (replyEmbed) {
-      await interaction.reply({ embeds: [replyEmbed], flags: MessageFlags.Ephemeral });
+      await editEmbed(interaction, replyEmbed);
     }
   }
   return {

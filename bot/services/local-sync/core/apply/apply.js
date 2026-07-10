@@ -17,6 +17,7 @@ const {
 } = require("./apply-targets");
 const {
   classifyBucketAgainstRoster,
+  resolveBucketModePreference,
 } = require("./apply-roster");
 const {
   appendPreflightDecision,
@@ -128,7 +129,8 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
   const pendingWrites = [];
   const useBatchApply = typeof applyRaidSetBatchForDiscordId === "function";
 
-  for (const bucket of buckets) {
+  for (const incomingBucket of buckets) {
+    const bucket = resolveBucketModePreference(userDoc, incomingBucket);
     const raidMeta = reqMap[`${bucket.raidKey}_${bucket.modeKey}`];
     if (!raidMeta) {
       appendMissingRequirementMeta(lists.unmapped, bucket);

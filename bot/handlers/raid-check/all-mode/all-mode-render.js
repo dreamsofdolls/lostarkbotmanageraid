@@ -8,6 +8,7 @@ const {
 } = require("../../../utils/raid/tasks/shared-tasks");
 const { isGoldProgressRaid } = require("../../../utils/raid/common/character");
 const { t } = require("../../../services/i18n");
+const { isRaidCheckVisibleRaid } = require("../visibility");
 
 function displayNameForUser(userDoc, meta) {
   return (
@@ -38,7 +39,7 @@ function createAllModePageRenderers({
     const rawGetRaidsFor = (character) => {
       let result = raidsCache.get(character);
       if (!result) {
-        result = getStatusRaidsForCharacter(character);
+        result = getStatusRaidsForCharacter(character).filter(isRaidCheckVisibleRaid);
         raidsCache.set(character, result);
       }
       return result;

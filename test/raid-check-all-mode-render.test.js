@@ -89,11 +89,12 @@ test("all-mode task page renders current account identity and read-only footer",
   assert.ok(embed.data.footer.text.length > 0);
 });
 
-test("all-mode raid page displays gold-locked raids but excludes them from progress counts", () => {
+test("all-mode raid page displays gold-locked raids but hides Solo raids entirely", () => {
   const character = {
     name: "Goldie",
     raids: [
       { raidKey: "act4", modeKey: "hard", isCompleted: false, goldReceives: true },
+      { raidKey: "kazeros", modeKey: "solo", isCompleted: false, goldReceives: true },
       { raidKey: "horizon", modeKey: "normal", isCompleted: false, goldReceives: false },
     ],
   };

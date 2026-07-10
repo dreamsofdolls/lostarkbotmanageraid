@@ -55,6 +55,7 @@ test("normalizeLocalSyncDifficulty - common variants map to internal modeKey", (
   assert.equal(normalizeLocalSyncDifficulty("Trial"), "nightmare");
   assert.equal(normalizeLocalSyncDifficulty("Inferno"), "nightmare");
   assert.equal(normalizeLocalSyncDifficulty("Nightmare"), "nightmare");
+  assert.equal(normalizeLocalSyncDifficulty("Solo"), "solo");
 });
 
 test("normalizeLocalSyncDifficulty - unknown returns null (caller decides default)", () => {
@@ -245,6 +246,34 @@ test("applyLocalSyncDeltas - lower-mode clear after reset is sent as the incomin
   assert.equal(result.applied[0].modeKey, "normal");
   assert.equal(applyStub.calls.length, 1);
   assert.equal(applyStub.calls[0].raidMeta.modeKey, "normal");
+  assert.deepEqual(applyStub.calls[0].effectiveGates, ["G1", "G2"]);
+});
+
+test("applyLocalSyncDeltas - stored Solo preference remaps incoming Normal clears to Solo", async () => {
+  const applyStub = makeApplyStub(() => ({ matched: true, updated: true, displayName: "Aki" }));
+  const userDoc = makeUserDoc([
+    {
+      id: "c1",
+      name: "Aki",
+      class: "Artist",
+      itemLevel: 1700,
+      assignedRaids: {
+        armoche: {
+          modeKey: "solo",
+          G1: { difficulty: "Solo", completedDate: null },
+          G2: { difficulty: "Solo", completedDate: null },
+        },
+      },
+    },
+  ]);
+
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Armoche, Sentinel of the Abyss", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 1 },
+  ], makeDeps(applyStub, { userDoc }));
+
+  assert.equal(result.applied.length, 1);
+  assert.equal(result.applied[0].modeKey, "solo");
+  assert.equal(applyStub.calls[0].raidMeta.modeKey, "solo");
   assert.deepEqual(applyStub.calls[0].effectiveGates, ["G1", "G2"]);
 });
 
