@@ -4,6 +4,26 @@ const { compareRaidModeOrder } = require("../../../models/Raid");
 
 const FILTER_ALL = "__all__";
 const FILTER_ALL_RAIDS = "__all_raids__";
+const FILTER_STATUS = Object.freeze({
+  all: "all",
+  pending: "pending",
+  success: "success",
+});
+const FILTER_STATUS_VALUES = new Set(Object.values(FILTER_STATUS));
+
+function normalizeAllModeStatusFilter(value) {
+  return FILTER_STATUS_VALUES.has(value)
+    ? value
+    : FILTER_STATUS.all;
+}
+
+function raidMatchesStatusFilter(raid, filterStatus) {
+  const status = normalizeAllModeStatusFilter(filterStatus);
+  if (status === FILTER_STATUS.all) return true;
+
+  const isCompleted = raid?.isCompleted === true;
+  return status === FILTER_STATUS.success ? isCompleted : !isCompleted;
+}
 
 function buildAllModeUserFilterRow({
   ActionRowBuilder,
@@ -131,9 +151,52 @@ function buildAllModeRaidFilterRow({
   );
 }
 
+function buildAllModeStatusFilterRow({
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
+  disabled,
+  filterStatus,
+  lang,
+  t,
+}) {
+  const activeStatus = normalizeAllModeStatusFilter(filterStatus);
+  const options = [
+    {
+      label: t("raid-check.filter.statusAll", lang),
+      value: FILTER_STATUS.all,
+      emoji: "\u{1f310}",
+    },
+    {
+      label: t("raid-check.filter.statusPending", lang),
+      value: FILTER_STATUS.pending,
+      emoji: "\u23f3",
+    },
+    {
+      label: t("raid-check.filter.statusSuccess", lang),
+      value: FILTER_STATUS.success,
+      emoji: "\u2705",
+    },
+  ].map((option) => ({
+    ...option,
+    default: option.value === activeStatus,
+  }));
+
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("raid-check-all-filter:status")
+      .setPlaceholder(t("raid-check.filter.statusPlaceholder", lang))
+      .setDisabled(disabled)
+      .addOptions(options)
+  );
+}
+
 module.exports = {
   FILTER_ALL,
   FILTER_ALL_RAIDS,
+  FILTER_STATUS,
   buildAllModeRaidFilterRow,
+  buildAllModeStatusFilterRow,
   buildAllModeUserFilterRow,
+  normalizeAllModeStatusFilter,
+  raidMatchesStatusFilter,
 };

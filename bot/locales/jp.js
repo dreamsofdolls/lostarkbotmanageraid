@@ -871,6 +871,10 @@ module.exports = {
     filter: {
       userPlaceholder: "ユーザーへジャンプ / フィルタ...",
       raidPlaceholder: "レイドで絞り込む...",
+      statusPlaceholder: "レイド状態で絞り込む...",
+      statusAll: "すべて",
+      statusPending: "未完了",
+      statusSuccess: "完了",
       allUsersDone: "全ユーザー (完了♪)",
       allUsersPending: "全ユーザー (未完了 {n} 件)",
       userDone: "{name} (完了♪)",

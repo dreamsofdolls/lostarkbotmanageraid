@@ -894,6 +894,10 @@ module.exports = {
     filter: {
       userPlaceholder: "Jump to user / Lọc theo user...",
       raidPlaceholder: "Filter by raid / Lọc theo raid...",
+      statusPlaceholder: "Lọc theo trạng thái raid...",
+      statusAll: "Tất cả",
+      statusPending: "Pending",
+      statusSuccess: "Success",
       allUsersDone: "All users (DONE)",
       allUsersPending: "All users ({n} pending)",
       userDone: "{name} (DONE)",

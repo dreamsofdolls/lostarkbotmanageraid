@@ -9,6 +9,11 @@ const {
 const { isGoldProgressRaid } = require("../../../utils/raid/common/character");
 const { t } = require("../../../services/i18n");
 const { isRaidCheckVisibleRaid } = require("../visibility");
+const {
+  FILTER_STATUS,
+  normalizeAllModeStatusFilter,
+  raidMatchesStatusFilter,
+} = require("./all-mode-filters");
 
 function displayNameForUser(userDoc, meta) {
   return (
@@ -34,7 +39,8 @@ function createAllModePageRenderers({
   summarizeRaidProgress,
   truncateText,
 }) {
-  function raidsForPage(userDoc, filterRaidId) {
+  function raidsForPage(userDoc, filterRaidId, filterStatus) {
+    const activeStatus = normalizeAllModeStatusFilter(filterStatus);
     const raidsCache = new Map();
     const rawGetRaidsFor = (character) => {
       let result = raidsCache.get(character);
@@ -44,12 +50,12 @@ function createAllModePageRenderers({
       }
       return result;
     };
-    const getRaidsFor = filterRaidId
-      ? (character) =>
-          rawGetRaidsFor(character).filter(
-            (raid) => `${raid.raidKey}:${raid.modeKey}` === filterRaidId
-          )
-      : rawGetRaidsFor;
+    const getRaidsFor = (character) =>
+      rawGetRaidsFor(character).filter(
+        (raid) =>
+          (!filterRaidId || `${raid.raidKey}:${raid.modeKey}` === filterRaidId) &&
+          raidMatchesStatusFilter(raid, activeStatus)
+      );
     const getProgressRaidsFor = (character) => getRaidsFor(character).filter(isGoldProgressRaid);
 
     const userAccounts = Array.isArray(userDoc.accounts) ? userDoc.accounts : [];
@@ -74,14 +80,22 @@ function createAllModePageRenderers({
 
   function buildRaidPage(pageIndex) {
     const { userDoc, account } = pagesData[pageIndex];
-    const { filterRaidId, filterUserId, currentLocalPage, filteredIndices, totalPages } = getState();
+    const {
+      filterRaidId,
+      filterStatus,
+      filterUserId,
+      currentLocalPage,
+      filteredIndices,
+      totalPages,
+    } = getState();
+    const activeStatus = normalizeAllModeStatusFilter(filterStatus);
     const {
       allRaidEntries,
       getRaidsFor,
       getProgressRaidsFor,
       userAccounts,
       userTotalChars,
-    } = raidsForPage(userDoc, filterRaidId);
+    } = raidsForPage(userDoc, filterRaidId, activeStatus);
     const globalTotals = {
       characters: userTotalChars,
       progress: summarizeRaidProgress(allRaidEntries),
@@ -101,7 +115,12 @@ function createAllModePageRenderers({
       globalTotals,
       getRaidsFor,
       userMeta,
-      { hideIneligibleChars: !!filterRaidId, getProgressRaidsFor, lang }
+      {
+        hideIneligibleChars:
+          !!filterRaidId || activeStatus !== FILTER_STATUS.all,
+        getProgressRaidsFor,
+        lang,
+      }
     );
 
     if (isManagerId && isManagerId(userDoc.discordId)) {

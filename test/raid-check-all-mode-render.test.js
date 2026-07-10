@@ -148,3 +148,61 @@ test("all-mode raid page displays gold-locked raids but hides Solo raids entirel
   assert.deepEqual(capturedGlobalTotals.progress, { completed: 0, total: 1 });
   assert.equal(embed.data.footer.text, "0/1");
 });
+
+test("all-mode raid page applies Success status per raid entry", () => {
+  const mixed = {
+    name: "Mixed",
+    raids: [
+      { raidKey: "act4", modeKey: "hard", isCompleted: false, goldReceives: true },
+      { raidKey: "kazeros", modeKey: "hard", isCompleted: true, goldReceives: true },
+    ],
+  };
+  const pendingOnly = {
+    name: "PendingOnly",
+    raids: [
+      { raidKey: "serca", modeKey: "hard", isCompleted: false, goldReceives: true },
+    ],
+  };
+  const account = { accountName: "Roster", characters: [mixed, pendingOnly] };
+  let captured = null;
+
+  const { buildRaidPage } = createAllModePageRenderers({
+    EmbedBuilder: FakeEmbedBuilder,
+    UI: { icons: { done: "done", pending: "pending", reset: "reset" } },
+    authorMeta: new Map(),
+    buildAccountPageEmbed: (currentAccount, pageIndex, totalPages, globalTotals, getRaidsFor, userMeta, options) => {
+      captured = {
+        mixed: getRaidsFor(mixed),
+        pendingOnly: getRaidsFor(pendingOnly),
+        globalTotals,
+        hideIneligibleChars: options.hideIneligibleChars,
+      };
+      return new FakeEmbedBuilder().setTitle(currentAccount.accountName);
+    },
+    buildStatusFooterText: () => "footer",
+    getState: () => ({
+      currentLocalPage: 0,
+      filterRaidId: null,
+      filterStatus: "success",
+      filterUserId: null,
+      filteredIndices: [0],
+      totalPages: 1,
+    }),
+    getStatusRaidsForCharacter: (character) => character.raids,
+    isManagerId: () => false,
+    lang: "en",
+    pagesData: [{ userDoc: { discordId: "u1", accounts: [account] }, account }],
+    summarizeRaidProgress: (entries) => ({
+      completed: entries.filter((entry) => entry.isCompleted).length,
+      total: entries.length,
+    }),
+    truncateText: (value) => String(value),
+  });
+
+  buildRaidPage(0);
+
+  assert.deepEqual(captured.mixed.map((raid) => raid.raidKey), ["kazeros"]);
+  assert.deepEqual(captured.pendingOnly, []);
+  assert.deepEqual(captured.globalTotals.progress, { completed: 1, total: 1 });
+  assert.equal(captured.hideIneligibleChars, true);
+});

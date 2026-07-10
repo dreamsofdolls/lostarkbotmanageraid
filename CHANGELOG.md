@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-07-08 (raid-check: all-mode status filter)
+
+### Added
+- /raid-check all-mode gains a status filter (All / Pending / Success). A raid with some but not all gates cleared reads as Pending; only a full clear is Success. It composes with the existing user and raid filters, and an active status filter hides ineligible characters the same way an active raid filter does. Progress counts still exclude gold-locked raids, and Solo raids stay hidden.
+
 ## 2026-07-08 (raid: Solo mode, raid-check visibility, interaction-ack hardening)
 
 ### Added
