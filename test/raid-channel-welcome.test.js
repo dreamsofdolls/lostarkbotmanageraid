@@ -64,4 +64,11 @@ for (const localeCode of Object.keys(TRANSLATIONS)) {
       `[${localeCode}] welcome embed total ${totalValueChars + totalNameChars} chars - approaching Discord 6000 cap`
     );
   });
+
+  test(`welcome embed (${localeCode}): documents raid-channel reset aliases`, () => {
+    const examples = TRANSLATIONS[localeCode]?.welcome?.examplesValue;
+    const aliases = TRANSLATIONS[localeCode]?.welcome?.aliasesValue;
+    assert.match(Array.isArray(examples) ? examples.join("\n") : String(examples || ""), /act4 reset/i);
+    assert.match(Array.isArray(aliases) ? aliases.join("\n") : String(aliases || ""), /`reset`.*`rs`/i);
+  });
 }

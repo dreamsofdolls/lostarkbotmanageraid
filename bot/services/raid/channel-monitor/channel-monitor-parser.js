@@ -44,6 +44,11 @@ const DIFFICULTY_ALIASES = new Map([
   ["ナイトメア", "nightmare"],
 ]);
 
+const ACTION_ALIASES = new Map([
+  ["reset", "reset"],
+  ["rs", "reset"],
+]);
+
 const GATE_TOKEN_RE = /^g([1-9])$/;
 
 function normalizeRaidChannelContent(content) {
@@ -73,6 +78,7 @@ function parseRaidMessage(content) {
   const raidSet = new Set();
   const diffSet = new Set();
   const gateSet = new Set();
+  const actionSet = new Set();
   const leftover = [];
 
   for (const tok of tokens) {
@@ -84,6 +90,10 @@ function parseRaidMessage(content) {
       diffSet.add(DIFFICULTY_ALIASES.get(tok));
       continue;
     }
+    if (ACTION_ALIASES.has(tok)) {
+      actionSet.add(ACTION_ALIASES.get(tok));
+      continue;
+    }
     const gateMatch = tok.match(GATE_TOKEN_RE);
     if (gateMatch) {
       gateSet.add(`G${gateMatch[1]}`);
@@ -92,21 +102,31 @@ function parseRaidMessage(content) {
     leftover.push(tok);
   }
 
-  if (raidSet.size === 0 || diffSet.size === 0) return null;
+  if (raidSet.size === 0) return null;
   if (leftover.length === 0) return null;
   if (raidSet.size > 1) return { error: "multi-raid", raids: [...raidSet] };
   if (diffSet.size > 1) return { error: "multi-difficulty", difficulties: [...diffSet] };
   if (gateSet.size > 1) return { error: "multi-gate", gates: [...gateSet] };
 
+  const action = [...actionSet][0] || null;
+  if (action === "reset") {
+    if (diffSet.size > 0) return { error: "reset-with-difficulty" };
+    if (gateSet.size > 0) return { error: "reset-with-gate" };
+  } else if (diffSet.size === 0) {
+    return null;
+  }
+
   return {
     raidKey: [...raidSet][0],
-    modeKey: [...diffSet][0],
+    modeKey: [...diffSet][0] || null,
+    ...(action ? { action } : {}),
     charNames: [...new Set(leftover.filter(Boolean))],
     gate: [...gateSet][0] || null,
   };
 }
 
 module.exports = {
+  ACTION_ALIASES,
   DIFFICULTY_ALIASES,
   RAID_ALIASES,
   normalizeRaidChannelContent,

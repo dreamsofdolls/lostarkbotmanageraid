@@ -110,6 +110,10 @@ function getGatesForRaid(raidKey) {
   return [...raid.gates];
 }
 
+function getRaidLabel(raidKey) {
+  return RAID_REQUIREMENTS[raidKey]?.label || String(raidKey || "");
+}
+
 function getRaidPartySize(raidKey) {
   const size = Number(RAID_REQUIREMENTS[raidKey]?.partySize);
   if (size === 4 || size === 8) return size;
@@ -233,6 +237,7 @@ module.exports = {
   areEquivalentRaidModes,
   getRaidRequirementList,
   getRaidRequirementMap,
+  getRaidLabel,
   getRaidPartySize,
   getGatesForRaid,
   getRaidGateForBoss,

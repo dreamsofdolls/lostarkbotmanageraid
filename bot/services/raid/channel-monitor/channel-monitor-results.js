@@ -5,12 +5,15 @@ const { t: translate } = require("../../i18n");
 function summarizeRaidChannelResults(results) {
   const list = Array.isArray(results) ? results : [];
   const notFoundResults = list.filter((r) => !r.matched && !r.error);
+  const alreadyResults = list.filter(
+    (r) => r.matched && !r.updated && (r.alreadyComplete || r.alreadyReset)
+  );
   const ineligibleResults = list.filter(
-    (r) => r.matched && !r.updated && !r.alreadyComplete
+    (r) => r.matched && !r.updated && !r.alreadyComplete && !r.alreadyReset
   );
   const errorResults = list.filter((r) => r.error);
   const successCount = list.filter((r) => r.updated).length;
-  const alreadyCount = list.filter((r) => r.alreadyComplete).length;
+  const alreadyCount = alreadyResults.length;
 
   return {
     hadNoRoster: list.some((r) => r.noRoster),
@@ -83,6 +86,7 @@ function buildRaidChannelDmFallbackText({
   results,
   raidMeta,
   effectiveGates,
+  statusType = "complete",
   authorLang,
   UI,
   userId,
@@ -97,24 +101,25 @@ function buildRaidChannelDmFallbackText({
     .map((r) => `**${r.displayName || r.charName}**`)
     .join(", ");
   const alreadyNames = results
-    .filter((r) => r.alreadyComplete)
+    .filter((r) => statusType === "reset" ? r.alreadyReset : r.alreadyComplete)
     .map((r) => `**${r.displayName || r.charName}**`)
     .join(", ");
+  const isReset = statusType === "reset";
   const parts = [
     doneNames &&
-      t("text-parser.dmFallbackMarkDone", authorLang, {
+      t(isReset ? "text-parser.dmFallbackReset" : "text-parser.dmFallbackMarkDone", authorLang, {
         scope,
         names: doneNames,
       }),
     alreadyNames &&
-      t("text-parser.dmFallbackAlready", authorLang, {
+      t(isReset ? "text-parser.dmFallbackAlreadyReset" : "text-parser.dmFallbackAlready", authorLang, {
         scope,
         names: alreadyNames,
       }),
   ].filter(Boolean);
 
   return t("text-parser.dmFallback", authorLang, {
-    icon: UI.icons.done,
+    icon: isReset ? UI.icons.reset : UI.icons.done,
     userId,
     parts: parts.join("; "),
   });

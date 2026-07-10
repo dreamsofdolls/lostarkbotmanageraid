@@ -76,3 +76,44 @@ test("raid-channel parse validation rejects gates outside the raid catalog", () 
   assert.match(resolved.content, /^text-parser\.invalidGate\|vi\|/);
   assert.match(resolved.content, /"`G1`, `G2`, `G3`"/);
 });
+
+test("raid-channel parse validation resolves raid-level reset without changing mode", () => {
+  const resolved = resolveParsedRaidUpdate({
+    parsed: {
+      raidKey: "act4",
+      modeKey: null,
+      action: "reset",
+      charNames: ["Qiylyn"],
+      gate: null,
+    },
+    RAID_REQUIREMENT_MAP,
+    getGatesForRaid,
+    getRaidLabel: () => "Act 4",
+    UI,
+    lang: "en",
+    t: fakeT,
+  });
+
+  assert.equal(resolved.action, "update");
+  assert.equal(resolved.statusType, "reset");
+  assert.deepEqual(resolved.effectiveGates, []);
+  assert.equal(resolved.raidMeta.raidKey, "act4");
+  assert.equal(resolved.raidMeta.label, "Act 4");
+  assert.equal(resolved.raidMeta.minItemLevel, 0);
+});
+
+test("raid-channel parse validation renders reset syntax hints", () => {
+  for (const error of ["reset-with-difficulty", "reset-with-gate"]) {
+    const resolved = resolveParsedRaidUpdate({
+      parsed: { error },
+      RAID_REQUIREMENT_MAP,
+      getGatesForRaid,
+      UI,
+      lang: "vi",
+      t: fakeT,
+    });
+
+    assert.equal(resolved.action, "hint");
+    assert.match(resolved.content, new RegExp(`^text-parser\\.${error === "reset-with-gate" ? "resetWithGate" : "resetWithDifficulty"}\\|vi\\|`));
+  }
+});

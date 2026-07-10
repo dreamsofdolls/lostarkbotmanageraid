@@ -139,6 +139,7 @@ const {
   getRaidRequirementList,
   getRaidRequirementMap,
   getGatesForRaid,
+  getRaidLabel,
   getRaidGateForBoss,
 } = require("./models/Raid");
 const {
@@ -830,6 +831,7 @@ const raidChannelMonitorService = createRaidChannelMonitorService({
   GuildConfig,
   RAID_REQUIREMENT_MAP,
   getGatesForRaid,
+  getRaidLabel,
   applyRaidSetForDiscordId,
   applyRaidSetBatchForDiscordId,
   getAccessibleAccounts,

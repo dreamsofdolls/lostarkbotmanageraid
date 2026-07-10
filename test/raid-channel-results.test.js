@@ -9,7 +9,7 @@ const {
   summarizeRaidChannelResults,
 } = require("../bot/services/raid/channel-monitor/channel-monitor-results");
 
-const UI = { icons: { done: "[done]", warn: "[warn]" } };
+const UI = { icons: { done: "[done]", reset: "[reset]", warn: "[warn]" } };
 const raidMeta = {
   label: "Act 4 Normal",
   minItemLevel: 1700,
@@ -30,6 +30,7 @@ test("raid-channel result summary groups progress and error outcomes", () => {
   const summary = summarizeRaidChannelResults([
     { charName: "Done", matched: true, updated: true },
     { charName: "Already", matched: true, alreadyComplete: true },
+    { charName: "AlreadyReset", matched: true, alreadyReset: true },
     { charName: "Missing", matched: false },
     { charName: "Low", matched: true, ineligibleItemLevel: 1600 },
     { charName: "Errored", error: "save failed" },
@@ -38,10 +39,38 @@ test("raid-channel result summary groups progress and error outcomes", () => {
   assert.equal(summary.hasProgress, true);
   assert.equal(summary.hasErrors, true);
   assert.equal(summary.successCount, 1);
-  assert.equal(summary.alreadyCount, 1);
+  assert.equal(summary.alreadyCount, 2);
   assert.deepEqual(summary.notFoundResults.map((r) => r.charName), ["Missing"]);
   assert.deepEqual(summary.ineligibleResults.map((r) => r.charName), ["Low"]);
   assert.deepEqual(summary.errorResults.map((r) => r.charName), ["Errored"]);
+});
+
+test("raid-channel DM fallback renders reset and already-reset outcomes", () => {
+  const recorder = createRecorder();
+  const content = buildRaidChannelDmFallbackText({
+    results: [
+      { charName: "Qiylyn", matched: true, updated: true },
+      { charName: "Bardly", matched: true, alreadyReset: true },
+    ],
+    raidMeta: { ...raidMeta, label: "Act 4" },
+    effectiveGates: [],
+    statusType: "reset",
+    authorLang: "vi",
+    UI,
+    userId: "user-1",
+    t: recorder.t.bind(recorder),
+  });
+
+  assert.equal(content, "text-parser.dmFallback");
+  assert.deepEqual(
+    recorder.calls.map((call) => call.key),
+    [
+      "text-parser.dmFallbackReset",
+      "text-parser.dmFallbackAlreadyReset",
+      "text-parser.dmFallback",
+    ]
+  );
+  assert.equal(recorder.calls[2].vars.icon, "[reset]");
 });
 
 test("raid-channel error hint renders only present sections plus partial note", () => {

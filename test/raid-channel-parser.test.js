@@ -26,6 +26,28 @@ test("raid-channel parser dedupes multi-character targets", () => {
   });
 });
 
+test("raid-channel parser accepts reset and rs without a difficulty", () => {
+  const expected = {
+    raidKey: "armoche",
+    modeKey: null,
+    action: "reset",
+    charNames: ["qiylyn", "morrah"],
+    gate: null,
+  };
+
+  assert.deepEqual(parseRaidMessage("act4 reset Qiylyn Morrah Qiylyn"), expected);
+  assert.deepEqual(parseRaidMessage("act4 rs Qiylyn Morrah"), expected);
+});
+
+test("raid-channel parser rejects difficulty or gate tokens on reset", () => {
+  assert.deepEqual(parseRaidMessage("act4 hm reset Qiylyn"), {
+    error: "reset-with-difficulty",
+  });
+  assert.deepEqual(parseRaidMessage("act4 rs Qiylyn G1"), {
+    error: "reset-with-gate",
+  });
+});
+
 test("raid-channel parser preserves existing alias semantics", () => {
   assert.equal(parseRaidMessage("Serca nm Qiylyn").modeKey, "normal");
   assert.equal(parseRaidMessage("Serca 9m Qiylyn").modeKey, "nightmare");
