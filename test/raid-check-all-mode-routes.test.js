@@ -19,6 +19,11 @@ test("raid-check all-mode routes exact filter custom ids", () => {
     action: RAID_CHECK_ALL_COMPONENT_ACTION.raidFilter,
     updatesMainMessage: true,
   });
+  assert.deepEqual(getRaidCheckAllComponentRoute("raid-check-all-filter:status"), {
+    customId: "raid-check-all-filter:status",
+    action: RAID_CHECK_ALL_COMPONENT_ACTION.statusFilter,
+    updatesMainMessage: true,
+  });
 });
 
 test("raid-check all-mode routes view toggle and pagination payloads", () => {

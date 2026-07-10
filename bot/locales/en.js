@@ -872,6 +872,10 @@ module.exports = {
     filter: {
       userPlaceholder: "Jump to user / filter by user...",
       raidPlaceholder: "Filter by raid...",
+      statusPlaceholder: "Filter by raid status...",
+      statusAll: "All",
+      statusPending: "Pending",
+      statusSuccess: "Success",
       allUsersDone: "All users (DONE)",
       allUsersPending: "All users ({n} pending)",
       userDone: "{name} (DONE)",

@@ -21,8 +21,11 @@ const {
 const {
   FILTER_ALL,
   FILTER_ALL_RAIDS,
+  FILTER_STATUS,
   buildAllModeRaidFilterRow,
+  buildAllModeStatusFilterRow,
   buildAllModeUserFilterRow,
+  normalizeAllModeStatusFilter,
 } = require("./all-mode-filters");
 const {
   buildAllModePagesData,
@@ -185,6 +188,7 @@ function createAllModeHandler({
 
     let filterUserId = null;
     let filterRaidId = null;
+    let filterStatus = FILTER_STATUS.all;
     let currentView = "raid";
     let filteredIndices = pagesData.map((_, index) => index);
     let currentLocalPage = 0;
@@ -194,6 +198,7 @@ function createAllModeHandler({
     const getRenderState = () => ({
       currentLocalPage,
       filterRaidId,
+      filterStatus,
       filterUserId,
       filteredIndices,
       totalPages,
@@ -317,6 +322,16 @@ function createAllModeHandler({
         truncateText,
       });
 
+    const buildStatusFilterRow = (disabled) =>
+      buildAllModeStatusFilterRow({
+        ActionRowBuilder,
+        StringSelectMenuBuilder,
+        disabled,
+        filterStatus,
+        lang,
+        t,
+      });
+
     const teamsSnapshot = await teamsView.loadActiveEventsForTeams({
       guildId: interaction.guildId || interaction.guild?.id,
     });
@@ -327,6 +342,7 @@ function createAllModeHandler({
       rows.push(buildFilterRow(disabled));
       if (currentView === "raid") {
         rows.push(buildRaidFilterRow(disabled));
+        rows.push(buildStatusFilterRow(disabled));
       }
       rows.push(
         ...teamsView.buildTeamsRows({
@@ -363,6 +379,12 @@ function createAllModeHandler({
       [RAID_CHECK_ALL_COMPONENT_ACTION.raidFilter]: async (component) => {
         const value = firstSelectValue(component, FILTER_ALL_RAIDS);
         filterRaidId = value === FILTER_ALL_RAIDS ? null : value;
+        await updateAllModeMessage(component);
+      },
+      [RAID_CHECK_ALL_COMPONENT_ACTION.statusFilter]: async (component) => {
+        filterStatus = normalizeAllModeStatusFilter(
+          firstSelectValue(component, FILTER_STATUS.all)
+        );
         await updateAllModeMessage(component);
       },
       [RAID_CHECK_ALL_COMPONENT_ACTION.viewToggle]: async (component, route) => {

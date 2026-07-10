@@ -6,8 +6,12 @@ const assert = require("node:assert/strict");
 const {
   FILTER_ALL,
   FILTER_ALL_RAIDS,
+  FILTER_STATUS,
   buildAllModeRaidFilterRow,
+  buildAllModeStatusFilterRow,
   buildAllModeUserFilterRow,
+  normalizeAllModeStatusFilter,
+  raidMatchesStatusFilter,
 } = require("../bot/handlers/raid-check/all-mode/all-mode-filters");
 
 class FakeSelectMenuBuilder {
@@ -121,4 +125,38 @@ test("all-mode raid filter scopes counts by the selected user and marks selected
   assert.equal(menu.options[1].value, "armoche:normal");
   assert.equal(menu.options[2].value, "kazeros:hard");
   assert.equal(menu.options[2].default, true);
+});
+
+test("all-mode status filter exposes All, Pending, and Success choices", () => {
+  const row = buildAllModeStatusFilterRow({
+    ActionRowBuilder: FakeActionRowBuilder,
+    StringSelectMenuBuilder: FakeSelectMenuBuilder,
+    disabled: false,
+    filterStatus: FILTER_STATUS.pending,
+    lang: "en",
+    t,
+  });
+
+  const menu = row.components[0].data;
+  assert.equal(menu.customId, "raid-check-all-filter:status");
+  assert.deepEqual(
+    menu.options.map((option) => [option.value, option.default]),
+    [
+      [FILTER_STATUS.all, false],
+      [FILTER_STATUS.pending, true],
+      [FILTER_STATUS.success, false],
+    ]
+  );
+});
+
+test("all-mode status semantics treat partial raids as Pending and full clears as Success", () => {
+  const pendingRaid = { isCompleted: false, completedGateKeys: ["G1"] };
+  const successRaid = { isCompleted: true, completedGateKeys: ["G1", "G2"] };
+
+  assert.equal(raidMatchesStatusFilter(pendingRaid, FILTER_STATUS.all), true);
+  assert.equal(raidMatchesStatusFilter(pendingRaid, FILTER_STATUS.pending), true);
+  assert.equal(raidMatchesStatusFilter(pendingRaid, FILTER_STATUS.success), false);
+  assert.equal(raidMatchesStatusFilter(successRaid, FILTER_STATUS.pending), false);
+  assert.equal(raidMatchesStatusFilter(successRaid, FILTER_STATUS.success), true);
+  assert.equal(normalizeAllModeStatusFilter("unexpected"), FILTER_STATUS.all);
 });

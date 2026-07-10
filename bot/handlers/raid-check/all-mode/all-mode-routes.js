@@ -3,6 +3,7 @@
 const RAID_CHECK_ALL_COMPONENT_ACTION = Object.freeze({
   userFilter: "userFilter",
   raidFilter: "raidFilter",
+  statusFilter: "statusFilter",
   viewToggle: "viewToggle",
   page: "page",
   rosterRefresh: "rosterRefresh",
@@ -28,6 +29,13 @@ function getRaidCheckAllComponentRoute(customId, { teamsSelectPrefix = "" } = {}
     return {
       customId: id,
       action: RAID_CHECK_ALL_COMPONENT_ACTION.raidFilter,
+      updatesMainMessage: true,
+    };
+  }
+  if (id === "raid-check-all-filter:status") {
+    return {
+      customId: id,
+      action: RAID_CHECK_ALL_COMPONENT_ACTION.statusFilter,
       updatesMainMessage: true,
     };
   }
