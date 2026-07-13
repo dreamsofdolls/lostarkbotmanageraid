@@ -28,20 +28,48 @@ async function createRaidStatusSessionState({
   buildMergedAccounts,
   getStatusRaidsForCharacter,
   buildRaidDropdownState,
+  buildStatusRosterFilterEntries,
 }) {
   let userDoc = initialUserDoc;
   let accounts = await buildMergedAccounts(discordId, userDoc.accounts, {
     accessibleAccounts: incomingSharedAccounts,
   });
   let currentPage = 0;
+  let selectedRosterIndex = null;
   let filterRaidId = null;
   let currentView = "raid";
   let raidDropdownEntries = [];
+  let rosterFilterEntries = [];
+  let visibleRosterIndices = [];
   let totalRaidPending = 0;
   const taskCharFilterByPage = new Map();
   const goldCharFilterByPage = new Map();
   const raidGetter = createRaidGetter({ getStatusRaidsForCharacter });
   let totalCharacters = countCharacters(accounts);
+
+  const recomputeRosterNavigation = () => {
+    rosterFilterEntries = buildStatusRosterFilterEntries({
+      accounts,
+      raidFilter: currentView === "raid" ? filterRaidId : null,
+      getRaidsFor: raidGetter.getRaidsFor,
+    });
+    visibleRosterIndices = rosterFilterEntries.map((entry) => entry.pageIndex);
+
+    if (visibleRosterIndices.length === 0) {
+      currentPage = 0;
+      selectedRosterIndex = null;
+      return;
+    }
+    if (!visibleRosterIndices.includes(currentPage)) {
+      currentPage = visibleRosterIndices[0];
+    }
+    if (
+      Number.isInteger(selectedRosterIndex) &&
+      !visibleRosterIndices.includes(selectedRosterIndex)
+    ) {
+      selectedRosterIndex = null;
+    }
+  };
 
   const recomputeRaidAggregate = () => {
     const nextState = buildRaidDropdownState(accounts, raidGetter.getRaidsFor);
@@ -51,7 +79,11 @@ async function createRaidStatusSessionState({
       filterRaidId = null;
     }
   };
-  recomputeRaidAggregate();
+  const recomputeDerivedState = () => {
+    recomputeRaidAggregate();
+    recomputeRosterNavigation();
+  };
+  recomputeDerivedState();
 
   async function reloadViewerAccounts(nextOwnDoc = null) {
     const reloadedOwnDoc = nextOwnDoc || await User.findOne({ discordId });
@@ -64,11 +96,35 @@ async function createRaidStatusSessionState({
     accounts = await buildMergedAccounts(discordId, userDoc.accounts);
     totalCharacters = countCharacters(accounts);
     raidGetter.clear();
-    recomputeRaidAggregate();
-    if (currentPage >= accounts.length) {
-      currentPage = Math.max(0, accounts.length - 1);
-    }
+    recomputeDerivedState();
     return userDoc;
+  }
+
+  function movePage(delta) {
+    if (visibleRosterIndices.length === 0) return;
+    const currentLocalPage = Math.max(0, visibleRosterIndices.indexOf(currentPage));
+    const nextLocalPage = Math.max(
+      0,
+      Math.min(
+        visibleRosterIndices.length - 1,
+        currentLocalPage + Number(delta || 0)
+      )
+    );
+    currentPage = visibleRosterIndices[nextLocalPage];
+    selectedRosterIndex = currentPage;
+  }
+
+  function selectRoster(rosterIndex) {
+    if (rosterIndex === null) {
+      selectedRosterIndex = null;
+      currentPage = visibleRosterIndices[0] ?? 0;
+      return;
+    }
+    if (!Number.isInteger(rosterIndex) || !visibleRosterIndices.includes(rosterIndex)) {
+      return;
+    }
+    selectedRosterIndex = rosterIndex;
+    currentPage = rosterIndex;
   }
 
   return {
@@ -84,17 +140,35 @@ async function createRaidStatusSessionState({
     set currentPage(value) {
       currentPage = value;
     },
+    get currentLocalPage() {
+      const localPage = visibleRosterIndices.indexOf(currentPage);
+      return localPage >= 0 ? localPage : 0;
+    },
+    get selectedRosterIndex() {
+      return selectedRosterIndex;
+    },
+    get visibleRosterCount() {
+      return visibleRosterIndices.length;
+    },
+    get visibleRosterIndices() {
+      return visibleRosterIndices;
+    },
+    get rosterFilterEntries() {
+      return rosterFilterEntries;
+    },
     get currentView() {
       return currentView;
     },
     set currentView(value) {
       currentView = value;
+      recomputeRosterNavigation();
     },
     get filterRaidId() {
       return filterRaidId;
     },
     set filterRaidId(value) {
       filterRaidId = value;
+      recomputeRosterNavigation();
     },
     get raidDropdownEntries() {
       return raidDropdownEntries;
@@ -115,6 +189,8 @@ async function createRaidStatusSessionState({
       return goldCharFilterByPage.get(page);
     },
     reloadViewerAccounts,
+    movePage,
+    selectRoster,
     setGoldCharFilterForPage(page, value) {
       goldCharFilterByPage.set(page, value);
     },
@@ -139,6 +215,15 @@ function createRaidStatusComponentSession({
     },
     set currentPage(value) {
       state.currentPage = value;
+    },
+    get selectedRosterIndex() {
+      return state.selectedRosterIndex;
+    },
+    movePage(delta) {
+      state.movePage(delta);
+    },
+    selectRoster(rosterIndex) {
+      state.selectRoster(rosterIndex);
     },
     set filterRaidId(value) {
       state.filterRaidId = value;

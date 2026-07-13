@@ -14,6 +14,10 @@ const {
 const {
   createRaidStatusSessionState,
 } = require("../bot/handlers/raid-status/state/session-state");
+const {
+  buildRaidDropdownState,
+  buildStatusRosterFilterEntries,
+} = require("../bot/handlers/raid-status/raid-filter");
 
 function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -127,6 +131,7 @@ test("raid-status session recounts characters after background roster refresh", 
       raidDropdownEntries: [],
       totalRaidPending: 0,
     }),
+    buildStatusRosterFilterEntries,
   });
 
   assert.equal(state.totalCharacters, 1);
@@ -139,6 +144,107 @@ test("raid-status session recounts characters after background roster refresh", 
     ],
   });
   assert.equal(state.totalCharacters, 3);
+});
+
+test("raid-status session keeps roster dropdown and pagination synchronized", async () => {
+  const accounts = [
+    {
+      accountName: "Alpha",
+      characters: [{
+        name: "A",
+        raids: [{
+          raidKey: "armoche",
+          modeKey: "hard",
+          raidName: "Act 4 Hard",
+          goldReceives: true,
+          isCompleted: false,
+        }],
+      }],
+    },
+    {
+      accountName: "Beta",
+      characters: [{
+        name: "B",
+        raids: [{
+          raidKey: "kazeros",
+          modeKey: "normal",
+          raidName: "Kazeros Normal",
+          goldReceives: true,
+          isCompleted: false,
+        }],
+      }],
+    },
+    {
+      accountName: "Gamma",
+      characters: [{
+        name: "C",
+        raids: [{
+          raidKey: "armoche",
+          modeKey: "hard",
+          raidName: "Act 4 Hard",
+          goldReceives: true,
+          isCompleted: true,
+        }],
+      }],
+    },
+  ];
+  const state = await createRaidStatusSessionState({
+    User: {},
+    discordId: "user-1",
+    userDoc: { accounts },
+    incomingSharedAccounts: [],
+    buildMergedAccounts: async (_discordId, ownAccounts) => ownAccounts,
+    getStatusRaidsForCharacter: (character) => character.raids || [],
+    buildRaidDropdownState,
+    buildStatusRosterFilterEntries,
+  });
+
+  assert.deepEqual(state.visibleRosterIndices, [0, 1, 2]);
+  assert.equal(state.selectedRosterIndex, null);
+
+  state.movePage(1);
+  assert.equal(state.currentPage, 1);
+  assert.equal(state.selectedRosterIndex, 1);
+
+  state.filterRaidId = "armoche:hard";
+  assert.deepEqual(state.visibleRosterIndices, [0, 2]);
+  assert.equal(state.currentPage, 0);
+  assert.equal(state.currentLocalPage, 0);
+  assert.equal(state.selectedRosterIndex, null);
+  assert.deepEqual(
+    state.rosterFilterEntries.map(({ pageIndex, pending, success }) => ({
+      pageIndex,
+      pending,
+      success,
+    })),
+    [
+      { pageIndex: 0, pending: 1, success: 0 },
+      { pageIndex: 2, pending: 0, success: 1 },
+    ]
+  );
+
+  state.movePage(1);
+  assert.equal(state.currentPage, 2);
+  assert.equal(state.currentLocalPage, 1);
+  assert.equal(state.selectedRosterIndex, 2);
+
+  state.selectRoster(null);
+  assert.equal(state.currentPage, 0);
+  assert.equal(state.selectedRosterIndex, null);
+
+  state.selectRoster(2);
+  assert.equal(state.currentPage, 2);
+  assert.equal(state.selectedRosterIndex, 2);
+
+  state.currentView = "task";
+  assert.deepEqual(state.visibleRosterIndices, [0, 1, 2]);
+  state.movePage(-1);
+  assert.equal(state.currentPage, 1);
+
+  state.currentView = "raid";
+  assert.deepEqual(state.visibleRosterIndices, [0, 2]);
+  assert.equal(state.currentPage, 0);
+  assert.equal(state.selectedRosterIndex, null);
 });
 
 test("raid-status local-sync probe returns the saved localSyncEnabled flag", async () => {

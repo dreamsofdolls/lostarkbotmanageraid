@@ -30,7 +30,17 @@ test("raid-status component routes resolve edit-driven controls", () => {
       redraw: true,
     },
   );
+  assert.deepEqual(
+    getStatusComponentRoute("status-filter:roster"),
+    {
+      customId: "status-filter:roster",
+      action: STATUS_COMPONENT_ACTION.rosterFilter,
+      editDriven: true,
+      redraw: true,
+    },
+  );
   assert.equal(editDrivenIds.has("status:prev"), true);
+  assert.equal(editDrivenIds.has("status-filter:roster"), true);
   assert.equal(editDrivenIds.has("status-gold:toggle"), true);
   assert.equal(editDrivenIds.has("status:sync"), false);
   assert.deepEqual(

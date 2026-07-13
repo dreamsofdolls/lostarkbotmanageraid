@@ -15,6 +15,8 @@ const {
 } = require("../bot/handlers/raid-status/components/component-handlers");
 const {
   FILTER_ALL_RAIDS,
+  FILTER_ALL_ROSTERS,
+  FILTER_NO_ROSTERS,
 } = require("../bot/handlers/raid-status/raid-filter");
 const {
   UI,
@@ -53,11 +55,23 @@ function createHandlerHarness(overrides = {}) {
   const session = {
     accounts: [{ accountName: "Roster A" }, { accountName: "Roster B" }],
     currentPage: 1,
+    selectedRosterIndex: null,
     filterRaidId: null,
     currentView: "raid",
     statusUserMeta: {},
     userDoc: { accounts: [] },
     cachedUrl: null,
+    movePage(delta) {
+      this.currentPage = Math.max(
+        0,
+        Math.min(this.accounts.length - 1, this.currentPage + delta)
+      );
+      this.selectedRosterIndex = this.currentPage;
+    },
+    selectRoster(rosterIndex) {
+      this.selectedRosterIndex = rosterIndex;
+      this.currentPage = rosterIndex === null ? 0 : rosterIndex;
+    },
     setCachedLocalSyncResumeUrl(value) {
       this.cachedUrl = value;
     },
@@ -118,6 +132,19 @@ test("raid-status component handlers update filter and task view state", async (
 
   await handlers[STATUS_COMPONENT_ACTION.raidFilter]({ values: [FILTER_ALL_RAIDS] });
   assert.equal(session.filterRaidId, null);
+
+  await handlers[STATUS_COMPONENT_ACTION.rosterFilter]({ values: ["1"] });
+  assert.equal(session.currentPage, 1);
+  assert.equal(session.selectedRosterIndex, 1);
+
+  await handlers[STATUS_COMPONENT_ACTION.rosterFilter]({ values: [FILTER_ALL_ROSTERS] });
+  assert.equal(session.currentPage, 0);
+  assert.equal(session.selectedRosterIndex, null);
+
+  assert.deepEqual(
+    await handlers[STATUS_COMPONENT_ACTION.rosterFilter]({ values: [FILTER_NO_ROSTERS] }),
+    { redraw: false }
+  );
 
   await handlers[STATUS_COMPONENT_ACTION.viewToggle]({ values: ["task"] });
   assert.equal(session.currentView, "task");

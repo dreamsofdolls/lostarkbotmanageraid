@@ -611,6 +611,11 @@ module.exports = {
     },
     filter: {
       placeholder: "Filter by raid...",
+      rosterPlaceholder: "Filter by roster...",
+      allRosters: "All rosters ({pending} pending · {success} success)",
+      rosterState: "{name} ({pending} pending · {success} success)",
+      noMatchingRosters: "No roster matches the current filter",
+      unnamedRoster: "Unnamed roster",
       allRaidsDone: "All raids (DONE)",
       allRaidsPending: "All raids ({n} total pending)",
       raidEntryDone: "{label} (DONE)",

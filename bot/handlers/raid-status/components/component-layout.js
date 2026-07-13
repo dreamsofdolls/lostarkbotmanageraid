@@ -19,14 +19,19 @@ function createRaidStatusComponentLayout({
   buildLocalSyncRefreshButton,
   buildRosterRefreshButton,
   buildRaidFilterRow,
+  buildStatusRosterFilterRow,
   buildMyRaidsRow,
   getAccounts,
   getCurrentPage,
+  getCurrentLocalPage = getCurrentPage,
+  getVisibleRosterCount = () => getAccounts().length,
   getCurrentView,
   getStatusUserMeta,
   getRaidDropdownEntries,
   getTotalRaidPending,
   getFilterRaidId,
+  getRosterFilterEntries = () => [],
+  getSelectedRosterIndex = () => null,
   getMyRaidsShaped,
   getBackgroundRefreshing = () => false,
 }) {
@@ -48,11 +53,10 @@ function createRaidStatusComponentLayout({
   };
 
   const addTaskViewRows = (rows, disabled) => {
-    const accounts = getAccounts();
-    const currentPage = getCurrentPage();
-    if (accounts.length > 1) {
+    const visibleRosterCount = getVisibleRosterCount();
+    if (visibleRosterCount > 1) {
       rows.push(
-        buildPaginationRow(currentPage, accounts.length, disabled, {
+        buildPaginationRow(getCurrentLocalPage(), visibleRosterCount, disabled, {
           prevId: "status:prev",
           nextId: "status:next",
           lang,
@@ -71,9 +75,10 @@ function createRaidStatusComponentLayout({
   const addGoldViewRows = (rows, disabled) => {
     const accounts = getAccounts();
     const currentPage = getCurrentPage();
-    if (accounts.length > 1) {
+    const visibleRosterCount = getVisibleRosterCount();
+    if (visibleRosterCount > 1) {
       rows.push(
-        buildPaginationRow(currentPage, accounts.length, disabled, {
+        buildPaginationRow(getCurrentLocalPage(), visibleRosterCount, disabled, {
           prevId: "status:prev",
           nextId: "status:next",
           lang,
@@ -96,16 +101,20 @@ function createRaidStatusComponentLayout({
   };
 
   const addRaidViewNavigationRows = (rows, disabled, showSync, syncDisabled) => {
-    const accounts = getAccounts();
-    const currentPage = getCurrentPage();
+    const visibleRosterCount = getVisibleRosterCount();
     const statusUserMeta = getStatusUserMeta();
 
-    if (accounts.length > 1) {
-      const paginationRow = buildPaginationRow(currentPage, accounts.length, disabled, {
-        prevId: "status:prev",
-        nextId: "status:next",
-        lang,
-      });
+    if (visibleRosterCount > 1) {
+      const paginationRow = buildPaginationRow(
+        getCurrentLocalPage(),
+        visibleRosterCount,
+        disabled,
+        {
+          prevId: "status:prev",
+          nextId: "status:next",
+          lang,
+        }
+      );
       if (showSync) {
         const btn = buildSyncButton(syncDisabled);
         if (btn) paginationRow.addComponents(btn);
@@ -142,6 +151,19 @@ function createRaidStatusComponentLayout({
       raidDropdownEntries,
       totalRaidPending: getTotalRaidPending(),
       filterRaidId: getFilterRaidId(),
+      disabled,
+      lang,
+    }));
+  };
+
+  const addRosterFilterRow = (rows, disabled) => {
+    if (getAccounts().length <= 1 || rows.length >= 5) return;
+    rows.push(buildStatusRosterFilterRow({
+      ActionRowBuilder,
+      StringSelectMenuBuilder,
+      truncateText,
+      rosterFilterEntries: getRosterFilterEntries(),
+      selectedRosterIndex: getSelectedRosterIndex(),
       disabled,
       lang,
     }));
@@ -188,6 +210,7 @@ function createRaidStatusComponentLayout({
     addRaidViewNavigationRows(rows, disabled, showSync, refreshDisabled);
     addRosterRefreshRow(rows, refreshDisabled, showRosterRefresh);
     rows.push(buildViewToggleRow(disabled));
+    addRosterFilterRow(rows, disabled);
     addRaidFilterRow(rows, disabled);
     addMyRaidsRow(rows, disabled);
     return rows;

@@ -9,6 +9,7 @@ const STATUS_COMPONENT_ACTION = Object.freeze({
   sync: "sync",
   myRaidsSelect: "myRaidsSelect",
   raidFilter: "raidFilter",
+  rosterFilter: "rosterFilter",
   viewToggle: "viewToggle",
   taskCharFilter: "taskCharFilter",
   taskToggle: "taskToggle",
@@ -58,6 +59,12 @@ const STATUS_COMPONENT_ROUTES = Object.freeze([
   {
     customId: "status-filter:raid",
     action: STATUS_COMPONENT_ACTION.raidFilter,
+    editDriven: true,
+    redraw: true,
+  },
+  {
+    customId: "status-filter:roster",
+    action: STATUS_COMPONENT_ACTION.rosterFilter,
     editDriven: true,
     redraw: true,
   },

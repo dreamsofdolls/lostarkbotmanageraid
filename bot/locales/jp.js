@@ -612,6 +612,11 @@ module.exports = {
     },
     filter: {
       placeholder: "レイドで絞り込む...",
+      rosterPlaceholder: "ロスターで絞り込む...",
+      allRosters: "すべてのロスター (未完了 {pending} · 完了 {success})",
+      rosterState: "{name} (未完了 {pending} · 完了 {success})",
+      noMatchingRosters: "現在の条件に合うロスターがありません",
+      unnamedRoster: "名前なしロスター",
       allRaidsDone: "すべてのレイド (完了♪)",
       allRaidsPending: "すべてのレイド (未完了 {n} 件)",
       raidEntryDone: "{label} (完了♪)",
