@@ -142,7 +142,7 @@ function addAllModeActionButtons({
   autoManageStateByDiscordId,
   localSyncStateByDiscordId,
 }) {
-  if (currentView === "raid") {
+  if (currentView === "raid" && currentViewUserId) {
     row.addComponents(
       buildEditButton({
         ButtonBuilder,

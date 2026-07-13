@@ -58,6 +58,7 @@ const t = (key) => key;
 
 function addButtons({
   currentView = "raid",
+  currentViewUserId = "user-a",
   actionUserId = "user-a",
   autoManageEnabled = false,
   localSyncEnabled = false,
@@ -71,7 +72,7 @@ function addButtons({
     lang: "en",
     disabled: false,
     currentView,
-    currentViewUserId: "user-a",
+    currentViewUserId,
     actionUserId,
     autoManageStateByDiscordId: new Map([["user-a", autoManageEnabled]]),
     localSyncStateByDiscordId: new Map([["user-a", localSyncEnabled]]),
@@ -106,6 +107,13 @@ test("raid-check all-mode buttons only add back-to-raid toggle in task view", ()
   assert.deepEqual(addButtons({ currentView: "task" }), [
     "raid-check-all:view-toggle:raid",
   ]);
+});
+
+test("raid-check all-mode buttons omit page actions when filters have no roster page", () => {
+  assert.deepEqual(
+    addButtons({ currentViewUserId: "", autoManageEnabled: false }),
+    ["raid-check-all:view-toggle:task"]
+  );
 });
 
 test("raid-check all-mode roster refresh row uses all-mode collector id", () => {

@@ -6,10 +6,14 @@ const assert = require("node:assert/strict");
 const {
   FILTER_ALL,
   FILTER_ALL_RAIDS,
+  FILTER_ALL_ROSTERS,
+  FILTER_NO_ROSTERS,
   FILTER_STATUS,
   buildAllModeRaidFilterRow,
+  buildAllModeRosterFilterRow,
   buildAllModeStatusFilterRow,
   buildAllModeUserFilterRow,
+  filterAllModePageIndices,
   normalizeAllModeStatusFilter,
   raidMatchesStatusFilter,
 } = require("../bot/handlers/raid-check/all-mode/all-mode-filters");
@@ -52,7 +56,23 @@ class FakeActionRowBuilder {
 }
 
 function t(key, lang, vars = {}) {
-  return `${key}:${vars.name || vars.label || ""}:${vars.n ?? ""}`;
+  return [
+    key,
+    vars.name || vars.label || "",
+    vars.n ?? "",
+    vars.pending ?? "",
+    vars.success ?? "",
+  ].join(":");
+}
+
+function page(discordId, accountName, raids) {
+  return {
+    userDoc: { discordId },
+    account: {
+      accountName,
+      characters: [{ raids }],
+    },
+  };
 }
 
 test("all-mode user filter sorts users by current pending count and marks selection", () => {
@@ -159,4 +179,113 @@ test("all-mode status semantics treat partial raids as Pending and full clears a
   assert.equal(raidMatchesStatusFilter(successRaid, FILTER_STATUS.pending), false);
   assert.equal(raidMatchesStatusFilter(successRaid, FILTER_STATUS.success), true);
   assert.equal(normalizeAllModeStatusFilter("unexpected"), FILTER_STATUS.all);
+});
+
+test("all-mode roster filter uses folder icons, shows full state, and hides raid mismatches", () => {
+  const pagesData = [
+    page("u1", "Alpha", [
+      { raidKey: "kazeros", modeKey: "hard", isCompleted: false },
+      { raidKey: "kazeros", modeKey: "hard", isCompleted: true },
+    ]),
+    page("u1", "Beta", [
+      { raidKey: "act4", modeKey: "hard", isCompleted: false },
+    ]),
+    page("u1", "Gamma", [
+      { raidKey: "kazeros", modeKey: "hard", isCompleted: true },
+    ]),
+  ];
+  const row = buildAllModeRosterFilterRow({
+    ActionRowBuilder: FakeActionRowBuilder,
+    StringSelectMenuBuilder: FakeSelectMenuBuilder,
+    disabled: false,
+    filterRaidId: "kazeros:hard",
+    filterRosterIndex: 2,
+    filterStatus: FILTER_STATUS.all,
+    filterUserId: "u1",
+    getStatusRaidsForCharacter: (character) => character.raids,
+    lang: "en",
+    pagesData,
+    t,
+    truncateText: (value) => String(value).slice(0, 100),
+  });
+
+  const menu = row.components[0].data;
+  assert.equal(menu.customId, "raid-check-all-filter:roster");
+  assert.equal(menu.disabled, false);
+  assert.deepEqual(menu.options.map((option) => option.value), [
+    FILTER_ALL_ROSTERS,
+    "0",
+    "2",
+  ]);
+  assert.equal(menu.options[0].emoji, "📂");
+  assert.equal(menu.options[1].emoji, "📁");
+  assert.match(menu.options[0].label, /:1:2$/);
+  assert.match(menu.options[1].label, /Alpha.*:1:1$/);
+  assert.equal(menu.options[2].default, true);
+});
+
+test("all-mode roster filter disables itself when no roster matches active status", () => {
+  const row = buildAllModeRosterFilterRow({
+    ActionRowBuilder: FakeActionRowBuilder,
+    StringSelectMenuBuilder: FakeSelectMenuBuilder,
+    disabled: false,
+    filterRaidId: "kazeros:hard",
+    filterRosterIndex: null,
+    filterStatus: FILTER_STATUS.pending,
+    filterUserId: "u1",
+    getStatusRaidsForCharacter: (character) => character.raids,
+    lang: "en",
+    pagesData: [
+      page("u1", "Done", [
+        { raidKey: "kazeros", modeKey: "hard", isCompleted: true },
+      ]),
+    ],
+    t,
+    truncateText: (value) => String(value).slice(0, 100),
+  });
+
+  const menu = row.components[0].data;
+  assert.equal(menu.disabled, true);
+  assert.equal(menu.options.length, 1);
+  assert.equal(menu.options[0].value, FILTER_NO_ROSTERS);
+});
+
+test("all-mode page filtering skips empty raid/status pages and clears an invalid roster", () => {
+  const pagesData = [
+    page("u1", "Pending", [
+      { raidKey: "kazeros", modeKey: "hard", isCompleted: false },
+    ]),
+    page("u1", "Other raid", [
+      { raidKey: "act4", modeKey: "hard", isCompleted: false },
+    ]),
+    page("u1", "Done", [
+      { raidKey: "kazeros", modeKey: "hard", isCompleted: true },
+    ]),
+    page("u2", "Another user", [
+      { raidKey: "kazeros", modeKey: "hard", isCompleted: false },
+    ]),
+  ];
+  const result = filterAllModePageIndices({
+    pagesData,
+    filterUserId: "u1",
+    filterRosterIndex: 2,
+    filterRaidId: "kazeros:hard",
+    filterStatus: FILTER_STATUS.pending,
+    getStatusRaidsForCharacter: (character) => character.raids,
+  });
+
+  assert.deepEqual(result.filteredIndices, [0]);
+  assert.equal(result.filterRosterIndex, null);
+
+  const taskViewResult = filterAllModePageIndices({
+    pagesData,
+    filterUserId: "u1",
+    filterRosterIndex: 2,
+    filterRaidId: "kazeros:hard",
+    filterStatus: FILTER_STATUS.pending,
+    getStatusRaidsForCharacter: (character) => character.raids,
+    applyRaidEligibility: false,
+  });
+  assert.deepEqual(taskViewResult.filteredIndices, [2]);
+  assert.equal(taskViewResult.filterRosterIndex, 2);
 });
