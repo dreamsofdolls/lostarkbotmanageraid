@@ -16,15 +16,19 @@ const {
 } = require("./all-mode-aggregate");
 const {
   addAllModeActionButtons,
+  buildRosterRefreshButton,
   buildAllModeRosterRefreshRow,
 } = require("./all-mode-buttons");
 const {
   FILTER_ALL,
   FILTER_ALL_RAIDS,
+  FILTER_ALL_ROSTERS,
   FILTER_STATUS,
   buildAllModeRaidFilterRow,
+  buildAllModeRosterFilterRow,
   buildAllModeStatusFilterRow,
   buildAllModeUserFilterRow,
+  filterAllModePageIndices,
   normalizeAllModeStatusFilter,
 } = require("./all-mode-filters");
 const {
@@ -186,6 +190,7 @@ function createAllModeHandler({
     }
 
     let filterUserId = null;
+    let filterRosterIndex = null;
     let filterRaidId = null;
     let filterStatus = FILTER_STATUS.all;
     let currentView = "raid";
@@ -194,14 +199,12 @@ function createAllModeHandler({
     let backgroundRefreshing = refreshQueued > 0;
 
     const currentAbsoluteIndex = () =>
-      filteredIndices[currentLocalPage] ?? filteredIndices[0] ?? 0;
+      filteredIndices[currentLocalPage] ?? filteredIndices[0] ?? null;
     const getRenderState = () => ({
       currentLocalPage,
       filterRaidId,
       filterStatus,
-      filterUserId,
       filteredIndices,
-      totalPages,
     });
     const pendingAggregateCache = createAllModePendingAggregateCache({
       pagesData,
@@ -222,8 +225,37 @@ function createAllModeHandler({
       summarizeRaidProgress,
       truncateText,
     });
-    const renderEmbed = (pageIndex) =>
-      currentView === "task" ? buildTaskPage(pageIndex) : buildRaidPage(pageIndex);
+    const renderEmbed = (pageIndex) => {
+      if (!Number.isInteger(pageIndex)) {
+        return buildNoticeEmbed(EmbedBuilder, {
+          type: "info",
+          title: t("raid-check.notice.noFilterMatchesTitle", lang),
+          description: t("raid-check.notice.noFilterMatchesDescription", lang),
+        });
+      }
+      return currentView === "task" ? buildTaskPage(pageIndex) : buildRaidPage(pageIndex);
+    };
+
+    const recomputeFilteredPages = ({ resetPage = true } = {}) => {
+      const result = filterAllModePageIndices({
+        pagesData,
+        filterUserId,
+        filterRosterIndex,
+        filterRaidId,
+        filterStatus,
+        getStatusRaidsForCharacter: pendingAggregateCache.getRaidsForCharacter,
+        applyRaidEligibility: currentView === "raid",
+      });
+      filteredIndices = result.filteredIndices;
+      filterRosterIndex = result.filterRosterIndex;
+      if (resetPage) currentLocalPage = 0;
+      else {
+        currentLocalPage = Math.max(
+          0,
+          Math.min(currentLocalPage, Math.max(0, filteredIndices.length - 1))
+        );
+      }
+    };
 
     const applyRefreshedUserDoc = (userDoc) => {
       if (!userDoc?.discordId || !Array.isArray(userDoc.accounts)) return false;
@@ -241,30 +273,27 @@ function createAllModeHandler({
 
     const applyUserFilter = (pickedValue) => {
       filterUserId = pickedValue === FILTER_ALL ? null : pickedValue;
-      if (filterUserId === null) {
-        filteredIndices = pagesData.map((_, index) => index);
-      } else {
-        filteredIndices = [];
-        for (let index = 0; index < pagesData.length; index += 1) {
-          if (pagesData[index].userDoc.discordId === filterUserId) {
-            filteredIndices.push(index);
-          }
-        }
-      }
-      currentLocalPage = 0;
+      filterRosterIndex = null;
+      recomputeFilteredPages();
     };
 
     const computePendingAggregate = ({ raidFilter, userFilter }) =>
       pendingAggregateCache.compute({ raidFilter, userFilter });
 
     const buildButtonRow = (disabled) => {
-      const row = buildPaginationRow(currentLocalPage, filteredIndices.length, disabled, {
-        prevId: "raid-check-all-page:prev",
-        nextId: "raid-check-all-page:next",
-        lang,
-      });
       const currentAbs = currentAbsoluteIndex();
-      const currentViewUserId = pagesData[currentAbs]?.userDoc?.discordId || "";
+      const hasCurrentPage = Number.isInteger(currentAbs);
+      const usesRosterNavigation = filterUserId !== null;
+      const row = !usesRosterNavigation && hasCurrentPage
+        ? buildPaginationRow(currentLocalPage, filteredIndices.length, disabled, {
+            prevId: "raid-check-all-page:prev",
+            nextId: "raid-check-all-page:next",
+            lang,
+          })
+        : new ActionRowBuilder();
+      const currentViewUserId = hasCurrentPage
+        ? pagesData[currentAbs]?.userDoc?.discordId || ""
+        : "";
       const actionUserId = filterUserId || currentViewUserId;
 
       addAllModeActionButtons({
@@ -280,11 +309,28 @@ function createAllModeHandler({
         autoManageStateByDiscordId,
         localSyncStateByDiscordId,
       });
-      return row;
+      if (usesRosterNavigation && currentView === "raid" && hasCurrentPage) {
+        row.addComponents(
+          buildRosterRefreshButton({
+            ButtonBuilder,
+            ButtonStyle,
+            t,
+            lang,
+            disabled: disabled || backgroundRefreshing,
+          })
+        );
+      }
+      return row.components.length > 0 ? row : null;
     };
 
     const buildRosterRefreshRow = (disabled) => {
-      if (currentView !== "raid") return null;
+      if (
+        currentView !== "raid" ||
+        filterUserId !== null ||
+        !Number.isInteger(currentAbsoluteIndex())
+      ) {
+        return null;
+      }
       return buildAllModeRosterRefreshRow({
         ActionRowBuilder,
         ButtonBuilder,
@@ -308,6 +354,23 @@ function createAllModeHandler({
         t,
         truncateText,
         visibleUserIds,
+      });
+
+    const buildRosterFilterRow = (disabled) =>
+      buildAllModeRosterFilterRow({
+        ActionRowBuilder,
+        StringSelectMenuBuilder,
+        disabled,
+        filterRaidId: currentView === "raid" ? filterRaidId : null,
+        filterRosterIndex,
+        filterStatus: currentView === "raid" ? filterStatus : FILTER_STATUS.all,
+        filterUserId,
+        getStatusRaidsForCharacter: pendingAggregateCache.getRaidsForCharacter,
+        lang,
+        pagesData,
+        t,
+        truncateText,
+        applyRaidEligibility: currentView === "raid",
       });
 
     const buildRaidFilterRow = (disabled) =>
@@ -335,10 +398,15 @@ function createAllModeHandler({
 
     let teamsSnapshot = [];
     const buildComponents = (disabled) => {
-      const rows = [buildButtonRow(disabled)];
+      const rows = [];
+      const buttonRow = buildButtonRow(disabled);
+      if (buttonRow) rows.push(buttonRow);
       const refreshRow = buildRosterRefreshRow(disabled);
       if (refreshRow) rows.push(refreshRow);
       rows.push(buildFilterRow(disabled));
+      if (filterUserId !== null) {
+        rows.push(buildRosterFilterRow(disabled));
+      }
       if (currentView === "raid") {
         rows.push(buildRaidFilterRow(disabled));
         rows.push(buildStatusFilterRow(disabled));
@@ -391,23 +459,38 @@ function createAllModeHandler({
         applyUserFilter(firstSelectValue(component, FILTER_ALL));
         await updateAllModeMessage(component);
       },
+      [RAID_CHECK_ALL_COMPONENT_ACTION.rosterFilter]: async (component) => {
+        const value = firstSelectValue(component, FILTER_ALL_ROSTERS);
+        if (value === FILTER_ALL_ROSTERS) {
+          filterRosterIndex = null;
+        } else {
+          const parsed = Number.parseInt(value, 10);
+          filterRosterIndex = Number.isInteger(parsed) ? parsed : null;
+        }
+        recomputeFilteredPages();
+        await updateAllModeMessage(component);
+      },
       [RAID_CHECK_ALL_COMPONENT_ACTION.raidFilter]: async (component) => {
         const value = firstSelectValue(component, FILTER_ALL_RAIDS);
         filterRaidId = value === FILTER_ALL_RAIDS ? null : value;
+        recomputeFilteredPages();
         await updateAllModeMessage(component);
       },
       [RAID_CHECK_ALL_COMPONENT_ACTION.statusFilter]: async (component) => {
         filterStatus = normalizeAllModeStatusFilter(
           firstSelectValue(component, FILTER_STATUS.all)
         );
+        recomputeFilteredPages();
         await updateAllModeMessage(component);
       },
       [RAID_CHECK_ALL_COMPONENT_ACTION.viewToggle]: async (component, route) => {
         currentView = route.targetView === "task" ? "task" : "raid";
+        recomputeFilteredPages();
         await updateAllModeMessage(component);
       },
       [RAID_CHECK_ALL_COMPONENT_ACTION.page]: async (component, route) => {
         const localTotal = filteredIndices.length;
+        if (localTotal === 0) return;
         if (route.pageAction === "prev") {
           currentLocalPage = Math.max(0, currentLocalPage - 1);
         } else if (route.pageAction === "next") {
@@ -452,6 +535,7 @@ function createAllModeHandler({
         try {
           const result = await runManualRosterRefresh(targetDiscordId, targetAccountName);
           applyRefreshedUserDoc(result.userDoc);
+          recomputeFilteredPages({ resetPage: false });
           await interaction.editReply({
             embeds: [renderEmbed(currentAbsoluteIndex())],
             components: buildComponents(false),
@@ -525,6 +609,7 @@ function createAllModeHandler({
           for (const userDoc of refreshedUsers || []) {
             if (applyRefreshedUserDoc(userDoc)) applied += 1;
           }
+          recomputeFilteredPages({ resetPage: false });
           backgroundRefreshing = false;
           console.log(
             `[raid-check all] background refresh applied=${applied}/${refreshQueued} ms=${Date.now() - refreshStarted}`

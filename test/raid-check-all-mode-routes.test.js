@@ -14,6 +14,11 @@ test("raid-check all-mode routes exact filter custom ids", () => {
     action: RAID_CHECK_ALL_COMPONENT_ACTION.userFilter,
     updatesMainMessage: true,
   });
+  assert.deepEqual(getRaidCheckAllComponentRoute("raid-check-all-filter:roster"), {
+    customId: "raid-check-all-filter:roster",
+    action: RAID_CHECK_ALL_COMPONENT_ACTION.rosterFilter,
+    updatesMainMessage: true,
+  });
   assert.deepEqual(getRaidCheckAllComponentRoute("raid-check-all-filter:raid"), {
     customId: "raid-check-all-filter:raid",
     action: RAID_CHECK_ALL_COMPONENT_ACTION.raidFilter,

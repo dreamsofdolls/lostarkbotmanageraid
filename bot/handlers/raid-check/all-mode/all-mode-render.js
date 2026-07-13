@@ -83,10 +83,8 @@ function createAllModePageRenderers({
     const {
       filterRaidId,
       filterStatus,
-      filterUserId,
       currentLocalPage,
       filteredIndices,
-      totalPages,
     } = getState();
     const activeStatus = normalizeAllModeStatusFilter(filterStatus);
     const {
@@ -141,9 +139,10 @@ function createAllModePageRenderers({
       embed.setDescription(baseDescription ? `${rollupLine}\n${baseDescription}` : rollupLine);
     }
 
-    const footerPageInfo = filterUserId === null
-      ? { pageIndex, totalPages }
-      : { pageIndex: currentLocalPage, totalPages: filteredIndices.length };
+    const footerPageInfo = {
+      pageIndex: currentLocalPage,
+      totalPages: filteredIndices.length,
+    };
     embed.setFooter({
       text: buildStatusFooterText(globalTotals, footerPageInfo, lang),
     });
