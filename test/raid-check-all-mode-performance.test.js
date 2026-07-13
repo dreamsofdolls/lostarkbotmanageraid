@@ -27,3 +27,24 @@ test("raid-check renders before starting roster and teams background work", () =
   assert.ok(backgroundTeams > firstReply, "teams query started before first render");
   assert.doesNotMatch(source, /interaction\.fetchReply\(/);
 });
+
+test("raid-check keeps pagination while the selected user is on All rosters", () => {
+  const source = fs.readFileSync(
+    path.join(
+      __dirname,
+      "..",
+      "bot",
+      "handlers",
+      "raid-check",
+      "all-mode",
+      "all-mode.js"
+    ),
+    "utf8"
+  );
+
+  assert.match(
+    source,
+    /const usesRosterNavigation = Number\.isInteger\(filterRosterIndex\);/,
+    "pagination should only be replaced after a specific roster is selected"
+  );
+});

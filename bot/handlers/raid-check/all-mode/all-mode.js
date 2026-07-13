@@ -283,7 +283,7 @@ function createAllModeHandler({
     const buildButtonRow = (disabled) => {
       const currentAbs = currentAbsoluteIndex();
       const hasCurrentPage = Number.isInteger(currentAbs);
-      const usesRosterNavigation = filterUserId !== null;
+      const usesRosterNavigation = Number.isInteger(filterRosterIndex);
       const row = !usesRosterNavigation && hasCurrentPage
         ? buildPaginationRow(currentLocalPage, filteredIndices.length, disabled, {
             prevId: "raid-check-all-page:prev",
