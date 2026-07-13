@@ -29,7 +29,9 @@ const {
   buildAllModeStatusFilterRow,
   buildAllModeUserFilterRow,
   filterAllModePageIndices,
+  getAllModeRosterSelectionForPage,
   normalizeAllModeStatusFilter,
+  resolveAllModeLocalPage,
 } = require("./all-mode-filters");
 const {
   buildAllModePagesData,
@@ -237,6 +239,7 @@ function createAllModeHandler({
     };
 
     const recomputeFilteredPages = ({ resetPage = true } = {}) => {
+      const previousLocalPage = currentLocalPage;
       const result = filterAllModePageIndices({
         pagesData,
         filterUserId,
@@ -248,13 +251,12 @@ function createAllModeHandler({
       });
       filteredIndices = result.filteredIndices;
       filterRosterIndex = result.filterRosterIndex;
-      if (resetPage) currentLocalPage = 0;
-      else {
-        currentLocalPage = Math.max(
-          0,
-          Math.min(currentLocalPage, Math.max(0, filteredIndices.length - 1))
-        );
-      }
+      currentLocalPage = resolveAllModeLocalPage({
+        filteredIndices,
+        filterRosterIndex,
+        currentLocalPage: previousLocalPage,
+        resetPage,
+      });
     };
 
     const applyRefreshedUserDoc = (userDoc) => {
@@ -283,8 +285,7 @@ function createAllModeHandler({
     const buildButtonRow = (disabled) => {
       const currentAbs = currentAbsoluteIndex();
       const hasCurrentPage = Number.isInteger(currentAbs);
-      const usesRosterNavigation = Number.isInteger(filterRosterIndex);
-      const row = !usesRosterNavigation && hasCurrentPage
+      const row = hasCurrentPage
         ? buildPaginationRow(currentLocalPage, filteredIndices.length, disabled, {
             prevId: "raid-check-all-page:prev",
             nextId: "raid-check-all-page:next",
@@ -309,7 +310,12 @@ function createAllModeHandler({
         autoManageStateByDiscordId,
         localSyncStateByDiscordId,
       });
-      if (usesRosterNavigation && currentView === "raid" && hasCurrentPage) {
+      if (
+        filterUserId !== null &&
+        currentView === "raid" &&
+        hasCurrentPage &&
+        row.components.length < 5
+      ) {
         row.addComponents(
           buildRosterRefreshButton({
             ButtonBuilder,
@@ -498,6 +504,11 @@ function createAllModeHandler({
         } else {
           return;
         }
+        filterRosterIndex = getAllModeRosterSelectionForPage({
+          filterUserId,
+          filteredIndices,
+          currentLocalPage,
+        });
         await updateAllModeMessage(component);
       },
       [RAID_CHECK_ALL_COMPONENT_ACTION.rosterRefresh]: async (component) => {

@@ -106,7 +106,7 @@ function filterAllModePageIndices({
 }) {
   const activeStatus = normalizeAllModeStatusFilter(filterStatus);
   const hasActiveRaidFilter = Boolean(filterRaidId) || activeStatus !== FILTER_STATUS.all;
-  let filteredIndices = [];
+  const filteredIndices = [];
   for (let pageIndex = 0; pageIndex < (pagesData || []).length; pageIndex += 1) {
     const page = pagesData[pageIndex];
     if (filterUserId && page?.userDoc?.discordId !== filterUserId) continue;
@@ -124,14 +124,41 @@ function filterAllModePageIndices({
   let effectiveRosterIndex = Number.isInteger(filterRosterIndex)
     ? filterRosterIndex
     : null;
-  if (effectiveRosterIndex !== null) {
-    if (filteredIndices.includes(effectiveRosterIndex)) {
-      filteredIndices = [effectiveRosterIndex];
-    } else {
-      effectiveRosterIndex = null;
-    }
+  if (
+    effectiveRosterIndex !== null &&
+    !filteredIndices.includes(effectiveRosterIndex)
+  ) {
+    effectiveRosterIndex = null;
   }
   return { filteredIndices, filterRosterIndex: effectiveRosterIndex };
+}
+
+function resolveAllModeLocalPage({
+  filteredIndices,
+  filterRosterIndex = null,
+  currentLocalPage = 0,
+  resetPage = true,
+}) {
+  const pageIndices = Array.isArray(filteredIndices) ? filteredIndices : [];
+  if (Number.isInteger(filterRosterIndex)) {
+    const selectedLocalPage = pageIndices.indexOf(filterRosterIndex);
+    if (selectedLocalPage >= 0) return selectedLocalPage;
+  }
+  if (resetPage) return 0;
+  return Math.max(
+    0,
+    Math.min(currentLocalPage, Math.max(0, pageIndices.length - 1))
+  );
+}
+
+function getAllModeRosterSelectionForPage({
+  filterUserId,
+  filteredIndices,
+  currentLocalPage,
+}) {
+  if (!filterUserId) return null;
+  const pageIndex = filteredIndices?.[currentLocalPage];
+  return Number.isInteger(pageIndex) ? pageIndex : null;
 }
 
 function buildAllModeUserFilterRow({
@@ -393,6 +420,8 @@ module.exports = {
   buildAllModeUserFilterRow,
   filterAllModePageIndices,
   getAllModeRosterFilterEntries,
+  getAllModeRosterSelectionForPage,
   normalizeAllModeStatusFilter,
   raidMatchesStatusFilter,
+  resolveAllModeLocalPage,
 };
