@@ -3,6 +3,8 @@
 const RaidEvent = require("../../../models/RaidEvent");
 const {
   FILTER_ALL_RAIDS,
+  FILTER_ALL_ROSTERS,
+  FILTER_NO_ROSTERS,
 } = require("../raid-filter");
 const {
   STATUS_COMPONENT_ACTION,
@@ -126,12 +128,12 @@ function createStatusComponentRouteHandlers(ctx) {
 
   return {
     [STATUS_COMPONENT_ACTION.prev]: async () => {
-      session.currentPage = Math.max(0, session.currentPage - 1);
+      session.movePage(-1);
       return redraw();
     },
 
     [STATUS_COMPONENT_ACTION.next]: async () => {
-      session.currentPage = Math.min(session.accounts.length - 1, session.currentPage + 1);
+      session.movePage(1);
       return redraw();
     },
 
@@ -366,6 +368,19 @@ function createStatusComponentRouteHandlers(ctx) {
     [STATUS_COMPONENT_ACTION.raidFilter]: async (component) => {
       const value = firstSelectValue(component, FILTER_ALL_RAIDS);
       session.filterRaidId = value === FILTER_ALL_RAIDS ? null : value;
+      return redraw();
+    },
+
+    [STATUS_COMPONENT_ACTION.rosterFilter]: async (component) => {
+      const value = firstSelectValue(component, FILTER_ALL_ROSTERS);
+      if (value === FILTER_NO_ROSTERS) return noRedraw();
+      if (value === FILTER_ALL_ROSTERS) {
+        session.selectRoster(null);
+        return redraw();
+      }
+      const rosterIndex = Number(value);
+      if (!Number.isInteger(rosterIndex)) return noRedraw();
+      session.selectRoster(rosterIndex);
       return redraw();
     },
 

@@ -1,10 +1,7 @@
 /**
- * handlers/raid-status/raid-filter.js
- * Inline raid-filter dropdown for /raid-status · aggregates every
- * gold-receiving raid currently visible in the viewer's progress
- * roster, exposes them as dropdown options, and filters the rendered
- * embed to the selected raid. The sentinel FILTER_ALL_RAIDS value
- * lets the user reset to the cross-raid overview.
+ * Dropdown state for /raid-status. Raid options summarize the viewer's
+ * gold-progress raids; roster options summarize the raids rendered on each
+ * account page and keep roster selection aligned with pagination.
  */
 
 const { isSupportClass } = require("../../models/Class");
@@ -14,6 +11,8 @@ const { isGoldProgressRaid } = require("../../utils/raid/common/character");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 
 const FILTER_ALL_RAIDS = "__all_raids__";
+const FILTER_ALL_ROSTERS = "__all_rosters__";
+const FILTER_NO_ROSTERS = "__no_rosters__";
 
 function buildRaidDropdownState(accounts, getRaidsFor) {
   const raidAggregate = new Map();
@@ -120,8 +119,117 @@ function buildRaidFilterRow(options) {
   );
 }
 
+function getStatusRosterRaidState({ account, raidFilter = null, getRaidsFor }) {
+  let pending = 0;
+  let success = 0;
+  const characters = Array.isArray(account?.characters) ? account.characters : [];
+  for (const character of characters) {
+    const raids = typeof getRaidsFor === "function" ? getRaidsFor(character) || [] : [];
+    for (const raid of raids) {
+      if (raidFilter && `${raid.raidKey}:${raid.modeKey}` !== raidFilter) continue;
+      if (raid?.isCompleted === true) success += 1;
+      else pending += 1;
+    }
+  }
+  return { pending, success, total: pending + success };
+}
+
+function buildStatusRosterFilterEntries({
+  accounts,
+  raidFilter = null,
+  getRaidsFor,
+}) {
+  const entries = [];
+  for (let pageIndex = 0; pageIndex < (accounts || []).length; pageIndex += 1) {
+    const account = accounts[pageIndex];
+    const state = getStatusRosterRaidState({ account, raidFilter, getRaidsFor });
+    if (raidFilter && state.total === 0) continue;
+    entries.push({
+      pageIndex,
+      accountName: String(account?.accountName || ""),
+      ...state,
+    });
+  }
+  return entries;
+}
+
+function buildStatusRosterFilterRow(options) {
+  const {
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    truncateText,
+    rosterFilterEntries,
+    selectedRosterIndex,
+    disabled,
+    lang = "vi",
+  } = options;
+  const entries = Array.isArray(rosterFilterEntries) ? rosterFilterEntries : [];
+  let selectOptions;
+
+  if (entries.length === 0) {
+    selectOptions = [{
+      label: truncateText(t("raid-status.filter.noMatchingRosters", lang), 100),
+      value: FILTER_NO_ROSTERS,
+      emoji: "\u{1f4c1}",
+      default: true,
+    }];
+  } else {
+    const totals = entries.reduce(
+      (sum, entry) => ({
+        pending: sum.pending + entry.pending,
+        success: sum.success + entry.success,
+      }),
+      { pending: 0, success: 0 }
+    );
+    selectOptions = [{
+      label: truncateText(t("raid-status.filter.allRosters", lang, totals), 100),
+      value: FILTER_ALL_ROSTERS,
+      emoji: "\u{1f4c2}",
+      default: selectedRosterIndex === null,
+    }];
+
+    const visibleEntries = entries.slice(0, 24);
+    if (
+      Number.isInteger(selectedRosterIndex) &&
+      !visibleEntries.some((entry) => entry.pageIndex === selectedRosterIndex)
+    ) {
+      const selected = entries.find((entry) => entry.pageIndex === selectedRosterIndex);
+      if (selected) visibleEntries[visibleEntries.length - 1] = selected;
+    }
+
+    for (const entry of visibleEntries) {
+      selectOptions.push({
+        label: truncateText(
+          t("raid-status.filter.rosterState", lang, {
+            name: entry.accountName || t("raid-status.filter.unnamedRoster", lang),
+            pending: entry.pending,
+            success: entry.success,
+          }),
+          100
+        ),
+        value: String(entry.pageIndex),
+        emoji: "\u{1f4c1}",
+        default: selectedRosterIndex === entry.pageIndex,
+      });
+    }
+  }
+
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("status-filter:roster")
+      .setPlaceholder(t("raid-status.filter.rosterPlaceholder", lang))
+      .setDisabled(disabled || entries.length === 0)
+      .addOptions(selectOptions)
+  );
+}
+
 module.exports = {
   FILTER_ALL_RAIDS,
+  FILTER_ALL_ROSTERS,
+  FILTER_NO_ROSTERS,
   buildRaidDropdownState,
   buildRaidFilterRow,
+  buildStatusRosterFilterEntries,
+  buildStatusRosterFilterRow,
+  getStatusRosterRaidState,
 };

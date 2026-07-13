@@ -635,6 +635,11 @@ module.exports = {
     },
     filter: {
       placeholder: "Lọc theo raid...",
+      rosterPlaceholder: "Lọc theo roster...",
+      allRosters: "Tất cả roster ({pending} chưa clear · {success} đã xong)",
+      rosterState: "{name} ({pending} chưa clear · {success} đã xong)",
+      noMatchingRosters: "Không có roster phù hợp với bộ lọc",
+      unnamedRoster: "Roster chưa đặt tên",
       allRaidsDone: "Tất cả raids (DONE)",
       allRaidsPending: "Tất cả raids ({n} chưa clear)",
       raidEntryDone: "{label} (DONE)",

@@ -8,6 +8,8 @@ function createRaidStatusRenderPayload({
   discordId,
   getAccounts,
   getCurrentPage,
+  getCurrentLocalPage = getCurrentPage,
+  getVisibleRosterCount = () => getAccounts().length,
   getCurrentView,
   getFilterRaidId,
   getStatusUserMeta,
@@ -76,8 +78,8 @@ function createRaidStatusRenderPayload({
 
     return buildAccountPageEmbed(
       accounts[currentPage],
-      currentPage,
-      accounts.length,
+      getCurrentLocalPage(),
+      getVisibleRosterCount(),
       filteredTotals,
       getDisplayRaidsFor,
       getStatusUserMeta(),

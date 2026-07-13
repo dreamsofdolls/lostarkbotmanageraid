@@ -16,6 +16,8 @@ const { createRaidStatusRenderPayload } = require("./view/render-payload");
 const {
   buildRaidDropdownState,
   buildRaidFilterRow,
+  buildStatusRosterFilterEntries,
+  buildStatusRosterFilterRow,
 } = require("./raid-filter");
 const {
   findActiveEventsForUser,
@@ -205,6 +207,7 @@ function createRaidStatusCommand(deps) {
       buildMergedAccounts,
       getStatusRaidsForCharacter,
       buildRaidDropdownState,
+      buildStatusRosterFilterEntries,
     });
 
     // Merge in accounts shared from manager-A users (RAID_MANAGER_ID
@@ -216,19 +219,8 @@ function createRaidStatusCommand(deps) {
     let statusUserMeta = buildStatusUserMeta(userDoc, piggybackOutcome);
     let backgroundRefreshing = typeof startBackgroundRefresh === "function";
 
-    // Raid-filter aggregate for the caller's own roster. Parallel to the
-    // all-mode dropdown in /raid-check, but counts here are
-    // self-scoped (chars across caller's accounts where the raid isn't
-    // fully cleared yet). Computed once at init with the unfiltered
-    // getRaidsFor so toggling filters later doesn't rewrite the labels
-    // underneath the user's hand - labels stay as a stable "my backlog
-    // per raid" reference. Sorted pending desc so the heaviest backlog
-    // surfaces first.
-    // Per-raid entries also track {supports, dps} so the dropdown label
-    // can render "Aegir Hard (3 pending · 1🛡️ 2⚔️)" - lets the caller see
-    // at a glance whether a raid's backlog is composition-blocking (no
-    // supports left) or just queue depth. Hard-support classes are Bard
-    // / Paladin / Artist / Valkyrie; everyone else counts as DPS.
+    // Reloading rebuilds both raid aggregates and roster navigation while
+    // keeping the page index tied to the underlying merged account list.
     const reloadViewerAccounts = async (nextOwnDoc = null) => {
       userDoc = await statusState.reloadViewerAccounts(nextOwnDoc);
     };
@@ -292,6 +284,8 @@ function createRaidStatusCommand(deps) {
       discordId,
       getAccounts: () => statusState.accounts,
       getCurrentPage: () => statusState.currentPage,
+      getCurrentLocalPage: () => statusState.currentLocalPage,
+      getVisibleRosterCount: () => statusState.visibleRosterCount,
       getCurrentView: () => statusState.currentView,
       getFilterRaidId: () => statusState.filterRaidId,
       getStatusUserMeta: () => statusUserMeta,
@@ -344,14 +338,19 @@ function createRaidStatusCommand(deps) {
       buildLocalSyncRefreshButton: syncControls.buildLocalSyncRefreshButton,
       buildRosterRefreshButton: syncControls.buildRosterRefreshButton,
       buildRaidFilterRow,
+      buildStatusRosterFilterRow,
       buildMyRaidsRow,
       getAccounts: () => statusState.accounts,
       getCurrentPage: () => statusState.currentPage,
+      getCurrentLocalPage: () => statusState.currentLocalPage,
+      getVisibleRosterCount: () => statusState.visibleRosterCount,
       getCurrentView: () => statusState.currentView,
       getStatusUserMeta: () => statusUserMeta,
       getRaidDropdownEntries: () => statusState.raidDropdownEntries,
       getTotalRaidPending: () => statusState.totalRaidPending,
       getFilterRaidId: () => statusState.filterRaidId,
+      getRosterFilterEntries: () => statusState.rosterFilterEntries,
+      getSelectedRosterIndex: () => statusState.selectedRosterIndex,
       getMyRaidsShaped: () => myRaidsShaped,
       getBackgroundRefreshing: () => backgroundRefreshing,
     });
