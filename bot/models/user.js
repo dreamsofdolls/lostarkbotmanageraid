@@ -191,9 +191,18 @@ const userSchema = new mongoose.Schema(
     // the attempt stamp so a string of Cloudflare 403s doesn't lie about
     // data freshness.
     lastAutoManageSyncAt: { type: Number, default: null },
+    // VN calendar day (YYYY-MM-DD) when this user most recently opened a
+    // usable /raid-status session. The daily backfill scheduler uses this
+    // separately from sync attempts so its own background run cannot pretend
+    // the user visited and accidentally stretch the cadence to every 2 days.
+    lastRaidStatusOpenedDayKey: { type: String, default: "" },
+    // Previous VN calendar day already claimed by the daily backfill worker.
+    // This is an attempt key, not a success claim: one broken Bible response
+    // must not hammer the same dormant user every 30-minute scheduler tick.
+    lastAutoManageDailyAttemptDayKey: { type: String, default: "" },
     // Unix ms timestamp of the last channel-announcement nudge Artist
     // posted for this user when every char returned "Logs not enabled".
-    // Dedup at 7 days so stuck users aren't spam-tagged each 30-min tick.
+    // Dedup at 7 days so stuck users aren't spam-tagged by daily backfill.
     lastPrivateLogNudgeAt: { type: Number, default: null },
     // Local-sync mode opt-in. MUTUALLY EXCLUSIVE with autoManageEnabled -
     // a user can have at most one active sync source at a time. Local-sync
@@ -253,7 +262,7 @@ userSchema.index(
 
 // Phase 3 background auto-manage tick filters to opted-in users, narrows by
 // stale `lastAutoManageSyncAt`, then sorts by `lastAutoManageAttemptAt` for
-// fair rotation. Kept for older deployments/query plans; the attempt-scan
+// fair rotation. Kept for older deployments/query plans; the day-key scan
 // index below is the current scheduler path.
 userSchema.index(
   {
@@ -267,17 +276,18 @@ userSchema.index(
   }
 );
 
-// Current background auto-manage scan: a user is eligible when the bot has
-// not attempted bible reconciliation recently. Attempt freshness is a better
-// queue cursor than success freshness because all-failed/private-log users
-// should still back off instead of being retried every scheduler tick.
+// Background auto-manage scan: select opted-in users who did not visit
+// /raid-status on the target VN day and have not yet been claimed for that
+// day's backfill. lastAutoManageAttemptAt remains the fairness sort cursor.
 userSchema.index(
   {
     autoManageEnabled: 1,
+    lastAutoManageDailyAttemptDayKey: 1,
+    lastRaidStatusOpenedDayKey: 1,
     lastAutoManageAttemptAt: 1,
   },
   {
-    name: "auto_manage_background_attempt_scan",
+    name: "auto_manage_daily_backfill_scan",
     partialFilterExpression: { autoManageEnabled: true },
   }
 );

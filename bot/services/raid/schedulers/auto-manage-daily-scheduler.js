@@ -4,22 +4,32 @@ const {
   stampAutoManageAttemptFromReport,
 } = require("../../auto-manage/reports/utils");
 const {
-  AUTO_MANAGE_BACKGROUND_STALE_MS,
-  buildAutoManageAttemptStaleFilter,
-} = require("../../auto-manage/runtime/support/freshness");
+  getAutoManageDailyContext,
+  buildMissingRaidStatusDayFilter,
+} = require("../../auto-manage/runtime/support/daily-backfill");
 const { createNonOverlappingIntervalRunner } = require("./scheduler-runner");
 
 const AUTO_MANAGE_DAILY_TICK_MS = 30 * 60 * 1000;
-const AUTO_MANAGE_DAILY_CUTOFF_MS = AUTO_MANAGE_BACKGROUND_STALE_MS;
 const AUTO_MANAGE_DAILY_BATCH_SIZE = 6;
 
-function buildAutoManageDailyCandidateQuery(cutoff) {
+function buildAutoManageDailyCandidateQuery(dailyContext) {
   return {
     autoManageEnabled: true,
     localSyncEnabled: { $ne: true },
     "accounts.0": { $exists: true },
-    ...buildAutoManageAttemptStaleFilter(cutoff),
+    ...buildMissingRaidStatusDayFilter(dailyContext),
   };
+}
+
+function buildAutoManageDailyClaimQuery(discordId, dailyContext) {
+  return {
+    discordId,
+    ...buildAutoManageDailyCandidateQuery(dailyContext),
+  };
+}
+
+function didClaimDailyBackfill(result) {
+  return Number(result?.modifiedCount ?? result?.nModified ?? 0) > 0;
 }
 
 function createOutcomeCounters() {
@@ -42,6 +52,7 @@ function shouldNudgePrivateLogUser({ report, isPublicLogDisabledError }) {
 async function syncCandidate({
   discordId,
   weekResetStart,
+  dailyContext,
   deps,
 }) {
   const {
@@ -70,6 +81,18 @@ async function syncCandidate({
       return { bucket: "skipped" };
     }
     if (!seedDoc.autoManageEnabled) {
+      return { bucket: "skipped" };
+    }
+
+    const claim = await User.updateOne(
+      buildAutoManageDailyClaimQuery(discordId, dailyContext),
+      {
+        $set: {
+          lastAutoManageDailyAttemptDayKey: dailyContext.targetDayKey,
+        },
+      }
+    );
+    if (!didClaimDailyBackfill(claim)) {
       return { bucket: "skipped" };
     }
 
@@ -142,11 +165,11 @@ function createAutoManageDailySchedulerService({
   nudgeStuckPrivateLogUser,
   processEnv = process.env,
 }) {
-  async function runAutoManageDailyTick(client) {
+  async function runAutoManageDailyTick(client, now = new Date()) {
     if (processEnv.AUTO_MANAGE_DAILY_DISABLED === "true") return;
 
-    const cutoff = Date.now() - AUTO_MANAGE_BACKGROUND_STALE_MS;
-    const candidates = await User.find(buildAutoManageDailyCandidateQuery(cutoff))
+    const dailyContext = getAutoManageDailyContext(now);
+    const candidates = await User.find(buildAutoManageDailyCandidateQuery(dailyContext))
       .sort({ lastAutoManageAttemptAt: 1 })
       .limit(AUTO_MANAGE_DAILY_BATCH_SIZE)
       .select("discordId")
@@ -160,6 +183,7 @@ function createAutoManageDailySchedulerService({
       const outcome = await syncCandidate({
         discordId,
         weekResetStart,
+        dailyContext,
         deps: {
           User,
           saveWithRetry,
@@ -178,7 +202,7 @@ function createAutoManageDailySchedulerService({
     }
 
     console.log(
-      `[auto-manage daily] tick: ${candidates.length} candidate(s) · synced ${counters.syncedCount} · attempted-only ${counters.attemptedOnlyCount} · skipped ${counters.skippedCount} · failed ${counters.failedCount}`
+      `[auto-manage daily] target=${dailyContext.targetDayKey}: ${candidates.length} candidate(s) · synced ${counters.syncedCount} · attempted-only ${counters.attemptedOnlyCount} · skipped ${counters.skippedCount} · failed ${counters.failedCount}`
     );
   }
 
@@ -200,10 +224,10 @@ function createAutoManageDailySchedulerService({
 
 module.exports = {
   AUTO_MANAGE_DAILY_TICK_MS,
-  AUTO_MANAGE_DAILY_CUTOFF_MS,
   AUTO_MANAGE_DAILY_BATCH_SIZE,
-  AUTO_MANAGE_BACKGROUND_STALE_MS,
   buildAutoManageDailyCandidateQuery,
+  buildAutoManageDailyClaimQuery,
   createAutoManageDailySchedulerService,
+  didClaimDailyBackfill,
   shouldNudgePrivateLogUser,
 };

@@ -49,6 +49,9 @@ const {
   createRaidStatusComponentSession,
   createRaidStatusSessionState,
 } = require("./state/session-state");
+const {
+  markRaidStatusOpenedDay,
+} = require("../../services/auto-manage/runtime/support/daily-backfill");
 
 const STATUS_PAGINATION_SESSION_MS = 10 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
@@ -440,6 +443,14 @@ function createRaidStatusCommand(deps) {
         });
       return backgroundRenderChain;
     };
+
+    void markRaidStatusOpenedDay({
+      User,
+      discordId,
+      lastOpenedDayKey: userDoc?.lastRaidStatusOpenedDayKey,
+    }).catch((err) => {
+      console.warn("[raid-status] daily activity stamp failed:", err?.message || err);
+    });
 
     if (backgroundRefreshing) {
       const refreshStarted = Date.now();
