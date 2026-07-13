@@ -41,29 +41,31 @@ async function probeLocalSyncModeWithBudget({
 async function loadStatusViewerState({
   User,
   discordId,
-  loadStatusUserDoc,
+  prepareStatusUserDoc,
   getAccessibleAccountsFn = getAccessibleAccounts,
 }) {
-  const lang = await getUserLanguage(discordId, { UserModel: User });
-  const seedDoc = await User.findOne({ discordId });
-  const hasOwnAccounts =
-    seedDoc && Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
-
-  let hasIncomingShare = false;
-  let incomingSharedAccounts = null;
-  if (!hasOwnAccounts) {
-    try {
-      incomingSharedAccounts = await getAccessibleAccountsFn(discordId, {
+  const incomingSharesPromise = Promise.resolve()
+    .then(() =>
+      getAccessibleAccountsFn(discordId, {
         includeOwn: false,
-      });
-      hasIncomingShare = incomingSharedAccounts.length > 0;
-    } catch (err) {
+      })
+    )
+    .then((rows) => (Array.isArray(rows) ? rows : []))
+    .catch((err) => {
       console.warn(
-        "[raid-status] share check failed during zero-own gate:",
+        "[raid-status] share check failed during viewer load:",
         err?.message || err
       );
-    }
-  }
+      return [];
+    });
+  const [lang, seedDoc, incomingSharedAccounts] = await Promise.all([
+    getUserLanguage(discordId, { UserModel: User }),
+    User.findOne({ discordId }),
+    incomingSharesPromise,
+  ]);
+  const hasOwnAccounts =
+    seedDoc && Array.isArray(seedDoc.accounts) && seedDoc.accounts.length > 0;
+  const hasIncomingShare = incomingSharedAccounts.length > 0;
 
   if (!hasOwnAccounts && !hasIncomingShare) {
     return {
@@ -74,6 +76,7 @@ async function loadStatusViewerState({
       incomingSharedAccounts,
       noRoster: true,
       piggybackOutcome: null,
+      startBackgroundRefresh: null,
       userDoc: null,
     };
   }
@@ -87,12 +90,13 @@ async function loadStatusViewerState({
       incomingSharedAccounts,
       noRoster: false,
       piggybackOutcome: null,
+      startBackgroundRefresh: null,
       userDoc: seedDoc || { discordId, accounts: [] },
     };
   }
 
-  const refreshed = await loadStatusUserDoc(discordId, seedDoc);
-  const userDoc = refreshed.userDoc;
+  const prepared = prepareStatusUserDoc(discordId, seedDoc);
+  const userDoc = prepared.userDoc;
   const noRoster =
     !hasIncomingShare &&
     (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0);
@@ -104,7 +108,8 @@ async function loadStatusViewerState({
     hasIncomingShare,
     incomingSharedAccounts,
     noRoster,
-    piggybackOutcome: refreshed.piggybackOutcome,
+    piggybackOutcome: prepared.piggybackOutcome,
+    startBackgroundRefresh: prepared.startBackgroundRefresh,
     userDoc,
   };
 }

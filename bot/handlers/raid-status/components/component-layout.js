@@ -28,6 +28,7 @@ function createRaidStatusComponentLayout({
   getTotalRaidPending,
   getFilterRaidId,
   getMyRaidsShaped,
+  getBackgroundRefreshing = () => false,
 }) {
   const getRowComponentCount = (row) => {
     if (Array.isArray(row?.components)) return row.components.length;
@@ -94,7 +95,7 @@ function createRaidStatusComponentLayout({
     if (modeRow && rows.length < 5) rows.push(modeRow);
   };
 
-  const addRaidViewNavigationRows = (rows, disabled, showSync) => {
+  const addRaidViewNavigationRows = (rows, disabled, showSync, syncDisabled) => {
     const accounts = getAccounts();
     const currentPage = getCurrentPage();
     const statusUserMeta = getStatusUserMeta();
@@ -106,13 +107,13 @@ function createRaidStatusComponentLayout({
         lang,
       });
       if (showSync) {
-        const btn = buildSyncButton(disabled);
+        const btn = buildSyncButton(syncDisabled);
         if (btn) paginationRow.addComponents(btn);
         if (statusUserMeta.localSyncEnabled) {
-          const newBtn = buildLocalSyncNewButton(disabled);
+          const newBtn = buildLocalSyncNewButton(syncDisabled);
           if (newBtn) {
             paginationRow.addComponents(newBtn);
-            paginationRow.addComponents(buildLocalSyncRefreshButton(disabled));
+            paginationRow.addComponents(buildLocalSyncRefreshButton(syncDisabled));
           }
         }
       }
@@ -121,7 +122,7 @@ function createRaidStatusComponentLayout({
     }
 
     if (showSync) {
-      const row = buildSyncRow(disabled);
+      const row = buildSyncRow(syncDisabled);
       if (row) rows.push(row);
     }
   };
@@ -182,9 +183,10 @@ function createRaidStatusComponentLayout({
     const statusUserMeta = getStatusUserMeta();
     const anySyncMode = statusUserMeta.autoManageEnabled || statusUserMeta.localSyncEnabled;
     const showSync = anySyncMode && !currentPageIsShared;
+    const refreshDisabled = disabled || getBackgroundRefreshing();
 
-    addRaidViewNavigationRows(rows, disabled, showSync);
-    addRosterRefreshRow(rows, disabled, showRosterRefresh);
+    addRaidViewNavigationRows(rows, disabled, showSync, refreshDisabled);
+    addRosterRefreshRow(rows, refreshDisabled, showRosterRefresh);
     rows.push(buildViewToggleRow(disabled));
     addRaidFilterRow(rows, disabled);
     addMyRaidsRow(rows, disabled);

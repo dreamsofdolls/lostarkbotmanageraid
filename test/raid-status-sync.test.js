@@ -88,3 +88,35 @@ test("raid-status changed week still enters the retry write path", async () => {
   assert.equal(saves, 1);
   assert.deepEqual(result.userDoc, seedDoc);
 });
+
+test("raid-status prepares a fresh render copy and starts sync lazily once", async () => {
+  let refreshCollections = 0;
+  const seedDoc = {
+    discordId: "user-1",
+    weeklyResetKey: "old",
+    accounts: [{ accountName: "Roster", characters: [] }],
+    autoManageEnabled: false,
+  };
+  const sync = createSync({
+    ensureFreshWeek: (doc) => {
+      doc.weeklyResetKey = "fresh";
+      return false;
+    },
+    collectStaleAccountRefreshes: async () => {
+      refreshCollections += 1;
+      return [];
+    },
+  });
+
+  const prepared = sync.prepareStatusUserDoc("user-1", seedDoc);
+
+  assert.equal(prepared.userDoc.weeklyResetKey, "fresh");
+  assert.equal(seedDoc.weeklyResetKey, "old");
+  assert.equal(refreshCollections, 0);
+
+  const first = prepared.startBackgroundRefresh();
+  const second = prepared.startBackgroundRefresh();
+  assert.equal(first, second);
+  await first;
+  assert.equal(refreshCollections, 1);
+});
