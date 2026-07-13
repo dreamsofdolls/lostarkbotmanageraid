@@ -97,9 +97,9 @@ const bibleLimiter = new ConcurrencyLimiter(2);
 // raiding server could queue up dozens of fetches at once and trip the
 // global 50-req/s ceiling - 5 in flight is a safe middle ground.
 const discordUserLimiter = new ConcurrencyLimiter(5);
-// /raid-check's initial render may pre-refresh multiple users before it scans.
-// Keep that user-level fan-out bounded so one leader view doesn't stampede
-// Mongo while still letting bible HTTP overlap through bibleLimiter.
+// /raid-check refreshes stale users after its first render. Keep that
+// background fan-out bounded so one leader view doesn't stampede Mongo while
+// still letting bible HTTP overlap through bibleLimiter.
 const raidCheckRefreshLimiter = new ConcurrencyLimiter(3);
 // Sync button can touch multiple opted-in users; bounded user-level fan-out
 // keeps wall-clock reasonable without increasing bible HTTP concurrency beyond

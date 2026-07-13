@@ -71,10 +71,12 @@ test("all-mode data loader uses lean query and fresh-week fallback without refre
   assert.deepEqual(result.users, rows);
   assert.deepEqual(ensured, ["100", "200"]);
   assert.equal(result.canRefreshFreshData, false);
+  assert.deepEqual(await result.startBackgroundRefresh(), []);
 });
 
-test("all-mode data loader refreshes queued docs and bypasses fresh docs", async () => {
+test("all-mode data loader queues stale refreshes without blocking the render snapshot", async () => {
   const limiterCalls = [];
+  const ensured = [];
   const seedUsers = [
     {
       discordId: "100",
@@ -97,9 +99,7 @@ test("all-mode data loader refreshes queued docs and bypasses fresh docs", async
 
   const result = await loadAllModeUsers({
     User,
-    ensureFreshWeek: () => {
-      throw new Error("ensureFreshWeek should not run on refresh path");
-    },
+    ensureFreshWeek: (doc) => ensured.push(doc.discordId),
     RAID_CHECK_USER_QUERY_FIELDS: "fields",
     raidCheckRefreshLimiter: {
       run: async (fn) => {
@@ -121,17 +121,26 @@ test("all-mode data loader refreshes queued docs and bypasses fresh docs", async
     raidCheckRefreshLimiter: { run: () => {} },
     loadFreshUserSnapshotForRaidViews: () => {},
   }), true);
-  assert.deepEqual(limiterCalls, ["run"]);
+  assert.deepEqual(limiterCalls, []);
   assert.equal(result.refreshQueued, 1);
   assert.equal(result.freshBypass, 1);
   assert.equal(result.canRefreshFreshData, true);
   assert.deepEqual(result.users, [
+    { discordId: "100-plain" },
+    { discordId: "200-plain" },
+  ]);
+  assert.deepEqual(ensured, ["100-plain", "200-plain"]);
+
+  const firstRefresh = result.startBackgroundRefresh();
+  const secondRefresh = result.startBackgroundRefresh();
+  assert.equal(firstRefresh, secondRefresh);
+  assert.deepEqual(await firstRefresh, [
     {
       discordId: "100-fresh",
       opts: { allowAutoManage: false, logLabel: "[raid-check all]" },
     },
-    { discordId: "200-plain" },
   ]);
+  assert.deepEqual(limiterCalls, ["run"]);
 });
 
 test("all-mode data builds one page per user account", () => {
@@ -156,7 +165,7 @@ test("all-mode data builds one page per user account", () => {
   );
 });
 
-test("all-mode data resolves author meta from cache, fetch, and cached doc names", async () => {
+test("all-mode author meta never waits on Discord REST before first render", async () => {
   const fetched = [];
   const users = [
     {
@@ -197,20 +206,17 @@ test("all-mode data resolves author meta from cache, fetch, and cached doc names
     interaction,
     users,
     pagesData,
-    discordUserLimiter: {
-      run: (fn) => fn(),
-    },
   });
 
   assert.deepEqual(visibleUserIds, ["100", "200"]);
-  assert.deepEqual(fetched, ["200"]);
+  assert.deepEqual(fetched, []);
   assert.deepEqual(authorMeta.get("100"), {
     displayName: "Cached Name",
     avatarURL: "avatar-100",
   });
   assert.deepEqual(authorMeta.get("200"), {
-    displayName: "Fetched 200",
-    avatarURL: "avatar-200",
+    displayName: "200",
+    avatarURL: null,
   });
 });
 
@@ -243,7 +249,6 @@ test("all-mode author meta skips Discord REST when Mongo already has a display n
     interaction,
     users,
     pagesData,
-    discordUserLimiter: { run: (fn) => fn() },
   });
 
   assert.deepEqual(fetched, []);

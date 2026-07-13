@@ -170,7 +170,6 @@ function createRaidCheckCommand(deps) {
     buildPaginationRow,
     isRaidLeader,
     isManagerId,
-    discordUserLimiter,
     raidCheckRefreshLimiter,
     loadFreshUserSnapshotForRaidViews,
     shouldLoadFreshUserSnapshotForRaidViews,
