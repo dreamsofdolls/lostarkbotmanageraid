@@ -14,8 +14,10 @@ const {
   buildAllModeStatusFilterRow,
   buildAllModeUserFilterRow,
   filterAllModePageIndices,
+  getAllModeRosterSelectionForPage,
   normalizeAllModeStatusFilter,
   raidMatchesStatusFilter,
+  resolveAllModeLocalPage,
 } = require("../bot/handlers/raid-check/all-mode/all-mode-filters");
 
 class FakeSelectMenuBuilder {
@@ -250,7 +252,7 @@ test("all-mode roster filter disables itself when no roster matches active statu
   assert.equal(menu.options[0].value, FILTER_NO_ROSTERS);
 });
 
-test("all-mode page filtering skips empty raid/status pages and clears an invalid roster", () => {
+test("all-mode page filtering keeps eligible pages and clears an invalid roster selection", () => {
   const pagesData = [
     page("u1", "Pending", [
       { raidKey: "kazeros", modeKey: "hard", isCompleted: false },
@@ -286,6 +288,46 @@ test("all-mode page filtering skips empty raid/status pages and clears an invali
     getStatusRaidsForCharacter: (character) => character.raids,
     applyRaidEligibility: false,
   });
-  assert.deepEqual(taskViewResult.filteredIndices, [2]);
+  assert.deepEqual(taskViewResult.filteredIndices, [0, 1, 2]);
   assert.equal(taskViewResult.filterRosterIndex, 2);
+  assert.equal(
+    resolveAllModeLocalPage({
+      filteredIndices: taskViewResult.filteredIndices,
+      filterRosterIndex: taskViewResult.filterRosterIndex,
+    }),
+    2
+  );
+});
+
+test("all-mode roster dropdown and pagination resolve each other's position", () => {
+  const filteredIndices = [3, 7, 9];
+
+  assert.equal(
+    resolveAllModeLocalPage({ filteredIndices, filterRosterIndex: 7 }),
+    1
+  );
+  assert.equal(
+    resolveAllModeLocalPage({
+      filteredIndices,
+      currentLocalPage: 99,
+      resetPage: false,
+    }),
+    2
+  );
+  assert.equal(
+    getAllModeRosterSelectionForPage({
+      filterUserId: "u1",
+      filteredIndices,
+      currentLocalPage: 1,
+    }),
+    7
+  );
+  assert.equal(
+    getAllModeRosterSelectionForPage({
+      filterUserId: null,
+      filteredIndices,
+      currentLocalPage: 1,
+    }),
+    null
+  );
 });

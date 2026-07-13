@@ -30,7 +30,7 @@ test("raid-check renders before starting roster and teams background work", () =
   assert.doesNotMatch(source, /interaction\.fetchReply\(/);
 });
 
-test("raid-check keeps pagination while the selected user is on All rosters", () => {
+test("raid-check keeps pagination while the roster dropdown acts as a page selector", () => {
   const source = fs.readFileSync(
     path.join(
       __dirname,
@@ -46,7 +46,7 @@ test("raid-check keeps pagination while the selected user is on All rosters", ()
 
   assert.match(
     source,
-    /const usesRosterNavigation = Number\.isInteger\(filterRosterIndex\);/,
-    "pagination should only be replaced after a specific roster is selected"
+    /const row = hasCurrentPage\s*\? buildPaginationRow/,
+    "pagination should remain available for both All rosters and a selected roster"
   );
 });
