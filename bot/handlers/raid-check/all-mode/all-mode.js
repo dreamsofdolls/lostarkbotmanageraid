@@ -177,7 +177,7 @@ function createAllModeHandler({
     const {
       visibleUserIds,
       authorMeta,
-      refreshMissingAuthorMeta,
+      refreshIncompleteAuthorMeta,
     } = resolveAllModeAuthorMeta({ interaction, users, pagesData });
     const totalPages = pagesData.length;
     const autoManageStateByDiscordId = new Map();
@@ -601,10 +601,10 @@ function createAllModeHandler({
         .catch(() => {});
     });
 
-    void refreshMissingAuthorMeta()
+    void refreshIncompleteAuthorMeta()
       .then((refreshed) => {
         if (refreshed <= 0) return null;
-        console.log(`[raid-check all] author names refreshed=${refreshed}`);
+        console.log(`[raid-check all] author metadata refreshed=${refreshed}`);
         return queueBackgroundRender("author-meta");
       })
       .catch((err) => {
