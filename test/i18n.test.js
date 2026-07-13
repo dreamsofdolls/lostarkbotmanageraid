@@ -51,6 +51,19 @@ test("locale packs keep the same leaf-key shape as vi", () => {
   }
 });
 
+test("vi raid-check filter dropdowns do not leak English state labels", () => {
+  const filter = TRANSLATIONS.vi["raid-check"].filter;
+  const copy = Object.values(filter).join("\n").replace(/\{[^}]+\}/g, "");
+
+  assert.doesNotMatch(copy, /\b(?:pending|success|done|filter by|jump to)\b/i);
+  assert.equal(filter.statusPending, "Chưa clear");
+  assert.equal(filter.statusSuccess, "Đã xong");
+  assert.equal(
+    filter.rosterState,
+    "{name} ({pending} chưa clear · {success} đã xong)"
+  );
+});
+
 test("jp/en raid-channel schedule copy matches per-language quiet hours", () => {
   const enText = flattenStrings(TRANSLATIONS.en).join("\n");
   assert.match(enText, /03:00-08:00 UTC/);
