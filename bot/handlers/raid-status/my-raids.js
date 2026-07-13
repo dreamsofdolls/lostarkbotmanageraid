@@ -86,7 +86,7 @@ function buildMyRaidsRow({
 }
 
 // One turn rendered as an inline field, member lines in the show format minus
-// the @mention (a personal view is glanceable - the viewer's own line marked).
+// the @mention; the viewer's own line is marked in this personal view.
 function turnFieldFor(turn, signups, viewerId, lang) {
   const members = resolveTurnMembers(signups, turn);
   const lines = members.map((m) => {

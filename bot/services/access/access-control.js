@@ -22,7 +22,7 @@ const { isManagerId } = require("./manager");
 // Shape returned per element:
 //   {
 //     ownerDiscordId,       // string
-//     ownerLabel,           // friendly name for UI ("@Alice")
+//     ownerLabel,           // display name for UI ("@Alice")
 //     accountName,          // string
 //     account,              // Mongoose account subdoc
 //     accessLevel,          // 'edit' | 'view'
@@ -82,7 +82,7 @@ async function getAccessibleAccounts(viewerDiscordId, { models = {}, helpers = {
 }
 
 // Light-weight "can viewer write?" check used at the top of write
-// handlers (/raid-set, /raid-task add, etc.) before we even autocomplete
+// handlers (/raid-set, /raid-task add, etc.) before autocomplete reaches
 // the next field. Saves a Mongo round trip on every interaction by
 // short-circuiting on viewer === owner (the common case).
 async function canEditAccount(viewerDiscordId, ownerDiscordId, { models = {}, helpers = {} } = {}) {

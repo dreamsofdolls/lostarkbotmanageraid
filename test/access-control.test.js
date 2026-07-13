@@ -43,8 +43,8 @@ function buildFakeRosterShare(records) {
     },
     findOne(query) {
       // Mongoose Query is chainable: caller does `findOne(...).lean()`.
-      // Returning a plain object with `.lean()` mirrors that shape; we
-      // intentionally don't make findOne async so .lean() is reachable
+      // Returning a plain object with `.lean()` mirrors that shape. findOne
+      // remains synchronous so .lean() is reachable
       // on the returned reference (an awaited Promise would not be).
       const matched = records.find((r) => {
         if (query.ownerDiscordId && r.ownerDiscordId !== query.ownerDiscordId) return false;

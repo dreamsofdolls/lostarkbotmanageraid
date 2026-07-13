@@ -329,8 +329,8 @@ function createRaidCheckCommand(deps) {
   // Consumes resolveCachedDisplayName from the sync-ui factory above, so
   // sync-ui has to be wired first. RAID_CHECK_EDIT_SESSION_MS is the local
   // const right above. The 6 returned functions cross-call each other
-  // through their shared closure, so we destructure and bind locally so
-  // the call sites below stay unchanged.
+  // through their shared closure; local destructuring and binding keep the
+  // call sites below unchanged.
   const {
     handleRaidCheckEditClick,
     buildRaidCheckEditDMEmbed,

@@ -65,7 +65,7 @@ function makeBoard(overrides = {}) {
   };
 }
 
-// A channel whose send/delete record their call order, so we can assert the
+// Channel stub whose send/delete methods record call order for verifying the
 // anti-ghost invariant (post the new board BEFORE deleting the old one).
 function makeChannel(order, options = {}) {
   const sentPayloads = options.sentPayloads || [];

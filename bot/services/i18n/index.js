@@ -8,7 +8,7 @@
 // Falls back: missing key in target locale → fall back to default
 // locale (vi) → fall back to the raw key string. This keeps a typo'd
 // key visible in dev output (you'll see "share.grant.foo" instead of
-// "" or a thrown error) so it's easy to spot in QA.
+// "" or a thrown error) so the failure is visible during QA.
 "use strict";
 
 const {
@@ -85,7 +85,7 @@ function applyVars(template, vars) {
   }
   if (typeof template !== "string" || !vars) return template;
   // Simple {name} interpolation. Missing var leaves the literal {name}
-  // in place so a missing var is visually obvious during dev.
+  // in place so a missing variable remains visible during development.
   return template.replace(/\{(\w+)\}/g, (match, name) => {
     return Object.prototype.hasOwnProperty.call(vars, name) ? String(vars[name]) : match;
   });
@@ -116,8 +116,8 @@ function t(key, lang = DEFAULT_LANGUAGE, vars = null) {
 
 /**
  * Cache-first lookup. Pass an optional UserModel for DI in tests; in
- * production the require() cycle would force a circular import if we
- * reached for the real model at module load, so callers pass it in.
+ * production, loading the real model here would create a circular import, so
+ * callers pass it in.
  */
 async function getUserLanguage(discordId, { UserModel } = {}) {
   if (!discordId) return DEFAULT_LANGUAGE;

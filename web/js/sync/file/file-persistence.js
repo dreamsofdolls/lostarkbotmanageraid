@@ -2,10 +2,10 @@
 // reloads. Uses IndexedDB to store the FileSystemFileHandle - browsers
 // allow handles in IDB and re-issue file access on next visit if the
 // user previously granted "Allow on every visit". Persistent FSA
-// permission is what makes la-utils.vercel.app feel native; we mirror.
+// permission provides persistent access and is mirrored here.
 //
 // Single-entry store keyed "current". The value carries the
-// discordId of the user the handle was saved under so we can detect
+// Discord ID associated with the saved handle, allowing detection when a
 // "different user opened the page" and wipe accordingly. User-side
 // Remove button calls clearHandle() explicitly.
 

@@ -248,8 +248,8 @@ function projectSummary(accounts, deltaBuckets) {
 /**
  * Build the `POST /api/local-sync/preview-summary` handler. Pre-sync
  * companion stats: gold delta, completion projection, raid status list,
- * last-sync timestamps. Lets the user see "if I sync, here's what changes"
- * before clicking the Sync button.
+ * last-sync timestamps. Lets the user preview post-sync changes before
+ * clicking the Sync button.
  *
  * Auth chain mirrors the sync endpoint - Bearer JWT, verify, Mongo state
  * check (localSyncEnabled, isCurrentStoredToken). Pure read; no writes.

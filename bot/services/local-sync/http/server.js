@@ -16,9 +16,9 @@ const fs = require("node:fs/promises");
 const url = require("node:url");
 
 /**
- * Tiny HTTP server for the local-sync web companion. Built on Node's
- * built-in http module so we avoid pulling in Express - the only routes
- * we need are static file serving (Phase 3) and the eventual POST
+ * Minimal HTTP server for the local-sync web companion. Built on Node's
+ * built-in http module to avoid an Express dependency. The required routes
+ * are static file serving (Phase 3) and the eventual POST
  * /api/raid-sync endpoint (Phase 4). Anything more elaborate would be a
  * cue to add Express, but this stays under 200 LOC for now.
  *
@@ -28,8 +28,8 @@ const url = require("node:url");
  * traffic can land.
  *
  * Sandboxed to the `webDir` argument - any path traversal attempt
- * (`../../etc/passwd`) is rejected before the disk read because we
- * resolve + verify the resolved path stays within webDir.
+ * (`../../etc/passwd`) is rejected before disk access by resolving the path
+ * and verifying that it remains within webDir.
  */
 
 const MIME_TYPES = {
@@ -96,7 +96,7 @@ function startLocalSyncHttpServer({ port = getEnvPort(), webDir, classIconsDir =
       const parsed = url.parse(req.url || "/", true);
       const pathname = parsed.pathname || "/";
       // Health probe - Railway pings this to detect "service ready".
-      // Returns plain 200 with no body so the probe is cheap.
+      // Returns an empty 200 response to minimize probe overhead.
       if (req.method === "GET" && (pathname === "/" || pathname === "/health")) {
         res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
         res.end("ok");

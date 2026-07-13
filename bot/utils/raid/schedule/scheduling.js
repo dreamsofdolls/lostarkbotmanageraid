@@ -55,9 +55,9 @@ function createSchedulingHelpers({
   
   /**
    * Next scheduler wake-up time for an interval job that started at
-   * `startedAtMs` and runs every `intervalMs`. We intentionally derive this
+   * `startedAtMs` and runs every `intervalMs`. This is derived
    * from the scheduler's REAL boot phase instead of wall-clock boundaries,
-   * because `setInterval(30m)` keeps the process-start phase forever
+   * because `setInterval(30m)` preserves the process-start phase
    * (:17/:47, :03/:33, etc).
    */
   function nextIntervalTickMs(startedAtMs, intervalMs, now = new Date()) {
@@ -91,7 +91,7 @@ function createSchedulingHelpers({
         return candidate.getTime();
       }
       // If today is Wed at/after 10 UTC, daysUntilWed collapses to 0 via
-      // modulo; promote it to 7 so we advance a full week.
+      // modulo; promote it to 7 to advance a full week.
       const daysUntilWed = ((3 - utcDay + 7) % 7) || 7;
       candidate.setUTCDate(candidate.getUTCDate() + daysUntilWed);
       return candidate.getTime();

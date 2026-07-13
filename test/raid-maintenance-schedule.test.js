@@ -127,7 +127,7 @@ test("pickMaintenanceVariant returns a non-empty string from the slot pool", () 
 
 test("pickMaintenanceVariant T-3h and T-1h variants include @here prefix", () => {
   // Drain the pool a few times and confirm every returned variant starts
-  // with the ping marker - we baked it into all 3 strings of each pool.
+  // with the ping marker, which is present in all three strings of each pool.
   for (let i = 0; i < 30; i++) {
     assert.ok(__test.pickMaintenanceVariant("T-3h").startsWith("@here "));
     assert.ok(__test.pickMaintenanceVariant("T-1h").startsWith("@here "));
@@ -172,10 +172,10 @@ test("maintenance registry preview matches the runtime ping policy", () => {
   assert.doesNotMatch(countdownPreview, /@here|@everyone/);
 });
 
-// Tiny in-test matcher that mirrors Mongo's $or + dot-path + $ne semantics
+// Minimal test matcher for Mongo's $or, dot-path, and $ne semantics
 // well enough to verify a guild config doc would survive the scheduler's
-// initial filter. We're not validating Mongo itself, only that the query
-// shape we hand to GuildConfig.find selects the right docs.
+// initial filter. This validates the query shape supplied to GuildConfig.find,
+// not MongoDB itself.
 function docMatchesQuery(doc, query) {
   if (query.$or) return query.$or.some((sub) => docMatchesQuery(doc, sub));
   for (const [path, condition] of Object.entries(query)) {

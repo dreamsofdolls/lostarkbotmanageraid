@@ -32,7 +32,7 @@ function makeEvent(extra = {}) {
     skipNotify: false, async save() {}, ...extra,
   };
 }
-// Channel that records send() calls (= the public pings we want to silence).
+// Channel stub that records send() calls for public-ping suppression checks.
 function makeChannel(order) {
   return {
     async send() { order.push("ping"); },

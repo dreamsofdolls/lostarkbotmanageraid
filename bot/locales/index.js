@@ -4,7 +4,7 @@
 // later without touching every consumer.
 //
 // SUPPORTED_LANGUAGES drives the /raid-language picker. Every entry
-// here is a "first-class" locale with full Artist-voice coverage
+// here is a first-class locale with full public-message key coverage
 // across every command. As of 2026-05-09 that's vi (default), jp, en.
 // New locales added here only need a matching <code>.js file; the
 // picker, /raid-help language: option, and per-user persistence pick

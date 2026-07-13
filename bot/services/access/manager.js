@@ -18,7 +18,7 @@ const DEFAULT_AUTO_MANAGE_SYNC_COOLDOWN_MS = 10 * 60 * 1000;
 const MANAGER_AUTO_MANAGE_SYNC_COOLDOWN_MS = 15 * 1000;
 
 // Roster metadata refresh cooldown (iLvl/class scrape from lostark.bible).
-// Regular users keep the conservative 2h spacing so we don't hammer bible
+// Regular users keep the conservative two-hour spacing to limit Bible traffic
 // when a roster sits in a /raid-status embed for a long browse session.
 // Managers (RAID_MANAGER_ID allowlist) drop to 10 minutes so they can
 // trigger a fresh scrape during operational decisions (rolling raids,

@@ -1,4 +1,4 @@
-// Tiny i18n resolver for the web companion. Reads active lang from
+// Minimal i18n resolver for the web companion. Reads active lang from
 // window.__artistLang (set in app.js after token decode) and walks the
 // dotted key path through the language dict. Mirror of the bot-side
 // bot/services/i18n.js but ESM-shaped + no Mongo cache (no need - the
@@ -16,8 +16,8 @@ export function normalizeLang(raw) {
   if (typeof raw !== "string") return DEFAULT_LANG;
   const lower = raw.toLowerCase().trim();
   if (SUPPORTED_LANGS.includes(lower)) return lower;
-  // Discord native locale code "ja" maps to our "jp"; defensive in case
-  // a token was minted from a Discord-locale-aware code path.
+  // Discord locale code "ja" maps to the internal "jp" key. This also
+  // handles tokens minted by Discord-locale-aware code paths.
   if (lower === "ja") return "jp";
   return DEFAULT_LANG;
 }

@@ -5,7 +5,7 @@
 //     URL token, set active i18n language, FSA permission, sql.js query,
 //     POST sync. Adding a framework would ship 100kB+ of runtime for
 //     ~280 LOC of logic.
-//   - wa-sqlite (asyncify build) loaded from jsdelivr. We use a custom
+//   - wa-sqlite (asyncify build) loaded from jsdelivr. A custom
 //     async VFS (web/js/sync/file/file-vfs.js) that streams from File.slice() so
 //     multi-GB encounters.db files don't blow Chrome's ArrayBuffer cap
 //     (sql.js, the previous library, required full-file load and broke
@@ -184,8 +184,8 @@ async function activateSyncPreview() {
 //
 // Token is decoded client-side (no fetch) since it carries Discord ID + lang
 // + expiry signed by the bot's HMAC secret. The decode is presentational
-// only (server re-verifies on every POST) so we just need the payload
-// fields, not crypto-trust.
+// only because the server re-verifies every POST; only the payload fields are
+// needed on the client.
 
 const params = new URLSearchParams(window.location.search);
 const token = params.get("token");
@@ -224,7 +224,7 @@ async function loadFile(file, { handle = null } = {}) {
   // Render file meta + a "Remove" button so the user can detach the
   // file (clears persisted handle from IDB so next visit asks for a
   // fresh pick). Restore action button (when permission was revoked)
-  // hides automatically because we re-render this innerHTML.
+  // hides automatically when this innerHTML is rendered again.
   fileMeta.innerHTML = `<div class="file-meta-row"><span>${t("file.selected")} <strong>${escapeHtml(file.name)}</strong> · ${formatBytes(file.size)} · ${t("file.modified")} ${new Date(file.lastModified).toLocaleString()}</span><button id="remove-file-btn" type="button" class="remove-file-btn">${escapeHtml(t("file.removeBtn"))}</button></div>`;
   // Wire Remove button - clears persisted handle + resets the UI back
   // to the dropzone state. Doesn't touch the actual file on disk.
@@ -323,7 +323,7 @@ pickFileBtn.addEventListener("click", async () => {
 // ----- 2.5. Restore-on-load: try to bring back the previously-picked
 // file when the user refreshes the page with the same token. The
 // browser's persistent FSA permission ("Allow on every visit") makes
-// this seamless when granted; otherwise we surface a Restore button
+// this seamless when granted; otherwise the UI surfaces a Restore button
 // that the user clicks to elevate permission inside a user gesture.
 async function attemptRestoreFromIdb() {
   if (!window.__artistDiscordId) return;
@@ -382,7 +382,7 @@ if (window.__artistDiscordId) {
 // ----- 3. wa-sqlite query (streaming VFS) -----
 //
 // Replaces the previous sql.js full-file load. wa-sqlite + FileBackedVFS
-// only reads the SQLite B-tree pages our query actually touches (~tens
+// only reads the SQLite B-tree pages touched by the query (~tens
 // of MB on a 4 GB DB), so file size is no longer a wall. Trade-off: more
 // async coordination + asyncify-built WASM is ~700 KB vs sql.js 1.5 MB,
 // roughly even.
@@ -491,7 +491,7 @@ async function runPreviewQuery(sqlite3, db) {
     return;
   }
   // Cache rows + schema for post-sync refresh (refreshDiffAndStats reuses
-  // these without re-parsing SQLite). The query is cheap on a warm DB
+  // these without re-parsing SQLite). The query is low-cost on a cached DB,
   // but skipping it avoids an unnecessary file-system roundtrip after
   // the user already committed.
   window.__artistRows = rows;
@@ -633,7 +633,7 @@ syncBtn.addEventListener("click", async () => {
     // Refresh section 3 (preview cards + stats panel) after a real apply
     // so the user sees post-sync state immediately - synced gates flip
     // from pending to synced, gold drops, completion % climbs. Pass
-    // keepSyncOutput so we don't clobber the success summary above.
+    // keepSyncOutput preserves the success summary above.
     if (a > 0 && window.__artistRows) {
       rebuildDiffFromRows({
         rows: window.__artistRows,

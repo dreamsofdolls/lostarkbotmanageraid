@@ -10,9 +10,9 @@
 // only fetches the B-tree pages it needs for a query (typically a few
 // MB even for a 4 GB DB), so file.slice() reads work fine.
 //
-// Read-only by design - we never write to the user's encounters.db file.
+// Read-only by design: the user's encounters.db file is never modified.
 // jWrite / jTruncate / jSync return SQLITE_READONLY so any accidental
-// write attempt fails loudly instead of silently corrupting.
+// write attempt returns SQLITE_READONLY instead of modifying the file.
 
 import { FacadeVFS } from "https://cdn.jsdelivr.net/npm/@journeyapps/wa-sqlite@1.3.0/src/FacadeVFS.js";
 import * as VFS from "https://cdn.jsdelivr.net/npm/@journeyapps/wa-sqlite@1.3.0/src/VFS.js";
@@ -160,7 +160,7 @@ export class FileBackedVFS extends FacadeVFS {
   }
 
   async jFullPathname(name, pOut) {
-    // Identity transform - we don't have a real directory tree.
+    // Identity transform because this VFS has no directory tree.
     const { read, written } = new TextEncoder().encodeInto(name, pOut);
     if (read < name.length || written >= pOut.length) return VFS.SQLITE_IOERR;
     pOut[written] = 0;

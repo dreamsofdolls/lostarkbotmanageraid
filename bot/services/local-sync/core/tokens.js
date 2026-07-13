@@ -14,7 +14,7 @@ const crypto = require("node:crypto");
 
 /**
  * JWT-style HMAC tokens used to bridge Discord identity into the web
- * companion. Format intentionally minimal so we don't pull in
+ * companion. The format is intentionally minimal and does not require
  * jsonwebtoken or jose - this is internal-only short-lived auth, not a
  * federated standard. Two base64url segments joined by `.`:
  *

@@ -216,7 +216,7 @@ function createTaskViewUi(deps) {
     });
     collector.on("collect", async (component) => {
       // Ephemeral message - only the original Manager can interact, so
-      // no per-user gating. Bound the customId to our prefix to avoid
+      // no per-user gating. Bound the customId to this handler's prefix to avoid
       // routing past stray clicks (defensive against shared message ids).
       const id = component.customId || "";
       if (id === "raid-check-tasks-page:prev") {

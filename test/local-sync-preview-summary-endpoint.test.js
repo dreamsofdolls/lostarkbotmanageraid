@@ -177,8 +177,8 @@ test("preview summary expands cumulative gates when only later gate is logged (L
     projectedPercent: 25,
   });
   // Gold credits BOTH gates (Kazeros Hard: G1=17000 + G2=35000) even
-  // though only G2 was in the file - this is what we want, otherwise
-  // mid-raid log-enable users get cheated out of G1 gold.
+  // though only G2 was in the file. This preserves G1 gold for users who
+  // enable logging after the first gate.
   assert.equal(summary.goldDelta.total, 52000);
   // The completed incoming raid stays visible because the same character
   // still has other eligible raids pending after sync.

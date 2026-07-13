@@ -606,7 +606,7 @@ test("Artist quiet hours: bedtime pool returns one of 3 variants, none mentionin
     assert.doesNotMatch(picked, /\*\*N\*\*/);
     assert.match(picked, /ngủ|sáng/); // sanity: tone words land
   }
-  // Over 50 draws we should have seen all 3 variants (probability of
+  // Fifty draws should cover all three variants (probability of
   // missing one after 50 draws from a 3-variant pool is (2/3)^50 ≈ 1e-9).
   assert.equal(seen.size, 3);
 });
@@ -656,7 +656,7 @@ test("nextAnnouncementEligibleBoundaryMs: artist-bedtime lands on next 20:00 UTC
   const fire = __test.nextAnnouncementEligibleBoundaryMs("artist-bedtime", before);
   assert.equal(fire, Date.UTC(2026, 3, 23, 20, 0, 0, 0));
 
-  // Exactly at 20:00 UTC → we advance to the next day (already past boundary).
+  // Exactly at 20:00 UTC advances to the next day because the boundary is inclusive.
   const atBoundary = new Date(Date.UTC(2026, 3, 23, 20, 0, 0, 0));
   const fireNext = __test.nextAnnouncementEligibleBoundaryMs("artist-bedtime", atBoundary);
   assert.equal(fireNext, Date.UTC(2026, 3, 24, 20, 0, 0, 0));
@@ -982,7 +982,7 @@ test("Edit flow: DM embed avoids sentence-level hyphens (Dusk voice rule)", () =
   for (const embed of embeds) {
     // A hyphen surrounded by whitespace is the tell for clause-splitting
     // dashes. Hyphens inside identifiers (/raid-status, Manage-Server,
-    // Lost-Ark-Bible, etc.) are fine, so we only flag the space-hyphen-space
+    // Lost-Ark-Bible, etc.) are valid, so only the space-hyphen-space
     // pattern.
     assert.doesNotMatch(embed.description, / - /);
   }
@@ -1137,7 +1137,7 @@ test("formatNextCooldownRemaining rounds up and returns null when expired", () =
     __test.formatNextCooldownRemaining(now - 10 * 60_000, 5 * 60_000),
     null
   );
-  // Exactly 0 (edge of boundary) -> null so we never show "0s".
+  // Exactly zero at the boundary returns null and suppresses "0s".
   assert.equal(__test.formatNextCooldownRemaining(now, 0), null);
   // Never attempted (lastAttemptAt = 0) -> null.
   assert.equal(__test.formatNextCooldownRemaining(0, 5 * 60_000), null);

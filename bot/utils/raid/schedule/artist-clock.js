@@ -1,10 +1,9 @@
 /**
  * utils/raid/schedule/artist-clock.js
- * Time-zone helpers for Artist persona events (bedtime 3am local,
- * wakeup 8am local). Quiet-hours window suppresses cleanup sweeps + 30-
- * min notice posts so the channel stays silent overnight. *ForLang
- * variants exist because the persona schedules in viewer-local time
- * (VN default; JP/EN guilds may want their own clock).
+ * Time-zone helpers for scheduled bedtime and wake-up announcements.
+ * The quiet-hours window suppresses cleanup sweeps and 30-minute notices.
+ * The *ForLang variants resolve boundaries in the configured locale's time
+ * zone (Vietnam by default; Japanese and English guilds may differ).
  */
 
 "use strict";
@@ -12,8 +11,8 @@
 const ARTIST_QUIET_START_HOUR_VN = 3;
 const ARTIST_QUIET_END_HOUR_VN = 8;
 
-// Per-language tz offset (minutes from UTC) for persona-event schedulers:
-// artist-bedtime fires at 3am LOCAL, artist-wakeup at 8am LOCAL.
+// Per-locale offset from UTC, in minutes, for bedtime and wake-up schedulers.
+// Bedtime fires at 03:00 local time and wake-up fires at 08:00 local time.
 const LANG_TZ_OFFSET_MINUTES = {
   vi: 7 * 60,
   jp: 9 * 60,
@@ -62,7 +61,7 @@ function isInArtistQuietHours(now = new Date()) {
 }
 
 /**
- * Whether `now` falls inside the Artist quiet-hours window in viewer's
+ * Whether `now` falls inside the configured quiet-hours window in the viewer's
  * local time. Quiet-hours suppress cleanup sweeps + 30-min notices so
  * the channel stays silent overnight (3am-8am local).
  * @param {Date} [now=new Date()] - test clock
@@ -76,8 +75,8 @@ function isInArtistQuietHoursForLang(now = new Date(), lang) {
 
 /**
  * Plain-text "DD/MM HH:mm" of an instant in the viewer's language tz. For
- * select-option descriptions, where Discord won't render `<t:..>` markup, so we
- * format a fixed local string the same way parseStartTime interprets input.
+ * select-option descriptions, where Discord does not render `<t:..>` markup.
+ * Uses the same fixed local format that parseStartTime accepts as input.
  * @param {Date|number|string} date - the instant (UTC)
  * @param {string} lang - viewer language (drives the tz offset)
  * @returns {string} e.g. "03/06 21:00"

@@ -76,7 +76,7 @@ function createRaidStatusView(deps) {
   // Gold line per character card - renders only for gold-earners with at
   // least one eligible raid this week. Non-earners emit no line at all:
   // the header already carries the 💰 marker (its absence signals "not
-  // gold-earner") so a dedicated body line would just clutter the card.
+  // gold-earner"), so a second body line would duplicate that state.
   function buildCharacterGoldLine(character, raids, lang) {
     if (!Array.isArray(raids) || raids.length === 0) return [];
     if (!character?.isGoldEarner) return [];
@@ -227,14 +227,12 @@ function createRaidStatusView(deps) {
 
   // Map the piggyback outcome captured during handleRaidStatusCommand
   // into a single description line. Returns null when the line would
-  // add noise without information (no piggyback was attempted, or it
-  // ran cleanly but found nothing new - the freshness line above
+  // duplicate existing information (no piggyback was attempted, or it
+  // completed without new data - the freshness line above
   // already covers the "data is fresh" case).
   //
-  // Voice: Artist persona (per CLAUDE.md memory) - friendly first-person
-  // "tớ"/"Artist" framing instead of neutral status copy. Locale pack
-  // owns the wording per language; this function only routes outcomes
-  // to the right translation key.
+  // Public wording is owned by the locale packs. This function only maps
+  // sync outcomes to translation keys.
   function buildPiggybackOutcomeLine(piggybackOutcome, lang) {
     if (!piggybackOutcome) return null;
     switch (piggybackOutcome.outcome) {

@@ -183,8 +183,8 @@ function createRaidStatusSync(deps) {
         // Timeout itself is silent here · the `[raid-status] background
         // auto-manage finished ... outcome=...` log fired by the
         // .then handler above is the truth signal (no background log
-        // implies no timeout). Keeping a second log line here just
-        // amplified noise on every slow bible response.
+        // implies no timeout). A second log line would duplicate every slow
+        // Bible response.
       }
 
       const hasCollectedRefresh =

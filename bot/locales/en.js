@@ -1,10 +1,8 @@
-// English translation pack for RaidManage. First-class locale (offered
-// in the /raid-language picker) with full Artist-voice coverage across
-// every command.
+// English localization pack exposed by /raid-language. All public message
+// keys are expected to have English coverage.
 //
-// Tone for EN is intentionally less syrupy than vi/jp - cross-server
-// users tend to prefer concise, professional Artist copy without the
-// "~" / "ですわ" flavor. Friendly, but not saccharine.
+// English copy uses a concise, professional register and omits the "~" /
+// "ですわ" styling used by the Vietnamese and Japanese packs.
 "use strict";
 
 module.exports = {

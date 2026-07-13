@@ -80,7 +80,7 @@ function createRaidAutoManageCommandDefinition() {
           ja: "on · off · sync · status · local-on · local-off · reset",
         })
         .setRequired(true)
-        // Autocomplete (not static choices) so we can hide redundant +
+        // Autocomplete, rather than static choices, hides redundant and
         // mutex-blocked actions from the dropdown. Six actions total
         // (bible on/off/sync, local on/off, status); filter logic lives
         // in handleRaidAutoManageAutocomplete and reads both flags.

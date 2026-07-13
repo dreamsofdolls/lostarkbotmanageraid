@@ -8,9 +8,8 @@
 // User.language schema default.
 //
 // Boss names ("Brelshaza, Ember in the Ashes", "Archdemon Kazeros")
-// stay English across all locales because LOA Logs writes them
-// verbatim to encounters.db - we don't translate proper nouns the
-// game itself doesn't translate. Raid+mode LABELS (the bucket
+// remain in English because LOA Logs writes them verbatim to encounters.db
+// and the game does not localize them. Raid and mode labels (the bucket
 // header text "Act 4 Hard") are localized.
 
 "use strict";

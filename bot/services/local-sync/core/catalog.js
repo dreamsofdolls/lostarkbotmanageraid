@@ -12,9 +12,8 @@
 const { RAID_REQUIREMENTS, BOSS_TO_RAID_GATE } = require("../../../models/Raid");
 const { CLASS_ID_TO_BIBLE_ID, getClassInfoByNumericId } = require("../../../models/Class");
 
-// LOA Logs encounters.db `difficulty` values vs Artist's internal modeKey.
-// Kept here so the server apply path and the web companion catalog share one
-// source instead of drifting when LOA Logs changes wording.
+// Mapping between LOA Logs encounters.db `difficulty` values and RaidManage
+// mode keys. Shared by the server apply path and web companion catalog.
 const DIFFICULTY_TO_MODE_KEY = Object.freeze({
   normal: "normal",
   solo: "solo",
@@ -35,7 +34,7 @@ const DIFFICULTY_TO_MODE_KEY = Object.freeze({
 });
 
 /**
- * Map a LOA Logs `difficulty` value to Artist's internal modeKey.
+ * Map a LOA Logs `difficulty` value to a RaidManage mode key.
  * @param {string} raw - LOA Logs raw difficulty string (e.g. "Hard")
  * @returns {"normal"|"solo"|"hard"|"nightmare"|null} normalized mode key, or null when unrecognized
  */

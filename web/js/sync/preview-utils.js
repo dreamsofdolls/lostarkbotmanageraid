@@ -244,8 +244,8 @@ export function groupByRaid(buckets) {
 /**
  * Surface the bosses present in raw rows that didn't map to any known
  * raid. Distinct from "failed encounters" (cleared=0) - unmapped means
- * the boss exists but our table doesn't know which raid+gate it belongs
- * to. Returned as a sorted array of unique boss names so the UI can
+ * the boss exists but the mapping table has no corresponding raid and gate.
+ * Returned as a sorted array of unique boss names so the UI can
  * list them for "report this" CTAs.
  */
 export function findUnmappedBosses(rows) {
@@ -422,7 +422,7 @@ export function collectDiffStateCounts(scope) {
  * Cells are computed once (resolveCellState) and shared by both views;
  * the projection step just pivots the same data. Cells with all gates
  * empty are filtered out of both views (no point rendering rows of
- * "·" badges - that's just noise).
+ * "·" badges because they duplicate the zero-value state).
  *
  * Returns: array of accounts:
  *   [{

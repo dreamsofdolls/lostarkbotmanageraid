@@ -1,6 +1,6 @@
 // HMAC-token mint/verify suite for the web-companion auth bridge.
-// Pinning happy path + 4 failure modes (malformed / forged / expired /
-// missing-secret) so the verify branch table is regression-guarded.
+// Covers successful verification and four failure modes: malformed, forged,
+// expired, and missing-secret. This guards the verification branch table.
 //
 // Each test sets/clears the env var inline to avoid bleed across the
 // suite (Node's --test runs files in parallel processes by default but

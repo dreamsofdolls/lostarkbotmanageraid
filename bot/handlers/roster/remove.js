@@ -152,10 +152,8 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
         const removedCount = Array.isArray(account.characters) ? account.characters.length : 0;
         userDoc.accounts.splice(accountIndex, 1);
         await userDoc.save();
-        // Description-driven layout (no cold field table). Artist voice
-        // states what happened + reminds the user the action is
-        // reversible via /raid-add-roster, so the destructive `danger` color
-        // is balanced by a recovery hint in the copy.
+        // Description-driven layout: state the removal and recovery path in
+        // one block. The `danger` color provides the destructive-action cue.
         const charPart =
           removedCount === 0
             ? t("raid-remove-roster.removedRoster.noChars", lang)
