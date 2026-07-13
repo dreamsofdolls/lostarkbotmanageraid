@@ -10,7 +10,7 @@ function normalizeSnowflake(name, rawValue) {
   const value = String(rawValue).trim().replace(/^['\"]|['\"]$/g, "");
   if (/^\d{17,20}$/.test(value)) return value;
 
-  // Common mistake: pasting the full OAuth2 URL instead of plain client id.
+  // CLIENT_ID must contain the plain application ID, not an OAuth2 URL.
   if (value.includes("discord.com/oauth2/authorize")) {
     try {
       const parsed = new URL(value);
@@ -49,8 +49,8 @@ const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
     console.log("Slash commands registered successfully.");
     // Force clean exit: discord.js REST client keeps a keep-alive HTTP agent
     // alive which prevents natural event-loop drain. Without explicit exit(0)
-    // the Railway `&& node bot.js` chain hangs forever and the bot never
-    // starts - leaving DB disconnected and the bot offline.
+    // the Railway `&& node bot.js` chain does not advance to bot startup,
+    // leaving the database disconnected and the bot offline.
     process.exit(0);
   } catch (error) {
     if (error?.status === 404) {

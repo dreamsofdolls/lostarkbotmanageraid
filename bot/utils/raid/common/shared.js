@@ -196,9 +196,8 @@ function buildDiscordIdentityFields(source) {
 
 // Build a richer ephemeral notice embed for user-facing rejection /
 // guidance / "session expired" surfaces. Replaces the plain
-// `interaction.reply({ content: "⚠️ ..." })` pattern that read flat
-// in-channel — color-coded embed reads at a glance and gives the
-// Artist persona room for a friendlier voice.
+// `interaction.reply({ content: "⚠️ ..." })` pattern. A color-coded embed
+// makes severity visible and keeps public wording in the locale layer.
 //
 // Caller passes EmbedBuilder so this helper stays in raid/shared
 // (Discord.js dep doesn't need to leak in here). `type` picks color +

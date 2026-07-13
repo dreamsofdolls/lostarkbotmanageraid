@@ -3,13 +3,13 @@
  *
  * Bot-startup bootstrap that mirrors PNG files in an assets folder onto
  * the bot's Discord application emoji slots. Used for two distinct
- * concerns today (and easy to extend for future ones):
+ * concerns through the same extensible structure:
  *   - **Class icons** (`assets/class-icons/`) -> class display names in
  *     `CLASS_EMOJI_MAP` -> rendered before character names in
  *     /raid-status + /raid-check char fields.
- *   - **Artist persona icons** (`assets/artist-icons/`) -> persona names
- *     in `ARTIST_EMOJI_MAP` -> used in pinned welcome embed + future
- *     bot-voice lines.
+ *   - **Bot expression icons** (`assets/artist-icons/`) -> expression names
+ *     in `ARTIST_EMOJI_MAP` -> used in pinned welcome embeds and other
+ *     public bot messages.
  *
  * **Content-addressed naming.** Each emoji is uploaded with the name
  * `{fileBaseName}_{md5short}` where md5short is the first 6 chars of
@@ -53,7 +53,7 @@ const ARTIST_ICONS_DIR = path.join(ROOT_ASSETS_DIR, "artist-icons");
 
 // Class IDs that share art with another class - upload ONE emoji and
 // point both display names at the same emoji ID. Saves application
-// emoji slots (2000 cap, plenty of room, but the dedup is still cleaner).
+// emoji slots and keeps aliases tied to one uploaded asset.
 const CLASS_ALIAS_GROUPS = [
   ["soulmaster", "force_master"], // both = Soulfist
   ["hawkeye", "hawk_eye"], // both = Sharpshooter
@@ -102,7 +102,7 @@ function expectedEmojiName(fileBase, buffer) {
 //   - The exact base with no underscore suffix (legacy pre-hash format)
 //   - The base followed by `_` + hex (current hash-suffix format)
 // Doesn't accidentally match unrelated emoji that happen to start with
-// the same prefix because we anchor on either no-suffix or `_hex` only.
+// the same prefix because matching is anchored to no suffix or `_hex` only.
 function findExistingForFileBase(existingByName, fileBase) {
   if (existingByName.has(fileBase)) return existingByName.get(fileBase);
   const re = new RegExp(`^${fileBase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}_[0-9a-f]{1,12}$`);
@@ -173,7 +173,7 @@ async function bootstrapEmojiFolder(client, config) {
   // boot would alternate-delete-reupload the two variants and churn the
   // emoji ID, which silently breaks any pinned message that hardcoded the
   // previous ID. Prefer .png > .gif > .jpg/.jpeg > .webp on conflict and
-  // warn loudly so the dev removes the duplicate from the asset folder.
+  // report it so the duplicate can be removed from the asset folder.
   const extPriority = { png: 0, gif: 1, jpg: 2, jpeg: 2, webp: 3 };
   const filesByBase = new Map();
   for (const f of allFiles) {
@@ -204,7 +204,7 @@ async function bootstrapEmojiFolder(client, config) {
   if (!existingByName) return ZERO;
 
   // Pre-compute alias bookkeeping. Empty `aliasGroups` -> all of this is
-  // no-op which keeps the simple-case (artist-icons) cheap.
+  // a no-op, avoiding alias work for folders such as artist-icons.
   const aliasCanonicalByAlias = new Map(); // aliasFileBase -> canonicalFileBase
   const aliasFileBases = new Set();
   for (const group of aliasGroups) {
@@ -350,7 +350,7 @@ async function bootstrapEmojiFolder(client, config) {
 
   // Orphan detection: app emoji whose name parses as a known displayKey
   // but didn't match any current PNG. Don't auto-delete - could be
-  // intentional (different concern), surface for human cleanup.
+  // intentional, so report it for manual review instead of deleting it.
   const orphanNames = [];
   for (const [name, emoji] of existingByName) {
     if (matchedEmojiIds.has(emoji.id)) continue;
@@ -388,10 +388,10 @@ function bootstrapClassEmoji(client) {
 }
 
 /**
- * Bootstrap artist persona emoji (`assets/artist-icons/` ->
- * `ARTIST_EMOJI_MAP` keyed by persona name like "shy"). Filename =
- * persona name directly (e.g., `shy.png` -> map key "shy"). No alias
- * groups - each persona expression is unique art.
+ * Bootstrap bot expression emoji (`assets/artist-icons/` ->
+ * `ARTIST_EMOJI_MAP`, keyed by names such as "shy"). Each filename maps
+ * directly to an expression key (for example, `shy.png` -> "shy").
+ * Expression assets do not use alias groups.
  */
 function bootstrapArtistEmoji(client) {
   return bootstrapEmojiFolder(client, {

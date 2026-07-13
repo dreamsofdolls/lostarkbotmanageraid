@@ -165,7 +165,7 @@ function createRaidTaskCommand(deps) {
     const handler = SUBCOMMAND_HANDLERS[sub];
     if (handler) return handler(interaction);
     // Fallback path: unknown subcommand. Resolve lang lazily here since
-    // we never reach this branch on the happy path.
+    // normal dispatch does not reach this branch.
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
     await replyTaskNotice(interaction, {
       type: "warn",

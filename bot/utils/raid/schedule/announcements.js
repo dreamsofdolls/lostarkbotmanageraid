@@ -1,6 +1,6 @@
 /**
  * utils/raid/schedule/announcements.js
- * Single source of truth for Artist channel-announcement metadata.
+ * Single source of truth for channel-announcement metadata.
  * Adding a new announcement type touches: the registry below, a
  * matching subdoc in GuildConfig.announcements schema, firing-site
  * code, and (optional) the /raid-announce HELP bullet. channelOverridable
@@ -11,8 +11,8 @@
 "use strict";
 
 // ---------------------------------------------------------------------------
-// Announcement registry - single source of truth for all Artist channel
-// announcements. Adding a new type requires:
+// Announcement registry for all automated channel messages. Adding a new
+// type requires:
 //   1. A new entry here (type key + label + subdocKey + channelOverridable)
 //   2. A matching subdoc in GuildConfig.announcements schema
 //   3. Firing-site code at wherever the announcement actually fires
@@ -133,7 +133,7 @@ const ANNOUNCEMENT_REGISTRY = {
   },
 };
 
-// Derived accessors - cheap object iteration on a small registry. Keeping
+// Derived accessors iterate over a small registry. Keeping
 // derivations in-function (rather than top-level computed consts) makes
 // the registry the only place that needs editing when adding a type.
 

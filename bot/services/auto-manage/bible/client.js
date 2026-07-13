@@ -120,8 +120,8 @@ function createBibleClient({ bibleLimiter, fetchImpl = defaultFetch }) {
   }
 
   /**
-   * Paginate bible's logs API until we see an entry older than
-   * `weekResetStart`, get an empty page, or hit `maxPages`. Bible returns
+   * Paginate Bible's logs API until an entry is older than `weekResetStart`,
+   * a page is empty, or `maxPages` is reached. Bible returns
    * newest-first with 25 entries per page, so one pre-reset entry in a
    * page means every deeper page is irrelevant.
    */

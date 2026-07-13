@@ -132,8 +132,8 @@ test("remove-roster: remove_roster deletes the entire account", async () => {
   assert.equal(stored.accounts.length, 1);
   assert.equal(stored.accounts[0].accountName, "Bravo");
   // Reply embed should reference the removed account in the
-  // Artist-voice description (cold field table dropped — content lives
-  // in the description sentence now).
+  // Localized description layout; removal details are contained in the
+  // description instead of separate fields.
   const replyArg = interaction._calls.editReply[0];
   const embedJson = replyArg.embeds[0].toJSON();
   assert.match(embedJson.title, /Đã xoá roster/);
@@ -193,7 +193,7 @@ test("remove-roster: remove_char on the seed char re-points accountName to next 
 test("remove-roster: remove_char on the seed when no remaining chars leaves accountName intact", async () => {
   // Edge case: removing the only char (also the seed) leaves an empty
   // account. Schema allows accountName to point at nothing; reseed walk
-  // simply has no candidate to swap to.
+  // has no candidate to swap to.
   const { factory, docs } = makeFactory();
   seedUser(docs, [
     { accountName: "Alpha", characters: [makeChar("Alpha")] },
@@ -223,7 +223,7 @@ test("remove-roster: rejects unknown action without touching state", async () =>
   // State unchanged.
   const stored = docs.get("user-1");
   assert.equal(stored.accounts[0].characters.length, 1);
-  // Ephemeral rejection emitted as a notice embed (Artist persona).
+  // Ephemeral rejection is emitted as a localized notice embed.
   const deferArg = interaction._calls.deferReply[0];
   const replyArg = interaction._calls.editReply[0];
   assert.equal(deferArg.flags, MessageFlags.Ephemeral);

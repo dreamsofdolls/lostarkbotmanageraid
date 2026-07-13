@@ -17,8 +17,8 @@ export function renderPreviewStats(panel, summary) {
   const charsAfterSync = Array.isArray(summary.charsAfterSync) ? summary.charsAfterSync : [];
   const lastSync = summary.lastSync || {};
 
-  // Gold chip: show value when > 0, else friendly "no new gold" copy
-  // so the panel still shows up (otherwise users wonder if it loaded).
+  // Gold chip: show the value when positive, otherwise show the localized
+  // "no new gold" state so the panel still renders when the value is zero.
   // When some of it is roster-bound (normal raids), surface that portion.
   const goldBoundStr = goldBound > 0
     ? ` <span class="stat-label">(🔒 ${escapeHtml(formatGold(goldBound))} ${escapeHtml(t("preview.statsGoldBound"))})</span>`
@@ -44,8 +44,8 @@ export function renderPreviewStats(panel, summary) {
   }
 
   // Completion chip uses {cleared}/{total} interpolation to bold the
-  // numbers via the locale's <strong> tags. innerHTML-safe because we
-  // control the template values (all numbers + the `raid` unit).
+  // numbers via the locale's <strong> tags. The template values are limited
+  // to numbers and the `raid` unit, so the generated HTML is safe.
   const completionStr = completion.totalRaids > 0
     ? t("preview.statsCompletionFormat", {
         cleared: completion.cleared,
@@ -136,7 +136,7 @@ export function renderPreviewStats(panel, summary) {
 // Render the full preview-output panel for the current roster page.
 // Bound to window.__artistRosterPage so prev/next button clicks just
 // mutate that index + re-call this. Re-rendering the whole panel is
-// cheap (handful of DOM nodes per raid card) and keeps the click
+// low-cost because each raid card has few DOM nodes, and keeps the click
 // handlers fresh after innerHTML rewrites.
 export function renderDiffPage(previewOutput) {
   if (!previewOutput) return;
@@ -185,7 +185,7 @@ export function renderDiffPage(previewOutput) {
     }
     // View toggle button - label shows the OTHER view (click to switch
     // TO that view). Single button instead of two-state radio so the
-    // affordance is obvious. /raid-status uses the same one-button
+    // the view switch remains visible. /raid-status uses the same one-button
     // toggle pattern between Raid view and Side tasks view.
     const toggleLabel = viewMode === "char" ? t("preview.viewToggleToRaid") : t("preview.viewToggleToChar");
     const toggleEmoji = viewMode === "char" ? "🗂️" : "👤";
@@ -279,7 +279,7 @@ export function renderDiffPage(previewOutput) {
   previewOutput.innerHTML = html;
 
   // Re-bind pagination handlers after each render. They mutate the
-  // global page index + re-call this function. Cheap because diff is
+  // global page index and invoke this function again. The diff is
   // already in memory.
   const prevBtn = document.getElementById("roster-prev");
   const nextBtn = document.getElementById("roster-next");
@@ -296,9 +296,9 @@ export function renderDiffPage(previewOutput) {
       renderDiffPage(previewOutput);
     });
   }
-  // View-toggle button: flip char-first <-> raid-first. Cheap because
-  // the underlying diff already carries both projections (preview-utils
-  // computes them in one pass), render just picks the right one.
+  // View-toggle button: flip char-first <-> raid-first. The underlying diff
+  // already carries both projections; preview-utils computes them in one pass,
+  // and rendering selects the active projection.
   const viewToggleBtn = document.getElementById("view-toggle");
   if (viewToggleBtn) {
     viewToggleBtn.addEventListener("click", () => {

@@ -45,7 +45,7 @@ const sideTaskSchema = new mongoose.Schema(
 // Account-level checklist items that are not tied to a specific character:
 // event shops, Chaos Gate, Field Boss, and similar roster chores. Scheduled
 // presets use `completedForKey` so a completion belongs to one hourly schedule
-// slot instead of staying done forever.
+// slot instead of remaining complete across future slots.
 const sharedTaskSchema = new mongoose.Schema(
   {
     taskId: { type: String, required: true },
@@ -87,7 +87,7 @@ const characterSchema = new mongoose.Schema(
     // this default flip retain whatever value they had stored (Mongoose
     // default only kicks in for missing fields at write time).
     isGoldEarner: { type: Boolean, default: true },
-    // lostark.bible identifiers cached the first time we fetch the
+    // lostark.bible identifiers cached after the first fetch of the
     // character's logs page - avoids re-scraping the SSR HTML on every
     // subsequent /raid-auto-manage sync. `sn` = characterSerial in
     // bible's API payload, `cid` = class id, `rid` = roster id. Null
@@ -107,7 +107,7 @@ const characterSchema = new mongoose.Schema(
     publicLogDisabled: { type: Boolean, default: false },
     // Stamp of the last bible 403 "Logs not enabled" hit for this char.
     // Gathers skip re-probing a flagged char until ~24h have elapsed so a
-    // one-time public-log-off doesn't burn API budget every sync cycle.
+    // one-time public-log-off does not consume API budget every sync cycle.
     // Cleared when publicLogDisabled flips back to false on a successful
     // sync (gather sees public log is ON again).
     publicLogDisabledAt: { type: Date, default: null },
@@ -187,22 +187,21 @@ const userSchema = new mongoose.Schema(
     // surface "last tried at" even when every char errored.
     lastAutoManageAttemptAt: { type: Number, default: null },
     // Unix ms timestamp of the last auto-manage sync where AT LEAST ONE
-    // character fetched+reconciled without throwing. Kept separate from
-    // the attempt stamp so a string of Cloudflare 403s doesn't lie about
-    // data freshness.
+    // character fetched and reconciled without throwing. Kept separate from
+    // the attempt stamp so repeated Cloudflare 403 responses do not mark
+    // cached data as fresh.
     lastAutoManageSyncAt: { type: Number, default: null },
     // VN calendar day (YYYY-MM-DD) when this user most recently opened a
-    // usable /raid-status session. The daily backfill scheduler uses this
-    // separately from sync attempts so its own background run cannot pretend
-    // the user visited and accidentally stretch the cadence to every 2 days.
+    // usable /raid-status session. Background sync does not update this field;
+    // otherwise a run for one day could suppress the next day's backfill.
     lastRaidStatusOpenedDayKey: { type: String, default: "" },
-    // Previous VN calendar day already claimed by the daily backfill worker.
-    // This is an attempt key, not a success claim: one broken Bible response
-    // must not hammer the same dormant user every 30-minute scheduler tick.
+    // VN calendar day for which daily backfill has already been claimed.
+    // This records an attempt rather than success, limiting each target day
+    // to one Bible request per user.
     lastAutoManageDailyAttemptDayKey: { type: String, default: "" },
-    // Unix ms timestamp of the last channel-announcement nudge Artist
-    // posted for this user when every char returned "Logs not enabled".
-    // Dedup at 7 days so stuck users aren't spam-tagged by daily backfill.
+    // Unix timestamp, in milliseconds, of the last channel notice posted when
+    // every character returned "Logs not enabled". The seven-day deduplication
+    // window limits repeated mentions for the same private-log condition.
     lastPrivateLogNudgeAt: { type: Number, default: null },
     // Local-sync mode opt-in. MUTUALLY EXCLUSIVE with autoManageEnabled -
     // a user can have at most one active sync source at a time. Local-sync
@@ -226,7 +225,7 @@ const userSchema = new mongoose.Schema(
     // on local-off so old links can't survive an opt-out.
     lastLocalSyncToken: { type: String, default: null },
     lastLocalSyncTokenExpAt: { type: Number, default: null },
-    // Preferred display locale for Artist's responses. Drives every
+    // Preferred display locale for public responses. Drives every
     // user-facing string via bot/services/i18n.js. Default "vi" so
     // pre-existing users see no behavior change after the i18n rollout;
     // they have to opt in via /raid-language to switch (e.g. "jp").
@@ -244,7 +243,7 @@ const userSchema = new mongoose.Schema(
 
 // Weekly reset wakes every 30 minutes and needs to find users whose cursor
 // lags the current target week. The query still uses `$ne`, but an index on
-// the cursor keeps that scheduler from hard-full-scanning forever as the user
+// the cursor prevents repeated full scans as the user
 // collection grows.
 userSchema.index({ weeklyResetKey: 1 });
 

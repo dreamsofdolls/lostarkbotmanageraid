@@ -1,7 +1,7 @@
-// Japanese translation pack for RaidManage.
-// Artist's JP voice is intentionally cuter than the VN baseline -
-// gentle Senko-chan flavor with occasional ですわ / ～♪ endings.
-// Core information stays identical; only tone + flavor change.
+// Japanese localization pack for RaidManage.
+// Japanese copy uses a more playful register than the Vietnamese baseline,
+// including occasional ですわ / ～♪ endings. Functional information must
+// remain equivalent across locales.
 //
 // Parity with vi.js is checked by tests in test/i18n.test.js so a
 // missing JP key gets caught at PR time rather than at runtime.

@@ -39,7 +39,7 @@ async function shrinkLocalSyncTokenAfterWrite({ User, discordId, token }) {
  * Build the POST /api/raid-sync handler. Factory pattern so bot.js can
  * inject the User model + applyRaidSetForDiscordId without circular
  * imports - this module sits below `bot/handlers` in the dependency
- * graph, so we can't import the handler directly here.
+ * graph, so importing the handler here would create an invalid dependency.
  *
  * Auth chain:
  *   1. Authorization: Bearer <jwt> header (or `?token=` query fallback)
@@ -125,7 +125,7 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId, applyRaidSetBa
     }
 
     // 5. Stamp lastLocalSyncAt. Best-effort - if it fails, the data is
-    // already written so we don't roll back; just log + still return ok.
+    // already written, so log the stamp failure without rolling back the sync.
     let lastLocalSyncAt = null;
     try {
       const stampResult = await recordLocalSyncSuccess(discordId, { UserModel: User });

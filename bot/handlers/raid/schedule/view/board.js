@@ -47,7 +47,7 @@ function renderGauge(filled, total) {
 }
 
 // Discord native relative + absolute timestamp pair. Auto-localizes to
-// each viewer's own region, so we never compute per-language clock text.
+// each viewer's region, eliminating server-side per-language clock formatting.
 function discordTime(date) {
   const sec = Math.floor(new Date(date).getTime() / 1000);
   return { rel: `<t:${sec}:R>`, abs: `<t:${sec}:f>` };
@@ -92,8 +92,8 @@ function buildScheduleEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
   const time = discordTime(event.startAt);
   const raidName = rosterLabel(event.raidKey, event.modeKey);
 
-  // HUD operational kicker line (monospace, language-independent) above the
-  // warm Artist prose lines.
+  // Language-independent operational summary above localized description
+  // lines.
   const descLines = [
     `\`${raidName} · iLvl ${event.minItemLevel}+\``,
     t("raid-schedule.board.startLine", lang, { rel: time.rel, abs: time.abs }),

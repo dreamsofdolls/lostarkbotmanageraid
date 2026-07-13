@@ -21,7 +21,7 @@ export function formatRelativeTime(ms) {
 
 export function formatGold(n) {
   if (!Number.isFinite(n) || n <= 0) return "0G";
-  // Comma thousand-separator works across all 3 locales we ship; LA
+  // Comma thousand separators are used across all three supported locales; LA
   // community reads "12,500G" everywhere regardless of UI lang.
   return `${n.toLocaleString("en-US")}G`;
 }

@@ -670,8 +670,8 @@ test("persistEditedRoster: preserves sideTasks on kept chars (HIGH bug fix)", as
 
 test("persistEditedRoster: throws when account vanished between command and Confirm", async () => {
   // Mid-session, user (or another concurrent flow) removed the account
-  // via /raid-remove-roster. Confirm should fail loudly so the Confirm
-  // handler can render a friendly error.
+  // via /raid-remove-roster. Confirm should return an explicit conflict so the
+  // handler can render a localized conflict error.
   const { factory, docs } = makeFactory();
   docs.set("user-1", {
     discordId: "user-1",

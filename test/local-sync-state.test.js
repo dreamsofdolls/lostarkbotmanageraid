@@ -91,7 +91,7 @@ test("setLocalSyncEnabled(true) without force - happy path stamps localSyncLinke
   const update = UserStub.calls.findOneAndUpdate[0].update;
   assert.equal(update.$set.localSyncEnabled, true);
   assert.ok(update.$set.localSyncLinkedAt >= before);
-  // No probe needed on the happy path.
+  // The successful transition does not require a fallback probe.
   assert.equal(UserStub.calls.findOne.length, 0);
 });
 

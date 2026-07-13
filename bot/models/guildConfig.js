@@ -38,16 +38,13 @@ const guildConfigSchema = new mongoose.Schema(
     // ticks within the same ISO week short-circuit; crossing into the next
     // ISO week produces a new key and the next tick posts again.
     lastWeeklyAnnouncementKey: { type: String, default: null },
-    // Per-guild dedup for Artist's daily bedtime moment. `YYYY-MM-DD` in VN
-    // calendar. Set once the 3:00 VN quiet-hours greeting has been posted
-    // today; subsequent quiet-hours ticks skip the announcement AND the
-    // cleanup sweep. Rolls over each VN calendar day so the next bedtime
-    // fires fresh.
+    // Per-guild dedup key for the daily bedtime announcement. Uses
+    // `YYYY-MM-DD` in the VN calendar. Once the 03:00 greeting is posted,
+    // subsequent quiet-hours ticks skip both the announcement and cleanup.
     lastArtistBedtimeKey: { type: String, default: null },
-    // Per-guild dedup for Artist's daily wake-up + morning-sweep moment.
-    // `YYYY-MM-DD` in VN calendar. Set once the 8:00 VN wake-up embed +
-    // catch-up cleanup have both run today. Subsequent ticks that day fall
-    // through to the normal hourly-cleanup path.
+    // Per-guild dedup key for the daily wake-up announcement and morning
+    // cleanup. Uses `YYYY-MM-DD` in the VN calendar. Subsequent ticks on the
+    // same day use the normal hourly-cleanup path.
     lastArtistWakeupKey: { type: String, default: null },
     // Per-guild dedup for the maintenance-early reminder group (T-3h, T-2h,
     // T-1h marks). Format: `YYYY-MM-DD:<slotKey>` where slotKey is one of
@@ -60,8 +57,7 @@ const guildConfigSchema = new mongoose.Schema(
     // T-10m, T-5m, T-1m). Same shape as `lastMaintenanceEarlyKey` but the
     // slotKey set is "T-15m" / "T-10m" / "T-5m" / "T-1m".
     lastMaintenanceCountdownKey: { type: String, default: null },
-    // Per-announcement-type config for Artist's channel voice. Each nested
-    // subdoc has:
+    // Per-announcement-type configuration. Each nested subdocument has:
     //   - enabled: whether the announcement fires at all.
     //   - channelId: override destination (null = fallback to raidChannelId).
     //       Only subdocs with a channelId field accept overrides; channel-bound
@@ -105,10 +101,9 @@ const guildConfigSchema = new mongoose.Schema(
             ),
             default: () => ({}),
           },
-          // Artist's 3:00 VN bedtime greeting. Channel-bound (like the
-          // hourly cleanup notice) because the message refers to the
-          // monitor channel itself going quiet. Disable = bedtime skipped
-          // silently, quiet-hours behavior (no cleanup sweep) still applies.
+          // The 03:00 VN bedtime greeting is channel-bound because it refers
+          // to the monitor channel entering quiet hours. Disabling the
+          // greeting does not disable quiet-hours cleanup suppression.
           artistBedtime: {
             type: new mongoose.Schema(
               { enabled: { type: Boolean, default: true } },
@@ -116,11 +111,9 @@ const guildConfigSchema = new mongoose.Schema(
             ),
             default: () => ({}),
           },
-          // Artist's 8:00 VN wake-up + morning-sweep notice. Channel-bound
-          // for the same reason. Disable = the wake-up greeting text is
-          // skipped; the catch-up cleanup sweep still runs because skipping
-          // it would leave overnight messages piled until the first :00 or
-          // :30 tick after 8:00.
+          // The 08:00 VN wake-up notice is channel-bound because it refers to
+          // the monitor channel. Disabling the greeting does not disable the
+          // morning catch-up cleanup.
           artistWakeup: {
             type: new mongoose.Schema(
               { enabled: { type: Boolean, default: true } },

@@ -126,7 +126,7 @@ function createSnapshotHelpers({
             // select would render "Complete / Process / Reset" with no
             // indication of what's already done, and Complete on an
             // already-done raid would silently no-op server-side after a
-            // confusing click. Keeping the whole tree is cheap - each
+            // misleading click. Retaining the full tree has bounded cost; each
             // character has at most 3 raids × 2-3 gates.
             assignedRaids,
           };

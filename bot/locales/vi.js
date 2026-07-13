@@ -345,8 +345,8 @@ module.exports = {
       managerOnlyDescription: "`/raid-share grant` và `/raid-share revoke` chỉ dành cho Raid Manager (env `RAID_MANAGER_ID`). Cậu vẫn có thể `/raid-share list` để xem ai đang share roster cho cậu.",
     },
   },
-  // Raid + mode display labels. Renders wherever Artist names a raid to
-  // the user (e.g. /raid-status raid lines, /raid-set autocomplete).
+  // Localized raid and mode labels used by public raid displays such as
+  // /raid-status lines and /raid-set autocomplete.
   // Canonical raid metadata in models/Raid.js stays English-only - this
   // namespace is the render-time translation lookup. Resolved via the
   // helpers in bot/utils/raid/common/labels.js.

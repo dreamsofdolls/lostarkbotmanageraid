@@ -88,7 +88,7 @@ test("generateTaskId is unique across rapid calls", () => {
     ids.add(generateTaskId());
   }
   // Allow up to 2 collisions out of 200 to absorb deep timestamp collision
-  // edges; in practice the random component dominates and we see 0/200.
+  // edges; in practice the random component normally produces 200 unique IDs.
   assert.ok(ids.size >= 198, `expected ~200 unique ids, got ${ids.size}`);
 });
 
@@ -893,9 +893,9 @@ test("raid-check task view renders roster shared tasks even without side tasks",
 // ---------------------------------------------------------------------------
 
 test("resetExpiredSideTasks issues 2 updateMany calls (daily + weekly) with the right filter shape", async () => {
-  // Inject a tiny User stub that records the args of each updateMany call.
-  // We need to drive the side-task scheduler factory ourselves to plug in
-  // the stub; the public createRaidSchedulerService is an OK seam since
+  // Inject a User stub that records the arguments of each updateMany call.
+  // The side-task scheduler factory is invoked directly to inject the stub;
+  // createRaidSchedulerService provides the public seam because
   // dailyResetStartMs/resetExpiredSideTasks live there.
   const calls = [];
   const userStub = {
@@ -979,8 +979,8 @@ test("resetExpiredSideTasks issues 2 updateMany calls (daily + weekly) with the 
 // ---------------------------------------------------------------------------
 
 test("REGRESSION (Codex #1): newly-added task seeds lastResetAt to current cycle start", async () => {
-  // Drive a real createRaidTaskCommand factory with stubbed deps so we can
-  // observe the saved task. Validates that handleAdd does NOT use 0 as the
+  // Invoke createRaidTaskCommand with stubbed dependencies to observe the
+  // saved task. Validates that handleAdd does NOT use 0 as the
   // seed - because lastResetAt=0 < dailyResetStartMs(now) makes the next
   // scheduler tick reset the just-added task back to ⬜.
   const FAKE_DAILY_START = Date.UTC(2026, 3, 22, 10, 0, 0, 0);
@@ -1721,7 +1721,7 @@ test("clear-confirm button clears roster-scoped side tasks", async () => {
 test("resetExpiredSideTasks reports modifiedCount accurately when Mongo touches docs", async () => {
   const userStub = {
     updateMany: async (filter, update, options) => {
-      // Pretend daily flushed 4 task entries, weekly flushed 2.
+      // Stub result: daily updates four task entries; weekly updates two.
       const isDaily = options.arrayFilters[0]["task.reset"] === "daily";
       return { modifiedCount: isDaily ? 4 : 2 };
     },

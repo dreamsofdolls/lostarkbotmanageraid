@@ -453,7 +453,7 @@ test("buildAccountPageEmbed: roster header icon stays 📥 for a non-Manager ros
 // user from an opted-in-but-never-synced user, so it has to render only
 // when the flag is explicitly false. Strict `=== false` matters for
 // legacy docs where autoManageEnabled is undefined - those should NOT
-// show OFF (we don't know the user's intent yet).
+// show OFF because the user's intent is unknown.
 
 test("buildAccountPageEmbed: appends ' · 📝 Auto-sync OFF' badge to title when autoManageEnabled === false", () => {
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
@@ -484,7 +484,7 @@ test("buildAccountPageEmbed: omits Auto-sync OFF badge when autoManageEnabled ==
 test("buildAccountPageEmbed: omits Auto-sync OFF badge for legacy doc with undefined autoManageEnabled", () => {
   // userMeta.autoManageEnabled is undefined - common for legacy User
   // docs from before /raid-auto-manage shipped. Strict `=== false`
-  // means we don't false-positive into showing OFF here.
+  // prevents a false OFF state here.
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
   const embed = buildAccountPageEmbed(
     account,
@@ -1044,7 +1044,7 @@ test("buildAccountPageEmbed: can hide per-character gold lines for filtered raid
 test("buildAccountPageEmbed: per-character field omits the gold body line for non-earners (header 💰 absence is the signal)", () => {
   // Non-earner card: no 💰 anywhere in the body. Header marker is the
   // sole indicator (absence = not earning). Body line was removed in
-  // round-32 because the duplicate signal was visual clutter.
+  // round-32 because the body line duplicated the header state.
   const char = makeChar("Passive", 1730, { isGoldEarner: false });
   const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
   const fakeRaid = {
@@ -1175,7 +1175,7 @@ test("buildAccountPageEmbed: shows '/raid-gold-earner' hint when account has at 
 test("buildAccountPageEmbed: omits '/raid-gold-earner' hint when every eligible char is already a gold-earner (no decision left)", () => {
   // Cap-reached-or-below state: every eligible char in the account is
   // marked. Nothing for the user to flip via the picker, so the hint is
-  // noise. Covers both "5 chars all earner" (sub-cap) and "6 chars all
+  // redundant. Covers both "5 chars all earner" (sub-cap) and "6 chars all
   // earner" (at cap).
   const a = makeChar("A", 1730, { isGoldEarner: true });
   const b = makeChar("B", 1730, { isGoldEarner: true });
@@ -1224,7 +1224,7 @@ test("buildAccountPageEmbed: omits '/raid-gold-earner' hint on empty roster (no 
 
 test("buildAccountPageEmbed: per-character field omits the gold line when char has no eligible raids", () => {
   // Char too low iLvl for any raid → "🔒 Not eligible yet" notice;
-  // tacking on a "💰 0G / 0G" line would just be noise.
+  // a "💰 0G / 0G" line would duplicate the ineligible state.
   const char = makeChar("LowGear", 1500, { isGoldEarner: true });
   const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
   const embed = buildAccountPageEmbed(
@@ -1279,7 +1279,7 @@ test("buildAccountPageEmbed: per-account rollup shows reduced-normal bound total
 
 test("buildAccountPageEmbed: omits per-account rollup when account has no gold-earners", () => {
   // All-passives account: rollup line would read '0G / 0G' which is
-  // noise/misleading. Suppressed entirely.
+  // misleading. It is suppressed entirely.
   const char = makeChar("Alt", 1730, { isGoldEarner: false });
   const account = { accountName: "AltsOnly", characters: [char], lastRefreshedAt: 0 };
   const embed = buildAccountPageEmbed(
@@ -1318,9 +1318,9 @@ test("buildAccountPageEmbed: cross-account 🌐 gold line shows the tradeable bu
 });
 
 test("buildAccountPageEmbed: cross-account 🌐 line omits gold tail when grand total is 0 (all-non-earner roster)", () => {
-  // Honesty rule: a roster where no one is a gold-earner shouldn't
-  // surface a '💰 0G / 0G' grand total - it would just confuse users
-  // into thinking their flags broke. Tail suppressed entirely.
+  // A roster with no gold earners should not
+  // surface a '💰 0G / 0G' grand total because it could imply an invalid
+  // gold-earner configuration. The tail is suppressed entirely.
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
   const embed = buildAccountPageEmbed(
     account,

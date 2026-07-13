@@ -21,8 +21,8 @@ const {
  *
  * Flow:
  *   1. Verify clicker.id === target (encoded in customId).
- *      Anyone else clicking just gets a polite "this isn't your nudge"
- *      reply - prevents random members opting someone else into local.
+ *      Other users receive an ephemeral audience-mismatch response, which
+ *      prevents unauthorized changes to the target user's sync mode.
  *   2. setLocalSyncEnabled(force:true) - atomic mutex flip: bible flag
  *      OFF + local flag ON in one Mongo write. Stuck-nudge IS the user's
  *      explicit consent to swap, so force is appropriate.
@@ -47,7 +47,7 @@ function createStuckNudgeButtonHandler({
     const m = /^stuck-nudge:switch-to-local:(\d+)$/.exec(customId);
     if (!m) {
       // The router should not dispatch unknown shapes, but acknowledge
-      // defensively so a stale/malformed component never spins forever.
+      // defensively so a stale or malformed component is acknowledged.
       await interaction.deferUpdate().catch(() => {});
       return;
     }
@@ -55,8 +55,8 @@ function createStuckNudgeButtonHandler({
     const clickerId = interaction.user.id;
 
     if (clickerId !== targetDiscordId) {
-      // Wrong audience. Quiet ephemeral reply - don't escalate channel
-      // noise on a button that's already mention-targeted.
+      // Wrong audience. Reply ephemerally because the button already targets
+      // a specific mention.
       await deferEphemeralReply(interaction);
       const clickerLang = await getUserLanguageFn(clickerId, { UserModel: User });
       await editNotice(interaction, EmbedBuilder, {

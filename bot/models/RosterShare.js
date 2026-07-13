@@ -27,7 +27,7 @@ const mongoose = require("mongoose");
 // re-request grants.
 //
 // When A deletes a roster, this document stays alive but points at no
-// data; B's view simply omits the missing roster on the next render. No
+// data; B's next render omits the missing roster. No
 // cascade hook needed - if A re-adds rosters later, B sees them again
 // automatically through the same share record.
 const rosterShareSchema = new mongoose.Schema({

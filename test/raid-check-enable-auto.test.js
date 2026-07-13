@@ -147,7 +147,7 @@ test("tryEnableAutoManage returns 'error' when findOneAndUpdate throws", async (
 });
 
 test("tryEnableAutoManage tolerates findOne throwing in the fallback path", async () => {
-  // CAS rejects + fallback read errors. We treat unknown state as
+  // CAS rejects and fallback reads fail. Unknown state is treated as
   // 'missing' rather than crashing - the leader gets the refresh-page
   // hint instead of a stack trace.
   const UserStub = makeUserStub({
@@ -218,8 +218,8 @@ test("tryDisableAutoManage returns 'error' when findOneAndUpdate throws", async 
 //
 // The DM lists every char with one of three Public Log status icons so
 // the user knows which chars they need to flip on lostark.bible AFTER
-// the Manager turns auto-sync on. Status rules are sticky and easy to
-// regress on if someone later swaps default semantics, so the suite
+// the Manager turns auto-sync on. Status rules persist and can
+// regress if default semantics change, so the suite
 // pins the icon contract.
 
 function makeUserDoc({
@@ -332,7 +332,7 @@ test("buildEnableAutoDmEmbed: footer hint OMITTED when every char is confirmed P
   });
   const json = embed.toJSON();
   // Footer should NOT exist when all chars are Public OK - the hint
-  // would just be visual noise.
+  // would duplicate the successful state.
   assert.equal(json.footer, undefined);
 });
 
@@ -397,8 +397,8 @@ test("buildDisableAutoDmEmbed: states ON→OFF transition + opt-back-in path exp
 test("buildDisableAutoDmEmbed: emits no roster fields (disable case skips status section by design)", () => {
   const embed = buildDisableAutoDmEmbed(EmbedBuilder, { managerId: "manager-1" });
   const json = embed.toJSON();
-  // Field count matters: any roster sections here would imply we still
-  // need the user to act on Public Log, which is irrelevant once auto-
+  // Roster sections would imply that Public Log action is still required,
+  // which is irrelevant once auto-
   // sync is off.
   assert.equal((json.fields || []).length, 0);
 });

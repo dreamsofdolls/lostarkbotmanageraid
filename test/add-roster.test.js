@@ -3,8 +3,8 @@
 // Focus: persistSelectedRoster's account-match + race-safe overlap guard.
 // These are the two pieces Codex flagged bugs in (commits 4b94664 +
 // a5dc054). The handler-level Discord interaction surface is not
-// exercised here — too much mocking for too little signal. Instead we
-// drive persistSelectedRoster directly via the factory's __test export.
+// exercised here because it requires extensive Discord mocking. The tests
+// call persistSelectedRoster through the factory's __test export instead.
 
 process.env.RAID_MANAGER_ID = "test-manager-1";
 
@@ -29,7 +29,7 @@ const { buildCharacterRecord, createCharacterId } = require("../bot/utils/raid/c
 // the in-memory store. JSON-clones around the boundary so mutations to
 // the returned doc don't accidentally leak back into the store before
 // .save() is called — mirrors Mongoose semantics close enough for the
-// persist logic we're testing.
+// persistence logic under test.
 function makeUserModel() {
   const docs = new Map();
 
@@ -434,8 +434,8 @@ test("persistSelectedRoster: leaves registeredBy null when user self-adds", asyn
   const stored = docs.get("user-1");
   assert.equal(stored.accounts.length, 1);
   // Mongoose default is null, but the in-memory test stub doesn't apply
-  // schema defaults - so we assert the field is unset/falsy rather than
-  // strictly null. The persist code path must NOT be writing a string
+  // schema defaults, so the assertion accepts an unset or falsy field rather
+  // than strictly null. The persist code path must NOT be writing a string
   // here.
   assert.ok(
     stored.accounts[0].registeredBy === undefined ||

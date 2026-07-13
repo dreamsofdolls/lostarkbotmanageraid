@@ -154,7 +154,7 @@ function createRaidStatusCommand(deps) {
   async function handleStatusCommand(interaction) {
     const started = Date.now();
     const discordId = interaction.user.id;
-    // Probe localSyncEnabled BEFORE defer so we can flag the reply as
+    // Probe localSyncEnabled before defer to mark the reply as
     // ephemeral when local-sync is on. The Mở Web Companion Link button
     // carries a signed token URL in its href - public messages would
     // leak that URL to anyone in the channel who clicks it (Link

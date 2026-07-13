@@ -33,7 +33,7 @@ const RAID_CHECK_REFRESH_CUTOFF_MS = MANAGER_ROSTER_REFRESH_COOLDOWN_MS;
 // fields, refresh stamps, weekly cursor, auto-manage badges, and (since
 // the round-29 Manager-task-view feature) per-character side tasks so the
 // 📝 Task view dropdown can render the same per-char list as
-// /raid-status. The full User document still stays out - we just opened
+// /raid-status. The full User document remains excluded; only
 // up the side-task subtree by Manager design call.
 // Roster-level accounts.sharedTasks is also projected for shared task rows.
 const RAID_CHECK_USER_BASE_QUERY = { "accounts.0": { $exists: true } };

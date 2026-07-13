@@ -111,7 +111,7 @@ test("winner net subtracts the 5% sell fee from the listing (uses 0.95V, not V)"
   //   bid          = floor(0.92 * floor(0.95*300000/4*3)) = 196650
   //   netRealizable= floor(0.95*300000) = 285000
   //   winnerNet    = 285000 - 196650 = 88350
-  //   gross V-bid  = 300000 - 196650 = 103350 (the WRONG number we used to show)
+  //   gross V-bid  = 300000 - 196650 = 103350 (the previous incorrect result)
   const interaction = makeInteraction({ marketValue: 300000, profit: true });
   await factory.handleRaidAuctionCommand(interaction);
   const serialized = JSON.stringify(interaction._calls[0].embeds[0].toJSON());
@@ -135,7 +135,7 @@ test("handler rejects a non-positive market value with a danger embed", async ()
   await factory.handleRaidAuctionCommand(interaction);
 
   const reply = interaction._calls[0];
-  // Invalid-input notice stays ephemeral so it doesn't clutter the channel.
+  // Invalid-input notices remain ephemeral and are not posted publicly.
   assert.equal(reply.flags, MessageFlags.Ephemeral);
   assert.equal(reply.embeds[0].toJSON().color, UI.colors.danger);
 });

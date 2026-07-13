@@ -126,11 +126,11 @@ async function startBot() {
     bootstrapClassEmoji(readyClient).catch((err) =>
       console.warn("[bot] class-emoji bootstrap rejected (non-fatal):", err?.message || err)
     );
-    // Artist persona emoji (assets/artist-icons/) - same content-hash
-    // pattern as class-emoji, separate folder + map. Powers the chibi
-    // Artist face in the pinned welcome embed and any future
-    // bot-voice surfaces. Failure is also non-fatal: getArtistEmoji
-    // falls back to empty string when an entry is unmapped.
+    // Bot expression emoji from assets/artist-icons use the same content-hash
+    // pattern as class emoji, with a separate folder and lookup map. They are
+    // used by pinned welcome embeds and other public bot messages. Bootstrap
+    // failures are non-fatal because getArtistEmoji returns an empty string
+    // for unmapped entries.
     bootstrapArtistEmoji(readyClient).catch((err) =>
       console.warn("[bot] artist-emoji bootstrap rejected (non-fatal):", err?.message || err)
     );
@@ -158,14 +158,14 @@ async function startBot() {
     // for LA VN Wednesday 14:00 maintenance boundary - 7 fire points total
     // (T-3h/2h/1h early reminders + T-15m/10m/5m/1m countdown). Per-guild
     // gating via /raid-announce type:maintenance-early|countdown action:on/off.
-    // Tick is cheap on non-Wednesday days (early-exits before any DB query),
-    // so leaving it running 24/7 has negligible cost.
+    // Non-Wednesday ticks exit before any database query, keeping the
+    // continuous scheduler overhead negligible.
     startMaintenanceScheduler(readyClient);
     // Side-task reset scheduler. 30-min tick, bulk updateMany. Resets
     // per-character side tasks once their cycle boundary passes (daily
     // 10:00 UTC = 17:00 VN, weekly Wed 10:00 UTC = 17:00 VN). Independent
-    // of AUTO_MANAGE_DAILY_DISABLED so player-tracked chores never get
-    // stuck "completed forever" even if bible auto-sync is off.
+    // of AUTO_MANAGE_DAILY_DISABLED so player-tracked chores do not remain
+    // completed beyond their scheduled reset when Bible sync is off.
     startSideTaskResetScheduler();
     // /raid-schedule auto-lock. Per-event autoLockAtStart controls whether
     // a board locks when its startAt has passed.

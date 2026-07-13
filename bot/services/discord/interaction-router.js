@@ -18,9 +18,9 @@
  */
 
 // Discord returns 10062 / "Unknown interaction" when the interaction
-// token has expired before we got around to acknowledging it (typically
+// token expires before the initial acknowledgement (typically the
 // 3s deadline for first response). Distinguish from real errors so the
-// noise log doesn't drown out actionable failures.
+// expected transient failures do not obscure actionable errors.
 function isUnknownInteractionError(error) {
   return error?.code === 10062 || error?.rawError?.code === 10062;
 }

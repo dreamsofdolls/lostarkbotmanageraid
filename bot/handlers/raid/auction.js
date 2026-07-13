@@ -128,7 +128,7 @@ function createRaidAuctionCommand({ EmbedBuilder, MessageFlags, UI, User }) {
     // Public reply: an auction happens live in the raid party, so the
     // suggested bid + split should be visible to everyone in the channel,
     // not just the caller. (The invalid-value notice above stays
-    // ephemeral so input mistakes don't clutter the channel.)
+    // ephemeral so invalid inputs remain private.)
     await interaction.reply({ embeds: [embed] });
   }
 

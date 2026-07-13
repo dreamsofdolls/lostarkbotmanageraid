@@ -53,7 +53,7 @@ function makeService(overrides = {}) {
 function makeChar(overrides = {}) {
   // Cached meta lets the gather skip resolveBibleMetaForEntry, which would
   // otherwise call into rosterFetch / SSR scrape paths the test does not
-  // stub. We only want to exercise the gather's job-build filter here.
+  // stub. This test only exercises the gather job-build filter.
   return {
     name: "Aki",
     class: "Artist",

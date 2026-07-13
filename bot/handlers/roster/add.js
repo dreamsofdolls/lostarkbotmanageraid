@@ -66,11 +66,9 @@ function createAddRosterCommand({
     buildNoticeEmbed,
   });
   // Module-level cache: sessionId -> session state. Lives in process
-  // memory only; bot restart drops every in-flight session, which is
-  // acceptable since the user is sitting in front of the embed and can
-  // simply re-run /raid-add-roster. Keying by random sessionId (not by user)
-  // means a user who runs /raid-add-roster twice gets two independent
-  // pickers — the older one still works until its 5-minute timer fires.
+  // Sessions are memory-only and are discarded on restart. Users can reopen
+  // the picker with /raid-add-roster. Random session IDs allow concurrent
+  // pickers for one user until each five-minute timer expires.
   const sessions = new Map();
 
   const {
@@ -119,11 +117,9 @@ function createAddRosterCommand({
     const lang = await getUserLanguage(callerId, { UserModel: User });
     const seedCharName = interaction.options.getString("name", true).trim();
 
-    // Target option: Raid Manager onboarding for lazy members. When the
-    // caller specifies `target`, we save the roster under THAT user's
-    // discordId instead of the caller's. Manager-gated because letting
-    // any user write to any other user's roster doc would let members
-    // grief each other (overwrite progress, add fake chars).
+    // The target option lets a Raid Manager register a roster for another
+    // user. Data is saved under the target's Discord ID and the option remains
+    // manager-gated to prevent unauthorized cross-user writes.
     const target = await resolveAddRosterTarget({ interaction, callerId, lang });
     if (target.handled) return;
     const { targetUser, discordId, actingForOther } = target;
@@ -323,9 +319,8 @@ function createAddRosterCommand({
       try {
         savedAccount = await persistSelectedRoster(session, selectedChars);
       } catch (err) {
-        // Race-detected duplicate (a concurrent /raid-add-roster session
-        // committed first against the same bible roster). Friendly
-        // hint + steer to /raid-edit-roster instead of a generic error.
+        // A concurrent /raid-add-roster session committed the same Bible
+        // roster first. Direct the user to /raid-edit-roster.
         if (err?.code === "RACE_DUP_ROSTER") {
           console.warn(
             `[add-roster] race-detected duplicate roster: ${err.collidingAccountName}`
@@ -366,9 +361,8 @@ function createAddRosterCommand({
       // Manager target onboarding: best-effort DM to the target user
       // BEFORE the channel embed lands, so the embed can surface DM
       // delivery status ("📩 Đã DM" / "⚠️ Không DM được"). DM is the
-      // primary notification (cleaner, persistent in target's inbox);
-      // channel ping below stays as both audit proof + fallback when
-      // DMs are blocked.
+      // primary notification because it persists in the target's inbox.
+      // The channel ping remains an audit record and fallback for blocked DMs.
       let dmDelivery = null;
       if (session.actingForOther) {
         const guildName = interaction.guild?.name || null;

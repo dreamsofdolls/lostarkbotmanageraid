@@ -115,7 +115,7 @@ test("constants: cap-6-per-account + 20-char picker cap match LA + Discord limit
   assert.equal(PICKER_MAX_OPTIONS, 20);
 });
 
-// --------- handleRaidGoldEarnerCommand happy path ---------
+// --------- handleRaidGoldEarnerCommand success path ---------
 
 test("handleRaidGoldEarnerCommand: opens picker with session keyed by random sessionId", async () => {
   const order = [];
