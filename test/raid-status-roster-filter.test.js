@@ -60,7 +60,7 @@ function account(accountName, raids) {
   };
 }
 
-test("raid-status roster entries show full state and hide raid mismatches", () => {
+test("raid-status roster entries separate display eligibility from progress counts", () => {
   const accounts = [
     account("Alpha", [
       { raidKey: "armoche", modeKey: "hard", isCompleted: false },
@@ -82,7 +82,7 @@ test("raid-status roster entries show full state and hide raid mismatches", () =
       ({ pageIndex, pending, success }) => ({ pageIndex, pending, success })
     ),
     [
-      { pageIndex: 0, pending: 1, success: 1 },
+      { pageIndex: 0, pending: 1, success: 0 },
       { pageIndex: 1, pending: 0, success: 1 },
     ]
   );
@@ -93,6 +93,19 @@ test("raid-status roster entries show full state and hide raid mismatches", () =
       getRaidsFor,
     }).map(({ pageIndex, pending, success }) => ({ pageIndex, pending, success })),
     [{ pageIndex: 0, pending: 1, success: 0 }]
+  );
+  assert.deepEqual(
+    buildStatusRosterFilterEntries({
+      accounts,
+      raidFilter: "horizon:solo",
+      getRaidsFor,
+    }).map(({ pageIndex, pending, success, displayMatches }) => ({
+      pageIndex,
+      pending,
+      success,
+      displayMatches,
+    })),
+    [{ pageIndex: 0, pending: 0, success: 0, displayMatches: 1 }]
   );
 });
 

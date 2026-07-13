@@ -122,16 +122,26 @@ function buildRaidFilterRow(options) {
 function getStatusRosterRaidState({ account, raidFilter = null, getRaidsFor }) {
   let pending = 0;
   let success = 0;
+  let displayMatches = 0;
   const characters = Array.isArray(account?.characters) ? account.characters : [];
   for (const character of characters) {
     const raids = typeof getRaidsFor === "function" ? getRaidsFor(character) || [] : [];
     for (const raid of raids) {
       if (raidFilter && `${raid.raidKey}:${raid.modeKey}` !== raidFilter) continue;
+      displayMatches += 1;
+      // Non-gold raids remain selectable because the raid page renders them,
+      // while roster counters stay aligned with /raid-status progress totals.
+      if (!isGoldProgressRaid(raid)) continue;
       if (raid?.isCompleted === true) success += 1;
       else pending += 1;
     }
   }
-  return { pending, success, total: pending + success };
+  return {
+    pending,
+    success,
+    total: pending + success,
+    displayMatches,
+  };
 }
 
 function buildStatusRosterFilterEntries({
@@ -143,7 +153,7 @@ function buildStatusRosterFilterEntries({
   for (let pageIndex = 0; pageIndex < (accounts || []).length; pageIndex += 1) {
     const account = accounts[pageIndex];
     const state = getStatusRosterRaidState({ account, raidFilter, getRaidsFor });
-    if (raidFilter && state.total === 0) continue;
+    if (raidFilter && state.displayMatches === 0) continue;
     entries.push({
       pageIndex,
       accountName: String(account?.accountName || ""),
