@@ -1,5 +1,47 @@
 "use strict";
 
+const AUTHOR_META_FETCH_CONCURRENCY = 4;
+
+function cleanIdentityValue(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function buildDiscordAuthorMeta({ member = null, user = null, cachedDisplayName = "" } = {}) {
+  const discordUser = member?.user || user || null;
+  const memberDisplayName = cleanIdentityValue(member?.displayName || member?.nickname);
+  const userDisplayName = cleanIdentityValue(
+    discordUser?.globalName || discordUser?.displayName || discordUser?.username
+  );
+  const avatarSource =
+    typeof member?.displayAvatarURL === "function" ? member : discordUser;
+  let avatarURL = null;
+  if (typeof avatarSource?.displayAvatarURL === "function") {
+    avatarURL = avatarSource.displayAvatarURL({ size: 64 });
+  }
+  return {
+    displayName:
+      memberDisplayName || cleanIdentityValue(cachedDisplayName) || userDisplayName,
+    avatarURL,
+  };
+}
+
+async function fetchDiscordAuthorMeta(interaction, discordId) {
+  let member = null;
+  const members = interaction?.guild?.members;
+  if (typeof members?.fetch === "function") {
+    member = await members
+      .fetch({ user: discordId, cache: true })
+      .catch(() => null);
+  }
+
+  let user = member?.user || null;
+  const users = interaction?.client?.users;
+  if (!user && typeof users?.fetch === "function") {
+    user = await users.fetch(discordId).catch(() => null);
+  }
+  return buildDiscordAuthorMeta({ member, user });
+}
+
 function toPlainUserDoc(userDoc) {
   if (!userDoc) return null;
   return typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
@@ -122,6 +164,7 @@ function resolveAllModeAuthorMeta({
   const usersByDiscordId = new Map(
     users.map((user) => [user.discordId, user])
   );
+  const missingDiscordIds = [];
   for (const discordId of visibleUserIds) {
     const userDoc = usersByDiscordId.get(discordId);
     const cachedDisplayName =
@@ -129,18 +172,55 @@ function resolveAllModeAuthorMeta({
       userDoc?.discordGlobalName ||
       userDoc?.discordUsername ||
       "";
-    let displayName = cachedDisplayName || discordId;
-    let avatarURL = null;
-    const userObj = interaction.client.users.cache.get(discordId);
-    if (userObj) {
-      avatarURL = userObj.displayAvatarURL({ size: 64 });
-      if (!cachedDisplayName) {
-        displayName = userObj.globalName || userObj.username || displayName;
-      }
-    }
-    authorMeta.set(discordId, { displayName, avatarURL });
+    const member = interaction?.guild?.members?.cache?.get?.(discordId) || null;
+    const userObj =
+      member?.user || interaction?.client?.users?.cache?.get?.(discordId) || null;
+    const resolved = buildDiscordAuthorMeta({
+      member,
+      user: userObj,
+      cachedDisplayName,
+    });
+    const hasResolvedDisplayName =
+      Boolean(resolved.displayName) && resolved.displayName !== discordId;
+    if (!hasResolvedDisplayName) missingDiscordIds.push(discordId);
+    authorMeta.set(discordId, {
+      displayName: hasResolvedDisplayName ? resolved.displayName : discordId,
+      avatarURL: resolved.avatarURL,
+    });
   }
-  return { visibleUserIds, authorMeta };
+
+  let refreshPromise = null;
+  const refreshMissingAuthorMeta = () => {
+    if (refreshPromise) return refreshPromise;
+    refreshPromise = (async () => {
+      let refreshed = 0;
+      for (
+        let offset = 0;
+        offset < missingDiscordIds.length;
+        offset += AUTHOR_META_FETCH_CONCURRENCY
+      ) {
+        const batch = missingDiscordIds.slice(
+          offset,
+          offset + AUTHOR_META_FETCH_CONCURRENCY
+        );
+        const rows = await Promise.all(
+          batch.map(async (discordId) => ({
+            discordId,
+            meta: await fetchDiscordAuthorMeta(interaction, discordId),
+          }))
+        );
+        for (const { discordId, meta } of rows) {
+          if (!meta.displayName) continue;
+          authorMeta.set(discordId, meta);
+          refreshed += 1;
+        }
+      }
+      return refreshed;
+    })();
+    return refreshPromise;
+  };
+
+  return { visibleUserIds, authorMeta, refreshMissingAuthorMeta };
 }
 
 module.exports = {
