@@ -1,10 +1,9 @@
 /**
  * handlers/raid-status/sync.js
- * Sync layer for /raid-status · runs the stale-roster refresh +
- * auto-manage piggyback inside a 2500ms budget, returning cached
- * data on timeout while the background sync continues. Background
- * apply uses a separate saveWithRetry loop so a VersionError on the
- * foreground render doesn't fan out.
+ * Sync layer for /raid-status. The root handler renders a weekly-fresh
+ * snapshot first, then starts stale-roster refresh + auto-manage piggyback
+ * here in the background. Apply uses a separate saveWithRetry loop so a
+ * VersionError cannot fan out across the visible session.
  */
 
 /**
@@ -66,6 +65,40 @@ function createRaidStatusSync(deps) {
     lastLocalSyncAt: Number(doc.lastLocalSyncAt) || 0,
     piggybackOutcome: outcome,
   });
+
+  const cloneRenderSnapshot = (seedDoc) => {
+    const plain = toPlainUserDoc(seedDoc);
+    if (!plain || plain !== seedDoc) return plain;
+
+    const clone = (value) => {
+      if (Array.isArray(value)) return value.map(clone);
+      if (!value || typeof value !== "object" || value instanceof Date) return value;
+      if (Object.getPrototypeOf(value) !== Object.prototype) return value;
+      return Object.fromEntries(
+        Object.entries(value).map(([key, entry]) => [key, clone(entry)])
+      );
+    };
+    return clone(plain);
+  };
+
+  function prepareStatusUserDoc(discordId, seedDoc) {
+    const userDoc = cloneRenderSnapshot(seedDoc);
+    ensureFreshWeek(userDoc);
+
+    let backgroundRefreshPromise = null;
+    const startBackgroundRefresh = () => {
+      if (!backgroundRefreshPromise) {
+        backgroundRefreshPromise = loadStatusUserDoc(discordId, seedDoc);
+      }
+      return backgroundRefreshPromise;
+    };
+
+    return {
+      userDoc,
+      piggybackOutcome: createOutcome(),
+      startBackgroundRefresh,
+    };
+  }
 
   async function loadStatusUserDoc(discordId, seedDoc) {
     let userDoc = null;
@@ -293,6 +326,7 @@ function createRaidStatusSync(deps) {
   return {
     buildStatusUserMeta,
     loadStatusUserDoc,
+    prepareStatusUserDoc,
     runManualStatusSync,
   };
 }

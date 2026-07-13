@@ -129,7 +129,7 @@ function createRaidStatusCommand(deps) {
 
   const {
     buildStatusUserMeta,
-    loadStatusUserDoc,
+    prepareStatusUserDoc,
     runManualStatusSync,
   } = createRaidStatusSync({
     User,
@@ -149,6 +149,7 @@ function createRaidStatusCommand(deps) {
   });
 
   async function handleStatusCommand(interaction) {
+    const started = Date.now();
     const discordId = interaction.user.id;
     // Probe localSyncEnabled BEFORE defer so we can flag the reply as
     // ephemeral when local-sync is on. The Mở Web Companion Link button
@@ -164,16 +165,18 @@ function createRaidStatusCommand(deps) {
     await interaction.deferReply(
       isLocalSyncMode ? { flags: MessageFlags.Ephemeral } : {}
     );
+    const ackMs = Date.now() - started;
     const viewerState = await loadStatusViewerState({
       User,
       discordId,
-      loadStatusUserDoc,
+      prepareStatusUserDoc,
     });
     const {
       lang,
       hasIncomingShare,
       incomingSharedAccounts,
       piggybackOutcome,
+      startBackgroundRefresh,
     } = viewerState;
     let userDoc = viewerState.userDoc;
 
@@ -208,6 +211,7 @@ function createRaidStatusCommand(deps) {
     // title with "Shared by Alice" and skip auto-manage badges B has no
     // control over.
     let statusUserMeta = buildStatusUserMeta(userDoc, piggybackOutcome);
+    let backgroundRefreshing = typeof startBackgroundRefresh === "function";
 
     // Raid-filter aggregate for the caller's own roster. Parallel to the
     // all-mode dropdown in /raid-check, but counts here are
@@ -289,7 +293,7 @@ function createRaidStatusCommand(deps) {
       getFilterRaidId: () => statusState.filterRaidId,
       getStatusUserMeta: () => statusUserMeta,
       baseGetRaidsFor: statusState.baseGetRaidsFor,
-      totalCharacters: statusState.totalCharacters,
+      getTotalCharacters: () => statusState.totalCharacters,
       summarizeRaidProgress,
       summarizeGlobalGold,
       buildAccountPageEmbed,
@@ -314,18 +318,9 @@ function createRaidStatusCommand(deps) {
       getStatusUserMeta: () => statusUserMeta,
     });
 
-    // A second "🆕 New link" Primary button rotates - clicked, mints
-    await syncControls.hydrateLocalSyncResumeUrl(interaction.user);
-
-    // "Raid của tôi": active raid-schedule events this viewer is signed up
-    // for (self-join or manager-added), guild-wide. Shaped once; the dropdown
-    // is the same on every page (it is viewer-global, not per-account).
-    const myRaidEvents = await findActiveEventsForUser({
-      RaidEvent,
-      guildId: interaction.guildId,
-      discordId: interaction.user.id,
-    });
-    const myRaidsShaped = shapeMyRaidEvents(myRaidEvents, interaction.user.id);
+    // Local-sync token and personal raid events hydrate after the first render;
+    // their controls appear in this same message when the reads finish.
+    let myRaidsShaped = [];
 
     const { buildComponents } = createRaidStatusComponentLayout({
       ActionRowBuilder,
@@ -355,19 +350,20 @@ function createRaidStatusCommand(deps) {
       getTotalRaidPending: () => statusState.totalRaidPending,
       getFilterRaidId: () => statusState.filterRaidId,
       getMyRaidsShaped: () => myRaidsShaped,
+      getBackgroundRefreshing: () => backgroundRefreshing,
     });
 
     const initialComponents = buildComponents(false);
 
-    await interaction.editReply({
-      ...(await buildEmbedAndCanvas()),
+    const messageFromEdit = await interaction.editReply({
+      embeds: [buildCurrentEmbed()],
+      files: [],
+      attachments: [],
       components: initialComponents,
     });
-
-    // No interactive surface (single account + no eligible raids) - skip
-    // the collector entirely. Without this guard the collector would
-    // spin for STATUS_PAGINATION_SESSION_MS doing nothing.
-    if (initialComponents.length === 0) return;
+    console.log(
+      `[raid-status] rendered accounts=${statusState.accounts.length} ackMs=${ackMs} openMs=${Date.now() - started}`
+    );
 
     const componentSession = createRaidStatusComponentSession({
       state: statusState,
@@ -403,8 +399,10 @@ function createRaidStatusCommand(deps) {
       buildMyRaidDetailEmbed,
     });
 
-    const message = await interaction.fetchReply();
-    attachRaidStatusComponentCollector({
+    const message = messageFromEdit?.createMessageComponentCollector
+      ? messageFromEdit
+      : await interaction.fetchReply();
+    const attachedCollector = attachRaidStatusComponentCollector({
       EmbedBuilder,
       User,
       interaction,
@@ -420,6 +418,74 @@ function createRaidStatusCommand(deps) {
       buildComponents,
       componentRouteHandlers,
     });
+
+    let backgroundRenderChain = Promise.resolve();
+
+    const queueBackgroundRender = (label) => {
+      backgroundRenderChain = backgroundRenderChain
+        .then(async () => {
+          if (attachedCollector.isEnded()) return;
+          const payload = await buildEmbedAndCanvas();
+          if (attachedCollector.isEnded()) return;
+          await interaction.editReply({
+            ...payload,
+            components: buildComponents(false),
+          });
+        })
+        .catch((err) => {
+          console.warn(
+            `[raid-status] ${label} background render failed:`,
+            err?.message || err
+          );
+        });
+      return backgroundRenderChain;
+    };
+
+    if (backgroundRefreshing) {
+      const refreshStarted = Date.now();
+      void startBackgroundRefresh()
+        .then(async (refreshed) => {
+          if (refreshed?.userDoc) {
+            await reloadViewerAccounts(refreshed.userDoc);
+            statusUserMeta = buildStatusUserMeta(
+              refreshed.userDoc,
+              refreshed.piggybackOutcome
+            );
+          }
+          backgroundRefreshing = false;
+          console.log(
+            `[raid-status] background refresh ms=${Date.now() - refreshStarted} outcome=${refreshed?.piggybackOutcome?.outcome || "unknown"}`
+          );
+          return queueBackgroundRender("refresh");
+        })
+        .catch((err) => {
+          backgroundRefreshing = false;
+          console.warn("[raid-status] background refresh failed:", err?.message || err);
+          return queueBackgroundRender("refresh-failed");
+        });
+    }
+
+    const extrasStarted = Date.now();
+    const localSyncHydration = statusUserMeta.localSyncEnabled
+      ? syncControls.hydrateLocalSyncResumeUrl(interaction.user)
+      : Promise.resolve();
+    const myRaidsHydration = findActiveEventsForUser({
+      RaidEvent,
+      guildId: interaction.guildId,
+      discordId: interaction.user.id,
+    }).then((events) => {
+      myRaidsShaped = shapeMyRaidEvents(events, interaction.user.id);
+    });
+    void Promise.all([localSyncHydration, myRaidsHydration])
+      .then(() => {
+        console.log(
+          `[raid-status] background extras raids=${myRaidsShaped.length} ms=${Date.now() - extrasStarted}`
+        );
+        return queueBackgroundRender("extras");
+      })
+      .catch((err) => {
+        console.warn("[raid-status] background extras failed:", err?.message || err);
+      });
   }
 
   return {

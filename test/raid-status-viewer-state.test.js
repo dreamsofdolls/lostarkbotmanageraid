@@ -11,6 +11,9 @@ const {
 const {
   clearUserLanguageCache,
 } = require("../bot/services/i18n");
+const {
+  createRaidStatusSessionState,
+} = require("../bot/handlers/raid-status/state/session-state");
 
 function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -43,8 +46,8 @@ test("raid-status viewer state returns noRoster when viewer has no own or shared
   const state = await loadStatusViewerState({
     User,
     discordId: "user-1",
-    loadStatusUserDoc: async () => {
-      throw new Error("own roster refresh should not run");
+    prepareStatusUserDoc: () => {
+      throw new Error("own roster preparation should not run");
     },
     getAccessibleAccountsFn: async () => [],
   });
@@ -62,8 +65,8 @@ test("raid-status viewer state supports share-only viewers with a stub user doc"
   const state = await loadStatusViewerState({
     User,
     discordId: "viewer",
-    loadStatusUserDoc: async () => {
-      throw new Error("own roster refresh should not run");
+    prepareStatusUserDoc: () => {
+      throw new Error("own roster preparation should not run");
     },
     getAccessibleAccountsFn: async () => shared,
   });
@@ -72,6 +75,70 @@ test("raid-status viewer state supports share-only viewers with a stub user doc"
   assert.equal(state.hasIncomingShare, true);
   assert.equal(state.incomingSharedAccounts, shared);
   assert.deepEqual(state.userDoc, { discordId: "viewer", accounts: [] });
+});
+
+test("raid-status viewer state returns the render snapshot without starting refresh", async () => {
+  clearUserLanguageCache();
+  const seedDoc = {
+    discordId: "user-1",
+    accounts: [{ accountName: "Roster", characters: [] }],
+  };
+  const User = makeUserModel({ seedDoc });
+  let prepared = 0;
+  let refreshStarted = 0;
+  const startBackgroundRefresh = () => {
+    refreshStarted += 1;
+    return Promise.resolve({ userDoc: seedDoc, piggybackOutcome: null });
+  };
+
+  const state = await loadStatusViewerState({
+    User,
+    discordId: "user-1",
+    prepareStatusUserDoc: (_discordId, doc) => {
+      prepared += 1;
+      assert.deepEqual(doc, seedDoc);
+      return {
+        userDoc: { ...seedDoc, prepared: true },
+        piggybackOutcome: { outcome: "not-applicable", newGatesApplied: 0 },
+        startBackgroundRefresh,
+      };
+    },
+    getAccessibleAccountsFn: async () => [],
+  });
+
+  assert.equal(prepared, 1);
+  assert.equal(refreshStarted, 0);
+  assert.equal(state.userDoc.prepared, true);
+  assert.equal(state.startBackgroundRefresh, startBackgroundRefresh);
+});
+
+test("raid-status session recounts characters after background roster refresh", async () => {
+  const buildMergedAccounts = async (_discordId, accounts) => accounts;
+  const state = await createRaidStatusSessionState({
+    User: {},
+    discordId: "user-1",
+    userDoc: {
+      accounts: [{ accountName: "Roster", characters: [{ name: "A" }] }],
+    },
+    incomingSharedAccounts: [],
+    buildMergedAccounts,
+    getStatusRaidsForCharacter: () => [],
+    buildRaidDropdownState: () => ({
+      raidDropdownEntries: [],
+      totalRaidPending: 0,
+    }),
+  });
+
+  assert.equal(state.totalCharacters, 1);
+  await state.reloadViewerAccounts({
+    accounts: [
+      {
+        accountName: "Roster",
+        characters: [{ name: "A" }, { name: "B" }, { name: "C" }],
+      },
+    ],
+  });
+  assert.equal(state.totalCharacters, 3);
 });
 
 test("raid-status local-sync probe returns the saved localSyncEnabled flag", async () => {

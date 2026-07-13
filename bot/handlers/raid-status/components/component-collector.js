@@ -130,6 +130,7 @@ function attachRaidStatusComponentCollector({
 
   return {
     collector,
+    isEnded: () => collectorEnded,
     scheduleTaskAutoRefresh,
   };
 }

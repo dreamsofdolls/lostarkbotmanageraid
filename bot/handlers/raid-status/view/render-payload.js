@@ -13,6 +13,7 @@ function createRaidStatusRenderPayload({
   getStatusUserMeta,
   baseGetRaidsFor,
   totalCharacters,
+  getTotalCharacters = () => totalCharacters,
   summarizeRaidProgress,
   summarizeGlobalGold,
   buildAccountPageEmbed,
@@ -68,7 +69,7 @@ function createRaidStatusRenderPayload({
     }
 
     const filteredTotals = {
-      characters: totalCharacters,
+      characters: getTotalCharacters(),
       progress: summarizeRaidProgress(filteredEntries),
       gold: summarizeGlobalGold(accounts, getDisplayRaidsFor),
     };

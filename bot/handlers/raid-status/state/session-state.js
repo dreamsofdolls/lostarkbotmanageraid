@@ -41,7 +41,7 @@ async function createRaidStatusSessionState({
   const taskCharFilterByPage = new Map();
   const goldCharFilterByPage = new Map();
   const raidGetter = createRaidGetter({ getStatusRaidsForCharacter });
-  const totalCharacters = countCharacters(accounts);
+  let totalCharacters = countCharacters(accounts);
 
   const recomputeRaidAggregate = () => {
     const nextState = buildRaidDropdownState(accounts, raidGetter.getRaidsFor);
@@ -62,6 +62,7 @@ async function createRaidStatusSessionState({
     }
 
     accounts = await buildMergedAccounts(discordId, userDoc.accounts);
+    totalCharacters = countCharacters(accounts);
     raidGetter.clear();
     recomputeRaidAggregate();
     if (currentPage >= accounts.length) {
