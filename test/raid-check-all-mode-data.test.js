@@ -257,3 +257,85 @@ test("all-mode author meta skips Discord REST when Mongo already has a display n
     avatarURL: null,
   });
 });
+
+test("all-mode author meta prefers a cached guild nickname without using REST", () => {
+  const users = [{ discordId: "400", accounts: [{ accountName: "D" }] }];
+  const pagesData = buildAllModePagesData(users);
+  const interaction = {
+    guild: {
+      members: {
+        cache: new Map([
+          [
+            "400",
+            {
+              displayName: "Guild Nickname",
+              displayAvatarURL: () => "guild-avatar-400",
+              user: { username: "discord-user-400" },
+            },
+          ],
+        ]),
+        fetch: async () => {
+          throw new Error("REST should not be needed");
+        },
+      },
+    },
+    client: { users: { cache: new Map() } },
+  };
+
+  const { authorMeta } = resolveAllModeAuthorMeta({ interaction, users, pagesData });
+
+  assert.deepEqual(authorMeta.get("400"), {
+    displayName: "Guild Nickname",
+    avatarURL: "guild-avatar-400",
+  });
+});
+
+test("all-mode author meta hydrates an unresolved numeric label in the background", async () => {
+  const fetched = [];
+  const users = [
+    {
+      discordId: "500",
+      discordDisplayName: "500",
+      accounts: [{ accountName: "E" }],
+    },
+  ];
+  const pagesData = buildAllModePagesData(users);
+  const interaction = {
+    guild: {
+      members: {
+        cache: new Map(),
+        fetch: async ({ user }) => {
+          fetched.push(user);
+          return {
+            displayName: "Fetched Guild Name",
+            displayAvatarURL: () => "guild-avatar-500",
+            user: { username: "discord-user-500" },
+          };
+        },
+      },
+    },
+    client: {
+      users: {
+        cache: new Map(),
+        fetch: async () => {
+          throw new Error("guild member fetch should resolve first");
+        },
+      },
+    },
+  };
+
+  const { authorMeta, refreshMissingAuthorMeta } = resolveAllModeAuthorMeta({
+    interaction,
+    users,
+    pagesData,
+  });
+
+  assert.equal(authorMeta.get("500").displayName, "500");
+  assert.equal(await refreshMissingAuthorMeta(), 1);
+  assert.equal(await refreshMissingAuthorMeta(), 1);
+  assert.deepEqual(fetched, ["500"]);
+  assert.deepEqual(authorMeta.get("500"), {
+    displayName: "Fetched Guild Name",
+    avatarURL: "guild-avatar-500",
+  });
+});

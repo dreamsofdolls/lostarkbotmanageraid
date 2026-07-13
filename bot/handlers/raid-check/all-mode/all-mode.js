@@ -174,11 +174,11 @@ function createAllModeHandler({
       return;
     }
 
-    const { visibleUserIds, authorMeta } = resolveAllModeAuthorMeta({
-      interaction,
-      users,
-      pagesData,
-    });
+    const {
+      visibleUserIds,
+      authorMeta,
+      refreshMissingAuthorMeta,
+    } = resolveAllModeAuthorMeta({ interaction, users, pagesData });
     const totalPages = pagesData.length;
     const autoManageStateByDiscordId = new Map();
     const localSyncStateByDiscordId = new Map();
@@ -600,6 +600,19 @@ function createAllModeHandler({
         .edit({ components: buildComponents(true) })
         .catch(() => {});
     });
+
+    void refreshMissingAuthorMeta()
+      .then((refreshed) => {
+        if (refreshed <= 0) return null;
+        console.log(`[raid-check all] author names refreshed=${refreshed}`);
+        return queueBackgroundRender("author-meta");
+      })
+      .catch((err) => {
+        console.warn(
+          "[raid-check all] author-name refresh failed:",
+          err?.message || err
+        );
+      });
 
     if (typeof startBackgroundRefresh === "function" && refreshQueued > 0) {
       const refreshStarted = Date.now();
