@@ -21,11 +21,11 @@ const {
   toPlainUserDoc,
 } = require("../../../services/auto-manage/reports/utils");
 const {
-  AUTO_MANAGE_BACKGROUND_STALE_MS,
+  AUTO_MANAGE_STATUS_STALE_MS,
   isAutoManageAttemptStale,
 } = require("../../../services/auto-manage/runtime/support/freshness");
 
-const STATUS_AUTO_MANAGE_PIGGYBACK_STALE_MS = AUTO_MANAGE_BACKGROUND_STALE_MS;
+const STATUS_AUTO_MANAGE_PIGGYBACK_STALE_MS = AUTO_MANAGE_STATUS_STALE_MS;
 
 function createRaidStatusSync(deps) {
   const {

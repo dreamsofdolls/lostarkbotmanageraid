@@ -145,8 +145,10 @@ async function startBot() {
     // `lastWeeklyAnnouncementKey` so a bot restart inside the same ISO
     // week won't re-announce.
     startWeeklyResetJob(readyClient);
-    // Phase 3: background auto-sync scheduler for /raid-auto-manage
-    // opted-in users. 30-min tick, 6-user batch, 30-min attempt freshness.
+    // Daily backfill for /raid-auto-manage opted-in users who did not open
+    // /raid-status on the previous VN calendar day. The 30-min worker tick
+    // drains a fair 6-user batch without coupling this cadence to the
+    // interactive /raid-status freshness window.
     // Killswitch: AUTO_MANAGE_DAILY_DISABLED=true env var skips every tick
     // - useful if bible starts blocking and ops need to back off without
     // a redeploy. Accepts client ref so the tick can post channel

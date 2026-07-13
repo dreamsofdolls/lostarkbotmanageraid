@@ -4,13 +4,16 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
-  AUTO_MANAGE_BACKGROUND_STALE_MS,
   AUTO_MANAGE_DAILY_BATCH_SIZE,
-  AUTO_MANAGE_DAILY_CUTOFF_MS,
   buildAutoManageDailyCandidateQuery,
+  buildAutoManageDailyClaimQuery,
   createAutoManageDailySchedulerService,
   shouldNudgePrivateLogUser,
 } = require("../bot/services/raid/schedulers/auto-manage-daily-scheduler");
+const {
+  getAutoManageDailyContext,
+  markRaidStatusOpenedDay,
+} = require("../bot/services/auto-manage/runtime/support/daily-backfill");
 
 function createFindChain(candidates, onQuery) {
   return (query) => {
@@ -39,23 +42,78 @@ function createFindChain(candidates, onQuery) {
   };
 }
 
-test("auto-manage daily scheduler builds the stale opted-in user query", () => {
-  const query = buildAutoManageDailyCandidateQuery(12345);
+test("auto-manage daily scheduler selects users absent on the target VN day", () => {
+  const dailyContext = {
+    currentDayKey: "2026-07-14",
+    targetDayKey: "2026-07-13",
+  };
+  const query = buildAutoManageDailyCandidateQuery(dailyContext);
 
   assert.deepEqual(query, {
     autoManageEnabled: true,
     localSyncEnabled: { $ne: true },
     "accounts.0": { $exists: true },
-    $or: [
-      { lastAutoManageAttemptAt: null },
-      { lastAutoManageAttemptAt: { $lte: 12345 } },
-    ],
+    lastRaidStatusOpenedDayKey: {
+      $nin: ["2026-07-13", "2026-07-14"],
+    },
+    lastAutoManageDailyAttemptDayKey: { $ne: "2026-07-13" },
+  });
+  assert.deepEqual(buildAutoManageDailyClaimQuery("100", dailyContext), {
+    discordId: "100",
+    ...query,
   });
 });
 
-test("auto-manage daily scheduler uses the shared background stale window", () => {
-  assert.equal(AUTO_MANAGE_DAILY_CUTOFF_MS, AUTO_MANAGE_BACKGROUND_STALE_MS);
-  assert.equal(AUTO_MANAGE_BACKGROUND_STALE_MS, 30 * 60 * 1000);
+test("auto-manage daily context rolls over at midnight Asia/Ho_Chi_Minh", () => {
+  assert.deepEqual(
+    getAutoManageDailyContext(new Date("2026-07-13T16:59:59.000Z")),
+    {
+      currentDayKey: "2026-07-13",
+      targetDayKey: "2026-07-12",
+    }
+  );
+  assert.deepEqual(
+    getAutoManageDailyContext(new Date("2026-07-13T17:00:00.000Z")),
+    {
+      currentDayKey: "2026-07-14",
+      targetDayKey: "2026-07-13",
+    }
+  );
+});
+
+test("raid-status activity stamp writes the VN day key idempotently", async () => {
+  const calls = [];
+  const dayKey = await markRaidStatusOpenedDay({
+    User: {
+      updateOne: async (query, update) => calls.push({ query, update }),
+    },
+    discordId: "100",
+    now: new Date("2026-07-13T17:05:00.000Z"),
+  });
+
+  assert.equal(dayKey, "2026-07-14");
+  assert.deepEqual(calls, [
+    {
+      query: {
+        discordId: "100",
+        lastRaidStatusOpenedDayKey: { $ne: "2026-07-14" },
+      },
+      update: {
+        $set: { lastRaidStatusOpenedDayKey: "2026-07-14" },
+      },
+    },
+  ]);
+
+  await markRaidStatusOpenedDay({
+    User: {
+      updateOne: async () => {
+        throw new Error("same-day status open should reuse the loaded day key");
+      },
+    },
+    discordId: "100",
+    lastOpenedDayKey: "2026-07-14",
+    now: new Date("2026-07-13T18:05:00.000Z"),
+  });
 });
 
 test("auto-manage daily scheduler skips DB work when deploy killswitch is on", async () => {
@@ -85,7 +143,7 @@ test("auto-manage daily scheduler skips DB work when deploy killswitch is on", a
   assert.equal(findCalls, 0);
 });
 
-test("auto-manage daily scheduler syncs one stale user and releases the slot", async () => {
+test("auto-manage daily scheduler syncs one absent user and releases the slot", async () => {
   const logs = [];
   const originalLog = console.log;
   console.log = (message) => logs.push(message);
@@ -110,11 +168,16 @@ test("auto-manage daily scheduler syncs one stale user and releases the slot", a
     };
     const findOneDocs = [seedDoc, freshDoc];
     let querySeen = null;
+    const claims = [];
     const User = {
       find: createFindChain([{ discordId: "100" }], (query) => {
         querySeen = query;
       }),
       findOne: async () => findOneDocs.shift() || null,
+      updateOne: async (query, update) => {
+        claims.push({ query, update });
+        return { modifiedCount: 1 };
+      },
     };
     const service = createAutoManageDailySchedulerService({
       User,
@@ -137,9 +200,20 @@ test("auto-manage daily scheduler syncs one stale user and releases the slot", a
       processEnv: {},
     });
 
-    await service.runAutoManageDailyTick({ clientId: "bot" });
+    await service.runAutoManageDailyTick(
+      { clientId: "bot" },
+      new Date("2026-07-13T17:05:00.000Z")
+    );
 
     assert.equal(querySeen.autoManageEnabled, true);
+    assert.deepEqual(querySeen.lastRaidStatusOpenedDayKey, {
+      $nin: ["2026-07-13", "2026-07-14"],
+    });
+    assert.equal(claims.length, 1);
+    assert.equal(
+      claims[0].update.$set.lastAutoManageDailyAttemptDayKey,
+      "2026-07-13"
+    );
     assert.equal(savedDocs.length, 1);
     assert.equal(typeof savedDocs[0].lastAutoManageAttemptAt, "number");
     assert.equal(typeof savedDocs[0].lastAutoManageSyncAt, "number");
@@ -148,6 +222,44 @@ test("auto-manage daily scheduler syncs one stale user and releases the slot", a
   } finally {
     console.log = originalLog;
   }
+});
+
+test("auto-manage daily scheduler skips a candidate claimed or opened after scan", async () => {
+  let gatherCalls = 0;
+  const releases = [];
+  const service = createAutoManageDailySchedulerService({
+    User: {
+      find: createFindChain([{ discordId: "100" }]),
+      findOne: async () => ({
+        discordId: "100",
+        autoManageEnabled: true,
+        accounts: [{ accountName: "Main" }],
+      }),
+      updateOne: async () => ({ modifiedCount: 0 }),
+    },
+    saveWithRetry: async (fn) => fn(),
+    ensureFreshWeek: () => {},
+    weekResetStartMs: () => 0,
+    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
+    releaseAutoManageSyncSlot: (discordId) => releases.push(discordId),
+    gatherAutoManageLogsForUserDoc: async () => {
+      gatherCalls += 1;
+      return {};
+    },
+    applyAutoManageCollected: () => ({ perChar: [] }),
+    isPublicLogDisabledError: () => false,
+    stampAutoManageAttempt: async () => {},
+    nudgeStuckPrivateLogUser: async () => {},
+    processEnv: {},
+  });
+
+  await service.runAutoManageDailyTick(
+    {},
+    new Date("2026-07-13T17:05:00.000Z")
+  );
+
+  assert.equal(gatherCalls, 0);
+  assert.deepEqual(releases, ["100"]);
 });
 
 test("auto-manage daily scheduler nudges only when every report entry is private-log blocked", () => {
