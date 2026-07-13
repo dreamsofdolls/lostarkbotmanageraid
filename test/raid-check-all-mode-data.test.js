@@ -220,7 +220,7 @@ test("all-mode author meta never waits on Discord REST before first render", asy
   });
 });
 
-test("all-mode author meta skips Discord REST when Mongo already has a display name", async () => {
+test("all-mode author meta fills a missing avatar in the background without blocking render", async () => {
   const fetched = [];
   const users = [
     {
@@ -245,7 +245,7 @@ test("all-mode author meta skips Discord REST when Mongo already has a display n
     },
   };
 
-  const { authorMeta } = await resolveAllModeAuthorMeta({
+  const { authorMeta, refreshIncompleteAuthorMeta } = await resolveAllModeAuthorMeta({
     interaction,
     users,
     pagesData,
@@ -255,6 +255,12 @@ test("all-mode author meta skips Discord REST when Mongo already has a display n
   assert.deepEqual(authorMeta.get("300"), {
     displayName: "Persisted Name",
     avatarURL: null,
+  });
+  assert.equal(await refreshIncompleteAuthorMeta(), 1);
+  assert.deepEqual(fetched, ["300"]);
+  assert.deepEqual(authorMeta.get("300"), {
+    displayName: "Persisted Name",
+    avatarURL: "avatar-300",
   });
 });
 
@@ -324,15 +330,15 @@ test("all-mode author meta hydrates an unresolved numeric label in the backgroun
     },
   };
 
-  const { authorMeta, refreshMissingAuthorMeta } = resolveAllModeAuthorMeta({
+  const { authorMeta, refreshIncompleteAuthorMeta } = resolveAllModeAuthorMeta({
     interaction,
     users,
     pagesData,
   });
 
   assert.equal(authorMeta.get("500").displayName, "500");
-  assert.equal(await refreshMissingAuthorMeta(), 1);
-  assert.equal(await refreshMissingAuthorMeta(), 1);
+  assert.equal(await refreshIncompleteAuthorMeta(), 1);
+  assert.equal(await refreshIncompleteAuthorMeta(), 1);
   assert.deepEqual(fetched, ["500"]);
   assert.deepEqual(authorMeta.get("500"), {
     displayName: "Fetched Guild Name",

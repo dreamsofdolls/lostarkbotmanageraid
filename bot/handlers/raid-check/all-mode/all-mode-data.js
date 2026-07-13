@@ -164,7 +164,7 @@ function resolveAllModeAuthorMeta({
   const usersByDiscordId = new Map(
     users.map((user) => [user.discordId, user])
   );
-  const missingDiscordIds = [];
+  const incompleteDiscordIds = [];
   for (const discordId of visibleUserIds) {
     const userDoc = usersByDiscordId.get(discordId);
     const cachedDisplayName =
@@ -182,7 +182,9 @@ function resolveAllModeAuthorMeta({
     });
     const hasResolvedDisplayName =
       Boolean(resolved.displayName) && resolved.displayName !== discordId;
-    if (!hasResolvedDisplayName) missingDiscordIds.push(discordId);
+    if (!hasResolvedDisplayName || !resolved.avatarURL) {
+      incompleteDiscordIds.push(discordId);
+    }
     authorMeta.set(discordId, {
       displayName: hasResolvedDisplayName ? resolved.displayName : discordId,
       avatarURL: resolved.avatarURL,
@@ -190,16 +192,16 @@ function resolveAllModeAuthorMeta({
   }
 
   let refreshPromise = null;
-  const refreshMissingAuthorMeta = () => {
+  const refreshIncompleteAuthorMeta = () => {
     if (refreshPromise) return refreshPromise;
     refreshPromise = (async () => {
       let refreshed = 0;
       for (
         let offset = 0;
-        offset < missingDiscordIds.length;
+        offset < incompleteDiscordIds.length;
         offset += AUTHOR_META_FETCH_CONCURRENCY
       ) {
-        const batch = missingDiscordIds.slice(
+        const batch = incompleteDiscordIds.slice(
           offset,
           offset + AUTHOR_META_FETCH_CONCURRENCY
         );
@@ -210,8 +212,29 @@ function resolveAllModeAuthorMeta({
           }))
         );
         for (const { discordId, meta } of rows) {
-          if (!meta.displayName) continue;
-          authorMeta.set(discordId, meta);
+          const current = authorMeta.get(discordId) || {
+            displayName: discordId,
+            avatarURL: null,
+          };
+          const hasCurrentDisplayName =
+            Boolean(current.displayName) && current.displayName !== discordId;
+          const hasFetchedDisplayName =
+            Boolean(meta.displayName) && meta.displayName !== discordId;
+          const next = {
+            displayName: hasCurrentDisplayName
+              ? current.displayName
+              : hasFetchedDisplayName
+                ? meta.displayName
+                : discordId,
+            avatarURL: meta.avatarURL || current.avatarURL || null,
+          };
+          if (
+            next.displayName === current.displayName &&
+            next.avatarURL === current.avatarURL
+          ) {
+            continue;
+          }
+          authorMeta.set(discordId, next);
           refreshed += 1;
         }
       }
@@ -220,7 +243,7 @@ function resolveAllModeAuthorMeta({
     return refreshPromise;
   };
 
-  return { visibleUserIds, authorMeta, refreshMissingAuthorMeta };
+  return { visibleUserIds, authorMeta, refreshIncompleteAuthorMeta };
 }
 
 module.exports = {
