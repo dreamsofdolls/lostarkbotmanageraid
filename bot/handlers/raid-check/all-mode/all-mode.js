@@ -90,7 +90,6 @@ function createAllModeHandler({
   buildPaginationRow,
   isRaidLeader,
   isManagerId,
-  discordUserLimiter,
   raidCheckRefreshLimiter,
   loadFreshUserSnapshotForRaidViews,
   shouldLoadFreshUserSnapshotForRaidViews,
@@ -148,6 +147,7 @@ function createAllModeHandler({
       refreshQueued,
       freshBypass,
       canRefreshFreshData,
+      startBackgroundRefresh,
     } = allModeUsers;
     if (canRefreshFreshData) {
       console.log(
@@ -170,11 +170,10 @@ function createAllModeHandler({
       return;
     }
 
-    const { visibleUserIds, authorMeta } = await resolveAllModeAuthorMeta({
+    const { visibleUserIds, authorMeta } = resolveAllModeAuthorMeta({
       interaction,
       users,
       pagesData,
-      discordUserLimiter,
     });
     const totalPages = pagesData.length;
     const autoManageStateByDiscordId = new Map();
@@ -192,6 +191,7 @@ function createAllModeHandler({
     let currentView = "raid";
     let filteredIndices = pagesData.map((_, index) => index);
     let currentLocalPage = 0;
+    let backgroundRefreshing = refreshQueued > 0;
 
     const currentAbsoluteIndex = () =>
       filteredIndices[currentLocalPage] ?? filteredIndices[0] ?? 0;
@@ -226,7 +226,7 @@ function createAllModeHandler({
       currentView === "task" ? buildTaskPage(pageIndex) : buildRaidPage(pageIndex);
 
     const applyRefreshedUserDoc = (userDoc) => {
-      if (!userDoc?.discordId || !Array.isArray(userDoc.accounts)) return;
+      if (!userDoc?.discordId || !Array.isArray(userDoc.accounts)) return false;
       const userIndex = users.findIndex((user) => user.discordId === userDoc.discordId);
       if (userIndex >= 0) users[userIndex] = userDoc;
       for (const page of pagesData) {
@@ -236,6 +236,7 @@ function createAllModeHandler({
         if (freshAccount) page.account = freshAccount;
       }
       pendingAggregateCache.clear();
+      return true;
     };
 
     const applyUserFilter = (pickedValue) => {
@@ -290,7 +291,7 @@ function createAllModeHandler({
         ButtonStyle,
         t,
         lang,
-        disabled,
+        disabled: disabled || backgroundRefreshing,
       });
     };
 
@@ -332,9 +333,7 @@ function createAllModeHandler({
         t,
       });
 
-    const teamsSnapshot = await teamsView.loadActiveEventsForTeams({
-      guildId: interaction.guildId || interaction.guild?.id,
-    });
+    let teamsSnapshot = [];
     const buildComponents = (disabled) => {
       const rows = [buildButtonRow(disabled)];
       const refreshRow = buildRosterRefreshRow(disabled);
@@ -355,11 +354,27 @@ function createAllModeHandler({
       return rows;
     };
 
-    await interaction.editReply({
+    let sessionEnded = false;
+    let backgroundRenderChain = Promise.resolve();
+    const queueBackgroundRender = (label) => {
+      backgroundRenderChain = backgroundRenderChain
+        .then(async () => {
+          if (sessionEnded) return;
+          await interaction.editReply({
+            embeds: [renderEmbed(currentAbsoluteIndex())],
+            components: buildComponents(false),
+          });
+        })
+        .catch((err) => {
+          console.warn(`[raid-check all] ${label} background render failed:`, err?.message || err);
+        });
+      return backgroundRenderChain;
+    };
+
+    const followup = await interaction.editReply({
       embeds: [renderEmbed(currentAbsoluteIndex())],
       components: buildComponents(false),
     });
-    const followup = await interaction.fetchReply();
     console.log(
       `[raid-check all] rendered pages=${totalPages} users=${visibleUserIds.length} openMs=${Date.now() - started}`
     );
@@ -495,10 +510,50 @@ function createAllModeHandler({
       if (handler) await handler(component, route);
     });
     collector.on("end", async () => {
+      sessionEnded = true;
+      await backgroundRenderChain;
       await followup
         .edit({ components: buildComponents(true) })
         .catch(() => {});
     });
+
+    if (typeof startBackgroundRefresh === "function" && refreshQueued > 0) {
+      const refreshStarted = Date.now();
+      void startBackgroundRefresh()
+        .then((refreshedUsers) => {
+          let applied = 0;
+          for (const userDoc of refreshedUsers || []) {
+            if (applyRefreshedUserDoc(userDoc)) applied += 1;
+          }
+          backgroundRefreshing = false;
+          console.log(
+            `[raid-check all] background refresh applied=${applied}/${refreshQueued} ms=${Date.now() - refreshStarted}`
+          );
+          return queueBackgroundRender("roster-refresh");
+        })
+        .catch((err) => {
+          backgroundRefreshing = false;
+          console.warn("[raid-check all] background refresh failed:", err?.message || err);
+          return queueBackgroundRender("roster-refresh-failed");
+        });
+    }
+
+    const teamsStarted = Date.now();
+    void teamsView
+      .loadActiveEventsForTeams({
+        guildId: interaction.guildId || interaction.guild?.id,
+      })
+      .then((rows) => {
+        teamsSnapshot = Array.isArray(rows) ? rows : [];
+        console.log(
+          `[raid-check all] background teams=${teamsSnapshot.length} ms=${Date.now() - teamsStarted}`
+        );
+        if (teamsSnapshot.length > 0) return queueBackgroundRender("teams");
+        return null;
+      })
+      .catch((err) => {
+        console.warn("[raid-check all] background teams failed:", err?.message || err);
+      });
   }
 
   return { handleRaidCheckAllCommand };
