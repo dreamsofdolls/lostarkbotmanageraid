@@ -6,6 +6,7 @@ const assert = require("node:assert/strict");
 const {
   buildAllModePagesData,
   canRefreshAllModeUsers,
+  createAllModeRefreshIndex,
   loadAllModeUsers,
   resolveAllModeAuthorMeta,
   toPlainUserDoc,
@@ -163,6 +164,42 @@ test("all-mode data builds one page per user account", () => {
       ["200", "C", 0],
     ]
   );
+});
+
+test("all-mode refresh index updates only the matching user pages", () => {
+  const users = [
+    {
+      discordId: "100",
+      accounts: [{ accountName: "A-old" }, { accountName: "B-old" }],
+    },
+    {
+      discordId: "200",
+      accounts: [{ accountName: "C-stable" }],
+    },
+  ];
+  const originalOtherUser = users[1];
+  const pagesData = buildAllModePagesData(users);
+  const originalOtherPage = pagesData[2];
+  const { applyRefreshedUserDoc } = createAllModeRefreshIndex(users, pagesData);
+  const refreshedUser = {
+    discordId: "100",
+    accounts: [{ accountName: "A-fresh" }, { accountName: "B-fresh" }],
+  };
+
+  assert.equal(applyRefreshedUserDoc(refreshedUser), true);
+  assert.equal(users[0], refreshedUser);
+  assert.equal(users[1], originalOtherUser);
+  assert.equal(pagesData[0].userDoc, refreshedUser);
+  assert.equal(pagesData[0].account.accountName, "A-fresh");
+  assert.equal(pagesData[1].account.accountName, "B-fresh");
+  assert.equal(pagesData[2], originalOtherPage);
+  assert.equal(pagesData[2].account.accountName, "C-stable");
+
+  assert.equal(
+    applyRefreshedUserDoc({ discordId: "missing", accounts: [] }),
+    false
+  );
+  assert.equal(applyRefreshedUserDoc({ discordId: "100" }), false);
 });
 
 test("all-mode author meta never waits on Discord REST before first render", async () => {

@@ -206,3 +206,57 @@ test("all-mode raid page applies Success status per raid entry", () => {
   assert.deepEqual(captured.globalTotals.progress, { completed: 1, total: 1 });
   assert.equal(captured.hideIneligibleChars, true);
 });
+
+test("all-mode raid page reuses a user's rollup while paginating their rosters", () => {
+  const firstCharacter = {
+    name: "First",
+    raids: [{ raidKey: "act4", modeKey: "hard", isCompleted: false, goldReceives: true }],
+  };
+  const secondCharacter = {
+    name: "Second",
+    raids: [{ raidKey: "kazeros", modeKey: "hard", isCompleted: true, goldReceives: true }],
+  };
+  const accounts = [
+    { accountName: "First roster", characters: [firstCharacter] },
+    { accountName: "Second roster", characters: [secondCharacter] },
+  ];
+  const userDoc = { discordId: "u1", accounts };
+  const pagesData = accounts.map((account) => ({ userDoc, account }));
+  let rollupCalls = 0;
+  let raidDerivationCalls = 0;
+  let currentLocalPage = 0;
+
+  const { buildRaidPage } = createAllModePageRenderers({
+    EmbedBuilder: FakeEmbedBuilder,
+    UI: { icons: { done: "done", pending: "pending", reset: "reset" } },
+    authorMeta: new Map(),
+    buildAccountPageEmbed: (account) => new FakeEmbedBuilder().setTitle(account.accountName),
+    buildStatusFooterText: () => "footer",
+    getState: () => ({
+      currentLocalPage,
+      filterRaidId: null,
+      filterStatus: "all",
+      filterUserId: "u1",
+      filteredIndices: [0, 1],
+    }),
+    getStatusRaidsForCharacter: (character) => {
+      raidDerivationCalls += 1;
+      return character.raids;
+    },
+    isManagerId: () => false,
+    lang: "en",
+    pagesData,
+    summarizeRaidProgress: (entries) => {
+      rollupCalls += 1;
+      return { completed: 0, total: entries.length };
+    },
+    truncateText: (value) => String(value),
+  });
+
+  buildRaidPage(0);
+  currentLocalPage = 1;
+  buildRaidPage(1);
+
+  assert.equal(rollupCalls, 1);
+  assert.equal(raidDerivationCalls, 2);
+});

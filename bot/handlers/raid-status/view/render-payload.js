@@ -24,6 +24,7 @@ function createRaidStatusRenderPayload({
   lang,
 }) {
   const backgroundBufferCache = new Map();
+  const globalTotalsCache = new WeakMap();
 
   const resolveBackgroundBuffer = async (account) => {
     const lookup = resolveBackgroundLookup(discordId, account);
@@ -63,18 +64,27 @@ function createRaidStatusRenderPayload({
           )
       : getProgressRaidsFor;
 
-    const filteredEntries = [];
-    for (const account of accounts) {
-      for (const character of account.characters || []) {
-        filteredEntries.push(...getCountRaidsFor(character));
-      }
+    let totalsByFilter = globalTotalsCache.get(accounts);
+    if (!totalsByFilter) {
+      totalsByFilter = new Map();
+      globalTotalsCache.set(accounts, totalsByFilter);
     }
-
-    const filteredTotals = {
-      characters: getTotalCharacters(),
-      progress: summarizeRaidProgress(filteredEntries),
-      gold: summarizeGlobalGold(accounts, getDisplayRaidsFor),
-    };
+    const totalsKey = filterRaidId || null;
+    let filteredTotals = totalsByFilter.get(totalsKey);
+    if (!filteredTotals) {
+      const filteredEntries = [];
+      for (const account of accounts) {
+        for (const character of account.characters || []) {
+          filteredEntries.push(...getCountRaidsFor(character));
+        }
+      }
+      filteredTotals = {
+        characters: getTotalCharacters(),
+        progress: summarizeRaidProgress(filteredEntries),
+        gold: summarizeGlobalGold(accounts, getDisplayRaidsFor),
+      };
+      totalsByFilter.set(totalsKey, filteredTotals);
+    }
 
     return buildAccountPageEmbed(
       accounts[currentPage],

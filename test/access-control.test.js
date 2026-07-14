@@ -193,6 +193,39 @@ test("getAccessibleAccounts honors view-level access on shared rosters", async (
   assert.equal(shared.accessLevel, "view");
 });
 
+test("getAccessibleAccounts keeps each access level when owner rows arrive out of order", async () => {
+  const owners = {
+    A: { discordId: "A", accounts: [ownAccount("AliceMain")] },
+    C: { discordId: "C", accounts: [ownAccount("CelineMain")] },
+  };
+  const User = {
+    async findOne() {
+      return null;
+    },
+    async find() {
+      return [owners.C, owners.A];
+    },
+  };
+  const RosterShare = buildFakeRosterShare([
+    sharedRecord("A", "B", "edit"),
+    sharedRecord("C", "B", "view"),
+  ]);
+
+  const accessible = await getAccessibleAccounts("B", {
+    models: { User, RosterShare },
+    helpers: { isManagerId: () => true },
+    includeOwn: false,
+  });
+
+  assert.deepEqual(
+    accessible.map((entry) => [entry.ownerDiscordId, entry.accessLevel]),
+    [
+      ["C", "view"],
+      ["A", "edit"],
+    ]
+  );
+});
+
 test("getAccessibleAccounts can skip own roster fetch when caller only needs shares", async () => {
   let ownFetches = 0;
   const baseUser = buildFakeUser([
