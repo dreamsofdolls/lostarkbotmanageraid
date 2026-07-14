@@ -55,15 +55,19 @@ async function getAccessibleAccounts(viewerDiscordId, { models = {}, helpers = {
   const shares = await ResolvedShare.find({ granteeDiscordId: viewerDiscordId }).lean();
   if (!shares || shares.length === 0) return accessible;
 
-  const liveShares = shares.filter((share) => resolvedIsManagerId(share.ownerDiscordId));
-  if (liveShares.length === 0) return accessible;
+  const liveShareByOwnerId = new Map();
+  for (const share of shares) {
+    if (!resolvedIsManagerId(share.ownerDiscordId)) continue;
+    liveShareByOwnerId.set(String(share.ownerDiscordId), share);
+  }
+  if (liveShareByOwnerId.size === 0) return accessible;
 
   const ownerDocs = await ResolvedUser.find({
-    discordId: { $in: liveShares.map((s) => s.ownerDiscordId) },
+    discordId: { $in: [...liveShareByOwnerId.keys()] },
   });
 
   for (const ownerDoc of ownerDocs) {
-    const share = liveShares.find((s) => s.ownerDiscordId === ownerDoc.discordId);
+    const share = liveShareByOwnerId.get(String(ownerDoc.discordId));
     if (!share) continue;
     if (!Array.isArray(ownerDoc.accounts)) continue;
     for (const account of ownerDoc.accounts) {

@@ -39,8 +39,19 @@ function createAllModePageRenderers({
   summarizeRaidProgress,
   truncateText,
 }) {
+  const raidViewCache = new WeakMap();
+
   function raidsForPage(userDoc, filterRaidId, filterStatus) {
     const activeStatus = normalizeAllModeStatusFilter(filterStatus);
+    let viewsByFilter = raidViewCache.get(userDoc);
+    if (!viewsByFilter) {
+      viewsByFilter = new Map();
+      raidViewCache.set(userDoc, viewsByFilter);
+    }
+    const cacheKey = JSON.stringify([filterRaidId || null, activeStatus]);
+    const cached = viewsByFilter.get(cacheKey);
+    if (cached) return cached;
+
     const raidsCache = new Map();
     const rawGetRaidsFor = (character) => {
       let result = raidsCache.get(character);
@@ -69,13 +80,16 @@ function createAllModePageRenderers({
         allRaidEntries.push(...getProgressRaidsFor(character));
       }
     }
-    return {
+    const result = {
       allRaidEntries,
       getRaidsFor,
       getProgressRaidsFor,
+      globalProgress: summarizeRaidProgress(allRaidEntries),
       userAccounts,
       userTotalChars,
     };
+    viewsByFilter.set(cacheKey, result);
+    return result;
   }
 
   function buildRaidPage(pageIndex) {
@@ -88,15 +102,15 @@ function createAllModePageRenderers({
     } = getState();
     const activeStatus = normalizeAllModeStatusFilter(filterStatus);
     const {
-      allRaidEntries,
       getRaidsFor,
       getProgressRaidsFor,
+      globalProgress,
       userAccounts,
       userTotalChars,
     } = raidsForPage(userDoc, filterRaidId, activeStatus);
     const globalTotals = {
       characters: userTotalChars,
-      progress: summarizeRaidProgress(allRaidEntries),
+      progress: globalProgress,
     };
     const userMeta = {
       discordId: userDoc.discordId,

@@ -35,6 +35,7 @@ const {
 } = require("./all-mode-filters");
 const {
   buildAllModePagesData,
+  createAllModeRefreshIndex,
   loadAllModeUsers,
   resolveAllModeAuthorMeta,
 } = require("./all-mode-data");
@@ -213,6 +214,7 @@ function createAllModeHandler({
       getStatusRaidsForCharacter,
       lang,
     });
+    const { applyRefreshedUserDoc } = createAllModeRefreshIndex(users, pagesData);
     const { buildRaidPage, buildTaskPage } = createAllModePageRenderers({
       EmbedBuilder,
       UI,
@@ -257,20 +259,6 @@ function createAllModeHandler({
         currentLocalPage: previousLocalPage,
         resetPage,
       });
-    };
-
-    const applyRefreshedUserDoc = (userDoc) => {
-      if (!userDoc?.discordId || !Array.isArray(userDoc.accounts)) return false;
-      const userIndex = users.findIndex((user) => user.discordId === userDoc.discordId);
-      if (userIndex >= 0) users[userIndex] = userDoc;
-      for (const page of pagesData) {
-        if (page.userDoc?.discordId !== userDoc.discordId) continue;
-        page.userDoc = userDoc;
-        const freshAccount = userDoc.accounts[page.accountIdx];
-        if (freshAccount) page.account = freshAccount;
-      }
-      pendingAggregateCache.clear();
-      return true;
     };
 
     const applyUserFilter = (pickedValue) => {
@@ -545,7 +533,7 @@ function createAllModeHandler({
 
         try {
           const result = await runManualRosterRefresh(targetDiscordId, targetAccountName);
-          applyRefreshedUserDoc(result.userDoc);
+          if (applyRefreshedUserDoc(result.userDoc)) pendingAggregateCache.clear();
           recomputeFilteredPages({ resetPage: false });
           await interaction.editReply({
             embeds: [renderEmbed(currentAbsoluteIndex())],
@@ -633,6 +621,7 @@ function createAllModeHandler({
           for (const userDoc of refreshedUsers || []) {
             if (applyRefreshedUserDoc(userDoc)) applied += 1;
           }
+          if (applied > 0) pendingAggregateCache.clear();
           recomputeFilteredPages({ resetPage: false });
           backgroundRefreshing = false;
           console.log(

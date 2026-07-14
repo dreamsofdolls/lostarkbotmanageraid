@@ -4,6 +4,9 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const {
+  createRaidStatusRenderPayload,
+} = require("../bot/handlers/raid-status/view/render-payload");
 
 test("raid-status renders before refresh, local token, schedule, and canvas I/O", () => {
   const source = fs.readFileSync(
@@ -44,4 +47,48 @@ test("raid-status viewer seed, language, and shares load concurrently", () => {
   );
 
   assert.match(source, /await Promise\.all\(\[/);
+});
+
+test("raid-status reuses global roster totals while paginating the same snapshot", () => {
+  const accounts = [
+    { accountName: "A", characters: [{ raids: [{ raidKey: "act4", modeKey: "hard" }] }] },
+    { accountName: "B", characters: [{ raids: [{ raidKey: "kazeros", modeKey: "hard" }] }] },
+  ];
+  let currentPage = 0;
+  let progressCalls = 0;
+  let goldCalls = 0;
+  let pageRenders = 0;
+  const { buildCurrentEmbed } = createRaidStatusRenderPayload({
+    discordId: "viewer",
+    getAccounts: () => accounts,
+    getCurrentPage: () => currentPage,
+    getCurrentView: () => "raid",
+    getFilterRaidId: () => null,
+    getStatusUserMeta: () => ({}),
+    baseGetRaidsFor: (character) => character.raids,
+    totalCharacters: 2,
+    summarizeRaidProgress: (raids) => {
+      progressCalls += 1;
+      return { completed: 0, partial: 0, total: raids.length };
+    },
+    summarizeGlobalGold: () => {
+      goldCalls += 1;
+      return { earned: 0, total: 0 };
+    },
+    buildAccountPageEmbed: () => {
+      pageRenders += 1;
+      return {};
+    },
+    buildGoldViewEmbed: () => ({}),
+    buildTaskViewEmbed: () => ({}),
+    lang: "en",
+  });
+
+  buildCurrentEmbed();
+  currentPage = 1;
+  buildCurrentEmbed();
+
+  assert.equal(pageRenders, 2);
+  assert.equal(progressCalls, 1);
+  assert.equal(goldCalls, 1);
 });

@@ -154,6 +154,42 @@ function buildAllModePagesData(users) {
   return pagesData;
 }
 
+function createAllModeRefreshIndex(users, pagesData) {
+  const userIndexByDiscordId = new Map();
+  for (let index = 0; index < users.length; index += 1) {
+    const discordId = users[index]?.discordId;
+    if (discordId) userIndexByDiscordId.set(String(discordId), index);
+  }
+
+  const pagesByDiscordId = new Map();
+  for (const page of pagesData) {
+    const discordId = page?.userDoc?.discordId;
+    if (!discordId) continue;
+    const key = String(discordId);
+    const userPages = pagesByDiscordId.get(key);
+    if (userPages) userPages.push(page);
+    else pagesByDiscordId.set(key, [page]);
+  }
+
+  const applyRefreshedUserDoc = (userDoc) => {
+    if (!userDoc?.discordId || !Array.isArray(userDoc.accounts)) return false;
+    const key = String(userDoc.discordId);
+    const hasUser = userIndexByDiscordId.has(key);
+    const userPages = pagesByDiscordId.get(key) || [];
+    if (!hasUser && userPages.length === 0) return false;
+
+    if (hasUser) users[userIndexByDiscordId.get(key)] = userDoc;
+    for (const page of userPages) {
+      page.userDoc = userDoc;
+      const freshAccount = userDoc.accounts[page.accountIdx];
+      if (freshAccount) page.account = freshAccount;
+    }
+    return true;
+  };
+
+  return { applyRefreshedUserDoc };
+}
+
 function resolveAllModeAuthorMeta({
   interaction,
   users,
@@ -249,6 +285,7 @@ function resolveAllModeAuthorMeta({
 module.exports = {
   buildAllModePagesData,
   canRefreshAllModeUsers,
+  createAllModeRefreshIndex,
   loadAllModeUsers,
   resolveAllModeAuthorMeta,
   toPlainUserDoc,
