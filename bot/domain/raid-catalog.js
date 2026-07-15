@@ -21,6 +21,7 @@ function buildSoloMode(normalMode) {
 
 function installSoloModes(raidRequirements) {
   for (const raid of Object.values(raidRequirements || {})) {
+    if (raid?.supportsSolo !== true) continue;
     const normalMode = raid?.modes?.[NORMAL_MODE_KEY];
     if (!normalMode || raid.modes[SOLO_MODE_KEY]) continue;
     const { normal, ...otherModes } = raid.modes;
@@ -41,6 +42,14 @@ function isSoloModeKey(modeKey) {
   return normalizeModeKey(modeKey) === SOLO_MODE_KEY;
 }
 
+function hasRaidMode(raidKey, modeKey) {
+  const normalizedModeKey = normalizeModeKey(modeKey);
+  return !!(
+    normalizedModeKey &&
+    RAID_REQUIREMENTS[raidKey]?.modes?.[normalizedModeKey]
+  );
+}
+
 function areEquivalentRaidModes(left, right) {
   const a = normalizeModeKey(left);
   const b = normalizeModeKey(right);
@@ -51,10 +60,13 @@ function areEquivalentRaidModes(left, right) {
   );
 }
 
-function preserveManualRaidModePreference(storedModeKey, incomingModeKey) {
+function preserveManualRaidModePreference(storedModeKey, incomingModeKey, raidKey = null) {
   const stored = normalizeModeKey(storedModeKey);
   const incoming = normalizeModeKey(incomingModeKey);
-  if (stored === SOLO_MODE_KEY && incoming === NORMAL_MODE_KEY) return SOLO_MODE_KEY;
+  const soloAvailable = !raidKey || hasRaidMode(raidKey, SOLO_MODE_KEY);
+  if (soloAvailable && stored === SOLO_MODE_KEY && incoming === NORMAL_MODE_KEY) {
+    return SOLO_MODE_KEY;
+  }
   return incoming || null;
 }
 
@@ -63,6 +75,7 @@ const RAID_REQUIREMENTS = {
     label: "Act 4",
     partySize: 8,
     gates: ["G1", "G2"],
+    supportsSolo: true,
     modes: {
       normal: { label: "Normal", minItemLevel: 1700, gold: { G1: 12500, G2: 20500 }, goldFactor: 0.5 },
       hard: { label: "Hard", minItemLevel: 1720, gold: { G1: 15000, G2: 27000 } },
@@ -72,6 +85,7 @@ const RAID_REQUIREMENTS = {
     label: "Kazeros",
     partySize: 8,
     gates: ["G1", "G2"],
+    supportsSolo: true,
     modes: {
       normal: { label: "Normal", minItemLevel: 1710, gold: { G1: 14000, G2: 26000 }, goldFactor: 0.5 },
       hard: { label: "Hard", minItemLevel: 1730, gold: { G1: 17000, G2: 35000 } },
@@ -81,6 +95,7 @@ const RAID_REQUIREMENTS = {
     label: "Serca",
     partySize: 4,
     gates: ["G1", "G2"],
+    supportsSolo: true,
     modes: {
       normal: { label: "Normal", minItemLevel: 1710, gold: { G1: 14000, G2: 21000 }, goldFactor: 0.5 },
       hard: { label: "Hard", minItemLevel: 1730, gold: { G1: 17500, G2: 26500 } },
@@ -91,6 +106,7 @@ const RAID_REQUIREMENTS = {
     label: "Horizon",
     partySize: 4,
     gates: ["G1", "G2"],
+    supportsSolo: false,
     modes: {
       normal: { label: "Level 1", minItemLevel: 1700, gold: { G1: 13500, G2: 16500 }, boundGold: CHARACTER_BOUND_GOLD },
       hard: { label: "Level 2", minItemLevel: 1720, gold: { G1: 16000, G2: 24000 }, boundGold: CHARACTER_BOUND_GOLD },
@@ -99,9 +115,9 @@ const RAID_REQUIREMENTS = {
   },
 };
 
-// Solo is derived instead of copied into every raid block: this temporary
-// mode shares Normal's gates, iLvl, gold, and bound split. `manualOnly`
-// prevents roster normalization from auto-selecting it.
+// Solo is derived for raids that expose a Normal difficulty instead of copied
+// into every block. Level-based raids opt out explicitly. `manualOnly` keeps
+// roster normalization from selecting Solo before a user or sync source does.
 installSoloModes(RAID_REQUIREMENTS);
 
 function getGatesForRaid(raidKey) {
@@ -246,6 +262,7 @@ module.exports = {
   getBaseGoldForGate,
   getBoundGoldForGate,
   getGoldForRaid,
+  hasRaidMode,
   isGoldBound,
   isSoloModeKey,
   preserveManualRaidModePreference,

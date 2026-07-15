@@ -37,6 +37,7 @@ test("local-sync catalog exposes raid metadata used by the web preview", () => {
   assert.equal(catalog.raids.horizon.modes.normal.minItemLevel, 1700);
   assert.equal(catalog.raids.horizon.modes.hard.minItemLevel, 1720);
   assert.equal(catalog.raids.horizon.modes.nightmare.minItemLevel, 1750);
+  assert.equal(catalog.raids.horizon.modes.solo, undefined);
   assert.equal(catalog.raids.armoche.modes.solo.label, "Solo");
   assert.equal(catalog.raids.armoche.modes.solo.manualOnly, true);
   assert.deepEqual(

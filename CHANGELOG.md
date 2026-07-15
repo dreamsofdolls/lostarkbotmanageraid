@@ -4,6 +4,13 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-07-15 (local-sync: explicit Solo difficulty)
+
+### Fixed
+- Local Sync now treats LoaLog's local `encounter_preview.difficulty = "Solo"` as a first-class mode even when the roster was previously set to Normal, so the web preview includes the clear in the sync payload instead of dropping it as a manual-only mode.
+- Solo is available only on the Normal-difficulty raids Act 4, Kazeros, and Serca. Horizon keeps its Level 1/2/3 family and no longer exposes a synthetic Solo option; legacy Horizon Solo entries normalize to Level 1 without losing gate timestamps or gold overrides.
+- Empty, unknown, or raid-incompatible local difficulties are skipped instead of being guessed as Normal. The online Auto Sync path is unchanged.
+
 ## 2026-07-08 (raid-check: all-mode status filter)
 
 ### Added

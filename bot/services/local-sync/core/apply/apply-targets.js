@@ -1,13 +1,18 @@
 "use strict";
 
-const { getRaidGateForBoss, getGatesForRaid } = require("../../../../models/Raid");
+const {
+  getRaidGateForBoss,
+  getGatesForRaid,
+  hasRaidMode,
+} = require("../../../../models/Raid");
 const { getCurrentResetStartMs } = require("../../../raid/schedulers/weekly-reset");
 const { normalizeDifficulty } = require("../catalog");
 
 function resolveTarget(delta) {
   const bossInfo = getRaidGateForBoss(delta.boss);
   if (!bossInfo) return null;
-  const modeKey = normalizeDifficulty(delta.difficulty) || "normal";
+  const modeKey = normalizeDifficulty(delta.difficulty);
+  if (!modeKey || !hasRaidMode(bossInfo.raidKey, modeKey)) return null;
   return {
     raidKey: bossInfo.raidKey,
     modeKey,

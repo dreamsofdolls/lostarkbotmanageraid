@@ -77,9 +77,30 @@ test("resolveLocalSyncTarget - unknown boss returns null", () => {
   assert.equal(resolveLocalSyncTarget({ boss: "Made-up Boss", difficulty: "Normal" }), null);
 });
 
-test("resolveLocalSyncTarget - unknown difficulty falls back to normal", () => {
-  const t = resolveLocalSyncTarget({ boss: "Witch of Agony, Serca", difficulty: "Mystery" });
-  assert.equal(t.modeKey, "normal");
+test("resolveLocalSyncTarget - unknown or empty difficulty is not guessed as Normal", () => {
+  assert.equal(
+    resolveLocalSyncTarget({ boss: "Witch of Agony, Serca", difficulty: "Mystery" }),
+    null
+  );
+  assert.equal(
+    resolveLocalSyncTarget({ boss: "Witch of Agony, Serca", difficulty: "" }),
+    null
+  );
+});
+
+test("resolveLocalSyncTarget - accepts Solo only for raids that expose it", () => {
+  const solo = resolveLocalSyncTarget({
+    boss: "Armoche, Sentinel of the Abyss",
+    difficulty: "Solo",
+  });
+  assert.equal(solo.raidKey, "armoche");
+  assert.equal(solo.modeKey, "solo");
+  assert.equal(solo.gate, "G2");
+
+  assert.equal(
+    resolveLocalSyncTarget({ boss: "Archbishop Arcenos", difficulty: "Solo" }),
+    null
+  );
 });
 
 // ---------- bucketize (dedupe + cumulative gate) ----------
@@ -275,6 +296,61 @@ test("applyLocalSyncDeltas - stored Solo preference remaps incoming Normal clear
   assert.equal(result.applied[0].modeKey, "solo");
   assert.equal(applyStub.calls[0].raidMeta.modeKey, "solo");
   assert.deepEqual(applyStub.calls[0].effectiveGates, ["G1", "G2"]);
+});
+
+test("applyLocalSyncDeltas - explicit LoaLog Solo clear switches a Normal raid to Solo", async () => {
+  const applyStub = makeApplyStub(() => ({ matched: true, updated: true, displayName: "Aki" }));
+  const userDoc = makeUserDoc([
+    {
+      id: "c1",
+      name: "Aki",
+      class: "Artist",
+      itemLevel: 1700,
+      assignedRaids: {
+        armoche: {
+          modeKey: "normal",
+          G1: { difficulty: "Normal", completedDate: null },
+          G2: { difficulty: "Normal", completedDate: null },
+        },
+      },
+    },
+  ]);
+
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Armoche, Sentinel of the Abyss", difficulty: "Solo", cleared: 1, charName: "Aki", lastClearMs: 1 },
+  ], makeDeps(applyStub, { userDoc }));
+
+  assert.equal(result.applied.length, 1);
+  assert.equal(result.applied[0].modeKey, "solo");
+  assert.equal(applyStub.calls[0].raidMeta.modeKey, "solo");
+  assert.deepEqual(applyStub.calls[0].effectiveGates, ["G1", "G2"]);
+});
+
+test("applyLocalSyncDeltas - stale Horizon Solo preference cannot override Level 1", async () => {
+  const applyStub = makeApplyStub(() => ({ matched: true, updated: true, displayName: "Aki" }));
+  const userDoc = makeUserDoc([
+    {
+      id: "c1",
+      name: "Aki",
+      class: "Artist",
+      itemLevel: 1700,
+      assignedRaids: {
+        horizon: {
+          modeKey: "solo",
+          G1: { difficulty: "Solo", completedDate: null },
+          G2: { difficulty: "Solo", completedDate: null },
+        },
+      },
+    },
+  ]);
+
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Archbishop Arcenos", difficulty: "Level 1", cleared: 1, charName: "Aki", lastClearMs: 1 },
+  ], makeDeps(applyStub, { userDoc }));
+
+  assert.equal(result.applied.length, 1);
+  assert.equal(result.applied[0].modeKey, "normal");
+  assert.equal(applyStub.calls[0].raidMeta.modeKey, "normal");
 });
 
 test("applyLocalSyncDeltas - skips cross-mode incoming clears when the raid is already done", async () => {
