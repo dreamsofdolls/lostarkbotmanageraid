@@ -120,7 +120,13 @@ test("raid-auto-manage action:off dispatches through the basic action handler", 
   });
 
   assert.deepEqual(updates[0].filter, { discordId: "u-off" });
-  assert.deepEqual(updates[0].update, { $set: { autoManageEnabled: false } });
+  assert.deepEqual(updates[0].update, {
+    $set: {
+      autoManageEnabled: false,
+      lastLocalSyncToken: null,
+      lastLocalSyncTokenExpAt: null,
+    },
+  });
   assert.equal(replies.length, 1);
   assert.match(replies[0].embeds[0].data.title, /Auto-manage disabled|Tắt/i);
 });

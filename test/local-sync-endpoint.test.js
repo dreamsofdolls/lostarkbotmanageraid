@@ -5,7 +5,11 @@ const { PassThrough } = require("node:stream");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { mintToken, TOKEN_POST_SYNC_TTL_SEC } = require("../bot/services/local-sync");
+const {
+  COMPANION_SCOPE,
+  mintToken,
+  TOKEN_POST_SYNC_TTL_SEC,
+} = require("../bot/services/local-sync");
 const { createRaidSyncEndpoint } = require("../bot/services/local-sync/http/endpoints/sync-endpoint");
 
 function makeReq({ token, method = "POST", body = { deltas: [] } } = {}) {
@@ -198,4 +202,107 @@ test("raid-sync endpoint shrinks token expiry after a successful write", async (
   assert.equal(updateCalls[0].update.$set.lastLocalSyncTokenExpAt, res.json().newExpSec);
   assert.ok(res.json().newExpSec >= Math.floor(Date.now() / 1000));
   assert.ok(res.json().newExpSec <= Math.floor(Date.now() / 1000) + TOKEN_POST_SYNC_TTL_SEC + 1);
+});
+
+test("raid-sync Solo scope serializes with auto-sync and rejects raw non-Solo deltas", async () => {
+  const token = mintToken("u1", undefined, null, null, COMPANION_SCOPE.solo);
+  const applyCalls = [];
+  const slotCalls = [];
+  const doc = {
+    discordId: "u1",
+    autoManageEnabled: true,
+    localSyncEnabled: false,
+    lastLocalSyncToken: token,
+    lastLocalSyncTokenExpAt: 9999999999,
+    accounts: [{
+      accountName: "Roster",
+      characters: [{ name: "Aki", class: "Artist", itemLevel: 1750, assignedRaids: {} }],
+    }],
+  };
+  const User = {
+    findOne() {
+      return { select: () => ({ lean: async () => doc }) };
+    },
+    async findOneAndUpdate() {
+      return doc;
+    },
+    async updateOne() {
+      return { modifiedCount: 1 };
+    },
+  };
+  const handler = createRaidSyncEndpoint({
+    User,
+    applyRaidSetForDiscordId: async (args) => {
+      applyCalls.push(args);
+      return { matched: true, updated: true, displayName: "Aki" };
+    },
+    acquireAutoManageSyncSlot: async (discordId, options) => {
+      slotCalls.push(["acquire", discordId, options]);
+      return { acquired: true };
+    },
+    releaseAutoManageSyncSlot: async (discordId) => {
+      slotCalls.push(["release", discordId]);
+    },
+  });
+  const res = makeRes();
+
+  await handler(makeReq({
+    token,
+    body: { deltas: [
+      {
+        boss: "Armoche, Sentinel of the Abyss",
+        difficulty: "Solo",
+        cleared: true,
+        charName: "Aki",
+        lastClearMs: Date.now(),
+      },
+      {
+        boss: "Armoche, Sentinel of the Abyss",
+        difficulty: "Normal",
+        cleared: true,
+        charName: "Aki",
+        lastClearMs: Date.now(),
+      },
+    ] },
+  }), res, { query: {} });
+
+  assert.equal(res.status, 200);
+  assert.equal(res.json().scope, "solo");
+  assert.equal(res.json().applied.length, 1);
+  assert.equal(res.json().rejected[0].reason, "scope_not_allowed");
+  assert.equal(applyCalls.length, 1);
+  assert.equal(applyCalls[0].raidMeta.modeKey, "solo");
+  assert.equal(applyCalls[0].requiredCompanionScope, "solo");
+  assert.deepEqual(slotCalls, [
+    ["acquire", "u1", { ignoreCooldown: true }],
+    ["release", "u1"],
+  ]);
+});
+
+test("raid-sync Solo scope returns 409 when the auto-sync slot is busy", async () => {
+  const token = mintToken("u1", undefined, null, null, COMPANION_SCOPE.solo);
+  let applyCalls = 0;
+  const User = makeUserStub({
+    discordId: "u1",
+    autoManageEnabled: true,
+    lastLocalSyncToken: token,
+    lastLocalSyncTokenExpAt: 9999999999,
+    accounts: [],
+  });
+  const handler = createRaidSyncEndpoint({
+    User,
+    applyRaidSetForDiscordId: async () => {
+      applyCalls += 1;
+      return { matched: true, updated: true };
+    },
+    acquireAutoManageSyncSlot: async () => ({ acquired: false, reason: "in-flight" }),
+    releaseAutoManageSyncSlot: async () => {},
+  });
+  const res = makeRes();
+
+  await handler(makeReq({ token }), res, { query: {} });
+
+  assert.equal(res.status, 409);
+  assert.equal(res.json().error, "sync already in progress");
+  assert.equal(applyCalls, 0);
 });

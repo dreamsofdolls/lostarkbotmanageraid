@@ -37,7 +37,8 @@ function createAutoManageReconciler({
       if (!incomingModeKey) continue;
       const modeKey = preserveManualRaidModePreference(
         assignedRaids[mapping.raidKey]?.modeKey,
-        incomingModeKey
+        incomingModeKey,
+        mapping.raidKey
       );
 
       const raidMeta = RAID_REQUIREMENT_MAP[`${mapping.raidKey}_${modeKey}`];

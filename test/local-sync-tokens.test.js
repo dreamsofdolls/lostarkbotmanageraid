@@ -16,6 +16,8 @@ const {
   mintToken,
   verifyToken,
   isCurrentStoredToken,
+  getOrMintLocalSyncToken,
+  COMPANION_SCOPE,
   TOKEN_DEFAULT_TTL_SEC,
   TOKEN_POST_SYNC_TTL_SEC,
 } = require("../bot/services/local-sync");
@@ -29,7 +31,9 @@ test("mintToken + verifyToken roundtrip - returns payload with discordId / iat /
   const token = mintToken("user-123");
   const result = verifyToken(token);
   assert.equal(result.ok, true);
+  assert.equal(result.scopeExplicit, true);
   assert.equal(result.payload.discordId, "user-123");
+  assert.equal(result.payload.scope, COMPANION_SCOPE.full);
   assert.equal(typeof result.payload.iat, "number");
   assert.equal(typeof result.payload.exp, "number");
   assert.equal(typeof result.payload.nonce, "string");
@@ -37,6 +41,73 @@ test("mintToken + verifyToken roundtrip - returns payload with discordId / iat /
   const now = Math.floor(Date.now() / 1000);
   assert.ok(Math.abs(result.payload.iat - now) <= 2);
   assert.equal(result.payload.exp, result.payload.iat + TOKEN_DEFAULT_TTL_SEC);
+});
+
+test("token scope roundtrip distinguishes full and Solo companions", () => {
+  const token = mintToken("user-123", undefined, null, null, COMPANION_SCOPE.solo);
+  const result = verifyToken(token);
+  assert.equal(result.ok, true);
+  assert.equal(result.payload.scope, COMPANION_SCOPE.solo);
+});
+
+test("verifyToken treats a signed legacy payload without scope as full", () => {
+  const crypto = require("node:crypto");
+  const now = Math.floor(Date.now() / 1000);
+  const payloadB64 = Buffer.from(JSON.stringify({
+    discordId: "legacy-user",
+    iat: now,
+    exp: now + 600,
+    nonce: "legacy",
+  }))
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+  const signature = crypto
+    .createHmac("sha256", process.env.LOCAL_SYNC_TOKEN_SECRET)
+    .update(payloadB64)
+    .digest("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+
+  const result = verifyToken(`${payloadB64}.${signature}`);
+  assert.equal(result.ok, true);
+  assert.equal(result.scopeExplicit, false);
+  assert.equal(result.payload.scope, COMPANION_SCOPE.full);
+});
+
+test("getOrMintLocalSyncToken reuses only a token with the requested scope", async () => {
+  const fullToken = mintToken("user-123");
+  const stored = {
+    lastLocalSyncToken: fullToken,
+    lastLocalSyncTokenExpAt: Math.floor(Date.now() / 1000) + 600,
+  };
+  const UserModel = {
+    findOne() {
+      return {
+        select() {
+          return { lean: async () => ({ ...stored }) };
+        },
+      };
+    },
+    async findOneAndUpdate(filter, update) {
+      Object.assign(stored, update.$set);
+      return { discordId: filter.discordId, ...stored };
+    },
+  };
+
+  assert.equal(await getOrMintLocalSyncToken("user-123", "en", {
+    UserModel,
+    scope: COMPANION_SCOPE.full,
+  }), fullToken);
+
+  const soloToken = await getOrMintLocalSyncToken("user-123", "en", {
+    UserModel,
+    scope: COMPANION_SCOPE.solo,
+  });
+  assert.notEqual(soloToken, fullToken);
+  assert.equal(verifyToken(soloToken).payload.scope, COMPANION_SCOPE.solo);
 });
 
 test("mintToken - tokens minted in the same second still differ", () => {

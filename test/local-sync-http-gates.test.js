@@ -3,7 +3,7 @@ process.env.LOCAL_SYNC_TOKEN_SECRET = "test-secret-at-least-16-chars-long";
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { mintToken } = require("../bot/services/local-sync");
+const { COMPANION_SCOPE, mintToken, verifyToken } = require("../bot/services/local-sync");
 const { createJsonSender } = require("../bot/services/local-sync/http/json");
 const {
   LOCAL_SYNC_DISABLED_ERROR,
@@ -71,6 +71,7 @@ test("local-sync HTTP gate verifies bearer tokens and query fallback", () => {
   assert.equal(bearerAuth.token, token);
   assert.equal(bearerAuth.discordId, "u1");
   assert.equal(bearerAuth.payload.discordId, "u1");
+  assert.equal(bearerAuth.scopeExplicit, true);
 
   const queryAuth = readVerifiedLocalSyncToken({
     req: makeReq(),
@@ -127,4 +128,52 @@ test("local-sync HTTP gate enforces enabled mode and current stored token", () =
     res: makeRes(),
     send,
   }), true);
+});
+
+test("local-sync HTTP gate uses auto-sync state for a Solo-scoped token", () => {
+  const token = mintToken("u1", undefined, null, null, COMPANION_SCOPE.solo);
+  const payload = verifyToken(token).payload;
+  const enabledRes = makeRes();
+  const disabledRes = makeRes();
+
+  assert.equal(requireCurrentLocalSyncUser({
+    userDoc: {
+      autoManageEnabled: true,
+      localSyncEnabled: false,
+      lastLocalSyncToken: token,
+      lastLocalSyncTokenExpAt: 9999999999,
+    },
+    token,
+    payload,
+    scopeExplicit: true,
+    res: enabledRes,
+    send,
+  }), true);
+
+  assert.equal(requireCurrentLocalSyncUser({
+    userDoc: { autoManageEnabled: false },
+    token,
+    payload,
+    res: disabledRes,
+    send,
+  }), false);
+  assert.equal(disabledRes.status, 409);
+  assert.match(disabledRes.json().error, /auto-sync disabled/);
+});
+
+test("new scoped tokens cannot resurrect after their stored token is cleared", () => {
+  const token = mintToken("u1", undefined, null, null, COMPANION_SCOPE.solo);
+  const verified = verifyToken(token);
+  const res = makeRes();
+
+  assert.equal(requireCurrentLocalSyncUser({
+    userDoc: { autoManageEnabled: true, lastLocalSyncToken: null },
+    token,
+    payload: verified.payload,
+    scopeExplicit: verified.scopeExplicit,
+    res,
+    send,
+  }), false);
+  assert.equal(res.status, 401);
+  assert.equal(res.json().error, TOKEN_REVOKED_ERROR);
 });

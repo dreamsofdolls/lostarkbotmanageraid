@@ -9,7 +9,12 @@
 
 "use strict";
 
-const { bucketizeLocalSyncDeltas } = require("../..");
+const {
+  COMPANION_SCOPE,
+  bucketizeLocalSyncDeltas,
+  isModeAllowedForCompanionScope,
+  normalizeLocalSyncDifficulty,
+} = require("../..");
 const {
   createJsonSender,
   readJsonBody,
@@ -28,6 +33,10 @@ const {
 } = require("../../../../models/Raid");
 const { normalizeName, toModeLabel } = require("../../../../utils/raid/common/shared");
 const { getStatusRaidsForCharacter } = require("../../../../utils/raid/common/character");
+const { getCurrentResetStartMs } = require("../../../raid/schedulers/weekly-reset");
+const {
+  hasCurrentWeekProgressInAnotherMode,
+} = require("../../core/apply/apply-roster");
 
 function makeGateKey(raidKey, modeKey, gate) {
   return `${raidKey}::${modeKey}::${gate}`;
@@ -70,9 +79,14 @@ function buildSimulatedAssignedRaids(char, finalRaidStates) {
  * Walk the user's accounts + characters and compute the four projections.
  * Pure function over (accounts, deltaBuckets) - no DB writes, no async.
  */
-function projectSummary(accounts, deltaBuckets) {
+function projectSummary(
+  accounts,
+  deltaBuckets,
+  { scope = COMPANION_SCOPE.full, currentWeekStartMs = 0 } = {}
+) {
   const bucketsByCharLower = new Map();
   for (const bucket of deltaBuckets || []) {
+    if (!isModeAllowedForCompanionScope(scope, bucket?.modeKey)) continue;
     const key = normalizeName(bucket.charName);
     if (!key) continue;
     if (!bucketsByCharLower.has(key)) bucketsByCharLower.set(key, []);
@@ -101,15 +115,29 @@ function projectSummary(accounts, deltaBuckets) {
       const preRaidStates = new Map();
 
       for (const raid of getStatusRaidsForCharacter(char)) {
-        const state = { modeKey: raid.modeKey, cleared: new Map() };
-        for (const gate of raid.completedGateKeys || []) {
-          state.cleared.set(
-            gate,
-            Number(char?.assignedRaids?.[raid.raidKey]?.[gate]?.completedDate) ||
-              Number(raid.completedAt) ||
-              0
-          );
-          dbClearedGates.set(makeGateKey(raid.raidKey, raid.modeKey, gate), true);
+        if (scope === COMPANION_SCOPE.solo && !RAID_REQUIREMENTS[raid.raidKey]?.modes?.solo) {
+          continue;
+        }
+        const modeKey = scope === COMPANION_SCOPE.solo
+          ? COMPANION_SCOPE.solo
+          : raid.modeKey;
+        const state = { modeKey, cleared: new Map() };
+        const assignedRaid = char?.assignedRaids?.[raid.raidKey] || {};
+        const storedModeKey = normalizeLocalSyncDifficulty(
+          assignedRaid.modeKey || getGatesForRaid(raid.raidKey)
+            .map((gate) => assignedRaid?.[gate]?.difficulty)
+            .find(Boolean)
+        );
+        const completedGateKeys = scope === COMPANION_SCOPE.solo && storedModeKey !== COMPANION_SCOPE.solo
+          ? []
+          : (raid.completedGateKeys || []);
+        for (const gate of completedGateKeys) {
+          const completedAt = Number(assignedRaid?.[gate]?.completedDate)
+            || Number(raid.completedAt)
+            || 0;
+          if (!(completedAt > 0) || completedAt < currentWeekStartMs) continue;
+          state.cleared.set(gate, completedAt);
+          dbClearedGates.set(makeGateKey(raid.raidKey, modeKey, gate), true);
         }
         preRaidStates.set(raid.raidKey, state);
       }
@@ -121,6 +149,12 @@ function projectSummary(accounts, deltaBuckets) {
       const appliedGates = new Map();
       for (const bucket of charBuckets) {
         if (!RAID_REQUIREMENTS[bucket.raidKey]?.modes?.[bucket.modeKey]) continue;
+        if (
+          scope === COMPANION_SCOPE.solo
+          && hasCurrentWeekProgressInAnotherMode(char, bucket, currentWeekStartMs)
+        ) {
+          continue;
+        }
         const gates = getGatesForRaid(bucket.raidKey);
         let state = finalRaidStates.get(bucket.raidKey);
         if (!state || state.modeKey !== bucket.modeKey) {
@@ -264,7 +298,8 @@ function createPreviewSummaryEndpoint({ User }) {
     if (!guardHttpMethod({ req, res, send, method: "POST" })) return;
     const auth = readVerifiedLocalSyncToken({ req, res, parsedUrl, send });
     if (!auth) return;
-    const { token, discordId } = auth;
+    const { token, discordId, payload, scopeExplicit } = auth;
+    const scope = payload.scope;
 
     let body;
     try {
@@ -278,7 +313,7 @@ function createPreviewSummaryEndpoint({ User }) {
     let userDoc;
     try {
       userDoc = await User.findOne({ discordId })
-        .select("localSyncEnabled lastLocalSyncToken lastLocalSyncTokenExpAt lastLocalSyncAt lastAutoManageSyncAt accounts.accountName accounts.characters.name accounts.characters.class accounts.characters.itemLevel accounts.characters.isGoldEarner accounts.characters.assignedRaids")
+        .select("autoManageEnabled localSyncEnabled lastLocalSyncToken lastLocalSyncTokenExpAt lastLocalSyncAt lastAutoManageSyncAt accounts.accountName accounts.characters.name accounts.characters.class accounts.characters.itemLevel accounts.characters.isGoldEarner accounts.characters.assignedRaids")
         .lean();
     } catch (err) {
       console.error("[preview-summary] state read failed:", err?.message || err);
@@ -289,6 +324,7 @@ function createPreviewSummaryEndpoint({ User }) {
     if (!userDoc) {
       send(res, 200, {
         ok: true,
+        scope,
         goldDelta: { total: 0, boundTotal: 0, byChar: [] },
         completion: { totalRaids: 0, cleared: 0, projected: 0, percent: 0, projectedPercent: 0 },
         charsAfterSync: [],
@@ -296,13 +332,24 @@ function createPreviewSummaryEndpoint({ User }) {
       });
       return;
     }
-    if (!requireCurrentLocalSyncUser({ userDoc, token, res, send })) return;
+    if (!requireCurrentLocalSyncUser({
+      userDoc,
+      token,
+      payload,
+      scopeExplicit,
+      res,
+      send,
+    })) return;
 
     const buckets = bucketizeLocalSyncDeltas(deltas);
-    const summary = projectSummary(userDoc.accounts || [], buckets);
+    const summary = projectSummary(userDoc.accounts || [], buckets, {
+      scope,
+      currentWeekStartMs: getCurrentResetStartMs(),
+    });
 
     send(res, 200, {
       ok: true,
+      scope,
       ...summary,
       lastSync: {
         localSyncAt: Number(userDoc.lastLocalSyncAt) || null,

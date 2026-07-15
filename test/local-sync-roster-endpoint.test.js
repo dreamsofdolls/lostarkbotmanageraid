@@ -103,6 +103,7 @@ test("roster endpoint returns only the slim roster fields when local-sync is ena
   assert.deepEqual(res.json(), {
     ok: true,
     discordId: "u1",
+    scope: "full",
     accounts: [
       {
         accountName: "Roster",

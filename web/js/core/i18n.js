@@ -10,7 +10,7 @@
 
 "use strict";
 
-import { TRANSLATIONS, DEFAULT_LANG, SUPPORTED_LANGS } from "/sync/js/core/locales.js";
+import { TRANSLATIONS, DEFAULT_LANG, SUPPORTED_LANGS } from "./locales.js";
 
 export function normalizeLang(raw) {
   if (typeof raw !== "string") return DEFAULT_LANG;
@@ -42,6 +42,18 @@ function interpolate(template, vars) {
   });
 }
 
+function getActiveScope() {
+  return window.__artistSyncScope === "solo" ? "solo" : "full";
+}
+
+function lookupForActiveScope(tree, key) {
+  if (getActiveScope() === "solo") {
+    const scopedValue = lookup(tree, `solo.${key}`);
+    if (scopedValue != null) return scopedValue;
+  }
+  return lookup(tree, key);
+}
+
 export function getActiveLang() {
   return normalizeLang(window.__artistLang || DEFAULT_LANG);
 }
@@ -54,9 +66,9 @@ export function setActiveLang(raw) {
 export function t(key, vars) {
   const lang = getActiveLang();
   const tree = TRANSLATIONS[lang] || TRANSLATIONS[DEFAULT_LANG];
-  let value = lookup(tree, key);
+  let value = lookupForActiveScope(tree, key);
   if (value == null && lang !== DEFAULT_LANG) {
-    value = lookup(TRANSLATIONS[DEFAULT_LANG], key);
+    value = lookupForActiveScope(TRANSLATIONS[DEFAULT_LANG], key);
   }
   if (value == null) {
     // Last-resort fallback: surface the missing key so the dev sees it

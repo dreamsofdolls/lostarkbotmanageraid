@@ -12,6 +12,10 @@ export function decodePayload(token) {
   }
 }
 
+export function resolveCompanionScope(payload) {
+  return payload?.scope === "solo" ? "solo" : "full";
+}
+
 function renderAuthStatus({ authStatus, authState, t, escapeHtml }) {
   if (!authState) return;
   const { kind, expSec, username, avatarUrl } = authState;

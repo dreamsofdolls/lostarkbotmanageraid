@@ -107,6 +107,8 @@ test("setLocalSyncEnabled(true) with force - flips autoManageEnabled OFF in same
   // bible scheduler tick can't see localSync ON + bible ON briefly.
   assert.equal(update.$set.autoManageEnabled, false);
   assert.equal(update.$set.localSyncEnabled, true);
+  assert.equal(update.$set.lastLocalSyncToken, null);
+  assert.equal(update.$set.lastLocalSyncTokenExpAt, null);
   // Filter is unconditional on bible state for force-mode.
   assert.deepEqual(UserStub.calls.findOneAndUpdate[0].filter, { discordId: "u1" });
 });
@@ -121,6 +123,8 @@ test("setLocalSyncEnabled(false) clears localSyncLinkedAt", async () => {
   const update = UserStub.calls.findOneAndUpdate[0].update;
   assert.equal(update.$set.localSyncEnabled, false);
   assert.equal(update.$set.localSyncLinkedAt, null);
+  assert.equal(update.$set.lastLocalSyncToken, null);
+  assert.equal(update.$set.lastLocalSyncTokenExpAt, null);
 });
 
 // ---------- setBibleAutoSyncEnabled ----------
@@ -168,6 +172,22 @@ test("setBibleAutoSyncEnabled(true) with force - clears localSyncEnabled in same
   assert.equal(update.$set.autoManageEnabled, true);
   assert.equal(update.$set.localSyncEnabled, false);
   assert.equal(update.$set.localSyncLinkedAt, null);
+  assert.equal(update.$set.lastLocalSyncToken, null);
+  assert.equal(update.$set.lastLocalSyncTokenExpAt, null);
+});
+
+test("setBibleAutoSyncEnabled(false) revokes the stored companion token", async () => {
+  const UserStub = makeUserStub({
+    findOneAndUpdateImpl: (filter, update) =>
+      Promise.resolve({ discordId: "u1", ...update.$set }),
+  });
+  const result = await setBibleAutoSyncEnabled("u1", false, {}, { UserModel: UserStub });
+  assert.equal(result.ok, true);
+  assert.deepEqual(UserStub.calls.findOneAndUpdate[0].update.$set, {
+    autoManageEnabled: false,
+    lastLocalSyncToken: null,
+    lastLocalSyncTokenExpAt: null,
+  });
 });
 
 // ---------- resolveSyncMode (pure) ----------
@@ -252,6 +272,21 @@ test("recordLocalSyncSuccess - stamps lastLocalSyncAt on success", async () => {
   assert.equal(result.ok, true);
   const update = UserStub.calls.findOneAndUpdate[0].update;
   assert.ok(update.$set.lastLocalSyncAt >= before);
+});
+
+test("recordLocalSyncSuccess - Solo scope requires autoManageEnabled=true", async () => {
+  const UserStub = makeUserStub({
+    findOneAndUpdateImpl: () => Promise.resolve({ discordId: "u1" }),
+  });
+  const result = await recordLocalSyncSuccess("u1", {
+    UserModel: UserStub,
+    scope: "solo",
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(UserStub.calls.findOneAndUpdate[0].filter, {
+    discordId: "u1",
+    autoManageEnabled: true,
+  });
 });
 
 // ---------- defensive guards ----------

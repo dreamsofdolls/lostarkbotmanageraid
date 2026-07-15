@@ -2,6 +2,7 @@ import { t, getRaidLabel, getRaidSpecificModeLabel } from "/sync/js/core/i18n.js
 import { escapeHtml } from "/sync/js/core/html.js";
 import { formatGold, formatRelativeTime } from "/sync/js/core/format.js";
 import { renderCharPendingLabel, renderCharPendingRow } from "/sync/js/sync/render/char-row.js";
+import { resolvePreviewLastSync } from "/sync/js/sync/preview-stats.js";
 
 export function renderPreviewStats(panel, summary) {
   if (!panel) return;
@@ -15,7 +16,6 @@ export function renderPreviewStats(panel, summary) {
   const goldByChar = Array.isArray(summary.goldDelta?.byChar) ? summary.goldDelta.byChar : [];
   const completion = summary.completion || {};
   const charsAfterSync = Array.isArray(summary.charsAfterSync) ? summary.charsAfterSync : [];
-  const lastSync = summary.lastSync || {};
 
   // Gold chip: show the value when positive, otherwise show the localized
   // "no new gold" state so the panel still renders when the value is zero.
@@ -28,19 +28,15 @@ export function renderPreviewStats(panel, summary) {
     : `<span class="stat-value">${escapeHtml(t("preview.statsGoldEmpty"))}</span>`;
 
   // Last sync: pick max of local + bible timestamps; show mode label
-  // so user knows which path the timestamp belongs to.
+  // so user knows which path the timestamp belongs to. Solo scope uses
+  // the companion timestamp only because Bible does not ingest Solo.
   let lastSyncStr;
-  const localMs = Number(lastSync.localSyncAt) || 0;
-  const bibleMs = Number(lastSync.autoManageSyncAt) || 0;
-  if (localMs === 0 && bibleMs === 0) {
+  const latestSync = resolvePreviewLastSync(summary);
+  if (!latestSync) {
     lastSyncStr = `<span class="stat-value">${escapeHtml(t("preview.statsLastSyncNever"))}</span>`;
   } else {
-    const useLocal = localMs >= bibleMs;
-    const ms = useLocal ? localMs : bibleMs;
-    const modeLabel = useLocal
-      ? t("preview.statsLastSyncLocalMode")
-      : t("preview.statsLastSyncBibleMode");
-    lastSyncStr = `<span class="stat-value">${escapeHtml(formatRelativeTime(ms) || "")} <span class="stat-label">(${escapeHtml(modeLabel)})</span></span>`;
+    const modeLabel = t(latestSync.labelKey);
+    lastSyncStr = `<span class="stat-value">${escapeHtml(formatRelativeTime(latestSync.ms) || "")} <span class="stat-label">(${escapeHtml(modeLabel)})</span></span>`;
   }
 
   // Completion chip uses {cleared}/{total} interpolation to bold the

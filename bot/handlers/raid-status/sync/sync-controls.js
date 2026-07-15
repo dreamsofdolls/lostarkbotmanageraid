@@ -102,6 +102,19 @@ function createRaidStatusSyncControls({
       disabled,
     });
 
+  const buildSoloCompanionButton = (disabled = false) => {
+    const statusUserMeta = getStatusUserMeta();
+    if (!statusUserMeta.autoManageEnabled || statusUserMeta.localSyncEnabled) {
+      return null;
+    }
+    return new ButtonBuilder()
+      .setCustomId("status:solo-companion")
+      .setLabel(t("raid-status.sync.soloCompanionButtonLabel", lang))
+      .setEmoji("\u{1f310}")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled);
+  };
+
   const buildSyncButton = (disabled) => {
     if (getStatusUserMeta().localSyncEnabled) {
       return buildLocalSyncResumeButton(disabled);
@@ -130,6 +143,7 @@ function createRaidStatusSyncControls({
     buildLocalSyncNewButton,
     buildLocalSyncRefreshButton,
     buildRosterRefreshButton,
+    buildSoloCompanionButton,
     buildSyncButton,
     buildSyncRow,
     hydrateLocalSyncResumeUrl,

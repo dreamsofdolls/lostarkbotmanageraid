@@ -5,6 +5,7 @@ const STATUS_COMPONENT_ACTION = Object.freeze({
   next: "next",
   localNewLink: "localNewLink",
   localRefresh: "localRefresh",
+  soloCompanion: "soloCompanion",
   rosterRefresh: "rosterRefresh",
   sync: "sync",
   myRaidsSelect: "myRaidsSelect",
@@ -41,6 +42,12 @@ const STATUS_COMPONENT_ROUTES = Object.freeze([
   {
     customId: "status:local-refresh",
     action: STATUS_COMPONENT_ACTION.localRefresh,
+    editDriven: false,
+    redraw: false,
+  },
+  {
+    customId: "status:solo-companion",
+    action: STATUS_COMPONENT_ACTION.soloCompanion,
     editDriven: false,
     redraw: false,
   },

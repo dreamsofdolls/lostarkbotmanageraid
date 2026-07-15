@@ -41,12 +41,14 @@ function makeUserModel() {
     constructor(data = {}) {
       this.discordId = data.discordId || null;
       this.localSyncEnabled = !!data.localSyncEnabled;
+      this.autoManageEnabled = !!data.autoManageEnabled;
       this.accounts = JSON.parse(JSON.stringify(data.accounts || []));
     }
     async save() {
       docs.set(this.discordId, {
         discordId: this.discordId,
         localSyncEnabled: this.localSyncEnabled,
+        autoManageEnabled: this.autoManageEnabled,
         accounts: JSON.parse(JSON.stringify(this.accounts)),
       });
       return this;
@@ -133,6 +135,7 @@ function seedUser(docs, accounts, extra = {}) {
 const KAZEROS_HARD = RAID_REQUIREMENT_MAP.kazeros_hard;
 const KAZEROS_NORMAL = RAID_REQUIREMENT_MAP.kazeros_normal;
 const ARMOCHE_NORMAL = RAID_REQUIREMENT_MAP.armoche_normal;
+const ARMOCHE_SOLO = RAID_REQUIREMENT_MAP.armoche_solo;
 
 function makeRaidSetInteraction(values, userId = "user-1") {
   const replies = [];
@@ -587,6 +590,153 @@ test("applyRaidSetForDiscordId: local-sync guard blocks stale POST writes after 
   assert.equal(result.updated, false);
   const stored = docs.get("user-1");
   assert.equal(stored.accounts[0].characters[0].assignedRaids?.kazeros?.G1, undefined);
+});
+
+test("applyRaidSetForDiscordId: Solo companion requires auto-sync on the fresh user doc", async () => {
+  const { factory, docs } = makeFactory();
+  seedUser(
+    docs,
+    [{ accountName: "Roster", characters: [makeChar("Cyrano", 1730)] }],
+    { autoManageEnabled: false }
+  );
+
+  const result = await factory.applyRaidSetForDiscordId({
+    discordId: "user-1",
+    characterName: "Cyrano",
+    raidMeta: ARMOCHE_SOLO,
+    statusType: "process",
+    effectiveGates: ["G1"],
+    requiredCompanionScope: "solo",
+  });
+
+  assert.equal(result.syncDisabled, true);
+  assert.equal(result.syncDisabledReason, "auto_sync_disabled");
+  assert.equal(result.updated, false);
+});
+
+test("applyRaidSetForDiscordId: Solo companion cannot write a non-Solo raid mode", async () => {
+  const { factory, docs } = makeFactory();
+  seedUser(
+    docs,
+    [{ accountName: "Roster", characters: [makeChar("Cyrano", 1730)] }],
+    { autoManageEnabled: true }
+  );
+
+  const result = await factory.applyRaidSetForDiscordId({
+    discordId: "user-1",
+    characterName: "Cyrano",
+    raidMeta: ARMOCHE_NORMAL,
+    statusType: "process",
+    effectiveGates: ["G1"],
+    requiredCompanionScope: "solo",
+  });
+
+  assert.equal(result.scopeNotAllowed, true);
+  assert.equal(result.updated, false);
+});
+
+test("applyRaidSetForDiscordId: Solo companion preserves positive progress in another mode", async () => {
+  const { factory, docs } = makeFactory();
+  seedUser(
+    docs,
+    [{
+      accountName: "Roster",
+      characters: [makeChar("Cyrano", 1730, {
+        armoche: {
+          modeKey: "normal",
+          G1: { difficulty: "Normal", completedDate: Date.now() },
+          G2: { difficulty: "Normal", completedDate: null },
+        },
+      })],
+    }],
+    { autoManageEnabled: true }
+  );
+
+  const result = await factory.applyRaidSetForDiscordId({
+    discordId: "user-1",
+    characterName: "Cyrano",
+    raidMeta: ARMOCHE_SOLO,
+    statusType: "process",
+    effectiveGates: ["G1", "G2"],
+    requiredCompanionScope: "solo",
+  });
+
+  assert.equal(result.progressConflict, true);
+  assert.equal(result.updated, false);
+  const raid = docs.get("user-1").accounts[0].characters[0].assignedRaids.armoche;
+  assert.equal(raid.modeKey, "normal");
+  assert.ok(Number(raid.G1.completedDate) > 0);
+});
+
+test("applyRaidSetForDiscordId: Solo companion ignores stale progress even when reset key is current", async () => {
+  const currentWeekStartMs = Date.now() - 10_000;
+  const { factory, docs } = makeFactory();
+  seedUser(
+    docs,
+    [{
+      accountName: "Roster",
+      characters: [makeChar("Cyrano", 1730, {
+        armoche: {
+          modeKey: "normal",
+          G1: { difficulty: "Normal", completedDate: currentWeekStartMs - 1 },
+          G2: { difficulty: "Normal", completedDate: null },
+        },
+      })],
+    }],
+    { autoManageEnabled: true }
+  );
+
+  const result = await factory.applyRaidSetForDiscordId({
+    discordId: "user-1",
+    characterName: "Cyrano",
+    raidMeta: ARMOCHE_SOLO,
+    statusType: "process",
+    effectiveGates: ["G1", "G2"],
+    requiredCompanionScope: "solo",
+    currentWeekStartMs,
+  });
+
+  assert.equal(result.progressConflict, false);
+  assert.equal(result.updated, true);
+  const raid = docs.get("user-1").accounts[0].characters[0].assignedRaids.armoche;
+  assert.equal(raid.modeKey, "solo");
+  assert.ok(Number(raid.G1.completedDate) >= currentWeekStartMs);
+  assert.ok(Number(raid.G2.completedDate) >= currentWeekStartMs);
+});
+
+test("applyRaidSetForDiscordId: same-mode stale gates do not short-circuit a current Solo clear", async () => {
+  const currentWeekStartMs = Date.now() - 10_000;
+  const { factory, docs } = makeFactory();
+  seedUser(
+    docs,
+    [{
+      accountName: "Roster",
+      characters: [makeChar("Cyrano", 1730, {
+        armoche: {
+          modeKey: "solo",
+          G1: { difficulty: "Solo", completedDate: currentWeekStartMs - 2 },
+          G2: { difficulty: "Solo", completedDate: currentWeekStartMs - 1 },
+        },
+      })],
+    }],
+    { autoManageEnabled: true }
+  );
+
+  const result = await factory.applyRaidSetForDiscordId({
+    discordId: "user-1",
+    characterName: "Cyrano",
+    raidMeta: ARMOCHE_SOLO,
+    statusType: "process",
+    effectiveGates: ["G1", "G2"],
+    requiredCompanionScope: "solo",
+    currentWeekStartMs,
+  });
+
+  assert.equal(result.alreadyComplete, false);
+  assert.equal(result.updated, true);
+  const raid = docs.get("user-1").accounts[0].characters[0].assignedRaids.armoche;
+  assert.ok(Number(raid.G1.completedDate) >= currentWeekStartMs);
+  assert.ok(Number(raid.G2.completedDate) >= currentWeekStartMs);
 });
 
 test("applyRaidSetForDiscordId: char not found returns matched=false without touching state", async () => {

@@ -12,10 +12,30 @@ const RESULT_CLASSIFIERS = Object.freeze([
     }),
   },
   {
-    matches: (result) => result.syncDisabled,
+    matches: (result) => result.scopeNotAllowed,
     append: ({ bucket, effectiveGates, rejected }) => rejected.push({
       charName: bucket.charName,
-      reason: "local_sync_disabled",
+      reason: "scope_not_allowed",
+      raidKey: bucket.raidKey,
+      modeKey: bucket.modeKey,
+      gates: effectiveGates,
+    }),
+  },
+  {
+    matches: (result) => result.progressConflict,
+    append: ({ bucket, effectiveGates, rejected }) => rejected.push({
+      charName: bucket.charName,
+      reason: "mode_progress_conflict",
+      raidKey: bucket.raidKey,
+      modeKey: bucket.modeKey,
+      gates: effectiveGates,
+    }),
+  },
+  {
+    matches: (result) => result.syncDisabled,
+    append: ({ result, bucket, effectiveGates, rejected }) => rejected.push({
+      charName: bucket.charName,
+      reason: result.syncDisabledReason || "local_sync_disabled",
       raidKey: bucket.raidKey,
       modeKey: bucket.modeKey,
       gates: effectiveGates,

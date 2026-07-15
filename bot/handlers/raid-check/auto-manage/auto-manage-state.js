@@ -34,7 +34,13 @@ async function tryDisableAutoManage(UserModel, discordId) {
   try {
     updated = await UserModel.findOneAndUpdate(
       { discordId, autoManageEnabled: true },
-      { $set: { autoManageEnabled: false } },
+      {
+        $set: {
+          autoManageEnabled: false,
+          lastLocalSyncToken: null,
+          lastLocalSyncTokenExpAt: null,
+        },
+      },
       { new: true }
     );
   } catch (err) {

@@ -52,12 +52,13 @@ function createRosterEndpoint({ User }) {
     if (!guardHttpMethod({ req, res, send, method: "GET" })) return;
     const auth = readVerifiedLocalSyncToken({ req, res, parsedUrl, send });
     if (!auth) return;
-    const { token, discordId } = auth;
+    const { token, discordId, payload, scopeExplicit } = auth;
+    const scope = payload.scope;
 
     let userDoc;
     try {
       userDoc = await User.findOne({ discordId })
-        .select("discordId localSyncEnabled lastLocalSyncToken lastLocalSyncTokenExpAt accounts.accountName accounts.characters.name accounts.characters.class accounts.characters.itemLevel accounts.characters.assignedRaids")
+        .select("discordId autoManageEnabled localSyncEnabled lastLocalSyncToken lastLocalSyncTokenExpAt accounts.accountName accounts.characters.name accounts.characters.class accounts.characters.itemLevel accounts.characters.assignedRaids")
         .lean();
     } catch (err) {
       console.error("[roster-endpoint] read failed:", err?.message || err);
@@ -68,10 +69,17 @@ function createRosterEndpoint({ User }) {
     if (!userDoc) {
       // No User doc yet - return empty roster instead of 404 so the web
       // can render gracefully ("no roster registered").
-      send(res, 200, { ok: true, discordId, accounts: [] });
+      send(res, 200, { ok: true, discordId, scope, accounts: [] });
       return;
     }
-    if (!requireCurrentLocalSyncUser({ userDoc, token, res, send })) return;
+    if (!requireCurrentLocalSyncUser({
+      userDoc,
+      token,
+      payload,
+      scopeExplicit,
+      res,
+      send,
+    })) return;
 
     const accounts = (Array.isArray(userDoc.accounts) ? userDoc.accounts : [])
       .map((account) => ({
@@ -85,7 +93,7 @@ function createRosterEndpoint({ User }) {
           })),
       }));
 
-    send(res, 200, { ok: true, discordId, accounts });
+    send(res, 200, { ok: true, discordId, scope, accounts });
   };
 }
 

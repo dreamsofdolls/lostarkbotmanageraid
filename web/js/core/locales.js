@@ -125,6 +125,51 @@ const VI = {
     unmappedHint: "Unmapped boss (cần extend bot-side map):",
     unmappedMore: "+{n}",
   },
+  solo: {
+    meta: {
+      pageTitle: "Artist · Solo Companion",
+    },
+    header: {
+      h1: "Solo Web Companion",
+      subtitle: "Bổ sung dữ liệu Solo raid từ LOA Logs trong khi Auto-sync vẫn xử lý các raid còn lại.",
+    },
+    identity: {
+      noTokenHint: "Mở `/raid-status` trong Discord rồi lấy một link Solo Web Companion mới.",
+      malformedHint: "Quay lại `/raid-status` để lấy một link Solo Web Companion mới.",
+      expiredHint: "Link đã hết hạn. Quay lại `/raid-status` để mở một link mới.",
+    },
+    file: {
+      hint: "Chọn `encounters.db` từ `%localappdata%\\LOA Logs\\`. Companion này chỉ đọc các encounter có difficulty Solo.",
+    },
+    preview: {
+      section: "3. Preview Solo raid tuần hiện tại",
+      noRecent: "Không có encounter Solo nào trong tuần raid hiện tại.",
+      nothingToSync: "Không có dữ liệu Solo để sync.",
+      headlineCount: "Tuần raid hiện tại: <strong>{chars}</strong> character, <strong>{clears}</strong> Solo raid clear sẽ sync.",
+      headlineNoSync: "Tuần raid hiện tại: không có Solo raid clear mới hợp lệ để sync.",
+      detectedCount: "Đã đọc từ file: {chars} character, {clears} Solo raid clear. Clear đã sync, không thuộc roster, hoặc không hợp lệ sẽ không được gửi.",
+      noBucketsMatched: "Không có Solo raid clear nào khớp với danh sách boss của bot.",
+      noRosterMatched: "Không có Solo raid clear mới nào khớp roster đã đăng ký. Clear đã sync hoặc character ngoài roster sẽ bị bỏ qua.",
+      statsGoldLabel: "Gold từ Solo raid chưa sync",
+      statsLastSyncSoloMode: "Web Companion",
+      soloDifficultyMissing: "Không thể xác minh difficulty Solo trong file này.",
+      soloDifficultyMissingHint: "Schema LOA Logs không có cột difficulty, nên companion sẽ không đoán encounter Normal thành Solo.",
+    },
+    diff: {
+      state: {
+        "mode-conflict": "đã có progress ở difficulty khác (không sync)",
+      },
+    },
+    sync: {
+      section: "4. Sync Solo raid về Artist",
+      hint: "Chỉ gửi các encounter có difficulty Solo. Server sẽ kiểm tra lại scope và quyền sở hữu từng character trước khi ghi.",
+      btnReady: "Sync Solo",
+      nothingToSync: "Không có dữ liệu Solo để sync.",
+      nothingToSyncFull: "Không có Solo raid clear mới hợp lệ trong tuần hiện tại để sync.",
+      sending: "Đang gửi {n} Solo delta về Artist...",
+      complete: "Sync Solo xong!",
+    },
+  },
   raidLabels: {
     armoche: "Act 4",
     kazeros: "Kazeros",
@@ -133,6 +178,7 @@ const VI = {
   },
   modeLabels: {
     normal: "Normal",
+    solo: "Solo",
     hard: "Hard",
     nightmare: "Nightmare",
   },
@@ -265,6 +311,51 @@ const JP = {
     unmappedHint: "未マッピングのボス (bot 側のマップ拡張が必要です):",
     unmappedMore: "+{n}",
   },
+  solo: {
+    meta: {
+      pageTitle: "Artist · Solo Companion",
+    },
+    header: {
+      h1: "Solo Web Companion",
+      subtitle: "Auto-sync を維持したまま、LOA Logs から Solo raid のデータだけを補完します。",
+    },
+    identity: {
+      noTokenHint: "Discord の `/raid-status` から新しい Solo Web Companion リンクを開いてください。",
+      malformedHint: "`/raid-status` に戻り、新しい Solo Web Companion リンクを取得してください。",
+      expiredHint: "リンクの有効期限が切れました。`/raid-status` から新しいリンクを開いてください。",
+    },
+    file: {
+      hint: "`%localappdata%\\LOA Logs\\` の `encounters.db` を選択してください。この Companion は difficulty が Solo の encounter だけを読み取ります。",
+    },
+    preview: {
+      section: "3. 今週の Solo raid プレビュー",
+      noRecent: "現在のレイド週に Solo encounter はありません。",
+      nothingToSync: "同期する Solo データはありません。",
+      headlineCount: "現在のレイド週: <strong>{chars}</strong> キャラクター、<strong>{clears}</strong> 件の Solo raid clear を同期します。",
+      headlineNoSync: "現在のレイド週に同期できる新しい Solo raid clear はありません。",
+      detectedCount: "ファイルから {chars} キャラクター、{clears} 件の Solo raid clear を読み取りました。同期済み、ロスター外、無効な clear は送信しません。",
+      noBucketsMatched: "bot のボス一覧に一致する Solo raid clear はありません。",
+      noRosterMatched: "登録済みロスターに一致する新しい Solo raid clear はありません。同期済み、またはロスター外のキャラクターはスキップします。",
+      statsGoldLabel: "未同期 Solo raid のゴールド",
+      statsLastSyncSoloMode: "ウェブコンパニオン",
+      soloDifficultyMissing: "このファイルでは Solo difficulty を確認できません。",
+      soloDifficultyMissingHint: "LOA Logs の schema に difficulty カラムがないため、Normal encounter を Solo と推測しません。",
+    },
+    diff: {
+      state: {
+        "mode-conflict": "別 difficulty の進捗があります（同期しません）",
+      },
+    },
+    sync: {
+      section: "4. Solo raid を Artist へ同期",
+      hint: "difficulty が Solo の encounter だけを送信します。サーバー側でも scope とキャラクター所有権を再確認します。",
+      btnReady: "Solo を同期",
+      nothingToSync: "同期する Solo データはありません。",
+      nothingToSyncFull: "現在のレイド週に同期できる新しい Solo raid clear はありません。",
+      sending: "{n} 件の Solo delta を Artist に送信中...",
+      complete: "Solo の同期が完了しました。",
+    },
+  },
   raidLabels: {
     armoche: "アクト4",
     kazeros: "カゼロス",
@@ -273,6 +364,7 @@ const JP = {
   },
   modeLabels: {
     normal: "ノーマル",
+    solo: "ソロ",
     hard: "ハード",
     nightmare: "ナイトメア",
   },
@@ -405,6 +497,51 @@ const EN = {
     unmappedHint: "Unmapped bosses (need bot-side aliases):",
     unmappedMore: "+{n}",
   },
+  solo: {
+    meta: {
+      pageTitle: "Artist · Solo Companion",
+    },
+    header: {
+      h1: "Solo Web Companion",
+      subtitle: "Keep Auto-sync for the rest of your raids while filling Solo raid data from LOA Logs.",
+    },
+    identity: {
+      noTokenHint: "Open `/raid-status` in Discord and request a new Solo Web Companion link.",
+      malformedHint: "Return to `/raid-status` for a fresh Solo Web Companion link.",
+      expiredHint: "This link expired. Return to `/raid-status` and open a fresh one.",
+    },
+    file: {
+      hint: "Choose `encounters.db` from `%localappdata%\\LOA Logs\\`. This companion reads only encounters whose difficulty is Solo.",
+    },
+    preview: {
+      section: "3. Current Solo raid-week preview",
+      noRecent: "No Solo encounters in the current raid week.",
+      nothingToSync: "No Solo data to sync.",
+      headlineCount: "Current raid week: <strong>{chars}</strong> character(s), <strong>{clears}</strong> Solo raid clear(s) will sync.",
+      headlineNoSync: "Current raid week: no new valid Solo raid clears to sync.",
+      detectedCount: "Read from file: {chars} character(s), {clears} Solo raid clear(s). Already synced, off-roster, or invalid clears will not be sent.",
+      noBucketsMatched: "No Solo raid clears matched the bot's known boss list.",
+      noRosterMatched: "No new Solo raid clears matched your registered roster. Already synced or off-roster characters will be skipped.",
+      statsGoldLabel: "Gold from unsynced Solo raids",
+      statsLastSyncSoloMode: "Web Companion",
+      soloDifficultyMissing: "This file cannot identify Solo difficulty safely.",
+      soloDifficultyMissingHint: "The LOA Logs schema has no difficulty column, so the companion will not guess that Normal encounters are Solo.",
+    },
+    diff: {
+      state: {
+        "mode-conflict": "progress exists at another difficulty (not synced)",
+      },
+    },
+    sync: {
+      section: "4. Sync Solo raids to Artist",
+      hint: "Sends only encounters whose difficulty is Solo. The server rechecks the scope and per-character ownership before writing.",
+      btnReady: "Sync Solo",
+      nothingToSync: "No Solo data to sync.",
+      nothingToSyncFull: "No new valid Solo raid clears in the current raid week to sync.",
+      sending: "Sending {n} Solo delta(s) to Artist...",
+      complete: "Solo sync complete!",
+    },
+  },
   raidLabels: {
     armoche: "Act 4",
     kazeros: "Kazeros",
@@ -413,6 +550,7 @@ const EN = {
   },
   modeLabels: {
     normal: "Normal",
+    solo: "Solo",
     hard: "Hard",
     nightmare: "Nightmare",
   },

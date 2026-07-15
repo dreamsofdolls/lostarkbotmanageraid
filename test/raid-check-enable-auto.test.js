@@ -179,7 +179,11 @@ test("tryDisableAutoManage returns 'disabled' when CAS filter matches", async ()
   const call = UserStub.calls.findOneAndUpdate[0];
   assert.equal(call.filter.discordId, "user-1");
   assert.equal(call.filter.autoManageEnabled, true);
-  assert.deepEqual(call.update.$set, { autoManageEnabled: false });
+  assert.deepEqual(call.update.$set, {
+    autoManageEnabled: false,
+    lastLocalSyncToken: null,
+    lastLocalSyncTokenExpAt: null,
+  });
 });
 
 test("tryDisableAutoManage returns 'already-off' when CAS rejects but doc still exists", async () => {

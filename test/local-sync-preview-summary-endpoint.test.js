@@ -429,3 +429,82 @@ test("preview summary includes eligible chars with no assigned raid state", () =
     },
   ]);
 });
+
+test("preview summary Solo scope contains only Solo-capable raid states", () => {
+  const buckets = bucketizeLocalSyncDeltas([
+    {
+      boss: "Armoche, Sentinel of the Abyss",
+      difficulty: "Solo",
+      cleared: true,
+      charName: "Aki",
+      lastClearMs: 2000,
+    },
+    {
+      boss: "Archdemon Kazeros",
+      difficulty: "Hard",
+      cleared: true,
+      charName: "Aki",
+      lastClearMs: 2000,
+    },
+  ]);
+
+  const summary = projectSummary(makeAccounts({
+    name: "Aki",
+    class: "Artist",
+    itemLevel: 1750,
+    isGoldEarner: true,
+    assignedRaids: {
+      armoche: {
+        modeKey: "normal",
+        G1: { difficulty: "Normal", completedDate: 1500 },
+        G2: { difficulty: "Normal", completedDate: 1600 },
+      },
+    },
+  }), buckets, { scope: "solo", currentWeekStartMs: 1000 });
+
+  assert.equal(summary.completion.totalRaids, 3);
+  assert.equal(summary.completion.cleared, 0, "stored Normal completion is not Solo progress");
+  assert.equal(
+    summary.completion.projected,
+    0,
+    "Solo preview must mirror the writer and preserve current-week Normal progress"
+  );
+  assert.equal(summary.charsAfterSync.length, 1);
+  assert.deepEqual(
+    summary.charsAfterSync[0].raids.map((raid) => raid.raidKey),
+    ["armoche", "kazeros", "serca"]
+  );
+  assert.ok(summary.charsAfterSync[0].raids.every((raid) => raid.modeKey === "solo"));
+  assert.ok(summary.charsAfterSync[0].raids.every((raid) => raid.incoming === false));
+  assert.equal(summary.goldDelta.total, 0);
+});
+
+test("preview summary allows Solo after progress from a previous raid week", () => {
+  const buckets = bucketizeLocalSyncDeltas([{
+    boss: "Armoche, Sentinel of the Abyss",
+    difficulty: "Solo",
+    cleared: true,
+    charName: "Aki",
+    lastClearMs: 2000,
+  }]);
+
+  const summary = projectSummary(makeAccounts({
+    name: "Aki",
+    class: "Artist",
+    itemLevel: 1750,
+    isGoldEarner: true,
+    assignedRaids: {
+      armoche: {
+        modeKey: "normal",
+        G1: { difficulty: "Normal", completedDate: 500 },
+        G2: { difficulty: "Normal", completedDate: null },
+      },
+    },
+  }), buckets, { scope: "solo", currentWeekStartMs: 1000 });
+
+  assert.equal(summary.completion.projected, 1);
+  assert.equal(
+    summary.charsAfterSync[0].raids.find((raid) => raid.raidKey === "armoche").incoming,
+    true
+  );
+});

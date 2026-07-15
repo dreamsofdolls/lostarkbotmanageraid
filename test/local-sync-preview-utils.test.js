@@ -144,6 +144,53 @@ test("preview exposes an explicit LoaLog Solo clear even before the roster store
   assert.equal(buildActionableBucketKeySet(diff).has("aki::armoche::solo"), true);
 });
 
+test("preview does not treat previous-week progress as a Solo mode conflict", async () => {
+  const { bucketize, buildDiff, buildActionableBucketKeySet, collectDiffStateCounts } = await loadPreviewUtils();
+  const buckets = bucketize([
+    ["Armoche, Sentinel of the Abyss", "Solo", 1, "Aki", 1, 2000, ""],
+  ]);
+  const diff = buildDiff(makeRoster({
+    name: "Aki",
+    class: "Bard",
+    itemLevel: 1700,
+    assignedRaids: {
+      armoche: {
+        modeKey: "normal",
+        G1: { completedDate: 500, difficulty: "Normal" },
+        G2: { completedDate: null, difficulty: "Normal" },
+      },
+    },
+  }), buckets, {
+    allowedModeKeys: ["solo"],
+    currentWeekStartMs: 1000,
+  });
+
+  const counts = collectDiffStateCounts(diff);
+  assert.equal(counts["mode-conflict"], undefined);
+  assert.equal(counts.pending, 2, "Armoche exposes two pending Solo gates");
+  assert.equal(
+    buildActionableBucketKeySet(diff, { includeModeConflict: false }).has("aki::armoche::solo"),
+    true
+  );
+});
+
+test("preview Solo scope excludes every non-Solo mode from both projections", async () => {
+  const { bucketize, buildDiff } = await loadPreviewUtils();
+  const buckets = bucketize([
+    ["Armoche, Sentinel of the Abyss", "Solo", 1, "Aki", 1, 1000, ""],
+    ["Armoche, Sentinel of the Abyss", "Hard", 1, "Aki", 1, 1100, ""],
+  ]);
+  const diff = buildDiff(makeRoster({
+    name: "Aki",
+    class: "Bard",
+    itemLevel: 1800,
+    assignedRaids: {},
+  }), buckets, { allowedModeKeys: ["solo"] });
+
+  assert.deepEqual(diff[0].characters[0].cells.map((cell) => cell.modeKey), ["solo"]);
+  assert.deepEqual(diff[0].raidCards.map((card) => card.modeKey), ["solo"]);
+});
+
 test("preview skips unknown difficulty and Solo on the level-based Horizon raid", async () => {
   const { bucketize } = await loadPreviewUtils();
   assert.deepEqual(bucketize([

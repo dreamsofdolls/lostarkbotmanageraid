@@ -19,6 +19,7 @@
 const state = require("./core/state");
 const tokens = require("./core/tokens");
 const apply = require("./core/apply/apply");
+const scope = require("./core/scope");
 
 module.exports = {
   SYNC_MODE: state.SYNC_MODE,
@@ -36,6 +37,14 @@ module.exports = {
   extractIdentityFromUser: tokens.extractIdentityFromUser,
   TOKEN_DEFAULT_TTL_SEC: tokens.DEFAULT_TTL_SEC,
   TOKEN_POST_SYNC_TTL_SEC: tokens.POST_SYNC_TTL_SEC,
+  COMPANION_SCOPE: scope.COMPANION_SCOPE,
+  SCOPE_NOT_ALLOWED_REASON: scope.SCOPE_NOT_ALLOWED_REASON,
+  normalizeCompanionScope: scope.normalizeCompanionScope,
+  getTokenCompanionScope: scope.getTokenCompanionScope,
+  isCompanionScopeEnabledForUser: scope.isCompanionScopeEnabledForUser,
+  isModeAllowedForCompanionScope: scope.isModeAllowedForCompanionScope,
+  resolveRequiredCompanionScope: scope.resolveRequiredCompanionScope,
+  buildCompanionStateFilter: scope.buildCompanionStateFilter,
   applyLocalSyncDeltas: apply.applyLocalSyncDeltas,
   resolveLocalSyncTarget: apply.resolveTarget,
   bucketizeLocalSyncDeltas: apply.bucketize,
