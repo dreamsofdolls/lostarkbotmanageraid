@@ -31,7 +31,11 @@ function resolveBucketModePreference(userDoc, bucket) {
   const character = findRosterCharacter(userDoc, bucket?.charName);
   if (!character) return bucket;
   const storedModeKey = getAssignedRaid(character, bucket.raidKey)?.modeKey;
-  const modeKey = preserveManualRaidModePreference(storedModeKey, bucket.modeKey);
+  const modeKey = preserveManualRaidModePreference(
+    storedModeKey,
+    bucket.modeKey,
+    bucket.raidKey
+  );
   return modeKey && modeKey !== bucket.modeKey
     ? { ...bucket, modeKey }
     : bucket;

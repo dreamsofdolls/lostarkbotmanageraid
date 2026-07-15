@@ -157,7 +157,7 @@ User document example:
 
 **Gate System.** Raid is "done" when every official gate has `completedDate > 0` at the selected difficulty. `assignedRaids.<raidKey>` uses `strict: false` so adding G3+ later is migration-free. `/raid-check` places characters in their natural iLvl bucket first (for example Serca Normal is `[1710,1730)`, Hard is `[1730,1740)`, Nightmare is `1740+`), but explicit clears are also shown on the mode they actually cleared and annotated when viewed from another bucket, e.g. `2/2 (Normal Clear)`.
 
-**Solo mode.** Every raid also carries a `solo` mode: a manual-only alias of Normal with the same item-level floor and the same base/bound/unbound gold, but its own stored key and localized label. It is never picked by automatic eligibility (`manualOnly`), and both sync paths preserve it, so a bible or local-sync clear reported as Normal will not overwrite a Solo you set by hand. Solo raids are hidden from `/raid-check` because a solo clear needs no team comp.
+**Solo mode.** Raids with a Normal difficulty carry a `solo` mode: a manual-only alias with the same item-level floor and the same base/bound/unbound gold, but its own stored key and localized label. Level-based content such as Horizon opts out. Solo is never picked by automatic eligibility (`manualOnly`). Local Sync reads the explicit `Solo` value from the local LoaLog `encounters.db`; unknown or empty difficulties are skipped instead of being guessed as Normal. The online Auto Sync policy is unchanged. Solo raids are hidden from `/raid-check` because a solo clear needs no team comp.
 
 **Class map.** 30+ Lost Ark classes mapped from bible internal IDs to display names in `bot/models/Class.js`. Unknown IDs fall back to title-cased raw ID.
 

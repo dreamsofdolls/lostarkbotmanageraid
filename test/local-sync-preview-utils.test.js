@@ -117,6 +117,42 @@ test("preview renders incoming Normal clears as Solo for a stored Solo raid", as
   assert.equal(actionableKeys.has("aki::armoche::normal"), true);
 });
 
+test("preview exposes an explicit LoaLog Solo clear even before the roster stores Solo", async () => {
+  const { bucketize, buildDiff, buildActionableBucketKeySet } = await loadPreviewUtils();
+  const buckets = bucketize([
+    ["Armoche, Sentinel of the Abyss", "Solo", 1, "Aki", 1, 1000, ""],
+  ]);
+  const diff = buildDiff(makeRoster({
+    name: "Aki",
+    class: "Bard",
+    itemLevel: 1700,
+    assignedRaids: {
+      armoche: {
+        modeKey: "normal",
+        G1: { completedDate: null, difficulty: "Normal" },
+        G2: { completedDate: null, difficulty: "Normal" },
+      },
+    },
+  }), buckets);
+
+  assert.equal(buckets.length, 1);
+  assert.equal(buckets[0].modeKey, "solo");
+  const [cell] = diff[0].characters[0].cells;
+  assert.equal(cell.raidKey, "armoche");
+  assert.equal(cell.modeKey, "solo");
+  assert.equal(cell.sourceModeKey, "solo");
+  assert.equal(buildActionableBucketKeySet(diff).has("aki::armoche::solo"), true);
+});
+
+test("preview skips unknown difficulty and Solo on the level-based Horizon raid", async () => {
+  const { bucketize } = await loadPreviewUtils();
+  assert.deepEqual(bucketize([
+    ["Armoche, Sentinel of the Abyss", "", 1, "Aki", 1, 1000, ""],
+    ["Armoche, Sentinel of the Abyss", "Mystery", 1, "Aki", 1, 1000, ""],
+    ["Archbishop Arcenos", "Solo", 1, "Aki", 1, 1000, ""],
+  ]), []);
+});
+
 test("currentWeeklyResetStartMs follows Wednesday 17:00 VN reset boundary", async () => {
   const { currentWeeklyResetStartMs } = await loadPreviewUtils();
   assert.equal(

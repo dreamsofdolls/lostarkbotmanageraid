@@ -461,7 +461,7 @@ async function runPreviewQuery(sqlite3, db) {
   const currentWeekStartMs = currentWeeklyResetStartMs();
   const sql = `
     SELECT ${bossSql} AS boss,
-           ${diffSql ? `COALESCE(${diffSql}, 'Normal')` : `'Normal'`} AS difficulty,
+           ${diffSql ? `COALESCE(${diffSql}, '')` : `'Normal'`} AS difficulty,
            ${clearedSql ? clearedSql : `1`} AS cleared,
            ${charSql ? `COALESCE(${charSql}, '')` : `''`} AS char_name,
            COUNT(*) AS n,
@@ -544,7 +544,8 @@ async function rebuildDiffFromRows({ rows, schemaDebug, keepSyncOutput = false }
   lastDeltas = syncRows
     .filter((r) => {
       const gateInfo = getRaidGateForBoss(r[0]);
-      const modeKey = normalizeDifficulty(r[1]) || "normal";
+      const modeKey = normalizeDifficulty(r[1]);
+      if (!modeKey) return false;
       return actionableKeys.has(makeBucketKey(r[3], gateInfo.raidKey, modeKey));
     })
     .map((r) => ({

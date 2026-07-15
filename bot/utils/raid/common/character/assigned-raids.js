@@ -36,6 +36,12 @@ function normalizeRaidModeKey(raidKey, modeKey) {
   return getRequirementFor(raidKey, key) ? key : null;
 }
 
+function getUnsupportedSoloFallbackModeKey(raidKey, modeKey) {
+  const key = toModeKey(modeKey);
+  if (key !== "solo" || getRequirementFor(raidKey, "solo")) return null;
+  return getRequirementFor(raidKey, "normal") ? "normal" : null;
+}
+
 function toPlainAssignedRaid(assignedRaid) {
   return assignedRaid && typeof assignedRaid.toObject === "function"
     ? assignedRaid.toObject()
@@ -81,6 +87,16 @@ function resolveEmptyCompletionDifficulty({ assignedRaid, fallbackDifficulty, ra
     return {
       canonicalDifficulty: toModeLabel(storedModeKey),
       canonicalModeKey: storedModeKey,
+    };
+  }
+  const unsupportedSoloFallback = getUnsupportedSoloFallbackModeKey(
+    raidKey,
+    assignedRaid?.modeKey || existingDifficulty
+  );
+  if (unsupportedSoloFallback) {
+    return {
+      canonicalDifficulty: toModeLabel(unsupportedSoloFallback),
+      canonicalModeKey: unsupportedSoloFallback,
     };
   }
   if (!existingDifficulty) {
@@ -130,7 +146,10 @@ function normalizeAssignedRaid(assignedRaid, fallbackDifficulty, raidKey) {
     }));
   } else {
     canonicalDifficulty = pickCanonicalDifficultyFromCompletions(diffTally);
-    canonicalModeKey = normalizeRaidModeKey(raidKey, toModeKey(canonicalDifficulty)) || null;
+    canonicalModeKey = normalizeRaidModeKey(raidKey, toModeKey(canonicalDifficulty))
+      || getUnsupportedSoloFallbackModeKey(raidKey, canonicalDifficulty)
+      || null;
+    if (canonicalModeKey) canonicalDifficulty = toModeLabel(canonicalModeKey);
   }
 
   const canonicalNorm = normalizeName(canonicalDifficulty);
@@ -145,8 +164,11 @@ function normalizeAssignedRaid(assignedRaid, fallbackDifficulty, raidKey) {
   for (const gate of keys) {
     const source = assignedRaid?.[gate] || {};
     const sourceDiff = source.difficulty;
+    const sourceFallbackModeKey = getUnsupportedSoloFallbackModeKey(raidKey, sourceDiff);
     const sourceMatchesCanonical =
-      !sourceDiff || normalizeName(sourceDiff) === canonicalNorm;
+      !sourceDiff ||
+      normalizeName(sourceDiff) === canonicalNorm ||
+      sourceFallbackModeKey === canonicalModeKey;
     normalized[gate] = {
       difficulty: canonicalDifficulty,
       completedDate: sourceMatchesCanonical ? (Number(source.completedDate) || undefined) : undefined,

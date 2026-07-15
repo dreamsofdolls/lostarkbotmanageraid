@@ -119,6 +119,13 @@ export function getGatesForRaid(raidKey) {
   return RAID_GATES[raidKey] || ["G1", "G2"];
 }
 
+function hasCatalogRaidMode(raidKey, modeKey) {
+  return Object.prototype.hasOwnProperty.call(
+    RAID_MODE_ILVL[raidKey] || {},
+    modeKey
+  );
+}
+
 function normalizeCharName(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -173,7 +180,8 @@ export function bucketize(rows) {
     if (!charName) continue;
     const gateInfo = getRaidGateForBoss(boss);
     if (!gateInfo) continue;
-    const modeKey = normalizeDifficulty(difficulty) || "normal";
+    const modeKey = normalizeDifficulty(difficulty);
+    if (!modeKey || !hasCatalogRaidMode(gateInfo.raidKey, modeKey)) continue;
     const gates = getGatesForRaid(gateInfo.raidKey);
     const gateIndex = gates.indexOf(gateInfo.gate);
     if (gateIndex < 0) continue;
@@ -306,6 +314,40 @@ export function getEligibleRaidModes(itemLevel) {
   return list;
 }
 
+function indexFileRaidModesByCharacter(fileBuckets) {
+  const byCharacter = new Map();
+  for (const bucket of fileBuckets || []) {
+    const charName = normalizeCharName(bucket?.charName);
+    if (!charName) continue;
+    if (!byCharacter.has(charName)) byCharacter.set(charName, new Map());
+    byCharacter.get(charName).set(
+      `${bucket.raidKey}:${bucket.modeKey}`,
+      { raidKey: bucket.raidKey, modeKey: bucket.modeKey }
+    );
+  }
+  return byCharacter;
+}
+
+function getFileRaidModesForCharacter(fileModesByCharacter, charName, itemLevel) {
+  const targetName = normalizeCharName(charName);
+  const ilvl = Number(itemLevel) || 0;
+  const modes = [];
+  for (const entry of fileModesByCharacter.get(targetName)?.values() || []) {
+    const minItemLevel = RAID_MODE_ILVL[entry.raidKey]?.[entry.modeKey];
+    if (typeof minItemLevel !== "number" || ilvl < minItemLevel) continue;
+    modes.push(entry);
+  }
+  return modes;
+}
+
+function dedupeRaidModes(entries) {
+  const unique = new Map();
+  for (const entry of entries || []) {
+    unique.set(`${entry.raidKey}:${entry.modeKey}`, entry);
+  }
+  return [...unique.values()];
+}
+
 function normalizeDifficultyLabel(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -433,6 +475,7 @@ export function collectDiffStateCounts(scope) {
  */
 export function buildDiff(rosterAccounts, fileBuckets) {
   const fileClearMap = buildFileClearMap(fileBuckets || []);
+  const fileModesByCharacter = indexFileRaidModesByCharacter(fileBuckets || []);
   const accounts = [];
   for (const account of rosterAccounts || []) {
     const accountName = account?.accountName || "(unnamed)";
@@ -442,13 +485,21 @@ export function buildDiff(rosterAccounts, fileBuckets) {
     const charsByRaidMode = new Map();
     for (const character of account?.characters || []) {
       const charNameLower = String(character?.name || "").trim().toLowerCase();
-      const eligible = getEligibleRaidModes(character?.itemLevel).map((entry) => {
+      const detectedModes = getFileRaidModesForCharacter(
+        fileModesByCharacter,
+        charNameLower,
+        character?.itemLevel
+      );
+      const eligible = dedupeRaidModes([
+        ...getEligibleRaidModes(character?.itemLevel),
+        ...detectedModes,
+      ].map((entry) => {
         const preferredModeKey = character?.assignedRaids?.[entry.raidKey]?.modeKey;
         const preferredBase = RAID_MODE_BASE[entry.raidKey]?.[preferredModeKey];
         return preferredBase === entry.modeKey
           ? { raidKey: entry.raidKey, modeKey: preferredModeKey }
           : entry;
-      });
+      }));
       const charCells = [];
       for (const { raidKey, modeKey } of eligible) {
         const gates = getGatesForRaid(raidKey);
