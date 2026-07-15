@@ -380,9 +380,16 @@ function normalizeDifficultyLabel(value) {
  *                   collapsed into empty so chars who only do Hard don't
  *                   pollute the Normal raid card)
  */
-export function resolveCellState({ assignedRaids, fileGates, modeKey, gate }) {
+export function resolveCellState({
+  assignedRaids,
+  fileGates,
+  modeKey,
+  gate,
+  currentWeekStartMs = 0,
+}) {
   const dbEntry = assignedRaids?.[gate];
-  const dbCleared = dbEntry && Number(dbEntry.completedDate) > 0;
+  const completedAt = Number(dbEntry?.completedDate);
+  const dbCleared = completedAt > 0 && completedAt >= (Number(currentWeekStartMs) || 0);
   const dbModeKey = normalizeDifficultyLabel(dbEntry?.difficulty);
   const targetModeLabel = normalizeDifficultyLabel(modeKey);
   const fileHas = fileGates && fileGates.has(gate);
@@ -417,12 +424,18 @@ export function isActionableState(state) {
   return ACTIONABLE_STATES.has(state);
 }
 
-export function buildActionableBucketKeySet(diffAccounts) {
+export function buildActionableBucketKeySet(
+  diffAccounts,
+  { includeModeConflict = true } = {}
+) {
   const keys = new Set();
   for (const account of diffAccounts || []) {
     for (const character of account?.characters || []) {
       for (const cell of character?.cells || []) {
-        const hasAction = (cell.gates || []).some((gate) => isActionableState(cell.states?.[gate]));
+        const hasAction = (cell.gates || []).some((gate) => {
+          const state = cell.states?.[gate];
+          return state === "pending" || (includeModeConflict && state === "mode-conflict");
+        });
         if (hasAction) {
           keys.add(makeBucketKey(character.name, cell.raidKey, cell.modeKey));
           if (cell.sourceModeKey && cell.sourceModeKey !== cell.modeKey) {
@@ -473,9 +486,16 @@ export function collectDiffStateCounts(scope) {
  *     characters: [{ name, class, itemLevel, cells: [{raidKey, modeKey, gates, states}] }]
  *   }]
  */
-export function buildDiff(rosterAccounts, fileBuckets) {
+export function buildDiff(
+  rosterAccounts,
+  fileBuckets,
+  { allowedModeKeys = null, currentWeekStartMs = 0 } = {}
+) {
   const fileClearMap = buildFileClearMap(fileBuckets || []);
   const fileModesByCharacter = indexFileRaidModesByCharacter(fileBuckets || []);
+  const allowedModes = Array.isArray(allowedModeKeys)
+    ? new Set(allowedModeKeys.map((modeKey) => String(modeKey || "").trim().toLowerCase()).filter(Boolean))
+    : null;
   const accounts = [];
   for (const account of rosterAccounts || []) {
     const accountName = account?.accountName || "(unnamed)";
@@ -499,7 +519,7 @@ export function buildDiff(rosterAccounts, fileBuckets) {
         return preferredBase === entry.modeKey
           ? { raidKey: entry.raidKey, modeKey: preferredModeKey }
           : entry;
-      }));
+      })).filter((entry) => !allowedModes || allowedModes.has(entry.modeKey));
       const charCells = [];
       for (const { raidKey, modeKey } of eligible) {
         const gates = getGatesForRaid(raidKey);
@@ -514,7 +534,13 @@ export function buildDiff(rosterAccounts, fileBuckets) {
         }
         const assignedRaids = character?.assignedRaids?.[raidKey];
         for (const gate of gates) {
-          const state = resolveCellState({ assignedRaids, fileGates, modeKey, gate });
+          const state = resolveCellState({
+            assignedRaids,
+            fileGates,
+            modeKey,
+            gate,
+            currentWeekStartMs,
+          });
           states[gate] = state;
           if (state !== "empty") hasActivity = true;
         }

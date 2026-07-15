@@ -4,6 +4,17 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-07-15 (auto-sync: Solo Web Companion)
+
+### Added
+- Bible Auto-sync users can open a private Solo Web Companion from `/raid-status`. The public status message exposes only an owner-checked interaction button; the signed browser link is created inside a dismissible ephemeral reply.
+- Companion tokens now carry an enforced sync scope. Full Local Sync keeps its existing all-mode behavior, while the Auto-sync companion reads, previews, and submits only explicit local `Solo` encounters.
+
+### Fixed
+- Solo-scoped writes are checked again against the fresh user document and cannot replace positive current-week progress stored under another difficulty. The browser preview now marks that conflict as non-syncable instead of promising a mode reset. Previous-week timestamps no longer block a current-week Solo clear.
+- The Solo browser query filters by difficulty before grouping and limiting rows, reducing local database work without changing the full Local Sync path.
+- Newly scoped companion links must match the currently persisted token, so disabling or switching sync modes remains a hard revocation even if the mode is enabled again before the signed URL expires. Legacy pre-scope links retain their bounded compatibility window.
+
 ## 2026-07-15 (local-sync: explicit Solo difficulty)
 
 ### Fixed

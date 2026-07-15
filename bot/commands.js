@@ -1102,6 +1102,18 @@ async function callApplyRaidSetBatchForDiscordId(args) {
   return applyRaidSetBatchForDiscordId(args);
 }
 
+async function callAcquireAutoManageSyncSlot(discordId, options) {
+  if (typeof acquireAutoManageSyncSlot !== "function") {
+    throw new Error("[commands] auto-manage sync slot manager is not initialized");
+  }
+  return acquireAutoManageSyncSlot(discordId, options);
+}
+
+function callReleaseAutoManageSyncSlot(discordId) {
+  if (typeof releaseAutoManageSyncSlot !== "function") return;
+  releaseAutoManageSyncSlot(discordId);
+}
+
 module.exports = {
   commands,
   handleRaidManagementCommand,
@@ -1132,6 +1144,8 @@ module.exports = {
   parseRaidMessage,
   applyRaidSetForDiscordId: callApplyRaidSetForDiscordId,
   applyRaidSetBatchForDiscordId: callApplyRaidSetBatchForDiscordId,
+  acquireAutoManageSyncSlot: callAcquireAutoManageSyncSlot,
+  releaseAutoManageSyncSlot: callReleaseAutoManageSyncSlot,
   handleStuckNudgeButton,
   __test: {
     buildRaidCheckSnapshotFromUsers,

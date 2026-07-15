@@ -10,6 +10,11 @@
 
 "use strict";
 
+const {
+  buildCompanionStateFilter,
+  normalizeCompanionScope,
+} = require("./scope");
+
 /**
  * State helpers for local-sync mode. The user picks ONE of two sync
  * sources at a time:
@@ -68,6 +73,8 @@ async function setLocalSyncEnabled(discordId, enabled, opts = {}, deps = {}) {
             localSyncEnabled: true,
             autoManageEnabled: false,
             localSyncLinkedAt: now,
+            lastLocalSyncToken: null,
+            lastLocalSyncTokenExpAt: null,
           },
         },
         { upsert: true, setDefaultsOnInsert: true, new: true }
@@ -137,6 +144,8 @@ async function setBibleAutoSyncEnabled(discordId, enabled, opts = {}, deps = {})
     if (force) {
       setFields.localSyncEnabled = false;
       setFields.localSyncLinkedAt = null;
+      setFields.lastLocalSyncToken = null;
+      setFields.lastLocalSyncTokenExpAt = null;
       const updated = await UserModel.findOneAndUpdate(
         { discordId },
         { $set: setFields },
@@ -158,7 +167,13 @@ async function setBibleAutoSyncEnabled(discordId, enabled, opts = {}, deps = {})
 
   const updated = await UserModel.findOneAndUpdate(
     { discordId },
-    { $set: { autoManageEnabled: false } },
+    {
+      $set: {
+        autoManageEnabled: false,
+        lastLocalSyncToken: null,
+        lastLocalSyncTokenExpAt: null,
+      },
+    },
     { new: true }
   );
   if (!updated) return { ok: false, reason: RESULT.noUser };
@@ -214,14 +229,17 @@ async function getSyncStatus(discordId, deps = {}) {
 }
 
 /**
- * Stamp lastLocalSyncAt after the web companion successfully POSTs
- * deltas. Conditional filter on localSyncEnabled=true so a stale POST
- * arriving after the user opted out is a no-op (caller surfaces 409).
+ * Stamp lastLocalSyncAt after either web companion successfully POSTs
+ * deltas. The conditional filter follows the signed token scope so a
+ * stale full link requires local-sync while a Solo companion link
+ * requires Bible auto-sync to still be enabled.
  */
 async function recordLocalSyncSuccess(discordId, deps = {}) {
   const UserModel = requireUserModel("recordLocalSyncSuccess", deps);
+  const scope = normalizeCompanionScope(deps.scope, { legacyDefault: true });
+  if (!scope) throw new Error("recordLocalSyncSuccess: invalid companion scope");
   const updated = await UserModel.findOneAndUpdate(
-    { discordId, localSyncEnabled: true },
+    buildCompanionStateFilter(discordId, scope),
     { $set: { lastLocalSyncAt: Date.now() } },
     { new: true }
   );

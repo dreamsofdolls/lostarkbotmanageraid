@@ -4,6 +4,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   StringSelectMenuBuilder,
 } = require("discord.js");
 
@@ -40,6 +42,11 @@ class FakeEmbedBuilder {
 
   setDescription(value) {
     this.description = value;
+    return this;
+  }
+
+  setTimestamp(value = new Date()) {
+    this.timestamp = value;
     return this;
   }
 }
@@ -89,6 +96,8 @@ function createHandlerHarness(overrides = {}) {
     session,
     EmbedBuilder: FakeEmbedBuilder,
     ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
     StringSelectMenuBuilder,
     UI,
     User: overrides.User || {},
@@ -109,6 +118,7 @@ function createHandlerHarness(overrides = {}) {
     getAutoManageCooldownMs: () => 0,
     AUTO_MANAGE_SYNC_COOLDOWN_MS: 0,
     buildMyRaidDetailEmbed: () => ({}),
+    rotateLocalSyncTokenFn: overrides.rotateLocalSyncTokenFn,
   });
 
   return { handlers, session, taskFilters, goldFilters, get reloadCount() { return reloadCount; } };
@@ -122,6 +132,106 @@ test("raid-status component handlers move pagination through session state", asy
 
   assert.deepEqual(await handlers[STATUS_COMPONENT_ACTION.next](), { redraw: true });
   assert.equal(session.currentPage, 1);
+});
+
+test("raid-status Solo Companion defers privately before minting and keeps its URL off the public reply", async (t) => {
+  const previousBaseUrl = process.env.PUBLIC_BASE_URL;
+  process.env.PUBLIC_BASE_URL = "https://raid.example.test/";
+  t.after(() => {
+    if (previousBaseUrl === undefined) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = previousBaseUrl;
+  });
+
+  const callOrder = [];
+  let originalEditCount = 0;
+  let privatePayload = null;
+  let mintArgs = null;
+  const harness = createHandlerHarness({
+    interaction: {
+      async editReply() {
+        originalEditCount += 1;
+      },
+    },
+    async rotateLocalSyncTokenFn(...args) {
+      callOrder.push("mint");
+      mintArgs = args;
+      return "solo token.value";
+    },
+  });
+  const component = {
+    user: {
+      id: "viewer",
+      globalName: "Solo Player",
+      displayAvatarURL: () => "https://cdn.example.test/avatar.webp",
+    },
+    async deferReply(payload) {
+      callOrder.push("defer");
+      assert.deepEqual(payload, { flags: 64 });
+    },
+    async editReply(payload) {
+      callOrder.push("private-edit");
+      privatePayload = payload;
+    },
+  };
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.soloCompanion](component);
+
+  assert.deepEqual(result, { redraw: false });
+  assert.deepEqual(callOrder, ["defer", "mint", "private-edit"]);
+  assert.equal(originalEditCount, 0);
+  assert.equal(mintArgs[0], "viewer");
+  assert.equal(mintArgs[1], "vi");
+  assert.equal(mintArgs[2].scope, "solo");
+  assert.deepEqual(mintArgs[2].identity, {
+    username: "Solo Player",
+    avatarUrl: "https://cdn.example.test/avatar.webp",
+  });
+  assert.match(privatePayload.embeds[0].title, /Solo Companion/);
+  assert.equal(privatePayload.components.length, 1);
+  assert.equal(privatePayload.components[0].components.length, 1);
+  assert.equal(
+    privatePayload.components[0].components[0].data.url,
+    "https://raid.example.test/sync?token=solo%20token.value",
+  );
+});
+
+test("raid-status Solo Companion reports token failures only in the deferred private reply", async (t) => {
+  const previousBaseUrl = process.env.PUBLIC_BASE_URL;
+  process.env.PUBLIC_BASE_URL = "https://raid.example.test";
+  t.after(() => {
+    if (previousBaseUrl === undefined) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = previousBaseUrl;
+  });
+
+  let originalEditCount = 0;
+  let privatePayload = null;
+  const harness = createHandlerHarness({
+    interaction: {
+      async editReply() {
+        originalEditCount += 1;
+      },
+    },
+    async rotateLocalSyncTokenFn() {
+      throw new Error("token unavailable");
+    },
+  });
+  const component = {
+    user: { id: "viewer", username: "Player" },
+    async deferReply(payload) {
+      assert.deepEqual(payload, { flags: 64 });
+    },
+    async editReply(payload) {
+      privatePayload = payload;
+    },
+  };
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.soloCompanion](component);
+
+  assert.deepEqual(result, { redraw: false });
+  assert.equal(originalEditCount, 0);
+  assert.match(privatePayload.embeds[0].title, /Solo Companion/);
+  assert.match(privatePayload.embeds[0].description, /token unavailable/);
+  assert.equal(privatePayload.components, undefined);
 });
 
 test("raid-status component handlers update filter and task view state", async () => {

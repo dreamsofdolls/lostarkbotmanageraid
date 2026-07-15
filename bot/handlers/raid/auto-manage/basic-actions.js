@@ -20,7 +20,13 @@ function createAutoManageBasicActionHandlers({
   async function handleOff({ discordId, lang, replyAutoEmbed }) {
     await User.findOneAndUpdate(
       { discordId },
-      { $set: { autoManageEnabled: false } },
+      {
+        $set: {
+          autoManageEnabled: false,
+          lastLocalSyncToken: null,
+          lastLocalSyncTokenExpAt: null,
+        },
+      },
       { upsert: true, setDefaultsOnInsert: true }
     );
     const embed = new EmbedBuilder()

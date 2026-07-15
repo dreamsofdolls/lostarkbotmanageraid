@@ -53,6 +53,8 @@ const {
   startRaidScheduleAutoLockScheduler,
   applyRaidSetForDiscordId,
   applyRaidSetBatchForDiscordId,
+  acquireAutoManageSyncSlot,
+  releaseAutoManageSyncSlot,
 } = require("./bot/commands");
 const User = require("./bot/models/user");
 const { startWeeklyResetJob } = require("./bot/services/raid/schedulers/weekly-reset");
@@ -94,6 +96,8 @@ async function startBot() {
     User,
     applyRaidSetForDiscordId,
     applyRaidSetBatchForDiscordId,
+    acquireAutoManageSyncSlot,
+    releaseAutoManageSyncSlot,
   });
 
   const intents = [GatewayIntentBits.Guilds];

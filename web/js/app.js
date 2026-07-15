@@ -28,6 +28,7 @@ import {
 import {
   bootstrapAuthSession,
   decodePayload,
+  resolveCompanionScope,
 } from "/sync/js/core/auth.js";
 import {
   saveHandle as savePersistedHandle,
@@ -50,6 +51,10 @@ import {
   quoteIdent,
   resolveEncounterSource,
 } from "/sync/js/sync/sqlite-schema.js";
+import {
+  buildEncounterPreviewSql,
+  filterRowsForSyncScope,
+} from "/sync/js/sync/encounter-query.js";
 
 const $ = (id) => document.getElementById(id);
 const authStatus = $("auth-status");
@@ -191,6 +196,7 @@ const params = new URLSearchParams(window.location.search);
 const token = params.get("token");
 
 const payload = token ? decodePayload(token) : null;
+const syncScope = resolveCompanionScope(payload);
 
 // Resolve the active language BEFORE rendering anything user-facing.
 // Token's `lang` field is the bot-side getUserLanguage(discordId) result
@@ -198,6 +204,7 @@ const payload = token ? decodePayload(token) : null;
 //   - no token present (page opened without /raid-auto-manage local-on)
 //   - token is malformed (bad payload)
 //   - token doesn't carry lang (legacy mint before Phase i18n)
+window.__artistSyncScope = syncScope;
 setActiveLang(payload?.lang || "vi");
 applyDomTranslations();
 renderWeekRange();
@@ -459,23 +466,21 @@ async function runPreviewQuery(sqlite3, db) {
   // needed before SQL so the DB scan only covers the active raid week.
   const { currentWeeklyResetStartMs } = await loadPreviewUtils();
   const currentWeekStartMs = currentWeeklyResetStartMs();
-  const sql = `
-    SELECT ${bossSql} AS boss,
-           ${diffSql ? `COALESCE(${diffSql}, '')` : `'Normal'`} AS difficulty,
-           ${clearedSql ? clearedSql : `1`} AS cleared,
-           ${charSql ? `COALESCE(${charSql}, '')` : `''`} AS char_name,
-           COUNT(*) AS n,
-           MAX(${tsSql}) AS last_ms,
-           ${playersSql ? `COALESCE(MAX(${playersSql}), '')` : `''`} AS players
-    FROM ${tableSql}
-    WHERE ${tsSql} >= ?
-      AND ${bossSql} IS NOT NULL
-      AND ${bossSql} != ''
-      ${clearedSql ? `AND ${clearedSql} = 1` : ""}
-    GROUP BY boss, difficulty, cleared, char_name
-    ORDER BY last_ms DESC
-    LIMIT 200;
-  `;
+  if (syncScope === "solo" && !diffSql) {
+    previewOutput.innerHTML = `<span class="status-err">${t("preview.soloDifficultyMissing")}</span><br><span class="hint">${t("preview.soloDifficultyMissingHint")}</span>`;
+    lastDeltas = [];
+    return;
+  }
+  const sql = buildEncounterPreviewSql({
+    tableSql,
+    bossSql,
+    tsSql,
+    diffSql,
+    clearedSql,
+    charSql,
+    playersSql,
+    scope: syncScope,
+  });
   const rows = [];
   try {
     await sqlite3.exec(db, sql.replace("?", String(currentWeekStartMs)), (row, _columns) => {
@@ -485,7 +490,8 @@ async function runPreviewQuery(sqlite3, db) {
     previewOutput.innerHTML = `<span class="status-err">${t("preview.queryFailed")}</span> ${escapeHtml(err.message || String(err))}<br><span class="hint">Table: <code>${escapeHtml(table)}</code>, boss column: <code>${escapeHtml(bossCol)}</code>, ts column: <code>${escapeHtml(tsCol)}</code>. ${t("preview.queryFailedHint")}</span>`;
     return;
   }
-  if (rows.length === 0) {
+  const scopedRows = filterRowsForSyncScope(rows, syncScope);
+  if (scopedRows.length === 0) {
     previewOutput.innerHTML = `<span class="status-ok">${t("preview.noRecent")}</span> ${t("preview.nothingToSync")}`;
     lastDeltas = [];
     return;
@@ -494,9 +500,9 @@ async function runPreviewQuery(sqlite3, db) {
   // these without re-parsing SQLite). The query is low-cost on a cached DB,
   // but skipping it avoids an unnecessary file-system roundtrip after
   // the user already committed.
-  window.__artistRows = rows;
+  window.__artistRows = scopedRows;
   window.__artistSchemaDebug = { table, bossCol, tsCol, charCol: charCol || "-" };
-  await rebuildDiffFromRows({ rows, schemaDebug: window.__artistSchemaDebug });
+  await rebuildDiffFromRows({ rows: scopedRows, schemaDebug: window.__artistSchemaDebug });
 }
 
 // Pure-data half of the preview pipeline: takes already-parsed rows +
@@ -514,10 +520,12 @@ async function rebuildDiffFromRows({ rows, schemaDebug, keepSyncOutput = false }
     makeBucketKey,
     buildActionableBucketKeySet,
     collectDiffStateCounts,
+    currentWeeklyResetStartMs,
   } = await loadPreviewUtils();
-  const syncRows = rows.filter((r) => r[3] && getRaidGateForBoss(r[0]));
-  const buckets = bucketize(rows);
-  const unmappedBosses = findUnmappedBosses(rows);
+  const scopedRows = filterRowsForSyncScope(rows, syncScope);
+  const syncRows = scopedRows.filter((r) => r[3] && getRaidGateForBoss(r[0]));
+  const buckets = bucketize(scopedRows);
+  const unmappedBosses = findUnmappedBosses(scopedRows);
   let rosterAccounts = [];
   let rosterError = "";
   try {
@@ -539,8 +547,16 @@ async function rebuildDiffFromRows({ rows, schemaDebug, keepSyncOutput = false }
   // accountName / className / itemLevel for each applied char without
   // re-fetching. Refreshed on every rebuildDiffFromRows call.
   window.__artistRosterAccounts = rosterAccounts;
-  const diff = buildDiff(rosterAccounts, buckets);
-  const actionableKeys = buildActionableBucketKeySet(diff);
+  const diff = buildDiff(rosterAccounts, buckets, {
+    allowedModeKeys: syncScope === "solo" ? ["solo"] : null,
+    currentWeekStartMs: currentWeeklyResetStartMs(),
+  });
+  const actionableKeys = buildActionableBucketKeySet(diff, {
+    // Full Local Sync keeps its intentional mode-switch behavior. The
+    // Auto-sync companion never submits a Solo clear that would replace
+    // positive progress already stored under another difficulty.
+    includeModeConflict: syncScope !== "solo",
+  });
   lastDeltas = syncRows
     .filter((r) => {
       const gateInfo = getRaidGateForBoss(r[0]);

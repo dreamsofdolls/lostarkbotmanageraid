@@ -126,3 +126,13 @@ test("web auth bootstrap renders expired token without enabling sync globals", a
   assert.equal(dom.windowRef.__artistSyncToken, undefined);
   assert.equal(dom.timers.length, 0);
 });
+
+test("web auth resolves Solo scope explicitly and keeps legacy tokens on full sync", async () => {
+  const { resolveCompanionScope } = await import("../web/js/core/auth.js");
+
+  assert.equal(resolveCompanionScope({ scope: "solo" }), "solo");
+  assert.equal(resolveCompanionScope({ scope: "full" }), "full");
+  assert.equal(resolveCompanionScope({}), "full");
+  assert.equal(resolveCompanionScope(null), "full");
+  assert.equal(resolveCompanionScope({ scope: "SOLO" }), "full");
+});

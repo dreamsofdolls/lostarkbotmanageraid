@@ -210,19 +210,19 @@ const userSchema = new mongoose.Schema(
     // lives in bot/services/local-sync/state.js so the mutex is enforced
     // at the data layer regardless of which UI surface flips the flag.
     localSyncEnabled: { type: Boolean, default: false },
-    // Unix ms timestamp of the last successful local-sync POST received
-    // from the web companion. Distinct from lastAutoManageSyncAt so the
-    // /raid-auto-manage action:status can show both modes' freshness.
+    // Unix ms timestamp of the last successful web-companion POST. This
+    // covers both full Local Sync and the Solo-only companion available to
+    // Bible Auto-sync users. Distinct from lastAutoManageSyncAt so status
+    // surfaces can show remote and local evidence separately.
     lastLocalSyncAt: { type: Number, default: null },
     // Unix ms timestamp of the first time the user opted into local-sync
     // (set on the local-on action, cleared on local-off). Used by the
     // onboarding embed to show "Local sync linked X days ago".
     localSyncLinkedAt: { type: Number, default: null },
-    // Most recently-minted local-sync URL token + its UTC seconds exp.
-    // /raid-status renders a "Resume" button when this is still valid
-    // (stored URL still opens companion with active session). Separate
-    // "New link" button rotates this to a freshly-minted token. Cleared
-    // on local-off so old links can't survive an opt-out.
+    // Most recently-minted web-companion token + its UTC seconds expiry.
+    // Its signed scope distinguishes full Local Sync from Auto-sync's
+    // Solo-only companion. Rotation revokes the previous URL; disabling
+    // the owning sync mode clears the stored capability.
     lastLocalSyncToken: { type: String, default: null },
     lastLocalSyncTokenExpAt: { type: Number, default: null },
     // Preferred display locale for public responses. Drives every

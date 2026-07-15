@@ -114,6 +114,8 @@ function createRaidSetCommand(deps) {
     statusType,
     effectiveGates,
     requireLocalSyncEnabled = false,
+    requiredCompanionScope = null,
+    currentWeekStartMs = 0,
   }) {
     let result = makeRaidSetResult(raidMeta);
     await saveWithRetry(async () => {
@@ -129,6 +131,8 @@ function createRaidSetCommand(deps) {
         statusType,
         effectiveGates,
         requireLocalSyncEnabled,
+        requiredCompanionScope,
+        currentWeekStartMs,
       });
       if (result.updated) await userDoc.save();
     });
@@ -139,6 +143,8 @@ function createRaidSetCommand(deps) {
     discordId,
     entries,
     requireLocalSyncEnabled = false,
+    requiredCompanionScope = null,
+    currentWeekStartMs = 0,
   }) {
     const list = Array.isArray(entries) ? entries : [];
     let results = list.map((entry) => makeRaidSetResult(entry?.raidMeta));
@@ -166,6 +172,8 @@ function createRaidSetCommand(deps) {
           statusType: entry.statusType || "process",
           effectiveGates: entry.effectiveGates,
           requireLocalSyncEnabled,
+          requiredCompanionScope,
+          currentWeekStartMs,
         }, now);
         results.push(result);
         if (result.updated) didUpdate = true;

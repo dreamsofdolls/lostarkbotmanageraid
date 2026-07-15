@@ -18,6 +18,7 @@ function createRaidStatusComponentLayout({
   buildLocalSyncNewButton,
   buildLocalSyncRefreshButton,
   buildRosterRefreshButton,
+  buildSoloCompanionButton,
   buildRaidFilterRow,
   buildStatusRosterFilterRow,
   buildMyRaidsRow,
@@ -103,6 +104,11 @@ function createRaidStatusComponentLayout({
   const addRaidViewNavigationRows = (rows, disabled, showSync, syncDisabled) => {
     const visibleRosterCount = getVisibleRosterCount();
     const statusUserMeta = getStatusUserMeta();
+    const appendSoloCompanionButton = (row) => {
+      if (typeof buildSoloCompanionButton !== "function") return;
+      const button = buildSoloCompanionButton(syncDisabled);
+      if (button && getRowComponentCount(row) < 5) row.addComponents(button);
+    };
 
     if (visibleRosterCount > 1) {
       const paginationRow = buildPaginationRow(
@@ -124,6 +130,8 @@ function createRaidStatusComponentLayout({
             paginationRow.addComponents(newBtn);
             paginationRow.addComponents(buildLocalSyncRefreshButton(syncDisabled));
           }
+        } else {
+          appendSoloCompanionButton(paginationRow);
         }
       }
       rows.push(paginationRow);
@@ -132,7 +140,10 @@ function createRaidStatusComponentLayout({
 
     if (showSync) {
       const row = buildSyncRow(syncDisabled);
-      if (row) rows.push(row);
+      if (row) {
+        if (!statusUserMeta.localSyncEnabled) appendSoloCompanionButton(row);
+        rows.push(row);
+      }
     }
   };
 

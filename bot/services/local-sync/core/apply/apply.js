@@ -27,6 +27,11 @@ const {
   applySingleWrite,
   buildWriteRaidMeta,
 } = require("./apply-writes");
+const {
+  SCOPE_NOT_ALLOWED_REASON,
+  isModeAllowedForCompanionScope,
+  resolveRequiredCompanionScope,
+} = require("../scope");
 
 function validateApplyDeps(discordId, deltas, deps) {
   if (typeof deps.applyRaidSetForDiscordId !== "function") {
@@ -66,10 +71,33 @@ function appendUnmappedDelta(unmapped, delta) {
   });
 }
 
-function collectCurrentWeekDeltas(deltas, currentWeekStartMs, { unmapped, rejected }) {
+function appendScopeViolation(rejected, delta) {
+  rejected.push({
+    boss: delta.boss || "(unknown)",
+    difficulty: delta.difficulty || "(unknown)",
+    charName: delta.charName || "(unknown)",
+    reason: SCOPE_NOT_ALLOWED_REASON,
+  });
+}
+
+function collectCurrentWeekDeltas(
+  deltas,
+  currentWeekStartMs,
+  requiredCompanionScope,
+  { unmapped, rejected }
+) {
   const currentWeekDeltas = [];
   for (const delta of deltas) {
     if (!delta.cleared) continue;
+    // Scope checks intentionally inspect the raw LOA Logs difficulty
+    // before stored-mode preference can remap Normal to Solo.
+    if (requiredCompanionScope && !isModeAllowedForCompanionScope(
+      requiredCompanionScope,
+      normalizeDifficulty(delta.difficulty)
+    )) {
+      appendScopeViolation(rejected, delta);
+      continue;
+    }
     if (!isCurrentWeekDelta(delta, currentWeekStartMs)) {
       appendOutsideCurrentWeek(rejected, delta);
       continue;
@@ -97,9 +125,22 @@ function buildPendingWrite(bucket, raidMeta, effectiveGates) {
   };
 }
 
-function shouldSkipForRosterPreflight(userDoc, bucket, raidMeta, effectiveGates, lists) {
+function shouldSkipForRosterPreflight(
+  userDoc,
+  bucket,
+  raidMeta,
+  effectiveGates,
+  lists,
+  { currentWeekStartMs, requiredCompanionScope }
+) {
   if (!userDoc) return false;
-  const preflight = classifyBucketAgainstRoster(userDoc, bucket, raidMeta, effectiveGates);
+  const preflight = classifyBucketAgainstRoster(
+    userDoc,
+    bucket,
+    raidMeta,
+    effectiveGates,
+    { currentWeekStartMs, requiredCompanionScope }
+  );
   return appendPreflightDecision(preflight, bucket, effectiveGates, lists);
 }
 
@@ -119,11 +160,24 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
     userDoc = null,
     currentWeekStartMs: injectedCurrentWeekStartMs,
     requireLocalSyncEnabled = false,
+    requiredCompanionScope: injectedCompanionScope = null,
   } = deps;
 
   const lists = createSummaryLists();
   const currentWeekStartMs = resolveCurrentWeekStartMs(injectedCurrentWeekStartMs);
-  const currentWeekDeltas = collectCurrentWeekDeltas(deltas, currentWeekStartMs, lists);
+  const requiredCompanionScope = resolveRequiredCompanionScope({
+    requiredCompanionScope: injectedCompanionScope,
+    requireLocalSyncEnabled,
+  });
+  if (injectedCompanionScope && !requiredCompanionScope) {
+    throw new Error("[local-sync/apply] invalid companion scope");
+  }
+  const currentWeekDeltas = collectCurrentWeekDeltas(
+    deltas,
+    currentWeekStartMs,
+    requiredCompanionScope,
+    lists
+  );
   const buckets = bucketize(currentWeekDeltas);
   const reqMap = getRaidRequirementMap();
   const pendingWrites = [];
@@ -138,7 +192,14 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
     }
 
     const effectiveGates = effectiveGatesForBucket(bucket);
-    if (shouldSkipForRosterPreflight(userDoc, bucket, raidMeta, effectiveGates, lists)) {
+    if (shouldSkipForRosterPreflight(
+      userDoc,
+      bucket,
+      raidMeta,
+      effectiveGates,
+      lists,
+      { currentWeekStartMs, requiredCompanionScope }
+    )) {
       continue;
     }
 
@@ -152,6 +213,8 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
       discordId,
       applyRaidSetForDiscordId,
       requireLocalSyncEnabled,
+      requiredCompanionScope,
+      currentWeekStartMs,
       ...pending,
       lists,
     });
@@ -161,6 +224,8 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
     discordId,
     applyRaidSetBatchForDiscordId,
     requireLocalSyncEnabled,
+    requiredCompanionScope,
+    currentWeekStartMs,
     pendingWrites,
     lists,
   });

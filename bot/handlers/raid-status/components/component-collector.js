@@ -1,7 +1,10 @@
 "use strict";
 
 const { t, getUserLanguage } = require("../../../services/i18n");
-const { replyNotice } = require("../../../utils/raid/common/shared");
+const {
+  deferEphemeralReply,
+  editNotice,
+} = require("../../../utils/raid/common/shared");
 const {
   getNextSharedTaskTransitionMs,
 } = require("../../../utils/raid/tasks/shared-tasks");
@@ -68,10 +71,19 @@ function attachRaidStatusComponentCollector({
 
   collector.on("collect", async (component) => {
     if (component.user.id !== interaction.user.id) {
-      const clickerLang = await getUserLanguage(component.user.id, {
-        UserModel: User,
+      const deferred = await deferEphemeralReply(component).then(() => true).catch((err) => {
+        console.warn("[raid-status component] non-owner defer failed:", err?.message || err);
+        return false;
       });
-      await replyNotice(component, EmbedBuilder, {
+      if (!deferred) return;
+
+      let clickerLang = lang;
+      try {
+        clickerLang = await getUserLanguage(component.user.id, { UserModel: User });
+      } catch (err) {
+        console.warn("[raid-status component] non-owner language lookup failed:", err?.message || err);
+      }
+      await editNotice(component, EmbedBuilder, {
         type: "lock",
         title: t("raid-status.sync.noControlTitle", clickerLang),
         description: t("raid-status.sync.noControlDescription", clickerLang),

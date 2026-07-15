@@ -200,16 +200,18 @@ test("applyLocalSyncDeltas - uses batch writer when provided", async () => {
     }));
   };
   const result = await applyLocalSyncDeltas("u1", [
-    { boss: "Brelshaza, Ember in the Ashes", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 1 },
-    { boss: "Abyss Lord Kazeros", difficulty: "Hard", cleared: 1, charName: "Aki", lastClearMs: 2 },
+    { boss: "Brelshaza, Ember in the Ashes", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 2000 },
+    { boss: "Abyss Lord Kazeros", difficulty: "Hard", cleared: 1, charName: "Aki", lastClearMs: 2001 },
   ], makeDeps(applyStub, {
     applyRaidSetBatchForDiscordId: batchStub,
     requireLocalSyncEnabled: true,
+    currentWeekStartMs: 1000,
   }));
 
   assert.equal(applyStub.calls.length, 0);
   assert.equal(batchCalls.length, 1);
   assert.equal(batchCalls[0].requireLocalSyncEnabled, true);
+  assert.equal(batchCalls[0].currentWeekStartMs, 1000);
   assert.equal(batchCalls[0].entries.length, 2);
   assert.equal(result.applied.length, 2);
 });
@@ -324,6 +326,110 @@ test("applyLocalSyncDeltas - explicit LoaLog Solo clear switches a Normal raid t
   assert.equal(result.applied[0].modeKey, "solo");
   assert.equal(applyStub.calls[0].raidMeta.modeKey, "solo");
   assert.deepEqual(applyStub.calls[0].effectiveGates, ["G1", "G2"]);
+});
+
+test("applyLocalSyncDeltas - Solo scope rejects raw Normal before stored Solo remapping", async () => {
+  const applyStub = makeApplyStub();
+  const userDoc = makeUserDoc([
+    {
+      name: "Aki",
+      itemLevel: 1750,
+      assignedRaids: {
+        armoche: {
+          modeKey: "solo",
+          G1: { difficulty: "Solo", completedDate: null },
+          G2: { difficulty: "Solo", completedDate: null },
+        },
+      },
+    },
+  ]);
+
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Armoche, Sentinel of the Abyss", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 2000 },
+  ], makeDeps(applyStub, {
+    userDoc,
+    currentWeekStartMs: 1000,
+    requiredCompanionScope: "solo",
+  }));
+
+  assert.equal(result.applied.length, 0);
+  assert.equal(result.rejected.length, 1);
+  assert.equal(result.rejected[0].reason, "scope_not_allowed");
+  assert.equal(applyStub.calls.length, 0);
+});
+
+test("applyLocalSyncDeltas - Solo scope applies an explicit Solo clear", async () => {
+  const applyStub = makeApplyStub(() => ({ matched: true, updated: true, displayName: "Aki" }));
+  const userDoc = makeUserDoc([
+    { name: "Aki", itemLevel: 1750, assignedRaids: {} },
+  ]);
+
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Armoche, Sentinel of the Abyss", difficulty: "Solo", cleared: 1, charName: "Aki", lastClearMs: 2000 },
+  ], makeDeps(applyStub, {
+    userDoc,
+    currentWeekStartMs: 1000,
+    requiredCompanionScope: "solo",
+  }));
+
+  assert.equal(result.applied.length, 1);
+  assert.equal(applyStub.calls[0].requiredCompanionScope, "solo");
+  assert.equal(applyStub.calls[0].currentWeekStartMs, 1000);
+  assert.equal(applyStub.calls[0].raidMeta.modeKey, "solo");
+});
+
+test("applyLocalSyncDeltas - stale-week completion timestamps do not block a current clear", async () => {
+  const applyStub = makeApplyStub(() => ({ matched: true, updated: true, displayName: "Aki" }));
+  const userDoc = makeUserDoc([
+    {
+      name: "Aki",
+      itemLevel: 1750,
+      assignedRaids: {
+        armoche: {
+          modeKey: "normal",
+          G1: { difficulty: "Normal", completedDate: 500 },
+          G2: { difficulty: "Normal", completedDate: 600 },
+        },
+      },
+    },
+  ]);
+
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Armoche, Sentinel of the Abyss", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 2000 },
+  ], makeDeps(applyStub, { userDoc, currentWeekStartMs: 1000 }));
+
+  assert.equal(result.applied.length, 1);
+  assert.equal(result.skipped.length, 0);
+  assert.equal(applyStub.calls.length, 1);
+});
+
+test("applyLocalSyncDeltas - Solo scope refuses to erase current-week progress in another mode", async () => {
+  const applyStub = makeApplyStub();
+  const userDoc = makeUserDoc([
+    {
+      name: "Aki",
+      itemLevel: 1750,
+      assignedRaids: {
+        armoche: {
+          modeKey: "normal",
+          G1: { difficulty: "Normal", completedDate: 1500 },
+          G2: { difficulty: "Normal", completedDate: null },
+        },
+      },
+    },
+  ]);
+
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Armoche, Sentinel of the Abyss", difficulty: "Solo", cleared: 1, charName: "Aki", lastClearMs: 2000 },
+  ], makeDeps(applyStub, {
+    userDoc,
+    currentWeekStartMs: 1000,
+    requiredCompanionScope: "solo",
+  }));
+
+  assert.equal(result.applied.length, 0);
+  assert.equal(result.rejected[0].reason, "mode_progress_conflict");
+  assert.equal(applyStub.calls.length, 0);
 });
 
 test("applyLocalSyncDeltas - stale Horizon Solo preference cannot override Level 1", async () => {

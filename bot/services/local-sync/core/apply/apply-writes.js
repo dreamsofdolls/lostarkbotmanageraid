@@ -13,6 +13,8 @@ async function applySingleWrite({
   discordId,
   applyRaidSetForDiscordId,
   requireLocalSyncEnabled,
+  requiredCompanionScope,
+  currentWeekStartMs,
   bucket,
   raidMeta,
   effectiveGates,
@@ -28,6 +30,8 @@ async function applySingleWrite({
       statusType: "process",
       effectiveGates,
       requireLocalSyncEnabled,
+      requiredCompanionScope,
+      currentWeekStartMs,
     });
     appendApplyResult(result, bucket, effectiveGates, lists);
   } catch (err) {
@@ -53,6 +57,8 @@ async function applyBatchWrites({
   discordId,
   applyRaidSetBatchForDiscordId,
   requireLocalSyncEnabled,
+  requiredCompanionScope,
+  currentWeekStartMs,
   pendingWrites,
   lists,
 }) {
@@ -62,6 +68,8 @@ async function applyBatchWrites({
     const results = await applyRaidSetBatchForDiscordId({
       discordId,
       requireLocalSyncEnabled,
+      requiredCompanionScope,
+      currentWeekStartMs,
       entries: pendingWrites.map(buildBatchEntry),
     });
     for (let i = 0; i < pendingWrites.length; i += 1) {

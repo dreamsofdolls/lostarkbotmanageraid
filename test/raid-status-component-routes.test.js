@@ -44,6 +44,16 @@ test("raid-status component routes resolve edit-driven controls", () => {
   assert.equal(editDrivenIds.has("status-gold:toggle"), true);
   assert.equal(editDrivenIds.has("status:sync"), false);
   assert.deepEqual(
+    getStatusComponentRoute("status:solo-companion"),
+    {
+      customId: "status:solo-companion",
+      action: STATUS_COMPONENT_ACTION.soloCompanion,
+      editDriven: false,
+      redraw: false,
+    },
+  );
+  assert.equal(editDrivenIds.has("status:solo-companion"), false);
+  assert.deepEqual(
     getStatusComponentRoute("status:roster-refresh"),
     {
       customId: "status:roster-refresh",

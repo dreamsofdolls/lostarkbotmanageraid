@@ -9,6 +9,7 @@
 "use strict";
 
 const {
+  COMPANION_SCOPE,
   applyLocalSyncDeltas,
   recordLocalSyncSuccess,
   TOKEN_POST_SYNC_TTL_SEC,
@@ -51,7 +52,13 @@ async function shrinkLocalSyncTokenAfterWrite({ User, discordId, token }) {
  * Returns { ok, applied, skipped, unmapped, rejected, lastLocalSyncAt }
  * on success, { ok: false, error } with appropriate HTTP status on failure.
  */
-function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId, applyRaidSetBatchForDiscordId = null }) {
+function createRaidSyncEndpoint({
+  User,
+  applyRaidSetForDiscordId,
+  applyRaidSetBatchForDiscordId = null,
+  acquireAutoManageSyncSlot = null,
+  releaseAutoManageSyncSlot = null,
+}) {
   if (!User) throw new Error("[sync-endpoint] User model required");
   if (typeof applyRaidSetForDiscordId !== "function") {
     throw new Error("[sync-endpoint] applyRaidSetForDiscordId required");
@@ -67,7 +74,8 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId, applyRaidSetBa
     if (!guardHttpMethod({ req, res, send, method: "POST" })) return;
     const auth = readVerifiedLocalSyncToken({ req, res, parsedUrl, send });
     if (!auth) return;
-    const { token, discordId } = auth;
+    const { token, discordId, payload, scopeExplicit } = auth;
+    const scope = payload.scope;
 
     // 2. Body parse.
     let body;
@@ -91,68 +99,119 @@ function createRaidSyncEndpoint({ User, applyRaidSetForDiscordId, applyRaidSetBa
     let userState;
     try {
       userState = await User.findOne({ discordId })
-        .select("localSyncEnabled lastLocalSyncToken lastLocalSyncTokenExpAt accounts")
+        .select("autoManageEnabled localSyncEnabled lastLocalSyncToken lastLocalSyncTokenExpAt accounts")
         .lean();
     } catch (err) {
       console.error("[sync-endpoint] state read failed:", err?.message || err);
       send(res, 500, { ok: false, error: "state read failed" });
       return;
     }
-    if (!requireCurrentLocalSyncUser({ userDoc: userState, token, res, send })) return;
+    if (!requireCurrentLocalSyncUser({
+      userDoc: userState,
+      token,
+      payload,
+      scopeExplicit,
+      res,
+      send,
+    })) return;
 
-    // 4. Apply.
-    let summary;
-    try {
-      summary = await applyLocalSyncDeltas(discordId, deltas, {
-        applyRaidSetForDiscordId,
-        applyRaidSetBatchForDiscordId,
-        getRaidRequirementMap,
-        userDoc: userState,
-        requireLocalSyncEnabled: true,
-      });
-    } catch (err) {
-      console.error("[sync-endpoint] apply failed:", err?.message || err);
-      send(res, 500, { ok: false, error: err.message || "apply failed" });
-      return;
+    // Solo companion writes share the same per-user slot as Bible polling.
+    // This prevents two automatic sources from mutating the roster at once.
+    let ownsSyncSlot = false;
+    if (
+      scope === COMPANION_SCOPE.solo
+      && typeof acquireAutoManageSyncSlot === "function"
+      && typeof releaseAutoManageSyncSlot === "function"
+    ) {
+      let guard;
+      try {
+        guard = await acquireAutoManageSyncSlot(discordId, { ignoreCooldown: true });
+      } catch (err) {
+        console.error("[sync-endpoint] sync slot acquire failed:", err?.message || err);
+        send(res, 500, { ok: false, error: "sync slot unavailable" });
+        return;
+      }
+      if (!guard?.acquired) {
+        send(res, 409, { ok: false, error: "sync already in progress" });
+        return;
+      }
+      ownsSyncSlot = true;
     }
-    if ((summary?.rejected || []).some((item) => item.reason === "local_sync_disabled")) {
-      send(res, 409, {
-        ok: false,
-        error: "local-sync disabled - run /raid-auto-manage action:local-on to re-enable",
+
+    try {
+      // 4. Apply.
+      let summary;
+      try {
+        summary = await applyLocalSyncDeltas(discordId, deltas, {
+          applyRaidSetForDiscordId,
+          applyRaidSetBatchForDiscordId,
+          getRaidRequirementMap,
+          userDoc: userState,
+          requireLocalSyncEnabled: scope === COMPANION_SCOPE.full,
+          requiredCompanionScope: scope,
+        });
+      } catch (err) {
+        console.error("[sync-endpoint] apply failed:", err?.message || err);
+        send(res, 500, { ok: false, error: err.message || "apply failed" });
+        return;
+      }
+      const disabledWrite = (summary?.rejected || []).find(
+        (item) => item.reason === "local_sync_disabled" || item.reason === "auto_sync_disabled"
+      );
+      if (disabledWrite) {
+        send(res, 409, {
+          ok: false,
+          error: disabledWrite.reason === "auto_sync_disabled"
+            ? "auto-sync disabled - re-enable Bible auto-sync before using the Solo companion"
+            : "local-sync disabled - run /raid-auto-manage action:local-on to re-enable",
+          scope,
+          ...summary,
+        });
+        return;
+      }
+
+      // 5. Stamp lastLocalSyncAt. Best-effort - if it fails, the data is
+      // already written, so log the stamp failure without rolling back the sync.
+      let lastLocalSyncAt = null;
+      try {
+        const stampResult = await recordLocalSyncSuccess(discordId, {
+          UserModel: User,
+          scope,
+        });
+        if (stampResult.ok) lastLocalSyncAt = Date.now();
+      } catch (err) {
+        console.warn("[sync-endpoint] timestamp stamp failed:", err?.message || err);
+      }
+
+      // 6. Shrink the local-sync token after a real write. All-skipped or
+      // rejected posts keep the remaining window so the user can retry with
+      // a corrected file/link flow.
+      let newExpSec = null;
+      if (Array.isArray(summary?.applied) && summary.applied.length > 0) {
+        try {
+          newExpSec = await shrinkLocalSyncTokenAfterWrite({ User, discordId, token });
+        } catch (err) {
+          console.warn("[sync-endpoint] token shrink failed:", err?.message || err);
+        }
+      }
+
+      send(res, 200, {
+        ok: true,
+        discordId,
+        scope,
+        lastLocalSyncAt,
+        newExpSec,
         ...summary,
       });
-      return;
-    }
-
-    // 5. Stamp lastLocalSyncAt. Best-effort - if it fails, the data is
-    // already written, so log the stamp failure without rolling back the sync.
-    let lastLocalSyncAt = null;
-    try {
-      const stampResult = await recordLocalSyncSuccess(discordId, { UserModel: User });
-      if (stampResult.ok) lastLocalSyncAt = Date.now();
-    } catch (err) {
-      console.warn("[sync-endpoint] timestamp stamp failed:", err?.message || err);
-    }
-
-    // 6. Shrink the local-sync token after a real write. All-skipped or
-    // rejected posts keep the remaining window so the user can retry with
-    // a corrected file/link flow.
-    let newExpSec = null;
-    if (Array.isArray(summary?.applied) && summary.applied.length > 0) {
-      try {
-        newExpSec = await shrinkLocalSyncTokenAfterWrite({ User, discordId, token });
-      } catch (err) {
-        console.warn("[sync-endpoint] token shrink failed:", err?.message || err);
+    } finally {
+      if (ownsSyncSlot && typeof releaseAutoManageSyncSlot === "function") {
+        try {
+          await releaseAutoManageSyncSlot(discordId);
+        } catch (err) {
+          console.warn("[sync-endpoint] sync slot release failed:", err?.message || err);
+        }
       }
     }
-
-    send(res, 200, {
-      ok: true,
-      discordId,
-      lastLocalSyncAt,
-      newExpSec,
-      ...summary,
-    });
   };
 }
 

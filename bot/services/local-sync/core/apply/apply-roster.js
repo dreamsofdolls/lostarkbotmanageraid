@@ -9,6 +9,8 @@ const {
   getGatesForRaid,
   preserveManualRaidModePreference,
 } = require("../../../../models/Raid");
+const { normalizeDifficulty } = require("../catalog");
+const { COMPANION_SCOPE } = require("../scope");
 
 function findRosterCharacter(userDoc, charName) {
   if (!userDoc || !Array.isArray(userDoc.accounts)) return null;
@@ -41,27 +43,55 @@ function resolveBucketModePreference(userDoc, bucket) {
     : bucket;
 }
 
-function raidAlreadyComplete(character, raidKey) {
+function isCurrentWeekCompletion(value, currentWeekStartMs = 0) {
+  const completedAt = Number(value);
+  return completedAt > 0 && completedAt >= currentWeekStartMs;
+}
+
+function raidAlreadyComplete(character, raidKey, currentWeekStartMs = 0) {
   const assignedRaid = getAssignedRaid(character, raidKey);
   const gates = getGatesForRaid(raidKey);
   return gates.length > 0 && gates.every((gate) => (
-    Number(assignedRaid?.[gate]?.completedDate) > 0
+    isCurrentWeekCompletion(assignedRaid?.[gate]?.completedDate, currentWeekStartMs)
   ));
 }
 
-function gatesAlreadyComplete(character, bucket, effectiveGates) {
+function gatesAlreadyComplete(character, bucket, effectiveGates, currentWeekStartMs = 0) {
   const selectedDifficulty = normalizeName(toModeLabel(bucket.modeKey));
   const assignedRaid = getAssignedRaid(character, bucket.raidKey);
   if (!Array.isArray(effectiveGates) || effectiveGates.length === 0) return false;
   return effectiveGates.every((gate) => {
     const entry = assignedRaid?.[gate];
-    if (!(Number(entry?.completedDate) > 0)) return false;
+    if (!isCurrentWeekCompletion(entry?.completedDate, currentWeekStartMs)) return false;
     const entryDifficulty = normalizeName(entry?.difficulty || "");
     return !entryDifficulty || entryDifficulty === selectedDifficulty;
   });
 }
 
-function classifyBucketAgainstRoster(userDoc, bucket, raidMeta, effectiveGates) {
+function hasCurrentWeekProgressInAnotherMode(
+  character,
+  bucket,
+  currentWeekStartMs = 0
+) {
+  const assignedRaid = getAssignedRaid(character, bucket.raidKey);
+  const storedModeKey = normalizeDifficulty(
+    assignedRaid?.modeKey || getGatesForRaid(bucket.raidKey)
+      .map((gate) => assignedRaid?.[gate]?.difficulty)
+      .find(Boolean)
+  );
+  if (!storedModeKey || storedModeKey === bucket.modeKey) return false;
+  return getGatesForRaid(bucket.raidKey).some((gate) => (
+    isCurrentWeekCompletion(assignedRaid?.[gate]?.completedDate, currentWeekStartMs)
+  ));
+}
+
+function classifyBucketAgainstRoster(
+  userDoc,
+  bucket,
+  raidMeta,
+  effectiveGates,
+  { currentWeekStartMs = 0, requiredCompanionScope = null } = {}
+) {
   if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
     return { action: "reject", reason: "no_roster" };
   }
@@ -74,7 +104,14 @@ function classifyBucketAgainstRoster(userDoc, bucket, raidMeta, effectiveGates) 
     return { action: "reject", reason: "ilvl_too_low", ineligibleItemLevel: charItemLevel };
   }
 
-  if (raidAlreadyComplete(character, bucket.raidKey)) {
+  if (
+    requiredCompanionScope === COMPANION_SCOPE.solo
+    && hasCurrentWeekProgressInAnotherMode(character, bucket, currentWeekStartMs)
+  ) {
+    return { action: "reject", reason: "mode_progress_conflict" };
+  }
+
+  if (raidAlreadyComplete(character, bucket.raidKey, currentWeekStartMs)) {
     return {
       action: "skip",
       reason: "already_complete",
@@ -82,7 +119,7 @@ function classifyBucketAgainstRoster(userDoc, bucket, raidMeta, effectiveGates) 
     };
   }
 
-  if (gatesAlreadyComplete(character, bucket, effectiveGates)) {
+  if (gatesAlreadyComplete(character, bucket, effectiveGates, currentWeekStartMs)) {
     return {
       action: "skip",
       reason: "already_complete",
@@ -97,6 +134,8 @@ module.exports = {
   classifyBucketAgainstRoster,
   findRosterCharacter,
   gatesAlreadyComplete,
+  hasCurrentWeekProgressInAnotherMode,
+  isCurrentWeekCompletion,
   raidAlreadyComplete,
   resolveBucketModePreference,
 };

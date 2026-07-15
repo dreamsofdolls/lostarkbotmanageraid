@@ -135,6 +135,31 @@ test("auto-manage keeps a stored Solo preference when upstream reports Normal", 
   assert.equal(act4.G2.difficulty, "Solo");
 });
 
+test("auto-manage does not preserve legacy Solo on a raid that has no Solo mode", () => {
+  const service = makeService();
+  const userDoc = makeUserDoc({
+    horizon: {
+      modeKey: "solo",
+      G1: { difficulty: "Solo", completedDate: null },
+      G2: { difficulty: "Solo", completedDate: null },
+    },
+  });
+
+  const report = service.applyAutoManageCollected(userDoc, 1000, [
+    {
+      entryKey: service.autoManageEntryKey("Roster", "Aki"),
+      logs: [
+        { boss: "Archbishop Arcenos", difficulty: "Level 1", timestamp: 3000 },
+      ],
+    },
+  ]);
+
+  const horizon = userDoc.accounts[0].characters[0].assignedRaids.horizon;
+  assert.equal(report.appliedTotal, 1);
+  assert.equal(horizon.modeKey, "normal");
+  assert.equal(horizon.G1.difficulty, "Normal");
+});
+
 test("auto-manage apply skips cross-mode logs when the raid is already done", () => {
   const service = makeService();
   const userDoc = makeUserDoc({

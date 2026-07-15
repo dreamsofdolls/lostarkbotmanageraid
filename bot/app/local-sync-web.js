@@ -26,11 +26,19 @@ const { createCatalogEndpoint } = require("../services/local-sync/http/endpoints
  * @param {{User: object, applyRaidSetForDiscordId: function, applyRaidSetBatchForDiscordId: function}} deps
  * @returns {Object<string, Function>} handler map
  */
-function createLocalSyncApiHandlers({ User, applyRaidSetForDiscordId, applyRaidSetBatchForDiscordId }) {
+function createLocalSyncApiHandlers({
+  User,
+  applyRaidSetForDiscordId,
+  applyRaidSetBatchForDiscordId,
+  acquireAutoManageSyncSlot = null,
+  releaseAutoManageSyncSlot = null,
+}) {
   const raidSyncHandler = createRaidSyncEndpoint({
     User,
     applyRaidSetForDiscordId,
     applyRaidSetBatchForDiscordId,
+    acquireAutoManageSyncSlot,
+    releaseAutoManageSyncSlot,
   });
   const rosterHandler = createRosterEndpoint({ User });
   const previewSummaryHandler = createPreviewSummaryEndpoint({ User });
@@ -57,6 +65,8 @@ function startLocalSyncWebCompanion({
   User,
   applyRaidSetForDiscordId,
   applyRaidSetBatchForDiscordId,
+  acquireAutoManageSyncSlot = null,
+  releaseAutoManageSyncSlot = null,
   env = process.env,
   log = console,
 } = {}) {
@@ -73,6 +83,8 @@ function startLocalSyncWebCompanion({
         User,
         applyRaidSetForDiscordId,
         applyRaidSetBatchForDiscordId,
+        acquireAutoManageSyncSlot,
+        releaseAutoManageSyncSlot,
       }),
     });
   } catch (err) {

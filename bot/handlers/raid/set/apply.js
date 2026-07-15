@@ -1,5 +1,12 @@
 "use strict";
 
+const {
+  COMPANION_SCOPE,
+  isCompanionScopeEnabledForUser,
+  isModeAllowedForCompanionScope,
+  resolveRequiredCompanionScope,
+} = require("../../../services/local-sync/core/scope");
+
 function createRaidSetApplyService({
   canEditAccount,
   normalizeName,
@@ -18,6 +25,9 @@ function createRaidSetApplyService({
       noRoster: false,
       authLost: false,
       syncDisabled: false,
+      syncDisabledReason: null,
+      scopeNotAllowed: false,
+      progressConflict: false,
       matched: false,
       updated: false,
       alreadyComplete: false,
@@ -55,20 +65,28 @@ function createRaidSetApplyService({
     return false;
   }
 
-  function detectModeChange(raidData, raidMeta, selectedDifficulty) {
+  function detectModeChange(
+    raidData,
+    raidMeta,
+    selectedDifficulty,
+    currentWeekStartMs = 0
+  ) {
     const normalizedSelectedDiff = normalizeName(selectedDifficulty);
     const officialGateList = getGatesForRaid(raidMeta.raidKey);
     let changed = Boolean(raidData.modeKey && raidData.modeKey !== raidMeta.modeKey);
-    let hadProgress = false;
 
     for (const gate of officialGateList) {
       const existingDiff = raidData[gate]?.difficulty;
       if (existingDiff && normalizeName(existingDiff) !== normalizedSelectedDiff) {
         changed = true;
-        if (Number(raidData[gate]?.completedDate) > 0) hadProgress = true;
-        break;
       }
     }
+
+    const progressFloorMs = Math.max(0, Number(currentWeekStartMs) || 0);
+    const hadProgress = changed && officialGateList.some((gate) => {
+      const completedAt = Number(raidData[gate]?.completedDate);
+      return completedAt > 0 && completedAt >= progressFloorMs;
+    });
 
     return { changed, hadProgress, officialGateList };
   }
@@ -79,12 +97,19 @@ function createRaidSetApplyService({
     }
   }
 
-  function everyTargetAlreadyDone(raidData, gateKeys, selectedDifficulty) {
+  function everyTargetAlreadyDone(
+    raidData,
+    gateKeys,
+    selectedDifficulty,
+    currentWeekStartMs = 0
+  ) {
     const normalizedSelectedDiff = normalizeName(selectedDifficulty);
+    const progressFloorMs = Math.max(0, Number(currentWeekStartMs) || 0);
     return gateKeys.length > 0 && gateKeys.every((gate) => {
       const entry = raidData[gate];
       if (!entry) return false;
-      if (!(Number(entry.completedDate) > 0)) return false;
+      const completedAt = Number(entry.completedDate);
+      if (!(completedAt > 0) || completedAt < progressFloorMs) return false;
       const entryDiff = normalizeName(entry.difficulty || "");
       return !entryDiff || entryDiff === normalizedSelectedDiff;
     });
@@ -118,6 +143,8 @@ function createRaidSetApplyService({
     statusType,
     effectiveGates,
     requireLocalSyncEnabled = false,
+    requiredCompanionScope = null,
+    currentWeekStartMs = 0,
   }, now = Date.now()) {
     const result = makeRaidSetResult(raidMeta);
     const gateList = Array.isArray(effectiveGates) ? effectiveGates.filter(Boolean) : [];
@@ -127,8 +154,23 @@ function createRaidSetApplyService({
       result.noRoster = true;
       return result;
     }
-    if (requireLocalSyncEnabled && !userDoc.localSyncEnabled) {
+    const companionScope = resolveRequiredCompanionScope({
+      requiredCompanionScope,
+      requireLocalSyncEnabled,
+    });
+    if (requiredCompanionScope && !companionScope) {
+      result.scopeNotAllowed = true;
+      return result;
+    }
+    if (companionScope && !isCompanionScopeEnabledForUser(userDoc, companionScope)) {
       result.syncDisabled = true;
+      result.syncDisabledReason = companionScope === COMPANION_SCOPE.solo
+        ? "auto_sync_disabled"
+        : "local_sync_disabled";
+      return result;
+    }
+    if (companionScope && !isModeAllowedForCompanionScope(companionScope, raidMeta?.modeKey)) {
+      result.scopeNotAllowed = true;
       return result;
     }
     if (await rejectUnauthorizedHelperWrite(result, userDoc, { discordId, executorId, rosterName })) {
@@ -154,8 +196,22 @@ function createRaidSetApplyService({
     );
     const shouldMarkDone = statusType === "complete" || statusType === "process";
     const { changed: modeChangeDetected, hadProgress, officialGateList } = shouldMarkDone
-      ? detectModeChange(raidData, raidMeta, selectedDifficulty)
+      ? detectModeChange(
+        raidData,
+        raidMeta,
+        selectedDifficulty,
+        currentWeekStartMs
+      )
       : { changed: false, hadProgress: false, officialGateList: getGatesForRaid(raidMeta.raidKey) };
+
+    if (
+      companionScope === COMPANION_SCOPE.solo
+      && modeChangeDetected
+      && hadProgress
+    ) {
+      result.progressConflict = true;
+      return result;
+    }
 
     if (modeChangeDetected) {
       resetRaidMode(raidData, officialGateList, selectedDifficulty);
@@ -164,7 +220,16 @@ function createRaidSetApplyService({
     if (shouldMarkDone) raidData.modeKey = raidMeta.modeKey;
 
     const gateKeys = gateList.length > 0 ? gateList : getGateKeys(raidData);
-    if (shouldMarkDone && !modeChangeDetected && everyTargetAlreadyDone(raidData, gateKeys, selectedDifficulty)) {
+    if (
+      shouldMarkDone
+      && !modeChangeDetected
+      && everyTargetAlreadyDone(
+        raidData,
+        gateKeys,
+        selectedDifficulty,
+        currentWeekStartMs
+      )
+    ) {
       result.alreadyComplete = true;
       return result;
     }

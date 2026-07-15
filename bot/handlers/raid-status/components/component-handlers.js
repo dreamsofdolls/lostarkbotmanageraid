@@ -26,11 +26,15 @@ const {
   localizedRaidLabel,
 } = require("../gold/gold-formatting");
 const {
+  deferEphemeralReply,
+  editEmbed,
+  editNotice,
   followUpNotice,
   replyNotice,
   replyEmbed,
 } = require("../../../utils/raid/common/shared");
 const {
+  COMPANION_SCOPE,
   rotateLocalSyncToken,
   extractIdentityFromUser,
 } = require("../../../services/local-sync");
@@ -92,6 +96,8 @@ function createStatusComponentRouteHandlers(ctx) {
     session,
     EmbedBuilder,
     ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
     StringSelectMenuBuilder,
     UI,
     User,
@@ -110,6 +116,7 @@ function createStatusComponentRouteHandlers(ctx) {
     truncateText,
     getAutoManageCooldownMs,
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
+    rotateLocalSyncTokenFn = rotateLocalSyncToken,
   } = ctx;
   const goldReplacementFlow = createGoldReplacementFlow({
     EmbedBuilder,
@@ -186,6 +193,60 @@ function createStatusComponentRouteHandlers(ctx) {
         title: t("raid-status.sync.localNewLinkSuccessTitle", lang),
         description: t("raid-status.sync.localNewLinkSuccessDescription", lang),
       }).catch(() => {});
+      return noRedraw();
+    },
+
+    [STATUS_COMPONENT_ACTION.soloCompanion]: async (component) => {
+      const deferred = await deferEphemeralReply(component).then(() => true).catch((err) => {
+        console.warn("[raid-status] solo-companion defer failed:", err?.message || err);
+        return false;
+      });
+      if (!deferred) return noRedraw();
+
+      const baseUrl = publicBaseUrl();
+      if (!baseUrl) {
+        await editNotice(component, EmbedBuilder, {
+          type: "warn",
+          title: t("raid-status.sync.soloCompanionUnavailableTitle", lang),
+          description: t("raid-status.sync.soloCompanionUnavailableDescription", lang),
+        }).catch(() => {});
+        return noRedraw();
+      }
+
+      try {
+        const identity = extractIdentityFromUser(component.user);
+        const token = await rotateLocalSyncTokenFn(discordId, lang, {
+          UserModel: User,
+          identity,
+          scope: COMPANION_SCOPE.solo,
+        });
+        const companionUrl = buildLocalSyncUrl(token, baseUrl);
+        if (!companionUrl) throw new Error("solo companion URL unavailable");
+
+        const embed = new EmbedBuilder()
+          .setColor(UI.colors.neutral)
+          .setTitle(`${UI.icons.info} ${t("raid-status.sync.soloCompanionTitle", lang)}`)
+          .setDescription(t("raid-status.sync.soloCompanionDescription", lang))
+          .setTimestamp();
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setStyle(ButtonStyle.Link)
+            .setLabel(t("raid-status.sync.soloCompanionOpenButtonLabel", lang))
+            .setEmoji("\u{1f310}")
+            .setURL(companionUrl)
+        );
+
+        await editEmbed(component, embed, { components: [row] });
+      } catch (err) {
+        console.error("[raid-status] solo-companion link failed:", err?.message || err);
+        await editNotice(component, EmbedBuilder, {
+          type: "error",
+          title: t("raid-status.sync.soloCompanionFailedTitle", lang),
+          description: t("raid-status.sync.soloCompanionFailedDescription", lang, {
+            error: err?.message || String(err),
+          }),
+        }).catch(() => {});
+      }
       return noRedraw();
     },
 

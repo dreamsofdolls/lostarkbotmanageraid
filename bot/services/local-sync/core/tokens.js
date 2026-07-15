@@ -11,6 +11,10 @@
 "use strict";
 
 const crypto = require("node:crypto");
+const {
+  COMPANION_SCOPE,
+  normalizeCompanionScope,
+} = require("./scope");
 
 /**
  * JWT-style HMAC tokens used to bridge Discord identity into the web
@@ -20,7 +24,7 @@ const crypto = require("node:crypto");
  *
  *   <payload-b64url>.<signature-b64url>
  *
- * Payload JSON: { discordId, iat, exp, nonce }. Signature: HMAC-SHA256 over
+ * Payload JSON: { discordId, scope, iat, exp, nonce }. Signature: HMAC-SHA256 over
  * the payload segment with a secret from env. Verification is constant-
  * time (timingSafeEqual) so a malformed token can't leak length info.
  *
@@ -77,13 +81,24 @@ function sign(payloadB64) {
  * propagate to the user as a "feature not configured" error rather than
  * silently fall back to insecure behavior.
  */
-function mintToken(discordId, ttlSec = DEFAULT_TTL_SEC, lang = null, identity = null) {
+function mintToken(
+  discordId,
+  ttlSec = DEFAULT_TTL_SEC,
+  lang = null,
+  identity = null,
+  scope = COMPANION_SCOPE.full
+) {
   if (!discordId || typeof discordId !== "string") {
     throw new Error("[local-sync/tokens] mintToken: discordId required");
+  }
+  const normalizedScope = normalizeCompanionScope(scope, { legacyDefault: false });
+  if (!normalizedScope) {
+    throw new Error("[local-sync/tokens] mintToken: scope must be full or solo");
   }
   const now = Math.floor(Date.now() / 1000);
   const payload = {
     discordId,
+    scope: normalizedScope,
     iat: now,
     exp: now + Math.max(60, Number(ttlSec) || DEFAULT_TTL_SEC),
     nonce: crypto.randomBytes(8).toString("hex"),
@@ -146,15 +161,37 @@ function verifyToken(token) {
   if (!payload.discordId || !payload.exp) {
     return { ok: false, reason: "malformed" };
   }
+  // Tokens minted before companion scopes existed are full local-sync links.
+  // Preserve whether the signed payload carried an explicit scope so HTTP
+  // gates can keep legacy compatibility without letting newly-scoped links
+  // resurrect after their persisted token has been revoked.
+  const scopeExplicit = !(
+    payload.scope === undefined
+    || payload.scope === null
+    || payload.scope === ""
+  );
+  if (!scopeExplicit) {
+    payload.scope = COMPANION_SCOPE.full;
+  } else {
+    payload.scope = normalizeCompanionScope(payload.scope, { legacyDefault: false });
+    if (!payload.scope) return { ok: false, reason: "scope" };
+  }
   const now = Math.floor(Date.now() / 1000);
   if (payload.exp < now) return { ok: false, reason: "expired" };
-  return { ok: true, payload };
+  return { ok: true, payload, scopeExplicit };
 }
 
-function isCurrentStoredToken(userDoc, token, nowSec = Math.floor(Date.now() / 1000)) {
+function isCurrentStoredToken(
+  userDoc,
+  token,
+  nowSec = Math.floor(Date.now() / 1000),
+  { allowMissingStoredToken = true } = {}
+) {
   // Backward compatibility for links minted before token persistence existed.
-  // Once a stored token exists, rotation/reset can hard-revoke older URLs.
-  if (!userDoc?.lastLocalSyncToken) return true;
+  // Newly-scoped links pass allowMissingStoredToken=false at the HTTP gate,
+  // so clearing the persisted token remains a hard revocation across opt-out
+  // and re-enable cycles.
+  if (!userDoc?.lastLocalSyncToken) return allowMissingStoredToken;
   if (userDoc.lastLocalSyncToken !== token) return false;
   const expAt = Number(userDoc.lastLocalSyncTokenExpAt) || 0;
   return !expAt || expAt >= nowSec;
@@ -173,7 +210,9 @@ function isCurrentStoredToken(userDoc, token, nowSec = Math.floor(Date.now() / 1
 async function rotateLocalSyncToken(discordId, lang, deps = {}) {
   const UserModel = deps?.UserModel;
   if (!UserModel) throw new Error("[local-sync/tokens] rotateLocalSyncToken: UserModel required");
-  const token = mintToken(discordId, undefined, lang, deps?.identity || null);
+  const scope = normalizeCompanionScope(deps?.scope, { legacyDefault: true });
+  if (!scope) throw new Error("[local-sync/tokens] rotateLocalSyncToken: invalid scope");
+  const token = mintToken(discordId, undefined, lang, deps?.identity || null, scope);
   const expAt = Math.floor(Date.now() / 1000) + DEFAULT_TTL_SEC;
   await UserModel.findOneAndUpdate(
     { discordId },
@@ -197,14 +236,23 @@ async function rotateLocalSyncToken(discordId, lang, deps = {}) {
 async function getOrMintLocalSyncToken(discordId, lang, deps = {}) {
   const UserModel = deps?.UserModel;
   if (!UserModel) throw new Error("[local-sync/tokens] getOrMintLocalSyncToken: UserModel required");
+  const scope = normalizeCompanionScope(deps?.scope, { legacyDefault: true });
+  if (!scope) throw new Error("[local-sync/tokens] getOrMintLocalSyncToken: invalid scope");
   const stored = await UserModel.findOne({ discordId })
     .select("lastLocalSyncToken lastLocalSyncTokenExpAt")
     .lean();
   const now = Math.floor(Date.now() / 1000);
   if (stored?.lastLocalSyncToken && Number(stored.lastLocalSyncTokenExpAt) > now + 60) {
-    return stored.lastLocalSyncToken;
+    const verified = verifyToken(stored.lastLocalSyncToken);
+    if (verified.ok && verified.payload.scope === scope) {
+      return stored.lastLocalSyncToken;
+    }
   }
-  return rotateLocalSyncToken(discordId, lang, { UserModel, identity: deps?.identity || null });
+  return rotateLocalSyncToken(discordId, lang, {
+    UserModel,
+    identity: deps?.identity || null,
+    scope,
+  });
 }
 
 /**

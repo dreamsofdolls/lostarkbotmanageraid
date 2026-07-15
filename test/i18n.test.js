@@ -64,6 +64,28 @@ test("vi raid-check filter dropdowns do not leak English state labels", () => {
   );
 });
 
+test("Solo Companion launcher copy is complete in all three first-class languages", () => {
+  const keys = [
+    "soloCompanionButtonLabel",
+    "soloCompanionTitle",
+    "soloCompanionDescription",
+    "soloCompanionOpenButtonLabel",
+    "soloCompanionUnavailableTitle",
+    "soloCompanionUnavailableDescription",
+    "soloCompanionFailedTitle",
+    "soloCompanionFailedDescription",
+  ];
+
+  for (const code of ["vi", "jp", "en"]) {
+    const sync = TRANSLATIONS[code]["raid-status"].sync;
+    for (const key of keys) {
+      assert.equal(typeof sync[key], "string", `${code} is missing raid-status.sync.${key}`);
+      assert.ok(sync[key].trim(), `${code} has an empty raid-status.sync.${key}`);
+    }
+    assert.match(sync.soloCompanionDescription, /Solo/i);
+  }
+});
+
 test("jp/en raid-channel schedule copy matches per-language quiet hours", () => {
   const enText = flattenStrings(TRANSLATIONS.en).join("\n");
   assert.match(enText, /03:00-08:00 UTC/);
