@@ -253,6 +253,18 @@ test("handleRaidHelpSelect: every known section key renders without throwing", a
   }
 });
 
+test("raid-help documents Solo text, raid-set, status totals, and raid-check visibility in every locale", async () => {
+  const factory = makeFactory();
+  for (const lang of ["vi", "en", "jp"]) {
+    for (const section of ["raid-status", "raid-set", "raid-check", "raid-channel"]) {
+      const interaction = makeSelectInteraction(section, { lang });
+      await factory.handleRaidHelpSelect(interaction);
+      const allFields = getAllFieldValues(interaction._calls.update[0].embeds[0].toJSON());
+      assert.match(allFields, /solo/i, `${lang}/${section} should explain Solo behavior`);
+    }
+  }
+});
+
 test("detail embed: every field value stays within Discord's 1024-char limit", async () => {
   // Regression guard against an overlong notes string crashing render.
   // splitHelpFieldValue is supposed to chunk; this asserts that

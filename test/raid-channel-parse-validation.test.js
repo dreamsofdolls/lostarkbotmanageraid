@@ -14,6 +14,11 @@ const RAID_REQUIREMENT_MAP = {
     modeKey: "normal",
     label: "Act 4 Normal",
   },
+  act4_solo: {
+    raidKey: "act4",
+    modeKey: "solo",
+    label: "Act 4 Solo",
+  },
 };
 const getGatesForRaid = () => ["G1", "G2", "G3"];
 
@@ -55,6 +60,47 @@ test("raid-channel parse validation expands a posted gate cumulatively", () => {
   assert.equal(resolved.statusType, "process");
   assert.deepEqual(resolved.charNames, ["Qiylyn"]);
   assert.deepEqual(resolved.effectiveGates, ["G1", "G2"]);
+});
+
+test("raid-channel parse validation accepts supported Solo raids", () => {
+  const resolved = resolveParsedRaidUpdate({
+    parsed: {
+      raidKey: "act4",
+      modeKey: "solo",
+      charNames: ["Qiylyn"],
+      gate: "G2",
+    },
+    RAID_REQUIREMENT_MAP,
+    getGatesForRaid,
+    UI,
+    lang: "en",
+    t: fakeT,
+  });
+
+  assert.equal(resolved.action, "update");
+  assert.equal(resolved.raidMeta.modeKey, "solo");
+  assert.equal(resolved.statusType, "process");
+  assert.deepEqual(resolved.effectiveGates, ["G1", "G2"]);
+});
+
+test("raid-channel parse validation rejects Solo for Horizon", () => {
+  const resolved = resolveParsedRaidUpdate({
+    parsed: {
+      raidKey: "horizon",
+      modeKey: "solo",
+      charNames: ["Qiylyn"],
+      gate: null,
+    },
+    RAID_REQUIREMENT_MAP,
+    getGatesForRaid,
+    UI,
+    lang: "en",
+    t: fakeT,
+  });
+
+  assert.equal(resolved.action, "hint");
+  assert.match(resolved.content, /^text-parser\.invalidCombo\|en\|/);
+  assert.match(resolved.content, /"modeKey":"solo"/);
 });
 
 test("raid-channel parse validation rejects gates outside the raid catalog", () => {

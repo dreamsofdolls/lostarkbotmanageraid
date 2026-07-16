@@ -65,10 +65,10 @@ test("raid-status roster entries separate display eligibility from progress coun
     account("Alpha", [
       { raidKey: "armoche", modeKey: "hard", isCompleted: false },
       {
-        raidKey: "horizon",
+        raidKey: "armoche",
         modeKey: "solo",
         isCompleted: true,
-        goldReceives: false,
+        goldReceives: true,
       },
     ]),
     account("Beta", [
@@ -97,7 +97,7 @@ test("raid-status roster entries separate display eligibility from progress coun
   assert.deepEqual(
     buildStatusRosterFilterEntries({
       accounts,
-      raidFilter: "horizon:solo",
+      raidFilter: "armoche:solo",
       getRaidsFor,
     }).map(({ pageIndex, pending, success, displayMatches }) => ({
       pageIndex,
@@ -229,4 +229,62 @@ test("raid-status raid embed footer uses filtered roster pagination", () => {
     pageIndex: 1,
     totalPages: 2,
   });
+});
+
+test("raid-status Solo filter renders its detail while progress totals stay zero", () => {
+  const soloRaid = {
+    raidKey: "armoche",
+    modeKey: "solo",
+    raidName: "Act 4 Solo",
+    completedGateKeys: [],
+    allGateKeys: ["G1", "G2"],
+    isCompleted: false,
+    goldReceives: true,
+  };
+  const accounts = [account("Solo", [soloRaid])];
+  let captured = null;
+  const { buildCurrentEmbed } = createRaidStatusRenderPayload({
+    discordId: "viewer",
+    getAccounts: () => accounts,
+    getCurrentPage: () => 0,
+    getCurrentLocalPage: () => 0,
+    getVisibleRosterCount: () => 1,
+    getCurrentView: () => "raid",
+    getFilterRaidId: () => "armoche:solo",
+    getStatusUserMeta: () => ({}),
+    baseGetRaidsFor: (character) => character.raids || [],
+    totalCharacters: 1,
+    summarizeRaidProgress: (raids) => ({
+      completed: raids.filter((raid) => raid.isCompleted).length,
+      partial: 0,
+      total: raids.length,
+    }),
+    summarizeGlobalGold: () => ({ earned: 0, total: 0 }),
+    buildAccountPageEmbed: (
+      currentAccount,
+      _pageIndex,
+      _totalPages,
+      globalTotals,
+      getDisplayRaidsFor,
+      _userMeta,
+      options,
+    ) => {
+      const character = currentAccount.characters[0];
+      captured = {
+        globalProgress: globalTotals.progress,
+        displayed: getDisplayRaidsFor(character),
+        counted: options.getProgressRaidsFor(character),
+      };
+      return {};
+    },
+    buildGoldViewEmbed: () => ({}),
+    buildTaskViewEmbed: () => ({}),
+    lang: "en",
+  });
+
+  buildCurrentEmbed();
+
+  assert.equal(captured.globalProgress.total, 0);
+  assert.deepEqual(captured.counted, []);
+  assert.deepEqual(captured.displayed, [soloRaid]);
 });
