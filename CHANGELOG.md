@@ -4,6 +4,15 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-07-16 (Solo text updates and progress-count separation)
+
+### Added
+- The raid-channel text monitor accepts `Act4 Solo <character>` (plus Japanese `ソロ`) for Act 4, Kazeros, and Serca. Supported Solo syntax is now documented in the configured-channel response, welcome pin, `/raid-help`, and README; Horizon Solo is rejected by the shared catalog validation.
+- `/raid-set` autocomplete coverage now locks in the three supported Solo choices, while `/raid-check` and its Edit progress flow continue to hide Solo by design.
+
+### Changed
+- `/raid-status` keeps Solo raids and their pending counts in the raid dropdown and character cards, but excludes Solo from the all-raids, roster, header, and footer pending/success totals. Solo gold remains identical to Normal and is not changed by this progress-count rule.
+
 ## 2026-07-15 (auto-sync: Solo Web Companion)
 
 ### Added
@@ -44,7 +53,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ## 2026-07-08 (raid-check: sync gold-receive state with raid-status)
 
 ### Fixed
-- /raid-check pending + progress counts now exclude raids a character turned gold off on (goldReceives === false), matching /raid-status. The per-char card still lists those raids with the trailing lock; only the counts (per-raid dropdown, per-user pending, progress totals) drop them, via the shared isGoldProgressRaid filter + buildAccountPageEmbed's getProgressRaidsFor hook.
+- /raid-check pending + progress counts now exclude raids a character turned gold off on (goldReceives === false), matching /raid-status. The per-char card still lists those raids with the trailing lock; only the counts (per-raid dropdown, per-user pending, progress totals) drop them, via the shared countable-progress filter + buildAccountPageEmbed's getProgressRaidsFor hook.
 
 ## 2026-07-08 (raid-profile: remove subsystem)
 

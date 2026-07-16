@@ -68,6 +68,21 @@ test("raid-channel parser preserves existing alias semantics", () => {
   });
 });
 
+test("raid-channel parser accepts Solo in English and Japanese", () => {
+  assert.deepEqual(parseRaidMessage("Act4 Solo Qiylyn"), {
+    raidKey: "armoche",
+    modeKey: "solo",
+    charNames: ["qiylyn"],
+    gate: null,
+  });
+  assert.deepEqual(parseRaidMessage("アクト4 ソロ Qiylyn G2"), {
+    raidKey: "armoche",
+    modeKey: "solo",
+    charNames: ["qiylyn"],
+    gate: "G2",
+  });
+});
+
 test("raid-channel parser returns explicit ambiguity errors", () => {
   assert.deepEqual(parseRaidMessage("kaz serca hard Qiylyn"), {
     error: "multi-raid",

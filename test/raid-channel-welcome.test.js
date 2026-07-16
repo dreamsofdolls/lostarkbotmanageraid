@@ -71,4 +71,11 @@ for (const localeCode of Object.keys(TRANSLATIONS)) {
     assert.match(Array.isArray(examples) ? examples.join("\n") : String(examples || ""), /act4 reset/i);
     assert.match(Array.isArray(aliases) ? aliases.join("\n") : String(aliases || ""), /`reset`.*`rs`/i);
   });
+
+  test(`welcome embed (${localeCode}): documents supported Solo text syntax`, () => {
+    const examples = TRANSLATIONS[localeCode]?.welcome?.examplesValue;
+    const aliases = TRANSLATIONS[localeCode]?.welcome?.aliasesValue;
+    assert.match(Array.isArray(examples) ? examples.join("\n") : String(examples || ""), /act4 solo/i);
+    assert.match(Array.isArray(aliases) ? aliases.join("\n") : String(aliases || ""), /solo/i);
+  });
 }

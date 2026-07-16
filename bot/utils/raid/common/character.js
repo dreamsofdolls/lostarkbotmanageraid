@@ -24,6 +24,7 @@ const {
   getGoldForGate,
   getBoundGoldForGate,
   isGoldBound,
+  isSoloModeKey,
 } = require("../../../models/Raid");
 const {
   RAID_GROUP_KEYS,
@@ -273,12 +274,16 @@ function getStatusRaidsForCharacter(character) {
   return applyCharacterGoldCap(sorted);
 }
 
-function isGoldProgressRaid(raid) {
-  return raid?.goldReceives !== false;
+// A raid may stay visible in the character card without contributing to the
+// headline pending/success totals. Gold-disabled/bound raids already follow
+// that rule, and Solo follows it as well: Solo progress is inspected from its
+// dedicated raid-filter entry instead of inflating the group-raid workload.
+function isCountedRaidProgress(raid) {
+  return !isSoloModeKey(raid?.modeKey) && raid?.goldReceives !== false;
 }
 
 function getStatusProgressRaidsForCharacter(character) {
-  return getStatusRaidsForCharacter(character).filter(isGoldProgressRaid);
+  return getStatusRaidsForCharacter(character).filter(isCountedRaidProgress);
 }
 
 // 3-state aggregate icon for a (done, total) pair. Shared by /raid-status's
@@ -466,7 +471,7 @@ module.exports = {
   ensureRaidEntries,
   getStatusRaidsForCharacter,
   getStatusProgressRaidsForCharacter,
-  isGoldProgressRaid,
+  isCountedRaidProgress,
   pickProgressIcon,
   formatRaidStatusLine,
   summarizeRaidProgress,

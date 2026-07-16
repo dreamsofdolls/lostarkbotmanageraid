@@ -25,6 +25,7 @@ const RAID_ALIASES = new Map([
 ]);
 
 const DIFFICULTY_ALIASES = new Map([
+  ["solo", "solo"],
   ["nightmare", "nightmare"],
   ["9m", "nightmare"],
   ["level3", "nightmare"],
@@ -40,6 +41,7 @@ const DIFFICULTY_ALIASES = new Map([
   // VN-community preference: nm reads as normal. Nightmare shorthand is 9m.
   ["nm", "normal"],
   ["ノーマル", "normal"],
+  ["ソロ", "solo"],
   ["ハード", "hard"],
   ["ナイトメア", "nightmare"],
 ]);

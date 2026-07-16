@@ -72,7 +72,9 @@ Post into the channel registered via `/raid-channel`:
 ```text
 Serca Nightmare Clauseduk            → mark all Serca Nightmare gates done
 Kazeros Hard Soulrano G1             → mark G1 only (cumulative: G_N also marks G1..G_{N-1})
+Act4 Solo Priscilladuk                → mark all Act 4 Solo gates done
 Act4 Hard Priscilladuk, Nailaduk     → multi-char in one post
+Act4 reset Priscilladuk               → reset all Act 4 gates while preserving its stored mode
 ```
 
 Aliases (case-insensitive):
@@ -80,11 +82,12 @@ Aliases (case-insensitive):
 | Kind | Values |
 |---|---|
 | Raid | `act 4` / `act4` / `armoche` · `kazeros` / `kaz` · `serca` (typo `secra`) · `horizon` / `cathedral` / `hc` |
-| Difficulty | `normal` / `nor` / `nm` / `level 1` / `l1` · `hard` / `hm` / `level 2` / `l2` · `nightmare` / `9m` / `level 3` / `l3` |
+| Difficulty | `solo` (Act 4/Kazeros/Serca only) · `normal` / `nor` / `nm` / `level 1` / `l1` · `hard` / `hm` / `level 2` / `l2` · `nightmare` / `9m` / `level 3` / `l3` |
 | Gate | `G1`, `G2`, ... (validated per raid) |
+| Reset | `reset` / `rs` (whole raid; no difficulty or gate) |
 | Separator | space, `+`, or `,` |
 
-Note: `nm` is Normal (not Nightmare). Nightmare only accepts the full word or `9m`.
+Note: `nm` is Normal (not Nightmare). Nightmare only accepts the full word or `9m`. Horizon uses Level 1/2/3 and does not support Solo.
 
 ## Data Model
 

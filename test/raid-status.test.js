@@ -208,7 +208,7 @@ test("REGRESSION: raid-status shared roster background uses the viewer image poo
   assert.equal(lookup.cacheKey, "viewer-b:shared roster");
 });
 
-test("REGRESSION: raid-status progress view displays all raids but counts only gold slots", () => {
+test("REGRESSION: raid-status displays detail-only raids but excludes them from headline progress", () => {
   const character = { name: "Aki" };
   const accounts = [{ accountName: "Alpha", characters: [character] }];
   const raids = [
@@ -909,6 +909,25 @@ test("buildRaidDropdownState: excludes raids that do not receive gold", () => {
   assert.deepEqual(
     raidDropdownEntries.map((r) => r.key),
     ["armoche:normal"],
+  );
+  assert.equal(totalRaidPending, 1);
+});
+
+test("buildRaidDropdownState: lists Solo pending counts without adding them to all-raids total", () => {
+  const raids = [
+    { raidKey: "armoche", modeKey: "normal", raidName: "Act 4 Normal", isCompleted: false, goldReceives: true },
+    { raidKey: "armoche", modeKey: "solo", raidName: "Act 4 Solo", isCompleted: false, goldReceives: true },
+    { raidKey: "horizon", modeKey: "normal", raidName: "Horizon Level 1", isCompleted: false, goldReceives: false },
+  ];
+  const accounts = [{ characters: [{ class: "Sorceress" }] }];
+  const { raidDropdownEntries, totalRaidPending } = buildRaidDropdownState(accounts, () => raids);
+
+  assert.deepEqual(
+    raidDropdownEntries.map((raid) => ({ key: raid.key, pending: raid.pending })),
+    [
+      { key: "armoche:normal", pending: 1 },
+      { key: "armoche:solo", pending: 1 },
+    ],
   );
   assert.equal(totalRaidPending, 1);
 });

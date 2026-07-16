@@ -6,7 +6,7 @@ const {
   getVisibleSharedTasks,
   getSharedTaskDisplay,
 } = require("../../../utils/raid/tasks/shared-tasks");
-const { isGoldProgressRaid } = require("../../../utils/raid/common/character");
+const { isCountedRaidProgress } = require("../../../utils/raid/common/character");
 const { t } = require("../../../services/i18n");
 const { isRaidCheckVisibleRaid } = require("../visibility");
 const {
@@ -67,7 +67,7 @@ function createAllModePageRenderers({
           (!filterRaidId || `${raid.raidKey}:${raid.modeKey}` === filterRaidId) &&
           raidMatchesStatusFilter(raid, activeStatus)
       );
-    const getProgressRaidsFor = (character) => getRaidsFor(character).filter(isGoldProgressRaid);
+    const getProgressRaidsFor = (character) => getRaidsFor(character).filter(isCountedRaidProgress);
 
     const userAccounts = Array.isArray(userDoc.accounts) ? userDoc.accounts : [];
     const userTotalChars = userAccounts.reduce(

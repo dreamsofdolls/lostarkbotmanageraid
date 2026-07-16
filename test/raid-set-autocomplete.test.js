@@ -131,6 +131,30 @@ test("raid-set autocomplete status always surfaces Reset for completed raids", a
   assert.deepEqual(interaction.responses[0].map((choice) => choice.value), ["reset"]);
 });
 
+test("raid-set autocomplete exposes Solo only for supported raids", async () => {
+  clearUserLanguageCache();
+  const interaction = createInteraction({
+    focused: { name: "raid", value: "solo" },
+    optionValues: {
+      roster: "Main",
+      character: "Qiylyn",
+    },
+  });
+  const service = createService();
+
+  await service.handleRaidSetAutocomplete(interaction);
+
+  assert.equal(interaction.responses.length, 1);
+  assert.deepEqual(
+    interaction.responses[0].map((choice) => choice.value),
+    ["armoche_solo", "kazeros_solo", "serca_solo"],
+  );
+  assert.equal(
+    interaction.responses[0].some((choice) => choice.value === "horizon_solo"),
+    false,
+  );
+});
+
 test("raid-set autocomplete dispatcher returns empty choices for unknown fields", async () => {
   const interaction = createInteraction({
     focused: { name: "unknown", value: "" },

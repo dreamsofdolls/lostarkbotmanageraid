@@ -1,13 +1,14 @@
 /**
  * Dropdown state for /raid-status. Raid options summarize the viewer's
- * gold-progress raids; roster options summarize the raids rendered on each
- * account page and keep roster selection aligned with pagination.
+ * countable group progress plus discoverable Solo detail; roster options
+ * summarize the raids rendered on each account page and keep roster selection
+ * aligned with pagination.
  */
 
 const { isSupportClass } = require("../../models/Class");
-const { compareRaidModeOrder } = require("../../models/Raid");
+const { compareRaidModeOrder, isSoloModeKey } = require("../../models/Raid");
 const { t } = require("../../services/i18n");
-const { isGoldProgressRaid } = require("../../utils/raid/common/character");
+const { isCountedRaidProgress } = require("../../utils/raid/common/character");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 
 const FILTER_ALL_RAIDS = "__all_raids__";
@@ -20,7 +21,11 @@ function buildRaidDropdownState(accounts, getRaidsFor) {
     for (const ch of account.characters || []) {
       const charIsSupport = isSupportClass(ch?.class);
       for (const raid of getRaidsFor(ch)) {
-        if (!isGoldProgressRaid(raid)) continue;
+        const countsTowardTotal = isCountedRaidProgress(raid);
+        // Solo stays discoverable in the raid dropdown even though the
+        // all-raids headline and roster counters intentionally exclude it.
+        // Other non-counted raids retain the existing hidden behavior.
+        if (!countsTowardTotal && !isSoloModeKey(raid?.modeKey)) continue;
         const key = `${raid.raidKey}:${raid.modeKey}`;
         let entry = raidAggregate.get(key);
         if (!entry) {
@@ -36,6 +41,7 @@ function buildRaidDropdownState(accounts, getRaidsFor) {
             pending: 0,
             supports: 0,
             dps: 0,
+            countsTowardTotal,
           };
           raidAggregate.set(key, entry);
         }
@@ -54,7 +60,7 @@ function buildRaidDropdownState(accounts, getRaidsFor) {
   // shuffled raids by backlog, which split a raid's modes apart.
   const raidDropdownEntries = [...raidAggregate.values()].sort(compareRaidModeOrder);
   const totalRaidPending = raidDropdownEntries.reduce(
-    (sum, r) => sum + r.pending,
+    (sum, r) => sum + (r.countsTowardTotal ? r.pending : 0),
     0
   );
 
@@ -129,9 +135,9 @@ function getStatusRosterRaidState({ account, raidFilter = null, getRaidsFor }) {
     for (const raid of raids) {
       if (raidFilter && `${raid.raidKey}:${raid.modeKey}` !== raidFilter) continue;
       displayMatches += 1;
-      // Non-gold raids remain selectable because the raid page renders them,
-      // while roster counters stay aligned with /raid-status progress totals.
-      if (!isGoldProgressRaid(raid)) continue;
+      // Detail-only raids remain renderable when selected, while roster
+      // counters stay aligned with the headline /raid-status progress totals.
+      if (!isCountedRaidProgress(raid)) continue;
       if (raid?.isCompleted === true) success += 1;
       else pending += 1;
     }
