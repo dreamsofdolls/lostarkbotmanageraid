@@ -4,7 +4,9 @@ const assert = require("node:assert/strict");
 const {
   _test: {
     resolveRaidChannelWritePlans,
+    resolveRaidChannelWriteBatch,
     applyRaidChannelWritePlans,
+    applyRaidChannelUpdatePlans,
     buildWritePlanSegments,
   },
 } = require("../bot/services/raid/channel-monitor/channel-monitor");
@@ -80,6 +82,25 @@ test("resolveRaidChannelWritePlans loads accessible accounts once and routes sha
   );
 });
 
+test("resolveRaidChannelWriteBatch reports every missing character before writes", async () => {
+  const batch = await resolveRaidChannelWriteBatch({
+    authorId: "viewer-1",
+    charNames: ["OwnOne", "MissingOne", "MissingTwo"],
+    logger: silentLogger,
+    getAccessibleAccounts: async () => [{
+      ownerDiscordId: "viewer-1",
+      accountName: "ViewerRoster",
+      isOwn: true,
+      accessLevel: "edit",
+      account: { characters: [{ charName: "OwnOne" }] },
+    }],
+  });
+
+  assert.equal(batch.lookupFailed, false);
+  assert.equal(batch.noAccessibleRoster, false);
+  assert.deepEqual(batch.missingCharNames, ["MissingOne", "MissingTwo"]);
+});
+
 test("applyRaidChannelWritePlans batches consecutive writes by target owner", async () => {
   const plans = [
     { index: 0, charName: "OwnOne", discordId: "viewer-1", executorId: null, rosterName: null },
@@ -146,6 +167,46 @@ test("applyRaidChannelWritePlans batches consecutive writes by target owner", as
       { charName: "SharedOne", displayName: "SharedOne", updated: true },
       { charName: "SharedTwo", displayName: "SharedTwo", updated: true },
     ],
+  );
+});
+
+test("applyRaidChannelUpdatePlans writes the raid-by-character product in one owner batch", async () => {
+  const plans = [
+    { index: 0, charName: "OwnOne", discordId: "viewer-1", executorId: null, rosterName: null },
+    { index: 1, charName: "OwnTwo", discordId: "viewer-1", executorId: null, rosterName: null },
+  ];
+  const updates = [
+    { raidMeta: { ...raidMeta, raidKey: "armoche", label: "Act 4 Hard" }, statusType: "complete", effectiveGates: [] },
+    { raidMeta, statusType: "complete", effectiveGates: [] },
+  ];
+  const batchCalls = [];
+
+  const groups = await applyRaidChannelUpdatePlans({
+    plans,
+    updates,
+    logger: silentLogger,
+    applyRaidSetForDiscordId: async () => {
+      throw new Error("single path should not run");
+    },
+    applyRaidSetBatchForDiscordId: async (args) => {
+      batchCalls.push(args);
+      return args.entries.map((entry) => ({
+        matched: true,
+        updated: true,
+        displayName: entry.characterName,
+      }));
+    },
+  });
+
+  assert.equal(batchCalls.length, 1);
+  assert.deepEqual(
+    batchCalls[0].entries.map((entry) => `${entry.characterName}:${entry.raidMeta.raidKey}`),
+    ["OwnOne:armoche", "OwnOne:kazeros", "OwnTwo:armoche", "OwnTwo:kazeros"]
+  );
+  assert.deepEqual(groups.map((group) => group.raidMeta.raidKey), ["armoche", "kazeros"]);
+  assert.deepEqual(
+    groups.map((group) => group.results.map((result) => result.displayName)),
+    [["OwnOne", "OwnTwo"], ["OwnOne", "OwnTwo"]]
   );
 });
 

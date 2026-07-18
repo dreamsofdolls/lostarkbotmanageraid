@@ -265,6 +265,17 @@ test("raid-help documents Solo text, raid-set, status totals, and raid-check vis
   }
 });
 
+test("raid-help documents multi-raid text and the Final alias in every locale", async () => {
+  const factory = makeFactory();
+  for (const lang of ["vi", "en", "jp"]) {
+    const interaction = makeSelectInteraction("raid-channel", { lang });
+    await factory.handleRaidHelpSelect(interaction);
+    const allFields = getAllFieldValues(interaction._calls.update[0].embeds[0].toJSON());
+    assert.match(allFields, /act4.*final/i, `${lang}/raid-channel should show multi-raid syntax`);
+    assert.match(allFields, /kazeros\/kaz\/final/i, `${lang}/raid-channel should list Final alias`);
+  }
+});
+
 test("detail embed: every field value stays within Discord's 1024-char limit", async () => {
   // Regression guard against an overlong notes string crashing render.
   // splitHelpFieldValue is supposed to chunk; this asserts that

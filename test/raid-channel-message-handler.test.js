@@ -106,6 +106,13 @@ test("raid-channel message handler carries reset intent through write and DM ren
       },
     },
     getRaidLabel: () => "Act 4",
+    getAccessibleAccounts: async () => [{
+      ownerDiscordId: "user-1",
+      accountName: "Main",
+      isOwn: true,
+      accessLevel: "edit",
+      account: { characters: [{ charName: "Qiylyn" }] },
+    }],
     parseRaidMessage: () => ({
       raidKey: "armoche",
       modeKey: null,
@@ -149,4 +156,139 @@ test("raid-channel message handler carries reset intent through write and DM ren
   assert.equal(rendered[0].statusType, "reset");
   assert.equal(publicMessages.length, 1);
   assert.match(publicMessages[0].content, /đã reset toàn bộ progress/i);
+});
+
+test("raid-channel message handler rejects all writes when any character is unknown", async () => {
+  let writeCalls = 0;
+  const hints = [];
+  const { handler } = makeHandler({
+    RAID_REQUIREMENT_MAP: {
+      armoche_hard: { raidKey: "armoche", modeKey: "hard", label: "Act 4 Hard", minItemLevel: 0 },
+      kazeros_hard: { raidKey: "kazeros", modeKey: "hard", label: "Kazeros Hard", minItemLevel: 0 },
+    },
+    UI: { icons: { info: "i", warn: "warn" } },
+    parseRaidMessage: () => ({
+      raidKeys: ["armoche", "kazeros"],
+      modeKey: "hard",
+      charNames: ["abc1", "missing"],
+      gate: null,
+    }),
+    getAccessibleAccounts: async () => [{
+      ownerDiscordId: "user-1",
+      accountName: "Main",
+      isOwn: true,
+      accessLevel: "edit",
+      account: { characters: [{ charName: "abc1" }] },
+    }],
+    applyRaidSetForDiscordId: async () => {
+      writeCalls += 1;
+      return { matched: true, updated: true };
+    },
+    applyRaidSetBatchForDiscordId: async () => {
+      writeCalls += 1;
+      return [];
+    },
+    postPersistentHint: async (_message, content) => hints.push(content),
+  });
+
+  await handler.handleRaidChannelMessage(makeMessage({
+    content: "act4 kazeros hm abc1 missing",
+  }));
+
+  assert.equal(writeCalls, 0);
+  assert.deepEqual(hints, ["text-parser.errorNotFound\ntext-parser.errorRetryNote"]);
+});
+
+test("raid-channel message handler fails closed when character preflight cannot load", async () => {
+  let writeCalls = 0;
+  const hints = [];
+  const { handler } = makeHandler({
+    RAID_REQUIREMENT_MAP: {
+      armoche_hard: { raidKey: "armoche", modeKey: "hard", label: "Act 4 Hard", minItemLevel: 0 },
+    },
+    UI: { icons: { info: "i", warn: "warn" } },
+    parseRaidMessage: () => ({
+      raidKeys: ["armoche"],
+      modeKey: "hard",
+      charNames: ["abc1"],
+      gate: null,
+    }),
+    getAccessibleAccounts: async () => {
+      throw new Error("mongo unavailable");
+    },
+    applyRaidSetForDiscordId: async () => {
+      writeCalls += 1;
+      return { matched: true, updated: true };
+    },
+    postPersistentHint: async (_message, content) => hints.push(content),
+  });
+
+  await handler.handleRaidChannelMessage(makeMessage({ content: "act4 hm abc1" }));
+
+  assert.equal(writeCalls, 0);
+  assert.deepEqual(hints, ["text-parser.errorSystem\ntext-parser.errorRetryNote"]);
+});
+
+test("raid-channel message handler batches every raid-character pair and DMs one embed per raid", async () => {
+  const batchCalls = [];
+  const dmPayloads = [];
+  const rendered = [];
+  const { handler } = makeHandler({
+    GuildConfig: {
+      findOne: () => ({
+        select: () => ({
+          lean: async () => ({ announcements: { whisperAck: { enabled: false } } }),
+        }),
+      }),
+    },
+    RAID_REQUIREMENT_MAP: {
+      armoche_hard: { raidKey: "armoche", modeKey: "hard", label: "Act 4 Hard", minItemLevel: 0 },
+      kazeros_hard: { raidKey: "kazeros", modeKey: "hard", label: "Kazeros Hard", minItemLevel: 0 },
+    },
+    parseRaidMessage: () => ({
+      raidKeys: ["armoche", "kazeros"],
+      raidDisplayNames: { kazeros: "Final" },
+      modeKey: "hard",
+      charNames: ["abc1", "abc2"],
+      gate: null,
+    }),
+    getAccessibleAccounts: async () => [{
+      ownerDiscordId: "user-1",
+      accountName: "Main",
+      isOwn: true,
+      accessLevel: "edit",
+      account: { characters: [{ charName: "abc1" }, { charName: "abc2" }] },
+    }],
+    applyRaidSetBatchForDiscordId: async (args) => {
+      batchCalls.push(args);
+      return args.entries.map((entry) => ({
+        matched: true,
+        updated: true,
+        displayName: entry.characterName,
+      }));
+    },
+    buildRaidChannelMultiResultEmbed: (args) => {
+      rendered.push(args);
+      return { data: { title: args.raidMeta.label } };
+    },
+  });
+
+  await handler.handleRaidChannelMessage(makeMessage({
+    content: "act4 final hm abc1 abc2",
+    author: {
+      id: "user-1",
+      bot: false,
+      send: async (payload) => dmPayloads.push(payload),
+    },
+  }));
+
+  assert.equal(batchCalls.length, 1);
+  assert.deepEqual(
+    batchCalls[0].entries.map((entry) => `${entry.characterName}:${entry.raidMeta.raidKey}`),
+    ["abc1:armoche", "abc1:kazeros", "abc2:armoche", "abc2:kazeros"]
+  );
+  assert.deepEqual(rendered.map((entry) => entry.raidMeta.raidKey), ["armoche", "kazeros"]);
+  assert.deepEqual(rendered.map((entry) => entry.raidMeta.label), ["Act 4 Hard", "Final Hard"]);
+  assert.equal(dmPayloads.length, 1);
+  assert.equal(dmPayloads[0].embeds.length, 2);
 });
