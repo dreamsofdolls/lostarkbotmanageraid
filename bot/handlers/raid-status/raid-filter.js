@@ -6,7 +6,11 @@
  */
 
 const { isSupportClass } = require("../../models/Class");
-const { compareRaidModeOrder, isSoloModeKey } = require("../../models/Raid");
+const {
+  areEquivalentRaidModes,
+  compareRaidModeOrder,
+  isSoloModeKey,
+} = require("../../models/Raid");
 const { t } = require("../../services/i18n");
 const { isCountedRaidProgress } = require("../../utils/raid/common/character");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
@@ -15,18 +19,50 @@ const FILTER_ALL_RAIDS = "__all_raids__";
 const FILTER_ALL_ROSTERS = "__all_rosters__";
 const FILTER_NO_ROSTERS = "__no_rosters__";
 
+// Normal and Solo share one lockout/progress tier. Once a character queues a
+// lateral Normal <-> Solo switch after clearing, the status filter should
+// follow that chosen identity immediately; otherwise the dropdown exposes the
+// old mode as a ghost option while the character is already presented as
+// moving to the equivalent target. Real tier changes (Normal -> Hard, etc.)
+// remain on the current mode until weekly reset because their progress is not
+// interchangeable.
+function getRaidFilterModeKey(raid) {
+  const modeKey = raid?.modeKey;
+  const pendingModeKey = raid?.pendingModeKey;
+  if (
+    pendingModeKey &&
+    pendingModeKey !== modeKey &&
+    areEquivalentRaidModes(modeKey, pendingModeKey)
+  ) {
+    return pendingModeKey;
+  }
+  return modeKey;
+}
+
+function getRaidFilterKey(raid) {
+  return `${raid?.raidKey}:${getRaidFilterModeKey(raid)}`;
+}
+
+function isCountedRaidFilterProgress(raid) {
+  const modeKey = getRaidFilterModeKey(raid);
+  return isCountedRaidProgress(
+    modeKey === raid?.modeKey ? raid : { ...raid, modeKey }
+  );
+}
+
 function buildRaidDropdownState(accounts, getRaidsFor) {
   const raidAggregate = new Map();
   for (const account of accounts || []) {
     for (const ch of account.characters || []) {
       const charIsSupport = isSupportClass(ch?.class);
       for (const raid of getRaidsFor(ch)) {
-        const countsTowardTotal = isCountedRaidProgress(raid);
+        const modeKey = getRaidFilterModeKey(raid);
+        const countsTowardTotal = isCountedRaidFilterProgress(raid);
         // Solo stays discoverable in the raid dropdown even though the
         // all-raids headline and roster counters intentionally exclude it.
         // Other non-counted raids retain the existing hidden behavior.
-        if (!countsTowardTotal && !isSoloModeKey(raid?.modeKey)) continue;
-        const key = `${raid.raidKey}:${raid.modeKey}`;
+        if (!countsTowardTotal && !isSoloModeKey(modeKey)) continue;
+        const key = getRaidFilterKey(raid);
         let entry = raidAggregate.get(key);
         if (!entry) {
           entry = {
@@ -35,9 +71,9 @@ function buildRaidDropdownState(accounts, getRaidsFor) {
             // Render-time labels come from getRaidModeLabel(raidKey,
             // modeKey, lang) in buildRaidFilterRow; ordering is by
             // raidKey/modeKey via compareRaidModeOrder below.
-            label: raid.raidName,
+            label: getRaidModeLabel(raid.raidKey, modeKey, "en") || raid.raidName,
             raidKey: raid.raidKey,
-            modeKey: raid.modeKey,
+            modeKey,
             pending: 0,
             supports: 0,
             dps: 0,
@@ -133,11 +169,11 @@ function getStatusRosterRaidState({ account, raidFilter = null, getRaidsFor }) {
   for (const character of characters) {
     const raids = typeof getRaidsFor === "function" ? getRaidsFor(character) || [] : [];
     for (const raid of raids) {
-      if (raidFilter && `${raid.raidKey}:${raid.modeKey}` !== raidFilter) continue;
+      if (raidFilter && getRaidFilterKey(raid) !== raidFilter) continue;
       displayMatches += 1;
       // Detail-only raids remain renderable when selected, while roster
       // counters stay aligned with the headline /raid-status progress totals.
-      if (!isCountedRaidProgress(raid)) continue;
+      if (!isCountedRaidFilterProgress(raid)) continue;
       if (raid?.isCompleted === true) success += 1;
       else pending += 1;
     }
@@ -247,5 +283,8 @@ module.exports = {
   buildRaidFilterRow,
   buildStatusRosterFilterEntries,
   buildStatusRosterFilterRow,
+  getRaidFilterKey,
+  getRaidFilterModeKey,
   getStatusRosterRaidState,
+  isCountedRaidFilterProgress,
 };

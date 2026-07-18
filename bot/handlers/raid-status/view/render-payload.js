@@ -1,7 +1,10 @@
 "use strict";
 
 const { loadBackgroundBuffer } = require("../../../services/raid-card/bg-loader");
-const { isCountedRaidProgress } = require("../../../utils/raid/common/character");
+const {
+  getRaidFilterKey,
+  isCountedRaidFilterProgress,
+} = require("../raid-filter");
 const { resolveBackgroundLookup } = require("./accounts");
 
 function createRaidStatusRenderPayload({
@@ -50,17 +53,18 @@ function createRaidStatusRenderPayload({
       return buildGoldViewEmbed(accounts[currentPage]);
     }
 
-    const getProgressRaidsFor = (ch) => baseGetRaidsFor(ch).filter(isCountedRaidProgress);
+    const getProgressRaidsFor = (ch) =>
+      baseGetRaidsFor(ch).filter(isCountedRaidFilterProgress);
     const getDisplayRaidsFor = filterRaidId
       ? (ch) =>
           baseGetRaidsFor(ch).filter(
-            (r) => `${r.raidKey}:${r.modeKey}` === filterRaidId
+            (r) => getRaidFilterKey(r) === filterRaidId
           )
       : baseGetRaidsFor;
     const getCountRaidsFor = filterRaidId
       ? (ch) =>
           getProgressRaidsFor(ch).filter(
-            (r) => `${r.raidKey}:${r.modeKey}` === filterRaidId
+            (r) => getRaidFilterKey(r) === filterRaidId
           )
       : getProgressRaidsFor;
 
