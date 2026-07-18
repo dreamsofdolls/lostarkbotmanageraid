@@ -32,24 +32,28 @@ function findAccessibleCharacterInAccounts(accessibleAccounts, charName) {
   return null;
 }
 
-async function resolveRaidChannelWritePlans({
+async function resolveRaidChannelWriteBatch({
   authorId,
   charNames,
   getAccessibleAccounts = defaultGetAccessibleAccounts,
   logger = console,
 }) {
   let accessibleAccounts = null;
+  let lookupFailed = false;
   try {
     accessibleAccounts = await getAccessibleAccounts(authorId);
   } catch (lookupErr) {
+    lookupFailed = true;
     logger.warn?.(
       `[raid-channel] getAccessibleAccounts failed for author ${authorId}:`,
       lookupErr?.message || lookupErr,
     );
   }
 
-  return (Array.isArray(charNames) ? charNames : []).map((charName, index) => {
+  const missingCharNames = [];
+  const plans = (Array.isArray(charNames) ? charNames : []).map((charName, index) => {
     const hit = findAccessibleCharacterInAccounts(accessibleAccounts, charName);
+    if (!hit && !lookupFailed) missingCharNames.push(charName);
     const plan = {
       index,
       charName,
@@ -64,6 +68,19 @@ async function resolveRaidChannelWritePlans({
     }
     return plan;
   });
+
+  return {
+    plans,
+    missingCharNames,
+    lookupFailed,
+    noAccessibleRoster:
+      !lookupFailed && (!Array.isArray(accessibleAccounts) || accessibleAccounts.length === 0),
+  };
+}
+
+async function resolveRaidChannelWritePlans(options) {
+  const batch = await resolveRaidChannelWriteBatch(options);
+  return batch.plans;
 }
 
 function getWritePlanSegmentKey(plan) {
@@ -93,22 +110,61 @@ async function applyRaidChannelWritePlans({
   applyRaidSetBatchForDiscordId = null,
   logger = console,
 }) {
-  const list = Array.isArray(plans) ? plans : [];
-  const results = new Array(list.length);
+  const updateGroups = await applyRaidChannelUpdatePlans({
+    plans,
+    updates: [{ raidMeta, statusType, effectiveGates }],
+    applyRaidSetForDiscordId,
+    applyRaidSetBatchForDiscordId,
+    logger,
+  });
+  return updateGroups[0]?.results || [];
+}
 
-  const assignResult = (plan, result) => {
-    results[plan.index] = { charName: plan.charName, ...result };
-    if (plan.executorId) {
+async function applyRaidChannelUpdatePlans({
+  plans,
+  updates,
+  applyRaidSetForDiscordId,
+  applyRaidSetBatchForDiscordId = null,
+  logger = console,
+}) {
+  const list = Array.isArray(plans) ? plans : [];
+  const updateList = Array.isArray(updates) ? updates.filter((update) => update?.raidMeta) : [];
+  if (list.length === 0 || updateList.length === 0) return [];
+
+  const resultsByUpdate = updateList.map(() => new Array(list.length));
+  const operations = [];
+  list.forEach((plan, charIndex) => {
+    updateList.forEach((update, updateIndex) => {
+      operations.push({
+        ...plan,
+        charIndex,
+        updateIndex,
+        raidMeta: update.raidMeta,
+        statusType: update.statusType,
+        effectiveGates: update.effectiveGates,
+      });
+    });
+  });
+
+  const assignResult = (operation, result) => {
+    resultsByUpdate[operation.updateIndex][operation.charIndex] = {
+      charName: operation.charName,
+      ...result,
+    };
+    if (operation.executorId) {
       logger.log?.(
-        `[raid-channel] share-write executor=${plan.executorId} owner=${plan.discordId} char=${plan.charName} raid=${raidMeta.raidKey}_${raidMeta.modeKey}`,
+        `[raid-channel] share-write executor=${operation.executorId} owner=${operation.discordId} char=${operation.charName} raid=${operation.raidMeta.raidKey}_${operation.raidMeta.modeKey}`,
       );
     }
   };
 
-  const assignError = (plan, err) => {
-    logger.error?.(`[raid-channel] write for "${plan.charName}" failed:`, err?.message || err);
-    results[plan.index] = {
-      charName: plan.charName,
+  const assignError = (operation, err) => {
+    logger.error?.(
+      `[raid-channel] write for "${operation.charName}" (${operation.raidMeta.raidKey}_${operation.raidMeta.modeKey}) failed:`,
+      err?.message || err,
+    );
+    resultsByUpdate[operation.updateIndex][operation.charIndex] = {
+      charName: operation.charName,
       error: err?.message || String(err),
       matched: false,
       updated: false,
@@ -116,67 +172,74 @@ async function applyRaidChannelWritePlans({
     };
   };
 
-  const runSingle = async (plan) => {
+  const runSingle = async (operation) => {
     try {
       const result = await applyRaidSetForDiscordId({
-        discordId: plan.discordId,
-        executorId: plan.executorId,
-        characterName: plan.charName,
-        rosterName: plan.rosterName,
-        raidMeta,
-        statusType,
-        effectiveGates,
+        discordId: operation.discordId,
+        executorId: operation.executorId,
+        characterName: operation.charName,
+        rosterName: operation.rosterName,
+        raidMeta: operation.raidMeta,
+        statusType: operation.statusType,
+        effectiveGates: operation.effectiveGates,
       });
-      assignResult(plan, result);
+      assignResult(operation, result);
     } catch (err) {
-      assignError(plan, err);
+      assignError(operation, err);
     }
   };
 
-  for (const segment of buildWritePlanSegments(list)) {
-    const segmentPlans = segment.plans;
+  for (const segment of buildWritePlanSegments(operations)) {
+    const segmentOperations = segment.plans;
     if (
-      segmentPlans.length > 1 &&
+      segmentOperations.length > 1 &&
       typeof applyRaidSetBatchForDiscordId === "function"
     ) {
       try {
         const batchResults = await applyRaidSetBatchForDiscordId({
-          discordId: segmentPlans[0].discordId,
-          entries: segmentPlans.map((plan) => ({
-            executorId: plan.executorId,
-            characterName: plan.charName,
-            rosterName: plan.rosterName,
-            raidMeta,
-            statusType,
-            effectiveGates,
+          discordId: segmentOperations[0].discordId,
+          entries: segmentOperations.map((operation) => ({
+            executorId: operation.executorId,
+            characterName: operation.charName,
+            rosterName: operation.rosterName,
+            raidMeta: operation.raidMeta,
+            statusType: operation.statusType,
+            effectiveGates: operation.effectiveGates,
           })),
         });
-        for (let i = 0; i < segmentPlans.length; i += 1) {
-          assignResult(segmentPlans[i], batchResults?.[i] || {});
+        for (let i = 0; i < segmentOperations.length; i += 1) {
+          assignResult(segmentOperations[i], batchResults?.[i] || {});
         }
       } catch (err) {
-        for (const plan of segmentPlans) {
-          assignError(plan, err);
+        for (const operation of segmentOperations) {
+          assignError(operation, err);
         }
       }
     } else {
-      for (const plan of segmentPlans) {
-        await runSingle(plan);
+      for (const operation of segmentOperations) {
+        await runSingle(operation);
       }
     }
 
-    if (segmentPlans.some((plan) => results[plan.index]?.noRoster)) {
+    if (segmentOperations.some(
+      (operation) => resultsByUpdate[operation.updateIndex][operation.charIndex]?.noRoster
+    )) {
       break;
     }
   }
 
-  return results.filter(Boolean);
+  return updateList.map((update, updateIndex) => ({
+    ...update,
+    results: resultsByUpdate[updateIndex].filter(Boolean),
+  }));
 }
 
 module.exports = {
   applyRaidChannelWritePlans,
+  applyRaidChannelUpdatePlans,
   buildWritePlanSegments,
   findAccessibleCharacterInAccounts,
   getAccessibleCharacterCandidates,
+  resolveRaidChannelWriteBatch,
   resolveRaidChannelWritePlans,
 };

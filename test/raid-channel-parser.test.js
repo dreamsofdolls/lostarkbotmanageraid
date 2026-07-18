@@ -83,11 +83,36 @@ test("raid-channel parser accepts Solo in English and Japanese", () => {
   });
 });
 
-test("raid-channel parser returns explicit ambiguity errors", () => {
+test("raid-channel parser accepts any number of raids before the difficulty", () => {
   assert.deepEqual(parseRaidMessage("kaz serca hard Qiylyn"), {
-    error: "multi-raid",
-    raids: ["kazeros", "serca"],
+    raidKeys: ["kazeros", "serca"],
+    modeKey: "hard",
+    charNames: ["qiylyn"],
+    gate: null,
   });
+  assert.deepEqual(parseRaidMessage("act4, kazeros hm abc1,abc2"), {
+    raidKeys: ["armoche", "kazeros"],
+    modeKey: "hard",
+    charNames: ["abc1", "abc2"],
+    gate: null,
+  });
+  assert.deepEqual(parseRaidMessage("act4 final hm abc1 abc2"), {
+    raidKeys: ["armoche", "kazeros"],
+    raidDisplayNames: { kazeros: "Final" },
+    modeKey: "hard",
+    charNames: ["abc1", "abc2"],
+    gate: null,
+  });
+  assert.deepEqual(parseRaidMessage("final hm abc1"), {
+    raidKey: "kazeros",
+    raidDisplayNames: { kazeros: "Final" },
+    modeKey: "hard",
+    charNames: ["abc1"],
+    gate: null,
+  });
+});
+
+test("raid-channel parser returns explicit ambiguity and ordering errors", () => {
   assert.deepEqual(parseRaidMessage("kaz hard normal Qiylyn"), {
     error: "multi-difficulty",
     difficulties: ["hard", "normal"],
@@ -95,5 +120,27 @@ test("raid-channel parser returns explicit ambiguity errors", () => {
   assert.deepEqual(parseRaidMessage("kaz hard Qiylyn G1 G2"), {
     error: "multi-gate",
     gates: ["G1", "G2"],
+  });
+  assert.deepEqual(parseRaidMessage("act4 kazro hard Qiylyn"), {
+    error: "invalid-raid",
+    raids: ["kazro"],
+  });
+  assert.deepEqual(parseRaidMessage("kazro hard Qiylyn"), {
+    error: "invalid-raid",
+    raids: ["kazro"],
+  });
+  assert.deepEqual(parseRaidMessage("act4 hard kazeros Qiylyn"), {
+    error: "raid-after-mode",
+    raids: ["kazeros"],
+  });
+});
+
+test("raid-channel parser supports multi-raid reset", () => {
+  assert.deepEqual(parseRaidMessage("act4, kazeros rs Qiylyn Morrah"), {
+    raidKeys: ["armoche", "kazeros"],
+    modeKey: null,
+    action: "reset",
+    charNames: ["qiylyn", "morrah"],
+    gate: null,
   });
 });

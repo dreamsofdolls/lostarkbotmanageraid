@@ -2,8 +2,10 @@
 
 const {
   applyRaidChannelWritePlans,
+  applyRaidChannelUpdatePlans,
   buildWritePlanSegments,
   findAccessibleCharacterInAccounts,
+  resolveRaidChannelWriteBatch,
   resolveRaidChannelWritePlans,
 } = require("./channel-monitor-write-plans");
 const { createMonitorChannelCache } = require("./channel-monitor-cache");
@@ -108,8 +110,10 @@ module.exports = {
   createRaidChannelMonitorService,
   _test: {
     findAccessibleCharacterInAccounts,
+    resolveRaidChannelWriteBatch,
     resolveRaidChannelWritePlans,
     applyRaidChannelWritePlans,
+    applyRaidChannelUpdatePlans,
     buildWritePlanSegments,
   },
 };

@@ -12,6 +12,7 @@ const RAID_ALIASES = new Map([
   ["act4", "armoche"],
   ["kazeros", "kazeros"],
   ["kaz", "kazeros"],
+  ["final", "kazeros"],
   ["serca", "serca"],
   ["secra", "serca"],
   ["horizon", "horizon"],
@@ -77,15 +78,42 @@ function parseRaidMessage(content) {
   const tokens = normalized.toLowerCase().split(" ").filter(Boolean);
   if (tokens.length < 3) return null;
 
+  const directiveIndex = tokens.findIndex(
+    (tok) => DIFFICULTY_ALIASES.has(tok) || ACTION_ALIASES.has(tok)
+  );
+  if (directiveIndex <= 0) return null;
+
   const raidSet = new Set();
   const diffSet = new Set();
   const gateSet = new Set();
   const actionSet = new Set();
   const leftover = [];
+  const invalidRaids = [];
+  const lateRaids = [];
+  const raidDisplayNames = {};
 
-  for (const tok of tokens) {
+  for (const tok of tokens.slice(0, directiveIndex)) {
+    const raidKey = RAID_ALIASES.get(tok);
+    if (raidKey) {
+      raidSet.add(raidKey);
+      if (tok === "final") raidDisplayNames[raidKey] = "Final";
+    } else {
+      invalidRaids.push(tok);
+    }
+  }
+
+  if (invalidRaids.length > 0 || raidSet.size === 0) {
+    return {
+      error: "invalid-raid",
+      raids: [...new Set(invalidRaids.length > 0
+        ? invalidRaids
+        : tokens.slice(0, directiveIndex))],
+    };
+  }
+
+  for (const tok of tokens.slice(directiveIndex)) {
     if (RAID_ALIASES.has(tok)) {
-      raidSet.add(RAID_ALIASES.get(tok));
+      lateRaids.push(tok);
       continue;
     }
     if (DIFFICULTY_ALIASES.has(tok)) {
@@ -104,9 +132,10 @@ function parseRaidMessage(content) {
     leftover.push(tok);
   }
 
-  if (raidSet.size === 0) return null;
   if (leftover.length === 0) return null;
-  if (raidSet.size > 1) return { error: "multi-raid", raids: [...raidSet] };
+  if (lateRaids.length > 0) {
+    return { error: "raid-after-mode", raids: [...new Set(lateRaids)] };
+  }
   if (diffSet.size > 1) return { error: "multi-difficulty", difficulties: [...diffSet] };
   if (gateSet.size > 1) return { error: "multi-gate", gates: [...gateSet] };
 
@@ -118,8 +147,10 @@ function parseRaidMessage(content) {
     return null;
   }
 
+  const raidKeys = [...raidSet];
   return {
-    raidKey: [...raidSet][0],
+    ...(raidKeys.length === 1 ? { raidKey: raidKeys[0] } : { raidKeys }),
+    ...(Object.keys(raidDisplayNames).length > 0 ? { raidDisplayNames } : {}),
     modeKey: [...diffSet][0] || null,
     ...(action ? { action } : {}),
     charNames: [...new Set(leftover.filter(Boolean))],

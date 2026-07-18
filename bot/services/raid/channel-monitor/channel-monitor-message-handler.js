@@ -1,8 +1,8 @@
 "use strict";
 
 const {
-  applyRaidChannelWritePlans,
-  resolveRaidChannelWritePlans,
+  applyRaidChannelUpdatePlans,
+  resolveRaidChannelWriteBatch,
 } = require("./channel-monitor-write-plans");
 const { resolveParsedRaidUpdate } = require("./channel-monitor-parse-validation");
 const {
@@ -82,10 +82,14 @@ function createRaidChannelMessageHandler({
     }
   }
 
-  async function sendAggregateDm(message, aggregateEmbed, resultSummary) {
+  async function sendAggregateDm(message, aggregateEmbeds, resultSummary) {
     if (!resultSummary.hasProgress && !resultSummary.hasErrors) return false;
+    const embeds = Array.isArray(aggregateEmbeds) ? aggregateEmbeds.filter(Boolean) : [];
+    if (embeds.length === 0) return false;
     try {
-      await message.author.send({ embeds: [aggregateEmbed] });
+      for (let index = 0; index < embeds.length; index += 10) {
+        await message.author.send({ embeds: embeds.slice(index, index + 10) });
+      }
       return true;
     } catch (err) {
       console.warn(
@@ -192,23 +196,64 @@ function createRaidChannelMessageHandler({
       return;
     }
 
-    const { raidMeta, charNames, statusType, effectiveGates } = resolvedUpdate;
-    const writePlans = await resolveRaidChannelWritePlans({
+    const updates = Array.isArray(resolvedUpdate.updates)
+      ? resolvedUpdate.updates
+      : [{
+        raidMeta: resolvedUpdate.raidMeta,
+        statusType: resolvedUpdate.statusType,
+        effectiveGates: resolvedUpdate.effectiveGates,
+      }];
+    const { charNames } = resolvedUpdate;
+    const writeBatch = await resolveRaidChannelWriteBatch({
       authorId: message.author.id,
       charNames,
       getAccessibleAccounts,
       logger: console,
     });
-    const results = await applyRaidChannelWritePlans({
-      plans: writePlans,
-      raidMeta,
-      statusType,
-      effectiveGates,
+    if (writeBatch.lookupFailed) {
+      await postPersistentHint(
+        message,
+        [
+          t("text-parser.errorSystem", authorLang, {
+            icon: UI.icons.warn,
+            names: charNames.map((name) => `\`${name}\``).join(", "),
+          }),
+          t("text-parser.errorRetryNote", authorLang),
+        ].join("\n")
+      );
+      return;
+    }
+    if (writeBatch.noAccessibleRoster) {
+      await postPersistentHint(
+        message,
+        t("text-parser.noRoster", authorLang, { icon: UI.icons.info })
+      );
+      return;
+    }
+    if (writeBatch.missingCharNames.length > 0) {
+      await postPersistentHint(
+        message,
+        [
+          t("text-parser.errorNotFound", authorLang, {
+            icon: UI.icons.warn,
+            names: writeBatch.missingCharNames.map((name) => `\`${name}\``).join(", "),
+          }),
+          t("text-parser.errorRetryNote", authorLang),
+        ].join("\n")
+      );
+      return;
+    }
+
+    const resultGroups = await applyRaidChannelUpdatePlans({
+      plans: writeBatch.plans,
+      updates,
       applyRaidSetForDiscordId,
       applyRaidSetBatchForDiscordId,
       logger: console,
     });
-    const resultSummary = summarizeRaidChannelResults(results);
+    const resultSummary = summarizeRaidChannelResults(
+      resultGroups.flatMap((group) => group.results)
+    );
     if (resultSummary.hadNoRoster) {
       await postPersistentHint(
         message,
@@ -217,24 +262,28 @@ function createRaidChannelMessageHandler({
       return;
     }
 
-    const aggregateEmbed = buildRaidChannelMultiResultEmbed({
-      results,
-      raidMeta,
-      gates: effectiveGates,
-      statusType,
-      guildName: message.guild?.name,
-      lang: authorLang,
-    });
-    const dmSucceeded = await sendAggregateDm(message, aggregateEmbed, resultSummary);
+    const aggregateEmbeds = resultGroups.map((group) =>
+      buildRaidChannelMultiResultEmbed({
+        results: group.results,
+        raidMeta: group.raidMeta,
+        gates: group.effectiveGates,
+        statusType: group.statusType,
+        guildName: message.guild?.name,
+        lang: authorLang,
+      })
+    );
+    const dmSucceeded = await sendAggregateDm(message, aggregateEmbeds, resultSummary);
     const ops = [];
-    const errorHint = buildRaidChannelErrorHint({
-      summary: resultSummary,
-      raidMeta,
-      authorLang,
-      UI,
-    });
-    if (errorHint) {
-      ops.push(postPersistentHint(message, errorHint));
+    const errorHints = resultGroups
+      .map((group) => buildRaidChannelErrorHint({
+        summary: summarizeRaidChannelResults(group.results),
+        raidMeta: group.raidMeta,
+        authorLang,
+        UI,
+      }))
+      .filter(Boolean);
+    if (errorHints.length > 0) {
+      ops.push(postPersistentHint(message, errorHints.join("\n")));
     }
 
     if (resultSummary.hasProgress) {
@@ -246,15 +295,19 @@ function createRaidChannelMessageHandler({
     }
 
     if (resultSummary.hasProgress && !dmSucceeded) {
-      enqueueDmFallback({
-        ops,
-        message,
-        results,
-        raidMeta,
-        effectiveGates,
-        statusType,
-        authorLang,
-      });
+      for (const group of resultGroups) {
+        const groupSummary = summarizeRaidChannelResults(group.results);
+        if (!groupSummary.hasProgress) continue;
+        enqueueDmFallback({
+          ops,
+          message,
+          results: group.results,
+          raidMeta: group.raidMeta,
+          effectiveGates: group.effectiveGates,
+          statusType: group.statusType,
+          authorLang,
+        });
+      }
     }
     await Promise.allSettled(ops);
   }

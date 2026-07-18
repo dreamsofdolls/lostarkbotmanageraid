@@ -78,4 +78,11 @@ for (const localeCode of Object.keys(TRANSLATIONS)) {
     assert.match(Array.isArray(examples) ? examples.join("\n") : String(examples || ""), /act4 solo/i);
     assert.match(Array.isArray(aliases) ? aliases.join("\n") : String(aliases || ""), /solo/i);
   });
+
+  test(`welcome embed (${localeCode}): documents multi-raid text and Final alias`, () => {
+    const examples = TRANSLATIONS[localeCode]?.welcome?.examplesValue;
+    const aliases = TRANSLATIONS[localeCode]?.welcome?.aliasesValue;
+    assert.match(Array.isArray(examples) ? examples.join("\n") : String(examples || ""), /act4.*final/i);
+    assert.match(Array.isArray(aliases) ? aliases.join("\n") : String(aliases || ""), /`final`/i);
+  });
 }

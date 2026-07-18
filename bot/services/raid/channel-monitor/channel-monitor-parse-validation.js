@@ -13,6 +13,16 @@ const PARSE_ERROR_HINTS = {
       icon: UI.icons.warn,
       raids: parsed.raids.join(", "),
     }),
+  "invalid-raid": ({ parsed, UI, lang, t }) =>
+    t("text-parser.invalidRaid", lang, {
+      icon: UI.icons.warn,
+      raids: parsed.raids.map((raid) => `\`${raid}\``).join(", "),
+    }),
+  "raid-after-mode": ({ parsed, UI, lang, t }) =>
+    t("text-parser.raidAfterMode", lang, {
+      icon: UI.icons.warn,
+      raids: parsed.raids.map((raid) => `\`${raid}\``).join(", "),
+    }),
   "multi-difficulty": ({ parsed, UI, lang, t }) =>
     t("text-parser.multiDifficulty", lang, {
       icon: UI.icons.warn,
@@ -51,6 +61,21 @@ function expandRaidChannelEffectiveGates({ gate, raidMeta, getGatesForRaid }) {
   return gateIndex >= 0 ? allGates.slice(0, gateIndex + 1) : [gate];
 }
 
+function applyParsedRaidDisplayName(raidMeta, displayName) {
+  if (!raidMeta || !displayName) return raidMeta;
+  const label = String(raidMeta.label || "");
+  const modeKey = String(raidMeta.modeKey || "");
+  const fallbackModeLabel = modeKey
+    ? `${modeKey.charAt(0).toUpperCase()}${modeKey.slice(1)}`
+    : "";
+  return {
+    ...raidMeta,
+    label: /^kazeros(?:\s|$)/i.test(label)
+      ? label.replace(/^kazeros/i, displayName)
+      : [displayName, fallbackModeLabel].filter(Boolean).join(" "),
+  };
+}
+
 function resolveParsedRaidUpdate({
   parsed,
   RAID_REQUIREMENT_MAP,
@@ -70,78 +95,120 @@ function resolveParsedRaidUpdate({
     };
   }
 
-  const { raidKey, modeKey, charNames, gate, action } = parsed;
+  const { modeKey, charNames, gate, action } = parsed;
+  const raidDisplayNames = parsed.raidDisplayNames || {};
+  const raidKeys = [...new Set(
+    (Array.isArray(parsed.raidKeys) ? parsed.raidKeys : [parsed.raidKey]).filter(Boolean)
+  )];
   if (!Array.isArray(charNames) || charNames.length === 0) {
     return { action: "ignore" };
   }
+  if (raidKeys.length === 0) return { action: "ignore" };
 
   if (action === "reset") {
-    const raidMeta = resolveRaidLevelResetMeta({
-      raidKey,
-      RAID_REQUIREMENT_MAP,
-      getRaidLabel,
-    });
-    if (!raidMeta) {
+    const updates = [];
+    const invalidRaidKeys = [];
+    for (const raidKey of raidKeys) {
+      const raidMeta = resolveRaidLevelResetMeta({
+        raidKey,
+        RAID_REQUIREMENT_MAP,
+        getRaidLabel,
+      });
+      if (!raidMeta) {
+        invalidRaidKeys.push(raidKey);
+        continue;
+      }
+      updates.push({
+        raidMeta: applyParsedRaidDisplayName(raidMeta, raidDisplayNames[raidKey]),
+        statusType: "reset",
+        effectiveGates: [],
+      });
+    }
+    if (invalidRaidKeys.length > 0) {
       return {
         action: "hint",
-        content: t("text-parser.invalidCombo", lang, {
-          icon: UI.icons.warn,
-          raidKey,
-          modeKey: "reset",
-        }),
+        content: invalidRaidKeys
+          .map((raidKey) => t("text-parser.invalidCombo", lang, {
+            icon: UI.icons.warn,
+            raidKey,
+            modeKey: "reset",
+          }))
+          .join("\n"),
       };
     }
     return {
       action: "update",
-      raidMeta,
+      updates,
       charNames,
-      statusType: "reset",
-      effectiveGates: [],
+      ...updates[0],
     };
   }
 
-  const raidValue = `${raidKey}_${modeKey}`;
-  const raidMeta = RAID_REQUIREMENT_MAP[raidValue];
-  if (!raidMeta) {
+  const updates = [];
+  const invalidRaidKeys = [];
+  for (const raidKey of raidKeys) {
+    const raidMeta = RAID_REQUIREMENT_MAP[`${raidKey}_${modeKey}`];
+    if (!raidMeta) {
+      invalidRaidKeys.push(raidKey);
+      continue;
+    }
+    updates.push({
+      raidMeta: applyParsedRaidDisplayName(raidMeta, raidDisplayNames[raidKey]),
+    });
+  }
+  if (invalidRaidKeys.length > 0) {
     return {
       action: "hint",
-      content: t("text-parser.invalidCombo", lang, {
-        icon: UI.icons.warn,
-        raidKey,
-        modeKey,
-      }),
+      content: invalidRaidKeys
+        .map((raidKey) => t("text-parser.invalidCombo", lang, {
+          icon: UI.icons.warn,
+          raidKey,
+          modeKey,
+        }))
+        .join("\n"),
     };
   }
 
   if (gate) {
-    const validGates = getGatesForRaid(raidMeta.raidKey);
-    if (!validGates.includes(gate)) {
+    const invalidGateUpdates = updates.filter(
+      ({ raidMeta }) => !getGatesForRaid(raidMeta.raidKey).includes(gate)
+    );
+    if (invalidGateUpdates.length > 0) {
       return {
         action: "hint",
-        content: t("text-parser.invalidGate", lang, {
-          icon: UI.icons.warn,
-          gate,
-          raidLabel: raidMeta.label,
-          validGates: validGates.map((g) => `\`${g}\``).join(", "),
-        }),
+        content: invalidGateUpdates
+          .map(({ raidMeta }) => t("text-parser.invalidGate", lang, {
+            icon: UI.icons.warn,
+            gate,
+            raidLabel: raidMeta.label,
+            validGates: getGatesForRaid(raidMeta.raidKey)
+              .map((g) => `\`${g}\``)
+              .join(", "),
+          }))
+          .join("\n"),
       };
     }
   }
 
+  for (const update of updates) {
+    update.statusType = gate ? "process" : "complete";
+    update.effectiveGates = expandRaidChannelEffectiveGates({
+      gate,
+      raidMeta: update.raidMeta,
+      getGatesForRaid,
+    });
+  }
+
   return {
     action: "update",
-    raidMeta,
+    updates,
     charNames,
-    statusType: gate ? "process" : "complete",
-    effectiveGates: expandRaidChannelEffectiveGates({
-      gate,
-      raidMeta,
-      getGatesForRaid,
-    }),
+    ...updates[0],
   };
 }
 
 module.exports = {
+  applyParsedRaidDisplayName,
   expandRaidChannelEffectiveGates,
   resolveRaidLevelResetMeta,
   resolveParsedRaidUpdate,
