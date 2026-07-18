@@ -109,6 +109,71 @@ test("raid-status roster entries separate display eligibility from progress coun
   );
 });
 
+test("raid-status Solo filter includes deferred Normal -> Solo characters without counting them", () => {
+  const accounts = [account("Alpha", [{
+    raidKey: "kazeros",
+    modeKey: "normal",
+    pendingModeKey: "solo",
+    isCompleted: true,
+    goldReceives: true,
+  }])];
+  const getRaidsFor = (character) => character.raids;
+
+  assert.deepEqual(
+    buildStatusRosterFilterEntries({
+      accounts,
+      raidFilter: "kazeros:solo",
+      getRaidsFor,
+    }).map(({ pageIndex, pending, success, displayMatches }) => ({
+      pageIndex,
+      pending,
+      success,
+      displayMatches,
+    })),
+    [{ pageIndex: 0, pending: 0, success: 0, displayMatches: 1 }],
+  );
+});
+
+test("raid-status Solo render resolves the same deferred Normal -> Solo filter key", () => {
+  const character = {
+    raids: [{
+      raidKey: "kazeros",
+      modeKey: "normal",
+      pendingModeKey: "solo",
+      isCompleted: true,
+      goldReceives: true,
+    }],
+  };
+  const accounts = [{ accountName: "Alpha", characters: [character] }];
+  let displayedRaids = null;
+  let countedRaids = null;
+  const { buildCurrentEmbed } = createRaidStatusRenderPayload({
+    discordId: "viewer",
+    getAccounts: () => accounts,
+    getCurrentPage: () => 0,
+    getCurrentView: () => "raid",
+    getFilterRaidId: () => "kazeros:solo",
+    getStatusUserMeta: () => ({}),
+    baseGetRaidsFor: (target) => target.raids,
+    totalCharacters: 1,
+    summarizeRaidProgress: () => ({ completed: 0, partial: 0, total: 0 }),
+    summarizeGlobalGold: () => ({ earned: 0, total: 0 }),
+    buildAccountPageEmbed: (accountValue, pageIndex, totalPages, totals, getRaidsFor, meta, options) => {
+      displayedRaids = getRaidsFor(character);
+      countedRaids = options.getProgressRaidsFor(character);
+      return {};
+    },
+    buildGoldViewEmbed: () => ({}),
+    buildTaskViewEmbed: () => ({}),
+    lang: "en",
+  });
+
+  buildCurrentEmbed();
+  assert.equal(displayedRaids.length, 1);
+  assert.equal(displayedRaids[0].pendingModeKey, "solo");
+  assert.deepEqual(countedRaids, []);
+});
+
 test("raid-status roster dropdown uses folder icons and selects the paginated roster", () => {
   const row = buildStatusRosterFilterRow({
     ActionRowBuilder: FakeActionRowBuilder,

@@ -932,6 +932,68 @@ test("buildRaidDropdownState: lists Solo pending counts without adding them to a
   assert.equal(totalRaidPending, 1);
 });
 
+test("buildRaidDropdownState: groups a deferred Normal -> Solo switch under Solo only", () => {
+  const accounts = [{
+    characters: [
+      {
+        class: "Sorceress",
+        raids: [{
+          raidKey: "kazeros",
+          modeKey: "normal",
+          pendingModeKey: "solo",
+          raidName: "Kazeros Normal",
+          isCompleted: true,
+          goldReceives: true,
+        }],
+      },
+      {
+        class: "Artist",
+        raids: [{
+          raidKey: "kazeros",
+          modeKey: "solo",
+          raidName: "Kazeros Solo",
+          isCompleted: false,
+          goldReceives: true,
+        }],
+      },
+    ],
+  }];
+
+  const { raidDropdownEntries, totalRaidPending } = buildRaidDropdownState(
+    accounts,
+    (character) => character.raids,
+  );
+
+  assert.deepEqual(
+    raidDropdownEntries.map((raid) => ({ key: raid.key, pending: raid.pending })),
+    [{ key: "kazeros:solo", pending: 1 }],
+  );
+  assert.equal(totalRaidPending, 0, "effective Solo progress stays out of all-raids totals");
+});
+
+test("buildRaidDropdownState: keeps a deferred real difficulty change on its current mode", () => {
+  const accounts = [{
+    characters: [{
+      class: "Sorceress",
+      raids: [{
+        raidKey: "kazeros",
+        modeKey: "normal",
+        pendingModeKey: "hard",
+        raidName: "Kazeros Normal",
+        isCompleted: true,
+        goldReceives: true,
+      }],
+    }],
+  }];
+
+  const { raidDropdownEntries } = buildRaidDropdownState(
+    accounts,
+    (character) => character.raids,
+  );
+
+  assert.deepEqual(raidDropdownEntries.map((raid) => raid.key), ["kazeros:normal"]);
+});
+
 test("formatRaidStatusLine: a raid not receiving gold gets a trailing lock", () => {
   const base = {
     raidName: "Horizon Level 3",

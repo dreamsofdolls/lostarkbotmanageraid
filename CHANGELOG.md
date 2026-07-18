@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-07-18 (raid-status: equivalent-mode filter identity)
+
+### Fixed
+- The `/raid-status` raid dropdown now groups a queued Normal -> Solo or Solo -> Normal switch under the chosen equivalent mode. The dropdown, roster pagination, and rendered character filter share the same key, so a completed old-mode entry no longer remains as a selectable ghost raid after every matching character has moved to Solo. True difficulty changes such as Normal -> Hard still remain on the current mode until weekly reset.
+
 ## 2026-07-16 (Solo text updates and progress-count separation)
 
 ### Added
