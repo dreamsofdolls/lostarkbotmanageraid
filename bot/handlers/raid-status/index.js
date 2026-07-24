@@ -41,7 +41,7 @@ const {
   createStatusComponentRouteHandlers,
 } = require("./components/component-handlers");
 const {
-  loadStatusViewerState,
+  createStatusViewerStateLoader,
   probeLocalSyncModeWithBudget,
 } = require("./state/viewer-state");
 const {
@@ -161,21 +161,24 @@ function createRaidStatusCommand(deps) {
     // carries a signed token URL in its href - public messages would
     // leak that URL to anyone in the channel who clicks it (Link
     // buttons bypass bot auth). Ephemeral keeps the URL opener-only.
-    // Lean+select is ~30ms - well under Discord's 3-sec defer deadline.
-    const isLocalSyncMode = await probeLocalSyncModeWithBudget({
+    // Start the viewer snapshot and share lookup at the same time. The
+    // lean seed is reused for the privacy probe, locale, and first render,
+    // avoiding repeated Mongo round-trips for the same viewer.
+    const viewerStateLoader = createStatusViewerStateLoader({
       User,
       discordId,
+      prepareStatusUserDoc,
+    });
+    const isLocalSyncMode = await probeLocalSyncModeWithBudget({
+      probePromise: viewerStateLoader.probeLocalSyncMode(),
       waitWithBudget,
     });
     await interaction.deferReply(
       isLocalSyncMode ? { flags: MessageFlags.Ephemeral } : {}
     );
     const ackMs = Date.now() - started;
-    const viewerState = await loadStatusViewerState({
-      User,
-      discordId,
-      prepareStatusUserDoc,
-    });
+    const viewerState = await viewerStateLoader.load();
+    const viewerReadyAt = Date.now();
     const {
       lang,
       hasIncomingShare,
@@ -209,6 +212,7 @@ function createRaidStatusCommand(deps) {
       buildRaidDropdownState,
       buildStatusRosterFilterEntries,
     });
+    const stateReadyAt = Date.now();
 
     // Merge in accounts shared from manager-A users (RAID_MANAGER_ID
     // allowlist) so /raid-status renders both B's own rosters AND any
@@ -356,6 +360,7 @@ function createRaidStatusCommand(deps) {
       getBackgroundRefreshing: () => backgroundRefreshing,
     });
 
+    const firstRenderStarted = Date.now();
     const initialComponents = buildComponents(false);
 
     const messageFromEdit = await interaction.editReply({
@@ -365,7 +370,7 @@ function createRaidStatusCommand(deps) {
       components: initialComponents,
     });
     console.log(
-      `[raid-status] rendered accounts=${statusState.accounts.length} ackMs=${ackMs} openMs=${Date.now() - started}`
+      `[raid-status] rendered accounts=${statusState.accounts.length} ackMs=${ackMs} postAckViewerMs=${Math.max(0, viewerReadyAt - started - ackMs)} stateMs=${stateReadyAt - viewerReadyAt} firstRenderMs=${Date.now() - firstRenderStarted} openMs=${Date.now() - started}`
     );
 
     const componentSession = createRaidStatusComponentSession({

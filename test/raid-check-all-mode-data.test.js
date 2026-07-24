@@ -82,25 +82,26 @@ test("all-mode data loader queues stale refreshes without blocking the render sn
     {
       discordId: "100",
       shouldRefresh: true,
-      toObject: () => ({ discordId: "100-plain" }),
     },
     {
       discordId: "200",
       shouldRefresh: false,
-      toObject: () => ({ discordId: "200-plain" }),
     },
   ];
   const User = {
     find: () =>
       createQuery({
-        leanRows: [],
-        awaitedRows: seedUsers,
+        leanRows: seedUsers,
+        awaitedRows: [{ discordId: "hydrated-query-should-not-run" }],
       }),
   };
 
   const result = await loadAllModeUsers({
     User,
-    ensureFreshWeek: (doc) => ensured.push(doc.discordId),
+    ensureFreshWeek: (doc) => {
+      ensured.push(doc.discordId);
+      doc.renderWeekPrepared = true;
+    },
     RAID_CHECK_USER_QUERY_FIELDS: "fields",
     raidCheckRefreshLimiter: {
       run: async (fn) => {
@@ -108,10 +109,17 @@ test("all-mode data loader queues stale refreshes without blocking the render sn
         return fn();
       },
     },
-    loadFreshUserSnapshotForRaidViews: async (doc, opts) => ({
-      discordId: `${doc.discordId}-fresh`,
-      opts,
-    }),
+    loadFreshUserSnapshotForRaidViews: async (doc, opts) => {
+      assert.equal(
+        doc.renderWeekPrepared,
+        undefined,
+        "render-only weekly normalization must not mutate the refresh seed"
+      );
+      return {
+        discordId: `${doc.discordId}-fresh`,
+        opts,
+      };
+    },
     shouldLoadFreshUserSnapshotForRaidViews: (doc, opts) => {
       assert.deepEqual(opts, { allowAutoManage: false });
       return doc.shouldRefresh;
@@ -127,10 +135,10 @@ test("all-mode data loader queues stale refreshes without blocking the render sn
   assert.equal(result.freshBypass, 1);
   assert.equal(result.canRefreshFreshData, true);
   assert.deepEqual(result.users, [
-    { discordId: "100-plain" },
-    { discordId: "200-plain" },
+    { discordId: "100", shouldRefresh: true, renderWeekPrepared: true },
+    { discordId: "200", shouldRefresh: false, renderWeekPrepared: true },
   ]);
-  assert.deepEqual(ensured, ["100-plain", "200-plain"]);
+  assert.deepEqual(ensured, ["100", "200"]);
 
   const firstRefresh = result.startBackgroundRefresh();
   const secondRefresh = result.startBackgroundRefresh();

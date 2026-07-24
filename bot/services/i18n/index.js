@@ -119,9 +119,15 @@ function t(key, lang = DEFAULT_LANGUAGE, vars = null) {
  * production, loading the real model here would create a circular import, so
  * callers pass it in.
  */
-async function getUserLanguage(discordId, { UserModel } = {}) {
+async function getUserLanguage(discordId, options = {}) {
+  const { UserModel } = options;
   if (!discordId) return DEFAULT_LANGUAGE;
   if (userLanguageCache.has(discordId)) return userLanguageCache.get(discordId);
+  if (Object.prototype.hasOwnProperty.call(options, "userDoc")) {
+    const lang = normalizeLanguage(options.userDoc?.language);
+    userLanguageCache.set(discordId, lang);
+    return lang;
+  }
   if (!UserModel) return DEFAULT_LANGUAGE;
   try {
     const doc = await UserModel.findOne({ discordId }, { language: 1 }).lean();

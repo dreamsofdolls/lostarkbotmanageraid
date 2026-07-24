@@ -47,6 +47,13 @@ function toPlainUserDoc(userDoc) {
   return typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
 }
 
+function cloneRenderUserDoc(userDoc) {
+  const plain = toPlainUserDoc(userDoc);
+  if (!plain || plain !== userDoc) return plain;
+  if (typeof structuredClone === "function") return structuredClone(plain);
+  return JSON.parse(JSON.stringify(plain));
+}
+
 function canRefreshAllModeUsers({
   raidCheckRefreshLimiter,
   loadFreshUserSnapshotForRaidViews,
@@ -92,7 +99,7 @@ async function loadAllModeUsers({
     };
   }
 
-  const seedUsers = await query;
+  const seedUsers = await query.lean();
   let refreshQueued = 0;
   let freshBypass = 0;
   const users = [];
@@ -104,7 +111,7 @@ async function loadAllModeUsers({
             allowAutoManage: false,
           })
         : true;
-    const renderDoc = toPlainUserDoc(seedDoc);
+    const renderDoc = cloneRenderUserDoc(seedDoc);
     if (renderDoc) {
       ensureFreshWeek(renderDoc);
       users.push(renderDoc);
