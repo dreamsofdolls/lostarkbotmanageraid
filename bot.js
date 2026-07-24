@@ -62,6 +62,9 @@ const { bootstrapClassEmoji, bootstrapArtistEmoji } = require("./bot/services/di
 const { registerSlashCommandsOnBoot } = require("./bot/app/slash-command-registration");
 const { startLocalSyncWebCompanion } = require("./bot/app/local-sync-web");
 const { createRaidInteractionRouter } = require("./bot/app/interaction-router-registry");
+const {
+  buildRuntimeInstanceIdentity,
+} = require("./bot/services/runtime/instance-identity");
 
 const { DISCORD_TOKEN, GUILD_ID } = process.env;
 
@@ -77,6 +80,8 @@ if (!DISCORD_TOKEN) {
 }
 
 async function startBot() {
+  const runtimeInstanceIdentity = buildRuntimeInstanceIdentity();
+  console.log(`[bot] runtime ${runtimeInstanceIdentity}`);
   await connectDB();
 
   // Warm the monitor channel cache BEFORE Discord login. The cache is pure
@@ -190,6 +195,7 @@ async function startBot() {
   // on lifecycle and startup wiring.
   const router = createRaidInteractionRouter({
     MessageFlags,
+    instanceIdentity: runtimeInstanceIdentity,
     handlers: {
       handleRaidManagementCommand,
       handleRaidHelpSelect,

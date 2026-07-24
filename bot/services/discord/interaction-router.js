@@ -11,18 +11,44 @@
  * - bot.js stays untouched.
  *
  * Error handling lives here too because every code path inside `handle`
- * shares the same fallback contract: stale interaction (HTTP 10062) is
- * a benign "user clicked too late, ignore" log; everything else gets a
- * generic error reply via the appropriate followUp/reply path depending
- * on whether the interaction was already deferred.
+ * shares the same fallback contract. Discord acknowledgement races
+ * (10062/40060) are logged with process identity and never trigger a
+ * second reply; unrelated failures use the generic error response.
  */
 
-// Discord returns 10062 / "Unknown interaction" when the interaction
-// token expires before the initial acknowledgement (typically the
-// 3s deadline for first response). Distinguish from real errors so the
-// expected transient failures do not obscure actionable errors.
+const {
+  buildRuntimeInstanceIdentity,
+} = require("../runtime/instance-identity");
+
+const INITIAL_ACK_DEADLINE_MS = 3_000;
+const INTERACTION_DEDUPE_TTL_MS = 15 * 60 * 1_000;
+const INTERACTION_DEDUPE_MAX_ENTRIES = 4_096;
+
+function getDiscordErrorCode(error) {
+  for (const value of [error?.code, error?.rawError?.code]) {
+    if (value === null || value === undefined || value === "") continue;
+    const numeric = Number(value);
+    if (Number.isInteger(numeric)) return numeric;
+  }
+  return null;
+}
+
+/**
+ * Identify Discord's "Unknown interaction" acknowledgement failure.
+ * @param {unknown} error
+ * @returns {boolean}
+ */
 function isUnknownInteractionError(error) {
-  return error?.code === 10062 || error?.rawError?.code === 10062;
+  return getDiscordErrorCode(error) === 10062;
+}
+
+/**
+ * Identify Discord's explicit duplicate acknowledgement failure.
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+function isAlreadyAcknowledgedError(error) {
+  return getDiscordErrorCode(error) === 40060;
 }
 
 // Compact one-line summary of an interaction for log lines. Picks the
@@ -42,6 +68,57 @@ function getInteractionAgeMs(interaction) {
   return created > 0 ? Date.now() - created : null;
 }
 
+function getLocalAckState(interaction) {
+  if (interaction?.replied) return "replied";
+  if (interaction?.deferred) return "deferred";
+  return "none";
+}
+
+function describeInteractionContext(interaction, instanceIdentity) {
+  const interactionId = interaction?.id || "unknown";
+  const ageMs = getInteractionAgeMs(interaction);
+  const agePart = ageMs === null ? "ageMs=unknown" : `ageMs=${ageMs}`;
+  return [
+    describeInteraction(interaction),
+    `interactionId=${interactionId}`,
+    agePart,
+    `localAck=${getLocalAckState(interaction)}`,
+    instanceIdentity,
+  ].join(" ");
+}
+
+function createInteractionDeduper({
+  ttlMs = INTERACTION_DEDUPE_TTL_MS,
+  maxEntries = INTERACTION_DEDUPE_MAX_ENTRIES,
+  now = Date.now,
+} = {}) {
+  const seenAtById = new Map();
+
+  return {
+    claim(rawInteractionId) {
+      const interactionId = String(rawInteractionId || "");
+      if (!interactionId) return true;
+
+      const timestamp = now();
+      const previousTimestamp = seenAtById.get(interactionId);
+      if (
+        previousTimestamp !== undefined &&
+        timestamp - previousTimestamp < ttlMs
+      ) {
+        return false;
+      }
+
+      seenAtById.delete(interactionId);
+      seenAtById.set(interactionId, timestamp);
+      if (seenAtById.size > maxEntries) {
+        const oldestId = seenAtById.keys().next().value;
+        seenAtById.delete(oldestId);
+      }
+      return true;
+    },
+  };
+}
+
 /**
  * @typedef {object} InteractionRouterDeps
  * @property {object} MessageFlags - discord.js MessageFlags enum (need .Ephemeral)
@@ -51,6 +128,8 @@ function getInteractionAgeMs(interaction) {
  * @property {Record<string, (interaction) => Promise<void>>} selectHandlers - String-select handlers, keyed by exact customId. Tried first.
  * @property {Array<{prefix: string, handle: (interaction) => Promise<void>}>} [selectRoutes] - Optional select handlers matched by customId prefix (first match wins). Used when the customId carries dynamic data (session IDs, etc.).
  * @property {Array<{prefix: string, handle: (interaction) => Promise<void>}>} buttonRoutes - Button handlers matched by customId prefix (first match wins).
+ * @property {string} [instanceIdentity] - secret-free runtime fingerprint for diagnostics
+ * @property {{warn: Function, error: Function}} [log] - injectable logger
  */
 
 /**
@@ -65,8 +144,11 @@ function createInteractionRouter({
   selectHandlers,
   selectRoutes = [],
   buttonRoutes,
+  instanceIdentity = buildRuntimeInstanceIdentity(),
+  log = console,
 }) {
   const allowedCommandSet = new Set(allowedCommands);
+  const interactionDeduper = createInteractionDeduper();
 
   async function dispatch(interaction) {
     if (interaction.isChatInputCommand()) {
@@ -124,16 +206,30 @@ function createInteractionRouter({
   }
 
   async function handleError(error, interaction) {
-    if (isUnknownInteractionError(error)) {
-      const ageMs = getInteractionAgeMs(interaction);
-      const agePart = ageMs === null ? "" : ` ageMs=${ageMs}`;
-      console.warn(
-        `[interaction-router] stale interaction ignored: ${describeInteraction(interaction)}${agePart}`
+    const interactionContext = describeInteractionContext(
+      interaction,
+      instanceIdentity
+    );
+    if (isAlreadyAcknowledgedError(error)) {
+      log.warn(
+        `[interaction-router] duplicate acknowledgement ignored: ${interactionContext}`
       );
       return;
     }
 
-    console.error("[interaction-router] error:", error);
+    if (isUnknownInteractionError(error)) {
+      const ageMs = getInteractionAgeMs(interaction);
+      const event =
+        ageMs !== null && ageMs < INITIAL_ACK_DEADLINE_MS
+          ? "interaction unavailable before deadline; duplicate consumer suspected"
+          : "stale interaction ignored";
+      log.warn(
+        `[interaction-router] ${event}: ${interactionContext}`
+      );
+      return;
+    }
+
+    log.error("[interaction-router] error:", error);
 
     // Best-effort generic error reply. If the interaction was already
     // acknowledged (deferReply / reply / update), follow up; otherwise
@@ -153,6 +249,15 @@ function createInteractionRouter({
 
   return {
     handle: async (interaction) => {
+      if (!interactionDeduper.claim(interaction?.id)) {
+        log.warn(
+          `[interaction-router] duplicate in-process dispatch ignored: ${describeInteractionContext(
+            interaction,
+            instanceIdentity
+          )}`
+        );
+        return;
+      }
       try {
         await dispatch(interaction);
       } catch (error) {
@@ -166,7 +271,9 @@ module.exports = {
   createInteractionRouter,
   // Re-exported for tests / future direct use; the router uses them
   // internally but they're pure helpers with no closure state.
+  isAlreadyAcknowledgedError,
   isUnknownInteractionError,
   describeInteraction,
   getInteractionAgeMs,
+  createInteractionDeduper,
 };
