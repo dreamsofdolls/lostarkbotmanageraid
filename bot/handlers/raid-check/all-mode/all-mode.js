@@ -122,6 +122,7 @@ function createAllModeHandler({
   async function handleRaidCheckAllCommand(interaction) {
     const started = Date.now();
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const ackMs = Date.now() - started;
     const langPromise = getUserLanguage(interaction.user.id, { UserModel: User });
     if (!isRaidLeader(interaction)) {
       const lang = await langPromise;
@@ -138,6 +139,7 @@ function createAllModeHandler({
       return;
     }
 
+    const dataLoadStarted = Date.now();
     const [lang, allModeUsers] = await Promise.all([
       langPromise,
       loadAllModeUsers({
@@ -149,6 +151,8 @@ function createAllModeHandler({
         shouldLoadFreshUserSnapshotForRaidViews,
       }),
     ]);
+    const dataReadyAt = Date.now();
+    const dataLoadMs = dataReadyAt - dataLoadStarted;
     const {
       users,
       refreshQueued,
@@ -433,12 +437,13 @@ function createAllModeHandler({
       return backgroundRenderChain;
     };
 
+    const firstRenderStarted = Date.now();
     const followup = await interaction.editReply({
       embeds: [renderEmbed(currentAbsoluteIndex())],
       components: buildComponents(false),
     });
     console.log(
-      `[raid-check all] rendered pages=${totalPages} users=${visibleUserIds.length} openMs=${Date.now() - started}`
+      `[raid-check all] rendered pages=${totalPages} users=${visibleUserIds.length} ackMs=${ackMs} dataLoadMs=${dataLoadMs} prepareMs=${firstRenderStarted - dataReadyAt} firstRenderMs=${Date.now() - firstRenderStarted} openMs=${Date.now() - started}`
     );
 
     const updateAllModeMessage = (component) =>

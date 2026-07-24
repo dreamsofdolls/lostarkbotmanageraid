@@ -4,12 +4,14 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  createStatusViewerStateLoader,
   loadStatusViewerState,
   probeLocalSyncMode,
   probeLocalSyncModeWithBudget,
 } = require("../bot/handlers/raid-status/state/viewer-state");
 const {
   clearUserLanguageCache,
+  getUserLanguage,
 } = require("../bot/services/i18n");
 const {
   createRaidStatusSessionState,
@@ -114,6 +116,60 @@ test("raid-status viewer state returns the render snapshot without starting refr
   assert.equal(refreshStarted, 0);
   assert.equal(state.userDoc.prepared, true);
   assert.equal(state.startBackgroundRefresh, startBackgroundRefresh);
+});
+
+test("raid-status viewer loader reuses one lean seed for probe, language, and render state", async () => {
+  clearUserLanguageCache();
+  const seedDoc = {
+    discordId: "user-1",
+    language: "en",
+    localSyncEnabled: true,
+    accounts: [{ accountName: "Roster", characters: [] }],
+  };
+  let findOneCalls = 0;
+  let leanCalls = 0;
+  let shareCalls = 0;
+  const User = {
+    findOne(query) {
+      findOneCalls += 1;
+      assert.deepEqual(query, { discordId: "user-1" });
+      return {
+        async lean() {
+          leanCalls += 1;
+          return clone(seedDoc);
+        },
+      };
+    },
+  };
+  const startBackgroundRefresh = () => Promise.resolve(null);
+  const loader = createStatusViewerStateLoader({
+    User,
+    discordId: "user-1",
+    prepareStatusUserDoc: (_discordId, doc) => ({
+      userDoc: doc,
+      piggybackOutcome: null,
+      startBackgroundRefresh,
+    }),
+    getAccessibleAccountsFn: async () => {
+      shareCalls += 1;
+      return [];
+    },
+  });
+
+  assert.equal(await loader.probeLocalSyncMode(), true);
+  const state = await loader.load();
+  assert.equal(state.lang, "en");
+  assert.equal(state.userDoc.discordId, "user-1");
+  assert.equal(findOneCalls, 1);
+  assert.equal(leanCalls, 1);
+  assert.equal(shareCalls, 1);
+
+  assert.equal(
+    await getUserLanguage("user-1", { UserModel: User }),
+    "en",
+    "the shared seed should also prime the process language cache"
+  );
+  assert.equal(findOneCalls, 1);
 });
 
 test("raid-status session recounts characters after background roster refresh", async () => {
@@ -253,6 +309,26 @@ test("raid-status local-sync probe returns the saved localSyncEnabled flag", asy
   });
 
   assert.equal(await probeLocalSyncMode({ User, discordId: "user-1" }), true);
+});
+
+test("raid-status local-sync probe fails closed to an ephemeral reply on read errors", async () => {
+  const User = {
+    findOne() {
+      return {
+        select: () => ({
+          lean: async () => {
+            throw new Error("temporary Mongo read failure");
+          },
+        }),
+      };
+    },
+  };
+
+  assert.equal(
+    await probeLocalSyncMode({ User, discordId: "user-1" }),
+    true,
+    "an uncertain privacy mode must never fall back to a public signed-link surface"
+  );
 });
 
 test("raid-status local-sync probe times out safe-ephemeral before Discord ack deadline", async () => {

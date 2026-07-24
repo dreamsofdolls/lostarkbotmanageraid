@@ -362,7 +362,8 @@ function getWeeklyResetSchedulerStartedAtMs() {
 }
 
 /**
- * Freshen a hydrated User document to the current target reset key.
+ * Freshen a User-shaped document (hydrated or plain snapshot) to the current
+ * target reset key.
  * If the user's weeklyResetKey lags the current target (i.e. last-passed
  * Wed 10:00 UTC = Wed 17:00 Vietnam time), clear every character's
  * gate-completedDate and task counters and bump the key. Idempotent:

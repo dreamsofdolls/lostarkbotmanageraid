@@ -46,6 +46,18 @@ const pagesData = [
 
 const getStatusRaidsForCharacter = (character) => character.raids;
 
+function normalizeAggregate(aggregate) {
+  return {
+    totalPending: aggregate.totalPending,
+    perUserPending: [...aggregate.perUserPending.entries()]
+      .map(([key, value]) => [key, value])
+      .sort(([a], [b]) => a.localeCompare(b)),
+    perRaidPending: [...aggregate.perRaidPending.entries()]
+      .map(([key, value]) => [key, value])
+      .sort(([a], [b]) => a.localeCompare(b)),
+  };
+}
+
 test("raid-check all-mode aggregate counts pending by user, raid, and role bucket", () => {
   const aggregate = computeAllModePendingAggregate({
     pagesData,
@@ -197,4 +209,70 @@ test("raid-check all-mode aggregate cache reuses scans and character raid deriva
   cache.clear();
   cache.compute({ raidFilter: null, userFilter: null });
   assert.equal(raidReads, 6);
+});
+
+test("raid-check all-mode aggregate cache indexes raid rows once across new filters", () => {
+  let completionReads = 0;
+  const trackedRaid = {
+    raidKey: "act4",
+    modeKey: "normal",
+    goldReceives: true,
+    get isCompleted() {
+      completionReads += 1;
+      return false;
+    },
+  };
+  const trackedPages = [
+    createPage("user-a", [{ class: "Artist", raids: [trackedRaid] }]),
+  ];
+  const cache = createAllModePendingAggregateCache({
+    pagesData: trackedPages,
+    getStatusRaidsForCharacter,
+    lang: "en",
+  });
+
+  cache.compute();
+  assert.equal(completionReads, 1);
+
+  cache.compute({ raidFilter: "act4:normal" });
+  cache.compute({ userFilter: "user-a" });
+  cache.compute({ raidFilter: "act4:normal", userFilter: "user-a" });
+
+  assert.equal(
+    completionReads,
+    1,
+    "new filter combinations should use the session index instead of rescanning raids"
+  );
+});
+
+test("raid-check all-mode aggregate index matches direct scans for every filter shape", () => {
+  const cache = createAllModePendingAggregateCache({
+    pagesData,
+    getStatusRaidsForCharacter,
+    lang: "en",
+  });
+  const filters = [
+    {},
+    { raidFilter: "act4:normal" },
+    { raidFilter: "serca:hard" },
+    { userFilter: "user-a" },
+    { userFilter: "user-b" },
+    { raidFilter: "act4:normal", userFilter: "user-a" },
+    { raidFilter: "missing:hard", userFilter: "user-a" },
+    { raidFilter: "act4:normal", userFilter: "missing-user" },
+  ];
+
+  for (const filter of filters) {
+    const expected = computeAllModePendingAggregate({
+      pagesData,
+      ...filter,
+      getStatusRaidsForCharacter,
+      lang: "en",
+    });
+    assert.deepEqual(
+      normalizeAggregate(cache.compute(filter)),
+      normalizeAggregate(expected),
+      `indexed aggregate differs for ${JSON.stringify(filter)}`
+    );
+  }
 });
