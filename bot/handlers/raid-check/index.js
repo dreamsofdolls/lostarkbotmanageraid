@@ -234,14 +234,9 @@ function createRaidCheckCommand(deps) {
   });
 
   async function handleRaidCheckCommand(interaction) {
-    // Round-32: /raid-check is now a single entry point that always lands
-    // in the cross-raid overview (all-mode). The previous per-raid render
-    // path + open-time piggyback have been removed because the inline
-    // raid-filter dropdown inside all-mode covers the same use case
-    // without doubling command-line surface. Edit + Sync button flows
-    // (which still need per-raid context) keep their dependencies via
-    // computeRaidCheckSnapshot - that helper survived the cull because
-    // it's reused by edit-ui.js and sync-ui.js for button-driven flows.
+    // /raid-check always lands in the cross-raid overview. Its inline
+    // raid filter owns per-raid focus, while Edit and Sync reuse
+    // computeRaidCheckSnapshot for their button-driven context.
     await handleRaidCheckAllCommand(interaction);
   }
 

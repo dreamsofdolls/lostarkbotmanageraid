@@ -191,8 +191,7 @@ test("detail embed: untagged technical bullets render in BOTH languages", async 
   const viFields = getAllFieldValues(viInteraction._calls.update[0].embeds[0].toJSON());
 
   // Cap line is a shared technical line (no EN:/VN: prefix) — must
-  // appear in both languages. Round-30 rewrite tightened the copy to
-  // "Cap 20 char/roster" (singular "char").
+  // appear in both languages using the singular "char" contract.
   assert.match(enFields, /Cap 20 char\/roster/);
   assert.match(viFields, /Cap 20 char\/roster/);
 });

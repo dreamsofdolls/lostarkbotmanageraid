@@ -55,7 +55,7 @@ const ANNOUNCEMENT_REGISTRY = {
     label: "Stuck private log nudge",
     subdocKey: "stuckPrivateLogNudge",
     channelOverridable: true,
-    trigger: "During the 30-minute phase-3 auto-manage tick, when a user's roster returns `Logs not enabled` for every character (all private).",
+    trigger: "During a 30-minute background auto-manage tick, when a user's roster returns `Logs not enabled` for every character (all private).",
     dedup: "7 ngày per user (`User.lastPrivateLogNudgeAt`). Guild chọn = first reachable guild có member cache hit.",
     messageTtl: "30 phút rồi Artist tự xóa",
     previewContent:
