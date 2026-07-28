@@ -237,8 +237,8 @@ function createRaidStatusCommand(deps) {
     // keyed by currentPage) so navigating across accounts doesn't lose
     // the user's per-account char focus. null = "auto-pick first char
     // with tasks" so the toggle dropdown is always populated when there's
-    // at least one task on the account. Codex round 28 finding #2:
-    // without scoping, accounts with > 25 total tasks (4+ chars × cap 8)
+    // at least one task on the account. Without account scoping, rosters
+    // with > 25 total tasks (4+ chars × cap 8)
     // would silently drop tail entries from the toggle dropdown.
     const {
       ALL_CHARS_SENTINEL,

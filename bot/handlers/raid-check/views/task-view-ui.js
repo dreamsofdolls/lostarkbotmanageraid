@@ -38,8 +38,7 @@ function createTaskViewUi(deps) {
   // "📝 Xem tasks" button in /raid-check. Renders ONE embed
   // per account with pagination (Prev/Next) when the user has > 1
   // account-with-tasks - matches /raid-status Task view's compact 2-
-  // column layout instead of stacking N embeds, which Trainee flagged
-  // as clunky on the round-29 first cut.
+  // column layout instead of stacking one embed per account.
   //
   // Read-only: no toggle dropdown (Manager doesn't modify member
   // data). Reply is ephemeral so the data never lands in the channel

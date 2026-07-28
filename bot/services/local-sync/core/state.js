@@ -126,7 +126,7 @@ async function setLocalSyncEnabled(discordId, enabled, opts = {}, deps = {}) {
 /**
  * Flip autoManageEnabled with the same mutex semantics in reverse.
  * Used by /raid-auto-manage action:on path + /raid-check Manager
- * "Bật auto-sync hộ" button (Phase 5 wires those over).
+ * "Bật auto-sync hộ" button.
  *
  * `stampLastAttempt: true` adds lastAutoManageAttemptAt to the $set so
  * the existing daily-tick race-guard ("first tick after enable doesn't

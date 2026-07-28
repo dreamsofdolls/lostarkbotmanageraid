@@ -1,4 +1,4 @@
-// Phase 4 (2026-05-10): cover the apply pipeline that maps web-companion
+// Covers the apply pipeline that maps web-companion
 // deltas → applyRaidSetForDiscordId calls. Pure unit tests with stubs;
 // the integration boundary (real Mongo write, real raid-set retry) is
 // already covered by the raid-set test suite.

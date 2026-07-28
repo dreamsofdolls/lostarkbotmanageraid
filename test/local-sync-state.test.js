@@ -1,5 +1,5 @@
-// Phase 1 (2026-05-09): cover the local-sync mutex helpers in
-// bot/services/local-sync/state.js. The mutex enforcement lives at the
+// Covers the local-sync mutex helpers in
+// bot/services/local-sync/core/state.js. Mutex enforcement lives at the
 // Mongo write layer (conditional findOneAndUpdate), so each test
 // validates BOTH the filter shape AND the result-code dispatch on
 // stub responses for the 3 outcome paths (ok / conflict / no_user).

@@ -30,12 +30,10 @@ const {
 const RAID_CHECK_REFRESH_CUTOFF_MS = MANAGER_ROSTER_REFRESH_COOLDOWN_MS;
 
 // Narrow Mongo payload for /raid-check scans. The view only needs roster
-// fields, refresh stamps, weekly cursor, auto-manage badges, and (since
-// the round-29 Manager-task-view feature) per-character side tasks so the
-// 📝 Task view dropdown can render the same per-char list as
-// /raid-status. The full User document remains excluded; only
-// up the side-task subtree by Manager design call.
-// Roster-level accounts.sharedTasks is also projected for shared task rows.
+// fields, refresh stamps, weekly cursor, auto-manage badges, and
+// per-character side tasks so the Manager task view can render the same
+// list as /raid-status. Roster-level accounts.sharedTasks is projected for
+// shared rows; the rest of the User document stays excluded.
 const RAID_CHECK_USER_BASE_QUERY = { "accounts.0": { $exists: true } };
 const RAID_CHECK_USER_QUERY_FIELDS = [
   "discordId",

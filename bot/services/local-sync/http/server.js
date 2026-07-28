@@ -17,10 +17,9 @@ const url = require("node:url");
 
 /**
  * Minimal HTTP server for the local-sync web companion. Built on Node's
- * built-in http module to avoid an Express dependency. The required routes
- * are static file serving (Phase 3) and the eventual POST
- * /api/raid-sync endpoint (Phase 4). Anything more elaborate would be a
- * cue to add Express, but this stays under 200 LOC for now.
+ * built-in http module to avoid an Express dependency. It serves the
+ * companion assets and dispatches exact method/path API handlers supplied
+ * by the composition root.
  *
  * Listens on `process.env.PORT || 3000` (Railway provides PORT in prod).
  * Bound to 0.0.0.0 so Railway's load balancer can reach it; do not bind
@@ -84,8 +83,7 @@ function getEnvPort(fallback = 3000) {
 /**
  * Start the HTTP server. Returns `{ server, stop }` so the bot entry
  * point can graceful-shutdown alongside the Discord client. `apiHandlers`
- * is a map keyed by HTTP method + path prefix that Phase 4 plugs into;
- * Phase 3 leaves it empty.
+ * is a map keyed by exact `<METHOD> <pathname>` strings.
  */
 function startLocalSyncHttpServer({ port = getEnvPort(), webDir, classIconsDir = null, apiHandlers = {} } = {}) {
   if (!webDir) {
@@ -102,8 +100,8 @@ function startLocalSyncHttpServer({ port = getEnvPort(), webDir, classIconsDir =
         res.end("ok");
         return;
       }
-      // API handlers (Phase 4 plugs in /api/raid-sync). Lookup by
-      // `<METHOD> <pathname>` exact match - keep simple, no router.
+      // API handlers use exact `<METHOD> <pathname>` lookup; keep this
+      // deliberately small and router-free.
       const apiKey = `${req.method} ${pathname}`;
       if (typeof apiHandlers[apiKey] === "function") {
         await apiHandlers[apiKey](req, res, parsed);

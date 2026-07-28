@@ -33,7 +33,7 @@ const {
  * Build the /raid-auto-manage command handler factory.
  * @param {object} deps - injected dependencies (discord.js builders,
  *   Mongoose User model, the core auto-manage service handles, local-
- *   sync helpers, cooldown resolvers Â· see destructure block).
+ *   sync helpers, cooldown resolvers; see destructure block).
  * @returns {{
  *   handleRaidAutoManageCommand: Function,
  *   handleRaidAutoManageAutocomplete: Function,

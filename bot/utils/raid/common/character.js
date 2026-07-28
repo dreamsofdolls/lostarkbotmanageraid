@@ -438,7 +438,7 @@ function summarizeRaidProgress(allRaids) {
   return { color, completed, partial, total };
 }
 
-// Per-gate display icon for Phase 1 progress-aware /raid-check rendering.
+// Per-gate display icon for progress-aware /raid-check rendering.
 // 'done'    = gate completed AT this raid's selected difficulty
 // 'partial' = unused right now (kept for future per-gate "started" semantics)
 // 'pending' = gate not done OR done at a different difficulty (mode-switch

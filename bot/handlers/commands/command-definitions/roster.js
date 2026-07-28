@@ -33,9 +33,8 @@ function createAddRosterCommandDefinition() {
 
   // /raid-check has no command-line options. Cross-raid overview is the
   // sole entry point; per-raid focus is achieved via the inline raid-
-  // filter dropdown inside the embed. The previous `raid` option (with
-  // its 7+1 choice list) was retired in round-32 because the inline
-  // filter offered the same UX without doubling the command surface.
+  // filter dropdown inside the embed, avoiding duplicate command and
+  // component controls for the same state.
 
   return addRosterCommand;
 }

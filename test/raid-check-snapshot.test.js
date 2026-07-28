@@ -966,7 +966,7 @@ test("Edit flow: DM embed describes Process gate and Reset distinctly", () => {
   assert.match(resetEmbed.description, /Reset về 0/);
 });
 
-test("Edit flow: DM embed avoids sentence-level hyphens (Dusk voice rule)", () => {
+test("Edit flow: DM embed follows the configured punctuation style", () => {
   // Traine rule: user-facing DM text uses punctuation (periods, commas,
   // parentheses) instead of hyphen-separated clauses. This test guards
   // against regressing back to the "- có thể họ đã tắt DM -" style.

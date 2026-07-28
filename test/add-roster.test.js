@@ -1,10 +1,9 @@
 // Tests for /raid-add-roster picker flow.
 //
 // Focus: persistSelectedRoster's account-match + race-safe overlap guard.
-// These are the two pieces Codex flagged bugs in (commits 4b94664 +
-// a5dc054). The handler-level Discord interaction surface is not
-// exercised here because it requires extensive Discord mocking. The tests
-// call persistSelectedRoster through the factory's __test export instead.
+// The handler-level Discord interaction surface is not exercised here
+// because it requires extensive Discord mocking. The tests call
+// persistSelectedRoster through the factory's __test export instead.
 
 process.env.RAID_MANAGER_ID = "test-manager-1";
 

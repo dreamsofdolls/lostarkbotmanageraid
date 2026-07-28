@@ -1124,8 +1124,8 @@ test("buildAccountPageEmbed: can hide per-character gold lines for filtered raid
 
 test("buildAccountPageEmbed: per-character field omits the gold body line for non-earners (header 💰 absence is the signal)", () => {
   // Non-earner card: no 💰 anywhere in the body. Header marker is the
-  // sole indicator (absence = not earning). Body line was removed in
-  // round-32 because the body line duplicated the header state.
+  // sole indicator (absence = not earning). A duplicate body line must
+  // not return.
   const char = makeChar("Passive", 1730, { isGoldEarner: false });
   const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
   const fakeRaid = {
@@ -1152,12 +1152,10 @@ test("buildAccountPageEmbed: per-character field omits the gold body line for no
   assert.doesNotMatch(charField.value, /💰/);
 });
 
-test("buildAccountPageEmbed: per-character header does NOT carry a 💰 suffix - gold body line is the sole indicator (round-32 rev)", () => {
-  // Earlier round added a header marker `· 💰` after the iLvl, but the
-  // body line `💰 earned / total G` already conveys the same info on
-  // every gold-earner card so the header marker was visual duplication.
-  // Removed per Traine's review (2026-05-05). Earner identity now lives
-  // exclusively in the body line.
+test("buildAccountPageEmbed: per-character header omits 💰 because the body is the sole indicator", () => {
+  // The body line `💰 earned / total G` conveys the state on every
+  // gold-earner card, so a second marker in the header is visual
+  // duplication.
   const char = makeChar("Earner", 1730, { isGoldEarner: true });
   const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
   const fakeRaid = {

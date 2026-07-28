@@ -1,6 +1,6 @@
 // Tests for /raid-edit-roster picker flow.
 //
-// Focus areas (each maps to a Codex-flagged bug or load-bearing
+// Focus areas (each maps to a previously observed bug or load-bearing
 // invariant):
 //   1. fetchBibleRosterWithFallback: multi-seed retry + zero-overlap reject
 //   2. buildEditRosterPickerChars: saved-first sort so truncation never
@@ -159,8 +159,8 @@ test("buildEditRosterPickerChars: saved chars never excluded by truncation when 
 });
 
 test("buildEditRosterPickerChars: tracks saved-overflow keys when savedCount > cap (legacy roster)", () => {
-  // Codex round 32 finding #2: a legacy roster with > cap saved chars
-  // (e.g. 22 chars stored before the 20-cap was tightened) gets sliced
+  // A legacy roster with more than the current cap of saved chars (for
+  // example, 22 chars stored before the cap was tightened) gets sliced
   // to top 20. The 2 dropped saved chars must be exposed via
   // excludedSavedKeys so persistEditedRoster can preserve them as-is
   // instead of silently deleting them on Confirm.
@@ -601,8 +601,8 @@ test("persistEditedRoster: preserves per-char state (raid completion, bibleSeria
 });
 
 test("persistEditedRoster: preserves sideTasks on kept chars (HIGH bug fix)", async () => {
-  // Codex round 32 finding #1: Confirm path used buildCharacterRecord
-  // which previously didn't copy sideTasks, so any user with /raid-task
+  // The Confirm path previously used a character record that omitted
+  // sideTasks, so any user with /raid-task
   // entries on a char would silently lose them on /raid-edit-roster Confirm
   // even when re-selecting that char. Pin the fix: sideTasks must
   // round-trip through persistEditedRoster intact.

@@ -6,8 +6,8 @@
  * written. Targets are therefore the assignSlots-derived comp (support +
  * dps), not a raw status filter. Each target -> a clear of (raidKey,
  * modeKey, all gates) on that signup's OWN character (consent = the act
- * of signing up). Pure target selection only; the actual write goes
- * through the /raid-set path in a later phase.
+ * of signing up). This module only selects targets; the schedule runtime
+ * sends them through the shared /raid-set batch writer.
  */
 
 "use strict";

@@ -236,8 +236,8 @@ test("applyRaidSetBatchForDiscordId: local-sync can apply multiple entries in on
 });
 
 test("applyRaidSetForDiscordId: complete short-circuits to alreadyComplete on no-op re-stamp", async () => {
-  // Codex-flagged regression class: re-stamping completedDate would
-  // surface a fresh "Raid Completed" DM even though nothing changed.
+  // Re-stamping completedDate would surface a fresh "Raid Completed" DM
+  // even though nothing changed.
   // Short-circuit must fire when every target gate already has
   // completedDate>0 at the selected difficulty AND no mode switch in
   // play.
@@ -356,9 +356,8 @@ test("applyRaidSetForDiscordId: reset on completed raid clears every gate", asyn
 });
 
 test("applyRaidSetForDiscordId: reset on already-empty raid short-circuits to alreadyReset", async () => {
-  // Codex-flagged: without the alreadyReset short-circuit, the Edit DM
-  // would tell the user "Artist vừa Reset về 0" for a raid they never
-  // touched.
+  // Without the alreadyReset short-circuit, the Edit DM would tell the
+  // user "Artist vừa Reset về 0" for a raid they never touched.
   const { factory, docs } = makeFactory();
   seedUser(docs, [
     { accountName: "Alpha", characters: [makeChar("Cyrano", 1730)] }, // empty assignedRaids

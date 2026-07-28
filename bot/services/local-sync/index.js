@@ -2,19 +2,14 @@
  * services/local-sync/index.js
  * Aggregate re-export surface for the local-sync sub-package. Callers
  * import via `require("./local-sync")` rather than spelunking into
- * sub-modules · keeps the dependency graph greppable and lets us
+ * sub-modules; this keeps the dependency graph greppable and lets us
  * relocate internals without touching consumers.
  */
 
 "use strict";
 
-// Local-sync mode entry point. Future phases add sub-modules here:
-//   - state.js (Phase 1, this commit) - mutex helpers + status snapshot
-//   - tokens.js (Phase 4) - JWT mint/verify for the web-companion link
-//   - apply.js (Phase 4) - dedupe + apply incoming raid-clear deltas
-//
-// Re-exports stay explicit so a `require("./local-sync")` import surface
-// is greppable from any caller without spelunking through sub-modules.
+// Re-exports stay explicit so callers have one stable, greppable facade
+// for mode state, signed tokens, scope policy, and delta application.
 
 const state = require("./core/state");
 const tokens = require("./core/tokens");

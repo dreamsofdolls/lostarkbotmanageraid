@@ -259,7 +259,7 @@ userSchema.index(
   { name: "raid_check_refresh_scan" }
 );
 
-// Phase 3 background auto-manage tick filters to opted-in users, narrows by
+// The background auto-manage tick filters to opted-in users, narrows by
 // stale `lastAutoManageSyncAt`, then sorts by `lastAutoManageAttemptAt` for
 // fair rotation. Kept for older deployments/query plans; the day-key scan
 // index below is the current scheduler path.

@@ -2,8 +2,8 @@
 // "Bật auto-sync hộ <user>". Earlier shape was a read-then-update which
 // leaked a race: 2 managers (or manager + user clicking action:on) could
 // both pass the read and both produce success embeds + duplicate DMs.
-// Codex round flagged the race; this suite pins the CAS contract in
-// place so a future refactor can't silently regress it.
+// This suite pins the CAS contract in place so a future refactor cannot
+// silently reintroduce duplicate success embeds or DMs.
 //
 // The helper is module-level (not bound to the createRaidCheckCommand
 // closure) so the suite can pass a stub UserModel and exercise all 4
@@ -76,7 +76,7 @@ test("tryEnableAutoManage returns 'flipped' when CAS filter matches", async () =
   assert.equal(result.doc, updatedDoc);
   // Critically: the CAS filter MUST include autoManageEnabled $ne true so
   // a doc that's already been flipped by a concurrent path is rejected.
-  // Codex round flagged the prior non-atomic shape - regression guard.
+  // Regression guard for the previously non-atomic read/update shape.
   assert.equal(UserStub.calls.findOneAndUpdate.length, 1);
   const call = UserStub.calls.findOneAndUpdate[0];
   assert.equal(call.filter.discordId, "user-1");
@@ -86,12 +86,10 @@ test("tryEnableAutoManage returns 'flipped' when CAS filter matches", async () =
 });
 
 test("tryEnableAutoManage update payload does NOT stamp lastAutoManageAttemptAt", async () => {
-  // Codex round 28 #2: stamping lastAutoManageAttemptAt here would push
-  // the new opt-in to the tail of the daily scheduler's ascending sort
-  // (sorted by exactly that field), contradicting the "next tick will
-  // pick up your roster" copy. Leaving the field as null gives the new
-  // user priority. Pin the contract so a future refactor doesn't quietly
-  // re-introduce the stamp.
+  // Stamping lastAutoManageAttemptAt here would push the new opt-in to
+  // the tail of the daily scheduler's ascending sort (which uses this
+  // field), contradicting the "next tick will pick up your roster" copy.
+  // Leaving it null gives the new user first-cycle priority.
   const UserStub = makeUserStub({
     findOneAndUpdateImpl: () =>
       Promise.resolve({ discordId: "user-1", autoManageEnabled: true }),

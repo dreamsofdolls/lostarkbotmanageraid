@@ -220,9 +220,8 @@ test("buildMaintenanceConfigQuery selects guilds with raidChannelId set (default
 test("buildMaintenanceConfigQuery selects guilds with override set even when raidChannelId is null (regression)", () => {
   // The scheduler used to filter on raidChannelId only, which silently
   // dropped guilds that had configured a maintenance override channel
-  // before setting the monitor. Codex round flagged that mismatch with
-  // /raid-announce UX claiming set-channel works independently. This test
-  // pins the fix in place.
+  // before setting the monitor. That contradicts the /raid-announce UX,
+  // where set-channel works independently, so this test pins the contract.
   const q = __test.buildMaintenanceConfigQuery();
   const earlyOverrideOnly = {
     raidChannelId: null,
@@ -242,7 +241,7 @@ test("buildMaintenanceConfigQuery selects guilds with override set even when rai
   assert.ok(docMatchesQuery(countdownOverrideOnly, q), "countdown override alone must select guild");
 });
 
-test("announcementOverridableTypeKeys returns all 4 channel-overridable types including maintenance-* (Codex bug 2)", () => {
+test("announcementOverridableTypeKeys returns all 4 channel-overridable types including maintenance-*", () => {
   // The /raid-announce action:set-channel reject message used to hard-code
   // "weekly-reset và stuck-nudge", which drifted out of sync once the 2
   // maintenance types landed. Pin the dynamic registry derivation so the

@@ -41,7 +41,7 @@ function createRaidStatusView(deps) {
   // Manager rosters get a 👑 at the account header (swapping the default
   // 📁 folder icon) instead of stamping every character name with a crown.
   // Per-char crown was scan-hostile once there were many chars and collides
-  // with the planned class-icon swap for the char name slot, so the visual
+  // with the class icon in the character-name slot, so the visual
   // cue lives at the roster boundary where it only appears once per group.
   function pickRosterHeaderIcon(discordId) {
     return isManagerId && isManagerId(discordId) ? "👑" : UI.icons.roster;

@@ -975,10 +975,10 @@ test("resetExpiredSideTasks issues 2 updateMany calls (daily + weekly) with the 
 });
 
 // ---------------------------------------------------------------------------
-// Codex round 28 regressions: lastResetAt seed + > 25 task per account
+// Regression coverage: lastResetAt seed + more than 25 tasks per account
 // ---------------------------------------------------------------------------
 
-test("REGRESSION (Codex #1): newly-added task seeds lastResetAt to current cycle start", async () => {
+test("newly-added task seeds lastResetAt to current cycle start (regression)", async () => {
   // Invoke createRaidTaskCommand with stubbed dependencies to observe the
   // saved task. Validates that handleAdd does NOT use 0 as the
   // seed - because lastResetAt=0 < dailyResetStartMs(now) makes the next
@@ -1061,7 +1061,7 @@ test("REGRESSION (Codex #1): newly-added task seeds lastResetAt to current cycle
   );
 });
 
-test("REGRESSION (Codex #1): weekly task seeds lastResetAt to weekResetStartMs", async () => {
+test("weekly task seeds lastResetAt to weekResetStartMs (regression)", async () => {
   const FAKE_WEEKLY_START = Date.UTC(2026, 3, 22, 10, 0, 0, 0);
   const FAKE_DAILY_START = Date.UTC(2026, 3, 23, 10, 0, 0, 0);
   let savedDoc = null;
@@ -1123,9 +1123,9 @@ test("REGRESSION (Codex #1): weekly task seeds lastResetAt to weekResetStartMs",
   assert.notEqual(persisted.lastResetAt, FAKE_DAILY_START);
 });
 
-test("REGRESSION (Codex #2): account with > 25 total tasks scoped per-char by filter", () => {
+test("account with more than 25 total tasks is scoped per character (regression)", () => {
   // Synthesize an account with 5 chars × 8 tasks = 40 total, each char
-  // sitting at the per-char cap. Without the round-28 char-filter, the
+  // sitting at the per-char cap. Without the per-character filter, the
   // toggle dropdown would silently drop entries 26..40. With the filter,
   // each char's 8 tasks fit comfortably under Discord's 25-option cap.
   const account = {
@@ -1168,8 +1168,8 @@ test("REGRESSION (Codex #2): account with > 25 total tasks scoped per-char by fi
   );
   assert.ok(totalTasks > 25, `setup must exceed 25 total tasks (got ${totalTasks})`);
 
-  // Simulate the round-28 fix: per-char cap = TASK_CAP_DAILY + TASK_CAP_WEEKLY.
-  // Filtering by ANY char must always produce a list <= 25 (Discord cap).
+  // Per-character cap = TASK_CAP_DAILY + TASK_CAP_WEEKLY. Filtering by
+  // any character must always produce a list <= 25 (Discord cap).
   for (const character of account.characters) {
     assert.ok(
       character.sideTasks.length <= 25,

@@ -206,14 +206,9 @@ if (RAID_MANAGER_ID.size === 0) {
     "[raid-check] RAID_MANAGER_ID env not set or empty - /raid-check will reject every invocation. Set the env var to a comma-separated list of Discord user IDs to enable."
   );
 }
-// Round-32: /raid-check's `raid` option was removed entirely. The picker
-// dropdown collapsed to one synthetic "all" entry (round-32a) and then
-// the option was dropped (round-32b) because the inline raid-filter
-// dropdown inside the all-mode embed already covers per-raid focus
-// without a separate command-line argument. RAID_CHOICES was the
-// /raid-check-specific choice list; nothing else consumed it, so it's
-// gone too. /raid-set still uses its own autocomplete-driven raid input
-// path, unaffected by this change.
+// /raid-check intentionally has no command-line raid choice: its inline
+// filter owns per-raid focus. /raid-set continues to use its independent
+// autocomplete-driven raid input.
 const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
 
 
