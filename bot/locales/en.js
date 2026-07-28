@@ -2016,7 +2016,7 @@ module.exports = {
     autoManageName: "🤖 Lazy posting? Try `/raid-auto-manage`",
     autoManageValue: [
       "**Bible mode** - `/raid-auto-manage action:on`: Artist pulls clear logs from lostark.bible. Make sure each char has **Public Log** enabled at <https://lostark.bible/me/logs> first.",
-      "**Local-sync mode** - `/raid-auto-manage action:local-on`: want logs to stay private? Artist gives you a private web companion link; drop your `encounters.db` (LOA Logs) into it, and the browser reads it locally and ships only deltas to Artist - the file itself never uploads.",
+      "**Local-sync mode** - `/raid-auto-manage action:local-on`: Artist returns a private companion link. Drop `encounters.db` (LOA Logs) there; the browser reads it locally and sends only deltas - the file never uploads.",
       "Need to wipe and re-sync from scratch? Run `/raid-auto-manage action:reset` (2-step confirm, only your own progress is wiped).",
     ],
     sideTasksName: "📝 Side tasks - per-character daily/weekly chore tracking",
