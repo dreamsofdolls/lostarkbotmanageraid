@@ -26,9 +26,9 @@ const {
  *   2. setLocalSyncEnabled(force:true) - atomic mutex flip: bible flag
  *      OFF + local flag ON in one Mongo write. Stuck-nudge IS the user's
  *      explicit consent to swap, so force is appropriate.
- *   3. Mint a 1-hour companion-link token + build the URL.
+ *   3. Mint a short-lived companion-link token + build the URL.
  *   4. Update the channel embed to "switched" state + DM the user the
- *      personalized link.
+ *      personalized link, with an ephemeral fallback if DM is unavailable.
  */
 function createStuckNudgeButtonHandler({
   EmbedBuilder,
@@ -139,10 +139,12 @@ function createStuckNudgeButtonHandler({
       }).catch(() => {});
     }
 
-    // DM the personalized companion link separately. Channel embed
-    // doesn't expose the URL (other members would see it; URL has the
-    // user's signed token). Private DM keeps the token contained.
+    // Deliver the personalized link privately. The channel embed never
+    // exposes it because the URL contains the user's signed token. If DM
+    // is unavailable, fall back to an ephemeral follow-up on this click.
     if (companionUrl) {
+      let privateSetupPayload = null;
+      let dmDelivered = false;
       try {
         const dmEmbed = new EmbedBuilder()
           .setColor(UI.colors.success)
@@ -155,15 +157,30 @@ function createStuckNudgeButtonHandler({
             .setLabel(t("raid-auto-manage.localEnable.openButtonLabel", clickerLang))
             .setURL(companionUrl)
         );
+        privateSetupPayload = { embeds: [dmEmbed], components: [dmRow] };
         const targetUser = await interaction.client.users.fetch(targetDiscordId).catch(() => null);
         if (targetUser) {
-          await targetUser.send({ embeds: [dmEmbed], components: [dmRow] }).catch((err) => {
-            console.warn("[stuck-nudge] DM send failed:", err?.message || err);
-          });
+          await targetUser.send(privateSetupPayload);
+          dmDelivered = true;
         }
       } catch (err) {
-        console.warn("[stuck-nudge] DM build failed:", err?.message || err);
+        console.warn("[stuck-nudge] DM delivery failed:", err?.message || err);
       }
+
+      if (!dmDelivered && privateSetupPayload) {
+        await interaction.followUp({
+          ...privateSetupPayload,
+          flags: MessageFlags.Ephemeral,
+        }).catch((err) => {
+          console.warn("[stuck-nudge] ephemeral link fallback failed:", err?.message || err);
+        });
+      }
+    } else {
+      await followUpNotice(interaction, EmbedBuilder, {
+        type: "warn",
+        title: t("raid-status.sync.localNewLinkUnavailableTitle", clickerLang),
+        description: t("raid-auto-manage.localEnable.successDescription", clickerLang),
+      }).catch(() => {});
     }
 
     console.log(`[stuck-nudge] user=${targetDiscordId} switched to local-sync via nudge button`);

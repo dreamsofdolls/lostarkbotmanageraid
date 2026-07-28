@@ -29,9 +29,8 @@ const {
  * time (timingSafeEqual) so a malformed token can't leak length info.
  *
  * Secret rotation: bump LOCAL_SYNC_TOKEN_SECRET in env; all in-flight
- * tokens invalidate immediately. No client-side TTL refresh path - if a
- * token expires, the user runs /raid-auto-manage action:local-on again
- * and the success embed mints a fresh one.
+ * tokens invalidate immediately. Expired user links are rotated from
+ * the `/raid-status` New link control.
  */
 
 const DEFAULT_TTL_SEC = 30 * 60; // 30 minutes - enough for file pick/preview while keeping a bounded replay window
@@ -75,7 +74,7 @@ function sign(payloadB64) {
  * the web companion can render in the user's preferred language without
  * a separate round-trip. Stale at most 30 minutes (token TTL) - if user
  * runs /raid-language after mint and reuses the URL, the page renders
- * in the old lang until a fresh mint via /raid-auto-manage local-on.
+ * in the old lang until a fresh link is minted.
  *
  * Throws if the secret env var is unset - callers should let this
  * propagate to the user as a "feature not configured" error rather than

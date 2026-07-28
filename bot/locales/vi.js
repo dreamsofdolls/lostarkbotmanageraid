@@ -290,23 +290,21 @@ module.exports = {
       deleteAbortedDescription: "Artist giữ nguyên event nha, không có gì bị xóa cả~",
     },
   },
-  // Top-level "stuck-nudge" namespace for the Phase 6 channel-button
-  // click handler. Distinct from `announcements.stuck-nudge.body` (the
-  // broadcast text the scheduler posts) so the two concerns evolve
-  // independently.
+  // Top-level "stuck-nudge" copy belongs to the channel-button click
+  // handler. Keep it separate from `announcements.stuck-nudge.body`,
+  // which is the scheduler's broadcast text.
   "stuck-nudge": {
     notForYouTitle: "Button này không dành cho cậu",
     notForYouDescription: "Button **Switch to Local Sync** chỉ <@{target}> mới bấm được nha. Cậu nhầm rồi~",
     flipFailTitle: "Switch fail",
     flipFailDescription: "Artist gặp lỗi khi flip mode: `{error}`. Thử `/raid-auto-manage action:local-on` thủ công nha.",
     switchedTitle: "Đã chuyển sang Local Sync",
-    switchedDescription: "<@{target}> đã chuyển từ bible auto-sync sang **local-sync mode**. Artist DM kèm link companion riêng cho cậu rồi nha~",
+    switchedDescription: "<@{target}> đã chuyển từ bible auto-sync sang **local-sync mode**. Mở `/raid-status` để vào Web Companion hoặc tạo link riêng mới nha~",
     dmTitle: "Local Sync setup",
-    dmDescription: "Bấm nút **Mở Web Companion** dưới đây để mở trang companion - drag-drop file `encounters.db` (ở `%localappdata%\\LOA Logs\\` hoặc path cậu setup) vào là Artist preview được data của cậu. Link có hiệu lực 1 giờ.",
+    dmDescription: "Bấm nút **Mở Web Companion** dưới đây để mở trang companion - drag-drop file `encounters.db` (ở `%localappdata%\\LOA Logs\\` hoặc path cậu setup) vào là Artist preview được data của cậu. Link có hiệu lực 30 phút.",
   },
-  // share.* kept ready for /raid-share migration. /raid-share handler
-  // currently still hardcodes its own VN strings (in active bug-fix by
-  // the user). Migrate later in one focused commit.
+  // Shared /raid-share copy. Keep this namespace aligned across locale
+  // packs; the handler resolves every grant/revoke/list message through it.
   share: {
     accessLevel: {
       edit: "chỉnh sửa",
@@ -699,7 +697,7 @@ module.exports = {
       localNewLinkFailedTitle: "Tạo link mới fail",
       localNewLinkFailedDescription: "Artist gặp lỗi khi mint token mới: `{error}`. Thử lại sau vài giây nha.",
       localNewLinkSuccessTitle: "Link mới đã sẵn sàng",
-      localNewLinkSuccessDescription: "Button **Mở Web Companion** ở message gốc vừa được update tại chỗ - bấm vào là mở link mới luôn. Token cũ vẫn còn hiệu lực đến hết TTL (1 giờ từ lúc mint trước) nếu cậu hoặc ai đó đang dùng tab cũ.",
+      localNewLinkSuccessDescription: "Button **Mở Web Companion** ở message gốc vừa được update tại chỗ - bấm vào là mở link mới luôn. Link cũ đã bị thu hồi ngay khi link này được tạo, nên hãy đóng mọi tab còn dùng link cũ.",
       noControlTitle: "Chỉ người mở mới điều khiển được",
       noControlDescription: "Embed này thuộc session `/raid-status` của người khác nha cậu, Artist chỉ cho người mở session thao tác. Mở session riêng bằng `/raid-status` của mình nhé.",
       noAutoSyncTitle: "Cậu chưa bật auto-sync",
@@ -1079,7 +1077,7 @@ module.exports = {
       alreadyOffTitle: "Auto-manage đang tắt sẵn",
       alreadyOffDescription: "Cậu chưa opt-in nha, không có flag để disable. Muốn bật thì action `on`.",
       localAlreadyOnTitle: "Local-sync đang bật rồi",
-      localAlreadyOnDescription: "Cậu đã opt-in local-sync từ trước nha. Muốn xem trạng thái thì `status`, muốn tắt thì `local-off`.",
+      localAlreadyOnDescription: "Cậu đã opt-in local-sync từ trước nha. Mở `/raid-status` để xem trạng thái hoặc tạo **Link mới**; muốn tắt thì dùng `local-off`.",
       localAlreadyOffTitle: "Local-sync đang tắt sẵn",
       localAlreadyOffDescription: "Cậu chưa opt-in local-sync nha, không có flag để disable. Muốn bật thì `local-on`.",
     },
@@ -1091,13 +1089,13 @@ module.exports = {
     },
     localEnable: {
       successTitle: "Local-sync đã bật",
-      successDescription: "Local-sync mode đã bật xong nha~ Web companion site Artist đang xây (Phase 3) - khi xong tớ sẽ DM link cá nhân để cậu drag-drop file `encounters.db`. Trong lúc đó cậu vẫn có thể `/raid-set` thủ công bình thường. Đổi ý thì `action:local-off`.",
-      successDescriptionWithLink: "Local-sync mode đã bật xong nha~ Bấm nút **Mở Web Companion** dưới đây để mở trang companion trên browser - drag-drop file `encounters.db` (ở `%localappdata%\\LOA Logs\\`) vào là Artist preview được data của cậu. Link có hiệu lực 1 giờ, hết hạn thì gọi lại `action:local-on`. Đổi ý thì `action:local-off`.",
+      successDescription: "Local-sync mode đã bật, nhưng Artist chưa tạo được link companion. Nhờ Manager kiểm tra cấu hình và log của Local Sync, rồi mở `/raid-status` và bấm **Tạo link mới**. Cậu vẫn có thể dùng `/raid-set` thủ công. Đổi ý thì `action:local-off`.",
+      successDescriptionWithLink: "Local-sync mode đã bật xong nha~ Bấm nút **Mở Web Companion** dưới đây để mở trang companion trên browser - drag-drop file `encounters.db` (ở `%localappdata%\\LOA Logs\\`) vào là Artist preview được data của cậu. Link có hiệu lực 30 phút; nếu hết hạn, mở `/raid-status` và bấm **Tạo link mới**. Đổi ý thì `action:local-off`.",
       openButtonLabel: "Mở Web Companion",
     },
     localDisable: {
       title: "Local-sync đã tắt",
-      description: "Local-sync mode đã tắt. File access permission ở browser của cậu Artist không xoá được trực tiếp - vào tab web companion (khi nó live) bấm \"Clear Access\" để revoke FSA permission nếu muốn dọn sạch hoàn toàn.",
+      description: "Local-sync mode đã tắt. File access permission ở browser của cậu Artist không xoá được trực tiếp - vào tab web companion và bấm \"Clear Access\" để revoke FSA permission nếu muốn dọn sạch hoàn toàn.",
     },
     disable: {
       title: "Auto-manage disabled",
@@ -1846,7 +1844,7 @@ module.exports = {
           "**Yêu cầu local-sync**: Chrome/Edge/Opera GX (cần File System Access API). File `encounters.db` ở `%localappdata%\\LOA Logs\\`.",
           "**Cooldown bible**: 15s cho Raid Manager, 10 phút cho user thường.",
           "**`action:on` flow**: probe roster trước, nếu có char private log → warn embed kèm nút `Vẫn bật` / `Huỷ`. Confirm thì kickstart 1 lần sync ngay.",
-          "**`action:local-on` flow**: mint URL signed-token (TTL 1 giờ) gửi qua DM. Mở link → drop file → preview tuần raid hiện tại → Sync. Token tự shrink xuống 60s sau mỗi lần sync thành công (anti-replay).",
+          "**`action:local-on` flow**: mint URL signed-token (TTL 30 phút) và trả trong reply Discord riêng tư. Mở link → drop file → preview tuần raid hiện tại → Sync. Token tự shrink xuống 60s sau mỗi lần sync thành công (anti-replay).",
           "**`action:reset` flow**: 2-step Danger confirm. Wipe sạch progress raid + state sync (assignedRaids, bibleSerial, bibleCid, lastLocalSyncToken, ...) cho riêng cậu - giống reset gate về mới tinh. Dùng khi muốn re-sync sạch sau khi đổi mode hoặc fix data.",
           "**Auto-tick background (bible only)**: opted-in user nào chưa được thử sync trong ~30 phút → background scheduler tự pull mỗi 30 phút (batch 6 user/tick fair rotation).",
           "**`action:status`**: show state (bible on/off, local-sync on/off) + last success vs last attempt - dễ thấy khi sync đang fail liên tục.",
@@ -1857,7 +1855,7 @@ module.exports = {
           "action:off": "Tắt bible auto-sync",
           "action:sync": "Manual sync bible ngay",
           "action:status": "Xem state bible/local + last sync time",
-          "action:local-on": "Bật local-sync mode + mint URL web companion (DM kèm link)",
+          "action:local-on": "Bật local-sync mode + mint URL web companion (reply riêng tư kèm link)",
           "action:local-off": "Tắt local-sync mode + revoke token hiện hành",
           "action:reset": "Wipe sạch progress raid + state sync cho riêng cậu (2-step confirm)",
         },
@@ -2047,7 +2045,7 @@ module.exports = {
     autoManageName: "🤖 Lười post? Bật `/raid-auto-manage` nhé",
     autoManageValue: [
       "**Bible mode** - `/raid-auto-manage action:on`: tớ pull clear logs từ lostark.bible. Cần bật **Public Log** ở <https://lostark.bible/me/logs> cho từng char muốn sync.",
-      "**Local-sync mode** - `/raid-auto-manage action:local-on`: muốn giữ log private? Tớ DM cậu link web companion, kéo file `encounters.db` (LOA Logs) vào, tớ đọc trong browser rồi sync delta về - không upload file đâu nha.",
+      "**Local-sync mode** - `/raid-auto-manage action:local-on`: muốn giữ log private? Tớ trả link web companion riêng tư; kéo file `encounters.db` (LOA Logs) vào, tớ đọc trong browser rồi sync delta về - không upload file đâu nha.",
       "Cần reset hết để re-sync mới? Gõ `/raid-auto-manage action:reset` (2-step confirm, wipe sạch progress riêng cậu).",
     ],
     sideTasksName: "📝 Side tasks - track chore daily/weekly riêng từng char",

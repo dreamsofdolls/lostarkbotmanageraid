@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 
 const { TRANSLATIONS, SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } = require("../bot/locales");
 const { normalizeLanguage, resolveLocale } = require("../bot/services/i18n");
+const { TOKEN_DEFAULT_TTL_SEC } = require("../bot/services/local-sync");
 
 function leafKeys(value, prefix = "", out = []) {
   if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -83,6 +84,73 @@ test("Solo Companion launcher copy is complete in all three first-class language
       assert.ok(sync[key].trim(), `${code} has an empty raid-status.sync.${key}`);
     }
     assert.match(sync.soloCompanionDescription, /Solo/i);
+  }
+});
+
+test("Local Sync copy matches the signed-token lifecycle in every language", () => {
+  const ttlMinutes = TOKEN_DEFAULT_TTL_SEC / 60;
+  assert.equal(ttlMinutes, 30, "copy expectations must be reviewed when the token TTL changes");
+
+  for (const code of ["vi", "jp", "en"]) {
+    const locale = TRANSLATIONS[code];
+    const statusSync = locale["raid-status"].sync;
+    const autoManage = locale["raid-auto-manage"];
+    const localOnHelp = flattenStrings(locale).find(
+      (text) => text.includes("action:local-on") && text.includes("TTL")
+    );
+
+    const ttlCopy = [
+      locale["stuck-nudge"].dmDescription,
+      autoManage.localEnable.successDescriptionWithLink,
+      localOnHelp,
+    ];
+    for (const text of ttlCopy) {
+      assert.equal(typeof text, "string", `${code} is missing Local Sync TTL copy`);
+      assert.match(text, new RegExp(String(ttlMinutes)), `${code} Local Sync TTL copy drifted`);
+    }
+    assert.doesNotMatch(
+      localOnHelp,
+      /\bDM\b/i,
+      `${code} local-on help must describe its private reply instead of a DM`
+    );
+
+    assert.match(
+      autoManage.redundant.localAlreadyOnDescription,
+      /\/raid-status/,
+      `${code} already-on guidance must expose the token rotation path`
+    );
+    assert.match(
+      autoManage.localEnable.successDescriptionWithLink,
+      /\/raid-status/,
+      `${code} expired-link guidance must use /raid-status`
+    );
+    assert.doesNotMatch(
+      autoManage.localEnable.successDescriptionWithLink,
+      /action:local-on/,
+      `${code} must not send enabled users through the blocked local-on gate`
+    );
+    assert.match(
+      locale["stuck-nudge"].switchedDescription,
+      /\/raid-status/,
+      `${code} nudge confirmation must expose the reliable companion path`
+    );
+
+    const lifecycleCopy = [
+      statusSync.localNewLinkSuccessDescription,
+      autoManage.localEnable.successDescription,
+      autoManage.localEnable.successDescriptionWithLink,
+      autoManage.localDisable.description,
+    ].join("\n");
+    assert.doesNotMatch(
+      lifecycleCopy,
+      /Phase 3|still being built|đang xây|構築中|once it's live|khi nó live|ライブになってから/,
+      `${code} still describes the live companion as unfinished`
+    );
+    assert.doesNotMatch(
+      statusSync.localNewLinkSuccessDescription,
+      /old token stays valid|Token cũ vẫn còn hiệu lực|古いトークン.*有効/,
+      `${code} incorrectly says a rotated token remains valid`
+    );
   }
 });
 

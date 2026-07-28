@@ -157,3 +157,50 @@ test("stuck-nudge state failure follows up ephemerally after deferUpdate", async
   assert.deepEqual(events, ["deferUpdate", "setLocalSyncEnabled", "followUp"]);
   assert.equal(followUpPayload.flags, 64);
 });
+
+test("stuck-nudge falls back to an ephemeral companion link when DM delivery fails", async (t) => {
+  const previousBaseUrl = process.env.PUBLIC_BASE_URL;
+  process.env.PUBLIC_BASE_URL = "https://sync.example.test";
+  t.after(() => {
+    if (previousBaseUrl == null) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = previousBaseUrl;
+  });
+
+  let fallbackPayload = null;
+  const handle = makeHandler({
+    getUserLanguageFn: async () => "en",
+    setLocalSyncEnabledFn: async () => ({ ok: true, reason: "ok" }),
+    rotateLocalSyncTokenFn: async () => "signed-token",
+  });
+  const interaction = {
+    customId: "stuck-nudge:switch-to-local:123456789",
+    user: {
+      id: "123456789",
+      globalName: "Traine",
+      displayAvatarURL: () => "https://cdn.example.test/avatar.webp",
+    },
+    deferUpdate: async () => {},
+    editReply: async () => {},
+    followUp: async (payload) => {
+      fallbackPayload = payload;
+    },
+    client: {
+      users: {
+        fetch: async () => ({
+          send: async () => {
+            throw new Error("DMs disabled");
+          },
+        }),
+      },
+    },
+  };
+
+  await handle(interaction);
+
+  assert.equal(fallbackPayload.flags, 64);
+  assert.equal(fallbackPayload.components.length, 1);
+  assert.match(
+    fallbackPayload.components[0].components[0].url,
+    /^https:\/\/sync\.example\.test\/sync\?token=/
+  );
+});
