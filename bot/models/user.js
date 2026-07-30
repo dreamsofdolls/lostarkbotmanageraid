@@ -192,13 +192,20 @@ const userSchema = new mongoose.Schema(
     // cached data as fresh.
     lastAutoManageSyncAt: { type: Number, default: null },
     // VN calendar day (YYYY-MM-DD) when this user most recently opened a
-    // usable /raid-status session. Background sync does not update this field;
-    // otherwise a run for one day could suppress the next day's backfill.
+    // usable /raid-status session. This is activity telemetry only; daily
+    // background eligibility is outcome-driven so a failed view piggyback
+    // never suppresses the autonomous retry path.
     lastRaidStatusOpenedDayKey: { type: String, default: "" },
-    // VN calendar day for which daily backfill has already been claimed.
-    // This records an attempt rather than success, limiting each target day
-    // to one Bible request per user.
+    // Daily background state. Attempts use a short DB lease to deduplicate
+    // workers. A target day is only finished after success, an all-private /
+    // no-actionable terminal result, or bounded transient retry exhaustion.
     lastAutoManageDailyAttemptDayKey: { type: String, default: "" },
+    autoManageDailyAttemptCount: { type: Number, default: 0 },
+    autoManageDailyNextAttemptAt: { type: Number, default: null },
+    autoManageDailyLeaseDayKey: { type: String, default: "" },
+    autoManageDailyLeaseUntil: { type: Number, default: null },
+    lastAutoManageDailyFinishedDayKey: { type: String, default: "" },
+    lastAutoManageDailyOutcome: { type: String, default: "" },
     // Unix timestamp, in milliseconds, of the last channel notice posted when
     // every character returned "Logs not enabled". The seven-day deduplication
     // window limits repeated mentions for the same private-log condition.
@@ -275,18 +282,20 @@ userSchema.index(
   }
 );
 
-// Background auto-manage scan: select opted-in users who did not visit
-// /raid-status on the target VN day and have not yet been claimed for that
-// day's backfill. lastAutoManageAttemptAt remains the fairness sort cursor.
+// Background auto-manage scan: select opted-in users whose target VN day is
+// unfinished and whose retry/lease window is available. /raid-status activity
+// is deliberately absent from this index because opening a view is not proof
+// that its sync succeeded.
 userSchema.index(
   {
     autoManageEnabled: 1,
-    lastAutoManageDailyAttemptDayKey: 1,
-    lastRaidStatusOpenedDayKey: 1,
+    lastAutoManageDailyFinishedDayKey: 1,
+    autoManageDailyNextAttemptAt: 1,
+    autoManageDailyLeaseUntil: 1,
     lastAutoManageAttemptAt: 1,
   },
   {
-    name: "auto_manage_daily_backfill_scan",
+    name: "auto_manage_daily_outcome_scan",
     partialFilterExpression: { autoManageEnabled: true },
   }
 );

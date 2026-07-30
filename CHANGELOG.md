@@ -4,6 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-07-30 (auto-sync: autonomous daily retries)
+
+### Fixed
+- Daily Bible Auto-sync no longer treats opening `/raid-status` as proof that synchronization finished. Every opted-in roster remains eligible independently of command activity, transient Bible failures retry automatically with bounded backoff, and a short database lease prevents duplicate workers from processing the same user.
+- Successful, all-private, no-actionable, and retry-exhausted outcomes are stored separately. All-private rosters retain the existing low-frequency reprobe/nudge behavior instead of being hammered by transient retries.
+
 ## 2026-07-18 (raid-status: equivalent-mode filter identity)
 
 ### Fixed

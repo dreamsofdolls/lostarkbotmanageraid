@@ -16,13 +16,6 @@ function getAutoManageDailyContext(now = new Date()) {
   };
 }
 
-function buildMissingRaidStatusDayFilter({ currentDayKey, targetDayKey }) {
-  return {
-    lastRaidStatusOpenedDayKey: { $nin: [targetDayKey, currentDayKey] },
-    lastAutoManageDailyAttemptDayKey: { $ne: targetDayKey },
-  };
-}
-
 async function markRaidStatusOpenedDay({
   User,
   discordId,
@@ -47,6 +40,5 @@ async function markRaidStatusOpenedDay({
 module.exports = {
   DAY_MS,
   getAutoManageDailyContext,
-  buildMissingRaidStatusDayFilter,
   markRaidStatusOpenedDay,
 };

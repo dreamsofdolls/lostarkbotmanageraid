@@ -52,7 +52,6 @@ function createRaidSchedulerService({
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
   isPublicLogDisabledError,
-  stampAutoManageAttempt,
 }) {
   const sideTaskResetService = createSideTaskResetService({
     User,
@@ -94,7 +93,6 @@ function createRaidSchedulerService({
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
     isPublicLogDisabledError,
-    stampAutoManageAttempt,
     nudgeStuckPrivateLogUser,
   });
 
