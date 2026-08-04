@@ -1510,7 +1510,7 @@ module.exports = {
       channelConfigBound: "チャンネル固定 (オーバーライド不可)",
       whenLabel: "発火タイミング",
       previewLabel: "メッセージプレビュー",
-      previewMissing: "*(この種別のプレビューは定義されていませんわ)*",
+      previewMissing: "(この種別のプレビューは定義されていませんわ)",
     },
     toggle: {
       noopTitle: "変更はありませんわ",
@@ -1885,9 +1885,9 @@ module.exports = {
         notes: [
           "アニメアート / キャラクターレンダー / 壁紙を1回のコマンドで1-4枚アップロードすると、アーティストが最大6シーンのライブラリに保存し、roster ごとに割り当てて /raid-status embed の画像として表示しますわ～ オプトイン制ですの、設定してないユーザーはテキスト embed のままで何も変わりませんわ。",
           "",
-          "**set image:<file> [image_2] [image_3] [image_4] [mode] [action]** — 1回に最大4枚アップロードできますの。`action:overwrite` はライブラリを置き換え、`action:extend` は6シーン上限まで追加しますわ。各画像は 8 MB まで、800x600 以上、PNG / JPG / WEBP / SVG を受け付けますの。保存時に均等割り当て、またはランダム割り当てを選べますわ。共有 roster でも閲覧者ご自身の pool を使いますわ。",
-          "**view** — 大きな preview を1シーンずつ表示する browser を開きますわ。シーン選択 dropdown と ◀/▶ pager で切り替えられますの。",
-          "**edit [image:<file>]** — 画像を添付すると選択したシーンの差し替え mode、添付なしなら1シーン削除またはライブラリ全削除 mode になりますわ。",
+          "**set image:<file> [image_2] [image_3] [image_4] [mode] [action]** - 1回に最大4枚アップロードできますの。`action:overwrite` はライブラリを置き換え、`action:extend` は6シーン上限まで追加しますわ。各画像は 8 MB まで、800x600 以上、PNG / JPG / WEBP / SVG を受け付けますの。保存時に均等割り当て、またはランダム割り当てを選べますわ。共有 roster でも閲覧者ご自身の pool を使いますわ。",
+          "**view** - 大きな preview を1シーンずつ表示する browser を開きますわ。シーン選択 dropdown と ◀/▶ pager で切り替えられますの。",
+          "**edit [image:<file>]** - 画像を添付すると選択したシーンの差し替え mode、添付なしなら1シーン削除またはライブラリ全削除 mode になりますわ。",
           "",
           "**保存場所**: バイトデータは bot のデータベースに直接書き込まれますわ (専用 collection · User doc には載せませんの)。管理者の設定や rehost channel は不要 · アップロードしてすぐ使えますの♪ 各保存画像は 2 MB 以下なので、6シーンでも Mongo document limit に収まりますわ。メモリ内 LRU キャッシュがリピート描画を吸収しますの。",
           "**クッキリ + キレイ**: 保存前に 16:9 (1600x900 JPEG) フレームに正規化しますわ · 自身の cover-fit バックプレートが背景を埋めて、source 画像は contain-fit で中央に丸ごと配置されますの。縦長や変則比率でも Discord embed の横幅いっぱいに表示されて、クロップされませんわ～",

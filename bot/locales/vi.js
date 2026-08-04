@@ -586,7 +586,7 @@ module.exports = {
     },
     removedChar: {
       title: "🗑️ Đã xoá character",
-      empty: "Roster giờ trống — cậu có thể `/raid-remove-roster` để xoá hẳn account, hoặc `/raid-edit-roster` để add lại chars mới.",
+      empty: "Roster giờ trống - cậu có thể `/raid-remove-roster` để xoá hẳn account, hoặc `/raid-edit-roster` để add lại chars mới.",
       remaining: "Roster **{accountName}** còn lại **{count}** character{plural}.",
       description: "Artist vừa xoá **{characterName}** khỏi roster **{accountName}** nha.\n\n{remainingPart}",
       reseededFooter: 'Seed roster đổi sang "{newSeed}" để /raid-status refresh tiếp tục hoạt động.',
@@ -675,7 +675,7 @@ module.exports = {
       localRefreshSuccessDescription: "Embed đã refresh lại theo state mới nhất từ DB. Sau khi sync qua web companion thì click nút này để thấy progress mới ngay nha~",
       soloCompanionButtonLabel: "Solo Companion",
       soloCompanionTitle: "Solo Companion đã sẵn sàng",
-      soloCompanionDescription: "Dùng link riêng tư bên dưới để đọc `encounters.db` và chỉ đồng bộ tiến độ **Solo**. Auto-sync Bible của cậu vẫn được giữ nguyên. Link này mang token cá nhân có thời hạn—đừng chia sẻ nhé.",
+      soloCompanionDescription: "Dùng link riêng tư bên dưới để đọc `encounters.db` và chỉ đồng bộ tiến độ **Solo**. Auto-sync Bible của cậu vẫn được giữ nguyên. Link này mang token cá nhân có thời hạn-đừng chia sẻ nhé.",
       soloCompanionOpenButtonLabel: "Mở Solo Companion",
       soloCompanionUnavailableTitle: "Solo Companion chưa khả dụng",
       soloCompanionUnavailableDescription: "Máy chủ chưa cấu hình URL công khai cho Solo Companion. Báo Manager kiểm tra `PUBLIC_BASE_URL` nhé.",
@@ -1531,7 +1531,7 @@ module.exports = {
       channelConfigBound: "Channel-bound (override not applicable)",
       whenLabel: "When it fires",
       previewLabel: "Message preview",
-      previewMissing: "*(no preview defined for this type)*",
+      previewMissing: "(kiểu này chưa có preview)",
     },
     toggle: {
       noopTitle: "Không có gì đổi",
@@ -1906,9 +1906,9 @@ module.exports = {
         notes: [
           "Upload 1-4 ảnh anime art / character render / wallpaper mỗi lần chạy lệnh, Artist sẽ lưu vào thư viện tối đa 6 cảnh, map chúng theo từng roster rồi gắn ảnh tương ứng vào embed /raid-status. Opt-in mỗi user · ai chưa set thì /raid-status vẫn render text embed như bình thường, không có gì đổi.",
           "",
-          "**set image:<file> [image_2] [image_3] [image_4] [mode] [action]** — upload tối đa 4 ảnh mỗi lệnh. `action:overwrite` thay cả thư viện; `action:extend` nối thêm tới cap 6 cảnh. Mỗi ảnh tối đa 8 MB, kích thước ≥ 800x600, format PNG / JPG / WEBP / SVG. Artist có thể chia đều hoặc random map roster lúc lưu; roster được share vẫn dùng pool ảnh của chính cậu.",
-          "**view** — Artist mở browser tương tác: một preview lớn mỗi lần, map roster, dropdown chọn cảnh và nút ◀/▶ để lật trang.",
-          "**edit [image:<file>]** — đính kèm ảnh để vào mode thay cảnh đã chọn; bỏ trống `image` để vào mode xoá một cảnh hoặc xoá cả thư viện.",
+          "**set image:<file> [image_2] [image_3] [image_4] [mode] [action]** - upload tối đa 4 ảnh mỗi lệnh. `action:overwrite` thay cả thư viện; `action:extend` nối thêm tới cap 6 cảnh. Mỗi ảnh tối đa 8 MB, kích thước ≥ 800x600, format PNG / JPG / WEBP / SVG. Artist có thể chia đều hoặc random map roster lúc lưu; roster được share vẫn dùng pool ảnh của chính cậu.",
+          "**view** - Artist mở browser tương tác: một preview lớn mỗi lần, map roster, dropdown chọn cảnh và nút ◀/▶ để lật trang.",
+          "**edit [image:<file>]** - đính kèm ảnh để vào mode thay cảnh đã chọn; bỏ trống `image` để vào mode xoá một cảnh hoặc xoá cả thư viện.",
           "",
           "**Lưu trữ**: ảnh đi thẳng vào database của bot (collection riêng, không nhồi vào User doc). Không cần admin setup channel gì cả · upload-and-go. Mỗi ảnh đã nén giữ dưới 2 MB nên cap 6 cảnh vẫn nằm dưới giới hạn document Mongo. Cache LRU in-memory hấp thụ render lặp lại nên /raid-status pagination không hit Mongo nhiều lần.",
           "**Đẹp + căng**: ảnh được normalize về frame 16:9 (1600x900 JPEG) trước khi lưu, với backplate cover-fit phủ nền + source giữ nguyên (contain-fit) ở giữa. Portrait hay tỉ lệ lạ đều render full chiều rộng embed Discord, không bị crop.",
@@ -1990,7 +1990,7 @@ module.exports = {
   welcome: {
     title: "{icon} Chào các bạn~ Artist ngồi trông channel này nhé",
     description: [
-      "Clear xong, post `<raid[, raid2, ...]> <difficulty> <character[, character2, ...]> [gate]` — Artist sẽ ghi mọi raid cho mọi character rồi dọn message nha~",
+      "Clear xong, post `<raid[, raid2, ...]> <difficulty> <character[, character2, ...]> [gate]` - Artist sẽ ghi mọi raid cho mọi character rồi dọn message nha~",
       "",
       "**Artist chỉ update được character trong roster của chính bạn thôi đấy.** Chưa có roster thì xem field bên dưới để biết bắt đầu từ đâu nha.",
     ],

@@ -115,6 +115,45 @@ function t(key, lang = DEFAULT_LANGUAGE, vars = null) {
 }
 
 /**
+ * Resolve a key that MAY carry several phrasings, picking one at random.
+ *
+ * A pool is an object `{ variants: [...] }` - never a bare array. Bare arrays
+ * already mean "multi-line block, join with \n" throughout these locales (42 of
+ * the 43 array keys are consumed via joinIfArray), so treating any array as a
+ * pool would silently render one random line out of a paragraph.
+ *
+ * Non-pool keys pass straight through to t(), so tPick is a safe drop-in and
+ * pools can be introduced one call site at a time.
+ *
+ *   tPick("raid-sync.doneTitle", "vi")                  → a random phrasing
+ *   tPick("raid-sync.doneTitle", "vi", null, {index: 2}) → the 3rd, always
+ *
+ * @param {string} key - dotted translation key
+ * @param {string} [lang] - locale code; falls back like t()
+ * @param {Object|null} [vars] - {name} interpolation values
+ * @param {{index?: number, random?: () => number}} [opts] - deterministic
+ *   selection for tests: `index` wins, else `random` (defaults to Math.random)
+ * @returns {string|string[]} the chosen variant, or t()'s result verbatim
+ */
+function tPick(key, lang = DEFAULT_LANGUAGE, vars = null, opts = {}) {
+  const code = resolveLocale(lang);
+  const raw =
+    lookupKey(TRANSLATIONS[code], key) ??
+    (code !== DEFAULT_LANGUAGE ? lookupKey(TRANSLATIONS[DEFAULT_LANGUAGE], key) : undefined);
+
+  const pool =
+    raw && !Array.isArray(raw) && typeof raw === "object" && Array.isArray(raw.variants)
+      ? raw.variants
+      : null;
+  if (!pool || pool.length === 0) return t(key, lang, vars);
+
+  const index = Number.isInteger(opts.index)
+    ? ((opts.index % pool.length) + pool.length) % pool.length
+    : Math.floor((opts.random || Math.random)() * pool.length);
+  return applyVars(pool[index], vars);
+}
+
+/**
  * Cache-first lookup. Pass an optional UserModel for DI in tests; in
  * production, loading the real model here would create a circular import, so
  * callers pass it in.
@@ -214,6 +253,7 @@ function clearGuildLanguageCache() {
 
 module.exports = {
   t,
+  tPick,
   getUserLanguage,
   setUserLanguage,
   clearUserLanguageCache,
