@@ -4,6 +4,20 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-08-05 (Artist voice pass and @-mention replies)
+
+### Added
+- Artist answers when you @-mention her, anywhere she can read. The reply is chosen from one of eleven context buckets: a bare mention, greeting, thanks, praise, being called a cat, a help or status request, a question, plus two context buckets that outrank content - `spam` when you ping again inside the 60s window, and `sleeping` between 03:00 and 07:59 Vietnam time, matching her existing bedtime announcement. Each bucket carries nine phrasings per language.
+- `tPick(key, lang, vars, opts)` alongside `t()`: a key whose value is `{ variants: [...] }` resolves to one member at random, everything else passes through unchanged so pools can be adopted one call site at a time. Selection accepts an injected index or RNG so tests can render every variant.
+- `test/locale-invariants.test.js` guards the locale files: key-set parity across vi/en/jp, per-key placeholder SET parity, variant siblings sharing their placeholder set, pool shape, no em-dash, and no italic stage directions.
+
+### Changed
+- Roughly 150 lines of Artist's copy across vi/en/jp now rotate between several phrasings instead of repeating one sentence. Covered so far: raid-status sync results, roster and local-state refresh, the gold-receive toggle, the raid-clear parser's update and reset summaries, the spam warning, the whisper ack, and the auto-manage sync report and auto-sync toggles.
+- Warmth now tracks the moment rather than being sprinkled. A tilde stays on genuine payoffs and is dropped from neutral "nothing changed" lines and from destructive confirmations; the uniform `Đã <verb> <object>` title template that opened 45 Vietnamese strings is broken up.
+
+### Fixed
+- Removed 14 em-dash characters from the locale files and rewrote `raid-announce previewMissing`, which was both italicised and left untranslated in Vietnamese.
+
 ## 2026-07-30 (auto-sync: autonomous daily retries)
 
 ### Fixed

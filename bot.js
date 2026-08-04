@@ -63,6 +63,13 @@ const { registerSlashCommandsOnBoot } = require("./bot/app/slash-command-registr
 const { startLocalSyncWebCompanion } = require("./bot/app/local-sync-web");
 const { createRaidInteractionRouter } = require("./bot/app/interaction-router-registry");
 const {
+  createArtistPingResponder,
+} = require("./bot/services/raid/artist-ping/ping-responder");
+const {
+  parseRaidMessage,
+} = require("./bot/services/raid/channel-monitor/channel-monitor-parser");
+const { getUserLanguage } = require("./bot/services/i18n");
+const {
   buildRuntimeInstanceIdentity,
 } = require("./bot/services/runtime/instance-identity");
 
@@ -182,11 +189,40 @@ async function startBot() {
   });
 
   if (TEXT_MONITOR_ENABLED) {
+    // Both handlers hang off the same listener because both need
+    // MessageContent, which is only requested under this flag. The monitor
+    // filters itself down to the configured raid channel; the ping responder
+    // deliberately does not, so tagging Artist works anywhere she can read.
+    const artistPing = createArtistPingResponder();
+
     client.on(Events.MessageCreate, async (message) => {
       try {
         await handleRaidChannelMessage(message);
       } catch (error) {
         console.error("[bot] raid-channel message handler error:", error);
+      }
+
+      try {
+        if (message.author?.bot) return;
+        // mentions.users, not mentions.has: an @everyone sweep must not read
+        // as someone talking to Artist.
+        if (!message.mentions?.users?.has(client.user.id)) return;
+
+        const stripped = String(message.content || "").replace(/<@!?\d+>/g, " ");
+        const lang = await getUserLanguage(message.author.id, { UserModel: User });
+        const reply = artistPing.buildPingReply({
+          content: message.content,
+          userId: message.author.id,
+          mentionsArtist: true,
+          // The parser owns raid updates; a clear that happens to tag Artist
+          // must be recorded, not chatted at.
+          parsesAsRaidCommand: Boolean(parseRaidMessage(stripped)),
+          lang,
+        });
+        if (reply) await message.reply({ content: reply });
+      } catch (error) {
+        // Chatter is never worth breaking the raid flow over.
+        console.warn("[bot] artist ping reply failed:", error?.message || error);
       }
     });
   }

@@ -2160,6 +2160,155 @@ module.exports = {
   // Scheduled announcement bodies. Multi-variant pools live as arrays so the
   // firing site can `Math.floor(Math.random() * pool.length)` and pick. {N}
   // interpolation = sweep count for the cleanup/wakeup variants.
+  // Replies for when someone @-mentions Artist. One pool per bucket returned by
+  // classifyArtistPing; the bucket decides the register, the pool decides the
+  // wording. {user} is the pinger's mention.
+  artistPing: {
+    bare: {
+      variants: [
+        "{user} Có tớ đây~ Cần gì cứ nói nha.",
+        "{user} Dạ? Artist nghe đây.",
+        "{user} Hửm? Cậu gọi tớ à~",
+        "{user} Tớ đây tớ đây, có chuyện gì thế?",
+        "{user} Ơi~ Artist đang rảnh, nói đi cậu.",
+        "{user} Gọi tớ mà không nói gì là tớ tò mò lắm đấy nha~",
+        "{user} Tớ nghe đây. Cần xem gì thì `/raid-status` nhé.",
+        "{user} Có mặt~ Cần tớ giúp gì không?",
+        "{user} Hửm, tớ vừa ngẩng lên đấy. Sao thế cậu?",
+      ],
+    },
+    greeting: {
+      variants: [
+        "{user} Chào cậu~ Hôm nay raid vui chứ?",
+        "{user} Ê chào~ Tớ vẫn ngồi đây trông channel nè.",
+        "{user} Chào cậu nha~ Clear được gì hôm nay chưa?",
+        "{user} Hi hi~ Artist đây.",
+        "{user} Chào~ Có cần tớ xem tiến độ giúp không?",
+        "{user} Ơ chào cậu! Tự nhiên được gọi tên vui ghê~",
+        "{user} Chào nha~ Tớ đang rảnh, cứ post clear thoải mái.",
+        "{user} Chào cậu~ Hôm nay tớ tỉnh táo lắm đấy.",
+        "{user} Ê~ Chào buổi raid vui vẻ nha!",
+      ],
+    },
+    thanks: {
+      variants: [
+        "{user} Có gì đâu~ Việc của tớ mà.",
+        "{user} Hehe, được cảm ơn tự nhiên thấy vui ghê~",
+        "{user} Ừ~ Cậu raid vui là tớ mừng rồi.",
+        "{user} Không có gì đâu nha, tớ ngồi đây suốt mà.",
+        "{user} Ơ... cảm ơn tớ á? T-thì cũng bình thường thôi mà~",
+        "{user} Được rồi được rồi~ Cứ post clear đều là tớ thích rồi.",
+        "{user} Tớ nhận nhé~ Lần sau cần gì cứ gọi.",
+        "{user} Hì, cảm ơn cậu đã cảm ơn tớ~",
+        "{user} Ừ nha~ Tớ ghi công này vào sổ đấy.",
+      ],
+    },
+    praise: {
+      variants: [
+        "{user} ...C-cậu khen thật à? Tớ chỉ làm việc bình thường thôi mà~",
+        "{user} Hehe~ Được khen là tớ làm việc hăng hơn đấy nha.",
+        "{user} Ơ... tự nhiên ngại ghê. Nhưng mà... cảm ơn cậu.",
+        "{user} Đương nhiên rồi~ Tớ ngồi trông channel này kỹ lắm đó.",
+        "{user} Được khen tự nhiên thấy đuôi nhẹ hẳn~",
+        "{user} T-tớ biết mà! Nhưng cậu nói ra thì tớ vui hơn~",
+        "{user} Hì... cậu để ý thật đấy à? Cảm ơn nha.",
+        "{user} Ừ thì~ tớ cũng cố gắng chút xíu thôi mà.",
+        "{user} Nghe câu đó xong tớ muốn dọn channel sạch hơn nữa luôn~",
+      ],
+    },
+    tease: {
+      variants: [
+        "{user} CÁO! Tớ là CÁO nhé! 💢",
+        "{user} 💢 Tớ có chín cái đuôi đấy, mèo nào có chín đuôi hả cậu?",
+        "{user} ...Được rồi, và cậu là khỉ. Cùng là động vật có vú cả mà.",
+        "{user} Tớ nghe thấy hết đấy nhé. Tớ chỉ làm ngơ thôi. 💢",
+        "{user} Cáo thuộc họ Chó, mèo thuộc họ Mèo. Học lại đi cậu. 💢",
+        "{user} Hừ. Tớ vẫn dọn channel cho cậu đấy, dù cậu gọi tớ là gì.",
+        "{user} 💢 Lần sau nói vậy tớ sync chậm 1 giây cho biết mặt.",
+        "{user} ...Thôi được, hôm nay tớ rộng lượng. Nhưng tớ là cáo nhé.",
+        "{user} Nghe quen quen~ Chắc tớ bị gọi vậy nhiều rồi. Vẫn sai nhé. 💢",
+      ],
+    },
+    help: {
+      variants: [
+        "{user} Gõ `/raid-help` là có đủ hướng dẫn nha~",
+        "{user} Để tớ chỉ: `/raid-help` mở tài liệu đầy đủ mọi lệnh.",
+        "{user} Mới vào à? `/raid-add-roster` trước, rồi `/raid-status` xem tiến độ nha.",
+        "{user} `/raid-help` là chỗ tớ để hết hướng dẫn đấy~",
+        "{user} Cần gì cứ mở `/raid-help`, tớ viết sẵn từng phần rồi nha.",
+        "{user} Post clear thì gõ `<raid> <difficulty> <character>` vào channel này là được~",
+        "{user} Tớ gợi ý nhé: `/raid-help` cho tổng quan, `/raid-status` cho tiến độ.",
+        "{user} Có `/raid-help` rồi mà~ Nhưng cậu hỏi tớ thì tớ vẫn vui.",
+        "{user} Bắt đầu từ `/raid-help` nha, ở đó có hết.",
+      ],
+    },
+    status: {
+      variants: [
+        "{user} Mở `/raid-status` là thấy hết tiến độ nha~",
+        "{user} `/raid-status` nhé, tớ vẽ sẵn bảng cho cậu rồi đấy.",
+        "{user} Muốn xem còn raid nào chưa clear thì `/raid-status` nha~",
+        "{user} Gõ `/raid-status` đi, tớ cập nhật liên tục mà.",
+        "{user} Tiến độ nằm ở `/raid-status`, tớ để sẵn cả gold tuần này luôn.",
+        "{user} `/raid-status` cho roster của cậu, `/raid-check` nếu muốn nhìn cả team.",
+        "{user} Để tớ khỏi kể dài: `/raid-status` là gọn nhất~",
+        "{user} Xem `/raid-status` nha, có cả filter theo raid lẫn theo roster.",
+        "{user} `/raid-status` đi cậu~ Số liệu tớ giữ mới nhất rồi.",
+      ],
+    },
+    question: {
+      variants: [
+        "{user} Hửm, câu này tớ chưa chắc. Thử `/raid-help` xem có không nha~",
+        "{user} Tớ chỉ giỏi mảng raid thôi~ Hỏi về lệnh thì tớ trả lời được ngay.",
+        "{user} Câu hỏi hay đấy, nhưng tớ chỉ biết mấy chuyện raid thôi nha.",
+        "{user} Ừm... tớ nghĩ `/raid-help` sẽ trả lời tốt hơn tớ.",
+        "{user} Tớ nghe rồi nhé. Nếu là chuyện raid thì hỏi cụ thể hơn tớ giúp được~",
+        "{user} Hmm~ Tớ không dám đoán bừa đâu. Cậu hỏi rõ hơn chút nha.",
+        "{user} Tớ chưa hiểu ý cậu lắm. Thử `/raid-help` trước xem sao~",
+        "{user} Câu đó vượt tầm tớ rồi~ Nhưng chuyện roster thì tớ rành lắm.",
+        "{user} Để tớ đoán... cậu muốn xem tiến độ? Vậy thì `/raid-status` nha.",
+      ],
+    },
+    sleeping: {
+      variants: [
+        "{user} ...Zzz... khuya rồi cậu ơi, tớ ngủ tới 8h sáng nha...",
+        "{user} Hửm...? Tớ đang ngủ mà... sáng mai tớ dọn một thể nhé...",
+        "{user} ...Ngáp... Giờ này tớ nghỉ rồi. Cậu cứ post clear, sáng tớ ghi hết~",
+        "{user} Khuya quá rồi... cậu cũng ngủ đi chứ...",
+        "{user} ...Tớ nghe thấy đấy, nhưng mắt không mở nổi... 8h sáng gặp lại nha.",
+        "{user} Zzz... tớ vẫn ghi clear bình thường đâu, chỉ là không nói chuyện nổi thôi...",
+        "{user} Ơ... ai gọi đấy... tớ ngủ tiếp đây...",
+        "{user} Giờ này Artist đi ngủ rồi mà~ Sáng mai tớ tỉnh táo hơn nhiều.",
+        "{user} ...Ừm... để mai nhé... tớ đang mơ dở...",
+      ],
+    },
+    spam: {
+      variants: [
+        "{user} Tớ vừa trả lời rồi mà~ Từ từ thôi cậu.",
+        "{user} Gọi hoài tớ chóng mặt đấy nha~",
+        "{user} Tớ vẫn ở đây, không đi đâu cả. Nghỉ chút đi cậu~",
+        "{user} Hửm, lại gọi nữa à? Tớ nghe từ lần đầu rồi mà.",
+        "{user} Bình tĩnh nào~ Tớ chỉ có một cái miệng thôi.",
+        "{user} Cậu gọi nhanh hơn tớ nghĩ đấy. Cho tớ thở chút~",
+        "{user} Ừ ừ tớ nghe rồi, nghe rồi nha~",
+        "{user} Tớ đang giữ nhịp một chút, lát nữa gọi lại nhé cậu.",
+        "{user} Nhiều quá tớ đuối~ Để tớ nghỉ một nhịp đã.",
+      ],
+    },
+    fallback: {
+      variants: [
+        "{user} Hửm~ Tớ nghe rồi, nhưng chưa rõ ý cậu lắm.",
+        "{user} Tớ đây~ Cần xem gì thì `/raid-status`, cần hướng dẫn thì `/raid-help` nha.",
+        "{user} Ừm... tớ chưa hiểu, nhưng tớ vẫn ngồi đây nghe cậu.",
+        "{user} Hì, cậu gọi tớ là tớ vui rồi~",
+        "{user} Tớ chỉ rành chuyện raid thôi nha, còn lại thì tớ chịu~",
+        "{user} Nghe rồi nghe rồi~ Có cần tớ mở tiến độ ra không?",
+        "{user} Hửm? Nói rõ hơn chút tớ mới giúp được nha cậu.",
+        "{user} Tớ vẫn trông channel này đều đấy~ Cần gì cứ bảo tớ.",
+        "{user} Ơ~ Cậu nhắc tên tớ nên tớ ngoi lên đây.",
+      ],
+    },
+  },
+
   announcements: {
     "weekly-reset": {
       body: "Tuần mới đến rồi nhỉ~ Artist vừa reset progress raid tuần này cho các cậu, giờ chỉ việc làm lại từ đầu thôi. Chúc các cậu tuần raid vui vẻ nha, biển báo này Artist cuỗm đi sau 30 phút.",
