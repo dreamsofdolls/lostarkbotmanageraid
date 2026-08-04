@@ -12,8 +12,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `test/locale-invariants.test.js` guards the locale files: key-set parity across vi/en/jp, per-key placeholder SET parity, variant siblings sharing their placeholder set, pool shape, no em-dash, and no italic stage directions.
 
 ### Changed
-- Roughly 150 lines of Artist's copy across vi/en/jp now rotate between several phrasings instead of repeating one sentence. Covered so far: raid-status sync results, roster and local-state refresh, the gold-receive toggle, the raid-clear parser's update and reset summaries, the spam warning, the whisper ack, and the auto-manage sync report and auto-sync toggles.
-- Warmth now tracks the moment rather than being sprinkled. A tilde stays on genuine payoffs and is dropped from neutral "nothing changed" lines and from destructive confirmations; the uniform `Đã <verb> <object>` title template that opened 45 Vietnamese strings is broken up.
+- 567 lines of Artist's copy across vi/en/jp now rotate between several phrasings instead of repeating one sentence, spread over 41 pools per language. Covered: raid-status sync results, roster and local-state refresh, the gold-receive toggle, the raid-clear parser's update and reset summaries, the spam warning, the whisper ack, the auto-manage sync report and auto-sync toggles, side-task add/remove, shared-task add/remove, roster-wide task add, schedule kick/add/delete, share grant/revoke, and the eleven mention buckets.
+- Warmth now tracks the moment rather than being sprinkled. A tilde stays on genuine payoffs and is dropped from the 22 lines where Artist had failed or the user's work was lost - a save that did not persist, an expired picker session, a sync that could not reach Bible, a permission refusal. Ordinary input validation keeps its warmth on purpose: an oversized image is a normal boundary, not a failure.
+- The uniform `Đã <verb> <object>` template that opened 35 Vietnamese titles now leads with the outcome or the object instead. One is kept deliberately: `Đã xong` stays as a dropdown label paired against `Chưa clear`.
 
 ### Fixed
 - Removed 14 em-dash characters from the locale files and rewrote `raid-announce previewMissing`, which was both italicised and left untranslated in Vietnamese.
