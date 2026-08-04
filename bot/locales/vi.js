@@ -1978,9 +1978,21 @@ module.exports = {
     resetWithDifficulty: "{icon} Reset không cần difficulty. Dùng `<raid> reset <character>` hoặc `<raid> rs <character>` nhé.",
     resetWithGate: "{icon} Reset bằng text sẽ xóa toàn bộ raid nên không nhận gate. Dùng `<raid> reset <character>` nhé.",
     noRoster: "{icon} Cậu chưa có roster. Dùng `/raid-add-roster` trước rồi quay lại post clear nha.",
-    spamWarn: "💢 Này ơi, tớ theo không kịp đâu~ Mỗi tin cách nhau ít nhất 2 giây thôi nhé, không Artist im lặng ignore đấy!",
+    spamWarn: {
+      variants: [
+        "💢 Này ơi, tớ theo không kịp đâu~ Mỗi tin cách nhau ít nhất 2 giây thôi nhé, không Artist im lặng ignore đấy!",
+        "💢 Từ từ thôi cậu ơi, tay tớ có hai cái à~ Cách nhau 2 giây giúp tớ, không thì tớ lặng thinh bỏ qua đấy nhé!",
+        "💢 Ối ối, dồn dập quá tớ ghi không kịp! Nghỉ 2 giây giữa mỗi tin nha, không Artist làm ngơ luôn đó.",
+      ],
+    },
     emptyContent: "{icon} Ớ kìa, tin của cậu bay qua rồi nhưng Artist không đọc được chữ nào hết... Không phải lỗi của cậu đâu nha, chắc tớ đang rối mấy cài đặt bên trong. Phiền cậu nhờ chủ bot xem hộ giúp Artist xíu, sửa xong cậu gõ lại là tớ bắt được ngay~",
-    whisperAck: "<@{userId}> ...Artist DM kết quả cho cậu rồi nha~ Channel sẽ tự dọn cả 2 tin nhắn sau 5 giây...",
+    whisperAck: {
+      variants: [
+        "<@{userId}> ...Artist DM kết quả cho cậu rồi nha~ Channel sẽ tự dọn cả 2 tin nhắn sau 5 giây...",
+        "<@{userId}> ...tớ nhắn riêng chi tiết cho cậu rồi đó~ Hai tin này 5 giây nữa tớ dọn nhé...",
+        "<@{userId}> ...ghi xong rồi, chi tiết tớ gửi trong DM nha~ Chỗ này tớ dọn sau 5 giây...",
+      ],
+    },
     dmFallbackMarkDone: "mark **{scope}** done cho {names}",
     dmFallbackAlready: "{names} đã clear **{scope}** từ trước",
     dmFallbackReset: "đã reset toàn bộ progress **{scope}** cho {names}",
@@ -1992,12 +2004,24 @@ module.exports = {
     errorPartialNote: "_(Các character hợp lệ khác trong post của bạn đã được update rồi - check DM cho chi tiết.)_",
     errorRetryNote: "_(Sửa lại rồi post lại nhé, tớ sẽ tự dọn hint cũ.)_",
     raidUpdateTitle: "Raid Update · {scope}",
-    raidUpdateDescription: "Tớ đã xử lý raid cho {count} character~",
+    raidUpdateDescription: {
+      variants: [
+        "Tớ đã xử lý raid cho {count} character~",
+        "Ghi xong cho {count} character rồi nha~",
+        "{count} character đã vào sổ, xong một lượt~",
+      ],
+    },
     raidUpdateAllGates: "All gates",
     raidUpdateUpdatedField: "{icon} Updated ({count})",
     raidUpdateAlreadyField: "{icon} Đã DONE từ trước ({count})",
     raidResetTitle: "Reset Raid · {scope}",
-    raidResetDescription: "Tớ đã xử lý reset toàn raid cho {count} character và giữ nguyên difficulty đang lưu.",
+    raidResetDescription: {
+      variants: [
+        "Tớ đã reset toàn raid cho {count} character, difficulty đang lưu vẫn giữ nguyên.",
+        "Xoá sạch progress raid của {count} character rồi, difficulty thì tớ để yên.",
+        "{count} character đã được reset toàn raid. Difficulty cũ vẫn nguyên đó nha.",
+      ],
+    },
     raidResetUpdatedField: "{icon} Đã reset ({count})",
     raidResetAlreadyField: "{icon} Vốn đã trống ({count})",
     raidUpdateNotFoundField: "{icon} Không tìm thấy trong roster ({count})",

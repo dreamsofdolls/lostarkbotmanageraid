@@ -1,6 +1,8 @@
 "use strict";
 
-const { t: translate } = require("../../i18n");
+// tPick, not t: the spam warning is a variant pool. Every other hint key here
+// is a plain string, and tPick passes those straight through to t().
+const { tPick: translate } = require("../../i18n");
 
 const EMPTY_CONTENT_WARNING_COOLDOWN_MS = 5 * 60 * 1000;
 const HINT_TTL_MS = 5 * 60 * 1000;

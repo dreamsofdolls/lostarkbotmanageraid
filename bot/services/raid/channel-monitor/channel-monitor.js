@@ -23,7 +23,7 @@ const { createRaidChannelResetService } = require("./channel-monitor-reset");
 const { createRaidChannelWelcomeService } = require("./channel-monitor-welcome");
 const { parseRaidMessage } = require("./channel-monitor-parser");
 const User = require("../../../models/user");
-const { t, getUserLanguage, getGuildLanguage } = require("../../i18n");
+const { tPick, getUserLanguage, getGuildLanguage } = require("../../i18n");
 
 function createRaidChannelMonitorService({
   PermissionFlagsBits,
@@ -84,7 +84,9 @@ function createRaidChannelMonitorService({
     getRaidLabel,
     getUserLanguage,
     parseRaidMessage,
-    t,
+    // tPick, not t: whisperAck is a variant pool, and every other key the
+    // message handler resolves is a plain string that tPick passes through.
+    t: tPick,
     UserModel: User,
     ...hintService,
   });

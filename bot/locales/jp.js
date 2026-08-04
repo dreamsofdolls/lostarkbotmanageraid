@@ -1950,9 +1950,21 @@ module.exports = {
     resetWithDifficulty: "{icon} リセットに難易度は要りませんの。`<raid> reset <character>` または `<raid> rs <character>` を使ってね♪",
     resetWithGate: "{icon} テキストのリセットはレイド全体を消すため、ゲートは指定できませんの。`<raid> reset <character>` を使ってね♪",
     noRoster: "{icon} まだロスターがありませんわ。先に `/raid-add-roster` を実行してからクリアを投稿してくださいませ♪",
-    spamWarn: "💢 ちょっとぉ～ 早すぎてついていけませんわ! メッセージは 2 秒以上空けて送ってね、さもないとアーティストは黙って無視しますわよ!",
+    spamWarn: {
+      variants: [
+        "💢 ちょっとぉ～ 早すぎてついていけませんわ! メッセージは 2 秒以上空けて送ってね、さもないとアーティストは黙って無視しますわよ!",
+        "💢 落ち着いてくださいませ、手は二本しかありませんの! 2 秒は空けてね、でないと黙って読み飛ばしますわよ!",
+        "💢 あらあら、速すぎて書き留められませんわ! メッセージの間隔は 2 秒、守らないとアーティストは知らんぷりしますからね!",
+      ],
+    },
     emptyContent: "{icon} あら、メッセージは届いたのに文字が読み取れませんわ... これはあなたのせいじゃありませんの、アーティスト側の設定が混乱しているみたい。お手数ですがボット管理者に確認してもらってね、修正後に投稿し直せばちゃんと拾えますわ～♪",
-    whisperAck: "<@{userId}> ...結果を DM でお送りしましたわ♪ チャンネルは 5 秒後に両方のメッセージを自動でお片付けしますの...",
+    whisperAck: {
+      variants: [
+        "<@{userId}> ...結果を DM でお送りしましたわ♪ チャンネルは 5 秒後に両方のメッセージを自動でお片付けしますの...",
+        "<@{userId}> ...詳しくは DM にお送りしましたの♪ こちらの 2 件は 5 秒後に片付けますわ...",
+        "<@{userId}> ...記録しましたわ、詳細は DM をご覧くださいませ♪ ここは 5 秒後にお掃除しますの...",
+      ],
+    },
     dmFallbackMarkDone: "**{scope}** を完了にマーク ({names})",
     dmFallbackAlready: "{names} は既に **{scope}** をクリア済みですわ",
     dmFallbackReset: "{names} の **{scope}** の進捗をすべてリセットしましたわ",
@@ -1964,12 +1976,24 @@ module.exports = {
     errorPartialNote: "_(投稿内の他の有効なキャラは更新済みですわ - 詳細は DM をご覧ください。)_",
     errorRetryNote: "_(修正して投稿し直してね♪ 古いヒントはアーティストが片付けますわ。)_",
     raidUpdateTitle: "レイド更新 · {scope}",
-    raidUpdateDescription: "{count} 体のキャラについてレイドを処理しましたわ～♪",
+    raidUpdateDescription: {
+      variants: [
+        "{count} 体のキャラについてレイドを処理しましたわ～♪",
+        "{count} 体分、記録しておきましたわ♪",
+        "{count} 体のキャラが台帳に入りましたの。ひと区切りですわ～",
+      ],
+    },
     raidUpdateAllGates: "全ゲート",
     raidUpdateUpdatedField: "{icon} 更新済み ({count})",
     raidUpdateAlreadyField: "{icon} 既に完了済み ({count})",
     raidResetTitle: "レイドリセット · {scope}",
-    raidResetDescription: "{count} 体のキャラのレイド全体をリセットしましたわ。保存済みの難易度は維持していますの。",
+    raidResetDescription: {
+      variants: [
+        "{count} 体のキャラのレイド全体をリセットしましたわ。保存済みの難易度は維持していますの。",
+        "{count} 体分のレイド進捗を消しましたわ。難易度はそのままにしてありますの。",
+        "{count} 体のキャラをレイドごとリセットしましたの。保存済みの難易度は触っていませんわ。",
+      ],
+    },
     raidResetUpdatedField: "{icon} リセット済み ({count})",
     raidResetAlreadyField: "{icon} 既に空です ({count})",
     raidUpdateNotFoundField: "{icon} ロスターに見つかりません ({count})",

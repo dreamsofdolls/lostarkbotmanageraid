@@ -6,7 +6,7 @@
 "use strict";
 
 const { getArtistEmoji } = require("../../../models/ArtistEmoji");
-const { t } = require("../../i18n");
+const { t, tPick } = require("../../i18n");
 
 function joinIfArray(value) {
   return Array.isArray(value) ? value.join("\n") : value;
@@ -55,7 +55,7 @@ function createRaidChannelEmbedBuilders({ EmbedBuilder, UI }) {
     const embed = new EmbedBuilder()
       .setColor(color)
       .setTitle(`${titleIcon} ${t(isReset ? "text-parser.raidResetTitle" : "text-parser.raidUpdateTitle", lang, { scope: scopeLabel })}`)
-      .setDescription(t(isReset ? "text-parser.raidResetDescription" : "text-parser.raidUpdateDescription", lang, { count: results.length }))
+      .setDescription(tPick(isReset ? "text-parser.raidResetDescription" : "text-parser.raidUpdateDescription", lang, { count: results.length }))
       .setTimestamp();
 
     if (done.length > 0) {

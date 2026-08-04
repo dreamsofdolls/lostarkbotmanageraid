@@ -1949,9 +1949,21 @@ module.exports = {
     resetWithDifficulty: "{icon} Reset does not take a difficulty. Use `<raid> reset <character>` or `<raid> rs <character>`.",
     resetWithGate: "{icon} Text reset clears the whole raid, so it cannot include a gate. Use `<raid> reset <character>`.",
     noRoster: "{icon} You don't have a roster yet. Run `/raid-add-roster` first, then come back and post your clear.",
-    spamWarn: "💢 Slow down - keep at least 2 seconds between messages, otherwise Artist will silently ignore them.",
+    spamWarn: {
+      variants: [
+        "💢 Slow down - keep at least 2 seconds between messages, otherwise Artist will silently ignore them.",
+        "💢 Easy there, I only have two hands~ Leave 2 seconds between messages or I will quietly skip them.",
+        "💢 That is too fast for me to write down! Give it 2 seconds between messages, else Artist just ignores them.",
+      ],
+    },
     emptyContent: "{icon} Your message arrived but Artist couldn't read any text from it. Not your fault - some internal config might be off. Please ask the bot owner to check; once fixed, just retype and Artist will pick it up.",
-    whisperAck: "<@{userId}> ...DM with the result is on the way. Channel will auto-clean both messages in 5 seconds...",
+    whisperAck: {
+      variants: [
+        "<@{userId}> ...DM with the result is on the way. Channel will auto-clean both messages in 5 seconds...",
+        "<@{userId}> ...sent you the details privately~ I will tidy both messages here in 5 seconds...",
+        "<@{userId}> ...it is written down, details are in your DMs~ Clearing this up in 5 seconds...",
+      ],
+    },
     dmFallbackMarkDone: "marked **{scope}** done for {names}",
     dmFallbackAlready: "{names} already cleared **{scope}**",
     dmFallbackReset: "reset all progress on **{scope}** for {names}",
@@ -1963,12 +1975,24 @@ module.exports = {
     errorPartialNote: "_(Other valid characters in your post were updated - check DM for details.)_",
     errorRetryNote: "_(Fix and repost; Artist will clean the old hint automatically.)_",
     raidUpdateTitle: "Raid Update · {scope}",
-    raidUpdateDescription: "Processed raid update for {count} character(s).",
+    raidUpdateDescription: {
+      variants: [
+        "Processed raid update for {count} character(s).",
+        "Written down for {count} character(s)~",
+        "{count} character(s) are on the board, that is one round done~",
+      ],
+    },
     raidUpdateAllGates: "All gates",
     raidUpdateUpdatedField: "{icon} Updated ({count})",
     raidUpdateAlreadyField: "{icon} Already DONE ({count})",
     raidResetTitle: "Raid Reset · {scope}",
-    raidResetDescription: "Processed a full raid reset for {count} character(s). Stored difficulty was preserved.",
+    raidResetDescription: {
+      variants: [
+        "Processed a full raid reset for {count} character(s). Stored difficulty was preserved.",
+        "Cleared the raid progress of {count} character(s). I left the stored difficulty alone.",
+        "{count} character(s) had their raid reset in full. The saved difficulty stays as it was.",
+      ],
+    },
     raidResetUpdatedField: "{icon} Reset ({count})",
     raidResetAlreadyField: "{icon} Already empty ({count})",
     raidUpdateNotFoundField: "{icon} Not found in roster ({count})",
