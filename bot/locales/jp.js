@@ -591,8 +591,20 @@ module.exports = {
       syncReadyNow: "同期準備完了",
     },
     piggyback: {
-      applied: "アーティストが同期したよ♪ 新しいゲートが **{n}** 個増えましたわ～",
-      syncedNoNew: "アーティスト同期済みですわ。新しいクリアは無いみたい～",
+      applied: {
+        variants: [
+          "アーティストが同期したよ♪ 新しいゲートが **{n}** 個増えましたわ～",
+          "ついでに同期しましたの♪ ゲートが **{n}** 個増えていましたわ～",
+          "同期も一緒に済ませましたわ。新しいゲートは **{n}** 個ですの～",
+        ],
+      },
+      syncedNoNew: {
+        variants: [
+          "同期は済んでいますわ。新しいクリアはまだ無いようですの。",
+          "同期しましたが、ログは前と変わりませんでしたわ。",
+          "ログを見てきましたけれど、新しいものはまだですの。",
+        ],
+      },
       timeout: "bible がちょっと遅いの～ アーティストはまだ裏で取得してますわ。10秒後にもう一度開いてくださいね♪",
       failed: "bible が機嫌悪いみたい… アーティストはキャッシュを見せてますわ。数分後にもう一度試してね～",
     },
@@ -650,7 +662,9 @@ module.exports = {
       localOpenButtonLabel: "ウェブコンパニオンを開く",
       localNewLinkButtonLabel: "新しいリンクを発行",
       localRefreshButtonLabel: "更新",
-      localRefreshSuccessTitle: "状態を更新しましたわ",
+      localRefreshSuccessTitle: {
+        variants: ["最新の状態ですわ", "更新しましたわ♪", "DB から読み直しましたの～"],
+      },
       localRefreshSuccessDescription: "DB の最新状態でエンベッドを再描画しましたわ♪ ウェブコンパニオンで同期した後、このボタンを押すとすぐに新しい進捗が見られますの。",
       soloCompanionButtonLabel: "ソロ・コンパニオン",
       soloCompanionTitle: "ソロ・コンパニオンの準備ができました",
@@ -661,7 +675,9 @@ module.exports = {
       soloCompanionFailedTitle: "ソロ・コンパニオンのリンクを作成できませんでした",
       soloCompanionFailedDescription: "現在、非公開リンクを作成できません: `{error}`。数秒後にもう一度お試しください。",
       rosterRefreshButtonLabel: "ロスター更新",
-      rosterRefreshSuccessTitle: "ロスターを更新しましたわ",
+      rosterRefreshSuccessTitle: {
+        variants: ["ロスターが最新になりましたわ", "ロスターを引き直しましたの♪", "ロスターは最新ですわ～"],
+      },
       rosterRefreshSuccessDescription: "lostark.bible から **{accountName}** の iLvl/class を取り直しましたわ。エンベッドも最新データで更新済みですの。",
       rosterRefreshNoUpdateTitle: "ロスター更新を試しましたわ",
       rosterRefreshNoUpdateDescription: "**{accountName}** を更新しようとしましたが、lostark.bible から一致するロスターデータが返りませんでしたわ。今のデータはそのままですの、数分後にもう一度試してね。",
@@ -683,10 +699,26 @@ module.exports = {
       noAutoSyncDescription: "同期ボタンは `/raid-auto-manage action:on` をオンにした時だけ動きますわ。先にそのコマンドを実行してから同期ボタンを押してくださいね～",
       cooldownTitle: "クールダウン中ですわ",
       cooldownDescription: "さっき同期したばかりですわ。あと **{remain}** 待ってからもう一度同期ボタンを押してね♪",
-      followupApplied: "アーティストが同期完了しましたわ♪ 新しいゲートが **{n}** 個適用されましたよ～",
-      followupSyncedNoNew: "同期完了しましたわ。キャッシュと比べて新しいゲートは無いですけど、表示はリフレッシュしましたよ♪",
-      followupSuccessTitle: "同期完了しましたわ♪",
-      followupNeutralTitle: "同期しましたわ",
+      followupApplied: {
+        variants: [
+          "同期完了ですわ♪ 新しいゲートを **{n}** 個記録しましたの～",
+          "lostark.bible から **{n}** 個のゲートクリアを引いてきましたわ～",
+          "**{n}** 個の新しいゲートが入りましたわ。ログとも一致していますの♪",
+        ],
+      },
+      followupSyncedNoNew: {
+        variants: [
+          "同期完了ですわ。キャッシュと比べて新しいゲートはございませんが、表示は更新しておきましたの。",
+          "ログに新しいものはありませんでしたが、念のため表示を更新しましたわ。",
+          "今回は新しいゲートなしですの。表示は DB と揃えておきましたわ。",
+        ],
+      },
+      followupSuccessTitle: {
+        variants: ["同期完了しましたわ♪", "ログが揃いましたわ～", "ログを引き終えましたの♪"],
+      },
+      followupNeutralTitle: {
+        variants: ["同期しましたわ", "ログを確認しましたの", "ログは確認済みですわ"],
+      },
       followupFailedTitle: "同期に失敗しましたわ",
       followupFailedDescription: "bible が機嫌悪いみたい… 新しいデータが取れませんでしたわ。クールダウンはリセットしたので、数分後にもう一度試してね～",
       cooldownFallback: "数秒",
@@ -750,7 +782,9 @@ module.exports = {
       replaceTimeoutDescription: "外すレイドが選ばれなかったので、そのままにしました。必要なら Gold received で **{targetRaid}** をもう一度選んでください。",
       replaceSuccessTitle: "受取ゴールドを更新しました",
       replaceSuccessDescription: "**{characterName}** のゴールドを **{targetRaid}** に移して、**{removedRaid}** を外しましたわ。",
-      toggleSuccessTitle: "受取ゴールドを更新しました",
+      toggleSuccessTitle: {
+        variants: ["受取ゴールドを更新しました", "受取ゴールドを調整しましたわ♪", "受取ゴールド、変更しましたの～"],
+      },
       toggleSuccessDescription: "**{characterName}** の **{raidLabel}** を更新しました。Gold received で新しい枠を確認してくださいね。",
       modePlaceholder: "難易度を変更 ({name})",
       modeTimingNow: "即時適用",

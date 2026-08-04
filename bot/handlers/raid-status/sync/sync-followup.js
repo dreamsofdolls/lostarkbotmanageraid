@@ -1,6 +1,6 @@
 "use strict";
 
-const { t } = require("../../../services/i18n");
+const { tPick } = require("../../../services/i18n");
 
 const MANUAL_SYNC_FOLLOWUP = Object.freeze({
   applied: {
@@ -21,7 +21,9 @@ const MANUAL_SYNC_FOLLOWUP = Object.freeze({
   },
 });
 
-function buildManualSyncFollowupPayload(manualOutcome, lang, translate = t) {
+// tPick, not t: the success/neutral titles and bodies are variant pools, so a
+// user syncing several times a week does not read the same sentence each time.
+function buildManualSyncFollowupPayload(manualOutcome, lang, translate = tPick) {
   const spec = MANUAL_SYNC_FOLLOWUP[String(manualOutcome?.outcome || "")];
   if (!spec) return null;
   const vars = typeof spec.vars === "function" ? spec.vars(manualOutcome || {}) : undefined;

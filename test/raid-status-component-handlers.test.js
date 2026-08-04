@@ -12,6 +12,7 @@ const {
 const {
   STATUS_COMPONENT_ACTION,
 } = require("../bot/handlers/raid-status/components/component-routes");
+const { TRANSLATIONS } = require("../bot/locales");
 const {
   createStatusComponentRouteHandlers,
 } = require("../bot/handlers/raid-status/components/component-handlers");
@@ -320,7 +321,19 @@ test("raid-status component handlers persist gold toggle and request redraw", as
   assert.equal(markedPath, "accounts");
   assert.equal(saved, 1);
   assert.equal(harness.reloadCount, 1);
-  assert.match(followUpPayload.embeds[0].title, /Đã cập nhật gold nhận/);
+  // The title is a variant pool, so assert the rendered line came from that
+  // pool rather than freezing one phrasing - the point is that the gold-toggle
+  // key was used, not which of its wordings the picker landed on.
+  // The rendered title carries a status-icon prefix, so match on containment
+  // like the original assertion did - just against every variant, since the
+  // point is that the gold-toggle key was used, not which wording was picked.
+  const goldToggleTitle = followUpPayload.embeds[0].title;
+  assert.ok(
+    TRANSLATIONS.vi["raid-status"].goldView.toggleSuccessTitle.variants.some((variant) =>
+      goldToggleTitle.includes(variant),
+    ),
+    `unexpected title: ${goldToggleTitle}`,
+  );
 });
 
 test("raid-status component handlers persist gold mode and request redraw", async () => {

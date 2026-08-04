@@ -590,8 +590,20 @@ module.exports = {
       syncReadyNow: "Sync ready",
     },
     piggyback: {
-      applied: "Artist just synced - **{n}** new gate(s) applied~",
-      syncedNoNew: "Artist synced already - no new clears right now~",
+      applied: {
+        variants: [
+          "Artist just synced - **{n}** new gate(s) applied~",
+          "Squeezed a sync in, found **{n}** more gate(s)~",
+          "Synced along the way - **{n}** new gate(s) on the board~",
+        ],
+      },
+      syncedNoNew: {
+        variants: [
+          "Artist synced already - no new clears right now.",
+          "Sync done, the logs look the same as before.",
+          "I checked the logs, nothing new has landed yet.",
+        ],
+      },
       timeout: "Bible is slow today - Artist is still pulling in the background. Re-open in ~10s for fresh data~",
       failed: "Bible is misbehaving - Artist is showing cache. Please retry in a few minutes~",
     },
@@ -649,7 +661,9 @@ module.exports = {
       localOpenButtonLabel: "Open Web Companion",
       localNewLinkButtonLabel: "New link",
       localRefreshButtonLabel: "Refresh",
-      localRefreshSuccessTitle: "State refreshed",
+      localRefreshSuccessTitle: {
+        variants: ["Here is the latest state", "Refreshed~", "Pulled it from the DB again~"],
+      },
       localRefreshSuccessDescription: "Embed re-rendered with the latest DB state. Click this after syncing through the web companion to see your new progress immediately.",
       soloCompanionButtonLabel: "Solo Companion",
       soloCompanionTitle: "Solo Companion is ready",
@@ -660,7 +674,9 @@ module.exports = {
       soloCompanionFailedTitle: "Could not create Solo Companion link",
       soloCompanionFailedDescription: "Could not create a private link right now: `{error}`. Try again in a few seconds.",
       rosterRefreshButtonLabel: "Refresh roster",
-      rosterRefreshSuccessTitle: "Roster refreshed",
+      rosterRefreshSuccessTitle: {
+        variants: ["Roster is fresh now", "Pulled the roster again~", "Roster is up to date~"],
+      },
       rosterRefreshSuccessDescription: "Artist pulled fresh iLvl/class data from lostark.bible for **{accountName}**. The embed now uses the latest data.",
       rosterRefreshNoUpdateTitle: "Roster refresh attempted",
       rosterRefreshNoUpdateDescription: "Artist tried refreshing **{accountName}**, but lostark.bible did not return matching roster data. Current data was kept; try again in a few minutes.",
@@ -682,10 +698,26 @@ module.exports = {
       noAutoSyncDescription: "The Sync button only works after you run `/raid-auto-manage action:on`. Enable it first and come back to click Sync~",
       cooldownTitle: "On cooldown",
       cooldownDescription: "You synced recently - wait another **{remain}** before you can click Sync again.",
-      followupApplied: "Artist just synced - **{n}** new gate(s) applied~",
-      followupSyncedNoNew: "Sync done - no new clears compared to cache. The embed has been refreshed~",
-      followupSuccessTitle: "Sync complete",
-      followupNeutralTitle: "Synced",
+      followupApplied: {
+        variants: [
+          "Sync done - **{n}** new gate(s) recorded~",
+          "Pulled **{n}** gate clear(s) from lostark.bible~",
+          "**{n}** new gate(s) are on the board, logs all line up~",
+        ],
+      },
+      followupSyncedNoNew: {
+        variants: [
+          "Sync done - no new clears compared to cache. The embed was refreshed anyway.",
+          "Nothing new in the logs, but I refreshed the embed to be sure.",
+          "No new gates this time. The embed is in step with the DB now.",
+        ],
+      },
+      followupSuccessTitle: {
+        variants: ["Sync complete~", "Logs are all in~", "Finished pulling logs~"],
+      },
+      followupNeutralTitle: {
+        variants: ["Sync done", "Finished checking the logs", "Logs checked"],
+      },
       followupFailedTitle: "Sync hit a snag",
       followupFailedDescription: "Bible is misbehaving - sync couldn't pull fresh data. Cooldown was reset; please retry in a few minutes.",
       cooldownFallback: "a few seconds",
@@ -749,7 +781,9 @@ module.exports = {
       replaceTimeoutDescription: "Artist did not see a raid to untick, so everything stays as-is. Reopen Gold received and pick **{targetRaid}** again when ready.",
       replaceSuccessTitle: "Received gold updated",
       replaceSuccessDescription: "Artist moved **{characterName}**'s gold to **{targetRaid}** and unticked **{removedRaid}**.",
-      toggleSuccessTitle: "Received gold updated",
+      toggleSuccessTitle: {
+        variants: ["Received gold updated", "Gold pick adjusted~", "Right, gold pick changed~"],
+      },
       toggleSuccessDescription: "Artist updated **{raidLabel}** for **{characterName}**. Open Gold received again to check the new slot.",
       modePlaceholder: "Change difficulty ({name})",
       modeTimingNow: "applies now",

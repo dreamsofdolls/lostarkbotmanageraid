@@ -612,8 +612,20 @@ module.exports = {
       syncReadyNow: "Sync sẵn sàng",
     },
     piggyback: {
-      applied: "Artist vừa sync xong, có **{n}** gate mới luôn nha~",
-      syncedNoNew: "Artist đã sync rồi, hiện không có gate clear mới nha~",
+      applied: {
+        variants: [
+          "Artist vừa sync xong, có **{n}** gate mới luôn nha~",
+          "Tranh thủ sync một nhịp, thấy thêm **{n}** gate nha~",
+          "Sync kèm luôn rồi, **{n}** gate mới vừa vào sổ~",
+        ],
+      },
+      syncedNoNew: {
+        variants: [
+          "Artist sync rồi, chưa có gate clear nào mới cả.",
+          "Sync xong, logs vẫn y như cũ thôi.",
+          "Tớ ngó qua logs rồi, chưa thấy gate nào mới.",
+        ],
+      },
       timeout: "Bible đang chậm tay, Artist vẫn đang lấy ngầm. Cậu mở lại sau ~10s là có data mới nha~",
       failed: "Bible đang dở chứng, Artist tạm xem cache. Cậu thử lại sau vài phút giúp tớ nhé~",
     },
@@ -671,7 +683,9 @@ module.exports = {
       localOpenButtonLabel: "Mở Web Companion",
       localNewLinkButtonLabel: "Tạo link mới",
       localRefreshButtonLabel: "Cập nhật",
-      localRefreshSuccessTitle: "Đã làm mới state",
+      localRefreshSuccessTitle: {
+        variants: ["State mới nhất đây", "Làm mới xong~", "Ngó lại DB rồi nha~"],
+      },
       localRefreshSuccessDescription: "Embed đã refresh lại theo state mới nhất từ DB. Sau khi sync qua web companion thì click nút này để thấy progress mới ngay nha~",
       soloCompanionButtonLabel: "Solo Companion",
       soloCompanionTitle: "Solo Companion đã sẵn sàng",
@@ -682,7 +696,9 @@ module.exports = {
       soloCompanionFailedTitle: "Không tạo được link Solo Companion",
       soloCompanionFailedDescription: "Không thể tạo link riêng tư lúc này: `{error}`. Thử lại sau vài giây nhé.",
       rosterRefreshButtonLabel: "Refresh roster",
-      rosterRefreshSuccessTitle: "Đã refresh roster",
+      rosterRefreshSuccessTitle: {
+        variants: ["Roster mới tinh rồi", "Kéo lại roster xong~", "Roster cập nhật rồi nha~"],
+      },
       rosterRefreshSuccessDescription: "Artist vừa kéo lại iLvl/class từ lostark.bible cho **{accountName}**. Embed đã cập nhật theo dữ liệu mới.",
       rosterRefreshNoUpdateTitle: "Đã thử refresh roster",
       rosterRefreshNoUpdateDescription: "Artist đã thử kéo lại **{accountName}**, nhưng lostark.bible chưa trả về dữ liệu khớp với roster này. Tớ giữ nguyên data hiện tại; thử lại sau vài phút nha.",
@@ -704,10 +720,26 @@ module.exports = {
       noAutoSyncDescription: "Sync button chỉ chạy được khi cậu đã `/raid-auto-manage action:on`. Gõ lệnh đó trước rồi quay lại bấm Sync nha~",
       cooldownTitle: "Đang trong cooldown",
       cooldownDescription: "Cậu vừa sync gần đây nha, đợi thêm **{remain}** nữa rồi bấm Sync tiếp được.",
-      followupApplied: "Artist vừa sync xong, có **{n}** gate mới được apply nha~",
-      followupSyncedNoNew: "Sync xong rồi, không có gate mới so với cache. Embed đã refresh lại nha~",
-      followupSuccessTitle: "Đã sync xong",
-      followupNeutralTitle: "Đã sync",
+      followupApplied: {
+        variants: [
+          "Sync xong, **{n}** gate mới vừa được ghi nhận nha~",
+          "Kéo về **{n}** gate clear từ lostark.bible rồi nha~",
+          "**{n}** gate mới vào sổ, logs khớp hết~",
+        ],
+      },
+      followupSyncedNoNew: {
+        variants: [
+          "Sync xong, không có gate nào mới so với cache. Embed vẫn được làm mới lại.",
+          "Logs chưa có gì mới, nhưng tớ đã refresh lại embed cho chắc.",
+          "Không có gate mới lần này. Embed đã đồng bộ với DB rồi nha.",
+        ],
+      },
+      followupSuccessTitle: {
+        variants: ["Sync xong rồi nha~", "Logs về đủ rồi~", "Kéo logs xong~"],
+      },
+      followupNeutralTitle: {
+        variants: ["Sync xong", "Ngó logs xong rồi", "Đã kiểm tra logs"],
+      },
       followupFailedTitle: "Sync gặp trục trặc",
       followupFailedDescription: "Bible đang dở chứng, sync chưa lấy được data mới. Cooldown đã reset, cậu thử lại sau vài phút giúp tớ nhé~",
       cooldownFallback: "vài giây",
@@ -771,7 +803,9 @@ module.exports = {
       replaceTimeoutDescription: "Artist chưa thấy cậu chọn raid để bỏ tick nên tớ giữ nguyên nhé. Khi cần đổi lại, mở Gold nhận và chọn lại **{targetRaid}**.",
       replaceSuccessTitle: "Đổi gold nhận xong",
       replaceSuccessDescription: "Artist đã chuyển gold của **{characterName}** sang **{targetRaid}** và bỏ tick **{removedRaid}** rồi nha. Gọn lại một nhịp~",
-      toggleSuccessTitle: "Đã cập nhật gold nhận",
+      toggleSuccessTitle: {
+        variants: ["Gold nhận cập nhật rồi", "Chỉnh gold nhận xong~", "Ok, gold nhận đổi rồi nha~"],
+      },
       toggleSuccessDescription: "Artist đã cập nhật **{raidLabel}** cho **{characterName}** rồi nha. Mở mắt nhìn lại Gold nhận xem slot mới đã vào đúng chỗ chưa~",
       modePlaceholder: "Đổi độ khó của {name}...",
       modeTimingNow: "đổi ngay",

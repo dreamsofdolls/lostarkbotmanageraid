@@ -50,6 +50,7 @@ const {
 } = require("../../../utils/discord/component-values");
 const {
   t,
+  tPick,
 } = require("../../../services/i18n");
 
 function noRedraw() {
@@ -65,7 +66,7 @@ function buildRosterRefreshFollowupPayload(result, lang) {
   if (result?.status === "updated") {
     return {
       type: "success",
-      title: t("raid-status.sync.rosterRefreshSuccessTitle", lang),
+      title: tPick("raid-status.sync.rosterRefreshSuccessTitle", lang),
       description: t("raid-status.sync.rosterRefreshSuccessDescription", lang, {
         accountName,
       }),
@@ -276,7 +277,7 @@ function createStatusComponentRouteHandlers(ctx) {
 
       await followUpNotice(component, EmbedBuilder, {
         type: "success",
-        title: t("raid-status.sync.localRefreshSuccessTitle", lang),
+        title: tPick("raid-status.sync.localRefreshSuccessTitle", lang),
         description: t("raid-status.sync.localRefreshSuccessDescription", lang),
       }).catch(() => {});
       return noRedraw();
@@ -660,7 +661,7 @@ function createStatusComponentRouteHandlers(ctx) {
       if (toggleResult.override === "include" && typeof component.followUp === "function") {
         await followUpNotice(component, EmbedBuilder, {
           type: "success",
-          title: t("raid-status.goldView.toggleSuccessTitle", lang),
+          title: tPick("raid-status.goldView.toggleSuccessTitle", lang),
           description: t("raid-status.goldView.toggleSuccessDescription", lang, {
             characterName: parsed.targetCharName,
             raidLabel: localizedRaidLabel(toggleResult.targetRaid, lang) || parsed.raidKey,

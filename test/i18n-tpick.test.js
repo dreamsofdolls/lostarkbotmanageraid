@@ -13,7 +13,11 @@ const { t, tPick, DEFAULT_LANGUAGE } = require("../bot/services/i18n");
 const { TRANSLATIONS } = require("../bot/locales");
 
 test("plain string keys pass straight through to t()", () => {
-  const key = "raid-status.gold.toggleSuccessTitle";
+  // A key that really exists and is NOT a pool - otherwise both sides would
+  // just return the raw key and the assertion would prove nothing.
+  const key = "raid-status.sync.cooldownTitle";
+  assert.equal(typeof t(key, "vi"), "string");
+  assert.notEqual(t(key, "vi"), key);
   assert.equal(tPick(key, "vi"), t(key, "vi"));
 });
 

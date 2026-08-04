@@ -9,7 +9,7 @@
 
 const { getClassEmoji } = require("../../../models/Class");
 const { pack2Columns, formatProgressTotals } = require("../../../utils/raid/common/shared");
-const { t } = require("../../../services/i18n");
+const { t, tPick } = require("../../../services/i18n");
 
 /**
  * Build the /raid-status view service.
@@ -238,10 +238,10 @@ function createRaidStatusView(deps) {
     switch (piggybackOutcome.outcome) {
       case "applied": {
         const n = piggybackOutcome.newGatesApplied || 0;
-        return `${UI.icons.reset} ${t("raid-status.piggyback.applied", lang, { n })}`;
+        return `${UI.icons.reset} ${tPick("raid-status.piggyback.applied", lang, { n })}`;
       }
       case "synced-no-new":
-        return `${UI.icons.done} ${t("raid-status.piggyback.syncedNoNew", lang)}`;
+        return `${UI.icons.done} ${tPick("raid-status.piggyback.syncedNoNew", lang)}`;
       case "timeout":
         return `⏳ ${t("raid-status.piggyback.timeout", lang)}`;
       case "failed":
