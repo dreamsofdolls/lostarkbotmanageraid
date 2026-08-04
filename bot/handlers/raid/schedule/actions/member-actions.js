@@ -1,6 +1,7 @@
 "use strict";
 
-const { t } = require("../../../../services/i18n");
+// tPick, not t: some titles here are variant pools; non-pool keys pass through.
+const { tPick: t } = require("../../../../services/i18n");
 const { partitionSelectable } = require("../../../../services/raid/schedule/slots/eligibility");
 const { applyJoin, applyKick } = require("../../../../services/raid/schedule/slots/signup-state");
 const { assignSlots, detectPromotion } = require("../../../../services/raid/schedule/slots/slots");

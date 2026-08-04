@@ -11,7 +11,8 @@
 const RosterShare = require("../../models/RosterShare");
 const User = require("../../models/user");
 const { isManagerId } = require("../../services/access/manager");
-const { t, getUserLanguage } = require("../../services/i18n");
+// tPick, not t: some titles here are variant pools; non-pool keys pass through.
+const { tPick: t, getUserLanguage } = require("../../services/i18n");
 const {
   deferEphemeralReply,
   editEmbed,

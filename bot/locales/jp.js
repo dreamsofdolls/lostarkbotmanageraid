@@ -251,9 +251,21 @@ module.exports = {
       kickEmptyDescription: "まだ誰もこのイベントに参加してないから、外す人がいないんだ。",
       kickNoneTitle: "誰も外せなかったよ",
       kickNoneDescription: "選んだ人はもうリストにいないみたい（先に自分で抜けたのかも）。Kick をもう一度開いて最新のリストを見てね。",
-      kickedTitle: "kick したよ～",
+      kickedTitle: {
+        variants: [
+          "kick したよ～",
+          "ボードから外しましたの～",
+          "枠が空きましたわ～",
+        ],
+      },
       kickedDescription: "Artist が **{members}** をイベントから外したよ。",
-      addedTitle: "イベントに追加したよ~",
+      addedTitle: {
+        variants: [
+          "イベントに追加したよ~",
+          "席を確保しましたの～",
+          "ボードに名前が載りましたわ～",
+        ],
+      },
       addedDescription: "Artist が {user} を **{character}** で追加したよ。今の位置: {placement}。",
       addedPing: "{user} lead が **{title}**（{character}）に追加したよ - {placement}。開始 {rel} ね~ board か /raid-status で詳細を見てね。",
       addedPlacementComp: "編成スロットに入っている",
@@ -270,7 +282,13 @@ module.exports = {
       addAllClearedDescription: "{user} の iLvl 足りてる char は全部このレイドを今週クリア済みだから、追加できる char が無いよ。",
       deleteConfirmTitle: "このイベントを完全に削除する？",
       deleteConfirmDescription: "board と全データ（参加・ターン）が消えて復元できないよ。Cancel（凍結して記録を残す）とは違うよ。いい？",
-      deletedTitle: "イベントを削除したよ~",
+      deletedTitle: {
+        variants: [
+          "イベントを削除したよ~",
+          "ボードを片付けましたの～",
+          "そのボードは消えましたわ～",
+        ],
+      },
       deletedDescription: "Artist が board とイベントデータを消したよ。参加者がいたらチャンネルで知らせたよ。",
       deletedBoardMissingDescription: "Artist はイベントデータを削除したけど、board メッセージは消せなかったよ。まだチャンネルに残っていたら手動で消してね。",
       deleteFailedTitle: "イベントを削除できなかったよ",
@@ -299,7 +317,13 @@ module.exports = {
       botTargetDescription: "対象は本物の Discord ユーザーじゃないとダメですよ～ ボットはダメ！",
       selfTargetTitle: "自分には共有できませんわ",
       selfTargetDescription: "対象は自分自身にはできないの～ 自分のロスターは自分でちゃんと管理できますもん♪",
-      successTitleNew: "共有できましたわ♪",
+      successTitleNew: {
+        variants: [
+          "共有できましたわ♪",
+          "権限をお渡ししましたの～",
+          "あちらから見えるようになりましたわ♪",
+        ],
+      },
       successTitleUpdate: "共有を更新しましたわ♪",
       descriptionUpdate: "<@{target}> の権限を `{previous}` → `{permission}` に変更しましたわ♪ 次回 /raid-status や /raid-set を実行する時、オートコンプリートに新しい権限が反映されますよ～",
       descriptionNewEdit: "これから <@{target}> は /raid-status であなたのロスターを全部見られますわ♪ `edit` 権限なので /raid-set、/raid-task、テキストパーサーで **進捗の更新** もできますよ～ いつでも `/raid-share revoke` で取り消せますわ。",
@@ -309,7 +333,13 @@ module.exports = {
     revoke: {
       noShareTitle: "取り消す共有がありませんわ",
       noShareDescription: "<@{target}> にはまだロスターを共有していませんよ～ 取り消すものは無いですわ。",
-      successTitle: "共有を取り消しましたわ♪",
+      successTitle: {
+        variants: [
+          "共有を取り消しましたわ♪",
+          "権限を戻しましたの",
+          "もう見えなくなりましたわ",
+        ],
+      },
       successDescription: "<@{target}> はもう /raid-status であなたのロスターを見られなくなりますわ。次回コマンドを実行する時、自分のロスターだけが表示されますよ～",
     },
     list: {
@@ -1379,7 +1409,13 @@ module.exports = {
       capReachedDescription: "**{characterName}** はもう **{cap} 個の {reset} タスク** に達してますわ。リストが薄まらないようハードキャップが効いてますの。\n\n**現状:** {dailyCount}/{capDaily} デイリー · {weeklyCount}/{capWeekly} ウィークリー\n**解決:** `/raid-task remove` で古いタスクを消してから新しいタスクを追加してね～",
       duplicateTitle: "タスクが既に存在しますわ",
       duplicateDescription: "**{characterName}** には既に同じサイクル `{reset}` のタスク `{taskName}` がありますわ。別の名前にするかサイクルを変えてね～",
-      successTitle: "サイドタスクを追加しましたわ♪",
+      successTitle: {
+        variants: [
+          "サイドタスクを追加しましたわ♪",
+          "サイドタスクを書き留めましたの～",
+          "チェックリストに入れておきましたわ♪",
+        ],
+      },
       successDescription: "**キャラ:** {characterName}\n**タスク:** {taskName}\n**サイクル:** {cycleLabel}\n\n**残スロット:** {remainDaily} デイリー · {remainWeekly} ウィークリー\n`/raid-status` で **タスクビュー** に切り替えると完了をトグルできますわ♪",
       cycleDailyLabel: "デイリー (19:00 JST リセット)",
       cycleWeeklyLabel: "ウィークリー (19:00 JST 水曜日リセット)",
@@ -1389,7 +1425,13 @@ module.exports = {
       emptyRosterDescription: "ロスター **{rosterName}** にはまだキャラが居ませんわ。先に `/raid-add-roster` でキャラを追加してからタスク登録してね～",
       nothingTitle: "追加できるものがありませんわ",
       nothingDescription: "このタスクを受け取れるキャラがロスターに居ませんでした (スロット満杯か、同じ名前+サイクルのタスクが既存)。\n\n{skippedSummary}",
-      successTitle: "ロスターにタスクを追加しましたわ♪",
+      successTitle: {
+        variants: [
+          "ロスターにタスクを追加しましたわ♪",
+          "ロスターの全キャラが持っていますの～",
+          "ロスター全体に行き渡りましたわ♪",
+        ],
+      },
       successDescription: "**ロスター:** {rosterName}\n**タスク:** {taskName} · {cycleLabel}\n\n**追加済み:** {addedNames}{skippedSection}",
       skippedHeader: "**スキップ ({count}):**",
       skippedLine: "• `{charName}`: {reason}",
@@ -1413,7 +1455,13 @@ module.exports = {
       capReachedDescription: "ロスター **{rosterName}** はもう共通タスクが満杯ですわ。リスト整理のためのハードキャップですの。\n\n**現状:** {dailyCount}/{capDaily} デイリー · {weeklyCount}/{capWeekly} ウィークリー · {scheduledCount}/{capScheduled} スケジュール\n**解決:** `/raid-task shared-remove` で古いタスクを消してから追加してね～",
       duplicateTitle: "共通タスクが既に存在しますわ",
       duplicateDescription: "ロスター **{rosterName}** には既に共通タスク **{taskName}** がありますわ。`name:` フィールドで別名にするか古いものを先に削除してね～",
-      successTitle: "共通タスクを追加しましたわ♪",
+      successTitle: {
+        variants: [
+          "共通タスクを追加しましたわ♪",
+          "ロスター全員がこれを持ちましたの～",
+          "共通タスクが入りましたわ♪",
+        ],
+      },
       successDescriptionSingle: "**ロスター:** {rosterName}\n**タスク:** {taskName}\n**種類:** {presetLabel}{expirySuffix}\n\nメンバーは `/raid-status` の 📝 サイドタスク ビューでこのタスクが見えますわ。",
       successDescriptionMulti: "**種類:** {presetLabel}{expirySuffix}\n**追加したロスター ({addedCount}):** {addedNames}{skippedSection}\n\nメンバーは全ロスターでこのタスクが `/raid-status` の 📝 サイドタスク ビューに見えますわ。",
       expirySuffix: " · {date} 期限",
@@ -1434,13 +1482,25 @@ module.exports = {
     sharedRemove: {
       noTaskTitle: "共通タスクがもう存在しませんわ",
       noTaskDescription: "このタスクは既に削除されたみたいですわ。`/raid-status` を開き直すか、新しいオートコンプリートを使ってね～",
-      successTitle: "共通タスクを削除しましたわ",
+      successTitle: {
+        variants: [
+          "共通タスクを削除しましたわ",
+          "ロスターから外しましたの",
+          "その共通タスクは消えましたわ",
+        ],
+      },
       successDescription: "**ロスター:** {rosterName}\n**タスク:** {taskName}\n\nメンバーは `/raid-status` の 📝 サイドタスク ビューで変更が見られますわ。",
     },
     remove: {
       noTaskTitle: "タスクがもう存在しませんわ",
       noTaskDescription: "このタスクは既に削除されたみたいですわ (または存在しない id をオートコンプリートが指してます)。`/raid-status` を更新して新しいリストを見てね～",
-      successTitle: "タスクを削除しましたわ",
+      successTitle: {
+        variants: [
+          "タスクを削除しましたわ",
+          "そのタスクは消えましたの",
+          "チェックリストから外しましたわ",
+        ],
+      },
       successDescription: "**キャラ:** {characterName}\n**タスク:** {taskName}\n\nメンバーは `/raid-status` の 📝 サイドタスク ビューで変更が見られますわ。",
     },
     clear: {

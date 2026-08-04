@@ -1,6 +1,7 @@
 "use strict";
 
-const { t, getUserLanguage } = require("../../../../services/i18n");
+// tPick, not t: some titles here are variant pools; non-pool keys pass through.
+const { tPick: t, getUserLanguage } = require("../../../../services/i18n");
 const { resolveEditableTaskWriteAccess } = require("../write-access");
 const {
   SCHEDULED_RESET,

@@ -262,9 +262,21 @@ module.exports = {
       kickEmptyDescription: "Chưa ai đăng ký event này nên không có ai để gỡ cả nha.",
       kickNoneTitle: "Không gỡ được ai",
       kickNoneDescription: "Mấy người cậu chọn không còn trong danh sách nữa (chắc tự rời rồi). Mở lại Kick để lấy danh sách mới nha.",
-      kickedTitle: "Kick xong rồi~",
+      kickedTitle: {
+        variants: [
+          "Kick xong rồi~",
+          "Tiễn ra khỏi board rồi nha~",
+          "Bỏ khỏi slot xong~",
+        ],
+      },
       kickedDescription: "Artist gỡ **{members}** khỏi event rồi nha.",
-      addedTitle: "Vào event rồi nha~",
+      addedTitle: {
+        variants: [
+          "Vào event rồi nha~",
+          "Xếp chỗ xong~",
+          "Có tên trong board rồi nha~",
+        ],
+      },
       addedDescription: "Artist thêm {user} với **{character}** rồi nha. Trạng thái hiện tại: {placement}.",
       addedPing: "{user} cậu vừa được lead thêm vào **{title}** ({character}) - {placement}, khởi raid {rel} nha~ Mở board hoặc /raid-status để xem chi tiết.",
       addedPlacementComp: "đang giữ slot trong đội",
@@ -281,7 +293,13 @@ module.exports = {
       addAllClearedDescription: "Mọi char đủ iLvl của {user} đã clear raid này tuần này rồi nên không thêm vào được nha.",
       deleteConfirmTitle: "Xóa hẳn event này?",
       deleteConfirmDescription: "Board + toàn bộ dữ liệu (đăng ký, turn) sẽ bị xóa, không khôi phục được. Khác với Hủy (đóng băng giữ record). Chắc chưa?",
-      deletedTitle: "Event xóa rồi~",
+      deletedTitle: {
+        variants: [
+          "Event xóa rồi~",
+          "Dọn board đi rồi~",
+          "Board đó biến mất rồi nha~",
+        ],
+      },
       deletedDescription: "Artist gỡ board + dữ liệu event rồi nha. Nếu có người đăng ký thì họ được báo ngoài channel.",
       deletedBoardMissingDescription: "Artist đã xóa dữ liệu event rồi, nhưng chưa gỡ được board message. Nếu board còn hiện trong channel, cậu xóa tay giúp Artist nha.",
       deleteFailedTitle: "Chưa xóa được event",
@@ -315,7 +333,13 @@ module.exports = {
       botTargetDescription: "Target phải là một Discord user thật, không phải bot.",
       selfTargetTitle: "Không share cho chính mình",
       selfTargetDescription: "Target không thể là chính cậu - roster của cậu thì cậu vẫn quản lý mà~",
-      successTitleNew: "Share xong rồi",
+      successTitleNew: {
+        variants: [
+          "Share xong rồi",
+          "Chia quyền xong~",
+          "Người kia xem được rồi nha~",
+        ],
+      },
       successTitleUpdate: "Cập nhật share thành công",
       descriptionUpdate: "Đổi quyền cho <@{target}> từ `{previous}` → `{permission}`. Lần kế tiếp họ chạy /raid-status hoặc /raid-set, autocomplete sẽ phản ánh quyền mới.",
       descriptionNewEdit: "Từ giờ <@{target}> sẽ thấy mọi roster của cậu trong /raid-status và (với quyền `edit`) có thể **update progress** qua /raid-set, /raid-task, text parser. Cậu có thể `/raid-share revoke` bất cứ lúc nào để rút quyền.",
@@ -325,7 +349,13 @@ module.exports = {
     revoke: {
       noShareTitle: "Không có share nào để rút",
       noShareDescription: "<@{target}> chưa được cậu share roster. Không có gì để revoke.",
-      successTitle: "Rút share rồi",
+      successTitle: {
+        variants: [
+          "Rút share rồi",
+          "Thu quyền lại xong",
+          "Người kia không xem được nữa",
+        ],
+      },
       successDescription: "<@{target}> sẽ không còn thấy roster của cậu trong /raid-status nữa. Lần kế tiếp họ chạy command, view sẽ revert về roster của riêng họ.",
     },
     list: {
@@ -1400,7 +1430,13 @@ module.exports = {
       capReachedDescription: "**{characterName}** đã đủ **{cap} task {reset}** rồi nha. Cap cứng để list không bị loãng.\n\n**Hiện tại:** {dailyCount}/{capDaily} daily · {weeklyCount}/{capWeekly} weekly\n**Cách giải:** Gõ `/raid-task remove` xoá task cũ trước, rồi mới add task mới.",
       duplicateTitle: "Task đã tồn tại",
       duplicateDescription: "Char **{characterName}** đã có task `{taskName}` cùng cycle `{reset}` rồi. Đặt tên khác hoặc đổi cycle nha.",
-      successTitle: "Side task vào rồi",
+      successTitle: {
+        variants: [
+          "Side task vào rồi",
+          "Ghi side task xong~",
+          "Thêm vào checklist rồi nha~",
+        ],
+      },
       successDescription: "**Character:** {characterName}\n**Task:** {taskName}\n**Cycle:** {cycleLabel}\n\n**Slot còn lại:** {remainDaily} daily · {remainWeekly} weekly\nVào `/raid-status` rồi đổi sang **Task view** để toggle complete nha.",
       cycleDailyLabel: "Daily (reset 17:00 VN)",
       cycleWeeklyLabel: "Weekly (reset 17:00 VN thứ 4)",
@@ -1410,7 +1446,13 @@ module.exports = {
       emptyRosterDescription: "Roster **{rosterName}** chưa có character nào. Add char trước qua `/raid-add-roster` rồi mới register task được.",
       nothingTitle: "Không có gì để thêm",
       nothingDescription: "Không có character nào trong roster có thể nhận task này (đầy slot hết hoặc đã có task trùng tên + cycle).\n\n{skippedSummary}",
-      successTitle: "Task vào cho cả roster rồi",
+      successTitle: {
+        variants: [
+          "Task vào cho cả roster rồi",
+          "Mọi char trong roster có task này~",
+          "Rải task cho cả roster xong~",
+        ],
+      },
       successDescription: "**Roster:** {rosterName}\n**Task:** {taskName} · {cycleLabel}\n\n**Đã thêm:** {addedNames}{skippedSection}",
       skippedHeader: "**Skipped ({count}):**",
       skippedLine: "• `{charName}`: {reason}",
@@ -1434,7 +1476,13 @@ module.exports = {
       capReachedDescription: "Roster **{rosterName}** đã đủ task chung rồi nha. Cap cứng để giữ list gọn.\n\n**Hiện tại:** {dailyCount}/{capDaily} daily · {weeklyCount}/{capWeekly} weekly · {scheduledCount}/{capScheduled} scheduled\n**Cách giải:** `/raid-task shared-remove` xoá bớt task cũ rồi add lại nha.",
       duplicateTitle: "Task chung đã tồn tại",
       duplicateDescription: "Roster **{rosterName}** đã có task chung **{taskName}** rồi. Đổi tên (qua field `name:`) hoặc xoá cái cũ trước nha.",
-      successTitle: "Task chung vào rồi",
+      successTitle: {
+        variants: [
+          "Task chung vào rồi",
+          "Cả roster có task này rồi~",
+          "Thêm task chung xong nha~",
+        ],
+      },
       successDescriptionSingle: "**Roster:** {rosterName}\n**Task:** {taskName}\n**Loại:** {presetLabel}{expirySuffix}\n\nMember sẽ thấy task này khi mở `/raid-status` view 📝 Side tasks.",
       successDescriptionMulti: "**Loại:** {presetLabel}{expirySuffix}\n**Roster đã thêm ({addedCount}):** {addedNames}{skippedSection}\n\nMember sẽ thấy task này ở mọi roster khi mở `/raid-status` view 📝 Side tasks.",
       expirySuffix: " · hết hạn {date}",
@@ -1455,13 +1503,25 @@ module.exports = {
     sharedRemove: {
       noTaskTitle: "Task chung đã không còn",
       noTaskDescription: "Task này có vẻ đã bị xoá từ trước. Gõ lại `/raid-status` hoặc dùng autocomplete mới nha.",
-      successTitle: "Task chung xoá rồi",
+      successTitle: {
+        variants: [
+          "Task chung xoá rồi",
+          "Gỡ task chung khỏi roster xong",
+          "Bỏ task chung đó đi rồi~",
+        ],
+      },
       successDescription: "**Roster:** {rosterName}\n**Task:** {taskName}\n\nMember sẽ thấy thay đổi ở `/raid-status` view 📝 Side tasks.",
     },
     remove: {
       noTaskTitle: "Task đã không còn",
       noTaskDescription: "Task này có vẻ đã bị xoá từ trước (hoặc autocomplete trỏ tới id không còn tồn tại). Refresh `/raid-status` để xem list mới nha.",
-      successTitle: "Task xoá rồi",
+      successTitle: {
+        variants: [
+          "Task xoá rồi",
+          "Bỏ task đó đi rồi~",
+          "Gỡ khỏi checklist xong",
+        ],
+      },
       successDescription: "**Character:** {characterName}\n**Task:** {taskName}\n\nMember sẽ thấy thay đổi ở `/raid-status` view 📝 Side tasks.",
     },
     clear: {

@@ -249,9 +249,21 @@ module.exports = {
       kickEmptyDescription: "No one has signed up for this event yet, so there's nobody to drop.",
       kickNoneTitle: "Couldn't drop anyone",
       kickNoneDescription: "The people you picked aren't on the list anymore (they probably left first). Reopen Kick for a fresh list.",
-      kickedTitle: "Kicked~",
+      kickedTitle: {
+        variants: [
+          "Kicked~",
+          "Off the board they go~",
+          "Slot is free again~",
+        ],
+      },
       kickedDescription: "Artist dropped **{members}** from the event.",
-      addedTitle: "Added to the event~",
+      addedTitle: {
+        variants: [
+          "Added to the event~",
+          "Seat taken~",
+          "You are on the board now~",
+        ],
+      },
       addedDescription: "Artist added {user} with **{character}**. Current placement: {placement}.",
       addedPing: "{user}, the lead just added you to **{title}** ({character}) - {placement}. Raid starts {rel}~ Open the board or /raid-status for details.",
       addedPlacementComp: "holding a comp slot",
@@ -268,7 +280,13 @@ module.exports = {
       addAllClearedDescription: "Every character of {user}'s at iLvl already cleared this raid this week, so there's nobody to add.",
       deleteConfirmTitle: "Delete this event for good?",
       deleteConfirmDescription: "The board and all data (signups, turns) will be removed and can't be recovered. Different from Cancel, which freezes and keeps a record. Sure?",
-      deletedTitle: "Event deleted~",
+      deletedTitle: {
+        variants: [
+          "Event deleted~",
+          "Board cleared away~",
+          "That board is gone now~",
+        ],
+      },
       deletedDescription: "Artist removed the board + the event data. If anyone had signed up, they were pinged in the channel.",
       deletedBoardMissingDescription: "Artist removed the event data, but couldn't delete the board message. If it is still visible in the channel, please delete it manually.",
       deleteFailedTitle: "Couldn't delete the event",
@@ -298,7 +316,13 @@ module.exports = {
       botTargetDescription: "Target must be a real Discord user, not a bot.",
       selfTargetTitle: "Cannot share with yourself",
       selfTargetDescription: "Target cannot be yourself - you already manage your own rosters~",
-      successTitleNew: "Share granted",
+      successTitleNew: {
+        variants: [
+          "Share granted",
+          "Access handed over~",
+          "They can see it now~",
+        ],
+      },
       successTitleUpdate: "Share updated",
       descriptionUpdate: "Updated <@{target}>'s permission from `{previous}` → `{permission}`. Their next /raid-status or /raid-set autocomplete will reflect the new level.",
       descriptionNewEdit: "From now on <@{target}> will see all your rosters in /raid-status, and (with `edit` permission) can **update progress** via /raid-set, /raid-task, and the text parser. Run `/raid-share revoke` any time to take it back.",
@@ -308,7 +332,13 @@ module.exports = {
     revoke: {
       noShareTitle: "No share to revoke",
       noShareDescription: "<@{target}> hasn't been granted share access by you. Nothing to revoke.",
-      successTitle: "Share revoked",
+      successTitle: {
+        variants: [
+          "Share revoked",
+          "Access pulled back",
+          "They cannot see it any more",
+        ],
+      },
       successDescription: "<@{target}> will no longer see your rosters in /raid-status. Their next command will show only their own rosters.",
     },
     list: {
@@ -1378,7 +1408,13 @@ module.exports = {
       capReachedDescription: "**{characterName}** already has **{cap} {reset} tasks**. Hard cap to keep the list focused.\n\n**Current:** {dailyCount}/{capDaily} daily · {weeklyCount}/{capWeekly} weekly\n**Fix:** Run `/raid-task remove` to drop an old task first, then add the new one.",
       duplicateTitle: "Task already exists",
       duplicateDescription: "Char **{characterName}** already has task `{taskName}` on cycle `{reset}`. Pick a different name or change the cycle.",
-      successTitle: "Side task added",
+      successTitle: {
+        variants: [
+          "Side task added",
+          "Side task written down~",
+          "Onto the checklist it goes~",
+        ],
+      },
       successDescription: "**Character:** {characterName}\n**Task:** {taskName}\n**Cycle:** {cycleLabel}\n\n**Slots remaining:** {remainDaily} daily · {remainWeekly} weekly\nOpen `/raid-status` and switch to **Task view** to toggle complete~",
       cycleDailyLabel: "Daily (resets 10:00 UTC)",
       cycleWeeklyLabel: "Weekly (resets 10:00 UTC Wed)",
@@ -1388,7 +1424,13 @@ module.exports = {
       emptyRosterDescription: "Roster **{rosterName}** has no characters yet. Add chars via `/raid-add-roster` first, then register tasks.",
       nothingTitle: "Nothing to add",
       nothingDescription: "No character in this roster could accept the task (caps reached, or duplicate name + cycle).\n\n{skippedSummary}",
-      successTitle: "Task added across roster",
+      successTitle: {
+        variants: [
+          "Task added across roster",
+          "Every character in the roster has it~",
+          "Spread across the roster~",
+        ],
+      },
       successDescription: "**Roster:** {rosterName}\n**Task:** {taskName} · {cycleLabel}\n\n**Added:** {addedNames}{skippedSection}",
       skippedHeader: "**Skipped ({count}):**",
       skippedLine: "• `{charName}`: {reason}",
@@ -1412,7 +1454,13 @@ module.exports = {
       capReachedDescription: "Roster **{rosterName}** is at the shared-task cap. Hard cap to keep the list manageable.\n\n**Current:** {dailyCount}/{capDaily} daily · {weeklyCount}/{capWeekly} weekly · {scheduledCount}/{capScheduled} scheduled\n**Fix:** `/raid-task shared-remove` to drop an old one, then add the new.",
       duplicateTitle: "Shared task already exists",
       duplicateDescription: "Roster **{rosterName}** already has shared task **{taskName}**. Use a different name (`name:` field) or remove the old one first.",
-      successTitle: "Shared task added",
+      successTitle: {
+        variants: [
+          "Shared task added",
+          "The whole roster has this one now~",
+          "Shared task is in~",
+        ],
+      },
       successDescriptionSingle: "**Roster:** {rosterName}\n**Task:** {taskName}\n**Type:** {presetLabel}{expirySuffix}\n\nMembers will see it under `/raid-status` 📝 Side tasks view.",
       successDescriptionMulti: "**Type:** {presetLabel}{expirySuffix}\n**Rosters added ({addedCount}):** {addedNames}{skippedSection}\n\nMembers will see it across every roster in `/raid-status` 📝 Side tasks view.",
       expirySuffix: " · expires {date}",
@@ -1433,13 +1481,25 @@ module.exports = {
     sharedRemove: {
       noTaskTitle: "Shared task no longer there",
       noTaskDescription: "Looks like this task was already removed. Re-run `/raid-status` or use a fresh autocomplete.",
-      successTitle: "Shared task removed",
+      successTitle: {
+        variants: [
+          "Shared task removed",
+          "Pulled it off the roster",
+          "That shared task is gone now~",
+        ],
+      },
       successDescription: "**Roster:** {rosterName}\n**Task:** {taskName}\n\nMembers will see the change in `/raid-status` 📝 Side tasks view.",
     },
     remove: {
       noTaskTitle: "Task no longer there",
       noTaskDescription: "Looks like this task was already removed (or autocomplete points at an id that no longer exists). Refresh `/raid-status` to see the new list.",
-      successTitle: "Task removed",
+      successTitle: {
+        variants: [
+          "Task removed",
+          "That task is gone now~",
+          "Off the checklist",
+        ],
+      },
       successDescription: "**Character:** {characterName}\n**Task:** {taskName}\n\nMembers will see the change in `/raid-status` 📝 Side tasks view.",
     },
     clear: {
