@@ -22,7 +22,8 @@
  */
 
 const { buildNoticeEmbed } = require("../../../utils/raid/common/shared");
-const { t, getUserLanguage } = require("../../../services/i18n");
+// tPick, not t: the refresh and sync titles are variant pools; other keys pass through.
+const { tPick: t, getUserLanguage } = require("../../../services/i18n");
 const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
 const {
   getAppliedAutoManageEntries,

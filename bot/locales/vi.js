@@ -996,9 +996,21 @@ module.exports = {
       backToRaidScan: "Quay lại raid scan",
     },
     refreshFlow: {
-      successTitle: "Roster mới tinh rồi",
+      successTitle: {
+        variants: [
+          "Roster mới tinh rồi",
+          "Kéo lại roster xong~",
+          "Roster cập nhật rồi nha~",
+        ],
+      },
       successDescription: "Artist vừa kéo lại iLvl/class từ lostark.bible cho **{accountName}** của {target}. Trang `/raid-check` đã cập nhật theo dữ liệu mới.",
-      noUpdateTitle: "Chưa lấy được data mới",
+      noUpdateTitle: {
+        variants: [
+          "Chưa lấy được data mới",
+          "Bible chưa trả gì mới",
+          "Lần này chưa có data mới",
+        ],
+      },
       noUpdateDescription: "Artist đã thử kéo lại **{accountName}** của {target}, nhưng lostark.bible chưa trả về dữ liệu khớp với roster này. Data hiện tại được giữ nguyên.",
       missingTitle: "Không thấy roster để refresh",
       missingDescription: "Artist không tìm thấy **{accountName}** của {target} trong DB nữa. Gọi lại `/raid-check` để lấy danh sách mới nha.",
@@ -1094,7 +1106,13 @@ module.exports = {
     syncFlow: {
       noOptedInTitle: "Không có user nào opt-in",
       noOptedInDescription: "Trong list pending hiện tại không có ai đã `/raid-auto-manage action:on` cả nha, Artist không có user để sync. Nhắc các cậu trong list bật auto-manage, hoặc dùng `/raid-set` để update thủ công.",
-      reportTitle: "Sync xong",
+      reportTitle: {
+        variants: [
+          "Sync xong",
+          "Ngó logs xong rồi",
+          "Kéo logs xong",
+        ],
+      },
       reportLineIntro: "Artist đã trigger sync cho **{users}** opted-in user (**{chars}** pending char).",
       reportLineSynced: "**Synced (có data mới):** {n}",
       reportLineAttemptedOnly: "**Attempted-only (no fresh data):** {n}",

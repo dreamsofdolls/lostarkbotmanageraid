@@ -975,9 +975,21 @@ module.exports = {
       backToRaidScan: "レイドスキャンへ戻る",
     },
     refreshFlow: {
-      successTitle: "ロスターを更新しましたわ",
+      successTitle: {
+        variants: [
+          "ロスターを更新しましたわ",
+          "ロスターを引き直しましたの♪",
+          "ロスターは最新ですわ～",
+        ],
+      },
       successDescription: "lostark.bible から {target} の **{accountName}** の iLvl/class を取り直しましたわ。`/raid-check` も最新データで更新済みですの。",
-      noUpdateTitle: "ロスター更新を試しましたわ",
+      noUpdateTitle: {
+        variants: [
+          "ロスター更新を試しましたわ",
+          "Bible からは新しいものが返りませんでしたわ",
+          "今回は新しいデータがございませんの",
+        ],
+      },
       noUpdateDescription: "{target} の **{accountName}** を更新しようとしましたが、lostark.bible から一致するデータが返りませんでしたわ。今のデータはそのままですの。",
       missingTitle: "更新するロスターが見つかりませんわ",
       missingDescription: "DB 内に {target} の **{accountName}** が見つかりませんでしたわ。`/raid-check` を開き直して新しい一覧を取ってね。",
@@ -1073,7 +1085,13 @@ module.exports = {
     syncFlow: {
       noOptedInTitle: "オプトインしているユーザーがいませんわ",
       noOptedInDescription: "現在の未完了リストには `/raid-auto-manage action:on` をしているユーザーが居ないですわ～ アーティストは同期するユーザーがいないの。リスト内のメンバーに自動同期をオンにしてもらうか、`/raid-set` で手動更新してね♪",
-      reportTitle: "同期完了ですわ♪",
+      reportTitle: {
+        variants: [
+          "同期完了ですわ♪",
+          "ログを確認し終えましたの",
+          "ログを引き終えましたわ～",
+        ],
+      },
       reportLineIntro: "アーティストが **{users}** 人のオプトイン済みユーザー (未完了キャラ **{chars}** 体) の同期を起動しましたわ。",
       reportLineSynced: "**同期済み (新データあり):** {n}",
       reportLineAttemptedOnly: "**試行のみ (新データ無し):** {n}",

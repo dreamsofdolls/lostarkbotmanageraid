@@ -974,9 +974,21 @@ module.exports = {
       backToRaidScan: "Back to raid scan",
     },
     refreshFlow: {
-      successTitle: "Roster refreshed",
+      successTitle: {
+        variants: [
+          "Roster refreshed",
+          "Pulled the roster again~",
+          "Roster is up to date~",
+        ],
+      },
       successDescription: "Artist pulled fresh iLvl/class data from lostark.bible for **{accountName}** owned by {target}. `/raid-check` now uses the latest data.",
-      noUpdateTitle: "Roster refresh attempted",
+      noUpdateTitle: {
+        variants: [
+          "Roster refresh attempted",
+          "Bible returned nothing new",
+          "No fresh data this time",
+        ],
+      },
       noUpdateDescription: "Artist tried refreshing **{accountName}** owned by {target}, but lostark.bible did not return matching roster data. Current data was kept.",
       missingTitle: "Roster not found",
       missingDescription: "Artist could not find **{accountName}** for {target} in the DB anymore. Run `/raid-check` again for a fresh list.",
@@ -1072,7 +1084,13 @@ module.exports = {
     syncFlow: {
       noOptedInTitle: "No opted-in users",
       noOptedInDescription: "No one in the current pending list has run `/raid-auto-manage action:on`, so Artist has no users to sync. Ask the listed members to enable auto-manage, or use `/raid-set` to update manually.",
-      reportTitle: "Sync done",
+      reportTitle: {
+        variants: [
+          "Sync done",
+          "Finished checking the logs",
+          "Logs pulled",
+        ],
+      },
       reportLineIntro: "Artist triggered sync for **{users}** opted-in users (**{chars}** pending chars).",
       reportLineSynced: "**Synced (new data):** {n}",
       reportLineAttemptedOnly: "**Attempted-only (no fresh data):** {n}",

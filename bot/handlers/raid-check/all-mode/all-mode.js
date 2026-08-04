@@ -9,7 +9,8 @@ const {
   UI,
 } = require("../../../utils/raid/common/shared");
 const { firstSelectValue } = require("../../../utils/discord/component-values");
-const { t, getUserLanguage } = require("../../../services/i18n");
+// tPick, not t: the refresh and sync titles are variant pools; other keys pass through.
+const { tPick: t, getUserLanguage } = require("../../../services/i18n");
 const { createTeamsViewUi } = require("../views/teams-view");
 const {
   createAllModePendingAggregateCache,
