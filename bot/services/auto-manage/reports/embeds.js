@@ -1,6 +1,8 @@
 "use strict";
 
-const { t } = require("../../i18n");
+// tPick, not t: the sync-report descriptions are variant pools, and every
+// other key this module resolves passes straight through to t().
+const { tPick: t } = require("../../i18n");
 const { getRaidLabel, getModeLabel } = require("../../../utils/raid/common/labels");
 const { splitEmbedFieldValue } = require("../../../utils/raid/common/shared");
 

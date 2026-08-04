@@ -1,7 +1,8 @@
 "use strict";
 
 const { deferEphemeralReply } = require("../../../../utils/raid/common/shared");
-const { t } = require("../../../../services/i18n");
+// tPick, not t: the cooldown intro line is a variant pool; other keys pass through.
+const { tPick: t } = require("../../../../services/i18n");
 const {
   stampAutoManageAttemptFromReport,
 } = require("../../../../services/auto-manage/reports/utils");

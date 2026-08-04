@@ -1134,7 +1134,13 @@ module.exports = {
       inFlightTitle: "Another sync is running",
       inFlightDescription: "You already have a sync fetching bible logs - wait for the result before retrying. Artist will DM when it's done.",
       cooldownTitle: "On cooldown",
-      cooldownLineIntro: "A sync ran recently, Artist is honoring the cooldown.",
+      cooldownLineIntro: {
+        variants: [
+          "A sync ran recently, Artist is honoring the cooldown.",
+          "You synced a moment ago, so I am letting it rest a beat.",
+          "That was just synced - let the cooldown finish first.",
+        ],
+      },
       cooldownLineWait: "**Wait:** {remain}",
       cooldownLineTotal: "**Your cooldown:** {totalCooldown}",
       cooldownLineNote: "The cooldown prevents bible spam - once it expires, you can sync again.",
@@ -1177,11 +1183,29 @@ module.exports = {
     },
     syncReport: {
       title: "Auto-manage Sync",
-      descriptionApplied: "Updated **{n}** gate clears from lostark.bible logs.",
+      descriptionApplied: {
+        variants: [
+          "Pulled **{n}** gate clear(s) from lostark.bible~ 🦊",
+          "**{n}** gate clear(s) are on the board, logs all line up~ 🦊",
+          "Done, **{n}** gate clear(s) recorded from the logs~ 🦊",
+        ],
+      },
       descriptionAppliedFailsTail: "{warnIcon} {n} characters failed to sync - details below.",
-      descriptionAllFailed: "Couldn't apply any gate because **all {n} characters failed** to sync. Check Cloudflare / \"Logs not enabled\" / character name below.",
+      descriptionAllFailed: {
+        variants: [
+          "Couldn't apply any gate because **all {n} characters failed** to sync. Check Cloudflare / \"Logs not enabled\" / character name below.",
+          "**All {n} characters failed** to sync, so no gate was applied. See Cloudflare / \"Logs not enabled\" / character name below.",
+          "No gate made it through: **{n} characters failed**. Usually Cloudflare, \"Logs not enabled\", or a wrong character name - details below.",
+        ],
+      },
       descriptionNoNewWithFails: "No new gate clears to apply. {warnIcon} {failed}/{total} characters failed - the rest already match the DB.",
-      descriptionNoNew: "No new gate clears to sync. The DB already matches this week's bible logs.",
+      descriptionNoNew: {
+        variants: [
+          "No new gate clears to sync. The DB already matches this week's bible logs.",
+          "Nothing new to pull. Your DB is in step with this week's bible logs.",
+          "This week's logs hold nothing the DB does not already have, so I left it alone.",
+        ],
+      },
       appliedFieldName: "{icon} {charName} ({accountName})",
       appliedLine: "• **{raidLabel}** `{gate}` ({difficulty})",
       moreCharsHeader: "… and more characters",
@@ -1284,7 +1308,9 @@ module.exports = {
       failDescription: "Artist hit an error disabling: `{error}`. Try `/raid-auto-manage action:off` instead.",
       accountMissingTitle: "Account not found",
       accountMissingDescription: "Artist can't find your roster in the DB anymore (you may have removed all rosters via `/raid-remove-roster`). Nothing to disable.",
-      disabledTitle: "Auto-sync turned off",
+      disabledTitle: {
+        variants: ["Auto-sync turned off", "Auto-sync is resting now~", "Right, auto-sync off~"],
+      },
       disabledDescription: "Artist disabled `/raid-auto-manage` for you. From now on Artist won't auto-sync - update progress manually with `/raid-set` or post clears in your server's monitor channel. To re-enable, run `/raid-auto-manage action:on`.",
       alreadyOffTitle: "Auto-sync was already off",
       alreadyOffDescription: "You disabled `/raid-auto-manage` previously (via slash command or by clicking this button before). Nothing to change.",
@@ -1298,7 +1324,9 @@ module.exports = {
       failDescription: "Artist hit an error enabling: `{error}`. Try `/raid-auto-manage action:on` instead.",
       accountMissingTitle: "Account not found",
       accountMissingDescription: "Artist can't find your roster in the DB anymore (you may have removed all rosters via `/raid-remove-roster`). Run `/raid-add-roster` first, then opt in.",
-      flippedTitle: "Auto-sync re-enabled",
+      flippedTitle: {
+        variants: ["Auto-sync re-enabled", "Auto-sync is running again~", "Right, auto-sync back on~"],
+      },
       flippedDescription: "Artist enabled `/raid-auto-manage` for you. From now on Artist will background-sync raid progress about every 30 minutes when your turn comes up. To turn it off, run `/raid-auto-manage action:off`.",
       alreadyOnTitle: "Auto-sync was already on",
       alreadyOnDescription: "You enabled `/raid-auto-manage` previously (via slash command or by clicking this button before). Nothing to change.",

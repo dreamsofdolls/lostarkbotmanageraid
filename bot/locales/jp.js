@@ -1135,7 +1135,13 @@ module.exports = {
       inFlightTitle: "別の同期が走ってますわ",
       inFlightDescription: "あなた自身の同期が bible を取りに行っている最中ですわ～ 結果が出るまで待ってね、連打しちゃダメですよ～♪ 終わったらアーティストが DM しますわ。",
       cooldownTitle: "クールダウン中ですわ",
-      cooldownLineIntro: "つい最近同期したばかりですわ～ アーティストはクールダウンを守ってますの。",
+      cooldownLineIntro: {
+        variants: [
+          "つい最近同期したばかりですわ～ アーティストはクールダウンを守ってますの。",
+          "さっき同期なさったばかりですから、少し休ませていますわ。",
+          "たった今同期したところですの。クールダウンが明けるまでお待ちくださいませ。",
+        ],
+      },
       cooldownLineWait: "**追加で待ち:** {remain}",
       cooldownLineTotal: "**あなたのクールダウン:** {totalCooldown}",
       cooldownLineNote: "bible を連打しないためのクールダウンですわ。それを過ぎればまた同期できますよ♪",
@@ -1178,11 +1184,29 @@ module.exports = {
     },
     syncReport: {
       title: "自動管理の同期",
-      descriptionApplied: "lostark.bible のログから **{n}** 件のゲートクリアを更新しましたわ～♪ 🦊",
+      descriptionApplied: {
+        variants: [
+          "lostark.bible のログから **{n}** 件のゲートクリアを引いてきましたわ～♪ 🦊",
+          "**{n}** 件のゲートクリアが台帳に入りましたわ。ログとも一致していますの♪ 🦊",
+          "完了ですわ、ログから **{n}** 件のゲートクリアを記録しましたの～ 🦊",
+        ],
+      },
       descriptionAppliedFailsTail: "{warnIcon} {n} 体のキャラが同期失敗 - 詳しくは下を見てね。",
-      descriptionAllFailed: "**全 {n} 体のキャラが同期失敗** だったので、適用できたゲートはゼロですわ。Cloudflare／\"Logs not enabled\"／キャラ名を下で確認してね～",
+      descriptionAllFailed: {
+        variants: [
+          "**全 {n} 体のキャラが同期失敗** だったので、適用できたゲートはゼロですわ。Cloudflare／\"Logs not enabled\"／キャラ名を下で確認してね～",
+          "**{n} 体すべてが同期失敗** で、ゲートは一つも適用できませんでしたわ。Cloudflare／\"Logs not enabled\"／キャラ名を下でご確認くださいませ。",
+          "ゲートは一つも通りませんでしたの。**{n} 体が失敗** ですわ。多くは Cloudflare、\"Logs not enabled\"、キャラ名の誤りですの - 詳しくは下をどうぞ。",
+        ],
+      },
       descriptionNoNewWithFails: "新しく適用できるゲートクリアはなかったですわ。{warnIcon} {failed}/{total} 体が失敗 - 残りのキャラは DB と一致してましたよ♪",
-      descriptionNoNew: "新しく同期するゲートクリアはなかったですわ。今週の bible ログと DB のデータは一致してますよ♪",
+      descriptionNoNew: {
+        variants: [
+          "新しく同期するゲートクリアはなかったですわ。今週の bible ログと DB のデータは一致してますよ♪",
+          "引いてくるものはありませんでしたわ。DB は今週の bible ログと揃っていますの。",
+          "今週のログに DB が持っていないものはございませんでしたので、そのままにしておきましたわ。",
+        ],
+      },
       appliedFieldName: "{icon} {charName} ({accountName})",
       appliedLine: "• **{raidLabel}** `{gate}` ({difficulty})",
       moreCharsHeader: "… 他にもたくさんのキャラ",
@@ -1285,7 +1309,9 @@ module.exports = {
       failDescription: "アーティスト、オフ切り替えで失敗しましたわ: `{error}`。 代わりに `/raid-auto-manage action:off` を試してね♪",
       accountMissingTitle: "アカウントが存在しませんわ",
       accountMissingDescription: "アーティスト、DB にあなたのロスターがもう見つかりませんわ (`/raid-remove-roster` で全部消した可能性)。オフにする物が無いですわ～",
-      disabledTitle: "自動同期をオフにしましたわ♪",
+      disabledTitle: {
+        variants: ["自動同期をオフにしましたわ♪", "自動同期はお休みですわ～", "はい、自動同期オフですの～"],
+      },
       disabledDescription: "アーティストがあなたの `/raid-auto-manage` をオフにしましたわ。これからは自動同期しません - `/raid-set` か、サーバーの監視チャンネルにクリアを投稿して手動で進捗を更新してね♪ 再オンにしたい時は `/raid-auto-manage action:on` を使ってくださいね。",
       alreadyOffTitle: "自動同期はもうオフですわ",
       alreadyOffDescription: "前から `/raid-auto-manage` をオフにしてましたわ (スラッシュコマンド経由か、このボタンを前回押したか)。何も変わりませんわ～",
@@ -1299,7 +1325,9 @@ module.exports = {
       failDescription: "アーティスト、オン切り替えで失敗しましたわ: `{error}`。 代わりに `/raid-auto-manage action:on` を試してね♪",
       accountMissingTitle: "アカウントが存在しませんわ",
       accountMissingDescription: "アーティスト、DB にあなたのロスターがもう見つかりませんわ (`/raid-remove-roster` で全部消した可能性)。先に `/raid-add-roster` を実行してからオプトインしてね♪",
-      flippedTitle: "自動同期を再オンにしましたわ♪",
+      flippedTitle: {
+        variants: ["自動同期を再オンにしましたわ♪", "自動同期がまた動いていますわ～", "はい、自動同期オンに戻しましたの～"],
+      },
       flippedDescription: "アーティストがあなたの `/raid-auto-manage` をオンにしましたわ。これから順番が来た時に約30分ごとでレイド進捗をバックグラウンド同期しますわ♪ オフにしたい時は `/raid-auto-manage action:off` を使ってね～",
       alreadyOnTitle: "自動同期はもうオンですわ",
       alreadyOnDescription: "前から `/raid-auto-manage` をオンにしてましたわ (スラッシュコマンド経由か、このボタンを前回押したか)。何も変わりませんわ～",

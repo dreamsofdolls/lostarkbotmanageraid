@@ -1,6 +1,8 @@
 "use strict";
 
-const { t, getUserLanguage } = require("../../../services/i18n");
+// tPick, not t: the enable/disable titles resolved through these key tables are
+// variant pools. Non-pool keys pass through to t() unchanged.
+const { tPick: t, getUserLanguage } = require("../../../services/i18n");
 const {
   deferEphemeralReply,
   editNotice,

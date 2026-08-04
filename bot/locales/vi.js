@@ -1156,7 +1156,13 @@ module.exports = {
       inFlightTitle: "Sync khác đang chạy",
       inFlightDescription: "Cậu có 1 sync khác của mình đang fetch bible rồi nha, đợi kết quả trước đừng gõ spam~ Artist sẽ DM khi xong.",
       cooldownTitle: "Đang trong cooldown",
-      cooldownLineIntro: "Sync vừa chạy gần đây nha cậu, Artist đang giữ cooldown.",
+      cooldownLineIntro: {
+        variants: [
+          "Sync vừa chạy gần đây nha cậu, Artist đang giữ cooldown.",
+          "Cậu mới sync xong đó, tớ đang để nó nghỉ một nhịp.",
+          "Vừa sync rồi mà, đợi hết cooldown đã nhé.",
+        ],
+      },
       cooldownLineWait: "**Đợi thêm:** {remain}",
       cooldownLineTotal: "**Cooldown của cậu:** {totalCooldown}",
       cooldownLineNote: "Cooldown để tránh gõ bible liên tục, qua ngưỡng đó cậu sync tiếp được nha.",
@@ -1199,11 +1205,29 @@ module.exports = {
     },
     syncReport: {
       title: "Auto-manage Sync",
-      descriptionApplied: "Đã update **{n}** gate clear từ lostark.bible logs nha~ 🦊",
+      descriptionApplied: {
+        variants: [
+          "Kéo về **{n}** gate clear từ lostark.bible rồi nha~ 🦊",
+          "**{n}** gate clear vừa vào sổ, logs khớp hết~ 🦊",
+          "Xong, **{n}** gate clear đã ghi nhận từ logs~ 🦊",
+        ],
+      },
       descriptionAppliedFailsTail: "{warnIcon} {n} char fail sync - chi tiết bên dưới.",
-      descriptionAllFailed: "Không apply được gate nào vì **tất cả {n} char fail** sync. Check Cloudflare / \"Logs not enabled\" / char name bên dưới.",
+      descriptionAllFailed: {
+        variants: [
+          "Không apply được gate nào vì **tất cả {n} char fail** sync. Check Cloudflare / \"Logs not enabled\" / char name bên dưới.",
+          "Cả **{n} char đều fail** sync nên chưa gate nào được apply. Xem Cloudflare / \"Logs not enabled\" / tên char bên dưới.",
+          "Không gate nào vào được: **{n} char fail** hết. Nguyên nhân thường là Cloudflare, \"Logs not enabled\", hoặc sai tên char - chi tiết bên dưới.",
+        ],
+      },
       descriptionNoNewWithFails: "Không có gate clear mới nào để apply. {warnIcon} {failed}/{total} char fail - các char còn lại đã match DB.",
-      descriptionNoNew: "Không có gate clear mới nào để sync. Data DB đã match với bible logs tuần này.",
+      descriptionNoNew: {
+        variants: [
+          "Không có gate clear mới nào để sync. Data DB đã match với bible logs tuần này.",
+          "Chưa có gate clear nào mới. DB của cậu đang khớp với bible logs tuần này rồi.",
+          "Logs tuần này không có gì mới so với DB, nên tớ không phải đụng gì cả.",
+        ],
+      },
       appliedFieldName: "{icon} {charName} ({accountName})",
       appliedLine: "• **{raidLabel}** `{gate}` ({difficulty})",
       moreCharsHeader: "… và thêm nhiều char khác",
@@ -1306,7 +1330,9 @@ module.exports = {
       failDescription: "Artist gặp lỗi khi tắt: `{error}`. Thử gõ `/raid-auto-manage action:off` thay nha.",
       accountMissingTitle: "Account không tồn tại",
       accountMissingDescription: "Artist không tìm thấy roster của cậu trong DB nữa (có thể đã `/raid-remove-roster` toàn bộ). Không có gì để tắt.",
-      disabledTitle: "Đã tắt auto-sync rồi nha~",
+      disabledTitle: {
+        variants: ["Tắt auto-sync rồi nha~", "Auto-sync nghỉ tay nhé~", "Ok, auto-sync off~"],
+      },
       disabledDescription: "Artist đã tắt `/raid-auto-manage` cho cậu. Từ giờ Artist không tự sync nữa - cậu update progress thủ công bằng `/raid-set` hoặc post clear vào monitor channel của server. Muốn bật lại thì gõ `/raid-auto-manage action:on`.",
       alreadyOffTitle: "Auto-sync đã tắt sẵn rồi",
       alreadyOffDescription: "Cậu đã tắt `/raid-auto-manage` trước đó (qua slash command hoặc đã bấm button này lần trước). Không có gì để đổi.",
@@ -1320,7 +1346,9 @@ module.exports = {
       failDescription: "Artist gặp lỗi khi bật: `{error}`. Thử gõ `/raid-auto-manage action:on` thay nha.",
       accountMissingTitle: "Account không tồn tại",
       accountMissingDescription: "Artist không tìm thấy roster của cậu trong DB nữa (có thể đã `/raid-remove-roster` toàn bộ). Bật `/raid-add-roster` trước rồi mới opt-in được nha.",
-      flippedTitle: "Đã bật lại auto-sync rồi nha~",
+      flippedTitle: {
+        variants: ["Bật lại auto-sync rồi nha~", "Auto-sync chạy tiếp nhé~", "Ok, auto-sync on lại~"],
+      },
       flippedDescription: "Artist đã bật `/raid-auto-manage` cho cậu. Từ giờ Artist sẽ tự sync raid progress nền khoảng mỗi 30 phút khi tới lượt. Muốn tắt thì gõ `/raid-auto-manage action:off`.",
       alreadyOnTitle: "Auto-sync đã bật sẵn rồi",
       alreadyOnDescription: "Cậu đã bật `/raid-auto-manage` trước đó (qua slash command hoặc đã bấm button này lần trước). Không có gì để đổi.",
