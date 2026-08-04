@@ -244,7 +244,7 @@ module.exports = {
       resurfaceFailedTitle: "Couldn't bump the board",
       resurfaceFailedDescription: "Artist couldn't repost the board (likely missing permissions in that channel). The old board is untouched - try again later.",
       showpickDeniedTitle: "That switcher is the lead's",
-      showpickDeniedDescription: "Only the board's creator can use the 'other boards' dropdown~",
+      showpickDeniedDescription: "Only the board's creator can use the 'other boards' dropdown.",
       kickEmptyTitle: "Nobody to kick",
       kickEmptyDescription: "No one has signed up for this event yet, so there's nobody to drop.",
       kickNoneTitle: "Couldn't drop anyone",
@@ -605,7 +605,7 @@ module.exports = {
         ],
       },
       timeout: "Bible is slow today - Artist is still pulling in the background. Re-open in ~10s for fresh data~",
-      failed: "Bible is misbehaving - Artist is showing cache. Please retry in a few minutes~",
+      failed: "Bible is misbehaving, so I am reading from cache. Please retry in a few minutes.",
     },
     embed: {
       allAccounts: "🌐 All accounts: **{chars}** chars · **{done}/{total}** raids done",

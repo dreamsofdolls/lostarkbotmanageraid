@@ -158,3 +158,46 @@ test("locale copy contains no italic stage directions", () => {
   }
   assert.deepEqual(offenders, []);
 });
+
+// Warmth has to fit the moment. These keys are the cases where Artist herself
+// failed or the user's work was lost - a save that did not persist, a picker
+// session that expired, a sync that could not fetch, a permission refusal.
+// A trailing "nha~" there reads as not taking it seriously.
+//
+// Deliberately NOT listed: ordinary input validation (an image that is too
+// large, a missing option). Those are normal boundaries, not failures, and
+// Artist being kind about them is correct rather than a defect.
+const FAILURE_KEYS = [
+  "raid-schedule.notice.showpickDeniedDescription",
+  "raid-add-roster.expired.description",
+  "raid-add-roster.expired.staleSessionDescription",
+  "raid-add-roster.persistFail.description",
+  "raid-edit-roster.expired.description",
+  "raid-edit-roster.expired.staleSessionDescription",
+  "raid-edit-roster.persistFail.description",
+  "raid-gold-earner.expired.description",
+  "raid-gold-earner.expired.staleSessionDescription",
+  "raid-gold-earner.saveFail.description",
+  "raid-status.piggyback.failed",
+  "raid-status.sync.followupFailedDescription",
+  "raidBg.errors.downloadFailed",
+  "raidBg.errors.storageFailed",
+];
+
+test("failure copy carries no warmth marker", () => {
+  // vi/en use "~"; jp uses "♪". The jp "～" is left alone on purpose - there it
+  // is part of the ojou-sama register, not a cheerfulness signal.
+  const MARKERS = { vi: /~/, en: /~/, jp: /♪/ };
+  const offenders = [];
+  for (const lang of LANGS) {
+    for (const key of FAILURE_KEYS) {
+      const value = MAPS[lang].get(key);
+      if (!value) {
+        offenders.push(`${lang}:${key} is missing`);
+        continue;
+      }
+      if (membersOf(value).some((s) => MARKERS[lang].test(s))) offenders.push(`${lang}:${key}`);
+    }
+  }
+  assert.deepEqual(offenders, []);
+});

@@ -379,10 +379,10 @@ module.exports = {
     },
     expired: {
       title: "{iconWarn} セッションが期限切れですわ",
-      description: "ロスター: [**{seedName}**]({link})\n\n5分セッションが終わって、何も保存されませんでしたわ。`/raid-add-roster` をもう一度実行してくださいね♪",
+      description: "ロスター: [**{seedName}**]({link})\n\n5分セッションが終わって、何も保存されませんでしたわ。`/raid-add-roster` をもう一度実行してくださいませ。",
       footerText: "ソース: lostark.bible",
       staleSessionTitle: "セッションが期限切れですわ",
-      staleSessionDescription: "5分セッションが終わってしまいましたわ。`/raid-add-roster` をもう一度実行すれば新しいピッカーを開きますね～♪",
+      staleSessionDescription: "5分セッションが終わってしまいましたわ。`/raid-add-roster` をもう一度実行すれば、新しいピッカーをお出しいたしますの。",
     },
     cancelled: {
       title: "{iconInfo} キャンセルしましたわ",
@@ -457,10 +457,10 @@ module.exports = {
     },
     expired: {
       title: "{iconWarn} セッションが期限切れですわ",
-      description: "ロスター: **{accountName}**\n\n5分セッションが終わって、変更は何も保存されませんでしたわ。`/raid-edit-roster` をもう一度実行してくださいね♪",
+      description: "ロスター: **{accountName}**\n\n5分セッションが終わって、変更は何も保存されませんでしたわ。`/raid-edit-roster` をもう一度実行してくださいませ。",
       footerText: "ソース: lostark.bible",
       staleSessionTitle: "セッションが期限切れですわ",
-      staleSessionDescription: "5分セッションが終わってしまいましたわ。`/raid-edit-roster` をもう一度実行すれば新しいピッカーを開きますね～♪",
+      staleSessionDescription: "5分セッションが終わってしまいましたわ。`/raid-edit-roster` をもう一度実行すれば、新しいピッカーをお出しいたしますの。",
     },
     cancelled: {
       title: "{iconInfo} キャンセルしましたわ",
@@ -515,9 +515,9 @@ module.exports = {
     },
     expired: {
       title: "{iconWarn} セッションが期限切れですわ",
-      description: "ロスター **{accountName}**: 5分セッションが終わって、何も保存されませんでしたわ。`/raid-gold-earner` をもう一度実行してくださいね♪",
+      description: "ロスター **{accountName}**: 5分セッションが終わって、何も保存されませんでしたわ。`/raid-gold-earner` をもう一度実行してくださいませ。",
       staleSessionTitle: "セッションが終わりましたわ",
-      staleSessionDescription: "このピッカーセッションはもう有効じゃないですわ (5分経過、またはボット再起動)。`/raid-gold-earner` をもう一度実行してくださいね～♪",
+      staleSessionDescription: "このピッカーセッションはもう有効ではありませんわ (5分経過、またはボット再起動)。`/raid-gold-earner` をもう一度実行してくださいませ。",
     },
     cancelled: {
       title: "{iconInfo} キャンセルしましたわ",
@@ -539,7 +539,7 @@ module.exports = {
     },
     saveFail: {
       title: "保存失敗ですわ",
-      description: "今回 DB に保存できませんでしたわ。数秒待ってもう一度試してくださいね～♪",
+      description: "今回 DB に保存できませんでしたわ。数秒待ってから、もう一度お試しくださいませ。",
     },
   },
   "raid-remove-roster": {

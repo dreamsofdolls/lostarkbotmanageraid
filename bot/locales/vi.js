@@ -257,7 +257,7 @@ module.exports = {
       resurfaceFailedTitle: "Chưa đẩy board được",
       resurfaceFailedDescription: "Artist không đăng lại được board (chắc mất quyền ở channel đó). Board cũ vẫn giữ nguyên, thử lại sau nha.",
       showpickDeniedTitle: "Bộ chọn này của lead",
-      showpickDeniedDescription: "Dropdown 'Board khác' chỉ người tạo board mới dùng được nha~",
+      showpickDeniedDescription: "Dropdown 'Board khác' chỉ người tạo board mới dùng được thôi.",
       kickEmptyTitle: "Chưa có ai để kick",
       kickEmptyDescription: "Chưa ai đăng ký event này nên không có ai để gỡ cả nha.",
       kickNoneTitle: "Không gỡ được ai",
@@ -400,10 +400,10 @@ module.exports = {
     },
     expired: {
       title: "{iconWarn} Phiên đã hết hạn",
-      description: "Roster: [**{seedName}**]({link})\n\nPhiên 5 phút đã hết và không có gì được lưu. Chạy lại `/raid-add-roster` để thử lại nhé~",
+      description: "Roster: [**{seedName}**]({link})\n\nPhiên 5 phút đã hết và không có gì được lưu. Chạy lại `/raid-add-roster` để làm lại.",
       footerText: "Source: lostark.bible",
       staleSessionTitle: "Phiên đã hết hạn",
-      staleSessionDescription: "Phiên 5 phút đã trôi qua mất rồi. Chạy lại `/raid-add-roster` để Artist mở picker mới cho cậu nha~",
+      staleSessionDescription: "Phiên 5 phút đã trôi qua. Chạy lại `/raid-add-roster` để tớ mở picker mới cho cậu.",
     },
     cancelled: {
       title: "{iconInfo} Đã huỷ",
@@ -441,7 +441,7 @@ module.exports = {
     },
     persistFail: {
       title: "Lưu roster fail",
-      description: "Artist lưu roster không xong: {error}\n\nThử lại sau vài giây nhé. Nếu lặp lại nhiều lần ping {adminMention} giúp Artist debug~",
+      description: "Artist lưu roster không xong: {error}\n\nThử lại sau vài giây. Nếu lặp lại nhiều lần, ping {adminMention} giúp tớ debug.",
     },
   },
   "raid-edit-roster": {
@@ -478,10 +478,10 @@ module.exports = {
     },
     expired: {
       title: "{iconWarn} Phiên đã hết hạn",
-      description: "Roster: **{accountName}**\n\nPhiên 5 phút đã hết và không có thay đổi nào được lưu. Chạy lại `/raid-edit-roster` để thử lại nhé~",
+      description: "Roster: **{accountName}**\n\nPhiên 5 phút đã hết và không có thay đổi nào được lưu. Chạy lại `/raid-edit-roster` để làm lại.",
       footerText: "Source: lostark.bible",
       staleSessionTitle: "Phiên đã hết hạn",
-      staleSessionDescription: "Phiên 5 phút đã trôi qua mất rồi. Chạy lại `/raid-edit-roster` để Artist mở picker mới cho cậu nha~",
+      staleSessionDescription: "Phiên 5 phút đã trôi qua. Chạy lại `/raid-edit-roster` để tớ mở picker mới cho cậu.",
     },
     cancelled: {
       title: "{iconInfo} Đã huỷ",
@@ -512,7 +512,7 @@ module.exports = {
     },
     persistFail: {
       title: "Lưu roster fail",
-      description: "Artist lưu thay đổi không xong: {error}\n\nThử lại sau vài giây nhé. Nếu lặp lại nhiều lần ping {adminMention} giúp Artist debug~",
+      description: "Artist lưu thay đổi không xong: {error}\n\nThử lại sau vài giây. Nếu lặp lại nhiều lần, ping {adminMention} giúp tớ debug.",
     },
   },
   "raid-gold-earner": {
@@ -536,9 +536,9 @@ module.exports = {
     },
     expired: {
       title: "{iconWarn} Phiên đã hết hạn",
-      description: "Roster **{accountName}**: phiên 5 phút đã hết, không có gì được lưu. Chạy lại `/raid-gold-earner` để thử lại nhé~",
+      description: "Roster **{accountName}**: phiên 5 phút đã hết, không có gì được lưu. Chạy lại `/raid-gold-earner` để làm lại.",
       staleSessionTitle: "Phiên đã hết",
-      staleSessionDescription: "Phiên picker này không còn active (hết 5 phút hoặc bot vừa restart). Chạy lại `/raid-gold-earner` nhé~",
+      staleSessionDescription: "Phiên picker này không còn active (hết 5 phút hoặc bot vừa restart). Chạy lại `/raid-gold-earner`.",
     },
     cancelled: {
       title: "{iconInfo} Đã huỷ",
@@ -560,7 +560,7 @@ module.exports = {
     },
     saveFail: {
       title: "Lưu thất bại",
-      description: "Artist không lưu được vào DB lần này. Cậu thử lại sau vài giây giúp tớ nhé~",
+      description: "Tớ không lưu được vào DB lần này. Cậu thử lại sau vài giây giúp tớ.",
     },
   },
   "raid-remove-roster": {
@@ -627,7 +627,7 @@ module.exports = {
         ],
       },
       timeout: "Bible đang chậm tay, Artist vẫn đang lấy ngầm. Cậu mở lại sau ~10s là có data mới nha~",
-      failed: "Bible đang dở chứng, Artist tạm xem cache. Cậu thử lại sau vài phút giúp tớ nhé~",
+      failed: "Bible đang dở chứng nên tớ tạm đọc cache. Cậu thử lại sau vài phút.",
     },
     embed: {
       allAccounts: "🌐 Tổng tất cả roster: **{chars}** char · **{done}/{total}** raid done",
@@ -741,7 +741,7 @@ module.exports = {
         variants: ["Sync xong", "Ngó logs xong rồi", "Đã kiểm tra logs"],
       },
       followupFailedTitle: "Sync gặp trục trặc",
-      followupFailedDescription: "Bible đang dở chứng, sync chưa lấy được data mới. Cooldown đã reset, cậu thử lại sau vài phút giúp tớ nhé~",
+      followupFailedDescription: "Bible đang dở chứng nên sync chưa lấy được data mới. Cooldown đã reset, cậu thử lại sau vài phút.",
       cooldownFallback: "vài giây",
     },
     expiredFooter: "⏱️ Session đã hết hạn ({seconds}s) · Dùng /raid-status để xem lại",
@@ -2411,7 +2411,7 @@ module.exports = {
   raidBg: {
     errors: {
       downloadFailed:
-        "Artist tải ảnh từ Discord không xong nha (HTTP {status}). Thử upload lại sau chút nhé~",
+        "Tớ tải ảnh từ Discord không xong (HTTP {status}). Cậu thử upload lại sau chút.",
       sizeTooBig:
         "File hơi nặng tay rồi đó cậu ({sizeMb} MB)! Artist chỉ ôm được tối đa {maxMb} MB thôi à~",
       formatUnsupported:
@@ -2421,7 +2421,7 @@ module.exports = {
       tooSmall:
         "Ảnh hơi tí xíu thôi cậu ({width}x{height}). Artist cần tối thiểu {minW}x{minH} để raid card vẫn căng + nét, không thì nhìn mờ tội nghiệp lắm~",
       storageFailed:
-        "Artist lưu vào database không xong rồi: {message}. Cậu thử lại sau chút, nếu vẫn lỗi thì báo admin nhe~",
+        "Tớ lưu vào database không xong: {message}. Cậu thử lại sau chút, nếu vẫn lỗi thì báo admin.",
     },
     set: {
       downloadFailedTitle: "❌ Artist tải ảnh không xong",
