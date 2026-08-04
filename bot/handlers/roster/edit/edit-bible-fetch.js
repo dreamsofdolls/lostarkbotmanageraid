@@ -1,11 +1,32 @@
 "use strict";
 
+const { t: translate, DEFAULT_LANGUAGE } = require("../../../services/i18n");
+
+/**
+ * Build the seed-and-retry Bible roster fetcher.
+ *
+ * The three fallback messages are read from `raid-edit-roster.fallback.*`.
+ * They were previously hardcoded Vietnamese here even though all three
+ * locales already carried the translation, so en/jp users saw Vietnamese.
+ *
+ * @param {Object} deps
+ * @param {Function} deps.fetchRosterCharacters
+ * @param {Function} deps.normalizeName
+ * @param {Function} deps.parseCombatScore
+ * @param {Function} [deps.t] - injected for tests
+ * @returns {Function} fetchBibleRosterWithFallback(savedChars, accountName, lang)
+ */
 function createFetchBibleRosterWithFallback({
   fetchRosterCharacters,
   normalizeName,
   parseCombatScore,
+  t = translate,
 }) {
-  return async function fetchBibleRosterWithFallback(savedChars, accountName) {
+  return async function fetchBibleRosterWithFallback(
+    savedChars,
+    accountName,
+    lang = DEFAULT_LANGUAGE
+  ) {
     const seeds = [];
     const sortedSaved = [...savedChars].sort(
       (a, b) => parseCombatScore(b.combatScore) - parseCombatScore(a.combatScore)
@@ -19,7 +40,10 @@ function createFetchBibleRosterWithFallback({
     if (accountName && !seeds.includes(accountName)) seeds.push(accountName);
 
     if (seeds.length === 0) {
-      return { bibleChars: [], bibleError: "Không có seed để fetch bible." };
+      return {
+        bibleChars: [],
+        bibleError: t("raid-edit-roster.fallback.noSeed", lang),
+      };
     }
 
     const savedNameSet = new Set(
@@ -58,9 +82,12 @@ function createFetchBibleRosterWithFallback({
       bibleChars: [],
       bibleError:
         lastError ||
-        (zeroOverlapHit
-          ? "Mọi seed đều trả roster không trùng saved chars (rename in-game?)"
-          : "Bible không trả về kết quả nào."),
+        t(
+          zeroOverlapHit
+            ? "raid-edit-roster.fallback.zeroOverlap"
+            : "raid-edit-roster.fallback.noResults",
+          lang
+        ),
     };
   };
 }

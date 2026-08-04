@@ -178,7 +178,8 @@ function createEditRosterCommand({
     }));
     const { bibleChars, bibleError } = await fetchBibleRosterWithFallback(
       savedChars,
-      targetAccount.accountName
+      targetAccount.accountName,
+      lang
     );
     const {
       merged,
