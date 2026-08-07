@@ -20,9 +20,9 @@
 //
 // Design choice: nested subdoc storage (GuildConfig.announcements) stays,
 // a collection-per-announcement refactor was considered and skipped because
-// cardinality is low (single-digit types × 1-ish guilds) and no query pattern needs
+// cardinality is low (10 fixed types × 1-ish guilds) and no query pattern needs
 // cross-guild announcement analytics or dynamic user-defined types. If the
-// type count crosses ~10 OR rich metadata lands (cron, TTL override,
+// type count grows materially OR rich user-defined metadata lands (cron, TTL override,
 // conditions), revisit collection split then.
 //
 // Groups:
@@ -131,6 +131,21 @@ const ANNOUNCEMENT_REGISTRY = {
     previewContent:
       "Random pick mỗi mốc, voice gấp gáp dần.\nT-15m / T-10m / T-5m / T-1m: không tag, giọng đếm ngược tới 'thoát game thôi'.",
   },
+  "world-event-reminder": {
+    label: "Chaos Gate / Field Boss · T-5m",
+    subdocKey: "worldEventReminder",
+    channelOverridable: true,
+    // This is intentionally opt-in. Unlike the other low-frequency types,
+    // this reminder can fire hourly across six event days, so silently
+    // enabling it for every legacy guild would be an unexpectedly noisy
+    // migration.
+    defaultEnabled: false,
+    trigger: "5 phút trước mỗi hourly Chaos Gate / Field Boss slot trong lịch UTC-4. Khi cả hai cùng mở vào Chủ nhật, Artist gộp thành một tin.",
+    dedup: "1 post/spawn/guild (`lastWorldEventReminderKey`). Tick 1 phút và chỉ claim trong cửa sổ T-5m → T-0 để restart trễ vẫn catch-up mà không post lặp.",
+    messageTtl: "6 phút rồi Artist tự xóa",
+    previewContent:
+      "🌪️ **Chaos Gate** và 👹 **Field Boss** sắp xuất hiện **sau 5 phút**. Tin thật sẽ kèm timestamp Discord theo giờ local của người xem.",
+  },
 };
 
 // Derived accessors iterate over a small registry. Keeping
@@ -160,6 +175,20 @@ function announcementSubdocKeys() {
 }
 
 /**
+ * Resolve the legacy/missing-field default for one announcement subdoc.
+ * Most historical types are on by default; high-volume opt-in types can
+ * declare `defaultEnabled: false` in the registry without introducing a
+ * second hard-coded defaults table.
+ * @param {string} subdocKey
+ * @returns {boolean}
+ */
+function announcementSubdocDefaultEnabled(subdocKey) {
+  const entry = Object.values(ANNOUNCEMENT_REGISTRY)
+    .find((candidate) => candidate.subdocKey === subdocKey);
+  return entry?.defaultEnabled !== false;
+}
+
+/**
  * Type keys whose destination admins can redirect via /raid-announce
  * set-channel. Channel-bound types (greeting, cleanup, whisper-ack) are
  * excluded because their message text refers to the monitor channel.
@@ -176,5 +205,6 @@ module.exports = {
   announcementTypeKeys,
   announcementTypeEntry,
   announcementSubdocKeys,
+  announcementSubdocDefaultEnabled,
   announcementOverridableTypeKeys,
 };

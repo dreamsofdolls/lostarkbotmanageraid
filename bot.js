@@ -45,10 +45,13 @@ const {
   handleRaidGoldEarnerAutocomplete,
   handleRaidGoldEarnerButton,
   handleStuckNudgeButton,
+  handleLocalSyncButton,
+  notifyLocalSyncPreviewReady,
   loadMonitorChannelCache,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
   startMaintenanceScheduler,
+  startWorldEventReminderScheduler,
   startSideTaskResetScheduler,
   startRaidScheduleAutoLockScheduler,
   applyRaidSetForDiscordId,
@@ -103,15 +106,6 @@ async function startBot() {
   // an empty-looking cache that masquerades as "chưa config channel nào".
   await loadMonitorChannelCache();
 
-  startLocalSyncWebCompanion({
-    rootDir: __dirname,
-    User,
-    applyRaidSetForDiscordId,
-    applyRaidSetBatchForDiscordId,
-    acquireAutoManageSyncSlot,
-    releaseAutoManageSyncSlot,
-  });
-
   const intents = [GatewayIntentBits.Guilds];
   if (TEXT_MONITOR_ENABLED) {
     // GuildMessages + MessageContent power the raid-channel text monitor.
@@ -124,6 +118,12 @@ async function startBot() {
   }
 
   const client = new Client({ intents });
+
+  startLocalSyncWebCompanion({
+    rootDir: __dirname,
+    User,
+    notifyPreviewReady: (payload) => notifyLocalSyncPreviewReady(client, payload),
+  });
 
   client.once(Events.ClientReady, async (readyClient) => {
     console.log(`Logged in as ${readyClient.user.tag}`);
@@ -177,6 +177,11 @@ async function startBot() {
     // Non-Wednesday ticks exit before any database query, keeping the
     // continuous scheduler overhead negligible.
     startMaintenanceScheduler(readyClient);
+    // Opt-in Chaos Gate / Field Boss reminder. The one-minute worker exits
+    // before querying Mongo unless the clock is inside a T-5m→T-0 window.
+    // Sunday overlaps are combined into one post and atomically deduped per
+    // guild/spawn via lastWorldEventReminderKey.
+    startWorldEventReminderScheduler(readyClient);
     // Side-task reset scheduler. 30-min tick, bulk updateMany. Resets
     // per-character side tasks once their cycle boundary passes (daily
     // 10:00 UTC = 17:00 VN, weekly Wed 10:00 UTC = 17:00 VN). Independent
@@ -252,6 +257,7 @@ async function startBot() {
       handleRaidScheduleButton,
       handleRaidScheduleSelect,
       handleStuckNudgeButton,
+      handleLocalSyncButton,
     },
   });
 

@@ -4,7 +4,10 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { bucketizeLocalSyncDeltas } = require("../bot/services/local-sync");
-const { projectSummary } = require("../bot/services/local-sync/http/endpoints/preview-summary-endpoint");
+const {
+  bucketizeCurrentWeekDeltas,
+  projectSummary,
+} = require("../bot/services/local-sync/http/endpoints/preview-summary-endpoint");
 
 function makeAccounts(character) {
   return [
@@ -14,6 +17,57 @@ function makeAccounts(character) {
     },
   ];
 }
+
+test("preview bucketing filters stale rows before choosing the highest gate", () => {
+  const buckets = bucketizeCurrentWeekDeltas([
+    {
+      boss: "Armoche, Sentinel of the Abyss",
+      difficulty: "Normal",
+      cleared: true,
+      charName: "Aki",
+      lastClearMs: 100,
+    },
+    {
+      boss: "Brelshaza, Ember in the Ashes",
+      difficulty: "Normal",
+      cleared: true,
+      charName: "Aki",
+      lastClearMs: 300,
+    },
+  ], 200);
+
+  assert.equal(buckets.length, 1);
+  assert.equal(buckets[0].gateIndex, 0);
+  assert.equal(buckets[0].lastClearMs, 300);
+});
+
+test("preview projection uses apply preflight for item level and stored Solo preference", () => {
+  const buckets = bucketizeLocalSyncDeltas([{
+    boss: "Brelshaza, Ember in the Ashes",
+    difficulty: "Normal",
+    cleared: true,
+    charName: "Aki",
+    lastClearMs: 300,
+  }]);
+  const tooLow = projectSummary(makeAccounts({
+    name: "Aki",
+    class: "Artist",
+    itemLevel: 1699,
+    assignedRaids: {},
+  }), buckets, { currentWeekStartMs: 200 });
+  assert.deepEqual(tooLow.changes, { chars: 0, raids: 0, gates: 0 });
+  assert.deepEqual(tooLow.changeDetails, []);
+
+  const storedSolo = projectSummary(makeAccounts({
+    name: "Aki",
+    class: "Artist",
+    itemLevel: 1750,
+    assignedRaids: { armoche: { modeKey: "solo" } },
+  }), buckets, { currentWeekStartMs: 200 });
+  assert.deepEqual(storedSolo.changeDetails[0].raids, [
+    { raidKey: "armoche", modeKey: "solo", gates: ["G1"] },
+  ]);
+});
 
 test("preview summary reads assigned raid difficulty from gate entries", () => {
   const summary = projectSummary(makeAccounts({
@@ -88,6 +142,13 @@ test("preview summary calculates pending gates in the post-sync mode", () => {
     projectedPercent: 0,
   });
   assert.equal(summary.goldDelta.total, 21000);
+  assert.deepEqual(summary.changeDetails, [{
+    accountName: "Roster",
+    charName: "Aki",
+    className: "Artist",
+    itemLevel: 1750,
+    raids: [{ raidKey: "serca", modeKey: "nightmare", gates: ["G1"] }],
+  }]);
   assert.deepEqual(summary.charsAfterSync, [
     {
       accountName: "Roster",

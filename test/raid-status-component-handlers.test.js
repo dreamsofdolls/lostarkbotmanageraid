@@ -187,7 +187,7 @@ test("raid-status Solo Companion defers privately before minting and keeps its U
     username: "Solo Player",
     avatarUrl: "https://cdn.example.test/avatar.webp",
   });
-  assert.match(privatePayload.embeds[0].title, /Solo Companion/);
+  assert.match(privatePayload.embeds[0].title, /Solo Local Reader/);
   assert.equal(privatePayload.components.length, 1);
   assert.equal(privatePayload.components[0].components.length, 1);
   assert.equal(
@@ -230,7 +230,7 @@ test("raid-status Solo Companion reports token failures only in the deferred pri
 
   assert.deepEqual(result, { redraw: false });
   assert.equal(originalEditCount, 0);
-  assert.match(privatePayload.embeds[0].title, /Solo Companion/);
+  assert.match(privatePayload.embeds[0].title, /Solo Local Reader/);
   assert.match(privatePayload.embeds[0].description, /token unavailable/);
   assert.equal(privatePayload.components, undefined);
 });

@@ -35,7 +35,7 @@ const userLanguageCache = new Map();
 
 // Same cache shape but keyed by guildId. Lookups are hot-path inside
 // scheduler ticks (cleanup notice / bedtime / wakeup / maintenance /
-// weekly-reset / stuck-nudge) - every 30-min tick fans out across every
+// world-event / weekly-reset / stuck-nudge) - scheduled ticks fan out across every
 // configured guild, and the cache means each guild's lang is one Mongo
 // hit at boot and zero hits per tick afterwards. Invalidated by
 // setGuildLanguage when admin runs /raid-channel config action:set-language.

@@ -4,7 +4,8 @@ const guildConfigSchema = new mongoose.Schema(
   {
     guildId: { type: String, required: true, unique: true, index: true },
     // Per-guild language code for PUBLIC announcement bodies (welcome embed,
-    // weekly-reset / cleanup / bedtime / wakeup / maintenance / stuck-nudge
+    // weekly-reset / cleanup / bedtime / wakeup / maintenance / world-event /
+    // stuck-nudge
     // notices, text-parser whisper ack and raid-update reply embeds, etc).
     // These broadcasts have no single per-user "viewer" so they can't use
     // per-user `User.language`. Default "vi" matches the legacy behavior
@@ -57,13 +58,18 @@ const guildConfigSchema = new mongoose.Schema(
     // T-10m, T-5m, T-1m). Same shape as `lastMaintenanceEarlyKey` but the
     // slotKey set is "T-15m" / "T-10m" / "T-5m" / "T-1m".
     lastMaintenanceCountdownKey: { type: String, default: null },
+    // Per-guild dedup for the opt-in Chaos Gate / Field Boss T-5 reminder.
+    // Value is `world-event:<spawn ISO>` and is shared by both presets so
+    // their overlapping Sunday slot produces one combined announcement.
+    lastWorldEventReminderKey: { type: String, default: null },
     // Per-announcement-type configuration. Each nested subdocument has:
     //   - enabled: whether the announcement fires at all.
     //   - channelId: override destination (null = fallback to raidChannelId).
     //       Only subdocs with a channelId field accept overrides; channel-bound
     //       types omit it and always fire into the raid monitor channel.
-    // Defaults all enabled=true / channelId=null so legacy guilds that
-    // existed before this field landed get the full voice out of the box.
+    // Low-frequency historical types default enabled=true / channelId=null.
+    // High-frequency reminders may opt out in the registry/schema so legacy
+    // guilds are not surprised by a noisy migration.
     announcements: {
       type: new mongoose.Schema(
         {
@@ -152,6 +158,20 @@ const guildConfigSchema = new mongoose.Schema(
             type: new mongoose.Schema(
               {
                 enabled: { type: Boolean, default: true },
+                channelId: { type: String, default: null },
+              },
+              { _id: false }
+            ),
+            default: () => ({}),
+          },
+          // Hourly Chaos Gate / Field Boss reminders are intentionally OFF
+          // by default because enabling a high-frequency type for legacy
+          // guilds would be a noisy migration. Admins opt in explicitly via
+          // /raid-announce type:world-event-reminder action:on.
+          worldEventReminder: {
+            type: new mongoose.Schema(
+              {
+                enabled: { type: Boolean, default: false },
                 channelId: { type: String, default: null },
               },
               { _id: false }

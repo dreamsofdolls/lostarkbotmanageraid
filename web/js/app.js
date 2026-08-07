@@ -1,4 +1,4 @@
-// Local Sync web companion - Phase 4.5 (streaming SQLite via wa-sqlite).
+// Local Reader - streaming SQLite via wa-sqlite, Discord confirmation handoff.
 //
 // Architecture choices:
 //   - vanilla JS (no React/Next/Vite). The page does 5 things: parse
@@ -42,10 +42,6 @@ import {
   renderPreviewStats,
 } from "/sync/js/sync/render/preview-renderer.js";
 import {
-  renderSyncApplyResult,
-  summarizeSyncResult,
-} from "/sync/js/sync/render/sync-result-renderer.js";
-import {
   formatSchemaPreview,
   listColumns,
   quoteIdent,
@@ -69,7 +65,7 @@ const syncSection = $("sync-section");
 const syncBtn = $("sync-btn");
 const syncOutput = $("sync-output");
 
-// Cache the last successful query result so the Sync button can POST it
+// Cache the last successful query result so the Discord-preview button can POST it
 // without re-running the SQL. Set on every loadAndPreview() success.
 let lastDeltas = null;
 let previewUtilsPromise = null;
@@ -214,7 +210,7 @@ renderWeekRange();
 // particular benefit from the right `lang` hint for browser font fallback.
 document.documentElement.setAttribute("lang", window.__artistLang || "vi");
 
-const authSession = bootstrapAuthSession({
+bootstrapAuthSession({
   token,
   payload,
   authStatus,
@@ -609,7 +605,7 @@ async function rebuildDiffFromRows({ rows, schemaDebug, keepSyncOutput = false }
     .catch(() => {});
 }
 
-// ----- 4. Sync POST -----
+// ----- 4. Discord preview handoff -----
 
 syncBtn.addEventListener("click", async () => {
   if (!window.__artistSyncToken) {
@@ -626,7 +622,7 @@ syncBtn.addEventListener("click", async () => {
   syncOutput.hidden = false;
   syncOutput.textContent = t("sync.sending", { n: lastDeltas.length });
   try {
-    const resp = await fetch("/api/raid-sync", {
+    const resp = await fetch("/api/local-sync/preview-job", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -640,26 +636,11 @@ syncBtn.addEventListener("click", async () => {
       syncBtn.disabled = false;
       return;
     }
-    const { applied: a } = summarizeSyncResult(data);
-    // Successful raid-sync writes shrink the stored token expiry server-side.
-    // Mirror the new expiry into the auth pill so the countdown updates now.
-    authSession.updateExpSec(data.newExpSec);
-    syncOutput.innerHTML = renderSyncApplyResult(data, window.__artistRosterAccounts || []);
+    const deliveryKey = data?.delivery?.delivered
+      ? "sync.sentToDiscord"
+      : "sync.savedForDiscord";
+    syncOutput.innerHTML = `<span class="status-ok">${escapeHtml(t("sync.previewReady"))}</span> ${escapeHtml(t(deliveryKey))}`;
     syncOutput.hidden = false;
-
-    // Refresh section 3 (preview cards + stats panel) after a real apply
-    // so the user sees post-sync state immediately - synced gates flip
-    // from pending to synced, gold drops, completion % climbs. Pass
-    // keepSyncOutput preserves the success summary above.
-    if (a > 0 && window.__artistRows) {
-      rebuildDiffFromRows({
-        rows: window.__artistRows,
-        schemaDebug: window.__artistSchemaDebug,
-        keepSyncOutput: true,
-      }).catch((err) => {
-        console.warn("[local-sync] post-sync refresh failed:", err?.message || err);
-      });
-    }
   } catch (err) {
     syncOutput.innerHTML = `<span class="status-err">${t("sync.networkError")}</span> ${escapeHtml(err.message || String(err))}`;
     syncBtn.disabled = false;

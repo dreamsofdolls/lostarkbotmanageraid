@@ -1,6 +1,10 @@
 /**
  * services/local-sync/http/sync-endpoint.js
- * POST /api/raid-sync handler. Auth chain: Bearer JWT -> signature
+ * Legacy POST /api/raid-sync handler. This factory is intentionally not
+ * mounted by app/local-sync-web.js: Local Reader writes now require an
+ * owner-confirmed Discord preview job. It remains only as isolated legacy
+ * coverage until the old module can be removed in a dedicated cleanup.
+ * Auth chain: Bearer JWT -> signature
  * verify -> Mongo localSyncEnabled check -> stored-token freshness check
  * -> apply. Successful writes shrink the stored token expiry so a leaked
  * URL has only a short replay window after data lands.

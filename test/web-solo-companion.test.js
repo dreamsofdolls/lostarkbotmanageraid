@@ -107,12 +107,12 @@ test("web i18n overlays Solo copy without changing full companion copy", async (
   global.window = { __artistLang: "en", __artistSyncScope: "solo" };
   try {
     const { t } = await import("../web/js/core/i18n.js");
-    assert.equal(t("header.h1"), "Solo Web Companion");
+    assert.equal(t("header.h1"), "Solo Local Reader");
     assert.match(t("sync.hint"), /only encounters whose difficulty is Solo/);
 
     global.window.__artistSyncScope = "full";
-    assert.equal(t("header.h1"), "Local Sync");
-    assert.match(t("sync.hint"), /cleared encounters above/);
+    assert.equal(t("header.h1"), "Local Reader");
+    assert.match(t("sync.hint"), /delta preview to Discord/);
   } finally {
     delete global.window;
   }

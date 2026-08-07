@@ -17,7 +17,12 @@ async function ensureApplicationIndexes() {
   try {
     const User = require("./models/user");
     const GuildConfig = require("./models/guildConfig");
-    await Promise.all([User.createIndexes(), GuildConfig.createIndexes()]);
+    const LocalSyncPreview = require("./models/localSyncPreview");
+    await Promise.all([
+      User.createIndexes(),
+      GuildConfig.createIndexes(),
+      LocalSyncPreview.createIndexes(),
+    ]);
     console.log(`[db] Ensured Mongo indexes in ${Date.now() - started}ms`);
   } catch (err) {
     // Index creation is a performance/ops aid, not a correctness gate.

@@ -57,7 +57,7 @@ test("raid-auto-manage action:sync rejects while local-sync is active", async ()
   assert.equal(replies.length, 1);
   assert.equal(replies[0].flags, 64);
   assert.match(replies[0].embeds[0].data.title, /local-sync/i);
-  assert.match(replies[0].embeds[0].data.description, /Web Companion/);
+  assert.match(replies[0].embeds[0].data.description, /Local Reader\/Discord Console/);
 });
 
 test("raid-auto-manage autocomplete hides bible sync while local-sync is active", async () => {

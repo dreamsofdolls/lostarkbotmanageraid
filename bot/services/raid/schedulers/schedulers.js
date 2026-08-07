@@ -38,6 +38,9 @@ const {
 const { createPrivateLogNudgeService } = require("./auto-manage-private-log-nudge");
 const { createMaintenanceSchedulerService } = require("./maintenance-scheduler");
 const { createSideTaskResetService } = require("./side-task-reset");
+const {
+  createWorldEventReminderSchedulerService,
+} = require("./world-event-reminder-scheduler");
 
 function createRaidSchedulerService({
   GuildConfig,
@@ -83,6 +86,14 @@ function createRaidSchedulerService({
     postChannelAnnouncement,
   });
 
+  const worldEventReminderService = createWorldEventReminderSchedulerService({
+    GuildConfig,
+    getAnnouncementsConfig,
+    getGuildLanguage,
+    postChannelAnnouncement,
+    t,
+  });
+
   const autoManageDailyService = createAutoManageDailySchedulerService({
     User,
     saveWithRetry,
@@ -100,6 +111,8 @@ function createRaidSchedulerService({
     AUTO_CLEANUP_TICK_MS: autoCleanupService.AUTO_CLEANUP_TICK_MS,
     AUTO_MANAGE_DAILY_TICK_MS: autoManageDailyService.AUTO_MANAGE_DAILY_TICK_MS,
     MAINTENANCE_TICK_MS,
+    WORLD_EVENT_REMINDER_TICK_MS:
+      worldEventReminderService.WORLD_EVENT_REMINDER_TICK_MS,
     MAINTENANCE_DAY_VN,
     MAINTENANCE_HOUR_VN,
     MAINTENANCE_MINUTE_VN,
@@ -123,12 +136,18 @@ function createRaidSchedulerService({
     startRaidChannelScheduler: autoCleanupService.startRaidChannelScheduler,
     startAutoManageDailyScheduler: autoManageDailyService.startAutoManageDailyScheduler,
     startMaintenanceScheduler: maintenanceService.startMaintenanceScheduler,
+    startWorldEventReminderScheduler:
+      worldEventReminderService.startWorldEventReminderScheduler,
     startSideTaskResetScheduler: sideTaskResetService.startSideTaskResetScheduler,
     dailyResetStartMs,
     resetExpiredSideTasks: sideTaskResetService.resetExpiredSideTasks,
     getAutoCleanupSchedulerStartedAtMs: autoCleanupService.getAutoCleanupSchedulerStartedAtMs,
     getAutoManageSchedulerStartedAtMs: autoManageDailyService.getAutoManageSchedulerStartedAtMs,
     getMaintenanceSchedulerStartedAtMs: maintenanceService.getMaintenanceSchedulerStartedAtMs,
+    getWorldEventReminderSchedulerStartedAtMs:
+      worldEventReminderService.getWorldEventReminderSchedulerStartedAtMs,
+    nextWorldEventReminderBoundaryMs:
+      worldEventReminderService.nextWorldEventReminderBoundaryMs,
     getSideTaskSchedulerStartedAtMs: sideTaskResetService.getSideTaskSchedulerStartedAtMs,
   };
 }

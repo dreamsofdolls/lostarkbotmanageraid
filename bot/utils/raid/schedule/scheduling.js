@@ -19,6 +19,7 @@
 function createSchedulingHelpers({
   // Pure dep - just the registry-key list
   announcementSubdocKeys,
+  announcementSubdocDefaultEnabled = () => true,
   // Resolvers for timestamps + interval values. Wrapped in getters so the
   // factory can be built before the lazy `let` bindings in bot/commands.js
   // get assigned by createRaidSchedulerService at boot.
@@ -31,6 +32,9 @@ function createSchedulingHelpers({
   resolveMaintenanceStarted,
   resolveMaintenanceTickMs,
   resolveMaintenanceSlotConfig,
+  resolveWorldEventStarted = () => null,
+  resolveWorldEventTickMs = () => null,
+  resolveNextWorldEventReminderBoundary = () => null,
 }) {
 
   /**
@@ -46,7 +50,9 @@ function createSchedulingHelpers({
     for (const subdocKey of announcementSubdocKeys()) {
       const sub = raw[subdocKey] || {};
       normalized[subdocKey] = {
-        enabled: sub.enabled !== false, // default true when missing
+        enabled: typeof sub.enabled === "boolean"
+          ? sub.enabled
+          : announcementSubdocDefaultEnabled(subdocKey),
         channelId: sub.channelId || null,
       };
     }
@@ -165,6 +171,9 @@ function createSchedulingHelpers({
       const earliestMinutes = Math.max(...minutesArr);
       return boundaryMs + 7 * 24 * 60 * 60 * 1000 - earliestMinutes * 60000;
     }
+    if (typeKey === "world-event-reminder") {
+      return resolveNextWorldEventReminderBoundary(now);
+    }
     return null; // event-driven
   }
   
@@ -184,6 +193,7 @@ function createSchedulingHelpers({
       weeklyResetStartedAtMs = resolveWeeklyResetStarted(),
       autoCleanupStartedAtMs = resolveAutoCleanupStarted(),
       autoManageStartedAtMs = resolveAutoManageStarted(),
+      worldEventStartedAtMs = resolveWorldEventStarted(),
     } = schedulerState;
     if (typeKey === "weekly-reset") {
       return nextIntervalTickMs(weeklyResetStartedAtMs, resolveWeeklyResetTickMs(), now);
@@ -204,6 +214,9 @@ function createSchedulingHelpers({
       const maintenanceStartedAtMs = resolveMaintenanceStarted?.();
       const tickMs = resolveMaintenanceTickMs?.();
       return nextIntervalTickMs(maintenanceStartedAtMs, tickMs, now);
+    }
+    if (typeKey === "world-event-reminder") {
+      return nextIntervalTickMs(worldEventStartedAtMs, resolveWorldEventTickMs(), now);
     }
     return null;
   }
@@ -297,6 +310,8 @@ function createSchedulingHelpers({
       lines.push("**Note:** The notice posts only after this guild's cleanup run completes.");
     } else if (typeKey === "stuck-nudge") {
       lines.push("**Note:** The nudge posts only if that tick finds a user whose logs are private.");
+    } else if (typeKey === "world-event-reminder") {
+      lines.push("**Note:** This high-frequency reminder is opt-in and combines Chaos Gate + Field Boss into one Sunday post when their spawn time matches.");
     }
   
     lines.push(dedupLine, ttlLine);

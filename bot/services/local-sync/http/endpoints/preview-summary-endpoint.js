@@ -35,8 +35,16 @@ const { normalizeName, toModeLabel } = require("../../../../utils/raid/common/sh
 const { getStatusRaidsForCharacter } = require("../../../../utils/raid/common/character");
 const { getCurrentResetStartMs } = require("../../../raid/schedulers/weekly-reset");
 const {
-  hasCurrentWeekProgressInAnotherMode,
+  classifyBucketAgainstRoster,
+  resolveBucketModePreference,
 } = require("../../core/apply/apply-roster");
+
+function bucketizeCurrentWeekDeltas(deltas, currentWeekStartMs = 0) {
+  const weekStartMs = Number(currentWeekStartMs) || 0;
+  return bucketizeLocalSyncDeltas((deltas || []).filter((delta) => (
+    Number(delta?.lastClearMs) >= weekStartMs
+  )));
+}
 
 function makeGateKey(raidKey, modeKey, gate) {
   return `${raidKey}::${modeKey}::${gate}`;
@@ -102,6 +110,10 @@ function projectSummary(
   let totalRaids = 0;
   let clearedRaids = 0;
   let projectedClearedRaids = 0;
+  let changedGateCount = 0;
+  const changedChars = new Set();
+  const changedRaids = new Set();
+  const changeDetails = [];
   // Per-char rollup for the pending list. Each char carries an array
   // of (raidKey, modeKey, status) so the web can render compact
   // "char: 🟢 Act 4 H · 🟡 Kazeros H · ⚪ Serca NM" rows.
@@ -147,15 +159,21 @@ function projectSummary(
       // raid-set mode switching.
       const finalRaidStates = cloneRaidStates(preRaidStates);
       const appliedGates = new Map();
-      for (const bucket of charBuckets) {
+      for (const incomingBucket of charBuckets) {
+        if (Number(incomingBucket.lastClearMs) < currentWeekStartMs) continue;
+        const bucket = resolveBucketModePreference({ accounts }, incomingBucket);
         if (!RAID_REQUIREMENTS[bucket.raidKey]?.modes?.[bucket.modeKey]) continue;
-        if (
-          scope === COMPANION_SCOPE.solo
-          && hasCurrentWeekProgressInAnotherMode(char, bucket, currentWeekStartMs)
-        ) {
-          continue;
-        }
         const gates = getGatesForRaid(bucket.raidKey);
+        const effectiveGates = gates.slice(0, bucket.gateIndex + 1);
+        const modeRequirement = RAID_REQUIREMENTS[bucket.raidKey].modes[bucket.modeKey];
+        const preflight = classifyBucketAgainstRoster(
+          { accounts },
+          bucket,
+          { minItemLevel: modeRequirement.minItemLevel },
+          effectiveGates,
+          { currentWeekStartMs, requiredCompanionScope: scope }
+        );
+        if (preflight.action !== "apply") continue;
         let state = finalRaidStates.get(bucket.raidKey);
         if (!state || state.modeKey !== bucket.modeKey) {
           state = { modeKey: bucket.modeKey, cleared: new Map() };
@@ -182,6 +200,9 @@ function projectSummary(
       let charGold = 0;
       let charGoldBound = 0;
       for (const { raidKey, modeKey, gate } of appliedGates.values()) {
+        changedGateCount += 1;
+        changedChars.add(charNameLower);
+        changedRaids.add(`${charNameLower}::${raidKey}::${modeKey}`);
         const finalRaid = finalRaidEntriesByKey.get(raidKey);
         if (char.isGoldEarner !== false && finalRaid?.goldReceives) {
           const bound = getBoundGoldForGate(raidKey, modeKey, gate);
@@ -204,6 +225,32 @@ function projectSummary(
         });
         goldTotal += charGold;
         goldBoundTotal += charGoldBound;
+      }
+
+      if (appliedGates.size > 0) {
+        const raidsByMode = new Map();
+        for (const { raidKey, modeKey, gate } of appliedGates.values()) {
+          const detailKey = `${raidKey}::${modeKey}`;
+          if (!raidsByMode.has(detailKey)) {
+            raidsByMode.set(detailKey, { raidKey, modeKey, gates: [] });
+          }
+          const detail = raidsByMode.get(detailKey);
+          if (!detail.gates.includes(gate)) detail.gates.push(gate);
+        }
+        for (const detail of raidsByMode.values()) {
+          const canonicalGates = getGatesForRaid(detail.raidKey);
+          detail.gates.sort((a, b) => canonicalGates.indexOf(a) - canonicalGates.indexOf(b));
+        }
+        const raidOrder = Object.keys(RAID_REQUIREMENTS);
+        changeDetails.push({
+          accountName: account?.accountName || "",
+          charName: char.name || "",
+          className: char.class || "",
+          itemLevel: Number(char.itemLevel) || 0,
+          raids: [...raidsByMode.values()].sort(
+            (a, b) => raidOrder.indexOf(a.raidKey) - raidOrder.indexOf(b.raidKey)
+          ),
+        });
       }
 
       // Pre-sync clearedRaids comes from preRaidStates. Use both pre +
@@ -263,6 +310,12 @@ function projectSummary(
     : 0;
 
   return {
+    changes: {
+      chars: changedChars.size,
+      raids: changedRaids.size,
+      gates: changedGateCount,
+    },
+    changeDetails,
     goldDelta: {
       total: goldTotal,
       boundTotal: goldBoundTotal,
@@ -327,6 +380,7 @@ function createPreviewSummaryEndpoint({ User }) {
         scope,
         goldDelta: { total: 0, boundTotal: 0, byChar: [] },
         completion: { totalRaids: 0, cleared: 0, projected: 0, percent: 0, projectedPercent: 0 },
+        changeDetails: [],
         charsAfterSync: [],
         lastSync: { localSyncAt: null, autoManageSyncAt: null },
       });
@@ -341,10 +395,11 @@ function createPreviewSummaryEndpoint({ User }) {
       send,
     })) return;
 
-    const buckets = bucketizeLocalSyncDeltas(deltas);
+    const currentWeekStartMs = getCurrentResetStartMs();
+    const buckets = bucketizeCurrentWeekDeltas(deltas, currentWeekStartMs);
     const summary = projectSummary(userDoc.accounts || [], buckets, {
       scope,
-      currentWeekStartMs: getCurrentResetStartMs(),
+      currentWeekStartMs,
     });
 
     send(res, 200, {
@@ -359,4 +414,8 @@ function createPreviewSummaryEndpoint({ User }) {
   };
 }
 
-module.exports = { createPreviewSummaryEndpoint, projectSummary };
+module.exports = {
+  bucketizeCurrentWeekDeltas,
+  createPreviewSummaryEndpoint,
+  projectSummary,
+};

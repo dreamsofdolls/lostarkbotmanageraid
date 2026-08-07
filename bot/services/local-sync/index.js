@@ -15,6 +15,8 @@ const state = require("./core/state");
 const tokens = require("./core/tokens");
 const apply = require("./core/apply/apply");
 const scope = require("./core/scope");
+const previewJobs = require("./core/preview-jobs");
+const applyPreview = require("./core/apply-preview-job");
 
 module.exports = {
   SYNC_MODE: state.SYNC_MODE,
@@ -44,4 +46,20 @@ module.exports = {
   resolveLocalSyncTarget: apply.resolveTarget,
   bucketizeLocalSyncDeltas: apply.bucketize,
   normalizeLocalSyncDifficulty: apply.normalizeDifficulty,
+  PREVIEW_JOB_TTL_MS: previewJobs.PREVIEW_JOB_TTL_MS,
+  MAX_PREVIEW_DELTAS: previewJobs.MAX_PREVIEW_DELTAS,
+  normalizePreviewDeltas: previewJobs.normalizePreviewDeltas,
+  fingerprintLocalSyncToken: previewJobs.fingerprintToken,
+  resolvePreviewJobState: previewJobs.resolveJobState,
+  createPreviewJob: previewJobs.createPreviewJob,
+  getPreviewJob: previewJobs.getPreviewJob,
+  getPreviewJobForUser: previewJobs.getPreviewJobForUser,
+  getLatestPreviewJob: previewJobs.getLatestPreviewJob,
+  claimPreviewJob: previewJobs.claimPreviewJob,
+  releasePreviewJob: previewJobs.releasePreviewJob,
+  finishPreviewJob: previewJobs.finishPreviewJob,
+  failPreviewJob: previewJobs.failPreviewJob,
+  cancelPreviewJob: previewJobs.cancelPreviewJob,
+  recordPreviewDelivery: previewJobs.recordPreviewDelivery,
+  applyPreviewJob: applyPreview.applyPreviewJob,
 };

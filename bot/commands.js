@@ -44,6 +44,7 @@ const {
   announcementTypeKeys,
   announcementTypeEntry,
   announcementSubdocKeys,
+  announcementSubdocDefaultEnabled,
   announcementOverridableTypeKeys,
 } = require("./utils/raid/schedule/announcements");
 const {
@@ -73,6 +74,7 @@ const { createRaidLanguageCommand } = require("./handlers/meta/language");
 const { createRaidBgCommand } = require("./handlers/raid/bg");
 const { createRaidSetCommand } = require("./handlers/raid/set");
 const { createStuckNudgeButtonHandler } = require("./handlers/local-sync/stuck-nudge-button");
+const { createLocalSyncDiscordConsole } = require("./handlers/local-sync/discord-console");
 const {
   createRosterRefreshService,
   ROSTER_REFRESH_COOLDOWN_MS,
@@ -327,6 +329,9 @@ let handleRaidHelpSelect;
 let handleRaidLanguageCommand;
 let handleRaidLanguageSelect;
 let handleRaidBgCommand;
+let handleRaidSyncCommand;
+let handleLocalSyncButton;
+let notifyLocalSyncPreviewReady;
 
 let handleRemoveRosterAutocomplete;
 let handleRemoveRosterCommand;
@@ -345,6 +350,7 @@ function getRaidCommandHandlerMap() {
     "raid-check": handleRaidCheckCommand,
     "raid-set": handleRaidSetCommand,
     "raid-status": handleStatusCommand,
+    "raid-sync": handleRaidSyncCommand,
     "raid-share": handleRaidShareCommand,
     "raid-language": handleRaidLanguageCommand,
     "raid-bg": handleRaidBgCommand,
@@ -401,6 +407,7 @@ let weekResetStartMs;
 let AUTO_CLEANUP_TICK_MS;
 let AUTO_MANAGE_DAILY_TICK_MS;
 let MAINTENANCE_TICK_MS;
+let WORLD_EVENT_REMINDER_TICK_MS;
 let postChannelAnnouncement;
 let getTargetCleanupSlotKey;
 let buildCleanupNoticePreview;
@@ -409,11 +416,14 @@ let buildMaintenancePreview;
 let startRaidChannelScheduler;
 let startAutoManageDailyScheduler;
 let startMaintenanceScheduler;
+let startWorldEventReminderScheduler;
 let startSideTaskResetScheduler;
 let startRaidScheduleAutoLockScheduler;
 let getAutoCleanupSchedulerStartedAtMs;
 let getAutoManageSchedulerStartedAtMs;
 let getMaintenanceSchedulerStartedAtMs;
+let getWorldEventReminderSchedulerStartedAtMs;
+let nextWorldEventReminderBoundaryMs;
 let getSideTaskSchedulerStartedAtMs;
 let getRaidScheduleAutoLockSchedulerStartedAtMs;
 let runRaidScheduleAutoLockTick;
@@ -448,6 +458,7 @@ const {
   buildAnnouncementWhenItFiresText,
 } = createSchedulingHelpers({
   announcementSubdocKeys,
+  announcementSubdocDefaultEnabled,
   resolveWeeklyResetStarted: () => getWeeklyResetSchedulerStartedAtMs(),
   resolveWeeklyResetTickMs: () => WEEKLY_RESET_TICK_MS,
   resolveAutoCleanupStarted: () => getAutoCleanupSchedulerStartedAtMs?.(),
@@ -457,6 +468,10 @@ const {
   resolveMaintenanceStarted: () => getMaintenanceSchedulerStartedAtMs?.(),
   resolveMaintenanceTickMs: () => MAINTENANCE_TICK_MS,
   resolveMaintenanceSlotConfig: () => getMaintenanceSlotConfigSnapshot?.(),
+  resolveWorldEventStarted: () => getWorldEventReminderSchedulerStartedAtMs?.(),
+  resolveWorldEventTickMs: () => WORLD_EVENT_REMINDER_TICK_MS,
+  resolveNextWorldEventReminderBoundary: (now) =>
+    nextWorldEventReminderBoundaryMs?.(now) ?? null,
 });
 
 const autoManageCoreService = createAutoManageCoreService({
@@ -779,6 +794,26 @@ const raidSetCommandHandlers = createRaidSetCommand({
   applyRaidSetBatchForDiscordId,
 } = raidSetCommandHandlers);
 
+const localSyncDiscordConsole = createLocalSyncDiscordConsole({
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  MessageFlags,
+  UI,
+  User,
+  formatGold,
+  applyRaidSetForDiscordId,
+  applyRaidSetBatchForDiscordId,
+  acquireAutoManageSyncSlot,
+  releaseAutoManageSyncSlot,
+});
+({
+  handleRaidSyncCommand,
+  handleLocalSyncButton,
+  notifyPreviewReady: notifyLocalSyncPreviewReady,
+} = localSyncDiscordConsole);
+
 const raidScheduleCommandHandlers = createRaidScheduleCommand({
   EmbedBuilder,
   ActionRowBuilder,
@@ -866,6 +901,7 @@ const raidSchedulerService = createRaidSchedulerService({
   AUTO_CLEANUP_TICK_MS,
   AUTO_MANAGE_DAILY_TICK_MS,
   MAINTENANCE_TICK_MS,
+  WORLD_EVENT_REMINDER_TICK_MS,
   postChannelAnnouncement,
   getTargetCleanupSlotKey,
   buildCleanupNoticePreview,
@@ -874,10 +910,13 @@ const raidSchedulerService = createRaidSchedulerService({
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
   startMaintenanceScheduler,
+  startWorldEventReminderScheduler,
   startSideTaskResetScheduler,
   getAutoCleanupSchedulerStartedAtMs,
   getAutoManageSchedulerStartedAtMs,
   getMaintenanceSchedulerStartedAtMs,
+  getWorldEventReminderSchedulerStartedAtMs,
+  nextWorldEventReminderBoundaryMs,
   getSideTaskSchedulerStartedAtMs,
 } = raidSchedulerService);
 
@@ -1129,10 +1168,14 @@ module.exports = {
   handleEditRosterButton,
   handleRaidGoldEarnerAutocomplete,
   handleRaidGoldEarnerButton,
+  handleRaidSyncCommand,
+  handleLocalSyncButton,
+  notifyLocalSyncPreviewReady,
   loadMonitorChannelCache,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
   startMaintenanceScheduler,
+  startWorldEventReminderScheduler,
   startSideTaskResetScheduler,
   startRaidScheduleAutoLockScheduler,
   parseRaidMessage,

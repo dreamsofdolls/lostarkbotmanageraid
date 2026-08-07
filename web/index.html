@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <!-- title gets overwritten in app.js once the active lang is resolved
        from the URL token; data-i18n keeps the key wired up. -->
-  <title data-i18n="meta.pageTitle">Artist · Local Sync</title>
+  <title data-i18n="meta.pageTitle">Artist · Local Reader</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" />
@@ -14,8 +14,8 @@
 <body>
   <main class="container">
     <header>
-      <h1 data-i18n="header.h1">Local Sync</h1>
-      <p class="subtitle" data-i18n="header.subtitle">Web companion for Artist's <code>/raid-auto-manage local-on</code> mode</p>
+      <h1 data-i18n="header.h1">Local Reader</h1>
+      <p class="subtitle" data-i18n="header.subtitle">Read encounters.db locally, then confirm changes in Discord</p>
     </header>
 
     <section id="auth-state" class="card">
@@ -46,17 +46,17 @@
     </section>
 
     <section id="sync-section" class="card" hidden>
-      <h2 data-i18n="sync.section">4. Sync to Artist</h2>
+      <h2 data-i18n="sync.section">4. Send preview to Discord</h2>
       <p class="hint" data-i18n="sync.hint">
-        Sends the cleared encounters above to the bot. Per-character ownership is enforced server-side - chars not in your roster are skipped.
+        Sends only the small delta preview to Discord. Review and apply it from the private Local Sync console.
       </p>
-      <button id="sync-btn" type="button" disabled data-i18n="sync.btnReady">Sync now</button>
+      <button id="sync-btn" type="button" disabled data-i18n="sync.btnReady">Send to Discord</button>
       <div id="sync-output" class="meta" hidden></div>
     </section>
 
   </main>
 
-  <!-- wa-sqlite (asyncify build) loaded lazily by app.js when a file is dropped.
+  <!-- wa-sqlite (asyncify build) loaded lazily by app.js when a file is selected.
        We use the streaming VFS pattern so multi-GB encounters.db files work
        (sql.js needed full-file ArrayBuffer; Chrome caps that at ~2GB). -->
   <script src="/sync/js/app.js" type="module"></script>

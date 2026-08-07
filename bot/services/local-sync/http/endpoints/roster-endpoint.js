@@ -1,7 +1,7 @@
 /**
  * services/local-sync/http/roster-endpoint.js
  * GET /api/me/roster handler · returns a slim roster snapshot for the
- * web companion's diff-view preview. Auth mirrors POST /api/raid-sync
+ * Local Reader's diff-view preview. Auth mirrors the preview-job endpoint
  * (Bearer JWT + stored-token freshness). Projection deliberately
  * excludes sideTasks/sharedTasks/lastRefreshedAt/registeredBy to keep
  * the payload tight and avoid leaking ops metadata.
@@ -23,7 +23,7 @@ const {
  * preview can render "currently synced (DB) vs pending sync (file)"
  * per (char, raid, gate, mode) cell.
  *
- * Auth chain mirrors POST /api/raid-sync: Bearer JWT -> verify ->
+ * Auth chain mirrors the preview-job endpoint: Bearer JWT -> verify ->
  * Mongo lookup. No write semantics; pure read.
  *
  * Returns slim JSON - only the fields the web preview needs:

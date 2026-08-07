@@ -4,6 +4,22 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-08-07 (Discord-first Local Sync)
+
+### Changed
+- Local Reader no longer writes raid progress from the web page. It reads `encounters.db` locally, sends only cleared-encounter deltas, and stores a two-hour preview job. The legacy direct-write HTTP route is no longer exposed.
+- New private `/raid-sync` console and DM confirmation show the exact characters, raids, and newly changed gates before applying. Sync, Cancel, and Refresh buttons are globally routed, owner-checked, atomic, and remain usable outside the short `/raid-status` collector session.
+- The browser keeps its `FileSystemFileHandle` in IndexedDB, so the file is normally selected once. A browser that revokes persistent permission asks for one Restore click; the raw SQLite file is never uploaded.
+
+### Added
+- Persistent `localsyncpreviews` jobs with expiry, supersede semantics, token fingerprinting, delivery receipts, and idempotent Discord apply. If DMs are blocked, the job remains available through `/raid-sync`.
+
+## 2026-08-07 (Chaos Gate / Field Boss reminder)
+
+### Added
+- `/raid-announce` now includes the opt-in `world-event-reminder` type. It posts five minutes before each Chaos Gate or Field Boss hourly slot, can target the monitor channel or an override channel, and combines the overlapping Sunday events into one message.
+- The one-minute reminder scheduler reuses the existing UTC-4 shared-task presets, catches up when the bot starts inside the T-5m window, and atomically deduplicates each guild/spawn. The new high-frequency type defaults to OFF for both existing and new guilds.
+
 ## 2026-08-05 (Artist voice pass and @-mention replies)
 
 ### Added

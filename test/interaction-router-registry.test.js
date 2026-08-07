@@ -145,3 +145,37 @@ test("raid-schedule-preview routes a User Select (add-member) through rse select
 
   assert.equal(selectCalls, 1);
 });
+
+test("Local Sync confirmation buttons route globally outside raid-status collectors", async () => {
+  let localSyncCalls = 0;
+  const noop = async () => {};
+  const handlers = {
+    handleRaidManagementCommand: noop,
+    handleRaidHelpSelect: noop,
+    handleRaidLanguageSelect: noop,
+    handleRaidSetAutocomplete: noop,
+    handleEditRosterAutocomplete: noop,
+    handleRemoveRosterAutocomplete: noop,
+    handleRaidChannelAutocomplete: noop,
+    handleRaidAutoManageAutocomplete: noop,
+    handleRaidAnnounceAutocomplete: noop,
+    handleRaidTaskAutocomplete: noop,
+    handleRaidGoldEarnerAutocomplete: noop,
+    handleLocalSyncButton: async () => { localSyncCalls += 1; },
+  };
+  const router = createRaidInteractionRouter({
+    MessageFlags: { Ephemeral: 64 },
+    handlers,
+  });
+
+  await router.handle({
+    id: "local-sync-button-interaction",
+    isChatInputCommand: () => false,
+    isAutocomplete: () => false,
+    isStringSelectMenu: () => false,
+    isButton: () => true,
+    customId: "local-sync:apply:preview-job-id",
+  });
+
+  assert.equal(localSyncCalls, 1);
+});

@@ -241,7 +241,7 @@ test("buildMaintenanceConfigQuery selects guilds with override set even when rai
   assert.ok(docMatchesQuery(countdownOverrideOnly, q), "countdown override alone must select guild");
 });
 
-test("announcementOverridableTypeKeys returns all 4 channel-overridable types including maintenance-*", () => {
+test("announcementOverridableTypeKeys returns all 5 channel-overridable types", () => {
   // The /raid-announce action:set-channel reject message used to hard-code
   // "weekly-reset và stuck-nudge", which drifted out of sync once the 2
   // maintenance types landed. Pin the dynamic registry derivation so the
@@ -252,6 +252,7 @@ test("announcementOverridableTypeKeys returns all 4 channel-overridable types in
     "maintenance-early",
     "stuck-nudge",
     "weekly-reset",
+    "world-event-reminder",
   ]);
 });
 

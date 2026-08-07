@@ -19,6 +19,7 @@ const RAID_COMMAND_NAMES = Object.freeze([
   "raid-check",
   "raid-set",
   "raid-status",
+  "raid-sync",
   "raid-help",
   "raid-remove-roster",
   "raid-channel",
@@ -70,6 +71,7 @@ function createRaidInteractionRouter({
       { prefix: "rse:", handle: handlers.handleRaidScheduleSelect },
     ],
     buttonRoutes: [
+      { prefix: "local-sync:", handle: handlers.handleLocalSyncButton },
       { prefix: "rse:", handle: handlers.handleRaidScheduleButton },
       { prefix: "raid-check:", handle: handlers.handleRaidCheckButton },
       { prefix: "add-roster:", handle: handlers.handleAddRosterButton },
