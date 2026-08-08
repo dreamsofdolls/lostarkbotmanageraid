@@ -10,6 +10,11 @@ const {
 
 const MAX_CHARACTER_FIELDS = 10;
 const MAX_RAIDS_PER_CHARACTER = 8;
+const RETRYABLE_PENDING_REASONS = new Set([
+  "sync_busy",
+  "write_error",
+  "apply_failed",
+]);
 
 function unixSeconds(value) {
   const ms = Number(new Date(value));
@@ -71,8 +76,9 @@ function statusColor(state, UI) {
 }
 
 function buildResultDescription(job, state, lang) {
-  if (state === "pending" && job?.failureReason === "sync_busy") {
-    return t("local-sync-discord.failureReasons.sync_busy", lang);
+  const failureReason = String(job?.failureReason || "");
+  if (state === "pending" && RETRYABLE_PENDING_REASONS.has(failureReason)) {
+    return t(`local-sync-discord.retryReasons.${failureReason}`, lang);
   }
   if (state === "applied") {
     const result = job?.result || {};
@@ -258,5 +264,6 @@ module.exports = {
   MAX_RAIDS_PER_CHARACTER,
   groupProjectedChanges,
   groupPreviewBuckets,
+  buildResultDescription,
   buildLocalSyncConsolePayload,
 };

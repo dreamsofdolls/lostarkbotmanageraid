@@ -9,6 +9,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ### Changed
 - Local Reader no longer writes raid progress from the web page. It reads `encounters.db` locally, sends only cleared-encounter deltas, and stores a two-hour preview job. The legacy direct-write HTTP route is no longer exposed.
 - New private `/raid-sync` console and DM confirmation show the exact characters, raids, and newly changed gates before applying. Sync, Cancel, and Refresh buttons are globally routed, owner-checked, atomic, and remain usable outside the short `/raid-status` collector session.
+- `/raid-sync` now keeps the durable console only while a preview still needs attention. Once there is no pending review, or immediately after Sync/Cancel, the same message hands off to the complete `/raid-status` session instead of rendering a second long summary UI. Running `/raid-sync` again creates a new DB-backed status session rather than reusing the previous message snapshot.
+- The Local Sync status control is now labelled **Refresh progress** and explicitly reloads the latest DB-backed raid state before redrawing the embed.
+- Pending previews are re-projected from the latest User state whenever the console opens or refreshes. Interrupted apply jobs recover after a short lease, transient write failures stay retryable without discarding successful writes, and stale/cleaned-up buttons resolve to the newest preview or a fresh Raid Status session.
 - The browser keeps its `FileSystemFileHandle` in IndexedDB, so the file is normally selected once. A browser that revokes persistent permission asks for one Restore click; the raw SQLite file is never uploaded.
 
 ### Added
@@ -19,6 +22,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ### Added
 - `/raid-announce` now includes the opt-in `world-event-reminder` type. It posts five minutes before each Chaos Gate or Field Boss hourly slot, can target the monitor channel or an override channel, and combines the overlapping Sunday events into one message.
 - The one-minute reminder scheduler reuses the existing UTC-4 shared-task presets, catches up when the bot starts inside the T-5m window, and atomically deduplicates each guild/spawn. The new high-frequency type defaults to OFF for both existing and new guilds.
+
+### Fixed
+- The `/raid-announce` `action` field now uses five immediate Discord choices instead of a Mongo-backed autocomplete, so **Turn notifications ON/OFF** no longer fails to load when the database is slow. A no-DB fallback remains for clients temporarily holding the old command schema during redeploy.
 
 ## 2026-08-05 (Artist voice pass and @-mention replies)
 

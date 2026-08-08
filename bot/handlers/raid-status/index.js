@@ -153,9 +153,15 @@ function createRaidStatusCommand(deps) {
     STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS,
   });
 
-  async function handleStatusCommand(interaction) {
+  // `alreadyDeferred` lets another private flow (currently /raid-sync)
+  // hand its existing message to the canonical status session. Keeping the
+  // collector, state, renderer, and component layout here avoids a second UI
+  // implementation drifting away from /raid-status.
+  async function handleStatusCommand(interaction, options = {}) {
     const started = Date.now();
     const discordId = interaction.user.id;
+    const alreadyDeferred = options?.alreadyDeferred === true;
+    const initialContent = options?.content ?? null;
     // Probe localSyncEnabled before defer to mark the reply as
     // ephemeral when local-sync is on. The Mở Web Companion Link button
     // carries a signed token URL in its href - public messages would
@@ -169,13 +175,15 @@ function createRaidStatusCommand(deps) {
       discordId,
       prepareStatusUserDoc,
     });
-    const isLocalSyncMode = await probeLocalSyncModeWithBudget({
-      probePromise: viewerStateLoader.probeLocalSyncMode(),
-      waitWithBudget,
-    });
-    await interaction.deferReply(
-      isLocalSyncMode ? { flags: MessageFlags.Ephemeral } : {}
-    );
+    if (!alreadyDeferred) {
+      const isLocalSyncMode = await probeLocalSyncModeWithBudget({
+        probePromise: viewerStateLoader.probeLocalSyncMode(),
+        waitWithBudget,
+      });
+      await interaction.deferReply(
+        isLocalSyncMode ? { flags: MessageFlags.Ephemeral } : {}
+      );
+    }
     const ackMs = Date.now() - started;
     const viewerState = await viewerStateLoader.load();
     const viewerReadyAt = Date.now();
@@ -190,7 +198,7 @@ function createRaidStatusCommand(deps) {
 
     if (viewerState.noRoster) {
       await interaction.editReply({
-        content: null,
+        content: initialContent,
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
@@ -198,6 +206,9 @@ function createRaidStatusCommand(deps) {
             description: t("raid-status.notice.noRosterDescription", lang),
           }),
         ],
+        files: [],
+        attachments: [],
+        components: [],
       });
       return;
     }
@@ -364,6 +375,7 @@ function createRaidStatusCommand(deps) {
     const initialComponents = buildComponents(false);
 
     const messageFromEdit = await interaction.editReply({
+      content: initialContent,
       embeds: [buildCurrentEmbed()],
       files: [],
       attachments: [],

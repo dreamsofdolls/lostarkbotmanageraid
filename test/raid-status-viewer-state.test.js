@@ -172,6 +172,46 @@ test("raid-status viewer loader reuses one lean seed for probe, language, and re
   assert.equal(findOneCalls, 1);
 });
 
+test("opening a new raid-status session reads a fresh DB snapshot", async () => {
+  clearUserLanguageCache();
+  let dbVersion = 1;
+  let findOneCalls = 0;
+  const User = {
+    findOne() {
+      findOneCalls += 1;
+      return {
+        async lean() {
+          return {
+            discordId: "user-reopen",
+            language: "vi",
+            localSyncEnabled: true,
+            dbVersion,
+            accounts: [{ accountName: "Roster", characters: [] }],
+          };
+        },
+      };
+    },
+  };
+  const createLoader = () => createStatusViewerStateLoader({
+    User,
+    discordId: "user-reopen",
+    prepareStatusUserDoc: (_discordId, doc) => ({
+      userDoc: doc,
+      piggybackOutcome: null,
+      startBackgroundRefresh: null,
+    }),
+    getAccessibleAccountsFn: async () => [],
+  });
+
+  const firstSession = await createLoader().load();
+  dbVersion = 2;
+  const reopenedSession = await createLoader().load();
+
+  assert.equal(firstSession.userDoc.dbVersion, 1);
+  assert.equal(reopenedSession.userDoc.dbVersion, 2);
+  assert.equal(findOneCalls, 2, "each command invocation must create a new DB-backed snapshot");
+});
+
 test("raid-status session recounts characters after background roster refresh", async () => {
   const buildMergedAccounts = async (_discordId, accounts) => accounts;
   const state = await createRaidStatusSessionState({

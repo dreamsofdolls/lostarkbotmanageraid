@@ -47,6 +47,7 @@ module.exports = {
   bucketizeLocalSyncDeltas: apply.bucketize,
   normalizeLocalSyncDifficulty: apply.normalizeDifficulty,
   PREVIEW_JOB_TTL_MS: previewJobs.PREVIEW_JOB_TTL_MS,
+  PREVIEW_APPLY_LEASE_MS: previewJobs.PREVIEW_APPLY_LEASE_MS,
   MAX_PREVIEW_DELTAS: previewJobs.MAX_PREVIEW_DELTAS,
   normalizePreviewDeltas: previewJobs.normalizePreviewDeltas,
   fingerprintLocalSyncToken: previewJobs.fingerprintToken,

@@ -5,7 +5,9 @@ const LocalSyncPreview = require("../../../models/localSyncPreview");
 const { normalizeCompanionScope } = require("./scope");
 
 const PREVIEW_JOB_TTL_MS = 2 * 60 * 60 * 1000;
+const PREVIEW_APPLY_LEASE_MS = 2 * 60 * 1000;
 const MAX_PREVIEW_DELTAS = 512;
+const previewCreateLocks = new Map();
 
 function clipString(value, maxLength) {
   return String(value || "").trim().slice(0, maxLength);
@@ -42,10 +44,54 @@ function fingerprintToken(token) {
   return crypto.createHash("sha256").update(String(token)).digest("hex");
 }
 
+function applyingLeaseIsActive(job, nowMs = Date.now()) {
+  const applyingAtMs = Number(new Date(job?.applyingAt));
+  return Number.isFinite(applyingAtMs)
+    && applyingAtMs > nowMs - PREVIEW_APPLY_LEASE_MS;
+}
+
 function resolveJobState(job, nowMs = Date.now()) {
   if (!job) return "missing";
-  if (Number(new Date(job.expiresAt)) <= nowMs && job.status === "pending") return "expired";
-  return job.status || "pending";
+  const status = job.status || "pending";
+  const expired = Number(new Date(job.expiresAt)) <= nowMs;
+  if (status === "pending") return expired ? "expired" : "pending";
+  if (status === "applying" && !applyingLeaseIsActive(job, nowMs)) {
+    return expired ? "expired" : "pending";
+  }
+  return status;
+}
+
+function reclaimableStatusFilter(nowMs) {
+  const staleBefore = new Date(nowMs - PREVIEW_APPLY_LEASE_MS);
+  return {
+    $or: [
+      { status: "pending" },
+      { status: "applying", applyingAt: { $lte: staleBefore } },
+      { status: "applying", applyingAt: null },
+    ],
+  };
+}
+
+function resolveNowMs(deps = {}) {
+  const injected = typeof deps.nowMs === "function" ? deps.nowMs() : deps.nowMs;
+  const parsed = Number(injected);
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
+async function runPreviewCreateExclusive(discordId, task) {
+  const previous = previewCreateLocks.get(discordId) || Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => { release = resolve; });
+  previewCreateLocks.set(discordId, current);
+  await previous.catch(() => {});
+  try {
+    return await task();
+  } finally {
+    release();
+    if (previewCreateLocks.get(discordId) === current) {
+      previewCreateLocks.delete(discordId);
+    }
+  }
 }
 
 async function createPreviewJob({
@@ -63,20 +109,28 @@ async function createPreviewJob({
   const normalizedDeltas = normalizePreviewDeltas(deltas);
   if (normalizedDeltas.length === 0) throw new Error("no valid deltas");
 
-  await PreviewModel.updateMany(
-    { discordId, status: "pending" },
-    { $set: { status: "superseded", failureReason: "newer_preview" } }
-  );
+  return runPreviewCreateExclusive(discordId, async () => {
+    await PreviewModel.updateMany(
+      { discordId, ...reclaimableStatusFilter(nowMs) },
+      {
+        $set: {
+          status: "superseded",
+          failureReason: "newer_preview",
+          applyingAt: null,
+        },
+      }
+    );
 
-  return PreviewModel.create({
-    jobId: crypto.randomUUID(),
-    discordId,
-    scope: normalizedScope,
-    status: "pending",
-    deltas: normalizedDeltas,
-    projection,
-    tokenFingerprint: fingerprintToken(token),
-    expiresAt: new Date(nowMs + PREVIEW_JOB_TTL_MS),
+    return PreviewModel.create({
+      jobId: crypto.randomUUID(),
+      discordId,
+      scope: normalizedScope,
+      status: "pending",
+      deltas: normalizedDeltas,
+      projection,
+      tokenFingerprint: fingerprintToken(token),
+      expiresAt: new Date(nowMs + PREVIEW_JOB_TTL_MS),
+    });
   });
 }
 
@@ -103,23 +157,52 @@ async function getLatestPreviewJob(discordId, deps = {}) {
 
 async function claimPreviewJob(jobId, discordId, deps = {}) {
   const PreviewModel = deps.PreviewModel || LocalSyncPreview;
+  const nowMs = resolveNowMs(deps);
+  const applyingAt = new Date(nowMs);
   return PreviewModel.findOneAndUpdate(
     {
       jobId,
       discordId,
-      status: "pending",
-      expiresAt: { $gt: new Date() },
+      expiresAt: { $gt: applyingAt },
+      ...reclaimableStatusFilter(nowMs),
     },
-    { $set: { status: "applying", failureReason: "" } },
+    {
+      $set: {
+        status: "applying",
+        applyingAt,
+        failureReason: "",
+        result: null,
+        // Keep Mongo's TTL index from deleting a job while it is being applied.
+        expiresAt: new Date(nowMs + PREVIEW_JOB_TTL_MS),
+      },
+    },
     { new: true }
   );
 }
 
-async function releasePreviewJob(jobId, discordId, reason, deps = {}) {
+function applyingOwnerFilter(jobId, discordId, deps = {}) {
+  const filter = { jobId, discordId, status: "applying" };
+  if (deps.leaseStartedAt != null) {
+    const leaseMs = Number(new Date(deps.leaseStartedAt));
+    if (Number.isFinite(leaseMs)) filter.applyingAt = new Date(leaseMs);
+  }
+  return filter;
+}
+
+async function releasePreviewJob(jobId, discordId, reason, deps = {}, options = {}) {
   const PreviewModel = deps.PreviewModel || LocalSyncPreview;
+  const update = {
+    status: "pending",
+    failureReason: String(reason || ""),
+    applyingAt: null,
+  };
+  if (options.clearProjection) update.projection = null;
+  if (Object.prototype.hasOwnProperty.call(options, "result")) {
+    update.result = options.result;
+  }
   return PreviewModel.findOneAndUpdate(
-    { jobId, discordId, status: "applying" },
-    { $set: { status: "pending", failureReason: String(reason || "") } },
+    applyingOwnerFilter(jobId, discordId, deps),
+    { $set: update },
     { new: true }
   );
 }
@@ -127,12 +210,13 @@ async function releasePreviewJob(jobId, discordId, reason, deps = {}) {
 async function finishPreviewJob(jobId, discordId, result, deps = {}) {
   const PreviewModel = deps.PreviewModel || LocalSyncPreview;
   return PreviewModel.findOneAndUpdate(
-    { jobId, discordId, status: "applying" },
+    applyingOwnerFilter(jobId, discordId, deps),
     {
       $set: {
         status: "applied",
         result: result || null,
         failureReason: "",
+        applyingAt: null,
         appliedAt: new Date(),
       },
     },
@@ -143,12 +227,13 @@ async function finishPreviewJob(jobId, discordId, result, deps = {}) {
 async function failPreviewJob(jobId, discordId, reason, result = null, deps = {}) {
   const PreviewModel = deps.PreviewModel || LocalSyncPreview;
   return PreviewModel.findOneAndUpdate(
-    { jobId, discordId, status: "applying" },
+    applyingOwnerFilter(jobId, discordId, deps),
     {
       $set: {
         status: "failed",
         failureReason: String(reason || "apply_failed"),
         result,
+        applyingAt: null,
       },
     },
     { new: true }
@@ -157,9 +242,22 @@ async function failPreviewJob(jobId, discordId, reason, result = null, deps = {}
 
 async function cancelPreviewJob(jobId, discordId, deps = {}) {
   const PreviewModel = deps.PreviewModel || LocalSyncPreview;
+  const nowMs = resolveNowMs(deps);
   return PreviewModel.findOneAndUpdate(
-    { jobId, discordId, status: "pending" },
-    { $set: { status: "cancelled", cancelledAt: new Date() } },
+    {
+      jobId,
+      discordId,
+      expiresAt: { $gt: new Date(nowMs) },
+      ...reclaimableStatusFilter(nowMs),
+    },
+    {
+      $set: {
+        status: "cancelled",
+        failureReason: "",
+        applyingAt: null,
+        cancelledAt: new Date(nowMs),
+      },
+    },
     { new: true }
   );
 }
@@ -178,6 +276,7 @@ async function recordPreviewDelivery(jobId, discordId, message, deps = {}) {
 
 module.exports = {
   PREVIEW_JOB_TTL_MS,
+  PREVIEW_APPLY_LEASE_MS,
   MAX_PREVIEW_DELTAS,
   normalizePreviewDelta,
   normalizePreviewDeltas,

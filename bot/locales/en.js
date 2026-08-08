@@ -69,6 +69,11 @@ module.exports = {
       auto_sync_disabled: "Bible Auto-sync was disabled",
       sync_busy: "Another sync is running. Wait a moment, then click Sync again.",
     },
+    retryReasons: {
+      apply_failed: "A temporary processing error occurred. Unfinished data was kept so you can click **Sync** to retry.",
+      write_error: "Some progress could not be written to the database. Completed writes were kept; click **Sync** to retry the rest.",
+      sync_busy: "Another sync is running. Wait a moment, then click **Sync** again.",
+    },
     buttons: {
       apply: "Sync",
       cancel: "Cancel",
@@ -744,11 +749,13 @@ module.exports = {
       buttonCooldown: "Sync ({remain})",
       localOpenButtonLabel: "Open Local Reader",
       localNewLinkButtonLabel: "New link",
-      localRefreshButtonLabel: "Refresh",
+      localRefreshButtonLabel: "Refresh progress",
       localRefreshSuccessTitle: {
         variants: ["Here is the latest state", "Refreshed~", "Pulled it from the DB again~"],
       },
       localRefreshSuccessDescription: "The embed now uses the latest DB state. Click this after confirming in Local Sync Console to see the new progress immediately.",
+      localRefreshFailedTitle: "Progress was not refreshed",
+      localRefreshFailedDescription: "Artist could not read or render the latest database state. The current embed was left unchanged; please try again shortly.",
       soloCompanionButtonLabel: "Solo Local Reader",
       soloCompanionTitle: "Solo Local Reader is ready",
       soloCompanionDescription: "Use the private link below to read `encounters.db` and send a **Solo-only** preview to Discord. Bible auto-sync stays enabled; only confirmation in Local Sync Console writes progress. The link contains a personal, expiring token, so do not share it.",

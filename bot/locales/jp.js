@@ -71,6 +71,11 @@ module.exports = {
       auto_sync_disabled: "Bible Auto-sync が無効です",
       sync_busy: "別の同期が実行中です。少し待ってからもう一度同期を押してね。",
     },
+    retryReasons: {
+      apply_failed: "一時的な処理エラーが発生しました。未完了のデータは保持されていますので、**同期**を押して再試行してくださいませ。",
+      write_error: "一部の進捗をデータベースへ書き込めませんでした。完了分は保持されています。**同期**を押して残りを再試行してね。",
+      sync_busy: "別の同期が実行中です。少し待ってからもう一度 **同期** を押してね。",
+    },
     buttons: {
       apply: "同期",
       cancel: "キャンセル",
@@ -745,11 +750,13 @@ module.exports = {
       buttonCooldown: "同期 ({remain})",
       localOpenButtonLabel: "Local Reader を開く",
       localNewLinkButtonLabel: "新しいリンクを発行",
-      localRefreshButtonLabel: "更新",
+      localRefreshButtonLabel: "進捗を更新",
       localRefreshSuccessTitle: {
         variants: ["最新の状態ですわ", "更新しましたわ♪", "DB から読み直しましたの～"],
       },
       localRefreshSuccessDescription: "DB の最新状態でエンベッドを再描画しましたわ♪ Local Sync Console で確認した後、このボタンを押すと新しい進捗がすぐ見られますの。",
+      localRefreshFailedTitle: "進捗を更新できませんでした",
+      localRefreshFailedDescription: "DB の最新状態を読み込み、または描画できませんでした。現在のエンベッドはそのまま保持されています。少し待ってから再試行してくださいませ。",
       soloCompanionButtonLabel: "Solo Local Reader",
       soloCompanionTitle: "Solo Local Reader の準備ができました",
       soloCompanionDescription: "下の非公開リンクで `encounters.db` を読み、**Solo のみ**の preview を Discord へ送ります。Bible 自動同期は有効のまま、進捗を書き込むのは Local Sync Console で確認した時だけですの。個人用の期限付きリンクなので共有しないでね。",

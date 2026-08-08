@@ -1,6 +1,9 @@
 "use strict";
 
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require("discord.js");
+const {
+  RAID_ANNOUNCE_ACTION_CHOICES,
+} = require("../../raid/announce/actions");
 
 function createRaidChannelCommandDefinition() {
   const raidChannelCommand = new SlashCommandBuilder()
@@ -128,11 +131,9 @@ function createRaidAnnounceCommandDefinition({ announcementTypeKeys, announcemen
           ja: "選択したアナウンスへの操作",
         })
         .setRequired(true)
-        // Autocomplete (not static choices) so labels can annotate the
-        // CURRENT per-guild state (e.g. "Turn on (currently OFF)") and hide
-        // redundant actions (on while on, off while off, clear-channel when
-        // no override set, set-channel for channel-bound types).
-        .setAutocomplete(true)
+        // These five actions are fixed. Static choices render immediately and
+        // avoid Discord's short autocomplete deadline depending on Mongo.
+        .addChoices(...RAID_ANNOUNCE_ACTION_CHOICES)
     )
     .addChannelOption((opt) =>
       opt

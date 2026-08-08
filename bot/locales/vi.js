@@ -76,6 +76,11 @@ module.exports = {
       auto_sync_disabled: "Bible Auto-sync đã bị tắt",
       sync_busy: "Một lượt sync khác đang chạy. Đợi một chút rồi bấm Đồng bộ lại nhé.",
     },
+    retryReasons: {
+      apply_failed: "Có lỗi tạm thời khi xử lý. Dữ liệu chưa hoàn tất vẫn được giữ để cậu bấm **Đồng bộ** thử lại.",
+      write_error: "Một phần tiến độ chưa ghi được vào DB. Phần đã ghi vẫn được giữ; bấm **Đồng bộ** để thử lại phần còn thiếu.",
+      sync_busy: "Một lượt sync khác đang chạy. Đợi một chút rồi bấm **Đồng bộ** lại nhé.",
+    },
     buttons: {
       apply: "Đồng bộ",
       cancel: "Huỷ",
@@ -766,11 +771,13 @@ module.exports = {
       buttonCooldown: "Sync ({remain})",
       localOpenButtonLabel: "Mở Local Reader",
       localNewLinkButtonLabel: "Tạo link mới",
-      localRefreshButtonLabel: "Cập nhật",
+      localRefreshButtonLabel: "Cập nhật tiến độ",
       localRefreshSuccessTitle: {
         variants: ["State mới nhất đây", "Làm mới xong~", "Ngó lại DB rồi nha~"],
       },
       localRefreshSuccessDescription: "Embed đã refresh theo state mới nhất từ DB. Sau khi xác nhận ở Local Sync Console thì bấm nút này để thấy progress mới ngay nha~",
+      localRefreshFailedTitle: "Chưa cập nhật được tiến độ",
+      localRefreshFailedDescription: "Artist chưa đọc hoặc render được state mới nhất từ DB. Embed hiện tại được giữ nguyên; cậu thử lại sau một chút nhé.",
       soloCompanionButtonLabel: "Solo Local Reader",
       soloCompanionTitle: "Solo Local Reader đã sẵn sàng",
       soloCompanionDescription: "Dùng link riêng tư bên dưới để đọc `encounters.db` và gửi preview **Solo** sang Discord. Bible Auto-sync vẫn được giữ nguyên; chỉ nút xác nhận trong Local Sync Console mới ghi progress. Link có token cá nhân có thời hạn, đừng chia sẻ nhé.",

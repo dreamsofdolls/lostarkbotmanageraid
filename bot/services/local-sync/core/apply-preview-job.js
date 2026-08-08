@@ -40,6 +40,10 @@ function findDisabledWrite(summary) {
   );
 }
 
+function hasWriteError(summary) {
+  return (summary?.rejected || []).some((item) => item?.reason === "write_error");
+}
+
 async function shrinkSourceTokenAfterWrite({ UserModel, userDoc, job, discordId }) {
   const currentToken = userDoc?.lastLocalSyncToken;
   if (!currentToken || !job?.tokenFingerprint) return null;
@@ -70,6 +74,10 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
   const job = typeof claimedDoc.toObject === "function"
     ? claimedDoc.toObject()
     : claimedDoc;
+  const leaseDeps = {
+    ...modelDeps,
+    leaseStartedAt: job.applyingAt,
+  };
   let ownsSyncSlot = false;
 
   try {
@@ -80,7 +88,7 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
         discordId,
         job.scope === COMPANION_SCOPE.solo ? "auto_sync_disabled" : "local_sync_disabled",
         null,
-        modelDeps
+        leaseDeps
       );
       return { ok: false, state: "failed", job: failed || job };
     }
@@ -92,7 +100,7 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
     ) {
       const guard = await deps.acquireAutoManageSyncSlot(discordId, { ignoreCooldown: true });
       if (!guard?.acquired) {
-        const released = await releasePreviewJob(jobId, discordId, "sync_busy", modelDeps);
+        const released = await releasePreviewJob(jobId, discordId, "sync_busy", leaseDeps);
         return { ok: false, state: "busy", job: released || job };
       }
       ownsSyncSlot = true;
@@ -114,9 +122,28 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
         discordId,
         disabledWrite.reason,
         summary,
-        modelDeps
+        leaseDeps
       );
       return { ok: false, state: "failed", job: failed || job, result: summary };
+    }
+
+    if (hasWriteError(summary)) {
+      // A retry is safe: successful writes are retained and roster preflight
+      // will skip them, while only the failed writes remain actionable.
+      const released = await releasePreviewJob(
+        jobId,
+        discordId,
+        "write_error",
+        leaseDeps,
+        { result: summary, clearProjection: true }
+      );
+      return {
+        ok: false,
+        state: "pending",
+        retryable: true,
+        job: released || job,
+        result: summary,
+      };
     }
 
     try {
@@ -143,16 +170,37 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
     }
 
     const result = { ...summary, newExpSec };
-    const finished = await finishPreviewJob(jobId, discordId, result, modelDeps);
+    const finished = await finishPreviewJob(jobId, discordId, result, leaseDeps);
+    if (!finished) {
+      const existing = await getPreviewJobForUser(jobId, discordId, modelDeps);
+      const state = resolveJobState(existing);
+      return {
+        ok: state === "applied",
+        state,
+        job: existing || null,
+        result,
+      };
+    }
     return {
       ok: true,
       state: "applied",
-      job: finished || { ...job, status: "applied", result },
+      job: finished,
       result,
     };
   } catch (err) {
-    await releasePreviewJob(jobId, discordId, err?.message || "apply_failed", modelDeps).catch(() => {});
-    throw err;
+    console.warn("[local-sync/preview-job] apply failed:", err?.message || err);
+    const released = await releasePreviewJob(
+      jobId,
+      discordId,
+      "apply_failed",
+      leaseDeps
+    ).catch(() => null);
+    return {
+      ok: false,
+      state: released ? "pending" : "applying",
+      retryable: Boolean(released),
+      job: released || job,
+    };
   } finally {
     if (ownsSyncSlot && typeof deps.releaseAutoManageSyncSlot === "function") {
       try {
@@ -167,5 +215,6 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
 module.exports = {
   applyPreviewJob,
   findDisabledWrite,
+  hasWriteError,
   shrinkSourceTokenAfterWrite,
 };

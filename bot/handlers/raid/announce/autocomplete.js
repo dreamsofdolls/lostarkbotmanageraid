@@ -1,11 +1,12 @@
 "use strict";
 
-const { t, getUserLanguage } = require("../../../services/i18n");
+const { t } = require("../../../services/i18n");
 
 function buildRaidAnnounceAutocompleteOptions({
   current,
   overridable,
   lang,
+  includeAllActions = false,
 }) {
   const options = [
     { name: t("raid-announce.autocomplete.show", lang), value: "show" },
@@ -25,7 +26,7 @@ function buildRaidAnnounceAutocompleteOptions({
 
   if (overridable) {
     options.push({ name: t("raid-announce.autocomplete.setChannel", lang), value: "set-channel" });
-    if (current?.channelId) {
+    if (includeAllActions || current?.channelId) {
       options.push({
         name: t("raid-announce.autocomplete.clearChannel", lang),
         value: "clear-channel",
@@ -33,6 +34,13 @@ function buildRaidAnnounceAutocompleteOptions({
     }
   }
   return options;
+}
+
+function resolveAutocompleteLanguage(interaction) {
+  const locale = String(interaction?.locale || interaction?.guildLocale || "").toLowerCase();
+  if (locale.startsWith("ja")) return "jp";
+  if (locale.startsWith("en")) return "en";
+  return "vi";
 }
 
 function filterRaidAnnounceAutocompleteOptions({ options, needle, normalizeName }) {
@@ -48,11 +56,8 @@ function filterRaidAnnounceAutocompleteOptions({ options, needle, normalizeName 
 }
 
 function createRaidAnnounceAutocompleteHandler({
-  User,
-  GuildConfig,
   normalizeName,
   announcementTypeEntry,
-  getAnnouncementsConfig,
 }) {
   return async function handleRaidAnnounceAutocomplete(interaction) {
     try {
@@ -62,25 +67,18 @@ function createRaidAnnounceAutocompleteHandler({
         return;
       }
 
-      const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
+      // New command schemas use static action choices. This path remains as a
+      // transition fallback for Discord clients still holding the old
+      // autocomplete schema, so it must answer without any DB dependency.
+      const lang = resolveAutocompleteLanguage(interaction);
       const typeValue = interaction.options.getString("type");
       const entry = typeValue ? announcementTypeEntry(typeValue) : null;
-      let current = null;
-      if (entry && interaction.guildId) {
-        try {
-          const cfg = await GuildConfig.findOne({ guildId: interaction.guildId })
-            .select(`announcements.${entry.subdocKey} raidChannelId`)
-            .lean();
-          current = getAnnouncementsConfig(cfg)[entry.subdocKey];
-        } catch (err) {
-          console.warn("[autocomplete] raid-announce state load failed:", err?.message || err);
-        }
-      }
 
       const options = buildRaidAnnounceAutocompleteOptions({
-        current,
+        current: null,
         overridable: entry?.channelOverridable === true,
         lang,
+        includeAllActions: true,
       });
       await interaction.respond(
         filterRaidAnnounceAutocompleteOptions({
@@ -101,5 +99,6 @@ module.exports = {
   __test: {
     buildRaidAnnounceAutocompleteOptions,
     filterRaidAnnounceAutocompleteOptions,
+    resolveAutocompleteLanguage,
   },
 };

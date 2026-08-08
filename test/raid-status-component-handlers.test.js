@@ -135,6 +135,81 @@ test("raid-status component handlers move pagination through session state", asy
   assert.equal(session.currentPage, 1);
 });
 
+test("raid-status local refresh reloads the latest DB state before redrawing", async () => {
+  const callOrder = [];
+  let dbVersion = "stale";
+  let editPayload = null;
+  let followUpPayload = null;
+  const harness = createHandlerHarness({
+    async reloadViewerAccounts() {
+      callOrder.push("reload");
+      dbVersion = "fresh";
+    },
+    async buildEmbedAndCanvas() {
+      callOrder.push("render");
+      return { embeds: [{ dbVersion }], attachments: [] };
+    },
+    buildComponents() {
+      return [{ dbVersion }];
+    },
+    interaction: {
+      async editReply(payload) {
+        callOrder.push("edit");
+        editPayload = payload;
+      },
+    },
+  });
+  const component = {
+    async deferUpdate() {
+      callOrder.push("defer");
+    },
+    async followUp(payload) {
+      callOrder.push("follow-up");
+      followUpPayload = payload;
+    },
+  };
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.localRefresh](component);
+
+  assert.deepEqual(result, { redraw: false });
+  assert.deepEqual(callOrder, ["defer", "reload", "render", "edit", "follow-up"]);
+  assert.equal(editPayload.embeds[0].dbVersion, "fresh");
+  assert.equal(editPayload.components[0].dbVersion, "fresh");
+  assert.match(followUpPayload.embeds[0].description, /state mới nhất từ DB/);
+});
+
+test("raid-status local refresh reports failure without claiming stale data is fresh", async () => {
+  const callOrder = [];
+  let followUpPayload = null;
+  const harness = createHandlerHarness({
+    async reloadViewerAccounts() {
+      callOrder.push("reload");
+      throw new Error("database unavailable");
+    },
+    interaction: {
+      async editReply() {
+        callOrder.push("edit");
+      },
+    },
+  });
+  const component = {
+    async deferUpdate() {
+      callOrder.push("defer");
+    },
+    async followUp(payload) {
+      callOrder.push("follow-up");
+      followUpPayload = payload;
+    },
+  };
+
+  const result = await harness.handlers[STATUS_COMPONENT_ACTION.localRefresh](component);
+
+  assert.deepEqual(result, { redraw: false });
+  assert.deepEqual(callOrder, ["defer", "reload", "follow-up"]);
+  assert.match(followUpPayload.embeds[0].title, /Chưa cập nhật/);
+  assert.match(followUpPayload.embeds[0].description, /giữ nguyên/);
+});
+
 test("raid-status Solo Companion defers privately before minting and keeps its URL off the public reply", async (t) => {
   const previousBaseUrl = process.env.PUBLIC_BASE_URL;
   process.env.PUBLIC_BASE_URL = "https://raid.example.test/";

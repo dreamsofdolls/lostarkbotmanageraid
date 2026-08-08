@@ -11,6 +11,7 @@
 
 const {
   createPreviewJob,
+  normalizePreviewDeltas,
 } = require("../..");
 const {
   bucketizeCurrentWeekDeltas,
@@ -78,6 +79,17 @@ function createPreviewJobEndpoint({
       send(res, 400, { ok: false, error: "non-empty deltas array required" });
       return;
     }
+    let normalizedDeltas;
+    try {
+      normalizedDeltas = normalizePreviewDeltas(body.deltas);
+    } catch (err) {
+      send(res, 400, { ok: false, error: err?.message || "preview job invalid" });
+      return;
+    }
+    if (normalizedDeltas.length === 0) {
+      send(res, 400, { ok: false, error: "no valid cleared deltas" });
+      return;
+    }
 
     let userDoc;
     try {
@@ -107,13 +119,13 @@ function createPreviewJobEndpoint({
       const currentWeekStartMs = getCurrentResetStartMs();
       const summary = projectSummary(
         userDoc.accounts || [],
-        bucketizeCurrentWeekDeltas(body.deltas, currentWeekStartMs),
+        bucketizeCurrentWeekDeltas(normalizedDeltas, currentWeekStartMs),
         { scope, currentWeekStartMs }
       );
       job = await createPreviewJob({
         discordId,
         scope,
-        deltas: body.deltas,
+        deltas: normalizedDeltas,
         projection: buildStoredProjection(summary),
         token,
       }, PreviewModel ? { PreviewModel } : {});

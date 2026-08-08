@@ -5,6 +5,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  PREVIEW_APPLY_LEASE_MS,
   createPreviewJob,
   mintToken,
   normalizePreviewDeltas,
@@ -95,10 +96,22 @@ test("creating a preview supersedes the previous pending job", async () => {
     nowMs: 1_000,
   }, { PreviewModel });
 
-  assert.deepEqual(calls[0], {
-    kind: "updateMany",
-    filter: { discordId: "u1", status: "pending" },
-    update: { $set: { status: "superseded", failureReason: "newer_preview" } },
+  assert.equal(calls[0].kind, "updateMany");
+  assert.equal(calls[0].filter.discordId, "u1");
+  assert.deepEqual(calls[0].filter.$or, [
+    { status: "pending" },
+    {
+      status: "applying",
+      applyingAt: { $lte: new Date(1_000 - PREVIEW_APPLY_LEASE_MS) },
+    },
+    { status: "applying", applyingAt: null },
+  ]);
+  assert.deepEqual(calls[0].update, {
+    $set: {
+      status: "superseded",
+      failureReason: "newer_preview",
+      applyingAt: null,
+    },
   });
   assert.match(job.jobId, /^[0-9a-f-]{36}$/i);
   assert.equal(job.deltas.length, 1);
@@ -106,6 +119,58 @@ test("creating a preview supersedes the previous pending job", async () => {
   assert.equal(Number(job.expiresAt), 1_000 + 2 * 60 * 60 * 1000);
   assert.equal(resolvePreviewJobState(job, 2_000), "pending");
   assert.equal(resolvePreviewJobState(job, Number(job.expiresAt) + 1), "expired");
+});
+
+test("applying previews recover after their lease expires", () => {
+  const nowMs = 10_000_000;
+  const base = {
+    status: "applying",
+    expiresAt: new Date(nowMs + 60_000),
+  };
+
+  assert.equal(resolvePreviewJobState({
+    ...base,
+    applyingAt: new Date(nowMs - PREVIEW_APPLY_LEASE_MS + 1),
+  }, nowMs), "applying");
+  assert.equal(resolvePreviewJobState({
+    ...base,
+    applyingAt: new Date(nowMs - PREVIEW_APPLY_LEASE_MS),
+  }, nowMs), "pending");
+  assert.equal(resolvePreviewJobState(base, nowMs), "pending");
+  assert.equal(resolvePreviewJobState({
+    ...base,
+    applyingAt: new Date(nowMs - PREVIEW_APPLY_LEASE_MS),
+    expiresAt: new Date(nowMs - 1),
+  }, nowMs), "expired");
+});
+
+test("concurrent preview creation is serialized per Discord user", async () => {
+  const events = [];
+  const PreviewModel = {
+    async updateMany() {
+      events.push("update");
+      await new Promise((resolve) => setImmediate(resolve));
+    },
+    async create(doc) {
+      events.push("create");
+      return doc;
+    },
+  };
+
+  await Promise.all([
+    createPreviewJob({
+      discordId: "serialized-user",
+      scope: "full",
+      deltas: [validDelta()],
+    }, { PreviewModel }),
+    createPreviewJob({
+      discordId: "serialized-user",
+      scope: "full",
+      deltas: [validDelta()],
+    }, { PreviewModel }),
+  ]);
+
+  assert.deepEqual(events, ["update", "create", "update", "create"]);
 });
 
 test("preview-job endpoint stores deltas and delivers a Discord confirmation", async () => {
@@ -157,7 +222,12 @@ test("preview-job endpoint stores deltas and delivers a Discord confirmation", a
   });
   const res = makeRes();
 
-  await handler(makeReq(token, { deltas: [validDelta()] }), res, { query: {} });
+  await handler(makeReq(token, {
+    deltas: [
+      validDelta(),
+      validDelta({ charName: "Ghost", cleared: "true" }),
+    ],
+  }), res, { query: {} });
 
   assert.equal(res.status, 200);
   assert.equal(res.json().ok, true);
@@ -165,6 +235,7 @@ test("preview-job endpoint stores deltas and delivers a Discord confirmation", a
   assert.equal(created.length, 1);
   assert.equal(created[0].discordId, "u1");
   assert.equal(created[0].scope, "full");
+  assert.equal(created[0].deltas.length, 1);
   assert.deepEqual(created[0].projection.changes, { chars: 1, raids: 1, gates: 1 });
   assert.deepEqual(created[0].projection.changeDetails[0].raids, [
     { raidKey: "armoche", modeKey: "normal", gates: ["G1"] },

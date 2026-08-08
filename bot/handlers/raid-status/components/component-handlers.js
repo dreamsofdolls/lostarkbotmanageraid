@@ -264,16 +264,19 @@ function createStatusComponentRouteHandlers(ctx) {
           session.userDoc,
           session.statusUserMeta?.piggybackOutcome || null
         );
+        await interaction.editReply({
+          ...(await buildEmbedAndCanvas()),
+          components: buildComponents(false),
+        });
       } catch (err) {
-        console.error("[raid-status] local-refresh reload failed:", err?.message || err);
+        console.error("[raid-status] local-refresh failed:", err?.message || err);
+        await followUpNotice(component, EmbedBuilder, {
+          type: "warn",
+          title: t("raid-status.sync.localRefreshFailedTitle", lang),
+          description: t("raid-status.sync.localRefreshFailedDescription", lang),
+        }).catch(() => {});
+        return noRedraw();
       }
-
-      await interaction.editReply({
-        ...(await buildEmbedAndCanvas()),
-        components: buildComponents(false),
-      }).catch((err) => {
-        console.warn("[raid-status] local-refresh editReply failed:", err?.message || err);
-      });
 
       await followUpNotice(component, EmbedBuilder, {
         type: "success",

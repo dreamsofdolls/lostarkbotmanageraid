@@ -29,6 +29,7 @@ const localSyncPreviewSchema = new mongoose.Schema(
     tokenFingerprint: { type: String, default: "" },
     result: { type: mongoose.Schema.Types.Mixed, default: null },
     failureReason: { type: String, default: "" },
+    applyingAt: { type: Date, default: null },
     appliedAt: { type: Date, default: null },
     cancelledAt: { type: Date, default: null },
     deliveryChannelId: { type: String, default: "" },

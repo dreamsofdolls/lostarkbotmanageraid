@@ -9,6 +9,7 @@ const {
   getPreviewJob,
   recordPreviewDelivery,
   extractIdentityFromUser,
+  resolvePreviewJobState,
 } = require("../../services/local-sync");
 const {
   bucketizeCurrentWeekDeltas,
@@ -20,12 +21,36 @@ const {
   publicBaseUrl,
   buildLocalSyncUrl,
 } = require("../raid-status/local-sync-controls");
-const { buildLocalSyncConsolePayload } = require("./discord-console-ui");
+const {
+  buildLocalSyncConsolePayload,
+  buildResultDescription,
+} = require("./discord-console-ui");
+
+const RAID_STATUS_HANDOFF_STATES = new Set([
+  "applied",
+  "cancelled",
+  "superseded",
+  "expired",
+]);
+const LATEST_PREVIEW_FALLBACK_STATES = new Set(["superseded", "expired"]);
 
 function activeScopeForUser(userDoc) {
   if (userDoc?.localSyncEnabled) return COMPANION_SCOPE.full;
   if (userDoc?.autoManageEnabled) return COMPANION_SCOPE.solo;
   return null;
+}
+
+function shouldOpenRaidStatusSurface(job, activeScope) {
+  if (!activeScope) return false;
+  if (!job) return true;
+  return RAID_STATUS_HANDOFF_STATES.has(resolvePreviewJobState(job));
+}
+
+function buildRaidStatusHandoffContent(job, lang) {
+  if (!job) return null;
+  const state = resolvePreviewJobState(job);
+  const icon = state === "applied" ? "✅" : "ℹ️";
+  return `${icon} ${buildResultDescription(job, state, lang)}`;
 }
 
 async function loadConsoleUser(UserModel, discordId) {
@@ -65,6 +90,7 @@ function createLocalSyncDiscordConsole({
   acquireAutoManageSyncSlot = null,
   releaseAutoManageSyncSlot = null,
   PreviewModel = null,
+  openRaidStatusSession = null,
 }) {
   if (!User) throw new Error("[local-sync/discord] User model required");
 
@@ -91,7 +117,15 @@ function createLocalSyncDiscordConsole({
     const loadedUser = userDoc || await loadConsoleUser(User, discordUser.id);
     const activeScope = activeScopeForUser(loadedUser);
     const readerUrl = await resolveReaderUrl(discordUser, loadedUser, lang);
-    const summary = job?.projection || previewSummaryForJob(loadedUser, job);
+    // The stored projection remains a fallback, but it can become stale if
+    // progress changes before the owner reopens or refreshes the console.
+    // Re-project against the freshly loaded User snapshot whenever possible.
+    let summary = job?.projection || null;
+    try {
+      summary = previewSummaryForJob(loadedUser, job) || summary;
+    } catch (err) {
+      console.warn("[local-sync/discord] preview re-projection failed:", err?.message || err);
+    }
     return buildLocalSyncConsolePayload({
       job,
       summary,
@@ -107,14 +141,57 @@ function createLocalSyncDiscordConsole({
     });
   }
 
+  async function maybeOpenRaidStatus(interaction, { job, lang, userDoc }) {
+    const activeScope = activeScopeForUser(userDoc);
+    if (
+      typeof openRaidStatusSession !== "function" ||
+      !shouldOpenRaidStatusSurface(job, activeScope)
+    ) {
+      return false;
+    }
+
+    try {
+      // Do not retain a raid-status session inside the Local Sync console.
+      // Calling the canonical handler here creates a new viewer loader, so
+      // every /raid-sync invocation reads the current DB snapshot again.
+      await openRaidStatusSession(interaction, {
+        alreadyDeferred: true,
+        content: buildRaidStatusHandoffContent(job, lang),
+      });
+      return true;
+    } catch (err) {
+      console.warn("[local-sync/discord] raid-status handoff failed:", err?.message || err);
+      return false;
+    }
+  }
+
+  async function preferLatestActionableJob(job, discordId) {
+    if (!LATEST_PREVIEW_FALLBACK_STATES.has(resolvePreviewJobState(job))) return job;
+    const latestJob = await getLatestPreviewJob(discordId, jobDeps);
+    if (!latestJob || latestJob.jobId === job?.jobId) return job;
+    return RAID_STATUS_HANDOFF_STATES.has(resolvePreviewJobState(latestJob))
+      ? job
+      : latestJob;
+  }
+
   async function handleRaidSyncCommand(interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const discordId = interaction.user.id;
-    const [lang, userDoc, latestJob] = await Promise.all([
-      getUserLanguage(discordId, { UserModel: User }),
+    const [userDoc, latestJob] = await Promise.all([
       loadConsoleUser(User, discordId),
       getLatestPreviewJob(discordId, jobDeps),
     ]);
+    const lang = await getUserLanguage(discordId, {
+      UserModel: User,
+      userDoc,
+    });
+    if (await maybeOpenRaidStatus(interaction, {
+      job: latestJob,
+      lang,
+      userDoc,
+    })) {
+      return;
+    }
     await interaction.editReply(await buildConsole(interaction.user, {
       job: latestJob,
       lang,
@@ -140,39 +217,45 @@ function createLocalSyncDiscordConsole({
     return { delivered: true, channel: "dm", messageId: message.id };
   }
 
-  async function renderMissingJob(interaction, lang) {
-    const payload = {
-      content: t("local-sync-discord.jobMissing", lang),
-      flags: MessageFlags.Ephemeral,
-    };
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp(payload).catch(() => {});
-    } else {
-      await interaction.reply(payload).catch(() => {});
-    }
-  }
-
   async function handleLocalSyncButton(interaction) {
     const [, action, jobId] = String(interaction.customId || "").split(":");
     if (!jobId || !["apply", "cancel", "refresh"].includes(action)) return;
+    // Acknowledge before any DB read so a slow Mongo round-trip cannot cross
+    // Discord's interaction deadline. Ownership is still checked before any
+    // mutation or message edit.
+    await interaction.deferUpdate();
 
     const [lang, existing] = await Promise.all([
       getUserLanguage(interaction.user.id, { UserModel: User }),
       getPreviewJob(jobId, jobDeps),
     ]);
     if (!existing) {
-      await renderMissingJob(interaction, lang);
+      const [userDoc, latestJob] = await Promise.all([
+        loadConsoleUser(User, interaction.user.id),
+        getLatestPreviewJob(interaction.user.id, jobDeps),
+      ]);
+      if (await maybeOpenRaidStatus(interaction, {
+        job: latestJob,
+        lang,
+        userDoc,
+      })) {
+        return;
+      }
+      await interaction.editReply(await buildConsole(interaction.user, {
+        job: latestJob,
+        lang,
+        userDoc,
+      }));
       return;
     }
     if (existing.discordId !== interaction.user.id) {
-      await interaction.reply({
+      await interaction.followUp({
         content: t("local-sync-discord.notOwner", lang),
         flags: MessageFlags.Ephemeral,
       }).catch(() => {});
       return;
     }
 
-    await interaction.deferUpdate();
     let nextJob = existing;
     if (action === "apply") {
       const outcome = await applyStoredPreviewJob(jobId, interaction.user.id, {
@@ -189,10 +272,18 @@ function createLocalSyncDiscordConsole({
         || await getPreviewJob(jobId, jobDeps)
         || existing;
     } else {
-      nextJob = await getPreviewJob(jobId, jobDeps) || existing;
+      nextJob = await getLatestPreviewJob(interaction.user.id, jobDeps) || existing;
     }
+    nextJob = await preferLatestActionableJob(nextJob, interaction.user.id);
 
     const userDoc = await loadConsoleUser(User, interaction.user.id);
+    if (await maybeOpenRaidStatus(interaction, {
+      job: nextJob,
+      lang,
+      userDoc,
+    })) {
+      return;
+    }
     await interaction.editReply(await buildConsole(interaction.user, {
       job: nextJob,
       lang,
@@ -210,6 +301,8 @@ function createLocalSyncDiscordConsole({
 
 module.exports = {
   activeScopeForUser,
+  shouldOpenRaidStatusSurface,
+  buildRaidStatusHandoffContent,
   previewSummaryForJob,
   createLocalSyncDiscordConsole,
 };

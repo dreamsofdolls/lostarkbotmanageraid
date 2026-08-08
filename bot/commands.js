@@ -807,6 +807,7 @@ const localSyncDiscordConsole = createLocalSyncDiscordConsole({
   applyRaidSetBatchForDiscordId,
   acquireAutoManageSyncSlot,
   releaseAutoManageSyncSlot,
+  openRaidStatusSession: handleStatusCommand,
 });
 ({
   handleRaidSyncCommand,
