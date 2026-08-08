@@ -331,6 +331,7 @@ let handleRaidLanguageSelect;
 let handleRaidBgCommand;
 let handleRaidSyncCommand;
 let handleLocalSyncButton;
+let handleLocalSyncRosterSelect;
 let notifyLocalSyncPreviewReady;
 
 let handleRemoveRosterAutocomplete;
@@ -804,6 +805,8 @@ const localSyncDiscordConsole = createLocalSyncDiscordConsole({
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
+  truncateText,
   MessageFlags,
   UI,
   User,
@@ -817,6 +820,7 @@ const localSyncDiscordConsole = createLocalSyncDiscordConsole({
 ({
   handleRaidSyncCommand,
   handleLocalSyncButton,
+  handleLocalSyncRosterSelect,
   notifyPreviewReady: notifyLocalSyncPreviewReady,
 } = localSyncDiscordConsole);
 
@@ -1176,6 +1180,7 @@ module.exports = {
   handleRaidGoldEarnerButton,
   handleRaidSyncCommand,
   handleLocalSyncButton,
+  handleLocalSyncRosterSelect,
   notifyLocalSyncPreviewReady,
   loadMonitorChannelCache,
   startRaidChannelScheduler,

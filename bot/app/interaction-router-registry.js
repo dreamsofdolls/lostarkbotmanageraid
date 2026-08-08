@@ -66,6 +66,10 @@ function createRaidInteractionRouter({
     },
     selectHandlers: {},
     selectRoutes: [
+      // The Local Sync roster picker on the standalone console / DM. The
+      // buttons on that same card go through buttonRoutes below; a select
+      // is a different interaction type and needs its own entry.
+      { prefix: "local-sync:roster:", handle: handlers.handleLocalSyncRosterSelect },
       { prefix: "raid-help:select:", handle: handlers.handleRaidHelpSelect },
       { prefix: "raid-language:select", handle: handlers.handleRaidLanguageSelect },
       { prefix: "rse:", handle: handlers.handleRaidScheduleSelect },

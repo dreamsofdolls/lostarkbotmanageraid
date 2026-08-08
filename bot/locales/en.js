@@ -69,6 +69,8 @@ module.exports = {
     goldName: "Projected gold",
     goldValue: "**{gold}**",
     moreRaids: "…and {count} more raids",
+    rosterPlaceholder: "Pick a roster to view...",
+    rosterPage: "Roster {current}/{total}",
     moreCharactersName: "Other characters",
     moreCharactersValue: "…and {count} more characters. The scan still keeps all data.",
     appliedDescription: "Sync complete: **{applied}** updated · **{skipped}** already present · **{rejected}** rejected.",

@@ -71,6 +71,8 @@ module.exports = {
     goldName: "予想ゴールド",
     goldValue: "**{gold}**",
     moreRaids: "…ほか {count} レイド",
+    rosterPlaceholder: "表示するロスターを選んでね...",
+    rosterPage: "ロスター {current}/{total}",
     moreCharactersName: "ほかのキャラ",
     moreCharactersValue: "…ほか {count} キャラ。スキャンデータはすべて保持されています。",
     appliedDescription: "同期完了: **{applied}** 更新 · **{skipped}** 登録済み · **{rejected}** 拒否。",

@@ -338,15 +338,19 @@ function createRaidStatusCommand(deps) {
       ActionRowBuilder,
       ButtonBuilder,
       ButtonStyle,
+      StringSelectMenuBuilder,
+      truncateText,
       UI,
       formatGold,
     };
     const buildSyncViewEmbed = () => buildLocalSyncViewEmbed({
       snapshot: statusState.localSyncSnapshot,
+      rosterIndex: statusState.localSyncRosterIndex,
       ...localSyncViewDeps,
     });
     const buildSyncViewRows = (disabled) => buildLocalSyncViewRows({
       snapshot: statusState.localSyncSnapshot,
+      rosterIndex: statusState.localSyncRosterIndex,
       disabled,
       ...localSyncViewDeps,
     });

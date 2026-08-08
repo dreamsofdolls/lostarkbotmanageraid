@@ -3,6 +3,16 @@
 const { t } = require("../../services/i18n");
 const { getGatesForRaid } = require("../../models/Raid");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
+const { getClassEmoji } = require("../../models/Class");
+// Aliased: buildLocalSyncConsolePayload takes a `UI` parameter, and an
+// unaliased import here would read as the same thing at a glance.
+const { UI: sharedUI } = require("../../utils/raid/common/shared");
+// Same two helpers /raid-status renders its character fields with · the
+// preview feeds them simulated characters, so the rows come out identical.
+const {
+  formatRaidStatusLine,
+  getStatusRaidsForCharacter,
+} = require("../../utils/raid/common/character");
 const {
   bucketizeLocalSyncDeltas,
   resolvePreviewJobState,
@@ -129,7 +139,82 @@ function buildResultDescription(job, state, lang) {
   return t(`local-sync-discord.stateDescriptions.${statusKey(state)}`, lang);
 }
 
-function addPreviewFields(embed, job, summary, lang, formatGold) {
+/**
+ * Which (raid, mode) pairs this preview is about to change, per character.
+ * @param {object|null} summary
+ * @returns {Map<string, Set<string>>} lowercased char name -> "raidKey::modeKey"
+ */
+function buildIncomingMap(summary) {
+  const map = new Map();
+  for (const c of summary?.charsAfterSync || []) {
+    const key = String(c.charName || "").toLowerCase();
+    const set = map.get(key) || new Set();
+    for (const r of c.raids || []) {
+      if (r.incoming) set.add(`${r.raidKey}::${r.modeKey}`);
+    }
+    if (set.size > 0) map.set(key, set);
+  }
+  return map;
+}
+
+/**
+ * Body of the card, one roster at a time, in the /raid-status raid-view
+ * shape. Not a copy of that layout · projectSummary hands back
+ * `accountsAfterSync`, characters whose assignedRaids already reflect the
+ * applied preview, so getStatusRaidsForCharacter and formatRaidStatusLine
+ * run on them unchanged. Whatever the raid view learns to render, this
+ * inherits.
+ *
+ * The one addition is ✨ on raids this sync flips · raid-status has no
+ * such concept because it shows what IS, while this card shows what is
+ * about to be.
+ *
+ * @returns {boolean} false when the summary predates accountsAfterSync,
+ *   so the caller can fall back to the delta-only list.
+ */
+function addRosterPageFields(embed, summary, lang, { rosterIndex = 0 } = {}) {
+  const accounts = Array.isArray(summary?.accountsAfterSync) ? summary.accountsAfterSync : [];
+  if (accounts.length === 0) return false;
+
+  const index = Math.min(Math.max(0, Number(rosterIndex) || 0), accounts.length - 1);
+  const account = accounts[index];
+  const incoming = buildIncomingMap(summary);
+
+  if (accounts.length > 1) {
+    embed.addFields({
+      name: `${sharedUI.icons.folder} ${account.accountName || "?"}`,
+      value: t("local-sync-discord.rosterPage", lang, { current: index + 1, total: accounts.length }),
+      inline: false,
+    });
+  }
+
+  for (const character of (account.characters || []).slice(0, MAX_CHARACTER_FIELDS)) {
+    const touched = incoming.get(String(character.name || "").toLowerCase());
+    const lines = getStatusRaidsForCharacter(character).map((raid) => {
+      const mark = touched?.has(`${raid.raidKey}::${raid.modeKey}`) ? " ✨" : "";
+      return `${formatRaidStatusLine(raid, lang)}${mark}`;
+    });
+    if (lines.length === 0) continue;
+    const emoji = getClassEmoji(character.class || character.className);
+    embed.addFields({
+      name: `${emoji ? `${emoji} ` : ""}${character.name} · ${Number(character.itemLevel) || 0}`,
+      value: lines.join("\n"),
+      inline: true,
+    });
+  }
+
+  const hidden = (account.characters || []).length - MAX_CHARACTER_FIELDS;
+  if (hidden > 0) {
+    embed.addFields({
+      name: t("local-sync-discord.moreCharactersName", lang),
+      value: t("local-sync-discord.moreCharactersValue", lang, { count: hidden }),
+      inline: false,
+    });
+  }
+  return true;
+}
+
+function addPreviewFields(embed, job, summary, lang, formatGold, options = {}) {
   const changes = summary?.changes || { chars: 0, raids: 0, gates: 0 };
   embed.addFields({
     name: t("local-sync-discord.summaryName", lang),
@@ -159,17 +244,23 @@ function addPreviewFields(embed, job, summary, lang, formatGold) {
     });
   }
 
+  // Preferred body: the raid view, one roster per page.
+  if (addRosterPageFields(embed, summary, lang, options)) return;
+
+  // Fallback for previews whose stored projection predates
+  // accountsAfterSync · delta list only, no per-raid context.
   const grouped = [...groupPreviewBuckets(job, lang, summary).entries()];
   for (const [charName, raids] of grouped.slice(0, MAX_CHARACTER_FIELDS)) {
     const lines = raids.slice(0, MAX_RAIDS_PER_CHARACTER).map((raid) =>
-      `＋ **${raid.label}** · ${raid.gates.join("–")}`
+      `＋ **${raid.label}** · ${raid.gates.join("-")}`
     );
     if (raids.length > MAX_RAIDS_PER_CHARACTER) {
       lines.push(t("local-sync-discord.moreRaids", lang, {
         count: raids.length - MAX_RAIDS_PER_CHARACTER,
       }));
     }
-    embed.addFields({ name: charName, value: lines.join("\n") || "—", inline: false });
+    // No em-dash: project rule covers every user-facing string.
+    embed.addFields({ name: charName, value: lines.join("\n") || "·", inline: false });
   }
   if (grouped.length > MAX_CHARACTER_FIELDS) {
     embed.addFields({
@@ -185,14 +276,39 @@ function addPreviewFields(embed, job, summary, lang, formatGold) {
 function buildRows({
   job,
   state,
+  summary,
+  rosterIndex = 0,
   readerUrl,
   lang,
   buttonPrefix = DM_BUTTON_PREFIX,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder = null,
+  truncateText = (value) => String(value),
 }) {
   const rows = [];
+  // Roster picker, same idea as the /raid-status roster dropdown. The
+  // jobId rides in the customId and the choice rides in the value, so this
+  // needs no session state and works the same on the standalone console,
+  // the DM, and the /raid-status view.
+  const accounts = Array.isArray(summary?.accountsAfterSync) ? summary.accountsAfterSync : [];
+  if (job?.jobId && accounts.length > 1 && StringSelectMenuBuilder) {
+    const current = Math.min(Math.max(0, Number(rosterIndex) || 0), accounts.length - 1);
+    rows.push(new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`${buttonPrefix}roster:${job.jobId}`)
+        .setPlaceholder(truncateText(t("local-sync-discord.rosterPlaceholder", lang), 150))
+        // Discord caps a select at 25 options; rosters past that are rare
+        // and still reachable once an earlier one is applied.
+        .addOptions(accounts.slice(0, 25).map((account, index) => ({
+          label: truncateText(account.accountName || `Roster ${index + 1}`, 100),
+          value: String(index),
+          emoji: sharedUI.icons.folder,
+          default: index === current,
+        })))
+    ));
+  }
   if (job?.jobId) {
     const actionRow = new ActionRowBuilder();
     if (state === "pending") {
@@ -240,6 +356,8 @@ function buildRows({
  * @param {string|null} options.activeScope - COMPANION_SCOPE value, null renders the disabled card
  * @param {string} [options.lang='vi']
  * @param {string} [options.buttonPrefix='local-sync:'] - customId namespace · see DM_BUTTON_PREFIX / STATUS_BUTTON_PREFIX
+ * @param {number} [options.rosterIndex=0] - which roster page of accountsAfterSync to render
+ * @param {Function} [options.StringSelectMenuBuilder] - omit to render without the roster picker
  * @returns {{embeds: object[], components: object[]}} discord.js message payload fragment
  */
 function buildLocalSyncConsolePayload({
@@ -249,10 +367,13 @@ function buildLocalSyncConsolePayload({
   activeScope = null,
   lang = "vi",
   buttonPrefix = DM_BUTTON_PREFIX,
+  rosterIndex = 0,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder = null,
+  truncateText,
   UI,
   formatGold,
 }) {
@@ -294,7 +415,7 @@ function buildLocalSyncConsolePayload({
         : "",
       buildResultDescription(job, state, lang),
     ].filter(Boolean).join("\n"));
-    addPreviewFields(embed, job, summary, lang, formatGold);
+    addPreviewFields(embed, job, summary, lang, formatGold, { rosterIndex });
   }
 
   return {
@@ -302,12 +423,16 @@ function buildLocalSyncConsolePayload({
     components: buildRows({
       job,
       state,
+      summary,
+      rosterIndex,
       readerUrl,
       lang,
       buttonPrefix,
       ActionRowBuilder,
       ButtonBuilder,
       ButtonStyle,
+      StringSelectMenuBuilder,
+      truncateText,
     }),
   };
 }

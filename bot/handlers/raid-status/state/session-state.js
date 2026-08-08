@@ -44,6 +44,10 @@ async function createRaidStatusSessionState({
   // can read it. null means "not fetched yet", which the renderer treats
   // as a fallback to the raid view rather than an error.
   let localSyncSnapshot = null;
+  // Which roster page of the preview is showing. Lives beside the
+  // snapshot rather than inside it so a refresh can replace the data
+  // without losing the user's place.
+  let localSyncRosterIndex = 0;
   let raidDropdownEntries = [];
   let rosterFilterEntries = [];
   let visibleRosterIndices = [];
@@ -175,6 +179,12 @@ async function createRaidStatusSessionState({
     set localSyncSnapshot(value) {
       localSyncSnapshot = value;
     },
+    get localSyncRosterIndex() {
+      return localSyncRosterIndex;
+    },
+    set localSyncRosterIndex(value) {
+      localSyncRosterIndex = Math.max(0, Number(value) || 0);
+    },
     get filterRaidId() {
       return filterRaidId;
     },
@@ -251,6 +261,12 @@ function createRaidStatusComponentSession({
     },
     set localSyncSnapshot(value) {
       state.localSyncSnapshot = value;
+    },
+    get localSyncRosterIndex() {
+      return state.localSyncRosterIndex;
+    },
+    set localSyncRosterIndex(value) {
+      state.localSyncRosterIndex = value;
     },
     get statusUserMeta() {
       return getStatusUserMeta();

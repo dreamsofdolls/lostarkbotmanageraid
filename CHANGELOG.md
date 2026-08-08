@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-08-08 (Local Sync card body reuses the raid view)
+
+### Changed
+- The Local Sync preview card now renders its body in the `/raid-status` raid-view format: one character per inline field, every raid on its own line with the same icons, gate counts and 🔒 gold-slot marks. It is genuine reuse rather than a lookalike · `projectSummary` now returns `accountsAfterSync`, characters whose `assignedRaids` already reflect the applied preview, so `getStatusRaidsForCharacter` and `formatRaidStatusLine` run on them unchanged.
+- Raids this preview is about to flip are marked ✨. The raid view has no such concept because it shows what is; this card shows what is about to be.
+- Multi-roster previews get a roster picker and render one roster per page, the way `/raid-status` pages through rosters. The jobId rides in the customId and the page in the select value, so it needs no session state and behaves identically on `/raid-sync`, on the DM preview, and inside the `/raid-status` sync view.
+- Previews stored before this change keep working: a projection without `accountsAfterSync` falls back to the old delta-only list.
+
 ## 2026-08-08 (Local Sync card header)
 
 ### Changed

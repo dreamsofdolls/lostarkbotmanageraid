@@ -7,6 +7,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
 } = require("discord.js");
 
 const { UI } = require("../bot/utils/raid/common/shared");
@@ -845,4 +846,109 @@ test("console header leads every data line with an icon and keeps the expiry as 
   // Only a live pending preview carries an expiry line.
   const applied = render(makeJob({ status: "applied" }));
   assert.doesNotMatch(applied, /Hết hạn/);
+});
+
+// ─── card body reuses the /raid-status raid view ───────────────
+
+function makeSummaryFixture() {
+  const {
+    projectSummary,
+    bucketizeCurrentWeekDeltas,
+  } = require("../bot/services/local-sync/http/endpoints/preview-summary-endpoint");
+  const { getCurrentResetStartMs } = require("../bot/services/raid/schedulers/weekly-reset");
+  const week = getCurrentResetStartMs();
+  const assigned = {
+    armoche: { modeKey: "hard" }, kazeros: { modeKey: "hard" },
+    serca: { modeKey: "hard" }, horizon: { modeKey: "level3" },
+  };
+  const char = (name, cls, ilvl) => ({
+    name, class: cls, itemLevel: ilvl, isGoldEarner: true, assignedRaids: { ...assigned },
+  });
+  const clear = (name, boss, at) => ({
+    cleared: true, charName: name, boss, difficulty: "Hard", lastClearMs: week + at,
+  });
+  return projectSummary(
+    [
+      { accountName: "Qiylyn", characters: [char("Qiylyn", "Berserker", 1755), char("Cweky", "Bard", 1745)] },
+      { accountName: "Alt", characters: [char("Nailaduk", "Reaper", 1750)] },
+    ],
+    bucketizeCurrentWeekDeltas([
+      clear("Qiylyn", "Abyss Lord Kazeros", 1000),
+      clear("Qiylyn", "Archdemon Kazeros", 2000),
+      clear("Nailaduk", "Witch of Agony, Serca", 3000),
+    ], week),
+    { scope: "full", currentWeekStartMs: week }
+  );
+}
+
+function renderBody(summary, rosterIndex) {
+  return buildLocalSyncConsolePayload({
+    job: makeJob(),
+    summary,
+    readerUrl: "https://example.test/sync?token=x",
+    activeScope: "full",
+    lang: "vi",
+    rosterIndex,
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    StringSelectMenuBuilder,
+    truncateText: (value) => String(value),
+    UI,
+    formatGold: (value) => `${value} G`,
+  });
+}
+
+test("card body renders one roster at a time in the raid-status row format", () => {
+  const summary = makeSummaryFixture();
+  // projectSummary must hand back accounts whose assignedRaids already
+  // reflect the preview · that is what lets the card reuse the raid view.
+  assert.ok(Array.isArray(summary.accountsAfterSync));
+  assert.deepEqual(summary.accountsAfterSync.map((a) => a.accountName), ["Qiylyn", "Alt"]);
+
+  const first = renderBody(summary, 0).embeds[0].toJSON();
+  const header = first.fields.find((f) => f.name.includes("Qiylyn") && f.value.startsWith("Roster"));
+  assert.equal(header.value, "Roster 1/2");
+
+  const qiylyn = first.fields.find((f) => f.name.startsWith("Qiylyn ·"));
+  assert.equal(qiylyn.inline, true);
+  // Same "icon label · done/total" rows formatRaidStatusLine emits, with a
+  // lock mark on raids that take no gold slot.
+  assert.match(qiylyn.value, /🟢 Kazeros Hard · 2\/2 ✨/);
+  assert.match(qiylyn.value, /⚪ Act 4 Hard · 0\/2/);
+  assert.match(qiylyn.value, /🔒/);
+  // ✨ only on what this preview flips.
+  assert.equal((qiylyn.value.match(/✨/g) || []).length, 1);
+
+  // Page two shows the other roster and none of the first one's characters.
+  const second = renderBody(summary, 1).embeds[0].toJSON();
+  assert.ok(second.fields.some((f) => f.name.startsWith("Nailaduk ·")));
+  assert.equal(second.fields.some((f) => f.name.startsWith("Qiylyn ·")), false);
+});
+
+test("roster picker appears only when the preview spans more than one roster", () => {
+  const summary = makeSummaryFixture();
+  const multi = renderBody(summary, 0);
+  const select = multi.components[0].toJSON().components[0];
+  assert.equal(select.custom_id, `local-sync:roster:${makeJob().jobId}`);
+  assert.deepEqual(select.options.map((o) => o.value), ["0", "1"]);
+  assert.equal(select.options[0].default, true);
+
+  const single = { ...summary, accountsAfterSync: summary.accountsAfterSync.slice(0, 1) };
+  const ids = componentIds(renderBody(single, 0));
+  assert.equal(ids.some((id) => String(id).includes(":roster:")), false);
+});
+
+test("a summary without accountsAfterSync falls back to the delta list", () => {
+  const summary = makeSummaryFixture();
+  const legacy = { ...summary };
+  delete legacy.accountsAfterSync;
+  const embed = renderBody(legacy, 0).embeds[0].toJSON();
+
+  assert.equal(embed.fields.some((f) => f.value.startsWith("Roster")), false);
+  const charField = embed.fields.find((f) => f.value.includes("＋"));
+  assert.ok(charField, "delta-only rows still render for old stored projections");
+  // Project rule: no em-dash anywhere a user can read it.
+  assert.equal(embed.fields.some((f) => f.value.includes("—")), false);
 });

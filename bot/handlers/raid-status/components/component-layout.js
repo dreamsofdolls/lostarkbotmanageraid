@@ -111,7 +111,7 @@ function createRaidStatusComponentLayout({
   // buttons do not have.
   const addSyncViewRows = (rows, disabled) => {
     for (const row of buildLocalSyncViewRows(disabled)) {
-      if (rows.length >= 4) break;
+      if (rows.length >= 4) break; // leave the last slot for the view dropdown
       rows.push(row);
     }
     // Solo Local Reader rides along as the second way in. It only builds

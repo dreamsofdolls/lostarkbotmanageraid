@@ -471,6 +471,14 @@ function createStatusComponentRouteHandlers(ctx) {
       const parsed = parseLocalSyncViewCustomId(component.customId);
       if (!parsed) return noRedraw();
 
+      // The roster picker only changes which page renders · no job work.
+      if (parsed.action === "roster") {
+        const picked = Number(firstSelectValue(component, "0"));
+        if (!Number.isFinite(picked)) return noRedraw();
+        session.localSyncRosterIndex = picked;
+        return redraw();
+      }
+
       const result = await runLocalSyncAction(parsed);
       if (!result.ok) {
         if (result.reason === "notOwner") {

@@ -81,6 +81,8 @@ function createLocalSyncDiscordConsole({
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder = null,
+  truncateText = (value) => String(value),
   MessageFlags,
   UI,
   User,
@@ -113,7 +115,7 @@ function createLocalSyncDiscordConsole({
     }
   }
 
-  async function buildConsole(discordUser, { job = null, lang, userDoc = null } = {}) {
+  async function buildConsole(discordUser, { job = null, lang, userDoc = null, rosterIndex = 0 } = {}) {
     const loadedUser = userDoc || await loadConsoleUser(User, discordUser.id);
     const activeScope = activeScopeForUser(loadedUser);
     const readerUrl = await resolveReaderUrl(discordUser, loadedUser, lang);
@@ -132,10 +134,13 @@ function createLocalSyncDiscordConsole({
       readerUrl,
       activeScope,
       lang,
+      rosterIndex,
       EmbedBuilder,
       ActionRowBuilder,
       ButtonBuilder,
       ButtonStyle,
+      StringSelectMenuBuilder,
+      truncateText,
       UI,
       formatGold,
     });
@@ -221,8 +226,31 @@ function createLocalSyncDiscordConsole({
     return { delivered: true, channel: "dm", messageId: message.id };
   }
 
+  // Roster picker on the standalone console and the DM. There is no
+  // session here, so the page rides in the select's value and the job in
+  // the customId · re-rendering with a different page needs nothing else.
+  async function handleLocalSyncRosterSelect(interaction) {
+    const [, action, jobId] = String(interaction.customId || "").split(":");
+    if (action !== "roster" || !jobId) return;
+    await interaction.deferUpdate();
+    const rosterIndex = Number(interaction.values?.[0] ?? 0) || 0;
+    const [lang, job, userDoc] = await Promise.all([
+      getUserLanguage(interaction.user.id, { UserModel: User }),
+      getPreviewJob(jobId, jobDeps),
+      loadConsoleUser(User, interaction.user.id),
+    ]);
+    if (!job || job.discordId !== interaction.user.id) return;
+    await interaction.editReply(await buildConsole(interaction.user, {
+      job,
+      lang,
+      userDoc,
+      rosterIndex,
+    }));
+  }
+
   async function handleLocalSyncButton(interaction) {
     const [, action, jobId] = String(interaction.customId || "").split(":");
+    if (action === "roster") return handleLocalSyncRosterSelect(interaction);
     if (!jobId || !["apply", "cancel", "refresh"].includes(action)) return;
     // Acknowledge before any DB read so a slow Mongo round-trip cannot cross
     // Discord's interaction deadline. Ownership is still checked before any
@@ -298,6 +326,7 @@ function createLocalSyncDiscordConsole({
   return {
     handleRaidSyncCommand,
     handleLocalSyncButton,
+    handleLocalSyncRosterSelect,
     notifyPreviewReady,
     buildConsole,
   };

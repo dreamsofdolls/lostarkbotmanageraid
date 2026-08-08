@@ -118,8 +118,15 @@ function projectSummary(
   // of (raidKey, modeKey, status) so the web can render compact
   // "char: 🟢 Act 4 H · 🟡 Kazeros H · ⚪ Serca NM" rows.
   const charsAfterSync = [];
+  // Same accounts, but every character carries the assignedRaids it WILL
+  // have once this preview is applied. Shaped exactly like a real account
+  // so raid-status view helpers (getStatusRaidsForCharacter,
+  // formatRaidStatusLine) run on it unchanged · that is what lets the
+  // Discord preview card reuse the raid view instead of reimplementing it.
+  const accountsAfterSync = [];
 
   for (const account of accounts || []) {
+    const simulatedChars = [];
     for (const char of account.characters || []) {
       const charNameLower = normalizeName(char.name);
       const charBuckets = bucketsByCharLower.get(charNameLower) || [];
@@ -300,7 +307,11 @@ function projectSummary(
           itemLevel: Number(char.itemLevel) || 0,
           raids: charRaidStates,
         });
+        simulatedChars.push(simulatedChar);
       }
+    }
+    if (simulatedChars.length > 0) {
+      accountsAfterSync.push({ ...account, characters: simulatedChars });
     }
   }
 
@@ -329,6 +340,7 @@ function projectSummary(
       projectedPercent,
     },
     charsAfterSync,
+    accountsAfterSync,
   };
 }
 

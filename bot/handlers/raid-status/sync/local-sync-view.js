@@ -31,7 +31,7 @@ const {
 } = require("../../local-sync/discord-console-ui");
 const { publicBaseUrl, buildLocalSyncUrl } = require("../local-sync-controls");
 
-const LOCAL_SYNC_ACTIONS = Object.freeze(["apply", "cancel", "refresh"]);
+const LOCAL_SYNC_ACTIONS = Object.freeze(["apply", "cancel", "refresh", "roster"]);
 
 /**
  * Split a `status-local:<action>:<jobId>` customId.
@@ -124,6 +124,9 @@ async function loadLocalSyncSnapshot({
 function buildLocalSyncViewEmbed({
   snapshot,
   lang,
+  rosterIndex = 0,
+  StringSelectMenuBuilder = null,
+  truncateText,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -136,10 +139,13 @@ function buildLocalSyncViewEmbed({
     ...snapshot,
     lang,
     buttonPrefix: STATUS_BUTTON_PREFIX,
+    rosterIndex,
     EmbedBuilder,
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
+    StringSelectMenuBuilder,
+    truncateText,
     UI,
     formatGold,
   });
@@ -156,6 +162,9 @@ function buildLocalSyncViewEmbed({
 function buildLocalSyncViewRows({
   snapshot,
   lang,
+  rosterIndex = 0,
+  StringSelectMenuBuilder = null,
+  truncateText,
   disabled = false,
   EmbedBuilder,
   ActionRowBuilder,
@@ -169,10 +178,13 @@ function buildLocalSyncViewRows({
     ...snapshot,
     lang,
     buttonPrefix: STATUS_BUTTON_PREFIX,
+    rosterIndex,
     EmbedBuilder,
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
+    StringSelectMenuBuilder,
+    truncateText,
     UI,
     formatGold,
   });
