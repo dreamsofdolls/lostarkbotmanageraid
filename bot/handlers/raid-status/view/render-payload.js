@@ -5,6 +5,9 @@ const {
   getRaidFilterKey,
   isCountedRaidFilterProgress,
 } = require("../raid-filter");
+const {
+  isGoldReceivingRaid,
+} = require("../../../utils/raid/common/character");
 const { resolveBackgroundLookup } = require("./accounts");
 
 function createRaidStatusRenderPayload({
@@ -58,7 +61,8 @@ function createRaidStatusRenderPayload({
     const getDisplayRaidsFor = filterRaidId
       ? (ch) =>
           baseGetRaidsFor(ch).filter(
-            (r) => getRaidFilterKey(r) === filterRaidId
+            (r) =>
+              getRaidFilterKey(r) === filterRaidId && isGoldReceivingRaid(r)
           )
       : baseGetRaidsFor;
     const getCountRaidsFor = filterRaidId

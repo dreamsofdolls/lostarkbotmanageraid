@@ -6,7 +6,10 @@ const {
   getVisibleSharedTasks,
   getSharedTaskDisplay,
 } = require("../../../utils/raid/tasks/shared-tasks");
-const { isCountedRaidProgress } = require("../../../utils/raid/common/character");
+const {
+  isCountedRaidProgress,
+  isGoldReceivingRaid,
+} = require("../../../utils/raid/common/character");
 const { t } = require("../../../services/i18n");
 const { isRaidCheckVisibleRaid } = require("../visibility");
 const {
@@ -64,7 +67,9 @@ function createAllModePageRenderers({
     const getRaidsFor = (character) =>
       rawGetRaidsFor(character).filter(
         (raid) =>
-          (!filterRaidId || `${raid.raidKey}:${raid.modeKey}` === filterRaidId) &&
+          (!filterRaidId ||
+            (`${raid.raidKey}:${raid.modeKey}` === filterRaidId &&
+              isGoldReceivingRaid(raid))) &&
           raidMatchesStatusFilter(raid, activeStatus)
       );
     const getProgressRaidsFor = (character) => getRaidsFor(character).filter(isCountedRaidProgress);

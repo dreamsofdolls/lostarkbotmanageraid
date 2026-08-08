@@ -1,6 +1,9 @@
 "use strict";
 
 const { compareRaidModeOrder } = require("../../../models/Raid");
+const {
+  isGoldReceivingRaid,
+} = require("../../../utils/raid/common/character");
 const { isRaidCheckVisibleRaid } = require("../visibility");
 
 const FILTER_ALL = "__all__";
@@ -44,7 +47,13 @@ function getAllModeRosterRaidState({
       : [];
     for (const raid of raids) {
       if (!isRaidCheckVisibleRaid(raid)) continue;
-      if (raidFilter && `${raid.raidKey}:${raid.modeKey}` !== raidFilter) continue;
+      if (
+        raidFilter &&
+        (`${raid.raidKey}:${raid.modeKey}` !== raidFilter ||
+          !isGoldReceivingRaid(raid))
+      ) {
+        continue;
+      }
       if (raid?.isCompleted === true) success += 1;
       else pending += 1;
     }

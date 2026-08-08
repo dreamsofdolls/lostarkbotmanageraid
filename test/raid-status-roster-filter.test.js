@@ -109,6 +109,66 @@ test("raid-status roster entries separate display eligibility from progress coun
   );
 });
 
+test("raid-status selected raid filter excludes gold-locked raids from roster and character display", () => {
+  const openRaid = {
+    raidKey: "kazeros",
+    modeKey: "hard",
+    isCompleted: false,
+    goldReceives: true,
+  };
+  const lockedRaid = {
+    raidKey: "kazeros",
+    modeKey: "hard",
+    isCompleted: false,
+    goldReceives: false,
+  };
+  const accounts = [
+    account("Open", [openRaid]),
+    account("Locked", [lockedRaid]),
+  ];
+  const getRaidsFor = (character) => character.raids;
+
+  assert.deepEqual(
+    buildStatusRosterFilterEntries({
+      accounts,
+      raidFilter: "kazeros:hard",
+      getRaidsFor,
+    }).map(({ pageIndex, accountName }) => ({ pageIndex, accountName })),
+    [{ pageIndex: 0, accountName: "Open" }]
+  );
+
+  let displayedRaids = null;
+  const lockedAccounts = [accounts[1]];
+  const { buildCurrentEmbed } = createRaidStatusRenderPayload({
+    discordId: "viewer",
+    getAccounts: () => lockedAccounts,
+    getCurrentPage: () => 0,
+    getCurrentView: () => "raid",
+    getFilterRaidId: () => "kazeros:hard",
+    getStatusUserMeta: () => ({}),
+    baseGetRaidsFor: getRaidsFor,
+    totalCharacters: 1,
+    summarizeRaidProgress: () => ({ completed: 0, partial: 0, total: 0 }),
+    summarizeGlobalGold: () => ({ earned: 0, total: 0 }),
+    buildAccountPageEmbed: (
+      currentAccount,
+      _pageIndex,
+      _totalPages,
+      _globalTotals,
+      getDisplayRaidsFor
+    ) => {
+      displayedRaids = getDisplayRaidsFor(currentAccount.characters[0]);
+      return {};
+    },
+    buildGoldViewEmbed: () => ({}),
+    buildTaskViewEmbed: () => ({}),
+    lang: "en",
+  });
+
+  buildCurrentEmbed();
+  assert.deepEqual(displayedRaids, []);
+});
+
 test("raid-status Solo filter includes deferred Normal -> Solo characters without counting them", () => {
   const accounts = [account("Alpha", [{
     raidKey: "kazeros",

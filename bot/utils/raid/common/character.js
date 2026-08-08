@@ -278,8 +278,12 @@ function getStatusRaidsForCharacter(character) {
 // headline pending/success totals. Gold-disabled/bound raids already follow
 // that rule, and Solo follows it as well: Solo progress is inspected from its
 // dedicated raid-filter entry instead of inflating the group-raid workload.
+function isGoldReceivingRaid(raid) {
+  return raid?.goldReceives !== false;
+}
+
 function isCountedRaidProgress(raid) {
-  return !isSoloModeKey(raid?.modeKey) && raid?.goldReceives !== false;
+  return !isSoloModeKey(raid?.modeKey) && isGoldReceivingRaid(raid);
 }
 
 function getStatusProgressRaidsForCharacter(character) {
@@ -471,6 +475,7 @@ module.exports = {
   ensureRaidEntries,
   getStatusRaidsForCharacter,
   getStatusProgressRaidsForCharacter,
+  isGoldReceivingRaid,
   isCountedRaidProgress,
   pickProgressIcon,
   formatRaidStatusLine,

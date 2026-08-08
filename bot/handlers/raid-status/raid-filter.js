@@ -12,7 +12,10 @@ const {
   isSoloModeKey,
 } = require("../../models/Raid");
 const { t } = require("../../services/i18n");
-const { isCountedRaidProgress } = require("../../utils/raid/common/character");
+const {
+  isCountedRaidProgress,
+  isGoldReceivingRaid,
+} = require("../../utils/raid/common/character");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 
 const FILTER_ALL_RAIDS = "__all_raids__";
@@ -169,7 +172,12 @@ function getStatusRosterRaidState({ account, raidFilter = null, getRaidsFor }) {
   for (const character of characters) {
     const raids = typeof getRaidsFor === "function" ? getRaidsFor(character) || [] : [];
     for (const raid of raids) {
-      if (raidFilter && getRaidFilterKey(raid) !== raidFilter) continue;
+      if (
+        raidFilter &&
+        (getRaidFilterKey(raid) !== raidFilter || !isGoldReceivingRaid(raid))
+      ) {
+        continue;
+      }
       displayMatches += 1;
       // Detail-only raids remain renderable when selected, while roster
       // counters stay aligned with the headline /raid-status progress totals.

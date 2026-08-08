@@ -195,6 +195,14 @@ test("all-mode roster filter uses folder icons, shows full state, and hides raid
     page("u1", "Gamma", [
       { raidKey: "kazeros", modeKey: "hard", isCompleted: true },
     ]),
+    page("u1", "Locked", [
+      {
+        raidKey: "kazeros",
+        modeKey: "hard",
+        isCompleted: false,
+        goldReceives: false,
+      },
+    ]),
   ];
   const row = buildAllModeRosterFilterRow({
     ActionRowBuilder: FakeActionRowBuilder,
@@ -266,6 +274,14 @@ test("all-mode page filtering keeps eligible pages and clears an invalid roster 
     page("u2", "Another user", [
       { raidKey: "kazeros", modeKey: "hard", isCompleted: false },
     ]),
+    page("u1", "Locked", [
+      {
+        raidKey: "kazeros",
+        modeKey: "hard",
+        isCompleted: false,
+        goldReceives: false,
+      },
+    ]),
   ];
   const result = filterAllModePageIndices({
     pagesData,
@@ -288,7 +304,7 @@ test("all-mode page filtering keeps eligible pages and clears an invalid roster 
     getStatusRaidsForCharacter: (character) => character.raids,
     applyRaidEligibility: false,
   });
-  assert.deepEqual(taskViewResult.filteredIndices, [0, 1, 2]);
+  assert.deepEqual(taskViewResult.filteredIndices, [0, 1, 2, 4]);
   assert.equal(taskViewResult.filterRosterIndex, 2);
   assert.equal(
     resolveAllModeLocalPage({

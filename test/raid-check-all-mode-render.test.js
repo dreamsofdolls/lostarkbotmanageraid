@@ -89,7 +89,7 @@ test("all-mode task page renders current account identity and read-only footer",
   assert.ok(embed.data.footer.text.length > 0);
 });
 
-test("all-mode raid page displays gold-locked raids but hides Solo raids entirely", () => {
+test("all-mode raid page keeps gold-locked raids unfiltered but excludes them from a selected raid", () => {
   const character = {
     name: "Goldie",
     raids: [
@@ -110,6 +110,7 @@ test("all-mode raid page displays gold-locked raids but hides Solo raids entirel
   let capturedDisplayRaids = null;
   let capturedProgressRaids = null;
   let capturedGlobalTotals = null;
+  let filterRaidId = null;
 
   const { buildRaidPage } = createAllModePageRenderers({
     EmbedBuilder: FakeEmbedBuilder,
@@ -125,7 +126,7 @@ test("all-mode raid page displays gold-locked raids but hides Solo raids entirel
       `${globalTotals.progress.completed}/${globalTotals.progress.total}`,
     getState: () => ({
       currentLocalPage: 0,
-      filterRaidId: null,
+      filterRaidId,
       filterUserId: null,
       filteredIndices: [0],
       totalPages: 1,
@@ -147,6 +148,13 @@ test("all-mode raid page displays gold-locked raids but hides Solo raids entirel
   assert.deepEqual(capturedProgressRaids.map((raid) => raid.raidKey), ["act4"]);
   assert.deepEqual(capturedGlobalTotals.progress, { completed: 0, total: 1 });
   assert.equal(embed.data.footer.text, "0/1");
+
+  filterRaidId = "horizon:normal";
+  buildRaidPage(0);
+
+  assert.deepEqual(capturedDisplayRaids, []);
+  assert.deepEqual(capturedProgressRaids, []);
+  assert.deepEqual(capturedGlobalTotals.progress, { completed: 0, total: 0 });
 });
 
 test("all-mode raid page applies Success status per raid entry", () => {
