@@ -488,7 +488,9 @@ async function runPreviewQuery(sqlite3, db) {
   }
   const scopedRows = filterRowsForSyncScope(rows, syncScope);
   if (scopedRows.length === 0) {
-    previewOutput.innerHTML = `<span class="status-ok">${t("preview.noRecent")}</span> ${t("preview.nothingToSync")}`;
+    // Both values are repo-owned locale strings, not file or user input,
+    // and carry intentional <strong> markup like preview.headlineCount does.
+    previewOutput.innerHTML = `<div class="empty-state"><p class="empty-state-title">${t("preview.noRecent")}</p><p class="empty-state-hint">${t("preview.nothingToSync")}</p></div>`;
     lastDeltas = [];
     return;
   }

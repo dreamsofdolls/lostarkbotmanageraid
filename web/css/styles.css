@@ -147,7 +147,10 @@ header h1 {
    up to chapter size. `::first-letter` targets the "1." / "2." that the
    markup already carries, so no extra element is needed. */
 .card h2 {
-  margin: 0 0 20px;
+  /* 20px here plus the lede's own 6px top margin opened a gap under every
+     section rule that read as a missing line. The first element after the
+     heading zeroes its top margin (below), so this value is the whole gap. */
+  margin: 0 0 14px;
   padding-bottom: 13px;
   font-family: var(--font-body);
   font-weight: 600;
@@ -174,7 +177,17 @@ header h1 {
   font-family: var(--font-display);
   font-size: 15px;
   font-style: italic;
-  max-width: 62ch;
+  /* 62ch broke these two-line ledes mid-clause and left a visible gap to
+     the right of the first line. Wider bound plus balanced wrapping so
+     both lines come out near the same length. */
+  max-width: 76ch;
+  text-wrap: balance;
+}
+/* Whatever comes first inside a card sits directly under the heading rule,
+   so it must not add its own top margin on top of the heading's. */
+.card > .hint:first-of-type,
+.card > *:first-of-type:not(h2) {
+  margin-top: 0;
 }
 .auth-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .auth-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); font-size: 12px; }
@@ -405,6 +418,31 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .status-ok { color: var(--success); }
 .status-err { color: var(--error); }
 .status-warn { color: var(--accent-bright); }
+
+/* Empty state · a ruled block with an italic serif lead, matching the
+   rest of the page instead of a bare sentence dropped into the card.
+   Deliberately not .status-ok: green reads as "something succeeded",
+   and "there is nothing here" is neither success nor failure. */
+.empty-state {
+  padding: 16px 2px 18px;
+  border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+}
+.empty-state-title {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 17px;
+  color: var(--text);
+}
+.empty-state-hint {
+  margin: 0;
+  max-width: 72ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+.empty-state-hint strong { color: var(--accent-bright); font-weight: 600; }
 
 table {
   width: 100%;
