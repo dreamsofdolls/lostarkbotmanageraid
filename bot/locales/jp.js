@@ -833,6 +833,8 @@ module.exports = {
       viewToggleTaskDescription: "キャラ別タスクとロスター共通タスクの表示 + トグル",
       viewToggleGoldLabel: "ゴールド＆難易度",
       viewToggleGoldDescription: "キャラごとにゴールドのトグルとレイド難易度の変更",
+      viewToggleSyncLabel: "ローカル同期",
+      viewToggleSyncDescription: "ゲームクライアントからのプレビューを確認してそのまま反映できますわ",
       viewTogglePlaceholder: "ビューを選んでね...",
       charFilterAllLabel: "🌐 全キャラ · {done}/{total}",
       charFilterAllDescription: "同じタスクを持つ全キャラを一括トグルですわ",
@@ -1823,7 +1825,7 @@ module.exports = {
         short: "あなたのレイド進捗とサイドタスクを確認ですわ～",
         example: "/raid-status",
         notes: [
-          "アカウント別・キャラ別に今週のレイドクリアを表示しますわ♪ 2つのビューがありますの: 📋 レイド進捗 + 📝 サイドタスク",
+          "アカウント別・キャラ別に今週のレイドクリアを表示しますわ♪ ドロップダウンには4つのビューがありますの: 📋 レイド進捗 · 📝 サイドタスク · 💰 ゴールド＆難易度 · 🗃️ ローカル同期",
           "",
           "**アイコン**: {iconDone} 全ゲート完了 · {iconPartial} 一部完了 · {iconPending} 未完了 · {iconLock} 装備レベル不足",
           "**使うタイミング**: しょっちゅう♪ 今週どのキャラがまだ未クリアかチェックしますわ。",
@@ -1834,6 +1836,7 @@ module.exports = {
           "**🗓️ 自分のレイド**: サーバー内で参加した、またはマネージャーに追加された `/raid-schedule-preview` イベントを一覧するドロップダウンですわ♪ 選ぶと開始時刻・部屋（枠を持っている場合）・自分のターンと仲間が見られますの。1 つ以上のイベントに入っている時だけ表示されますわ。",
           "**💰 ゴールド追跡**: all-raid 表示ではゴールド受取キャラのカードに `💰 獲得 / 合計 G` 行が出て、説明欄にもアカウント集計が出ますわ。`🔒 ... 拘束` はその合計に含まれる bound 分ですの (Normal の Act 4/Kazeros/Serca は半分 bound)。Lost Ark は週 6 人までなので `/raid-gold-earner roster:<名前>` で指定してね～ 1つのレイドに絞った時はカードをスッキリさせるためキャラ別ゴールド行を隠し、レイド単位の集計は説明欄に残しますの♪",
           "**難易度変更**: Gold view で表示中キャラのレイド難易度を選べますわ。今週すでに走ったレイドなら、次の週リセット後に適用されますの。",
+          "**🗃️ ローカル同期**: `/raid-sync` を `/raid-status` の枠に取り込んだビューですわ♪ 選ぶと `encounters.db` の最新プレビューを確認して、その場で 同期 / キャンセル / 更新 できますの。メッセージはそのままなので他のビューにも戻れますわ。同期モードが未設定なら、ビューは開きますが有効化の案内だけでボタンは出ませんの。",
           "**リアルタイムカウントダウン**: `最終更新`、`最終同期`、`同期準備` の行は Discord ネイティブのタイムスタンプで自動カウントダウンしますわ。表示をリフレッシュする必要は無いですの～",
         ],
       },
@@ -1848,6 +1851,7 @@ module.exports = {
           "**次回以降**: 新しいリンクで reader を開くとファイルが復元され、`Discord へ送信` を押すだけですの。",
           "**確認**: Discord DM または `/raid-sync` で変更されるキャラ・レイド・ゲートを表示します。Discord の `同期` ボタンだけが進捗を書き込みますわ。",
           "**プライバシー**: `encounters.db` はアップロードせず、小さな delta だけ送信します。プレビューは2時間で期限切れですの。",
+          "**`/raid-status` と同じ枠**: 同期・キャンセル・期限切れの済んだプレビューなら、`/raid-sync` は `/raid-status` を 🗃️ ローカル同期 ビューで直接開きますわ♪ レイド進捗 · サイドタスク · ゴールド との行き来も自由ですの。まだ確認待ちのプレビューは専用コンソールに残しますわ。同期ボタンがセッションと一緒に切れないようにですの。",
         ],
       },
       "raid-gold-earner": {
@@ -2239,7 +2243,7 @@ module.exports = {
     autoManageName: "🤖 投稿が面倒? `/raid-auto-manage` を有効化してね♪",
     autoManageValue: [
       "**bible モード** - `/raid-auto-manage action:on`: アーティストが lostark.bible からクリアログを取得しますわ。事前に <https://lostark.bible/me/logs> で同期したい各キャラの **Public Log** を有効化してね♪",
-      "**local-sync モード** - `/raid-auto-manage action:local-on`: Local Reader が `encounters.db` を端末内で読み、小さな preview を Discord に送りますわ。`/raid-sync` で確認するまで進捗は書きませんし、ファイル本体もアップロードしませんの。",
+      "**local-sync モード** - `/raid-auto-manage action:local-on`: Local Reader が `encounters.db` を端末内で読み、小さな preview を Discord に送りますわ。`/raid-sync` か `/raid-status` の `🗃️ ローカル同期` ビューで確認するまで進捗は書きませんし、ファイル本体もアップロードしませんの。",
       "全部リセットして再同期したい? `/raid-auto-manage action:reset` を実行ですわ (2 段階確認、ご自分のぶんだけ全消し)。",
     ],
     sideTasksName: "📝 サイドタスク - キャラ別のデイリー/ウィークリーお仕事追跡",

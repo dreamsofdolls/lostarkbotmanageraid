@@ -22,6 +22,7 @@ function createRaidStatusComponentLayout({
   buildRaidFilterRow,
   buildStatusRosterFilterRow,
   buildMyRaidsRow,
+  buildLocalSyncViewRows = () => [],
   getAccounts,
   getCurrentPage,
   getCurrentLocalPage = getCurrentPage,
@@ -99,6 +100,19 @@ function createRaidStatusComponentLayout({
       ? buildGoldModeRow(goldToggleDisabled)
       : null;
     if (modeRow && rows.length < 5) rows.push(modeRow);
+  };
+
+  // Local Sync view: the toggle row stays first so the user can always
+  // get back out, then the console's own apply/cancel/refresh + reader
+  // rows. Pagination and filters are omitted on purpose · a preview is
+  // account-wide, so per-roster navigation would suggest a scope the
+  // buttons do not have.
+  const addSyncViewRows = (rows, disabled) => {
+    rows.push(buildViewToggleRow(disabled));
+    for (const row of buildLocalSyncViewRows(disabled)) {
+      if (rows.length >= 5) break;
+      rows.push(row);
+    }
   };
 
   const addRaidViewNavigationRows = (rows, disabled, showSync, syncDisabled) => {
@@ -204,6 +218,10 @@ function createRaidStatusComponentLayout({
     }
     if (getCurrentView() === "gold") {
       addGoldViewRows(rows, disabled);
+      return rows;
+    }
+    if (getCurrentView() === "sync") {
+      addSyncViewRows(rows, disabled);
       return rows;
     }
 

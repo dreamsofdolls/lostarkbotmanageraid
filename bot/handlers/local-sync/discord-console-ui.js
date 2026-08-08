@@ -10,6 +10,16 @@ const {
 
 const MAX_CHARACTER_FIELDS = 10;
 const MAX_RAIDS_PER_CHARACTER = 8;
+// Two surfaces render this payload and each needs its own customId
+// namespace. The DM preview has no component collector, so its buttons
+// must reach the global router (`local-sync:` in
+// app/interaction-router-registry.js). The /raid-status sync view lives
+// inside a collector-owned message, and the global router would
+// editReply() over the whole status embed if it ever saw those clicks -
+// `status-local:` is deliberately absent from every router prefix so
+// only the collector handles it.
+const DM_BUTTON_PREFIX = "local-sync:";
+const STATUS_BUTTON_PREFIX = "status-local:";
 const RETRYABLE_PENDING_REASONS = new Set([
   "sync_busy",
   "write_error",
@@ -157,6 +167,7 @@ function buildRows({
   state,
   readerUrl,
   lang,
+  buttonPrefix = DM_BUTTON_PREFIX,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -167,12 +178,12 @@ function buildRows({
     if (state === "pending") {
       actionRow.addComponents(
         new ButtonBuilder()
-          .setCustomId(`local-sync:apply:${job.jobId}`)
+          .setCustomId(`${buttonPrefix}apply:${job.jobId}`)
           .setStyle(ButtonStyle.Success)
           .setEmoji("✅")
           .setLabel(t("local-sync-discord.buttons.apply", lang)),
         new ButtonBuilder()
-          .setCustomId(`local-sync:cancel:${job.jobId}`)
+          .setCustomId(`${buttonPrefix}cancel:${job.jobId}`)
           .setStyle(ButtonStyle.Secondary)
           .setEmoji("✖️")
           .setLabel(t("local-sync-discord.buttons.cancel", lang))
@@ -180,7 +191,7 @@ function buildRows({
     }
     actionRow.addComponents(
       new ButtonBuilder()
-        .setCustomId(`local-sync:refresh:${job.jobId}`)
+        .setCustomId(`${buttonPrefix}refresh:${job.jobId}`)
         .setStyle(ButtonStyle.Secondary)
         .setEmoji("🔄")
         .setLabel(t("local-sync-discord.buttons.refresh", lang))
@@ -200,12 +211,24 @@ function buildRows({
   return rows;
 }
 
+/**
+ * Render the Local Sync preview console (embed + action rows).
+ * @param {object} options
+ * @param {object|null} options.job - stored preview job, null when none exists
+ * @param {object|null} options.summary - projected change summary for the job
+ * @param {string|null} options.readerUrl - signed web-companion URL, omits the link row when null
+ * @param {string|null} options.activeScope - COMPANION_SCOPE value, null renders the disabled card
+ * @param {string} [options.lang='vi']
+ * @param {string} [options.buttonPrefix='local-sync:'] - customId namespace · see DM_BUTTON_PREFIX / STATUS_BUTTON_PREFIX
+ * @returns {{embeds: object[], components: object[]}} discord.js message payload fragment
+ */
 function buildLocalSyncConsolePayload({
   job = null,
   summary = null,
   readerUrl = null,
   activeScope = null,
   lang = "vi",
+  buttonPrefix = DM_BUTTON_PREFIX,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -252,6 +275,7 @@ function buildLocalSyncConsolePayload({
       state,
       readerUrl,
       lang,
+      buttonPrefix,
       ActionRowBuilder,
       ButtonBuilder,
       ButtonStyle,
@@ -260,6 +284,8 @@ function buildLocalSyncConsolePayload({
 }
 
 module.exports = {
+  DM_BUTTON_PREFIX,
+  STATUS_BUTTON_PREFIX,
   MAX_CHARACTER_FIELDS,
   MAX_RAIDS_PER_CHARACTER,
   groupProjectedChanges,

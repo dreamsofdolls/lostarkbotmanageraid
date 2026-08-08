@@ -27,6 +27,7 @@ function createRaidStatusRenderPayload({
   buildAccountPageEmbed,
   buildGoldViewEmbed,
   buildTaskViewEmbed,
+  buildLocalSyncViewEmbed = () => null,
   lang,
 }) {
   const backgroundBufferCache = new Map();
@@ -54,6 +55,13 @@ function createRaidStatusRenderPayload({
     }
     if (currentView === "gold") {
       return buildGoldViewEmbed(accounts[currentPage]);
+    }
+    if (currentView === "sync") {
+      // Falls through to the raid embed when the snapshot has not loaded
+      // yet · the collector's "end" hook re-renders from here and must
+      // never throw on a session that expired mid-fetch.
+      const syncEmbed = buildLocalSyncViewEmbed();
+      if (syncEmbed) return syncEmbed;
     }
 
     const getProgressRaidsFor = (ch) =>
@@ -120,7 +128,11 @@ function createRaidStatusRenderPayload({
       return payload;
     };
 
-    if (getCurrentView() === "task") return payload;
+    // Task and sync views render plain cards · loading a roster
+    // background for them costs a disk/network read for an image the
+    // embed never shows.
+    const view = getCurrentView();
+    if (view === "task" || view === "sync") return payload;
     const account = getAccounts()[getCurrentPage()];
     const bgBuffer = await resolveBackgroundBuffer(account);
     if (!bgBuffer) return payload;

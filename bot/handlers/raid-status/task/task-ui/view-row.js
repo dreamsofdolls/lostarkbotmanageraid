@@ -35,6 +35,17 @@ function createViewToggleRow({
             emoji: "\uD83D\uDCB0",
             default: getCurrentView() === "gold",
           },
+          // Always listed, even with no sync mode on \u00B7 Discord cannot
+          // disable a single select option, so the "off" state is shown
+          // by the view itself (the console renders its disabled card
+          // with no action buttons). Hiding it would cost discovery.
+          {
+            label: t("raid-status.taskView.viewToggleSyncLabel", lang),
+            description: t("raid-status.taskView.viewToggleSyncDescription", lang),
+            value: "sync",
+            emoji: "\uD83D\uDDC3\uFE0F",
+            default: getCurrentView() === "sync",
+          },
         ])
     );
   };

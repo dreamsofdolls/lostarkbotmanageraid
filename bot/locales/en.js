@@ -832,6 +832,8 @@ module.exports = {
       viewToggleTaskDescription: "View + toggle per-char tasks and roster-shared tasks",
       viewToggleGoldLabel: "Gold & difficulty",
       viewToggleGoldDescription: "View + toggle gold, and change raid difficulty per character",
+      viewToggleSyncLabel: "Local Sync",
+      viewToggleSyncDescription: "Check the preview from your game client and apply it here",
       viewTogglePlaceholder: "Pick a view...",
       charFilterAllLabel: "🌐 All characters · {done}/{total}",
       charFilterAllDescription: "Bulk-toggle one task across every char that has it",
@@ -1822,7 +1824,7 @@ module.exports = {
         short: "View your raid progress",
         example: "/raid-status",
         notes: [
-          "Per-account per-character view of this week's raid clears. Two views: 📋 Raid + 📝 Side tasks.",
+          "Per-account per-character view of this week's raid clears. The dropdown holds four views: 📋 Raid · 📝 Side tasks · 💰 Gold & difficulty · 🗃️ Local Sync.",
           "",
           "**Icons**: {iconDone} done all gates · {iconPartial} partial · {iconPending} pending · {iconLock} not eligible (iLvl too low).",
           "**When to use**: often - check which char still has raids pending this week.",
@@ -1833,6 +1835,7 @@ module.exports = {
           "**🗓️ My raids**: a dropdown listing the `/raid-schedule-preview` events across the server you joined or were added to by a manager. Pick one to see the time, room (if you hold a slot), and your turn(s) with teammates. Only shown when you are in at least one event.",
           "**💰 Gold tracking**: all-raid view shows `💰 earned / total G` on each gold-earner card, plus a per-account rollup line in the description. The `🔒 ... bound` tail is the bound share inside that total (normal Act 4/Kazeros/Serca split half bound). LA caps at 6 gold-earners/account/week - mark them via `/raid-gold-earner roster:<name>`. When you filter to one raid, per-character gold lines are hidden to keep the card clean, while the raid-scoped rollup stays in the description.",
           "**Difficulty changes**: in the Gold view, pick a raid difficulty for the active character. If that raid already ran this week, Artist queues it for the next weekly reset.",
+          "**🗃️ Local Sync**: pulls `/raid-sync` into the `/raid-status` frame. Pick it to read the newest `encounters.db` preview and Sync / Cancel / Refresh it right there, then switch back to another view without losing the message. With no sync mode on, the view still opens but only explains how to turn it on, with no buttons.",
           "**Real-time countdown**: the `Last updated`, `Last synced`, `Sync ready` lines tick down automatically (Discord native timestamp), no need to refresh the embed.",
         ],
       },
@@ -1847,6 +1850,7 @@ module.exports = {
           "**Later scans**: open the reader with a fresh link, let it restore the file, then click `Send to Discord`.",
           "**Confirmation**: a Discord DM or `/raid-sync` shows the exact characters, raids, and gates. Only the Discord `Sync` button writes progress.",
           "**Privacy**: `encounters.db` is never uploaded; only a small delta is sent. Preview jobs expire after two hours.",
+          "**Shares the `/raid-status` frame**: once a preview is synced, cancelled, or expired, `/raid-sync` opens `/raid-status` straight on the 🗃️ Local Sync view, so you can switch between it and Raid · Side tasks · Gold freely. A preview still awaiting review stays in its own console so the Sync button does not die with the session.",
         ],
       },
       "raid-gold-earner": {
@@ -2238,7 +2242,7 @@ module.exports = {
     autoManageName: "🤖 Lazy posting? Try `/raid-auto-manage`",
     autoManageValue: [
       "**Bible mode** - `/raid-auto-manage action:on`: Artist pulls clear logs from lostark.bible. Make sure each char has **Public Log** enabled at <https://lostark.bible/me/logs> first.",
-      "**Local-sync mode** - `/raid-auto-manage action:local-on`: Local Reader reads `encounters.db` on-device, sends a small preview to Discord, and waits for `/raid-sync` confirmation. The source file never uploads.",
+      "**Local-sync mode** - `/raid-auto-manage action:local-on`: Local Reader reads `encounters.db` on-device, sends a small preview to Discord, and waits for your confirmation in `/raid-sync` or the `🗃️ Local Sync` view inside `/raid-status`. The source file never uploads.",
       "Need to wipe and re-sync from scratch? Run `/raid-auto-manage action:reset` (2-step confirm, only your own progress is wiped).",
     ],
     sideTasksName: "📝 Side tasks - per-character daily/weekly chore tracking",

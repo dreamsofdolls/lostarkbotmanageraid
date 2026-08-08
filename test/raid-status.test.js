@@ -1489,7 +1489,7 @@ test("raid-status view toggle includes the received-gold screen", () => {
   });
 
   const options = taskUi.buildViewToggleRow(false).toJSON().components[0].options;
-  assert.deepEqual(options.map((option) => option.value), ["raid", "task", "gold"]);
+  assert.deepEqual(options.map((option) => option.value), ["raid", "task", "gold", "sync"]);
   assert.equal(options.find((option) => option.value === "gold").default, true);
 });
 

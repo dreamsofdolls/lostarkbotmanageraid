@@ -29,6 +29,7 @@ async function createRaidStatusSessionState({
   getStatusRaidsForCharacter,
   buildRaidDropdownState,
   buildStatusRosterFilterEntries,
+  initialView = "raid",
 }) {
   let userDoc = initialUserDoc;
   let accounts = await buildMergedAccounts(discordId, userDoc.accounts, {
@@ -37,7 +38,12 @@ async function createRaidStatusSessionState({
   let currentPage = 0;
   let selectedRosterIndex = null;
   let filterRaidId = null;
-  let currentView = "raid";
+  let currentView = initialView;
+  // Sync view payload · loaded asynchronously by the component handler
+  // (and by the /raid-sync entry point) so both synchronous render paths
+  // can read it. null means "not fetched yet", which the renderer treats
+  // as a fallback to the raid view rather than an error.
+  let localSyncSnapshot = null;
   let raidDropdownEntries = [];
   let rosterFilterEntries = [];
   let visibleRosterIndices = [];
@@ -163,6 +169,12 @@ async function createRaidStatusSessionState({
       currentView = value;
       recomputeRosterNavigation();
     },
+    get localSyncSnapshot() {
+      return localSyncSnapshot;
+    },
+    set localSyncSnapshot(value) {
+      localSyncSnapshot = value;
+    },
     get filterRaidId() {
       return filterRaidId;
     },
@@ -230,6 +242,15 @@ function createRaidStatusComponentSession({
     },
     set currentView(value) {
       state.currentView = value;
+    },
+    get currentView() {
+      return state.currentView;
+    },
+    get localSyncSnapshot() {
+      return state.localSyncSnapshot;
+    },
+    set localSyncSnapshot(value) {
+      state.localSyncSnapshot = value;
     },
     get statusUserMeta() {
       return getStatusUserMeta();

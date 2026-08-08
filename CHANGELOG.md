@@ -4,6 +4,19 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-08-08 (Local Sync as a /raid-status view)
+
+### Added
+- `/raid-status` view dropdown gains a fourth entry, **🗃️ Local Sync**, rendering the `/raid-sync` console inside the status message. Apply, Cancel, Refresh, and the Local Reader link all work there, and switching back to Raid/Side tasks/Gold keeps the same message.
+- The option is always listed because Discord cannot disable a single select option. With no sync mode enabled it opens a card explaining how to turn one on, and shows no action buttons.
+
+### Changed
+- After Sync, Cancel, or expiry, `/raid-sync` hands off to `/raid-status` already on the Local Sync view instead of the raid page with a one-line result banner. A preview still awaiting review keeps the standalone console, whose globally routed buttons outlive the 10-minute status collector.
+- Applying a preview from the status view reloads the merged account list before redrawing, so the Raid and Gold views do not show pre-apply data.
+
+### Fixed
+- `/raid-status` help in all three locales claimed two views when there were three; it now lists all four.
+
 ## 2026-08-07 (Discord-first Local Sync)
 
 ### Changed

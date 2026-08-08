@@ -687,6 +687,11 @@ const raidStatusCommand = createRaidStatusCommand({
   getAutoManageCooldownMs,
   getRosterRefreshCooldownMs,
   isManagerId,
+  // Local Sync view (`status-local:` buttons). Hoisted thunks, not the
+  // raw bindings · raid-set composes after this factory, so the plain
+  // `let`s are still undefined here.
+  applyRaidSetForDiscordId: callApplyRaidSetForDiscordId,
+  applyRaidSetBatchForDiscordId: callApplyRaidSetBatchForDiscordId,
 });
 ({
   handleStatusCommand,

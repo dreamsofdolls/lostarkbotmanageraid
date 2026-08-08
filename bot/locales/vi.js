@@ -854,6 +854,8 @@ module.exports = {
       viewToggleTaskDescription: "Xem + toggle task riêng theo char và task chung của roster",
       viewToggleGoldLabel: "Gold & độ khó",
       viewToggleGoldDescription: "Xem + toggle gold nhận, và đổi độ khó raid cho từng character",
+      viewToggleSyncLabel: "Local Sync",
+      viewToggleSyncDescription: "Xem preview từ client game của cậu rồi duyệt luôn ở đây",
       viewTogglePlaceholder: "Chọn view...",
       charFilterAllLabel: "🌐 Tất cả character · {done}/{total}",
       charFilterAllDescription: "Bulk toggle 1 task cho mọi char cùng có nó",
@@ -1844,7 +1846,7 @@ module.exports = {
         short: "Xem tiến độ raid + chore phụ của cậu",
         example: "/raid-status",
         notes: [
-          "Hiển thị mỗi character + raid nào đã clear tuần này. Có 2 view: 📋 Tiến độ raid + 📝 Side tasks.",
+          "Hiển thị mỗi character + raid nào đã clear tuần này. Dropdown có 4 view: 📋 Tiến độ raid · 📝 Side tasks · 💰 Gold & độ khó · 🗃️ Local Sync.",
           "",
           "**Icons**: {iconDone} done hết gate · {iconPartial} partial · {iconPending} pending · {iconLock} chưa đủ iLvl.",
           "**Khi nào dùng**: thường xuyên - kiểm tra char nào còn pending tuần này.",
@@ -1855,6 +1857,7 @@ module.exports = {
           "**🗓️ Raid của tôi**: dropdown liệt kê các event `/raid-schedule-preview` toàn server mà cậu đã đăng ký hoặc bị manager add. Chọn 1 để xem giờ, phòng (nếu cậu trong đội), và turn của cậu kèm đồng đội. Chỉ hiện khi cậu đang nằm trong ít nhất 1 event.",
           "**💰 Track gold**: all-raid view hiện dòng `💰 đã kiếm / tổng G` trên từng gold-earner, kèm rollup per-account ở description cộng dồn mọi gold-earner. Phần `🔒 ... khóa` là gold bound nằm trong tổng đó (normal Act 4/Kazeros/Serca có nửa bound). LA cap 6 gold-earner/account/tuần - mark bằng `/raid-gold-earner roster:<tên>`. Khi filter 1 raid cụ thể, Artist ẩn dòng gold từng char để card gọn hơn, còn rollup theo raid vẫn nằm ở description.",
           "**Đổi độ khó**: trong view Gold nhận, chọn độ khó raid cho character đang xem. Nếu raid đó đã chạy tuần này, Artist sẽ xếp lịch áp dụng sau reset tuần kế tiếp.",
+          "**🗃️ Local Sync**: view này kéo `/raid-sync` vào chung khung `/raid-status`. Chọn để xem preview mới nhất từ `encounters.db` rồi Đồng bộ / Huỷ / Làm mới ngay tại chỗ, xong lại đổi view khác mà không mất tin nhắn. Chưa bật sync mode thì view vẫn mở được nhưng chỉ hướng dẫn cách bật, không có nút nào.",
           "**Real-time countdown**: dòng `Last updated`, `Last synced`, `Sync ready` đếm ngược tự động (Discord native timestamp), không cần refresh embed.",
         ],
       },
@@ -1869,6 +1872,7 @@ module.exports = {
           "**Những lần sau**: mở reader bằng link mới, file tự restore nếu quyền vẫn còn, rồi bấm `Gửi sang Discord`.",
           "**Xác nhận**: Discord DM hoặc `/raid-sync` hiện đúng char/raid/gate sẽ đổi. Chỉ nút `Đồng bộ` trong Discord mới ghi tiến độ.",
           "**Riêng tư**: `encounters.db` không upload; reader chỉ gửi delta nhỏ. Preview tự hết hạn sau 2 giờ.",
+          "**Chung khung với `/raid-status`**: preview đã Đồng bộ/Huỷ/hết hạn rồi thì `/raid-sync` mở thẳng `/raid-status` ở view 🗃️ Local Sync, đổi qua lại với Tiến độ raid · Side tasks · Gold thoải mái. Preview còn chờ duyệt vẫn nằm ở console riêng để nút Đồng bộ không chết theo session.",
         ],
       },
       "raid-gold-earner": {
@@ -2267,7 +2271,7 @@ module.exports = {
     autoManageName: "🤖 Lười post? Bật `/raid-auto-manage` nhé",
     autoManageValue: [
       "**Bible mode** - `/raid-auto-manage action:on`: tớ pull clear logs từ lostark.bible. Cần bật **Public Log** ở <https://lostark.bible/me/logs> cho từng char muốn sync.",
-      "**Local-sync mode** - `/raid-auto-manage action:local-on`: muốn giữ log private? Local Reader đọc `encounters.db` trong browser, gửi preview nhỏ sang Discord rồi cậu xác nhận bằng `/raid-sync`; file gốc không upload đâu nha.",
+      "**Local-sync mode** - `/raid-auto-manage action:local-on`: muốn giữ log private? Local Reader đọc `encounters.db` rồi gửi preview nhỏ sang Discord, cậu duyệt ở `/raid-sync` hoặc view `🗃️ Local Sync` của `/raid-status`; file gốc không upload đâu nha.",
       "Cần reset hết để re-sync mới? Gõ `/raid-auto-manage action:reset` (2-step confirm, wipe sạch progress riêng cậu).",
     ],
     sideTasksName: "📝 Side tasks - track chore daily/weekly riêng từng char",

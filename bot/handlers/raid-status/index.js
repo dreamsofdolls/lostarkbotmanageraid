@@ -38,6 +38,12 @@ const {
   createRaidStatusSyncControls,
 } = require("./sync/sync-controls");
 const {
+  buildLocalSyncViewEmbed,
+  buildLocalSyncViewRows,
+  loadLocalSyncSnapshot,
+  runLocalSyncViewAction,
+} = require("./sync/local-sync-view");
+const {
   createStatusComponentRouteHandlers,
 } = require("./components/component-handlers");
 const {
@@ -108,6 +114,9 @@ function createRaidStatusCommand(deps) {
     getAutoManageCooldownMs,
     getRosterRefreshCooldownMs,
     isManagerId,
+    applyRaidSetForDiscordId = null,
+    applyRaidSetBatchForDiscordId = null,
+    PreviewModel = null,
   } = deps;
 
   const {
@@ -162,6 +171,9 @@ function createRaidStatusCommand(deps) {
     const discordId = interaction.user.id;
     const alreadyDeferred = options?.alreadyDeferred === true;
     const initialContent = options?.content ?? null;
+    // /raid-sync hands off here with initialView "sync" so Local Sync
+    // renders inside the canonical status frame instead of its own card.
+    const initialView = options?.initialView === "sync" ? "sync" : "raid";
     // Probe localSyncEnabled before defer to mark the reply as
     // ephemeral when local-sync is on. The Mở Web Companion Link button
     // carries a signed token URL in its href - public messages would
@@ -222,6 +234,7 @@ function createRaidStatusCommand(deps) {
       getStatusRaidsForCharacter,
       buildRaidDropdownState,
       buildStatusRosterFilterEntries,
+      initialView,
     });
     const stateReadyAt = Date.now();
 
@@ -292,6 +305,56 @@ function createRaidStatusCommand(deps) {
       lang,
     });
 
+    // Local Sync view. Its data needs three awaits (user doc, newest
+    // preview job, signed reader URL) while both raid-status render
+    // paths are synchronous, so the snapshot is fetched here and by the
+    // async component handler, then parked on session state.
+    const refreshLocalSyncSnapshot = async ({ jobId = "" } = {}) =>
+      loadLocalSyncSnapshot({
+        discordUser: interaction.user,
+        userDoc: statusState.userDoc,
+        User,
+        PreviewModel,
+        lang,
+        jobId,
+      });
+
+    const runLocalSyncAction = ({ action, jobId }) =>
+      runLocalSyncViewAction({
+        action,
+        jobId,
+        discordId,
+        User,
+        PreviewModel,
+        applyRaidSetForDiscordId,
+        applyRaidSetBatchForDiscordId,
+        acquireAutoManageSyncSlot,
+        releaseAutoManageSyncSlot,
+      });
+
+    const localSyncViewDeps = {
+      lang,
+      EmbedBuilder,
+      ActionRowBuilder,
+      ButtonBuilder,
+      ButtonStyle,
+      UI,
+      formatGold,
+    };
+    const buildSyncViewEmbed = () => buildLocalSyncViewEmbed({
+      snapshot: statusState.localSyncSnapshot,
+      ...localSyncViewDeps,
+    });
+    const buildSyncViewRows = (disabled) => buildLocalSyncViewRows({
+      snapshot: statusState.localSyncSnapshot,
+      disabled,
+      ...localSyncViewDeps,
+    });
+
+    if (initialView === "sync") {
+      statusState.localSyncSnapshot = await refreshLocalSyncSnapshot();
+    }
+
     const {
       buildCurrentEmbed,
       buildEmbedAndCanvas,
@@ -311,6 +374,7 @@ function createRaidStatusCommand(deps) {
       buildAccountPageEmbed,
       buildGoldViewEmbed,
       buildTaskViewEmbed,
+      buildLocalSyncViewEmbed: buildSyncViewEmbed,
       lang,
     });
 
@@ -356,6 +420,7 @@ function createRaidStatusCommand(deps) {
       buildRaidFilterRow,
       buildStatusRosterFilterRow,
       buildMyRaidsRow,
+      buildLocalSyncViewRows: buildSyncViewRows,
       getAccounts: () => statusState.accounts,
       getCurrentPage: () => statusState.currentPage,
       getCurrentLocalPage: () => statusState.currentLocalPage,
@@ -419,6 +484,8 @@ function createRaidStatusCommand(deps) {
       getAutoManageCooldownMs,
       AUTO_MANAGE_SYNC_COOLDOWN_MS,
       buildMyRaidDetailEmbed,
+      refreshLocalSyncSnapshot,
+      runLocalSyncAction,
     });
 
     const message = messageFromEdit?.createMessageComponentCollector

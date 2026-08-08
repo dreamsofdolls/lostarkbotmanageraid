@@ -18,7 +18,15 @@ const STATUS_COMPONENT_ACTION = Object.freeze({
   goldMode: "goldMode",
   goldToggle: "goldToggle",
   goldReplace: "goldReplace",
+  localSyncAction: "localSyncAction",
 });
+
+// `status-local:` buttons live inside the /raid-status message and are
+// deliberately absent from every prefix in interaction-router-registry.js.
+// The DM preview uses `local-sync:` and the global router instead · if
+// both surfaces shared one prefix, a click here would make the router
+// editReply() the console payload over the whole status embed.
+const LOCAL_SYNC_ACTION_PREFIX = "status-local:";
 
 const STATUS_COMPONENT_ROUTES = Object.freeze([
   {
@@ -139,6 +147,14 @@ function getStatusComponentRoute(customId, { myRaidsSelectId = "" } = {}) {
       redraw: true,
     });
   }
+  if (id.startsWith(LOCAL_SYNC_ACTION_PREFIX)) {
+    return Object.freeze({
+      customId: id,
+      action: STATUS_COMPONENT_ACTION.localSyncAction,
+      editDriven: true,
+      redraw: true,
+    });
+  }
   return ROUTES_BY_CUSTOM_ID.get(id) || null;
 }
 
@@ -147,6 +163,7 @@ function getEditDrivenStatusComponentIds() {
 }
 
 module.exports = {
+  LOCAL_SYNC_ACTION_PREFIX,
   STATUS_COMPONENT_ACTION,
   STATUS_COMPONENT_ROUTES,
   getEditDrivenStatusComponentIds,

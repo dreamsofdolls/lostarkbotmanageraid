@@ -154,8 +154,12 @@ function createLocalSyncDiscordConsole({
       // Do not retain a raid-status session inside the Local Sync console.
       // Calling the canonical handler here creates a new viewer loader, so
       // every /raid-sync invocation reads the current DB snapshot again.
+      // initialView lands on the status dropdown's Local Sync entry, so a
+      // settled preview keeps its own frame instead of dropping the user
+      // on the raid page with only a one-line result banner.
       await openRaidStatusSession(interaction, {
         alreadyDeferred: true,
+        initialView: "sync",
         content: buildRaidStatusHandoffContent(job, lang),
       });
       return true;

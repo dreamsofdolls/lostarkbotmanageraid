@@ -46,6 +46,9 @@ const {
   buildManualSyncFollowupPayload,
 } = require("../sync/sync-followup");
 const {
+  parseLocalSyncViewCustomId,
+} = require("../sync/local-sync-view");
+const {
   firstSelectValue,
 } = require("../../../utils/discord/component-values");
 const {
@@ -118,6 +121,8 @@ function createStatusComponentRouteHandlers(ctx) {
     getAutoManageCooldownMs,
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
     rotateLocalSyncTokenFn = rotateLocalSyncToken,
+    refreshLocalSyncSnapshot = async () => null,
+    runLocalSyncAction = async () => ({ ok: false, reason: "missing", job: null, applied: false }),
   } = ctx;
   const goldReplacementFlow = createGoldReplacementFlow({
     EmbedBuilder,
@@ -451,7 +456,46 @@ function createStatusComponentRouteHandlers(ctx) {
 
     [STATUS_COMPONENT_ACTION.viewToggle]: async (component) => {
       const picked = firstSelectValue(component, "raid");
+      if (picked === "sync") {
+        // Both render paths are synchronous, so the console payload has
+        // to be resolved here and parked on the session first.
+        session.localSyncSnapshot = await refreshLocalSyncSnapshot();
+        session.currentView = "sync";
+        return redraw();
+      }
       session.currentView = picked === "task" || picked === "gold" ? picked : "raid";
+      return redraw();
+    },
+
+    [STATUS_COMPONENT_ACTION.localSyncAction]: async (component) => {
+      const parsed = parseLocalSyncViewCustomId(component.customId);
+      if (!parsed) return noRedraw();
+
+      const result = await runLocalSyncAction(parsed);
+      if (!result.ok) {
+        if (result.reason === "notOwner") {
+          await followUpNotice(component, EmbedBuilder, {
+            type: "lock",
+            title: t("raid-status.sync.noControlTitle", lang),
+            description: t("local-sync-discord.notOwner", lang),
+          }).catch(() => {});
+        }
+        // A vanished job still redraws · refreshing pulls whatever
+        // preview replaced it instead of stranding the stale card.
+        session.localSyncSnapshot = await refreshLocalSyncSnapshot();
+        return redraw();
+      }
+
+      // Applying writes raid progress, so the merged account list the
+      // raid and gold views read from is stale until it is reloaded.
+      if (result.applied) {
+        await reloadViewerAccounts().catch((err) => {
+          console.warn("[raid-status local-sync] reload after apply failed:", err?.message || err);
+        });
+      }
+      session.localSyncSnapshot = await refreshLocalSyncSnapshot({
+        jobId: result.job?.jobId || "",
+      });
       return redraw();
     },
 
