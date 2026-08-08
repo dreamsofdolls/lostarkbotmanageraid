@@ -13,6 +13,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - Palette hue moved from blue-grey to brown at the same darkness, which lets the signature amber read as brass ink. Added a three-step surface ladder (`--surface-1..3`): four box levels nest inside each other and previously all resolved to the same `#1d2024`.
 - Container widened 740px to 840px so the character grid fits three columns, `Chọn file` demoted to an outline button so it stops competing with `Gửi sang Discord`, and the badge/counter faces folded onto the declared `--font-mono` instead of a second hard-coded mono stack.
 
+### Fixed
+- The Fraunces font request now includes the `ital` axis. The restyle sets italic serif in six places (subtitle, section ledes, week range, summaries) and the previous URL shipped only the roman, so the browser was synthesizing a mechanical shear instead of drawing the real italic.
+
 ## 2026-08-08 (Local Sync as a /raid-status view)
 
 ### Added

@@ -102,8 +102,9 @@ header h1 {
   color: var(--text);
   /* Fraunces is optical-size aware · a high opsz gives the display cut
      with the sharper serifs, which is what makes it read as a nameplate
-     rather than body copy blown up. */
-  font-variation-settings: "opsz" 120, "SOFT" 0;
+     rather than body copy blown up. Only axes named in the font URL
+     respond; anything else here would be inert. */
+  font-variation-settings: "opsz" 120;
 }
 .subtitle {
   margin: 12px auto 0;
@@ -505,7 +506,7 @@ table th { color: var(--text-dim); font-weight: 600; }
 }
 .page-btn:hover:not(:disabled) {
   background: var(--accent);
-  color: #1a1c1f;
+  color: var(--accent-ink);
   border-color: var(--accent);
 }
 .page-btn:disabled {
@@ -522,7 +523,7 @@ table th { color: var(--text-dim); font-weight: 600; }
 }
 .view-toggle:hover {
   background: var(--accent);
-  color: #1a1c1f;
+  color: var(--accent-ink);
 }
 
 /* Char-first view: per-char card with raid+mode rows inline. Default
@@ -664,9 +665,13 @@ table th { color: var(--text-dim); font-weight: 600; }
   border-color: rgba(255, 112, 67, 0.5);
 }
 .gate-db-other-mode {
-  background: rgba(100, 149, 237, 0.18);
-  color: #a4c1ec;
-  border-color: rgba(100, 149, 237, 0.4);
+  /* "cleared at a different mode" · the one cool hue on the page, so it
+     is pulled toward slate rather than cornflower to sit in the warm
+     palette. renderGateBadge still emits this state even though
+     renderDiffLegend filters it out of the legend strip. */
+  background: rgba(122, 148, 176, 0.16);
+  color: #a8bccd;
+  border-color: rgba(122, 148, 176, 0.42);
 }
 .gate-empty {
   background: var(--bg-deep);

@@ -8,7 +8,12 @@
   <title data-i18n="meta.pageTitle">Artist · Local Reader</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" />
+  <!-- Fraunces needs the `ital` axis: the editorial styling sets
+       font-style: italic on the serif in six places (subtitle, section
+       ledes, week range, summaries, preview standfirst). Without the
+       axis the browser only has the roman and synthesizes a mechanical
+       shear instead of drawing the real italic. -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Work+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" />
   <link rel="stylesheet" href="/sync/css/styles.css" />
 </head>
 <body>
