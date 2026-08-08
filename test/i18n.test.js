@@ -131,8 +131,13 @@ test("Local Sync copy matches the signed-token lifecycle in every language", () 
     );
     assert.match(
       locale["stuck-nudge"].switchedDescription,
-      /\/raid-sync/,
-      `${code} nudge confirmation must expose the Discord console path`
+      /\/raid-status/,
+      `${code} nudge confirmation must expose the Local Sync status view`
+    );
+    assert.doesNotMatch(
+      flattenStrings(locale).join("\n"),
+      /\/raid-sync\b/,
+      `${code} still points users to the removed /raid-sync command`
     );
 
     const lifecycleCopy = [

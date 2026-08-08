@@ -158,11 +158,9 @@ function createLocalSyncDiscordConsole({
 
     try {
       // Do not retain a raid-status session inside the Local Sync console.
-      // Calling the canonical handler here creates a new viewer loader, so
-      // every /raid-sync invocation reads the current DB snapshot again.
-      // initialView lands on the status dropdown's Local Sync entry, so a
-      // settled preview keeps its own frame instead of dropping the user
-      // on the raid page with only a one-line result banner.
+      // A durable DM preview can outlive the status collector; after one of
+      // its global buttons settles the job, hand the same interaction to a
+      // fresh status viewer on the Local Sync entry.
       await openRaidStatusSession(interaction, {
         alreadyDeferred: true,
         initialView: "sync",
@@ -182,31 +180,6 @@ function createLocalSyncDiscordConsole({
     return RAID_STATUS_HANDOFF_STATES.has(resolvePreviewJobState(latestJob))
       ? job
       : latestJob;
-  }
-
-  async function handleRaidSyncCommand(interaction) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const discordId = interaction.user.id;
-    const [userDoc, latestJob] = await Promise.all([
-      loadConsoleUser(User, discordId),
-      getLatestPreviewJob(discordId, jobDeps),
-    ]);
-    const lang = await getUserLanguage(discordId, {
-      UserModel: User,
-      userDoc,
-    });
-    if (await maybeOpenRaidStatus(interaction, {
-      job: latestJob,
-      lang,
-      userDoc,
-    })) {
-      return;
-    }
-    await interaction.editReply(await buildConsole(interaction.user, {
-      job: latestJob,
-      lang,
-      userDoc,
-    }));
   }
 
   async function notifyPreviewReady(client, { jobId, discordId, lang = "vi" }) {
@@ -328,7 +301,6 @@ function createLocalSyncDiscordConsole({
   }
 
   return {
-    handleRaidSyncCommand,
     handleLocalSyncButton,
     handleLocalSyncRosterSelect,
     notifyPreviewReady,

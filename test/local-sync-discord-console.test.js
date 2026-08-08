@@ -15,7 +15,6 @@ const {
   buildLocalSyncConsolePayload,
 } = require("../bot/handlers/local-sync/discord-console-ui");
 const {
-  buildRaidStatusHandoffContent,
   createLocalSyncDiscordConsole,
   shouldOpenRaidStatusSurface,
 } = require("../bot/handlers/local-sync/discord-console");
@@ -129,7 +128,7 @@ test("retryable write errors keep the Sync action and explain what was retained"
   assert.ok(componentIds(payload).includes(`local-sync:apply:${job.jobId}`));
 });
 
-test("raid-sync reserves the review console for actionable preview states", () => {
+test("durable Local Sync buttons reserve the review console for actionable preview states", () => {
   const scope = COMPANION_SCOPE.full;
   assert.equal(shouldOpenRaidStatusSurface(null, scope), true);
   assert.equal(shouldOpenRaidStatusSurface(makeJob(), scope), false);
@@ -165,105 +164,6 @@ function makeConsoleUserModel(userDoc) {
     },
   };
 }
-
-function makeRaidSyncInteraction(discordId) {
-  const deferred = [];
-  const edits = [];
-  return {
-    deferred,
-    edits,
-    user: { id: discordId, username: "Aki" },
-    async deferReply(payload) {
-      deferred.push(payload);
-    },
-    async editReply(payload) {
-      edits.push(payload);
-      return payload;
-    },
-  };
-}
-
-test("raid-sync reuses the full raid-status session after an applied preview", async () => {
-  const discordId = "raid-sync-status-handoff-user";
-  const userDoc = {
-    discordId,
-    language: "en",
-    localSyncEnabled: true,
-    autoManageEnabled: false,
-    accounts: [],
-  };
-  const appliedJob = makeJob({
-    discordId,
-    status: "applied",
-    result: { applied: [{ id: 1 }], skipped: [], rejected: [] },
-  });
-  const handoffs = [];
-  const service = createLocalSyncDiscordConsole({
-    EmbedBuilder,
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    MessageFlags: { Ephemeral: 64 },
-    UI,
-    User: makeConsoleUserModel(userDoc),
-    PreviewModel: { findOne: () => appliedJob },
-    openRaidStatusSession: async (interaction, options) => {
-      handoffs.push({ interaction, options });
-    },
-  });
-  const interaction = makeRaidSyncInteraction(discordId);
-
-  await service.handleRaidSyncCommand(interaction);
-
-  assert.deepEqual(interaction.deferred, [{ flags: 64 }]);
-  assert.equal(interaction.edits.length, 0);
-  assert.equal(handoffs.length, 1);
-  assert.equal(handoffs[0].interaction, interaction);
-  assert.equal(handoffs[0].options.alreadyDeferred, true);
-  assert.equal(
-    handoffs[0].options.content,
-    buildRaidStatusHandoffContent(appliedJob, "en")
-  );
-  assert.match(handoffs[0].options.content, /Sync complete/);
-});
-
-test("raid-sync keeps pending previews in the durable confirmation console", async () => {
-  const discordId = "raid-sync-pending-console-user";
-  const userDoc = {
-    discordId,
-    language: "en",
-    localSyncEnabled: true,
-    autoManageEnabled: false,
-    accounts: [],
-  };
-  const pendingJob = makeJob({ discordId });
-  const handoffs = [];
-  const service = createLocalSyncDiscordConsole({
-    EmbedBuilder,
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    MessageFlags: { Ephemeral: 64 },
-    UI,
-    User: makeConsoleUserModel(userDoc),
-    PreviewModel: { findOne: () => pendingJob },
-    openRaidStatusSession: async (...args) => handoffs.push(args),
-  });
-  const interaction = makeRaidSyncInteraction(discordId);
-  const previousBaseUrl = process.env.PUBLIC_BASE_URL;
-  delete process.env.PUBLIC_BASE_URL;
-  try {
-    await service.handleRaidSyncCommand(interaction);
-  } finally {
-    if (previousBaseUrl == null) delete process.env.PUBLIC_BASE_URL;
-    else process.env.PUBLIC_BASE_URL = previousBaseUrl;
-  }
-
-  assert.equal(handoffs.length, 0);
-  assert.equal(interaction.edits.length, 1);
-  assert.match(interaction.edits[0].embeds[0].toJSON().title, /Local Sync Console/);
-  assert.ok(componentIds(interaction.edits[0]).includes(`local-sync:apply:${pendingJob.jobId}`));
-});
 
 test("reopening a pending console re-projects it from the latest User snapshot", async () => {
   const discordId = "raid-sync-fresh-projection-user";

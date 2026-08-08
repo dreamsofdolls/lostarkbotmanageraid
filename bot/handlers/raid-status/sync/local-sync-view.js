@@ -1,6 +1,6 @@
 /**
  * handlers/raid-status/sync/local-sync-view.js
- * Local Sync as a /raid-status view rather than a separate /raid-sync
+ * Local Sync as a first-class /raid-status view
  * message. Two invariants shape this file:
  *   1. The snapshot is loaded asynchronously up front (see
  *      loadLocalSyncSnapshot) because both raid-status render paths -
@@ -48,7 +48,7 @@ function parseLocalSyncViewCustomId(customId) {
 
 /**
  * Whether the viewer has any sync mode on. Drives both the dropdown
- * option and the /raid-sync handoff · a viewer with no scope has
+ * option and durable DM handoffs · a viewer with no scope has
  * nothing to preview, so the option stays hidden entirely.
  * @param {object|null} userDoc - lean User document
  * @returns {boolean}

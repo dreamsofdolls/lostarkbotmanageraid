@@ -40,7 +40,7 @@ async function createRaidStatusSessionState({
   let filterRaidId = null;
   let currentView = initialView;
   // Sync view payload · loaded asynchronously by the component handler
-  // (and by the /raid-sync entry point) so both synchronous render paths
+  // (and by Local Sync handoffs) so both synchronous render paths
   // can read it. null means "not fetched yet", which the renderer treats
   // as a fallback to the raid view rather than an error.
   let localSyncSnapshot = null;

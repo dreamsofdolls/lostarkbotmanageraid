@@ -100,6 +100,7 @@ test("all web locales provide Solo companion copy and a Solo mode label", async 
     assert.match(TRANSLATIONS[lang].solo.file.hint, /Solo/i, lang);
     assert.equal(TRANSLATIONS[lang].solo.preview.statsLastSyncSoloMode.length > 0, true, lang);
     assert.equal(TRANSLATIONS[lang].solo.diff.state["mode-conflict"].length > 0, true, lang);
+    assert.doesNotMatch(JSON.stringify(TRANSLATIONS[lang]), /\/raid-sync\b/, lang);
   }
 });
 

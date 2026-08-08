@@ -19,7 +19,6 @@ const RAID_COMMAND_NAMES = Object.freeze([
   "raid-check",
   "raid-set",
   "raid-status",
-  "raid-sync",
   "raid-help",
   "raid-remove-roster",
   "raid-channel",

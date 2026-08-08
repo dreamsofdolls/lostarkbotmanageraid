@@ -93,19 +93,8 @@ function createStatusCommandDefinition() {
   return statusCommand;
 }
 
-function createRaidSyncCommandDefinition() {
-  return new SlashCommandBuilder()
-    .setName("raid-sync")
-    .setDescription("Open your private Local Sync console")
-    .setDescriptionLocalizations({
-      vi: "Mở bảng Local Sync riêng tư của cậu",
-      ja: "自分専用のローカル同期コンソールを開く",
-    });
-}
-
 module.exports = {
   createRaidCheckCommandDefinition,
   createRaidSetCommandDefinition,
-  createRaidSyncCommandDefinition,
   createStatusCommandDefinition,
 };

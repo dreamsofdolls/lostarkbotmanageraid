@@ -162,8 +162,8 @@ function createRaidStatusCommand(deps) {
     STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS,
   });
 
-  // `alreadyDeferred` lets another private flow (currently /raid-sync)
-  // hand its existing message to the canonical status session. Keeping the
+  // `alreadyDeferred` lets a durable Local Sync button flow hand its existing
+  // message to the canonical status session. Keeping the
   // collector, state, renderer, and component layout here avoids a second UI
   // implementation drifting away from /raid-status.
   async function handleStatusCommand(interaction, options = {}) {
@@ -171,8 +171,8 @@ function createRaidStatusCommand(deps) {
     const discordId = interaction.user.id;
     const alreadyDeferred = options?.alreadyDeferred === true;
     const initialContent = options?.content ?? null;
-    // /raid-sync hands off here with initialView "sync" so Local Sync
-    // renders inside the canonical status frame instead of its own card.
+    // Durable Local Sync buttons hand off here with initialView "sync" so the
+    // settled result renders inside the canonical status frame.
     const initialView = options?.initialView === "sync" ? "sync" : "raid";
     // Probe localSyncEnabled before defer to mark the reply as
     // ephemeral when local-sync is on. The Mở Web Companion Link button

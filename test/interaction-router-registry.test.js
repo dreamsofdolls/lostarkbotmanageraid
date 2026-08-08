@@ -21,6 +21,14 @@ test("interaction router allowlist includes /raid-schedule-preview", () => {
   assert.ok(!RAID_COMMAND_NAMES.includes("raid-schedule"));
 });
 
+test("raid-sync is no longer registered as a standalone slash command", () => {
+  const registeredCommandNames = commands.map((command) => command.toJSON().name);
+
+  assert.ok(!registeredCommandNames.includes("raid-sync"));
+  assert.ok(!RAID_COMMAND_NAMES.includes("raid-sync"));
+  assert.ok(!commandsTest.getRaidCommandDispatchNames().includes("raid-sync"));
+});
+
 test("interaction router allowlist includes every registered slash command", () => {
   const registeredCommandNames = commands.map((command) => command.toJSON().name);
   const missingFromRouter = registeredCommandNames.filter(

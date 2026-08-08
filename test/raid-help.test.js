@@ -70,7 +70,6 @@ const EXPECTED_SECTION_KEYS = [
   "raid-add-roster",
   "raid-edit-roster",
   "raid-status",
-  "raid-sync",
   "raid-gold-earner",
   "raid-auction",
   "raid-schedule-preview",

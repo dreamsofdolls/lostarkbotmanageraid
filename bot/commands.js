@@ -329,7 +329,6 @@ let handleRaidHelpSelect;
 let handleRaidLanguageCommand;
 let handleRaidLanguageSelect;
 let handleRaidBgCommand;
-let handleRaidSyncCommand;
 let handleLocalSyncButton;
 let handleLocalSyncRosterSelect;
 let notifyLocalSyncPreviewReady;
@@ -351,7 +350,6 @@ function getRaidCommandHandlerMap() {
     "raid-check": handleRaidCheckCommand,
     "raid-set": handleRaidSetCommand,
     "raid-status": handleStatusCommand,
-    "raid-sync": handleRaidSyncCommand,
     "raid-share": handleRaidShareCommand,
     "raid-language": handleRaidLanguageCommand,
     "raid-bg": handleRaidBgCommand,
@@ -818,7 +816,6 @@ const localSyncDiscordConsole = createLocalSyncDiscordConsole({
   openRaidStatusSession: handleStatusCommand,
 });
 ({
-  handleRaidSyncCommand,
   handleLocalSyncButton,
   handleLocalSyncRosterSelect,
   notifyPreviewReady: notifyLocalSyncPreviewReady,
@@ -1178,7 +1175,6 @@ module.exports = {
   handleEditRosterButton,
   handleRaidGoldEarnerAutocomplete,
   handleRaidGoldEarnerButton,
-  handleRaidSyncCommand,
   handleLocalSyncButton,
   handleLocalSyncRosterSelect,
   notifyLocalSyncPreviewReady,

@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-08-09 (Local Sync lives only in raid-status)
+
+### Removed
+- The standalone `/raid-sync` slash command is gone. Open `/raid-status` and choose **🗃️ Local Sync** to review, apply, cancel, refresh, or reopen Local Reader previews.
+
+### Changed
+- Bot help, Local Reader recovery hints, and Local Sync setup copy in Vietnamese, English, and Japanese now point exclusively to the `/raid-status` Local Sync view. The durable DM preview buttons and the internal `/api/raid-sync` endpoint are unchanged.
+
 ## 2026-08-08 (Local Sync card shows only what changes)
 
 ### Changed
