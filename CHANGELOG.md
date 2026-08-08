@@ -4,6 +4,15 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-08-08 (Local Reader editorial restyle)
+
+### Changed
+- Local Reader web companion restyled from HUD console to printed page. The masthead is a centred nameplate under a double rule, section headings are letterspaced caps with the leading numeral pulled up to chapter size in serif, and each section's opening line is set as an italic standfirst.
+- Dropped the `//` kickers and the retrofuture corner brackets. Plates are framed with an inset double rule instead; the pulsing status LED on the sync receipt is now a printer's fleuron.
+- Character entries, the statistics band, and the four result cells lost their filled boxes in favour of rules, so the page reads as one document rather than stacked panels. The raid-first view got the same treatment.
+- Palette hue moved from blue-grey to brown at the same darkness, which lets the signature amber read as brass ink. Added a three-step surface ladder (`--surface-1..3`): four box levels nest inside each other and previously all resolved to the same `#1d2024`.
+- Container widened 740px to 840px so the character grid fits three columns, `Chọn file` demoted to an outline button so it stops competing with `Gửi sang Discord`, and the badge/counter faces folded onto the declared `--font-mono` instead of a second hard-coded mono stack.
+
 ## 2026-08-08 (Local Sync as a /raid-status view)
 
 ### Added
