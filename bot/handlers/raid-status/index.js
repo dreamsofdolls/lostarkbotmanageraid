@@ -345,12 +345,12 @@ function createRaidStatusCommand(deps) {
     };
     const buildSyncViewEmbed = () => buildLocalSyncViewEmbed({
       snapshot: statusState.localSyncSnapshot,
-      rosterIndex: statusState.localSyncRosterIndex,
+      rosterFilter: statusState.localSyncRosterFilter,
       ...localSyncViewDeps,
     });
     const buildSyncViewRows = (disabled) => buildLocalSyncViewRows({
       snapshot: statusState.localSyncSnapshot,
-      rosterIndex: statusState.localSyncRosterIndex,
+      rosterFilter: statusState.localSyncRosterFilter,
       disabled,
       ...localSyncViewDeps,
     });

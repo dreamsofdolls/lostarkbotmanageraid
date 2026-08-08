@@ -4,6 +4,15 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-08-08 (Local Sync card shows only what changes)
+
+### Changed
+- The Local Sync preview card now lists **only the characters this sync changes**, and inside them only the raids it changes, in the `/raid-status` gold-view shape: two inline character cards per line, each a header plus one `icon · raid · gate progress` line. A preview that touches 2 characters no longer renders a 24-character roster listing for them to hide in.
+- That fits every roster on one card, so roster paging is gone. **◀ Trước** / **Sau ▶** are removed and the three preview actions plus **Mở Local Reader** collapse into a single button row.
+- The roster dropdown became a filter rather than a pager: it lists only the rosters this preview touches, appears only when there is more than one, and **Tất cả roster** (the default) shows them all.
+- Change totals moved out of embed fields and into the description, next to scope and status. Three inline fields rendered as a three-across row, which fought the two-across character cards.
+- A preview that adds nothing beyond what is already recorded now says so on the card instead of rendering an empty body.
+
 ## 2026-08-08 (Local Sync roster controls match the raid view)
 
 ### Changed

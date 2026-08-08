@@ -98,24 +98,21 @@ test("status-local routes resolve without shadowing the bible sync button", () =
   );
 });
 
-test("customId parser accepts the three console actions and rejects the rest", () => {
-  // `page` is the roster page prev/next were rendered at; the other
-  // actions carry no page and default to 0.
+test("customId parser accepts the console actions and rejects the rest", () => {
   assert.deepEqual(parseLocalSyncViewCustomId(`status-local:apply:${JOB_ID}`), {
     action: "apply",
     jobId: JOB_ID,
-    page: 0,
   });
   assert.deepEqual(parseLocalSyncViewCustomId(`status-local:cancel:${JOB_ID}`), {
     action: "cancel",
     jobId: JOB_ID,
-    page: 0,
   });
-  assert.deepEqual(parseLocalSyncViewCustomId(`status-local:roster-next:${JOB_ID}:3`), {
-    action: "roster-next",
+  assert.deepEqual(parseLocalSyncViewCustomId(`status-local:roster:${JOB_ID}`), {
+    action: "roster",
     jobId: JOB_ID,
-    page: 3,
   });
+  // Paging is gone · the card shows every changed roster at once.
+  assert.equal(parseLocalSyncViewCustomId(`status-local:roster-next:${JOB_ID}:3`), null);
   assert.equal(parseLocalSyncViewCustomId(`status-local:delete:${JOB_ID}`), null);
   assert.equal(parseLocalSyncViewCustomId("status-local:apply:"), null);
   assert.equal(parseLocalSyncViewCustomId(`local-sync:apply:${JOB_ID}`), null);
@@ -231,7 +228,7 @@ test("applying a preview reloads the account list before the redraw", async () =
   });
 
   assert.deepEqual(result, { redraw: true });
-  assert.deepEqual(calls.actions, [{ action: "apply", jobId: JOB_ID, page: 0 }]);
+  assert.deepEqual(calls.actions, [{ action: "apply", jobId: JOB_ID }]);
   // Applying writes raid progress · without the reload, toggling back to
   // the raid view would show pre-apply data.
   assert.equal(calls.reloads, 1);
@@ -245,7 +242,7 @@ test("cancelling refreshes without touching the account list", async () => {
     customId: `status-local:cancel:${JOB_ID}`,
   });
 
-  assert.deepEqual(calls.actions, [{ action: "cancel", jobId: JOB_ID, page: 0 }]);
+  assert.deepEqual(calls.actions, [{ action: "cancel", jobId: JOB_ID }]);
   assert.equal(calls.reloads, 0);
 });
 
@@ -274,30 +271,24 @@ test("a malformed customId is ignored instead of redrawing", async () => {
   assert.equal(calls.actions.length, 0);
 });
 
-test("the roster dropdown pins a page, and its all-rosters entry unpins it", async () => {
+test("the roster dropdown narrows the card, and its all-rosters entry widens it again", async () => {
   const { handlers, session, calls } = createHarness();
 
   await handlers[STATUS_COMPONENT_ACTION.localSyncAction]({
     customId: `status-local:roster:${JOB_ID}`,
     values: ["1"],
   });
-  assert.equal(session.localSyncRosterIndex, 1);
+  assert.equal(session.localSyncRosterFilter, 1);
 
   // "Tất cả roster" is the same __all_rosters__ value the raid view's
-  // dropdown uses · null means page 0 with nothing pinned.
+  // dropdown uses · null shows every roster the preview touches.
   await handlers[STATUS_COMPONENT_ACTION.localSyncAction]({
     customId: `status-local:roster:${JOB_ID}`,
     values: ["__all_rosters__"],
   });
-  assert.equal(session.localSyncRosterIndex, null);
+  assert.equal(session.localSyncRosterFilter, null);
 
-  // Stepping reads the page out of the customId, not the session.
-  await handlers[STATUS_COMPONENT_ACTION.localSyncAction]({
-    customId: `status-local:roster-next:${JOB_ID}:2`,
-  });
-  assert.equal(session.localSyncRosterIndex, 3);
-
-  // Roster navigation is pure paging · no job work, no snapshot reload.
+  // Narrowing only changes what renders · no job work, no snapshot reload.
   assert.equal(calls.actions.length, 0);
   assert.equal(calls.refresh.length, 0);
 });
@@ -445,12 +436,24 @@ test("Solo Local Reader never lands inside the roster dropdown's row", () => {
   // Discord rejects a row that mixes a select with buttons, and a
   // multi-roster preview ends on the roster dropdown · the button has to
   // open a row of its own rather than append to the last one.
+  const character = (name) => ({
+    name,
+    class: "Berserker",
+    itemLevel: 1750,
+    isGoldEarner: true,
+    assignedRaids: { kazeros: { modeKey: "hard" } },
+  });
+  const changed = (name) => ({
+    charName: name,
+    raids: [{ raidKey: "kazeros", modeKey: "hard", incoming: true }],
+  });
   const snapshot = makeSnapshot({
     summary: {
-      changes: { chars: 1, raids: 2, gates: 3 },
+      changes: { chars: 2, raids: 2, gates: 2 },
+      charsAfterSync: [changed("MainOne"), changed("AltOne")],
       accountsAfterSync: [
-        { accountName: "Main", characters: [] },
-        { accountName: "Alt", characters: [] },
+        { accountName: "Main", characters: [character("MainOne")] },
+        { accountName: "Alt", characters: [character("AltOne")] },
       ],
     },
   });

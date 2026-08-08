@@ -31,9 +31,7 @@ const {
 } = require("../../local-sync/discord-console-ui");
 const { publicBaseUrl, buildLocalSyncUrl } = require("../local-sync-controls");
 
-const LOCAL_SYNC_ACTIONS = Object.freeze([
-  "apply", "cancel", "refresh", "roster", "roster-prev", "roster-next",
-]);
+const LOCAL_SYNC_ACTIONS = Object.freeze(["apply", "cancel", "refresh", "roster"]);
 
 /**
  * Split a `status-local:<action>:<jobId>` customId.
@@ -43,11 +41,9 @@ const LOCAL_SYNC_ACTIONS = Object.freeze([
 function parseLocalSyncViewCustomId(customId) {
   const id = String(customId || "");
   if (!id.startsWith(STATUS_BUTTON_PREFIX)) return null;
-  // roster-prev / roster-next append the page they were rendered at, so
-  // the stateless surfaces can step from it without a session.
-  const [action, jobId, page] = id.slice(STATUS_BUTTON_PREFIX.length).split(":");
+  const [action, jobId] = id.slice(STATUS_BUTTON_PREFIX.length).split(":");
   if (!LOCAL_SYNC_ACTIONS.includes(action) || !jobId) return null;
-  return { action, jobId, page: Number(page) || 0 };
+  return { action, jobId };
 }
 
 /**
@@ -128,7 +124,7 @@ async function loadLocalSyncSnapshot({
 function buildLocalSyncViewEmbed({
   snapshot,
   lang,
-  rosterIndex = null,
+  rosterFilter = null,
   StringSelectMenuBuilder = null,
   truncateText,
   EmbedBuilder,
@@ -143,7 +139,7 @@ function buildLocalSyncViewEmbed({
     ...snapshot,
     lang,
     buttonPrefix: STATUS_BUTTON_PREFIX,
-    rosterIndex,
+    rosterFilter,
     EmbedBuilder,
     ActionRowBuilder,
     ButtonBuilder,
@@ -166,7 +162,7 @@ function buildLocalSyncViewEmbed({
 function buildLocalSyncViewRows({
   snapshot,
   lang,
-  rosterIndex = null,
+  rosterFilter = null,
   StringSelectMenuBuilder = null,
   truncateText,
   disabled = false,
@@ -182,7 +178,7 @@ function buildLocalSyncViewRows({
     ...snapshot,
     lang,
     buttonPrefix: STATUS_BUTTON_PREFIX,
-    rosterIndex,
+    rosterFilter,
     EmbedBuilder,
     ActionRowBuilder,
     ButtonBuilder,

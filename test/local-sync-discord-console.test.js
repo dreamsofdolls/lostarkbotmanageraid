@@ -83,13 +83,13 @@ test("pending Discord console renders preview details and durable job buttons", 
   assert.ok(characterField);
   assert.match(characterField.value, /G2/);
   assert.doesNotMatch(characterField.value, /G1/);
-  // Navigation first (the reader link leaves Discord), then the buttons
-  // that act on this preview.
+  // One row: the three preview actions, then the link that leaves Discord.
+  assert.equal(payload.components.length, 1);
   assert.deepEqual(componentIds(payload), [
-    "https://example.test/sync?token=x",
     `local-sync:apply:${job.jobId}`,
     `local-sync:cancel:${job.jobId}`,
     `local-sync:refresh:${job.jobId}`,
+    "https://example.test/sync?token=x",
   ]);
 });
 
@@ -302,11 +302,11 @@ test("reopening a pending console re-projects it from the latest User snapshot",
     else process.env.PUBLIC_BASE_URL = previousBaseUrl;
   }
 
-  const changesField = payload.embeds[0].toJSON().fields.find(
-    (field) => field.name === "Changes"
-  );
-  assert.match(changesField.value, /\*\*0\*\* chars/);
-  assert.doesNotMatch(changesField.value, /99/);
+  // Totals live in the description · three inline fields would render as
+  // a three-across row and the card is two-across.
+  const description = payload.embeds[0].toJSON().description;
+  assert.match(description, /\*\*Changes:\*\* \*\*0\*\* chars/);
+  assert.doesNotMatch(description, /99/);
 });
 
 test("a successful Discord apply replaces the console with a live raid-status session", async () => {
@@ -883,14 +883,14 @@ function makeSummaryFixture() {
   );
 }
 
-function renderBody(summary, rosterIndex) {
+function renderBody(summary, rosterFilter = null) {
   return buildLocalSyncConsolePayload({
     job: makeJob(),
     summary,
     readerUrl: "https://example.test/sync?token=x",
     activeScope: "full",
     lang: "vi",
-    rosterIndex,
+    rosterFilter,
     EmbedBuilder,
     ActionRowBuilder,
     ButtonBuilder,
@@ -902,93 +902,85 @@ function renderBody(summary, rosterIndex) {
   });
 }
 
-test("card body renders one roster at a time in the raid-status row format", () => {
+test("the card lists only what this sync changes, every roster at once", () => {
   const summary = makeSummaryFixture();
   // projectSummary must hand back accounts whose assignedRaids already
-  // reflect the preview · that is what lets the card reuse the raid view.
+  // reflect the preview · that is what lets the card reuse the raid rows.
   assert.ok(Array.isArray(summary.accountsAfterSync));
   assert.deepEqual(summary.accountsAfterSync.map((a) => a.accountName), ["Qiylyn", "Alt"]);
 
-  const first = renderBody(summary, 0).embeds[0].toJSON();
-  const header = first.fields.find((f) => f.name.includes("Qiylyn") && f.value.startsWith("Roster"));
-  assert.equal(header.value, "Roster 1/2");
+  const embed = renderBody(summary).embeds[0].toJSON();
+  // Both rosters on one card, each behind its own header.
+  assert.ok(embed.fields.some((f) => f.name.endsWith("Qiylyn") && f.value.includes("**1**")));
+  assert.ok(embed.fields.some((f) => f.name.endsWith("Alt")));
 
-  const qiylyn = first.fields.find((f) => f.name.startsWith("Qiylyn ·"));
+  const qiylyn = embed.fields.find((f) => f.name.startsWith("Qiylyn ·"));
   assert.equal(qiylyn.inline, true);
-  // Same "icon label · done/total" rows formatRaidStatusLine emits, with a
-  // lock mark on raids that take no gold slot.
-  assert.match(qiylyn.value, /🟢 Kazeros Hard · 2\/2 ✨/);
-  assert.match(qiylyn.value, /⚪ Act 4 Hard · 0\/2/);
-  assert.match(qiylyn.value, /🔒/);
-  // ✨ only on what this preview flips.
-  assert.equal((qiylyn.value.match(/✨/g) || []).length, 1);
+  // Only the raids this sync flips, in the same "icon label · done/total"
+  // rows formatRaidStatusLine emits everywhere else.
+  assert.equal(qiylyn.value, "🟢 Kazeros Hard · 2/2");
+  assert.ok(embed.fields.some((f) => f.name.startsWith("Nailaduk ·")));
 
-  // Page two shows the other roster and none of the first one's characters.
-  const second = renderBody(summary, 1).embeds[0].toJSON();
-  assert.ok(second.fields.some((f) => f.name.startsWith("Nailaduk ·")));
-  assert.equal(second.fields.some((f) => f.name.startsWith("Qiylyn ·")), false);
+  // Cweky changes nothing in this preview, so it is not on the card at all.
+  assert.equal(embed.fields.some((f) => f.name.startsWith("Cweky")), false);
+
+  // Two characters per line · the gold view's zero-width spacer packing.
+  const spacers = embed.fields.filter((f) => f.inline && f.name === "​");
+  assert.ok(spacers.length > 0);
+
+  // Totals moved into the description so no row renders three-across.
+  assert.match(embed.description, /📊 \*\*Thay đổi:\*\*/);
+  assert.match(embed.description, /💰 \*\*Gold dự kiến:\*\*/);
 });
 
-test("roster picker appears only when the preview spans more than one roster", () => {
+test("the roster dropdown narrows the card to one roster", () => {
   const summary = makeSummaryFixture();
-  const multi = renderBody(summary, 0);
-  // The dropdown sits below the buttons, as the last row of the card.
-  const rows = multi.components.map((row) => row.toJSON());
-  const select = rows[rows.length - 1].components[0];
+  const rows = renderBody(summary).components.map((row) => row.toJSON());
+  // Two rows only: the buttons, then the dropdown under them.
+  assert.equal(rows.length, 2);
+  const select = rows[1].components[0];
   assert.equal(select.custom_id, `local-sync:roster:${makeJob().jobId}`);
   // Same options /raid-status offers: an all-rosters entry first, then one
   // per roster, each carrying its own pending/done counts.
   assert.deepEqual(select.options.map((o) => o.value), ["__all_rosters__", "0", "1"]);
   assert.match(select.options[0].label, /^Tất cả roster \(\d+ chưa clear · \d+ đã xong\)$/);
   assert.match(select.options[1].label, /^Qiylyn \(\d+ chưa clear · \d+ đã xong\)$/);
-  assert.equal(select.options[1].default, true);
+  assert.equal(select.options[0].default, true);
 
-  // rosterIndex null is the unpinned state · page 0 renders, but the
-  // dropdown still reads "Tất cả roster".
-  const unpinned = renderBody(summary, null).components;
-  const allOption = unpinned[unpinned.length - 1].toJSON().components[0].options[0];
-  assert.equal(allOption.default, true);
+  // Narrowed to the second roster: only its characters, and no header
+  // because there is nothing left to tell apart.
+  const narrowed = renderBody(summary, 1).embeds[0].toJSON();
+  assert.ok(narrowed.fields.some((f) => f.name.startsWith("Nailaduk ·")));
+  assert.equal(narrowed.fields.some((f) => f.name.startsWith("Qiylyn ·")), false);
+  assert.equal(narrowed.fields.some((f) => f.name.endsWith("Alt")), false);
 
+  // One changed roster needs no picker · the card already shows it all.
   const single = { ...summary, accountsAfterSync: summary.accountsAfterSync.slice(0, 1) };
-  const ids = componentIds(renderBody(single, 0));
+  const ids = componentIds(renderBody(single));
   assert.equal(ids.some((id) => String(id).includes(":roster:")), false);
 });
 
-test("navigation sits above the buttons that act on the preview", () => {
-  const rows = renderBody(makeSummaryFixture(), 0).components.map((row) => row.toJSON().components);
-  // Top row moves you around · pages through rosters, or leaves for the
-  // reader page. The row under it acts on this preview.
-  assert.deepEqual(rows[0].map((c) => c.label), ["◀ Trước", "Sau ▶", "Mở Local Reader"]);
-  assert.equal(rows[0][2].url, "https://example.test/sync?token=x");
-  assert.deepEqual(rows[1].map((c) => c.label), ["Đồng bộ", "Huỷ", "Làm mới"]);
+test("the preview actions and the reader link share one row", () => {
+  const rows = renderBody(makeSummaryFixture()).components.map((row) => row.toJSON().components);
+  assert.deepEqual(rows[0].map((c) => c.label), ["Đồng bộ", "Huỷ", "Làm mới", "Mở Local Reader"]);
+  assert.equal(rows[0][3].url, "https://example.test/sync?token=x");
+  // No paging left · the card shows every changed roster at once.
+  assert.equal(rows.flat().some((c) => String(c.custom_id).includes("roster-")), false);
 });
 
-test("roster paging uses the same prev/next buttons as the raid view", () => {
-  const summary = makeSummaryFixture();
-  const first = renderBody(summary, 0).components[0].toJSON().components;
-  assert.deepEqual(first.slice(0, 2).map((c) => c.label), ["◀ Trước", "Sau ▶"]);
-  assert.equal(first[0].disabled, true);
-  assert.equal(first[1].disabled, false);
-  // The rendered page rides in the customId so the DM, which has no
-  // collector, can still step from it.
-  assert.equal(first[0].custom_id, `local-sync:roster-prev:${makeJob().jobId}:0`);
+test("a preview that changes nothing says so instead of rendering blank", () => {
+  const summary = { ...makeSummaryFixture(), charsAfterSync: [] };
+  const embed = renderBody(summary).embeds[0].toJSON();
 
-  const last = renderBody(summary, 1).components[0].toJSON().components;
-  assert.equal(last[0].disabled, false);
-  assert.equal(last[1].disabled, true);
-  assert.equal(last[1].custom_id, `local-sync:roster-next:${makeJob().jobId}:1`);
-
-  // One roster means no paging at all, only the action buttons.
-  const single = { ...summary, accountsAfterSync: summary.accountsAfterSync.slice(0, 1) };
-  const solo = renderBody(single, 0).components[0].toJSON().components;
-  assert.equal(solo.some((c) => String(c.custom_id).includes("roster-")), false);
+  assert.equal(embed.fields.length, 1);
+  assert.match(embed.fields[0].name, /Không có gì mới/);
 });
 
 test("a summary without accountsAfterSync falls back to the delta list", () => {
   const summary = makeSummaryFixture();
   const legacy = { ...summary };
   delete legacy.accountsAfterSync;
-  const embed = renderBody(legacy, 0).embeds[0].toJSON();
+  const embed = renderBody(legacy).embeds[0].toJSON();
 
   assert.equal(embed.fields.some((f) => f.value.startsWith("Roster")), false);
   const charField = embed.fields.find((f) => f.value.includes("＋"));

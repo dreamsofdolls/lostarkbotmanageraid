@@ -6,7 +6,7 @@ const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 const { getClassEmoji } = require("../../models/Class");
 // Aliased: buildLocalSyncConsolePayload takes a `UI` parameter, and an
 // unaliased import here would read as the same thing at a glance.
-const { UI: sharedUI } = require("../../utils/raid/common/shared");
+const { UI: sharedUI, pack2Columns } = require("../../utils/raid/common/shared");
 // Same two helpers /raid-status renders its character fields with · the
 // preview feeds them simulated characters, so the rows come out identical.
 const {
@@ -26,6 +26,10 @@ const {
 
 const MAX_CHARACTER_FIELDS = 10;
 const MAX_RAIDS_PER_CHARACTER = 8;
+// 8 characters pack to 12 fields at two per line, which leaves room for a
+// roster header per group inside Discord's 25-field embed cap.
+const MAX_CHANGED_CHARACTERS = 8;
+const MAX_BODY_FIELDS = 22;
 // Two surfaces render this payload and each needs its own customId
 // namespace. The DM preview has no component collector, so its buttons
 // must reach the global router (`local-sync:` in
@@ -164,94 +168,149 @@ function buildIncomingMap(summary) {
 }
 
 /**
- * Body of the card, one roster at a time, in the /raid-status raid-view
- * shape. Not a copy of that layout · projectSummary hands back
+ * Rosters this preview touches, each with only the characters it changes.
+ * Everything already in sync is left out · the card is about what is
+ * about to change, and a full roster listing buries that in rows the
+ * viewer has no decision to make about.
+ * @param {object|null} summary
+ * @param {number|null} rosterFilter - index into accountsAfterSync, null for every roster
+ * @returns {Array<{index: number, account: object, characters: object[]}>}
+ */
+function collectChangedRosters(summary, rosterFilter = null) {
+  const accounts = Array.isArray(summary?.accountsAfterSync) ? summary.accountsAfterSync : [];
+  const incoming = buildIncomingMap(summary);
+  const groups = [];
+  accounts.forEach((account, index) => {
+    if (rosterFilter !== null && index !== rosterFilter) return;
+    const characters = (account.characters || []).filter((character) =>
+      incoming.has(String(character.name || "").toLowerCase())
+    );
+    if (characters.length > 0) groups.push({ index, account, characters });
+  });
+  return groups;
+}
+
+/**
+ * Body of the card, in the /raid-status gold-view shape: two columns of
+ * inline character fields, each a header line plus one line per raid.
+ * Not a copy of that layout · projectSummary hands back
  * `accountsAfterSync`, characters whose assignedRaids already reflect the
  * applied preview, so getStatusRaidsForCharacter and formatRaidStatusLine
- * run on them unchanged. Whatever the raid view learns to render, this
- * inherits.
+ * run on them unchanged and the gate counts read the same everywhere.
  *
- * The one addition is ✨ on raids this sync flips · raid-status has no
- * such concept because it shows what IS, while this card shows what is
- * about to be.
+ * Only characters this sync changes are listed, and inside them only the
+ * raids it changes · that is what lets every roster fit on one card with
+ * no paging.
  *
  * @returns {boolean} false when the summary predates accountsAfterSync,
  *   so the caller can fall back to the delta-only list.
  */
-function addRosterPageFields(embed, summary, lang, { rosterIndex = 0 } = {}) {
-  const accounts = Array.isArray(summary?.accountsAfterSync) ? summary.accountsAfterSync : [];
-  if (accounts.length === 0) return false;
+function addChangedCharacterFields(embed, summary, lang, { rosterFilter = null } = {}) {
+  if (!Array.isArray(summary?.accountsAfterSync)) return false;
 
-  const index = Math.min(Math.max(0, Number(rosterIndex) || 0), accounts.length - 1);
-  const account = accounts[index];
   const incoming = buildIncomingMap(summary);
-
-  if (accounts.length > 1) {
+  const groups = collectChangedRosters(summary, rosterFilter);
+  if (groups.length === 0) {
     embed.addFields({
-      name: `${sharedUI.icons.folder} ${account.accountName || "?"}`,
-      value: t("local-sync-discord.rosterPage", lang, { current: index + 1, total: accounts.length }),
+      name: t("local-sync-discord.noChangesName", lang),
+      value: t("local-sync-discord.noChangesValue", lang),
       inline: false,
     });
+    return true;
   }
 
-  for (const character of (account.characters || []).slice(0, MAX_CHARACTER_FIELDS)) {
-    const touched = incoming.get(String(character.name || "").toLowerCase());
-    const lines = getStatusRaidsForCharacter(character).map((raid) => {
-      const mark = touched?.has(`${raid.raidKey}::${raid.modeKey}`) ? " ✨" : "";
-      return `${formatRaidStatusLine(raid, lang)}${mark}`;
-    });
-    if (lines.length === 0) continue;
-    const emoji = getClassEmoji(character.class || character.className);
-    embed.addFields({
-      name: `${emoji ? `${emoji} ` : ""}${character.name} · ${Number(character.itemLevel) || 0}`,
-      value: lines.join("\n"),
-      inline: true,
-    });
+  const fields = [];
+  let budget = MAX_CHANGED_CHARACTERS;
+  let hidden = 0;
+  for (const group of groups) {
+    const charFields = [];
+    for (const character of group.characters) {
+      const touched = incoming.get(String(character.name || "").toLowerCase());
+      const lines = getStatusRaidsForCharacter(character)
+        .filter((raid) => touched.has(`${raid.raidKey}::${raid.modeKey}`))
+        .map((raid) => formatRaidStatusLine(raid, lang));
+      if (lines.length === 0) continue;
+      if (budget <= 0) {
+        hidden += 1;
+        continue;
+      }
+      budget -= 1;
+      const emoji = getClassEmoji(character.class || character.className);
+      charFields.push({
+        name: `${emoji ? `${emoji} ` : ""}${character.name} · ${Number(character.itemLevel) || 0}`,
+        value: lines.join("\n"),
+        inline: true,
+      });
+    }
+    if (charFields.length === 0) continue;
+    // The roster header only earns its field when more than one roster is
+    // on the card · with a single one it says what the title already does.
+    if (groups.length > 1) {
+      fields.push({
+        name: `${sharedUI.icons.folder} ${group.account.accountName || "?"}`,
+        value: t("local-sync-discord.rosterChangedChars", lang, { count: charFields.length }),
+        inline: false,
+      });
+    }
+    // Two characters per line, the same zero-width-spacer packing the gold
+    // and raid views use. Packed per roster so a header always starts a
+    // fresh line instead of landing mid-pair.
+    fields.push(...pack2Columns(charFields));
   }
 
-  const hidden = (account.characters || []).length - MAX_CHARACTER_FIELDS;
   if (hidden > 0) {
-    embed.addFields({
+    fields.push({
       name: t("local-sync-discord.moreCharactersName", lang),
       value: t("local-sync-discord.moreCharactersValue", lang, { count: hidden }),
       inline: false,
     });
   }
+  // Discord caps an embed at 25 fields and the summary row above already
+  // spends up to three of them.
+  embed.addFields(...fields.slice(0, MAX_BODY_FIELDS));
   return true;
 }
 
-function addPreviewFields(embed, job, summary, lang, formatGold, options = {}) {
-  const changes = summary?.changes || { chars: 0, raids: 0, gates: 0 };
-  embed.addFields({
-    name: t("local-sync-discord.summaryName", lang),
-    value: t("local-sync-discord.summaryValue", lang, changes),
-    inline: true,
-  });
+/**
+ * The preview's totals, as description lines rather than embed fields.
+ * The gold view carries its totals the same way · three inline fields
+ * would render as a three-across row, and the card's character cards are
+ * two-across.
+ * @returns {string[]} one "icon **Label:** value" line per available total
+ */
+function buildSummaryLines(summary, lang, formatGold) {
+  const lines = [
+    `📊 **${t("local-sync-discord.summaryName", lang)}:** ${t(
+      "local-sync-discord.summaryValue",
+      lang,
+      summary?.changes || { chars: 0, raids: 0, gates: 0 }
+    )}`,
+  ];
 
   if (summary?.completion) {
-    embed.addFields({
-      name: t("local-sync-discord.completionName", lang),
-      value: t("local-sync-discord.completionValue", lang, {
-        current: summary.completion.percent,
-        projected: summary.completion.projectedPercent,
-      }),
-      inline: true,
-    });
+    lines.push(`📈 **${t("local-sync-discord.completionName", lang)}:** ${t(
+      "local-sync-discord.completionValue",
+      lang,
+      { current: summary.completion.percent, projected: summary.completion.projectedPercent }
+    )}`);
   }
 
   if (Number(summary?.goldDelta?.total) > 0) {
     const gold = typeof formatGold === "function"
       ? formatGold(summary.goldDelta.total)
       : String(summary.goldDelta.total);
-    embed.addFields({
-      name: t("local-sync-discord.goldName", lang),
-      value: t("local-sync-discord.goldValue", lang, { gold }),
-      inline: true,
-    });
+    lines.push(`💰 **${t("local-sync-discord.goldName", lang)}:** ${t(
+      "local-sync-discord.goldValue",
+      lang,
+      { gold }
+    )}`);
   }
+  return lines;
+}
 
-  // Preferred body: the raid view, one roster per page.
-  if (addRosterPageFields(embed, summary, lang, options)) return;
+function addPreviewFields(embed, job, summary, lang, options = {}) {
+  // Preferred body: the gold view's two columns, changed characters only.
+  if (addChangedCharacterFields(embed, summary, lang, options)) return;
 
   // Fallback for previews whose stored projection predates
   // accountsAfterSync · delta list only, no per-raid context.
@@ -283,7 +342,7 @@ function buildRows({
   job,
   state,
   summary,
-  rosterIndex = null,
+  rosterFilter = null,
   readerUrl,
   lang,
   buttonPrefix = DM_BUTTON_PREFIX,
@@ -295,7 +354,6 @@ function buildRows({
 }) {
   const rows = [];
   const accounts = Array.isArray(summary?.accountsAfterSync) ? summary.accountsAfterSync : [];
-  const currentPage = Math.min(Math.max(0, Number(rosterIndex) || 0), Math.max(0, accounts.length - 1));
   const readerButton = readerUrl
     ? new ButtonBuilder()
       .setStyle(ButtonStyle.Link)
@@ -305,34 +363,9 @@ function buildRows({
     : null;
 
   if (job?.jobId) {
-    // Two rows, split by what the buttons do rather than by what fits.
-    // The top row moves you around: page through rosters, or leave for
-    // the reader page. The row under it acts on this preview.
-    //
-    // Paging labels and style come from the same locale keys
-    // /raid-status pages with (buildPaginationRow in commands.js) · the
-    // two surfaces are meant to read as the same control, and sharing
-    // the keys is what keeps their wording from drifting apart. Current
-    // page travels in the customId so the stateless surfaces know where
-    // they are.
-    const navRow = new ActionRowBuilder();
-    if (accounts.length > 1) {
-      navRow.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`${buttonPrefix}roster-prev:${job.jobId}:${currentPage}`)
-          .setStyle(ButtonStyle.Secondary)
-          .setLabel(t("common.pagination.previous", lang))
-          .setDisabled(currentPage <= 0),
-        new ButtonBuilder()
-          .setCustomId(`${buttonPrefix}roster-next:${job.jobId}:${currentPage}`)
-          .setStyle(ButtonStyle.Secondary)
-          .setLabel(t("common.pagination.next", lang))
-          .setDisabled(currentPage >= accounts.length - 1)
-      );
-    }
-    if (readerButton) navRow.addComponents(readerButton);
-    if (navRow.components.length > 0) rows.push(navRow);
-
+    // One row: the card shows every changed character at once, so there
+    // is nothing left to page through and the three preview actions plus
+    // the reader link fit inside Discord's five-per-row limit.
     const actionRow = new ActionRowBuilder();
     if (state === "pending") {
       actionRow.addComponents(
@@ -355,6 +388,8 @@ function buildRows({
         .setEmoji("🔄")
         .setLabel(t("local-sync-discord.buttons.refresh", lang))
     );
+    // The link goes last · it leaves Discord, the others stay here.
+    if (readerButton) actionRow.addComponents(readerButton);
     rows.push(actionRow);
   } else if (readerButton) {
     // No preview to act on · the reader link is the only way forward.
@@ -367,18 +402,22 @@ function buildRows({
   // customId namespace differs. The counts are read off accountsAfterSync,
   // so they describe the roster as it will look once applied · the same
   // state the fields above already render.
-  if (job?.jobId && accounts.length > 1 && StringSelectMenuBuilder) {
+  //
+  // It lists only the rosters this preview touches, and appears only when
+  // there is more than one · the card already shows them all at once, so
+  // the dropdown is a way to narrow down, not the only way to see them.
+  const changedIndices = new Set(collectChangedRosters(summary).map((group) => group.index));
+  if (job?.jobId && changedIndices.size > 1 && StringSelectMenuBuilder) {
+    const entries = buildStatusRosterFilterEntries({
+      accounts,
+      getRaidsFor: getStatusRaidsForCharacter,
+    }).filter((entry) => changedIndices.has(entry.pageIndex));
     rows.push(buildStatusRosterFilterRow({
       ActionRowBuilder,
       StringSelectMenuBuilder,
       truncateText,
-      rosterFilterEntries: buildStatusRosterFilterEntries({
-        accounts,
-        getRaidsFor: getStatusRaidsForCharacter,
-      }),
-      // null keeps "Tất cả roster" marked · rosterIndex is null only
-      // until the viewer picks a roster or steps with the arrows.
-      selectedRosterIndex: rosterIndex === null ? null : currentPage,
+      rosterFilterEntries: entries,
+      selectedRosterIndex: rosterFilter,
       disabled: false,
       lang,
       customId: `${buttonPrefix}roster:${job.jobId}`,
@@ -396,7 +435,7 @@ function buildRows({
  * @param {string|null} options.activeScope - COMPANION_SCOPE value, null renders the disabled card
  * @param {string} [options.lang='vi']
  * @param {string} [options.buttonPrefix='local-sync:'] - customId namespace · see DM_BUTTON_PREFIX / STATUS_BUTTON_PREFIX
- * @param {number|null} [options.rosterIndex=null] - which roster page of accountsAfterSync to render; null renders page 0 with "Tất cả roster" still selected in the dropdown
+ * @param {number|null} [options.rosterFilter=null] - render only this roster of accountsAfterSync; null shows every roster the preview touches
  * @param {Function} [options.StringSelectMenuBuilder] - omit to render without the roster picker
  * @returns {{embeds: object[], components: object[]}} discord.js message payload fragment
  */
@@ -407,7 +446,7 @@ function buildLocalSyncConsolePayload({
   activeScope = null,
   lang = "vi",
   buttonPrefix = DM_BUTTON_PREFIX,
-  rosterIndex = null,
+  rosterFilter = null,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -447,15 +486,20 @@ function buildLocalSyncConsolePayload({
     // Discord renders <t:…:R> in the VIEWER's client language, so
     // "in 2 hours" would otherwise sit mid-clause inside a Vietnamese
     // sentence. After a label it reads as data.
-    embed.setDescription([
+    const headerLines = [
       `🌐 **${t("local-sync-discord.scopeName", lang)}:** ${scopeLabel}`,
       `${STATE_ICON[key] || ""} **${t("local-sync-discord.statusName", lang)}:** ${t(`local-sync-discord.states.${key}`, lang)}`.trim(),
       expiresAt > 0 && state === "pending"
         ? t("local-sync-discord.expiresLine", lang, { timestamp: `<t:${expiresAt}:R>` })
         : "",
       buildResultDescription(job, state, lang),
-    ].filter(Boolean).join("\n"));
-    addPreviewFields(embed, job, summary, lang, formatGold, { rosterIndex });
+    ].filter(Boolean);
+    // Totals sit under a blank line so they read as their own block.
+    embed.setDescription([
+      headerLines.join("\n"),
+      buildSummaryLines(summary, lang, formatGold).join("\n"),
+    ].join("\n\n"));
+    addPreviewFields(embed, job, summary, lang, { rosterFilter });
   }
 
   return {
@@ -464,7 +508,7 @@ function buildLocalSyncConsolePayload({
       job,
       state,
       summary,
-      rosterIndex,
+      rosterFilter,
       readerUrl,
       lang,
       buttonPrefix,

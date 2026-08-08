@@ -471,23 +471,18 @@ function createStatusComponentRouteHandlers(ctx) {
       const parsed = parseLocalSyncViewCustomId(component.customId);
       if (!parsed) return noRedraw();
 
-      // Roster navigation only changes which page renders · no job work.
-      // The session keeps the page here so a later refresh does not lose it;
-      // the stateless surfaces read it back out of the customId instead.
+      // Narrowing to one roster only changes what renders · no job work.
+      // The session holds the filter so a later refresh does not lose it;
+      // the stateless surfaces read it back out of the select value.
       if (parsed.action === "roster") {
         const value = firstSelectValue(component, FILTER_ALL_ROSTERS);
         if (value === FILTER_ALL_ROSTERS) {
-          session.localSyncRosterIndex = null;
+          session.localSyncRosterFilter = null;
           return redraw();
         }
         const picked = Number(value);
         if (!Number.isFinite(picked)) return noRedraw();
-        session.localSyncRosterIndex = picked;
-        return redraw();
-      }
-      if (parsed.action === "roster-prev" || parsed.action === "roster-next") {
-        const step = parsed.action === "roster-next" ? 1 : -1;
-        session.localSyncRosterIndex = Math.max(0, parsed.page + step);
+        session.localSyncRosterFilter = picked;
         return redraw();
       }
 
