@@ -311,6 +311,24 @@ function buildRows({
   }
   if (job?.jobId) {
     const actionRow = new ActionRowBuilder();
+    // Prev/next ride on the action row because Discord forbids mixing a
+    // select with buttons in one row. Current page travels in the
+    // customId so the stateless surfaces know where they are.
+    if (accounts.length > 1) {
+      const current = Math.min(Math.max(0, Number(rosterIndex) || 0), accounts.length - 1);
+      actionRow.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`${buttonPrefix}roster-prev:${job.jobId}:${current}`)
+          .setStyle(ButtonStyle.Secondary)
+          .setEmoji("◀")
+          .setDisabled(current <= 0),
+        new ButtonBuilder()
+          .setCustomId(`${buttonPrefix}roster-next:${job.jobId}:${current}`)
+          .setStyle(ButtonStyle.Secondary)
+          .setEmoji("▶")
+          .setDisabled(current >= accounts.length - 1)
+      );
+    }
     if (state === "pending") {
       actionRow.addComponents(
         new ButtonBuilder()

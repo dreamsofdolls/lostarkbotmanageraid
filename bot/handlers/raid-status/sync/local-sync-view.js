@@ -31,7 +31,9 @@ const {
 } = require("../../local-sync/discord-console-ui");
 const { publicBaseUrl, buildLocalSyncUrl } = require("../local-sync-controls");
 
-const LOCAL_SYNC_ACTIONS = Object.freeze(["apply", "cancel", "refresh", "roster"]);
+const LOCAL_SYNC_ACTIONS = Object.freeze([
+  "apply", "cancel", "refresh", "roster", "roster-prev", "roster-next",
+]);
 
 /**
  * Split a `status-local:<action>:<jobId>` customId.
@@ -41,9 +43,11 @@ const LOCAL_SYNC_ACTIONS = Object.freeze(["apply", "cancel", "refresh", "roster"
 function parseLocalSyncViewCustomId(customId) {
   const id = String(customId || "");
   if (!id.startsWith(STATUS_BUTTON_PREFIX)) return null;
-  const [action, jobId] = id.slice(STATUS_BUTTON_PREFIX.length).split(":");
+  // roster-prev / roster-next append the page they were rendered at, so
+  // the stateless surfaces can step from it without a session.
+  const [action, jobId, page] = id.slice(STATUS_BUTTON_PREFIX.length).split(":");
   if (!LOCAL_SYNC_ACTIONS.includes(action) || !jobId) return null;
-  return { action, jobId };
+  return { action, jobId, page: Number(page) || 0 };
 }
 
 /**

@@ -230,10 +230,13 @@ function createLocalSyncDiscordConsole({
   // session here, so the page rides in the select's value and the job in
   // the customId · re-rendering with a different page needs nothing else.
   async function handleLocalSyncRosterSelect(interaction) {
-    const [, action, jobId] = String(interaction.customId || "").split(":");
-    if (action !== "roster" || !jobId) return;
+    const [, action, jobId, page] = String(interaction.customId || "").split(":");
+    const isStep = action === "roster-prev" || action === "roster-next";
+    if ((action !== "roster" && !isStep) || !jobId) return;
     await interaction.deferUpdate();
-    const rosterIndex = Number(interaction.values?.[0] ?? 0) || 0;
+    const rosterIndex = isStep
+      ? Math.max(0, (Number(page) || 0) + (action === "roster-next" ? 1 : -1))
+      : Number(interaction.values?.[0] ?? 0) || 0;
     const [lang, job, userDoc] = await Promise.all([
       getUserLanguage(interaction.user.id, { UserModel: User }),
       getPreviewJob(jobId, jobDeps),
@@ -250,7 +253,9 @@ function createLocalSyncDiscordConsole({
 
   async function handleLocalSyncButton(interaction) {
     const [, action, jobId] = String(interaction.customId || "").split(":");
-    if (action === "roster") return handleLocalSyncRosterSelect(interaction);
+    if (action === "roster" || action === "roster-prev" || action === "roster-next") {
+      return handleLocalSyncRosterSelect(interaction);
+    }
     if (!jobId || !["apply", "cancel", "refresh"].includes(action)) return;
     // Acknowledge before any DB read so a slow Mongo round-trip cannot cross
     // Discord's interaction deadline. Ownership is still checked before any

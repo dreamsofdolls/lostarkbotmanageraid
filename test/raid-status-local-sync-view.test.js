@@ -99,13 +99,22 @@ test("status-local routes resolve without shadowing the bible sync button", () =
 });
 
 test("customId parser accepts the three console actions and rejects the rest", () => {
+  // `page` is the roster page prev/next were rendered at; the other
+  // actions carry no page and default to 0.
   assert.deepEqual(parseLocalSyncViewCustomId(`status-local:apply:${JOB_ID}`), {
     action: "apply",
     jobId: JOB_ID,
+    page: 0,
   });
   assert.deepEqual(parseLocalSyncViewCustomId(`status-local:cancel:${JOB_ID}`), {
     action: "cancel",
     jobId: JOB_ID,
+    page: 0,
+  });
+  assert.deepEqual(parseLocalSyncViewCustomId(`status-local:roster-next:${JOB_ID}:3`), {
+    action: "roster-next",
+    jobId: JOB_ID,
+    page: 3,
   });
   assert.equal(parseLocalSyncViewCustomId(`status-local:delete:${JOB_ID}`), null);
   assert.equal(parseLocalSyncViewCustomId("status-local:apply:"), null);
@@ -222,7 +231,7 @@ test("applying a preview reloads the account list before the redraw", async () =
   });
 
   assert.deepEqual(result, { redraw: true });
-  assert.deepEqual(calls.actions, [{ action: "apply", jobId: JOB_ID }]);
+  assert.deepEqual(calls.actions, [{ action: "apply", jobId: JOB_ID, page: 0 }]);
   // Applying writes raid progress · without the reload, toggling back to
   // the raid view would show pre-apply data.
   assert.equal(calls.reloads, 1);
@@ -236,7 +245,7 @@ test("cancelling refreshes without touching the account list", async () => {
     customId: `status-local:cancel:${JOB_ID}`,
   });
 
-  assert.deepEqual(calls.actions, [{ action: "cancel", jobId: JOB_ID }]);
+  assert.deepEqual(calls.actions, [{ action: "cancel", jobId: JOB_ID, page: 0 }]);
   assert.equal(calls.reloads, 0);
 });
 
