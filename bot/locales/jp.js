@@ -28,7 +28,17 @@ module.exports = {
   "local-sync-discord": {
     title: "ローカル同期コンソール",
     disabledDescription: "ローカル同期は有効ではありません。完全同期は `/raid-auto-manage action:local-on`、Solo reader は Bible Auto-sync を有効にしてくださいませ。",
-    noPreviewDescription: "まだプレビューがありません。**Local Reader を開く**を押し、最初の一度だけ `encounters.db` を選んで Discord へ送ってね。次回からブラウザがファイルを覚えますの。",
+    noPreviewDescription: [
+      "確認できるプレビューはまだありませんわ。",
+      "",
+      "Local Reader は `encounters.db` をあなたの端末内で直接読むウェブページですの。ファイル自体はアップロードされず、どのキャラがどのレイドのどのゲートをクリアしたかという小さな要約だけが Discord に届きますわ。",
+      "",
+      "**1.** **Local Reader を開く** を押して、`%localappdata%\\LOA Logs\\` の `encounters.db` を選んでね♪",
+      "**2.** ページ下部の送信ボタンを押しますわ。",
+      "**3.** ここへ戻って変更をよく確かめてから **同期** を押してくださいませ。レイド進捗が書き込まれるのはこの段階だけですの。",
+      "",
+      "ブラウザがファイルを覚えるので、選ぶのは初回だけですわ。reader のリンクは 30 分、プレビューは 2 時間保持されますの。",
+    ],
     scopeName: "範囲",
     scopeFull: "完全ローカル同期",
     scopeSolo: "Solo のみ",

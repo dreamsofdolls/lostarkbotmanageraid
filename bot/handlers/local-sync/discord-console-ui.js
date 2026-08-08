@@ -26,6 +26,13 @@ const RETRYABLE_PENDING_REASONS = new Set([
   "apply_failed",
 ]);
 
+// Multi-line locale values are stored as arrays of lines · t() returns
+// them verbatim, so the call site joins. Same convention as
+// services/raid/channel-monitor/channel-monitor-embeds.js.
+function joinIfArray(value) {
+  return Array.isArray(value) ? value.join("\n") : value;
+}
+
 function unixSeconds(value) {
   const ms = Number(new Date(value));
   return Number.isFinite(ms) ? Math.floor(ms / 1000) : 0;
@@ -248,7 +255,7 @@ function buildLocalSyncConsolePayload({
   }
 
   if (!job) {
-    embed.setDescription(t("local-sync-discord.noPreviewDescription", lang));
+    embed.setDescription(joinIfArray(t("local-sync-discord.noPreviewDescription", lang)));
   } else {
     const scopeLabel = t(
       job.scope === "solo"

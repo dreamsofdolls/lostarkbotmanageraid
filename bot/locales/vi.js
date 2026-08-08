@@ -33,7 +33,17 @@ module.exports = {
   "local-sync-discord": {
     title: "Local Sync Console",
     disabledDescription: "Local Sync chưa được bật. Dùng `/raid-auto-manage action:local-on` để bật Local Sync đầy đủ, hoặc bật Bible Auto-sync để dùng reader Solo.",
-    noPreviewDescription: "Chưa có preview nào. Bấm **Mở Local Reader**, chọn `encounters.db` lần đầu rồi gửi preview về Discord. Trình duyệt sẽ nhớ file cho những lần sau.",
+    noPreviewDescription: [
+      "Chưa có preview nào để duyệt.",
+      "",
+      "Local Reader là trang web đọc thẳng `encounters.db` ngay trên máy cậu. File không hề được tải lên đâu, nó chỉ gửi về Discord một bản tóm tắt nhỏ: char nào vừa clear raid nào, gate nào.",
+      "",
+      "**1.** Bấm **Mở Local Reader**, chọn `encounters.db` trong `%localappdata%\\LOA Logs\\`.",
+      "**2.** Bấm nút gửi preview ở cuối trang.",
+      "**3.** Quay lại đây, xem kỹ thay đổi rồi bấm **Đồng bộ**. Tiến độ raid chỉ được ghi ở đúng bước này thôi.",
+      "",
+      "Trình duyệt nhớ file nên chỉ phải chọn một lần. Link mở reader sống 30 phút, preview giữ 2 giờ.",
+    ],
     scopeName: "Phạm vi",
     scopeFull: "Local Sync đầy đủ",
     scopeSolo: "Chỉ Solo",

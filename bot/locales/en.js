@@ -26,7 +26,17 @@ module.exports = {
   "local-sync-discord": {
     title: "Local Sync Console",
     disabledDescription: "Local Sync is not enabled. Use `/raid-auto-manage action:local-on` for full Local Sync, or enable Bible Auto-sync to use the Solo reader.",
-    noPreviewDescription: "There is no preview yet. Click **Open Local Reader**, choose `encounters.db` once, then send the preview to Discord. Your browser remembers the file for future scans.",
+    noPreviewDescription: [
+      "Nothing to review yet.",
+      "",
+      "Local Reader is a web page that reads `encounters.db` right on your own machine. The file is never uploaded; all Discord receives is a small summary of which character cleared which raid and gate.",
+      "",
+      "**1.** Click **Open Local Reader** and pick `encounters.db` from `%localappdata%\\LOA Logs\\`.",
+      "**2.** Press the send button at the bottom of the page.",
+      "**3.** Come back here, look the changes over, then press **Sync**. That step is the only one that writes raid progress.",
+      "",
+      "The browser remembers the file, so you only pick it once. A reader link lasts 30 minutes and a preview is kept for 2 hours.",
+    ],
     scopeName: "Scope",
     scopeFull: "Full Local Sync",
     scopeSolo: "Solo only",

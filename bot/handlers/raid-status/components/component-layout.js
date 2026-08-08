@@ -102,17 +102,25 @@ function createRaidStatusComponentLayout({
     if (modeRow && rows.length < 5) rows.push(modeRow);
   };
 
-  // Local Sync view: the toggle row stays first so the user can always
-  // get back out, then the console's own apply/cancel/refresh + reader
-  // rows. Pagination and filters are omitted on purpose · a preview is
+  // Local Sync view: actions first, view switcher last. The card's whole
+  // job is "do the next thing with this preview", so apply/cancel/refresh
+  // and the reader links sit directly under the text that describes them;
+  // the dropdown is navigation and belongs at the bottom, out of the way.
+  // Pagination and filters are omitted on purpose · a preview is
   // account-wide, so per-roster navigation would suggest a scope the
   // buttons do not have.
   const addSyncViewRows = (rows, disabled) => {
-    rows.push(buildViewToggleRow(disabled));
     for (const row of buildLocalSyncViewRows(disabled)) {
-      if (rows.length >= 5) break;
+      if (rows.length >= 4) break;
       rows.push(row);
     }
+    // Solo Local Reader rides along as the second way in. It only builds
+    // for bible auto-sync users (see buildSoloCompanionButton), so for
+    // full local-sync users nothing is added here.
+    if (typeof buildSoloCompanionButton === "function") {
+      addButtonToBestRow(rows, buildSoloCompanionButton(disabled));
+    }
+    rows.push(buildViewToggleRow(disabled));
   };
 
   const addRaidViewNavigationRows = (rows, disabled, showSync, syncDisabled) => {

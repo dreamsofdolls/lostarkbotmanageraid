@@ -4,6 +4,13 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-08-08 (Local Sync first-run card)
+
+### Changed
+- In the `/raid-status` Local Sync view, action buttons now sit above the view dropdown instead of below it. The card exists to act on a preview, so apply / cancel / refresh and the reader links belong next to the text describing them; the dropdown is navigation and moved to the bottom.
+- `Solo Local Reader` now also appears in the Local Sync view as a second way in. It only builds for bible auto-sync users, so nothing changes for full local-sync users.
+- The "no preview yet" card was rewritten in all three locales. It now explains what Local Reader is, states plainly that `encounters.db` is never uploaded, numbers the three steps, and says which step actually writes raid progress. Link and preview lifetimes (30 minutes, 2 hours) are stated instead of assumed.
+
 ## 2026-08-08 (Local Reader editorial restyle)
 
 ### Changed

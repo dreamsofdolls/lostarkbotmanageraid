@@ -316,10 +316,86 @@ test("the sync view shows the toggle row plus the console rows only", () => {
 
   assert.ok(ids.includes("status-view:toggle"));
   assert.ok(ids.includes(`status-local:apply:${JOB_ID}`));
+  // Actions sit above the view switcher: the card is there to act on a
+  // preview, and the dropdown is navigation. Order is the behaviour, so
+  // assert it rather than mere presence.
+  assert.ok(
+    ids.indexOf(`status-local:apply:${JOB_ID}`) < ids.indexOf("status-view:toggle"),
+    "apply/cancel/refresh must render above the view dropdown"
+  );
+  assert.equal(
+    customIds([rows[rows.length - 1]])[0],
+    "status-view:toggle",
+    "the view dropdown must be the last row"
+  );
   // Pagination and filters belong to per-roster views · a preview is
   // account-wide, so they would imply a scope the buttons do not have.
   assert.equal(ids.includes("status-filter:raid"), false);
   assert.ok(rows.length <= 5);
+});
+
+// ─── Solo Local Reader as the second way in ────────────────────
+
+function syncViewLayout({ soloButton = null, snapshot = makeSnapshot() } = {}) {
+  return createRaidStatusComponentLayout({
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    truncateText,
+    lang: "vi",
+    buildPaginationRow: () => new ActionRowBuilder(),
+    buildViewToggleRow: () => new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId("status-view:toggle")
+        .setPlaceholder("view")
+        .addOptions([{ label: "raid", value: "raid" }])
+    ),
+    buildSharedTaskToggleRow: () => null,
+    buildTaskCharFilterRow: () => null,
+    buildTaskToggleRow: () => new ActionRowBuilder(),
+    buildGoldCharFilterRow: () => null,
+    buildGoldModeRow: () => null,
+    buildGoldToggleRow: () => new ActionRowBuilder(),
+    buildSyncButton: () => null,
+    buildSyncRow: () => null,
+    buildLocalSyncNewButton: () => null,
+    buildLocalSyncRefreshButton: () => null,
+    buildRosterRefreshButton: () => null,
+    buildSoloCompanionButton: () => soloButton,
+    buildRaidFilterRow: () => new ActionRowBuilder(),
+    buildStatusRosterFilterRow: () => new ActionRowBuilder(),
+    buildMyRaidsRow: () => new ActionRowBuilder(),
+    buildLocalSyncViewRows: (disabled) => buildLocalSyncViewRows({ snapshot, disabled, ...viewDeps() }),
+    getAccounts: () => [{ accountName: "Main", characters: [] }],
+    getCurrentPage: () => 0,
+    getCurrentView: () => "sync",
+    getStatusUserMeta: () => ({ localSyncEnabled: true }),
+    getRaidDropdownEntries: () => [],
+    getTotalRaidPending: () => 0,
+    getFilterRaidId: () => null,
+    getMyRaidsShaped: () => [],
+  });
+}
+
+test("Solo Local Reader shows up in the sync view when it builds", () => {
+  const solo = new ButtonBuilder()
+    .setCustomId("status:solo-companion")
+    .setLabel("Solo Local Reader")
+    .setStyle(ButtonStyle.Secondary);
+  const ids = customIds(syncViewLayout({ soloButton: solo }).buildComponents(false));
+
+  assert.ok(ids.includes("status:solo-companion"));
+  // Still above the dropdown · it is an alternative way in, not navigation.
+  assert.ok(ids.indexOf("status:solo-companion") < ids.indexOf("status-view:toggle"));
+});
+
+test("no Solo Local Reader button means no empty row in the sync view", () => {
+  // buildSoloCompanionButton returns null for full local-sync users, and a
+  // null must not leave a stray ActionRow behind.
+  const rows = syncViewLayout({ soloButton: null }).buildComponents(false);
+  const ids = customIds(rows);
+
+  assert.equal(ids.includes("status:solo-companion"), false);
+  assert.ok(rows.every((row) => row.toJSON().components.length > 0), "no empty action rows");
 });
 
 test("the sync view skips the roster background image", async () => {
