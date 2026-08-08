@@ -4,6 +4,16 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-08-08 (Local Reader spacing, raid-status button grouping)
+
+### Changed
+- `/raid-status` in local-sync mode regroups its buttons by where they take you. Paging, **Cập nhật tiến độ** and **Refresh roster** share the navigation row because they act inside Discord; **Mở Local Reader** and **Tạo link mới** move to a row of their own because they send you out to the browser. Row count is unchanged, so nothing gets pushed past Discord's five-row cap. Bible auto-sync mode keeps its existing single row.
+- Local Reader section headings sat 26px above the line under them, which read as a missing line. Now 14px, with the first element after a heading no longer adding its own top margin.
+- Section ledes were capped at 62ch and broke mid-clause, leaving a gap to the right of the first line. Widened to 76ch with balanced wrapping.
+
+### Fixed
+- The "no clears this week" state was a bare sentence marked `.status-ok`, so an empty result rendered in success green. It is now a ruled block matching the rest of the page, and the copy says something useful instead of saying "nothing to sync" twice: the Solo-scope version explains that party clears are bible auto-sync's job, which is why nothing appears here.
+
 ## 2026-08-08 (Local Sync first-run card)
 
 ### Changed

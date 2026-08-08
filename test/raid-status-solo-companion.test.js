@@ -180,3 +180,109 @@ test("raid-status collector rejects another user's Solo Companion click before d
   assert.equal(ackOrder[1][0], "edit");
   assert.match(replyPayload.embeds[0].data.title, /only the command author/i);
 });
+
+test("local-sync mode splits in-Discord actions from the web companion buttons", () => {
+  const statusUserMeta = { autoManageEnabled: false, localSyncEnabled: true };
+  const controls = buildControls(() => statusUserMeta);
+  // Both web buttons need a reader URL to build at all.
+  controls.setCachedLocalSyncResumeUrl("https://example.test/sync?token=t");
+
+  const { buildComponents } = createRaidStatusComponentLayout({
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    truncateText: (value) => String(value),
+    lang: "en",
+    buildPaginationRow: () => new ActionRowBuilder()
+      .addComponents(makeButton("status:prev"), makeButton("status:next")),
+    buildViewToggleRow: () => new ActionRowBuilder().addComponents(makeButton("status-view:toggle")),
+    buildSyncButton: controls.buildSyncButton,
+    buildSyncRow: controls.buildSyncRow,
+    buildLocalSyncNewButton: controls.buildLocalSyncNewButton,
+    buildLocalSyncRefreshButton: controls.buildLocalSyncRefreshButton,
+    buildRosterRefreshButton: controls.buildRosterRefreshButton,
+    buildSoloCompanionButton: controls.buildSoloCompanionButton,
+    buildRaidFilterRow: () => null,
+    buildStatusRosterFilterRow: () => new ActionRowBuilder().addComponents(makeButton("status-filter:roster")),
+    buildMyRaidsRow: () => null,
+    getAccounts: () => [{ accountName: "Main" }, { accountName: "Alt" }],
+    getCurrentPage: () => 0,
+    getCurrentLocalPage: () => 0,
+    getVisibleRosterCount: () => 2,
+    getCurrentView: () => "raid",
+    getStatusUserMeta: () => statusUserMeta,
+    getRaidDropdownEntries: () => [],
+    getTotalRaidPending: () => 0,
+    getFilterRaidId: () => null,
+    getRosterFilterEntries: () => [],
+    getSelectedRosterIndex: () => null,
+    getMyRaidsShaped: () => [],
+  });
+
+  const rows = buildComponents(false);
+  // Link buttons carry no custom_id, so fall back to the URL to identify them.
+  const perRow = rows.map((row) => row.components.map((c) =>
+    componentCustomId(c) || (c?.data?.url ? "link:reader" : "?")));
+
+  // Row 1 acts inside Discord: paging, progress refresh, roster refresh.
+  assert.deepEqual(perRow[0], [
+    "status:prev",
+    "status:next",
+    "status:local-refresh",
+    "status:roster-refresh",
+  ]);
+  // Row 2 is the pair that sends the user out to the browser.
+  assert.deepEqual(perRow[1], ["link:reader", "status:local-new-link"]);
+
+  assert.ok(rows.length <= 5, "Discord allows at most 5 action rows");
+  assert.ok(rows.every((row) => row.components.length <= 5));
+});
+
+test("bible auto-sync mode keeps its single button row", () => {
+  const statusUserMeta = { autoManageEnabled: true, localSyncEnabled: false };
+  const controls = buildControls(() => statusUserMeta);
+
+  const { buildComponents } = createRaidStatusComponentLayout({
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    truncateText: (value) => String(value),
+    lang: "en",
+    buildPaginationRow: () => new ActionRowBuilder()
+      .addComponents(makeButton("status:prev"), makeButton("status:next")),
+    buildViewToggleRow: () => new ActionRowBuilder().addComponents(makeButton("status-view:toggle")),
+    buildSyncButton: controls.buildSyncButton,
+    buildSyncRow: controls.buildSyncRow,
+    buildLocalSyncNewButton: controls.buildLocalSyncNewButton,
+    buildLocalSyncRefreshButton: controls.buildLocalSyncRefreshButton,
+    buildRosterRefreshButton: controls.buildRosterRefreshButton,
+    buildSoloCompanionButton: controls.buildSoloCompanionButton,
+    buildRaidFilterRow: () => null,
+    buildStatusRosterFilterRow: () => new ActionRowBuilder().addComponents(makeButton("status-filter:roster")),
+    buildMyRaidsRow: () => null,
+    getAccounts: () => [{ accountName: "Main" }, { accountName: "Alt" }],
+    getCurrentPage: () => 0,
+    getCurrentLocalPage: () => 0,
+    getVisibleRosterCount: () => 2,
+    getCurrentView: () => "raid",
+    getStatusUserMeta: () => statusUserMeta,
+    getRaidDropdownEntries: () => [],
+    getTotalRaidPending: () => 0,
+    getFilterRaidId: () => null,
+    getRosterFilterEntries: () => [],
+    getSelectedRosterIndex: () => null,
+    getMyRaidsShaped: () => [],
+  });
+
+  const rows = buildComponents(false);
+  const perRow = rows.map((row) => row.components.map(componentCustomId));
+
+  // Unchanged: bible mode has one sync button plus the Solo reader, and
+  // they still fit on the navigation row with roster refresh.
+  assert.deepEqual(perRow[0], [
+    "status:prev",
+    "status:next",
+    "status:sync",
+    "status:solo-companion",
+    "status:roster-refresh",
+  ]);
+  assert.equal(perRow[1][0], "status-view:toggle");
+});

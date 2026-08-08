@@ -123,13 +123,43 @@ function createRaidStatusComponentLayout({
     rows.push(buildViewToggleRow(disabled));
   };
 
+  // Returns the "leaves Discord" row for local-sync users, or null.
+  // Callers push it AFTER the roster-refresh button has had its chance at
+  // the navigation row · see buildComponents.
+  //
+  // Local-sync mode groups the controls by where they take you: paging,
+  // progress refresh and roster refresh act inside Discord and share the
+  // navigation row, while Open Local Reader and New link send you out to
+  // the browser and get a row of their own. Bible mode is untouched; it
+  // has only one sync button plus the Solo reader, which fit on one row.
   const addRaidViewNavigationRows = (rows, disabled, showSync, syncDisabled) => {
     const visibleRosterCount = getVisibleRosterCount();
     const statusUserMeta = getStatusUserMeta();
+    const localSync = showSync && statusUserMeta.localSyncEnabled;
     const appendSoloCompanionButton = (row) => {
       if (typeof buildSoloCompanionButton !== "function") return;
       const button = buildSoloCompanionButton(syncDisabled);
       if (button && getRowComponentCount(row) < 5) row.addComponents(button);
+    };
+
+    // Both builders return null when no public base URL is configured, in
+    // which case there is no web row at all.
+    const companionButtons = localSync
+      ? [buildSyncButton(syncDisabled), buildLocalSyncNewButton(syncDisabled)].filter(Boolean)
+      : [];
+    const companionRow = companionButtons.length > 0
+      ? new ActionRowBuilder().addComponents(...companionButtons)
+      : null;
+
+    const addInDiscordSyncButtons = (row) => {
+      if (!showSync) return;
+      if (localSync) {
+        row.addComponents(buildLocalSyncRefreshButton(syncDisabled));
+        return;
+      }
+      const btn = buildSyncButton(syncDisabled);
+      if (btn) row.addComponents(btn);
+      appendSoloCompanionButton(row);
     };
 
     if (visibleRosterCount > 1) {
@@ -143,30 +173,23 @@ function createRaidStatusComponentLayout({
           lang,
         }
       );
-      if (showSync) {
-        const btn = buildSyncButton(syncDisabled);
-        if (btn) paginationRow.addComponents(btn);
-        if (statusUserMeta.localSyncEnabled) {
-          const newBtn = buildLocalSyncNewButton(syncDisabled);
-          if (newBtn) {
-            paginationRow.addComponents(newBtn);
-            paginationRow.addComponents(buildLocalSyncRefreshButton(syncDisabled));
-          }
-        } else {
-          appendSoloCompanionButton(paginationRow);
-        }
-      }
+      addInDiscordSyncButtons(paginationRow);
       rows.push(paginationRow);
-      return;
+      return companionRow;
     }
 
+    if (localSync) {
+      rows.push(new ActionRowBuilder().addComponents(buildLocalSyncRefreshButton(syncDisabled)));
+      return companionRow;
+    }
     if (showSync) {
       const row = buildSyncRow(syncDisabled);
       if (row) {
-        if (!statusUserMeta.localSyncEnabled) appendSoloCompanionButton(row);
+        appendSoloCompanionButton(row);
         rows.push(row);
       }
     }
+    return null;
   };
 
   const addRosterRefreshRow = (rows, disabled, showRosterRefresh) => {
@@ -244,8 +267,11 @@ function createRaidStatusComponentLayout({
     const showSync = anySyncMode && !currentPageIsShared;
     const refreshDisabled = disabled || getBackgroundRefreshing();
 
-    addRaidViewNavigationRows(rows, disabled, showSync, refreshDisabled);
+    const companionRow = addRaidViewNavigationRows(rows, disabled, showSync, refreshDisabled);
+    // Roster refresh goes first so it lands on the navigation row it
+    // belongs to · pushing the web row before this would capture it.
     addRosterRefreshRow(rows, refreshDisabled, showRosterRefresh);
+    if (companionRow && rows.length < 5) rows.push(companionRow);
     rows.push(buildViewToggleRow(disabled));
     addRosterFilterRow(rows, disabled);
     addRaidFilterRow(rows, disabled);
