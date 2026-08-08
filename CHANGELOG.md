@@ -4,6 +4,13 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-08-08 (Local Sync card header)
+
+### Changed
+- The Local Sync card header now follows the same grammar as the `/raid-status` views it sits next to: every data line opens with an icon and a bold label, and the sentence telling you what to do next carries no icon and comes last.
+- The status line's icon tracks the state (⏳ awaiting, 🔄 syncing, ✅ synced, ✖️ cancelled, 🔁 replaced, ⌛ expired, ⚠️ failed), so the card's condition reads before the words do.
+- The expiry moved out of prose into a labelled `🕐 Hết hạn:` line. Discord renders `<t:…:R>` in the viewer's own client language, so the old sentence came out as "Preview hết hạn in 2 hours." with an English fragment mid-clause; i18n cannot fix that, but a label turns it into data.
+
 ## 2026-08-08 (Local Reader spacing, raid-status button grouping)
 
 ### Changed

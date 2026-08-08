@@ -61,7 +61,7 @@ module.exports = {
       failed: "Artist could not apply this preview.",
       missing: "This preview no longer exists.",
     },
-    expiresLine: "Preview expires {timestamp}.",
+    expiresLine: "🕐 **Expires:** {timestamp}",
     summaryName: "Changes",
     summaryValue: "**{chars}** chars · **{raids}** raids · **{gates}** gates",
     completionName: "Weekly progress",

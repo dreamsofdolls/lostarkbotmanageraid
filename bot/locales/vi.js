@@ -68,7 +68,7 @@ module.exports = {
       failed: "Artist không thể áp dụng preview này.",
       missing: "Preview không còn tồn tại.",
     },
-    expiresLine: "Preview hết hạn {timestamp}.",
+    expiresLine: "🕐 **Hết hạn:** {timestamp}",
     summaryName: "Thay đổi",
     summaryValue: "**{chars}** char · **{raids}** raid · **{gates}** gate",
     completionName: "Tiến độ tuần",

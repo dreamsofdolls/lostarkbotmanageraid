@@ -63,7 +63,7 @@ module.exports = {
       failed: "Artist はこのプレビューを適用できませんでした。",
       missing: "このプレビューはもう存在しません。",
     },
-    expiresLine: "プレビューは {timestamp} に期限切れです。",
+    expiresLine: "🕐 **期限:** {timestamp}",
     summaryName: "変更",
     summaryValue: "**{chars}** キャラ · **{raids}** レイド · **{gates}** ゲート",
     completionName: "週間進捗",

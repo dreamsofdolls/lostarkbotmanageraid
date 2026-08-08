@@ -811,3 +811,38 @@ test("a cleaned-up preview button falls through to a fresh raid-status session",
   assert.equal(handoffs[0].options.alreadyDeferred, true);
   assert.equal(handoffs[0].options.content, null);
 });
+
+test("console header leads every data line with an icon and keeps the expiry as a labelled value", () => {
+  const render = (job) => buildLocalSyncConsolePayload({
+    job,
+    summary: { changes: { chars: 1, raids: 1, gates: 2 } },
+    readerUrl: "https://example.test/sync?token=x",
+    activeScope: "full",
+    lang: "vi",
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    UI,
+    formatGold: (value) => `${value} G`,
+  }).embeds[0].toJSON().description;
+
+  const pending = render(makeJob()).split("\n");
+  assert.match(pending[0], /^🌐 \*\*Phạm vi:\*\* /);
+  assert.match(pending[1], /^⏳ \*\*Trạng thái:\*\* Chờ xác nhận$/);
+  // Discord renders <t:…:R> in the viewer's own language, so it must not
+  // sit inside a sentence · after a label the English fragment reads as data.
+  assert.match(pending[2], /^🕐 \*\*Hết hạn:\*\* <t:\d+:R>$/);
+  // The "what to do next" sentence stays icon-free, like the /raid-status
+  // views it borrows from.
+  assert.doesNotMatch(pending[3], /^[🌐⏳🕐]/);
+
+  // The status icon tracks the state rather than being decoration.
+  assert.match(render(makeJob({ status: "applied" })).split("\n")[1], /^✅ /);
+  assert.match(render(makeJob({ status: "failed", failureReason: "apply_failed" })).split("\n")[1], /^⚠️ /);
+  assert.match(render(makeJob({ status: "cancelled" })).split("\n")[1], /^✖️ /);
+
+  // Only a live pending preview carries an expiry line.
+  const applied = render(makeJob({ status: "applied" }));
+  assert.doesNotMatch(applied, /Hết hạn/);
+});

@@ -85,6 +85,19 @@ function statusKey(state) {
   return known.has(state) ? state : "missing";
 }
 
+// One icon per state, so the card's condition reads before the words do.
+// Matches how /raid-status leads every header line with an icon.
+const STATE_ICON = Object.freeze({
+  pending: "⏳",
+  applying: "🔄",
+  applied: "✅",
+  cancelled: "✖️",
+  superseded: "🔁",
+  expired: "⌛",
+  failed: "⚠️",
+  missing: "❔",
+});
+
 function statusColor(state, UI) {
   if (state === "applied") return UI.colors.success;
   if (state === "failed" || state === "expired") return UI.colors.danger;
@@ -264,13 +277,22 @@ function buildLocalSyncConsolePayload({
       lang
     );
     const expiresAt = unixSeconds(job.expiresAt);
+    const key = statusKey(state);
+    // Header shape borrowed from the /raid-status views: every data line
+    // opens with an icon and a bold label, and the sentence explaining
+    // what to do next follows with no icon of its own.
+    //
+    // The expiry line is a labelled value rather than prose on purpose ·
+    // Discord renders <t:…:R> in the VIEWER's client language, so
+    // "in 2 hours" would otherwise sit mid-clause inside a Vietnamese
+    // sentence. After a label it reads as data.
     embed.setDescription([
-      `**${t("local-sync-discord.scopeName", lang)}:** ${scopeLabel}`,
-      `**${t("local-sync-discord.statusName", lang)}:** ${t(`local-sync-discord.states.${statusKey(state)}`, lang)}`,
-      buildResultDescription(job, state, lang),
+      `🌐 **${t("local-sync-discord.scopeName", lang)}:** ${scopeLabel}`,
+      `${STATE_ICON[key] || ""} **${t("local-sync-discord.statusName", lang)}:** ${t(`local-sync-discord.states.${key}`, lang)}`.trim(),
       expiresAt > 0 && state === "pending"
         ? t("local-sync-discord.expiresLine", lang, { timestamp: `<t:${expiresAt}:R>` })
         : "",
+      buildResultDescription(job, state, lang),
     ].filter(Boolean).join("\n"));
     addPreviewFields(embed, job, summary, lang, formatGold);
   }
