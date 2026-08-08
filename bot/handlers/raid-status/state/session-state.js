@@ -46,8 +46,9 @@ async function createRaidStatusSessionState({
   let localSyncSnapshot = null;
   // Which roster page of the preview is showing. Lives beside the
   // snapshot rather than inside it so a refresh can replace the data
-  // without losing the user's place.
-  let localSyncRosterIndex = 0;
+  // without losing the user's place. null means page 0 with no roster
+  // pinned in the dropdown.
+  let localSyncRosterIndex = null;
   let raidDropdownEntries = [];
   let rosterFilterEntries = [];
   let visibleRosterIndices = [];
@@ -183,7 +184,10 @@ async function createRaidStatusSessionState({
       return localSyncRosterIndex;
     },
     set localSyncRosterIndex(value) {
-      localSyncRosterIndex = Math.max(0, Number(value) || 0);
+      // null is the "Tất cả roster" state · page 0 with nothing pinned in
+      // the dropdown, the same distinction selectedRosterIndex makes for
+      // the raid view.
+      localSyncRosterIndex = value === null ? null : Math.max(0, Number(value) || 0);
     },
     get filterRaidId() {
       return filterRaidId;

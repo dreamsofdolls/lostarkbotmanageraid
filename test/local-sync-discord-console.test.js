@@ -930,14 +930,47 @@ test("card body renders one roster at a time in the raid-status row format", () 
 test("roster picker appears only when the preview spans more than one roster", () => {
   const summary = makeSummaryFixture();
   const multi = renderBody(summary, 0);
-  const select = multi.components[0].toJSON().components[0];
+  // The dropdown sits below the buttons, as the last row of the card.
+  const rows = multi.components.map((row) => row.toJSON());
+  const select = rows[rows.length - 1].components[0];
   assert.equal(select.custom_id, `local-sync:roster:${makeJob().jobId}`);
-  assert.deepEqual(select.options.map((o) => o.value), ["0", "1"]);
-  assert.equal(select.options[0].default, true);
+  // Same options /raid-status offers: an all-rosters entry first, then one
+  // per roster, each carrying its own pending/done counts.
+  assert.deepEqual(select.options.map((o) => o.value), ["__all_rosters__", "0", "1"]);
+  assert.match(select.options[0].label, /^Tất cả roster \(\d+ chưa clear · \d+ đã xong\)$/);
+  assert.match(select.options[1].label, /^Qiylyn \(\d+ chưa clear · \d+ đã xong\)$/);
+  assert.equal(select.options[1].default, true);
+
+  // rosterIndex null is the unpinned state · page 0 renders, but the
+  // dropdown still reads "Tất cả roster".
+  const unpinned = renderBody(summary, null).components;
+  const allOption = unpinned[unpinned.length - 1].toJSON().components[0].options[0];
+  assert.equal(allOption.default, true);
 
   const single = { ...summary, accountsAfterSync: summary.accountsAfterSync.slice(0, 1) };
   const ids = componentIds(renderBody(single, 0));
   assert.equal(ids.some((id) => String(id).includes(":roster:")), false);
+});
+
+test("roster paging uses the same prev/next buttons as the raid view", () => {
+  const summary = makeSummaryFixture();
+  const first = renderBody(summary, 0).components[0].toJSON().components;
+  assert.deepEqual(first.slice(0, 2).map((c) => c.label), ["◀ Trước", "Sau ▶"]);
+  assert.equal(first[0].disabled, true);
+  assert.equal(first[1].disabled, false);
+  // The rendered page rides in the customId so the DM, which has no
+  // collector, can still step from it.
+  assert.equal(first[0].custom_id, `local-sync:roster-prev:${makeJob().jobId}:0`);
+
+  const last = renderBody(summary, 1).components[0].toJSON().components;
+  assert.equal(last[0].disabled, false);
+  assert.equal(last[1].disabled, true);
+  assert.equal(last[1].custom_id, `local-sync:roster-next:${makeJob().jobId}:1`);
+
+  // One roster means no paging at all, only the action buttons.
+  const single = { ...summary, accountsAfterSync: summary.accountsAfterSync.slice(0, 1) };
+  const solo = renderBody(single, 0).components[0].toJSON().components;
+  assert.equal(solo.some((c) => String(c.custom_id).includes("roster-")), false);
 });
 
 test("a summary without accountsAfterSync falls back to the delta list", () => {

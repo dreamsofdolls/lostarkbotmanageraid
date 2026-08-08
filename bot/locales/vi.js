@@ -76,7 +76,6 @@ module.exports = {
     goldName: "Gold dự kiến",
     goldValue: "**{gold}**",
     moreRaids: "…và {count} raid khác",
-    rosterPlaceholder: "Chọn roster để xem...",
     rosterPage: "Roster {current}/{total}",
     moreCharactersName: "Nhân vật khác",
     moreCharactersValue: "…và {count} nhân vật khác. Quét vẫn giữ đủ dữ liệu.",

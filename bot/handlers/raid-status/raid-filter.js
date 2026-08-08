@@ -222,6 +222,11 @@ function buildStatusRosterFilterRow(options) {
     selectedRosterIndex,
     disabled,
     lang = "vi",
+    // The Local Sync preview card renders this same dropdown, but its
+    // clicks belong to a different namespace (see DM_BUTTON_PREFIX /
+    // STATUS_BUTTON_PREFIX in local-sync/discord-console-ui.js), so the
+    // id is an override rather than a constant.
+    customId = "status-filter:roster",
   } = options;
   const entries = Array.isArray(rosterFilterEntries) ? rosterFilterEntries : [];
   let selectOptions;
@@ -276,7 +281,7 @@ function buildStatusRosterFilterRow(options) {
 
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId("status-filter:roster")
+      .setCustomId(customId)
       .setPlaceholder(t("raid-status.filter.rosterPlaceholder", lang))
       .setDisabled(disabled || entries.length === 0)
       .addOptions(selectOptions)

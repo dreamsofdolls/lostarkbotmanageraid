@@ -16,6 +16,7 @@ const {
   projectSummary,
 } = require("../../services/local-sync/http/endpoints/preview-summary-endpoint");
 const { getCurrentResetStartMs } = require("../../services/raid/schedulers/weekly-reset");
+const { FILTER_ALL_ROSTERS } = require("../raid-status/raid-filter");
 const { t, getUserLanguage } = require("../../services/i18n");
 const {
   publicBaseUrl,
@@ -115,7 +116,7 @@ function createLocalSyncDiscordConsole({
     }
   }
 
-  async function buildConsole(discordUser, { job = null, lang, userDoc = null, rosterIndex = 0 } = {}) {
+  async function buildConsole(discordUser, { job = null, lang, userDoc = null, rosterIndex = null } = {}) {
     const loadedUser = userDoc || await loadConsoleUser(User, discordUser.id);
     const activeScope = activeScopeForUser(loadedUser);
     const readerUrl = await resolveReaderUrl(discordUser, loadedUser, lang);
@@ -234,9 +235,12 @@ function createLocalSyncDiscordConsole({
     const isStep = action === "roster-prev" || action === "roster-next";
     if ((action !== "roster" && !isStep) || !jobId) return;
     await interaction.deferUpdate();
+    // "Tất cả roster" is the dropdown's no-selection entry · it lands on
+    // page 0 but leaves the card unpinned, same as /raid-status.
+    const picked = String(interaction.values?.[0] ?? "");
     const rosterIndex = isStep
       ? Math.max(0, (Number(page) || 0) + (action === "roster-next" ? 1 : -1))
-      : Number(interaction.values?.[0] ?? 0) || 0;
+      : (picked === FILTER_ALL_ROSTERS ? null : Number(picked) || 0);
     const [lang, job, userDoc] = await Promise.all([
       getUserLanguage(interaction.user.id, { UserModel: User }),
       getPreviewJob(jobId, jobDeps),

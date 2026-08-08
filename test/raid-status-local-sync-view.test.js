@@ -274,6 +274,34 @@ test("a malformed customId is ignored instead of redrawing", async () => {
   assert.equal(calls.actions.length, 0);
 });
 
+test("the roster dropdown pins a page, and its all-rosters entry unpins it", async () => {
+  const { handlers, session, calls } = createHarness();
+
+  await handlers[STATUS_COMPONENT_ACTION.localSyncAction]({
+    customId: `status-local:roster:${JOB_ID}`,
+    values: ["1"],
+  });
+  assert.equal(session.localSyncRosterIndex, 1);
+
+  // "Tất cả roster" is the same __all_rosters__ value the raid view's
+  // dropdown uses · null means page 0 with nothing pinned.
+  await handlers[STATUS_COMPONENT_ACTION.localSyncAction]({
+    customId: `status-local:roster:${JOB_ID}`,
+    values: ["__all_rosters__"],
+  });
+  assert.equal(session.localSyncRosterIndex, null);
+
+  // Stepping reads the page out of the customId, not the session.
+  await handlers[STATUS_COMPONENT_ACTION.localSyncAction]({
+    customId: `status-local:roster-next:${JOB_ID}:2`,
+  });
+  assert.equal(session.localSyncRosterIndex, 3);
+
+  // Roster navigation is pure paging · no job work, no snapshot reload.
+  assert.equal(calls.actions.length, 0);
+  assert.equal(calls.refresh.length, 0);
+});
+
 // ─── Layout and render ─────────────────────────────────────────
 
 test("the sync view shows the toggle row plus the console rows only", () => {

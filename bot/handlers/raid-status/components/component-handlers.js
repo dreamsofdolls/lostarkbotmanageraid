@@ -475,7 +475,12 @@ function createStatusComponentRouteHandlers(ctx) {
       // The session keeps the page here so a later refresh does not lose it;
       // the stateless surfaces read it back out of the customId instead.
       if (parsed.action === "roster") {
-        const picked = Number(firstSelectValue(component, "0"));
+        const value = firstSelectValue(component, FILTER_ALL_ROSTERS);
+        if (value === FILTER_ALL_ROSTERS) {
+          session.localSyncRosterIndex = null;
+          return redraw();
+        }
+        const picked = Number(value);
         if (!Number.isFinite(picked)) return noRedraw();
         session.localSyncRosterIndex = picked;
         return redraw();

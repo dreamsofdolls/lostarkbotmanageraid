@@ -4,6 +4,14 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-08-08 (Local Sync roster controls match the raid view)
+
+### Changed
+- The Local Sync preview card's roster picker is now literally the `/raid-status` one: same builder (`buildStatusRosterFilterRow`), same options, same labels. It opens with a **📂 Tất cả roster (x chưa clear · y đã xong)** entry and gives every roster its own counts, instead of listing bare roster names. Only the customId namespace differs. The counts read off `accountsAfterSync`, so they describe each roster as it will look once applied, matching the fields above them.
+- The dropdown moved below the buttons, where `/raid-status` keeps its own roster dropdown.
+- Roster paging swapped its bare ◀/▶ icons for the labelled **◀ Trước** / **Sau ▶** buttons the raid view pages with, sharing the same locale keys so their wording cannot drift apart.
+- Picking **Tất cả roster** lands on page 1 without pinning a roster, the same distinction `selectedRosterIndex` makes in the raid view. Stepping with the arrows pins the page it lands on.
+
 ## 2026-08-08 (Local Sync card body reuses the raid view)
 
 ### Changed

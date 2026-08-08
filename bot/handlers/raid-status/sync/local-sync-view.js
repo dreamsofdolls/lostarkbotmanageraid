@@ -128,7 +128,7 @@ async function loadLocalSyncSnapshot({
 function buildLocalSyncViewEmbed({
   snapshot,
   lang,
-  rosterIndex = 0,
+  rosterIndex = null,
   StringSelectMenuBuilder = null,
   truncateText,
   EmbedBuilder,
@@ -166,7 +166,7 @@ function buildLocalSyncViewEmbed({
 function buildLocalSyncViewRows({
   snapshot,
   lang,
-  rosterIndex = 0,
+  rosterIndex = null,
   StringSelectMenuBuilder = null,
   truncateText,
   disabled = false,

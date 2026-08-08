@@ -13,6 +13,12 @@ const {
   formatRaidStatusLine,
   getStatusRaidsForCharacter,
 } = require("../../utils/raid/common/character");
+// The roster dropdown is the /raid-status one, not a lookalike · same
+// builder, same labels, same counts.
+const {
+  buildStatusRosterFilterEntries,
+  buildStatusRosterFilterRow,
+} = require("../raid-status/raid-filter");
 const {
   bucketizeLocalSyncDeltas,
   resolvePreviewJobState,
@@ -277,7 +283,7 @@ function buildRows({
   job,
   state,
   summary,
-  rosterIndex = 0,
+  rosterIndex = null,
   readerUrl,
   lang,
   buttonPrefix = DM_BUTTON_PREFIX,
@@ -288,45 +294,30 @@ function buildRows({
   truncateText = (value) => String(value),
 }) {
   const rows = [];
-  // Roster picker, same idea as the /raid-status roster dropdown. The
-  // jobId rides in the customId and the choice rides in the value, so this
-  // needs no session state and works the same on the standalone console,
-  // the DM, and the /raid-status view.
   const accounts = Array.isArray(summary?.accountsAfterSync) ? summary.accountsAfterSync : [];
-  if (job?.jobId && accounts.length > 1 && StringSelectMenuBuilder) {
-    const current = Math.min(Math.max(0, Number(rosterIndex) || 0), accounts.length - 1);
-    rows.push(new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId(`${buttonPrefix}roster:${job.jobId}`)
-        .setPlaceholder(truncateText(t("local-sync-discord.rosterPlaceholder", lang), 150))
-        // Discord caps a select at 25 options; rosters past that are rare
-        // and still reachable once an earlier one is applied.
-        .addOptions(accounts.slice(0, 25).map((account, index) => ({
-          label: truncateText(account.accountName || `Roster ${index + 1}`, 100),
-          value: String(index),
-          emoji: sharedUI.icons.folder,
-          default: index === current,
-        })))
-    ));
-  }
+  const currentPage = Math.min(Math.max(0, Number(rosterIndex) || 0), Math.max(0, accounts.length - 1));
   if (job?.jobId) {
     const actionRow = new ActionRowBuilder();
     // Prev/next ride on the action row because Discord forbids mixing a
     // select with buttons in one row. Current page travels in the
     // customId so the stateless surfaces know where they are.
+    //
+    // Labels and style come from the same locale keys /raid-status pages
+    // with (buildPaginationRow in commands.js) · the two surfaces are
+    // meant to read as the same control, and sharing the keys is what
+    // keeps their wording from drifting apart.
     if (accounts.length > 1) {
-      const current = Math.min(Math.max(0, Number(rosterIndex) || 0), accounts.length - 1);
       actionRow.addComponents(
         new ButtonBuilder()
-          .setCustomId(`${buttonPrefix}roster-prev:${job.jobId}:${current}`)
+          .setCustomId(`${buttonPrefix}roster-prev:${job.jobId}:${currentPage}`)
           .setStyle(ButtonStyle.Secondary)
-          .setEmoji("◀")
-          .setDisabled(current <= 0),
+          .setLabel(t("common.pagination.previous", lang))
+          .setDisabled(currentPage <= 0),
         new ButtonBuilder()
-          .setCustomId(`${buttonPrefix}roster-next:${job.jobId}:${current}`)
+          .setCustomId(`${buttonPrefix}roster-next:${job.jobId}:${currentPage}`)
           .setStyle(ButtonStyle.Secondary)
-          .setEmoji("▶")
-          .setDisabled(current >= accounts.length - 1)
+          .setLabel(t("common.pagination.next", lang))
+          .setDisabled(currentPage >= accounts.length - 1)
       );
     }
     if (state === "pending") {
@@ -362,6 +353,30 @@ function buildRows({
         .setLabel(t("local-sync-discord.buttons.openReader", lang))
     ));
   }
+
+  // Roster picker last, under the buttons · same position and the same
+  // builder as the /raid-status roster dropdown, so the options carry the
+  // "Tất cả roster (x chưa clear · y đã xong)" counts verbatim. Only the
+  // customId namespace differs. The counts are read off accountsAfterSync,
+  // so they describe the roster as it will look once applied · the same
+  // state the fields above already render.
+  if (job?.jobId && accounts.length > 1 && StringSelectMenuBuilder) {
+    rows.push(buildStatusRosterFilterRow({
+      ActionRowBuilder,
+      StringSelectMenuBuilder,
+      truncateText,
+      rosterFilterEntries: buildStatusRosterFilterEntries({
+        accounts,
+        getRaidsFor: getStatusRaidsForCharacter,
+      }),
+      // null keeps "Tất cả roster" marked · rosterIndex is null only
+      // until the viewer picks a roster or steps with the arrows.
+      selectedRosterIndex: rosterIndex === null ? null : currentPage,
+      disabled: false,
+      lang,
+      customId: `${buttonPrefix}roster:${job.jobId}`,
+    }));
+  }
   return rows;
 }
 
@@ -374,7 +389,7 @@ function buildRows({
  * @param {string|null} options.activeScope - COMPANION_SCOPE value, null renders the disabled card
  * @param {string} [options.lang='vi']
  * @param {string} [options.buttonPrefix='local-sync:'] - customId namespace · see DM_BUTTON_PREFIX / STATUS_BUTTON_PREFIX
- * @param {number} [options.rosterIndex=0] - which roster page of accountsAfterSync to render
+ * @param {number|null} [options.rosterIndex=null] - which roster page of accountsAfterSync to render; null renders page 0 with "Tất cả roster" still selected in the dropdown
  * @param {Function} [options.StringSelectMenuBuilder] - omit to render without the roster picker
  * @returns {{embeds: object[], components: object[]}} discord.js message payload fragment
  */
@@ -385,7 +400,7 @@ function buildLocalSyncConsolePayload({
   activeScope = null,
   lang = "vi",
   buttonPrefix = DM_BUTTON_PREFIX,
-  rosterIndex = 0,
+  rosterIndex = null,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
