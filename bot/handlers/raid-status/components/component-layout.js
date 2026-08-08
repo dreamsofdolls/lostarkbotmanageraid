@@ -43,10 +43,18 @@ function createRaidStatusComponentLayout({
     return 0;
   };
 
+  // Discord rejects a row that mixes a select with buttons, and the Local
+  // Sync view ends on its roster dropdown · a row that is not all buttons
+  // counts as full no matter how few components it holds.
+  const isButtonRow = (row) => {
+    const components = row?.components || row?.data?.components || [];
+    return components.every((component) => (component?.data?.type ?? component?.type) === 2);
+  };
+
   const addButtonToBestRow = (rows, button) => {
     if (!button) return;
     const lastRow = rows[rows.length - 1];
-    if (lastRow && getRowComponentCount(lastRow) < 5) {
+    if (lastRow && isButtonRow(lastRow) && getRowComponentCount(lastRow) < 5) {
       lastRow.addComponents(button);
       return;
     }

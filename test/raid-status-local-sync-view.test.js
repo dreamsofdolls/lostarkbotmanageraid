@@ -401,7 +401,13 @@ function syncViewLayout({ soloButton = null, snapshot = makeSnapshot() } = {}) {
     buildRaidFilterRow: () => new ActionRowBuilder(),
     buildStatusRosterFilterRow: () => new ActionRowBuilder(),
     buildMyRaidsRow: () => new ActionRowBuilder(),
-    buildLocalSyncViewRows: (disabled) => buildLocalSyncViewRows({ snapshot, disabled, ...viewDeps() }),
+    buildLocalSyncViewRows: (disabled) => buildLocalSyncViewRows({
+      snapshot,
+      disabled,
+      StringSelectMenuBuilder,
+      truncateText,
+      ...viewDeps(),
+    }),
     getAccounts: () => [{ accountName: "Main", characters: [] }],
     getCurrentPage: () => 0,
     getCurrentView: () => "sync",
@@ -433,6 +439,38 @@ test("no Solo Local Reader button means no empty row in the sync view", () => {
 
   assert.equal(ids.includes("status:solo-companion"), false);
   assert.ok(rows.every((row) => row.toJSON().components.length > 0), "no empty action rows");
+});
+
+test("Solo Local Reader never lands inside the roster dropdown's row", () => {
+  // Discord rejects a row that mixes a select with buttons, and a
+  // multi-roster preview ends on the roster dropdown · the button has to
+  // open a row of its own rather than append to the last one.
+  const snapshot = makeSnapshot({
+    summary: {
+      changes: { chars: 1, raids: 2, gates: 3 },
+      accountsAfterSync: [
+        { accountName: "Main", characters: [] },
+        { accountName: "Alt", characters: [] },
+      ],
+    },
+  });
+  const solo = new ButtonBuilder()
+    .setCustomId("status:solo-companion")
+    .setLabel("Solo Local Reader")
+    .setStyle(ButtonStyle.Secondary);
+  const rows = syncViewLayout({ soloButton: solo, snapshot }).buildComponents(false)
+    .map((row) => row.toJSON().components);
+
+  const dropdownRow = rows.find((components) =>
+    components.some((component) => String(component.custom_id || "").includes(":roster:")));
+  assert.ok(dropdownRow, "a two-roster preview renders the picker");
+  assert.equal(dropdownRow.length, 1);
+
+  const soloRow = rows.find((components) =>
+    components.some((component) => component.custom_id === "status:solo-companion"));
+  assert.ok(soloRow);
+  assert.notEqual(soloRow, dropdownRow);
+  assert.ok(rows.length <= 5);
 });
 
 test("the sync view skips the roster background image", async () => {

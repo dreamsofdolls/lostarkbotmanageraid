@@ -296,18 +296,28 @@ function buildRows({
   const rows = [];
   const accounts = Array.isArray(summary?.accountsAfterSync) ? summary.accountsAfterSync : [];
   const currentPage = Math.min(Math.max(0, Number(rosterIndex) || 0), Math.max(0, accounts.length - 1));
+  const readerButton = readerUrl
+    ? new ButtonBuilder()
+      .setStyle(ButtonStyle.Link)
+      .setURL(readerUrl)
+      .setEmoji("🗃️")
+      .setLabel(t("local-sync-discord.buttons.openReader", lang))
+    : null;
+
   if (job?.jobId) {
-    const actionRow = new ActionRowBuilder();
-    // Prev/next ride on the action row because Discord forbids mixing a
-    // select with buttons in one row. Current page travels in the
-    // customId so the stateless surfaces know where they are.
+    // Two rows, split by what the buttons do rather than by what fits.
+    // The top row moves you around: page through rosters, or leave for
+    // the reader page. The row under it acts on this preview.
     //
-    // Labels and style come from the same locale keys /raid-status pages
-    // with (buildPaginationRow in commands.js) · the two surfaces are
-    // meant to read as the same control, and sharing the keys is what
-    // keeps their wording from drifting apart.
+    // Paging labels and style come from the same locale keys
+    // /raid-status pages with (buildPaginationRow in commands.js) · the
+    // two surfaces are meant to read as the same control, and sharing
+    // the keys is what keeps their wording from drifting apart. Current
+    // page travels in the customId so the stateless surfaces know where
+    // they are.
+    const navRow = new ActionRowBuilder();
     if (accounts.length > 1) {
-      actionRow.addComponents(
+      navRow.addComponents(
         new ButtonBuilder()
           .setCustomId(`${buttonPrefix}roster-prev:${job.jobId}:${currentPage}`)
           .setStyle(ButtonStyle.Secondary)
@@ -320,6 +330,10 @@ function buildRows({
           .setDisabled(currentPage >= accounts.length - 1)
       );
     }
+    if (readerButton) navRow.addComponents(readerButton);
+    if (navRow.components.length > 0) rows.push(navRow);
+
+    const actionRow = new ActionRowBuilder();
     if (state === "pending") {
       actionRow.addComponents(
         new ButtonBuilder()
@@ -342,16 +356,9 @@ function buildRows({
         .setLabel(t("local-sync-discord.buttons.refresh", lang))
     );
     rows.push(actionRow);
-  }
-
-  if (readerUrl) {
-    rows.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setStyle(ButtonStyle.Link)
-        .setURL(readerUrl)
-        .setEmoji("🗃️")
-        .setLabel(t("local-sync-discord.buttons.openReader", lang))
-    ));
+  } else if (readerButton) {
+    // No preview to act on · the reader link is the only way forward.
+    rows.push(new ActionRowBuilder().addComponents(readerButton));
   }
 
   // Roster picker last, under the buttons · same position and the same

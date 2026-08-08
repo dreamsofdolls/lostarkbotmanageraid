@@ -83,11 +83,13 @@ test("pending Discord console renders preview details and durable job buttons", 
   assert.ok(characterField);
   assert.match(characterField.value, /G2/);
   assert.doesNotMatch(characterField.value, /G1/);
+  // Navigation first (the reader link leaves Discord), then the buttons
+  // that act on this preview.
   assert.deepEqual(componentIds(payload), [
+    "https://example.test/sync?token=x",
     `local-sync:apply:${job.jobId}`,
     `local-sync:cancel:${job.jobId}`,
     `local-sync:refresh:${job.jobId}`,
-    "https://example.test/sync?token=x",
   ]);
 });
 
@@ -950,6 +952,15 @@ test("roster picker appears only when the preview spans more than one roster", (
   const single = { ...summary, accountsAfterSync: summary.accountsAfterSync.slice(0, 1) };
   const ids = componentIds(renderBody(single, 0));
   assert.equal(ids.some((id) => String(id).includes(":roster:")), false);
+});
+
+test("navigation sits above the buttons that act on the preview", () => {
+  const rows = renderBody(makeSummaryFixture(), 0).components.map((row) => row.toJSON().components);
+  // Top row moves you around · pages through rosters, or leaves for the
+  // reader page. The row under it acts on this preview.
+  assert.deepEqual(rows[0].map((c) => c.label), ["◀ Trước", "Sau ▶", "Mở Local Reader"]);
+  assert.equal(rows[0][2].url, "https://example.test/sync?token=x");
+  assert.deepEqual(rows[1].map((c) => c.label), ["Đồng bộ", "Huỷ", "Làm mới"]);
 });
 
 test("roster paging uses the same prev/next buttons as the raid view", () => {

@@ -11,6 +11,10 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - The dropdown moved below the buttons, where `/raid-status` keeps its own roster dropdown.
 - Roster paging swapped its bare ◀/▶ icons for the labelled **◀ Trước** / **Sau ▶** buttons the raid view pages with, sharing the same locale keys so their wording cannot drift apart.
 - Picking **Tất cả roster** lands on page 1 without pinning a roster, the same distinction `selectedRosterIndex` makes in the raid view. Stepping with the arrows pins the page it lands on.
+- The card's buttons split by what they do rather than by what fits: paging and **Mở Local Reader** share the top row because both move you somewhere, and **Đồng bộ** / **Huỷ** / **Làm mới** get the row under it because they act on the preview.
+
+### Fixed
+- **Solo Local Reader** could be appended into the roster dropdown's row in the `/raid-status` sync view. Discord rejects a row mixing a select with buttons, so a Solo user with a multi-roster preview would have hit a failed render; the button now opens its own row.
 
 ## 2026-08-08 (Local Sync card body reuses the raid view)
 
