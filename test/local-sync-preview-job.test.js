@@ -173,10 +173,11 @@ test("concurrent preview creation is serialized per Discord user", async () => {
   assert.deepEqual(events, ["update", "create", "update", "create"]);
 });
 
-test("preview-job endpoint stores deltas and delivers a Discord confirmation", async () => {
+test("preview-job endpoint acknowledges durable storage before Discord delivery", async () => {
   const token = mintToken("u1", undefined, "vi");
   const created = [];
   const notifications = [];
+  const backgroundTasks = [];
   const PreviewModel = {
     async updateMany() {},
     async create(doc) {
@@ -219,6 +220,7 @@ test("preview-job endpoint stores deltas and delivers a Discord confirmation", a
       notifications.push(payload);
       return { delivered: true, channel: "dm" };
     },
+    scheduleTask: (task) => backgroundTasks.push(task),
   });
   const res = makeRes();
 
@@ -231,7 +233,11 @@ test("preview-job endpoint stores deltas and delivers a Discord confirmation", a
 
   assert.equal(res.status, 200);
   assert.equal(res.json().ok, true);
-  assert.deepEqual(res.json().delivery, { delivered: true, channel: "dm" });
+  assert.deepEqual(res.json().delivery, {
+    delivered: false,
+    channel: "stored",
+    pending: true,
+  });
   assert.equal(created.length, 1);
   assert.equal(created[0].discordId, "u1");
   assert.equal(created[0].scope, "full");
@@ -240,15 +246,21 @@ test("preview-job endpoint stores deltas and delivers a Discord confirmation", a
   assert.deepEqual(created[0].projection.changeDetails[0].raids, [
     { raidKey: "armoche", modeKey: "normal", gates: ["G1"] },
   ]);
-  assert.deepEqual(notifications, [{
-    jobId: created[0].jobId,
-    discordId: "u1",
-    lang: "vi",
-  }]);
+  assert.equal(notifications.length, 0, "Discord must not delay the HTTP acknowledgement");
+  assert.equal(backgroundTasks.length, 1);
+  await backgroundTasks[0]();
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0].jobId, created[0].jobId);
+  assert.equal(notifications[0].discordId, "u1");
+  assert.equal(notifications[0].lang, "vi");
+  assert.equal(notifications[0].job.jobId, created[0].jobId);
+  assert.equal(notifications[0].userDoc.discordId, "u1");
 });
 
 test("preview-job endpoint stores the job when Discord DMs are unavailable", async () => {
   const token = mintToken("u2", undefined, "en");
+  const backgroundTasks = [];
+  const warnings = [];
   const PreviewModel = {
     async updateMany() {},
     async create(doc) { return doc; },
@@ -275,6 +287,11 @@ test("preview-job endpoint stores the job when Discord DMs are unavailable", asy
     notifyPreviewReady: async () => {
       throw new Error("Cannot send messages to this user");
     },
+    scheduleTask: (task) => backgroundTasks.push(task),
+    log: {
+      error() {},
+      warn(...args) { warnings.push(args.join(" ")); },
+    },
   });
   const res = makeRes();
 
@@ -284,5 +301,8 @@ test("preview-job endpoint stores the job when Discord DMs are unavailable", asy
   assert.equal(res.json().ok, true);
   assert.equal(res.json().delivery.delivered, false);
   assert.equal(res.json().delivery.channel, "stored");
-  assert.match(res.json().delivery.error, /Cannot send messages/);
+  assert.equal(res.json().delivery.pending, true);
+  assert.equal(backgroundTasks.length, 1);
+  await backgroundTasks[0]();
+  assert.match(warnings.join("\n"), /Cannot send messages/);
 });

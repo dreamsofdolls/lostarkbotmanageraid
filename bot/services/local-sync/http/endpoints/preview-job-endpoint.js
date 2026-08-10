@@ -30,6 +30,18 @@ const {
 
 const MAX_BODY_BYTES = 256 * 1024;
 
+const STORED_DELIVERY = Object.freeze({
+  delivered: false,
+  channel: "stored",
+  error: "discord delivery unavailable",
+});
+
+const PENDING_DELIVERY = Object.freeze({
+  delivered: false,
+  channel: "stored",
+  pending: true,
+});
+
 function normalizeDeliveryResult(result) {
   if (result?.delivered) {
     return { delivered: true, channel: result.channel || "dm" };
@@ -53,10 +65,45 @@ function buildStoredProjection(summary) {
   };
 }
 
+function plainJobSnapshot(job) {
+  return typeof job?.toObject === "function" ? job.toObject() : job;
+}
+
+function schedulePreviewDelivery({
+  notifyPreviewReady,
+  payload,
+  scheduleTask,
+  log,
+}) {
+  if (typeof notifyPreviewReady !== "function") return false;
+  const run = async () => {
+    try {
+      const delivery = normalizeDeliveryResult(await notifyPreviewReady(payload));
+      if (!delivery.delivered) {
+        log.warn(
+          "[preview-job-endpoint] Discord delivery unavailable; preview remains stored:",
+          delivery.error
+        );
+      }
+    } catch (err) {
+      log.warn("[preview-job-endpoint] Discord delivery failed:", err?.message || err);
+    }
+  };
+  try {
+    scheduleTask(run);
+    return true;
+  } catch (err) {
+    log.warn("[preview-job-endpoint] Discord delivery scheduling failed:", err?.message || err);
+    return false;
+  }
+}
+
 function createPreviewJobEndpoint({
   User,
   PreviewModel = null,
   notifyPreviewReady = null,
+  scheduleTask = (task) => setImmediate(task),
+  log = console,
 }) {
   if (!User) throw new Error("[preview-job-endpoint] User model required");
   const send = createJsonSender({ methods: "POST, OPTIONS" });
@@ -101,7 +148,7 @@ function createPreviewJobEndpoint({
         )
         .lean();
     } catch (err) {
-      console.error("[preview-job-endpoint] state read failed:", err?.message || err);
+      log.error("[preview-job-endpoint] state read failed:", err?.message || err);
       send(res, 500, { ok: false, error: "state read failed" });
       return;
     }
@@ -134,26 +181,35 @@ function createPreviewJobEndpoint({
       return;
     }
 
-    let delivery = { delivered: false, channel: "stored", error: "discord delivery unavailable" };
-    if (typeof notifyPreviewReady === "function") {
-      try {
-        delivery = normalizeDeliveryResult(await notifyPreviewReady({
-          jobId: job.jobId,
-          discordId,
-          lang: payload.lang || userDoc?.language || "vi",
-        }));
-      } catch (err) {
-        console.warn("[preview-job-endpoint] Discord delivery failed:", err?.message || err);
-        delivery = normalizeDeliveryResult({ error: err?.message || err });
-      }
-    }
-
+    const notificationPayload = {
+      jobId: job.jobId,
+      discordId,
+      lang: payload.lang || userDoc?.language || "vi",
+      // The endpoint has just loaded both snapshots. Reusing them lets the DM
+      // path skip two immediate MongoDB reads without weakening apply-time
+      // validation, which reloads the current user again when the button wins.
+      job: plainJobSnapshot(job),
+      userDoc,
+    };
+    const hasNotifier = typeof notifyPreviewReady === "function";
     send(res, 200, {
       ok: true,
       jobId: job.jobId,
       expiresAt: new Date(job.expiresAt).toISOString(),
-      delivery,
+      delivery: hasNotifier ? PENDING_DELIVERY : STORED_DELIVERY,
     });
+
+    // A durable preview is the HTTP success boundary. Discord REST, console
+    // rendering, and receipt persistence continue after res.end(), so slow or
+    // blocked DMs cannot hold the Local Reader button in a loading state.
+    if (hasNotifier) {
+      schedulePreviewDelivery({
+        notifyPreviewReady,
+        payload: notificationPayload,
+        scheduleTask,
+        log,
+      });
+    }
   };
 }
 
@@ -161,4 +217,5 @@ module.exports = {
   buildStoredProjection,
   createPreviewJobEndpoint,
   normalizeDeliveryResult,
+  schedulePreviewDelivery,
 };

@@ -375,6 +375,39 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   font-family: var(--font-mono);
   color: var(--text-dim);
 }
+
+/* Realtime file state sits outside .meta so updating the selected-file row
+   never destroys it. The dot is deliberately quiet: it communicates whether
+   sending is safe without turning the editorial page into a monitoring HUD. */
+.live-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 9px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.live-status[hidden] { display: none; }
+.live-status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+.live-status[data-state="ready"] { color: var(--success); }
+.live-status[data-state="ready"]::before {
+  background: var(--success);
+  box-shadow: 0 0 7px rgba(87, 201, 140, 0.45);
+}
+.live-status[data-state="updating"],
+.live-status[data-state="warning"] { color: var(--accent-bright); }
+.live-status[data-state="updating"]::before,
+.live-status[data-state="warning"]::before { background: var(--accent); }
+.live-status[data-state="error"] { color: var(--error); }
+.live-status[data-state="error"]::before { background: var(--error); }
+.live-status[data-state="static"]::before { background: var(--text-dim); }
 /* The "found N characters / M clears" line opens the preview it
    describes · set as a standfirst, not boxed off on its own. */
 #preview-output > .meta:first-child {

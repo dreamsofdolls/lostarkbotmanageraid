@@ -40,6 +40,13 @@ export class FileBackedVFS extends FacadeVFS {
     super(name, module);
   }
 
+  setFile(pathname, file) {
+    if (this.mapIdToFile.size > 0) {
+      throw new Error("cannot replace a VFS file while SQLite has it open");
+    }
+    this.mapNameToFile.set(String(pathname || ""), file);
+  }
+
   async close() {
     for (const fileId of this.mapIdToFile.keys()) {
       await this.jClose(fileId);

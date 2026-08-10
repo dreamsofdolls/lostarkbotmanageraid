@@ -35,6 +35,7 @@ test("local-sync web server serves browser helper modules", async () => {
       ["/sync/js/core/auth.js", "bootstrapAuthSession"],
       ["/sync/js/core/html.js", "escapeHtml"],
       ["/sync/js/core/format.js", "formatBytes"],
+      ["/sync/js/sync/file/file-change-monitor.js", "readFileRevision"],
       ["/sync/js/sync/render/preview-renderer.js", "renderDiffPage"],
       ["/sync/js/sync/sqlite-schema.js", "resolveEncounterSource"],
     ]) {

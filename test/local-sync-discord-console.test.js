@@ -354,6 +354,19 @@ test("Discord DM delivery renders the durable console and stores its receipt", a
   };
   const pendingJob = makeJob({ discordId });
   const PreviewModel = makePreviewModel(pendingJob);
+  let previewReads = 0;
+  const readPreview = PreviewModel.findOne.bind(PreviewModel);
+  PreviewModel.findOne = (filter) => {
+    previewReads += 1;
+    return readPreview(filter);
+  };
+  const UserModel = makeConsoleUserModel(userDoc);
+  let userReads = 0;
+  const readUser = UserModel.findOne.bind(UserModel);
+  UserModel.findOne = (...args) => {
+    userReads += 1;
+    return readUser(...args);
+  };
   const sent = [];
   const targetUser = {
     id: discordId,
@@ -370,7 +383,7 @@ test("Discord DM delivery renders the durable console and stores its receipt", a
     ButtonStyle,
     MessageFlags: { Ephemeral: 64 },
     UI,
-    User: makeConsoleUserModel(userDoc),
+    User: UserModel,
     PreviewModel,
   });
   const previousBaseUrl = process.env.PUBLIC_BASE_URL;
@@ -383,6 +396,8 @@ test("Discord DM delivery renders the durable console and stores its receipt", a
       jobId: pendingJob.jobId,
       discordId,
       lang: "en",
+      job: pendingJob,
+      userDoc,
     });
   } finally {
     if (previousBaseUrl == null) delete process.env.PUBLIC_BASE_URL;
@@ -395,6 +410,8 @@ test("Discord DM delivery renders the durable console and stores its receipt", a
     messageId: "message-1",
   });
   assert.equal(sent.length, 1);
+  assert.equal(previewReads, 0, "the freshly created preview snapshot should be reused");
+  assert.equal(userReads, 0, "the endpoint roster snapshot should be reused");
   assert.ok(componentIds(sent[0]).includes(`local-sync:apply:${pendingJob.jobId}`));
   assert.equal(PreviewModel.value.deliveryChannelId, "dm-channel-1");
   assert.equal(PreviewModel.value.deliveryMessageId, "message-1");

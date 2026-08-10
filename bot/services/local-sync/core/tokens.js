@@ -237,9 +237,11 @@ async function getOrMintLocalSyncToken(discordId, lang, deps = {}) {
   if (!UserModel) throw new Error("[local-sync/tokens] getOrMintLocalSyncToken: UserModel required");
   const scope = normalizeCompanionScope(deps?.scope, { legacyDefault: true });
   if (!scope) throw new Error("[local-sync/tokens] getOrMintLocalSyncToken: invalid scope");
-  const stored = await UserModel.findOne({ discordId })
-    .select("lastLocalSyncToken lastLocalSyncTokenExpAt")
-    .lean();
+  const stored = Object.prototype.hasOwnProperty.call(deps, "userDoc")
+    ? deps.userDoc
+    : await UserModel.findOne({ discordId })
+      .select("lastLocalSyncToken lastLocalSyncTokenExpAt")
+      .lean();
   const now = Math.floor(Date.now() / 1000);
   if (stored?.lastLocalSyncToken && Number(stored.lastLocalSyncTokenExpAt) > now + 60) {
     const verified = verifyToken(stored.lastLocalSyncToken);

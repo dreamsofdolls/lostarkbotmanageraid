@@ -4,6 +4,19 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-08-10 (Local Reader follows live database revisions)
+
+### Changed
+- A remembered `encounters.db` handle is now watched continuously: native file events are used when Chromium exposes them, with lightweight SQLite-header polling plus focus/visibility catch-up as the reliable fallback. Burst writes settle into one refresh, failed reads retry automatically, and the selected-file timestamp updates with every committed snapshot.
+- Preview builds are latest-only. A newer database revision aborts or supersedes older SQLite/roster work, and Local Reader checks the stable on-disk revision again immediately before creating the Discord preview so stale deltas cannot win a race.
+- The wa-sqlite runtime and streaming VFS are reused across refreshes instead of recompiling WASM for every database commit. WAL-mode files are detected and fail closed at send time because a lone `encounters.db` handle cannot verify uncheckpointed sidecar data.
+- The visible-tab fallback now probes every 300 ms and settles a revision for 120 ms, keeping its normal detection budget below half a second without reading beyond SQLite's 100-byte header. Catalog, roster, and SQLite preparation also overlap instead of waiting in a serial chain.
+- Sending an unchanged preview no longer forces another SQLite scan and roster request: one current header probe is enough, while changed files still settle, rebuild latest-only, and receive a final post-query revision check.
+- `POST /api/local-sync/preview-job` now returns as soon as the job is durably stored. Discord rendering and DM delivery continue in the background using the job and User snapshots already loaded by the endpoint, and Local Sync Discord controls reuse User reads wherever no apply mutation occurred.
+
+### Tests
+- Added deterministic coverage for same-size SQLite commits, burst coalescing, stable-file reads, latest-only execution, refresh retry, recovery after a transient settle read failure, the sub-500 ms fallback budget, no-wait HTTP acknowledgement, and snapshot reuse across Discord delivery.
+
 ## 2026-08-09 (Local Sync lives only in raid-status)
 
 ### Removed

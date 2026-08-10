@@ -110,6 +110,25 @@ test("getOrMintLocalSyncToken reuses only a token with the requested scope", asy
   assert.equal(verifyToken(soloToken).payload.scope, COMPANION_SCOPE.solo);
 });
 
+test("getOrMintLocalSyncToken reuses a supplied User snapshot without another read", async () => {
+  const fullToken = mintToken("snapshot-user");
+  const userDoc = {
+    lastLocalSyncToken: fullToken,
+    lastLocalSyncTokenExpAt: Math.floor(Date.now() / 1000) + 600,
+  };
+  const UserModel = {
+    findOne() {
+      throw new Error("unexpected duplicate token lookup");
+    },
+  };
+
+  assert.equal(await getOrMintLocalSyncToken("snapshot-user", "vi", {
+    UserModel,
+    userDoc,
+    scope: COMPANION_SCOPE.full,
+  }), fullToken);
+});
+
 test("mintToken - tokens minted in the same second still differ", () => {
   const first = mintToken("user-123");
   const second = mintToken("user-123");

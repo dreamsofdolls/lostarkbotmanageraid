@@ -106,6 +106,7 @@ function createLocalSyncDiscordConsole({
     try {
       const token = await getOrMintLocalSyncToken(discordUser.id, lang, {
         UserModel: User,
+        userDoc,
         identity: extractIdentityFromUser(discordUser),
         scope,
       });
@@ -182,16 +183,30 @@ function createLocalSyncDiscordConsole({
       : latestJob;
   }
 
-  async function notifyPreviewReady(client, { jobId, discordId, lang = "vi" }) {
+  async function notifyPreviewReady(client, {
+    jobId,
+    discordId,
+    lang = "vi",
+    job: providedJob = null,
+    userDoc: providedUserDoc = null,
+  }) {
     if (!client?.users?.fetch) {
       return { delivered: false, error: "Discord client unavailable" };
     }
-    const job = await getPreviewJob(jobId, jobDeps);
+    if (providedJob && providedJob.discordId !== discordId) {
+      return { delivered: false, error: "preview job unavailable" };
+    }
+    // Job lookup, Discord user lookup, and roster lookup are independent.
+    // Run them together; the HTTP handoff can also supply the two MongoDB
+    // snapshots it just created/read so the usual path only waits on Discord.
+    const [job, targetUser, userDoc] = await Promise.all([
+      providedJob || getPreviewJob(jobId, jobDeps),
+      client.users.fetch(discordId),
+      providedUserDoc || loadConsoleUser(User, discordId),
+    ]);
     if (!job || job.discordId !== discordId) {
       return { delivered: false, error: "preview job unavailable" };
     }
-    const targetUser = await client.users.fetch(discordId);
-    const userDoc = await loadConsoleUser(User, discordId);
     const payload = await buildConsole(targetUser, { job, lang, userDoc });
     const message = await targetUser.send(payload);
     await recordPreviewDelivery(jobId, discordId, message, jobDeps).catch((err) => {
@@ -211,11 +226,14 @@ function createLocalSyncDiscordConsole({
     // filter and shows every roster again, same as /raid-status.
     const picked = String(interaction.values?.[0] ?? "");
     const rosterFilter = picked === FILTER_ALL_ROSTERS ? null : Number(picked) || 0;
-    const [lang, job, userDoc] = await Promise.all([
-      getUserLanguage(interaction.user.id, { UserModel: User }),
+    const [job, userDoc] = await Promise.all([
       getPreviewJob(jobId, jobDeps),
       loadConsoleUser(User, interaction.user.id),
     ]);
+    const lang = await getUserLanguage(interaction.user.id, {
+      UserModel: User,
+      userDoc,
+    });
     if (!job || job.discordId !== interaction.user.id) return;
     await interaction.editReply(await buildConsole(interaction.user, {
       job,
@@ -234,26 +252,27 @@ function createLocalSyncDiscordConsole({
     // mutation or message edit.
     await interaction.deferUpdate();
 
-    const [lang, existing] = await Promise.all([
-      getUserLanguage(interaction.user.id, { UserModel: User }),
+    const [existing, initialUserDoc] = await Promise.all([
       getPreviewJob(jobId, jobDeps),
+      loadConsoleUser(User, interaction.user.id),
     ]);
+    const lang = await getUserLanguage(interaction.user.id, {
+      UserModel: User,
+      userDoc: initialUserDoc,
+    });
     if (!existing) {
-      const [userDoc, latestJob] = await Promise.all([
-        loadConsoleUser(User, interaction.user.id),
-        getLatestPreviewJob(interaction.user.id, jobDeps),
-      ]);
+      const latestJob = await getLatestPreviewJob(interaction.user.id, jobDeps);
       if (await maybeOpenRaidStatus(interaction, {
         job: latestJob,
         lang,
-        userDoc,
+        userDoc: initialUserDoc,
       })) {
         return;
       }
       await interaction.editReply(await buildConsole(interaction.user, {
         job: latestJob,
         lang,
-        userDoc,
+        userDoc: initialUserDoc,
       }));
       return;
     }
@@ -283,9 +302,17 @@ function createLocalSyncDiscordConsole({
     } else {
       nextJob = await getLatestPreviewJob(interaction.user.id, jobDeps) || existing;
     }
-    nextJob = await preferLatestActionableJob(nextJob, interaction.user.id);
-
-    const userDoc = await loadConsoleUser(User, interaction.user.id);
+    // Apply mutates raid progress and needs a post-write roster read. Cancel
+    // and Refresh leave the User document untouched, so reuse the snapshot
+    // already loaded above. When a reload is needed, overlap it with the
+    // independent latest-job check.
+    let userDoc;
+    [nextJob, userDoc] = await Promise.all([
+      preferLatestActionableJob(nextJob, interaction.user.id),
+      action === "apply"
+        ? loadConsoleUser(User, interaction.user.id)
+        : Promise.resolve(initialUserDoc),
+    ]);
     if (await maybeOpenRaidStatus(interaction, {
       job: nextJob,
       lang,

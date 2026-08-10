@@ -104,6 +104,29 @@ test("all web locales provide Solo companion copy and a Solo mode label", async 
   }
 });
 
+test("all web locales explain realtime file freshness and send-time verification", async () => {
+  const { TRANSLATIONS } = await import("../web/js/core/locales.js");
+  const fileKeys = [
+    "liveStarting",
+    "liveUpdating",
+    "liveVerifying",
+    "liveReady",
+    "liveStatic",
+    "liveRetrying",
+    "liveWalWarning",
+  ];
+  for (const lang of ["vi", "jp", "en"]) {
+    for (const key of fileKeys) {
+      assert.equal(TRANSLATIONS[lang].file[key].length > 0, true, `${lang}.${key}`);
+    }
+    assert.match(TRANSLATIONS[lang].file.liveReady, /\{time\}/, lang);
+    assert.equal(TRANSLATIONS[lang].sync.verifyingFreshness.length > 0, true, lang);
+    assert.equal(TRANSLATIONS[lang].sync.fileBusy.length > 0, true, lang);
+    assert.equal(TRANSLATIONS[lang].sync.walUnsafe.length > 0, true, lang);
+    assert.equal(TRANSLATIONS[lang].sync.deliveryPending.length > 0, true, lang);
+  }
+});
+
 test("web i18n overlays Solo copy without changing full companion copy", async () => {
   global.window = { __artistLang: "en", __artistSyncScope: "solo" };
   try {
