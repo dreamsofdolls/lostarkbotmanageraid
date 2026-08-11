@@ -32,7 +32,10 @@ const {
   isGoldBound,
 } = require("../../../../models/Raid");
 const { normalizeName, toModeLabel } = require("../../../../utils/raid/common/shared");
-const { getStatusRaidsForCharacter } = require("../../../../utils/raid/common/character");
+const {
+  getGoldOverride,
+  getStatusRaidsForCharacter,
+} = require("../../../../utils/raid/common/character");
 const { getCurrentResetStartMs } = require("../../../raid/schedulers/weekly-reset");
 const {
   classifyBucketAgainstRoster,
@@ -67,11 +70,8 @@ function buildSimulatedAssignedRaids(char, finalRaidStates) {
     const source = char?.assignedRaids?.[raidKey] || {};
     const modeLabel = toModeLabel(state.modeKey);
     const raidData = { modeKey: state.modeKey };
-    if (source.goldOverride === "include" || source.goldForced === true) {
-      raidData.goldOverride = "include";
-    } else if (source.goldOverride === "exclude" || source.goldDisabled === true) {
-      raidData.goldOverride = "exclude";
-    }
+    const goldOverride = getGoldOverride(source);
+    if (goldOverride) raidData.goldOverride = goldOverride;
     for (const gate of getGatesForRaid(raidKey)) {
       raidData[gate] = {
         difficulty: modeLabel,

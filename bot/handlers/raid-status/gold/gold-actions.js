@@ -13,6 +13,7 @@ const {
 const { ensureFreshWeek } = require("../../../services/raid/schedulers/weekly-reset");
 const {
   GOLD_RAID_CAP_PER_CHARACTER,
+  getGoldOverride,
   getStatusRaidsForCharacter,
 } = require("../../../utils/raid/common/character");
 
@@ -282,12 +283,6 @@ module.exports = {
   getGoldReplacementRequirement,
 };
 
-function resolveGoldOverride(raidData) {
-  if (raidData?.goldOverride === "include" || raidData?.goldForced === true) return "include";
-  if (raidData?.goldOverride === "exclude" || raidData?.goldDisabled === true) return "exclude";
-  return null;
-}
-
 function getRaidModeKey(raidKey, raidData, character) {
   const assignedModeKey = getAssignedRaidModeKey(raidData, raidKey);
   if (assignedModeKey) return assignedModeKey;
@@ -300,7 +295,7 @@ function getRaidModeKey(raidKey, raidData, character) {
 }
 
 function getNextGoldOverride(raidKey, raidData, character) {
-  const current = resolveGoldOverride(raidData);
+  const current = getGoldOverride(raidData);
   if (current === "include") return "exclude";
   if (current === "exclude") return null;
 

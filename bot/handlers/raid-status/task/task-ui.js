@@ -1,7 +1,10 @@
 "use strict";
 
 const { getClassEmoji } = require("../../../models/Class");
-const { buildAccountTaskFields } = require("../../../utils/raid/tasks/task-view");
+const {
+  addTaskViewContent,
+  buildAccountTaskFields,
+} = require("../../../utils/raid/tasks/task-view");
 const {
   getVisibleSharedTasks,
   getSharedTaskDisplay,
@@ -18,6 +21,7 @@ function createRaidStatusTaskUi(deps) {
     ...deps,
     lang: deps.lang || "vi",
     getClassEmoji,
+    addTaskViewContent,
     buildAccountTaskFields,
     getVisibleSharedTasks,
     getSharedTaskDisplay,

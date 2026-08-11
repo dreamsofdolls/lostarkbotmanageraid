@@ -48,6 +48,7 @@ const {
   findFetchedRosterMatchForCharacter,
   pickUniqueFetchedRosterCandidate,
 } = require("./character/roster-matching");
+const { getGoldOverride } = require("./character/gold-policy");
 const {
   sanitizeSideTasks,
   sanitizeTasks,
@@ -168,12 +169,6 @@ function compareGoldSlotPriority(a, b) {
   const orderDiff = raidDisplayRank(a) - raidDisplayRank(b);
   if (orderDiff !== 0) return orderDiff;
   return (Number(a?.minItemLevel) || 0) - (Number(b?.minItemLevel) || 0);
-}
-
-function getGoldOverride(source) {
-  if (source?.goldOverride === "include" || source?.goldForced === true) return "include";
-  if (source?.goldOverride === "exclude" || source?.goldDisabled === true) return "exclude";
-  return null;
 }
 
 function applyCharacterGoldCap(raids) {

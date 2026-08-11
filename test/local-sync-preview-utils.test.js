@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { buildLocalSyncCatalog } = require("../bot/services/local-sync/core/catalog");
+const { weeklyResetStartMs } = require("../bot/utils/raid/schedule/reset-windows");
 
 async function loadPreviewUtils() {
   const file = path.join(__dirname, "..", "web", "js", "sync", "preview-utils.js");
@@ -202,16 +203,15 @@ test("preview skips unknown difficulty and Solo on the level-based Horizon raid"
 
 test("currentWeeklyResetStartMs follows Wednesday 17:00 VN reset boundary", async () => {
   const { currentWeeklyResetStartMs } = await loadPreviewUtils();
-  assert.equal(
-    currentWeeklyResetStartMs(new Date(Date.UTC(2026, 3, 22, 9, 59, 0, 0))),
-    Date.UTC(2026, 3, 15, 10, 0, 0, 0)
-  );
-  assert.equal(
-    currentWeeklyResetStartMs(new Date(Date.UTC(2026, 3, 22, 10, 0, 0, 0))),
-    Date.UTC(2026, 3, 22, 10, 0, 0, 0)
-  );
-  assert.equal(
-    currentWeeklyResetStartMs(new Date(Date.UTC(2026, 3, 26, 12, 0, 0, 0))),
-    Date.UTC(2026, 3, 22, 10, 0, 0, 0)
-  );
+  const cases = [
+    [Date.UTC(2026, 3, 22, 9, 59, 0, 0), Date.UTC(2026, 3, 15, 10, 0, 0, 0)],
+    [Date.UTC(2026, 3, 22, 10, 0, 0, 0), Date.UTC(2026, 3, 22, 10, 0, 0, 0)],
+    [Date.UTC(2026, 3, 26, 12, 0, 0, 0), Date.UTC(2026, 3, 22, 10, 0, 0, 0)],
+  ];
+  for (const [nowMs, expectedMs] of cases) {
+    const now = new Date(nowMs);
+    assert.equal(currentWeeklyResetStartMs(now), expectedMs);
+    assert.equal(weeklyResetStartMs(now), expectedMs);
+    assert.equal(currentWeeklyResetStartMs(now), weeklyResetStartMs(now));
+  }
 });

@@ -25,6 +25,9 @@ const { resolveGuildChannel } = require("../../discord/resolve-guild-channel");
 const {
   createNonOverlappingIntervalRunner,
 } = require("./scheduler-runner");
+const {
+  weeklyResetStartMs,
+} = require("../../../utils/raid/schedule/reset-windows");
 
 const WEEKLY_ANNOUNCEMENT_TTL_MS = 30 * 60 * 1000; // marker sits 30 min before self-delete
 const WEEKLY_RESET_TICK_MS = 30 * 60 * 1000;
@@ -72,21 +75,7 @@ function getTargetResetKey(now = new Date()) {
 }
 
 function getCurrentResetStartMs(now = new Date()) {
-  const cursor = new Date(now.getTime());
-  for (let i = 0; i < 8; i += 1) {
-    const day = cursor.getUTCDay();
-    if (day === 3 && cursor.getUTCHours() >= 10) {
-      return Date.UTC(
-        cursor.getUTCFullYear(),
-        cursor.getUTCMonth(),
-        cursor.getUTCDate(),
-        10, 0, 0, 0
-      );
-    }
-    cursor.setUTCDate(cursor.getUTCDate() - 1);
-    cursor.setUTCHours(23, 59, 59, 999);
-  }
-  return now.getTime() - 7 * 24 * 60 * 60 * 1000;
+  return weeklyResetStartMs(now);
 }
 
 function shouldPreserveCurrentWeekCompletion(timestamp, preserveSinceMs) {

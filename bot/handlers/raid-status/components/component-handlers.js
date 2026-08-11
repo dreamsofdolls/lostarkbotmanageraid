@@ -139,6 +139,35 @@ function createStatusComponentRouteHandlers(ctx) {
     truncateText,
   });
 
+  function resolveCurrentAccountWriteContext({ logLabel, detail = "" }) {
+    const targetAccount = session.accounts[session.currentPage];
+    const targetAccountName = targetAccount?.accountName || "";
+    if (!targetAccountName) return null;
+
+    const sharedFrom = targetAccount?._sharedFrom;
+    const detailSuffix = detail ? ` ${detail}` : "";
+    if (sharedFrom && sharedFrom.accessLevel !== "edit") {
+      console.log(
+        `[${logLabel}] view-only share rejected ` +
+        `executor=${discordId} owner=${sharedFrom.ownerDiscordId}${detailSuffix}`,
+      );
+      return null;
+    }
+
+    const writeDiscordId = sharedFrom ? sharedFrom.ownerDiscordId : discordId;
+    if (sharedFrom) {
+      console.log(
+        `[${logLabel}] share-write executor=${discordId} ` +
+        `owner=${writeDiscordId}${detailSuffix}`,
+      );
+    }
+    return {
+      targetAccount,
+      targetAccountName,
+      writeDiscordId,
+    };
+  }
+
   return {
     [STATUS_COMPONENT_ACTION.prev]: async () => {
       session.movePage(-1);
@@ -529,27 +558,12 @@ function createStatusComponentRouteHandlers(ctx) {
         return noRedraw();
       }
 
-      const targetAccount = session.accounts[session.currentPage];
-      const targetAccountName = targetAccount?.accountName || "";
-      if (!targetAccountName) {
-        return noRedraw();
-      }
-
-      const sharedFrom = targetAccount?._sharedFrom;
-      if (sharedFrom && sharedFrom.accessLevel !== "edit") {
-        console.log(
-          `[raid-status side-task toggle] view-only share rejected ` +
-          `executor=${discordId} owner=${sharedFrom.ownerDiscordId} kind=${parsed.kind}`,
-        );
-        return noRedraw();
-      }
-      const writeDiscordId = sharedFrom ? sharedFrom.ownerDiscordId : discordId;
-      if (sharedFrom) {
-        console.log(
-          `[raid-status side-task toggle] share-write executor=${discordId} ` +
-          `owner=${writeDiscordId} kind=${parsed.kind}`,
-        );
-      }
+      const writeContext = resolveCurrentAccountWriteContext({
+        logLabel: "raid-status side-task toggle",
+        detail: `kind=${parsed.kind}`,
+      });
+      if (!writeContext) return noRedraw();
+      const { targetAccountName, writeDiscordId } = writeContext;
 
       await toggleParsedSideTask({
         User,
@@ -582,27 +596,12 @@ function createStatusComponentRouteHandlers(ctx) {
         return noRedraw();
       }
 
-      const targetAccount = session.accounts[session.currentPage];
-      const targetAccountName = targetAccount?.accountName || "";
-      if (!targetAccountName) {
-        return noRedraw();
-      }
-
-      const sharedFrom = targetAccount?._sharedFrom;
-      if (sharedFrom && sharedFrom.accessLevel !== "edit") {
-        console.log(
-          `[raid-status gold mode] view-only share rejected ` +
-          `executor=${discordId} owner=${sharedFrom.ownerDiscordId} raid=${parsed.raidKey}`,
-        );
-        return noRedraw();
-      }
-      const writeDiscordId = sharedFrom ? sharedFrom.ownerDiscordId : discordId;
-      if (sharedFrom) {
-        console.log(
-          `[raid-status gold mode] share-write executor=${discordId} ` +
-          `owner=${writeDiscordId} raid=${parsed.raidKey}`,
-        );
-      }
+      const writeContext = resolveCurrentAccountWriteContext({
+        logLabel: "raid-status gold mode",
+        detail: `raid=${parsed.raidKey}`,
+      });
+      if (!writeContext) return noRedraw();
+      const { targetAccountName, writeDiscordId } = writeContext;
 
       let result;
       try {
@@ -673,27 +672,12 @@ function createStatusComponentRouteHandlers(ctx) {
         return noRedraw();
       }
 
-      const targetAccount = session.accounts[session.currentPage];
-      const targetAccountName = targetAccount?.accountName || "";
-      if (!targetAccountName) {
-        return noRedraw();
-      }
-
-      const sharedFrom = targetAccount?._sharedFrom;
-      if (sharedFrom && sharedFrom.accessLevel !== "edit") {
-        console.log(
-          `[raid-status gold toggle] view-only share rejected ` +
-          `executor=${discordId} owner=${sharedFrom.ownerDiscordId} raid=${parsed.raidKey}`,
-        );
-        return noRedraw();
-      }
-      const writeDiscordId = sharedFrom ? sharedFrom.ownerDiscordId : discordId;
-      if (sharedFrom) {
-        console.log(
-          `[raid-status gold toggle] share-write executor=${discordId} ` +
-          `owner=${writeDiscordId} raid=${parsed.raidKey}`,
-        );
-      }
+      const writeContext = resolveCurrentAccountWriteContext({
+        logLabel: "raid-status gold toggle",
+        detail: `raid=${parsed.raidKey}`,
+      });
+      if (!writeContext) return noRedraw();
+      const { targetAccountName, writeDiscordId } = writeContext;
 
       const toggleResult = await toggleParsedGoldRaid({
         User,

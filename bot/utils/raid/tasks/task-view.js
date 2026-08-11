@@ -40,6 +40,8 @@ const HEADER_SEPARATOR = "\u00A0\u00B7\u00A0";
 // With the spacer trick, 11 chars pack to 18 fields, leaving room for
 // caller-added placeholder fields. Above this, render one field per char.
 const PAGE_CHAR_CAP = 11;
+const SHARED_TASK_DISPLAY_LIMIT = 12;
+const DISCORD_EMBED_FIELD_LIMIT = 25;
 
 function getCharacterName(character) {
   return String(character?.name || character?.charName || "").trim();
@@ -157,7 +159,87 @@ function buildAccountTaskFields(account, helpers) {
   return { fields, totals };
 }
 
+/**
+ * Add the shared-task summary plus character fields to a task-view embed and
+ * return the surface-specific footer fragments. Translation copy remains with
+ * each caller through the `text` adapter while Discord field-budget behavior
+ * stays identical across /raid-status and both /raid-check views.
+ */
+function addTaskViewContent({
+  embed,
+  fields,
+  totals,
+  sharedTasks,
+  now,
+  lang,
+  UI,
+  getSharedTaskDisplay,
+  truncateText,
+  text,
+  overflowFieldName = "...",
+  showSharedField = true,
+}) {
+  const taskFields = Array.isArray(fields) ? fields : [];
+  const tasks = Array.isArray(sharedTasks) ? sharedTasks : [];
+  const displayRows = tasks.map((task) => getSharedTaskDisplay(task, now, lang));
+
+  const hasSharedField = showSharedField && displayRows.length > 0;
+  if (hasSharedField) {
+    const lines = displayRows.slice(0, SHARED_TASK_DISPLAY_LIMIT).map((display) => {
+      const icon = display.completed ? UI.icons.done : UI.icons.pending;
+      return `${icon} ${display.emoji} **${display.name}** · ${display.status}`;
+    });
+    if (displayRows.length > SHARED_TASK_DISPLAY_LIMIT) {
+      lines.push(text.sharedOverflow(displayRows.length - SHARED_TASK_DISPLAY_LIMIT));
+    }
+    embed.addFields({
+      name: text.sharedHeader(),
+      value: truncateText(lines.join("\n"), 1024),
+      inline: false,
+    });
+  }
+
+  const fieldBudget = hasSharedField
+    ? DISCORD_EMBED_FIELD_LIMIT - 1
+    : DISCORD_EMBED_FIELD_LIMIT;
+  const visibleFields = taskFields.length > fieldBudget
+    ? [
+        ...taskFields.slice(0, fieldBudget - 1),
+        {
+          name: overflowFieldName,
+          value: text.characterOverflow(taskFields.length - fieldBudget + 1),
+          inline: false,
+        },
+      ]
+    : taskFields;
+  if (visibleFields.length > 0) embed.addFields(...visibleFields);
+
+  const footerParts = [];
+  if (displayRows.length > 0) {
+    footerParts.push(text.sharedFooter({
+      done: displayRows.filter((display) => display.completed).length,
+      total: displayRows.length,
+    }));
+  }
+  if (totals.daily > 0) {
+    footerParts.push(text.dailyFooter({
+      done: totals.dailyDone,
+      total: totals.daily,
+    }));
+  }
+  if (totals.weekly > 0) {
+    footerParts.push(text.weeklyFooter({
+      done: totals.weeklyDone,
+      total: totals.weekly,
+    }));
+  }
+  return footerParts;
+}
+
 module.exports = {
+  DISCORD_EMBED_FIELD_LIMIT,
   PAGE_CHAR_CAP,
+  SHARED_TASK_DISPLAY_LIMIT,
+  addTaskViewContent,
   buildAccountTaskFields,
 };

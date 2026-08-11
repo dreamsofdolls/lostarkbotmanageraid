@@ -723,6 +723,61 @@ test("buildAccountTaskFields odd char count pads with spacer to keep 2-column", 
   assert.equal(fields[2].name, "​");
 });
 
+test("addTaskViewContent shares Discord field budgeting without changing surface copy", () => {
+  const {
+    DISCORD_EMBED_FIELD_LIMIT,
+    addTaskViewContent,
+  } = require("../bot/utils/raid/tasks/task-view");
+  const makeEmbed = () => ({
+    data: { fields: [] },
+    addFields(...nextFields) {
+      this.data.fields.push(...nextFields);
+      return this;
+    },
+  });
+  const fields = Array.from({ length: DISCORD_EMBED_FIELD_LIMIT }, (_, index) => ({
+    name: `Character ${index + 1}`,
+    value: "task",
+    inline: false,
+  }));
+  const sharedTasks = [{ name: "Shared", emoji: "S", status: "done", completed: true }];
+  const common = {
+    fields,
+    totals: { daily: 2, dailyDone: 1, weekly: 0, weeklyDone: 0 },
+    sharedTasks,
+    now: new Date(0),
+    lang: "en",
+    UI: { icons: { done: "done", pending: "pending" } },
+    getSharedTaskDisplay: (task) => task,
+    truncateText: (value) => value,
+    text: {
+      sharedOverflow: (n) => `${n} shared more`,
+      sharedHeader: () => "Shared tasks",
+      characterOverflow: (n) => `${n} characters more`,
+      sharedFooter: ({ done, total }) => `shared ${done}/${total}`,
+      dailyFooter: ({ done, total }) => `daily ${done}/${total}`,
+      weeklyFooter: ({ done, total }) => `weekly ${done}/${total}`,
+    },
+  };
+
+  const embed = makeEmbed();
+  const footerParts = addTaskViewContent({ embed, ...common });
+  assert.equal(embed.data.fields.length, DISCORD_EMBED_FIELD_LIMIT);
+  assert.equal(embed.data.fields[0].name, "Shared tasks");
+  assert.equal(embed.data.fields.at(-1).value, "2 characters more");
+  assert.deepEqual(footerParts, ["shared 1/1", "daily 1/2"]);
+
+  const hiddenSharedEmbed = makeEmbed();
+  const hiddenSharedFooter = addTaskViewContent({
+    embed: hiddenSharedEmbed,
+    ...common,
+    showSharedField: false,
+  });
+  assert.equal(hiddenSharedEmbed.data.fields.length, DISCORD_EMBED_FIELD_LIMIT);
+  assert.equal(hiddenSharedEmbed.data.fields[0].name, "Character 1");
+  assert.deepEqual(hiddenSharedFooter, ["shared 1/1", "daily 1/2"]);
+});
+
 test("PROJECTION: raid-check all-mode uses the shared raid-check projection", () => {
   // Manager all-mode and the per-raid snapshot must stay on the same
   // allowlist. This pins sideTasks plus alias fields such as

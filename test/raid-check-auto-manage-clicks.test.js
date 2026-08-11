@@ -180,6 +180,28 @@ test("raid-check auto-manage manager enable sends target DM and success reply", 
   assert.equal(interaction.edits[0].embeds[0].data.color, UI.colors.success);
 });
 
+test("raid-check auto-manage manager disable sends the matching self-enable action", async () => {
+  const targetSends = [];
+  const User = makeUserModel({
+    findOneAndUpdateImpl: () => Promise.resolve({
+      discordId: "user-1",
+      autoManageEnabled: false,
+    }),
+  });
+  const ui = createUi(User);
+  const interaction = makeInteraction({ targetSends });
+
+  await ui.handleRaidCheckDisableAutoOneClick(interaction, "user-1");
+
+  assert.equal(User.calls.findOneAndUpdate.length, 1);
+  assert.equal(User.calls.findOneAndUpdate[0].filter.autoManageEnabled, true);
+  assert.equal(targetSends.length, 1);
+  assert.equal(targetSends[0].components[0].components[0].data.customId, "raid-check:enable-auto-self:user-1");
+  assert.equal(targetSends[0].components[0].components[0].data.style, "primary");
+  assert.equal(interaction.edits.length, 1);
+  assert.equal(interaction.edits[0].embeds[0].data.color, UI.colors.muted);
+});
+
 test("raid-check auto-manage self disable rejects clicks from a different user", async () => {
   const User = makeUserModel({
     findOneAndUpdateImpl: () => {
@@ -263,4 +285,23 @@ test("raid-check auto-manage self action defers the source update before DB work
 
   assert.equal(events[0], "defer-update");
   assert.ok(events.includes("state"));
+});
+
+test("raid-check auto-manage self enable uses the guarded transition and success copy", async () => {
+  const User = makeUserModel({
+    findOneAndUpdateImpl: () => Promise.resolve({
+      discordId: "user-1",
+      autoManageEnabled: true,
+    }),
+  });
+  const ui = createUi(User);
+  const interaction = makeInteraction({ userId: "user-1" });
+
+  await ui.handleRaidCheckEnableAutoSelfClick(interaction, "user-1");
+
+  assert.equal(interaction.deferredUpdates, 1);
+  assert.equal(User.calls.findOneAndUpdate.length, 1);
+  assert.deepEqual(User.calls.findOneAndUpdate[0].filter.localSyncEnabled, { $ne: true });
+  assert.equal(interaction.edits.length, 1);
+  assert.equal(interaction.edits[0].embeds[0].data.color, UI.colors.success);
 });

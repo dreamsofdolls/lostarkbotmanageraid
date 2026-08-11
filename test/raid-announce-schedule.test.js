@@ -90,3 +90,66 @@ test("buildAnnouncementWhenItFiresText shows both boundary and scheduler phase f
   assert.match(text, /\*\*Next eligible boundary:\*\*/);
   assert.match(text, /\*\*Next scheduler check:\*\*/);
 });
+
+test("announcement schedule rules keep on-demand and disabled guard copy per type", () => {
+  const entry = {
+    trigger: "test trigger",
+    dedup: "test dedup",
+    messageTtl: "test ttl",
+    channelOverridable: false,
+  };
+  const current = { enabled: true, channelId: null };
+  const now = new Date(Date.UTC(2026, 3, 24, 12, 10, 0, 0));
+  const cases = [
+    {
+      typeKey: "set-greeting",
+      guildCfg: { raidChannelId: "123" },
+      schedulerState: {},
+      expected: /On-demand/,
+    },
+    {
+      typeKey: "artist-bedtime",
+      guildCfg: { raidChannelId: "123", autoCleanupEnabled: false },
+      schedulerState: {},
+      expected: /shares the cleanup scheduler/,
+    },
+    {
+      typeKey: "stuck-nudge",
+      guildCfg: { raidChannelId: "123" },
+      schedulerState: { autoManageDisabled: true },
+      expected: /AUTO_MANAGE_DAILY_DISABLED=true/,
+    },
+  ];
+
+  for (const testCase of cases) {
+    const text = __test.buildAnnouncementWhenItFiresText(
+      testCase.typeKey,
+      entry,
+      current,
+      testCase.guildCfg,
+      now,
+      testCase.schedulerState
+    );
+    assert.match(text, testCase.expected);
+  }
+});
+
+test("artist schedule rules share the cleanup scheduler phase", () => {
+  const now = new Date(Date.UTC(2026, 3, 24, 12, 18, 0, 0));
+  const schedulerState = {
+    autoCleanupStartedAtMs: Date.UTC(2026, 3, 24, 12, 17, 0, 0),
+  };
+  const cleanupCheck = __test.nextAnnouncementSchedulerCheckMs(
+    "hourly-cleanup",
+    now,
+    schedulerState
+  );
+  assert.equal(
+    __test.nextAnnouncementSchedulerCheckMs("artist-bedtime", now, schedulerState),
+    cleanupCheck
+  );
+  assert.equal(
+    __test.nextAnnouncementSchedulerCheckMs("artist-wakeup", now, schedulerState),
+    cleanupCheck
+  );
+});

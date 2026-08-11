@@ -11,7 +11,10 @@ const {
   editEmbed,
   editNotice,
 } = require("../../../utils/raid/common/shared");
-const { buildAccountTaskFields } = require("../../../utils/raid/tasks/task-view");
+const {
+  addTaskViewContent,
+  buildAccountTaskFields,
+} = require("../../../utils/raid/tasks/task-view");
 const {
   getVisibleSharedTasks,
   getSharedTaskDisplay,
@@ -128,59 +131,38 @@ function createTaskViewUi(deps) {
       });
       const now = new Date();
       const sharedTasks = getVisibleSharedTasks(account, now.getTime());
-      if (sharedTasks.length > 0) {
-        const lines = sharedTasks.slice(0, 12).map((task) => {
-          const display = getSharedTaskDisplay(task, now, lang);
-          const icon = display.completed ? UI.icons.done : UI.icons.pending;
-          return `${icon} ${display.emoji} **${display.name}** · ${display.status}`;
-        });
-        if (sharedTasks.length > 12) {
-          lines.push(t("raid-check.taskView.sharedTaskExtra", lang, { n: sharedTasks.length - 12 }));
-        }
-        embed.addFields({
-          name: t("raid-check.taskView.sharedTaskHeader", lang),
-          value: truncateText(lines.join("\n"), 1024),
-          inline: false,
-        });
-      }
-      const fieldBudget = sharedTasks.length > 0 ? 24 : 25;
-      const visibleFields =
-        fields.length > fieldBudget
-          ? [
-              ...fields.slice(0, fieldBudget - 1),
-              {
-                name: "…",
-                value: t("raid-check.taskView.charsExtraField", lang, { n: fields.length - fieldBudget + 1 }),
-                inline: false,
-              },
-            ]
-          : fields;
-      if (visibleFields.length > 0) embed.addFields(...visibleFields);
-      const footerParts = [];
-      if (sharedTasks.length > 0) {
-        const sharedDone = sharedTasks.filter((task) =>
-          getSharedTaskDisplay(task, now, lang).completed
-        ).length;
-        footerParts.push(t("raid-check.taskView.sharedFooter", lang, {
-          doneIcon: UI.icons.done,
-          done: sharedDone,
-          total: sharedTasks.length,
-        }));
-      }
-      if (totals.daily > 0) {
-        footerParts.push(t("raid-check.taskView.dailyFooter", lang, {
-          doneIcon: UI.icons.done,
-          done: totals.dailyDone,
-          total: totals.daily,
-        }));
-      }
-      if (totals.weekly > 0) {
-        footerParts.push(t("raid-check.taskView.weeklyFooter", lang, {
-          doneIcon: UI.icons.done,
-          done: totals.weeklyDone,
-          total: totals.weekly,
-        }));
-      }
+      const footerParts = addTaskViewContent({
+        embed,
+        fields,
+        totals,
+        sharedTasks,
+        now,
+        lang,
+        UI,
+        getSharedTaskDisplay,
+        truncateText,
+        overflowFieldName: "…",
+        text: {
+          sharedOverflow: (n) => t("raid-check.taskView.sharedTaskExtra", lang, { n }),
+          sharedHeader: () => t("raid-check.taskView.sharedTaskHeader", lang),
+          characterOverflow: (n) => t("raid-check.taskView.charsExtraField", lang, { n }),
+          sharedFooter: ({ done, total }) => t("raid-check.taskView.sharedFooter", lang, {
+            doneIcon: UI.icons.done,
+            done,
+            total,
+          }),
+          dailyFooter: ({ done, total }) => t("raid-check.taskView.dailyFooter", lang, {
+            doneIcon: UI.icons.done,
+            done,
+            total,
+          }),
+          weeklyFooter: ({ done, total }) => t("raid-check.taskView.weeklyFooter", lang, {
+            doneIcon: UI.icons.done,
+            done,
+            total,
+          }),
+        },
+      });
       if (totalPages > 1) {
         footerParts.push(t("raid-check.taskView.pageFooter", lang, {
           current: pageIdx + 1,

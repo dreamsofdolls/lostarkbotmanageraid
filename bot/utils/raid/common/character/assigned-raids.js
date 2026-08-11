@@ -11,6 +11,7 @@ const {
   getRaidRequirementMap,
   getGatesForRaid,
 } = require("../../../../models/Raid");
+const { getGoldOverride } = require("./gold-policy");
 
 const RAID_REQUIREMENT_MAP = getRaidRequirementMap();
 const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
@@ -154,11 +155,8 @@ function normalizeAssignedRaid(assignedRaid, fallbackDifficulty, raidKey) {
 
   const canonicalNorm = normalizeName(canonicalDifficulty);
   const normalized = canonicalModeKey ? { modeKey: canonicalModeKey } : {};
-  if (assignedRaid?.goldOverride === "include" || assignedRaid?.goldForced === true) {
-    normalized.goldOverride = "include";
-  } else if (assignedRaid?.goldOverride === "exclude" || assignedRaid?.goldDisabled === true) {
-    normalized.goldOverride = "exclude";
-  }
+  const goldOverride = getGoldOverride(assignedRaid);
+  if (goldOverride) normalized.goldOverride = goldOverride;
   const pendingModeKey = normalizeRaidModeKey(raidKey, assignedRaid?.pendingModeKey);
   if (pendingModeKey) normalized.pendingModeKey = pendingModeKey;
   for (const gate of keys) {

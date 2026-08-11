@@ -77,6 +77,148 @@ function createSchedulingHelpers({
     return startedAtMs + (ticksElapsed * intervalMs);
   }
   
+  function nextWeeklyResetBoundaryMs(now) {
+    const candidate = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      10, 0, 0, 0
+    ));
+    const utcDay = now.getUTCDay();
+    if (utcDay === 3 && now.getUTCHours() < 10) {
+      return candidate.getTime();
+    }
+    // If today is Wed at/after 10 UTC, daysUntilWed collapses to 0 via
+    // modulo; promote it to 7 to advance a full week.
+    const daysUntilWed = ((3 - utcDay + 7) % 7) || 7;
+    candidate.setUTCDate(candidate.getUTCDate() + daysUntilWed);
+    return candidate.getTime();
+  }
+
+  function nextHalfHourBoundaryMs(now) {
+    const candidate = new Date(now);
+    candidate.setUTCSeconds(0, 0);
+    candidate.setUTCMinutes(candidate.getUTCMinutes() < 30 ? 30 : 60);
+    return candidate.getTime();
+  }
+
+  function nextDailyUtcBoundaryMs(now, targetUtcHour) {
+    const candidate = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      targetUtcHour, 0, 0, 0
+    ));
+    if (candidate.getTime() <= now.getTime()) {
+      candidate.setUTCDate(candidate.getUTCDate() + 1);
+    }
+    return candidate.getTime();
+  }
+
+  function nextMaintenanceBoundaryMs(now, minutesKey) {
+    // Single source of truth: the slot config snapshot from the scheduler
+    // module. Changing that config automatically flows into this preview.
+    const cfg = resolveMaintenanceSlotConfig?.();
+    if (!cfg) return null;
+    const minutesArr = cfg[minutesKey];
+    if (!Array.isArray(minutesArr) || minutesArr.length === 0) return null;
+
+    const utcDay = now.getUTCDay();
+    const daysToAdd = utcDay === cfg.dayOfWeek
+      ? 0
+      : (cfg.dayOfWeek - utcDay + 7) % 7;
+    const boundary = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() + daysToAdd,
+      cfg.utcHour, cfg.utcMinute, 0, 0
+    ));
+    const boundaryMs = boundary.getTime();
+    const futureFirePoint = minutesArr
+      .map((minutesBefore) => boundaryMs - minutesBefore * 60000)
+      .sort((a, b) => a - b)
+      .find((timestampMs) => timestampMs > now.getTime());
+    if (futureFirePoint !== undefined) return futureFirePoint;
+
+    // All fire points this week passed - next eligible is the earliest
+    // fire point (largest minutesBefore) of NEXT week's boundary.
+    const earliestMinutes = Math.max(...minutesArr);
+    return boundaryMs + 7 * 24 * 60 * 60 * 1000 - earliestMinutes * 60000;
+  }
+
+  const cleanupSchedulerCheck = ({ now, schedulerState }) => nextIntervalTickMs(
+    schedulerState.autoCleanupStartedAtMs,
+    resolveAutoCleanupTickMs(),
+    now
+  );
+  const maintenanceSchedulerCheck = ({ now }) => nextIntervalTickMs(
+    resolveMaintenanceStarted?.(),
+    resolveMaintenanceTickMs?.(),
+    now
+  );
+  const cleanupScheduleDisabled = ({ guildCfg }) => guildCfg?.autoCleanupEnabled !== true;
+
+  const announcementScheduleRules = Object.freeze({
+    "weekly-reset": {
+      eligibleBoundary: nextWeeklyResetBoundaryMs,
+      schedulerCheck: ({ now, schedulerState }) => nextIntervalTickMs(
+        schedulerState.weeklyResetStartedAtMs,
+        resolveWeeklyResetTickMs(),
+        now
+      ),
+      note: "The announcement posts only if that scheduler pass actually resets at least one user and is still inside the Wed→Thu reset window.",
+    },
+    "hourly-cleanup": {
+      eligibleBoundary: nextHalfHourBoundaryMs,
+      schedulerCheck: cleanupSchedulerCheck,
+      disabledWhen: cleanupScheduleDisabled,
+      disabledText: "Disabled until `/raid-channel config action:schedule-on` is enabled",
+      note: "The notice posts only after this guild's cleanup run completes.",
+    },
+    "stuck-nudge": {
+      eligibleBoundary: nextHalfHourBoundaryMs,
+      schedulerCheck: ({ now, schedulerState }) => nextIntervalTickMs(
+        schedulerState.autoManageStartedAtMs,
+        resolveAutoManageDailyTickMs(),
+        now
+      ),
+      disabledWhen: ({ autoManageDisabled }) => autoManageDisabled,
+      disabledText: "Disabled by deploy killswitch (`AUTO_MANAGE_DAILY_DISABLED=true`)",
+      note: "The nudge posts only if that tick finds a user whose logs are private.",
+    },
+    "artist-bedtime": {
+      eligibleBoundary: (now) => nextDailyUtcBoundaryMs(now, 20),
+      schedulerCheck: cleanupSchedulerCheck,
+      disabledWhen: cleanupScheduleDisabled,
+      disabledText: "Disabled until `/raid-channel config action:schedule-on` is enabled (shares the cleanup scheduler)",
+    },
+    "artist-wakeup": {
+      eligibleBoundary: (now) => nextDailyUtcBoundaryMs(now, 1),
+      schedulerCheck: cleanupSchedulerCheck,
+      disabledWhen: cleanupScheduleDisabled,
+      disabledText: "Disabled until `/raid-channel config action:schedule-on` is enabled (shares the cleanup scheduler)",
+    },
+    "maintenance-early": {
+      eligibleBoundary: (now) => nextMaintenanceBoundaryMs(now, "earlyMinutes"),
+      schedulerCheck: maintenanceSchedulerCheck,
+    },
+    "maintenance-countdown": {
+      eligibleBoundary: (now) => nextMaintenanceBoundaryMs(now, "countdownMinutes"),
+      schedulerCheck: maintenanceSchedulerCheck,
+    },
+    "world-event-reminder": {
+      eligibleBoundary: (now) => resolveNextWorldEventReminderBoundary(now),
+      schedulerCheck: ({ now, schedulerState }) => nextIntervalTickMs(
+        schedulerState.worldEventStartedAtMs,
+        resolveWorldEventTickMs(),
+        now
+      ),
+      note: "This high-frequency reminder is opt-in and combines Chaos Gate + Field Boss into one Sunday post when their spawn time matches.",
+    },
+    "set-greeting": { onDemand: true },
+    "whisper-ack": { onDemand: true },
+  });
+
   /**
    * Wall-clock eligibility boundary for announcement types whose natural
    * trigger is tied to a calendar boundary. This is NOT always the same as
@@ -84,97 +226,7 @@ function createSchedulingHelpers({
    * from its boot phase.
    */
   function nextAnnouncementEligibleBoundaryMs(typeKey, now = new Date()) {
-    const nowMs = now.getTime();
-    if (typeKey === "weekly-reset") {
-      const candidate = new Date(Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth(),
-        now.getUTCDate(),
-        10, 0, 0, 0
-      ));
-      const utcDay = now.getUTCDay();
-      if (utcDay === 3 && now.getUTCHours() < 10) {
-        return candidate.getTime();
-      }
-      // If today is Wed at/after 10 UTC, daysUntilWed collapses to 0 via
-      // modulo; promote it to 7 to advance a full week.
-      const daysUntilWed = ((3 - utcDay + 7) % 7) || 7;
-      candidate.setUTCDate(candidate.getUTCDate() + daysUntilWed);
-      return candidate.getTime();
-    }
-    if (typeKey === "hourly-cleanup") {
-      // Cadence bumped from hourly to 30-min per Traine (Apr 2026). Next
-      // eligible boundary is the next :00 or :30 slot, same shape as the
-      // stuck-nudge tick boundary below.
-      const candidate = new Date(now);
-      candidate.setUTCSeconds(0, 0);
-      if (candidate.getUTCMinutes() < 30) {
-        candidate.setUTCMinutes(30);
-      } else {
-        candidate.setUTCMinutes(60); // rolls into next hour
-      }
-      return candidate.getTime();
-    }
-    if (typeKey === "stuck-nudge") {
-      const candidate = new Date(now);
-      candidate.setUTCSeconds(0, 0);
-      if (candidate.getUTCMinutes() < 30) {
-        candidate.setUTCMinutes(30);
-      } else {
-        candidate.setUTCMinutes(60); // rolls into next hour
-      }
-      return candidate.getTime();
-    }
-    if (typeKey === "artist-bedtime" || typeKey === "artist-wakeup") {
-      // Bedtime = 3:00 VN = 20:00 UTC previous day. Wake-up = 8:00 VN =
-      // 1:00 UTC same day. Compute the next UTC boundary that matches.
-      const targetUtcHour = typeKey === "artist-bedtime" ? 20 : 1;
-      const candidate = new Date(Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth(),
-        now.getUTCDate(),
-        targetUtcHour, 0, 0, 0
-      ));
-      if (candidate.getTime() <= nowMs) {
-        candidate.setUTCDate(candidate.getUTCDate() + 1);
-      }
-      return candidate.getTime();
-    }
-    if (typeKey === "maintenance-early" || typeKey === "maintenance-countdown") {
-      // Single source of truth: the slot config snapshot from the scheduler
-      // module. Boundary day-of-week, UTC hour, minute, and the minutesBefore
-      // arrays all come through one resolver - changing the maintenance
-      // schedule at the top of raid-schedulers.js automatically flows here.
-      const cfg = resolveMaintenanceSlotConfig?.();
-      if (!cfg) return null;
-      const minutesArr = typeKey === "maintenance-early" ? cfg.earlyMinutes : cfg.countdownMinutes;
-      if (!Array.isArray(minutesArr) || minutesArr.length === 0) return null;
-      const utcDay = now.getUTCDay();
-      const daysToAdd = utcDay === cfg.dayOfWeek
-        ? 0
-        : (cfg.dayOfWeek - utcDay + 7) % 7;
-      const boundary = new Date(Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth(),
-        now.getUTCDate() + daysToAdd,
-        cfg.utcHour, cfg.utcMinute, 0, 0
-      ));
-      const boundaryMs = boundary.getTime();
-      const mocTimes = minutesArr
-        .map((m) => boundaryMs - m * 60000)
-        .sort((a, b) => a - b);
-      for (const t of mocTimes) {
-        if (t > nowMs) return t;
-      }
-      // All fire points this week passed - next eligible is the earliest
-      // fire point (largest minutesBefore) of NEXT week's boundary.
-      const earliestMinutes = Math.max(...minutesArr);
-      return boundaryMs + 7 * 24 * 60 * 60 * 1000 - earliestMinutes * 60000;
-    }
-    if (typeKey === "world-event-reminder") {
-      return resolveNextWorldEventReminderBoundary(now);
-    }
-    return null; // event-driven
+    return announcementScheduleRules[typeKey]?.eligibleBoundary?.(now) ?? null;
   }
   
   /**
@@ -195,30 +247,17 @@ function createSchedulingHelpers({
       autoManageStartedAtMs = resolveAutoManageStarted(),
       worldEventStartedAtMs = resolveWorldEventStarted(),
     } = schedulerState;
-    if (typeKey === "weekly-reset") {
-      return nextIntervalTickMs(weeklyResetStartedAtMs, resolveWeeklyResetTickMs(), now);
-    }
-    if (typeKey === "hourly-cleanup") {
-      return nextIntervalTickMs(autoCleanupStartedAtMs, resolveAutoCleanupTickMs(), now);
-    }
-    if (typeKey === "stuck-nudge") {
-      return nextIntervalTickMs(autoManageStartedAtMs, resolveAutoManageDailyTickMs(), now);
-    }
-    if (typeKey === "artist-bedtime" || typeKey === "artist-wakeup") {
-      // These piggyback on the auto-cleanup scheduler tick, so the next
-      // scheduler check is the same cadence. The dispatch logic inside
-      // runAutoCleanupTick decides which path fires at tick time.
-      return nextIntervalTickMs(autoCleanupStartedAtMs, resolveAutoCleanupTickMs(), now);
-    }
-    if (typeKey === "maintenance-early" || typeKey === "maintenance-countdown") {
-      const maintenanceStartedAtMs = resolveMaintenanceStarted?.();
-      const tickMs = resolveMaintenanceTickMs?.();
-      return nextIntervalTickMs(maintenanceStartedAtMs, tickMs, now);
-    }
-    if (typeKey === "world-event-reminder") {
-      return nextIntervalTickMs(worldEventStartedAtMs, resolveWorldEventTickMs(), now);
-    }
-    return null;
+    const rule = announcementScheduleRules[typeKey];
+    if (!rule?.schedulerCheck) return null;
+    return rule.schedulerCheck({
+      now,
+      schedulerState: {
+        weeklyResetStartedAtMs,
+        autoCleanupStartedAtMs,
+        autoManageStartedAtMs,
+        worldEventStartedAtMs,
+      },
+    });
   }
   
   function formatDiscordTimestampPair(ms) {
@@ -266,28 +305,15 @@ function createSchedulingHelpers({
       return lines.join("\n");
     }
   
-    if (typeKey === "set-greeting" || typeKey === "whisper-ack") {
+    const scheduleRule = announcementScheduleRules[typeKey];
+    if (scheduleRule?.onDemand) {
       lines.push("**Next check:** On-demand (fires when the trigger condition happens; not on a fixed schedule)");
       lines.push(dedupLine, ttlLine);
       return lines.join("\n");
     }
-  
-    if (typeKey === "hourly-cleanup" && guildCfg?.autoCleanupEnabled !== true) {
-      lines.push("**Next check:** Disabled until `/raid-channel config action:schedule-on` is enabled");
-      lines.push(dedupLine, ttlLine);
-      return lines.join("\n");
-    }
-  
-    // Bedtime + wake-up both ride the auto-cleanup scheduler tick, so
-    // they're silent whenever the scheduler itself is off.
-    if ((typeKey === "artist-bedtime" || typeKey === "artist-wakeup") && guildCfg?.autoCleanupEnabled !== true) {
-      lines.push("**Next check:** Disabled until `/raid-channel config action:schedule-on` is enabled (shares the cleanup scheduler)");
-      lines.push(dedupLine, ttlLine);
-      return lines.join("\n");
-    }
-  
-    if (typeKey === "stuck-nudge" && autoManageDisabled) {
-      lines.push("**Next check:** Disabled by deploy killswitch (`AUTO_MANAGE_DAILY_DISABLED=true`)");
+
+    if (scheduleRule?.disabledWhen?.({ guildCfg, autoManageDisabled })) {
+      lines.push(`**Next check:** ${scheduleRule.disabledText}`);
       lines.push(dedupLine, ttlLine);
       return lines.join("\n");
     }
@@ -304,14 +330,8 @@ function createSchedulingHelpers({
       lines.push("**Next scheduler check:** After bot startup");
     }
   
-    if (typeKey === "weekly-reset") {
-      lines.push("**Note:** The announcement posts only if that scheduler pass actually resets at least one user and is still inside the Wed→Thu reset window.");
-    } else if (typeKey === "hourly-cleanup") {
-      lines.push("**Note:** The notice posts only after this guild's cleanup run completes.");
-    } else if (typeKey === "stuck-nudge") {
-      lines.push("**Note:** The nudge posts only if that tick finds a user whose logs are private.");
-    } else if (typeKey === "world-event-reminder") {
-      lines.push("**Note:** This high-frequency reminder is opt-in and combines Chaos Gate + Field Boss into one Sunday post when their spawn time matches.");
+    if (scheduleRule?.note) {
+      lines.push(`**Note:** ${scheduleRule.note}`);
     }
   
     lines.push(dedupLine, ttlLine);

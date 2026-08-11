@@ -92,27 +92,12 @@ function createRaidCheckAutoManageUi(deps) {
     return true;
   }
 
-  async function handleRaidCheckEnableAutoOneClick(interaction, targetDiscordId) {
-    await deferEphemeralReply(interaction);
-    const managerLangPromise = getUserLanguage(interaction.user.id, { UserModel: User });
-    if (!targetDiscordId) {
-      const managerLang = await managerLangPromise;
-      await editNoticeByKey(interaction, {
-        type: "warn",
-        titleKey: "raid-auto-manage.enableButton.expiredTitle",
-        descriptionKey: "raid-auto-manage.enableButton.expiredDescription",
-        lang: managerLang,
-      });
-      return;
-    }
-
-    const [managerLang, result] = await Promise.all([
-      managerLangPromise,
-      tryEnableAutoManage(User, targetDiscordId),
-    ]);
-    const handled = await replyAtomicOutcome(
-      interaction,
-      {
+  const MANAGER_AUTO_ACTIONS = Object.freeze({
+    enable: {
+      transition: tryEnableAutoManage,
+      keyPrefix: "raid-auto-manage.enableButton",
+      successType: "success",
+      outcomes: {
         error: {
           type: "error",
           titleKey: "raid-auto-manage.enableButton.flipFailTitle",
@@ -135,72 +120,26 @@ function createRaidCheckAutoManageUi(deps) {
           descriptionKey: "raid-auto-manage.enableButton.localLockedDescription",
         },
       },
-      { lang: managerLang, targetDiscordId, result }
-    );
-    if (handled) return;
-
-    const dmSent = await sendTargetDm({
-      interaction,
-      targetDiscordId,
-      buildEmbed: (targetLang) =>
+      buildDmEmbed: ({ managerId, result, targetLang }) =>
         buildEnableAutoDmEmbed(
           EmbedBuilder,
-          { managerId: interaction.user.id, userDoc: result.doc },
+          { managerId, userDoc: result.doc },
           targetLang
         ),
-      buildRow: (targetLang) =>
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`raid-check:disable-auto-self:${targetDiscordId}`)
-            .setLabel(t("raid-auto-manage.dm.enable.disableSelfButton", targetLang))
-            .setEmoji("\u{1f6ab}")
-            .setStyle(ButtonStyle.Danger)
-        ),
-    });
-
-    console.log(
-      `[raid-check enable-auto] manager=${interaction.user.id} target=${targetDiscordId} flipped=true dmSent=${dmSent}`
-    );
-    await editNotice(interaction, EmbedBuilder, {
-      type: "success",
-      title: t("raid-auto-manage.enableButton.successTitle", managerLang),
-      description: [
-        t("raid-auto-manage.enableButton.successLineIntro", managerLang),
-        "",
-        t("raid-auto-manage.enableButton.successLineTarget", managerLang, {
-          target: targetDiscordId,
-        }),
-        t("raid-auto-manage.enableButton.successLineState", managerLang),
-        dmSent
-          ? t("raid-auto-manage.enableButton.successLineDmSent", managerLang)
-          : t("raid-auto-manage.enableButton.successLineDmFailed", managerLang),
-        "",
-        t("raid-auto-manage.enableButton.successLineOutro", managerLang),
-      ].join("\n"),
-    });
-  }
-
-  async function handleRaidCheckDisableAutoOneClick(interaction, targetDiscordId) {
-    await deferEphemeralReply(interaction);
-    const managerLangPromise = getUserLanguage(interaction.user.id, { UserModel: User });
-    if (!targetDiscordId) {
-      const managerLang = await managerLangPromise;
-      await editNoticeByKey(interaction, {
-        type: "warn",
-        titleKey: "raid-auto-manage.disableButton.expiredTitle",
-        descriptionKey: "raid-auto-manage.disableButton.expiredDescription",
-        lang: managerLang,
-      });
-      return;
-    }
-
-    const [managerLang, result] = await Promise.all([
-      managerLangPromise,
-      tryDisableAutoManage(User, targetDiscordId),
-    ]);
-    const handled = await replyAtomicOutcome(
-      interaction,
-      {
+      selfButton: {
+        customIdAction: "disable-auto-self",
+        labelKey: "raid-auto-manage.dm.enable.disableSelfButton",
+        emoji: "\u{1f6ab}",
+        style: ButtonStyle.Danger,
+      },
+      successLog: ({ managerId, targetDiscordId, dmSent }) =>
+        `[raid-check enable-auto] manager=${managerId} target=${targetDiscordId} flipped=true dmSent=${dmSent}`,
+    },
+    disable: {
+      transition: tryDisableAutoManage,
+      keyPrefix: "raid-auto-manage.disableButton",
+      successType: "muted",
+      outcomes: {
         error: {
           type: "error",
           titleKey: "raid-auto-manage.disableButton.flipFailTitle",
@@ -218,83 +157,26 @@ function createRaidCheckAutoManageUi(deps) {
           descriptionKey: "raid-auto-manage.disableButton.alreadyOffDescription",
         },
       },
-      { lang: managerLang, targetDiscordId, result }
-    );
-    if (handled) return;
+      buildDmEmbed: ({ managerId, targetLang }) =>
+        buildDisableAutoDmEmbed(EmbedBuilder, { managerId }, targetLang),
+      selfButton: {
+        customIdAction: "enable-auto-self",
+        labelKey: "raid-auto-manage.dm.disable.enableSelfButton",
+        emoji: "\u{1f504}",
+        style: ButtonStyle.Primary,
+      },
+      successLog: ({ managerId, targetDiscordId, dmSent }) =>
+        `[raid-check disable-auto-one] manager=${managerId} target=${targetDiscordId} outcome=disabled dmSent=${dmSent}`,
+    },
+  });
 
-    const dmSent = await sendTargetDm({
-      interaction,
-      targetDiscordId,
-      buildEmbed: (targetLang) =>
-        buildDisableAutoDmEmbed(
-          EmbedBuilder,
-          { managerId: interaction.user.id },
-          targetLang
-        ),
-      buildRow: (targetLang) =>
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`raid-check:enable-auto-self:${targetDiscordId}`)
-            .setLabel(t("raid-auto-manage.dm.disable.enableSelfButton", targetLang))
-            .setEmoji("\u{1f504}")
-            .setStyle(ButtonStyle.Primary)
-        ),
-    });
-
-    console.log(
-      `[raid-check disable-auto-one] manager=${interaction.user.id} target=${targetDiscordId} outcome=disabled dmSent=${dmSent}`
-    );
-    await editNotice(interaction, EmbedBuilder, {
-      type: "muted",
-      title: t("raid-auto-manage.disableButton.successTitle", managerLang),
-      description: [
-        t("raid-auto-manage.disableButton.successLineIntro", managerLang),
-        "",
-        t("raid-auto-manage.disableButton.successLineTarget", managerLang, {
-          target: targetDiscordId,
-        }),
-        t("raid-auto-manage.disableButton.successLineState", managerLang),
-        dmSent
-          ? t("raid-auto-manage.disableButton.successLineDmSent", managerLang)
-          : t("raid-auto-manage.disableButton.successLineDmFailed", managerLang),
-        "",
-        t("raid-auto-manage.disableButton.successLineOutro", managerLang),
-      ].join("\n"),
-    });
-  }
-
-  async function handleRaidCheckDisableAutoSelfClick(interaction, targetDiscordId) {
-    if (!targetDiscordId) {
-      await deferEphemeralReply(interaction);
-      const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      await editNoticeByKey(interaction, {
-        type: "warn",
-        titleKey: "raid-auto-manage.disableSelf.expiredTitle",
-        descriptionKey: "raid-auto-manage.disableSelf.expiredDescription",
-        lang,
-      });
-      return;
-    }
-    if (interaction.user.id !== targetDiscordId) {
-      await deferEphemeralReply(interaction);
-      const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      await editNoticeByKey(interaction, {
-        type: "lock",
-        titleKey: "raid-auto-manage.disableSelf.notOwnerTitle",
-        descriptionKey: "raid-auto-manage.disableSelf.notOwnerDescription",
-        lang,
-      });
-      return;
-    }
-
-    await interaction.deferUpdate();
-    const [lang, result] = await Promise.all([
-      getUserLanguage(interaction.user.id, { UserModel: User }),
-      tryDisableAutoManage(User, targetDiscordId),
-    ]);
-    const handled = await replyAtomicOutcome(
-      interaction,
-      {
+  const SELF_AUTO_ACTIONS = Object.freeze({
+    disable: {
+      transition: tryDisableAutoManage,
+      keyPrefix: "raid-auto-manage.disableSelf",
+      resultType: "muted",
+      logTag: "raid-check disable-auto-self",
+      outcomes: {
         error: {
           type: "error",
           titleKey: "raid-auto-manage.disableSelf.failTitle",
@@ -307,62 +189,24 @@ function createRaidCheckAutoManageUi(deps) {
           descriptionKey: "raid-auto-manage.disableSelf.accountMissingDescription",
         },
       },
-      { lang, targetDiscordId, result },
-      followUpNoticeByKey
-    );
-    if (handled) return;
-
-    const textKeys = result.outcome === "disabled"
-      ? {
+      resultText: {
+        disabled: {
           titleKey: "raid-auto-manage.disableSelf.disabledTitle",
           descriptionKey: "raid-auto-manage.disableSelf.disabledDescription",
-        }
-      : {
+        },
+        "already-off": {
           titleKey: "raid-auto-manage.disableSelf.alreadyOffTitle",
           descriptionKey: "raid-auto-manage.disableSelf.alreadyOffDescription",
-        };
-    console.log(
-      `[raid-check disable-auto-self] user=${targetDiscordId} outcome=${result.outcome}`
-    );
-    await editNoticeByText(interaction, {
-      type: "muted",
-      title: t(textKeys.titleKey, lang),
-      description: t(textKeys.descriptionKey, lang),
-    });
-  }
-
-  async function handleRaidCheckEnableAutoSelfClick(interaction, targetDiscordId) {
-    if (!targetDiscordId) {
-      await deferEphemeralReply(interaction);
-      const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      await editNoticeByKey(interaction, {
-        type: "warn",
-        titleKey: "raid-auto-manage.enableSelf.expiredTitle",
-        descriptionKey: "raid-auto-manage.enableSelf.expiredDescription",
-        lang,
-      });
-      return;
-    }
-    if (interaction.user.id !== targetDiscordId) {
-      await deferEphemeralReply(interaction);
-      const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
-      await editNoticeByKey(interaction, {
-        type: "lock",
-        titleKey: "raid-auto-manage.enableSelf.notOwnerTitle",
-        descriptionKey: "raid-auto-manage.enableSelf.notOwnerDescription",
-        lang,
-      });
-      return;
-    }
-
-    await interaction.deferUpdate();
-    const [lang, result] = await Promise.all([
-      getUserLanguage(interaction.user.id, { UserModel: User }),
-      tryEnableAutoManage(User, targetDiscordId),
-    ]);
-    const handled = await replyAtomicOutcome(
-      interaction,
-      {
+        },
+      },
+      defaultOutcome: "already-off",
+    },
+    enable: {
+      transition: tryEnableAutoManage,
+      keyPrefix: "raid-auto-manage.enableSelf",
+      resultType: "success",
+      logTag: "raid-check enable-auto-self",
+      outcomes: {
         error: {
           type: "error",
           titleKey: "raid-auto-manage.enableSelf.failTitle",
@@ -375,34 +219,150 @@ function createRaidCheckAutoManageUi(deps) {
           descriptionKey: "raid-auto-manage.enableSelf.accountMissingDescription",
         },
       },
+      resultText: {
+        flipped: {
+          titleKey: "raid-auto-manage.enableSelf.flippedTitle",
+          descriptionKey: "raid-auto-manage.enableSelf.flippedDescription",
+        },
+        "local-locked": {
+          titleKey: "raid-auto-manage.enableSelf.localLockedTitle",
+          descriptionKey: "raid-auto-manage.enableSelf.localLockedDescription",
+        },
+        "already-on": {
+          titleKey: "raid-auto-manage.enableSelf.alreadyOnTitle",
+          descriptionKey: "raid-auto-manage.enableSelf.alreadyOnDescription",
+        },
+      },
+      defaultOutcome: "already-on",
+    },
+  });
+
+  async function handleManagerAutoClick(interaction, targetDiscordId, config) {
+    await deferEphemeralReply(interaction);
+    const managerLangPromise = getUserLanguage(interaction.user.id, { UserModel: User });
+    if (!targetDiscordId) {
+      const managerLang = await managerLangPromise;
+      await editNoticeByKey(interaction, {
+        type: "warn",
+        titleKey: `${config.keyPrefix}.expiredTitle`,
+        descriptionKey: `${config.keyPrefix}.expiredDescription`,
+        lang: managerLang,
+      });
+      return;
+    }
+
+    const [managerLang, result] = await Promise.all([
+      managerLangPromise,
+      config.transition(User, targetDiscordId),
+    ]);
+    const handled = await replyAtomicOutcome(
+      interaction,
+      config.outcomes,
+      { lang: managerLang, targetDiscordId, result }
+    );
+    if (handled) return;
+
+    const dmSent = await sendTargetDm({
+      interaction,
+      targetDiscordId,
+      buildEmbed: (targetLang) => config.buildDmEmbed({
+        managerId: interaction.user.id,
+        result,
+        targetLang,
+      }),
+      buildRow: (targetLang) =>
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`raid-check:${config.selfButton.customIdAction}:${targetDiscordId}`)
+            .setLabel(t(config.selfButton.labelKey, targetLang))
+            .setEmoji(config.selfButton.emoji)
+            .setStyle(config.selfButton.style)
+        ),
+    });
+
+    console.log(config.successLog({
+      managerId: interaction.user.id,
+      targetDiscordId,
+      dmSent,
+    }));
+    await editNotice(interaction, EmbedBuilder, {
+      type: config.successType,
+      title: t(`${config.keyPrefix}.successTitle`, managerLang),
+      description: [
+        t(`${config.keyPrefix}.successLineIntro`, managerLang),
+        "",
+        t(`${config.keyPrefix}.successLineTarget`, managerLang, {
+          target: targetDiscordId,
+        }),
+        t(`${config.keyPrefix}.successLineState`, managerLang),
+        dmSent
+          ? t(`${config.keyPrefix}.successLineDmSent`, managerLang)
+          : t(`${config.keyPrefix}.successLineDmFailed`, managerLang),
+        "",
+        t(`${config.keyPrefix}.successLineOutro`, managerLang),
+      ].join("\n"),
+    });
+  }
+
+  async function rejectInvalidSelfTarget(interaction, targetDiscordId, config) {
+    const reason = !targetDiscordId
+      ? "expired"
+      : interaction.user.id !== targetDiscordId
+        ? "notOwner"
+        : null;
+    if (!reason) return false;
+
+    await deferEphemeralReply(interaction);
+    const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
+    await editNoticeByKey(interaction, {
+      type: reason === "expired" ? "warn" : "lock",
+      titleKey: `${config.keyPrefix}.${reason}Title`,
+      descriptionKey: `${config.keyPrefix}.${reason}Description`,
+      lang,
+    });
+    return true;
+  }
+
+  async function handleSelfAutoClick(interaction, targetDiscordId, config) {
+    if (await rejectInvalidSelfTarget(interaction, targetDiscordId, config)) return;
+
+    await interaction.deferUpdate();
+    const [lang, result] = await Promise.all([
+      getUserLanguage(interaction.user.id, { UserModel: User }),
+      config.transition(User, targetDiscordId),
+    ]);
+    const handled = await replyAtomicOutcome(
+      interaction,
+      config.outcomes,
       { lang, targetDiscordId, result },
       followUpNoticeByKey
     );
     if (handled) return;
 
-    const textByOutcome = {
-      flipped: {
-        titleKey: "raid-auto-manage.enableSelf.flippedTitle",
-        descriptionKey: "raid-auto-manage.enableSelf.flippedDescription",
-      },
-      "local-locked": {
-        titleKey: "raid-auto-manage.enableSelf.localLockedTitle",
-        descriptionKey: "raid-auto-manage.enableSelf.localLockedDescription",
-      },
-      "already-on": {
-        titleKey: "raid-auto-manage.enableSelf.alreadyOnTitle",
-        descriptionKey: "raid-auto-manage.enableSelf.alreadyOnDescription",
-      },
-    };
-    const textKeys = textByOutcome[result.outcome] || textByOutcome["already-on"];
-    console.log(
-      `[raid-check enable-auto-self] user=${targetDiscordId} outcome=${result.outcome}`
-    );
+    const textKeys = config.resultText[result.outcome]
+      || config.resultText[config.defaultOutcome];
+    console.log(`[${config.logTag}] user=${targetDiscordId} outcome=${result.outcome}`);
     await editNoticeByText(interaction, {
-      type: "success",
+      type: config.resultType,
       title: t(textKeys.titleKey, lang),
       description: t(textKeys.descriptionKey, lang),
     });
+  }
+
+  async function handleRaidCheckEnableAutoOneClick(interaction, targetDiscordId) {
+    return handleManagerAutoClick(interaction, targetDiscordId, MANAGER_AUTO_ACTIONS.enable);
+  }
+
+  async function handleRaidCheckDisableAutoOneClick(interaction, targetDiscordId) {
+    return handleManagerAutoClick(interaction, targetDiscordId, MANAGER_AUTO_ACTIONS.disable);
+  }
+
+  async function handleRaidCheckDisableAutoSelfClick(interaction, targetDiscordId) {
+    return handleSelfAutoClick(interaction, targetDiscordId, SELF_AUTO_ACTIONS.disable);
+  }
+
+  async function handleRaidCheckEnableAutoSelfClick(interaction, targetDiscordId) {
+    return handleSelfAutoClick(interaction, targetDiscordId, SELF_AUTO_ACTIONS.enable);
   }
 
   return {
