@@ -45,7 +45,10 @@ const {
   formatGold,
 } = require("../bot/utils/raid/common/shared");
 const { getGoldForGate, getBoundGoldForGate, isGoldBound, compareRaidModeOrder } = require("../bot/domain/raid-catalog");
-const { buildRaidDropdownState } = require("../bot/handlers/raid-status/raid-filter");
+const {
+  buildRaidDropdownState,
+  buildRaidFilterRow,
+} = require("../bot/handlers/raid-status/raid-filter");
 const { getRaidModeLabel } = require("../bot/utils/raid/common/labels");
 const {
   summarizeRaidProgress,
@@ -213,6 +216,7 @@ test("REGRESSION: raid-status displays detail-only raids but excludes them from 
   const accounts = [{ accountName: "Alpha", characters: [character] }];
   const raids = [
     { raidKey: "armoche", modeKey: "normal", raidName: "Act 4 Normal", isCompleted: false, goldReceives: true },
+    { raidKey: "kazeros", modeKey: "solo", raidName: "Kazeros Solo", isCompleted: false, goldReceives: true },
     { raidKey: "horizon", modeKey: "normal", raidName: "Horizon Level 1", isCompleted: false, goldReceives: false },
   ];
   let capturedTotals = null;
@@ -243,9 +247,13 @@ test("REGRESSION: raid-status displays detail-only raids but excludes them from 
 
   buildCurrentEmbed();
 
-  assert.deepEqual(capturedRaids.map((raid) => raid.raidKey), ["armoche", "horizon"]);
+  assert.deepEqual(
+    capturedRaids.map((raid) => raid.raidKey),
+    ["armoche", "kazeros", "horizon"],
+  );
   assert.deepEqual(capturedProgressRaids.map((raid) => raid.raidKey), ["armoche"]);
   assert.equal(capturedTotals.progress.total, 1);
+  assert.equal(capturedTotals.solo, 1);
 });
 
 // --------- buildAccountPageEmbed ---------
@@ -913,23 +921,54 @@ test("buildRaidDropdownState: excludes raids that do not receive gold", () => {
   assert.equal(totalRaidPending, 1);
 });
 
-test("buildRaidDropdownState: lists Solo pending counts without adding them to all-raids total", () => {
-  const raids = [
-    { raidKey: "armoche", modeKey: "normal", raidName: "Act 4 Normal", isCompleted: false, goldReceives: true },
-    { raidKey: "armoche", modeKey: "solo", raidName: "Act 4 Solo", isCompleted: false, goldReceives: true },
-    { raidKey: "horizon", modeKey: "normal", raidName: "Horizon Level 1", isCompleted: false, goldReceives: false },
-  ];
-  const accounts = [{ characters: [{ class: "Sorceress" }] }];
-  const { raidDropdownEntries, totalRaidPending } = buildRaidDropdownState(accounts, () => raids);
+test("buildRaidDropdownState: counts all Solo raids without adding them to pending progress", () => {
+  const accounts = [{ characters: [
+    {
+      class: "Sorceress",
+      raids: [
+        { raidKey: "armoche", modeKey: "normal", raidName: "Act 4 Normal", isCompleted: false, goldReceives: true },
+        { raidKey: "armoche", modeKey: "solo", raidName: "Act 4 Solo", isCompleted: false, goldReceives: true },
+        { raidKey: "horizon", modeKey: "normal", raidName: "Horizon Level 1", isCompleted: false, goldReceives: false },
+      ],
+    },
+    {
+      class: "Artist",
+      raids: [
+        { raidKey: "kazeros", modeKey: "solo", raidName: "Kazeros Solo", isCompleted: true, goldReceives: true },
+      ],
+    },
+  ] }];
+  const { raidDropdownEntries, totalRaidPending, totalSoloRaids } = buildRaidDropdownState(
+    accounts,
+    (character) => character.raids,
+  );
 
   assert.deepEqual(
     raidDropdownEntries.map((raid) => ({ key: raid.key, pending: raid.pending })),
     [
       { key: "armoche:normal", pending: 1 },
       { key: "armoche:solo", pending: 1 },
+      { key: "kazeros:solo", pending: 0 },
     ],
   );
   assert.equal(totalRaidPending, 1);
+  assert.equal(totalSoloRaids, 2, "completed Solo raids still belong in the Solo total");
+
+  const row = buildRaidFilterRow({
+    ActionRowBuilder,
+    StringSelectMenuBuilder,
+    truncateText,
+    raidDropdownEntries,
+    totalRaidPending,
+    totalSoloRaids,
+    filterRaidId: null,
+    disabled: false,
+    lang: "vi",
+  });
+  assert.equal(
+    row.toJSON().components[0].options[0].label,
+    "Tất cả raids (1 chưa clear - 2 solo raid)",
+  );
 });
 
 test("buildRaidDropdownState: groups a deferred Normal -> Solo switch under Solo only", () => {
@@ -1385,6 +1424,7 @@ test("buildAccountPageEmbed: cross-account 🌐 gold line shows the tradeable bu
     {
       progress: { completed: 5, partial: 1, total: 8 },
       characters: 12,
+      solo: 6,
       gold: { earned: 50000, total: 200000, earnedUnbound: 50000, totalUnbound: 200000, earnedBound: 0, totalBound: 0 },
     },
     NOOP_GET_RAIDS_FOR
@@ -1392,6 +1432,7 @@ test("buildAccountPageEmbed: cross-account 🌐 gold line shows the tradeable bu
   const desc = embed.toJSON().description || "";
   assert.match(desc, /Tổng tất cả roster/);
   assert.match(desc, /5\/8/);
+  assert.match(desc, /6\*\* solo raid/);
   // 🌐 line carries the tradeable (unbound) gold in bold; no bound tail here.
   assert.match(desc, /💰 \*\*50,000G \/ 200,000G\*\*/);
 });

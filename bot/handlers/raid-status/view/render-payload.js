@@ -2,6 +2,7 @@
 
 const { loadBackgroundBuffer } = require("../../../services/raid-card/bg-loader");
 const {
+  countSoloRaids,
   getRaidFilterKey,
   isCountedRaidFilterProgress,
 } = require("../raid-filter");
@@ -97,6 +98,7 @@ function createRaidStatusRenderPayload({
       filteredTotals = {
         characters: getTotalCharacters(),
         progress: summarizeRaidProgress(filteredEntries),
+        solo: countSoloRaids(accounts, getDisplayRaidsFor),
         gold: summarizeGlobalGold(accounts, getDisplayRaidsFor),
       };
       totalsByFilter.set(totalsKey, filteredTotals);

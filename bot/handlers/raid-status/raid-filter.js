@@ -53,13 +53,34 @@ function isCountedRaidFilterProgress(raid) {
   );
 }
 
+/**
+ * Count every raid currently presented as Solo across the visible accounts.
+ * Solo is detail-only and intentionally excluded from the main progress
+ * denominator, so callers need this separate rollup instead of deriving it
+ * from totalRaidPending.
+ */
+function countSoloRaids(accounts, getRaidsFor) {
+  let total = 0;
+  for (const account of accounts || []) {
+    for (const character of account.characters || []) {
+      const raids = typeof getRaidsFor === "function" ? getRaidsFor(character) || [] : [];
+      for (const raid of raids) {
+        if (isSoloModeKey(getRaidFilterModeKey(raid))) total += 1;
+      }
+    }
+  }
+  return total;
+}
+
 function buildRaidDropdownState(accounts, getRaidsFor) {
   const raidAggregate = new Map();
+  let totalSoloRaids = 0;
   for (const account of accounts || []) {
     for (const ch of account.characters || []) {
       const charIsSupport = isSupportClass(ch?.class);
       for (const raid of getRaidsFor(ch)) {
         const modeKey = getRaidFilterModeKey(raid);
+        if (isSoloModeKey(modeKey)) totalSoloRaids += 1;
         const countsTowardTotal = isCountedRaidFilterProgress(raid);
         // Solo stays discoverable in the raid dropdown even though the
         // all-raids headline and roster counters intentionally exclude it.
@@ -102,8 +123,7 @@ function buildRaidDropdownState(accounts, getRaidsFor) {
     (sum, r) => sum + (r.countsTowardTotal ? r.pending : 0),
     0
   );
-
-  return { raidDropdownEntries, totalRaidPending };
+  return { raidDropdownEntries, totalRaidPending, totalSoloRaids };
 }
 
 function buildRaidFilterRow(options) {
@@ -113,6 +133,7 @@ function buildRaidFilterRow(options) {
     truncateText,
     raidDropdownEntries,
     totalRaidPending,
+    totalSoloRaids = 0,
     filterRaidId,
     disabled,
     lang = "vi",
@@ -120,8 +141,11 @@ function buildRaidFilterRow(options) {
 
   const allRaidsLabel =
     totalRaidPending === 0
-      ? t("raid-status.filter.allRaidsDone", lang)
-      : t("raid-status.filter.allRaidsPending", lang, { n: totalRaidPending });
+      ? t("raid-status.filter.allRaidsDone", lang, { solo: totalSoloRaids })
+      : t("raid-status.filter.allRaidsPending", lang, {
+          n: totalRaidPending,
+          solo: totalSoloRaids,
+        });
 
   const selectOptions = [
     {
@@ -299,5 +323,6 @@ module.exports = {
   getRaidFilterKey,
   getRaidFilterModeKey,
   getStatusRosterRaidState,
+  countSoloRaids,
   isCountedRaidFilterProgress,
 };
