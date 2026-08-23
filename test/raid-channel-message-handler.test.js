@@ -4,6 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  MESSAGE_DEDUP_MAX_PERSISTED_IDS,
   createRaidChannelMessageHandler,
 } = require("../bot/services/raid/channel-monitor/channel-monitor-message-handler");
 
@@ -83,6 +84,47 @@ test("raid-channel message handler warns on empty monitor messages before parsin
 
   assert.equal(calls.emptyWarnings, 1);
   assert.equal(calls.parses, 0);
+});
+
+test("raid-channel message handler claims one Discord message across runtime instances", async () => {
+  const claimedMessageIds = new Set();
+  let parseCalls = 0;
+  const GuildConfig = {
+    updateOne: async (filter, update) => {
+      const messageId = update.$push.recentRaidMessageIds.$each[0];
+      assert.deepEqual(filter, {
+        guildId: "guild-1",
+        recentRaidMessageIds: { $ne: messageId },
+      });
+      assert.equal(
+        update.$push.recentRaidMessageIds.$slice,
+        -MESSAGE_DEDUP_MAX_PERSISTED_IDS
+      );
+
+      if (claimedMessageIds.has(messageId)) {
+        return { matchedCount: 0, modifiedCount: 0 };
+      }
+      claimedMessageIds.add(messageId);
+      return { matchedCount: 1, modifiedCount: 1 };
+    },
+  };
+  const overrides = {
+    GuildConfig,
+    parseRaidMessage: () => {
+      parseCalls += 1;
+      return null;
+    },
+  };
+  const firstRuntime = makeHandler(overrides).handler;
+  const secondRuntime = makeHandler(overrides).handler;
+
+  await Promise.all([
+    firstRuntime.handleRaidChannelMessage(makeMessage()),
+    secondRuntime.handleRaidChannelMessage(makeMessage()),
+  ]);
+
+  assert.equal(parseCalls, 1);
+  assert.deepEqual([...claimedMessageIds], ["message-1"]);
 });
 
 test("raid-channel message handler carries reset intent through write and DM rendering", async () => {

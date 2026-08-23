@@ -12,6 +12,7 @@ const {
 } = require("./channel-monitor-results");
 
 const MESSAGE_DEDUP_TTL_MS = 60 * 1000;
+const MESSAGE_DEDUP_MAX_PERSISTED_IDS = 128;
 
 function scheduleDetachedTimeout(fn, ms) {
   const timer = setTimeout(fn, ms);
@@ -56,7 +57,7 @@ function createRaidChannelMessageHandler({
     return !cachedChannelId || cachedChannelId !== message.channelId;
   }
 
-  function claimMessage(message) {
+  function claimMessageLocally(message) {
     if (recentlyHandledMessageIds.has(message.id)) {
       console.warn(
         `[raid-channel] duplicate handler call for message ${message.id} (author=${message.author?.id}) - dropping`
@@ -69,6 +70,47 @@ function createRaidChannelMessageHandler({
       MESSAGE_DEDUP_TTL_MS
     );
     return true;
+  }
+
+  async function claimMessageAcrossRuntimes(message) {
+    if (typeof GuildConfig?.updateOne !== "function") return true;
+
+    try {
+      const result = await GuildConfig.updateOne(
+        {
+          guildId: message.guildId,
+          recentRaidMessageIds: { $ne: message.id },
+        },
+        {
+          $push: {
+            recentRaidMessageIds: {
+              $each: [message.id],
+              $slice: -MESSAGE_DEDUP_MAX_PERSISTED_IDS,
+            },
+          },
+        }
+      );
+      const modifiedCount = result?.modifiedCount ?? result?.nModified ?? 0;
+      if (modifiedCount > 0) return true;
+
+      console.warn(
+        `[raid-channel] duplicate runtime delivery for message ${message.id} (author=${message.author?.id}) - dropping`
+      );
+      return false;
+    } catch (err) {
+      // Do not take the text monitor offline because the extra idempotency
+      // guard failed. Normal raid writes still report their own DB errors.
+      console.warn(
+        "[raid-channel] distributed message claim failed; continuing with local guard:",
+        err?.message || err
+      );
+      return true;
+    }
+  }
+
+  async function claimMessage(message) {
+    if (!claimMessageLocally(message)) return false;
+    return claimMessageAcrossRuntimes(message);
   }
 
   async function resolveWhisperAckEnabled(guildId) {
@@ -162,7 +204,7 @@ function createRaidChannelMessageHandler({
 
   async function handleRaidChannelMessage(message) {
     if (shouldIgnoreMessage(message)) return;
-    if (!claimMessage(message)) return;
+    if (!(await claimMessage(message))) return;
 
     if (!message.content || !message.content.trim()) {
       await postEmptyContentWarning(message);
@@ -318,6 +360,7 @@ function createRaidChannelMessageHandler({
 }
 
 module.exports = {
+  MESSAGE_DEDUP_MAX_PERSISTED_IDS,
   MESSAGE_DEDUP_TTL_MS,
   createRaidChannelMessageHandler,
 };

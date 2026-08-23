@@ -17,6 +17,16 @@ const guildConfigSchema = new mongoose.Schema(
     // Channel ID the bot monitors for short-text raid-clear messages.
     // null/empty = monitor disabled for this guild.
     raidChannelId: { type: String, default: null },
+    // Bounded cross-runtime idempotency window for Discord MessageCreate.
+    // Railway may briefly overlap the old and new bot containers during a
+    // rolling deploy; both receive the same gateway event unless they share
+    // this atomic claim. Discord snowflakes are never reused, so retaining
+    // the latest IDs longer than the in-memory TTL is safe.
+    recentRaidMessageIds: {
+      type: [String],
+      default: [],
+      select: false,
+    },
     // Toggle for the daily auto-cleanup job. When true, the scheduler
     // deletes every non-pinned message in `raidChannelId` right after
     // the VN-day boundary (00:00 Asia/Ho_Chi_Minh = 17:00 UTC).
