@@ -64,6 +64,36 @@ function createRosterRefreshService(deps) {
   } = deps;
   const staleAccountRefreshInFlight = new Map();
 
+  // One normalized count map replaces repeated cross-account scans. The apply
+  // phase mutates the same representation after each accepted rename so later
+  // collision decisions still observe the current roster state.
+  function buildAccountNameCounts(accounts) {
+    const counts = new Map();
+    for (const account of accounts || []) {
+      const name = normalizeName(account?.accountName);
+      if (name) counts.set(name, (counts.get(name) || 0) + 1);
+    }
+    return counts;
+  }
+
+  function hasOtherAccountWithName(accountNameCounts, account, normalizedName) {
+    if (!normalizedName) return false;
+    const ownContribution = normalizeName(account?.accountName) === normalizedName ? 1 : 0;
+    return (accountNameCounts.get(normalizedName) || 0) > ownContribution;
+  }
+
+  function moveAccountNameCount(accountNameCounts, previousName, nextName) {
+    if (previousName === nextName) return;
+    if (previousName) {
+      const previousCount = accountNameCounts.get(previousName) || 0;
+      if (previousCount <= 1) accountNameCounts.delete(previousName);
+      else accountNameCounts.set(previousName, previousCount - 1);
+    }
+    if (nextName) {
+      accountNameCounts.set(nextName, (accountNameCounts.get(nextName) || 0) + 1);
+    }
+  }
+
   // cooldownMs is parameterized so callers with a manager discordId can
   // pass `getRosterRefreshCooldownMs(discordId)` (10m for managers, 2h
   // for regulars). Default keeps the conservative 2h spacing for
@@ -114,13 +144,22 @@ function createRosterRefreshService(deps) {
     return userDoc.accounts.find((account) => normalizeName(account?.accountName) === target) || null;
   }
 
-  async function collectOneStaleAccountRefresh(userDoc, account, otherAccountNames) {
+  async function collectOneStaleAccountRefresh(account, accountNameCounts) {
     const originalName = account.accountName;
     const seeds = [];
-    if (originalName) seeds.push(originalName);
+    const seenSeeds = new Set();
+    // Preserve account-first retry order while preventing duplicate requests
+    // when an account name is also present in its character list.
+    if (originalName) {
+      seeds.push(originalName);
+      seenSeeds.add(originalName);
+    }
     for (const c of account.characters || []) {
       const name = getCharacterName(c);
-      if (name && !seeds.includes(name)) seeds.push(name);
+      if (name && !seenSeeds.has(name)) {
+        seeds.push(name);
+        seenSeeds.add(name);
+      }
     }
     if (seeds.length === 0) {
       return {
@@ -131,12 +170,14 @@ function createRosterRefreshService(deps) {
       };
     }
 
-    const savedNames = (account.characters || [])
+    // These indexes are reused for every fetched seed, so overlap checks stay a
+    // single pass even when exact normalization fails and folded names are used.
+    const savedNames = new Set((account.characters || [])
       .map((c) => normalizeName(getCharacterName(c)))
-      .filter(Boolean);
-    const savedFoldedNames = (account.characters || [])
+      .filter(Boolean));
+    const savedFoldedNames = new Set((account.characters || [])
       .map((c) => foldName(getCharacterName(c)))
-      .filter(Boolean);
+      .filter(Boolean));
 
     let attempted = false;
     let zeroOverlapCount = 0;
@@ -148,11 +189,10 @@ function createRosterRefreshService(deps) {
         const fetched = await fetchRosterCharacters(seed);
         if (!Array.isArray(fetched) || fetched.length === 0) continue;
 
-        const fetchedNames = new Set(fetched.map((c) => normalizeName(c.charName)));
-        const fetchedFoldedNames = new Set(fetched.map((c) => foldName(c.charName)));
-        const hasOverlap =
-          savedNames.some((n) => fetchedNames.has(n)) ||
-          savedFoldedNames.some((n) => fetchedFoldedNames.has(n));
+        const hasOverlap = fetched.some((c) =>
+          savedNames.has(normalizeName(c.charName)) ||
+          savedFoldedNames.has(foldName(c.charName))
+        );
         if (!hasOverlap) {
           zeroOverlapCount += 1;
           continue;
@@ -161,8 +201,10 @@ function createRosterRefreshService(deps) {
         let resolvedSeed = null;
         if (originalName !== seed) {
           const normalizedSeed = normalizeName(seed);
-          const collides = otherAccountNames.some(
-            (name, i) => userDoc.accounts[i] !== account && name === normalizedSeed
+          const collides = hasOtherAccountWithName(
+            accountNameCounts,
+            account,
+            normalizedSeed
           );
           if (!collides) resolvedSeed = seed;
         }
@@ -215,12 +257,12 @@ function createRosterRefreshService(deps) {
     return { accountName: originalName, fetchedChars: null, resolvedSeed: null, attempted };
   }
 
-  function collectOneStaleAccountRefreshDeduped(userDoc, account, otherAccountNames) {
+  function collectOneStaleAccountRefreshDeduped(userDoc, account, accountNameCounts) {
     const key = buildRefreshInFlightKey(userDoc, account);
-    if (!key) return collectOneStaleAccountRefresh(userDoc, account, otherAccountNames);
+    if (!key) return collectOneStaleAccountRefresh(account, accountNameCounts);
 
     if (!staleAccountRefreshInFlight.has(key)) {
-      const promise = collectOneStaleAccountRefresh(userDoc, account, otherAccountNames)
+      const promise = collectOneStaleAccountRefresh(account, accountNameCounts)
         .finally(() => staleAccountRefreshInFlight.delete(key));
       staleAccountRefreshInFlight.set(key, promise);
     }
@@ -236,11 +278,11 @@ function createRosterRefreshService(deps) {
     const staleAccounts = userDoc.accounts.filter((account) => isAccountRefreshStale(account, now));
     if (staleAccounts.length === 0) return [];
 
-    const otherAccountNames = userDoc.accounts.map((a) => normalizeName(a?.accountName));
+    const accountNameCounts = buildAccountNameCounts(userDoc.accounts);
 
     const results = await Promise.allSettled(
       staleAccounts.map((account) =>
-        collectOneStaleAccountRefreshDeduped(userDoc, account, otherAccountNames)
+        collectOneStaleAccountRefreshDeduped(userDoc, account, accountNameCounts)
       )
     );
 
@@ -268,8 +310,8 @@ function createRosterRefreshService(deps) {
       };
     }
 
-    const otherAccountNames = userDoc.accounts.map((a) => normalizeName(a?.accountName));
-    return collectOneStaleAccountRefreshDeduped(userDoc, account, otherAccountNames);
+    const accountNameCounts = buildAccountNameCounts(userDoc.accounts);
+    return collectOneStaleAccountRefreshDeduped(userDoc, account, accountNameCounts);
   }
 
   function applyStaleAccountRefreshes(userDoc, collected) {
@@ -286,6 +328,9 @@ function createRosterRefreshService(deps) {
 
     let didUpdate = false;
     const now = Date.now();
+    // Renames are applied sequentially, so keep the counts in sync after each
+    // accepted rename to preserve the former fresh-array collision semantics.
+    const accountNameCounts = buildAccountNameCounts(userDoc.accounts);
 
     for (const account of userDoc.accounts) {
       const entry = byName.get(normalizeName(account?.accountName));
@@ -326,10 +371,16 @@ function createRosterRefreshService(deps) {
 
       if (entry.resolvedSeed && account.accountName !== entry.resolvedSeed) {
         const normalizedSeed = normalizeName(entry.resolvedSeed);
-        const freshCollides = userDoc.accounts.some(
-          (other) => other !== account && normalizeName(other.accountName) === normalizedSeed
+        const freshCollides = hasOtherAccountWithName(
+          accountNameCounts,
+          account,
+          normalizedSeed
         );
-        if (!freshCollides) account.accountName = entry.resolvedSeed;
+        if (!freshCollides) {
+          const previousName = normalizeName(account.accountName);
+          account.accountName = entry.resolvedSeed;
+          moveAccountNameCount(accountNameCounts, previousName, normalizedSeed);
+        }
       }
 
       account.lastRefreshedAt = now;

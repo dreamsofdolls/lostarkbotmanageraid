@@ -3,8 +3,9 @@
 // All write logic is inline in handleRemoveRosterCommand, so tests
 // drive the handler with a minimal mock interaction. Key behaviors
 // covered: remove_roster wipes the whole account, remove_char preserves
-// the rest, the seed-reseed step picks a non-colliding fallback name,
-// and validation paths reject bad inputs without touching state.
+// the rest, the seed-reseed step picks a non-colliding fallback name with one
+// account-name index, and validation paths reject bad inputs without touching
+// state.
 
 process.env.RAID_MANAGER_ID = "test-manager";
 
@@ -53,7 +54,7 @@ function makeUserModel(events = null) {
   return { User, docs };
 }
 
-function makeFactory({ events = null } = {}) {
+function makeFactory({ events = null, normalizeNameFn = normalizeName } = {}) {
   const { User, docs } = makeUserModel(events);
   const factory = createRemoveRosterCommand({
     EmbedBuilder,
@@ -62,7 +63,7 @@ function makeFactory({ events = null } = {}) {
     User,
     saveWithRetry: async (op) => op(),
     ensureFreshWeek: () => false,
-    normalizeName,
+    normalizeName: normalizeNameFn,
     getCharacterName,
     getCharacterClass,
     createCharacterId,
@@ -188,6 +189,43 @@ test("remove-roster: remove_char on the seed char re-points accountName to next 
   const reseededAccount = stored.accounts.find((a) => a.accountName === "Soulrano");
   assert.ok(reseededAccount, `expected an account renamed to "Soulrano", got ${stored.accounts.map((a) => a.accountName).join(", ")}`);
   assert.equal(reseededAccount.characters.length, 2);
+});
+
+test("remove-roster: seed reselection indexes account-name collisions once", async () => {
+  let normalizeCalls = 0;
+  const countingNormalizeName = (value) => {
+    normalizeCalls += 1;
+    return normalizeName(value);
+  };
+  const { factory, docs } = makeFactory({ normalizeNameFn: countingNormalizeName });
+  const collisionCount = 200;
+  const collidingCharacters = Array.from(
+    { length: collisionCount },
+    (_, index) => makeChar(`Taken${index}`)
+  );
+  seedUser(docs, [
+    {
+      accountName: "Alpha",
+      characters: [makeChar("Alpha"), ...collidingCharacters, makeChar("Available")],
+    },
+    ...collidingCharacters.map((character) => ({
+      accountName: character.name,
+      characters: [makeChar(`${character.name}Alt`)],
+    })),
+  ]);
+
+  const interaction = makeInteraction({
+    options: { roster: "Alpha", action: "remove_char", character: "Alpha" },
+  });
+  await factory.handleRemoveRosterCommand(interaction);
+
+  assert.equal(docs.get("user-1").accounts[0].accountName, "Available");
+  // The old candidate-by-account scan needed roughly collisionCount squared
+  // normalizations. The indexed path stays proportional to accounts + chars.
+  assert.ok(
+    normalizeCalls < collisionCount * 5,
+    `expected linear normalization work, got ${normalizeCalls} calls`
+  );
 });
 
 test("remove-roster: remove_char on the seed when no remaining chars leaves accountName intact", async () => {

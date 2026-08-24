@@ -208,3 +208,66 @@ test("applyStaleAccountRefreshes preserves assigned raid mode preference", () =>
   assert.equal(char.assignedRaids.kazeros.G1.difficulty, "Normal");
   assert.equal(char.assignedRaids.kazeros.G2.difficulty, "Normal");
 });
+
+test("applyStaleAccountRefreshes updates collision counts after each rename", () => {
+  const service = makeService(async () => []);
+  const user = {
+    discordId: "user-1",
+    accounts: [
+      { accountName: "Alpha", characters: [{ name: "AlphaChar", class: "Bard" }] },
+      { accountName: "Beta", characters: [{ name: "BetaChar", class: "Artist" }] },
+    ],
+  };
+
+  service.applyStaleAccountRefreshes(user, [
+    {
+      accountName: "Alpha",
+      attempted: true,
+      resolvedSeed: "SharedName",
+      fetchedChars: [{ charName: "AlphaChar", className: "Bard", itemLevel: 1700 }],
+    },
+    {
+      accountName: "Beta",
+      attempted: true,
+      resolvedSeed: "SharedName",
+      fetchedChars: [{ charName: "BetaChar", className: "Artist", itemLevel: 1700 }],
+    },
+  ]);
+
+  assert.deepEqual(user.accounts.map((account) => account.accountName), ["SharedName", "Beta"]);
+});
+
+test("applyStaleAccountRefreshes indexes account-name collisions once", () => {
+  const service = makeService(async () => []);
+  const accountCount = 120;
+  let accountReads = 0;
+  const rawAccounts = Array.from({ length: accountCount }, (_, index) => ({
+    accountName: `Account-${index}`,
+    characters: [{ name: `Character-${index}`, class: "Artist" }],
+  }));
+  const accounts = new Proxy(rawAccounts, {
+    get(target, property, receiver) {
+      if (/^\d+$/.test(String(property))) accountReads += 1;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const collected = rawAccounts.map((account, index) => ({
+    accountName: account.accountName,
+    attempted: true,
+    resolvedSeed: `Renamed-${index}`,
+    fetchedChars: [{
+      charName: `Character-${index}`,
+      className: "Artist",
+      itemLevel: 1700,
+    }],
+  }));
+
+  const didUpdate = service.applyStaleAccountRefreshes({ discordId: "user-1", accounts }, collected);
+
+  assert.equal(didUpdate, true);
+  assert.equal(rawAccounts.at(-1).accountName, `Renamed-${accountCount - 1}`);
+  assert.ok(
+    accountReads < accountCount * 5,
+    `expected linear account reads, received ${accountReads}`,
+  );
+});

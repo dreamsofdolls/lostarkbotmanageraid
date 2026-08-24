@@ -1,5 +1,5 @@
 /**
- * services/raid/channel-monitor-write-plans.js
+ * services/raid/channel-monitor/channel-monitor-write-plans.js
  * Shared-roster write routing for the raid text-channel monitor. This is pure
  * enough to test directly and keeps the Discord message handler focused on
  * message lifecycle, replies, and notifications.
@@ -11,6 +11,11 @@ const {
   getAccessibleAccounts: defaultGetAccessibleAccounts,
 } = require("../../access/access-control");
 
+/**
+ * Return every normalized name field that may identify a roster character.
+ * @param {object} character - saved roster character
+ * @returns {string[]} lowercase, trimmed lookup candidates
+ */
 function getAccessibleCharacterCandidates(character) {
   return [character?.charName, character?.name, character?.displayName]
     .filter(Boolean)
@@ -18,6 +23,14 @@ function getAccessibleCharacterCandidates(character) {
     .filter(Boolean);
 }
 
+/**
+ * Resolve one character against accessible accounts in source order.
+ * This direct helper remains for single-name callers; batch routing builds one
+ * shared index instead of repeating this traversal for every character.
+ * @param {Array<object>} accessibleAccounts - access-control account entries
+ * @param {string} charName - requested character name
+ * @returns {object|null} matching account entry plus character, or null
+ */
 function findAccessibleCharacterInAccounts(accessibleAccounts, charName) {
   const target = String(charName || "").trim().toLowerCase();
   if (!target) return null;
@@ -32,6 +45,40 @@ function findAccessibleCharacterInAccounts(accessibleAccounts, charName) {
   return null;
 }
 
+/**
+ * Index an accessible-roster snapshot while preserving first-match precedence.
+ * @param {Array<object>} accessibleAccounts - access-control account entries
+ * @returns {Map<string, object>} normalized character name to routing metadata
+ */
+function buildAccessibleCharacterIndex(accessibleAccounts) {
+  const byName = new Map();
+  for (const entry of accessibleAccounts || []) {
+    const chars = Array.isArray(entry.account?.characters) ? entry.account.characters : [];
+    for (const character of chars) {
+      const hit = { ...entry, character };
+      for (const candidate of getAccessibleCharacterCandidates(character)) {
+        // Preserve the former nested-loop rule: the first accessible match wins.
+        if (!byName.has(candidate)) byName.set(candidate, hit);
+      }
+    }
+  }
+  return byName;
+}
+
+/**
+ * Resolve a batch of names using one access lookup and one character index.
+ * @param {object} options
+ * @param {string} options.authorId - Discord user initiating the write
+ * @param {string[]} options.charNames - requested characters in input order
+ * @param {Function} [options.getAccessibleAccounts] - access lookup dependency
+ * @param {object} [options.logger=console] - logger dependency
+ * @returns {Promise<{
+ *   plans: Array<object>,
+ *   missingCharNames: string[],
+ *   lookupFailed: boolean,
+ *   noAccessibleRoster: boolean,
+ * }>}
+ */
 async function resolveRaidChannelWriteBatch({
   authorId,
   charNames,
@@ -51,8 +98,11 @@ async function resolveRaidChannelWriteBatch({
   }
 
   const missingCharNames = [];
+  // Every requested name targets the same access snapshot, so build its index
+  // once instead of rescanning every account and character for each request.
+  const characterIndex = buildAccessibleCharacterIndex(accessibleAccounts);
   const plans = (Array.isArray(charNames) ? charNames : []).map((charName, index) => {
-    const hit = findAccessibleCharacterInAccounts(accessibleAccounts, charName);
+    const hit = characterIndex.get(String(charName || "").trim().toLowerCase()) || null;
     if (!hit && !lookupFailed) missingCharNames.push(charName);
     const plan = {
       index,
@@ -78,6 +128,12 @@ async function resolveRaidChannelWriteBatch({
   };
 }
 
+/**
+ * Resolve only the ordered write plans for callers that do not need batch
+ * diagnostics.
+ * @param {object} options - options accepted by resolveRaidChannelWriteBatch
+ * @returns {Promise<Array<object>>} ordered routing plans
+ */
 async function resolveRaidChannelWritePlans(options) {
   const batch = await resolveRaidChannelWriteBatch(options);
   return batch.plans;
@@ -87,6 +143,12 @@ function getWritePlanSegmentKey(plan) {
   return `${plan.discordId || ""}\x1f${plan.executorId || ""}`;
 }
 
+/**
+ * Group only adjacent operations with the same owner/executor route. Keeping
+ * segments contiguous preserves input order and the early no-roster stop rule.
+ * @param {Array<object>} plans - ordered write operations
+ * @returns {Array<{key: string, plans: Array<object>}>} contiguous route segments
+ */
 function buildWritePlanSegments(plans) {
   const segments = [];
   for (const plan of plans || []) {
@@ -101,6 +163,18 @@ function buildWritePlanSegments(plans) {
   return segments;
 }
 
+/**
+ * Apply one raid update across pre-resolved character write plans.
+ * @param {object} options
+ * @param {Array<object>} options.plans - ordered routing plans
+ * @param {object} options.raidMeta - normalized raid metadata
+ * @param {string} options.statusType - requested completion state
+ * @param {unknown} options.effectiveGates - effective gate selection
+ * @param {Function} options.applyRaidSetForDiscordId - single-write dependency
+ * @param {Function|null} [options.applyRaidSetBatchForDiscordId=null] - batch dependency
+ * @param {object} [options.logger=console] - logger dependency
+ * @returns {Promise<Array<object>>} per-character results in input order
+ */
 async function applyRaidChannelWritePlans({
   plans,
   raidMeta,
@@ -120,6 +194,17 @@ async function applyRaidChannelWritePlans({
   return updateGroups[0]?.results || [];
 }
 
+/**
+ * Apply several raid updates while sharing route segments across their
+ * character operations.
+ * @param {object} options
+ * @param {Array<object>} options.plans - ordered routing plans
+ * @param {Array<object>} options.updates - raid/status/gate updates
+ * @param {Function} options.applyRaidSetForDiscordId - single-write dependency
+ * @param {Function|null} [options.applyRaidSetBatchForDiscordId=null] - batch dependency
+ * @param {object} [options.logger=console] - logger dependency
+ * @returns {Promise<Array<object>>} updates paired with ordered result arrays
+ */
 async function applyRaidChannelUpdatePlans({
   plans,
   updates,

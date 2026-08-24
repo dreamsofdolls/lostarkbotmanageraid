@@ -11,6 +11,14 @@ const {
 } = require("../../utils/raid/common/autocomplete");
 const { t, getUserLanguage } = require("../../services/i18n");
 
+/**
+ * Compose the roster-removal autocomplete and command handlers.
+ * @param {object} deps - injected Discord, persistence, roster, and UI helpers
+ * @returns {{
+ *   handleRemoveRosterAutocomplete: Function,
+ *   handleRemoveRosterCommand: Function,
+ * }} command handlers
+ */
 function createRemoveRosterCommand(deps) {
   const {
     EmbedBuilder,
@@ -198,18 +206,20 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
       account.characters.splice(charIndex, 1);
       let reseededTo = null;
       if (wasSeed && account.characters.length > 0) {
-        // Walk the remaining characters for the first name that does NOT
-        // collide with another account's accountName - roster autocomplete
-        // and removal key off accountName as a per-user unique identifier,
-        // so avoiding collision here preserves that invariant.
+        // Roster autocomplete and removal treat accountName as unique per user.
+        // Index other account names once, then preserve the former natural-order
+        // rule by selecting the first remaining non-colliding character.
+        const otherAccountNames = new Set();
+        for (const other of userDoc.accounts) {
+          if (other === account) continue;
+          const normalizedAccountName = normalizeName(other.accountName);
+          if (normalizedAccountName) otherAccountNames.add(normalizedAccountName);
+        }
         for (const candidate of account.characters) {
           const fallbackName = getCharacterName(candidate);
           if (!fallbackName) continue;
           const normalizedFallback = normalizeName(fallbackName);
-          const collides = userDoc.accounts.some(
-            (other) => other !== account && normalizeName(other.accountName) === normalizedFallback
-          );
-          if (collides) continue;
+          if (otherAccountNames.has(normalizedFallback)) continue;
           account.accountName = fallbackName;
           reseededTo = fallbackName;
           break;

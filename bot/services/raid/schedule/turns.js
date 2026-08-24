@@ -65,14 +65,25 @@ function removeMembersFromTurns(turns, memberIds) {
 }
 
 /**
+ * Index live signups once when several turns need to resolve the same pool.
+ * @param {Array} signups - event.signups
+ * @returns {Map<unknown, object>} signup record keyed by discordId
+ */
+function buildSignupIndex(signups) {
+  return new Map((signups || []).map((signup) => [signup.discordId, signup]));
+}
+
+/**
  * Map a turn's memberIds to live signup records, dropping anyone no longer
  * in the pool and tagging each with role.
  * @param {Array} signups - event.signups
  * @param {object} turn - a turn sub-document
+ * @param {Map<unknown, object>|null} [signupIndex=null] - index from
+ *   buildSignupIndex; null preserves the standalone single-turn API
  * @returns {Array<{discordId: string, characterName: string, characterClass: string, characterItemLevel: number, role: "support"|"dps"}>}
  */
-function resolveTurnMembers(signups, turn) {
-  const byId = new Map((signups || []).map((s) => [s.discordId, s]));
+function resolveTurnMembers(signups, turn, signupIndex = null) {
+  const byId = signupIndex instanceof Map ? signupIndex : buildSignupIndex(signups);
   return (turn?.memberIds || [])
     .map((id) => byId.get(id))
     .filter(Boolean)
@@ -92,5 +103,6 @@ module.exports = {
   setTurnMembers,
   removeTurn,
   removeMembersFromTurns,
+  buildSignupIndex,
   resolveTurnMembers,
 };

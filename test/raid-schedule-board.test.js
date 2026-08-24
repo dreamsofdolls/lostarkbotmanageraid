@@ -168,3 +168,36 @@ test("buildTurnPlanEmbed (4-man): one field per turn, no party split", () => {
   assert.ok(v.includes("Morrah") && v.includes("DPS"));
   assert.ok(v.includes("trống"), "2 unfilled dps slots padded");      // 1 of 3 dps filled
 });
+
+test("buildTurnPlanEmbed indexes the signup pool once for every turn", () => {
+  let discordIdReads = 0;
+  const signupCount = 50;
+  const turnCount = 20;
+  const signups = Array.from({ length: signupCount }, (_, index) => ({
+    get discordId() {
+      discordIdReads += 1;
+      return `member-${index}`;
+    },
+    characterName: `Character ${index}`,
+    characterClass: "Berserker",
+    characterItemLevel: 1700,
+    role: "dps",
+  }));
+  const event = makeEvent({
+    partySize: 4,
+    supSlots: 1,
+    dpsSlots: 3,
+    signups,
+    turns: Array.from({ length: turnCount }, (_, index) => ({
+      name: `Turn ${index + 1}`,
+      memberIds: [`member-${index}`],
+    })),
+  });
+
+  buildTurnPlanEmbed(event, deps);
+
+  assert.ok(
+    discordIdReads <= signupCount + turnCount,
+    `expected one signup index pass, received ${discordIdReads} id reads`,
+  );
+});

@@ -14,7 +14,9 @@ const { t: translate, DEFAULT_LANGUAGE } = require("../../../services/i18n");
  * @param {Function} deps.normalizeName
  * @param {Function} deps.parseCombatScore
  * @param {Function} [deps.t] - injected for tests
- * @returns {Function} fetchBibleRosterWithFallback(savedChars, accountName, lang)
+ * @returns {(savedChars: Array<object>, accountName: string, lang?: string) =>
+ *   Promise<{bibleChars: Array<object>, bibleError: string|null}>}
+ *   fetchBibleRosterWithFallback
  */
 function createFetchBibleRosterWithFallback({
   fetchRosterCharacters,
@@ -28,16 +30,23 @@ function createFetchBibleRosterWithFallback({
     lang = DEFAULT_LANGUAGE
   ) {
     const seeds = [];
+    const seenSeeds = new Set();
+    // Preserve highest-combat-score retry priority, append the account name as
+    // the final fallback, and avoid duplicate network attempts in constant time.
     const sortedSaved = [...savedChars].sort(
       (a, b) => parseCombatScore(b.combatScore) - parseCombatScore(a.combatScore)
     );
 
     for (const character of sortedSaved) {
-      if (character.name && !seeds.includes(character.name)) {
+      if (character.name && !seenSeeds.has(character.name)) {
         seeds.push(character.name);
+        seenSeeds.add(character.name);
       }
     }
-    if (accountName && !seeds.includes(accountName)) seeds.push(accountName);
+    if (accountName && !seenSeeds.has(accountName)) {
+      seeds.push(accountName);
+      seenSeeds.add(accountName);
+    }
 
     if (seeds.length === 0) {
       return {
@@ -58,10 +67,11 @@ function createFetchBibleRosterWithFallback({
         if (!Array.isArray(fetched) || fetched.length === 0) continue;
 
         if (savedNameSet.size > 0) {
-          const fetchedNames = new Set(
-            fetched.map((character) => normalizeName(character.charName))
+          // Stop on the first overlap; the saved-name index avoids rebuilding or
+          // rescanning the saved roster for every fetched character.
+          const hasOverlap = fetched.some((character) =>
+            savedNameSet.has(normalizeName(character.charName))
           );
-          const hasOverlap = [...savedNameSet].some((name) => fetchedNames.has(name));
           if (!hasOverlap) {
             zeroOverlapHit = true;
             console.warn(

@@ -15,7 +15,10 @@ const { t } = require("../../../../services/i18n");
 const { getClassEmoji, isSupportClass } = require("../../../../models/Class");
 const { getRaidRequirementMap } = require("../../../../domain/raid-catalog");
 const { assignSlots } = require("../../../../services/raid/schedule/slots/slots");
-const { resolveTurnMembers } = require("../../../../services/raid/schedule/turns");
+const {
+  buildSignupIndex,
+  resolveTurnMembers,
+} = require("../../../../services/raid/schedule/turns");
 const { getRaidModeLabel } = require("../../../../utils/raid/common/labels");
 const { formatStartShortForLang } = require("../../../../utils/raid/schedule/artist-clock");
 
@@ -338,9 +341,12 @@ function buildTurnPlanEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
   const perTurnFields = partyCount === 1 ? 1 : 1 + partyCount; // 4-man: 1; 8-man: header + 2
   let usedFields = 0;
   let droppedTurns = 0;
+  // All turns resolve against one signup pool. Index it once for the board,
+  // while skipping even that work when there are no turns to render.
+  const signupIndex = turns.length > 0 ? buildSignupIndex(event.signups) : null;
 
   for (const turn of turns) {
-    const members = resolveTurnMembers(event.signups, turn);
+    const members = resolveTurnMembers(event.signups, turn, signupIndex);
     for (const member of members) visibleMembers.add(member.discordId);
     if (usedFields + perTurnFields > FIELD_BUDGET) {
       droppedTurns += 1;

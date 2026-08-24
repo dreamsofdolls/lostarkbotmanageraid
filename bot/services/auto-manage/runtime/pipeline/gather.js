@@ -1,3 +1,11 @@
+/**
+ * Account-scoped Bible metadata and log gathering for auto-manage.
+ *
+ * Invariant: character jobs from one account share fallback seed order,
+ * in-flight roster fetches, and derived roster indexes. Character log work
+ * remains bounded by AUTO_MANAGE_GATHER_CHARACTER_CONCURRENCY.
+ */
+
 "use strict";
 
 const {
@@ -9,6 +17,25 @@ const {
   mapWithConcurrency,
 } = require("../support/helpers");
 
+/**
+ * Compose the auto-manage gather pipeline from its Bible and roster helpers.
+ * @param {object} deps - injected runtime dependencies
+ * @param {Function} deps.autoManageEntryKey - builds a stable account/character key
+ * @param {Function} deps.buildFetchedRosterIndexes - indexes one fetched roster
+ * @param {Function} deps.fetchBibleCharacterMetaWithLimiter - rate-limited metadata fetch
+ * @param {Function} deps.fetchBibleLogsSinceWeekReset - weekly log fetch
+ * @param {Function} deps.fetchRosterCharacters - roster fallback fetch
+ * @param {Function} deps.findFetchedRosterMatchForCharacter - saved/fetched matcher
+ * @param {Function} deps.getCharacterClass - saved character class accessor
+ * @param {Function} deps.getCharacterName - saved character name accessor
+ * @param {Function} deps.normalizeName - name normalizer
+ * @param {Function} [deps.nowMs] - injectable clock for public-log reprobes
+ * @returns {{
+ *   gatherAutoManageLogsForCharacter: Function,
+ *   gatherAutoManageLogsForUserDoc: Function,
+ *   resolveBibleCharacterMetaViaRoster: Function,
+ * }} gather operations
+ */
 function createAutoManageGatherer({
   autoManageEntryKey,
   buildFetchedRosterIndexes,
@@ -21,20 +48,54 @@ function createAutoManageGatherer({
   normalizeName,
   nowMs = () => Date.now(),
 }) {
-  async function resolveBibleCharacterMetaViaRoster(account, character, rosterFetchCache = null) {
+  function buildRosterFallbackSeeds(account) {
     const seeds = [];
-    if (account?.accountName) seeds.push(account.accountName);
+    const seen = new Set();
+    if (account?.accountName) {
+      seeds.push(account.accountName);
+      seen.add(account.accountName);
+    }
     for (const c of account?.characters || []) {
       const name = getCharacterName(c);
-      if (name && !seeds.includes(name)) seeds.push(name);
+      if (name && !seen.has(name)) {
+        seeds.push(name);
+        seen.add(name);
+      }
     }
+    return seeds;
+  }
+
+  function buildRosterFallbackContext(account) {
+    // Separate caches share both the in-flight I/O promise and its derived CPU
+    // index across concurrent character jobs without conflating the two values.
+    return {
+      seeds: buildRosterFallbackSeeds(account),
+      fetchCache: new Map(),
+      indexCache: new Map(),
+    };
+  }
+
+  async function resolveBibleCharacterMetaViaRoster(
+    account,
+    character,
+    rosterFallbackContext = null
+  ) {
+    // A raw Map is accepted for compatibility with older direct callers.
+    const context = rosterFallbackContext instanceof Map
+      ? { fetchCache: rosterFallbackContext }
+      : rosterFallbackContext;
+    const seeds = Array.isArray(context?.seeds)
+      ? context.seeds
+      : buildRosterFallbackSeeds(account);
+    const fetchCache = context?.fetchCache || null;
+    const indexCache = context?.indexCache || null;
 
     for (const seed of seeds) {
       let fetched;
       const cacheKey = normalizeName(seed);
-      if (rosterFetchCache) {
-        if (!rosterFetchCache.has(cacheKey)) {
-          rosterFetchCache.set(
+      if (fetchCache) {
+        if (!fetchCache.has(cacheKey)) {
+          fetchCache.set(
             cacheKey,
             fetchRosterCharacters(seed).catch((err) => {
               console.warn(
@@ -45,7 +106,7 @@ function createAutoManageGatherer({
             })
           );
         }
-        fetched = await rosterFetchCache.get(cacheKey);
+        fetched = await fetchCache.get(cacheKey);
       } else {
         try {
           fetched = await fetchRosterCharacters(seed);
@@ -59,9 +120,18 @@ function createAutoManageGatherer({
       }
       if (!Array.isArray(fetched) || fetched.length === 0) continue;
 
+      let fetchedIndexes;
+      if (indexCache) {
+        if (!indexCache.has(cacheKey)) {
+          indexCache.set(cacheKey, buildFetchedRosterIndexes(fetched));
+        }
+        fetchedIndexes = indexCache.get(cacheKey);
+      } else {
+        fetchedIndexes = buildFetchedRosterIndexes(fetched);
+      }
       const matchInfo = findFetchedRosterMatchForCharacter(
         character,
-        buildFetchedRosterIndexes(fetched)
+        fetchedIndexes
       );
       const canonicalName = matchInfo?.match?.charName;
       if (!canonicalName) continue;
@@ -87,7 +157,7 @@ function createAutoManageGatherer({
     return null;
   }
 
-  async function resolveBibleMetaForEntry(account, character, entry, rosterFetchCache) {
+  async function resolveBibleMetaForEntry(account, character, entry, rosterFallbackContext) {
     try {
       const meta = await fetchBibleCharacterMetaWithLimiter(entry.charName);
       return { meta, canonicalName: null, source: "direct" };
@@ -95,7 +165,7 @@ function createAutoManageGatherer({
       const resolved = await resolveBibleCharacterMetaViaRoster(
         account,
         character,
-        rosterFetchCache
+        rosterFallbackContext
       );
       if (!resolved) throw directErr;
       return {
@@ -110,10 +180,15 @@ function createAutoManageGatherer({
     account,
     character,
     entry,
-    rosterFetchCache,
+    rosterFallbackContext,
     weekResetStart,
   }) {
-    const resolved = await resolveBibleMetaForEntry(account, character, entry, rosterFetchCache);
+    const resolved = await resolveBibleMetaForEntry(
+      account,
+      character,
+      entry,
+      rosterFallbackContext
+    );
     const meta = resolved.meta;
     entry.meta = { sn: meta.sn, cid: meta.cid, rid: meta.rid };
     if (resolved.canonicalName) entry.canonicalName = resolved.canonicalName;
@@ -126,7 +201,12 @@ function createAutoManageGatherer({
     });
   }
 
-  async function gatherAutoManageLogsForCharacter(account, character, weekResetStart, rosterFetchCache) {
+  async function gatherAutoManageLogsForCharacter(
+    account,
+    character,
+    weekResetStart,
+    rosterFallbackContext
+  ) {
     const charName = getCharacterName(character);
     const entry = {
       accountName: account.accountName,
@@ -148,7 +228,7 @@ function createAutoManageGatherer({
           account,
           character,
           entry,
-          rosterFetchCache
+          rosterFallbackContext
         );
         if (resolved.canonicalName) {
           entry.canonicalName = resolved.canonicalName;
@@ -193,7 +273,7 @@ function createAutoManageGatherer({
           account,
           character,
           entry,
-          rosterFetchCache,
+          rosterFallbackContext,
           weekResetStart,
         });
         filteredLogs = filterLogsForCharacter(
@@ -226,7 +306,9 @@ function createAutoManageGatherer({
     const now = nowMs();
 
     for (const account of userDoc.accounts || []) {
-      const rosterFetchCache = new Map();
+      // Context remains account-scoped so every job for this account shares
+      // fallback work while independent accounts retain their own seed order.
+      const rosterFallbackContext = buildRosterFallbackContext(account);
       for (const character of account.characters || []) {
         const entryKey = autoManageEntryKey(account.accountName, getCharacterName(character));
         if (includeEntryKeys && !includeEntryKeys.has(entryKey)) continue;
@@ -242,15 +324,20 @@ function createAutoManageGatherer({
         ) {
           continue;
         }
-        jobs.push({ account, character, rosterFetchCache });
+        jobs.push({ account, character, rosterFallbackContext });
       }
     }
 
     return mapWithConcurrency(
       jobs,
       AUTO_MANAGE_GATHER_CHARACTER_CONCURRENCY,
-      ({ account, character, rosterFetchCache }) =>
-        gatherAutoManageLogsForCharacter(account, character, weekResetStart, rosterFetchCache)
+      ({ account, character, rosterFallbackContext }) =>
+        gatherAutoManageLogsForCharacter(
+          account,
+          character,
+          weekResetStart,
+          rosterFallbackContext
+        )
     );
   }
 

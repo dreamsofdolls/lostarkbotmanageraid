@@ -101,6 +101,37 @@ test("resolveRaidChannelWriteBatch reports every missing character before writes
   assert.deepEqual(batch.missingCharNames, ["MissingOne", "MissingTwo"]);
 });
 
+test("resolveRaidChannelWriteBatch indexes accessible characters once per batch", async () => {
+  let characterNameReads = 0;
+  const characterCount = 200;
+  const characters = Array.from({ length: characterCount }, (_, index) => ({
+    get charName() {
+      characterNameReads += 1;
+      return `Character-${index}`;
+    },
+  }));
+
+  const batch = await resolveRaidChannelWriteBatch({
+    authorId: "viewer-1",
+    charNames: characters.map((_, index) => `Character-${index}`),
+    logger: silentLogger,
+    getAccessibleAccounts: async () => [{
+      ownerDiscordId: "owner-1",
+      accountName: "OwnerRoster",
+      isOwn: false,
+      accessLevel: "edit",
+      account: { characters },
+    }],
+  });
+
+  assert.equal(batch.plans.length, characterCount);
+  assert.equal(batch.missingCharNames.length, 0);
+  assert.ok(
+    characterNameReads <= characterCount + 1,
+    `expected one roster index pass, received ${characterNameReads} name reads`,
+  );
+});
+
 test("applyRaidChannelWritePlans batches consecutive writes by target owner", async () => {
   const plans = [
     { index: 0, charName: "OwnOne", discordId: "viewer-1", executorId: null, rosterName: null },
