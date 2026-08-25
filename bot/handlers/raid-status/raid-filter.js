@@ -81,17 +81,13 @@ function countSoloRaids(accounts, getRaidsFor) {
 
 function buildRaidDropdownState(accounts, getRaidsFor) {
   const raidAggregate = new Map();
-  let totalSoloRaids = 0;
-  let completedSoloRaids = 0;
+  let totalSoloPending = 0;
   for (const account of accounts || []) {
     for (const ch of account.characters || []) {
       const charIsSupport = isSupportClass(ch?.class);
       for (const raid of getRaidsFor(ch)) {
         const modeKey = getRaidFilterModeKey(raid);
-        if (isSoloModeKey(modeKey)) {
-          totalSoloRaids += 1;
-          if (raid?.isCompleted === true) completedSoloRaids += 1;
-        }
+        if (isSoloModeKey(modeKey) && raid?.isCompleted !== true) totalSoloPending += 1;
         const countsTowardTotal = isCountedRaidFilterProgress(raid);
         // Solo stays discoverable in the raid dropdown even though the
         // all-raids headline and roster counters intentionally exclude it.
@@ -134,7 +130,7 @@ function buildRaidDropdownState(accounts, getRaidsFor) {
     (sum, r) => sum + (r.countsTowardTotal ? r.pending : 0),
     0
   );
-  return { raidDropdownEntries, totalRaidPending, totalSoloRaids, completedSoloRaids };
+  return { raidDropdownEntries, totalRaidPending, totalSoloPending };
 }
 
 function buildRaidFilterRow(options) {
@@ -144,24 +140,16 @@ function buildRaidFilterRow(options) {
     truncateText,
     raidDropdownEntries,
     totalRaidPending,
-    totalSoloRaids = 0,
-    completedSoloRaids = 0,
+    totalSoloPending = 0,
     filterRaidId,
     disabled,
     lang = "vi",
   } = options;
 
-  const allRaidsLabel =
-    totalRaidPending === 0
-      ? t("raid-status.filter.allRaidsDone", lang, {
-          soloDone: completedSoloRaids,
-          soloTotal: totalSoloRaids,
-        })
-      : t("raid-status.filter.allRaidsPending", lang, {
-          n: totalRaidPending,
-          soloDone: completedSoloRaids,
-          soloTotal: totalSoloRaids,
-        });
+  const allRaidsLabel = t("raid-status.filter.raidSummary", lang, {
+    n: totalRaidPending,
+    solo: totalSoloPending,
+  });
 
   const selectOptions = [
     {
@@ -207,6 +195,7 @@ function buildRaidFilterRow(options) {
 function getStatusRosterRaidState({ account, raidFilter = null, getRaidsFor }) {
   let pending = 0;
   let success = 0;
+  let soloPending = 0;
   let displayMatches = 0;
   const characters = Array.isArray(account?.characters) ? account.characters : [];
   for (const character of characters) {
@@ -219,6 +208,10 @@ function getStatusRosterRaidState({ account, raidFilter = null, getRaidsFor }) {
         continue;
       }
       displayMatches += 1;
+      if (isSoloModeKey(getRaidFilterModeKey(raid))) {
+        if (raid?.isCompleted !== true) soloPending += 1;
+        continue;
+      }
       // Detail-only raids remain renderable when selected, while roster
       // counters stay aligned with the headline /raid-status progress totals.
       if (!isCountedRaidFilterProgress(raid)) continue;
@@ -229,6 +222,7 @@ function getStatusRosterRaidState({ account, raidFilter = null, getRaidsFor }) {
   return {
     pending,
     success,
+    soloPending,
     total: pending + success,
     displayMatches,
   };
@@ -262,6 +256,8 @@ function buildStatusRosterFilterRow(options) {
     selectedRosterIndex,
     disabled,
     lang = "vi",
+    includeAllOption = true,
+    currentPageIndex = null,
     // The Local Sync preview card renders this same dropdown, but its
     // clicks belong to a different namespace (see DM_BUTTON_PREFIX /
     // STATUS_BUTTON_PREFIX in local-sync/discord-console-ui.js), so the
@@ -279,26 +275,22 @@ function buildStatusRosterFilterRow(options) {
       default: true,
     }];
   } else {
-    const totals = entries.reduce(
-      (sum, entry) => ({
-        pending: sum.pending + entry.pending,
-        success: sum.success + entry.success,
-      }),
-      { pending: 0, success: 0 }
-    );
-    selectOptions = [{
-      label: truncateText(t("raid-status.filter.allRosters", lang, totals), 100),
-      value: FILTER_ALL_ROSTERS,
-      emoji: "\u{1f4c2}",
-      default: selectedRosterIndex === null,
-    }];
+    selectOptions = includeAllOption
+      ? [{
+          label: truncateText(t("raid-status.filter.allRosters", lang), 100),
+          value: FILTER_ALL_ROSTERS,
+          emoji: "\u{1f4c2}",
+          default: selectedRosterIndex === null,
+        }]
+      : [];
 
-    const visibleEntries = entries.slice(0, 24);
+    const activeRosterIndex = includeAllOption ? selectedRosterIndex : currentPageIndex;
+    const visibleEntries = entries.slice(0, includeAllOption ? 24 : 25);
     if (
-      Number.isInteger(selectedRosterIndex) &&
-      !visibleEntries.some((entry) => entry.pageIndex === selectedRosterIndex)
+      Number.isInteger(activeRosterIndex) &&
+      !visibleEntries.some((entry) => entry.pageIndex === activeRosterIndex)
     ) {
-      const selected = entries.find((entry) => entry.pageIndex === selectedRosterIndex);
+      const selected = entries.find((entry) => entry.pageIndex === activeRosterIndex);
       if (selected) visibleEntries[visibleEntries.length - 1] = selected;
     }
 
@@ -308,13 +300,13 @@ function buildStatusRosterFilterRow(options) {
           t("raid-status.filter.rosterState", lang, {
             name: entry.accountName || t("raid-status.filter.unnamedRoster", lang),
             pending: entry.pending,
-            success: entry.success,
+            solo: Number(entry.soloPending) || 0,
           }),
           100
         ),
         value: String(entry.pageIndex),
         emoji: "\u{1f4c1}",
-        default: selectedRosterIndex === entry.pageIndex,
+        default: activeRosterIndex === entry.pageIndex,
       });
     }
   }

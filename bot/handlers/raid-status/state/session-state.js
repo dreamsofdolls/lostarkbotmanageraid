@@ -57,8 +57,7 @@ async function createRaidStatusSessionState({
   let rosterFilterEntries = [];
   let visibleRosterIndices = [];
   let totalRaidPending = 0;
-  let totalSoloRaids = 0;
-  let completedSoloRaids = 0;
+  let totalSoloPending = 0;
   const taskCharFilterByPage = new Map();
   const goldCharFilterByPage = new Map();
   const raidGetter = createRaidGetter({ getStatusRaidsForCharacter });
@@ -94,8 +93,7 @@ async function createRaidStatusSessionState({
     const nextState = buildRaidDropdownState(accounts, raidGetter.getRaidsFor);
     raidDropdownEntries = nextState.raidDropdownEntries;
     totalRaidPending = nextState.totalRaidPending;
-    totalSoloRaids = Number(nextState.totalSoloRaids) || 0;
-    completedSoloRaids = Number(nextState.completedSoloRaids) || 0;
+    totalSoloPending = Number(nextState.totalSoloPending) || 0;
     if (filterRaidId && !raidDropdownEntries.some((entry) => entry.key === filterRaidId)) {
       filterRaidId = null;
     }
@@ -209,8 +207,8 @@ async function createRaidStatusSessionState({
       return localSyncRosterFilter;
     },
     set localSyncRosterFilter(value) {
-      // null is the "Tất cả roster" state, the same no-selection the raid
-      // view's selectedRosterIndex uses.
+      // null is Local Sync's aggregate "Rosters" state. The main raid-status
+      // dropdown instead follows the roster shown on the current page.
       localSyncRosterFilter = value === null ? null : Math.max(0, Number(value) || 0);
     },
     get filterRaidId() {
@@ -229,11 +227,8 @@ async function createRaidStatusSessionState({
     get totalRaidPending() {
       return totalRaidPending;
     },
-    get totalSoloRaids() {
-      return totalSoloRaids;
-    },
-    get completedSoloRaids() {
-      return completedSoloRaids;
+    get totalSoloPending() {
+      return totalSoloPending;
     },
     get userDoc() {
       return userDoc;

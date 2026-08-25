@@ -31,8 +31,7 @@ function createRaidStatusComponentLayout({
   getStatusUserMeta,
   getRaidDropdownEntries,
   getTotalRaidPending,
-  getTotalSoloRaids = () => 0,
-  getCompletedSoloRaids = () => 0,
+  getTotalSoloPending = () => 0,
   getFilterRaidId,
   getRosterFilterEntries = () => [],
   getSelectedRosterIndex = () => null,
@@ -216,8 +215,7 @@ function createRaidStatusComponentLayout({
       truncateText,
       raidDropdownEntries,
       totalRaidPending: getTotalRaidPending(),
-      totalSoloRaids: getTotalSoloRaids(),
-      completedSoloRaids: getCompletedSoloRaids(),
+      totalSoloPending: getTotalSoloPending(),
       filterRaidId: getFilterRaidId(),
       disabled,
       lang,
@@ -232,6 +230,10 @@ function createRaidStatusComponentLayout({
       truncateText,
       rosterFilterEntries: getRosterFilterEntries(),
       selectedRosterIndex: getSelectedRosterIndex(),
+      currentPageIndex: getCurrentPage(),
+      // /raid-status always renders one paginated roster, so an "All"
+      // option would claim a combined view that the card does not provide.
+      includeAllOption: false,
       disabled,
       lang,
     }));

@@ -70,6 +70,12 @@ test("raid-status roster entries separate display eligibility from progress coun
         isCompleted: true,
         goldReceives: true,
       },
+      {
+        raidKey: "kazeros",
+        modeKey: "solo",
+        isCompleted: false,
+        goldReceives: true,
+      },
     ]),
     account("Beta", [
       { raidKey: "kazeros", modeKey: "normal", isCompleted: true },
@@ -79,11 +85,16 @@ test("raid-status roster entries separate display eligibility from progress coun
 
   assert.deepEqual(
     buildStatusRosterFilterEntries({ accounts, getRaidsFor }).map(
-      ({ pageIndex, pending, success }) => ({ pageIndex, pending, success })
+      ({ pageIndex, pending, success, soloPending }) => ({
+        pageIndex,
+        pending,
+        success,
+        soloPending,
+      })
     ),
     [
-      { pageIndex: 0, pending: 1, success: 0 },
-      { pageIndex: 1, pending: 0, success: 1 },
+      { pageIndex: 0, pending: 1, success: 0, soloPending: 1 },
+      { pageIndex: 1, pending: 0, success: 1, soloPending: 0 },
     ]
   );
   assert.deepEqual(
@@ -91,21 +102,40 @@ test("raid-status roster entries separate display eligibility from progress coun
       accounts,
       raidFilter: "armoche:hard",
       getRaidsFor,
-    }).map(({ pageIndex, pending, success }) => ({ pageIndex, pending, success })),
-    [{ pageIndex: 0, pending: 1, success: 0 }]
+    }).map(({ pageIndex, pending, success, soloPending }) => ({
+      pageIndex,
+      pending,
+      success,
+      soloPending,
+    })),
+    [{ pageIndex: 0, pending: 1, success: 0, soloPending: 0 }]
   );
   assert.deepEqual(
     buildStatusRosterFilterEntries({
       accounts,
       raidFilter: "armoche:solo",
       getRaidsFor,
-    }).map(({ pageIndex, pending, success, displayMatches }) => ({
+    }).map(({ pageIndex, pending, success, soloPending, displayMatches }) => ({
       pageIndex,
       pending,
       success,
+      soloPending,
       displayMatches,
     })),
-    [{ pageIndex: 0, pending: 0, success: 0, displayMatches: 1 }]
+    [{ pageIndex: 0, pending: 0, success: 0, soloPending: 0, displayMatches: 1 }]
+  );
+  assert.deepEqual(
+    buildStatusRosterFilterEntries({
+      accounts,
+      raidFilter: "kazeros:solo",
+      getRaidsFor,
+    }).map(({ pageIndex, pending, soloPending, displayMatches }) => ({
+      pageIndex,
+      pending,
+      soloPending,
+      displayMatches,
+    })),
+    [{ pageIndex: 0, pending: 0, soloPending: 1, displayMatches: 1 }]
   );
 });
 
@@ -184,13 +214,14 @@ test("raid-status Solo filter includes deferred Normal -> Solo characters withou
       accounts,
       raidFilter: "kazeros:solo",
       getRaidsFor,
-    }).map(({ pageIndex, pending, success, displayMatches }) => ({
+    }).map(({ pageIndex, pending, success, soloPending, displayMatches }) => ({
       pageIndex,
       pending,
       success,
+      soloPending,
       displayMatches,
     })),
-    [{ pageIndex: 0, pending: 0, success: 0, displayMatches: 1 }],
+    [{ pageIndex: 0, pending: 0, success: 0, soloPending: 0, displayMatches: 1 }],
   );
 });
 
@@ -240,36 +271,36 @@ test("raid-status roster dropdown uses folder icons and selects the paginated ro
     StringSelectMenuBuilder: FakeSelectMenuBuilder,
     truncateText: (value, limit) => String(value).slice(0, limit),
     rosterFilterEntries: [
-      { pageIndex: 0, accountName: "Alpha", pending: 2, success: 1 },
-      { pageIndex: 3, accountName: "Gamma", pending: 0, success: 4 },
+      { pageIndex: 0, accountName: "Alpha", pending: 2, success: 1, soloPending: 3 },
+      { pageIndex: 3, accountName: "Gamma", pending: 0, success: 4, soloPending: 1 },
     ],
     selectedRosterIndex: 3,
+    currentPageIndex: 3,
+    includeAllOption: false,
     disabled: false,
-    lang: "en",
+    lang: "vi",
   });
 
   const menu = row.components[0].data;
   assert.equal(menu.customId, "status-filter:roster");
-  assert.equal(menu.placeholder, "Filter by roster...");
+  assert.equal(menu.placeholder, "Lọc theo roster...");
   assert.equal(menu.disabled, false);
   assert.deepEqual(menu.options.map((option) => option.value), [
-    FILTER_ALL_ROSTERS,
     "0",
     "3",
   ]);
-  assert.equal(menu.options[0].emoji, "📂");
-  assert.equal(menu.options[1].emoji, "📁");
-  assert.match(menu.options[0].label, /2 pending · 5 success/);
-  assert.match(menu.options[2].label, /Gamma \(0 pending · 4 success\)/);
-  assert.equal(menu.options[2].default, true);
+  assert.equal(menu.options[0].emoji, "📁");
+  assert.equal(menu.options[0].label, "Alpha (Còn 2 raid · 3 solo)");
+  assert.equal(menu.options[1].label, "Gamma (Còn 0 raid · 1 solo)");
+  assert.equal(menu.options[1].default, true);
   assert.equal(t("raid-status.filter.rosterPlaceholder", "jp"), "ロスターで絞り込む...");
 });
 
 test("raid-status layout paginates the visible roster list and mirrors its selection", () => {
   let paginationArgs = null;
   const entries = [
-    { pageIndex: 0, accountName: "Alpha", pending: 1, success: 0 },
-    { pageIndex: 2, accountName: "Gamma", pending: 0, success: 1 },
+    { pageIndex: 0, accountName: "Alpha", pending: 1, success: 0, soloPending: 2 },
+    { pageIndex: 2, accountName: "Gamma", pending: 0, success: 1, soloPending: 0 },
   ];
   const makeRow = () => new FakeActionRowBuilder().addComponents({ data: {} });
   const { buildComponents } = createRaidStatusComponentLayout({
@@ -311,6 +342,7 @@ test("raid-status layout paginates the visible roster list and mirrors its selec
 
   assert.deepEqual(paginationArgs, { currentPage: 1, totalPages: 2 });
   assert.ok(rosterMenu, "expected the roster dropdown in raid view");
+  assert.equal(rosterMenu.options.some((option) => option.value === FILTER_ALL_ROSTERS), false);
   assert.equal(rosterMenu.options.find((option) => option.value === "2").default, true);
   assert.ok(rows.length <= 5);
 });

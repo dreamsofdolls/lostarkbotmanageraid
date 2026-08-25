@@ -398,8 +398,9 @@ function buildRows({
 
   // Roster picker last, under the buttons · same position and the same
   // builder as the /raid-status roster dropdown, so the options carry the
-  // "Tất cả roster (x chưa clear · y đã xong)" counts verbatim. Only the
-  // customId namespace differs. The counts are read off accountsAfterSync,
+  // same concise "Rosters" all-option and "Tên (Còn x raid · y solo)"
+  // per-roster counts. Only the customId namespace differs. The counts are
+  // read off accountsAfterSync,
   // so they describe the roster as it will look once applied · the same
   // state the fields above already render.
   //

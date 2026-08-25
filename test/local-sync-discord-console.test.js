@@ -857,11 +857,11 @@ test("the roster dropdown narrows the card to one roster", () => {
   assert.equal(rows.length, 2);
   const select = rows[1].components[0];
   assert.equal(select.custom_id, `local-sync:roster:${makeJob().jobId}`);
-  // Same options /raid-status offers: an all-rosters entry first, then one
-  // per roster, each carrying its own pending/done counts.
+  // Local Sync keeps an aggregate entry first, then one per roster with its
+  // remaining regular-raid and Solo counts.
   assert.deepEqual(select.options.map((o) => o.value), ["__all_rosters__", "0", "1"]);
-  assert.match(select.options[0].label, /^Tất cả roster \(\d+ chưa clear · \d+ đã xong\)$/);
-  assert.match(select.options[1].label, /^Qiylyn \(\d+ chưa clear · \d+ đã xong\)$/);
+  assert.equal(select.options[0].label, "Rosters");
+  assert.match(select.options[1].label, /^Qiylyn \(Còn \d+ raid · \d+ solo\)$/);
   assert.equal(select.options[0].default, true);
 
   // Narrowed to the second roster: only its characters, and no header

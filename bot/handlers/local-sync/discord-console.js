@@ -222,8 +222,9 @@ function createLocalSyncDiscordConsole({
     const [, action, jobId] = String(interaction.customId || "").split(":");
     if (action !== "roster" || !jobId) return;
     await interaction.deferUpdate();
-    // "Tất cả roster" is the dropdown's no-selection entry · it drops the
-    // filter and shows every roster again, same as /raid-status.
+    // "Rosters" is Local Sync's aggregate entry · it drops the filter and
+    // shows every roster in the preview again. /raid-status intentionally has
+    // no aggregate entry because its card always renders one paginated roster.
     const picked = String(interaction.values?.[0] ?? "");
     const rosterFilter = picked === FILTER_ALL_ROSTERS ? null : Number(picked) || 0;
     const [job, userDoc] = await Promise.all([

@@ -936,7 +936,7 @@ test("buildRaidDropdownState: excludes raids that do not receive gold", () => {
   assert.equal(totalRaidPending, 1);
 });
 
-test("buildRaidDropdownState: counts all Solo raids without adding them to pending progress", () => {
+test("buildRaidDropdownState: counts pending Solo raids without adding them to main progress", () => {
   const accounts = [{ characters: [
     {
       class: "Sorceress",
@@ -956,8 +956,7 @@ test("buildRaidDropdownState: counts all Solo raids without adding them to pendi
   const {
     raidDropdownEntries,
     totalRaidPending,
-    totalSoloRaids,
-    completedSoloRaids,
+    totalSoloPending,
   } = buildRaidDropdownState(
     accounts,
     (character) => character.raids,
@@ -972,8 +971,7 @@ test("buildRaidDropdownState: counts all Solo raids without adding them to pendi
     ],
   );
   assert.equal(totalRaidPending, 1);
-  assert.equal(totalSoloRaids, 2, "completed Solo raids still belong in the Solo total");
-  assert.equal(completedSoloRaids, 1);
+  assert.equal(totalSoloPending, 1, "completed Solo raids stay out of the pending count");
   assert.deepEqual(
     summarizeSoloRaidProgress(accounts, (character) => character.raids),
     { completed: 1, total: 2 }
@@ -985,15 +983,14 @@ test("buildRaidDropdownState: counts all Solo raids without adding them to pendi
     truncateText,
     raidDropdownEntries,
     totalRaidPending,
-    totalSoloRaids,
-    completedSoloRaids,
+    totalSoloPending,
     filterRaidId: null,
     disabled: false,
     lang: "vi",
   });
   assert.equal(
     row.toJSON().components[0].options[0].label,
-    "Tất cả raids (1 chưa clear - 1/2 solo raid done)",
+    "Raids (Còn 1 raid · 1 solo)",
   );
 });
 

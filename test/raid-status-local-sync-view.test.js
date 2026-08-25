@@ -280,8 +280,8 @@ test("the roster dropdown narrows the card, and its all-rosters entry widens it 
   });
   assert.equal(session.localSyncRosterFilter, 1);
 
-  // "Tất cả roster" is the same __all_rosters__ value the raid view's
-  // dropdown uses · null shows every roster the preview touches.
+  // Local Sync's "Rosters" option uses __all_rosters__; null shows every
+  // roster touched by the preview. The main raid view has no aggregate option.
   await handlers[STATUS_COMPONENT_ACTION.localSyncAction]({
     customId: `status-local:roster:${JOB_ID}`,
     values: ["__all_rosters__"],
