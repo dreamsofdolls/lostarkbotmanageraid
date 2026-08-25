@@ -2,9 +2,9 @@
 
 const { loadBackgroundBuffer } = require("../../../services/raid-card/bg-loader");
 const {
-  countSoloRaids,
   getRaidFilterKey,
   isCountedRaidFilterProgress,
+  summarizeSoloRaidProgress,
 } = require("../raid-filter");
 const {
   isGoldReceivingRaid,
@@ -95,10 +95,14 @@ function createRaidStatusRenderPayload({
           filteredEntries.push(...getCountRaidsFor(character));
         }
       }
+      const soloProgress = summarizeSoloRaidProgress(accounts, getDisplayRaidsFor);
       filteredTotals = {
         characters: getTotalCharacters(),
         progress: summarizeRaidProgress(filteredEntries),
-        solo: countSoloRaids(accounts, getDisplayRaidsFor),
+        // Preserve the numeric total for existing consumers while exposing
+        // completed/total to the headline renderer.
+        solo: soloProgress.total,
+        soloProgress,
         gold: summarizeGlobalGold(accounts, getDisplayRaidsFor),
       };
       totalsByFilter.set(totalsKey, filteredTotals);

@@ -60,6 +60,9 @@ const {
 const {
   markRaidStatusOpenedDay,
 } = require("../../services/auto-manage/runtime/support/daily-backfill");
+const {
+  createLatestOnlyQueue,
+} = require("../../utils/async/latest-only-queue");
 
 const STATUS_PAGINATION_SESSION_MS = 10 * 60 * 1000;
 const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
@@ -511,29 +514,29 @@ function createRaidStatusCommand(deps) {
       buildEmbedAndCanvas,
       buildComponents,
       componentRouteHandlers,
+      refreshStateIfStale: () => statusState.refreshViewerAccountsIfStale(),
     });
 
-    let backgroundRenderChain = Promise.resolve();
-
-    const queueBackgroundRender = (label) => {
-      backgroundRenderChain = backgroundRenderChain
-        .then(async () => {
-          if (attachedCollector.isEnded()) return;
-          const payload = await buildEmbedAndCanvas();
-          if (attachedCollector.isEnded()) return;
-          await interaction.editReply({
-            ...payload,
-            components: buildComponents(false),
-          });
-        })
-        .catch((err) => {
+    const backgroundRenderQueue = createLatestOnlyQueue(
+      async () => {
+        if (attachedCollector.isEnded()) return;
+        const payload = await buildEmbedAndCanvas();
+        if (attachedCollector.isEnded()) return;
+        await interaction.editReply({
+          ...payload,
+          components: buildComponents(false),
+        });
+      },
+      {
+        onError: (err, labels) => {
           console.warn(
-            `[raid-status] ${label} background render failed:`,
+            `[raid-status] ${labels.join("+") || "update"} background render failed:`,
             err?.message || err
           );
-        });
-      return backgroundRenderChain;
-    };
+        },
+      }
+    );
+    const queueBackgroundRender = (label) => backgroundRenderQueue.request(label);
 
     void markRaidStatusOpenedDay({
       User,

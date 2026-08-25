@@ -54,22 +54,29 @@ function isCountedRaidFilterProgress(raid) {
 }
 
 /**
- * Count every raid currently presented as Solo across the visible accounts.
+ * Summarize raids currently presented as Solo across the visible accounts.
  * Solo is detail-only and intentionally excluded from the main progress
  * denominator, so callers need this separate rollup instead of deriving it
  * from totalRaidPending.
  */
-function countSoloRaids(accounts, getRaidsFor) {
+function summarizeSoloRaidProgress(accounts, getRaidsFor) {
   let total = 0;
+  let completed = 0;
   for (const account of accounts || []) {
     for (const character of account.characters || []) {
       const raids = typeof getRaidsFor === "function" ? getRaidsFor(character) || [] : [];
       for (const raid of raids) {
-        if (isSoloModeKey(getRaidFilterModeKey(raid))) total += 1;
+        if (!isSoloModeKey(getRaidFilterModeKey(raid))) continue;
+        total += 1;
+        if (raid?.isCompleted === true) completed += 1;
       }
     }
   }
-  return total;
+  return { completed, total };
+}
+
+function countSoloRaids(accounts, getRaidsFor) {
+  return summarizeSoloRaidProgress(accounts, getRaidsFor).total;
 }
 
 function buildRaidDropdownState(accounts, getRaidsFor) {
@@ -325,4 +332,5 @@ module.exports = {
   getStatusRosterRaidState,
   countSoloRaids,
   isCountedRaidFilterProgress,
+  summarizeSoloRaidProgress,
 };

@@ -710,7 +710,7 @@ module.exports = {
       failed: "Bible is misbehaving, so I am reading from cache. Please retry in a few minutes.",
     },
     embed: {
-      allAccounts: "🌐 All accounts: **{chars}** chars · **{done}/{total}** raids done · **{solo}** solo raids",
+      allAccounts: "🌐 All accounts: **{chars}** chars · **{done}/{total}** raids done · **{soloDone}/{soloTotal}** solo raids done",
       earnedThisWeek: "💰 Earned this week: **{earned}** / **{total}**{boundTail}",
       goldRollup: "💰 **{earned} / {total}**{boundTail}",
       goldBoundTail: " · 🔒 **{bound}** bound",

@@ -1,5 +1,7 @@
 "use strict";
 
+const RAID_STATUS_INTERACTIVE_REFRESH_MAX_AGE_MS = 5000;
+
 function createRaidGetter({ getStatusRaidsForCharacter }) {
   const raidsCache = new Map();
   const getRaidsFor = (character) => {
@@ -30,6 +32,8 @@ async function createRaidStatusSessionState({
   buildRaidDropdownState,
   buildStatusRosterFilterEntries,
   initialView = "raid",
+  now = Date.now,
+  interactiveRefreshMaxAgeMs = RAID_STATUS_INTERACTIVE_REFRESH_MAX_AGE_MS,
 }) {
   let userDoc = initialUserDoc;
   let accounts = await buildMergedAccounts(discordId, userDoc.accounts, {
@@ -58,6 +62,8 @@ async function createRaidStatusSessionState({
   const goldCharFilterByPage = new Map();
   const raidGetter = createRaidGetter({ getStatusRaidsForCharacter });
   let totalCharacters = countCharacters(accounts);
+  let lastReloadedAtMs = Number(now());
+  let interactiveReloadPromise = null;
 
   const recomputeRosterNavigation = () => {
     rosterFilterEntries = buildStatusRosterFilterEntries({
@@ -110,7 +116,22 @@ async function createRaidStatusSessionState({
     totalCharacters = countCharacters(accounts);
     raidGetter.clear();
     recomputeDerivedState();
+    lastReloadedAtMs = Number(now());
     return userDoc;
+  }
+
+  function refreshViewerAccountsIfStale({ maxAgeMs = interactiveRefreshMaxAgeMs } = {}) {
+    const normalizedMaxAgeMs = Math.max(0, Number(maxAgeMs) || 0);
+    const ageMs = Math.max(0, Number(now()) - lastReloadedAtMs);
+    if (ageMs < normalizedMaxAgeMs) return Promise.resolve(false);
+    if (interactiveReloadPromise) return interactiveReloadPromise;
+
+    interactiveReloadPromise = reloadViewerAccounts()
+      .then(() => true)
+      .finally(() => {
+        interactiveReloadPromise = null;
+      });
+    return interactiveReloadPromise;
   }
 
   function movePage(delta) {
@@ -218,6 +239,7 @@ async function createRaidStatusSessionState({
     getGoldCharFilter(page) {
       return goldCharFilterByPage.get(page);
     },
+    refreshViewerAccountsIfStale,
     reloadViewerAccounts,
     movePage,
     selectRoster,
@@ -298,6 +320,7 @@ function createRaidStatusComponentSession({
 }
 
 module.exports = {
+  RAID_STATUS_INTERACTIVE_REFRESH_MAX_AGE_MS,
   countCharacters,
   createRaidStatusComponentSession,
   createRaidStatusSessionState,

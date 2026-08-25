@@ -242,6 +242,82 @@ test("raid-status session recounts characters after background roster refresh", 
   assert.equal(state.totalCharacters, 3);
 });
 
+test("raid-status refreshes an aged interaction snapshot and skips a recent one", async () => {
+  let nowMs = 1_000;
+  let findOneCalls = 0;
+  let dbDoc = {
+    accounts: [{ accountName: "Roster", characters: [{ name: "A" }] }],
+  };
+  const state = await createRaidStatusSessionState({
+    User: {
+      findOne: async () => {
+        findOneCalls += 1;
+        return clone(dbDoc);
+      },
+    },
+    discordId: "user-live",
+    userDoc: clone(dbDoc),
+    incomingSharedAccounts: [],
+    buildMergedAccounts: async (_discordId, accounts) => accounts,
+    getStatusRaidsForCharacter: () => [],
+    buildRaidDropdownState: () => ({ raidDropdownEntries: [], totalRaidPending: 0 }),
+    buildStatusRosterFilterEntries,
+    now: () => nowMs,
+    interactiveRefreshMaxAgeMs: 5_000,
+  });
+
+  nowMs += 4_999;
+  assert.equal(await state.refreshViewerAccountsIfStale(), false);
+  assert.equal(findOneCalls, 0);
+
+  dbDoc = {
+    accounts: [{
+      accountName: "Roster",
+      characters: [{ name: "A" }, { name: "B" }],
+    }],
+  };
+  nowMs += 1;
+  assert.equal(await state.refreshViewerAccountsIfStale(), true);
+  assert.equal(findOneCalls, 1);
+  assert.equal(state.totalCharacters, 2);
+});
+
+test("raid-status coalesces concurrent live snapshot reloads", async () => {
+  let nowMs = 10_000;
+  let findOneCalls = 0;
+  let resolveFind;
+  const findResult = new Promise((resolve) => {
+    resolveFind = resolve;
+  });
+  const state = await createRaidStatusSessionState({
+    User: {
+      findOne: () => {
+        findOneCalls += 1;
+        return findResult;
+      },
+    },
+    discordId: "user-coalesced",
+    userDoc: { accounts: [{ accountName: "Roster", characters: [] }] },
+    incomingSharedAccounts: [],
+    buildMergedAccounts: async (_discordId, accounts) => accounts,
+    getStatusRaidsForCharacter: () => [],
+    buildRaidDropdownState: () => ({ raidDropdownEntries: [], totalRaidPending: 0 }),
+    buildStatusRosterFilterEntries,
+    now: () => nowMs,
+    interactiveRefreshMaxAgeMs: 5_000,
+  });
+
+  nowMs += 5_000;
+  const first = state.refreshViewerAccountsIfStale();
+  const second = state.refreshViewerAccountsIfStale();
+  assert.equal(first, second);
+  assert.equal(findOneCalls, 1);
+
+  resolveFind({ accounts: [{ accountName: "Roster", characters: [{ name: "Fresh" }] }] });
+  assert.equal(await first, true);
+  assert.equal(state.totalCharacters, 1);
+});
+
 test("raid-status session keeps roster dropdown and pagination synchronized", async () => {
   const accounts = [
     {

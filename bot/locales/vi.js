@@ -732,7 +732,7 @@ module.exports = {
       failed: "Bible đang dở chứng nên tớ tạm đọc cache. Cậu thử lại sau vài phút.",
     },
     embed: {
-      allAccounts: "🌐 Tổng tất cả roster: **{chars}** char · **{done}/{total}** raid done · **{solo}** solo raid",
+      allAccounts: "🌐 Tổng tất cả roster: **{chars}** char · **{done}/{total}** raid done · **{soloDone}/{soloTotal}** solo raid done",
       earnedThisWeek: "💰 Tuần này đã kiếm: **{earned}** / **{total}**{boundTail}",
       goldRollup: "💰 **{earned} / {total}**{boundTail}",
       goldBoundTail: " · 🔒 **{bound}** khóa",

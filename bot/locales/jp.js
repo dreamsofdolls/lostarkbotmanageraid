@@ -711,7 +711,7 @@ module.exports = {
       failed: "bible が機嫌悪いみたい… アーティストはキャッシュを見せてますわ。数分後にもう一度試してね～",
     },
     embed: {
-      allAccounts: "🌐 全アカウント: **{chars}** キャラ · **{done}/{total}** レイド完了 · ソロレイド **{solo}** 件",
+      allAccounts: "🌐 全アカウント: **{chars}** キャラ · **{done}/{total}** レイド完了 · ソロレイド **{soloDone}/{soloTotal}** 完了",
       earnedThisWeek: "💰 今週の獲得: **{earned}** / **{total}**{boundTail}",
       goldRollup: "💰 **{earned} / {total}**{boundTail}",
       goldBoundTail: " · 🔒 **{bound}** 拘束",

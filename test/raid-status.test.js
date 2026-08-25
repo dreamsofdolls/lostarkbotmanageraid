@@ -54,6 +54,7 @@ const {
 const {
   buildRaidDropdownState,
   buildRaidFilterRow,
+  summarizeSoloRaidProgress,
 } = require("../bot/handlers/raid-status/raid-filter");
 const { getRaidModeLabel } = require("../bot/utils/raid/common/labels");
 const {
@@ -260,6 +261,7 @@ test("REGRESSION: raid-status displays detail-only raids but excludes them from 
   assert.deepEqual(capturedProgressRaids.map((raid) => raid.raidKey), ["armoche"]);
   assert.equal(capturedTotals.progress.total, 1);
   assert.equal(capturedTotals.solo, 1);
+  assert.deepEqual(capturedTotals.soloProgress, { completed: 0, total: 1 });
 });
 
 // --------- buildAccountPageEmbed ---------
@@ -966,6 +968,10 @@ test("buildRaidDropdownState: counts all Solo raids without adding them to pendi
   );
   assert.equal(totalRaidPending, 1);
   assert.equal(totalSoloRaids, 2, "completed Solo raids still belong in the Solo total");
+  assert.deepEqual(
+    summarizeSoloRaidProgress(accounts, (character) => character.raids),
+    { completed: 1, total: 2 }
+  );
 
   const row = buildRaidFilterRow({
     ActionRowBuilder,
@@ -1438,6 +1444,7 @@ test("buildAccountPageEmbed: cross-account 🌐 gold line shows the tradeable bu
       progress: { completed: 5, partial: 1, total: 8 },
       characters: 12,
       solo: 6,
+      soloProgress: { completed: 4, total: 6 },
       gold: { earned: 50000, total: 200000, earnedUnbound: 50000, totalUnbound: 200000, earnedBound: 0, totalBound: 0 },
     },
     NOOP_GET_RAIDS_FOR
@@ -1445,7 +1452,7 @@ test("buildAccountPageEmbed: cross-account 🌐 gold line shows the tradeable bu
   const desc = embed.toJSON().description || "";
   assert.match(desc, /Tổng tất cả roster/);
   assert.match(desc, /5\/8/);
-  assert.match(desc, /6\*\* solo raid/);
+  assert.match(desc, /4\/6\*\* solo raid done/);
   // 🌐 line carries the tradeable (unbound) gold in bold; no bound tail here.
   assert.match(desc, /💰 \*\*50,000G \/ 200,000G\*\*/);
 });

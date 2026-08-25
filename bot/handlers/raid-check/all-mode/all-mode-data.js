@@ -111,14 +111,22 @@ async function loadAllModeUsers({
             allowAutoManage: false,
           })
         : true;
+    if (!shouldRefresh) {
+      // Fresh lean rows are render-only and never enter a refresh job, so
+      // weekly normalization can safely happen in place without cloning the
+      // full roster tree.
+      ensureFreshWeek(seedDoc);
+      users.push(seedDoc);
+      freshBypass += 1;
+      continue;
+    }
+
+    // Stale rows still need an isolated render copy because the refresh
+    // service receives the untouched seed document in the background.
     const renderDoc = cloneRenderUserDoc(seedDoc);
     if (renderDoc) {
       ensureFreshWeek(renderDoc);
       users.push(renderDoc);
-    }
-    if (!shouldRefresh) {
-      freshBypass += 1;
-      continue;
     }
     refreshQueued += 1;
     refreshJobs.push(() =>
@@ -132,10 +140,25 @@ async function loadAllModeUsers({
   }
 
   let backgroundRefreshPromise = null;
-  const startBackgroundRefresh = () => {
+  const startBackgroundRefresh = ({ onUserRefreshed = null } = {}) => {
     if (!backgroundRefreshPromise) {
       backgroundRefreshPromise = Promise.all(
-        refreshJobs.map((run) => Promise.resolve().then(run).catch(() => null))
+        refreshJobs.map((run) => Promise.resolve()
+          .then(run)
+          .then((userDoc) => {
+            if (userDoc && typeof onUserRefreshed === "function") {
+              try {
+                onUserRefreshed(userDoc);
+              } catch (err) {
+                console.warn(
+                  "[raid-check all] incremental refresh callback failed:",
+                  err?.message || err
+                );
+              }
+            }
+            return userDoc;
+          })
+          .catch(() => null))
       ).then((rows) => rows.filter(Boolean));
     }
     return backgroundRefreshPromise;

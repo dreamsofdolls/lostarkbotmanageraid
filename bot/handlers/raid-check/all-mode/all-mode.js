@@ -47,6 +47,9 @@ const {
   RAID_CHECK_ALL_COMPONENT_ACTION,
   getRaidCheckAllComponentRoute,
 } = require("./all-mode-routes");
+const {
+  createLatestOnlyQueue,
+} = require("../../../utils/async/latest-only-queue");
 
 function buildRaidCheckRosterRefreshNoticePayload(result, lang) {
   const accountName = result?.accountName || "?";
@@ -422,21 +425,24 @@ function createAllModeHandler({
     };
 
     let sessionEnded = false;
-    let backgroundRenderChain = Promise.resolve();
-    const queueBackgroundRender = (label) => {
-      backgroundRenderChain = backgroundRenderChain
-        .then(async () => {
-          if (sessionEnded) return;
-          await interaction.editReply({
-            embeds: [renderEmbed(currentAbsoluteIndex())],
-            components: buildComponents(false),
-          });
-        })
-        .catch((err) => {
-          console.warn(`[raid-check all] ${label} background render failed:`, err?.message || err);
+    const backgroundRenderQueue = createLatestOnlyQueue(
+      async () => {
+        if (sessionEnded) return;
+        await interaction.editReply({
+          embeds: [renderEmbed(currentAbsoluteIndex())],
+          components: buildComponents(false),
         });
-      return backgroundRenderChain;
-    };
+      },
+      {
+        onError: (err, labels) => {
+          console.warn(
+            `[raid-check all] ${labels.join("+") || "update"} background render failed:`,
+            err?.message || err
+          );
+        },
+      }
+    );
+    const queueBackgroundRender = (label) => backgroundRenderQueue.request(label);
 
     const firstRenderStarted = Date.now();
     const followup = await interaction.editReply({
@@ -600,7 +606,7 @@ function createAllModeHandler({
     });
     collector.on("end", async () => {
       sessionEnded = true;
-      await backgroundRenderChain;
+      await backgroundRenderQueue.flush();
       await followup
         .edit({ components: buildComponents(true) })
         .catch(() => {});
@@ -621,19 +627,22 @@ function createAllModeHandler({
 
     if (typeof startBackgroundRefresh === "function" && refreshQueued > 0) {
       const refreshStarted = Date.now();
-      void startBackgroundRefresh()
-        .then((refreshedUsers) => {
-          let applied = 0;
-          for (const userDoc of refreshedUsers || []) {
-            if (applyRefreshedUserDoc(userDoc)) applied += 1;
-          }
-          if (applied > 0) pendingAggregateCache.clear();
+      let applied = 0;
+      void startBackgroundRefresh({
+        onUserRefreshed: (userDoc) => {
+          if (!applyRefreshedUserDoc(userDoc)) return;
+          applied += 1;
+          pendingAggregateCache.clear();
           recomputeFilteredPages({ resetPage: false });
+          queueBackgroundRender("roster-refresh-partial");
+        },
+      })
+        .then((refreshedUsers) => {
           backgroundRefreshing = false;
           console.log(
-            `[raid-check all] background refresh applied=${applied}/${refreshQueued} ms=${Date.now() - refreshStarted}`
+            `[raid-check all] background refresh applied=${applied}/${refreshQueued} resolved=${refreshedUsers?.length || 0} ms=${Date.now() - refreshStarted}`
           );
-          return queueBackgroundRender("roster-refresh");
+          return queueBackgroundRender("roster-refresh-complete");
         })
         .catch((err) => {
           backgroundRefreshing = false;

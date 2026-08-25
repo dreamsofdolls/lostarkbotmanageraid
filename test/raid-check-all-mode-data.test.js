@@ -29,6 +29,14 @@ function createQuery({ leanRows, awaitedRows, onSelect }) {
   };
 }
 
+function deferred() {
+  let resolve;
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 test("all-mode data helper converts mongoose-like docs to plain objects", () => {
   const doc = {
     toObject: () => ({ discordId: "100" }),
@@ -138,6 +146,8 @@ test("all-mode data loader queues stale refreshes without blocking the render sn
     { discordId: "100", shouldRefresh: true, renderWeekPrepared: true },
     { discordId: "200", shouldRefresh: false, renderWeekPrepared: true },
   ]);
+  assert.notEqual(result.users[0], seedUsers[0], "stale refresh seeds need an isolated render copy");
+  assert.equal(result.users[1], seedUsers[1], "fresh lean rows should bypass a full roster clone");
   assert.deepEqual(ensured, ["100", "200"]);
 
   const firstRefresh = result.startBackgroundRefresh();
@@ -150,6 +160,45 @@ test("all-mode data loader queues stale refreshes without blocking the render sn
     },
   ]);
   assert.deepEqual(limiterCalls, ["run"]);
+});
+
+test("all-mode background refresh publishes each user as soon as it resolves", async () => {
+  const first = deferred();
+  const second = deferred();
+  const published = [];
+  const seedUsers = [
+    { discordId: "100", accounts: [] },
+    { discordId: "200", accounts: [] },
+  ];
+  const User = {
+    find: () => createQuery({ leanRows: seedUsers, awaitedRows: [] }),
+  };
+
+  const result = await loadAllModeUsers({
+    User,
+    ensureFreshWeek: () => {},
+    RAID_CHECK_USER_QUERY_FIELDS: "fields",
+    raidCheckRefreshLimiter: { run: (fn) => fn() },
+    loadFreshUserSnapshotForRaidViews: (doc) => (
+      doc.discordId === "100" ? first.promise : second.promise
+    ),
+    shouldLoadFreshUserSnapshotForRaidViews: () => true,
+  });
+
+  const refreshPromise = result.startBackgroundRefresh({
+    onUserRefreshed: (doc) => published.push(doc.discordId),
+  });
+  first.resolve({ discordId: "100", accounts: [{ accountName: "A" }] });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(published, ["100"], "the first roster should not wait for the second one");
+
+  second.resolve({ discordId: "200", accounts: [{ accountName: "B" }] });
+  assert.deepEqual(
+    (await refreshPromise).map((doc) => doc.discordId),
+    ["100", "200"]
+  );
+  assert.deepEqual(published, ["100", "200"]);
+  assert.equal(result.startBackgroundRefresh(), refreshPromise, "refresh work remains memoized");
 });
 
 test("all-mode data builds one page per user account", () => {

@@ -344,7 +344,8 @@ function createRaidStatusView(deps) {
           chars: globalTotals.characters,
           done: globalTotals.progress.completed,
           total: globalTotals.progress.total,
-          solo: Number(globalTotals.solo) || 0,
+          soloDone: Number(globalTotals?.soloProgress?.completed) || 0,
+          soloTotal: Number(globalTotals?.soloProgress?.total ?? globalTotals.solo) || 0,
         }),
       );
       // Gold on its own line: cramming it onto the counts line above ran long

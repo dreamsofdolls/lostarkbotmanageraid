@@ -9,7 +9,20 @@ const {
   getNextSharedTaskTransitionMs,
 } = require("../../../utils/raid/tasks/shared-tasks");
 const { MY_RAIDS_SELECT_ID } = require("../my-raids");
-const { getStatusComponentRoute } = require("./component-routes");
+const {
+  STATUS_COMPONENT_ACTION,
+  getStatusComponentRoute,
+} = require("./component-routes");
+
+const LIVE_SNAPSHOT_ACTIONS = new Set([
+  STATUS_COMPONENT_ACTION.prev,
+  STATUS_COMPONENT_ACTION.next,
+  STATUS_COMPONENT_ACTION.raidFilter,
+  STATUS_COMPONENT_ACTION.rosterFilter,
+  STATUS_COMPONENT_ACTION.viewToggle,
+  STATUS_COMPONENT_ACTION.taskCharFilter,
+  STATUS_COMPONENT_ACTION.goldCharFilter,
+]);
 
 function attachRaidStatusComponentCollector({
   EmbedBuilder,
@@ -26,6 +39,7 @@ function attachRaidStatusComponentCollector({
   buildEmbedAndCanvas,
   buildComponents,
   componentRouteHandlers,
+  refreshStateIfStale,
 }) {
   const collector = message.createMessageComponentCollector({ time: sessionMs });
   const sessionExpiresAtMs = Date.now() + sessionMs;
@@ -102,6 +116,21 @@ function attachRaidStatusComponentCollector({
         return false;
       });
       if (!deferred) return;
+    }
+
+    // Navigation and read-only filters should render from a recent Mongo
+    // snapshot. Refresh only on interaction, with session-level TTL and
+    // in-flight coalescing, so idle collectors never poll the database.
+    if (
+      LIVE_SNAPSHOT_ACTIONS.has(route.action)
+      && typeof refreshStateIfStale === "function"
+    ) {
+      await refreshStateIfStale().catch((err) => {
+        console.warn(
+          "[raid-status component] live snapshot refresh failed:",
+          err?.message || err
+        );
+      });
     }
 
     const handler = componentRouteHandlers[route.action];
