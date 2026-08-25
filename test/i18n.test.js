@@ -61,7 +61,15 @@ test("vi raid-check filter dropdowns do not leak English state labels", () => {
   assert.equal(filter.statusSuccess, "Đã xong");
   assert.equal(
     filter.rosterState,
-    "{name} ({pending} chưa clear · {success} đã xong)"
+    "{name} (Còn {pending} raid)"
+  );
+  assert.equal(filter.raidSummary, "Raids (Còn {n} raid)");
+});
+
+test("vi gold-earner hint uses the current command wording", () => {
+  assert.equal(
+    TRANSLATIONS.vi["raid-status"].embed.goldEarnerHint,
+    "_💰 Bật gold-earner bằng `/raid-gold-earner roster:<name>`._"
   );
 });
 

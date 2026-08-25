@@ -261,9 +261,7 @@ function buildAllModeRaidFilterRow({
   const options = [
     {
       label: truncateText(
-        totalPending === 0
-          ? t("raid-check.filter.allRaidsDone", lang)
-          : t("raid-check.filter.allRaidsPending", lang, { n: totalPending }),
+        t("raid-check.filter.raidSummary", lang, { n: totalPending }),
         100
       ),
       value: FILTER_ALL_RAIDS,
@@ -302,6 +300,7 @@ function buildAllModeRosterFilterRow({
   disabled,
   filterRaidId,
   filterRosterIndex,
+  currentPageIndex = null,
   filterStatus,
   filterUserId,
   getStatusRaidsForCharacter,
@@ -328,28 +327,18 @@ function buildAllModeRosterFilterRow({
       default: true,
     }];
   } else {
-    const totals = entries.reduce(
-      (sum, entry) => ({
-        pending: sum.pending + entry.pending,
-        success: sum.success + entry.success,
-      }),
-      { pending: 0, success: 0 }
-    );
-    options = [{
-      label: truncateText(
-        t("raid-check.filter.allRosters", lang, totals),
-        100
-      ),
-      value: FILTER_ALL_ROSTERS,
-      emoji: "\u{1f4c2}",
-      default: filterRosterIndex === null,
-    }];
-    const visibleEntries = entries.slice(0, 24);
+    // One all-mode page still renders one roster, so the selector mirrors the
+    // visible page instead of presenting a misleading aggregate "All" row.
+    const activeRosterIndex = Number.isInteger(currentPageIndex)
+      ? currentPageIndex
+      : filterRosterIndex;
+    options = [];
+    const visibleEntries = entries.slice(0, 25);
     if (
-      Number.isInteger(filterRosterIndex) &&
-      !visibleEntries.some((entry) => entry.pageIndex === filterRosterIndex)
+      Number.isInteger(activeRosterIndex) &&
+      !visibleEntries.some((entry) => entry.pageIndex === activeRosterIndex)
     ) {
-      const selected = entries.find((entry) => entry.pageIndex === filterRosterIndex);
+      const selected = entries.find((entry) => entry.pageIndex === activeRosterIndex);
       if (selected) visibleEntries[visibleEntries.length - 1] = selected;
     }
     for (const entry of visibleEntries) {
@@ -358,13 +347,12 @@ function buildAllModeRosterFilterRow({
           t("raid-check.filter.rosterState", lang, {
             name: entry.accountName || t("raid-check.allMode.unnamedRoster", lang),
             pending: entry.pending,
-            success: entry.success,
           }),
           100
         ),
         value: String(entry.pageIndex),
         emoji: "\u{1f4c1}",
-        default: filterRosterIndex === entry.pageIndex,
+        default: activeRosterIndex === entry.pageIndex,
       });
     }
   }

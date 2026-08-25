@@ -365,6 +365,7 @@ function createAllModeHandler({
         disabled,
         filterRaidId: currentView === "raid" ? filterRaidId : null,
         filterRosterIndex,
+        currentPageIndex: currentAbsoluteIndex(),
         filterStatus: currentView === "raid" ? filterStatus : FILTER_STATUS.all,
         filterUserId,
         getStatusRaidsForCharacter: pendingAggregateCache.getRaidsForCharacter,

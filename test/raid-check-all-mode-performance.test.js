@@ -47,6 +47,11 @@ test("raid-check keeps pagination while the roster dropdown acts as a page selec
   assert.match(
     source,
     /const row = hasCurrentPage\s*\? buildPaginationRow/,
-    "pagination should remain available for both All rosters and a selected roster"
+    "pagination should remain available while the selector follows the visible roster"
+  );
+  assert.match(
+    source,
+    /currentPageIndex:\s*currentAbsoluteIndex\(\)/,
+    "the roster selector should mark the roster rendered on the current page"
   );
 });

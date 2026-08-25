@@ -183,7 +183,7 @@ test("all-mode status semantics treat partial raids as Pending and full clears a
   assert.equal(normalizeAllModeStatusFilter("unexpected"), FILTER_STATUS.all);
 });
 
-test("all-mode roster filter uses folder icons, shows full state, and hides raid mismatches", () => {
+test("all-mode roster filter mirrors the visible roster and hides raid mismatches", () => {
   const pagesData = [
     page("u1", "Alpha", [
       { raidKey: "kazeros", modeKey: "hard", isCompleted: false },
@@ -209,7 +209,8 @@ test("all-mode roster filter uses folder icons, shows full state, and hides raid
     StringSelectMenuBuilder: FakeSelectMenuBuilder,
     disabled: false,
     filterRaidId: "kazeros:hard",
-    filterRosterIndex: 2,
+    filterRosterIndex: null,
+    currentPageIndex: 2,
     filterStatus: FILTER_STATUS.all,
     filterUserId: "u1",
     getStatusRaidsForCharacter: (character) => character.raids,
@@ -223,15 +224,16 @@ test("all-mode roster filter uses folder icons, shows full state, and hides raid
   assert.equal(menu.customId, "raid-check-all-filter:roster");
   assert.equal(menu.disabled, false);
   assert.deepEqual(menu.options.map((option) => option.value), [
-    FILTER_ALL_ROSTERS,
     "0",
     "2",
   ]);
-  assert.equal(menu.options[0].emoji, "📂");
-  assert.equal(menu.options[1].emoji, "📁");
-  assert.match(menu.options[0].label, /:1:2$/);
-  assert.match(menu.options[1].label, /Alpha.*:1:1$/);
-  assert.equal(menu.options[2].default, true);
+  assert.equal(
+    menu.options.some((option) => option.value === FILTER_ALL_ROSTERS),
+    false
+  );
+  assert.equal(menu.options[0].emoji, "📁");
+  assert.match(menu.options[0].label, /Alpha.*:1:$/);
+  assert.equal(menu.options[1].default, true);
 });
 
 test("all-mode roster filter disables itself when no roster matches active status", () => {
