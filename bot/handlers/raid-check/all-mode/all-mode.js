@@ -18,7 +18,6 @@ const {
 const {
   addAllModeActionButtons,
   buildRosterRefreshButton,
-  buildAllModeRosterRefreshRow,
 } = require("./all-mode-buttons");
 const {
   FILTER_ALL,
@@ -276,10 +275,10 @@ function createAllModeHandler({
     const computePendingAggregate = ({ raidFilter, userFilter }) =>
       pendingAggregateCache.compute({ raidFilter, userFilter });
 
-    const buildButtonRow = (disabled) => {
+    const buildControlRows = (disabled) => {
       const currentAbs = currentAbsoluteIndex();
       const hasCurrentPage = Number.isInteger(currentAbs);
-      const row = hasCurrentPage
+      const navigationRow = hasCurrentPage
         ? buildPaginationRow(currentLocalPage, filteredIndices.length, disabled, {
             prevId: "raid-check-all-page:prev",
             nextId: "raid-check-all-page:next",
@@ -290,9 +289,17 @@ function createAllModeHandler({
         ? pagesData[currentAbs]?.userDoc?.discordId || ""
         : "";
       const actionUserId = filterUserId || currentViewUserId;
+      // The overview has room for a dedicated action row: keep page navigation
+      // and roster refresh together, then place Edit/Tasks beneath them. A
+      // user-filtered raid view already uses four selector rows, so it retains
+      // the compact single row to stay within Discord's five-row limit.
+      const separateActionRow = currentView !== "raid" || filterUserId === null;
+      const actionRow = separateActionRow
+        ? new ActionRowBuilder()
+        : navigationRow;
 
       addAllModeActionButtons({
-        row,
+        row: actionRow,
         ButtonBuilder,
         ButtonStyle,
         t,
@@ -305,12 +312,11 @@ function createAllModeHandler({
         localSyncStateByDiscordId,
       });
       if (
-        filterUserId !== null &&
         currentView === "raid" &&
         hasCurrentPage &&
-        row.components.length < 5
+        navigationRow.components.length < 5
       ) {
-        row.addComponents(
+        navigationRow.addComponents(
           buildRosterRefreshButton({
             ButtonBuilder,
             ButtonStyle,
@@ -320,25 +326,15 @@ function createAllModeHandler({
           })
         );
       }
-      return row.components.length > 0 ? row : null;
-    };
-
-    const buildRosterRefreshRow = (disabled) => {
+      const rows = [];
+      if (navigationRow.components.length > 0) rows.push(navigationRow);
       if (
-        currentView !== "raid" ||
-        filterUserId !== null ||
-        !Number.isInteger(currentAbsoluteIndex())
+        separateActionRow &&
+        actionRow.components.length > 0
       ) {
-        return null;
+        rows.push(actionRow);
       }
-      return buildAllModeRosterRefreshRow({
-        ActionRowBuilder,
-        ButtonBuilder,
-        ButtonStyle,
-        t,
-        lang,
-        disabled: disabled || backgroundRefreshing,
-      });
+      return rows;
     };
 
     const buildFilterRow = (disabled) =>
@@ -401,11 +397,7 @@ function createAllModeHandler({
 
     let teamsSnapshot = [];
     const buildComponents = (disabled) => {
-      const rows = [];
-      const buttonRow = buildButtonRow(disabled);
-      if (buttonRow) rows.push(buttonRow);
-      const refreshRow = buildRosterRefreshRow(disabled);
-      if (refreshRow) rows.push(refreshRow);
+      const rows = buildControlRows(disabled);
       rows.push(buildFilterRow(disabled));
       if (filterUserId !== null) {
         rows.push(buildRosterFilterRow(disabled));

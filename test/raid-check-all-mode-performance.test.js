@@ -30,7 +30,7 @@ test("raid-check renders before starting roster and teams background work", () =
   assert.doesNotMatch(source, /interaction\.fetchReply\(/);
 });
 
-test("raid-check keeps pagination while the roster dropdown acts as a page selector", () => {
+test("raid-check keeps overview navigation separate from action buttons", () => {
   const source = fs.readFileSync(
     path.join(
       __dirname,
@@ -46,8 +46,18 @@ test("raid-check keeps pagination while the roster dropdown acts as a page selec
 
   assert.match(
     source,
-    /const row = hasCurrentPage\s*\? buildPaginationRow/,
+    /const navigationRow = hasCurrentPage\s*\? buildPaginationRow/,
     "pagination should remain available while the selector follows the visible roster"
+  );
+  assert.match(
+    source,
+    /const separateActionRow = currentView !== "raid" \|\| filterUserId === null;/,
+    "the overview should render Edit and Tasks on a dedicated second row"
+  );
+  assert.match(
+    source,
+    /navigationRow\.addComponents\(\s*buildRosterRefreshButton/,
+    "roster refresh should share the navigation row with Prev and Next"
   );
   assert.match(
     source,

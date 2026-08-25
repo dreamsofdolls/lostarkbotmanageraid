@@ -110,25 +110,6 @@ function buildRosterRefreshButton({
   });
 }
 
-function buildAllModeRosterRefreshRow({
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  t,
-  lang,
-  disabled,
-}) {
-  return new ActionRowBuilder().addComponents(
-    buildRosterRefreshButton({
-      ButtonBuilder,
-      ButtonStyle,
-      t,
-      lang,
-      disabled,
-    })
-  );
-}
-
 function addAllModeActionButtons({
   row,
   ButtonBuilder,
@@ -188,7 +169,6 @@ function addAllModeActionButtons({
 
 module.exports = {
   addAllModeActionButtons,
-  buildAllModeRosterRefreshRow,
   buildAutoSyncButton,
   buildRosterRefreshButton,
   buildViewToggleButton,

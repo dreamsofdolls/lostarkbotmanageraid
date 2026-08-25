@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 
 const {
   addAllModeActionButtons,
-  buildAllModeRosterRefreshRow,
+  buildRosterRefreshButton,
 } = require("../bot/handlers/raid-check/all-mode/all-mode-buttons");
 
 class FakeButtonBuilder {
@@ -116,11 +116,8 @@ test("raid-check all-mode buttons omit page actions when filters have no roster 
   );
 });
 
-test("raid-check all-mode roster refresh row uses all-mode collector id", () => {
-  const row = buildAllModeRosterRefreshRow({
-    ActionRowBuilder: function ActionRowBuilder() {
-      return createRow();
-    },
+test("raid-check all-mode roster refresh button uses all-mode collector id", () => {
+  const button = buildRosterRefreshButton({
     ButtonBuilder: FakeButtonBuilder,
     ButtonStyle,
     t,
@@ -128,8 +125,6 @@ test("raid-check all-mode roster refresh row uses all-mode collector id", () => 
     disabled: false,
   });
 
-  assert.deepEqual(
-    row.components.map((component) => component.data.customId),
-    ["raid-check-all:roster-refresh"]
-  );
+  assert.equal(button.data.customId, "raid-check-all:roster-refresh");
+  assert.equal(button.data.disabled, false);
 });
