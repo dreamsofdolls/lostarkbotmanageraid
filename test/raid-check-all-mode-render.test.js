@@ -116,6 +116,7 @@ test("all-mode raid page hides Solo, gold-locked raids, and hidden-only characte
   let capturedDisplayRaids = null;
   let capturedProgressRaids = null;
   let capturedGlobalTotals = null;
+  let capturedShowGoldEarnerHint = null;
   let capturedVisibleCharacters = null;
   let filterRaidId = null;
 
@@ -127,6 +128,7 @@ test("all-mode raid page hides Solo, gold-locked raids, and hidden-only characte
       capturedDisplayRaids = getRaidsFor(character);
       capturedProgressRaids = options.getProgressRaidsFor(character);
       capturedGlobalTotals = globalTotals;
+      capturedShowGoldEarnerHint = options.showGoldEarnerHint;
       capturedVisibleCharacters = account.characters
         .filter(options.shouldDisplayCharacter)
         .map((entry) => entry.name);
@@ -156,6 +158,7 @@ test("all-mode raid page hides Solo, gold-locked raids, and hidden-only characte
   assert.deepEqual(capturedDisplayRaids.map((raid) => raid.raidKey), ["act4"]);
   assert.deepEqual(capturedProgressRaids.map((raid) => raid.raidKey), ["act4"]);
   assert.deepEqual(capturedGlobalTotals.progress, { completed: 0, total: 1 });
+  assert.equal(capturedShowGoldEarnerHint, false);
   assert.deepEqual(capturedVisibleCharacters, ["Goldie"]);
   assert.equal(embed.data.footer.text, "0/1");
 

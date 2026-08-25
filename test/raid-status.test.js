@@ -1343,6 +1343,22 @@ test("buildAccountPageEmbed: shows '/raid-gold-earner' hint when account has at 
   assert.match(desc, /\/raid-gold-earner/);
 });
 
+test("buildAccountPageEmbed: can suppress the gold-earner hint for raid-check", () => {
+  const char = makeChar("Candidate", 1730, { isGoldEarner: false });
+  const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 3 }, characters: 1 },
+    getStatusRaidsForCharacter,
+    null,
+    { showGoldEarnerHint: false }
+  );
+
+  assert.doesNotMatch(embed.toJSON().description || "", /\/raid-gold-earner/);
+});
+
 test("buildAccountPageEmbed: omits '/raid-gold-earner' hint when every eligible char is already a gold-earner (no decision left)", () => {
   // Cap-reached-or-below state: every eligible char in the account is
   // marked. Nothing for the user to flip via the picker, so the hint is

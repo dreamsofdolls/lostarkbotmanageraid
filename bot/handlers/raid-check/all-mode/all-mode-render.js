@@ -153,6 +153,7 @@ function createAllModePageRenderers({
         getProgressRaidsFor,
         lang,
         shouldDisplayCharacter,
+        showGoldEarnerHint: false,
       }
     );
 

@@ -260,6 +260,7 @@ function createRaidStatusView(deps) {
       getProgressRaidsFor = getRaidsFor,
       shouldDisplayCharacter = null,
       showCharacterGold = true,
+      showGoldEarnerHint = true,
       lang = "vi",
     } = options;
     const characters = Array.isArray(account.characters) ? account.characters : [];
@@ -366,7 +367,7 @@ function createRaidStatusView(deps) {
     const eligibleNonEarnerCount = (account.characters || []).filter(
       (c) => !c?.isGoldEarner && getRaidsFor(c).length > 0
     ).length;
-    if (eligibleNonEarnerCount > 0) {
+    if (showGoldEarnerHint && eligibleNonEarnerCount > 0) {
       descriptionLines.push(t("raid-status.embed.goldEarnerHint", lang));
     }
 
