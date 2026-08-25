@@ -82,12 +82,9 @@ function createAllModePageRenderers({
           raidMatchesStatusFilter(raid, activeStatus)
       );
     const getProgressRaidsFor = (character) => getRaidsFor(character).filter(isCountedRaidProgress);
-    const getEmptyRaidLine = (character) => {
+    const shouldDisplayCharacter = (character) => {
       const statusRaids = getStatusRaidsFor(character);
-      if (statusRaids.length === 0 || getVisibleRaidsFor(character).length > 0) {
-        return null;
-      }
-      return t("raid-check.allMode.hiddenRaidData", lang);
+      return statusRaids.length === 0 || getVisibleRaidsFor(character).length > 0;
     };
 
     const userAccounts = Array.isArray(userDoc.accounts) ? userDoc.accounts : [];
@@ -105,7 +102,7 @@ function createAllModePageRenderers({
       allRaidEntries,
       getRaidsFor,
       getProgressRaidsFor,
-      getEmptyRaidLine,
+      shouldDisplayCharacter,
       globalProgress: summarizeRaidProgress(allRaidEntries),
       userAccounts,
       userTotalChars,
@@ -126,7 +123,7 @@ function createAllModePageRenderers({
     const {
       getRaidsFor,
       getProgressRaidsFor,
-      getEmptyRaidLine,
+      shouldDisplayCharacter,
       globalProgress,
       userAccounts,
       userTotalChars,
@@ -153,9 +150,9 @@ function createAllModePageRenderers({
       {
         hideIneligibleChars:
           !!filterRaidId || activeStatus !== FILTER_STATUS.all,
-        getEmptyRaidLine,
         getProgressRaidsFor,
         lang,
+        shouldDisplayCharacter,
       }
     );
 

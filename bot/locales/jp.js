@@ -1008,8 +1008,7 @@ module.exports = {
       notEligibleGeneric: "_まだ参加できませんわ_",
     },
     allMode: {
-      rollupLine: "🌐 全アカウント: **{characters}** キャラ · **{completed}/{total}** レイド完了",
-      hiddenRaidData: "🗑️ データは表示されません",
+      rollupLine: "🌐 ロスター: **{characters}** キャラ · **{completed}/{total}** レイド",
       taskHeaderDescription: "閲覧専用のマネージャービューですわ - トグルは持ち主が `/raid-status` でしかできませんの。",
       taskHeaderResetLine: "自動リセット: デイリー 19:00 JST {resetIcon} ウィークリー 19:00 JST 水曜日ですわ。",
       sharedTaskHeader: "🌟 ロスター共通タスク",

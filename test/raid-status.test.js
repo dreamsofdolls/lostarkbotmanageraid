@@ -433,7 +433,7 @@ test("buildAccountPageEmbed: hideIneligibleChars filter swaps roster body for an
   assert.ok(hasIneligibleNotice, "should surface an 'ineligible for this raid' notice");
 });
 
-test("buildAccountPageEmbed: custom hidden-data line stays distinct from not-eligible", () => {
+test("buildAccountPageEmbed: display predicate omits hidden-only chars but keeps not-eligible chars", () => {
   const hidden = makeChar("HiddenRaids", 1730);
   const belowRequirement = makeChar("BelowRequirement", 1500);
   const account = {
@@ -449,15 +449,14 @@ test("buildAccountPageEmbed: custom hidden-data line stays distinct from not-eli
     NOOP_GET_RAIDS_FOR,
     null,
     {
-      getEmptyRaidLine: (character) =>
-        character === hidden ? "🗑️ Dữ liệu không hiển thị" : null,
+      shouldDisplayCharacter: (character) => character !== hidden,
     }
   );
   const fields = embed.toJSON().fields || [];
   const hiddenField = fields.find((field) => field.name.includes("HiddenRaids"));
   const belowField = fields.find((field) => field.name.includes("BelowRequirement"));
 
-  assert.equal(hiddenField?.value, "🗑️ Dữ liệu không hiển thị");
+  assert.equal(hiddenField, undefined);
   assert.match(belowField?.value || "", /🔒.*Chưa đủ điều kiện/);
 });
 

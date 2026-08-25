@@ -1029,8 +1029,7 @@ module.exports = {
       notEligibleGeneric: "_Chưa đủ điều kiện_",
     },
     allMode: {
-      rollupLine: "🌐 All accounts: **{characters}** chars · **{completed}/{total}** raids done",
-      hiddenRaidData: "🗑️ Dữ liệu không hiển thị",
+      rollupLine: "🌐 Rosters: **{characters}** chars · **{completed}/{total}** raids",
       taskHeaderDescription: "Read-only Manager view - chỉ owner toggle được ở `/raid-status` của họ.",
       taskHeaderResetLine: "Auto-reset: Daily 17:00 VN {resetIcon} Weekly 17:00 VN thứ 4.",
       sharedTaskHeader: "🌟 Task chung của roster",

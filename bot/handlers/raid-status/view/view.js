@@ -103,7 +103,7 @@ function createRaidStatusView(deps) {
   }
 
   function buildCharacterField(character, getRaidsFor, lang, options = {}) {
-    const { showGold = true, getEmptyRaidLine = null } = options;
+    const { showGold = true } = options;
     const name = getCharacterName(character);
     const itemLevel = Number(character.itemLevel) || 0;
     // Class emoji prepended to char name when the class is mapped in
@@ -114,11 +114,8 @@ function createRaidStatusView(deps) {
     const fieldName = truncateText(`${namePrefix}${name} · ${itemLevel}`, 256);
 
     const raids = getRaidsFor(character);
-    const customEmptyLine = raids.length === 0 && typeof getEmptyRaidLine === "function"
-      ? getEmptyRaidLine(character)
-      : null;
     const lines = raids.length === 0
-      ? [customEmptyLine || `${UI.icons.lock} ${t("raid-status.embed.notEligible", lang)}`]
+      ? [`${UI.icons.lock} ${t("raid-status.embed.notEligible", lang)}`]
       : raids.map((raid) => formatRaidStatusLine(raid, lang));
 
     if (showGold) {
@@ -261,7 +258,7 @@ function createRaidStatusView(deps) {
     const {
       hideIneligibleChars = false,
       getProgressRaidsFor = getRaidsFor,
-      getEmptyRaidLine = null,
+      shouldDisplayCharacter = null,
       showCharacterGold = true,
       lang = "vi",
     } = options;
@@ -403,16 +400,21 @@ function createRaidStatusView(deps) {
       return embed;
     }
 
-    const visibleChars = hideIneligibleChars
-      ? characters.filter((c) => getRaidsFor(c).length > 0)
+    const displayCharacters = typeof shouldDisplayCharacter === "function"
+      ? characters.filter(shouldDisplayCharacter)
       : characters;
+    const visibleChars = hideIneligibleChars
+      ? displayCharacters.filter((c) => getRaidsFor(c).length > 0)
+      : displayCharacters;
 
-    if (visibleChars.length === 0 && hideIneligibleChars) {
-      embed.addFields({
-        name: "​",
-        value: `${UI.icons.lock} ${t("raid-status.embed.allIneligible", lang)}`,
-        inline: false,
-      });
+    if (visibleChars.length === 0) {
+      if (hideIneligibleChars) {
+        embed.addFields({
+          name: "​",
+          value: `${UI.icons.lock} ${t("raid-status.embed.allIneligible", lang)}`,
+          inline: false,
+        });
+      }
       appendOutcomeField();
       return embed;
     }
@@ -421,7 +423,6 @@ function createRaidStatusView(deps) {
       ...pack2Columns(
         visibleChars.map((c) =>
           buildCharacterField(c, getRaidsFor, lang, {
-            getEmptyRaidLine,
             showGold: showCharacterGold,
           })
         )

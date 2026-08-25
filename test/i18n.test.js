@@ -88,22 +88,19 @@ test("vi gold-earner hint uses the current command wording", () => {
   );
 });
 
-test("raid-check hidden-data copy and active sync badges are localized without ON/OFF wording", () => {
+test("raid-check active sync badges are localized without ON/OFF wording", () => {
   const expected = {
     vi: {
       auto: " · 📝 Auto-sync",
       local: " · 🌐 Local-sync",
-      hidden: "🗑️ Dữ liệu không hiển thị",
     },
     jp: {
       auto: " · 📝 自動同期",
       local: " · 🌐 ローカル同期",
-      hidden: "🗑️ データは表示されません",
     },
     en: {
       auto: " · 📝 Auto-sync",
       local: " · 🌐 Local-sync",
-      hidden: "🗑️ Data not displayed",
     },
   };
 
@@ -111,8 +108,20 @@ test("raid-check hidden-data copy and active sync badges are localized without O
     const locale = TRANSLATIONS[code];
     assert.equal(locale["raid-status"].embed.autoSyncOnBadge, values.auto);
     assert.equal(locale["raid-status"].embed.localSyncOnBadge, values.local);
-    assert.equal(locale["raid-check"].allMode.hiddenRaidData, values.hidden);
     assert.doesNotMatch(`${values.auto}\n${values.local}`, /BẬT|TẮT|\bON\b|\bOFF\b/);
+  }
+});
+
+test("raid-check roster rollup omits aggregate and done wording in every language", () => {
+  const expected = {
+    vi: "🌐 Rosters: **{characters}** chars · **{completed}/{total}** raids",
+    en: "🌐 Rosters: **{characters}** chars · **{completed}/{total}** raids",
+    jp: "🌐 ロスター: **{characters}** キャラ · **{completed}/{total}** レイド",
+  };
+
+  for (const [code, value] of Object.entries(expected)) {
+    assert.equal(TRANSLATIONS[code]["raid-check"].allMode.rollupLine, value);
+    assert.doesNotMatch(value, /All accounts|done|完了/i);
   }
 });
 

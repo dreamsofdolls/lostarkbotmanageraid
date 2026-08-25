@@ -1007,8 +1007,7 @@ module.exports = {
       notEligibleGeneric: "_Not eligible yet_",
     },
     allMode: {
-      rollupLine: "🌐 All accounts: **{characters}** chars · **{completed}/{total}** raids done",
-      hiddenRaidData: "🗑️ Data not displayed",
+      rollupLine: "🌐 Rosters: **{characters}** chars · **{completed}/{total}** raids",
       taskHeaderDescription: "Read-only Manager view - only the owner can toggle in their `/raid-status`.",
       taskHeaderResetLine: "Auto-reset: Daily 10:00 UTC {resetIcon} Weekly 10:00 UTC Wednesday.",
       sharedTaskHeader: "🌟 Roster shared tasks",
