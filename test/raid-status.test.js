@@ -378,7 +378,7 @@ test("buildAccountPageEmbed: page counter shows in footer when totalPages > 1", 
   assert.match(embed.toJSON().footer.text, /Trang 2\/3/);
 });
 
-test("buildAccountPageEmbed: includes the 'Total' rollup line in description when paginating", () => {
+test("buildAccountPageEmbed: includes the 'Rosters' progress line when paginating", () => {
   // Multi-account caller flips between pages; the cross-account rollup
   // helps them keep a sense of overall progress.
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
@@ -390,12 +390,12 @@ test("buildAccountPageEmbed: includes the 'Total' rollup line in description whe
     NOOP_GET_RAIDS_FOR
   );
   const json = embed.toJSON();
-  assert.match(json.description, /🌐 Total:/);
+  assert.match(json.description, /🌐 Rosters:/);
   assert.match(json.description, /12.*char/);
   assert.match(json.description, /5\/8/);
 });
 
-test("buildAccountPageEmbed: omits the 'Total' rollup on a single-page roster", () => {
+test("buildAccountPageEmbed: omits the 'Rosters' progress line on a single-page roster", () => {
   // No need for the cross-account context when there's only one page.
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
   const embed = buildAccountPageEmbed(
@@ -406,7 +406,7 @@ test("buildAccountPageEmbed: omits the 'Total' rollup on a single-page roster", 
     NOOP_GET_RAIDS_FOR
   );
   const desc = embed.toJSON().description || "";
-  assert.doesNotMatch(desc, /🌐 Total:/);
+  assert.doesNotMatch(desc, /🌐 Rosters:/);
 });
 
 test("buildAccountPageEmbed: hideIneligibleChars filter swaps roster body for an empty notice when all chars filtered out", () => {
@@ -1459,11 +1459,12 @@ test("buildAccountPageEmbed: cross-account 🌐 gold line shows the tradeable bu
     NOOP_GET_RAIDS_FOR
   );
   const desc = embed.toJSON().description || "";
-  assert.match(desc, /🌐 Total:/);
+  assert.match(desc, /🌐 Rosters:/);
   assert.match(desc, /5\/8/);
-  assert.match(desc, /4\/6\*\* solo raid done/);
+  assert.match(desc, /4\/6\*\* solo raid/);
+  assert.doesNotMatch(desc, /raid done|solo raid done/);
   // 🌐 line carries the tradeable (unbound) gold in bold; no bound tail here.
-  assert.match(desc, /💰 \*\*50,000G \/ 200,000G\*\*/);
+  assert.match(desc, /💰 Total: \*\*50,000G \/ 200,000G\*\*/);
 });
 
 test("buildAccountPageEmbed: cross-account 🌐 line omits gold tail when grand total is 0 (all-non-earner roster)", () => {
@@ -1483,7 +1484,7 @@ test("buildAccountPageEmbed: cross-account 🌐 line omits gold tail when grand 
     NOOP_GET_RAIDS_FOR
   );
   const desc = embed.toJSON().description || "";
-  assert.match(desc, /🌐 Total:/);
+  assert.match(desc, /🌐 Rosters:/);
   assert.doesNotMatch(desc, /All accounts.*💰/);
 });
 

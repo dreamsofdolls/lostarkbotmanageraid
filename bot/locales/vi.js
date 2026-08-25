@@ -732,9 +732,9 @@ module.exports = {
       failed: "Bible đang dở chứng nên tớ tạm đọc cache. Cậu thử lại sau vài phút.",
     },
     embed: {
-      allAccounts: "🌐 Total: **{chars}** char · **{done}/{total}** raid done · **{soloDone}/{soloTotal}** solo raid done",
+      allAccounts: "🌐 Rosters: **{chars}** char · **{done}/{total}** raid · **{soloDone}/{soloTotal}** solo raid",
       rosterGold: "💰 Roster: **{earned}** / **{total}**{boundTail}",
-      goldRollup: "💰 **{earned} / {total}**{boundTail}",
+      goldRollup: "💰 Total: **{earned} / {total}**{boundTail}",
       goldBoundTail: " · 🔒 **{bound}**",
       notEligible: "_Chưa đủ điều kiện_",
       noCharacters: "_Chưa có character nào._",

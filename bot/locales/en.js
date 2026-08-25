@@ -710,9 +710,9 @@ module.exports = {
       failed: "Bible is misbehaving, so I am reading from cache. Please retry in a few minutes.",
     },
     embed: {
-      allAccounts: "🌐 Total: **{chars}** chars · **{done}/{total}** raids done · **{soloDone}/{soloTotal}** solo raids done",
+      allAccounts: "🌐 Rosters: **{chars}** chars · **{done}/{total}** raids · **{soloDone}/{soloTotal}** solo raids",
       rosterGold: "💰 Roster: **{earned}** / **{total}**{boundTail}",
-      goldRollup: "💰 **{earned} / {total}**{boundTail}",
+      goldRollup: "💰 Total: **{earned} / {total}**{boundTail}",
       goldBoundTail: " · 🔒 **{bound}**",
       notEligible: "_Not eligible yet_",
       noCharacters: "_No characters saved._",

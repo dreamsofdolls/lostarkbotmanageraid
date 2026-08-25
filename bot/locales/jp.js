@@ -711,9 +711,9 @@ module.exports = {
       failed: "bible が機嫌悪いみたい… アーティストはキャッシュを見せてますわ。数分後にもう一度試してね～",
     },
     embed: {
-      allAccounts: "🌐 Total: **{chars}** キャラ · **{done}/{total}** レイド完了 · ソロレイド **{soloDone}/{soloTotal}** 完了",
+      allAccounts: "🌐 Rosters: **{chars}** キャラ · **{done}/{total}** レイド · ソロレイド **{soloDone}/{soloTotal}**",
       rosterGold: "💰 Roster: **{earned}** / **{total}**{boundTail}",
-      goldRollup: "💰 **{earned} / {total}**{boundTail}",
+      goldRollup: "💰 Total: **{earned} / {total}**{boundTail}",
       goldBoundTail: " · 🔒 **{bound}**",
       notEligible: "_まだ参加できませんわ_",
       noCharacters: "_キャラがまだ登録されていませんわ。_",
