@@ -63,7 +63,22 @@ test("vi raid-check filter dropdowns do not leak English state labels", () => {
     filter.rosterState,
     "{name} (Còn {pending} raid)"
   );
+  assert.equal(
+    filter.userPending,
+    "{name} (Còn {n} raid · {supports}🛡️ {dps}⚔️)"
+  );
   assert.equal(filter.raidSummary, "Raids (Còn {n} raid)");
+});
+
+test("raid-check user dropdown describes remaining raids in every language", () => {
+  assert.equal(
+    TRANSLATIONS.en["raid-check"].filter.userPending,
+    "{name} ({n} raids remaining · {supports}🛡️ {dps}⚔️)"
+  );
+  assert.equal(
+    TRANSLATIONS.jp["raid-check"].filter.userPending,
+    "{name} (残り {n} レイド · {supports}🛡️ {dps}⚔️)"
+  );
 });
 
 test("vi gold-earner hint uses the current command wording", () => {

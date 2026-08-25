@@ -1031,7 +1031,7 @@ module.exports = {
       statusPending: "Pending",
       statusSuccess: "Success",
       userDone: "{name} (DONE)",
-      userPending: "{name} ({n} pending · {supports}🛡️ {dps}⚔️)",
+      userPending: "{name} ({n} raids remaining · {supports}🛡️ {dps}⚔️)",
       rosterState: "{name} ({pending} remaining)",
       noMatchingRosters: "No rosters match the current filters",
       raidSummary: "Raids ({n} remaining)",

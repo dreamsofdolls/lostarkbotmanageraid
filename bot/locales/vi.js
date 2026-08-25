@@ -1053,7 +1053,7 @@ module.exports = {
       statusPending: "Chưa clear",
       statusSuccess: "Đã xong",
       userDone: "{name} (đã xong)",
-      userPending: "{name} ({n} chưa clear · {supports}🛡️ {dps}⚔️)",
+      userPending: "{name} (Còn {n} raid · {supports}🛡️ {dps}⚔️)",
       rosterState: "{name} (Còn {pending} raid)",
       noMatchingRosters: "Không có roster phù hợp bộ lọc",
       raidSummary: "Raids (Còn {n} raid)",

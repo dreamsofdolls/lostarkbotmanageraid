@@ -1032,7 +1032,7 @@ module.exports = {
       statusPending: "未完了",
       statusSuccess: "完了",
       userDone: "{name} (完了♪)",
-      userPending: "{name} (未完了 {n} 件 · {supports}🛡️ {dps}⚔️)",
+      userPending: "{name} (残り {n} レイド · {supports}🛡️ {dps}⚔️)",
       rosterState: "{name} (残り {pending} レイド)",
       noMatchingRosters: "現在のフィルターに一致するロスターなし",
       raidSummary: "Raids (残り {n} レイド)",
