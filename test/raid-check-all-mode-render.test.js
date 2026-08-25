@@ -74,7 +74,6 @@ test("all-mode task page renders current account identity and read-only footer",
       totalPages: 1,
     }),
     getStatusRaidsForCharacter: () => [],
-    isManagerId: () => false,
     lang: "en",
     pagesData,
     summarizeRaidProgress: () => ({ completed: 0, total: 0 }),
@@ -89,7 +88,7 @@ test("all-mode task page renders current account identity and read-only footer",
   assert.ok(embed.data.footer.text.length > 0);
 });
 
-test("all-mode raid page keeps gold-locked raids unfiltered but excludes them from a selected raid", () => {
+test("all-mode raid page hides Solo and gold-locked raids and explains hidden-only characters", () => {
   const character = {
     name: "Goldie",
     raids: [
@@ -98,18 +97,26 @@ test("all-mode raid page keeps gold-locked raids unfiltered but excludes them fr
       { raidKey: "horizon", modeKey: "normal", isCompleted: false, goldReceives: false },
     ],
   };
+  const hiddenOnlyCharacter = {
+    name: "HiddenOnly",
+    raids: [
+      { raidKey: "kazeros", modeKey: "solo", isCompleted: false, goldReceives: true },
+      { raidKey: "horizon", modeKey: "normal", isCompleted: false, goldReceives: false },
+    ],
+  };
   const pagesData = [
     {
       userDoc: {
         discordId: "u1",
-        accounts: [{ accountName: "Roster", characters: [character] }],
+        accounts: [{ accountName: "Roster", characters: [character, hiddenOnlyCharacter] }],
       },
-      account: { accountName: "Roster", characters: [character] },
+      account: { accountName: "Roster", characters: [character, hiddenOnlyCharacter] },
     },
   ];
   let capturedDisplayRaids = null;
   let capturedProgressRaids = null;
   let capturedGlobalTotals = null;
+  let capturedHiddenOnlyLine = null;
   let filterRaidId = null;
 
   const { buildRaidPage } = createAllModePageRenderers({
@@ -120,6 +127,7 @@ test("all-mode raid page keeps gold-locked raids unfiltered but excludes them fr
       capturedDisplayRaids = getRaidsFor(character);
       capturedProgressRaids = options.getProgressRaidsFor(character);
       capturedGlobalTotals = globalTotals;
+      capturedHiddenOnlyLine = options.getEmptyRaidLine(hiddenOnlyCharacter);
       return new FakeEmbedBuilder().setTitle(account.accountName);
     },
     buildStatusFooterText: (globalTotals) =>
@@ -132,7 +140,6 @@ test("all-mode raid page keeps gold-locked raids unfiltered but excludes them fr
       totalPages: 1,
     }),
     getStatusRaidsForCharacter: (ch) => ch.raids,
-    isManagerId: () => false,
     lang: "en",
     pagesData,
     summarizeRaidProgress: (entries) => ({
@@ -144,9 +151,10 @@ test("all-mode raid page keeps gold-locked raids unfiltered but excludes them fr
 
   const embed = buildRaidPage(0);
 
-  assert.deepEqual(capturedDisplayRaids.map((raid) => raid.raidKey), ["act4", "horizon"]);
+  assert.deepEqual(capturedDisplayRaids.map((raid) => raid.raidKey), ["act4"]);
   assert.deepEqual(capturedProgressRaids.map((raid) => raid.raidKey), ["act4"]);
   assert.deepEqual(capturedGlobalTotals.progress, { completed: 0, total: 1 });
+  assert.equal(capturedHiddenOnlyLine, "🗑️ Data not displayed");
   assert.equal(embed.data.footer.text, "0/1");
 
   filterRaidId = "horizon:normal";
@@ -197,7 +205,6 @@ test("all-mode raid page applies Success status per raid entry", () => {
       totalPages: 1,
     }),
     getStatusRaidsForCharacter: (character) => character.raids,
-    isManagerId: () => false,
     lang: "en",
     pagesData: [{ userDoc: { discordId: "u1", accounts: [account] }, account }],
     summarizeRaidProgress: (entries) => ({
@@ -251,7 +258,6 @@ test("all-mode raid page reuses a user's rollup while paginating their rosters",
       raidDerivationCalls += 1;
       return character.raids;
     },
-    isManagerId: () => false,
     lang: "en",
     pagesData,
     summarizeRaidProgress: (entries) => {

@@ -116,7 +116,6 @@ function createRaidStatusCommand(deps) {
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
     getAutoManageCooldownMs,
     getRosterRefreshCooldownMs,
-    isManagerId,
     applyRaidSetForDiscordId = null,
     applyRaidSetBatchForDiscordId = null,
     PreviewModel = null,
@@ -141,7 +140,6 @@ function createRaidStatusCommand(deps) {
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
     getAutoManageCooldownMs,
     getRosterRefreshCooldownMs,
-    isManagerId,
   });
 
   const {

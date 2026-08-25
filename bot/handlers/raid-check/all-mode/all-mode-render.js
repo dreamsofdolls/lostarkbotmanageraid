@@ -39,7 +39,6 @@ function createAllModePageRenderers({
   buildStatusFooterText,
   getState,
   getStatusRaidsForCharacter,
-  isManagerId,
   lang,
   pagesData,
   summarizeRaidProgress,
@@ -58,17 +57,24 @@ function createAllModePageRenderers({
     const cached = viewsByFilter.get(cacheKey);
     if (cached) return cached;
 
-    const raidsCache = new Map();
-    const rawGetRaidsFor = (character) => {
-      let result = raidsCache.get(character);
+    const statusRaidsCache = new Map();
+    const visibleRaidsCache = new Map();
+    const getStatusRaidsFor = (character) => {
+      let result = statusRaidsCache.get(character);
       if (!result) {
-        result = getStatusRaidsForCharacter(character).filter(isRaidCheckVisibleRaid);
-        raidsCache.set(character, result);
+        result = getStatusRaidsForCharacter(character);
+        statusRaidsCache.set(character, result);
       }
       return result;
     };
+    const getVisibleRaidsFor = (character) => {
+      if (visibleRaidsCache.has(character)) return visibleRaidsCache.get(character);
+      const result = getStatusRaidsFor(character).filter(isRaidCheckVisibleRaid);
+      visibleRaidsCache.set(character, result);
+      return result;
+    };
     const getRaidsFor = (character) =>
-      rawGetRaidsFor(character).filter(
+      getVisibleRaidsFor(character).filter(
         (raid) =>
           (!filterRaidId ||
             (`${raid.raidKey}:${raid.modeKey}` === filterRaidId &&
@@ -76,6 +82,13 @@ function createAllModePageRenderers({
           raidMatchesStatusFilter(raid, activeStatus)
       );
     const getProgressRaidsFor = (character) => getRaidsFor(character).filter(isCountedRaidProgress);
+    const getEmptyRaidLine = (character) => {
+      const statusRaids = getStatusRaidsFor(character);
+      if (statusRaids.length === 0 || getVisibleRaidsFor(character).length > 0) {
+        return null;
+      }
+      return t("raid-check.allMode.hiddenRaidData", lang);
+    };
 
     const userAccounts = Array.isArray(userDoc.accounts) ? userDoc.accounts : [];
     const userTotalChars = userAccounts.reduce(
@@ -92,6 +105,7 @@ function createAllModePageRenderers({
       allRaidEntries,
       getRaidsFor,
       getProgressRaidsFor,
+      getEmptyRaidLine,
       globalProgress: summarizeRaidProgress(allRaidEntries),
       userAccounts,
       userTotalChars,
@@ -112,6 +126,7 @@ function createAllModePageRenderers({
     const {
       getRaidsFor,
       getProgressRaidsFor,
+      getEmptyRaidLine,
       globalProgress,
       userAccounts,
       userTotalChars,
@@ -138,18 +153,11 @@ function createAllModePageRenderers({
       {
         hideIneligibleChars:
           !!filterRaidId || activeStatus !== FILTER_STATUS.all,
+        getEmptyRaidLine,
         getProgressRaidsFor,
         lang,
       }
     );
-
-    if (isManagerId && isManagerId(userDoc.discordId)) {
-      const origTitle = embed.data?.title || "";
-      const crownIdx = origTitle.indexOf("\u{1f451}");
-      if (crownIdx > 0) {
-        embed.setTitle(origTitle.slice(crownIdx));
-      }
-    }
 
     if (userAccounts.length > 1) {
       const rollupLine = t("raid-check.allMode.rollupLine", lang, {

@@ -69,7 +69,7 @@ const {
   ensureAssignedRaids,
   RAID_REQUIREMENT_MAP,
 } = require("../bot/utils/raid/common/character");
-const { getAutoManageCooldownMs, isManagerId } = require("../bot/services/access/manager");
+const { getAutoManageCooldownMs } = require("../bot/services/access/manager");
 const { CLASS_EMOJI_MAP } = require("../bot/models/Class");
 
 function makeFactory() {
@@ -109,7 +109,6 @@ function makeFactory() {
     weekResetStartMs: () => 0,
     AUTO_MANAGE_SYNC_COOLDOWN_MS: 10 * 60 * 1000,
     getAutoManageCooldownMs,
-    isManagerId,
   });
 }
 
@@ -434,59 +433,70 @@ test("buildAccountPageEmbed: hideIneligibleChars filter swaps roster body for an
   assert.ok(hasIneligibleNotice, "should surface an 'ineligible for this raid' notice");
 });
 
-test("buildAccountPageEmbed: roster header icon swaps to 👑 for a Manager-owned roster", () => {
-  // Manager privilege visual cue. isManagerId hits the env-allowlist
-  // (RAID_MANAGER_ID seeded at the top of this file).
-  const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
+test("buildAccountPageEmbed: custom hidden-data line stays distinct from not-eligible", () => {
+  const hidden = makeChar("HiddenRaids", 1730);
+  const belowRequirement = makeChar("BelowRequirement", 1500);
+  const account = {
+    accountName: "Alpha",
+    characters: [hidden, belowRequirement],
+    lastRefreshedAt: 0,
+  };
   const embed = buildAccountPageEmbed(
     account,
     0,
     1,
-    { progress: { completed: 0, partial: 0, total: 0 }, characters: 0 },
+    { progress: { completed: 0, partial: 0, total: 0 }, characters: 2 },
     NOOP_GET_RAIDS_FOR,
-    { discordId: "test-manager" } // manager
+    null,
+    {
+      getEmptyRaidLine: (character) =>
+        character === hidden ? "🗑️ Dữ liệu không hiển thị" : null,
+    }
   );
-  assert.match(embed.toJSON().title, /👑/);
+  const fields = embed.toJSON().fields || [];
+  const hiddenField = fields.find((field) => field.name.includes("HiddenRaids"));
+  const belowField = fields.find((field) => field.name.includes("BelowRequirement"));
+
+  assert.equal(hiddenField?.value, "🗑️ Dữ liệu không hiển thị");
+  assert.match(belowField?.value || "", /🔒.*Chưa đủ điều kiện/);
 });
 
-test("buildAccountPageEmbed: roster header icon stays 📥 for a non-Manager roster", () => {
+test("buildAccountPageEmbed: title keeps one progress icon for Manager and regular rosters", () => {
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
-  const embed = buildAccountPageEmbed(
-    account,
-    0,
-    1,
-    { progress: { completed: 0, partial: 0, total: 0 }, characters: 0 },
-    NOOP_GET_RAIDS_FOR,
-    { discordId: "regular-user" }
-  );
-  assert.match(embed.toJSON().title, /📥/);
-  assert.doesNotMatch(embed.toJSON().title, /👑/);
+  for (const discordId of ["test-manager", "regular-user"]) {
+    const embed = buildAccountPageEmbed(
+      account,
+      0,
+      1,
+      { progress: { completed: 0, partial: 0, total: 0 }, characters: 0 },
+      NOOP_GET_RAIDS_FOR,
+      { discordId }
+    );
+    assert.equal(embed.toJSON().title, `${UI.icons.lock} Alpha`);
+  }
 });
 
-// --------- Auto-sync OFF badge (added 2026-04-27) ---------
-//
-// The badge is the only visual cue that distinguishes a non-opted-in
-// user from an opted-in-but-never-synced user, so it has to render only
-// when the flag is explicitly false. Strict `=== false` matters for
-// legacy docs where autoManageEnabled is undefined - those should NOT
-// show OFF because the user's intent is unknown.
-
-test("buildAccountPageEmbed: appends ' · 📝 Auto-sync OFF' badge to title when autoManageEnabled === false", () => {
+test("buildAccountPageEmbed: hides sync badges when both modes are off or unset", () => {
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
-  const embed = buildAccountPageEmbed(
-    account,
-    0,
-    1,
-    { progress: { completed: 0, partial: 0, total: 0 }, characters: 0 },
-    NOOP_GET_RAIDS_FOR,
-    { discordId: "regular-user", autoManageEnabled: false }
-  );
-  assert.match(embed.toJSON().title, /· 📝 Auto-sync TẮT/);
+  for (const userMeta of [
+    { discordId: "regular-user", autoManageEnabled: false, localSyncEnabled: false },
+    { discordId: "legacy-user" },
+  ]) {
+    const embed = buildAccountPageEmbed(
+      account,
+      0,
+      1,
+      { progress: { completed: 0, partial: 0, total: 0 }, characters: 0 },
+      NOOP_GET_RAIDS_FOR,
+      userMeta
+    );
+    assert.doesNotMatch(embed.toJSON().title, /Auto-sync|Local-sync/);
+  }
 });
 
-test("buildAccountPageEmbed: omits Auto-sync OFF badge when autoManageEnabled === true (silent on opted-in)", () => {
+test("buildAccountPageEmbed: shows only the active sync mode without ON/OFF wording", () => {
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
-  const embed = buildAccountPageEmbed(
+  const autoEmbed = buildAccountPageEmbed(
     account,
     0,
     1,
@@ -494,24 +504,44 @@ test("buildAccountPageEmbed: omits Auto-sync OFF badge when autoManageEnabled ==
     NOOP_GET_RAIDS_FOR,
     { discordId: "regular-user", autoManageEnabled: true }
   );
-  assert.doesNotMatch(embed.toJSON().title, /Auto-sync TẮT/);
-});
+  assert.match(autoEmbed.toJSON().title, /· 📝 Auto-sync$/);
 
-test("buildAccountPageEmbed: omits Auto-sync OFF badge for legacy doc with undefined autoManageEnabled", () => {
-  // userMeta.autoManageEnabled is undefined - common for legacy User
-  // docs from before /raid-auto-manage shipped. Strict `=== false`
-  // prevents a false OFF state here.
-  const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
-  const embed = buildAccountPageEmbed(
+  const localEmbed = buildAccountPageEmbed(
     account,
     0,
     1,
     { progress: { completed: 0, partial: 0, total: 0 }, characters: 0 },
     NOOP_GET_RAIDS_FOR,
-    { discordId: "regular-user" }
+    {
+      discordId: "regular-user",
+      autoManageEnabled: true,
+      localSyncEnabled: true,
+    }
   );
-  assert.doesNotMatch(embed.toJSON().title, /Auto-sync TẮT/);
+  assert.match(localEmbed.toJSON().title, /· 🌐 Local-sync$/);
+  assert.doesNotMatch(localEmbed.toJSON().title, /Auto-sync|BẬT|TẮT|\bON\b|\bOFF\b/);
 });
+
+for (const [lang, expected] of [
+  ["vi", "· 🌐 Local-sync"],
+  ["en", "· 🌐 Local-sync"],
+  ["jp", "· 🌐 ローカル同期"],
+]) {
+  test(`buildAccountPageEmbed: Local Sync badge omits enabled wording in ${lang}`, () => {
+    const embed = buildAccountPageEmbed(
+      { accountName: "Alpha", characters: [], lastRefreshedAt: 0 },
+      0,
+      1,
+      { progress: { completed: 0, partial: 0, total: 0 }, characters: 0 },
+      NOOP_GET_RAIDS_FOR,
+      { discordId: "regular-user", localSyncEnabled: true },
+      { lang }
+    );
+    const title = embed.toJSON().title;
+    assert.ok(title.endsWith(expected));
+    assert.doesNotMatch(title, /BẬT|TẮT|\bON\b|\bOFF\b/);
+  });
+}
 
 // --------- Gold tracking (added 2026-05-05) ---------
 //

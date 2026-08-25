@@ -175,6 +175,7 @@ function buildAllModeUserFilterRow({
   StringSelectMenuBuilder,
   authorMeta,
   computePendingAggregate,
+  currentPageUserId = null,
   disabled,
   filterRaidId,
   filterUserId,
@@ -183,23 +184,10 @@ function buildAllModeUserFilterRow({
   truncateText,
   visibleUserIds,
 }) {
-  const { perUserPending, totalPending } = computePendingAggregate({
+  const { perUserPending } = computePendingAggregate({
     raidFilter: filterRaidId,
     userFilter: null,
   });
-  const options = [
-    {
-      label: truncateText(
-        totalPending === 0
-          ? t("raid-check.filter.allUsersDone", lang)
-          : t("raid-check.filter.allUsersPending", lang, { n: totalPending }),
-        100
-      ),
-      value: FILTER_ALL,
-      emoji: "\u{1f310}",
-      default: filterUserId === null,
-    },
-  ];
   const sortedUsers = visibleUserIds
     .map((discordId) => {
       const tally = perUserPending.get(discordId) || { count: 0, supports: 0, dps: 0 };
@@ -215,7 +203,20 @@ function buildAllModeUserFilterRow({
       (a, b) =>
         b.pending - a.pending || a.displayName.localeCompare(b.displayName)
     );
-  for (const user of sortedUsers.slice(0, 24)) {
+  const activeUserId = currentPageUserId || filterUserId || sortedUsers[0]?.discordId;
+  const visibleUsers = sortedUsers.slice(0, 25);
+  if (
+    activeUserId &&
+    !visibleUsers.some((user) => user.discordId === activeUserId)
+  ) {
+    const activeUser = sortedUsers.find((user) => user.discordId === activeUserId);
+    if (activeUser) visibleUsers[visibleUsers.length - 1] = activeUser;
+  }
+
+  // The embed renders one user's roster page, so the selector follows that
+  // visible user instead of claiming the card is an aggregate All-user view.
+  const options = [];
+  for (const user of visibleUsers) {
     const label = user.pending === 0
       ? t("raid-check.filter.userDone", lang, { name: user.displayName })
       : t("raid-check.filter.userPending", lang, {
@@ -228,7 +229,7 @@ function buildAllModeUserFilterRow({
       label: truncateText(label, 100),
       value: user.discordId,
       emoji: "\u{1f464}",
-      default: filterUserId === user.discordId,
+      default: activeUserId === user.discordId,
     });
   }
   return new ActionRowBuilder().addComponents(

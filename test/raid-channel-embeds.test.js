@@ -77,7 +77,11 @@ test("raid-channel welcome embed renders the configured onboarding field set", (
   assert.equal(embed.color, UI.colors.neutral);
   assert.ok(embed.title);
   assert.ok(embed.description);
-  assert.equal(embed.fields.length, 11);
+  assert.equal(embed.fields.length, 10);
   assert.ok(embed.fields.every((field) => typeof field.name === "string" && field.name.length > 0));
   assert.ok(embed.fields.every((field) => typeof field.value === "string" && field.value.length > 0));
+  assert.doesNotMatch(
+    embed.fields.map((field) => `${field.name}\n${field.value}`).join("\n"),
+    /rosters wearing.*👑/i
+  );
 });

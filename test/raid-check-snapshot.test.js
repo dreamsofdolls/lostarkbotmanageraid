@@ -1,6 +1,6 @@
 // Seed RAID_MANAGER_ID before requiring bot/commands so manager.js captures
 // a deterministic allowlist at module load. Tests below rely on these IDs
-// to verify manager-specific branching (30s sync cooldown, 👑 roster prefix).
+// to verify manager-specific cooldown branching.
 process.env.RAID_MANAGER_ID = "test-manager-1,test-manager-2";
 
 const test = require("node:test");

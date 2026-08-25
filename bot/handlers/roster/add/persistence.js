@@ -123,7 +123,15 @@ function createAddRosterPersistence({
     await saveWithRetry(async () => {
       let userDoc = await User.findOne({ discordId: session.discordId });
       if (!userDoc) {
-        userDoc = new User({ discordId: session.discordId, accounts: [] });
+        // First roster onboarding starts in Local Sync mode. Keep this on the
+        // new-document branch only: adding or refreshing a roster later must
+        // never override a user's explicit sync-mode choice.
+        userDoc = new User({
+          discordId: session.discordId,
+          accounts: [],
+          autoManageEnabled: false,
+          localSyncEnabled: true,
+        });
       }
       ensureFreshWeek(userDoc);
 

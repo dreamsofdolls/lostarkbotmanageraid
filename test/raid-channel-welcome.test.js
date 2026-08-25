@@ -24,7 +24,6 @@ function extractWelcomeFieldLengths(localeTree) {
     ["autoManageName", "autoManageValue"],
     ["sideTasksName", "sideTasksValue"],
     ["goldName", "goldValue"],
-    ["crownName", "crownValue"],
     ["iconName", "iconValue"],
   ];
   const welcome = localeTree.welcome || {};

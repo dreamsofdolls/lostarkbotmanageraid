@@ -77,7 +77,7 @@ function page(discordId, accountName, raids) {
   };
 }
 
-test("all-mode user filter sorts users by current pending count and marks selection", () => {
+test("all-mode user filter omits All and marks the user on the visible page", () => {
   const row = buildAllModeUserFilterRow({
     ActionRowBuilder: FakeActionRowBuilder,
     StringSelectMenuBuilder: FakeSelectMenuBuilder,
@@ -96,9 +96,10 @@ test("all-mode user filter sorts users by current pending count and marks select
         ]),
       };
     },
+    currentPageUserId: "u1",
     disabled: false,
     filterRaidId: "kazeros:hard",
-    filterUserId: "u2",
+    filterUserId: null,
     lang: "en",
     t,
     truncateText: (value) => String(value).slice(0, 100),
@@ -106,10 +107,10 @@ test("all-mode user filter sorts users by current pending count and marks select
   });
 
   const options = row.components[0].data.options;
-  assert.equal(options[0].value, FILTER_ALL);
-  assert.equal(options[1].value, "u2");
+  assert.equal(options.some((option) => option.value === FILTER_ALL), false);
+  assert.equal(options[0].value, "u2");
+  assert.equal(options[1].value, "u1");
   assert.equal(options[1].default, true);
-  assert.equal(options[2].value, "u1");
 });
 
 test("all-mode raid filter scopes counts by the selected user and marks selected raid", () => {

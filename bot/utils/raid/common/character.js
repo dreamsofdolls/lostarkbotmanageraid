@@ -269,10 +269,10 @@ function getStatusRaidsForCharacter(character) {
   return applyCharacterGoldCap(sorted);
 }
 
-// A raid may stay visible in the character card without contributing to the
-// headline pending/success totals. Gold-disabled/bound raids already follow
-// that rule, and Solo follows it as well: Solo progress is inspected from its
-// dedicated raid-filter entry instead of inflating the group-raid workload.
+// /raid-status may keep a raid visible in the character card without counting
+// it in headline progress. /raid-check applies its stricter display filter in
+// handlers/raid-check/visibility.js so Solo and gold-locked raids disappear
+// from both its cards and totals.
 function isGoldReceivingRaid(raid) {
   return raid?.goldReceives !== false;
 }

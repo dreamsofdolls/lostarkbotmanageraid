@@ -36,11 +36,15 @@ function makeUserModel() {
     constructor(data = {}) {
       this.discordId = data.discordId || null;
       this.accounts = JSON.parse(JSON.stringify(data.accounts || []));
+      this.autoManageEnabled = data.autoManageEnabled;
+      this.localSyncEnabled = data.localSyncEnabled;
     }
     async save() {
       docs.set(this.discordId, {
         discordId: this.discordId,
         accounts: JSON.parse(JSON.stringify(this.accounts)),
+        autoManageEnabled: this.autoManageEnabled,
+        localSyncEnabled: this.localSyncEnabled,
       });
       return this;
     }
@@ -124,6 +128,27 @@ test("persistSelectedRoster: creates a new account on a fresh user", async () =>
   assert.ok(stored);
   assert.equal(stored.accounts.length, 1);
   assert.equal(stored.accounts[0].accountName, "Alpha");
+  assert.equal(stored.autoManageEnabled, false);
+  assert.equal(stored.localSyncEnabled, true);
+});
+
+test("persistSelectedRoster: preserves an existing user's disabled Local Sync choice", async () => {
+  const { factory, docs } = makeFactory();
+  docs.set("user-1", {
+    discordId: "user-1",
+    accounts: [],
+    autoManageEnabled: false,
+    localSyncEnabled: false,
+  });
+  const session = makeSession({ seedCharName: "Alpha", bibleNames: ["alpha"] });
+
+  await factory.__test.persistSelectedRoster(session, [
+    { charName: "Alpha", className: "Bard", itemLevel: 1700, combatScore: "85000" },
+  ]);
+
+  const stored = docs.get("user-1");
+  assert.equal(stored.localSyncEnabled, false);
+  assert.equal(stored.autoManageEnabled, false);
 });
 
 test("persistSelectedRoster: matches existing account by name and merges new chars", async () => {

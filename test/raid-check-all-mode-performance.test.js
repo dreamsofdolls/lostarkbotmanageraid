@@ -54,4 +54,9 @@ test("raid-check keeps pagination while the roster dropdown acts as a page selec
     /currentPageIndex:\s*currentAbsoluteIndex\(\)/,
     "the roster selector should mark the roster rendered on the current page"
   );
+  assert.match(
+    source,
+    /currentPageUserId:\s*\r?\n?\s*pagesData\[currentAbsoluteIndex\(\)\]\?\.userDoc\?\.discordId/,
+    "the user selector should mark the user rendered on the current page"
+  );
 });

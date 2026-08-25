@@ -122,7 +122,6 @@ function createRaidChannelEmbedBuilders({ EmbedBuilder, UI }) {
         { name: t("welcome.autoManageName", lang), value: joinIfArray(t("welcome.autoManageValue", lang)) },
         { name: t("welcome.sideTasksName", lang), value: joinIfArray(t("welcome.sideTasksValue", lang)) },
         { name: t("welcome.goldName", lang), value: joinIfArray(t("welcome.goldValue", lang)) },
-        { name: t("welcome.crownName", lang), value: joinIfArray(t("welcome.crownValue", lang)) },
         { name: t("welcome.iconName", lang), value: joinIfArray(t("welcome.iconValue", lang)) },
       )
       .setFooter({ text: t("welcome.footer", lang) });

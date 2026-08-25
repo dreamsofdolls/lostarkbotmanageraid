@@ -73,6 +73,34 @@ test("vi gold-earner hint uses the current command wording", () => {
   );
 });
 
+test("raid-check hidden-data copy and active sync badges are localized without ON/OFF wording", () => {
+  const expected = {
+    vi: {
+      auto: " · 📝 Auto-sync",
+      local: " · 🌐 Local-sync",
+      hidden: "🗑️ Dữ liệu không hiển thị",
+    },
+    jp: {
+      auto: " · 📝 自動同期",
+      local: " · 🌐 ローカル同期",
+      hidden: "🗑️ データは表示されません",
+    },
+    en: {
+      auto: " · 📝 Auto-sync",
+      local: " · 🌐 Local-sync",
+      hidden: "🗑️ Data not displayed",
+    },
+  };
+
+  for (const [code, values] of Object.entries(expected)) {
+    const locale = TRANSLATIONS[code];
+    assert.equal(locale["raid-status"].embed.autoSyncOnBadge, values.auto);
+    assert.equal(locale["raid-status"].embed.localSyncOnBadge, values.local);
+    assert.equal(locale["raid-check"].allMode.hiddenRaidData, values.hidden);
+    assert.doesNotMatch(`${values.auto}\n${values.local}`, /BẬT|TẮT|\bON\b|\bOFF\b/);
+  }
+});
+
 test("Solo Companion launcher copy is complete in all three first-class languages", () => {
   const keys = [
     "soloCompanionButtonLabel",

@@ -35,17 +35,7 @@ function createRaidStatusView(deps) {
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
     getAutoManageCooldownMs,
     getRosterRefreshCooldownMs,
-    isManagerId,
   } = deps;
-
-  // Manager rosters get a 👑 at the account header (swapping the default
-  // 📁 folder icon) instead of stamping every character name with a crown.
-  // Per-char crown was scan-hostile once there were many chars and collides
-  // with the class icon in the character-name slot, so the visual
-  // cue lives at the roster boundary where it only appears once per group.
-  function pickRosterHeaderIcon(discordId) {
-    return isManagerId && isManagerId(discordId) ? "👑" : UI.icons.roster;
-  }
 
   // Footer shows subject-scoped rollup (done/partial/pending across the
   // viewed user's entire roster) + optional page counter, matching
@@ -113,7 +103,7 @@ function createRaidStatusView(deps) {
   }
 
   function buildCharacterField(character, getRaidsFor, lang, options = {}) {
-    const { showGold = true } = options;
+    const { showGold = true, getEmptyRaidLine = null } = options;
     const name = getCharacterName(character);
     const itemLevel = Number(character.itemLevel) || 0;
     // Class emoji prepended to char name when the class is mapped in
@@ -124,8 +114,11 @@ function createRaidStatusView(deps) {
     const fieldName = truncateText(`${namePrefix}${name} · ${itemLevel}`, 256);
 
     const raids = getRaidsFor(character);
+    const customEmptyLine = raids.length === 0 && typeof getEmptyRaidLine === "function"
+      ? getEmptyRaidLine(character)
+      : null;
     const lines = raids.length === 0
-      ? [`${UI.icons.lock} ${t("raid-status.embed.notEligible", lang)}`]
+      ? [customEmptyLine || `${UI.icons.lock} ${t("raid-status.embed.notEligible", lang)}`]
       : raids.map((raid) => formatRaidStatusLine(raid, lang));
 
     if (showGold) {
@@ -268,6 +261,7 @@ function createRaidStatusView(deps) {
     const {
       hideIneligibleChars = false,
       getProgressRaidsFor = getRaidsFor,
+      getEmptyRaidLine = null,
       showCharacterGold = true,
       lang = "vi",
     } = options;
@@ -287,31 +281,22 @@ function createRaidStatusView(deps) {
           ? UI.icons.partial
           : UI.icons.pending;
 
-    // Shared rosters surface with a 👥 header icon (instead of the
-    // owner-roster 👑/📁) and a "Shared by ..." suffix so the viewer
-    // immediately reads the page as not-their-own. Owner-A's auto-sync
-    // state is also hidden because the badge belongs to A's account
-    // settings, not B's; rendering A's setting on B's view would mislead.
+    // The progress icon is the only leading title icon. Shared ownership is
+    // already explicit in the localized "Shared by ..." suffix, so a second
+    // roster/manager/shared icon would only create a noisy double-icon title.
+    // Owner-A's sync state is hidden on a shared page because those settings
+    // do not belong to viewer B.
     const sharedFrom = account._sharedFrom;
     const isShared = !!sharedFrom;
-    const headerIcon = isShared ? "👥" : pickRosterHeaderIcon(userMeta?.discordId);
-    // Sync-mode badge. Three rendering paths so the header tells the
-    // viewer at a glance which mode (if any) is active:
-    //   - localSyncOn → 🌐 Local-sync BẬT (explicit positive, so the
-    //     /raid-check + /raid-status manager view doesn't leave a
-    //     local-sync user looking unset)
-    //   - bible auto-sync explicitly disabled → 📝 Auto-sync TẮT
-    //   - otherwise (bible on, or legacy unknown flag) → no badge
-    // Strict `=== false` on autoManageEnabled so a missing/unknown flag
-    // doesn't false-positive into showing OFF. Skipped on shared pages
-    // because the sync flags belong to owner A.
-    const localSyncOn = !!userMeta?.localSyncEnabled;
-    let autoSyncBadge = "";
+    // Show only the active sync mode. OFF and legacy/unset values stay hidden;
+    // the mode label itself is enough, so locale packs intentionally omit
+    // ON/OFF wording. Local wins defensively if an old document has both flags.
+    let syncModeBadge = "";
     if (!isShared) {
-      if (localSyncOn) {
-        autoSyncBadge = t("raid-status.embed.localSyncOnBadge", lang);
-      } else if (userMeta?.autoManageEnabled === false) {
-        autoSyncBadge = t("raid-status.embed.autoSyncOffBadge", lang);
+      if (userMeta?.localSyncEnabled === true) {
+        syncModeBadge = t("raid-status.embed.localSyncOnBadge", lang);
+      } else if (userMeta?.autoManageEnabled === true) {
+        syncModeBadge = t("raid-status.embed.autoSyncOnBadge", lang);
       }
     }
     const sharedBadge = isShared
@@ -327,7 +312,7 @@ function createRaidStatusView(deps) {
           ),
         })
       : "";
-    const title = `${titleIcon} ${headerIcon} ${account.accountName}${autoSyncBadge}${sharedBadge}`;
+    const title = `${titleIcon} ${account.accountName}${syncModeBadge}${sharedBadge}`;
 
     const descriptionLines = [];
     if (totalPages > 1) {
@@ -435,7 +420,10 @@ function createRaidStatusView(deps) {
     embed.addFields(
       ...pack2Columns(
         visibleChars.map((c) =>
-          buildCharacterField(c, getRaidsFor, lang, { showGold: showCharacterGold })
+          buildCharacterField(c, getRaidsFor, lang, {
+            getEmptyRaidLine,
+            showGold: showCharacterGold,
+          })
         )
       )
     );
