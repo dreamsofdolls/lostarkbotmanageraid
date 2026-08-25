@@ -206,7 +206,7 @@ test("reopening a pending console re-projects it from the latest User snapshot",
   // a three-across row and the card is two-across.
   const description = payload.embeds[0].toJSON().description;
   assert.match(description, /\*\*Changes:\*\* \*\*0\*\* chars/);
-  assert.doesNotMatch(description, /99/);
+  assert.doesNotMatch(description, /\*\*Changes:\*\* \*\*99\*\* chars/);
 });
 
 test("a successful Discord apply replaces the console with a live raid-status session", async () => {

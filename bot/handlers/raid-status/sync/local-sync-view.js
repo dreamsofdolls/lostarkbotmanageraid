@@ -47,17 +47,6 @@ function parseLocalSyncViewCustomId(customId) {
 }
 
 /**
- * Whether the viewer has any sync mode on. Drives both the dropdown
- * option and durable DM handoffs · a viewer with no scope has
- * nothing to preview, so the option stays hidden entirely.
- * @param {object|null} userDoc - lean User document
- * @returns {boolean}
- */
-function hasLocalSyncScope(userDoc) {
-  return Boolean(activeScopeForUser(userDoc));
-}
-
-/**
  * Read the viewer's newest preview job plus a fresh reader URL.
  * Called from async component handlers; the result is stashed on
  * session state for the synchronous builders to read.
@@ -256,7 +245,6 @@ module.exports = {
   STATUS_BUTTON_PREFIX,
   buildLocalSyncViewEmbed,
   buildLocalSyncViewRows,
-  hasLocalSyncScope,
   loadLocalSyncSnapshot,
   parseLocalSyncViewCustomId,
   runLocalSyncViewAction,

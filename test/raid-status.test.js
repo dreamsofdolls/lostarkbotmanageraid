@@ -44,7 +44,13 @@ const {
   getCharacterName,
   formatGold,
 } = require("../bot/utils/raid/common/shared");
-const { getGoldForGate, getBoundGoldForGate, isGoldBound, compareRaidModeOrder } = require("../bot/domain/raid-catalog");
+const {
+  getGoldForGate,
+  getBoundGoldForGate,
+  isGoldBound,
+  compareRaidModeOrder,
+  raidModeSortRank,
+} = require("../bot/domain/raid-catalog");
 const {
   buildRaidDropdownState,
   buildRaidFilterRow,
@@ -886,6 +892,13 @@ test("compareRaidModeOrder: canonical raid progression + difficulty order", () =
     "serca:hard",
     "horizon:hard",
   ]);
+});
+
+test("raidModeSortRank keeps unknown modes and raids at their legacy fallback ranks", () => {
+  assert.ok(raidModeSortRank("armoche", "normal") < raidModeSortRank("armoche", "hard"));
+  assert.ok(raidModeSortRank("armoche", "hard") < raidModeSortRank("armoche", "unknown"));
+  assert.ok(raidModeSortRank("armoche", "unknown") < raidModeSortRank("kazeros", "normal"));
+  assert.ok(raidModeSortRank("horizon", "nightmare") < raidModeSortRank("unknown", "normal"));
 });
 
 test("buildRaidDropdownState: orders the filter dropdown by raid progression, not pending count", () => {

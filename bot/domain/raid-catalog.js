@@ -212,13 +212,6 @@ function getBoundGoldForGate(raidKey, modeKey, gate) {
   return Math.max(0, base - getGoldForGate(raidKey, modeKey, gate));
 }
 
-function getGoldForRaid(raidKey, modeKey) {
-  const gates = getGatesForRaid(raidKey);
-  let total = 0;
-  for (const gate of gates) total += getGoldForGate(raidKey, modeKey, gate);
-  return total;
-}
-
 // Whether a (raid, mode)'s paid gold is fully bound (unbound value = 0).
 function isGoldBound(raidKey, modeKey) {
   return !!RAID_REQUIREMENTS[raidKey]?.modes?.[modeKey]?.boundGold;
@@ -229,12 +222,25 @@ function isGoldBound(raidKey, modeKey) {
 // (normal -> solo -> hard -> nightmare). Used to keep raid dropdowns grouped by raid
 // and ordered by difficulty instead of shuffling by pending count.
 const RAID_ORDER = Object.keys(RAID_REQUIREMENTS);
+const RAID_SORT_INDEX = new Map(
+  RAID_ORDER.map((raidKey, raidIndex) => [raidKey, raidIndex])
+);
+const MODE_SORT_INDEX_BY_RAID = new Map(
+  RAID_ORDER.map((raidKey) => [
+    raidKey,
+    new Map(
+      Object.keys(RAID_REQUIREMENTS[raidKey]?.modes || {})
+        .map((modeKey, modeIndex) => [modeKey, modeIndex])
+    ),
+  ])
+);
 
 function raidModeSortRank(raidKey, modeKey) {
-  const raidIdx = RAID_ORDER.indexOf(raidKey);
-  const modeKeys = Object.keys(RAID_REQUIREMENTS[raidKey]?.modes || {});
-  const modeIdx = modeKeys.indexOf(modeKey);
-  return (raidIdx < 0 ? 99 : raidIdx) * 100 + (modeIdx < 0 ? 99 : modeIdx);
+  // Dropdown sorts call this comparator repeatedly. Precomputed indexes keep
+  // each lookup O(1) while preserving the legacy "unknown goes last" rank.
+  const raidIdx = RAID_SORT_INDEX.get(raidKey);
+  const modeIdx = MODE_SORT_INDEX_BY_RAID.get(raidKey)?.get(modeKey);
+  return (raidIdx ?? 99) * 100 + (modeIdx ?? 99);
 }
 
 // Comparator for entries carrying { raidKey, modeKey } - sorts into the
@@ -247,8 +253,6 @@ function compareRaidModeOrder(a, b) {
 }
 
 module.exports = {
-  NORMAL_MODE_KEY,
-  SOLO_MODE_KEY,
   RAID_REQUIREMENTS,
   areEquivalentRaidModes,
   getRaidRequirementList,
@@ -261,7 +265,6 @@ module.exports = {
   getGoldForGate,
   getBaseGoldForGate,
   getBoundGoldForGate,
-  getGoldForRaid,
   hasRaidMode,
   isGoldBound,
   isSoloModeKey,

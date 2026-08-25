@@ -2,7 +2,7 @@
 
 const SOLO_DIFFICULTIES = new Set(["solo", "solo mode"]);
 
-export function isSoloDifficulty(value) {
+function isSoloDifficulty(value) {
   return SOLO_DIFFICULTIES.has(String(value || "").trim().toLowerCase());
 }
 

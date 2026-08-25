@@ -216,40 +216,6 @@ export function bucketize(rows) {
 }
 
 /**
- * Group buckets by raid+mode key for the per-raid table layout.
- * Returns an array of { groupKey, raidKey, modeKey, raidLabel,
- * modeLabel, buckets[] } sorted by raid order then mode order, with
- * buckets inside each group sorted by lastClearMs descending.
- */
-export function groupByRaid(buckets) {
-  const groups = new Map();
-  for (const b of buckets) {
-    const key = `${b.raidKey}_${b.modeKey}`;
-    if (!groups.has(key)) {
-      groups.set(key, {
-        groupKey: key,
-        raidKey: b.raidKey,
-        modeKey: b.modeKey,
-        raidLabel: b.raidLabel,
-        modeLabel: b.modeLabel,
-        buckets: [],
-      });
-    }
-    groups.get(key).buckets.push(b);
-  }
-  const arr = [...groups.values()];
-  arr.sort((a, b) => {
-    const r = orderIndex(RAID_ORDER, a.raidKey) - orderIndex(RAID_ORDER, b.raidKey);
-    if (r !== 0) return r;
-    return orderIndex(MODE_ORDER, a.modeKey) - orderIndex(MODE_ORDER, b.modeKey);
-  });
-  for (const g of arr) {
-    g.buckets.sort((a, b) => b.lastClearMs - a.lastClearMs);
-  }
-  return arr;
-}
-
-/**
  * Surface the bosses present in raw rows that didn't map to any known
  * raid. Distinct from "failed encounters" (cleared=0) - unmapped means
  * the boss exists but the mapping table has no corresponding raid and gate.
@@ -271,13 +237,6 @@ export function findUnmappedBosses(rows) {
 
 // ----- Roster diff (Phase 7: roster-grouped preview) -----
 
-// Roster diff uses the catalog's iLvl gates and display order, mirroring the
-// server raid metadata without duplicating it here.
-function orderIndex(order, key) {
-  const idx = order.indexOf(key);
-  return idx >= 0 ? idx : Number.MAX_SAFE_INTEGER;
-}
-
 export function currentWeeklyResetStartMs(now = new Date()) {
   const cursor = new Date(now.getTime());
   for (let i = 0; i < 8; i += 1) {
@@ -294,10 +253,6 @@ export function currentWeeklyResetStartMs(now = new Date()) {
     cursor.setUTCHours(23, 59, 59, 999);
   }
   return now.getTime() - 7 * 24 * 60 * 60 * 1000;
-}
-
-export function getRaidModeIlvl(raidKey, modeKey) {
-  return RAID_MODE_ILVL[raidKey]?.[modeKey] ?? 0;
 }
 
 export function getEligibleRaidModes(itemLevel) {
@@ -416,12 +371,6 @@ export function buildFileClearMap(buckets) {
     map.set(key, new Set(b.gates));
   }
   return map;
-}
-
-const ACTIONABLE_STATES = new Set(["pending", "mode-conflict"]);
-
-export function isActionableState(state) {
-  return ACTIONABLE_STATES.has(state);
 }
 
 export function buildActionableBucketKeySet(

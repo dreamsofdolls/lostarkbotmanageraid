@@ -247,10 +247,6 @@ async function setGuildLanguage(guildId, lang, { GuildConfigModel } = {}) {
   return code;
 }
 
-function clearGuildLanguageCache() {
-  guildLanguageCache.clear();
-}
-
 module.exports = {
   t,
   tPick,
@@ -259,7 +255,6 @@ module.exports = {
   clearUserLanguageCache,
   getGuildLanguage,
   setGuildLanguage,
-  clearGuildLanguageCache,
   normalizeLanguage,
   resolveLocale,
   getSupportedLanguages,

@@ -2,7 +2,6 @@
 
 const SCHEDULE_SOURCE_TIME_ZONE = "Etc/GMT+4";
 const SCHEDULE_SOURCE_LABEL = "UTC-4";
-const PACIFIC_TIME_ZONE = SCHEDULE_SOURCE_TIME_ZONE;
 const VIETNAM_TIME_ZONE = "Asia/Ho_Chi_Minh";
 const SHARED_TASK_CAP_DAILY = 5;
 const SHARED_TASK_CAP_WEEKLY = 5;
@@ -62,7 +61,6 @@ function getSharedTaskPreset(preset) {
 }
 
 module.exports = {
-  PACIFIC_TIME_ZONE,
   SCHEDULE_SOURCE_TIME_ZONE,
   SCHEDULE_SOURCE_LABEL,
   VIETNAM_TIME_ZONE,
