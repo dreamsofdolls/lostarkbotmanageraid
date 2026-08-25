@@ -58,6 +58,7 @@ async function createRaidStatusSessionState({
   let visibleRosterIndices = [];
   let totalRaidPending = 0;
   let totalSoloRaids = 0;
+  let completedSoloRaids = 0;
   const taskCharFilterByPage = new Map();
   const goldCharFilterByPage = new Map();
   const raidGetter = createRaidGetter({ getStatusRaidsForCharacter });
@@ -94,6 +95,7 @@ async function createRaidStatusSessionState({
     raidDropdownEntries = nextState.raidDropdownEntries;
     totalRaidPending = nextState.totalRaidPending;
     totalSoloRaids = Number(nextState.totalSoloRaids) || 0;
+    completedSoloRaids = Number(nextState.completedSoloRaids) || 0;
     if (filterRaidId && !raidDropdownEntries.some((entry) => entry.key === filterRaidId)) {
       filterRaidId = null;
     }
@@ -229,6 +231,9 @@ async function createRaidStatusSessionState({
     },
     get totalSoloRaids() {
       return totalSoloRaids;
+    },
+    get completedSoloRaids() {
+      return completedSoloRaids;
     },
     get userDoc() {
       return userDoc;

@@ -437,6 +437,7 @@ function createRaidStatusCommand(deps) {
       getRaidDropdownEntries: () => statusState.raidDropdownEntries,
       getTotalRaidPending: () => statusState.totalRaidPending,
       getTotalSoloRaids: () => statusState.totalSoloRaids,
+      getCompletedSoloRaids: () => statusState.completedSoloRaids,
       getFilterRaidId: () => statusState.filterRaidId,
       getRosterFilterEntries: () => statusState.rosterFilterEntries,
       getSelectedRosterIndex: () => statusState.selectedRosterIndex,

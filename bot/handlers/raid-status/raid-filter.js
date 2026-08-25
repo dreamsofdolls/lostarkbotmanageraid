@@ -82,12 +82,16 @@ function countSoloRaids(accounts, getRaidsFor) {
 function buildRaidDropdownState(accounts, getRaidsFor) {
   const raidAggregate = new Map();
   let totalSoloRaids = 0;
+  let completedSoloRaids = 0;
   for (const account of accounts || []) {
     for (const ch of account.characters || []) {
       const charIsSupport = isSupportClass(ch?.class);
       for (const raid of getRaidsFor(ch)) {
         const modeKey = getRaidFilterModeKey(raid);
-        if (isSoloModeKey(modeKey)) totalSoloRaids += 1;
+        if (isSoloModeKey(modeKey)) {
+          totalSoloRaids += 1;
+          if (raid?.isCompleted === true) completedSoloRaids += 1;
+        }
         const countsTowardTotal = isCountedRaidFilterProgress(raid);
         // Solo stays discoverable in the raid dropdown even though the
         // all-raids headline and roster counters intentionally exclude it.
@@ -130,7 +134,7 @@ function buildRaidDropdownState(accounts, getRaidsFor) {
     (sum, r) => sum + (r.countsTowardTotal ? r.pending : 0),
     0
   );
-  return { raidDropdownEntries, totalRaidPending, totalSoloRaids };
+  return { raidDropdownEntries, totalRaidPending, totalSoloRaids, completedSoloRaids };
 }
 
 function buildRaidFilterRow(options) {
@@ -141,6 +145,7 @@ function buildRaidFilterRow(options) {
     raidDropdownEntries,
     totalRaidPending,
     totalSoloRaids = 0,
+    completedSoloRaids = 0,
     filterRaidId,
     disabled,
     lang = "vi",
@@ -148,10 +153,14 @@ function buildRaidFilterRow(options) {
 
   const allRaidsLabel =
     totalRaidPending === 0
-      ? t("raid-status.filter.allRaidsDone", lang, { solo: totalSoloRaids })
+      ? t("raid-status.filter.allRaidsDone", lang, {
+          soloDone: completedSoloRaids,
+          soloTotal: totalSoloRaids,
+        })
       : t("raid-status.filter.allRaidsPending", lang, {
           n: totalRaidPending,
-          solo: totalSoloRaids,
+          soloDone: completedSoloRaids,
+          soloTotal: totalSoloRaids,
         });
 
   const selectOptions = [

@@ -360,13 +360,13 @@ function createRaidStatusView(deps) {
         );
       }
     }
-    // Per-account gold rollup. Always emitted on accounts with at least
-    // one gold-earner.
+    // Current-roster gold rollup. Always emitted when the visible roster has
+    // at least one gold-earner.
     if (typeof summarizeAccountGold === "function") {
       const accountGold = summarizeAccountGold(account, getRaidsFor);
       if (accountGold.total > 0) {
         descriptionLines.push(
-          t("raid-status.embed.earnedThisWeek", lang, {
+          t("raid-status.embed.rosterGold", lang, {
             // 💰 = tradeable (unbound); the bound tail carries the bound bucket.
             earned: formatGold(accountGold.earnedUnbound),
             total: formatGold(accountGold.totalUnbound),

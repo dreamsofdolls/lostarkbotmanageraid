@@ -378,7 +378,7 @@ test("buildAccountPageEmbed: page counter shows in footer when totalPages > 1", 
   assert.match(embed.toJSON().footer.text, /Trang 2\/3/);
 });
 
-test("buildAccountPageEmbed: includes 'Tổng tất cả roster' rollup line in description when paginating", () => {
+test("buildAccountPageEmbed: includes the 'Total' rollup line in description when paginating", () => {
   // Multi-account caller flips between pages; the cross-account rollup
   // helps them keep a sense of overall progress.
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
@@ -390,12 +390,12 @@ test("buildAccountPageEmbed: includes 'Tổng tất cả roster' rollup line in 
     NOOP_GET_RAIDS_FOR
   );
   const json = embed.toJSON();
-  assert.match(json.description, /Tổng tất cả roster/);
+  assert.match(json.description, /🌐 Total:/);
   assert.match(json.description, /12.*char/);
   assert.match(json.description, /5\/8/);
 });
 
-test("buildAccountPageEmbed: omits 'Tổng tất cả roster' rollup on a single-page roster", () => {
+test("buildAccountPageEmbed: omits the 'Total' rollup on a single-page roster", () => {
   // No need for the cross-account context when there's only one page.
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
   const embed = buildAccountPageEmbed(
@@ -406,7 +406,7 @@ test("buildAccountPageEmbed: omits 'Tổng tất cả roster' rollup on a single
     NOOP_GET_RAIDS_FOR
   );
   const desc = embed.toJSON().description || "";
-  assert.doesNotMatch(desc, /Tổng tất cả roster/);
+  assert.doesNotMatch(desc, /🌐 Total:/);
 });
 
 test("buildAccountPageEmbed: hideIneligibleChars filter swaps roster body for an empty notice when all chars filtered out", () => {
@@ -953,7 +953,12 @@ test("buildRaidDropdownState: counts all Solo raids without adding them to pendi
       ],
     },
   ] }];
-  const { raidDropdownEntries, totalRaidPending, totalSoloRaids } = buildRaidDropdownState(
+  const {
+    raidDropdownEntries,
+    totalRaidPending,
+    totalSoloRaids,
+    completedSoloRaids,
+  } = buildRaidDropdownState(
     accounts,
     (character) => character.raids,
   );
@@ -968,6 +973,7 @@ test("buildRaidDropdownState: counts all Solo raids without adding them to pendi
   );
   assert.equal(totalRaidPending, 1);
   assert.equal(totalSoloRaids, 2, "completed Solo raids still belong in the Solo total");
+  assert.equal(completedSoloRaids, 1);
   assert.deepEqual(
     summarizeSoloRaidProgress(accounts, (character) => character.raids),
     { completed: 1, total: 2 }
@@ -980,13 +986,14 @@ test("buildRaidDropdownState: counts all Solo raids without adding them to pendi
     raidDropdownEntries,
     totalRaidPending,
     totalSoloRaids,
+    completedSoloRaids,
     filterRaidId: null,
     disabled: false,
     lang: "vi",
   });
   assert.equal(
     row.toJSON().components[0].options[0].label,
-    "Tất cả raids (1 chưa clear - 2 solo raid)",
+    "Tất cả raids (1 chưa clear - 1/2 solo raid done)",
   );
 });
 
@@ -1288,7 +1295,8 @@ test("buildAccountPageEmbed: per-character bound gold renders inline after the e
   // Disjoint buckets: 💰 = tradeable (unbound), 🔒 = bound. This char's only
   // earnings are a fully-bound raid, so the tradeable bucket is 0 and all
   // 40,000 sits in the bound bucket - the two no longer overlap.
-  assert.match(charField.value, /💰 0G · 🔒 \*\*40,000G\*\* khóa/);
+  assert.match(charField.value, /💰 0G · 🔒 \*\*40,000G\*\*/);
+  assert.doesNotMatch(charField.value, /khóa/);
 });
 
 test("buildAccountPageEmbed: shows '/raid-gold-earner' hint when account has at least one eligible non-earner char", () => {
@@ -1377,7 +1385,7 @@ test("buildAccountPageEmbed: per-character field omits the gold line when char h
   assert.doesNotMatch(charField.value, /💰/);
 });
 
-test("buildAccountPageEmbed: appends per-account 'Tuần này đã kiếm' rollup to description when account has gold-earners", () => {
+test("buildAccountPageEmbed: appends the current-roster gold rollup when it has gold-earners", () => {
   const char = makeChar("Earner", 1730, { isGoldEarner: true });
   const account = { accountName: "Alpha", characters: [char], lastRefreshedAt: 0 };
   const embed = buildAccountPageEmbed(
@@ -1389,7 +1397,7 @@ test("buildAccountPageEmbed: appends per-account 'Tuần này đã kiếm' rollu
   );
   const desc = embed.toJSON().description || "";
   // 1730 gold-earner has 4 eligible raids, but only 3 raid-gold slots.
-  assert.match(desc, /💰 Tuần này đã kiếm:/);
+  assert.match(desc, /💰 Roster:/);
   assert.match(desc, /138,000G/);
 });
 
@@ -1404,13 +1412,14 @@ test("buildAccountPageEmbed: per-account rollup shows reduced-normal bound total
     getStatusRaidsForCharacter
   );
   const desc = embed.toJSON().description || "";
-  assert.match(desc, /💰 Tuần này đã kiếm:/);
+  assert.match(desc, /💰 Roster:/);
   // Disjoint: 💰 shows the tradeable (unbound) half, 🔒 the bound half. The
   // three reduced-normal raids split 108,000 total into 54,000 / 54,000, so
   // the 💰 number is now 54,000 (the tradeable bucket), not the 108,000 grand
   // total it used to overlap with the bound figure.
-  assert.match(desc, /💰 Tuần này đã kiếm: \*\*0G\*\* \/ \*\*54,000G\*\*/);
-  assert.match(desc, /🔒 \*\*0G \/ 54,000G\*\* khóa/);
+  assert.match(desc, /💰 Roster: \*\*0G\*\* \/ \*\*54,000G\*\*/);
+  assert.match(desc, /🔒 \*\*0G \/ 54,000G\*\*/);
+  assert.doesNotMatch(desc, /khóa/);
   assert.doesNotMatch(desc, /108,000G/);
 });
 
@@ -1427,12 +1436,12 @@ test("buildAccountPageEmbed: omits per-account rollup when account has no gold-e
     getStatusRaidsForCharacter
   );
   const desc = embed.toJSON().description || "";
-  assert.doesNotMatch(desc, /Tuần này đã kiếm/);
+  assert.doesNotMatch(desc, /💰 Roster:/);
 });
 
 test("buildAccountPageEmbed: cross-account 🌐 gold line shows the tradeable bucket across every roster when paginating", () => {
-  // The per-account 'Tuần này đã kiếm' line below shows the current
-  // page's account only; the 🌐 line is the cross-account aggregate.
+  // The Roster line below shows the current page's roster only; the 🌐 line
+  // is the cross-roster aggregate.
   // The 💰 figure is the tradeable (unbound) bucket; an all-unbound
   // roster has no bound tail.
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
@@ -1450,7 +1459,7 @@ test("buildAccountPageEmbed: cross-account 🌐 gold line shows the tradeable bu
     NOOP_GET_RAIDS_FOR
   );
   const desc = embed.toJSON().description || "";
-  assert.match(desc, /Tổng tất cả roster/);
+  assert.match(desc, /🌐 Total:/);
   assert.match(desc, /5\/8/);
   assert.match(desc, /4\/6\*\* solo raid done/);
   // 🌐 line carries the tradeable (unbound) gold in bold; no bound tail here.
@@ -1474,7 +1483,7 @@ test("buildAccountPageEmbed: cross-account 🌐 line omits gold tail when grand 
     NOOP_GET_RAIDS_FOR
   );
   const desc = embed.toJSON().description || "";
-  assert.match(desc, /Tổng tất cả roster/);
+  assert.match(desc, /🌐 Total:/);
   assert.doesNotMatch(desc, /All accounts.*💰/);
 });
 
