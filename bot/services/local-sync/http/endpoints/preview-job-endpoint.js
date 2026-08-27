@@ -20,11 +20,9 @@ const {
 const { getCurrentResetStartMs } = require("../../../raid/schedulers/weekly-reset");
 const {
   createJsonSender,
-  readJsonBody,
 } = require("../json");
 const {
-  guardHttpMethod,
-  readVerifiedLocalSyncToken,
+  readAuthenticatedJsonRequest,
   requireCurrentLocalSyncUser,
 } = require("../request-gates");
 
@@ -109,19 +107,17 @@ function createPreviewJobEndpoint({
   const send = createJsonSender({ methods: "POST, OPTIONS" });
 
   return async function handlePreviewJob(req, res, parsedUrl) {
-    if (!guardHttpMethod({ req, res, send, method: "POST" })) return;
-    const auth = readVerifiedLocalSyncToken({ req, res, parsedUrl, send });
-    if (!auth) return;
-    const { token, discordId, payload, scopeExplicit } = auth;
+    const request = await readAuthenticatedJsonRequest({
+      req,
+      res,
+      parsedUrl,
+      send,
+      maxBodyBytes: MAX_BODY_BYTES,
+    });
+    if (!request) return;
+    const { token, discordId, payload, scopeExplicit, body } = request;
     const scope = payload.scope;
 
-    let body;
-    try {
-      body = await readJsonBody(req, MAX_BODY_BYTES);
-    } catch (err) {
-      send(res, err.status || 400, { ok: false, error: err.message || "bad body" });
-      return;
-    }
     if (!Array.isArray(body?.deltas) || body.deltas.length === 0) {
       send(res, 400, { ok: false, error: "non-empty deltas array required" });
       return;

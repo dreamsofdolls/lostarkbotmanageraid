@@ -7,7 +7,7 @@ const {
   verifyToken,
   isCurrentStoredToken,
 } = require("..");
-const { extractBearerToken } = require("./json");
+const { extractBearerToken, readJsonBody } = require("./json");
 
 const LOCAL_SYNC_DISABLED_ERROR = "local-sync disabled - run /raid-auto-manage action:local-on to re-enable";
 const AUTO_SYNC_DISABLED_ERROR = "auto-sync disabled - re-enable Bible auto-sync before using the Solo companion";
@@ -44,6 +44,30 @@ function readVerifiedLocalSyncToken({ req, res, parsedUrl, send }) {
     scopeExplicit: verified.scopeExplicit === true,
     discordId: verified.payload.discordId,
   };
+}
+
+async function readAuthenticatedJsonRequest({
+  req,
+  res,
+  parsedUrl,
+  send,
+  maxBodyBytes,
+  method = "POST",
+}) {
+  if (!guardHttpMethod({ req, res, send, method })) return null;
+  const auth = readVerifiedLocalSyncToken({ req, res, parsedUrl, send });
+  if (!auth) return null;
+
+  try {
+    const body = await readJsonBody(req, maxBodyBytes);
+    return { ...auth, body };
+  } catch (err) {
+    send(res, err.status || 400, {
+      ok: false,
+      error: err.message || "bad body",
+    });
+    return null;
+  }
 }
 
 function requireCurrentLocalSyncUser({
@@ -84,6 +108,7 @@ module.exports = {
   LOCAL_SYNC_DISABLED_ERROR,
   TOKEN_REVOKED_ERROR,
   guardHttpMethod,
+  readAuthenticatedJsonRequest,
   readVerifiedLocalSyncToken,
   requireCurrentLocalSyncUser,
 };

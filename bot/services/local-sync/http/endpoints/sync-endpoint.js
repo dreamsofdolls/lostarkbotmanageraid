@@ -20,11 +20,9 @@ const {
 } = require("../..");
 const {
   createJsonSender,
-  readJsonBody,
 } = require("../json");
 const {
-  guardHttpMethod,
-  readVerifiedLocalSyncToken,
+  readAuthenticatedJsonRequest,
   requireCurrentLocalSyncUser,
 } = require("../request-gates");
 const { getRaidRequirementMap } = require("../../../../models/Raid");
@@ -75,20 +73,17 @@ function createRaidSyncEndpoint({
   const send = createJsonSender({ methods: "POST, OPTIONS" });
 
   return async function handleRaidSync(req, res, parsedUrl) {
-    if (!guardHttpMethod({ req, res, send, method: "POST" })) return;
-    const auth = readVerifiedLocalSyncToken({ req, res, parsedUrl, send });
-    if (!auth) return;
-    const { token, discordId, payload, scopeExplicit } = auth;
+    const request = await readAuthenticatedJsonRequest({
+      req,
+      res,
+      parsedUrl,
+      send,
+      maxBodyBytes: MAX_BODY_BYTES,
+    });
+    if (!request) return;
+    const { token, discordId, payload, scopeExplicit, body } = request;
     const scope = payload.scope;
 
-    // 2. Body parse.
-    let body;
-    try {
-      body = await readJsonBody(req, MAX_BODY_BYTES);
-    } catch (err) {
-      send(res, err.status || 400, { ok: false, error: err.message || "bad body" });
-      return;
-    }
     const deltas = Array.isArray(body?.deltas) ? body.deltas : null;
     if (!deltas) {
       send(res, 400, { ok: false, error: "deltas array required" });

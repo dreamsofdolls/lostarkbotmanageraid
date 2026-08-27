@@ -10,11 +10,11 @@
 "use strict";
 
 const {
-  stampAutoManageAttemptFromReport,
-} = require("../auto-manage/reports/utils");
-const {
   isAutoManageAttemptStale,
 } = require("../auto-manage/runtime/support/freshness");
+const {
+  commitCollectedRaidViewRefresh,
+} = require("./view-refresh-commit");
 
 function toPlainUserSnapshot(userDoc) {
   if (!userDoc) return null;
@@ -117,29 +117,17 @@ function createRaidViewSnapshotService({
 
       if (!needsFreshWrite) return toPlainUserSnapshot(seedDoc);
 
-      const snapshot = await saveWithRetry(async () => {
-        const doc = await User.findOne({ discordId });
-        if (!doc) return null;
-        const didFreshenWeek = ensureFreshWeek(doc);
-        const didRefresh = applyStaleAccountRefreshes(doc, refreshCollected);
-
-        let didAutoManage = false;
-        if (autoManageCollected && doc.autoManageEnabled) {
-          const autoReport = applyAutoManageCollected(
-            doc,
-            autoManageWeekResetStart,
-            autoManageCollected
-          );
-          const now = Date.now();
-          stampAutoManageAttemptFromReport(doc, autoReport, now);
-          didAutoManage = true;
-        } else if (autoManageBibleHit) {
-          doc.lastAutoManageAttemptAt = Date.now();
-          didAutoManage = true;
-        }
-
-        if (didFreshenWeek || didRefresh || didAutoManage) await doc.save();
-        return doc.toObject();
+      const snapshot = await commitCollectedRaidViewRefresh({
+        User,
+        saveWithRetry,
+        discordId,
+        ensureFreshWeek,
+        applyStaleAccountRefreshes,
+        refreshCollected,
+        applyAutoManageCollected,
+        autoManageCollected,
+        autoManageWeekResetStart,
+        autoManageBibleHit,
       });
       return snapshot;
     } catch (err) {

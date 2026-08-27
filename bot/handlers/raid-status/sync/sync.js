@@ -17,13 +17,15 @@
  */
 const {
   countAppliedAutoManageGates,
-  stampAutoManageAttemptFromReport,
   toPlainUserDoc,
 } = require("../../../services/auto-manage/reports/utils");
 const {
   AUTO_MANAGE_STATUS_STALE_MS,
   isAutoManageAttemptStale,
 } = require("../../../services/auto-manage/runtime/support/freshness");
+const {
+  commitCollectedRaidViewRefresh,
+} = require("../../../services/raid/view-refresh-commit");
 
 const STATUS_AUTO_MANAGE_PIGGYBACK_STALE_MS = AUTO_MANAGE_STATUS_STALE_MS;
 
@@ -196,34 +198,23 @@ function createRaidStatusSync(deps) {
       if (!needsFreshWrite) {
         userDoc = toPlainUserDoc(seedDoc);
       } else {
-        userDoc = await saveWithRetry(async () => {
-          const doc = await User.findOne({ discordId });
-          if (!doc) return null;
-
-          const didFreshenWeek = ensureFreshWeek(doc);
-          const didRefresh = applyStaleAccountRefreshes(doc, refreshCollected);
-
-          let didAutoManage = false;
-          if (autoManageCollected && doc.autoManageEnabled) {
-            const autoReport = applyAutoManageCollected(
-              doc,
-              autoManageWeekResetStart,
-              autoManageCollected
-            );
-            const now = Date.now();
-            stampAutoManageAttemptFromReport(doc, autoReport, now);
+        userDoc = await commitCollectedRaidViewRefresh({
+          User,
+          saveWithRetry,
+          discordId,
+          ensureFreshWeek,
+          applyStaleAccountRefreshes,
+          refreshCollected,
+          applyAutoManageCollected,
+          autoManageCollected,
+          autoManageWeekResetStart,
+          autoManageBibleHit,
+          onAutoManageReport: (autoReport) => {
             const newGates = countAppliedAutoManageGates(autoReport);
             piggybackOutcome.newGatesApplied = newGates;
             piggybackOutcome.outcome =
               newGates > 0 ? "applied" : "synced-no-new";
-            didAutoManage = true;
-          } else if (autoManageBibleHit) {
-            doc.lastAutoManageAttemptAt = Date.now();
-            didAutoManage = true;
-          }
-
-          if (didFreshenWeek || didRefresh || didAutoManage) await doc.save();
-          return toPlainUserDoc(doc);
+          },
         });
       }
     } catch (err) {
