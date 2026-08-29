@@ -17,6 +17,9 @@ const {
   isGoldReceivingRaid,
 } = require("../../utils/raid/common/character");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
+const {
+  selectEntriesWithPinnedActive,
+} = require("../../utils/discord/select-options");
 
 const FILTER_ALL_RAIDS = "__all_raids__";
 const FILTER_ALL_ROSTERS = "__all_rosters__";
@@ -285,14 +288,11 @@ function buildStatusRosterFilterRow(options) {
       : [];
 
     const activeRosterIndex = includeAllOption ? selectedRosterIndex : currentPageIndex;
-    const visibleEntries = entries.slice(0, includeAllOption ? 24 : 25);
-    if (
-      Number.isInteger(activeRosterIndex) &&
-      !visibleEntries.some((entry) => entry.pageIndex === activeRosterIndex)
-    ) {
-      const selected = entries.find((entry) => entry.pageIndex === activeRosterIndex);
-      if (selected) visibleEntries[visibleEntries.length - 1] = selected;
-    }
+    const visibleEntries = selectEntriesWithPinnedActive(entries, {
+      limit: includeAllOption ? 24 : 25,
+      activeValue: activeRosterIndex,
+      getValue: (entry) => entry.pageIndex,
+    });
 
     for (const entry of visibleEntries) {
       selectOptions.push({

@@ -51,6 +51,48 @@ function requireUserModel(label, deps) {
 }
 
 /**
+ * Shared conditional-update state transition for the two mutually exclusive
+ * sync modes. It owns the repeated enable/force/disable result dispatch while
+ * callers provide only the mode-specific fields.
+ */
+async function updateExclusiveSyncMode({
+  UserModel,
+  discordId,
+  enabled,
+  force,
+  conflictField,
+  enableSet,
+  forceSet,
+  disableSet,
+}) {
+  const requiresConflictGuard = Boolean(enabled && !force);
+  const filter = requiresConflictGuard
+    ? { discordId, [conflictField]: { $ne: true } }
+    : { discordId };
+  const setFields = enabled
+    ? { ...enableSet, ...(force ? forceSet : {}) }
+    : disableSet;
+  const options = enabled
+    ? { upsert: true, setDefaultsOnInsert: true, new: true }
+    : { new: true };
+
+  const updated = await UserModel.findOneAndUpdate(
+    filter,
+    { $set: setFields },
+    options
+  );
+  if (updated) return { ok: true, reason: RESULT.ok, doc: updated };
+  if (!requiresConflictGuard) return { ok: false, reason: RESULT.noUser };
+
+  // A guarded write can miss because the opposite mode is active or because
+  // no usable document exists. Probe only on that ambiguous path.
+  const existing = await UserModel.findOne({ discordId }).lean();
+  return existing?.[conflictField]
+    ? { ok: false, reason: RESULT.conflict }
+    : { ok: false, reason: RESULT.noUser };
+}
+
+/**
  * Flip localSyncEnabled. Mutex: rejects when bible auto-sync is on,
  * unless `force: true` (used by the stuck-private-log nudge "Switch to
  * local sync" CTA where the user explicitly opted to swap).
@@ -62,65 +104,30 @@ async function setLocalSyncEnabled(discordId, enabled, opts = {}, deps = {}) {
   const { force = false } = opts;
   const now = Date.now();
 
-  if (enabled) {
-    if (force) {
-      // Atomic single-update flips both flags + stamps onboarding ts.
-      // Used by the stuck-nudge "Switch to local sync" CTA.
-      const updated = await UserModel.findOneAndUpdate(
-        { discordId },
-        {
-          $set: {
-            localSyncEnabled: true,
-            autoManageEnabled: false,
-            localSyncLinkedAt: now,
-            lastLocalSyncToken: null,
-            lastLocalSyncTokenExpAt: null,
-          },
-        },
-        { upsert: true, setDefaultsOnInsert: true, new: true }
-      );
-      if (!updated) return { ok: false, reason: RESULT.noUser };
-      return { ok: true, reason: RESULT.ok, doc: updated };
-    }
-    // Strict mode: rejects when autoManageEnabled is true.
-    const updated = await UserModel.findOneAndUpdate(
-      { discordId, autoManageEnabled: { $ne: true } },
-      {
-        $set: {
-          localSyncEnabled: true,
-          localSyncLinkedAt: now,
-        },
-      },
-      { upsert: true, setDefaultsOnInsert: true, new: true }
-    );
-    if (updated) return { ok: true, reason: RESULT.ok, doc: updated };
-    // Filter missed: either user has bible on (conflict) OR upsert-race
-    // landed an unexpected doc shape. Probe to disambiguate so the
-    // caller can render the right error embed.
-    const existing = await UserModel.findOne({ discordId }).lean();
-    if (existing?.autoManageEnabled) return { ok: false, reason: RESULT.conflict };
-    return { ok: false, reason: RESULT.noUser };
-  }
-
-  // enabled === false: simple turn-off. No mutex concern. Also wipe
-  // any stored URL token so the old link can't outlive the opt-out
-  // (security: if user disabled local-sync because they shared the
-  // link with someone they shouldn't have, the old token should die
-  // with the flag).
-  const updated = await UserModel.findOneAndUpdate(
-    { discordId },
-    {
-      $set: {
-        localSyncEnabled: false,
-        localSyncLinkedAt: null,
-        lastLocalSyncToken: null,
-        lastLocalSyncTokenExpAt: null,
-      },
+  return updateExclusiveSyncMode({
+    UserModel,
+    discordId,
+    enabled,
+    force,
+    conflictField: "autoManageEnabled",
+    enableSet: {
+      localSyncEnabled: true,
+      localSyncLinkedAt: now,
     },
-    { new: true }
-  );
-  if (!updated) return { ok: false, reason: RESULT.noUser };
-  return { ok: true, reason: RESULT.ok, doc: updated };
+    // Force-mode flips both flags in one atomic write and revokes the old
+    // companion token before a newly minted local link can be used.
+    forceSet: {
+      autoManageEnabled: false,
+      lastLocalSyncToken: null,
+      lastLocalSyncTokenExpAt: null,
+    },
+    disableSet: {
+      localSyncEnabled: false,
+      localSyncLinkedAt: null,
+      lastLocalSyncToken: null,
+      lastLocalSyncTokenExpAt: null,
+    },
+  });
 }
 
 /**
@@ -138,46 +145,30 @@ async function setBibleAutoSyncEnabled(discordId, enabled, opts = {}, deps = {})
   const UserModel = requireUserModel("setBibleAutoSyncEnabled", deps);
   const { force = false, stampLastAttempt = false } = opts;
 
-  if (enabled) {
-    const setFields = { autoManageEnabled: true };
-    if (stampLastAttempt) setFields.lastAutoManageAttemptAt = Date.now();
-    if (force) {
-      setFields.localSyncEnabled = false;
-      setFields.localSyncLinkedAt = null;
-      setFields.lastLocalSyncToken = null;
-      setFields.lastLocalSyncTokenExpAt = null;
-      const updated = await UserModel.findOneAndUpdate(
-        { discordId },
-        { $set: setFields },
-        { upsert: true, setDefaultsOnInsert: true, new: true }
-      );
-      if (!updated) return { ok: false, reason: RESULT.noUser };
-      return { ok: true, reason: RESULT.ok, doc: updated };
-    }
-    const updated = await UserModel.findOneAndUpdate(
-      { discordId, localSyncEnabled: { $ne: true } },
-      { $set: setFields },
-      { upsert: true, setDefaultsOnInsert: true, new: true }
-    );
-    if (updated) return { ok: true, reason: RESULT.ok, doc: updated };
-    const existing = await UserModel.findOne({ discordId }).lean();
-    if (existing?.localSyncEnabled) return { ok: false, reason: RESULT.conflict };
-    return { ok: false, reason: RESULT.noUser };
-  }
-
-  const updated = await UserModel.findOneAndUpdate(
-    { discordId },
-    {
-      $set: {
-        autoManageEnabled: false,
-        lastLocalSyncToken: null,
-        lastLocalSyncTokenExpAt: null,
-      },
+  return updateExclusiveSyncMode({
+    UserModel,
+    discordId,
+    enabled,
+    force,
+    conflictField: "localSyncEnabled",
+    enableSet: {
+      autoManageEnabled: true,
+      ...(enabled && stampLastAttempt
+        ? { lastAutoManageAttemptAt: Date.now() }
+        : {}),
     },
-    { new: true }
-  );
-  if (!updated) return { ok: false, reason: RESULT.noUser };
-  return { ok: true, reason: RESULT.ok, doc: updated };
+    forceSet: {
+      localSyncEnabled: false,
+      localSyncLinkedAt: null,
+      lastLocalSyncToken: null,
+      lastLocalSyncTokenExpAt: null,
+    },
+    disableSet: {
+      autoManageEnabled: false,
+      lastLocalSyncToken: null,
+      lastLocalSyncTokenExpAt: null,
+    },
+  });
 }
 
 /**

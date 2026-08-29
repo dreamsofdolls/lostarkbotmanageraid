@@ -63,7 +63,7 @@ function createRaidStatusComponentLayout({
     rows.push(new ActionRowBuilder().addComponents(button));
   };
 
-  const addTaskViewRows = (rows, disabled) => {
+  const addPaginatedViewHeader = (rows, disabled) => {
     const visibleRosterCount = getVisibleRosterCount();
     if (visibleRosterCount > 1) {
       rows.push(
@@ -74,8 +74,11 @@ function createRaidStatusComponentLayout({
         })
       );
     }
-
     rows.push(buildViewToggleRow(disabled));
+  };
+
+  const addTaskViewRows = (rows, disabled) => {
+    addPaginatedViewHeader(rows, disabled);
     const sharedTaskRow = buildSharedTaskToggleRow(disabled);
     if (sharedTaskRow) rows.push(sharedTaskRow);
     const charFilterRow = buildTaskCharFilterRow(disabled);
@@ -86,18 +89,7 @@ function createRaidStatusComponentLayout({
   const addGoldViewRows = (rows, disabled) => {
     const accounts = getAccounts();
     const currentPage = getCurrentPage();
-    const visibleRosterCount = getVisibleRosterCount();
-    if (visibleRosterCount > 1) {
-      rows.push(
-        buildPaginationRow(getCurrentLocalPage(), visibleRosterCount, disabled, {
-          prevId: "status:prev",
-          nextId: "status:next",
-          lang,
-        })
-      );
-    }
-
-    rows.push(buildViewToggleRow(disabled));
+    addPaginatedViewHeader(rows, disabled);
     const charFilterRow = buildGoldCharFilterRow(disabled);
     if (charFilterRow) rows.push(charFilterRow);
 

@@ -4,6 +4,9 @@ const { compareRaidModeOrder } = require("../../../models/Raid");
 const {
   isGoldReceivingRaid,
 } = require("../../../utils/raid/common/character");
+const {
+  selectEntriesWithPinnedActive,
+} = require("../../../utils/discord/select-options");
 const { isRaidCheckVisibleRaid } = require("../visibility");
 
 const FILTER_ALL = "__all__";
@@ -204,14 +207,11 @@ function buildAllModeUserFilterRow({
         b.pending - a.pending || a.displayName.localeCompare(b.displayName)
     );
   const activeUserId = currentPageUserId || filterUserId || sortedUsers[0]?.discordId;
-  const visibleUsers = sortedUsers.slice(0, 25);
-  if (
-    activeUserId &&
-    !visibleUsers.some((user) => user.discordId === activeUserId)
-  ) {
-    const activeUser = sortedUsers.find((user) => user.discordId === activeUserId);
-    if (activeUser) visibleUsers[visibleUsers.length - 1] = activeUser;
-  }
+  const visibleUsers = selectEntriesWithPinnedActive(sortedUsers, {
+    limit: 25,
+    activeValue: activeUserId,
+    getValue: (user) => user.discordId,
+  });
 
   // The embed renders one user's roster page, so the selector follows that
   // visible user instead of claiming the card is an aggregate All-user view.
@@ -334,14 +334,11 @@ function buildAllModeRosterFilterRow({
       ? currentPageIndex
       : filterRosterIndex;
     options = [];
-    const visibleEntries = entries.slice(0, 25);
-    if (
-      Number.isInteger(activeRosterIndex) &&
-      !visibleEntries.some((entry) => entry.pageIndex === activeRosterIndex)
-    ) {
-      const selected = entries.find((entry) => entry.pageIndex === activeRosterIndex);
-      if (selected) visibleEntries[visibleEntries.length - 1] = selected;
-    }
+    const visibleEntries = selectEntriesWithPinnedActive(entries, {
+      limit: 25,
+      activeValue: activeRosterIndex,
+      getValue: (entry) => entry.pageIndex,
+    });
     for (const entry of visibleEntries) {
       options.push({
         label: truncateText(

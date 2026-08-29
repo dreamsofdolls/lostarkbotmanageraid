@@ -95,6 +95,18 @@ test("setLocalSyncEnabled(true) without force - happy path stamps localSyncLinke
   assert.equal(UserStub.calls.findOne.length, 0);
 });
 
+test("setLocalSyncEnabled(true) without force - reports no_user after a clean guarded miss", async () => {
+  const UserStub = makeUserStub({
+    findOneAndUpdateImpl: () => Promise.resolve(null),
+    findOneImpl: () => Promise.resolve({}),
+  });
+
+  const result = await setLocalSyncEnabled("u1", true, {}, { UserModel: UserStub });
+
+  assert.deepEqual(result, { ok: false, reason: RESULT.noUser });
+  assert.equal(UserStub.calls.findOne.length, 1);
+});
+
 test("setLocalSyncEnabled(true) with force - flips autoManageEnabled OFF in same atomic update", async () => {
   const UserStub = makeUserStub({
     findOneAndUpdateImpl: (filter, update) =>
@@ -188,6 +200,17 @@ test("setBibleAutoSyncEnabled(false) revokes the stored companion token", async 
     lastLocalSyncToken: null,
     lastLocalSyncTokenExpAt: null,
   });
+});
+
+test("setBibleAutoSyncEnabled(false) reports no_user without a conflict probe", async () => {
+  const UserStub = makeUserStub({
+    findOneAndUpdateImpl: () => Promise.resolve(null),
+  });
+
+  const result = await setBibleAutoSyncEnabled("u1", false, {}, { UserModel: UserStub });
+
+  assert.deepEqual(result, { ok: false, reason: RESULT.noUser });
+  assert.equal(UserStub.calls.findOne.length, 0);
 });
 
 // ---------- resolveSyncMode (pure) ----------

@@ -42,23 +42,39 @@ function parseTaskToggleValue(value) {
   };
 }
 
-async function toggleBulkSideTask(options) {
+async function mutateFreshAccount(options, mutateAccount) {
   const {
     User,
     saveWithRetry,
     discordId,
     targetAccountName,
-    targetReset,
-    targetNameLower,
   } = options;
+  const normalizedTargetAccountName = normalizeName(targetAccountName);
 
   await saveWithRetry(async () => {
     const userDocFresh = await User.findOne({ discordId });
     if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return;
+
     const account = userDocFresh.accounts.find(
-      (a) => normalizeName(a?.accountName) === normalizeName(targetAccountName)
+      (candidate) =>
+        normalizeName(candidate?.accountName) === normalizedTargetAccountName
     );
-    if (!account || !Array.isArray(account.characters)) return;
+    if (!account) return;
+
+    const changed = await mutateAccount(account);
+    if (!changed) return;
+    await userDocFresh.save();
+  });
+}
+
+async function toggleBulkSideTask(options) {
+  const {
+    targetReset,
+    targetNameLower,
+  } = options;
+
+  await mutateFreshAccount(options, (account) => {
+    if (!Array.isArray(account.characters)) return false;
 
     const owners = [];
     for (const ch of account.characters) {
@@ -70,75 +86,57 @@ async function toggleBulkSideTask(options) {
       );
       if (task) owners.push({ task });
     }
-    if (owners.length === 0) return;
+    if (owners.length === 0) return false;
 
     const allDone = owners.every((o) => o.task.completed);
     const nextState = !allDone;
     for (const { task } of owners) {
       task.completed = nextState;
     }
-    await userDocFresh.save();
+    return true;
   });
 }
 
 async function toggleSingleSideTask(options) {
   const {
-    User,
-    saveWithRetry,
-    discordId,
-    targetAccountName,
     targetCharName,
     targetTaskId,
   } = options;
 
-  await saveWithRetry(async () => {
-    const userDocFresh = await User.findOne({ discordId });
-    if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return;
-    const account = userDocFresh.accounts.find(
-      (a) => normalizeName(a?.accountName) === normalizeName(targetAccountName)
-    );
-    if (!account || !Array.isArray(account.characters)) return;
+  await mutateFreshAccount(options, (account) => {
+    if (!Array.isArray(account.characters)) return false;
 
     const target = account.characters.find(
       (c) =>
         String(c?.name || "").trim().toLowerCase() ===
         targetCharName.trim().toLowerCase()
     );
-    if (!target) return;
+    if (!target) return false;
     if (!Array.isArray(target.sideTasks)) target.sideTasks = [];
     const task = target.sideTasks.find((t) => t?.taskId === targetTaskId);
-    if (!task) return;
+    if (!task) return false;
     task.completed = !task.completed;
-    await userDocFresh.save();
+    return true;
   });
 }
 
 async function toggleSharedTask(options) {
   const {
-    User,
-    saveWithRetry,
-    discordId,
-    targetAccountName,
     taskId,
     now = new Date(),
   } = options;
 
-  await saveWithRetry(async () => {
-    const userDocFresh = await User.findOne({ discordId });
-    if (!userDocFresh || !Array.isArray(userDocFresh.accounts)) return;
-    const account = userDocFresh.accounts.find(
-      (a) => normalizeName(a?.accountName) === normalizeName(targetAccountName)
-    );
-    if (!account || !Array.isArray(account.sharedTasks)) return;
+  await mutateFreshAccount(options, (account) => {
+    if (!Array.isArray(account.sharedTasks)) return false;
 
     const task = account.sharedTasks.find((t) => t?.taskId === taskId);
-    if (!task || Number(task.archivedAt) > 0) return;
+    if (!task || Number(task.archivedAt) > 0) return false;
     const expiresAt = Number(task.expiresAt) || 0;
-    if (expiresAt > 0 && expiresAt < now.getTime()) return;
+    if (expiresAt > 0 && expiresAt < now.getTime()) return false;
 
     if (task.reset === "scheduled") {
       const state = resolveScheduledSharedTaskState(task, now);
-      if (!state.active || !state.key) return;
+      if (!state.active || !state.key) return false;
       if (task.completedForKey === state.key) {
         task.completedForKey = "";
         task.completed = false;
@@ -152,7 +150,7 @@ async function toggleSharedTask(options) {
       task.completed = !task.completed;
       task.completedAt = task.completed ? now.getTime() : null;
     }
-    await userDocFresh.save();
+    return true;
   });
 }
 
