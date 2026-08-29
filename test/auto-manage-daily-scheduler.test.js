@@ -259,6 +259,89 @@ test("auto-manage daily scheduler syncs one absent user and releases the slot", 
   }
 });
 
+test("auto-manage daily scheduler settles configuration changes made after gather", async () => {
+  const originalLog = console.log;
+  console.log = () => {};
+  try {
+    const now = new Date("2026-07-13T17:05:00.000Z");
+    const nowMs = now.getTime();
+    for (const {
+      name,
+      docOverrides,
+      expectedOutcome,
+    } of [
+      {
+        name: "auto-manage disabled",
+        docOverrides: { autoManageEnabled: false },
+        expectedOutcome: AUTO_MANAGE_DAILY_OUTCOME.disabled,
+      },
+      {
+        name: "local sync enabled",
+        docOverrides: { localSyncEnabled: true },
+        expectedOutcome: AUTO_MANAGE_DAILY_OUTCOME.disabled,
+      },
+      {
+        name: "roster removed",
+        docOverrides: { accounts: [] },
+        expectedOutcome: AUTO_MANAGE_DAILY_OUTCOME.noRoster,
+      },
+    ]) {
+      const savedDocs = [];
+      const seedDoc = {
+        discordId: "100",
+        autoManageEnabled: true,
+        accounts: [{ accountName: "Main" }],
+      };
+      const freshDoc = {
+        discordId: "100",
+        autoManageEnabled: true,
+        localSyncEnabled: false,
+        accounts: [{ accountName: "Main" }],
+        autoManageDailyLeaseDayKey: "2026-07-13",
+        autoManageDailyLeaseUntil: Date.parse("2026-07-13T17:25:00.000Z"),
+        autoManageDailyAttemptCount: 1,
+        ...docOverrides,
+        async save() {
+          savedDocs.push({ ...this });
+        },
+      };
+      const findOneDocs = [seedDoc, freshDoc];
+      const service = createAutoManageDailySchedulerService({
+        User: {
+          find: createFindChain([{ discordId: "100" }]),
+          findOne: async () => findOneDocs.shift() || null,
+          updateOne: async () => ({ modifiedCount: 1 }),
+        },
+        saveWithRetry: async (fn) => fn(),
+        ensureFreshWeek: () => {},
+        weekResetStartMs: () => 777,
+        acquireAutoManageSyncSlot: async () => ({ acquired: true }),
+        releaseAutoManageSyncSlot: () => {},
+        gatherAutoManageLogsForUserDoc: async () => ({ source: "bible" }),
+        applyAutoManageCollected: () => {
+          throw new Error("configuration drift must settle before apply");
+        },
+        isPublicLogDisabledError: () => false,
+        nudgeStuckPrivateLogUser: async () => {
+          throw new Error("configuration drift must not post a nudge");
+        },
+        processEnv: {},
+      });
+
+      await service.runAutoManageDailyTick({}, now);
+
+      assert.equal(savedDocs.length, 1, name);
+      assert.equal(savedDocs[0].lastAutoManageAttemptAt, nowMs, name);
+      assert.equal(savedDocs[0].lastAutoManageDailyOutcome, expectedOutcome, name);
+      assert.equal(savedDocs[0].autoManageDailyLeaseDayKey, "", name);
+      assert.equal(savedDocs[0].autoManageDailyLeaseUntil, null, name);
+      assert.equal(savedDocs[0].lastAutoManageDailyFinishedDayKey, undefined, name);
+    }
+  } finally {
+    console.log = originalLog;
+  }
+});
+
 test("auto-manage daily scheduler skips a candidate leased or finished after scan", async () => {
   let gatherCalls = 0;
   const releases = [];

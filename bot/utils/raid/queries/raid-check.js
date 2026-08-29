@@ -12,7 +12,6 @@
 
 const { RAID_REQUIREMENTS } = require("../../../models/Raid");
 const {
-  ROSTER_REFRESH_COOLDOWN_MS,
   ROSTER_REFRESH_FAILURE_COOLDOWN_MS,
 } = require("../../../services/roster/refresh");
 const {

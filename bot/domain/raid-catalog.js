@@ -153,7 +153,12 @@ function buildRaidRequirementList() {
 }
 
 function getRaidRequirementList() {
-  return buildRaidRequirementList().map(({ value, ...raid }) => raid);
+  return buildRaidRequirementList().map((raid) => ({
+    label: raid.label,
+    minItemLevel: raid.minItemLevel,
+    raidKey: raid.raidKey,
+    modeKey: raid.modeKey,
+  }));
 }
 
 function getRaidRequirementMap() {

@@ -68,7 +68,7 @@ function createRaidSetAutocompleteService({
     return loadUserForAutocomplete(executorId);
   }
 
-  function buildRaidProgressChoice({ req, character, lang }) {
+  function buildRaidProgressChoice({ req, character }) {
     const { done, total, isComplete, icon } = computeRaidProgress({
       character,
       req,

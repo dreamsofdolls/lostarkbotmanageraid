@@ -1,9 +1,6 @@
 "use strict";
 
 const {
-  truncateChoice,
-} = require("../../../../utils/raid/common/autocomplete");
-const {
   normalizeName,
   findCharacterInUser,
 } = require("../../../../utils/raid/tasks/side-tasks");

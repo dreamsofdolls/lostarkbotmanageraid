@@ -1,13 +1,5 @@
 const mongoose = require("mongoose");
 
-const raidGateSchema = new mongoose.Schema(
-  {
-    difficulty: { type: String, default: "Normal" },
-    completedDate: { type: Number, default: null },
-  },
-  { _id: false }
-);
-
 const assignedRaidSchema = new mongoose.Schema(
   {},
   { _id: false, strict: false }

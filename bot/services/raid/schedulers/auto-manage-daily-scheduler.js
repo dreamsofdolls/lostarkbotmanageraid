@@ -64,6 +64,36 @@ function shouldNudgePrivateLogUser({ report, isPublicLogDisabledError }) {
   );
 }
 
+async function settleUnavailableDailyCandidate({
+  userDoc,
+  targetDayKey,
+  attemptCount,
+  nowMs,
+}) {
+  if (!ownsAutoManageDailyLease(userDoc, targetDayKey, attemptCount)) {
+    return {
+      handled: true,
+      transition: { bucket: "skipped", outcome: "superseded" },
+    };
+  }
+
+  let outcome = null;
+  if (!userDoc.autoManageEnabled || userDoc.localSyncEnabled) {
+    outcome = AUTO_MANAGE_DAILY_OUTCOME.disabled;
+  } else if (!Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+    outcome = AUTO_MANAGE_DAILY_OUTCOME.noRoster;
+  }
+  if (!outcome) return { handled: false, transition: null };
+
+  userDoc.lastAutoManageAttemptAt = nowMs;
+  releaseAutoManageDailyLeaseWithoutFinishing(userDoc, outcome);
+  await userDoc.save();
+  return {
+    handled: true,
+    transition: { bucket: "skipped", outcome },
+  };
+}
+
 async function persistTransientDailyFailure({
   User,
   saveWithRetry,
@@ -75,42 +105,18 @@ async function persistTransientDailyFailure({
   let transition = { bucket: "skipped", outcome: "superseded" };
   await saveWithRetry(async () => {
     const fresh = await User.findOne({ discordId });
-    if (
-      !ownsAutoManageDailyLease(
-        fresh,
-        dailyContext.targetDayKey,
-        attemptCount
-      )
-    ) {
+    const settlement = await settleUnavailableDailyCandidate({
+      userDoc: fresh,
+      targetDayKey: dailyContext.targetDayKey,
+      attemptCount,
+      nowMs,
+    });
+    if (settlement.handled) {
+      transition = settlement.transition;
       return;
     }
 
     fresh.lastAutoManageAttemptAt = nowMs;
-    if (!fresh.autoManageEnabled || fresh.localSyncEnabled) {
-      releaseAutoManageDailyLeaseWithoutFinishing(
-        fresh,
-        AUTO_MANAGE_DAILY_OUTCOME.disabled
-      );
-      transition = {
-        bucket: "skipped",
-        outcome: AUTO_MANAGE_DAILY_OUTCOME.disabled,
-      };
-      await fresh.save();
-      return;
-    }
-    if (!Array.isArray(fresh.accounts) || fresh.accounts.length === 0) {
-      releaseAutoManageDailyLeaseWithoutFinishing(
-        fresh,
-        AUTO_MANAGE_DAILY_OUTCOME.noRoster
-      );
-      transition = {
-        bucket: "skipped",
-        outcome: AUTO_MANAGE_DAILY_OUTCOME.noRoster,
-      };
-      await fresh.save();
-      return;
-    }
-
     transition = scheduleAutoManageDailyRetry({
       userDoc: fresh,
       targetDayKey: dailyContext.targetDayKey,
@@ -185,40 +191,14 @@ async function syncCandidate({
     let transition = { bucket: "skipped", outcome: "superseded" };
     await saveWithRetry(async () => {
       const fresh = await User.findOne({ discordId });
-      if (
-        !ownsAutoManageDailyLease(
-          fresh,
-          dailyContext.targetDayKey,
-          attemptCount
-        )
-      ) {
-        return;
-      }
-
-      if (!fresh.autoManageEnabled || fresh.localSyncEnabled) {
-        fresh.lastAutoManageAttemptAt = nowMs;
-        releaseAutoManageDailyLeaseWithoutFinishing(
-          fresh,
-          AUTO_MANAGE_DAILY_OUTCOME.disabled
-        );
-        transition = {
-          bucket: "skipped",
-          outcome: AUTO_MANAGE_DAILY_OUTCOME.disabled,
-        };
-        await fresh.save();
-        return;
-      }
-      if (!Array.isArray(fresh.accounts) || fresh.accounts.length === 0) {
-        fresh.lastAutoManageAttemptAt = nowMs;
-        releaseAutoManageDailyLeaseWithoutFinishing(
-          fresh,
-          AUTO_MANAGE_DAILY_OUTCOME.noRoster
-        );
-        transition = {
-          bucket: "skipped",
-          outcome: AUTO_MANAGE_DAILY_OUTCOME.noRoster,
-        };
-        await fresh.save();
+      const settlement = await settleUnavailableDailyCandidate({
+        userDoc: fresh,
+        targetDayKey: dailyContext.targetDayKey,
+        attemptCount,
+        nowMs,
+      });
+      if (settlement.handled) {
+        transition = settlement.transition;
         return;
       }
 

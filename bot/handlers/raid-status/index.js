@@ -202,7 +202,6 @@ function createRaidStatusCommand(deps) {
     const viewerReadyAt = Date.now();
     const {
       lang,
-      hasIncomingShare,
       incomingSharedAccounts,
       piggybackOutcome,
       startBackgroundRefresh,
@@ -266,7 +265,6 @@ function createRaidStatusCommand(deps) {
     // with > 25 total tasks (4+ chars × cap 8)
     // would silently drop tail entries from the toggle dropdown.
     const {
-      ALL_CHARS_SENTINEL,
       buildTaskViewEmbed,
       buildViewToggleRow,
       buildSharedTaskToggleRow,

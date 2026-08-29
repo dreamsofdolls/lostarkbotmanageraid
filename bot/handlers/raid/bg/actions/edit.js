@@ -100,7 +100,6 @@ function createFinalNotice({ EmbedBuilder }) {
 
 function createEditActionHandlers({
   interaction,
-  EmbedBuilder,
   lang,
   render,
   finalNotice,
@@ -226,7 +225,6 @@ async function handleEdit({ interaction, deps, lang }) {
   const collector = message.createMessageComponentCollector({ time: RAID_BG_BROWSER_MS });
   const actionHandlers = createEditActionHandlers({
     interaction,
-    EmbedBuilder,
     lang,
     render,
     finalNotice,

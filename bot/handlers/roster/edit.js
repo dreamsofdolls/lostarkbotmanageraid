@@ -9,7 +9,6 @@ const {
 const {
   buildRosterAutocompleteChoices,
   getRosterMatches,
-  truncateChoice,
 } = require("../../utils/raid/common/autocomplete");
 const { t, getUserLanguage } = require("../../services/i18n");
 const {

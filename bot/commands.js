@@ -14,7 +14,6 @@ const {
   PermissionFlagsBits,
 } = require("discord.js");
 const GuildConfig = require("./models/guildConfig");
-const { randomUUID } = require("node:crypto");
 const User = require("./models/user");
 const { saveWithRetry } = require("./models/user");
 const {
@@ -30,7 +29,6 @@ const {
   foldName,
   parseCombatScore,
   toModeLabel,
-  toModeKey,
   getCharacterName,
   getCharacterClass,
   truncateText,
@@ -50,7 +48,6 @@ const {
 const {
   createRaidStatusCommand,
   STATUS_PAGINATION_SESSION_MS,
-  STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS,
 } = require("./handlers/raid-status");
 const {
   createRaidCheckCommand,
@@ -137,9 +134,7 @@ const loadAccountsRegisteredBy = createInFlightLoader((discordId) =>
   ).lean()
 );
 const {
-  RAID_REQUIREMENTS,
   getRaidRequirementList,
-  getRaidRequirementMap,
   getGatesForRaid,
   getRaidLabel,
   getRaidGateForBoss,
@@ -147,25 +142,16 @@ const {
 const {
   createCharacterId,
   buildFetchedRosterIndexes,
-  pickUniqueFetchedRosterCandidate,
   findFetchedRosterMatchForCharacter,
-  getRequirementFor,
-  getBestEligibleModeKey,
-  sanitizeTasks,
   getGateKeys,
   normalizeAssignedRaid,
-  getCompletedGateKeys,
-  buildAssignedRaidFromLegacy,
   ensureAssignedRaids,
-  isAssignedRaidCompleted,
   buildCharacterRecord,
-  ensureRaidEntries,
   getStatusRaidsForCharacter,
   formatRaidStatusLine,
   summarizeRaidProgress,
   summarizeAccountGold,
   summarizeGlobalGold,
-  raidCheckGateIcon,
   RAID_REQUIREMENT_MAP,
 } = require("./utils/raid/common/character");
 const {
@@ -211,9 +197,6 @@ if (RAID_MANAGER_ID.size === 0) {
 // /raid-check intentionally has no command-line raid choice: its inline
 // filter owns per-raid focus. /raid-set continues to use its independent
 // autocomplete-driven raid input.
-const RAID_GROUP_KEYS = Object.keys(RAID_REQUIREMENTS);
-
-
 function isRaidLeader(interaction) {
   // Env-allowlist check against the invoker's Discord user ID. Set is
   // built once at module load (see services/access/manager.js) so this is O(1)
@@ -270,7 +253,6 @@ let handleEditRosterButton;
 let buildRaidCheckSnapshotFromUsers;
 let formatRaidCheckNotEligibleFieldValue;
 let getRaidCheckRenderableChars;
-let computeRaidCheckSnapshot;
 let buildEditableCharsByUser;
 let getEligibleRaidsForChar;
 let getCharRaidGateStatus;
@@ -388,14 +370,12 @@ let handleRaidTaskAutocomplete;
 let handleRaidTaskButton;
 
 let AUTO_MANAGE_SYNC_COOLDOWN_MS;
-let getAutoManageCooldownMsFromService;
 let acquireAutoManageSyncSlot;
 let releaseAutoManageSyncSlot;
 let formatAutoManageCooldownRemaining;
 let autoManageEntryKey;
 let gatherAutoManageLogsForUserDoc;
 let applyAutoManageCollected;
-let syncAutoManageForUserDoc;
 let stampAutoManageAttempt;
 let isPublicLogDisabledError;
 let commitAutoManageOn;
@@ -423,7 +403,6 @@ let getAutoManageSchedulerStartedAtMs;
 let getMaintenanceSchedulerStartedAtMs;
 let getWorldEventReminderSchedulerStartedAtMs;
 let nextWorldEventReminderBoundaryMs;
-let getSideTaskSchedulerStartedAtMs;
 let getRaidScheduleAutoLockSchedulerStartedAtMs;
 let runRaidScheduleAutoLockTick;
 let RAID_SCHEDULE_AUTO_LOCK_TICK_MS;
@@ -453,7 +432,6 @@ const {
   nextIntervalTickMs,
   nextAnnouncementEligibleBoundaryMs,
   nextAnnouncementSchedulerCheckMs,
-  formatDiscordTimestampPair,
   buildAnnouncementWhenItFiresText,
 } = createSchedulingHelpers({
   announcementSubdocKeys,
@@ -495,14 +473,12 @@ const autoManageCoreService = createAutoManageCoreService({
 });
 ({
   AUTO_MANAGE_SYNC_COOLDOWN_MS,
-  getAutoManageCooldownMs: getAutoManageCooldownMsFromService,
   acquireAutoManageSyncSlot,
   releaseAutoManageSyncSlot,
   formatAutoManageCooldownRemaining,
   autoManageEntryKey,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
-  syncAutoManageForUserDoc,
   stampAutoManageAttempt,
   isPublicLogDisabledError,
   commitAutoManageOn,
@@ -760,7 +736,6 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   buildRaidCheckSnapshotFromUsers,
   formatRaidCheckNotEligibleFieldValue,
   getRaidCheckRenderableChars,
-  computeRaidCheckSnapshot,
   buildEditableCharsByUser,
   getEligibleRaidsForChar,
   getCharRaidGateStatus,
@@ -924,7 +899,6 @@ const raidSchedulerService = createRaidSchedulerService({
   getMaintenanceSchedulerStartedAtMs,
   getWorldEventReminderSchedulerStartedAtMs,
   nextWorldEventReminderBoundaryMs,
-  getSideTaskSchedulerStartedAtMs,
 } = raidSchedulerService);
 
 // Expose quiet-hours helpers for __test access. Tests exercise them via

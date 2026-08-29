@@ -39,7 +39,6 @@ const {
 } = require("./add/session");
 function createAddRosterCommand({
   EmbedBuilder,
-  StringSelectMenuBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,

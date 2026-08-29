@@ -201,7 +201,7 @@ test("preview skips unknown difficulty and Solo on the level-based Horizon raid"
   ]), []);
 });
 
-test("currentWeeklyResetStartMs follows Wednesday 17:00 VN reset boundary", async () => {
+test("currentWeeklyResetStartMs follows Wednesday 17:00 VN reset boundary and backend parity", async () => {
   const { currentWeeklyResetStartMs } = await loadPreviewUtils();
   const cases = [
     [Date.UTC(2026, 3, 22, 9, 59, 0, 0), Date.UTC(2026, 3, 15, 10, 0, 0, 0)],
@@ -213,5 +213,15 @@ test("currentWeeklyResetStartMs follows Wednesday 17:00 VN reset boundary", asyn
     assert.equal(currentWeeklyResetStartMs(now), expectedMs);
     assert.equal(weeklyResetStartMs(now), expectedMs);
     assert.equal(currentWeeklyResetStartMs(now), weeklyResetStartMs(now));
+  }
+
+  const parityStartMs = Date.UTC(2025, 11, 28, 0, 0, 0, 0);
+  for (let offsetHours = 0; offsetHours <= 24 * 21; offsetHours += 3) {
+    const now = new Date(parityStartMs + offsetHours * 60 * 60 * 1000);
+    assert.equal(
+      currentWeeklyResetStartMs(now),
+      weeklyResetStartMs(now),
+      `backend/browser reset drift at ${now.toISOString()}`
+    );
   }
 });

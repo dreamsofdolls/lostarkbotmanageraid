@@ -1,6 +1,6 @@
 "use strict";
 
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require("discord.js");
+const { SlashCommandBuilder } = require("discord.js");
 const { RAID_REQUIREMENTS } = require("../../../domain/raid-catalog");
 
 const RAID_SCHEDULE_RAID_CHOICES = Object.entries(RAID_REQUIREMENTS).map(

@@ -25,11 +25,8 @@ function createRemoveRosterCommand(deps) {
     UI,
     User,
     saveWithRetry,
-    ensureFreshWeek,
     normalizeName,
     getCharacterName,
-    getCharacterClass,
-    createCharacterId,
     loadUserForAutocomplete,
   } = deps;
 

@@ -1,6 +1,6 @@
 "use strict";
 
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require("discord.js");
+const { SlashCommandBuilder } = require("discord.js");
 
 function createAddRosterCommandDefinition() {
   const addRosterCommand = new SlashCommandBuilder()
