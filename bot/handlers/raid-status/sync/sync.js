@@ -17,6 +17,7 @@
  */
 const {
   countAppliedAutoManageGates,
+  stampAutoManageAttemptFromReport,
   toPlainUserDoc,
 } = require("../../../services/auto-manage/reports/utils");
 const {

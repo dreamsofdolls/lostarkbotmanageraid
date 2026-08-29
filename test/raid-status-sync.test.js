@@ -120,3 +120,66 @@ test("raid-status prepares a fresh render copy and starts sync lazily once", asy
   await first;
   assert.equal(refreshCollections, 1);
 });
+
+test("raid-status manual sync stamps and saves a successful report", async () => {
+  let mongoReads = 0;
+  let saves = 0;
+  let fallbackStamps = 0;
+  let releases = 0;
+  let acquiredCallbacks = 0;
+  const seedDoc = {
+    discordId: "user-1",
+    accounts: [{ accountName: "Roster", characters: [] }],
+    autoManageEnabled: true,
+  };
+  const freshDoc = {
+    ...seedDoc,
+    save: async () => {
+      saves += 1;
+    },
+  };
+  const renderedDoc = {
+    ...seedDoc,
+    lastAutoManageAttemptAt: "persisted",
+    lastAutoManageSyncAt: "persisted",
+  };
+  const sync = createSync({
+    User: {
+      findOne: () => {
+        mongoReads += 1;
+        if (mongoReads === 1) return Promise.resolve(seedDoc);
+        if (mongoReads === 2) return Promise.resolve(freshDoc);
+        return { lean: async () => renderedDoc };
+      },
+    },
+    acquireAutoManageSyncSlot: async () => ({ acquired: true }),
+    releaseAutoManageSyncSlot: () => {
+      releases += 1;
+    },
+    gatherAutoManageLogsForUserDoc: async () => ({ collected: true }),
+    applyAutoManageCollected: () => ({
+      perChar: [{ error: null, applied: ["gate-1"] }],
+    }),
+    stampAutoManageAttempt: async () => {
+      fallbackStamps += 1;
+    },
+  });
+
+  const result = await sync.runManualStatusSync("user-1", {
+    onAcquired: async () => {
+      acquiredCallbacks += 1;
+    },
+  });
+
+  assert.equal(result.status, "completed");
+  assert.equal(result.outcome.outcome, "applied");
+  assert.equal(result.outcome.newGatesApplied, 1);
+  assert.equal(result.userDoc, renderedDoc);
+  assert.equal(saves, 1);
+  assert.equal(fallbackStamps, 0);
+  assert.equal(releases, 1);
+  assert.equal(acquiredCallbacks, 1);
+  assert.equal(mongoReads, 3);
+  assert.equal(freshDoc.lastAutoManageAttemptAt, freshDoc.lastAutoManageSyncAt);
+  assert.ok(Number.isFinite(freshDoc.lastAutoManageAttemptAt));
+});
