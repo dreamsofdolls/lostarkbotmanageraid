@@ -13,6 +13,10 @@ const {
   ensureSideTasks,
   countByReset,
 } = require("../../../../utils/raid/tasks/side-tasks");
+const {
+  capForReset,
+  cycleStartForReset,
+} = require("./reset-policy");
 
 function readAddSingleRequest(interaction) {
   return {
@@ -41,14 +45,6 @@ function buildAddSingleValidationNotice(request, lang) {
   }
 
   return null;
-}
-
-function capForReset(reset) {
-  return reset === "daily" ? TASK_CAP_DAILY : TASK_CAP_WEEKLY;
-}
-
-function cycleStartForReset(reset, { dailyResetStartMs, weekResetStartMs }) {
-  return reset === "daily" ? dailyResetStartMs() : weekResetStartMs();
 }
 
 function createAddSingleResult() {

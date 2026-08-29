@@ -74,6 +74,29 @@ async function tryReadStaticFile(webDir, requestPath) {
   return tryReadFileFromRoot(webDir, rel);
 }
 
+function sendStaticFileResponse(res, result, cacheControl) {
+  if (result.error === "forbidden") {
+    res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("forbidden");
+    return;
+  }
+  if (result.error === "not_found") {
+    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("not found");
+    return;
+  }
+  if (result.error) {
+    res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("server error");
+    return;
+  }
+  res.writeHead(200, {
+    "Content-Type": result.mime,
+    "Cache-Control": cacheControl,
+  });
+  res.end(result.data);
+}
+
 function getEnvPort(fallback = 3000) {
   const raw = Number(process.env.PORT);
   if (Number.isFinite(raw) && raw > 0) return raw;
@@ -112,51 +135,13 @@ function startLocalSyncHttpServer({ port = getEnvPort(), webDir, classIconsDir =
       if (req.method === "GET" && classIconsDir && pathname.startsWith("/sync/class-icons/")) {
         const rel = pathname.replace(/^\/sync\/class-icons\/?/, "");
         const result = await tryReadFileFromRoot(classIconsDir, rel);
-        if (result.error === "forbidden") {
-          res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-          res.end("forbidden");
-          return;
-        }
-        if (result.error === "not_found") {
-          res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-          res.end("not found");
-          return;
-        }
-        if (result.error) {
-          res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
-          res.end("server error");
-          return;
-        }
-        res.writeHead(200, {
-          "Content-Type": result.mime,
-          "Cache-Control": "public, max-age=86400",
-        });
-        res.end(result.data);
+        sendStaticFileResponse(res, result, "public, max-age=86400");
         return;
       }
       // Static path: only serve under /sync/*. Anything else falls through to 404.
       if (req.method === "GET" && pathname.startsWith("/sync")) {
         const result = await tryReadStaticFile(webDir, pathname);
-        if (result.error === "forbidden") {
-          res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
-          res.end("forbidden");
-          return;
-        }
-        if (result.error === "not_found") {
-          res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-          res.end("not found");
-          return;
-        }
-        if (result.error) {
-          res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
-          res.end("server error");
-          return;
-        }
-        res.writeHead(200, {
-          "Content-Type": result.mime,
-          "Cache-Control": "public, max-age=300",
-        });
-        res.end(result.data);
+        sendStaticFileResponse(res, result, "public, max-age=300");
         return;
       }
       res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });

@@ -52,7 +52,7 @@ export function formatSchemaPreview(tableName, cols) {
 export async function listColumns(sqlite3, db, tableName) {
   const cols = new Set();
   try {
-    await sqlite3.exec(db, `PRAGMA table_info(${tableName});`, (row, _columns) => {
+    await sqlite3.exec(db, `PRAGMA table_info(${tableName});`, (row) => {
       // PRAGMA table_info row layout: [cid, name, type, notnull, dflt_value, pk]
       const name = row[1];
       if (typeof name === "string") cols.add(name);

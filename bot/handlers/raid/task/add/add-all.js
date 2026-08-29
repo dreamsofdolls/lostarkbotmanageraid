@@ -4,14 +4,16 @@
 const { tPick: t, getUserLanguage } = require("../../../../services/i18n");
 const { resolveEditableTaskWriteAccess } = require("../write-access");
 const {
-  TASK_CAP_DAILY,
-  TASK_CAP_WEEKLY,
   generateTaskId,
   normalizeName,
   getCharacterDisplayName,
   ensureSideTasks,
   countByReset,
 } = require("../../../../utils/raid/tasks/side-tasks");
+const {
+  capForReset,
+  cycleStartForReset,
+} = require("./reset-policy");
 
 function readAddAllRequest(interaction) {
   return {
@@ -30,14 +32,6 @@ function buildAddAllValidationNotice(request, lang) {
     };
   }
   return null;
-}
-
-function capForReset(reset) {
-  return reset === "daily" ? TASK_CAP_DAILY : TASK_CAP_WEEKLY;
-}
-
-function cycleStartForReset(reset, { dailyResetStartMs, weekResetStartMs }) {
-  return reset === "daily" ? dailyResetStartMs() : weekResetStartMs();
 }
 
 function createAddAllResult(rosterName) {

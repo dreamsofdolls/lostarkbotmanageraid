@@ -13,8 +13,7 @@ const {
 const { t, getUserLanguage } = require("../../services/i18n");
 const {
   guardPickerConfirm,
-  handleRosterPickerCancel,
-  handleRosterPickerToggle,
+  handleRosterPickerNavigationAction,
   loadRosterPickerButtonContext,
 } = require("./picker/button-flow");
 const {
@@ -274,28 +273,17 @@ function createEditRosterCommand({
     });
     if (context.handled) return;
 
-    const { action, route, sessionId, session } = context;
-    if (action === "toggle") {
-      await handleRosterPickerToggle({
-        interaction,
-        session,
-        charIndex: route?.index,
-        buildSelectionEmbed,
-        buildSelectionComponents,
-      });
-      return;
-    }
+    const navigationHandled = await handleRosterPickerNavigationAction({
+      interaction,
+      context,
+      sessions,
+      buildSelectionEmbed,
+      buildSelectionComponents,
+      buildCancelledEmbed,
+    });
+    if (navigationHandled) return;
 
-    if (action === "cancel") {
-      await handleRosterPickerCancel({
-        interaction,
-        sessions,
-        sessionId,
-        session,
-        buildCancelledEmbed,
-      });
-      return;
-    }
+    const { action, sessionId, session } = context;
 
     if (action !== "confirm") return;
 

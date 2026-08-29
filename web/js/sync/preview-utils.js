@@ -175,7 +175,7 @@ export function getClassInfoForChar(playersRaw, charName) {
 export function bucketize(rows) {
   const map = new Map();
   for (const row of rows) {
-    const [boss, difficulty, cleared, charName, _count, lastMs, playersRaw] = row;
+    const [boss, difficulty, cleared, charName, , lastMs, playersRaw] = row;
     if (Number(cleared) !== 1) continue;
     if (!charName) continue;
     const gateInfo = getRaidGateForBoss(boss);
@@ -225,7 +225,7 @@ export function bucketize(rows) {
 export function findUnmappedBosses(rows) {
   const set = new Set();
   for (const row of rows) {
-    const [boss, _diff, cleared] = row;
+    const [boss, , cleared] = row;
     if (Number(cleared) !== 1) continue;
     if (!boss) continue;
     if (!getRaidGateForBoss(boss)) {

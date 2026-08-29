@@ -366,20 +366,14 @@ function summarizeCharacterGold(raids) {
   };
 }
 
-// Sum gold for a whole account, gating per-character on `isGoldEarner`.
-// Lost Ark caps gold-earner characters at 6 per account/week; the
-// per-character 3-raid gold cap is already baked into each raid entry by
-// getStatusRaidsForCharacter. `getRaidsFor` is the same callable the view
-// layer uses (already filter-scoped when the caller has a raid filter active),
-// so this function inherits the active filter without taking it separately.
-function summarizeAccountGold(account, getRaidsFor) {
+function summarizeGoldItems(items, summarizeItem) {
   let earned = 0;
   let total = 0;
   let earnedBound = 0;
   let totalBound = 0;
-  for (const character of account?.characters || []) {
-    if (!character?.isGoldEarner) continue;
-    const sub = summarizeCharacterGold(getRaidsFor(character));
+  for (const item of items || []) {
+    const sub = summarizeItem(item);
+    if (!sub) continue;
     earned += sub.earned;
     total += sub.total;
     earnedBound += sub.earnedBound;
@@ -395,28 +389,28 @@ function summarizeAccountGold(account, getRaidsFor) {
   };
 }
 
+// Sum gold for a whole account, gating per-character on `isGoldEarner`.
+// Lost Ark caps gold-earner characters at 6 per account/week; the
+// per-character 3-raid gold cap is already baked into each raid entry by
+// getStatusRaidsForCharacter. `getRaidsFor` is the same callable the view
+// layer uses (already filter-scoped when the caller has a raid filter active),
+// so this function inherits the active filter without taking it separately.
+function summarizeAccountGold(account, getRaidsFor) {
+  return summarizeGoldItems(
+    account?.characters,
+    (character) => character?.isGoldEarner
+      ? summarizeCharacterGold(getRaidsFor(character))
+      : null
+  );
+}
+
 // Cross-account variant for the multi-roster rollup line. Wraps
 // summarizeAccountGold and inherits the same isGoldEarner gate.
 function summarizeGlobalGold(accounts, getRaidsFor) {
-  let earned = 0;
-  let total = 0;
-  let earnedBound = 0;
-  let totalBound = 0;
-  for (const account of accounts || []) {
-    const sub = summarizeAccountGold(account, getRaidsFor);
-    earned += sub.earned;
-    total += sub.total;
-    earnedBound += sub.earnedBound;
-    totalBound += sub.totalBound;
-  }
-  return {
-    earned,
-    total,
-    earnedBound,
-    totalBound,
-    earnedUnbound: earned - earnedBound,
-    totalUnbound: total - totalBound,
-  };
+  return summarizeGoldItems(
+    accounts,
+    (account) => summarizeAccountGold(account, getRaidsFor)
+  );
 }
 
 function summarizeRaidProgress(allRaids) {

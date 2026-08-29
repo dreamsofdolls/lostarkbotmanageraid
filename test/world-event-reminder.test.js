@@ -67,6 +67,17 @@ test("next reminder boundary advances past a reminder window already in progress
   assert.equal(insideWindow, Date.UTC(2026, 3, 27, 15, 55, 0, 0));
 });
 
+test("world-event reminder helpers reject invalid dates and lead windows consistently", () => {
+  for (const [now, leadMs] of [
+    ["not-a-date", 5 * 60 * 1000],
+    [utc(2026, 4, 27, 14, 0), 0],
+    [utc(2026, 4, 27, 14, 0), Number.NaN],
+  ]) {
+    assert.equal(resolveWorldEventReminderForNow(now, leadMs), null);
+    assert.equal(nextWorldEventReminderBoundaryMs(now, leadMs), null);
+  }
+});
+
 test("world-event reminder is opt-in for both lean legacy config and new schema docs", () => {
   const { getAnnouncementsConfig } = createSchedulingHelpers({
     announcementSubdocKeys,

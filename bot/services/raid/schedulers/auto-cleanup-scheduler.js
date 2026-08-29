@@ -76,15 +76,20 @@ async function runQuietPhase(context) {
   }
 }
 
-async function runWakeupPhase(context) {
+async function runCleanupPhase(context, {
+  phaseName,
+  persistedState,
+  logState,
+  announcementKey,
+  pickNoticeContent,
+  noticeTtlMs,
+}) {
   const {
     GuildConfig,
     cfg,
     channel,
     announcements,
     cleanupAndRefreshRaidChannel,
-    dayKey,
-    targetKey,
     guildLang,
     postChannelAnnouncement,
   } = context;
@@ -98,73 +103,50 @@ async function runWakeupPhase(context) {
     });
     await GuildConfig.findOneAndUpdate(
       { guildId: cfg.guildId },
-      {
-        $set: {
-          lastArtistWakeupKey: dayKey,
-          lastAutoCleanupKey: targetKey,
-        },
-      }
+      { $set: persistedState }
     );
     console.log(
-      `[raid-channel] artist-wakeup guild=${cfg.guildId} day=${dayKey} deleted=${deleted} skippedOld=${skippedOld}`
+      `[raid-channel] ${phaseName} guild=${cfg.guildId} ${logState} deleted=${deleted} skippedOld=${skippedOld}`
     );
-    if (isAnnouncementEnabled(announcements, "artistWakeup")) {
+    if (isAnnouncementEnabled(announcements, announcementKey)) {
       await postChannelAnnouncement(
         channel,
-        pickWakeupNoticeContent(deleted, guildLang),
-        ARTIST_WAKEUP_NOTICE_TTL_MS,
-        "raid-channel artist-wakeup"
+        pickNoticeContent(deleted, guildLang),
+        noticeTtlMs,
+        `raid-channel ${phaseName}`
       );
     }
   } catch (err) {
     console.error(
-      `[raid-channel] artist-wakeup failed guild=${cfg.guildId}:`,
+      `[raid-channel] ${phaseName} failed guild=${cfg.guildId}:`,
       err?.message || err
     );
   }
 }
 
+async function runWakeupPhase(context) {
+  await runCleanupPhase(context, {
+    phaseName: "artist-wakeup",
+    persistedState: {
+      lastArtistWakeupKey: context.dayKey,
+      lastAutoCleanupKey: context.targetKey,
+    },
+    logState: `day=${context.dayKey}`,
+    announcementKey: "artistWakeup",
+    pickNoticeContent: pickWakeupNoticeContent,
+    noticeTtlMs: ARTIST_WAKEUP_NOTICE_TTL_MS,
+  });
+}
+
 async function runNormalCleanupPhase(context) {
-  const {
-    GuildConfig,
-    cfg,
-    channel,
-    announcements,
-    cleanupAndRefreshRaidChannel,
-    targetKey,
-    guildLang,
-    postChannelAnnouncement,
-  } = context;
-
-  try {
-    const { deleted, skippedOld } = await cleanupAndRefreshRaidChannel(channel, {
-      botUserId: context.client.user.id,
-      client: context.client,
-      guildId: cfg.guildId,
-      protectedMessageIds: [cfg.welcomeMessageId].filter(Boolean),
-    });
-    await GuildConfig.findOneAndUpdate(
-      { guildId: cfg.guildId },
-      { $set: { lastAutoCleanupKey: targetKey } }
-    );
-    console.log(
-      `[raid-channel] auto-cleanup guild=${cfg.guildId} key=${targetKey} deleted=${deleted} skippedOld=${skippedOld}`
-    );
-
-    if (isAnnouncementEnabled(announcements, "hourlyCleanupNotice")) {
-      await postChannelAnnouncement(
-        channel,
-        pickCleanupNoticeContent(deleted, guildLang),
-        AUTO_CLEANUP_NOTICE_TTL_MS,
-        "raid-channel auto-cleanup"
-      );
-    }
-  } catch (err) {
-    console.error(
-      `[raid-channel] auto-cleanup failed guild=${cfg.guildId}:`,
-      err?.message || err
-    );
-  }
+  await runCleanupPhase(context, {
+    phaseName: "auto-cleanup",
+    persistedState: { lastAutoCleanupKey: context.targetKey },
+    logState: `key=${context.targetKey}`,
+    announcementKey: "hourlyCleanupNotice",
+    pickNoticeContent: pickCleanupNoticeContent,
+    noticeTtlMs: AUTO_CLEANUP_NOTICE_TTL_MS,
+  });
 }
 
 const CLEANUP_PHASES = [

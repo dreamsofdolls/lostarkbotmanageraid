@@ -91,3 +91,64 @@ test("auto-cleanup scheduler runs normal cleanup and stamps the slot key", async
   assert.equal(posts[0][2], 5 * 60 * 1000);
   assert.equal(posts[0][3], "raid-channel auto-cleanup");
 });
+
+test("auto-cleanup scheduler runs wakeup cleanup and stamps both dedup keys", async () => {
+  const now = new Date(Date.UTC(2026, 3, 24, 1, 0, 0, 0));
+  const dayKey = getTargetDayKeyForLang(now, "vi");
+  const updates = [];
+  const posts = [];
+  const channel = {};
+  const cfg = {
+    guildId: "guild-wakeup",
+    raidChannelId: "channel-1",
+    welcomeMessageId: null,
+    lastArtistWakeupKey: "old-day",
+    lastAutoCleanupKey: "old-slot",
+  };
+  const GuildConfig = {
+    find: () => ({ lean: async () => [cfg] }),
+    findOneAndUpdate: async (filter, update) => {
+      updates.push({ filter, update });
+      return {};
+    },
+  };
+  const service = createAutoCleanupSchedulerService({
+    GuildConfig,
+    getAnnouncementsConfig: () => ({
+      artistWakeup: { enabled: true },
+    }),
+    cleanupAndRefreshRaidChannel: async (target, options) => {
+      assert.equal(target, channel);
+      assert.deepEqual(options.protectedMessageIds, []);
+      return { deleted: 3, skippedOld: 0 };
+    },
+    getGuildLanguage: async () => "vi",
+    postChannelAnnouncement: async (...args) => {
+      posts.push(args);
+      return { id: "message-wakeup" };
+    },
+    nowDate: () => now,
+  });
+  const client = {
+    user: { id: "bot" },
+    guilds: { cache: new Map([["guild-wakeup", makeGuild(channel)]]) },
+  };
+
+  await service.runAutoCleanupTick(client);
+
+  assert.deepEqual(updates, [
+    {
+      filter: { guildId: "guild-wakeup" },
+      update: {
+        $set: {
+          lastArtistWakeupKey: dayKey,
+          lastAutoCleanupKey: "2026-04-24T08:00",
+        },
+      },
+    },
+  ]);
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0][0], channel);
+  assert.equal(posts[0][2], 10 * 60 * 1000);
+  assert.equal(posts[0][3], "raid-channel artist-wakeup");
+});

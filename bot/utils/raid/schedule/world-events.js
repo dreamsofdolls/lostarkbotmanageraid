@@ -17,6 +17,13 @@ function toDate(value) {
   return Number.isFinite(date.getTime()) ? date : null;
 }
 
+function normalizeReminderWindow(now, leadMs) {
+  const date = toDate(now);
+  const lead = Number(leadMs);
+  if (!date || !Number.isFinite(lead) || lead <= 0) return null;
+  return { date, lead, nowMs: date.getTime() };
+}
+
 /**
  * Return the next real spawn strictly after `after`. During an active
  * schedule window, the next slot boundary is a spawn unless it is also the
@@ -57,11 +64,10 @@ function resolveWorldEventReminderForNow(
   now = new Date(),
   leadMs = WORLD_EVENT_REMINDER_LEAD_MS
 ) {
-  const date = toDate(now);
-  const lead = Number(leadMs);
-  if (!date || !Number.isFinite(lead) || lead <= 0) return null;
+  const window = normalizeReminderWindow(now, leadMs);
+  if (!window) return null;
+  const { lead, nowMs } = window;
 
-  const nowMs = date.getTime();
   const lookAhead = new Date(nowMs + lead);
   const matches = [];
 
@@ -102,11 +108,10 @@ function nextWorldEventReminderBoundaryMs(
   now = new Date(),
   leadMs = WORLD_EVENT_REMINDER_LEAD_MS
 ) {
-  const date = toDate(now);
-  const lead = Number(leadMs);
-  if (!date || !Number.isFinite(lead) || lead <= 0) return null;
+  const window = normalizeReminderWindow(now, leadMs);
+  if (!window) return null;
+  const { date, lead, nowMs } = window;
 
-  const nowMs = date.getTime();
   const candidates = [];
   for (const presetKey of WORLD_EVENT_PRESET_KEYS) {
     let cursor = date;

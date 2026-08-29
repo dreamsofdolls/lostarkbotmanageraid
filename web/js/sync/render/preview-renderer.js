@@ -4,6 +4,33 @@ import { formatGold, formatRelativeTime } from "/sync/js/core/format.js";
 import { renderCharPendingLabel, renderCharPendingRow } from "/sync/js/sync/render/char-row.js";
 import { resolvePreviewLastSync } from "/sync/js/sync/preview-stats.js";
 
+function groupPreviewCharactersByRoster(characters) {
+  const byRoster = new Map();
+  for (const character of characters) {
+    const key = character.accountName || "";
+    if (!byRoster.has(key)) byRoster.set(key, []);
+    byRoster.get(key).push(character);
+  }
+  return byRoster;
+}
+
+function renderRosterCharacterLists(characters, renderTail) {
+  let html = "";
+  for (const [accountName, charsInRoster] of groupPreviewCharactersByRoster(characters)) {
+    if (accountName) {
+      html += `<div class="char-pending-roster-header">📁 <strong>${escapeHtml(accountName)}</strong></div>`;
+    }
+    html += `<ul class="char-pending-list">`;
+    for (const character of charsInRoster) {
+      const classIcon = renderClassIcon(character.className);
+      const charLabel = renderCharPendingLabel(classIcon, character);
+      html += renderCharPendingRow(charLabel, renderTail(character));
+    }
+    html += `</ul>`;
+  }
+  return html;
+}
+
 export function renderPreviewStats(panel, summary) {
   if (!panel) return;
   if (!summary) {
@@ -65,63 +92,32 @@ export function renderPreviewStats(panel, summary) {
   // Class icon prefix uses the same /sync/class-icons/<slug>.png
   // convention as the existing per-roster preview cards.
   if (charsAfterSync.length > 0) {
-    const byRoster = new Map();
-    for (const c of charsAfterSync) {
-      const key = c.accountName || "";
-      if (!byRoster.has(key)) byRoster.set(key, []);
-      byRoster.get(key).push(c);
-    }
     html += `<details><summary>${escapeHtml(t("preview.statsPendingSummary", { n: charsAfterSync.length }))}</summary>`;
-    for (const [accountName, charsInRoster] of byRoster) {
-      if (accountName) {
-        html += `<div class="char-pending-roster-header">📁 <strong>${escapeHtml(accountName)}</strong></div>`;
-      }
-      html += `<ul class="char-pending-list">`;
-      for (const c of charsInRoster) {
-        const classIcon = renderClassIcon(c.className);
-        const charLabel = renderCharPendingLabel(classIcon, c);
-        const pillsHtml = (c.raids || []).map((r) => {
-          const icon = r.status === "done" ? "🟢" : r.status === "partial" ? "🟡" : "⚪";
-          const raidLabel = getRaidLabel(r.raidKey);
-          const modeLabel = getRaidSpecificModeLabel(r.raidKey, r.modeKey);
-          // `incoming` = ≥1 gate in this raid+mode is in the delta. ✨
-          // marker + brighter border on those pills so the user can
-          // tell which raids are about to flip from this sync vs
-          // pills that stay steady.
-          const incomingMark = r.incoming ? `<span class="raid-pill-incoming">✨</span> ` : "";
-          const incomingClass = r.incoming ? " raid-pill--incoming" : "";
-          return `<span class="raid-pill raid-pill--${r.status}${incomingClass}">${incomingMark}${icon} ${escapeHtml(raidLabel)} <span class="raid-pill-mode">${escapeHtml(modeLabel)}</span></span>`;
-        }).join("");
-        html += renderCharPendingRow(charLabel, pillsHtml);
-      }
-      html += `</ul>`;
-    }
+    html += renderRosterCharacterLists(charsAfterSync, (character) =>
+      (character.raids || []).map((raid) => {
+        const icon = raid.status === "done" ? "🟢" : raid.status === "partial" ? "🟡" : "⚪";
+        const raidLabel = getRaidLabel(raid.raidKey);
+        const modeLabel = getRaidSpecificModeLabel(raid.raidKey, raid.modeKey);
+        // `incoming` = ≥1 gate in this raid+mode is in the delta. ✨
+        // marker + brighter border on those pills so the user can
+        // tell which raids are about to flip from this sync vs
+        // pills that stay steady.
+        const incomingMark = raid.incoming ? `<span class="raid-pill-incoming">✨</span> ` : "";
+        const incomingClass = raid.incoming ? " raid-pill--incoming" : "";
+        return `<span class="raid-pill raid-pill--${raid.status}${incomingClass}">${incomingMark}${icon} ${escapeHtml(raidLabel)} <span class="raid-pill-mode">${escapeHtml(modeLabel)}</span></span>`;
+      }).join("")
+    );
     html += `</details>`;
   }
   // Per-char gold breakdown - same per-roster sectioning + class icon
   // treatment as the raid status list. Gold value lives on the right as a
   // standalone pill so the eye scans "char · roster" → "gold" cleanly.
   if (goldByChar.length > 0) {
-    const goldByRoster = new Map();
-    for (const c of goldByChar) {
-      const key = c.accountName || "";
-      if (!goldByRoster.has(key)) goldByRoster.set(key, []);
-      goldByRoster.get(key).push(c);
-    }
     html += `<details><summary>${escapeHtml(t("preview.statsGoldByCharSummary"))}</summary>`;
-    for (const [accountName, charsInRoster] of goldByRoster) {
-      if (accountName) {
-        html += `<div class="char-pending-roster-header">📁 <strong>${escapeHtml(accountName)}</strong></div>`;
-      }
-      html += `<ul class="char-pending-list">`;
-      for (const c of charsInRoster) {
-        const classIcon = renderClassIcon(c.className);
-        const charLabel = renderCharPendingLabel(classIcon, c);
-        const goldPill = `<span class="gold-pill">💰 ${escapeHtml(formatGold(c.gold))}</span>`;
-        html += renderCharPendingRow(charLabel, goldPill);
-      }
-      html += `</ul>`;
-    }
+    html += renderRosterCharacterLists(
+      goldByChar,
+      (character) => `<span class="gold-pill">💰 ${escapeHtml(formatGold(character.gold))}</span>`
+    );
     html += `</details>`;
   }
   panel.innerHTML = html;

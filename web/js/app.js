@@ -255,6 +255,17 @@ async function fetchPreviewSummary(deltas, { signal } = {}) {
   }
 }
 
+function clearArtistPreviewGlobals() {
+  window.__artistRows = [];
+  window.__artistSchemaDebug = null;
+  window.__artistRosterAccounts = [];
+  window.__artistDiff = [];
+  window.__artistCollectDiffStateCounts = null;
+  window.__artistUnmappedBosses = [];
+  window.__artistRosterError = "";
+  window.__artistMeta = null;
+}
+
 function clearSyncSurface() {
   previewSummaryController?.abort();
   previewSummaryController = null;
@@ -267,14 +278,7 @@ function clearSyncSurface() {
   syncOutput.innerHTML = "";
   lastDeltas = null;
   lastRenderedRevision = null;
-  window.__artistRows = [];
-  window.__artistSchemaDebug = null;
-  window.__artistRosterAccounts = [];
-  window.__artistDiff = [];
-  window.__artistCollectDiffStateCounts = null;
-  window.__artistUnmappedBosses = [];
-  window.__artistRosterError = "";
-  window.__artistMeta = null;
+  clearArtistPreviewGlobals();
 }
 
 function resetSyncSurface({ keepFile = true } = {}) {
@@ -684,7 +688,7 @@ async function runPreviewQuery(sqlite3, db, context, expectedSelection) {
   });
   const rows = [];
   try {
-    await sqlite3.exec(db, sql.replace("?", String(currentWeekStartMs)), (row, _columns) => {
+    await sqlite3.exec(db, sql.replace("?", String(currentWeekStartMs)), (row) => {
       rows.push(row);
     });
   } catch (err) {
@@ -808,14 +812,7 @@ async function buildPreviewStateFromRows(
 
 function clearCommittedPreviewState() {
   lastDeltas = [];
-  window.__artistRows = [];
-  window.__artistSchemaDebug = null;
-  window.__artistRosterAccounts = [];
-  window.__artistDiff = [];
-  window.__artistCollectDiffStateCounts = null;
-  window.__artistUnmappedBosses = [];
-  window.__artistRosterError = "";
-  window.__artistMeta = null;
+  clearArtistPreviewGlobals();
   renderPreviewStats(previewStats, null);
   syncSection.hidden = true;
   syncBtn.disabled = true;

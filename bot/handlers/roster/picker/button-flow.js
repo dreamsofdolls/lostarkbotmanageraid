@@ -126,6 +126,40 @@ async function handleRosterPickerCancel({
   });
 }
 
+async function handleRosterPickerNavigationAction({
+  interaction,
+  context,
+  sessions,
+  buildSelectionEmbed,
+  buildSelectionComponents,
+  buildCancelledEmbed,
+}) {
+  const { action, route, sessionId, session } = context;
+  if (action === "toggle") {
+    await handleRosterPickerToggle({
+      interaction,
+      session,
+      charIndex: route?.index,
+      buildSelectionEmbed,
+      buildSelectionComponents,
+    });
+    return true;
+  }
+
+  if (action === "cancel") {
+    await handleRosterPickerCancel({
+      interaction,
+      sessions,
+      sessionId,
+      session,
+      buildCancelledEmbed,
+    });
+    return true;
+  }
+
+  return false;
+}
+
 /**
  * Confirm-button guard shared by the /raid-add-roster + /raid-edit-roster
  * pickers. Runs the two pre-persist gates (empty selection, per-account cap)
@@ -206,9 +240,7 @@ function selectedRosterPickerChars(session) {
 
 module.exports = {
   loadRosterPickerButtonContext,
-  handleRosterPickerToggle,
-  handleRosterPickerCancel,
+  handleRosterPickerNavigationAction,
   guardPickerConfirm,
   selectedRosterPickerChars,
-  toggleRosterPickerIndex,
 };
