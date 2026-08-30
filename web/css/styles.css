@@ -223,7 +223,6 @@ header h1 {
    body face, not mono · mono labels read as machine output, which is
    the voice this design moves away from. */
 .preview-stats .stat-label,
-.sync-cell .l,
 .char-raid-name,
 .char-pending-roster-header {
   font-family: var(--font-body);
@@ -250,53 +249,8 @@ header h1 {
 .raid-pill--pending { background: #2a2e34; border-color: #3a3e44; color: var(--text-dim); }
 .raid-pill-mode { color: inherit; opacity: 0.75; font-size: 10px; }
 .gold-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; font-size: 11px; background: #2e2918; border: 1px solid #6b5a2c; color: #f0c870; font-weight: 600; }
-.raid-pill--rejected { background: #2e1d1d; border-color: #6b3535; color: #e89090; }
 .raid-pill--incoming { box-shadow: 0 0 0 1px var(--accent), 0 0 8px rgba(244, 174, 83, 0.3); }
 .raid-pill-incoming { font-size: 10px; }
-/* ── Sync result · the receipt. Scoped under .sync-result so the
-   post-sync confirmation reads as a printed slip, while the lighter
-   preview above reuses the bare .char-pending-row / .raid-pill classes. ── */
-.sync-result { font-family: var(--font-body); color: var(--text); }
-/* Promote the host #sync-output box to a plate while it holds a result.
-   :has is widely supported now; browsers without it just keep the plain
-   .meta box (graceful degrade). */
-#sync-output:has(.sync-result) { position: relative; background: linear-gradient(180deg, var(--card-top), var(--card)); border-color: var(--border); border-radius: 3px; padding: 18px 20px; }
-
-.sync-result-head { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; }
-/* A printer's fleuron instead of a pulsing status LED · same job (mark
-   the head of the block), the voice this design speaks. */
-.sync-led { flex: 0 0 auto; color: var(--accent); font-size: 15px; line-height: 1; }
-.sync-led::before { content: "❦"; }
-.sync-result-kicker { font-family: var(--font-body); font-size: 10px; font-weight: 600; letter-spacing: 3px; color: var(--text-dim); text-transform: uppercase; }
-
-/* Four status-colored count cells: at-a-glance read before the per-char
-   detail. Ruled top and side, no fill · a figure table, not four chips. */
-.sync-stat-cells { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-bottom: 20px; }
-.sync-cell { background: none; border: 0; border-top: 1px solid var(--border); border-right: 1px solid var(--border-soft); border-radius: 0; padding: 12px 14px 10px; }
-.sync-cell:last-child { border-right: 0; }
-.sync-cell--ok { border-top-color: var(--success); }
-.sync-cell--dim { border-top-color: var(--border); }
-.sync-cell--amb { border-top-color: var(--accent); }
-.sync-cell--err { border-top-color: var(--error); }
-.sync-cell .n { display: block; font-family: var(--font-display); font-size: 34px; font-weight: 500; line-height: 1; color: var(--text); }
-.sync-cell--ok .n { color: var(--success); }
-.sync-cell--amb .n { color: var(--accent-bright); }
-.sync-cell--err .n { color: var(--error); }
-.sync-cell .l { display: block; margin-top: 4px; }
-
-/* Section heads are ruled, not railed · the accent rail was HUD grammar. */
-.sync-result .sync-result-section { margin-top: 22px; }
-.sync-result .sync-result-section-title { margin: 0 0 9px; padding-bottom: 6px; font-family: var(--font-body); font-size: 10px; font-weight: 600; letter-spacing: 2.6px; color: var(--text-dim); text-transform: uppercase; border-bottom: 1px solid var(--border-soft); }
-.sync-result .sync-result-section--rejected .sync-result-section-title { color: #e89090; border-bottom-color: #6b3535; }
-.sync-result .char-pending-roster-header { margin: 11px 0 6px; }
-.sync-result .char-pending-row { transition: border-color 0.15s ease; }
-.sync-result .char-pending-row:hover { border-bottom-color: var(--accent-dim); }
-
-.sync-result .sync-result-unmapped { margin-top: 16px; font-size: 12px; background: var(--bg-deep); border: 1px dashed #5a4d2c; border-radius: 3px; padding: 8px 12px; }
-
-@media (prefers-reduced-motion: reduce) {
-  .sync-result .char-pending-row { transition: none; }
-}
 
 code {
   font-family: var(--font-mono);
