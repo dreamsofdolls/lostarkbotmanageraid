@@ -173,6 +173,36 @@ test("collectStaleAccountRefreshes keeps iterating seeds on non-429 errors", asy
   assert.equal(fetchCalls, 2);
 });
 
+test("collectStaleAccountRefreshes normalizes duplicate seed names before Bible requests", async () => {
+  const fetchedSeeds = [];
+  const service = makeService(async (seed) => {
+    fetchedSeeds.push(seed);
+    if (normalizeName(seed) === "beta") {
+      return [
+        {
+          charName: "Alpha",
+          className: "Bard",
+          itemLevel: 1725,
+          combatScore: "92500",
+        },
+      ];
+    }
+    return [];
+  });
+  const user = makeStaleUser();
+  user.accounts[0].accountName = " Alpha ";
+  user.accounts[0].characters.push(
+    { name: "alpha", class: "Bard", itemLevel: 1700 },
+    { name: "ALPHA", class: "Bard", itemLevel: 1700 },
+    { name: "Beta", class: "Bard", itemLevel: 1700 }
+  );
+
+  const result = await service.collectStaleAccountRefreshes(user);
+
+  assert.deepEqual(fetchedSeeds, ["Alpha", "Beta"]);
+  assert.equal(result[0].fetchedChars?.[0]?.itemLevel, 1725);
+});
+
 test("applyStaleAccountRefreshes preserves assigned raid mode preference", () => {
   const service = makeService(async () => []);
   const user = makeStaleUser();

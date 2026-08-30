@@ -144,23 +144,41 @@ function createRosterRefreshService(deps) {
     return userDoc.accounts.find((account) => normalizeName(account?.accountName) === target) || null;
   }
 
+  function buildRefreshSearchState(account) {
+    const seeds = [];
+    const seenSeedNames = new Set();
+    const savedNames = new Set();
+    const savedFoldedNames = new Set();
+
+    function addSeed(name) {
+      const queryName = String(name || "").trim().normalize("NFC");
+      const normalizedName = normalizeName(queryName);
+      if (normalizedName && !seenSeedNames.has(normalizedName)) {
+        seenSeedNames.add(normalizedName);
+        seeds.push(queryName);
+      }
+      return normalizedName;
+    }
+
+    addSeed(account?.accountName);
+    for (const character of account?.characters || []) {
+      const name = getCharacterName(character);
+      const normalizedName = addSeed(name);
+      if (normalizedName) savedNames.add(normalizedName);
+      const foldedName = foldName(name);
+      if (foldedName) savedFoldedNames.add(foldedName);
+    }
+
+    return { seeds, savedNames, savedFoldedNames };
+  }
+
   async function collectOneStaleAccountRefresh(account, accountNameCounts) {
     const originalName = account.accountName;
-    const seeds = [];
-    const seenSeeds = new Set();
-    // Preserve account-first retry order while preventing duplicate requests
-    // when an account name is also present in its character list.
-    if (originalName) {
-      seeds.push(originalName);
-      seenSeeds.add(originalName);
-    }
-    for (const c of account.characters || []) {
-      const name = getCharacterName(c);
-      if (name && !seenSeeds.has(name)) {
-        seeds.push(name);
-        seenSeeds.add(name);
-      }
-    }
+    // Preserve account-first retry order while sharing the same normalized
+    // identity used by account lookup. This prevents case/whitespace variants
+    // of one character from consuming separate Bible requests. Saved-name
+    // overlap indexes are built in the same character pass.
+    const { seeds, savedNames, savedFoldedNames } = buildRefreshSearchState(account);
     if (seeds.length === 0) {
       return {
         accountName: originalName,
@@ -169,15 +187,6 @@ function createRosterRefreshService(deps) {
         attempted: false,
       };
     }
-
-    // These indexes are reused for every fetched seed, so overlap checks stay a
-    // single pass even when exact normalization fails and folded names are used.
-    const savedNames = new Set((account.characters || [])
-      .map((c) => normalizeName(getCharacterName(c)))
-      .filter(Boolean));
-    const savedFoldedNames = new Set((account.characters || [])
-      .map((c) => foldName(getCharacterName(c)))
-      .filter(Boolean));
 
     let attempted = false;
     let zeroOverlapCount = 0;
