@@ -40,22 +40,29 @@ function createRaidChannelCoreActions({
   }
 
   function buildDeployNotes(lang) {
-    const notes = [];
-    if (!isTextMonitorEnabled()) {
-      notes.push(t("raid-channel.show.monitorDisabledNote", lang, { icon: UI.icons.warn }));
-    }
-
     const { healthy, error } = getMonitorCacheHealth();
-    if (!healthy) {
-      const errorSuffix = error
+    const errorSuffix = error
         ? t("raid-channel.show.cacheUnhealthyErrorSuffix", lang, { error })
         : "";
-      notes.push(t("raid-channel.show.cacheUnhealthyNote", lang, {
-        icon: UI.icons.warn,
-        errorSuffix,
-      }));
-    }
-    return notes;
+    return [
+      !isTextMonitorEnabled()
+        ? t("raid-channel.show.monitorDisabledNote", lang, { icon: UI.icons.warn })
+        : "",
+      !healthy
+        ? t("raid-channel.show.cacheUnhealthyNote", lang, {
+            icon: UI.icons.warn,
+            errorSuffix,
+          })
+        : "",
+    ].filter(Boolean);
+  }
+
+  function appendShowNotes(lines, broadcastLangLine, deployNotes) {
+    return [
+      ...lines,
+      ...(broadcastLangLine ? ["", broadcastLangLine] : []),
+      ...(deployNotes.length > 0 ? ["", ...deployNotes] : []),
+    ];
   }
 
   async function loadSetGreetingEnabled(guildId) {
@@ -191,9 +198,11 @@ function createRaidChannelCoreActions({
     const broadcastLangLine = await loadBroadcastLanguageLine(guildId, lang);
 
     if (!channelId) {
-      const lines = [t("raid-channel.show.noConfigLine", lang)];
-      if (broadcastLangLine) lines.push("", broadcastLangLine);
-      if (deployNotes.length > 0) lines.push("", ...deployNotes);
+      const lines = appendShowNotes(
+        [t("raid-channel.show.noConfigLine", lang)],
+        broadcastLangLine,
+        deployNotes
+      );
       embed.setDescription(lines.join("\n"));
       await replyChannelEmbed(embed);
       return;
@@ -213,9 +222,7 @@ function createRaidChannelCoreActions({
     } else {
       lines.push(t("raid-channel.show.channelOkLine", lang, { icon: UI.icons.done }));
     }
-    if (broadcastLangLine) lines.push("", broadcastLangLine);
-    if (deployNotes.length > 0) lines.push("", ...deployNotes);
-    embed.setDescription(lines.join("\n"));
+    embed.setDescription(appendShowNotes(lines, broadcastLangLine, deployNotes).join("\n"));
     await replyChannelEmbed(embed);
   }
 

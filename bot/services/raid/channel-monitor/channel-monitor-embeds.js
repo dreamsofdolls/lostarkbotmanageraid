@@ -12,6 +12,40 @@ function joinIfArray(value) {
   return Array.isArray(value) ? value.join("\n") : value;
 }
 
+function partitionRaidChannelResults(results, isReset) {
+  const buckets = { done: [], already: [], notFound: [], ineligible: [], errored: [] };
+  for (const result of results) {
+    const display = result.displayName || result.charName;
+    if (result.error) buckets.errored.push(result.charName);
+    else if (result.updated) buckets.done.push(display);
+    else if (isReset ? result.alreadyReset : result.alreadyComplete) buckets.already.push(display);
+    else if (!result.matched) buckets.notFound.push(result.charName);
+    else buckets.ineligible.push(`${display} (iLvl ${result.ineligibleItemLevel})`);
+  }
+  return buckets;
+}
+
+function resolveMultiResultStyle(buckets, isReset, UI) {
+  const hasProgress = buckets.done.length > 0 || buckets.already.length > 0;
+  const anyError = buckets.notFound.length > 0
+    || buckets.ineligible.length > 0
+    || buckets.errored.length > 0;
+  return {
+    color: hasProgress && !anyError
+      ? (isReset ? UI.colors.muted : UI.colors.success)
+      : UI.colors.progress,
+    titleIcon: hasProgress
+      ? (isReset ? UI.icons.reset : UI.icons.done)
+      : UI.icons.info,
+  };
+}
+
+function addNonEmptyResultFields(embed, fields) {
+  embed.addFields(fields
+    .filter((field) => field.count > 0)
+    .map((field) => field.build()));
+}
+
 function createRaidChannelEmbedBuilders({ EmbedBuilder, UI }) {
   function buildRaidChannelMultiResultEmbed({
     results,
@@ -30,77 +64,63 @@ function createRaidChannelEmbedBuilders({ EmbedBuilder, UI }) {
       statusType === "process" && Array.isArray(gates) && gates.length > 0
         ? `${raidMeta.label} · ${gatesText}`
         : raidMeta.label;
-    const done = [];
-    const already = [];
-    const notFound = [];
-    const ineligible = [];
-    const errored = [];
-    for (const result of results) {
-      const display = result.displayName || result.charName;
-      if (result.error) errored.push(result.charName);
-      else if (result.updated) done.push(display);
-      else if (isReset ? result.alreadyReset : result.alreadyComplete) already.push(display);
-      else if (!result.matched) notFound.push(result.charName);
-      else ineligible.push(`${display} (iLvl ${result.ineligibleItemLevel})`);
-    }
-
-    const hasProgress = done.length > 0 || already.length > 0;
-    const anyError = notFound.length > 0 || ineligible.length > 0 || errored.length > 0;
-    const color = hasProgress && !anyError
-      ? (isReset ? UI.colors.muted : UI.colors.success)
-      : UI.colors.progress;
-    const titleIcon = hasProgress
-      ? (isReset ? UI.icons.reset : UI.icons.done)
-      : UI.icons.info;
+    const buckets = partitionRaidChannelResults(results, isReset);
+    const style = resolveMultiResultStyle(buckets, isReset, UI);
     const embed = new EmbedBuilder()
-      .setColor(color)
-      .setTitle(`${titleIcon} ${t(isReset ? "text-parser.raidResetTitle" : "text-parser.raidUpdateTitle", lang, { scope: scopeLabel })}`)
+      .setColor(style.color)
+      .setTitle(`${style.titleIcon} ${t(isReset ? "text-parser.raidResetTitle" : "text-parser.raidUpdateTitle", lang, { scope: scopeLabel })}`)
       .setDescription(tPick(isReset ? "text-parser.raidResetDescription" : "text-parser.raidUpdateDescription", lang, { count: results.length }))
       .setTimestamp();
-
-    if (done.length > 0) {
-      embed.addFields({
-        name: t(isReset ? "text-parser.raidResetUpdatedField" : "text-parser.raidUpdateUpdatedField", lang, {
-          icon: isReset ? UI.icons.reset : UI.icons.done,
-          count: done.length,
+    addNonEmptyResultFields(embed, [
+      {
+        count: buckets.done.length,
+        build: () => ({
+          name: t(isReset ? "text-parser.raidResetUpdatedField" : "text-parser.raidUpdateUpdatedField", lang, {
+            icon: isReset ? UI.icons.reset : UI.icons.done,
+            count: buckets.done.length,
+          }),
+          value: buckets.done.map((name) => `**${name}**`).join(", "),
         }),
-        value: done.map((name) => `**${name}**`).join(", "),
-      });
-    }
-    if (already.length > 0) {
-      embed.addFields({
-        name: t(isReset ? "text-parser.raidResetAlreadyField" : "text-parser.raidUpdateAlreadyField", lang, {
-          icon: UI.icons.info,
-          count: already.length,
+      },
+      {
+        count: buckets.already.length,
+        build: () => ({
+          name: t(isReset ? "text-parser.raidResetAlreadyField" : "text-parser.raidUpdateAlreadyField", lang, {
+            icon: UI.icons.info,
+            count: buckets.already.length,
+          }),
+          value: buckets.already.map((name) => `**${name}**`).join(", "),
         }),
-        value: already.map((name) => `**${name}**`).join(", "),
-      });
-    }
-    if (notFound.length > 0) {
-      embed.addFields({
-        name: t("text-parser.raidUpdateNotFoundField", lang, {
-          icon: UI.icons.warn,
-          count: notFound.length,
+      },
+      {
+        count: buckets.notFound.length,
+        build: () => ({
+          name: t("text-parser.raidUpdateNotFoundField", lang, {
+            icon: UI.icons.warn,
+            count: buckets.notFound.length,
+          }),
+          value: buckets.notFound.map((name) => `\`${name}\``).join(", "),
         }),
-        value: notFound.map((name) => `\`${name}\``).join(", "),
-      });
-    }
-    if (ineligible.length > 0) {
-      embed.addFields({
-        name: t("text-parser.raidUpdateIneligibleField", lang, {
-          icon: UI.icons.warn,
-          raidLabel: raidMeta.label,
-          minItemLevel: raidMeta.minItemLevel,
+      },
+      {
+        count: buckets.ineligible.length,
+        build: () => ({
+          name: t("text-parser.raidUpdateIneligibleField", lang, {
+            icon: UI.icons.warn,
+            raidLabel: raidMeta.label,
+            minItemLevel: raidMeta.minItemLevel,
+          }),
+          value: buckets.ineligible.join("\n"),
         }),
-        value: ineligible.join("\n"),
-      });
-    }
-    if (errored.length > 0) {
-      embed.addFields({
-        name: t("text-parser.raidUpdateErrorField", lang, { icon: UI.icons.warn }),
-        value: errored.map((name) => `\`${name}\``).join(", "),
-      });
-    }
+      },
+      {
+        count: buckets.errored.length,
+        build: () => ({
+          name: t("text-parser.raidUpdateErrorField", lang, { icon: UI.icons.warn }),
+          value: buckets.errored.map((name) => `\`${name}\``).join(", "),
+        }),
+      },
+    ]);
     if (guildName) {
       embed.setFooter({ text: t("text-parser.raidUpdateFooterServer", lang, { guildName }) });
     }

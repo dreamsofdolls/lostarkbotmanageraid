@@ -59,34 +59,18 @@ const CLASS_ALIAS_GROUPS = [
   ["hawkeye", "hawk_eye"], // both = Sharpshooter
 ];
 
+const MIME_SIGNATURES = [
+  { mime: "image/png", segments: [[0, [0x89, 0x50, 0x4e, 0x47]]] },
+  { mime: "image/webp", segments: [[0, [0x52, 0x49, 0x46, 0x46]], [8, [0x57, 0x45, 0x42, 0x50]]] },
+  { mime: "image/gif", segments: [[0, [0x47, 0x49, 0x46]]] },
+  { mime: "image/jpeg", segments: [[0, [0xff, 0xd8, 0xff]]] },
+];
+
 function detectMime(buffer) {
-  if (
-    buffer[0] === 0x89 &&
-    buffer[1] === 0x50 &&
-    buffer[2] === 0x4e &&
-    buffer[3] === 0x47
-  ) {
-    return "image/png";
-  }
-  if (
-    buffer[0] === 0x52 &&
-    buffer[1] === 0x49 &&
-    buffer[2] === 0x46 &&
-    buffer[3] === 0x46 &&
-    buffer[8] === 0x57 &&
-    buffer[9] === 0x45 &&
-    buffer[10] === 0x42 &&
-    buffer[11] === 0x50
-  ) {
-    return "image/webp";
-  }
-  if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46) {
-    return "image/gif";
-  }
-  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
-    return "image/jpeg";
-  }
-  return "application/octet-stream";
+  const signature = MIME_SIGNATURES.find(({ segments }) => segments.every(
+    ([offset, bytes]) => bytes.every((byte, index) => buffer[offset + index] === byte)
+  ));
+  return signature?.mime || "application/octet-stream";
 }
 
 function shortHash(buffer) {
@@ -132,6 +116,239 @@ async function listAppEmoji({ rest, appId, namespace }) {
   }
 }
 
+const EMPTY_BOOTSTRAP_RESULT = Object.freeze({
+  uploaded: 0,
+  reused: 0,
+  refreshed: 0,
+  aliasResolved: 0,
+  aliasCleanedUp: 0,
+  orphans: 0,
+  skipped: 0,
+  failed: 0,
+  total: 0,
+});
+
+function emptyBootstrapResult() {
+  return { ...EMPTY_BOOTSTRAP_RESULT };
+}
+
+function selectPreferredImageFiles(iconsDir, namespace) {
+  const allFiles = fs
+    .readdirSync(iconsDir)
+    .filter((filename) => /\.(png|webp|gif|jpg|jpeg)$/i.test(filename));
+  const extPriority = { png: 0, gif: 1, jpg: 2, jpeg: 2, webp: 3 };
+  const preferredByBase = new Map();
+  for (const filename of allFiles) {
+    const parsed = path.parse(filename);
+    const priority = extPriority[parsed.ext.replace(/^\./, "").toLowerCase()] ?? 99;
+    const current = preferredByBase.get(parsed.name);
+    if (!current || priority < current.priority) {
+      preferredByBase.set(parsed.name, { filename, priority });
+    }
+  }
+
+  if (preferredByBase.size !== allFiles.length) {
+    const winners = new Set([...preferredByBase.values()].map((entry) => entry.filename));
+    const dropped = allFiles.filter((filename) => !winners.has(filename));
+    console.warn(
+      `[${namespace}] duplicate basenames in ${iconsDir} - ignoring ${dropped.length} non-preferred file(s): ${dropped.join(", ")}. Remove them from the asset folder to silence this warning.`
+    );
+  }
+  return [...preferredByBase.values()].map((entry) => entry.filename);
+}
+
+function createAliasIndex(aliasGroups) {
+  const canonicalByAlias = new Map();
+  const aliases = new Set();
+  for (const [canonical, ...groupAliases] of aliasGroups) {
+    for (const alias of groupAliases) {
+      canonicalByAlias.set(alias, canonical);
+      aliases.add(alias);
+    }
+  }
+  return { canonicalByAlias, aliases };
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function cleanupAliasEmoji({ client, appId, namespace, existingByName, aliases, delayMs }) {
+  let cleaned = 0;
+  for (const [name, emoji] of [...existingByName.entries()]) {
+    const candidateBase = name.replace(/_[0-9a-f]{1,12}$/i, "");
+    if (!aliases.has(candidateBase)) continue;
+    try {
+      await client.rest.delete(`/applications/${appId}/emojis/${emoji.id}`);
+      existingByName.delete(name);
+      cleaned += 1;
+      console.log(`[${namespace}] deleted duplicate alias :${name}: (canonical handles it)`);
+      await delay(delayMs);
+    } catch (err) {
+      console.warn(
+        `[${namespace}] failed to delete duplicate alias :${name}: (${emoji.id}):`,
+        err?.message || err
+      );
+    }
+  }
+  return cleaned;
+}
+
+function sortCanonicalFilesFirst(files, canonicalByAlias) {
+  return [...files].sort((left, right) => {
+    const leftIsAlias = canonicalByAlias.has(path.parse(left).name);
+    const rightIsAlias = canonicalByAlias.has(path.parse(right).name);
+    if (leftIsAlias === rightIsAlias) return left.localeCompare(right);
+    return leftIsAlias ? 1 : -1;
+  });
+}
+
+function createEmojiSyncState(aliasCleanedUp) {
+  return {
+    matchedEmojiIds: new Set(),
+    idByFileBase: {},
+    fullNameByFileBase: {},
+    uploaded: 0,
+    reused: 0,
+    refreshed: 0,
+    aliasResolved: 0,
+    aliasCleanedUp,
+    skipped: 0,
+    failed: 0,
+  };
+}
+
+function mapAliasEmoji(fileBase, displayKey, canonical, emojiMap, state) {
+  const canonicalId = state.idByFileBase[canonical];
+  const canonicalName = state.fullNameByFileBase[canonical];
+  if (!canonicalId || !canonicalName) {
+    state.skipped += 1;
+    return;
+  }
+  emojiMap[displayKey] = `<:${canonicalName}:${canonicalId}>`;
+  state.idByFileBase[fileBase] = canonicalId;
+  state.fullNameByFileBase[fileBase] = canonicalName;
+  state.aliasResolved += 1;
+}
+
+function mapExistingEmoji(fileBase, displayKey, existing, emojiMap, state) {
+  emojiMap[displayKey] = `<:${existing.name}:${existing.id}>`;
+  state.idByFileBase[fileBase] = existing.id;
+  state.fullNameByFileBase[fileBase] = existing.name;
+  state.matchedEmojiIds.add(existing.id);
+  state.reused += 1;
+}
+
+async function deleteStaleEmoji({ client, appId, namespace, existing, state, delayMs }) {
+  try {
+    await client.rest.delete(`/applications/${appId}/emojis/${existing.id}`);
+    state.matchedEmojiIds.add(existing.id);
+    await delay(delayMs);
+    return true;
+  } catch (err) {
+    console.warn(
+      `[${namespace}] failed to delete stale :${existing.name}: (${existing.id}) before refresh:`,
+      err?.message || err
+    );
+    state.failed += 1;
+    return false;
+  }
+}
+
+async function uploadEmoji({ client, appId, namespace, filename, fileBase, displayKey, buffer, expectedName, existing, emojiMap, state, delayMs }) {
+  if (buffer.byteLength > 256 * 1024) {
+    console.warn(`[${namespace}] ${filename} is ${buffer.byteLength}B (over 256KB cap); skipping`);
+    state.failed += 1;
+    return;
+  }
+  try {
+    const dataUri = `data:${detectMime(buffer)};base64,${buffer.toString("base64")}`;
+    const created = await client.rest.post(`/applications/${appId}/emojis`, {
+      body: { name: expectedName, image: dataUri },
+    });
+    if (!created?.id) {
+      console.warn(`[${namespace}] ${filename} upload returned no id; skipping`);
+      state.failed += 1;
+      return;
+    }
+    emojiMap[displayKey] = `<:${created.name}:${created.id}>`;
+    state.idByFileBase[fileBase] = created.id;
+    state.fullNameByFileBase[fileBase] = created.name;
+    state.matchedEmojiIds.add(created.id);
+    if (existing) state.refreshed += 1;
+    else state.uploaded += 1;
+    await delay(delayMs);
+  } catch (err) {
+    state.failed += 1;
+    console.warn(`[${namespace}] failed to upload ${filename}:`, err?.message || err);
+  }
+}
+
+async function syncEmojiFile({ client, appId, namespace, iconsDir, filename, emojiMap, resolveDisplayKey, canonicalByAlias, existingByName, state, delayMs }) {
+  const fileBase = path.parse(filename).name;
+  const displayKey = resolveDisplayKey(fileBase);
+  if (!displayKey) {
+    state.skipped += 1;
+    return;
+  }
+
+  const canonical = canonicalByAlias.get(fileBase);
+  if (canonical) {
+    mapAliasEmoji(fileBase, displayKey, canonical, emojiMap, state);
+    return;
+  }
+
+  const buffer = fs.readFileSync(path.join(iconsDir, filename));
+  const expectedName = expectedEmojiName(fileBase, buffer);
+  const existing = findExistingForFileBase(existingByName, fileBase);
+  if (existing?.name === expectedName) {
+    mapExistingEmoji(fileBase, displayKey, existing, emojiMap, state);
+    return;
+  }
+  if (existing && !(await deleteStaleEmoji({ client, appId, namespace, existing, state, delayMs }))) {
+    return;
+  }
+  await uploadEmoji({
+    client,
+    appId,
+    namespace,
+    filename,
+    fileBase,
+    displayKey,
+    buffer,
+    expectedName,
+    existing,
+    emojiMap,
+    state,
+    delayMs,
+  });
+}
+
+function findOrphanEmojiNames(existingByName, matchedEmojiIds, resolveDisplayKey) {
+  const names = [];
+  for (const [name, emoji] of existingByName) {
+    if (matchedEmojiIds.has(emoji.id)) continue;
+    const candidateBase = name.replace(/_[0-9a-f]{1,12}$/i, "");
+    if (resolveDisplayKey(candidateBase)) names.push(name);
+  }
+  return names;
+}
+
+function summarizeEmojiSync(state, orphanCount) {
+  const total = state.uploaded + state.reused + state.refreshed + state.aliasResolved;
+  return {
+    uploaded: state.uploaded,
+    reused: state.reused,
+    refreshed: state.refreshed,
+    aliasResolved: state.aliasResolved,
+    aliasCleanedUp: state.aliasCleanedUp,
+    orphans: orphanCount,
+    skipped: state.skipped,
+    failed: state.failed,
+    total,
+  };
+}
+
 /**
  * @typedef {object} EmojiBootstrapConfig
  * @property {string} namespace - Log prefix tag (e.g., "class-emoji").
@@ -151,225 +368,80 @@ async function listAppEmoji({ rest, appId, namespace }) {
  * @returns {Promise<{uploaded: number, reused: number, refreshed: number, aliasResolved: number, aliasCleanedUp: number, orphans: number, skipped: number, failed: number, total: number}>}
  */
 async function bootstrapEmojiFolder(client, config) {
-  const { namespace, iconsDir, emojiMap, resolveDisplayKey, aliasGroups = [] } = config;
-  const ZERO = { uploaded: 0, reused: 0, refreshed: 0, aliasResolved: 0, aliasCleanedUp: 0, orphans: 0, skipped: 0, failed: 0, total: 0 };
+  const {
+    namespace,
+    iconsDir,
+    emojiMap,
+    resolveDisplayKey,
+    aliasGroups = [],
+    mutationDelayMs = 250,
+  } = config;
 
   if (!fs.existsSync(iconsDir)) {
     console.warn(`[${namespace}] icons dir not found at ${iconsDir}; skipping bootstrap`);
-    return ZERO;
+    return emptyBootstrapResult();
   }
-
-  const allFiles = fs
-    .readdirSync(iconsDir)
-    .filter((f) => /\.(png|webp|gif|jpg|jpeg)$/i.test(f));
-  if (allFiles.length === 0) {
+  const files = selectPreferredImageFiles(iconsDir, namespace);
+  if (files.length === 0) {
     console.warn(`[${namespace}] no image files in ${iconsDir}; skipping bootstrap`);
-    return ZERO;
+    return emptyBootstrapResult();
   }
-
-  // Dedup by basename. The bootstrap keys every emoji on
-  // `path.parse(filename).name` (extension stripped), so two files like
-  // `shy.png` + `shy.webp` collide on key "shy". Without this guard, each
-  // boot would alternate-delete-reupload the two variants and churn the
-  // emoji ID, which silently breaks any pinned message that hardcoded the
-  // previous ID. Prefer .png > .gif > .jpg/.jpeg > .webp on conflict and
-  // report it so the duplicate can be removed from the asset folder.
-  const extPriority = { png: 0, gif: 1, jpg: 2, jpeg: 2, webp: 3 };
-  const filesByBase = new Map();
-  for (const f of allFiles) {
-    const base = path.parse(f).name;
-    const ext = path.parse(f).ext.replace(/^\./, "").toLowerCase();
-    const prio = extPriority[ext] ?? 99;
-    const current = filesByBase.get(base);
-    if (!current || prio < current.prio) {
-      filesByBase.set(base, { filename: f, prio });
-    }
-  }
-  if (filesByBase.size !== allFiles.length) {
-    const winners = new Set([...filesByBase.values()].map((v) => v.filename));
-    const dropped = allFiles.filter((f) => !winners.has(f));
-    console.warn(
-      `[${namespace}] duplicate basenames in ${iconsDir} - ignoring ${dropped.length} non-preferred file(s): ${dropped.join(", ")}. Remove them from the asset folder to silence this warning.`
-    );
-  }
-  const files = [...filesByBase.values()].map((v) => v.filename);
 
   const appId = client.application?.id || client.user?.id;
   if (!appId) {
     console.warn(`[${namespace}] could not resolve application id; skipping bootstrap`);
-    return ZERO;
+    return emptyBootstrapResult();
   }
 
   const existingByName = await listAppEmoji({ rest: client.rest, appId, namespace });
-  if (!existingByName) return ZERO;
+  if (!existingByName) return emptyBootstrapResult();
 
-  // Pre-compute alias bookkeeping. Empty `aliasGroups` -> all of this is
-  // a no-op, avoiding alias work for folders such as artist-icons.
-  const aliasCanonicalByAlias = new Map(); // aliasFileBase -> canonicalFileBase
-  const aliasFileBases = new Set();
-  for (const group of aliasGroups) {
-    const [canonical, ...aliases] = group;
-    for (const alias of aliases) {
-      aliasCanonicalByAlias.set(alias, canonical);
-      aliasFileBases.add(alias);
-    }
-  }
-
-  // Alias cleanup pass: existing emoji whose name matches a known
-  // non-canonical alias is a structural duplicate of the canonical's art.
-  // Auto-delete is safe because aliases are KNOWN duplicates by design.
-  let aliasCleanedUp = 0;
-  for (const [name, emoji] of [...existingByName.entries()]) {
-    const candidateBase = name.replace(/_[0-9a-f]{1,12}$/i, "");
-    if (aliasFileBases.has(candidateBase)) {
-      try {
-        await client.rest.delete(`/applications/${appId}/emojis/${emoji.id}`);
-        existingByName.delete(name);
-        aliasCleanedUp += 1;
-        console.log(`[${namespace}] deleted duplicate alias :${name}: (canonical handles it)`);
-        await new Promise((r) => setTimeout(r, 250));
-      } catch (err) {
-        console.warn(
-          `[${namespace}] failed to delete duplicate alias :${name}: (${emoji.id}):`,
-          err?.message || err
-        );
-      }
-    }
-  }
-
-  // Sort canonical files ahead of aliases so canonical IDs exist by the
-  // time aliases try to resolve.
-  const sortedFiles = files.sort((a, b) => {
-    const aIsAlias = aliasCanonicalByAlias.has(path.parse(a).name);
-    const bIsAlias = aliasCanonicalByAlias.has(path.parse(b).name);
-    if (aIsAlias === bIsAlias) return a.localeCompare(b);
-    return aIsAlias ? 1 : -1;
+  const aliasIndex = createAliasIndex(aliasGroups);
+  const aliasCleanedUp = await cleanupAliasEmoji({
+    client,
+    appId,
+    namespace,
+    existingByName,
+    aliases: aliasIndex.aliases,
+    delayMs: mutationDelayMs,
   });
-
-  const matchedEmojiIds = new Set();
-  const idByFileBase = {};
-  const fullNameByFileBase = {};
-
-  let uploaded = 0;
-  let reused = 0;
-  let refreshed = 0;
-  let aliasResolved = 0;
-  let skipped = 0;
-  let failed = 0;
-
+  const state = createEmojiSyncState(aliasCleanedUp);
+  const sortedFiles = sortCanonicalFilesFirst(files, aliasIndex.canonicalByAlias);
   for (const filename of sortedFiles) {
-    const fileBase = path.parse(filename).name;
-    const displayKey = resolveDisplayKey(fileBase);
-    if (!displayKey) {
-      skipped += 1;
-      continue;
-    }
-
-    // Alias path: don't upload, point at canonical's already-uploaded ID
-    const canonical = aliasCanonicalByAlias.get(fileBase);
-    if (canonical) {
-      const canonicalId = idByFileBase[canonical];
-      const canonicalName = fullNameByFileBase[canonical];
-      if (canonicalId && canonicalName) {
-        emojiMap[displayKey] = `<:${canonicalName}:${canonicalId}>`;
-        idByFileBase[fileBase] = canonicalId;
-        fullNameByFileBase[fileBase] = canonicalName;
-        aliasResolved += 1;
-      } else {
-        skipped += 1;
-      }
-      continue;
-    }
-
-    const buffer = fs.readFileSync(path.join(iconsDir, filename));
-    const expectedName = expectedEmojiName(fileBase, buffer);
-    const existing = findExistingForFileBase(existingByName, fileBase);
-
-    if (existing && existing.name === expectedName) {
-      emojiMap[displayKey] = `<:${existing.name}:${existing.id}>`;
-      idByFileBase[fileBase] = existing.id;
-      fullNameByFileBase[fileBase] = existing.name;
-      matchedEmojiIds.add(existing.id);
-      reused += 1;
-      continue;
-    }
-
-    // Refresh path: existing emoji has the wrong name (different hash, or
-    // legacy plain name pre-hash bootstrap). Discord emoji image is
-    // immutable - delete the stale one then upload fresh content.
-    if (existing) {
-      try {
-        await client.rest.delete(`/applications/${appId}/emojis/${existing.id}`);
-        matchedEmojiIds.add(existing.id);
-        await new Promise((r) => setTimeout(r, 250));
-      } catch (err) {
-        console.warn(
-          `[${namespace}] failed to delete stale :${existing.name}: (${existing.id}) before refresh:`,
-          err?.message || err
-        );
-        failed += 1;
-        continue;
-      }
-    }
-
-    try {
-      const mime = detectMime(buffer);
-      if (buffer.byteLength > 256 * 1024) {
-        console.warn(
-          `[${namespace}] ${filename} is ${buffer.byteLength}B (over 256KB cap); skipping`
-        );
-        failed += 1;
-        continue;
-      }
-      const dataUri = `data:${mime};base64,${buffer.toString("base64")}`;
-      const created = await client.rest.post(`/applications/${appId}/emojis`, {
-        body: { name: expectedName, image: dataUri },
-      });
-      if (!created?.id) {
-        console.warn(`[${namespace}] ${filename} upload returned no id; skipping`);
-        failed += 1;
-        continue;
-      }
-      emojiMap[displayKey] = `<:${created.name}:${created.id}>`;
-      idByFileBase[fileBase] = created.id;
-      fullNameByFileBase[fileBase] = created.name;
-      matchedEmojiIds.add(created.id);
-      if (existing) refreshed += 1;
-      else uploaded += 1;
-      // Application emoji rate limit: ~50 / 30s. Sleep 250ms between
-      // mutations to stay well under without making startup feel slow.
-      await new Promise((r) => setTimeout(r, 250));
-    } catch (err) {
-      failed += 1;
-      console.warn(
-        `[${namespace}] failed to upload ${filename}:`,
-        err?.message || err
-      );
-    }
+    await syncEmojiFile({
+      client,
+      appId,
+      namespace,
+      iconsDir,
+      filename,
+      emojiMap,
+      resolveDisplayKey,
+      canonicalByAlias: aliasIndex.canonicalByAlias,
+      existingByName,
+      state,
+      delayMs: mutationDelayMs,
+    });
   }
 
   // Orphan detection: app emoji whose name parses as a known displayKey
   // but didn't match any current PNG. Don't auto-delete - could be
   // intentional, so report it for manual review instead of deleting it.
-  const orphanNames = [];
-  for (const [name, emoji] of existingByName) {
-    if (matchedEmojiIds.has(emoji.id)) continue;
-    const candidateBase = name.replace(/_[0-9a-f]{1,12}$/i, "");
-    if (resolveDisplayKey(candidateBase)) {
-      orphanNames.push(name);
-    }
-  }
+  const orphanNames = findOrphanEmojiNames(
+    existingByName,
+    state.matchedEmojiIds,
+    resolveDisplayKey
+  );
   if (orphanNames.length > 0) {
     console.warn(
       `[${namespace}] orphan emoji on application (no matching PNG in ${path.basename(iconsDir)}/): ${orphanNames.join(", ")} - delete manually at https://discord.com/developers/applications if no longer wanted`
     );
   }
 
-  const total = uploaded + reused + refreshed + aliasResolved;
+  const result = summarizeEmojiSync(state, orphanNames.length);
   console.log(
-    `[${namespace}] bootstrap done: uploaded=${uploaded} refreshed=${refreshed} reused=${reused} aliasResolved=${aliasResolved} aliasCleanedUp=${aliasCleanedUp} orphans=${orphanNames.length} skipped=${skipped} failed=${failed} totalActive=${total}`
+    `[${namespace}] bootstrap done: uploaded=${result.uploaded} refreshed=${result.refreshed} reused=${result.reused} aliasResolved=${result.aliasResolved} aliasCleanedUp=${result.aliasCleanedUp} orphans=${result.orphans} skipped=${result.skipped} failed=${result.failed} totalActive=${result.total}`
   );
-  return { uploaded, reused, refreshed, aliasResolved, aliasCleanedUp, orphans: orphanNames.length, skipped, failed, total };
+  return result;
 }
 
 /**

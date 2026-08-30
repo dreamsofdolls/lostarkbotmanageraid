@@ -6,12 +6,11 @@ const RAID_BG_MAX_IMAGES = 6;
 const RAID_BG_ASSIGNMENT_MODES = new Set(["even", "random"]);
 
 function collectAttachments(interaction) {
-  const attachments = [interaction.options.getAttachment("image", true)];
-  for (const name of ["image_2", "image_3", "image_4"]) {
-    const att = interaction.options.getAttachment(name, false);
-    if (att) attachments.push(att);
-  }
-  return attachments;
+  return [
+    interaction.options.getAttachment("image", true),
+    ...["image_2", "image_3", "image_4"]
+      .map((name) => interaction.options.getAttachment(name, false)),
+  ].filter(Boolean);
 }
 
 function shuffleCopy(list) {
@@ -171,9 +170,8 @@ function buildRaidBgEmbed(EmbedBuilder, {
     .setTitle(title)
     .setDescription(description)
     .setColor(color);
-  if (fields.length > 0) embed.addFields(fields);
-  if (footer) embed.setFooter({ text: footer });
-  return embed;
+  embed.addFields(fields);
+  return footer ? embed.setFooter({ text: footer }) : embed;
 }
 
 function compactAssignmentsAfterRemove(assignments, removedIndex, imageCount) {

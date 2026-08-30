@@ -385,8 +385,6 @@ function createRaidCheckEditRenderer({
       raidRequirementMap: RAID_REQUIREMENT_MAP,
       getCharRaidGateStatus,
     });
-    if (statusRow) rows.push(statusRow);
-
     const gateRow = buildGateButtonRow({
       ActionRowBuilder,
       ButtonBuilder,
@@ -396,7 +394,7 @@ function createRaidCheckEditRenderer({
       raidRequirementMap: RAID_REQUIREMENT_MAP,
       getCharRaidGateStatus,
     });
-    if (gateRow) rows.push(gateRow);
+    rows.push(...[statusRow, gateRow].filter(Boolean));
 
     return rows;
   }

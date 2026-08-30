@@ -334,13 +334,14 @@ function createRaidStatusView(deps) {
   }) {
     const lines = buildGlobalRollupLines(totalPages, globalTotals, lang);
     const rosterGoldLine = buildRosterGoldLine(account, getRaidsFor, lang);
-    if (rosterGoldLine) lines.push(rosterGoldLine);
-
     const freshnessLine = buildAccountFreshnessLine(account, userMeta, lang);
-    if (freshnessLine) lines.push(freshnessLine);
-    if (showGoldEarnerHint && hasEligibleNonEarner(account, getRaidsFor)) {
-      lines.push(t("raid-status.embed.goldEarnerHint", lang));
-    }
+    lines.push(...[
+      rosterGoldLine,
+      freshnessLine,
+      showGoldEarnerHint && hasEligibleNonEarner(account, getRaidsFor)
+        ? t("raid-status.embed.goldEarnerHint", lang)
+        : "",
+    ].filter(Boolean));
     return lines;
   }
 

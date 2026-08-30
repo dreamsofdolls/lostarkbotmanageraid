@@ -80,9 +80,8 @@ function createRaidStatusComponentLayout({
   const addTaskViewRows = (rows, disabled) => {
     addPaginatedViewHeader(rows, disabled);
     const sharedTaskRow = buildSharedTaskToggleRow(disabled);
-    if (sharedTaskRow) rows.push(sharedTaskRow);
     const charFilterRow = buildTaskCharFilterRow(disabled);
-    if (charFilterRow) rows.push(charFilterRow);
+    rows.push(...[sharedTaskRow, charFilterRow].filter(Boolean));
     rows.push(buildTaskToggleRow(disabled));
   };
 

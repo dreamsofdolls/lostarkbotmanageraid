@@ -52,167 +52,173 @@ function createSnapshotHelpers({
     return typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
   }
 
-  function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
-    const userMeta = new Map();
-    const rosterRefreshMap = new Map();
-    const rosterRefreshAttemptMap = new Map();
-    const allEligible = [];
-    const notEligibleChars = [];
+  function createSnapshotState() {
+    return {
+      userMeta: new Map(),
+      rosterRefreshMap: new Map(),
+      rosterRefreshAttemptMap: new Map(),
+      allEligible: [],
+      notEligibleChars: [],
+    };
+  }
+
+  function createRaidScanContext(raidMeta) {
     const selectedDifficulty = toModeLabel(raidMeta.modeKey);
-    const selectedDiffNorm = normalizeName(selectedDifficulty);
-    const { lowestMin, selfMin, nextMin } = getRaidScanRange(
-      raidMeta.raidKey,
-      Number(raidMeta.minItemLevel) || 0
+    return {
+      raidMeta,
+      selectedDifficulty,
+      selectedDiffNorm: normalizeName(selectedDifficulty),
+      ...getRaidScanRange(raidMeta.raidKey, Number(raidMeta.minItemLevel) || 0),
+    };
+  }
+
+  function recordUserMetadata(state, userDoc) {
+    if (state.userMeta.has(userDoc.discordId)) return;
+    state.userMeta.set(userDoc.discordId, {
+      autoManageEnabled: !!userDoc.autoManageEnabled,
+      localSyncEnabled: !!userDoc.localSyncEnabled,
+      lastAutoManageSyncAt: Number(userDoc.lastAutoManageSyncAt) || 0,
+      lastAutoManageAttemptAt: Number(userDoc.lastAutoManageAttemptAt) || 0,
+      discordUsername: userDoc.discordUsername || "",
+      discordGlobalName: userDoc.discordGlobalName || "",
+      discordDisplayName: userDoc.discordDisplayName || "",
+    });
+  }
+
+  function recordAccountFreshness(state, userDoc, account) {
+    const accountName = account.accountName || "(no name)";
+    const rosterKey = userDoc.discordId + ROSTER_KEY_SEP + accountName;
+    state.rosterRefreshMap.set(rosterKey, Number(account.lastRefreshedAt) || 0);
+    state.rosterRefreshAttemptMap.set(rosterKey, Number(account.lastRefreshAttemptAt) || 0);
+    return accountName;
+  }
+
+  function buildCharacterBaseEntry(userDoc, accountName, character, assignedRaids, itemLevel) {
+    return {
+      discordId: userDoc.discordId,
+      accountName,
+      charName: getCharacterName(character),
+      className: character.class || "",
+      itemLevel,
+      publicLogDisabled: !!character.publicLogDisabled,
+      assignedRaids,
+    };
+  }
+
+  function readGateProgress(assigned, officialGates, context) {
+    const selectedModeDoneGates = new Set();
+    const completedModeLabels = new Set();
+    const gateStatus = officialGates.map((gate) => {
+      const gateEntry = assigned[gate];
+      if (!gateEntry || !(Number(gateEntry.completedDate) > 0)) return "pending";
+
+      if (normalizeName(gateEntry.difficulty) === context.selectedDiffNorm) {
+        selectedModeDoneGates.add(gate);
+      }
+      if (gateEntry.difficulty) completedModeLabels.add(toModeLabel(gateEntry.difficulty));
+      return "done";
+    });
+    return { completedModeLabels, gateStatus, selectedModeDoneGates };
+  }
+
+  function overallGateStatus(gateStatus) {
+    const doneCount = gateStatus.filter((status) => status === "done").length;
+    if (doneCount === gateStatus.length) return "complete";
+    if (doneCount > 0) return "partial";
+    return "none";
+  }
+
+  function modeAnnotation(completedModeLabels, naturalInRange, selectedDifficulty) {
+    if (completedModeLabels.size === 0) return null;
+    if (completedModeLabels.has(selectedDifficulty) && naturalInRange) return null;
+    return [...completedModeLabels].map((mode) => `${mode} Clear`).join("/");
+  }
+
+  function classifyCharacter(userDoc, accountName, character, context) {
+    if (!character) return null;
+    const itemLevel = Number(character.itemLevel) || 0;
+    if (itemLevel < context.lowestMin) return null;
+
+    const assignedRaids = ensureAssignedRaids(character);
+    const assigned = assignedRaids[context.raidMeta.raidKey] || {};
+    const storedModeKey = assigned.modeKey || assigned.G1?.difficulty || assigned.G2?.difficulty || "";
+    if (!isRaidCheckVisibleMode(storedModeKey)) return null;
+
+    const baseEntry = buildCharacterBaseEntry(
+      userDoc,
+      accountName,
+      character,
+      assignedRaids,
+      itemLevel
     );
+    const storedGateKeys = getGateKeys(assigned);
+    const officialGates = storedGateKeys.length > 0
+      ? storedGateKeys
+      : getGatesForRaid(context.raidMeta.raidKey);
+    const naturalInRange = itemLevel >= context.selfMin && itemLevel < context.nextMin;
+    const progress = readGateProgress(assigned, officialGates, context);
+    if (!naturalInRange && progress.selectedModeDoneGates.size === 0) {
+      return {
+        bucket: "notEligibleChars",
+        entry: {
+          ...baseEntry,
+          gateStatus: [],
+          overallStatus: "not-eligible",
+          notEligibleReason: itemLevel < context.selfMin ? "low" : "high",
+        },
+      };
+    }
+
+    return {
+      bucket: "allEligible",
+      entry: {
+        ...baseEntry,
+        gateStatus: progress.gateStatus,
+        overallStatus: overallGateStatus(progress.gateStatus),
+        doneModeAnnotation: modeAnnotation(
+          progress.completedModeLabels,
+          naturalInRange,
+          context.selectedDifficulty
+        ),
+      },
+    };
+  }
+
+  function collectAccountCharacters(state, userDoc, account, context) {
+    const accountName = recordAccountFreshness(state, userDoc, account);
+    const characters = Array.isArray(account.characters) ? account.characters : [];
+    for (const character of characters) {
+      const classified = classifyCharacter(userDoc, accountName, character, context);
+      if (classified) state[classified.bucket].push(classified.entry);
+    }
+  }
+
+  function finalizeSnapshotState(state) {
+    const completeChars = state.allEligible.filter((char) => char.overallStatus === "complete");
+    const partialChars = state.allEligible.filter((char) => char.overallStatus === "partial");
+    const noneChars = state.allEligible.filter((char) => char.overallStatus === "none");
+    return {
+      ...state,
+      allChars: [...state.allEligible, ...state.notEligibleChars],
+      completeChars,
+      partialChars,
+      noneChars,
+      pendingChars: [...partialChars, ...noneChars],
+    };
+  }
+
+  function buildRaidCheckSnapshotFromUsers(users, raidMeta) {
+    const state = createSnapshotState();
+    const context = createRaidScanContext(raidMeta);
 
     for (const userDoc of users || []) {
       if (!userDoc) continue;
       ensureFreshWeek(userDoc);
-      if (!userMeta.has(userDoc.discordId)) {
-        userMeta.set(userDoc.discordId, {
-          autoManageEnabled: !!userDoc.autoManageEnabled,
-          localSyncEnabled: !!userDoc.localSyncEnabled,
-          lastAutoManageSyncAt: Number(userDoc.lastAutoManageSyncAt) || 0,
-          lastAutoManageAttemptAt: Number(userDoc.lastAutoManageAttemptAt) || 0,
-          // Cached Discord identity strings from the User doc. The Edit
-          // flow prefers these (populated the last time the user ran a
-          // slash command) over a live client.users.fetch round-trip
-          // because discord.js's cached user often only has the raw
-          // username handle, not the guild-displayed nickname.
-          discordUsername: userDoc.discordUsername || "",
-          discordGlobalName: userDoc.discordGlobalName || "",
-          discordDisplayName: userDoc.discordDisplayName || "",
-        });
-      }
-
+      recordUserMetadata(state, userDoc);
       const accounts = Array.isArray(userDoc.accounts) ? userDoc.accounts : [];
-      for (const account of accounts) {
-        const rosterKey = userDoc.discordId + ROSTER_KEY_SEP + (account.accountName || "(no name)");
-        rosterRefreshMap.set(rosterKey, Number(account.lastRefreshedAt) || 0);
-        rosterRefreshAttemptMap.set(rosterKey, Number(account.lastRefreshAttemptAt) || 0);
-
-        const characters = Array.isArray(account.characters) ? account.characters : [];
-        for (const character of characters) {
-          if (!character) continue;
-          const characterItemLevel = Number(character.itemLevel) || 0;
-          if (characterItemLevel < lowestMin) continue;
-
-          const assignedRaids = ensureAssignedRaids(character);
-          const assigned = assignedRaids[raidMeta.raidKey] || {};
-          const storedModeKey =
-            assigned.modeKey || assigned.G1?.difficulty || assigned.G2?.difficulty || "";
-          if (!isRaidCheckVisibleMode(storedModeKey)) continue;
-
-          const baseEntry = {
-            discordId: userDoc.discordId,
-            accountName: account.accountName || "(no name)",
-            charName: getCharacterName(character),
-            // Carried so the user-filter dropdown can show a per-user
-            // support/DPS breakdown ("8 pending · 2🛡️ 6⚔️"). Without
-            // this the dropdown only knows the total, which makes it
-            // hard to tell whether a backlog is composition-blocking
-            // (low support count) or just queue depth.
-            className: character.class || "",
-            itemLevel: characterItemLevel,
-            // Carried forward so the /raid-check Edit flow can decide
-            // whether a leader is allowed to touch this char despite the
-            // owner having auto-sync enabled - see the Edit-flow auth
-            // rule in services/access/manager-edit-auth or the cascading
-            // select builders.
-            publicLogDisabled: !!character.publicLogDisabled,
-            // Full assignedRaids copy so the Edit flow can show per-gate
-            // state for ANY raid the leader picks in the raid dropdown,
-            // not just the scanned raidMeta. Without this the cascading
-            // select would render "Complete / Process / Reset" with no
-            // indication of what's already done, and Complete on an
-            // already-done raid would silently no-op server-side after a
-            // misleading click. Retaining the full tree has bounded cost; each
-            // character has at most 3 raids × 2-3 gates.
-            assignedRaids,
-          };
-
-          const storedGateKeys = getGateKeys(assigned);
-          const officialGates =
-            storedGateKeys.length > 0 ? storedGateKeys : getGatesForRaid(raidMeta.raidKey);
-          const naturalInRange =
-            characterItemLevel >= selfMin && characterItemLevel < nextMin;
-          const selectedModeDoneGates = new Set();
-          const completedModeLabels = new Set();
-          const gateStatus = officialGates.map((gate) => {
-            const gateEntry = assigned[gate];
-            if (!gateEntry) return "pending";
-            if (!(Number(gateEntry.completedDate) > 0)) return "pending";
-
-            const storedDiffNorm = normalizeName(gateEntry.difficulty);
-            if (storedDiffNorm === selectedDiffNorm) selectedModeDoneGates.add(gate);
-            if (gateEntry.difficulty) completedModeLabels.add(toModeLabel(gateEntry.difficulty));
-            return "done";
-          });
-
-          const doneCount = gateStatus.filter((status) => status === "done").length;
-          let overallStatus;
-          if (doneCount === officialGates.length) overallStatus = "complete";
-          else if (doneCount > 0) overallStatus = "partial";
-          else overallStatus = "none";
-
-          // Mode placement has two sources:
-          //   1. natural bucket by current iLvl range (default planning view)
-          //   2. explicit progress at the selected mode (what they actually ran)
-          //
-          // Example: a 1740 Serca character naturally belongs to Nightmare.
-          // If they actually clear Serca Normal, show them in BOTH the
-          // Nightmare bucket (with "Normal Clear") and the Normal page (because
-          // that page is the source-of-truth view for Normal clears). But a
-          // 1730+ character with Hard progress should not leak into Normal just
-          // because Hard ranks above Normal.
-          const hasSelectedModeProgress = selectedModeDoneGates.size > 0;
-          if (!naturalInRange && !hasSelectedModeProgress) {
-            notEligibleChars.push({
-              ...baseEntry,
-              gateStatus: [],
-              overallStatus: "not-eligible",
-              notEligibleReason: characterItemLevel < selfMin ? "low" : "high",
-            });
-            continue;
-          }
-
-          // Annotation for clears whose actual mode is important context:
-          // different mode than the scan, or an out-of-range same-mode clear
-          // surfaced by explicit progress instead of the natural iLvl bucket.
-          const doneModeAnnotation =
-            completedModeLabels.size > 0 &&
-            (!completedModeLabels.has(selectedDifficulty) || !naturalInRange)
-              ? [...completedModeLabels].map((mode) => `${mode} Clear`).join("/")
-              : null;
-
-          allEligible.push({
-            ...baseEntry,
-            gateStatus,
-            overallStatus,
-            doneModeAnnotation,
-          });
-        }
-      }
+      for (const account of accounts) collectAccountCharacters(state, userDoc, account, context);
     }
-
-    const completeChars = allEligible.filter((c) => c.overallStatus === "complete");
-    const partialChars = allEligible.filter((c) => c.overallStatus === "partial");
-    const noneChars = allEligible.filter((c) => c.overallStatus === "none");
-    const pendingChars = [...partialChars, ...noneChars];
-    const allChars = [...allEligible, ...notEligibleChars];
-
-    return {
-      allEligible,
-      allChars,
-      completeChars,
-      partialChars,
-      noneChars,
-      notEligibleChars,
-      pendingChars,
-      userMeta,
-      rosterRefreshMap,
-      rosterRefreshAttemptMap,
-    };
+    return finalizeSnapshotState(state);
   }
 
   function formatRaidCheckNotEligibleFieldValue(character, lang = "vi") {

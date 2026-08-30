@@ -37,51 +37,57 @@ function buildClassIconByLabel(classesById) {
   return byLabel;
 }
 
-export function setCatalog(rawCatalog = {}) {
-  const raids = rawCatalog.raids || {};
-  const raidLabels = {};
-  const modeLabels = {};
-  const raidModeLabels = {};
-  const raidGates = {};
-  const raidModeIlvl = {};
-  const raidModeBase = {};
-  const raidModeManualOnly = {};
-
+function buildRaidCatalogIndexes(raids) {
+  const indexes = {
+    raidLabels: {},
+    modeLabels: {},
+    raidModeLabels: {},
+    raidGates: {},
+    raidModeIlvl: {},
+    raidModeBase: {},
+    raidModeManualOnly: {},
+  };
   for (const [raidKey, raid] of Object.entries(raids)) {
-    raidLabels[raidKey] = raid?.label || raidKey;
-    raidGates[raidKey] = Array.isArray(raid?.gates) && raid.gates.length > 0
+    indexes.raidLabels[raidKey] = raid?.label || raidKey;
+    indexes.raidGates[raidKey] = Array.isArray(raid?.gates) && raid.gates.length > 0
       ? [...raid.gates]
       : ["G1", "G2"];
-    raidModeIlvl[raidKey] = {};
-    raidModeBase[raidKey] = {};
-    raidModeManualOnly[raidKey] = {};
-    raidModeLabels[raidKey] = {};
+    indexes.raidModeIlvl[raidKey] = {};
+    indexes.raidModeBase[raidKey] = {};
+    indexes.raidModeManualOnly[raidKey] = {};
+    indexes.raidModeLabels[raidKey] = {};
     for (const [modeKey, mode] of Object.entries(raid?.modes || {})) {
-      if (!modeLabels[modeKey]) modeLabels[modeKey] = mode?.label || modeKey;
-      raidModeLabels[raidKey][modeKey] = mode?.label || modeKey;
-      raidModeIlvl[raidKey][modeKey] = Number(mode?.minItemLevel) || 0;
-      raidModeBase[raidKey][modeKey] = mode?.baseModeKey || null;
-      raidModeManualOnly[raidKey][modeKey] = mode?.manualOnly === true;
+      indexes.modeLabels[modeKey] ||= mode?.label || modeKey;
+      indexes.raidModeLabels[raidKey][modeKey] = mode?.label || modeKey;
+      indexes.raidModeIlvl[raidKey][modeKey] = Number(mode?.minItemLevel) || 0;
+      indexes.raidModeBase[raidKey][modeKey] = mode?.baseModeKey || null;
+      indexes.raidModeManualOnly[raidKey][modeKey] = mode?.manualOnly === true;
     }
   }
+  return indexes;
+}
+
+function configuredOrder(value, fallback) {
+  return Array.isArray(value) && value.length > 0 ? [...value] : fallback;
+}
+
+export function setCatalog(rawCatalog = {}) {
+  const raids = rawCatalog.raids || {};
+  const indexes = buildRaidCatalogIndexes(raids);
 
   BOSS_TO_RAID_GATE = new Map((rawCatalog.bossToRaidGate || []).map(([boss, target]) => [
     boss,
     { raidKey: target?.raidKey, gate: target?.gate },
   ]));
-  RAID_LABELS = raidLabels;
-  MODE_LABELS = modeLabels;
-  RAID_MODE_LABELS = raidModeLabels;
-  RAID_GATES = raidGates;
-  RAID_MODE_ILVL = raidModeIlvl;
-  RAID_MODE_BASE = raidModeBase;
-  RAID_MODE_MANUAL_ONLY = raidModeManualOnly;
-  RAID_ORDER = Array.isArray(rawCatalog.raidOrder) && rawCatalog.raidOrder.length > 0
-    ? [...rawCatalog.raidOrder]
-    : Object.keys(raids);
-  MODE_ORDER = Array.isArray(rawCatalog.modeOrder) && rawCatalog.modeOrder.length > 0
-    ? [...rawCatalog.modeOrder]
-    : Object.keys(modeLabels);
+  RAID_LABELS = indexes.raidLabels;
+  MODE_LABELS = indexes.modeLabels;
+  RAID_MODE_LABELS = indexes.raidModeLabels;
+  RAID_GATES = indexes.raidGates;
+  RAID_MODE_ILVL = indexes.raidModeIlvl;
+  RAID_MODE_BASE = indexes.raidModeBase;
+  RAID_MODE_MANUAL_ONLY = indexes.raidModeManualOnly;
+  RAID_ORDER = configuredOrder(rawCatalog.raidOrder, Object.keys(raids));
+  MODE_ORDER = configuredOrder(rawCatalog.modeOrder, Object.keys(indexes.modeLabels));
   CLASS_BY_ID = rawCatalog.classesById || {};
   CLASS_ICON_BY_LABEL = buildClassIconByLabel(CLASS_BY_ID);
   DIFFICULTY_TO_MODE_KEY = rawCatalog.difficultyToModeKey || {};
@@ -154,6 +160,65 @@ export function getClassInfoForChar(playersRaw, charName) {
   return null;
 }
 
+function parseClearedEncounter(row) {
+  const [boss, difficulty, cleared, charName, , lastMs, playersRaw] = row;
+  if (Number(cleared) !== 1 || !charName) return null;
+  const gateInfo = getRaidGateForBoss(boss);
+  if (!gateInfo) return null;
+  const modeKey = normalizeDifficulty(difficulty);
+  if (!modeKey || !hasCatalogRaidMode(gateInfo.raidKey, modeKey)) return null;
+  const gates = getGatesForRaid(gateInfo.raidKey);
+  const gateIndex = gates.indexOf(gateInfo.gate);
+  if (gateIndex < 0) return null;
+  return {
+    charName,
+    classInfo: getClassInfoForChar(playersRaw, charName),
+    gateIndex,
+    gates,
+    lastClearMs: Number(lastMs) || 0,
+    modeKey,
+    raidKey: gateInfo.raidKey,
+  };
+}
+
+function createEncounterBucket(encounter) {
+  const { charName, classInfo, gateIndex, gates, lastClearMs, modeKey, raidKey } = encounter;
+  return {
+    charName,
+    classId: classInfo?.classId || "",
+    className: classInfo?.className || "",
+    classIcon: classInfo?.classIcon || "",
+    raidKey,
+    modeKey,
+    gateIndex,
+    gates: gates.slice(0, gateIndex + 1),
+    raidLabel: RAID_LABELS[raidKey] || raidKey,
+    modeLabel: RAID_MODE_LABELS[raidKey]?.[modeKey] || MODE_LABELS[modeKey] || modeKey,
+    lastClearMs,
+  };
+}
+
+function refreshBucketClassInfo(bucket, classInfo) {
+  if (bucket.classIcon || !classInfo?.classIcon) return;
+  bucket.classId = classInfo.classId || "";
+  bucket.className = classInfo.className || "";
+  bucket.classIcon = classInfo.classIcon || "";
+}
+
+function mergeEncounterBucket(map, encounter) {
+  const key = makeBucketKey(encounter.charName, encounter.raidKey, encounter.modeKey);
+  const existing = map.get(key);
+  if (!existing || encounter.gateIndex > existing.gateIndex) {
+    map.set(key, createEncounterBucket(encounter));
+    return;
+  }
+  if (encounter.gateIndex !== existing.gateIndex || encounter.lastClearMs <= existing.lastClearMs) {
+    return;
+  }
+  existing.lastClearMs = encounter.lastClearMs;
+  refreshBucketClassInfo(existing, encounter.classInfo);
+}
+
 /**
  * Bucketize raw encounter rows into one entry per (char, raid, mode)
  * tuple, keeping the highest gate cleared. Mirror of
@@ -175,42 +240,8 @@ export function getClassInfoForChar(playersRaw, charName) {
 export function bucketize(rows) {
   const map = new Map();
   for (const row of rows) {
-    const [boss, difficulty, cleared, charName, , lastMs, playersRaw] = row;
-    if (Number(cleared) !== 1) continue;
-    if (!charName) continue;
-    const gateInfo = getRaidGateForBoss(boss);
-    if (!gateInfo) continue;
-    const modeKey = normalizeDifficulty(difficulty);
-    if (!modeKey || !hasCatalogRaidMode(gateInfo.raidKey, modeKey)) continue;
-    const gates = getGatesForRaid(gateInfo.raidKey);
-    const gateIndex = gates.indexOf(gateInfo.gate);
-    if (gateIndex < 0) continue;
-    const bucketKey = makeBucketKey(charName, gateInfo.raidKey, modeKey);
-    const lastClearMs = Number(lastMs) || 0;
-    const classInfo = getClassInfoForChar(playersRaw, charName);
-    const existing = map.get(bucketKey);
-    if (!existing || gateIndex > existing.gateIndex) {
-      map.set(bucketKey, {
-        charName,
-        classId: classInfo?.classId || "",
-        className: classInfo?.className || "",
-        classIcon: classInfo?.classIcon || "",
-        raidKey: gateInfo.raidKey,
-        modeKey,
-        gateIndex,
-        gates: gates.slice(0, gateIndex + 1),
-        raidLabel: RAID_LABELS[gateInfo.raidKey] || gateInfo.raidKey,
-        modeLabel: RAID_MODE_LABELS[gateInfo.raidKey]?.[modeKey] || MODE_LABELS[modeKey] || modeKey,
-        lastClearMs,
-      });
-    } else if (gateIndex === existing.gateIndex && lastClearMs > existing.lastClearMs) {
-      existing.lastClearMs = lastClearMs;
-      if (!existing.classIcon && classInfo?.classIcon) {
-        existing.classId = classInfo.classId || "";
-        existing.className = classInfo.className || "";
-        existing.classIcon = classInfo.classIcon || "";
-      }
-    }
+    const encounter = parseClearedEncounter(row);
+    if (encounter) mergeEncounterBucket(map, encounter);
   }
   return [...map.values()];
 }

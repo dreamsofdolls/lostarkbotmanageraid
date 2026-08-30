@@ -15,52 +15,65 @@ function createScheduleShowResurfaceActions({
   noticeEmbed,
   turnPlanDashboardPayload,
 }) {
-  async function republishBoard(interaction, event, lang) {
-    if (!event.channelId || !interaction.client?.channels) return { ok: false };
-    let channel;
+  async function fetchBoardChannel(interaction, event) {
+    if (!event.channelId || !interaction.client?.channels) return null;
     try {
-      channel = await interaction.client.channels.fetch(event.channelId);
+      const channel = await interaction.client.channels.fetch(event.channelId);
+      return channel?.send ? channel : null;
     } catch (error) {
       console.warn("[raid-schedule] resurface channel fetch failed:", error?.message || error);
-      return { ok: false };
+      return null;
     }
-    if (!channel?.send) return { ok: false };
+  }
 
-    let message;
+  async function postBoardMessage(channel, event, lang) {
     try {
-      message = await channel.send(await boardPayload(event, lang));
+      return await channel.send(await boardPayload(event, lang));
     } catch (error) {
       console.warn("[raid-schedule] resurface post failed:", error?.message || error);
-      return { ok: false };
+      return null;
     }
+  }
 
+  async function deleteBoardMessage(channel, messageOrId, logLabel) {
+    try {
+      if (typeof messageOrId?.delete === "function") {
+        await messageOrId.delete();
+        return;
+      }
+      const messageId = messageOrId?.id || messageOrId;
+      if (!messageId || !channel.messages?.fetch) return;
+      const message = await channel.messages.fetch(messageId);
+      if (message?.delete) await message.delete();
+    } catch (error) {
+      console.warn(`[raid-schedule] ${logLabel}:`, error?.message || error);
+    }
+  }
+
+  async function persistResurfacedMessage(event, message, channel) {
     const oldMessageId = event.messageId;
     event.messageId = message.id;
     try {
       await event.save();
+      return { ok: true, oldMessageId };
     } catch (error) {
       console.warn("[raid-schedule] resurface save failed:", error?.message || error);
       event.messageId = oldMessageId;
-      try {
-        if (typeof message.delete === "function") {
-          await message.delete();
-        } else if (message.id && channel.messages?.fetch) {
-          const fresh = await channel.messages.fetch(message.id);
-          if (fresh?.delete) await fresh.delete();
-        }
-      } catch (cleanupError) {
-        console.warn("[raid-schedule] resurface new-delete failed:", cleanupError?.message || cleanupError);
-      }
-      return { ok: false };
+      await deleteBoardMessage(channel, message, "resurface new-delete failed");
+      return { ok: false, oldMessageId };
     }
+  }
 
-    if (oldMessageId && oldMessageId !== message.id) {
-      try {
-        const old = await channel.messages.fetch(oldMessageId);
-        if (old) await old.delete();
-      } catch (error) {
-        console.warn("[raid-schedule] resurface old-delete failed:", error?.message || error);
-      }
+  async function republishBoard(interaction, event, lang) {
+    const channel = await fetchBoardChannel(interaction, event);
+    if (!channel) return { ok: false };
+    const message = await postBoardMessage(channel, event, lang);
+    if (!message) return { ok: false };
+
+    const persisted = await persistResurfacedMessage(event, message, channel);
+    if (!persisted.ok) return { ok: false };
+    if (persisted.oldMessageId && persisted.oldMessageId !== message.id) {
+      await deleteBoardMessage(channel, persisted.oldMessageId, "resurface old-delete failed");
     }
     return { ok: true, message };
   }
