@@ -134,6 +134,139 @@ function createRaidSetApplyService({
     }
   }
 
+  function resolveCompanionWriteScope(result, userDoc, {
+    requiredCompanionScope,
+    requireLocalSyncEnabled,
+    raidMeta,
+  }) {
+    if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+      result.noRoster = true;
+      return { blocked: true, companionScope: null };
+    }
+    const companionScope = resolveRequiredCompanionScope({
+      requiredCompanionScope,
+      requireLocalSyncEnabled,
+    });
+    if (requiredCompanionScope && !companionScope) {
+      result.scopeNotAllowed = true;
+      return { blocked: true, companionScope };
+    }
+    if (companionScope && !isCompanionScopeEnabledForUser(userDoc, companionScope)) {
+      result.syncDisabled = true;
+      result.syncDisabledReason = companionScope === COMPANION_SCOPE.solo
+        ? "auto_sync_disabled"
+        : "local_sync_disabled";
+      return { blocked: true, companionScope };
+    }
+    if (companionScope && !isModeAllowedForCompanionScope(companionScope, raidMeta?.modeKey)) {
+      result.scopeNotAllowed = true;
+      return { blocked: true, companionScope };
+    }
+    return { blocked: false, companionScope };
+  }
+
+  function resolveEligibleCharacter(result, userDoc, { characterName, rosterName, raidMeta }) {
+    const character = findCharacterInUser(userDoc, characterName, rosterName);
+    if (!character) return null;
+    result.matched = true;
+    result.displayName = getCharacterName(character);
+    const itemLevel = Number(character.itemLevel) || 0;
+    if (itemLevel >= raidMeta.minItemLevel) return character;
+    result.ineligibleItemLevel = itemLevel;
+    return null;
+  }
+
+  function prepareRaidMutation(character, {
+    raidMeta,
+    statusType,
+    selectedDifficulty,
+    currentWeekStartMs,
+  }) {
+    const assignedRaids = ensureAssignedRaids(character);
+    const raidData = normalizeAssignedRaid(
+      assignedRaids[raidMeta.raidKey] || {},
+      selectedDifficulty,
+      raidMeta.raidKey
+    );
+    const shouldMarkDone = statusType === "complete" || statusType === "process";
+    const modeChange = shouldMarkDone
+      ? detectModeChange(raidData, raidMeta, selectedDifficulty, currentWeekStartMs)
+      : {
+          changed: false,
+          hadProgress: false,
+          officialGateList: getGatesForRaid(raidMeta.raidKey),
+        };
+    return { assignedRaids, raidData, shouldMarkDone, modeChange };
+  }
+
+  function rejectSoloProgressConflict(result, companionScope, modeChange) {
+    const blocked = companionScope === COMPANION_SCOPE.solo
+      && modeChange.changed
+      && modeChange.hadProgress;
+    if (blocked) result.progressConflict = true;
+    return blocked;
+  }
+
+  function applyModeTransition(result, mutation, raidMeta, selectedDifficulty) {
+    if (mutation.modeChange.changed) {
+      resetRaidMode(
+        mutation.raidData,
+        mutation.modeChange.officialGateList,
+        selectedDifficulty
+      );
+      result.modeResetCount = mutation.modeChange.hadProgress ? 1 : 0;
+    }
+    if (mutation.shouldMarkDone) mutation.raidData.modeKey = raidMeta.modeKey;
+  }
+
+  function rejectAlreadyAppliedState(result, mutation, gateKeys, selectedDifficulty, currentWeekStartMs) {
+    if (
+      mutation.shouldMarkDone
+      && !mutation.modeChange.changed
+      && everyTargetAlreadyDone(
+        mutation.raidData,
+        gateKeys,
+        selectedDifficulty,
+        currentWeekStartMs
+      )
+    ) {
+      result.alreadyComplete = true;
+      return true;
+    }
+    if (
+      !mutation.shouldMarkDone
+      && !mutation.modeChange.changed
+      && everyTargetAlreadyEmpty(mutation.raidData, gateKeys)
+    ) {
+      result.alreadyReset = true;
+      return true;
+    }
+    return false;
+  }
+
+  function commitRaidMutation({
+    result,
+    mutation,
+    character,
+    raidMeta,
+    gateKeys,
+    selectedDifficulty,
+    now,
+  }) {
+    applyGateUpdates(mutation.raidData, gateKeys, {
+      shouldMarkDone: mutation.shouldMarkDone,
+      selectedDifficulty,
+      now,
+    });
+    if (mutation.shouldMarkDone) mutation.raidData.modeKey = raidMeta.modeKey;
+    mutation.assignedRaids[raidMeta.raidKey] = mutation.raidData;
+    character.assignedRaids = mutation.assignedRaids;
+    if (!character.name) character.name = getCharacterName(character);
+    if (!character.class) character.class = getCharacterClass(character);
+    if (!character.id) character.id = createCharacterId();
+    result.updated = true;
+  }
+
   async function applyRaidSetToLoadedUserDoc(userDoc, {
     discordId,
     executorId = null,
@@ -150,102 +283,51 @@ function createRaidSetApplyService({
     const gateList = Array.isArray(effectiveGates) ? effectiveGates.filter(Boolean) : [];
     const selectedDifficulty = result.selectedDifficulty;
 
-    if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
-      result.noRoster = true;
-      return result;
-    }
-    const companionScope = resolveRequiredCompanionScope({
+    const scope = resolveCompanionWriteScope(result, userDoc, {
       requiredCompanionScope,
       requireLocalSyncEnabled,
+      raidMeta,
     });
-    if (requiredCompanionScope && !companionScope) {
-      result.scopeNotAllowed = true;
-      return result;
-    }
-    if (companionScope && !isCompanionScopeEnabledForUser(userDoc, companionScope)) {
-      result.syncDisabled = true;
-      result.syncDisabledReason = companionScope === COMPANION_SCOPE.solo
-        ? "auto_sync_disabled"
-        : "local_sync_disabled";
-      return result;
-    }
-    if (companionScope && !isModeAllowedForCompanionScope(companionScope, raidMeta?.modeKey)) {
-      result.scopeNotAllowed = true;
-      return result;
-    }
+    if (scope.blocked) return result;
     if (await rejectUnauthorizedHelperWrite(result, userDoc, { discordId, executorId, rosterName })) {
       return result;
     }
 
-    const character = findCharacterInUser(userDoc, characterName, rosterName);
+    const character = resolveEligibleCharacter(result, userDoc, {
+      characterName,
+      rosterName,
+      raidMeta,
+    });
     if (!character) return result;
-    result.matched = true;
-    result.displayName = getCharacterName(character);
 
-    const charItemLevel = Number(character.itemLevel) || 0;
-    if (charItemLevel < raidMeta.minItemLevel) {
-      result.ineligibleItemLevel = charItemLevel;
-      return result;
-    }
-
-    const assignedRaids = ensureAssignedRaids(character);
-    const raidData = normalizeAssignedRaid(
-      assignedRaids[raidMeta.raidKey] || {},
+    const mutation = prepareRaidMutation(character, {
+      raidMeta,
+      statusType,
       selectedDifficulty,
-      raidMeta.raidKey
-    );
-    const shouldMarkDone = statusType === "complete" || statusType === "process";
-    const { changed: modeChangeDetected, hadProgress, officialGateList } = shouldMarkDone
-      ? detectModeChange(
-        raidData,
-        raidMeta,
-        selectedDifficulty,
-        currentWeekStartMs
-      )
-      : { changed: false, hadProgress: false, officialGateList: getGatesForRaid(raidMeta.raidKey) };
-
-    if (
-      companionScope === COMPANION_SCOPE.solo
-      && modeChangeDetected
-      && hadProgress
-    ) {
-      result.progressConflict = true;
+      currentWeekStartMs,
+    });
+    if (rejectSoloProgressConflict(result, scope.companionScope, mutation.modeChange)) {
       return result;
     }
+    applyModeTransition(result, mutation, raidMeta, selectedDifficulty);
+    const gateKeys = gateList.length > 0 ? gateList : getGateKeys(mutation.raidData);
+    if (rejectAlreadyAppliedState(
+      result,
+      mutation,
+      gateKeys,
+      selectedDifficulty,
+      currentWeekStartMs
+    )) return result;
 
-    if (modeChangeDetected) {
-      resetRaidMode(raidData, officialGateList, selectedDifficulty);
-      result.modeResetCount = hadProgress ? 1 : 0;
-    }
-    if (shouldMarkDone) raidData.modeKey = raidMeta.modeKey;
-
-    const gateKeys = gateList.length > 0 ? gateList : getGateKeys(raidData);
-    if (
-      shouldMarkDone
-      && !modeChangeDetected
-      && everyTargetAlreadyDone(
-        raidData,
-        gateKeys,
-        selectedDifficulty,
-        currentWeekStartMs
-      )
-    ) {
-      result.alreadyComplete = true;
-      return result;
-    }
-    if (!shouldMarkDone && !modeChangeDetected && everyTargetAlreadyEmpty(raidData, gateKeys)) {
-      result.alreadyReset = true;
-      return result;
-    }
-
-    applyGateUpdates(raidData, gateKeys, { shouldMarkDone, selectedDifficulty, now });
-    if (shouldMarkDone) raidData.modeKey = raidMeta.modeKey;
-    assignedRaids[raidMeta.raidKey] = raidData;
-    character.assignedRaids = assignedRaids;
-    if (!character.name) character.name = getCharacterName(character);
-    if (!character.class) character.class = getCharacterClass(character);
-    if (!character.id) character.id = createCharacterId();
-    result.updated = true;
+    commitRaidMutation({
+      result,
+      mutation,
+      character,
+      raidMeta,
+      gateKeys,
+      selectedDifficulty,
+      now,
+    });
     return result;
   }
 

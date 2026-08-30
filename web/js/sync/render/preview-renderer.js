@@ -130,151 +130,151 @@ export function renderPreviewStats(panel, summary) {
 // mutate that index + re-call this. Re-rendering the whole panel is
 // low-cost because each raid card has few DOM nodes, and keeps the click
 // handlers fresh after innerHTML rewrites.
-export function renderDiffPage(previewOutput) {
-  if (!previewOutput) return;
-  const diff = window.__artistDiff || [];
-  const meta = window.__artistMeta || { distinctChars: 0, clears: 0, schemaDebug: {} };
-  const unmappedBosses = window.__artistUnmappedBosses || [];
-  const rosterError = window.__artistRosterError || "";
+function normalizeRosterPageIndex(diff) {
   let pageIndex = Number(window.__artistRosterPage) || 0;
   if (pageIndex < 0) pageIndex = 0;
   if (pageIndex >= diff.length) pageIndex = Math.max(0, diff.length - 1);
   window.__artistRosterPage = pageIndex;
+  return pageIndex;
+}
 
-  const headlineKey = Number(meta.clears) > 0 ? "preview.headlineCount" : "preview.headlineNoSync";
-  // SQLite identifiers come from the selected file and are untrusted even
-  // though the companion is local. Escape them before the innerHTML sink.
-  let html = `<div class="meta">${t(headlineKey, { chars: meta.distinctChars, clears: meta.clears })} <span class="hint">${escapeHtml(t("preview.schemaDebug", meta.schemaDebug))}</span></div>`;
+function renderPreviewHeadline(meta) {
+  const headlineKey = Number(meta.clears) > 0
+    ? "preview.headlineCount"
+    : "preview.headlineNoSync";
+  let html = `<div class="meta">${t(headlineKey, {
+    chars: meta.distinctChars,
+    clears: meta.clears,
+  })} <span class="hint">${escapeHtml(t("preview.schemaDebug", meta.schemaDebug))}</span></div>`;
   if (Number(meta.detectedClears) > Number(meta.clears)) {
-    html += `<div class="hint">${t("preview.detectedCount", { chars: meta.detectedChars || 0, clears: meta.detectedClears || 0 })}</div>`;
+    html += `<div class="hint">${t("preview.detectedCount", {
+      chars: meta.detectedChars || 0,
+      clears: meta.detectedClears || 0,
+    })}</div>`;
   }
+  return html;
+}
 
-  if (diff.length === 0) {
-    if (rosterError) {
-      html += `<p class="hint preview-note"><span class="status-err">${t("preview.rosterUnavailable")}</span> ${escapeHtml(rosterError)}</p>`;
-    } else if (Number(meta.detectedClears) > 0) {
-      html += `<p class="hint preview-note">${t("preview.noRosterMatched")}</p>`;
-    } else {
-      html += `<p class="hint preview-note">${t("preview.noBucketsMatched")}</p>`;
-    }
-  } else {
-    const page = diff[pageIndex];
-    html += renderDiffLegend(page);
-    const viewMode = window.__artistViewMode === "raid" ? "raid" : "char";
-    // Roster pagination header + view toggle. Pagination hides for
-    // single-roster users; toggle always shows so the user sees the
-    // alternate view exists. Layout: [Prev] [Roster name (X/Y)] [Next] | [View toggle]
-    html += `<div class="roster-pagination">`;
-    if (diff.length > 1) {
-      const prevDisabled = pageIndex === 0 ? "disabled" : "";
-      html += `<button class="page-btn" id="roster-prev" ${prevDisabled}>◀</button>`;
-    }
-    html += `<span class="roster-name">🏛️ ${escapeHtml(page.accountName)}</span>`;
-    if (diff.length > 1) {
-      html += `<span class="page-counter">${pageIndex + 1}/${diff.length}</span>`;
-      const nextDisabled = pageIndex >= diff.length - 1 ? "disabled" : "";
-      html += `<button class="page-btn" id="roster-next" ${nextDisabled}>▶</button>`;
-    }
-    // View toggle button - label shows the OTHER view (click to switch
-    // TO that view). Single button instead of two-state radio so the
-    // the view switch remains visible. /raid-status uses the same one-button
-    // toggle pattern between Raid view and Side tasks view.
-    const toggleLabel = viewMode === "char" ? t("preview.viewToggleToRaid") : t("preview.viewToggleToChar");
-    const toggleEmoji = viewMode === "char" ? "🗂️" : "👤";
-    html += `<button class="page-btn view-toggle" id="view-toggle">${toggleEmoji} ${escapeHtml(toggleLabel)}</button>`;
-    html += `</div>`;
-    // Branch render based on active view mode.
-    if (viewMode === "char") {
-      // Char-first: one card per char with raid+mode rows inline.
-      // Default view since "what has my char done" is the natural
-      // mental model when previewing what's about to sync. Cards
-      // pack 2-up via the grid wrapper for wide viewports - chars
-      // list often runs 6-9 chars per roster, vertical stacking
-      // wastes horizontal space.
-      html += `<div class="char-cards-grid">`;
-      for (const character of page.characters) {
-        html += `<div class="char-card">`;
-        html += `<div class="char-card-head">${formatCharRowHead(character)}</div>`;
-        // Group cells by raidKey so the same raid's modes sit on one
-        // row: "Act 4: 🛡️Normal ✓✓  ⚔️Hard ✓✓". Wrap all raid rows
-        // in a CSS grid so they sit 2-up on wide viewports (typical
-        // case: 2-3 raids, fits 2 across with room to spare) and
-        // collapse to 1-up on narrow.
-        const cellsByRaid = new Map();
-        for (const cell of character.cells) {
-          if (!cellsByRaid.has(cell.raidKey)) cellsByRaid.set(cell.raidKey, []);
-          cellsByRaid.get(cell.raidKey).push(cell);
-        }
-        html += `<div class="char-raid-grid">`;
-        for (const [raidKey, raidCells] of cellsByRaid) {
-          const raidLabel = getRaidLabel(raidKey);
-          html += `<div class="char-raid-row">`;
-          html += `<span class="char-raid-name">${escapeHtml(raidLabel)}</span>`;
-          html += `<div class="char-raid-modes">`;
-          for (const cell of raidCells) {
-            const modeLabel = getRaidSpecificModeLabel(cell.raidKey, cell.modeKey);
-            const modeEmoji = cell.modeKey === "nightmare" ? "🌑" : cell.modeKey === "hard" ? "⚔️" : "🛡️";
-            html += `<div class="char-mode-block">`;
-            html += `<span class="char-mode-label">${modeEmoji} ${escapeHtml(modeLabel)}</span>`;
-            html += `<div class="gate-badges">`;
-            for (const gate of cell.gates) {
-              html += renderGateBadge(gate, cell.states[gate]);
-            }
-            html += `</div>`;
-            html += `</div>`;
-          }
-          html += `</div>`;
-          html += `</div>`;
-        }
-        html += `</div>`;
-        html += `</div>`;
-      }
-      html += `</div>`; // close .char-cards-grid
-    } else {
-      // Raid-first: raid-card layout (Phase 7 first cut). Best for
-      // "who in this account cleared raid X" Manager-scan flow.
-      for (const card of page.raidCards) {
-        const raidLabel = getRaidLabel(card.raidKey);
-        const modeLabel = getRaidSpecificModeLabel(card.raidKey, card.modeKey);
-        const cardEmoji = card.modeKey === "nightmare" ? "🌑" : card.modeKey === "hard" ? "⚔️" : "🛡️";
-        html += `<div class="raid-card">`;
-        html += `<h4 class="raid-card-header">${cardEmoji} ${escapeHtml(raidLabel)} ${escapeHtml(modeLabel)} <span class="hint">· ${t("preview.raidGroupCharCount", { n: card.chars.length })}</span></h4>`;
-        for (const char of card.chars) {
-          html += `<div class="raid-card-char">`;
-          html += `<div class="char-info">${formatCharRowHead(char)}</div>`;
-          html += `<div class="gate-badges">`;
-          for (const gate of char.gates) {
-            const state = char.states[gate];
-            html += renderGateBadge(gate, state);
-          }
-          html += `</div>`;
-          html += `</div>`;
-        }
-        html += `</div>`;
-      }
-    }
+function renderEmptyDiffMessage(meta, rosterError) {
+  if (rosterError) {
+    return `<p class="hint preview-note"><span class="status-err">${t("preview.rosterUnavailable")}</span> ${escapeHtml(rosterError)}</p>`;
   }
-
-  // Unmapped folded into <details> at the bottom so the main view
-  // stays focused on "what will sync". Manager / debug surface when
-  // a user wants to see why their count is lower than expected.
-  if (unmappedBosses.length > 0) {
-    html += `<details class="footer-details"><summary>${t("preview.unmappedSummary", { n: unmappedBosses.length })}</summary>`;
-    html += `<ul>`;
-    for (const boss of unmappedBosses) {
-      html += `<li><code>${escapeHtml(boss)}</code></li>`;
-    }
-    html += `</ul>`;
-    html += `<p class="hint">${t("preview.unmappedReportHint")}</p>`;
-    html += `</details>`;
+  if (Number(meta.detectedClears) > 0) {
+    return `<p class="hint preview-note">${t("preview.noRosterMatched")}</p>`;
   }
-  previewOutput.innerHTML = html;
+  return `<p class="hint preview-note">${t("preview.noBucketsMatched")}</p>`;
+}
 
-  // Re-bind pagination handlers after each render. They mutate the
-  // global page index and invoke this function again. The diff is
-  // already in memory.
+function getModeEmoji(modeKey) {
+  if (modeKey === "nightmare") return "🌑";
+  if (modeKey === "hard") return "⚔️";
+  return "🛡️";
+}
+
+function renderRosterPagination(page, diffLength, pageIndex, viewMode) {
+  let html = `<div class="roster-pagination">`;
+  if (diffLength > 1) {
+    const prevDisabled = pageIndex === 0 ? "disabled" : "";
+    html += `<button class="page-btn" id="roster-prev" ${prevDisabled}>◀</button>`;
+  }
+  html += `<span class="roster-name">🏛️ ${escapeHtml(page.accountName)}</span>`;
+  if (diffLength > 1) {
+    const nextDisabled = pageIndex >= diffLength - 1 ? "disabled" : "";
+    html += `<span class="page-counter">${pageIndex + 1}/${diffLength}</span>`;
+    html += `<button class="page-btn" id="roster-next" ${nextDisabled}>▶</button>`;
+  }
+  const toggleLabel = viewMode === "char"
+    ? t("preview.viewToggleToRaid")
+    : t("preview.viewToggleToChar");
+  const toggleEmoji = viewMode === "char" ? "🗂️" : "👤";
+  html += `<button class="page-btn view-toggle" id="view-toggle">${toggleEmoji} ${escapeHtml(toggleLabel)}</button>`;
+  return html + `</div>`;
+}
+
+function groupCharacterCellsByRaid(cells) {
+  const grouped = new Map();
+  for (const cell of cells) {
+    if (!grouped.has(cell.raidKey)) grouped.set(cell.raidKey, []);
+    grouped.get(cell.raidKey).push(cell);
+  }
+  return grouped;
+}
+
+function renderCharacterMode(cell) {
+  const modeLabel = getRaidSpecificModeLabel(cell.raidKey, cell.modeKey);
+  const badges = cell.gates
+    .map((gate) => renderGateBadge(gate, cell.states[gate]))
+    .join("");
+  return `<div class="char-mode-block">`
+    + `<span class="char-mode-label">${getModeEmoji(cell.modeKey)} ${escapeHtml(modeLabel)}</span>`
+    + `<div class="gate-badges">${badges}</div>`
+    + `</div>`;
+}
+
+function renderCharacterRaidRow(raidKey, cells) {
+  return `<div class="char-raid-row">`
+    + `<span class="char-raid-name">${escapeHtml(getRaidLabel(raidKey))}</span>`
+    + `<div class="char-raid-modes">${cells.map(renderCharacterMode).join("")}</div>`
+    + `</div>`;
+}
+
+function renderCharacterCard(character) {
+  const raidRows = [...groupCharacterCellsByRaid(character.cells)]
+    .map(([raidKey, cells]) => renderCharacterRaidRow(raidKey, cells))
+    .join("");
+  return `<div class="char-card">`
+    + `<div class="char-card-head">${formatCharRowHead(character)}</div>`
+    + `<div class="char-raid-grid">${raidRows}</div>`
+    + `</div>`;
+}
+
+function renderCharacterCards(characters) {
+  return `<div class="char-cards-grid">${characters.map(renderCharacterCard).join("")}</div>`;
+}
+
+function renderRaidCardCharacter(character) {
+  const badges = character.gates
+    .map((gate) => renderGateBadge(gate, character.states[gate]))
+    .join("");
+  return `<div class="raid-card-char">`
+    + `<div class="char-info">${formatCharRowHead(character)}</div>`
+    + `<div class="gate-badges">${badges}</div>`
+    + `</div>`;
+}
+
+function renderRaidCard(card) {
+  const raidLabel = getRaidLabel(card.raidKey);
+  const modeLabel = getRaidSpecificModeLabel(card.raidKey, card.modeKey);
+  return `<div class="raid-card">`
+    + `<h4 class="raid-card-header">${getModeEmoji(card.modeKey)} ${escapeHtml(raidLabel)} ${escapeHtml(modeLabel)} <span class="hint">· ${t("preview.raidGroupCharCount", { n: card.chars.length })}</span></h4>`
+    + card.chars.map(renderRaidCardCharacter).join("")
+    + `</div>`;
+}
+
+function renderDiffAccountPage(page, diffLength, pageIndex) {
+  const viewMode = window.__artistViewMode === "raid" ? "raid" : "char";
+  const cards = viewMode === "char"
+    ? renderCharacterCards(page.characters)
+    : page.raidCards.map(renderRaidCard).join("");
+  return renderDiffLegend(page)
+    + renderRosterPagination(page, diffLength, pageIndex, viewMode)
+    + cards;
+}
+
+function renderUnmappedBosses(unmappedBosses) {
+  if (unmappedBosses.length === 0) return "";
+  const items = unmappedBosses
+    .map((boss) => `<li><code>${escapeHtml(boss)}</code></li>`)
+    .join("");
+  return `<details class="footer-details"><summary>${t("preview.unmappedSummary", {
+    n: unmappedBosses.length,
+  })}</summary><ul>${items}</ul><p class="hint">${t("preview.unmappedReportHint")}</p></details>`;
+}
+
+function bindDiffPageControls(previewOutput) {
   const prevBtn = document.getElementById("roster-prev");
   const nextBtn = document.getElementById("roster-next");
+  const viewToggleBtn = document.getElementById("view-toggle");
   if (prevBtn) {
     prevBtn.addEventListener("click", () => {
       window.__artistRosterPage = Math.max(0, (window.__artistRosterPage || 0) - 1);
@@ -288,16 +288,29 @@ export function renderDiffPage(previewOutput) {
       renderDiffPage(previewOutput);
     });
   }
-  // View-toggle button: flip char-first <-> raid-first. The underlying diff
-  // already carries both projections; preview-utils computes them in one pass,
-  // and rendering selects the active projection.
-  const viewToggleBtn = document.getElementById("view-toggle");
   if (viewToggleBtn) {
     viewToggleBtn.addEventListener("click", () => {
       window.__artistViewMode = window.__artistViewMode === "raid" ? "char" : "raid";
       renderDiffPage(previewOutput);
     });
   }
+}
+
+export function renderDiffPage(previewOutput) {
+  if (!previewOutput) return;
+  const diff = window.__artistDiff || [];
+  const meta = window.__artistMeta || { distinctChars: 0, clears: 0, schemaDebug: {} };
+  const unmappedBosses = window.__artistUnmappedBosses || [];
+  const rosterError = window.__artistRosterError || "";
+  const pageIndex = normalizeRosterPageIndex(diff);
+
+  let html = renderPreviewHeadline(meta);
+  html += diff.length === 0
+    ? renderEmptyDiffMessage(meta, rosterError)
+    : renderDiffAccountPage(diff[pageIndex], diff.length, pageIndex);
+  html += renderUnmappedBosses(unmappedBosses);
+  previewOutput.innerHTML = html;
+  bindDiffPageControls(previewOutput);
 }
 
 function formatCharRowHead(character) {

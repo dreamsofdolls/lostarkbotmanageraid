@@ -413,6 +413,153 @@ export function collectDiffStateCounts(scope) {
   return counts;
 }
 
+function normalizeAllowedModes(allowedModeKeys) {
+  if (!Array.isArray(allowedModeKeys)) return null;
+  return new Set(allowedModeKeys
+    .map((modeKey) => String(modeKey || "").trim().toLowerCase())
+    .filter(Boolean));
+}
+
+function preferStoredRaidMode(character, entry) {
+  const preferredModeKey = character?.assignedRaids?.[entry.raidKey]?.modeKey;
+  const preferredBase = RAID_MODE_BASE[entry.raidKey]?.[preferredModeKey];
+  return preferredBase === entry.modeKey
+    ? { raidKey: entry.raidKey, modeKey: preferredModeKey }
+    : entry;
+}
+
+function getCharacterRaidModes(character, fileModesByCharacter, allowedModes) {
+  const detectedModes = getFileRaidModesForCharacter(
+    fileModesByCharacter,
+    character?.name,
+    character?.itemLevel
+  );
+  const modes = dedupeRaidModes([
+    ...getEligibleRaidModes(character?.itemLevel),
+    ...detectedModes,
+  ].map((entry) => preferStoredRaidMode(character, entry)));
+  return allowedModes
+    ? modes.filter((entry) => allowedModes.has(entry.modeKey))
+    : modes;
+}
+
+function resolveFileGates(fileClearMap, charName, raidKey, modeKey) {
+  const directGates = fileClearMap.get(makeBucketKey(charName, raidKey, modeKey));
+  const baseModeKey = RAID_MODE_BASE[raidKey]?.[modeKey];
+  if (directGates || !baseModeKey) {
+    return { sourceModeKey: modeKey, fileGates: directGates };
+  }
+  return {
+    sourceModeKey: baseModeKey,
+    fileGates: fileClearMap.get(makeBucketKey(charName, raidKey, baseModeKey)),
+  };
+}
+
+function buildCharacterCell({
+  character,
+  charName,
+  raidKey,
+  modeKey,
+  fileClearMap,
+  currentWeekStartMs,
+}) {
+  const gates = getGatesForRaid(raidKey);
+  const { sourceModeKey, fileGates } = resolveFileGates(
+    fileClearMap,
+    charName,
+    raidKey,
+    modeKey
+  );
+  const assignedRaids = character?.assignedRaids?.[raidKey];
+  const states = Object.fromEntries(gates.map((gate) => [
+    gate,
+    resolveCellState({
+      assignedRaids,
+      fileGates,
+      modeKey,
+      gate,
+      currentWeekStartMs,
+    }),
+  ]));
+  if (!Object.values(states).some((state) => state !== "empty")) return null;
+  return { raidKey, modeKey, sourceModeKey, gates, states };
+}
+
+function appendRaidProjection(charsByRaidMode, character, cell) {
+  const key = `${cell.raidKey}_${cell.modeKey}`;
+  if (!charsByRaidMode.has(key)) charsByRaidMode.set(key, []);
+  charsByRaidMode.get(key).push({
+    name: character?.name || "",
+    class: character?.class || "",
+    itemLevel: Number(character?.itemLevel) || 0,
+    gates: cell.gates,
+    states: cell.states,
+  });
+}
+
+function buildCharacterProjection(character, context) {
+  const charName = normalizeCharName(character?.name);
+  const cells = [];
+  const modes = getCharacterRaidModes(
+    character,
+    context.fileModesByCharacter,
+    context.allowedModes
+  );
+  for (const { raidKey, modeKey } of modes) {
+    const cell = buildCharacterCell({
+      character,
+      charName,
+      raidKey,
+      modeKey,
+      fileClearMap: context.fileClearMap,
+      currentWeekStartMs: context.currentWeekStartMs,
+    });
+    if (!cell) continue;
+    cells.push(cell);
+    appendRaidProjection(context.charsByRaidMode, character, cell);
+  }
+  if (cells.length === 0) return null;
+  return {
+    name: character?.name || "",
+    class: character?.class || "",
+    itemLevel: Number(character?.itemLevel) || 0,
+    cells,
+  };
+}
+
+function compareCharacters(left, right) {
+  return (right.itemLevel - left.itemLevel) || left.name.localeCompare(right.name);
+}
+
+function buildRaidCards(charsByRaidMode) {
+  const cards = [];
+  for (const raidKey of RAID_ORDER) {
+    for (const modeKey of MODE_ORDER) {
+      const chars = charsByRaidMode.get(`${raidKey}_${modeKey}`);
+      if (!chars?.length) continue;
+      chars.sort(compareCharacters);
+      cards.push({ raidKey, modeKey, chars });
+    }
+  }
+  return cards;
+}
+
+function buildAccountDiff(account, sharedContext) {
+  const charsByRaidMode = new Map();
+  const context = { ...sharedContext, charsByRaidMode };
+  const characters = (account?.characters || [])
+    .map((character) => buildCharacterProjection(character, context))
+    .filter(Boolean)
+    .sort(compareCharacters);
+  const raidCards = buildRaidCards(charsByRaidMode);
+  if (characters.length === 0 && raidCards.length === 0) return null;
+  return {
+    accountName: account?.accountName || "(unnamed)",
+    characters,
+    raidCards,
+  };
+}
+
 /**
  * Build the renderable diff structure with TWO projections of the
  * same per-(char, raid, mode, gate) cell data so the UI can offer
@@ -440,106 +587,14 @@ export function buildDiff(
   fileBuckets,
   { allowedModeKeys = null, currentWeekStartMs = 0 } = {}
 ) {
-  const fileClearMap = buildFileClearMap(fileBuckets || []);
-  const fileModesByCharacter = indexFileRaidModesByCharacter(fileBuckets || []);
-  const allowedModes = Array.isArray(allowedModeKeys)
-    ? new Set(allowedModeKeys.map((modeKey) => String(modeKey || "").trim().toLowerCase()).filter(Boolean))
-    : null;
-  const accounts = [];
-  for (const account of rosterAccounts || []) {
-    const accountName = account?.accountName || "(unnamed)";
-    // Pre-compute every char's eligible cells with state. Single pass
-    // populates both projections.
-    const charEntries = [];
-    const charsByRaidMode = new Map();
-    for (const character of account?.characters || []) {
-      const charNameLower = String(character?.name || "").trim().toLowerCase();
-      const detectedModes = getFileRaidModesForCharacter(
-        fileModesByCharacter,
-        charNameLower,
-        character?.itemLevel
-      );
-      const eligible = dedupeRaidModes([
-        ...getEligibleRaidModes(character?.itemLevel),
-        ...detectedModes,
-      ].map((entry) => {
-        const preferredModeKey = character?.assignedRaids?.[entry.raidKey]?.modeKey;
-        const preferredBase = RAID_MODE_BASE[entry.raidKey]?.[preferredModeKey];
-        return preferredBase === entry.modeKey
-          ? { raidKey: entry.raidKey, modeKey: preferredModeKey }
-          : entry;
-      })).filter((entry) => !allowedModes || allowedModes.has(entry.modeKey));
-      const charCells = [];
-      for (const { raidKey, modeKey } of eligible) {
-        const gates = getGatesForRaid(raidKey);
-        const states = {};
-        let hasActivity = false;
-        let sourceModeKey = modeKey;
-        let fileGates = fileClearMap.get(`${charNameLower}::${raidKey}::${modeKey}`);
-        const baseModeKey = RAID_MODE_BASE[raidKey]?.[modeKey];
-        if (!fileGates && baseModeKey) {
-          sourceModeKey = baseModeKey;
-          fileGates = fileClearMap.get(`${charNameLower}::${raidKey}::${baseModeKey}`);
-        }
-        const assignedRaids = character?.assignedRaids?.[raidKey];
-        for (const gate of gates) {
-          const state = resolveCellState({
-            assignedRaids,
-            fileGates,
-            modeKey,
-            gate,
-            currentWeekStartMs,
-          });
-          states[gate] = state;
-          if (state !== "empty") hasActivity = true;
-        }
-        if (!hasActivity) continue;
-        const cell = {
-          raidKey,
-          modeKey,
-          sourceModeKey,
-          gates,
-          states,
-        };
-        charCells.push(cell);
-        // Mirror into raid-first projection - same cell, different
-        // grouping. char identity travels with it.
-        const key = `${raidKey}_${modeKey}`;
-        if (!charsByRaidMode.has(key)) charsByRaidMode.set(key, []);
-        charsByRaidMode.get(key).push({
-          name: character?.name || "",
-          class: character?.class || "",
-          itemLevel: Number(character?.itemLevel) || 0,
-          gates,
-          states,
-        });
-      }
-      if (charCells.length > 0) {
-        charEntries.push({
-          name: character?.name || "",
-          class: character?.class || "",
-          itemLevel: Number(character?.itemLevel) || 0,
-          cells: charCells,
-        });
-      }
-    }
-    // Char-first projection: sort by ilvl desc + name for stable order.
-    charEntries.sort((a, b) => (b.itemLevel - a.itemLevel) || a.name.localeCompare(b.name));
-    // Raid-first projection: deterministic raid+mode order, chars
-    // sorted by ilvl desc within each card.
-    const raidCards = [];
-    for (const raidKey of RAID_ORDER) {
-      for (const modeKey of MODE_ORDER) {
-        const key = `${raidKey}_${modeKey}`;
-        const chars = charsByRaidMode.get(key);
-        if (!chars || chars.length === 0) continue;
-        chars.sort((a, b) => (b.itemLevel - a.itemLevel) || a.name.localeCompare(b.name));
-        raidCards.push({ raidKey, modeKey, chars });
-      }
-    }
-    if (charEntries.length > 0 || raidCards.length > 0) {
-      accounts.push({ accountName, characters: charEntries, raidCards });
-    }
-  }
-  return accounts;
+  const buckets = fileBuckets || [];
+  const context = {
+    fileClearMap: buildFileClearMap(buckets),
+    fileModesByCharacter: indexFileRaidModesByCharacter(buckets),
+    allowedModes: normalizeAllowedModes(allowedModeKeys),
+    currentWeekStartMs,
+  };
+  return (rosterAccounts || [])
+    .map((account) => buildAccountDiff(account, context))
+    .filter(Boolean);
 }
