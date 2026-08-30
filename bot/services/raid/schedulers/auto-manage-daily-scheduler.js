@@ -94,6 +94,23 @@ async function settleUnavailableDailyCandidate({
   };
 }
 
+async function loadDailyCandidateSettlement({
+  User,
+  discordId,
+  dailyContext,
+  attemptCount,
+  nowMs,
+}) {
+  const fresh = await User.findOne({ discordId });
+  const settlement = await settleUnavailableDailyCandidate({
+    userDoc: fresh,
+    targetDayKey: dailyContext.targetDayKey,
+    attemptCount,
+    nowMs,
+  });
+  return { fresh, settlement };
+}
+
 async function persistTransientDailyFailure({
   User,
   saveWithRetry,
@@ -104,10 +121,10 @@ async function persistTransientDailyFailure({
 }) {
   let transition = { bucket: "skipped", outcome: "superseded" };
   await saveWithRetry(async () => {
-    const fresh = await User.findOne({ discordId });
-    const settlement = await settleUnavailableDailyCandidate({
-      userDoc: fresh,
-      targetDayKey: dailyContext.targetDayKey,
+    const { fresh, settlement } = await loadDailyCandidateSettlement({
+      User,
+      discordId,
+      dailyContext,
       attemptCount,
       nowMs,
     });
@@ -125,6 +142,120 @@ async function persistTransientDailyFailure({
     });
     await fresh.save();
   });
+  return transition;
+}
+
+async function loadEligibleDailySeed(User, discordId) {
+  const seedDoc = await User.findOne({ discordId });
+  if (!seedDoc || !Array.isArray(seedDoc.accounts) || seedDoc.accounts.length === 0) {
+    return {
+      seedDoc: null,
+      transition: { bucket: "skipped", outcome: "missing-roster" },
+    };
+  }
+  if (!seedDoc.autoManageEnabled) {
+    return {
+      seedDoc: null,
+      transition: { bucket: "skipped", outcome: "disabled" },
+    };
+  }
+  return { seedDoc, transition: null };
+}
+
+async function persistCollectedDailyReport({
+  User,
+  saveWithRetry,
+  discordId,
+  dailyContext,
+  attemptCount,
+  nowMs,
+  ensureFreshWeek,
+  applyAutoManageCollected,
+  isPublicLogDisabledError,
+  weekResetStart,
+  collected,
+}) {
+  let report = null;
+  let transition = { bucket: "skipped", outcome: "superseded" };
+  await saveWithRetry(async () => {
+    const { fresh, settlement } = await loadDailyCandidateSettlement({
+      User,
+      discordId,
+      dailyContext,
+      attemptCount,
+      nowMs,
+    });
+    if (settlement.handled) {
+      transition = settlement.transition;
+      return;
+    }
+
+    ensureFreshWeek(fresh);
+    report = applyAutoManageCollected(fresh, weekResetStart, collected);
+    stampAutoManageAttemptFromReport(fresh, report, nowMs);
+    transition = applyAutoManageDailyReportState({
+      userDoc: fresh,
+      report,
+      isPublicLogDisabledError,
+      targetDayKey: dailyContext.targetDayKey,
+      attemptCount,
+      nowMs,
+    });
+    await fresh.save();
+  });
+  return { report, transition };
+}
+
+async function maybeNudgePrivateLogUser({
+  report,
+  isPublicLogDisabledError,
+  nudgeStuckPrivateLogUser,
+  client,
+  discordId,
+}) {
+  if (!shouldNudgePrivateLogUser({ report, isPublicLogDisabledError })) return;
+  try {
+    await nudgeStuckPrivateLogUser(client, discordId);
+  } catch (err) {
+    console.warn(
+      `[auto-manage daily] user ${discordId} private-log nudge failed:`,
+      err?.message || err
+    );
+  }
+}
+
+async function settleCandidateFailure({
+  err,
+  claimed,
+  User,
+  saveWithRetry,
+  discordId,
+  dailyContext,
+  attemptCount,
+  nowMs,
+}) {
+  let transition = { bucket: "failed", outcome: "unpersisted-failure" };
+  if (claimed) {
+    try {
+      transition = await persistTransientDailyFailure({
+        User,
+        saveWithRetry,
+        discordId,
+        dailyContext,
+        attemptCount,
+        nowMs,
+      });
+    } catch (persistErr) {
+      console.warn(
+        `[auto-manage daily] user ${discordId} retry state failed:`,
+        persistErr?.message || persistErr
+      );
+    }
+  }
+  console.warn(
+    `[auto-manage daily] user ${discordId} sync failed:`,
+    err?.message || err
+  );
   return transition;
 }
 
@@ -156,13 +287,9 @@ async function syncCandidate({
   let claimed = false;
   let attemptCount = 0;
   try {
-    const seedDoc = await User.findOne({ discordId });
-    if (!seedDoc || !Array.isArray(seedDoc.accounts) || seedDoc.accounts.length === 0) {
-      return { bucket: "skipped", outcome: "missing-roster" };
-    }
-    if (!seedDoc.autoManageEnabled) {
-      return { bucket: "skipped", outcome: "disabled" };
-    }
+    const seed = await loadEligibleDailySeed(User, discordId);
+    if (seed.transition) return seed.transition;
+    const { seedDoc } = seed;
 
     attemptCount = getNextAutoManageDailyAttemptCount(
       seedDoc,
@@ -187,77 +314,40 @@ async function syncCandidate({
       weekResetStart
     );
 
-    let latestReport = null;
-    let transition = { bucket: "skipped", outcome: "superseded" };
-    await saveWithRetry(async () => {
-      const fresh = await User.findOne({ discordId });
-      const settlement = await settleUnavailableDailyCandidate({
-        userDoc: fresh,
-        targetDayKey: dailyContext.targetDayKey,
-        attemptCount,
-        nowMs,
-      });
-      if (settlement.handled) {
-        transition = settlement.transition;
-        return;
-      }
-
-      ensureFreshWeek(fresh);
-      const report = applyAutoManageCollected(fresh, weekResetStart, collected);
-      latestReport = report;
-      stampAutoManageAttemptFromReport(fresh, report, nowMs);
-      transition = applyAutoManageDailyReportState({
-        userDoc: fresh,
-        report,
-        isPublicLogDisabledError,
-        targetDayKey: dailyContext.targetDayKey,
-        attemptCount,
-        nowMs,
-      });
-      await fresh.save();
+    const persisted = await persistCollectedDailyReport({
+      User,
+      saveWithRetry,
+      discordId,
+      dailyContext,
+      attemptCount,
+      nowMs,
+      ensureFreshWeek,
+      applyAutoManageCollected,
+      isPublicLogDisabledError,
+      weekResetStart,
+      collected,
     });
 
-    if (
-      shouldNudgePrivateLogUser({
-        report: latestReport,
-        isPublicLogDisabledError,
-      })
-    ) {
-      try {
-        await nudgeStuckPrivateLogUser(client, discordId);
-      } catch (err) {
-        console.warn(
-          `[auto-manage daily] user ${discordId} private-log nudge failed:`,
-          err?.message || err
-        );
-      }
-    }
+    await maybeNudgePrivateLogUser({
+      report: persisted.report,
+      isPublicLogDisabledError,
+      nudgeStuckPrivateLogUser,
+      client,
+      discordId,
+    });
 
-    return transition;
+    return persisted.transition;
   } catch (err) {
-    let transition = { bucket: "failed", outcome: "unpersisted-failure" };
-    if (claimed) {
-      try {
-        transition = await persistTransientDailyFailure({
-          User,
-          saveWithRetry,
-          discordId,
-          dailyContext,
-          attemptCount,
-          nowMs,
-        });
-      } catch (persistErr) {
-        console.warn(
-          `[auto-manage daily] user ${discordId} retry state failed:`,
-          persistErr?.message || persistErr
-        );
-      }
-    }
-    console.warn(
-      `[auto-manage daily] user ${discordId} sync failed:`,
-      err?.message || err
-    );
-    return transition;
+    return settleCandidateFailure({
+      err,
+      claimed,
+      User,
+      saveWithRetry,
+      discordId,
+      dailyContext,
+      attemptCount,
+      nowMs,
+    });
   } finally {
     releaseAutoManageSyncSlot(discordId);
   }

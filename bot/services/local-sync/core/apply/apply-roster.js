@@ -12,10 +12,26 @@ const {
 const { normalizeDifficulty } = require("../catalog");
 const { COMPANION_SCOPE } = require("../scope");
 
-function findRosterCharacter(userDoc, charName) {
-  if (!userDoc || !Array.isArray(userDoc.accounts)) return null;
+function buildRosterCharacterIndex(userDoc) {
+  const index = new Map();
+  if (!userDoc || !Array.isArray(userDoc.accounts)) return index;
+  for (const account of userDoc.accounts) {
+    const chars = Array.isArray(account?.characters) ? account.characters : [];
+    for (const character of chars) {
+      const key = normalizeName(getCharacterName(character));
+      // Preserve findRosterCharacter's first-match behavior when a corrupt
+      // roster happens to contain the same name under two accounts.
+      if (key && !index.has(key)) index.set(key, character);
+    }
+  }
+  return index;
+}
+
+function findRosterCharacter(userDoc, charName, rosterIndex = null) {
   const target = normalizeName(charName);
   if (!target) return null;
+  if (rosterIndex instanceof Map) return rosterIndex.get(target) || null;
+  if (!userDoc || !Array.isArray(userDoc.accounts)) return null;
   for (const account of userDoc.accounts) {
     const chars = Array.isArray(account?.characters) ? account.characters : [];
     for (const character of chars) {
@@ -29,8 +45,8 @@ function getAssignedRaid(character, raidKey) {
   return character?.assignedRaids?.[raidKey] || {};
 }
 
-function resolveBucketModePreference(userDoc, bucket) {
-  const character = findRosterCharacter(userDoc, bucket?.charName);
+function resolveBucketModePreference(userDoc, bucket, { rosterIndex = null } = {}) {
+  const character = findRosterCharacter(userDoc, bucket?.charName, rosterIndex);
   if (!character) return bucket;
   const storedModeKey = getAssignedRaid(character, bucket.raidKey)?.modeKey;
   const modeKey = preserveManualRaidModePreference(
@@ -85,18 +101,59 @@ function hasCurrentWeekProgressInAnotherMode(
   ));
 }
 
+function hasUsableRoster(userDoc) {
+  return Boolean(
+    userDoc
+    && Array.isArray(userDoc.accounts)
+    && userDoc.accounts.length > 0
+  );
+}
+
+function hasRequiredModeConflict(
+  character,
+  bucket,
+  requiredCompanionScope,
+  currentWeekStartMs
+) {
+  return requiredCompanionScope === COMPANION_SCOPE.solo
+    && hasCurrentWeekProgressInAnotherMode(character, bucket, currentWeekStartMs);
+}
+
+function buildAlreadyCompleteResult(character, bucket, effectiveGates, currentWeekStartMs) {
+  const alreadyComplete = raidAlreadyComplete(
+    character,
+    bucket.raidKey,
+    currentWeekStartMs
+  ) || gatesAlreadyComplete(
+    character,
+    bucket,
+    effectiveGates,
+    currentWeekStartMs
+  );
+  if (!alreadyComplete) return null;
+  return {
+    action: "skip",
+    reason: "already_complete",
+    displayName: getCharacterName(character) || bucket.charName,
+  };
+}
+
 function classifyBucketAgainstRoster(
   userDoc,
   bucket,
   raidMeta,
   effectiveGates,
-  { currentWeekStartMs = 0, requiredCompanionScope = null } = {}
+  {
+    currentWeekStartMs = 0,
+    requiredCompanionScope = null,
+    rosterIndex = null,
+  } = {}
 ) {
-  if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
+  if (!hasUsableRoster(userDoc)) {
     return { action: "reject", reason: "no_roster" };
   }
 
-  const character = findRosterCharacter(userDoc, bucket.charName);
+  const character = findRosterCharacter(userDoc, bucket.charName, rosterIndex);
   if (!character) return { action: "reject", reason: "char_not_in_roster" };
 
   const charItemLevel = Number(character.itemLevel) || 0;
@@ -104,33 +161,28 @@ function classifyBucketAgainstRoster(
     return { action: "reject", reason: "ilvl_too_low", ineligibleItemLevel: charItemLevel };
   }
 
-  if (
-    requiredCompanionScope === COMPANION_SCOPE.solo
-    && hasCurrentWeekProgressInAnotherMode(character, bucket, currentWeekStartMs)
-  ) {
+  if (hasRequiredModeConflict(
+    character,
+    bucket,
+    requiredCompanionScope,
+    currentWeekStartMs
+  )) {
     return { action: "reject", reason: "mode_progress_conflict" };
   }
 
-  if (raidAlreadyComplete(character, bucket.raidKey, currentWeekStartMs)) {
-    return {
-      action: "skip",
-      reason: "already_complete",
-      displayName: getCharacterName(character) || bucket.charName,
-    };
-  }
-
-  if (gatesAlreadyComplete(character, bucket, effectiveGates, currentWeekStartMs)) {
-    return {
-      action: "skip",
-      reason: "already_complete",
-      displayName: getCharacterName(character) || bucket.charName,
-    };
-  }
+  const completed = buildAlreadyCompleteResult(
+    character,
+    bucket,
+    effectiveGates,
+    currentWeekStartMs
+  );
+  if (completed) return completed;
 
   return { action: "apply", displayName: getCharacterName(character) || bucket.charName };
 }
 
 module.exports = {
+  buildRosterCharacterIndex,
   classifyBucketAgainstRoster,
   findRosterCharacter,
   gatesAlreadyComplete,

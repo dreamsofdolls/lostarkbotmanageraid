@@ -11,6 +11,10 @@ const { getClassEmoji } = require("../../../models/Class");
 const { pack2Columns, formatProgressTotals } = require("../../../utils/raid/common/shared");
 const { t, tPick } = require("../../../services/i18n");
 
+function numberOrZero(value) {
+  return Number(value) || 0;
+}
+
 /**
  * Build the /raid-status view service.
  * @param {object} deps - injected dependencies (discord.js builders +
@@ -67,6 +71,12 @@ function createRaidStatusView(deps) {
   // least one eligible raid this week. Non-earners emit no line at all:
   // the header already carries the 💰 marker (its absence signals "not
   // gold-earner"), so a second body line would duplicate that state.
+  function resolveEarnedBoundGold(raid, earnedGold) {
+    const explicitBound = numberOrZero(raid?.earnedBoundGold);
+    if (explicitBound) return explicitBound;
+    return raid?.goldBound ? earnedGold : 0;
+  }
+
   function buildCharacterGoldLine(character, raids, lang) {
     if (!Array.isArray(raids) || raids.length === 0) return [];
     if (!character?.isGoldEarner) return [];
@@ -74,14 +84,14 @@ function createRaidStatusView(deps) {
     let total = 0;
     let earnedBound = 0;
     for (const raid of raids) {
-      const e = Number(raid?.earnedGold) || 0;
+      const e = numberOrZero(raid?.earnedGold);
       earned += e;
-      total += Number(raid?.totalGold) || 0;
+      total += numberOrZero(raid?.totalGold);
       // Mirror summarizeCharacterGold: a reduced-normal raid pays half its gold
       // bound, so use the per-raid earnedBoundGold split. Falling back to the
       // whole-raid amount only for fully-bound modes / bare test raids that
       // predate the split field - otherwise the bound half goes uncounted.
-      earnedBound += Number(raid?.earnedBoundGold) || (raid?.goldBound ? e : 0);
+      earnedBound += resolveEarnedBoundGold(raid, e);
     }
     if (total <= 0) return [];
     // Disjoint buckets: 💰 = tradeable (unbound) gold, 🔒 = roster-bound gold.
@@ -94,9 +104,9 @@ function createRaidStatusView(deps) {
   }
 
   function buildBoundGoldTail(gold, lang) {
-    const totalBound = Number(gold?.totalBound) || 0;
+    const totalBound = numberOrZero(gold?.totalBound);
     if (totalBound <= 0) return "";
-    const earnedBound = Number(gold?.earnedBound) || 0;
+    const earnedBound = numberOrZero(gold?.earnedBound);
     return t("raid-status.embed.goldBoundTail", lang, {
       bound: `${formatGold(earnedBound)} / ${formatGold(totalBound)}`,
     });
@@ -129,90 +139,58 @@ function createRaidStatusView(deps) {
     };
   }
 
+  function resolveUserCooldown(getCooldownMs, discordId, fallbackMs) {
+    if (typeof getCooldownMs !== "function" || !discordId) return fallbackMs;
+    return getCooldownMs(discordId);
+  }
+
+  function buildRosterFreshnessLine(account, userMeta, lang) {
+    const lastRefreshedAt = numberOrZero(account?.lastRefreshedAt);
+    if (lastRefreshedAt <= 0) return "";
+
+    const lastUpdated = `${UI.icons.roster} ${t("raid-status.freshness.lastUpdated", lang)} <t:${Math.floor(lastRefreshedAt / 1000)}:R>`;
+    const cooldownMs = resolveUserCooldown(
+      getRosterRefreshCooldownMs,
+      userMeta?.discordId,
+      ROSTER_REFRESH_COOLDOWN_MS
+    );
+    const remain = formatRosterRefreshCooldownRemaining(account, cooldownMs);
+    if (!remain) {
+      return `${lastUpdated} · ✅ ${t("raid-status.freshness.refreshReadyNow", lang)}`;
+    }
+
+    const cursor = numberOrZero(account?.lastRefreshAttemptAt) || lastRefreshedAt;
+    const nextTs = `<t:${Math.floor((cursor + cooldownMs) / 1000)}:R>`;
+    return `${lastUpdated} · ⏳ ${t("raid-status.freshness.refreshReady", lang)} ${nextTs}`;
+  }
+
+  function buildAutoManageFreshnessLine(account, userMeta, lang) {
+    if (account?._sharedFrom || !userMeta?.autoManageEnabled) return "";
+
+    const lastSyncAt = numberOrZero(userMeta?.lastAutoManageSyncAt);
+    const lastSync = lastSyncAt > 0
+      ? `${UI.icons.reset} ${t("raid-status.freshness.lastSynced", lang)} <t:${Math.floor(lastSyncAt / 1000)}:R>`
+      : `${UI.icons.reset} ${t("raid-status.freshness.neverSynced", lang)}`;
+    const cooldownMs = resolveUserCooldown(
+      getAutoManageCooldownMs,
+      userMeta?.discordId,
+      AUTO_MANAGE_SYNC_COOLDOWN_MS
+    );
+    const lastAttempt = numberOrZero(userMeta?.lastAutoManageAttemptAt);
+    const remain = formatNextCooldownRemaining(lastAttempt, cooldownMs);
+    if (!remain) {
+      return `${lastSync} · ✅ ${t("raid-status.freshness.syncReadyNow", lang)}`;
+    }
+
+    const nextTs = `<t:${Math.floor((lastAttempt + cooldownMs) / 1000)}:R>`;
+    return `${lastSync} · ⏳ ${t("raid-status.freshness.syncReady", lang)} ${nextTs}`;
+  }
+
   function buildAccountFreshnessLine(account, userMeta, lang) {
-    const parts = [];
-    const lastRefreshedAt = Number(account?.lastRefreshedAt) || 0;
-    if (lastRefreshedAt > 0) {
-      // Discord native timestamp `<t:UNIX:R>` ticks client-side - browser
-      // refreshes the relative string every second without a server-side
-      // re-render. Replaces the static `formatShortRelative()` snapshot
-      // so the freshness line stays accurate even after the user has
-      // been staring at the embed for a minute.
-      const lastUpdatedTs = `<t:${Math.floor(lastRefreshedAt / 1000)}:R>`;
-      const lastUpdatedLabel = t("raid-status.freshness.lastUpdated", lang);
-      const lastUpdated = `${UI.icons.roster} ${lastUpdatedLabel} ${lastUpdatedTs}`;
-      // Manager (in RAID_MANAGER_ID allowlist) gets a 10-min refresh
-      // cooldown vs 2h for regular users so the operational refresh path
-      // mirrors the per-user cooldown they'd actually hit. Falls back to
-      // the conservative 2h default when the helper isn't wired in
-      // (older deps shape, tests).
-      const refreshCooldownMs =
-        typeof getRosterRefreshCooldownMs === "function" && userMeta?.discordId
-          ? getRosterRefreshCooldownMs(userMeta.discordId)
-          : ROSTER_REFRESH_COOLDOWN_MS;
-      const remain = formatRosterRefreshCooldownRemaining(account, refreshCooldownMs);
-      if (remain) {
-        // `lastRefreshAttemptAt` (or lastRefreshedAt if no attempt
-        // recorded) + cooldown is the moment the next refresh becomes
-        // eligible; render that as another <t:R> so "in Xm" ticks down
-        // toward zero in real time.
-        const cooldownMs = refreshCooldownMs;
-        const cursor =
-          Number(account?.lastRefreshAttemptAt) ||
-          Number(account?.lastRefreshedAt) ||
-          0;
-        const nextEligible = cursor + cooldownMs;
-        const nextTs = `<t:${Math.floor(nextEligible / 1000)}:R>`;
-        const refreshReadyLabel = t("raid-status.freshness.refreshReady", lang);
-        parts.push(`${lastUpdated} · ⏳ ${refreshReadyLabel} ${nextTs}`);
-      } else {
-        const refreshReadyNowLabel = t("raid-status.freshness.refreshReadyNow", lang);
-        parts.push(`${lastUpdated} · ✅ ${refreshReadyNowLabel}`);
-      }
-    }
-
-    // Auto-manage state belongs to the account *owner*, not the viewer.
-    // On shared pages the auto-sync line would render B's settings on
-    // A's roster, which is misleading. Hide the line for shared
-    // accounts; rely on the title's "Shared by ..." badge to signal
-    // why sync info is absent.
-    const isShared = !!account?._sharedFrom;
-    if (!isShared && userMeta?.autoManageEnabled) {
-      const lastSyncAt = Number(userMeta?.lastAutoManageSyncAt) || 0;
-      const lastSyncLabel = t("raid-status.freshness.lastSynced", lang);
-      const neverSyncedLabel = t("raid-status.freshness.neverSynced", lang);
-      const lastSync =
-        lastSyncAt > 0
-          ? `${UI.icons.reset} ${lastSyncLabel} <t:${Math.floor(lastSyncAt / 1000)}:R>`
-          : `${UI.icons.reset} ${neverSyncedLabel}`;
-      // Manager (in RAID_MANAGER_ID allowlist) has a 15s sync cooldown vs 10m
-      // for regular users - the countdown must reflect the per-user value or
-      // it would mislead managers into waiting minutes after a click when
-      // they're actually sync-ready within seconds.
-      const cooldownMs =
-        typeof getAutoManageCooldownMs === "function" && userMeta?.discordId
-          ? getAutoManageCooldownMs(userMeta.discordId)
-          : AUTO_MANAGE_SYNC_COOLDOWN_MS;
-      const lastAttempt = Number(userMeta?.lastAutoManageAttemptAt) || 0;
-      const remain = formatNextCooldownRemaining(lastAttempt, cooldownMs);
-      if (remain) {
-        const nextEligible = lastAttempt + cooldownMs;
-        const nextTs = `<t:${Math.floor(nextEligible / 1000)}:R>`;
-        const syncReadyLabel = t("raid-status.freshness.syncReady", lang);
-        parts.push(`${lastSync} · ⏳ ${syncReadyLabel} ${nextTs}`);
-      } else {
-        const syncReadyNowLabel = t("raid-status.freshness.syncReadyNow", lang);
-        parts.push(`${lastSync} · ✅ ${syncReadyNowLabel}`);
-      }
-    }
-
-    // Render refresh segment + sync segment on SEPARATE lines instead of
-    // joining with " · " on one line. The combined line was getting wide
-    // (4 sub-segments × ~15 chars each = ~60 chars) and harder to scan
-    // because refresh + sync are distinct concepts (roster metadata vs
-    // bible logs) on different cooldown clocks. Stacking them visually
-    // mirrors the conceptual split.
-    return parts.join("\n");
+    return [
+      buildRosterFreshnessLine(account, userMeta, lang),
+      buildAutoManageFreshnessLine(account, userMeta, lang),
+    ].filter(Boolean).join("\n");
   }
 
   // Map the piggyback outcome captured during handleRaidStatusCommand
@@ -243,6 +221,148 @@ function createRaidStatusView(deps) {
     }
   }
 
+  function resolveProgressIcon(progress) {
+    if (progress.total === 0) return UI.icons.lock;
+    if (progress.completed === progress.total) return UI.icons.done;
+    if (progress.completed + progress.partial > 0) return UI.icons.partial;
+    return UI.icons.pending;
+  }
+
+  function summarizeAccountProgress(characters, getProgressRaidsFor) {
+    const accountRaids = [];
+    for (const character of characters) {
+      accountRaids.push(...getProgressRaidsFor(character));
+    }
+    return summarizeRaidProgress(accountRaids);
+  }
+
+  function resolveSyncModeBadge(sharedFrom, userMeta, lang) {
+    if (sharedFrom) return "";
+    if (userMeta?.localSyncEnabled === true) {
+      return t("raid-status.embed.localSyncOnBadge", lang);
+    }
+    if (userMeta?.autoManageEnabled === true) {
+      return t("raid-status.embed.autoSyncOnBadge", lang);
+    }
+    return "";
+  }
+
+  function buildSharedRosterBadge(sharedFrom, lang) {
+    if (!sharedFrom) return "";
+    return t("raid-status.embed.sharedBySuffix", lang, {
+      owner: sharedFrom.ownerLabel || "(unknown)",
+      level: t(
+        `share.accessLevel.${sharedFrom.accessLevel || "edit"}`,
+        lang,
+      ),
+    });
+  }
+
+  function buildAccountTitle(account, accountProgress, userMeta, lang) {
+    const sharedFrom = account._sharedFrom;
+    const syncModeBadge = resolveSyncModeBadge(sharedFrom, userMeta, lang);
+    const sharedBadge = buildSharedRosterBadge(sharedFrom, lang);
+    return `${resolveProgressIcon(accountProgress)} ${account.accountName}${syncModeBadge}${sharedBadge}`;
+  }
+
+  function normalizeGlobalRollup(globalTotals) {
+    const root = globalTotals || {};
+    const progress = root.progress || {};
+    const soloProgress = root.soloProgress || {};
+    const gold = root.gold || {};
+    return {
+      characters: root.characters,
+      done: progress.completed,
+      total: progress.total,
+      soloDone: numberOrZero(soloProgress.completed),
+      soloTotal: numberOrZero(soloProgress.total ?? root.solo),
+      gold,
+      goldTotal: numberOrZero(gold.total),
+      goldEarnedUnbound: numberOrZero(gold.earnedUnbound),
+      goldTotalUnbound: numberOrZero(gold.totalUnbound),
+    };
+  }
+
+  function buildGlobalRollupLines(totalPages, globalTotals, lang) {
+    if (totalPages <= 1) return [];
+    const totals = normalizeGlobalRollup(globalTotals);
+    const lines = [
+      t("raid-status.embed.allAccounts", lang, {
+        chars: totals.characters,
+        done: totals.done,
+        total: totals.total,
+        soloDone: totals.soloDone,
+        soloTotal: totals.soloTotal,
+      }),
+    ];
+
+    if (totals.goldTotal > 0) {
+      lines.push(t("raid-status.embed.goldRollup", lang, {
+        earned: formatGold(totals.goldEarnedUnbound),
+        total: formatGold(totals.goldTotalUnbound),
+        boundTail: buildBoundGoldTail(totals.gold, lang),
+      }));
+    }
+    return lines;
+  }
+
+  function buildRosterGoldLine(account, getRaidsFor, lang) {
+    if (typeof summarizeAccountGold !== "function") return "";
+    const accountGold = summarizeAccountGold(account, getRaidsFor);
+    if (accountGold.total <= 0) return "";
+    return t("raid-status.embed.rosterGold", lang, {
+      earned: formatGold(accountGold.earnedUnbound),
+      total: formatGold(accountGold.totalUnbound),
+      boundTail: buildBoundGoldTail(accountGold, lang),
+    });
+  }
+
+  function hasEligibleNonEarner(account, getRaidsFor) {
+    return (account.characters || []).some(
+      (character) => !character?.isGoldEarner && getRaidsFor(character).length > 0
+    );
+  }
+
+  function buildAccountDescriptionLines({
+    account,
+    totalPages,
+    globalTotals,
+    getRaidsFor,
+    userMeta,
+    showGoldEarnerHint,
+    lang,
+  }) {
+    const lines = buildGlobalRollupLines(totalPages, globalTotals, lang);
+    const rosterGoldLine = buildRosterGoldLine(account, getRaidsFor, lang);
+    if (rosterGoldLine) lines.push(rosterGoldLine);
+
+    const freshnessLine = buildAccountFreshnessLine(account, userMeta, lang);
+    if (freshnessLine) lines.push(freshnessLine);
+    if (showGoldEarnerHint && hasEligibleNonEarner(account, getRaidsFor)) {
+      lines.push(t("raid-status.embed.goldEarnerHint", lang));
+    }
+    return lines;
+  }
+
+  function resolveVisibleCharacters({
+    characters,
+    shouldDisplayCharacter,
+    hideIneligibleChars,
+    getRaidsFor,
+  }) {
+    const displayCharacters = typeof shouldDisplayCharacter === "function"
+      ? characters.filter(shouldDisplayCharacter)
+      : characters;
+    return hideIneligibleChars
+      ? displayCharacters.filter((character) => getRaidsFor(character).length > 0)
+      : displayCharacters;
+  }
+
+  function appendOutcomeField(embed, outcomeLine) {
+    if (!outcomeLine) return;
+    embed.addFields({ name: "​", value: outcomeLine, inline: false });
+  }
+
   function buildAccountPageEmbed(
     account,
     pageIndex,
@@ -264,112 +384,17 @@ function createRaidStatusView(deps) {
       lang = "vi",
     } = options;
     const characters = Array.isArray(account.characters) ? account.characters : [];
-
-    const accountRaids = [];
-    for (const character of characters) {
-      accountRaids.push(...getProgressRaidsFor(character));
-    }
-    const accountProgress = summarizeRaidProgress(accountRaids);
-
-    const titleIcon = accountProgress.total === 0
-      ? UI.icons.lock
-      : accountProgress.completed === accountProgress.total
-        ? UI.icons.done
-        : accountProgress.completed + accountProgress.partial > 0
-          ? UI.icons.partial
-          : UI.icons.pending;
-
-    // The progress icon is the only leading title icon. Shared ownership is
-    // already explicit in the localized "Shared by ..." suffix, so a second
-    // roster/manager/shared icon would only create a noisy double-icon title.
-    // Owner-A's sync state is hidden on a shared page because those settings
-    // do not belong to viewer B.
-    const sharedFrom = account._sharedFrom;
-    const isShared = !!sharedFrom;
-    // Show only the active sync mode. OFF and legacy/unset values stay hidden;
-    // the mode label itself is enough, so locale packs intentionally omit
-    // ON/OFF wording. Local wins defensively if an old document has both flags.
-    let syncModeBadge = "";
-    if (!isShared) {
-      if (userMeta?.localSyncEnabled === true) {
-        syncModeBadge = t("raid-status.embed.localSyncOnBadge", lang);
-      } else if (userMeta?.autoManageEnabled === true) {
-        syncModeBadge = t("raid-status.embed.autoSyncOnBadge", lang);
-      }
-    }
-    const sharedBadge = isShared
-      ? t("raid-status.embed.sharedBySuffix", lang, {
-          owner: sharedFrom.ownerLabel || "(unknown)",
-          // Localize the access level (edit / view) so the badge tail
-          // reads natively in each language - "(編集可)" for JP, "(chỉnh
-          // sửa)" for VN, "(edit)" for EN. Fall back to the raw level
-          // string if the lookup misses (e.g. unknown grant type).
-          level: t(
-            `share.accessLevel.${sharedFrom.accessLevel || "edit"}`,
-            lang,
-          ),
-        })
-      : "";
-    const title = `${titleIcon} ${account.accountName}${syncModeBadge}${sharedBadge}`;
-
-    const descriptionLines = [];
-    if (totalPages > 1) {
-      // Cross-account rollup. Suppressed when total <= 0 so an
-      // all-non-earner roster doesn't render a misleading "💰 0G / 0G".
-      const globalGoldTotal = Number(globalTotals?.gold?.total) || 0;
-      // 💰 shows the tradeable (unbound) bucket; the bound tail carries the
-      // roster-bound bucket. Disjoint so the two never look additive.
-      const globalGoldEarnedUnbound = Number(globalTotals?.gold?.earnedUnbound) || 0;
-      const globalGoldTotalUnbound = Number(globalTotals?.gold?.totalUnbound) || 0;
-      const globalBoundTail = buildBoundGoldTail(globalTotals?.gold, lang);
-      descriptionLines.push(
-        t("raid-status.embed.allAccounts", lang, {
-          chars: globalTotals.characters,
-          done: globalTotals.progress.completed,
-          total: globalTotals.progress.total,
-          soloDone: Number(globalTotals?.soloProgress?.completed) || 0,
-          soloTotal: Number(globalTotals?.soloProgress?.total ?? globalTotals.solo) || 0,
-        }),
-      );
-      // Gold on its own line: cramming it onto the counts line above ran long
-      // once the bound tail was added, wrapping the bound onto an orphan line.
-      if (globalGoldTotal > 0) {
-        descriptionLines.push(
-          t("raid-status.embed.goldRollup", lang, {
-            earned: formatGold(globalGoldEarnedUnbound),
-            total: formatGold(globalGoldTotalUnbound),
-            boundTail: globalBoundTail,
-          }),
-        );
-      }
-    }
-    // Current-roster gold rollup. Always emitted when the visible roster has
-    // at least one gold-earner.
-    if (typeof summarizeAccountGold === "function") {
-      const accountGold = summarizeAccountGold(account, getRaidsFor);
-      if (accountGold.total > 0) {
-        descriptionLines.push(
-          t("raid-status.embed.rosterGold", lang, {
-            // 💰 = tradeable (unbound); the bound tail carries the bound bucket.
-            earned: formatGold(accountGold.earnedUnbound),
-            total: formatGold(accountGold.totalUnbound),
-            boundTail: buildBoundGoldTail(accountGold, lang),
-          }),
-        );
-      }
-    }
-    const freshnessLine = buildAccountFreshnessLine(account, userMeta, lang);
-    if (freshnessLine) descriptionLines.push(freshnessLine);
-
-    // Discoverability hint for /raid-gold-earner. Shown ONLY when the
-    // account has at least one eligible char (>= 1 raid unlocked at
-    // current iLvl) that isn't yet a gold-earner.
-    const eligibleNonEarnerCount = (account.characters || []).filter(
-      (c) => !c?.isGoldEarner && getRaidsFor(c).length > 0
-    ).length;
-    if (showGoldEarnerHint && eligibleNonEarnerCount > 0) {
-      descriptionLines.push(t("raid-status.embed.goldEarnerHint", lang));
-    }
+    const accountProgress = summarizeAccountProgress(characters, getProgressRaidsFor);
+    const title = buildAccountTitle(account, accountProgress, userMeta, lang);
+    const descriptionLines = buildAccountDescriptionLines({
+      account,
+      totalPages,
+      globalTotals,
+      getRaidsFor,
+      userMeta,
+      showGoldEarnerHint,
+      lang,
+    });
 
     const outcomeLine = buildPiggybackOutcomeLine(userMeta?.piggybackOutcome, lang);
 
@@ -385,28 +410,22 @@ function createRaidStatusView(deps) {
       embed.setDescription(descriptionLines.join("\n"));
     }
 
-    const appendOutcomeField = () => {
-      if (outcomeLine) {
-        embed.addFields({ name: "​", value: outcomeLine, inline: false });
-      }
-    };
-
     if (characters.length === 0) {
       embed.addFields({
         name: "​",
         value: t("raid-status.embed.noCharacters", lang),
         inline: false,
       });
-      appendOutcomeField();
+      appendOutcomeField(embed, outcomeLine);
       return embed;
     }
 
-    const displayCharacters = typeof shouldDisplayCharacter === "function"
-      ? characters.filter(shouldDisplayCharacter)
-      : characters;
-    const visibleChars = hideIneligibleChars
-      ? displayCharacters.filter((c) => getRaidsFor(c).length > 0)
-      : displayCharacters;
+    const visibleChars = resolveVisibleCharacters({
+      characters,
+      shouldDisplayCharacter,
+      hideIneligibleChars,
+      getRaidsFor,
+    });
 
     if (visibleChars.length === 0) {
       if (hideIneligibleChars) {
@@ -416,7 +435,7 @@ function createRaidStatusView(deps) {
           inline: false,
         });
       }
-      appendOutcomeField();
+      appendOutcomeField(embed, outcomeLine);
       return embed;
     }
 
@@ -430,7 +449,7 @@ function createRaidStatusView(deps) {
       )
     );
 
-    appendOutcomeField();
+    appendOutcomeField(embed, outcomeLine);
     return embed;
   }
 

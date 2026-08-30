@@ -162,6 +162,32 @@ test("applyLocalSyncDeltas - happy path: matched+updated rows go into 'applied'"
   assert.deepEqual(result.applied[0].gates, ["G1"]);
 });
 
+test("applyLocalSyncDeltas indexes the roster once across multiple buckets", async () => {
+  let accountIterations = 0;
+  const rawAccounts = [{
+    accountName: "Roster",
+    characters: [{ name: "Aki", itemLevel: 2000, assignedRaids: {} }],
+  }];
+  const accounts = new Proxy(rawAccounts, {
+    get(target, property, receiver) {
+      if (property === Symbol.iterator) {
+        accountIterations += 1;
+        return target[Symbol.iterator].bind(target);
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const applyStub = makeApplyStub(() => ({ matched: true, updated: true }));
+
+  const result = await applyLocalSyncDeltas("u1", [
+    { boss: "Brelshaza, Ember in the Ashes", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 1 },
+    { boss: "Witch of Agony, Serca", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 1 },
+  ], makeDeps(applyStub, { userDoc: { accounts } }));
+
+  assert.equal(result.applied.length, 2);
+  assert.equal(accountIterations, 1);
+});
+
 test("applyLocalSyncDeltas - cumulative gate expansion: G2 cleared writes [G1, G2]", async () => {
   const applyStub = makeApplyStub(() => ({ matched: true, updated: true }));
   await applyLocalSyncDeltas("u1", [

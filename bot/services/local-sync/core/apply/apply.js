@@ -16,6 +16,7 @@ const {
   resolveTarget,
 } = require("./apply-targets");
 const {
+  buildRosterCharacterIndex,
   classifyBucketAgainstRoster,
   resolveBucketModePreference,
 } = require("./apply-roster");
@@ -131,7 +132,7 @@ function shouldSkipForRosterPreflight(
   raidMeta,
   effectiveGates,
   lists,
-  { currentWeekStartMs, requiredCompanionScope }
+  { currentWeekStartMs, requiredCompanionScope, rosterIndex }
 ) {
   if (!userDoc) return false;
   const preflight = classifyBucketAgainstRoster(
@@ -139,7 +140,7 @@ function shouldSkipForRosterPreflight(
     bucket,
     raidMeta,
     effectiveGates,
-    { currentWeekStartMs, requiredCompanionScope }
+    { currentWeekStartMs, requiredCompanionScope, rosterIndex }
   );
   return appendPreflightDecision(preflight, bucket, effectiveGates, lists);
 }
@@ -182,9 +183,10 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
   const reqMap = getRaidRequirementMap();
   const pendingWrites = [];
   const useBatchApply = typeof applyRaidSetBatchForDiscordId === "function";
+  const rosterIndex = userDoc ? buildRosterCharacterIndex(userDoc) : null;
 
   for (const incomingBucket of buckets) {
-    const bucket = resolveBucketModePreference(userDoc, incomingBucket);
+    const bucket = resolveBucketModePreference(userDoc, incomingBucket, { rosterIndex });
     const raidMeta = reqMap[`${bucket.raidKey}_${bucket.modeKey}`];
     if (!raidMeta) {
       appendMissingRequirementMeta(lists.unmapped, bucket);
@@ -198,7 +200,7 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
       raidMeta,
       effectiveGates,
       lists,
-      { currentWeekStartMs, requiredCompanionScope }
+      { currentWeekStartMs, requiredCompanionScope, rosterIndex }
     )) {
       continue;
     }

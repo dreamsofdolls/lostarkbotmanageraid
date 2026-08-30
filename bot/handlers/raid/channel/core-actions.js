@@ -58,18 +58,6 @@ function createRaidChannelCoreActions({
     return notes;
   }
 
-  async function resolveConfiguredChannel(interaction, channelId) {
-    let channel = interaction.guild?.channels?.cache?.get(channelId) || null;
-    if (!channel && interaction.guild?.channels?.fetch) {
-      try {
-        channel = await interaction.guild.channels.fetch(channelId);
-      } catch {
-        channel = null;
-      }
-    }
-    return channel;
-  }
-
   async function loadSetGreetingEnabled(guildId) {
     try {
       const existingCfg = await GuildConfig.findOne({ guildId })
@@ -211,7 +199,7 @@ function createRaidChannelCoreActions({
       return;
     }
 
-    const channel = await resolveConfiguredChannel(interaction, channelId);
+    const channel = await resolveRaidMonitorChannel(interaction, channelId);
     const botMember = interaction.guild?.members?.me;
     const missing = channel ? getMissingBotChannelPermissions(channel, botMember) : null;
     const lines = [t("raid-channel.show.monitoringLine", lang, { channelId })];
