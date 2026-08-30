@@ -48,9 +48,9 @@ function createRosterEndpoint({ User }) {
 
   const send = createJsonSender({ methods: "GET, OPTIONS" });
 
-  return async function handleRosterRead(req, res, parsedUrl) {
+  return async function handleRosterRead(req, res) {
     if (!guardHttpMethod({ req, res, send, method: "GET" })) return;
-    const auth = readVerifiedLocalSyncToken({ req, res, parsedUrl, send });
+    const auth = readVerifiedLocalSyncToken({ req, res, send });
     if (!auth) return;
     const { token, discordId, payload, scopeExplicit } = auth;
     const scope = payload.scope;

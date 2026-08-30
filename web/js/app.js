@@ -6,7 +6,7 @@
 //     SQLite, builds a roster diff, then POSTs a confirmation preview.
 //     The state machine is explicit, so a UI framework would add runtime
 //     weight without improving the file/query correctness boundary.
-//   - wa-sqlite (asyncify build) loaded from jsdelivr. A custom
+//   - wa-sqlite (asyncify build) served from this deployment. A custom
 //     async VFS (web/js/sync/file/file-vfs.js) that streams from File.slice() so
 //     multi-GB encounters.db files don't blow Chrome's ArrayBuffer cap
 //     (sql.js, the previous library, required full-file load and broke
@@ -29,6 +29,7 @@ import {
 import {
   bootstrapAuthSession,
   decodePayload,
+  readAndScrubLocalSyncToken,
   resolveCompanionScope,
 } from "/sync/js/core/auth.js";
 import {
@@ -338,8 +339,10 @@ async function activateSyncPreview(file, { revision = null } = {}) {
 // only because the server re-verifies every POST; only the payload fields are
 // needed on the client.
 
-const params = new URLSearchParams(window.location.search);
-const token = params.get("token");
+// New links keep the bearer token in the URL fragment, which browsers never
+// send to Railway/proxy access logs or Referer headers. Query parsing remains
+// as a migration fallback for previously issued short-lived links.
+const token = readAndScrubLocalSyncToken(window);
 
 const payload = token ? decodePayload(token) : null;
 const syncScope = resolveCompanionScope(payload);
@@ -592,8 +595,7 @@ window.addEventListener("beforeunload", () => {
 // async coordination + asyncify-built WASM is ~700 KB vs sql.js 1.5 MB,
 // roughly even.
 
-const WA_SQLITE_VERSION = "1.3.0";
-const WA_SQLITE_BASE = `https://cdn.jsdelivr.net/npm/@journeyapps/wa-sqlite@${WA_SQLITE_VERSION}`;
+const WA_SQLITE_BASE = "/sync/vendor/wa-sqlite";
 
 async function loadSqliteRuntime() {
   if (!sqliteRuntimePromise) {

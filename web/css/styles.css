@@ -171,6 +171,7 @@ header h1 {
 }
 
 .hint { color: var(--text-dim); font-size: 13px; line-height: 1.55; margin: 6px 0; }
+.preview-note { margin-top: 12px; }
 /* The opening line of each section is its lede · set in italic serif so
    it reads as standfirst copy rather than another hint. */
 .card > .hint:first-of-type {

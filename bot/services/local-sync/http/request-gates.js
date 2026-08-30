@@ -25,8 +25,8 @@ function guardHttpMethod({ req, res, send, method }) {
   return true;
 }
 
-function readVerifiedLocalSyncToken({ req, res, parsedUrl, send }) {
-  const token = extractBearerToken(req, parsedUrl);
+function readVerifiedLocalSyncToken({ req, res, send }) {
+  const token = extractBearerToken(req);
   if (!token) {
     send(res, 401, { ok: false, error: "missing token" });
     return null;
@@ -49,13 +49,12 @@ function readVerifiedLocalSyncToken({ req, res, parsedUrl, send }) {
 async function readAuthenticatedJsonRequest({
   req,
   res,
-  parsedUrl,
   send,
   maxBodyBytes,
   method = "POST",
 }) {
   if (!guardHttpMethod({ req, res, send, method })) return null;
-  const auth = readVerifiedLocalSyncToken({ req, res, parsedUrl, send });
+  const auth = readVerifiedLocalSyncToken({ req, res, send });
   if (!auth) return null;
 
   try {

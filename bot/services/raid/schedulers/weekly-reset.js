@@ -26,6 +26,10 @@ const {
   createNonOverlappingIntervalRunner,
 } = require("./scheduler-runner");
 const {
+  claimGuildState,
+  rollbackGuildState,
+} = require("./guild-state-claim");
+const {
   weeklyResetStartMs,
 } = require("../../../utils/raid/schedule/reset-windows");
 
@@ -220,11 +224,16 @@ function isWithinWeeklyResetWindow(now = new Date()) {
  * ISO week doesn't re-announce. Silent failure path - bot without
  * Send Messages perm or deleted channel just skips without throwing.
  */
-async function postWeeklyResetAnnouncements(client, targetKey) {
+async function postWeeklyResetAnnouncements(client, targetKey, {
+  GuildConfigModel = GuildConfig,
+  getGuildLanguageFn = getGuildLanguage,
+  resolveGuildChannelFn = resolveGuildChannel,
+  setTimeoutFn = setTimeout,
+} = {}) {
   if (!client || !targetKey) return;
   let configs;
   try {
-    configs = await GuildConfig.find({
+    configs = await GuildConfigModel.find({
       $and: [
         {
           $or: [
@@ -254,24 +263,52 @@ async function postWeeklyResetAnnouncements(client, targetKey) {
     const weeklyEnabled = weeklyCfg.enabled !== false;
     if (!weeklyEnabled) continue;
     const targetChannelId = weeklyCfg.channelId || cfg.raidChannelId;
-    const channel = await resolveGuildChannel(client, cfg.guildId, targetChannelId);
+    const channel = await resolveGuildChannelFn(client, cfg.guildId, targetChannelId);
     if (!channel) continue;
 
+    const claimedState = { lastWeeklyAnnouncementKey: targetKey };
+    let claimPrevious = null;
+    let sentSuccessfully = false;
     try {
+      claimPrevious = await claimGuildState({
+        GuildConfig: GuildConfigModel,
+        guildId: cfg.guildId,
+        guard: {
+          lastWeeklyAnnouncementKey: { $ne: targetKey },
+          "announcements.weeklyReset.enabled": { $ne: false },
+          raidChannelId: cfg.raidChannelId,
+          "announcements.weeklyReset.channelId": weeklyCfg.channelId ?? null,
+        },
+        claimedState,
+      });
+      if (!claimPrevious) continue;
+
       // Per-guild broadcast language - resolved once per guild per tick. JP/
       // EN guilds opt their weekly-reset announcement into their voice via
       // /raid-channel config action:set-language; legacy guilds without the
       // field land on default "vi" through getGuildLanguage's fallback.
-      const guildLang = await getGuildLanguage(cfg.guildId, { GuildConfigModel: GuildConfig });
+      const guildLang = await getGuildLanguageFn(cfg.guildId, { GuildConfigModel });
       const sent = await channel.send({
         content: t("announcements.weekly-reset.body", guildLang),
       });
-      await GuildConfig.findOneAndUpdate(
-        { guildId: cfg.guildId },
-        { $set: { lastWeeklyAnnouncementKey: targetKey } }
-      );
-      setTimeout(() => sent.delete().catch(() => {}), WEEKLY_ANNOUNCEMENT_TTL_MS);
+      sentSuccessfully = true;
+      setTimeoutFn(() => sent.delete().catch(() => {}), WEEKLY_ANNOUNCEMENT_TTL_MS);
     } catch (err) {
+      if (claimPrevious && !sentSuccessfully) {
+        try {
+          await rollbackGuildState({
+            GuildConfig: GuildConfigModel,
+            guildId: cfg.guildId,
+            claimedState,
+            previousState: claimPrevious,
+          });
+        } catch (rollbackError) {
+          console.warn(
+            `[weekly-reset] announcement claim rollback failed guild=${cfg.guildId}:`,
+            rollbackError?.message || rollbackError
+          );
+        }
+      }
       console.warn(
         `[weekly-reset] announcement post failed guild=${cfg.guildId}:`,
         err?.message || err
@@ -387,4 +424,5 @@ module.exports = {
   getCurrentResetStartMs,
   ensureFreshWeek,
   clearCharacterProgress,
+  postWeeklyResetAnnouncements,
 };

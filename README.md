@@ -259,7 +259,7 @@ Weekly reset runs every 30 minutes (UTC-based trigger: Wed ≥ 10:00 UTC). Per-u
 | `RAID_MANAGER_ID` | ❌ (recommended) | empty | Comma-separated user IDs. Empty = `/raid-check` rejects everyone; manager perks never apply |
 | `AUTO_MANAGE_DAILY_DISABLED` | ❌ | `false` | Killswitch for the background bible auto-sync scheduler (no redeploy needed) |
 | `LOCAL_SYNC_TOKEN_SECRET` | ✅ for Local Reader | - | HMAC secret used for private 30-minute reader links; use at least 16 characters |
-| `PUBLIC_BASE_URL` | ✅ for Local Reader | - | Public HTTPS origin used to build `/sync?token=...` links |
+| `PUBLIC_BASE_URL` | ✅ for Local Reader | - | Public HTTPS origin used to build `/sync#token=...` links |
 | `LOCAL_SYNC_HTTP_DISABLED` | ❌ | `false` | `true` disables the Local Reader HTTP surface |
 
 `/raid-bg` (background image for `/raid-status` embeds) needs no admin setup and no env var · uploaded bytes are normalized to a 16:9 (1600x900) JPEG frame (≤ 2 MB per stored image) and persisted on the `userbackgrounds` Mongo collection (separate from the User doc). Users can `/raid-bg set` 1-4 images with `action:overwrite` (replace the library) or `action:extend` (append) up to a **6-scene library** (decoupled from roster count); `/raid-bg view` is an interactive browser (one large scene at a time, a scene dropdown + ◀/▶ pager); `/raid-bg edit` replaces a scene (attach an image, then pick the slot) or deletes scenes (pick a slot, or clear all) via an ephemeral picker. The bot maps saved images evenly or randomly across rosters (extra scenes are spares) and attaches the matching one as the embed image. Shared roster pages use the viewer's own background pool, not the roster owner's.

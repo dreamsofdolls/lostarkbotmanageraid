@@ -60,6 +60,7 @@ function startLocalSyncWebCompanion({
   notifyPreviewReady = null,
   env = process.env,
   log = console,
+  startHttpServer = startLocalSyncHttpServer,
 } = {}) {
   if (env.LOCAL_SYNC_HTTP_DISABLED === "true") {
     log.log("[bot] LOCAL_SYNC_HTTP_DISABLED=true - skipping Local Reader HTTP server.");
@@ -67,14 +68,23 @@ function startLocalSyncWebCompanion({
   }
 
   try {
-    return startLocalSyncHttpServer({
+    const companion = startHttpServer({
       webDir: path.join(rootDir, "web"),
       classIconsDir: path.join(rootDir, "assets", "class-icons"),
+      waSqliteDir: path.join(rootDir, "node_modules", "@journeyapps", "wa-sqlite"),
       apiHandlers: createLocalSyncApiHandlers({
         User,
         notifyPreviewReady,
       }),
+      log,
     });
+    void companion.ready.catch((err) => {
+      log.error(
+        "[bot] local-sync HTTP server failed to start (continuing without Local Reader):",
+        err?.message || err
+      );
+    });
+    return companion;
   } catch (err) {
     log.error(
       "[bot] local-sync HTTP server failed to start (continuing without Local Reader):",

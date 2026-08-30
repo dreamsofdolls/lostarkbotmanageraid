@@ -136,3 +136,19 @@ test("web auth resolves Solo scope explicitly and keeps legacy tokens on full sy
   assert.equal(resolveCompanionScope(null), "full");
   assert.equal(resolveCompanionScope({ scope: "SOLO" }), "full");
 });
+
+test("web auth reads fragment token and scrubs credentials from the address bar", async () => {
+  const { readAndScrubLocalSyncToken } = await import("../web/js/core/auth.js");
+  const replacements = [];
+  const windowRef = {
+    location: {
+      href: "https://sync.example.test/sync?token=legacy&theme=dark#token=fragment&view=reader",
+    },
+    history: {
+      replaceState: (...args) => replacements.push(args),
+    },
+  };
+
+  assert.equal(readAndScrubLocalSyncToken(windowRef), "fragment");
+  assert.deepEqual(replacements, [[null, "", "/sync?theme=dark#view=reader"]]);
+});

@@ -106,11 +106,10 @@ function createPreviewJobEndpoint({
   if (!User) throw new Error("[preview-job-endpoint] User model required");
   const send = createJsonSender({ methods: "POST, OPTIONS" });
 
-  return async function handlePreviewJob(req, res, parsedUrl) {
+  return async function handlePreviewJob(req, res) {
     const request = await readAuthenticatedJsonRequest({
       req,
       res,
-      parsedUrl,
       send,
       maxBodyBytes: MAX_BODY_BYTES,
     });

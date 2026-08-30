@@ -55,7 +55,7 @@ test("local-sync HTTP gate handles preflight and method mismatch", () => {
   assert.equal(guardHttpMethod({ req: makeReq({ method: "GET" }), res: makeRes(), send, method: "GET" }), true);
 });
 
-test("local-sync HTTP gate verifies bearer tokens and query fallback", () => {
+test("local-sync HTTP gate requires bearer tokens and ignores query credentials", () => {
   const token = mintToken("u1");
   const bearerRes = makeRes();
   const queryRes = makeRes();
@@ -79,8 +79,9 @@ test("local-sync HTTP gate verifies bearer tokens and query fallback", () => {
     parsedUrl: { query: { token } },
     send,
   });
-  assert.equal(queryAuth.discordId, "u1");
-  assert.equal(queryAuth.token, token);
+  assert.equal(queryAuth, null);
+  assert.equal(queryRes.status, 401);
+  assert.deepEqual(queryRes.json(), { ok: false, error: "missing token" });
 
   assert.equal(readVerifiedLocalSyncToken({ req: makeReq(), res: missingRes, parsedUrl: { query: {} }, send }), null);
   assert.equal(missingRes.status, 401);

@@ -85,6 +85,17 @@ async function connectDB() {
   });
 }
 
+async function disconnectDB() {
+  if (mongoose.connection.readyState === 0) {
+    connected = false;
+    return;
+  }
+
+  await mongoose.disconnect();
+  connected = false;
+}
+
 module.exports = {
   connectDB,
+  disconnectDB,
 };

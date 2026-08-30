@@ -13,6 +13,10 @@ const {
 } = require("../../../utils/raid/schedule/cleanup-notices");
 const { createNonOverlappingIntervalRunner } = require("./scheduler-runner");
 const { resolveGuildChannel } = require("../../discord/resolve-guild-channel");
+const {
+  claimGuildState,
+  rollbackGuildState,
+} = require("./guild-state-claim");
 
 const AUTO_CLEANUP_NOTICE_TTL_MS = 5 * 60 * 1000;
 const ARTIST_BEDTIME_NOTICE_TTL_MS = 5 * 60 * 1000;
@@ -23,15 +27,17 @@ function isAnnouncementEnabled(announcements, key) {
   return announcements?.[key]?.enabled !== false;
 }
 
-async function stampBedtimeSuppressed({ GuildConfig, cfg, dayKey }) {
+async function rollbackPhaseClaim({ GuildConfig, cfg, claimedState, previousState, phaseName }) {
   try {
-    await GuildConfig.findOneAndUpdate(
-      { guildId: cfg.guildId },
-      { $set: { lastArtistBedtimeKey: dayKey } }
-    );
+    await rollbackGuildState({
+      GuildConfig,
+      guildId: cfg.guildId,
+      claimedState,
+      previousState: previousState || cfg,
+    });
   } catch (err) {
     console.error(
-      `[raid-channel] artist-bedtime disabled-stamp failed guild=${cfg.guildId}:`,
+      `[raid-channel] ${phaseName} claim rollback failed guild=${cfg.guildId}:`,
       err?.message || err
     );
   }
@@ -42,19 +48,31 @@ async function runQuietPhase(context) {
     GuildConfig,
     cfg,
     channel,
-    announcements,
     dayKey,
+    getAnnouncementsConfig,
     guildLang,
     postChannelAnnouncement,
   } = context;
 
   if (cfg.lastArtistBedtimeKey === dayKey) return;
-  if (!isAnnouncementEnabled(announcements, "artistBedtime")) {
-    await stampBedtimeSuppressed({ GuildConfig, cfg, dayKey });
-    return;
-  }
+  const claimedState = { lastArtistBedtimeKey: dayKey };
+  let claimPrevious = null;
 
   try {
+    claimPrevious = await claimGuildState({
+      GuildConfig,
+      guildId: cfg.guildId,
+      guard: {
+        autoCleanupEnabled: true,
+        raidChannelId: cfg.raidChannelId,
+        lastArtistBedtimeKey: { $ne: dayKey },
+      },
+      claimedState,
+    });
+    if (!claimPrevious) return;
+    const announcements = getAnnouncementsConfig(claimPrevious);
+    if (!isAnnouncementEnabled(announcements, "artistBedtime")) return;
+
     const sent = await postChannelAnnouncement(
       channel,
       pickBedtimeNoticeContent(guildLang),
@@ -62,13 +80,26 @@ async function runQuietPhase(context) {
       "raid-channel artist-bedtime"
     );
     if (sent) {
-      await GuildConfig.findOneAndUpdate(
-        { guildId: cfg.guildId },
-        { $set: { lastArtistBedtimeKey: dayKey } }
-      );
       console.log(`[raid-channel] artist-bedtime guild=${cfg.guildId} day=${dayKey}`);
+    } else {
+      await rollbackPhaseClaim({
+        GuildConfig,
+        cfg,
+        claimedState,
+        previousState: claimPrevious,
+        phaseName: "artist-bedtime",
+      });
     }
   } catch (err) {
+    if (claimPrevious) {
+      await rollbackPhaseClaim({
+        GuildConfig,
+        cfg,
+        claimedState,
+        previousState: claimPrevious,
+        phaseName: "artist-bedtime",
+      });
+    }
     console.error(
       `[raid-channel] artist-bedtime failed guild=${cfg.guildId}:`,
       err?.message || err
@@ -88,23 +119,37 @@ async function runCleanupPhase(context, {
     GuildConfig,
     cfg,
     channel,
-    announcements,
     cleanupAndRefreshRaidChannel,
+    getAnnouncementsConfig,
     guildLang,
     postChannelAnnouncement,
   } = context;
 
+  let claimPrevious = null;
+  let cleanupFinished = false;
   try {
+    claimPrevious = await claimGuildState({
+      GuildConfig,
+      guildId: cfg.guildId,
+      guard: {
+        autoCleanupEnabled: true,
+        raidChannelId: cfg.raidChannelId,
+        [phaseName === "artist-wakeup" ? "lastArtistWakeupKey" : "lastAutoCleanupKey"]: {
+          $ne: phaseName === "artist-wakeup" ? context.dayKey : context.targetKey,
+        },
+      },
+      claimedState: persistedState,
+    });
+    if (!claimPrevious) return;
+    const announcements = getAnnouncementsConfig(claimPrevious);
+
     const { deleted, skippedOld } = await cleanupAndRefreshRaidChannel(channel, {
       botUserId: context.client.user.id,
       client: context.client,
       guildId: cfg.guildId,
       protectedMessageIds: [cfg.welcomeMessageId].filter(Boolean),
     });
-    await GuildConfig.findOneAndUpdate(
-      { guildId: cfg.guildId },
-      { $set: persistedState }
-    );
+    cleanupFinished = true;
     console.log(
       `[raid-channel] ${phaseName} guild=${cfg.guildId} ${logState} deleted=${deleted} skippedOld=${skippedOld}`
     );
@@ -117,6 +162,15 @@ async function runCleanupPhase(context, {
       );
     }
   } catch (err) {
+    if (claimPrevious && !cleanupFinished) {
+      await rollbackPhaseClaim({
+        GuildConfig,
+        cfg,
+        claimedState: persistedState,
+        previousState: claimPrevious,
+        phaseName,
+      });
+    }
     console.error(
       `[raid-channel] ${phaseName} failed guild=${cfg.guildId}:`,
       err?.message || err
@@ -202,8 +256,8 @@ function createAutoCleanupSchedulerService({
         cfg,
         channel,
         client,
-        announcements: getAnnouncementsConfig(cfg),
         cleanupAndRefreshRaidChannel,
+        getAnnouncementsConfig,
         dayKey: getTargetDayKeyForLang(now, guildLang),
         guildLang,
         now,

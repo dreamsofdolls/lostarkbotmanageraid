@@ -22,7 +22,7 @@ const {
   Events,
   MessageFlags,
 } = require("discord.js");
-const { connectDB } = require("./bot/db");
+const { connectDB, disconnectDB } = require("./bot/db");
 const {
   commands,
   handleRaidManagementCommand,
@@ -60,6 +60,10 @@ const { startWeeklyResetJob } = require("./bot/services/raid/schedulers/weekly-r
 const { bootstrapClassEmoji, bootstrapArtistEmoji } = require("./bot/services/discord/emoji-bootstrap");
 const { registerSlashCommandsOnBoot } = require("./bot/app/slash-command-registration");
 const { startLocalSyncWebCompanion } = require("./bot/app/local-sync-web");
+const {
+  createProcessTerminator,
+  installProcessLifecycle,
+} = require("./bot/app/process-lifecycle");
 const { createRaidInteractionRouter } = require("./bot/app/interaction-router-registry");
 const {
   createArtistPingResponder,
@@ -115,13 +119,21 @@ async function startBot() {
 
   const client = new Client({ intents });
 
-  startLocalSyncWebCompanion({
+  let localSyncWeb = null;
+  const terminate = createProcessTerminator({
+    client,
+    getLocalSyncWeb: () => localSyncWeb,
+    disconnect: disconnectDB,
+  });
+  installProcessLifecycle({ terminate });
+
+  localSyncWeb = startLocalSyncWebCompanion({
     rootDir: __dirname,
     User,
     notifyPreviewReady: (payload) => notifyLocalSyncPreviewReady(client, payload),
   });
 
-  client.once(Events.ClientReady, async (readyClient) => {
+  async function handleClientReady(readyClient) {
     console.log(`Logged in as ${readyClient.user.tag}`);
     await registerSlashCommandsOnBoot({
       client: readyClient,
@@ -187,6 +199,14 @@ async function startBot() {
     // /raid-schedule auto-lock. Per-event autoLockAtStart controls whether
     // a board locks when its startAt has passed.
     startRaidScheduleAutoLockScheduler(readyClient);
+  }
+
+  client.once(Events.ClientReady, (readyClient) => {
+    void handleClientReady(readyClient).catch((error) => terminate({
+      label: "Ready bootstrap failed",
+      error,
+      exitCode: 1,
+    }));
   });
 
   if (TEXT_MONITOR_ENABLED) {
@@ -259,7 +279,15 @@ async function startBot() {
 
   client.on(Events.InteractionCreate, router.handle);
 
-  await client.login(DISCORD_TOKEN);
+  try {
+    await client.login(DISCORD_TOKEN);
+  } catch (error) {
+    await terminate({
+      label: "Discord login failed",
+      error,
+      exitCode: 1,
+    });
+  }
 }
 
 startBot().catch((error) => {

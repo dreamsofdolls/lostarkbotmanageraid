@@ -6,7 +6,7 @@ function publicBaseUrl() {
 
 function buildLocalSyncUrl(token, baseUrl = publicBaseUrl()) {
   if (!baseUrl || !token) return null;
-  return `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
+  return `${baseUrl}/sync#token=${encodeURIComponent(token)}`;
 }
 
 function buildLocalSyncResumeButton({

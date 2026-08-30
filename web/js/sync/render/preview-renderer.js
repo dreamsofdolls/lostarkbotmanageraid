@@ -151,11 +151,11 @@ export function renderDiffPage(previewOutput) {
 
   if (diff.length === 0) {
     if (rosterError) {
-      html += `<p class="hint" style="margin-top:12px;"><span class="status-err">${t("preview.rosterUnavailable")}</span> ${escapeHtml(rosterError)}</p>`;
+      html += `<p class="hint preview-note"><span class="status-err">${t("preview.rosterUnavailable")}</span> ${escapeHtml(rosterError)}</p>`;
     } else if (Number(meta.detectedClears) > 0) {
-      html += `<p class="hint" style="margin-top:12px;">${t("preview.noRosterMatched")}</p>`;
+      html += `<p class="hint preview-note">${t("preview.noRosterMatched")}</p>`;
     } else {
-      html += `<p class="hint" style="margin-top:12px;">${t("preview.noBucketsMatched")}</p>`;
+      html += `<p class="hint preview-note">${t("preview.noBucketsMatched")}</p>`;
     }
   } else {
     const page = diff[pageIndex];

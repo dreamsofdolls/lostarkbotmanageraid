@@ -267,7 +267,7 @@ test("raid-status Solo Companion defers privately before minting and keeps its U
   assert.equal(privatePayload.components[0].components.length, 1);
   assert.equal(
     privatePayload.components[0].components[0].data.url,
-    "https://raid.example.test/sync?token=solo%20token.value",
+    "https://raid.example.test/sync#token=solo%20token.value",
   );
 });
 

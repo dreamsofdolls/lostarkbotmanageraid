@@ -13,7 +13,7 @@
 const http = require("node:http");
 const path = require("node:path");
 const fs = require("node:fs/promises");
-const url = require("node:url");
+const { SECURITY_HEADERS } = require("./security-headers");
 
 /**
  * Minimal HTTP server for the local-sync web companion. Built on Node's
@@ -34,6 +34,7 @@ const url = require("node:url");
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
@@ -76,21 +77,22 @@ async function tryReadStaticFile(webDir, requestPath) {
 
 function sendStaticFileResponse(res, result, cacheControl) {
   if (result.error === "forbidden") {
-    res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+    res.writeHead(403, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
     res.end("forbidden");
     return;
   }
   if (result.error === "not_found") {
-    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    res.writeHead(404, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
     res.end("not found");
     return;
   }
   if (result.error) {
-    res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+    res.writeHead(500, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
     res.end("server error");
     return;
   }
   res.writeHead(200, {
+    ...SECURITY_HEADERS,
     "Content-Type": result.mime,
     "Cache-Control": cacheControl,
   });
@@ -108,18 +110,24 @@ function getEnvPort(fallback = 3000) {
  * point can graceful-shutdown alongside the Discord client. `apiHandlers`
  * is a map keyed by exact `<METHOD> <pathname>` strings.
  */
-function startLocalSyncHttpServer({ port = getEnvPort(), webDir, classIconsDir = null, apiHandlers = {} } = {}) {
+function startLocalSyncHttpServer({
+  port = getEnvPort(),
+  webDir,
+  classIconsDir = null,
+  waSqliteDir = null,
+  apiHandlers = {},
+  log = console,
+} = {}) {
   if (!webDir) {
     throw new Error("[local-sync/http-server] webDir is required");
   }
   const server = http.createServer(async (req, res) => {
     try {
-      const parsed = url.parse(req.url || "/", true);
-      const pathname = parsed.pathname || "/";
+      const pathname = new URL(req.url || "/", "http://localhost").pathname;
       // Health probe - Railway pings this to detect "service ready".
       // Returns an empty 200 response to minimize probe overhead.
       if (req.method === "GET" && (pathname === "/" || pathname === "/health")) {
-        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+        res.writeHead(200, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
         res.end("ok");
         return;
       }
@@ -127,7 +135,7 @@ function startLocalSyncHttpServer({ port = getEnvPort(), webDir, classIconsDir =
       // deliberately small and router-free.
       const apiKey = `${req.method} ${pathname}`;
       if (typeof apiHandlers[apiKey] === "function") {
-        await apiHandlers[apiKey](req, res, parsed);
+        await apiHandlers[apiKey](req, res);
         return;
       }
       // Static class icons used by the web preview. Kept outside webDir so
@@ -138,33 +146,63 @@ function startLocalSyncHttpServer({ port = getEnvPort(), webDir, classIconsDir =
         sendStaticFileResponse(res, result, "public, max-age=86400");
         return;
       }
+      // Self-host the pinned wa-sqlite package. The Local Reader handles a
+      // user-selected encounters.db file, so executable CDN code must not
+      // share its page context or gain access to the file/token.
+      if (req.method === "GET" && waSqliteDir && pathname.startsWith("/sync/vendor/wa-sqlite/")) {
+        const rel = pathname.replace(/^\/sync\/vendor\/wa-sqlite\/?/, "");
+        const result = await tryReadFileFromRoot(waSqliteDir, rel);
+        sendStaticFileResponse(res, result, "public, max-age=31536000, immutable");
+        return;
+      }
       // Static path: only serve under /sync/*. Anything else falls through to 404.
       if (req.method === "GET" && pathname.startsWith("/sync")) {
         const result = await tryReadStaticFile(webDir, pathname);
         sendStaticFileResponse(res, result, "public, max-age=300");
         return;
       }
-      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.writeHead(404, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
       res.end("not found");
     } catch (err) {
       console.error("[local-sync/http-server] request handler threw:", err?.message || err);
       try {
-        res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" });
+        res.writeHead(500, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
         res.end("server error");
       } catch {
         // Headers already sent or socket closed - nothing to do.
       }
     }
   });
+  let readySettled = false;
+  let resolveReady;
+  let rejectReady;
+  const ready = new Promise((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+  server.on("error", (err) => {
+    if (!readySettled) {
+      readySettled = true;
+      rejectReady(err);
+      return;
+    }
+    log.error("[local-sync/http-server] runtime server error:", err?.message || err);
+  });
   server.listen(port, "0.0.0.0", () => {
     const address = server.address();
     const actualPort = address && typeof address === "object" ? address.port : port;
-    console.log(`[local-sync/http-server] listening on 0.0.0.0:${actualPort} (webDir=${webDir})`);
+    readySettled = true;
+    log.log(`[local-sync/http-server] listening on 0.0.0.0:${actualPort} (webDir=${webDir})`);
+    resolveReady({ port: actualPort });
   });
   return {
     server,
+    ready,
     async stop() {
-      await new Promise((resolve) => server.close(resolve));
+      if (!server.listening) return;
+      await new Promise((resolve, reject) => {
+        server.close((err) => (err ? reject(err) : resolve()));
+      });
     },
   };
 }

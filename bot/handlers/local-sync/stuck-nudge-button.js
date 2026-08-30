@@ -11,6 +11,7 @@ const {
   rotateLocalSyncToken,
   extractIdentityFromUser,
 } = require("../../services/local-sync");
+const { buildLocalSyncUrl } = require("../raid-status/local-sync-controls");
 
 /**
  * Click handler for the "🌐 Switch to Local Sync" button on the stuck-
@@ -111,7 +112,7 @@ function createStuckNudgeButtonHandler({
         // so passing clickerLang is correct for the target's preference.
         const identity = extractIdentityFromUser(interaction.user);
         const token = await rotateLocalSyncTokenFn(targetDiscordId, clickerLang, { UserModel: User, identity });
-        companionUrl = `${baseUrl}/sync?token=${encodeURIComponent(token)}`;
+        companionUrl = buildLocalSyncUrl(token, baseUrl);
       } catch (err) {
         console.warn("[stuck-nudge] token mint failed:", err?.message || err);
       }

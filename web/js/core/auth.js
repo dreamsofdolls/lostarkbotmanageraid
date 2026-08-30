@@ -16,6 +16,23 @@ export function resolveCompanionScope(payload) {
   return payload?.scope === "solo" ? "solo" : "full";
 }
 
+export function readAndScrubLocalSyncToken(windowRef = window) {
+  const url = new URL(windowRef.location.href);
+  const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
+  const token = hashParams.get("token") || url.searchParams.get("token");
+  if (!token) return null;
+
+  // Fragments stay out of proxy logs and Referer headers. Once JavaScript has
+  // captured the bearer token, remove it from the address bar/history too so
+  // screenshots and copied URLs cannot accidentally disclose it.
+  hashParams.delete("token");
+  url.searchParams.delete("token");
+  const remainingHash = hashParams.toString();
+  const cleanUrl = `${url.pathname}${url.search}${remainingHash ? `#${remainingHash}` : ""}`;
+  windowRef.history.replaceState(null, "", cleanUrl);
+  return token;
+}
+
 function renderAuthStatus({ authStatus, authState, t, escapeHtml }) {
   if (!authState) return;
   const { kind, expSec, username, avatarUrl } = authState;

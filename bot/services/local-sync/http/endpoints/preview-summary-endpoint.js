@@ -357,11 +357,10 @@ function createPreviewSummaryEndpoint({ User }) {
   const MAX_BODY_BYTES = 256 * 1024;
   const send = createJsonSender({ methods: "POST, OPTIONS" });
 
-  return async function handlePreviewSummary(req, res, parsedUrl) {
+  return async function handlePreviewSummary(req, res) {
     const request = await readAuthenticatedJsonRequest({
       req,
       res,
-      parsedUrl,
       send,
       maxBodyBytes: MAX_BODY_BYTES,
     });

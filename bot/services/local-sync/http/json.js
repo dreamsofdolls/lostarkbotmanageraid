@@ -1,10 +1,14 @@
 "use strict";
 
+const { SECURITY_HEADERS } = require("./security-headers");
+
 function createJsonSender({ methods, allowHeaders = "Authorization, Content-Type", extraHeaders = {} }) {
   return function sendJson(res, status, body) {
     const headers = typeof extraHeaders === "function" ? extraHeaders(status) : extraHeaders;
     res.writeHead(status, {
+      ...SECURITY_HEADERS,
       "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": methods,
       "Access-Control-Allow-Headers": allowHeaders,
@@ -14,11 +18,11 @@ function createJsonSender({ methods, allowHeaders = "Authorization, Content-Type
   };
 }
 
-function extractBearerToken(req, parsedUrl) {
+function extractBearerToken(req) {
   const auth = req.headers["authorization"] || "";
   const match = /^Bearer\s+(.+)$/i.exec(auth);
   if (match) return match[1].trim();
-  return parsedUrl?.query?.token || null;
+  return null;
 }
 
 function readJsonBody(req, maxBodyBytes) {

@@ -201,6 +201,6 @@ test("stuck-nudge falls back to an ephemeral companion link when DM delivery fai
   assert.equal(fallbackPayload.components.length, 1);
   assert.match(
     fallbackPayload.components[0].components[0].url,
-    /^https:\/\/sync\.example\.test\/sync\?token=/
+    /^https:\/\/sync\.example\.test\/sync#token=/
   );
 });
