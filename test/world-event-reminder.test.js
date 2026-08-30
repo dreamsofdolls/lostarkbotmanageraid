@@ -27,6 +27,15 @@ function utc(year, month, day, hour, minute, second = 0) {
   return new Date(Date.UTC(year, month - 1, day, hour, minute, second, 0));
 }
 
+function makeGuild(channel) {
+  return {
+    channels: {
+      cache: new Map([["override-1", channel]]),
+      fetch: async () => null,
+    },
+  };
+}
+
 test("world-event reminder matches Chaos Gate at T-5 and catches up inside the window", () => {
   // Mon Apr 27 2026 11:00 UTC-4 = 15:00 UTC.
   const exact = resolveWorldEventReminderForNow(utc(2026, 4, 27, 14, 55, 30));
@@ -120,9 +129,9 @@ test("world-event scheduler claims once and posts the combined Sunday message", 
       finds.push(query);
       return { lean: async () => [cfg] };
     },
-    findOneAndUpdate: (filter, update, options) => {
+    findOneAndUpdate: async (filter, update, options) => {
       claims.push({ filter, update, options });
-      return { lean: async () => ({ ...cfg, ...update.$set }) };
+      return { ...cfg };
     },
   };
   const service = createWorldEventReminderSchedulerService({
@@ -160,10 +169,53 @@ test("world-event scheduler claims once and posts the combined Sunday message", 
   assert.equal(claims[0].filter.guildId, "guild-1");
   assert.equal(claims[0].filter["announcements.worldEventReminder.enabled"], true);
   assert.match(claims[0].update.$set.lastWorldEventReminderKey, /^world-event:/);
-  assert.deepEqual(claims[0].options, { new: true });
+  assert.deepEqual(claims[0].options, { new: false });
   assert.equal(posts.length, 1);
   assert.equal(posts[0][0], channel);
   assert.match(posts[0][1], /^announcements\.world-event-reminder\.both:en:/);
   assert.equal(posts[0][2], WORLD_EVENT_REMINDER_TTL_MS);
   assert.equal(posts[0][3], "world-event reminder");
+});
+
+test("world-event scheduler releases its dedup claim when Discord send fails", async () => {
+  const now = utc(2026, 4, 26, 14, 57);
+  const cfg = {
+    guildId: "guild-1",
+    raidChannelId: null,
+    lastWorldEventReminderKey: null,
+    announcements: {
+      worldEventReminder: { enabled: true, channelId: "override-1" },
+    },
+  };
+  const mutations = [];
+  const GuildConfig = {
+    find: () => ({ lean: async () => [cfg] }),
+    findOneAndUpdate: async (filter, update, options) => {
+      mutations.push({ filter, update, options });
+      return { ...cfg };
+    },
+  };
+  const service = createWorldEventReminderSchedulerService({
+    GuildConfig,
+    getAnnouncementsConfig: (doc) => doc.announcements,
+    getGuildLanguage: async () => "en",
+    postChannelAnnouncement: async () => null,
+    t: (key) => key,
+    nowDate: () => now,
+  });
+  const client = {
+    guilds: {
+      cache: new Map([["guild-1", makeGuild({})]]),
+    },
+  };
+
+  await service.runWorldEventReminderTick(client);
+
+  assert.equal(mutations.length, 2);
+  const reminderKey = mutations[0].update.$set.lastWorldEventReminderKey;
+  assert.deepEqual(mutations[1], {
+    filter: { guildId: "guild-1", lastWorldEventReminderKey: reminderKey },
+    update: { $set: { lastWorldEventReminderKey: null } },
+    options: { new: true },
+  });
 });

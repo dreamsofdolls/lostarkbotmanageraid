@@ -10,20 +10,27 @@ const {
 } = require("../../../utils/raid/schedule/world-events");
 const { resolveGuildChannel } = require("../../discord/resolve-guild-channel");
 const { createNonOverlappingIntervalRunner } = require("./scheduler-runner");
+const {
+  claimGuildState,
+  rollbackGuildState,
+} = require("./guild-state-claim");
 
 const SUBDOC_KEY = "worldEventReminder";
 const DEDUP_FIELD = "lastWorldEventReminderKey";
 
 async function claimWorldEventReminder({ GuildConfig, cfg, reminder }) {
-  return GuildConfig.findOneAndUpdate(
-    {
-      guildId: cfg.guildId,
+  return claimGuildState({
+    GuildConfig,
+    guildId: cfg.guildId,
+    guard: {
       [DEDUP_FIELD]: { $ne: reminder.key },
       [`announcements.${SUBDOC_KEY}.enabled`]: true,
+      raidChannelId: cfg.raidChannelId ?? null,
+      [`announcements.${SUBDOC_KEY}.channelId`]:
+        cfg.announcements?.[SUBDOC_KEY]?.channelId ?? null,
     },
-    { $set: { [DEDUP_FIELD]: reminder.key } },
-    { new: true }
-  ).lean();
+    claimedState: { [DEDUP_FIELD]: reminder.key },
+  });
 }
 
 function buildWorldEventReminderContent({ reminder, lang, t }) {
@@ -80,7 +87,8 @@ function createWorldEventReminderSchedulerService({
       }
       if (!claimed) continue;
 
-      let sent;
+      let sent = null;
+      let postError = null;
       try {
         sent = await postChannelAnnouncement(
           channel,
@@ -89,22 +97,35 @@ function createWorldEventReminderSchedulerService({
           "world-event reminder"
         );
       } catch (err) {
-        console.error(
-          `[world-event reminder] guild=${cfg.guildId} post threw (dedup stamped, slot lost):`,
-          err?.message || err
-        );
-        continue;
+        postError = err;
       }
 
       if (sent) {
         console.log(
           `[world-event reminder] posted guild=${cfg.guildId} events=${reminder.presetKeys.join("+")} key=${reminder.key}`
         );
-      } else {
-        console.warn(
-          `[world-event reminder] claimed but send failed guild=${cfg.guildId} key=${reminder.key} (slot will not retry)`
+        continue;
+      }
+
+      let claimReleased = false;
+      try {
+        claimReleased = Boolean(await rollbackGuildState({
+          GuildConfig,
+          guildId: cfg.guildId,
+          claimedState: { [DEDUP_FIELD]: reminder.key },
+          previousState: claimed,
+        }));
+      } catch (rollbackError) {
+        console.error(
+          `[world-event reminder] guild=${cfg.guildId} claim rollback failed:`,
+          rollbackError?.message || rollbackError
         );
       }
+
+      console.warn(
+        `[world-event reminder] send failed; claim ${claimReleased ? "released" : "not released"} guild=${cfg.guildId} key=${reminder.key}:`,
+        postError?.message || postError || "no message returned"
+      );
     }
   }
 

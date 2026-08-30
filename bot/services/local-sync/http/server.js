@@ -15,6 +15,8 @@ const path = require("node:path");
 const fs = require("node:fs/promises");
 const { SECURITY_HEADERS } = require("./security-headers");
 
+const DEFAULT_SHUTDOWN_GRACE_MS = 5_000;
+
 /**
  * Minimal HTTP server for the local-sync web companion. Built on Node's
  * built-in http module to avoid an Express dependency. It serves the
@@ -117,6 +119,7 @@ function startLocalSyncHttpServer({
   waSqliteDir = null,
   apiHandlers = {},
   log = console,
+  shutdownGraceMs = DEFAULT_SHUTDOWN_GRACE_MS,
 } = {}) {
   if (!webDir) {
     throw new Error("[local-sync/http-server] webDir is required");
@@ -195,14 +198,38 @@ function startLocalSyncHttpServer({
     log.log(`[local-sync/http-server] listening on 0.0.0.0:${actualPort} (webDir=${webDir})`);
     resolveReady({ port: actualPort });
   });
+  let stopPromise = null;
   return {
     server,
     ready,
-    async stop() {
-      if (!server.listening) return;
-      await new Promise((resolve, reject) => {
-        server.close((err) => (err ? reject(err) : resolve()));
+    stop() {
+      if (stopPromise) return stopPromise;
+      if (!server.listening) return Promise.resolve();
+
+      const graceMs = Number.isFinite(shutdownGraceMs) && shutdownGraceMs >= 0
+        ? shutdownGraceMs
+        : DEFAULT_SHUTDOWN_GRACE_MS;
+      stopPromise = new Promise((resolve, reject) => {
+        let forceTimer = null;
+        const finish = (err) => {
+          if (forceTimer) clearTimeout(forceTimer);
+          if (err) reject(err);
+          else resolve();
+        };
+
+        try {
+          server.close(finish);
+          // Idle keep-alive sockets do not need the full grace window.
+          server.closeIdleConnections?.();
+          forceTimer = setTimeout(() => {
+            server.closeAllConnections?.();
+          }, graceMs);
+          forceTimer.unref?.();
+        } catch (err) {
+          finish(err);
+        }
       });
+      return stopPromise;
     },
   };
 }

@@ -8,6 +8,12 @@ const {
 } = require("../../../utils/raid/schedule/maintenance");
 const { createNonOverlappingIntervalRunner } = require("./scheduler-runner");
 const { resolveGuildChannel } = require("../../discord/resolve-guild-channel");
+const {
+  claimGuildState,
+  rollbackGuildState,
+} = require("./guild-state-claim");
+
+const MAINTENANCE_POST_RETRY_DELAY_MS = 1_000;
 
 const MAINTENANCE_GROUPS = {
   early: {
@@ -25,53 +31,83 @@ function maintenanceTickKey(now, slot) {
   return `${vn.toISOString().slice(0, 10)}:${slot.key}`;
 }
 
-async function claimMaintenanceTick({ GuildConfig, cfg, groupConfig, tickKey }) {
-  return GuildConfig.findOneAndUpdate(
-    {
-      guildId: cfg.guildId,
+async function claimMaintenanceTick({ GuildConfig, cfg, conf, groupConfig, tickKey }) {
+  return claimGuildState({
+    GuildConfig,
+    guildId: cfg.guildId,
+    guard: {
       [groupConfig.dedupField]: { $ne: tickKey },
       [`announcements.${groupConfig.subdocKey}.enabled`]: { $ne: false },
+      raidChannelId: cfg.raidChannelId ?? null,
+      [`announcements.${groupConfig.subdocKey}.channelId`]: conf.channelId ?? null,
     },
-    { $set: { [groupConfig.dedupField]: tickKey } },
-    { new: true }
-  ).lean();
+    claimedState: { [groupConfig.dedupField]: tickKey },
+  });
 }
 
 async function postClaimedMaintenance({
   cfg,
   channel,
+  claimPrevious,
   content,
+  GuildConfig,
+  groupConfig,
   group,
   postChannelAnnouncement,
   slot,
   tickKey,
+  waitBeforeRetry,
 }) {
-  let sent;
-  try {
-    sent = await postChannelAnnouncement(
-      channel,
-      content,
-      slot.ttlMs,
-      `maintenance ${slot.key}`
-    );
-  } catch (err) {
-    console.error(
-      `[maintenance] guild=${cfg.guildId} slot=${slot.key} post threw (dedup stamped, slot lost until next cycle):`,
-      err?.message || err
-    );
-    return;
+  let lastError = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    if (attempt > 1) {
+      try {
+        await waitBeforeRetry(MAINTENANCE_POST_RETRY_DELAY_MS);
+      } catch (err) {
+        lastError = err;
+        break;
+      }
+    }
+
+    try {
+      const sent = await postChannelAnnouncement(
+        channel,
+        content,
+        slot.ttlMs,
+        `maintenance ${slot.key}`
+      );
+      if (sent) {
+        console.log(
+          `[maintenance] posted guild=${cfg.guildId} group=${group} slot=${slot.key} key=${tickKey} attempt=${attempt}`
+        );
+        return true;
+      }
+      lastError = new Error("no message returned");
+    } catch (err) {
+      lastError = err;
+    }
   }
 
-  if (sent) {
-    console.log(
-      `[maintenance] posted guild=${cfg.guildId} group=${group} slot=${slot.key} key=${tickKey}`
+  let claimReleased = false;
+  try {
+    claimReleased = Boolean(await rollbackGuildState({
+      GuildConfig,
+      guildId: cfg.guildId,
+      claimedState: { [groupConfig.dedupField]: tickKey },
+      previousState: claimPrevious,
+    }));
+  } catch (rollbackError) {
+    console.error(
+      `[maintenance] guild=${cfg.guildId} slot=${slot.key} claim rollback failed:`,
+      rollbackError?.message || rollbackError
     );
-    return;
   }
 
   console.warn(
-    `[maintenance] claimed but send failed guild=${cfg.guildId} slot=${slot.key} (dedup stamped, slot lost until next cycle, check channel permissions or Discord availability)`
+    `[maintenance] send failed after retry; claim ${claimReleased ? "released" : "not released"} guild=${cfg.guildId} slot=${slot.key}:`,
+    lastError?.message || lastError
   );
+  return false;
 }
 
 function createMaintenanceSchedulerService({
@@ -80,6 +116,7 @@ function createMaintenanceSchedulerService({
   getGuildLanguage,
   postChannelAnnouncement,
   nowDate = () => new Date(),
+  waitBeforeRetry = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 }) {
   async function runMaintenanceTick(client) {
     const now = nowDate();
@@ -115,7 +152,7 @@ function createMaintenanceSchedulerService({
 
       let claimed;
       try {
-        claimed = await claimMaintenanceTick({ GuildConfig, cfg, groupConfig, tickKey });
+        claimed = await claimMaintenanceTick({ GuildConfig, cfg, conf, groupConfig, tickKey });
       } catch (err) {
         console.error(
           `[maintenance] guild=${cfg.guildId} slot=${slot.key} claim failed:`,
@@ -128,11 +165,15 @@ function createMaintenanceSchedulerService({
       await postClaimedMaintenance({
         cfg,
         channel,
+        claimPrevious: claimed,
         content,
+        GuildConfig,
+        groupConfig,
         group,
         postChannelAnnouncement,
         slot,
         tickKey,
+        waitBeforeRetry,
       });
     }
   }

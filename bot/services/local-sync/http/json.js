@@ -28,26 +28,51 @@ function extractBearerToken(req) {
 function readJsonBody(req, maxBodyBytes) {
   return new Promise((resolve, reject) => {
     let received = 0;
+    let settled = false;
+    let tooLarge = false;
     const chunks = [];
+
+    const fail = (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+
+    req.on("aborted", () => fail(Object.assign(new Error("request aborted"), { status: 400 })));
+    req.on("error", fail);
+
+    const contentLength = Number(req.headers?.["content-length"]);
+    if (Number.isFinite(contentLength) && contentLength > maxBodyBytes) {
+      tooLarge = true;
+      req.resume?.();
+      fail(Object.assign(new Error("body too large"), { status: 413 }));
+      return;
+    }
+
     req.on("data", (chunk) => {
+      if (tooLarge) return;
       received += chunk.length;
       if (received > maxBodyBytes) {
-        reject(Object.assign(new Error("body too large"), { status: 413 }));
-        req.destroy();
+        tooLarge = true;
+        chunks.length = 0;
+        // Keep draining the request. Destroying the socket here prevents the
+        // handler from delivering its structured 413 response to the client.
+        fail(Object.assign(new Error("body too large"), { status: 413 }));
         return;
       }
       chunks.push(chunk);
     });
     req.on("end", () => {
+      if (settled) return;
       try {
         const raw = Buffer.concat(chunks).toString("utf8");
-        if (!raw) return resolve({});
-        resolve(JSON.parse(raw));
-      } catch (err) {
-        reject(Object.assign(new Error("invalid JSON"), { status: 400 }));
+        const parsed = raw ? JSON.parse(raw) : {};
+        settled = true;
+        resolve(parsed);
+      } catch {
+        fail(Object.assign(new Error("invalid JSON"), { status: 400 }));
       }
     });
-    req.on("error", reject);
   });
 }
 

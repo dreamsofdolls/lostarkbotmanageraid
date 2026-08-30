@@ -1,23 +1,54 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const http = require("node:http");
 const path = require("node:path");
 
 const { startLocalSyncHttpServer } = require("../bot/services/local-sync/http/server");
 const { startLocalSyncWebCompanion } = require("../bot/app/local-sync-web");
+const { createJsonSender, readJsonBody } = require("../bot/services/local-sync/http/json");
 
-async function startTestServer({ classIconsDir = null, waSqliteDir = null } = {}) {
+async function startTestServer({
+  apiHandlers = {},
+  classIconsDir = null,
+  shutdownGraceMs,
+  waSqliteDir = null,
+} = {}) {
   const { server, ready, stop } = startLocalSyncHttpServer({
     port: 0,
     webDir: path.join(__dirname, "..", "web"),
     classIconsDir,
+    apiHandlers,
+    shutdownGraceMs,
     waSqliteDir,
   });
   await ready;
   const address = server.address();
   return {
     baseUrl: `http://127.0.0.1:${address.port}`,
+    server,
     stop,
   };
+}
+
+function postChunkedJson(url, body) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Transfer-Encoding": "chunked",
+      },
+    }, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => resolve({
+        body: Buffer.concat(chunks).toString("utf8"),
+        status: res.statusCode,
+      }));
+    });
+    req.on("error", reject);
+    req.end(body);
+  });
 }
 
 test("local-sync web server serves browser helper modules", async () => {
@@ -123,6 +154,67 @@ test("local-sync HTTP bind failures reject ready without an uncaught server erro
   } finally {
     await second.stop();
     await first.stop();
+  }
+});
+
+test("local-sync JSON API returns 413 for a chunked oversized body without resetting the socket", async () => {
+  const send = createJsonSender({ methods: "POST" });
+  const { baseUrl, stop } = await startTestServer({
+    apiHandlers: {
+      "POST /limited-json": async (req, res) => {
+        try {
+          const body = await readJsonBody(req, 64);
+          send(res, 200, { ok: true, body });
+        } catch (err) {
+          send(res, err.status || 500, { ok: false, error: err.message });
+        }
+      },
+    },
+  });
+
+  try {
+    const response = await postChunkedJson(
+      `${baseUrl}/limited-json`,
+      JSON.stringify({ payload: "x".repeat(256) })
+    );
+    assert.equal(response.status, 413);
+    assert.deepEqual(JSON.parse(response.body), { ok: false, error: "body too large" });
+  } finally {
+    await stop();
+  }
+});
+
+test("local-sync HTTP shutdown force-closes an active request after its grace window", async () => {
+  let markEntered;
+  const entered = new Promise((resolve) => {
+    markEntered = resolve;
+  });
+  const { baseUrl, stop } = await startTestServer({
+    shutdownGraceMs: 20,
+    apiHandlers: {
+      "POST /hang": async () => {
+        markEntered();
+        await new Promise(() => {});
+      },
+    },
+  });
+
+  const req = http.request(`${baseUrl}/hang`, { method: "POST" });
+  req.on("error", () => {});
+  req.flushHeaders();
+  await entered;
+
+  let timeout;
+  try {
+    await Promise.race([
+      stop(),
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error("HTTP shutdown remained stuck")), 1_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+    req.destroy();
   }
 });
 
