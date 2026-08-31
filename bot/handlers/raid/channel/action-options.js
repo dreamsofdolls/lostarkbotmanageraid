@@ -1,5 +1,9 @@
 "use strict";
 
+const {
+  filterAutocompleteChoices,
+} = require("../../../utils/discord/select-options");
+
 const RAID_CHANNEL_ACTION_CHOICES = Object.freeze([
   { value: "show", labelKey: "show" },
   { value: "set", labelKey: "set" },
@@ -31,19 +35,16 @@ function buildRaidChannelActionChoices({
   normalizeName,
   choices = RAID_CHANNEL_ACTION_CHOICES,
 }) {
-  const normalizedNeedle = normalizeName(needle || "");
-  return choices
+  const visibleChoices = choices
     .filter((choice) => isRaidChannelActionVisible(choice, autoCleanupEnabled))
     .map((choice) => ({
       name: raidChannelActionLabel(choice, lang, t),
       value: choice.value,
-    }))
-    .filter((choice) => {
-      if (!normalizedNeedle) return true;
-      return normalizeName(choice.name).includes(normalizedNeedle) ||
-        normalizeName(choice.value).includes(normalizedNeedle);
-    })
-    .slice(0, 25);
+    }));
+  return filterAutocompleteChoices(visibleChoices, {
+    needle,
+    normalize: normalizeName,
+  });
 }
 
 module.exports = {

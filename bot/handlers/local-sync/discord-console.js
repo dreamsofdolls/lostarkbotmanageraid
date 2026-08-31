@@ -8,7 +8,7 @@ const {
   getOrMintLocalSyncToken,
   getPreviewJob,
   recordPreviewDelivery,
-  extractIdentityFromUser,
+  issueLocalSyncAccessUrl,
   resolvePreviewJobState,
 } = require("../../services/local-sync");
 const {
@@ -18,10 +18,6 @@ const {
 const { getCurrentResetStartMs } = require("../../services/raid/schedulers/weekly-reset");
 const { FILTER_ALL_ROSTERS } = require("../raid-status/raid-filter");
 const { t, getUserLanguage } = require("../../services/i18n");
-const {
-  publicBaseUrl,
-  buildLocalSyncUrl,
-} = require("../raid-status/local-sync-controls");
 const {
   buildLocalSyncConsolePayload,
   buildResultDescription,
@@ -101,16 +97,17 @@ function createLocalSyncDiscordConsole({
 
   async function resolveReaderUrl(discordUser, userDoc, lang) {
     const scope = activeScopeForUser(userDoc);
-    const baseUrl = publicBaseUrl();
-    if (!scope || !baseUrl) return null;
+    if (!scope) return null;
     try {
-      const token = await getOrMintLocalSyncToken(discordUser.id, lang, {
+      return await issueLocalSyncAccessUrl({
+        discordId: discordUser.id,
+        lang,
         UserModel: User,
+        discordUser,
         userDoc,
-        identity: extractIdentityFromUser(discordUser),
         scope,
+        tokenProvider: getOrMintLocalSyncToken,
       });
-      return buildLocalSyncUrl(token, baseUrl);
     } catch (err) {
       console.warn("[local-sync/discord] reader URL failed:", err?.message || err);
       return null;

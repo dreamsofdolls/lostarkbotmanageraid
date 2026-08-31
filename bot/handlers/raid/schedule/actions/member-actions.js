@@ -2,11 +2,16 @@
 
 // tPick, not t: some titles here are variant pools; non-pool keys pass through.
 const { tPick: t } = require("../../../../services/i18n");
-const { partitionSelectable } = require("../../../../services/raid/schedule/slots/eligibility");
-const { applyJoin, applyKick } = require("../../../../services/raid/schedule/slots/signup-state");
+const {
+  applyCharacterJoin,
+  applyKick,
+} = require("../../../../services/raid/schedule/slots/signup-state");
 const { assignSlots, detectPromotion } = require("../../../../services/raid/schedule/slots/slots");
 const { removeMembersFromTurns } = require("../../../../services/raid/schedule/turns");
-const { findOwnEligibleRows } = require("../view/select-options");
+const {
+  getSelectableCharacterRows,
+  loadSelectableCharacterRow,
+} = require("../view/select-options");
 const { parseScheduleCustomId } = require("../router");
 
 function createScheduleMemberActions({
@@ -109,7 +114,7 @@ function createScheduleMemberActions({
       return;
     }
 
-    const { selectable: rows, allCleared } = partitionSelectable(findOwnEligibleRows(userDoc, event));
+    const { selectable: rows, allCleared } = getSelectableCharacterRows(userDoc, event);
     if (rows.length === 0) {
       await editNotice(
         interaction,
@@ -136,22 +141,17 @@ function createScheduleMemberActions({
     }
 
     const rowIndex = Number(interaction.values?.[0]);
-    const userDoc = await User.findOne({ discordId: targetId }).lean();
-    const rows = partitionSelectable(findOwnEligibleRows(userDoc, event)).selectable;
-    const row = rows.find((candidate) => candidate.index === rowIndex);
+    const row = await loadSelectableCharacterRow(User, targetId, event, rowIndex);
     if (!row) {
       await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");
       return;
     }
 
-    const next = applyJoin(Array.from(event.signups || []), {
-      discordId: targetId,
-      accountName: row.accountName,
-      characterName: row.name,
-      characterClass: row.className,
-      characterItemLevel: row.itemLevel,
-      alreadyClearedThisWeek: row.alreadyCleared,
-    });
+    const next = applyCharacterJoin(
+      Array.from(event.signups || []),
+      targetId,
+      row
+    );
     const afterSlots = assignSlots(next, {
       supSlots: event.supSlots,
       dpsSlots: event.dpsSlots,

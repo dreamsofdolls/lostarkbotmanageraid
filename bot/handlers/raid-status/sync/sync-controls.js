@@ -3,11 +3,9 @@
 const { t } = require("../../../services/i18n");
 const {
   getOrMintLocalSyncToken,
-  extractIdentityFromUser,
+  issueLocalSyncAccessUrl,
 } = require("../../../services/local-sync");
 const {
-  publicBaseUrl,
-  buildLocalSyncUrl,
   buildLocalSyncResumeButton: makeLocalSyncResumeButton,
   buildLocalSyncNewButton: makeLocalSyncNewButton,
   buildLocalSyncRefreshButton: makeLocalSyncRefreshButton,
@@ -46,15 +44,14 @@ function createRaidStatusSyncControls({
 
   async function hydrateLocalSyncResumeUrl(interactionUser) {
     if (!getStatusUserMeta().localSyncEnabled) return;
-    const baseUrl = publicBaseUrl();
-    if (!baseUrl) return;
     try {
-      const identity = extractIdentityFromUser(interactionUser);
-      const token = await getOrMintLocalSyncToken(discordId, lang, {
+      cachedLocalSyncResumeUrl = await issueLocalSyncAccessUrl({
+        discordId,
+        lang,
         UserModel: User,
-        identity,
+        discordUser: interactionUser,
+        tokenProvider: getOrMintLocalSyncToken,
       });
-      cachedLocalSyncResumeUrl = buildLocalSyncUrl(token, baseUrl);
     } catch (err) {
       console.warn("[raid-status] local-sync token resolve failed:", err?.message || err);
     }

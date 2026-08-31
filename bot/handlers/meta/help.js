@@ -18,7 +18,7 @@
 const User = require("../../models/user");
 const { t, getUserLanguage, resolveLocale } = require("../../services/i18n");
 const { customIdPart } = require("../../utils/discord/custom-id");
-const { splitEmbedFieldValue } = require("../../utils/raid/common/shared");
+const { addChunkedEmbedField } = require("../../utils/raid/common/shared");
 
 // Section order is the only place command listing order is configured -
 // drives both the overview embed and the dropdown options.
@@ -221,13 +221,8 @@ function createRaidHelpCommand(deps) {
 
   const HELP_FIELD_VALUE_LIMIT = 1024; // Discord rejects embed field values above this.
   function addChunkedHelpField(embed, name, value) {
-    const chunks = splitEmbedFieldValue(value, HELP_FIELD_VALUE_LIMIT);
-    chunks.forEach((chunk, index) => {
-      embed.addFields({
-        name: index === 0 ? name : `${name} (${index + 1})`,
-        value: chunk,
-        inline: false,
-      });
+    addChunkedEmbedField(embed, name, value, {
+      limit: HELP_FIELD_VALUE_LIMIT,
     });
   }
 

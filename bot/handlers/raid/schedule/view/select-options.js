@@ -1,7 +1,10 @@
 "use strict";
 
 const { t } = require("../../../../services/i18n");
-const { listEligibleCharacters } = require("../../../../services/raid/schedule/slots/eligibility");
+const {
+  listEligibleCharacters,
+  partitionSelectable,
+} = require("../../../../services/raid/schedule/slots/eligibility");
 const { getClassEmoji } = require("../../../../models/Class");
 
 const PICKER_LIMIT = 25;
@@ -32,6 +35,20 @@ function findOwnEligibleRows(userDoc, event) {
   return rows
     .map((row, index) => ({ ...row, index }))
     .filter((row) => row.eligible);
+}
+
+function getSelectableCharacterRows(userDoc, event) {
+  return partitionSelectable(findOwnEligibleRows(userDoc, event));
+}
+
+function findSelectableCharacterRow(userDoc, event, rowIndex) {
+  const { selectable } = getSelectableCharacterRows(userDoc, event);
+  return selectable.find((candidate) => candidate.index === Number(rowIndex)) || null;
+}
+
+async function loadSelectableCharacterRow(UserModel, discordId, event, rowIndex) {
+  const userDoc = await UserModel.findOne({ discordId }).lean();
+  return findSelectableCharacterRow(userDoc, event, rowIndex);
 }
 
 function characterRowOption(row, lang) {
@@ -79,6 +96,9 @@ module.exports = {
   PICKER_LIMIT,
   clip,
   findOwnEligibleRows,
+  getSelectableCharacterRows,
+  findSelectableCharacterRow,
+  loadSelectableCharacterRow,
   characterSelectOptions,
   signupSelectOptions,
 };

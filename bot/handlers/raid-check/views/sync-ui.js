@@ -27,7 +27,6 @@ const { tPick: t, getUserLanguage } = require("../../../services/i18n");
 const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
 const {
   getAppliedAutoManageEntries,
-  stampAutoManageAttemptFromReport,
 } = require("../../../services/auto-manage/reports/utils");
 
 /**
@@ -45,11 +44,10 @@ const {
  * @param {object} deps.UI - shared color/icon palette
  * @param {object} deps.User - Mongoose User model
  * @param {Function} deps.ensureFreshWeek - week-reset advancer
- * @param {Function} deps.saveWithRetry - VersionError-safe save wrapper
  * @param {Function} deps.weekResetStartMs - current weekly reset epoch
  * @param {Function} deps.autoManageEntryKey - composite account+char key
  * @param {Function} deps.gatherAutoManageLogsForUserDoc - bible HTTP gather
- * @param {Function} deps.applyAutoManageCollected - in-memory reconcile
+ * @param {Function} deps.commitAutoManageCollected - retry-safe reconcile + stamp + save
  * @param {Function} deps.stampAutoManageAttempt - touch lastAutoManageAttemptAt
  * @param {Function} deps.acquireAutoManageSyncSlot - per-user mutex
  * @param {Function} deps.releaseAutoManageSyncSlot - mutex release
@@ -69,11 +67,10 @@ function createSyncUi({
   UI,
   User,
   ensureFreshWeek,
-  saveWithRetry,
   weekResetStartMs,
   autoManageEntryKey,
   gatherAutoManageLogsForUserDoc,
-  applyAutoManageCollected,
+  commitAutoManageCollected,
   stampAutoManageAttempt,
   acquireAutoManageSyncSlot,
   releaseAutoManageSyncSlot,
@@ -222,26 +219,17 @@ function createSyncUi({
 
             let outcome = "attempted-only";
             let delta = null;
-            await saveWithRetry(async () => {
-              const fresh = await User.findOne({ discordId });
-              if (!fresh || !Array.isArray(fresh.accounts) || fresh.accounts.length === 0) return;
-
-              ensureFreshWeek(fresh);
-              if (!fresh.autoManageEnabled) {
-                fresh.lastAutoManageAttemptAt = Date.now();
-                await fresh.save();
-                return;
-              }
-
-              const report = applyAutoManageCollected(fresh, weekResetStart, collected);
-              const now = Date.now();
-              if (stampAutoManageAttemptFromReport(fresh, report, now)) {
-                outcome = "synced";
-              }
-              const appliedEntries = getAppliedAutoManageEntries(report);
-              if (appliedEntries.length > 0) delta = appliedEntries;
-              await fresh.save();
-            });
+            const committed = await commitAutoManageCollected(
+              discordId,
+              weekResetStart,
+              collected,
+              { requireRoster: true }
+            );
+            if (String(committed?.status || "").startsWith("synced-")) {
+              outcome = "synced";
+            }
+            const appliedEntries = getAppliedAutoManageEntries(committed?.report);
+            if (appliedEntries.length > 0) delta = appliedEntries;
 
             if (outcome === "synced") syncedCount += 1;
             else attemptedOnlyCount += 1;

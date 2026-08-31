@@ -1,7 +1,13 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { applyJoin, applyRsvp, applyLeave, applyKick } = require("../bot/services/raid/schedule/slots/signup-state");
+const {
+  applyJoin,
+  applyCharacterJoin,
+  applyRsvp,
+  applyLeave,
+  applyKick,
+} = require("../bot/services/raid/schedule/slots/signup-state");
 const { detectPromotion } = require("../bot/services/raid/schedule/slots/slots");
 
 const COUNTS = { supSlots: 1, dpsSlots: 1 };
@@ -28,6 +34,28 @@ test("applyJoin re-join preserves original joinedAt, swaps character", () => {
   assert.equal(second[0].joinedAt, 100);          // position kept
   assert.equal(second[0].role, "dps");            // class swap re-derives role
   assert.equal(second[0].characterName, "newchar");
+});
+
+test("applyCharacterJoin maps an eligible picker row into the canonical signup", () => {
+  const joined = applyCharacterJoin([], "a", {
+    accountName: "Roster A",
+    name: "Aki",
+    className: "Bard",
+    itemLevel: 1725,
+    alreadyCleared: false,
+  }, 123);
+
+  assert.deepEqual(joined[0], {
+    discordId: "a",
+    accountName: "Roster A",
+    characterName: "Aki",
+    characterClass: "Bard",
+    characterItemLevel: 1725,
+    role: "support",
+    status: "confirmed",
+    alreadyClearedThisWeek: false,
+    joinedAt: 123,
+  });
 });
 
 test("applyRsvp flips an existing signup; no-op when not joined", () => {

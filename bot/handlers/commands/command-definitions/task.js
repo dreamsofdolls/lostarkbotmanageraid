@@ -2,6 +2,37 @@
 
 const { SlashCommandBuilder } = require("discord.js");
 
+const TASK_RESET_CHOICES = Object.freeze([
+  {
+    name: "Daily (17:00 VN)",
+    name_localizations: {
+      vi: "Daily (reset 17:00 VN)",
+      ja: "デイリー (リセット 19:00 JST)",
+    },
+    value: "daily",
+  },
+  {
+    name: "Weekly (17:00 VN Wed)",
+    name_localizations: {
+      vi: "Weekly (reset 17:00 VN thứ 4)",
+      ja: "ウィークリー (リセット 水曜 19:00 JST)",
+    },
+    value: "weekly",
+  },
+]);
+
+function configureCharacterRosterOption(option) {
+  return option
+    .setName("roster")
+    .setDescription("Roster (account) chứa character - autocomplete")
+    .setDescriptionLocalizations({
+      vi: "Roster (account) chứa character - autocomplete",
+      ja: "キャラを含むロスター（アカウント）- オートコンプリート",
+    })
+    .setRequired(true)
+    .setAutocomplete(true);
+}
+
 function createRaidTaskCommandDefinition() {
   const raidTaskCommand = new SlashCommandBuilder()
     .setName("raid-task")
@@ -44,17 +75,7 @@ function createRaidTaskCommandDefinition() {
               }
             )
         )
-        .addStringOption((opt) =>
-          opt
-            .setName("roster")
-            .setDescription("Roster (account) chứa character - autocomplete")
-            .setDescriptionLocalizations({
-              vi: "Roster (account) chứa character - autocomplete",
-              ja: "キャラを含むロスター（アカウント）- オートコンプリート",
-            })
-            .setRequired(true)
-            .setAutocomplete(true)
-        )
+        .addStringOption(configureCharacterRosterOption)
         .addStringOption((opt) =>
           opt
             .setName("name")
@@ -76,24 +97,7 @@ function createRaidTaskCommandDefinition() {
               ja: "このタスクのリセット周期",
             })
             .setRequired(true)
-            .addChoices(
-              {
-                name: "Daily (17:00 VN)",
-                name_localizations: {
-                  vi: "Daily (reset 17:00 VN)",
-                  ja: "デイリー (リセット 19:00 JST)",
-                },
-                value: "daily",
-              },
-              {
-                name: "Weekly (17:00 VN Wed)",
-                name_localizations: {
-                  vi: "Weekly (reset 17:00 VN thứ 4)",
-                  ja: "ウィークリー (リセット 水曜 19:00 JST)",
-                },
-                value: "weekly",
-              }
-            )
+            .addChoices(...TASK_RESET_CHOICES)
         )
         .addStringOption((opt) =>
           opt
@@ -115,17 +119,7 @@ function createRaidTaskCommandDefinition() {
           vi: "Xóa một side task khỏi character",
           ja: "キャラから1つのサイドタスクを削除",
         })
-        .addStringOption((opt) =>
-          opt
-            .setName("roster")
-            .setDescription("Roster (account) chứa character - autocomplete")
-            .setDescriptionLocalizations({
-              vi: "Roster (account) chứa character - autocomplete",
-              ja: "キャラを含むロスター（アカウント）- オートコンプリート",
-            })
-            .setRequired(true)
-            .setAutocomplete(true)
-        )
+        .addStringOption(configureCharacterRosterOption)
         .addStringOption((opt) =>
           opt
             .setName("character")
@@ -157,17 +151,7 @@ function createRaidTaskCommandDefinition() {
           vi: "Xóa TOÀN BỘ side task của một character (yêu cầu xác nhận)",
           ja: "1キャラの全サイドタスクを削除（確認が必要）",
         })
-        .addStringOption((opt) =>
-          opt
-            .setName("roster")
-            .setDescription("Roster (account) chứa character - autocomplete")
-            .setDescriptionLocalizations({
-              vi: "Roster (account) chứa character - autocomplete",
-              ja: "キャラを含むロスター（アカウント）- オートコンプリート",
-            })
-            .setRequired(true)
-            .setAutocomplete(true)
-        )
+        .addStringOption(configureCharacterRosterOption)
         .addStringOption((opt) =>
           opt
             .setName("character")
@@ -231,24 +215,7 @@ function createRaidTaskCommandDefinition() {
               ja: "共有タスクの手動リセット周期（スケジュール済みプリセットでは無視）",
             })
             .setRequired(false)
-            .addChoices(
-              {
-                name: "Daily (17:00 VN)",
-                name_localizations: {
-                  vi: "Daily (reset 17:00 VN)",
-                  ja: "デイリー (リセット 19:00 JST)",
-                },
-                value: "daily",
-              },
-              {
-                name: "Weekly (17:00 VN Wed)",
-                name_localizations: {
-                  vi: "Weekly (reset 17:00 VN thứ 4)",
-                  ja: "ウィークリー (リセット 水曜 19:00 JST)",
-                },
-                value: "weekly",
-              }
-            )
+            .addChoices(...TASK_RESET_CHOICES)
         )
         .addStringOption((opt) =>
           opt

@@ -43,6 +43,17 @@ function applyJoin(signups, payload, now = Date.now()) {
   return next;
 }
 
+function applyCharacterJoin(signups, discordId, row, now = Date.now()) {
+  return applyJoin(signups, {
+    discordId,
+    accountName: row.accountName,
+    characterName: row.name,
+    characterClass: row.className,
+    characterItemLevel: row.itemLevel,
+    alreadyClearedThisWeek: row.alreadyCleared,
+  }, now);
+}
+
 /**
  * Flip an existing signup's RSVP status. `late` keeps the slot (flag
  * only); `tentative`/`absent` vacate it (they drop out of the comp,
@@ -97,4 +108,11 @@ function applyKick(signups, discordIds) {
   return { signups: next, removed };
 }
 
-module.exports = { applyJoin, applyRsvp, applyLeave, applyKick, RSVP_STATUSES };
+module.exports = {
+  applyJoin,
+  applyCharacterJoin,
+  applyRsvp,
+  applyLeave,
+  applyKick,
+  RSVP_STATUSES,
+};

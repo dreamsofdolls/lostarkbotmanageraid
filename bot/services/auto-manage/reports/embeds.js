@@ -4,18 +4,7 @@
 // other key this module resolves passes straight through to t().
 const { tPick: t } = require("../../i18n");
 const { getRaidLabel, getModeLabel } = require("../../../utils/raid/common/labels");
-const { splitEmbedFieldValue } = require("../../../utils/raid/common/shared");
-
-function addChunkedEmbedField(embed, name, value) {
-  const chunks = splitEmbedFieldValue(value);
-  chunks.forEach((chunk, index) => {
-    embed.addFields({
-      name: index === 0 ? name : `${name} (${index + 1})`,
-      value: chunk,
-      inline: false,
-    });
-  });
-}
+const { addChunkedEmbedField } = require("../../../utils/raid/common/shared");
 
 function createAutoManageReportEmbeds({ EmbedBuilder, UI }) {
   function buildAutoManageHiddenCharsWarningEmbed(hiddenChars, probeReport, lang = "vi") {

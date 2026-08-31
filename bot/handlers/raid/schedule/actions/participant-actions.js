@@ -1,12 +1,15 @@
 "use strict";
 
 const { t } = require("../../../../services/i18n");
-const { partitionSelectable } = require("../../../../services/raid/schedule/slots/eligibility");
-const { applyJoin, applyRsvp } = require("../../../../services/raid/schedule/slots/signup-state");
+const {
+  applyCharacterJoin,
+  applyRsvp,
+} = require("../../../../services/raid/schedule/slots/signup-state");
 const { detectPromotion } = require("../../../../services/raid/schedule/slots/slots");
 const {
   PICKER_LIMIT,
-  findOwnEligibleRows,
+  getSelectableCharacterRows,
+  loadSelectableCharacterRow,
   characterSelectOptions,
 } = require("../view/select-options");
 
@@ -47,7 +50,7 @@ function createScheduleParticipantActions({
       return;
     }
 
-    const { selectable: rows, allCleared } = partitionSelectable(findOwnEligibleRows(userDoc, event));
+    const { selectable: rows, allCleared } = getSelectableCharacterRows(userDoc, event);
     if (rows.length === 0) {
       await editNotice(
         interaction,
@@ -85,22 +88,22 @@ function createScheduleParticipantActions({
     }
 
     const rowIndex = Number(interaction.values?.[0]);
-    const userDoc = await User.findOne({ discordId: interaction.user.id }).lean();
-    const rows = partitionSelectable(findOwnEligibleRows(userDoc, event)).selectable;
-    const row = rows.find((candidate) => candidate.index === rowIndex);
+    const row = await loadSelectableCharacterRow(
+      User,
+      interaction.user.id,
+      event,
+      rowIndex
+    );
     if (!row) {
       await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");
       return;
     }
 
-    const next = applyJoin(Array.from(event.signups || []), {
-      discordId: interaction.user.id,
-      accountName: row.accountName,
-      characterName: row.name,
-      characterClass: row.className,
-      characterItemLevel: row.itemLevel,
-      alreadyClearedThisWeek: row.alreadyCleared,
-    });
+    const next = applyCharacterJoin(
+      Array.from(event.signups || []),
+      interaction.user.id,
+      row
+    );
     markSignups(event, next);
     await event.save();
 

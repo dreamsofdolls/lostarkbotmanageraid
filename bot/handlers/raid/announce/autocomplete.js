@@ -1,6 +1,9 @@
 "use strict";
 
 const { t } = require("../../../services/i18n");
+const {
+  filterAutocompleteChoices,
+} = require("../../../utils/discord/select-options");
 
 function buildRaidAnnounceAutocompleteOptions({
   current,
@@ -44,15 +47,10 @@ function resolveAutocompleteLanguage(interaction) {
 }
 
 function filterRaidAnnounceAutocompleteOptions({ options, needle, normalizeName }) {
-  const normalizedNeedle = normalizeName(needle || "");
-  const filtered = !normalizedNeedle
-    ? options
-    : options.filter(
-        (choice) =>
-          normalizeName(choice.name).includes(normalizedNeedle) ||
-          normalizeName(choice.value).includes(normalizedNeedle)
-      );
-  return filtered.slice(0, 25);
+  return filterAutocompleteChoices(options, {
+    needle,
+    normalize: normalizeName,
+  });
 }
 
 function createRaidAnnounceAutocompleteHandler({

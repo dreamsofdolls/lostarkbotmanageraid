@@ -13,6 +13,7 @@
 
 const state = require("./core/state");
 const tokens = require("./core/tokens");
+const accessUrl = require("./core/access-url");
 const apply = require("./core/apply/apply");
 const scope = require("./core/scope");
 const previewJobs = require("./core/preview-jobs");
@@ -32,6 +33,9 @@ module.exports = {
   rotateLocalSyncToken: tokens.rotateLocalSyncToken,
   getOrMintLocalSyncToken: tokens.getOrMintLocalSyncToken,
   extractIdentityFromUser: tokens.extractIdentityFromUser,
+  publicBaseUrl: accessUrl.publicBaseUrl,
+  buildLocalSyncUrl: accessUrl.buildLocalSyncUrl,
+  issueLocalSyncAccessUrl: accessUrl.issueLocalSyncAccessUrl,
   TOKEN_DEFAULT_TTL_SEC: tokens.DEFAULT_TTL_SEC,
   TOKEN_POST_SYNC_TTL_SEC: tokens.POST_SYNC_TTL_SEC,
   COMPANION_SCOPE: scope.COMPANION_SCOPE,

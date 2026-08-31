@@ -281,6 +281,7 @@ let buildRaidCheckEditDMEmbed;
 let handleRaidCheckCommand;
 let handleRaidCheckButton;
 let handleStatusCommand;
+let commitAutoManageCollected;
 let applyAutoManageCollectedForStatus;
 let collectStaleAccountRefreshes;
 let collectAccountRefresh;
@@ -620,7 +621,10 @@ const autoManageSyncService = createAutoManageSyncService({
   ensureFreshWeek,
   applyAutoManageCollected,
 });
-({ applyAutoManageCollectedForStatus } = autoManageSyncService);
+({
+  commitAutoManageCollected,
+  applyAutoManageCollectedForStatus,
+} = autoManageSyncService);
 
 const raidViewSnapshotService = createRaidViewSnapshotService({
   User,
@@ -675,6 +679,7 @@ const raidStatusCommand = createRaidStatusCommand({
   releaseAutoManageSyncSlot,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
+  commitAutoManageCollected,
   applyAutoManageCollectedForStatus,
   stampAutoManageAttempt,
   weekResetStartMs,
@@ -729,7 +734,7 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   releaseAutoManageSyncSlot,
   autoManageEntryKey,
   gatherAutoManageLogsForUserDoc,
-  applyAutoManageCollected,
+  commitAutoManageCollected,
   stampAutoManageAttempt,
   weekResetStartMs,
   isRaidLeader,

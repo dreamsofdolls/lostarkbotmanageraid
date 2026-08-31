@@ -1,5 +1,21 @@
 const mongoose = require("mongoose");
 
+function createAnnouncementSetting({
+  channelOverridable = false,
+  enabledByDefault = true,
+} = {}) {
+  const fields = {
+    enabled: { type: Boolean, default: enabledByDefault },
+  };
+  if (channelOverridable) {
+    fields.channelId = { type: String, default: null };
+  }
+  return {
+    type: new mongoose.Schema(fields, { _id: false }),
+    default: () => ({}),
+  };
+}
+
 const guildConfigSchema = new mongoose.Schema(
   {
     guildId: { type: String, required: true, unique: true, index: true },
@@ -83,111 +99,39 @@ const guildConfigSchema = new mongoose.Schema(
     announcements: {
       type: new mongoose.Schema(
         {
-          weeklyReset: {
-            type: new mongoose.Schema(
-              {
-                enabled: { type: Boolean, default: true },
-                channelId: { type: String, default: null },
-              },
-              { _id: false }
-            ),
-            default: () => ({}),
-          },
-          stuckPrivateLogNudge: {
-            type: new mongoose.Schema(
-              {
-                enabled: { type: Boolean, default: true },
-                channelId: { type: String, default: null },
-              },
-              { _id: false }
-            ),
-            default: () => ({}),
-          },
-          setGreeting: {
-            type: new mongoose.Schema(
-              { enabled: { type: Boolean, default: true } },
-              { _id: false }
-            ),
-            default: () => ({}),
-          },
-          hourlyCleanupNotice: {
-            type: new mongoose.Schema(
-              { enabled: { type: Boolean, default: true } },
-              { _id: false }
-            ),
-            default: () => ({}),
-          },
+          weeklyReset: createAnnouncementSetting({ channelOverridable: true }),
+          stuckPrivateLogNudge: createAnnouncementSetting({ channelOverridable: true }),
+          setGreeting: createAnnouncementSetting(),
+          hourlyCleanupNotice: createAnnouncementSetting(),
           // The 03:00 VN bedtime greeting is channel-bound because it refers
           // to the monitor channel entering quiet hours. Disabling the
           // greeting does not disable quiet-hours cleanup suppression.
-          artistBedtime: {
-            type: new mongoose.Schema(
-              { enabled: { type: Boolean, default: true } },
-              { _id: false }
-            ),
-            default: () => ({}),
-          },
+          artistBedtime: createAnnouncementSetting(),
           // The 08:00 VN wake-up notice is channel-bound because it refers to
           // the monitor channel. Disabling the greeting does not disable the
           // morning catch-up cleanup.
-          artistWakeup: {
-            type: new mongoose.Schema(
-              { enabled: { type: Boolean, default: true } },
-              { _id: false }
-            ),
-            default: () => ({}),
-          },
-          whisperAck: {
-            type: new mongoose.Schema(
-              { enabled: { type: Boolean, default: true } },
-              { _id: false }
-            ),
-            default: () => ({}),
-          },
+          artistWakeup: createAnnouncementSetting(),
+          whisperAck: createAnnouncementSetting(),
           // Maintenance early reminders (T-3h / T-2h / T-1h marks). Channel-
           // overridable: a server can push these to a different channel from
           // the monitor channel to avoid pinging in the same place as
           // clear-raid notifications. Toggle group is independent of
           // maintenanceCountdown.
-          maintenanceEarly: {
-            type: new mongoose.Schema(
-              {
-                enabled: { type: Boolean, default: true },
-                channelId: { type: String, default: null },
-              },
-              { _id: false }
-            ),
-            default: () => ({}),
-          },
+          maintenanceEarly: createAnnouncementSetting({ channelOverridable: true }),
           // Maintenance countdown reminders (T-15m / T-10m / T-5m / T-1m).
           // Same channel-override model as maintenanceEarly. Split into a
           // separate group so a server that doesn't want 4 consecutive
           // pings near the boundary can disable just this group while
           // keeping the 3 earlier reminders.
-          maintenanceCountdown: {
-            type: new mongoose.Schema(
-              {
-                enabled: { type: Boolean, default: true },
-                channelId: { type: String, default: null },
-              },
-              { _id: false }
-            ),
-            default: () => ({}),
-          },
+          maintenanceCountdown: createAnnouncementSetting({ channelOverridable: true }),
           // Hourly Chaos Gate / Field Boss reminders are intentionally OFF
           // by default because enabling a high-frequency type for legacy
           // guilds would be a noisy migration. Admins opt in explicitly via
           // /raid-announce type:world-event-reminder action:on.
-          worldEventReminder: {
-            type: new mongoose.Schema(
-              {
-                enabled: { type: Boolean, default: false },
-                channelId: { type: String, default: null },
-              },
-              { _id: false }
-            ),
-            default: () => ({}),
-          },
+          worldEventReminder: createAnnouncementSetting({
+            channelOverridable: true,
+            enabledByDefault: false,
+          }),
         },
         { _id: false }
       ),

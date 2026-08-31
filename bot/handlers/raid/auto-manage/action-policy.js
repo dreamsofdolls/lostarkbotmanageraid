@@ -1,5 +1,9 @@
 "use strict";
 
+const {
+  filterAutocompleteChoices,
+} = require("../../../utils/discord/select-options");
+
 const AUTO_MANAGE_ACTIONS = Object.freeze([
   "on",
   "off",
@@ -114,19 +118,16 @@ function getAutoManageStateGate(action, state = {}) {
 }
 
 function buildAutoManageAutocompleteChoices({ bibleOn = false, localOn = false, needle = "", lang, t, normalizeName }) {
-  const normalizedNeedle = normalizeName(needle || "");
-  return AUTO_MANAGE_ACTION_CHOICES
+  const choices = AUTO_MANAGE_ACTION_CHOICES
     .filter((choice) => choice.show({ bibleOn, localOn }))
     .map((choice) => ({
       name: t(`raid-auto-manage.autocomplete.${choice.key}`, lang),
       value: choice.value,
-    }))
-    .filter((choice) => {
-      if (!normalizedNeedle) return true;
-      return normalizeName(choice.name).includes(normalizedNeedle) ||
-        normalizeName(choice.value).includes(normalizedNeedle);
-    })
-    .slice(0, 25);
+    }));
+  return filterAutocompleteChoices(choices, {
+    needle,
+    normalize: normalizeName,
+  });
 }
 
 module.exports = {

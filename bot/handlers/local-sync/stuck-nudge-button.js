@@ -9,9 +9,8 @@ const { t, getUserLanguage } = require("../../services/i18n");
 const {
   setLocalSyncEnabled,
   rotateLocalSyncToken,
-  extractIdentityFromUser,
+  issueLocalSyncAccessUrl,
 } = require("../../services/local-sync");
-const { buildLocalSyncUrl } = require("../raid-status/local-sync-controls");
 
 /**
  * Click handler for the "🌐 Switch to Local Sync" button on the stuck-
@@ -103,19 +102,20 @@ function createStuckNudgeButtonHandler({
 
     // Mint companion link. Same env-var fallback as the local-on
     // command path: degrade gracefully if PUBLIC_BASE_URL missing.
-    const baseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
     let companionUrl = null;
-    if (baseUrl) {
-      try {
-        // clickerLang resolved earlier via getUserLanguage(clickerId);
-        // clickerId === targetDiscordId by this point (verified above),
-        // so passing clickerLang is correct for the target's preference.
-        const identity = extractIdentityFromUser(interaction.user);
-        const token = await rotateLocalSyncTokenFn(targetDiscordId, clickerLang, { UserModel: User, identity });
-        companionUrl = buildLocalSyncUrl(token, baseUrl);
-      } catch (err) {
-        console.warn("[stuck-nudge] token mint failed:", err?.message || err);
-      }
+    try {
+      // clickerLang resolved earlier via getUserLanguage(clickerId);
+      // clickerId === targetDiscordId by this point (verified above),
+      // so passing clickerLang is correct for the target's preference.
+      companionUrl = await issueLocalSyncAccessUrl({
+        discordId: targetDiscordId,
+        lang: clickerLang,
+        UserModel: User,
+        discordUser: interaction.user,
+        tokenProvider: rotateLocalSyncTokenFn,
+      });
+    } catch (err) {
+      console.warn("[stuck-nudge] token mint failed:", err?.message || err);
     }
 
     // Update the original channel embed to "switched" state - removes

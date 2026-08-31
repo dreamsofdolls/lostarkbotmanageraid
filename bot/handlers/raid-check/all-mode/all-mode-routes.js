@@ -1,5 +1,7 @@
 "use strict";
 
+const { splitCustomId } = require("../../../utils/discord/custom-id");
+
 const RAID_CHECK_ALL_COMPONENT_ACTION = Object.freeze({
   userFilter: "userFilter",
   rosterFilter: "rosterFilter",
@@ -33,10 +35,6 @@ const PREFIX_COMPONENT_ROUTES = Object.freeze([
     segmentIndex: 1,
   },
 ]);
-
-function splitCustomId(customId) {
-  return String(customId || "").split(":");
-}
 
 function getRaidCheckAllComponentRoute(customId, { teamsSelectPrefix = "" } = {}) {
   const id = String(customId || "");

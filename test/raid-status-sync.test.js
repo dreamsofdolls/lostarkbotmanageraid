@@ -6,6 +6,9 @@ const assert = require("node:assert/strict");
 const {
   createRaidStatusSync,
 } = require("../bot/handlers/raid-status/sync/sync");
+const {
+  createAutoManageSyncService,
+} = require("../bot/services/auto-manage/runtime/sync");
 
 function createSync(overrides = {}) {
   return createRaidStatusSync({
@@ -23,6 +26,11 @@ function createSync(overrides = {}) {
     releaseAutoManageSyncSlot: () => {},
     gatherAutoManageLogsForUserDoc: async () => null,
     applyAutoManageCollected: () => ({ perChar: [] }),
+    commitAutoManageCollected: async () => ({
+      status: "attempt-stamped",
+      report: null,
+      snapshot: null,
+    }),
     applyAutoManageCollectedForStatus: async () => {},
     stampAutoManageAttempt: async () => {},
     weekResetStartMs: () => 0,
@@ -143,23 +151,33 @@ test("raid-status manual sync stamps and saves a successful report", async () =>
     lastAutoManageAttemptAt: "persisted",
     lastAutoManageSyncAt: "persisted",
   };
-  const sync = createSync({
-    User: {
-      findOne: () => {
-        mongoReads += 1;
-        if (mongoReads === 1) return Promise.resolve(seedDoc);
-        if (mongoReads === 2) return Promise.resolve(freshDoc);
-        return { lean: async () => renderedDoc };
-      },
+  freshDoc.toObject = () => renderedDoc;
+  const User = {
+    findOne: () => {
+      mongoReads += 1;
+      if (mongoReads === 1) return Promise.resolve(seedDoc);
+      if (mongoReads === 2) return Promise.resolve(freshDoc);
+      return { lean: async () => renderedDoc };
     },
+  };
+  const applyAutoManageCollected = () => ({
+    perChar: [{ error: null, applied: ["gate-1"] }],
+  });
+  const { commitAutoManageCollected } = createAutoManageSyncService({
+    User,
+    saveWithRetry: async (operation) => operation(),
+    ensureFreshWeek: () => false,
+    applyAutoManageCollected,
+  });
+  const sync = createSync({
+    User,
     acquireAutoManageSyncSlot: async () => ({ acquired: true }),
     releaseAutoManageSyncSlot: () => {
       releases += 1;
     },
     gatherAutoManageLogsForUserDoc: async () => ({ collected: true }),
-    applyAutoManageCollected: () => ({
-      perChar: [{ error: null, applied: ["gate-1"] }],
-    }),
+    applyAutoManageCollected,
+    commitAutoManageCollected,
     stampAutoManageAttempt: async () => {
       fallbackStamps += 1;
     },
@@ -179,7 +197,7 @@ test("raid-status manual sync stamps and saves a successful report", async () =>
   assert.equal(fallbackStamps, 0);
   assert.equal(releases, 1);
   assert.equal(acquiredCallbacks, 1);
-  assert.equal(mongoReads, 3);
+  assert.equal(mongoReads, 2);
   assert.equal(freshDoc.lastAutoManageAttemptAt, freshDoc.lastAutoManageSyncAt);
   assert.ok(Number.isFinite(freshDoc.lastAutoManageAttemptAt));
 });

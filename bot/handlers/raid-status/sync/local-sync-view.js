@@ -19,7 +19,7 @@ const {
   getLatestPreviewJob,
   getOrMintLocalSyncToken,
   getPreviewJob,
-  extractIdentityFromUser,
+  issueLocalSyncAccessUrl,
 } = require("../../../services/local-sync");
 const {
   activeScopeForUser,
@@ -29,8 +29,6 @@ const {
   STATUS_BUTTON_PREFIX,
   buildLocalSyncConsolePayload,
 } = require("../../local-sync/discord-console-ui");
-const { publicBaseUrl, buildLocalSyncUrl } = require("../local-sync-controls");
-
 const LOCAL_SYNC_ACTIONS = Object.freeze(["apply", "cancel", "refresh", "roster"]);
 
 /**
@@ -87,18 +85,18 @@ async function loadLocalSyncSnapshot({
   }
 
   let readerUrl = null;
-  const baseUrl = publicBaseUrl();
-  if (baseUrl) {
-    try {
-      const token = await getOrMintLocalSyncToken(discordUser.id, lang, {
-        UserModel: User,
-        identity: extractIdentityFromUser(discordUser),
-        scope: activeScope,
-      });
-      readerUrl = buildLocalSyncUrl(token, baseUrl);
-    } catch (err) {
-      console.warn("[raid-status local-sync] reader URL failed:", err?.message || err);
-    }
+  try {
+    readerUrl = await issueLocalSyncAccessUrl({
+      discordId: discordUser.id,
+      lang,
+      UserModel: User,
+      discordUser,
+      userDoc,
+      scope: activeScope,
+      tokenProvider: getOrMintLocalSyncToken,
+    });
+  } catch (err) {
+    console.warn("[raid-status local-sync] reader URL failed:", err?.message || err);
   }
 
   return { job, summary, readerUrl, activeScope };

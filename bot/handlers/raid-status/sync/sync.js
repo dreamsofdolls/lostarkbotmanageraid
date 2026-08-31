@@ -17,7 +17,6 @@
  */
 const {
   countAppliedAutoManageGates,
-  stampAutoManageAttemptFromReport,
   toPlainUserDoc,
 } = require("../../../services/auto-manage/reports/utils");
 const {
@@ -42,6 +41,7 @@ function createRaidStatusSync(deps) {
     releaseAutoManageSyncSlot,
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
+    commitAutoManageCollected,
     applyAutoManageCollectedForStatus,
     stampAutoManageAttempt,
     weekResetStartMs,
@@ -236,6 +236,7 @@ function createRaidStatusSync(deps) {
   async function runManualStatusSync(discordId, options = {}) {
     const { onAcquired } = options;
     let manualGuard = null;
+    let committedSnapshot = null;
     const manualOutcome = createOutcome();
 
     try {
@@ -271,29 +272,18 @@ function createRaidStatusSync(deps) {
         }
 
         if (collectedLocal) {
-          await saveWithRetry(async () => {
-            const fresh = await User.findOne({ discordId });
-            if (!fresh) return;
-            ensureFreshWeek(fresh);
-            if (!fresh.autoManageEnabled) {
-              fresh.lastAutoManageAttemptAt = Date.now();
-              await fresh.save();
-              return;
-            }
-
-            const report = applyAutoManageCollected(
-              fresh,
-              weekResetStart,
-              collectedLocal
-            );
-            const now = Date.now();
-            stampAutoManageAttemptFromReport(fresh, report, now);
-            const newGates = countAppliedAutoManageGates(report);
+          const committed = await commitAutoManageCollected(
+            discordId,
+            weekResetStart,
+            collectedLocal
+          );
+          committedSnapshot = committed?.snapshot || null;
+          if (committed?.report) {
+            const newGates = countAppliedAutoManageGates(committed.report);
             manualOutcome.newGatesApplied = newGates;
             manualOutcome.outcome =
               newGates > 0 ? "applied" : "synced-no-new";
-            await fresh.save();
-          });
+          }
         }
       }
     } catch (err) {
@@ -307,7 +297,7 @@ function createRaidStatusSync(deps) {
       if (manualGuard?.acquired) releaseAutoManageSyncSlot(discordId);
     }
 
-    const userDoc = await User.findOne({ discordId }).lean();
+    const userDoc = committedSnapshot || await User.findOne({ discordId }).lean();
     return {
       status: "completed",
       outcome: manualOutcome,

@@ -4,11 +4,9 @@ const { t } = require("../../../services/i18n");
 const {
   setLocalSyncEnabled,
   getSyncStatus,
-  rotateLocalSyncToken,
-  extractIdentityFromUser,
+  issueLocalSyncAccessUrl,
   RESULT: SYNC_RESULT,
 } = require("../../../services/local-sync");
-const { buildLocalSyncUrl } = require("../../raid-status/local-sync-controls");
 
 function createAutoManageBasicActionHandlers({
   EmbedBuilder,
@@ -54,16 +52,16 @@ function createAutoManageBasicActionHandlers({
       return;
     }
 
-    const baseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
     let companionUrl = null;
-    if (baseUrl) {
-      try {
-        const identity = extractIdentityFromUser(interaction.user);
-        const token = await rotateLocalSyncToken(discordId, lang, { UserModel: User, identity });
-        companionUrl = buildLocalSyncUrl(token, baseUrl);
-      } catch (err) {
-        console.warn("[raid-auto-manage] local-on token mint failed:", err?.message || String(err));
-      }
+    try {
+      companionUrl = await issueLocalSyncAccessUrl({
+        discordId,
+        lang,
+        UserModel: User,
+        discordUser: interaction.user,
+      });
+    } catch (err) {
+      console.warn("[raid-auto-manage] local-on token mint failed:", err?.message || String(err));
     }
 
     const embed = new EmbedBuilder()

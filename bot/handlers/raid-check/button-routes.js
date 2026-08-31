@@ -1,5 +1,7 @@
 "use strict";
 
+const { parseCustomIdRoute } = require("../../utils/discord/custom-id");
+
 const RAID_CHECK_BUTTON_SCOPE = Object.freeze({
   self: "self",
   manager: "manager",
@@ -36,13 +38,7 @@ const RAID_ACTION_HANDLERS = Object.freeze({
 });
 
 function parseRaidCheckButtonCustomId(customId) {
-  const parts = String(customId || "").split(":");
-  return {
-    prefix: parts[0] || "",
-    action: parts[1] || "",
-    value: parts[2] || "",
-    parts,
-  };
+  return parseCustomIdRoute(customId);
 }
 
 function getRaidCheckButtonRoute(customId) {

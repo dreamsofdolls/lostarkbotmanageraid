@@ -4,6 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  filterAutocompleteChoices,
   selectEntriesWithPinnedActive,
 } = require("../bot/utils/discord/select-options");
 
@@ -40,4 +41,22 @@ test("select entries tolerate missing input and an absent active value", () => {
     selectEntriesWithPinnedActive([1, 2, 3], { limit: 2, activeValue: 9 }),
     [1, 2]
   );
+});
+
+test("autocomplete choices share normalized filtering and Discord limit handling", () => {
+  const choices = Array.from({ length: 30 }, (_, index) => ({
+    name: index === 28 ? "Brelshaza Hard" : `Raid ${index}`,
+    value: index === 28 ? "brel_hard" : `raid-${index}`,
+  }));
+  const normalize = (value) => String(value || "").trim().toLowerCase();
+
+  assert.deepEqual(
+    filterAutocompleteChoices(choices, { needle: " BREL ", normalize }),
+    [choices[28]]
+  );
+  assert.deepEqual(
+    filterAutocompleteChoices(choices, { normalize }),
+    choices.slice(0, 25)
+  );
+  assert.deepEqual(filterAutocompleteChoices(null), []);
 });

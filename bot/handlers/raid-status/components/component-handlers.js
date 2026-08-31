@@ -36,12 +36,9 @@ const {
 const {
   COMPANION_SCOPE,
   rotateLocalSyncToken,
-  extractIdentityFromUser,
-} = require("../../../services/local-sync");
-const {
   publicBaseUrl,
-  buildLocalSyncUrl,
-} = require("../local-sync-controls");
+  issueLocalSyncAccessUrl,
+} = require("../../../services/local-sync");
 const {
   buildManualSyncFollowupPayload,
 } = require("../sync/sync-followup");
@@ -200,9 +197,14 @@ function createStatusComponentRouteHandlers(ctx) {
 
       let freshUrl;
       try {
-        const identity = extractIdentityFromUser(component.user);
-        const token = await rotateLocalSyncToken(discordId, lang, { UserModel: User, identity });
-        freshUrl = buildLocalSyncUrl(token, baseUrl);
+        freshUrl = await issueLocalSyncAccessUrl({
+          discordId,
+          lang,
+          UserModel: User,
+          discordUser: component.user,
+          baseUrl,
+          tokenProvider: rotateLocalSyncTokenFn,
+        });
       } catch (err) {
         console.error("[raid-status] rotate local-sync token failed:", err?.message || err);
         await followUpNotice(component, EmbedBuilder, {
@@ -249,13 +251,15 @@ function createStatusComponentRouteHandlers(ctx) {
       }
 
       try {
-        const identity = extractIdentityFromUser(component.user);
-        const token = await rotateLocalSyncTokenFn(discordId, lang, {
+        const companionUrl = await issueLocalSyncAccessUrl({
+          discordId,
+          lang,
           UserModel: User,
-          identity,
+          discordUser: component.user,
+          baseUrl,
           scope: COMPANION_SCOPE.solo,
+          tokenProvider: rotateLocalSyncTokenFn,
         });
-        const companionUrl = buildLocalSyncUrl(token, baseUrl);
         if (!companionUrl) throw new Error("solo companion URL unavailable");
 
         const embed = new EmbedBuilder()

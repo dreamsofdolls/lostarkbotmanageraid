@@ -9,7 +9,18 @@ function customIdPart(customId, index, fallback = "") {
   return part === undefined ? fallback : part;
 }
 
+function parseCustomIdRoute(customId) {
+  const parts = splitCustomId(customId);
+  return {
+    prefix: parts[0] || "",
+    action: parts[1] || "",
+    value: parts[2] || "",
+    parts,
+  };
+}
+
 module.exports = {
   customIdPart,
+  parseCustomIdRoute,
   splitCustomId,
 };

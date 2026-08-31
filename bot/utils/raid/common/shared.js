@@ -168,6 +168,23 @@ function splitEmbedFieldValue(value, limit = 1024) {
   return chunks.length > 0 ? chunks : ["_No details_"];
 }
 
+function addChunkedEmbedField(
+  embed,
+  name,
+  value,
+  { limit = 1024, inline = false } = {}
+) {
+  const chunks = splitEmbedFieldValue(value, limit);
+  chunks.forEach((chunk, index) => {
+    embed.addFields({
+      name: index === 0 ? name : `${name} (${index + 1})`,
+      value: chunk,
+      inline,
+    });
+  });
+  return embed;
+}
+
 function waitWithBudget(promise, budgetMs) {
   let timeoutId;
   const timeout = new Promise((resolve) => {
@@ -408,6 +425,7 @@ function pack2Columns(fields) {
 }
 
 module.exports = {
+  addChunkedEmbedField,
   buildNoticeEmbed,
   ConcurrencyLimiter,
   UI,

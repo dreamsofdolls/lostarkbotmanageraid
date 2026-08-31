@@ -1,13 +1,9 @@
 "use strict";
 
-function publicBaseUrl() {
-  return (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
-}
-
-function buildLocalSyncUrl(token, baseUrl = publicBaseUrl()) {
-  if (!baseUrl || !token) return null;
-  return `${baseUrl}/sync#token=${encodeURIComponent(token)}`;
-}
+const {
+  publicBaseUrl,
+  buildLocalSyncUrl,
+} = require("../../services/local-sync");
 
 function buildLocalSyncResumeButton({
   ButtonBuilder,
