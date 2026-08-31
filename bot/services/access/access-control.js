@@ -25,9 +25,14 @@ const { isManagerId } = require("./manager");
 //     ownerLabel,           // display name for UI ("@Alice")
 //     accountName,          // string
 //     account,              // Mongoose account subdoc
+//     ownerDoc,             // already-loaded owner doc for downstream reuse
 //     accessLevel,          // 'edit' | 'view'
 //     isOwn,                // bool
 //   }
+function leanWhenSupported(query) {
+  return query && typeof query.lean === "function" ? query.lean() : query;
+}
+
 async function getAccessibleAccounts(viewerDiscordId, { models = {}, helpers = {}, includeOwn = true } = {}) {
   const ResolvedUser = models.User || User;
   const ResolvedShare = models.RosterShare || RosterShare;
@@ -36,8 +41,18 @@ async function getAccessibleAccounts(viewerDiscordId, { models = {}, helpers = {
 
   if (!viewerDiscordId) return accessible;
 
+  // Own-account and share metadata reads do not depend on one another.
+  // Starting both together removes one full Mongo round trip from the
+  // shared-roster path while lean documents avoid Mongoose hydration cost.
+  const ownDocPromise = includeOwn
+    ? leanWhenSupported(ResolvedUser.findOne({ discordId: viewerDiscordId }))
+    : Promise.resolve(null);
+  const sharesPromise = leanWhenSupported(
+    ResolvedShare.find({ granteeDiscordId: viewerDiscordId })
+  );
+  const [ownDoc, shares] = await Promise.all([ownDocPromise, sharesPromise]);
+
   if (includeOwn) {
-    const ownDoc = await ResolvedUser.findOne({ discordId: viewerDiscordId });
     if (ownDoc && Array.isArray(ownDoc.accounts)) {
       for (const account of ownDoc.accounts) {
         accessible.push({
@@ -45,6 +60,7 @@ async function getAccessibleAccounts(viewerDiscordId, { models = {}, helpers = {
           ownerLabel: pickDisplayLabel(ownDoc),
           accountName: account.accountName,
           account,
+          ownerDoc: ownDoc,
           accessLevel: "edit",
           isOwn: true,
         });
@@ -52,7 +68,6 @@ async function getAccessibleAccounts(viewerDiscordId, { models = {}, helpers = {
     }
   }
 
-  const shares = await ResolvedShare.find({ granteeDiscordId: viewerDiscordId }).lean();
   if (!shares || shares.length === 0) return accessible;
 
   const liveShareByOwnerId = new Map();
@@ -62,9 +77,11 @@ async function getAccessibleAccounts(viewerDiscordId, { models = {}, helpers = {
   }
   if (liveShareByOwnerId.size === 0) return accessible;
 
-  const ownerDocs = await ResolvedUser.find({
-    discordId: { $in: [...liveShareByOwnerId.keys()] },
-  });
+  const ownerDocs = await leanWhenSupported(
+    ResolvedUser.find({
+      discordId: { $in: [...liveShareByOwnerId.keys()] },
+    })
+  );
 
   for (const ownerDoc of ownerDocs) {
     const share = liveShareByOwnerId.get(String(ownerDoc.discordId));
@@ -76,6 +93,7 @@ async function getAccessibleAccounts(viewerDiscordId, { models = {}, helpers = {
         ownerLabel: pickDisplayLabel(ownerDoc),
         accountName: account.accountName,
         account,
+        ownerDoc,
         accessLevel: share.accessLevel || "edit",
         isOwn: false,
       });

@@ -107,13 +107,41 @@ function createAddRosterCommand({
   });
   async function handleAddRosterCommand(interaction) {
     const callerId = interaction.user.id;
+    const seedCharName = interaction.options.getString("name", true).trim();
+    const requestedTarget = interaction.options.getUser("target");
+    const targetsAnotherUser = Boolean(
+      requestedTarget && requestedTarget.id !== callerId
+    );
+    const targetCanProceed = !targetsAnotherUser || (
+      typeof isManagerId === "function"
+      && isManagerId(callerId)
+      && !requestedTarget.bot
+    );
+
     // Slash invoker (Manager or self-add user) sees every reply on this
     // command in their own locale — including the Manager-target
     // onboarding ephemeral, which is the Manager's reply that *mentions*
     // the target. Target's separate DM uses their own lang (resolved in
     // tryDeliverTargetDM).
-    const lang = await getUserLanguage(callerId, { UserModel: User });
-    const seedCharName = interaction.options.getString("name", true).trim();
+    // Self-add can reuse one full user read for language + duplicate checks.
+    // Manager-target adds need two different users, so start those independent
+    // reads together instead of paying their latency serially.
+    let lang;
+    let existingUser = null;
+    if (!targetsAnotherUser) {
+      existingUser = await User.findOne({ discordId: callerId }).lean();
+      lang = await getUserLanguage(callerId, {
+        UserModel: User,
+        userDoc: existingUser,
+      });
+    } else if (targetCanProceed) {
+      [lang, existingUser] = await Promise.all([
+        getUserLanguage(callerId, { UserModel: User }),
+        User.findOne({ discordId: requestedTarget.id }).lean(),
+      ]);
+    } else {
+      lang = await getUserLanguage(callerId, { UserModel: User });
+    }
 
     // The target option lets a Raid Manager register a roster for another
     // user. Data is saved under the target's Discord ID and the option remains
@@ -126,7 +154,6 @@ function createAddRosterCommand({
     // Seed name matches either an existing account name or any stored
     // character name → block the add. Users who want to refresh a saved
     // roster should remove it first, per Traine's explicit preference.
-    const existingUser = await User.findOne({ discordId }).lean();
     if (existingUser && Array.isArray(existingUser.accounts)) {
       const matched = findDuplicateBySeed({
         accounts: existingUser.accounts,

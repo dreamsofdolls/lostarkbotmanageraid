@@ -121,6 +121,42 @@ test("getAccessibleAccounts merges shared accounts when manager A has granted ac
   assert.equal(shared.ownerDiscordId, "A");
   assert.equal(shared.ownerLabel, "Alice");
   assert.equal(shared.accessLevel, "edit");
+  assert.equal(shared.ownerDoc.discordId, "A");
+  assert.equal(shared.account, shared.ownerDoc.accounts[0]);
+});
+
+test("getAccessibleAccounts starts own and share reads concurrently", async () => {
+  const events = [];
+  let releaseOwn;
+  const User = {
+    findOne() {
+      events.push("own-start");
+      return new Promise((resolve) => { releaseOwn = resolve; });
+    },
+    find() {
+      throw new Error("owner lookup should not run without shares");
+    },
+  };
+  const RosterShare = {
+    find() {
+      return {
+        async lean() {
+          events.push("shares-start");
+          return [];
+        },
+      };
+    },
+  };
+
+  const pending = getAccessibleAccounts("B", {
+    models: { User, RosterShare },
+    helpers: { isManagerId: () => false },
+  });
+
+  assert.deepEqual(events, ["own-start", "shares-start"]);
+  releaseOwn({ discordId: "B", accounts: [ownAccount("BaoMain")] });
+  const accessible = await pending;
+  assert.equal(accessible.length, 1);
 });
 
 test("getAccessibleAccounts returns shared rosters even when viewer has no own roster", async () => {

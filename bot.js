@@ -23,29 +23,10 @@ const {
   MessageFlags,
 } = require("discord.js");
 const { connectDB, disconnectDB } = require("./bot/db");
+const raidCommands = require("./bot/commands");
 const {
   commands,
-  handleRaidManagementCommand,
-  handleRaidHelpSelect,
-  handleRaidLanguageSelect,
-  handleRaidSetAutocomplete,
-  handleRemoveRosterAutocomplete,
-  handleRaidChannelAutocomplete,
-  handleRaidAutoManageAutocomplete,
-  handleRaidTaskAutocomplete,
-  handleRaidTaskButton,
-  handleRaidScheduleButton,
-  handleRaidScheduleSelect,
-  handleRaidAnnounceAutocomplete,
   handleRaidChannelMessage,
-  handleRaidCheckButton,
-  handleAddRosterButton,
-  handleEditRosterAutocomplete,
-  handleEditRosterButton,
-  handleRaidGoldEarnerAutocomplete,
-  handleRaidGoldEarnerButton,
-  handleStuckNudgeButton,
-  handleLocalSyncButton,
   notifyLocalSyncPreviewReady,
   loadMonitorChannelCache,
   startRaidChannelScheduler,
@@ -54,7 +35,7 @@ const {
   startWorldEventReminderScheduler,
   startSideTaskResetScheduler,
   startRaidScheduleAutoLockScheduler,
-} = require("./bot/commands");
+} = raidCommands;
 const User = require("./bot/models/user");
 const { startWeeklyResetJob } = require("./bot/services/raid/schedulers/weekly-reset");
 const { bootstrapClassEmoji, bootstrapArtistEmoji } = require("./bot/services/discord/emoji-bootstrap");
@@ -258,28 +239,9 @@ async function startBot() {
   const router = createRaidInteractionRouter({
     MessageFlags,
     instanceIdentity: runtimeInstanceIdentity,
-    handlers: {
-      handleRaidManagementCommand,
-      handleRaidHelpSelect,
-      handleRaidLanguageSelect,
-      handleRaidSetAutocomplete,
-      handleRemoveRosterAutocomplete,
-      handleRaidChannelAutocomplete,
-      handleRaidAutoManageAutocomplete,
-      handleRaidTaskAutocomplete,
-      handleRaidAnnounceAutocomplete,
-      handleRaidCheckButton,
-      handleAddRosterButton,
-      handleEditRosterAutocomplete,
-      handleEditRosterButton,
-      handleRaidGoldEarnerAutocomplete,
-      handleRaidGoldEarnerButton,
-      handleRaidTaskButton,
-      handleRaidScheduleButton,
-      handleRaidScheduleSelect,
-      handleStuckNudgeButton,
-      handleLocalSyncButton,
-    },
+    // Pass the command facade directly so newly exported interaction
+    // handlers cannot be forgotten in a second hand-maintained list.
+    handlers: raidCommands,
   });
 
   client.on(Events.InteractionCreate, router.handle);

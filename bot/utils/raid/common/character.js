@@ -85,33 +85,6 @@ function buildCharacterRecord(source, fallbackId) {
   };
 }
 
-
-
-function ensureRaidEntries(character) {
-  const assignedRaids = ensureAssignedRaids(character);
-  const raids = [];
-
-  for (const raidKey of RAID_GROUP_KEYS) {
-    const assignedRaid = assignedRaids[raidKey];
-    const modeKey = getAssignedRaidModeKey(assignedRaid, raidKey)
-      || toModeKey(assignedRaid?.G1?.difficulty || assignedRaid?.G2?.difficulty || "Normal");
-    const requirement = getRequirementFor(raidKey, modeKey) || getRequirementFor(raidKey, "normal");
-    if (!requirement) continue;
-
-    raids.push({
-      raidName: requirement.label,
-      raidKey,
-      modeKey,
-      pendingModeKey: normalizeRaidModeKey(raidKey, assignedRaid?.pendingModeKey) || null,
-      minItemLevel: requirement.minItemLevel,
-      completedGateKeys: getCompletedGateKeys(assignedRaid),
-      isCompleted: isAssignedRaidCompleted(assignedRaid),
-    });
-  }
-
-  return raids;
-}
-
 // Compute the (earnedGold, totalGold) pair for a raid entry. earnedGold
 // sums the gold reward of every gate already cleared this week at the
 // raid's selected mode; totalGold sums every official gate of that mode.
@@ -431,17 +404,6 @@ function summarizeRaidProgress(allRaids) {
   return { color, completed, partial, total };
 }
 
-// Per-gate display icon for progress-aware /raid-check rendering.
-// 'done'    = gate completed AT this raid's selected difficulty
-// 'partial' = unused right now (kept for future per-gate "started" semantics)
-// 'pending' = gate not done OR done at a different difficulty (mode-switch
-//             would wipe it anyway, so it's not real progress for this scan)
-function raidCheckGateIcon(status) {
-  if (status === "done") return "🟢";
-  if (status === "partial") return "🟡";
-  return "⚪";
-}
-
 module.exports = {
   createCharacterId,
   buildFetchedRosterIndexes,
@@ -461,7 +423,6 @@ module.exports = {
   toPlainAssignedRaid,
   isAssignedRaidCompleted,
   buildCharacterRecord,
-  ensureRaidEntries,
   getStatusRaidsForCharacter,
   getStatusProgressRaidsForCharacter,
   isGoldReceivingRaid,
@@ -476,6 +437,5 @@ module.exports = {
   applyCharacterGoldCap,
   getGoldOverride,
   GOLD_RAID_CAP_PER_CHARACTER,
-  raidCheckGateIcon,
   RAID_REQUIREMENT_MAP,
 };

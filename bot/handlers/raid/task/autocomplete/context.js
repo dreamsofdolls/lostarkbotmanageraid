@@ -10,7 +10,8 @@ function createRaidTaskAutocompleteContext({
     }
     const writeTarget = await resolveTaskWriteTarget(executorId, rosterName);
     if (writeTarget.viaShare) {
-      const ownerDoc = await loadUserForAutocomplete(writeTarget.discordId);
+      const ownerDoc = writeTarget.ownerDoc
+        || await loadUserForAutocomplete(writeTarget.discordId);
       if (ownerDoc && Array.isArray(ownerDoc.accounts)) {
         return ownerDoc;
       }

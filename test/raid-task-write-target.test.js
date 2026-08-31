@@ -55,9 +55,12 @@ test("raid-task write target gives own roster precedence before shared rosters",
 });
 
 test("raid-task write target routes editable shared roster writes to owner", async () => {
+  let accessibleOptions = null;
   const resolveTaskWriteTarget = createRaidTaskWriteTargetResolver({
     loadUserForAutocomplete: async () => ({ accounts: [] }),
-    getAccessibleAccounts: async () => [
+    getAccessibleAccounts: async (_executorId, options) => {
+      accessibleOptions = options;
+      return [
       {
         isOwn: false,
         accountName: "Shared",
@@ -65,7 +68,8 @@ test("raid-task write target routes editable shared roster writes to owner", asy
         ownerLabel: "Owner One",
         accessLevel: "edit",
       },
-    ],
+      ];
+    },
   });
 
   const result = await resolveTaskWriteTarget("viewer-1", "shared");
@@ -77,6 +81,7 @@ test("raid-task write target routes editable shared roster writes to owner", asy
     accessLevel: "edit",
     canEdit: true,
   });
+  assert.deepEqual(accessibleOptions, { includeOwn: false });
 });
 
 test("raid-task write target preserves view-only shared roster metadata", async () => {

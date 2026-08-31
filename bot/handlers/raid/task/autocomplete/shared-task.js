@@ -53,8 +53,10 @@ function createSharedTaskAutocompleteHandlers({
       await interaction.respond([]).catch(() => {});
       return;
     }
-    const lang = await getUserLanguage(discordId, { UserModel: User });
-    const userDoc = await loadUserDocForRosterAutocomplete(discordId, rosterInput);
+    const [lang, userDoc] = await Promise.all([
+      getUserLanguage(discordId, { UserModel: User }),
+      loadUserDocForRosterAutocomplete(discordId, rosterInput),
+    ]);
     const account = findAccountInUser(userDoc, rosterInput);
     if (!account) {
       await interaction.respond([]).catch(() => {});
@@ -77,10 +79,14 @@ function createSharedTaskAutocompleteHandlers({
   async function autocompleteSharedPreset(interaction, focused) {
     const needle = normalizeName(focused.value || "");
     const rosterInput = interaction.options.getString("roster") || "";
-    const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
-    const userDoc = rosterInput
-      ? await loadUserDocForRosterAutocomplete(interaction.user.id, rosterInput)
-      : await loadUserForAutocomplete(interaction.user.id);
+    const discordId = interaction.user.id;
+    const userDocPromise = rosterInput
+      ? loadUserDocForRosterAutocomplete(discordId, rosterInput)
+      : loadUserForAutocomplete(discordId);
+    const [lang, userDoc] = await Promise.all([
+      getUserLanguage(discordId, { UserModel: User }),
+      userDocPromise,
+    ]);
     const accounts = Array.isArray(userDoc?.accounts) ? userDoc.accounts : [];
     const selectedAccount = rosterInput
       ? findAccountInUser(userDoc, rosterInput)

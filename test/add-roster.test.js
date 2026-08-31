@@ -22,6 +22,7 @@ const {
 const { createAddRosterCommand } = require("../bot/handlers/roster/add");
 const { UI, normalizeName, parseCombatScore, getCharacterName, getCharacterClass } = require("../bot/utils/raid/common/shared");
 const { buildCharacterRecord, createCharacterId } = require("../bot/utils/raid/common/character");
+const { clearUserLanguageCache } = require("../bot/services/i18n");
 
 // In-memory User model stub. findOne returns either a "live" doc (with
 // .save) or .lean() returns the plain JSON. save() persists back into
@@ -29,7 +30,7 @@ const { buildCharacterRecord, createCharacterId } = require("../bot/utils/raid/c
 // the returned doc don't accidentally leak back into the store before
 // .save() is called — mirrors Mongoose semantics close enough for the
 // persistence logic under test.
-function makeUserModel() {
+function makeUserModel(events = null) {
   const docs = new Map();
 
   class User {
@@ -49,6 +50,7 @@ function makeUserModel() {
       return this;
     }
     static findOne(query) {
+      events?.push(`findOne:${query.discordId}`);
       const data = docs.get(query.discordId);
       return {
         async lean() {
@@ -64,8 +66,8 @@ function makeUserModel() {
   return { User, docs };
 }
 
-function makeFactory({ fetchRosterCharacters } = {}) {
-  const { User, docs } = makeUserModel();
+function makeFactory({ fetchRosterCharacters, events } = {}) {
+  const { User, docs } = makeUserModel(events);
   const factory = createAddRosterCommand({
     EmbedBuilder,
     StringSelectMenuBuilder,
@@ -89,6 +91,43 @@ function makeFactory({ fetchRosterCharacters } = {}) {
   });
   return { factory, User, docs };
 }
+
+test("handleAddRosterCommand reuses the self lookup and defers before Bible fetch", async () => {
+  clearUserLanguageCache();
+  const events = [];
+  const { factory } = makeFactory({
+    events,
+    fetchRosterCharacters: async () => {
+      events.push("fetchRoster");
+      return [];
+    },
+  });
+  const interaction = {
+    user: { id: "fresh-self-user" },
+    options: {
+      getString: () => "FreshSeed",
+      getUser: () => null,
+    },
+    async reply() {
+      events.push("reply");
+    },
+    async deferReply() {
+      events.push("deferReply");
+    },
+    async editReply() {
+      events.push("editReply");
+    },
+  };
+
+  await factory.handleAddRosterCommand(interaction);
+
+  assert.deepEqual(events, [
+    "findOne:fresh-self-user",
+    "deferReply",
+    "fetchRoster",
+    "editReply",
+  ]);
+});
 
 function makeSession({ discordId = "user-1", seedCharName = "Alpha", bibleNames = [] } = {}) {
   return {

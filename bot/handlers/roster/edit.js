@@ -107,8 +107,11 @@ function createEditRosterCommand({
       return;
     }
 
-    const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
     const userDoc = await loadUserForAutocomplete(interaction.user.id);
+    const lang = await getUserLanguage(interaction.user.id, {
+      UserModel: User,
+      userDoc,
+    });
     const matches = getRosterMatches(userDoc, focused.value || "");
     const charsWord = (count) =>
       t(
@@ -129,12 +132,18 @@ function createEditRosterCommand({
 
   async function handleEditRosterCommand(interaction) {
     const callerId = interaction.user.id;
-    const lang = await getUserLanguage(callerId, { UserModel: User });
     const rosterArg = interaction.options.getString("roster", true).trim();
 
+    // Every edit-roster result is private, so acknowledge before Mongo and
+    // reuse that same user document for both locale and roster state.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const userDoc = await User.findOne({ discordId: callerId }).lean();
+    const lang = await getUserLanguage(callerId, {
+      UserModel: User,
+      userDoc,
+    });
     if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
-      await interaction.reply({
+      await interaction.editReply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "info",
@@ -142,7 +151,6 @@ function createEditRosterCommand({
             description: t("raid-edit-roster.notice.noRostersDescription", lang),
           }),
         ],
-        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -151,7 +159,7 @@ function createEditRosterCommand({
       (account) => normalizeName(account.accountName) === normalizeName(rosterArg)
     );
     if (!targetAccount) {
-      await interaction.reply({
+      await interaction.editReply({
         embeds: [
           buildNoticeEmbed(EmbedBuilder, {
             type: "warn",
@@ -161,12 +169,9 @@ function createEditRosterCommand({
             }),
           }),
         ],
-        flags: MessageFlags.Ephemeral,
       });
       return;
     }
-
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const savedChars = (targetAccount.characters || []).map((character) => ({
       name: getCharacterName(character),

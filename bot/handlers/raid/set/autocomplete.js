@@ -46,7 +46,9 @@ function createRaidSetAutocompleteService({
   User,
   normalizeName,
   loadUserForAutocomplete,
-  getAccessibleAccounts,
+  getAccessibleAccounts = async () => [],
+  loadAccessibleAccountsForAutocomplete = (discordId) =>
+    getAccessibleAccounts(discordId, { includeOwn: false }),
   flattenRegisteredAccounts,
   resolveRosterOwner,
   loadAccountsRegisteredBy,
@@ -90,13 +92,34 @@ function createRaidSetAutocompleteService({
     const executorId = interaction.user.id;
     const needle = focused.value || "";
     const target = normalizeName(needle);
-    const lang = await getUserLanguage(executorId, { UserModel: User });
+    const registeredDocsPromise = loadAccountsRegisteredBy(executorId).catch((err) => {
+      console.warn(
+        "[raid-set autocomplete] loadAccountsRegisteredBy failed:",
+        err?.message || err
+      );
+      return [];
+    });
+    const accessiblePromise = loadAccessibleAccountsForAutocomplete(executorId).catch((err) => {
+      console.warn(
+        "[raid-set autocomplete] getAccessibleAccounts failed:",
+        err?.message || err
+      );
+      return [];
+    });
+    const [ownDoc, registeredDocs, accessible] = await Promise.all([
+      loadUserForAutocomplete(executorId),
+      registeredDocsPromise,
+      accessiblePromise,
+    ]);
+    const lang = await getUserLanguage(executorId, {
+      UserModel: User,
+      userDoc: ownDoc,
+    });
     const charsWord = (n) =>
       t(
         n === 1 ? "raid-set.autocomplete.charsSingular" : "raid-set.autocomplete.charsPlural",
         lang
       );
-    const ownDoc = await loadUserForAutocomplete(executorId);
     const ownMatches = getRosterMatches(ownDoc, needle);
     const ownChoices = buildRosterAutocompleteChoices(ownMatches, {
       lang,
@@ -105,50 +128,32 @@ function createRaidSetAutocompleteService({
       charsWord,
     });
 
-    let helperChoices = [];
-    try {
-      const registeredDocs = await loadAccountsRegisteredBy(executorId);
-      helperChoices = flattenRegisteredAccounts(registeredDocs, executorId)
-        .filter(
-          (entry) =>
-            !target || normalizeName(entry.account.accountName).includes(target)
-        )
-        .map((entry) => {
-          const charCount = Array.isArray(entry.account.characters)
-            ? entry.account.characters.length
-            : 0;
-          const label = t("raid-set.autocomplete.helperChoice", lang, {
-            name: entry.account.accountName,
-            charCount,
-            charsWord: charsWord(charCount),
-            owner: entry.ownerLabel,
-          });
-          return truncateChoice(label, entry.account.accountName);
+    const helperChoices = flattenRegisteredAccounts(registeredDocs, executorId)
+      .filter(
+        (entry) =>
+          !target || normalizeName(entry.account.accountName).includes(target)
+      )
+      .map((entry) => {
+        const charCount = Array.isArray(entry.account.characters)
+          ? entry.account.characters.length
+          : 0;
+        const label = t("raid-set.autocomplete.helperChoice", lang, {
+          name: entry.account.accountName,
+          charCount,
+          charsWord: charsWord(charCount),
+          owner: entry.ownerLabel,
         });
-    } catch (err) {
-      console.warn(
-        "[raid-set autocomplete] loadAccountsRegisteredBy failed:",
-        err?.message || err
-      );
-    }
-
-    let shareChoices = [];
-    try {
-      const accessible = await getAccessibleAccounts(executorId);
-      shareChoices = buildSharedRosterAutocompleteChoices(accessible, {
-        needle,
-        lang,
-        t,
-        choiceKey: "raid-set.autocomplete.sharedChoice",
-        accessTagKey: "raid-set.autocomplete.sharedAccessTagView",
-        charsWord,
+        return truncateChoice(label, entry.account.accountName);
       });
-    } catch (err) {
-      console.warn(
-        "[raid-set autocomplete] getAccessibleAccounts failed:",
-        err?.message || err
-      );
-    }
+
+    const shareChoices = buildSharedRosterAutocompleteChoices(accessible, {
+      needle,
+      lang,
+      t,
+      choiceKey: "raid-set.autocomplete.sharedChoice",
+      accessTagKey: "raid-set.autocomplete.sharedAccessTagView",
+      charsWord,
+    });
 
     await interaction.respond([...ownChoices, ...helperChoices, ...shareChoices].slice(0, 25)).catch(() => {});
   }
@@ -216,7 +221,13 @@ function createRaidSetAutocompleteService({
     const raidValue = interaction.options.getString("raid") || "";
     const needle = normalizeName(focused.value || "");
     const executorId = interaction.user.id;
-    const lang = await getUserLanguage(executorId, { UserModel: User });
+    const raidMeta = RAID_REQUIREMENT_MAP[raidValue];
+    const [lang, userDoc] = await Promise.all([
+      getUserLanguage(executorId, { UserModel: User }),
+      characterInput && raidMeta
+        ? resolveAutocompleteUserDoc(executorId, rosterInput)
+        : Promise.resolve(null),
+    ]);
     const baseChoices = [
       { name: t("raid-set.statusChoices.complete", lang), value: "complete" },
       { name: t("raid-set.statusChoices.process", lang), value: "process" },
@@ -224,13 +235,11 @@ function createRaidSetAutocompleteService({
     ];
     const applyFilter = (list) =>
       list.filter((choice) => !needle || normalizeName(choice.name).includes(needle));
-    const raidMeta = RAID_REQUIREMENT_MAP[raidValue];
     if (!characterInput || !raidMeta) {
       await interaction.respond(applyFilter(baseChoices)).catch(() => {});
       return;
     }
 
-    const userDoc = await resolveAutocompleteUserDoc(executorId, rosterInput);
     const character = findCharacterInUser(userDoc, characterInput, rosterInput || null);
     if (!character) {
       await interaction.respond(applyFilter(baseChoices)).catch(() => {});

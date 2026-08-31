@@ -26,11 +26,12 @@ const {
 const { createEditRosterCommand } = require("../bot/handlers/roster/edit");
 const { UI, normalizeName, parseCombatScore, getCharacterName, getCharacterClass } = require("../bot/utils/raid/common/shared");
 const { buildCharacterRecord, createCharacterId } = require("../bot/utils/raid/common/character");
+const { clearUserLanguageCache } = require("../bot/services/i18n");
 
 // Same in-memory User stub shape as add-roster.test.js. Kept duplicated
 // (rather than shared via a helper) so each test file is self-contained
 // and a future change to one's mock doesn't accidentally break the other.
-function makeUserModel() {
+function makeUserModel(events = null) {
   const docs = new Map();
   class User {
     constructor(data = {}) {
@@ -45,6 +46,7 @@ function makeUserModel() {
       return this;
     }
     static findOne(query) {
+      events?.push(`findOne:${query.discordId}`);
       const data = docs.get(query.discordId);
       return {
         async lean() {
@@ -60,8 +62,8 @@ function makeUserModel() {
   return { User, docs };
 }
 
-function makeFactory({ fetchRosterCharacters } = {}) {
-  const { User, docs } = makeUserModel();
+function makeFactory({ fetchRosterCharacters, events } = {}) {
+  const { User, docs } = makeUserModel(events);
   const factory = createEditRosterCommand({
     EmbedBuilder,
     StringSelectMenuBuilder,
@@ -85,6 +87,35 @@ function makeFactory({ fetchRosterCharacters } = {}) {
   });
   return { factory, User, docs };
 }
+
+test("handleEditRosterCommand defers ephemerally before its user lookup", async () => {
+  clearUserLanguageCache();
+  const events = [];
+  const deferred = [];
+  const { factory } = makeFactory({ events });
+  const interaction = {
+    user: { id: "fresh-edit-user" },
+    options: {
+      getString: () => "MissingRoster",
+    },
+    async deferReply(payload) {
+      events.push("deferReply");
+      deferred.push(payload);
+    },
+    async editReply() {
+      events.push("editReply");
+    },
+  };
+
+  await factory.handleEditRosterCommand(interaction);
+
+  assert.deepEqual(events, [
+    "deferReply",
+    "findOne:fresh-edit-user",
+    "editReply",
+  ]);
+  assert.equal(deferred[0].flags, MessageFlags.Ephemeral);
+});
 
 // --------- buildEditRosterPickerChars (saved-first sort + truncation) ---------
 

@@ -78,10 +78,6 @@ function summarizeSoloRaidProgress(accounts, getRaidsFor) {
   return { completed, total };
 }
 
-function countSoloRaids(accounts, getRaidsFor) {
-  return summarizeSoloRaidProgress(accounts, getRaidsFor).total;
-}
-
 function buildRaidDropdownState(accounts, getRaidsFor) {
   const raidAggregate = new Map();
   let totalSoloPending = 0;
@@ -331,7 +327,6 @@ module.exports = {
   getRaidFilterKey,
   getRaidFilterModeKey,
   getStatusRosterRaidState,
-  countSoloRaids,
   isCountedRaidFilterProgress,
   summarizeSoloRaidProgress,
 };

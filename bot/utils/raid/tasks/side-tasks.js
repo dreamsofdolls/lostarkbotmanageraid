@@ -181,13 +181,15 @@ function resolveTaskWriteTargetFromAccessible(executorId, rosterName, accessible
   if (!sharedMatch) {
     return { discordId: executorId, viaShare: false };
   }
-  return {
+  const result = {
     discordId: sharedMatch.ownerDiscordId,
     viaShare: true,
     ownerLabel: sharedMatch.ownerLabel,
     accessLevel: sharedMatch.accessLevel,
     canEdit: sharedMatch.accessLevel === "edit",
   };
+  if (sharedMatch.ownerDoc) result.ownerDoc = sharedMatch.ownerDoc;
+  return result;
 }
 
 function ensureSideTasks(character) {

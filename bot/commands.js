@@ -107,9 +107,20 @@ const raidCheckSyncLimiter = new ConcurrencyLimiter(3);
 const rosterFetchService = createRosterFetchService({ bibleLimiter });
 const { fetchRosterCharacters } = rosterFetchService;
 
-
+// A one-second resolved-value window covers Discord's rapid per-keystroke
+// autocomplete burst without turning this into long-lived application state.
+// Keep it on autocomplete-only wrappers: command/write paths continue using
+// the fresh in-flight loaders below and never observe a settled stale value.
+const AUTOCOMPLETE_CACHE_OPTIONS = Object.freeze({
+  ttlMs: 1_000,
+  maxEntries: 250,
+});
 const loadUserForAutocomplete = createInFlightLoader((discordId) =>
   User.findOne({ discordId }).lean()
+);
+const loadCachedUserForAutocomplete = createInFlightLoader(
+  loadUserForAutocomplete,
+  AUTOCOMPLETE_CACHE_OPTIONS
 );
 
 /**
@@ -121,17 +132,22 @@ const loadUserForAutocomplete = createInFlightLoader((discordId) =>
  * stampede Mongo. Projects only the fields the picker label needs
  * (display-name cache + accounts) to keep result size compact.
  */
-const loadAccountsRegisteredBy = createInFlightLoader((discordId) =>
-  User.find(
-    { "accounts.registeredBy": discordId },
-    {
-      discordId: 1,
-      discordUsername: 1,
-      discordGlobalName: 1,
-      discordDisplayName: 1,
-      accounts: 1,
-    }
-  ).lean()
+const loadAccountsRegisteredBy = createInFlightLoader(
+  (discordId) =>
+    User.find(
+      { "accounts.registeredBy": discordId },
+      {
+        discordId: 1,
+        discordUsername: 1,
+        discordGlobalName: 1,
+        discordDisplayName: 1,
+        accounts: 1,
+      }
+    ).lean()
+);
+const loadCachedAccountsRegisteredBy = createInFlightLoader(
+  loadAccountsRegisteredBy,
+  AUTOCOMPLETE_CACHE_OPTIONS
 );
 const {
   getRaidRequirementList,
@@ -189,6 +205,10 @@ const {
   getPrimaryManagerId,
 } = require("./services/access/manager");
 const { getAccessibleAccounts } = require("./services/access/access-control");
+const loadAccessibleAccountsForAutocomplete = createInFlightLoader(
+  (discordId) => getAccessibleAccounts(discordId, { includeOwn: false }),
+  AUTOCOMPLETE_CACHE_OPTIONS
+);
 if (RAID_MANAGER_ID.size === 0) {
   console.warn(
     "[raid-check] RAID_MANAGER_ID env not set or empty - /raid-check will reject every invocation. Set the env var to a comma-separated list of Discord user IDs to enable."
@@ -559,7 +579,7 @@ const editRosterCommandHandlers = createEditRosterCommand({
   getCharacterClass,
   buildCharacterRecord,
   createCharacterId,
-  loadUserForAutocomplete,
+  loadUserForAutocomplete: loadCachedUserForAutocomplete,
   getPrimaryManagerId,
 });
 ({
@@ -758,6 +778,9 @@ const raidSetCommandHandlers = createRaidSetCommand({
   createCharacterId,
   loadUserForAutocomplete,
   loadAccountsRegisteredBy,
+  loadCachedUserForAutocomplete,
+  loadCachedAccountsRegisteredBy,
+  loadAccessibleAccountsForAutocomplete,
   getRaidRequirementList,
   RAID_REQUIREMENT_MAP,
   getGatesForRaid,
@@ -1059,6 +1082,8 @@ const raidTaskCommandHandlers = createRaidTaskCommand({
   User,
   saveWithRetry,
   loadUserForAutocomplete,
+  loadCachedUserForAutocomplete,
+  loadAccessibleAccountsForAutocomplete,
   dailyResetStartMs,
   weekResetStartMs,
 });
@@ -1116,18 +1141,6 @@ async function callApplyRaidSetBatchForDiscordId(args) {
   return applyRaidSetBatchForDiscordId(args);
 }
 
-async function callAcquireAutoManageSyncSlot(discordId, options) {
-  if (typeof acquireAutoManageSyncSlot !== "function") {
-    throw new Error("[commands] auto-manage sync slot manager is not initialized");
-  }
-  return acquireAutoManageSyncSlot(discordId, options);
-}
-
-function callReleaseAutoManageSyncSlot(discordId) {
-  if (typeof releaseAutoManageSyncSlot !== "function") return;
-  releaseAutoManageSyncSlot(discordId);
-}
-
 module.exports = {
   commands,
   handleRaidManagementCommand,
@@ -1162,8 +1175,6 @@ module.exports = {
   parseRaidMessage,
   applyRaidSetForDiscordId: callApplyRaidSetForDiscordId,
   applyRaidSetBatchForDiscordId: callApplyRaidSetBatchForDiscordId,
-  acquireAutoManageSyncSlot: callAcquireAutoManageSyncSlot,
-  releaseAutoManageSyncSlot: callReleaseAutoManageSyncSlot,
   handleStuckNudgeButton,
   __test: {
     buildRaidCheckSnapshotFromUsers,

@@ -7,10 +7,11 @@ const {
   RAID_COMMAND_NAMES,
   createRaidInteractionRouter,
 } = require("../bot/app/interaction-router-registry");
+const commandModule = require("../bot/commands");
 const {
   commands,
   __test: commandsTest,
-} = require("../bot/commands");
+} = commandModule;
 
 test("interaction router allowlist includes /raid-bg", () => {
   assert.ok(RAID_COMMAND_NAMES.includes("raid-bg"));
@@ -186,4 +187,38 @@ test("Local Sync confirmation buttons route globally outside raid-status collect
   });
 
   assert.equal(localSyncCalls, 1);
+});
+
+test("Local Sync roster selects route through the exported console handler", async () => {
+  let rosterSelectCalls = 0;
+  const noop = async () => {};
+  const router = createRaidInteractionRouter({
+    MessageFlags: { Ephemeral: 64 },
+    handlers: {
+      handleRaidManagementCommand: noop,
+      handleRaidHelpSelect: noop,
+      handleRaidLanguageSelect: noop,
+      handleRaidSetAutocomplete: noop,
+      handleEditRosterAutocomplete: noop,
+      handleRemoveRosterAutocomplete: noop,
+      handleRaidChannelAutocomplete: noop,
+      handleRaidAutoManageAutocomplete: noop,
+      handleRaidAnnounceAutocomplete: noop,
+      handleRaidTaskAutocomplete: noop,
+      handleRaidGoldEarnerAutocomplete: noop,
+      handleLocalSyncRosterSelect: async () => { rosterSelectCalls += 1; },
+    },
+  });
+
+  await router.handle({
+    id: "local-sync-roster-interaction",
+    isChatInputCommand: () => false,
+    isAutocomplete: () => false,
+    isStringSelectMenu: () => true,
+    isButton: () => false,
+    customId: "local-sync:roster:preview-job-id",
+  });
+
+  assert.equal(rosterSelectCalls, 1);
+  assert.equal(typeof commandModule.handleLocalSyncRosterSelect, "function");
 });

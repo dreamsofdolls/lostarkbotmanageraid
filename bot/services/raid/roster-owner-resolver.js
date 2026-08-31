@@ -74,10 +74,12 @@ function createRosterOwnerResolver({
   //   1. The executor's own accounts.
   //   2. Helper-added accounts where `registeredBy === executor.id`.
   //   3. Roster shares granted through /raid-share.
-  async function resolveRosterOwner(executorId, rosterName) {
+  async function resolveRosterOwner(executorId, rosterName, context = {}) {
     if (!rosterName) return null;
     const target = normalizeName(rosterName);
-    const ownDoc = await loadUserForAutocomplete(executorId);
+    const ownDoc = Object.prototype.hasOwnProperty.call(context, "ownDoc")
+      ? context.ownDoc
+      : await loadUserForAutocomplete(executorId);
     if (ownDoc && Array.isArray(ownDoc.accounts)) {
       const ownAccount = ownDoc.accounts.find(
         (account) => normalizeName(account.accountName) === target
@@ -93,6 +95,16 @@ function createRosterOwnerResolver({
       }
     }
 
+    // Once the own-roster fast path misses, helper registrations and live
+    // shares are independent. Start both lookups together so shared-roster
+    // latency is max(A, B), not A + B. The wrapped share promise prevents an
+    // unhandled rejection when a helper match lets us return early.
+    const accessiblePromise = Promise.resolve()
+      .then(() => getAccessibleAccounts(executorId, { includeOwn: false }))
+      .then(
+        (value) => ({ value }),
+        (error) => ({ error })
+      );
     const registeredDocs = await loadAccountsRegisteredBy(executorId);
     const flattened = flattenRegisteredAccounts(registeredDocs, executorId);
     const matches = flattened.filter(
@@ -108,23 +120,29 @@ function createRosterOwnerResolver({
       return { ambiguous: true, matches };
     }
 
-    let accessible = [];
-    try {
-      accessible = await getAccessibleAccounts(executorId);
-    } catch (err) {
-      log.warn("[raid-set] getAccessibleAccounts failed:", err?.message || err);
+    const accessibleResult = await accessiblePromise;
+    if (accessibleResult.error) {
+      log.warn(
+        "[raid-set] getAccessibleAccounts failed:",
+        accessibleResult.error?.message || accessibleResult.error
+      );
       return null;
     }
+    const accessible = accessibleResult.value || [];
     const sharedMatch = accessible.find(
       (entry) => !entry.isOwn && normalizeName(entry.accountName) === target
     );
     if (!sharedMatch) return null;
 
-    const ownerDoc = await User.findOne({ discordId: sharedMatch.ownerDiscordId });
+    // access-control already loaded the owner document to build this entry.
+    // Keep a fallback for injected/legacy providers that do not expose it.
+    const ownerDoc = sharedMatch.ownerDoc
+      || await User.findOne({ discordId: sharedMatch.ownerDiscordId });
     if (!ownerDoc || !Array.isArray(ownerDoc.accounts)) return null;
-    const ownerAccount = ownerDoc.accounts.find(
-      (account) => normalizeName(account.accountName) === target
-    );
+    const ownerAccount = sharedMatch.account
+      || ownerDoc.accounts.find(
+        (account) => normalizeName(account.accountName) === target
+      );
     if (!ownerAccount) return null;
     return {
       ownerDiscordId: sharedMatch.ownerDiscordId,

@@ -1,8 +1,12 @@
 "use strict";
 
-const { replyEmbed, replyNotice } = require("../../utils/raid/common/shared");
 const {
-  getAccessibleAccounts,
+  deferEphemeralReply,
+  editEmbed,
+  editNotice,
+} = require("../../utils/raid/common/shared");
+const {
+  getAccessibleAccounts: defaultGetAccessibleAccounts,
   canEditAccount,
 } = require("../../services/access/access-control");
 const { t, getUserLanguage } = require("../../services/i18n");
@@ -29,6 +33,11 @@ function createRaidSetCommand(deps) {
     createCharacterId,
     loadUserForAutocomplete,
     loadAccountsRegisteredBy = async () => [],
+    loadCachedUserForAutocomplete = loadUserForAutocomplete,
+    loadCachedAccountsRegisteredBy = loadAccountsRegisteredBy,
+    getAccessibleAccounts = defaultGetAccessibleAccounts,
+    loadAccessibleAccountsForAutocomplete = (discordId) =>
+      getAccessibleAccounts(discordId, { includeOwn: false }),
     getRaidRequirementList,
     RAID_REQUIREMENT_MAP,
     getGatesForRaid,
@@ -45,6 +54,14 @@ function createRaidSetCommand(deps) {
     loadAccountsRegisteredBy,
     getAccessibleAccounts,
   });
+  const { resolveRosterOwner: resolveRosterOwnerForAutocomplete } =
+    createRosterOwnerResolver({
+      User,
+      normalizeName,
+      loadUserForAutocomplete: loadCachedUserForAutocomplete,
+      loadAccountsRegisteredBy: loadCachedAccountsRegisteredBy,
+      getAccessibleAccounts: loadAccessibleAccountsForAutocomplete,
+    });
 
   function findCharacterInUser(userDoc, characterName, rosterName = null) {
     return findCharacterEntryInUser(userDoc, characterName, rosterName)?.character || null;
@@ -71,11 +88,11 @@ function createRaidSetCommand(deps) {
     UI,
     User,
     normalizeName,
-    loadUserForAutocomplete,
-    getAccessibleAccounts,
+    loadUserForAutocomplete: loadCachedUserForAutocomplete,
+    loadAccessibleAccountsForAutocomplete,
     flattenRegisteredAccounts,
-    resolveRosterOwner,
-    loadAccountsRegisteredBy,
+    resolveRosterOwner: resolveRosterOwnerForAutocomplete,
+    loadAccountsRegisteredBy: loadCachedAccountsRegisteredBy,
     getRaidRequirementList,
     RAID_REQUIREMENT_MAP,
     getGatesForRaid,
@@ -189,12 +206,21 @@ function createRaidSetCommand(deps) {
 
   async function handleRaidSetCommand(interaction) {
     const executorId = interaction.user.id;
-    const lang = await getUserLanguage(executorId, { UserModel: User });
-    const replySetNotice = (options, extras) =>
-      replyNotice(interaction, EmbedBuilder, options, extras);
-    const replySetEmbed = (embed, extras) => replyEmbed(interaction, embed, extras);
-
     const input = readRaidSetInput(interaction);
+
+    // Every /raid-set outcome is private, so acknowledge before the first
+    // cache/DB lookup. The router can also edit this deferred reply if an
+    // unexpected downstream failure occurs.
+    await deferEphemeralReply(interaction);
+    const ownDoc = await loadUserForAutocomplete(executorId);
+    const lang = await getUserLanguage(executorId, {
+      UserModel: User,
+      userDoc: ownDoc,
+    });
+    const replySetNotice = (options, extras) =>
+      editNotice(interaction, EmbedBuilder, options, extras);
+    const replySetEmbed = (embed, extras) => editEmbed(interaction, embed, extras);
+
     const { rosterName, characterName, raidKey, statusType } = input;
     const validation = validateRaidSetInput(input, lang);
     if (!validation.valid) {
@@ -203,7 +229,7 @@ function createRaidSetCommand(deps) {
     }
     const { raidMeta, effectiveGate } = validation;
 
-    const resolvedOwner = await resolveRosterOwner(executorId, rosterName);
+    const resolvedOwner = await resolveRosterOwner(executorId, rosterName, { ownDoc });
     if (await replyRosterOwnerFailure({ replySetNotice, resolvedOwner, lang, rosterName })) {
       return;
     }

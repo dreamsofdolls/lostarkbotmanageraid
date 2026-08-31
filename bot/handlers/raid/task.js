@@ -61,6 +61,9 @@ function createRaidTaskCommand(deps) {
     User,
     saveWithRetry,
     loadUserForAutocomplete,
+    loadCachedUserForAutocomplete = loadUserForAutocomplete,
+    loadAccessibleAccountsForAutocomplete = (discordId) =>
+      getAccessibleAccounts(discordId, { includeOwn: false }),
     dailyResetStartMs,
     weekResetStartMs,
   } = deps;
@@ -68,6 +71,10 @@ function createRaidTaskCommand(deps) {
   const resolveTaskWriteTarget = createRaidTaskWriteTargetResolver({
     loadUserForAutocomplete,
     getAccessibleAccounts,
+  });
+  const resolveTaskAutocompleteTarget = createRaidTaskWriteTargetResolver({
+    loadUserForAutocomplete: loadCachedUserForAutocomplete,
+    getAccessibleAccounts: loadAccessibleAccountsForAutocomplete,
   });
   const {
     editTaskNotice,
@@ -125,8 +132,9 @@ function createRaidTaskCommand(deps) {
 
   const { handleRaidTaskAutocomplete } = createRaidTaskAutocompleteHandlers({
     User,
-    loadUserForAutocomplete,
-    resolveTaskWriteTarget,
+    loadUserForAutocomplete: loadCachedUserForAutocomplete,
+    loadAccessibleAccountsForAutocomplete,
+    resolveTaskWriteTarget: resolveTaskAutocompleteTarget,
   });
 
   const BUTTON_ACTION_HANDLERS = Object.freeze({

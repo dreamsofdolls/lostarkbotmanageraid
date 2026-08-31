@@ -102,6 +102,10 @@ function makeFactory(overrides = {}) {
       overrides.loadUserForAutocomplete || defaultLoadUserForAutocomplete,
     loadAccountsRegisteredBy:
       overrides.loadAccountsRegisteredBy || defaultLoadAccountsRegisteredBy,
+    getAccessibleAccounts:
+      overrides.getAccessibleAccounts || (async () => []),
+    loadAccessibleAccountsForAutocomplete:
+      overrides.loadAccessibleAccountsForAutocomplete || (async () => []),
     getRaidRequirementList,
     RAID_REQUIREMENT_MAP,
     getGatesForRaid,
@@ -137,10 +141,13 @@ const KAZEROS_NORMAL = RAID_REQUIREMENT_MAP.kazeros_normal;
 const ARMOCHE_NORMAL = RAID_REQUIREMENT_MAP.armoche_normal;
 const ARMOCHE_SOLO = RAID_REQUIREMENT_MAP.armoche_solo;
 
-function makeRaidSetInteraction(values, userId = "user-1") {
+function makeRaidSetInteraction(values, userId = "user-1", events = []) {
   const replies = [];
+  const deferred = [];
   return {
     replies,
+    deferred,
+    events,
     user: { id: userId },
     options: {
       getString(name) {
@@ -150,6 +157,16 @@ function makeRaidSetInteraction(values, userId = "user-1") {
       },
     },
     async reply(payload) {
+      events.push("reply");
+      replies.push(payload);
+      return payload;
+    },
+    async deferReply(payload) {
+      events.push("deferReply");
+      deferred.push(payload);
+    },
+    async editReply(payload) {
+      events.push("editReply");
       replies.push(payload);
       return payload;
     },
@@ -311,6 +328,8 @@ test("handleRaidSetCommand: process gate writes progress and replies with succes
 
   await factory.handleRaidSetCommand(interaction);
 
+  assert.equal(interaction.events[0], "deferReply");
+  assert.equal(interaction.deferred[0].flags, MessageFlags.Ephemeral);
   assert.equal(interaction.replies.length, 1);
   const [embed] = interaction.replies[0].embeds;
   assert.match(embed.data.description, /Cyrano/);
@@ -318,6 +337,35 @@ test("handleRaidSetCommand: process gate writes progress and replies with succes
   const kaz = docs.get("user-1").accounts[0].characters[0].assignedRaids.kazeros;
   assert.ok(Number(kaz.G1.completedDate) > 0, "G1 should be stamped");
   assert.ok(!(Number(kaz.G2.completedDate) > 0), "G2 should remain unstamped");
+});
+
+test("handleRaidSetCommand acknowledges before its first user-data lookup", async () => {
+  const events = [];
+  let backingDocs;
+  const { factory, docs } = makeFactory({
+    loadUserForAutocomplete: async (discordId) => {
+      events.push("loadUser");
+      const data = backingDocs.get(discordId);
+      return data ? JSON.parse(JSON.stringify(data)) : null;
+    },
+  });
+  backingDocs = docs;
+  seedUser(docs, [
+    { accountName: "Alpha", characters: [makeChar("Cyrano", 1730)] },
+  ]);
+  const interaction = makeRaidSetInteraction({
+    roster: "Alpha",
+    character: "Cyrano",
+    raid: "kazeros_hard",
+    status: "process",
+    gate: "G1",
+  }, "user-1", events);
+
+  await factory.handleRaidSetCommand(interaction);
+
+  assert.deepEqual(events.slice(0, 2), ["deferReply", "loadUser"]);
+  assert.equal(interaction.deferred[0].flags, MessageFlags.Ephemeral);
+  assert.ok(!events.includes("reply"), "deferred commands must finish with editReply");
 });
 
 test("applyRaidSetForDiscordId: reset on completed raid clears every gate", async () => {
@@ -1121,6 +1169,47 @@ test("resolveRosterOwner: same accountName registered for two different users re
   assert.equal(resolved.matches.length, 2);
   const ownerIds = resolved.matches.map((m) => m.ownerDiscordId).sort();
   assert.deepEqual(ownerIds, ["user-2", "user-3"]);
+});
+
+test("resolveRosterOwner starts helper/share lookups together and reuses shared ownerDoc", async () => {
+  const ownerDoc = {
+    discordId: "owner-1",
+    discordDisplayName: "Owner One",
+    accounts: [{ accountName: "Shared", characters: [] }],
+  };
+  let releaseRegistered;
+  let accessibleStarted = false;
+  let accessibleOptions = null;
+  const { factory } = makeFactory({
+    loadUserForAutocomplete: async () => ({ accounts: [] }),
+    loadAccountsRegisteredBy: async () => new Promise((resolve) => {
+      releaseRegistered = resolve;
+    }),
+    getAccessibleAccounts: async (_executorId, options) => {
+      accessibleStarted = true;
+      accessibleOptions = options;
+      return [{
+        ownerDiscordId: "owner-1",
+        ownerLabel: "Owner One",
+        accountName: "Shared",
+        account: ownerDoc.accounts[0],
+        ownerDoc,
+        accessLevel: "edit",
+        isOwn: false,
+      }];
+    },
+  });
+
+  const pending = factory.resolveRosterOwner("viewer-1", "Shared");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(accessibleStarted, true, "share lookup should overlap the helper lookup");
+  releaseRegistered([]);
+
+  const resolved = await pending;
+  assert.deepEqual(accessibleOptions, { includeOwn: false });
+  assert.equal(resolved.ownerDoc, ownerDoc);
+  assert.equal(resolved.account, ownerDoc.accounts[0]);
+  assert.equal(resolved.viaShare, true);
 });
 
 test("resolveRosterOwner: empty rosterName returns null without DB calls", async () => {

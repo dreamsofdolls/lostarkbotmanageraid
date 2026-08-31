@@ -55,7 +55,7 @@ function createInteraction({ focused, optionValues }) {
   };
 }
 
-function createService({ userDoc } = {}) {
+function createService({ userDoc, ...overrides } = {}) {
   const doc = userDoc || {
     accounts: [
       {
@@ -92,6 +92,7 @@ function createService({ userDoc } = {}) {
       );
       return (account?.characters || []).find((char) => char.name === characterName) || null;
     },
+    ...overrides,
   });
 }
 
@@ -165,4 +166,50 @@ test("raid-set autocomplete dispatcher returns empty choices for unknown fields"
   await service.handleRaidSetAutocomplete(interaction);
 
   assert.deepEqual(interaction.responses, [[]]);
+});
+
+test("raid-set roster autocomplete starts independent sources together", async () => {
+  clearUserLanguageCache();
+  const events = [];
+  let releaseOwn;
+  const doc = {
+    language: "en",
+    accounts: [{ accountName: "Main", characters: [] }],
+  };
+  const service = createService({
+    userDoc: doc,
+    User: {
+      findOne() {
+        throw new Error("language lookup should reuse the loaded user doc");
+      },
+    },
+    loadUserForAutocomplete: async () => {
+      events.push("own-start");
+      return new Promise((resolve) => { releaseOwn = resolve; });
+    },
+    loadAccountsRegisteredBy: async () => {
+      events.push("registered-start");
+      return [];
+    },
+    loadAccessibleAccountsForAutocomplete: async () => {
+      events.push("accessible-start");
+      return [];
+    },
+  });
+  const interaction = createInteraction({
+    focused: { name: "roster", value: "" },
+    optionValues: {},
+  });
+
+  const pending = service.handleRaidSetAutocomplete(interaction);
+  assert.deepEqual(events, [
+    "registered-start",
+    "accessible-start",
+    "own-start",
+  ]);
+  releaseOwn(doc);
+  await pending;
+
+  assert.equal(interaction.responses.length, 1);
+  assert.equal(interaction.responses[0][0].value, "Main");
 });

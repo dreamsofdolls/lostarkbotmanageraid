@@ -7,17 +7,35 @@ const {
   buildRosterAutocompleteChoices,
   buildSharedRosterAutocompleteChoices,
 } = require("../../../../utils/raid/common/autocomplete");
-const { getAccessibleAccounts } = require("../../../../services/access/access-control");
+const {
+  getAccessibleAccounts: defaultGetAccessibleAccounts,
+} = require("../../../../services/access/access-control");
 const { t, getUserLanguage } = require("../../../../services/i18n");
 
 function createRosterAutocompleteHandlers({
   User,
   loadUserForAutocomplete,
+  loadAccessibleAccountsForAutocomplete = (discordId) =>
+    defaultGetAccessibleAccounts(discordId, { includeOwn: false }),
   loadUserDocForRosterAutocomplete,
 }) {
   async function autocompleteRoster(interaction, focused) {
     const executorId = interaction.user.id;
-    const lang = await getUserLanguage(executorId, { UserModel: User });
+    const accessiblePromise = loadAccessibleAccountsForAutocomplete(executorId).catch((err) => {
+      console.warn(
+        "[raid-task autocomplete] getAccessibleAccounts failed:",
+        err?.message || err,
+      );
+      return [];
+    });
+    const [userDoc, accessible] = await Promise.all([
+      loadUserForAutocomplete(executorId),
+      accessiblePromise,
+    ]);
+    const lang = await getUserLanguage(executorId, {
+      UserModel: User,
+      userDoc,
+    });
     const charsWord = (n) =>
       t(
         n === 1 ? "raid-task.autocomplete.charsSingular" : "raid-task.autocomplete.charsPlural",
@@ -25,7 +43,6 @@ function createRosterAutocompleteHandlers({
       );
     const taskSuffixFor = (n) =>
       n > 0 ? t("raid-task.autocomplete.taskSuffix", lang, { n }) : "";
-    const userDoc = await loadUserForAutocomplete(executorId);
     const matches = getRosterMatches(userDoc, focused.value || "");
     const choices = buildRosterAutocompleteChoices(matches, {
       lang,
@@ -35,24 +52,15 @@ function createRosterAutocompleteHandlers({
       taskSuffixFor,
     });
 
-    let shareChoices = [];
-    try {
-      const accessible = await getAccessibleAccounts(executorId);
-      shareChoices = buildSharedRosterAutocompleteChoices(accessible, {
-        needle: focused.value || "",
-        lang,
-        t,
-        choiceKey: "raid-task.autocomplete.sharedChoice",
-        accessTagKey: "raid-task.autocomplete.sharedAccessTagView",
-        charsWord,
-        taskSuffixFor,
-      });
-    } catch (err) {
-      console.warn(
-        "[raid-task autocomplete] getAccessibleAccounts failed:",
-        err?.message || err,
-      );
-    }
+    const shareChoices = buildSharedRosterAutocompleteChoices(accessible, {
+      needle: focused.value || "",
+      lang,
+      t,
+      choiceKey: "raid-task.autocomplete.sharedChoice",
+      accessTagKey: "raid-task.autocomplete.sharedAccessTagView",
+      charsWord,
+      taskSuffixFor,
+    });
 
     const merged = [...choices, ...shareChoices].slice(0, 25);
     await interaction.respond(merged).catch(() => {});

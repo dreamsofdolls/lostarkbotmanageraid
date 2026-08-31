@@ -16,6 +16,7 @@ const {
 function createRaidTaskAutocompleteHandlers({
   User,
   loadUserForAutocomplete,
+  loadAccessibleAccountsForAutocomplete,
   resolveTaskWriteTarget,
 }) {
   const {
@@ -30,6 +31,7 @@ function createRaidTaskAutocompleteHandlers({
   } = createRosterAutocompleteHandlers({
     User,
     loadUserForAutocomplete,
+    loadAccessibleAccountsForAutocomplete,
     loadUserDocForRosterAutocomplete,
   });
   const {

@@ -26,7 +26,7 @@ function createRaidTaskWriteTargetResolver({
 
     let accessible = [];
     try {
-      accessible = await getAccessibleAccounts(executorId);
+      accessible = await getAccessibleAccounts(executorId, { includeOwn: false });
     } catch (err) {
       logger.warn?.("[raid-task] getAccessibleAccounts failed:", err?.message || err);
       return { discordId: executorId, viaShare: false };
