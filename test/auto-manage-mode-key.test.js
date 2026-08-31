@@ -4,6 +4,9 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const { createAutoManageCoreService } = require("../bot/services/auto-manage/runtime/core");
+const {
+  normalizeDifficultyToModeKey,
+} = require("../bot/services/auto-manage/bible/log-utils");
 const { UI, normalizeName, toModeLabel, getCharacterName, getCharacterClass } = require("../bot/utils/raid/common/shared");
 const { getRaidGateForBoss, getGatesForRaid } = require("../bot/models/Raid");
 const {
@@ -55,6 +58,23 @@ function makeUserDoc(assignedRaids) {
     ],
   };
 }
+
+test("auto-manage difficulty aliases use the canonical mode lookup", () => {
+  const aliasesByMode = {
+    solo: ["solo", "solo mode"],
+    nightmare: ["nightmare", "9m", "level 3", "level3", "l3"],
+    hard: ["hard", "hm", "level 2", "level2", "l2"],
+    normal: ["normal", "nor", "nm", "level 1", "level1", "l1"],
+  };
+
+  for (const [modeKey, aliases] of Object.entries(aliasesByMode)) {
+    for (const alias of aliases) {
+      assert.equal(normalizeDifficultyToModeKey(`  ${alias.toUpperCase()}  `), modeKey);
+    }
+  }
+  assert.equal(normalizeDifficultyToModeKey("unknown"), null);
+  assert.equal(normalizeDifficultyToModeKey(null), null);
+});
 
 test("auto-manage apply keeps existing modeKey when current sync has no clear logs", () => {
   const service = makeService();

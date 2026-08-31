@@ -24,6 +24,11 @@ const SHARED_TASK_PRESET_ORDER = [
   "field_boss",
   "custom",
 ];
+const SHARED_RESET_DETAIL_KEY_BY_TYPE = new Map([
+  ["daily", "raid-task.sharedAdd.resetDetailDaily"],
+  ["weekly", "raid-task.sharedAdd.resetDetailWeekly"],
+  [SCHEDULED_RESET, "raid-task.sharedAdd.resetDetailScheduled"],
+]);
 
 /**
  * Generate a unique-enough ID for a per-character side-task. Scope is
@@ -99,10 +104,8 @@ function sharedPresetLabel(preset) {
 }
 
 function formatSharedResetDetail(reset, { t, lang }) {
-  if (reset === "daily") return t("raid-task.sharedAdd.resetDetailDaily", lang);
-  if (reset === "weekly") return t("raid-task.sharedAdd.resetDetailWeekly", lang);
-  if (reset === SCHEDULED_RESET) return t("raid-task.sharedAdd.resetDetailScheduled", lang);
-  return formatSharedResetLabel(reset, lang);
+  const detailKey = SHARED_RESET_DETAIL_KEY_BY_TYPE.get(reset);
+  return detailKey ? t(detailKey, lang) : formatSharedResetLabel(reset, lang);
 }
 
 function getCharacterDisplayName(character) {

@@ -47,11 +47,13 @@ function createRaidChannelMessageHandler({
   const recentlyHandledMessageIds = new Set();
 
   function shouldIgnoreMessage(message) {
-    if (!message) return true;
-    if (!message.guildId) return true;
-    if (message.author?.bot) return true;
-    if (message.system) return true;
-    if (message.webhookId) return true;
+    if (
+      !message ||
+      !message.guildId ||
+      message.author?.bot ||
+      message.system ||
+      message.webhookId
+    ) return true;
 
     const cachedChannelId = getCachedMonitorChannelId(message.guildId);
     return !cachedChannelId || cachedChannelId !== message.channelId;

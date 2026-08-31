@@ -33,6 +33,10 @@ function createRaidStatusRenderPayload({
 }) {
   const backgroundBufferCache = new Map();
   const globalTotalsCache = new WeakMap();
+  const accountViewEmbedByName = new Map([
+    ["task", buildTaskViewEmbed],
+    ["gold", buildGoldViewEmbed],
+  ]);
 
   const resolveBackgroundBuffer = async (account) => {
     const lookup = resolveBackgroundLookup(discordId, account);
@@ -51,12 +55,8 @@ function createRaidStatusRenderPayload({
     const currentView = getCurrentView();
     const filterRaidId = getFilterRaidId();
 
-    if (currentView === "task") {
-      return buildTaskViewEmbed(accounts[currentPage]);
-    }
-    if (currentView === "gold") {
-      return buildGoldViewEmbed(accounts[currentPage]);
-    }
+    const accountViewEmbed = accountViewEmbedByName.get(currentView);
+    if (accountViewEmbed) return accountViewEmbed(accounts[currentPage]);
     if (currentView === "sync") {
       // Falls through to the raid embed when the snapshot has not loaded
       // yet · the collector's "end" hook re-renders from here and must

@@ -2,6 +2,14 @@
 
 const { raidChannelGuard } = require("./channel-monitor-guard");
 
+async function firstResolved(resolvers) {
+  for (const resolve of resolvers) {
+    const value = await resolve();
+    if (value) return value;
+  }
+  return null;
+}
+
 function createRaidChannelWelcomeService({
   GuildConfig,
   getGuildLanguage,
@@ -102,19 +110,13 @@ function createRaidChannelWelcomeService({
   async function resolveStaleMessage(ref, channel, client) {
     if (ref.message) return ref.message;
     try {
-      let sourceChannel = ref.channelId === channel.id ? channel : null;
-      if (!sourceChannel) {
-        sourceChannel = client?.channels?.cache?.get?.(ref.channelId) || null;
-      }
-      if (!sourceChannel) {
-        sourceChannel = await client?.channels?.fetch?.(ref.channelId);
-      }
-      if (!sourceChannel) {
-        sourceChannel = channel.guild?.channels?.cache?.get?.(ref.channelId) || null;
-      }
-      if (!sourceChannel) {
-        sourceChannel = await channel.guild?.channels?.fetch?.(ref.channelId);
-      }
+      const sourceChannel = await firstResolved([
+        () => (ref.channelId === channel.id ? channel : null),
+        () => client?.channels?.cache?.get?.(ref.channelId) || null,
+        () => client?.channels?.fetch?.(ref.channelId),
+        () => channel.guild?.channels?.cache?.get?.(ref.channelId) || null,
+        () => channel.guild?.channels?.fetch?.(ref.channelId),
+      ]);
       return await sourceChannel?.messages?.fetch?.(ref.messageId);
     } catch {
       return null;

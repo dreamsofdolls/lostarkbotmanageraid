@@ -244,6 +244,13 @@ function createRaidShareCommand(deps) {
   // Top-level dispatch. Permission gate (Manager-only) applies to
   // grant/revoke. List is open to everyone so a regular user can see
   // who has shared rosters with them.
+  const managerOnlySubcommands = new Set(["grant", "revoke"]);
+  const subcommandHandlers = new Map([
+    ["grant", handleGrant],
+    ["revoke", handleRevoke],
+    ["list", handleList],
+  ]);
+
   async function handleRaidShareCommand(interaction) {
     // Resolve invoker's locale once at command entry; every reply on
     // /raid-share is ephemeral to the invoker, so this lang threads
@@ -251,7 +258,7 @@ function createRaidShareCommand(deps) {
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
     const sub = interaction.options.getSubcommand();
 
-    if ((sub === "grant" || sub === "revoke") && !isManagerId(interaction.user.id)) {
+    if (managerOnlySubcommands.has(sub) && !isManagerId(interaction.user.id)) {
       await replyShareAlert(interaction, {
         type: "error",
         title: t("share.auth.managerOnlyTitle", lang),
@@ -260,9 +267,8 @@ function createRaidShareCommand(deps) {
       return;
     }
 
-    if (sub === "grant") return handleGrant(interaction, lang);
-    if (sub === "revoke") return handleRevoke(interaction, lang);
-    if (sub === "list") return handleList(interaction, lang);
+    const handler = subcommandHandlers.get(sub);
+    if (handler) return handler(interaction, lang);
 
     await replyShareAlert(interaction, {
       type: "error",

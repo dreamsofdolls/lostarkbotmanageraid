@@ -243,21 +243,20 @@ function createRaidStatusComponentLayout({
     }));
   };
 
+  const specializedViewRowsByName = new Map([
+    ["task", addTaskViewRows],
+    ["gold", addGoldViewRows],
+    ["sync", addSyncViewRows],
+  ]);
+
   const buildComponents = (disabled) => {
     const rows = [];
     const accounts = getAccounts();
     const currentPage = getCurrentPage();
 
-    if (getCurrentView() === "task") {
-      addTaskViewRows(rows, disabled);
-      return rows;
-    }
-    if (getCurrentView() === "gold") {
-      addGoldViewRows(rows, disabled);
-      return rows;
-    }
-    if (getCurrentView() === "sync") {
-      addSyncViewRows(rows, disabled);
+    const specializedViewRows = specializedViewRowsByName.get(getCurrentView());
+    if (specializedViewRows) {
+      specializedViewRows(rows, disabled);
       return rows;
     }
 

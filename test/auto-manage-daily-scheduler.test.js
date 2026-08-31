@@ -5,8 +5,10 @@ const assert = require("node:assert/strict");
 
 const {
   AUTO_MANAGE_DAILY_BATCH_SIZE,
+  applyOutcomeCounter,
   buildAutoManageDailyCandidateQuery,
   buildAutoManageDailyClaimQuery,
+  createOutcomeCounters,
   createAutoManageDailySchedulerService,
   persistTransientDailyFailure,
   shouldNudgePrivateLogUser,
@@ -20,6 +22,30 @@ const {
   AUTO_MANAGE_DAILY_RETRY_DELAYS_MS,
   AUTO_MANAGE_DAILY_OUTCOME,
 } = require("../bot/services/auto-manage/runtime/support/daily-state");
+
+test("auto-manage daily counters route each outcome bucket by lookup", () => {
+  const counters = createOutcomeCounters();
+  for (const bucket of [
+    "synced",
+    "settled",
+    "retry-scheduled",
+    "retry-exhausted",
+    "failed",
+    "skipped",
+    "unknown",
+  ]) {
+    applyOutcomeCounter(counters, bucket);
+  }
+
+  assert.deepEqual(counters, {
+    syncedCount: 1,
+    settledCount: 1,
+    retryScheduledCount: 1,
+    retryExhaustedCount: 1,
+    skippedCount: 2,
+    failedCount: 1,
+  });
+});
 
 function createFindChain(candidates, onQuery) {
   return (query) => {

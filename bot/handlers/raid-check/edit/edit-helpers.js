@@ -171,11 +171,10 @@ function createEditHelpers({
 
     const raidData = character.assignedRaids[raidMeta.raidKey] || {};
     const shouldMarkDone = statusType === "complete" || statusType === "process";
-    let modeChangeDetected = false;
-    if (shouldMarkDone && raidData.modeKey && raidData.modeKey !== raidMeta.modeKey) {
-      modeChangeDetected = true;
-    }
     if (shouldMarkDone) {
+      let modeChangeDetected = Boolean(
+        raidData.modeKey && raidData.modeKey !== raidMeta.modeKey
+      );
       for (const gate of officialGates) {
         const existingDiff = raidData[gate]?.difficulty;
         if (existingDiff && normalizeName(existingDiff) !== normalizedSelectedDiff) {
@@ -183,13 +182,13 @@ function createEditHelpers({
           break;
         }
       }
-    }
-    if (modeChangeDetected) {
-      for (const gate of officialGates) {
-        raidData[gate] = { difficulty: selectedDifficulty, completedDate: undefined };
+      if (modeChangeDetected) {
+        for (const gate of officialGates) {
+          raidData[gate] = { difficulty: selectedDifficulty, completedDate: undefined };
+        }
       }
+      raidData.modeKey = raidMeta.modeKey;
     }
-    if (shouldMarkDone) raidData.modeKey = raidMeta.modeKey;
 
     const storedGateKeys = getGateKeys(raidData);
     const targetGates =
@@ -205,7 +204,6 @@ function createEditHelpers({
         completedDate: shouldMarkDone ? now : null,
       };
     }
-    if (shouldMarkDone) raidData.modeKey = raidMeta.modeKey;
     character.assignedRaids[raidMeta.raidKey] = raidData;
   }
 

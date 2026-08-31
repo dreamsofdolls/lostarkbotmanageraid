@@ -117,12 +117,16 @@ const STATE_ICON = Object.freeze({
   failed: "⚠️",
   missing: "❔",
 });
+const STATE_COLOR_KEY_BY_NAME = new Map([
+  ["applied", "success"],
+  ["failed", "danger"],
+  ["expired", "danger"],
+  ["cancelled", "progress"],
+  ["superseded", "progress"],
+]);
 
 function statusColor(state, UI) {
-  if (state === "applied") return UI.colors.success;
-  if (state === "failed" || state === "expired") return UI.colors.danger;
-  if (state === "cancelled" || state === "superseded") return UI.colors.progress;
-  return UI.colors.neutral;
+  return UI.colors[STATE_COLOR_KEY_BY_NAME.get(state) || "neutral"];
 }
 
 function buildResultDescription(job, state, lang) {

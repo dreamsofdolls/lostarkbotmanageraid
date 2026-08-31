@@ -12,12 +12,17 @@ const {
   resolveScheduledSharedTaskState,
 } = require("./schedule");
 
+const SHARED_RESET_LABEL_KEY_BY_TYPE = new Map([
+  ["daily", "shared-task.reset.daily"],
+  ["weekly", "shared-task.reset.weekly"],
+  [SCHEDULED_RESET, "shared-task.reset.scheduled"],
+]);
+
 function formatSharedResetLabel(reset, lang) {
   const { t } = require("../../../../services/i18n");
-  if (reset === "daily") return t("shared-task.reset.daily", lang);
-  if (reset === "weekly") return t("shared-task.reset.weekly", lang);
-  if (reset === SCHEDULED_RESET) return t("shared-task.reset.scheduled", lang);
-  return t("shared-task.reset.weekly", lang);
+  const labelKey = SHARED_RESET_LABEL_KEY_BY_TYPE.get(reset)
+    || "shared-task.reset.weekly";
+  return t(labelKey, lang);
 }
 
 function getSharedTaskDisplay(task, now = new Date(), lang) {

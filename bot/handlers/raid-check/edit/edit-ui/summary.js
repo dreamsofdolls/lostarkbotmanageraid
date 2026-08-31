@@ -3,13 +3,14 @@
 const { t } = require("../../../../services/i18n");
 const { getRaidModeLabel } = require("../../../../utils/raid/common/labels");
 
+const STATUS_LABEL_KEY_BY_TYPE = new Map([
+  ["complete", "raid-check.editFlow.statusLabelComplete"],
+  ["reset", "raid-check.editFlow.statusLabelReset"],
+]);
+
 function getRaidCheckEditStatusLabel({ statusType, gate, lang }) {
-  if (statusType === "complete") {
-    return t("raid-check.editFlow.statusLabelComplete", lang);
-  }
-  if (statusType === "reset") {
-    return t("raid-check.editFlow.statusLabelReset", lang);
-  }
+  const labelKey = STATUS_LABEL_KEY_BY_TYPE.get(statusType);
+  if (labelKey) return t(labelKey, lang);
   if (gate) {
     return t("raid-check.editFlow.statusLabelProcess", lang, { gate });
   }

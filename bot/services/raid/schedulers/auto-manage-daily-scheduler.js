@@ -20,6 +20,13 @@ const { createNonOverlappingIntervalRunner } = require("./scheduler-runner");
 
 const AUTO_MANAGE_DAILY_TICK_MS = 30 * 60 * 1000;
 const AUTO_MANAGE_DAILY_BATCH_SIZE = 6;
+const OUTCOME_COUNTER_KEY_BY_BUCKET = new Map([
+  ["synced", "syncedCount"],
+  ["settled", "settledCount"],
+  ["retry-scheduled", "retryScheduledCount"],
+  ["retry-exhausted", "retryExhaustedCount"],
+  ["failed", "failedCount"],
+]);
 
 function buildAutoManageDailyCandidateQuery(dailyContext, nowMs = Date.now()) {
   return {
@@ -354,12 +361,8 @@ async function syncCandidate({
 }
 
 function applyOutcomeCounter(counters, bucket) {
-  if (bucket === "synced") counters.syncedCount += 1;
-  else if (bucket === "settled") counters.settledCount += 1;
-  else if (bucket === "retry-scheduled") counters.retryScheduledCount += 1;
-  else if (bucket === "retry-exhausted") counters.retryExhaustedCount += 1;
-  else if (bucket === "failed") counters.failedCount += 1;
-  else counters.skippedCount += 1;
+  const counterKey = OUTCOME_COUNTER_KEY_BY_BUCKET.get(bucket) || "skippedCount";
+  counters[counterKey] += 1;
 }
 
 function createAutoManageDailySchedulerService({
@@ -441,6 +444,8 @@ module.exports = {
   AUTO_MANAGE_DAILY_BATCH_SIZE,
   buildAutoManageDailyCandidateQuery,
   buildAutoManageDailyClaimQuery,
+  applyOutcomeCounter,
+  createOutcomeCounters,
   createAutoManageDailySchedulerService,
   didClaimDailyBackfill,
   shouldNudgePrivateLogUser,
