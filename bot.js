@@ -64,6 +64,10 @@ const {
   createProcessTerminator,
   installProcessLifecycle,
 } = require("./bot/app/process-lifecycle");
+const {
+  installDiscordGatewayDiagnostics,
+  startDiscordLogin,
+} = require("./bot/app/discord-startup");
 const { createRaidInteractionRouter } = require("./bot/app/interaction-router-registry");
 const {
   createArtistPingResponder,
@@ -126,6 +130,7 @@ async function startBot() {
     disconnect: disconnectDB,
   });
   installProcessLifecycle({ terminate });
+  installDiscordGatewayDiagnostics(client);
 
   localSyncWeb = startLocalSyncWebCompanion({
     rootDir: __dirname,
@@ -279,15 +284,7 @@ async function startBot() {
 
   client.on(Events.InteractionCreate, router.handle);
 
-  try {
-    await client.login(DISCORD_TOKEN);
-  } catch (error) {
-    await terminate({
-      label: "Discord login failed",
-      error,
-      exitCode: 1,
-    });
-  }
+  await startDiscordLogin({ client, token: DISCORD_TOKEN, terminate });
 }
 
 startBot().catch((error) => {
