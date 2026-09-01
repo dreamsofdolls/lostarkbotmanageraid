@@ -4,7 +4,7 @@ const {
   getRaidGateForBoss,
   getGatesForRaid,
   hasRaidMode,
-} = require("../../../../models/Raid");
+} = require("../../../../domain/raid-catalog");
 const { getCurrentResetStartMs } = require("../../../raid/schedulers/weekly-reset");
 const { normalizeDifficulty } = require("../catalog");
 

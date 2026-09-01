@@ -32,7 +32,7 @@ const {
 const {
   getRaidRequirementList,
   getGatesForRaid,
-} = require("../bot/models/Raid");
+} = require("../bot/domain/raid-catalog");
 const { clearCharacterProgress } = require("../bot/services/raid/schedulers/weekly-reset");
 
 function makeUserModel() {

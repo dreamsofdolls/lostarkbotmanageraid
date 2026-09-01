@@ -9,6 +9,5 @@ function createAutoManageEntryKey(normalizeName) {
 }
 
 module.exports = {
-  AUTO_MANAGE_ENTRY_SEP,
   createAutoManageEntryKey,
 };

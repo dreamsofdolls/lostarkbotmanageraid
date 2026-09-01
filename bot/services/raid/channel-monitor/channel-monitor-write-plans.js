@@ -324,7 +324,6 @@ module.exports = {
   applyRaidChannelUpdatePlans,
   buildWritePlanSegments,
   findAccessibleCharacterInAccounts,
-  getAccessibleCharacterCandidates,
   resolveRaidChannelWriteBatch,
   resolveRaidChannelWritePlans,
 };

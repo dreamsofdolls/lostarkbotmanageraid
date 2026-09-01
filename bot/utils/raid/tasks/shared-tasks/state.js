@@ -74,7 +74,5 @@ module.exports = {
   countSharedTasksByReset,
   sharedTaskCapForReset,
   parseSharedTaskExpiresAt,
-  isSharedTaskArchived,
-  isSharedTaskExpired,
   getVisibleSharedTasks,
 };

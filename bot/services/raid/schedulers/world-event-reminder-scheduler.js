@@ -146,9 +146,5 @@ function createWorldEventReminderSchedulerService({
 }
 
 module.exports = {
-  SUBDOC_KEY,
-  DEDUP_FIELD,
-  buildWorldEventReminderContent,
-  claimWorldEventReminder,
   createWorldEventReminderSchedulerService,
 };

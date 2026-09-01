@@ -169,7 +169,5 @@ function addAllModeActionButtons({
 
 module.exports = {
   addAllModeActionButtons,
-  buildAutoSyncButton,
   buildRosterRefreshButton,
-  buildViewToggleButton,
 };

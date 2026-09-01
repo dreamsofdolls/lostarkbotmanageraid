@@ -23,6 +23,5 @@ function preserveRosterCharacterState(record, existing, fields = PRESERVED_CHARA
 }
 
 module.exports = {
-  PRESERVED_CHARACTER_FIELDS,
   preserveRosterCharacterState,
 };

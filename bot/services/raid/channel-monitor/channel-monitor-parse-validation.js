@@ -208,8 +208,5 @@ function resolveParsedRaidUpdate({
 }
 
 module.exports = {
-  applyParsedRaidDisplayName,
-  expandRaidChannelEffectiveGates,
-  resolveRaidLevelResetMeta,
   resolveParsedRaidUpdate,
 };

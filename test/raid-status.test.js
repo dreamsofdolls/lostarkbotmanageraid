@@ -544,7 +544,7 @@ for (const [lang, expected] of [
 
 // --------- Gold tracking (added 2026-05-05) ---------
 //
-// Per (raid, mode, gate) gold values live in models/Raid.js. The view
+// Per (raid, mode, gate) gold values live in domain/raid-catalog.js. The view
 // surfaces them in three places: per-character `💰 earned / total` line,
 // per-account rollup in description, and the cross-account 🌐 line when
 // paginating. All three respect the Lost Ark 6-gold-earner-per-account

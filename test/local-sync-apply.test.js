@@ -14,7 +14,7 @@ const {
   bucketizeLocalSyncDeltas,
   normalizeLocalSyncDifficulty,
 } = require("../bot/services/local-sync");
-const { getRaidRequirementMap } = require("../bot/models/Raid");
+const { getRaidRequirementMap } = require("../bot/domain/raid-catalog");
 
 function makeApplyStub(impl) {
   const calls = [];

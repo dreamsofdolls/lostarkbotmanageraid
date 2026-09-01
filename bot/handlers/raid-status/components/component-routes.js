@@ -163,9 +163,7 @@ function getEditDrivenStatusComponentIds() {
 }
 
 module.exports = {
-  LOCAL_SYNC_ACTION_PREFIX,
   STATUS_COMPONENT_ACTION,
-  STATUS_COMPONENT_ROUTES,
   getEditDrivenStatusComponentIds,
   getStatusComponentRoute,
 };

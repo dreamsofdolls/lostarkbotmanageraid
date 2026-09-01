@@ -320,8 +320,6 @@ function createRaidStatusComponentSession({
 }
 
 module.exports = {
-  RAID_STATUS_INTERACTIVE_REFRESH_MAX_AGE_MS,
-  countCharacters,
   createRaidStatusComponentSession,
   createRaidStatusSessionState,
 };

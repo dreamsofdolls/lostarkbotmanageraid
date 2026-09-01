@@ -447,7 +447,7 @@ module.exports = {
   },
   // Localized raid and mode labels used by public raid displays such as
   // /raid-status lines and /raid-set autocomplete.
-  // Canonical raid metadata in models/Raid.js stays English-only - this
+  // Canonical raid metadata in domain/raid-catalog.js stays English-only - this
   // namespace is the render-time translation lookup. Resolved via the
   // helpers in bot/utils/raid/common/labels.js.
   raid: {

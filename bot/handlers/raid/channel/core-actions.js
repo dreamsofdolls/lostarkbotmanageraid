@@ -371,5 +371,4 @@ function createRaidChannelCoreActions({
 
 module.exports = {
   createRaidChannelCoreActions,
-  RAID_CHANNEL_GREETING_TTL_MS,
 };

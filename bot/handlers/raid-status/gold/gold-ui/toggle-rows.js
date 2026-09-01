@@ -8,7 +8,7 @@ const {
   areEquivalentRaidModes,
   compareRaidModeOrder,
   raidModeSortRank,
-} = require("../../../../models/Raid");
+} = require("../../../../domain/raid-catalog");
 const { parseCustomEmoji } = require("../../../../utils/discord/emoji");
 const {
   getRaidLabel,

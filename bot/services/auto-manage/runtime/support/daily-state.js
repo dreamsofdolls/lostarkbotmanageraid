@@ -203,10 +203,7 @@ module.exports = {
   getNextAutoManageDailyAttemptCount,
   buildAutoManageDailyClaimUpdate,
   ownsAutoManageDailyLease,
-  clearAutoManageDailyLease,
-  finishAutoManageDailyAttempt,
   scheduleAutoManageDailyRetry,
-  classifyAutoManageDailyReport,
   applyAutoManageDailyReportState,
   releaseAutoManageDailyLeaseWithoutFinishing,
 };

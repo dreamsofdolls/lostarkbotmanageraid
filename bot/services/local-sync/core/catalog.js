@@ -9,7 +9,7 @@
 
 "use strict";
 
-const { RAID_REQUIREMENTS, BOSS_TO_RAID_GATE } = require("../../../models/Raid");
+const { RAID_REQUIREMENTS, BOSS_TO_RAID_GATE } = require("../../../domain/raid-catalog");
 const { CLASS_ID_TO_BIBLE_ID, getClassInfoByNumericId } = require("../../../models/Class");
 
 // Mapping between LOA Logs encounters.db `difficulty` values and RaidManage

@@ -211,6 +211,5 @@ function createScheduleRuntimeHelpers({
 }
 
 module.exports = {
-  CLOSED_EVENT_STATUSES,
   createScheduleRuntimeHelpers,
 };

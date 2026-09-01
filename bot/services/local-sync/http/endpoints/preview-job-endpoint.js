@@ -209,8 +209,5 @@ function createPreviewJobEndpoint({
 }
 
 module.exports = {
-  buildStoredProjection,
   createPreviewJobEndpoint,
-  normalizeDeliveryResult,
-  schedulePreviewDelivery,
 };

@@ -20,7 +20,7 @@ const {
 const {
   getRaidRequirementList,
   getGatesForRaid,
-} = require("../bot/models/Raid");
+} = require("../bot/domain/raid-catalog");
 const { clearUserLanguageCache } = require("../bot/services/i18n");
 
 const KAZEROS_HARD = RAID_REQUIREMENT_MAP.kazeros_hard;

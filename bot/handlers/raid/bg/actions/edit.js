@@ -256,7 +256,5 @@ async function handleEdit({ interaction, deps, lang }) {
 }
 
 module.exports = {
-  buildReplacementImage,
-  createEditActionHandlers,
   handleEdit,
 };

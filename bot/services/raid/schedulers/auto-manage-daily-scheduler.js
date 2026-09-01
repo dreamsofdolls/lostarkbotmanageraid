@@ -447,7 +447,6 @@ module.exports = {
   applyOutcomeCounter,
   createOutcomeCounters,
   createAutoManageDailySchedulerService,
-  didClaimDailyBackfill,
   shouldNudgePrivateLogUser,
   persistTransientDailyFailure,
 };

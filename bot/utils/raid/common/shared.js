@@ -440,7 +440,6 @@ module.exports = {
   truncateText,
   formatShortRelative,
   formatNextCooldownRemaining,
-  splitEmbedFieldValue,
   waitWithBudget,
   buildDiscordIdentityFields,
   INLINE_SPACER,

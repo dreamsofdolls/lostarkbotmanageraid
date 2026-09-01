@@ -131,7 +131,6 @@ function buildAutoManageAutocompleteChoices({ bibleOn = false, localOn = false, 
 }
 
 module.exports = {
-  AUTO_MANAGE_ACTIONS,
   buildAutoManageAutocompleteChoices,
   getAutoManageStateGate,
   isValidAutoManageAction,

@@ -313,6 +313,4 @@ module.exports = {
   createRaidHelpCommand,
   // Exported for tests that want to assert on the section roster
   // without duplicating it.
-  SECTION_ORDER,
-  SECTION_META,
 };

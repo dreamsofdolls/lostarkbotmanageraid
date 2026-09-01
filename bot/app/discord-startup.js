@@ -85,7 +85,6 @@ async function startDiscordLogin({
 }
 
 module.exports = {
-  DISCORD_LOGIN_TIMEOUT_MS,
   installDiscordGatewayDiagnostics,
   startDiscordLogin,
 };

@@ -13,9 +13,9 @@
 // this often is cheap, while it keeps the fallback path responsive on browsers
 // without FileSystemObserver (or when the observer misses a background event).
 export const DEFAULT_VISIBLE_POLL_MS = 300;
-export const DEFAULT_HIDDEN_POLL_MS = 2_000;
+const DEFAULT_HIDDEN_POLL_MS = 2_000;
 export const DEFAULT_SETTLE_MS = 120;
-export const DEFAULT_RETRY_MS = 750;
+const DEFAULT_RETRY_MS = 750;
 
 const SQLITE_HEADER_BYTES = 100;
 const SQLITE_MAGIC = [

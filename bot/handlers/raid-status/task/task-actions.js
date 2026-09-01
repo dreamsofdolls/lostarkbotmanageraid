@@ -213,7 +213,4 @@ async function toggleParsedSideTask(options) {
 module.exports = {
   parseTaskToggleValue,
   toggleParsedSideTask,
-  toggleBulkSideTask,
-  toggleSingleSideTask,
-  toggleSharedTask,
 };

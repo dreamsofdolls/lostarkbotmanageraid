@@ -163,7 +163,6 @@ function createRosterOwnerResolver({
 }
 
 module.exports = {
-  pickOwnerLabel,
   flattenRegisteredAccounts,
   createRosterOwnerResolver,
 };

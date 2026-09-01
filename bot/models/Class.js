@@ -197,7 +197,6 @@ module.exports = {
   CLASS_ID_TO_BIBLE_ID,
   getClassName,
   getClassInfoByNumericId,
-  SUPPORT_CLASS_NAMES,
   isSupportClass,
   CLASS_EMOJI_MAP,
   getClassEmoji,

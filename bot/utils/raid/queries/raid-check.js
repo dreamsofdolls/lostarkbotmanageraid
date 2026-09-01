@@ -10,7 +10,7 @@
  * handlers/raid-status/* (anything that scans User docs for raid view).
  */
 
-const { RAID_REQUIREMENTS } = require("../../../models/Raid");
+const { RAID_REQUIREMENTS } = require("../../../domain/raid-catalog");
 const {
   ROSTER_REFRESH_FAILURE_COOLDOWN_MS,
 } = require("../../../services/roster/refresh");
@@ -143,7 +143,6 @@ function buildRaidCheckUserQuery(raidMeta, now = Date.now()) {
 }
 
 module.exports = {
-  RAID_CHECK_USER_BASE_QUERY,
   RAID_CHECK_USER_QUERY_FIELDS,
   getRaidScanRange,
   buildRaidCheckUserQuery,

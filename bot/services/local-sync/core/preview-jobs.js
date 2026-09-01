@@ -278,7 +278,6 @@ module.exports = {
   PREVIEW_JOB_TTL_MS,
   PREVIEW_APPLY_LEASE_MS,
   MAX_PREVIEW_DELTAS,
-  normalizePreviewDelta,
   normalizePreviewDeltas,
   fingerprintToken,
   resolveJobState,

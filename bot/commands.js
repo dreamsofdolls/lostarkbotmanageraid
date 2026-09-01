@@ -60,7 +60,7 @@ const { createRaidScheduleCommand } = require("./handlers/raid/schedule");
 // Board embed builders reused by /raid-check's "📋 Đội đã xếp" dropdown.
 const { buildScheduleEmbed, buildTurnPlanEmbed } = require("./handlers/raid/schedule/view/board");
 const { createEditRosterCommand } = require("./handlers/roster/edit");
-const { createRaidCommandDefinitions } = require("./handlers/commands/definitions");
+const { createRaidCommandDefinitions } = require("./handlers/commands/command-definitions");
 const { createRaidAutoManageCommand } = require("./handlers/raid/auto-manage");
 const { createRaidAnnounceCommand } = require("./handlers/raid/announce");
 const { createRemoveRosterCommand } = require("./handlers/roster/remove");
@@ -154,7 +154,7 @@ const {
   getGatesForRaid,
   getRaidLabel,
   getRaidGateForBoss,
-} = require("./models/Raid");
+} = require("./domain/raid-catalog");
 const {
   createCharacterId,
   buildFetchedRosterIndexes,

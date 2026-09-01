@@ -239,7 +239,6 @@ function addTaskViewContent({
 module.exports = {
   DISCORD_EMBED_FIELD_LIMIT,
   PAGE_CHAR_CAP,
-  SHARED_TASK_DISPLAY_LIMIT,
   addTaskViewContent,
   buildAccountTaskFields,
 };

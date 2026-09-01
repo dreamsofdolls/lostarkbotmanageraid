@@ -114,5 +114,4 @@ module.exports = {
   applyRsvp,
   applyLeave,
   applyKick,
-  RSVP_STATUSES,
 };

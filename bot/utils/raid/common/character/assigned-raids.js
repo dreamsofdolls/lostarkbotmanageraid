@@ -10,7 +10,7 @@ const {
   getRaidRequirementList,
   getRaidRequirementMap,
   getGatesForRaid,
-} = require("../../../../models/Raid");
+} = require("../../../../domain/raid-catalog");
 const { getGoldOverride } = require("./gold-policy");
 
 const RAID_REQUIREMENT_MAP = getRaidRequirementMap();
@@ -253,9 +253,6 @@ module.exports = {
   isAssignedRaidCompleted,
   normalizeAssignedRaid,
   normalizeRaidModeKey,
-  pickCanonicalDifficultyFromCompletions,
-  resolveEmptyCompletionDifficulty,
   setAssignedRaidMode,
-  tallyCompletedDifficulties,
   toPlainAssignedRaid,
 };

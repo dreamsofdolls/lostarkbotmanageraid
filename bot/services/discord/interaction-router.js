@@ -273,7 +273,4 @@ module.exports = {
   // internally but they're pure helpers with no closure state.
   isAlreadyAcknowledgedError,
   isUnknownInteractionError,
-  describeInteraction,
-  getInteractionAgeMs,
-  createInteractionDeduper,
 };

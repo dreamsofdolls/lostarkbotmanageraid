@@ -103,7 +103,6 @@ function requireCurrentLocalSyncUser({
 }
 
 module.exports = {
-  AUTO_SYNC_DISABLED_ERROR,
   LOCAL_SYNC_DISABLED_ERROR,
   TOKEN_REVOKED_ERROR,
   guardHttpMethod,

@@ -44,7 +44,6 @@ function toPlainUserDoc(userDoc) {
 
 module.exports = {
   getAutoManageEntries,
-  isSuccessfulAutoManageEntry,
   hasSuccessfulAutoManageReport,
   getAppliedAutoManageEntries,
   hasAppliedAutoManageDelta,

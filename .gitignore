@@ -2,8 +2,7 @@ node_modules/
 .env
 npm-debug.log*
 
-# Local render artefacts from scripts/preview-raid-card.js · re-generated
-# every time the prototype runs, no need to track.
+# Local output left by the retired raid-card preview prototype.
 scripts/preview-raid-card.png
 
 # Design scratch (brainstorm mockups / specs / plans) is local-only - not pushed.

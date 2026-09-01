@@ -123,5 +123,4 @@ function createRaidLanguageCommand(deps) {
 
 module.exports = {
   createRaidLanguageCommand,
-  RAID_LANGUAGE_SELECT_CUSTOM_ID: SELECT_CUSTOM_ID,
 };

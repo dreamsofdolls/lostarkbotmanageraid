@@ -1,6 +1,6 @@
 "use strict";
 
-const { isSoloModeKey } = require("../../models/Raid");
+const { isSoloModeKey } = require("../../domain/raid-catalog");
 
 function isRaidCheckVisibleMode(modeKey) {
   return !isSoloModeKey(modeKey);

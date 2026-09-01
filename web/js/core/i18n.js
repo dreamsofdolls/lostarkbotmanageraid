@@ -12,7 +12,7 @@
 
 import { TRANSLATIONS, DEFAULT_LANG, SUPPORTED_LANGS } from "./locales.js";
 
-export function normalizeLang(raw) {
+function normalizeLang(raw) {
   if (typeof raw !== "string") return DEFAULT_LANG;
   const lower = raw.toLowerCase().trim();
   if (SUPPORTED_LANGS.includes(lower)) return lower;
@@ -54,7 +54,7 @@ function lookupForActiveScope(tree, key) {
   return lookup(tree, key);
 }
 
-export function getActiveLang() {
+function getActiveLang() {
   return normalizeLang(window.__artistLang || DEFAULT_LANG);
 }
 

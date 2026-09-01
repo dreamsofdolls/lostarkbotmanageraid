@@ -1,6 +1,6 @@
 // Render-time helpers for raid + mode labels.
 //
-// models/Raid.js owns the canonical English labels (used as the source of
+// domain/raid-catalog.js owns the canonical English labels (used as the source of
 // truth for boss/iLvl/gold metadata). This module sits one layer above
 // and resolves the user-visible label per locale via the i18n service.
 //
@@ -17,7 +17,7 @@
 "use strict";
 
 const { t } = require("../../../services/i18n");
-const { RAID_REQUIREMENTS } = require("../../../models/Raid");
+const { RAID_REQUIREMENTS } = require("../../../domain/raid-catalog");
 
 function getRaidLabel(raidKey, lang) {
   // Use the canonical label as the fallback chain's terminus: t() falls

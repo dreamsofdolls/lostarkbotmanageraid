@@ -112,7 +112,5 @@ function createArtistPingResponder({
 
 module.exports = {
   createArtistPingResponder,
-  vietnamHourNow,
-  DEFAULT_COOLDOWN_MS,
   MAX_REPLIES_PER_WINDOW,
 };

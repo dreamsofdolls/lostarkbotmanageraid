@@ -184,10 +184,9 @@ LostArk_RaidManage/
 |   |   |-- raid-check/             # Scan + edit/sync/task-view/all-mode UI
 |   |   |-- raid-status/            # Status view, task UI, sync, filters
 |   |   `-- roster/                 # Add/edit/remove roster + gold-earner handlers
-|   |-- models/                    # Mongoose schemas + compatibility model exports
+|   |-- models/                    # Persisted schemas + Discord/class metadata
 |   |   |-- user.js
 |   |   |-- guildConfig.js
-|   |   |-- Raid.js                 # Backward-compatible wrapper for domain/raid-catalog
 |   |   |-- Class.js
 |   |   `-- ArtistEmoji.js
 |   |-- services/                  # Cross-command services grouped by concern

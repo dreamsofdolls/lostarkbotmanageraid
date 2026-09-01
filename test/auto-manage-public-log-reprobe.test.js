@@ -11,7 +11,7 @@ const {
   getCharacterName,
   getCharacterClass,
 } = require("../bot/utils/raid/common/shared");
-const { getRaidGateForBoss, getGatesForRaid } = require("../bot/models/Raid");
+const { getRaidGateForBoss, getGatesForRaid } = require("../bot/domain/raid-catalog");
 const {
   ensureAssignedRaids,
   normalizeAssignedRaid,

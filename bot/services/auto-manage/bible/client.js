@@ -159,9 +159,5 @@ function createBibleClient({ bibleLimiter, fetchImpl = defaultFetch }) {
 }
 
 module.exports = {
-  BIBLE_REQUEST_TIMEOUT_MS,
-  DEFAULT_MAX_LOG_PAGES,
   createBibleClient,
-  fetchBibleCharacterLogs,
-  fetchBibleCharacterMeta,
 };

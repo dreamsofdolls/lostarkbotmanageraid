@@ -136,9 +136,6 @@ async function authorizePickerSession({
 
 module.exports = {
   newPickerSessionId,
-  truncateButtonLabel,
-  buildToggleButtonRows,
-  buildConfirmCancelRow,
   buildTogglePickerComponents,
   resolveAdminMention,
   clearPickerSession,

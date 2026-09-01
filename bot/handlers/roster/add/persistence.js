@@ -181,12 +181,5 @@ function createAddRosterPersistence({
 }
 
 module.exports = {
-  buildSavedAccountSnapshot,
-  buildSelectedCharacterRecords,
   createAddRosterPersistence,
-  createDuplicateRosterError,
-  ensureAddRosterTargetAccount,
-  findAddRosterMergeAccount,
-  findCollidingBibleRosterAccount,
-  getSessionBibleNameSet,
 };

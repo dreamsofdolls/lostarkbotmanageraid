@@ -171,5 +171,4 @@ function createRaidViewSnapshotService({
 
 module.exports = {
   createRaidViewSnapshotService,
-  toPlainUserSnapshot,
 };

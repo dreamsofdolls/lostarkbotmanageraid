@@ -99,5 +99,4 @@ function createManualRosterRefreshRunner({
 
 module.exports = {
   createManualRosterRefreshRunner,
-  resolveManualRosterRefreshStatus,
 };

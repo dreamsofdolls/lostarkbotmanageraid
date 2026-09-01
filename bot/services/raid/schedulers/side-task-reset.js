@@ -138,6 +138,5 @@ function createSideTaskResetService({
 }
 
 module.exports = {
-  SIDE_TASK_RESET_TICK_MS,
   createSideTaskResetService,
 };

@@ -220,5 +220,4 @@ module.exports = {
   STALE_TAG,
   UNCHECK_ICON,
   createEditRosterRenderers,
-  tagFor,
 };

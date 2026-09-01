@@ -28,7 +28,7 @@ const {
   getGoldForGate,
   getBoundGoldForGate,
   isGoldBound,
-} = require("../../../../models/Raid");
+} = require("../../../../domain/raid-catalog");
 const { normalizeName, toModeLabel } = require("../../../../utils/raid/common/shared");
 const {
   getGoldOverride,

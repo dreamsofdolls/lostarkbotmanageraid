@@ -363,6 +363,5 @@ function createRaidChannelMessageHandler({
 
 module.exports = {
   MESSAGE_DEDUP_MAX_PERSISTED_IDS,
-  MESSAGE_DEDUP_TTL_MS,
   createRaidChannelMessageHandler,
 };

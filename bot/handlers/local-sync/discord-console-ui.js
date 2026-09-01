@@ -1,7 +1,7 @@
 "use strict";
 
 const { t } = require("../../services/i18n");
-const { getGatesForRaid } = require("../../models/Raid");
+const { getGatesForRaid } = require("../../domain/raid-catalog");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 const { getClassEmoji } = require("../../models/Class");
 // Aliased: buildLocalSyncConsolePayload takes a `UI` parameter, and an
@@ -529,10 +529,6 @@ function buildLocalSyncConsolePayload({
 module.exports = {
   DM_BUTTON_PREFIX,
   STATUS_BUTTON_PREFIX,
-  MAX_CHARACTER_FIELDS,
-  MAX_RAIDS_PER_CHARACTER,
-  groupProjectedChanges,
-  groupPreviewBuckets,
   buildResultDescription,
   buildLocalSyncConsolePayload,
 };

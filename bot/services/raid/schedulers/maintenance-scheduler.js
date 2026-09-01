@@ -194,6 +194,5 @@ function createMaintenanceSchedulerService({
 }
 
 module.exports = {
-  MAINTENANCE_GROUPS,
   createMaintenanceSchedulerService,
 };

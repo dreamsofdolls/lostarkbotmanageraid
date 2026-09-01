@@ -95,7 +95,6 @@ function signupSelectOptions(signups, lang, defaults = null, limit = PICKER_LIMI
 module.exports = {
   PICKER_LIMIT,
   clip,
-  findOwnEligibleRows,
   getSelectableCharacterRows,
   findSelectableCharacterRow,
   loadSelectableCharacterRow,

@@ -69,4 +69,4 @@ function detectPromotion(before, after, counts) {
   );
 }
 
-module.exports = { assignSlots, nextWaitlistPromotion, detectPromotion, SLOT_STATUSES };
+module.exports = { assignSlots, nextWaitlistPromotion, detectPromotion };

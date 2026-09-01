@@ -3,7 +3,7 @@
 const { normalizeDifficultyToModeKey } = require("../../bible/log-utils");
 const {
   preserveManualRaidModePreference,
-} = require("../../../../models/Raid");
+} = require("../../../../domain/raid-catalog");
 
 function createAutoManageReconciler({
   ensureAssignedRaids,

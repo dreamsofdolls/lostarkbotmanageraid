@@ -84,6 +84,5 @@ async function handleView({ interaction, deps, lang }) {
 }
 
 module.exports = {
-  applyViewBrowserAction,
   handleView,
 };

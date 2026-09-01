@@ -2,7 +2,7 @@
 
 const User = require("../../../models/user");
 const LocalSyncPreview = require("../../../models/localSyncPreview");
-const { getRaidRequirementMap } = require("../../../models/Raid");
+const { getRaidRequirementMap } = require("../../../domain/raid-catalog");
 const {
   COMPANION_SCOPE,
   isCompanionScopeEnabledForUser,
@@ -290,7 +290,4 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
 
 module.exports = {
   applyPreviewJob,
-  findDisabledWrite,
-  hasWriteError,
-  shrinkSourceTokenAfterWrite,
 };

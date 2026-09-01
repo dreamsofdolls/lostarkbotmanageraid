@@ -38,7 +38,6 @@ async function markRaidStatusOpenedDay({
 }
 
 module.exports = {
-  DAY_MS,
   getAutoManageDailyContext,
   markRaidStatusOpenedDay,
 };

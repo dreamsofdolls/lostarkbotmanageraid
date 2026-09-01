@@ -282,5 +282,4 @@ function createSchedulePanelBuilders({
 
 module.exports = {
   createSchedulePanelBuilders,
-  raidLabelFor,
 };

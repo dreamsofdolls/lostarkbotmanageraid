@@ -209,7 +209,6 @@ module.exports = {
   SHARED_TASK_PRESET_ORDER,
   generateTaskId,
   normalizeName,
-  isLiveSharedTask,
   sharedTaskHasPreset,
   isDuplicateSharedTask,
   sharedPresetLabel,

@@ -6,9 +6,9 @@
 "use strict";
 
 export let BOSS_TO_RAID_GATE = new Map();
-export let RAID_LABELS = {};
+let RAID_LABELS = {};
 export let MODE_LABELS = {};
-export let RAID_MODE_LABELS = {};
+let RAID_MODE_LABELS = {};
 
 let RAID_GATES = {};
 let CLASS_BY_ID = {};
@@ -286,7 +286,7 @@ export function currentWeeklyResetStartMs(now = new Date()) {
   return now.getTime() - 7 * 24 * 60 * 60 * 1000;
 }
 
-export function getEligibleRaidModes(itemLevel) {
+function getEligibleRaidModes(itemLevel) {
   const ilvl = Number(itemLevel) || 0;
   const list = [];
   for (const raidKey of RAID_ORDER) {
@@ -366,7 +366,7 @@ function normalizeDifficultyLabel(value) {
  *                   collapsed into empty so chars who only do Hard don't
  *                   pollute the Normal raid card)
  */
-export function resolveCellState({
+function resolveCellState({
   assignedRaids,
   fileGates,
   modeKey,
@@ -395,7 +395,7 @@ export function resolveCellState({
  * expansion already applied by bucketize, so a bucket with gates
  * ["G1","G2"] populates both gate entries in the set.
  */
-export function buildFileClearMap(buckets) {
+function buildFileClearMap(buckets) {
   const map = new Map();
   for (const b of buckets) {
     const key = makeBucketKey(b.charName, b.raidKey, b.modeKey);

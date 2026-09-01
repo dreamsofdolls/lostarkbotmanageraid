@@ -12,7 +12,7 @@ const User = require("../../../models/user");
 const { saveWithRetry } = require("../../../models/user");
 const GuildConfig = require("../../../models/guildConfig");
 const RaidEvent = require("../../../models/RaidEvent");
-const { RAID_REQUIREMENTS } = require("../../../models/Raid");
+const { RAID_REQUIREMENTS } = require("../../../domain/raid-catalog");
 const { t, getGuildLanguage } = require("../../i18n");
 const {
   getRequirementFor,
@@ -415,11 +415,9 @@ function ensureFreshWeek(user, now = new Date()) {
 }
 
 module.exports = {
-  resetWeekly,
   startWeeklyResetJob,
   getWeeklyResetSchedulerStartedAtMs,
   WEEKLY_RESET_TICK_MS,
-  getWeekKey,
   getTargetResetKey,
   getCurrentResetStartMs,
   ensureFreshWeek,

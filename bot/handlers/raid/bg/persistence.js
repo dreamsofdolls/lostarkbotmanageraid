@@ -44,7 +44,6 @@ async function saveLibrary(discordId, images, assignments, mode) {
 }
 
 module.exports = {
-  buildLibraryUpdate,
   saveLibrary,
   upsertLibrary,
 };

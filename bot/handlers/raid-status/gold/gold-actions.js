@@ -1,6 +1,6 @@
 "use strict";
 
-const { RAID_REQUIREMENTS, isGoldBound } = require("../../../models/Raid");
+const { RAID_REQUIREMENTS, isGoldBound } = require("../../../domain/raid-catalog");
 const { normalizeName, toModeKey, toModeLabel } = require("../../../utils/raid/common/shared");
 const {
   getAssignedRaidModeKey,
@@ -280,7 +280,6 @@ module.exports = {
   toggleRaidGoldDisabled,
   replaceRaidGoldSelection,
   getNextGoldOverride,
-  getGoldReplacementRequirement,
 };
 
 function getRaidModeKey(raidKey, raidData, character) {

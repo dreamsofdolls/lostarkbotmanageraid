@@ -267,19 +267,8 @@ function resolveScheduledSharedTaskState(task, now = new Date()) {
 }
 
 module.exports = {
-  WEEKDAY_SHORT,
-  WEEKDAY_VN,
-  getZonedParts,
-  shiftLocalDate,
-  zonedDateTimeToUtcMs,
   formatDiscordTimestamp,
   formatVietnamSourceScheduleLabel,
   formatVietnamScheduleLabel,
-  localDateKey,
-  utcDateKey,
-  scheduledTaskKey,
-  scheduleWindowDurationMinutes,
-  getScheduleSlotMinutes,
-  resolveActiveScheduleWindow,
   resolveScheduledSharedTaskState,
 };

@@ -48,8 +48,6 @@ function buildRaidChannelActionChoices({
 }
 
 module.exports = {
-  RAID_CHANNEL_ACTION_CHOICES,
   buildRaidChannelActionChoices,
   isRaidChannelActionVisible,
-  raidChannelActionLabel,
 };

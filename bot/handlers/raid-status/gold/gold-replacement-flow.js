@@ -180,7 +180,5 @@ function createGoldReplacementFlow(ctx) {
 }
 
 module.exports = {
-  GOLD_REPLACE_SELECT_ID,
   createGoldReplacementFlow,
-  goldReplaceTokenFromId,
 };

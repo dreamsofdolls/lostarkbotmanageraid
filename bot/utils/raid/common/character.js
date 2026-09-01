@@ -25,7 +25,7 @@ const {
   getBoundGoldForGate,
   isGoldBound,
   isSoloModeKey,
-} = require("../../../models/Raid");
+} = require("../../../domain/raid-catalog");
 const {
   RAID_GROUP_KEYS,
   RAID_REQUIREMENT_MAP,
@@ -282,7 +282,7 @@ function formatRaidStatusLine(raid, lang) {
   // signature).
   let label = raid.raidName;
   if (lang) {
-    // Lazy-require to avoid circular import: labels.js → models/Raid.js
+    // Lazy-require to avoid circular import: labels.js → domain/raid-catalog.js
     // → (potentially) other utils. Pull at call time so the dependency
     // graph stays clean at module load.
     const { getRaidModeLabel } = require("./labels");
@@ -427,14 +427,12 @@ module.exports = {
   getStatusProgressRaidsForCharacter,
   isGoldReceivingRaid,
   isCountedRaidProgress,
-  pickProgressIcon,
   formatRaidStatusLine,
   summarizeRaidProgress,
   summarizeCharacterGold,
   summarizeAccountGold,
   summarizeGlobalGold,
   computeRaidGold,
-  applyCharacterGoldCap,
   getGoldOverride,
   GOLD_RAID_CAP_PER_CHARACTER,
   RAID_REQUIREMENT_MAP,

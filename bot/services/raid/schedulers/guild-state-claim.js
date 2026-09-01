@@ -41,6 +41,5 @@ async function rollbackGuildState({
 
 module.exports = {
   claimGuildState,
-  normalizePreviousState,
   rollbackGuildState,
 };

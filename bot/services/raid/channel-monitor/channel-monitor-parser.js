@@ -159,9 +159,6 @@ function parseRaidMessage(content) {
 }
 
 module.exports = {
-  ACTION_ALIASES,
-  DIFFICULTY_ALIASES,
-  RAID_ALIASES,
   normalizeRaidChannelContent,
   parseRaidMessage,
 };

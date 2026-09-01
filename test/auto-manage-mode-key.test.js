@@ -8,7 +8,7 @@ const {
   normalizeDifficultyToModeKey,
 } = require("../bot/services/auto-manage/bible/log-utils");
 const { UI, normalizeName, toModeLabel, getCharacterName, getCharacterClass } = require("../bot/utils/raid/common/shared");
-const { getRaidGateForBoss, getGatesForRaid } = require("../bot/models/Raid");
+const { getRaidGateForBoss, getGatesForRaid } = require("../bot/domain/raid-catalog");
 const {
   ensureAssignedRaids,
   normalizeAssignedRaid,

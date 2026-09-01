@@ -8,7 +8,7 @@ const {
 const {
   getGatesForRaid,
   preserveManualRaidModePreference,
-} = require("../../../../models/Raid");
+} = require("../../../../domain/raid-catalog");
 const { normalizeDifficulty } = require("../catalog");
 const { COMPANION_SCOPE } = require("../scope");
 
@@ -184,9 +184,6 @@ function classifyBucketAgainstRoster(
 module.exports = {
   buildRosterCharacterIndex,
   classifyBucketAgainstRoster,
-  findRosterCharacter,
-  gatesAlreadyComplete,
-  hasCurrentWeekProgressInAnotherMode,
   isCurrentWeekCompletion,
   raidAlreadyComplete,
   resolveBucketModePreference,

@@ -162,5 +162,4 @@ module.exports = {
   getAccessibleAccounts,
   canEditAccount,
   findAccessibleCharacter,
-  pickDisplayLabel,
 };

@@ -1,6 +1,6 @@
 "use strict";
 
-const { compareRaidModeOrder } = require("../../../models/Raid");
+const { compareRaidModeOrder } = require("../../../domain/raid-catalog");
 const {
   isGoldReceivingRaid,
 } = require("../../../utils/raid/common/character");
@@ -414,7 +414,6 @@ module.exports = {
   buildAllModeStatusFilterRow,
   buildAllModeUserFilterRow,
   filterAllModePageIndices,
-  getAllModeRosterFilterEntries,
   getAllModeRosterSelectionForPage,
   normalizeAllModeStatusFilter,
   raidMatchesStatusFilter,

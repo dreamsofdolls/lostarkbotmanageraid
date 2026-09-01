@@ -10,7 +10,7 @@ const {
   areEquivalentRaidModes,
   compareRaidModeOrder,
   isSoloModeKey,
-} = require("../../models/Raid");
+} = require("../../domain/raid-catalog");
 const { t } = require("../../services/i18n");
 const {
   isCountedRaidProgress,
@@ -325,8 +325,6 @@ module.exports = {
   buildStatusRosterFilterEntries,
   buildStatusRosterFilterRow,
   getRaidFilterKey,
-  getRaidFilterModeKey,
-  getStatusRosterRaidState,
   isCountedRaidFilterProgress,
   summarizeSoloRaidProgress,
 };

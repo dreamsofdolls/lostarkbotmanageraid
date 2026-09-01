@@ -17,6 +17,5 @@ function isAutoManageAttemptStale(
 
 module.exports = {
   AUTO_MANAGE_STATUS_STALE_MS,
-  getLastAutoManageAttemptAt,
   isAutoManageAttemptStale,
 };

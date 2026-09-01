@@ -336,7 +336,6 @@ function createLocalSyncDiscordConsole({
 module.exports = {
   activeScopeForUser,
   shouldOpenRaidStatusSurface,
-  buildRaidStatusHandoffContent,
   previewSummaryForJob,
   createLocalSyncDiscordConsole,
 };

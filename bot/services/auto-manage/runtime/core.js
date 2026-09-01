@@ -24,7 +24,9 @@ const {
 const {
   createAutoManageReconciler,
 } = require("./pipeline/reconcile");
-const { weekResetStartMs } = require("./support/week-reset");
+const {
+  weeklyResetStartMs: weekResetStartMs,
+} = require("../../../utils/raid/schedule/reset-windows");
 
 function isPublicLogDisabledError(err) {
   if (!err) return false;

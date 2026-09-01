@@ -178,7 +178,6 @@ function createStatusViewerStateLoader({
 }
 
 module.exports = {
-  LOCAL_SYNC_PROBE_BUDGET_MS,
   createStatusViewerStateLoader,
   loadStatusViewerState,
   probeLocalSyncMode,

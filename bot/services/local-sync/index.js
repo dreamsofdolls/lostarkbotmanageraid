@@ -54,7 +54,6 @@ module.exports = {
   PREVIEW_APPLY_LEASE_MS: previewJobs.PREVIEW_APPLY_LEASE_MS,
   MAX_PREVIEW_DELTAS: previewJobs.MAX_PREVIEW_DELTAS,
   normalizePreviewDeltas: previewJobs.normalizePreviewDeltas,
-  fingerprintLocalSyncToken: previewJobs.fingerprintToken,
   resolvePreviewJobState: previewJobs.resolveJobState,
   createPreviewJob: previewJobs.createPreviewJob,
   getPreviewJob: previewJobs.getPreviewJob,

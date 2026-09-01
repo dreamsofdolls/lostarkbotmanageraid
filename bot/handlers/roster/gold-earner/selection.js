@@ -53,6 +53,5 @@ function buildPickerCharacters(characters) {
 module.exports = {
   pickInitialSelection,
   findAccountByRoster,
-  sortCharactersForPicker,
   buildPickerCharacters,
 };

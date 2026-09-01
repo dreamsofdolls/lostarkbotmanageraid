@@ -69,7 +69,6 @@ function getRaidAnnounceActionHandler(action) {
 
 module.exports = {
   RAID_ANNOUNCE_ACTION_CHOICES,
-  RAID_ANNOUNCE_ACTIONS,
   getRaidAnnounceActionHandler,
   isValidRaidAnnounceAction,
 };
