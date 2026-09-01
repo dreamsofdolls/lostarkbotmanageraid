@@ -116,8 +116,4 @@ function createRaidAnnounceCommand(deps) {
 
 module.exports = {
   createRaidAnnounceCommand,
-  __test: {
-    buildCurrentEntry,
-    hasManageGuild,
-  },
 };

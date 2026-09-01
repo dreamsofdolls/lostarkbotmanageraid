@@ -101,5 +101,4 @@ function createRaidScheduleAutoLockService({
 
 module.exports = {
   createRaidScheduleAutoLockService,
-  RAID_SCHEDULE_AUTO_LOCK_TICK_MS,
 };

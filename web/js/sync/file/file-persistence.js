@@ -60,7 +60,7 @@ export async function saveHandle({ discordId, handle, fileName }) {
  * Read the stored entry. Returns `{ discordId, handle, fileName,
  * savedAt }` or null when nothing is saved.
  */
-export async function loadEntry() {
+async function loadEntry() {
   return withStore("readonly", (store) => {
     return new Promise((resolve, reject) => {
       const req = store.get(ENTRY_KEY);

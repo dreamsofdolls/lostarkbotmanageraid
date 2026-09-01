@@ -94,9 +94,4 @@ function createRaidAnnounceAutocompleteHandler({
 
 module.exports = {
   createRaidAnnounceAutocompleteHandler,
-  __test: {
-    buildRaidAnnounceAutocompleteOptions,
-    filterRaidAnnounceAutocompleteOptions,
-    resolveAutocompleteLanguage,
-  },
 };

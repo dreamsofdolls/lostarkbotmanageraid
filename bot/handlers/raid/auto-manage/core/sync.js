@@ -185,8 +185,4 @@ function createAutoManageSyncHandler({
 
 module.exports = {
   createAutoManageSyncHandler,
-  __test: {
-    buildSyncCooldownDescription,
-    hasSyncableRoster,
-  },
 };

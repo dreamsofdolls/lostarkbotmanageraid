@@ -239,7 +239,6 @@ async function runLocalSyncViewAction({
 }
 
 module.exports = {
-  STATUS_BUTTON_PREFIX,
   buildLocalSyncViewEmbed,
   buildLocalSyncViewRows,
   loadLocalSyncSnapshot,

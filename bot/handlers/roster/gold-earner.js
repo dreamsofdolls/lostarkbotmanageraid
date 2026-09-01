@@ -336,8 +336,6 @@ function createRaidGoldEarnerCommand({
     __test: {
       sessions,
       pickInitialSelection,
-      GOLD_EARNER_CAP_PER_ACCOUNT,
-      PICKER_MAX_OPTIONS,
     },
   };
 }

@@ -134,8 +134,6 @@ function createRaidAuctionCommand({ EmbedBuilder, MessageFlags, UI, User }) {
 
   return {
     handleRaidAuctionCommand,
-    // Test seam: pure formula, no Discord lifecycle needed.
-    __test: { computeAuctionBid, PARTY_SIZES },
   };
 }
 

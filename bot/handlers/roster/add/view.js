@@ -218,9 +218,6 @@ function createAddRosterViewBuilders({
 }
 
 module.exports = {
-  BUTTONS_PER_ROW,
-  CHECK_ICON,
-  UNCHECK_ICON,
   buildSeedRosterLink,
   createAddRosterViewBuilders,
 };

@@ -201,7 +201,6 @@ function announcementOverridableTypeKeys() {
 }
 
 module.exports = {
-  ANNOUNCEMENT_REGISTRY,
   announcementTypeKeys,
   announcementTypeEntry,
   announcementSubdocKeys,

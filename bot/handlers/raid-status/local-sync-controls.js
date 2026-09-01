@@ -1,10 +1,5 @@
 "use strict";
 
-const {
-  publicBaseUrl,
-  buildLocalSyncUrl,
-} = require("../../services/local-sync");
-
 function buildLocalSyncResumeButton({
   ButtonBuilder,
   ButtonStyle,
@@ -84,8 +79,6 @@ function buildBibleSyncButton({
 }
 
 module.exports = {
-  publicBaseUrl,
-  buildLocalSyncUrl,
   buildLocalSyncResumeButton,
   buildLocalSyncNewButton,
   buildLocalSyncRefreshButton,

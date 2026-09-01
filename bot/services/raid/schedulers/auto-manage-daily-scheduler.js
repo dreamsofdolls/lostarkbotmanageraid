@@ -440,7 +440,6 @@ function createAutoManageDailySchedulerService({
 }
 
 module.exports = {
-  AUTO_MANAGE_DAILY_TICK_MS,
   AUTO_MANAGE_DAILY_BATCH_SIZE,
   buildAutoManageDailyCandidateQuery,
   buildAutoManageDailyClaimQuery,

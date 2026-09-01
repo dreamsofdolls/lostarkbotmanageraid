@@ -163,6 +163,5 @@ function createRosterOwnerResolver({
 }
 
 module.exports = {
-  flattenRegisteredAccounts,
   createRosterOwnerResolver,
 };

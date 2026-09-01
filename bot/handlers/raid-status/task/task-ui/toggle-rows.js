@@ -189,5 +189,4 @@ function createTaskToggleRows({
 
 module.exports = {
   createTaskToggleRows,
-  parseCustomEmoji,
 };

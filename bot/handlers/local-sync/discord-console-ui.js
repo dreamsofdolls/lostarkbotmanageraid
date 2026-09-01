@@ -527,7 +527,6 @@ function buildLocalSyncConsolePayload({
 }
 
 module.exports = {
-  DM_BUTTON_PREFIX,
   STATUS_BUTTON_PREFIX,
   buildResultDescription,
   buildLocalSyncConsolePayload,

@@ -5,9 +5,9 @@
 
 "use strict";
 
-export let BOSS_TO_RAID_GATE = new Map();
+let BOSS_TO_RAID_GATE = new Map();
 let RAID_LABELS = {};
-export let MODE_LABELS = {};
+let MODE_LABELS = {};
 let RAID_MODE_LABELS = {};
 
 let RAID_GATES = {};
@@ -121,7 +121,7 @@ export function getRaidGateForBoss(bossName) {
   return BOSS_TO_RAID_GATE.get(bossName) || null;
 }
 
-export function getGatesForRaid(raidKey) {
+function getGatesForRaid(raidKey) {
   return RAID_GATES[raidKey] || ["G1", "G2"];
 }
 
@@ -140,7 +140,7 @@ export function makeBucketKey(charName, raidKey, modeKey) {
   return `${String(charName || "").trim().toLowerCase()}::${raidKey}::${modeKey}`;
 }
 
-export function getClassInfoForChar(playersRaw, charName) {
+function getClassInfoForChar(playersRaw, charName) {
   const target = normalizeCharName(charName);
   if (!target) return null;
   for (const item of String(playersRaw || "").split(",")) {

@@ -383,5 +383,4 @@ function createSharedAddHandler({
 
 module.exports = {
   createSharedAddHandler,
-  resolveSharedTaskReset,
 };

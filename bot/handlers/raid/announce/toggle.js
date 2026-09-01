@@ -59,7 +59,4 @@ async function handleToggleAnnouncement(ctx) {
 
 module.exports = {
   handleToggleAnnouncement,
-  __test: {
-    buildToggleStateText,
-  },
 };

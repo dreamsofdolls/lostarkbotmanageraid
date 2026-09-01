@@ -51,7 +51,5 @@ module.exports = {
     detectMime,
     stripPngAncillaryChunks,
     compactAssignmentsAfterRemove,
-    buildSceneBrowserPayload,
-    RAID_BG_MAX_IMAGES,
   },
 };

@@ -94,7 +94,7 @@ export function getRaidLabel(raidKey) {
   return labels[raidKey] || raidKey;
 }
 
-export function getModeLabel(modeKey) {
+function getModeLabel(modeKey) {
   const lang = getActiveLang();
   const labels = (TRANSLATIONS[lang] || TRANSLATIONS[DEFAULT_LANG]).modeLabels || {};
   return labels[modeKey] || modeKey;
@@ -108,7 +108,7 @@ export function getRaidSpecificModeLabel(raidKey, modeKey) {
   return labels[modeKey] || getModeLabel(modeKey);
 }
 
-export function getRaidModeLabel(raidKey, modeKey) {
+function getRaidModeLabel(raidKey, modeKey) {
   const raid = getRaidLabel(raidKey);
   const mode = getRaidSpecificModeLabel(raidKey, modeKey);
   return mode ? `${raid} ${mode}` : raid;

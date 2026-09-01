@@ -302,7 +302,4 @@ function createAutoManageEnableHandler({
 
 module.exports = {
   createAutoManageEnableHandler,
-  __test: {
-    setInitialSyncTitle,
-  },
 };

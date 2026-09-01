@@ -185,6 +185,5 @@ module.exports = {
   buildRosterCharacterIndex,
   classifyBucketAgainstRoster,
   isCurrentWeekCompletion,
-  raidAlreadyComplete,
   resolveBucketModePreference,
 };

@@ -32,7 +32,7 @@ export function resolveEncounterSource({ previewCols, encounterCols }) {
   return null;
 }
 
-export function pickColumn(cols, names) {
+function pickColumn(cols, names) {
   return names.find((name) => cols.has(name)) || null;
 }
 

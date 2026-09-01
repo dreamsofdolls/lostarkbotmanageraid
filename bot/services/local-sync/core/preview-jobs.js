@@ -275,9 +275,7 @@ async function recordPreviewDelivery(jobId, discordId, message, deps = {}) {
 }
 
 module.exports = {
-  PREVIEW_JOB_TTL_MS,
   PREVIEW_APPLY_LEASE_MS,
-  MAX_PREVIEW_DELTAS,
   normalizePreviewDeltas,
   fingerprintToken,
   resolveJobState,

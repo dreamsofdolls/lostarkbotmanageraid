@@ -80,6 +80,5 @@ function createTaskFilterState({
 }
 
 module.exports = {
-  ALL_CHARS_SENTINEL,
   createTaskFilterState,
 };

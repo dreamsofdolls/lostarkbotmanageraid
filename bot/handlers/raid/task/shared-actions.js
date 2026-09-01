@@ -11,7 +11,6 @@ const {
 } = require("../../../utils/raid/tasks/side-tasks");
 const {
   createSharedAddHandler,
-  resolveSharedTaskReset,
 } = require("./shared/shared-add");
 
 function createRaidTaskSharedActionHandlers({
@@ -123,5 +122,4 @@ function createRaidTaskSharedActionHandlers({
 
 module.exports = {
   createRaidTaskSharedActionHandlers,
-  resolveSharedTaskReset,
 };

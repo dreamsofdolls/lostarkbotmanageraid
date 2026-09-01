@@ -186,6 +186,5 @@ function createAutoManageReportEmbeds({ EmbedBuilder, UI }) {
 }
 
 module.exports = {
-  addChunkedEmbedField,
   createAutoManageReportEmbeds,
 };

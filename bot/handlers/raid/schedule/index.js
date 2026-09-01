@@ -9,9 +9,6 @@
 
 const { t } = require("../../../services/i18n");
 const {
-  RAID_REQUIREMENTS,
-} = require("../../../domain/raid-catalog");
-const {
   addTurn,
   setTurnMembers,
 } = require("../../../services/raid/schedule/turns");
@@ -391,5 +388,4 @@ function createRaidScheduleCommand({
 
 module.exports = {
   createRaidScheduleCommand,
-  RAID_REQUIREMENTS,
 };

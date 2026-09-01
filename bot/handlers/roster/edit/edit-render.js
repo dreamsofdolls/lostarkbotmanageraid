@@ -215,9 +215,7 @@ function createEditRosterRenderers({
 }
 
 module.exports = {
-  CHECK_ICON,
   NEW_TAG,
   STALE_TAG,
-  UNCHECK_ICON,
   createEditRosterRenderers,
 };

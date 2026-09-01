@@ -287,6 +287,5 @@ function createAutoCleanupSchedulerService({
 }
 
 module.exports = {
-  AUTO_CLEANUP_TICK_MS,
   createAutoCleanupSchedulerService,
 };

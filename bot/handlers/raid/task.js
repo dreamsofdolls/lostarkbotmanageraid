@@ -191,16 +191,7 @@ function createRaidTaskCommand(deps) {
 
 module.exports = {
   createRaidTaskCommand,
-  TASK_CAP_DAILY,
-  TASK_CAP_WEEKLY,
   SHARED_TASK_CAP_DAILY,
   SHARED_TASK_CAP_WEEKLY,
   SHARED_TASK_CAP_SCHEDULED,
-  generateTaskId,
-  findCharacterInUser,
-  findAccountInUser,
-  resolveTaskWriteTargetFromAccessible,
-  countByReset,
-  ensureSideTasks,
-  ensureSharedTasks,
 };

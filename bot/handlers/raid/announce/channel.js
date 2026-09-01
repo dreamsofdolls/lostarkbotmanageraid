@@ -139,7 +139,4 @@ async function handleClearAnnouncementChannel(ctx) {
 module.exports = {
   handleClearAnnouncementChannel,
   handleSetAnnouncementChannel,
-  __test: {
-    buildOverridableTypeList,
-  },
 };

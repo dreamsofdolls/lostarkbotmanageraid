@@ -123,11 +123,4 @@ async function handleShowAnnouncement(ctx) {
 
 module.exports = {
   handleShowAnnouncement,
-  __test: {
-    buildAnnouncementPreviewText,
-    buildChannelConfigText,
-    buildDestinationText,
-    buildEnabledValue,
-    buildShowAnnouncementEmbed,
-  },
 };

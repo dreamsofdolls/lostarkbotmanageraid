@@ -62,5 +62,4 @@ function createAutoManageSyncSlotManager({
 
 module.exports = {
   createAutoManageSyncSlotManager,
-  formatAutoManageCooldownRemaining,
 };

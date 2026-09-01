@@ -240,5 +240,4 @@ module.exports = {
   resolveTarget,
   bucketize,
   normalizeDifficulty,
-  isCurrentWeekDelta,
 };

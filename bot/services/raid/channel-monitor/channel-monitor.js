@@ -111,7 +111,6 @@ function createRaidChannelMonitorService({
 module.exports = {
   createRaidChannelMonitorService,
   _test: {
-    findAccessibleCharacterInAccounts,
     resolveRaidChannelWriteBatch,
     resolveRaidChannelWritePlans,
     applyRaidChannelWritePlans,

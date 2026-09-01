@@ -1,9 +1,6 @@
 "use strict";
 
 const {
-  buildClearConfirmRow,
-} = require("./clear/components");
-const {
   createClearCancelHandler,
   createClearConfirmHandler,
 } = require("./clear/confirm");
@@ -20,6 +17,5 @@ function createRaidTaskClearActionHandlers(deps) {
 }
 
 module.exports = {
-  buildClearConfirmRow,
   createRaidTaskClearActionHandlers,
 };

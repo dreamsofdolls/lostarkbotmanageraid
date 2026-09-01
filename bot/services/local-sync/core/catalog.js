@@ -96,7 +96,6 @@ function buildLocalSyncCatalog() {
 }
 
 module.exports = {
-  DIFFICULTY_TO_MODE_KEY,
   normalizeDifficulty,
   buildLocalSyncCatalog,
 };

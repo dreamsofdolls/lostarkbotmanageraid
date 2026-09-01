@@ -185,7 +185,4 @@ function createAutoManageResetHandler({
 
 module.exports = {
   createAutoManageResetHandler,
-  __test: {
-    wipeAutoManageState,
-  },
 };

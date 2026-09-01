@@ -323,7 +323,7 @@ function formatCharRowHead(character) {
   return `<span class="char-cell">${icon}<strong>${escapeHtml(character.name)}</strong> <span class="hint">· ${character.itemLevel}</span></span>`;
 }
 
-export function renderClassIcon(className) {
+function renderClassIcon(className) {
   const resolveIcon = window.__artistGetClassIconForLabel;
   const iconName = typeof resolveIcon === "function" ? resolveIcon(className) : "";
   return iconName
