@@ -1,5 +1,5 @@
 /**
- * services/raid/schedule/eligibility.js
+ * services/raid/schedule/slots/eligibility.js
  * Roster-aware eligibility for /raid-schedule signups. Derives a
  * character's role (support vs dps) from its class, checks whether it has
  * already cleared a raid this week (all gates stamped), and flattens a

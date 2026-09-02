@@ -1,5 +1,5 @@
 /**
- * handlers/raid/schedule/panels.js
+ * handlers/raid/schedule/view/panels.js
  * Ephemeral Discord payload builders for lead controls and schedule dashboards.
  * These stay separate from index.js so handlers can focus on interaction
  * lifecycle and persisted RaidEvent mutations.

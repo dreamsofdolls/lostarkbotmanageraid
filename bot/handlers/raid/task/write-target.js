@@ -24,7 +24,7 @@ function createRaidTaskWriteTargetResolver({
       logger.warn?.("[raid-task] own roster lookup failed:", err?.message || err);
     }
 
-    let accessible = [];
+    let accessible;
     try {
       accessible = await getAccessibleAccounts(executorId, { includeOwn: false });
     } catch (err) {

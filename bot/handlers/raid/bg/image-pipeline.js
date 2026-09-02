@@ -268,6 +268,24 @@ async function resizeForStorage(img) {
   }
 }
 
+async function processBgAttachment(attachment, fallbackFilename = "background.jpg") {
+  const buffer = await downloadAttachment(attachment);
+  const validated = await validateBgAttachment(attachment, buffer);
+  const resized = await resizeForStorage(validated.img);
+  return {
+    imageData: resized.buffer,
+    mime: resized.mime,
+    width: resized.width,
+    height: resized.height,
+    sizeBytes: resized.buffer.length,
+    originalWidth: validated.width,
+    originalHeight: validated.height,
+    originalFilename: attachment.name || fallbackFilename,
+    originalMime: validated.mime || "",
+    storageQuality: resized.quality,
+  };
+}
+
 module.exports = {
   RaidBgError,
   RAID_BG_UPLOAD_MAX_MB,
@@ -278,6 +296,7 @@ module.exports = {
   downloadAttachment,
   validateBgAttachment,
   resizeForStorage,
+  processBgAttachment,
   detectMime,
   stripPngAncillaryChunks,
 };

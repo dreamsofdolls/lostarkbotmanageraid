@@ -424,9 +424,6 @@ let getAutoManageSchedulerStartedAtMs;
 let getMaintenanceSchedulerStartedAtMs;
 let getWorldEventReminderSchedulerStartedAtMs;
 let nextWorldEventReminderBoundaryMs;
-let getRaidScheduleAutoLockSchedulerStartedAtMs;
-let runRaidScheduleAutoLockTick;
-let RAID_SCHEDULE_AUTO_LOCK_TICK_MS;
 
 let loadMonitorChannelCache;
 let getMonitorCacheHealth;
@@ -858,10 +855,7 @@ const raidScheduleAutoLockService = createRaidScheduleAutoLockService({
   UI,
 });
 ({
-  RAID_SCHEDULE_AUTO_LOCK_TICK_MS,
   startRaidScheduleAutoLockScheduler,
-  runRaidScheduleAutoLockTick,
-  getRaidScheduleAutoLockSchedulerStartedAtMs,
 } = raidScheduleAutoLockService);
 
 const raidChannelMonitorService = createRaidChannelMonitorService({
@@ -939,8 +933,6 @@ const {
   hasReachedArtistWakeupBoundary,
   pickBedtimeNoticeContent,
   pickWakeupNoticeContent,
-  ARTIST_QUIET_START_HOUR_VN,
-  ARTIST_QUIET_END_HOUR_VN,
   getMaintenanceSlotForNow,
   pickMaintenanceVariant,
   buildMaintenanceConfigQuery,
@@ -949,7 +941,6 @@ const {
   MAINTENANCE_HOUR_VN,
   MAINTENANCE_MINUTE_VN,
   dailyResetStartMs,
-  resetExpiredSideTasks,
 } = raidSchedulerService;
 
 const raidHelpCommandHandlers = createRaidHelpCommand({

@@ -1,5 +1,5 @@
 /**
- * handlers/raid-status/task-actions.js
+ * handlers/raid-status/task/task-actions.js
  * Pure helpers for the /raid-status task-toggle dropdown · parse the
  * select-menu value into a kind discriminator, resolve scheduled-
  * shared-task state for time-windowed presets (Chaos Gate, Field

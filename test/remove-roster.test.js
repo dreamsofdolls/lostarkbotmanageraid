@@ -184,11 +184,14 @@ test("remove-roster: remove_char on the seed char re-points accountName to next 
   const stored = docs.get("user-1");
   // Alpha account should have re-pointed to "Soulrano" (skipped
   // "Bardella" because that's another account's accountName).
-  const alphaAccount = stored.accounts.find((a) => a.characters.some((c) => c.name === "Bardella" && c.id === "Bardella-id"));
-  // Find by char name since accountName changed
   const reseededAccount = stored.accounts.find((a) => a.accountName === "Soulrano");
   assert.ok(reseededAccount, `expected an account renamed to "Soulrano", got ${stored.accounts.map((a) => a.accountName).join(", ")}`);
   assert.equal(reseededAccount.characters.length, 2);
+  assert.ok(
+    reseededAccount.characters.some((character) =>
+      character.name === "Bardella" && character.id === "Bardella-id"
+    ),
+  );
 });
 
 test("remove-roster: seed reselection indexes account-name collisions once", async () => {

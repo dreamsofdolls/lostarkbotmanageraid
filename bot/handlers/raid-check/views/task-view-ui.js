@@ -1,5 +1,5 @@
 /**
- * handlers/raid-check/task-view-ui.js
+ * handlers/raid-check/views/task-view-ui.js
  * Side-task overlay for /raid-check · renders the per-account task
  * fields + shared-roster tasks on the cross-raid view, sharing the
  * same field-builders as /raid-status's side-tasks dropdown so the

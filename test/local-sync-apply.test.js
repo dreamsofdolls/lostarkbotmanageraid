@@ -27,6 +27,17 @@ function makeApplyStub(impl) {
   return fn;
 }
 
+function makeSuccessfulBatchStub(calls) {
+  return async (args) => {
+    calls.push(args);
+    return args.entries.map((entry) => ({
+      matched: true,
+      updated: true,
+      displayName: entry.characterName,
+    }));
+  };
+}
+
 function makeUserDoc(chars = []) {
   return {
     accounts: [
@@ -217,14 +228,7 @@ test("applyLocalSyncDeltas - uses batch writer when provided", async () => {
     throw new Error("single writer should not be called");
   });
   const batchCalls = [];
-  const batchStub = async (args) => {
-    batchCalls.push(args);
-    return args.entries.map((entry) => ({
-      matched: true,
-      updated: true,
-      displayName: entry.characterName,
-    }));
-  };
+  const batchStub = makeSuccessfulBatchStub(batchCalls);
   const result = await applyLocalSyncDeltas("u1", [
     { boss: "Brelshaza, Ember in the Ashes", difficulty: "Normal", cleared: 1, charName: "Aki", lastClearMs: 2000 },
     { boss: "Abyss Lord Kazeros", difficulty: "Hard", cleared: 1, charName: "Aki", lastClearMs: 2001 },
@@ -247,14 +251,7 @@ test("applyLocalSyncDeltas - batch writer receives cumulative gates for a later-
     throw new Error("single writer should not be called");
   });
   const batchCalls = [];
-  const batchStub = async (args) => {
-    batchCalls.push(args);
-    return args.entries.map((entry) => ({
-      matched: true,
-      updated: true,
-      displayName: entry.characterName,
-    }));
-  };
+  const batchStub = makeSuccessfulBatchStub(batchCalls);
 
   const result = await applyLocalSyncDeltas("u1", [
     { boss: "Armoche, Sentinel of the Abyss", difficulty: "Hard", cleared: 1, charName: "Aki", lastClearMs: 1 },

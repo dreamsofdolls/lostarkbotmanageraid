@@ -108,12 +108,6 @@ export function getRaidSpecificModeLabel(raidKey, modeKey) {
   return labels[modeKey] || getModeLabel(modeKey);
 }
 
-function getRaidModeLabel(raidKey, modeKey) {
-  const raid = getRaidLabel(raidKey);
-  const mode = getRaidSpecificModeLabel(raidKey, modeKey);
-  return mode ? `${raid} ${mode}` : raid;
-}
-
 /**
  * Apply translations to every element in the DOM that has a
  * `data-i18n="some.key"` attribute. Called once at boot after the

@@ -137,8 +137,8 @@ function normalizeAssignedRaid(assignedRaid, fallbackDifficulty, raidKey) {
   const keys = rawGateKeys.length > 0 ? rawGateKeys : officialGates;
   const diffTally = tallyCompletedDifficulties(assignedRaid, keys);
 
-  let canonicalModeKey = null;
-  let canonicalDifficulty = null;
+  let canonicalModeKey;
+  let canonicalDifficulty;
   if (diffTally.size === 0) {
     ({ canonicalDifficulty, canonicalModeKey } = resolveEmptyCompletionDifficulty({
       assignedRaid,
@@ -242,7 +242,6 @@ function getAssignedRaidCompletedAt(assignedRaid, gates = null) {
 module.exports = {
   RAID_GROUP_KEYS,
   RAID_REQUIREMENT_MAP,
-  buildAssignedRaidFromLegacy,
   ensureAssignedRaids,
   getAssignedRaidCompletedAt,
   getAssignedRaidModeKey,

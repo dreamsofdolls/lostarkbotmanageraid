@@ -67,7 +67,6 @@ const {
   getStatusRaidsForCharacter,
   getStatusProgressRaidsForCharacter,
   ensureAssignedRaids,
-  RAID_REQUIREMENT_MAP,
 } = require("../bot/utils/raid/common/character");
 const { getAutoManageCooldownMs } = require("../bot/services/access/manager");
 const { CLASS_EMOJI_MAP } = require("../bot/models/Class");

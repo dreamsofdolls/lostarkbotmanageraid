@@ -180,6 +180,18 @@ function createLocalSyncDiscordConsole({
       : latestJob;
   }
 
+  async function loadInteractionPreviewContext(interaction, jobId) {
+    const [job, userDoc] = await Promise.all([
+      getPreviewJob(jobId, jobDeps),
+      loadConsoleUser(User, interaction.user.id),
+    ]);
+    const lang = await getUserLanguage(interaction.user.id, {
+      UserModel: User,
+      userDoc,
+    });
+    return { job, userDoc, lang };
+  }
+
   async function notifyPreviewReady(client, {
     jobId,
     discordId,
@@ -224,14 +236,10 @@ function createLocalSyncDiscordConsole({
     // no aggregate entry because its card always renders one paginated roster.
     const picked = String(interaction.values?.[0] ?? "");
     const rosterFilter = picked === FILTER_ALL_ROSTERS ? null : Number(picked) || 0;
-    const [job, userDoc] = await Promise.all([
-      getPreviewJob(jobId, jobDeps),
-      loadConsoleUser(User, interaction.user.id),
-    ]);
-    const lang = await getUserLanguage(interaction.user.id, {
-      UserModel: User,
-      userDoc,
-    });
+    const { job, userDoc, lang } = await loadInteractionPreviewContext(
+      interaction,
+      jobId,
+    );
     if (!job || job.discordId !== interaction.user.id) return;
     await interaction.editReply(await buildConsole(interaction.user, {
       job,
@@ -250,14 +258,11 @@ function createLocalSyncDiscordConsole({
     // mutation or message edit.
     await interaction.deferUpdate();
 
-    const [existing, initialUserDoc] = await Promise.all([
-      getPreviewJob(jobId, jobDeps),
-      loadConsoleUser(User, interaction.user.id),
-    ]);
-    const lang = await getUserLanguage(interaction.user.id, {
-      UserModel: User,
+    const {
+      job: existing,
       userDoc: initialUserDoc,
-    });
+      lang,
+    } = await loadInteractionPreviewContext(interaction, jobId);
     if (!existing) {
       const latestJob = await getLatestPreviewJob(interaction.user.id, jobDeps);
       if (await maybeOpenRaidStatus(interaction, {
@@ -282,7 +287,7 @@ function createLocalSyncDiscordConsole({
       return;
     }
 
-    let nextJob = existing;
+    let nextJob;
     if (action === "apply") {
       const outcome = await applyStoredPreviewJob(jobId, interaction.user.id, {
         UserModel: User,

@@ -24,28 +24,6 @@ function getAccessibleCharacterCandidates(character) {
 }
 
 /**
- * Resolve one character against accessible accounts in source order.
- * This direct helper remains for single-name callers; batch routing builds one
- * shared index instead of repeating this traversal for every character.
- * @param {Array<object>} accessibleAccounts - access-control account entries
- * @param {string} charName - requested character name
- * @returns {object|null} matching account entry plus character, or null
- */
-function findAccessibleCharacterInAccounts(accessibleAccounts, charName) {
-  const target = String(charName || "").trim().toLowerCase();
-  if (!target) return null;
-  for (const entry of accessibleAccounts || []) {
-    const chars = Array.isArray(entry.account?.characters) ? entry.account.characters : [];
-    for (const character of chars) {
-      if (getAccessibleCharacterCandidates(character).includes(target)) {
-        return { ...entry, character };
-      }
-    }
-  }
-  return null;
-}
-
-/**
  * Index an accessible-roster snapshot while preserving first-match precedence.
  * @param {Array<object>} accessibleAccounts - access-control account entries
  * @returns {Map<string, object>} normalized character name to routing metadata
@@ -323,7 +301,6 @@ module.exports = {
   applyRaidChannelWritePlans,
   applyRaidChannelUpdatePlans,
   buildWritePlanSegments,
-  findAccessibleCharacterInAccounts,
   resolveRaidChannelWriteBatch,
   resolveRaidChannelWritePlans,
 };

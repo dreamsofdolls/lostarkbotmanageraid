@@ -1,5 +1,5 @@
 /**
- * services/local-sync/http/preview-summary-endpoint.js
+ * services/local-sync/http/endpoints/preview-summary-endpoint.js
  * Pre-sync diff computation for the web companion's "currently synced
  * vs pending" preview. Pure projection over (accounts × deltaBuckets)
  * - no DB writes - so the user can preview the impact before clicking
@@ -19,9 +19,9 @@ const {
   createJsonSender,
 } = require("../json");
 const {
-  readAuthenticatedJsonRequest,
   requireCurrentLocalSyncUser,
 } = require("../request-gates");
+const { readAuthenticatedPreviewRequest } = require("./preview-request");
 const {
   RAID_REQUIREMENTS,
   getGatesForRaid,
@@ -493,19 +493,12 @@ function projectSummary(
 function createPreviewSummaryEndpoint({ User }) {
   if (!User) throw new Error("[preview-summary] User model required");
 
-  const MAX_BODY_BYTES = 256 * 1024;
   const send = createJsonSender({ methods: "POST, OPTIONS" });
 
   return async function handlePreviewSummary(req, res) {
-    const request = await readAuthenticatedJsonRequest({
-      req,
-      res,
-      send,
-      maxBodyBytes: MAX_BODY_BYTES,
-    });
+    const request = await readAuthenticatedPreviewRequest({ req, res, send });
     if (!request) return;
-    const { token, discordId, payload, scopeExplicit, body } = request;
-    const scope = payload.scope;
+    const { token, discordId, payload, scope, scopeExplicit, body } = request;
 
     const deltas = Array.isArray(body?.deltas) ? body.deltas : [];
 

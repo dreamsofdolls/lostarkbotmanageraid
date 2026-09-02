@@ -4,9 +4,19 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  buildCharacterAutocompleteChoices,
   buildRosterAutocompleteChoices,
   buildSharedRosterAutocompleteChoices,
 } = require("../bot/utils/raid/common/autocomplete");
+
+test("buildCharacterAutocompleteChoices uses the shared character label contract", () => {
+  assert.deepEqual(
+    buildCharacterAutocompleteChoices([
+      { name: "Aki", className: "Artist", itemLevel: 1735.5 },
+    ]),
+    [{ name: "Aki · Artist · 1735.5", value: "Aki" }],
+  );
+});
 
 function fakeT(key, lang, vars = {}) {
   if (key === "share.accessLevel.view") return "view";

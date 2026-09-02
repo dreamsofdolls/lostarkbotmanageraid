@@ -25,40 +25,59 @@ function formatSharedResetLabel(reset, lang) {
   return t(labelKey, lang);
 }
 
+function formatScheduledStatus(state, nextScheduleLabel, fallback, lang) {
+  const { t } = require("../../../../services/i18n");
+  const activeEndsAtMs = state.slotEndAtMs || state.windowEndAtMs;
+  if (state.active && activeEndsAtMs) {
+    return t("shared-task.status.nowOpenWithCloses", lang, {
+      whenR: formatDiscordTimestamp(activeEndsAtMs, "R"),
+      whenAbs: formatDiscordTimestamp(activeEndsAtMs, "f"),
+    });
+  }
+  if (state.active) return t("shared-task.status.nowOpen", lang);
+  if (state.nextAtMs) {
+    return t("shared-task.status.opensAt", lang, {
+      whenR: formatDiscordTimestamp(state.nextAtMs, "R"),
+      whenAbs: formatDiscordTimestamp(state.nextAtMs, "f"),
+    });
+  }
+  return nextScheduleLabel
+    ? t("shared-task.status.opensAtShort", lang, { label: nextScheduleLabel })
+    : fallback;
+}
+
+function formatScheduledOptionStatus(state, nextScheduleLabel, fallback, lang) {
+  const { t } = require("../../../../services/i18n");
+  if (state.active) return t("shared-task.status.nowOpen", lang);
+  const label = state.nextAtMs
+    ? formatVietnamScheduleLabel(state.nextAtMs)
+    : nextScheduleLabel;
+  return label
+    ? t("shared-task.status.opensAtShort", lang, { label })
+    : fallback;
+}
+
 function getSharedTaskDisplay(task, now = new Date(), lang) {
   const { t } = require("../../../../services/i18n");
   const preset = getSharedTaskPreset(task?.preset);
   const name = String(task?.name || preset.defaultName).trim();
   if (task?.reset === SCHEDULED_RESET) {
     const state = resolveScheduledSharedTaskState(task, now);
-    const activeEndsAtMs = state.slotEndAtMs || state.windowEndAtMs;
     const nextScheduleLabel = state.nextAtMs
       ? formatVietnamSourceScheduleLabel(state.nextAtMs)
       : state.nextLabel;
-    const status = state.active
-      ? activeEndsAtMs
-        ? t("shared-task.status.nowOpenWithCloses", lang, {
-            whenR: formatDiscordTimestamp(activeEndsAtMs, "R"),
-            whenAbs: formatDiscordTimestamp(activeEndsAtMs, "f"),
-          })
-        : t("shared-task.status.nowOpen", lang)
-      : state.nextAtMs
-        ? t("shared-task.status.opensAt", lang, {
-            whenR: formatDiscordTimestamp(state.nextAtMs, "R"),
-            whenAbs: formatDiscordTimestamp(state.nextAtMs, "f"),
-          })
-        : nextScheduleLabel
-          ? t("shared-task.status.opensAtShort", lang, { label: nextScheduleLabel })
-          : preset.scheduleText;
-    const optionStatus = state.active
-      ? t("shared-task.status.nowOpen", lang)
-      : state.nextAtMs
-        ? t("shared-task.status.opensAtShort", lang, {
-            label: formatVietnamScheduleLabel(state.nextAtMs),
-          })
-        : nextScheduleLabel
-          ? t("shared-task.status.opensAtShort", lang, { label: nextScheduleLabel })
-          : preset.scheduleText;
+    const status = formatScheduledStatus(
+      state,
+      nextScheduleLabel,
+      preset.scheduleText,
+      lang,
+    );
+    const optionStatus = formatScheduledOptionStatus(
+      state,
+      nextScheduleLabel,
+      preset.scheduleText,
+      lang,
+    );
     return {
       name,
       emoji: preset.emoji,

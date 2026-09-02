@@ -1,11 +1,10 @@
 "use strict";
 
-const ALL_CHARS_SENTINEL = "__ALL_CHARS__";
+const {
+  resolveCharacterNameFilter,
+} = require("../../state/character-filter");
 
-function sameName(left, right) {
-  return String(left || "").trim().toLowerCase() ===
-    String(right || "").trim().toLowerCase();
-}
+const ALL_CHARS_SENTINEL = "__ALL_CHARS__";
 
 function createTaskFilterState({
   getAccounts,
@@ -27,15 +26,12 @@ function createTaskFilterState({
   function resolveTaskCharFilter() {
     const explicit = getTaskCharFilter(getCurrentPage());
     const candidates = charsWithTasksOnPage();
-    if (candidates.length === 0) return null;
-    if (explicit === ALL_CHARS_SENTINEL) return ALL_CHARS_SENTINEL;
-    if (explicit) {
-      const stillExists = candidates.find((character) =>
-        sameName(getCharacterName(character), explicit)
-      );
-      if (stillExists) return getCharacterName(stillExists);
-    }
-    return getCharacterName(candidates[0]);
+    return resolveCharacterNameFilter({
+      allCharactersSentinel: ALL_CHARS_SENTINEL,
+      candidates,
+      explicit,
+      getCharacterName,
+    });
   }
 
   function aggregateTasksOnPage() {

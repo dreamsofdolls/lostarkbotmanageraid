@@ -46,6 +46,7 @@ const crypto = require("crypto");
 
 const { CLASS_NAMES, CLASS_EMOJI_MAP } = require("../../models/Class");
 const { ARTIST_EMOJI_MAP } = require("../../models/ArtistEmoji");
+const { sleep: delay } = require("../../utils/async");
 
 const ROOT_ASSETS_DIR = path.resolve(__dirname, "..", "..", "..", "assets");
 const CLASS_ICONS_DIR = path.join(ROOT_ASSETS_DIR, "class-icons");
@@ -167,10 +168,6 @@ function createAliasIndex(aliasGroups) {
     }
   }
   return { canonicalByAlias, aliases };
-}
-
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function cleanupAliasEmoji({ client, appId, namespace, existingByName, aliases, delayMs }) {

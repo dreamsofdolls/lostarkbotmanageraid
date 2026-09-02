@@ -1,5 +1,5 @@
 /**
- * services/raid/schedule/owned-boards.js
+ * services/raid/schedule/boards/owned-boards.js
  * Pure shaping for active-board pickers: turn RaidEvent docs into sorted,
  * render-ready rows. No I/O - the Mongo query + Discord option build live in
  * the handlers. Kept here so the sort/derived-count logic is unit-testable.

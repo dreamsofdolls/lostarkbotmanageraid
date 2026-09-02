@@ -1,5 +1,5 @@
 /**
- * services/raid/schedule/auto-clear.js
+ * services/raid/schedule/lifecycle/auto-clear.js
  * Choose the auto-clear write targets when a /raid-schedule event ends.
  * Only players who actually held a comp slot get credited - a confirmed
  * signup that overflowed to the waitlist did NOT raid, so it must NOT be

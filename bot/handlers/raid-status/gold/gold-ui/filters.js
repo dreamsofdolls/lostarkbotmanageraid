@@ -1,9 +1,9 @@
 "use strict";
 
-function sameName(left, right) {
-  return String(left || "").trim().toLowerCase() ===
-    String(right || "").trim().toLowerCase();
-}
+const {
+  resolveCharacterNameFilter,
+  sameCharacterName,
+} = require("../../state/character-filter");
 
 function createGoldFilterState({
   getAccounts,
@@ -24,14 +24,11 @@ function createGoldFilterState({
   function resolveGoldCharFilter() {
     const explicit = getGoldCharFilter(getCurrentPage());
     const candidates = goldCharactersOnPage();
-    if (candidates.length === 0) return null;
-    if (explicit) {
-      const stillExists = candidates.find((character) =>
-        sameName(getCharacterName(character), explicit)
-      );
-      if (stillExists) return getCharacterName(stillExists);
-    }
-    return getCharacterName(candidates[0]);
+    return resolveCharacterNameFilter({
+      candidates,
+      explicit,
+      getCharacterName,
+    });
   }
 
   function activeGoldCharacter() {
@@ -39,7 +36,7 @@ function createGoldFilterState({
     if (!activeName) return null;
     const account = getAccounts()[getCurrentPage()];
     return (account?.characters || []).find((character) =>
-      sameName(getCharacterName(character), activeName)
+      sameCharacterName(getCharacterName(character), activeName)
     ) || null;
   }
 
@@ -52,5 +49,4 @@ function createGoldFilterState({
 
 module.exports = {
   createGoldFilterState,
-  sameName,
 };

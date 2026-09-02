@@ -1,5 +1,5 @@
 /**
- * services/raid/schedule/slots.js
+ * services/raid/schedule/slots/slots.js
  * Pure slot-assignment for the /raid-schedule board. Given the
  * slot-occupying signups (confirmed + late) and the recommended
  * support/dps counts, partition them into support / dps / waitlist by

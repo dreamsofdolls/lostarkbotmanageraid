@@ -14,9 +14,7 @@ const {
   RAID_BG_MIN_HEIGHT,
   RAID_BG_OUTPUT_WIDTH,
   RAID_BG_OUTPUT_HEIGHT,
-  downloadAttachment,
-  validateBgAttachment,
-  resizeForStorage,
+  processBgAttachment,
 } = require("../image-pipeline");
 const {
   RAID_BG_MAX_IMAGES,
@@ -51,32 +49,13 @@ function isValidationError(err) {
     || err.key === "raidBg.errors.tooSmall";
 }
 
-function buildProcessedImage({ filename, validated, resized }) {
-  return {
-    imageData: resized.buffer,
-    mime: resized.mime,
-    width: resized.width,
-    height: resized.height,
-    sizeBytes: resized.buffer.length,
-    originalWidth: validated.width,
-    originalHeight: validated.height,
-    originalFilename: filename,
-    originalMime: validated.mime || "",
-    storageQuality: resized.quality,
-  };
-}
-
 async function processUploads(attachments) {
   const processed = [];
   for (const attachment of attachments) {
-    const buffer = await downloadAttachment(attachment);
-    const validated = await validateBgAttachment(attachment, buffer);
-    const resized = await resizeForStorage(validated.img);
-    processed.push(buildProcessedImage({
-      filename: attachment.name || `background-${processed.length + 1}.png`,
-      validated,
-      resized,
-    }));
+    processed.push(await processBgAttachment(
+      attachment,
+      `background-${processed.length + 1}.png`,
+    ));
   }
   return processed;
 }

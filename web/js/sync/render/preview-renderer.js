@@ -4,6 +4,17 @@ import { formatGold, formatRelativeTime } from "/sync/js/core/format.js";
 import { renderCharPendingLabel, renderCharPendingRow } from "/sync/js/sync/render/char-row.js";
 import { resolvePreviewLastSync } from "/sync/js/sync/preview-stats.js";
 
+const GATE_STATE_SYMBOL = Object.freeze({
+  "db-other-mode": "◐",
+  "mode-conflict": "⚠",
+  pending: "⏬",
+  synced: "✓",
+});
+
+function gateStateSymbol(state) {
+  return GATE_STATE_SYMBOL[state] || "·";
+}
+
 function groupPreviewCharactersByRoster(characters) {
   const byRoster = new Map();
   for (const character of characters) {
@@ -339,11 +350,7 @@ function renderGateBadge(gate, state) {
   //   db-other-mode blue dot (DB cleared at different mode, file silent)
   //   empty         gray dot
   const cls = `gate-badge gate-${state}`;
-  const symbol = state === "synced" ? "✓"
-    : state === "pending" ? "⏬"
-    : state === "mode-conflict" ? "⚠"
-    : state === "db-other-mode" ? "◐"
-    : "·";
+  const symbol = gateStateSymbol(state);
   return `<span class="${cls}" title="${escapeHtml(gate)}: ${escapeHtml(t("diff.state." + state))}">${escapeHtml(gate)} ${symbol}</span>`;
 }
 
@@ -356,6 +363,8 @@ function renderDiffLegend(scope) {
   const counts = typeof collectCounts === "function" ? collectCounts(scope) : {};
   const states = ["synced", "pending", "mode-conflict", "empty"].filter((s) => counts[s] > 0);
   if (states.length === 0) return "";
-  const items = states.map((s) => `<span class="legend-item gate-${s}">${s === "synced" ? "✓" : s === "pending" ? "⏬" : s === "mode-conflict" ? "⚠" : "·"} ${escapeHtml(t("diff.state." + s))}</span>`).join("");
+  const items = states.map((state) => (
+    `<span class="legend-item gate-${state}">${gateStateSymbol(state)} ${escapeHtml(t("diff.state." + state))}</span>`
+  )).join("");
   return `<div class="diff-legend">${items}</div>`;
 }

@@ -26,18 +26,7 @@ const {
   SHARED_TASK_CAP_DAILY,
   SHARED_TASK_CAP_WEEKLY,
   SHARED_TASK_CAP_SCHEDULED,
-  ensureSharedTasks,
 } = require("../../utils/raid/tasks/shared-tasks");
-const {
-  TASK_CAP_DAILY,
-  TASK_CAP_WEEKLY,
-  generateTaskId,
-  findCharacterInUser,
-  findAccountInUser,
-  resolveTaskWriteTargetFromAccessible,
-  ensureSideTasks,
-  countByReset,
-} = require("../../utils/raid/tasks/side-tasks");
 
 /**
  * Build the /raid-task command handler factory.

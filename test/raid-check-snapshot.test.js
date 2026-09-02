@@ -9,6 +9,7 @@ const assert = require("node:assert/strict");
 const { __test, parseRaidMessage } = require("../bot/commands");
 const { createSnapshotHelpers } = require("../bot/handlers/raid-check/snapshot");
 const { ensureFreshWeek, getTargetResetKey } = require("../bot/services/raid/schedulers/weekly-reset");
+const { lookupArray } = require("../bot/utils/raid/schedule/locale-arrays");
 
 function makeCharacter(name, itemLevel, kazeros = {}) {
   return {
@@ -639,15 +640,19 @@ test("Artist quiet hours: wake-up pool is disjoint from the hourly-cleanup pool"
   // Regression guard: a future refactor might merge the two pools by accident.
   // The wake-up moment is ceremonial (morning) and the hourly one is not, so
   // their variant sets must stay separate.
-  const wakeupSamples = new Set();
-  const hourlySamples = new Set();
-  for (let i = 0; i < 60; i += 1) {
-    wakeupSamples.add(__test.pickWakeupNoticeContent(10));
-  }
+  const wakeupSamples = lookupArray("vi", "announcements.artist-wakeup.normal");
+  const hourlySamples = new Set(
+    lookupArray("vi", "announcements.cleanup-volume.normal"),
+  );
   // Any wake-up line mentioning "morning" or "dậy" should never appear in the
   // regular hourly pool (verified by checking a few hourly outputs).
-  const morningMarkers = [...wakeupSamples].filter((s) => /dậy|Morning|sáng/i.test(s));
+  const morningMarkers = wakeupSamples.filter((s) => /dậy|Morning|sáng/i.test(s));
   assert.ok(morningMarkers.length > 0, "wake-up pool must contain morning-tone lines");
+  assert.deepEqual(
+    wakeupSamples.filter((sample) => hourlySamples.has(sample)),
+    [],
+    "wake-up and hourly-cleanup pools must remain disjoint",
+  );
 });
 
 test("nextAnnouncementEligibleBoundaryMs: artist-bedtime lands on next 20:00 UTC (= 03:00 VN)", () => {
@@ -1211,7 +1216,10 @@ test("parseManagerIds splits, trims, skips empties, and dedupes", () => {
   assert.deepEqual([...ids].sort(), ["123", "456", "789"]);
   assert.equal(parseManagerIds("").size, 0);
   assert.equal(parseManagerIds("   ").size, 0);
-  assert.equal(parseManagerIds(undefined).size >= 0, true);
+  assert.deepEqual(
+    [...parseManagerIds(undefined)].sort(),
+    ["test-manager-1", "test-manager-2"],
+  );
 });
 
 test("isManagerId matches env-allowlisted Discord user IDs", () => {

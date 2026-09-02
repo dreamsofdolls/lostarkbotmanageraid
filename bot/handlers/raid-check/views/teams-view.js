@@ -1,5 +1,5 @@
 /**
- * handlers/raid-check/teams-view.js
+ * handlers/raid-check/views/teams-view.js
  * "📋 Đội đã xếp" surface for /raid-check: a dropdown listing every active
  * raid-schedule event in the guild (any Manager's), and the per-event detail
  * (board comp + bus turn plan) shown ephemerally when a Manager picks one.
@@ -177,7 +177,7 @@ function createTeamsViewUi(deps) {
    */
   async function handleRaidCheckTeamsSelect(interaction, eventId, lang) {
     await deferEphemeralReply(interaction);
-    let event = null;
+    let event;
     try {
       event = eventId ? await RaidEvent.findById(eventId) : null;
     } catch {

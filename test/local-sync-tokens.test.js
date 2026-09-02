@@ -178,7 +178,7 @@ test("verifyToken - rejects forged signature with reason='signature'", () => {
 
 test("verifyToken - rejects payload tamper (signature mismatch)", () => {
   const token = mintToken("user-123");
-  const [payloadB64, sigB64] = token.split(".");
+  const [, sigB64] = token.split(".");
   // Substitute a different payload but reuse the original sig - HMAC
   // mismatch should reject.
   const fakePayload = Buffer.from(JSON.stringify({ discordId: "evil-user", iat: 1, exp: 9999999999 }))

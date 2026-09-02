@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { sleep } = require("../utils/async");
 
 const assignedRaidSchema = new mongoose.Schema(
   {},
@@ -326,7 +327,7 @@ async function saveWithRetry(operation, maxAttempts = 5) {
       const isDupKey = error?.code === 11000;
       if (!isVersion && !isDupKey) throw error;
       if (attempt === maxAttempts) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 40 * attempt));
+      await sleep(40 * attempt);
     }
   }
   throw lastError;

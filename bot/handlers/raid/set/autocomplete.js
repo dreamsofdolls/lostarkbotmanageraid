@@ -1,6 +1,7 @@
 "use strict";
 
 const {
+  buildCharacterAutocompleteChoices,
   getRosterMatches,
   getCharacterMatches,
   truncateChoice,
@@ -166,12 +167,7 @@ function createRaidSetAutocompleteService({
       rosterFilter: rosterInput || null,
       needle: focused.value || "",
     });
-    const choices = entries.map((entry) =>
-      truncateChoice(
-        `${entry.name} · ${entry.className} · ${entry.itemLevel}`,
-        entry.name
-      )
-    );
+    const choices = buildCharacterAutocompleteChoices(entries);
     await interaction.respond(choices).catch(() => {});
   }
 

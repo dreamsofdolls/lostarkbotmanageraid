@@ -1,5 +1,5 @@
 /**
- * services/local-sync/http/catalog-endpoint.js
+ * services/local-sync/http/endpoints/catalog-endpoint.js
  * GET /api/catalog handler. No auth - the catalog is public (just
  * raid/class metadata) and is shipped with a 5-min Cache-Control so
  * web companion page loads stay light.

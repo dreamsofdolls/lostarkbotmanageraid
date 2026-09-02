@@ -1,5 +1,5 @@
 /**
- * services/raid/weekly-reset.js
+ * services/raid/schedulers/weekly-reset.js
  * Weekly reset service: fires every Wed 17:00 VN (10:00 UTC) · marks
  * every stale User doc with the new week key, clears raid progress
  * and per-character side tasks, then posts the per-guild reset-

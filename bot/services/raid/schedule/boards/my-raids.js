@@ -1,5 +1,5 @@
 /**
- * services/raid/schedule/my-raids.js
+ * services/raid/schedule/boards/my-raids.js
  * Pure helpers for the "Raid của tôi" view (a /raid-status dropdown that lists
  * the raid-schedule events a member is in). No I/O - callers pass already
  * fetched RaidEvent docs (lean objects). The Discord render + Mongo query live

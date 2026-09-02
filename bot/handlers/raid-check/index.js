@@ -39,7 +39,7 @@ const RAID_CHECK_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 /**
  * Build the /raid-check command handler factory.
  * @param {object} deps - injected dependencies (discord.js builders +
- *   MessageFlags, Mongoose User + saveWithRetry, raid catalogue,
+ *   MessageFlags, Mongoose User, raid catalogue,
  *   auto-manage service handles, raidCheckRefreshLimiter +
  *   raidCheckSyncLimiter + discordUserLimiter, RAID_REQUIREMENT_MAP
  *   · see the destructure block).
@@ -58,7 +58,6 @@ function createRaidCheckCommand(deps) {
     MessageFlags,
     UI,
     User,
-    saveWithRetry,
     ensureFreshWeek,
     normalizeName,
     toModeLabel,

@@ -1,5 +1,5 @@
 /**
- * services/raid/channel-monitor-embeds.js
+ * services/raid/channel-monitor/channel-monitor-embeds.js
  * Discord embed builders used by the raid text-channel monitor.
  */
 

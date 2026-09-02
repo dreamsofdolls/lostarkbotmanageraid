@@ -56,8 +56,7 @@ function getRosterRefreshCooldownMs(discordId) {
 // configured (env unset / empty), which lets call sites fall back to
 // the generic copy gracefully.
 function getPrimaryManagerId() {
-  for (const id of MANAGER_IDS) return id;
-  return null;
+  return MANAGER_IDS.values().next().value ?? null;
 }
 
 module.exports = {

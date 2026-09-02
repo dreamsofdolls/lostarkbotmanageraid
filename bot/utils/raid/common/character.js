@@ -6,9 +6,8 @@
  * function takes its inputs explicitly and returns plain values, which makes
  * them trivially unit-testable in isolation.
  *
- * Used by: bot/commands.js (compose root), handlers/raid-status.js,
- * handlers/raid-check.js, services/auto-manage/runtime/core.js (indirectly via
- * commands.__test exports).
+ * Used by: bot/commands.js (compose root), raid-status / raid-check handlers,
+ * auto-manage runtime services, and direct character-contract tests.
  */
 
 const { randomUUID } = require("node:crypto");
@@ -29,10 +28,8 @@ const {
 const {
   RAID_GROUP_KEYS,
   RAID_REQUIREMENT_MAP,
-  buildAssignedRaidFromLegacy,
   ensureAssignedRaids,
   getAssignedRaidModeKey,
-  getBestEligibleModeKey,
   getAssignedRaidCompletedAt,
   getCompletedGateKeys,
   getGateKeys,

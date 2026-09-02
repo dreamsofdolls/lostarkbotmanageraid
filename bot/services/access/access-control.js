@@ -52,19 +52,17 @@ async function getAccessibleAccounts(viewerDiscordId, { models = {}, helpers = {
   );
   const [ownDoc, shares] = await Promise.all([ownDocPromise, sharesPromise]);
 
-  if (includeOwn) {
-    if (ownDoc && Array.isArray(ownDoc.accounts)) {
-      for (const account of ownDoc.accounts) {
-        accessible.push({
-          ownerDiscordId: viewerDiscordId,
-          ownerLabel: pickDisplayLabel(ownDoc),
-          accountName: account.accountName,
-          account,
-          ownerDoc: ownDoc,
-          accessLevel: "edit",
-          isOwn: true,
-        });
-      }
+  if (includeOwn && ownDoc && Array.isArray(ownDoc.accounts)) {
+    for (const account of ownDoc.accounts) {
+      accessible.push({
+        ownerDiscordId: viewerDiscordId,
+        ownerLabel: pickDisplayLabel(ownDoc),
+        accountName: account.accountName,
+        account,
+        ownerDoc: ownDoc,
+        accessLevel: "edit",
+        isOwn: true,
+      });
     }
   }
 

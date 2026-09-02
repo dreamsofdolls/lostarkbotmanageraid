@@ -4,10 +4,10 @@ const {
   editEmbed,
 } = require("../../utils/raid/common/shared");
 const {
+  buildCharacterAutocompleteChoices,
   buildRosterAutocompleteChoices,
   getRosterMatches,
   getCharacterMatches,
-  truncateChoice,
 } = require("../../utils/raid/common/autocomplete");
 const { t, getUserLanguage } = require("../../services/i18n");
 
@@ -30,7 +30,7 @@ function createRemoveRosterCommand(deps) {
     loadUserForAutocomplete,
   } = deps;
 
-async function autocompleteRemoveRosterRoster(interaction, focused) {
+  async function autocompleteRemoveRosterRoster(interaction, focused) {
     const userDoc = await loadUserForAutocomplete(interaction.user.id);
     const matches = getRosterMatches(userDoc, focused.value || "");
     const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
@@ -65,12 +65,7 @@ async function autocompleteRemoveRosterRoster(interaction, focused) {
       dedup: false,
       sortByILvl: false,
     });
-    const choices = entries.map((entry) =>
-      truncateChoice(
-        `${entry.name} · ${entry.className} · ${entry.itemLevel}`,
-        entry.name
-      )
-    );
+    const choices = buildCharacterAutocompleteChoices(entries);
     await interaction.respond(choices).catch(() => {});
   }
   async function handleRemoveRosterAutocomplete(interaction) {

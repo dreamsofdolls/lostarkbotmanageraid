@@ -19,6 +19,15 @@ const UI = {
   },
 };
 
+const NOTICE_STYLE_BY_TYPE = Object.freeze({
+  error: { color: UI.colors.danger, icon: UI.icons.warn },
+  info: { color: UI.colors.neutral, icon: UI.icons.info },
+  lock: { color: UI.colors.danger, icon: UI.icons.lock },
+  muted: { color: UI.colors.muted, icon: UI.icons.info },
+  success: { color: UI.colors.success, icon: UI.icons.done },
+  warn: { color: UI.colors.progress, icon: UI.icons.warn },
+});
+
 class ConcurrencyLimiter {
   constructor(max) {
     this.max = Math.max(1, max);
@@ -221,26 +230,8 @@ function buildDiscordIdentityFields(source) {
 // header icon by intent; defaults: info=blue, warn=yellow, lock=red,
 // success=green, error=red, muted=gray.
 function buildNoticeEmbed(EmbedBuilder, { type = "info", title, description }) {
-  const color =
-    type === "warn"
-      ? UI.colors.progress
-      : type === "lock" || type === "error"
-        ? UI.colors.danger
-        : type === "success"
-          ? UI.colors.success
-          : type === "muted"
-            ? UI.colors.muted
-            : UI.colors.neutral;
-  const icon =
-    type === "warn"
-      ? UI.icons.warn
-      : type === "lock"
-        ? UI.icons.lock
-        : type === "error"
-          ? UI.icons.warn
-          : type === "success"
-            ? UI.icons.done
-            : UI.icons.info;
+  const { color, icon } = NOTICE_STYLE_BY_TYPE[type]
+    || NOTICE_STYLE_BY_TYPE.info;
   const embed = new EmbedBuilder().setColor(color);
   if (title) embed.setTitle(`${icon} ${title}`);
   if (description) embed.setDescription(description);

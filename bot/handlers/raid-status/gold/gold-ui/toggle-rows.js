@@ -19,7 +19,26 @@ const {
   localizedRaidLabel,
   rawGoldTotal,
 } = require("../gold-formatting");
-const { sameName } = require("./filters");
+const { sameCharacterName } = require("../../state/character-filter");
+
+const MODE_DIRECTION_EMOJI = Object.freeze({
+  cancel: "↩️",
+  down: "⬇️",
+  side: "↔️",
+  up: "⬆️",
+});
+
+function resolveModeDirection({
+  currentModeKey,
+  currentRank,
+  isCancel,
+  raidKey,
+  targetModeKey,
+}) {
+  if (isCancel) return "cancel";
+  if (areEquivalentRaidModes(currentModeKey, targetModeKey)) return "side";
+  return raidModeSortRank(raidKey, targetModeKey) > currentRank ? "up" : "down";
+}
 
 function computeGoldModeOptions(activeName, raids, itemLevel) {
   const out = [];
@@ -37,11 +56,13 @@ function computeGoldModeOptions(activeName, raids, itemLevel) {
       const isCancel = !!raid.pendingModeKey && modeKey === currentModeKey;
       // Mode declaration order is difficulty order. Normal and Solo share one
       // tier, so switching between them is lateral rather than up/down.
-      const direction = isCancel
-        ? "cancel"
-        : areEquivalentRaidModes(currentModeKey, modeKey)
-          ? "side"
-          : (raidModeSortRank(raid.raidKey, modeKey) > currentRank ? "up" : "down");
+      const direction = resolveModeDirection({
+        currentModeKey,
+        currentRank,
+        isCancel,
+        raidKey: raid.raidKey,
+        targetModeKey: modeKey,
+      });
       const goldTotal = Object.values(mode.gold || {})
         .reduce((sum, value) => sum + (Number(value) || 0), 0);
       out.push({
@@ -105,7 +126,7 @@ function createGoldToggleRows({
           100
         ),
         value: name.slice(0, 100),
-        default: sameName(name, activeName),
+        default: sameCharacterName(name, activeName),
       };
       const classEmojiObj = parseCustomEmoji(
         getClassEmoji(character.class || character.className)
@@ -206,11 +227,8 @@ function createGoldToggleRows({
           // easier, back = cancel a queued change); the grey description line
           // carries the current->target transition, timing, and gold so the
           // bold label stays a clean "Raid -> Mode".
-          const emoji = option.direction === "side"
-            ? "\u2194\ufe0f"
-            : option.direction === "up"
-            ? "⬆️"
-            : option.direction === "down" ? "⬇️" : "↩️";
+          const emoji = MODE_DIRECTION_EMOJI[option.direction]
+            || MODE_DIRECTION_EMOJI.cancel;
           let description;
           if (option.isCancel) {
             description = t("raid-status.goldView.modeCancelDesc", lang);

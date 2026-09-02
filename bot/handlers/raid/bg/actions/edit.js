@@ -9,9 +9,7 @@ const {
 } = require("../../../../utils/raid/common/shared");
 const {
   RaidBgError,
-  downloadAttachment,
-  validateBgAttachment,
-  resizeForStorage,
+  processBgAttachment,
 } = require("../image-pipeline");
 const {
   RAID_BG_ASSIGNMENT_MODES,
@@ -27,28 +25,10 @@ const {
 } = require("../scene-browser");
 const { saveLibrary } = require("../persistence");
 
-async function buildReplacementImage(attachment) {
-  const buffer = await downloadAttachment(attachment);
-  const validated = await validateBgAttachment(attachment, buffer);
-  const resized = await resizeForStorage(validated.img);
-  return {
-    imageData: resized.buffer,
-    mime: resized.mime,
-    width: resized.width,
-    height: resized.height,
-    sizeBytes: resized.buffer.length,
-    originalWidth: validated.width,
-    originalHeight: validated.height,
-    originalFilename: attachment.name || "background.jpg",
-    originalMime: validated.mime || "",
-    storageQuality: resized.quality,
-  };
-}
-
 async function resolveReplacement({ interaction, EmbedBuilder, replaceAttachment, lang }) {
   if (!replaceAttachment) return null;
   try {
-    return await buildReplacementImage(replaceAttachment);
+    return await processBgAttachment(replaceAttachment);
   } catch (err) {
     if (!(err instanceof RaidBgError)) throw err;
     await editEmbed(interaction, buildRaidBgEmbed(EmbedBuilder, {
@@ -113,6 +93,17 @@ function createEditActionHandlers({
     clearBackgroundCache(interaction.user.id);
   };
 
+  const clearLibrary = async (component) => {
+    await UserBackground.deleteOne({ discordId: interaction.user.id });
+    clearBackgroundCache(interaction.user.id);
+    collector.stop("done");
+    await finalNotice(component, {
+      title: t("raidBg.edit.clearedTitle", lang),
+      description: t("raidBg.edit.clearedDescription", lang),
+      color: 0x99aab5,
+    });
+  };
+
   return {
     "raidbg:scene": async (component) => {
       setState({ index: Number(component.values?.[0]) || 0 });
@@ -131,28 +122,11 @@ function createEditActionHandlers({
         color: 0x57f287,
       });
     },
-    "raidbg:deleteall": async (component) => {
-      await UserBackground.deleteOne({ discordId: interaction.user.id });
-      clearBackgroundCache(interaction.user.id);
-      collector.stop("done");
-      await finalNotice(component, {
-        title: t("raidBg.edit.clearedTitle", lang),
-        description: t("raidBg.edit.clearedDescription", lang),
-        color: 0x99aab5,
-      });
-    },
+    "raidbg:deleteall": clearLibrary,
     "raidbg:dodelete": async (component) => {
       const { images, assignments, mode, index } = getState();
       if (images.length <= 1) {
-        await UserBackground.deleteOne({ discordId: interaction.user.id });
-        clearBackgroundCache(interaction.user.id);
-        collector.stop("done");
-        await finalNotice(component, {
-          title: t("raidBg.edit.clearedTitle", lang),
-          description: t("raidBg.edit.clearedDescription", lang),
-          color: 0x99aab5,
-        });
-        return;
+        return clearLibrary(component);
       }
 
       const nextImages = images.filter((_image, idx) => idx !== index);

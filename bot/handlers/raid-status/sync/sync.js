@@ -1,5 +1,5 @@
 /**
- * handlers/raid-status/sync.js
+ * handlers/raid-status/sync/sync.js
  * Sync layer for /raid-status. The root handler renders a weekly-fresh
  * snapshot first, then starts stale-roster refresh + auto-manage piggyback
  * here in the background. Apply uses a separate saveWithRetry loop so a
@@ -104,7 +104,7 @@ function createRaidStatusSync(deps) {
   }
 
   async function loadStatusUserDoc(discordId, seedDoc) {
-    let userDoc = null;
+    let userDoc;
     let autoManageGuard = null;
     let autoManageReleaseInBackground = false;
     const piggybackOutcome = createOutcome();

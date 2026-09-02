@@ -133,6 +133,15 @@ function truncateChoice(label, value, max = 100) {
   };
 }
 
+function buildCharacterAutocompleteChoices(entries) {
+  return (Array.isArray(entries) ? entries : []).map((entry) =>
+    truncateChoice(
+      `${entry.name} · ${entry.className} · ${entry.itemLevel}`,
+      entry.name,
+    )
+  );
+}
+
 function buildRosterAutocompleteChoices(accounts, options) {
   const {
     lang,
@@ -201,6 +210,7 @@ module.exports = {
   getRosterMatches,
   getCharacterMatches,
   truncateChoice,
+  buildCharacterAutocompleteChoices,
   buildRosterAutocompleteChoices,
   buildSharedRosterAutocompleteChoices,
 };

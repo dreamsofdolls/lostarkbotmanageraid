@@ -1,5 +1,5 @@
 /**
- * services/raid/schedule/auto-lock.js
+ * services/raid/schedule/lifecycle/auto-lock.js
  * Passive auto-lock worker for /raid-schedule boards. It scans due open
  * events and atomically flips them to locked, then refreshes the board
  * message so stale Join/Late/Maybe buttons become disabled.

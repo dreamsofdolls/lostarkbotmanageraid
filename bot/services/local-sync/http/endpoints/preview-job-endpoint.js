@@ -22,11 +22,9 @@ const {
   createJsonSender,
 } = require("../json");
 const {
-  readAuthenticatedJsonRequest,
   requireCurrentLocalSyncUser,
 } = require("../request-gates");
-
-const MAX_BODY_BYTES = 256 * 1024;
+const { readAuthenticatedPreviewRequest } = require("./preview-request");
 
 const STORED_DELIVERY = Object.freeze({
   delivered: false,
@@ -107,15 +105,9 @@ function createPreviewJobEndpoint({
   const send = createJsonSender({ methods: "POST, OPTIONS" });
 
   return async function handlePreviewJob(req, res) {
-    const request = await readAuthenticatedJsonRequest({
-      req,
-      res,
-      send,
-      maxBodyBytes: MAX_BODY_BYTES,
-    });
+    const request = await readAuthenticatedPreviewRequest({ req, res, send });
     if (!request) return;
-    const { token, discordId, payload, scopeExplicit, body } = request;
-    const scope = payload.scope;
+    const { token, discordId, payload, scope, scopeExplicit, body } = request;
 
     if (!Array.isArray(body?.deltas) || body.deltas.length === 0) {
       send(res, 400, { ok: false, error: "non-empty deltas array required" });

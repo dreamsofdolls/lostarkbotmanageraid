@@ -75,7 +75,7 @@ async function fetchBibleCharacterLogs(
     // Read body so callers can distinguish "Logs not enabled" (private char,
     // user action fixes it) from Cloudflare/block 403s (bot-infra issue,
     // toggling Public Log won't help). See reference_bible_api.md.
-    let bodyText = "";
+    let bodyText;
     try {
       bodyText = await res.text();
     } catch {

@@ -1,5 +1,5 @@
 /**
- * services/raid/schedule/signup-state.js
+ * services/raid/schedule/slots/signup-state.js
  * Pure signup-list mutations for the /raid-schedule board. Each function
  * takes the current signups array (+ payload) and returns a NEW array,
  * leaving slot-vs-waitlist placement to slots.assignSlots at render time

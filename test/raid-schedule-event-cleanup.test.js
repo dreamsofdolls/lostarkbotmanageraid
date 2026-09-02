@@ -89,6 +89,7 @@ test("purgeStaleRaidEvents deletes docs first, then boards by id", async () => {
 
   assert.equal(result.deleted, 2);
   assert.equal(result.boardsDeleted, 1);                       // only e1 had a messageId
+  assert.equal(boardDeletes, 1);
   assert.deepEqual(deleteArgs.map((q) => q._id), ["e1", "e2"]);
   assert.equal(deleteArgs[0].startAt.$lt.getTime(), BOUNDARY);
   assert.equal(deleteArgs[1].startAt.$lt.getTime(), BOUNDARY);

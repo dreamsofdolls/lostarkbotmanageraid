@@ -17,6 +17,12 @@ const DEFAULT_HIDDEN_POLL_MS = 2_000;
 export const DEFAULT_SETTLE_MS = 120;
 const DEFAULT_RETRY_MS = 750;
 
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 const SQLITE_HEADER_BYTES = 100;
 const SQLITE_MAGIC = [
   0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x20, 0x66,
@@ -106,7 +112,7 @@ export async function readFileHandleSnapshot(handle) {
 export async function readStableFileHandleSnapshot(handle, {
   settleMs = DEFAULT_SETTLE_MS,
   maxAttempts = 4,
-  wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  wait = sleep,
   initialSnapshot = null,
 } = {}) {
   // Callers that have just probed the handle can reuse that immutable snapshot
@@ -202,7 +208,9 @@ export function createLatestOnlyRunner(run) {
 
   function whenIdle() {
     if (!draining && !pending) return Promise.resolve();
-    return new Promise((resolve) => idleWaiters.push(resolve));
+    return new Promise((resolve) => {
+      idleWaiters.push(resolve);
+    });
   }
 
   return {

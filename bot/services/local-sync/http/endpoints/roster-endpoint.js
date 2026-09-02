@@ -1,5 +1,5 @@
 /**
- * services/local-sync/http/roster-endpoint.js
+ * services/local-sync/http/endpoints/roster-endpoint.js
  * GET /api/me/roster handler · returns a slim roster snapshot for the
  * Local Reader's diff-view preview. Auth mirrors the preview-job endpoint
  * (Bearer JWT + stored-token freshness). Projection deliberately

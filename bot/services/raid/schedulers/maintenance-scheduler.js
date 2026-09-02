@@ -12,6 +12,7 @@ const {
   claimGuildState,
   rollbackGuildState,
 } = require("./guild-state-claim");
+const { sleep } = require("../../../utils/async");
 
 const MAINTENANCE_POST_RETRY_DELAY_MS = 1_000;
 
@@ -116,7 +117,7 @@ function createMaintenanceSchedulerService({
   getGuildLanguage,
   postChannelAnnouncement,
   nowDate = () => new Date(),
-  waitBeforeRetry = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  waitBeforeRetry = sleep,
 }) {
   async function runMaintenanceTick(client) {
     const now = nowDate();

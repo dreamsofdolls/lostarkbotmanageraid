@@ -1,5 +1,5 @@
 /**
- * services/local-sync/core/apply.js
+ * services/local-sync/core/apply/apply.js
  * Apply path for local-sync deltas. The heavy lifting is split into
  * target mapping, roster preflight, result classification, and write
  * dispatch helpers; this file keeps the public orchestration contract.

@@ -7,7 +7,7 @@ const { DISCORD_TOKEN, CLIENT_ID, GUILD_ID } = process.env;
 function normalizeSnowflake(name, rawValue) {
   if (!rawValue) return null;
 
-  const value = String(rawValue).trim().replace(/^['\"]|['\"]$/g, "");
+  const value = String(rawValue).trim().replace(/^['"]|['"]$/g, "");
   if (/^\d{17,20}$/.test(value)) return value;
 
   // CLIENT_ID must contain the plain application ID, not an OAuth2 URL.

@@ -1,5 +1,5 @@
 /**
- * handlers/raid-status/view.js
+ * handlers/raid-status/view/view.js
  * View layer for /raid-status · builds the per-roster embed (one
  * page per account) with raid progress, weekly gold rollup, side-
  * task badges, and the navigation/filter components. Localised via

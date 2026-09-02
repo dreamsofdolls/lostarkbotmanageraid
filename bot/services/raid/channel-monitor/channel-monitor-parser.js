@@ -1,5 +1,5 @@
 /**
- * services/raid/channel-monitor-parser.js
+ * services/raid/channel-monitor/channel-monitor-parser.js
  * Pure parser for short raid-clear messages posted in the configured raid
  * monitor channel. Keep this free of Discord/Mongo dependencies so parser
  * aliases can be tested without constructing the channel-monitor service.

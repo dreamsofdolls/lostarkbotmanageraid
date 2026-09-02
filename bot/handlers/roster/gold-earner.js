@@ -275,7 +275,7 @@ function createRaidGoldEarnerCommand({
   async function handleConfirmAction(interaction, session, sessionId) {
     await interaction.deferUpdate();
     clearPickerSession(sessions, sessionId, { timerField: "timer" });
-    let savedNames = [];
+    let savedNames;
     try {
       savedNames = await persistGoldEarnerSelection(session);
     } catch (err) {

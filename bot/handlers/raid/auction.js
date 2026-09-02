@@ -55,11 +55,9 @@ const PARTY_SIZES = [4, 8];
  * @param {object} deps.UI - shared color/icon palette
  * @param {object} deps.User - Mongoose User model (used by
  *   getUserLanguage to render embed copy in the caller's locale)
- * @returns {{
- *   handleRaidAuctionCommand: Function,
- *   __test: {computeAuctionBid: Function, PARTY_SIZES: number[]},
- * }} handler wired into commands.js dispatch + a test seam exposing
- *   the pure formula function for unit tests
+ * @returns {{handleRaidAuctionCommand: Function}} handler wired into
+ *   commands.js dispatch. Pure formula helpers are exported directly by this
+ *   module for unit tests.
  */
 function createRaidAuctionCommand({ EmbedBuilder, MessageFlags, UI, User }) {
   async function handleRaidAuctionCommand(interaction) {

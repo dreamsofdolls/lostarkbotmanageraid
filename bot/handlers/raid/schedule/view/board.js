@@ -1,5 +1,5 @@
 /**
- * handlers/raid/schedule/board.js
+ * handlers/raid/schedule/view/board.js
  * Render the /raid-schedule event board: the embed (raid + countdown +
  * comp columns + waitlist + RSVP zones + room line) and the three
  * component rows (status / utility / lead). Pure-ish builders - they take

@@ -1,5 +1,5 @@
 /**
- * services/raid/schedule/slot-config.js
+ * services/raid/schedule/slots/slot-config.js
  * Recommended Support/DPS slot split per party size. Soft guidance only -
  * the board does not hard-enforce roles, but these counts drive the
  * default comp shape (4-man = 1 sup + 3 dps, 8-man = 2 sup + 6 dps) and

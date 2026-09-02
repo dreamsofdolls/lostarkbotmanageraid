@@ -1,9 +1,9 @@
 /**
  * handlers/raid/bg.js
  *
- * Thin dispatcher for /raid-bg. Subcommand behavior lives in bg/set.js,
- * bg/view.js, and bg/edit.js; shared browser, library, persistence, and image
- * processing helpers live under the same bg/ folder.
+ * Thin dispatcher for /raid-bg. Subcommand behavior lives under bg/actions/;
+ * shared browser, library, persistence, and image-processing helpers live in
+ * the parent bg/ folder.
  */
 
 "use strict";
@@ -13,13 +13,7 @@ const {
   detectMime,
   stripPngAncillaryChunks,
 } = require("./bg/image-pipeline");
-const {
-  compactAssignmentsAfterRemove,
-  RAID_BG_MAX_IMAGES,
-} = require("./bg/library");
-const {
-  buildSceneBrowserPayload,
-} = require("./bg/scene-browser");
+const { compactAssignmentsAfterRemove } = require("./bg/library");
 const { handleSet } = require("./bg/actions/set");
 const { handleView } = require("./bg/actions/view");
 const { handleEdit } = require("./bg/actions/edit");

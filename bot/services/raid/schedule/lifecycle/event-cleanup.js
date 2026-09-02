@@ -1,5 +1,5 @@
 /**
- * services/raid/schedule/event-cleanup.js
+ * services/raid/schedule/lifecycle/event-cleanup.js
  * Auto-purge for stale /raid-schedule-preview events. A raid event whose
  * startAt is before the most recent weekly reset (Wed 10:00 UTC = 17:00 VN)
  * belongs to a finished raid cycle, so it is safe to delete its RaidEvent doc
