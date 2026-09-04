@@ -6,6 +6,12 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ## 2026-09-04 (Full Local Sync propagates party progress)
 
+### Fixed
+- The Vietnamese `/raid-remove-roster` cards said "4 character**s**". The handler passed an English plural suffix for every locale, and Vietnamese does not mark plurals with a suffix. Japanese had already dropped the token; only Vietnamese still carried it.
+
+### Changed
+- The `/raid-remove-roster` cards say more without becoming a report. Both keep their notification shape - title, a couple of lines, footer, no fields - with four changes: the roster or character name reaches the **title**, so a collapsed card still says what went; the removal card names the **gold lost with the roster**, because "all raid progress is gone" is an abstraction and a number is not; the re-add command moves to the **footer** where RaidManage keeps the next step, freeing the description; and the character card **names the survivors** instead of counting them, since "3 characters left" only sent the reader to `/raid-status` to find out which three. Gold is summed before the delete from data already in hand, so nothing extra is fetched.
+
 ### Added
 - Confirming a **Full Local Sync** preview now applies the same cumulative Gate progress to party members found in the encounter's `players` snapshot when their character exists in Artist's roster database and their owner currently has either Local Sync or Bible Auto Sync enabled.
 

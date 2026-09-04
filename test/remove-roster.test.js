@@ -377,3 +377,76 @@ test("remove-roster: defers ephemerally before language and roster DB lookups", 
   assert.equal(interaction._calls.deferReply[0].flags, MessageFlags.Ephemeral);
   assert.ok(interaction._calls.editReply[0], "should finish through editReply");
 });
+
+test("remove-roster: the Vietnamese card drops the English plural suffix", async () => {
+  // {plural} was passed for every locale, so a Vietnamese reader got
+  // "4 characters". Vietnamese does not mark plurals with a suffix.
+  const { factory, docs } = makeFactory();
+  seedUser(docs, [
+    { accountName: "Alpha", characters: [makeChar("Cyrano"), makeChar("Bardella")] },
+  ]);
+
+  const interaction = makeInteraction({
+    options: { roster: "Alpha", action: "remove_roster" },
+  });
+  await factory.handleRemoveRosterCommand(interaction);
+
+  const embedJson = interaction._calls.editReply[0].embeds[0].toJSON();
+  assert.match(embedJson.description, /\*\*2\*\* character khỏi/u);
+  assert.doesNotMatch(embedJson.description, /characters/u);
+});
+
+test("remove-roster: the roster name reaches the title and the re-add command the footer", async () => {
+  // Collapsed in the client, the title is all that stays visible, and it
+  // used to say nothing about which roster went.
+  const { factory, docs } = makeFactory();
+  seedUser(docs, [{ accountName: "Alpha", characters: [makeChar("Cyrano")] }]);
+
+  const interaction = makeInteraction({
+    options: { roster: "Alpha", action: "remove_roster" },
+  });
+  await factory.handleRemoveRosterCommand(interaction);
+
+  const embedJson = interaction._calls.editReply[0].embeds[0].toJSON();
+  assert.match(embedJson.title, /Đã xoá roster · Alpha/u);
+  assert.equal(embedJson.footer.text, "/raid-add-roster name:Alpha");
+  // The recovery hint used to eat half the description.
+  assert.doesNotMatch(embedJson.description, /raid-add-roster/u);
+});
+
+test("remove-roster: a roster with no earned gold says nothing about gold", async () => {
+  // makeChar assigns no completed raids, so the clause must stay out
+  // rather than print a bare zero.
+  const { factory, docs } = makeFactory();
+  seedUser(docs, [{ accountName: "Alpha", characters: [makeChar("Cyrano")] }]);
+
+  const interaction = makeInteraction({
+    options: { roster: "Alpha", action: "remove_roster" },
+  });
+  await factory.handleRemoveRosterCommand(interaction);
+
+  const embedJson = interaction._calls.editReply[0].embeds[0].toJSON();
+  assert.doesNotMatch(embedJson.description, /gold/u);
+});
+
+test("remove-roster: remove_char names the survivors instead of counting them", async () => {
+  const { factory, docs } = makeFactory();
+  seedUser(docs, [
+    {
+      accountName: "Alpha",
+      characters: [makeChar("Cyrano"), makeChar("Bardella"), makeChar("Soulrano")],
+    },
+  ]);
+
+  const interaction = makeInteraction({
+    options: { roster: "Alpha", action: "remove_char", character: "Bardella" },
+  });
+  await factory.handleRemoveRosterCommand(interaction);
+
+  const embedJson = interaction._calls.editReply[0].embeds[0].toJSON();
+  assert.match(embedJson.title, /Đã xoá character · Bardella/u);
+  // "còn lại 2 characters" made the reader run /raid-status to find out who.
+  assert.match(embedJson.description, /Cyrano/u);
+  assert.match(embedJson.description, /Soulrano/u);
+  assert.doesNotMatch(embedJson.description, /characters/u);
+});

@@ -10,6 +10,15 @@ const {
   getCharacterMatches,
 } = require("../../utils/raid/common/autocomplete");
 const { t, getUserLanguage } = require("../../services/i18n");
+const { formatGold } = require("../../utils/raid/common/shared");
+const {
+  getStatusRaidsForCharacter,
+  summarizeAccountGold,
+} = require("../../utils/raid/common/character");
+const { getClassEmoji } = require("../../models/Class");
+
+/** Names beyond this are collapsed into a trailing `+N`. */
+const REMAINING_NAME_LIMIT = 8;
 
 /**
  * Compose the roster-removal autocomplete and command handlers.
@@ -29,6 +38,19 @@ function createRemoveRosterCommand(deps) {
     getCharacterName,
     loadUserForAutocomplete,
   } = deps;
+
+  /**
+   * Render one character as `{class icon} **{name}**`, the shape every
+   * other card in the bot uses. Falls back to the bare bold name when the
+   * class has no registered emoji.
+   * @param {object} character - a character subdocument
+   * @returns {string} markdown for one character
+   */
+  function withClassIcon(character) {
+    const name = getCharacterName(character);
+    const icon = getClassEmoji(character?.class || character?.className);
+    return icon ? `${icon} **${name}**` : `**${name}**`;
+  }
 
   async function autocompleteRemoveRosterRoster(interaction, focused) {
     const userDoc = await loadUserForAutocomplete(interaction.user.id);
@@ -150,10 +172,15 @@ function createRemoveRosterCommand(deps) {
       const account = userDoc.accounts[accountIndex];
       if (action === "remove_roster") {
         const removedCount = Array.isArray(account.characters) ? account.characters.length : 0;
+        // Summed before the splice, while the characters are still here.
+        // "Raid progress is gone" is an abstraction; a gold figure is the
+        // one number that makes someone stop if they mistyped the name.
+        const lostGold = summarizeAccountGold(account, getStatusRaidsForCharacter);
         userDoc.accounts.splice(accountIndex, 1);
         await userDoc.save();
-        // Description-driven layout: state the removal and recovery path in
-        // one block. The `danger` color provides the destructive-action cue.
+        // Description-driven layout: state the removal in one block and put
+        // the recovery command in the footer, where RaidManage keeps the
+        // next step. The `danger` color provides the destructive-action cue.
         const charPart =
           removedCount === 0
             ? t("raid-remove-roster.removedRoster.noChars", lang)
@@ -161,15 +188,34 @@ function createRemoveRosterCommand(deps) {
                 count: removedCount,
                 plural: removedCount === 1 ? "" : "s",
               });
+        // `earned`, not `earnedUnbound`: the disjoint 💰/🔒 buckets are how
+        // /raid-status *displays* gold, but what died here is the whole
+        // week's progress, bound gold included. Splitting it would let the
+        // card understate the loss.
+        const goldPart = lostGold?.earned > 0
+          ? t("raid-remove-roster.removedRoster.goldTail", lang, {
+              gold: formatGold(lostGold.earned),
+            })
+          : "";
         replyEmbed = new EmbedBuilder()
           .setColor(UI.colors.danger)
-          .setTitle(t("raid-remove-roster.removedRoster.title", lang))
+          .setTitle(
+            t("raid-remove-roster.removedRoster.title", lang, {
+              accountName: account.accountName,
+            })
+          )
           .setDescription(
             t("raid-remove-roster.removedRoster.description", lang, {
               accountName: account.accountName,
               charPart,
+              goldPart,
             })
           )
+          .setFooter({
+            text: t("raid-remove-roster.removedRoster.footerReadd", lang, {
+              accountName: account.accountName,
+            }),
+          })
           .setTimestamp();
         return;
       }
@@ -195,6 +241,9 @@ function createRemoveRosterCommand(deps) {
         return;
       }
       const wasSeed = normalizeName(account.accountName) === normalizedChar;
+      // Captured before the splice · the card names the character with its
+      // class icon the way every other surface in the bot does.
+      const removedCharacter = account.characters[charIndex];
       account.characters.splice(charIndex, 1);
       let reseededTo = null;
       if (wasSeed && account.characters.length > 0) {
@@ -219,6 +268,10 @@ function createRemoveRosterCommand(deps) {
       }
       await userDoc.save();
       const remaining = account.characters.length;
+      // Naming who is left beats counting them · "3 characters left" sends
+      // the reader to /raid-status just to find out which three.
+      const visibleNames = account.characters.slice(0, REMAINING_NAME_LIMIT).map(withClassIcon);
+      const overflow = remaining - visibleNames.length;
       const remainingPart =
         remaining === 0
           ? t("raid-remove-roster.removedChar.empty", lang)
@@ -226,13 +279,23 @@ function createRemoveRosterCommand(deps) {
               accountName: account.accountName,
               count: remaining,
               plural: remaining === 1 ? "" : "s",
+              // A bare "+3" needs no translation and matches the delta
+              // tokens the bot already prints elsewhere.
+              names: visibleNames.join(", ") + (overflow > 0 ? ` +${overflow}` : ""),
             });
+      const removedLabel = removedCharacter
+        ? withClassIcon(removedCharacter)
+        : `**${characterName}**`;
       const embed = new EmbedBuilder()
         .setColor(UI.colors.muted)
-        .setTitle(t("raid-remove-roster.removedChar.title", lang))
+        .setTitle(
+          t("raid-remove-roster.removedChar.title", lang, {
+            characterName: getCharacterName(removedCharacter) || characterName,
+          })
+        )
         .setDescription(
           t("raid-remove-roster.removedChar.description", lang, {
-            characterName,
+            characterName: removedLabel,
             accountName: account.accountName,
             remainingPart,
           })
