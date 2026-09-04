@@ -128,6 +128,24 @@ test("retryable write errors keep the Sync action and explain what was retained"
   assert.ok(componentIds(payload).includes(`local-sync:apply:${job.jobId}`));
 });
 
+test("party write errors identify the unfinished party propagation", () => {
+  const job = makeJob({ failureReason: "party_write_error" });
+  const payload = buildLocalSyncConsolePayload({
+    job,
+    summary: { changes: { chars: 1, raids: 1, gates: 1 } },
+    activeScope: "full",
+    lang: "vi",
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    UI,
+  });
+
+  assert.match(payload.embeds[0].toJSON().description, /roster trong party/);
+  assert.ok(componentIds(payload).includes(`local-sync:apply:${job.jobId}`));
+});
+
 test("durable Local Sync buttons reserve the review console for actionable preview states", () => {
   const scope = COMPANION_SCOPE.full;
   assert.equal(shouldOpenRaidStatusSurface(null, scope), true);
@@ -660,6 +678,8 @@ test("party write failures retain source authorization and retry only unfinished
   assert.equal(first.ok, false);
   assert.equal(first.state, "pending");
   assert.equal(first.retryable, true);
+  assert.equal(first.job.failureReason, "party_write_error");
+  assert.equal(PreviewModel.value.failureReason, "party_write_error");
   assert.equal(PreviewModel.value.partyAuthorized, true);
   assert.equal(PreviewModel.value.partyDeltas.length, 1);
 

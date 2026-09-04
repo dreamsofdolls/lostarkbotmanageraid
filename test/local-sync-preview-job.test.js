@@ -134,6 +134,31 @@ test("creating a full preview stores bounded party evidence while Solo discards 
   assert.equal(created.length, 2);
 });
 
+test("full preview rejects more than 15 targets for one source Gate", async () => {
+  let wrote = false;
+  const PreviewModel = {
+    async updateMany() { wrote = true; },
+    async create() { wrote = true; },
+  };
+  const source = validDelta();
+  const partyDeltas = Array.from({ length: 16 }, (_, index) => ({
+    ...source,
+    charName: `Target${index}`,
+    sourceCharName: source.charName,
+  }));
+
+  await assert.rejects(
+    createPreviewJob({
+      discordId: "party-overflow",
+      scope: "full",
+      deltas: [source],
+      partyDeltas,
+    }, { PreviewModel }),
+    /too many party targets for one source Gate \(max 15\)/
+  );
+  assert.equal(wrote, false, "fan-out must fail before the preview reaches Mongo");
+});
+
 test("creating a preview supersedes the previous pending job", async () => {
   const calls = [];
   const PreviewModel = {

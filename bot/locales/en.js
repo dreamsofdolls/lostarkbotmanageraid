@@ -85,6 +85,7 @@ module.exports = {
     retryReasons: {
       apply_failed: "A temporary processing error occurred. Unfinished data was kept so you can click **Sync** to retry.",
       write_error: "Some progress could not be written to the database. Completed writes were kept; click **Sync** to retry the rest.",
+      party_write_error: "Some party rosters could not be updated. Completed writes were kept; click **Sync** to retry the rest.",
       sync_busy: "Another sync is running. Wait a moment, then click **Sync** again.",
     },
     buttons: {

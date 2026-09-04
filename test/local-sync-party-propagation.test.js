@@ -44,6 +44,28 @@ test("party roster lookup has a case-insensitive character-name index", () => {
   assert.deepEqual(options.collation, { locale: "en", strength: 2 });
 });
 
+test("party propagation enforces the 16-player Gate boundary before querying rosters", async () => {
+  let queried = false;
+  const UserModel = {
+    find() {
+      queried = true;
+      throw new Error("roster query must not run for an oversized party");
+    },
+  };
+
+  await assert.rejects(
+    propagatePartyDeltas(
+      Array.from({ length: 16 }, (_, index) => ({
+        ...makePartyDelta(`Target${index}`),
+        lastClearMs: 2_000 + index,
+      })),
+      { UserModel }
+    ),
+    /too many party targets for one source Gate \(max 15\)/
+  );
+  assert.equal(queried, false);
+});
+
 test("party propagation batches per owner, includes both sync modes, and ignores touched raids", async () => {
   const users = [
     makeUser("local-owner", [makeCharacter("Aki"), makeCharacter("Dara")], {

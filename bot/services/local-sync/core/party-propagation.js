@@ -8,6 +8,7 @@ const {
 } = require("../../../utils/raid/common/shared");
 const { applyLocalSyncDeltas } = require("./apply/apply");
 const { resolveCurrentWeekStartMs } = require("./apply/apply-targets");
+const { assertPartyTargetFanout } = require("./party-policy");
 
 const TARGET_USER_SELECT = [
   "discordId",
@@ -95,9 +96,7 @@ function appendIgnoredEntries(target, entries, discordId, fallbackReason = "igno
 }
 
 async function propagatePartyDeltas(partyDeltas, deps = {}) {
-  if (!Array.isArray(partyDeltas)) {
-    throw new Error("[local-sync/party] partyDeltas must be an array");
-  }
+  assertPartyTargetFanout(partyDeltas);
   if (partyDeltas.length === 0) return emptyPropagationResult();
 
   const UserModel = deps.UserModel || User;

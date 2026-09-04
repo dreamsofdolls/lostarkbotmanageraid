@@ -43,6 +43,7 @@ const STATUS_BUTTON_PREFIX = "status-local:";
 const RETRYABLE_PENDING_REASONS = new Set([
   "sync_busy",
   "write_error",
+  "party_write_error",
   "apply_failed",
 ]);
 

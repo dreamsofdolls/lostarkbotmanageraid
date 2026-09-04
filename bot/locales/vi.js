@@ -92,6 +92,7 @@ module.exports = {
     retryReasons: {
       apply_failed: "Có lỗi tạm thời khi xử lý. Dữ liệu chưa hoàn tất vẫn được giữ để cậu bấm **Đồng bộ** thử lại.",
       write_error: "Một phần tiến độ chưa ghi được vào DB. Phần đã ghi vẫn được giữ; bấm **Đồng bộ** để thử lại phần còn thiếu.",
+      party_write_error: "Một vài roster trong party chưa cập nhật được tiến độ. Phần đã ghi vẫn được giữ; bấm **Đồng bộ** để thử lại phần còn thiếu.",
       sync_busy: "Một lượt sync khác đang chạy. Đợi một chút rồi bấm **Đồng bộ** lại nhé.",
     },
     buttons: {

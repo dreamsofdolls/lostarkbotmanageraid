@@ -216,6 +216,7 @@ async function resolveRejectedSummary({
   job,
   summary,
   leaseDeps,
+  writeErrorReason = "write_error",
 }) {
   const disabledWrite = findDisabledWrite(summary);
   if (disabledWrite) {
@@ -233,7 +234,7 @@ async function resolveRejectedSummary({
   const released = await releasePreviewJob(
     jobId,
     discordId,
-    "write_error",
+    writeErrorReason,
     leaseDeps,
     { result: summary, clearProjection: true }
   );
@@ -365,6 +366,7 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
       job,
       summary,
       leaseDeps,
+      writeErrorReason: "party_write_error",
     });
     if (rejectedOutcome) return rejectedOutcome;
 

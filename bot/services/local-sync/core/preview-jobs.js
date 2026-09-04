@@ -2,6 +2,7 @@
 
 const crypto = require("node:crypto");
 const LocalSyncPreview = require("../../../models/localSyncPreview");
+const { assertPartyTargetFanout } = require("./party-policy");
 const { normalizeCompanionScope } = require("./scope");
 
 const PREVIEW_JOB_TTL_MS = 2 * 60 * 60 * 1000;
@@ -134,6 +135,7 @@ async function createPreviewJob({
         normalizePreviewDeltas(partyDeltas)
       )
     : [];
+  assertPartyTargetFanout(normalizedPartyDeltas);
   if (normalizedDeltas.length === 0) throw new Error("no valid deltas");
 
   return runPreviewCreateExclusive(discordId, async () => {
@@ -221,6 +223,7 @@ function applyingOwnerFilter(jobId, discordId, deps = {}) {
 async function authorizePreviewParty(jobId, discordId, partyDeltas, deps = {}) {
   const PreviewModel = deps.PreviewModel || LocalSyncPreview;
   const normalizedPartyDeltas = normalizePreviewDeltas(partyDeltas);
+  assertPartyTargetFanout(normalizedPartyDeltas);
   return PreviewModel.findOneAndUpdate(
     applyingOwnerFilter(jobId, discordId, deps),
     {
