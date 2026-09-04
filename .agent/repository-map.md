@@ -13,6 +13,7 @@
 | `bot/services/roster/`, `bot/services/discord/` | Roster I/O, identity cache và Discord services |
 | `bot/utils/async/` | In-flight loader và latest-only queue |
 | `bot/utils/discord/`, `bot/utils/raid/` | Component helpers, queries, schedule math, tasks |
+| `bot/utils/user-doc.js` | Chuyển Mongoose document sang plain object; giữ nguyên plain object đã có |
 | `bot/models/`, `bot/locales/` | Mongo schemas và i18n |
 | `web/` | Local Reader ES modules, HTML/CSS và SQLite file processing |
 | `scripts/` | Deploy-command và icon development tools |
@@ -28,6 +29,11 @@
   in-flight dedup không đồng nghĩa được dùng kết quả đã cache lâu.
 - In-flight loader chỉ evict mục đã settled, không làm mất việc gộp request đang
   chạy. Dung lượng được thu về giới hạn khi đợt xử lý kết thúc.
+- `raid-card/bg-loader.js` gộp các lượt đọc ảnh nền đang chạy theo owner; mỗi lượt
+  render sau đó vẫn kiểm tra `updatedAt`. Cùng module cung cấp `getStoredImages`
+  và `bufferFromStored` cho handler thư viện ảnh, gồm cả dữ liệu legacy.
+- `filterAutocompleteChoices` dừng khi đủ kết quả; normalizer phải là hàm thuần
+  và không dựa vào việc mọi lựa chọn đều được duyệt.
 - Local Reader đọc file ở browser, gửi delta preview; apply qua scope/permission
   và Discord confirmation. Solo-only mode không được suy đoán difficulty bị thiếu.
 - Giữ `web/package.json` vì nó xác định module boundary riêng cho frontend.

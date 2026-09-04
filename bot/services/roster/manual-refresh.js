@@ -1,9 +1,6 @@
 "use strict";
 
-function toPlainUserDoc(userDoc) {
-  if (!userDoc) return null;
-  return typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
-}
+const { toPlainUserDoc } = require("../../utils/user-doc");
 
 function findAccountByName(userDoc, accountName, normalizeName) {
   const target = normalizeName(accountName);

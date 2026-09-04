@@ -923,3 +923,63 @@ test("bg-loader selects the assigned image for the requested roster", async (t) 
 
   assert.equal(selected, pngB);
 });
+
+test("bg-loader shares overlapping Mongo reads across rosters and rechecks later requests", async (t) => {
+  const images = [Buffer.from('image-a'), Buffer.from('image-b')];
+  let version = 1;
+  const reads = { meta: 0, data: 0 };
+  t.mock.method(UserBackground, 'findOne', () => ({
+    select: (projection) => ({ lean: async () => {
+      const data = projection.includes('imageData');
+      reads[data ? 'data' : 'meta'] += 1;
+      await Promise.resolve();
+      return data ? {
+        updatedAt: version,
+        images: images.map(imageData => ({ imageData })),
+        assignments: [
+          { accountKey: 'roster a', imageIndex: 0 },
+          { accountKey: 'roster b', imageIndex: 1 },
+        ],
+      } : { updatedAt: version };
+    } }),
+  }));
+  bgLoader.clearBackgroundCache();
+  t.after(() => bgLoader.clearBackgroundCache());
+
+  const buffers = await Promise.all([
+    bgLoader.loadBackgroundBuffer('shared-user', { accountName: 'Roster A' }),
+    bgLoader.loadBackgroundBuffer('shared-user', { accountName: 'Roster B' }),
+  ]);
+  assert.deepEqual(buffers, images);
+  assert.deepEqual(reads, { meta: 1, data: 1 });
+
+  version = 2;
+  images[0] = Buffer.from('new-image-a');
+  assert.equal(await bgLoader.loadBackgroundBuffer('shared-user', { accountName: 'Roster A' }), images[0]);
+  assert.deepEqual(reads, { meta: 2, data: 2 });
+});
+
+test("bg-loader keeps owner reads isolated and retries after a failed read", async (t) => {
+  let fail = true;
+  const reads = [];
+  t.mock.method(UserBackground, 'findOne', ({ discordId }) => ({
+    select: (projection) => ({ lean: async () => {
+      reads.push({ discordId, projection });
+      if (fail && discordId === 'owner-a') throw new Error('temporary read failure');
+      return projection.includes('imageData')
+        ? { updatedAt: 1, imageData: Buffer.from(discordId) }
+        : { updatedAt: 1 };
+    } }),
+  }));
+  bgLoader.clearBackgroundCache();
+  t.after(() => bgLoader.clearBackgroundCache());
+  const [failed, other] = await Promise.all([
+    bgLoader.loadBackgroundBuffer('owner-a'),
+    bgLoader.loadBackgroundBuffer('owner-b'),
+  ]);
+  assert.equal(failed, null);
+  assert.equal(other.toString(), 'owner-b');
+  fail = false;
+  assert.equal((await bgLoader.loadBackgroundBuffer('owner-a')).toString(), 'owner-a');
+  assert.equal(reads.filter(read => read.discordId === 'owner-a' && read.projection === 'updatedAt').length, 2);
+});

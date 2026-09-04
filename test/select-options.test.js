@@ -60,3 +60,29 @@ test("autocomplete choices share normalized filtering and Discord limit handling
   );
   assert.deepEqual(filterAutocompleteChoices(null), []);
 });
+
+test("autocomplete stops normalizing candidates once the result limit is filled", () => {
+  const choices = Array.from({ length: 1_000 }, (_, index) => ({
+    name: `Raid ${index}`, value: `raid-${index}`,
+  }));
+  let normalizations = 0;
+  const normalize = (value) => {
+    normalizations += 1;
+    return String(value || '').trim().toLowerCase();
+  };
+  assert.deepEqual(filterAutocompleteChoices(choices, { needle: 'raid', normalize }), choices.slice(0, 25));
+  assert.equal(normalizations, 26); // One needle plus the first 25 matching names.
+});
+
+test("autocomplete retains value-only matches, sparse input, and limit semantics", () => {
+  const choices = [
+    { name: 'Alpha', value: 'match-a' },
+    ,
+    { name: 'Match B', value: 'b' },
+    { name: 'Other', value: 'other' },
+  ];
+  for (const limit of [0, -1, 1.9, Infinity, NaN]) {
+    const expected = [choices[0], choices[2]].slice(0, Math.max(0, Math.trunc(Number(limit) || 0)));
+    assert.deepEqual(filterAutocompleteChoices(choices, { needle: 'match', limit }), expected);
+  }
+});

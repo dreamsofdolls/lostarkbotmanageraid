@@ -1,6 +1,10 @@
 "use strict";
 
-const { normalizeAccountKey } = require("../../../services/raid-card/bg-loader");
+const {
+  normalizeAccountKey,
+  bufferFromStored: normalizeStoredBuffer,
+  getStoredImages,
+} = require("../../../services/raid-card/bg-loader");
 
 const RAID_BG_MAX_IMAGES = 6;
 const RAID_BG_ASSIGNMENT_MODES = new Set(["even", "random"]);
@@ -71,12 +75,6 @@ async function loadVisibleRosterNames({ User, discordId, getAccessibleAccounts }
   return loadOwnRosterNames(User, discordId);
 }
 
-function normalizeStoredBuffer(value) {
-  if (!value) return null;
-  if (Buffer.isBuffer(value)) return value;
-  return Buffer.from(value.buffer || value);
-}
-
 function normalizeStoredImage(image) {
   const buffer = normalizeStoredBuffer(image.imageData);
   return {
@@ -91,12 +89,6 @@ function normalizeStoredImage(image) {
     originalMime: image.originalMime || "",
     storageQuality: image.storageQuality || 85,
   };
-}
-
-function getStoredImages(bg) {
-  if (Array.isArray(bg?.images) && bg.images.length > 0) return bg.images;
-  if (bg?.imageData) return [bg];
-  return [];
 }
 
 function formatAssignmentLines(assignments) {

@@ -9,6 +9,17 @@
 "use strict";
 
 const UserBackground = require("../../models/userBackground");
+const { createInFlightLoader } = require("../../utils/async/in-flight-loader");
+
+// Roster pages for one owner share overlapping reads, but every later render
+// still checks Mongo's version. Completed documents are never cached here.
+const loadBackgroundMeta = createInFlightLoader((discordId) =>
+  UserBackground.findOne({ discordId }).select("updatedAt").lean()
+);
+const loadBackgroundData = createInFlightLoader((discordId) =>
+  UserBackground.findOne({ discordId })
+    .select("images assignments mode imageData updatedAt").lean()
+);
 
 const CACHE_CAP = 40;
 
@@ -18,6 +29,11 @@ function normalizeAccountKey(accountName) {
   return String(accountName || "").trim().toLowerCase();
 }
 
+/**
+ * Preserve Buffer identity while accepting Mongo's stored binary shape.
+ * @param {Buffer|object|null} value Stored image bytes.
+ * @returns {Buffer|null} Image buffer or null when absent.
+ */
 function bufferFromStored(value) {
   if (!value) return null;
   if (Buffer.isBuffer(value)) return value;
@@ -55,6 +71,11 @@ function getDocUpdatedAt(doc, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+/**
+ * Read the current image library or the legacy single-image document.
+ * @param {object|null} doc Stored background document.
+ * @returns {object[]} Image records in their persisted order.
+ */
 function getStoredImages(doc) {
   if (Array.isArray(doc?.images) && doc.images.length > 0) {
     return doc.images;
@@ -99,9 +120,7 @@ async function loadBackgroundBuffer(discordId, options = {}) {
 
   let metaUpdatedAt;
   try {
-    const meta = await UserBackground.findOne({ discordId })
-      .select("updatedAt")
-      .lean();
+    const meta = await loadBackgroundMeta(discordId);
     if (!meta) {
       cache.delete(cacheKey);
       return null;
@@ -119,9 +138,7 @@ async function loadBackgroundBuffer(discordId, options = {}) {
   }
 
   try {
-    const doc = await UserBackground.findOne({ discordId })
-      .select("images assignments mode imageData updatedAt")
-      .lean();
+    const doc = await loadBackgroundData(discordId);
     const images = getStoredImages(doc);
     if (images.length === 0) {
       cache.delete(cacheKey);
@@ -147,8 +164,12 @@ async function loadBackgroundBuffer(discordId, options = {}) {
 function clearBackgroundCache(discordId) {
   if (!discordId) {
     cache.clear();
+    loadBackgroundMeta.clear();
+    loadBackgroundData.clear();
     return;
   }
+  loadBackgroundMeta.invalidate(discordId);
+  loadBackgroundData.invalidate(discordId);
   const prefix = `${discordId}:`;
   for (const key of Array.from(cache.keys())) {
     if (key === discordId || key.startsWith(prefix)) {
@@ -161,6 +182,8 @@ module.exports = {
   loadBackgroundBuffer,
   clearBackgroundCache,
   normalizeAccountKey,
+  bufferFromStored,
+  getStoredImages,
   _cache: cache,
   _CACHE_CAP: CACHE_CAP,
   _selectImageIndex: selectImageIndex,

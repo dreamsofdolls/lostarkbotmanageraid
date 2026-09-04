@@ -11,7 +11,8 @@ git diff --check
 
 | Thay đổi | Test liên quan |
 | --- | --- |
-| In-flight/autocomplete | `node --test test/in-flight-loader.test.js test/raid-autocomplete-choices.test.js` |
+| In-flight/autocomplete | `node --test test/in-flight-loader.test.js test/raid-autocomplete-choices.test.js test/select-options.test.js` |
+| Background library/loading | `node --test test/raid-bg.test.js` |
 | Manual/Bible sync | `node --test test/auto-manage-runtime-sync.test.js test/raid-status.test.js` |
 | Local Sync | `node --test test/local-sync-apply.test.js test/local-sync-http-server.test.js test/local-sync-tokens.test.js` |
 | Schedule | `node --test test/raid-schedule-auto-clear.test.js test/raid-announce-schedule.test.js` |

@@ -14,6 +14,7 @@
 
 const { t } = require("../../services/i18n");
 const { isRaidCheckVisibleMode } = require("./visibility");
+const { toPlainUserDoc } = require("../../utils/user-doc");
 
 /**
  * Build the /raid-check snapshot helper service. Computes the pending-
@@ -47,11 +48,6 @@ function createSnapshotHelpers({
   loadFreshUserSnapshotForRaidViews,
   shouldLoadFreshUserSnapshotForRaidViews,
 }) {
-  function toPlainUserDoc(userDoc) {
-    if (!userDoc) return null;
-    return typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
-  }
-
   function createSnapshotState() {
     return {
       userMeta: new Map(),

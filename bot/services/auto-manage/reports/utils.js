@@ -1,5 +1,7 @@
 "use strict";
 
+const { toPlainUserDoc } = require("../../../utils/user-doc");
+
 function getAutoManageEntries(report) {
   return Array.isArray(report?.perChar) ? report.perChar : [];
 }
@@ -35,11 +37,6 @@ function stampAutoManageAttemptFromReport(doc, report, now = Date.now()) {
   if (!hasSuccessfulAutoManageReport(report)) return false;
   doc.lastAutoManageSyncAt = now;
   return true;
-}
-
-function toPlainUserDoc(userDoc) {
-  if (!userDoc) return null;
-  return typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
 }
 
 module.exports = {

@@ -29,6 +29,12 @@ function selectEntriesWithPinnedActive(
   return visible;
 }
 
+/**
+ * Filter in source order and stop once Discord's result page is full.
+ * @param {object[]} choices Candidate name/value pairs.
+ * @param {object} [options] Needle, pure normalizer, and result limit.
+ * @returns {object[]} Matching choices, capped to the normalized limit.
+ */
 function filterAutocompleteChoices(
   choices,
   {
@@ -39,13 +45,16 @@ function filterAutocompleteChoices(
 ) {
   const source = Array.isArray(choices) ? choices : [];
   const normalizedNeedle = normalize(needle || "");
-  const filtered = normalizedNeedle
-    ? source.filter((choice) => (
-        normalize(choice?.name).includes(normalizedNeedle) ||
-        normalize(choice?.value).includes(normalizedNeedle)
-      ))
-    : source;
-  return filtered.slice(0, Math.max(0, Math.trunc(Number(limit) || 0)));
+  const max = Math.max(0, Math.trunc(Number(limit) || 0));
+  if (!normalizedNeedle) return source.slice(0, max);
+  const matches = [];
+  for (let index = 0; index < source.length && matches.length < max; index += 1) {
+    if (!(index in source)) continue; // Match Array.filter's sparse-array behavior.
+    const choice = source[index];
+    if (normalize(choice?.name).includes(normalizedNeedle) ||
+        normalize(choice?.value).includes(normalizedNeedle)) matches.push(choice);
+  }
+  return matches;
 }
 
 module.exports = {

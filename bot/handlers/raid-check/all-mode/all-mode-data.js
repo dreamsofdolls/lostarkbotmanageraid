@@ -1,5 +1,7 @@
 "use strict";
 
+const { toPlainUserDoc } = require("../../../utils/user-doc");
+
 const AUTHOR_META_FETCH_CONCURRENCY = 4;
 
 function cleanIdentityValue(value) {
@@ -40,11 +42,6 @@ async function fetchDiscordAuthorMeta(interaction, discordId) {
     user = await users.fetch(discordId).catch(() => null);
   }
   return buildDiscordAuthorMeta({ member, user });
-}
-
-function toPlainUserDoc(userDoc) {
-  if (!userDoc) return null;
-  return typeof userDoc.toObject === "function" ? userDoc.toObject() : userDoc;
 }
 
 function cloneRenderUserDoc(userDoc) {
