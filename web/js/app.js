@@ -79,6 +79,7 @@ const syncOutput = $("sync-output");
 // Cache only the last atomically committed query result so the Discord-preview
 // button can POST it without accepting data from a superseded refresh.
 let lastDeltas = null;
+let lastPartyDeltas = null;
 let previewUtilsPromise = null;
 let selectedLocalFile = null;
 let selectedFileHandle = null;
@@ -278,6 +279,7 @@ function clearSyncSurface() {
   syncOutput.hidden = true;
   syncOutput.innerHTML = "";
   lastDeltas = null;
+  lastPartyDeltas = null;
   lastRenderedRevision = null;
   clearArtistPreviewGlobals();
 }
@@ -752,6 +754,7 @@ async function buildPreviewStateFromRows(
   const rosterPromise = rosterSnapshotReady || fetchRosterSnapshot(context);
   const {
     bucketize,
+    expandPartyEncounterRows,
     findUnmappedBosses,
     getRaidGateForBoss,
     buildDiff,
@@ -763,7 +766,9 @@ async function buildPreviewStateFromRows(
   } = await utilsPromise;
   throwIfPreviewSuperseded(context, expectedSelection);
   const scopedRows = filterRowsForSyncScope(rows, syncScope);
-  const syncRows = scopedRows.filter((r) => r[3] && getRaidGateForBoss(r[0]));
+  const syncRows = scopedRows.filter((r) => (
+    Number(r[2]) === 1 && r[3] && getRaidGateForBoss(r[0])
+  ));
   const buckets = bucketize(scopedRows);
   const unmappedBosses = findUnmappedBosses(scopedRows);
   const { rosterAccounts, rosterError } = await rosterPromise;
@@ -778,13 +783,13 @@ async function buildPreviewStateFromRows(
     // positive progress already stored under another difficulty.
     includeModeConflict: syncScope !== "solo",
   });
-  const deltas = syncRows
-    .filter((r) => {
-      const gateInfo = getRaidGateForBoss(r[0]);
-      const modeKey = normalizeDifficulty(r[1]);
-      if (!modeKey) return false;
-      return actionableKeys.has(makeBucketKey(r[3], gateInfo.raidKey, modeKey));
-    })
+  const actionableSourceRows = syncRows.filter((r) => {
+    const gateInfo = getRaidGateForBoss(r[0]);
+    const modeKey = normalizeDifficulty(r[1]);
+    if (!modeKey) return false;
+    return actionableKeys.has(makeBucketKey(r[3], gateInfo.raidKey, modeKey));
+  });
+  const deltas = actionableSourceRows
     .map((r) => ({
       boss: r[0],
       difficulty: r[1],
@@ -793,6 +798,25 @@ async function buildPreviewStateFromRows(
       lastClearMs: Number(r[5]) || 0,
     }));
   const syncableBuckets = buckets.filter((b) => actionableKeys.has(makeBucketKey(b.charName, b.raidKey, b.modeKey)));
+  // Expand only source encounters that this exact preview can apply. Besides
+  // reducing the handoff payload, this keeps every propagated participant
+  // structurally tied to a source delta stored in the same preview job.
+  const partyBuckets = syncScope === "full"
+    ? bucketize(expandPartyEncounterRows(actionableSourceRows))
+    : [];
+  const partyDeltas = partyBuckets
+    .filter((bucket) => (
+      String(bucket.charName || "").trim().toLowerCase()
+      !== String(bucket.sourceCharName || "").trim().toLowerCase()
+    ))
+    .map((bucket) => ({
+      boss: bucket.boss,
+      difficulty: bucket.difficulty,
+      cleared: 1,
+      charName: bucket.charName,
+      sourceCharName: bucket.sourceCharName,
+      lastClearMs: bucket.lastClearMs,
+    }));
   return {
     rows: scopedRows,
     schemaDebug,
@@ -800,6 +824,7 @@ async function buildPreviewStateFromRows(
     rosterError,
     diff,
     deltas,
+    partyDeltas,
     unmappedBosses,
     collectDiffStateCounts,
     meta: {
@@ -814,6 +839,7 @@ async function buildPreviewStateFromRows(
 
 function clearCommittedPreviewState() {
   lastDeltas = [];
+  lastPartyDeltas = [];
   clearArtistPreviewGlobals();
   renderPreviewStats(previewStats, null);
   syncSection.hidden = true;
@@ -832,6 +858,7 @@ function commitPreviewState(state, { revision, expectedSelection }) {
   // metadata without another request. Every assignment belongs to this one
   // atomic commit block, after freshness has been proven.
   lastDeltas = state.deltas;
+  lastPartyDeltas = state.partyDeltas;
   window.__artistRows = state.rows;
   window.__artistSchemaDebug = state.schemaDebug;
   window.__artistRosterAccounts = state.rosterAccounts;
@@ -1043,6 +1070,9 @@ syncBtn.addEventListener("click", async () => {
       return;
     }
     const deltasToSend = lastDeltas.map((delta) => ({ ...delta }));
+    const partyDeltasToSend = Array.isArray(lastPartyDeltas)
+      ? lastPartyDeltas.map((delta) => ({ ...delta }))
+      : [];
     syncOutput.textContent = t("sync.sending", { n: deltasToSend.length });
     const resp = await fetch("/api/local-sync/preview-job", {
       method: "POST",
@@ -1050,7 +1080,10 @@ syncBtn.addEventListener("click", async () => {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${window.__artistSyncToken}`,
       },
-      body: JSON.stringify({ deltas: deltasToSend }),
+      body: JSON.stringify({
+        deltas: deltasToSend,
+        partyDeltas: partyDeltasToSend,
+      }),
     });
     const data = await resp.json();
     if (!resp.ok || !data.ok) {

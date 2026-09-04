@@ -27,6 +27,10 @@ export function buildEncounterPreviewSql({
   }
 
   const difficultySelect = diffSql ? `COALESCE(${diffSql}, '')` : `'Normal'`;
+  // SQLite associates bare result columns with the row selected by the sole
+  // MAX() aggregate. This keeps `players` and `last_ms` from the same latest
+  // encounter instead of choosing the lexicographically largest party text.
+  const playersSelect = playersSql ? `COALESCE(${playersSql}, '')` : `''`;
   const soloWhere = scope === "solo"
     ? `AND LOWER(TRIM(COALESCE(${diffSql}, ''))) IN ('solo', 'solo mode')`
     : "";
@@ -38,7 +42,7 @@ export function buildEncounterPreviewSql({
            ${charSql ? `COALESCE(${charSql}, '')` : `''`} AS char_name,
            COUNT(*) AS n,
            MAX(${tsSql}) AS last_ms,
-           ${playersSql ? `COALESCE(MAX(${playersSql}), '')` : `''`} AS players
+           ${playersSelect} AS players
     FROM ${tableSql}
     WHERE ${tsSql} >= ?
       AND ${bossSql} IS NOT NULL

@@ -131,6 +131,8 @@ function createRaidSetCommand(deps) {
     statusType,
     effectiveGates,
     requireLocalSyncEnabled = false,
+    requireAnySyncEnabled = false,
+    requireRaidUntouched = false,
     requiredCompanionScope = null,
     currentWeekStartMs = 0,
   }) {
@@ -148,6 +150,8 @@ function createRaidSetCommand(deps) {
         statusType,
         effectiveGates,
         requireLocalSyncEnabled,
+        requireAnySyncEnabled,
+        requireRaidUntouched,
         requiredCompanionScope,
         currentWeekStartMs,
       });
@@ -160,6 +164,8 @@ function createRaidSetCommand(deps) {
     discordId,
     entries,
     requireLocalSyncEnabled = false,
+    requireAnySyncEnabled = false,
+    requireRaidUntouched = false,
     requiredCompanionScope = null,
     currentWeekStartMs = 0,
   }) {
@@ -189,6 +195,8 @@ function createRaidSetCommand(deps) {
           statusType: entry.statusType || "process",
           effectiveGates: entry.effectiveGates,
           requireLocalSyncEnabled,
+          requireAnySyncEnabled,
+          requireRaidUntouched,
           requiredCompanionScope,
           currentWeekStartMs,
         }, now);

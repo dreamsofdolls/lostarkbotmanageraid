@@ -7,6 +7,7 @@ const assert = require("node:assert/strict");
 const {
   PREVIEW_APPLY_LEASE_MS,
   createPreviewJob,
+  filterPartyDeltasBySourceDeltas,
   mintToken,
   normalizePreviewDeltas,
   resolvePreviewJobState,
@@ -74,6 +75,63 @@ test("preview delta normalization keeps only safe cleared rows", () => {
   assert.equal(result[0].boss.length, 256);
   assert.equal(result[0].charName, "Aki");
   assert.equal(result[0].cleared, true);
+});
+
+test("party deltas must point back to the exact source encounter", () => {
+  const source = normalizePreviewDeltas([validDelta()]);
+  const matching = {
+    ...source[0],
+    charName: "Bao",
+    sourceCharName: "Aki",
+  };
+  const wrongGateEvidence = {
+    ...matching,
+    boss: "Armoche, Sentinel of the Abyss",
+  };
+  const sourceItself = {
+    ...matching,
+    charName: "Aki",
+  };
+
+  assert.deepEqual(
+    filterPartyDeltasBySourceDeltas(source, [matching, wrongGateEvidence, sourceItself]),
+    [matching]
+  );
+});
+
+test("creating a full preview stores bounded party evidence while Solo discards it", async () => {
+  const created = [];
+  const PreviewModel = {
+    async updateMany() {},
+    async create(doc) {
+      created.push(doc);
+      return doc;
+    },
+  };
+  const source = validDelta();
+  const partyDelta = {
+    ...source,
+    charName: "Bao",
+    sourceCharName: source.charName,
+  };
+
+  const full = await createPreviewJob({
+    discordId: "party-full",
+    scope: "full",
+    deltas: [source],
+    partyDeltas: [partyDelta],
+  }, { PreviewModel });
+  const solo = await createPreviewJob({
+    discordId: "party-solo",
+    scope: "solo",
+    deltas: [source],
+    partyDeltas: [partyDelta],
+  }, { PreviewModel });
+
+  assert.equal(full.partyDeltas.length, 1);
+  assert.equal(full.partyDeltas[0].sourceCharName, "Aki");
+  assert.deepEqual(solo.partyDeltas, []);
+  assert.equal(created.length, 2);
 });
 
 test("creating a preview supersedes the previous pending job", async () => {

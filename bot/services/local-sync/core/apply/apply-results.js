@@ -32,6 +32,16 @@ const RESULT_CLASSIFIERS = Object.freeze([
     }),
   },
   {
+    matches: (result) => result.progressProtected,
+    append: ({ bucket, effectiveGates, skipped }) => skipped.push({
+      charName: bucket.charName,
+      reason: "progress_already_started",
+      raidKey: bucket.raidKey,
+      modeKey: bucket.modeKey,
+      gates: effectiveGates,
+    }),
+  },
+  {
     matches: (result) => result.syncDisabled,
     append: ({ result, bucket, effectiveGates, rejected }) => rejected.push({
       charName: bucket.charName,

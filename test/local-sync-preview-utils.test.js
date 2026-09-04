@@ -90,6 +90,67 @@ test("preview buckets get class info from backend catalog", async () => {
   assert.equal(bucket.classIcon, "/sync/class-icons/bard.png");
 });
 
+test("party encounter rows expand all participants and keep the highest cumulative gate", async () => {
+  const {
+    bucketize,
+    expandPartyEncounterRows,
+    parseEncounterParticipantNames,
+  } = await loadPreviewUtils();
+  const players = [
+    "204:Aki",
+    "105:Bao",
+    "204:Ciel",
+    "105:Dara",
+    "204:Eira",
+    "105:Faye",
+    "204:Gale",
+    "105:Hana",
+  ].join(",");
+  const rows = [
+    ["Brelshaza, Ember in the Ashes", "Hard", 1, "Aki", 1, 1000, players],
+    ["Armoche, Sentinel of the Abyss", "Hard", 1, "Aki", 1, 2000, players],
+  ];
+
+  assert.deepEqual(parseEncounterParticipantNames("204:AKI,105:Bao,broken", "Aki"), [
+    "Aki",
+    "Bao",
+  ]);
+  const expanded = expandPartyEncounterRows(rows);
+  assert.equal(expanded.length, 16);
+  assert.equal(expanded.every((row) => row[7] === "Aki"), true);
+
+  const buckets = bucketize(expanded);
+  assert.equal(buckets.length, 8);
+  assert.equal(buckets.every((bucket) => bucket.gateIndex === 1), true);
+  assert.equal(buckets.every((bucket) => bucket.sourceCharName === "Aki"), true);
+  assert.deepEqual(buckets.find((bucket) => bucket.charName === "Bao")?.gates, ["G1", "G2"]);
+});
+
+test("party bucket keeps source evidence from the newest encounter at the same gate", async () => {
+  const { bucketize, expandPartyEncounterRows } = await loadPreviewUtils();
+  const rows = [
+    ["Armoche, Sentinel of the Abyss", "Hard", 1, "SourceA", 1, 1000, "105:Target"],
+    ["Armoche, Sentinel of the Abyss", "Hard", 1, "SourceB", 1, 2000, "105:Target"],
+  ];
+
+  const [bucket] = bucketize(expandPartyEncounterRows(rows)).filter((entry) => (
+    entry.charName === "Target"
+  ));
+
+  assert.equal(bucket.sourceCharName, "SourceB");
+  assert.equal(bucket.lastClearMs, 2000);
+});
+
+test("party expansion keeps the local player when an encounter has no players payload", async () => {
+  const { bucketize, expandPartyEncounterRows } = await loadPreviewUtils();
+  const expanded = expandPartyEncounterRows([
+    ["Witch of Agony, Serca", "Hard", 1, "Aki", 1, 1000, ""],
+  ]);
+
+  assert.equal(expanded.length, 1);
+  assert.equal(bucketize(expanded)[0].charName, "Aki");
+});
+
 test("preview renders incoming Normal clears as Solo for a stored Solo raid", async () => {
   const { bucketize, buildDiff, buildActionableBucketKeySet } = await loadPreviewUtils();
   const buckets = bucketize([

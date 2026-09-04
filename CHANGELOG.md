@@ -4,6 +4,18 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-09-04 (Full Local Sync propagates party progress)
+
+### Added
+- Confirming a **Full Local Sync** preview now applies the same cumulative Gate progress to party members found in the encounter's `players` snapshot when their character exists in Artist's roster database and their owner currently has either Local Sync or Bible Auto Sync enabled.
+
+### Safety
+- Party propagation is untouched-only: if any Gate of that character's raid already has current-week progress, Artist ignores the character entirely and does not count, replace, or extend that progress. The write path re-checks both sync opt-in and untouched state against a fresh User document immediately before saving.
+- Every party row must match the exact source character, boss, difficulty, and clear timestamp stored in the preview, and propagation is authorized only after that source raid/Gate was successfully applied. Solo Local Reader never propagates party progress.
+
+### Performance
+- The browser sends only the highest actionable Gate per participant/raid/mode. The server resolves all matching characters through one case-insensitive multikey index query, groups work by roster owner, and saves each owner's eligible characters in one batch. Durable authorization lets a transient target write retry without repeating successful target writes.
+
 ## 2026-08-10 (Local Reader follows live database revisions)
 
 ### Changed

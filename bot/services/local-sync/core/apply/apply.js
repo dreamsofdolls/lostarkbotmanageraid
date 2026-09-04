@@ -132,7 +132,13 @@ function shouldSkipForRosterPreflight(
   raidMeta,
   effectiveGates,
   lists,
-  { currentWeekStartMs, requiredCompanionScope, rosterIndex }
+  {
+    currentWeekStartMs,
+    requireAnySyncEnabled,
+    requireRaidUntouched,
+    requiredCompanionScope,
+    rosterIndex,
+  }
 ) {
   if (!userDoc) return false;
   const preflight = classifyBucketAgainstRoster(
@@ -140,7 +146,13 @@ function shouldSkipForRosterPreflight(
     bucket,
     raidMeta,
     effectiveGates,
-    { currentWeekStartMs, requiredCompanionScope, rosterIndex }
+    {
+      currentWeekStartMs,
+      requireAnySyncEnabled,
+      requireRaidUntouched,
+      requiredCompanionScope,
+      rosterIndex,
+    }
   );
   return appendPreflightDecision(preflight, bucket, effectiveGates, lists);
 }
@@ -161,6 +173,9 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
     userDoc = null,
     currentWeekStartMs: injectedCurrentWeekStartMs,
     requireLocalSyncEnabled = false,
+    requireAnySyncEnabled = false,
+    requireRaidUntouched = false,
+    preserveStoredModePreference = true,
     requiredCompanionScope: injectedCompanionScope = null,
   } = deps;
 
@@ -186,7 +201,9 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
   const rosterIndex = userDoc ? buildRosterCharacterIndex(userDoc) : null;
 
   for (const incomingBucket of buckets) {
-    const bucket = resolveBucketModePreference(userDoc, incomingBucket, { rosterIndex });
+    const bucket = preserveStoredModePreference
+      ? resolveBucketModePreference(userDoc, incomingBucket, { rosterIndex })
+      : incomingBucket;
     const raidMeta = reqMap[`${bucket.raidKey}_${bucket.modeKey}`];
     if (!raidMeta) {
       appendMissingRequirementMeta(lists.unmapped, bucket);
@@ -200,7 +217,13 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
       raidMeta,
       effectiveGates,
       lists,
-      { currentWeekStartMs, requiredCompanionScope, rosterIndex }
+      {
+        currentWeekStartMs,
+        requireAnySyncEnabled,
+        requireRaidUntouched,
+        requiredCompanionScope,
+        rosterIndex,
+      }
     )) {
       continue;
     }
@@ -215,6 +238,8 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
       discordId,
       applyRaidSetForDiscordId,
       requireLocalSyncEnabled,
+      requireAnySyncEnabled,
+      requireRaidUntouched,
       requiredCompanionScope,
       currentWeekStartMs,
       ...pending,
@@ -226,6 +251,8 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
     discordId,
     applyRaidSetBatchForDiscordId,
     requireLocalSyncEnabled,
+    requireAnySyncEnabled,
+    requireRaidUntouched,
     requiredCompanionScope,
     currentWeekStartMs,
     pendingWrites,

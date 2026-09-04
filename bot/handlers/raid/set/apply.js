@@ -28,6 +28,7 @@ function createRaidSetApplyService({
       syncDisabledReason: null,
       scopeNotAllowed: false,
       progressConflict: false,
+      progressProtected: false,
       matched: false,
       updated: false,
       alreadyComplete: false,
@@ -137,10 +138,16 @@ function createRaidSetApplyService({
   function resolveCompanionWriteScope(result, userDoc, {
     requiredCompanionScope,
     requireLocalSyncEnabled,
+    requireAnySyncEnabled,
     raidMeta,
   }) {
     if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
       result.noRoster = true;
+      return { blocked: true, companionScope: null };
+    }
+    if (requireAnySyncEnabled && !userDoc.localSyncEnabled && !userDoc.autoManageEnabled) {
+      result.syncDisabled = true;
+      result.syncDisabledReason = "sync_disabled";
       return { blocked: true, companionScope: null };
     }
     const companionScope = resolveRequiredCompanionScope({
@@ -205,6 +212,22 @@ function createRaidSetApplyService({
       && modeChange.hadProgress;
     if (blocked) result.progressConflict = true;
     return blocked;
+  }
+
+  function rejectProtectedRaidProgress(
+    result,
+    mutation,
+    requireRaidUntouched,
+    currentWeekStartMs
+  ) {
+    if (!requireRaidUntouched) return false;
+    const progressFloorMs = Math.max(0, Number(currentWeekStartMs) || 0);
+    const hasProgress = mutation.modeChange.officialGateList.some((gate) => {
+      const completedAt = Number(mutation.raidData?.[gate]?.completedDate);
+      return completedAt > 0 && completedAt >= progressFloorMs;
+    });
+    if (hasProgress) result.progressProtected = true;
+    return hasProgress;
   }
 
   function applyModeTransition(result, mutation, raidMeta, selectedDifficulty) {
@@ -276,6 +299,8 @@ function createRaidSetApplyService({
     statusType,
     effectiveGates,
     requireLocalSyncEnabled = false,
+    requireAnySyncEnabled = false,
+    requireRaidUntouched = false,
     requiredCompanionScope = null,
     currentWeekStartMs = 0,
   }, now = Date.now()) {
@@ -286,6 +311,7 @@ function createRaidSetApplyService({
     const scope = resolveCompanionWriteScope(result, userDoc, {
       requiredCompanionScope,
       requireLocalSyncEnabled,
+      requireAnySyncEnabled,
       raidMeta,
     });
     if (scope.blocked) return result;
@@ -306,6 +332,14 @@ function createRaidSetApplyService({
       selectedDifficulty,
       currentWeekStartMs,
     });
+    if (rejectProtectedRaidProgress(
+      result,
+      mutation,
+      requireRaidUntouched,
+      currentWeekStartMs
+    )) {
+      return result;
+    }
     if (rejectSoloProgressConflict(result, scope.companionScope, mutation.modeChange)) {
       return result;
     }

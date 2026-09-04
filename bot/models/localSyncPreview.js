@@ -8,6 +8,7 @@ const localSyncDeltaSchema = new mongoose.Schema(
     difficulty: { type: String, required: true },
     cleared: { type: Boolean, default: true },
     charName: { type: String, required: true },
+    sourceCharName: { type: String, default: "" },
     lastClearMs: { type: Number, required: true },
   },
   { _id: false }
@@ -25,6 +26,8 @@ const localSyncPreviewSchema = new mongoose.Schema(
       index: true,
     },
     deltas: { type: [localSyncDeltaSchema], default: [] },
+    partyDeltas: { type: [localSyncDeltaSchema], default: [] },
+    partyAuthorized: { type: Boolean, default: false },
     projection: { type: mongoose.Schema.Types.Mixed, default: null },
     tokenFingerprint: { type: String, default: "" },
     result: { type: mongoose.Schema.Types.Mixed, default: null },

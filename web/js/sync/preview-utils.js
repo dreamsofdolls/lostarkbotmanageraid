@@ -20,6 +20,7 @@ let RAID_MODE_MANUAL_ONLY = {};
 let RAID_ORDER = [];
 let MODE_ORDER = [];
 let catalogLoaded = false;
+const MAX_ENCOUNTER_PARTICIPANTS = 16;
 
 function normalizeClassLabel(value) {
   return String(value || "").trim().toLowerCase();
@@ -160,6 +161,42 @@ function getClassInfoForChar(playersRaw, charName) {
   return null;
 }
 
+export function parseEncounterParticipantNames(playersRaw, localCharName = "") {
+  const names = new Map();
+  const appendName = (value) => {
+    const charName = String(value || "").trim().slice(0, 128);
+    const key = normalizeCharName(charName);
+    if (!key || names.has(key) || names.size >= MAX_ENCOUNTER_PARTICIPANTS) return;
+    names.set(key, charName);
+  };
+
+  // Keep the local player even when an older LOA Logs row has no `players`
+  // payload. The remaining names come from the party snapshot attached to
+  // that exact cleared encounter.
+  appendName(localCharName);
+  for (const item of String(playersRaw || "").split(",")) {
+    const match = /^(\d+):(.*)$/.exec(item.trim());
+    if (!match) continue;
+    appendName(match[2]);
+  }
+  return [...names.values()];
+}
+
+export function expandPartyEncounterRows(rows) {
+  const expanded = [];
+  for (const row of rows || []) {
+    if (!Array.isArray(row) || Number(row[2]) !== 1) continue;
+    const participants = parseEncounterParticipantNames(row[6], row[3]);
+    for (const charName of participants) {
+      const participantRow = [...row];
+      participantRow[3] = charName;
+      participantRow[7] = String(row[3] || "").trim();
+      expanded.push(participantRow);
+    }
+  }
+  return expanded;
+}
+
 function parseClearedEncounter(row) {
   const [boss, difficulty, cleared, charName, , lastMs, playersRaw] = row;
   if (Number(cleared) !== 1 || !charName) return null;
@@ -171,7 +208,10 @@ function parseClearedEncounter(row) {
   const gateIndex = gates.indexOf(gateInfo.gate);
   if (gateIndex < 0) return null;
   return {
+    boss,
+    difficulty,
     charName,
+    sourceCharName: String(row[7] || charName).trim(),
     classInfo: getClassInfoForChar(playersRaw, charName),
     gateIndex,
     gates,
@@ -182,9 +222,23 @@ function parseClearedEncounter(row) {
 }
 
 function createEncounterBucket(encounter) {
-  const { charName, classInfo, gateIndex, gates, lastClearMs, modeKey, raidKey } = encounter;
-  return {
+  const {
+    boss,
+    difficulty,
     charName,
+    sourceCharName,
+    classInfo,
+    gateIndex,
+    gates,
+    lastClearMs,
+    modeKey,
+    raidKey,
+  } = encounter;
+  return {
+    boss,
+    difficulty,
+    charName,
+    sourceCharName,
     classId: classInfo?.classId || "",
     className: classInfo?.className || "",
     classIcon: classInfo?.classIcon || "",
@@ -215,6 +269,9 @@ function mergeEncounterBucket(map, encounter) {
   if (encounter.gateIndex !== existing.gateIndex || encounter.lastClearMs <= existing.lastClearMs) {
     return;
   }
+  existing.boss = encounter.boss;
+  existing.difficulty = encounter.difficulty;
+  existing.sourceCharName = encounter.sourceCharName;
   existing.lastClearMs = encounter.lastClearMs;
   refreshBucketClassInfo(existing, encounter.classInfo);
 }

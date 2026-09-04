@@ -72,6 +72,13 @@ function raidAlreadyComplete(character, raidKey, currentWeekStartMs = 0) {
   ));
 }
 
+function raidHasCurrentWeekProgress(character, raidKey, currentWeekStartMs = 0) {
+  const assignedRaid = getAssignedRaid(character, raidKey);
+  return getGatesForRaid(raidKey).some((gate) => (
+    isCurrentWeekCompletion(assignedRaid?.[gate]?.completedDate, currentWeekStartMs)
+  ));
+}
+
 function gatesAlreadyComplete(character, bucket, effectiveGates, currentWeekStartMs = 0) {
   const selectedDifficulty = normalizeName(toModeLabel(bucket.modeKey));
   const assignedRaid = getAssignedRaid(character, bucket.raidKey);
@@ -145,12 +152,17 @@ function classifyBucketAgainstRoster(
   effectiveGates,
   {
     currentWeekStartMs = 0,
+    requireAnySyncEnabled = false,
+    requireRaidUntouched = false,
     requiredCompanionScope = null,
     rosterIndex = null,
   } = {}
 ) {
   if (!hasUsableRoster(userDoc)) {
     return { action: "reject", reason: "no_roster" };
+  }
+  if (requireAnySyncEnabled && !userDoc.localSyncEnabled && !userDoc.autoManageEnabled) {
+    return { action: "reject", reason: "sync_disabled" };
   }
 
   const character = findRosterCharacter(userDoc, bucket.charName, rosterIndex);
@@ -159,6 +171,18 @@ function classifyBucketAgainstRoster(
   const charItemLevel = Number(character.itemLevel) || 0;
   if (charItemLevel < raidMeta.minItemLevel) {
     return { action: "reject", reason: "ilvl_too_low", ineligibleItemLevel: charItemLevel };
+  }
+
+  if (requireRaidUntouched && raidHasCurrentWeekProgress(
+    character,
+    bucket.raidKey,
+    currentWeekStartMs
+  )) {
+    return {
+      action: "skip",
+      reason: "progress_already_started",
+      displayName: getCharacterName(character) || bucket.charName,
+    };
   }
 
   if (hasRequiredModeConflict(
@@ -185,5 +209,6 @@ module.exports = {
   buildRosterCharacterIndex,
   classifyBucketAgainstRoster,
   isCurrentWeekCompletion,
+  raidHasCurrentWeekProgress,
   resolveBucketModePreference,
 };

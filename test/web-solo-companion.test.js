@@ -43,6 +43,23 @@ test("legacy and full encounter query preserve the Normal fallback", async () =>
   }
 });
 
+test("encounter query takes party members from the same latest row as last_ms", async () => {
+  const { buildEncounterPreviewSql } = await import("../web/js/sync/encounter-query.js");
+  const sql = buildEncounterPreviewSql({
+    tableSql: '"encounter_preview"',
+    bossSql: '"boss"',
+    tsSql: '"timestamp"',
+    diffSql: '"difficulty"',
+    clearedSql: '"cleared"',
+    charSql: '"local_player"',
+    playersSql: '"players"',
+  });
+
+  assert.match(sql, /MAX\("timestamp"\) AS last_ms/);
+  assert.match(sql, /COALESCE\("players", ''\) AS players/);
+  assert.doesNotMatch(sql, /MAX\("players"\)/);
+});
+
 test("Solo row defense accepts only explicit Solo labels", async () => {
   const { filterRowsForSyncScope } = await import("../web/js/sync/encounter-query.js");
   const rows = [

@@ -18,6 +18,7 @@ const apply = require("./core/apply/apply");
 const scope = require("./core/scope");
 const previewJobs = require("./core/preview-jobs");
 const applyPreview = require("./core/apply-preview-job");
+const partyPropagation = require("./core/party-propagation");
 
 module.exports = {
   SYNC_MODE: state.SYNC_MODE,
@@ -47,6 +48,7 @@ module.exports = {
   normalizeLocalSyncDifficulty: apply.normalizeDifficulty,
   PREVIEW_APPLY_LEASE_MS: previewJobs.PREVIEW_APPLY_LEASE_MS,
   normalizePreviewDeltas: previewJobs.normalizePreviewDeltas,
+  filterPartyDeltasBySourceDeltas: previewJobs.filterPartyDeltasBySourceDeltas,
   resolvePreviewJobState: previewJobs.resolveJobState,
   createPreviewJob: previewJobs.createPreviewJob,
   getPreviewJob: previewJobs.getPreviewJob,
@@ -54,4 +56,5 @@ module.exports = {
   cancelPreviewJob: previewJobs.cancelPreviewJob,
   recordPreviewDelivery: previewJobs.recordPreviewDelivery,
   applyPreviewJob: applyPreview.applyPreviewJob,
+  propagatePartyDeltas: partyPropagation.propagatePartyDeltas,
 };

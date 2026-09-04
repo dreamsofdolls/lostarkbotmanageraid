@@ -18,6 +18,7 @@ function normalizePreviewDelta(raw) {
   const boss = clipString(raw.boss, 256);
   const difficulty = clipString(raw.difficulty, 64);
   const charName = clipString(raw.charName, 128);
+  const sourceCharName = clipString(raw.sourceCharName, 128);
   const lastClearMs = Number(raw.lastClearMs);
   if (!boss || !difficulty || !charName || !Number.isFinite(lastClearMs) || lastClearMs <= 0) {
     return null;
@@ -27,6 +28,7 @@ function normalizePreviewDelta(raw) {
     difficulty,
     cleared: raw.cleared === true || raw.cleared === 1,
     charName,
+    sourceCharName,
     lastClearMs: Math.trunc(lastClearMs),
   };
 }
@@ -37,6 +39,24 @@ function normalizePreviewDeltas(deltas) {
     throw new Error(`too many deltas (max ${MAX_PREVIEW_DELTAS})`);
   }
   return deltas.map(normalizePreviewDelta).filter((delta) => delta?.cleared);
+}
+
+function deltaEvidenceKey(delta, charName = delta?.charName) {
+  return [
+    clipString(charName, 128).toLowerCase(),
+    clipString(delta?.boss, 256).toLowerCase(),
+    clipString(delta?.difficulty, 64).toLowerCase(),
+    Math.trunc(Number(delta?.lastClearMs) || 0),
+  ].join("\u0000");
+}
+
+function filterPartyDeltasBySourceDeltas(sourceDeltas, partyDeltas) {
+  const sourceKeys = new Set((sourceDeltas || []).map((delta) => deltaEvidenceKey(delta)));
+  return (partyDeltas || []).filter((delta) => (
+    delta.sourceCharName
+    && delta.sourceCharName.toLowerCase() !== delta.charName.toLowerCase()
+    && sourceKeys.has(deltaEvidenceKey(delta, delta.sourceCharName))
+  ));
 }
 
 function fingerprintToken(token) {
@@ -98,6 +118,7 @@ async function createPreviewJob({
   discordId,
   scope,
   deltas,
+  partyDeltas = [],
   projection = null,
   token = "",
   nowMs = Date.now(),
@@ -107,6 +128,12 @@ async function createPreviewJob({
   if (!discordId) throw new Error("discordId required");
   if (!normalizedScope) throw new Error("invalid companion scope");
   const normalizedDeltas = normalizePreviewDeltas(deltas);
+  const normalizedPartyDeltas = normalizedScope === "full"
+    ? filterPartyDeltasBySourceDeltas(
+        normalizedDeltas,
+        normalizePreviewDeltas(partyDeltas)
+      )
+    : [];
   if (normalizedDeltas.length === 0) throw new Error("no valid deltas");
 
   return runPreviewCreateExclusive(discordId, async () => {
@@ -127,6 +154,8 @@ async function createPreviewJob({
       scope: normalizedScope,
       status: "pending",
       deltas: normalizedDeltas,
+      partyDeltas: normalizedPartyDeltas,
+      partyAuthorized: false,
       projection,
       tokenFingerprint: fingerprintToken(token),
       expiresAt: new Date(nowMs + PREVIEW_JOB_TTL_MS),
@@ -187,6 +216,21 @@ function applyingOwnerFilter(jobId, discordId, deps = {}) {
     if (Number.isFinite(leaseMs)) filter.applyingAt = new Date(leaseMs);
   }
   return filter;
+}
+
+async function authorizePreviewParty(jobId, discordId, partyDeltas, deps = {}) {
+  const PreviewModel = deps.PreviewModel || LocalSyncPreview;
+  const normalizedPartyDeltas = normalizePreviewDeltas(partyDeltas);
+  return PreviewModel.findOneAndUpdate(
+    applyingOwnerFilter(jobId, discordId, deps),
+    {
+      $set: {
+        partyDeltas: normalizedPartyDeltas,
+        partyAuthorized: true,
+      },
+    },
+    { new: true }
+  );
 }
 
 async function releasePreviewJob(jobId, discordId, reason, deps = {}, options = {}) {
@@ -277,6 +321,7 @@ async function recordPreviewDelivery(jobId, discordId, message, deps = {}) {
 module.exports = {
   PREVIEW_APPLY_LEASE_MS,
   normalizePreviewDeltas,
+  filterPartyDeltasBySourceDeltas,
   fingerprintToken,
   resolveJobState,
   createPreviewJob,
@@ -284,6 +329,7 @@ module.exports = {
   getPreviewJobForUser,
   getLatestPreviewJob,
   claimPreviewJob,
+  authorizePreviewParty,
   releasePreviewJob,
   finishPreviewJob,
   failPreviewJob,

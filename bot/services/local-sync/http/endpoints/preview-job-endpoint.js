@@ -114,8 +114,12 @@ function createPreviewJobEndpoint({
       return;
     }
     let normalizedDeltas;
+    let normalizedPartyDeltas;
     try {
       normalizedDeltas = normalizePreviewDeltas(body.deltas);
+      normalizedPartyDeltas = scope === "full"
+        ? normalizePreviewDeltas(body.partyDeltas || [])
+        : [];
     } catch (err) {
       send(res, 400, { ok: false, error: err?.message || "preview job invalid" });
       return;
@@ -160,6 +164,7 @@ function createPreviewJobEndpoint({
         discordId,
         scope,
         deltas: normalizedDeltas,
+        partyDeltas: normalizedPartyDeltas,
         projection: buildStoredProjection(summary),
         token,
       }, PreviewModel ? { PreviewModel } : {});

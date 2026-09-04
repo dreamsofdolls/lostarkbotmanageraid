@@ -307,6 +307,17 @@ userSchema.index(
   }
 );
 
+// Full Local Sync can propagate a cleared party gate to opted-in roster
+// characters named in the same encounter. Case-insensitive collation mirrors
+// the write path's character-name matching without scanning every user.
+userSchema.index(
+  { "accounts.characters.name": 1 },
+  {
+    name: "sync_party_character_lookup",
+    collation: { locale: "en", strength: 2 },
+  }
+);
+
 const User = mongoose.model("User", userSchema);
 
 /**

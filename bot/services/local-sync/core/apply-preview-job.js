@@ -2,18 +2,27 @@
 
 const User = require("../../../models/user");
 const LocalSyncPreview = require("../../../models/localSyncPreview");
-const { getRaidRequirementMap } = require("../../../domain/raid-catalog");
+const {
+  areEquivalentRaidModes,
+  getRaidRequirementMap,
+} = require("../../../domain/raid-catalog");
 const {
   COMPANION_SCOPE,
   isCompanionScopeEnabledForUser,
 } = require("./scope");
 const { applyLocalSyncDeltas } = require("./apply/apply");
+const {
+  resolveCurrentWeekStartMs,
+  resolveTarget,
+} = require("./apply/apply-targets");
+const { propagatePartyDeltas } = require("./party-propagation");
 const { recordLocalSyncSuccess } = require("./state");
 const { POST_SYNC_TTL_SEC } = require("./tokens");
 const {
   fingerprintToken,
   resolveJobState,
   claimPreviewJob,
+  authorizePreviewParty,
   releasePreviewJob,
   finishPreviewJob,
   failPreviewJob,
@@ -114,15 +123,91 @@ async function acquireApplySlot({ jobId, discordId, job, leaseDeps, deps }) {
   };
 }
 
-function buildApplyDeltaOptions(job, userDoc, deps) {
+function buildApplyDeltaOptions(job, userDoc, deps, currentWeekStartMs) {
   return {
     applyRaidSetForDiscordId: deps.applyRaidSetForDiscordId,
     applyRaidSetBatchForDiscordId: deps.applyRaidSetBatchForDiscordId || null,
     getRaidRequirementMap: deps.getRaidRequirementMap || getRaidRequirementMap,
     userDoc,
+    currentWeekStartMs,
     requireLocalSyncEnabled: job.scope === COMPANION_SCOPE.full,
     requiredCompanionScope: job.scope,
   };
+}
+
+function mergePartyPropagation(summary, propagation) {
+  if ((propagation.applied?.length || 0) === 0
+      && (propagation.rejected?.length || 0) === 0) {
+    return summary;
+  }
+  return {
+    ...summary,
+    applied: [...(summary.applied || []), ...(propagation.applied || [])],
+    rejected: [...(summary.rejected || []), ...(propagation.rejected || [])],
+    partyPropagation: {
+      applied: propagation.applied?.length || 0,
+    },
+  };
+}
+
+function appliedGateKey(charName, raidKey, modeKey) {
+  return [
+    String(charName || "").trim().toLowerCase(),
+    raidKey,
+    modeKey,
+  ].join("::");
+}
+
+function eligiblePartyDeltas(job, sourceSummary) {
+  const appliedGates = new Map();
+  for (const entry of sourceSummary?.applied || []) {
+    const key = appliedGateKey(entry?.charName, entry?.raidKey, entry?.modeKey);
+    if (!appliedGates.has(key)) appliedGates.set(key, new Set());
+    for (const gate of entry?.gates || []) appliedGates.get(key).add(gate);
+  }
+  return (job.partyDeltas || []).filter((delta) => {
+    const target = resolveTarget(delta);
+    if (!target || !delta?.sourceCharName) return false;
+    const candidateModes = [...new Set([target.modeKey, "normal", "solo"])]
+      .filter((modeKey) => areEquivalentRaidModes(modeKey, target.modeKey));
+    return candidateModes.some((modeKey) => appliedGates.get(appliedGateKey(
+      delta.sourceCharName,
+      target.raidKey,
+      modeKey
+    ))?.has(target.gate) === true);
+  });
+}
+
+async function applyPartyPropagation(job, sourceSummary, deps, currentWeekStartMs) {
+  if (job.scope !== COMPANION_SCOPE.full || !Array.isArray(job.partyDeltas)
+      || job.partyDeltas.length === 0) {
+    return { applied: [], ignored: [], rejected: [] };
+  }
+  const deltas = job.partyAuthorized === true
+    ? job.partyDeltas
+    : eligiblePartyDeltas(job, sourceSummary);
+  if (deltas.length === 0) return { applied: [], ignored: [], rejected: [] };
+  if (job.partyAuthorized !== true) {
+    const authorized = await authorizePreviewParty(
+      deps.jobId,
+      deps.discordId,
+      deltas,
+      deps.leaseDeps
+    );
+    if (!authorized) throw new Error("[local-sync/party] preview lease lost before propagation");
+    // Keep the claimed in-memory snapshot aligned with the durable retry
+    // authorization. If a target write fails, the next claim can safely retry
+    // these same deltas even though the source character is already complete.
+    job.partyAuthorized = true;
+    job.partyDeltas = deltas;
+  }
+  return propagatePartyDeltas(deltas, {
+    UserModel: deps.UserModel || User,
+    applyRaidSetForDiscordId: deps.applyRaidSetForDiscordId,
+    applyRaidSetBatchForDiscordId: deps.applyRaidSetBatchForDiscordId || null,
+    getRaidRequirementMap: deps.getRaidRequirementMap || getRaidRequirementMap,
+    currentWeekStartMs,
+  });
 }
 
 async function resolveRejectedSummary({
@@ -251,12 +336,30 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
     ownsSlot = slot.ownsSlot;
     if (slot.outcome) return slot.outcome;
 
-    const summary = await applyLocalSyncDeltas(
+    const currentWeekStartMs = resolveCurrentWeekStartMs(deps.currentWeekStartMs);
+    let summary = await applyLocalSyncDeltas(
       discordId,
       job.deltas || [],
-      buildApplyDeltaOptions(job, userDoc, deps)
+      buildApplyDeltaOptions(job, userDoc, deps, currentWeekStartMs)
     );
-    const rejectedOutcome = await resolveRejectedSummary({
+    let rejectedOutcome = await resolveRejectedSummary({
+      jobId,
+      discordId,
+      job,
+      summary,
+      leaseDeps,
+    });
+    if (rejectedOutcome) return rejectedOutcome;
+
+    const partyPropagation = await applyPartyPropagation(job, summary, {
+      ...deps,
+      UserModel,
+      jobId,
+      discordId,
+      leaseDeps,
+    }, currentWeekStartMs);
+    summary = mergePartyPropagation(summary, partyPropagation);
+    rejectedOutcome = await resolveRejectedSummary({
       jobId,
       discordId,
       job,

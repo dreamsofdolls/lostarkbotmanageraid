@@ -514,6 +514,162 @@ test("Discord apply claims a preview atomically and is idempotent", async () => 
   assert.equal(writes.length, 1, "a second click must not write again");
 });
 
+test("full Local Sync applies an evidenced party gate to opted-in roster owners", async () => {
+  const job = makeJob();
+  job.deltas[0].difficulty = "Normal";
+  job.partyDeltas = [{
+    ...job.deltas[0],
+    charName: "Bao",
+    sourceCharName: "Aki",
+  }];
+  const PreviewModel = makePreviewModel(job);
+  const sourceUser = {
+    discordId: "u1",
+    localSyncEnabled: true,
+    autoManageEnabled: false,
+    lastLocalSyncToken: null,
+    accounts: [{
+      accountName: "Source roster",
+      characters: [{
+        name: "Aki",
+        class: "Artist",
+        itemLevel: 1750,
+        assignedRaids: { armoche: { modeKey: "solo" } },
+      }],
+    }],
+  };
+  const targetUser = {
+    discordId: "u2",
+    localSyncEnabled: false,
+    autoManageEnabled: true,
+    accounts: [{
+      accountName: "Target roster",
+      characters: [{
+        name: "Bao",
+        class: "Bard",
+        itemLevel: 1750,
+        assignedRaids: {},
+      }],
+    }],
+  };
+  let partyQueries = 0;
+  const UserModel = {
+    findOne() {
+      return makeConsoleUserQuery(sourceUser);
+    },
+    find() {
+      partyQueries += 1;
+      return {
+        select() { return this; },
+        collation() { return this; },
+        async lean() { return [targetUser]; },
+      };
+    },
+    async findOneAndUpdate() {
+      return sourceUser;
+    },
+    async updateOne() {
+      return { matchedCount: 1 };
+    },
+  };
+  const writes = [];
+
+  const outcome = await applyPreviewJob(job.jobId, "u1", {
+    PreviewModel,
+    UserModel,
+    applyRaidSetForDiscordId: async (args) => {
+      writes.push(args);
+      return {
+        matched: true,
+        updated: true,
+        displayName: args.characterName,
+      };
+    },
+  });
+
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.result.partyPropagation.applied, 1);
+  assert.deepEqual(outcome.result.applied.map((entry) => entry.charName), ["Aki", "Bao"]);
+  assert.equal(outcome.result.applied[1].propagated, true);
+  assert.deepEqual(writes.map((entry) => entry.discordId), ["u1", "u2"]);
+  assert.equal(writes[0].raidMeta.modeKey, "solo");
+  assert.equal(writes[1].raidMeta.modeKey, "normal");
+  assert.equal(writes[1].requireAnySyncEnabled, true);
+  assert.equal(writes[1].requireRaidUntouched, true);
+  assert.equal(partyQueries, 1);
+});
+
+test("party write failures retain source authorization and retry only unfinished targets", async () => {
+  const job = makeJob();
+  job.partyDeltas = [{
+    ...job.deltas[0],
+    charName: "Bao",
+    sourceCharName: "Aki",
+  }];
+  const PreviewModel = makePreviewModel(job);
+  const sourceUser = {
+    discordId: "u1",
+    localSyncEnabled: true,
+    autoManageEnabled: false,
+    accounts: [{
+      accountName: "Source",
+      characters: [{ name: "Aki", class: "Artist", itemLevel: 1750, assignedRaids: {} }],
+    }],
+  };
+  const targetUser = {
+    discordId: "u2",
+    autoManageEnabled: true,
+    localSyncEnabled: false,
+    accounts: [{
+      accountName: "Target",
+      characters: [{ name: "Bao", class: "Bard", itemLevel: 1750, assignedRaids: {} }],
+    }],
+  };
+  const UserModel = {
+    findOne() { return makeConsoleUserQuery(sourceUser); },
+    find() {
+      return {
+        select() { return this; },
+        collation() { return this; },
+        async lean() { return [targetUser]; },
+      };
+    },
+    async findOneAndUpdate() { return sourceUser; },
+    async updateOne() { return { matchedCount: 1 }; },
+  };
+  let sourceAttempts = 0;
+  let targetAttempts = 0;
+  const deps = {
+    PreviewModel,
+    UserModel,
+    applyRaidSetForDiscordId: async (args) => {
+      if (args.discordId === "u1") {
+        sourceAttempts += 1;
+        return sourceAttempts === 1
+          ? { matched: true, updated: true, displayName: "Aki" }
+          : { matched: true, updated: false, displayName: "Aki", alreadyComplete: true };
+      }
+      targetAttempts += 1;
+      return targetAttempts === 1
+        ? null
+        : { matched: true, updated: true, displayName: "Bao" };
+    },
+  };
+
+  const first = await applyPreviewJob(job.jobId, "u1", deps);
+  assert.equal(first.ok, false);
+  assert.equal(first.state, "pending");
+  assert.equal(first.retryable, true);
+  assert.equal(PreviewModel.value.partyAuthorized, true);
+  assert.equal(PreviewModel.value.partyDeltas.length, 1);
+
+  const second = await applyPreviewJob(job.jobId, "u1", deps);
+  assert.equal(second.ok, true);
+  assert.equal(second.result.partyPropagation.applied, 1);
+  assert.equal(sourceAttempts, 2);
+  assert.equal(targetAttempts, 2);
+});
+
 test("a stale applying lease can be reclaimed after a bot restart", async () => {
   const nowMs = Date.now();
   const job = makeJob({
