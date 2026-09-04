@@ -37,98 +37,31 @@ const {
 const RAID_CHECK_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 
 /**
- * Build the /raid-check command handler factory.
- * @param {object} deps - injected dependencies (discord.js builders +
- *   MessageFlags, Mongoose User, raid catalogue,
- *   auto-manage service handles, raidCheckRefreshLimiter +
- *   raidCheckSyncLimiter + discordUserLimiter, RAID_REQUIREMENT_MAP
- *   · see the destructure block).
- * @returns {object} service surface · see the return literal for the
- *   canonical handler list (handleRaidCheckCommand + every button /
- *   select dispatch entry for the all-mode, edit cascade, sync flow,
- *   auto-manage UI, and task view).
+ * Compose the manager overview and its edit/sync flows. Child factories declare
+ * their own dependencies; locally derived helpers and visibility rules override
+ * the shared dependencies when needed.
+ * @param {object} deps - Discord builders, User model, raid helpers and sync services.
+ * @returns {object} Command/button handlers and shared snapshot/edit helpers.
  */
 function createRaidCheckCommand(deps) {
   const {
     EmbedBuilder,
-    StringSelectMenuBuilder,
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    MessageFlags,
-    UI,
     User,
-    ensureFreshWeek,
-    normalizeName,
-    toModeLabel,
-    getCharacterName,
-    truncateText,
-    getGatesForRaid,
-    ensureAssignedRaids,
-    getGateKeys,
-    getRaidScanRange,
-    buildRaidCheckUserQuery,
-    buildAccountPageEmbed,
-    buildStatusFooterText,
-    summarizeRaidProgress,
-    getStatusRaidsForCharacter,
-    buildPaginationRow,
-    resolveDiscordDisplay,
-    loadFreshUserSnapshotForRaidViews,
-    shouldLoadFreshUserSnapshotForRaidViews,
-    runManualRosterRefresh,
-    acquireAutoManageSyncSlot,
-    releaseAutoManageSyncSlot,
-    autoManageEntryKey,
-    gatherAutoManageLogsForUserDoc,
-    commitAutoManageCollected,
-    stampAutoManageAttempt,
-    weekResetStartMs,
     isRaidLeader,
-    applyRaidSetForDiscordId,
     RAID_REQUIREMENT_MAP: FULL_RAID_REQUIREMENT_MAP,
-    RAID_CHECK_USER_QUERY_FIELDS,
-    ROSTER_KEY_SEP,
-    raidCheckRefreshLimiter,
-    raidCheckSyncLimiter,
-    discordUserLimiter,
-    // raid-schedule bridge for all-mode's "📋 Đội đã xếp" dropdown.
-    RaidEvent,
-    buildScheduleEmbed,
-    buildTurnPlanEmbed,
   } = deps;
 
   const RAID_REQUIREMENT_MAP = filterRaidCheckRequirementMap(
     FULL_RAID_REQUIREMENT_MAP
   );
 
-  // Snapshot helpers extracted to ./raid-check/snapshot.js. Wired here so
-  // the inner handlers below can call them directly without threading deps.
   const {
     buildRaidCheckSnapshotFromUsers,
     formatRaidCheckNotEligibleFieldValue,
     getRaidCheckRenderableChars,
     computeRaidCheckSnapshot,
-  } = createSnapshotHelpers({
-    User,
-    buildRaidCheckUserQuery,
-    RAID_CHECK_USER_QUERY_FIELDS,
-    UI,
-    ROSTER_KEY_SEP,
-    toModeLabel,
-    normalizeName,
-    getRaidScanRange,
-    ensureFreshWeek,
-    ensureAssignedRaids,
-    getCharacterName,
-    getGateKeys,
-    getGatesForRaid,
-    raidCheckRefreshLimiter,
-    loadFreshUserSnapshotForRaidViews,
-    shouldLoadFreshUserSnapshotForRaidViews,
-  });
+  } = createSnapshotHelpers(deps);
 
-  // Pure edit-flow helpers extracted to ./raid-check/edit-helpers.js.
   const {
     buildEditableCharsByUser,
     getEligibleRaidsForChar,
@@ -137,95 +70,28 @@ function createRaidCheckCommand(deps) {
     applyLocalRaidEditToChar,
     formatCharEditLabel,
     formatUserEditLabel,
-  } = createEditHelpers({
-    UI,
-    normalizeName,
-    toModeLabel,
-    truncateText,
-    getGatesForRaid,
-    getGateKeys,
-    getRaidScanRange,
-    RAID_REQUIREMENT_MAP,
-  });
+  } = createEditHelpers({ ...deps, RAID_REQUIREMENT_MAP });
 
-  // /raid-check handler extracted to ./raid-check/all-mode.js.
-  // Bound here so the existing inline call (`await handleRaidCheckAllCommand(...)`)
-  // resolves through the local destructure.
   const { handleRaidCheckAllCommand } = createAllModeHandler({
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    EmbedBuilder,
-    MessageFlags,
-    StringSelectMenuBuilder,
-    User,
-    ensureFreshWeek,
-    truncateText,
-    buildAccountPageEmbed,
-    buildStatusFooterText,
-    summarizeRaidProgress,
-    getStatusRaidsForCharacter,
-    buildPaginationRow,
-    isRaidLeader,
-    raidCheckRefreshLimiter,
-    loadFreshUserSnapshotForRaidViews,
-    shouldLoadFreshUserSnapshotForRaidViews,
-    runManualRosterRefresh,
-    RAID_CHECK_USER_QUERY_FIELDS,
+    ...deps,
     RAID_CHECK_PAGINATION_SESSION_MS,
-    RaidEvent,
-    buildScheduleEmbed,
-    buildTurnPlanEmbed,
   });
 
-  // Sync flow + shared display-name resolver extracted to
-  // ./raid-check/sync-ui.js. Wired BEFORE createEditUi because edit-ui
-  // consumes resolveCachedDisplayName as a dep (Edit cascade resolves
-  // display names per editable user). The same resolver is also called
-  // from the main /raid-check render path below, so the destructure has
-  // to land before any handler body that references it gets invoked.
+  // Build Sync before Edit so both use the same cached display-name resolver.
   const {
     resolveCachedDisplayName,
     handleRaidCheckSyncClick,
-  } = createSyncUi({
-    EmbedBuilder,
-    MessageFlags,
-    UI,
-    User,
-    ensureFreshWeek,
-    normalizeName,
-    weekResetStartMs,
-    autoManageEntryKey,
-    gatherAutoManageLogsForUserDoc,
-    commitAutoManageCollected,
-    stampAutoManageAttempt,
-    acquireAutoManageSyncSlot,
-    releaseAutoManageSyncSlot,
-    raidCheckSyncLimiter,
-    discordUserLimiter,
-    resolveDiscordDisplay,
-    computeRaidCheckSnapshot,
-  });
+  } = createSyncUi({ ...deps, computeRaidCheckSnapshot });
 
   const {
     handleRaidCheckEnableAutoOneClick,
     handleRaidCheckDisableAutoSelfClick,
     handleRaidCheckDisableAutoOneClick,
     handleRaidCheckEnableAutoSelfClick,
-  } = createRaidCheckAutoManageUi({
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    EmbedBuilder,
-    User,
-  });
+  } = createRaidCheckAutoManageUi(deps);
 
   const { handleRaidCheckViewTasksClick } = createTaskViewUi({
-    EmbedBuilder,
-    UI,
-    User,
-    truncateText,
-    buildPaginationRow,
+    ...deps,
     RAID_CHECK_PAGINATION_SESSION_MS,
   });
 
@@ -316,30 +182,13 @@ function createRaidCheckCommand(deps) {
 
   const RAID_CHECK_EDIT_SESSION_MS = 3 * 60 * 1000;
 
-  // Edit cascading-select flow extracted to ./raid-check/edit-ui.js.
-  // Consumes resolveCachedDisplayName from the sync-ui factory above, so
-  // sync-ui has to be wired first. RAID_CHECK_EDIT_SESSION_MS is the local
-  // const right above. The 6 returned functions cross-call each other
-  // through their shared closure; local destructuring and binding keep the
-  // call sites below unchanged.
   const {
     handleRaidCheckEditClick,
     buildRaidCheckEditDMEmbed,
   } = createEditUi({
-    EmbedBuilder,
-    StringSelectMenuBuilder,
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    UI,
-    User,
-    normalizeName,
-    truncateText,
+    ...deps,
     RAID_REQUIREMENT_MAP,
-    resolveDiscordDisplay,
     resolveCachedDisplayName,
-    discordUserLimiter,
-    applyRaidSetForDiscordId,
     computeRaidCheckSnapshot,
     buildEditableCharsByUser,
     getCharRaidGateStatus,

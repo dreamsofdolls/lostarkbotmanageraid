@@ -69,14 +69,10 @@ const STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS = 2500;
 const STATUS_TASK_AUTO_REFRESH_GRACE_MS = 1000;
 
 /**
- * Build the /raid-status command handler factory.
- * @param {object} deps - injected dependencies (discord.js builders +
- *   MessageFlags, Mongoose User + saveWithRetry, RosterShare,
- *   auto-manage service handles, refresh service, view/task UI/sync
- *   sub-factories, raid catalogue · see destructure block).
- * @returns {object} service surface · see the return literal for the
- *   canonical handler list (handleStatusCommand + every paginate/
- *   filter/task-action/sync button + select dispatch entry).
+ * Compose the status session with shared view/sync services. Child factories
+ * declare their own dependencies; session budgets are fixed here.
+ * @param {object} deps - Discord builders, User model, raid helpers and sync services.
+ * @returns {object} Status command and shared roster/footer render helpers.
  */
 function createRaidStatusCommand(deps) {
   const {
@@ -89,34 +85,20 @@ function createRaidStatusCommand(deps) {
     UI,
     User,
     saveWithRetry,
-    ensureFreshWeek,
     getCharacterName,
     truncateText,
     formatNextCooldownRemaining,
     waitWithBudget,
     summarizeRaidProgress,
-    summarizeAccountGold,
     summarizeGlobalGold,
     formatGold,
-    formatRaidStatusLine,
     getStatusRaidsForCharacter,
     buildPaginationRow,
-    collectStaleAccountRefreshes,
-    applyStaleAccountRefreshes,
     runManualRosterRefresh,
-    formatRosterRefreshCooldownRemaining,
-    ROSTER_REFRESH_COOLDOWN_MS,
     acquireAutoManageSyncSlot,
     releaseAutoManageSyncSlot,
-    gatherAutoManageLogsForUserDoc,
-    applyAutoManageCollected,
-    commitAutoManageCollected,
-    applyAutoManageCollectedForStatus,
-    stampAutoManageAttempt,
-    weekResetStartMs,
     AUTO_MANAGE_SYNC_COOLDOWN_MS,
     getAutoManageCooldownMs,
-    getRosterRefreshCooldownMs,
     applyRaidSetForDiscordId = null,
     applyRaidSetBatchForDiscordId = null,
     PreviewModel = null,
@@ -126,42 +108,14 @@ function createRaidStatusCommand(deps) {
     buildAccountFreshnessLine,
     buildAccountPageEmbed,
     buildStatusFooterText,
-  } = createRaidStatusView({
-    EmbedBuilder,
-    UI,
-    getCharacterName,
-    truncateText,
-    formatNextCooldownRemaining,
-    summarizeRaidProgress,
-    summarizeAccountGold,
-    formatGold,
-    formatRaidStatusLine,
-    formatRosterRefreshCooldownRemaining,
-    ROSTER_REFRESH_COOLDOWN_MS,
-    AUTO_MANAGE_SYNC_COOLDOWN_MS,
-    getAutoManageCooldownMs,
-    getRosterRefreshCooldownMs,
-  });
+  } = createRaidStatusView(deps);
 
   const {
     buildStatusUserMeta,
     prepareStatusUserDoc,
     runManualStatusSync,
   } = createRaidStatusSync({
-    User,
-    saveWithRetry,
-    ensureFreshWeek,
-    collectStaleAccountRefreshes,
-    applyStaleAccountRefreshes,
-    waitWithBudget,
-    acquireAutoManageSyncSlot,
-    releaseAutoManageSyncSlot,
-    gatherAutoManageLogsForUserDoc,
-    applyAutoManageCollected,
-    commitAutoManageCollected,
-    applyAutoManageCollectedForStatus,
-    stampAutoManageAttempt,
-    weekResetStartMs,
+    ...deps,
     STATUS_AUTO_MANAGE_PIGGYBACK_BUDGET_MS,
   });
 
