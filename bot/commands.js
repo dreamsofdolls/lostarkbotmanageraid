@@ -86,7 +86,7 @@ const { createRaidChannelMonitorService } = require("./services/raid/channel-mon
 const { createRaidSchedulerService } = require("./services/raid/schedulers/schedulers");
 const { createRaidScheduleAutoLockService } = require("./services/raid/schedule/lifecycle/auto-lock");
 const { createDiscordIdentityCache } = require("./services/discord/user-identity-cache");
-const { createInFlightLoader } = require("./shared/in-flight-loader");
+const { createInFlightLoader } = require("./utils/async/in-flight-loader");
 const RaidEvent = require("./models/RaidEvent");
 
 const bibleLimiter = new ConcurrencyLimiter(2);

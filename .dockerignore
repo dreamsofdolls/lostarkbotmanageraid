@@ -3,3 +3,17 @@ node_modules/
 .git/
 .gitignore
 *.md
+
+# Keep the Local Reader (web/) and runtime assets; omit development-only files.
+.agent/
+.agents/
+.claude/
+.codex/
+.superpowers/
+.playwright-mcp/
+docs/
+test/
+scripts/
+coverage/
+*.log
+.env.*

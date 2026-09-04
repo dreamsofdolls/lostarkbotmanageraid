@@ -1,5 +1,15 @@
 "use strict";
 
+/**
+ * Share pending loads and optionally retain successful results for a short TTL.
+ * Pending work may exceed the cache limit; only settled entries can be evicted.
+ * @param {Function} loadFn Load one value for a key.
+ * @param {object} [options] Cache policy.
+ * @param {number} [options.ttlMs=0] Resolved-value lifetime; zero disables caching.
+ * @param {number} [options.maxEntries=Infinity] Capacity once pending work settles.
+ * @param {() => number} [options.now=Date.now] Clock used for TTL checks.
+ * @returns {Function} Loader with invalidate, clear, and cachedKeyCount methods.
+ */
 function createInFlightLoader(
   loadFn,
   { ttlMs = 0, maxEntries = Number.POSITIVE_INFINITY, now = Date.now } = {}
@@ -55,7 +65,12 @@ function createInFlightLoader(
       .then(
         (value) => {
           entry.settledAt = now();
-          if (ttlMs === 0 && entries.get(key) === entry) entries.delete(key);
+          // A replaced/invalidated request must not change the current cache.
+          if (entries.get(key) !== entry) return value;
+          if (ttlMs === 0) entries.delete(key);
+          while (entries.size > entryLimit && evictOldestSettledEntry()) {
+            // Reclaim the temporary overflow as soon as burst work settles.
+          }
           return value;
         },
         (error) => {

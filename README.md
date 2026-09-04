@@ -171,6 +171,8 @@ User document example:
 ```
 LostArk_RaidManage/
 |-- bot.js                         # Discord client lifecycle + listeners
+|-- AGENTS.md                      # Repository instructions for coding agents
+|-- .agent/                        # Repository map + verification workflow
 |-- bot/
 |   |-- commands.js                # Compose root: wires every command/service factory
 |   |-- db.js                      # Lazy Mongo connect with DNS fallback
@@ -197,8 +199,9 @@ LostArk_RaidManage/
 |   |   |-- local-sync/             # Local Reader API, tokens, preview jobs, Discord apply logic
 |   |   |-- raid/                   # Schedulers, weekly reset, channel monitor, raid view snapshots
 |   |   `-- roster/                 # Bible roster fetch + refresh cooldown logic
-|   |-- shared/                    # Generic reusable helpers
 |   `-- utils/
+|       |-- async/                 # In-flight loader + latest-only queue
+|       |-- discord/               # Generic Discord component helpers
 |       `-- raid/                  # Pure raid helpers grouped by reuse surface
 |           |-- common/             # Names, labels, embeds, character normalization
 |           |-- queries/            # Mongo query builders for raid views
@@ -223,6 +226,12 @@ Four composition principles:
 2. **Registry as single source of truth.** `ANNOUNCEMENT_REGISTRY`, `RAID_REQUIREMENTS`, `RAID_MANAGER_ID` all live in exactly one place and are referenced from docs, HELP_SECTIONS, and runtime logic.
 3. **Services orchestrate, utils calculate.** Long-running DB/Discord flows stay in `services/*`; pure raid math and view helpers live in `utils/raid/*` so `/raid-status`, `/raid-check`, `/raid-task`, schedulers, and Local Sync reuse the same calculations.
 4. **Shared write paths.** `applyRaidSetForDiscordId` is reused by `/raid-set`, the text monitor, `/raid-check` Edit, and Local Sync apply logic - new UIs never re-implement raid mutation.
+
+For maintenance, start with [AGENTS.md](AGENTS.md) and the
+[repository guide](.agent/README.md). Backend modules use CommonJS; `web/` keeps
+its own ES module boundary. Development tools live in `scripts/`, and temporary
+agent notes go in `.agent/local/` (gitignored). Docker excludes development files
+while retaining `web/`, runtime assets, and the bot.
 
 Interaction flow:
 
@@ -282,7 +291,7 @@ Logic-only changes (inside a command, no new option or name tweak) don't require
 1. Push to the GitHub branch Railway tracks (`main`).
 2. Create the Railway service → link repo.
 3. In the service's **Variables** tab, set every env var (minimum: `DISCORD_TOKEN`, `CLIENT_ID`, `GUILD_ID`, `MONGO_URI`).
-4. Railway builds from `Dockerfile` (node:20-slim, `npm install --omit=dev`) and starts via `node bot.js`.
+4. Railway builds from `Dockerfile` (node:20-slim, `npm ci --omit=dev`) and starts via `node bot.js`.
 5. `railway.toml` sets restart policy = `ON_FAILURE`, max 3 retries.
 
 The bot **re-registers slash commands on every boot** (`ClientReady` handler calls `rest.put(applicationGuildCommands, ...)`), so a push → Railway redeploy → new schema lands without any separate CLI step. Registration failure logs a warning and the bot boots with the previous cached schema — fail-soft. `scripts/deploy-commands.js` stays around only for dev-machine force-registers.

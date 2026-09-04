@@ -12,3 +12,6 @@ docs/
 # Claude Code local workspace: worktrees, settings, and design scratch moved
 # under .claude/superpowers (mockups/specs/plans). Local-only, never pushed.
 .claude/
+
+# Agent guides are versioned; scratch notes and verification logs stay local.
+.agent/local/
