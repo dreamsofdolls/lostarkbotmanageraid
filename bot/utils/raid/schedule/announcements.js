@@ -52,14 +52,14 @@ const ANNOUNCEMENT_REGISTRY = {
       "Tuần mới đến rồi nhỉ~ Artist vừa reset progress raid tuần này cho các cậu, giờ chỉ việc làm lại từ đầu thôi. Chúc các cậu tuần raid vui vẻ nha, biển báo này Artist cuỗm đi sau 30 phút.",
   },
   "stuck-nudge": {
-    label: "Stuck private log nudge",
+    // Keep existing settings addressable; daily auto-sync no longer sends nudges.
+    label: "Private log nudge (retired)",
     subdocKey: "stuckPrivateLogNudge",
     channelOverridable: true,
-    trigger: "During a 30-minute background auto-manage tick, when a user's roster returns `Logs not enabled` for every character (all private).",
-    dedup: "7 ngày per user (`User.lastPrivateLogNudgeAt`). Guild chọn = first reachable guild có member cache hit.",
-    messageTtl: "30 phút rồi Artist tự xóa",
-    previewContent:
-      "<@user> nhắc khẽ nhé~ Roster cậu đã bật auto-manage nhưng hiện tại tất cả char đều là private log, Artist không sync được data đâu. Vào https://lostark.bible/me/logs bật **Show on Profile** cho char cần sync giúp tớ nha. Biển báo này Artist cuỗm đi sau 30 phút.",
+    trigger: "Disabled. Daily auto-sync runs silently; this type no longer sends notifications.",
+    dedup: "Not scheduled",
+    messageTtl: "Not sent",
+    previewContent: "No notification is sent for private logs.",
   },
   "set-greeting": {
     label: "Set greeting",

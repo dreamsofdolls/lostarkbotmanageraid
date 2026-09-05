@@ -1,8 +1,8 @@
 "use strict";
 
 // tPick, not t: some titles here are variant pools; non-pool keys pass through.
-const { tPick: t, getUserLanguage } = require("../../../../services/i18n");
-const { resolveEditableTaskWriteAccess } = require("../write-access");
+const { tPick: t } = require("../../../../services/i18n");
+const { createTaskAddHandler } = require("./handler");
 const {
   TASK_CAP_DAILY,
   TASK_CAP_WEEKLY,
@@ -163,67 +163,16 @@ function buildAddSingleNotice(result, request, lang) {
   return builder({ result, request, lang });
 }
 
-function buildAddSingleSaveFailedNotice(lang) {
-  return {
-    type: "error",
-    title: t("raid-task.save.addFailedTitle", lang),
-    description: t("raid-task.save.addFailedDescription", lang),
-  };
+function createAddSingleHandler(deps) {
+  return createTaskAddHandler(deps, {
+    commandName: "add-single",
+    readRequest: readAddSingleRequest,
+    buildValidationNotice: buildAddSingleValidationNotice,
+    createResult: createAddSingleResult,
+    applyToUserDoc: applyAddSingleToUserDoc,
+    buildNotice: buildAddSingleNotice,
+    saveFailedDescriptionKey: "raid-task.save.addFailedDescription",
+  });
 }
 
-function createAddSingleHandler({
-  User,
-  saveWithRetry,
-  dailyResetStartMs,
-  weekResetStartMs,
-  resolveTaskWriteTarget,
-  replyTaskNotice,
-  replyViewOnlyShareNotice,
-}) {
-  return async function handleAddSingle(interaction) {
-    const executorId = interaction.user.id;
-    const lang = await getUserLanguage(executorId, { UserModel: User });
-    const request = readAddSingleRequest(interaction);
-    const validationNotice = buildAddSingleValidationNotice(request, lang);
-    if (validationNotice) {
-      await replyTaskNotice(interaction, validationNotice);
-      return;
-    }
-
-    const access = await resolveEditableTaskWriteAccess({
-      executorId,
-      rosterName: request.rosterName,
-      commandName: "add-single",
-      resolveTaskWriteTarget,
-      denyViewOnly: (writeTarget) => replyViewOnlyShareNotice(interaction, writeTarget, lang),
-    });
-    if (!access.ok) return;
-
-    const result = createAddSingleResult();
-    try {
-      await saveWithRetry(async () => {
-        const userDoc = await User.findOne({ discordId: access.discordId });
-        if (
-          applyAddSingleToUserDoc(
-            userDoc,
-            request,
-            result,
-            { dailyResetStartMs, weekResetStartMs }
-          )
-        ) {
-          await userDoc.save();
-        }
-      });
-    } catch (error) {
-      console.error("[raid-task add] save failed:", error?.message || error);
-      await replyTaskNotice(interaction, buildAddSingleSaveFailedNotice(lang));
-      return;
-    }
-
-    await replyTaskNotice(interaction, buildAddSingleNotice(result, request, lang));
-  };
-}
-
-module.exports = {
-  createAddSingleHandler,
-};
+module.exports = { createAddSingleHandler };

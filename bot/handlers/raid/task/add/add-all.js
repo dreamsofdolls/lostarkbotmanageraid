@@ -1,8 +1,8 @@
 "use strict";
 
 // tPick, not t: some titles here are variant pools; non-pool keys pass through.
-const { tPick: t, getUserLanguage } = require("../../../../services/i18n");
-const { resolveEditableTaskWriteAccess } = require("../write-access");
+const { tPick: t } = require("../../../../services/i18n");
+const { createTaskAddHandler } = require("./handler");
 const {
   generateTaskId,
   normalizeName,
@@ -42,14 +42,6 @@ function createAddAllResult(rosterName) {
     skippedCap: [],
     skippedDup: [],
   };
-}
-
-function resetAddAllResult(result, rosterName) {
-  result.outcome = "ok";
-  result.resolvedRosterName = rosterName;
-  result.added.length = 0;
-  result.skippedCap.length = 0;
-  result.skippedDup.length = 0;
 }
 
 function findRosterAccount(userDoc, rosterName) {
@@ -228,68 +220,16 @@ function buildAddAllNotice(result, request, lang) {
   return buildAddAllCompletedNotice(result, request, lang);
 }
 
-function buildAddAllSaveFailedNotice(lang) {
-  return {
-    type: "error",
-    title: t("raid-task.save.addFailedTitle", lang),
-    description: t("raid-task.save.addAllFailedDescription", lang),
-  };
+function createAddAllHandler(deps) {
+  return createTaskAddHandler(deps, {
+    commandName: "add-all",
+    readRequest: readAddAllRequest,
+    buildValidationNotice: buildAddAllValidationNotice,
+    createResult: createAddAllResult,
+    applyToUserDoc: applyAddAllToUserDoc,
+    buildNotice: buildAddAllNotice,
+    saveFailedDescriptionKey: "raid-task.save.addAllFailedDescription",
+  });
 }
 
-function createAddAllHandler({
-  User,
-  saveWithRetry,
-  dailyResetStartMs,
-  weekResetStartMs,
-  resolveTaskWriteTarget,
-  replyTaskNotice,
-  replyViewOnlyShareNotice,
-}) {
-  return async function handleAddAll(interaction) {
-    const executorId = interaction.user.id;
-    const lang = await getUserLanguage(executorId, { UserModel: User });
-    const request = readAddAllRequest(interaction);
-    const validationNotice = buildAddAllValidationNotice(request, lang);
-    if (validationNotice) {
-      await replyTaskNotice(interaction, validationNotice);
-      return;
-    }
-
-    const access = await resolveEditableTaskWriteAccess({
-      executorId,
-      rosterName: request.rosterName,
-      commandName: "add-all",
-      resolveTaskWriteTarget,
-      denyViewOnly: (writeTarget) => replyViewOnlyShareNotice(interaction, writeTarget, lang),
-    });
-    if (!access.ok) return;
-
-    const result = createAddAllResult(request.rosterName);
-    try {
-      await saveWithRetry(async () => {
-        resetAddAllResult(result, request.rosterName);
-        const userDoc = await User.findOne({ discordId: access.discordId });
-        if (
-          applyAddAllToUserDoc(
-            userDoc,
-            request,
-            result,
-            { dailyResetStartMs, weekResetStartMs }
-          )
-        ) {
-          await userDoc.save();
-        }
-      });
-    } catch (error) {
-      console.error("[raid-task add-all] save failed:", error?.message || error);
-      await replyTaskNotice(interaction, buildAddAllSaveFailedNotice(lang));
-      return;
-    }
-
-    await replyTaskNotice(interaction, buildAddAllNotice(result, request, lang));
-  };
-}
-
-module.exports = {
-  createAddAllHandler,
-};
+module.exports = { createAddAllHandler };

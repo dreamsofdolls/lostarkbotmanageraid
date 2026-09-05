@@ -161,7 +161,6 @@ test("auto-manage daily scheduler skips DB work when deploy killswitch is on", a
     gatherAutoManageLogsForUserDoc: async () => ({}),
     applyAutoManageCollected: () => ({ perChar: [] }),
     isPublicLogDisabledError: () => false,
-    nudgeStuckPrivateLogUser: async () => {},
     processEnv: { AUTO_MANAGE_DAILY_DISABLED: "true" },
   });
 
@@ -220,9 +219,6 @@ test("auto-manage daily scheduler syncs one absent user and releases the slot", 
         perChar: [{ charName: "Qiylyn", applied: ["G1"] }],
       }),
       isPublicLogDisabledError: () => false,
-      nudgeStuckPrivateLogUser: async () => {
-        throw new Error("nudge should not run on successful public logs");
-      },
       processEnv: {},
     });
 
@@ -328,9 +324,6 @@ test("auto-manage daily scheduler settles configuration changes made after gathe
           throw new Error("configuration drift must settle before apply");
         },
         isPublicLogDisabledError: () => false,
-        nudgeStuckPrivateLogUser: async () => {
-          throw new Error("configuration drift must not post a nudge");
-        },
         processEnv: {},
       });
 
@@ -372,7 +365,6 @@ test("auto-manage daily scheduler skips a candidate leased or finished after sca
     },
     applyAutoManageCollected: () => ({ perChar: [] }),
     isPublicLogDisabledError: () => false,
-    nudgeStuckPrivateLogUser: async () => {},
     processEnv: {},
   });
 
@@ -419,9 +411,6 @@ test("auto-manage daily scheduler schedules a transient report retry without fin
       perChar: [{ charName: "Qiylyn", error: "HTTP 503", applied: [] }],
     }),
     isPublicLogDisabledError: () => false,
-    nudgeStuckPrivateLogUser: async () => {
-      throw new Error("transient failures must not post private-log nudges");
-    },
     processEnv: {},
   });
 
@@ -447,7 +436,7 @@ test("auto-manage daily scheduler schedules a transient report retry without fin
 
 test("auto-manage daily scheduler settles all-private reports silently", async () => {
   const savedDocs = [];
-  const nudges = [];
+  const discordAccess = [];
   const seedDoc = {
     discordId: "100",
     autoManageEnabled: true,
@@ -482,13 +471,12 @@ test("auto-manage daily scheduler settles all-private reports silently", async (
       ],
     }),
     isPublicLogDisabledError: (error) => error === "Logs not enabled",
-    nudgeStuckPrivateLogUser: async (client, discordId) => {
-      nudges.push({ client, discordId });
-    },
     processEnv: {},
   });
 
-  const client = { clientId: "bot" };
+  const client = new Proxy({}, {
+    get(_target, property) { discordAccess.push(property); return undefined; },
+  });
   await service.runAutoManageDailyTick(
     client,
     new Date("2026-07-13T17:05:00.000Z")
@@ -503,7 +491,7 @@ test("auto-manage daily scheduler settles all-private reports silently", async (
     savedDocs[0].lastAutoManageDailyOutcome,
     AUTO_MANAGE_DAILY_OUTCOME.allPrivate
   );
-  assert.deepEqual(nudges, []);
+  assert.deepEqual(discordAccess, [], "a silent sync must not access Discord channels or users");
 });
 
 test("auto-manage daily scheduler persists retry state when gather throws", async () => {
@@ -549,7 +537,6 @@ test("auto-manage daily scheduler persists retry state when gather throws", asyn
         throw new Error("apply must not run after gather failure");
       },
       isPublicLogDisabledError: () => false,
-      nudgeStuckPrivateLogUser: async () => {},
       processEnv: {},
     });
 
@@ -652,7 +639,6 @@ test("auto-manage daily scheduler exposes the batch size used by the query chain
     gatherAutoManageLogsForUserDoc: async () => ({}),
     applyAutoManageCollected: () => ({ perChar: [] }),
     isPublicLogDisabledError: () => false,
-    nudgeStuckPrivateLogUser: async () => {},
     processEnv: {},
   });
 

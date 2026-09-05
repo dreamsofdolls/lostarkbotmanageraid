@@ -1,8 +1,8 @@
 "use strict";
 
 // tPick, not t: some titles here are variant pools; non-pool keys pass through.
-const { tPick: t, getUserLanguage } = require("../../../../services/i18n");
-const { resolveEditableTaskWriteAccess } = require("../write-access");
+const { tPick: t } = require("../../../../services/i18n");
+const { createTaskAddHandler } = require("../add/handler");
 const {
   SCHEDULED_RESET,
   SHARED_TASK_PRESETS,
@@ -165,13 +165,14 @@ function applySharedAddToUserDoc(userDoc, request, result, deps, now) {
     const accountOutcome = applySharedAddToAccount(account, request, result, deps, now);
     if (!request.applyAllRosters && accountOutcome !== "added") {
       result.outcome = accountOutcome;
-      return;
+      return false;
     }
   }
 
   if (request.applyAllRosters && result.addedRosters.length === 0) {
     result.outcome = "none-added";
   }
+  return result.addedRosters.length > 0;
 }
 
 function buildSkippedSummary(result, lang) {
@@ -315,72 +316,16 @@ function buildSharedAddNotice(result, request, lang) {
   return builder({ result, request, lang });
 }
 
-function buildSharedAddSaveFailedNotice(lang) {
-  return {
-    type: "error",
-    title: t("raid-task.save.addFailedTitle", lang),
-    description: t("raid-task.save.sharedAddFailedDescription", lang),
-  };
+function createSharedAddHandler(deps) {
+  return createTaskAddHandler(deps, {
+    commandName: "shared-add",
+    readRequest: readSharedAddRequest,
+    buildValidationNotice: buildValidationNotice,
+    createResult: createSharedAddResult,
+    applyToUserDoc: applySharedAddToUserDoc,
+    buildNotice: buildSharedAddNotice,
+    saveFailedDescriptionKey: "raid-task.save.sharedAddFailedDescription",
+  });
 }
 
-function createSharedAddHandler({
-  User,
-  saveWithRetry,
-  dailyResetStartMs,
-  weekResetStartMs,
-  resolveTaskWriteTarget,
-  replyTaskNotice,
-  replyViewOnlyShareNotice,
-}) {
-  return async function handleSharedAdd(interaction) {
-    const executorId = interaction.user.id;
-    const lang = await getUserLanguage(executorId, { UserModel: User });
-    const request = readSharedAddRequest(interaction);
-    const validationNotice = buildValidationNotice(request, lang);
-    if (validationNotice) {
-      await replyTaskNotice(interaction, validationNotice);
-      return;
-    }
-
-    let writeTarget = { discordId: executorId, viaShare: false };
-    if (!request.applyAllRosters) {
-      const access = await resolveEditableTaskWriteAccess({
-        executorId,
-        rosterName: request.rosterName,
-        commandName: "shared-add",
-        resolveTaskWriteTarget,
-        denyViewOnly: (target) => replyViewOnlyShareNotice(interaction, target, lang),
-      });
-      if (!access.ok) return;
-      writeTarget = access.writeTarget;
-    }
-
-    const result = createSharedAddResult(request.rosterName);
-    const now = Date.now();
-    try {
-      await saveWithRetry(async () => {
-        const userDoc = await User.findOne({ discordId: writeTarget.discordId });
-        applySharedAddToUserDoc(
-          userDoc,
-          request,
-          result,
-          { dailyResetStartMs, weekResetStartMs },
-          now
-        );
-        if (result.addedRosters.length > 0) {
-          await userDoc.save();
-        }
-      });
-    } catch (error) {
-      console.error("[raid-task shared-add] save failed:", error?.message || error);
-      await replyTaskNotice(interaction, buildSharedAddSaveFailedNotice(lang));
-      return;
-    }
-
-    await replyTaskNotice(interaction, buildSharedAddNotice(result, request, lang));
-  };
-}
-
-module.exports = {
-  createSharedAddHandler,
-};
+module.exports = { createSharedAddHandler };
