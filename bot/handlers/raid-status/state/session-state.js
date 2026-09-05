@@ -105,14 +105,19 @@ async function createRaidStatusSessionState({
   recomputeDerivedState();
 
   async function reloadViewerAccounts(nextOwnDoc = null) {
-    const reloadedOwnDoc = nextOwnDoc || await User.findOne({ discordId });
+    // Fresh share authorization and the own roster are independent reads. Keep
+    // both fresh on reload, while overlapping their Mongo round trips.
+    const [reloadedOwnDoc, sharedAccounts] = await Promise.all([
+      nextOwnDoc || User.findOne({ discordId }),
+      buildMergedAccounts(discordId, []),
+    ]);
     if (reloadedOwnDoc && Array.isArray(reloadedOwnDoc.accounts)) {
       userDoc = reloadedOwnDoc;
     } else if (!userDoc || !Array.isArray(userDoc.accounts)) {
       userDoc = { discordId, accounts: [] };
     }
 
-    accounts = await buildMergedAccounts(discordId, userDoc.accounts);
+    accounts = [...userDoc.accounts, ...sharedAccounts];
     totalCharacters = countCharacters(accounts);
     raidGetter.clear();
     recomputeDerivedState();

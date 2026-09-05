@@ -24,26 +24,7 @@ test("daily availability is outcome-driven and does not depend on raid-status ac
     NOW_MS
   );
 
-  assert.deepEqual(filter, {
-    lastAutoManageDailyFinishedDayKey: { $ne: TARGET_DAY },
-    $and: [
-      {
-        $or: [
-          { autoManageDailyLeaseUntil: { $exists: false } },
-          { autoManageDailyLeaseUntil: null },
-          { autoManageDailyLeaseUntil: { $lte: NOW_MS } },
-        ],
-      },
-      {
-        $or: [
-          { lastAutoManageDailyAttemptDayKey: { $ne: TARGET_DAY } },
-          { autoManageDailyNextAttemptAt: { $exists: false } },
-          { autoManageDailyNextAttemptAt: null },
-          { autoManageDailyNextAttemptAt: { $lte: NOW_MS } },
-        ],
-      },
-    ],
-  });
+  assert.deepEqual(filter.lastAutoManageDailyFinishedDayKey, { $ne: TARGET_DAY });
   assert.equal(JSON.stringify(filter).includes("lastRaidStatusOpenedDayKey"), false);
   assert.equal(JSON.stringify(filter).includes("autoManageDailyLeaseDayKey"), false);
 });

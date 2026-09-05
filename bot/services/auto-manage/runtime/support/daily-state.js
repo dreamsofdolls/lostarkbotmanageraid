@@ -5,6 +5,7 @@ const {
 } = require("../../reports/utils");
 
 const AUTO_MANAGE_DAILY_LEASE_MS = 20 * 60 * 1000;
+const AUTO_MANAGE_DAILY_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const AUTO_MANAGE_DAILY_RETRY_DELAYS_MS = Object.freeze([
   30 * 60 * 1000,
   60 * 60 * 1000,
@@ -24,6 +25,13 @@ const AUTO_MANAGE_DAILY_OUTCOME = Object.freeze({
   noRoster: "no-roster",
 });
 
+/**
+ * Build the shared scan/atomic-claim filter; opening status never postpones a
+ * failed sync, and a calendar rollover never bypasses a pending retry deadline.
+ * @param {{targetDayKey: string}} dailyContext
+ * @param {number} [nowMs]
+ * @returns {object} Mongo eligibility filter.
+ */
 function buildAutoManageDailyAvailabilityFilter(
   { targetDayKey },
   nowMs = Date.now()
@@ -31,6 +39,14 @@ function buildAutoManageDailyAvailabilityFilter(
   return {
     lastAutoManageDailyFinishedDayKey: { $ne: targetDayKey },
     $and: [
+      // Calendar keys still identify attempts; elapsed time controls eligibility.
+      ...["lastAutoManageDailyFinishedAt", "lastAutoManageSyncAt"].map(field => ({
+        $or: [
+          { [field]: { $exists: false } },
+          { [field]: null },
+          { [field]: { $lte: nowMs - AUTO_MANAGE_DAILY_INTERVAL_MS } },
+        ],
+      })),
       {
         $or: [
           { autoManageDailyLeaseUntil: { $exists: false } },
@@ -40,7 +56,6 @@ function buildAutoManageDailyAvailabilityFilter(
       },
       {
         $or: [
-          { lastAutoManageDailyAttemptDayKey: { $ne: targetDayKey } },
           { autoManageDailyNextAttemptAt: { $exists: false } },
           { autoManageDailyNextAttemptAt: null },
           { autoManageDailyNextAttemptAt: { $lte: nowMs } },
@@ -50,8 +65,11 @@ function buildAutoManageDailyAvailabilityFilter(
   };
 }
 
+/** @returns {number} Attempt number, preserving unfinished retries across midnight. */
 function getNextAutoManageDailyAttemptCount(userDoc, targetDayKey) {
-  if (userDoc?.lastAutoManageDailyAttemptDayKey !== targetDayKey) return 1;
+  const pending = [AUTO_MANAGE_DAILY_OUTCOME.retryScheduled, AUTO_MANAGE_DAILY_OUTCOME.inFlight]
+    .includes(userDoc?.lastAutoManageDailyOutcome);
+  if (!pending && userDoc?.lastAutoManageDailyAttemptDayKey !== targetDayKey) return 1;
   return Math.max(0, Number(userDoc?.autoManageDailyAttemptCount) || 0) + 1;
 }
 
@@ -85,7 +103,7 @@ function clearAutoManageDailyLease(userDoc) {
   userDoc.autoManageDailyLeaseUntil = null;
 }
 
-function finishAutoManageDailyAttempt(userDoc, targetDayKey, outcome) {
+function finishAutoManageDailyAttempt(userDoc, targetDayKey, outcome, nowMs) {
   let bucket = "settled";
   if (outcome === AUTO_MANAGE_DAILY_OUTCOME.success) bucket = "synced";
   else if (outcome === AUTO_MANAGE_DAILY_OUTCOME.retryExhausted) {
@@ -93,6 +111,7 @@ function finishAutoManageDailyAttempt(userDoc, targetDayKey, outcome) {
   }
 
   userDoc.lastAutoManageDailyFinishedDayKey = targetDayKey;
+  userDoc.lastAutoManageDailyFinishedAt = nowMs;
   userDoc.lastAutoManageDailyOutcome = outcome;
   userDoc.autoManageDailyNextAttemptAt = null;
   clearAutoManageDailyLease(userDoc);
@@ -113,7 +132,8 @@ function scheduleAutoManageDailyRetry({
     return finishAutoManageDailyAttempt(
       userDoc,
       targetDayKey,
-      AUTO_MANAGE_DAILY_OUTCOME.retryExhausted
+      AUTO_MANAGE_DAILY_OUTCOME.retryExhausted,
+      nowMs
     );
   }
 
@@ -169,13 +189,13 @@ function applyAutoManageDailyReportState({
     isPublicLogDisabledError,
   });
   if (outcome === AUTO_MANAGE_DAILY_OUTCOME.success) {
-    return finishAutoManageDailyAttempt(userDoc, targetDayKey, outcome);
+    return finishAutoManageDailyAttempt(userDoc, targetDayKey, outcome, nowMs);
   }
   if (
     outcome === AUTO_MANAGE_DAILY_OUTCOME.allPrivate ||
     outcome === AUTO_MANAGE_DAILY_OUTCOME.noActionable
   ) {
-    return finishAutoManageDailyAttempt(userDoc, targetDayKey, outcome);
+    return finishAutoManageDailyAttempt(userDoc, targetDayKey, outcome, nowMs);
   }
   return scheduleAutoManageDailyRetry({
     userDoc,
@@ -195,6 +215,7 @@ function releaseAutoManageDailyLeaseWithoutFinishing(
 }
 
 module.exports = {
+  AUTO_MANAGE_DAILY_INTERVAL_MS,
   AUTO_MANAGE_DAILY_LEASE_MS,
   AUTO_MANAGE_DAILY_RETRY_DELAYS_MS,
   AUTO_MANAGE_DAILY_MAX_ATTEMPTS,

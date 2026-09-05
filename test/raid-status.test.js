@@ -160,22 +160,40 @@ test("buildStatusFooterText: handles missing progress field defensively", () => 
   assert.match(text, /0 pending/);
 });
 
-test("REGRESSION: raid-status reload paths preserve merged shared rosters", () => {
-  const indexSource = fs.readFileSync(
-    path.join(__dirname, "..", "bot", "handlers", "raid-status", "index.js"),
-    "utf8"
-  );
-  const stateSource = fs.readFileSync(
-    path.join(__dirname, "..", "bot", "handlers", "raid-status", "state", "session-state.js"),
-    "utf8"
-  );
-  assert.match(indexSource, /const reloadViewerAccounts = async/);
-  assert.match(
-    stateSource,
-    /accounts = await buildMergedAccounts\(discordId, userDoc\.accounts\)/
-  );
-  assert.doesNotMatch(stateSource, /accounts\s*=\s*userDoc\.accounts/);
-  assert.doesNotMatch(stateSource, /accounts\s*=\s*reloaded\.accounts/);
+test("REGRESSION: raid-status reload preserves shared rosters and applies revoked access", async (t) => {
+  const User = require("../bot/models/user");
+  const RosterShare = require("../bot/models/RosterShare");
+  const { createRaidStatusSessionState } = require("../bot/handlers/raid-status/state/session-state");
+  const { buildMergedAccounts } = require("../bot/handlers/raid-status/view/accounts");
+  const { buildStatusRosterFilterEntries } = require("../bot/handlers/raid-status/raid-filter");
+  let granted = true;
+  let shareReads = 0;
+  t.mock.method(RosterShare, "find", () => ({ lean: async () => {
+    shareReads += 1;
+    return granted ? [{ ownerDiscordId: "test-manager", accessLevel: "view" }] : [];
+  } }));
+  t.mock.method(User, "find", () => ({ lean: async () => [{
+    discordId: "test-manager",
+    accounts: [{ accountName: "Shared", characters: [] }],
+  }] }));
+  const ownDoc = { accounts: [{ accountName: "Own", characters: [] }] };
+  const state = await createRaidStatusSessionState({
+    User: { findOne: async () => ownDoc },
+    discordId: "viewer",
+    userDoc: ownDoc,
+    buildMergedAccounts,
+    getStatusRaidsForCharacter: () => [],
+    buildRaidDropdownState: () => ({ raidDropdownEntries: [], totalRaidPending: 0 }),
+    buildStatusRosterFilterEntries,
+  });
+  assert.deepEqual(state.accounts.map(account => account.accountName), ["Own", "Shared"]);
+  await state.reloadViewerAccounts({ accounts: [{ accountName: "Updated", characters: [] }] });
+  assert.deepEqual(state.accounts.map(account => account.accountName), ["Updated", "Shared"]);
+  assert.equal(state.accounts[1]._sharedFrom.accessLevel, "view");
+  granted = false;
+  await state.reloadViewerAccounts();
+  assert.deepEqual(state.accounts.map(account => account.accountName), ["Own"]);
+  assert.equal(shareReads, 3, "every reload must recheck current grants");
 });
 
 test("REGRESSION: raid-status edit payload clears stale canvas attachments", () => {

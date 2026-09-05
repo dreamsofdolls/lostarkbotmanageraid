@@ -318,6 +318,37 @@ test("raid-status coalesces concurrent live snapshot reloads", async () => {
   assert.equal(state.totalCharacters, 1);
 });
 
+test("raid-status starts fresh share authorization while its own roster reload is pending", async () => {
+  let resolveOwn;
+  const own = new Promise(resolve => { resolveOwn = resolve; });
+  let shareReads = 0;
+  const sharedAccount = { accountName: "Shared", characters: [], _sharedFrom: { ownerDiscordId: "owner" } };
+  const state = await createRaidStatusSessionState({
+    User: { findOne: () => own },
+    discordId: "viewer",
+    userDoc: { accounts: [] },
+    incomingSharedAccounts: [],
+    buildMergedAccounts: async (_id, accounts, options) => {
+      if (options) return accounts;
+      shareReads += 1;
+      return [...accounts, sharedAccount];
+    },
+    getStatusRaidsForCharacter: () => [],
+    buildRaidDropdownState: () => ({ raidDropdownEntries: [], totalRaidPending: 0 }),
+    buildStatusRosterFilterEntries,
+  });
+  const reload = state.reloadViewerAccounts();
+  try {
+    assert.equal(shareReads, 1, "share authorization must not wait for the own-document query");
+  } finally {
+    resolveOwn({ accounts: [{ accountName: "Own", characters: [{ name: "Fresh" }] }] });
+    await reload;
+  }
+  assert.deepEqual(state.accounts.map(account => account.accountName), ["Own", "Shared"]);
+  assert.equal(state.accounts[1]._sharedFrom.ownerDiscordId, "owner");
+  assert.equal(state.totalCharacters, 1);
+});
+
 test("raid-status session keeps roster dropdown and pagination synchronized", async () => {
   const accounts = [
     {

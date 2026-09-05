@@ -14,6 +14,7 @@ git diff --check
 | In-flight/autocomplete | `node --test test/in-flight-loader.test.js test/raid-autocomplete-choices.test.js test/select-options.test.js` |
 | Background library/loading | `node --test test/raid-bg.test.js` |
 | Manual/Bible sync | `node --test test/auto-manage-runtime-sync.test.js test/raid-status.test.js` |
+| Daily 24h/status latency | `node --test test/auto-manage-24h.test.js test/auto-manage-daily-state.test.js test/auto-manage-daily-scheduler.test.js test/raid-status-viewer-state.test.js` |
 | Local Sync | `node --test test/local-sync-apply.test.js test/local-sync-http-server.test.js test/local-sync-tokens.test.js` |
 | Schedule | `node --test test/raid-schedule-auto-clear.test.js test/raid-announce-schedule.test.js` |
 | i18n | `node --test test/i18n.test.js` |

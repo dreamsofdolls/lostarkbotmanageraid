@@ -198,6 +198,8 @@ const userSchema = new mongoose.Schema(
     autoManageDailyLeaseDayKey: { type: String, default: "" },
     autoManageDailyLeaseUntil: { type: Number, default: null },
     lastAutoManageDailyFinishedDayKey: { type: String, default: "" },
+    // Rolling 24-hour gate, including private/no-actionable/exhausted outcomes.
+    lastAutoManageDailyFinishedAt: { type: Number, default: null },
     lastAutoManageDailyOutcome: { type: String, default: "" },
     // Unix timestamp, in milliseconds, of the last channel notice posted when
     // every character returned "Logs not enabled". The seven-day deduplication

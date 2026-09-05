@@ -6,8 +6,8 @@ const {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// DAY_MS derives the adjacent VN date key only. Backfill eligibility is based
-// on calendar-day keys, not on a rolling 24-hour interval.
+// Day keys label attempts for compatibility with persisted state. The separate
+// daily-state filter enforces the rolling 24-hour interval and retry deadlines.
 function getAutoManageDailyContext(now = new Date()) {
   const instant = now instanceof Date ? now : new Date(now);
   return {

@@ -25,6 +25,12 @@
   và Local Sync không tự cài một cách ghi raid progress khác.
 - Manual/Bible sync giữ thứ tự acquire → gather → apply → stamp → save → outcome
   → release; failure vẫn phải giải phóng lock.
+- Daily auto-sync chạy im lặng, kiểm tra mỗi 5 phút theo batch nhỏ; chỉ chọn người
+  đã bật Auto-sync và quá 24 giờ kể từ lần sync thành công/lần daily kết thúc.
+  `lastAutoManageDailyFinishedAt` chặn cả kết quả private/no-actionable/exhausted;
+  retry có backoff và giữ số lượt qua nửa đêm. Không phụ thuộc việc mở raid-status.
+- Reload raid-status đọc roster của người xem và quyền roster được chia sẻ song
+  song; mỗi lần reload vẫn kiểm tra quyền mới, không dùng TTL cho quyền ghi.
 - Autocomplete mới được phép dùng TTL ngắn. Command/write path cần dữ liệu mới;
   in-flight dedup không đồng nghĩa được dùng kết quả đã cache lâu.
 - In-flight loader chỉ evict mục đã settled, không làm mất việc gộp request đang

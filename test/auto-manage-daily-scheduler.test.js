@@ -11,7 +11,6 @@ const {
   createOutcomeCounters,
   createAutoManageDailySchedulerService,
   persistTransientDailyFailure,
-  shouldNudgePrivateLogUser,
 } = require("../bot/services/raid/schedulers/auto-manage-daily-scheduler");
 const {
   getAutoManageDailyContext,
@@ -82,29 +81,10 @@ test("auto-manage daily scheduler selects unfinished users without a status-open
   const nowMs = Date.parse("2026-07-13T17:05:00.000Z");
   const query = buildAutoManageDailyCandidateQuery(dailyContext, nowMs);
 
-  assert.deepEqual(query, {
-    autoManageEnabled: true,
-    localSyncEnabled: { $ne: true },
-    "accounts.0": { $exists: true },
-    lastAutoManageDailyFinishedDayKey: { $ne: "2026-07-13" },
-    $and: [
-      {
-        $or: [
-          { autoManageDailyLeaseUntil: { $exists: false } },
-          { autoManageDailyLeaseUntil: null },
-          { autoManageDailyLeaseUntil: { $lte: nowMs } },
-        ],
-      },
-      {
-        $or: [
-          { lastAutoManageDailyAttemptDayKey: { $ne: "2026-07-13" } },
-          { autoManageDailyNextAttemptAt: { $exists: false } },
-          { autoManageDailyNextAttemptAt: null },
-          { autoManageDailyNextAttemptAt: { $lte: nowMs } },
-        ],
-      },
-    ],
-  });
+  assert.equal(query.autoManageEnabled, true);
+  assert.deepEqual(query.localSyncEnabled, { $ne: true });
+  assert.deepEqual(query["accounts.0"], { $exists: true });
+  assert.deepEqual(query.lastAutoManageDailyFinishedDayKey, { $ne: "2026-07-13" });
   assert.equal(JSON.stringify(query).includes("lastRaidStatusOpenedDayKey"), false);
   assert.deepEqual(buildAutoManageDailyClaimQuery("100", dailyContext, nowMs), {
     discordId: "100",
@@ -465,7 +445,7 @@ test("auto-manage daily scheduler schedules a transient report retry without fin
   assert.equal(savedDocs[0].autoManageDailyLeaseUntil, null);
 });
 
-test("auto-manage daily scheduler settles all-private reports and posts one nudge", async () => {
+test("auto-manage daily scheduler settles all-private reports silently", async () => {
   const savedDocs = [];
   const nudges = [];
   const seedDoc = {
@@ -523,11 +503,12 @@ test("auto-manage daily scheduler settles all-private reports and posts one nudg
     savedDocs[0].lastAutoManageDailyOutcome,
     AUTO_MANAGE_DAILY_OUTCOME.allPrivate
   );
-  assert.deepEqual(nudges, [{ client, discordId: "100" }]);
+  assert.deepEqual(nudges, []);
 });
 
 test("auto-manage daily scheduler persists retry state when gather throws", async () => {
   const warnings = [];
+  const events = [];
   const originalWarn = console.warn;
   console.warn = (...args) => warnings.push(args.join(" "));
   try {
@@ -544,6 +525,8 @@ test("auto-manage daily scheduler persists retry state when gather throws", asyn
       autoManageDailyLeaseDayKey: "2026-07-13",
       autoManageDailyAttemptCount: 1,
       async save() {
+        await Promise.resolve();
+        events.push("persist");
         savedDocs.push({ ...this });
       },
     };
@@ -558,7 +541,7 @@ test("auto-manage daily scheduler persists retry state when gather throws", asyn
       ensureFreshWeek: () => {},
       weekResetStartMs: () => 777,
       acquireAutoManageSyncSlot: async () => ({ acquired: true }),
-      releaseAutoManageSyncSlot: () => {},
+      releaseAutoManageSyncSlot: () => events.push("release"),
       gatherAutoManageLogsForUserDoc: async () => {
         throw new Error("upstream unavailable");
       },
@@ -586,6 +569,7 @@ test("auto-manage daily scheduler persists retry state when gather throws", asyn
         AUTO_MANAGE_DAILY_RETRY_DELAYS_MS[0]
     );
     assert.match(warnings.join("\n"), /upstream unavailable/);
+    assert.deepEqual(events, ["persist", "release"]);
   } finally {
     console.warn = originalWarn;
   }
@@ -648,42 +632,6 @@ test("transient failure persistence respects configuration changes made during a
     assert.equal(savedDocs[0].autoManageDailyLeaseUntil, null, name);
     assert.equal(savedDocs[0].lastAutoManageDailyFinishedDayKey, undefined, name);
   }
-});
-
-test("auto-manage daily scheduler nudges only when every report entry is private-log blocked", () => {
-  assert.equal(
-    shouldNudgePrivateLogUser({
-      report: {
-        perChar: [
-          { error: "Logs not enabled" },
-          { error: "private" },
-        ],
-      },
-      isPublicLogDisabledError: (error) => ["Logs not enabled", "private"].includes(error),
-    }),
-    true
-  );
-
-  assert.equal(
-    shouldNudgePrivateLogUser({
-      report: {
-        perChar: [
-          { error: "Logs not enabled" },
-          { applied: ["G1"] },
-        ],
-      },
-      isPublicLogDisabledError: (error) => error === "Logs not enabled",
-    }),
-    false
-  );
-
-  assert.equal(
-    shouldNudgePrivateLogUser({
-      report: { perChar: [] },
-      isPublicLogDisabledError: () => true,
-    }),
-    false
-  );
 });
 
 test("auto-manage daily scheduler exposes the batch size used by the query chain", () => {

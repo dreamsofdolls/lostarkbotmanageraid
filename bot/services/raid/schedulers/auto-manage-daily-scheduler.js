@@ -18,7 +18,9 @@ const {
 } = require("../../auto-manage/runtime/support/daily-state");
 const { createNonOverlappingIntervalRunner } = require("./scheduler-runner");
 
-const AUTO_MANAGE_DAILY_TICK_MS = 30 * 60 * 1000;
+// The persisted 24-hour gate limits sync frequency; short ticks drain due users
+// in small batches without waiting another half hour after each batch.
+const AUTO_MANAGE_DAILY_TICK_MS = 5 * 60 * 1000;
 const AUTO_MANAGE_DAILY_BATCH_SIZE = 6;
 const OUTCOME_COUNTER_KEY_BY_BUCKET = new Map([
   ["synced", "syncedCount"],
@@ -61,14 +63,6 @@ function createOutcomeCounters() {
     skippedCount: 0,
     failedCount: 0,
   };
-}
-
-function shouldNudgePrivateLogUser({ report, isPublicLogDisabledError }) {
-  return Boolean(
-    report &&
-      report.perChar.length > 0 &&
-      report.perChar.every((entry) => isPublicLogDisabledError(entry.error))
-  );
 }
 
 async function settleUnavailableDailyCandidate({
@@ -213,24 +207,6 @@ async function persistCollectedDailyReport({
   return { report, transition };
 }
 
-async function maybeNudgePrivateLogUser({
-  report,
-  isPublicLogDisabledError,
-  nudgeStuckPrivateLogUser,
-  client,
-  discordId,
-}) {
-  if (!shouldNudgePrivateLogUser({ report, isPublicLogDisabledError })) return;
-  try {
-    await nudgeStuckPrivateLogUser(client, discordId);
-  } catch (err) {
-    console.warn(
-      `[auto-manage daily] user ${discordId} private-log nudge failed:`,
-      err?.message || err
-    );
-  }
-}
-
 async function settleCandidateFailure({
   err,
   claimed,
@@ -282,8 +258,6 @@ async function syncCandidate({
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
     isPublicLogDisabledError,
-    nudgeStuckPrivateLogUser,
-    client,
   } = deps;
 
   const guard = await acquireAutoManageSyncSlot(discordId);
@@ -335,17 +309,10 @@ async function syncCandidate({
       collected,
     });
 
-    await maybeNudgePrivateLogUser({
-      report: persisted.report,
-      isPublicLogDisabledError,
-      nudgeStuckPrivateLogUser,
-      client,
-      discordId,
-    });
-
     return persisted.transition;
   } catch (err) {
-    return settleCandidateFailure({
+    // Persist the retry/lease state before finally releases the shared sync slot.
+    return await settleCandidateFailure({
       err,
       claimed,
       User,
@@ -365,6 +332,12 @@ function applyOutcomeCounter(counters, bucket) {
   counters[counterKey] += 1;
 }
 
+/**
+ * Run silent background syncs for opted-in users, at most once per 24 hours
+ * after a settled run/successful sync, with bounded retries for transient errors.
+ * @param {object} deps - User persistence, shared sync lock and Bible services.
+ * @returns {object} Scheduler lifecycle and a deterministic tick entrypoint.
+ */
 function createAutoManageDailySchedulerService({
   User,
   saveWithRetry,
@@ -375,7 +348,6 @@ function createAutoManageDailySchedulerService({
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
   isPublicLogDisabledError,
-  nudgeStuckPrivateLogUser,
   processEnv = process.env,
 }) {
   async function runAutoManageDailyTick(client, now = new Date()) {
@@ -411,8 +383,6 @@ function createAutoManageDailySchedulerService({
           gatherAutoManageLogsForUserDoc,
           applyAutoManageCollected,
           isPublicLogDisabledError,
-          nudgeStuckPrivateLogUser,
-          client,
         },
       });
       applyOutcomeCounter(counters, outcome.bucket);
@@ -446,6 +416,5 @@ module.exports = {
   applyOutcomeCounter,
   createOutcomeCounters,
   createAutoManageDailySchedulerService,
-  shouldNudgePrivateLogUser,
   persistTransientDailyFailure,
 };

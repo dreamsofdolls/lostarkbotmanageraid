@@ -1,6 +1,6 @@
 "use strict";
 
-const { t, getGuildLanguage, getUserLanguage } = require("../../i18n");
+const { t, getGuildLanguage } = require("../../i18n");
 const {
   ARTIST_QUIET_START_HOUR_VN,
   ARTIST_QUIET_END_HOUR_VN,
@@ -35,7 +35,6 @@ const {
 const {
   createAutoManageDailySchedulerService,
 } = require("./auto-manage-daily-scheduler");
-const { createPrivateLogNudgeService } = require("./auto-manage-private-log-nudge");
 const { createMaintenanceSchedulerService } = require("./maintenance-scheduler");
 const { createSideTaskResetService } = require("./side-task-reset");
 const {
@@ -60,15 +59,6 @@ function createRaidSchedulerService({
     User,
     dailyResetStartMs,
     weekResetStartMs,
-  });
-
-  const { nudgeStuckPrivateLogUser } = createPrivateLogNudgeService({
-    GuildConfig,
-    User,
-    getAnnouncementsConfig,
-    getUserLanguage,
-    t,
-    postChannelAnnouncement,
   });
 
   const autoCleanupService = createAutoCleanupSchedulerService({
@@ -104,7 +94,6 @@ function createRaidSchedulerService({
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
     isPublicLogDisabledError,
-    nudgeStuckPrivateLogUser,
   });
 
   return {
