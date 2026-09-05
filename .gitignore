@@ -13,5 +13,6 @@ docs/
 # under .claude/superpowers (mockups/specs/plans). Local-only, never pushed.
 .claude/
 
-# Agent guides are versioned; scratch notes and verification logs stay local.
-.agent/local/
+# Agent instructions, guides, scratch notes and logs stay local.
+.agent/
+AGENTS.md
