@@ -5,8 +5,99 @@ const assert = require("node:assert/strict");
 
 const {
   createAllModePendingAggregateCache,
-  computeAllModePendingAggregate,
 } = require("../bot/handlers/raid-check/all-mode/all-mode-aggregate");
+
+// Independent scan oracle retained only for parity tests of the indexed runtime path.
+const { isSupportClass } = require("../bot/models/Class");
+const { getRaidModeLabel } = require("../bot/utils/raid/common/labels");
+const { isCountedRaidProgress } = require("../bot/utils/raid/common/character");
+const { isRaidCheckVisibleRaid } = require("../bot/handlers/raid-check/visibility");
+
+function createRoleTally() {
+  return { count: 0, supports: 0, dps: 0 };
+}
+
+function addPendingRole(tally, isSupport) {
+  tally.count += 1;
+  if (isSupport) {
+    tally.supports += 1;
+  } else {
+    tally.dps += 1;
+  }
+}
+
+function getRaidEntry({ perRaidPending, raid, lang }) {
+  const key = `${raid.raidKey}:${raid.modeKey}`;
+  let entry = perRaidPending.get(key);
+  if (!entry) {
+    entry = {
+      key,
+      label: getRaidModeLabel(raid.raidKey, raid.modeKey, lang),
+      // raidKey/modeKey kept so the raid dropdown can sort by canonical
+      // progression order (compareRaidModeOrder) instead of pending count.
+      raidKey: raid.raidKey,
+      modeKey: raid.modeKey,
+      pending: 0,
+      supports: 0,
+      dps: 0,
+    };
+    perRaidPending.set(key, entry);
+  }
+  return entry;
+}
+
+function computeReferenceAggregate({
+  pagesData,
+  raidFilter = null,
+  userFilter = null,
+  getStatusRaidsForCharacter,
+  lang = "vi",
+}) {
+  const perUserPending = new Map();
+  const perRaidPending = new Map();
+  let totalPending = 0;
+
+  for (const page of pagesData || []) {
+    const discordId = page?.userDoc?.discordId;
+    if (!discordId) continue;
+    if (userFilter && discordId !== userFilter) continue;
+
+    const chars = Array.isArray(page?.account?.characters)
+      ? page.account.characters
+      : [];
+    for (const character of chars) {
+      const charIsSupport = isSupportClass(character?.class);
+      for (const raid of getStatusRaidsForCharacter(character) || []) {
+        if (!isRaidCheckVisibleRaid(raid)) continue;
+        if (!isCountedRaidProgress(raid)) continue;
+        const raidEntry = getRaidEntry({ perRaidPending, raid, lang });
+        if (raidFilter && raidEntry.key !== raidFilter) continue;
+        if (raid.isCompleted) continue;
+
+        let userEntry = perUserPending.get(discordId);
+        if (!userEntry) {
+          userEntry = createRoleTally();
+          perUserPending.set(discordId, userEntry);
+        }
+
+        addPendingRole(userEntry, charIsSupport);
+        raidEntry.pending += 1;
+        if (charIsSupport) {
+          raidEntry.supports += 1;
+        } else {
+          raidEntry.dps += 1;
+        }
+        totalPending += 1;
+      }
+    }
+  }
+
+  return { perUserPending, perRaidPending, totalPending };
+}
+
+function computePendingAggregate({ raidFilter, userFilter, ...options }) {
+  return createAllModePendingAggregateCache(options).compute({ raidFilter, userFilter });
+}
 
 function createPage(discordId, characters) {
   return {
@@ -59,7 +150,7 @@ function normalizeAggregate(aggregate) {
 }
 
 test("raid-check all-mode aggregate counts pending by user, raid, and role bucket", () => {
-  const aggregate = computeAllModePendingAggregate({
+  const aggregate = computePendingAggregate({
     pagesData,
     getStatusRaidsForCharacter,
     lang: "en",
@@ -86,7 +177,7 @@ test("raid-check all-mode aggregate counts pending by user, raid, and role bucke
 });
 
 test("raid-check all-mode aggregate keeps completed raid entries visible with zero pending", () => {
-  const aggregate = computeAllModePendingAggregate({
+  const aggregate = computePendingAggregate({
     pagesData,
     getStatusRaidsForCharacter,
     lang: "en",
@@ -100,7 +191,7 @@ test("raid-check all-mode aggregate keeps completed raid entries visible with ze
 });
 
 test("raid-check all-mode aggregate scopes pending counts by active raid filter", () => {
-  const aggregate = computeAllModePendingAggregate({
+  const aggregate = computePendingAggregate({
     pagesData,
     raidFilter: "serca:hard",
     getStatusRaidsForCharacter,
@@ -117,7 +208,7 @@ test("raid-check all-mode aggregate scopes pending counts by active raid filter"
 });
 
 test("raid-check all-mode aggregate scopes raid dropdown counts by active user filter", () => {
-  const aggregate = computeAllModePendingAggregate({
+  const aggregate = computePendingAggregate({
     pagesData,
     userFilter: "user-b",
     getStatusRaidsForCharacter,
@@ -130,7 +221,7 @@ test("raid-check all-mode aggregate scopes raid dropdown counts by active user f
 });
 
 test("raid-check all-mode aggregate excludes raids that do not receive gold", () => {
-  const aggregate = computeAllModePendingAggregate({
+  const aggregate = computePendingAggregate({
     pagesData: [
       createPage("user-a", [
         {
@@ -166,7 +257,7 @@ test("raid-check all-mode aggregate excludes raids that do not receive gold", ()
 });
 
 test("raid-check all-mode aggregate excludes Solo raids even when they receive gold", () => {
-  const aggregate = computeAllModePendingAggregate({
+  const aggregate = computePendingAggregate({
     pagesData: [
       createPage("user-a", [
         {
@@ -263,7 +354,7 @@ test("raid-check all-mode aggregate index matches direct scans for every filter 
   ];
 
   for (const filter of filters) {
-    const expected = computeAllModePendingAggregate({
+    const expected = computeReferenceAggregate({
       pagesData,
       ...filter,
       getStatusRaidsForCharacter,

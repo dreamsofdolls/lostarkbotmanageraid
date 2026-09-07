@@ -77,20 +77,7 @@ function applyRsvp(signups, discordId, status) {
 }
 
 /**
- * Remove the caller's signup entirely.
- * @param {Array} signups
- * @param {string} discordId
- * @returns {{signups: Array, ok: boolean}} ok=false when nothing was removed
- */
-function applyLeave(signups, discordId) {
-  const list = Array.isArray(signups) ? signups : [];
-  const ok = list.some((s) => s.discordId === discordId);
-  return { signups: list.filter((s) => s.discordId !== discordId), ok };
-}
-
-/**
- * Lead-side removal (kick) of one or more signups by discordId. Unlike
- * applyLeave (self-service, single id), this drops a whole set in one pass
+ * Lead-side removal (kick) of one or more signups by discordId in one pass
  * and reports which signup records were actually present + removed, so the
  * caller can confirm to the lead and ping any waitlist promotion the freed
  * slot triggers (via slots.detectPromotion on before/after).
@@ -112,6 +99,5 @@ module.exports = {
   applyJoin,
   applyCharacterJoin,
   applyRsvp,
-  applyLeave,
   applyKick,
 };

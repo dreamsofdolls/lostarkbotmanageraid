@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { assignSlots, nextWaitlistPromotion } = require("../bot/services/raid/schedule/slots/slots");
+const { assignSlots, detectPromotion } = require("../bot/services/raid/schedule/slots/slots");
 const { applyJoin } = require("../bot/services/raid/schedule/slots/signup-state");
 
 const sigs = [
@@ -19,11 +19,15 @@ test("assignSlots fills by join order, overflow to waitlist, by role", () => {
   assert.deepEqual(waitlist.map((s) => s.discordId), ["c"]);     // 3rd support overflows
 });
 
-test("nextWaitlistPromotion returns the first waitlisted of the freed role", () => {
+test("detectPromotion selects the waitlisted member for the role actually freed", () => {
+  const counts = { supSlots: 2, dpsSlots: 6 };
   // c (support) is waitlisted; freeing a support slot should promote c.
-  assert.equal(nextWaitlistPromotion(sigs, { supSlots: 2, dpsSlots: 6 }, "support").discordId, "c");
+  assert.deepEqual(
+    detectPromotion(sigs, sigs.filter((s) => s.discordId !== "a"), counts).map((s) => s.discordId),
+    ["c"],
+  );
   // No dps is waitlisted, so a freed dps slot has no promotion.
-  assert.equal(nextWaitlistPromotion(sigs, { supSlots: 2, dpsSlots: 6 }, "dps"), null);
+  assert.deepEqual(detectPromotion(sigs, sigs.filter((s) => s.discordId !== "d"), counts), []);
 });
 
 test("manager-added signups follow normal role capacity and can land on waitlist", () => {

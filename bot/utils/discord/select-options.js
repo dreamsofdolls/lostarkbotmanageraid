@@ -1,5 +1,11 @@
 "use strict";
 
+/** Truncate Discord select text, reserving one character for an ellipsis. */
+function truncateSelectText(value, max) {
+  const text = String(value || "");
+  return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`;
+}
+
 /**
  * Return at most `limit` entries while keeping the active entry visible.
  * Discord select menus cap options, so an active item outside the first page
@@ -58,6 +64,7 @@ function filterAutocompleteChoices(
 }
 
 module.exports = {
+  truncateSelectText,
   filterAutocompleteChoices,
   selectEntriesWithPinnedActive,
 };

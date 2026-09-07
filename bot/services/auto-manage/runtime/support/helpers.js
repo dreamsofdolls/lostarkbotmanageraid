@@ -21,24 +21,33 @@ async function mapWithConcurrency(items, limit, mapper) {
   return results;
 }
 
+/**
+ * Select named logs in one pass; wholly unnamed legacy responses pass through.
+ * @param {Array} logs Raw Bible log rows.
+ * @param {string} expectedName Character requested by the caller.
+ * @param {Function} normalizeName Pure character-name normalizer.
+ * @returns {{logs: Array, mismatchedNames: Array, hadNamedLogs: boolean}}
+ */
 function filterLogsForCharacter(logs, expectedName, normalizeName) {
   const expected = normalizeName(expectedName);
   if (!expected || !Array.isArray(logs) || logs.length === 0) {
     return { logs: Array.isArray(logs) ? logs : [], mismatchedNames: [], hadNamedLogs: false };
   }
-  const namedLogs = logs.filter((log) => normalizeName(log?.name));
-  if (namedLogs.length === 0) {
+  const filtered = [];
+  const mismatchedNames = new Set();
+  let hadNamedLogs = false;
+  logs.forEach((log) => {
+    const name = log?.name;
+    const normalized = normalizeName(name);
+    if (!normalized) return;
+    hadNamedLogs = true;
+    if (normalized === expected) filtered.push(log);
+    else mismatchedNames.add(name);
+  });
+  if (!hadNamedLogs) {
     return { logs, mismatchedNames: [], hadNamedLogs: false };
   }
-  const filtered = namedLogs.filter((log) => normalizeName(log?.name) === expected);
-  const mismatchedNames = [
-    ...new Set(
-      namedLogs
-        .map((log) => log?.name)
-        .filter((name) => normalizeName(name) !== expected)
-    ),
-  ];
-  return { logs: filtered, mismatchedNames, hadNamedLogs: true };
+  return { logs: filtered, mismatchedNames: [...mismatchedNames], hadNamedLogs };
 }
 
 module.exports = {

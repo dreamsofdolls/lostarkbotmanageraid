@@ -11,6 +11,8 @@
  * limit window doesn't fan out to ~N more bible requests.
  */
 
+const { findAccountByName } = require("../../utils/user-doc");
+
 const ROSTER_REFRESH_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const ROSTER_REFRESH_FAILURE_COOLDOWN_MS = 5 * 60 * 1000;
 const REFRESH_SEED_FAILURE_DETAIL_LIMIT = 3;
@@ -136,12 +138,6 @@ function createRosterRefreshService(deps) {
     const accountName = normalizeName(account?.accountName);
     if (!discordId || !accountName) return null;
     return `${discordId}:${accountName}`;
-  }
-
-  function findAccountByName(userDoc, accountName) {
-    const target = normalizeName(accountName);
-    if (!target || !Array.isArray(userDoc?.accounts)) return null;
-    return userDoc.accounts.find((account) => normalizeName(account?.accountName) === target) || null;
   }
 
   function buildRefreshSearchState(account) {
@@ -308,7 +304,7 @@ function createRosterRefreshService(deps) {
 
   async function collectAccountRefresh(userDoc, accountName) {
     const originalName = String(accountName || "").trim();
-    const account = findAccountByName(userDoc, originalName);
+    const account = findAccountByName(userDoc, originalName, normalizeName);
     if (!account) {
       return {
         accountName: originalName,

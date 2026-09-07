@@ -6,13 +6,9 @@ const {
   partitionSelectable,
 } = require("../../../../services/raid/schedule/slots/eligibility");
 const { getClassEmoji } = require("../../../../models/Class");
+const { truncateSelectText: clip } = require("../../../../utils/discord/select-options");
 
 const PICKER_LIMIT = 25;
-
-function clip(value, max) {
-  const text = String(value || "");
-  return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}\u2026`;
-}
 
 function classEmojiOption(className) {
   const match = /^<(a)?:(\w+):(\d+)>$/.exec(getClassEmoji(className) || "");

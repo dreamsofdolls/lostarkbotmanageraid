@@ -1,12 +1,6 @@
 "use strict";
 
-const { toPlainUserDoc } = require("../../utils/user-doc");
-
-function findAccountByName(userDoc, accountName, normalizeName) {
-  const target = normalizeName(accountName);
-  if (!target || !Array.isArray(userDoc?.accounts)) return null;
-  return userDoc.accounts.find((account) => normalizeName(account?.accountName) === target) || null;
-}
+const { toPlainUserDoc, findAccountByName } = require("../../utils/user-doc");
 
 function resolveManualRosterRefreshStatus({
   entry,

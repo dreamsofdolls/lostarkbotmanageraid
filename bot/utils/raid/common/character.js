@@ -251,10 +251,6 @@ function isCountedRaidProgress(raid) {
   return !isSoloModeKey(raid?.modeKey) && isGoldReceivingRaid(raid);
 }
 
-function getStatusProgressRaidsForCharacter(character) {
-  return getStatusRaidsForCharacter(character).filter(isCountedRaidProgress);
-}
-
 // 3-state aggregate icon for a (done, total) pair. Shared by /raid-status's
 // per-raid line AND /raid-check's per-char card so both commands surface the
 // same visual vocabulary: 🟢 = all done, 🟡 = at least 1 done but not all,
@@ -414,7 +410,6 @@ module.exports = {
   toPlainAssignedRaid,
   buildCharacterRecord,
   getStatusRaidsForCharacter,
-  getStatusProgressRaidsForCharacter,
   isGoldReceivingRaid,
   isCountedRaidProgress,
   formatRaidStatusLine,

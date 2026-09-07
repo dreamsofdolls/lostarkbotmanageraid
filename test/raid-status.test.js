@@ -65,7 +65,7 @@ const {
   computeRaidGold,
   formatRaidStatusLine,
   getStatusRaidsForCharacter,
-  getStatusProgressRaidsForCharacter,
+  isCountedRaidProgress,
   ensureAssignedRaids,
 } = require("../bot/utils/raid/common/character");
 const { getAutoManageCooldownMs } = require("../bot/services/access/manager");
@@ -695,10 +695,10 @@ test("getStatusRaidsForCharacter: reduced normal raids still auto-count because 
   assert.equal(totals.totalUnbound, 54000);
 });
 
-test("getStatusProgressRaidsForCharacter: 1700 chars auto-count the only unbound gold raid", () => {
+test("counted raid progress: 1700 chars auto-count the only unbound gold raid", () => {
   const char = makeChar("Fresh1700", 1700, { isGoldEarner: true });
   const allRaids = getStatusRaidsForCharacter(char);
-  const progressRaids = getStatusProgressRaidsForCharacter(char);
+  const progressRaids = getStatusRaidsForCharacter(char).filter(isCountedRaidProgress);
 
   assert.ok(allRaids.find((raid) => raid.raidKey === "horizon"), "gold setup still sees Horizon");
   assert.deepEqual(
@@ -1303,7 +1303,7 @@ test("buildAccountPageEmbed: real 1710 gold-earner with no clears still shows 0G
     { progress: { completed: 0, partial: 0, total: 3 }, characters: 1 },
     getStatusRaidsForCharacter,
     null,
-    { getProgressRaidsFor: getStatusProgressRaidsForCharacter }
+    { getProgressRaidsFor: (character) => getStatusRaidsForCharacter(character).filter(isCountedRaidProgress) }
   );
   const charField = embed.toJSON().fields.find((f) => /Qiaoli/.test(f.name));
   assert.ok(charField, "char field should be present");

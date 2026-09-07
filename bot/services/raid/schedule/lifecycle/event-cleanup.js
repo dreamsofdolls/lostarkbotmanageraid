@@ -28,28 +28,6 @@ function buildStaleQuery(boundaryMs, nowMs) {
 }
 
 /**
- * Whether an event is stale enough to purge. Two rules:
- *   1. startAt before the most recent weekly reset (any status) - the raid week
- *      has passed.
- *   2. startAt more than 24h ago AND not marked done (status !== "cleared") -
- *      an abandoned event the lead never ended. Only checked when nowMs is given.
- * Missing/invalid startAt is treated as NOT stale - never delete blindly.
- * @param {object} event - a RaidEvent doc (needs startAt; status for rule 2)
- * @param {number} boundaryMs - epoch ms of the most recent weekly reset
- * @param {number} [nowMs] - current epoch ms; enables rule 2 when finite
- * @returns {boolean}
- */
-function isStaleEvent(event, boundaryMs, nowMs) {
-  const start = event && event.startAt != null ? new Date(event.startAt).getTime() : NaN;
-  if (!Number.isFinite(start)) return false;
-  if (start < boundaryMs) return true; // rule 1: before the weekly reset
-  if (Number.isFinite(nowMs) && event.status !== "cleared" && start < nowMs - ABANDONED_AFTER_MS) {
-    return true; // rule 2: 24h past start + never marked done
-  }
-  return false;
-}
-
-/**
  * Delete every raid event whose startAt is before the boundary. The DB delete
  * happens before any board message delete so a Mongo failure cannot leave an
  * open/locked ghost event whose board has vanished. Board deletion remains
@@ -106,4 +84,4 @@ async function purgeStaleRaidEvents({ RaidEvent, client, boundaryMs, nowMs }) {
   return { deleted, boardsDeleted };
 }
 
-module.exports = { isStaleEvent, purgeStaleRaidEvents };
+module.exports = { purgeStaleRaidEvents };

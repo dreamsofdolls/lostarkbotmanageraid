@@ -2,41 +2,24 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
-  isStaleEvent,
   purgeStaleRaidEvents,
 } = require("../bot/services/raid/schedule/lifecycle/event-cleanup");
 
 const BOUNDARY = Date.UTC(2026, 4, 27, 10, 0); // a Wed 10:00 UTC (= 17:00 VN reset)
 
-test("isStaleEvent: true when startAt is before the reset boundary", () => {
-  assert.equal(isStaleEvent({ startAt: new Date(Date.UTC(2026, 4, 25, 13, 0)) }, BOUNDARY), true);  // before reset
-  assert.equal(isStaleEvent({ startAt: new Date(Date.UTC(2026, 4, 28, 13, 0)) }, BOUNDARY), false); // after reset
-  assert.equal(isStaleEvent({ startAt: new Date(BOUNDARY) }, BOUNDARY), false); // exactly at boundary = this cycle
-});
-
-test("isStaleEvent: missing/invalid startAt is not stale (defensive - never delete blindly)", () => {
-  assert.equal(isStaleEvent({}, BOUNDARY), false);
-  assert.equal(isStaleEvent({ startAt: null }, BOUNDARY), false);
-  assert.equal(isStaleEvent(null, BOUNDARY), false);
-});
-
-// Rule 2: an event 24h past start that is NOT marked done (cleared) is stale,
-// even when the weekly boundary is far off. Isolate Rule 2 with a far-past boundary.
-test("isStaleEvent: 24h past start + not 'cleared' is stale (abandoned event)", () => {
-  const now = Date.UTC(2026, 4, 31, 0, 0);
-  const farPastBoundary = now - 100 * 24 * 3600 * 1000; // so Rule 1 never triggers here
-  const start25hAgo = new Date(now - 25 * 3600 * 1000);
-  const start10hAgo = new Date(now - 10 * 3600 * 1000);
-
-  assert.equal(isStaleEvent({ startAt: start25hAgo, status: "open" }, farPastBoundary, now), true);
-  assert.equal(isStaleEvent({ startAt: start25hAgo, status: "locked" }, farPastBoundary, now), true);
-  assert.equal(isStaleEvent({ startAt: start25hAgo, status: "cancelled" }, farPastBoundary, now), true);
-  // marked done -> kept (until the weekly reset, Rule 1)
-  assert.equal(isStaleEvent({ startAt: start25hAgo, status: "cleared" }, farPastBoundary, now), false);
-  // only 10h past start -> not yet
-  assert.equal(isStaleEvent({ startAt: start10hAgo, status: "open" }, farPastBoundary, now), false);
-  // no nowMs -> Rule 2 disabled (backward compat)
-  assert.equal(isStaleEvent({ startAt: start25hAgo, status: "open" }, farPastBoundary), false);
+test("purge query uses an exclusive weekly boundary and disables abandoned cleanup without a finite clock", async () => {
+  for (const nowMs of [undefined, NaN, Infinity]) {
+    let findQuery;
+    const RaidEvent = {
+      find(query) {
+        findQuery = query;
+        return { select() { return { lean: async () => [] }; } };
+      },
+      async deleteOne() { assert.fail("empty query results must not delete records"); },
+    };
+    await purgeStaleRaidEvents({ RaidEvent, client: {}, boundaryMs: BOUNDARY, nowMs });
+    assert.deepEqual(findQuery, { startAt: { $lt: new Date(BOUNDARY) } });
+  }
 });
 
 test("purgeStaleRaidEvents query carries the 24h-not-cleared rule when nowMs is given", async () => {

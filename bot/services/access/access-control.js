@@ -121,30 +121,6 @@ async function canEditAccount(viewerDiscordId, ownerDiscordId, { models = {}, he
   return !!share;
 }
 
-// Lookup helper: given a viewer + a character name (case-insensitive),
-// return the (ownerDoc, account, character) trio if the char exists in
-// any accessible account. Used by text parser + /raid-set when the
-// caller has a name but doesn't know which roster it belongs to.
-async function findAccessibleCharacter(viewerDiscordId, charName, options = {}) {
-  if (!viewerDiscordId || !charName) return null;
-  const target = String(charName).trim().toLowerCase();
-  if (!target) return null;
-
-  const accessible = await getAccessibleAccounts(viewerDiscordId, options);
-  for (const entry of accessible) {
-    const chars = Array.isArray(entry.account?.characters) ? entry.account.characters : [];
-    for (const character of chars) {
-      const candidates = [character.charName, character.name, character.displayName]
-        .filter(Boolean)
-        .map((s) => String(s).toLowerCase());
-      if (candidates.includes(target)) {
-        return { ...entry, character };
-      }
-    }
-  }
-  return null;
-}
-
 function pickDisplayLabel(userDoc) {
   if (!userDoc) return "";
   return (
@@ -159,5 +135,4 @@ function pickDisplayLabel(userDoc) {
 module.exports = {
   getAccessibleAccounts,
   canEditAccount,
-  findAccessibleCharacter,
 };

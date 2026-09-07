@@ -23,7 +23,7 @@ const {
 const {
   formatRaidStatusLine,
   getStatusRaidsForCharacter,
-  getStatusProgressRaidsForCharacter,
+  isCountedRaidProgress,
 } = require("../bot/utils/raid/common/character");
 const { getRaidModeLabel } = require("../bot/utils/raid/common/labels");
 
@@ -121,7 +121,7 @@ test("raid-status keeps Solo visible while reusing Normal progress and gold", ()
 
   const raid = getStatusRaidsForCharacter(character)
     .find((entry) => entry.raidKey === "armoche");
-  const countedProgress = getStatusProgressRaidsForCharacter(character);
+  const countedProgress = getStatusRaidsForCharacter(character).filter(isCountedRaidProgress);
 
   assert.equal(raid.modeKey, "solo");
   assert.equal(raid.rawEarnedGold, 12500);

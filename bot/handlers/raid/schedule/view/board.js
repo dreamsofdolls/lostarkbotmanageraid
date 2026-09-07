@@ -21,12 +21,7 @@ const {
 } = require("../../../../services/raid/schedule/turns");
 const { getRaidModeLabel } = require("../../../../utils/raid/common/labels");
 const { formatStartShortForLang } = require("../../../../utils/raid/schedule/artist-clock");
-
-// Discord caps select option label/description at 100 chars; trim with an ellipsis.
-function clip(value, max) {
-  const text = String(value || "");
-  return text.length <= max ? text : `${text.slice(0, Math.max(0, max - 1))}…`;
-}
+const { truncateSelectText: clip } = require("../../../../utils/discord/select-options");
 
 // Lifecycle -> embed stripe color (mapped onto the shared UI palette).
 function stripeColor(UI, status) {

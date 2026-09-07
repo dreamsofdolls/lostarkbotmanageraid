@@ -158,12 +158,7 @@ function getStatusComponentRoute(customId, { myRaidsSelectId = "" } = {}) {
   return ROUTES_BY_CUSTOM_ID.get(id) || null;
 }
 
-function getEditDrivenStatusComponentIds() {
-  return new Set(STATUS_COMPONENT_ROUTES.filter((route) => route.editDriven).map((route) => route.customId));
-}
-
 module.exports = {
   STATUS_COMPONENT_ACTION,
-  getEditDrivenStatusComponentIds,
   getStatusComponentRoute,
 };

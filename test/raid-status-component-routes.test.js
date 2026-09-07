@@ -5,13 +5,10 @@ const assert = require("node:assert/strict");
 
 const {
   STATUS_COMPONENT_ACTION,
-  getEditDrivenStatusComponentIds,
   getStatusComponentRoute,
 } = require("../bot/handlers/raid-status/components/component-routes");
 
 test("raid-status component routes resolve edit-driven controls", () => {
-  const editDrivenIds = getEditDrivenStatusComponentIds();
-
   assert.deepEqual(
     getStatusComponentRoute("status:prev"),
     {
@@ -39,10 +36,10 @@ test("raid-status component routes resolve edit-driven controls", () => {
       redraw: true,
     },
   );
-  assert.equal(editDrivenIds.has("status:prev"), true);
-  assert.equal(editDrivenIds.has("status-filter:roster"), true);
-  assert.equal(editDrivenIds.has("status-gold:toggle"), true);
-  assert.equal(editDrivenIds.has("status:sync"), false);
+  assert.equal(getStatusComponentRoute("status:prev").editDriven, true);
+  assert.equal(getStatusComponentRoute("status-filter:roster").editDriven, true);
+  assert.equal(getStatusComponentRoute("status-gold:toggle").editDriven, true);
+  assert.equal(getStatusComponentRoute("status:sync").editDriven, false);
   assert.deepEqual(
     getStatusComponentRoute("status:solo-companion"),
     {
@@ -52,7 +49,7 @@ test("raid-status component routes resolve edit-driven controls", () => {
       redraw: false,
     },
   );
-  assert.equal(editDrivenIds.has("status:solo-companion"), false);
+  assert.equal(getStatusComponentRoute("status:solo-companion").editDriven, false);
   assert.deepEqual(
     getStatusComponentRoute("status:roster-refresh"),
     {
@@ -62,7 +59,7 @@ test("raid-status component routes resolve edit-driven controls", () => {
       redraw: false,
     },
   );
-  assert.equal(editDrivenIds.has("status:roster-refresh"), false);
+  assert.equal(getStatusComponentRoute("status:roster-refresh").editDriven, false);
 });
 
 test("raid-status component routes keep task toggle ids on one action", () => {

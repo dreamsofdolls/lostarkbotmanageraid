@@ -4,7 +4,6 @@ const assert = require("node:assert/strict");
 const {
   addTurn,
   setTurnMembers,
-  removeTurn,
   removeMembersFromTurns,
   resolveTurnMembers,
 } = require("../bot/services/raid/schedule/turns");
@@ -24,13 +23,6 @@ test("setTurnMembers replaces one turn (deduped), leaves others, allows overlap"
   turns = setTurnMembers(turns, 1, ["a"]);
   assert.deepEqual(turns[1].memberIds, ["a"]);
   assert.deepEqual(turns[0].memberIds, ["a", "b"]); // turn 1 untouched
-});
-
-test("removeTurn drops the turn at index", () => {
-  let turns = addTurn(addTurn([], "T1"), "T2");
-  turns = removeTurn(turns, 0);
-  assert.equal(turns.length, 1);
-  assert.equal(turns[0].name, "T2");
 });
 
 test("removeMembersFromTurns drops kicked ids from every turn", () => {

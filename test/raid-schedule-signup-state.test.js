@@ -5,7 +5,6 @@ const {
   applyJoin,
   applyCharacterJoin,
   applyRsvp,
-  applyLeave,
   applyKick,
 } = require("../bot/services/raid/schedule/slots/signup-state");
 const { detectPromotion } = require("../bot/services/raid/schedule/slots/slots");
@@ -71,14 +70,6 @@ test("applyRsvp flips an existing signup; no-op when not joined", () => {
   assert.throws(() => applyRsvp(joined, "a", "bogus"), /invalid RSVP status/);
 });
 
-test("applyLeave removes the signup and reports whether anything changed", () => {
-  const joined = applyJoin([], joinPayload("a", "Bard"), 100);
-  const left = applyLeave(joined, "a");
-  assert.equal(left.ok, true);
-  assert.equal(left.signups.length, 0);
-  assert.equal(applyLeave(joined, "ghost").ok, false);
-});
-
 test("applyKick removes one or more signups and reports the dropped records", () => {
   let signups = applyJoin([], joinPayload("a", "Bard"), 1);
   signups = applyJoin(signups, joinPayload("b", "Berserker"), 2);
@@ -118,7 +109,7 @@ test("detectPromotion finds the waitlister pulled into a freed slot", () => {
   let signups = applyJoin([], joinPayload("a", "Berserker"), 1);
   signups = applyJoin(signups, joinPayload("b", "Berserker"), 2);
   // 'a' leaves -> 'b' should be promoted into the comp.
-  const after = applyLeave(signups, "a").signups;
+  const after = applyKick(signups, ["a"]).signups;
   const promoted = detectPromotion(signups, after, COUNTS);
   assert.deepEqual(promoted.map((s) => s.discordId), ["b"]);
 

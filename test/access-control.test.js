@@ -4,7 +4,6 @@ const assert = require("node:assert/strict");
 const {
   getAccessibleAccounts,
   canEditAccount,
-  findAccessibleCharacter,
 } = require("../bot/services/access/access-control");
 
 // Lightweight in-memory fakes for User + RosterShare so the service
@@ -322,53 +321,4 @@ test("canEditAccount returns false when owner is no longer in RAID_MANAGER_ID", 
     helpers: { isManagerId: () => false },
   });
   assert.equal(allow, false);
-});
-
-test("findAccessibleCharacter resolves a char by name across own + shared rosters", async () => {
-  const User = buildFakeUser([
-    {
-      discordId: "A",
-      discordDisplayName: "Alice",
-      accounts: [
-        {
-          accountName: "AliceMain",
-          characters: [{ charName: "AlphaChar" }, { charName: "BetaChar" }],
-        },
-      ],
-    },
-    {
-      discordId: "B",
-      accounts: [
-        {
-          accountName: "BaoMain",
-          characters: [{ charName: "MyOwnChar" }],
-        },
-      ],
-    },
-  ]);
-  const RosterShare = buildFakeRosterShare([sharedRecord("A", "B", "edit")]);
-  const helpers = { isManagerId: () => true };
-
-  const own = await findAccessibleCharacter("B", "MyOwnChar", {
-    models: { User, RosterShare },
-    helpers,
-  });
-  assert.ok(own, "expected to resolve B's own char");
-  assert.equal(own.isOwn, true);
-  assert.equal(own.character.charName, "MyOwnChar");
-
-  const shared = await findAccessibleCharacter("B", "BetaChar", {
-    models: { User, RosterShare },
-    helpers,
-  });
-  assert.ok(shared, "expected to resolve A's char via share");
-  assert.equal(shared.isOwn, false);
-  assert.equal(shared.ownerDiscordId, "A");
-  assert.equal(shared.character.charName, "BetaChar");
-
-  const missing = await findAccessibleCharacter("B", "NobodyChar", {
-    models: { User, RosterShare },
-    helpers,
-  });
-  assert.equal(missing, null);
 });

@@ -39,16 +39,6 @@ function setTurnMembers(turns, index, memberIds) {
 }
 
 /**
- * Drop the turn at index.
- * @param {Array} turns
- * @param {number} index
- * @returns {Array} new turns array
- */
-function removeTurn(turns, index) {
-  return (Array.isArray(turns) ? turns : []).filter((_, i) => i !== index);
-}
-
-/**
  * Remove one or more signup ids from every turn. Used when a lead kicks
  * members from the signup pool so the saved turn plan stays consistent
  * with the pool instead of relying on render-time filtering only.
@@ -101,7 +91,6 @@ function resolveTurnMembers(signups, turn, signupIndex = null) {
 module.exports = {
   addTurn,
   setTurnMembers,
-  removeTurn,
   removeMembersFromTurns,
   buildSignupIndex,
   resolveTurnMembers,

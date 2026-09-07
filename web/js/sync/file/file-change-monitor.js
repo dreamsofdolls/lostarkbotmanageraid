@@ -366,9 +366,7 @@ export function createFileChangeMonitor({
       if (!lastRevisionKey) {
         lastRevisionKey = key;
         report("baseline", { snapshot, reason });
-      } else if (key !== lastRevisionKey) {
-        stageCandidate(snapshot, reason);
-      } else if (candidate) {
+      } else if (key !== lastRevisionKey || candidate) {
         stageCandidate(snapshot, reason);
       }
     } while (running && probeAgain);

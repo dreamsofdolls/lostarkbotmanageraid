@@ -13,6 +13,11 @@
 
 const { t } = require("../../../services/i18n");
 
+const GATE_PROGRESS_DISPLAY = new Map([
+  ["complete", { icon: "🟢", rollupKey: "raid-check.editFlow.gateRollupComplete" }],
+  ["partial", { icon: "🟠", rollupKey: "raid-check.editFlow.gateRollupPartial" }],
+]);
+
 /**
  * Build the /raid-check Edit helper service · pure render/filter
  * helpers shared by the Edit cascade (account picker → char picker →
@@ -152,11 +157,11 @@ function createEditHelpers({
       }
       return `⚪ ${g.gate}`;
     });
-    const rollup = gateStatus.overallStatus === "complete"
-      ? t("raid-check.editFlow.gateRollupComplete", lang)
-      : gateStatus.overallStatus === "partial"
-        ? t("raid-check.editFlow.gateRollupPartial", lang)
-        : t("raid-check.editFlow.gateRollupNone", lang);
+    const rollup = t(
+      GATE_PROGRESS_DISPLAY.get(gateStatus.overallStatus)?.rollupKey
+        || "raid-check.editFlow.gateRollupNone",
+      lang,
+    );
     const suffix = t("raid-check.editFlow.gateLineSuffix", lang, { rollup });
     return `${parts.join(" · ")}  ${suffix}`;
   }
@@ -229,14 +234,11 @@ function createEditHelpers({
       const total = gateStatus.gates.length;
       if (total > 0) {
         const done = gateStatus.gates.filter((g) => g.doneAtPickedMode).length;
-        if (gateStatus.overallStatus === "complete") {
-          parts.push(`🟢 ${done}/${total}`);
-        } else if (gateStatus.overallStatus === "partial") {
-          parts.push(`🟠 ${done}/${total}`);
-        } else if (gateStatus.modeChangeNeeded) {
+        const progressDisplay = GATE_PROGRESS_DISPLAY.get(gateStatus.overallStatus);
+        if (!progressDisplay && gateStatus.modeChangeNeeded) {
           parts.push(`🟡 ${t("raid-check.editFlow.gateRollupDifferentMode", lang)}`);
         } else {
-          parts.push(`⚪ ${done}/${total}`);
+          parts.push(`${progressDisplay?.icon || "⚪"} ${done}/${total}`);
         }
       }
     }

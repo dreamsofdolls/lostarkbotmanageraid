@@ -21,7 +21,6 @@ const SLOT_STATUSES = new Set(["confirmed", "late"]);
 function assignSlots(signups, { supSlots, dpsSlots }) {
   const occupying = (signups || [])
     .filter((s) => SLOT_STATUSES.has(s.status))
-    .slice()
     .sort((a, b) => Number(a.joinedAt) - Number(b.joinedAt));
 
   const support = [];
@@ -33,18 +32,6 @@ function assignSlots(signups, { supSlots, dpsSlots }) {
     else waitlist.push(s);
   }
   return { support, dps, waitlist };
-}
-
-/**
- * First waitlisted signup of a given role (the one a freed slot promotes).
- * @param {Array} signups - all signups
- * @param {{supSlots: number, dpsSlots: number}} counts
- * @param {"support"|"dps"} role - the role whose slot just freed
- * @returns {object|null} the promotable signup, or null
- */
-function nextWaitlistPromotion(signups, counts, role) {
-  const { waitlist } = assignSlots(signups, counts);
-  return waitlist.find((s) => s.role === role) || null;
 }
 
 /**
@@ -69,4 +56,4 @@ function detectPromotion(before, after, counts) {
   );
 }
 
-module.exports = { assignSlots, nextWaitlistPromotion, detectPromotion };
+module.exports = { assignSlots, detectPromotion };
