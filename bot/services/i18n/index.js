@@ -3,7 +3,7 @@
 //   2. Look up a viewer's preferred locale from their User doc, cached
 //      in-process so /raid-status (which renders many strings per call)
 //      doesn't re-query Mongo per t() invocation.
-//   3. Persist a new locale + invalidate the cache atomically.
+//   3. Persist a new locale without older reads overwriting its cache value.
 //
 // Falls back: missing key in target locale → fall back to default
 // locale (vi) → fall back to the raw key string. This keeps a typo'd
@@ -25,12 +25,8 @@ const SUPPORTED_CODES = new Set(SUPPORTED_LANGUAGES.map((l) => l.code));
 // before becoming first-class.
 const KNOWN_LOCALE_CODES = new Set(Object.keys(TRANSLATIONS));
 
-// In-process cache. Keyed by discordId, value = locale code. Cleared
-// whenever setUserLanguage runs so a /raid-language change in this
-// session reflects immediately. If the bot scales horizontally one day,
-// this cache stays node-local; that's acceptable since stale entries
-// only mean "1 view rendered in the previous language for ~one tick"
-// after a switch on a sibling node.
+// In-process cache. setUserLanguage publishes successful writes locally.
+// Other bot instances need their own invalidation to observe external writes.
 const userLanguageCache = new Map();
 
 // Same cache shape but keyed by guildId. Lookups are hot-path inside
@@ -40,6 +36,8 @@ const userLanguageCache = new Map();
 // hit at boot and zero hits per tick afterwards. Invalidated by
 // setGuildLanguage when admin runs /raid-channel config action:set-language.
 const guildLanguageCache = new Map();
+const userLanguageLoads = new Map();
+const guildLanguageLoads = new Map();
 
 /**
  * Coerce arbitrary input into a first-class locale code.
@@ -153,9 +151,43 @@ function tPick(key, lang = DEFAULT_LANGUAGE, vars = null, opts = {}) {
   return applyVars(pool[index], vars);
 }
 
+async function getStoredLanguage(id, { cache, pending, Model, idField }) {
+  const cached = id ? cache.get(id) : undefined;
+  if (!id || cached || !Model) return cached || DEFAULT_LANGUAGE;
+
+  let loads = pending.get(id);
+  if (!loads) {
+    loads = new Map();
+    pending.set(id, loads);
+  }
+  if (loads.has(Model)) return loads.get(Model).promise;
+
+  const request = { promise: null, replacement: null };
+  request.promise = Promise.resolve()
+    .then(() => Model.findOne({ [idField]: id }, { language: 1 }).lean())
+    .then((doc) => {
+      const lang = request.replacement || normalizeLanguage(doc?.language);
+      // A cache clear detaches old reads; a saved preference supersedes them.
+      if (pending.get(id) === loads) cache.set(id, lang);
+      return lang;
+    })
+    .catch(() => request.replacement || DEFAULT_LANGUAGE)
+    .finally(() => {
+      loads.delete(Model);
+      if (loads.size === 0 && pending.get(id) === loads) pending.delete(id);
+    });
+  loads.set(Model, request);
+  return request.promise;
+}
+
+function publishLanguage(id, lang, cache, pending) {
+  cache.set(id, lang);
+  for (const request of pending.get(id)?.values() || []) request.replacement = lang;
+}
+
 /**
- * Cache-first lookup. Pass an optional UserModel for DI in tests; in
- * production, loading the real model here would create a circular import, so
+ * Cache-first lookup that shares pending reads. Pass UserModel for DI; loading
+ * the production model here would create a circular import, so
  * callers pass it in.
  */
 async function getUserLanguage(discordId, options = {}) {
@@ -164,18 +196,15 @@ async function getUserLanguage(discordId, options = {}) {
   if (userLanguageCache.has(discordId)) return userLanguageCache.get(discordId);
   if (Object.prototype.hasOwnProperty.call(options, "userDoc")) {
     const lang = normalizeLanguage(options.userDoc?.language);
-    userLanguageCache.set(discordId, lang);
+    publishLanguage(discordId, lang, userLanguageCache, userLanguageLoads);
     return lang;
   }
-  if (!UserModel) return DEFAULT_LANGUAGE;
-  try {
-    const doc = await UserModel.findOne({ discordId }, { language: 1 }).lean();
-    const lang = normalizeLanguage(doc?.language);
-    userLanguageCache.set(discordId, lang);
-    return lang;
-  } catch {
-    return DEFAULT_LANGUAGE;
-  }
+  return getStoredLanguage(discordId, {
+    cache: userLanguageCache,
+    pending: userLanguageLoads,
+    Model: UserModel,
+    idField: "discordId",
+  });
 }
 
 /**
@@ -193,12 +222,13 @@ async function setUserLanguage(discordId, lang, { UserModel } = {}) {
       { upsert: true },
     );
   }
-  userLanguageCache.set(discordId, code);
+  publishLanguage(discordId, code, userLanguageCache, userLanguageLoads);
   return code;
 }
 
 function clearUserLanguageCache() {
   userLanguageCache.clear();
+  userLanguageLoads.clear();
 }
 
 /**
@@ -214,17 +244,12 @@ function clearUserLanguageCache() {
  *     a whole announcement)
  */
 async function getGuildLanguage(guildId, { GuildConfigModel } = {}) {
-  if (!guildId) return DEFAULT_LANGUAGE;
-  if (guildLanguageCache.has(guildId)) return guildLanguageCache.get(guildId);
-  if (!GuildConfigModel) return DEFAULT_LANGUAGE;
-  try {
-    const doc = await GuildConfigModel.findOne({ guildId }, { language: 1 }).lean();
-    const lang = normalizeLanguage(doc?.language);
-    guildLanguageCache.set(guildId, lang);
-    return lang;
-  } catch {
-    return DEFAULT_LANGUAGE;
-  }
+  return getStoredLanguage(guildId, {
+    cache: guildLanguageCache,
+    pending: guildLanguageLoads,
+    Model: GuildConfigModel,
+    idField: "guildId",
+  });
 }
 
 /**
@@ -243,7 +268,7 @@ async function setGuildLanguage(guildId, lang, { GuildConfigModel } = {}) {
       { upsert: true },
     );
   }
-  guildLanguageCache.set(guildId, code);
+  publishLanguage(guildId, code, guildLanguageCache, guildLanguageLoads);
   return code;
 }
 
