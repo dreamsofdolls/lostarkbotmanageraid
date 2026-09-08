@@ -884,7 +884,7 @@ test("bg-loader cache returns the same buffer on subsequent calls", async (t) =>
   assert.ok(Buffer.isBuffer(first));
   assert.equal(first, second);
   assert.equal(dataCalls, 1);
-  assert.equal(metaCalls, 2);
+  assert.equal(metaCalls, 1, "only a cached buffer needs a separate version probe");
 });
 
 test("bg-loader selects the assigned image for the requested roster", async (t) => {
@@ -951,12 +951,12 @@ test("bg-loader shares overlapping Mongo reads across rosters and rechecks later
     bgLoader.loadBackgroundBuffer('shared-user', { accountName: 'Roster B' }),
   ]);
   assert.deepEqual(buffers, images);
-  assert.deepEqual(reads, { meta: 1, data: 1 });
+  assert.deepEqual(reads, { meta: 0, data: 1 });
 
   version = 2;
   images[0] = Buffer.from('new-image-a');
   assert.equal(await bgLoader.loadBackgroundBuffer('shared-user', { accountName: 'Roster A' }), images[0]);
-  assert.deepEqual(reads, { meta: 2, data: 2 });
+  assert.deepEqual(reads, { meta: 1, data: 2 });
 });
 
 test("bg-loader keeps owner reads isolated and retries after a failed read", async (t) => {
@@ -981,5 +981,48 @@ test("bg-loader keeps owner reads isolated and retries after a failed read", asy
   assert.equal(other.toString(), 'owner-b');
   fail = false;
   assert.equal((await bgLoader.loadBackgroundBuffer('owner-a')).toString(), 'owner-a');
-  assert.equal(reads.filter(read => read.discordId === 'owner-a' && read.projection === 'updatedAt').length, 2);
+  assert.equal(reads.filter(read => read.discordId === 'owner-a' && read.projection.includes('imageData')).length, 2);
+});
+
+test("bg-loader cold reads do not probe metadata and never retain a deleted image", async t => {
+  const reads = [];
+  let doc = { updatedAt: 1, imageData: Buffer.from('legacy-image') };
+  t.mock.method(UserBackground, 'findOne', () => ({ select: projection => ({ lean: async () => {
+    reads.push(projection);
+    return doc;
+  } }) }));
+  bgLoader.clearBackgroundCache();
+  t.after(() => bgLoader.clearBackgroundCache());
+  assert.equal((await bgLoader.loadBackgroundBuffer('cold-user')).toString(), 'legacy-image');
+  assert.equal(reads.length, 1);
+  assert.ok(reads[0].includes('imageData'));
+  doc = null;
+  assert.equal(await bgLoader.loadBackgroundBuffer('cold-user'), null);
+  assert.equal(reads.at(-1), 'updatedAt');
+  doc = { updatedAt: 2, imageData: Buffer.from('replacement') };
+  assert.equal((await bgLoader.loadBackgroundBuffer('cold-user')).toString(), 'replacement');
+  assert.equal(reads.length, 3);
+});
+
+test("bg-loader respects invalidation while a cached image version probe is pending", async t => {
+  let doc = { updatedAt: 1, imageData: Buffer.from('old-image') };
+  let releaseMeta;
+  let metaStarted;
+  const started = new Promise(resolve => { metaStarted = resolve; });
+  t.mock.method(UserBackground, 'findOne', () => ({ select: projection => ({ lean: () => {
+    if (projection === 'updatedAt') {
+      metaStarted();
+      return new Promise(resolve => { releaseMeta = resolve; });
+    }
+    return Promise.resolve(doc);
+  } }) }));
+  bgLoader.clearBackgroundCache();
+  t.after(() => bgLoader.clearBackgroundCache());
+  await bgLoader.loadBackgroundBuffer('updated-owner');
+  const pending = bgLoader.loadBackgroundBuffer('updated-owner');
+  await started;
+  bgLoader.clearBackgroundCache('updated-owner');
+  doc = { updatedAt: 2, imageData: Buffer.from('new-image') };
+  releaseMeta({ updatedAt: 1 });
+  assert.equal((await pending).toString(), 'new-image');
 });

@@ -118,23 +118,27 @@ async function loadBackgroundBuffer(discordId, options = {}) {
   const accountKey = normalizeAccountKey(accountName);
   const cacheKey = `${discordId}:${accountKey}`;
 
-  let metaUpdatedAt;
-  try {
-    const meta = await loadBackgroundMeta(discordId);
-    if (!meta) {
-      cache.delete(cacheKey);
+  let metaUpdatedAt = 0;
+  // Without a cached buffer, the full document is needed anyway and includes
+  // its version. Cached images still get a fresh, small version query first.
+  if (cache.has(cacheKey)) {
+    try {
+      const meta = await loadBackgroundMeta(discordId);
+      if (!meta) {
+        cache.delete(cacheKey);
+        return null;
+      }
+      metaUpdatedAt = getDocUpdatedAt(meta);
+    } catch (err) {
+      console.warn(`[raid-card bg-loader] meta read failed for ${discordId}:`, err.message);
       return null;
     }
-    metaUpdatedAt = getDocUpdatedAt(meta);
-  } catch (err) {
-    console.warn(`[raid-card bg-loader] meta read failed for ${discordId}:`, err.message);
-    return null;
-  }
 
-  const cached = cache.get(cacheKey);
-  if (cached && cached.updatedAt === metaUpdatedAt) {
-    touch(cacheKey, cached);
-    return cached.buffer;
+    const cached = cache.get(cacheKey);
+    if (cached && cached.updatedAt === metaUpdatedAt) {
+      touch(cacheKey, cached);
+      return cached.buffer;
+    }
   }
 
   try {

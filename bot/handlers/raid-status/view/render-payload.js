@@ -65,21 +65,24 @@ function createRaidStatusRenderPayload({
       if (syncEmbed) return syncEmbed;
     }
 
-    const getProgressRaidsFor = (ch) =>
-      baseGetRaidsFor(ch).filter(isCountedRaidFilterProgress);
-    const getDisplayRaidsFor = filterRaidId
-      ? (ch) =>
-          baseGetRaidsFor(ch).filter(
-            (r) =>
-              getRaidFilterKey(r) === filterRaidId && isGoldReceivingRaid(r)
-          )
-      : baseGetRaidsFor;
-    const getCountRaidsFor = filterRaidId
-      ? (ch) =>
-          getProgressRaidsFor(ch).filter(
-            (r) => getRaidFilterKey(r) === filterRaidId
-          )
-      : getProgressRaidsFor;
+    // Totals, gold summaries and character fields reuse the same filtered rows.
+    // Keep this cache within one render so later edits always see fresh state.
+    const raidViews = new Map();
+    const getRaidView = (character) => {
+      if (raidViews.has(character)) return raidViews.get(character);
+      const raids = baseGetRaidsFor(character);
+      const matching = filterRaidId
+        ? raids.filter((raid) => getRaidFilterKey(raid) === filterRaidId)
+        : raids;
+      const view = {
+        display: filterRaidId ? matching.filter(isGoldReceivingRaid) : raids,
+        progress: matching.filter(isCountedRaidFilterProgress),
+      };
+      raidViews.set(character, view);
+      return view;
+    };
+    const getDisplayRaidsFor = (character) => getRaidView(character).display;
+    const getCountRaidsFor = (character) => getRaidView(character).progress;
 
     let totalsByFilter = globalTotalsCache.get(accounts);
     if (!totalsByFilter) {

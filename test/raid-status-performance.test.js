@@ -92,3 +92,65 @@ test("raid-status reuses global roster totals while paginating the same snapshot
   assert.equal(progressCalls, 1);
   assert.equal(goldCalls, 1);
 });
+
+test("raid-status derives displayed and counted raids once per character within a render", () => {
+  const character = {
+    raids: [
+      { raidKey: "act4", modeKey: "hard", goldReceives: true },
+      { raidKey: "act4", modeKey: "normal", pendingModeKey: "solo", goldReceives: true },
+      { raidKey: "kazeros", modeKey: "hard", goldReceives: false },
+    ],
+  };
+  let accounts = [{ accountName: "A", characters: [character] }];
+  let filter = null;
+  let reads = 0;
+  let lastRender;
+  const { buildCurrentEmbed } = createRaidStatusRenderPayload({
+    discordId: "viewer", getAccounts: () => accounts,
+    getCurrentPage: () => 0, getCurrentView: () => "raid",
+    getFilterRaidId: () => filter, getStatusUserMeta: () => ({}),
+    baseGetRaidsFor: (char) => { reads += 1; return char.raids; },
+    totalCharacters: 1,
+    summarizeRaidProgress: (raids) => ({ completed: 0, partial: 0, total: raids.length }),
+    summarizeGlobalGold: (rows, getRaids) => {
+      for (const account of rows) for (const char of account.characters) getRaids(char);
+      return {};
+    },
+    buildAccountPageEmbed: (account, _page, _pages, totals, getDisplay, _meta, options) => {
+      lastRender = {
+        display: getDisplay(account.characters[0]),
+        progress: options.getProgressRaidsFor(account.characters[0]),
+        totals,
+      };
+      assert.strictEqual(getDisplay(account.characters[0]), lastRender.display);
+      assert.strictEqual(options.getProgressRaidsFor(account.characters[0]), lastRender.progress);
+      return {};
+    },
+    buildGoldViewEmbed: () => ({}), buildTaskViewEmbed: () => ({}), lang: "en",
+  });
+
+  buildCurrentEmbed();
+  assert.equal(reads, 1);
+  assert.deepEqual(lastRender.display, character.raids);
+  assert.deepEqual(lastRender.progress, [character.raids[0]]);
+  assert.equal(lastRender.totals.solo, 1);
+
+  filter = "act4:solo";
+  buildCurrentEmbed();
+  assert.equal(reads, 2);
+  assert.deepEqual(lastRender.display, [character.raids[1]]);
+  assert.deepEqual(lastRender.progress, []);
+
+  filter = "kazeros:hard";
+  buildCurrentEmbed();
+  assert.equal(reads, 3);
+  assert.deepEqual(lastRender.display, []);
+
+  filter = null;
+  const replacement = { raids: [{ raidKey: "horizon", modeKey: "hard", goldReceives: true }] };
+  accounts = [{ accountName: "A", characters: [replacement] }];
+  buildCurrentEmbed();
+  assert.equal(reads, 4);
+  assert.deepEqual(lastRender.display, replacement.raids);
+  assert.deepEqual(lastRender.progress, replacement.raids);
+});
