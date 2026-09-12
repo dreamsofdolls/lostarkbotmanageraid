@@ -1,117 +1,69 @@
 "use strict";
 
-// tPick, not t: some titles here are variant pools; non-pool keys pass through.
-const { tPick: t, getUserLanguage } = require("../../../services/i18n");
-const { resolveEditableTaskWriteAccess, revalidateTaskWriteAccess } = require("./write-access");
-const {
-  getCharacterDisplayName,
-  findCharacterInUser,
-  ensureSideTasks,
-} = require("../../../utils/raid/tasks/side-tasks");
+const { tPick: t } = require("../../../services/i18n");
+const { createTaskMutationHandler } = require("./write-handler");
+const { getCharacterDisplayName, findCharacterInUser, findAccountInUser, ensureSideTasks } = require("../../../utils/raid/tasks/side-tasks");
+const { ensureSharedTasks } = require("../../../utils/raid/tasks/shared-tasks");
 
-function createRaidTaskRemoveActionHandlers({
-  User,
-  saveWithRetry,
-  resolveTaskWriteTarget,
-  replyTaskNotice,
-  replyViewOnlyShareNotice,
-}) {
-  async function handleRemove(interaction) {
-    const executorId = interaction.user.id;
-    const lang = await getUserLanguage(executorId, { UserModel: User });
-    const rosterName = interaction.options.getString("roster", true);
-    const characterName = interaction.options.getString("character", true);
-    const taskId = interaction.options.getString("task", true);
-
-    const access = await resolveEditableTaskWriteAccess({
-      executorId,
-      rosterName,
-      commandName: "remove",
-      resolveTaskWriteTarget,
-      denyViewOnly: (writeTarget) => replyViewOnlyShareNotice(interaction, writeTarget, lang),
-    });
-    if (!access.ok) return;
-    const discordId = access.discordId;
-
-    let outcome = "removed";
-    let resolvedCharName = "";
-    let removedTaskName = "";
-
-    try {
-      await saveWithRetry(async () => {
-        const userDoc = await User.findOne({ discordId });
-        if (!await revalidateTaskWriteAccess({
-          access, executorId, rosterName, resolveTaskWriteTarget,
-          denyViewOnly: (target) => replyViewOnlyShareNotice(interaction, target, lang),
-        })) {
-          outcome = "auth-lost";
-          return;
-        }
-        if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
-          outcome = "no-roster";
-          return;
-        }
-        const found = findCharacterInUser(userDoc, characterName, rosterName);
-        if (!found) {
-          outcome = "no-character";
-          return;
-        }
-        resolvedCharName = getCharacterDisplayName(found.character);
-        const sideTasks = ensureSideTasks(found.character);
-        const idx = sideTasks.findIndex((task) => task?.taskId === taskId);
-        if (idx === -1) {
-          outcome = "task-not-found";
-          return;
-        }
-        removedTaskName = sideTasks[idx]?.name || t("raid-task.unnamedTaskFallback", lang);
-        sideTasks.splice(idx, 1);
-        await userDoc.save();
-      });
-    } catch (error) {
-      console.error("[raid-task remove] save failed:", error?.message || error);
-      await replyTaskNotice(interaction, {
-        type: "error",
-        title: t("raid-task.save.addFailedTitle", lang),
-        description: t("raid-task.save.removeFailedDescription", lang),
-      });
-      return;
-    }
-
-    if (outcome === "auth-lost") return;
-    if (outcome === "no-roster" || outcome === "no-character") {
-      await replyTaskNotice(interaction, {
+/** Remove one character or shared-roster task through the same guarded write lifecycle. */
+function createTaskRemoveHandler(deps, { shared = false } = {}) {
+  const commandName = shared ? "shared-remove" : "remove";
+  const noticePrefix = shared ? "sharedRemove" : "remove";
+  const missingPrefix = shared ? "rosterNotFound" : "noCharacter";
+  const displayKey = shared ? "rosterName" : "characterName";
+  return createTaskMutationHandler(deps, {
+    commandName,
+    saveFailedDescriptionKey: `raid-task.save.${noticePrefix}FailedDescription`,
+    readRequest: interaction => ({
+      rosterName: interaction.options.getString("roster", true),
+      characterName: shared ? null : interaction.options.getString("character", true),
+      taskId: interaction.options.getString("task", true),
+    }),
+    createResult: () => ({ outcome: "removed" }),
+    applyToUserDoc(userDoc, request, result) {
+      const target = shared
+        ? findAccountInUser(userDoc, request.rosterName)
+        : findCharacterInUser(userDoc, request.characterName, request.rosterName)?.character;
+      if (!target) {
+        result.outcome = "missing-target";
+        return false;
+      }
+      result.displayName = shared ? target.accountName : getCharacterDisplayName(target);
+      const tasks = shared ? ensureSharedTasks(target) : ensureSideTasks(target);
+      const index = tasks.findIndex(task => task?.taskId === request.taskId);
+      if (index === -1) {
+        result.outcome = "task-not-found";
+        return false;
+      }
+      result.taskName = tasks[index]?.name;
+      tasks.splice(index, 1);
+      return true;
+    },
+    buildNotice(result, request, lang) {
+      if (result.outcome === "missing-target") return {
         type: "warn",
-        title: t("raid-task.common.noCharacterTitle", lang),
-        description: t("raid-task.common.noCharacterDescription", lang, {
-          characterName,
+        title: t(`raid-task.common.${missingPrefix}Title`, lang),
+        description: t(`raid-task.common.${missingPrefix}Description`, lang, { [displayKey]: request[displayKey] }),
+      };
+      if (result.outcome === "task-not-found") return {
+        type: "warn",
+        title: t(`raid-task.${noticePrefix}.noTaskTitle`, lang),
+        description: t(`raid-task.${noticePrefix}.noTaskDescription`, lang),
+      };
+      return {
+        type: "success",
+        title: t(`raid-task.${noticePrefix}.successTitle`, lang),
+        description: t(`raid-task.${noticePrefix}.successDescription`, lang, {
+          [displayKey]: result.displayName,
+          taskName: result.taskName || t("raid-task.unnamedTaskFallback", lang),
         }),
-      });
-      return;
-    }
-    if (outcome === "task-not-found") {
-      await replyTaskNotice(interaction, {
-        type: "warn",
-        title: t("raid-task.remove.noTaskTitle", lang),
-        description: t("raid-task.remove.noTaskDescription", lang),
-      });
-      return;
-    }
-
-    await replyTaskNotice(interaction, {
-      type: "success",
-      title: t("raid-task.remove.successTitle", lang),
-      description: t("raid-task.remove.successDescription", lang, {
-        characterName: resolvedCharName,
-        taskName: removedTaskName,
-      }),
-    });
-  }
-
-  return {
-    handleRemove,
-  };
+      };
+    },
+  });
 }
 
-module.exports = {
-  createRaidTaskRemoveActionHandlers,
-};
+function createRaidTaskRemoveActionHandlers(deps) {
+  return { handleRemove: createTaskRemoveHandler(deps) };
+}
+
+module.exports = { createRaidTaskRemoveActionHandlers, createTaskRemoveHandler };

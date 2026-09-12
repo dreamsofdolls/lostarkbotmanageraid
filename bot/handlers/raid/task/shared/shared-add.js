@@ -2,7 +2,7 @@
 
 // tPick, not t: some titles here are variant pools; non-pool keys pass through.
 const { tPick: t } = require("../../../../services/i18n");
-const { createTaskAddHandler } = require("../add/handler");
+const { createTaskMutationHandler } = require("../write-handler");
 const {
   SCHEDULED_RESET,
   SHARED_TASK_PRESETS,
@@ -317,7 +317,7 @@ function buildSharedAddNotice(result, request, lang) {
 }
 
 function createSharedAddHandler(deps) {
-  return createTaskAddHandler(deps, {
+  return createTaskMutationHandler(deps, {
     commandName: "shared-add",
     readRequest: readSharedAddRequest,
     buildValidationNotice: buildValidationNotice,

@@ -3,6 +3,7 @@
 const { deferEphemeralReply } = require("../../../../utils/raid/common/shared");
 const { assertBibleSyncAllowed, enableBibleSync } = require("../../../../services/auto-manage/runtime/support/sync-mode");
 const { t } = require("../../../../services/i18n");
+const { awaitAutoManageDecision, buildAutoManageCancelEmbed } = require("./confirmation");
 
 function buildEnableSimpleSuccessEmbed({ EmbedBuilder, UI, lang, descriptionKey }) {
   return new EmbedBuilder()
@@ -59,37 +60,6 @@ function buildHiddenCharsConfirmRow({
   );
 }
 
-async function awaitEnableDecision({
-  interaction,
-  discordId,
-  ComponentType,
-}) {
-  const replyMsg = await interaction.fetchReply();
-  try {
-    const btn = await replyMsg.awaitMessageComponent({
-      filter: (i) =>
-        i.user.id === discordId && i.customId.startsWith("auto-manage:"),
-      componentType: ComponentType.Button,
-      time: 60_000,
-    });
-    await btn.deferUpdate().catch(() => {});
-    return btn.customId === "auto-manage:confirm-on" ? "confirm" : "cancel";
-  } catch {
-    return "timeout";
-  }
-}
-
-function buildEnableCancelEmbed({ EmbedBuilder, UI, lang, decision }) {
-  const title = decision === "timeout"
-    ? t("raid-auto-manage.enable.cancelTimeoutTitle", lang)
-    : t("raid-auto-manage.enable.cancelTitle", lang);
-  return new EmbedBuilder()
-    .setColor(UI.colors.muted)
-    .setTitle(`${UI.icons.reset} ${title}`)
-    .setDescription(t("raid-auto-manage.enable.cancelDescription", lang))
-    .setTimestamp();
-}
-
 function createAutoManageEnableHandler({
   EmbedBuilder,
   ActionRowBuilder,
@@ -129,7 +99,7 @@ function createAutoManageEnableHandler({
       UI,
       lang,
     });
-    await editAutoEmbed(syncEmbed);
+    await editAutoEmbed(syncEmbed, { components: [] });
   }
 
   return async function handleOn({
@@ -172,20 +142,7 @@ function createAutoManageEnableHandler({
       const weekResetStart = weekResetStartMs();
       const probeDoc = await User.findOne({ discordId });
       assertBibleSyncAllowed(probeDoc);
-      if (!probeDoc) {
-        await enableBibleSync(User, discordId);
-        await editAutoEmbed(
-          buildEnableSimpleSuccessEmbed({
-            EmbedBuilder,
-            UI,
-            lang,
-            descriptionKey: "raid-auto-manage.enable.noRosterDescription",
-          })
-        );
-        return;
-      }
-
-      if (!Array.isArray(probeDoc.accounts) || probeDoc.accounts.length === 0) {
+      if (!probeDoc || !Array.isArray(probeDoc.accounts) || probeDoc.accounts.length === 0) {
         await enableBibleSync(User, discordId);
         await editAutoEmbed(
           buildEnableSimpleSuccessEmbed({
@@ -236,31 +193,28 @@ function createAutoManageEnableHandler({
           ],
         }
       );
-      const decision = await awaitEnableDecision({
+      const decision = await awaitAutoManageDecision({
         interaction,
         discordId,
         ComponentType,
+        customIdPrefix: "auto-manage:",
+        confirmId: "auto-manage:confirm-on",
       });
 
       if (decision === "confirm") {
-        const finalReport = await commitAutoManageOn(
+        await showInitialSyncReport({
           discordId,
           weekResetStart,
-          probeCollected
-        );
-        const syncEmbed = setInitialSyncTitle({
-          embed: buildAutoManageSyncReportEmbed(finalReport, lang),
-          report: finalReport,
-          UI,
+          probeCollected,
           lang,
+          editAutoEmbed,
         });
-        await editAutoEmbed(syncEmbed, { components: [] });
         return;
       }
 
       await stampAutoManageAttempt(discordId);
       await editAutoEmbed(
-        buildEnableCancelEmbed({ EmbedBuilder, UI, lang, decision }),
+        buildAutoManageCancelEmbed({ EmbedBuilder, UI, lang, decision, action: "enable" }),
         { components: [] }
       );
     } catch (err) {

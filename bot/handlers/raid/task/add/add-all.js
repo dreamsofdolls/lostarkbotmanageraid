@@ -2,10 +2,11 @@
 
 // tPick, not t: some titles here are variant pools; non-pool keys pass through.
 const { tPick: t } = require("../../../../services/i18n");
-const { createTaskAddHandler } = require("./handler");
+const { createTaskMutationHandler } = require("../write-handler");
 const {
   generateTaskId,
   normalizeName,
+  findAccountInUser,
   getCharacterDisplayName,
   ensureSideTasks,
   countByReset,
@@ -42,13 +43,6 @@ function createAddAllResult(rosterName) {
     skippedCap: [],
     skippedDup: [],
   };
-}
-
-function findRosterAccount(userDoc, rosterName) {
-  const targetRoster = normalizeName(rosterName);
-  return userDoc.accounts.find(
-    (candidate) => normalizeName(candidate.accountName) === targetRoster
-  );
 }
 
 function buildTaskRecord(request, cycleStart) {
@@ -91,7 +85,7 @@ function applyAddAllToUserDoc(userDoc, request, result, deps) {
     return false;
   }
 
-  const account = findRosterAccount(userDoc, request.rosterName);
+  const account = findAccountInUser(userDoc, request.rosterName);
   if (!account) {
     result.outcome = "no-roster-match";
     return false;
@@ -221,7 +215,7 @@ function buildAddAllNotice(result, request, lang) {
 }
 
 function createAddAllHandler(deps) {
-  return createTaskAddHandler(deps, {
+  return createTaskMutationHandler(deps, {
     commandName: "add-all",
     readRequest: readAddAllRequest,
     buildValidationNotice: buildAddAllValidationNotice,

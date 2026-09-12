@@ -234,6 +234,11 @@ Four composition principles:
 3. **Services orchestrate, utils calculate.** Long-running DB/Discord flows stay in `services/*`; pure raid math and view helpers live in `utils/raid/*` so `/raid-status`, `/raid-check`, `/raid-task`, schedulers, and Local Sync reuse the same calculations.
 4. **Shared write paths.** `applyRaidSetForDiscordId` is reused by `/raid-set`, the text monitor, `/raid-check` Edit, and Local Sync apply logic - new UIs never re-implement raid mutation.
 
+Task additions and removals share `handlers/raid/task/write-handler.js` for access
+checks, fresh document reads, save retries, and replies after commit. Auto-manage
+enable/reset confirmations share `handlers/raid/auto-manage/core/confirmation.js`;
+their write operations and confirmation IDs stay in the individual handlers.
+
 For maintenance, start with [AGENTS.md](AGENTS.md) and the
 [repository guide](.agent/README.md). Backend modules use CommonJS; `web/` keeps
 its own ES module boundary. Development tools live in `scripts/`, and temporary

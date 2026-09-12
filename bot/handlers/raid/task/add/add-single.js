@@ -2,7 +2,7 @@
 
 // tPick, not t: some titles here are variant pools; non-pool keys pass through.
 const { tPick: t } = require("../../../../services/i18n");
-const { createTaskAddHandler } = require("./handler");
+const { createTaskMutationHandler } = require("../write-handler");
 const {
   TASK_CAP_DAILY,
   TASK_CAP_WEEKLY,
@@ -164,7 +164,7 @@ function buildAddSingleNotice(result, request, lang) {
 }
 
 function createAddSingleHandler(deps) {
-  return createTaskAddHandler(deps, {
+  return createTaskMutationHandler(deps, {
     commandName: "add-single",
     readRequest: readAddSingleRequest,
     buildValidationNotice: buildAddSingleValidationNotice,

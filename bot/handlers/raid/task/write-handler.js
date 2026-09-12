@@ -1,17 +1,17 @@
 "use strict";
 
-const { tPick: t, getUserLanguage } = require("../../../../services/i18n");
-const { resolveEditableTaskWriteAccess, revalidateTaskWriteAccess } = require("../write-access");
+const { tPick: t, getUserLanguage } = require("../../../services/i18n");
+const { resolveEditableTaskWriteAccess, revalidateTaskWriteAccess } = require("./write-access");
 
-/** Shared validation, access and save lifecycle for the three task-add commands. */
-function createTaskAddHandler({
+/** Shared access, retry and reply lifecycle for task additions and removals. */
+function createTaskMutationHandler({
   User, saveWithRetry, dailyResetStartMs, weekResetStartMs,
   resolveTaskWriteTarget, replyTaskNotice, replyViewOnlyShareNotice,
 }, {
-  commandName, readRequest, buildValidationNotice, createResult,
+  commandName, readRequest, buildValidationNotice = () => null, createResult,
   applyToUserDoc, buildNotice, saveFailedDescriptionKey,
 }) {
-  return async function handleTaskAdd(interaction) {
+  return async function handleTaskMutation(interaction) {
     const executorId = interaction.user.id;
     const lang = await getUserLanguage(executorId, { UserModel: User });
     const request = readRequest(interaction);
@@ -65,4 +65,4 @@ function createTaskAddHandler({
   };
 }
 
-module.exports = { createTaskAddHandler };
+module.exports = { createTaskMutationHandler };

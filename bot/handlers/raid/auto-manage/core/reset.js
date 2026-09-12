@@ -2,6 +2,7 @@
 
 const { t } = require("../../../../services/i18n");
 const { resetAutoManageDailyState } = require("../../../../services/auto-manage/runtime/support/daily-state");
+const { awaitAutoManageDecision, buildAutoManageCancelEmbed } = require("./confirmation");
 
 function buildResetConfirmEmbed({ EmbedBuilder, UI, lang }) {
   return new EmbedBuilder()
@@ -27,37 +28,6 @@ function buildResetConfirmRow({
       .setLabel(t("raid-auto-manage.reset.cancelButton", lang))
       .setStyle(ButtonStyle.Secondary)
   );
-}
-
-async function awaitResetDecision({
-  interaction,
-  discordId,
-  ComponentType,
-}) {
-  const replyMsg = await interaction.fetchReply();
-  try {
-    const btn = await replyMsg.awaitMessageComponent({
-      filter: (i) =>
-        i.user.id === discordId && i.customId.startsWith("auto-manage:reset-"),
-      componentType: ComponentType.Button,
-      time: 60_000,
-    });
-    await btn.deferUpdate().catch(() => {});
-    return btn.customId === "auto-manage:reset-confirm" ? "confirm" : "cancel";
-  } catch {
-    return "timeout";
-  }
-}
-
-function buildResetCancelEmbed({ EmbedBuilder, UI, lang, decision }) {
-  const title = decision === "timeout"
-    ? t("raid-auto-manage.reset.cancelTimeoutTitle", lang)
-    : t("raid-auto-manage.reset.cancelTitle", lang);
-  return new EmbedBuilder()
-    .setColor(UI.colors.muted)
-    .setTitle(`${UI.icons.reset} ${title}`)
-    .setDescription(t("raid-auto-manage.reset.cancelDescription", lang))
-    .setTimestamp();
 }
 
 function buildResetSuccessEmbed({ EmbedBuilder, UI, lang }) {
@@ -127,14 +97,16 @@ function createAutoManageResetHandler({
       }
     );
 
-    const decision = await awaitResetDecision({
+    const decision = await awaitAutoManageDecision({
       interaction,
       discordId,
       ComponentType,
+      customIdPrefix: "auto-manage:reset-",
+      confirmId: "auto-manage:reset-confirm",
     });
     if (decision !== "confirm") {
       await editAutoEmbed(
-        buildResetCancelEmbed({ EmbedBuilder, UI, lang, decision }),
+        buildAutoManageCancelEmbed({ EmbedBuilder, UI, lang, decision, action: "reset" }),
         { components: [] }
       ).catch(() => {});
       return;

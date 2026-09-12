@@ -6,6 +6,10 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ## 2026-09-12
 
+### Changed
+- Task additions and removals now share one access, retry, and reply lifecycle. Character and roster task removal reuse the same mutation flow without changing their targets or notices.
+- Auto-manage enable/reset share confirmation handling, and enable reuses its no-roster and initial-report paths.
+
 ### Fixed
 - `/raid-auto-manage reset` now clears daily sync leases, retry backoff, and completed-day state. Each background attempt has a unique lease token, preventing an old worker from writing after a reset and a new same-day attempt, even when both attempts use the same counter value.
 - Switching to Local Sync cancels in-flight Bible writes at commit, including save retries and initial Auto-sync activation. Atomic mode updates invalidate stale document saves, and conflicting first-time enables return a mode conflict instead of a duplicate-key error.
