@@ -76,11 +76,18 @@ async function updateExclusiveSyncMode({
     ? { upsert: true, setDefaultsOnInsert: true, new: true }
     : { new: true };
 
-  const updated = await UserModel.findOneAndUpdate(
-    filter,
-    { $set: setFields },
-    options
-  );
+  // Mode changes must invalidate any document read by an in-flight Bible
+  // commit; its optimistic save then retries and observes the new mode.
+  const update = { $set: setFields, $inc: { __v: 1 } };
+  let updated;
+  try {
+    updated = await UserModel.findOneAndUpdate(filter, update, options);
+  } catch (err) {
+    if (!requiresConflictGuard || err?.code !== 11000) throw err;
+    // A guarded upsert can try to insert the existing discordId when the
+    // opposite mode is active. Retry as update-only, then classify the miss.
+    updated = await UserModel.findOneAndUpdate(filter, update, { new: true });
+  }
   if (updated) return { ok: true, reason: RESULT.ok, doc: updated };
   if (!requiresConflictGuard) return { ok: false, reason: RESULT.noUser };
 

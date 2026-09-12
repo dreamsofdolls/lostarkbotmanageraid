@@ -79,6 +79,48 @@ test("setLocalSyncEnabled(true) without force - filter rejects when bible is on,
   assert.equal(UserStub.calls.findOne.length, 1);
 });
 
+test("a guarded upsert duplicate is retried without insertion and returns the current mode conflict", async () => {
+  for (const [flip, oppositeFlag] of [
+    [setLocalSyncEnabled, "autoManageEnabled"], [setBibleAutoSyncEnabled, "localSyncEnabled"],
+  ]) {
+    const stub = makeUserStub({
+      findOneAndUpdateImpl: (_filter, _update, options) => {
+        if (options.upsert) throw Object.assign(new Error("Duplicate discordId"), { code: 11000 });
+        return null;
+      },
+      findOneImpl: async () => ({ [oppositeFlag]: true }),
+    });
+    const result = await flip("u1", true, {}, { UserModel: stub });
+    assert.deepEqual(result, { ok: false, reason: RESULT.conflict });
+    assert.equal(stub.calls.findOneAndUpdate.length, 2);
+    assert.equal(stub.calls.findOneAndUpdate[1].options.upsert, undefined);
+    assert.deepEqual(stub.calls.findOneAndUpdate[1].filter, stub.calls.findOneAndUpdate[0].filter);
+  }
+});
+
+test("a concurrent first-time enable retries its guarded update and succeeds on the existing user", async () => {
+  const stub = makeUserStub({
+    findOneAndUpdateImpl: (_filter, _update, options) => {
+      if (options.upsert) throw Object.assign(new Error("Concurrent insert"), { code: 11000 });
+      return { discordId: "u1", localSyncEnabled: true };
+    },
+  });
+  const result = await setLocalSyncEnabled("u1", true, {}, { UserModel: stub });
+  assert.equal(result.ok, true);
+  assert.equal(stub.calls.findOne.length, 0);
+  assert.deepEqual(stub.calls.findOneAndUpdate[1].update.$inc, { __v: 1 });
+});
+
+test("sync mode flips invalidate in-flight optimistic saves", async () => {
+  for (const flip of [setLocalSyncEnabled, setBibleAutoSyncEnabled]) {
+    for (const enabled of [false, true]) {
+      const stub = makeUserStub({ findOneAndUpdateImpl: async () => ({ discordId: "u1" }) });
+      await flip("u1", enabled, {}, { UserModel: stub });
+      assert.deepEqual(stub.calls.findOneAndUpdate[0].update.$inc, { __v: 1 });
+    }
+  }
+});
+
 test("setLocalSyncEnabled(true) without force - happy path stamps localSyncLinkedAt", async () => {
   const before = Date.now();
   const UserStub = makeUserStub({

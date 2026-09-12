@@ -1,6 +1,7 @@
 "use strict";
 
 const { deferEphemeralReply } = require("../../../../utils/raid/common/shared");
+const { assertBibleSyncAllowed } = require("../../../../services/auto-manage/runtime/support/sync-mode");
 // tPick, not t: the cooldown intro line is a variant pool; other keys pass through.
 const { tPick: t } = require("../../../../services/i18n");
 const {
@@ -90,6 +91,7 @@ async function applyManualSync({
   let report;
   await saveWithRetry(async () => {
     const userDoc = await User.findOne({ discordId });
+    assertBibleSyncAllowed(userDoc);
     if (!hasSyncableRoster(userDoc)) {
       report = { noRoster: true };
       return;
@@ -136,10 +138,13 @@ function createAutoManageSyncHandler({
       return;
     }
 
-    await deferEphemeralReply(interaction);
+    let acknowledged = false;
     try {
+      await deferEphemeralReply(interaction);
+      acknowledged = true;
       const weekResetStart = weekResetStartMs();
       const seedDoc = await User.findOne({ discordId });
+      assertBibleSyncAllowed(seedDoc);
       if (!hasSyncableRoster(seedDoc)) {
         await editNoRosterNotice({ lang, editAutoNotice });
         return;
@@ -167,6 +172,15 @@ function createAutoManageSyncHandler({
 
       await editAutoEmbed(buildAutoManageSyncReportEmbed(report, lang));
     } catch (err) {
+      if (!acknowledged) throw err;
+      if (err?.code === "LOCAL_SYNC_ACTIVE") {
+        await editAutoNotice({
+          type: "warn",
+          title: t("raid-auto-manage.sync.localLockedTitle", lang),
+          description: t("raid-auto-manage.sync.localLockedDescription", lang),
+        }, { content: null });
+        return;
+      }
       console.error("[auto-manage] sync failed:", err?.message || err);
       await editAutoNotice({
         type: "error",

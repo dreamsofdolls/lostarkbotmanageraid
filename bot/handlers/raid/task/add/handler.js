@@ -1,7 +1,7 @@
 "use strict";
 
 const { tPick: t, getUserLanguage } = require("../../../../services/i18n");
-const { resolveEditableTaskWriteAccess } = require("../write-access");
+const { resolveEditableTaskWriteAccess, revalidateTaskWriteAccess } = require("../write-access");
 
 /** Shared validation, access and save lifecycle for the three task-add commands. */
 function createTaskAddHandler({
@@ -24,8 +24,9 @@ function createTaskAddHandler({
     // Only shared-add exposes all_rosters, and it always targets the executor's
     // own accounts. A share grant must never expand into access to other rosters.
     let discordId = executorId;
+    let access = { discordId: executorId };
     if (!request.applyAllRosters) {
-      const access = await resolveEditableTaskWriteAccess({
+      access = await resolveEditableTaskWriteAccess({
         executorId, rosterName: request.rosterName, commandName, resolveTaskWriteTarget,
         denyViewOnly: (target) => replyViewOnlyShareNotice(interaction, target, lang),
       });
@@ -41,6 +42,10 @@ function createTaskAddHandler({
         // must not inflate counts or trigger a redundant save on the next one.
         const attemptResult = createResult(request.rosterName);
         const userDoc = await User.findOne({ discordId });
+        if (!await revalidateTaskWriteAccess({
+          access, executorId, rosterName: request.rosterName, resolveTaskWriteTarget,
+          denyViewOnly: (target) => replyViewOnlyShareNotice(interaction, target, lang),
+        })) return null;
         if (applyToUserDoc(userDoc, request, attemptResult, { dailyResetStartMs, weekResetStartMs }, now)) {
           await userDoc.save();
         }
@@ -56,7 +61,7 @@ function createTaskAddHandler({
       });
       return;
     }
-    await replyTaskNotice(interaction, buildNotice(result, request, lang));
+    if (result) await replyTaskNotice(interaction, buildNotice(result, request, lang));
   };
 }
 

@@ -1,6 +1,7 @@
 "use strict";
 
 const { deferEphemeralReply } = require("../../../../utils/raid/common/shared");
+const { assertBibleSyncAllowed, enableBibleSync } = require("../../../../services/auto-manage/runtime/support/sync-mode");
 const { t } = require("../../../../services/i18n");
 
 function buildEnableSimpleSuccessEmbed({ EmbedBuilder, UI, lang, descriptionKey }) {
@@ -89,22 +90,6 @@ function buildEnableCancelEmbed({ EmbedBuilder, UI, lang, decision }) {
     .setTimestamp();
 }
 
-async function enableWithoutInitialSync({ User, saveWithRetry, discordId }) {
-  await saveWithRetry(async () => {
-    const userDoc = await User.findOne({ discordId });
-    if (!userDoc) {
-      await User.findOneAndUpdate(
-        { discordId },
-        { $set: { autoManageEnabled: true } },
-        { upsert: true, setDefaultsOnInsert: true }
-      );
-      return;
-    }
-    userDoc.autoManageEnabled = true;
-    await userDoc.save();
-  });
-}
-
 function createAutoManageEnableHandler({
   EmbedBuilder,
   ActionRowBuilder,
@@ -113,7 +98,6 @@ function createAutoManageEnableHandler({
   ComponentType,
   UI,
   User,
-  saveWithRetry,
   ensureFreshWeek,
   acquireAutoManageSyncSlot,
   releaseAutoManageSyncSlot,
@@ -167,10 +151,12 @@ function createAutoManageEnableHandler({
     }
 
     const cooldownSkip = !guard.acquired && guard.reason === "cooldown";
-    await deferEphemeralReply(interaction);
+    let acknowledged = false;
     try {
+      await deferEphemeralReply(interaction);
+      acknowledged = true;
       if (cooldownSkip) {
-        await enableWithoutInitialSync({ User, saveWithRetry, discordId });
+        await enableBibleSync(User, discordId);
         await editAutoEmbed(
           buildEnableCooldownSkipEmbed({
             EmbedBuilder,
@@ -185,12 +171,9 @@ function createAutoManageEnableHandler({
 
       const weekResetStart = weekResetStartMs();
       const probeDoc = await User.findOne({ discordId });
+      assertBibleSyncAllowed(probeDoc);
       if (!probeDoc) {
-        await User.findOneAndUpdate(
-          { discordId },
-          { $set: { autoManageEnabled: true } },
-          { upsert: true, setDefaultsOnInsert: true }
-        );
+        await enableBibleSync(User, discordId);
         await editAutoEmbed(
           buildEnableSimpleSuccessEmbed({
             EmbedBuilder,
@@ -203,8 +186,7 @@ function createAutoManageEnableHandler({
       }
 
       if (!Array.isArray(probeDoc.accounts) || probeDoc.accounts.length === 0) {
-        probeDoc.autoManageEnabled = true;
-        await probeDoc.save();
+        await enableBibleSync(User, discordId);
         await editAutoEmbed(
           buildEnableSimpleSuccessEmbed({
             EmbedBuilder,
@@ -282,6 +264,15 @@ function createAutoManageEnableHandler({
         { components: [] }
       );
     } catch (err) {
+      if (!acknowledged) throw err;
+      if (err?.code === "LOCAL_SYNC_ACTIVE") {
+        await editAutoNotice({
+          type: "warn",
+          title: t("raid-auto-manage.mutex.bibleBlockedByLocalTitle", lang),
+          description: t("raid-auto-manage.mutex.bibleBlockedByLocalDescription", lang),
+        }, { content: null, components: [] });
+        return;
+      }
       await stampAutoManageAttempt(discordId);
       console.error("[auto-manage] enable-with-sync failed:", err?.message || err);
       await editAutoNotice({
@@ -295,7 +286,7 @@ function createAutoManageEnableHandler({
         components: [],
       }).catch(() => {});
     } finally {
-      if (!cooldownSkip) releaseAutoManageSyncSlot(discordId);
+      if (guard.acquired) releaseAutoManageSyncSlot(discordId);
     }
   };
 }

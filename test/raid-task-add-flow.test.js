@@ -9,7 +9,7 @@ const { createAddAllHandler } = require("../bot/handlers/raid/task/add/add-all")
 const { createSharedAddHandler } = require("../bot/handlers/raid/task/shared/shared-add");
 
 const factories = { single: createAddSingleHandler, all: createAddAllHandler, shared: createSharedAddHandler };
-function harness(kind, { deny = false, allRosters = false, saveError = null, duplicateOnRetry = false } = {}) {
+function harness(kind, { deny = false, allRosters = false, saveError = null, duplicateOnRetry = false, revokeOnRetry = false } = {}) {
   clearUserLanguageCache();
   const events = [];
   const notices = [];
@@ -40,7 +40,7 @@ function harness(kind, { deny = false, allRosters = false, saveError = null, dup
     weekResetStartMs: () => 222,
     resolveTaskWriteTarget: async () => {
       events.push("access");
-      return { discordId: "owner", viaShare: true, canEdit: !deny };
+      return { discordId: "owner", viaShare: true, canEdit: !deny && !(revokeOnRetry && saves > 0) };
     },
     replyViewOnlyShareNotice: async () => { events.push("denied"); },
     replyTaskNotice: async (_interaction, notice) => { events.push("reply"); notices.push(notice); },
@@ -56,6 +56,17 @@ function harness(kind, { deny = false, allRosters = false, saveError = null, dup
 }
 
 for (const kind of Object.keys(factories)) {
+  test(`${kind} add stops when edit access is revoked before a save retry`, async () => {
+    const state = harness(kind, {
+      revokeOnRetry: true,
+      saveError: Object.assign(new Error("conflict"), { name: "VersionError" }),
+    });
+    await state.run();
+    assert.equal(state.saves, 1, "the rejected first attempt must be the only save attempt");
+    assert.ok(state.events.includes("denied"));
+    assert.equal(state.notices.length, 0, "access denial must not be followed by success");
+  });
+
   test(`${kind} add denies a view-only share before loading a writable document`, async () => {
     const state = harness(kind, { deny: true });
     await state.run();
@@ -66,7 +77,7 @@ for (const kind of Object.keys(factories)) {
   test(`${kind} add retries from fresh state and replies only after the owner's save succeeds`, async () => {
     const state = harness(kind, { saveError: Object.assign(new Error("conflict"), { name: "VersionError" }) });
     await state.run();
-    assert.deepEqual(state.events, ["access", "read:owner", "save", "read:owner", "save", "reply"]);
+    assert.deepEqual(state.events, ["access", "read:owner", "access", "save", "read:owner", "access", "save", "reply"]);
     assert.equal(state.notices[0].type, "success");
     const account = state.docs[1].accounts[0];
     const tasks = kind === "shared" ? account.sharedTasks : account.characters[0].sideTasks;
@@ -77,7 +88,7 @@ for (const kind of Object.keys(factories)) {
   test(`${kind} add reports a terminal save failure without retrying or announcing success`, async () => {
     const state = harness(kind, { saveError: new Error("offline") });
     await state.run();
-    assert.deepEqual(state.events, ["access", "read:owner", "save", "reply"]);
+    assert.deepEqual(state.events, ["access", "read:owner", "access", "save", "reply"]);
     assert.equal(state.notices.length, 1);
     assert.equal(state.notices[0].type, "error");
   });

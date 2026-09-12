@@ -24,4 +24,17 @@ async function resolveEditableTaskWriteAccess({
   return { ok: true, writeTarget, discordId };
 }
 
-module.exports = { resolveEditableTaskWriteAccess };
+/** Recheck the original shared owner on every save attempt, without retargeting a write. */
+async function revalidateTaskWriteAccess({
+  access, executorId, rosterName, resolveTaskWriteTarget, denyViewOnly,
+}) {
+  if (access.discordId === executorId) return true;
+  const current = await resolveTaskWriteTarget(executorId, rosterName);
+  if (current.discordId === access.discordId && current.viaShare && current.canEdit) return true;
+  // A removed grant falls back to the executor in the resolver. It must never
+  // authorize the already-loaded owner's document or redirect this command.
+  await denyViewOnly(access.writeTarget);
+  return false;
+}
+
+module.exports = { resolveEditableTaskWriteAccess, revalidateTaskWriteAccess };

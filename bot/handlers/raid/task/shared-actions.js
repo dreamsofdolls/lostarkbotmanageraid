@@ -2,7 +2,7 @@
 
 // tPick, not t: some titles here are variant pools; non-pool keys pass through.
 const { tPick: t, getUserLanguage } = require("../../../services/i18n");
-const { resolveEditableTaskWriteAccess } = require("./write-access");
+const { resolveEditableTaskWriteAccess, revalidateTaskWriteAccess } = require("./write-access");
 const {
   ensureSharedTasks,
 } = require("../../../utils/raid/tasks/shared-tasks");
@@ -55,6 +55,13 @@ function createRaidTaskSharedActionHandlers({
     try {
       await saveWithRetry(async () => {
         const userDoc = await User.findOne({ discordId });
+        if (!await revalidateTaskWriteAccess({
+          access, executorId, rosterName, resolveTaskWriteTarget,
+          denyViewOnly: (target) => replyViewOnlyShareNotice(interaction, target, lang),
+        })) {
+          outcome = "auth-lost";
+          return;
+        }
         if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
           outcome = "no-roster";
           return;
@@ -85,6 +92,7 @@ function createRaidTaskSharedActionHandlers({
       return;
     }
 
+    if (outcome === "auth-lost") return;
     if (outcome === "no-roster" || outcome === "no-roster-match") {
       await replyTaskNotice(interaction, {
         type: "warn",

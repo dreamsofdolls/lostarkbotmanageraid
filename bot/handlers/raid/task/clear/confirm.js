@@ -1,7 +1,7 @@
 "use strict";
 
 const { t, getUserLanguage } = require("../../../../services/i18n");
-const { resolveEditableTaskWriteAccess } = require("../write-access");
+const { resolveEditableTaskWriteAccess, revalidateTaskWriteAccess } = require("../write-access");
 const {
   getCharacterDisplayName,
   findCharacterInUser,
@@ -119,6 +119,13 @@ function createClearConfirmHandler({
     try {
       await saveWithRetry(async () => {
         const userDoc = await User.findOne({ discordId: access.discordId });
+        if (!await revalidateTaskWriteAccess({
+          access, executorId, rosterName: route.rosterName, resolveTaskWriteTarget,
+          denyViewOnly: (target) => editTaskNotice(interaction, viewOnlyShareNotice(target, lang)),
+        })) {
+          result.outcome = "auth-lost";
+          return;
+        }
         if (applyClearConfirmed(userDoc, route, result)) {
           await userDoc.save();
         }
@@ -129,7 +136,9 @@ function createClearConfirmHandler({
       return;
     }
 
-    await editTaskNotice(interaction, buildClearConfirmNotice(result, lang)).catch(() => {});
+    if (result.outcome !== "auth-lost") {
+      await editTaskNotice(interaction, buildClearConfirmNotice(result, lang)).catch(() => {});
+    }
   };
 }
 

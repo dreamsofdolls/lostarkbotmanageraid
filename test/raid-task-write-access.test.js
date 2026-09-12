@@ -3,7 +3,25 @@ const assert = require("node:assert/strict");
 
 const {
   resolveEditableTaskWriteAccess,
+  revalidateTaskWriteAccess,
 } = require("../bot/handlers/raid/task/write-access");
+
+for (const current of [
+  { discordId: "viewer", viaShare: false },
+  { discordId: "another-owner", viaShare: true, canEdit: true },
+  { discordId: "owner", viaShare: true, canEdit: false },
+]) {
+  test(`task write revalidation rejects revoked or retargeted access: ${JSON.stringify(current)}`, async () => {
+    let denied = null;
+    const writeTarget = { discordId: "owner", viaShare: true, canEdit: true, ownerLabel: "Original owner" };
+    assert.equal(await revalidateTaskWriteAccess({
+      access: { discordId: "owner", writeTarget }, executorId: "viewer", rosterName: "Main",
+      resolveTaskWriteTarget: async () => current,
+      denyViewOnly: async target => { denied = target; },
+    }), false);
+    assert.equal(denied, writeTarget);
+  });
+}
 
 test("raid-task write access passes own roster without logging", async () => {
   const logs = [];

@@ -130,3 +130,18 @@ test("commitAutoManageCollected can reject a roster removed during gather", asyn
   assert.equal(freshens, 0);
   assert.equal(saves, 0);
 });
+
+test("automatic commit skips Local Sync without reconciling, stamping, or saving", async () => {
+  const doc = {
+    autoManageEnabled: true, localSyncEnabled: true, accounts: [{ accountName: "Roster" }],
+    save: () => assert.fail("Must preserve Local Sync data"),
+  };
+  const result = await createService({
+    doc,
+    ensureFreshWeek: () => assert.fail("Must guard before mutating the document"),
+    applyAutoManageCollected: () => assert.fail("Must not reconcile Bible logs"),
+  }).commitAutoManageCollected("user-1", 1234, []);
+  assert.equal(result.status, "local-sync-active");
+  assert.equal(result.report, null);
+  assert.equal(doc.lastAutoManageAttemptAt, undefined);
+});

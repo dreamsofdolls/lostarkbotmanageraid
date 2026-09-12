@@ -25,6 +25,7 @@ function createAutoManageBasicActionHandlers({
           lastLocalSyncToken: null,
           lastLocalSyncTokenExpAt: null,
         },
+        $inc: { __v: 1 },
       },
       { upsert: true, setDefaultsOnInsert: true }
     );

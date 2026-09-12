@@ -24,6 +24,7 @@ const {
 const {
   createAutoManageReconciler,
 } = require("./pipeline/reconcile");
+const { assertBibleSyncAllowed } = require("./support/sync-mode");
 const {
   weeklyResetStartMs: weekResetStartMs,
 } = require("../../../utils/raid/schedule/reset-windows");
@@ -130,13 +131,9 @@ function createAutoManageCoreService({
   async function gatherForCommit(discordId, weekResetStart) {
     const seedDoc = await User.findOne({ discordId });
     if (!seedDoc) return { missingUser: true, collected: undefined };
+    assertBibleSyncAllowed(seedDoc);
     if (!Array.isArray(seedDoc.accounts) || seedDoc.accounts.length === 0) {
-      await User.findOneAndUpdate(
-        { discordId },
-        { $set: { autoManageEnabled: true, lastAutoManageAttemptAt: Date.now() } },
-        { upsert: true, setDefaultsOnInsert: true }
-      );
-      return { collected: null, report: { appliedTotal: 0, perChar: [] } };
+      return { collected: [] };
     }
     ensureFreshWeek(seedDoc);
     return {
@@ -149,7 +146,6 @@ function createAutoManageCoreService({
     if (!collected) {
       const gathered = await gatherForCommit(discordId, weekResetStart);
       if (gathered.missingUser) return undefined;
-      if (gathered.report) return gathered.report;
       collected = gathered.collected;
     }
 
@@ -157,10 +153,12 @@ function createAutoManageCoreService({
     await saveWithRetry(async () => {
       const fresh = await User.findOne({ discordId });
       if (!fresh) return;
+      assertBibleSyncAllowed(fresh);
       fresh.autoManageEnabled = true;
       if (!Array.isArray(fresh.accounts) || fresh.accounts.length === 0) {
         fresh.lastAutoManageAttemptAt = Date.now();
         await fresh.save();
+        finalReport = { appliedTotal: 0, perChar: [] };
         return;
       }
       ensureFreshWeek(fresh);

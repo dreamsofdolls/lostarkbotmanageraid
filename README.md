@@ -43,6 +43,11 @@ Beyond progress tracking, Artist ships a **zero-upload Local Reader** that reads
 
 All replies are ephemeral (visible only to the caller) unless a command's row notes otherwise.
 
+Bible and Local Sync remain mutually exclusive even when the mode changes during a
+running sync or a save retry. A failed Discord acknowledgement releases the sync slot.
+Task writes to shared rosters recheck edit access before each save attempt and stay
+bound to the original owner, so a revoked grant cannot continue a pending retry.
+
 | Command | Who | What |
 |---|---|---|
 | `/raid-add-roster` | anyone (self); Raid Manager (`target:` for others) | Fetch a roster from `lostark.bible`, open an interactive picker (per-char toggle buttons + Confirm/Cancel, 5-min session), then save the chosen chars (cap 20/roster) |

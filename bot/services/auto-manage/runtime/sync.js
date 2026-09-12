@@ -25,6 +25,9 @@ function createAutoManageSyncService(deps) {
       if (!doc) {
         return { status: "missing-user", report: null, snapshot: null };
       }
+      if (doc.localSyncEnabled) {
+        return { status: "local-sync-active", report: null, snapshot: toPlainUserDoc(doc) };
+      }
       if (
         options.requireRoster === true &&
         (!Array.isArray(doc.accounts) || doc.accounts.length === 0)
