@@ -110,6 +110,18 @@ function buildRosterRefreshButton({
   });
 }
 
+/** Build the manager action that syncs all opted-in rosters across all raids. */
+function buildSyncAllButton({ ButtonBuilder, ButtonStyle, t, lang, disabled }) {
+  return createButton({
+    ButtonBuilder,
+    customId: "raid-check:sync-all",
+    label: t("raid-check.buttons.syncAll", lang),
+    emoji: "🔄",
+    style: ButtonStyle.Primary,
+    disabled,
+  });
+}
+
 function addAllModeActionButtons({
   row,
   ButtonBuilder,
@@ -170,4 +182,5 @@ function addAllModeActionButtons({
 module.exports = {
   addAllModeActionButtons,
   buildRosterRefreshButton,
+  buildSyncAllButton,
 };

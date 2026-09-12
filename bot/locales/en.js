@@ -1045,6 +1045,7 @@ module.exports = {
       enableAutoSync: "Enable auto-sync",
       disableAutoSync: "Disable auto-sync",
       refreshRoster: "Refresh roster",
+      syncAll: "Sync-check all",
       viewTasks: "View tasks",
       backToRaidScan: "Back to raid scan",
     },
@@ -1157,6 +1158,9 @@ module.exports = {
       footer: "Check `/raid-status` for the full updated progress.",
     },
     syncFlow: {
+      noOptedInAllDescription: "No rosters have Auto-sync enabled. Local Sync users are skipped.",
+      reportLineAllIntro: "Checked **{users}** Auto-sync users · **{chars}** characters across **all raids**.",
+      reportLineAllHint: "Reopen `/raid-check` to see the updated progress across all raids.",
       noOptedInTitle: "No opted-in users",
       noOptedInDescription: "No one in the current pending list has run `/raid-auto-manage action:on`, so Artist has no users to sync. Ask the listed members to enable auto-manage, or use `/raid-set` to update manually.",
       reportTitle: {

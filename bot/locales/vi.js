@@ -1067,6 +1067,7 @@ module.exports = {
       enableAutoSync: "Bật auto-sync",
       disableAutoSync: "Tắt auto-sync",
       refreshRoster: "Refresh roster",
+      syncAll: "Sync-check all",
       viewTasks: "Xem tasks",
       backToRaidScan: "Quay lại raid scan",
     },
@@ -1179,6 +1180,9 @@ module.exports = {
       footer: "Cậu ghé `/raid-status` xem full progress mới giúp Artist nha~",
     },
     syncFlow: {
+      noOptedInAllDescription: "Chưa có roster nào bật Auto-sync. Người dùng Local Sync được bỏ qua.",
+      reportLineAllIntro: "Đã kiểm tra **{users}** người bật Auto-sync · **{chars}** nhân vật trên **toàn bộ raid**.",
+      reportLineAllHint: "Mở lại `/raid-check` để xem tiến độ mới của toàn bộ raid nha~",
       noOptedInTitle: "Không có user nào opt-in",
       noOptedInDescription: "Trong list pending hiện tại không có ai đã `/raid-auto-manage action:on` cả nha, Artist không có user để sync. Nhắc các cậu trong list bật auto-manage, hoặc dùng `/raid-set` để update thủ công.",
       reportTitle: {

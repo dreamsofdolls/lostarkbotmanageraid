@@ -18,6 +18,7 @@ const {
 const {
   addAllModeActionButtons,
   buildRosterRefreshButton,
+  buildSyncAllButton,
 } = require("./all-mode-buttons");
 const {
   FILTER_ALL,
@@ -311,6 +312,13 @@ function createAllModeHandler({
         autoManageStateByDiscordId,
         localSyncStateByDiscordId,
       });
+      // The unfiltered overview has a separate row; the user-filtered view
+      // already fills Discord's five-row / five-button limits.
+      if (separateActionRow && currentView === "raid") {
+        actionRow.addComponents(buildSyncAllButton({
+          ButtonBuilder, ButtonStyle, t, lang, disabled,
+        }));
+      }
       if (
         currentView === "raid" &&
         hasCurrentPage &&

@@ -112,6 +112,8 @@ function createRaidCheckCommand(deps) {
         handleRaidCheckEnableAutoSelfClick(interaction, route.targetDiscordId),
     };
     const managerButtonHandlers = {
+      [RAID_CHECK_BUTTON_HANDLER.syncAll]: () =>
+        handleRaidCheckSyncClick(interaction, null),
       [RAID_CHECK_BUTTON_HANDLER.editAll]: () =>
         handleRaidCheckEditClick(interaction, null, null, route.preSelectedUserId),
       [RAID_CHECK_BUTTON_HANDLER.enableAutoOne]: () =>

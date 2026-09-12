@@ -164,3 +164,109 @@ test("raid-check edit acknowledges before language lookup", () => {
   assert.notEqual(languageIndex, -1);
   assert.ok(ackIndex < languageIndex);
 });
+
+test("sync all scans every opted-in roster once and keeps local-sync users out", async () => {
+  clearUserLanguageCache();
+  const events = [];
+  const docs = [
+    { discordId: "all-target", autoManageEnabled: true, accounts: [
+      { accountName: "Roster A", characters: [{ name: "Aki" }, { charName: "Mika" }] },
+      { accountName: "Roster B", characters: [{ name: "Sora" }] },
+    ] },
+    { discordId: "local-target", autoManageEnabled: true, localSyncEnabled: true, accounts: [
+      { accountName: "Local", characters: [{ name: "Localchar" }] },
+    ] },
+    { discordId: "opted-out", autoManageEnabled: false, accounts: [
+      { accountName: "Off", characters: [{ name: "Offchar" }] },
+    ] },
+  ];
+  const User = {
+    find() {
+      events.push("query");
+      return { select() { return this; }, lean: async () => docs };
+    },
+    findOne({ discordId }) {
+      if (discordId === "all-manager") return { lean: async () => ({ language: "en" }) };
+      return Promise.resolve(docs.find(doc => doc.discordId === discordId));
+    },
+  };
+  const ui = createSyncUi({
+    EmbedBuilder: FakeEmbedBuilder, MessageFlags: { Ephemeral: 64 },
+    UI: { colors: { success: 1 }, icons: { done: "ok" } }, User,
+    ensureFreshWeek: () => events.push("week"),
+    weekResetStartMs: () => 1234,
+    autoManageEntryKey: (accountName, charName) => `${accountName}:${charName}`,
+    gatherAutoManageLogsForUserDoc: async (_doc, _reset, options) => {
+      events.push("gather");
+      assert.deepEqual([...options.includeEntryKeys], ["Roster A:Aki", "Roster A:Mika", "Roster B:Sora"]);
+      return { logs: true };
+    },
+    commitAutoManageCollected: async discordId => {
+      assert.equal(discordId, "all-target");
+      events.push("commit");
+      return { status: "synced-no-delta", report: { perChar: [] } };
+    },
+    acquireAutoManageSyncSlot: async discordId => {
+      assert.equal(discordId, "all-target");
+      events.push("acquire");
+      return { acquired: true };
+    },
+    releaseAutoManageSyncSlot: () => events.push("release"),
+    raidCheckSyncLimiter: { run: fn => fn() }, discordUserLimiter: { run: fn => fn() },
+    computeRaidCheckSnapshot: () => assert.fail("All raids must not reuse a single-raid filter"),
+  });
+  let reply;
+  await ui.handleRaidCheckSyncClick({
+    user: { id: "all-manager" }, client: { users: {} },
+    deferReply: async () => events.push("defer"),
+    editReply: async payload => { reply = payload; },
+  }, null);
+  assert.deepEqual(events, ["defer", "query", "acquire", "week", "gather", "commit", "release"]);
+  assert.match(reply.embeds[0].description, /all raids/i);
+});
+
+test("sync all isolates per-user failures, rechecks consent, and releases only acquired slots", async () => {
+  clearUserLanguageCache();
+  const ids = ["lock-error", "busy", "gather-error", "changed-to-local", "ok-user"];
+  const released = [];
+  const gathered = [];
+  const committed = [];
+  const docs = ids.map(discordId => ({
+    discordId, autoManageEnabled: true,
+    accounts: [{ accountName: "Roster", characters: [{ name: "Aki" }] }],
+  }));
+  const ui = createSyncUi({
+    EmbedBuilder: FakeEmbedBuilder, MessageFlags: { Ephemeral: 64 },
+    UI: { colors: { success: 1 }, icons: { done: "ok" } },
+    User: {
+      find: () => ({ select() { return this; }, lean: async () => docs }),
+      findOne: ({ discordId }) => discordId === "failure-manager"
+        ? { lean: async () => ({ language: "en" }) }
+        : Promise.resolve({ ...docs.find(doc => doc.discordId === discordId), localSyncEnabled: discordId === "changed-to-local" }),
+    },
+    ensureFreshWeek: () => {}, weekResetStartMs: () => 1234,
+    autoManageEntryKey: (account, char) => `${account}:${char}`,
+    acquireAutoManageSyncSlot: async discordId => {
+      if (discordId === "lock-error") throw new Error("Lock unavailable");
+      return { acquired: discordId !== "busy" };
+    },
+    releaseAutoManageSyncSlot: discordId => released.push(discordId),
+    gatherAutoManageLogsForUserDoc: async doc => {
+      gathered.push(doc.discordId);
+      if (doc.discordId === "gather-error") throw new Error("Gather failed");
+      return [];
+    },
+    commitAutoManageCollected: async discordId => {
+      committed.push(discordId);
+      return { status: "synced-no-delta", report: { perChar: [] } };
+    },
+    raidCheckSyncLimiter: { run: fn => fn() }, discordUserLimiter: { run: fn => fn() },
+  });
+  await ui.handleRaidCheckSyncClick({
+    user: { id: "failure-manager" }, client: { users: {} },
+    deferReply: async () => {}, editReply: async () => {},
+  }, null);
+  assert.deepEqual(gathered.sort(), ["gather-error", "ok-user"]);
+  assert.deepEqual(committed, ["ok-user"]);
+  assert.deepEqual(released.sort(), ["changed-to-local", "gather-error", "ok-user"]);
+});

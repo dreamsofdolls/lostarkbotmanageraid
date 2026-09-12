@@ -35,6 +35,11 @@ test("raid-check button routes classify self actions without manager gate", () =
 });
 
 test("raid-check button routes classify manager actions that do not need raid metadata", () => {
+  const syncAll = getRaidCheckButtonRoute("raid-check:sync-all");
+  assert.equal(syncAll.scope, RAID_CHECK_BUTTON_SCOPE.manager);
+  assert.equal(syncAll.handler, RAID_CHECK_BUTTON_HANDLER.syncAll);
+  assert.equal(syncAll.managerRequired, true);
+  assert.equal(syncAll.raidRequired, false);
   assert.deepEqual(getRaidCheckButtonRoute("raid-check:edit-all:456"), {
     scope: RAID_CHECK_BUTTON_SCOPE.manager,
     handler: RAID_CHECK_BUTTON_HANDLER.editAll,

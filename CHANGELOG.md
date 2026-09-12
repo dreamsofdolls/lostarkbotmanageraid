@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-09-12
+
+### Added
+- Managers can use **Sync-check all** from the `/raid-check` overview to pull Bible raid progress for every Auto-sync roster across all raids. The action skips Local Sync users, checks current opt-in again before gathering, and uses the existing sync locks and retry-safe write service.
+
 ## 2026-09-04 (Full Local Sync propagates party progress)
 
 ### Fixed

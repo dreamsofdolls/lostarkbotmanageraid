@@ -6,6 +6,7 @@ const assert = require("node:assert/strict");
 const {
   addAllModeActionButtons,
   buildRosterRefreshButton,
+  buildSyncAllButton,
 } = require("../bot/handlers/raid-check/all-mode/all-mode-buttons");
 
 class FakeButtonBuilder {
@@ -127,4 +128,15 @@ test("raid-check all-mode roster refresh button uses all-mode collector id", () 
 
   assert.equal(button.data.customId, "raid-check-all:roster-refresh");
   assert.equal(button.data.disabled, false);
+});
+
+test("sync all button uses the manager-gated route and disables on session expiry", () => {
+  for (const disabled of [false, true]) {
+    const button = buildSyncAllButton({
+      ButtonBuilder: FakeButtonBuilder, ButtonStyle, t, lang: "en", disabled,
+    });
+    assert.equal(button.data.customId, "raid-check:sync-all");
+    assert.equal(button.data.label, "raid-check.buttons.syncAll");
+    assert.equal(button.data.disabled, disabled);
+  }
 });

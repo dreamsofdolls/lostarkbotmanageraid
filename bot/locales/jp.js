@@ -1046,6 +1046,7 @@ module.exports = {
       enableAutoSync: "自動同期をオンに",
       disableAutoSync: "自動同期をオフに",
       refreshRoster: "ロスター更新",
+      syncAll: "全レイド同期",
       viewTasks: "タスクを見る",
       backToRaidScan: "レイドスキャンへ戻る",
     },
@@ -1158,6 +1159,9 @@ module.exports = {
       footer: "新しい進捗の全体は `/raid-status` で確認してね♪",
     },
     syncFlow: {
+      noOptedInAllDescription: "Auto-sync が有効なロスターはありません。Local Sync ユーザーは対象外です。",
+      reportLineAllIntro: "Auto-sync ユーザー **{users}** 人 · キャラクター **{chars}** 体の **全レイド** を確認しました。",
+      reportLineAllHint: "`/raid-check` を開き直すと全レイドの更新後の進捗を確認できます。",
       noOptedInTitle: "オプトインしているユーザーがいませんわ",
       noOptedInDescription: "現在の未完了リストには `/raid-auto-manage action:on` をしているユーザーが居ないですわ～ アーティストは同期するユーザーがいないの。リスト内のメンバーに自動同期をオンにしてもらうか、`/raid-set` で手動更新してね♪",
       reportTitle: {

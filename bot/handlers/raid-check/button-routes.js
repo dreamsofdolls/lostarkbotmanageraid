@@ -16,6 +16,7 @@ const RAID_CHECK_BUTTON_HANDLER = Object.freeze({
   disableAutoOne: "disableAutoOne",
   viewTasks: "viewTasks",
   sync: "sync",
+  syncAll: "syncAll",
   edit: "edit",
   unsupported: "unsupported",
 });
@@ -26,6 +27,7 @@ const SELF_ACTION_HANDLERS = Object.freeze({
 });
 
 const MANAGER_ACTION_HANDLERS = Object.freeze({
+  "sync-all": RAID_CHECK_BUTTON_HANDLER.syncAll,
   "edit-all": RAID_CHECK_BUTTON_HANDLER.editAll,
   "enable-auto-one": RAID_CHECK_BUTTON_HANDLER.enableAutoOne,
   "disable-auto-one": RAID_CHECK_BUTTON_HANDLER.disableAutoOne,

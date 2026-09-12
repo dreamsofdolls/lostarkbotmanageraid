@@ -74,7 +74,7 @@ test("raid-check denied button acknowledges before the language lookup", async (
     },
   };
   const interaction = {
-    customId: "raid-check:view-tasks:user-1",
+    customId: "raid-check:sync-all",
     user: { id: "denied-button-user" },
     deferReply: async () => {
       events.push("defer");
@@ -101,4 +101,80 @@ test("raid-check denied button acknowledges before the language lookup", async (
   await command.handleRaidCheckButton(interaction);
 
   assert.deepEqual(events, ["defer", "language", "edit"]);
+});
+
+test("raid-check overview renders Sync-check all within Discord limits and restores it after clearing a user filter", async () => {
+  clearUserLanguageCache();
+  const { createAllModeHandler } = require("../bot/handlers/raid-check/all-mode/all-mode");
+  const { FILTER_ALL } = require("../bot/handlers/raid-check/all-mode/all-mode-filters");
+  const handlers = {};
+  const edits = [];
+  const userDoc = {
+    discordId: "roster-user", discordDisplayName: "Roster user", autoManageEnabled: true,
+    accounts: [{ accountName: "Roster", characters: [{ name: "Aki", itemLevel: 1740 }] }],
+  };
+  const User = {
+    find: () => ({ select() { return this; }, lean: async () => [userDoc] }),
+    findOne: () => ({ lean: async () => ({ language: "en" }) }),
+  };
+  const command = createAllModeHandler({
+    ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, StringSelectMenuBuilder,
+    User, ensureFreshWeek: () => {}, truncateText: text => String(text),
+    buildAccountPageEmbed: () => new EmbedBuilder().setTitle("Roster"),
+    buildStatusFooterText: () => "Weekly progress",
+    summarizeRaidProgress: raids => ({ completed: 0, total: raids.length }),
+    getStatusRaidsForCharacter: () => [{ raidKey: "act4", modeKey: "hard", goldReceives: true, isCompleted: false }],
+    buildPaginationRow: (_page, _total, disabled) => new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("raid-check-all-page:prev").setLabel("Previous").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+      new ButtonBuilder().setCustomId("raid-check-all-page:next").setLabel("Next").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+    ),
+    isRaidLeader: () => true, RAID_CHECK_USER_QUERY_FIELDS: "", RAID_CHECK_PAGINATION_SESSION_MS: 1000,
+  });
+  const message = {
+    createMessageComponentCollector: () => ({ on: (event, handler) => { handlers[event] = handler; } }),
+    edit: async payload => { edits.push(payload); },
+  };
+  await command.handleRaidCheckAllCommand({
+    user: { id: "ui-manager" }, guildId: "guild",
+    deferReply: async () => {},
+    editReply: async payload => { edits.push(payload); return message; },
+  });
+  const assertRows = expectedSync => {
+    const rows = edits.at(-1).components.map(row => row.toJSON());
+    assert.ok(rows.length <= 5);
+    assert.ok(rows.every(row => row.components.length <= 5));
+    const sync = rows.flatMap(row => row.components).find(item => item.custom_id === "raid-check:sync-all");
+    assert.equal(Boolean(sync), expectedSync);
+    return rows;
+  };
+  assertRows(true);
+  for (const value of ["roster-user", FILTER_ALL]) {
+    await handlers.collect({
+      customId: "raid-check-all-filter:user", user: { id: "ui-manager" }, values: [value],
+      update: async payload => { edits.push(payload); },
+    });
+    assertRows(value === FILTER_ALL);
+  }
+  await handlers.end();
+  assert.ok(assertRows(true).flatMap(row => row.components).every(item => item.disabled));
+});
+
+test("manager Sync-check all dispatches without requiring per-raid metadata", async () => {
+  clearUserLanguageCache();
+  let queries = 0;
+  let report;
+  const command = createRaidCheckCommand({
+    ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, StringSelectMenuBuilder,
+    User: {
+      find: () => { queries += 1; return { select() { return this; }, lean: async () => [] }; },
+      findOne: () => ({ lean: async () => ({ language: "en" }) }),
+    },
+    isRaidLeader: () => true, RAID_REQUIREMENT_MAP: {},
+  });
+  await command.handleRaidCheckButton({
+    customId: "raid-check:sync-all", user: { id: "empty-sync-manager" },
+    deferReply: async () => {}, editReply: async payload => { report = payload; },
+  });
+  assert.equal(queries, 1);
+  assert.match(report.embeds[0].toJSON().description, /No rosters have Auto-sync enabled/);
 });
