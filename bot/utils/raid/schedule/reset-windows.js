@@ -55,7 +55,25 @@ function weeklyResetStartMs(now = new Date()) {
   return date.getTime() - 7 * 24 * 60 * 60 * 1000;
 }
 
+/**
+ * Decode the persisted ISO-week cursor to its Wednesday 10:00 UTC boundary.
+ * Invalid or absent legacy keys return null so callers can keep their fallback.
+ */
+function weeklyResetStartFromKey(key) {
+  const match = /^(\d{4})-W(\d{2})$/.exec(String(key || ""));
+  if (!match) return null;
+  const week = Number(match[2]);
+  if (week < 1 || week > 53) return null;
+  const january4 = new Date(`${match[1]}-01-04T10:00:00.000Z`);
+  const isoDay = january4.getUTCDay() || 7;
+  const start = january4.getTime() + (3 - isoDay + (week - 1) * 7) * 86400000;
+  // Thursday determines the ISO year, rejecting W53 in a 52-week year.
+  if (new Date(start + 86400000).getUTCFullYear() !== Number(match[1])) return null;
+  return start;
+}
+
 module.exports = {
   dailyResetStartMs,
   weeklyResetStartMs,
+  weeklyResetStartFromKey,
 };

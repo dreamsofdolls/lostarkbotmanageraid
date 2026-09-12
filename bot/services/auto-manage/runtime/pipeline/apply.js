@@ -1,5 +1,7 @@
 "use strict";
 
+const { weeklyResetStartFromKey } = require("../../../../utils/raid/schedule/reset-windows");
+
 function createAutoManageApplier({
   autoManageEntryKey,
   getCharacterClass,
@@ -10,6 +12,12 @@ function createAutoManageApplier({
   function applyAutoManageCollected(userDoc, weekResetStart, collected) {
     const report = { appliedTotal: 0, perChar: [] };
     const byKey = new Map(collected.map((entry) => [entry.entryKey, entry]));
+    // A gather (or save retry) can cross reset. Never restore logs older than
+    // the reset already applied to the fresh document being committed.
+    const documentWeekStart = weeklyResetStartFromKey(userDoc.weeklyResetKey);
+    const effectiveWeekStart = documentWeekStart === null
+      ? weekResetStart
+      : Math.max(Number(weekResetStart) || 0, documentWeekStart);
 
     for (const account of userDoc.accounts || []) {
       for (const character of account.characters || []) {
@@ -47,7 +55,7 @@ function createAutoManageApplier({
           const applied = reconcileCharacterFromLogs(
             character,
             gathered.logs || [],
-            weekResetStart
+            effectiveWeekStart
           );
           entry.applied = applied;
           report.appliedTotal += applied.length;

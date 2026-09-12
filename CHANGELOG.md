@@ -11,6 +11,8 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - Auto-manage enable/reset share confirmation handling, and enable reuses its no-roster and initial-report paths.
 
 ### Fixed
+- Bible results arriving after a weekly reset cannot restore the previous week's gate progress. The shared apply path honors the fresh document's reset cursor, including save retries.
+- Concurrent MongoDB callers share connection, DNS fallback, and index setup; reconnects no longer accumulate event listeners.
 - `/raid-auto-manage reset` now clears daily sync leases, retry backoff, and completed-day state. Each background attempt has a unique lease token, preventing an old worker from writing after a reset and a new same-day attempt, even when both attempts use the same counter value.
 - Switching to Local Sync cancels in-flight Bible writes at commit, including save retries and initial Auto-sync activation. Atomic mode updates invalidate stale document saves, and conflicting first-time enables return a mode conflict instead of a duplicate-key error.
 - Failed Discord acknowledgement now releases the acquired manual sync or enable slot, so a failed interaction cannot leave sync permanently busy.

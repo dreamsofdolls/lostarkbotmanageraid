@@ -9,6 +9,8 @@ const mongoose = require("mongoose");
 const dns = require("node:dns");
 
 let connected = false;
+let connectionPromise = null;
+let listenersAttached = false;
 
 async function ensureApplicationIndexes() {
   if (process.env.MONGO_ENSURE_INDEXES === "false") return;
@@ -33,11 +35,18 @@ async function ensureApplicationIndexes() {
 
 /**
  * Connect to MongoDB if not already connected.
- * Safe to call multiple times – subsequent calls are no-ops.
+ * Overlapping callers share one attempt, including DNS fallback and index setup.
  */
 async function connectDB() {
+  if (connectionPromise) return connectionPromise;
   if (connected) return;
+  connectionPromise = Promise.resolve().then(openConnection).finally(() => {
+    connectionPromise = null;
+  });
+  return connectionPromise;
+}
 
+async function openConnection() {
   const mongoUri = process.env.MONGO_URI;
   const mongoDbName = process.env.MONGO_DB_NAME || "manage";
   const dnsServers = process.env.DNS_SERVERS || "8.8.8.8,1.1.1.1";
@@ -73,19 +82,23 @@ async function connectDB() {
   const { host, port, name } = mongoose.connection;
   console.log(`[db] Connected to MongoDB at ${host}:${port}/${name}`);
 
+  if (!listenersAttached) {
+    listenersAttached = true;
+    mongoose.connection.on("disconnected", () => {
+      connected = false;
+      console.warn("[db] MongoDB disconnected");
+    });
+
+    mongoose.connection.on("error", (err) => {
+      console.error("[db] MongoDB error:", err.message);
+    });
+  }
+
   await ensureApplicationIndexes();
-
-  mongoose.connection.on("disconnected", () => {
-    connected = false;
-    console.warn("[db] MongoDB disconnected");
-  });
-
-  mongoose.connection.on("error", (err) => {
-    console.error("[db] MongoDB error:", err.message);
-  });
 }
 
 async function disconnectDB() {
+  if (connectionPromise) await connectionPromise.catch(() => {});
   if (mongoose.connection.readyState === 0) {
     connected = false;
     return;
