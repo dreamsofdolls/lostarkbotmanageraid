@@ -1,6 +1,10 @@
 "use strict";
 
 const {
+  hasAssignedRaidModeChange,
+  resetAssignedRaidGates,
+} = require("../../../utils/raid/common/character/assigned-raids");
+const {
   COMPANION_SCOPE,
   isCompanionScopeEnabledForUser,
   isModeAllowedForCompanionScope,
@@ -72,16 +76,10 @@ function createRaidSetApplyService({
     selectedDifficulty,
     currentWeekStartMs = 0
   ) {
-    const normalizedSelectedDiff = normalizeName(selectedDifficulty);
     const officialGateList = getGatesForRaid(raidMeta.raidKey);
-    let changed = Boolean(raidData.modeKey && raidData.modeKey !== raidMeta.modeKey);
-
-    for (const gate of officialGateList) {
-      const existingDiff = raidData[gate]?.difficulty;
-      if (existingDiff && normalizeName(existingDiff) !== normalizedSelectedDiff) {
-        changed = true;
-      }
-    }
+    const changed = hasAssignedRaidModeChange(
+      raidData, raidMeta.modeKey, selectedDifficulty, officialGateList, normalizeName
+    );
 
     const progressFloorMs = Math.max(0, Number(currentWeekStartMs) || 0);
     const hadProgress = changed && officialGateList.some((gate) => {
@@ -90,12 +88,6 @@ function createRaidSetApplyService({
     });
 
     return { changed, hadProgress, officialGateList };
-  }
-
-  function resetRaidMode(raidData, gates, selectedDifficulty) {
-    for (const gate of gates) {
-      raidData[gate] = { difficulty: selectedDifficulty, completedDate: undefined };
-    }
   }
 
   function everyTargetAlreadyDone(
@@ -232,7 +224,7 @@ function createRaidSetApplyService({
 
   function applyModeTransition(result, mutation, raidMeta, selectedDifficulty) {
     if (mutation.modeChange.changed) {
-      resetRaidMode(
+      resetAssignedRaidGates(
         mutation.raidData,
         mutation.modeChange.officialGateList,
         selectedDifficulty

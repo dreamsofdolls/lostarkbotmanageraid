@@ -12,6 +12,10 @@
  */
 
 const { t } = require("../../../services/i18n");
+const {
+  hasAssignedRaidModeChange,
+  resetAssignedRaidGates,
+} = require("../../../utils/raid/common/character/assigned-raids");
 
 const GATE_PROGRESS_DISPLAY = new Map([
   ["complete", { icon: "🟢", rollupKey: "raid-check.editFlow.gateRollupComplete" }],
@@ -169,7 +173,6 @@ function createEditHelpers({
   function applyLocalRaidEditToChar(character, raidMeta, statusType, effectiveGates, now = Date.now()) {
     if (!character || !raidMeta) return;
     const selectedDifficulty = toModeLabel(raidMeta.modeKey);
-    const normalizedSelectedDiff = normalizeName(selectedDifficulty);
     const officialGates = getGatesForRaid(raidMeta.raidKey) || [];
     const gateList = Array.isArray(effectiveGates) ? effectiveGates.filter(Boolean) : [];
     if (!character.assignedRaids) character.assignedRaids = {};
@@ -177,20 +180,11 @@ function createEditHelpers({
     const raidData = character.assignedRaids[raidMeta.raidKey] || {};
     const shouldMarkDone = statusType === "complete" || statusType === "process";
     if (shouldMarkDone) {
-      let modeChangeDetected = Boolean(
-        raidData.modeKey && raidData.modeKey !== raidMeta.modeKey
+      const modeChangeDetected = hasAssignedRaidModeChange(
+        raidData, raidMeta.modeKey, selectedDifficulty, officialGates, normalizeName
       );
-      for (const gate of officialGates) {
-        const existingDiff = raidData[gate]?.difficulty;
-        if (existingDiff && normalizeName(existingDiff) !== normalizedSelectedDiff) {
-          modeChangeDetected = true;
-          break;
-        }
-      }
       if (modeChangeDetected) {
-        for (const gate of officialGates) {
-          raidData[gate] = { difficulty: selectedDifficulty, completedDate: undefined };
-        }
+        resetAssignedRaidGates(raidData, officialGates, selectedDifficulty);
       }
       raidData.modeKey = raidMeta.modeKey;
     }

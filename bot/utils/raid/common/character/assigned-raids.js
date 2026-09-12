@@ -49,6 +49,26 @@ function toPlainAssignedRaid(assignedRaid) {
     : { ...(assignedRaid || {}) };
 }
 
+/**
+ * Detect a stored mode or official-gate difficulty conflict without mutating it.
+ * The injected normalizer must be pure; matching stops at the first conflict.
+ */
+function hasAssignedRaidModeChange(assignedRaid, modeKey, difficulty, gates, normalize = normalizeName) {
+  if (assignedRaid.modeKey && assignedRaid.modeKey !== modeKey) return true;
+  const selected = normalize(difficulty);
+  return gates.some((gate) => {
+    const existing = assignedRaid[gate]?.difficulty;
+    return Boolean(existing && normalize(existing) !== selected);
+  });
+}
+
+/** Overwrite only the supplied gates, preserving mode choices and other raid metadata. */
+function resetAssignedRaidGates(assignedRaid, gates, difficulty, completedDate) {
+  for (const gate of gates) {
+    assignedRaid[gate] = { difficulty, completedDate };
+  }
+}
+
 function setAssignedRaidMode(assignedRaid, raidKey, modeKey, { completedDate = null } = {}) {
   const normalizedModeKey = normalizeRaidModeKey(raidKey, modeKey);
   const plain = toPlainAssignedRaid(assignedRaid);
@@ -57,9 +77,7 @@ function setAssignedRaidMode(assignedRaid, raidKey, modeKey, { completedDate = n
   plain.modeKey = normalizedModeKey;
   delete plain.pendingModeKey;
   const label = toModeLabel(normalizedModeKey);
-  for (const gate of getGatesForRaid(raidKey)) {
-    plain[gate] = { difficulty: label, completedDate };
-  }
+  resetAssignedRaidGates(plain, getGatesForRaid(raidKey), label, completedDate);
   return plain;
 }
 
@@ -249,9 +267,11 @@ module.exports = {
   getCompletedGateKeys,
   getGateKeys,
   getRequirementFor,
+  hasAssignedRaidModeChange,
   isAssignedRaidCompleted,
   normalizeAssignedRaid,
   normalizeRaidModeKey,
+  resetAssignedRaidGates,
   setAssignedRaidMode,
   toPlainAssignedRaid,
 };

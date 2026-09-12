@@ -2,6 +2,10 @@
 
 const { normalizeDifficultyToModeKey } = require("../../bible/log-utils");
 const {
+  hasAssignedRaidModeChange,
+  resetAssignedRaidGates,
+} = require("../../../../utils/raid/common/character/assigned-raids");
+const {
   preserveManualRaidModePreference,
 } = require("../../../../domain/raid-catalog");
 
@@ -45,7 +49,6 @@ function createAutoManageReconciler({
       if (!raidMeta) continue;
 
       const difficultyLabel = toModeLabel(modeKey);
-      const normalizedSelectedDiff = normalizeName(difficultyLabel);
       const existingRaid = normalizeAssignedRaid(
         assignedRaids[mapping.raidKey] || {},
         difficultyLabel,
@@ -60,21 +63,11 @@ function createAutoManageReconciler({
         continue;
       }
 
-      let modeChange = false;
-      if (existingRaid.modeKey && existingRaid.modeKey !== modeKey) {
-        modeChange = true;
-      }
-      for (const g of officialGates) {
-        const existingDiff = existingRaid[g]?.difficulty;
-        if (existingDiff && normalizeName(existingDiff) !== normalizedSelectedDiff) {
-          modeChange = true;
-          break;
-        }
-      }
+      const modeChange = hasAssignedRaidModeChange(
+        existingRaid, modeKey, difficultyLabel, officialGates, normalizeName
+      );
       if (modeChange) {
-        for (const g of officialGates) {
-          existingRaid[g] = { difficulty: difficultyLabel, completedDate: undefined };
-        }
+        resetAssignedRaidGates(existingRaid, officialGates, difficultyLabel);
       }
       existingRaid.modeKey = modeKey;
 
