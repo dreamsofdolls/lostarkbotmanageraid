@@ -69,9 +69,10 @@ async function settleUnavailableDailyCandidate({
   userDoc,
   targetDayKey,
   attemptCount,
+  leaseToken,
   nowMs,
 }) {
-  if (!ownsAutoManageDailyLease(userDoc, targetDayKey, attemptCount)) {
+  if (!ownsAutoManageDailyLease(userDoc, targetDayKey, attemptCount, leaseToken)) {
     return {
       handled: true,
       transition: { bucket: "skipped", outcome: "superseded" },
@@ -100,6 +101,7 @@ async function loadDailyCandidateSettlement({
   discordId,
   dailyContext,
   attemptCount,
+  leaseToken,
   nowMs,
 }) {
   const fresh = await User.findOne({ discordId });
@@ -107,6 +109,7 @@ async function loadDailyCandidateSettlement({
     userDoc: fresh,
     targetDayKey: dailyContext.targetDayKey,
     attemptCount,
+    leaseToken,
     nowMs,
   });
   return { fresh, settlement };
@@ -118,6 +121,7 @@ async function persistTransientDailyFailure({
   discordId,
   dailyContext,
   attemptCount,
+  leaseToken,
   nowMs,
 }) {
   let transition = { bucket: "skipped", outcome: "superseded" };
@@ -127,6 +131,7 @@ async function persistTransientDailyFailure({
       discordId,
       dailyContext,
       attemptCount,
+      leaseToken,
       nowMs,
     });
     if (settlement.handled) {
@@ -169,6 +174,7 @@ async function persistCollectedDailyReport({
   discordId,
   dailyContext,
   attemptCount,
+  leaseToken,
   nowMs,
   ensureFreshWeek,
   applyAutoManageCollected,
@@ -184,6 +190,7 @@ async function persistCollectedDailyReport({
       discordId,
       dailyContext,
       attemptCount,
+      leaseToken,
       nowMs,
     });
     if (settlement.handled) {
@@ -215,6 +222,7 @@ async function settleCandidateFailure({
   discordId,
   dailyContext,
   attemptCount,
+  leaseToken,
   nowMs,
 }) {
   let transition = { bucket: "failed", outcome: "unpersisted-failure" };
@@ -226,6 +234,7 @@ async function settleCandidateFailure({
         discordId,
         dailyContext,
         attemptCount,
+        leaseToken,
         nowMs,
       });
     } catch (persistErr) {
@@ -267,6 +276,7 @@ async function syncCandidate({
 
   let claimed = false;
   let attemptCount = 0;
+  let leaseToken = "";
   try {
     const seed = await loadEligibleDailySeed(User, discordId);
     if (seed.transition) return seed.transition;
@@ -276,13 +286,10 @@ async function syncCandidate({
       seedDoc,
       dailyContext.targetDayKey
     );
+    const claimUpdate = buildAutoManageDailyClaimUpdate({ targetDayKey: dailyContext.targetDayKey, attemptCount, nowMs });
+    leaseToken = claimUpdate.$set.autoManageDailyLeaseToken;
     const claim = await User.updateOne(
-      buildAutoManageDailyClaimQuery(discordId, dailyContext, nowMs),
-      buildAutoManageDailyClaimUpdate({
-        targetDayKey: dailyContext.targetDayKey,
-        attemptCount,
-        nowMs,
-      })
+      buildAutoManageDailyClaimQuery(discordId, dailyContext, nowMs), claimUpdate
     );
     if (!didClaimDailyBackfill(claim)) {
       return { bucket: "skipped", outcome: "claimed-or-not-due" };
@@ -301,6 +308,7 @@ async function syncCandidate({
       discordId,
       dailyContext,
       attemptCount,
+      leaseToken,
       nowMs,
       ensureFreshWeek,
       applyAutoManageCollected,
@@ -320,6 +328,7 @@ async function syncCandidate({
       discordId,
       dailyContext,
       attemptCount,
+      leaseToken,
       nowMs,
     });
   } finally {

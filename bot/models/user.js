@@ -197,6 +197,7 @@ const userSchema = new mongoose.Schema(
     autoManageDailyNextAttemptAt: { type: Number, default: null },
     autoManageDailyLeaseDayKey: { type: String, default: "" },
     autoManageDailyLeaseUntil: { type: Number, default: null },
+    autoManageDailyLeaseToken: { type: String, default: "" },
     lastAutoManageDailyFinishedDayKey: { type: String, default: "" },
     // Rolling 24-hour gate, including private/no-actionable/exhausted outcomes.
     lastAutoManageDailyFinishedAt: { type: Number, default: null },

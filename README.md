@@ -45,6 +45,8 @@ All replies are ephemeral (visible only to the caller) unless a command's row no
 
 Bible and Local Sync remain mutually exclusive even when the mode changes during a
 running sync or a save retry. A failed Discord acknowledgement releases the sync slot.
+Reset also clears the daily scheduler's lease and retry state. A new daily attempt has
+its own identity, so an older worker cannot overwrite it after reset and re-enable.
 Task writes to shared rosters recheck edit access before each save attempt and stay
 bound to the original owner, so a revoked grant cannot continue a pending retry.
 

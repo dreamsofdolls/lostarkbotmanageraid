@@ -20,6 +20,8 @@ const {
   AUTO_MANAGE_DAILY_LEASE_MS,
   AUTO_MANAGE_DAILY_RETRY_DELAYS_MS,
   AUTO_MANAGE_DAILY_OUTCOME,
+  buildAutoManageDailyClaimUpdate,
+  resetAutoManageDailyState,
 } = require("../bot/services/auto-manage/runtime/support/daily-state");
 
 test("auto-manage daily counters route each outcome bucket by lookup", () => {
@@ -71,6 +73,40 @@ function createFindChain(candidates, onQuery) {
     };
     return chain;
   };
+}
+
+for (const gatherFails of [false, true]) {
+  test(`old daily worker cannot settle a new same-day attempt after reset (gatherFails=${gatherFails})`, async () => {
+    const now = new Date('2026-09-12T12:00:00Z');
+    const day = getAutoManageDailyContext(now).targetDayKey;
+    let nextToken;
+    let saves = 0;
+    let releases = 0;
+    const doc = { discordId: 'owner', autoManageEnabled: true, accounts: [{ accountName: 'Main' }], save: async () => { saves += 1; } };
+    const service = createAutoManageDailySchedulerService({
+      User: {
+        find: createFindChain([{ discordId: 'owner' }]), findOne: async () => doc,
+        updateOne: async (_filter, update) => { Object.assign(doc, update.$set); return { modifiedCount: 1 }; },
+      },
+      saveWithRetry: operation => operation(), ensureFreshWeek: () => {}, weekResetStartMs: () => 0,
+      acquireAutoManageSyncSlot: async () => ({ acquired: true }), releaseAutoManageSyncSlot: () => { releases += 1; },
+      gatherAutoManageLogsForUserDoc: async () => {
+        resetAutoManageDailyState(doc);
+        const next = buildAutoManageDailyClaimUpdate({ targetDayKey: day, attemptCount: 1, nowMs: now.getTime() });
+        nextToken = next.$set.autoManageDailyLeaseToken;
+        Object.assign(doc, next.$set);
+        if (gatherFails) throw new Error('Old gather failed after reset');
+        return [];
+      },
+      applyAutoManageCollected: () => assert.fail('A replaced worker must not apply old logs'),
+      isPublicLogDisabledError: () => false, processEnv: {},
+    });
+    await service.runAutoManageDailyTick({}, now);
+    assert.equal(saves, 0);
+    assert.equal(releases, 1);
+    assert.equal(doc.autoManageDailyLeaseToken, nextToken);
+    assert.equal(doc.lastAutoManageDailyOutcome, 'in-flight');
+  });
 }
 
 test("auto-manage daily scheduler selects unfinished users without a status-open gate", () => {
@@ -204,6 +240,7 @@ test("auto-manage daily scheduler syncs one absent user and releases the slot", 
       findOne: async () => findOneDocs.shift() || null,
       updateOne: async (query, update) => {
         claims.push({ query, update });
+        freshDoc.autoManageDailyLeaseToken = update.$set.autoManageDailyLeaseToken;
         return { modifiedCount: 1 };
       },
     };
@@ -312,7 +349,7 @@ test("auto-manage daily scheduler settles configuration changes made after gathe
         User: {
           find: createFindChain([{ discordId: "100" }]),
           findOne: async () => findOneDocs.shift() || null,
-          updateOne: async () => ({ modifiedCount: 1 }),
+          updateOne: async (_query, update) => { freshDoc.autoManageDailyLeaseToken = update.$set.autoManageDailyLeaseToken; return { modifiedCount: 1 }; },
         },
         saveWithRetry: async (fn) => fn(),
         ensureFreshWeek: () => {},
@@ -399,7 +436,7 @@ test("auto-manage daily scheduler schedules a transient report retry without fin
     User: {
       find: createFindChain([{ discordId: "100" }]),
       findOne: async () => findOneDocs.shift() || null,
-      updateOne: async () => ({ modifiedCount: 1 }),
+      updateOne: async (_query, update) => { freshDoc.autoManageDailyLeaseToken = update.$set.autoManageDailyLeaseToken; return { modifiedCount: 1 }; },
     },
     saveWithRetry: async (fn) => fn(),
     ensureFreshWeek: () => {},
@@ -457,7 +494,7 @@ test("auto-manage daily scheduler settles all-private reports silently", async (
     User: {
       find: createFindChain([{ discordId: "100" }]),
       findOne: async () => findOneDocs.shift() || null,
-      updateOne: async () => ({ modifiedCount: 1 }),
+      updateOne: async (_query, update) => { freshDoc.autoManageDailyLeaseToken = update.$set.autoManageDailyLeaseToken; return { modifiedCount: 1 }; },
     },
     saveWithRetry: async (fn) => fn(),
     ensureFreshWeek: () => {},
@@ -523,7 +560,7 @@ test("auto-manage daily scheduler persists retry state when gather throws", asyn
       User: {
         find: createFindChain([{ discordId: "100" }]),
         findOne: async () => findOneDocs.shift() || null,
-        updateOne: async () => ({ modifiedCount: 1 }),
+        updateOne: async (_query, update) => { retryDoc.autoManageDailyLeaseToken = update.$set.autoManageDailyLeaseToken; return { modifiedCount: 1 }; },
       },
       saveWithRetry: async (fn) => fn(),
       ensureFreshWeek: () => {},

@@ -12,6 +12,7 @@ const {
 
 const { createRaidAutoManageCommand } = require("../bot/handlers/raid/auto-manage");
 const { UI, normalizeName } = require("../bot/utils/raid/common/shared");
+const { ownsAutoManageDailyLease } = require("../bot/services/auto-manage/runtime/support/daily-state");
 
 function makeUserStub(doc) {
   return {
@@ -184,6 +185,14 @@ test("raid-auto-manage action:reset serializes with bible sync slot and wipes sy
     lastLocalSyncToken: "old-token",
     lastLocalSyncTokenExpAt: 999,
     lastPrivateLogNudgeAt: 555,
+    lastAutoManageDailyAttemptDayKey: "2026-09-12",
+    autoManageDailyAttemptCount: 3,
+    autoManageDailyNextAttemptAt: 888,
+    autoManageDailyLeaseDayKey: "2026-09-12",
+    autoManageDailyLeaseUntil: 999,
+    lastAutoManageDailyFinishedDayKey: "2026-09-12",
+    lastAutoManageDailyFinishedAt: 777,
+    lastAutoManageDailyOutcome: "in-flight",
     accounts: [
       {
         accountName: "Roster",
@@ -256,6 +265,10 @@ test("raid-auto-manage action:reset serializes with bible sync slot and wipes sy
   assert.equal(doc.autoManageEnabled, false);
   assert.equal(doc.localSyncEnabled, false);
   assert.equal(doc.lastLocalSyncToken, null);
+  assert.equal(ownsAutoManageDailyLease(doc, "2026-09-12", 3), false, "reset must invalidate an old background worker's lease");
+  assert.equal(doc.lastAutoManageDailyFinishedAt, null);
+  assert.equal(doc.autoManageDailyNextAttemptAt, null);
+  assert.equal(doc.autoManageDailyAttemptCount, 0);
   assert.deepEqual(doc.accounts[0].characters[0].assignedRaids, { armoche: {}, kazeros: {}, serca: {}, horizon: {} });
   assert.equal(doc.accounts[0].characters[0].publicLogDisabled, false);
   assert.equal(doc.accounts[0].characters[0].bibleSerial, null);

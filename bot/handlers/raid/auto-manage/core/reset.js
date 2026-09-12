@@ -1,6 +1,7 @@
 "use strict";
 
 const { t } = require("../../../../services/i18n");
+const { resetAutoManageDailyState } = require("../../../../services/auto-manage/runtime/support/daily-state");
 
 function buildResetConfirmEmbed({ EmbedBuilder, UI, lang }) {
   return new EmbedBuilder()
@@ -68,6 +69,7 @@ function buildResetSuccessEmbed({ EmbedBuilder, UI, lang }) {
 }
 
 function wipeAutoManageState(userDoc) {
+  resetAutoManageDailyState(userDoc);
   userDoc.autoManageEnabled = false;
   userDoc.localSyncEnabled = false;
   userDoc.localSyncLinkedAt = null;

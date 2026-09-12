@@ -1,5 +1,7 @@
 "use strict";
 
+const { randomUUID } = require("node:crypto");
+
 const {
   hasSuccessfulAutoManageReport,
 } = require("../../reports/utils");
@@ -77,30 +79,47 @@ function buildAutoManageDailyClaimUpdate({
   targetDayKey,
   attemptCount,
   nowMs = Date.now(),
+  leaseToken = randomUUID(),
 }) {
   return {
+    $inc: { __v: 1 },
     $set: {
       lastAutoManageDailyAttemptDayKey: targetDayKey,
       autoManageDailyAttemptCount: attemptCount,
       autoManageDailyNextAttemptAt: null,
       autoManageDailyLeaseDayKey: targetDayKey,
       autoManageDailyLeaseUntil: nowMs + AUTO_MANAGE_DAILY_LEASE_MS,
+      autoManageDailyLeaseToken: leaseToken,
       lastAutoManageDailyOutcome: AUTO_MANAGE_DAILY_OUTCOME.inFlight,
     },
   };
 }
 
-function ownsAutoManageDailyLease(userDoc, targetDayKey, attemptCount) {
+/** Match the unique attempt token as well as its day/count, which can repeat after reset. */
+function ownsAutoManageDailyLease(userDoc, targetDayKey, attemptCount, leaseToken = "") {
   return Boolean(
     userDoc &&
       userDoc.autoManageDailyLeaseDayKey === targetDayKey &&
-      Number(userDoc.autoManageDailyAttemptCount) === Number(attemptCount)
+      Number(userDoc.autoManageDailyAttemptCount) === Number(attemptCount) &&
+      String(userDoc.autoManageDailyLeaseToken || "") === leaseToken
   );
 }
 
 function clearAutoManageDailyLease(userDoc) {
   userDoc.autoManageDailyLeaseDayKey = "";
   userDoc.autoManageDailyLeaseUntil = null;
+  userDoc.autoManageDailyLeaseToken = "";
+}
+
+/** Reset daily backoff and settlement state, invalidating any worker from before the user's reset. */
+function resetAutoManageDailyState(userDoc) {
+  clearAutoManageDailyLease(userDoc);
+  userDoc.lastAutoManageDailyAttemptDayKey = "";
+  userDoc.autoManageDailyAttemptCount = 0;
+  userDoc.autoManageDailyNextAttemptAt = null;
+  userDoc.lastAutoManageDailyFinishedDayKey = "";
+  userDoc.lastAutoManageDailyFinishedAt = null;
+  userDoc.lastAutoManageDailyOutcome = "";
 }
 
 function finishAutoManageDailyAttempt(userDoc, targetDayKey, outcome, nowMs) {
@@ -224,6 +243,7 @@ module.exports = {
   getNextAutoManageDailyAttemptCount,
   buildAutoManageDailyClaimUpdate,
   ownsAutoManageDailyLease,
+  resetAutoManageDailyState,
   scheduleAutoManageDailyRetry,
   applyAutoManageDailyReportState,
   releaseAutoManageDailyLeaseWithoutFinishing,

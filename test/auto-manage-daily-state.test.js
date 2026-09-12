@@ -12,6 +12,7 @@ const {
   getNextAutoManageDailyAttemptCount,
   buildAutoManageDailyClaimUpdate,
   ownsAutoManageDailyLease,
+  resetAutoManageDailyState,
   applyAutoManageDailyReportState,
 } = require("../bot/services/auto-manage/runtime/support/daily-state");
 
@@ -58,12 +59,14 @@ test("daily claim increments attempts per target day and owns a bounded lease", 
     nowMs: NOW_MS,
   });
   assert.deepEqual(update, {
+    $inc: { __v: 1 },
     $set: {
       lastAutoManageDailyAttemptDayKey: TARGET_DAY,
       autoManageDailyAttemptCount: 2,
       autoManageDailyNextAttemptAt: null,
       autoManageDailyLeaseDayKey: TARGET_DAY,
       autoManageDailyLeaseUntil: NOW_MS + AUTO_MANAGE_DAILY_LEASE_MS,
+      autoManageDailyLeaseToken: update.$set.autoManageDailyLeaseToken,
       lastAutoManageDailyOutcome: AUTO_MANAGE_DAILY_OUTCOME.inFlight,
     },
   });
@@ -89,6 +92,20 @@ test("daily claim increments attempts per target day and owns a bounded lease", 
     ),
     false
   );
+});
+
+test("reset and re-enable cannot give an old worker ownership of a new same-day attempt", () => {
+  const first = buildAutoManageDailyClaimUpdate({ targetDayKey: TARGET_DAY, attemptCount: 1, nowMs: NOW_MS });
+  const second = buildAutoManageDailyClaimUpdate({ targetDayKey: TARGET_DAY, attemptCount: 1, nowMs: NOW_MS });
+  const doc = { ...first.$set };
+  const oldToken = first.$set.autoManageDailyLeaseToken;
+  assert.equal(ownsAutoManageDailyLease(doc, TARGET_DAY, 1, oldToken), true);
+  resetAutoManageDailyState(doc);
+  assert.equal(ownsAutoManageDailyLease(doc, TARGET_DAY, 1, oldToken), false);
+  Object.assign(doc, second.$set);
+  assert.notEqual(second.$set.autoManageDailyLeaseToken, oldToken);
+  assert.equal(ownsAutoManageDailyLease(doc, TARGET_DAY, 1, oldToken), false);
+  assert.equal(ownsAutoManageDailyLease(doc, TARGET_DAY, 1, second.$set.autoManageDailyLeaseToken), true);
 });
 
 test("successful daily report finishes the target day and clears retry state", () => {
