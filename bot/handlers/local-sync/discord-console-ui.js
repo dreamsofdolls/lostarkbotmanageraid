@@ -463,8 +463,9 @@ function buildLocalSyncConsolePayload({
   formatGold,
 }) {
   const state = job ? resolvePreviewJobState(job) : "missing";
-  // A filter kept from an earlier preview can name a roster this one leaves
-  // unchanged; the dropdown lists only changed rosters, so it could not be cleared.
+  // Re-projecting the same preview can leave the chosen roster with nothing
+  // to change. Filtering on it would show "Nothing new" over real changes,
+  // and with a single changed roster there is no dropdown to clear it from.
   const shownRosterFilter = collectChangedRosters(summary, rosterFilter).length > 0
     ? rosterFilter
     : null;

@@ -840,7 +840,7 @@ test("an active applying lease cannot be stolen or cancelled", async () => {
   assert.equal(PreviewModel.value.status, "applying");
 });
 
-test("a transient write error stays pending and succeeds on retry", async () => {
+test("a transient write error stays pending, and the applied card after the retry keeps the preview totals", async () => {
   const job = makeJob({ projection: { changes: { chars: 1, raids: 1, gates: 1 } } });
   const PreviewModel = makePreviewModel(job);
   const userDoc = {
@@ -877,7 +877,6 @@ test("a transient write error stays pending and succeeds on retry", async () => 
   assert.equal(first.result.rejected[0].reason, "write_error");
   assert.equal(PreviewModel.value.status, "pending");
   assert.equal(PreviewModel.value.failureReason, "write_error");
-  assert.equal(PreviewModel.value.projection, null);
   assert.equal(PreviewModel.value.applyingAt, null);
 
   const second = await applyPreviewJob(job.jobId, "u1", deps);
@@ -885,6 +884,31 @@ test("a transient write error stays pending and succeeds on retry", async () => 
   assert.equal(second.state, "applied");
   assert.equal(attempts, 2);
   assert.equal(PreviewModel.value.status, "applied");
+
+  // The applied card reads the projection stored with the preview, so a
+  // failed first attempt must not have taken it away.
+  const service = createLocalSyncDiscordConsole({
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    MessageFlags: { Ephemeral: 64 },
+    UI,
+    User: deps.UserModel,
+  });
+  const previousBaseUrl = process.env.PUBLIC_BASE_URL;
+  delete process.env.PUBLIC_BASE_URL;
+  let payload;
+  try {
+    payload = await service.buildConsole(
+      { id: "u1", username: "Aki" },
+      { job: PreviewModel.value, lang: "en", userDoc }
+    );
+  } finally {
+    if (previousBaseUrl == null) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = previousBaseUrl;
+  }
+  assert.match(payload.embeds[0].toJSON().description, /\*\*Changes:\*\* \*\*1\*\* chars/);
 });
 
 test("Refresh on an old console loads the newest actionable preview", async () => {

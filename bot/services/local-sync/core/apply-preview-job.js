@@ -231,12 +231,15 @@ async function resolveRejectedSummary({
   }
   if (!hasWriteError(summary)) return null;
 
+  // The stored projection stays: pending cards re-project from the roster,
+  // and the applied card reads it to report the whole preview, including the
+  // gates this attempt already wrote.
   const released = await releasePreviewJob(
     jobId,
     discordId,
     writeErrorReason,
     leaseDeps,
-    { result: summary, clearProjection: true }
+    { result: summary }
   );
   return {
     ok: false,

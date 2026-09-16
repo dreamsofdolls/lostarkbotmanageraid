@@ -505,8 +505,9 @@ function createStatusComponentRouteHandlers(ctx) {
       if (!parsed) return noRedraw();
 
       // Narrowing to one roster only changes what renders · no job work.
-      // The session holds the filter so a later refresh does not lose it;
-      // the stateless surfaces read it back out of the select value.
+      // The session holds the filter so a later refresh of the same preview
+      // does not lose it; the stateless surfaces read it back out of the
+      // select value.
       if (parsed.action === "roster") {
         const value = firstSelectValue(component, FILTER_ALL_ROSTERS);
         if (value === FILTER_ALL_ROSTERS) {

@@ -49,9 +49,10 @@ async function createRaidStatusSessionState({
   // as a fallback to the raid view rather than an error.
   let localSyncSnapshot = null;
   // Which roster of the preview the card is narrowed to. Lives beside the
-  // snapshot rather than inside it so a refresh can replace the data
-  // without losing the choice. null shows every roster the preview
-  // touches, which is the default.
+  // snapshot rather than inside it so a refresh of the same preview can
+  // replace the data without losing the choice; loading a different preview
+  // clears it. null shows every roster the preview touches, which is the
+  // default.
   let localSyncRosterFilter = null;
   let raidDropdownEntries = [];
   let rosterFilterEntries = [];
@@ -206,6 +207,7 @@ async function createRaidStatusSessionState({
       return localSyncSnapshot;
     },
     set localSyncSnapshot(value) {
+      if (value?.job?.jobId !== localSyncSnapshot?.job?.jobId) localSyncRosterFilter = null;
       localSyncSnapshot = value;
     },
     get localSyncRosterFilter() {

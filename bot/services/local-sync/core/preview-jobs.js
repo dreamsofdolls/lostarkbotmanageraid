@@ -243,7 +243,6 @@ async function releasePreviewJob(jobId, discordId, reason, deps = {}, options = 
     failureReason: String(reason || ""),
     applyingAt: null,
   };
-  if (options.clearProjection) update.projection = null;
   if (Object.prototype.hasOwnProperty.call(options, "result")) {
     update.result = options.result;
   }

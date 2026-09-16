@@ -450,6 +450,29 @@ test("raid-status session keeps roster dropdown and pagination synchronized", as
   assert.equal(state.selectedRosterIndex, null);
 });
 
+test("raid-status session keeps the Local Sync roster filter only for the preview it was picked on", async () => {
+  const state = await createRaidStatusSessionState({
+    User: {},
+    discordId: "viewer",
+    userDoc: { accounts: [] },
+    incomingSharedAccounts: [],
+    buildMergedAccounts: async (_discordId, accounts) => accounts,
+    getStatusRaidsForCharacter: () => [],
+    buildRaidDropdownState: () => ({ raidDropdownEntries: [], totalRaidPending: 0 }),
+    buildStatusRosterFilterEntries,
+  });
+
+  state.localSyncSnapshot = { job: { jobId: "preview-a", status: "pending" } };
+  state.localSyncRosterFilter = 1;
+
+  // Sync, or a Refresh with nothing newer, reloads the same preview · the choice survives.
+  state.localSyncSnapshot = { job: { jobId: "preview-a", status: "applied" } };
+  assert.equal(state.localSyncRosterFilter, 1);
+
+  state.localSyncSnapshot = { job: { jobId: "preview-b", status: "pending" } };
+  assert.equal(state.localSyncRosterFilter, null);
+});
+
 test("raid-status local-sync probe returns the saved localSyncEnabled flag", async () => {
   const User = makeUserModel({
     seedDoc: { discordId: "user-1", localSyncEnabled: true },
