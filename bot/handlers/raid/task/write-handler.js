@@ -3,7 +3,29 @@
 const { tPick: t, getUserLanguage } = require("../../../services/i18n");
 const { resolveEditableTaskWriteAccess, revalidateTaskWriteAccess } = require("./write-access");
 
-/** Shared access, retry and reply lifecycle for task additions and removals. */
+/**
+ * Shared access, retry and reply lifecycle for task additions and removals.
+ * @param {object} deps - shared services for every task command.
+ * @param {object} deps.User - User mongoose model.
+ * @param {Function} deps.saveWithRetry - runs each write attempt with retry.
+ * @param {Function} deps.dailyResetStartMs - daily reset boundary helper.
+ * @param {Function} deps.weekResetStartMs - weekly reset boundary helper.
+ * @param {Function} deps.resolveTaskWriteTarget - shared-roster access resolver.
+ * @param {Function} deps.replyTaskNotice - sends the command's notice reply.
+ * @param {Function} deps.replyViewOnlyShareNotice - sends the view-only denial.
+ * @param {object} spec - per-command behavior.
+ * @param {string} spec.commandName - command label for share and save-failure logs.
+ * @param {Function} spec.readRequest - extracts the request (rosterName, ...)
+ *   from the interaction.
+ * @param {Function} [spec.buildValidationNotice] - early reply that skips the
+ *   write path when the request is invalid.
+ * @param {Function} spec.createResult - fresh per-attempt result object.
+ * @param {Function} spec.applyToUserDoc - mutates the user doc; return true
+ *   only when a save is needed.
+ * @param {Function} spec.buildNotice - final reply from the attempt result.
+ * @param {string} spec.saveFailedDescriptionKey - i18n key for save failures.
+ * @returns {Function} async interaction handler.
+ */
 function createTaskMutationHandler({
   User, saveWithRetry, dailyResetStartMs, weekResetStartMs,
   resolveTaskWriteTarget, replyTaskNotice, replyViewOnlyShareNotice,

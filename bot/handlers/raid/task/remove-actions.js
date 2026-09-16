@@ -5,7 +5,15 @@ const { createTaskMutationHandler } = require("./write-handler");
 const { getCharacterDisplayName, findCharacterInUser, findAccountInUser, ensureSideTasks } = require("../../../utils/raid/tasks/side-tasks");
 const { ensureSharedTasks } = require("../../../utils/raid/tasks/shared-tasks");
 
-/** Remove one character or shared-roster task through the same guarded write lifecycle. */
+/**
+ * Remove one character or shared-roster task through the same guarded write
+ * lifecycle.
+ * @param {object} deps - services passed through to the mutation handler.
+ * @param {object} [options]
+ * @param {boolean} [options.shared=false] - target shared-roster tasks
+ *   (command `shared-remove`) instead of one character's side tasks.
+ * @returns {Function} async interaction handler.
+ */
 function createTaskRemoveHandler(deps, { shared = false } = {}) {
   const commandName = shared ? "shared-remove" : "remove";
   const noticePrefix = shared ? "sharedRemove" : "remove";
@@ -62,6 +70,11 @@ function createTaskRemoveHandler(deps, { shared = false } = {}) {
   });
 }
 
+/**
+ * Build the raid task remove action handlers.
+ * @param {object} deps - services passed through to the mutation handler.
+ * @returns {{handleRemove: Function}} handlers keyed by action name.
+ */
 function createRaidTaskRemoveActionHandlers(deps) {
   return { handleRemove: createTaskRemoveHandler(deps) };
 }
