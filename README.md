@@ -178,8 +178,6 @@ User document example:
 ```
 LostArk_RaidManage/
 |-- bot.js                         # Discord client lifecycle + listeners
-|-- AGENTS.md                      # Repository instructions for coding agents
-|-- .agent/                        # Repository map + verification workflow
 |-- bot/
 |   |-- commands.js                # Compose root: wires every command/service factory
 |   |-- db.js                      # Lazy Mongo connect with DNS fallback
@@ -239,10 +237,9 @@ checks, fresh document reads, save retries, and replies after commit. Auto-manag
 enable/reset confirmations share `handlers/raid/auto-manage/core/confirmation.js`;
 their write operations and confirmation IDs stay in the individual handlers.
 
-For maintenance, start with [AGENTS.md](AGENTS.md) and the
-[repository guide](.agent/README.md). Backend modules use CommonJS; `web/` keeps
-its own ES module boundary. Development tools live in `scripts/`, and temporary
-agent notes go in `.agent/local/` (gitignored). Docker excludes development files
+For maintenance, see `.claude/repository-map.md` and `.claude/verification.md`
+(local, gitignored). Backend modules use CommonJS; `web/` keeps its own ES module
+boundary. Development tools live in `scripts/`. Docker excludes development files
 while retaining `web/`, runtime assets, and the bot.
 
 Interaction flow:
