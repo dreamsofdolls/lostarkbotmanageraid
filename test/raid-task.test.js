@@ -826,6 +826,11 @@ test("REGRESSION: raid-check all-mode actions target current page user", () => {
     path.join(__dirname, "..", "bot", "handlers", "raid-check", "all-mode", "all-mode.js"),
     "utf8"
   );
+  // Row building lives in all-mode-view.js; keep the layout guard on it.
+  const allModeViewSrc = fs.readFileSync(
+    path.join(__dirname, "..", "bot", "handlers", "raid-check", "all-mode", "all-mode-view.js"),
+    "utf8"
+  );
   const allModeButtonsSrc = fs.readFileSync(
     path.join(
       __dirname,
@@ -840,7 +845,7 @@ test("REGRESSION: raid-check all-mode actions target current page user", () => {
   );
 
   assert.ok(
-    allModeSrc.includes("const actionUserId = filterUserId || currentViewUserId;"),
+    allModeViewSrc.includes("const actionUserId = filterUserId || currentViewUserId;"),
     "all-mode action buttons must fall back to the currently visible user"
   );
   assert.ok(

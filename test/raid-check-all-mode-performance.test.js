@@ -39,7 +39,7 @@ test("raid-check keeps overview navigation separate from action buttons", () => 
       "handlers",
       "raid-check",
       "all-mode",
-      "all-mode.js"
+      "all-mode-view.js"
     ),
     "utf8"
   );
