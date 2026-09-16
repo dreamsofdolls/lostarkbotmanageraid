@@ -2,6 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { EmbedBuilder } = require("discord.js");
 
 const {
   attachRaidStatusComponentCollector,
@@ -60,4 +61,59 @@ test("raid-status navigation refreshes an aged snapshot before applying the rout
   });
 
   assert.deepEqual(calls, ["defer", "refresh", "handler", "render", "edit"]);
+});
+
+test("a throwing raid-status handler is reported to the clicker instead of rejecting the listener", async () => {
+  const listeners = new Map();
+  const followUps = [];
+  const edits = [];
+  attachRaidStatusComponentCollector({
+    EmbedBuilder,
+    User: {},
+    interaction: {
+      user: { id: "owner" },
+      editReply: async (payload) => {
+        edits.push(payload);
+        return {};
+      },
+    },
+    message: {
+      createMessageComponentCollector: () => ({
+        on(event, handler) {
+          listeners.set(event, handler);
+          return this;
+        },
+      }),
+    },
+    lang: "en",
+    sessionMs: 60_000,
+    taskAutoRefreshGraceMs: 1_000,
+    getAccounts: () => [],
+    getCurrentPage: () => 0,
+    getCurrentView: () => "raid",
+    buildCurrentEmbed: () => ({}),
+    buildEmbedAndCanvas: async () => ({ embeds: [{}] }),
+    buildComponents: () => [],
+    componentRouteHandlers: {
+      next: async () => {
+        throw new Error("mongo unavailable");
+      },
+    },
+  });
+
+  await listeners.get("collect")({
+    customId: "status:next",
+    user: { id: "owner" },
+    deferred: false,
+    async deferUpdate() {
+      this.deferred = true;
+    },
+    async followUp(payload) {
+      followUps.push(payload);
+    },
+  });
+
+  assert.equal(followUps.length, 1);
+  assert.match(followUps[0].embeds[0].toJSON().title, /Progress was not refreshed/);
+  assert.deepEqual(edits, []);
 });

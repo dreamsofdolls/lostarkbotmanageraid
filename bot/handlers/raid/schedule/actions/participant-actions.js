@@ -154,7 +154,6 @@ function createScheduleParticipantActions({
             character: s.characterName,
           }))
           .join("\n"),
-        flags: ephemeralFlag,
       }).catch(() => {});
     }
   }

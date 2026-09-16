@@ -189,7 +189,8 @@ function buildLocalSyncViewRows({
 /**
  * Run one apply/cancel/refresh action against a preview job.
  * Ownership is enforced here because the collector only proves the
- * clicker owns the /raid-status session, not the job.
+ * clicker owns the /raid-status session, not the job. Database errors
+ * reject; the collector turns them into a notice for the clicker.
  * @param {object} options
  * @param {string} options.action - "apply" | "cancel" | "refresh"
  * @param {string} options.jobId
@@ -208,7 +209,7 @@ async function runLocalSyncViewAction({
   releaseAutoManageSyncSlot = null,
 }) {
   const jobDeps = PreviewModel ? { PreviewModel } : {};
-  const existing = await getPreviewJob(jobId, jobDeps).catch(() => null);
+  const existing = await getPreviewJob(jobId, jobDeps);
   if (!existing) return { ok: false, reason: "missing", job: null, applied: false };
   if (existing.discordId !== discordId) {
     return { ok: false, reason: "notOwner", job: null, applied: false };
@@ -228,13 +229,13 @@ async function runLocalSyncViewAction({
   }
 
   if (action === "cancel") {
-    const job = await cancelPreviewJob(jobId, discordId, jobDeps).catch(() => null)
-      || await getPreviewJob(jobId, jobDeps).catch(() => null)
+    const job = await cancelPreviewJob(jobId, discordId, jobDeps)
+      || await getPreviewJob(jobId, jobDeps)
       || existing;
     return { ok: true, job, applied: false };
   }
 
-  const job = await getLatestPreviewJob(discordId, jobDeps).catch(() => null) || existing;
+  const job = await getLatestPreviewJob(discordId, jobDeps) || existing;
   return { ok: true, job, applied: false };
 }
 

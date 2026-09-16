@@ -182,7 +182,17 @@ function createRaidChannelCommand({
 
     const action = interaction.options.getString("action", true);
     const handler = actionHandlers[action];
-    if (!handler) return;
+    if (!handler) {
+      await replyChannelNotice({
+        type: "warn",
+        title: t("raid-channel.invalidActionTitle", lang),
+        description: t("raid-channel.invalidActionDescription", lang, {
+          action,
+          actions: Object.keys(actionHandlers).map((name) => `\`${name}\``).join(", "),
+        }),
+      });
+      return;
+    }
 
     await handler({
       action,

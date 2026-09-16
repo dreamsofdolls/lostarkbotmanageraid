@@ -1632,6 +1632,8 @@ module.exports = {
       manageGuildTitle: "Manage Server required",
       manageGuildDescription: "`/raid-channel config` is restricted to members with the **Manage Server** permission. Ask an admin to grant it and try again.",
     },
+    invalidActionTitle: "Unknown action",
+    invalidActionDescription: "Artist doesn't recognize `{action}`. Pick one from autocomplete: {actions}.",
     set: {
       missingChannelTitle: "Missing `channel` option",
       missingChannelDescription: "Action `set` needs a `channel:#<channel-name>` option so Artist knows which channel to monitor. Example: `/raid-channel config action:set channel:#raid-clears`.",

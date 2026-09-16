@@ -4,6 +4,8 @@ const { t, getUserLanguage } = require("../../../services/i18n");
 const {
   deferEphemeralReply,
   editNotice,
+  followUpNotice,
+  replyNotice,
 } = require("../../../utils/raid/common/shared");
 const {
   getNextSharedTaskTransitionMs,
@@ -83,28 +85,7 @@ function attachRaidStatusComponentCollector({
     }, delayMs);
   };
 
-  collector.on("collect", async (component) => {
-    if (component.user.id !== interaction.user.id) {
-      const deferred = await deferEphemeralReply(component).then(() => true).catch((err) => {
-        console.warn("[raid-status component] non-owner defer failed:", err?.message || err);
-        return false;
-      });
-      if (!deferred) return;
-
-      let clickerLang = lang;
-      try {
-        clickerLang = await getUserLanguage(component.user.id, { UserModel: User });
-      } catch (err) {
-        console.warn("[raid-status component] non-owner language lookup failed:", err?.message || err);
-      }
-      await editNotice(component, EmbedBuilder, {
-        type: "lock",
-        title: t("raid-status.sync.noControlTitle", clickerLang),
-        description: t("raid-status.sync.noControlDescription", clickerLang),
-      }).catch(() => {});
-      return;
-    }
-
+  async function routeOwnerComponent(component) {
     const route = getStatusComponentRoute(component.customId || "", {
       myRaidsSelectId: MY_RAIDS_SELECT_ID,
     });
@@ -147,6 +128,43 @@ function attachRaidStatusComponentCollector({
       return false;
     });
     if (updated) scheduleTaskAutoRefresh();
+  }
+
+  collector.on("collect", async (component) => {
+    if (component.user.id !== interaction.user.id) {
+      const deferred = await deferEphemeralReply(component).then(() => true).catch((err) => {
+        console.warn("[raid-status component] non-owner defer failed:", err?.message || err);
+        return false;
+      });
+      if (!deferred) return;
+
+      let clickerLang = lang;
+      try {
+        clickerLang = await getUserLanguage(component.user.id, { UserModel: User });
+      } catch (err) {
+        console.warn("[raid-status component] non-owner language lookup failed:", err?.message || err);
+      }
+      await editNotice(component, EmbedBuilder, {
+        type: "lock",
+        title: t("raid-status.sync.noControlTitle", clickerLang),
+        description: t("raid-status.sync.noControlDescription", clickerLang),
+      }).catch(() => {});
+      return;
+    }
+
+    // Collector events bypass the interaction router's error handling, and
+    // process-lifecycle exits the bot on any unhandled rejection.
+    try {
+      await routeOwnerComponent(component);
+    } catch (err) {
+      console.error(`[raid-status component] ${component.customId} failed:`, err);
+      const sendNotice = component.deferred || component.replied ? followUpNotice : replyNotice;
+      await sendNotice(component, EmbedBuilder, {
+        type: "warn",
+        title: t("raid-status.sync.localRefreshFailedTitle", lang),
+        description: t("raid-status.sync.localRefreshFailedDescription", lang),
+      }).catch(() => {});
+    }
   });
 
   collector.on("end", async () => {

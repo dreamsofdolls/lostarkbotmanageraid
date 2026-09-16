@@ -129,6 +129,48 @@ test("handleAddRosterCommand reuses the self lookup and defers before Bible fetc
   ]);
 });
 
+test("handleAddRosterCommand hands its Bible roster names to the Confirm race guard", async () => {
+  clearUserLanguageCache();
+  const roster = [
+    { charName: "Alpha", className: "Bard", itemLevel: 1700, combatScore: "85000" },
+    { charName: "Beta", className: "Paladin", itemLevel: 1690, combatScore: "82000" },
+  ];
+  const { factory, docs } = makeFactory({ fetchRosterCharacters: async () => roster });
+
+  await factory.handleAddRosterCommand({
+    user: { id: "user-1" },
+    options: {
+      getString: () => "Beta",
+      getUser: () => null,
+    },
+    async reply() {},
+    async deferReply() {},
+    async editReply() {},
+  });
+  const [session] = factory.__test.sessions.values();
+  clearTimeout(session.expireTimer);
+
+  // Between the command and Confirm, another session saved this Bible roster
+  // under "Alpha".
+  docs.set("user-1", {
+    discordId: "user-1",
+    accounts: [{
+      accountName: "Alpha",
+      characters: [{ id: "alpha-id", name: "Alpha", class: "Bard", itemLevel: 1700, combatScore: "85000", assignedRaids: { armoche: {}, kazeros: {}, serca: {} }, tasks: [] }],
+    }],
+  });
+
+  await assert.rejects(
+    () => factory.__test.persistSelectedRoster(session, [roster[1]]),
+    (err) => {
+      assert.equal(err.code, "RACE_DUP_ROSTER");
+      assert.equal(err.collidingAccountName, "Alpha");
+      return true;
+    }
+  );
+  assert.equal(docs.get("user-1").accounts.length, 1);
+});
+
 function makeSession({ discordId = "user-1", seedCharName = "Alpha", bibleNames = [] } = {}) {
   return {
     sessionId: "sess-test",
@@ -367,25 +409,6 @@ test("persistSelectedRoster: race guard does NOT trigger on unrelated rosters", 
     stored.accounts.map((a) => a.accountName),
     ["Alpha", "Charlie"]
   );
-});
-
-test("persistSelectedRoster: skips overlap check when bibleNames is empty (defensive default)", async () => {
-  // bibleNames = empty Set means "no payload to compare against, skip
-  // race guard entirely". Used as a defensive fallback if a future
-  // caller forgets to populate it. Should NOT block anything.
-  const { factory, docs } = makeFactory();
-  docs.set("user-1", { discordId: "user-1", accounts: [] });
-
-  const session = makeSession({
-    seedCharName: "Alpha",
-    bibleNames: [], // empty
-  });
-  const selected = [
-    { charName: "Alpha", className: "Bard", itemLevel: 1700, combatScore: "85000" },
-  ];
-
-  const saved = await factory.__test.persistSelectedRoster(session, selected);
-  assert.equal(saved.accountName, "Alpha");
 });
 
 test("persistSelectedRoster: stamps account.lastRefreshedAt for /raid-status lazy-refresh skip", async () => {

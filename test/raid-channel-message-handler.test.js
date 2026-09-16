@@ -200,6 +200,57 @@ test("raid-channel message handler carries reset intent through write and DM ren
   assert.match(publicMessages[0].content, /đã reset toàn bộ progress/i);
 });
 
+test("raid-channel message handler still clears the pending hint when the whisper confirmation fails", async () => {
+  const clearedHints = [];
+  const { handler } = makeHandler({
+    GuildConfig: {
+      findOne: () => ({
+        select: () => ({
+          lean: async () => ({ announcements: { whisperAck: { enabled: true } } }),
+        }),
+      }),
+    },
+    RAID_REQUIREMENT_MAP: {
+      armoche_normal: {
+        raidKey: "armoche",
+        modeKey: "normal",
+        label: "Act 4 Normal",
+        minItemLevel: 1700,
+      },
+    },
+    getRaidLabel: () => "Act 4",
+    getAccessibleAccounts: async () => [{
+      ownerDiscordId: "user-1",
+      accountName: "Main",
+      isOwn: true,
+      accessLevel: "edit",
+      account: { characters: [{ charName: "Qiylyn" }] },
+    }],
+    parseRaidMessage: () => ({
+      raidKey: "armoche",
+      modeKey: null,
+      action: "reset",
+      charNames: ["qiylyn"],
+      gate: null,
+    }),
+    applyRaidSetForDiscordId: async () => ({ matched: true, updated: true, displayName: "Qiylyn" }),
+    clearPendingHint: async (_channel, key) => {
+      clearedHints.push(key);
+    },
+  });
+
+  await handler.handleRaidChannelMessage(makeMessage({
+    content: "act4 rs Qiylyn",
+    channel: {
+      send: async () => {
+        throw new Error("Missing Permissions");
+      },
+    },
+  }));
+
+  assert.deepEqual(clearedHints, ["hint-key"]);
+});
+
 test("raid-channel message handler rejects all writes when any character is unknown", async () => {
   let writeCalls = 0;
   const hints = [];

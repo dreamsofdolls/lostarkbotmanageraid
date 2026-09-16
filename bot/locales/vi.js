@@ -1654,6 +1654,8 @@ module.exports = {
       manageGuildTitle: "Cần Manage Server",
       manageGuildDescription: "Lệnh `/raid-channel config` chỉ dành cho thành viên có quyền **Manage Server** trên Discord. Nhờ admin mở quyền hộ rồi thử lại nha~",
     },
+    invalidActionTitle: "Action không hợp lệ",
+    invalidActionDescription: "Artist không hiểu action `{action}`. Cậu chọn lại từ autocomplete nha: {actions}.",
     set: {
       missingChannelTitle: "Thiếu option `channel`",
       missingChannelDescription: "Action `set` cần kèm option `channel:#<tên-kênh>` để Artist biết monitor kênh nào. Ví dụ: `/raid-channel config action:set channel:#raid-clears`.",

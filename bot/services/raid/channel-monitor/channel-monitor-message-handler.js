@@ -150,7 +150,7 @@ function createRaidChannelMessageHandler({
     if (!whisperAckEnabled) return null;
 
     try {
-      return message.channel.send({
+      return await message.channel.send({
         content: t("text-parser.whisperAck", authorLang, { userId: message.author.id }),
         allowedMentions: { users: [message.author.id] },
       });

@@ -1633,6 +1633,8 @@ module.exports = {
       manageGuildTitle: "サーバー管理権限が必要ですわ",
       manageGuildDescription: "`/raid-channel config` は Discord の **サーバー管理 (Manage Server)** 権限を持つメンバー専用ですわ。管理者に権限を付与してもらってから再試行してね♪",
     },
+    invalidActionTitle: "不明なアクションですわ",
+    invalidActionDescription: "アーティストは `{action}` を認識できませんの。オートコンプリートから選び直してね: {actions}",
     set: {
       missingChannelTitle: "`channel` オプションが足りませんわ",
       missingChannelDescription: "Action `set` には `channel:#<チャンネル名>` オプションが必要ですわ。例: `/raid-channel config action:set channel:#raid-clears`。",

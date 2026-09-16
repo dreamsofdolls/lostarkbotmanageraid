@@ -27,6 +27,7 @@ const {
   buildLocalSyncViewEmbed,
   buildLocalSyncViewRows,
   parseLocalSyncViewCustomId,
+  runLocalSyncViewAction,
 } = require("../bot/handlers/raid-status/sync/local-sync-view");
 const {
   UI,
@@ -292,6 +293,54 @@ test("the roster dropdown narrows the card, and its all-rosters entry widens it 
   assert.equal(calls.actions.length, 0);
   assert.equal(calls.refresh.length, 0);
 });
+
+function previewModelFailingAt(failingCall) {
+  const job = {
+    jobId: JOB_ID,
+    discordId: "viewer",
+    scope: "full",
+    status: "pending",
+    expiresAt: new Date(Date.now() + 60_000),
+  };
+  const fail = () => {
+    throw new Error("mongo unavailable");
+  };
+  return {
+    findOne(query) {
+      if (failingCall === "job lookup" && query.jobId) fail();
+      if (failingCall === "latest job" && !query.jobId) fail();
+      return {
+        sort() {
+          return this;
+        },
+        lean: async () => job,
+      };
+    },
+    findOneAndUpdate: async () => {
+      if (failingCall === "cancel write") fail();
+      return { ...job, status: "cancelled" };
+    },
+  };
+}
+
+for (const [action, failingCall] of [
+  ["apply", "job lookup"],
+  ["cancel", "cancel write"],
+  ["refresh", "latest job"],
+]) {
+  test(`a database error in the ${failingCall} of Local Sync ${action} is raised, not redrawn as stale state`, async () => {
+    await assert.rejects(
+      () => runLocalSyncViewAction({
+        action,
+        jobId: JOB_ID,
+        discordId: "viewer",
+        User: {},
+        PreviewModel: previewModelFailingAt(failingCall),
+      }),
+      /mongo unavailable/
+    );
+  });
+}
 
 // ─── Layout and render ─────────────────────────────────────────
 

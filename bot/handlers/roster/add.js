@@ -253,7 +253,7 @@ function createAddRosterCommand({
       // persistSelectedRoster. NOT just the displayed (capped) chars
       // because two sessions on the same bible roster could each truncate
       // to different windows yet still represent the same roster.
-      bibleNames: bibleNameSet,
+      bibleNameSet,
       rosterCharacters,
       parseCombatScore,
     });
