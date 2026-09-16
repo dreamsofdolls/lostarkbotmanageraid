@@ -190,6 +190,8 @@ async function claimPreviewJob(jobId, discordId, deps = {}) {
   const PreviewModel = deps.PreviewModel || LocalSyncPreview;
   const nowMs = resolveNowMs(deps);
   const applyingAt = new Date(nowMs);
+  // result stays as the last attempt stored it; applyPreviewJob carries those
+  // writes into the retry.
   return PreviewModel.findOneAndUpdate(
     {
       jobId,
@@ -202,7 +204,6 @@ async function claimPreviewJob(jobId, discordId, deps = {}) {
         status: "applying",
         applyingAt,
         failureReason: "",
-        result: null,
         // Keep Mongo's TTL index from deleting a job while it is being applied.
         expiresAt: new Date(nowMs + PREVIEW_JOB_TTL_MS),
       },

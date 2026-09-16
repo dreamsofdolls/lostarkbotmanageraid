@@ -158,6 +158,26 @@ function appliedGateKey(charName, raidKey, modeKey) {
   ].join("::");
 }
 
+// A write error sends a preview back to pending after part of it was written,
+// and the retry skips those gates as already complete. Carrying the earlier
+// writes forward keeps party propagation, the token shrink and the stored
+// result covering the whole preview.
+function mergeEarlierAttempt(earlierResult, summary) {
+  const earlierApplied = earlierResult?.applied || [];
+  if (earlierApplied.length === 0) return summary;
+  const earlierKeys = new Set(earlierApplied.map((entry) => (
+    appliedGateKey(entry.charName, entry.raidKey, entry.modeKey)
+  )));
+  const writtenEarlier = (entry) => earlierKeys.has(
+    appliedGateKey(entry.charName, entry.raidKey, entry.modeKey)
+  );
+  return {
+    ...summary,
+    applied: [...earlierApplied, ...summary.applied.filter((entry) => !writtenEarlier(entry))],
+    skipped: summary.skipped.filter((entry) => !writtenEarlier(entry)),
+  };
+}
+
 function eligiblePartyDeltas(job, sourceSummary) {
   const appliedGates = new Map();
   for (const entry of sourceSummary?.applied || []) {
@@ -341,11 +361,11 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
     if (slot.outcome) return slot.outcome;
 
     const currentWeekStartMs = resolveCurrentWeekStartMs(deps.currentWeekStartMs);
-    let summary = await applyLocalSyncDeltas(
+    let summary = mergeEarlierAttempt(job.result, await applyLocalSyncDeltas(
       discordId,
       job.deltas || [],
       buildApplyDeltaOptions(job, userDoc, deps, currentWeekStartMs)
-    );
+    ));
     let rejectedOutcome = await resolveRejectedSummary({
       jobId,
       discordId,

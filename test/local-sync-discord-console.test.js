@@ -13,6 +13,7 @@ const {
 const { UI } = require("../bot/utils/raid/common/shared");
 const {
   buildLocalSyncConsolePayload,
+  buildResultDescription,
 } = require("../bot/handlers/local-sync/discord-console-ui");
 const {
   createLocalSyncDiscordConsole,
@@ -770,6 +771,83 @@ test("party write failures retain source authorization and retry only unfinished
   assert.equal(targetAttempts, 2);
 });
 
+test("a source write error before party propagation still propagates the gates written earlier", async () => {
+  const job = makeJob();
+  job.deltas.push({ ...job.deltas[0], charName: "Ceri" });
+  job.partyDeltas = [{
+    ...job.deltas[0],
+    charName: "Bao",
+    sourceCharName: "Aki",
+  }];
+  const PreviewModel = makePreviewModel(job);
+  const sourceUser = {
+    discordId: "u1",
+    localSyncEnabled: true,
+    autoManageEnabled: false,
+    accounts: [{
+      accountName: "Source",
+      characters: [
+        { name: "Aki", class: "Artist", itemLevel: 1750, assignedRaids: {} },
+        { name: "Ceri", class: "Bard", itemLevel: 1750, assignedRaids: {} },
+      ],
+    }],
+  };
+  const targetUser = {
+    discordId: "u2",
+    autoManageEnabled: true,
+    localSyncEnabled: false,
+    accounts: [{
+      accountName: "Target",
+      characters: [{ name: "Bao", class: "Bard", itemLevel: 1750, assignedRaids: {} }],
+    }],
+  };
+  const UserModel = {
+    findOne() { return makeConsoleUserQuery(sourceUser); },
+    find() {
+      return {
+        select() { return this; },
+        collation() { return this; },
+        async lean() { return [targetUser]; },
+      };
+    },
+    async findOneAndUpdate() { return sourceUser; },
+    async updateOne() { return { matchedCount: 1 }; },
+  };
+  let akiWrites = 0;
+  let ceriWrites = 0;
+  const targetWrites = [];
+  const deps = {
+    PreviewModel,
+    UserModel,
+    applyRaidSetForDiscordId: async (args) => {
+      if (args.discordId === "u2") {
+        targetWrites.push(args.characterName);
+        return { matched: true, updated: true, displayName: "Bao" };
+      }
+      if (args.characterName === "Aki") {
+        akiWrites += 1;
+        return akiWrites === 1
+          ? { matched: true, updated: true, displayName: "Aki" }
+          : { matched: true, updated: false, displayName: "Aki", alreadyComplete: true };
+      }
+      ceriWrites += 1;
+      return ceriWrites === 1
+        ? null
+        : { matched: true, updated: true, displayName: "Ceri" };
+    },
+  };
+
+  const first = await applyPreviewJob(job.jobId, "u1", deps);
+  assert.equal(first.state, "pending");
+  assert.equal(first.job.failureReason, "write_error");
+  // The source write error sends the job back before party propagation runs.
+  assert.deepEqual(targetWrites, []);
+
+  const second = await applyPreviewJob(job.jobId, "u1", deps);
+  assert.equal(second.ok, true);
+  assert.deepEqual(targetWrites, ["Bao"]);
+});
+
 test("a stale applying lease can be reclaimed after a bot restart", async () => {
   const nowMs = Date.now();
   const job = makeJob({
@@ -909,6 +987,54 @@ test("a transient write error stays pending, and the applied card after the retr
     else process.env.PUBLIC_BASE_URL = previousBaseUrl;
   }
   assert.match(payload.embeds[0].toJSON().description, /\*\*Changes:\*\* \*\*1\*\* chars/);
+});
+
+test("a retry counts the gates an earlier attempt wrote as updated, not already present", async () => {
+  const job = makeJob();
+  job.deltas.push({ ...job.deltas[0], charName: "Ceri" });
+  const PreviewModel = makePreviewModel(job);
+  const userDoc = {
+    discordId: "u1",
+    localSyncEnabled: true,
+    autoManageEnabled: false,
+    lastLocalSyncToken: null,
+    accounts: [{
+      accountName: "Roster",
+      characters: [
+        { name: "Aki", class: "Artist", itemLevel: 1750, isGoldEarner: true, assignedRaids: {} },
+        { name: "Ceri", class: "Bard", itemLevel: 1750, isGoldEarner: true, assignedRaids: {} },
+      ],
+    }],
+  };
+  let akiWrites = 0;
+  let ceriWrites = 0;
+  const deps = {
+    PreviewModel,
+    UserModel: makeConsoleUserModel(userDoc),
+    applyRaidSetForDiscordId: async (args) => {
+      if (args.characterName === "Aki") {
+        akiWrites += 1;
+        return akiWrites === 1
+          ? { matched: true, updated: true, displayName: "Aki" }
+          : { matched: true, updated: false, displayName: "Aki", alreadyComplete: true };
+      }
+      ceriWrites += 1;
+      return ceriWrites === 1
+        ? null
+        : { matched: true, updated: true, displayName: "Ceri" };
+    },
+  };
+
+  const first = await applyPreviewJob(job.jobId, "u1", deps);
+  assert.equal(first.state, "pending");
+  assert.equal(first.job.failureReason, "write_error");
+
+  const second = await applyPreviewJob(job.jobId, "u1", deps);
+  assert.equal(second.state, "applied");
+  assert.match(
+    buildResultDescription(PreviewModel.value, "applied", "en"),
+    /\*\*2\*\* updated · \*\*0\*\* already present/
+  );
 });
 
 test("Refresh on an old console loads the newest actionable preview", async () => {
