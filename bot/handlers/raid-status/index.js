@@ -144,13 +144,15 @@ function createRaidStatusCommand(deps) {
       discordId,
       prepareStatusUserDoc,
     });
+    // A handoff edits the Local Sync DM it came from, which only the viewer sees.
+    let replyIsPrivate = alreadyDeferred;
     if (!alreadyDeferred) {
-      const isLocalSyncMode = await probeLocalSyncModeWithBudget({
+      replyIsPrivate = await probeLocalSyncModeWithBudget({
         probePromise: viewerStateLoader.probeLocalSyncMode(),
         waitWithBudget,
       });
       await interaction.deferReply(
-        isLocalSyncMode ? { flags: MessageFlags.Ephemeral } : {}
+        replyIsPrivate ? { flags: MessageFlags.Ephemeral } : {}
       );
     }
     const ackMs = Date.now() - started;
@@ -272,6 +274,7 @@ function createRaidStatusCommand(deps) {
         PreviewModel,
         lang,
         jobId,
+        includeReaderUrl: replyIsPrivate,
       });
 
     const runLocalSyncAction = ({ action, jobId }) =>

@@ -227,6 +227,86 @@ test("reopening a pending console re-projects it from the latest User snapshot",
   assert.doesNotMatch(description, /\*\*Changes:\*\* \*\*99\*\* chars/);
 });
 
+test("an applied console still lists what it synced once that progress is written", async () => {
+  const {
+    projectSummary,
+    bucketizeCurrentWeekDeltas,
+  } = require("../bot/services/local-sync/http/endpoints/preview-summary-endpoint");
+  const { getCurrentResetStartMs } = require("../bot/services/raid/schedulers/weekly-reset");
+  const discordId = "raid-sync-applied-body-user";
+  const week = getCurrentResetStartMs();
+  const deltas = [{
+    cleared: true,
+    charName: "Qiylyn",
+    boss: "Abyss Lord Kazeros",
+    difficulty: "Hard",
+    lastClearMs: week + 1000,
+  }];
+  const preview = projectSummary(
+    [{
+      accountName: "Qiylyn",
+      characters: [{
+        name: "Qiylyn",
+        class: "Berserker",
+        itemLevel: 1755,
+        isGoldEarner: true,
+        assignedRaids: { kazeros: { modeKey: "hard" } },
+      }],
+    }],
+    bucketizeCurrentWeekDeltas(deltas, week),
+    { scope: "full", currentWeekStartMs: week }
+  );
+  assert.equal(preview.changes.chars, 1);
+  const appliedJob = makeJob({
+    discordId,
+    status: "applied",
+    deltas,
+    // The shape the preview-job endpoint stores at creation.
+    projection: {
+      changes: preview.changes,
+      changeDetails: preview.changeDetails,
+      completion: preview.completion,
+      goldDelta: preview.goldDelta,
+    },
+    result: { applied: [{ charName: "Qiylyn" }], skipped: [], rejected: [] },
+  });
+  // After Sync the roster already carries these gates.
+  const writtenUserDoc = {
+    discordId,
+    language: "en",
+    localSyncEnabled: true,
+    autoManageEnabled: false,
+    accounts: preview.accountsAfterSync,
+  };
+  const service = createLocalSyncDiscordConsole({
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    MessageFlags: { Ephemeral: 64 },
+    UI,
+    User: makeConsoleUserModel(writtenUserDoc),
+  });
+  const previousBaseUrl = process.env.PUBLIC_BASE_URL;
+  delete process.env.PUBLIC_BASE_URL;
+  let payload;
+  try {
+    payload = await service.buildConsole(
+      { id: discordId, username: "Qiylyn" },
+      { job: appliedJob, lang: "en", userDoc: writtenUserDoc }
+    );
+  } finally {
+    if (previousBaseUrl == null) delete process.env.PUBLIC_BASE_URL;
+    else process.env.PUBLIC_BASE_URL = previousBaseUrl;
+  }
+
+  const embed = payload.embeds[0].toJSON();
+  assert.match(embed.description, /Sync complete: \*\*1\*\* updated/);
+  assert.match(embed.description, /\*\*Changes:\*\* \*\*1\*\* chars/);
+  assert.equal(embed.fields.some((field) => field.name === "Nothing new"), false);
+  assert.ok(embed.fields.some((field) => field.name === "Qiylyn" && field.value.includes("G1")));
+});
+
 test("a successful Discord apply replaces the console with a live raid-status session", async () => {
   const discordId = "raid-sync-apply-handoff-user";
   const userDoc = {
@@ -1051,6 +1131,28 @@ test("the roster dropdown narrows the card to one roster", () => {
   const single = { ...summary, accountsAfterSync: summary.accountsAfterSync.slice(0, 1) };
   const ids = componentIds(renderBody(single));
   assert.equal(ids.some((id) => String(id).includes(":roster:")), false);
+});
+
+test("a roster filter matching no changed roster falls back to every roster", () => {
+  const summary = makeSummaryFixture();
+
+  // Only the first roster changes now, so no dropdown is offered to clear a
+  // filter still pointing at the second one.
+  const single = { ...summary, accountsAfterSync: summary.accountsAfterSync.slice(0, 1) };
+  const stale = renderBody(single, 1);
+  const staleEmbed = stale.embeds[0].toJSON();
+  assert.ok(staleEmbed.fields.some((f) => f.name.startsWith("Qiylyn ·")));
+  assert.equal(staleEmbed.fields.some((f) => /Không có gì mới/.test(f.name)), false);
+  assert.equal(componentIds(stale).some((id) => String(id).includes(":roster:")), false);
+
+  // With several changed rosters, the dropdown shows the aggregate entry
+  // instead of pointing at a roster the card is not showing.
+  const outOfRange = renderBody(summary, 5);
+  const outOfRangeEmbed = outOfRange.embeds[0].toJSON();
+  assert.ok(outOfRangeEmbed.fields.some((f) => f.name.startsWith("Qiylyn ·")));
+  assert.ok(outOfRangeEmbed.fields.some((f) => f.name.startsWith("Nailaduk ·")));
+  const select = outOfRange.components.map((row) => row.toJSON())[1].components[0];
+  assert.equal(select.options[0].default, true);
 });
 
 test("the preview actions and the reader link share one row", () => {

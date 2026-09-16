@@ -26,6 +26,7 @@ const {
 const {
   buildLocalSyncViewEmbed,
   buildLocalSyncViewRows,
+  loadLocalSyncSnapshot,
   parseLocalSyncViewCustomId,
   runLocalSyncViewAction,
 } = require("../bot/handlers/raid-status/sync/local-sync-view");
@@ -341,6 +342,52 @@ for (const [action, failingCall] of [
     );
   });
 }
+
+test("the sync snapshot issues a signed reader link only for a private message", async (t) => {
+  const previous = {
+    PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL,
+    LOCAL_SYNC_TOKEN_SECRET: process.env.LOCAL_SYNC_TOKEN_SECRET,
+  };
+  process.env.PUBLIC_BASE_URL = "https://raid.example.test";
+  process.env.LOCAL_SYNC_TOKEN_SECRET = "test-secret-at-least-16-chars-long";
+  t.after(() => {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  const tokenWrites = [];
+  const load = (options = {}) => loadLocalSyncSnapshot({
+    discordUser: { id: "bible-viewer", username: "Aki" },
+    // A Bible Auto-sync viewer: /raid-status replies publicly for them.
+    userDoc: { autoManageEnabled: true, localSyncEnabled: false, accounts: [] },
+    User: {
+      findOneAndUpdate: async (filter) => {
+        tokenWrites.push(filter.discordId);
+      },
+    },
+    PreviewModel: {
+      findOne: () => ({
+        sort() {
+          return this;
+        },
+        lean: async () => null,
+      }),
+    },
+    lang: "en",
+    ...options,
+  });
+
+  const publicSnapshot = await load();
+  assert.equal(publicSnapshot.activeScope, "solo");
+  assert.equal(publicSnapshot.readerUrl, null);
+  assert.deepEqual(tokenWrites, []);
+
+  const privateSnapshot = await load({ includeReaderUrl: true });
+  assert.match(privateSnapshot.readerUrl, /^https:\/\/raid\.example\.test\/sync#token=/);
+  assert.deepEqual(tokenWrites, ["bible-viewer"]);
+});
 
 // ─── Layout and render ─────────────────────────────────────────
 

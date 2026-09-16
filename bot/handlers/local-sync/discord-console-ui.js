@@ -463,6 +463,11 @@ function buildLocalSyncConsolePayload({
   formatGold,
 }) {
   const state = job ? resolvePreviewJobState(job) : "missing";
+  // A filter kept from an earlier preview can name a roster this one leaves
+  // unchanged; the dropdown lists only changed rosters, so it could not be cleared.
+  const shownRosterFilter = collectChangedRosters(summary, rosterFilter).length > 0
+    ? rosterFilter
+    : null;
   const embed = new EmbedBuilder()
     .setTitle(`🗃️ ${t("local-sync-discord.title", lang)}`)
     .setColor(statusColor(state, UI))
@@ -505,7 +510,7 @@ function buildLocalSyncConsolePayload({
       headerLines.join("\n"),
       buildSummaryLines(summary, lang, formatGold).join("\n"),
     ].join("\n\n"));
-    addPreviewFields(embed, job, summary, lang, { rosterFilter });
+    addPreviewFields(embed, job, summary, lang, { rosterFilter: shownRosterFilter });
   }
 
   return {
@@ -514,7 +519,7 @@ function buildLocalSyncConsolePayload({
       job,
       state,
       summary,
-      rosterFilter,
+      rosterFilter: shownRosterFilter,
       readerUrl,
       lang,
       buttonPrefix,

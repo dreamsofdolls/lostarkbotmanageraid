@@ -55,6 +55,8 @@ function parseLocalSyncViewCustomId(customId) {
  * @param {object|null} [options.PreviewModel] - injected preview model for tests
  * @param {string} options.lang
  * @param {string} [options.jobId] - load this job instead of the latest one
+ * @param {boolean} [options.includeReaderUrl=false] - issue the signed reader
+ *   link; pass true only when the message is visible to the viewer alone
  * @returns {Promise<{job: object|null, summary: object|null, readerUrl: string|null, activeScope: string|null}>}
  */
 async function loadLocalSyncSnapshot({
@@ -64,6 +66,7 @@ async function loadLocalSyncSnapshot({
   PreviewModel = null,
   lang,
   jobId = "",
+  includeReaderUrl = false,
 }) {
   const jobDeps = PreviewModel ? { PreviewModel } : {};
   const activeScope = activeScopeForUser(userDoc);
@@ -83,6 +86,10 @@ async function loadLocalSyncSnapshot({
   } catch (err) {
     console.warn("[raid-status local-sync] re-projection failed:", err?.message || err);
   }
+
+  // The link carries the viewer's token and Discord link buttons do not check
+  // who clicks them.
+  if (!includeReaderUrl) return { job, summary, readerUrl: null, activeScope };
 
   let readerUrl = null;
   try {

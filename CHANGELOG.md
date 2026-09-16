@@ -4,9 +4,12 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
-## 2026-09-16
+## 2026-09-17
 
 ### Fixed
+- `/raid-status` no longer puts the signed Local Reader link in a public message. Bible Auto-sync viewers, whose `/raid-status` is public, open the reader through the private **Solo Local Reader** button; before, anyone in the channel could use their token.
+- A synced Local Sync card keeps listing what it applied. It re-projected the preview onto the already-written progress, so "Sync complete" sat above "Nothing new" and zero totals.
+- A Local Sync roster filter left from an earlier preview no longer empties the card; when it matches no changed roster, the card shows every changed roster again.
 - A database error behind a `/raid-status` button no longer shuts the bot down. The card stays as it was and the clicker gets a retry notice; Local Sync apply, cancel and refresh now report database failures instead of redrawing stale job state.
 - `/raid-add-roster` Confirm now blocks a second account for a Bible roster that a concurrent session already saved. The command stored the roster names under the wrong session key, so this guard never ran.
 - A waitlister promoted when someone RSVPs tentative or absent is pinged in the board channel, as the kick flow already did. The ping was ephemeral, so only the clicker saw it.

@@ -62,6 +62,9 @@ async function loadConsoleUser(UserModel, discordId) {
 
 function previewSummaryForJob(userDoc, job) {
   if (!job || !userDoc) return null;
+  // Applied gates are already in userDoc, so re-projecting would find nothing
+  // new; callers fall back to the projection stored when the preview was made.
+  if (resolvePreviewJobState(job) === "applied") return null;
   const currentWeekStartMs = getCurrentResetStartMs();
   return projectSummary(
     userDoc.accounts || [],
