@@ -18,10 +18,7 @@ const {
 const { getCurrentResetStartMs } = require("../../services/raid/schedulers/weekly-reset");
 const { FILTER_ALL_ROSTERS } = require("../raid-status/raid-filter");
 const { t, getUserLanguage } = require("../../services/i18n");
-const {
-  buildLocalSyncConsolePayload,
-  buildResultDescription,
-} = require("./discord-console-ui");
+const { buildLocalSyncConsolePayload } = require("./discord-console-ui");
 
 const RAID_STATUS_HANDOFF_STATES = new Set([
   "applied",
@@ -41,13 +38,6 @@ function shouldOpenRaidStatusSurface(job, activeScope) {
   if (!activeScope) return false;
   if (!job) return true;
   return RAID_STATUS_HANDOFF_STATES.has(resolvePreviewJobState(job));
-}
-
-function buildRaidStatusHandoffContent(job, lang) {
-  if (!job) return null;
-  const state = resolvePreviewJobState(job);
-  const icon = state === "applied" ? "✅" : "ℹ️";
-  return `${icon} ${buildResultDescription(job, state, lang)}`;
 }
 
 async function loadConsoleUser(UserModel, discordId) {
@@ -148,7 +138,7 @@ function createLocalSyncDiscordConsole({
     });
   }
 
-  async function maybeOpenRaidStatus(interaction, { job, lang, userDoc }) {
+  async function maybeOpenRaidStatus(interaction, { job, userDoc }) {
     const activeScope = activeScopeForUser(userDoc);
     if (
       typeof openRaidStatusSession !== "function" ||
@@ -161,11 +151,12 @@ function createLocalSyncDiscordConsole({
       // Do not retain a raid-status session inside the Local Sync console.
       // A durable DM preview can outlive the status collector; after one of
       // its global buttons settles the job, hand the same interaction to a
-      // fresh status viewer on the Local Sync entry.
+      // fresh status viewer on the Local Sync entry. No content line: the card
+      // already states the result, and raid-status edits with content null,
+      // which also clears a line an earlier handoff left on the message.
       await openRaidStatusSession(interaction, {
         alreadyDeferred: true,
         initialView: "sync",
-        content: buildRaidStatusHandoffContent(job, lang),
       });
       return true;
     } catch (err) {
@@ -270,7 +261,6 @@ function createLocalSyncDiscordConsole({
       const latestJob = await getLatestPreviewJob(interaction.user.id, jobDeps);
       if (await maybeOpenRaidStatus(interaction, {
         job: latestJob,
-        lang,
         userDoc: initialUserDoc,
       })) {
         return;
@@ -321,7 +311,6 @@ function createLocalSyncDiscordConsole({
     ]);
     if (await maybeOpenRaidStatus(interaction, {
       job: nextJob,
-      lang,
       userDoc,
     })) {
       return;

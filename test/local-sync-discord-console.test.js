@@ -370,7 +370,8 @@ test("a successful Discord apply replaces the console with a live raid-status se
   assert.equal(handoffs.length, 1);
   assert.equal(handoffs[0].sourceInteraction, interaction);
   assert.equal(handoffs[0].options.alreadyDeferred, true);
-  assert.match(handoffs[0].options.content, /Sync complete/);
+  // The Local Sync card already states the result; a content line would repeat it.
+  assert.equal(handoffs[0].options.content, undefined);
 });
 
 test("cancelling a preview replaces the console with Raid Status without writing", async () => {
@@ -410,7 +411,7 @@ test("cancelling a preview replaces the console with Raid Status without writing
   assert.equal(interaction.deferredUpdates, 1);
   assert.equal(PreviewModel.value.status, "cancelled");
   assert.equal(handoffs.length, 1);
-  assert.match(handoffs[0].options.content, /cancelled/);
+  assert.equal(handoffs[0].options.content, undefined);
 });
 
 test("global Local Sync buttons acknowledge quickly but reject a different Discord owner", async () => {
@@ -1135,7 +1136,7 @@ test("a cleaned-up preview button falls through to a fresh raid-status session",
   assert.equal(handoffs.length, 1);
   assert.equal(handoffs[0].sourceInteraction, interaction);
   assert.equal(handoffs[0].options.alreadyDeferred, true);
-  assert.equal(handoffs[0].options.content, null);
+  assert.equal(handoffs[0].options.content, undefined);
 });
 
 test("console header leads every data line with an icon and keeps the expiry as a labelled value", () => {
