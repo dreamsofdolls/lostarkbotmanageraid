@@ -16,6 +16,7 @@ const {
   projectSummary,
 } = require("../../services/local-sync/http/endpoints/preview-summary-endpoint");
 const { getCurrentResetStartMs } = require("../../services/raid/schedulers/weekly-reset");
+const { getStatusRaidsForCharacter } = require("../../utils/raid/common/character");
 const { FILTER_ALL_ROSTERS } = require("../raid-status/raid-filter");
 const { t, getUserLanguage } = require("../../services/i18n");
 const { buildLocalSyncConsolePayload } = require("./discord-console-ui");
@@ -50,11 +51,59 @@ async function loadConsoleUser(UserModel, discordId) {
     .lean();
 }
 
+// True when the roster already shows every gate the preview wrote. It stops
+// holding after a weekly reset, a manual reset or a difficulty change, and it
+// never held for a raid-status session opened before the sync.
+function rosterHoldsWrittenGates(accounts, changeDetails) {
+  const characters = new Map();
+  for (const account of accounts) {
+    for (const character of account.characters || []) {
+      characters.set(String(character.name || "").toLowerCase(), character);
+    }
+  }
+  return changeDetails.every((detail) => {
+    const character = characters.get(String(detail.charName || "").toLowerCase());
+    if (!character) return false;
+    const raidRows = getStatusRaidsForCharacter(character);
+    return (detail.raids || []).every((raid) => {
+      const row = raidRows.find((entry) => (
+        entry.raidKey === raid.raidKey && entry.modeKey === raid.modeKey
+      ));
+      return Boolean(row) && (raid.gates || []).every((gate) => row.completedGateKeys.includes(gate));
+    });
+  });
+}
+
+// After a sync the roster is the after-sync state, and the stored projection
+// names the characters and raids that were written. Together they are the
+// summary the pending card was built from.
+function appliedSummaryForJob(userDoc, job) {
+  const changeDetails = job.projection?.changeDetails;
+  const accounts = userDoc.accounts;
+  if (!Array.isArray(changeDetails) || changeDetails.length === 0 || !Array.isArray(accounts)) {
+    return null;
+  }
+  if (!rosterHoldsWrittenGates(accounts, changeDetails)) return null;
+  return {
+    ...job.projection,
+    accountsAfterSync: accounts,
+    charsAfterSync: changeDetails.map((detail) => ({
+      charName: detail.charName,
+      raids: (detail.raids || []).map((raid) => ({
+        raidKey: raid.raidKey,
+        modeKey: raid.modeKey,
+        incoming: true,
+      })),
+    })),
+  };
+}
+
 function previewSummaryForJob(userDoc, job) {
   if (!job || !userDoc) return null;
   // Applied gates are already in userDoc, so re-projecting would find nothing
-  // new; callers fall back to the projection stored when the preview was made.
-  if (resolvePreviewJobState(job) === "applied") return null;
+  // new. The roster itself is rebuilt into the summary instead; when it cannot
+  // vouch for the written gates, callers fall back to the stored projection.
+  if (resolvePreviewJobState(job) === "applied") return appliedSummaryForJob(userDoc, job);
   const currentWeekStartMs = getCurrentResetStartMs();
   return projectSummary(
     userDoc.accounts || [],

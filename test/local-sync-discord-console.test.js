@@ -16,6 +16,7 @@ const {
 } = require("../bot/handlers/local-sync/discord-console-ui");
 const {
   createLocalSyncDiscordConsole,
+  previewSummaryForJob,
   shouldOpenRaidStatusSurface,
 } = require("../bot/handlers/local-sync/discord-console");
 const {
@@ -320,7 +321,10 @@ test("an applied console still lists what it synced once that progress is writte
   assert.match(embed.description, /Artist has written the changes below\./);
   assert.match(embed.description, /\*\*Changes:\*\* \*\*1\*\* chars/);
   assert.equal(embed.fields.some((field) => field.name === "Nothing new"), false);
-  assert.ok(embed.fields.some((field) => field.name === "Qiylyn" && field.value.includes("G1")));
+  // The same two-column row the pending card showed, read off the written roster.
+  const written = embed.fields.find((field) => field.name.startsWith("Qiylyn ·"));
+  assert.equal(written.inline, true);
+  assert.match(written.value, /Kazeros Hard · 1\/2/);
 });
 
 test("a successful Discord apply replaces the console with a live raid-status session", async () => {
@@ -1536,4 +1540,72 @@ test("a filter left on the only changed roster is not announced as a filter", ()
   const single = makeWideSummary([2]);
   const embed = renderBody(single, 0).embeds[0].toJSON();
   assert.equal(embed.fields.some((f) => /đang lọc/.test(f.value)), false);
+});
+
+// ─── the applied card is rebuilt from the roster it was written into ──
+
+function makeAppliedFixture() {
+  const {
+    projectSummary,
+    bucketizeCurrentWeekDeltas,
+  } = require("../bot/services/local-sync/http/endpoints/preview-summary-endpoint");
+  const { getCurrentResetStartMs } = require("../bot/services/raid/schedulers/weekly-reset");
+  const week = getCurrentResetStartMs();
+  const deltas = [{
+    cleared: true,
+    charName: "Qiylyn",
+    boss: "Abyss Lord Kazeros",
+    difficulty: "Hard",
+    lastClearMs: week + 1000,
+  }];
+  const accountsBeforeSync = [{
+    accountName: "Qiylyn",
+    characters: [{
+      name: "Qiylyn",
+      class: "Berserker",
+      itemLevel: 1755,
+      isGoldEarner: true,
+      assignedRaids: { kazeros: { modeKey: "hard" } },
+    }],
+  }];
+  const preview = projectSummary(
+    accountsBeforeSync,
+    bucketizeCurrentWeekDeltas(deltas, week),
+    { scope: "full", currentWeekStartMs: week }
+  );
+  const job = makeJob({
+    status: "applied",
+    deltas,
+    projection: {
+      changes: preview.changes,
+      changeDetails: preview.changeDetails,
+      completion: preview.completion,
+      goldDelta: preview.goldDelta,
+    },
+    result: { applied: [{ charName: "Qiylyn" }], skipped: [], rejected: [] },
+  });
+  return { job, accountsBeforeSync, accountsAfterSync: preview.accountsAfterSync };
+}
+
+test("an applied job's summary is rebuilt from a roster that holds the written gates", () => {
+  const { job, accountsAfterSync } = makeAppliedFixture();
+  const summary = previewSummaryForJob({ accounts: accountsAfterSync }, job);
+
+  assert.equal(summary.accountsAfterSync, accountsAfterSync);
+  assert.deepEqual(summary.charsAfterSync, [{
+    charName: "Qiylyn",
+    raids: [{ raidKey: "kazeros", modeKey: "hard", incoming: true }],
+  }]);
+  assert.deepEqual(summary.changes, job.projection.changes);
+});
+
+test("a roster that does not hold the written gates falls back to the stored projection", () => {
+  const { job, accountsBeforeSync } = makeAppliedFixture();
+  // A raid-status session opened before the sync still holds this roster.
+  assert.equal(previewSummaryForJob({ accounts: accountsBeforeSync }, job), null);
+  // So does a character that left the roster.
+  assert.equal(previewSummaryForJob({ accounts: [] }, job), null);
+  // A projection from before changeDetails existed has nothing to check.
+  const legacy = { ...job, projection: { changes: job.projection.changes } };
+  assert.equal(previewSummaryForJob({ accounts: accountsBeforeSync }, legacy), null);
 });
