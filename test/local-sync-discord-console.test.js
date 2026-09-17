@@ -1287,12 +1287,19 @@ test("the roster dropdown narrows the card to one roster", () => {
   assert.match(select.options[1].label, /^Qiylyn \(Còn \d+ raid · \d+ solo\)$/);
   assert.equal(select.options[0].default, true);
 
-  // Narrowed to the second roster: only its characters, and no header
-  // because there is nothing left to tell apart.
+  // Narrowed to the second roster: only its characters. The roster header
+  // stays, because Sync still writes every roster and the card must say so.
   const narrowed = renderBody(summary, 1).embeds[0].toJSON();
   assert.ok(narrowed.fields.some((f) => f.name.startsWith("Nailaduk ·")));
   assert.equal(narrowed.fields.some((f) => f.name.startsWith("Qiylyn ·")), false);
-  assert.equal(narrowed.fields.some((f) => f.name.endsWith("Alt")), false);
+  const filteredHeader = narrowed.fields.find((f) => f.name.endsWith("Alt"));
+  assert.equal(
+    filteredHeader.value,
+    "**1** nhân vật có thay đổi · đang lọc, **Đồng bộ** vẫn ghi đủ **2** roster"
+  );
+  // Unfiltered, every header is the plain count.
+  const unfilteredHeader = renderBody(summary).embeds[0].toJSON().fields.find((f) => f.name.endsWith("Alt"));
+  assert.equal(unfilteredHeader.value, "**1** nhân vật có thay đổi");
 
   // One changed roster needs no picker · the card already shows it all.
   const single = { ...summary, accountsAfterSync: summary.accountsAfterSync.slice(0, 1) };
@@ -1476,4 +1483,57 @@ test("the DM card and the raid-status card differ only in their customId namespa
     componentIds(dm).map((id) => String(id).replace(/^local-sync:/, "status-local:")),
     componentIds(status)
   );
+});
+
+// One Kazeros G1 clear per character, `charactersPerRoster[i]` characters in roster i.
+function makeWideSummary(charactersPerRoster) {
+  const {
+    projectSummary,
+    bucketizeCurrentWeekDeltas,
+  } = require("../bot/services/local-sync/http/endpoints/preview-summary-endpoint");
+  const { getCurrentResetStartMs } = require("../bot/services/raid/schedulers/weekly-reset");
+  const week = getCurrentResetStartMs();
+  const accounts = charactersPerRoster.map((count, rosterIndex) => ({
+    accountName: `Roster${rosterIndex}`,
+    characters: Array.from({ length: count }, (_, index) => ({
+      name: `R${rosterIndex}C${index}`,
+      class: "Bard",
+      itemLevel: 1750,
+      isGoldEarner: true,
+      assignedRaids: { kazeros: { modeKey: "hard" } },
+    })),
+  }));
+  const deltas = accounts.flatMap((account) => account.characters).map((character, index) => ({
+    cleared: true,
+    charName: character.name,
+    boss: "Abyss Lord Kazeros",
+    difficulty: "Hard",
+    lastClearMs: week + (index + 1) * 1000,
+  }));
+  return projectSummary(accounts, bucketizeCurrentWeekDeltas(deltas, week), {
+    scope: "full",
+    currentWeekStartMs: week,
+  });
+}
+
+test("past eight characters the card says Sync still covers the rest and how to see them", () => {
+  const othersField = (summary) => renderBody(summary).embeds[0].toJSON().fields
+    .find((f) => f.name === "Nhân vật khác");
+
+  // Two rosters: the roster picker is on the card, so the line points at it.
+  assert.equal(
+    othersField(makeWideSummary([5, 5])).value,
+    "…và **2** nhân vật khác. **Đồng bộ** vẫn ghi đủ cả những nhân vật này. Lọc theo roster bên dưới để xem từng nhóm."
+  );
+  // One roster: no picker, so no pointer to it.
+  assert.equal(
+    othersField(makeWideSummary([10])).value,
+    "…và **2** nhân vật khác. **Đồng bộ** vẫn ghi đủ cả những nhân vật này."
+  );
+});
+
+test("a filter left on the only changed roster is not announced as a filter", () => {
+  const single = makeWideSummary([2]);
+  const embed = renderBody(single, 0).embeds[0].toJSON();
+  assert.equal(embed.fields.some((f) => /đang lọc/.test(f.value)), false);
 });

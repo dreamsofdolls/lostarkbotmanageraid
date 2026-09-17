@@ -98,7 +98,9 @@ module.exports = {
     noChangesName: "Không có gì mới",
     noChangesValue: "Preview này không thêm tiến độ nào so với dữ liệu Artist đang giữ.",
     moreCharactersName: "Nhân vật khác",
-    moreCharactersValue: "…và {count} nhân vật khác. Quét vẫn giữ đủ dữ liệu.",
+    moreCharactersValue: "…và **{count}** nhân vật khác. **Đồng bộ** vẫn ghi đủ cả những nhân vật này.",
+    moreCharactersFilterHint: " Lọc theo roster bên dưới để xem từng nhóm.",
+    rosterFilteredSuffix: " · đang lọc, **Đồng bộ** vẫn ghi đủ **{count}** roster",
     retryReasons: {
       apply_failed: "Có lỗi tạm thời khi xử lý. Dữ liệu chưa hoàn tất vẫn được giữ để cậu bấm **Đồng bộ** thử lại.",
       write_error: "Một phần tiến độ chưa ghi được vào DB. Phần đã ghi vẫn được giữ; bấm **Đồng bộ** để thử lại phần còn thiếu.",

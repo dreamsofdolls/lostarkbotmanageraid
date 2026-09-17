@@ -134,14 +134,25 @@ function collectChangedRosters(summary, rosterFilter = null) {
  * raids it changes · that is what lets every roster fit on one card with
  * no paging.
  *
+ * @param {object} [options]
+ * @param {number|null} [options.rosterFilter=null] - index into accountsAfterSync to narrow to
+ * @param {boolean} [options.hasRosterPicker=false] - whether the card carries the roster dropdown
  * @returns {boolean} false when the summary predates accountsAfterSync,
  *   so the caller can fall back to the delta-only list.
  */
-function addChangedCharacterFields(embed, summary, lang, { rosterFilter = null } = {}) {
+function addChangedCharacterFields(
+  embed,
+  summary,
+  lang,
+  { rosterFilter = null, hasRosterPicker = false } = {}
+) {
   if (!Array.isArray(summary?.accountsAfterSync)) return false;
 
   const incoming = buildIncomingMap(summary);
   const groups = collectChangedRosters(summary, rosterFilter);
+  // A filter only counts while there is another roster it is hiding.
+  const changedRosterCount = collectChangedRosters(summary).length;
+  const filtered = rosterFilter !== null && changedRosterCount > 1;
   if (groups.length === 0) {
     embed.addFields({
       name: t("local-sync-discord.noChangesName", lang),
@@ -175,12 +186,16 @@ function addChangedCharacterFields(embed, summary, lang, { rosterFilter = null }
       });
     }
     if (charFields.length === 0) continue;
-    // The roster header only earns its field when more than one roster is
-    // on the card · with a single one it says what the title already does.
-    if (groups.length > 1) {
+    // The roster header earns its field when several rosters are on the card,
+    // and while a filter hides the others · Sync still writes every roster,
+    // and a lone unnamed roster under a green Sync button reads as the whole job.
+    if (groups.length > 1 || filtered) {
+      const changedChars = t("local-sync-discord.rosterChangedChars", lang, { count: charFields.length });
       fields.push({
         name: `${sharedUI.icons.folder} ${group.account.accountName || "?"}`,
-        value: t("local-sync-discord.rosterChangedChars", lang, { count: charFields.length }),
+        value: filtered
+          ? `${changedChars}${t("local-sync-discord.rosterFilteredSuffix", lang, { count: changedRosterCount })}`
+          : changedChars,
         inline: false,
       });
     }
@@ -191,9 +206,12 @@ function addChangedCharacterFields(embed, summary, lang, { rosterFilter = null }
   }
 
   if (hidden > 0) {
+    const stillSynced = t("local-sync-discord.moreCharactersValue", lang, { count: hidden });
     fields.push({
       name: t("local-sync-discord.moreCharactersName", lang),
-      value: t("local-sync-discord.moreCharactersValue", lang, { count: hidden }),
+      value: hasRosterPicker
+        ? `${stillSynced}${t("local-sync-discord.moreCharactersFilterHint", lang)}`
+        : stillSynced,
       inline: false,
     });
   }
@@ -449,7 +467,10 @@ function buildLocalSyncConsolePayload({
     if (card.showBody) {
       // Totals sit under a blank line so they read as their own block.
       blocks.push(buildSummaryLines(summary, lang, formatGold).join("\n"));
-      addPreviewFields(embed, job, summary, lang, { rosterFilter: shownRosterFilter });
+      addPreviewFields(embed, job, summary, lang, {
+        rosterFilter: shownRosterFilter,
+        hasRosterPicker,
+      });
     }
     embed.setDescription(blocks.join("\n\n"));
   }

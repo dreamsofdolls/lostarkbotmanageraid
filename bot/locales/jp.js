@@ -93,7 +93,9 @@ module.exports = {
     noChangesName: "新しい変更なし",
     noChangesValue: "このプレビューは、Artistが持っている進捗に追加するものがないよ。",
     moreCharactersName: "ほかのキャラ",
-    moreCharactersValue: "…ほか {count} キャラ。スキャンデータはすべて保持されています。",
+    moreCharactersValue: "…ほか **{count}** キャラ。**同期** はこのキャラたちにもすべて書き込みますわ。",
+    moreCharactersFilterHint: " 下のロスター絞り込みでグループごとに見られますの。",
+    rosterFilteredSuffix: " · 絞り込み中、**同期** は **{count}** ロスターすべてに書き込みますわ",
     retryReasons: {
       apply_failed: "一時的な処理エラーが発生しました。未完了のデータは保持されていますので、**同期**を押して再試行してくださいませ。",
       write_error: "一部の進捗をデータベースへ書き込めませんでした。完了分は保持されています。**同期**を押して残りを再試行してね。",
