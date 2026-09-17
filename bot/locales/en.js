@@ -106,7 +106,6 @@ module.exports = {
       refresh: "Refresh",
       openReader: "Open Local Reader",
     },
-    jobMissing: "This preview no longer exists or has been cleaned up. Open `/raid-status` and pick `🗃️ Local Sync` to scan again.",
     notOwner: "This Local Sync preview belongs to a different Discord account.",
   },
   "shared-task": {

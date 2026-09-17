@@ -108,7 +108,6 @@ module.exports = {
       refresh: "更新",
       openReader: "Local Reader を開く",
     },
-    jobMissing: "このプレビューは削除済み、または期限切れです。`/raid-status` から `🗃️ ローカル同期` を選んでもう一度スキャンしてね。",
     notOwner: "このローカル同期プレビューは別の Discord アカウントのものです。",
   },
   "shared-task": {

@@ -113,7 +113,6 @@ module.exports = {
       refresh: "Làm mới",
       openReader: "Mở Local Reader",
     },
-    jobMissing: "Preview này không còn tồn tại hoặc đã được dọn. Mở `/raid-status` rồi chọn `🗃️ Local Sync` để quét lại nhé.",
     notOwner: "Preview Local Sync này không thuộc tài khoản Discord của cậu.",
   },
   // Shared-task display labels rendered in /raid-task autocomplete +
