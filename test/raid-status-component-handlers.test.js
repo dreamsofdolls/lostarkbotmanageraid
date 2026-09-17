@@ -175,7 +175,9 @@ test("raid-status local refresh reloads the latest DB state before redrawing", a
   assert.deepEqual(callOrder, ["defer", "reload", "render", "edit", "follow-up"]);
   assert.equal(editPayload.embeds[0].dbVersion, "fresh");
   assert.equal(editPayload.components[0].dbVersion, "fresh");
-  assert.match(followUpPayload.embeds[0].description, /state mới nhất từ DB/);
+  // One fixed title, so the notice reads the same every time it confirms.
+  assert.match(followUpPayload.embeds[0].title, /Đã đọc lại tiến độ$/);
+  assert.equal(followUpPayload.embeds[0].description, "Card phía trên đang hiện dữ liệu mới nhất từ DB.");
 });
 
 test("raid-status local refresh reports failure without claiming stale data is fresh", async () => {

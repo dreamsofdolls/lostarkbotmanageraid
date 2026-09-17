@@ -161,8 +161,8 @@ function attachRaidStatusComponentCollector({
       const sendNotice = component.deferred || component.replied ? followUpNotice : replyNotice;
       await sendNotice(component, EmbedBuilder, {
         type: "warn",
-        title: t("raid-status.sync.localRefreshFailedTitle", lang),
-        description: t("raid-status.sync.localRefreshFailedDescription", lang),
+        title: t("raid-status.sync.buttonFailedTitle", lang),
+        description: t("raid-status.sync.buttonFailedDescription", lang),
       }).catch(() => {});
     }
   });

@@ -318,7 +318,7 @@ function createStatusComponentRouteHandlers(ctx) {
 
       await followUpNotice(component, EmbedBuilder, {
         type: "success",
-        title: tPick("raid-status.sync.localRefreshSuccessTitle", lang),
+        title: t("raid-status.sync.localRefreshSuccessTitle", lang),
         description: t("raid-status.sync.localRefreshSuccessDescription", lang),
       }).catch(() => {});
       return noRedraw();
