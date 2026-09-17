@@ -168,6 +168,10 @@ test("locale copy contains no italic stage directions", () => {
 // large, a missing option). Those are normal boundaries, not failures, and
 // Artist being kind about them is correct rather than a defect.
 const FAILURE_KEYS = [
+  "local-sync-discord.stateDescriptions.expired",
+  "local-sync-discord.stateDescriptions.failed",
+  "local-sync-discord.stateDescriptions.failedLocalOff",
+  "local-sync-discord.stateDescriptions.failedBibleOff",
   "raid-schedule.notice.showpickDeniedDescription",
   "raid-add-roster.expired.description",
   "raid-add-roster.expired.staleSessionDescription",
