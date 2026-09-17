@@ -65,17 +65,6 @@ module.exports = {
     scopeName: "Scope",
     scopeFull: "Full Local Sync",
     scopeSolo: "Solo only",
-    statusName: "Status",
-    states: {
-      pending: "Awaiting confirmation",
-      applying: "Syncing",
-      applied: "Synced",
-      cancelled: "Cancelled",
-      superseded: "Replaced by a newer preview",
-      expired: "Expired",
-      failed: "Unable to sync",
-      missing: "Not found",
-    },
     stateDescriptions: {
       pending: "Review the changes below, then click **Sync** if everything looks right.",
       nothing: "This preview adds nothing beyond the progress Artist already has, so there is no need to **Sync**~",
@@ -103,14 +92,6 @@ module.exports = {
     noChangesValue: "This preview adds no progress beyond what Artist already has.",
     moreCharactersName: "Other characters",
     moreCharactersValue: "…and {count} more characters. The scan still keeps all data.",
-    appliedDescription: "Sync complete: **{applied}** updated · **{skipped}** already present · **{rejected}** rejected.",
-    failedDescription: "Unable to sync: **{reason}**.",
-    failureReasons: {
-      apply_failed: "data write failed",
-      local_sync_disabled: "Local Sync was disabled",
-      auto_sync_disabled: "Bible Auto-sync was disabled",
-      sync_busy: "Another sync is running. Wait a moment, then click Sync again.",
-    },
     retryReasons: {
       apply_failed: "A temporary processing error occurred. Unfinished data was kept so you can click **Sync** to retry.",
       write_error: "Some progress could not be written to the database. Completed writes were kept; click **Sync** to retry the rest.",

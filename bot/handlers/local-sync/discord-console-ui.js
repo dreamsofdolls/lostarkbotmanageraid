@@ -23,6 +23,7 @@ const {
   bucketizeLocalSyncDeltas,
   resolvePreviewJobState,
 } = require("../../services/local-sync");
+const { describeLocalSyncCard } = require("./discord-console-card");
 
 const MAX_CHARACTER_FIELDS = 10;
 const MAX_RAIDS_PER_CHARACTER = 8;
@@ -40,19 +41,6 @@ const MAX_BODY_FIELDS = 22;
 // only the collector handles it.
 const DM_BUTTON_PREFIX = "local-sync:";
 const STATUS_BUTTON_PREFIX = "status-local:";
-const RETRYABLE_PENDING_REASONS = new Set([
-  "sync_busy",
-  "write_error",
-  "party_write_error",
-  "apply_failed",
-]);
-
-// Multi-line locale values are stored as arrays of lines · t() returns
-// them verbatim, so the call site joins. Same convention as
-// services/raid/channel-monitor/channel-monitor-embeds.js.
-function joinIfArray(value) {
-  return Array.isArray(value) ? value.join("\n") : value;
-}
 
 function unixSeconds(value) {
   const ms = Number(new Date(value));
@@ -91,67 +79,6 @@ function groupPreviewBuckets(job, lang, summary = null) {
     });
   }
   return byCharacter;
-}
-
-function statusKey(state) {
-  const known = new Set([
-    "pending",
-    "applying",
-    "applied",
-    "cancelled",
-    "superseded",
-    "expired",
-    "failed",
-  ]);
-  return known.has(state) ? state : "missing";
-}
-
-// One icon per state, so the card's condition reads before the words do.
-// Matches how /raid-status leads every header line with an icon.
-const STATE_ICON = Object.freeze({
-  pending: "⏳",
-  applying: "🔄",
-  applied: "✅",
-  cancelled: "✖️",
-  superseded: "🔁",
-  expired: "⌛",
-  failed: "⚠️",
-  missing: "❔",
-});
-const STATE_COLOR_KEY_BY_NAME = new Map([
-  ["applied", "success"],
-  ["failed", "danger"],
-  ["expired", "danger"],
-  ["cancelled", "progress"],
-  ["superseded", "progress"],
-]);
-
-function statusColor(state, UI) {
-  return UI.colors[STATE_COLOR_KEY_BY_NAME.get(state) || "neutral"];
-}
-
-function buildResultDescription(job, state, lang) {
-  const failureReason = String(job?.failureReason || "");
-  if (state === "pending" && RETRYABLE_PENDING_REASONS.has(failureReason)) {
-    return t(`local-sync-discord.retryReasons.${failureReason}`, lang);
-  }
-  if (state === "applied") {
-    const result = job?.result || {};
-    return t("local-sync-discord.appliedDescription", lang, {
-      applied: result.applied?.length || 0,
-      skipped: result.skipped?.length || 0,
-      rejected: result.rejected?.length || 0,
-    });
-  }
-  if (state === "failed") {
-    const reason = String(job?.failureReason || "apply_failed");
-    const reasonKey = `local-sync-discord.failureReasons.${reason}`;
-    const localized = t(reasonKey, lang);
-    return t("local-sync-discord.failedDescription", lang, {
-      reason: localized === reasonKey ? reason : localized,
-    });
-  }
-  return t(`local-sync-discord.stateDescriptions.${statusKey(state)}`, lang);
 }
 
 /**
@@ -345,7 +272,8 @@ function addPreviewFields(embed, job, summary, lang, options = {}) {
 
 function buildRows({
   job,
-  state,
+  showApplyCancel,
+  hasRosterPicker,
   summary,
   rosterFilter = null,
   readerUrl,
@@ -372,7 +300,7 @@ function buildRows({
     // is nothing left to page through and the three preview actions plus
     // the reader link fit inside Discord's five-per-row limit.
     const actionRow = new ActionRowBuilder();
-    if (state === "pending") {
+    if (showApplyCancel) {
       actionRow.addComponents(
         new ButtonBuilder()
           .setCustomId(`${buttonPrefix}apply:${job.jobId}`)
@@ -409,11 +337,9 @@ function buildRows({
   // so they describe the roster as it will look once applied · the same
   // state the fields above already render.
   //
-  // It lists only the rosters this preview touches, and appears only when
-  // there is more than one · the card already shows them all at once, so
-  // the dropdown is a way to narrow down, not the only way to see them.
-  const changedIndices = new Set(collectChangedRosters(summary).map((group) => group.index));
-  if (job?.jobId && changedIndices.size > 1 && StringSelectMenuBuilder) {
+  // It lists only the rosters this preview touches.
+  if (hasRosterPicker) {
+    const changedIndices = new Set(collectChangedRosters(summary).map((group) => group.index));
     const entries = buildStatusRosterFilterEntries({
       accounts,
       getRaidsFor: getStatusRaidsForCharacter,
@@ -463,24 +389,38 @@ function buildLocalSyncConsolePayload({
   formatGold,
 }) {
   const state = job ? resolvePreviewJobState(job) : "missing";
+  const card = describeLocalSyncCard({
+    job,
+    state,
+    summary,
+    activeScope,
+    hasReaderLink: Boolean(readerUrl),
+    lang,
+  });
   // Re-projecting the same preview can leave the chosen roster with nothing
   // to change. Filtering on it would show "Nothing new" over real changes,
   // and with a single changed roster there is no dropdown to clear it from.
   const shownRosterFilter = collectChangedRosters(summary, rosterFilter).length > 0
     ? rosterFilter
     : null;
+  // The picker narrows a body that lists several rosters · with no body, or
+  // with one roster, the card already shows everything there is.
+  const hasRosterPicker = card.showBody
+    && Boolean(job?.jobId)
+    && Boolean(StringSelectMenuBuilder)
+    && collectChangedRosters(summary).length > 1;
   const embed = new EmbedBuilder()
     .setTitle(`🗃️ ${t("local-sync-discord.title", lang)}`)
-    .setColor(statusColor(state, UI))
+    .setColor(UI.colors[card.colorKey])
     .setTimestamp();
 
-  if (!activeScope) {
-    embed.setDescription(t("local-sync-discord.disabledDescription", lang));
+  if (card.kind === "disabled") {
+    embed.setDescription(card.sentence);
     return { embeds: [embed], components: [] };
   }
 
-  if (!job) {
-    embed.setDescription(joinIfArray(t("local-sync-discord.noPreviewDescription", lang)));
+  if (card.kind === "empty") {
+    embed.setDescription(`${card.trackerLine}\n\n${card.sentence}`);
   } else {
     const scopeLabel = t(
       job.scope === "solo"
@@ -489,36 +429,37 @@ function buildLocalSyncConsolePayload({
       lang
     );
     const expiresAt = unixSeconds(job.expiresAt);
-    const key = statusKey(state);
-    // Header shape borrowed from the /raid-status views: every data line
-    // opens with an icon and a bold label, and the sentence explaining
-    // what to do next follows with no icon of its own.
+    // The step tracker leads, then every data line opens with an icon and a
+    // bold label, and the sentence explaining what to do next follows with no
+    // icon of its own.
     //
     // The expiry line is a labelled value rather than prose on purpose ·
     // Discord renders <t:…:R> in the VIEWER's client language, so
     // "in 2 hours" would otherwise sit mid-clause inside a Vietnamese
     // sentence. After a label it reads as data.
     const headerLines = [
+      card.trackerLine,
       `🌐 **${t("local-sync-discord.scopeName", lang)}:** ${scopeLabel}`,
-      `${STATE_ICON[key] || ""} **${t("local-sync-discord.statusName", lang)}:** ${t(`local-sync-discord.states.${key}`, lang)}`.trim(),
-      expiresAt > 0 && state === "pending"
+      card.showExpiry && expiresAt > 0
         ? t("local-sync-discord.expiresLine", lang, { timestamp: `<t:${expiresAt}:R>` })
         : "",
-      buildResultDescription(job, state, lang),
+      card.sentence,
     ].filter(Boolean);
-    // Totals sit under a blank line so they read as their own block.
-    embed.setDescription([
-      headerLines.join("\n"),
-      buildSummaryLines(summary, lang, formatGold).join("\n"),
-    ].join("\n\n"));
-    addPreviewFields(embed, job, summary, lang, { rosterFilter: shownRosterFilter });
+    const blocks = [headerLines.join("\n")];
+    if (card.showBody) {
+      // Totals sit under a blank line so they read as their own block.
+      blocks.push(buildSummaryLines(summary, lang, formatGold).join("\n"));
+      addPreviewFields(embed, job, summary, lang, { rosterFilter: shownRosterFilter });
+    }
+    embed.setDescription(blocks.join("\n\n"));
   }
 
   return {
     embeds: [embed],
     components: buildRows({
       job,
-      state,
+      showApplyCancel: card.showApplyCancel,
+      hasRosterPicker,
       summary,
       rosterFilter: shownRosterFilter,
       readerUrl,
@@ -535,6 +476,5 @@ function buildLocalSyncConsolePayload({
 
 module.exports = {
   STATUS_BUTTON_PREFIX,
-  buildResultDescription,
   buildLocalSyncConsolePayload,
 };

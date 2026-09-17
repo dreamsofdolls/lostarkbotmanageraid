@@ -13,7 +13,6 @@ const {
 const { UI } = require("../bot/utils/raid/common/shared");
 const {
   buildLocalSyncConsolePayload,
-  buildResultDescription,
 } = require("../bot/handlers/local-sync/discord-console-ui");
 const {
   createLocalSyncDiscordConsole,
@@ -52,6 +51,21 @@ function componentIds(payload) {
   );
 }
 
+// The roster makeJob()'s delta belongs to. Against an empty roster the preview
+// projects no gates, which is a "nothing new" card without Sync.
+function makeAkiRoster() {
+  return [{
+    accountName: "Roster",
+    characters: [{
+      name: "Aki",
+      class: "Bard",
+      itemLevel: 1750,
+      isGoldEarner: true,
+      assignedRaids: {},
+    }],
+  }];
+}
+
 test("pending Discord console renders preview details and durable job buttons", () => {
   const job = makeJob();
   const payload = buildLocalSyncConsolePayload({
@@ -78,7 +92,7 @@ test("pending Discord console renders preview details and durable job buttons", 
 
   const embed = payload.embeds[0].toJSON();
   assert.match(embed.title, /Local Sync Console/);
-  assert.match(embed.description, /Chờ xác nhận/);
+  assert.match(embed.description, /⏳ \*\*Xem trước\*\*/);
   const characterField = embed.fields.find((field) => field.name === "Aki");
   assert.ok(characterField);
   assert.match(characterField.value, /G2/);
@@ -221,11 +235,11 @@ test("reopening a pending console re-projects it from the latest User snapshot",
     else process.env.PUBLIC_BASE_URL = previousBaseUrl;
   }
 
-  // Totals live in the description · three inline fields would render as
-  // a three-across row and the card is two-across.
+  // The fresh projection finds nothing to write, so the card says so instead
+  // of repeating the stale stored totals.
   const description = payload.embeds[0].toJSON().description;
-  assert.match(description, /\*\*Changes:\*\* \*\*0\*\* chars/);
-  assert.doesNotMatch(description, /\*\*Changes:\*\* \*\*99\*\* chars/);
+  assert.match(description, /\*\*Nothing new\*\*/);
+  assert.doesNotMatch(description, /\*\*99\*\*/);
 });
 
 test("an applied console still lists what it synced once that progress is written", async () => {
@@ -302,7 +316,8 @@ test("an applied console still lists what it synced once that progress is writte
   }
 
   const embed = payload.embeds[0].toJSON();
-  assert.match(embed.description, /Sync complete: \*\*1\*\* updated/);
+  assert.match(embed.description, /✅ \*\*Synced\*\*/);
+  assert.match(embed.description, /Artist has written the changes below\./);
   assert.match(embed.description, /\*\*Changes:\*\* \*\*1\*\* chars/);
   assert.equal(embed.fields.some((field) => field.name === "Nothing new"), false);
   assert.ok(embed.fields.some((field) => field.name === "Qiylyn" && field.value.includes("G1")));
@@ -450,7 +465,7 @@ test("Discord DM delivery renders the durable console and stores its receipt", a
     language: "en",
     localSyncEnabled: true,
     autoManageEnabled: false,
-    accounts: [],
+    accounts: makeAkiRoster(),
   };
   const pendingJob = makeJob({ discordId });
   const PreviewModel = makePreviewModel(pendingJob);
@@ -1032,10 +1047,9 @@ test("a retry counts the gates an earlier attempt wrote as updated, not already 
 
   const second = await applyPreviewJob(job.jobId, "u1", deps);
   assert.equal(second.state, "applied");
-  assert.match(
-    buildResultDescription(PreviewModel.value, "applied", "en"),
-    /\*\*2\*\* updated · \*\*0\*\* already present/
-  );
+  // The merged result is what the card and party propagation both read.
+  assert.equal(PreviewModel.value.result.applied.length, 2);
+  assert.equal(PreviewModel.value.result.skipped.length, 0);
 });
 
 test("Refresh on an old console loads the newest actionable preview", async () => {
@@ -1054,7 +1068,7 @@ test("Refresh on an old console loads the newest actionable preview", async () =
     language: "en",
     localSyncEnabled: true,
     autoManageEnabled: false,
-    accounts: [],
+    accounts: makeAkiRoster(),
   };
   const PreviewModel = {
     findOne(filter) {
@@ -1139,7 +1153,7 @@ test("a cleaned-up preview button falls through to a fresh raid-status session",
   assert.equal(handoffs[0].options.content, undefined);
 });
 
-test("console header leads every data line with an icon and keeps the expiry as a labelled value", () => {
+test("the header leads with the step tracker and keeps the expiry as a labelled value", () => {
   const render = (job) => buildLocalSyncConsolePayload({
     job,
     summary: { changes: { chars: 1, raids: 1, gates: 2 } },
@@ -1155,23 +1169,25 @@ test("console header leads every data line with an icon and keeps the expiry as 
   }).embeds[0].toJSON().description;
 
   const pending = render(makeJob()).split("\n");
-  assert.match(pending[0], /^🌐 \*\*Phạm vi:\*\* /);
-  assert.match(pending[1], /^⏳ \*\*Trạng thái:\*\* Chờ xác nhận$/);
+  assert.equal(pending[0], "✅ Đọc log › ⏳ **Xem trước** › ⚪ Đồng bộ");
+  assert.match(pending[1], /^🌐 \*\*Phạm vi:\*\* /);
   // Discord renders <t:…:R> in the viewer's own language, so it must not
   // sit inside a sentence · after a label the English fragment reads as data.
   assert.match(pending[2], /^🕐 \*\*Hết hạn:\*\* <t:\d+:R>$/);
   // The "what to do next" sentence stays icon-free, like the /raid-status
   // views it borrows from.
-  assert.doesNotMatch(pending[3], /^[🌐⏳🕐]/);
+  assert.doesNotMatch(pending[3], /^[🌐⏳🕐✅]/);
 
-  // The status icon tracks the state rather than being decoration.
-  assert.match(render(makeJob({ status: "applied" })).split("\n")[1], /^✅ /);
-  assert.match(render(makeJob({ status: "failed", failureReason: "apply_failed" })).split("\n")[1], /^⚠️ /);
-  assert.match(render(makeJob({ status: "cancelled" })).split("\n")[1], /^✖️ /);
+  // The current step tracks the state.
+  assert.match(render(makeJob({ status: "applied" })).split("\n")[0], /✅ \*\*Đã đồng bộ\*\*$/);
+  assert.match(
+    render(makeJob({ status: "failed", failureReason: "local_sync_disabled" })).split("\n")[0],
+    /⚠️ \*\*Không ghi được\*\*$/
+  );
+  assert.match(render(makeJob({ status: "cancelled" })).split("\n")[0], /✖️ \*\*Đã huỷ\*\*/);
 
-  // Only a live pending preview carries an expiry line.
-  const applied = render(makeJob({ status: "applied" }));
-  assert.doesNotMatch(applied, /Hết hạn/);
+  // Only a preview that can still be synced carries an expiry line.
+  assert.doesNotMatch(render(makeJob({ status: "applied" })), /Hết hạn/);
 });
 
 // ─── card body reuses the /raid-status raid view ───────────────
@@ -1207,9 +1223,9 @@ function makeSummaryFixture() {
   );
 }
 
-function renderBody(summary, rosterFilter = null) {
+function renderBody(summary, rosterFilter = null, job = makeJob()) {
   return buildLocalSyncConsolePayload({
-    job: makeJob(),
+    job,
     summary,
     readerUrl: "https://example.test/sync?token=x",
     activeScope: "full",
@@ -1333,4 +1349,131 @@ test("a summary without accountsAfterSync falls back to the delta list", () => {
   assert.ok(charField, "delta-only rows still render for old stored projections");
   // Project rule: no em-dash anywhere a user can read it.
   assert.equal(embed.fields.some((f) => f.value.includes("—")), false);
+});
+
+// ─── the card follows the state table ──────────────────────────
+
+const NO_CHANGES = { chars: 0, raids: 0, gates: 0 };
+
+test("a preview that adds no gates drops Sync, Cancel, totals and the roster picker", () => {
+  const summary = { ...makeSummaryFixture(), changes: NO_CHANGES, charsAfterSync: [] };
+  const payload = renderBody(summary);
+  const embed = payload.embeds[0].toJSON();
+
+  assert.deepEqual(componentIds(payload), [
+    `local-sync:refresh:${makeJob().jobId}`,
+    "https://example.test/sync?token=x",
+  ]);
+  assert.equal(embed.description.split("\n")[0], "✅ Đọc log › ℹ️ **Không có gì mới** › ⚪ Đồng bộ");
+  assert.doesNotMatch(embed.description, /\*\*Thay đổi:\*\*|🕐/);
+  assert.equal((embed.fields || []).length, 0);
+  assert.equal(embed.color, UI.colors.neutral);
+});
+
+test("closed previews keep one sentence and a way forward, nothing else", () => {
+  const closedJobs = [
+    [makeJob({ status: "cancelled" }), UI.colors.muted],
+    [makeJob({ status: "superseded" }), UI.colors.muted],
+    [makeJob({ expiresAt: new Date(Date.now() - 1) }), UI.colors.muted],
+    [makeJob({ status: "failed", failureReason: "local_sync_disabled" }), UI.colors.danger],
+  ];
+  for (const [job, color] of closedJobs) {
+    const payload = renderBody(makeSummaryFixture(), null, job);
+    const embed = payload.embeds[0].toJSON();
+    const label = job.status;
+    assert.equal(embed.color, color, label);
+    // The expired card's tracker says "Hết hạn", so the expiry line is matched by its icon.
+    assert.doesNotMatch(embed.description, /\*\*Thay đổi:\*\*|\*\*Tiến độ tuần:\*\*|🕐/, label);
+    assert.equal((embed.fields || []).length, 0, label);
+    assert.deepEqual(componentIds(payload), [
+      `local-sync:refresh:${job.jobId}`,
+      "https://example.test/sync?token=x",
+    ], label);
+  }
+});
+
+test("a party retry with nothing left in the owner's roster still offers Sync and lists nothing", () => {
+  const summary = { ...makeSummaryFixture(), changes: NO_CHANGES, charsAfterSync: [] };
+  const job = makeJob({ failureReason: "party_write_error" });
+  const payload = renderBody(summary, null, job);
+  const embed = payload.embeds[0].toJSON();
+
+  assert.ok(componentIds(payload).includes(`local-sync:apply:${job.jobId}`));
+  assert.equal(embed.color, UI.colors.progress);
+  assert.match(embed.description, /⚠️ \*\*Đồng bộ dở\*\*/);
+  assert.match(embed.description, /roster trong party/);
+  assert.equal((embed.fields || []).length, 0);
+});
+
+test("the empty card names the reader control the viewer has", () => {
+  const describeEmpty = (readerUrl, activeScope) => buildLocalSyncConsolePayload({
+    job: null,
+    summary: null,
+    readerUrl,
+    activeScope,
+    lang: "vi",
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    UI,
+  }).embeds[0].toJSON().description;
+
+  const full = describeEmpty("https://example.test/sync?token=x", "full");
+  assert.equal(full.split("\n")[0], "⏳ **Đọc log** › ⚪ Xem trước › ⚪ Đồng bộ");
+  assert.match(full, /Bấm \*\*Mở Local Reader\*\*, chọn/);
+
+  const solo = describeEmpty(null, "solo");
+  assert.match(solo, /Bấm \*\*Solo Local Reader\*\*/);
+  assert.doesNotMatch(solo, /\*\*Mở Local Reader\*\*/);
+});
+
+test("a viewer with no sync mode sees the grey disabled card with no controls", () => {
+  const payload = buildLocalSyncConsolePayload({
+    job: makeJob(),
+    summary: makeSummaryFixture(),
+    readerUrl: null,
+    activeScope: null,
+    lang: "vi",
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    UI,
+  });
+  const embed = payload.embeds[0].toJSON();
+  assert.equal(embed.color, UI.colors.muted);
+  assert.match(embed.description, /^Local Sync chưa được bật/);
+  assert.deepEqual(payload.components, []);
+});
+
+test("the DM card and the raid-status card differ only in their customId namespace", () => {
+  const build = (buttonPrefix) => buildLocalSyncConsolePayload({
+    job: makeJob(),
+    summary: makeSummaryFixture(),
+    readerUrl: "https://example.test/sync?token=x",
+    activeScope: "full",
+    lang: "vi",
+    buttonPrefix,
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    StringSelectMenuBuilder,
+    truncateText: (value) => String(value),
+    UI,
+    formatGold: (value) => `${value} G`,
+  });
+  const dm = build("local-sync:");
+  const status = build("status-local:");
+  const visible = (payload) => {
+    const { title, description, fields, color } = payload.embeds[0].toJSON();
+    return { title, description, fields, color };
+  };
+
+  assert.deepEqual(visible(dm), visible(status));
+  assert.deepEqual(
+    componentIds(dm).map((id) => String(id).replace(/^local-sync:/, "status-local:")),
+    componentIds(status)
+  );
 });

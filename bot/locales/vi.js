@@ -72,17 +72,6 @@ module.exports = {
     scopeName: "Phạm vi",
     scopeFull: "Local Sync đầy đủ",
     scopeSolo: "Chỉ Solo",
-    statusName: "Trạng thái",
-    states: {
-      pending: "Chờ xác nhận",
-      applying: "Đang đồng bộ",
-      applied: "Đã đồng bộ",
-      cancelled: "Đã huỷ",
-      superseded: "Đã có preview mới hơn",
-      expired: "Đã hết hạn",
-      failed: "Không thể đồng bộ",
-      missing: "Không tìm thấy",
-    },
     stateDescriptions: {
       pending: "Kiểm tra các thay đổi bên dưới rồi bấm **Đồng bộ** nếu mọi thứ đúng nhé.",
       nothing: "Preview này không thêm gì so với tiến độ Artist đang giữ, nên không cần **Đồng bộ** đâu~",
@@ -110,14 +99,6 @@ module.exports = {
     noChangesValue: "Preview này không thêm tiến độ nào so với dữ liệu Artist đang giữ.",
     moreCharactersName: "Nhân vật khác",
     moreCharactersValue: "…và {count} nhân vật khác. Quét vẫn giữ đủ dữ liệu.",
-    appliedDescription: "Đồng bộ xong: **{applied}** cập nhật · **{skipped}** đã có · **{rejected}** bị từ chối.",
-    failedDescription: "Không thể đồng bộ: **{reason}**.",
-    failureReasons: {
-      apply_failed: "lỗi ghi dữ liệu",
-      local_sync_disabled: "Local Sync đã bị tắt",
-      auto_sync_disabled: "Bible Auto-sync đã bị tắt",
-      sync_busy: "Một lượt sync khác đang chạy. Đợi một chút rồi bấm Đồng bộ lại nhé.",
-    },
     retryReasons: {
       apply_failed: "Có lỗi tạm thời khi xử lý. Dữ liệu chưa hoàn tất vẫn được giữ để cậu bấm **Đồng bộ** thử lại.",
       write_error: "Một phần tiến độ chưa ghi được vào DB. Phần đã ghi vẫn được giữ; bấm **Đồng bộ** để thử lại phần còn thiếu.",

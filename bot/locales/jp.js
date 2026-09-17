@@ -67,17 +67,6 @@ module.exports = {
     scopeName: "範囲",
     scopeFull: "完全ローカル同期",
     scopeSolo: "Solo のみ",
-    statusName: "状態",
-    states: {
-      pending: "確認待ち",
-      applying: "同期中",
-      applied: "同期済み",
-      cancelled: "キャンセル済み",
-      superseded: "新しいプレビューに置換済み",
-      expired: "期限切れ",
-      failed: "同期できませんでした",
-      missing: "見つかりません",
-    },
     stateDescriptions: {
       pending: "下の変更を確認して、正しければ **同期** を押してくださいませ。",
       nothing: "このプレビューは、Artist が持っている進捗に追加するものがありませんわ。**同期** は不要ですの♪",
@@ -105,14 +94,6 @@ module.exports = {
     noChangesValue: "このプレビューは、Artistが持っている進捗に追加するものがないよ。",
     moreCharactersName: "ほかのキャラ",
     moreCharactersValue: "…ほか {count} キャラ。スキャンデータはすべて保持されています。",
-    appliedDescription: "同期完了: **{applied}** 更新 · **{skipped}** 登録済み · **{rejected}** 拒否。",
-    failedDescription: "同期できませんでした: **{reason}**。",
-    failureReasons: {
-      apply_failed: "データ書き込みエラー",
-      local_sync_disabled: "ローカル同期が無効です",
-      auto_sync_disabled: "Bible Auto-sync が無効です",
-      sync_busy: "別の同期が実行中です。少し待ってからもう一度同期を押してね。",
-    },
     retryReasons: {
       apply_failed: "一時的な処理エラーが発生しました。未完了のデータは保持されていますので、**同期**を押して再試行してくださいませ。",
       write_error: "一部の進捗をデータベースへ書き込めませんでした。完了分は保持されています。**同期**を押して残りを再試行してね。",

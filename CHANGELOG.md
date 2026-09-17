@@ -6,6 +6,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ## 2026-09-17
 
+### Changed
+- Local Sync cards open with a step tracker (Read log › Preview › Sync) in place of the Status line, and each state keeps one sentence that names only the controls the card has. Closed previews (cancelled, replaced, expired, failed) no longer list totals, characters or the roster picker, and a preview that adds nothing drops Sync and Cancel. The "Sync complete" counts line is gone; a synced card mentions rejected log entries only when there are some. Side colours mean one thing each: yellow asks for another Sync, grey is closed, red is a failure a retry cannot fix.
+
 ### Fixed
 - `/raid-status` no longer puts the signed Local Reader link in a public message. Bible Auto-sync viewers, whose `/raid-status` is public, open the reader through the private **Solo Local Reader** button; before, anyone in the channel could use their token.
 - A synced Local Sync card keeps listing what it applied. It re-projected the preview onto the already-written progress, so "Sync complete" sat above "Nothing new" and zero totals. A write error before a successful retry no longer discards the stored preview the card reads.
