@@ -311,13 +311,17 @@ async function finishAppliedPreview({
   };
 }
 
-async function recoverFailedPreviewApply({ jobId, discordId, job, leaseDeps, error }) {
+async function recoverFailedPreviewApply({ jobId, discordId, job, leaseDeps, error, summary }) {
   console.warn("[local-sync/preview-job] apply failed:", error?.message || error);
+  // Gates written before the throw stay on the job. The retry finds them
+  // already complete, and only the stored result marks them as this preview's
+  // writes for party propagation and the token shrink.
   const released = await releasePreviewJob(
     jobId,
     discordId,
     "apply_failed",
-    leaseDeps
+    leaseDeps,
+    summary ? { result: summary } : {}
   ).catch(() => null);
   return {
     ok: false,
@@ -344,6 +348,7 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
   if (claim.outcome) return claim.outcome;
   const { job, leaseDeps } = claim;
   let ownsSlot = false;
+  let summary = null;
 
   try {
     const userDoc = await loadApplyUser(discordId, UserModel);
@@ -361,7 +366,7 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
     if (slot.outcome) return slot.outcome;
 
     const currentWeekStartMs = resolveCurrentWeekStartMs(deps.currentWeekStartMs);
-    let summary = mergeEarlierAttempt(job.result, await applyLocalSyncDeltas(
+    summary = mergeEarlierAttempt(job.result, await applyLocalSyncDeltas(
       discordId,
       job.deltas || [],
       buildApplyDeltaOptions(job, userDoc, deps, currentWeekStartMs)
@@ -401,7 +406,8 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
       discordId,
       summary,
     });
-    return finishAppliedPreview({
+    // Awaited so a failure here reaches the catch below like every other step.
+    return await finishAppliedPreview({
       jobId,
       discordId,
       summary,
@@ -410,7 +416,7 @@ async function applyPreviewJob(jobId, discordId, deps = {}) {
       modelDeps,
     });
   } catch (error) {
-    return recoverFailedPreviewApply({ jobId, discordId, job, leaseDeps, error });
+    return recoverFailedPreviewApply({ jobId, discordId, job, leaseDeps, error, summary });
   } finally {
     await releaseApplySlotBestEffort(discordId, ownsSlot, deps);
   }

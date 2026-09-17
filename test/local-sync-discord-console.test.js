@@ -868,6 +868,126 @@ test("a source write error before party propagation still propagates the gates w
   assert.deepEqual(targetWrites, ["Bao"]);
 });
 
+test("an apply that throws after its writes still propagates those gates on the retry", async () => {
+  const job = makeJob();
+  job.partyDeltas = [{
+    ...job.deltas[0],
+    charName: "Bao",
+    sourceCharName: "Aki",
+  }];
+  const PreviewModel = makePreviewModel(job);
+  // The first attempt writes Aki's gates, then the party authorization write
+  // fails, so the attempt ends in the catch-all instead of a write error.
+  const persist = PreviewModel.findOneAndUpdate.bind(PreviewModel);
+  let authorizationFailures = 1;
+  PreviewModel.findOneAndUpdate = async (filter, update) => {
+    if (update?.$set?.partyAuthorized && authorizationFailures > 0) {
+      authorizationFailures -= 1;
+      throw new Error("mongo unavailable");
+    }
+    return persist(filter, update);
+  };
+  const sourceUser = {
+    discordId: "u1",
+    localSyncEnabled: true,
+    autoManageEnabled: false,
+    accounts: [{
+      accountName: "Source",
+      characters: [{ name: "Aki", class: "Artist", itemLevel: 1750, assignedRaids: {} }],
+    }],
+  };
+  const targetUser = {
+    discordId: "u2",
+    autoManageEnabled: true,
+    localSyncEnabled: false,
+    accounts: [{
+      accountName: "Target",
+      characters: [{ name: "Bao", class: "Bard", itemLevel: 1750, assignedRaids: {} }],
+    }],
+  };
+  const UserModel = {
+    findOne() { return makeConsoleUserQuery(sourceUser); },
+    find() {
+      return {
+        select() { return this; },
+        collation() { return this; },
+        async lean() { return [targetUser]; },
+      };
+    },
+    async findOneAndUpdate() { return sourceUser; },
+    async updateOne() { return { matchedCount: 1 }; },
+  };
+  let akiWrites = 0;
+  const targetWrites = [];
+  const deps = {
+    PreviewModel,
+    UserModel,
+    applyRaidSetForDiscordId: async (args) => {
+      if (args.discordId === "u2") {
+        targetWrites.push(args.characterName);
+        return { matched: true, updated: true, displayName: "Bao" };
+      }
+      akiWrites += 1;
+      return akiWrites === 1
+        ? { matched: true, updated: true, displayName: "Aki" }
+        : { matched: true, updated: false, displayName: "Aki", alreadyComplete: true };
+    },
+  };
+
+  const first = await applyPreviewJob(job.jobId, "u1", deps);
+  assert.equal(first.state, "pending");
+  assert.equal(first.job.failureReason, "apply_failed");
+  assert.deepEqual(targetWrites, []);
+
+  // The retry finds Aki's gates already complete. They were written by this
+  // preview, so the party still has to receive them.
+  const second = await applyPreviewJob(job.jobId, "u1", deps);
+  assert.equal(second.ok, true);
+  assert.deepEqual(targetWrites, ["Bao"]);
+});
+
+test("an apply whose final write throws stays retryable and keeps what it wrote", async () => {
+  const job = makeJob();
+  const PreviewModel = makePreviewModel(job);
+  const persist = PreviewModel.findOneAndUpdate.bind(PreviewModel);
+  let finishFailures = 1;
+  PreviewModel.findOneAndUpdate = async (filter, update) => {
+    if (update?.$set?.status === "applied" && finishFailures > 0) {
+      finishFailures -= 1;
+      throw new Error("mongo unavailable");
+    }
+    return persist(filter, update);
+  };
+  const userDoc = {
+    discordId: "u1",
+    localSyncEnabled: true,
+    autoManageEnabled: false,
+    lastLocalSyncToken: null,
+    accounts: makeAkiRoster(),
+  };
+  let akiWrites = 0;
+  const deps = {
+    PreviewModel,
+    UserModel: makeConsoleUserModel(userDoc),
+    applyRaidSetForDiscordId: async () => {
+      akiWrites += 1;
+      return akiWrites === 1
+        ? { matched: true, updated: true, displayName: "Aki" }
+        : { matched: true, updated: false, displayName: "Aki", alreadyComplete: true };
+    },
+  };
+
+  const first = await applyPreviewJob(job.jobId, "u1", deps);
+  assert.equal(first.state, "pending");
+  assert.equal(first.job.failureReason, "apply_failed");
+  assert.equal(PreviewModel.value.result.applied.length, 1);
+
+  const second = await applyPreviewJob(job.jobId, "u1", deps);
+  assert.equal(second.state, "applied");
+  assert.equal(PreviewModel.value.result.applied.length, 1);
+  assert.equal(PreviewModel.value.result.skipped.length, 0);
+});
+
 test("a stale applying lease can be reclaimed after a bot restart", async () => {
   const nowMs = Date.now();
   const job = makeJob({
