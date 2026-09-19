@@ -152,7 +152,6 @@ function classifyBucketAgainstRoster(
   effectiveGates,
   {
     currentWeekStartMs = 0,
-    requireAnySyncEnabled = false,
     requireRaidUntouched = false,
     requiredCompanionScope = null,
     rosterIndex = null,
@@ -160,9 +159,6 @@ function classifyBucketAgainstRoster(
 ) {
   if (!hasUsableRoster(userDoc)) {
     return { action: "reject", reason: "no_roster" };
-  }
-  if (requireAnySyncEnabled && !userDoc.localSyncEnabled && !userDoc.autoManageEnabled) {
-    return { action: "reject", reason: "sync_disabled" };
   }
 
   const character = findRosterCharacter(userDoc, bucket.charName, rosterIndex);

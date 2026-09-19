@@ -66,7 +66,7 @@ test("party propagation enforces the 16-player Gate boundary before querying ros
   assert.equal(queried, false);
 });
 
-test("party propagation batches per owner, includes both sync modes, and ignores touched raids", async () => {
+test("party propagation batches per owner, includes every sync mode, and ignores touched raids", async () => {
   const users = [
     makeUser("local-owner", [makeCharacter("Aki"), makeCharacter("Dara")], {
       localSyncEnabled: true,
@@ -79,8 +79,8 @@ test("party propagation batches per owner, includes both sync modes, and ignores
       G1: { difficulty: "Hard", completedDate: 1_500 },
       G2: { difficulty: "Hard", completedDate: null },
     })], { localSyncEnabled: true }),
-    // A stale query snapshot must still be harmless: preflight and the fresh
-    // writer guard both receive requireAnySyncEnabled.
+    // Neither Local Sync nor Auto Sync: a registered roster still gets its
+    // party clear.
     makeUser("off-owner", [makeCharacter("Eira")]),
   ];
   const queryState = {};
@@ -126,22 +126,20 @@ test("party propagation batches per owner, includes both sync modes, and ignores
     },
   });
 
-  assert.deepEqual(result.applied.map((entry) => entry.charName).sort(), ["Aki", "Bao", "Dara"]);
+  assert.deepEqual(
+    result.applied.map((entry) => entry.charName).sort(),
+    ["Aki", "Bao", "Dara", "Eira"]
+  );
   assert.equal(result.applied.every((entry) => entry.propagated), true);
   assert.equal(result.ignored.some((entry) => (
     entry.charName === "Ciel" && entry.reason === "progress_already_started"
   )), true);
-  assert.equal(result.ignored.some((entry) => (
-    entry.charName === "Eira" && entry.reason === "sync_disabled"
-  )), true);
   assert.equal(result.rejected.length, 0);
-  assert.equal(batchCalls.length, 2, "two owners should produce two saves, not three character saves");
-  assert.deepEqual(batchCalls.map((call) => call.entries.length).sort(), [1, 2]);
-  assert.equal(batchCalls.every((call) => call.requireAnySyncEnabled === true), true);
+  assert.equal(batchCalls.length, 3, "three owners should produce three saves, not four character saves");
+  assert.deepEqual(batchCalls.map((call) => call.entries.length).sort(), [1, 1, 2]);
   assert.equal(batchCalls.every((call) => call.requireRaidUntouched === true), true);
   assert.deepEqual(queryState.collation, { locale: "en", strength: 2 });
-  assert.deepEqual(queryState.filter.$or, [
-    { localSyncEnabled: true },
-    { autoManageEnabled: true },
-  ]);
+  assert.deepEqual(queryState.filter, {
+    "accounts.characters.name": { $in: ["Aki", "Bao", "Ciel", "Dara", "Eira"] },
+  });
 });

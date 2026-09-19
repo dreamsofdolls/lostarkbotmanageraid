@@ -633,7 +633,7 @@ test("Discord apply claims a preview atomically and is idempotent", async () => 
   assert.equal(writes.length, 1, "a second click must not write again");
 });
 
-test("full Local Sync applies an evidenced party gate to opted-in roster owners", async () => {
+test("full Local Sync applies an evidenced party gate to a registered roster owner", async () => {
   const job = makeJob();
   job.deltas[0].difficulty = "Normal";
   job.partyDeltas = [{
@@ -657,10 +657,11 @@ test("full Local Sync applies an evidenced party gate to opted-in roster owners"
       }],
     }],
   };
+  // Neither sync mode is on: the owner is reached through registration alone.
   const targetUser = {
     discordId: "u2",
     localSyncEnabled: false,
-    autoManageEnabled: true,
+    autoManageEnabled: false,
     accounts: [{
       accountName: "Target roster",
       characters: [{
@@ -713,7 +714,6 @@ test("full Local Sync applies an evidenced party gate to opted-in roster owners"
   assert.deepEqual(writes.map((entry) => entry.discordId), ["u1", "u2"]);
   assert.equal(writes[0].raidMeta.modeKey, "solo");
   assert.equal(writes[1].raidMeta.modeKey, "normal");
-  assert.equal(writes[1].requireAnySyncEnabled, true);
   assert.equal(writes[1].requireRaidUntouched, true);
   assert.equal(partyQueries, 1);
 

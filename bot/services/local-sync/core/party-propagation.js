@@ -12,8 +12,6 @@ const { assertPartyTargetFanout } = require("./party-policy");
 
 const TARGET_USER_SELECT = [
   "discordId",
-  "autoManageEnabled",
-  "localSyncEnabled",
   "accounts.accountName",
   "accounts.characters.name",
   "accounts.characters.class",
@@ -38,14 +36,12 @@ function buildPartyDeltaIndex(deltas) {
   return index;
 }
 
-async function loadOptedInRosterUsers(UserModel, participantNames) {
+// Every registered roster, whatever its sync mode: a party clear is the
+// owner's progress whether or not they sync it themselves.
+async function loadPartyRosterUsers(UserModel, participantNames) {
   if (participantNames.length === 0) return [];
   let query = UserModel.find({
     "accounts.characters.name": { $in: participantNames },
-    $or: [
-      { localSyncEnabled: true },
-      { autoManageEnabled: true },
-    ],
   });
   if (typeof query?.select === "function") query = query.select(TARGET_USER_SELECT);
   if (typeof query?.collation === "function") {
@@ -106,7 +102,7 @@ async function propagatePartyDeltas(partyDeltas, deps = {}) {
 
   const deltaIndex = buildPartyDeltaIndex(partyDeltas);
   const participantNames = [...deltaIndex.values()].map((entry) => entry.charName);
-  const users = await loadOptedInRosterUsers(UserModel, participantNames);
+  const users = await loadPartyRosterUsers(UserModel, participantNames);
   const result = emptyPropagationResult();
   const currentWeekStartMs = resolveCurrentWeekStartMs(deps.currentWeekStartMs);
 
@@ -122,7 +118,6 @@ async function propagatePartyDeltas(partyDeltas, deps = {}) {
       getRaidRequirementMap: deps.getRaidRequirementMap || getRaidRequirementMap,
       userDoc,
       currentWeekStartMs,
-      requireAnySyncEnabled: true,
       requireRaidUntouched: true,
       preserveStoredModePreference: false,
     });

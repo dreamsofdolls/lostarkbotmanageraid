@@ -639,49 +639,6 @@ test("applyRaidSetForDiscordId: local-sync guard blocks stale POST writes after 
   assert.equal(stored.accounts[0].characters[0].assignedRaids?.kazeros?.G1, undefined);
 });
 
-test("applyRaidSetForDiscordId: party guard accepts either Local Sync or Auto Sync", async () => {
-  const { factory, docs } = makeFactory();
-  seedUser(
-    docs,
-    [{ accountName: "Roster", characters: [makeChar("Cyrano", 1730)] }],
-    { localSyncEnabled: false, autoManageEnabled: true }
-  );
-
-  const result = await factory.applyRaidSetForDiscordId({
-    discordId: "user-1",
-    characterName: "Cyrano",
-    raidMeta: KAZEROS_HARD,
-    statusType: "process",
-    effectiveGates: ["G1"],
-    requireAnySyncEnabled: true,
-  });
-
-  assert.equal(result.syncDisabled, false);
-  assert.equal(result.updated, true);
-});
-
-test("applyRaidSetForDiscordId: party guard re-checks that at least one sync mode is still enabled", async () => {
-  const { factory, docs } = makeFactory();
-  seedUser(
-    docs,
-    [{ accountName: "Roster", characters: [makeChar("Cyrano", 1730)] }],
-    { localSyncEnabled: false, autoManageEnabled: false }
-  );
-
-  const result = await factory.applyRaidSetForDiscordId({
-    discordId: "user-1",
-    characterName: "Cyrano",
-    raidMeta: KAZEROS_HARD,
-    statusType: "process",
-    effectiveGates: ["G1"],
-    requireAnySyncEnabled: true,
-  });
-
-  assert.equal(result.syncDisabled, true);
-  assert.equal(result.syncDisabledReason, "sync_disabled");
-  assert.equal(result.updated, false);
-});
-
 test("applyRaidSetForDiscordId: party propagation protects a raid after any current-week progress", async () => {
   const currentWeekStartMs = Date.now() - 10_000;
   const { factory, docs } = makeFactory();
@@ -706,7 +663,6 @@ test("applyRaidSetForDiscordId: party propagation protects a raid after any curr
     raidMeta: KAZEROS_HARD,
     statusType: "process",
     effectiveGates: ["G1", "G2"],
-    requireAnySyncEnabled: true,
     requireRaidUntouched: true,
     currentWeekStartMs,
   });
@@ -740,7 +696,6 @@ test("applyRaidSetForDiscordId: previous-week progress does not block party prop
     raidMeta: KAZEROS_HARD,
     statusType: "process",
     effectiveGates: ["G1", "G2"],
-    requireAnySyncEnabled: true,
     requireRaidUntouched: true,
     currentWeekStartMs,
   });

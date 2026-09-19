@@ -134,7 +134,6 @@ function shouldSkipForRosterPreflight(
   lists,
   {
     currentWeekStartMs,
-    requireAnySyncEnabled,
     requireRaidUntouched,
     requiredCompanionScope,
     rosterIndex,
@@ -148,7 +147,6 @@ function shouldSkipForRosterPreflight(
     effectiveGates,
     {
       currentWeekStartMs,
-      requireAnySyncEnabled,
       requireRaidUntouched,
       requiredCompanionScope,
       rosterIndex,
@@ -173,7 +171,6 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
     userDoc = null,
     currentWeekStartMs: injectedCurrentWeekStartMs,
     requireLocalSyncEnabled = false,
-    requireAnySyncEnabled = false,
     requireRaidUntouched = false,
     preserveStoredModePreference = true,
     requiredCompanionScope: injectedCompanionScope = null,
@@ -219,7 +216,6 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
       lists,
       {
         currentWeekStartMs,
-        requireAnySyncEnabled,
         requireRaidUntouched,
         requiredCompanionScope,
         rosterIndex,
@@ -238,7 +234,6 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
       discordId,
       applyRaidSetForDiscordId,
       requireLocalSyncEnabled,
-      requireAnySyncEnabled,
       requireRaidUntouched,
       requiredCompanionScope,
       currentWeekStartMs,
@@ -251,7 +246,6 @@ async function applyLocalSyncDeltas(discordId, deltas, deps = {}) {
     discordId,
     applyRaidSetBatchForDiscordId,
     requireLocalSyncEnabled,
-    requireAnySyncEnabled,
     requireRaidUntouched,
     requiredCompanionScope,
     currentWeekStartMs,

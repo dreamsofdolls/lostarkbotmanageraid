@@ -310,7 +310,7 @@ userSchema.index(
   }
 );
 
-// Full Local Sync can propagate a cleared party gate to opted-in roster
+// Full Local Sync can propagate a cleared party gate to registered roster
 // characters named in the same encounter. Case-insensitive collation mirrors
 // the write path's character-name matching without scanning every user.
 userSchema.index(

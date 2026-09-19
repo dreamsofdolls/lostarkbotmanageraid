@@ -130,16 +130,10 @@ function createRaidSetApplyService({
   function resolveCompanionWriteScope(result, userDoc, {
     requiredCompanionScope,
     requireLocalSyncEnabled,
-    requireAnySyncEnabled,
     raidMeta,
   }) {
     if (!userDoc || !Array.isArray(userDoc.accounts) || userDoc.accounts.length === 0) {
       result.noRoster = true;
-      return { blocked: true, companionScope: null };
-    }
-    if (requireAnySyncEnabled && !userDoc.localSyncEnabled && !userDoc.autoManageEnabled) {
-      result.syncDisabled = true;
-      result.syncDisabledReason = "sync_disabled";
       return { blocked: true, companionScope: null };
     }
     const companionScope = resolveRequiredCompanionScope({
@@ -291,7 +285,6 @@ function createRaidSetApplyService({
     statusType,
     effectiveGates,
     requireLocalSyncEnabled = false,
-    requireAnySyncEnabled = false,
     requireRaidUntouched = false,
     requiredCompanionScope = null,
     currentWeekStartMs = 0,
@@ -303,7 +296,6 @@ function createRaidSetApplyService({
     const scope = resolveCompanionWriteScope(result, userDoc, {
       requiredCompanionScope,
       requireLocalSyncEnabled,
-      requireAnySyncEnabled,
       raidMeta,
     });
     if (scope.blocked) return result;
