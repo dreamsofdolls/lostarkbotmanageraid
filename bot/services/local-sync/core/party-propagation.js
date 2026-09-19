@@ -91,6 +91,29 @@ function appendIgnoredEntries(target, entries, discordId, fallbackReason = "igno
   }
 }
 
+/**
+ * Party characters found in a registered roster, for the pre-sync preview.
+ * Runs the propagation roster lookup without writing, so the preview names
+ * the same characters Sync would reach.
+ * @param {object[]} partyDeltas - normalized party deltas, tied to source
+ *   clears and already checked by assertPartyTargetFanout
+ * @param {object} [deps]
+ * @param {object} [deps.UserModel] - injected User model for tests
+ * @returns {Promise<Array<{charName: string, deltas: object[]}>>} one entry
+ *   per registered character, carrying its party deltas
+ */
+async function findRegisteredPartyTargets(partyDeltas, deps = {}) {
+  const deltaIndex = buildPartyDeltaIndex(partyDeltas);
+  const users = await loadPartyRosterUsers(
+    deps.UserModel || User,
+    [...deltaIndex.values()].map((entry) => entry.charName)
+  );
+  const registered = new Set(users.flatMap((userDoc) => [...buildRosterNameSet(userDoc)]));
+  return [...deltaIndex.entries()]
+    .filter(([key]) => registered.has(key))
+    .map(([, entry]) => entry);
+}
+
 async function propagatePartyDeltas(partyDeltas, deps = {}) {
   assertPartyTargetFanout(partyDeltas);
   if (partyDeltas.length === 0) return emptyPropagationResult();
@@ -138,5 +161,6 @@ async function propagatePartyDeltas(partyDeltas, deps = {}) {
 }
 
 module.exports = {
+  findRegisteredPartyTargets,
   propagatePartyDeltas,
 };

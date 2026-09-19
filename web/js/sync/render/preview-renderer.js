@@ -131,6 +131,20 @@ export function renderPreviewStats(panel, summary) {
     );
     html += `</details>`;
   }
+  // Registered party members from the same clears. They live in other
+  // owners' rosters, so they get their own list after the viewer's own.
+  const party = Array.isArray(summary.party) ? summary.party : [];
+  if (party.length > 0) {
+    html += `<details><summary>👥 ${escapeHtml(t("preview.statsPartySummary", { n: party.length }))}</summary>`;
+    html += `<ul class="char-pending-list">`;
+    for (const member of party) {
+      const pills = member.raids.map((raid) => (
+        `<span class="raid-pill raid-pill--incoming">${escapeHtml(getRaidLabel(raid.raidKey))} <span class="raid-pill-mode">${escapeHtml(getRaidSpecificModeLabel(raid.raidKey, raid.modeKey))}</span> ${escapeHtml(raid.gates.join("-"))}</span>`
+      )).join("");
+      html += renderCharPendingRow(renderCharPendingLabel("", member, { withItemLevel: false }), pills);
+    }
+    html += `</ul><p class="hint">${escapeHtml(t("preview.statsPartyNote"))}</p></details>`;
+  }
   panel.innerHTML = html;
   panel.hidden = false;
 }

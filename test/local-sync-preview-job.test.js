@@ -16,6 +16,9 @@ const {
   createPreviewJobEndpoint,
 } = require("../bot/services/local-sync/http/endpoints/preview-job-endpoint");
 const {
+  createPreviewSummaryEndpoint,
+} = require("../bot/services/local-sync/http/endpoints/preview-summary-endpoint");
+const {
   createLocalSyncApiHandlers,
 } = require("../bot/app/local-sync-web");
 
@@ -388,4 +391,59 @@ test("preview-job endpoint stores the job when Discord DMs are unavailable", asy
   assert.equal(backgroundTasks.length, 1);
   await backgroundTasks[0]();
   assert.match(warnings.join("\n"), /Cannot send messages/);
+});
+
+test("preview-summary names registered party members tied to a source clear, without their owners", async () => {
+  const token = mintToken("u1", undefined, "vi");
+  const partyQueries = [];
+  const User = {
+    findOne() {
+      return {
+        select: () => ({
+          lean: async () => ({
+            discordId: "u1",
+            localSyncEnabled: true,
+            lastLocalSyncToken: token,
+            lastLocalSyncTokenExpAt: 9_999_999_999,
+            accounts: [{
+              accountName: "Roster",
+              characters: [{ name: "Aki", class: "Artist", itemLevel: 1750, assignedRaids: {} }],
+            }],
+          }),
+        }),
+      };
+    },
+    find(filter) {
+      partyQueries.push(filter);
+      return {
+        select() { return this; },
+        collation() { return this; },
+        // Stored in another case: the lookup matches names case-insensitively.
+        async lean() {
+          return [{ discordId: "u2", accounts: [{ accountName: "Other", characters: [{ name: "bao" }] }] }];
+        },
+      };
+    },
+  };
+  const handler = createPreviewSummaryEndpoint({ User });
+  const res = makeRes();
+  const source = validDelta();
+
+  await handler(makeReq(token, {
+    deltas: [source],
+    partyDeltas: [
+      { ...source, charName: "Bao", sourceCharName: "Aki" },
+      { ...source, charName: "Stranger", sourceCharName: "Aki" },
+      // No source clear carries this timestamp, so it never reaches the lookup.
+      { ...source, charName: "Forged", sourceCharName: "Aki", lastClearMs: source.lastClearMs - 1 },
+    ],
+  }), res, { query: {} });
+
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.json().party, [{
+    charName: "Bao",
+    raids: [{ raidKey: "armoche", modeKey: "normal", gates: ["G1"] }],
+  }]);
+  assert.deepEqual(partyQueries[0]["accounts.characters.name"].$in, ["Bao", "Stranger"]);
+  assert.doesNotMatch(res.body, /u2/);
 });

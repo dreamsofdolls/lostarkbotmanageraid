@@ -10,6 +10,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - A confirmed Full Local Sync now propagates party progress to every registered roster, not only to owners with Local Sync or Bible Auto Sync on. The remaining guards are unchanged: the target raid must have no current-week progress, each source Gate reaches at most 15 targets, and the source Gate must apply first.
 
 ### Added
+- The Local Reader preview names the party members registered with Artist that a Full Local Sync would also reach, with the raids and gates they share with your clears. `preview-summary` finds them with the same roster lookup and source-clear checks as the stored preview job, and returns character names only, never their owners.
 - A synced Local Sync card lists the party members Sync also wrote to: each character with the raids and gates it received, and its owner. The list is read from the stored apply result, because those characters live in other owners' rosters, and it appears only on the applied card.
 
 ## 2026-09-17

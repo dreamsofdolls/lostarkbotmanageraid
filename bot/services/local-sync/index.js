@@ -57,4 +57,5 @@ module.exports = {
   recordPreviewDelivery: previewJobs.recordPreviewDelivery,
   applyPreviewJob: applyPreview.applyPreviewJob,
   propagatePartyDeltas: partyPropagation.propagatePartyDeltas,
+  findRegisteredPartyTargets: partyPropagation.findRegisteredPartyTargets,
 };

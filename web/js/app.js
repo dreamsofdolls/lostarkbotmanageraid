@@ -232,7 +232,7 @@ function renderWeekRange() {
 // Pre-sync stats panel. Server is single source of truth for gold rates
 // + completion math; client just renders. Fired off after lastDeltas
 // settles so the panel reflects what THIS sync would do, not stale data.
-async function fetchPreviewSummary(deltas, { signal } = {}) {
+async function fetchPreviewSummary(deltas, partyDeltas, { signal } = {}) {
   if (!window.__artistSyncToken) return null;
   try {
     const resp = await fetch("/api/local-sync/preview-summary", {
@@ -242,7 +242,9 @@ async function fetchPreviewSummary(deltas, { signal } = {}) {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${window.__artistSyncToken}`,
       },
-      body: JSON.stringify({ deltas: Array.isArray(deltas) ? deltas : [] }),
+      // Party deltas let the server name the registered party members this
+      // sync would also reach.
+      body: JSON.stringify({ deltas: Array.isArray(deltas) ? deltas : [], partyDeltas }),
     });
     if (!resp.ok) {
       console.warn("[local-sync] preview-summary failed:", resp.status);
@@ -885,7 +887,7 @@ function commitPreviewState(state, { revision, expectedSelection }) {
   previewSummaryController?.abort();
   const controller = new AbortController();
   previewSummaryController = controller;
-  fetchPreviewSummary(lastDeltas, { signal: controller.signal })
+  fetchPreviewSummary(lastDeltas, lastPartyDeltas, { signal: controller.signal })
     .then((summary) => {
       if (!controller.signal.aborted
           && expectedSelection === selectionSerial

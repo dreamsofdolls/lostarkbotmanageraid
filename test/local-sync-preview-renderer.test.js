@@ -111,3 +111,22 @@ test("preview renderer keeps pagination, view toggle, and escaping behavior afte
     dom.window.close();
   }
 });
+
+test("preview stats list registered party members only when the server names some", async () => {
+  const { renderPreviewStats } = await loadPreviewRenderer();
+  const panel = { hidden: true, innerHTML: "" };
+
+  renderPreviewStats(panel, {
+    party: [{
+      charName: "Bao",
+      raids: [{ raidKey: "kazeros", modeKey: "hard", gates: ["G1", "G2"] }],
+    }],
+  });
+  assert.equal(panel.hidden, false);
+  assert.match(panel.innerHTML, /👥 preview\.statsPartySummary/);
+  assert.match(panel.innerHTML, /<li>Bao<span class="raid-pill raid-pill--incoming">kazeros <span class="raid-pill-mode">hard<\/span> G1-G2<\/span><\/li>/);
+  assert.match(panel.innerHTML, /preview\.statsPartyNote/);
+
+  renderPreviewStats(panel, { party: [] });
+  assert.doesNotMatch(panel.innerHTML, /statsPartySummary/);
+});

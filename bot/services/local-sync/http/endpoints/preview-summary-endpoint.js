@@ -12,9 +12,13 @@
 const {
   COMPANION_SCOPE,
   bucketizeLocalSyncDeltas,
+  filterPartyDeltasBySourceDeltas,
+  findRegisteredPartyTargets,
   isModeAllowedForCompanionScope,
   normalizeLocalSyncDifficulty,
+  normalizePreviewDeltas,
 } = require("../..");
+const { assertPartyTargetFanout } = require("../../core/party-policy");
 const {
   createJsonSender,
 } = require("../json");
@@ -482,10 +486,37 @@ function projectSummary(
 }
 
 /**
+ * Registered party members a Full preview would reach, with the raids and
+ * gates each shares with a source clear. Owner IDs stay on the server · the
+ * browser only learns which names from its own log are registered.
+ * @param {object[]} partyDeltas - normalized party deltas tied to source clears
+ * @param {object} options
+ * @param {object} options.User - User model for the roster lookup
+ * @param {number} options.currentWeekStartMs - weekly reset floor
+ * @returns {Promise<Array<{charName: string, raids: Array<{raidKey: string, modeKey: string, gates: string[]}>}>>}
+ */
+async function summarizeRegisteredParty(partyDeltas, { User, currentWeekStartMs }) {
+  const targets = await findRegisteredPartyTargets(partyDeltas, { UserModel: User });
+  return targets
+    .map((target) => ({
+      charName: target.charName,
+      raids: bucketizeCurrentWeekDeltas(target.deltas, currentWeekStartMs)
+        .map((bucket) => ({
+          raidKey: bucket.raidKey,
+          modeKey: bucket.modeKey,
+          gates: getGatesForRaid(bucket.raidKey).slice(0, bucket.gateIndex + 1),
+        }))
+        .sort((a, b) => RAID_ORDER_INDEX.get(a.raidKey) - RAID_ORDER_INDEX.get(b.raidKey)),
+    }))
+    .filter((member) => member.raids.length > 0);
+}
+
+/**
  * Build the `POST /api/local-sync/preview-summary` handler. Pre-sync
  * companion stats: gold delta, completion projection, raid status list,
- * last-sync timestamps. Lets the user preview post-sync changes before
- * clicking the Sync button.
+ * last-sync timestamps, and the registered party members a Full sync would
+ * also reach. Lets the user preview post-sync changes before clicking the
+ * Sync button.
  *
  * Auth chain mirrors the sync endpoint - Bearer JWT, verify, Mongo state
  * check (localSyncEnabled, isCurrentStoredToken). Pure read; no writes.
@@ -534,7 +565,28 @@ function createPreviewSummaryEndpoint({ User }) {
       send,
     })) return;
 
+    // Same checks the preview job applies, so the preview names only party
+    // members the stored job would accept.
+    let partyDeltas;
+    try {
+      partyDeltas = scope === COMPANION_SCOPE.full
+        ? filterPartyDeltasBySourceDeltas(deltas, normalizePreviewDeltas(body?.partyDeltas || []))
+        : [];
+      assertPartyTargetFanout(partyDeltas);
+    } catch (err) {
+      send(res, 400, { ok: false, error: err?.message || "party deltas invalid" });
+      return;
+    }
+
     const currentWeekStartMs = getCurrentResetStartMs();
+    let party;
+    try {
+      party = await summarizeRegisteredParty(partyDeltas, { User, currentWeekStartMs });
+    } catch (err) {
+      console.error("[preview-summary] party lookup failed:", err?.message || err);
+      send(res, 500, { ok: false, error: "party lookup failed" });
+      return;
+    }
     const buckets = bucketizeCurrentWeekDeltas(deltas, currentWeekStartMs);
     const summary = projectSummary(userDoc.accounts || [], buckets, {
       scope,
@@ -545,6 +597,7 @@ function createPreviewSummaryEndpoint({ User }) {
       ok: true,
       scope,
       ...summary,
+      party,
       lastSync: {
         localSyncAt: Number(userDoc.lastLocalSyncAt) || null,
         autoManageSyncAt: Number(userDoc.lastAutoManageSyncAt) || null,
