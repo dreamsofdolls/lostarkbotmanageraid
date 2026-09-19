@@ -2,7 +2,7 @@
 //
 // This function is the SINGLE write entry point for raid completion
 // state — driven by the slash command, the text-channel monitor parser,
-// and the /raid-check Edit flow. Bugs here cascade everywhere, so the
+// and Local Sync apply. Bugs here cascade everywhere, so the
 // short-circuit semantics (alreadyComplete / alreadyReset / mode-switch
 // wipe) get specific coverage.
 

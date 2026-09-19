@@ -63,7 +63,7 @@ function buildRaidCheckRosterRefreshNoticePayload(result, lang) {
  *
  * @param {object} deps Session wiring: builders, caches and the shared
  *   mutable `state` the handlers mutate.
- * @param {object} deps.state Mutable session state (filters, view, page).
+ * @param {object} deps.state Mutable session state (filters, page).
  * @param {(component: object) => Promise<void>} deps.applyUserFilter Applies
  *   the user selector value and recomputes filtered pages.
  * @param {(options?: { resetPage?: boolean }) => void} deps.recomputeFilteredPages
@@ -126,11 +126,6 @@ function createAllModeComponentHandlers({
       state.filterStatus = normalizeAllModeStatusFilter(
         firstSelectValue(component, FILTER_STATUS.all)
       );
-      recomputeFilteredPages();
-      await updateAllModeMessage(component);
-    },
-    [RAID_CHECK_ALL_COMPONENT_ACTION.viewToggle]: async (component, route) => {
-      state.currentView = route.targetView === "task" ? "task" : "raid";
       recomputeFilteredPages();
       await updateAllModeMessage(component);
     },

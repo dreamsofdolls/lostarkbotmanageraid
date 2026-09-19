@@ -103,7 +103,7 @@ test("raid-check denied button acknowledges before the language lookup", async (
   assert.deepEqual(events, ["defer", "language", "edit"]);
 });
 
-test("raid-check overview renders Sync-check all within Discord limits and restores it after clearing a user filter", async () => {
+test("raid-check keeps Sync-check all and Refresh roster in every view within Discord limits, a user filter included", async () => {
   clearUserLanguageCache();
   const { createAllModeHandler } = require("../bot/handlers/raid-check/all-mode/all-mode");
   const { FILTER_ALL } = require("../bot/handlers/raid-check/all-mode/all-mode-filters");
@@ -139,24 +139,27 @@ test("raid-check overview renders Sync-check all within Discord limits and resto
     deferReply: async () => {},
     editReply: async payload => { edits.push(payload); return message; },
   });
-  const assertRows = expectedSync => {
+  const assertRows = () => {
     const rows = edits.at(-1).components.map(row => row.toJSON());
     assert.ok(rows.length <= 5);
     assert.ok(rows.every(row => row.components.length <= 5));
-    const sync = rows.flatMap(row => row.components).find(item => item.custom_id === "raid-check:sync-all");
-    assert.equal(Boolean(sync), expectedSync);
+    const ids = rows.flatMap(row => row.components).map(item => item.custom_id);
+    assert.ok(ids.includes("raid-check:sync-all"));
+    assert.ok(ids.includes("raid-check-all:roster-refresh"));
     return rows;
   };
-  assertRows(true);
+  assertRows();
+  // The user filter adds the roster dropdown and, with auto-sync on, the
+  // disable toggle: the fullest button row there is.
   for (const value of ["roster-user", FILTER_ALL]) {
     await handlers.collect({
       customId: "raid-check-all-filter:user", user: { id: "ui-manager" }, values: [value],
       update: async payload => { edits.push(payload); },
     });
-    assertRows(value === FILTER_ALL);
+    assertRows();
   }
   await handlers.end();
-  assert.ok(assertRows(true).flatMap(row => row.components).every(item => item.disabled));
+  assert.ok(assertRows().flatMap(row => row.components).every(item => item.disabled));
 });
 
 test("manager Sync-check all dispatches without requiring per-raid metadata", async () => {

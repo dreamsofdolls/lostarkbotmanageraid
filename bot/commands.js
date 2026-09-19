@@ -232,21 +232,6 @@ const commands = createRaidCommandDefinitions({
 });
 
 
-async function resolveDiscordDisplay(client, discordId) {
-  // Cache-first: discord.js populates users cache during normal gateway
-  // events so most IDs are resolvable without a REST round-trip. Only miss
-  // paths go through the limiter - keeps /raid-check fast on warm caches.
-  const cached = client.users.cache.get(discordId);
-  if (cached) return cached.username || discordId;
-  try {
-    const user = await discordUserLimiter.run(() => client.users.fetch(discordId));
-    return user?.username || discordId;
-  } catch {
-    return discordId;
-  }
-}
-
-
 // Shared scan+classify pass for /raid-check. Returns the raw eligible list
 // + per-user metadata so both the initial command AND the button handlers
 // (Remind / Sync) can operate on a fresh Mongo snapshot every time - no
@@ -273,11 +258,6 @@ let handleEditRosterButton;
 let buildRaidCheckSnapshotFromUsers;
 let formatRaidCheckNotEligibleFieldValue;
 let getRaidCheckRenderableChars;
-let buildEditableCharsByUser;
-let getEligibleRaidsForChar;
-let getCharRaidGateStatus;
-let applyLocalRaidEditToChar;
-let buildRaidCheckEditDMEmbed;
 let handleRaidCheckCommand;
 let handleRaidCheckButton;
 let handleStatusCommand;
@@ -723,7 +703,6 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   summarizeRaidProgress,
   getStatusRaidsForCharacter,
   buildPaginationRow,
-  resolveDiscordDisplay,
   loadFreshUserSnapshotForRaidViews,
   shouldLoadFreshUserSnapshotForRaidViews,
   runManualRosterRefresh,
@@ -736,13 +715,6 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   weekResetStartMs,
   isRaidLeader,
   isManagerId,
-  // Late-bind thunk wrapper: raid-set's factory composes AFTER
-  // raid-check's below, so the `applyRaidSetForDiscordId` `let` binding
-  // is still undefined at the moment this dep object is built. The
-  // arrow captures the outer binding by reference and is only invoked
-  // at interaction time when raid-set has long since composed and
-  // filled in the value.
-  applyRaidSetForDiscordId: (args) => applyRaidSetForDiscordId(args),
   RAID_REQUIREMENT_MAP,
   RAID_CHECK_USER_QUERY_FIELDS,
   ROSTER_KEY_SEP,
@@ -758,11 +730,6 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   buildRaidCheckSnapshotFromUsers,
   formatRaidCheckNotEligibleFieldValue,
   getRaidCheckRenderableChars,
-  buildEditableCharsByUser,
-  getEligibleRaidsForChar,
-  getCharRaidGateStatus,
-  applyLocalRaidEditToChar,
-  buildRaidCheckEditDMEmbed,
   handleRaidCheckCommand,
   handleRaidCheckButton,
 } = raidCheckCommandHandlers);
@@ -1205,11 +1172,6 @@ module.exports = {
     MAINTENANCE_HOUR_VN,
     MAINTENANCE_MINUTE_VN,
     dailyResetStartMs,
-    buildEditableCharsByUser,
-    getEligibleRaidsForChar,
-    getCharRaidGateStatus,
-    applyLocalRaidEditToChar,
-    buildRaidCheckEditDMEmbed,
     getRaidCommandDispatchNames,
   },
 };

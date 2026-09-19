@@ -1,18 +1,13 @@
 /**
  * handlers/raid-check/index.js
  * Compose root for /raid-check (Manager-only cross-raid overview).
- * Wires the snapshot helpers + edit cascade + sync flow + all-mode
- * + auto-manage UI + task-view UI into one handler bag dispatched
- * from commands.js. Owns the per-session pagination timer.
- *
- * Composition order matters: sync-ui must come BEFORE edit-ui
- * because edit-ui consumes resolveCachedDisplayName as a dep.
+ * Wires the snapshot helpers + sync flow + all-mode + auto-manage UI
+ * + task-view UI into one handler bag dispatched from commands.js.
+ * Owns the per-session pagination timer.
  */
 
 const { createSnapshotHelpers } = require("./snapshot");
-const { createEditHelpers } = require("./edit/edit-helpers");
 const { createAllModeHandler } = require("./all-mode/all-mode");
-const { createEditUi } = require("./edit/edit-ui");
 const { createSyncUi } = require("./views/sync-ui");
 const {
   createRaidCheckAutoManageUi,
@@ -37,11 +32,11 @@ const {
 const RAID_CHECK_PAGINATION_SESSION_MS = 5 * 60 * 1000;
 
 /**
- * Compose the manager overview and its edit/sync flows. Child factories declare
+ * Compose the manager overview and its sync flow. Child factories declare
  * their own dependencies; locally derived helpers and visibility rules override
  * the shared dependencies when needed.
  * @param {object} deps - Discord builders, User model, raid helpers and sync services.
- * @returns {object} Command/button handlers and shared snapshot/edit helpers.
+ * @returns {object} Command/button handlers and shared snapshot helpers.
  */
 function createRaidCheckCommand(deps) {
   const {
@@ -62,26 +57,12 @@ function createRaidCheckCommand(deps) {
     computeRaidCheckSnapshot,
   } = createSnapshotHelpers(deps);
 
-  const {
-    buildEditableCharsByUser,
-    getEligibleRaidsForChar,
-    getCharRaidGateStatus,
-    formatGateStateLine,
-    applyLocalRaidEditToChar,
-    formatCharEditLabel,
-    formatUserEditLabel,
-  } = createEditHelpers({ ...deps, RAID_REQUIREMENT_MAP });
-
   const { handleRaidCheckAllCommand } = createAllModeHandler({
     ...deps,
     RAID_CHECK_PAGINATION_SESSION_MS,
   });
 
-  // Build Sync before Edit so both use the same cached display-name resolver.
-  const {
-    resolveCachedDisplayName,
-    handleRaidCheckSyncClick,
-  } = createSyncUi({ ...deps, computeRaidCheckSnapshot });
+  const { handleRaidCheckSyncClick } = createSyncUi({ ...deps, computeRaidCheckSnapshot });
 
   const {
     handleRaidCheckEnableAutoOneClick,
@@ -97,8 +78,8 @@ function createRaidCheckCommand(deps) {
 
   async function handleRaidCheckCommand(interaction) {
     // /raid-check always lands in the cross-raid overview. Its inline
-    // raid filter owns per-raid focus, while Edit and Sync reuse
-    // computeRaidCheckSnapshot for their button-driven context.
+    // raid filter owns per-raid focus, while Sync reuses
+    // computeRaidCheckSnapshot for its button-driven context.
     await handleRaidCheckAllCommand(interaction);
   }
 
@@ -114,8 +95,6 @@ function createRaidCheckCommand(deps) {
     const managerButtonHandlers = {
       [RAID_CHECK_BUTTON_HANDLER.syncAll]: () =>
         handleRaidCheckSyncClick(interaction, null),
-      [RAID_CHECK_BUTTON_HANDLER.editAll]: () =>
-        handleRaidCheckEditClick(interaction, null, null, route.preSelectedUserId),
       [RAID_CHECK_BUTTON_HANDLER.enableAutoOne]: () =>
         handleRaidCheckEnableAutoOneClick(interaction, route.targetDiscordId),
       [RAID_CHECK_BUTTON_HANDLER.disableAutoOne]: () =>
@@ -126,8 +105,6 @@ function createRaidCheckCommand(deps) {
     const raidButtonHandlers = {
       [RAID_CHECK_BUTTON_HANDLER.sync]: (raidMeta) =>
         handleRaidCheckSyncClick(interaction, raidMeta),
-      [RAID_CHECK_BUTTON_HANDLER.edit]: (raidMeta) =>
-        handleRaidCheckEditClick(interaction, raidMeta, route.raidKey),
     };
 
     if (route.scope === RAID_CHECK_BUTTON_SCOPE.self) {
@@ -182,35 +159,11 @@ function createRaidCheckCommand(deps) {
     });
   }
 
-  const RAID_CHECK_EDIT_SESSION_MS = 3 * 60 * 1000;
-
-  const {
-    handleRaidCheckEditClick,
-    buildRaidCheckEditDMEmbed,
-  } = createEditUi({
-    ...deps,
-    RAID_REQUIREMENT_MAP,
-    resolveCachedDisplayName,
-    computeRaidCheckSnapshot,
-    buildEditableCharsByUser,
-    getCharRaidGateStatus,
-    formatGateStateLine,
-    formatCharEditLabel,
-    formatUserEditLabel,
-    applyLocalRaidEditToChar,
-    RAID_CHECK_EDIT_SESSION_MS,
-  });
-
   return {
     buildRaidCheckSnapshotFromUsers,
     formatRaidCheckNotEligibleFieldValue,
     getRaidCheckRenderableChars,
     computeRaidCheckSnapshot,
-    buildEditableCharsByUser,
-    getEligibleRaidsForChar,
-    getCharRaidGateStatus,
-    applyLocalRaidEditToChar,
-    buildRaidCheckEditDMEmbed,
     handleRaidCheckCommand,
     handleRaidCheckButton,
   };

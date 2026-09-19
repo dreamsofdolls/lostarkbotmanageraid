@@ -2,8 +2,6 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 
 const {
   createSyncUi,
@@ -115,7 +113,6 @@ test("raid-check sync commits through the shared retry-safe service", async () =
     },
     raidCheckSyncLimiter: { run: (operation) => operation() },
     discordUserLimiter: { run: (operation) => operation() },
-    resolveDiscordDisplay: async () => "",
     computeRaidCheckSnapshot: async () => ({
       pendingChars: [{
         discordId: "target",
@@ -147,22 +144,6 @@ test("raid-check sync commits through the shared retry-safe service", async () =
   ]);
   assert.equal(releaseCount, 1);
   assert.match(editPayload.embeds[0].description, /1/);
-});
-
-test("raid-check edit acknowledges before language lookup", () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, "..", "bot", "handlers", "raid-check", "edit", "edit-ui.js"),
-    "utf8"
-  );
-  const start = source.indexOf("async function handleRaidCheckEditClick");
-  const end = source.indexOf("const scopeAll", start);
-  const opening = source.slice(start, end);
-  const ackIndex = opening.indexOf("deferEphemeralReply(interaction)");
-  const languageIndex = opening.indexOf("getUserLanguage");
-
-  assert.notEqual(ackIndex, -1);
-  assert.notEqual(languageIndex, -1);
-  assert.ok(ackIndex < languageIndex);
 });
 
 test("sync all scans every opted-in roster once and keeps local-sync users out", async () => {

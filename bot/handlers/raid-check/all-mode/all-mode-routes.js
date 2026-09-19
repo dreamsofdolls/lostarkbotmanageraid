@@ -7,7 +7,6 @@ const RAID_CHECK_ALL_COMPONENT_ACTION = Object.freeze({
   rosterFilter: "rosterFilter",
   raidFilter: "raidFilter",
   statusFilter: "statusFilter",
-  viewToggle: "viewToggle",
   page: "page",
   rosterRefresh: "rosterRefresh",
   teamsSelect: "teamsSelect",
@@ -22,12 +21,6 @@ const EXACT_COMPONENT_ACTION_BY_ID = new Map([
 ]);
 
 const PREFIX_COMPONENT_ROUTES = Object.freeze([
-  {
-    prefix: "raid-check-all:view-toggle:",
-    action: RAID_CHECK_ALL_COMPONENT_ACTION.viewToggle,
-    payloadKey: "targetView",
-    segmentIndex: 2,
-  },
   {
     prefix: "raid-check-all-page:",
     action: RAID_CHECK_ALL_COMPONENT_ACTION.page,

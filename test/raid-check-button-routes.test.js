@@ -40,12 +40,11 @@ test("raid-check button routes classify manager actions that do not need raid me
   assert.equal(syncAll.handler, RAID_CHECK_BUTTON_HANDLER.syncAll);
   assert.equal(syncAll.managerRequired, true);
   assert.equal(syncAll.raidRequired, false);
-  assert.deepEqual(getRaidCheckButtonRoute("raid-check:edit-all:456"), {
+  assert.deepEqual(getRaidCheckButtonRoute("raid-check:enable-auto-one:456"), {
     scope: RAID_CHECK_BUTTON_SCOPE.manager,
-    handler: RAID_CHECK_BUTTON_HANDLER.editAll,
-    action: "edit-all",
+    handler: RAID_CHECK_BUTTON_HANDLER.enableAutoOne,
+    action: "enable-auto-one",
     targetDiscordId: "456",
-    preSelectedUserId: "456",
     managerRequired: true,
     raidRequired: false,
   });
@@ -56,10 +55,10 @@ test("raid-check button routes classify manager actions that do not need raid me
 });
 
 test("raid-check button routes classify raid-scoped actions and preserve unsupported actions", () => {
-  assert.deepEqual(getRaidCheckButtonRoute("raid-check:edit:armoche_normal"), {
+  assert.deepEqual(getRaidCheckButtonRoute("raid-check:sync:armoche_normal"), {
     scope: RAID_CHECK_BUTTON_SCOPE.raid,
-    handler: RAID_CHECK_BUTTON_HANDLER.edit,
-    action: "edit",
+    handler: RAID_CHECK_BUTTON_HANDLER.sync,
+    action: "sync",
     raidKey: "armoche_normal",
     managerRequired: true,
     raidRequired: true,

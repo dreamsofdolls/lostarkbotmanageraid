@@ -58,7 +58,6 @@ const ButtonStyle = {
 const t = (key) => key;
 
 function addButtons({
-  currentView = "raid",
   currentViewUserId = "user-a",
   actionUserId = "user-a",
   autoManageEnabled = false,
@@ -72,7 +71,6 @@ function addButtons({
     t,
     lang: "en",
     disabled: false,
-    currentView,
     currentViewUserId,
     actionUserId,
     autoManageStateByDiscordId: new Map([["user-a", autoManageEnabled]]),
@@ -81,40 +79,24 @@ function addButtons({
   return row.components.map((component) => component.data.customId);
 }
 
-test("raid-check all-mode buttons add edit, enable-auto, and task view in raid view", () => {
+test("raid-check all-mode buttons add enable-auto for the user on the page", () => {
   assert.deepEqual(addButtons({ autoManageEnabled: false }), [
-    "raid-check:edit-all:user-a",
     "raid-check:enable-auto-one:user-a",
-    "raid-check-all:view-toggle:task",
   ]);
 });
 
 test("raid-check all-mode buttons add disable-auto when auto sync is on", () => {
   assert.deepEqual(addButtons({ autoManageEnabled: true }), [
-    "raid-check:edit-all:user-a",
     "raid-check:disable-auto-one:user-a",
-    "raid-check-all:view-toggle:task",
   ]);
 });
 
 test("raid-check all-mode buttons hide manager auto toggle for local-sync users", () => {
-  assert.deepEqual(
-    addButtons({ autoManageEnabled: false, localSyncEnabled: true }),
-    ["raid-check:edit-all:user-a", "raid-check-all:view-toggle:task"]
-  );
-});
-
-test("raid-check all-mode buttons only add back-to-raid toggle in task view", () => {
-  assert.deepEqual(addButtons({ currentView: "task" }), [
-    "raid-check-all:view-toggle:raid",
-  ]);
+  assert.deepEqual(addButtons({ autoManageEnabled: false, localSyncEnabled: true }), []);
 });
 
 test("raid-check all-mode buttons omit page actions when filters have no roster page", () => {
-  assert.deepEqual(
-    addButtons({ currentViewUserId: "", autoManageEnabled: false }),
-    ["raid-check-all:view-toggle:task"]
-  );
+  assert.deepEqual(addButtons({ currentViewUserId: "", autoManageEnabled: false }), []);
 });
 
 test("raid-check all-mode roster refresh button uses all-mode collector id", () => {

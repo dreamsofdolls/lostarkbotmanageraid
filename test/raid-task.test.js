@@ -780,8 +780,8 @@ test("addTaskViewContent shares Discord field budgeting without changing surface
 
 test("PROJECTION: raid-check all-mode uses the shared raid-check projection", () => {
   // Manager all-mode and the per-raid snapshot must stay on the same
-  // allowlist. This pins sideTasks plus alias fields such as
-  // charName/className/raids that previously drifted out of all-mode.
+  // allowlist. This pins alias fields such as charName/className/raids
+  // that previously drifted out of all-mode.
   const fs = require("fs");
   const path = require("path");
   const allModeSrc = fs.readFileSync(
@@ -792,14 +792,6 @@ test("PROJECTION: raid-check all-mode uses the shared raid-check projection", ()
   assert.ok(
     allModeSrc.includes("RAID_CHECK_USER_QUERY_FIELDS"),
     "all-mode must use the shared /raid-check projection constant"
-  );
-  assert.ok(
-    RAID_CHECK_USER_QUERY_FIELDS.includes("accounts.characters.sideTasks"),
-    "sideTasks must be in shared projection (Manager Task view)"
-  );
-  assert.ok(
-    RAID_CHECK_USER_QUERY_FIELDS.includes("accounts.sharedTasks"),
-    "sharedTasks must be in shared projection (Manager Task view)"
   );
   assert.ok(
     RAID_CHECK_USER_QUERY_FIELDS.includes("accounts.characters.charName"),
@@ -822,10 +814,6 @@ test("PROJECTION: raid-check all-mode uses the shared raid-check projection", ()
 test("REGRESSION: raid-check all-mode actions target current page user", () => {
   const fs = require("fs");
   const path = require("path");
-  const allModeSrc = fs.readFileSync(
-    path.join(__dirname, "..", "bot", "handlers", "raid-check", "all-mode", "all-mode.js"),
-    "utf8"
-  );
   // Row building lives in all-mode-view.js; keep the layout guard on it.
   const allModeViewSrc = fs.readFileSync(
     path.join(__dirname, "..", "bot", "handlers", "raid-check", "all-mode", "all-mode-view.js"),
@@ -852,25 +840,6 @@ test("REGRESSION: raid-check all-mode actions target current page user", () => {
     allModeButtonsSrc.includes("raid-check:enable-auto-one:${actionUserId}") &&
       allModeButtonsSrc.includes("raid-check:disable-auto-one:${actionUserId}"),
     "auto-sync buttons must target the currently visible user"
-  );
-  assert.ok(
-    !allModeSrc.includes('if (!filterUserId) currentView = "raid";'),
-    "clearing the dropdown filter must not force Task view away from current-page users"
-  );
-});
-
-test("PROJECTION: RAID_CHECK_USER_QUERY_FIELDS allowlist includes sideTasks", () => {
-  const {
-    RAID_CHECK_USER_QUERY_FIELDS,
-  } = require("../bot/utils/raid/queries/raid-check");
-  assert.ok(typeof RAID_CHECK_USER_QUERY_FIELDS === "string");
-  assert.ok(
-    RAID_CHECK_USER_QUERY_FIELDS.includes("accounts.characters.sideTasks"),
-    "sideTasks must be in /raid-check select projection (Manager Task view)"
-  );
-  assert.ok(
-    RAID_CHECK_USER_QUERY_FIELDS.includes("accounts.sharedTasks"),
-    "sharedTasks must be in /raid-check select projection (Manager Task view)"
   );
 });
 

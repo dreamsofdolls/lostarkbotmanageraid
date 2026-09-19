@@ -5,7 +5,6 @@ const assert = require("node:assert/strict");
 
 const {
   createAllModePageRenderers,
-  displayNameForUser,
 } = require("../bot/handlers/raid-check/all-mode/all-mode-render");
 
 class FakeEmbedBuilder {
@@ -44,50 +43,6 @@ class FakeEmbedBuilder {
   }
 }
 
-test("all-mode render display name prefers resolved Discord meta", () => {
-  assert.equal(
-    displayNameForUser({ discordId: "u1", discordUsername: "Saved" }, { displayName: "Fetched" }),
-    "Fetched"
-  );
-  assert.equal(displayNameForUser({ discordId: "u1", discordUsername: "Saved" }, null), "Saved");
-  assert.equal(displayNameForUser({ discordId: "u1" }, null), "<@u1>");
-});
-
-test("all-mode task page renders current account identity and read-only footer", () => {
-  const pagesData = [
-    {
-      userDoc: { discordId: "u1", discordUsername: "Saved" },
-      account: { accountName: "Roster", characters: [] },
-    },
-  ];
-  const { buildTaskPage } = createAllModePageRenderers({
-    EmbedBuilder: FakeEmbedBuilder,
-    UI: { icons: { done: "done", pending: "pending", reset: "reset" } },
-    authorMeta: new Map([["u1", { displayName: "Fetched", avatarURL: "avatar.png" }]]),
-    buildAccountPageEmbed: () => new FakeEmbedBuilder(),
-    buildStatusFooterText: () => "footer",
-    getState: () => ({
-      currentLocalPage: 0,
-      filterRaidId: null,
-      filterUserId: null,
-      filteredIndices: [0],
-      totalPages: 1,
-    }),
-    getStatusRaidsForCharacter: () => [],
-    lang: "en",
-    pagesData,
-    summarizeRaidProgress: () => ({ completed: 0, total: 0 }),
-    truncateText: (value) => String(value),
-  });
-
-  const embed = buildTaskPage(0);
-
-  assert.match(embed.data.title, /Fetched/);
-  assert.match(embed.data.title, /Roster/);
-  assert.deepEqual(embed.data.author, { name: "Fetched", iconURL: "avatar.png" });
-  assert.ok(embed.data.footer.text.length > 0);
-});
-
 test("all-mode raid page hides Solo, gold-locked raids, and hidden-only characters", () => {
   const character = {
     name: "Goldie",
@@ -121,8 +76,6 @@ test("all-mode raid page hides Solo, gold-locked raids, and hidden-only characte
   let filterRaidId = null;
 
   const { buildRaidPage } = createAllModePageRenderers({
-    EmbedBuilder: FakeEmbedBuilder,
-    UI: { icons: { done: "done", pending: "pending", reset: "reset" } },
     authorMeta: new Map(),
     buildAccountPageEmbed: (account, pageIndex, totalPages, globalTotals, getRaidsFor, userMeta, options) => {
       capturedDisplayRaids = getRaidsFor(character);
@@ -188,8 +141,6 @@ test("all-mode raid page applies Success status per raid entry", () => {
   let captured = null;
 
   const { buildRaidPage } = createAllModePageRenderers({
-    EmbedBuilder: FakeEmbedBuilder,
-    UI: { icons: { done: "done", pending: "pending", reset: "reset" } },
     authorMeta: new Map(),
     buildAccountPageEmbed: (currentAccount, pageIndex, totalPages, globalTotals, getRaidsFor, userMeta, options) => {
       captured = {
@@ -247,8 +198,6 @@ test("all-mode raid page reuses a user's rollup while paginating their rosters",
   let currentLocalPage = 0;
 
   const { buildRaidPage } = createAllModePageRenderers({
-    EmbedBuilder: FakeEmbedBuilder,
-    UI: { icons: { done: "done", pending: "pending", reset: "reset" } },
     authorMeta: new Map(),
     buildAccountPageEmbed: (account) => new FakeEmbedBuilder().setTitle(account.accountName),
     buildStatusFooterText: () => "footer",

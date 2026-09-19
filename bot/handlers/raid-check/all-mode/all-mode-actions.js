@@ -19,12 +19,7 @@ function resolveAllModeAutoSyncAction({
   return null;
 }
 
-function resolveAllModeViewToggleTarget(currentView) {
-  return currentView === "raid" ? "task" : "raid";
-}
-
 module.exports = {
   ALL_MODE_AUTO_SYNC_ACTION,
   resolveAllModeAutoSyncAction,
-  resolveAllModeViewToggleTarget,
 };

@@ -1,14 +1,5 @@
 "use strict";
 
-const { getClassEmoji } = require("../../../models/Class");
-const {
-  addTaskViewContent,
-  buildAccountTaskFields,
-} = require("../../../utils/raid/tasks/task-view");
-const {
-  getVisibleSharedTasks,
-  getSharedTaskDisplay,
-} = require("../../../utils/raid/tasks/shared-tasks");
 const {
   isCountedRaidProgress,
   isGoldReceivingRaid,
@@ -21,19 +12,7 @@ const {
   raidMatchesStatusFilter,
 } = require("./all-mode-filters");
 
-function displayNameForUser(userDoc, meta) {
-  return (
-    meta?.displayName ||
-    userDoc.discordDisplayName ||
-    userDoc.discordGlobalName ||
-    userDoc.discordUsername ||
-    `<@${userDoc.discordId}>`
-  );
-}
-
 function createAllModePageRenderers({
-  EmbedBuilder,
-  UI,
   authorMeta,
   buildAccountPageEmbed,
   buildStatusFooterText,
@@ -187,96 +166,11 @@ function createAllModePageRenderers({
     return embed;
   }
 
-  function buildTaskPage(pageIndex) {
-    const { userDoc, account } = pagesData[pageIndex];
-    const { currentLocalPage, filteredIndices } = getState();
-    const accountName = String(
-      account?.accountName || t("raid-check.allMode.unnamedRoster", lang)
-    );
-    const meta = authorMeta.get(userDoc.discordId);
-    const displayName = displayNameForUser(userDoc, meta);
-
-    const embed = new EmbedBuilder()
-      .setColor(0x5865f2)
-      .setTitle(`\u{1f4dd} ${displayName} \u00b7 ${accountName}`);
-
-    const { fields, totals } = buildAccountTaskFields(account, {
-      UI,
-      getClassEmoji,
-      truncateText,
-      lang,
-    });
-    const now = new Date();
-    const sharedTasks = getVisibleSharedTasks(account, now.getTime());
-
-    if (fields.length > 0 || sharedTasks.length > 0) {
-      embed.setDescription(
-        [
-          t("raid-check.allMode.taskHeaderDescription", lang),
-          t("raid-check.allMode.taskHeaderResetLine", lang, { resetIcon: UI.icons.reset }),
-        ].join("\n")
-      );
-    } else {
-      embed.setDescription(
-        t("raid-check.allMode.noTasksDescription", lang, { accountName })
-      );
-    }
-
-    const footerParts = addTaskViewContent({
-      embed,
-      fields,
-      totals,
-      sharedTasks,
-      now,
-      lang,
-      UI,
-      getSharedTaskDisplay,
-      truncateText,
-      showSharedField: fields.length > 0,
-      text: {
-        sharedOverflow: (n) => t("raid-check.allMode.sharedTaskExtra", lang, { n }),
-        sharedHeader: () => t("raid-check.allMode.sharedTaskHeader", lang),
-        characterOverflow: (n) => t("raid-check.allMode.charsExtraField", lang, { n }),
-        sharedFooter: ({ done, total }) => t("raid-check.allMode.sharedFooter", lang, {
-          doneIcon: UI.icons.done,
-          done,
-          total,
-        }),
-        dailyFooter: ({ done, total }) => t("raid-check.allMode.dailyFooter", lang, {
-          done,
-          total,
-        }),
-        weeklyFooter: ({ done, total }) => t("raid-check.allMode.weeklyFooter", lang, {
-          done,
-          total,
-        }),
-      },
-    });
-    const localTotal = filteredIndices.length;
-    if (localTotal > 1) {
-      footerParts.push(t("raid-check.allMode.pageFooter", lang, {
-        current: currentLocalPage + 1,
-        total: localTotal,
-      }));
-    }
-    footerParts.push(t("raid-check.allMode.readOnlySuffix", lang));
-    embed.setFooter({ text: footerParts.join(" \u00b7 ") });
-
-    if (meta) {
-      const authorPayload = { name: truncateText(displayName, 256) };
-      if (meta.avatarURL) authorPayload.iconURL = meta.avatarURL;
-      embed.setAuthor(authorPayload);
-    }
-    return embed;
-  }
-
   return {
     buildRaidPage,
-    buildTaskPage,
   };
 }
 
 module.exports = {
   createAllModePageRenderers,
-  displayNameForUser,
 };

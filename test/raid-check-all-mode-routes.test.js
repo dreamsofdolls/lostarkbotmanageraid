@@ -31,13 +31,7 @@ test("raid-check all-mode routes exact filter custom ids", () => {
   });
 });
 
-test("raid-check all-mode routes view toggle and pagination payloads", () => {
-  assert.deepEqual(getRaidCheckAllComponentRoute("raid-check-all:view-toggle:task"), {
-    customId: "raid-check-all:view-toggle:task",
-    action: RAID_CHECK_ALL_COMPONENT_ACTION.viewToggle,
-    targetView: "task",
-    updatesMainMessage: true,
-  });
+test("raid-check all-mode routes pagination and roster refresh", () => {
   assert.deepEqual(getRaidCheckAllComponentRoute("raid-check-all-page:next"), {
     customId: "raid-check-all-page:next",
     action: RAID_CHECK_ALL_COMPONENT_ACTION.page,

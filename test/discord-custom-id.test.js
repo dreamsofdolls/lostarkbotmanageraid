@@ -8,10 +8,10 @@ const {
 } = require("../bot/utils/discord/custom-id");
 
 test("discord custom id helper splits colon-separated custom IDs", () => {
-  assert.deepEqual(splitCustomId("raid-check-all:view-toggle:task"), [
-    "raid-check-all",
-    "view-toggle",
-    "task",
+  assert.deepEqual(splitCustomId("raid-check:enable-auto-one:123"), [
+    "raid-check",
+    "enable-auto-one",
+    "123",
   ]);
 });
 

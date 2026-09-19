@@ -155,14 +155,13 @@ function createAllModeHandler({
       localSyncStateByDiscordId.set(id, !!page.userDoc.localSyncEnabled);
     }
 
-    // Shared mutable session state: filters, view, paging and background
-    // flags are read fresh by the view builders and collector handlers.
+    // Shared mutable session state: filters, paging and background flags
+    // are read fresh by the view builders and collector handlers.
     const state = {
       filterUserId: null,
       filterRosterIndex: null,
       filterRaidId: null,
       filterStatus: FILTER_STATUS.all,
-      currentView: "raid",
       filteredIndices: pagesData.map((_, index) => index),
       currentLocalPage: 0,
       backgroundRefreshing: refreshQueued > 0,
@@ -184,9 +183,7 @@ function createAllModeHandler({
       lang,
     });
     const { applyRefreshedUserDoc } = createAllModeRefreshIndex(users, pagesData);
-    const { buildRaidPage, buildTaskPage } = createAllModePageRenderers({
-      EmbedBuilder,
-      UI,
+    const { buildRaidPage } = createAllModePageRenderers({
       authorMeta,
       buildAccountPageEmbed,
       buildStatusFooterText,
@@ -205,7 +202,7 @@ function createAllModeHandler({
           description: t("raid-check.notice.noFilterMatchesDescription", lang),
         });
       }
-      return state.currentView === "task" ? buildTaskPage(pageIndex) : buildRaidPage(pageIndex);
+      return buildRaidPage(pageIndex);
     };
 
     const recomputeFilteredPages = ({ resetPage = true } = {}) => {
@@ -217,7 +214,6 @@ function createAllModeHandler({
         filterRaidId: state.filterRaidId,
         filterStatus: state.filterStatus,
         getStatusRaidsForCharacter: pendingAggregateCache.getRaidsForCharacter,
-        applyRaidEligibility: state.currentView === "raid",
       });
       state.filteredIndices = result.filteredIndices;
       state.filterRosterIndex = result.filterRosterIndex;

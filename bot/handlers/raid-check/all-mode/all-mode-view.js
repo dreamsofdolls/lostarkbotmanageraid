@@ -7,7 +7,6 @@
  */
 
 const {
-  FILTER_STATUS,
   buildAllModeRaidFilterRow,
   buildAllModeRosterFilterRow,
   buildAllModeStatusFilterRow,
@@ -50,9 +49,12 @@ function createAllModeViewBuilders({
   state,
   currentAbsoluteIndex,
 }) {
-  const buildControlRows = (disabled) => {
+  // One button row in every view: page navigation, the auto-sync toggle for
+  // the user on the page, roster refresh and Sync-check all. That is five
+  // buttons at most, and a single row keeps the user-filtered view's four
+  // selector rows inside Discord's five-row limit.
+  const buildControlRow = (disabled) => {
     const {
-      currentView,
       filterUserId,
       backgroundRefreshing,
       currentLocalPage,
@@ -60,7 +62,7 @@ function createAllModeViewBuilders({
     } = state;
     const currentAbs = currentAbsoluteIndex();
     const hasCurrentPage = Number.isInteger(currentAbs);
-    const navigationRow = hasCurrentPage
+    const row = hasCurrentPage
       ? buildPaginationRow(currentLocalPage, filteredIndices.length, disabled, {
           prevId: "raid-check-all-page:prev",
           nextId: "raid-check-all-page:next",
@@ -71,41 +73,21 @@ function createAllModeViewBuilders({
       ? pagesData[currentAbs]?.userDoc?.discordId || ""
       : "";
     const actionUserId = filterUserId || currentViewUserId;
-    // The overview has room for a dedicated action row: keep page navigation
-    // and roster refresh together, then place Edit/Tasks beneath them. A
-    // user-filtered raid view already uses four selector rows, so it retains
-    // the compact single row to stay within Discord's five-row limit.
-    const separateActionRow = currentView !== "raid" || filterUserId === null;
-    const actionRow = separateActionRow
-      ? new ActionRowBuilder()
-      : navigationRow;
 
     addAllModeActionButtons({
-      row: actionRow,
+      row,
       ButtonBuilder,
       ButtonStyle,
       t,
       lang,
       disabled,
-      currentView,
       currentViewUserId,
       actionUserId,
       autoManageStateByDiscordId,
       localSyncStateByDiscordId,
     });
-    // The unfiltered overview has a separate row; the user-filtered view
-    // already fills Discord's five-row / five-button limits.
-    if (separateActionRow && currentView === "raid") {
-      actionRow.addComponents(buildSyncAllButton({
-        ButtonBuilder, ButtonStyle, t, lang, disabled,
-      }));
-    }
-    if (
-      currentView === "raid" &&
-      hasCurrentPage &&
-      navigationRow.components.length < 5
-    ) {
-      navigationRow.addComponents(
+    if (hasCurrentPage) {
+      row.addComponents(
         buildRosterRefreshButton({
           ButtonBuilder,
           ButtonStyle,
@@ -115,15 +97,10 @@ function createAllModeViewBuilders({
         })
       );
     }
-    const rows = [];
-    if (navigationRow.components.length > 0) rows.push(navigationRow);
-    if (
-      separateActionRow &&
-      actionRow.components.length > 0
-    ) {
-      rows.push(actionRow);
-    }
-    return rows;
+    row.addComponents(buildSyncAllButton({
+      ButtonBuilder, ButtonStyle, t, lang, disabled,
+    }));
+    return row;
   };
 
   const buildFilterRow = (disabled) => {
@@ -147,7 +124,6 @@ function createAllModeViewBuilders({
 
   const buildRosterFilterRow = (disabled) => {
     const {
-      currentView,
       filterRaidId,
       filterStatus,
       filterUserId,
@@ -157,17 +133,16 @@ function createAllModeViewBuilders({
       ActionRowBuilder,
       StringSelectMenuBuilder,
       disabled,
-      filterRaidId: currentView === "raid" ? filterRaidId : null,
+      filterRaidId,
       filterRosterIndex,
       currentPageIndex: currentAbsoluteIndex(),
-      filterStatus: currentView === "raid" ? filterStatus : FILTER_STATUS.all,
+      filterStatus,
       filterUserId,
       getStatusRaidsForCharacter: getRaidsForCharacter,
       lang,
       pagesData,
       t,
       truncateText,
-      applyRaidEligibility: currentView === "raid",
     });
   };
 
@@ -199,16 +174,13 @@ function createAllModeViewBuilders({
   };
 
   const buildComponents = (disabled) => {
-    const { currentView, filterUserId, teamsSnapshot } = state;
-    const rows = buildControlRows(disabled);
-    rows.push(buildFilterRow(disabled));
+    const { filterUserId, teamsSnapshot } = state;
+    const rows = [buildControlRow(disabled), buildFilterRow(disabled)];
     if (filterUserId !== null) {
       rows.push(buildRosterFilterRow(disabled));
     }
-    if (currentView === "raid") {
-      rows.push(buildRaidFilterRow(disabled));
-      rows.push(buildStatusFilterRow(disabled));
-    }
+    rows.push(buildRaidFilterRow(disabled));
+    rows.push(buildStatusFilterRow(disabled));
     rows.push(
       ...teamsView.buildTeamsRows({
         shapedEvents: teamsSnapshot,

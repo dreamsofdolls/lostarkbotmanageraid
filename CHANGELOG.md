@@ -11,6 +11,12 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - Local Sync card roster headers carry the changed count in the name (`📁 Clauseduk (6)`) in place of a "6 characters with changes" line, and the "Other characters" field is gone. The card now fills Discord's 25 fields instead of stopping at eight characters, so a 14-character sync over three rosters shows every character.
 - Party members a sync reached move to a second embed under the card, in the card's own layout: one group per owner headed by their server nickname and count, then two-column rows with class icon, item level and raid status. Names replace the mentions; an owner with no cached Discord name keeps a mention under an "Unknown member" header. Party entries now store class, item level and owner name when written, so the embed needs no extra roster reads.
 
+### Removed
+- `/raid-check` drops **Edit progress** and **Xem tasks**. The Edit progress flow (raid, user, character and status selectors plus the member DM) and the read-only Manager task view are deleted with their strings and help notes. It was the only way for a Manager to write progress for another member's Public Log OFF characters; that progress now comes from the owner through `/raid-set`, the text monitor or Local Sync.
+
+### Fixed
+- **Sync-check all** stays in every `/raid-check` view, including one filtered to a single user, where the full button row used to push it out. Navigation, the auto-sync toggle, Refresh roster and Sync-check all now share one row, so Refresh roster is no longer dropped when the auto-sync toggle shows, and the unfiltered overview has room for the 📋 teams dropdown again.
+
 ## 2026-09-19
 
 ### Changed

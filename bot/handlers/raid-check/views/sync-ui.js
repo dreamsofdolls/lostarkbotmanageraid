@@ -1,24 +1,14 @@
 /**
  * sync-ui.js
  *
- * The /raid-check Sync button flow + the cache-first display-name
- * resolver used by every view inside /raid-check.
+ * The /raid-check Sync button flow.
  *
- * Three exports:
- *   - resolveCachedDisplayName: shared by main render path, Edit flow,
- *     and the Sync DM path. Prefers cached User-doc identity strings
- *     over discord.js's local user cache because the doc reflects the
- *     guild-displayed nickname/global name, not the raw username
- *     handle.
+ * Two exports:
  *   - buildRaidCheckSyncDMEmbed: pure embed builder for the DM the
  *     target member receives after Sync surfaces new gates from bible.
  *   - handleRaidCheckSyncClick: the Sync button handler. Walks every
  *     opted-in pending user, runs the auto-manage gather + apply via
  *     limiter, then DMs each user whose progress changed.
- *
- * Order matters at the compose root: sync-ui must be wired BEFORE
- * edit-ui because edit-ui consumes resolveCachedDisplayName as a dep
- * (Edit cascade also resolves display names per editable user).
  */
 
 const { buildNoticeEmbed, getCharacterName } = require("../../../utils/raid/common/shared");
@@ -30,13 +20,8 @@ const {
 } = require("../../../services/auto-manage/reports/utils");
 
 /**
- * Build the /raid-check Sync UI service. Returns three handlers (display
- * name resolver, DM embed builder, Sync click handler) that the rest of
- * /raid-check composes on top of.
- *
- * Wired BEFORE edit-ui at the compose root because edit-ui consumes
- * `resolveCachedDisplayName` as a dep (Edit cascade also resolves
- * display names per editable user).
+ * Build the /raid-check Sync UI service: the DM embed builder and the Sync
+ * click handler.
  *
  * @param {object} deps - injected dependencies
  * @param {Function} deps.EmbedBuilder - discord.js builder
@@ -53,10 +38,8 @@ const {
  * @param {Function} deps.releaseAutoManageSyncSlot - mutex release
  * @param {object} deps.raidCheckSyncLimiter - per-user concurrency cap
  * @param {object} deps.discordUserLimiter - Discord REST fan-out limiter
- * @param {Function} deps.resolveDiscordDisplay - REST display-name resolver
  * @param {Function} deps.computeRaidCheckSnapshot - snapshot builder
  * @returns {{
- *   resolveCachedDisplayName: Function,
  *   buildRaidCheckSyncDMEmbed: Function,
  *   handleRaidCheckSyncClick: Function,
  * }}
@@ -76,32 +59,8 @@ function createSyncUi({
   releaseAutoManageSyncSlot,
   raidCheckSyncLimiter,
   discordUserLimiter,
-  resolveDiscordDisplay,
   computeRaidCheckSnapshot,
 }) {
-
-  // Shared display-name resolver for every view inside /raid-check (main
-  // render + Edit cascade + Sync DM). Prefers the cached identity strings
-  // on the User doc (stamped every slash-command invocation) because those
-  // reflect the guild-displayed nickname / global name rather than the raw
-  // username handle discord.js's local cache typically holds. Falls back
-  // to `resolveDiscordDisplay` (already gated by discordUserLimiter
-  // internally) for users whose doc fields are empty, and finally to the
-  // snowflake.
-  async function resolveCachedDisplayName(client, discordId, meta) {
-    const cached =
-      meta?.discordDisplayName ||
-      meta?.discordGlobalName ||
-      meta?.discordUsername ||
-      "";
-    if (cached) return cached;
-    try {
-      const live = await resolveDiscordDisplay(client, discordId);
-      return live || discordId;
-    } catch {
-      return discordId;
-    }
-  }
 
   function buildRaidCheckSyncDMEmbed(raidMeta, delta, lang = "vi") {
     const lines = delta.map((entry) => {
@@ -336,7 +295,6 @@ function createSyncUi({
   }
 
   return {
-    resolveCachedDisplayName,
     buildRaidCheckSyncDMEmbed,
     handleRaidCheckSyncClick,
   };

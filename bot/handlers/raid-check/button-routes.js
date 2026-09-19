@@ -11,13 +11,11 @@ const RAID_CHECK_BUTTON_SCOPE = Object.freeze({
 const RAID_CHECK_BUTTON_HANDLER = Object.freeze({
   disableAutoSelf: "disableAutoSelf",
   enableAutoSelf: "enableAutoSelf",
-  editAll: "editAll",
   enableAutoOne: "enableAutoOne",
   disableAutoOne: "disableAutoOne",
   viewTasks: "viewTasks",
   sync: "sync",
   syncAll: "syncAll",
-  edit: "edit",
   unsupported: "unsupported",
 });
 
@@ -28,7 +26,6 @@ const SELF_ACTION_HANDLERS = Object.freeze({
 
 const MANAGER_ACTION_HANDLERS = Object.freeze({
   "sync-all": RAID_CHECK_BUTTON_HANDLER.syncAll,
-  "edit-all": RAID_CHECK_BUTTON_HANDLER.editAll,
   "enable-auto-one": RAID_CHECK_BUTTON_HANDLER.enableAutoOne,
   "disable-auto-one": RAID_CHECK_BUTTON_HANDLER.disableAutoOne,
   "view-tasks": RAID_CHECK_BUTTON_HANDLER.viewTasks,
@@ -36,7 +33,6 @@ const MANAGER_ACTION_HANDLERS = Object.freeze({
 
 const RAID_ACTION_HANDLERS = Object.freeze({
   sync: RAID_CHECK_BUTTON_HANDLER.sync,
-  edit: RAID_CHECK_BUTTON_HANDLER.edit,
 });
 
 function parseRaidCheckButtonCustomId(customId) {
@@ -65,7 +61,6 @@ function getRaidCheckButtonRoute(customId) {
       handler: managerHandler,
       action,
       targetDiscordId: parsed.value || null,
-      preSelectedUserId: action === "edit-all" ? parsed.value || null : null,
       managerRequired: true,
       raidRequired: false,
     };

@@ -6,7 +6,6 @@ const assert = require("node:assert/strict");
 const {
   ALL_MODE_AUTO_SYNC_ACTION,
   resolveAllModeAutoSyncAction,
-  resolveAllModeViewToggleTarget,
 } = require("../bot/handlers/raid-check/all-mode/all-mode-actions");
 
 function resolveFor({
@@ -49,10 +48,4 @@ test("raid-check all-mode auto action chooses enable or disable from current sta
 
 test("raid-check all-mode auto action hides buttons for unknown auto state", () => {
   assert.equal(resolveFor({ autoManageEnabled: undefined }), null);
-});
-
-test("raid-check all-mode view toggle target flips raid and task views", () => {
-  assert.equal(resolveAllModeViewToggleTarget("raid"), "task");
-  assert.equal(resolveAllModeViewToggleTarget("task"), "raid");
-  assert.equal(resolveAllModeViewToggleTarget("other"), "raid");
 });

@@ -3,7 +3,6 @@
 const {
   ALL_MODE_AUTO_SYNC_ACTION,
   resolveAllModeAutoSyncAction,
-  resolveAllModeViewToggleTarget,
 } = require("./all-mode-actions");
 
 function createButton({
@@ -20,24 +19,6 @@ function createButton({
     .setEmoji(emoji)
     .setStyle(style)
     .setDisabled(disabled);
-}
-
-function buildEditButton({
-  ButtonBuilder,
-  ButtonStyle,
-  t,
-  lang,
-  disabled,
-  currentViewUserId,
-}) {
-  return createButton({
-    ButtonBuilder,
-    customId: `raid-check:edit-all:${currentViewUserId}`,
-    label: t("raid-check.buttons.editProgress", lang),
-    emoji: "\u270f\ufe0f",
-    style: ButtonStyle.Secondary,
-    disabled,
-  });
 }
 
 function buildAutoSyncButton({
@@ -66,31 +47,6 @@ function buildAutoSyncButton({
   const config = configs[action];
   if (!config) return null;
   return createButton({ ButtonBuilder, disabled, ...config });
-}
-
-function buildViewToggleButton({
-  ButtonBuilder,
-  ButtonStyle,
-  t,
-  lang,
-  disabled,
-  targetView,
-}) {
-  const configs = {
-    task: {
-      customId: "raid-check-all:view-toggle:task",
-      label: t("raid-check.buttons.viewTasks", lang),
-      emoji: "\u{1f4dd}",
-      style: ButtonStyle.Secondary,
-    },
-    raid: {
-      customId: "raid-check-all:view-toggle:raid",
-      label: t("raid-check.buttons.backToRaidScan", lang),
-      emoji: "\u{1f4cb}",
-      style: ButtonStyle.Primary,
-    },
-  };
-  return createButton({ ButtonBuilder, disabled, ...configs[targetView] });
 }
 
 function buildRosterRefreshButton({
@@ -129,53 +85,26 @@ function addAllModeActionButtons({
   t,
   lang,
   disabled,
-  currentView,
   currentViewUserId,
   actionUserId,
   autoManageStateByDiscordId,
   localSyncStateByDiscordId,
 }) {
-  if (currentView === "raid" && currentViewUserId) {
-    row.addComponents(
-      buildEditButton({
-        ButtonBuilder,
-        ButtonStyle,
-        t,
-        lang,
-        disabled,
-        currentViewUserId,
-      })
-    );
-
-    const autoSyncAction = resolveAllModeAutoSyncAction({
+  if (!currentViewUserId) return row;
+  const autoSyncButton = buildAutoSyncButton({
+    ButtonBuilder,
+    ButtonStyle,
+    t,
+    lang,
+    disabled,
+    actionUserId,
+    action: resolveAllModeAutoSyncAction({
       actionUserId,
       autoManageStateByDiscordId,
       localSyncStateByDiscordId,
-    });
-    const autoSyncButton = buildAutoSyncButton({
-      ButtonBuilder,
-      ButtonStyle,
-      t,
-      lang,
-      disabled,
-      actionUserId,
-      action: autoSyncAction,
-    });
-    if (autoSyncButton) row.addComponents(autoSyncButton);
-  }
-
-  if (actionUserId) {
-    row.addComponents(
-      buildViewToggleButton({
-        ButtonBuilder,
-        ButtonStyle,
-        t,
-        lang,
-        disabled,
-        targetView: resolveAllModeViewToggleTarget(currentView),
-      })
-    );
-  }
+    }),
+  });
+  if (autoSyncButton) row.addComponents(autoSyncButton);
   return row;
 }
 
