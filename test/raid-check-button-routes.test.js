@@ -48,10 +48,6 @@ test("raid-check button routes classify manager actions that do not need raid me
     managerRequired: true,
     raidRequired: false,
   });
-  assert.equal(
-    getRaidCheckButtonRoute("raid-check:view-tasks:456").handler,
-    RAID_CHECK_BUTTON_HANDLER.viewTasks,
-  );
 });
 
 test("raid-check button routes classify raid-scoped actions and preserve unsupported actions", () => {

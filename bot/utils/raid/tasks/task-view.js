@@ -1,7 +1,6 @@
 /**
  * utils/raid/tasks/task-view.js
- * Shared Task-view renderer for /raid-status (self) + /raid-check
- * (Manager spot-check). Owns the per-char card layout, 2-column
+ * Task-view renderer for /raid-status. Owns the per-char card layout, 2-column
  * ZWS-spacer packing, and totals math. Layout switches to one-per-row
  * past PAGE_CHAR_CAP because the 2-column trick stops fitting under
  * Discord's 25-field cap.
@@ -15,8 +14,7 @@ const { t } = require("../../../services/i18n");
 const HEADER_SEPARATOR = "\u00A0\u00B7\u00A0";
 
 /**
- * Shared helper for the Task view layout used by both `/raid-status` and
- * `/raid-check` (Manager spot-check). Renders the per-character
+ * Helper for the `/raid-status` Task view layout. Renders the per-character
  * card fields with the 2-column ZWS-spacer packing trick that matches the
  * raid view, plus rolls up daily/weekly totals so the caller can build
  * its own footer.
@@ -72,9 +70,8 @@ function buildAccountTaskFields(account, helpers) {
     truncateText = (s, n) => (s.length > n ? `${s.slice(0, n - 3)}...` : s),
     // Optional viewer-language. Defaults to "vi" so any caller that
     // hasn't been migrated yet still produces VN copy (matching the
-    // pre-i18n behavior). The shared helper renders into 3 surfaces:
-    // /raid-status Side tasks, /raid-check Manager Task view, and
-    // /raid-check task-view-ui - all pass lang explicitly post-i18n.
+    // pre-i18n behavior). The /raid-status Side tasks callers pass lang
+    // explicitly.
     lang = "vi",
   } = helpers;
 

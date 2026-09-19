@@ -116,7 +116,7 @@ module.exports = {
     notOwner: "Preview Local Sync này không thuộc tài khoản Discord của cậu.",
   },
   // Shared-task display labels rendered in /raid-task autocomplete +
-  // /raid-status taskView + /raid-check task-view-ui.
+  // /raid-status taskView.
   "shared-task": {
     reset: {
       daily: "Mỗi ngày",
@@ -130,9 +130,8 @@ module.exports = {
       opensAtShort: "Mở {label}",
     },
   },
-  // Per-character body labels rendered by `buildAccountTaskFields` (shared
-  // by /raid-status Side tasks + /raid-check Manager Task view + /raid-check
-  // task-view-ui). VN keeps "Daily"/"Weekly" as gamer loanwords for parity
+  // Per-character body labels rendered by `buildAccountTaskFields` for
+  // /raid-status Side tasks. VN keeps "Daily"/"Weekly" as gamer loanwords for parity
   // with the footerDailyDone/footerWeeklyDone keys.
   "task-view": {
     dailyHeader: "Daily",
@@ -1025,7 +1024,6 @@ module.exports = {
     staleButton: {
       title: "Button đã hết hạn",
       raidInvalidDescription: "Raid trong button không còn hợp lệ (có thể session cũ hoặc bot vừa restart). Gõ `/raid-check` lại để refresh nha.",
-      taskViewDescription: "Discord đã rớt context của button này (chắc bot vừa restart). Refresh `/raid-check` rồi thử lại nha.",
       unsupportedActionTitle: "Button action không hỗ trợ",
       unsupportedActionDescription: "Action `{action}` không khớp với flow Artist biết. Có thể button cũ từ build trước, gõ `/raid-check` lại để refresh nha.",
     },
@@ -1119,22 +1117,6 @@ module.exports = {
       charLine: "**{charName}** · {n} gate mới: {gateInfo}",
       gateInfoEmpty: "_(detail không có)_",
       footer: "Cậu ghé `/raid-status` xem full progress nha~",
-    },
-    taskView: {
-      noUserTitle: "Không tìm thấy user",
-      noUserDescription: "Artist không thấy doc của <@{target}> trong DB. Có thể user chưa từng dùng bot.",
-      noTasksTitle: "📝 Tasks · <@{target}>",
-      noTasksLine1: "User <@{target}> chưa đăng ký side task nào.",
-      noTasksLine2: "Họ chưa từng dùng `/raid-task add` để track chore daily/weekly.",
-      sharedTaskHeader: "🌟 Task chung của roster",
-      sharedTaskExtra: "_+{n} task chung khác_",
-      charsExtraField: "_+{n} character có task khác_",
-      sharedFooter: "{doneIcon} {done}/{total} task chung",
-      dailyFooter: "{doneIcon} {done}/{total} daily",
-      weeklyFooter: "{doneIcon} {done}/{total} weekly",
-      pageFooter: "Page {current}/{total}",
-      readOnlySuffix: "Read-only · Manager view",
-      unnamedRoster: "(unnamed roster)",
     },
   },
   "raid-auto-manage": {

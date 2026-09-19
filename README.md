@@ -188,7 +188,7 @@ LostArk_RaidManage/
 |   |   |-- local-sync/             # Local-sync buttons / follow-up actions
 |   |   |-- meta/                   # Help + language commands
 |   |   |-- raid/                   # raid-set/task/share/channel/announce/auto-manage handlers
-|   |   |-- raid-check/             # Scan + sync/task-view/all-mode UI
+|   |   |-- raid-check/             # Scan + sync/all-mode UI
 |   |   |-- raid-status/            # Status view, task UI, sync, filters
 |   |   `-- roster/                 # Add/edit/remove roster + gold-earner handlers
 |   |-- models/                    # Persisted schemas + Discord/class metadata

@@ -2,8 +2,8 @@
  * handlers/raid-check/index.js
  * Compose root for /raid-check (Manager-only cross-raid overview).
  * Wires the snapshot helpers + sync flow + all-mode + auto-manage UI
- * + task-view UI into one handler bag dispatched from commands.js.
- * Owns the per-session pagination timer.
+ * into one handler bag dispatched from commands.js. Owns the
+ * per-session pagination timer.
  */
 
 const { createSnapshotHelpers } = require("./snapshot");
@@ -16,7 +16,6 @@ const {
   buildEnableAutoDmEmbed,
   buildDisableAutoDmEmbed,
 } = require("./auto-manage/auto-manage");
-const { createTaskViewUi } = require("./views/task-view-ui");
 const { filterRaidCheckRequirementMap } = require("./visibility");
 const {
   deferEphemeralReply,
@@ -71,11 +70,6 @@ function createRaidCheckCommand(deps) {
     handleRaidCheckEnableAutoSelfClick,
   } = createRaidCheckAutoManageUi(deps);
 
-  const { handleRaidCheckViewTasksClick } = createTaskViewUi({
-    ...deps,
-    RAID_CHECK_PAGINATION_SESSION_MS,
-  });
-
   async function handleRaidCheckCommand(interaction) {
     // /raid-check always lands in the cross-raid overview. Its inline
     // raid filter owns per-raid focus, while Sync reuses
@@ -99,8 +93,6 @@ function createRaidCheckCommand(deps) {
         handleRaidCheckEnableAutoOneClick(interaction, route.targetDiscordId),
       [RAID_CHECK_BUTTON_HANDLER.disableAutoOne]: () =>
         handleRaidCheckDisableAutoOneClick(interaction, route.targetDiscordId),
-      [RAID_CHECK_BUTTON_HANDLER.viewTasks]: () =>
-        handleRaidCheckViewTasksClick(interaction, route.targetDiscordId),
     };
     const raidButtonHandlers = {
       [RAID_CHECK_BUTTON_HANDLER.sync]: (raidMeta) =>

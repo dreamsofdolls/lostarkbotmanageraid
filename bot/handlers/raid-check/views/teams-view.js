@@ -6,7 +6,7 @@
  *
  * This is the ONLY place raid-check reaches into the raid-schedule domain, so
  * the coupling (RaidEvent + the board embed builders) is isolated here rather
- * than leaking into all-mode.js - mirrors how task-view-ui.js isolates tasks.
+ * than leaking into all-mode.js.
  *
  * Discord constraints driving the shape:
  *   - a select option's label/description are PLAIN TEXT (no <t:..>/<#..>), so
