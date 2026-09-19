@@ -123,8 +123,12 @@ function buildRaidDropdownState(accounts, getRaidsFor) {
   // Order by canonical raid progression + difficulty (Act 4 -> Kazeros ->
   // Serca -> Horizon, Normal -> Hard -> Nightmare) so the same raid's modes
   // sit together and the list reads predictably. The old pending-desc sort
-  // shuffled raids by backlog, which split a raid's modes apart.
-  const raidDropdownEntries = [...raidAggregate.values()].sort(compareRaidModeOrder);
+  // shuffled raids by backlog, which split a raid's modes apart. Solo raids
+  // need no party, so they all sit below the raids a group has to run.
+  const raidDropdownEntries = [...raidAggregate.values()].sort((a, b) => (
+    Number(isSoloModeKey(a.modeKey)) - Number(isSoloModeKey(b.modeKey))
+    || compareRaidModeOrder(a, b)
+  ));
   const totalRaidPending = raidDropdownEntries.reduce(
     (sum, r) => sum + (r.countsTowardTotal ? r.pending : 0),
     0

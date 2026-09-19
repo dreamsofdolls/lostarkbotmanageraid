@@ -967,6 +967,24 @@ test("buildRaidDropdownState: orders the filter dropdown by raid progression, no
   );
 });
 
+test("buildRaidDropdownState: lists every Solo raid below the party raids", () => {
+  // Act 4 Solo comes before Kazeros in progression, but a party raid still
+  // outranks any Solo one.
+  const raids = [
+    { raidKey: "kazeros", modeKey: "solo", raidName: "Kazeros Solo", isCompleted: false, goldReceives: true },
+    { raidKey: "armoche", modeKey: "solo", raidName: "Act 4 Solo", isCompleted: false, goldReceives: true },
+    { raidKey: "serca", modeKey: "hard", raidName: "Serca Hard", isCompleted: false, goldReceives: true },
+    { raidKey: "kazeros", modeKey: "normal", raidName: "Kazeros Normal", isCompleted: false, goldReceives: true },
+  ];
+  const accounts = [{ characters: [{ class: "Sorceress" }] }];
+  const { raidDropdownEntries } = buildRaidDropdownState(accounts, () => raids);
+
+  assert.deepEqual(
+    raidDropdownEntries.map((r) => r.key),
+    ["kazeros:normal", "serca:hard", "armoche:solo", "kazeros:solo"],
+  );
+});
+
 test("buildRaidDropdownState: excludes raids that do not receive gold", () => {
   const raids = [
     { raidKey: "armoche", modeKey: "normal", raidName: "Act 4 Normal", isCompleted: false, goldReceives: true },
