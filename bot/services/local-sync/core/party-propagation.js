@@ -12,6 +12,9 @@ const { assertPartyTargetFanout } = require("./party-policy");
 
 const TARGET_USER_SELECT = [
   "discordId",
+  "discordDisplayName",
+  "discordGlobalName",
+  "discordUsername",
   "accounts.accountName",
   "accounts.characters.name",
   "accounts.characters.class",
@@ -52,23 +55,23 @@ async function loadPartyRosterUsers(UserModel, participantNames) {
   return Array.isArray(users) ? users : [];
 }
 
-function buildRosterNameSet(userDoc) {
-  const names = new Set();
+function buildRosterCharacterMap(userDoc) {
+  const characters = new Map();
   for (const account of userDoc?.accounts || []) {
     for (const character of account?.characters || []) {
       const key = normalizeName(getCharacterName(character));
-      if (key) names.add(key);
+      if (key) characters.set(key, character);
     }
   }
-  return names;
+  return characters;
 }
 
-function selectUserPartyDeltas(userDoc, partyDeltasOrIndex) {
+function selectUserPartyDeltas(rosterByName, partyDeltasOrIndex) {
   const deltaIndex = partyDeltasOrIndex instanceof Map
     ? partyDeltasOrIndex
     : buildPartyDeltaIndex(partyDeltasOrIndex);
   const selected = [];
-  for (const rosterName of buildRosterNameSet(userDoc)) {
+  for (const rosterName of rosterByName.keys()) {
     selected.push(...(deltaIndex.get(rosterName)?.deltas || []));
   }
   return selected;
@@ -108,7 +111,7 @@ async function findRegisteredPartyTargets(partyDeltas, deps = {}) {
     deps.UserModel || User,
     [...deltaIndex.values()].map((entry) => entry.charName)
   );
-  const registered = new Set(users.flatMap((userDoc) => [...buildRosterNameSet(userDoc)]));
+  const registered = new Set(users.flatMap((userDoc) => [...buildRosterCharacterMap(userDoc).keys()]));
   return [...deltaIndex.entries()]
     .filter(([key]) => registered.has(key))
     .map(([, entry]) => entry);
@@ -132,7 +135,8 @@ async function propagatePartyDeltas(partyDeltas, deps = {}) {
   for (const userDoc of users) {
     const discordId = String(userDoc?.discordId || "").trim();
     if (!discordId) continue;
-    const deltas = selectUserPartyDeltas(userDoc, deltaIndex);
+    const rosterByName = buildRosterCharacterMap(userDoc);
+    const deltas = selectUserPartyDeltas(rosterByName, deltaIndex);
     if (deltas.length === 0) continue;
 
     const summary = await applyLocalSyncDeltas(discordId, deltas, {
@@ -145,9 +149,23 @@ async function propagatePartyDeltas(partyDeltas, deps = {}) {
       preserveStoredModePreference: false,
     });
 
-    result.applied.push(...(summary.applied || []).map((entry) => (
-      decorateEntry(entry, discordId)
-    )));
+    // The synced card lists these rows without reading other owners'
+    // rosters again, so each carries the class, item level and owner name
+    // it is shown with. The writer reloads the roster, so a character
+    // renamed in between can miss the lookup.
+    const ownerName = userDoc.discordDisplayName
+      || userDoc.discordGlobalName
+      || userDoc.discordUsername
+      || "";
+    result.applied.push(...(summary.applied || []).map((entry) => {
+      const character = rosterByName.get(normalizeName(entry.charName));
+      return decorateEntry({
+        ...entry,
+        className: character?.class || "",
+        itemLevel: Number(character?.itemLevel) || 0,
+        ownerName,
+      }, discordId);
+    }));
     for (const entry of summary.rejected || []) {
       const decorated = decorateEntry(entry, discordId);
       if (entry?.reason === "write_error") result.rejected.push(decorated);

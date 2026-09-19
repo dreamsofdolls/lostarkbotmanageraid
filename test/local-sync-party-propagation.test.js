@@ -66,6 +66,46 @@ test("party propagation enforces the 16-player Gate boundary before querying ros
   assert.equal(queried, false);
 });
 
+test("party entries carry the class, item level and owner name the synced card shows", async () => {
+  const users = [
+    makeUser("nick-owner", [makeCharacter("Aki")], {
+      discordDisplayName: "Tinh Hoa",
+      discordGlobalName: "tinhhoa",
+      discordUsername: "tinhhoatanna",
+    }),
+    // No server nickname cached: the account name is the last fallback.
+    makeUser("plain-owner", [makeCharacter("Bao")], { discordUsername: "rog" }),
+  ];
+  const UserModel = {
+    find() {
+      return {
+        select() { return this; },
+        collation() { return this; },
+        async lean() { return users; },
+      };
+    },
+  };
+
+  const result = await propagatePartyDeltas([makePartyDelta("Aki"), makePartyDelta("Bao")], {
+    UserModel,
+    currentWeekStartMs: 1_000,
+    applyRaidSetForDiscordId: async () => {
+      throw new Error("batch writer should run");
+    },
+    applyRaidSetBatchForDiscordId: async (args) => args.entries.map((entry) => ({
+      matched: true,
+      updated: true,
+      displayName: entry.characterName,
+    })),
+  });
+
+  const byName = new Map(result.applied.map((entry) => [entry.charName, entry]));
+  assert.equal(byName.get("Aki").className, "Bard");
+  assert.equal(byName.get("Aki").itemLevel, 1750);
+  assert.equal(byName.get("Aki").ownerName, "Tinh Hoa");
+  assert.equal(byName.get("Bao").ownerName, "rog");
+});
+
 test("party propagation batches per owner, includes every sync mode, and ignores touched raids", async () => {
   const users = [
     makeUser("local-owner", [makeCharacter("Aki"), makeCharacter("Dara")], {
