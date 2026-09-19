@@ -94,6 +94,8 @@ module.exports = {
     moreCharactersValue: "…and **{count}** more characters. **Sync** still writes all of them.",
     moreCharactersFilterHint: " Filter by roster below to see each group.",
     rosterFilteredSuffix: " · filtered, **Sync** still writes all **{count}** rosters",
+    partyName: "Party members also updated ({count})",
+    partyMore: "…and **{count}** more characters",
     retryReasons: {
       apply_failed: "A temporary processing error occurred. Unfinished data was kept so you can click **Sync** to retry.",
       write_error: "Some progress could not be written to the database. Completed writes were kept; click **Sync** to retry the rest.",

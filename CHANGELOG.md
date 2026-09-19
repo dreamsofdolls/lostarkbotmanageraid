@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-09-19
+
+### Added
+- A synced Local Sync card lists the party members Sync also wrote to: each character with the raids and gates it received, and its owner. The list is read from the stored apply result, because those characters live in other owners' rosters, and it appears only on the applied card.
+
 ## 2026-09-17
 
 ### Changed

@@ -31,6 +31,9 @@ const MAX_RAIDS_PER_CHARACTER = 8;
 // roster header per group inside Discord's 25-field embed cap.
 const MAX_CHANGED_CHARACTERS = 8;
 const MAX_BODY_FIELDS = 22;
+// Discord caps a field value at 1024 characters; the difference is room for
+// the closing "more characters" line.
+const PARTY_FIELD_BUDGET = 960;
 // Two surfaces render this payload and each needs its own customId
 // namespace. The DM preview has no component collector, so its buttons
 // must reach the global router (`local-sync:` in
@@ -288,6 +291,56 @@ function addPreviewFields(embed, job, summary, lang, options = {}) {
   }
 }
 
+/**
+ * Party members the sync also wrote to, one line per character with its
+ * owner. Read from the stored result rather than the roster · these
+ * characters belong to other owners, so the initiator's roster never holds
+ * them.
+ * @param {object} embed - EmbedBuilder receiving the field
+ * @param {object} job - applied preview job; reads job.result.applied
+ * @param {string} lang
+ * @returns {void}
+ */
+function addPartyField(embed, job, lang) {
+  const byCharacter = new Map();
+  for (const entry of job.result?.applied || []) {
+    if (!entry.propagated) continue;
+    const charKey = `${entry.targetDiscordId}::${entry.charName.toLowerCase()}`;
+    if (!byCharacter.has(charKey)) {
+      byCharacter.set(charKey, {
+        charName: entry.charName,
+        ownerId: entry.targetDiscordId,
+        raids: new Map(),
+      });
+    }
+    // Keyed per raid and mode · a retry carries the earlier attempt's
+    // entries forward, so the same raid can be listed twice.
+    byCharacter.get(charKey).raids.set(
+      `${entry.raidKey}::${entry.modeKey}`,
+      `${getRaidModeLabel(entry.raidKey, entry.modeKey, lang)} ${entry.gates.join("-")}`
+    );
+  }
+  if (byCharacter.size === 0) return;
+
+  const characters = [...byCharacter.values()];
+  const lines = [];
+  let length = 0;
+  for (const character of characters) {
+    const line = `**${character.charName}** · ${[...character.raids.values()].join(", ")} · <@${character.ownerId}>`;
+    if (length + line.length + 1 > PARTY_FIELD_BUDGET) break;
+    lines.push(line);
+    length += line.length + 1;
+  }
+  if (lines.length < characters.length) {
+    lines.push(t("local-sync-discord.partyMore", lang, { count: characters.length - lines.length }));
+  }
+  embed.addFields({
+    name: `👥 ${t("local-sync-discord.partyName", lang, { count: characters.length })}`,
+    value: lines.join("\n"),
+    inline: false,
+  });
+}
+
 function buildRows({
   job,
   showApplyCancel,
@@ -471,6 +524,9 @@ function buildLocalSyncConsolePayload({
         rosterFilter: shownRosterFilter,
         hasRosterPicker,
       });
+      // Only the applied card: a pending job can carry an earlier attempt's
+      // result, and that is not what Sync has written.
+      if (card.kind === "applied") addPartyField(embed, job, lang);
     }
     embed.setDescription(blocks.join("\n\n"));
   }

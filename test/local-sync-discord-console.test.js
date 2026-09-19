@@ -716,6 +716,12 @@ test("full Local Sync applies an evidenced party gate to opted-in roster owners"
   assert.equal(writes[1].requireAnySyncEnabled, true);
   assert.equal(writes[1].requireRaidUntouched, true);
   assert.equal(partyQueries, 1);
+
+  // Bao is in u2's roster, not u1's, so only the stored result can name it.
+  const party = renderBody(null, null, PreviewModel.value).embeds[0].toJSON().fields
+    .find((field) => field.name.startsWith("👥"));
+  assert.equal(party.name, "👥 Người cùng party cũng được cập nhật (1)");
+  assert.equal(party.value, "**Bao** · Act 4 Normal G1-G2 · <@u2>");
 });
 
 test("party write failures retain source authorization and retry only unfinished targets", async () => {
@@ -1728,4 +1734,60 @@ test("a roster that does not hold the written gates falls back to the stored pro
   // A projection from before changeDetails existed has nothing to check.
   const legacy = { ...job, projection: { changes: job.projection.changes } };
   assert.equal(previewSummaryForJob({ accounts: accountsBeforeSync }, legacy), null);
+});
+
+// ─── party members the sync also wrote to ──────────────────────
+
+function makePropagatedEntry(charName, targetDiscordId, raidKey = "kazeros", gates = ["G1"]) {
+  return {
+    charName,
+    raidKey,
+    modeKey: "hard",
+    gates,
+    modeResetCount: 0,
+    targetDiscordId,
+    propagated: true,
+  };
+}
+
+function findPartyField(payload) {
+  return payload.embeds[0].toJSON().fields.find((field) => field.name.startsWith("👥"));
+}
+
+test("the synced card lists each propagated party member once, with its owner", () => {
+  const { job } = makeAppliedFixture();
+  job.result.applied.push(
+    makePropagatedEntry("Bao", "u2"),
+    // A retry carries the earlier attempt's entry forward.
+    makePropagatedEntry("Bao", "u2"),
+    makePropagatedEntry("Bao", "u2", "armoche", ["G1", "G2"]),
+    makePropagatedEntry("Ciel", "u3")
+  );
+  const party = findPartyField(renderBody(null, null, job));
+
+  assert.equal(party.name, "👥 Người cùng party cũng được cập nhật (2)");
+  assert.equal(party.value, [
+    "**Bao** · Kazeros Hard G1, Act 4 Hard G1-G2 · <@u2>",
+    "**Ciel** · Kazeros Hard G1 · <@u3>",
+  ].join("\n"));
+});
+
+test("a pending job holding an earlier attempt's result lists no party members", () => {
+  const { job } = makeAppliedFixture();
+  job.status = "pending";
+  job.result.applied.push(makePropagatedEntry("Bao", "u2"));
+
+  assert.equal(findPartyField(renderBody(null, null, job)), undefined);
+});
+
+test("a long party list stays inside one field and counts the characters it leaves out", () => {
+  const { job } = makeAppliedFixture();
+  for (let index = 0; index < 40; index += 1) {
+    job.result.applied.push(makePropagatedEntry(`Member${index}`, `9${String(index).padStart(17, "0")}`));
+  }
+  const lines = findPartyField(renderBody(null, null, job)).value.split("\n");
+  const shown = lines.filter((line) => line.startsWith("**")).length;
+
+  assert.ok(lines.join("\n").length <= 1024);
+  assert.equal(lines.at(-1), `…và **${40 - shown}** nhân vật khác`);
 });
