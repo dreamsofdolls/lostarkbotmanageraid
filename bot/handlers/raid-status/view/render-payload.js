@@ -28,7 +28,7 @@ function createRaidStatusRenderPayload({
   buildAccountPageEmbed,
   buildGoldViewEmbed,
   buildTaskViewEmbed,
-  buildLocalSyncViewEmbed = () => null,
+  buildLocalSyncViewEmbeds = () => [],
   lang,
 }) {
   const backgroundBufferCache = new Map();
@@ -61,7 +61,7 @@ function createRaidStatusRenderPayload({
       // Falls through to the raid embed when the snapshot has not loaded
       // yet · the collector's "end" hook re-renders from here and must
       // never throw on a session that expired mid-fetch.
-      const syncEmbed = buildLocalSyncViewEmbed();
+      const [syncEmbed] = buildLocalSyncViewEmbeds();
       if (syncEmbed) return syncEmbed;
     }
 
@@ -127,12 +127,22 @@ function createRaidStatusRenderPayload({
     );
   };
 
+  // Every embed the message shows · an applied sync card carries a party
+  // embed under it, every other view is a single embed.
+  const buildCurrentEmbeds = () => {
+    if (getCurrentView() === "sync") {
+      const syncEmbeds = buildLocalSyncViewEmbeds();
+      if (syncEmbeds.length > 0) return syncEmbeds;
+    }
+    return [buildCurrentEmbed()];
+  };
+
   const buildEmbedAndCanvas = async () => {
-    const embed = buildCurrentEmbed();
-    const payload = { embeds: [embed], files: [], attachments: [] };
+    const embeds = buildCurrentEmbeds();
+    const payload = { embeds, files: [], attachments: [] };
     const attachBackgroundToStatusEmbed = (buffer) => {
       const name = "raid-background.jpg";
-      embed.setImage(`attachment://${name}`);
+      embeds[0].setImage(`attachment://${name}`);
       payload.files = [{ attachment: buffer, name }];
       return payload;
     };
@@ -150,6 +160,7 @@ function createRaidStatusRenderPayload({
 
   return {
     buildCurrentEmbed,
+    buildCurrentEmbeds,
     buildEmbedAndCanvas,
   };
 }

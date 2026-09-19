@@ -27,13 +27,10 @@ const { describeLocalSyncCard } = require("./discord-console-card");
 
 const MAX_CHARACTER_FIELDS = 10;
 const MAX_RAIDS_PER_CHARACTER = 8;
-// 8 characters pack to 12 fields at two per line, which leaves room for a
-// roster header per group inside Discord's 25-field embed cap.
-const MAX_CHANGED_CHARACTERS = 8;
-const MAX_BODY_FIELDS = 22;
-// Discord caps a field value at 1024 characters; the difference is room for
-// the closing "more characters" line.
-const PARTY_FIELD_BUDGET = 960;
+const EMBED_FIELD_LIMIT = 25;
+// Discord rejects an empty field value; a header field carries its text in
+// the name.
+const BLANK_FIELD_VALUE = "​";
 // Two surfaces render this payload and each needs its own customId
 // namespace. The DM preview has no component collector, so its buttons
 // must reach the global router (`local-sync:` in
@@ -126,6 +123,28 @@ function collectChangedRosters(summary, rosterFilter = null) {
 }
 
 /**
+ * Append one group (an optional header, then its characters two per line)
+ * while it fits under Discord's 25-field embed cap. A group without room
+ * for its header and one line is left out; the counts in the headers and
+ * the summary still give the totals.
+ * @param {object[]} fields - embed fields collected so far, extended in place
+ * @param {object|null} header - non-inline group header field
+ * @param {object[]} charFields - inline character fields
+ * @returns {void}
+ */
+function appendGroupFields(fields, header, charFields) {
+  const headerCost = header ? 1 : 0;
+  // pack2Columns emits three fields per line: two characters and a spacer.
+  if (fields.length + headerCost + 3 > EMBED_FIELD_LIMIT) return;
+  if (header) fields.push(header);
+  const lines = pack2Columns(charFields);
+  for (let index = 0; index < lines.length; index += 3) {
+    if (fields.length + 3 > EMBED_FIELD_LIMIT) break;
+    fields.push(...lines.slice(index, index + 3));
+  }
+}
+
+/**
  * Body of the card, in the /raid-status gold-view shape: two columns of
  * inline character fields, each a header line plus one line per raid.
  * Not a copy of that layout · projectSummary hands back
@@ -139,7 +158,6 @@ function collectChangedRosters(summary, rosterFilter = null) {
  *
  * @param {object} [options]
  * @param {number|null} [options.rosterFilter=null] - index into accountsAfterSync to narrow to
- * @param {boolean} [options.hasRosterPicker=false] - whether the card carries the roster dropdown
  * @returns {boolean} false when the summary predates accountsAfterSync,
  *   so the caller can fall back to the delta-only list.
  */
@@ -147,7 +165,7 @@ function addChangedCharacterFields(
   embed,
   summary,
   lang,
-  { rosterFilter = null, hasRosterPicker = false } = {}
+  { rosterFilter = null } = {}
 ) {
   if (!Array.isArray(summary?.accountsAfterSync)) return false;
 
@@ -166,8 +184,6 @@ function addChangedCharacterFields(
   }
 
   const fields = [];
-  let budget = MAX_CHANGED_CHARACTERS;
-  let hidden = 0;
   for (const group of groups) {
     const charFields = [];
     for (const character of group.characters) {
@@ -176,11 +192,6 @@ function addChangedCharacterFields(
         .filter((raid) => touched.has(`${raid.raidKey}::${raid.modeKey}`))
         .map((raid) => formatRaidStatusLine(raid, lang));
       if (lines.length === 0) continue;
-      if (budget <= 0) {
-        hidden += 1;
-        continue;
-      }
-      budget -= 1;
       const emoji = getClassEmoji(character.class || character.className);
       charFields.push({
         name: `${emoji ? `${emoji} ` : ""}${character.name} · ${Number(character.itemLevel) || 0}`,
@@ -192,35 +203,18 @@ function addChangedCharacterFields(
     // The roster header earns its field when several rosters are on the card,
     // and while a filter hides the others · Sync still writes every roster,
     // and a lone unnamed roster under a green Sync button reads as the whole job.
-    if (groups.length > 1 || filtered) {
-      const changedChars = t("local-sync-discord.rosterChangedChars", lang, { count: charFields.length });
-      fields.push({
-        name: `${sharedUI.icons.folder} ${group.account.accountName || "?"}`,
-        value: filtered
-          ? `${changedChars}${t("local-sync-discord.rosterFilteredSuffix", lang, { count: changedRosterCount })}`
-          : changedChars,
-        inline: false,
-      });
-    }
-    // Two characters per line, the same zero-width-spacer packing the gold
-    // and raid views use. Packed per roster so a header always starts a
-    // fresh line instead of landing mid-pair.
-    fields.push(...pack2Columns(charFields));
-  }
-
-  if (hidden > 0) {
-    const stillSynced = t("local-sync-discord.moreCharactersValue", lang, { count: hidden });
-    fields.push({
-      name: t("local-sync-discord.moreCharactersName", lang),
-      value: hasRosterPicker
-        ? `${stillSynced}${t("local-sync-discord.moreCharactersFilterHint", lang)}`
-        : stillSynced,
+    const header = groups.length > 1 || filtered ? {
+      name: `${sharedUI.icons.folder} ${group.account.accountName || "?"} (${charFields.length})`,
+      value: filtered
+        ? t("local-sync-discord.rosterFilteredNote", lang, { count: changedRosterCount })
+        : BLANK_FIELD_VALUE,
       inline: false,
-    });
+    } : null;
+    // Packed per roster so a header always starts a fresh line instead of
+    // landing mid-pair.
+    appendGroupFields(fields, header, charFields);
   }
-  // Discord caps an embed at 25 fields and the summary row above already
-  // spends up to three of them.
-  embed.addFields(...fields.slice(0, MAX_BODY_FIELDS));
+  embed.addFields(...fields);
   return true;
 }
 
@@ -291,54 +285,75 @@ function addPreviewFields(embed, job, summary, lang, options = {}) {
   }
 }
 
+// Party propagation writes only a raid with no current-week progress, so the
+// gates it wrote are that raid's whole state this week.
+function propagatedRaidRow(entry) {
+  const allGateKeys = getGatesForRaid(entry.raidKey);
+  return {
+    raidKey: entry.raidKey,
+    modeKey: entry.modeKey,
+    allGateKeys,
+    completedGateKeys: entry.gates,
+    isCompleted: entry.gates.length === allGateKeys.length,
+  };
+}
+
 /**
- * Party members the sync also wrote to, one line per character with its
- * owner. Read from the stored result rather than the roster · these
- * characters belong to other owners, so the initiator's roster never holds
- * them.
- * @param {object} embed - EmbedBuilder receiving the field
+ * Party members the sync also wrote to, as a second embed under the card:
+ * one group per owner, headed by their cached server name, with the same
+ * two-column character fields as the card. Read from the stored result ·
+ * these characters live in other owners' rosters.
  * @param {object} job - applied preview job; reads job.result.applied
  * @param {string} lang
- * @returns {void}
+ * @param {object} deps
+ * @param {Function} deps.EmbedBuilder
+ * @param {number} deps.color - the card's color, so both read as one message
+ * @returns {object|null} EmbedBuilder, or null when nothing was propagated
  */
-function addPartyField(embed, job, lang) {
-  const byCharacter = new Map();
+function buildPartyEmbed(job, lang, { EmbedBuilder, color }) {
+  const owners = new Map();
   for (const entry of job.result?.applied || []) {
     if (!entry.propagated) continue;
-    const charKey = `${entry.targetDiscordId}::${entry.charName.toLowerCase()}`;
-    if (!byCharacter.has(charKey)) {
-      byCharacter.set(charKey, {
-        charName: entry.charName,
-        ownerId: entry.targetDiscordId,
-        raids: new Map(),
-      });
+    if (!owners.has(entry.targetDiscordId)) {
+      owners.set(entry.targetDiscordId, { ownerName: entry.ownerName, characters: new Map() });
     }
+    const characters = owners.get(entry.targetDiscordId).characters;
+    const charKey = entry.charName.toLowerCase();
+    if (!characters.has(charKey)) characters.set(charKey, { entry, raids: new Map() });
     // Keyed per raid and mode · a retry carries the earlier attempt's
     // entries forward, so the same raid can be listed twice.
-    byCharacter.get(charKey).raids.set(
-      `${entry.raidKey}::${entry.modeKey}`,
-      `${getRaidModeLabel(entry.raidKey, entry.modeKey, lang)} ${entry.gates.join("-")}`
-    );
+    characters.get(charKey).raids.set(`${entry.raidKey}::${entry.modeKey}`, entry);
   }
-  if (byCharacter.size === 0) return;
+  if (owners.size === 0) return null;
 
-  const characters = [...byCharacter.values()];
-  const lines = [];
-  let length = 0;
-  for (const character of characters) {
-    const line = `**${character.charName}** · ${[...character.raids.values()].join(", ")} · <@${character.ownerId}>`;
-    if (length + line.length + 1 > PARTY_FIELD_BUDGET) break;
-    lines.push(line);
-    length += line.length + 1;
+  const fields = [];
+  let total = 0;
+  for (const [ownerId, { ownerName, characters }] of owners) {
+    const charFields = [...characters.values()].map(({ entry, raids }) => {
+      const emoji = getClassEmoji(entry.className);
+      const itemLevel = entry.itemLevel ? ` · ${entry.itemLevel}` : "";
+      return {
+        name: `${emoji ? `${emoji} ` : ""}${entry.charName}${itemLevel}`,
+        value: [...raids.values()]
+          .map((raid) => formatRaidStatusLine(propagatedRaidRow(raid), lang))
+          .join("\n"),
+        inline: true,
+      };
+    });
+    total += charFields.length;
+    // An owner with no cached Discord name, or an entry stored before names
+    // were kept, falls back to a mention in the value · field names do not
+    // render mentions, and a mention inside an embed does not notify.
+    appendGroupFields(fields, {
+      name: `👤 ${ownerName || t("local-sync-discord.partyOwnerUnknown", lang)} (${charFields.length})`,
+      value: ownerName ? BLANK_FIELD_VALUE : `<@${ownerId}>`,
+      inline: false,
+    }, charFields);
   }
-  if (lines.length < characters.length) {
-    lines.push(t("local-sync-discord.partyMore", lang, { count: characters.length - lines.length }));
-  }
-  embed.addFields({
-    name: `👥 ${t("local-sync-discord.partyName", lang, { count: characters.length })}`,
-    value: lines.join("\n"),
-    inline: false,
-  });
+  return new EmbedBuilder()
+    .setTitle(`👥 ${t("local-sync-discord.partyName", lang, { count: total })}`)
+    .setColor(color)
+    .addFields(fields);
 }
 
 function buildRows({
@@ -440,7 +455,8 @@ function buildRows({
  * @param {string} [options.buttonPrefix='local-sync:'] - customId namespace · see DM_BUTTON_PREFIX / STATUS_BUTTON_PREFIX
  * @param {number|null} [options.rosterFilter=null] - render only this roster of accountsAfterSync; null shows every roster the preview touches
  * @param {Function} [options.StringSelectMenuBuilder] - omit to render without the roster picker
- * @returns {{embeds: object[], components: object[]}} discord.js message payload fragment
+ * @returns {{embeds: object[], components: object[]}} discord.js message payload fragment;
+ *   an applied card that reached party members carries their embed second
  */
 function buildLocalSyncConsolePayload({
   job = null,
@@ -520,19 +536,24 @@ function buildLocalSyncConsolePayload({
     if (card.showBody) {
       // Totals sit under a blank line so they read as their own block.
       blocks.push(buildSummaryLines(summary, lang, formatGold).join("\n"));
-      addPreviewFields(embed, job, summary, lang, {
-        rosterFilter: shownRosterFilter,
-        hasRosterPicker,
-      });
-      // Only the applied card: a pending job can carry an earlier attempt's
-      // result, and that is not what Sync has written.
-      if (card.kind === "applied") addPartyField(embed, job, lang);
+      addPreviewFields(embed, job, summary, lang, { rosterFilter: shownRosterFilter });
     }
     embed.setDescription(blocks.join("\n\n"));
   }
 
+  // Only the applied card: a pending job can carry an earlier attempt's
+  // result, and that is not what Sync has written.
+  const partyEmbed = card.kind === "applied"
+    ? buildPartyEmbed(job, lang, { EmbedBuilder, color: UI.colors[card.colorKey] })
+    : null;
+  if (partyEmbed) {
+    // One timestamp, under the last embed, so the two read as one message.
+    embed.setTimestamp(null);
+    partyEmbed.setTimestamp();
+  }
+
   return {
-    embeds: [embed],
+    embeds: [embed, partyEmbed].filter(Boolean),
     components: buildRows({
       job,
       showApplyCancel: card.showApplyCancel,

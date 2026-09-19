@@ -38,7 +38,7 @@ const {
   createRaidStatusSyncControls,
 } = require("./sync/sync-controls");
 const {
-  buildLocalSyncViewEmbed,
+  buildLocalSyncViewEmbeds,
   buildLocalSyncViewRows,
   loadLocalSyncSnapshot,
   runLocalSyncViewAction,
@@ -301,7 +301,7 @@ function createRaidStatusCommand(deps) {
       UI,
       formatGold,
     };
-    const buildSyncViewEmbed = () => buildLocalSyncViewEmbed({
+    const buildSyncViewEmbeds = () => buildLocalSyncViewEmbeds({
       snapshot: statusState.localSyncSnapshot,
       rosterFilter: statusState.localSyncRosterFilter,
       ...localSyncViewDeps,
@@ -318,7 +318,7 @@ function createRaidStatusCommand(deps) {
     }
 
     const {
-      buildCurrentEmbed,
+      buildCurrentEmbeds,
       buildEmbedAndCanvas,
     } = createRaidStatusRenderPayload({
       discordId,
@@ -336,7 +336,7 @@ function createRaidStatusCommand(deps) {
       buildAccountPageEmbed,
       buildGoldViewEmbed,
       buildTaskViewEmbed,
-      buildLocalSyncViewEmbed: buildSyncViewEmbed,
+      buildLocalSyncViewEmbeds: buildSyncViewEmbeds,
       lang,
     });
 
@@ -404,7 +404,7 @@ function createRaidStatusCommand(deps) {
 
     const messageFromEdit = await interaction.editReply({
       content: initialContent,
-      embeds: [buildCurrentEmbed()],
+      embeds: buildCurrentEmbeds(),
       files: [],
       attachments: [],
       components: initialComponents,
@@ -465,7 +465,7 @@ function createRaidStatusCommand(deps) {
       getAccounts: () => statusState.accounts,
       getCurrentPage: () => statusState.currentPage,
       getCurrentView: () => statusState.currentView,
-      buildCurrentEmbed,
+      buildCurrentEmbeds,
       buildEmbedAndCanvas,
       buildComponents,
       componentRouteHandlers,

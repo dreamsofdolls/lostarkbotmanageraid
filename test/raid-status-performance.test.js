@@ -24,7 +24,7 @@ test("raid-status renders before refresh, local token, schedule, and canvas I/O"
   assert.ok(localSyncHydration > firstReply, "local-sync token lookup started before first render");
   assert.ok(scheduleHydration > firstReply, "raid schedule query started before first render");
   assert.ok(activityStamp > firstReply, "daily activity stamp ran before first render");
-  assert.match(source, /embeds: \[buildCurrentEmbed\(\)\]/);
+  assert.match(source, /embeds: buildCurrentEmbeds\(\),/);
   assert.doesNotMatch(
     source,
     /const message = await interaction\.fetchReply\(\)/,

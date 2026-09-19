@@ -660,6 +660,7 @@ test("full Local Sync applies an evidenced party gate to a registered roster own
   // Neither sync mode is on: the owner is reached through registration alone.
   const targetUser = {
     discordId: "u2",
+    discordDisplayName: "Tinh Hoa",
     localSyncEnabled: false,
     autoManageEnabled: false,
     accounts: [{
@@ -717,11 +718,14 @@ test("full Local Sync applies an evidenced party gate to a registered roster own
   assert.equal(writes[1].requireRaidUntouched, true);
   assert.equal(partyQueries, 1);
 
-  // Bao is in u2's roster, not u1's, so only the stored result can name it.
-  const party = renderBody(null, null, PreviewModel.value).embeds[0].toJSON().fields
-    .find((field) => field.name.startsWith("👥"));
-  assert.equal(party.name, "👥 Người cùng party cũng được cập nhật (1)");
-  assert.equal(party.value, "**Bao** · Act 4 Normal G1-G2 · <@u2>");
+  // Bao is in u2's roster, not u1's, so only the stored result can name it,
+  // with the class, item level and owner name kept when it was written.
+  const party = renderBody(null, null, PreviewModel.value).embeds[1].toJSON();
+  assert.equal(party.title, "👥 Người cùng party cũng được cập nhật (1)");
+  assert.deepEqual(
+    party.fields.slice(0, 2).map((f) => [f.name, f.value]),
+    [["👤 Tinh Hoa (1)", "​"], ["Bao · 1750", "🟢 Act 4 Normal · 2/2"]]
+  );
 });
 
 test("party write failures retain source authorization and retry only unfinished targets", async () => {
@@ -1380,9 +1384,9 @@ test("the card lists only what this sync changes, every roster at once", () => {
   assert.deepEqual(summary.accountsAfterSync.map((a) => a.accountName), ["Qiylyn", "Alt"]);
 
   const embed = renderBody(summary).embeds[0].toJSON();
-  // Both rosters on one card, each behind its own header.
-  assert.ok(embed.fields.some((f) => f.name.endsWith("Qiylyn") && f.value.includes("**1**")));
-  assert.ok(embed.fields.some((f) => f.name.endsWith("Alt")));
+  // Both rosters on one card, each behind a header carrying its changed count.
+  assert.ok(embed.fields.some((f) => f.name === "📁 Qiylyn (1)"));
+  assert.ok(embed.fields.some((f) => f.name === "📁 Alt (1)"));
 
   const qiylyn = embed.fields.find((f) => f.name.startsWith("Qiylyn ·"));
   assert.equal(qiylyn.inline, true);
@@ -1422,14 +1426,12 @@ test("the roster dropdown narrows the card to one roster", () => {
   const narrowed = renderBody(summary, 1).embeds[0].toJSON();
   assert.ok(narrowed.fields.some((f) => f.name.startsWith("Nailaduk ·")));
   assert.equal(narrowed.fields.some((f) => f.name.startsWith("Qiylyn ·")), false);
-  const filteredHeader = narrowed.fields.find((f) => f.name.endsWith("Alt"));
-  assert.equal(
-    filteredHeader.value,
-    "**1** nhân vật có thay đổi · đang lọc, **Đồng bộ** vẫn ghi đủ **2** roster"
-  );
-  // Unfiltered, every header is the plain count.
-  const unfilteredHeader = renderBody(summary).embeds[0].toJSON().fields.find((f) => f.name.endsWith("Alt"));
-  assert.equal(unfilteredHeader.value, "**1** nhân vật có thay đổi");
+  const filteredHeader = narrowed.fields.find((f) => f.name === "📁 Alt (1)");
+  assert.equal(filteredHeader.value, "Đang lọc, **Đồng bộ** vẫn ghi đủ **2** roster");
+  // Unfiltered, the count in the name is all the header says.
+  const unfilteredHeader = renderBody(summary).embeds[0].toJSON().fields
+    .find((f) => f.name === "📁 Alt (1)");
+  assert.equal(unfilteredHeader.value, "​");
 
   // One changed roster needs no picker · the card already shows it all.
   const single = { ...summary, accountsAfterSync: summary.accountsAfterSync.slice(0, 1) };
@@ -1646,20 +1648,21 @@ function makeWideSummary(charactersPerRoster) {
   });
 }
 
-test("past eight characters the card says Sync still covers the rest and how to see them", () => {
-  const othersField = (summary) => renderBody(summary).embeds[0].toJSON().fields
-    .find((f) => f.name === "Nhân vật khác");
+test("the card shows every changed character that fits Discord's 25 fields, with no overflow field", () => {
+  const fieldsOf = (summary) => renderBody(summary).embeds[0].toJSON().fields;
+  const characterCount = (fields) => fields.filter((f) => f.inline && f.name !== "​").length;
 
-  // Two rosters: the roster picker is on the card, so the line points at it.
-  assert.equal(
-    othersField(makeWideSummary([5, 5])).value,
-    "…và **2** nhân vật khác. **Đồng bộ** vẫn ghi đủ cả những nhân vật này. Lọc theo roster bên dưới để xem từng nhóm."
-  );
-  // One roster: no picker, so no pointer to it.
-  assert.equal(
-    othersField(makeWideSummary([10])).value,
-    "…và **2** nhân vật khác. **Đồng bộ** vẫn ghi đủ cả những nhân vật này."
-  );
+  // Ten characters in two rosters fit whole.
+  const both = fieldsOf(makeWideSummary([5, 5]));
+  assert.equal(characterCount(both), 10);
+  assert.equal(both.some((f) => f.name === "Nhân vật khác"), false);
+
+  // Past the cap, the first roster takes 19 fields and the second fits its
+  // header and one line; the header still counts all twelve.
+  const wide = fieldsOf(makeWideSummary([12, 12]));
+  assert.ok(wide.length <= 25);
+  assert.ok(wide.some((f) => f.name === "📁 Roster1 (12)"));
+  assert.equal(characterCount(wide), 14);
 });
 
 test("a filter left on the only changed roster is not announced as a filter", () => {
@@ -1738,56 +1741,74 @@ test("a roster that does not hold the written gates falls back to the stored pro
 
 // ─── party members the sync also wrote to ──────────────────────
 
-function makePropagatedEntry(charName, targetDiscordId, raidKey = "kazeros", gates = ["G1"]) {
+function makePropagatedEntry(charName, targetDiscordId, overrides = {}) {
   return {
     charName,
-    raidKey,
+    raidKey: "kazeros",
     modeKey: "hard",
-    gates,
+    gates: ["G1"],
     modeResetCount: 0,
     targetDiscordId,
     propagated: true,
+    className: "Bard",
+    itemLevel: 1750,
+    ownerName: `${targetDiscordId}-nick`,
+    ...overrides,
   };
 }
 
-function findPartyField(payload) {
-  return payload.embeds[0].toJSON().fields.find((field) => field.name.startsWith("👥"));
-}
-
-test("the synced card lists each propagated party member once, with its owner", () => {
+test("party members get a second embed, grouped by owner name, in the card's two-column rows", () => {
   const { job } = makeAppliedFixture();
   job.result.applied.push(
-    makePropagatedEntry("Bao", "u2"),
+    makePropagatedEntry("Bao", "u2", { ownerName: "Tinh Hoa" }),
     // A retry carries the earlier attempt's entry forward.
-    makePropagatedEntry("Bao", "u2"),
-    makePropagatedEntry("Bao", "u2", "armoche", ["G1", "G2"]),
-    makePropagatedEntry("Ciel", "u3")
+    makePropagatedEntry("Bao", "u2", { ownerName: "Tinh Hoa" }),
+    makePropagatedEntry("Bao", "u2", { ownerName: "Tinh Hoa", raidKey: "armoche" }),
+    makePropagatedEntry("Ciel", "u3", { ownerName: "rog", gates: ["G1", "G2"] })
   );
-  const party = findPartyField(renderBody(null, null, job));
+  const payload = renderBody(null, null, job);
+  assert.equal(payload.embeds.length, 2);
+  const card = payload.embeds[0].toJSON();
+  const party = payload.embeds[1].toJSON();
 
-  assert.equal(party.name, "👥 Người cùng party cũng được cập nhật (2)");
-  assert.equal(party.value, [
-    "**Bao** · Kazeros Hard G1, Act 4 Hard G1-G2 · <@u2>",
-    "**Ciel** · Kazeros Hard G1 · <@u3>",
-  ].join("\n"));
+  assert.equal(party.title, "👥 Người cùng party cũng được cập nhật (2)");
+  assert.deepEqual(party.fields.map((f) => f.name), [
+    "👤 Tinh Hoa (1)", "Bao · 1750", "​", "​",
+    "👤 rog (1)", "Ciel · 1750", "​", "​",
+  ]);
+  const bao = party.fields.find((f) => f.name === "Bao · 1750");
+  assert.match(bao.value, /^\S+ Kazeros Hard · 1\/2\n\S+ Act 4 Hard · 1\/2$/u);
+  assert.equal(party.fields.find((f) => f.name === "Ciel · 1750").value, "🟢 Kazeros Hard · 2/2");
+  // Names replace the mentions, and one timestamp sits under both embeds.
+  assert.doesNotMatch(JSON.stringify(party), /<@/);
+  assert.equal(card.timestamp, undefined);
+  assert.ok(party.timestamp);
 });
 
-test("a pending job holding an earlier attempt's result lists no party members", () => {
+test("an owner with no cached Discord name keeps a mention under a placeholder header", () => {
+  const { job } = makeAppliedFixture();
+  job.result.applied.push(makePropagatedEntry("Bao", "u9", { ownerName: "" }));
+  const header = renderBody(null, null, job).embeds[1].toJSON().fields[0];
+
+  assert.equal(header.name, "👤 Chưa rõ tên (1)");
+  assert.equal(header.value, "<@u9>");
+});
+
+test("a pending job holding an earlier attempt's result has no party embed", () => {
   const { job } = makeAppliedFixture();
   job.status = "pending";
   job.result.applied.push(makePropagatedEntry("Bao", "u2"));
 
-  assert.equal(findPartyField(renderBody(null, null, job)), undefined);
+  assert.equal(renderBody(null, null, job).embeds.length, 1);
 });
 
-test("a long party list stays inside one field and counts the characters it leaves out", () => {
+test("a long party list stays inside the 25-field cap and the title still counts everyone", () => {
   const { job } = makeAppliedFixture();
   for (let index = 0; index < 40; index += 1) {
     job.result.applied.push(makePropagatedEntry(`Member${index}`, `9${String(index).padStart(17, "0")}`));
   }
-  const lines = findPartyField(renderBody(null, null, job)).value.split("\n");
-  const shown = lines.filter((line) => line.startsWith("**")).length;
+  const party = renderBody(null, null, job).embeds[1].toJSON();
 
-  assert.ok(lines.join("\n").length <= 1024);
-  assert.equal(lines.at(-1), `…và **${40 - shown}** nhân vật khác`);
+  assert.ok(party.fields.length <= 25);
+  assert.equal(party.title, "👥 Người cùng party cũng được cập nhật (40)");
 });

@@ -4,7 +4,7 @@
  * message. Two invariants shape this file:
  *   1. The snapshot is loaded asynchronously up front (see
  *      loadLocalSyncSnapshot) because both raid-status render paths -
- *      buildCurrentEmbed and buildComponents - are synchronous.
+ *      buildCurrentEmbeds and buildComponents - are synchronous.
  *   2. Buttons carry the STATUS_BUTTON_PREFIX namespace so the global
  *      interaction router never claims them; the raid-status collector
  *      owns every click inside its own message.
@@ -110,12 +110,13 @@ async function loadLocalSyncSnapshot({
 }
 
 /**
- * Build the sync view embed from a snapshot.
+ * Build the sync view embeds from a snapshot: the card, then the party
+ * embed when an applied card reached party members.
  * @param {object} options
  * @param {object|null} options.snapshot - result of loadLocalSyncSnapshot
- * @returns {object|null} EmbedBuilder instance, or null when there is no snapshot yet
+ * @returns {object[]} EmbedBuilder instances, empty when there is no snapshot yet
  */
-function buildLocalSyncViewEmbed({
+function buildLocalSyncViewEmbeds({
   snapshot,
   lang,
   rosterFilter = null,
@@ -128,7 +129,7 @@ function buildLocalSyncViewEmbed({
   UI,
   formatGold,
 }) {
-  if (!snapshot) return null;
+  if (!snapshot) return [];
   const payload = buildLocalSyncConsolePayload({
     ...snapshot,
     lang,
@@ -143,7 +144,7 @@ function buildLocalSyncViewEmbed({
     UI,
     formatGold,
   });
-  return payload.embeds[0] || null;
+  return payload.embeds;
 }
 
 /**
@@ -247,7 +248,7 @@ async function runLocalSyncViewAction({
 }
 
 module.exports = {
-  buildLocalSyncViewEmbed,
+  buildLocalSyncViewEmbeds,
   buildLocalSyncViewRows,
   loadLocalSyncSnapshot,
   parseLocalSyncViewCustomId,

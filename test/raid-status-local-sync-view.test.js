@@ -24,7 +24,7 @@ const {
   createRaidStatusRenderPayload,
 } = require("../bot/handlers/raid-status/view/render-payload");
 const {
-  buildLocalSyncViewEmbed,
+  buildLocalSyncViewEmbeds,
   buildLocalSyncViewRows,
   loadLocalSyncSnapshot,
   parseLocalSyncViewCustomId,
@@ -126,7 +126,7 @@ test("customId parser accepts the console actions and rejects the rest", () => {
 test("no sync mode renders the disabled card with no action buttons", () => {
   const snapshot = { activeScope: null, job: null, summary: null, readerUrl: null };
   const rows = buildLocalSyncViewRows({ snapshot, ...viewDeps() });
-  const embed = buildLocalSyncViewEmbed({ snapshot, ...viewDeps() });
+  const [embed] = buildLocalSyncViewEmbeds({ snapshot, ...viewDeps() });
 
   assert.deepEqual(rows, []);
   assert.ok(embed);
@@ -599,7 +599,7 @@ test("the sync view skips the roster background image", async () => {
     buildAccountPageEmbed: () => new EmbedBuilder().setTitle("raid"),
     buildGoldViewEmbed: () => new EmbedBuilder().setTitle("gold"),
     buildTaskViewEmbed: () => new EmbedBuilder().setTitle("task"),
-    buildLocalSyncViewEmbed: () => buildLocalSyncViewEmbed({ snapshot, ...viewDeps() }),
+    buildLocalSyncViewEmbeds: () => buildLocalSyncViewEmbeds({ snapshot, ...viewDeps() }),
     lang: "vi",
   });
 
@@ -617,7 +617,7 @@ test("the sync view skips the roster background image", async () => {
 });
 
 test("the sync view falls back to the raid embed when no snapshot loaded", () => {
-  const { buildCurrentEmbed } = createRaidStatusRenderPayload({
+  const { buildCurrentEmbeds } = createRaidStatusRenderPayload({
     discordId: "viewer",
     getAccounts: () => [{ accountName: "Main", characters: [] }],
     getCurrentPage: () => 0,
@@ -631,11 +631,11 @@ test("the sync view falls back to the raid embed when no snapshot loaded", () =>
     buildAccountPageEmbed: () => new EmbedBuilder().setTitle("raid"),
     buildGoldViewEmbed: () => new EmbedBuilder().setTitle("gold"),
     buildTaskViewEmbed: () => new EmbedBuilder().setTitle("task"),
-    buildLocalSyncViewEmbed: () => null,
+    buildLocalSyncViewEmbeds: () => [],
     lang: "vi",
   });
 
   // The collector's end hook re-renders through this path and must not
   // throw on a session that expired mid-fetch.
-  assert.equal(buildCurrentEmbed().toJSON().title, "raid");
+  assert.deepEqual(buildCurrentEmbeds().map((embed) => embed.toJSON().title), ["raid"]);
 });

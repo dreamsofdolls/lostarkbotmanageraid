@@ -36,7 +36,7 @@ test("raid-status navigation refreshes an aged snapshot before applying the rout
     getAccounts: () => [],
     getCurrentPage: () => 0,
     getCurrentView: () => "raid",
-    buildCurrentEmbed: () => ({}),
+    buildCurrentEmbeds: () => [{}],
     buildEmbedAndCanvas: async () => {
       calls.push("render");
       return { embeds: [{}] };
@@ -91,7 +91,7 @@ test("a throwing raid-status handler is reported to the clicker instead of rejec
     getAccounts: () => [],
     getCurrentPage: () => 0,
     getCurrentView: () => "raid",
-    buildCurrentEmbed: () => ({}),
+    buildCurrentEmbeds: () => [{}],
     buildEmbedAndCanvas: async () => ({ embeds: [{}] }),
     buildComponents: () => [],
     componentRouteHandlers: {

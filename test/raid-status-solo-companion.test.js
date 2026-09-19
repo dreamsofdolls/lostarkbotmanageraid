@@ -152,7 +152,7 @@ test("raid-status collector rejects another user's Solo Companion click before d
     getAccounts: () => [],
     getCurrentPage: () => 0,
     getCurrentView: () => "raid",
-    buildCurrentEmbed: () => new EmbedBuilder(),
+    buildCurrentEmbeds: () => [new EmbedBuilder()],
     buildEmbedAndCanvas: async () => ({}),
     buildComponents: () => [],
     componentRouteHandlers: {
