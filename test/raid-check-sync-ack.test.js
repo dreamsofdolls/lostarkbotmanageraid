@@ -11,9 +11,11 @@ const {
 } = require("../bot/services/i18n");
 
 class FakeEmbedBuilder {
-  setColor() { return this; }
-  setTitle() { return this; }
+  constructor() { this.fields = []; }
+  setColor(value) { this.color = value; return this; }
+  setTitle(value) { this.title = value; return this; }
   setDescription(value) { this.description = value; return this; }
+  addFields(fields) { this.fields.push(...fields); return this; }
   setTimestamp() { return this; }
 }
 
@@ -204,6 +206,9 @@ test("sync all scans every opted-in roster once and keeps local-sync users out",
   }, null);
   assert.deepEqual(events, ["defer", "query", "acquire", "week", "gather", "commit", "release"]);
   assert.match(reply.embeds[0].description, /all raids/i);
+  // A clean run carries only the three always-on counters: nothing was
+  // skipped, nothing failed, no gate moved, so no optional field fires.
+  assert.equal(reply.embeds[0].fields.length, 3);
 });
 
 test("sync all isolates per-user failures, rechecks consent, and releases only acquired slots", async () => {
@@ -250,4 +255,56 @@ test("sync all isolates per-user failures, rechecks consent, and releases only a
   assert.deepEqual(gathered.sort(), ["gather-error", "ok-user"]);
   assert.deepEqual(committed, ["ok-user"]);
   assert.deepEqual(released.sort(), ["changed-to-local", "gather-error", "ok-user"]);
+});
+
+test("sync report adds a counter field only when that outcome happened", async () => {
+  clearUserLanguageCache();
+  const ids = ["synced-a", "synced-b", "busy", "gather-error"];
+  const docs = ids.map(discordId => ({
+    discordId, autoManageEnabled: true,
+    accounts: [{ accountName: "Roster", characters: [{ name: "Aki" }] }],
+  }));
+  const ui = createSyncUi({
+    EmbedBuilder: FakeEmbedBuilder, MessageFlags: { Ephemeral: 64 },
+    UI: { colors: { success: 1 }, icons: { done: "🟢", warn: "⚠️", pending: "⚪" } },
+    User: {
+      find: () => ({ select() { return this; }, lean: async () => docs }),
+      findOne: ({ discordId }) => discordId === "counter-manager"
+        ? { lean: async () => ({ language: "en" }) }
+        : Promise.resolve(docs.find(doc => doc.discordId === discordId)),
+    },
+    ensureFreshWeek: () => {}, weekResetStartMs: () => 1234,
+    autoManageEntryKey: (account, char) => `${account}:${char}`,
+    acquireAutoManageSyncSlot: async discordId => ({ acquired: discordId !== "busy" }),
+    releaseAutoManageSyncSlot: () => {},
+    gatherAutoManageLogsForUserDoc: async doc => {
+      if (doc.discordId === "gather-error") throw new Error("Gather failed");
+      return [];
+    },
+    commitAutoManageCollected: async () => ({ status: "synced-no-delta", report: { perChar: [] } }),
+    raidCheckSyncLimiter: { run: fn => fn() }, discordUserLimiter: { run: fn => fn() },
+  });
+  let reply;
+  await ui.handleRaidCheckSyncClick({
+    user: { id: "counter-manager" }, client: { users: {} },
+    deferReply: async () => {}, editReply: async payload => { reply = payload; },
+  }, null);
+
+  const embed = reply.embeds[0];
+  const counters = embed.fields
+    .filter(field => field.name !== "​")
+    .map(field => `${field.name}=${field.value}`);
+  assert.deepEqual(counters, [
+    "🔍 Checked=4",
+    "🟢 New data=2",
+    "⚠️ Failed=1",
+    "⏳ Skipped=1",
+  ]);
+  // Two spacers pad the second row so the lone 4th counter is not
+  // stretched across its own row.
+  assert.equal(embed.fields.length, 6);
+  // A partial run drops the success title and its green icon.
+  assert.match(embed.title, /^⚠️ /);
+  assert.match(embed.description, /failed to sync/);
+  assert.match(embed.description, /still on cooldown/);
 });

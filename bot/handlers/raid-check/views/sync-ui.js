@@ -11,7 +11,11 @@
  *     limiter, then DMs each user whose progress changed.
  */
 
-const { buildNoticeEmbed, getCharacterName } = require("../../../utils/raid/common/shared");
+const {
+  buildNoticeEmbed,
+  getCharacterName,
+  INLINE_SPACER,
+} = require("../../../utils/raid/common/shared");
 // tPick, not t: the refresh and sync titles are variant pools; other keys pass through.
 const { tPick: t, getUserLanguage } = require("../../../services/i18n");
 const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
@@ -264,34 +268,88 @@ function createSyncUi({
       `[raid-check sync] raid=${scopeLabel} pendingUsers=${pendingUserCount} optedIn=${optedInDiscordIds.length} scopedChars=${scopedCharCount} synced=${syncedCount} attemptedOnly=${attemptedOnlyCount} skipped=${skippedCount} failed=${failedCount} dmSent=${dmSent} dmFailed=${dmFailed} snapshotMs=${snapshotMs} syncMs=${syncMs} dmMs=${dmMs} totalMs=${Date.now() - started}`
     );
 
-    const description = [
+    // Counters render as inline fields, following the LoaLogs scan-result
+    // shape: the three that answer "did this run work" always show, the
+    // rest only when they have something to report. Discord packs 3 inline
+    // fields per row, so pad to a multiple of 3 once past the first row -
+    // a lone 4th field would stretch across its whole row.
+    const counterFields = [
+      {
+        name: `🔍 ${t("raid-check.syncFlow.reportFields.checked", managerLang)}`,
+        value: String(optedInDiscordIds.length),
+        inline: true,
+      },
+      {
+        name: `${UI.icons.done} ${t("raid-check.syncFlow.reportFields.synced", managerLang)}`,
+        value: String(syncedCount),
+        inline: true,
+      },
+      {
+        name: `${UI.icons.warn} ${t("raid-check.syncFlow.reportFields.failed", managerLang)}`,
+        value: String(failedCount),
+        inline: true,
+      },
+    ];
+    const optionalCounters = [
+      [UI.icons.pending, "noNewData", attemptedOnlyCount],
+      ["⏳", "skipped", skippedCount],
+      ["🆕", "newGates", deltasPerUser.size],
+    ];
+    for (const [icon, key, count] of optionalCounters) {
+      if (count === 0) continue;
+      counterFields.push({
+        name: `${icon} ${t(`raid-check.syncFlow.reportFields.${key}`, managerLang)}`,
+        value: String(count),
+        inline: true,
+      });
+    }
+    if (dmSent > 0 || dmFailed > 0) {
+      counterFields.push({
+        name: `📩 ${t("raid-check.syncFlow.reportFields.dmSent", managerLang)}`,
+        value: dmFailed > 0
+          ? `${dmSent}${t("raid-check.syncFlow.reportDmFailedSuffix", managerLang, { n: dmFailed })}`
+          : String(dmSent),
+        inline: true,
+      });
+    }
+    if (counterFields.length > 3) {
+      while (counterFields.length % 3 !== 0) counterFields.push(INLINE_SPACER);
+    }
+
+    const allFailed = failedCount > 0 && syncedCount === 0;
+    let noticeType = "success";
+    let titleKey = "raid-check.syncFlow.reportTitle";
+    if (allFailed) {
+      noticeType = "error";
+      titleKey = "raid-check.syncFlow.reportTitleFailed";
+    } else if (failedCount > 0 || skippedCount > 0) {
+      noticeType = "warn";
+      titleKey = "raid-check.syncFlow.reportTitlePartial";
+    }
+
+    const lines = [
       t(syncAll ? "raid-check.syncFlow.reportLineAllIntro" : "raid-check.syncFlow.reportLineIntro", managerLang, {
         users: optedInDiscordIds.length,
         chars: scopedCharCount,
       }),
-      "",
-      t("raid-check.syncFlow.reportLineSynced", managerLang, { n: syncedCount }),
-      t("raid-check.syncFlow.reportLineAttemptedOnly", managerLang, { n: attemptedOnlyCount }),
-      t("raid-check.syncFlow.reportLineSkipped", managerLang, { n: skippedCount }),
-      t("raid-check.syncFlow.reportLineFailed", managerLang, { n: failedCount }),
-      t("raid-check.syncFlow.reportLineUpdated", managerLang, { n: deltasPerUser.size }),
-      t("raid-check.syncFlow.reportLineDmSent", managerLang, { sent: dmSent }) +
-        (dmFailed > 0
-          ? t("raid-check.syncFlow.reportLineDmFailedSuffix", managerLang, { n: dmFailed })
-          : ""),
-      "",
-      t(syncAll ? "raid-check.syncFlow.reportLineAllHint" : "raid-check.syncFlow.reportLineHint", managerLang, { raidLabel: raidModeLabel }),
-    ].join("\n");
-    await interaction.editReply({
-      content: null,
-      embeds: [
-        buildNoticeEmbed(EmbedBuilder, {
-          type: "success",
-          title: t("raid-check.syncFlow.reportTitle", managerLang),
-          description,
-        }),
-      ],
+    ];
+    if (failedCount > 0) {
+      lines.push(t("raid-check.syncFlow.reportTailFailed", managerLang, { n: failedCount }));
+    }
+    if (skippedCount > 0) {
+      lines.push(t("raid-check.syncFlow.reportTailSkipped", managerLang, { n: skippedCount }));
+    }
+    lines.push("", allFailed
+      ? t("raid-check.syncFlow.reportHintAllFailed", managerLang)
+      : t(syncAll ? "raid-check.syncFlow.reportLineAllHint" : "raid-check.syncFlow.reportLineHint", managerLang, { raidLabel: raidModeLabel }));
+
+    const embed = buildNoticeEmbed(EmbedBuilder, {
+      type: noticeType,
+      title: t(titleKey, managerLang),
+      description: lines.join("\n"),
     });
+    embed.addFields(counterFields);
+    await interaction.editReply({ content: null, embeds: [embed] });
   }
 
   return {
