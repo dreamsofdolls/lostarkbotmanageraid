@@ -339,9 +339,10 @@ function createSyncUi({
     if (skippedCount > 0) {
       lines.push(t("raid-check.syncFlow.reportTailSkipped", managerLang, { n: skippedCount }));
     }
-    lines.push("", allFailed
-      ? t("raid-check.syncFlow.reportHintAllFailed", managerLang)
-      : t(syncAll ? "raid-check.syncFlow.reportLineAllHint" : "raid-check.syncFlow.reportLineHint", managerLang, { raidLabel: raidModeLabel }));
+    const hintKey = allFailed
+      ? (syncAll ? "raid-check.syncFlow.reportHintAllFailed" : "raid-check.syncFlow.reportHintFailed")
+      : (syncAll ? "raid-check.syncFlow.reportLineAllHint" : "raid-check.syncFlow.reportLineHint");
+    lines.push("", t(hintKey, managerLang, { raidLabel: raidModeLabel }));
 
     const embed = buildNoticeEmbed(EmbedBuilder, {
       type: noticeType,

@@ -1108,6 +1108,7 @@ module.exports = {
       reportTailFailed: "⚠️ **{n}** users failed to sync - check the bot logs for details.",
       reportTailSkipped: "⏳ **{n}** users are still on cooldown, they will be picked up next time.",
       reportHintAllFailed: "Try again in a few minutes, or ask each member to record progress with `/raid-set`.",
+      reportHintFailed: "Try again in a few minutes, or ask the members still pending on **{raidLabel}** to record progress with `/raid-set`.",
       reportLineHint: "Open `/raid-check` and pick **{raidLabel}** in the filter dropdown to see the new pending list.",
     },
     syncDm: {

@@ -1129,6 +1129,7 @@ module.exports = {
       reportTailFailed: "⚠️ **{n}** user fail sync - xem bot log cho chi tiết nha.",
       reportTailSkipped: "⏳ **{n}** user còn cooldown, để lần sau nha.",
       reportHintAllFailed: "Thử lại sau vài phút, hoặc nhờ từng người dùng `/raid-set` để ghi tay nha.",
+      reportHintFailed: "Thử lại sau vài phút, hoặc nhờ mấy người còn pending ở **{raidLabel}** dùng `/raid-set` để ghi tay nha.",
       reportLineHint: "Mở `/raid-check` rồi pick **{raidLabel}** ở dropdown filter để xem list pending mới nha~",
     },
     syncDm: {
