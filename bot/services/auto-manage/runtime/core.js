@@ -5,6 +5,7 @@ const {
   getAutoManageCooldownMs: getAutoManageCooldownMsDefault,
 } = require("../../access/manager");
 const { createBibleClient } = require("../bible/client");
+const { isPublicLogDisabledError } = require("../bible/error-kinds");
 const {
   stampAutoManageAttemptFromReport,
 } = require("../reports/utils");
@@ -28,11 +29,6 @@ const { assertBibleSyncAllowed } = require("./support/sync-mode");
 const {
   weeklyResetStartMs: weekResetStartMs,
 } = require("../../../utils/raid/schedule/reset-windows");
-
-function isPublicLogDisabledError(err) {
-  if (!err) return false;
-  return /logs\s*not\s*enabled/i.test(String(err));
-}
 
 function createAutoManageCoreService({
   EmbedBuilder,

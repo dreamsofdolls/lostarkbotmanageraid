@@ -22,6 +22,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - The daily auto-manage run retries later when a character fails with an error other than a disabled Public Log, even if other characters synced, and it moves the last-sync time only when the run fully succeeds. A day with some characters rate-limited used to count as synced, so those characters waited for the next day.
 - `/raid-check` Sync-all reports users with Local Sync on, no saved roster or only private logs as skipped, and users whose characters all failed for another reason as failed; both used to count as "attempted". The skipped line now gives those reasons instead of a cooldown, which Sync-all never applies, and the button stays disabled while the background roster refresh is still running.
 - The sync report's title icon and color follow the outcome: yellow ⚠️ when some characters failed, red ⚠️ when all did. A fully failed sync used to show ℹ️ on a yellow bar, and the first sync of `action:on` always showed 🟢.
+- A character name that lostark.bible does not know now fails Bible sync as `lostark.bible has no character "..."` instead of `Could not parse bible metadata (page shape changed?)`. Bible answers such a name with HTTP 200 and a "Character Not Found" page, which the sync read as a changed page layout.
 
 ## 2026-09-20
 

@@ -1,5 +1,6 @@
 "use strict";
 
+const { createBibleCharacterNotFoundError } = require("./error-kinds");
 const { createBibleHttpError } = require("./rate-limit");
 
 const BIBLE_REGION = "NA";
@@ -43,6 +44,8 @@ async function fetchBibleCharacterMeta(charName, { fetchImpl = defaultFetch } = 
   // SSR SvelteKit bootstrap data: {header:{id:<cid>,sn:"<serial>",rid:<rid>,...}}
   const match = html.match(/header:\{id:(\d+),sn:"([^"]+)",rid:(\d+)/);
   if (!match) {
+    // The "Character Not Found" page carries `header:void 0` in the same data.
+    if (html.includes("header:void 0")) throw createBibleCharacterNotFoundError(charName);
     throw new Error(`Could not parse bible metadata for "${charName}" (page shape changed?)`);
   }
   return { cid: Number(match[1]), sn: match[2], rid: Number(match[3]) };
