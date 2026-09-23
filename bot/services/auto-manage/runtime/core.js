@@ -146,6 +146,15 @@ function createAutoManageCoreService({
     };
   }
 
+  /**
+   * Turn auto-manage on and apply one Bible sync in the same save.
+   * @param {string} discordId
+   * @param {number} weekResetStart - current week's reset time in ms
+   * @param {object[]|null} [preCollected] - logs a probe already gathered
+   * @returns {Promise<{report: object|undefined, userDoc: object|null}>} the
+   *   report and the document as saved; `userDoc` is null when the user
+   *   record is gone
+   */
   async function commitAutoManageOn(discordId, weekResetStart, preCollected = null) {
     let collected = preCollected;
     if (!collected) {
