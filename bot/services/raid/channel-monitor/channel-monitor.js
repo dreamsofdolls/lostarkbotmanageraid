@@ -50,7 +50,7 @@ function createRaidChannelMonitorService({
     getMissingAnnouncementChannelPermissions,
   } = createRaidChannelPermissionHelpers({ PermissionFlagsBits });
   const {
-    buildRaidChannelMultiResultEmbed,
+    buildRaidChannelReceiptEmbed,
     buildRaidChannelWelcomeEmbed,
   } = createRaidChannelEmbedBuilders({ EmbedBuilder, UI });
   const { postRaidChannelWelcome } = createRaidChannelWelcomeService({
@@ -75,7 +75,7 @@ function createRaidChannelMonitorService({
     UI,
     applyRaidSetBatchForDiscordId,
     applyRaidSetForDiscordId,
-    buildRaidChannelMultiResultEmbed,
+    buildRaidChannelReceiptEmbed,
     getAccessibleAccounts,
     getAnnouncementsConfig,
     getCachedMonitorChannelId,

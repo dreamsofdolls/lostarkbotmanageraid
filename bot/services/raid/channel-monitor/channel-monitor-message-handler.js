@@ -26,7 +26,7 @@ function createRaidChannelMessageHandler({
   UI,
   applyRaidSetBatchForDiscordId,
   applyRaidSetForDiscordId,
-  buildRaidChannelMultiResultEmbed,
+  buildRaidChannelReceiptEmbed,
   checkUserMonitorCooldown,
   clearPendingHint,
   commitUserMonitorActivity,
@@ -126,14 +126,9 @@ function createRaidChannelMessageHandler({
     }
   }
 
-  async function sendAggregateDm(message, aggregateEmbeds, resultSummary) {
-    if (!resultSummary.hasProgress && !resultSummary.hasErrors) return false;
-    const embeds = Array.isArray(aggregateEmbeds) ? aggregateEmbeds.filter(Boolean) : [];
-    if (embeds.length === 0) return false;
+  async function sendReceiptDm(message, receiptEmbed) {
     try {
-      for (let index = 0; index < embeds.length; index += 10) {
-        await message.author.send({ embeds: embeds.slice(index, index + 10) });
-      }
+      await message.author.send({ embeds: [receiptEmbed] });
       return true;
     } catch (err) {
       console.warn(
@@ -141,6 +136,20 @@ function createRaidChannelMessageHandler({
         err?.message || err
       );
       return false;
+    }
+  }
+
+  // The writes are already saved, so a failed re-read must not cost the
+  // receipt: it falls back to the roster read before the write.
+  async function loadReceiptAccounts(authorId, preWriteAccounts) {
+    try {
+      return { accounts: await getAccessibleAccounts(authorId), afterWrite: true };
+    } catch (err) {
+      console.warn(
+        `[raid-channel] receipt re-read for ${authorId} failed; using the roster read before the write:`,
+        err?.message || err
+      );
+      return { accounts: preWriteAccounts, afterWrite: false };
     }
   }
 
@@ -296,21 +305,24 @@ function createRaidChannelMessageHandler({
       return;
     }
 
-    const aggregateEmbeds = resultGroups.map((group) =>
-      buildRaidChannelMultiResultEmbed({
-        results: group.results,
-        raidMeta: group.raidMeta,
-        gates: group.effectiveGates,
-        statusType: group.statusType,
-        guildName: message.guild?.name,
-        lang: authorLang,
-      })
-    );
-    const dmSucceeded = await sendAggregateDm(message, aggregateEmbeds, resultSummary);
+    // An empty result set has nothing to report; the old per-raid DM stayed
+    // silent here too, and the receipt builder reads the first group.
+    if (!resultSummary.hasProgress && !resultSummary.hasErrors) return;
+
+    const receipt = await loadReceiptAccounts(message.author.id, writeBatch.accessibleAccounts);
+    const receiptEmbed = buildRaidChannelReceiptEmbed({
+      text: message.content,
+      resultGroups,
+      accounts: receipt.accounts,
+      afterWrite: receipt.afterWrite,
+      guildName: message.guild?.name,
+      lang: authorLang,
+    });
+    const dmSucceeded = await sendReceiptDm(message, receiptEmbed);
     const ops = [];
     const errorHint = buildRaidChannelErrorHint({
       resultGroups,
-      accounts: writeBatch.accessibleAccounts,
+      accounts: receipt.accounts,
       authorLang,
       UI,
     });
@@ -329,7 +341,7 @@ function createRaidChannelMessageHandler({
         ops,
         message,
         resultGroups,
-        accounts: writeBatch.accessibleAccounts,
+        accounts: receipt.accounts,
         authorLang,
       });
     }
