@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-09-23
+
+### Fixed
+- The raid view in `/raid-status` and `/raid-check` opens for rosters of 17 characters or more instead of failing with a generic error. Up to 16 characters keep the two-column layout; longer rosters get one full-width row per character, as the gold view does, and a roster past Discord's 25-field cap ends with a "+N character khác" line.
+
 ## 2026-09-20
 
 ### Changed

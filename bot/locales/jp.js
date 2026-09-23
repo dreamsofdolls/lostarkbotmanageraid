@@ -732,6 +732,7 @@ module.exports = {
       notEligible: "_まだ参加できませんわ_",
       noCharacters: "_キャラがまだ登録されていませんわ。_",
       allIneligible: "_このロスター内にこのレイドへ参加できるキャラが居ませんわ。_",
+      moreCharacters: "_他 {n} キャラ_",
       autoSyncOnBadge: " · 📝 自動同期",
       localSyncOnBadge: " · 🌐 ローカル同期",
       sharedBySuffix: " · 👥 {owner} さんから共有 ({level})",

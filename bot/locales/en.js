@@ -731,6 +731,7 @@ module.exports = {
       notEligible: "_Not eligible yet_",
       noCharacters: "_No characters saved._",
       allIneligible: "_No character in this roster is eligible for this raid._",
+      moreCharacters: "_+{n} more characters_",
       autoSyncOnBadge: " · 📝 Auto-sync",
       localSyncOnBadge: " · 🌐 Local-sync",
       sharedBySuffix: " · 👥 Shared by {owner} ({level})",

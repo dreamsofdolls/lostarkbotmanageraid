@@ -11,6 +11,12 @@ const { getClassEmoji } = require("../../../models/Class");
 const { pack2Columns, formatProgressTotals } = require("../../../utils/raid/common/shared");
 const { t, tPick } = require("../../../services/i18n");
 
+// pack2Columns spends 3 fields on every 2 characters, so 16 characters fill
+// 24 of Discord's 25 fields and leave one for the sync outcome line. Longer
+// rosters get one full-width field per character, as the gold view does.
+const PAIRED_LAYOUT_CHARACTER_CAP = 16;
+const EMBED_FIELD_LIMIT = 25;
+
 function numberOrZero(value) {
   return Number(value) || 0;
 }
@@ -440,15 +446,31 @@ function createRaidStatusView(deps) {
       return embed;
     }
 
-    embed.addFields(
-      ...pack2Columns(
-        visibleChars.map((c) =>
-          buildCharacterField(c, getRaidsFor, lang, {
-            showGold: showCharacterGold,
-          })
-        )
-      )
+    const characterFields = visibleChars.map((c) =>
+      buildCharacterField(c, getRaidsFor, lang, {
+        showGold: showCharacterGold,
+      })
     );
+    if (characterFields.length <= PAIRED_LAYOUT_CHARACTER_CAP) {
+      embed.addFields(...pack2Columns(characterFields));
+    } else {
+      const fieldBudget = EMBED_FIELD_LIMIT - (outcomeLine ? 1 : 0);
+      const shownCount = characterFields.length > fieldBudget
+        ? fieldBudget - 1
+        : characterFields.length;
+      embed.addFields(
+        ...characterFields.slice(0, shownCount).map((field) => ({ ...field, inline: false }))
+      );
+      if (shownCount < characterFields.length) {
+        embed.addFields({
+          name: "...",
+          value: t("raid-status.embed.moreCharacters", lang, {
+            n: characterFields.length - shownCount,
+          }),
+          inline: false,
+        });
+      }
+    }
 
     appendOutcomeField(embed, outcomeLine);
     return embed;

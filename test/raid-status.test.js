@@ -477,6 +477,48 @@ test("buildAccountPageEmbed: display predicate omits hidden-only chars but keeps
   assert.match(belowField?.value || "", /🔒.*Chưa đủ điều kiện/);
 });
 
+function renderLongRoster(count, userMeta = null) {
+  const account = {
+    accountName: "Alpha",
+    characters: Array.from({ length: count }, (_, i) =>
+      makeChar(`Rowan${String(i + 1).padStart(2, "0")}`, 1760)),
+    lastRefreshedAt: 0,
+  };
+  return buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 0, total: 0 }, characters: count },
+    getStatusRaidsForCharacter,
+    userMeta
+  ).toJSON();
+}
+
+function countCharacterFields(fields) {
+  return fields.filter((field) => /Rowan\d{2}/.test(field.name)).length;
+}
+
+test("buildAccountPageEmbed: a 17-character roster renders every character within 25 fields", () => {
+  const { fields } = renderLongRoster(17);
+  assert.ok(fields.length <= 25);
+  assert.equal(countCharacterFields(fields), 17);
+});
+
+test("buildAccountPageEmbed: a 26-character roster fills 25 fields and notes the 2 left out", () => {
+  const { fields } = renderLongRoster(26);
+  assert.equal(fields.length, 25);
+  assert.equal(countCharacterFields(fields), 24);
+  assert.match(fields.at(-1).value, /\+2\b/);
+});
+
+test("buildAccountPageEmbed: a long roster keeps a field for the sync outcome line", () => {
+  const { fields } = renderLongRoster(25, { piggybackOutcome: { outcome: "failed" } });
+  assert.equal(fields.length, 25);
+  assert.equal(countCharacterFields(fields), 23);
+  assert.match(fields.at(-2).value, /\+2\b/);
+  assert.ok(fields.at(-1).value.startsWith(UI.icons.warn));
+});
+
 test("buildAccountPageEmbed: title keeps one progress icon for Manager and regular rosters", () => {
   const account = { accountName: "Alpha", characters: [], lastRefreshedAt: 0 };
   for (const discordId of ["test-manager", "regular-user"]) {
