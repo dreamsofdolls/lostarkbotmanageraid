@@ -322,6 +322,11 @@ function createAutoManageGatherer({
         const entryKey = autoManageEntryKey(account.accountName, getCharacterName(character));
         if (includeEntryKeys && !includeEntryKeys.has(entryKey)) continue;
 
+        // A character flagged "Logs not enabled" is re-probed at most once per
+        // PUBLIC_LOG_DISABLED_REPROBE_MS, so it does not cost a Bible request on
+        // every sync, yet a flip back to public shows up within a day. An
+        // explicit includeEntryKeys selection (the /raid-check Sync of pending
+        // characters) skips the gate; it is the only way to re-probe sooner.
         const flaggedAt = character.publicLogDisabledAt
           ? new Date(character.publicLogDisabledAt).getTime()
           : 0;
