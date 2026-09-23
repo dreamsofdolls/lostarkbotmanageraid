@@ -289,6 +289,8 @@ module.exports = {
       noEligibleDescription: "Your roster has no character at iLvl {ilvl}+ for this raid. Hone up a bit and hop in~",
       pickerStaleTitle: "That list is a little stale",
       pickerStaleDescription: "The roster or event changed after the picker opened. Hit Join again so Artist can pull a fresh list.",
+      boardChangedTitle: "The board just changed",
+      boardChangedDescription: "Someone updated this board at the same moment you clicked, so your action was not saved. Give it another try.",
       joinedTitle: "You're in~",
       joinedDescription: "Artist put **{character}** on the board for you.",
       joinedRefreshFailedTitle: "Signed up, but the board didn't refresh",

@@ -338,6 +338,18 @@ function createRaidScheduleCommand({
     { prefix: "teammembers", create: () => handleTeamMembersSelect },
   ]);
 
+  // RaidEvent saves use optimistic concurrency, so when two people act on one
+  // board at the same moment the later save throws a VersionError. That is a
+  // lost race, not a bug: ask for a retry instead of the router's generic error.
+  async function runBoardAction(handler, interaction, event, lang, notify) {
+    try {
+      return await handler(interaction, event, lang);
+    } catch (error) {
+      if (error?.name !== "VersionError") throw error;
+      await notify(interaction, lang, "warn", "boardChangedTitle", "boardChangedDescription");
+    }
+  }
+
   async function loadScheduleComponentContext(interaction, { beforeLoad = null } = {}) {
     const parsed = parseScheduleCustomId(interaction.customId);
     if (typeof beforeLoad === "function") await beforeLoad();
@@ -358,7 +370,7 @@ function createRaidScheduleCommand({
       BUTTON_ACTION_HANDLERS,
       BUTTON_PREFIX_HANDLERS,
     );
-    if (handler) return handler(interaction, event, lang);
+    if (handler) return runBoardAction(handler, interaction, event, lang, replyNotice);
     await replyNotice(interaction, lang, "warn", "unknownTitle", "unknownDescription");
   }
 
@@ -375,7 +387,7 @@ function createRaidScheduleCommand({
       SELECT_ACTION_HANDLERS,
       SELECT_PREFIX_HANDLERS,
     );
-    if (handler) return handler(interaction, event, lang);
+    if (handler) return runBoardAction(handler, interaction, event, lang, editNotice);
     await editNotice(interaction, lang, "warn", "unknownTitle", "unknownDescription");
   }
 

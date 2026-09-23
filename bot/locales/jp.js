@@ -291,6 +291,8 @@ module.exports = {
       noEligibleDescription: "このレイドの iLvl {ilvl}+ に届くキャラがロスターに無いみたい。少し強化してからまた来てね～",
       pickerStaleTitle: "リストが少し古くなったよ",
       pickerStaleDescription: "ピッカーを開いた後にロスターかイベントが変わったみたい。もう一度 Join を押して、新しいリストを出すね。",
+      boardChangedTitle: "ボードがちょうど更新されたよ",
+      boardChangedDescription: "押したのと同じタイミングで誰かがこのボードを更新したから、今の操作は保存されなかったよ。もう一度試してね。",
       joinedTitle: "参加できたよ～",
       joinedDescription: "Artist が **{character}** をボードに載せておいたよ。",
       joinedRefreshFailedTitle: "登録はできたけど、ボードの更新が間に合わなかったよ",

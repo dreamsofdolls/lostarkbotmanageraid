@@ -13,6 +13,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `/raid-help` has a `/raid-share` section in vi, en and jp: `grant` and `revoke` are Manager-only, `list` is open to everyone, and the notes cover `edit` against `view` and the roster commands that stay with the owner. The command had no help entry since it shipped. A test now fails whenever a routed command lacks a help section.
 - The `/raid-bg` page of `/raid-help` describes its options instead of printing raw keys such as `raid-help.sections.raid-bg.optionDescriptions.view`. A test checks every help page in all three languages for leftover keys.
 - The `/raid-language` description names all three languages (Tiếng Việt / 日本語 / English), and its default text, shown to Discord clients in other languages, is now English like the other commands. It used to list only Vietnamese and Japanese, in Vietnamese.
+- When two players act on the same signup board at the same moment, the click whose save loses the race now says the board just changed and asks for another try, instead of the generic "Có lỗi xảy ra" error. Nothing is saved for that click, as before.
 
 ## 2026-09-20
 

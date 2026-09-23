@@ -301,6 +301,8 @@ module.exports = {
       noEligibleDescription: "Roster của cậu chưa có bạn nào đạt iLvl {ilvl}+ cho raid này. Hone thêm chút rồi vào nha~",
       pickerStaleTitle: "Danh sách hơi cũ rồi",
       pickerStaleDescription: "Roster hoặc event đổi rồi sau khi cậu mở picker. Bấm Tham gia lại để Artist lấy danh sách mới nha.",
+      boardChangedTitle: "Board vừa đổi mất rồi",
+      boardChangedDescription: "Có người cập nhật board này đúng lúc cậu bấm, nên thao tác của cậu chưa được lưu. Cậu thử lại lần nữa nha.",
       joinedTitle: "Vào đội rồi nha~",
       joinedDescription: "Artist xếp **{character}** lên board cho cậu rồi nhé.",
       joinedRefreshFailedTitle: "Ghi tên xong, mà board chưa kịp refresh",
