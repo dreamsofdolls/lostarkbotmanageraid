@@ -1904,6 +1904,25 @@ module.exports = {
           "**Session timeout 5 minutes** - components disable when expired; type `/raid-check` again to reopen.",
         ],
       },
+      "raid-share": {
+        label: "/raid-share",
+        short: "[Raid Manager] Share all your rosters with another user, edit or view",
+        example: "/raid-share grant target:@user permission:edit",
+        notes: [
+          "A Manager shares **all** of their rosters with another user, who sees them in `/raid-status` from their next open. `grant` and `revoke` are restricted to Raid Managers (env `RAID_MANAGER_ID`).",
+          "",
+          "**grant target:<user> [permission]** - `edit` (default) lets the recipient update progress through `/raid-status`, `/raid-set`, `/raid-task` and the text parser; `view` is read-only. Granting the same user again swaps the level in place.",
+          "**revoke target:<user>** - removes the share. The next command the other user runs shows only their own rosters again.",
+          "**list [direction]** - open to everyone. `out` shows shares you granted, `in` shows shares you received, both by default.",
+          "",
+          "**Owner commands**: `/raid-add-roster`, `/raid-edit-roster`, `/raid-remove-roster` and `/raid-auto-manage` never run on shared rosters. A share is suspended while its owner is not a Manager.",
+        ],
+        optionDescriptions: {
+          "grant target:<user> permission:<edit|view>": "Share all your rosters with this user (Manager-only)",
+          "revoke target:<user>": "Remove the share you granted this user (Manager-only)",
+          "list direction:<both|out|in>": "Show the shares you granted and the shares you received",
+        },
+      },
       "raid-remove-roster": {
         label: "/raid-remove-roster",
         short: "Remove a roster or one character from it",

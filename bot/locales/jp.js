@@ -1905,6 +1905,25 @@ module.exports = {
           "**セッションタイムアウト 5 分** - 期限切れで全コンポーネントが無効化、もう一度 `/raid-check` で再開ですわ♪",
         ],
       },
+      "raid-share": {
+        label: "/raid-share",
+        short: "[レイドマネージャー専用] 自分の全ロスターを他ユーザーに共有 (edit / view) ですわ",
+        example: "/raid-share grant target:@user permission:edit",
+        notes: [
+          "マネージャーが自分の**全**ロスターを他ユーザーに共有しますの。受け取った方は次に `/raid-status` を開いた時から表示されますわ。`grant` と `revoke` はレイドマネージャー (環境変数 `RAID_MANAGER_ID`) 限定ですの。",
+          "",
+          "**grant target:<user> [permission]** - `edit` (既定) なら `/raid-status`、`/raid-set`、`/raid-task`、テキストパーサーで進捗を更新できますわ。`view` は閲覧のみですの。同じ相手にもう一度 grant すると権限をその場で切り替えますわ。",
+          "**revoke target:<user>** - 共有を取り消しますの。相手が次にコマンドを使うと、ご自身のロスターだけの表示に戻りますわ。",
+          "**list [direction]** - どなたでも使えますわ。`out` は付与した共有、`in` は受け取った共有、既定は両方を表示しますの。",
+          "",
+          "**オーナー専用コマンド**: `/raid-add-roster`、`/raid-edit-roster`、`/raid-remove-roster`、`/raid-auto-manage` は共有ロスターには使えませんわ。オーナーがマネージャーでなくなると共有は一時停止しますの。",
+        ],
+        optionDescriptions: {
+          "grant target:<user> permission:<edit|view>": "このユーザーに全ロスターを共有 (マネージャー限定)",
+          "revoke target:<user>": "このユーザーへの共有を取り消し (マネージャー限定)",
+          "list direction:<both|out|in>": "付与した共有と受け取った共有を表示",
+        },
+      },
       "raid-remove-roster": {
         label: "/raid-remove-roster",
         short: "ロスターまたはキャラ 1 体を削除しますの",

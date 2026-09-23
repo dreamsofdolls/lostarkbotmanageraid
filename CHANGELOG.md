@@ -10,6 +10,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - The raid view in `/raid-status` and `/raid-check` opens for rosters of 17 characters or more instead of failing with a generic error. Up to 16 characters keep the two-column layout; longer rosters get one full-width row per character, as the gold view does, and a roster past Discord's 25-field cap ends with a "+N character khác" line.
 - A signup board with a long waitlist keeps updating. The `⏳ WAITLIST` column lists the first 10 players and a `+N` line for the rest, and the RSVP row names up to 10 players per status. About 15 waiting players used to push the column past Discord's field limit, after which every join, RSVP or kick failed to redraw the board.
 - The Local Reader shows Discord names with Vietnamese or Japanese characters correctly. The page decoded the token as Latin-1, so "Trần Văn A" appeared as "Tráº§n VÄn A" in the identity line.
+- `/raid-help` has a `/raid-share` section in vi, en and jp: `grant` and `revoke` are Manager-only, `list` is open to everyone, and the notes cover `edit` against `view` and the roster commands that stay with the owner. The command had no help entry since it shipped. A test now fails whenever a routed command lacks a help section.
 
 ## 2026-09-20
 

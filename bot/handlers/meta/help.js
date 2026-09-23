@@ -33,6 +33,7 @@ const SECTION_ORDER = [
   "raid-task",
   "raid-set",
   "raid-check",
+  "raid-share",
   "raid-remove-roster",
   "raid-channel",
   "raid-auto-manage",
@@ -107,6 +108,14 @@ const SECTION_META = {
     ],
   },
   "raid-check": { icon: "🔍", options: [] },
+  "raid-share": {
+    icon: "👥",
+    options: [
+      { name: "grant target:<user> permission:<edit|view>", required: false },
+      { name: "revoke target:<user>", required: false },
+      { name: "list direction:<both|out|in>", required: false },
+    ],
+  },
   "raid-remove-roster": {
     icon: "🗑️",
     options: [

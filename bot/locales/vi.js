@@ -1925,6 +1925,25 @@ module.exports = {
           "**Session timeout 5 phút** - hết hạn disable mọi component, gõ lại `/raid-check` để mở lại.",
         ],
       },
+      "raid-share": {
+        label: "/raid-share",
+        short: "[Raid Manager] Share toàn bộ roster cho user khác, quyền edit hoặc view",
+        example: "/raid-share grant target:@user permission:edit",
+        notes: [
+          "Manager chia sẻ **tất cả** roster của mình cho một user khác. Người nhận thấy các roster đó trong `/raid-status` từ lần mở kế tiếp. `grant` và `revoke` chỉ Raid Manager (env `RAID_MANAGER_ID`) mới gọi được.",
+          "",
+          "**grant target:<user> [permission]** - `edit` (mặc định) cho người nhận update progress qua `/raid-status`, `/raid-set`, `/raid-task` và text parser; `view` chỉ xem. Grant lại cho cùng người thì đổi quyền tại chỗ.",
+          "**revoke target:<user>** - rút quyền. Lần kế tiếp người kia chạy lệnh, view quay về roster của riêng họ.",
+          "**list [direction]** - ai cũng dùng được. `out` là share cậu đã cấp, `in` là share cậu nhận, mặc định hiện cả hai.",
+          "",
+          "**Lệnh của chủ roster**: `/raid-add-roster`, `/raid-edit-roster`, `/raid-remove-roster` và `/raid-auto-manage` không chạy trên roster được share. Share tạm ngưng khi người cấp không còn là Manager.",
+        ],
+        optionDescriptions: {
+          "grant target:<user> permission:<edit|view>": "Share toàn bộ roster cho user này (chỉ Manager)",
+          "revoke target:<user>": "Rút share đã cấp cho user này (chỉ Manager)",
+          "list direction:<both|out|in>": "Xem share cậu đã cấp và share cậu nhận",
+        },
+      },
       "raid-remove-roster": {
         label: "/raid-remove-roster",
         short: "Xoá roster hoặc 1 character",

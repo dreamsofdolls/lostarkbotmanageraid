@@ -20,6 +20,7 @@ const {
 } = require("discord.js");
 
 const { createRaidHelpCommand } = require("../bot/handlers/meta/help");
+const { RAID_COMMAND_NAMES } = require("../bot/app/interaction-router-registry");
 const { UI } = require("../bot/utils/raid/common/shared");
 
 function makeFactory() {
@@ -76,6 +77,7 @@ const EXPECTED_SECTION_KEYS = [
   "raid-task",
   "raid-set",
   "raid-check",
+  "raid-share",
   "raid-remove-roster",
   "raid-channel",
   "raid-auto-manage",
@@ -111,6 +113,17 @@ test("dropdown contains every help section + bakes default lang into customId", 
   assert.equal(select.custom_id, "raid-help:select:vi", "default lang is vi");
   const optionValues = select.options.map((o) => o.value).sort();
   assert.deepEqual(optionValues, [...EXPECTED_SECTION_KEYS].sort());
+});
+
+test("every routed slash command except /raid-help has a help section", async () => {
+  const factory = makeFactory();
+  const interaction = makeReplyInteraction();
+  await factory.handleRaidHelpCommand(interaction);
+
+  const options = interaction._calls.reply[0].components[0].toJSON().components[0].options;
+  const sectionKeys = new Set(options.map((o) => o.value));
+  const missing = RAID_COMMAND_NAMES.filter((name) => name !== "raid-help" && !sectionKeys.has(name));
+  assert.deepEqual(missing, []);
 });
 
 test("language=en option renders English overview + bakes en into dropdown customId", async () => {
