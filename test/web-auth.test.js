@@ -101,6 +101,13 @@ test("web auth bootstrap decodes valid token, exposes globals, and updates expir
   assert.match(dom.authStatus.innerHTML, /sec/);
 });
 
+test("web auth decodes non-ASCII Discord names from the token payload", async () => {
+  const { decodePayload } = await import("../web/js/core/auth.js");
+  for (const username of ["Trần Văn A", "トレイン"]) {
+    assert.equal(decodePayload(makeToken({ discordId: "123", username })).username, username);
+  }
+});
+
 test("web auth bootstrap renders expired token without enabling sync globals", async () => {
   const { bootstrapAuthSession, decodePayload } = await import("../web/js/core/auth.js");
   const dom = makeDom();

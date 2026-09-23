@@ -6,7 +6,10 @@ export function decodePayload(token) {
     if (parts.length !== 2) return null;
     const normalized = parts[0].replace(/-/g, "+").replace(/_/g, "/");
     const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
-    return JSON.parse(atob(padded));
+    // atob returns one character per byte, and the server encodes the payload
+    // as UTF-8, so names with diacritics need the bytes decoded first.
+    const bytes = Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     return null;
   }
