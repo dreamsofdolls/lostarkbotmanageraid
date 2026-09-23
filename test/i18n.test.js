@@ -4,6 +4,9 @@ const assert = require("node:assert/strict");
 const { TRANSLATIONS, SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } = require("../bot/locales");
 const { normalizeLanguage, resolveLocale } = require("../bot/services/i18n");
 const { TOKEN_DEFAULT_TTL_SEC } = require("../bot/services/local-sync");
+const {
+  createRaidLanguageCommandDefinition,
+} = require("../bot/handlers/commands/command-definitions/social");
 
 function leafKeys(value, prefix = "", out = []) {
   if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -230,4 +233,14 @@ test("jp/en raid-channel schedule copy matches per-language quiet hours", () => 
   assert.match(jpText, /朝3時/);
   assert.match(jpText, /朝8時/);
   assert.doesNotMatch(jpText, /朝5時|朝10時|翌5時/);
+});
+
+test("/raid-language names every supported language in each description", () => {
+  const command = createRaidLanguageCommandDefinition().toJSON();
+  const descriptions = [command.description, ...Object.values(command.description_localizations || {})];
+  for (const description of descriptions) {
+    for (const { label } of SUPPORTED_LANGUAGES) {
+      assert.ok(description.includes(label), `"${description}" should name ${label}`);
+    }
+  }
 });

@@ -32,10 +32,10 @@ function createRaidHelpCommandDefinition() {
 function createRaidLanguageCommandDefinition() {
   const raidLanguageCommand = new SlashCommandBuilder()
     .setName("raid-language")
-    .setDescription("Đổi ngôn ngữ Artist hiển thị cho cậu (Tiếng Việt / 日本語)")
+    .setDescription("Change the language Artist uses with you (Tiếng Việt / 日本語 / English)")
     .setDescriptionLocalizations({
-      vi: "Đổi ngôn ngữ Artist hiển thị cho cậu (Tiếng Việt / 日本語)",
-      ja: "Artist の表示言語を切り替え（Tiếng Việt / 日本語）",
+      vi: "Đổi ngôn ngữ Artist hiển thị cho cậu (Tiếng Việt / 日本語 / English)",
+      ja: "Artist の表示言語を切り替え（Tiếng Việt / 日本語 / English）",
     })
     .setDMPermission(false);
 
