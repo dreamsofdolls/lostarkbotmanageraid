@@ -179,7 +179,9 @@ const userSchema = new mongoose.Schema(
     // Unix ms timestamp of the last auto-manage sync where AT LEAST ONE
     // character fetched and reconciled without throwing. Kept separate from
     // the attempt stamp so repeated Cloudflare 403 responses do not mark
-    // cached data as fresh.
+    // cached data as fresh. The daily run is stricter and stamps it only on a
+    // fully successful report, because the daily availability filter reads
+    // this field and a partial-success stamp would block the scheduled retry.
     lastAutoManageSyncAt: { type: Number, default: null },
     // VN calendar day (YYYY-MM-DD) when this user most recently opened a
     // usable /raid-status session. This is activity telemetry only; daily

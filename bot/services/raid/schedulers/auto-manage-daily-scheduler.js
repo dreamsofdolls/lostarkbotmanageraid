@@ -206,6 +206,9 @@ async function persistCollectedDailyReport({
       nowMs,
     });
     fresh.lastAutoManageAttemptAt = nowMs;
+    // Only a successful outcome counts as a sync here: the availability
+    // filter reads lastAutoManageSyncAt, so stamping a partial success would
+    // hide the user from the retry this report just scheduled.
     if (transition.outcome === AUTO_MANAGE_DAILY_OUTCOME.success) {
       fresh.lastAutoManageSyncAt = nowMs;
     }
