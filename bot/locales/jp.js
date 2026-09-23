@@ -2047,6 +2047,11 @@ module.exports = {
           "**保存場所**: バイトデータは bot のデータベースに直接書き込まれますわ (専用 collection · User doc には載せませんの)。管理者の設定や rehost channel は不要 · アップロードしてすぐ使えますの♪ 各保存画像は 2 MB 以下なので、6シーンでも Mongo document limit に収まりますわ。メモリ内 LRU キャッシュがリピート描画を吸収しますの。",
           "**クッキリ + キレイ**: 保存前に 16:9 (1600x900 JPEG) フレームに正規化しますわ · 自身の cover-fit バックプレートが背景を埋めて、source 画像は contain-fit で中央に丸ごと配置されますの。縦長や変則比率でも Discord embed の横幅いっぱいに表示されて、クロップされませんわ～",
         ],
+        optionDescriptions: {
+          "set image:<file> action:<overwrite|extend>": "1-4 枚アップロード。`overwrite` はライブラリを置き換え、`extend` は 6 シーンまで追加",
+          view: "シーンブラウザとロスター割り当てを表示",
+          "edit image:<file>": "選択中のシーンを添付画像で差し替え。`image` なしならシーンを削除",
+        },
       },
     },
   },

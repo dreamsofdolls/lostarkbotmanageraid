@@ -288,6 +288,18 @@ test("raid-help documents multi-raid text and the Final alias in every locale", 
   }
 });
 
+test("detail embeds never show a raw raid-help key in any locale", async () => {
+  const factory = makeFactory();
+  for (const lang of ["vi", "en", "jp"]) {
+    for (const key of EXPECTED_SECTION_KEYS) {
+      const interaction = makeSelectInteraction(key, { lang });
+      await factory.handleRaidHelpSelect(interaction);
+      const rendered = JSON.stringify(interaction._calls.update[0].embeds[0].toJSON());
+      assert.doesNotMatch(rendered, /raid-help\.sections\./, `${lang}/${key}`);
+    }
+  }
+});
+
 test("detail embed: every field value stays within Discord's 1024-char limit", async () => {
   // Regression guard against an overlong notes string crashing render.
   // splitHelpFieldValue is supposed to chunk; this asserts that

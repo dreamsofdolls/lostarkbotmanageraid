@@ -2046,6 +2046,11 @@ module.exports = {
           "**Storage**: bytes land in the bot's database (a dedicated collection · not nested on the User doc). No admin setup, no rehost channel · upload-and-go. Each stored image is kept under 2 MB, so the 6-scene cap stays below Mongo's document limit. An in-memory LRU cache absorbs repeat-render hits so /raid-status pagination doesn't bounce on Mongo.",
           "**Sharp + clean**: each upload is normalized to a 16:9 (1600x900 JPEG) frame before storage · a cover-fit backplate fills the canvas while the source stays whole (contain-fit) in the center. Portrait or odd-ratio art still spans the embed's full width without being cropped.",
         ],
+        optionDescriptions: {
+          "set image:<file> action:<overwrite|extend>": "Upload 1-4 images; `overwrite` replaces the library, `extend` appends up to 6 scenes",
+          view: "Open the scene browser with the roster map",
+          "edit image:<file>": "Replace the selected scene with the attached image; leave `image` empty to delete scenes",
+        },
       },
     },
   },

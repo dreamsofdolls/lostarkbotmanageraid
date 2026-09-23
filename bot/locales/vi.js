@@ -2067,6 +2067,11 @@ module.exports = {
           "**Lưu trữ**: ảnh đi thẳng vào database của bot (collection riêng, không nhồi vào User doc). Không cần admin setup channel gì cả · upload-and-go. Mỗi ảnh đã nén giữ dưới 2 MB nên cap 6 cảnh vẫn nằm dưới giới hạn document Mongo. Cache LRU in-memory hấp thụ render lặp lại nên /raid-status pagination không hit Mongo nhiều lần.",
           "**Đẹp + căng**: ảnh được normalize về frame 16:9 (1600x900 JPEG) trước khi lưu, với backplate cover-fit phủ nền + source giữ nguyên (contain-fit) ở giữa. Portrait hay tỉ lệ lạ đều render full chiều rộng embed Discord, không bị crop.",
         ],
+        optionDescriptions: {
+          "set image:<file> action:<overwrite|extend>": "Upload 1-4 ảnh; `overwrite` thay cả thư viện, `extend` nối thêm tới 6 cảnh",
+          view: "Mở browser xem từng cảnh và map roster",
+          "edit image:<file>": "Thay cảnh đang chọn bằng ảnh đính kèm; bỏ trống `image` để xoá cảnh",
+        },
       },
     },
   },
