@@ -870,7 +870,6 @@ const raidSchedulerService = createRaidSchedulerService({
   releaseAutoManageSyncSlot,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
-  isPublicLogDisabledError,
 });
 ({
   AUTO_CLEANUP_TICK_MS,

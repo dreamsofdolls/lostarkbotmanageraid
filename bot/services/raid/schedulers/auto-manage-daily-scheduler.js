@@ -175,7 +175,6 @@ async function persistCollectedDailyReport({
   nowMs,
   ensureFreshWeek,
   applyAutoManageCollected,
-  isPublicLogDisabledError,
   weekResetStart,
   collected,
 }) {
@@ -200,7 +199,6 @@ async function persistCollectedDailyReport({
     transition = applyAutoManageDailyReportState({
       userDoc: fresh,
       report,
-      isPublicLogDisabledError,
       targetDayKey: dailyContext.targetDayKey,
       attemptCount,
       nowMs,
@@ -269,7 +267,6 @@ async function syncCandidate({
     releaseAutoManageSyncSlot,
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
-    isPublicLogDisabledError,
   } = deps;
 
   const guard = await acquireAutoManageSyncSlot(discordId);
@@ -315,7 +312,6 @@ async function syncCandidate({
       nowMs,
       ensureFreshWeek,
       applyAutoManageCollected,
-      isPublicLogDisabledError,
       weekResetStart,
       collected,
     });
@@ -359,7 +355,6 @@ function createAutoManageDailySchedulerService({
   releaseAutoManageSyncSlot,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
-  isPublicLogDisabledError,
   processEnv = process.env,
 }) {
   async function runAutoManageDailyTick(client, now = new Date()) {
@@ -394,7 +389,6 @@ function createAutoManageDailySchedulerService({
           releaseAutoManageSyncSlot,
           gatherAutoManageLogsForUserDoc,
           applyAutoManageCollected,
-          isPublicLogDisabledError,
         },
       });
       applyOutcomeCounter(counters, outcome.bucket);

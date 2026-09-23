@@ -99,7 +99,7 @@ for (const gatherFails of [false, true]) {
         return [];
       },
       applyAutoManageCollected: () => assert.fail('A replaced worker must not apply old logs'),
-      isPublicLogDisabledError: () => false, processEnv: {},
+      processEnv: {},
     });
     await service.runAutoManageDailyTick({}, now);
     assert.equal(saves, 0);
@@ -196,7 +196,6 @@ test("auto-manage daily scheduler skips DB work when deploy killswitch is on", a
     releaseAutoManageSyncSlot: () => {},
     gatherAutoManageLogsForUserDoc: async () => ({}),
     applyAutoManageCollected: () => ({ perChar: [] }),
-    isPublicLogDisabledError: () => false,
     processEnv: { AUTO_MANAGE_DAILY_DISABLED: "true" },
   });
 
@@ -255,7 +254,6 @@ test("auto-manage daily scheduler syncs one absent user and releases the slot", 
       applyAutoManageCollected: () => ({
         perChar: [{ charName: "Qiylyn", applied: ["G1"] }],
       }),
-      isPublicLogDisabledError: () => false,
       processEnv: {},
     });
 
@@ -360,7 +358,6 @@ test("auto-manage daily scheduler settles configuration changes made after gathe
         applyAutoManageCollected: () => {
           throw new Error("configuration drift must settle before apply");
         },
-        isPublicLogDisabledError: () => false,
         processEnv: {},
       });
 
@@ -401,7 +398,6 @@ test("auto-manage daily scheduler skips a candidate leased or finished after sca
       return {};
     },
     applyAutoManageCollected: () => ({ perChar: [] }),
-    isPublicLogDisabledError: () => false,
     processEnv: {},
   });
 
@@ -450,7 +446,6 @@ test("auto-manage daily scheduler retries a partial transient report without sta
         { charName: "Bori", error: "HTTP 503", applied: [] },
       ],
     }),
-    isPublicLogDisabledError: () => false,
     processEnv: {},
   });
 
@@ -511,7 +506,6 @@ test("auto-manage daily scheduler settles all-private reports silently", async (
         { charName: "Qiylyn", error: "Logs not enabled", applied: [] },
       ],
     }),
-    isPublicLogDisabledError: (error) => error === "Logs not enabled",
     processEnv: {},
   });
 
@@ -577,7 +571,6 @@ test("auto-manage daily scheduler persists retry state when gather throws", asyn
       applyAutoManageCollected: () => {
         throw new Error("apply must not run after gather failure");
       },
-      isPublicLogDisabledError: () => false,
       processEnv: {},
     });
 
@@ -679,7 +672,6 @@ test("auto-manage daily scheduler exposes the batch size used by the query chain
     releaseAutoManageSyncSlot: () => {},
     gatherAutoManageLogsForUserDoc: async () => ({}),
     applyAutoManageCollected: () => ({ perChar: [] }),
-    isPublicLogDisabledError: () => false,
     processEnv: {},
   });
 

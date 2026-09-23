@@ -3,6 +3,10 @@
 const { randomUUID } = require("node:crypto");
 
 const {
+  BIBLE_ERROR_KIND,
+  classifyBibleError,
+} = require("../../bible/error-kinds");
+const {
   hasSuccessfulAutoManageReport,
 } = require("../../reports/utils");
 
@@ -26,6 +30,13 @@ const AUTO_MANAGE_DAILY_OUTCOME = Object.freeze({
   disabled: "disabled",
   noRoster: "no-roster",
 });
+
+// A retry later the same day cannot turn a Public Log on or make Bible know
+// a character name, so these failures settle the day.
+const SETTLED_ERROR_KINDS = new Set([
+  BIBLE_ERROR_KIND.publicLogOff,
+  BIBLE_ERROR_KIND.notFound,
+]);
 
 /**
  * Build the shared scan/atomic-claim filter; opening status never postpones a
@@ -170,51 +181,44 @@ function scheduleAutoManageDailyRetry({
   };
 }
 
-function classifyAutoManageDailyReport({
-  report,
-  isPublicLogDisabledError,
-}) {
+function classifyAutoManageDailyReport(report) {
   const entries = Array.isArray(report?.perChar) ? report.perChar : [];
   if (entries.length === 0) {
     return AUTO_MANAGE_DAILY_OUTCOME.noActionable;
   }
-  const hasTransientError = entries.some(
-    (entry) => entry?.error && !(
-      typeof isPublicLogDisabledError === "function" &&
-      isPublicLogDisabledError(entry.error)
-    )
-  );
-  if (hasTransientError) {
+  const errorKinds = entries
+    .filter((entry) => entry?.error)
+    .map((entry) => classifyBibleError(entry.error));
+  if (errorKinds.some((kind) => !SETTLED_ERROR_KINDS.has(kind))) {
     return AUTO_MANAGE_DAILY_OUTCOME.retryScheduled;
   }
   if (hasSuccessfulAutoManageReport(report)) {
     return AUTO_MANAGE_DAILY_OUTCOME.success;
   }
-  if (
-    entries.every(
-      (entry) =>
-        entry?.error &&
-        typeof isPublicLogDisabledError === "function" &&
-        isPublicLogDisabledError(entry.error)
-    )
-  ) {
-    return AUTO_MANAGE_DAILY_OUTCOME.allPrivate;
-  }
-  return AUTO_MANAGE_DAILY_OUTCOME.retryScheduled;
+  // Every character failed, each for a reason a retry cannot fix.
+  return errorKinds.every((kind) => kind === BIBLE_ERROR_KIND.publicLogOff)
+    ? AUTO_MANAGE_DAILY_OUTCOME.allPrivate
+    : AUTO_MANAGE_DAILY_OUTCOME.noActionable;
 }
 
+/**
+ * Settle the daily attempt or schedule its retry from the sync report.
+ * @param {object} params
+ * @param {object} params.userDoc - the document the report was applied to
+ * @param {{perChar: object[]}} params.report - applyAutoManageCollected report
+ * @param {string} params.targetDayKey
+ * @param {number} params.attemptCount
+ * @param {number} [params.nowMs]
+ * @returns {{bucket: string, outcome: string, nextAttemptAt: number|null}}
+ */
 function applyAutoManageDailyReportState({
   userDoc,
   report,
-  isPublicLogDisabledError,
   targetDayKey,
   attemptCount,
   nowMs = Date.now(),
 }) {
-  const outcome = classifyAutoManageDailyReport({
-    report,
-    isPublicLogDisabledError,
-  });
+  const outcome = classifyAutoManageDailyReport(report);
   if (outcome === AUTO_MANAGE_DAILY_OUTCOME.success) {
     return finishAutoManageDailyAttempt(userDoc, targetDayKey, outcome, nowMs);
   }

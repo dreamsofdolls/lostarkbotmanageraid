@@ -875,7 +875,6 @@ test("resetExpiredSideTasks issues 2 updateMany calls (daily + weekly) with the 
     releaseAutoManageSyncSlot: () => {},
     gatherAutoManageLogsForUserDoc: async () => ({}),
     applyAutoManageCollected: () => ({ perChar: [] }),
-    isPublicLogDisabledError: () => false,
     stampAutoManageAttempt: async () => {},
   });
 
@@ -1696,7 +1695,6 @@ test("resetExpiredSideTasks reports modifiedCount accurately when Mongo touches 
     releaseAutoManageSyncSlot: () => {},
     gatherAutoManageLogsForUserDoc: async () => ({}),
     applyAutoManageCollected: () => ({ perChar: [] }),
-    isPublicLogDisabledError: () => false,
     stampAutoManageAttempt: async () => {},
   });
   const report = await service.resetExpiredSideTasks(

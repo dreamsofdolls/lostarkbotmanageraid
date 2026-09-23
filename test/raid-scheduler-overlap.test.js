@@ -16,7 +16,6 @@ function createServiceWithGuildConfig(GuildConfig) {
     releaseAutoManageSyncSlot: () => {},
     gatherAutoManageLogsForUserDoc: async () => ({}),
     applyAutoManageCollected: () => ({ perChar: [] }),
-    isPublicLogDisabledError: () => false,
     stampAutoManageAttempt: async () => {},
   });
 }

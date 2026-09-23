@@ -50,9 +50,9 @@ test("background retry deadlines and attempt limits survive a VN midnight rollov
 });
 
 test("every terminal daily outcome starts the 24-hour interval, including exhausted retries", () => {
-  for (const report of [{ perChar: [{ applied: [] }] }, { perChar: [] }, { perChar: [{ error: "private" }] }, { perChar: [{ error: "HTTP 503" }] }]) {
+  for (const report of [{ perChar: [{ applied: [] }] }, { perChar: [] }, { perChar: [{ error: "Logs not enabled" }] }, { perChar: [{ error: "HTTP 503" }] }]) {
     const doc = {};
-    applyAutoManageDailyReportState({ userDoc: doc, report, isPublicLogDisabledError: error => error === "private", targetDayKey: context.targetDayKey, attemptCount: 4, nowMs: now });
+    applyAutoManageDailyReportState({ userDoc: doc, report, targetDayKey: context.targetDayKey, attemptCount: 4, nowMs: now });
     assert.equal(doc.lastAutoManageDailyFinishedAt, now);
   }
 });

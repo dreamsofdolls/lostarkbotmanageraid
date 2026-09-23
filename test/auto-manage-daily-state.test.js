@@ -117,7 +117,6 @@ test("successful daily report finishes the target day and clears retry state", (
   const transition = applyAutoManageDailyReportState({
     userDoc: doc,
     report: { perChar: [{ error: null, applied: [] }] },
-    isPublicLogDisabledError: () => false,
     targetDayKey: TARGET_DAY,
     attemptCount: 1,
     nowMs: NOW_MS,
@@ -158,7 +157,6 @@ test("all-private and no-actionable reports settle without retrying", () => {
     const transition = applyAutoManageDailyReportState({
       userDoc: doc,
       report,
-      isPublicLogDisabledError: (error) => error === "Logs not enabled",
       targetDayKey: TARGET_DAY,
       attemptCount: 1,
       nowMs: NOW_MS,
@@ -168,6 +166,44 @@ test("all-private and no-actionable reports settle without retrying", () => {
     assert.equal(transition.outcome, expectedOutcome);
     assert.equal(doc.lastAutoManageDailyFinishedDayKey, TARGET_DAY);
     assert.equal(doc.autoManageDailyNextAttemptAt, null);
+  }
+});
+
+test("a character Bible does not know settles the day instead of retrying", () => {
+  const missing = 'lostark.bible has no character "Kanna"';
+  for (const { perChar, bucket, outcome } of [
+    {
+      perChar: [{ error: null, applied: [] }, { error: missing }],
+      bucket: "synced",
+      outcome: AUTO_MANAGE_DAILY_OUTCOME.success,
+    },
+    {
+      perChar: [{ error: missing }],
+      bucket: "settled",
+      outcome: AUTO_MANAGE_DAILY_OUTCOME.noActionable,
+    },
+    {
+      // All-private stays strict: this roster is not only a Public Log issue.
+      perChar: [{ error: missing }, { error: "Logs not enabled" }],
+      bucket: "settled",
+      outcome: AUTO_MANAGE_DAILY_OUTCOME.noActionable,
+    },
+    {
+      perChar: [{ error: missing }, { error: "LostArk Bible HTTP 429" }],
+      bucket: "retry-scheduled",
+      outcome: AUTO_MANAGE_DAILY_OUTCOME.retryScheduled,
+    },
+  ]) {
+    const transition = applyAutoManageDailyReportState({
+      userDoc: { autoManageDailyLeaseDayKey: TARGET_DAY },
+      report: { perChar },
+      targetDayKey: TARGET_DAY,
+      attemptCount: 1,
+      nowMs: NOW_MS,
+    });
+
+    assert.equal(transition.bucket, bucket, JSON.stringify(perChar));
+    assert.equal(transition.outcome, outcome, JSON.stringify(perChar));
   }
 });
 
@@ -184,7 +220,6 @@ test("a partial daily success still retries when another character hit a transie
         { error: "LostArk Bible HTTP 429", applied: [] },
       ],
     },
-    isPublicLogDisabledError: (error) => error === "Logs not enabled",
     targetDayKey: TARGET_DAY,
     attemptCount: 1,
     nowMs: NOW_MS,
@@ -214,7 +249,6 @@ test("transient failures back off and finish only after bounded exhaustion", () 
     const transition = applyAutoManageDailyReportState({
       userDoc: doc,
       report: { perChar: [{ error: "HTTP 503" }] },
-      isPublicLogDisabledError: () => false,
       targetDayKey: TARGET_DAY,
       attemptCount,
       nowMs: NOW_MS,
@@ -236,7 +270,6 @@ test("transient failures back off and finish only after bounded exhaustion", () 
   const exhausted = applyAutoManageDailyReportState({
     userDoc: exhaustedDoc,
     report: { perChar: [{ error: "HTTP 503" }] },
-    isPublicLogDisabledError: () => false,
     targetDayKey: TARGET_DAY,
     attemptCount: AUTO_MANAGE_DAILY_MAX_ATTEMPTS,
     nowMs: NOW_MS,

@@ -53,7 +53,6 @@ function createRaidSchedulerService({
   releaseAutoManageSyncSlot,
   gatherAutoManageLogsForUserDoc,
   applyAutoManageCollected,
-  isPublicLogDisabledError,
 }) {
   const sideTaskResetService = createSideTaskResetService({
     User,
@@ -93,7 +92,6 @@ function createRaidSchedulerService({
     releaseAutoManageSyncSlot,
     gatherAutoManageLogsForUserDoc,
     applyAutoManageCollected,
-    isPublicLogDisabledError,
   });
 
   return {
