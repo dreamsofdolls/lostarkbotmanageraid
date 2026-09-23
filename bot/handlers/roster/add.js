@@ -118,11 +118,10 @@ function createAddRosterCommand({
       && !requestedTarget.bot
     );
 
-    // Slash invoker (Manager or self-add user) sees every reply on this
-    // command in their own locale — including the Manager-target
-    // onboarding ephemeral, which is the Manager's reply that *mentions*
-    // the target. Target's separate DM uses their own lang (resolved in
-    // tryDeliverTargetDM).
+    // Replies on this command use the invoker's locale (Manager or self-add
+    // user). Text meant for the target of a Manager add uses the target's
+    // locale instead: the ping line on the saved card and the DM (resolved
+    // in tryDeliverTargetDM).
     // Self-add can reuse one full user read for language + duplicate checks.
     // Manager-target adds need two different users, so start those independent
     // reads together instead of paying their latency serially.
@@ -173,6 +172,9 @@ function createAddRosterCommand({
       }
     }
 
+    // Public on purpose, unlike /raid-edit-roster: members in the channel see
+    // new rosters being onboarded, and the target of a Manager add can check
+    // the roster saved for them.
     await interaction.deferReply();
     let rosterCharacters;
     try {
