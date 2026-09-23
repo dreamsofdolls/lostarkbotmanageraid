@@ -259,7 +259,11 @@ test("sync all isolates per-user failures, rechecks consent, and releases only a
 
 test("sync report adds a counter field only when that outcome happened", async () => {
   clearUserLanguageCache();
-  const ids = ["synced-a", "synced-b", "busy", "gather-error", "all-chars-failed"];
+  const ids = ["synced-a", "synced-b", "busy", "gather-error", "all-chars-failed", "private-only"];
+  const failedCharErrors = {
+    "all-chars-failed": "LostArk Bible HTTP 429",
+    "private-only": "Bible logs API returned HTTP 403 - Logs not enabled",
+  };
   const docs = ids.map(discordId => ({
     discordId, autoManageEnabled: true,
     accounts: [{ accountName: "Roster", characters: [{ name: "Aki" }] }],
@@ -281,12 +285,13 @@ test("sync report adds a counter field only when that outcome happened", async (
       if (doc.discordId === "gather-error") throw new Error("Gather failed");
       return [];
     },
-    commitAutoManageCollected: async (discordId) => discordId === "all-chars-failed"
+    commitAutoManageCollected: async (discordId) => failedCharErrors[discordId]
       ? {
           status: "all-chars-failed",
-          report: { perChar: [{ error: "LostArk Bible HTTP 429", applied: [] }] },
+          report: { perChar: [{ error: failedCharErrors[discordId], applied: [] }] },
         }
       : { status: "synced-no-delta", report: { perChar: [] } },
+    isPublicLogDisabledError: error => /logs\s*not\s*enabled/i.test(String(error)),
     raidCheckSyncLimiter: { run: fn => fn() }, discordUserLimiter: { run: fn => fn() },
   });
   let reply;
@@ -299,11 +304,12 @@ test("sync report adds a counter field only when that outcome happened", async (
   const counters = embed.fields
     .filter(field => field.name !== "​")
     .map(field => `${field.name}=${field.value}`);
+  // Private logs are the user's setting, so that user is skipped, not failed.
   assert.deepEqual(counters, [
-    "🔍 Checked=5",
+    "🔍 Checked=6",
     "🟢 New data=2",
     "⚠️ Failed=2",
-    "⏳ Skipped=1",
+    "⏳ Skipped=2",
   ]);
   // Two spacers pad the second row so the lone 4th counter is not
   // stretched across its own row.
@@ -311,5 +317,5 @@ test("sync report adds a counter field only when that outcome happened", async (
   // A partial run drops the success title and its green icon.
   assert.match(embed.title, /^⚠️ /);
   assert.match(embed.description, /failed to sync/);
-  assert.match(embed.description, /still on cooldown/);
+  assert.match(embed.description, /2\*\* users were skipped/);
 });

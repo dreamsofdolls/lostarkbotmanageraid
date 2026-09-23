@@ -58,6 +58,7 @@ function createSyncUi({
   autoManageEntryKey,
   gatherAutoManageLogsForUserDoc,
   commitAutoManageCollected,
+  isPublicLogDisabledError,
   stampAutoManageAttempt,
   acquireAutoManageSyncSlot,
   releaseAutoManageSyncSlot,
@@ -65,6 +66,14 @@ function createSyncUi({
   discordUserLimiter,
   computeRaidCheckSnapshot,
 }) {
+
+  // Private logs are a user setting that no retry fixes, so a report whose
+  // characters all failed on that alone counts as skipped, not failed.
+  function hasOnlyPrivateLogErrors(report) {
+    const entries = Array.isArray(report?.perChar) ? report.perChar : [];
+    return entries.length > 0 &&
+      entries.every((entry) => isPublicLogDisabledError(entry?.error));
+  }
 
   function buildRaidCheckSyncDMEmbed(raidMeta, delta, lang = "vi") {
     const lines = delta.map((entry) => {
@@ -224,7 +233,11 @@ function createSyncUi({
                 syncedCount += 1;
                 break;
               case "all-chars-failed":
-                failedCount += 1;
+                if (hasOnlyPrivateLogErrors(committed.report)) {
+                  skippedCount += 1;
+                } else {
+                  failedCount += 1;
+                }
                 break;
               case "local-sync-active":
               case "missing-roster":

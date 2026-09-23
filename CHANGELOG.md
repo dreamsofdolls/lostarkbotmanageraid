@@ -19,7 +19,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - When two players act on the same signup board at the same moment, the click whose save loses the race now says the board just changed and asks for another try, instead of the generic "Có lỗi xảy ra" error. Nothing is saved for that click, as before.
 - `/raid-channel config action:set` acknowledges Discord before it saves the channel, posts and pins the welcome and clears old pins. On a slow API the admin used to see "The application did not respond" although the channel, welcome and pin had all been set.
 - The daily auto-manage run retries later when a character fails with an error other than a disabled Public Log, even if other characters synced, and it moves the last-sync time only when the run fully succeeds. A day with some characters rate-limited used to count as synced, so those characters waited for the next day.
-- `/raid-check` Sync-all reports users with Local Sync on or no saved roster as skipped, and users whose characters all failed as failed; both used to count as "attempted". The button stays disabled while the background roster refresh is still running.
+- `/raid-check` Sync-all reports users with Local Sync on, no saved roster or only private logs as skipped, and users whose characters all failed for another reason as failed; both used to count as "attempted". The skipped line now gives those reasons instead of a cooldown, which Sync-all never applies, and the button stays disabled while the background roster refresh is still running.
 
 ## 2026-09-20
 

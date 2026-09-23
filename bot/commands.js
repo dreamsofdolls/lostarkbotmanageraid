@@ -714,6 +714,7 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   autoManageEntryKey,
   gatherAutoManageLogsForUserDoc,
   commitAutoManageCollected,
+  isPublicLogDisabledError,
   stampAutoManageAttempt,
   weekResetStartMs,
   isRaidLeader,

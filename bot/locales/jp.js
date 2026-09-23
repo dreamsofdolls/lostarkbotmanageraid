@@ -1110,7 +1110,7 @@ module.exports = {
       },
       reportDmFailedSuffix: " ({n} 失敗)",
       reportTailFailed: "⚠️ **{n}** 人が同期に失敗しましたわ - 詳細はボットログを確認してね♪",
-      reportTailSkipped: "⏳ **{n}** 人はまだクールダウン中ですの、次回に回しますわ。",
+      reportTailSkipped: "⏳ **{n}** 人はスキップしましたわ - 別の同期が実行中か、Local Sync を使用中か、ロスターが無いか、ログが非公開ですの。",
       reportHintAllFailed: "数分後にもう一度試すか、各メンバーに `/raid-set` で手動記録してもらってね♪",
       reportHintFailed: "数分後にもう一度試すか、**{raidLabel}** が未完了のメンバーに `/raid-set` で手動記録してもらってね♪",
       reportLineHint: "`/raid-check` を開いてフィルタドロップダウンで **{raidLabel}** を選ぶと新しい未完了リストが見られますわ♪",
