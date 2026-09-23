@@ -5,7 +5,25 @@ const {
   buildAccessibleCharacterIndex,
   formatNamedCharacter,
   toCharacterLookupKey,
+  uniqueNames,
 } = require("./channel-monitor-characters");
+
+// Discord refuses a channel message longer than this.
+const MESSAGE_LIMIT = 2000;
+
+/**
+ * Cut text to maxLength at the last boundary that fits, marking the cut.
+ * @param {string} text
+ * @param {number} maxLength
+ * @param {string} boundary - where a cut may fall, such as "; " or "\n"
+ * @returns {string}
+ */
+function cutAtBoundary(text, maxLength, boundary) {
+  if (text.length <= maxLength) return text;
+  const head = text.slice(0, maxLength - 1);
+  const end = head.lastIndexOf(boundary);
+  return `${end > 0 ? head.slice(0, end) : head}…`;
+}
 
 function summarizeRaidChannelResults(results) {
   const list = Array.isArray(results) ? results : [];
@@ -80,7 +98,7 @@ function buildRaidChannelErrorHint({ resultGroups, accounts, authorLang, UI, t =
 
   const index = buildAccessibleCharacterIndex(accounts);
   const lines = [];
-  const notFoundNames = [...new Set(summary.notFoundResults.map((r) => r.charName))];
+  const notFoundNames = uniqueNames(summary.notFoundResults.map((r) => r.charName));
   if (notFoundNames.length > 0) {
     lines.push(t("text-parser.errorNotFound", authorLang, {
       icon: UI.icons.warn,
@@ -121,8 +139,9 @@ function buildRaidChannelErrorHint({ resultGroups, accounts, authorLang, UI, t =
     }));
   }
 
-  lines.push(t(summary.hasProgress ? "text-parser.errorPartialNote" : "text-parser.errorRetryNote", authorLang));
-  return lines.join("\n");
+  const note = t(summary.hasProgress ? "text-parser.errorPartialNote" : "text-parser.errorRetryNote", authorLang);
+  // The note says what to do next, so a hint over the limit drops lines instead.
+  return `${cutAtBoundary(lines.join("\n"), MESSAGE_LIMIT - note.length - 1, "\n")}\n${note}`;
 }
 
 /**
@@ -162,11 +181,11 @@ function buildRaidChannelDmFallbackText({ resultGroups, accounts, authorLang, UI
   ].filter(Boolean);
 
   const icon = written.size === 0 ? UI.icons.info : isReset ? UI.icons.reset : UI.icons.done;
-  return t("text-parser.dmFallback", authorLang, {
-    icon,
-    userId,
-    parts: parts.join(t("text-parser.dmFallbackSeparator", authorLang)),
-  });
+  const render = (text) => t("text-parser.dmFallback", authorLang, { icon, userId, parts: text });
+  // The DM-off note says why this message exists, so a long post drops
+  // entries instead.
+  const budget = MESSAGE_LIMIT - render("").length;
+  return render(cutAtBoundary(parts.join(t("text-parser.dmFallbackSeparator", authorLang)), budget, "; "));
 }
 
 module.exports = {

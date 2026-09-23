@@ -160,3 +160,61 @@ test("the error hint lists failed writes with class icons and not-found names as
   ].join("\n"));
   assert.equal(buildRaidChannelErrorHint({ resultGroups: [group(SERCA_HARD, [written("Qiaoli")])], accounts: ACCOUNTS, authorLang: "vi", UI }), null);
 });
+
+test("a missing name typed twice in different case is listed once in the hint", () => {
+  const content = buildRaidChannelErrorHint({
+    resultGroups: [group(SERCA_HARD, [{ charName: "Ghost", matched: false }, { charName: "ghost", matched: false }])],
+    accounts: ACCOUNTS,
+    authorLang: "vi",
+    UI,
+  });
+
+  assert.equal(content.split("\n")[0], `${UI.icons.warn} Không tìm thấy trong roster: \`Ghost\``);
+});
+
+// Thirty characters with a full-length class emoji push both channel texts
+// past Discord's 2000-character message limit.
+const LONG_EMOJI = "<:bard_class_icon:1234567890123456789>";
+const ALT_NAMES = Array.from({ length: 30 }, (_, i) => `Alt${i}`);
+const ALT_ACCOUNTS = [{
+  accountName: "Main",
+  account: { characters: ALT_NAMES.map((name) => ({ name, class: "Bard", itemLevel: 1740 })) },
+}];
+
+function withLongBardIcon(t) {
+  const saved = CLASS_EMOJI_MAP.Bard;
+  CLASS_EMOJI_MAP.Bard = LONG_EMOJI;
+  t.after(() => { CLASS_EMOJI_MAP.Bard = saved; });
+}
+
+test("a DM fallback past Discord's limit drops whole entries and keeps the DM note", (t) => {
+  withLongBardIcon(t);
+  const content = buildRaidChannelDmFallbackText({
+    resultGroups: [ACT4_SOLO, FINAL_SOLO, SERCA_HARD].map((raidMeta) => group(raidMeta, ALT_NAMES.map(written))),
+    accounts: ALT_ACCOUNTS,
+    authorLang: "vi",
+    UI,
+    userId: "user-1",
+  });
+
+  assert.ok(content.length <= 2000);
+  assert.ok(content.startsWith(`${UI.icons.done} <@user-1> đã ghi ${LONG_EMOJI} **Alt0** · Act 4 Solo, Final Solo, Serca Hard; `));
+  assert.ok(content.endsWith(`Serca Hard…. ${DM_OFF}`));
+});
+
+test("an error hint past Discord's limit drops whole lines and keeps the note", (t) => {
+  withLongBardIcon(t);
+  const low = (name) => ({ charName: name.toLowerCase(), displayName: name, matched: true, updated: false, ineligibleItemLevel: 1700 });
+  const content = buildRaidChannelErrorHint({
+    resultGroups: [FINAL_HARD, SERCA_HARD].map((raidMeta) => group(raidMeta, ALT_NAMES.map(low))),
+    accounts: ALT_ACCOUNTS,
+    authorLang: "vi",
+    UI,
+  });
+  const lines = content.split("\n");
+
+  assert.ok(content.length <= 2000);
+  assert.equal(lines[0], `${UI.icons.warn} Chưa đủ iLvl: ${LONG_EMOJI} **Alt0** (iLvl 1700) · Final Hard (cần 1730+), Serca Hard (cần 1730+)`);
+  assert.ok(lines.at(-2).endsWith("Serca Hard (cần 1730+)…"));
+  assert.equal(lines.at(-1), "_(Sửa lại rồi post lại nhé, tớ sẽ tự dọn hint cũ.)_");
+});

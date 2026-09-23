@@ -227,8 +227,43 @@ test("rows fall back to raid names when the roster predates the write", () => {
 
   assert.equal(
     cardsOf(embed)[0].value,
-    [`${UI.icons.done} Act 4 Solo`, `${UI.icons.done} Final Solo`, `${UI.icons.done} Serca Solo`].join("\n"),
+    [`${UI.icons.done} Act 4 Solo`, `${UI.icons.done} Kazeros Solo`, `${UI.icons.done} Serca Solo`].join("\n"),
   );
+});
+
+test("card rows name the raid as /raid-status does, not as it was typed", () => {
+  const bori = { charName: "bori", displayName: "Bori", matched: true, updated: false, ineligibleItemLevel: 1725 };
+  const embed = receipt({
+    text: "final hard Bori",
+    resultGroups: [group({ ...RAIDS.kazeros_hard, label: "Final Hard" }, [bori])],
+    accounts: [account("Bori", [character("Bori", "Bard", 1725, {})])],
+  });
+
+  assert.equal(cardsOf(embed)[0].value, `${UI.icons.warn} Kazeros Hard · _cần 1730+_`);
+});
+
+test("a missing name typed twice in different case is listed once", () => {
+  const embed = receipt({
+    text: "act4 hard Qiaoli, Ghost, ghost",
+    resultGroups: [group(RAIDS.armoche_hard, [
+      written("Qiaoli"),
+      { charName: "Ghost", matched: false },
+      { charName: "ghost", matched: false },
+    ])],
+    accounts: [account("Qiaoli", [character("Qiaoli", "Aeromancer", 1742, doneRaids("hard", "Hard", ["armoche"]))])],
+  });
+
+  assert.equal(embed.description.split("\n").at(-1), `${UI.icons.warn} Không tìm thấy trong roster: \`Ghost\``);
+});
+
+test("the receipt line is cut between characters, never inside an emoji", () => {
+  const embed = receipt({
+    text: `${"x".repeat(198)}😀${"y".repeat(10)}`,
+    resultGroups: [group(RAIDS.armoche_hard, [written("Qiaoli")])],
+    accounts: [],
+  });
+
+  assert.equal(embed.description.split("\n")[0], `💬 \`${"x".repeat(198)}😀…\``);
 });
 
 test("the receipt line stays one line inside its code span", () => {

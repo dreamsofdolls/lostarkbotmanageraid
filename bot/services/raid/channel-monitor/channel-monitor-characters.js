@@ -59,6 +59,20 @@ function findAccessibleCharacter(index, name) {
 }
 
 /**
+ * @param {string[]} names - names as typed
+ * @returns {string[]} names in first-seen order, one per lookup key
+ */
+function uniqueNames(names) {
+  const seen = new Set();
+  return names.filter((name) => {
+    const key = toCharacterLookupKey(name);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
  * A character's name for a message: class icon plus its saved spelling, or
  * the typed name in bold when the roster does not hold it.
  * @param {Map<string, object>} index - from buildAccessibleCharacterIndex
@@ -78,4 +92,5 @@ module.exports = {
   formatNamedCharacter,
   getAccessibleCharacterCandidates,
   toCharacterLookupKey,
+  uniqueNames,
 };

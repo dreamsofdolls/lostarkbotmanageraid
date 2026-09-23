@@ -17,9 +17,11 @@ const {
   appendGroupFields,
   buildCharacterStatusField,
 } = require("../../../utils/raid/common/changed-characters");
+const { getRaidLabel, getRaidModeLabel } = require("../../../utils/raid/common/labels");
 const {
   getAccessibleCharacterCandidates,
   toCharacterLookupKey,
+  uniqueNames,
 } = require("./channel-monitor-characters");
 
 const RECEIPT_TEXT_LIMIT = 200;
@@ -30,10 +32,11 @@ function joinIfArray(value) {
 
 /** The post as typed, on one line and safe inside a code span. */
 function formatReceiptText(text) {
-  const oneLine = text.replace(/\s+/g, " ").trim().replace(/`/g, "'");
-  return oneLine.length > RECEIPT_TEXT_LIMIT
-    ? `${oneLine.slice(0, RECEIPT_TEXT_LIMIT - 1)}…`
-    : oneLine;
+  // Counted by code point so the cut never splits an emoji.
+  const chars = Array.from(text.replace(/\s+/g, " ").trim().replace(/`/g, "'"));
+  return chars.length > RECEIPT_TEXT_LIMIT
+    ? `${chars.slice(0, RECEIPT_TEXT_LIMIT - 1).join("")}…`
+    : chars.join("");
 }
 
 function resultOutcome(result) {
@@ -56,7 +59,7 @@ function collectReceiptOutcomes(resultGroups) {
     for (const result of group.results) {
       const outcome = resultOutcome(result);
       if (outcome === "notFound") {
-        if (!notFoundNames.includes(result.charName)) notFoundNames.push(result.charName);
+        notFoundNames.push(result.charName);
         continue;
       }
       // A failed write has no displayName, only the name as typed.
@@ -75,7 +78,7 @@ function collectReceiptOutcomes(resultGroups) {
     for (const outcome of outcomes) counts[outcome] += 1;
     if (outcomes.includes("updated")) writtenCharacterCount += 1;
   }
-  return { byCharacter, counts, writtenCharacterCount, notFoundNames };
+  return { byCharacter, counts, writtenCharacterCount, notFoundNames: uniqueNames(notFoundNames) };
 }
 
 function createRaidChannelEmbedBuilders({ EmbedBuilder, UI }) {
@@ -118,6 +121,11 @@ function createRaidChannelEmbedBuilders({ EmbedBuilder, UI }) {
   function buildCharacterRows(character, raids, { afterWrite, isReset, lang }) {
     const entries = [...raids.values()];
     const isRecorded = (entry) => entry?.outcome === "updated" || entry?.outcome === "already";
+    // Rows name the raid as /raid-status does, not as the post typed it; a
+    // reset covers the raid, whatever mode is stored.
+    const rowLabel = (raidMeta) => (isReset
+      ? getRaidLabel(raidMeta.raidKey, lang)
+      : getRaidModeLabel(raidMeta.raidKey, raidMeta.modeKey, lang));
     // One post cannot name two modes of one raid, and a reset's raidMeta
     // does not carry the stored mode, so rows match on raidKey.
     const statusRaids = afterWrite
@@ -137,7 +145,7 @@ function createRaidChannelEmbedBuilders({ EmbedBuilder, UI }) {
       .filter((entry) => isRecorded(entry) && !shownRaidKeys.has(entry.raidMeta.raidKey))
       .map(({ raidMeta, outcome }) => {
         const icon = outcome === "already" ? UI.icons.info : isReset ? UI.icons.reset : UI.icons.done;
-        return `${icon} ${raidMeta.label}`;
+        return `${icon} ${rowLabel(raidMeta)}`;
       });
     const skipped = entries
       .filter(({ outcome }) => outcome === "ineligible" || outcome === "errored")
@@ -145,7 +153,7 @@ function createRaidChannelEmbedBuilders({ EmbedBuilder, UI }) {
         const note = outcome === "ineligible"
           ? t("text-parser.rowNeedsItemLevel", lang, { minItemLevel: raidMeta.minItemLevel })
           : t("text-parser.rowWriteFailed", lang);
-        return `${UI.icons.warn} ${raidMeta.label} · _${note}_`;
+        return `${UI.icons.warn} ${rowLabel(raidMeta)} · _${note}_`;
       });
     return [...statusRows, ...labelRows, ...skipped];
   }
