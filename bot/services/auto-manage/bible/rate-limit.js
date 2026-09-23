@@ -1,6 +1,7 @@
 "use strict";
 
 const DEFAULT_BIBLE_RATE_LIMIT_BACKOFF_MS = 60 * 1000;
+const MAX_BIBLE_RATE_LIMIT_BACKOFF_MS = 5 * 60 * 1000;
 
 function parseRetryAfterMs(value, nowMs = Date.now()) {
   const raw = String(value || "").trim();
@@ -82,9 +83,13 @@ class BibleRequestLimiter {
 
   _openCircuit(error) {
     const requestedBackoffMs = Number(error?.retryAfterMs);
-    const backoffMs = requestedBackoffMs > 0
-      ? requestedBackoffMs
-      : this.defaultBackoffMs;
+    // A Bible that is still throttling answers the first request after the
+    // backoff with another 429, which reopens the circuit. The cap only bounds
+    // how long one Retry-After header can block every Bible feature.
+    const backoffMs = Math.min(
+      requestedBackoffMs > 0 ? requestedBackoffMs : this.defaultBackoffMs,
+      MAX_BIBLE_RATE_LIMIT_BACKOFF_MS
+    );
     const wasBlocked = this.getBackoffRemainingMs() > 0;
     if (wasBlocked) error.isBibleBackoff = true;
     this.blockedUntil = Math.max(

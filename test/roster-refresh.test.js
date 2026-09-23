@@ -136,6 +136,26 @@ test("collectStaleAccountRefreshes aborts seed loop on first HTTP 429", async ()
   assert.doesNotMatch(warnings[0], /seed "Alpha" failed/);
 });
 
+test("collectStaleAccountRefreshes stays quiet while the global Bible backoff is active", async () => {
+  const service = makeService(async () => {
+    const error = new Error("LostArk Bible HTTP 429 - global backoff active for 42s");
+    error.status = 429;
+    error.isBibleBackoff = true;
+    throw error;
+  });
+
+  const originalWarn = console.warn;
+  const warnings = [];
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    await service.collectStaleAccountRefreshes(makeStaleUser());
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  assert.deepEqual(warnings, []);
+});
+
 test("collectStaleAccountRefreshes keeps iterating seeds on non-429 errors", async () => {
   let fetchCalls = 0;
   const service = makeService(async (seed) => {

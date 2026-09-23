@@ -86,6 +86,21 @@ test("Bible limiter opens one global circuit and rejects queued work after HTTP 
   assert.equal(await limiter.run(async () => "recovered"), "recovered");
 });
 
+test("Bible limiter caps a long Retry-After at five minutes", async () => {
+  const limiter = new BibleRequestLimiter(1, {
+    nowMs: () => 10_000,
+    log: { warn: () => {} },
+  });
+  const rateLimitError = new Error("LostArk Bible HTTP 429");
+  rateLimitError.status = 429;
+  rateLimitError.retryAfterMs = 3_600_000;
+
+  await assert.rejects(limiter.run(async () => { throw rateLimitError; }));
+
+  assert.equal(limiter.getBackoffRemainingMs(), 5 * 60 * 1000);
+  assert.equal(rateLimitError.retryAfterMs, 3_600_000);
+});
+
 test("Bible HTTP errors carry Retry-After seconds or dates into the limiter", () => {
   const now = Date.parse("2026-09-20T08:00:00Z");
   assert.equal(parseRetryAfterMs("12", now), 12_000);

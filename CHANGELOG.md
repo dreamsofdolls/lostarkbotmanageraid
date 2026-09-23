@@ -7,7 +7,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ## 2026-09-23
 
 ### Changed
-- A Bible HTTP 429 pauses every Bible request for the `Retry-After` time, or 60 seconds when Bible sends none. Requests already queued fail at once with the same rate-limit error instead of each reaching Bible, and the characters caught by the pause no longer log a warning each.
+- A Bible HTTP 429 pauses every Bible request for the `Retry-After` time, capped at five minutes, or 60 seconds when Bible sends none. Requests already queued fail at once with the same rate-limit error instead of each reaching Bible, and the characters caught by the pause no longer log a warning each.
 
 ### Fixed
 - The raid view in `/raid-status` and `/raid-check` opens for rosters of 17 characters or more instead of failing with a generic error. Up to 16 characters keep the two-column layout; longer rosters get one full-width row per character, as the gold view does, and a roster past Discord's 25-field cap ends with a "+N character khác" line.

@@ -240,10 +240,13 @@ function createRosterRefreshService(deps) {
     if (seedFailures.length > 0) {
       const rateLimited = seedFailures.filter((entry) => isBibleRateLimitError(entry.message));
       const otherFailures = seedFailures.filter((entry) => !isBibleRateLimitError(entry.message));
-      if (rateLimitedAbort && !rateLimitedAbortSuppressed) {
-        console.warn(
-          `[refresh] account "${originalName || "(unnamed roster)"}" aborted on first LostArk Bible HTTP 429 - retry after the failure cooldown.`
-        );
+      if (rateLimitedAbort) {
+        // A backoff rejection was already logged once by the Bible limiter.
+        if (!rateLimitedAbortSuppressed) {
+          console.warn(
+            `[refresh] account "${originalName || "(unnamed roster)"}" aborted on first LostArk Bible HTTP 429 - retry after the failure cooldown.`
+          );
+        }
       } else if (rateLimited.length > 0) {
         console.warn(
           `[refresh] account "${originalName || "(unnamed roster)"}" ${rateLimited.length} seed(s) hit LostArk Bible HTTP 429 - suppressed per-seed logs.`
