@@ -21,9 +21,9 @@ test("computeGoldModeOptions offers Solo plus eligible difficulty modes", () => 
   assert.deepEqual(Object.keys(byMode).sort(), ["hard", "solo"]);
   assert.equal(byMode.solo.value, "Aurora::armoche::solo");
   assert.equal(byMode.solo.direction, "side");
-  assert.equal(byMode.solo.goldTotal, 33000); // same base total as Normal
+  assert.equal(byMode.solo.goldTotal, 27000); // same base total as Normal
   assert.equal(byMode.hard.direction, "up");
-  assert.equal(byMode.hard.goldTotal, 42000);
+  assert.equal(byMode.hard.goldTotal, 38000);
   assert.ok(opts.every((option) => option.deferred === false));
 });
 
@@ -90,5 +90,5 @@ test("computeGoldModeOptions treats Solo and Normal as a lateral switch", () => 
 
   assert.deepEqual(opts.map((option) => option.modeKey), ["normal"]);
   assert.equal(opts[0].direction, "side");
-  assert.equal(opts[0].goldTotal, 33000);
+  assert.equal(opts[0].goldTotal, 27000);
 });

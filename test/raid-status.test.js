@@ -45,6 +45,7 @@ const {
   formatGold,
 } = require("../bot/utils/raid/common/shared");
 const {
+  getBaseGoldForGate,
   getGoldForGate,
   getBoundGoldForGate,
   isGoldBound,
@@ -621,11 +622,11 @@ test("formatGold: produces locale-style 'NN,NNNG' suffix and floors invalid inpu
 });
 
 test("computeRaidGold: sums earned vs total across the gates of a (raid, mode)", () => {
-  // Kazeros Hard G1=17000, G2=35000. Earned = G1 only = 17000.
-  // Total = both gates = 52000.
+  // Kazeros Hard G1=16000, G2=32000. Earned = G1 only = 16000.
+  // Total = both gates = 48000.
   const gold = computeRaidGold("kazeros", "hard", ["G1"], ["G1", "G2"]);
-  assert.equal(gold.earnedGold, 17000);
-  assert.equal(gold.totalGold, 52000);
+  assert.equal(gold.earnedGold, 16000);
+  assert.equal(gold.totalGold, 48000);
 });
 
 test("computeRaidGold: returns 0 earned when no gates cleared, full total still surfaces", () => {
@@ -635,13 +636,32 @@ test("computeRaidGold: returns 0 earned when no gates cleared, full total still 
   assert.equal(gold.totalGold, 54000);
 });
 
+test("raid-catalog: gate gold matches the current patch, and Solo pays what Normal pays", () => {
+  const patchGold = {
+    armoche: { normal: [10000, 17000], hard: [13500, 24500] },
+    kazeros: { normal: [11000, 21000], hard: [16000, 32000] },
+    serca: { normal: [13000, 19000] },
+  };
+  for (const [raidKey, modes] of Object.entries(patchGold)) {
+    for (const [modeKey, gates] of Object.entries(modes)) {
+      for (const paidMode of modeKey === "normal" ? ["normal", "solo"] : [modeKey]) {
+        assert.deepEqual(
+          [getBaseGoldForGate(raidKey, paidMode, "G1"), getBaseGoldForGate(raidKey, paidMode, "G2")],
+          gates,
+          `${raidKey} ${paidMode}`,
+        );
+      }
+    }
+  }
+});
+
 test("raid-catalog: normal gold splits unbound/bound; Horizon is full-bound", () => {
-  // Base armoche normal G1=12500 -> 6250 unbound + 6250 bound.
-  assert.equal(getGoldForGate("armoche", "normal", "G1"), 6250);
-  assert.equal(getBoundGoldForGate("armoche", "normal", "G1"), 6250);
-  assert.equal(getGoldForGate("armoche", "normal", "G2"), 10250);
-  assert.equal(getBoundGoldForGate("armoche", "normal", "G2"), 10250);
-  assert.equal(getGoldForGate("armoche", "hard", "G1"), 15000);
+  // Base armoche normal G1=10000 -> 5000 unbound + 5000 bound.
+  assert.equal(getGoldForGate("armoche", "normal", "G1"), 5000);
+  assert.equal(getBoundGoldForGate("armoche", "normal", "G1"), 5000);
+  assert.equal(getGoldForGate("armoche", "normal", "G2"), 8500);
+  assert.equal(getBoundGoldForGate("armoche", "normal", "G2"), 8500);
+  assert.equal(getGoldForGate("armoche", "hard", "G1"), 13500);
   assert.equal(getBoundGoldForGate("armoche", "hard", "G1"), 0);
   assert.equal(isGoldBound("armoche", "normal"), false);
   assert.equal(isGoldBound("kazeros", "normal"), false);
@@ -658,13 +678,13 @@ test("raid-catalog: normal gold splits unbound/bound; Horizon is full-bound", ()
 
 test("computeRaidGold: carries reduced normal bound half and Horizon full-bound", () => {
   const normal = computeRaidGold("armoche", "normal", ["G1"], ["G1", "G2"]);
-  assert.equal(normal.earnedGold, 12500); // 6250 unbound + 6250 bound
-  assert.equal(normal.totalGold, 33000); // full base total, split in breakdown
-  assert.equal(normal.earnedBoundGold, 6250);
-  assert.equal(normal.totalBoundGold, 16500);
+  assert.equal(normal.earnedGold, 10000); // 5000 unbound + 5000 bound
+  assert.equal(normal.totalGold, 27000); // full base total, split in breakdown
+  assert.equal(normal.earnedBoundGold, 5000);
+  assert.equal(normal.totalBoundGold, 13500);
   assert.equal(normal.goldBound, false);
   const hard = computeRaidGold("kazeros", "hard", ["G1", "G2"], ["G1", "G2"]);
-  assert.equal(hard.totalGold, 52000);
+  assert.equal(hard.totalGold, 48000);
   assert.equal(hard.totalBoundGold, 0);
   assert.equal(hard.goldBound, false);
   const horizon = computeRaidGold("horizon", "nightmare", ["G1"], ["G1", "G2"]);
@@ -701,7 +721,7 @@ test("getStatusRaidsForCharacter: decorates each raid entry with earnedGold + to
   // 1730 char defaults to Hard across all 4 raids per
   // getBestEligibleModeKey logic, but only 3 raids can count gold.
   // Default un-cleared setup takes the first 3 display slots:
-  // Act 4 Hard 42000 + Kazeros Hard 52000 + Serca Hard 44000 = 138000G.
+  // Act 4 Hard 38000 + Kazeros Hard 48000 + Serca Hard 44000 = 130000G.
   const char = makeChar("Maxlevel", 1730);
   const raids = getStatusRaidsForCharacter(char);
   assert.equal(raids.length, 4);
@@ -711,7 +731,7 @@ test("getStatusRaidsForCharacter: decorates each raid entry with earnedGold + to
     assert.ok(typeof raid.rawTotalGold === "number", `raid ${raid.raidName} missing rawTotalGold`);
   }
   const sum = raids.reduce((acc, r) => acc + r.totalGold, 0);
-  assert.equal(sum, 138000);
+  assert.equal(sum, 130000);
   const horizon = raids.find((raid) => raid.raidKey === "horizon");
   assert.equal(horizon.rawTotalGold, 40000);
   assert.equal(horizon.totalGold, 0);
@@ -732,9 +752,9 @@ test("getStatusRaidsForCharacter: reduced normal raids still auto-count because 
 
   const totals = summarizeCharacterGold(raids);
   assert.equal(totals.earned, 0);
-  assert.equal(totals.total, 108000);
-  assert.equal(totals.totalBound, 54000);
-  assert.equal(totals.totalUnbound, 54000);
+  assert.equal(totals.total, 91000);
+  assert.equal(totals.totalBound, 45500);
+  assert.equal(totals.totalUnbound, 45500);
 });
 
 test("counted raid progress: 1700 chars auto-count the only unbound gold raid", () => {
@@ -783,7 +803,7 @@ test("getStatusRaidsForCharacter: counts the first 3 completed raids by completi
     ["armoche", "kazeros", "serca"],
   );
   assert.equal(raids.find((raid) => raid.raidKey === "horizon").goldExcludedReason, "bound");
-  assert.equal(summarizeCharacterGold(raids).earned, 138000);
+  assert.equal(summarizeCharacterGold(raids).earned, 130000);
 });
 
 test("getStatusRaidsForCharacter: manual goldOverride exclude keeps that raid out of gold slots", () => {
@@ -839,7 +859,7 @@ test("getStatusRaidsForCharacter: manual goldOverride include can count a bound 
     raids.filter((raid) => raid.goldReceives).map((raid) => raid.raidKey),
     ["armoche", "kazeros", "horizon"],
   );
-  assert.equal(summarizeCharacterGold(raids).total, 134000);
+  assert.equal(summarizeCharacterGold(raids).total, 126000);
 });
 
 test("getStatusRaidsForCharacter: Serca 1740+ shows one mode, switching to the cleared lower mode", () => {
@@ -1201,7 +1221,7 @@ test("summarizeAccountGold: only counts characters with isGoldEarner=true", () =
   const passive = makeChar("Passive", 1730, { isGoldEarner: false });
   const account = { accountName: "A", characters: [earner, passive], lastRefreshedAt: 0 };
   const result = summarizeAccountGold(account, getStatusRaidsForCharacter);
-  assert.equal(result.total, 138000);
+  assert.equal(result.total, 130000);
   assert.equal(result.earned, 0);
 });
 
@@ -1224,7 +1244,7 @@ test("summarizeGlobalGold: composes summarizeAccountGold across multiple account
     { accountName: "B", characters: [earnerB], lastRefreshedAt: 0 },
   ];
   const result = summarizeGlobalGold(accounts, getStatusRaidsForCharacter);
-  assert.equal(result.total, 138000 * 2);
+  assert.equal(result.total, 130000 * 2);
 });
 
 test("buildAccountPageEmbed: per-character field shows '💰 earned' (earned-only, no /total) for a gold-earner", () => {
@@ -1517,7 +1537,7 @@ test("buildAccountPageEmbed: appends the current-roster gold rollup when it has 
   const desc = embed.toJSON().description || "";
   // 1730 gold-earner has 4 eligible raids, but only 3 raid-gold slots.
   assert.match(desc, /💰 Roster:/);
-  assert.match(desc, /138,000G/);
+  assert.match(desc, /130,000G/);
 });
 
 test("buildAccountPageEmbed: per-account rollup shows reduced-normal bound total", () => {
@@ -1533,13 +1553,13 @@ test("buildAccountPageEmbed: per-account rollup shows reduced-normal bound total
   const desc = embed.toJSON().description || "";
   assert.match(desc, /💰 Roster:/);
   // Disjoint: 💰 shows the tradeable (unbound) half, 🔒 the bound half. The
-  // three reduced-normal raids split 108,000 total into 54,000 / 54,000, so
-  // the 💰 number is now 54,000 (the tradeable bucket), not the 108,000 grand
+  // three reduced-normal raids split 91,000 total into 45,500 / 45,500, so
+  // the 💰 number is now 45,500 (the tradeable bucket), not the 91,000 grand
   // total it used to overlap with the bound figure.
-  assert.match(desc, /💰 Roster: \*\*0G\*\* \/ \*\*54,000G\*\*/);
-  assert.match(desc, /🔒 \*\*0G \/ 54,000G\*\*/);
+  assert.match(desc, /💰 Roster: \*\*0G\*\* \/ \*\*45,500G\*\*/);
+  assert.match(desc, /🔒 \*\*0G \/ 45,500G\*\*/);
   assert.doesNotMatch(desc, /khóa/);
-  assert.doesNotMatch(desc, /108,000G/);
+  assert.doesNotMatch(desc, /91,000G/);
 });
 
 test("buildAccountPageEmbed: omits per-account rollup when account has no gold-earners", () => {
@@ -1719,9 +1739,9 @@ test("raid-status gold view renders auto-bound status and setup dropdowns", () =
   assert.ok(goldField, "gold character field should render");
   assert.match(goldField.name, /Goldie\s*\u00B7\s*1730\s*\u00B7\s*3\/3/);
   assert.doesNotMatch(goldField.value, /\b3\/3\b/);
-  assert.match(goldField.value, /Act 4 Hard - 42,000G/);
+  assert.match(goldField.value, /Act 4 Hard - 38,000G/);
   assert.doesNotMatch(goldField.value, /0G\s*\/\s*\d/);
-  assert.doesNotMatch(goldField.value, /42,000G\s*\/\s*42,000G/);
+  assert.doesNotMatch(goldField.value, /38,000G\s*\/\s*38,000G/);
   assert.match(goldField.value, /Horizon Level 2 - locked/);
   assert.doesNotMatch(goldField.value, /gold bound/);
   assert.doesNotMatch(goldField.value, /auto bỏ qua vì/i);

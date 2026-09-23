@@ -184,16 +184,16 @@ test("preview summary splits reduced normal gold into unbound and bound shares",
     assignedRaids: {},
   }), buckets);
 
-  assert.equal(summary.goldDelta.total, 14000);
-  assert.equal(summary.goldDelta.boundTotal, 7000);
+  assert.equal(summary.goldDelta.total, 13000);
+  assert.equal(summary.goldDelta.boundTotal, 6500);
   assert.deepEqual(summary.goldDelta.byChar, [
     {
       accountName: "Roster",
       charName: "Aki",
       className: "Artist",
       itemLevel: 1710,
-      gold: 14000,
-      goldBound: 7000,
+      gold: 13000,
+      goldBound: 6500,
     },
   ]);
 });
@@ -237,10 +237,10 @@ test("preview summary expands cumulative gates when only later gate is logged (L
     percent: 0,
     projectedPercent: 25,
   });
-  // Gold credits BOTH gates (Kazeros Hard: G1=17000 + G2=35000) even
+  // Gold credits BOTH gates (Kazeros Hard: G1=16000 + G2=32000) even
   // though only G2 was in the file. This preserves G1 gold for users who
   // enable logging after the first gate.
-  assert.equal(summary.goldDelta.total, 52000);
+  assert.equal(summary.goldDelta.total, 48000);
   // The completed incoming raid stays visible because the same character
   // still has other eligible raids pending after sync.
   assert.deepEqual(summary.charsAfterSync, [

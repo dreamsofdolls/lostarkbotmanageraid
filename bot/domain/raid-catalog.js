@@ -77,8 +77,8 @@ const RAID_REQUIREMENTS = {
     gates: ["G1", "G2"],
     supportsSolo: true,
     modes: {
-      normal: { label: "Normal", minItemLevel: 1700, gold: { G1: 12500, G2: 20500 }, goldFactor: 0.5 },
-      hard: { label: "Hard", minItemLevel: 1720, gold: { G1: 15000, G2: 27000 } },
+      normal: { label: "Normal", minItemLevel: 1700, gold: { G1: 10000, G2: 17000 }, goldFactor: 0.5 },
+      hard: { label: "Hard", minItemLevel: 1720, gold: { G1: 13500, G2: 24500 } },
     },
   },
   kazeros: {
@@ -87,8 +87,8 @@ const RAID_REQUIREMENTS = {
     gates: ["G1", "G2"],
     supportsSolo: true,
     modes: {
-      normal: { label: "Normal", minItemLevel: 1710, gold: { G1: 14000, G2: 26000 }, goldFactor: 0.5 },
-      hard: { label: "Hard", minItemLevel: 1730, gold: { G1: 17000, G2: 35000 } },
+      normal: { label: "Normal", minItemLevel: 1710, gold: { G1: 11000, G2: 21000 }, goldFactor: 0.5 },
+      hard: { label: "Hard", minItemLevel: 1730, gold: { G1: 16000, G2: 32000 } },
     },
   },
   serca: {
@@ -97,7 +97,7 @@ const RAID_REQUIREMENTS = {
     gates: ["G1", "G2"],
     supportsSolo: true,
     modes: {
-      normal: { label: "Normal", minItemLevel: 1710, gold: { G1: 14000, G2: 21000 }, goldFactor: 0.5 },
+      normal: { label: "Normal", minItemLevel: 1710, gold: { G1: 13000, G2: 19000 }, goldFactor: 0.5 },
       hard: { label: "Hard", minItemLevel: 1730, gold: { G1: 17500, G2: 26500 } },
       nightmare: { label: "Nightmare", minItemLevel: 1740, gold: { G1: 21000, G2: 33000 } },
     },
