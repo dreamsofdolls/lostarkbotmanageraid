@@ -414,7 +414,7 @@ test("auto-manage daily scheduler skips a candidate leased or finished after sca
   assert.deepEqual(releases, ["100"]);
 });
 
-test("auto-manage daily scheduler schedules a transient report retry without finishing the day", async () => {
+test("auto-manage daily scheduler retries a partial transient report without stamping success", async () => {
   const savedDocs = [];
   const seedDoc = {
     discordId: "100",
@@ -445,7 +445,10 @@ test("auto-manage daily scheduler schedules a transient report retry without fin
     releaseAutoManageSyncSlot: () => {},
     gatherAutoManageLogsForUserDoc: async () => ({ source: "bible" }),
     applyAutoManageCollected: () => ({
-      perChar: [{ charName: "Qiylyn", error: "HTTP 503", applied: [] }],
+      perChar: [
+        { charName: "Qiylyn", error: null, applied: [] },
+        { charName: "Bori", error: "HTTP 503", applied: [] },
+      ],
     }),
     isPublicLogDisabledError: () => false,
     processEnv: {},
@@ -467,6 +470,7 @@ test("auto-manage daily scheduler schedules a transient report retry without fin
       AUTO_MANAGE_DAILY_RETRY_DELAYS_MS[0]
   );
   assert.equal(savedDocs[0].lastAutoManageDailyFinishedDayKey, undefined);
+  assert.equal(savedDocs[0].lastAutoManageSyncAt, undefined);
   assert.equal(savedDocs[0].autoManageDailyLeaseDayKey, "");
   assert.equal(savedDocs[0].autoManageDailyLeaseUntil, null);
 });

@@ -259,7 +259,7 @@ test("sync all isolates per-user failures, rechecks consent, and releases only a
 
 test("sync report adds a counter field only when that outcome happened", async () => {
   clearUserLanguageCache();
-  const ids = ["synced-a", "synced-b", "busy", "gather-error"];
+  const ids = ["synced-a", "synced-b", "busy", "gather-error", "all-chars-failed"];
   const docs = ids.map(discordId => ({
     discordId, autoManageEnabled: true,
     accounts: [{ accountName: "Roster", characters: [{ name: "Aki" }] }],
@@ -281,7 +281,12 @@ test("sync report adds a counter field only when that outcome happened", async (
       if (doc.discordId === "gather-error") throw new Error("Gather failed");
       return [];
     },
-    commitAutoManageCollected: async () => ({ status: "synced-no-delta", report: { perChar: [] } }),
+    commitAutoManageCollected: async (discordId) => discordId === "all-chars-failed"
+      ? {
+          status: "all-chars-failed",
+          report: { perChar: [{ error: "LostArk Bible HTTP 429", applied: [] }] },
+        }
+      : { status: "synced-no-delta", report: { perChar: [] } },
     raidCheckSyncLimiter: { run: fn => fn() }, discordUserLimiter: { run: fn => fn() },
   });
   let reply;
@@ -295,9 +300,9 @@ test("sync report adds a counter field only when that outcome happened", async (
     .filter(field => field.name !== "​")
     .map(field => `${field.name}=${field.value}`);
   assert.deepEqual(counters, [
-    "🔍 Checked=4",
+    "🔍 Checked=5",
     "🟢 New data=2",
-    "⚠️ Failed=1",
+    "⚠️ Failed=2",
     "⏳ Skipped=1",
   ]);
   // Two spacers pad the second row so the lone 4th counter is not

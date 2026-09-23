@@ -61,6 +61,11 @@ test("raid-check keeps navigation, roster refresh and Sync-check all on one butt
   );
   assert.match(
     source,
+    /buildSyncAllButton\(\{[\s\S]*?disabled:\s*disabled\s*\|\|\s*backgroundRefreshing/,
+    "Sync-check all should wait until the opening roster refresh finishes"
+  );
+  assert.match(
+    source,
     /currentPageIndex:\s*currentAbsoluteIndex\(\)/,
     "the roster selector should mark the roster rendered on the current page"
   );

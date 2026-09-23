@@ -81,6 +81,9 @@ const { createManualRosterRefreshRunner } = require("./services/roster/manual-re
 const { createAutoManageSyncService } = require("./services/auto-manage/runtime/sync");
 const { createRosterFetchService } = require("./services/roster/fetch");
 const { createAutoManageCoreService } = require("./services/auto-manage/runtime/core");
+const {
+  BibleRequestLimiter,
+} = require("./services/auto-manage/bible/rate-limit");
 const { createRaidViewSnapshotService } = require("./services/raid/view-snapshot");
 const { createRaidChannelMonitorService } = require("./services/raid/channel-monitor/channel-monitor");
 const { createRaidSchedulerService } = require("./services/raid/schedulers/schedulers");
@@ -89,7 +92,7 @@ const { createDiscordIdentityCache } = require("./services/discord/user-identity
 const { createInFlightLoader } = require("./utils/async/in-flight-loader");
 const RaidEvent = require("./models/RaidEvent");
 
-const bibleLimiter = new ConcurrencyLimiter(2);
+const bibleLimiter = new BibleRequestLimiter(2);
 // Discord REST fan-out limiter: caps parallel `client.users.fetch` bursts in
 // /raid-check (which resolves display names for every unique discordId with
 // matching chars). discord.js serializes per-bucket internally, but a large

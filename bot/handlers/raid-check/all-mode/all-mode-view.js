@@ -98,7 +98,11 @@ function createAllModeViewBuilders({
       );
     }
     row.addComponents(buildSyncAllButton({
-      ButtonBuilder, ButtonStyle, t, lang, disabled,
+      ButtonBuilder,
+      ButtonStyle,
+      t,
+      lang,
+      disabled: disabled || backgroundRefreshing,
     }));
     return row;
   };

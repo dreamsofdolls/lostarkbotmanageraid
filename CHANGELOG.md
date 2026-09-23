@@ -6,6 +6,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ## 2026-09-23
 
+### Changed
+- A Bible HTTP 429 pauses every Bible request for the `Retry-After` time, or 60 seconds when Bible sends none. Requests already queued fail at once with the same rate-limit error instead of each reaching Bible, and the characters caught by the pause no longer log a warning each.
+
 ### Fixed
 - The raid view in `/raid-status` and `/raid-check` opens for rosters of 17 characters or more instead of failing with a generic error. Up to 16 characters keep the two-column layout; longer rosters get one full-width row per character, as the gold view does, and a roster past Discord's 25-field cap ends with a "+N character khác" line.
 - A signup board with a long waitlist keeps updating. The `⏳ WAITLIST` column lists the first 10 players and a `+N` line for the rest, and the RSVP row names up to 10 players per status. About 15 waiting players used to push the column past Discord's field limit, after which every join, RSVP or kick failed to redraw the board.
@@ -15,6 +18,8 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - The `/raid-language` description names all three languages (Tiếng Việt / 日本語 / English), and its default text, shown to Discord clients in other languages, is now English like the other commands. It used to list only Vietnamese and Japanese, in Vietnamese.
 - When two players act on the same signup board at the same moment, the click whose save loses the race now says the board just changed and asks for another try, instead of the generic "Có lỗi xảy ra" error. Nothing is saved for that click, as before.
 - `/raid-channel config action:set` acknowledges Discord before it saves the channel, posts and pins the welcome and clears old pins. On a slow API the admin used to see "The application did not respond" although the channel, welcome and pin had all been set.
+- The daily auto-manage run retries later when a character fails with an error other than a disabled Public Log, even if other characters synced, and it moves the last-sync time only when the run fully succeeds. A day with some characters rate-limited used to count as synced, so those characters waited for the next day.
+- `/raid-check` Sync-all reports users with Local Sync on or no saved roster as skipped, and users whose characters all failed as failed; both used to count as "attempted". The button stays disabled while the background roster refresh is still running.
 
 ## 2026-09-20
 

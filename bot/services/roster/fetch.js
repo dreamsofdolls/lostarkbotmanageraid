@@ -3,6 +3,9 @@
 const { JSDOM, VirtualConsole } = require("jsdom");
 const { getClassName } = require("../../models/Class");
 const { parseItemLevel } = require("../../utils/raid/common/shared");
+const {
+  createBibleHttpError,
+} = require("../auto-manage/bible/rate-limit");
 
 const jsdomVirtualConsole = new VirtualConsole();
 jsdomVirtualConsole.on("jsdomError", (err) => {
@@ -53,7 +56,10 @@ function createRosterFetchService({ bibleLimiter }) {
     });
 
     if (!response.ok) {
-      throw new Error(`LostArk Bible HTTP ${response.status}`);
+      throw createBibleHttpError(
+        `LostArk Bible HTTP ${response.status}`,
+        response
+      );
     }
 
     const html = await response.text();

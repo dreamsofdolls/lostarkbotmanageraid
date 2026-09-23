@@ -58,3 +58,41 @@ test("auto-manage builds one fetched-roster index for every account fallback", a
   assert.equal(indexBuildCalls, 1, "the same fetched roster should be indexed once");
   assert.ok(entries.every((entry) => entry.error === null));
 });
+
+test("auto-manage does not start roster fallback after a direct Bible 429", async () => {
+  let rosterFetchCalls = 0;
+  const rateLimitError = new Error("Bible roster page returned HTTP 429");
+  rateLimitError.status = 429;
+  const gatherer = createAutoManageGatherer({
+    autoManageEntryKey: (accountName, charName) => `${accountName}:${charName}`,
+    buildFetchedRosterIndexes: () => new Map(),
+    fetchBibleCharacterMetaWithLimiter: async () => {
+      throw rateLimitError;
+    },
+    fetchBibleLogsSinceWeekReset: async () => [],
+    fetchRosterCharacters: async () => {
+      rosterFetchCalls += 1;
+      return [];
+    },
+    findFetchedRosterMatchForCharacter: () => null,
+    getCharacterClass: (character) => character.class,
+    getCharacterName: (character) => character.name,
+    normalizeName: (value) => String(value || "").trim().toLowerCase(),
+  });
+
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    const [entry] = await gatherer.gatherAutoManageLogsForUserDoc({
+      accounts: [{
+        accountName: "Roster",
+        characters: [{ name: "Aki", class: "Artist" }],
+      }],
+    }, 0);
+
+    assert.match(entry.error, /HTTP 429/);
+    assert.equal(rosterFetchCalls, 0);
+  } finally {
+    console.warn = originalWarn;
+  }
+});

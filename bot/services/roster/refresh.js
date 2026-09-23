@@ -12,6 +12,9 @@
  */
 
 const { findAccountByName } = require("../../utils/user-doc");
+const {
+  isBibleRateLimitError,
+} = require("../auto-manage/bible/rate-limit");
 
 const ROSTER_REFRESH_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const ROSTER_REFRESH_FAILURE_COOLDOWN_MS = 5 * 60 * 1000;
@@ -19,11 +22,6 @@ const REFRESH_SEED_FAILURE_DETAIL_LIMIT = 3;
 
 function getErrorMessage(err) {
   return err?.message || String(err || "unknown error");
-}
-
-function isRateLimitMessage(message) {
-  return /\bHTTP 429\b/i.test(String(message || "")) ||
-    /rate.?limit/i.test(String(message || ""));
 }
 
 /**
@@ -187,6 +185,7 @@ function createRosterRefreshService(deps) {
     let attempted = false;
     let zeroOverlapCount = 0;
     let rateLimitedAbort = false;
+    let rateLimitedAbortSuppressed = false;
     const seedFailures = [];
     for (const seed of seeds) {
       try {
@@ -225,8 +224,9 @@ function createRosterRefreshService(deps) {
         // limit window burns ~N seeds per account and a thundering-herd
         // of refresh-eligible accounts amplifies the load on bible just
         // when its limiter is trying to shed it.
-        if (isRateLimitMessage(message)) {
+        if (isBibleRateLimitError(err)) {
           rateLimitedAbort = true;
+          rateLimitedAbortSuppressed = err?.isBibleBackoff === true;
           break;
         }
       }
@@ -238,9 +238,9 @@ function createRosterRefreshService(deps) {
       );
     }
     if (seedFailures.length > 0) {
-      const rateLimited = seedFailures.filter((entry) => isRateLimitMessage(entry.message));
-      const otherFailures = seedFailures.filter((entry) => !isRateLimitMessage(entry.message));
-      if (rateLimitedAbort) {
+      const rateLimited = seedFailures.filter((entry) => isBibleRateLimitError(entry.message));
+      const otherFailures = seedFailures.filter((entry) => !isBibleRateLimitError(entry.message));
+      if (rateLimitedAbort && !rateLimitedAbortSuppressed) {
         console.warn(
           `[refresh] account "${originalName || "(unnamed roster)"}" aborted on first LostArk Bible HTTP 429 - retry after the failure cooldown.`
         );

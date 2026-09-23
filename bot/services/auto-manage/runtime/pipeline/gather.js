@@ -16,6 +16,9 @@ const {
   filterLogsForCharacter,
   mapWithConcurrency,
 } = require("../support/helpers");
+const {
+  isBibleRateLimitError,
+} = require("../../bible/rate-limit");
 
 /**
  * Compose the auto-manage gather pipeline from its Bible and roster helpers.
@@ -98,6 +101,7 @@ function createAutoManageGatherer({
           fetchCache.set(
             cacheKey,
             fetchRosterCharacters(seed).catch((err) => {
+              if (isBibleRateLimitError(err)) throw err;
               console.warn(
                 `[auto-manage] roster fallback seed "${seed}" failed:`,
                 err?.message || err
@@ -111,6 +115,7 @@ function createAutoManageGatherer({
         try {
           fetched = await fetchRosterCharacters(seed);
         } catch (err) {
+          if (isBibleRateLimitError(err)) throw err;
           console.warn(
             `[auto-manage] roster fallback seed "${seed}" failed:`,
             err?.message || err
@@ -140,6 +145,7 @@ function createAutoManageGatherer({
       try {
         meta = await fetchBibleCharacterMetaWithLimiter(canonicalName);
       } catch (err) {
+        if (isBibleRateLimitError(err)) throw err;
         console.warn(
           `[auto-manage] roster fallback canonical meta for "${canonicalName}" failed:`,
           err?.message || err
@@ -162,6 +168,7 @@ function createAutoManageGatherer({
       const meta = await fetchBibleCharacterMetaWithLimiter(entry.charName);
       return { meta, canonicalName: null, source: "direct" };
     } catch (directErr) {
+      if (isBibleRateLimitError(directErr)) throw directErr;
       const resolved = await resolveBibleCharacterMetaViaRoster(
         account,
         character,
@@ -290,10 +297,12 @@ function createAutoManageGatherer({
       entry.logs = filteredLogs.logs;
     } catch (err) {
       entry.error = err?.message || String(err);
-      console.warn(
-        `[auto-manage] gather for ${entry.charName} failed:`,
-        err?.message || err
-      );
+      if (!err?.isBibleBackoff) {
+        console.warn(
+          `[auto-manage] gather for ${entry.charName} failed:`,
+          err?.message || err
+        );
+      }
     }
     return entry;
   }

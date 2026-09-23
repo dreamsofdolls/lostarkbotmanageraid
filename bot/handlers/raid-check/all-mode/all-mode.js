@@ -349,11 +349,11 @@ function createAllModeHandler({
 
     if (typeof startBackgroundRefresh === "function" && refreshQueued > 0) {
       const refreshStarted = Date.now();
-      let applied = 0;
+      let published = 0;
       void startBackgroundRefresh({
         onUserRefreshed: (userDoc) => {
           if (!applyRefreshedUserDoc(userDoc)) return;
-          applied += 1;
+          published += 1;
           pendingAggregateCache.clear();
           recomputeFilteredPages({ resetPage: false });
           queueBackgroundRender("roster-refresh-partial");
@@ -362,7 +362,7 @@ function createAllModeHandler({
         .then((refreshedUsers) => {
           state.backgroundRefreshing = false;
           console.log(
-            `[raid-check all] background refresh applied=${applied}/${refreshQueued} resolved=${refreshedUsers?.length || 0} ms=${Date.now() - refreshStarted}`
+            `[raid-check all] background refresh published=${published}/${refreshQueued} jobsCompleted=${refreshedUsers?.length || 0} ms=${Date.now() - refreshStarted}`
           );
           return queueBackgroundRender("roster-refresh-complete");
         })

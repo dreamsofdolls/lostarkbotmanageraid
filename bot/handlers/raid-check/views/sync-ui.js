@@ -212,23 +212,33 @@ function createSyncUi({
             });
             bibleHit = true;
 
-            let outcome = "attempted-only";
-            let delta = null;
             const committed = await commitAutoManageCollected(
               discordId,
               weekResetStart,
               collected,
               { requireRoster: true }
             );
-            if (String(committed?.status || "").startsWith("synced-")) {
-              outcome = "synced";
+            switch (committed?.status) {
+              case "synced-with-delta":
+              case "synced-no-delta":
+                syncedCount += 1;
+                break;
+              case "all-chars-failed":
+                failedCount += 1;
+                break;
+              case "local-sync-active":
+              case "missing-roster":
+              case "missing-user":
+                skippedCount += 1;
+                break;
+              default:
+                attemptedOnlyCount += 1;
             }
-            const appliedEntries = getAppliedAutoManageEntries(committed?.report);
-            if (appliedEntries.length > 0) delta = appliedEntries;
 
-            if (outcome === "synced") syncedCount += 1;
-            else attemptedOnlyCount += 1;
-            if (delta) deltasPerUser.set(discordId, delta);
+            const appliedEntries = getAppliedAutoManageEntries(committed?.report);
+            if (appliedEntries.length > 0) {
+              deltasPerUser.set(discordId, appliedEntries);
+            }
           } catch (err) {
             failedCount += 1;
             if (bibleHit) await stampAutoManageAttempt(discordId);

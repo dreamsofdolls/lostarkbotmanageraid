@@ -1,5 +1,7 @@
 "use strict";
 
+const { createBibleHttpError } = require("./rate-limit");
+
 const BIBLE_REGION = "NA";
 const BIBLE_USER_AGENT = "Mozilla/5.0 (compatible; LostArkRaidManageBot/1.0)";
 const BIBLE_REQUEST_TIMEOUT_MS = 15000;
@@ -32,7 +34,10 @@ async function fetchBibleCharacterMeta(charName, { fetchImpl = defaultFetch } = 
     signal: createRequestSignal(),
   });
   if (!res.ok) {
-    throw new Error(`Bible roster page returned HTTP ${res.status} for "${charName}"`);
+    throw createBibleHttpError(
+      `Bible roster page returned HTTP ${res.status} for "${charName}"`,
+      res
+    );
   }
   const html = await res.text();
   // SSR SvelteKit bootstrap data: {header:{id:<cid>,sn:"<serial>",rid:<rid>,...}}
@@ -82,8 +87,10 @@ async function fetchBibleCharacterLogs(
       bodyText = "";
     }
     const snippet = bodyText ? ` - ${bodyText.slice(0, 200).replace(/\s+/g, " ").trim()}` : "";
-    const err = new Error(`Bible logs API returned HTTP ${res.status}${snippet}`);
-    err.status = res.status;
+    const err = createBibleHttpError(
+      `Bible logs API returned HTTP ${res.status}${snippet}`,
+      res
+    );
     err.bodyText = bodyText;
     throw err;
   }

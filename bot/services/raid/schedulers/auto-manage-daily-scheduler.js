@@ -1,9 +1,6 @@
 "use strict";
 
 const {
-  stampAutoManageAttemptFromReport,
-} = require("../../auto-manage/reports/utils");
-const {
   getAutoManageDailyContext,
 } = require("../../auto-manage/runtime/support/daily-backfill");
 const {
@@ -200,7 +197,6 @@ async function persistCollectedDailyReport({
 
     ensureFreshWeek(fresh);
     report = applyAutoManageCollected(fresh, weekResetStart, collected);
-    stampAutoManageAttemptFromReport(fresh, report, nowMs);
     transition = applyAutoManageDailyReportState({
       userDoc: fresh,
       report,
@@ -209,6 +205,10 @@ async function persistCollectedDailyReport({
       attemptCount,
       nowMs,
     });
+    fresh.lastAutoManageAttemptAt = nowMs;
+    if (transition.outcome === AUTO_MANAGE_DAILY_OUTCOME.success) {
+      fresh.lastAutoManageSyncAt = nowMs;
+    }
     await fresh.save();
   });
   return { report, transition };

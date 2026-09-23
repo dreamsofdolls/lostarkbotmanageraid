@@ -171,6 +171,33 @@ test("all-private and no-actionable reports settle without retrying", () => {
   }
 });
 
+test("a partial daily success still retries when another character hit a transient error", () => {
+  const doc = {
+    autoManageDailyLeaseDayKey: TARGET_DAY,
+    autoManageDailyLeaseUntil: NOW_MS + 1000,
+  };
+  const transition = applyAutoManageDailyReportState({
+    userDoc: doc,
+    report: {
+      perChar: [
+        { error: null, applied: [] },
+        { error: "LostArk Bible HTTP 429", applied: [] },
+      ],
+    },
+    isPublicLogDisabledError: (error) => error === "Logs not enabled",
+    targetDayKey: TARGET_DAY,
+    attemptCount: 1,
+    nowMs: NOW_MS,
+  });
+
+  assert.equal(transition.bucket, "retry-scheduled");
+  assert.equal(transition.outcome, AUTO_MANAGE_DAILY_OUTCOME.retryScheduled);
+  assert.equal(
+    doc.autoManageDailyNextAttemptAt,
+    NOW_MS + AUTO_MANAGE_DAILY_RETRY_DELAYS_MS[0]
+  );
+});
+
 test("transient failures back off and finish only after bounded exhaustion", () => {
   assert.deepEqual(AUTO_MANAGE_DAILY_RETRY_DELAYS_MS, [
     30 * 60 * 1000,

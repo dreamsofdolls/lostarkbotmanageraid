@@ -174,13 +174,21 @@ function classifyAutoManageDailyReport({
   report,
   isPublicLogDisabledError,
 }) {
-  if (hasSuccessfulAutoManageReport(report)) {
-    return AUTO_MANAGE_DAILY_OUTCOME.success;
-  }
-
   const entries = Array.isArray(report?.perChar) ? report.perChar : [];
   if (entries.length === 0) {
     return AUTO_MANAGE_DAILY_OUTCOME.noActionable;
+  }
+  const hasTransientError = entries.some(
+    (entry) => entry?.error && !(
+      typeof isPublicLogDisabledError === "function" &&
+      isPublicLogDisabledError(entry.error)
+    )
+  );
+  if (hasTransientError) {
+    return AUTO_MANAGE_DAILY_OUTCOME.retryScheduled;
+  }
+  if (hasSuccessfulAutoManageReport(report)) {
+    return AUTO_MANAGE_DAILY_OUTCOME.success;
   }
   if (
     entries.every(
