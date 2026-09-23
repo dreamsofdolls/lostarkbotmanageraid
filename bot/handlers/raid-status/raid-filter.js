@@ -7,13 +7,13 @@
 
 const { isSupportClass } = require("../../models/Class");
 const {
-  areEquivalentRaidModes,
   compareRaidModeOrder,
   isSoloModeKey,
 } = require("../../domain/raid-catalog");
 const { t } = require("../../services/i18n");
 const {
-  isCountedRaidProgress,
+  getRaidFilterModeKey,
+  isCountedRaidFilterProgress,
   isGoldReceivingRaid,
 } = require("../../utils/raid/common/character");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
@@ -25,35 +25,8 @@ const FILTER_ALL_RAIDS = "__all_raids__";
 const FILTER_ALL_ROSTERS = "__all_rosters__";
 const FILTER_NO_ROSTERS = "__no_rosters__";
 
-// Normal and Solo share one lockout/progress tier. Once a character queues a
-// lateral Normal <-> Solo switch after clearing, the status filter should
-// follow that chosen identity immediately; otherwise the dropdown exposes the
-// old mode as a ghost option while the character is already presented as
-// moving to the equivalent target. Real tier changes (Normal -> Hard, etc.)
-// remain on the current mode until weekly reset because their progress is not
-// interchangeable.
-function getRaidFilterModeKey(raid) {
-  const modeKey = raid?.modeKey;
-  const pendingModeKey = raid?.pendingModeKey;
-  if (
-    pendingModeKey &&
-    pendingModeKey !== modeKey &&
-    areEquivalentRaidModes(modeKey, pendingModeKey)
-  ) {
-    return pendingModeKey;
-  }
-  return modeKey;
-}
-
 function getRaidFilterKey(raid) {
   return `${raid?.raidKey}:${getRaidFilterModeKey(raid)}`;
-}
-
-function isCountedRaidFilterProgress(raid) {
-  const modeKey = getRaidFilterModeKey(raid);
-  return isCountedRaidProgress(
-    modeKey === raid?.modeKey ? raid : { ...raid, modeKey }
-  );
 }
 
 /**

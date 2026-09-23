@@ -19,6 +19,7 @@ const {
 } = require("./shared");
 const {
   RAID_REQUIREMENTS,
+  areEquivalentRaidModes,
   getGatesForRaid,
   getGoldForGate,
   getBoundGoldForGate,
@@ -251,6 +252,43 @@ function isCountedRaidProgress(raid) {
   return !isSoloModeKey(raid?.modeKey) && isGoldReceivingRaid(raid);
 }
 
+/**
+ * The mode /raid-status files a raid under. Normal and Solo share one
+ * lockout/progress tier, so once a character queues a lateral Normal <-> Solo
+ * switch after clearing, the raid follows that chosen mode immediately;
+ * otherwise the dropdown would expose the old mode as a ghost option while the
+ * character is already presented as moving. Real tier changes (Normal -> Hard,
+ * etc.) stay on the current mode until weekly reset because their progress is
+ * not interchangeable.
+ * @param {object} raid - status raid entry
+ * @returns {string|undefined} mode key
+ */
+function getRaidFilterModeKey(raid) {
+  const modeKey = raid?.modeKey;
+  const pendingModeKey = raid?.pendingModeKey;
+  if (
+    pendingModeKey &&
+    pendingModeKey !== modeKey &&
+    areEquivalentRaidModes(modeKey, pendingModeKey)
+  ) {
+    return pendingModeKey;
+  }
+  return modeKey;
+}
+
+/**
+ * Whether a raid counts toward the /raid-status done / partial / pending
+ * totals, read under its filter mode.
+ * @param {object} raid - status raid entry
+ * @returns {boolean}
+ */
+function isCountedRaidFilterProgress(raid) {
+  const modeKey = getRaidFilterModeKey(raid);
+  return isCountedRaidProgress(
+    modeKey === raid?.modeKey ? raid : { ...raid, modeKey }
+  );
+}
+
 // 3-state aggregate icon for a (done, total) pair. Shared by /raid-status's
 // per-raid line AND /raid-check's per-char card so both commands surface the
 // same visual vocabulary: 🟢 = all done, 🟡 = at least 1 done but not all,
@@ -412,6 +450,8 @@ module.exports = {
   getStatusRaidsForCharacter,
   isGoldReceivingRaid,
   isCountedRaidProgress,
+  getRaidFilterModeKey,
+  isCountedRaidFilterProgress,
   formatRaidStatusLine,
   summarizeRaidProgress,
   summarizeCharacterGold,
