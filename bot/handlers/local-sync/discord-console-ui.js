@@ -6,7 +6,7 @@ const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 const { getClassEmoji } = require("../../models/Class");
 // Aliased: buildLocalSyncConsolePayload takes a `UI` parameter, and an
 // unaliased import here would read as the same thing at a glance.
-const { UI: sharedUI, pack2Columns } = require("../../utils/raid/common/shared");
+const { UI: sharedUI } = require("../../utils/raid/common/shared");
 // Same two helpers /raid-status renders its character fields with · the
 // preview feeds them simulated characters, so the rows come out identical.
 const {
@@ -20,6 +20,12 @@ const {
   buildStatusRosterFilterRow,
 } = require("../raid-status/raid-filter");
 const {
+  BLANK_FIELD_VALUE,
+  appendGroupFields,
+  buildCharacterStatusField,
+  touchedRaidLines,
+} = require("../../utils/raid/common/changed-characters");
+const {
   bucketizeLocalSyncDeltas,
   resolvePreviewJobState,
 } = require("../../services/local-sync");
@@ -27,10 +33,6 @@ const { describeLocalSyncCard } = require("./discord-console-card");
 
 const MAX_CHARACTER_FIELDS = 10;
 const MAX_RAIDS_PER_CHARACTER = 8;
-const EMBED_FIELD_LIMIT = 25;
-// Discord rejects an empty field value; a header field carries its text in
-// the name.
-const BLANK_FIELD_VALUE = "​";
 // Two surfaces render this payload and each needs its own customId
 // namespace. The DM preview has no component collector, so its buttons
 // must reach the global router (`local-sync:` in
@@ -123,28 +125,6 @@ function collectChangedRosters(summary, rosterFilter = null) {
 }
 
 /**
- * Append one group (an optional header, then its characters two per line)
- * while it fits under Discord's 25-field embed cap. A group without room
- * for its header and one line is left out; the counts in the headers and
- * the summary still give the totals.
- * @param {object[]} fields - embed fields collected so far, extended in place
- * @param {object|null} header - non-inline group header field
- * @param {object[]} charFields - inline character fields
- * @returns {void}
- */
-function appendGroupFields(fields, header, charFields) {
-  const headerCost = header ? 1 : 0;
-  // pack2Columns emits three fields per line: two characters and a spacer.
-  if (fields.length + headerCost + 3 > EMBED_FIELD_LIMIT) return;
-  if (header) fields.push(header);
-  const lines = pack2Columns(charFields);
-  for (let index = 0; index < lines.length; index += 3) {
-    if (fields.length + 3 > EMBED_FIELD_LIMIT) break;
-    fields.push(...lines.slice(index, index + 3));
-  }
-}
-
-/**
  * Body of the card, in the /raid-status gold-view shape: two columns of
  * inline character fields, each a header line plus one line per raid.
  * Not a copy of that layout · projectSummary hands back
@@ -188,16 +168,9 @@ function addChangedCharacterFields(
     const charFields = [];
     for (const character of group.characters) {
       const touched = incoming.get(String(character.name || "").toLowerCase());
-      const lines = getStatusRaidsForCharacter(character)
-        .filter((raid) => touched.has(`${raid.raidKey}::${raid.modeKey}`))
-        .map((raid) => formatRaidStatusLine(raid, lang));
+      const lines = touchedRaidLines(character, touched, lang);
       if (lines.length === 0) continue;
-      const emoji = getClassEmoji(character.class || character.className);
-      charFields.push({
-        name: `${emoji ? `${emoji} ` : ""}${character.name} · ${Number(character.itemLevel) || 0}`,
-        value: lines.join("\n"),
-        inline: true,
-      });
+      charFields.push(buildCharacterStatusField(character, lines));
     }
     if (charFields.length === 0) continue;
     // The roster header earns its field when several rosters are on the card,
