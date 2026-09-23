@@ -1,6 +1,7 @@
 "use strict";
 
 const { t: translate, DEFAULT_LANGUAGE } = require("../../../services/i18n");
+const { formatBibleError } = require("../../../services/auto-manage/bible/error-text");
 
 /**
  * Build the seed-and-retry Bible roster fetcher.
@@ -83,8 +84,8 @@ function createFetchBibleRosterWithFallback({
 
         return { bibleChars: fetched, bibleError: null };
       } catch (err) {
-        lastError = err?.message || String(err);
-        console.warn(`[edit-roster] seed "${seed}" failed: ${lastError}`);
+        console.warn(`[edit-roster] seed "${seed}" failed: ${err?.message || err}`);
+        lastError = formatBibleError(err, lang);
       }
     }
 

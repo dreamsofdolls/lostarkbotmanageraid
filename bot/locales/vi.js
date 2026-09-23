@@ -582,7 +582,7 @@ module.exports = {
     },
     fallback: {
       noSeed: "Không có seed để fetch bible.",
-      zeroOverlap: "Mọi seed đều trả roster không trùng saved chars (rename in-game?)",
+      zeroOverlap: "Roster Bible trả về không có char nào trùng với char đã lưu (đổi tên trong game?)",
       noResults: "Bible không trả về kết quả nào.",
     },
     picker: {
@@ -590,7 +590,7 @@ module.exports = {
       rosterLine: "Roster: **{accountName}**",
       headerLine: "Đang edit - bấm nút bên dưới để toggle ✅/⬜ chars muốn **giữ/add** vs **xoá**:",
       selectingLine: "Đang chọn: **{selected}** / {total}",
-      bibleOffline: "{iconWarn} Bible offline ({error}) - chỉ thấy char đã saved, không add char mới được. Thử lại sau khi bible up.",
+      bibleOffline: "{iconWarn} Chưa lấy được roster từ Bible: {error}\nTạm thời cậu chỉ thấy char đã lưu, chưa add được char mới.",
       legend: "{iconInfo} {newTag} = char mới có ở bible chưa được add · {staleTag} = char đã saved nhưng không còn ở bible (rename/private log?).",
       excludedSaved: "{iconWarn} Roster có saved chars vượt cap picker ({cap}). **{count}** saved char ngoài cửa sổ sẽ được giữ nguyên không thay đổi - cậu chỉ edit được top {cap} chars hiển thị thôi nha. Để dọn hẳn, dùng `/raid-remove-roster` rồi `/raid-add-roster` lại từ đầu.",
       excludedBibleOnly: "{iconWarn} {count} char mới ở bible chưa hiện được do cap {cap} đầy. Toggle off saved char muốn xoá rồi Confirm trước, sau đó `/raid-edit-roster` lần nữa để add tiếp char mới còn lại.",
@@ -1221,7 +1221,7 @@ module.exports = {
       localLockedTitle: "Cậu đang dùng local-sync",
       localLockedDescription: "Manual `action:sync` là sync từ lostark.bible, nên tớ chặn khi **local-sync** đang bật. Mở `/raid-status` → `🗃️ Local Sync` để dùng Local Reader/Discord Console hoặc chạy `/raid-auto-manage action:local-off` nếu muốn chuyển lại bible.",
       failTitle: "Sync fail",
-      failDescription: "Artist sync không xong vì: `{error}`. Có thể lostark.bible đang block (Cloudflare 403) hoặc char names có gì sai. Thử lại sau vài phút nha, nếu vẫn fail thì check char ở https://lostark.bible/me/logs.",
+      failDescription: "Artist sync không xong vì lỗi bên bot: `{error}`. Thử lại sau vài phút nha.",
     },
     status: {
       title: "Auto-manage Status",

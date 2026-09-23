@@ -26,7 +26,8 @@ const {
 const { createEditRosterCommand } = require("../bot/handlers/roster/edit");
 const { UI, normalizeName, parseCombatScore, getCharacterName, getCharacterClass } = require("../bot/utils/raid/common/shared");
 const { buildCharacterRecord, createCharacterId } = require("../bot/utils/raid/common/character");
-const { clearUserLanguageCache } = require("../bot/services/i18n");
+const { clearUserLanguageCache, t } = require("../bot/services/i18n");
+const { createBibleHttpError } = require("../bot/services/auto-manage/bible/rate-limit");
 
 // Same in-memory User stub shape as add-roster.test.js. Kept duplicated
 // (rather than shared via a helper) so each test file is self-contained
@@ -443,7 +444,7 @@ test("fetchBibleRosterWithFallback: all seeds zero-overlap → bibleError set", 
   );
 
   assert.equal(bibleChars.length, 0);
-  assert.match(bibleError, /không trùng saved chars|rename/i);
+  assert.equal(bibleError, t("raid-edit-roster.fallback.zeroOverlap", "vi"));
 });
 
 test("fetchBibleRosterWithFallback: empty savedChars skips overlap check (first success wins)", async () => {
@@ -483,6 +484,26 @@ test("fetchBibleRosterWithFallback: all seeds throw → bibleError = lastError",
 
   assert.equal(bibleChars.length, 0);
   assert.match(bibleError, /seed .+ failed/);
+});
+
+test("fetchBibleRosterWithFallback: a Bible 403 reads as its label, an unknown error stays in a code span", async () => {
+  const savedChars = [{ name: "X", class: "Bard", itemLevel: 1700, combatScore: "85000" }];
+  const blocked = makeFactory({
+    fetchRosterCharacters: async () => {
+      throw createBibleHttpError("LostArk Bible HTTP 403", { status: 403 });
+    },
+  });
+  const unknown = makeFactory({
+    fetchRosterCharacters: async (seed) => {
+      throw new Error(`seed ${seed} failed`);
+    },
+  });
+
+  const fromBlocked = await blocked.factory.__test.fetchBibleRosterWithFallback(savedChars, "Account", "en");
+  const fromUnknown = await unknown.factory.__test.fetchBibleRosterWithFallback(savedChars, "Account", "en");
+
+  assert.equal(fromBlocked.bibleError, t("common.bibleError.blocked", "en"));
+  assert.equal(fromUnknown.bibleError, "`seed Account failed`");
 });
 
 test("fetchBibleRosterWithFallback: empty seeds list → bibleError 'không có seed'", async () => {

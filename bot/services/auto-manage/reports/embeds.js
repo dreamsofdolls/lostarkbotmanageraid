@@ -20,9 +20,9 @@ const {
   buildCharacterStatusField,
   touchedRaidLines,
 } = require("../../../utils/raid/common/changed-characters");
-const { BIBLE_ERROR_KIND, classifyBibleError } = require("../bible/error-kinds");
+const { BIBLE_ERROR_KIND } = require("../bible/error-kinds");
+const { describeBibleError } = require("../bible/error-text");
 
-const MAX_ERROR_LENGTH = 180;
 const MAX_REASON_NAMES = 10;
 // What the user can fix first, then what waits on Bible, then the rest.
 const REASON_ORDER = [
@@ -155,21 +155,6 @@ function createAutoManageReportEmbeds({
     }
   }
 
-  function describeFailure(error, lang) {
-    const kind = classifyBibleError(error);
-    if (kind !== BIBLE_ERROR_KIND.other) {
-      return { kind, text: t(`common.bibleError.${kind}`, lang) };
-    }
-    // One line and no backtick, so the text fits inside a code span.
-    const oneLine = String(error).replace(/\s+/g, " ").trim().replace(/`/g, "'");
-    return {
-      kind,
-      text: oneLine.length > MAX_ERROR_LENGTH
-        ? `${oneLine.slice(0, MAX_ERROR_LENGTH - 1)}\u2026`
-        : oneLine,
-    };
-  }
-
   function formatFailureRow(failure) {
     return failure.kind === BIBLE_ERROR_KIND.other
       ? `${UI.icons.warn} \`${failure.text}\``
@@ -179,7 +164,7 @@ function createAutoManageReportEmbeds({
   function buildReasonLines(perChar, lang) {
     const groups = new Map(REASON_ORDER.map((kind) => [kind, { names: [], texts: new Set() }]));
     for (const entry of perChar) {
-      const failure = describeFailure(entry.error, lang);
+      const failure = describeBibleError(entry.error, lang);
       const group = groups.get(failure.kind);
       group.names.push(entry.charName);
       group.texts.add(failure.text);
@@ -248,7 +233,7 @@ function createAutoManageReportEmbeds({
         );
         if (!entry) continue;
         const lines = entry.error
-          ? [formatFailureRow(describeFailure(entry.error, lang))]
+          ? [formatFailureRow(describeBibleError(entry.error, lang))]
           : touchedRaidLines(
             character,
             new Set(entry.applied.map((gate) => `${gate.raidKey}::${gate.modeKey}`)),

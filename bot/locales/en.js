@@ -560,7 +560,7 @@ module.exports = {
     },
     fallback: {
       noSeed: "No seed available to fetch bible.",
-      zeroOverlap: "Every seed returned a roster with no overlap with saved characters (in-game rename?)",
+      zeroOverlap: "The rosters Bible returned share no character with the saved ones (renamed in game?)",
       noResults: "Bible returned no results.",
     },
     picker: {
@@ -568,7 +568,7 @@ module.exports = {
       rosterLine: "Roster: **{accountName}**",
       headerLine: "Editing - tap a button to toggle ✅/⬜ for the characters you want to **keep/add** vs **remove**:",
       selectingLine: "Selected: **{selected}** / {total}",
-      bibleOffline: "{iconWarn} Bible offline ({error}) - only saved characters are visible, can't add new ones. Try again once bible is back up.",
+      bibleOffline: "{iconWarn} Couldn't load the roster from Bible: {error}\nFor now only saved characters are shown, and new ones can't be added.",
       legend: "{iconInfo} {newTag} = new character on bible not yet added · {staleTag} = saved but no longer on bible (rename / private log?).",
       excludedSaved: "{iconWarn} Roster has saved characters beyond the picker cap ({cap}). **{count}** saved char(s) outside the window will be left untouched - you can only edit the top {cap} shown. To clean up fully, use `/raid-remove-roster` then `/raid-add-roster` from scratch.",
       excludedBibleOnly: "{iconWarn} {count} new bible character(s) couldn't fit in the picker (cap {cap} full). Toggle off saved characters you want to remove and Confirm first, then run `/raid-edit-roster` again to add the rest.",
@@ -1199,7 +1199,7 @@ module.exports = {
       localLockedTitle: "You're on local-sync mode",
       localLockedDescription: "Manual `action:sync` pulls from lostark.bible, so Artist blocks it while **local-sync** is active. Open `/raid-status` → `🗃️ Local Sync` for the Local Reader/Discord Console, or run `/raid-auto-manage action:local-off` to switch back to bible.",
       failTitle: "Sync failed",
-      failDescription: "Artist couldn't finish the sync: `{error}`. lostark.bible may be blocking (Cloudflare 403) or a character name is off. Try again in a few minutes; if it still fails, check your characters at https://lostark.bible/me/logs.",
+      failDescription: "Artist couldn't finish the sync because of a bot-side error: `{error}`. Try again in a few minutes.",
     },
     status: {
       title: "Auto-manage status",

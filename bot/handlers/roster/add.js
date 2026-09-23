@@ -7,6 +7,7 @@ const {
   resolveAdminMention,
 } = require("../../utils/raid/roster-picker");
 const { t, getUserLanguage } = require("../../services/i18n");
+const { formatBibleError } = require("../../services/auto-manage/bible/error-text");
 const {
   guardPickerConfirm,
   handleRosterPickerNavigationAction,
@@ -183,7 +184,7 @@ function createAddRosterCommand({
       await interaction.editReply(
         t("raid-add-roster.fetch.failed", lang, {
           iconWarn: UI.icons.warn,
-          error: error.message,
+          error: formatBibleError(error, lang),
         })
       );
       return;

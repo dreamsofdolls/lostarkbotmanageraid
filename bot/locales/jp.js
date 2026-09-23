@@ -561,7 +561,7 @@ module.exports = {
     },
     fallback: {
       noSeed: "Bible 取得用の seed がありませんわ。",
-      zeroOverlap: "全 seed が保存済みキャラと重複しないロスターを返しましたわ (ゲーム内改名?)",
+      zeroOverlap: "Bible が返したロスターに保存済みキャラが一人もいませんでしたわ (ゲーム内で改名?)",
       noResults: "Bible から結果が返って来ませんでしたわ。",
     },
     picker: {
@@ -569,7 +569,7 @@ module.exports = {
       rosterLine: "ロスター: **{accountName}**",
       headerLine: "編集中 - 下のボタンで ✅/⬜ 切り替えて、**残す/追加** vs **削除** を決めてくださいね:",
       selectingLine: "選択中: **{selected}** / {total}",
-      bibleOffline: "{iconWarn} bible がオフラインですわ ({error}) - 保存済みキャラのみ表示、新規追加はできないの。bible 復旧後に再試行してくださいね。",
+      bibleOffline: "{iconWarn} Bible からロスターを取得できませんでしたわ: {error}\n今は保存済みキャラのみ表示で、新しいキャラは追加できませんの。",
       legend: "{iconInfo} {newTag} = bible にある新規キャラ・未追加 · {staleTag} = 保存済みだけど bible に存在しない (改名/プライベートログ?)。",
       excludedSaved: "{iconWarn} ロスターにピッカー上限 ({cap}) を超える保存済みキャラがありますわ。**{count}** キャラはウィンドウ外で変更されませんの - 上位 {cap} キャラだけ編集できますよ。完全に整理したいなら、`/raid-remove-roster` から `/raid-add-roster` で最初からやり直してくださいね。",
       excludedBibleOnly: "{iconWarn} bible の新規 {count} キャラは上限 {cap} 満杯のため表示されませんわ。削除したい保存済みキャラをオフにして確定し、`/raid-edit-roster` をもう一度実行して残りを追加してくださいね♪",
@@ -1200,7 +1200,7 @@ module.exports = {
       localLockedTitle: "ローカル同期モード中ですわ",
       localLockedDescription: "Manual `action:sync` は lostark.bible から取得する同期なので、**ローカル同期** が有効な間はブロックしますわ。`/raid-status` → `🗃️ ローカル同期` から Local Reader/Discord Console を開くか、bible に戻すなら `/raid-auto-manage action:local-off` を実行してね♪",
       failTitle: "同期に失敗しましたわ",
-      failDescription: "アーティスト、同期できませんでしたわ: `{error}`。 lostark.bible が遮断中 (Cloudflare 403) かキャラ名がおかしいかもしれませんわ。数分後に再試行してね、それでもダメなら https://lostark.bible/me/logs でキャラを確認してくださいね～",
+      failDescription: "アーティスト、ボット側のエラーで同期できませんでしたわ: `{error}`。数分後に再試行してね～",
     },
     status: {
       title: "自動管理の状態",
