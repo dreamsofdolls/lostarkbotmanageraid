@@ -5,10 +5,9 @@
  * All user-facing strings live in bot/locales/<lang>.js under the
  * `raid-help` namespace and are pulled at render time via i18n.
  *
- * Three locales: vi (default, first-class), jp (first-class), en
- * (partial, available only via `/raid-help language:en` one-off
- * override). Language resolution: explicit slash option wins, else the
- * viewer's persistent /raid-language preference, else "vi".
+ * Three first-class locales: vi (default), jp and en. Language
+ * resolution: explicit slash option wins, else the viewer's persistent
+ * /raid-language preference, else "vi".
  *
  * Invariant: adding a section here means also adding the matching
  * `raid-help.sections.<key>.*` keys in every locale pack (the i18n
@@ -266,9 +265,9 @@ function createRaidHelpCommand(deps) {
     const placeholder = t("raid-help.placeholder", lang);
     // Lang baked into the customId so dropdown selections after a
     // language switch render the detail in the user's chosen language
-    // without re-running the slash command. selectRoutes prefix-match
-    // in bot.js dispatches `raid-help:select:<lang>` to the same
-    // handler.
+    // without re-running the slash command. The selectRoutes prefix
+    // match in app/interaction-router-registry.js dispatches
+    // `raid-help:select:<lang>` to the same handler.
     const menu = new StringSelectMenuBuilder()
       .setCustomId(`raid-help:select:${lang}`)
       .setPlaceholder(placeholder)
@@ -285,9 +284,7 @@ function createRaidHelpCommand(deps) {
 
   async function resolveHelpLanguage(interaction) {
     // Slash option wins as a per-call override; otherwise fall back to
-    // the viewer's persistent /raid-language preference. resolveLocale
-    // (not normalizeLanguage) so an `en` override is honored even
-    // though it isn't in the /raid-language picker.
+    // the viewer's persistent /raid-language preference.
     const explicit = interaction.options.getString("language");
     if (explicit) return resolveLocale(explicit);
     const stored = await resolveStoredLanguage(interaction.user.id);
