@@ -31,17 +31,6 @@ function buildEnableCooldownSkipEmbed({
     .setTimestamp();
 }
 
-function setInitialSyncTitle({ embed, report, UI, lang }) {
-  embed.setTitle(
-    `${UI.icons.done} ${
-      (report?.appliedTotal || 0) > 0
-        ? t("raid-auto-manage.enable.initialSyncCompleteTitle", lang)
-        : t("raid-auto-manage.enable.initialSyncNothingTitle", lang)
-    }`
-  );
-  return embed;
-}
-
 function buildHiddenCharsConfirmRow({
   ActionRowBuilder,
   ButtonBuilder,
@@ -98,11 +87,11 @@ function createAutoManageEnableHandler({
       // error for handleOn's catch, not an empty sync.
       throw new Error("User record not found when committing auto-manage");
     }
-    const syncEmbed = setInitialSyncTitle({
-      embed: buildAutoManageSyncReportEmbed(report, lang, { userDoc }),
-      report,
-      UI,
-      lang,
+    const syncEmbed = buildAutoManageSyncReportEmbed(report, lang, {
+      userDoc,
+      titleText: t(report.appliedTotal > 0
+        ? "raid-auto-manage.enable.initialSyncCompleteTitle"
+        : "raid-auto-manage.enable.initialSyncNothingTitle", lang),
     });
     await editAutoEmbed(syncEmbed, { components: [] });
   }

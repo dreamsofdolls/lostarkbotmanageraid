@@ -78,6 +78,7 @@ test("action:on hands the committed user document to the report card", async () 
   });
 
   assert.equal(captured.options.userDoc, saved);
+  assert.equal(captured.options.titleText, require("../bot/services/i18n").t("raid-auto-manage.enable.initialSyncNothingTitle", "en"));
 });
 
 test("action:on reports an error when the user record disappears before commit", async (t) => {

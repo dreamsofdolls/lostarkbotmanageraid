@@ -72,7 +72,12 @@ function createAutoManageCoreService({
   const {
     buildAutoManageHiddenCharsWarningEmbed,
     buildAutoManageSyncReportEmbed,
-  } = createAutoManageReportEmbeds({ EmbedBuilder, UI });
+  } = createAutoManageReportEmbeds({
+    EmbedBuilder,
+    UI,
+    getAutoManageCooldownMs,
+    isPublicLogDisabledError,
+  });
   const {
     reconcileCharacterFromLogs,
   } = createAutoManageReconciler({
