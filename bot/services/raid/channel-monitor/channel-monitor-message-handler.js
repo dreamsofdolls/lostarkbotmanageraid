@@ -171,20 +171,10 @@ function createRaidChannelMessageHandler({
     }, 5_000);
   }
 
-  function enqueueDmFallback({
-    ops,
-    message,
-    results,
-    raidMeta,
-    effectiveGates,
-    statusType,
-    authorLang,
-  }) {
+  function enqueueDmFallback({ ops, message, resultGroups, accounts, authorLang }) {
     const fallbackText = buildRaidChannelDmFallbackText({
-      results,
-      raidMeta,
-      effectiveGates,
-      statusType,
+      resultGroups,
+      accounts,
       authorLang,
       UI,
       userId: message.author.id,
@@ -318,17 +308,13 @@ function createRaidChannelMessageHandler({
     );
     const dmSucceeded = await sendAggregateDm(message, aggregateEmbeds, resultSummary);
     const ops = [];
-    const errorHints = resultGroups
-      .map((group) => buildRaidChannelErrorHint({
-        summary: summarizeRaidChannelResults(group.results),
-        raidMeta: group.raidMeta,
-        authorLang,
-        UI,
-      }))
-      .filter(Boolean);
-    if (errorHints.length > 0) {
-      ops.push(postPersistentHint(message, errorHints.join("\n")));
-    }
+    const errorHint = buildRaidChannelErrorHint({
+      resultGroups,
+      accounts: writeBatch.accessibleAccounts,
+      authorLang,
+      UI,
+    });
+    if (errorHint) ops.push(postPersistentHint(message, errorHint));
 
     if (resultSummary.hasProgress) {
       const whisperMsg = await maybeSendWhisperAck({ message, authorLang, dmSucceeded });
@@ -339,19 +325,13 @@ function createRaidChannelMessageHandler({
     }
 
     if (resultSummary.hasProgress && !dmSucceeded) {
-      for (const group of resultGroups) {
-        const groupSummary = summarizeRaidChannelResults(group.results);
-        if (!groupSummary.hasProgress) continue;
-        enqueueDmFallback({
-          ops,
-          message,
-          results: group.results,
-          raidMeta: group.raidMeta,
-          effectiveGates: group.effectiveGates,
-          statusType: group.statusType,
-          authorLang,
-        });
-      }
+      enqueueDmFallback({
+        ops,
+        message,
+        resultGroups,
+        accounts: writeBatch.accessibleAccounts,
+        authorLang,
+      });
     }
     await Promise.allSettled(ops);
   }

@@ -7,6 +7,7 @@ const {
   MESSAGE_DEDUP_MAX_PERSISTED_IDS,
   createRaidChannelMessageHandler,
 } = require("../bot/services/raid/channel-monitor/channel-monitor-message-handler");
+const { UI } = require("../bot/utils/raid/common/shared");
 
 function makeHandler(overrides = {}) {
   const calls = {
@@ -197,7 +198,7 @@ test("raid-channel message handler carries reset intent through write and DM ren
   assert.equal(rendered.length, 1);
   assert.equal(rendered[0].statusType, "reset");
   assert.equal(publicMessages.length, 1);
-  assert.match(publicMessages[0].content, /đã reset toàn bộ progress/i);
+  assert.match(publicMessages[0].content, /đã reset \*\*Qiylyn\*\* · Act 4/);
 });
 
 test("raid-channel message handler still clears the pending hint when the whisper confirmation fails", async () => {
@@ -384,4 +385,67 @@ test("raid-channel message handler batches every raid-character pair and DMs one
   assert.deepEqual(rendered.map((entry) => entry.raidMeta.label), ["Act 4 Hard", "Final Hard"]);
   assert.equal(dmPayloads.length, 1);
   assert.equal(dmPayloads[0].embeds.length, 2);
+});
+
+test("raid-channel message handler posts one fallback and one hint for a multi-raid post", async () => {
+  const publicMessages = [];
+  const hints = [];
+  const { handler } = makeHandler({
+    UI,
+    GuildConfig: {
+      findOne: () => ({
+        select: () => ({
+          lean: async () => ({ announcements: { whisperAck: { enabled: false } } }),
+        }),
+      }),
+    },
+    RAID_REQUIREMENT_MAP: {
+      armoche_hard: { raidKey: "armoche", modeKey: "hard", label: "Act 4 Hard", minItemLevel: 1720 },
+      kazeros_hard: { raidKey: "kazeros", modeKey: "hard", label: "Kazeros Hard", minItemLevel: 1730 },
+    },
+    parseRaidMessage: () => ({
+      raidKeys: ["armoche", "kazeros"],
+      modeKey: "hard",
+      charNames: ["abc1", "abc2"],
+      gate: null,
+    }),
+    getAccessibleAccounts: async () => [{
+      ownerDiscordId: "user-1",
+      accountName: "Main",
+      isOwn: true,
+      accessLevel: "edit",
+      account: { characters: [{ charName: "abc1" }, { charName: "abc2" }] },
+    }],
+    applyRaidSetBatchForDiscordId: async (args) => args.entries.map((entry) => (
+      entry.characterName === "abc2"
+        ? { matched: true, updated: false, ineligibleItemLevel: 1725, displayName: "abc2" }
+        : { matched: true, updated: true, displayName: "abc1" }
+    )),
+    postPersistentHint: async (_message, content) => hints.push(content),
+  });
+
+  await handler.handleRaidChannelMessage(makeMessage({
+    content: "act4 kazeros hm abc1 abc2",
+    author: {
+      id: "user-1",
+      bot: false,
+      send: async () => {
+        throw new Error("DMs disabled");
+      },
+    },
+    channel: {
+      send: async (payload) => {
+        publicMessages.push(payload);
+        return { delete: async () => {} };
+      },
+    },
+  }));
+
+  assert.equal(publicMessages.length, 1);
+  assert.match(publicMessages[0].content, /^🟢 <@user-1> đã ghi \*\*abc1\*\* · Act 4 Hard, Kazeros Hard\. /);
+  assert.equal(hints.length, 1);
+  assert.deepEqual(hints[0].split("\n"), [
+    "⚠️ Chưa đủ iLvl: **abc2** (iLvl 1725) · Act 4 Hard (cần 1720+), Kazeros Hard (cần 1730+)",
+    "_(Các character hợp lệ khác trong post của bạn đã được update rồi - check DM cho chi tiết.)_",
+  ]);
 });

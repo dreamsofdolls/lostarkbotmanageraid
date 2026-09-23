@@ -25,6 +25,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - The sync report's title icon and color follow the outcome: yellow ⚠️ when some characters failed, red ⚠️ when all did. A fully failed sync used to show ℹ️ on a yellow bar, and the first sync of `action:on` always showed 🟢.
 - A character name that lostark.bible does not know now fails Bible sync as `lostark.bible has no character "..."` instead of `Could not parse bible metadata (page shape changed?)`. Bible answers such a name with HTTP 200 and a "Character Not Found" page, which the sync read as a changed page layout.
 - `/raid-add-roster` and the `/raid-edit-roster` picker say when Bible is rate limiting or blocking (HTTP 403) instead of printing the raw error; other errors keep their text in a code span. The picker no longer calls every fetch failure "Bible offline", and a failed `/raid-auto-manage action:sync` no longer blames Cloudflare or character names for an error that only the bot's own database or Discord calls can raise.
+- The raid text channel answers a post with one message where it used to answer per raid. When the author's DMs are closed, the fallback lists every raid of the post in one message instead of one message per raid, and the error hint gathers a character's raids on one line with a single note at the end. Every character named there carries its class icon.
 
 ## 2026-09-20
 

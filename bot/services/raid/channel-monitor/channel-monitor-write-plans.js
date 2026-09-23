@@ -10,38 +10,10 @@
 const {
   getAccessibleAccounts: defaultGetAccessibleAccounts,
 } = require("../../access/access-control");
-
-/**
- * Return every normalized name field that may identify a roster character.
- * @param {object} character - saved roster character
- * @returns {string[]} lowercase, trimmed lookup candidates
- */
-function getAccessibleCharacterCandidates(character) {
-  return [character?.charName, character?.name, character?.displayName]
-    .filter(Boolean)
-    .map((s) => String(s).trim().toLowerCase())
-    .filter(Boolean);
-}
-
-/**
- * Index an accessible-roster snapshot while preserving first-match precedence.
- * @param {Array<object>} accessibleAccounts - access-control account entries
- * @returns {Map<string, object>} normalized character name to routing metadata
- */
-function buildAccessibleCharacterIndex(accessibleAccounts) {
-  const byName = new Map();
-  for (const entry of accessibleAccounts || []) {
-    const chars = Array.isArray(entry.account?.characters) ? entry.account.characters : [];
-    for (const character of chars) {
-      const hit = { ...entry, character };
-      for (const candidate of getAccessibleCharacterCandidates(character)) {
-        // Preserve the former nested-loop rule: the first accessible match wins.
-        if (!byName.has(candidate)) byName.set(candidate, hit);
-      }
-    }
-  }
-  return byName;
-}
+const {
+  buildAccessibleCharacterIndex,
+  findAccessibleCharacter,
+} = require("./channel-monitor-characters");
 
 /**
  * Resolve a batch of names using one access lookup and one character index.
@@ -55,6 +27,7 @@ function buildAccessibleCharacterIndex(accessibleAccounts) {
  *   missingCharNames: string[],
  *   lookupFailed: boolean,
  *   noAccessibleRoster: boolean,
+ *   accessibleAccounts: Array<object>,
  * }>}
  */
 async function resolveRaidChannelWriteBatch({
@@ -80,7 +53,7 @@ async function resolveRaidChannelWriteBatch({
   // once instead of rescanning every account and character for each request.
   const characterIndex = buildAccessibleCharacterIndex(accessibleAccounts);
   const plans = (Array.isArray(charNames) ? charNames : []).map((charName, index) => {
-    const hit = characterIndex.get(String(charName || "").trim().toLowerCase()) || null;
+    const hit = findAccessibleCharacter(characterIndex, charName);
     if (!hit && !lookupFailed) missingCharNames.push(charName);
     const plan = {
       index,
@@ -103,6 +76,8 @@ async function resolveRaidChannelWriteBatch({
     lookupFailed,
     noAccessibleRoster:
       !lookupFailed && (!Array.isArray(accessibleAccounts) || accessibleAccounts.length === 0),
+    // The roster as read before the write; replies name characters from it.
+    accessibleAccounts: Array.isArray(accessibleAccounts) ? accessibleAccounts : [],
   };
 }
 
