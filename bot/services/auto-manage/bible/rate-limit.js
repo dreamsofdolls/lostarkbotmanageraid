@@ -3,6 +3,12 @@
 const DEFAULT_BIBLE_RATE_LIMIT_BACKOFF_MS = 60 * 1000;
 const MAX_BIBLE_RATE_LIMIT_BACKOFF_MS = 5 * 60 * 1000;
 
+/**
+ * Read a Retry-After header value as a delay.
+ * @param {string|null|undefined} value - seconds or an HTTP date
+ * @param {number} [nowMs] - clock used for an HTTP date
+ * @returns {number|null} delay in ms, or null when the value is missing or unreadable
+ */
 function parseRetryAfterMs(value, nowMs = Date.now()) {
   const raw = String(value || "").trim();
   if (!raw) return null;
@@ -22,6 +28,14 @@ function getRetryAfterMs(response, nowMs = Date.now()) {
   return parseRetryAfterMs(value, nowMs);
 }
 
+/**
+ * Build the error thrown for a non-OK Bible response, keeping the status and
+ * any Retry-After delay for BibleRequestLimiter.
+ * @param {string} message
+ * @param {{status?: number, headers?: {get: (name: string) => string|null}}} response
+ * @param {number} [nowMs] - clock used for an HTTP-date Retry-After
+ * @returns {Error} error with `status`, plus `retryAfterMs` when Bible sent one
+ */
 function createBibleHttpError(message, response, nowMs = Date.now()) {
   const error = new Error(message);
   error.status = Number(response?.status) || null;
@@ -30,12 +44,25 @@ function createBibleHttpError(message, response, nowMs = Date.now()) {
   return error;
 }
 
+/**
+ * @param {unknown} error - an Error or an error message
+ * @returns {boolean} true for an HTTP 429 status or a rate-limit message
+ */
 function isBibleRateLimitError(error) {
   return Number(error?.status) === 429 ||
     /\bHTTP 429\b|rate.?limit/i.test(error?.message || String(error || ""));
 }
 
+/**
+ * Caps concurrent Bible requests. After an HTTP 429 it rejects every queued
+ * and new request with a backoff error until the backoff ends.
+ */
 class BibleRequestLimiter {
+  /**
+   * @param {number} max - requests allowed in flight at once
+   * @param {{defaultBackoffMs?: number, nowMs?: () => number, log?: Console}} [options]
+   *   `defaultBackoffMs` applies when a 429 carries no Retry-After
+   */
   constructor(
     max,
     {
@@ -53,10 +80,16 @@ class BibleRequestLimiter {
     this.blockedUntil = 0;
   }
 
+  /** @returns {number} ms until requests are allowed again, 0 when they already are */
   getBackoffRemainingMs() {
     return Math.max(0, this.blockedUntil - this.nowMs());
   }
 
+  /**
+   * @template T
+   * @param {() => Promise<T>} fn - the Bible request
+   * @returns {Promise<T>} its result, or a backoff error while the backoff is active
+   */
   run(fn) {
     const remainingMs = this.getBackoffRemainingMs();
     if (remainingMs > 0) {
@@ -140,9 +173,7 @@ class BibleRequestLimiter {
 
 module.exports = {
   BibleRequestLimiter,
-  DEFAULT_BIBLE_RATE_LIMIT_BACKOFF_MS,
   createBibleHttpError,
-  getRetryAfterMs,
   isBibleRateLimitError,
   parseRetryAfterMs,
 };
