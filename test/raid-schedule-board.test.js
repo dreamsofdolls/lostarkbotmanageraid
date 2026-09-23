@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require("discord.js");
 const { UI } = require("../bot/utils/raid/common/shared");
+const { CLASS_EMOJI_MAP } = require("../bot/models/Class");
 const {
   buildScheduleEmbed,
   buildScheduleComponents,
@@ -122,6 +123,49 @@ test("renderRsvpLine lists tentative/absent only (late stays in comp)", () => {
   const line = renderRsvpLine(makeEvent().signups, "vi");
   assert.ok(line.includes("Maybe"));      // tentative
   assert.ok(!line.includes("Morrah"));    // late -> not in RSVP line
+});
+
+function makeSignup(i, extra = {}) {
+  return {
+    discordId: `u${i}`,
+    characterName: `Wait${String(i).padStart(2, "0")}abcdefghij`,
+    characterClass: "Berserker",
+    characterItemLevel: 1760.83,
+    role: "dps",
+    status: "confirmed",
+    joinedAt: 100 + i,
+    ...extra,
+  };
+}
+
+test("buildScheduleEmbed lists the first 10 of 30 waiters and counts the other 20", () => {
+  const oldEmoji = CLASS_EMOJI_MAP.Berserker;
+  CLASS_EMOJI_MAP.Berserker = "<:berserker_a3f9b2:1234567890123456789>";
+  try {
+    // 6 dps slots, so signups 7..36 wait; the 10th waiter is signup 16.
+    const signups = Array.from({ length: 36 }, (_, i) => makeSignup(i + 1));
+    const embed = buildScheduleEmbed(makeEvent({ signups }), deps);
+    const waitlist = embed.data.fields.find((f) => f.name.startsWith("⏳"));
+    assert.ok(waitlist.value.length <= 1024);
+    assert.equal(waitlist.value.split("\n").length, 11);
+    assert.ok(waitlist.value.includes("Wait16abcdefghij"));
+    assert.ok(!waitlist.value.includes("Wait17abcdefghij"));
+    assert.ok(waitlist.value.endsWith("`+20`"));
+  } finally {
+    CLASS_EMOJI_MAP.Berserker = oldEmoji;
+  }
+});
+
+test("renderRsvpLine names at most 10 players per status and counts the rest", () => {
+  const signups = [
+    ...Array.from({ length: 25 }, (_, i) => makeSignup(i + 1, { status: "tentative" })),
+    ...Array.from({ length: 3 }, (_, i) => makeSignup(i + 40, { status: "absent" })),
+  ];
+  const line = renderRsvpLine(signups, "vi");
+  assert.ok(line.includes("Wait10abcdefghij"));
+  assert.ok(!line.includes("Wait11abcdefghij"));
+  assert.ok(line.includes("+15"));
+  assert.ok(line.includes("Wait42abcdefghij"));
 });
 
 test("buildTurnPlanEmbed (8-man): each turn = header + Party 1 + Party 2, with padding", () => {

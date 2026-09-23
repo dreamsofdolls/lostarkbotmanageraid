@@ -35,6 +35,13 @@ function stripeColor(UI, status) {
 // same spirit as the SUP/DPS chips).
 const STATUS_CODE = { open: "OPEN", locked: "LOCKED", cleared: "DONE", cancelled: "CANCELLED" };
 
+// A waitlist line runs to about 93 characters (custom class emoji, 16-character
+// name, decimal item level), so 10 lines plus the "+N" tail stay under
+// Discord's 1024-character field limit. RSVP names are capped per status the
+// same way. Joining has no signup cap, so both lists can grow without bound.
+const WAITLIST_LINE_CAP = 10;
+const RSVP_NAME_CAP = 10;
+
 // Slot-fill gauge for the HUD header: one block per slot (▰ filled, ▱ empty),
 // "" when there are no slots. Pure - unit-tested.
 function renderGauge(filled, total) {
@@ -128,11 +135,13 @@ function buildScheduleEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
     // Three inline columns (Support | DPS | Waitlist) so the field row
     // fills Discord's full embed width instead of leaving the 3rd column
     // empty. Waitlist always renders (even at 0) to keep the 3-col shape.
-    const waitlistValue = waitlist.length > 0
-      ? waitlist
-          .map((s, i) => `\`#${i + 1}\` ${getClassEmoji(s.characterClass) || "•"} **${s.characterName}** · ${s.characterItemLevel}`)
-          .join("\n")
-      : "-";
+    const waitlistLines = waitlist
+      .slice(0, WAITLIST_LINE_CAP)
+      .map((s, i) => `\`#${i + 1}\` ${getClassEmoji(s.characterClass) || "•"} **${s.characterName}** · ${s.characterItemLevel}`);
+    if (waitlist.length > WAITLIST_LINE_CAP) {
+      waitlistLines.push(`\`+${waitlist.length - WAITLIST_LINE_CAP}\``);
+    }
+    const waitlistValue = waitlistLines.join("\n") || "-";
     embed.addFields(
       { name: t("raid-schedule.board.supportHeader", lang, { n: support.length, slots: event.supSlots }), value: buildColumn(support, event.supSlots, lang), inline: true },
       { name: t("raid-schedule.board.dpsHeader", lang, { n: dps.length, slots: event.dpsSlots }), value: buildColumn(dps, event.dpsSlots, lang), inline: true },
@@ -152,6 +161,12 @@ function buildScheduleEmbed(event, { EmbedBuilder, UI, lang = "vi" }) {
   return embed;
 }
 
+function rsvpNames(signups) {
+  const names = signups.slice(0, RSVP_NAME_CAP).map((s) => s.characterName);
+  if (signups.length > RSVP_NAME_CAP) names.push(`+${signups.length - RSVP_NAME_CAP}`);
+  return names.join(", ");
+}
+
 // "🤔 Có thể N · names   ❌ Vắng N · names" - tentative + absent only
 // (late holds a slot, so it shows in the comp columns, not here).
 function renderRsvpLine(signups, lang) {
@@ -162,10 +177,10 @@ function renderRsvpLine(signups, lang) {
   // Names are appended OUTSIDE the t() call so the row renders correctly
   // even before the locale keys land (t supplies only the label prefix).
   if (tentative.length) {
-    parts.push(`${t("raid-schedule.board.rsvpTentative", lang)} ${tentative.length} · ${tentative.map((s) => s.characterName).join(", ")}`);
+    parts.push(`${t("raid-schedule.board.rsvpTentative", lang)} ${tentative.length} · ${rsvpNames(tentative)}`);
   }
   if (absent.length) {
-    parts.push(`${t("raid-schedule.board.rsvpAbsent", lang)} ${absent.length} · ${absent.map((s) => s.characterName).join(", ")}`);
+    parts.push(`${t("raid-schedule.board.rsvpAbsent", lang)} ${absent.length} · ${rsvpNames(absent)}`);
   }
   return parts.join("   ");
 }
