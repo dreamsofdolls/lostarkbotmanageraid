@@ -89,6 +89,7 @@ async function applyManualSync({
   collected,
 }) {
   let report;
+  let savedDoc = null;
   await saveWithRetry(async () => {
     const userDoc = await User.findOne({ discordId });
     assertBibleSyncAllowed(userDoc);
@@ -100,8 +101,11 @@ async function applyManualSync({
     report = applyAutoManageCollected(userDoc, weekResetStart, collected);
     stampAutoManageAttemptFromReport(userDoc, report, Date.now());
     await userDoc.save();
+    // Set after the save, so a failed attempt that saveWithRetry repeats
+    // never leaves its document behind.
+    savedDoc = userDoc;
   });
-  return { report };
+  return { report, userDoc: savedDoc };
 }
 
 function createAutoManageSyncHandler({
@@ -155,7 +159,7 @@ function createAutoManageSyncHandler({
         seedDoc,
         weekResetStart
       );
-      const { report } = await applyManualSync({
+      const { report, userDoc } = await applyManualSync({
         User,
         saveWithRetry,
         ensureFreshWeek,
@@ -170,7 +174,7 @@ function createAutoManageSyncHandler({
         return;
       }
 
-      await editAutoEmbed(buildAutoManageSyncReportEmbed(report, lang));
+      await editAutoEmbed(buildAutoManageSyncReportEmbed(report, lang, { userDoc }));
     } catch (err) {
       if (!acknowledged) throw err;
       if (err?.code === "LOCAL_SYNC_ACTIVE") {

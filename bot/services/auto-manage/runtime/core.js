@@ -145,11 +145,12 @@ function createAutoManageCoreService({
     let collected = preCollected;
     if (!collected) {
       const gathered = await gatherForCommit(discordId, weekResetStart);
-      if (gathered.missingUser) return undefined;
+      if (gathered.missingUser) return { report: undefined, userDoc: null };
       collected = gathered.collected;
     }
 
     let finalReport;
+    let savedDoc = null;
     await saveWithRetry(async () => {
       const fresh = await User.findOne({ discordId });
       if (!fresh) return;
@@ -159,6 +160,7 @@ function createAutoManageCoreService({
         fresh.lastAutoManageAttemptAt = Date.now();
         await fresh.save();
         finalReport = { appliedTotal: 0, perChar: [] };
+        savedDoc = fresh;
         return;
       }
       ensureFreshWeek(fresh);
@@ -166,9 +168,10 @@ function createAutoManageCoreService({
       const now = Date.now();
       stampAutoManageAttemptFromReport(fresh, finalReport, now);
       await fresh.save();
+      savedDoc = fresh;
     });
 
-    return finalReport;
+    return { report: finalReport, userDoc: savedDoc };
   }
 
   return {

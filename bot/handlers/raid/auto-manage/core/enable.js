@@ -88,14 +88,19 @@ function createAutoManageEnableHandler({
     lang,
     editAutoEmbed,
   }) {
-    const finalReport = await commitAutoManageOn(
+    const { report, userDoc } = await commitAutoManageOn(
       discordId,
       weekResetStart,
       probeCollected
     );
+    if (!userDoc) {
+      // The probe read the user a moment ago. Losing the record now is an
+      // error for handleOn's catch, not an empty sync.
+      throw new Error("User record not found when committing auto-manage");
+    }
     const syncEmbed = setInitialSyncTitle({
-      embed: buildAutoManageSyncReportEmbed(finalReport, lang),
-      report: finalReport,
+      embed: buildAutoManageSyncReportEmbed(report, lang, { userDoc }),
+      report,
       UI,
       lang,
     });

@@ -28,7 +28,7 @@ for (const action of ["enable", "reset"]) {
         gatherAutoManageLogsForUserDoc: async () => [],
         applyAutoManageCollected: () => ({ perChar: decision === "no hidden logs" ? [] : [{ error: "hidden" }] }),
         isPublicLogDisabledError: error => error === "hidden",
-        commitAutoManageOn: async () => { writes += 1; return { appliedTotal: 1 }; },
+        commitAutoManageOn: async () => { writes += 1; return { report: { appliedTotal: 1 }, userDoc: {} }; },
         buildAutoManageSyncReportEmbed: () => new EmbedBuilder().setDescription("Synced"),
         buildAutoManageHiddenCharsWarningEmbed: () => new EmbedBuilder().setDescription("Hidden logs"),
         stampAutoManageAttempt: async () => {},
