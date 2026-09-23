@@ -67,12 +67,12 @@ function t(key, lang, vars = {}) {
   ].join(":");
 }
 
-function page(discordId, accountName, raids) {
+function page(discordId, accountName, raids, itemLevel = 1730) {
   return {
     userDoc: { discordId },
     account: {
       accountName,
-      characters: [{ raids }],
+      characters: [{ itemLevel, raids }],
     },
   };
 }
@@ -349,4 +349,33 @@ test("all-mode roster dropdown and pagination resolve each other's position", ()
     }),
     null
   );
+});
+
+test("all-mode pages and the roster list skip a roster with nothing from 1720, even unfiltered", () => {
+  const pagesData = [
+    page("u1", "Main", [{ raidKey: "act4", modeKey: "hard", isCompleted: false }]),
+    page("u1", "Alts", [{ raidKey: "kazeros", modeKey: "normal", isCompleted: false }], 1710),
+  ];
+  const getStatusRaidsForCharacter = (character) => character.raids;
+
+  assert.deepEqual(
+    filterAllModePageIndices({ pagesData, getStatusRaidsForCharacter }).filteredIndices,
+    [0],
+  );
+  const row = buildAllModeRosterFilterRow({
+    ActionRowBuilder: FakeActionRowBuilder,
+    StringSelectMenuBuilder: FakeSelectMenuBuilder,
+    disabled: false,
+    filterRaidId: null,
+    filterRosterIndex: null,
+    currentPageIndex: 0,
+    filterStatus: FILTER_STATUS.all,
+    filterUserId: "u1",
+    getStatusRaidsForCharacter,
+    lang: "en",
+    pagesData,
+    t,
+    truncateText: (value) => String(value).slice(0, 100),
+  });
+  assert.deepEqual(row.components[0].data.options.map((option) => option.value), ["0"]);
 });

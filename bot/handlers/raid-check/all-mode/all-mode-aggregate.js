@@ -3,7 +3,7 @@
 const { isSupportClass } = require("../../../models/Class");
 const { getRaidModeLabel } = require("../../../utils/raid/common/labels");
 const { isCountedRaidProgress } = require("../../../utils/raid/common/character");
-const { isRaidCheckVisibleRaid } = require("../visibility");
+const { isRaidCheckVisibleCharacter, isRaidCheckVisibleRaid } = require("../visibility");
 
 function createRoleTally() {
   return { count: 0, supports: 0, dps: 0 };
@@ -85,6 +85,7 @@ function createAllModePendingAggregateCache({
         ? page.account.characters
         : [];
       for (const character of chars) {
+        if (!isRaidCheckVisibleCharacter(character)) continue;
         const charIsSupport = isSupportClass(character?.class);
         for (const raid of getCachedRaidsForCharacter(character) || []) {
           if (!isRaidCheckVisibleRaid(raid)) continue;

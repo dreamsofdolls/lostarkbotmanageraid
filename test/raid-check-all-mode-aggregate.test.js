@@ -11,7 +11,10 @@ const {
 const { isSupportClass } = require("../bot/models/Class");
 const { getRaidModeLabel } = require("../bot/utils/raid/common/labels");
 const { isCountedRaidProgress } = require("../bot/utils/raid/common/character");
-const { isRaidCheckVisibleRaid } = require("../bot/handlers/raid-check/visibility");
+const {
+  isRaidCheckVisibleCharacter,
+  isRaidCheckVisibleRaid,
+} = require("../bot/handlers/raid-check/visibility");
 
 function createRoleTally() {
   return { count: 0, supports: 0, dps: 0 };
@@ -66,6 +69,7 @@ function computeReferenceAggregate({
       ? page.account.characters
       : [];
     for (const character of chars) {
+      if (!isRaidCheckVisibleCharacter(character)) continue;
       const charIsSupport = isSupportClass(character?.class);
       for (const raid of getStatusRaidsForCharacter(character) || []) {
         if (!isRaidCheckVisibleRaid(raid)) continue;
@@ -114,6 +118,7 @@ const pagesData = [
   createPage("user-a", [
     {
       class: "Artist",
+      itemLevel: 1730,
       raids: [
         raid("act4", "normal"),
         raid("kazeros", "hard", true),
@@ -121,6 +126,7 @@ const pagesData = [
     },
     {
       class: "Slayer",
+      itemLevel: 1730,
       raids: [
         raid("act4", "normal"),
         raid("serca", "hard"),
@@ -130,6 +136,7 @@ const pagesData = [
   createPage("user-b", [
     {
       class: "Bard",
+      itemLevel: 1730,
       raids: [raid("act4", "normal")],
     },
   ]),
@@ -226,6 +233,7 @@ test("raid-check all-mode aggregate excludes raids that do not receive gold", ()
       createPage("user-a", [
         {
           class: "Artist",
+          itemLevel: 1730,
           raids: [
             raid("act4", "hard", false, { goldReceives: false }),
             raid("kazeros", "hard", false, { goldReceives: true }),
@@ -235,6 +243,7 @@ test("raid-check all-mode aggregate excludes raids that do not receive gold", ()
       createPage("user-b", [
         {
           class: "Slayer",
+          itemLevel: 1730,
           raids: [
             raid("act4", "hard", false, { goldReceives: false }),
           ],
@@ -262,6 +271,7 @@ test("raid-check all-mode aggregate excludes Solo raids even when they receive g
       createPage("user-a", [
         {
           class: "Artist",
+          itemLevel: 1730,
           raids: [
             raid("act4", "solo", false, { goldReceives: true }),
             raid("kazeros", "normal", false, { goldReceives: true }),
@@ -314,7 +324,7 @@ test("raid-check all-mode aggregate cache indexes raid rows once across new filt
     },
   };
   const trackedPages = [
-    createPage("user-a", [{ class: "Artist", raids: [trackedRaid] }]),
+    createPage("user-a", [{ class: "Artist", itemLevel: 1730, raids: [trackedRaid] }]),
   ];
   const cache = createAllModePendingAggregateCache({
     pagesData: trackedPages,
@@ -366,4 +376,20 @@ test("raid-check all-mode aggregate index matches direct scans for every filter 
       `indexed aggregate differs for ${JSON.stringify(filter)}`
     );
   }
+});
+
+test("raid-check all-mode aggregate leaves out characters below 1720", () => {
+  const aggregate = computePendingAggregate({
+    pagesData: [
+      createPage("user-a", [
+        { class: "Slayer", itemLevel: 1730, raids: [raid("act4", "hard")] },
+        { class: "Slayer", itemLevel: 1710, raids: [raid("kazeros", "normal")] },
+      ]),
+    ],
+    getStatusRaidsForCharacter,
+    lang: "en",
+  });
+
+  assert.equal(aggregate.totalPending, 1);
+  assert.deepEqual([...aggregate.perRaidPending.keys()], ["act4:hard"]);
 });

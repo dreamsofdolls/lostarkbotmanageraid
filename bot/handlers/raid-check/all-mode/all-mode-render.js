@@ -5,7 +5,7 @@ const {
   isGoldReceivingRaid,
 } = require("../../../utils/raid/common/character");
 const { t } = require("../../../services/i18n");
-const { isRaidCheckVisibleRaid } = require("../visibility");
+const { isRaidCheckVisibleCharacter, isRaidCheckVisibleRaid } = require("../visibility");
 const {
   FILTER_STATUS,
   normalizeAllModeStatusFilter,
@@ -48,7 +48,9 @@ function createAllModePageRenderers({
     };
     const getVisibleRaidsFor = (character) => {
       if (visibleRaidsCache.has(character)) return visibleRaidsCache.get(character);
-      const result = getStatusRaidsFor(character).filter(isRaidCheckVisibleRaid);
+      const result = isRaidCheckVisibleCharacter(character)
+        ? getStatusRaidsFor(character).filter(isRaidCheckVisibleRaid)
+        : [];
       visibleRaidsCache.set(character, result);
       return result;
     };
@@ -61,10 +63,7 @@ function createAllModePageRenderers({
           raidMatchesStatusFilter(raid, activeStatus)
       );
     const getProgressRaidsFor = (character) => getRaidsFor(character).filter(isCountedRaidProgress);
-    const shouldDisplayCharacter = (character) => {
-      const statusRaids = getStatusRaidsFor(character);
-      return statusRaids.length === 0 || getVisibleRaidsFor(character).length > 0;
-    };
+    const shouldDisplayCharacter = (character) => getVisibleRaidsFor(character).length > 0;
 
     const userAccounts = Array.isArray(userDoc.accounts) ? userDoc.accounts : [];
     const userTotalChars = userAccounts.reduce(

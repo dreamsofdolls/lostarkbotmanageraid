@@ -162,6 +162,56 @@ test("raid-check keeps Sync-check all and Refresh roster in every view within Di
   assert.ok(assertRows().flatMap(row => row.components).every(item => item.disabled));
 });
 
+test("raid-check opens on rosters with a character from 1720 and skips the rest", async () => {
+  clearUserLanguageCache();
+  const { createAllModeHandler } = require("../bot/handlers/raid-check/all-mode/all-mode");
+  const handlers = {};
+  const renderedRosters = [];
+  const pageTotals = [];
+  const userDoc = {
+    discordId: "roster-user", discordDisplayName: "Roster user",
+    accounts: [
+      { accountName: "Alts", characters: [{ name: "Low", itemLevel: 1710 }] },
+      { accountName: "Main", characters: [{ name: "Aki", itemLevel: 1740 }] },
+    ],
+  };
+  const User = {
+    find: () => ({ select() { return this; }, lean: async () => [userDoc] }),
+    findOne: () => ({ lean: async () => ({ language: "en" }) }),
+  };
+  const command = createAllModeHandler({
+    ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, StringSelectMenuBuilder,
+    User, ensureFreshWeek: () => {}, truncateText: text => String(text),
+    buildAccountPageEmbed: (account) => {
+      renderedRosters.push(account.accountName);
+      return new EmbedBuilder().setTitle(account.accountName);
+    },
+    buildStatusFooterText: () => "Weekly progress",
+    summarizeRaidProgress: raids => ({ completed: 0, total: raids.length }),
+    getStatusRaidsForCharacter: () => [{ raidKey: "act4", modeKey: "hard", goldReceives: true, isCompleted: false }],
+    buildPaginationRow: (_page, total, disabled) => {
+      pageTotals.push(total);
+      return new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("raid-check-all-page:prev").setLabel("Previous").setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+      );
+    },
+    isRaidLeader: () => true, RAID_CHECK_USER_QUERY_FIELDS: "", RAID_CHECK_PAGINATION_SESSION_MS: 1000,
+  });
+  const message = {
+    createMessageComponentCollector: () => ({ on: (event, handler) => { handlers[event] = handler; } }),
+    edit: async () => {},
+  };
+  await command.handleRaidCheckAllCommand({
+    user: { id: "ui-manager" }, guildId: "guild",
+    deferReply: async () => {},
+    editReply: async () => message,
+  });
+
+  assert.deepEqual(renderedRosters, ["Main"]);
+  assert.equal(pageTotals.at(-1), 1);
+  await handlers.end();
+});
+
 test("manager Sync-check all dispatches without requiring per-raid metadata", async () => {
   clearUserLanguageCache();
   let queries = 0;

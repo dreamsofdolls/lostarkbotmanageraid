@@ -162,7 +162,7 @@ function createAllModeHandler({
       filterRosterIndex: null,
       filterRaidId: null,
       filterStatus: FILTER_STATUS.all,
-      filteredIndices: pagesData.map((_, index) => index),
+      filteredIndices: [],
       currentLocalPage: 0,
       backgroundRefreshing: refreshQueued > 0,
       teamsSnapshot: [],
@@ -224,6 +224,8 @@ function createAllModeHandler({
         resetPage,
       });
     };
+    // The first view follows the same page rules as a filter change.
+    recomputeFilteredPages();
 
     const applyUserFilter = (pickedValue) => {
       state.filterUserId = pickedValue === FILTER_ALL ? null : pickedValue;

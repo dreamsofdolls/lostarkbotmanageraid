@@ -46,6 +46,7 @@ class FakeEmbedBuilder {
 test("all-mode raid page hides Solo, gold-locked raids, and hidden-only characters", () => {
   const character = {
     name: "Goldie",
+    itemLevel: 1730,
     raids: [
       { raidKey: "act4", modeKey: "hard", isCompleted: false, goldReceives: true },
       { raidKey: "kazeros", modeKey: "solo", isCompleted: false, goldReceives: true },
@@ -54,6 +55,7 @@ test("all-mode raid page hides Solo, gold-locked raids, and hidden-only characte
   };
   const hiddenOnlyCharacter = {
     name: "HiddenOnly",
+    itemLevel: 1730,
     raids: [
       { raidKey: "kazeros", modeKey: "solo", isCompleted: false, goldReceives: true },
       { raidKey: "horizon", modeKey: "normal", isCompleted: false, goldReceives: false },
@@ -126,6 +128,7 @@ test("all-mode raid page hides Solo, gold-locked raids, and hidden-only characte
 test("all-mode raid page applies Success status per raid entry", () => {
   const mixed = {
     name: "Mixed",
+    itemLevel: 1730,
     raids: [
       { raidKey: "act4", modeKey: "hard", isCompleted: false, goldReceives: true },
       { raidKey: "kazeros", modeKey: "hard", isCompleted: true, goldReceives: true },
@@ -133,6 +136,7 @@ test("all-mode raid page applies Success status per raid entry", () => {
   };
   const pendingOnly = {
     name: "PendingOnly",
+    itemLevel: 1730,
     raids: [
       { raidKey: "serca", modeKey: "hard", isCompleted: false, goldReceives: true },
     ],
@@ -181,10 +185,12 @@ test("all-mode raid page applies Success status per raid entry", () => {
 test("all-mode raid page reuses a user's rollup while paginating their rosters", () => {
   const firstCharacter = {
     name: "First",
+    itemLevel: 1730,
     raids: [{ raidKey: "act4", modeKey: "hard", isCompleted: false, goldReceives: true }],
   };
   const secondCharacter = {
     name: "Second",
+    itemLevel: 1730,
     raids: [{ raidKey: "kazeros", modeKey: "hard", isCompleted: true, goldReceives: true }],
   };
   const accounts = [
@@ -227,4 +233,56 @@ test("all-mode raid page reuses a user's rollup while paginating their rosters",
 
   assert.equal(rollupCalls, 1);
   assert.equal(raidDerivationCalls, 2);
+});
+
+test("all-mode raid page leaves out characters below 1720 and characters with no raid", () => {
+  const main = {
+    name: "Main",
+    itemLevel: 1730,
+    raids: [{ raidKey: "act4", modeKey: "hard", isCompleted: false, goldReceives: true }],
+  };
+  const normalAlt = {
+    name: "NormalAlt",
+    itemLevel: 1710,
+    raids: [{ raidKey: "kazeros", modeKey: "normal", isCompleted: false, goldReceives: true }],
+  };
+  const noRaidAlt = { name: "NoRaidAlt", itemLevel: 1690, raids: [] };
+  const characters = [main, normalAlt, noRaidAlt];
+  const pagesData = [{
+    userDoc: { discordId: "u1", accounts: [{ accountName: "Roster", characters }] },
+    account: { accountName: "Roster", characters },
+  }];
+  let visibleNames = null;
+  let globalTotals = null;
+
+  const { buildRaidPage } = createAllModePageRenderers({
+    authorMeta: new Map(),
+    buildAccountPageEmbed: (account, pageIndex, totalPages, totals, getRaidsFor, userMeta, options) => {
+      visibleNames = account.characters.filter(options.shouldDisplayCharacter).map((entry) => entry.name);
+      globalTotals = totals;
+      return new FakeEmbedBuilder().setTitle(account.accountName);
+    },
+    buildStatusFooterText: (totals) => `${totals.progress.completed}/${totals.progress.total}`,
+    getState: () => ({
+      currentLocalPage: 0,
+      filterRaidId: null,
+      filterUserId: null,
+      filteredIndices: [0],
+      totalPages: 1,
+    }),
+    getStatusRaidsForCharacter: (character) => character.raids,
+    lang: "en",
+    pagesData,
+    summarizeRaidProgress: (entries) => ({
+      completed: entries.filter((entry) => entry.isCompleted).length,
+      total: entries.length,
+    }),
+    truncateText: (value) => String(value),
+  });
+
+  buildRaidPage(0);
+
+  assert.deepEqual(visibleNames, ["Main"]);
+  assert.deepEqual(globalTotals.progress, { completed: 0, total: 1 });
+  assert.equal(globalTotals.characters, 3);
 });

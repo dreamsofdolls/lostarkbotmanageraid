@@ -1927,6 +1927,7 @@ module.exports = {
           "**Filter dropdown**: user + roster + raid + status giúp thu hẹp overview mà không phải gõ lại lệnh. Pick 1 user sẽ hiện dropdown 📁 roster; mỗi roster có số pending/success và roster không khớp raid/status đang chọn sẽ bị ẩn. Cùng lúc đó có nút `Bật/Tắt auto-sync hộ`.",
           "**🔄 Sync button**: force-sync bible logs/progress CHỈ cho user đã opt-in auto-sync trong list pending. Nút `Refresh roster` riêng sẽ kéo lại iLvl/class cho roster đang xem, kể cả khi chỉ muốn cập nhật metadata. Non-opted-in user không bị động đến bởi Sync progress (privacy-respecting).",
           "**Solo**: không xuất hiện trong `/raid-check` vì Solo không cần ghép đội; xem tiến độ Solo ở dropdown raid của `/raid-status`.",
+          "**Char dưới 1720**: không xuất hiện trong `/raid-check`, cả thẻ, số pending lẫn danh sách roster; roster không còn char nào từ 1720 thì không thành trang. Xem các char này ở `/raid-status`.",
           "**📋 Đội đã xếp**: dropdown liệt kê mọi board signup đang chạy trong guild (event `/raid-schedule-preview` của bất kỳ Manager nào). Chọn 1 để xem comp (Support/DPS + waitlist) và bảng phân turn, dạng ephemeral. Quá 25 event thì tràn sang dropdown phụ.",
           "**Session timeout 5 phút** - hết hạn disable mọi component, gõ lại `/raid-check` để mở lại.",
         ],

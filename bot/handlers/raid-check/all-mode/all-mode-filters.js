@@ -7,7 +7,7 @@ const {
 const {
   selectEntriesWithPinnedActive,
 } = require("../../../utils/discord/select-options");
-const { isRaidCheckVisibleRaid } = require("../visibility");
+const { isRaidCheckVisibleCharacter, isRaidCheckVisibleRaid } = require("../visibility");
 
 const FILTER_ALL = "__all__";
 const FILTER_ALL_RAIDS = "__all_raids__";
@@ -45,6 +45,7 @@ function getAllModeRosterRaidState({
     ? page.account.characters
     : [];
   for (const character of characters) {
+    if (!isRaidCheckVisibleCharacter(character)) continue;
     const raids = typeof getStatusRaidsForCharacter === "function"
       ? getStatusRaidsForCharacter(character) || []
       : [];
@@ -81,7 +82,6 @@ function getAllModeRosterFilterEntries({
 }) {
   if (!filterUserId) return [];
   const activeStatus = normalizeAllModeStatusFilter(filterStatus);
-  const hasActiveRaidFilter = Boolean(filterRaidId) || activeStatus !== FILTER_STATUS.all;
   const entries = [];
   for (let pageIndex = 0; pageIndex < (pagesData || []).length; pageIndex += 1) {
     const page = pagesData[pageIndex];
@@ -91,13 +91,7 @@ function getAllModeRosterFilterEntries({
       raidFilter: filterRaidId,
       getStatusRaidsForCharacter,
     });
-    if (
-      applyRaidEligibility &&
-      hasActiveRaidFilter &&
-      !rosterStateMatchesStatus(state, activeStatus)
-    ) {
-      continue;
-    }
+    if (applyRaidEligibility && !rosterStateMatchesStatus(state, activeStatus)) continue;
     entries.push({
       pageIndex,
       accountName: String(page?.account?.accountName || ""),
@@ -117,12 +111,12 @@ function filterAllModePageIndices({
   applyRaidEligibility = true,
 }) {
   const activeStatus = normalizeAllModeStatusFilter(filterStatus);
-  const hasActiveRaidFilter = Boolean(filterRaidId) || activeStatus !== FILTER_STATUS.all;
   const filteredIndices = [];
   for (let pageIndex = 0; pageIndex < (pagesData || []).length; pageIndex += 1) {
     const page = pagesData[pageIndex];
     if (filterUserId && page?.userDoc?.discordId !== filterUserId) continue;
-    if (applyRaidEligibility && hasActiveRaidFilter) {
+    // A roster with nothing /raid-check shows is not a page, filtered or not.
+    if (applyRaidEligibility) {
       const state = getAllModeRosterRaidState({
         page,
         raidFilter: filterRaidId,

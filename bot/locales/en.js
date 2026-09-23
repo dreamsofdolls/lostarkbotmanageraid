@@ -1905,6 +1905,7 @@ module.exports = {
           "**Filter dropdowns**: user + roster + raid + status filters narrow the overview without re-running the command. Selecting one user reveals the 📁 roster dropdown; each roster shows pending/success counts, and rosters without the selected raid/status are hidden. The same selection exposes `Enable or disable auto-sync`.",
           "**🔄 Sync button**: force-syncs bible logs/progress ONLY for opted-in users in the pending list. The separate `Refresh roster` button pulls iLvl/class for the currently shown roster when you only need fresh metadata. Non-opted-in users are not touched by progress sync (privacy-respecting).",
           "**Solo**: hidden from `/raid-check` because Solo needs no team composition; inspect Solo progress from `/raid-status`'s raid dropdown.",
+          "**Characters below 1720**: left out of `/raid-check`, from the cards, the pending counts and the roster list; a roster with no character from 1720 is not a page. See them in `/raid-status`.",
           "**📋 Arranged teams**: a dropdown lists every active signup board in the guild (any Manager's `/raid-schedule-preview` event). Pick one to see its comp (Support/DPS + waitlist) and bus turn plan, ephemerally. Past 25 events it spills into extra dropdowns.",
           "**Session timeout 5 minutes** - components disable when expired; type `/raid-check` again to reopen.",
         ],
