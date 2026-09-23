@@ -16,7 +16,6 @@ const { buildAutoManageSyncReportEmbed } = createAutoManageReportEmbeds({
   EmbedBuilder,
   UI,
   getAutoManageCooldownMs: () => COOLDOWN_MS,
-  isPublicLogDisabledError: (error) => /logs\s*not\s*enabled/i.test(String(error)),
 });
 
 const character = (name, className, assignedRaids = {}) => ({
@@ -35,6 +34,13 @@ const CLAUSEDUK = character("Clauseduk", "Berserker", {
 const DUSKFOX = character("Duskfox", "Sorceress", { kazeros: { modeKey: "hard", G1: DONE, G2: OPEN } });
 const KANNA = character("Kanna", "Artist");
 const CLAUSEDUK_APPLIED = [...gates("kazeros", "hard", "G1", "G2"), ...gates("serca", "nightmare", "G1")];
+
+// Messages as the Bible client, the limiter and fetch() produce them.
+const PRIVATE_LOGS = 'Bible logs API returned HTTP 403 - {"error":"Logs not enabled"}';
+const BACKOFF = "LostArk Bible HTTP 429 - global backoff active for 45s";
+const blockedPage = (name) => `Bible roster page returned HTTP 403 for "${name}"`;
+const missing = (name) => `lostark.bible has no character "${name}"`;
+const label = (kind) => t(`common.bibleError.${kind}`, "en");
 
 test("a clean sync shows the changed characters in the /raid-status grammar", () => {
   const embed = buildAutoManageSyncReportEmbed({
@@ -67,8 +73,8 @@ test("a failed character is a card in its own roster, and two rosters get header
     appliedTotal: 3,
     perChar: [
       { accountName: "Clauseduk", charName: "Clauseduk", applied: CLAUSEDUK_APPLIED, error: null },
-      { accountName: "Ainslinn", charName: "Kanna", applied: [], error: "Logs not enabled for this character" },
-      { accountName: "Ainslinn", charName: "Sora", applied: [], error: "Request failed with status code 403" },
+      { accountName: "Ainslinn", charName: "Kanna", applied: [], error: PRIVATE_LOGS },
+      { accountName: "Ainslinn", charName: "Sora", applied: [], error: blockedPage("Sora") },
     ],
   }, "en", { userDoc: doc }).toJSON();
   const names = embed.fields.map((field) => field.name);
@@ -79,9 +85,33 @@ test("a failed character is a card in its own roster, and two rosters get header
   assert.ok(embed.title.startsWith(UI.icons.warn));
   assert.deepEqual(names.filter((name) => name.startsWith(UI.icons.folder)),
     [`${UI.icons.folder} Clauseduk (1)`, `${UI.icons.folder} Ainslinn (2)`]);
-  assert.equal(kanna.value, `${UI.icons.warn} _${t("raid-auto-manage.syncReport.publicLogOff", "en")}_`);
-  assert.equal(sora.value, `${UI.icons.warn} \`Request failed with status code 403\``);
+  assert.equal(kanna.value, `${UI.icons.warn} _${label("publicLogOff")}_`);
+  assert.equal(sora.value, `${UI.icons.warn} _${label("blocked")}_`);
   assert.ok(names.indexOf(kanna.name) > names.indexOf(`${UI.icons.folder} Ainslinn (2)`));
+});
+
+test("a missing character and a rate limit get labels, an unknown error keeps its text", () => {
+  const embed = buildAutoManageSyncReportEmbed({
+    appliedTotal: 3,
+    perChar: [
+      { accountName: "Roster", charName: "Clauseduk", applied: CLAUSEDUK_APPLIED, error: null },
+      { accountName: "Roster", charName: "Kanna", applied: [], error: missing("Kanna") },
+      { accountName: "Roster", charName: "Duskfox", applied: [], error: BACKOFF },
+    ],
+  }, "en", { userDoc: userDoc([{ accountName: "Roster", characters: [CLAUSEDUK, KANNA, DUSKFOX] }]) }).toJSON();
+  const valueOf = (name) => embed.fields.find((field) => field.name.endsWith(`${name} · 1750`)).value;
+
+  assert.equal(valueOf("Kanna"), `${UI.icons.warn} _${label("notFound")}_`);
+  assert.equal(valueOf("Duskfox"), `${UI.icons.warn} _${label("rateLimit")}_`);
+
+  const unknown = buildAutoManageSyncReportEmbed({
+    appliedTotal: 0,
+    perChar: [
+      { accountName: "Roster", charName: "Clauseduk", applied: [], error: null },
+      { accountName: "Roster", charName: "Kanna", applied: [], error: "fetch failed" },
+    ],
+  }, "en", { userDoc: userDoc([{ accountName: "Roster", characters: [CLAUSEDUK, KANNA] }]) }).toJSON();
+  assert.equal(cardsOf(unknown)[0].value, `${UI.icons.warn} \`fetch failed\``);
 });
 
 test("no new gates with some failures shows only the failed characters", () => {
@@ -102,21 +132,34 @@ test("no new gates with some failures shows only the failed characters", () => {
 test("when every character fails, no cards are drawn and the reasons are grouped", () => {
   const alts = Array.from({ length: 12 }, (_, index) => `Alt${index}`);
   const doc = userDoc(
-    [{ accountName: "Roster", characters: [KANNA, ...alts.map((name) => character(name, "Bard"))] }],
+    [{ accountName: "Roster", characters: [KANNA, ...["Sora", "Mika", "Aki", ...alts].map((name) => character(name, "Bard"))] }],
     NOW - 3_600_000,
   );
   const embed = buildAutoManageSyncReportEmbed({
     appliedTotal: 0,
     perChar: [
-      { accountName: "Roster", charName: "Kanna", applied: [], error: "Logs not enabled" },
-      ...alts.map((name) => ({ accountName: "Roster", charName: name, applied: [], error: "Request failed with status code 403" })),
+      { accountName: "Roster", charName: "Aki", applied: [], error: BACKOFF },
+      { accountName: "Roster", charName: "Mika", applied: [], error: blockedPage("Mika") },
+      { accountName: "Roster", charName: "Sora", applied: [], error: missing("Sora") },
+      { accountName: "Roster", charName: "Kanna", applied: [], error: PRIVATE_LOGS },
+      ...alts.map((name) => ({ accountName: "Roster", charName: name, applied: [], error: "fetch failed" })),
     ],
   }, "en", { userDoc: doc }).toJSON();
+  const reasonLines = [
+    `**${label("publicLogOff")}:** **Kanna**`,
+    `**${label("notFound")}:** **Sora**`,
+    `**${label("blocked")}:** **Mika**`,
+    `**${label("rateLimit")}:** **Aki**`,
+    `**${t("raid-auto-manage.syncReport.otherError", "en")}:** **Alt0**`,
+  ];
 
   assert.equal(embed.color, UI.colors.danger);
   assert.equal(embed.fields, undefined);
-  assert.ok(embed.description.includes(`**${t("raid-auto-manage.syncReport.publicLogOff", "en")}:** **Kanna**`));
-  assert.ok(embed.description.includes("**Alt9** … and 2 more · `Request failed with status code 403`"));
+  const positions = reasonLines.map((line) => embed.description.indexOf(line));
+  assert.ok(positions.every((position) => position >= 0), `missing reason line in:\n${embed.description}`);
+  assert.deepEqual([...positions].sort((a, b) => a - b), positions);
+  assert.ok(embed.description.includes("**Alt9** … and 2 more · `fetch failed`"));
+  assert.equal(embed.description.includes(`**Mika** · \``), false);
   assert.ok(embed.description.includes(`<t:${Math.floor((NOW - 3_600_000) / 1000)}:R>`));
 });
 

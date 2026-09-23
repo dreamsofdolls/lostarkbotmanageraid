@@ -22,6 +22,12 @@ module.exports = {
       pending: "pending",
       notEligible: "not eligible",
     },
+    bibleError: {
+      rateLimit: "Bible is rate limiting requests",
+      publicLogOff: "Public Log is off",
+      blocked: "Bible blocked the request (HTTP 403)",
+      notFound: "Not found on Bible",
+    },
   },
   "local-sync-discord": {
     title: "Local Sync Console",
@@ -1237,9 +1243,9 @@ module.exports = {
       descriptionAppliedFailsTail: "{warnIcon} {n} characters failed to sync - details below.",
       descriptionAllFailed: {
         variants: [
-          "Couldn't apply any gate because **all {n} characters failed** to sync. Check Cloudflare / \"Logs not enabled\" / character name below.",
-          "**All {n} characters failed** to sync, so no gate was applied. See Cloudflare / \"Logs not enabled\" / character name below.",
-          "No gate made it through: **{n} characters failed**. Usually Cloudflare, \"Logs not enabled\", or a wrong character name - details below.",
+          "Couldn't apply any gate because **all {n} characters failed** to sync. The reasons are grouped below.",
+          "**All {n} characters failed** to sync, so no gate was applied. See the reasons below.",
+          "No gate made it through: **{n} characters failed**. I grouped the reasons below.",
         ],
       },
       descriptionNoNewWithFails: "No new gate clears to apply. {warnIcon} {failed}/{total} characters failed - the rest already match the DB.",
@@ -1250,7 +1256,6 @@ module.exports = {
           "This week's logs hold nothing the DB does not already have, so I left it alone.",
         ],
       },
-      publicLogOff: "Public Log is off",
       otherError: "Other error",
       reasonLine: "{warnIcon} **{reason}:** {names}",
       moreNames: "… and {n} more",

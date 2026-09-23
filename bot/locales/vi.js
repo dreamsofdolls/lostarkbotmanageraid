@@ -29,6 +29,13 @@ module.exports = {
       pending: "pending",
       notEligible: "not eligible",
     },
+    // One label per kind in bible/error-kinds.js; "other" shows the raw error.
+    bibleError: {
+      rateLimit: "Bible đang giới hạn request",
+      publicLogOff: "Chưa bật Public Log",
+      blocked: "Bible chặn request (HTTP 403)",
+      notFound: "Không tìm thấy trên Bible",
+    },
   },
   "local-sync-discord": {
     title: "Local Sync Console",
@@ -1258,9 +1265,9 @@ module.exports = {
       descriptionAppliedFailsTail: "{warnIcon} {n} char fail sync - chi tiết bên dưới.",
       descriptionAllFailed: {
         variants: [
-          "Không apply được gate nào vì **tất cả {n} char fail** sync. Check Cloudflare / \"Logs not enabled\" / char name bên dưới.",
-          "Cả **{n} char đều fail** sync nên chưa gate nào được apply. Xem Cloudflare / \"Logs not enabled\" / tên char bên dưới.",
-          "Không gate nào vào được: **{n} char fail** hết. Nguyên nhân thường là Cloudflare, \"Logs not enabled\", hoặc sai tên char - chi tiết bên dưới.",
+          "Không apply được gate nào vì **tất cả {n} char fail** sync. Lý do từng nhóm ở ngay bên dưới.",
+          "Cả **{n} char đều fail** sync nên chưa gate nào được apply. Xem lý do bên dưới nha.",
+          "Không gate nào vào được: **{n} char fail** hết. Tớ gom lý do theo nhóm ngay bên dưới.",
         ],
       },
       descriptionNoNewWithFails: "Không có gate clear mới nào để apply. {warnIcon} {failed}/{total} char fail - các char còn lại đã match DB.",
@@ -1271,7 +1278,6 @@ module.exports = {
           "Logs tuần này không có gì mới so với DB, nên tớ không phải đụng gì cả.",
         ],
       },
-      publicLogOff: "Chưa bật Public Log",
       otherError: "Lỗi khác",
       reasonLine: "{warnIcon} **{reason}:** {names}",
       moreNames: "… và {n} char khác",

@@ -24,6 +24,12 @@ module.exports = {
       pending: "未完了",
       notEligible: "対象外",
     },
+    bibleError: {
+      rateLimit: "Bible がリクエストを制限中",
+      publicLogOff: "Public Log がオフ",
+      blocked: "Bible にブロックされました (HTTP 403)",
+      notFound: "Bible に見つかりません",
+    },
   },
   "local-sync-discord": {
     title: "ローカル同期コンソール",
@@ -1238,9 +1244,9 @@ module.exports = {
       descriptionAppliedFailsTail: "{warnIcon} {n} 体のキャラが同期失敗 - 詳しくは下を見てね。",
       descriptionAllFailed: {
         variants: [
-          "**全 {n} 体のキャラが同期失敗** だったので、適用できたゲートはゼロですわ。Cloudflare／\"Logs not enabled\"／キャラ名を下で確認してね～",
-          "**{n} 体すべてが同期失敗** で、ゲートは一つも適用できませんでしたわ。Cloudflare／\"Logs not enabled\"／キャラ名を下でご確認くださいませ。",
-          "ゲートは一つも通りませんでしたの。**{n} 体が失敗** ですわ。多くは Cloudflare、\"Logs not enabled\"、キャラ名の誤りですの - 詳しくは下をどうぞ。",
+          "**全 {n} 体のキャラが同期失敗** だったので、適用できたゲートはゼロですわ。理由は下にまとめましたの。",
+          "**{n} 体すべてが同期失敗** で、ゲートは一つも適用できませんでしたわ。理由は下でご確認くださいませ。",
+          "ゲートは一つも通りませんでしたの。**{n} 体が失敗** ですわ - 理由ごとに下へまとめましたわ。",
         ],
       },
       descriptionNoNewWithFails: "新しく適用できるゲートクリアはなかったですわ。{warnIcon} {failed}/{total} 体が失敗 - 残りのキャラは DB と一致してましたよ♪",
@@ -1251,7 +1257,6 @@ module.exports = {
           "今週のログに DB が持っていないものはございませんでしたので、そのままにしておきましたわ。",
         ],
       },
-      publicLogOff: "Public Log がオフ",
       otherError: "その他のエラー",
       reasonLine: "{warnIcon} **{reason}:** {names}",
       moreNames: "…ほか {n} 体",

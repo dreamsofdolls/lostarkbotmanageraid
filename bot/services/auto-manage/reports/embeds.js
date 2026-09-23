@@ -20,9 +20,18 @@ const {
   buildCharacterStatusField,
   touchedRaidLines,
 } = require("../../../utils/raid/common/changed-characters");
+const { BIBLE_ERROR_KIND, classifyBibleError } = require("../bible/error-kinds");
 
 const MAX_ERROR_LENGTH = 180;
 const MAX_REASON_NAMES = 10;
+// What the user can fix first, then what waits on Bible, then the rest.
+const REASON_ORDER = [
+  BIBLE_ERROR_KIND.publicLogOff,
+  BIBLE_ERROR_KIND.notFound,
+  BIBLE_ERROR_KIND.blocked,
+  BIBLE_ERROR_KIND.rateLimit,
+  BIBLE_ERROR_KIND.other,
+];
 
 /**
  * Report embeds for Bible auto-sync.
@@ -30,15 +39,12 @@ const MAX_REASON_NAMES = 10;
  * @param {Function} deps.EmbedBuilder - discord.js builder
  * @param {object} deps.UI - shared color and icon palette
  * @param {Function} deps.getAutoManageCooldownMs - cooldown for a discordId
- * @param {Function} deps.isPublicLogDisabledError - true for a Public Log OFF error.
- *   Passed in because runtime/core.js, which defines it, imports this module.
  * @returns {object} the embed builders
  */
 function createAutoManageReportEmbeds({
   EmbedBuilder,
   UI,
   getAutoManageCooldownMs,
-  isPublicLogDisabledError,
 }) {
   function buildAutoManageHiddenCharsWarningEmbed(hiddenChars, probeReport, lang = "vi") {
     const visibleApplied = (probeReport?.perChar || []).filter(
@@ -150,13 +156,14 @@ function createAutoManageReportEmbeds({
   }
 
   function describeFailure(error, lang) {
-    if (isPublicLogDisabledError(error)) {
-      return { kind: "publicLog", text: t("raid-auto-manage.syncReport.publicLogOff", lang) };
+    const kind = classifyBibleError(error);
+    if (kind !== BIBLE_ERROR_KIND.other) {
+      return { kind, text: t(`common.bibleError.${kind}`, lang) };
     }
     // One line and no backtick, so the text fits inside a code span.
     const oneLine = String(error).replace(/\s+/g, " ").trim().replace(/`/g, "'");
     return {
-      kind: "other",
+      kind,
       text: oneLine.length > MAX_ERROR_LENGTH
         ? `${oneLine.slice(0, MAX_ERROR_LENGTH - 1)}\u2026`
         : oneLine,
@@ -164,16 +171,13 @@ function createAutoManageReportEmbeds({
   }
 
   function formatFailureRow(failure) {
-    return failure.kind === "publicLog"
-      ? `${UI.icons.warn} _${failure.text}_`
-      : `${UI.icons.warn} \`${failure.text}\``;
+    return failure.kind === BIBLE_ERROR_KIND.other
+      ? `${UI.icons.warn} \`${failure.text}\``
+      : `${UI.icons.warn} _${failure.text}_`;
   }
 
   function buildReasonLines(perChar, lang) {
-    const groups = new Map([
-      ["publicLog", { names: [], texts: new Set() }],
-      ["other", { names: [], texts: new Set() }],
-    ]);
+    const groups = new Map(REASON_ORDER.map((kind) => [kind, { names: [], texts: new Set() }]));
     for (const entry of perChar) {
       const failure = describeFailure(entry.error, lang);
       const group = groups.get(failure.kind);
@@ -186,11 +190,12 @@ function createAutoManageReportEmbeds({
       const shown = group.names.slice(0, MAX_REASON_NAMES).map((name) => `**${name}**`).join(", ");
       const hidden = group.names.length - MAX_REASON_NAMES;
       const more = hidden > 0 ? ` ${t("raid-auto-manage.syncReport.moreNames", lang, { n: hidden })}` : "";
+      const isOther = kind === BIBLE_ERROR_KIND.other;
       // The error text is printed once, and only when the whole group shares it.
-      const sample = kind === "other" && group.texts.size === 1 ? ` \u00b7 \`${[...group.texts][0]}\`` : "";
-      const reason = kind === "publicLog"
-        ? t("raid-auto-manage.syncReport.publicLogOff", lang)
-        : t("raid-auto-manage.syncReport.otherError", lang);
+      const sample = isOther && group.texts.size === 1 ? ` \u00b7 \`${[...group.texts][0]}\`` : "";
+      const reason = isOther
+        ? t("raid-auto-manage.syncReport.otherError", lang)
+        : [...group.texts][0];
       lines.push(`${t("raid-auto-manage.syncReport.reasonLine", lang, {
         warnIcon: UI.icons.warn,
         reason,

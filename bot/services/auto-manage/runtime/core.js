@@ -72,7 +72,6 @@ function createAutoManageCoreService({
     EmbedBuilder,
     UI,
     getAutoManageCooldownMs,
-    isPublicLogDisabledError,
   });
   const {
     reconcileCharacterFromLogs,
