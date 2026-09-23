@@ -14,6 +14,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - The `/raid-bg` page of `/raid-help` describes its options instead of printing raw keys such as `raid-help.sections.raid-bg.optionDescriptions.view`. A test checks every help page in all three languages for leftover keys.
 - The `/raid-language` description names all three languages (Tiếng Việt / 日本語 / English), and its default text, shown to Discord clients in other languages, is now English like the other commands. It used to list only Vietnamese and Japanese, in Vietnamese.
 - When two players act on the same signup board at the same moment, the click whose save loses the race now says the board just changed and asks for another try, instead of the generic "Có lỗi xảy ra" error. Nothing is saved for that click, as before.
+- `/raid-channel config action:set` acknowledges Discord before it saves the channel, posts and pins the welcome and clears old pins. On a slow API the admin used to see "The application did not respond" although the channel, welcome and pin had all been set.
 
 ## 2026-09-20
 

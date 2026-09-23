@@ -102,7 +102,7 @@ function createRaidChannelCoreActions({
     );
   }
 
-  async function handleSetChannel({ interaction, guildId, lang, replyChannelEmbed, replyChannelNotice }) {
+  async function handleSetChannel({ interaction, guildId, lang, editChannelEmbed, replyChannelNotice }) {
     const channel = interaction.options.getChannel("channel");
     if (!channel) {
       await replyChannelNotice({
@@ -136,6 +136,9 @@ function createRaidChannelCoreActions({
       return;
     }
 
+    // The config write, welcome post and pin, stale-welcome cleanup and
+    // greeting below can outlast Discord's 3-second window.
+    await deferEphemeralReply(interaction);
     const previousChannelId = getCachedMonitorChannelId(guildId);
     await GuildConfig.findOneAndUpdate(
       { guildId },
@@ -186,7 +189,7 @@ function createRaidChannelCoreActions({
         },
       )
       .setTimestamp();
-    await replyChannelEmbed(embed);
+    await editChannelEmbed(embed);
   }
 
   async function handleShowChannel({ interaction, guildId, lang, replyChannelEmbed }) {

@@ -24,6 +24,9 @@ function makeReplyCollectors() {
     replyChannelEmbed(embed) {
       this.embeds.push(embed.toJSON());
     },
+    editChannelEmbed(embed) {
+      this.embeds.push(embed.toJSON());
+    },
     replyChannelNotice(notice) {
       this.notices.push(notice);
     },
@@ -103,10 +106,11 @@ test("raid-channel set forwards the previous channel so legacy welcome pins can 
       options: { getChannel: () => targetChannel },
       guild: { members: { me: {} } },
       client,
+      deferReply: async () => {},
     },
     guildId: "guild1",
     lang: "en",
-    replyChannelEmbed: replies.replyChannelEmbed.bind(replies),
+    editChannelEmbed: replies.editChannelEmbed.bind(replies),
     replyChannelNotice: replies.replyChannelNotice.bind(replies),
   });
 
