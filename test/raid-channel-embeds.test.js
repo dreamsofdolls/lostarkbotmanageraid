@@ -149,6 +149,22 @@ test("a reset and a reset of an empty raid, matched on the raid whatever mode is
   assert.ok(TRANSLATIONS.vi["text-parser"].raidResetNothing.variants.includes(empty.description.split("\n")[1]));
 });
 
+test("a reset on a character below the raid's item level still gets its row", () => {
+  const alreadyEmpty = receipt({
+    text: "serca reset Alt",
+    resultGroups: [group(RESET_SERCA, [{ charName: "alt", displayName: "Alt", matched: true, alreadyReset: true }], "reset")],
+    accounts: [account("Alt", [character("Alt", "Bard", 1700, {})])],
+  });
+  const reset = receipt({
+    text: "serca reset Alt",
+    resultGroups: [group(RESET_SERCA, [written("Alt")], "reset")],
+    accounts: [account("Alt", [character("Alt", "Bard", 1600, { serca: { modeKey: "hard" } })])],
+  });
+
+  assert.equal(cardsOf(alreadyEmpty)[0].value, `${UI.icons.info} Serca`);
+  assert.equal(cardsOf(reset)[0].value, `${UI.icons.reset} Serca`);
+});
+
 test("a failed write lands on its character whatever the case it was typed in", () => {
   const embed = receipt({
     text: "act4, serca hard Qiaoli, hailua",

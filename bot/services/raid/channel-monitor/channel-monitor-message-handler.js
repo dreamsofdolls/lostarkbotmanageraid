@@ -305,8 +305,8 @@ function createRaidChannelMessageHandler({
       return;
     }
 
-    // An empty result set has nothing to report; the old per-raid DM stayed
-    // silent here too, and the receipt builder reads the first group.
+    // Only an empty result set has neither progress nor errors. It gets no
+    // reply, and the receipt builder needs at least one raid group.
     if (!resultSummary.hasProgress && !resultSummary.hasErrors) return;
 
     const receipt = await loadReceiptAccounts(message.author.id, writeBatch.accessibleAccounts);

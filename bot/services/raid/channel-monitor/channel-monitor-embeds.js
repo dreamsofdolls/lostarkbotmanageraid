@@ -118,18 +118,24 @@ function createRaidChannelEmbedBuilders({ EmbedBuilder, UI }) {
   function buildCharacterRows(character, raids, { afterWrite, isReset, lang }) {
     const entries = [...raids.values()];
     const isRecorded = (entry) => entry?.outcome === "updated" || entry?.outcome === "already";
-    const rows = afterWrite
-      // One post cannot name two modes of one raid, and a reset's raidMeta
-      // does not carry the stored mode, so rows match on raidKey.
-      ? getStatusRaidsForCharacter(character)
-        .filter((raid) => isRecorded(raids.get(raid.raidKey)))
-        .map((raid) => {
-          const line = formatRaidStatusLine(raid, lang);
-          return raids.get(raid.raidKey).outcome === "already"
-            ? line.replace(/^\S+ /u, `${UI.icons.info} `)
-            : line;
-        })
-      : entries.filter(isRecorded).map(({ raidMeta, outcome }) => {
+    // One post cannot name two modes of one raid, and a reset's raidMeta
+    // does not carry the stored mode, so rows match on raidKey.
+    const statusRaids = afterWrite
+      ? getStatusRaidsForCharacter(character).filter((raid) => isRecorded(raids.get(raid.raidKey)))
+      : [];
+    const statusRows = statusRaids.map((raid) => {
+      const line = formatRaidStatusLine(raid, lang);
+      return raids.get(raid.raidKey).outcome === "already"
+        ? line.replace(/^\S+ /u, `${UI.icons.info} `)
+        : line;
+    });
+    // A raid the status view leaves out (a reset on a character below the
+    // raid's item level) or a roster read before the write shows the raid
+    // name without progress, so no card is left without rows.
+    const shownRaidKeys = new Set(statusRaids.map((raid) => raid.raidKey));
+    const labelRows = entries
+      .filter((entry) => isRecorded(entry) && !shownRaidKeys.has(entry.raidMeta.raidKey))
+      .map(({ raidMeta, outcome }) => {
         const icon = outcome === "already" ? UI.icons.info : isReset ? UI.icons.reset : UI.icons.done;
         return `${icon} ${raidMeta.label}`;
       });
@@ -141,7 +147,7 @@ function createRaidChannelEmbedBuilders({ EmbedBuilder, UI }) {
           : t("text-parser.rowWriteFailed", lang);
         return `${UI.icons.warn} ${raidMeta.label} · _${note}_`;
       });
-    return [...rows, ...skipped];
+    return [...statusRows, ...labelRows, ...skipped];
   }
 
   function buildReceiptFields(accounts, byCharacter, options) {
