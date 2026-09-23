@@ -270,6 +270,29 @@ function formatProgressTotals(totals, UI, lang) {
 }
 
 /**
+ * Render the Bible auto-sync freshness line /raid-status shows:
+ * `🔄 Last synced … · ⏳ Sync ready …`. Callers decide when the next sync
+ * opens, so each keeps its own cooldown source.
+ * @param {object} state
+ * @param {number} state.lastSyncAt - last successful sync in ms, 0 when never
+ * @param {number} state.readyAt - when the next sync opens in ms, 0 when open now
+ * @param {object} UI - shared icon palette
+ * @param {string} lang - locale
+ * @returns {string} the freshness line
+ */
+function formatAutoManageFreshnessLine({ lastSyncAt, readyAt }, UI, lang) {
+  // Lazy require, as in formatProgressTotals, to avoid a circular import.
+  const { t } = require("../../../services/i18n");
+  const lastSync = lastSyncAt > 0
+    ? `${UI.icons.reset} ${t("raid-status.freshness.lastSynced", lang)} <t:${Math.floor(lastSyncAt / 1000)}:R>`
+    : `${UI.icons.reset} ${t("raid-status.freshness.neverSynced", lang)}`;
+  if (readyAt <= 0) {
+    return `${lastSync} · ✅ ${t("raid-status.freshness.syncReadyNow", lang)}`;
+  }
+  return `${lastSync} · ⏳ ${t("raid-status.freshness.syncReady", lang)} <t:${Math.floor(readyAt / 1000)}:R>`;
+}
+
+/**
  * Render a gold amount with locale-style thousands separators and a
  * trailing `G` suffix (e.g. `26,000G`). Used by the per-character gold
  * line in `/raid-status` and the account / cross-account rollup. Negative
@@ -436,6 +459,7 @@ module.exports = {
   INLINE_SPACER,
   pack2Columns,
   formatProgressTotals,
+  formatAutoManageFreshnessLine,
   formatGold,
   replyNotice,
   replyEmbed,

@@ -8,7 +8,11 @@
  */
 
 const { getClassEmoji } = require("../../../models/Class");
-const { pack2Columns, formatProgressTotals } = require("../../../utils/raid/common/shared");
+const {
+  pack2Columns,
+  formatAutoManageFreshnessLine,
+  formatProgressTotals,
+} = require("../../../utils/raid/common/shared");
 const { t, tPick } = require("../../../services/i18n");
 
 // pack2Columns spends 3 fields on every 2 characters, so 16 characters fill
@@ -173,23 +177,19 @@ function createRaidStatusView(deps) {
   function buildAutoManageFreshnessLine(account, userMeta, lang) {
     if (account?._sharedFrom || !userMeta?.autoManageEnabled) return "";
 
-    const lastSyncAt = numberOrZero(userMeta?.lastAutoManageSyncAt);
-    const lastSync = lastSyncAt > 0
-      ? `${UI.icons.reset} ${t("raid-status.freshness.lastSynced", lang)} <t:${Math.floor(lastSyncAt / 1000)}:R>`
-      : `${UI.icons.reset} ${t("raid-status.freshness.neverSynced", lang)}`;
     const cooldownMs = resolveUserCooldown(
       getAutoManageCooldownMs,
       userMeta?.discordId,
       AUTO_MANAGE_SYNC_COOLDOWN_MS
     );
     const lastAttempt = numberOrZero(userMeta?.lastAutoManageAttemptAt);
-    const remain = formatNextCooldownRemaining(lastAttempt, cooldownMs);
-    if (!remain) {
-      return `${lastSync} · ✅ ${t("raid-status.freshness.syncReadyNow", lang)}`;
-    }
-
-    const nextTs = `<t:${Math.floor((lastAttempt + cooldownMs) / 1000)}:R>`;
-    return `${lastSync} · ⏳ ${t("raid-status.freshness.syncReady", lang)} ${nextTs}`;
+    const readyAt = formatNextCooldownRemaining(lastAttempt, cooldownMs)
+      ? lastAttempt + cooldownMs
+      : 0;
+    return formatAutoManageFreshnessLine({
+      lastSyncAt: numberOrZero(userMeta?.lastAutoManageSyncAt),
+      readyAt,
+    }, UI, lang);
   }
 
   function buildAccountFreshnessLine(account, userMeta, lang) {
