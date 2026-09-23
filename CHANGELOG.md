@@ -8,6 +8,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 
 ### Changed
 - A Bible HTTP 429 pauses every Bible request for the `Retry-After` time, capped at five minutes, or 60 seconds when Bible sends none. Requests already queued fail at once with the same rate-limit error instead of each reaching Bible, and the characters caught by the pause no longer log a warning each.
+- The `/raid-auto-manage` sync report (after `action:sync`, and the first sync of `action:on`) shows characters as `/raid-status` does: one card per changed character with class icon, item level and a `🟢 Raid · 2/2` row per raid the sync touched, two per line, under `📁 Roster (N)` headers when more than one roster changed. A character that failed is a card in its roster with the reason; when every character fails the card lists the grouped reasons instead. The card also carries the `🔄 Last synced · ⏳ Sync ready` line and the done / partial / pending footer.
 
 ### Fixed
 - The raid view in `/raid-status` and `/raid-check` opens for rosters of 17 characters or more instead of failing with a generic error. Up to 16 characters keep the two-column layout; longer rosters get one full-width row per character, as the gold view does, and a roster past Discord's 25-field cap ends with a "+N character khác" line.
@@ -20,6 +21,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `/raid-channel config action:set` acknowledges Discord before it saves the channel, posts and pins the welcome and clears old pins. On a slow API the admin used to see "The application did not respond" although the channel, welcome and pin had all been set.
 - The daily auto-manage run retries later when a character fails with an error other than a disabled Public Log, even if other characters synced, and it moves the last-sync time only when the run fully succeeds. A day with some characters rate-limited used to count as synced, so those characters waited for the next day.
 - `/raid-check` Sync-all reports users with Local Sync on, no saved roster or only private logs as skipped, and users whose characters all failed for another reason as failed; both used to count as "attempted". The skipped line now gives those reasons instead of a cooldown, which Sync-all never applies, and the button stays disabled while the background roster refresh is still running.
+- The sync report's title icon and color follow the outcome: yellow ⚠️ when some characters failed, red ⚠️ when all did. A fully failed sync used to show ℹ️ on a yellow bar, and the first sync of `action:on` always showed 🟢.
 
 ## 2026-09-20
 
