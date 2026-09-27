@@ -104,13 +104,21 @@ lower half. No roster registration or Auto-sync is required. This is one
 log/gate, not a whole-raid aggregate, and anonymized names are kept as shown on
 Bible. It does not update raid progress or scan for logs automatically.
 
-The public panel has five rows: **Bracketed / Reset / Refresh**, **◀ / tab name / ▶**,
-then dropdowns for **team or player**, **raid**, and **encounter**. Only the original
-caller can operate it for 15 minutes; other members can view it or open their own.
-Player choices follow the Damage table's party/row order, preserving anonymous names.
-Reset keeps the current log and restores Team / Damage / Bracketed ON. Refresh
-reloads the recent history and current images, bypasses cached captures, and keeps
-the selected log, player and mode. Bracketed OFF selects Bible's Normalized mode.
+Controls sit in five rows: **◀️ tab ▶️ · 📐 Bracketed/Normalized · ↩️ Defaults**,
+then menus for **raid**, **log**, **player** and **tab**. A closed menu shows only
+its chosen option, so labels carry the facts: a raid's log count and best parse, a
+log's percent, DPS, nDPS and duration, a player's class icon, gear score and
+badges, a tab's short explanation. Defaults keeps the current log and returns to
+the whole team, Damage and Bracketed; Normalized is Bible's normalized percentile
+mode. Character lookup starts with 25 recent logs; the raid menu lists only raids
+in that history and holds **⏬ Load older logs** (another page on demand, up to
+250 logs) and **🔄 Refresh**, which reloads the history and recaptures the current
+view, bypassing cached captures, while keeping the log, player, tab and mode. If
+Bible repeats a page without new IDs, loading stops; the count is the history
+loaded into this panel, not a claim to cover every log. Long menus paginate within
+Discord's 25-option limit. Only the original caller can operate the panel, for 15
+minutes; other members can view it or open their own. Player choices follow the
+Damage table's party and row order, keeping anonymous names.
 
 Team navigation includes Damage, Party/Self Buffs (offensive or all), Shields
 (Given, Received, Total Blocked, Blocked Breakdown), Tanked, Average DPS and 10s DPS.
@@ -121,12 +129,6 @@ skill tables, buff contribution, Crit Luck, stat conversion, damage potential,
 miscellaneous bonuses, opener rotation and charts when provided by that log.
 Public profile/loadout links are shown where Bible exposes them. Switching logs
 resets player focus to the team so a slot can never silently select another person.
-
-Character lookup starts with 25 recent logs. The raid menu contains only raids
-in the loaded history; its **Load older logs** option fetches another page on
-demand, up to 250 logs. Long dropdowns paginate within Discord's 25-option limit.
-If Bible repeats a page without new IDs, loading stops; the displayed count is
-the history loaded into this panel, not a claim to cover all historical logs.
 
 Every problem is answered with a notice card that only the clicker sees: what
 happened and what to do next. A capture that fails or times out links the original

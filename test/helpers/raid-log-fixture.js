@@ -71,8 +71,8 @@ function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry
     const interaction = {
       user: { id: "someone-else" }, guildId: "guild", channelId: "channel", message: { id: "message" },
       customId, values: value === undefined ? undefined : [value],
-      isButton: () => ["search", "bracketed", "detail", "reset", "refresh", "tab_prev", "tab_next", "tab_label"].includes(action),
-      isStringSelectMenu: () => ["character", "player", "raid", "log"].includes(action),
+      isButton: () => ["search", "bracketed", "detail", "reset", "tab_prev", "tab_next", "tab_label"].includes(action),
+      isStringSelectMenu: () => ["character", "player", "raid", "log", "tab"].includes(action),
       isModalSubmit: () => action === "submit",
       fields: { getTextInputValue: name => { assert.equal(name, "character"); return value; } },
       showModal: async next => { modal = next.toJSON(); events.push(["modal", modal]); },

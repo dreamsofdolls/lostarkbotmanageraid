@@ -21,7 +21,7 @@ test("an oversized second image or failed edit leaves the previous public card i
   assert.equal(JSON.stringify(f.payload), before);
   f.failEdit = false; await f.click(f.owner("player", "1-0"));
   assert.equal(f.payload.embeds.length, 2);
-  f.verifyFailure = new RaidLogError("logs_private"); await f.click(f.owner("refresh"));
+  f.verifyFailure = new RaidLogError("logs_private"); await f.click(f.owner("raid", "__refresh"));
   assert.deepEqual(f.payload.attachments, []); assert.match(noticeText(f.payload), /Qiylyn/);
 });
 
@@ -69,7 +69,7 @@ test("refresh reloads history and bypasses PNG cache without changing the curren
   const f = fixture(); await f.run(); await f.click(f.owner("log", "old"));
   await f.click(f.owner("player", "1-0")); await f.click(f.owner("bracketed"));
   f.events.length = 0;
-  await f.click(f.owner("refresh"));
+  await f.click(f.owner("raid", "__refresh"));
   assert.deepEqual(f.events.slice(0, 2), ["ack-update", "refresh"]);
   assert.ok(!f.events.includes("verify"));
   const [, url, options] = captures(f)[0];
@@ -91,7 +91,7 @@ test("team arrows cover every tab and reject disabled, forged and wrong-kind con
   const count = captures(f).length;
   for (const action of ["tab_next", "tab_label", "detail", "tab"]) await f.click(f.owner(action));
   await f.click(f.owner("player", "forged"));
-  await f.click(f.owner("refresh", undefined, { isButton: () => false, isStringSelectMenu: () => true }));
+  await f.click(f.owner("raid", "__refresh", { isStringSelectMenu: () => false, isButton: () => true }));
   assert.equal(captures(f).length, count);
 });
 

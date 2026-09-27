@@ -2,28 +2,30 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { MessageFlags } = require("discord.js");
+const { MessageFlags, ButtonStyle } = require("discord.js");
 const { RaidLogError } = require("../bot/services/raid-log/errors");
 const { createRaidInteractionRouter } = require("../bot/app/interaction-router-registry");
-const { fixture, logEntry, captures, control, noticeText } = require("./helpers/raid-log-fixture");
+const { fixture, logEntry, captures, control, noticeText, withClassIcons } = require("./helpers/raid-log-fixture");
 
-test("public panel orders actions, tab arrows, player, raid and log within five Discord rows in every locale", async () => {
+test("public panel puts one button row above the raid, log, player and tab menus in every locale", async () => {
   for (const lang of ["vi", "en", "jp"]) {
     const f = fixture({ lang });
     await f.run();
     assert.equal(f.events[0], "ack");
     const rows = f.payload.components.map(row => row.toJSON());
-    assert.deepEqual(rows.map(row => row.components.map(c => c.type)), [[2, 2, 2], [2, 2, 2], [3], [3], [3]]);
-    assert.equal(control(f, "tab_label").label, "Damage · 1/12");
-    assert.equal(control(f, "tab_label").disabled, true);
+    assert.deepEqual(rows.map(row => row.components.map(c => c.type)), [[2, 2, 2, 2, 2], [3], [3], [3], [3]]);
+    assert.deepEqual(rows.map(row => row.components.at(-1).custom_id.split(":").at(-1)), ["reset", "raid", "log", "player", "tab"]);
+    const label = control(f, "tab_label");
+    assert.deepEqual([label.label, label.emoji.name, label.disabled], ["Damage · 1/12", "⚔️", true]);
     assert.equal(control(f, "tab_prev").disabled, true);
     assert.equal(control(f, "tab_next").disabled, false);
-    assert.deepEqual(control(f, "player").options.slice(1).map(o => o.label), ["1. 1760 Qiylyn", "2. 1755 Canameo", "3. 1746 Slayer #1"]);
-    assert.deepEqual(control(f, "raid").options.map(o => o.value), ["kazeros", "serca"]);
+    assert.deepEqual(control(f, "raid").options.map(o => o.value), ["kazeros", "serca", "__refresh"]);
     assert.deepEqual(control(f, "log").options.map(o => o.value), ["new", "old"]);
-    assert.equal(control(f, "bracketed").label, "Bracketed: ON");
+    assert.deepEqual(control(f, "player").options.map(o => o.value), ["__team", "1-0", "1-3", "2-1"]);
+    assert.deepEqual([control(f, "bracketed").label, control(f, "bracketed").style], ["Bracketed", ButtonStyle.Primary]);
+    assert.equal(control(f, "refresh"), undefined);
     assert.equal(control(f, "detail"), undefined);
-    assert.doesNotMatch(JSON.stringify(f.payload), /raid-log\.controls|raid-log\.character/);
+    assert.doesNotMatch(JSON.stringify(f.payload), /raid-log\./);
   }
 });
 
@@ -39,7 +41,7 @@ test("the caller can change tabs and Bracketed, with immediate ACK before privac
   assert.equal(control(f, "tab_label").label, "Party Buffs · 2/12");
   await f.click(f.owner("bracketed"));
   assert.equal(captures(f).at(-1)[2].bracketed, false);
-  assert.match(control(f, "bracketed").label, /OFF.*Normalized/);
+  assert.deepEqual([control(f, "bracketed").label, control(f, "bracketed").style], ["Normalized", ButtonStyle.Secondary]);
   await f.click(old);
   assert.match(noticeText(f.events.at(-1)[1]), /Bảng vừa được cập nhật/);
   assert.equal(f.events.at(-1)[1].flags, MessageFlags.Ephemeral);
@@ -53,7 +55,7 @@ test("other members cannot operate any log control or trigger Bible, capture or 
     const before = JSON.stringify(f.payload);
     f.events.length = 0;
     const attempts = [["tab_next"], ["raid", "serca"], ["log", "l1"], ["bracketed"], ["raid", "__more"],
-      ["log", "__next"], ["player", "1-0"], ["reset"], ["refresh"]];
+      ["log", "__next"], ["player", "1-0"], ["reset"], ["raid", "__refresh"], ["tab", "tanked"]];
     for (const [action, value] of attempts) {
       await f.click(f.component(action, value));
       const [event, payload] = f.events.at(-1);
@@ -62,7 +64,7 @@ test("other members cannot operate any log control or trigger Bible, capture or 
       assert.match(noticeText(payload), { vi: /không phải của cậu/, en: /isn't yours/, jp: /あなたのものではありません/ }[lang]);
       assert.match(noticeText(payload), /<@author>/);
     }
-    assert.equal(f.events.length, 9);
+    assert.equal(f.events.length, 10);
     assert.equal(JSON.stringify(f.payload), before);
     await f.click(f.owner("bracketed"));
     assert.equal(captures(f).length, 1);
@@ -132,7 +134,7 @@ test("more than 25 raid choices paginate without losing raid selection or exposi
   assert.equal(control(f, "raid").options.length, 23);
   await f.click(f.owner("raid", "__next"));
   assert.equal(captures(f).length, 1);
-  assert.equal(control(f, "raid").options.length, 9);
+  assert.equal(control(f, "raid").options.length, 11);
   await f.click(f.owner("raid", "raid29"));
   assert.deepEqual(control(f, "log").options.map(x => x.value), ["l29"]);
   assert.equal(captures(f).at(-1)[1], "https://lostark.bible/logs/l29");
@@ -215,4 +217,67 @@ test("global router dispatches both raid-log dropdowns and buttons to the panel 
       isStringSelectMenu: () => select, isButton: () => !select });
   }
   assert.equal(calls, 2);
+});
+
+test("the raid menu keeps load-older and refresh on every page within 25 options", async () => {
+  const logs = Array.from({ length: 30 }, (_, i) => logEntry(`l${i}`, `raid${i}`, 100 - i));
+  for (const hasMore of [false, true]) {
+    const f = fixture({ logs, hasMore });
+    await f.run();
+    const tail = hasMore ? ["__more", "__refresh"] : ["__refresh"];
+    let values = control(f, "raid").options.map(option => option.value);
+    assert.equal(values.length, 21 + 1 + tail.length);
+    assert.deepEqual(values.slice(21), ["__next", ...tail]);
+    await f.click(f.owner("raid", "__next"));
+    values = control(f, "raid").options.map(option => option.value);
+    assert.deepEqual(values, [...logs.slice(21).map(log => log.raidKey), "__prev", ...tail]);
+    assert.ok(values.length <= 25);
+  }
+});
+
+test("the tab menu lists the current tab set with glosses and switches tab like the arrows", async () => {
+  const f = fixture();
+  await f.run();
+  const [first] = control(f, "tab").options;
+  assert.equal(control(f, "tab").options.length, 12);
+  assert.deepEqual([first.label, first.description, first.emoji.name, first.default],
+    ["Damage · DMG từng người, DPS, crit, back/front", "Tab 1/12", "⚔️", true]);
+  await f.click(f.owner("tab", "tanked"));
+  assert.equal(captures(f).at(-1)[2].tab, "tanked");
+  assert.equal(control(f, "tab_label").label, "Tanked · 10/12");
+  const count = captures(f).length;
+  await f.click(f.owner("tab", "damage_category"));
+  assert.equal(captures(f).length, count);
+  assert.match(noticeText(f.events.at(-1)[1]), /không có trong/);
+  await f.click(f.owner("player", "1-0"));
+  assert.deepEqual(control(f, "tab").options.map(option => option.value),
+    ["damage", "party_buffs", "party_buffs_all", "self_buffs", "self_buffs_all", "damage_category"]);
+});
+
+test("closed menus carry their facts: raid best parse, log figures, player icon and badges", async t => {
+  withClassIcons(t, { Aeromancer: "<:aeromancer:111111111111111111>" });
+  const logs = [
+    { ...logEntry("new", "kazeros", Date.UTC(2026, 8, 24, 16, 40)), percentile: 0.9925, normalizedPercentile: 0.9,
+      dps: 1.06e9, ndps: 385.7e6, duration: 447637 },
+    { ...logEntry("old", "kazeros", Date.UTC(2026, 8, 24, 16, 31)), percentile: 0.6074, normalizedPercentile: 0.58,
+      dps: 953e6, ndps: 345e6, duration: 288001, isDead: true },
+    logEntry("serca", "serca", 80),
+  ];
+  const f = fixture({ logs });
+  await f.run();
+  const [kazeros, serca, refresh] = control(f, "raid").options;
+  assert.deepEqual([kazeros.label, kazeros.emoji.name, kazeros.description, kazeros.default],
+    ["kazeros · 2 log · tốt nhất 99%", "🌸", "Gần nhất 24/09 23:40", true]);
+  assert.deepEqual([serca.label, serca.emoji.name], ["serca · 1 log · tốt nhất -", "⚪"]);
+  assert.deepEqual([refresh.value, refresh.label, refresh.emoji.name], ["__refresh", "Làm mới", "🔄"]);
+  const [open, older] = control(f, "log").options;
+  assert.deepEqual([open.label, open.description, open.emoji.name, open.default],
+    ["G2 Hard · 24/09 23:40 · 99% · 1.06B DPS · 386M nDPS · ⏱ 7:27", "Bracketed 99% · Normalized 90%", "🌸", true]);
+  assert.equal(older.label, "G2 Hard · 24/09 23:31 · 60% · 953M DPS · 345M nDPS · ⏱ 4:48 · 💀");
+  const players = control(f, "player").options;
+  assert.deepEqual(players.map(option => option.label), ["Toàn đội · 8 người · 2 party", "Qiylyn · 1760 · 🌸 99 · Party 1",
+    "Canameo · 1755 · 🟣 82 · 🟣 91 · Party 1", "Slayer #1 · 1746 · 🟣 80 · Party 2"]);
+  assert.deepEqual(players.map(option => option.description), ["Bảng của cả đội", "Aeromancer · ⭐ đang tra", "Bard · support", "Slayer"]);
+  assert.deepEqual(players[1].emoji, { animated: false, name: "aeromancer", id: "111111111111111111" });
+  assert.equal(players[2].emoji, undefined);
 });

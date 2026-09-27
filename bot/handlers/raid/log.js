@@ -12,8 +12,8 @@ const { buildRaidLogNotice, buildRevokedNotice } = require("./log-notices");
 
 const PICKER_ACTION_TYPES = { search: "isButton", character: "isStringSelectMenu", submit: "isModalSubmit" };
 const LOG_ACTION_TYPES = {
-  tab_prev: "isButton", tab_next: "isButton", bracketed: "isButton", reset: "isButton", refresh: "isButton",
-  player: "isStringSelectMenu", raid: "isStringSelectMenu", log: "isStringSelectMenu",
+  tab_prev: "isButton", tab_next: "isButton", bracketed: "isButton", reset: "isButton",
+  player: "isStringSelectMenu", raid: "isStringSelectMenu", log: "isStringSelectMenu", tab: "isStringSelectMenu",
 };
 
 function createRaidLogCommand({
@@ -127,6 +127,7 @@ function createRaidLogCommand({
     reset: () => ({ player: null, tab: "damage", bracketed: true }),
     tab_prev: state => stepTab(state, -1),
     tab_next: state => stepTab(state, 1),
+    tab: (state, value) => ({ tab: value }),
     player: (state, value) => ({ player: state.result.players?.find(entry => entry.id === value) || null, tab: "damage" }),
   };
 
@@ -136,7 +137,7 @@ function createRaidLogCommand({
       .find(component => component.custom_id.endsWith(`:${action}`));
     if (!control || control.disabled || (control.options && !control.options.some(option => option.value === value))) throw new RaidLogError("invalid_selection");
     if (Object.hasOwn(viewSelections, action)) return { ...next, ...viewSelections[action](state, value) };
-    if (action === "refresh") {
+    if (value === "__refresh") {
       const catalog = await logCatalog.refresh(state.catalog);
       // Keep the active historical log selectable even at the history limit.
       if (!catalog.logs.some(entry => entry.id === state.selected.id)) catalog.logs = [...catalog.logs.slice(0, -1), state.selected];
@@ -177,10 +178,13 @@ function createRaidLogCommand({
     try {
       if (state.stage === "picker") return await selectCharacter(interaction, state, action);
       await interaction.deferUpdate();
-      if (action !== "refresh") await logCatalog.verify(state.catalog);
-      const next = await applySelection(state, action, interaction.values?.[0]);
+      const value = interaction.values?.[0];
+      // Refresh re-reads the log list itself, so it skips the separate privacy check.
+      const refreshing = action === "raid" && value === "__refresh";
+      if (!refreshing) await logCatalog.verify(state.catalog);
+      const next = await applySelection(state, action, value);
       const changed = next.tab !== state.tab || next.bracketed !== state.bracketed || next.selected.id !== state.selected.id || next.player?.id !== state.player?.id;
-      if (changed || action === "refresh") await render(interaction, next, action === "refresh");
+      if (changed || refreshing) await render(interaction, next, refreshing);
       else await interaction.editReply({ embeds: embeds(next, next.result), components: buildLogComponents(next), allowedMentions: { parse: [] } });
       Object.assign(state, next);
       log.info(`[raid-log] interaction action=${action} elapsedMs=${now() - started}`);

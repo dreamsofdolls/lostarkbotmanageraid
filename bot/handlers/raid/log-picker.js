@@ -24,7 +24,7 @@ function rosterChoices(accounts = []) {
 
 function pickerOptions(state) {
   const choices = state.choices.map(({ label, description, value }) => ({ label, description, value }));
-  return pagedChoices(choices, state.page, false, state.lang);
+  return pagedChoices(choices, state.page, state.lang);
 }
 
 function buildLogPicker(state, { EmbedBuilder, UI }) {

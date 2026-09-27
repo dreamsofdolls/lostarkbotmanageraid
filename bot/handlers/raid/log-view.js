@@ -13,67 +13,9 @@ const { tabsForPlayer } = require("../../services/raid-log/tabs");
 const { pickHighlights } = require("../../services/raid-log/highlights");
 const { parseTier } = require("../../services/raid-log/parse-tiers");
 const { formatCompact, percentOf, formatPercent, formatShare, formatClock, formatWhen } = require("../../services/raid-log/format");
-
-const PAGE_SIZE = 22; // Leave room for previous, next and loading older logs.
-const timestamp = new Intl.DateTimeFormat("en-GB", {
-  timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
-});
-
-function panelChoices(state) {
-  const logs = state.catalog.logs;
-  const raids = [...new Map(logs.map(log => [log.raidKey, log.raidLabel])).entries()]
-    .map(([value, label]) => ({ label: label.slice(0, 100), value, default: value === state.selected.raidKey }));
-  const raidLogs = logs.filter(log => log.raidKey === state.selected.raidKey).map(log => ({
-    label: log.timestamp ? `${log.gate} · ${log.difficulty} · ${timestamp.format(log.timestamp)}`.slice(0, 100) : log.raidLabel.slice(0,100),
-    value: log.id, default: log.id === state.selected.id,
-    description: `${log.duration ? `${Math.floor(log.duration / 60_000)}:${String(Math.floor(log.duration / 1000) % 60).padStart(2,"0")} · ` : ""}${log.id}`.slice(0,100),
-  }));
-  return { raids, logs: raidLogs };
-}
-
-function pagedChoices(choices, page, hasMore, lang) {
-  const result = choices.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-  if (page > 0) result.push({ label: t("common.pagination.previous", lang), value: "__prev" });
-  if ((page + 1) * PAGE_SIZE < choices.length) result.push({ label: t("common.pagination.next", lang), value: "__next" });
-  if (hasMore) result.push({ label: t("raid-log.controls.loadMore", lang), value: "__more" });
-  return result;
-}
-
-function buildLogComponents(state, disabled = false) {
-  const id = action => `raid-log:${state.id}:${state.revision}:${action}`;
-  const { raids, logs } = panelChoices(state);
-  const tabs = tabsForPlayer(state.player, state.result);
-  const tabKeys = Object.keys(tabs);
-  const tabIndex = tabKeys.indexOf(state.tab);
-  const button = (action, label, inactive = disabled, style = ButtonStyle.Secondary) => new ButtonBuilder()
-    .setCustomId(id(action)).setLabel(label).setStyle(style).setDisabled(inactive);
-  const select = (action, placeholder, options) => new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder().setCustomId(id(action)).setPlaceholder(placeholder.slice(0, 150))
-      .setDisabled(disabled).addOptions(options),
-  );
-  return [
-    new ActionRowBuilder().addComponents(
-      button("bracketed", state.bracketed ? "Bracketed: ON" : "Bracketed: OFF · Normalized", disabled,
-        state.bracketed ? ButtonStyle.Primary : ButtonStyle.Secondary),
-      button("reset", t("raid-log.controls.reset", state.lang)),
-      button("refresh", t("raid-log.controls.refresh", state.lang)),
-    ),
-    new ActionRowBuilder().addComponents(
-      button("tab_prev", "◀", disabled || tabIndex === 0),
-      button("tab_label", `${tabs[state.tab]} · ${tabIndex + 1}/${tabKeys.length}`, true),
-      button("tab_next", "▶", disabled || tabIndex === tabKeys.length - 1),
-    ),
-    select("player", t("raid-log.controls.player", state.lang), [
-      { label: t("raid-log.controls.team", state.lang), value: "__team", default: !state.player },
-      ...(state.result.players || []).map((player, index) => ({
-        label: `${index + 1}. ${player.label}`.slice(0, 100), value: player.id, default: player.id === state.player?.id,
-        description: [`Party ${player.party}`, player.className].filter(Boolean).join(" · ").slice(0, 100),
-      })),
-    ]),
-    select("raid", `2 · ${state.selected.raidLabel}`, pagedChoices(raids, state.raidPage, state.catalog.hasMore, state.lang)),
-    select("log", `3 · ${t("raid-log.controls.log", state.lang)}`, pagedChoices(logs, state.logPage, false, state.lang)),
-  ];
-}
+const { parseCustomEmoji } = require("../../utils/discord/emoji");
+const { truncateSelectText } = require("../../utils/discord/select-options");
+const { normalizeCharacterName } = require("../../services/raid-log/source");
 
 // ─── Card ───
 
@@ -180,6 +122,135 @@ function buildLogEmbeds(state, result, { EmbedBuilder, UI }) {
   }
   const lower = result.images[1];
   return lower ? [card, new EmbedBuilder().setColor(color).setImage(`attachment://${lower.filename}`)] : [card];
+}
+
+// ─── Controls ───
+
+// Menus hold 25 options: a page of logs or characters leaves room for
+// previous and next, and the raid menu also for load-older and refresh.
+const PAGE_SIZE = 22;
+const RAID_PAGE_SIZE = 21;
+const TAB_EMOJI = Object.freeze({
+  damage: "⚔️", party_buffs: "🤝", party_buffs_all: "🤝", self_buffs: "💪", self_buffs_all: "💪",
+  shields: "🛡️", shields_received: "🛡️", shields_blocked: "🛡️", shields_breakdown: "🛡️",
+  tanked: "🩸", dps_average: "📈", dps_10s: "📉", damage_category: "🧩",
+});
+
+/**
+ * @param {object[]} choices menu options
+ * @param {number} page zero-based page
+ * @param {string} lang
+ * @param {number} [size]
+ * @returns {object[]} the page's options followed by previous/next entries
+ */
+function pagedChoices(choices, page, lang, size = PAGE_SIZE) {
+  const shown = choices.slice(page * size, (page + 1) * size);
+  if (page > 0) shown.push({ label: t("common.pagination.previous", lang), value: "__prev" });
+  if ((page + 1) * size < choices.length) shown.push({ label: t("common.pagination.next", lang), value: "__next" });
+  return shown;
+}
+
+function raidOptions(state, support) {
+  const raids = new Map();
+  for (const entry of state.catalog.logs) raids.set(entry.raidKey, [...(raids.get(entry.raidKey) || []), entry]);
+  const options = [...raids].map(([raidKey, logs]) => {
+    const percents = logs.map(entry => headlinePercent(entry, support, state.bracketed)).filter(percent => percent !== null);
+    const best = percents.length ? Math.max(...percents) : null;
+    return {
+      label: truncateSelectText(t("raid-log.controls.raidOption", state.lang,
+        { raid: logs[0].raidLabel, count: logs.length, best: formatPercent(best) }), 100),
+      value: raidKey, emoji: { name: parseTier(best).emoji }, default: raidKey === state.selected.raidKey,
+      description: t("raid-log.controls.raidOptionDetail", state.lang, { when: formatWhen(logs[0].timestamp) }),
+    };
+  });
+  return [
+    ...pagedChoices(options, state.raidPage, state.lang, RAID_PAGE_SIZE),
+    ...(state.catalog.hasMore ? [{ label: t("raid-log.controls.loadMore", state.lang), value: "__more", emoji: { name: "⏬" },
+      description: t("raid-log.controls.loadMoreDetail", state.lang) }] : []),
+    { label: t("raid-log.controls.refresh", state.lang), value: "__refresh", emoji: { name: "🔄" },
+      description: t("raid-log.controls.refreshDetail", state.lang) },
+  ];
+}
+
+function logOptions(state, support) {
+  const options = state.catalog.logs.filter(entry => entry.raidKey === state.selected.raidKey).map(entry => {
+    const percent = headlinePercent(entry, support, state.bracketed);
+    return {
+      label: truncateSelectText([`${entry.gate || entry.raidLabel} ${entry.difficulty}`.trim(), formatWhen(entry.timestamp),
+        formatPercent(percent), ...logFigures(entry, support, state.lang)].join(" · "), 100),
+      value: entry.id, emoji: { name: parseTier(percent).emoji }, default: entry.id === state.selected.id,
+      // Bible's own names for the two figures behind the percent.
+      description: support
+        ? `rContribution ${formatPercent(percentOf(entry.contributionPercentile))} · Buff Performance ${formatPercent(percentOf(entry.percentile))}`
+        : `Bracketed ${formatPercent(percentOf(entry.percentile))} · Normalized ${formatPercent(percentOf(entry.normalizedPercentile))}`,
+    };
+  });
+  return pagedChoices(options, state.logPage, state.lang);
+}
+
+function playerOptions(state) {
+  const { players, playerCount, partyCount } = state.result;
+  const lookedUp = normalizeCharacterName(state.catalog.profile.name);
+  return [
+    { label: t("raid-log.controls.team", state.lang, { players: playerCount, parties: partyCount }), value: "__team",
+      emoji: { name: "👥" }, description: t("raid-log.controls.teamDetail", state.lang), default: !state.player },
+    ...players.map(player => {
+      const { itemLevel, name } = splitLabel(player.label);
+      const badges = player.badges[state.bracketed ? "bracketed" : "normalized"].map(badgeText).join(" · ");
+      const description = [player.className, isSupportClass(player.className) && t("raid-log.controls.support", state.lang),
+        normalizeCharacterName(name) === lookedUp && t("raid-log.controls.lookedUp", state.lang)].filter(Boolean).join(" · ");
+      const emoji = parseCustomEmoji(getClassEmoji(player.className));
+      return {
+        label: truncateSelectText([name, itemLevel, badges, t("raid-log.controls.party", state.lang, { party: player.party })]
+          .filter(Boolean).join(" · "), 100),
+        value: player.id, default: player.id === state.player?.id,
+        // Bible can omit a class icon; Discord rejects an empty description.
+        ...(description ? { description: truncateSelectText(description, 100) } : {}),
+        ...(emoji ? { emoji } : {}),
+      };
+    }),
+  ];
+}
+
+function tabOptions(state, tabs) {
+  const keys = Object.keys(tabs);
+  const glossSet = state.player ? "player" : "team";
+  return keys.map((key, index) => ({
+    label: truncateSelectText(`${tabs[key]} · ${t(`raid-log.tabs.${glossSet}.${key}`, state.lang)}`, 100),
+    value: key, emoji: { name: TAB_EMOJI[key] }, default: key === state.tab,
+    description: t("raid-log.controls.tabDetail", state.lang, { index: index + 1, count: keys.length }),
+  }));
+}
+
+/**
+ * @param {object} state panel session
+ * @param {boolean} [disabled] lock every control, as on a revoked panel
+ * @returns {ActionRowBuilder[]} the button row, then the raid, log, player and tab menus
+ */
+function buildLogComponents(state, disabled = false) {
+  const id = action => `raid-log:${state.id}:${state.revision}:${action}`;
+  const support = isSupportClass(state.catalog.profile.className);
+  const tabs = tabsForPlayer(state.player, state.result);
+  const tabKeys = Object.keys(tabs);
+  const tabIndex = tabKeys.indexOf(state.tab);
+  const button = (action, style = ButtonStyle.Secondary) => new ButtonBuilder()
+    .setCustomId(id(action)).setStyle(style).setDisabled(disabled);
+  const select = (action, placeholder, options) => new ActionRowBuilder().addComponents(new StringSelectMenuBuilder()
+    .setCustomId(id(action)).setPlaceholder(t(`raid-log.controls.${placeholder}`, state.lang)).setDisabled(disabled).addOptions(options));
+  return [
+    new ActionRowBuilder().addComponents(
+      button("tab_prev").setEmoji("◀️").setDisabled(disabled || tabIndex === 0),
+      button("tab_label").setEmoji(TAB_EMOJI[state.tab]).setLabel(`${tabs[state.tab]} · ${tabIndex + 1}/${tabKeys.length}`).setDisabled(true),
+      button("tab_next").setEmoji("▶️").setDisabled(disabled || tabIndex === tabKeys.length - 1),
+      button("bracketed", state.bracketed ? ButtonStyle.Primary : ButtonStyle.Secondary).setEmoji("📐")
+        .setLabel(state.bracketed ? "Bracketed" : "Normalized"),
+      button("reset").setEmoji("↩️").setLabel(t("raid-log.controls.reset", state.lang)),
+    ),
+    select("raid", "raidPlaceholder", raidOptions(state, support)),
+    select("log", "logPlaceholder", logOptions(state, support)),
+    select("player", "playerPlaceholder", playerOptions(state)),
+    select("tab", "tabPlaceholder", tabOptions(state, tabs)),
+  ];
 }
 
 module.exports = { buildLogComponents, buildLogEmbeds, parseSummary, headlinePercent, pagedChoices, PAGE_SIZE };
