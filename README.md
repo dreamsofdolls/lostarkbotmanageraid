@@ -99,8 +99,9 @@ DPS alongside the image. No roster registration or Auto-sync is required.
 This is one log/gate, not a whole-raid aggregate, and anonymized names are kept
 as shown on Bible. It does not update raid progress or scan for logs automatically.
 
-The public message has three dropdowns: tab, raid, and encounter. Everyone in
-the channel can operate it for 15 minutes. Tabs are Damage, Party Buffs, Self Buffs,
+The public message has three dropdowns: tab, raid, and encounter. Only the
+original caller can operate the picker and resulting log panel for 15 minutes;
+other members can view it or run their own `/raid-log`. Tabs are Damage, Party Buffs, Self Buffs,
 Shields (Given), and Tanked. Bracketed ON uses Bible's bracketed percentiles;
 Bracketed OFF selects Normalized. Detail is visible but disabled.
 

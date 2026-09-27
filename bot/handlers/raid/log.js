@@ -132,14 +132,14 @@ function createRaidLogCommand({
     const reject = code => interaction.reply({ content: t(`raid-log.errors.${code}`, state?.lang || "vi"), flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
     if (!state || state.expires <= now()) return reject("expired");
     if (state.guildId !== interaction.guildId || state.channelId !== interaction.channelId || state.messageId !== interaction.message?.id) return reject("invalid_selection");
-    if (state.stage === "picker" && state.ownerId !== interaction.user.id) return reject("picker_owner");
+    if (state.ownerId !== interaction.user.id) return reject("owner_only");
     if (state.busy) return reject("panel_busy");
     if (String(state.revision) !== revision) return reject("stale");
     const validAction = state.stage === "picker"
       ? Object.hasOwn(PICKER_ACTION_TYPES, action) && interaction[PICKER_ACTION_TYPES[action]]?.()
       : ["tab", "raid", "log", "bracketed"].includes(action) && !interaction.isModalSubmit?.();
     if (!validAction) return reject("invalid_selection");
-    // Picking a character is owner-only; the resulting log is shared. Claim before any await.
+    // The public message is controlled by its caller throughout. Claim before any await.
     state.busy = true;
     const started = now();
     try {

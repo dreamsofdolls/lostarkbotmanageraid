@@ -66,7 +66,7 @@ test("production loader queries only the invoking Discord ID and reuses that doc
   assert.equal(payload.components[1].toJSON().components[0].options.length, 2);
 });
 
-test("search opens an input modal immediately, then updates the same card into a shared full log", async () => {
+test("search opens an input modal immediately, then updates the same card into a public full log", async () => {
   const f = fixture(); await f.open(); f.events.length = 0;
   await f.click(f.owner("search"));
   assert.equal(f.events.length, 1);
@@ -77,7 +77,7 @@ test("search opens an input modal immediately, then updates the same card into a
   assert.deepEqual(f.events.slice(1, 3), ["ack-update", ["open", "Qiylyn"]]);
   assert.deepEqual(captures(f)[0][2], { view: "full", tab: "damage", bracketed: true, useCache: true });
   assert.equal(controls(f).length, 4);
-  await f.click(f.component("tab", "tanked"));
+  await f.click(f.owner("tab", "tanked"));
   assert.equal(captures(f).at(-1)[2].tab, "tanked");
 });
 
