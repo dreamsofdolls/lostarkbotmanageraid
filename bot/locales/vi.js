@@ -165,6 +165,18 @@ module.exports = {
     description: "**{players} người · {parties} party** · {view}\nBấm tiêu đề để mở log gốc.",
     latest: "Log public gần nhất của **{character}** (NA).",
     character: "Log public của **{character}** (NA).",
+    picker: {
+      title: "🧪 TEST · Tìm raid log",
+      description: "{owner}, chọn nhân vật để xem log public gần nhất trên Bible (NA).",
+      withRoster: "Tìm theo tên bất kỳ, hoặc chọn trong **{count} nhân vật** thuộc roster của cậu bên dưới. Mỗi lựa chọn ghi kèm tên roster.",
+      withoutRoster: "Cậu chưa có nhân vật trong roster đã đăng ký. Bấm **Tìm tên nhân vật** để bắt đầu.",
+      unavailable: "Chưa tải được roster của cậu. Cậu vẫn có thể tìm nhân vật theo tên.",
+      defaults: "Mở ở **Damage · Full tab · Bracketed ON**. Log private sẽ có thông báo lý do.",
+      search: "Tìm tên nhân vật",
+      name: "Tên nhân vật (NA)",
+      select: "Chọn nhân vật từ roster · {page}/{pages}",
+      footer: "Chỉ người gọi được chọn nhân vật • 15 phút • Bảng log sau đó cho cả kênh điều khiển",
+    },
     controls: {
       log: "Chọn log của raid · giờ VN",
       loadMore: "Tải thêm 25 log cũ hơn / raid khác…",
@@ -178,7 +190,9 @@ module.exports = {
     views: { team: "Bảng DMG của team", full: "Tab Damage đầy đủ" },
     errors: {
       invalid_url: "Dùng link log public dạng `https://lostark.bible/logs/<id>` nhé (không kèm query hoặc fragment).",
-      invalid_source: "Nhập `character:<tên nhân vật>` để lấy log public gần nhất nhé.",
+      invalid_source: "Nhập tên nhân vật để lấy log public gần nhất nhé.",
+      picker_owner: "Chỉ người gọi lệnh được chọn nhân vật trên thẻ này. Cậu gọi `/raid-log` để mở thẻ riêng nhé.",
+      roster_changed: "Nhân vật này không còn trong roster của cậu. Gọi lại `/raid-log` để tải danh sách mới, hoặc dùng Tìm tên nhân vật nhé.",
       invalid_character: "Nhập tên nhân vật (NA), tối đa 64 ký tự chữ hoặc số, không kèm link hay khoảng trắng nhé.",
       character_not_found: "Bible chưa tìm thấy nhân vật này ở NA. Cậu kiểm tra lại tên nhé.",
       character_mismatch: "Dữ liệu Bible trả về không khớp chính xác nhân vật cần tìm. Artist chưa chọn log để tránh gửi nhầm trận của char khác.",
@@ -1857,9 +1871,10 @@ module.exports = {
       "raid-log": {
         label: "/raid-log",
         short: "Thử nghiệm: xem log public, chuyển tab / raid và Bracketed",
-        example: "/raid-log character:Saturnxd",
+        example: "/raid-log",
         notes: [
-          "Nhập `character:<tên nhân vật>` để lấy log public gần nhất theo thời gian trận, trên region NA, không giới hạn tuần hiện tại.",
+          "Gọi lệnh không cần tham số để mở thẻ chọn nhân vật. Tìm tên qua nút mở hộp nhập, hoặc chọn nhân vật thuộc roster của chính người gọi. Chưa có nhân vật đã lưu thì chỉ hiện tìm tên.",
+          "Thẻ mở đầu công khai, chỉ người gọi được chọn nhân vật. Sau khi chọn, thẻ chuyển thành bảng log public gần nhất trên NA, không giới hạn tuần hiện tại; cả kênh có thể điều khiển.",
           "Trả thông tin trận và ảnh trực tiếp tại kênh gọi lệnh. Không cần đăng ký roster hoặc bật Auto-sync.",
           "Ba dropdown chọn tab → raid → log. Mọi người trong kênh đều có thể thao tác trong 15 phút. Chỉ hiện raid có log đã tải; chọn tải thêm trong dropdown raid để xem lịch sử cũ hơn (tối đa 250 log).",
           "Bracketed mặc định ON, dùng phân vị theo bracket; OFF chuyển sang Normalized như trên Bible. Detail hiện nhưng chưa bấm được. Log private sẽ khóa bảng và bỏ ảnh.",
@@ -1867,7 +1882,7 @@ module.exports = {
           "Mỗi lần lấy một log/gate, không tổng hợp cả raid. Giữ nguyên tên bị ẩn; không tự nhận diện roster, đánh dấu clear hay quét nền.",
           "Chỉ dùng log public trên lostark.bible. Đây là bản thử nghiệm; Bible đổi bố cục hoặc giới hạn truy cập có thể khiến lần chụp thất bại.",
         ],
-        optionDescriptions: { character: "Tên nhân vật (NA), lấy log public gần nhất, full tab và Bracketed bật" },
+        optionDescriptions: {},
       },
       "raid-auction": {
         label: "/raid-auction",

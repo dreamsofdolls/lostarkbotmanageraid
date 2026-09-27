@@ -1,46 +1,11 @@
 "use strict";
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { EmbedBuilder, AttachmentBuilder, MessageFlags } = require('discord.js');
-const { createRaidLogCommand } = require('../bot/handlers/raid/log');
+const { MessageFlags } = require('discord.js');
 const { RaidLogError } = require('../bot/services/raid-log/errors');
 const { createRaidInteractionRouter } = require('../bot/app/interaction-router-registry');
 
-function logEntry(id,raidKey='kazeros',timestamp=100) {
- return { id, url:`https://lostark.bible/logs/${id}`, character:'Qiylyn', raidKey, raidLabel:raidKey, gate:'G2', difficulty:'Hard', timestamp, duration:90000 };
-}
-function fixture({lang='vi',logs=[logEntry('new'),logEntry('old','kazeros',90),logEntry('serca','serca',80)],hasMore=false,sessionMs, maxSessions, now}={}) {
- const events=[]; let payload; let failure; let verifyFailure; let beforeVerify; let failEdit=false;
- const catalog={profile:{name:'Qiylyn'},logs,page:1,hasMore};
- const logCatalog={
-  open:async()=>{events.push('open');if(verifyFailure)throw verifyFailure;return catalog;},
-  verify:async()=>{events.push('verify');await beforeVerify?.();if(verifyFailure)throw verifyFailure;},
-  more:async current=>{events.push('more');return {...current,hasMore:false,logs:[...current.logs,logEntry('extra','horizon',70)]};},
- };
- const editReply=async next=>{events.push('edit');if(failEdit)throw new Error('Discord unavailable');payload={...payload,...next};return {id:'message'};};
- const handlers=createRaidLogCommand({
-  EmbedBuilder,AttachmentBuilder,MessageFlags,UI:{colors:{progress:0xfee75c}},log:{},logCatalog,sessionMs,maxSessions,now,
-  resolveStoredLanguage:async()=>lang,
-  captureRaidLog:async(url,options)=>{
-   events.push(['capture',url,options]);if(failure)throw failure;
-   return {url,title:'Kazeros G2',header:'Hard\nKazeros G2',summary:'Duration: 1:30 · Total DMG: 100 · Total DPS: 1',
-    playerCount:8,partyCount:2,filename:'capture.png',buffer:Buffer.from('png')};
-  },
- });
- const slash={user:{id:'author'},guildId:'guild',channelId:'channel',options:{getString:name=>{assert.equal(name,'character');return 'Qiylyn';}},deferReply:async()=>events.push('ack'),editReply};
- function component(action,value,overrides={}) {
-  const controls=payload.components.flatMap(row=>row.toJSON().components);
-  const control=controls.find(c=>c.custom_id.endsWith(`:${action}`));
-  const interaction={user:{id:'someone-else'},guildId:'guild',channelId:'channel',message:{id:'message'},customId:control.custom_id,values:value?[value]:undefined,
-   deferUpdate:async()=>{events.push('ack-update');interaction.deferred=true;},editReply,
-   reply:async reply=>{events.push(['reply',reply]);},followUp:async reply=>{events.push(['followUp',reply]);},...overrides};
-  return interaction;
- }
- return {events,handlers,slash,component,run:()=>handlers.handleRaidLogCommand(slash),click:interaction=>handlers.handleRaidLogComponent(interaction),
-  get payload(){return payload;},set failure(error){failure=error;},set verifyFailure(error){verifyFailure=error;},set beforeVerify(fn){beforeVerify=fn;},set failEdit(value){failEdit=value;}};
-}
-const captures=f=>f.events.filter(x=>Array.isArray(x)&&x[0]==='capture');
-const controls=f=>f.payload.components.map(row=>row.toJSON().components[0]);
+const { fixture, logEntry, captures, controls } = require("./helpers/raid-log-fixture");
 
 test('public panel has exactly three dropdowns then Bracketed and disabled Detail in every locale',async()=>{
  for(const lang of ['vi','en','jp']) {
@@ -98,7 +63,7 @@ test('load-more and menu pagination preserve the displayed image without recaptu
 
 test('private characters are blocked initially and changing to private revokes the existing panel before capture',async()=>{
  const initial=fixture();initial.verifyFailure=new RaidLogError('logs_private');await initial.run();
- assert.equal(captures(initial).length,0);assert.deepEqual(initial.payload.components,[]);assert.match(initial.payload.content,/Public Log/);
+ assert.equal(captures(initial).length,0);assert.equal(initial.payload.components.length,1);assert.match(initial.events.at(-1)[1].content,/Public Log/);
  const f=fixture();await f.run();f.verifyFailure=new RaidLogError('logs_private');
  const action=f.component('tab','tanked');await f.click(action);
  assert.equal(captures(f).length,1);assert.deepEqual(f.payload.attachments,[]);assert.deepEqual(f.payload.embeds,[]);

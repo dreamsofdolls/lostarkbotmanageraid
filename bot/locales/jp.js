@@ -154,6 +154,18 @@ module.exports = {
     description: "**{players} 人 · {parties} パーティー** · {view}\nタイトルから元のログを開けるよ。",
     latest: "**{character}** (NA) の最新公開ログ。",
     character: "**{character}** (NA) の公開ログ。",
+    picker: {
+      title: "🧪 TEST · レイドログ検索",
+      description: "{owner}、キャラクターを選んで Bible (NA) の最新公開ログを見よう。",
+      withRoster: "名前で検索するか、自分の保存済みロスターの **{count}人**から選んでね。各選択肢にロスター名を表示するよ。",
+      withoutRoster: "保存済みロスターにキャラクターがいないよ。**キャラクター名を検索**から始めてね。",
+      unavailable: "ロスターを読み込めなかったよ。名前での検索は使えるよ。",
+      defaults: "**Damage · タブ全体 · Bracketed ON** で開くよ。非公開ログは理由を表示するよ。",
+      search: "キャラクター名を検索",
+      name: "キャラクター名 (NA)",
+      select: "ロスターのキャラクターを選択 · {page}/{pages}",
+      footer: "選択できるのは実行者のみ • 15分間 • 選択後のログはチャンネル全員が操作可能",
+    },
     controls: {
       log: "レイドのログを選択 · ベトナム時間",
       loadMore: "古いログ25件 / 他のレイドを読み込む…",
@@ -167,7 +179,9 @@ module.exports = {
     views: { team: "チームの DMG 表", full: "Damage タブ全体" },
     errors: {
       invalid_url: "公開ログの URL `https://lostark.bible/logs/<id>` を使ってね (クエリやフラグメントは付けないでね)。",
-      invalid_source: "`character:<名前>` を入力して、最新の公開ログを取得してね。",
+      invalid_source: "キャラクター名を入力して、最新の公開ログを取得してね。",
+      picker_owner: "このカードのキャラクターを選べるのは実行者だけだよ。`/raid-log` で自分のカードを開いてね。",
+      roster_changed: "このキャラクターは保存済みロスターにいないよ。`/raid-log` で一覧を更新するか、名前で検索してね。",
       invalid_character: "NA のキャラクター名を64文字以内の文字・数字で入力してね。リンクや空白は含めないでね。",
       character_not_found: "Bible の NA でこのキャラクターが見つからなかったよ。名前を確認してね。",
       character_mismatch: "Bible のデータが指定したキャラクターと一致しないよ。他のキャラのログを送らないように選択を中止したよ。",
@@ -1836,9 +1850,10 @@ module.exports = {
       "raid-log": {
         label: "/raid-log",
         short: "実験版: 公開ログ・タブ・レイド・Bracketed を選択",
-        example: "/raid-log character:Saturnxd",
+        example: "/raid-log",
         notes: [
-          "`character:<名前>` で NA の戦闘時刻が最も新しい公開ログを取得するよ。今週に限定しないよ。",
+          "引数なしでキャラクター選択カードを開くよ。入力ダイアログで名前を検索するか、実行者自身の保存済みロスターから選んでね。保存済みキャラクターがいなければ名前検索だけ表示するよ。",
+          "最初のカードは公開だけど、選択できるのは実行者だけ。選択後は NA の最新公開ログに切り替わり、全員が操作できるよ。今週に限定しないよ。",
           "コマンドを実行したチャンネルに戦闘情報と画像を投稿するよ。ロスター登録や Auto-sync は不要。",
           "3つのメニューでタブ → レイド → ログを選択。チャンネルの全員が15分間操作できるよ。読み込んだログがあるレイドのみ表示。レイドメニューから古いログを追加できるよ (最大250件)。",
           "Bracketed は既定で ON、ブラケット別の順位を使うよ。OFF は Bible の Normalized。Detail は表示のみ。非公開ログは操作を無効化し画像を削除するよ。",
@@ -1846,7 +1861,7 @@ module.exports = {
           "1リンクは1ログ/ゲートで、レイド全体の集計ではないよ。匿名名はそのままで、ロスター照合、クリア更新、バックグラウンド監視は行わないよ。",
           "lostark.bible の公開ログのみ対応。実験版なので、レイアウト変更やアクセス制限で撮影できない場合があるよ。",
         ],
-        optionDescriptions: { character: "NA のキャラクター名。最新の公開ログ、タブ全体、Bracketed ON" },
+        optionDescriptions: {},
       },
       "raid-auction": {
         label: "/raid-auction",

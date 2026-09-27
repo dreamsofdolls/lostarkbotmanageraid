@@ -128,6 +128,7 @@ function createInteractionDeduper({
  * @property {Record<string, (interaction) => Promise<void>>} selectHandlers - String-select handlers, keyed by exact customId. Tried first.
  * @property {Array<{prefix: string, handle: (interaction) => Promise<void>}>} [selectRoutes] - Optional select handlers matched by customId prefix (first match wins). Used when the customId carries dynamic data (session IDs, etc.).
  * @property {Array<{prefix: string, handle: (interaction) => Promise<void>}>} buttonRoutes - Button handlers matched by customId prefix (first match wins).
+ * @property {Array<{prefix: string, handle: (interaction) => Promise<void>}>} [modalRoutes] - Modal submission handlers matched by customId prefix.
  * @property {string} [instanceIdentity] - secret-free runtime fingerprint for diagnostics
  * @property {{warn: Function, error: Function}} [log] - injectable logger
  */
@@ -144,6 +145,7 @@ function createInteractionRouter({
   selectHandlers,
   selectRoutes = [],
   buttonRoutes,
+  modalRoutes = [],
   instanceIdentity = buildRuntimeInstanceIdentity(),
   log = console,
 }) {
@@ -189,6 +191,12 @@ function createInteractionRouter({
           return;
         }
       }
+      return;
+    }
+
+    if (interaction.isModalSubmit?.()) {
+      const route = modalRoutes.find(entry => interaction.customId.startsWith(entry.prefix));
+      if (route) await route.handle(interaction);
       return;
     }
 

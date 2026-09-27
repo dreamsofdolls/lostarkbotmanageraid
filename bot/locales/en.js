@@ -152,6 +152,18 @@ module.exports = {
     description: "**{players} players · {parties} parties** · {view}\nOpen the title to view the original log.",
     latest: "Latest public log for **{character}** (NA).",
     character: "Public logs for **{character}** (NA).",
+    picker: {
+      title: "🧪 TEST · Find raid logs",
+      description: "{owner}, choose a character to view their latest public Bible log (NA).",
+      withRoster: "Search any name, or choose from **{count} characters** in your own saved rosters below. Each choice includes its roster name.",
+      withoutRoster: "You have no characters in your saved rosters yet. Select **Search character name** to begin.",
+      unavailable: "Your rosters could not be loaded. You can still search by character name.",
+      defaults: "Opens on **Damage · Full tab · Bracketed ON**. Private logs show an explanation.",
+      search: "Search character name",
+      name: "Character name (NA)",
+      select: "Choose a roster character · {page}/{pages}",
+      footer: "Only the caller can choose a character • 15 minutes • The resulting log is shared with the channel",
+    },
     controls: {
       log: "Select a log for this raid · VN time",
       loadMore: "Load 25 older logs / more raids…",
@@ -165,7 +177,9 @@ module.exports = {
     views: { team: "Team Damage tables", full: "Full Damage tab" },
     errors: {
       invalid_url: "Use a public log URL: `https://lostark.bible/logs/<id>` (no query or fragment).",
-      invalid_source: "Provide `character:<name>` to fetch the latest public log.",
+      invalid_source: "Enter a character name to fetch the latest public log.",
+      picker_owner: "Only the caller can choose a character on this card. Run `/raid-log` to open your own.",
+      roster_changed: "This character is no longer in your saved rosters. Run `/raid-log` for an updated list, or search by name.",
       invalid_character: "Enter an NA character name, up to 64 letters or digits, without a link or spaces.",
       character_not_found: "Bible could not find this character in NA. Please check the name.",
       character_mismatch: "Bible's data does not match the requested character. No log was selected to avoid sharing another character's encounter.",
@@ -1835,9 +1849,10 @@ module.exports = {
       "raid-log": {
         label: "/raid-log",
         short: "Experimental: browse public logs, tabs, raids and Bracketed",
-        example: "/raid-log character:Saturnxd",
+        example: "/raid-log",
         notes: [
-          "Use `character:<name>` for the latest public log by encounter time in NA, with no current-week restriction.",
+          "Run without options to open a character picker. Search by name using the input dialog, or choose a character from the caller's own saved rosters. Without saved characters, only name search appears.",
+          "The opening card is public, but only its caller can choose a character. It then becomes the latest public log panel in NA, without a current-week restriction; everyone in the channel can operate it.",
           "Posts encounter details and an image in the calling channel. No registered roster or Auto-sync opt-in is required.",
           "Three menus select tab → raid → log. Everyone in the channel can operate the panel for 15 minutes. Only raids in loaded logs appear; load older history from the raid menu (up to 250 logs).",
           "Bracketed defaults to ON and uses bracketed percentiles; OFF selects Normalized on Bible. Detail is visible but disabled. Private logs revoke the controls and image.",
@@ -1845,7 +1860,7 @@ module.exports = {
           "One link represents one log/gate, not the whole raid. Anonymized names stay unchanged; no roster matching, clear updates or background scanning.",
           "Only public lostark.bible logs are supported. Experimental: layout changes or access limits may prevent a capture.",
         ],
-        optionDescriptions: { character: "NA character name; latest public log, full tab and Bracketed ON" },
+        optionDescriptions: {},
       },
       "raid-auction": {
         label: "/raid-auction",

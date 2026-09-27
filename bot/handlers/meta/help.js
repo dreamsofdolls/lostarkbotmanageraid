@@ -73,7 +73,7 @@ const SECTION_META = {
   },
   "raid-log": {
     icon: "📸",
-    options: [{ name: "character", required: true }],
+    options: [],
   },
   "raid-schedule-preview": {
     icon: "📅",

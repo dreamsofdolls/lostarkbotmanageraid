@@ -65,6 +65,9 @@ function createRaidInteractionRouter({
       "raid-gold-earner": handlers.handleRaidGoldEarnerAutocomplete,
     },
     selectHandlers: {},
+    modalRoutes: [
+      { prefix: "raid-log:", handle: handlers.handleRaidLogComponent },
+    ],
     selectRoutes: [
       { prefix: "raid-log:", handle: handlers.handleRaidLogComponent },
       // The Local Sync roster picker on the standalone console / DM. The

@@ -39,13 +39,12 @@ test("browser requests cannot leave Bible or navigate away from the public log",
   assert.equal(isAllowedRequest("https://lostark.bible/login", true, URL), false);
 });
 
-test("command is a guild-only experiment with only a required character option", () => {
+test("command opens a guild-only experiment without slash options", () => {
   const data = createRaidLogCommandDefinition().toJSON();
   assert.equal(data.name, "raid-log");
   assert.equal(data.dm_permission, false);
   assert.match(data.description, /TEST/);
-  assert.deepEqual(data.options.map(option => option.name), ["character"]);
-  assert.equal(data.options[0].required, true);
+  assert.deepEqual(data.options, []);
 });
 
 function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, onScreenshot, onNavigate, closeError } = {}) {
@@ -321,14 +320,16 @@ test("real DOM inspection includes every party row for 4/8 players and rejects c
 
 function handlerFixture({ character = "Saturnxd", error, lookupError, lang = "vi", attachmentSizeLimit } = {}) {
   const calls = [];
+  let payload;
+  let modal;
   const interaction = {
-    user: { id: "caller" }, attachmentSizeLimit,
-    options: { getString: name => { assert.equal(name, "character"); return character; } },
+    user: { id: "caller" }, guildId: "guild", channelId: "channel", attachmentSizeLimit,
     deferReply: async options => calls.push(["defer", options]),
-    editReply: async payload => { calls.push(["edit", payload]); return { id: "message" }; },
+    editReply: async next => { payload = next; calls.push([next.files ? "edit" : "picker", next]); return { id: "message" }; },
   };
   const handler = createRaidLogCommand({
     EmbedBuilder, AttachmentBuilder, MessageFlags, UI: { colors: { progress: 0xfee75c } }, log: {},
+    loadCaller: async () => { calls.push(["roster"]); return null; },
     resolveStoredLanguage: async () => { calls.push(["language"]); return lang; },
     logCatalog: { open: async name => {
       calls.push(["lookup", name]);
@@ -343,18 +344,31 @@ function handlerFixture({ character = "Saturnxd", error, lookupError, lang = "vi
         playerCount: 8, partyCount: 2, filename: "log.png", buffer: Buffer.from("png") };
     },
   });
-  return { calls, interaction, run: () => handler.handleRaidLogCommand(interaction) };
+  return { calls, interaction, run: async () => {
+    await handler.handleRaidLogCommand(interaction);
+    const base = { ...interaction, message: { id: "message" },
+      reply: async reply => calls.push(["error", reply]), followUp: async reply => calls.push(["error", reply]) };
+    await handler.handleRaidLogComponent({ ...base,
+      customId: payload.components[0].toJSON().components[0].custom_id, isButton: () => true,
+      showModal: async value => { modal = value.toJSON(); },
+    });
+    const submit = { ...base, customId: modal.custom_id, isModalSubmit: () => true,
+      fields: { getTextInputValue: () => character },
+      deferUpdate: async () => { calls.push(["ack-update"]); submit.deferred = true; },
+    };
+    await handler.handleRaidLogComponent(submit);
+  } };
 }
 
 test("handler acknowledges first, attaches a public image with source link in all locales", async () => {
   for (const lang of ["vi", "en", "jp"]) {
     const fixture = handlerFixture({ lang });
     await fixture.run();
-    assert.deepEqual(fixture.calls.map(call => call[0]), ["defer", "language", "lookup", "capture", "edit"]);
+    assert.deepEqual(fixture.calls.map(call => call[0]), ["defer", "roster", "language", "picker", "ack-update", "lookup", "capture", "edit"]);
     assert.deepEqual(fixture.calls[0][1], {});
-    assert.equal(fixture.calls[3][2].view, "full");
-    assert.equal(fixture.calls[3][2].bracketed, true);
-    const payload = fixture.calls[4][1];
+    assert.equal(fixture.calls[6][2].view, "full");
+    assert.equal(fixture.calls[6][2].bracketed, true);
+    const payload = fixture.calls.at(-1)[1];
     const embed = payload.embeds[0].toJSON();
     assert.equal(embed.url, URL);
     assert.match(embed.title, /TEST/);
@@ -378,7 +392,7 @@ test("TEST summary preserves source duration and numbers without inventing missi
 test("handler keeps invalid names private, avoids capture and returns localized errors without attachments", async () => {
   const invalid = handlerFixture({ character: "https://localhost/" });
   await invalid.run();
-  assert.equal(invalid.calls[0][1].flags, MessageFlags.Ephemeral);
+  assert.equal(invalid.calls.at(-1)[1].flags, MessageFlags.Ephemeral);
   assert.ok(!invalid.calls.some(call => call[0] === "capture"));
   for (const error of [new RaidLogError("busy"), new RaidLogError("timeout"), new RaidLogError("browser_crashed"),
     Object.assign(new Error("HTTP 429"), { status: 429 }), new Error("SECRET INTERNAL PATH")]) {
@@ -387,7 +401,8 @@ test("handler keeps invalid names private, avoids capture and returns localized 
     const payload = fixture.calls.at(-1)[1];
     assert.ok(payload.content);
     assert.doesNotMatch(payload.content, /raid-log\.|SECRET INTERNAL PATH/);
-    assert.deepEqual(payload.files, []);
+    assert.equal(payload.flags, MessageFlags.Ephemeral);
+    assert.equal(payload.files, undefined);
   }
   const small = handlerFixture({ attachmentSizeLimit: 1 });
   await small.run();
@@ -398,10 +413,10 @@ test("character lookup defaults to latest log, acknowledges first and labels the
   for (const lang of ["vi", "en", "jp"]) {
     const fixture = handlerFixture({ character: "saturnxd", lang });
     await fixture.run();
-    assert.deepEqual(fixture.calls.map(call => call[0]), ["defer", "language", "lookup", "capture", "edit"]);
-    assert.equal(fixture.calls[2][1], "saturnxd");
-    assert.equal(fixture.calls[3][1], URL);
-    assert.equal(fixture.calls[3][2].view, "full");
+    assert.deepEqual(fixture.calls.map(call => call[0]), ["defer", "roster", "language", "picker", "ack-update", "lookup", "capture", "edit"]);
+    assert.equal(fixture.calls[5][1], "saturnxd");
+    assert.equal(fixture.calls[6][1], URL);
+    assert.equal(fixture.calls[6][2].view, "full");
     const embed = fixture.calls.at(-1)[1].embeds[0].toJSON();
     assert.match(embed.description, /Saturnxd/);
     assert.match(embed.description, /NA/);
@@ -413,8 +428,8 @@ test("missing/invalid names reject privately before lookup and private character
   for (const character of [null, "", " ", "Not A Name"]) {
     const fixture = handlerFixture({ character });
     await fixture.run();
-    assert.equal(fixture.calls[0][1].flags, MessageFlags.Ephemeral);
-    assert.deepEqual(fixture.calls.map(call => call[0]), ["defer", "language", "edit"]);
+    assert.equal(fixture.calls.at(-1)[1].flags, MessageFlags.Ephemeral);
+    assert.deepEqual(fixture.calls.map(call => call[0]), ["defer", "roster", "language", "picker", "ack-update", "error"]);
     assert.doesNotMatch(fixture.calls.at(-1)[1].content, /`(?:url|view):/);
   }
   for (const code of ["character_not_found", "character_mismatch", "logs_private", "no_logs"]) {

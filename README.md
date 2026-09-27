@@ -74,7 +74,15 @@ Raid Manager = Discord user IDs listed in `RAID_MANAGER_ID` (comma-separated). M
 
 ## Experimental public log capture
 
-`/raid-log character:<name>` finds the character's latest public
+`/raid-log` opens a public character picker without command options. Only the
+caller can choose a character: **Search character name** opens a text-input
+dialog, and a dropdown lists characters from that caller's own saved rosters
+with roster/class/item-level labels. The dropdown paginates when needed. Users
+with no saved characters see only name search. Shared or manager-accessible
+rosters belonging to other users are excluded. A roster selection is checked
+against the owner's current saved characters before lookup.
+
+Selecting a character replaces the opening card with their latest public
 log in NA by encounter timestamp, without a weekly reset filter. It resolves the
 character IDs and class from a single profile-page request through the existing
 Bible client, then reads the
@@ -82,9 +90,9 @@ newest logs page, and requires an exact character-name match (case-insensitive,
 with accents preserved). No registered roster is needed. Private logs, unknown
 characters, no logs and mismatched identities produce a notice instead of a capture.
 
-`character` is the only command option and is required. New panels open on the
-full Damage tab with **Bracketed ON**. Every tab capture includes the encounter
-header and all tables in the selected tab, including after changing raid or log.
+New log panels open on the full Damage tab with **Bracketed ON**. Every tab
+capture includes the encounter header and all tables in the selected tab,
+including after changing raid or log.
 The PNG appears in the calling channel, with a linked title. The card is marked
 **TEST** and shows encounter details, team size, duration, total damage and team
 DPS alongside the image. No roster registration or Auto-sync is required.

@@ -5,10 +5,16 @@ const { t, getUserLanguage } = require("../../services/i18n");
 const { parseRaidLogSource } = require("../../services/raid-log/source");
 const { RaidLogError, raidLogErrorCode } = require("../../services/raid-log/errors");
 const { buildSummaryFields, buildLogComponents, buildLogEmbed } = require("./log-view");
+const { rosterChoices, pickerOptions, buildLogPicker, buildLogSearchModal } = require("./log-picker");
+
+const PICKER_ACTION_TYPES = { search: "isButton", character: "isStringSelectMenu", submit: "isModalSubmit" };
 
 function createRaidLogCommand({
   EmbedBuilder, AttachmentBuilder, MessageFlags, UI, User, captureRaidLog, logCatalog,
-  resolveStoredLanguage = id => getUserLanguage(id, { UserModel: User }),
+  loadCaller = id => User.findOne({ discordId: id }).select(
+    "language accounts.accountName accounts.characters.name accounts.characters.class accounts.characters.itemLevel",
+  ).lean(),
+  resolveStoredLanguage = (id, userDoc) => getUserLanguage(id, { UserModel: User, userDoc }),
   sessionMs = 15 * 60_000, maxSessions = 64, now = Date.now, log = console,
 }) {
   const sessions = new Map();
@@ -43,28 +49,61 @@ function createRaidLogCommand({
   }
 
   async function handleRaidLogCommand(interaction) {
-    let source;
-    let invalid;
-    try { source = parseRaidLogSource({ character: interaction.options.getString("character") }); }
-    catch (error) { invalid = error; }
-    await interaction.deferReply(invalid ? { flags: MessageFlags.Ephemeral } : {});
-    const language = resolveStoredLanguage(interaction.user.id).catch(() => "vi");
+    await interaction.deferReply({});
+    let rosterUnavailable = false;
+    const userDoc = await loadCaller(interaction.user.id).catch(error => {
+      log.warn?.(`[raid-log] roster lookup failed: ${error.message}`);
+      rosterUnavailable = true;
+      return null;
+    });
+    const lang = await resolveStoredLanguage(interaction.user.id, userDoc).catch(() => "vi");
     let state;
     try {
-      if (invalid) throw invalid;
-      const catalog = await logCatalog.open(source.character);
       state = {
         id: randomBytes(8).toString("hex"), revision: 0, expires: now() + sessionMs, busy: true,
         guildId: interaction.guildId, channelId: interaction.channelId,
-        lang: await language, catalog, selected: catalog.logs[0], tab: "damage", bracketed: true, raidPage: 0, logPage: 0,
+        stage: "picker", ownerId: interaction.user.id, lang, page: 0,
+        choices: rosterChoices(userDoc?.accounts), rosterUnavailable,
       };
       remember(state);
-      const message = await render(interaction, state);
+      const message = await interaction.editReply(buildLogPicker(state, { EmbedBuilder, UI }));
       state.messageId = message.id;
     } catch (error) {
       if (state) sessions.delete(state.id);
-      await interaction.editReply({ content: errorText(error, await language), embeds: [], components: [], files: [], attachments: [], allowedMentions: { parse: [] } });
+      await interaction.editReply({ content: errorText(error, lang), embeds: [], components: [], files: [], attachments: [], allowedMentions: { parse: [] } });
     } finally { if (state) state.busy = false; }
+  }
+
+  async function selectCharacter(interaction, state, action) {
+    if (action === "search") return interaction.showModal(buildLogSearchModal(state));
+    await interaction.deferUpdate();
+    let name;
+    if (action === "submit") {
+      name = interaction.fields.getTextInputValue("character");
+    } else {
+      const value = interaction.values?.[0];
+      if (!pickerOptions(state).some(option => option.value === value)) throw new RaidLogError("invalid_selection");
+      if (value === "__prev" || value === "__next") {
+        const next = { ...state, page: state.page + (value === "__next" ? 1 : -1), revision: state.revision + 1 };
+        await interaction.editReply(buildLogPicker(next, { EmbedBuilder, UI }));
+        Object.assign(state, next);
+        return;
+      }
+      const choice = state.choices[Number(value)];
+      // Resolve against the owner's latest saved roster, never another member's
+      // shared/manager-accessible accounts or a stale array index.
+      const fresh = await loadCaller(state.ownerId);
+      if (!rosterChoices(fresh?.accounts).some(entry => entry.key === choice.key)) throw new RaidLogError("roster_changed");
+      name = choice.name;
+    }
+    const source = parseRaidLogSource({ character: name });
+    const catalog = await logCatalog.open(source.character);
+    const next = {
+      ...state, stage: "log", revision: state.revision + 1, expires: now() + sessionMs,
+      catalog, selected: catalog.logs[0], tab: "damage", bracketed: true, raidPage: 0, logPage: 0, choices: [],
+    };
+    await render(interaction, next);
+    Object.assign(state, next);
   }
 
   async function applySelection(state, action, value) {
@@ -92,14 +131,19 @@ function createRaidLogCommand({
     const state = sessions.get(id);
     const reject = code => interaction.reply({ content: t(`raid-log.errors.${code}`, state?.lang || "vi"), flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
     if (!state || state.expires <= now()) return reject("expired");
-    if (state.guildId !== interaction.guildId || state.channelId !== interaction.channelId || state.messageId !== interaction.message.id) return reject("invalid_selection");
+    if (state.guildId !== interaction.guildId || state.channelId !== interaction.channelId || state.messageId !== interaction.message?.id) return reject("invalid_selection");
+    if (state.stage === "picker" && state.ownerId !== interaction.user.id) return reject("picker_owner");
     if (state.busy) return reject("panel_busy");
     if (String(state.revision) !== revision) return reject("stale");
-    if (!["tab", "raid", "log", "bracketed"].includes(action)) return reject("invalid_selection");
-    // Everyone in this channel may operate this panel. Claim before any await.
+    const validAction = state.stage === "picker"
+      ? Object.hasOwn(PICKER_ACTION_TYPES, action) && interaction[PICKER_ACTION_TYPES[action]]?.()
+      : ["tab", "raid", "log", "bracketed"].includes(action) && !interaction.isModalSubmit?.();
+    if (!validAction) return reject("invalid_selection");
+    // Picking a character is owner-only; the resulting log is shared. Claim before any await.
     state.busy = true;
     const started = now();
     try {
+      if (state.stage === "picker") return await selectCharacter(interaction, state, action);
       await interaction.deferUpdate();
       await logCatalog.verify(state.catalog);
       const next = await applySelection(state, action, interaction.values?.[0]);
@@ -110,7 +154,7 @@ function createRaidLogCommand({
       log.info?.(`[raid-log] interaction action=${action} elapsedMs=${now() - started}`);
     } catch (error) {
       const code = raidLogErrorCode(error);
-      if (["logs_private", "no_logs", "character_mismatch"].includes(code)) {
+      if (state.stage === "log" && ["logs_private", "no_logs", "character_mismatch"].includes(code)) {
         sessions.delete(id);
         await interaction.editReply({ content: errorText(error, state.lang), embeds: [], attachments: [], files: [], components: buildLogComponents(state, true), allowedMentions: { parse: [] } });
       } else {
