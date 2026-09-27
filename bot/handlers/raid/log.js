@@ -5,7 +5,7 @@ const { t, getUserLanguage } = require("../../services/i18n");
 const { parseRaidLogSource } = require("../../services/raid-log/source");
 const { RaidLogError, raidLogErrorCode } = require("../../services/raid-log/errors");
 const { MAX_IMAGE_BYTES } = require("../../services/raid-log/capture");
-const { buildSummaryFields, buildLogComponents, buildLogEmbeds } = require("./log-view");
+const { buildLogComponents, buildLogEmbeds } = require("./log-view");
 const { tabsForPlayer } = require("../../services/raid-log/tabs");
 const { rosterChoices, pickerOptions, buildLogPicker, buildLogSearchModal } = require("./log-picker");
 
@@ -191,4 +191,4 @@ function createRaidLogCommand({
   return { handleRaidLogCommand, handleRaidLogComponent };
 }
 
-module.exports = { createRaidLogCommand, buildSummaryFields };
+module.exports = { createRaidLogCommand };
