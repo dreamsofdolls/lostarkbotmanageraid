@@ -138,7 +138,9 @@ badges, AP/Brand/Identity/T uptime and rCon, and lists characters whose logs are
 private. A menu opens any of the newest 25 in the log panel after checking that
 the character is still in the caller's roster. Results are kept for five minutes
 per caller; **🔄 Refresh** asks Bible again, and a gathering that passes 45 seconds
-shows what arrived in time.
+shows what arrived in time. Characters are asked two at a time, as Auto-sync does,
+and if Bible fails for every character the previous card comes back with a notice
+instead of an empty result.
 
 Every problem is answered with a notice card that only the clicker sees: what
 happened and what to do next. A capture that fails or times out links the original

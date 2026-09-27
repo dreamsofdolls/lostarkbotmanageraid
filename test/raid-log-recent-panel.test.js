@@ -93,6 +93,25 @@ test("a fight whose log is gone or whose character left the roster is refused wi
   assert.equal(captures(f).length, 0);
 });
 
+test("when Bible fails for the whole roster the previous card comes back with a notice", async () => {
+  const limited = Object.assign(new Error("HTTP 429"), { status: 429 });
+  const f = fixture({ accounts });
+  f.recentResult = limited;
+  await f.open();
+  await f.click(f.owner("recent_open"));
+  const [event, notice] = f.events.at(-1);
+  assert.equal(event, "followUp");
+  assert.match(noticeText(notice), /Bible đang giới hạn/);
+  assert.equal(f.payload.embeds[0].toJSON().title, "📜 Raid log");
+  assert.deepEqual(actionsOf(f.payload), [["search", "recent_open"], ["character"]]);
+  f.recentResult = RECENT;
+  await f.click(f.owner("recent_open"));
+  f.recentResult = limited;
+  await f.click(f.owner("recent_refresh"));
+  assert.match(f.payload.embeds[0].toJSON().title, /^🕘/);
+  assert.deepEqual(actionsOf(f.payload), [["picker", "recent_refresh"], ["recent"]]);
+});
+
 test("a roster with no public logs gets the empty card with the private list and no menu", async () => {
   const f = await openRecent({ entries: [], private: ["Altchar", "Qiylyn"], characters: 0, logs: 0, capped: false, timedOut: false });
   assert.equal(f.payload.embeds[0].toJSON().description,

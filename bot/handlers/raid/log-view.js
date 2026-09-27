@@ -65,8 +65,8 @@ function highlightFields(players, bracketed, lang) {
     field("👑", "mvpDamage", damage ? person(damage, damage.share === null ? "-" : `${damage.share}% D%`) : "`-`", lang),
     field("📈", "scoreDealer", dealerScore ? person(dealerScore, dealerScore.badge === null ? "-"
       : `${badgeText(dealerScore.badge)} · ${formatCompact(dealerScore.ndps)} nDPS`) : "`-`", lang),
-    field("🎯", "mvpCounter", counter ? person(counter, [t("raid-log.values.counter", lang, { count: counter.counters }),
-      ...(counter.tied ? [`${formatCompact(counter.stagger)} STAG`] : [])].join(" · "))
+    field("🎯", "mvpCounter", counter ? person(counter, counter.counters === null ? "-"
+      : [t("raid-log.values.counter", lang, { count: counter.counters }), ...(counter.tied ? [`${formatCompact(counter.stagger)} STAG`] : [])].join(" · "))
       : `${t("raid-log.values.noCounter", lang)}\n\`0\``, lang),
     field("✨", "mvpSupport", support ? person(support, support.share === null ? "-" : `${support.share}% bD%`) : noSupport, lang),
     field("🤝", "supportContribution", supportContribution

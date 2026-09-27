@@ -10,8 +10,12 @@ const NOW = Date.parse("2026-09-27T12:40:00Z");
 const bibleRow = (id, name, timestamp, extra = {}) => ({ id, name, boss: "Death Incarnate Kazeros", difficulty: "Hard",
   timestamp, duration: 447637, ...extra });
 
-function fixture({ accounts, rowsByName = {}, errors = {}, hang = [] } = {}) {
+// `hang` names never answer; `held` names answer when the test releases them.
+function fixture({ accounts, rowsByName = {}, errors = {}, hang = [], held = [] } = {}) {
   const calls = [];
+  const releases = {};
+  let inFlight = 0;
+  let maxInFlight = 0;
   const client = {
     fetchBibleCharacterProfileWithLimiter: async name => {
       calls.push(["profile", name]);
@@ -21,15 +25,21 @@ function fixture({ accounts, rowsByName = {}, errors = {}, hang = [] } = {}) {
       const name = args.serial.replace(/^sn-/, "");
       calls.push(["logs", name, args]);
       if (hang.includes(name)) return new Promise(() => {});
-      if (errors[name]) throw errors[name];
-      return rowsByName[name] || [];
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      try {
+        await new Promise(resolve => (held.includes(name) ? releases[name] = resolve : setImmediate(resolve)));
+        if (errors[name]) throw errors[name];
+        return rowsByName[name] || [];
+      } finally { inFlight -= 1; }
     },
   };
   let now = NOW;
   const warnings = [];
   const recent = createRecentRaidLogs({ client, now: () => now, deadlineMs: 50,
     log: { ...silentLog, warn: message => warnings.push(message) } });
-  return { calls, warnings, recent, accounts, advance: ms => { now += ms; } };
+  return { calls, warnings, recent, accounts, advance: ms => { now += ms; }, release: name => releases[name](),
+    get maxInFlight() { return maxInFlight; } };
 }
 
 const character = (name, extra = {}) => ({ name, class: "Aeromancer", itemLevel: 1760, bibleSerial: `sn-${name}`, bibleCid: 1, bibleRid: 2, ...extra });
@@ -66,6 +76,19 @@ test("characters Auto-sync saw private in the last day are skipped; Logs not ena
   assert.match(f.warnings[0], /recent logs skipped Hailua: socket hang up/);
 });
 
+test("when Bible fails for every character the load fails with its error, a 429 first, and nothing is kept", async () => {
+  const limited = Object.assign(new Error("HTTP 429"), { status: 429 });
+  const f = fixture({ errors: { Alpha: new Error("socket hang up"), Bravo: limited } });
+  const accounts = [{ accountName: "Main", characters: [character("Alpha", { itemLevel: 1780 }), character("Bravo", { itemLevel: 1770 })] }];
+  await assert.rejects(f.recent.load("owner", accounts), error => error === limited);
+  await assert.rejects(f.recent.load("owner", accounts), error => error === limited);
+  assert.equal(f.calls.length, 4);
+  const logsOff = Object.assign(new Error('Bible logs API returned HTTP 403 - {"error":"Logs not enabled"}'), { status: 403 });
+  const privateOnly = fixture({ errors: { Alpha: logsOff } });
+  const result = await privateOnly.recent.load("owner", [{ accountName: "Main", characters: [character("Alpha")] }]);
+  assert.deepEqual([result.entries, result.private], [[], ["Alpha"]]);
+});
+
 test("only the 24 highest item levels are read", async () => {
   const characters = Array.from({ length: 30 }, (_, i) => character(`Char${i}`, { itemLevel: 1700 + i }));
   const f = fixture();
@@ -82,6 +105,25 @@ test("a character that never answers does not hold the rest past the deadline", 
   const result = await f.recent.load("owner", [{ accountName: "Main", characters: [character("Slow"), character("Qiylyn")] }]);
   assert.equal(result.timedOut, true);
   assert.deepEqual(result.entries.map(entry => entry.id), ["q1"]);
+});
+
+test("Bible is asked about two characters at a time, as Auto-sync does", async () => {
+  const characters = Array.from({ length: 6 }, (_, i) => character(`Char${i}`));
+  const f = fixture();
+  await f.recent.load("owner", [{ accountName: "Main", characters }]);
+  assert.equal(f.calls.length, 6);
+  assert.equal(f.maxInFlight, 2);
+});
+
+test("once the deadline passes, a character still waiting its turn is never asked", async () => {
+  const f = fixture({ hang: ["Alpha"], held: ["Bravo"] });
+  const result = await f.recent.load("owner", [{ accountName: "Main", characters: [
+    character("Alpha", { itemLevel: 1780 }), character("Bravo", { itemLevel: 1770 }), character("Charlie", { itemLevel: 1760 }),
+  ] }]);
+  assert.equal(result.timedOut, true);
+  f.release("Bravo");
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(f.calls.map(call => call[1]), ["Alpha", "Bravo"]);
 });
 
 test("results stay for five minutes per owner; refresh reads again; at most 25 entries", async () => {

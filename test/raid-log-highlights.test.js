@@ -47,6 +47,11 @@ test("MVP Counter is one player: counters, then stagger, then D%, then table ord
   assert.equal(pickHighlights(TEAM.map(p => ({ ...p, counters: 0 })), true).counter, null);
 });
 
+test("without a CTR column MVP Counter still names someone by STAG, with no count", () => {
+  const h = pickHighlights(TEAM.map(p => ({ ...p, counters: null })), true);
+  assert.deepEqual([labelOf(h.counter), h.counter.counters, h.counter.tied], ["1751.66 Thinkingofyou", null, false]);
+});
+
 test("a log without supports leaves every support pick empty", () => {
   const dealers = TEAM.filter(p => p.className !== "Bard");
   const h = pickHighlights(dealers, true);

@@ -136,10 +136,17 @@ function createRaidLogCommand({
     const accounts = (await loadCaller(state.ownerId))?.accounts;
     // The loading card has no controls; busy stays held until the result replaces it.
     await interaction.editReply(buildRecentLoading(state, recentLogs.countCandidates(accounts), { EmbedBuilder, UI }));
-    const recent = await recentLogs.load(state.ownerId, accounts, { refresh });
-    const next = { ...state, stage: "recent", recent, revision: state.revision + 1, expires: now() + sessionMs };
-    await interaction.editReply(buildRecentView(next, { EmbedBuilder, UI }));
-    Object.assign(state, next);
+    try {
+      const recent = await recentLogs.load(state.ownerId, accounts, { refresh });
+      const next = { ...state, stage: "recent", recent, revision: state.revision + 1, expires: now() + sessionMs };
+      await interaction.editReply(buildRecentView(next, { EmbedBuilder, UI }));
+      Object.assign(state, next);
+    } catch (error) {
+      // Put the card the loading card replaced back, controls included, before the notice.
+      const previous = state.stage === "recent" ? buildRecentView(state, { EmbedBuilder, UI }) : buildLogPicker(state, { EmbedBuilder, UI });
+      await interaction.editReply(previous);
+      throw error;
+    }
   }
 
   async function handleRecent(interaction, state, action) {

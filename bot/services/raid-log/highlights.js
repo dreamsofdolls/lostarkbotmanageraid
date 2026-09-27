@@ -42,10 +42,13 @@ function pickHighlights(players = [], bracketed = true) {
   const dealers = players.filter(player => !isSupportClass(player.className));
   const supports = players.filter(player => isSupportClass(player.className));
   const mostCounters = Math.max(0, ...players.map(player => player.counters ?? 0));
+  // Counts of zero mean nobody countered; no counts at all mean Bible gave no
+  // CTR column, and the pick falls to the tie-breaks.
+  const counted = players.some(player => Number.isFinite(player.counters));
 
   const damage = pickBest(dealers, [p => p.damageShare, p => p.dps]);
   const dealerScore = pickBest(dealers, [p => badges(p)[0], p => p.ndps]);
-  const counter = mostCounters > 0 ? pickBest(players, [p => p.counters, p => p.stagger, p => p.damageShare]) : null;
+  const counter = mostCounters > 0 || !counted ? pickBest(players, [p => p.counters, p => p.stagger, p => p.damageShare]) : null;
   const support = pickBest(supports, [p => p.buffedShare, p => p.contribution]);
   // A support's badges read "rContribution, Buff Performance" (Bible's tooltip order).
   const supportContribution = pickBest(supports, [p => badges(p)[0], p => p.contribution]);
@@ -55,8 +58,8 @@ function pickHighlights(players = [], bracketed = true) {
     damage: damage && { player: damage, share: damage.damageShare ?? null },
     dealerScore: dealerScore && { player: dealerScore, badge: badges(dealerScore)[0] ?? null, ndps: dealerScore.ndps ?? null },
     counter: counter && {
-      player: counter, counters: counter.counters, stagger: counter.stagger ?? null,
-      tied: players.filter(player => player.counters === mostCounters).length > 1,
+      player: counter, counters: counter.counters ?? null, stagger: counter.stagger ?? null,
+      tied: counted && players.filter(player => player.counters === mostCounters).length > 1,
     },
     support: support && { player: support, share: support.buffedShare ?? null },
     supportContribution: supportContribution && {

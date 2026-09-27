@@ -52,7 +52,11 @@ function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry
     logCatalog, sessionMs, maxSessions, now,
     recentLogs: {
       countCandidates: accounts => accounts.flatMap(account => account.characters).length,
-      load: async (ownerId, accounts, options) => { events.push(["recent", ownerId, options]); return recentResult; },
+      load: async (ownerId, accounts, options) => {
+        events.push(["recent", ownerId, options]);
+        if (recentResult instanceof Error) throw recentResult;
+        return recentResult;
+      },
     },
     loadCaller: async id => { events.push(["load", id]); if (loadFailure) throw loadFailure; return userDoc; },
     resolveStoredLanguage: async (id, doc) => { assert.equal(doc, userDoc); return lang; },

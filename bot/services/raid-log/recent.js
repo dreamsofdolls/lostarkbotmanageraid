@@ -11,14 +11,19 @@
 
 const { createBibleClient } = require("../auto-manage/bible/client");
 const { isPublicLogDisabledError } = require("../auto-manage/bible/error-kinds");
+const { mapWithConcurrency } = require("../auto-manage/runtime/support/helpers");
 const { isSupportClass } = require("../../models/Class");
 const { getCharacterName, getCharacterClass } = require("../../utils/raid/common/shared");
 const { normalizeCatalogLogs } = require("./catalog");
+const { raidLogErrorCode } = require("./errors");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_RECENT_CHARACTERS = 24;
 // One select menu holds at most 25 options.
 const MAX_ENTRIES = 25;
+// Two characters at a time, as Auto-sync reads Bible, so other Bible callers
+// keep their place in the shared limiter's queue.
+const CONCURRENCY = 2;
 
 /**
  * @param {{ bibleLimiter?: object, client?: object, now?: () => number, ttlMs?: number, deadlineMs?: number, log?: object }} deps
@@ -53,6 +58,7 @@ function createRecentRaidLogs({
    * @param {object[]} accounts the owner's saved accounts, read fresh
    * @param {{ refresh?: boolean }} [options]
    * @returns {Promise<{ entries: object[], private: string[], characters: number, logs: number, capped: boolean, timedOut: boolean }>}
+   *   rejects with Bible's error, a rate limit first, when no character could be read and some failed
    */
   async function load(ownerId, accounts, { refresh = false } = {}) {
     const cached = cache.get(ownerId);
@@ -60,8 +66,12 @@ function createRecentRaidLogs({
     const { chosen, capped } = candidatesOf(accounts);
     const privateNames = [];
     const gathered = [];
+    const failures = [];
     let characters = 0;
-    const work = Promise.all(chosen.map(async character => {
+    let stopped = false;
+    const work = mapWithConcurrency(chosen, CONCURRENCY, async character => {
+      // Characters still waiting their turn are skipped once the card is built.
+      if (stopped) return;
       const name = String(getCharacterName(character)).trim();
       const disabledAt = character.publicLogDisabledAt ? new Date(character.publicLogDisabledAt).getTime() : 0;
       if (character.publicLogDisabled && now() - disabledAt < DAY_MS) {
@@ -72,16 +82,26 @@ function createRecentRaidLogs({
         gathered.push(...await logsOf(character));
         characters += 1;
       } catch (error) {
-        if (isPublicLogDisabledError(error)) privateNames.push(name);
-        else log.warn(`[raid-log] recent logs skipped ${name}: ${error.message}`);
+        if (isPublicLogDisabledError(error)) {
+          privateNames.push(name);
+        } else {
+          failures.push(error);
+          log.warn(`[raid-log] recent logs skipped ${name}: ${error.message}`);
+        }
       }
-    }));
+    });
     let timer;
     const timedOut = await Promise.race([
       work.then(() => false),
       new Promise(resolve => { timer = setTimeout(() => resolve(true), deadlineMs); }),
     ]);
+    stopped = true;
     clearTimeout(timer);
+    // Nothing read while Bible failed says nothing about the roster; the error
+    // becomes the notice card and is not cached.
+    if (!characters && failures.length) {
+      throw failures.find(error => raidLogErrorCode(error) === "rate_limited") || failures[0];
+    }
     const entries = [...gathered].sort((a, b) => b.timestamp - a.timestamp);
     const value = {
       entries: entries.slice(0, MAX_ENTRIES), private: [...privateNames].sort((a, b) => a.localeCompare(b)),

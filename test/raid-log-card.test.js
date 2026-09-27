@@ -67,6 +67,13 @@ test("a log without supports or counters says so instead of naming someone", asy
   assert.deepEqual(values.slice(3, 6), Array(3).fill("Không có support\n`-`"));
 });
 
+test("a log whose counters Bible did not give names the STAG leader with - rather than claiming nobody countered", async () => {
+  const f = fixture({ logs: KAZEROS, transformCapture: result => ({ ...result,
+    players: result.players.map(player => ({ ...player, counters: null })) }) });
+  await f.run();
+  assert.equal(card(f).fields[2].value, "**Slayer #1**\n`-`");
+});
+
 test("a support whose figures Bible did not give keeps the name and shows -", async () => {
   const f = fixture({ logs: KAZEROS, transformCapture: result => ({ ...result,
     players: result.players.map(player => ({ ...player, buffedShare: null })) }) });
