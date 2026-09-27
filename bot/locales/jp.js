@@ -150,6 +150,32 @@ module.exports = {
     unchangedDescription: "もう **{flag} {label}** を使ってますよ～♪",
     footer: "いつでも /raid-language で変えられますわ♪",
   },
+  "raid-log": {
+    description: "**{players} 人 · {parties} パーティー** · {view}\nタイトルから元のログを開けるよ。",
+    latest: "**{character}** (NA) の最新公開ログ。",
+    details: "戦闘情報",
+    fields: { duration: "⏱ 戦闘時間", totalDamage: "⚔ 合計 DMG", totalDps: "📊 チーム DPS" },
+    footer: "TEST • 1ログ/ゲート • Bible の匿名表示を維持",
+    views: { team: "チームの DMG 表", full: "Damage タブ全体" },
+    errors: {
+      invalid_url: "公開ログの URL `https://lostark.bible/logs/<id>` を使ってね (クエリやフラグメントは付けないでね)。",
+      invalid_source: "最新ログなら `character:<名前>`、指定のログなら `url:<リンク>`。どちらか一方だけ入力してね。",
+      invalid_character: "NA のキャラクター名を64文字以内の文字・数字で入力してね。リンクや空白は含めないでね。",
+      character_not_found: "Bible の NA でこのキャラクターが見つからなかったよ。名前を確認してね。",
+      character_mismatch: "Bible のデータが指定したキャラクターと一致しないよ。他のキャラのログを送らないように選択を中止したよ。",
+      logs_private: "このキャラクターは Bible の Public Log が無効だよ。名前で検索するには Public Log を有効にしてね。",
+      no_logs: "このキャラクターには撮影できる公開ログがまだないよ。",
+      invalid_view: "`view:team` または `view:full` を選んでね。",
+      busy: "別のログを撮影中だよ。少し待ってから試してね。",
+      browser_unavailable: "実験版の撮影ブラウザーが使えないよ。管理者に Playwright/Chromium の確認をお願いしてね。",
+      unavailable: "このログの Damage 表を開けなかったよ。ログが存在しない、非公開、または Bible がアクセスを制限している可能性があるので、元のリンクを確認してね。",
+      incomplete: "Damage 表や画像の読み込みが不完全か、Bible のレイアウトが変わったみたい。欠けた画像を送らないように中止したよ。あとでもう一度試してね。",
+      too_large: "画像が添付サイズの上限を超えたよ。`view:team` を試すか、元のログを開いてね。",
+      timeout: "Bible の読み込みに時間がかかったので撮影を中止したよ。あとでもう一度試してね。",
+      rate_limited: "Bible がリクエストを制限中 (HTTP 429) だよ。アクセスを一時停止しているので、数分後に試してね。",
+      failed: "ログを撮影できなかったよ。あとでもう一度試すか、Bible のリンクを確認してね。",
+    },
+  },
   "raid-auction": {
     notice: {
       invalidValueTitle: "{iconWarn} 無効な値ですわ",
@@ -1793,6 +1819,19 @@ module.exports = {
         optionDescriptions: {
           roster: "設定するロスター (オートコンプリート)",
         },
+      },
+      "raid-log": {
+        label: "/raid-log",
+        short: "実験版: 公開ログの Damage を撮影",
+        example: "/raid-log character:Saturnxd",
+        notes: [
+          "`character:<名前>` で NA の戦闘時刻が最も新しい公開ログを取得するよ。今週に限定しないよ。特定のログなら `url:<リンク>` を使ってね。どちらか一方だけ指定してね。",
+          "コマンドを実行したチャンネルに戦闘情報と画像を投稿するよ。ロスター登録や Auto-sync は不要。",
+          "既定は全パーティーの DMG 表。`view:full` なら戦闘情報と Damage タブの貢献集計表も含めるよ。",
+          "1リンクは1ログ/ゲートで、レイド全体の集計ではないよ。匿名名はそのままで、ロスター照合、クリア更新、バックグラウンド監視は行わないよ。",
+          "lostark.bible の公開ログのみ対応。実験版なので、レイアウト変更やアクセス制限で撮影できない場合があるよ。",
+        ],
+        optionDescriptions: { character: "NA のキャラクター名。最新の公開ログを取得", url: "character の代わりに特定ログの URL を指定", view: "team (既定) または full" },
       },
       "raid-auction": {
         label: "/raid-auction",

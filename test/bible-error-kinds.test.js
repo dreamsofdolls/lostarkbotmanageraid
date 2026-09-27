@@ -72,6 +72,16 @@ test("a not-found name that reads like a rate limit stays notFound", async () =>
   assertKind(error, BIBLE_ERROR_KIND.notFound);
 });
 
+test("character profile reads class from the requested header, not another roster member", async () => {
+  const html = '<title>Sáturn (NA) | lostark.bible</title><script>data:{header:{id:123,sn:"serial",rid:456,class:"blade"},redirectedFrom:null},roster:[{name:"Other",class:"bard"}]</script>';
+  const profile = await clientAnswering(200, html).fetchBibleCharacterProfileWithLimiter("Sáturn");
+  assert.deepEqual(profile, { cid: 123, sn: "serial", rid: 456, name: "Sáturn", className: "Deathblade" });
+  const brokenHeader = html.replace('class:"blade"', 'missingClass:"blade"');
+  await assert.rejects(clientAnswering(200, brokenHeader).fetchBibleCharacterProfileWithLimiter("Sáturn"), /Could not parse bible profile/);
+  const unknown = await captureRejection(clientAnswering(200, NOT_FOUND_PAGE).fetchBibleCharacterProfileWithLimiter("Unknown"));
+  assertKind(unknown, BIBLE_ERROR_KIND.notFound);
+});
+
 test("a Bible 429 and the limiter's backoff are rateLimit", async () => {
   const limiter = new BibleRequestLimiter(1, { nowMs: () => 0, log: { warn: () => {} } });
   const first = await captureRejection(limiter.run(async () => {

@@ -148,6 +148,32 @@ module.exports = {
     unchangedDescription: "You're already using **{flag} {label}**.",
     footer: "Run /raid-language any time to switch back",
   },
+  "raid-log": {
+    description: "**{players} players · {parties} parties** · {view}\nOpen the title to view the original log.",
+    latest: "Latest public log for **{character}** (NA).",
+    details: "Encounter details",
+    fields: { duration: "⏱ Duration", totalDamage: "⚔ Total DMG", totalDps: "📊 Team DPS" },
+    footer: "TEST • One log/gate • Bible's anonymized names preserved",
+    views: { team: "Team Damage tables", full: "Full Damage tab" },
+    errors: {
+      invalid_url: "Use a public log URL: `https://lostark.bible/logs/<id>` (no query or fragment).",
+      invalid_source: "Provide exactly one: `character:<name>` for the latest log, or `url:<log link>` for a specific encounter.",
+      invalid_character: "Enter an NA character name, up to 64 letters or digits, without a link or spaces.",
+      character_not_found: "Bible could not find this character in NA. Please check the name.",
+      character_mismatch: "Bible's data does not match the requested character. No log was selected to avoid sharing another character's encounter.",
+      logs_private: "This character has not enabled Public Log on Bible. Enable it before looking up logs by name.",
+      no_logs: "This character has no public logs on Bible to capture yet.",
+      invalid_view: "Choose `view:team` or `view:full`.",
+      busy: "Artist is capturing another log. Please try again shortly.",
+      browser_unavailable: "The experimental capture browser is unavailable. Ask the operator to check Playwright/Chromium.",
+      unavailable: "Cannot open this log's Damage tables. The log may be missing, no longer public, or Bible may be blocking the request. Please check the original link.",
+      incomplete: "Damage tables or image assets are incomplete, or Bible's layout has changed. No image was sent to avoid missing or clipped data. Please try again later.",
+      too_large: "The image exceeds the attachment limit. Try `view:team` or open the original log.",
+      timeout: "Bible took too long to load, so this capture was stopped. Please try again later.",
+      rate_limited: "Bible is limiting requests (HTTP 429). Access is temporarily paused; please try again in a few minutes.",
+      failed: "Could not capture this log. Please try again later or check the link on Bible.",
+    },
+  },
   "raid-auction": {
     notice: {
       invalidValueTitle: "{iconWarn} Invalid value",
@@ -1792,6 +1818,19 @@ module.exports = {
         optionDescriptions: {
           roster: "Roster (account) to configure (autocomplete)",
         },
+      },
+      "raid-log": {
+        label: "/raid-log",
+        short: "Experimental: capture Damage from a public log",
+        example: "/raid-log character:Saturnxd",
+        notes: [
+          "Use `character:<name>` for the latest public log by encounter time in NA, with no current-week restriction. Alternatively, use `url:<link>` to select a specific log; provide exactly one of the two.",
+          "Posts encounter details and an image in the calling channel. No registered roster or Auto-sync opt-in is required.",
+          "Defaults to all party Damage tables; `view:full` includes encounter information and the Damage tab's contribution summary tables.",
+          "One link represents one log/gate, not the whole raid. Anonymized names stay unchanged; no roster matching, clear updates or background scanning.",
+          "Only public lostark.bible logs are supported. Experimental: layout changes or access limits may prevent a capture.",
+        ],
+        optionDescriptions: { character: "NA character name; defaults to the latest public log", url: "Specific log URL, instead of character", view: "team (default) or full" },
       },
       "raid-auction": {
         label: "/raid-auction",

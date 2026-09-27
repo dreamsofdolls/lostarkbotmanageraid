@@ -2,6 +2,7 @@
 
 const { createBibleCharacterNotFoundError } = require("./error-kinds");
 const { createBibleHttpError } = require("./rate-limit");
+const { getClassName } = require("../../../models/Class");
 
 const BIBLE_REGION = "NA";
 const BIBLE_USER_AGENT = "Mozilla/5.0 (compatible; LostArkRaidManageBot/1.0)";
@@ -22,7 +23,7 @@ function createRequestSignal() {
  * data. These IDs are required to call the logs API but only need to be
  * fetched once per character - caller caches them on the character doc.
  */
-async function fetchBibleCharacterMeta(charName, { fetchImpl = defaultFetch } = {}) {
+async function fetchBibleCharacterPage(charName, { fetchImpl = defaultFetch } = {}) {
   const url = `https://lostark.bible/character/${BIBLE_REGION}/${encodeURIComponent(charName)}/roster`;
   const res = await fetchImpl(url, {
     headers: {
@@ -48,7 +49,25 @@ async function fetchBibleCharacterMeta(charName, { fetchImpl = defaultFetch } = 
     if (html.includes("header:void 0")) throw createBibleCharacterNotFoundError(charName);
     throw new Error(`Could not parse bible metadata for "${charName}" (page shape changed?)`);
   }
-  return { cid: Number(match[1]), sn: match[2], rid: Number(match[3]) };
+  return { html, meta: { cid: Number(match[1]), sn: match[2], rid: Number(match[3]) } };
+}
+
+async function fetchBibleCharacterMeta(charName, options) {
+  return (await fetchBibleCharacterPage(charName, options)).meta;
+}
+
+// The same page contains both identity and class. /raid-log does not need to
+// fetch it again or parse every roster card to resolve one character.
+async function fetchBibleCharacterProfile(charName, options) {
+  const { html, meta } = await fetchBibleCharacterPage(charName, options);
+  const name = html.match(/<title>([^<]+) \(NA\) \| lostark\.bible<\/title>/)?.[1];
+  const headerStart = html.indexOf("header:{id:");
+  const headerEnd = html.indexOf("redirectedFrom:", headerStart);
+  const classId = headerEnd > headerStart
+    ? html.slice(headerStart, headerEnd).match(/\bclass:"([^"]+)"/)?.[1]
+    : null;
+  if (!name || !classId) throw new Error(`Could not parse bible profile for "${charName}" (page shape changed?)`);
+  return { ...meta, name, className: getClassName(classId) };
 }
 
 /**
@@ -129,6 +148,10 @@ function createBibleClient({ bibleLimiter, fetchImpl = defaultFetch }) {
     return bibleLimiter.run(() => fetchBibleCharacterMeta(charName, { fetchImpl }));
   }
 
+  function fetchBibleCharacterProfileWithLimiter(charName) {
+    return bibleLimiter.run(() => fetchBibleCharacterProfile(charName, { fetchImpl }));
+  }
+
   /**
    * Paginate Bible's logs API until an entry is older than `weekResetStart`,
    * a page is empty, or `maxPages` is reached. Bible returns
@@ -163,6 +186,7 @@ function createBibleClient({ bibleLimiter, fetchImpl = defaultFetch }) {
 
   return {
     fetchBibleCharacterMetaWithLimiter,
+    fetchBibleCharacterProfileWithLimiter,
     fetchBibleLogsSinceWeekReset,
     fetchBibleLogsWithLimiter,
   };

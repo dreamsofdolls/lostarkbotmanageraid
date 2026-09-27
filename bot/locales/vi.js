@@ -161,6 +161,32 @@ module.exports = {
     unchangedDescription: "Cậu vẫn đang dùng **{flag} {label}** mà~",
     footer: "/raid-language để đổi lại bất cứ lúc nào",
   },
+  "raid-log": {
+    description: "**{players} người · {parties} party** · {view}\nBấm tiêu đề để mở log gốc.",
+    latest: "Log public gần nhất của **{character}** (NA).",
+    details: "Thông tin trận",
+    fields: { duration: "⏱ Thời lượng", totalDamage: "⚔ Tổng DMG", totalDps: "📊 DPS đội" },
+    footer: "TEST • Một log/gate • Giữ nguyên tên ẩn trên Bible",
+    views: { team: "Bảng DMG của team", full: "Tab Damage đầy đủ" },
+    errors: {
+      invalid_url: "Dùng link log public dạng `https://lostark.bible/logs/<id>` nhé (không kèm query hoặc fragment).",
+      invalid_source: "Nhập đúng một trong hai: `character:<tên nhân vật>` để lấy log gần nhất, hoặc `url:<link log>` để chọn một trận cụ thể nhé.",
+      invalid_character: "Nhập tên nhân vật (NA), tối đa 64 ký tự chữ hoặc số, không kèm link hay khoảng trắng nhé.",
+      character_not_found: "Bible chưa tìm thấy nhân vật này ở NA. Cậu kiểm tra lại tên nhé.",
+      character_mismatch: "Dữ liệu Bible trả về không khớp chính xác nhân vật cần tìm. Artist chưa chọn log để tránh gửi nhầm trận của char khác.",
+      logs_private: "Nhân vật này chưa bật Public Log trên Bible. Cần bật Public Log thì Artist mới lấy log theo tên được nhé.",
+      no_logs: "Nhân vật này chưa có log public trên Bible để chụp.",
+      invalid_view: "Chọn `view:team` hoặc `view:full` nhé.",
+      busy: "Artist đang chụp một log khác. Cậu thử lại sau một chút nhé.",
+      browser_unavailable: "Chức năng thử nghiệm chưa có trình duyệt chụp ảnh sẵn sàng. Nhờ người vận hành kiểm tra Playwright/Chromium nhé.",
+      unavailable: "Không mở được bảng Damage của log này. Log có thể không tồn tại, không còn public, hoặc Bible đang chặn yêu cầu. Cậu kiểm tra link gốc nhé.",
+      incomplete: "Bảng Damage hoặc tài nguyên ảnh tải chưa đầy đủ, hoặc bố cục Bible đã đổi. Artist chưa gửi ảnh để tránh bị cắt/mất dữ liệu; cậu thử lại sau nhé.",
+      too_large: "Ảnh vượt giới hạn đính kèm. Cậu thử `view:team` hoặc mở log gốc nhé.",
+      timeout: "Bible tải quá lâu nên lần chụp này đã dừng. Cậu thử lại sau nhé.",
+      rate_limited: "Bible đang giới hạn yêu cầu (HTTP 429). Artist đã tạm ngưng truy cập; cậu thử lại sau vài phút nhé.",
+      failed: "Chưa chụp được log ở lần thử này. Cậu thử lại sau hoặc kiểm tra link trên Bible nhé.",
+    },
+  },
   "raid-auction": {
     notice: {
       invalidValueTitle: "{iconWarn} Giá trị không hợp lệ",
@@ -1814,6 +1840,19 @@ module.exports = {
         optionDescriptions: {
           roster: "Roster cần config (autocomplete)",
         },
+      },
+      "raid-log": {
+        label: "/raid-log",
+        short: "Thử nghiệm: lấy ảnh Damage từ log public",
+        example: "/raid-log character:Saturnxd",
+        notes: [
+          "Nhập `character:<tên nhân vật>` để lấy log public gần nhất theo thời gian trận, trên region NA, không giới hạn tuần hiện tại. Hoặc nhập `url:<link>` để chọn log cụ thể; chỉ dùng một trong hai.",
+          "Trả thông tin trận và ảnh trực tiếp tại kênh gọi lệnh. Không cần đăng ký roster hoặc bật Auto-sync.",
+          "Mặc định chụp bảng DMG tất cả party; `view:full` thêm thông tin trận và các bảng tổng hợp đóng góp trong tab Damage.",
+          "Mỗi lần lấy một log/gate, không tổng hợp cả raid. Giữ nguyên tên bị ẩn; không tự nhận diện roster, đánh dấu clear hay quét nền.",
+          "Chỉ dùng log public trên lostark.bible. Đây là bản thử nghiệm; Bible đổi bố cục hoặc giới hạn truy cập có thể khiến lần chụp thất bại.",
+        ],
+        optionDescriptions: { character: "Tên nhân vật (NA), mặc định lấy log public gần nhất", url: "Link log cụ thể, dùng thay cho character", view: "team (mặc định) hoặc full" },
       },
       "raid-auction": {
         label: "/raid-auction",

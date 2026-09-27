@@ -72,6 +72,58 @@ bound to the original owner, so a revoked grant cannot continue a pending retry.
 
 Raid Manager = Discord user IDs listed in `RAID_MANAGER_ID` (comma-separated). Manager perks: 15s auto-manage sync cooldown (vs 10m), `👑` header icon on their rosters, and exclusive access to `/raid-check`.
 
+## Experimental public log capture
+
+`/raid-log character:<name> [view:team|full]` finds the character's latest public
+log in NA by encounter timestamp, without a weekly reset filter. It resolves the
+character IDs and class from a single profile-page request through the existing
+Bible client, then reads the
+newest logs page, and requires an exact character-name match (case-insensitive,
+with accents preserved). No registered roster is needed. Private logs, unknown
+characters, no logs and mismatched identities produce a notice instead of a capture.
+
+Alternatively, `/raid-log url:https://lostark.bible/logs/<id> [view:team|full]`
+selects a specific log. Provide exactly one of `character` or `url`. Both post the original
+Damage tab as a PNG in the calling channel, with encounter details and a linked
+title. The card is marked **TEST** and shows encounter details, team size,
+duration, total damage and team DPS alongside the image. `team` (default) includes all party Damage tables; `full` also includes the
+header and contribution summary tables. No roster registration or Auto-sync is required.
+This is one log/gate, not a whole-raid aggregate, and anonymized names are kept
+as shown on Bible. It does not update raid progress or scan for logs automatically.
+
+For a local experiment without Discord or MongoDB:
+
+```powershell
+npm ci
+npx playwright install --no-shell chromium
+npm run preview:raid-log -- --character Saturnxd
+npm run preview:raid-log -- https://lostark.bible/logs/S9NbBTM team
+npm run preview:raid-log -- https://lostark.bible/logs/MsBBW1A full
+```
+
+The shared capture service writes PNG + JSON evidence to `.agent/raid-log-preview/`
+only when invoked through this preview script. The Discord handler keeps the PNG
+in memory and attaches it to its reply. Register the command through the existing
+`deploy:commands` workflow and restart the bot when ready to test in Discord; the
+preview command itself never registers commands or sends messages.
+
+Playwright is pinned in the lockfile. Docker installs Chromium and
+its system dependencies at build time; other Linux installations need
+`npx playwright install --with-deps --no-shell chromium`. Capture uses Chromium's
+new headless mode (`channel: "chromium"`). See the official
+[Playwright browser setup](https://playwright.dev/docs/browsers#chromium-new-headless-mode).
+The bot needs Embed Links and Attach Files permissions in the target channel.
+
+Only HTTPS public log URLs on `lostark.bible` are accepted, without query strings
+or fragments. Captures use an isolated unsigned-in browser, allow only same-origin
+requests plus image assets from `cdn.ags.lol`, and close it after success or failure.
+One capture runs per process; it
+shares Bible's existing request limiter/backoff and has a 60-second browser budget
+after a limiter slot is available. Captures over 8 MiB, missing assets, clipped
+tables and inaccessible logs are reported as errors. This experiment depends on
+Bible's current layout and access policy; local success does not establish Railway
+resource usage, Linux rendering or Discord delivery.
+
 ## Text-monitor format
 
 Post into the channel registered via `/raid-channel`:

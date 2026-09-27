@@ -30,6 +30,7 @@ const RAID_COMMAND_NAMES = Object.freeze([
   "raid-language",
   "raid-bg",
   "raid-auction",
+  "raid-log",
   "raid-schedule-preview",
 ]);
 

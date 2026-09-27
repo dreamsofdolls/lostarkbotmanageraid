@@ -28,6 +28,7 @@ const SECTION_ORDER = [
   "raid-status",
   "raid-gold-earner",
   "raid-auction",
+  "raid-log",
   "raid-schedule-preview",
   "raid-task",
   "raid-set",
@@ -68,6 +69,13 @@ const SECTION_META = {
     options: [
       { name: "market_value", required: true },
       { name: "profit", required: false },
+    ],
+  },
+  "raid-log": {
+    icon: "📸",
+    options: [
+      { name: "character", required: false }, { name: "url", required: false },
+      { name: "view", required: false },
     ],
   },
   "raid-schedule-preview": {
