@@ -58,7 +58,7 @@ const { createRaidGoldEarnerCommand } = require("./handlers/roster/gold-earner")
 const { createRaidAuctionCommand } = require("./handlers/raid/auction");
 const { createRaidLogCommand } = require("./handlers/raid/log");
 const { createRaidLogCapture } = require("./services/raid-log/capture");
-const { createLatestRaidLogLookup } = require("./services/raid-log/latest");
+const { createRaidLogCatalog } = require("./services/raid-log/catalog");
 const { createRaidScheduleCommand } = require("./handlers/raid/schedule");
 // Board embed builders reused by /raid-check's "📋 Đội đã xếp" dropdown.
 const { buildScheduleEmbed, buildTurnPlanEmbed } = require("./handlers/raid/schedule/view/board");
@@ -256,6 +256,7 @@ let handleRaidGoldEarnerAutocomplete;
 let handleRaidGoldEarnerButton;
 let handleRaidAuctionCommand;
 let handleRaidLogCommand;
+let handleRaidLogComponent;
 let handleRaidScheduleCommand;
 let handleRaidScheduleButton;
 let handleRaidScheduleSelect;
@@ -547,10 +548,10 @@ const raidAuctionCommandHandlers = createRaidAuctionCommand({
 });
 ({ handleRaidAuctionCommand } = raidAuctionCommandHandlers);
 
-({ handleRaidLogCommand } = createRaidLogCommand({
+({ handleRaidLogCommand, handleRaidLogComponent } = createRaidLogCommand({
   EmbedBuilder, AttachmentBuilder, MessageFlags, UI, User,
-  captureRaidLog: createRaidLogCapture({ bibleLimiter }),
-  findLatestRaidLog: createLatestRaidLogLookup({ bibleLimiter }),
+  captureRaidLog: createRaidLogCapture({ bibleLimiter, idleMs: 45_000 }),
+  logCatalog: createRaidLogCatalog({ bibleLimiter }),
 }));
 
 const editRosterCommandHandlers = createEditRosterCommand({
@@ -1121,6 +1122,7 @@ async function callApplyRaidSetBatchForDiscordId(args) {
 module.exports = {
   commands,
   handleRaidManagementCommand,
+  handleRaidLogComponent,
   handleRaidHelpSelect,
   handleRaidLanguageSelect,
   handleRaidSetAutocomplete,

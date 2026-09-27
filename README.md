@@ -91,6 +91,26 @@ header and contribution summary tables. No roster registration or Auto-sync is r
 This is one log/gate, not a whole-raid aggregate, and anonymized names are kept
 as shown on Bible. It does not update raid progress or scan for logs automatically.
 
+The public message has three dropdowns: tab, raid, and encounter. Everyone in
+the channel can operate it for 15 minutes. Tabs are Damage, Party Buffs, Self Buffs,
+Shields (Given), and Tanked. Bracketed ON uses Bible's bracketed percentiles;
+Bracketed OFF selects Normalized. Detail is visible but disabled.
+
+Character lookup starts with 25 recent logs. The raid menu contains only raids
+in the loaded history; its **Load older logs** option fetches another page on
+demand, up to 250 logs. Long dropdowns paginate within Discord's 25-option limit.
+If Bible repeats a page without new IDs, loading stops; the displayed count is
+the history loaded into this panel, not a claim to cover all historical logs.
+Each character-panel action checks public-log access before using any cached
+image. Private logs revoke the controls and remove the attached image. URL-only
+panels can change tabs/mode; their raid/log dropdowns are disabled.
+
+Capture reuses one browser/page for up to 45 idle seconds, then closes it.
+Images use CSS resolution, a 16 MiB LRU cache and a 5-minute cache lifetime.
+Concurrent panel edits are rejected before work starts, and failed edits retain
+the last successful selection. A crashed browser gets one fresh attempt within
+the original deadline, respecting the shared Bible HTTP 429 backoff.
+
 For a local experiment without Discord or MongoDB:
 
 ```powershell
@@ -116,10 +136,11 @@ The bot needs Embed Links and Attach Files permissions in the target channel.
 
 Only HTTPS public log URLs on `lostark.bible` are accepted, without query strings
 or fragments. Captures use an isolated unsigned-in browser, allow only same-origin
-requests plus image assets from `cdn.ags.lol`, and close it after success or failure.
-One capture runs per process; it
-shares Bible's existing request limiter/backoff and has a 60-second browser budget
-after a limiter slot is available. Captures over 8 MiB, missing assets, clipped
+requests plus image assets from `cdn.ags.lol`. Failed captures close their browser;
+successful interactive captures close after the idle timeout. One capture runs
+per process; it shares Bible's existing request limiter/backoff. Attempts share
+a 60-second deadline, including the time already spent waiting for the limiter.
+Captures over 8 MiB, missing assets, clipped
 tables and inaccessible logs are reported as errors. This experiment depends on
 Bible's current layout and access policy; local success does not establish Railway
 resource usage, Linux rendering or Discord delivery.

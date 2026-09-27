@@ -49,15 +49,20 @@ test("command is a guild-only experiment with character/URL alternatives and tea
   assert.deepEqual(data.options[2].choices.map(choice => choice.value), ["team", "full"]);
 });
 
-function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, onScreenshot, closeError } = {}) {
+function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, onScreenshot, onNavigate, closeError } = {}) {
   let rejectNavigation;
-  const state = { closed: 0, launches: 0, routes: [] };
+  let normalized = false;
+  const state = { closed: 0, launches: 0, navigations: 0, routes: [] };
   const page = Object.assign(new EventEmitter(), {
     setDefaultTimeout() {},
-    goto: async () => holdNavigation ? new Promise((resolve, reject) => { rejectNavigation = reject; })
-      : ({ ok: () => status === 200, status: () => status, headers: () => ({ "retry-after": "60" }) }),
-    getByRole: () => ({ click: async () => {} }),
-    locator: () => ({ filter: () => ({ waitFor: async () => {} }) }),
+    goto: async () => {
+      state.navigations++;
+      onNavigate?.();
+      return holdNavigation ? new Promise((resolve, reject) => { rejectNavigation = reject; })
+        : ({ ok: () => status === 200, status: () => status, headers: () => ({ "retry-after": "60" }) });
+    },
+    getByRole: (role, options) => ({ click: async () => { state.tab = options.name; }, isChecked: async () => normalized }),
+    locator: () => ({ filter: () => ({ waitFor: async () => {}, click: async () => { normalized = !normalized; } }) }),
     waitForFunction: async () => {},
     evaluate: async fn => fn === inspectDamagePage ? {
       title: "Kazeros G2", header: "Hard\nKazeros\n09:15", playerCount: 8, partyCount: 2,
@@ -67,6 +72,7 @@ function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, on
     screenshot: async options => {
       state.clip = options.clip;
       state.scale = options.scale;
+      state.normalized = normalized;
       await onScreenshot?.(page);
       if (screenshotError) throw screenshotError;
       return Buffer.from("png");
@@ -84,14 +90,56 @@ function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, on
       if (closeError) throw closeError;
     },
   });
-  return { state, log: {}, launchBrowser: async () => { state.launches++; return browser; } };
+  return { state, page, log: {}, launchBrowser: async () => { state.launches++; return browser; } };
 }
+
+test("warm capture switches tabs/modes without navigation, caches variants and resets on another log", async () => {
+  const fake = fakeBrowser();
+  const capture = createRaidLogCapture({ ...fake, idleMs: 60_000 });
+  try {
+    await capture(URL, { useCache: true });
+    assert.equal(fake.state.closed, 0);
+    await capture(URL, { tab: "self_buffs", bracketed: false, useCache: true });
+    assert.equal(fake.state.tab, "Self Buffs");
+    assert.equal(fake.state.normalized, true);
+    assert.equal(fake.state.launches, 1);
+    assert.equal(fake.state.navigations, 1);
+    const cached = await capture(URL, { useCache: true });
+    assert.equal(cached.cached, true);
+    await capture("https://lostark.bible/logs/other", { tab: "tanked", bracketed: true });
+    assert.equal(fake.state.navigations, 2);
+    assert.equal(fake.state.tab, "Tanked");
+    assert.equal(fake.state.normalized, false);
+    await assert.rejects(capture(URL, { tab: "Settings" }), { code: "invalid_selection" });
+    await assert.rejects(capture(URL, { bracketed: "true" }), { code: "invalid_selection" });
+  } finally { await capture.close(); }
+  assert.equal(fake.state.closed, 1);
+});
+
+test("warm browser closes when idle and a renderer that crashes while idle is replaced", async t => {
+  const failed = fakeBrowser();
+  const healthy = fakeBrowser();
+  let launches = 0;
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const capture = createRaidLogCapture({ idleMs: 45_000, log: {}, launchBrowser: () => {
+    return ++launches === 1 ? failed.launchBrowser() : healthy.launchBrowser();
+  } });
+  try {
+    await capture(URL);
+    failed.page.emit("crash");
+    await capture(URL, { tab: "shields" });
+    assert.equal(launches, 2);
+    assert.equal(failed.state.closed, 1);
+    t.mock.timers.tick(45_000);
+    assert.equal(healthy.state.closed, 1);
+  } finally { await capture.close(); }
+});
 
 test("capture returns selected region and closes the browser after success or screenshot failure", async () => {
   for (const view of ["team", "full"]) {
     const fake = fakeBrowser();
     const result = await createRaidLogCapture(fake)(URL, { view });
-    assert.equal(result.filename, `raid-log-S9NbBTM-${view}.png`);
+    assert.equal(result.filename, `raid-log-S9NbBTM-${view}-damage-bracketed.png`);
     assert.equal(fake.state.clip.height, view === "team" ? 400 : 800);
     assert.equal(fake.state.closed, 1);
     assert.equal(fake.state.context.serviceWorkers, "block");
@@ -180,19 +228,23 @@ test("recovery uses the remaining budget and never launches after the original d
   }
 });
 
-test("capture rejects overlap before launching and releases its slot after timeout", async () => {
-  const fake = fakeBrowser({ holdNavigation: true });
+test("capture rejects overlap before launching and releases its slot after timeout", async t => {
+  // Advance only after navigation starts; real 25ms deadlines race disk IO
+  // when the full suite is running and can expire before a browser launches.
+  t.mock.method(Date, "now", () => 0);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let entered;
+  const fake = fakeBrowser({ holdNavigation: true, onNavigate: () => entered() });
   const capture = createRaidLogCapture({ ...fake, timeoutMs: 25 });
-  // Keep the process alive because the production deadline is deliberately unref'ed.
-  const keepAlive = setTimeout(() => {}, 1000);
-  try {
-    const first = capture(URL);
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const navigating = new Promise(resolve => { entered = resolve; });
+    const pending = capture(URL);
     await assert.rejects(capture(URL), { code: "busy" });
-    await assert.rejects(first, { code: "timeout" });
-    assert.equal(fake.state.closed, 1);
-    await assert.rejects(capture(URL), { code: "timeout" });
-    assert.equal(fake.state.closed, 2);
-  } finally { clearTimeout(keepAlive); }
+    await navigating;
+    t.mock.timers.tick(25);
+    await assert.rejects(pending, { code: "timeout" });
+    assert.equal(fake.state.closed, attempt);
+  }
 });
 
 test("HTTP 429 opens the shared Bible backoff and missing logs close their browser", async () => {
@@ -271,16 +323,16 @@ function handlerFixture({ input = URL, character = null, error, lookupError, lan
     user: { id: "caller" }, attachmentSizeLimit,
     options: { getString: name => name === "url" ? input : name === "character" ? character : null },
     deferReply: async options => calls.push(["defer", options]),
-    editReply: async payload => calls.push(["edit", payload]),
+    editReply: async payload => { calls.push(["edit", payload]); return { id: "message" }; },
   };
   const handler = createRaidLogCommand({
     EmbedBuilder, AttachmentBuilder, MessageFlags, UI: { colors: { progress: 0xfee75c } }, log: {},
     resolveStoredLanguage: async () => { calls.push(["language"]); return lang; },
-    findLatestRaidLog: async name => {
+    logCatalog: { open: async name => {
       calls.push(["lookup", name]);
       if (lookupError) throw lookupError;
-      return { url: URL, character: "Saturnxd", region: "NA" };
-    },
+      return { profile: { name: "Saturnxd" }, logs: [{ id: "S9NbBTM", url: URL, character: "Saturnxd", raidKey: "kazeros", raidLabel: "Kazeros" }] };
+    } },
     captureRaidLog: async (url, options) => {
       calls.push(["capture", url, options]);
       if (error) throw error;

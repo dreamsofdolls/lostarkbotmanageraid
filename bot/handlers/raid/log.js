@@ -1,78 +1,128 @@
 "use strict";
 
+const { randomBytes } = require("node:crypto");
 const { t, getUserLanguage } = require("../../services/i18n");
-const { parseRaidLogSource } = require("../../services/raid-log/source");
+const { parseRaidLogSource, parsePublicLogUrl } = require("../../services/raid-log/source");
 const { RaidLogError, raidLogErrorCode } = require("../../services/raid-log/errors");
-
-function buildSummaryFields(summary, lang) {
-  const text = String(summary || "");
-  const duration = text.match(/Duration:\s*([\d:]+)(?:\s*(\+[\d:]+))?/);
-  const values = {
-    duration: duration?.slice(1).filter(Boolean).join(" "),
-    totalDamage: text.match(/Total DMG:\s*([\d,]+)/)?.[1],
-    totalDps: text.match(/Total DPS:\s*([\d,]+)/)?.[1],
-  };
-  return Object.entries(values)
-    .filter(([, value]) => value)
-    .map(([key, value]) => ({ name: t(`raid-log.fields.${key}`, lang), value, inline: true }));
-}
+const { buildSummaryFields, buildLogComponents, buildLogEmbed } = require("./log-view");
 
 function createRaidLogCommand({
-  EmbedBuilder, AttachmentBuilder, MessageFlags, UI, User, captureRaidLog, findLatestRaidLog,
+  EmbedBuilder, AttachmentBuilder, MessageFlags, UI, User, captureRaidLog, logCatalog,
   resolveStoredLanguage = id => getUserLanguage(id, { UserModel: User }),
-  log = console,
+  sessionMs = 15 * 60_000, maxSessions = 64, now = Date.now, log = console,
 }) {
-  function replyError(interaction, error, lang) {
+  const sessions = new Map();
+  const embed = (state, result) => buildLogEmbed(state, result, { EmbedBuilder, UI });
+  function errorText(error, lang) {
     const code = raidLogErrorCode(error);
     log.warn?.(`[raid-log] ${code}: ${error.message}`);
-    return interaction.editReply({
-      content: t(`raid-log.errors.${code}`, lang), embeds: [], files: [],
-      allowedMentions: { parse: [] },
+    return t(`raid-log.errors.${code}`, lang);
+  }
+  function remember(state) {
+    for (const [id, entry] of sessions) if (entry.expires <= now() && !entry.busy) sessions.delete(id);
+    if (sessions.size >= maxSessions) {
+      const oldest = [...sessions.values()].find(entry => !entry.busy);
+      if (!oldest) throw new RaidLogError("busy");
+      sessions.delete(oldest.id);
+    }
+    sessions.set(state.id, state);
+  }
+  async function render(interaction, state) {
+    const result = await captureRaidLog(state.selected.url, {
+      view: state.view, tab: state.tab, bracketed: state.bracketed, useCache: Boolean(state.catalog),
     });
+    if (result.buffer.length > (interaction.attachmentSizeLimit || 8 * 1024 * 1024)) throw new RaidLogError("too_large");
+    const { buffer, ...metadata } = result;
+    state.result = metadata; // Only the byte-limited capture cache retains image buffers.
+    const message = await interaction.editReply({
+      content: null, embeds: [embed(state, result)], components: buildLogComponents(state),
+      attachments: [], files: [new AttachmentBuilder(buffer, { name: result.filename })], allowedMentions: { parse: [] },
+    });
+    log.info?.(`[raid-log] rendered id=${state.selected.id} tab=${state.tab} bracketed=${state.bracketed} cached=${Boolean(result.cached)}`);
+    return message;
   }
 
   async function handleRaidLogCommand(interaction) {
-    const url = interaction.options.getString("url");
-    const character = interaction.options.getString("character");
     const view = interaction.options.getString("view") || "team";
     let source;
     let invalid;
-    try { source = parseRaidLogSource({ character, url }); } catch (error) { invalid = error; }
-    // Acknowledge before database or browser work. Successful captures are public
-    // in the caller's channel, and malformed input is private to the caller.
+    try { source = parseRaidLogSource({ character: interaction.options.getString("character"), url: interaction.options.getString("url") }); }
+    catch (error) { invalid = error; }
     await interaction.deferReply(invalid ? { flags: MessageFlags.Ephemeral } : {});
-    const lang = await resolveStoredLanguage(interaction.user.id);
-    if (invalid) return replyError(interaction, invalid, lang);
+    const language = resolveStoredLanguage(interaction.user.id).catch(() => "vi");
+    let state;
     try {
-      const selected = source.character ? await findLatestRaidLog(source.character) : source;
-      const result = await captureRaidLog(selected.url, { view });
-      if (result.buffer.length > (interaction.attachmentSizeLimit || 8 * 1024 * 1024)) {
-        throw new RaidLogError("too_large");
-      }
-      const description = [];
-      if (selected.character) description.push(t("raid-log.latest", lang, { character: selected.character }));
-      description.push(t("raid-log.description", lang, {
-        players: result.playerCount, parties: result.partyCount, view: t(`raid-log.views.${view}`, lang),
-      }));
-      const embed = new EmbedBuilder()
-        .setColor(UI.colors.progress)
-        .setTitle(`🧪 TEST · ${result.title}`.slice(0, 256))
-        .setURL(result.url)
-        .setDescription(description.join("\n"))
-        .addFields({ name: t("raid-log.details", lang), value: result.header.replace(/\n{2,}/g, "\n").slice(0, 1024) })
-        .addFields(buildSummaryFields(result.summary, lang))
-        .setImage(`attachment://${result.filename}`)
-        .setFooter({ text: t("raid-log.footer", lang) });
-      await interaction.editReply({
-        embeds: [embed], files: [new AttachmentBuilder(result.buffer, { name: result.filename })],
-        allowedMentions: { parse: [] },
-      });
+      if (invalid) throw invalid;
+      const catalog = source.character ? await logCatalog.open(source.character) : null;
+      const selected = catalog?.logs[0] || { ...parsePublicLogUrl(source.url), raidKey: "linked", raidLabel: "Bible log" };
+      state = {
+        id: randomBytes(8).toString("hex"), revision: 0, expires: now() + sessionMs, busy: true,
+        guildId: interaction.guildId, channelId: interaction.channelId,
+        lang: await language, catalog, selected, view, tab: "damage", bracketed: true, raidPage: 0, logPage: 0,
+      };
+      remember(state);
+      const message = await render(interaction, state);
+      state.messageId = message.id;
     } catch (error) {
-      // Keep browser internals, URLs from redirects and filesystem paths out of Discord.
-      return replyError(interaction, error, lang);
-    }
+      if (state) sessions.delete(state.id);
+      await interaction.editReply({ content: errorText(error, await language), embeds: [], components: [], files: [], attachments: [], allowedMentions: { parse: [] } });
+    } finally { if (state) state.busy = false; }
   }
-  return { handleRaidLogCommand };
+
+  async function applySelection(state, action, value) {
+    const next = { ...state, revision: state.revision + 1 };
+    if (action === "bracketed") return { ...next, bracketed: !state.bracketed };
+    const rows = buildLogComponents(state).map(row => row.toJSON());
+    const rowIndex = { tab: 0, raid: 1, log: 2 }[action];
+    const control = rows[rowIndex]?.components[0];
+    if (!control || control.disabled || !control.options.some(option => option.value === value)) throw new RaidLogError("invalid_selection");
+    if (action === "tab") return { ...next, tab: value };
+    if (value === "__more") return { ...next, catalog: await logCatalog.more(state.catalog) };
+    const pageKey = action === "raid" ? "raidPage" : "logPage";
+    if (value === "__prev" || value === "__next") return { ...next, [pageKey]: state[pageKey] + (value === "__next" ? 1 : -1) };
+    const selected = action === "raid"
+      ? state.catalog.logs.find(entry => entry.raidKey === value)
+      : state.catalog.logs.find(entry => entry.id === value && entry.raidKey === state.selected.raidKey);
+    if (!selected) throw new RaidLogError("invalid_selection");
+    next.selected = selected;
+    if (action === "raid") next.logPage = 0;
+    return next;
+  }
+
+  async function handleRaidLogComponent(interaction) {
+    const [, id, revision, action] = String(interaction.customId).split(":");
+    const state = sessions.get(id);
+    const reject = code => interaction.reply({ content: t(`raid-log.errors.${code}`, state?.lang || "vi"), flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
+    if (!state || state.expires <= now()) return reject("expired");
+    if (state.guildId !== interaction.guildId || state.channelId !== interaction.channelId || state.messageId !== interaction.message.id) return reject("invalid_selection");
+    if (state.busy) return reject("panel_busy");
+    if (String(state.revision) !== revision) return reject("stale");
+    if (!["tab", "raid", "log", "bracketed"].includes(action)) return reject("invalid_selection");
+    // Everyone in this channel may operate this panel. Claim before any await.
+    state.busy = true;
+    const started = now();
+    try {
+      await interaction.deferUpdate();
+      if (state.catalog) await logCatalog.verify(state.catalog);
+      const next = await applySelection(state, action, interaction.values?.[0]);
+      const changed = next.tab !== state.tab || next.bracketed !== state.bracketed || next.selected.id !== state.selected.id;
+      if (changed) await render(interaction, next);
+      else await interaction.editReply({ embeds: [embed(next, next.result)], components: buildLogComponents(next), allowedMentions: { parse: [] } });
+      Object.assign(state, next);
+      log.info?.(`[raid-log] interaction action=${action} elapsedMs=${now() - started}`);
+    } catch (error) {
+      const code = raidLogErrorCode(error);
+      if (["logs_private", "no_logs", "character_mismatch"].includes(code)) {
+        sessions.delete(id);
+        await interaction.editReply({ content: errorText(error, state.lang), embeds: [], attachments: [], files: [], components: buildLogComponents(state, true), allowedMentions: { parse: [] } });
+      } else {
+        const payload = { content: errorText(error, state.lang), flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } };
+        if (interaction.deferred) await interaction.followUp(payload);
+        else await interaction.reply(payload);
+      }
+    } finally { state.busy = false; }
+  }
+  return { handleRaidLogCommand, handleRaidLogComponent };
 }
 
 module.exports = { createRaidLogCommand, buildSummaryFields };
