@@ -112,6 +112,12 @@ test("when Bible fails for the whole roster the previous card comes back with a 
   assert.deepEqual(actionsOf(f.payload), [["picker", "recent_refresh"], ["recent"]]);
 });
 
+test("a fight without a difficulty keeps single spaces on the card and in the menu", async () => {
+  const f = await openRecent({ ...RECENT, entries: [entry("solo", "Qiylyn", "Aeromancer", NOW - HOUR, { difficulty: "", percentile: 0.5 })] });
+  assert.match(f.payload.embeds[0].toJSON().description, /^🔵 \*\*Kazeros G2\*\* · Qiylyn · <t:/);
+  assert.equal(f.payload.components[1].toJSON().components[0].options[0].label, "Kazeros G2 · Qiylyn · 50");
+});
+
 test("a roster with no public logs gets the empty card with the private list and no menu", async () => {
   const f = await openRecent({ entries: [], private: ["Altchar", "Qiylyn"], characters: 0, logs: 0, capped: false, timedOut: false });
   assert.equal(f.payload.embeds[0].toJSON().description,

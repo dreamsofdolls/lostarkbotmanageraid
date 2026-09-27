@@ -59,7 +59,7 @@ const recentCard = (EmbedBuilder, UI, lang, description) => new EmbedBuilder().s
  */
 function recentOptions(state) {
   return state.recent.entries.map((entry, index) => ({
-    label: truncateSelectText(`${fightName(entry)} ${entry.difficulty} · ${entry.character} · ${badgesOf(entry)}`, 100),
+    label: truncateSelectText([[fightName(entry), entry.difficulty].filter(Boolean).join(" "), entry.character, badgesOf(entry)].join(" · "), 100),
     value: String(index), emoji: { name: tierOf(entry).emoji },
     description: truncateSelectText(`${recentDetail(entry)} · ${formatWhen(entry.timestamp)}`, 100),
   }));
@@ -86,8 +86,8 @@ function buildRecentView(state, { EmbedBuilder, UI }) {
   const id = action => `raid-log:${state.id}:${state.revision}:${action}`;
   const lines = recent.entries.length
     ? recent.entries.slice(0, CARD_ENTRIES).flatMap(entry => [
-      `${tierOf(entry).emoji} **${fightName(entry)}** ${entry.difficulty} · ${[getClassEmoji(entry.className), entry.character]
-        .filter(Boolean).join(" ")} · <t:${Math.floor(entry.timestamp / 1000)}:R>`,
+      [[`${tierOf(entry).emoji} **${fightName(entry)}**`, entry.difficulty].filter(Boolean).join(" "),
+        [getClassEmoji(entry.className), entry.character].filter(Boolean).join(" "), `<t:${Math.floor(entry.timestamp / 1000)}:R>`].join(" · "),
       `-# ${recentDetail(entry)}`,
     ])
     : [t("raid-log.recent.empty", lang)];

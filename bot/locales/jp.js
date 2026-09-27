@@ -193,7 +193,7 @@ module.exports = {
       teamDetail: "チーム全体の表",
       party: "パーティー {party}",
       support: "サポート",
-      lookedUp: "⭐ 検索中",
+      lookedUp: "⭐ 検索対象",
       tabDetail: "タブ {index}/{count}",
     },
     tabs: {
