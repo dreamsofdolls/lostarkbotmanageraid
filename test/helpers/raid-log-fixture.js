@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const { EmbedBuilder, AttachmentBuilder, MessageFlags } = require("discord.js");
 const { createRaidLogCommand } = require("../../bot/handlers/raid/log");
+const { silentLog } = require("./silent-log");
 
 function logEntry(id, raidKey = "kazeros", timestamp = 100) {
   return { id, url: `https://lostark.bible/logs/${id}`, character: "Qiylyn", raidKey,
@@ -27,7 +28,7 @@ function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry
     payload = { ...payload, ...next }; return { id: "message" };
   };
   const handlers = createRaidLogCommand({
-    EmbedBuilder, AttachmentBuilder, MessageFlags, UI: { colors: { progress: 0xfee75c } }, log: {},
+    EmbedBuilder, AttachmentBuilder, MessageFlags, UI: { colors: { progress: 0xfee75c } }, log: silentLog,
     logCatalog, sessionMs, maxSessions, now,
     loadCaller: async id => { events.push(["load", id]); if (loadFailure) throw loadFailure; return userDoc; },
     resolveStoredLanguage: async (id, doc) => { assert.equal(doc, userDoc); return lang; },

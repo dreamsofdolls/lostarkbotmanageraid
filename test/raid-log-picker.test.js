@@ -7,6 +7,7 @@ const { createRaidLogCommand } = require("../bot/handlers/raid/log");
 const { createRaidInteractionRouter } = require("../bot/app/interaction-router-registry");
 const { RaidLogError } = require("../bot/services/raid-log/errors");
 const { fixture, captures, controls } = require("./helpers/raid-log-fixture");
+const { silentLog } = require("./helpers/silent-log");
 
 const accounts = [
   { accountName: "Main roster", characters: [{ name: "Qiylyn", class: "Wardancer", itemLevel: 1760 }] },
@@ -56,7 +57,7 @@ test("production loader queries only the invoking Discord ID and reuses that doc
     } };
   } };
   const handler = createRaidLogCommand({ EmbedBuilder, AttachmentBuilder, MessageFlags, User,
-    UI: { colors: { progress: 0xfee75c } }, log: {} });
+    UI: { colors: { progress: 0xfee75c } }, log: silentLog });
   await handler.handleRaidLogCommand({ user: { id: "caller-only" }, guildId: "g", channelId: "c",
     deferReply: async () => assert.equal(reads.length, 0),
     editReply: async value => { payload = value; return { id: "m" }; },

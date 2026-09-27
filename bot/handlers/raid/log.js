@@ -27,7 +27,7 @@ function createRaidLogCommand({
   const embeds = (state, result) => buildLogEmbeds(state, result, { EmbedBuilder, UI });
   function errorText(error, lang) {
     const code = raidLogErrorCode(error);
-    log.warn?.(`[raid-log] ${code}: ${error.message}`);
+    log.warn(`[raid-log] ${code}: ${error.message}`);
     return t(`raid-log.errors.${code}`, lang);
   }
   function remember(state) {
@@ -51,7 +51,7 @@ function createRaidLogCommand({
       content: null, embeds: embeds(state, state.result), components: buildLogComponents(state),
       attachments: [], files: images.map(image => new AttachmentBuilder(image.buffer, { name: image.filename })), allowedMentions: { parse: [] },
     });
-    log.info?.(`[raid-log] rendered id=${state.selected.id} player=${state.player?.id || "team"} tab=${state.tab} images=${images.length} bracketed=${state.bracketed} cached=${Boolean(result.cached)}`);
+    log.info(`[raid-log] rendered id=${state.selected.id} player=${state.player?.id || "team"} tab=${state.tab} images=${images.length} bracketed=${state.bracketed} cached=${Boolean(result.cached)}`);
     return message;
   }
 
@@ -59,7 +59,7 @@ function createRaidLogCommand({
     await interaction.deferReply({});
     let rosterUnavailable = false;
     const userDoc = await loadCaller(interaction.user.id).catch(error => {
-      log.warn?.(`[raid-log] roster lookup failed: ${error.message}`);
+      log.warn(`[raid-log] roster lookup failed: ${error.message}`);
       rosterUnavailable = true;
       return null;
     });
@@ -175,7 +175,7 @@ function createRaidLogCommand({
       if (changed || action === "refresh") await render(interaction, next, action === "refresh");
       else await interaction.editReply({ embeds: embeds(next, next.result), components: buildLogComponents(next), allowedMentions: { parse: [] } });
       Object.assign(state, next);
-      log.info?.(`[raid-log] interaction action=${action} elapsedMs=${now() - started}`);
+      log.info(`[raid-log] interaction action=${action} elapsedMs=${now() - started}`);
     } catch (error) {
       const code = raidLogErrorCode(error);
       if (state.stage === "log" && ["logs_private", "no_logs", "character_mismatch"].includes(code)) {

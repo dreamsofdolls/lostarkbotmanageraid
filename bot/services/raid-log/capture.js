@@ -100,7 +100,7 @@ function createRaidLogCapture({
   function closeResource(resource) {
     if (!resource) return disposing;
     resource.closing ||= resource.browser.close().catch(error => {
-      logger.warn?.(`[raid-log] browser cleanup: ${error.message}`);
+      logger.warn(`[raid-log] browser cleanup: ${error.message}`);
     });
     disposing = resource.closing;
     return disposing;
@@ -225,7 +225,7 @@ function createRaidLogCapture({
     } catch (error) {
       if (expired || error.name === "TimeoutError") throw new RaidLogError("timeout", error);
       if (resource?.crashed || /(?:Target|Page) crashed/i.test(`${error.message} ${error.cause?.message || ""}`)) {
-        logger.warn?.(`[raid-log] browser_crashed ${JSON.stringify({
+        logger.warn(`[raid-log] browser_crashed ${JSON.stringify({
           id: log.id, view, tab, bracketed, stage, clip, deviceScaleFactor: 1,
           memoryBefore, memoryAfter: await readCaptureMemory(), cause: error.cause?.message || error.message,
         })}`);
@@ -272,7 +272,7 @@ function createRaidLogCapture({
         if (error.code !== "browser_crashed") throw error;
         // One fresh browser only; keep the original deadline, busy slot and
         // shared Bible backoff. capturePage has already closed the failed one.
-        logger.warn?.(`[raid-log] retrying capture once after browser crash id=${log.id} view=${view}`);
+        logger.warn(`[raid-log] retrying capture once after browser crash id=${log.id} view=${view}`);
         return await attempt();
       }
     } finally {

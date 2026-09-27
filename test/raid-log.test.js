@@ -11,6 +11,7 @@ const { RaidLogError } = require("../bot/services/raid-log/errors");
 const { createRaidLogCommand, buildSummaryFields } = require("../bot/handlers/raid/log");
 const { createRaidLogCommandDefinition } = require("../bot/handlers/commands/command-definitions/public-log");
 const { BibleRequestLimiter } = require("../bot/services/auto-manage/bible/rate-limit");
+const { silentLog } = require("./helpers/silent-log");
 const URL = "https://lostark.bible/logs/S9NbBTM";
 
 test("public URLs are canonicalized and unsafe/non-log destinations are rejected", () => {
@@ -95,7 +96,7 @@ function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, on
       if (closeError) throw closeError;
     },
   });
-  return { state, page, log: {}, launchBrowser: async () => { state.launches++; return browser; } };
+  return { state, page, log: silentLog, launchBrowser: async () => { state.launches++; return browser; } };
 }
 
 test("warm capture switches tabs/modes without navigation, caches variants and resets on another log", async () => {
@@ -129,7 +130,7 @@ test("warm browser closes when idle and a renderer that crashes while idle is re
   const healthy = fakeBrowser();
   let launches = 0;
   t.mock.timers.enable({ apis: ["setTimeout"] });
-  const capture = createRaidLogCapture({ idleMs: 45_000, log: {}, launchBrowser: () => {
+  const capture = createRaidLogCapture({ idleMs: 45_000, log: silentLog, launchBrowser: () => {
     return ++launches === 1 ? failed.launchBrowser() : healthy.launchBrowser();
   } });
   try {
@@ -235,7 +236,7 @@ test("recovery uses the remaining budget and never launches after the original d
     } });
     const healthy = fakeBrowser();
     const timeouts = [];
-    const capture = createRaidLogCapture({ log: {}, launchBrowser: options => {
+    const capture = createRaidLogCapture({ log: silentLog, launchBrowser: options => {
       timeouts.push(options.timeout);
       return timeouts.length === 1 ? failed.launchBrowser() : healthy.launchBrowser();
     } });
@@ -350,7 +351,7 @@ function handlerFixture({ character = "Saturnxd", error, lookupError, lang = "vi
     editReply: async next => { payload = next; calls.push([next.files ? "edit" : "picker", next]); return { id: "message" }; },
   };
   const handler = createRaidLogCommand({
-    EmbedBuilder, AttachmentBuilder, MessageFlags, UI: { colors: { progress: 0xfee75c } }, log: {},
+    EmbedBuilder, AttachmentBuilder, MessageFlags, UI: { colors: { progress: 0xfee75c } }, log: silentLog,
     loadCaller: async () => { calls.push(["roster"]); return null; },
     resolveStoredLanguage: async () => { calls.push(["language"]); return lang; },
     logCatalog: { open: async name => {
