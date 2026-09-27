@@ -10,7 +10,6 @@ const { readPartyMetrics } = require("../bot/services/raid-log/metrics");
 const { parsePublicLogUrl } = require("../bot/services/raid-log/source");
 const { RaidLogError } = require("../bot/services/raid-log/errors");
 const { createRaidLogCommand } = require("../bot/handlers/raid/log");
-const { buildSummaryFields } = require("../bot/handlers/raid/log-view");
 const { createRaidLogCommandDefinition } = require("../bot/handlers/commands/command-definitions/public-log");
 const { BibleRequestLimiter } = require("../bot/services/auto-manage/bible/rate-limit");
 const { silentLog } = require("./helpers/silent-log");
@@ -370,20 +369,21 @@ function handlerFixture({ character = "Saturnxd", error, lookupError, lang = "vi
     editReply: async next => { payload = next; calls.push([next.files ? "edit" : "picker", next]); return { id: "message" }; },
   };
   const handler = createRaidLogCommand({
-    EmbedBuilder, AttachmentBuilder, MessageFlags, UI: { colors: { progress: 0xfee75c } }, log: silentLog,
+    EmbedBuilder, AttachmentBuilder, MessageFlags, UI: { colors: { progress: 0xfee75c, neutral: 0x5865f2 } }, log: silentLog,
     loadCaller: async () => { calls.push(["roster"]); return null; },
     resolveStoredLanguage: async () => { calls.push(["language"]); return lang; },
     logCatalog: { open: async name => {
       calls.push(["lookup", name]);
       if (lookupError) throw lookupError;
-      return { profile: { name: "Saturnxd" }, logs: [{ id: "S9NbBTM", url: URL, character: "Saturnxd", raidKey: "kazeros", raidLabel: "Kazeros" }] };
+      return { profile: { name: "Saturnxd" }, logs: [{ id: "S9NbBTM", url: URL, character: "Saturnxd", raidKey: "kazeros", raidLabel: "Kazeros",
+        gate: "G2", difficulty: "Hard", timestamp: Date.UTC(2026, 8, 24, 16, 40), duration: 447637 }] };
     } },
     captureRaidLog: async (url, options) => {
       calls.push(["capture", url, options]);
       if (error) throw error;
       return { url: URL, title: "Kazeros G2", header: "Hard\nKazeros G2\n09:15",
         summary: "Duration:\n7:27\n+0:39\n·\nTotal DMG:\n1,928,393,107,867\n·\nTotal DPS:\n4,314,078,107\nDamage",
-        playerCount: 8, partyCount: 2, images: [{ filename: "log.png", buffer: Buffer.from("png") }] };
+        playerCount: 8, partyCount: 2, players: [], images: [{ filename: "log.png", buffer: Buffer.from("png") }] };
     },
   });
   return { calls, interaction, run: async () => {
@@ -413,22 +413,17 @@ test("handler acknowledges first, attaches a public image with source link in al
     const payload = fixture.calls.at(-1)[1];
     const embed = payload.embeds[0].toJSON();
     assert.equal(embed.url, URL);
-    assert.match(embed.title, /TEST/);
-    assert.match(embed.footer.text, /TEST/);
-    assert.deepEqual(embed.fields.slice(1).map(field => field.value), ["7:27 +0:39", "1,928,393,107,867", "4,314,078,107"]);
-    assert.ok(embed.fields.slice(1).every(field => field.inline));
+    assert.equal(embed.title, { vi: "📜 Kazeros · nhật ký của Saturnxd", en: "📜 Kazeros · Saturnxd's log book",
+      jp: "📜 Kazeros · Saturnxd のログ帳" }[lang]);
+    assert.equal(embed.footer, undefined);
+    assert.equal(embed.description, undefined);
+    assert.deepEqual(embed.fields.slice(6, 9).map(field => field.value), ["`7:27 +0:39`", "`1,928,393,107,867`", "`4,314,078,107`"]);
+    assert.ok(embed.fields.slice(0, 9).every(field => field.inline));
     assert.equal(embed.image.url, "attachment://log.png");
     assert.equal(payload.files[0].name, "log.png");
-    assert.match(embed.description, /8/);
     assert.doesNotMatch(JSON.stringify(embed), /raid-log\./);
     assert.deepEqual(payload.allowedMentions, { parse: [] });
   }
-});
-
-test("TEST summary preserves source duration and numbers without inventing missing values", () => {
-  assert.deepEqual(buildSummaryFields(undefined, "vi"), []);
-  assert.deepEqual(buildSummaryFields("Duration:\n7:04\n·\nTotal DMG:\n1,539,242,432,317", "vi").map(field => field.value),
-    ["7:04", "1,539,242,432,317"]);
 });
 
 test("handler keeps invalid names private, avoids capture and returns localized errors without attachments", async () => {
@@ -461,9 +456,8 @@ test("character lookup defaults to latest log, acknowledges first and labels the
     assert.equal(fixture.calls[6][1], URL);
     assert.equal(fixture.calls[6][2].view, "full");
     const embed = fixture.calls.at(-1)[1].embeds[0].toJSON();
-    assert.match(embed.description, /Saturnxd/);
-    assert.match(embed.description, /NA/);
-    assert.doesNotMatch(embed.description, /raid-log\./);
+    assert.match(embed.title, /Saturnxd/);
+    assert.doesNotMatch(JSON.stringify(embed), /raid-log\./);
   }
 });
 

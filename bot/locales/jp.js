@@ -151,9 +151,6 @@ module.exports = {
     footer: "いつでも /raid-language で変えられますわ♪",
   },
   "raid-log": {
-    description: "**{players} 人 · {parties} パーティー** · {view}\nタイトルから元のログを開けるよ。",
-    latest: "**{character}** (NA) の最新公開ログ。",
-    character: "**{character}** (NA) の公開ログ。",
     picker: {
       title: "🧪 TEST · レイドログ検索",
       description: "{owner}、キャラクターを選んで Bible (NA) の最新公開ログを見よう。",
@@ -169,20 +166,32 @@ module.exports = {
     controls: {
       log: "レイドのログを選択 · ベトナム時間",
       loadMore: "古いログ25件 / 他のレイドを読み込む…",
-      history: "**{count}件**を読み込み済み · レイドメニューから追加 (最大250件)。",
-      historyEnd: "このパネルに **{count}件**を読み込み済み (最大250件)。",
       reset: "初期表示に戻す",
       refresh: "更新",
       player: "1 · チームまたはプレイヤーを選択",
       team: "チーム全体",
-      selectedPlayer: "**表示中: {player}**",
-      imagePart: "画像 {part}/2 · 上から順に表示 · 操作は実行者のみ",
-      footer: "TEST • 操作できるのは実行者のみ • 15分間有効",
     },
-    details: "戦闘情報",
-    fields: { duration: "⏱ 戦闘時間", totalDamage: "⚔ 合計 DMG", totalDps: "📊 チーム DPS" },
-    footer: "TEST • 1ログ/ゲート • Bible の匿名表示を維持",
-    views: { team: "チームの DMG 表", full: "Damage タブ全体" },
+    panel: {
+      title: "{raid} · {character} のログ帳",
+      history: "直近のログ {count} 件",
+    },
+    fields: {
+      mvpDamage: "MVP DMG",
+      scoreDealer: "DPS スコア",
+      mvpCounter: "MVP カウンター",
+      mvpSupport: "MVP Radiant Sup",
+      supportContribution: "サポート貢献",
+      supportUptime: "サポート稼働率",
+      duration: "戦闘時間",
+      totalDamage: "合計 DMG",
+      teamDps: "チーム DPS",
+    },
+    values: {
+      counter: "カウンター {count} 回",
+      noCounter: "カウンターなし",
+      noSupport: "サポートなし",
+      uptime: "稼働率",
+    },
     notices: {
       link: "[Bible で元のログを開く]({url})",
       owner_only: {
@@ -1930,12 +1939,13 @@ module.exports = {
       },
       "raid-log": {
         label: "/raid-log",
-        short: "実験版: 公開ログ・タブ・レイド・Bracketed を選択",
+        short: "実験版: MVP・スコア・Bible の全タブで見る公開ログ帳",
         example: "/raid-log",
         notes: [
           "引数なしでキャラクター選択カードを開くよ。入力ダイアログで名前を検索するか、実行者自身の保存済みロスターから選んでね。保存済みキャラクターがいなければ名前検索だけ表示するよ。",
           "最初のカードもログパネルもチャンネルに公開されますが、操作できるのは呼び出した方だけですわ。キャラクターを選ぶと NA の最新公開ログに切り替わり、今週に限定しませんの。問題があれば押した方にだけカードでお知らせし、撮影に失敗したときは元のログへのリンクを添えますわ。途中でログが非公開になればパネルを閉じて画像を外しますの。",
-          "コマンドを実行したチャンネルに戦闘情報と画像を投稿するよ。ロスター登録や Auto-sync は不要。",
+          "キャラクターを選ぶとログ帳になりますわ: 👑 MVP DMG (D% 最高)、📈 DPS スコア (バッジ + nDPS)、🎯 MVP カウンター (最多カウンターの 1 人、同数なら STAG、次に D%)、✨ MVP Radiant Sup (bD% 最高)、🤝 サポート貢献 (rContribution バッジ + rCon%)、⏱️ サポート稼働率 (Buff Performance バッジ)、そして戦闘時間・合計 DMG・チーム DPS。ロスター登録や Auto-sync は不要ですわ。",
+          "📜 表示中レイドの直近 5 件をパースの色で並べ、▶ が開いているログですの。カードの色も開いているログのパースに合わせますわ。画像は表示中のタブを Bible からそのまま撮影しますの。",
           "3つのメニューでチーム/プレイヤー → レイド → ログを選択。◀/▶で表示対象のタブを切り替えるよ。操作は実行者のみ、15分間。読み込み済みのレイドのみ表示し、古いログは最大250件まで追加できるよ。",
           "Bracketed は初期状態で ON、OFF は Normalized。初期表示に戻すと現在のログを保ったままチーム / Damage / Bracketed ON。更新は選択を保ち履歴と画像を再取得するよ。",
           "チーム表示は Damage、Party/Self Buffs (攻撃のみ/全て)、Shields 4種類、Tanked、DPSグラフ2種類。プレイヤー表示はスキル/バフと下部の分析を上下2枚で表示。対応ログでは Source/Category 分解も選べるよ。",

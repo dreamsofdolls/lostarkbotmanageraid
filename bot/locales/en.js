@@ -149,9 +149,6 @@ module.exports = {
     footer: "Run /raid-language any time to switch back",
   },
   "raid-log": {
-    description: "**{players} players · {parties} parties** · {view}\nOpen the title to view the original log.",
-    latest: "Latest public log for **{character}** (NA).",
-    character: "Public logs for **{character}** (NA).",
     picker: {
       title: "🧪 TEST · Find raid logs",
       description: "{owner}, choose a character to view their latest public Bible log (NA).",
@@ -167,20 +164,32 @@ module.exports = {
     controls: {
       log: "Select a log for this raid · VN time",
       loadMore: "Load 25 older logs / more raids…",
-      history: "**{count} logs** loaded · Load more from the raid menu (up to 250 logs).",
-      historyEnd: "**{count} logs** loaded for this panel (up to 250 logs).",
       reset: "Reset view",
       refresh: "Refresh",
       player: "1 · Select team or player",
       team: "Whole team",
-      selectedPlayer: "**Viewing: {player}**",
-      imagePart: "Image {part}/2 · Read top to bottom · Caller controls only",
-      footer: "TEST • Only the caller can control • Active for 15 minutes",
     },
-    details: "Encounter details",
-    fields: { duration: "⏱ Duration", totalDamage: "⚔ Total DMG", totalDps: "📊 Team DPS" },
-    footer: "TEST • One log/gate • Bible's anonymized names preserved",
-    views: { team: "Team Damage tables", full: "Full Damage tab" },
+    panel: {
+      title: "{raid} · {character}'s log book",
+      history: "{count} latest logs",
+    },
+    fields: {
+      mvpDamage: "MVP DMG",
+      scoreDealer: "DPS score",
+      mvpCounter: "MVP Counter",
+      mvpSupport: "MVP Radiant Sup",
+      supportContribution: "Sup contribution",
+      supportUptime: "Sup uptime",
+      duration: "Duration",
+      totalDamage: "Total DMG",
+      teamDps: "Team DPS",
+    },
+    values: {
+      counter: "{count} counters",
+      noCounter: "Nobody countered",
+      noSupport: "No supports",
+      uptime: "uptime",
+    },
     notices: {
       link: "[Open the original log on Bible]({url})",
       owner_only: {
@@ -1929,12 +1938,13 @@ module.exports = {
       },
       "raid-log": {
         label: "/raid-log",
-        short: "Experimental: browse public logs, tabs, raids and Bracketed",
+        short: "Experimental: public log book with MVPs, scores and every Bible tab",
         example: "/raid-log",
         notes: [
           "Run without options to open a character picker. Search by name using the input dialog, or choose a character from the caller's own saved rosters. Without saved characters, only name search appears.",
           "The opening card and log panel are public, and only the caller can use them. Selecting a character opens their latest public log in NA, without a current-week restriction. Every problem comes as a card only the clicker sees, with the original log linked when a capture fails; if the logs turn private mid-session, the panel locks and the image is removed.",
-          "Posts encounter details and an image in the calling channel. No registered roster or Auto-sync opt-in is required.",
+          "Choosing a character opens the log book: 👑 MVP DMG (highest D%), 📈 DPS score (badge + nDPS), 🎯 MVP Counter (one player: most counters, then STAG, then D%), ✨ MVP Radiant Sup (highest bD%), 🤝 Sup contribution (rContribution badge + rCon%), ⏱️ Sup uptime (Buff Performance badge), then duration, total DMG and team DPS. No registered roster or Auto-sync opt-in is required.",
+          "📜 The raid's five latest logs follow, coloured by parse, with ▶ on the open one; the card's side colour follows that log's parse. The image is the current tab, captured straight from Bible.",
           "Three menus select team/player → raid → log; ◀/▶ changes tabs for the selected view. Only the caller can interact for 15 minutes. Only raids in loaded history appear; load older logs from the raid menu (up to 250).",
           "Bracketed defaults to ON; OFF selects Normalized. Reset keeps the current log and restores Team / Damage / Bracketed ON. Refresh reloads history and the current images while keeping your selection.",
           "Team tabs include Damage, Party/Self Buffs (offensive or all), four Shields modes, Tanked and two DPS charts. Select a player for skills/buffs and all lower analysis cards in two ordered images, including Source/Category breakdown where available.",

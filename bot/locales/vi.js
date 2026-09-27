@@ -162,9 +162,6 @@ module.exports = {
     footer: "/raid-language để đổi lại bất cứ lúc nào",
   },
   "raid-log": {
-    description: "**{players} người · {parties} party** · {view}\nBấm tiêu đề để mở log gốc.",
-    latest: "Log public gần nhất của **{character}** (NA).",
-    character: "Log public của **{character}** (NA).",
     picker: {
       title: "🧪 TEST · Tìm raid log",
       description: "{owner}, chọn nhân vật để xem log public gần nhất trên Bible (NA).",
@@ -180,20 +177,32 @@ module.exports = {
     controls: {
       log: "Chọn log của raid · giờ VN",
       loadMore: "Tải thêm 25 log cũ hơn / raid khác…",
-      history: "Đã tải **{count} log** · Tải thêm trong danh sách raid (tối đa 250 log).",
-      historyEnd: "Đã tải **{count} log** cho bảng này (tối đa 250 log).",
       reset: "Về ban đầu",
       refresh: "Refresh",
       player: "1 · Chọn Toàn đội hoặc player",
       team: "Toàn đội",
-      selectedPlayer: "**Đang xem: {player}**",
-      imagePart: "Ảnh {part}/2 · Đọc từ trên xuống · Chỉ người gọi được thao tác",
-      footer: "TEST • Chỉ người gọi được thao tác • Bảng hoạt động 15 phút",
     },
-    details: "Thông tin trận",
-    fields: { duration: "⏱ Thời lượng", totalDamage: "⚔ Tổng DMG", totalDps: "📊 DPS đội" },
-    footer: "TEST • Một log/gate • Giữ nguyên tên ẩn trên Bible",
-    views: { team: "Bảng DMG của team", full: "Tab Damage đầy đủ" },
+    panel: {
+      title: "{raid} · nhật ký của {character}",
+      history: "{count} log gần nhất",
+    },
+    fields: {
+      mvpDamage: "MVP DMG",
+      scoreDealer: "Score DPS",
+      mvpCounter: "MVP Counter",
+      mvpSupport: "MVP Radiant Sup",
+      supportContribution: "Sup Perform",
+      supportUptime: "Sup uptime",
+      duration: "Thời lượng",
+      totalDamage: "Tổng DMG",
+      teamDps: "DPS đội",
+    },
+    values: {
+      counter: "{count} counter",
+      noCounter: "Không ai counter",
+      noSupport: "Không có support",
+      uptime: "uptime",
+    },
     notices: {
       link: "[Mở log gốc trên Bible]({url})",
       owner_only: {
@@ -1951,12 +1960,13 @@ module.exports = {
       },
       "raid-log": {
         label: "/raid-log",
-        short: "Thử nghiệm: xem log public, chuyển tab / raid và Bracketed",
+        short: "Thử nghiệm: nhật ký log public với MVP, score và mọi tab Bible",
         example: "/raid-log",
         notes: [
           "Gọi lệnh không cần tham số để mở thẻ chọn nhân vật. Tìm tên qua nút mở hộp nhập, hoặc chọn nhân vật thuộc roster của chính người gọi. Chưa có nhân vật đã lưu thì chỉ hiện tìm tên.",
           "Thẻ mở đầu và bảng log đều công khai, chỉ người gọi được bấm. Sau khi chọn nhân vật, thẻ chuyển thành bảng log public gần nhất ở NA, không giới hạn tuần hiện tại. Mọi lỗi hiện thành card riêng cho người bấm, kèm link log gốc khi lần chụp hỏng; log chuyển private giữa chừng thì bảng bị khoá và gỡ ảnh.",
-          "Trả thông tin trận và ảnh trực tiếp tại kênh gọi lệnh. Không cần đăng ký roster hoặc bật Auto-sync.",
+          "Chọn nhân vật thì thẻ thành nhật ký log: 👑 MVP DMG (D% cao nhất), 📈 Score DPS (badge + nDPS), 🎯 MVP Counter (một người: nhiều counter nhất, hoà thì STAG rồi D%), ✨ MVP Radiant Sup (bD% cao nhất), 🤝 Sup Perform (badge rContribution + rCon%), ⏱️ Sup uptime (badge Buff Performance), rồi thời lượng, tổng DMG, DPS đội. Không cần đăng ký roster hoặc bật Auto-sync.",
+          "📜 5 log gần nhất của raid đang xem tô màu theo parse, ▶ đánh dấu log đang mở; màu viền card theo parse của log đang mở. Ảnh là tab đang xem, chụp thẳng từ Bible.",
           "Ba dropdown chọn Toàn đội/player → raid → log; nút ◀/▶ chuyển tab theo chế độ đang xem. Chỉ người gọi được thao tác trong 15 phút. Raid có log đã tải mới xuất hiện; tải thêm lịch sử trong dropdown raid (tối đa 250 log).",
           "Bracketed mặc định ON; OFF chuyển sang Normalized. Về ban đầu giữ log, trở về Toàn đội / Damage / Bracketed ON. Refresh tải lại danh sách và ảnh hiện tại, giữ lựa chọn.",
           "Toàn đội có Damage, Party/Self Buffs (tấn công hoặc đầy đủ), bốn chế độ Shields, Tanked và hai biểu đồ DPS. Chọn player để xem skill/buff và toàn bộ phân tích phía dưới bằng hai ảnh trên/dưới; Breakdown có By Source và By Category khi log hỗ trợ.",

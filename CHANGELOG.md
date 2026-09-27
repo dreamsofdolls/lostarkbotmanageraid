@@ -7,6 +7,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ## 2026-09-28
 
 ### Changed
+- The `/raid-log` panel is a log book: 👑 MVP DMG, 📈 DPS score and 🎯 MVP Counter on the DPS row, ✨ MVP Radiant Sup, 🤝 Sup contribution and ⏱️ Sup uptime on the support row, then duration, total DMG and team DPS, each name with its class icon. The raid's five latest logs follow, coloured by parse, and the side colour follows the open log; the TEST title, description lines and footer are gone.
 - `/raid-log` answers every problem with a notice card (what happened, what to do next) instead of one line of text. A capture that fails or times out links the log it tried to open, and a panel whose character turns Public Log off becomes a lock card naming the character, with the image removed and the controls disabled.
 - `/raid-log` reads each player's figures and percentile badges (Bracketed and Normalized) from Bible's Damage table when it first opens a log, and each support's bD% from their detail view, so the first open of a log takes a few seconds longer. A support page that fails leaves only that figure empty.
 

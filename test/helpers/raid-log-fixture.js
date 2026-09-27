@@ -3,7 +3,25 @@
 const assert = require("node:assert/strict");
 const { EmbedBuilder, AttachmentBuilder, MessageFlags } = require("discord.js");
 const { createRaidLogCommand } = require("../../bot/handlers/raid/log");
+const { CLASS_EMOJI_MAP } = require("../../bot/models/Class");
 const { silentLog } = require("./silent-log");
+
+// Team figures as capture.js reads them from Bible (log zEn59i4), three of its eight rows.
+const PLAYERS = [
+  { id: "1-0", party: 1, row: 0, label: "1760 Qiylyn", className: "Aeromancer", badges: { bracketed: [99], normalized: [98] },
+    damageShare: 24.6, counters: 3, stagger: 3500, dps: 1.06e9, ndps: 385.7e6, contribution: 63.6, buffedShare: null },
+  { id: "1-3", party: 1, row: 3, label: "1755 Canameo", className: "Bard", badges: { bracketed: [82, 91], normalized: [82, 91] },
+    damageShare: 0.1, counters: 2, stagger: 2000, dps: 4.2e6, ndps: 3.6e6, contribution: 51.1, buffedShare: 31.8 },
+  { id: "2-1", party: 2, row: 1, label: "1746 Slayer #1", className: "Slayer", badges: { bracketed: [80], normalized: [69] },
+    damageShare: 11, counters: 0, stagger: 3600, dps: 473.2e6, ndps: 211.3e6, contribution: 55.3, buffedShare: null },
+];
+
+// Sets class icons for one test and restores them after it.
+function withClassIcons(t, icons) {
+  const saved = Object.fromEntries(Object.keys(icons).map(name => [name, CLASS_EMOJI_MAP[name]]));
+  Object.assign(CLASS_EMOJI_MAP, icons);
+  t.after(() => Object.assign(CLASS_EMOJI_MAP, saved));
+}
 
 function logEntry(id, raidKey = "kazeros", timestamp = 100) {
   return { id, url: `https://lostark.bible/logs/${id}`, character: "Qiylyn", raidKey,
@@ -11,12 +29,12 @@ function logEntry(id, raidKey = "kazeros", timestamp = 100) {
 }
 
 function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry("old", "kazeros", 90), logEntry("serca", "serca", 80)],
-  hasMore = false, sessionMs, maxSessions, now, transformCapture = result => result } = {}) {
+  profile = { name: "Qiylyn" }, hasMore = false, sessionMs, maxSessions, now, transformCapture = result => result } = {}) {
   const events = [];
   let payload, modal, failure, verifyFailure, beforeVerify, beforeOpen, loadFailure;
   let failEdit = false;
   let userDoc = { language: lang, accounts };
-  const catalog = { profile: { name: "Qiylyn" }, logs, page: 1, hasMore };
+  const catalog = { profile, logs, page: 1, hasMore };
   const logCatalog = {
     open: async name => { events.push(["open", name]); await beforeOpen?.(); if (verifyFailure) throw verifyFailure; return catalog; },
     verify: async () => { events.push("verify"); await beforeVerify?.(); if (verifyFailure) throw verifyFailure; },
@@ -28,7 +46,7 @@ function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry
     payload = { ...payload, ...next }; return { id: "message" };
   };
   const handlers = createRaidLogCommand({
-    EmbedBuilder, AttachmentBuilder, MessageFlags, UI: { colors: { progress: 0xfee75c } }, log: silentLog,
+    EmbedBuilder, AttachmentBuilder, MessageFlags, UI: { colors: { progress: 0xfee75c, neutral: 0x5865f2 } }, log: silentLog,
     logCatalog, sessionMs, maxSessions, now,
     loadCaller: async id => { events.push(["load", id]); if (loadFailure) throw loadFailure; return userDoc; },
     resolveStoredLanguage: async (id, doc) => { assert.equal(doc, userDoc); return lang; },
@@ -40,8 +58,8 @@ function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry
       return transformCapture({ url, title: "Kazeros G2", header: "Hard\nKazeros G2", summary: "Duration: 1:30 · Total DMG: 100 · Total DPS: 1",
         playerCount: 8, partyCount: 2, images,
         hasBreakdown: options.player?.id !== "2-1",
-        players: [{ id: "1-0", party: 1, row: 0, label: "1760 Qiylyn", className: "Aeromancer" },
-          { id: "2-1", party: 2, row: 1, label: "1746 Slayer #1", className: "Slayer" }] });
+        ...(options.player ? { links: [{ title: "View Character Profile", url: "https://lostark.bible/character/NA/Qiylyn" }] } : {}),
+        players: PLAYERS });
     },
   });
   const slash = { user: { id: "author" }, guildId: "guild", channelId: "channel",
@@ -87,4 +105,4 @@ function noticeText(payload) {
   return `${title}\n${description}`;
 }
 
-module.exports = { fixture, logEntry, captures, controls, control, noticeText };
+module.exports = { fixture, logEntry, captures, controls, control, noticeText, withClassIcons };

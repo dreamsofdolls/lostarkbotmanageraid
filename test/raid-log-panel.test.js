@@ -18,7 +18,7 @@ test("public panel orders actions, tab arrows, player, raid and log within five 
     assert.equal(control(f, "tab_label").disabled, true);
     assert.equal(control(f, "tab_prev").disabled, true);
     assert.equal(control(f, "tab_next").disabled, false);
-    assert.deepEqual(control(f, "player").options.slice(1).map(o => o.label), ["1. 1760 Qiylyn", "2. 1746 Slayer #1"]);
+    assert.deepEqual(control(f, "player").options.slice(1).map(o => o.label), ["1. 1760 Qiylyn", "2. 1755 Canameo", "3. 1746 Slayer #1"]);
     assert.deepEqual(control(f, "raid").options.map(o => o.value), ["kazeros", "serca"]);
     assert.deepEqual(control(f, "log").options.map(o => o.value), ["new", "old"]);
     assert.equal(control(f, "bracketed").label, "Bracketed: ON");

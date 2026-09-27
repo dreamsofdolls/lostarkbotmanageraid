@@ -90,14 +90,19 @@ newest logs page, and requires an exact character-name match (case-insensitive,
 with accents preserved). No registered roster is needed. Private logs, unknown
 characters, no logs and mismatched identities produce a notice card instead of a capture.
 
-New log panels open on the full Damage tab with **Bracketed ON**. Every tab
-capture includes the encounter header, all tables and the charts in the selected tab,
-including after changing raid or log.
-The PNG appears in the calling channel, with a linked title. The card is marked
-**TEST** and shows encounter details, team size, duration, total damage and team
-DPS alongside the image. No roster registration or Auto-sync is required.
-This is one log/gate, not a whole-raid aggregate, and anonymized names are kept
-as shown on Bible. It does not update raid progress or scan for logs automatically.
+The panel is a log book titled with the raid and character and linked to the log
+on Bible. Its fields name 👑 MVP DMG (highest D%), 📈 DPS score (best percentile
+badge, with nDPS) and 🎯 MVP Counter (most counters; ties go to STAG, then D%,
+then table order) on the DPS row; ✨ MVP Radiant Sup (highest bD%), 🤝 Sup
+contribution (best rContribution badge, with rCon%) and ⏱️ Sup uptime (best Buff
+Performance badge) on the support row; then duration, total DMG and team DPS in
+Bible's own wording. 📜 The raid's five latest logs follow, coloured by parse tier
+with ▶ on the open log, and the side colour follows the open log's parse. New
+panels open on the full Damage tab with **Bracketed**; the image is the selected
+tab as captured from Bible, and a player view adds an image-only embed for the
+lower half. No roster registration or Auto-sync is required. This is one
+log/gate, not a whole-raid aggregate, and anonymized names are kept as shown on
+Bible. It does not update raid progress or scan for logs automatically.
 
 The public panel has five rows: **Bracketed / Reset / Refresh**, **◀ / tab name / ▶**,
 then dropdowns for **team or player**, **raid**, and **encounter**. Only the original
