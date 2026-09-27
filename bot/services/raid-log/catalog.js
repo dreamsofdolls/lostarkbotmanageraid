@@ -56,13 +56,21 @@ function createRaidLogCatalog({ bibleLimiter, client = createBibleClient({ bible
       const logs = normalizeCatalogLogs(rows, catalog.profile.name);
       if (!logs.length) throw new RaidLogError("no_logs");
     },
+    async refresh(catalog) {
+      const rows = await read(catalog.profile, 1);
+      const fresh = normalizeCatalogLogs(rows, catalog.profile.name);
+      if (!fresh.length) throw new RaidLogError("no_logs");
+      const logs = mergeLogs(catalog.logs, fresh).slice(0, MAX_LOG_PAGES * 25);
+      return { ...catalog, logs, hasMore: logs.length < MAX_LOG_PAGES * 25
+        && (catalog.page === 1 ? rows.length === 25 : catalog.hasMore) };
+    },
     async more(catalog) {
       if (!catalog.hasMore || catalog.page >= MAX_LOG_PAGES) throw new RaidLogError("invalid_selection");
       const page = catalog.page + 1;
       const rows = await read(catalog.profile, page);
-      const logs = mergeLogs(catalog.logs, normalizeCatalogLogs(rows, catalog.profile.name));
+      const logs = mergeLogs(catalog.logs, normalizeCatalogLogs(rows, catalog.profile.name)).slice(0, MAX_LOG_PAGES * 25);
       return { ...catalog, logs, page,
-        hasMore: rows.length === 25 && page < MAX_LOG_PAGES && logs.length > catalog.logs.length };
+        hasMore: rows.length === 25 && page < MAX_LOG_PAGES && logs.length < MAX_LOG_PAGES * 25 && logs.length > catalog.logs.length };
     },
   };
 }

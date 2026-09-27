@@ -10,7 +10,7 @@ function logEntry(id, raidKey = "kazeros", timestamp = 100) {
 }
 
 function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry("old", "kazeros", 90), logEntry("serca", "serca", 80)],
-  hasMore = false, sessionMs, maxSessions, now } = {}) {
+  hasMore = false, sessionMs, maxSessions, now, transformCapture = result => result } = {}) {
   const events = [];
   let payload, modal, failure, verifyFailure, beforeVerify, beforeOpen, loadFailure;
   let failEdit = false;
@@ -20,6 +20,7 @@ function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry
     open: async name => { events.push(["open", name]); await beforeOpen?.(); if (verifyFailure) throw verifyFailure; return catalog; },
     verify: async () => { events.push("verify"); await beforeVerify?.(); if (verifyFailure) throw verifyFailure; },
     more: async current => { events.push("more"); return { ...current, hasMore: false, logs: [...current.logs, logEntry("extra", "horizon", 70)] }; },
+    refresh: async current => { events.push("refresh"); if (verifyFailure) throw verifyFailure; return { ...current, logs: [logEntry("latest", "kazeros", 200), ...current.logs] }; },
   };
   const editReply = async next => {
     events.push("edit"); if (failEdit) throw new Error("Discord unavailable");
@@ -32,20 +33,25 @@ function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry
     resolveStoredLanguage: async (id, doc) => { assert.equal(doc, userDoc); return lang; },
     captureRaidLog: async (url, options) => {
       events.push(["capture", url, options]); if (failure) throw failure;
-      return { url, title: "Kazeros G2", header: "Hard\nKazeros G2", summary: "Duration: 1:30 · Total DMG: 100 · Total DPS: 1",
-        playerCount: 8, partyCount: 2, filename: "capture.png", buffer: Buffer.from("png") };
+      const images = options.player ? ["top", "bottom"].map(part => ({ filename: `${part}.png`, buffer: Buffer.from(part) })) : undefined;
+      return transformCapture({ url, title: "Kazeros G2", header: "Hard\nKazeros G2", summary: "Duration: 1:30 · Total DMG: 100 · Total DPS: 1",
+        playerCount: 8, partyCount: 2, filename: images?.[0].filename || "capture.png", buffer: images?.[0].buffer || Buffer.from("png"), images,
+        hasBreakdown: options.player?.id !== "2-1",
+        players: [{ id: "1-0", party: 1, row: 0, label: "1760 Qiylyn", className: "Aeromancer" },
+          { id: "2-1", party: 2, row: 1, label: "1746 Slayer #1", className: "Slayer" }] });
     },
   });
   const slash = { user: { id: "author" }, guildId: "guild", channelId: "channel",
     deferReply: async options => { assert.deepEqual(options, {}); events.push("ack"); }, editReply };
   function component(action, value, overrides = {}) {
     const controls = payload.components.flatMap(row => row.toJSON().components);
-    const customId = action === "submit" ? modal.custom_id : controls.find(c => c.custom_id.endsWith(`:${action}`)).custom_id;
+    const customId = action === "submit" ? modal.custom_id
+      : controls.find(c => c.custom_id.endsWith(`:${action}`))?.custom_id || controls[0].custom_id.replace(/:[^:]+$/, `:${action}`);
     const interaction = {
       user: { id: "someone-else" }, guildId: "guild", channelId: "channel", message: { id: "message" },
       customId, values: value === undefined ? undefined : [value],
-      isButton: () => ["search", "bracketed", "detail"].includes(action),
-      isStringSelectMenu: () => ["character", "tab", "raid", "log"].includes(action),
+      isButton: () => ["search", "bracketed", "detail", "reset", "refresh", "tab_prev", "tab_next", "tab_label"].includes(action),
+      isStringSelectMenu: () => ["character", "player", "raid", "log"].includes(action),
       isModalSubmit: () => action === "submit",
       fields: { getTextInputValue: name => { assert.equal(name, "character"); return value; } },
       showModal: async next => { modal = next.toJSON(); events.push(["modal", modal]); },
@@ -70,5 +76,6 @@ function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry
 }
 const captures = f => f.events.filter(x => Array.isArray(x) && x[0] === "capture");
 const controls = f => f.payload.components.map(row => row.toJSON().components[0]);
+const control = (f, action) => f.payload.components.flatMap(row => row.toJSON().components).find(c => c.custom_id.endsWith(`:${action}`));
 
-module.exports = { fixture, logEntry, captures, controls };
+module.exports = { fixture, logEntry, captures, controls, control };

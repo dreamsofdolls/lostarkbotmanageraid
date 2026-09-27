@@ -53,19 +53,26 @@ function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, on
   const state = { closed: 0, launches: 0, navigations: 0, routes: [] };
   const page = Object.assign(new EventEmitter(), {
     setDefaultTimeout() {},
+    setViewportSize: async () => {},
+    keyboard: { press: async () => {} },
     goto: async () => {
       state.navigations++;
       onNavigate?.();
       return holdNavigation ? new Promise((resolve, reject) => { rejectNavigation = reject; })
         : ({ ok: () => status === 200, status: () => status, headers: () => ({ "retry-after": "60" }) });
     },
-    getByRole: (role, options) => ({ click: async () => { state.tab = options.name; }, isChecked: async () => normalized }),
+    getByRole: (role, options) => ({
+      click: async () => { if (!["Settings", "Given"].includes(options.name)) state.tab = options.name; },
+      isChecked: async () => normalized, count: async () => 0,
+      filter: () => ({ locator: () => ({ isChecked: async () => true, click: async () => {} }) }),
+    }),
     locator: () => ({ filter: () => ({ waitFor: async () => {}, click: async () => { normalized = !normalized; } }) }),
     waitForFunction: async () => {},
     evaluate: async fn => fn === inspectDamagePage ? {
       title: "Kazeros G2", header: "Hard\nKazeros\n09:15", playerCount: 8, partyCount: 2,
       team: { x: 0, y: 0, width: 1280, height: 400 }, full: { x: 0, y: 0, width: 1280, height: 800 },
-    } : undefined,
+      players: [],
+    } : 96,
     mouse: { move: async () => {} },
     screenshot: async options => {
       state.clip = options.clip;
@@ -133,6 +140,19 @@ test("warm browser closes when idle and a renderer that crashes while idle is re
     assert.equal(failed.state.closed, 1);
     t.mock.timers.tick(45_000);
     assert.equal(healthy.state.closed, 1);
+  } finally { await capture.close(); }
+});
+
+test("refresh forces navigation and invalidates other cached variants for that log", async () => {
+  const fake = fakeBrowser(); const capture = createRaidLogCapture({ ...fake, idleMs: 60_000 });
+  try {
+    await capture(URL, { useCache: true });
+    await capture(URL, { tab: "tanked", useCache: true });
+    assert.equal((await capture(URL, { useCache: true })).cached, true);
+    assert.equal((await capture(URL, { useCache: true, refresh: true })).cached, undefined);
+    assert.equal(fake.state.navigations, 2);
+    assert.equal((await capture(URL, { tab: "tanked", useCache: true })).cached, undefined);
+    assert.equal(fake.state.navigations, 2);
   } finally { await capture.close(); }
 });
 

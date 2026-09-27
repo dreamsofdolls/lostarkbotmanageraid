@@ -91,7 +91,7 @@ with accents preserved). No registered roster is needed. Private logs, unknown
 characters, no logs and mismatched identities produce a notice instead of a capture.
 
 New log panels open on the full Damage tab with **Bracketed ON**. Every tab
-capture includes the encounter header and all tables in the selected tab,
+capture includes the encounter header, all tables and the charts in the selected tab,
 including after changing raid or log.
 The PNG appears in the calling channel, with a linked title. The card is marked
 **TEST** and shows encounter details, team size, duration, total damage and team
@@ -99,11 +99,23 @@ DPS alongside the image. No roster registration or Auto-sync is required.
 This is one log/gate, not a whole-raid aggregate, and anonymized names are kept
 as shown on Bible. It does not update raid progress or scan for logs automatically.
 
-The public message has three dropdowns: tab, raid, and encounter. Only the
-original caller can operate the picker and resulting log panel for 15 minutes;
-other members can view it or run their own `/raid-log`. Tabs are Damage, Party Buffs, Self Buffs,
-Shields (Given), and Tanked. Bracketed ON uses Bible's bracketed percentiles;
-Bracketed OFF selects Normalized. Detail is visible but disabled.
+The public panel has five rows: **Bracketed / Reset / Refresh**, **◀ / tab name / ▶**,
+then dropdowns for **team or player**, **raid**, and **encounter**. Only the original
+caller can operate it for 15 minutes; other members can view it or open their own.
+Player choices follow the Damage table's party/row order, preserving anonymous names.
+Reset keeps the current log and restores Team / Damage / Bracketed ON. Refresh
+reloads the recent history and current images, bypasses cached captures, and keeps
+the selected log, player and mode. Bracketed OFF selects Bible's Normalized mode.
+
+Team navigation includes Damage, Party/Self Buffs (offensive or all), Shields
+(Given, Received, Total Blocked, Blocked Breakdown), Tanked, Average DPS and 10s DPS.
+Player navigation includes Skill Damage, Party/Self Buffs (offensive or all), and
+Damage Breakdown By Category when available; other player tabs use By Source.
+Each player capture is two ordered images covering the entire content, including
+skill tables, buff contribution, Crit Luck, stat conversion, damage potential,
+miscellaneous bonuses, opener rotation and charts when provided by that log.
+Public profile/loadout links are shown where Bible exposes them. Switching logs
+resets player focus to the team so a slot can never silently select another person.
 
 Character lookup starts with 25 recent logs. The raid menu contains only raids
 in the loaded history; its **Load older logs** option fetches another page on
@@ -114,7 +126,11 @@ Each character-panel action checks public-log access before using any cached
 image. Private logs revoke the controls and remove the attached image.
 
 Capture reuses one browser/page for up to 45 idle seconds, then closes it.
-Images use CSS resolution, a 16 MiB LRU cache and a 5-minute cache lifetime.
+Images use CSS resolution, a 16 MiB LRU cache (counting both player images) and a
+5-minute cache lifetime. Captures wait for chart rendering to settle. Wide buff
+tables expand the capture container/viewport, up to 3200px, without hiding columns.
+Player images split near a card boundary with a small overlap, covering the last
+chart instead of clipping at the last table. No player images are pre-rendered.
 Concurrent panel edits are rejected before work starts, and failed edits retain
 the last successful selection. A crashed browser gets one fresh attempt within
 the original deadline, respecting the shared Bible HTTP 429 backoff.

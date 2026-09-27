@@ -72,3 +72,35 @@ test('image cache enforces byte budget, LRU and TTL without retaining oversized 
  now=10;assert.equal(cache.get('a'),undefined);assert.equal(cache.get('c'),undefined);
  cache.set('d',result('d'));assert.equal(cache.get('d').id,'d');
 });
+
+test('two-image cache accounts for both buffers and refresh invalidates every variant of only that log',()=>{
+ const cache=createImageCache({maxBytes:10});
+ const pair={buffer:Buffer.alloc(3),images:[{buffer:Buffer.alloc(3)},{buffer:Buffer.alloc(4)}]};
+ cache.set('log:player1',pair);cache.set('log:player2',pair);
+ assert.equal(cache.get('log:player1'),undefined);assert.equal(cache.get('log:player2'),pair);
+ cache.set('other:team',{buffer:Buffer.alloc(3)});
+ cache.invalidateLog('log');
+ assert.equal(cache.get('log:player2'),undefined);assert.ok(cache.get('other:team'));
+ cache.set('huge:detail',{images:[{buffer:Buffer.alloc(6)},{buffer:Buffer.alloc(6)}]});
+ assert.equal(cache.get('huge:detail'),undefined);
+});
+
+test('catalog refresh fetches once, keeps older history, updates existing metadata and enforces privacy',async()=>{
+ let reads=0;let rows=[row('latest',undefined,200),row('old','Abyss Lord Kazeros',100)];
+ const service=createRaidLogCatalog({client:{fetchBibleLogsWithLimiter:async()=>{reads++;return rows;}}});
+ const current={profile:{name:'Qiylyn'},logs:normalizeCatalogLogs([row('old'),row('history',undefined,1)],'Qiylyn'),page:2,hasMore:false};
+ const refreshed=await service.refresh(current);
+ assert.equal(reads,1);assert.deepEqual(refreshed.logs.map(log=>log.id),['latest','old','history']);
+ assert.equal(refreshed.logs[1].gate,'G1');assert.equal(current.logs[0].gate,'G2');
+ rows=[];await assert.rejects(service.refresh(current),{code:'no_logs'});
+});
+
+test('refresh followed by older-page loading cannot grow history past 250 logs',async()=>{
+ const rows=Array.from({length:25},(_,i)=>row(`new${i}`,undefined,1000-i));
+ const service=createRaidLogCatalog({client:{fetchBibleLogsWithLimiter:async()=>rows}});
+ const current={profile:{name:'Qiylyn'},logs:normalizeCatalogLogs(Array.from({length:240},(_,i)=>row(`old${i}`,undefined,500-i)),'Qiylyn'),page:2,hasMore:true};
+ for(const result of [await service.refresh(current),await service.more(current)]) {
+  assert.equal(result.logs.length,250);assert.equal(result.hasMore,false);
+  await assert.rejects(service.more(result),{code:'invalid_selection'});
+ }
+});

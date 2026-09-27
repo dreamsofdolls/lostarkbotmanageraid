@@ -75,10 +75,10 @@ test("search opens an input modal immediately, then updates the same card into a
   assert.equal(input.custom_id, "character"); assert.equal(input.required, true); assert.equal(input.max_length, 64);
   await f.click(f.owner("submit", " Qiylyn "));
   assert.deepEqual(f.events.slice(1, 3), ["ack-update", ["open", "Qiylyn"]]);
-  assert.deepEqual(captures(f)[0][2], { view: "full", tab: "damage", bracketed: true, useCache: true });
-  assert.equal(controls(f).length, 4);
-  await f.click(f.owner("tab", "tanked"));
-  assert.equal(captures(f).at(-1)[2].tab, "tanked");
+  assert.deepEqual(captures(f)[0][2], { view: "full", tab: "damage", bracketed: true, player: null, useCache: true, refresh: false });
+  assert.equal(controls(f).length, 5);
+  await f.click(f.owner("tab_next"));
+  assert.equal(captures(f).at(-1)[2].tab, "party_buffs");
 });
 
 test("only the caller can open search, select a saved character or submit a modal", async () => {
@@ -143,7 +143,7 @@ test("private log and rendering failures preserve a retryable picker without sha
   assert.equal(controls(f)[0].custom_id, pickerId); assert.equal(f.payload.files, undefined);
   f.failure = null; f.failEdit = true; await f.search();
   assert.equal(controls(f)[0].custom_id, pickerId);
-  f.failEdit = false; await f.search(); assert.equal(controls(f).length, 4);
+  f.failEdit = false; await f.search(); assert.equal(controls(f).length, 5);
 });
 
 test("roster lookup failure keeps name search available without pretending there are no saved rosters", async () => {

@@ -4,8 +4,10 @@ const { createBibleHttpError } = require("../auto-manage/bible/rate-limit");
 const { RaidLogError } = require("./errors");
 const { BIBLE_ORIGIN, parsePublicLogUrl } = require("./source");
 const { readCaptureMemory } = require("./memory");
-const { RAID_LOG_TABS } = require("./tabs");
+const { tabsForPlayer } = require("./tabs");
 const { createImageCache } = require("./image-cache");
+const { inspectPlayerPage, selectPlayer } = require("./detail");
+const { selectCaptureTab, fitCaptureTables, waitForCharts } = require("./page-controls");
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
@@ -45,7 +47,7 @@ function inspectDamagePage({ expectedPlayers, expectedParties } = {}) {
   const clip = (top, bottom) => ({ x, y: Math.floor(top + scrollY), width: right - x,
     height: Math.ceil(bottom + scrollY) - Math.floor(top + scrollY) });
   const team = clip(cardRect.top, lastParty.bottom + 4);
-  const full = clip(headerRect.top, lastTable.bottom + 16);
+  const full = clip(headerRect.top, Math.max(lastTable.bottom + 16, card.parentElement.getBoundingClientRect().bottom));
   const playerCount = playerTables.reduce((sum, table) => sum + table.querySelectorAll("tbody tr").length, 0);
   const fits = (element, region) => {
     const rect = element.getBoundingClientRect();
@@ -74,6 +76,11 @@ function inspectDamagePage({ expectedPlayers, expectedParties } = {}) {
     header: hero.innerText.split(/\s+Uploaded by\b/)[0].trim().replace(/\n{3,}/g, "\n\n"),
     summary: card.innerText.split(/Damage\s+Party Buffs|Party\s+1/)[0].trim(),
     playerCount, partyCount: parties.length || expectedParties, team, full,
+    players: parties.flatMap((party, partyIndex) => [...party.querySelectorAll("tbody tr")].map((row, rowIndex) => ({
+      id: `${partyIndex + 1}-${rowIndex}`, party: partyIndex + 1, row: rowIndex,
+      label: (row.cells[1]?.querySelector(".truncate")?.innerText || row.cells[1]?.innerText || "").trim(),
+      className: row.querySelector('img[src*="/classes/"]')?.alt || "",
+    }))),
   };
 }
 
@@ -109,7 +116,7 @@ function createRaidLogCapture({
     });
   }
 
-  async function capturePage(log, { view, tab, bracketed }, deadline) {
+  async function capturePage(log, { view, tab, bracketed, player, refresh }, deadline) {
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) throw new RaidLogError("timeout");
     clearTimeout(idleTimer);
@@ -156,9 +163,14 @@ function createRaidLogCapture({
       if (expired) throw new RaidLogError("timeout");
       const page = resource.page;
       page.setDefaultTimeout(12_000);
-      if (resource.url !== log.url || !resource.baseline) {
+      await page.setViewportSize({ width: 1600, height: 1200 });
+      await page.evaluate(() => {
+        for (const container of document.querySelectorAll(".max-w-7xl")) container.style.maxWidth = "";
+      });
+      if (refresh || resource.url !== log.url || !resource.baseline) {
         resource.url = log.url;
         resource.baseline = null;
+        resource.player = null;
         stage = "navigation";
         const response = await page.goto(log.url, { waitUntil: "domcontentloaded", timeout: 30_000 });
         if (!response?.ok()) {
@@ -175,39 +187,42 @@ function createRaidLogCapture({
         resource.baseline = await page.evaluate(inspectDamagePage);
         if (resource.baseline.error) throw new RaidLogError(resource.baseline.error);
       }
+      if ((resource.player?.id || null) !== (player?.id || null)) {
+        if (resource.player) await page.getByRole("button", { name: "Return to Overview", exact: true }).click();
+        if (player) {
+          const current = resource.baseline.players.find(entry => entry.id === player.id && entry.label === player.label);
+          if (!current || !await selectPlayer(page, current)) throw new RaidLogError("invalid_selection");
+          player = current;
+        }
+        resource.player = player;
+      }
       stage = tab;
       try {
-        await page.getByRole("button", { name: RAID_LOG_TABS[tab], exact: true }).click();
-        const normalizedSwitch = page.getByRole("switch", { name: "Use normalized DPS percentiles" });
-        if (await normalizedSwitch.isChecked() === bracketed) {
-          await page.locator("label").filter({ has: normalizedSwitch }).click();
-        }
-        // Check the site's reactive state too, so an early click during
-        // hydration cannot produce an image labelled as the wrong tab/mode.
-        await page.waitForFunction(({ label, bracketed }) => {
-          const active = Array.from(document.querySelectorAll("button"))
-            .some(button => button.innerText.trim() === label && button.classList.contains("bg-accent-600"));
-          const input = document.querySelector('input[aria-label="Use normalized DPS percentiles"]');
-          return active && input?.checked === !bracketed
-            && input.closest("label").querySelector("span").classList.contains("text-white") === bracketed;
-        }, { label: RAID_LOG_TABS[tab], bracketed });
+        await selectCaptureTab(page, { tab, bracketed, player });
+        await fitCaptureTables(page);
       } catch (error) {
         throw new RaidLogError("unavailable", error);
       }
       stage = "assets";
       await waitForAssets(page);
+      await waitForCharts(page);
       await page.mouse.move(0, 0);
-      const evidence = await page.evaluate(inspectDamagePage, {
-        expectedPlayers: resource.baseline.playerCount, expectedParties: resource.baseline.partyCount,
-      });
+      const evidence = player
+        ? await page.evaluate(inspectPlayerPage, { player, playerCount: resource.baseline.playerCount, partyCount: resource.baseline.partyCount })
+        : await page.evaluate(inspectDamagePage, { expectedPlayers: resource.baseline.playerCount, expectedParties: resource.baseline.partyCount });
       if (evidence.error) throw new RaidLogError(evidence.error);
-      clip = evidence[view];
       stage = "screenshot";
-      const buffer = await page.screenshot({ clip, type: "png", scale: "css", animations: "disabled" });
-      if (buffer.length > MAX_IMAGE_BYTES) throw new RaidLogError("too_large");
+      const filenameBase = `raid-log-${log.id}-${view}-${tab}-${bracketed ? "bracketed" : "normalized"}${player ? `-player-${player.id}` : ""}`;
+      const images = [];
+      for (const [index, region] of (player ? evidence.clips : [evidence[view]]).entries()) {
+        clip = region;
+        const buffer = await page.screenshot({ clip, fullPage: view === "full", type: "png", scale: "css", animations: "disabled" });
+        if (buffer.length > MAX_IMAGE_BYTES) throw new RaidLogError("too_large");
+        images.push({ buffer, filename: `${filenameBase}${player ? `-${index === 0 ? "top" : "bottom"}` : ""}.png`, clip });
+      }
       succeeded = true;
-      return { ...log, view, tab, bracketed, ...evidence, buffer,
-        filename: `raid-log-${log.id}-${view}-${tab}-${bracketed ? "bracketed" : "normalized"}.png` };
+      return { ...log, view, tab, bracketed, ...evidence, players: resource.baseline.players, images,
+        buffer: images[0].buffer, filename: images[0].filename };
     } catch (error) {
       if (expired || error.name === "TimeoutError") throw new RaidLogError("timeout", error);
       if (resource?.crashed || /(?:Target|Page) crashed/i.test(`${error.message} ${error.cause?.message || ""}`)) {
@@ -231,19 +246,21 @@ function createRaidLogCapture({
     }
   }
 
-  async function captureRaidLog(input, { view = "full", tab = "damage", bracketed = true, useCache = false } = {}) {
+  async function captureRaidLog(input, { view = "full", tab = "damage", bracketed = true, player = null, useCache = false, refresh = false } = {}) {
     const log = parsePublicLogUrl(input);
     if (!["team", "full"].includes(view)) throw new RaidLogError("invalid_view");
-    if (!Object.hasOwn(RAID_LOG_TABS, tab) || typeof bracketed !== "boolean") throw new RaidLogError("invalid_selection");
-    const key = `${log.id}:${view}:${tab}:${bracketed}`;
-    const cached = useCache && cache.get(key);
+    if (!Object.hasOwn(tabsForPlayer(player), tab) || typeof bracketed !== "boolean"
+      || (player && (view !== "full" || !/^\d+-\d+$/.test(player.id) || typeof player.label !== "string"))) throw new RaidLogError("invalid_selection");
+    const key = `${log.id}:${view}:${tab}:${bracketed}:${player ? JSON.stringify([player.id, player.label]) : "team"}`;
+    const cached = useCache && !refresh && cache.get(key);
     if (cached) return { ...cached, cached: true };
     if (busy) throw new RaidLogError("busy");
     // Claim synchronously, before launch or waiting on the shared Bible limiter.
     busy = true;
+    if (refresh) cache.invalidateLog(log.id);
     const deadline = Date.now() + timeoutMs;
     const attempt = async () => {
-      const options = { view, tab, bracketed };
+      const options = { view, tab, bracketed, player, refresh };
       const result = await (bibleLimiter
         ? bibleLimiter.run(() => capturePage(log, options, deadline)) : capturePage(log, options, deadline));
       if (useCache) cache.set(key, result);
