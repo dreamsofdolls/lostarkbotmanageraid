@@ -189,6 +189,16 @@ const FAILURE_KEYS = [
   "raid-status.sync.followupFailedDescription",
   "raidBg.errors.downloadFailed",
   "raidBg.errors.storageFailed",
+  "raid-log.notices.expired.description",
+  "raid-log.notices.rate_limited.description",
+  "raid-log.notices.timeout.description",
+  "raid-log.notices.unavailable.description",
+  "raid-log.notices.incomplete.description",
+  "raid-log.notices.browser_crashed.description",
+  "raid-log.notices.browser_unavailable.description",
+  "raid-log.notices.character_mismatch.description",
+  "raid-log.notices.invalid_view.description",
+  "raid-log.notices.failed.description",
 ];
 
 test("failure copy carries no warmth marker", () => {

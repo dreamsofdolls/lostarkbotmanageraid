@@ -3,7 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { JSDOM } = require("jsdom");
-const { fixture, captures, control } = require("./helpers/raid-log-fixture");
+const { fixture, captures, control, noticeText } = require("./helpers/raid-log-fixture");
 const { inspectPlayerPage, selectPlayer } = require("../bot/services/raid-log/detail");
 const { RAID_LOG_TABS, RAID_LOG_PLAYER_TABS } = require("../bot/services/raid-log/tabs");
 const { RaidLogError } = require("../bot/services/raid-log/errors");
@@ -16,13 +16,13 @@ test("an oversized second image or failed edit leaves the previous public card i
   await f.run(); const before = JSON.stringify(f.payload);
   await f.click(f.owner("player", "1-0", { attachmentSizeLimit: 10 }));
   assert.equal(JSON.stringify(f.payload), before);
-  assert.match(f.events.at(-1)[1].content, /giới hạn/);
+  assert.match(noticeText(f.events.at(-1)[1]), /giới hạn/);
   f.failEdit = true; await f.click(f.owner("player", "1-0"));
   assert.equal(JSON.stringify(f.payload), before);
   f.failEdit = false; await f.click(f.owner("player", "1-0"));
   assert.equal(f.payload.embeds.length, 2);
   f.verifyFailure = new RaidLogError("logs_private"); await f.click(f.owner("refresh"));
-  assert.deepEqual(f.payload.attachments, []); assert.deepEqual(f.payload.embeds, []);
+  assert.deepEqual(f.payload.attachments, []); assert.match(noticeText(f.payload), /Qiylyn/);
 });
 
 test("player selection replaces the tab set and publishes top/bottom images in order", async () => {

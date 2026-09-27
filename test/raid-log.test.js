@@ -14,6 +14,7 @@ const { buildSummaryFields } = require("../bot/handlers/raid/log-view");
 const { createRaidLogCommandDefinition } = require("../bot/handlers/commands/command-definitions/public-log");
 const { BibleRequestLimiter } = require("../bot/services/auto-manage/bible/rate-limit");
 const { silentLog } = require("./helpers/silent-log");
+const { noticeText } = require("./helpers/raid-log-fixture");
 const URL = "https://lostark.bible/logs/S9NbBTM";
 
 test("public URLs are canonicalized and unsafe/non-log destinations are rejected", () => {
@@ -440,14 +441,15 @@ test("handler keeps invalid names private, avoids capture and returns localized 
     const fixture = handlerFixture({ error });
     await fixture.run();
     const payload = fixture.calls.at(-1)[1];
-    assert.ok(payload.content);
-    assert.doesNotMatch(payload.content, /raid-log\.|SECRET INTERNAL PATH/);
+    const [notice] = payload.embeds.map(embed => embed.toJSON());
+    assert.ok(notice.title && notice.description);
+    assert.doesNotMatch(JSON.stringify(notice), /raid-log\.|SECRET INTERNAL PATH/);
     assert.equal(payload.flags, MessageFlags.Ephemeral);
     assert.equal(payload.files, undefined);
   }
   const small = handlerFixture({ attachmentSizeLimit: 1 });
   await small.run();
-  assert.match(small.calls.at(-1)[1].content, /giới hạn đính kèm/);
+  assert.match(noticeText(small.calls.at(-1)[1]), /giới hạn đính kèm/);
 });
 
 test("character lookup defaults to latest log, acknowledges first and labels the selected character", async () => {
@@ -471,12 +473,12 @@ test("missing/invalid names reject privately before lookup and private character
     await fixture.run();
     assert.equal(fixture.calls.at(-1)[1].flags, MessageFlags.Ephemeral);
     assert.deepEqual(fixture.calls.map(call => call[0]), ["defer", "roster", "language", "picker", "ack-update", "error"]);
-    assert.doesNotMatch(fixture.calls.at(-1)[1].content, /`(?:url|view):/);
+    assert.doesNotMatch(noticeText(fixture.calls.at(-1)[1]), /`(?:url|view):/);
   }
   for (const code of ["character_not_found", "character_mismatch", "logs_private", "no_logs"]) {
     const fixture = handlerFixture({ lookupError: new RaidLogError(code) });
     await fixture.run();
     assert.ok(!fixture.calls.some(call => call[0] === "capture"));
-    assert.doesNotMatch(fixture.calls.at(-1)[1].content, /raid-log\./);
+    assert.doesNotMatch(noticeText(fixture.calls.at(-1)[1]), /raid-log\./);
   }
 });

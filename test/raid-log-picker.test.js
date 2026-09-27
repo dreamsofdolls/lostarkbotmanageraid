@@ -6,7 +6,7 @@ const { EmbedBuilder, AttachmentBuilder, MessageFlags } = require("discord.js");
 const { createRaidLogCommand } = require("../bot/handlers/raid/log");
 const { createRaidInteractionRouter } = require("../bot/app/interaction-router-registry");
 const { RaidLogError } = require("../bot/services/raid-log/errors");
-const { fixture, captures, controls } = require("./helpers/raid-log-fixture");
+const { fixture, captures, controls, noticeText } = require("./helpers/raid-log-fixture");
 const { silentLog } = require("./helpers/silent-log");
 
 const accounts = [
@@ -89,13 +89,13 @@ test("only the caller can open search, select a saved character or submit a moda
     await f.click(f.component(action, value));
     assert.equal(f.events.at(-1)[0], "reply");
     assert.equal(f.events.at(-1)[1].flags, MessageFlags.Ephemeral);
-    assert.match(f.events.at(-1)[1].content, /Chỉ người gọi/);
+    assert.match(noticeText(f.events.at(-1)[1]), /không phải của cậu/);
   }
   assert.equal(f.events.length, before + 3);
   assert.equal(captures(f).length, 0);
   for (const overrides of [{ channelId: "other" }, { guildId: "other" }, { message: { id: "other" } }, { message: null }]) {
     await f.click(f.owner("submit", "Qiylyn", overrides));
-    assert.match(f.events.at(-1)[1].content, /không có trong/);
+    assert.match(noticeText(f.events.at(-1)[1]), /không có trong/);
   }
   assert.equal(eventCount(f, "open"), 0);
 });
@@ -110,7 +110,7 @@ test("saved selection reloads the caller, tolerates reordered rosters and reject
   const removed = fixture({ accounts }); await removed.open(); removed.userDoc = { accounts: [accounts[1]] };
   await removed.click(removed.owner("character", "0"));
   assert.equal(eventCount(removed, "open"), 0);
-  assert.match(removed.events.at(-1)[1].content, /không còn trong roster/);
+  assert.match(noticeText(removed.events.at(-1)[1]), /không còn trong roster/);
   assert.equal(controls(removed)[0].type, 2);
   await removed.search("Qiylyn"); assert.equal(captures(removed).length, 1);
 });
@@ -121,12 +121,12 @@ test("long character lists paginate within Discord limits, reject forged values 
   assert.equal(controls(f)[1].options.length, 23);
   for (const value of ["__prev", "-1", "1e0", "23", "999", "forged"]) {
     await f.click(f.owner("character", value));
-    assert.match(f.events.at(-1)[1].content, /không có trong/);
+    assert.match(noticeText(f.events.at(-1)[1]), /không có trong/);
   }
   await f.click(f.owner("character", "__next"));
   assert.equal(controls(f)[1].options.length, 24);
   assert.equal(controls(f)[1].options[0].label, "Char22");
-  await f.click(oldModal); assert.match(f.events.at(-1)[1].content, /cập nhật/);
+  await f.click(oldModal); assert.match(noticeText(f.events.at(-1)[1]), /cập nhật/);
   await f.click(f.owner("character", "__next"));
   assert.equal(controls(f)[1].options.length, 7);
   await f.click(f.owner("character", "49"));
@@ -138,7 +138,7 @@ test("private log and rendering failures preserve a retryable picker without sha
   const f = fixture({ accounts }); await f.open();
   const pickerId = controls(f)[0].custom_id;
   f.verifyFailure = new RaidLogError("logs_private"); await f.search();
-  assert.match(f.events.at(-1)[1].content, /Public Log/);
+  assert.match(noticeText(f.events.at(-1)[1]), /Public Log/);
   assert.equal(captures(f).length, 0); assert.equal(controls(f)[0].custom_id, pickerId);
   f.verifyFailure = null; f.failure = new RaidLogError("browser_crashed"); await f.search();
   assert.equal(controls(f)[0].custom_id, pickerId); assert.equal(f.payload.files, undefined);
@@ -163,10 +163,10 @@ test("overlapping selections cannot duplicate a capture and the old modal is sta
   const pending = f.click(oldModal);
   await opening;
   await f.click(f.owner("character", "0"));
-  assert.match(f.events.at(-1)[1].content, /đang xử lý/);
+  assert.match(noticeText(f.events.at(-1)[1]), /đang xử lý/);
   release(); await pending;
   assert.equal(eventCount(f, "open"), 1); assert.equal(captures(f).length, 1);
-  await f.click(oldModal); assert.match(f.events.at(-1)[1].content, /cập nhật/);
+  await f.click(oldModal); assert.match(noticeText(f.events.at(-1)[1]), /cập nhật/);
   assert.equal(eventCount(f, "open"), 1);
 });
 
@@ -174,9 +174,9 @@ test("expired modal and wrong interaction kinds cannot start a capture", async (
   let now = 0; const f = fixture({ accounts, now: () => now, sessionMs: 100 });
   await f.open(); await f.click(f.owner("search"));
   await f.click(f.owner("character", "0", { isStringSelectMenu: () => false, isModalSubmit: () => true }));
-  assert.match(f.events.at(-1)[1].content, /không có trong/);
+  assert.match(noticeText(f.events.at(-1)[1]), /không có trong/);
   now = 101; await f.click(f.owner("submit", "Qiylyn"));
-  assert.match(f.events.at(-1)[1].content, /hết hạn/);
+  assert.match(noticeText(f.events.at(-1)[1]), /hết hạn/);
   assert.equal(eventCount(f, "open"), 0);
 });
 

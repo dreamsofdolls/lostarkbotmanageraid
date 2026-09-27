@@ -1,13 +1,14 @@
 "use strict";
 
 const { randomBytes } = require("node:crypto");
-const { t, getUserLanguage } = require("../../services/i18n");
+const { getUserLanguage } = require("../../services/i18n");
 const { parseRaidLogSource } = require("../../services/raid-log/source");
 const { RaidLogError, raidLogErrorCode } = require("../../services/raid-log/errors");
 const { MAX_IMAGE_BYTES } = require("../../services/raid-log/capture");
 const { buildLogComponents, buildLogEmbeds } = require("./log-view");
 const { tabsForPlayer } = require("../../services/raid-log/tabs");
 const { rosterChoices, pickerOptions, buildLogPicker, buildLogSearchModal } = require("./log-picker");
+const { buildRaidLogNotice, buildRevokedNotice } = require("./log-notices");
 
 const PICKER_ACTION_TYPES = { search: "isButton", character: "isStringSelectMenu", submit: "isModalSubmit" };
 const LOG_ACTION_TYPES = {
@@ -25,11 +26,6 @@ function createRaidLogCommand({
 }) {
   const sessions = new Map();
   const embeds = (state, result) => buildLogEmbeds(state, result, { EmbedBuilder, UI });
-  function errorText(error, lang) {
-    const code = raidLogErrorCode(error);
-    log.warn(`[raid-log] ${code}: ${error.message}`);
-    return t(`raid-log.errors.${code}`, lang);
-  }
   function remember(state) {
     for (const [id, entry] of sessions) if (entry.expires <= now() && !entry.busy) sessions.delete(id);
     if (sessions.size >= maxSessions) {
@@ -40,19 +36,25 @@ function createRaidLogCommand({
     sessions.set(state.id, state);
   }
   async function render(interaction, state, refresh = false) {
-    const result = await captureRaidLog(state.selected.url, {
-      view: "full", tab: state.tab, bracketed: state.bracketed, player: state.player, useCache: true, refresh,
-    });
-    const limit = interaction.attachmentSizeLimit || MAX_IMAGE_BYTES;
-    if (result.images.some(image => image.buffer.length > limit)) throw new RaidLogError("too_large");
-    const { images, ...metadata } = result;
-    state.result = { ...metadata, images: images.map(image => ({ filename: image.filename })) };
-    const message = await interaction.editReply({
-      content: null, embeds: embeds(state, state.result), components: buildLogComponents(state),
-      attachments: [], files: images.map(image => new AttachmentBuilder(image.buffer, { name: image.filename })), allowedMentions: { parse: [] },
-    });
-    log.info(`[raid-log] rendered id=${state.selected.id} player=${state.player?.id || "team"} tab=${state.tab} images=${images.length} bracketed=${state.bracketed} cached=${Boolean(result.cached)}`);
-    return message;
+    try {
+      const result = await captureRaidLog(state.selected.url, {
+        view: "full", tab: state.tab, bracketed: state.bracketed, player: state.player, useCache: true, refresh,
+      });
+      const limit = interaction.attachmentSizeLimit || MAX_IMAGE_BYTES;
+      if (result.images.some(image => image.buffer.length > limit)) throw new RaidLogError("too_large");
+      const { images, ...metadata } = result;
+      state.result = { ...metadata, images: images.map(image => ({ filename: image.filename })) };
+      const message = await interaction.editReply({
+        content: null, embeds: embeds(state, state.result), components: buildLogComponents(state),
+        attachments: [], files: images.map(image => new AttachmentBuilder(image.buffer, { name: image.filename })), allowedMentions: { parse: [] },
+      });
+      log.info(`[raid-log] rendered id=${state.selected.id} player=${state.player?.id || "team"} tab=${state.tab} images=${images.length} bracketed=${state.bracketed} cached=${Boolean(result.cached)}`);
+      return message;
+    } catch (error) {
+      // The notice links the log being opened; the session still points at the previous one.
+      error.logUrl = state.selected.url;
+      throw error;
+    }
   }
 
   async function handleRaidLogCommand(interaction) {
@@ -77,7 +79,10 @@ function createRaidLogCommand({
       state.messageId = message.id;
     } catch (error) {
       if (state) sessions.delete(state.id);
-      await interaction.editReply({ content: errorText(error, lang), embeds: [], components: [], files: [], attachments: [], allowedMentions: { parse: [] } });
+      const code = raidLogErrorCode(error);
+      log.warn(`[raid-log] ${code}: ${error.message}`);
+      await interaction.editReply({ content: null, embeds: [buildRaidLogNotice(code, { EmbedBuilder, lang })],
+        components: [], files: [], attachments: [], allowedMentions: { parse: [] } });
     } finally { if (state) state.busy = false; }
   }
 
@@ -154,7 +159,10 @@ function createRaidLogCommand({
   async function handleRaidLogComponent(interaction) {
     const [, id, revision, action] = String(interaction.customId).split(":");
     const state = sessions.get(id);
-    const reject = code => interaction.reply({ content: t(`raid-log.errors.${code}`, state?.lang || "vi"), flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } });
+    const reject = code => interaction.reply({
+      embeds: [buildRaidLogNotice(code, { EmbedBuilder, lang: state?.lang || "vi", owner: state && `<@${state.ownerId}>` })],
+      flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] },
+    });
     if (!state || state.expires <= now()) return reject("expired");
     if (state.guildId !== interaction.guildId || state.channelId !== interaction.channelId || state.messageId !== interaction.message?.id) return reject("invalid_selection");
     if (state.ownerId !== interaction.user.id) return reject("owner_only");
@@ -178,11 +186,18 @@ function createRaidLogCommand({
       log.info(`[raid-log] interaction action=${action} elapsedMs=${now() - started}`);
     } catch (error) {
       const code = raidLogErrorCode(error);
+      log.warn(`[raid-log] ${code}: ${error.message}`);
       if (state.stage === "log" && ["logs_private", "no_logs", "character_mismatch"].includes(code)) {
         sessions.delete(id);
-        await interaction.editReply({ content: errorText(error, state.lang), embeds: [], attachments: [], files: [], components: buildLogComponents(state, true), allowedMentions: { parse: [] } });
+        await interaction.editReply({
+          content: null, embeds: [buildRevokedNotice(code, { EmbedBuilder, lang: state.lang, character: state.catalog.profile.name })],
+          attachments: [], files: [], components: buildLogComponents(state, true), allowedMentions: { parse: [] },
+        });
       } else {
-        const payload = { content: errorText(error, state.lang), flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] } };
+        const payload = {
+          embeds: [buildRaidLogNotice(code, { EmbedBuilder, lang: state.lang, logUrl: error.logUrl })],
+          flags: MessageFlags.Ephemeral, allowedMentions: { parse: [] },
+        };
         if (interaction.deferred) await interaction.followUp(payload);
         else await interaction.reply(payload);
       }

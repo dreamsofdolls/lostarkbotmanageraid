@@ -88,7 +88,7 @@ character IDs and class from a single profile-page request through the existing
 Bible client, then reads the
 newest logs page, and requires an exact character-name match (case-insensitive,
 with accents preserved). No registered roster is needed. Private logs, unknown
-characters, no logs and mismatched identities produce a notice instead of a capture.
+characters, no logs and mismatched identities produce a notice card instead of a capture.
 
 New log panels open on the full Damage tab with **Bracketed ON**. Every tab
 capture includes the encounter header, all tables and the charts in the selected tab,
@@ -122,8 +122,12 @@ in the loaded history; its **Load older logs** option fetches another page on
 demand, up to 250 logs. Long dropdowns paginate within Discord's 25-option limit.
 If Bible repeats a page without new IDs, loading stops; the displayed count is
 the history loaded into this panel, not a claim to cover all historical logs.
-Each character-panel action checks public-log access before using any cached
-image. Private logs revoke the controls and remove the attached image.
+
+Every problem is answered with a notice card that only the clicker sees: what
+happened and what to do next. A capture that fails or times out links the original
+log on Bible. Each panel action checks public-log access before using any cached
+image, and a character whose logs turn private mid-session gets a lock card in
+place of the panel, with the image removed and every control disabled.
 
 Capture reuses one browser/page for up to 45 idle seconds, then closes it.
 When it first opens a log it also reads every player's figures and percentile

@@ -194,30 +194,105 @@ module.exports = {
     fields: { duration: "⏱ Thời lượng", totalDamage: "⚔ Tổng DMG", totalDps: "📊 DPS đội" },
     footer: "TEST • Một log/gate • Giữ nguyên tên ẩn trên Bible",
     views: { team: "Bảng DMG của team", full: "Tab Damage đầy đủ" },
-    errors: {
-      invalid_url: "Dùng link log public dạng `https://lostark.bible/logs/<id>` nhé (không kèm query hoặc fragment).",
-      invalid_source: "Nhập tên nhân vật để lấy log public gần nhất nhé.",
-      owner_only: "Chỉ người gọi lệnh được thao tác trên bảng này. Cậu gọi `/raid-log` để mở bảng riêng nhé.",
-      roster_changed: "Nhân vật này không còn trong roster của cậu. Gọi lại `/raid-log` để tải danh sách mới, hoặc dùng Tìm tên nhân vật nhé.",
-      invalid_character: "Nhập tên nhân vật (NA), tối đa 64 ký tự chữ hoặc số, không kèm link hay khoảng trắng nhé.",
-      character_not_found: "Bible chưa tìm thấy nhân vật này ở NA. Cậu kiểm tra lại tên nhé.",
-      character_mismatch: "Dữ liệu Bible trả về không khớp chính xác nhân vật cần tìm. Artist chưa chọn log để tránh gửi nhầm trận của char khác.",
-      logs_private: "Nhân vật này chưa bật Public Log trên Bible. Cần bật Public Log thì Artist mới lấy log theo tên được nhé.",
-      no_logs: "Nhân vật này chưa có log public trên Bible để chụp.",
-      invalid_view: "Cấu hình vùng chụp không hợp lệ. Nhờ người vận hành kiểm tra nhé.",
-      invalid_selection: "Lựa chọn này không có trong bảng log hiện tại.",
-      panel_busy: "Bảng đang xử lý một lượt bấm. Cậu đợi ảnh cập nhật rồi chọn tiếp nhé.",
-      stale: "Bảng vừa được cập nhật. Cậu chọn lại trên bảng mới nhất nhé.",
-      expired: "Bảng log đã hết hạn hoặc bot vừa khởi động lại. Gọi `/raid-log` để mở bảng mới nhé.",
-      busy: "Artist đang chụp một log khác. Cậu thử lại sau một chút nhé.",
-      browser_unavailable: "Chức năng thử nghiệm chưa có trình duyệt chụp ảnh sẵn sàng. Nhờ người vận hành kiểm tra Playwright/Chromium nhé.",
-      browser_crashed: "Trình duyệt chụp ảnh bị dừng đột ngột và chưa thể khôi phục. Cậu thử lại sau một lúc hoặc mở log gốc trên Bible nhé.",
-      unavailable: "Không mở được bảng của log này. Log có thể không tồn tại, không còn public, hoặc Bible đang chặn yêu cầu. Cậu kiểm tra link gốc nhé.",
-      incomplete: "Bảng log, biểu đồ hoặc tài nguyên ảnh tải chưa đầy đủ, hoặc bố cục Bible đã đổi. Artist chưa gửi ảnh để tránh bị cắt/mất dữ liệu; cậu thử lại sau nhé.",
-      too_large: "Ảnh full tab vượt giới hạn đính kèm. Cậu xem log gốc trên Bible nhé.",
-      timeout: "Bible tải quá lâu nên lần chụp này đã dừng. Cậu thử lại sau nhé.",
-      rate_limited: "Bible đang giới hạn yêu cầu (HTTP 429). Artist đã tạm ngưng truy cập; cậu thử lại sau vài phút nhé.",
-      failed: "Chưa chụp được log ở lần thử này. Cậu thử lại sau hoặc kiểm tra link trên Bible nhé.",
+    notices: {
+      link: "[Mở log gốc trên Bible]({url})",
+      owner_only: {
+        title: "Bảng này không phải của cậu",
+        description: "Bảng log này là của {owner}, chỉ người gọi lệnh mới bấm được. Cậu gọi `/raid-log` để mở bảng của riêng mình nhé.",
+      },
+      panel_busy: {
+        title: "Artist đang chụp lượt trước",
+        description: "Bảng đang xử lý cú bấm vừa rồi, nên cú bấm này chưa được tính. Đợi ảnh mới hiện ra rồi cậu bấm tiếp nhé.",
+      },
+      stale: {
+        title: "Bảng vừa được cập nhật",
+        description: "Nút cậu bấm thuộc phiên bản cũ của bảng. Cậu bấm lại trên bảng mới nhất nhé.",
+      },
+      invalid_selection: {
+        title: "Lựa chọn không còn trên bảng",
+        description: "Lựa chọn này không có trong bảng đang hiện, có thể bảng vừa đổi raid hoặc log. Cậu chọn lại từ bảng mới nhất nhé.",
+      },
+      expired: {
+        title: "Bảng log đã hết hạn",
+        description: "Mỗi bảng mở 15 phút, hoặc bot vừa khởi động lại. Gọi `/raid-log` để mở bảng mới.",
+      },
+      busy: {
+        title: "Artist đang chụp một log khác",
+        description: "Mỗi lúc Artist chỉ chụp được một log. Cậu thử lại sau vài giây nhé.",
+      },
+      invalid_source: {
+        title: "Chưa có tên nhân vật",
+        description: "Cậu nhập tên một nhân vật NA để Artist tìm log public gần nhất nhé.",
+      },
+      invalid_character: {
+        title: "Tên nhân vật chưa hợp lệ",
+        description: "Tên chỉ gồm chữ và số, tối đa 64 ký tự, không có khoảng trắng hay link. Ví dụ: `Qiylyn`.",
+      },
+      roster_changed: {
+        title: "Nhân vật không còn trong roster",
+        description: "Nhân vật này không còn trong roster đã lưu của cậu. Gọi lại `/raid-log` để tải danh sách mới, hoặc bấm **🔎 Tìm theo tên** nhé.",
+      },
+      character_not_found: {
+        title: "Không tìm thấy nhân vật",
+        description: "Bible không có nhân vật này ở NA. Cậu kiểm tra lại chính tả, kể cả dấu, nhé.",
+      },
+      no_logs: {
+        title: "Chưa có log public",
+        description: "Nhân vật này chưa có log public nào trên Bible. Log sẽ hiện ở đây sau khi được upload lên Bible.",
+      },
+      logs_private: {
+        title: "Log chưa bật public",
+        description: "Nhân vật này chưa bật Public Log trên Bible, nên Artist không xem được log. Chủ nhân vật bật Public Log trong cài đặt log của Bible là xem được.",
+      },
+      character_mismatch: {
+        title: "Dữ liệu Bible không khớp",
+        description: "Bible trả về log mang tên một nhân vật khác. Artist dừng ở đây để không gửi nhầm trận của người khác.",
+      },
+      rate_limited: {
+        title: "Bible đang giới hạn truy cập",
+        description: "Bible trả về HTTP 429, nên Artist tạm dừng mọi yêu cầu tới Bible. Thử lại sau vài phút.",
+      },
+      timeout: {
+        title: "Bible phản hồi quá lâu",
+        description: "Lần chụp này đã dừng sau 60 giây. Thử lại sau, hoặc xem thẳng trên Bible.",
+      },
+      unavailable: {
+        title: "Không mở được log này",
+        description: "Log có thể đã bị xoá, không còn public, hoặc Bible đang chặn yêu cầu.",
+      },
+      incomplete: {
+        title: "Log tải chưa đầy đủ",
+        description: "Bảng, biểu đồ hoặc ảnh trên Bible chưa tải xong, hoặc Bible vừa đổi bố cục. Artist không gửi ảnh để tránh thiếu số liệu. Thử lại sau.",
+      },
+      too_large: {
+        title: "Ảnh vượt giới hạn đính kèm",
+        description: "Ảnh của tab này lớn hơn giới hạn file của kênh. Cậu xem tab này trên Bible nhé.",
+      },
+      browser_crashed: {
+        title: "Trình duyệt chụp ảnh dừng đột ngột",
+        description: "Artist đã thử lại một lần nhưng chưa được. Thử lại sau ít phút, hoặc xem thẳng trên Bible.",
+      },
+      browser_unavailable: {
+        title: "Trình duyệt chụp ảnh chưa sẵn sàng",
+        description: "Bot chưa có Chromium để chụp log. Nhờ người vận hành kiểm tra Playwright/Chromium.",
+      },
+      invalid_url: {
+        title: "Link log không hợp lệ",
+        description: "Link log phải có dạng `https://lostark.bible/logs/<mã>`, không kèm query hay fragment.",
+      },
+      invalid_view: {
+        title: "Cấu hình vùng chụp không hợp lệ",
+        description: "Nhờ người vận hành kiểm tra tham số `view`.",
+      },
+      failed: {
+        title: "Chưa chụp được log",
+        description: "Có lỗi chưa rõ nguyên nhân. Thử lại sau, hoặc xem thẳng trên Bible.",
+      },
+      revoked: {
+        title: "Log của {character} không còn public",
+        description: "{character} vừa tắt Public Log trên Bible, nên Artist gỡ ảnh và khoá bảng này.",
+        hint: "Bật lại Public Log rồi gọi `/raid-log` để mở bảng mới.",
+      },
     },
   },
   "raid-auction": {
@@ -1880,10 +1955,10 @@ module.exports = {
         example: "/raid-log",
         notes: [
           "Gọi lệnh không cần tham số để mở thẻ chọn nhân vật. Tìm tên qua nút mở hộp nhập, hoặc chọn nhân vật thuộc roster của chính người gọi. Chưa có nhân vật đã lưu thì chỉ hiện tìm tên.",
-          "Thẻ mở đầu và bảng log đều công khai, chỉ người gọi được thao tác. Sau khi chọn nhân vật, thẻ chuyển thành bảng log public gần nhất trên NA, không giới hạn tuần hiện tại.",
+          "Thẻ mở đầu và bảng log đều công khai, chỉ người gọi được bấm. Sau khi chọn nhân vật, thẻ chuyển thành bảng log public gần nhất ở NA, không giới hạn tuần hiện tại. Mọi lỗi hiện thành card riêng cho người bấm, kèm link log gốc khi lần chụp hỏng; log chuyển private giữa chừng thì bảng bị khoá và gỡ ảnh.",
           "Trả thông tin trận và ảnh trực tiếp tại kênh gọi lệnh. Không cần đăng ký roster hoặc bật Auto-sync.",
           "Ba dropdown chọn Toàn đội/player → raid → log; nút ◀/▶ chuyển tab theo chế độ đang xem. Chỉ người gọi được thao tác trong 15 phút. Raid có log đã tải mới xuất hiện; tải thêm lịch sử trong dropdown raid (tối đa 250 log).",
-          "Bracketed mặc định ON; OFF chuyển sang Normalized. Về ban đầu giữ log, trở về Toàn đội / Damage / Bracketed ON. Refresh tải lại danh sách và ảnh hiện tại, giữ lựa chọn. Log private khóa bảng và bỏ ảnh.",
+          "Bracketed mặc định ON; OFF chuyển sang Normalized. Về ban đầu giữ log, trở về Toàn đội / Damage / Bracketed ON. Refresh tải lại danh sách và ảnh hiện tại, giữ lựa chọn.",
           "Toàn đội có Damage, Party/Self Buffs (tấn công hoặc đầy đủ), bốn chế độ Shields, Tanked và hai biểu đồ DPS. Chọn player để xem skill/buff và toàn bộ phân tích phía dưới bằng hai ảnh trên/dưới; Breakdown có By Source và By Category khi log hỗ trợ.",
           "Mỗi lần lấy một log/gate, không tổng hợp cả raid. Giữ nguyên tên bị ẩn; không tự nhận diện roster, đánh dấu clear hay quét nền.",
           "Chỉ dùng log public trên lostark.bible. Đây là bản thử nghiệm; Bible đổi bố cục hoặc giới hạn truy cập có thể khiến lần chụp thất bại.",

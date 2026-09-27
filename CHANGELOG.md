@@ -7,6 +7,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ## 2026-09-28
 
 ### Changed
+- `/raid-log` answers every problem with a notice card (what happened, what to do next) instead of one line of text. A capture that fails or times out links the log it tried to open, and a panel whose character turns Public Log off becomes a lock card naming the character, with the image removed and the controls disabled.
 - `/raid-log` reads each player's figures and percentile badges (Bracketed and Normalized) from Bible's Damage table when it first opens a log, and each support's bD% from their detail view, so the first open of a log takes a few seconds longer. A support page that fails leaves only that figure empty.
 
 ## 2026-09-23

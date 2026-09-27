@@ -181,30 +181,105 @@ module.exports = {
     fields: { duration: "⏱ Duration", totalDamage: "⚔ Total DMG", totalDps: "📊 Team DPS" },
     footer: "TEST • One log/gate • Bible's anonymized names preserved",
     views: { team: "Team Damage tables", full: "Full Damage tab" },
-    errors: {
-      invalid_url: "Use a public log URL: `https://lostark.bible/logs/<id>` (no query or fragment).",
-      invalid_source: "Enter a character name to fetch the latest public log.",
-      owner_only: "Only the caller can interact with this panel. Run `/raid-log` to open your own.",
-      roster_changed: "This character is no longer in your saved rosters. Run `/raid-log` for an updated list, or search by name.",
-      invalid_character: "Enter an NA character name, up to 64 letters or digits, without a link or spaces.",
-      character_not_found: "Bible could not find this character in NA. Please check the name.",
-      character_mismatch: "Bible's data does not match the requested character. No log was selected to avoid sharing another character's encounter.",
-      logs_private: "This character has not enabled Public Log on Bible. Enable it before looking up logs by name.",
-      no_logs: "This character has no public logs on Bible to capture yet.",
-      invalid_view: "The capture area configuration is invalid. Please ask the operator to check it.",
-      invalid_selection: "This selection is not available in the current log panel.",
-      panel_busy: "This panel is processing another selection. Wait for the image to update before choosing again.",
-      stale: "This panel was just updated. Please choose again from its latest controls.",
-      expired: "This log panel expired or the bot restarted. Run `/raid-log` to open a new panel.",
-      busy: "Artist is capturing another log. Please try again shortly.",
-      browser_unavailable: "The experimental capture browser is unavailable. Ask the operator to check Playwright/Chromium.",
-      browser_crashed: "The capture browser crashed and could not recover. Please try again later or open the original log on Bible.",
-      unavailable: "Cannot open this log's tables. The log may be missing, no longer public, or Bible may be blocking the request. Please check the original link.",
-      incomplete: "Log tables, charts or image assets are incomplete, or Bible's layout has changed. No image was sent to avoid missing or clipped data. Please try again later.",
-      too_large: "The full-tab image exceeds the attachment limit. Please view the original log on Bible.",
-      timeout: "Bible took too long to load, so this capture was stopped. Please try again later.",
-      rate_limited: "Bible is limiting requests (HTTP 429). Access is temporarily paused; please try again in a few minutes.",
-      failed: "Could not capture this log. Please try again later or check the link on Bible.",
+    notices: {
+      link: "[Open the original log on Bible]({url})",
+      owner_only: {
+        title: "This panel isn't yours",
+        description: "This log panel belongs to {owner}; only the caller can use it. Run `/raid-log` to open your own.",
+      },
+      panel_busy: {
+        title: "Still capturing the last click",
+        description: "This panel is busy with your previous click, so this one was not counted. Wait for the new image, then continue.",
+      },
+      stale: {
+        title: "The panel just changed",
+        description: "That control belongs to an older version of the panel. Use the latest one.",
+      },
+      invalid_selection: {
+        title: "That choice is gone",
+        description: "It is not on the panel shown now; the raid or log may have just changed. Choose again from the latest panel.",
+      },
+      expired: {
+        title: "This log panel expired",
+        description: "Panels last 15 minutes, or the bot restarted. Run `/raid-log` to open a new one.",
+      },
+      busy: {
+        title: "Busy with another log",
+        description: "Artist captures one log at a time. Try again in a few seconds.",
+      },
+      invalid_source: {
+        title: "No character name",
+        description: "Enter an NA character name to find their latest public log.",
+      },
+      invalid_character: {
+        title: "That name isn't valid",
+        description: "Use letters and digits only, up to 64, with no spaces or links. Example: `Qiylyn`.",
+      },
+      roster_changed: {
+        title: "Not in your roster anymore",
+        description: "This character is no longer in your saved roster. Run `/raid-log` again for a fresh list, or use **🔎 Search by name**.",
+      },
+      character_not_found: {
+        title: "Character not found",
+        description: "Bible has no character by that name in NA. Check the spelling, accents included.",
+      },
+      no_logs: {
+        title: "No public logs yet",
+        description: "This character has no public logs on Bible. They will show up here once uploaded.",
+      },
+      logs_private: {
+        title: "Logs aren't public",
+        description: "This character has not enabled Public Log on Bible, so its logs can't be viewed. The owner can turn it on in Bible's log settings.",
+      },
+      character_mismatch: {
+        title: "Bible's data doesn't match",
+        description: "Bible returned logs under another character's name. Stopped here so no one else's fight is shared by mistake.",
+      },
+      rate_limited: {
+        title: "Bible is rate limiting",
+        description: "Bible answered HTTP 429, so requests to Bible are paused. Try again in a few minutes.",
+      },
+      timeout: {
+        title: "Bible took too long",
+        description: "This capture stopped after 60 seconds. Try again later, or view it on Bible.",
+      },
+      unavailable: {
+        title: "Can't open this log",
+        description: "It may be deleted or no longer public, or Bible may be blocking requests.",
+      },
+      incomplete: {
+        title: "The log didn't finish loading",
+        description: "Tables, charts or images on Bible were incomplete, or Bible changed its layout. No image was sent, to avoid missing numbers. Try again later.",
+      },
+      too_large: {
+        title: "Image too large to attach",
+        description: "This tab's image is over the channel's file limit. View this tab on Bible instead.",
+      },
+      browser_crashed: {
+        title: "The capture browser crashed",
+        description: "One retry did not help. Try again in a few minutes, or view it on Bible.",
+      },
+      browser_unavailable: {
+        title: "The capture browser isn't ready",
+        description: "Chromium is not available to capture logs. Ask the operator to check Playwright/Chromium.",
+      },
+      invalid_url: {
+        title: "Invalid log link",
+        description: "Log links look like `https://lostark.bible/logs/<id>`, with no query or fragment.",
+      },
+      invalid_view: {
+        title: "Invalid capture area",
+        description: "Ask the operator to check the `view` setting.",
+      },
+      failed: {
+        title: "Couldn't capture the log",
+        description: "Something unexpected went wrong. Try again later, or view it on Bible.",
+      },
+      revoked: {
+        title: "{character}'s logs are no longer public",
+        description: "{character} turned off Public Log on Bible, so the image was removed and this panel locked.",
+        hint: "Turn Public Log back on, then run `/raid-log` for a new panel.",
+      },
     },
   },
   "raid-auction": {
@@ -1858,10 +1933,10 @@ module.exports = {
         example: "/raid-log",
         notes: [
           "Run without options to open a character picker. Search by name using the input dialog, or choose a character from the caller's own saved rosters. Without saved characters, only name search appears.",
-          "The opening card and log panel are public, and only the caller can interact with them. Selecting a character opens their latest public log in NA, without a current-week restriction.",
+          "The opening card and log panel are public, and only the caller can use them. Selecting a character opens their latest public log in NA, without a current-week restriction. Every problem comes as a card only the clicker sees, with the original log linked when a capture fails; if the logs turn private mid-session, the panel locks and the image is removed.",
           "Posts encounter details and an image in the calling channel. No registered roster or Auto-sync opt-in is required.",
           "Three menus select team/player → raid → log; ◀/▶ changes tabs for the selected view. Only the caller can interact for 15 minutes. Only raids in loaded history appear; load older logs from the raid menu (up to 250).",
-          "Bracketed defaults to ON; OFF selects Normalized. Reset keeps the current log and restores Team / Damage / Bracketed ON. Refresh reloads history and the current images while keeping your selection. Private logs revoke controls and images.",
+          "Bracketed defaults to ON; OFF selects Normalized. Reset keeps the current log and restores Team / Damage / Bracketed ON. Refresh reloads history and the current images while keeping your selection.",
           "Team tabs include Damage, Party/Self Buffs (offensive or all), four Shields modes, Tanked and two DPS charts. Select a player for skills/buffs and all lower analysis cards in two ordered images, including Source/Category breakdown where available.",
           "One link represents one log/gate, not the whole raid. Anonymized names stay unchanged; no roster matching, clear updates or background scanning.",
           "Only public lostark.bible logs are supported. Experimental: layout changes or access limits may prevent a capture.",

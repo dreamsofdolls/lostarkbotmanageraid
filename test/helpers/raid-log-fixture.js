@@ -81,4 +81,10 @@ const captures = f => f.events.filter(x => Array.isArray(x) && x[0] === "capture
 const controls = f => f.payload.components.map(row => row.toJSON().components[0]);
 const control = (f, action) => f.payload.components.flatMap(row => row.toJSON().components).find(c => c.custom_id.endsWith(`:${action}`));
 
-module.exports = { fixture, logEntry, captures, controls, control };
+// Title and description of the notice card a reply, follow-up or edit carries.
+function noticeText(payload) {
+  const { title, description } = payload.embeds[0].toJSON();
+  return `${title}\n${description}`;
+}
+
+module.exports = { fixture, logEntry, captures, controls, control, noticeText };

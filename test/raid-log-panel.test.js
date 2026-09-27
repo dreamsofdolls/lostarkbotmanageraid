@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const { MessageFlags } = require("discord.js");
 const { RaidLogError } = require("../bot/services/raid-log/errors");
 const { createRaidInteractionRouter } = require("../bot/app/interaction-router-registry");
-const { fixture, logEntry, captures, control } = require("./helpers/raid-log-fixture");
+const { fixture, logEntry, captures, control, noticeText } = require("./helpers/raid-log-fixture");
 
 test("public panel orders actions, tab arrows, player, raid and log within five Discord rows in every locale", async () => {
   for (const lang of ["vi", "en", "jp"]) {
@@ -41,7 +41,7 @@ test("the caller can change tabs and Bracketed, with immediate ACK before privac
   assert.equal(captures(f).at(-1)[2].bracketed, false);
   assert.match(control(f, "bracketed").label, /OFF.*Normalized/);
   await f.click(old);
-  assert.match(f.events.at(-1)[1].content, /cập nhật/);
+  assert.match(noticeText(f.events.at(-1)[1]), /Bảng vừa được cập nhật/);
   assert.equal(f.events.at(-1)[1].flags, MessageFlags.Ephemeral);
 });
 
@@ -59,7 +59,8 @@ test("other members cannot operate any log control or trigger Bible, capture or 
       const [event, payload] = f.events.at(-1);
       assert.equal(event, "reply");
       assert.equal(payload.flags, MessageFlags.Ephemeral);
-      assert.match(payload.content, { vi: /Chỉ người gọi/, en: /Only the caller/, jp: /実行者だけ/ }[lang]);
+      assert.match(noticeText(payload), { vi: /không phải của cậu/, en: /isn't yours/, jp: /あなたのものではありません/ }[lang]);
+      assert.match(noticeText(payload), /<@author>/);
     }
     assert.equal(f.events.length, 9);
     assert.equal(JSON.stringify(f.payload), before);
@@ -110,7 +111,7 @@ test("private characters are blocked initially and changing to private revokes t
   await initial.run();
   assert.equal(captures(initial).length, 0);
   assert.equal(initial.payload.components.length, 1);
-  assert.match(initial.events.at(-1)[1].content, /Public Log/);
+  assert.match(noticeText(initial.events.at(-1)[1]), /Public Log/);
   const f = fixture();
   await f.run();
   f.verifyFailure = new RaidLogError("logs_private");
@@ -118,10 +119,11 @@ test("private characters are blocked initially and changing to private revokes t
   await f.click(action);
   assert.equal(captures(f).length, 1);
   assert.deepEqual(f.payload.attachments, []);
-  assert.deepEqual(f.payload.embeds, []);
+  assert.equal(f.payload.embeds.length, 1);
+  assert.match(noticeText(f.payload), /Log của Qiylyn không còn public/);
   assert.ok(f.payload.components.every(row => row.toJSON().components.every(c => c.disabled)));
   await f.click(action);
-  assert.match(f.events.at(-1)[1].content, /hết hạn/);
+  assert.match(noticeText(f.events.at(-1)[1]), /hết hạn/);
 });
 
 test("more than 25 raid choices paginate without losing raid selection or exposing unavailable logs", async () => {
@@ -144,7 +146,7 @@ test("simultaneous clicks do not overlap; capture and Discord failures leave com
   const action = f.owner("tab_next");
   const pending = f.click(action);
   await f.click(f.owner("bracketed"));
-  assert.match(f.events.find(event => event[0] === "reply")[1].content, /đang xử lý/);
+  assert.match(noticeText(f.events.find(event => event[0] === "reply")[1]), /đang xử lý/);
   await new Promise(resolve => setImmediate(resolve));
   release();
   await pending;
@@ -170,11 +172,11 @@ test("expired and evicted panels retain their explicit limits", async () => {
   const first = f.owner("tab_next");
   await f.run();
   await f.click(first);
-  assert.match(f.events.at(-1)[1].content, /hết hạn/);
+  assert.match(noticeText(f.events.at(-1)[1]), /hết hạn/);
   const second = f.owner("tab_next");
   now = 101;
   await f.click(second);
-  assert.match(f.events.at(-1)[1].content, /hết hạn/);
+  assert.match(noticeText(f.events.at(-1)[1]), /hết hạn/);
 });
 
 test("every selection captures a full tab; Bracketed persists within a panel and starts ON for each new panel", async () => {
@@ -191,6 +193,18 @@ test("every selection captures a full tab; Bracketed persists within a panel and
   assert.equal(captures(f).at(-1)[2].tab, "damage");
   assert.equal(captures(f).length, 6);
   assert.ok(captures(f).every(([, , options]) => options.view === "full"));
+});
+
+test("a failed capture answers with a notice card linking the log it tried to open", async () => {
+  const f = fixture();
+  await f.run();
+  f.failure = new RaidLogError("timeout");
+  await f.click(f.owner("log", "old"));
+  const [event, payload] = f.events.at(-1);
+  assert.equal(event, "followUp");
+  assert.equal(payload.flags, MessageFlags.Ephemeral);
+  assert.deepEqual(payload.allowedMentions, { parse: [] });
+  assert.match(noticeText(payload), /Bible phản hồi quá lâu[\s\S]*\(https:\/\/lostark\.bible\/logs\/old\)/);
 });
 
 test("global router dispatches both raid-log dropdowns and buttons to the panel handler", async () => {
