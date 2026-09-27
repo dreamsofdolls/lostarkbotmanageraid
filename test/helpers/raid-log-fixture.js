@@ -31,9 +31,10 @@ function logEntry(id, raidKey = "kazeros", timestamp = 100) {
 function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry("old", "kazeros", 90), logEntry("serca", "serca", 80)],
   profile = { name: "Qiylyn" }, hasMore = false, sessionMs, maxSessions, now, transformCapture = result => result } = {}) {
   const events = [];
-  let payload, modal, failure, verifyFailure, beforeVerify, beforeOpen, loadFailure;
+  let payload, modal, failure, verifyFailure, beforeVerify, beforeOpen, loadFailure, recentResult;
   let failEdit = false;
   let userDoc = { language: lang, accounts };
+  const edits = [];
   const catalog = { profile, logs, page: 1, hasMore };
   const logCatalog = {
     open: async name => { events.push(["open", name]); await beforeOpen?.(); if (verifyFailure) throw verifyFailure; return catalog; },
@@ -43,11 +44,16 @@ function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry
   };
   const editReply = async next => {
     events.push("edit"); if (failEdit) throw new Error("Discord unavailable");
+    edits.push(next);
     payload = { ...payload, ...next }; return { id: "message" };
   };
   const handlers = createRaidLogCommand({
     EmbedBuilder, AttachmentBuilder, MessageFlags, UI: { colors: { progress: 0xfee75c, neutral: 0x5865f2 } }, log: silentLog,
     logCatalog, sessionMs, maxSessions, now,
+    recentLogs: {
+      countCandidates: accounts => accounts.flatMap(account => account.characters).length,
+      load: async (ownerId, accounts, options) => { events.push(["recent", ownerId, options]); return recentResult; },
+    },
     loadCaller: async id => { events.push(["load", id]); if (loadFailure) throw loadFailure; return userDoc; },
     resolveStoredLanguage: async (id, doc) => { assert.equal(doc, userDoc); return lang; },
     captureRaidLog: async (url, options) => {
@@ -71,8 +77,9 @@ function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry
     const interaction = {
       user: { id: "someone-else" }, guildId: "guild", channelId: "channel", message: { id: "message" },
       customId, values: value === undefined ? undefined : [value],
-      isButton: () => ["search", "bracketed", "detail", "reset", "tab_prev", "tab_next", "tab_label"].includes(action),
-      isStringSelectMenu: () => ["character", "player", "raid", "log", "tab"].includes(action),
+      isButton: () => ["search", "bracketed", "detail", "reset", "tab_prev", "tab_next", "tab_label",
+        "recent_open", "picker", "recent_refresh"].includes(action),
+      isStringSelectMenu: () => ["character", "player", "raid", "log", "tab", "recent"].includes(action),
       isModalSubmit: () => action === "submit",
       fields: { getTextInputValue: name => { assert.equal(name, "character"); return value; } },
       showModal: async next => { modal = next.toJSON(); events.push(["modal", modal]); },
@@ -88,7 +95,8 @@ function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry
   const search = async (name = "Qiylyn") => { await click(owner("search")); await click(owner("submit", name)); };
   return {
     events, handlers, slash, component, owner, open, search, click, run: async () => { await open(); await search(); },
-    get payload() { return payload; }, get modal() { return modal; },
+    get payload() { return payload; }, get modal() { return modal; }, get edits() { return edits; },
+    set recentResult(value) { recentResult = value; },
     set failure(error) { failure = error; }, set verifyFailure(error) { verifyFailure = error; },
     set beforeVerify(fn) { beforeVerify = fn; }, set failEdit(value) { failEdit = value; },
     set beforeOpen(fn) { beforeOpen = fn; },

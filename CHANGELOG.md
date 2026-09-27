@@ -13,6 +13,9 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `/raid-log` answers every problem with a notice card (what happened, what to do next) instead of one line of text. A capture that fails or times out links the log it tried to open, and a panel whose character turns Public Log off becomes a lock card naming the character, with the image removed and the controls disabled.
 - `/raid-log` reads each player's figures and percentile badges (Bracketed and Normalized) from Bible's Damage table when it first opens a log, and each support's bD% from their detail view, so the first open of a log takes a few seconds longer. A support page that fails leaves only that figure empty.
 
+### Added
+- `/raid-log` has a **🕘 Log gần đây** button on the opening card. Like Bible's Recent Encounters, it gathers the newest public logs of up to 24 of the caller's own characters (highest item level first), shows the ten newest with parse and DPS or support uptime, and opens any of the newest 25 in the log panel. Characters Auto-sync saw with Public Log off in the last day are skipped and listed.
+
 ## 2026-09-23
 
 ### Changed

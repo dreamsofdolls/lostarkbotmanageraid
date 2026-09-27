@@ -59,6 +59,7 @@ const { createRaidAuctionCommand } = require("./handlers/raid/auction");
 const { createRaidLogCommand } = require("./handlers/raid/log");
 const { createRaidLogCapture } = require("./services/raid-log/capture");
 const { createRaidLogCatalog } = require("./services/raid-log/catalog");
+const { createRecentRaidLogs } = require("./services/raid-log/recent");
 const { createRaidScheduleCommand } = require("./handlers/raid/schedule");
 // Board embed builders reused by /raid-check's "📋 Đội đã xếp" dropdown.
 const { buildScheduleEmbed, buildTurnPlanEmbed } = require("./handlers/raid/schedule/view/board");
@@ -552,6 +553,7 @@ const raidAuctionCommandHandlers = createRaidAuctionCommand({
   EmbedBuilder, AttachmentBuilder, MessageFlags, UI, User,
   captureRaidLog: createRaidLogCapture({ bibleLimiter, idleMs: 45_000 }),
   logCatalog: createRaidLogCatalog({ bibleLimiter }),
+  recentLogs: createRecentRaidLogs({ bibleLimiter }),
 }));
 
 const editRosterCommandHandlers = createEditRosterCommand({

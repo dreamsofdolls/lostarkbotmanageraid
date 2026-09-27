@@ -27,6 +27,7 @@ test("opening card is public, acknowledges before loading and renders only searc
       assert.equal(captures(f).length, 0);
       assert.deepEqual(controls(f).map(c => c.type), [2]);
       assert.match(controls(f)[0].custom_id, /:search$/);
+      assert.equal(f.payload.components[0].toJSON().components.length, 1);
       assert.equal(f.payload.flags, undefined);
       assert.deepEqual(f.payload.allowedMentions, { parse: [] });
       const card = f.payload.embeds[0].toJSON();
@@ -44,6 +45,7 @@ test("roster card lists saved characters with class icon, roster and item level 
   for (const lang of ["vi", "en", "jp"]) {
     const f = fixture({ lang, accounts }); await f.open();
     assert.deepEqual(controls(f).map(c => c.type), [2, 3]);
+    assert.deepEqual(f.payload.components[0].toJSON().components.map(c => c.custom_id.split(":").at(-1)), ["search", "recent_open"]);
     const choices = controls(f)[1].options;
     assert.deepEqual(choices.map(c => c.label), ["Qiylyn", "Altchar"]);
     assert.equal(choices[0].description, { vi: "Roster Main roster · 1760", en: "Roster Main roster · 1760", jp: "ロスター Main roster · 1760" }[lang]);
@@ -61,6 +63,7 @@ test("production loader queries only the invoking Discord ID and reuses that doc
     reads.push(query);
     return { select: fields => {
       assert.match(fields, /language.*accounts\.accountName.*accounts\.characters\.name/);
+      assert.match(fields, /accounts\.characters\.bibleSerial.*accounts\.characters\.publicLogDisabledAt/);
       assert.doesNotMatch(fields, /registeredBy|assignedRaids|localSync|tasks/);
       return { lean: async () => ({ language: "en", accounts }) };
     } };
@@ -161,6 +164,7 @@ test("private log and rendering failures preserve a retryable picker without sha
 test("roster lookup failure keeps name search available without pretending there are no saved rosters", async () => {
   const f = fixture({ accounts }); f.loadFailure = new Error("database unavailable"); await f.open();
   assert.equal(controls(f).length, 1);
+  assert.equal(f.payload.components[0].toJSON().components.length, 1);
   assert.match(f.payload.embeds[0].toJSON().description, /chưa tải được roster/);
   await f.search(); assert.equal(captures(f).length, 1);
 });

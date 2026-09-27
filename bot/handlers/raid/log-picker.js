@@ -57,9 +57,14 @@ function pickerOptions(state) {
 function buildLogPicker(state, { EmbedBuilder, UI }) {
   const id = action => `raid-log:${state.id}:${state.revision}:${action}`;
   const key = state.rosterUnavailable ? "unavailable" : state.choices.length ? "withRoster" : "withoutRoster";
-  const components = [new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(id("search")).setEmoji("🔎").setLabel(t("raid-log.picker.search", state.lang)).setStyle(ButtonStyle.Primary),
-  )];
+  const buttons = [new ButtonBuilder().setCustomId(id("search")).setEmoji("🔎")
+    .setLabel(t("raid-log.picker.search", state.lang)).setStyle(ButtonStyle.Primary)];
+  // Recent logs read the saved roster, so the button needs saved characters.
+  if (state.choices.length) {
+    buttons.push(new ButtonBuilder().setCustomId(id("recent_open")).setEmoji("🕘")
+      .setLabel(t("raid-log.picker.recent", state.lang)).setStyle(ButtonStyle.Secondary));
+  }
+  const components = [new ActionRowBuilder().addComponents(...buttons)];
   if (state.choices.length) {
     const pages = Math.ceil(state.choices.length / PAGE_SIZE);
     components.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(id("character"))

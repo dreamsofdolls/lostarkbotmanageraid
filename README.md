@@ -77,9 +77,10 @@ Raid Manager = Discord user IDs listed in `RAID_MANAGER_ID` (comma-separated). M
 `/raid-log` opens a public character picker without command options. Only the
 caller can use it: **🔎 Search by name** opens a text-input dialog, and a menu
 lists the caller's own saved characters with class icon, roster and item level,
-paginated when needed. Users with no saved characters see only name search.
-Shared or manager-accessible rosters belonging to other users are excluded, and a
-roster choice is checked against the owner's current saved characters before lookup.
+paginated when needed, and **🕘 Recent logs** gathers the newest public logs
+across that roster. Users with no saved characters see only name search. Shared
+or manager-accessible rosters belonging to other users are excluded, and a roster
+choice is checked against the owner's current saved characters before lookup.
 
 Selecting a character replaces the opening card with their latest public
 log in NA by encounter timestamp, without a weekly reset filter. It resolves the
@@ -128,6 +129,16 @@ skill tables, buff contribution, Crit Luck, stat conversion, damage potential,
 miscellaneous bonuses, opener rotation and charts when provided by that log.
 Public profile/loadout links are shown where Bible exposes them. Switching logs
 resets player focus to the team so a slot can never silently select another person.
+
+**🕘 Recent logs** reads page 1 of each saved character's logs (the 24 highest item
+levels) with the Bible IDs Auto-sync stored, asking for a profile only when they
+are missing, and skips characters Auto-sync saw with Public Log off in the last
+day. It shows the ten newest fights with parse, DPS and nDPS, or a support's two
+badges, AP/Brand/Identity/T uptime and rCon, and lists characters whose logs are
+private. A menu opens any of the newest 25 in the log panel after checking that
+the character is still in the caller's roster. Results are kept for five minutes
+per caller; **🔄 Refresh** asks Bible again, and a gathering that passes 45 seconds
+shows what arrived in time.
 
 Every problem is answered with a notice card that only the clicker sees: what
 happened and what to do next. A capture that fails or times out links the original

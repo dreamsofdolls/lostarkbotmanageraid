@@ -199,6 +199,7 @@ const FAILURE_KEYS = [
   "raid-log.notices.character_mismatch.description",
   "raid-log.notices.invalid_view.description",
   "raid-log.notices.failed.description",
+  "raid-log.recent.timedOut",
 ];
 
 test("failure copy carries no warmth marker", () => {
