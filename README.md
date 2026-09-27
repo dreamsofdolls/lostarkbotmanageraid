@@ -75,12 +75,11 @@ Raid Manager = Discord user IDs listed in `RAID_MANAGER_ID` (comma-separated). M
 ## Experimental public log capture
 
 `/raid-log` opens a public character picker without command options. Only the
-caller can choose a character: **Search character name** opens a text-input
-dialog, and a dropdown lists characters from that caller's own saved rosters
-with roster/class/item-level labels. The dropdown paginates when needed. Users
-with no saved characters see only name search. Shared or manager-accessible
-rosters belonging to other users are excluded. A roster selection is checked
-against the owner's current saved characters before lookup.
+caller can use it: **🔎 Search by name** opens a text-input dialog, and a menu
+lists the caller's own saved characters with class icon, roster and item level,
+paginated when needed. Users with no saved characters see only name search.
+Shared or manager-accessible rosters belonging to other users are excluded, and a
+roster choice is checked against the owner's current saved characters before lookup.
 
 Selecting a character replaces the opening card with their latest public
 log in NA by encounter timestamp, without a weekly reset filter. It resolves the

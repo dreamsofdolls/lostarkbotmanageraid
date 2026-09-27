@@ -1,60 +1,86 @@
 "use strict";
 
+/**
+ * bot/handlers/raid/log-picker.js
+ * The /raid-log opening card: search by name, or a menu of the caller's own
+ * saved characters, and the search box.
+ */
+
 const {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
   ModalBuilder, TextInputBuilder, TextInputStyle,
 } = require("discord.js");
 const { t } = require("../../services/i18n");
+const { getClassEmoji } = require("../../models/Class");
+const { parseCustomEmoji } = require("../../utils/discord/emoji");
+const { truncateSelectText } = require("../../utils/discord/select-options");
 const { normalizeCharacterName } = require("../../services/raid-log/source");
 const { getCharacterName, getCharacterClass } = require("../../utils/raid/common/shared");
 const { pagedChoices, PAGE_SIZE } = require("./log-view");
 
+/**
+ * @param {object[]} [accounts] the caller's saved accounts
+ * @returns {object[]} one choice per named character; `value` is its index, `key` survives roster reordering
+ */
 function rosterChoices(accounts = []) {
   return accounts.flatMap(account => (account.characters || []).flatMap(character => {
     const name = String(getCharacterName(character)).trim();
     if (!name) return [];
     return [{
-      name,
-      key: JSON.stringify([account.accountName, normalizeCharacterName(name)]),
-      label: name.slice(0, 100),
-      description: [account.accountName, getCharacterClass(character), character.itemLevel].filter(Boolean).join(" · ").slice(0, 100),
+      name, key: JSON.stringify([account.accountName, normalizeCharacterName(name)]),
+      roster: account.accountName, className: getCharacterClass(character), itemLevel: character.itemLevel,
     }];
   })).map((choice, index) => ({ ...choice, value: String(index) }));
 }
 
+/**
+ * @param {object} state picker session
+ * @returns {object[]} the menu options of the current page
+ */
 function pickerOptions(state) {
-  const choices = state.choices.map(({ label, description, value }) => ({ label, description, value }));
-  return pagedChoices(choices, state.page, state.lang);
+  const options = state.choices.map(choice => {
+    const emoji = parseCustomEmoji(getClassEmoji(choice.className));
+    return {
+      label: truncateSelectText(choice.name, 100), value: choice.value,
+      description: truncateSelectText(t("raid-log.picker.rosterOption", state.lang, { roster: choice.roster, itemLevel: choice.itemLevel }), 100),
+      ...(emoji ? { emoji } : {}),
+    };
+  });
+  return pagedChoices(options, state.page, state.lang);
 }
 
+/**
+ * @param {object} state picker session
+ * @param {{ EmbedBuilder: Function, UI: object }} builders
+ * @returns {object} message payload
+ */
 function buildLogPicker(state, { EmbedBuilder, UI }) {
+  const id = action => `raid-log:${state.id}:${state.revision}:${action}`;
   const key = state.rosterUnavailable ? "unavailable" : state.choices.length ? "withRoster" : "withoutRoster";
-  const description = [
-    t("raid-log.picker.description", state.lang, { owner: `<@${state.ownerId}>` }),
-    t(`raid-log.picker.${key}`, state.lang, { count: state.choices.length }),
-    t("raid-log.picker.defaults", state.lang),
-  ];
   const components = [new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`raid-log:${state.id}:${state.revision}:search`)
-      .setLabel(t("raid-log.picker.search", state.lang)).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(id("search")).setEmoji("🔎").setLabel(t("raid-log.picker.search", state.lang)).setStyle(ButtonStyle.Primary),
   )];
-  if (state.choices.length) components.push(new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder().setCustomId(`raid-log:${state.id}:${state.revision}:character`)
-      .setPlaceholder(t("raid-log.picker.select", state.lang, {
-        page: state.page + 1, pages: Math.ceil(state.choices.length / PAGE_SIZE),
-      })).addOptions(pickerOptions(state)),
-  ));
+  if (state.choices.length) {
+    const pages = Math.ceil(state.choices.length / PAGE_SIZE);
+    components.push(new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId(id("character"))
+      .setPlaceholder(pages > 1 ? t("raid-log.picker.selectPage", state.lang, { page: state.page + 1, pages }) : t("raid-log.picker.select", state.lang))
+      .addOptions(pickerOptions(state))));
+  }
   return {
     content: null,
-    embeds: [new EmbedBuilder().setColor(UI.colors.progress).setTitle(t("raid-log.picker.title", state.lang))
-      .setDescription(description.join("\n\n")).setFooter({ text: t("raid-log.picker.footer", state.lang) })],
+    embeds: [new EmbedBuilder().setColor(UI.colors.neutral).setTitle(`📜 ${t("raid-log.picker.title", state.lang)}`)
+      .setDescription(`${t(`raid-log.picker.${key}`, state.lang)}\n-# ${t("raid-log.picker.hint", state.lang)}`)],
     components, allowedMentions: { parse: [] },
   };
 }
 
+/**
+ * @param {object} state picker session
+ * @returns {ModalBuilder}
+ */
 function buildLogSearchModal(state) {
   return new ModalBuilder().setCustomId(`raid-log:${state.id}:${state.revision}:submit`)
-    .setTitle(t("raid-log.picker.search", state.lang)).addComponents(
+    .setTitle(t("raid-log.picker.modalTitle", state.lang)).addComponents(
       new ActionRowBuilder().addComponents(new TextInputBuilder()
         .setCustomId("character").setLabel(t("raid-log.picker.name", state.lang))
         .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(64)),

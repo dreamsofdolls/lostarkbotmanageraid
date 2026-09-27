@@ -6,7 +6,9 @@ const { EmbedBuilder, AttachmentBuilder, MessageFlags } = require("discord.js");
 const { createRaidLogCommand } = require("../bot/handlers/raid/log");
 const { createRaidInteractionRouter } = require("../bot/app/interaction-router-registry");
 const { RaidLogError } = require("../bot/services/raid-log/errors");
-const { fixture, captures, controls, noticeText } = require("./helpers/raid-log-fixture");
+const { getClassEmoji } = require("../bot/models/Class");
+const { parseCustomEmoji } = require("../bot/utils/discord/emoji");
+const { fixture, captures, controls, noticeText, withClassIcons } = require("./helpers/raid-log-fixture");
 const { silentLog } = require("./helpers/silent-log");
 
 const accounts = [
@@ -27,20 +29,27 @@ test("opening card is public, acknowledges before loading and renders only searc
       assert.match(controls(f)[0].custom_id, /:search$/);
       assert.equal(f.payload.flags, undefined);
       assert.deepEqual(f.payload.allowedMentions, { parse: [] });
-      assert.match(f.payload.embeds[0].toJSON().description, /<@author>/);
+      const card = f.payload.embeds[0].toJSON();
+      assert.equal(card.title, { vi: "📜 Raid log", en: "📜 Raid log", jp: "📜 レイドログ" }[lang]);
+      assert.doesNotMatch(card.description, /<@/);
+      assert.match(card.description, /\n-# /);
+      assert.equal(card.footer, undefined);
       assert.doesNotMatch(JSON.stringify(f.payload), /raid-log\./);
     }
   }
 });
 
-test("roster card lists saved characters with roster, class and item level in all locales", async () => {
+test("roster card lists saved characters with class icon, roster and item level in all locales", async t => {
+  withClassIcons(t, { Wardancer: "<:wardancer:333333333333333333>" });
   for (const lang of ["vi", "en", "jp"]) {
     const f = fixture({ lang, accounts }); await f.open();
     assert.deepEqual(controls(f).map(c => c.type), [2, 3]);
     const choices = controls(f)[1].options;
     assert.deepEqual(choices.map(c => c.label), ["Qiylyn", "Altchar"]);
-    assert.equal(choices[0].description, "Main roster · Wardancer · 1760");
-    assert.equal(choices[1].description, "Second roster · Artist · 1700");
+    assert.equal(choices[0].description, { vi: "Roster Main roster · 1760", en: "Roster Main roster · 1760", jp: "ロスター Main roster · 1760" }[lang]);
+    assert.deepEqual(choices[0].emoji, parseCustomEmoji(getClassEmoji("Wardancer")));
+    assert.equal(choices[1].emoji, undefined);
+    assert.equal(controls(f)[1].placeholder, { vi: "Chọn nhân vật trong roster", en: "Choose a roster character", jp: "ロスターのキャラクターを選択" }[lang]);
     assert.doesNotMatch(JSON.stringify(f.payload), /raid-log\./);
     assert.equal(captures(f).length, 0);
   }
@@ -57,13 +66,13 @@ test("production loader queries only the invoking Discord ID and reuses that doc
     } };
   } };
   const handler = createRaidLogCommand({ EmbedBuilder, AttachmentBuilder, MessageFlags, User,
-    UI: { colors: { progress: 0xfee75c } }, log: silentLog });
+    UI: { colors: { neutral: 0x5865f2 } }, log: silentLog });
   await handler.handleRaidLogCommand({ user: { id: "caller-only" }, guildId: "g", channelId: "c",
     deferReply: async () => assert.equal(reads.length, 0),
     editReply: async value => { payload = value; return { id: "m" }; },
   });
   assert.deepEqual(reads, [{ discordId: "caller-only" }]);
-  assert.match(payload.embeds[0].toJSON().description, /your own saved rosters/);
+  assert.match(payload.embeds[0].toJSON().description, /from your roster below/);
   assert.equal(payload.components[1].toJSON().components[0].options.length, 2);
 });
 
@@ -74,6 +83,7 @@ test("search opens an input modal immediately, then updates the same card into a
   assert.equal(f.events[0][0], "modal");
   const input = f.modal.components[0].components[0];
   assert.equal(input.custom_id, "character"); assert.equal(input.required, true); assert.equal(input.max_length, 64);
+  assert.equal(f.modal.title, "Tìm log theo tên");
   await f.click(f.owner("submit", " Qiylyn "));
   assert.deepEqual(f.events.slice(1, 3), ["ack-update", ["open", "Qiylyn"]]);
   assert.deepEqual(captures(f)[0][2], { view: "full", tab: "damage", bracketed: true, player: null, useCache: true, refresh: false });
@@ -116,9 +126,10 @@ test("saved selection reloads the caller, tolerates reordered rosters and reject
 });
 
 test("long character lists paginate within Discord limits, reject forged values and invalidate stale modals", async () => {
-  const f = fixture({ accounts: [{ accountName: "Roster", characters: Array.from({ length: 50 }, (_, i) => ({ name: `Char${i}` })) }] });
+  const f = fixture({ accounts: [{ accountName: "Roster", characters: Array.from({ length: 50 }, (_, i) => ({ name: `Char${i}`, class: "Bard", itemLevel: 1700 })) }] });
   await f.open(); await f.click(f.owner("search")); const oldModal = f.owner("submit", "Qiylyn");
   assert.equal(controls(f)[1].options.length, 23);
+  assert.equal(controls(f)[1].placeholder, "Chọn nhân vật trong roster · 1/3");
   for (const value of ["__prev", "-1", "1e0", "23", "999", "forged"]) {
     await f.click(f.owner("character", value));
     assert.match(noticeText(f.events.at(-1)[1]), /không có trong/);
@@ -150,7 +161,7 @@ test("private log and rendering failures preserve a retryable picker without sha
 test("roster lookup failure keeps name search available without pretending there are no saved rosters", async () => {
   const f = fixture({ accounts }); f.loadFailure = new Error("database unavailable"); await f.open();
   assert.equal(controls(f).length, 1);
-  assert.match(f.payload.embeds[0].toJSON().description, /Chưa tải được roster/);
+  assert.match(f.payload.embeds[0].toJSON().description, /chưa tải được roster/);
   await f.search(); assert.equal(captures(f).length, 1);
 });
 
