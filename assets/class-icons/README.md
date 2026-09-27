@@ -1,6 +1,6 @@
 # Class Icons
 
-PNG sources for the 27 Lost Ark classes the bot's `data/Class.js`
+PNG sources for the 28 Lost Ark classes the bot's `data/Class.js`
 recognizes. Filenames match the **bible class ID** (the key in
 `CLASS_NAMES`) so the bootstrap can derive every other identifier
 (emoji name, display name) from the filename alone.
@@ -128,8 +128,9 @@ canvas.save(dst, "PNG", optimize=True)
 | yinyangshi | Artist | Lost Ark Wiki (Fandom) |
 | weather_artist | Aeromancer | Lost Ark Wiki (Fandom) |
 | alchemist | Wildsoul | Discord emoji rip (white silhouette, 86x96 padded → 320x320) |
+| dimension_master | Dimensionalist | Added by the maintainer (white silhouette, 96x96) |
 
-**Coverage:** All 27 known Lost Ark classes (2026-04-26). If Smilegate
+**Coverage:** All 28 known Lost Ark classes (2026-09-28). If Smilegate
 releases a new class, add an entry to `CLASS_NAMES` in
 `src/data/Class.js` + drop the PNG here named after the bible class
 ID. Bot bootstrap auto-uploads on next deploy.

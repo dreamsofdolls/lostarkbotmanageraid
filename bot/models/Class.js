@@ -45,6 +45,7 @@ const CLASS_NAMES = {
   yinyangshi:         'Artist',
   weather_artist:     'Aeromancer',
   alchemist:          'Wildsoul',
+  dimension_master:   'Dimensionalist',
 };
 
 // lostark.bible numeric class IDs seen in LOA Logs `encounter_preview.players`
@@ -180,6 +181,7 @@ const CLASS_EMOJI_MAP = {
   Artist: '',
   Aeromancer: '',
   Wildsoul: '',
+  Dimensionalist: '',
 };
 
 /**

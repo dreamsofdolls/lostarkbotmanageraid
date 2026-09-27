@@ -14,6 +14,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - `/raid-log` reads each player's figures and percentile badges (Bracketed and Normalized) from Bible's Damage table when it first opens a log, and each support's bD% from their detail view, so the first open of a log takes a few seconds longer. A support page that fails leaves only that figure empty.
 
 ### Added
+- Dimensionalist, the new specialist class (Bible ID `dimension_master`), has its class icon: the bot uploads it as an application emoji on its next start, and every character line shows it like the other classes. It counts as DPS.
 - `/raid-log` has a **🕘 Log gần đây** button on the opening card. Like Bible's Recent Encounters, it gathers the newest public logs of up to 24 of the caller's own characters (highest item level first), shows the ten newest with parse and DPS or support uptime, and opens any of the newest 25 in the log panel. Characters Auto-sync saw with Public Log off in the last day are skipped and listed.
 
 ### Fixed
