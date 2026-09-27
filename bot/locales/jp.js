@@ -168,6 +168,7 @@ module.exports = {
       invalid_view: "`view:team` または `view:full` を選んでね。",
       busy: "別のログを撮影中だよ。少し待ってから試してね。",
       browser_unavailable: "実験版の撮影ブラウザーが使えないよ。管理者に Playwright/Chromium の確認をお願いしてね。",
+      browser_crashed: "撮影ブラウザーが突然停止し、復旧できなかったよ。少し待ってから再試行するか、Bible の元のログを開いてね。",
       unavailable: "このログの Damage 表を開けなかったよ。ログが存在しない、非公開、または Bible がアクセスを制限している可能性があるので、元のリンクを確認してね。",
       incomplete: "Damage 表や画像の読み込みが不完全か、Bible のレイアウトが変わったみたい。欠けた画像を送らないように中止したよ。あとでもう一度試してね。",
       too_large: "画像が添付サイズの上限を超えたよ。`view:team` を試すか、元のログを開いてね。",

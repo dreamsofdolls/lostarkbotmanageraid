@@ -179,6 +179,7 @@ module.exports = {
       invalid_view: "Chọn `view:team` hoặc `view:full` nhé.",
       busy: "Artist đang chụp một log khác. Cậu thử lại sau một chút nhé.",
       browser_unavailable: "Chức năng thử nghiệm chưa có trình duyệt chụp ảnh sẵn sàng. Nhờ người vận hành kiểm tra Playwright/Chromium nhé.",
+      browser_crashed: "Trình duyệt chụp ảnh bị dừng đột ngột và chưa thể khôi phục. Cậu thử lại sau một lúc hoặc mở log gốc trên Bible nhé.",
       unavailable: "Không mở được bảng Damage của log này. Log có thể không tồn tại, không còn public, hoặc Bible đang chặn yêu cầu. Cậu kiểm tra link gốc nhé.",
       incomplete: "Bảng Damage hoặc tài nguyên ảnh tải chưa đầy đủ, hoặc bố cục Bible đã đổi. Artist chưa gửi ảnh để tránh bị cắt/mất dữ liệu; cậu thử lại sau nhé.",
       too_large: "Ảnh vượt giới hạn đính kèm. Cậu thử `view:team` hoặc mở log gốc nhé.",

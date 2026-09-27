@@ -2,6 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { EventEmitter } = require("node:events");
 const { JSDOM } = require("jsdom");
 const { EmbedBuilder, AttachmentBuilder, MessageFlags } = require("discord.js");
 const { createRaidLogCapture, isAllowedRequest, inspectDamagePage } = require("../bot/services/raid-log/capture");
@@ -48,10 +49,10 @@ test("command is a guild-only experiment with character/URL alternatives and tea
   assert.deepEqual(data.options[2].choices.map(choice => choice.value), ["team", "full"]);
 });
 
-function fakeBrowser({ status = 200, screenshotError, holdNavigation = false } = {}) {
+function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, onScreenshot, closeError } = {}) {
   let rejectNavigation;
   const state = { closed: 0, launches: 0, routes: [] };
-  const page = {
+  const page = Object.assign(new EventEmitter(), {
     setDefaultTimeout() {},
     goto: async () => holdNavigation ? new Promise((resolve, reject) => { rejectNavigation = reject; })
       : ({ ok: () => status === 200, status: () => status, headers: () => ({ "retry-after": "60" }) }),
@@ -65,11 +66,13 @@ function fakeBrowser({ status = 200, screenshotError, holdNavigation = false } =
     mouse: { move: async () => {} },
     screenshot: async options => {
       state.clip = options.clip;
+      state.scale = options.scale;
+      await onScreenshot?.(page);
       if (screenshotError) throw screenshotError;
       return Buffer.from("png");
     },
-  };
-  const browser = {
+  });
+  const browser = Object.assign(new EventEmitter(), {
     newContext: async options => {
       state.context = options;
       return { route: async (pattern, fn) => state.routes.push(fn), newPage: async () => page };
@@ -77,9 +80,11 @@ function fakeBrowser({ status = 200, screenshotError, holdNavigation = false } =
     close: async () => {
       state.closed++;
       rejectNavigation?.(new Error("Browser closed"));
+      browser.emit("disconnected");
+      if (closeError) throw closeError;
     },
-  };
-  return { state, launchBrowser: async () => { state.launches++; return browser; } };
+  });
+  return { state, log: {}, launchBrowser: async () => { state.launches++; return browser; } };
 }
 
 test("capture returns selected region and closes the browser after success or screenshot failure", async () => {
@@ -90,10 +95,89 @@ test("capture returns selected region and closes the browser after success or sc
     assert.equal(fake.state.clip.height, view === "team" ? 400 : 800);
     assert.equal(fake.state.closed, 1);
     assert.equal(fake.state.context.serviceWorkers, "block");
+    assert.equal(fake.state.context.deviceScaleFactor, 1);
+    assert.equal(fake.state.scale, "css");
   }
   const fake = fakeBrowser({ screenshotError: new Error("Screenshot failed") });
   await assert.rejects(createRaidLogCapture(fake)(URL), /Screenshot failed/);
   assert.equal(fake.state.closed, 1);
+});
+
+test("a crashed renderer is closed before one retry, holding the busy slot throughout recovery", async () => {
+  const warnings = [];
+  let capture;
+  const failed = fakeBrowser({
+    onScreenshot: async page => { page.emit("crash"); throw new Error("page.screenshot: Target crashed"); },
+    closeError: new Error("Already disconnected"),
+  });
+  const healthy = fakeBrowser();
+  let launches = 0;
+  capture = createRaidLogCapture({
+    log: { warn: message => warnings.push(message) },
+    launchBrowser: async () => {
+      if (++launches === 1) return failed.launchBrowser();
+      assert.equal(failed.state.closed, 1);
+      await assert.rejects(capture(URL), { code: "busy" });
+      return healthy.launchBrowser();
+    },
+  });
+  assert.equal((await capture(URL)).playerCount, 8);
+  assert.equal(launches, 2);
+  assert.equal(healthy.state.closed, 1);
+  const diagnostic = warnings.find(message => message.startsWith("[raid-log] browser_crashed "));
+  assert.match(diagnostic, /"stage":"screenshot"/);
+  assert.match(diagnostic, /"memoryBefore":/);
+  assert.match(diagnostic, /"memoryAfter":/);
+});
+
+test("repeated crashes stop after two attempts and release the slot for the next call", async () => {
+  const fake = fakeBrowser({ screenshotError: new Error("page.screenshot: Target crashed") });
+  const capture = createRaidLogCapture(fake);
+  await assert.rejects(capture(URL), { code: "browser_crashed" });
+  assert.equal(fake.state.launches, 2);
+  assert.equal(fake.state.closed, 2);
+  await assert.rejects(capture(URL), { code: "browser_crashed" });
+  assert.equal(fake.state.launches, 4);
+  assert.equal(fake.state.closed, 4);
+});
+
+test("crash recovery respects Bible backoff opened during the first attempt", async () => {
+  const { createBibleHttpError } = require("../bot/services/auto-manage/bible/rate-limit");
+  const bibleLimiter = new BibleRequestLimiter(2, { log: {} });
+  const fake = fakeBrowser({ onScreenshot: async () => {
+    await assert.rejects(bibleLimiter.run(() => { throw createBibleHttpError("HTTP 429", { status: 429 }); }));
+    throw new Error("page.screenshot: Target crashed");
+  } });
+  await assert.rejects(createRaidLogCapture({ ...fake, bibleLimiter })(URL), { status: 429, isBibleBackoff: true });
+  assert.equal(fake.state.launches, 1);
+  assert.equal(fake.state.closed, 1);
+});
+
+test("recovery uses the remaining budget and never launches after the original deadline", async t => {
+  let now = 0;
+  t.mock.method(Date, "now", () => now);
+  for (const elapsed of [55_000, 60_001]) {
+    now = 0;
+    const failed = fakeBrowser({ onScreenshot: async () => {
+      now = elapsed;
+      throw new Error("Target crashed");
+    } });
+    const healthy = fakeBrowser();
+    const timeouts = [];
+    const capture = createRaidLogCapture({ log: {}, launchBrowser: options => {
+      timeouts.push(options.timeout);
+      return timeouts.length === 1 ? failed.launchBrowser() : healthy.launchBrowser();
+    } });
+    if (elapsed < 60_000) {
+      await capture(URL);
+      assert.deepEqual(timeouts, [15_000, 5_000]);
+      assert.equal(healthy.state.closed, 1);
+    } else {
+      await assert.rejects(capture(URL), { code: "timeout" });
+      assert.deepEqual(timeouts, [15_000]);
+    }
+    assert.equal(failed.state.closed, 1);
+  }
 });
 
 test("capture rejects overlap before launching and releases its slot after timeout", async () => {
@@ -241,7 +325,7 @@ test("handler keeps invalid links private, avoids capture and returns localized 
   await invalid.run();
   assert.equal(invalid.calls[0][1].flags, MessageFlags.Ephemeral);
   assert.ok(!invalid.calls.some(call => call[0] === "capture"));
-  for (const error of [new RaidLogError("busy"), new RaidLogError("timeout"),
+  for (const error of [new RaidLogError("busy"), new RaidLogError("timeout"), new RaidLogError("browser_crashed"),
     Object.assign(new Error("HTTP 429"), { status: 429 }), new Error("SECRET INTERNAL PATH")]) {
     const fixture = handlerFixture({ error });
     await fixture.run();

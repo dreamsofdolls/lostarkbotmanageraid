@@ -166,6 +166,7 @@ module.exports = {
       invalid_view: "Choose `view:team` or `view:full`.",
       busy: "Artist is capturing another log. Please try again shortly.",
       browser_unavailable: "The experimental capture browser is unavailable. Ask the operator to check Playwright/Chromium.",
+      browser_crashed: "The capture browser crashed and could not recover. Please try again later or open the original log on Bible.",
       unavailable: "Cannot open this log's Damage tables. The log may be missing, no longer public, or Bible may be blocking the request. Please check the original link.",
       incomplete: "Damage tables or image assets are incomplete, or Bible's layout has changed. No image was sent to avoid missing or clipped data. Please try again later.",
       too_large: "The image exceeds the attachment limit. Try `view:team` or open the original log.",

@@ -3,6 +3,7 @@
 const { createBibleHttpError } = require("../auto-manage/bible/rate-limit");
 const { RaidLogError } = require("./errors");
 const { BIBLE_ORIGIN, parsePublicLogUrl } = require("./source");
+const { readCaptureMemory } = require("./memory");
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
@@ -76,28 +77,40 @@ function createRaidLogCapture({
   bibleLimiter,
   launchBrowser = options => require("playwright").chromium.launch(options),
   timeoutMs = 60_000,
+  log: logger = console,
 } = {}) {
   let busy = false;
 
-  async function capturePage(log, view) {
+  async function capturePage(log, view, deadline) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) throw new RaidLogError("timeout");
     let browser;
     let closing;
     let expired = false;
-    const close = () => browser ? (closing ||= browser.close()) : Promise.resolve();
+    let crashed = false;
+    let stage = "launch";
+    let clip;
+    const memoryBefore = await readCaptureMemory();
+    const close = () => browser ? (closing ||= browser.close().catch(error => {
+      logger.warn?.(`[raid-log] browser cleanup: ${error.message}`);
+    })) : Promise.resolve();
     const timer = setTimeout(() => {
       expired = true;
       void close().catch(() => {});
-    }, timeoutMs);
+    }, Math.max(1, deadline - Date.now()));
     timer.unref?.();
     try {
       try {
-        browser = await launchBrowser({ headless: true, channel: "chromium", timeout: Math.min(timeoutMs, 15_000) });
+        browser = await launchBrowser({ headless: true, channel: "chromium", timeout: Math.min(remainingMs, 15_000) });
       } catch (error) {
         throw new RaidLogError("browser_unavailable", error);
       }
       if (expired) throw new RaidLogError("timeout");
+      browser.on("disconnected", () => { crashed = true; });
       const context = await browser.newContext({
-        viewport: { width: 1600, height: 1200 }, deviceScaleFactor: 2,
+        // Preserve the desktop layout without rasterizing four times as many
+        // pixels as the CSS-sized image needs on the bot's shared container.
+        viewport: { width: 1600, height: 1200 }, deviceScaleFactor: 1,
         locale: "en-GB", timezoneId: "Asia/Ho_Chi_Minh",
         serviceWorkers: "block", acceptDownloads: false,
       });
@@ -107,7 +120,9 @@ function createRaidLogCapture({
           ? route.continue() : route.abort();
       });
       const page = await context.newPage();
+      page.on("crash", () => { crashed = true; });
       page.setDefaultTimeout(12_000);
+      stage = "navigation";
       const response = await page.goto(log.url, { waitUntil: "domcontentloaded", timeout: 30_000 });
       if (!response?.ok()) {
         if (response?.status() === 429) {
@@ -117,12 +132,14 @@ function createRaidLogCapture({
         }
         throw new RaidLogError("unavailable");
       }
+      stage = "damage";
       try {
         await page.getByRole("button", { name: "Damage", exact: true }).click();
         await page.locator("table").filter({ hasText: "Party 1" }).waitFor({ state: "visible" });
       } catch (error) {
         throw new RaidLogError("unavailable", error);
       }
+      stage = "assets";
       await page.waitForFunction(() => document.fonts.status === "loaded"
         && Array.from(document.images).every(img => img.complete));
       await page.evaluate(async () => {
@@ -133,11 +150,20 @@ function createRaidLogCapture({
       await page.mouse.move(0, 0);
       const evidence = await page.evaluate(inspectDamagePage);
       if (evidence.error) throw new RaidLogError(evidence.error);
-      const buffer = await page.screenshot({ clip: evidence[view], type: "png", scale: "device" });
+      clip = evidence[view];
+      stage = "screenshot";
+      const buffer = await page.screenshot({ clip, type: "png", scale: "css" });
       if (buffer.length > MAX_IMAGE_BYTES) throw new RaidLogError("too_large");
       return { ...log, view, ...evidence, buffer, filename: `raid-log-${log.id}-${view}.png` };
     } catch (error) {
       if (expired || error.name === "TimeoutError") throw new RaidLogError("timeout", error);
+      if (crashed || /(?:Target|Page) crashed/i.test(`${error.message} ${error.cause?.message || ""}`)) {
+        logger.warn?.(`[raid-log] browser_crashed ${JSON.stringify({
+          id: log.id, view, stage, clip, deviceScaleFactor: 1,
+          memoryBefore, memoryAfter: await readCaptureMemory(), cause: error.cause?.message || error.message,
+        })}`);
+        throw new RaidLogError("browser_crashed", error);
+      }
       throw error;
     } finally {
       clearTimeout(timer);
@@ -151,8 +177,19 @@ function createRaidLogCapture({
     if (busy) throw new RaidLogError("busy");
     // Claim synchronously, before launch or waiting on the shared Bible limiter.
     busy = true;
+    const deadline = Date.now() + timeoutMs;
+    const attempt = () => bibleLimiter
+      ? bibleLimiter.run(() => capturePage(log, view, deadline)) : capturePage(log, view, deadline);
     try {
-      return await (bibleLimiter ? bibleLimiter.run(() => capturePage(log, view)) : capturePage(log, view));
+      try {
+        return await attempt();
+      } catch (error) {
+        if (error.code !== "browser_crashed") throw error;
+        // One fresh browser only; keep the original deadline, busy slot and
+        // shared Bible backoff. capturePage has already closed the failed one.
+        logger.warn?.(`[raid-log] retrying capture once after browser crash id=${log.id} view=${view}`);
+        return await attempt();
+      }
     } finally {
       busy = false;
     }
