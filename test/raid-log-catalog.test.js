@@ -225,3 +225,21 @@ test("real Bible client opens a character with exactly two limited HTTP requests
   assert.equal(calls[0].url, "https://lostark.bible/character/NA/saturnxd/roster");
   assert.deepEqual(JSON.parse(calls[1].options.body), { region: "NA", characterSerial: "serial-1", className: "Deathblade", cid: 123, rid: 456, page: 1 });
 });
+
+test("catalog keeps Bible's per-log performance fields, with null for missing or non-numeric values", () => {
+  const [dealer, support] = normalizeCatalogLogs([
+    { ...row("dealer"), spec: "Wind Fury", dps: 1060505447, ndps: 385681991, percentile: 0.9925, normalizedPercentile: 0.9951 },
+    { ...row("support", "Corvus Tul Rak", 90), spec: "Desperate Salvation", dps: 12899869, ndps: 12397396,
+      rContribution: 0.5259, percentile: 0.7936, contributionPercentile: 0.9737, buffs: [0.934, 0.963, 0.802, 0.328], isDead: true },
+  ], "Qiylyn");
+  assert.deepEqual(
+    [dealer.spec, dealer.dps, dealer.ndps, dealer.percentile, dealer.normalizedPercentile, dealer.contributionPercentile, dealer.isDead],
+    ["Wind Fury", 1060505447, 385681991, 0.9925, 0.9951, null, false],
+  );
+  assert.deepEqual(
+    [support.rContribution, support.percentile, support.contributionPercentile, support.buffs, support.isDead, support.isBus],
+    [0.5259, 0.7936, 0.9737, [0.934, 0.963, 0.802, 0.328], true, false],
+  );
+  const [bare] = normalizeCatalogLogs([{ ...row("bare"), percentile: null, dps: "fast", buffs: "x" }], "Qiylyn");
+  assert.deepEqual([bare.spec, bare.dps, bare.percentile, bare.rContribution, bare.buffs], ["", null, null, null, null]);
+});

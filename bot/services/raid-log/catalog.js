@@ -8,6 +8,14 @@ const { BIBLE_ORIGIN, normalizeCharacterName, parsePublicLogUrl, parseRaidLogSou
 
 const MAX_LOG_PAGES = 10;
 
+// Bible omits a figure it has no value for; a number that is missing or not
+// finite stays null so the card shows "-" rather than 0.
+function finiteOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function normalizeCatalogLogs(rows, character) {
   if (!Array.isArray(rows)) throw new RaidLogError("unavailable");
   const matches = rows.filter(row => normalizeCharacterName(row?.name) === normalizeCharacterName(character));
@@ -26,6 +34,12 @@ function normalizeCatalogLogs(rows, character) {
       duration: Number(row.duration) || 0, gate: raid?.gate || "",
       raidKey: raid?.raidKey || `boss-${createHash("sha256").update(row.boss).digest("hex").slice(0,16)}`,
       raidLabel: raid ? getRaidLabel(raid.raidKey) : row.boss,
+      spec: typeof row.spec === "string" ? row.spec : "",
+      dps: finiteOrNull(row.dps), ndps: finiteOrNull(row.ndps),
+      percentile: finiteOrNull(row.percentile), normalizedPercentile: finiteOrNull(row.normalizedPercentile),
+      contributionPercentile: finiteOrNull(row.contributionPercentile), rContribution: finiteOrNull(row.rContribution),
+      buffs: Array.isArray(row.buffs) ? row.buffs.map(finiteOrNull) : null,
+      isDead: row.isDead === true, isBus: row.isBus === true,
     };
   });
 }
