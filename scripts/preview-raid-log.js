@@ -11,7 +11,7 @@ const { BibleRequestLimiter } = require("../bot/services/auto-manage/bible/rate-
 async function main() {
   const args = process.argv.slice(2);
   const byCharacter = args[0] === "--character";
-  const [input, view = "team"] = byCharacter ? args.slice(1) : args;
+  const [input, view = "full"] = byCharacter ? args.slice(1) : args;
   if (!input) throw new Error("Usage: npm run preview:raid-log -- <public-log-url> [team|full] OR --character <name> [team|full]");
   const source = parseRaidLogSource(byCharacter ? { character: input } : { url: input });
   const startedAt = Date.now();

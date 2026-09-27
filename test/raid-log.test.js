@@ -39,14 +39,13 @@ test("browser requests cannot leave Bible or navigate away from the public log",
   assert.equal(isAllowedRequest("https://lostark.bible/login", true, URL), false);
 });
 
-test("command is a guild-only experiment with character/URL alternatives and team/full choice", () => {
+test("command is a guild-only experiment with only a required character option", () => {
   const data = createRaidLogCommandDefinition().toJSON();
   assert.equal(data.name, "raid-log");
   assert.equal(data.dm_permission, false);
   assert.match(data.description, /TEST/);
-  assert.deepEqual(data.options.map(option => option.name), ["character", "url", "view"]);
-  assert.ok(data.options.every(option => !option.required));
-  assert.deepEqual(data.options[2].choices.map(choice => choice.value), ["team", "full"]);
+  assert.deepEqual(data.options.map(option => option.name), ["character"]);
+  assert.equal(data.options[0].required, true);
 });
 
 function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, onScreenshot, onNavigate, closeError } = {}) {
@@ -97,7 +96,10 @@ test("warm capture switches tabs/modes without navigation, caches variants and r
   const fake = fakeBrowser();
   const capture = createRaidLogCapture({ ...fake, idleMs: 60_000 });
   try {
-    await capture(URL, { useCache: true });
+    const initial = await capture(URL, { useCache: true });
+    assert.equal(initial.filename, "raid-log-S9NbBTM-full-damage-bracketed.png");
+    assert.equal(fake.state.clip.height, 800);
+    assert.equal(fake.state.normalized, false);
     assert.equal(fake.state.closed, 0);
     await capture(URL, { tab: "self_buffs", bracketed: false, useCache: true });
     assert.equal(fake.state.tab, "Self Buffs");
@@ -317,11 +319,11 @@ test("real DOM inspection includes every party row for 4/8 players and rejects c
   }
 });
 
-function handlerFixture({ input = URL, character = null, error, lookupError, lang = "vi", attachmentSizeLimit } = {}) {
+function handlerFixture({ character = "Saturnxd", error, lookupError, lang = "vi", attachmentSizeLimit } = {}) {
   const calls = [];
   const interaction = {
     user: { id: "caller" }, attachmentSizeLimit,
-    options: { getString: name => name === "url" ? input : name === "character" ? character : null },
+    options: { getString: name => { assert.equal(name, "character"); return character; } },
     deferReply: async options => calls.push(["defer", options]),
     editReply: async payload => { calls.push(["edit", payload]); return { id: "message" }; },
   };
@@ -348,10 +350,11 @@ test("handler acknowledges first, attaches a public image with source link in al
   for (const lang of ["vi", "en", "jp"]) {
     const fixture = handlerFixture({ lang });
     await fixture.run();
-    assert.deepEqual(fixture.calls.map(call => call[0]), ["defer", "language", "capture", "edit"]);
+    assert.deepEqual(fixture.calls.map(call => call[0]), ["defer", "language", "lookup", "capture", "edit"]);
     assert.deepEqual(fixture.calls[0][1], {});
-    assert.equal(fixture.calls[2][2].view, "team");
-    const payload = fixture.calls[3][1];
+    assert.equal(fixture.calls[3][2].view, "full");
+    assert.equal(fixture.calls[3][2].bracketed, true);
+    const payload = fixture.calls[4][1];
     const embed = payload.embeds[0].toJSON();
     assert.equal(embed.url, URL);
     assert.match(embed.title, /TEST/);
@@ -372,8 +375,8 @@ test("TEST summary preserves source duration and numbers without inventing missi
     ["7:04", "1,539,242,432,317"]);
 });
 
-test("handler keeps invalid links private, avoids capture and returns localized errors without attachments", async () => {
-  const invalid = handlerFixture({ input: "https://localhost/" });
+test("handler keeps invalid names private, avoids capture and returns localized errors without attachments", async () => {
+  const invalid = handlerFixture({ character: "https://localhost/" });
   await invalid.run();
   assert.equal(invalid.calls[0][1].flags, MessageFlags.Ephemeral);
   assert.ok(!invalid.calls.some(call => call[0] === "capture"));
@@ -393,12 +396,12 @@ test("handler keeps invalid links private, avoids capture and returns localized 
 
 test("character lookup defaults to latest log, acknowledges first and labels the selected character", async () => {
   for (const lang of ["vi", "en", "jp"]) {
-    const fixture = handlerFixture({ input: null, character: "saturnxd", lang });
+    const fixture = handlerFixture({ character: "saturnxd", lang });
     await fixture.run();
     assert.deepEqual(fixture.calls.map(call => call[0]), ["defer", "language", "lookup", "capture", "edit"]);
     assert.equal(fixture.calls[2][1], "saturnxd");
     assert.equal(fixture.calls[3][1], URL);
-    assert.equal(fixture.calls[3][2].view, "team");
+    assert.equal(fixture.calls[3][2].view, "full");
     const embed = fixture.calls.at(-1)[1].embeds[0].toJSON();
     assert.match(embed.description, /Saturnxd/);
     assert.match(embed.description, /NA/);
@@ -406,15 +409,16 @@ test("character lookup defaults to latest log, acknowledges first and labels the
   }
 });
 
-test("missing/both sources reject privately before lookup and private characters never reach capture", async () => {
-  for (const options of [{ input: null }, { character: "Saturnxd" }]) {
-    const fixture = handlerFixture(options);
+test("missing/invalid names reject privately before lookup and private characters never reach capture", async () => {
+  for (const character of [null, "", " ", "Not A Name"]) {
+    const fixture = handlerFixture({ character });
     await fixture.run();
     assert.equal(fixture.calls[0][1].flags, MessageFlags.Ephemeral);
     assert.deepEqual(fixture.calls.map(call => call[0]), ["defer", "language", "edit"]);
+    assert.doesNotMatch(fixture.calls.at(-1)[1].content, /`(?:url|view):/);
   }
   for (const code of ["character_not_found", "character_mismatch", "logs_private", "no_logs"]) {
-    const fixture = handlerFixture({ input: null, character: "Saturnxd", lookupError: new RaidLogError(code) });
+    const fixture = handlerFixture({ lookupError: new RaidLogError(code) });
     await fixture.run();
     assert.ok(!fixture.calls.some(call => call[0] === "capture"));
     assert.doesNotMatch(fixture.calls.at(-1)[1].content, /raid-log\./);

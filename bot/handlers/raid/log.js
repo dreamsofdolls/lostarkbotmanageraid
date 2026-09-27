@@ -2,7 +2,7 @@
 
 const { randomBytes } = require("node:crypto");
 const { t, getUserLanguage } = require("../../services/i18n");
-const { parseRaidLogSource, parsePublicLogUrl } = require("../../services/raid-log/source");
+const { parseRaidLogSource } = require("../../services/raid-log/source");
 const { RaidLogError, raidLogErrorCode } = require("../../services/raid-log/errors");
 const { buildSummaryFields, buildLogComponents, buildLogEmbed } = require("./log-view");
 
@@ -29,7 +29,7 @@ function createRaidLogCommand({
   }
   async function render(interaction, state) {
     const result = await captureRaidLog(state.selected.url, {
-      view: state.view, tab: state.tab, bracketed: state.bracketed, useCache: Boolean(state.catalog),
+      view: "full", tab: state.tab, bracketed: state.bracketed, useCache: true,
     });
     if (result.buffer.length > (interaction.attachmentSizeLimit || 8 * 1024 * 1024)) throw new RaidLogError("too_large");
     const { buffer, ...metadata } = result;
@@ -43,22 +43,20 @@ function createRaidLogCommand({
   }
 
   async function handleRaidLogCommand(interaction) {
-    const view = interaction.options.getString("view") || "team";
     let source;
     let invalid;
-    try { source = parseRaidLogSource({ character: interaction.options.getString("character"), url: interaction.options.getString("url") }); }
+    try { source = parseRaidLogSource({ character: interaction.options.getString("character") }); }
     catch (error) { invalid = error; }
     await interaction.deferReply(invalid ? { flags: MessageFlags.Ephemeral } : {});
     const language = resolveStoredLanguage(interaction.user.id).catch(() => "vi");
     let state;
     try {
       if (invalid) throw invalid;
-      const catalog = source.character ? await logCatalog.open(source.character) : null;
-      const selected = catalog?.logs[0] || { ...parsePublicLogUrl(source.url), raidKey: "linked", raidLabel: "Bible log" };
+      const catalog = await logCatalog.open(source.character);
       state = {
         id: randomBytes(8).toString("hex"), revision: 0, expires: now() + sessionMs, busy: true,
         guildId: interaction.guildId, channelId: interaction.channelId,
-        lang: await language, catalog, selected, view, tab: "damage", bracketed: true, raidPage: 0, logPage: 0,
+        lang: await language, catalog, selected: catalog.logs[0], tab: "damage", bracketed: true, raidPage: 0, logPage: 0,
       };
       remember(state);
       const message = await render(interaction, state);
@@ -103,7 +101,7 @@ function createRaidLogCommand({
     const started = now();
     try {
       await interaction.deferUpdate();
-      if (state.catalog) await logCatalog.verify(state.catalog);
+      await logCatalog.verify(state.catalog);
       const next = await applySelection(state, action, interaction.values?.[0]);
       const changed = next.tab !== state.tab || next.bracketed !== state.bracketed || next.selected.id !== state.selected.id;
       if (changed) await render(interaction, next);

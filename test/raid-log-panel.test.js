@@ -9,7 +9,7 @@ const { createRaidInteractionRouter } = require('../bot/app/interaction-router-r
 function logEntry(id,raidKey='kazeros',timestamp=100) {
  return { id, url:`https://lostark.bible/logs/${id}`, character:'Qiylyn', raidKey, raidLabel:raidKey, gate:'G2', difficulty:'Hard', timestamp, duration:90000 };
 }
-function fixture({lang='vi',byUrl=false,logs=[logEntry('new'),logEntry('old','kazeros',90),logEntry('serca','serca',80)],hasMore=false,sessionMs, maxSessions, now}={}) {
+function fixture({lang='vi',logs=[logEntry('new'),logEntry('old','kazeros',90),logEntry('serca','serca',80)],hasMore=false,sessionMs, maxSessions, now}={}) {
  const events=[]; let payload; let failure; let verifyFailure; let beforeVerify; let failEdit=false;
  const catalog={profile:{name:'Qiylyn'},logs,page:1,hasMore};
  const logCatalog={
@@ -27,7 +27,7 @@ function fixture({lang='vi',byUrl=false,logs=[logEntry('new'),logEntry('old','ka
     playerCount:8,partyCount:2,filename:'capture.png',buffer:Buffer.from('png')};
   },
  });
- const slash={user:{id:'author'},guildId:'guild',channelId:'channel',options:{getString:name=>name==='character'&&!byUrl?'Qiylyn':name==='url'&&byUrl?'https://lostark.bible/logs/linked':null},deferReply:async()=>events.push('ack'),editReply};
+ const slash={user:{id:'author'},guildId:'guild',channelId:'channel',options:{getString:name=>{assert.equal(name,'character');return 'Qiylyn';}},deferReply:async()=>events.push('ack'),editReply};
  function component(action,value,overrides={}) {
   const controls=payload.components.flatMap(row=>row.toJSON().components);
   const control=controls.find(c=>c.custom_id.endsWith(`:${action}`));
@@ -129,13 +129,25 @@ test('simultaneous clicks do not overlap; capture and Discord failures leave com
  f.failEdit=false;await f.click(retry);assert.notEqual(controls(f)[3].label,current);
 });
 
-test('expired, evicted and URL-only panels retain their explicit limits',async()=>{
+test('expired and evicted panels retain their explicit limits',async()=>{
  let now=0;const f=fixture({sessionMs:100,now:()=>now,maxSessions:1});await f.run();const first=f.component('tab','tanked');
  await f.run();await f.click(first);assert.match(f.events.at(-1)[1].content,/hết hạn/);
  const second=f.component('tab','tanked');now=101;await f.click(second);assert.match(f.events.at(-1)[1].content,/hết hạn/);
- const url=fixture({byUrl:true});await url.run();assert.equal(controls(url)[1].disabled,true);assert.equal(controls(url)[2].disabled,true);
- await url.click(url.component('tab','tanked'));assert.equal(captures(url).at(-1)[2].tab,'tanked');
- assert.equal(captures(url).at(-1)[2].useCache,false);assert.ok(!url.events.includes('verify'));
+});
+
+test('every selection captures a full tab; Bracketed persists within a panel and starts ON for each new panel',async()=>{
+ const f=fixture();await f.run();
+ assert.equal(captures(f).at(-1)[2].bracketed,true);
+ await f.click(f.component('bracketed'));
+ for(const [action,value] of [['tab','party_buffs'],['log','old'],['raid','serca']]) {
+  await f.click(f.component(action,value));
+  assert.equal(captures(f).at(-1)[2].bracketed,false);
+ }
+ await f.run();
+ assert.equal(captures(f).at(-1)[2].bracketed,true);
+ assert.equal(captures(f).at(-1)[2].tab,'damage');
+ assert.equal(captures(f).length,6);
+ assert.ok(captures(f).every(([, , options])=>options.view==='full'));
 });
 
 test('global router dispatches both raid-log dropdowns and buttons to the panel handler',async()=>{

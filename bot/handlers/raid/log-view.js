@@ -22,7 +22,7 @@ function buildSummaryFields(summary, lang) {
 }
 
 function panelChoices(state) {
-  const logs = state.catalog?.logs || [state.selected];
+  const logs = state.catalog.logs;
   const raids = [...new Map(logs.map(log => [log.raidKey, log.raidLabel])).entries()]
     .map(([value, label]) => ({ label: label.slice(0, 100), value, default: value === state.selected.raidKey }));
   const raidLogs = logs.filter(log => log.raidKey === state.selected.raidKey).map(log => ({
@@ -44,14 +44,14 @@ function pagedChoices(choices, page, hasMore, lang) {
 function buildLogComponents(state, disabled = false) {
   const id = action => `raid-log:${state.id}:${state.revision}:${action}`;
   const { raids, logs } = panelChoices(state);
-  const select = (action, placeholder, options, unavailable = false) => new ActionRowBuilder().addComponents(
+  const select = (action, placeholder, options) => new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder().setCustomId(id(action)).setPlaceholder(placeholder.slice(0, 150))
-      .setDisabled(disabled || unavailable).addOptions(options),
+      .setDisabled(disabled).addOptions(options),
   );
   return [
     select("tab", `1 · ${RAID_LOG_TABS[state.tab]}`, Object.entries(RAID_LOG_TABS).map(([value, label]) => ({ value, label, default: value === state.tab }))),
-    select("raid", `2 · ${state.selected.raidLabel}`, pagedChoices(raids, state.raidPage, state.catalog?.hasMore, state.lang), !state.catalog),
-    select("log", `3 · ${t("raid-log.controls.log", state.lang)}`, pagedChoices(logs, state.logPage, false, state.lang), !state.catalog),
+    select("raid", `2 · ${state.selected.raidLabel}`, pagedChoices(raids, state.raidPage, state.catalog.hasMore, state.lang)),
+    select("log", `3 · ${t("raid-log.controls.log", state.lang)}`, pagedChoices(logs, state.logPage, false, state.lang)),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(id("bracketed"))
         .setLabel(state.bracketed ? "Bracketed: ON" : "Bracketed: OFF · Normalized")
@@ -62,13 +62,12 @@ function buildLogComponents(state, disabled = false) {
 }
 
 function buildLogEmbed(state, result, { EmbedBuilder, UI }) {
-  const description = [];
-  if (state.catalog) description.push(t("raid-log.character", state.lang, { character: state.catalog.profile.name }));
+  const description = [t("raid-log.character", state.lang, { character: state.catalog.profile.name })];
   description.push(t("raid-log.description", state.lang, {
     players: result.playerCount, parties: result.partyCount, view: RAID_LOG_TABS[state.tab],
   }));
   description.push(`**${state.bracketed ? "Bracketed" : "Normalized"}**`);
-  if (state.catalog) description.push(t(`raid-log.controls.${state.catalog.hasMore ? "history" : "historyEnd"}`, state.lang, { count: state.catalog.logs.length }));
+  description.push(t(`raid-log.controls.${state.catalog.hasMore ? "history" : "historyEnd"}`, state.lang, { count: state.catalog.logs.length }));
   return new EmbedBuilder().setColor(UI.colors.progress).setTitle(`🧪 TEST · ${result.title}`.slice(0, 256))
     .setURL(result.url).setDescription(description.join("\n"))
     .addFields({ name: t("raid-log.details", state.lang), value: result.header.replace(/\n{2,}/g, "\n").slice(0,1024) })

@@ -231,7 +231,7 @@ function createRaidLogCapture({
     }
   }
 
-  async function captureRaidLog(input, { view = "team", tab = "damage", bracketed = true, useCache = false } = {}) {
+  async function captureRaidLog(input, { view = "full", tab = "damage", bracketed = true, useCache = false } = {}) {
     const log = parsePublicLogUrl(input);
     if (!["team", "full"].includes(view)) throw new RaidLogError("invalid_view");
     if (!Object.hasOwn(RAID_LOG_TABS, tab) || typeof bracketed !== "boolean") throw new RaidLogError("invalid_selection");

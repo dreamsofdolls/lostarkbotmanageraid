@@ -74,7 +74,7 @@ Raid Manager = Discord user IDs listed in `RAID_MANAGER_ID` (comma-separated). M
 
 ## Experimental public log capture
 
-`/raid-log character:<name> [view:team|full]` finds the character's latest public
+`/raid-log character:<name>` finds the character's latest public
 log in NA by encounter timestamp, without a weekly reset filter. It resolves the
 character IDs and class from a single profile-page request through the existing
 Bible client, then reads the
@@ -82,12 +82,12 @@ newest logs page, and requires an exact character-name match (case-insensitive,
 with accents preserved). No registered roster is needed. Private logs, unknown
 characters, no logs and mismatched identities produce a notice instead of a capture.
 
-Alternatively, `/raid-log url:https://lostark.bible/logs/<id> [view:team|full]`
-selects a specific log. Provide exactly one of `character` or `url`. Both post the original
-Damage tab as a PNG in the calling channel, with encounter details and a linked
-title. The card is marked **TEST** and shows encounter details, team size,
-duration, total damage and team DPS alongside the image. `team` (default) includes all party Damage tables; `full` also includes the
-header and contribution summary tables. No roster registration or Auto-sync is required.
+`character` is the only command option and is required. New panels open on the
+full Damage tab with **Bracketed ON**. Every tab capture includes the encounter
+header and all tables in the selected tab, including after changing raid or log.
+The PNG appears in the calling channel, with a linked title. The card is marked
+**TEST** and shows encounter details, team size, duration, total damage and team
+DPS alongside the image. No roster registration or Auto-sync is required.
 This is one log/gate, not a whole-raid aggregate, and anonymized names are kept
 as shown on Bible. It does not update raid progress or scan for logs automatically.
 
@@ -102,8 +102,7 @@ demand, up to 250 logs. Long dropdowns paginate within Discord's 25-option limit
 If Bible repeats a page without new IDs, loading stops; the displayed count is
 the history loaded into this panel, not a claim to cover all historical logs.
 Each character-panel action checks public-log access before using any cached
-image. Private logs revoke the controls and remove the attached image. URL-only
-panels can change tabs/mode; their raid/log dropdowns are disabled.
+image. Private logs revoke the controls and remove the attached image.
 
 Capture reuses one browser/page for up to 45 idle seconds, then closes it.
 Images use CSS resolution, a 16 MiB LRU cache and a 5-minute cache lifetime.
@@ -116,9 +115,7 @@ For a local experiment without Discord or MongoDB:
 ```powershell
 npm ci
 npx playwright install --no-shell chromium
-npm run preview:raid-log -- --character Saturnxd
-npm run preview:raid-log -- https://lostark.bible/logs/S9NbBTM team
-npm run preview:raid-log -- https://lostark.bible/logs/MsBBW1A full
+npm run preview:raid-log -- --character Qiylyn
 ```
 
 The shared capture service writes PNG + JSON evidence to `.agent/raid-log-preview/`
