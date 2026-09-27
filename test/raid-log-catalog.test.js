@@ -5,6 +5,8 @@ const assert = require("node:assert/strict");
 const { createRaidLogCatalog, normalizeCatalogLogs } = require("../bot/services/raid-log/catalog");
 const { raidLogErrorCode } = require("../bot/services/raid-log/errors");
 const { createImageCache } = require("../bot/services/raid-log/image-cache");
+const { createBibleClient } = require("../bot/services/auto-manage/bible/client");
+const { createBibleCharacterNotFoundError } = require("../bot/services/auto-manage/bible/error-kinds");
 
 const row = (id, boss = "Death Incarnate Kazeros", timestamp = 100) => ({ id, boss, timestamp, name: "Qiylyn", difficulty: "Hard" });
 
@@ -138,4 +140,88 @@ test("refresh followed by older-page loading cannot grow history past 250 logs",
     assert.equal(result.hasMore, false);
     await assert.rejects(service.more(result), { code: "invalid_selection" });
   }
+});
+
+test("catalog never folds accents or accepts nameless rows as the requested character", () => {
+  assert.throws(() => normalizeCatalogLogs([{ ...row("x"), name: "Saturn" }], "Sáturn"), { code: "character_mismatch" });
+  assert.throws(() => normalizeCatalogLogs([{ id: "x", boss: "Death Incarnate Kazeros", timestamp: 10 }], "Saturn"), { code: "character_mismatch" });
+  const logs = normalizeCatalogLogs([{ ...row("upper"), name: "QIYLYN", timestamp: "200" }, row("lower")], "Qiylyn");
+  assert.deepEqual(logs.map(log => [log.id, log.timestamp]), [["upper", 200], ["lower", 100]]);
+});
+
+test("a malformed Bible page fails instead of yielding a partial history", () => {
+  assert.throws(() => normalizeCatalogLogs({}, "Qiylyn"), { code: "unavailable" });
+  for (const item of [{ ...row("x"), timestamp: "oops" }, { ...row("x"), id: undefined }]) {
+    assert.throws(() => normalizeCatalogLogs([row("ok"), item], "Qiylyn"), { code: "unavailable" });
+  }
+});
+
+function openFixture({ profile, logs, profileError, logsError } = {}) {
+  const calls = [];
+  const catalog = createRaidLogCatalog({ client: {
+    fetchBibleCharacterProfileWithLimiter: async name => {
+      calls.push(["profile", name]);
+      if (profileError) throw profileError;
+      return { sn: "serial-1", cid: 123, rid: 456, name: "Saturnxd", className: "Deathblade", ...profile };
+    },
+    fetchBibleLogsWithLimiter: async args => {
+      calls.push(["logs", args]);
+      if (logsError) throw logsError;
+      return logs ?? [row("ABC")].map(entry => ({ ...entry, name: "Saturnxd" }));
+    },
+  } });
+  return { calls, open: name => catalog.open(name) };
+}
+
+test("open resolves exact name and class and requests only page 1 with fresh Bible IDs", async () => {
+  const { open, calls } = openFixture();
+  const opened = await open("saturnxd");
+  assert.equal(opened.logs[0].character, "Saturnxd");
+  assert.equal(opened.logs[0].url, "https://lostark.bible/logs/ABC");
+  assert.deepEqual(calls, [
+    ["profile", "saturnxd"],
+    ["logs", { serial: "serial-1", cid: 123, rid: 456, className: "Deathblade", page: 1 }],
+  ]);
+});
+
+test("open rejects a profile identity mismatch before fetching logs", async () => {
+  const { open, calls } = openFixture({ profile: { name: "Other" } });
+  await assert.rejects(open("Saturnxd"), { code: "character_mismatch" });
+  assert.equal(calls.length, 1);
+});
+
+test("error mapping distinguishes unknown names, private logs, blocked access, timeout and backoff", async () => {
+  const hasCode = expected => error => raidLogErrorCode(error) === expected;
+  const unknown = openFixture({ profileError: createBibleCharacterNotFoundError("Ratelimit") });
+  await assert.rejects(unknown.open("Ratelimit"), hasCode("character_not_found"));
+  assert.equal(unknown.calls.length, 1);
+  await assert.rejects(openFixture({ logs: [] }).open("Saturnxd"), { code: "no_logs" });
+  const privateError = Object.assign(new Error('Bible logs API returned HTTP 403 - {"error":"Logs not enabled"}'), { status: 403 });
+  await assert.rejects(openFixture({ logsError: privateError }).open("Saturnxd"), hasCode("logs_private"));
+  await assert.rejects(openFixture({ logsError: Object.assign(new Error("Blocked"), { status: 403 }) }).open("Saturnxd"), hasCode("unavailable"));
+  await assert.rejects(openFixture({ profileError: Object.assign(new Error("Timed out"), { name: "TimeoutError" }) }).open("Saturnxd"), hasCode("timeout"));
+  const backoff = Object.assign(new Error("HTTP 429"), { status: 429, retryAfterMs: 60_000 });
+  await assert.rejects(openFixture({ logsError: backoff }).open("Saturnxd"), error => error === backoff);
+  assert.equal(raidLogErrorCode(backoff), "rate_limited");
+  assert.equal(raidLogErrorCode(new Error("Internal path")), "failed");
+});
+
+test("real Bible client opens a character with exactly two limited HTTP requests", async () => {
+  const calls = [];
+  let limitedCalls = 0;
+  const html = '<title>Saturnxd (NA) | lostark.bible</title><script>data:{header:{id:123,sn:"serial-1",rid:456,combatPowerHistory:[{score:8000}],class:"blade"},redirectedFrom:null},roster:[{name:"Other",class:"bard"}]</script>';
+  const client = createBibleClient({
+    bibleLimiter: { run: fn => { limitedCalls++; return fn(); } },
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return { ok: true, text: async () => html,
+        json: async () => [{ id: "ABC", name: "Saturnxd", boss: "Death Incarnate Kazeros", timestamp: 100 }] };
+    },
+  });
+  const opened = await createRaidLogCatalog({ client }).open("saturnxd");
+  assert.equal(opened.logs[0].character, "Saturnxd");
+  assert.equal(calls.length, 2);
+  assert.equal(limitedCalls, 2);
+  assert.equal(calls[0].url, "https://lostark.bible/character/NA/saturnxd/roster");
+  assert.deepEqual(JSON.parse(calls[1].options.body), { region: "NA", characterSerial: "serial-1", className: "Deathblade", cid: 123, rid: 456, page: 1 });
 });

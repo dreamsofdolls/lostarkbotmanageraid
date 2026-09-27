@@ -4,7 +4,7 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { createRaidLogCapture } = require("../bot/services/raid-log/capture");
-const { createLatestRaidLogLookup } = require("../bot/services/raid-log/latest");
+const { createRaidLogCatalog } = require("../bot/services/raid-log/catalog");
 const { parseRaidLogSource } = require("../bot/services/raid-log/source");
 const { BibleRequestLimiter } = require("../bot/services/auto-manage/bible/rate-limit");
 
@@ -16,7 +16,7 @@ async function main() {
   const source = parseRaidLogSource(byCharacter ? { character: input } : { url: input });
   const startedAt = Date.now();
   const bibleLimiter = new BibleRequestLimiter(2);
-  const selected = source.character ? await createLatestRaidLogLookup({ bibleLimiter })(source.character) : source;
+  const selected = source.character ? (await createRaidLogCatalog({ bibleLimiter }).open(source.character)).logs[0] : source;
   const { images, ...result } = await createRaidLogCapture({ bibleLimiter })(selected.url, { view });
   const directory = path.resolve(__dirname, "../.agent/raid-log-preview");
   await fs.mkdir(directory, { recursive: true });
