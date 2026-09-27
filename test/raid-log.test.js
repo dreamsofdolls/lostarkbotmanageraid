@@ -103,7 +103,7 @@ test("warm capture switches tabs/modes without navigation, caches variants and r
   const capture = createRaidLogCapture({ ...fake, idleMs: 60_000 });
   try {
     const initial = await capture(URL, { useCache: true });
-    assert.equal(initial.filename, "raid-log-S9NbBTM-full-damage-bracketed.png");
+    assert.equal(initial.images[0].filename, "raid-log-S9NbBTM-full-damage-bracketed.png");
     assert.equal(fake.state.clip.height, 800);
     assert.equal(fake.state.normalized, false);
     assert.equal(fake.state.closed, 0);
@@ -160,7 +160,9 @@ test("capture returns selected region and closes the browser after success or sc
   for (const view of ["team", "full"]) {
     const fake = fakeBrowser();
     const result = await createRaidLogCapture(fake)(URL, { view });
-    assert.equal(result.filename, `raid-log-S9NbBTM-${view}-damage-bracketed.png`);
+    assert.equal(result.images[0].filename, `raid-log-S9NbBTM-${view}-damage-bracketed.png`);
+    assert.equal(result.buffer, undefined);
+    assert.equal(result.filename, undefined);
     assert.equal(fake.state.clip.height, view === "team" ? 400 : 800);
     assert.equal(fake.state.closed, 1);
     assert.equal(fake.state.context.serviceWorkers, "block");
@@ -361,7 +363,7 @@ function handlerFixture({ character = "Saturnxd", error, lookupError, lang = "vi
       if (error) throw error;
       return { url: URL, title: "Kazeros G2", header: "Hard\nKazeros G2\n09:15",
         summary: "Duration:\n7:27\n+0:39\n·\nTotal DMG:\n1,928,393,107,867\n·\nTotal DPS:\n4,314,078,107\nDamage",
-        playerCount: 8, partyCount: 2, filename: "log.png", buffer: Buffer.from("png") };
+        playerCount: 8, partyCount: 2, images: [{ filename: "log.png", buffer: Buffer.from("png") }] };
     },
   });
   return { calls, interaction, run: async () => {

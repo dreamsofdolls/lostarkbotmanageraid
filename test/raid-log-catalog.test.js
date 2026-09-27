@@ -65,20 +65,20 @@ test('repeated source pages stop loading without claiming extra history, and his
 test('image cache enforces byte budget, LRU and TTL without retaining oversized images',()=>{
  let now=0;
  const cache=createImageCache({maxBytes:6,ttlMs:10,now:()=>now});
- const result=id=>({id,buffer:Buffer.alloc(3)});
+ const result=id=>({id,images:[{buffer:Buffer.alloc(3)}]});
  cache.set('a',result('a'));cache.set('b',result('b'));cache.get('a');cache.set('c',result('c'));
  assert.equal(cache.get('b'),undefined);assert.equal(cache.get('a').id,'a');
- cache.set('huge',{buffer:Buffer.alloc(7)});assert.equal(cache.get('huge'),undefined);
+ cache.set('huge',{images:[{buffer:Buffer.alloc(7)}]});assert.equal(cache.get('huge'),undefined);
  now=10;assert.equal(cache.get('a'),undefined);assert.equal(cache.get('c'),undefined);
  cache.set('d',result('d'));assert.equal(cache.get('d').id,'d');
 });
 
 test('two-image cache accounts for both buffers and refresh invalidates every variant of only that log',()=>{
  const cache=createImageCache({maxBytes:10});
- const pair={buffer:Buffer.alloc(3),images:[{buffer:Buffer.alloc(3)},{buffer:Buffer.alloc(4)}]};
+ const pair={images:[{buffer:Buffer.alloc(3)},{buffer:Buffer.alloc(4)}]};
  cache.set('log:player1',pair);cache.set('log:player2',pair);
  assert.equal(cache.get('log:player1'),undefined);assert.equal(cache.get('log:player2'),pair);
- cache.set('other:team',{buffer:Buffer.alloc(3)});
+ cache.set('other:team',{images:[{buffer:Buffer.alloc(3)}]});
  cache.invalidateLog('log');
  assert.equal(cache.get('log:player2'),undefined);assert.ok(cache.get('other:team'));
  cache.set('huge:detail',{images:[{buffer:Buffer.alloc(6)},{buffer:Buffer.alloc(6)}]});

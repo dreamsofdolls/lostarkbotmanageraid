@@ -17,12 +17,12 @@ async function main() {
   const startedAt = Date.now();
   const bibleLimiter = new BibleRequestLimiter(2);
   const selected = source.character ? await createLatestRaidLogLookup({ bibleLimiter })(source.character) : source;
-  const { buffer, images, ...result } = await createRaidLogCapture({ bibleLimiter })(selected.url, { view });
+  const { images, ...result } = await createRaidLogCapture({ bibleLimiter })(selected.url, { view });
   const directory = path.resolve(__dirname, "../.agent/raid-log-preview");
   await fs.mkdir(directory, { recursive: true });
-  const imagePath = path.join(directory, result.filename);
-  const evidence = { ...result, selected, imagePath, bytes: buffer.length, elapsedMs: Date.now() - startedAt,
-    images: images.map(({ buffer: bytes, ...image }) => ({ ...image, bytes: bytes.length })) };
+  const imagePath = path.join(directory, images[0].filename);
+  const evidence = { ...result, selected, imagePath, elapsedMs: Date.now() - startedAt,
+    images: images.map(({ buffer, ...image }) => ({ ...image, bytes: buffer.length })) };
   for (const image of images) await fs.writeFile(path.join(directory, image.filename), image.buffer);
   await fs.writeFile(`${imagePath}.json`, JSON.stringify(evidence, null, 2) + "\n");
   console.log(JSON.stringify(evidence, null, 2));

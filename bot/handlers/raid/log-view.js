@@ -91,7 +91,7 @@ function buildLogEmbed(state, result, { EmbedBuilder, UI }) {
     .setURL(result.url).setDescription(description.join("\n"))
     .addFields({ name: t("raid-log.details", state.lang), value: result.header.replace(/\n{2,}/g, "\n").slice(0,1024) })
     .addFields(buildSummaryFields(result.summary, state.lang))
-    .setImage(`attachment://${result.filename}`).setFooter({ text: t("raid-log.controls.footer", state.lang) });
+    .setImage(`attachment://${result.images[0].filename}`).setFooter({ text: t("raid-log.controls.footer", state.lang) });
 }
 
 function buildLogEmbeds(state, result, builders) {

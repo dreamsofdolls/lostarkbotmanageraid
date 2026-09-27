@@ -3,8 +3,7 @@
 function createImageCache({ maxBytes = 16 * 1024 * 1024, ttlMs = 5 * 60_000, now = Date.now } = {}) {
   const entries = new Map();
   let bytes = 0;
-  const sizeOf = result => result.images
-    ? result.images.reduce((sum, image) => sum + image.buffer.length, 0) : result.buffer.length;
+  const sizeOf = result => result.images.reduce((sum, image) => sum + image.buffer.length, 0);
   function remove(key) {
     const entry = entries.get(key);
     if (entry) bytes -= sizeOf(entry.result);

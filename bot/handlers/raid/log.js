@@ -4,6 +4,7 @@ const { randomBytes } = require("node:crypto");
 const { t, getUserLanguage } = require("../../services/i18n");
 const { parseRaidLogSource } = require("../../services/raid-log/source");
 const { RaidLogError, raidLogErrorCode } = require("../../services/raid-log/errors");
+const { MAX_IMAGE_BYTES } = require("../../services/raid-log/capture");
 const { buildSummaryFields, buildLogComponents, buildLogEmbeds } = require("./log-view");
 const { tabsForPlayer } = require("../../services/raid-log/tabs");
 const { rosterChoices, pickerOptions, buildLogPicker, buildLogSearchModal } = require("./log-picker");
@@ -42,12 +43,12 @@ function createRaidLogCommand({
     const result = await captureRaidLog(state.selected.url, {
       view: "full", tab: state.tab, bracketed: state.bracketed, player: state.player, useCache: true, refresh,
     });
-    const images = result.images || [{ buffer: result.buffer, filename: result.filename }];
-    if (images.some(image => image.buffer.length > (interaction.attachmentSizeLimit || 8 * 1024 * 1024))) throw new RaidLogError("too_large");
-    const { buffer, images: capturedImages, ...metadata } = result;
-    state.result = { ...metadata, images: images.map(({ buffer: bytes, ...image }) => image) };
+    const limit = interaction.attachmentSizeLimit || MAX_IMAGE_BYTES;
+    if (result.images.some(image => image.buffer.length > limit)) throw new RaidLogError("too_large");
+    const { images, ...metadata } = result;
+    state.result = { ...metadata, images: images.map(image => ({ filename: image.filename })) };
     const message = await interaction.editReply({
-      content: null, embeds: embeds(state, result), components: buildLogComponents(state),
+      content: null, embeds: embeds(state, state.result), components: buildLogComponents(state),
       attachments: [], files: images.map(image => new AttachmentBuilder(image.buffer, { name: image.filename })), allowedMentions: { parse: [] },
     });
     log.info?.(`[raid-log] rendered id=${state.selected.id} player=${state.player?.id || "team"} tab=${state.tab} images=${images.length} bracketed=${state.bracketed} cached=${Boolean(result.cached)}`);

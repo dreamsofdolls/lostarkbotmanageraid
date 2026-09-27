@@ -33,9 +33,11 @@ function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry
     resolveStoredLanguage: async (id, doc) => { assert.equal(doc, userDoc); return lang; },
     captureRaidLog: async (url, options) => {
       events.push(["capture", url, options]); if (failure) throw failure;
-      const images = options.player ? ["top", "bottom"].map(part => ({ filename: `${part}.png`, buffer: Buffer.from(part) })) : undefined;
+      const images = options.player
+        ? ["top", "bottom"].map(part => ({ filename: `${part}.png`, buffer: Buffer.from(part) }))
+        : [{ filename: "capture.png", buffer: Buffer.from("png") }];
       return transformCapture({ url, title: "Kazeros G2", header: "Hard\nKazeros G2", summary: "Duration: 1:30 · Total DMG: 100 · Total DPS: 1",
-        playerCount: 8, partyCount: 2, filename: images?.[0].filename || "capture.png", buffer: images?.[0].buffer || Buffer.from("png"), images,
+        playerCount: 8, partyCount: 2, images,
         hasBreakdown: options.player?.id !== "2-1",
         players: [{ id: "1-0", party: 1, row: 0, label: "1760 Qiylyn", className: "Aeromancer" },
           { id: "2-1", party: 2, row: 1, label: "1746 Slayer #1", className: "Slayer" }] });

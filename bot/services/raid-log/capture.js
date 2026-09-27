@@ -221,8 +221,7 @@ function createRaidLogCapture({
         images.push({ buffer, filename: `${filenameBase}${player ? `-${index === 0 ? "top" : "bottom"}` : ""}.png`, clip });
       }
       succeeded = true;
-      return { ...log, view, tab, bracketed, ...evidence, players: resource.baseline.players, images,
-        buffer: images[0].buffer, filename: images[0].filename };
+      return { ...log, view, tab, bracketed, ...evidence, players: resource.baseline.players, images };
     } catch (error) {
       if (expired || error.name === "TimeoutError") throw new RaidLogError("timeout", error);
       if (resource?.crashed || /(?:Target|Page) crashed/i.test(`${error.message} ${error.cause?.message || ""}`)) {
@@ -289,4 +288,4 @@ function createRaidLogCapture({
   return captureRaidLog;
 }
 
-module.exports = { createRaidLogCapture, isAllowedRequest, inspectDamagePage };
+module.exports = { createRaidLogCapture, isAllowedRequest, inspectDamagePage, MAX_IMAGE_BYTES };

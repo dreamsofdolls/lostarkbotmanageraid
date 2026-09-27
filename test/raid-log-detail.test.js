@@ -10,7 +10,7 @@ const { RaidLogError } = require("../bot/services/raid-log/errors");
 
 test("an oversized second image or failed edit leaves the previous public card intact", async () => {
   const f = fixture({ transformCapture: result => {
-    if (result.images) result.images[1].buffer = Buffer.alloc(12);
+    if (result.images[1]) result.images[1].buffer = Buffer.alloc(12);
     return result;
   } });
   await f.run(); const before = JSON.stringify(f.payload);
