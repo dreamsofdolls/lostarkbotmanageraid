@@ -2,6 +2,8 @@
 
 const { captureTabOptions } = require("./tabs");
 
+const NORMALIZED_SWITCH = "Use normalized DPS percentiles";
+
 async function selectCaptureTab(page, { tab, bracketed, player }) {
   const options = captureTabOptions(tab);
   await page.getByRole("button", { name: options.button, exact: true }).click();
@@ -16,15 +18,35 @@ async function selectCaptureTab(page, { tab, bracketed, player }) {
   const subButton = page.getByRole("button", { name: sub, exact: true });
   // Older logs can lack the damage attribution analysis, but still have skills.
   if (options.breakdown || options.chart || await subButton.count()) await subButton.click();
-  const normalizedSwitch = page.getByRole("switch", { name: "Use normalized DPS percentiles" });
-  if (await normalizedSwitch.isChecked() === bracketed) await page.locator("label").filter({ has: normalizedSwitch }).click();
-  await page.waitForFunction(({ label, bracketed }) => {
-    const active = [...document.querySelectorAll("button")]
-      .some(button => button.innerText.trim() === label && button.classList.contains("bg-accent-600"));
-    const input = document.querySelector('input[aria-label="Use normalized DPS percentiles"]');
-    return active && input?.checked === !bracketed
-      && input.closest("label").querySelector("span").classList.contains("text-white") === bracketed;
-  }, { label: options.button, bracketed });
+  await setNormalized(page, !bracketed);
+  await page.waitForFunction(label => [...document.querySelectorAll("button")]
+    .some(button => button.innerText.trim() === label && button.classList.contains("bg-accent-600")), options.button);
+}
+
+/**
+ * @param {object} page Playwright page on a Damage view
+ * @param {boolean} on true for Normalized percentiles, false for Bracketed
+ * @returns {Promise<void>}
+ */
+async function setNormalized(page, on) {
+  const toggle = page.getByRole("switch", { name: NORMALIZED_SWITCH });
+  if (await toggle.isChecked() !== on) await page.locator("label").filter({ has: toggle }).click();
+  // The input flips on click; the label's white text in Bracketed mode comes
+  // with Bible's re-render, so waiting on both waits for the redrawn table.
+  await page.waitForFunction(({ name, on }) => {
+    const input = document.querySelector(`input[aria-label="${name}"]`);
+    return input?.checked === on && input.closest("label").querySelector("span").classList.contains("text-white") === !on;
+  }, { name: NORMALIZED_SWITCH, on });
+}
+
+/**
+ * Leaves a player's detail view for the team overview.
+ * @param {object} page
+ * @returns {Promise<void>}
+ */
+async function returnToOverview(page) {
+  await page.getByRole("button", { name: "Return to Overview", exact: true }).click();
+  await page.locator("table").filter({ hasText: "Party 1" }).waitFor({ state: "visible" });
 }
 
 async function fitCaptureTables(page) {
@@ -60,4 +82,4 @@ async function waitForCharts(page) {
   }));
 }
 
-module.exports = { selectCaptureTab, fitCaptureTables, waitForCharts };
+module.exports = { selectCaptureTab, fitCaptureTables, waitForCharts, setNormalized, returnToOverview };

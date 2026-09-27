@@ -126,6 +126,9 @@ Each character-panel action checks public-log access before using any cached
 image. Private logs revoke the controls and remove the attached image.
 
 Capture reuses one browser/page for up to 45 idle seconds, then closes it.
+When it first opens a log it also reads every player's figures and percentile
+badges from the Damage table in both modes, and each support's bD% from their
+detail view; a support page that fails leaves only that figure empty.
 Images use CSS resolution, a 16 MiB LRU cache (counting both player images) and a
 5-minute cache lifetime. Captures wait for chart rendering to settle. Wide buff
 tables expand the capture container/viewport, up to 3200px, without hiding columns.

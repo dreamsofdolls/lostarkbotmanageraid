@@ -4,6 +4,11 @@ Dates use the local calendar of the commit. Structure loosely follows [Keep a Ch
 
 This file now favors high-signal, user-visible changes and major backend fixes. Deep implementation notes should live in commit messages or test files instead of bloating the changelog.
 
+## 2026-09-28
+
+### Changed
+- `/raid-log` reads each player's figures and percentile badges (Bracketed and Normalized) from Bible's Damage table when it first opens a log, and each support's bD% from their detail view, so the first open of a log takes a few seconds longer. A support page that fails leaves only that figure empty.
+
 ## 2026-09-23
 
 ### Changed

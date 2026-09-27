@@ -7,7 +7,8 @@ const { readCaptureMemory } = require("./memory");
 const { tabsForPlayer } = require("./tabs");
 const { createImageCache } = require("./image-cache");
 const { inspectPlayerPage, selectPlayer } = require("./detail");
-const { selectCaptureTab, fitCaptureTables, waitForCharts } = require("./page-controls");
+const { selectCaptureTab, fitCaptureTables, waitForCharts, returnToOverview } = require("./page-controls");
+const { collectTeamMetrics } = require("./team-metrics");
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
@@ -186,9 +187,10 @@ function createRaidLogCapture({
         await waitForAssets(page);
         resource.baseline = await page.evaluate(inspectDamagePage);
         if (resource.baseline.error) throw new RaidLogError(resource.baseline.error);
+        resource.baseline.players = await collectTeamMetrics(page, resource.baseline.players, { deadline, log: logger });
       }
       if ((resource.player?.id || null) !== (player?.id || null)) {
-        if (resource.player) await page.getByRole("button", { name: "Return to Overview", exact: true }).click();
+        if (resource.player) await returnToOverview(page);
         if (player) {
           const current = resource.baseline.players.find(entry => entry.id === player.id && entry.label === player.label);
           if (!current || !await selectPlayer(page, current)) throw new RaidLogError("invalid_selection");

@@ -6,6 +6,7 @@ const { EventEmitter } = require("node:events");
 const { JSDOM } = require("jsdom");
 const { EmbedBuilder, AttachmentBuilder, MessageFlags } = require("discord.js");
 const { createRaidLogCapture, isAllowedRequest, inspectDamagePage } = require("../bot/services/raid-log/capture");
+const { readPartyMetrics } = require("../bot/services/raid-log/metrics");
 const { parsePublicLogUrl } = require("../bot/services/raid-log/source");
 const { RaidLogError } = require("../bot/services/raid-log/errors");
 const { createRaidLogCommand } = require("../bot/handlers/raid/log");
@@ -49,7 +50,7 @@ test("command opens a guild-only experiment without slash options", () => {
   assert.deepEqual(data.options, []);
 });
 
-function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, onScreenshot, onNavigate, closeError } = {}) {
+function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, onScreenshot, onNavigate, closeError, players = [], metrics = [] } = {}) {
   let rejectNavigation;
   let normalized = false;
   const state = { closed: 0, launches: 0, navigations: 0, routes: [] };
@@ -73,8 +74,8 @@ function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, on
     evaluate: async fn => fn === inspectDamagePage ? {
       title: "Kazeros G2", header: "Hard\nKazeros\n09:15", playerCount: 8, partyCount: 2,
       team: { x: 0, y: 0, width: 1280, height: 400 }, full: { x: 0, y: 0, width: 1280, height: 800 },
-      players: [],
-    } : 96,
+      players,
+    } : fn === readPartyMetrics ? metrics : 96,
     mouse: { move: async () => {} },
     screenshot: async options => {
       state.clip = options.clip;
@@ -142,6 +143,22 @@ test("warm browser closes when idle and a renderer that crashes while idle is re
     assert.equal(failed.state.closed, 1);
     t.mock.timers.tick(45_000);
     assert.equal(healthy.state.closed, 1);
+  } finally { await capture.close(); }
+});
+
+test("a new log's baseline carries team figures into every capture, cached ones included", async () => {
+  const players = [{ id: "1-0", party: 1, row: 0, label: "1760 Qiylyn", className: "Aeromancer" }];
+  const metrics = [{ id: "1-0", label: "1760 Qiylyn", className: "Aeromancer", badges: [99],
+    dps: 1.06e9, ndps: 385.7e6, contribution: 63.6, damageShare: 24.6, stagger: 3500, counters: 3 }];
+  const fake = fakeBrowser({ players, metrics });
+  const capture = createRaidLogCapture({ ...fake, idleMs: 60_000 });
+  try {
+    const first = await capture(URL, { useCache: true });
+    assert.equal(first.players[0].damageShare, 24.6);
+    assert.deepEqual(first.players[0].badges, { bracketed: [99], normalized: [99] });
+    const cached = await capture(URL, { useCache: true });
+    assert.equal(cached.cached, true);
+    assert.equal(cached.players[0].counters, 3);
   } finally { await capture.close(); }
 });
 
