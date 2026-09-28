@@ -1,19 +1,16 @@
 "use strict";
 
+const {
+  CORE_MODE_ALIASES,
+  SHORTHAND_MODE_ALIASES,
+  buildModeAliasMap,
+} = require("../../../domain/difficulty-aliases");
+
 function normalizeKey(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-const MODE_KEY_BY_DIFFICULTY = new Map(
-  Object.entries({
-    solo: ["solo", "solo mode"],
-    nightmare: ["nightmare", "9m", "level 3", "level3", "l3"],
-    hard: ["hard", "hm", "level 2", "level2", "l2"],
-    normal: ["normal", "nor", "nm", "level 1", "level1", "l1"],
-  }).flatMap(([modeKey, aliases]) => (
-    aliases.map((alias) => [alias, modeKey])
-  ))
-);
+const MODE_KEY_BY_DIFFICULTY = buildModeAliasMap(CORE_MODE_ALIASES, SHORTHAND_MODE_ALIASES);
 
 function normalizeDifficultyToModeKey(difficulty) {
   return MODE_KEY_BY_DIFFICULTY.get(normalizeKey(difficulty)) || null;
