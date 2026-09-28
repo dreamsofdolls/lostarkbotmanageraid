@@ -13,6 +13,7 @@ const {
 const { firstSelectValue } = require("../../../utils/discord/component-values");
 // tPick, not t: the refresh titles are variant pools; other keys pass through.
 const { tPick: t } = require("../../../services/i18n");
+const { buildRosterRefreshNotice } = require("../../../services/roster/refresh-outcome");
 const {
   FILTER_ALL,
   FILTER_ALL_RAIDS,
@@ -25,37 +26,29 @@ const {
   RAID_CHECK_ALL_COMPONENT_ACTION,
 } = require("./all-mode-routes");
 
-function buildRaidCheckRosterRefreshNoticePayload(result, lang) {
-  const accountName = result?.accountName || "?";
-  const target = result?.discordId ? `<@${result.discordId}>` : "?";
-  if (result?.status === "updated") {
-    return {
-      type: "success",
-      title: t("raid-check.refreshFlow.successTitle", lang),
-      description: t("raid-check.refreshFlow.successDescription", lang, {
-        accountName,
-        target,
-      }),
-    };
-  }
-  if (result?.status === "attempted" || result?.status === "skipped") {
-    return {
-      type: "warn",
-      title: t("raid-check.refreshFlow.noUpdateTitle", lang),
-      description: t("raid-check.refreshFlow.noUpdateDescription", lang, {
-        accountName,
-        target,
-      }),
-    };
-  }
-  return {
+const ROSTER_REFRESH_NOTICES = Object.freeze({
+  updated: {
+    type: "success",
+    title: "raid-check.refreshFlow.successTitle",
+    description: "raid-check.refreshFlow.successDescription",
+  },
+  noUpdate: {
     type: "warn",
-    title: t("raid-check.refreshFlow.missingTitle", lang),
-    description: t("raid-check.refreshFlow.missingDescription", lang, {
-      accountName,
-      target,
-    }),
-  };
+    title: "raid-check.refreshFlow.noUpdateTitle",
+    description: "raid-check.refreshFlow.noUpdateDescription",
+  },
+  missing: {
+    type: "warn",
+    title: "raid-check.refreshFlow.missingTitle",
+    description: "raid-check.refreshFlow.missingDescription",
+  },
+});
+
+function buildRaidCheckRosterRefreshNoticePayload(result, lang) {
+  return buildRosterRefreshNotice(result, lang, ROSTER_REFRESH_NOTICES, {
+    accountName: result?.accountName || "?",
+    target: result?.discordId ? `<@${result.discordId}>` : "?",
+  });
 }
 
 /**
