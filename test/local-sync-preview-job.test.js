@@ -534,3 +534,36 @@ test("preview-summary names registered party members tied to a source clear, wit
   assert.deepEqual(partyQueries[0]["accounts.characters.name"].$in, ["Bao", "Stranger"]);
   assert.doesNotMatch(res.body, /u2/);
 });
+
+test("preview-summary counts only the clears a preview job would store", async () => {
+  const token = mintToken("u5", undefined, "en");
+  const handler = createPreviewSummaryEndpoint({ User: makeAkiUser("u5", token) });
+
+  const notCleared = makeRes();
+  await handler(makeReq(token, {
+    deltas: [validDelta({ cleared: "false" })],
+  }), notCleared, { query: {} });
+  assert.equal(notCleared.status, 200);
+  assert.deepEqual(notCleared.json().changes, { chars: 0, raids: 0, gates: 0 });
+
+  // The Local Reader sends `cleared: 1`, which both endpoints accept.
+  const cleared = makeRes();
+  await handler(makeReq(token, {
+    deltas: [validDelta({ cleared: 1 })],
+  }), cleared, { query: {} });
+  assert.equal(cleared.status, 200);
+  assert.deepEqual(cleared.json().changes, { chars: 1, raids: 1, gates: 1 });
+});
+
+test("preview-summary rejects more deltas than a preview job accepts", async () => {
+  const token = mintToken("u6", undefined, "en");
+  const handler = createPreviewSummaryEndpoint({ User: makeAkiUser("u6", token) });
+  const res = makeRes();
+
+  await handler(makeReq(token, {
+    deltas: Array.from({ length: 513 }, () => validDelta()),
+  }), res, { query: {} });
+
+  assert.equal(res.status, 400);
+  assert.deepEqual(res.json(), { ok: false, error: "too many deltas (max 512)" });
+});
