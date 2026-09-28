@@ -395,6 +395,8 @@ function createRaidScheduleCommand({
     handleRaidScheduleCommand,
     handleRaidScheduleButton,
     handleRaidScheduleSelect,
+    // Shared with the auto-lock worker so its board refresh matches ours.
+    boardPayload,
   };
 }
 
