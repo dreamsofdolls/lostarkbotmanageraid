@@ -16,7 +16,7 @@ const { resolveEditableTaskWriteAccess, revalidateTaskWriteAccess } = require(".
  * @param {object} spec - per-command behavior.
  * @param {string} spec.commandName - command label for share and save-failure logs.
  * @param {Function} spec.readRequest - extracts the request (rosterName, ...)
- *   from the interaction.
+ *   from the interaction and the executor's language.
  * @param {Function} [spec.buildValidationNotice] - early reply that skips the
  *   write path when the request is invalid.
  * @param {Function} spec.createResult - fresh per-attempt result object.
@@ -36,7 +36,7 @@ function createTaskMutationHandler({
   return async function handleTaskMutation(interaction) {
     const executorId = interaction.user.id;
     const lang = await getUserLanguage(executorId, { UserModel: User });
-    const request = readRequest(interaction);
+    const request = readRequest(interaction, lang);
     const validationNotice = buildValidationNotice(request, lang);
     if (validationNotice) {
       await replyTaskNotice(interaction, validationNotice);

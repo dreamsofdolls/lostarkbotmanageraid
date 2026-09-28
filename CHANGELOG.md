@@ -7,6 +7,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 ## 2026-09-28
 
 ### Changed
+- The `/raid-log` waiting line reads as a short bold "⏳ Đã nhận yêu cầu · Artist đang xử lý…" with the render-queue note in small text below it, instead of one long sentence above the card. The Japanese line now speaks in Artist's usual voice.
 - The `/raid-log` opening card reads "📜 Raid log" with one question and a hint line, with no footer and no mention of the caller; the roster menu shows each character's class icon with `Roster <name> · <item level>`.
 - `/raid-log` controls are one button row (◀️ tab ▶️, 📐 Bracketed/Normalized, ↩️ Defaults) above four menus for raid, log, player and tab. A closed menu shows its facts: each raid's log count and best parse, each log's percent, DPS, nDPS and duration, each player's class icon, gear score and badges, each tab with a short explanation. Refresh moved into the raid menu beside ⏬ Load older logs.
 - The `/raid-log` panel is a log book: 👑 MVP DMG, 📈 DPS score and 🎯 MVP Counter on the DPS row, ✨ MVP Radiant Sup, 🤝 Sup contribution and ⏱️ Sup uptime on the support row, then duration, total DMG and team DPS, each name with its class icon. The raid's five latest logs follow, coloured by parse, and the side colour follows the open log; the TEST title, description lines and footer are gone.
@@ -22,6 +23,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - When Bible's table has no CTR column, 🎯 MVP Counter names the STAG leader with `-` instead of "Không ai counter `0`".
 - Log gần đây keeps single spaces when a fight has no difficulty, and the jp player menu marks the looked-up character as 検索対象 rather than 検索中 ("searching").
 - Only a real HTTP 429 from Bible pauses Bible requests now. Looking up a name Bible does not know that contains "ratelimit" (`Piratelimits`, say) used to pause every Bible request for every user for a minute, and anyone could repeat it; a character named like "Logsnotenabled" could also be reported as Public Log off when Bible failed for another reason.
+- `/raid-task shared-add expires_at` ends the typed day at midnight in the lead's `/raid-language` timezone (UTC+7 vi, UTC+9 jp, UTC en). A vi or jp lead who typed `2026-10-05` used to see "expires 6 October" and keep the task until 06:59 (vi) or 08:59 (jp) the next morning. Tasks already saved keep their expiry.
 
 ## 2026-09-27
 

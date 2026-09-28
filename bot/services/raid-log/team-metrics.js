@@ -11,7 +11,7 @@
 const { isSupportClass } = require("../../models/Class");
 const { readPartyMetrics, readSupportShare } = require("./metrics");
 const { selectPlayer } = require("./detail");
-const { setNormalized, returnToOverview } = require("./page-controls");
+const { setNormalized, returnToOverview, bibleButton, OVERVIEW_BUTTON } = require("./page-controls");
 
 // Opening a support takes a second or two; with less time than this left the
 // card goes without bD% rather than risking the capture's deadline.
@@ -48,7 +48,7 @@ async function collectTeamMetrics(page, players, { deadline, now = Date.now, log
     } catch (error) {
       log.warn(`[raid-log] support share unavailable player=${player.id}: ${error.message}`);
     }
-    if (await page.getByRole("button", { name: "Return to Overview", exact: true }).count()) await returnToOverview(page);
+    if (await bibleButton(page, OVERVIEW_BUTTON).count()) await returnToOverview(page);
   }
   return merged;
 }
