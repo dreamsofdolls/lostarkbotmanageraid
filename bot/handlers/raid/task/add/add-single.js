@@ -6,8 +6,6 @@ const { createTaskMutationHandler } = require("../write-handler");
 const {
   TASK_CAP_DAILY,
   TASK_CAP_WEEKLY,
-  generateTaskId,
-  normalizeName,
   getCharacterDisplayName,
   findCharacterInUser,
   ensureSideTasks,
@@ -17,6 +15,12 @@ const {
   capForReset,
   cycleStartForReset,
 } = require("./reset-policy");
+const {
+  tryAddSideTask,
+  cycleLabelForReset,
+  invalidTaskNameNotice,
+  noRosterNotice,
+} = require("./add-common");
 
 function readAddSingleRequest(interaction) {
   return {
@@ -36,13 +40,7 @@ function buildAddSingleValidationNotice(request, lang) {
     };
   }
 
-  if (!request.taskName) {
-    return {
-      type: "warn",
-      title: t("raid-task.common.invalidTaskNameTitle", lang),
-      description: t("raid-task.common.invalidTaskNameDescription", lang),
-    };
-  }
+  if (!request.taskName) return invalidTaskNameNotice(lang);
 
   return null;
 }
@@ -72,50 +70,22 @@ function applyAddSingleToUserDoc(userDoc, request, result, deps) {
   const sideTasks = ensureSideTasks(character);
   result.resolvedCharName = getCharacterDisplayName(character);
 
-  const cap = capForReset(request.reset);
-  const currentCount = countByReset(sideTasks, request.reset);
-  if (currentCount >= cap) {
-    result.outcome = "cap-reached";
-    result.dailyCount = countByReset(sideTasks, "daily");
-    result.weeklyCount = countByReset(sideTasks, "weekly");
-    return false;
-  }
-
-  const dupName = sideTasks.some(
-    (task) =>
-      normalizeName(task?.name) === normalizeName(request.taskName) &&
-      task?.reset === request.reset
-  );
-  if (dupName) {
+  const outcome = tryAddSideTask(sideTasks, request, cycleStartForReset(request.reset, deps));
+  if (outcome === "duplicate") {
     result.outcome = "duplicate";
     return false;
   }
-
-  sideTasks.push({
-    taskId: generateTaskId(),
-    name: request.taskName,
-    reset: request.reset,
-    completed: false,
-    lastResetAt: cycleStartForReset(request.reset, deps),
-    createdAt: Date.now(),
-  });
   result.dailyCount = countByReset(sideTasks, "daily");
   result.weeklyCount = countByReset(sideTasks, "weekly");
+  if (outcome === "cap-reached") {
+    result.outcome = "cap-reached";
+    return false;
+  }
   return true;
 }
 
-function cycleLabelForReset(reset, lang) {
-  return reset === "daily"
-    ? t("raid-task.add.cycleDailyLabel", lang)
-    : t("raid-task.add.cycleWeeklyLabel", lang);
-}
-
 const ADD_SINGLE_NOTICE_BUILDERS = {
-  "no-roster": ({ lang }) => ({
-    type: "warn",
-    title: t("raid-task.common.noRosterTitle", lang),
-    description: t("raid-task.common.noRosterDescription", lang),
-  }),
+  "no-roster": ({ lang }) => noRosterNotice(lang),
   "no-character": ({ request, lang }) => ({
     type: "warn",
     title: t("raid-task.common.noCharacterTitle", lang),
