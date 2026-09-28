@@ -5,8 +5,8 @@ ENV NODE_ENV=production
 
 COPY package*.json ./
 RUN npm ci --omit=dev
-# /raid-log captures public Damage pages in an isolated, on-demand browser.
-RUN npx playwright install --with-deps --no-shell chromium \
+# /raid-log uses the smaller headless shell for public team/player captures.
+RUN npx playwright install --with-deps --only-shell chromium \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . .

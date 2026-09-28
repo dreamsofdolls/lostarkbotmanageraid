@@ -123,6 +123,7 @@ function createRaidLogCapture({
     let expired = false;
     let stage = "launch";
     let clip;
+    let memoryAtScreenshot;
     const controller = new AbortController();
     const memoryBefore = await readMemory();
     const timer = setTimeout(() => {
@@ -143,7 +144,8 @@ function createRaidLogCapture({
         controller.signal.throwIfAborted();
         if (!resource) {
           try {
-            const browser = await launchBrowser({ headless: true, channel: "chromium", timeout: Math.min(deadline - Date.now(), 15_000) });
+            // Playwright's headless shell avoids the full Chrome process set.
+            const browser = await launchBrowser({ headless: true, timeout: Math.min(deadline - Date.now(), 15_000) });
             resource = { browser, url: log.url, crashed: false };
           } catch (error) {
             throw new RaidLogError("browser_unavailable", error);
@@ -206,12 +208,24 @@ function createRaidLogCapture({
         });
         stage = "navigation";
       }
+      // Detail builds thousands of chart/skill nodes. Reclaim the previous
+      // view's temporary allocations before starting another render.
+      if (player || resource.player) {
+        stage = "detail-memory";
+        await page.requestGC();
+        controller.signal.throwIfAborted();
+      }
       if ((resource.player?.id || null) !== (player?.id || null)) {
+        stage = "player";
         if (resource.player) await returnToOverview(page);
         if (player) {
           const current = resource.baseline.players.find(entry => entry.id === player.id && entry.label === player.label);
           if (!current || !await selectPlayer(page, current)) throw new RaidLogError("invalid_selection");
           player = current;
+          // The detail exists now; reclaim construction garbage before tab
+          // selection can trigger another render of it.
+          await page.requestGC();
+          controller.signal.throwIfAborted();
         }
         resource.player = player;
       }
@@ -235,6 +249,9 @@ function createRaidLogCapture({
       const images = [];
       for (const [index, region] of (player ? evidence.clips : [evidence[view]]).entries()) {
         clip = region;
+        if (player) await page.requestGC();
+        memoryAtScreenshot = await readMemory();
+        controller.signal.throwIfAborted();
         const screenshot = await page.screenshot({ clip, fullPage: view === "full", type: "png", scale: "css", animations: "disabled" });
         controller.signal.throwIfAborted();
         if (screenshot.length > MAX_IMAGE_BYTES) throw new RaidLogError("too_large");
@@ -264,8 +281,9 @@ function createRaidLogCapture({
       if (expired || error.name === "TimeoutError") throw new RaidLogError("timeout", error);
       if ((resource?.crashed && !resource.closing) || /(?:Target|Page) crashed/i.test(`${error.message} ${error.cause?.message || ""}`)) {
         logger.warn(`[raid-log] browser_crashed ${JSON.stringify({
-          id: log.id, view, tab, bracketed, stage, clip, deviceScaleFactor: 1,
-          memoryBefore, memoryAfter: await readMemory(), cause: error.cause?.message || error.message,
+          id: log.id, view, tab, bracketed, player: player?.label || "team", stage, clip, deviceScaleFactor: 1,
+          browserMode: "headless-shell", memoryBefore, memoryAtScreenshot,
+          memoryAfter: await readMemory(), cause: error.cause?.message || error.message,
         })}`);
         const crashed = new RaidLogError("browser_crashed", error);
         crashed.stage = stage;

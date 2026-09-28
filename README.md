@@ -159,6 +159,10 @@ image, and a character whose logs turn private mid-session gets a lock card in
 place of the panel, with the image removed and every control disabled.
 
 Capture reuses one browser/page for up to 45 idle seconds when memory permits.
+It uses Playwright's Chromium Headless Shell rather than the full Chromium
+channel. Before entering/changing player detail and before each detail PNG,
+it requests browser garbage collection to release temporary chart allocations.
+The capture layout, CSS resolution and two-image detail coverage are unchanged.
 When it first opens a log it also reads every player's figures and percentile
 badges from the Damage table in both modes. Support bD% comes from the public
 encounter data already embedded in the page, using Bible's displayed total DMG
@@ -187,7 +191,7 @@ For a local experiment without Discord or MongoDB:
 
 ```powershell
 npm ci
-npx playwright install --no-shell chromium
+npx playwright install --only-shell chromium
 npm run preview:raid-log -- --character Qiylyn
 ```
 
@@ -197,11 +201,11 @@ in memory and attaches it to its reply. Register the command through the existin
 `deploy:commands` workflow and restart the bot when ready to test in Discord; the
 preview command itself never registers commands or sends messages.
 
-Playwright is pinned in the lockfile. Docker installs Chromium and
+Playwright is pinned in the lockfile. Docker installs Chromium Headless Shell and
 its system dependencies at build time; other Linux installations need
-`npx playwright install --with-deps --no-shell chromium`. Capture uses Chromium's
-new headless mode (`channel: "chromium"`). See the official
-[Playwright browser setup](https://playwright.dev/docs/browsers#chromium-new-headless-mode).
+`npx playwright install --with-deps --only-shell chromium`. Capture leaves the
+`channel` option unset to use that shell. See the official
+[Playwright browser setup](https://playwright.dev/docs/browsers#chromium-headless-shell).
 The bot needs Embed Links and Attach Files permissions in the target channel.
 
 Only HTTPS public log URLs on `lostark.bible` are accepted, without query strings

@@ -56,10 +56,11 @@ function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, on
   closeError, players = [], metrics = [] } = {}) {
   let rejectNavigation;
   let normalized = false;
-  const state = { closed: 0, launches: 0, navigations: 0, routes: [] };
+  const state = { closed: 0, launches: 0, navigations: 0, routes: [], garbageCollections: 0 };
   const page = Object.assign(new EventEmitter(), {
     setDefaultTimeout() {},
     setViewportSize: async () => {},
+    requestGC: async () => { state.garbageCollections++; },
     keyboard: { press: async () => {} },
     goto: async () => {
       state.navigations++;
@@ -105,7 +106,7 @@ function fakeBrowser({ status = 200, screenshotError, holdNavigation = false, on
     },
   });
   return { state, page, log: silentLog, readMemory: async () => ({ max: "max" }),
-    launchBrowser: async () => { state.launches++; return browser; } };
+    launchBrowser: async options => { state.launches++; state.launchOptions = options; return browser; } };
 }
 
 test("warm capture switches tabs/modes without navigation, caches variants and resets on another log", async () => {
@@ -194,6 +195,9 @@ test("capture returns selected region and closes the browser after success or sc
     assert.equal(fake.state.context.serviceWorkers, "block");
     assert.equal(fake.state.context.deviceScaleFactor, 1);
     assert.equal(fake.state.scale, "css");
+    assert.equal(fake.state.launchOptions.headless, true);
+    assert.equal(fake.state.launchOptions.channel, undefined, "use headless shell, not the full Chromium channel");
+    assert.equal(fake.state.garbageCollections, 0, "team-only captures avoid explicit GC overhead");
   }
   const fake = fakeBrowser({ screenshotError: new Error("Screenshot failed") });
   await assert.rejects(createRaidLogCapture(fake)(URL), /Screenshot failed/);
@@ -274,12 +278,13 @@ test("both player screenshots finish before a memory-driven close and sequential
   const player = { id: "1-0", party: 1, row: 0, label: "1760 Qiylyn", className: "Aeromancer" };
   const fake = fakeBrowser({ players: [player] });
   const calls = [];
+  fake.page.requestGC = async () => { calls.push("gc"); };
   const evaluate = fake.page.evaluate;
   fake.page.evaluate = async fn => fn === inspectPlayerPage ? { player, clips: [
     { x: 0, y: 0, width: 1280, height: 900 }, { x: 0, y: 884, width: 1280, height: 900 },
   ] } : evaluate(fn);
   const locator = { nth: () => locator, locator: () => locator, filter: () => locator,
-    first: () => locator, innerText: async () => player.label, dispatchEvent: async () => {}, waitFor: async () => {}, click: async () => {} };
+    first: () => locator, innerText: async () => player.label, dispatchEvent: async () => { calls.push("select"); }, waitFor: async () => {}, click: async () => {} };
   fake.page.locator = () => locator;
   const getByRole = fake.page.getByRole;
   fake.page.getByRole = (...args) => ({ ...getByRole(...args), waitFor: async () => {} });
@@ -294,10 +299,29 @@ test("both player screenshots finish before a memory-driven close and sequential
   });
   try {
     const result = await capture(URL, { player });
-    assert.deepEqual(calls, ["shot:0", "shot:884", "png:0", "png:884"]);
+    assert.deepEqual(calls, ["gc", "select", "gc", "gc", "shot:0", "gc", "shot:884", "png:0", "png:884"]);
     assert.deepEqual(result.images.map(image => image.filename.split("-").at(-1)), ["top.png", "bottom.png"]);
     assert.equal(fake.state.closed, 1);
   } finally { await capture.close(); }
+});
+
+test("detail garbage collection failure releases the browser without starting a screenshot", async () => {
+  const player = { id: "1-0", party: 1, row: 0, label: "1754.16 Zywang", className: "Machinist" };
+  const fake = fakeBrowser({ players: [player], onScreenshot: () => assert.fail("must not capture") });
+  fake.page.requestGC = async () => { throw new Error("GC connection failed"); };
+  const capture = createRaidLogCapture({ ...fake, idleMs: 45_000 });
+  await assert.rejects(capture(URL, { player }), /GC connection failed/);
+  assert.equal(fake.state.closed, 1);
+  assert.equal(fake.state.launches, 1);
+});
+
+test("a capture expiring during detail GC never continues into player selection", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const player = { id: "1-0", party: 1, row: 0, label: "1754.16 Zywang", className: "Machinist" };
+  const fake = fakeBrowser({ players: [player], onScreenshot: () => assert.fail("must not capture") });
+  fake.page.requestGC = async () => { t.mock.timers.tick(60_001); };
+  await assert.rejects(createRaidLogCapture(fake)(URL, { player }), { code: "timeout" });
+  assert.equal(fake.state.closed, 1);
 });
 
 test("a framing failure after intentional browser close is not retried as a browser crash", async () => {
@@ -361,6 +385,8 @@ test("a crashed renderer is closed before one retry, holding the busy slot throu
   assert.match(diagnostic, /"stage":"screenshot"/);
   assert.match(diagnostic, /"memoryBefore":/);
   assert.match(diagnostic, /"memoryAfter":/);
+  assert.match(diagnostic, /"memoryAtScreenshot":/);
+  assert.match(diagnostic, /"browserMode":"headless-shell"/);
 });
 
 test("repeated crashes stop after two attempts and release the slot for the next call", async () => {
