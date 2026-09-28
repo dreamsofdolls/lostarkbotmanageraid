@@ -53,6 +53,7 @@ const {
   t,
   tPick,
 } = require("../../../services/i18n");
+const { buildRosterRefreshNotice } = require("../../../services/roster/refresh-outcome");
 
 function noRedraw() {
   return { redraw: false };
@@ -62,35 +63,28 @@ function redraw() {
   return { redraw: true };
 }
 
-function buildRosterRefreshFollowupPayload(result, lang) {
-  const accountName = result?.accountName || "?";
-  if (result?.status === "updated") {
-    return {
-      type: "success",
-      title: tPick("raid-status.sync.rosterRefreshSuccessTitle", lang),
-      description: t("raid-status.sync.rosterRefreshSuccessDescription", lang, {
-        accountName,
-      }),
-    };
-  }
-
-  if (result?.status === "attempted" || result?.status === "skipped") {
-    return {
-      type: "warn",
-      title: t("raid-status.sync.rosterRefreshNoUpdateTitle", lang),
-      description: t("raid-status.sync.rosterRefreshNoUpdateDescription", lang, {
-        accountName,
-      }),
-    };
-  }
-
-  return {
+const ROSTER_REFRESH_NOTICES = Object.freeze({
+  updated: {
+    type: "success",
+    title: "raid-status.sync.rosterRefreshSuccessTitle",
+    description: "raid-status.sync.rosterRefreshSuccessDescription",
+  },
+  noUpdate: {
     type: "warn",
-    title: t("raid-status.sync.rosterRefreshMissingTitle", lang),
-    description: t("raid-status.sync.rosterRefreshMissingDescription", lang, {
-      accountName,
-    }),
-  };
+    title: "raid-status.sync.rosterRefreshNoUpdateTitle",
+    description: "raid-status.sync.rosterRefreshNoUpdateDescription",
+  },
+  missing: {
+    type: "warn",
+    title: "raid-status.sync.rosterRefreshMissingTitle",
+    description: "raid-status.sync.rosterRefreshMissingDescription",
+  },
+});
+
+function buildRosterRefreshFollowupPayload(result, lang) {
+  return buildRosterRefreshNotice(result, lang, ROSTER_REFRESH_NOTICES, {
+    accountName: result?.accountName || "?",
+  });
 }
 
 function createStatusComponentRouteHandlers(ctx) {

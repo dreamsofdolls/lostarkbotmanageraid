@@ -5,14 +5,14 @@ const {
   isGoldReceivingRaid,
 } = require("../../../utils/raid/common/character");
 const {
+  FILTER_ALL_RAIDS,
+  FILTER_ALL_ROSTERS,
+  FILTER_NO_ROSTERS,
   selectEntriesWithPinnedActive,
 } = require("../../../utils/discord/select-options");
 const { isRaidCheckVisibleCharacter, isRaidCheckVisibleRaid } = require("../visibility");
 
 const FILTER_ALL = "__all__";
-const FILTER_ALL_RAIDS = "__all_raids__";
-const FILTER_ALL_ROSTERS = "__all_rosters__";
-const FILTER_NO_ROSTERS = "__no_rosters__";
 const FILTER_STATUS = Object.freeze({
   all: "all",
   pending: "pending",

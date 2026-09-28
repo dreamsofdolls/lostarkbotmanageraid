@@ -63,7 +63,17 @@ function filterAutocompleteChoices(
   return matches;
 }
 
+// Sentinel select values the /raid-status and /raid-check raid and roster
+// filters share: "all raids", "all rosters", and the disabled "no rosters"
+// placeholder.
+const FILTER_ALL_RAIDS = "__all_raids__";
+const FILTER_ALL_ROSTERS = "__all_rosters__";
+const FILTER_NO_ROSTERS = "__no_rosters__";
+
 module.exports = {
+  FILTER_ALL_RAIDS,
+  FILTER_ALL_ROSTERS,
+  FILTER_NO_ROSTERS,
   truncateSelectText,
   filterAutocompleteChoices,
   selectEntriesWithPinnedActive,
