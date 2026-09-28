@@ -266,6 +266,8 @@ async function openAllModeSession({ userDoc, runManualRosterRefresh } = {}) {
   return { handlers, edits };
 }
 
+const lastEditComponents = edits => edits.at(-1).components.flatMap(row => row.toJSON().components);
+
 test("a rejected Discord call in the raid-check collector is logged instead of crashing the bot", async (t) => {
   const errors = [];
   t.mock.method(console, "error", (...args) => { errors.push(args); });
@@ -286,4 +288,26 @@ test("a rejected Discord call in the raid-check collector is logged instead of c
   assert.equal(errors.length, 1);
   assert.equal(errors[0].at(-1), unknownInteraction);
   await handlers.end();
+});
+
+test("raid-check roster refresh that outlives the session leaves the controls disabled", async () => {
+  const userDoc = {
+    discordId: "roster-user", discordDisplayName: "Roster user",
+    accounts: [{ accountName: "Roster", characters: [{ name: "Aki", itemLevel: 1740 }] }],
+  };
+  const session = await openAllModeSession({
+    userDoc,
+    runManualRosterRefresh: async () => {
+      // The 5-minute collector ends while Bible is still answering.
+      await session.handlers.end();
+      return { status: "updated", accountName: "Roster", userDoc: { ...userDoc } };
+    },
+  });
+
+  await session.handlers.collect({
+    customId: "raid-check-all:roster-refresh", user: { id: "ui-manager" },
+    deferUpdate: async () => {}, followUp: async () => {},
+  });
+
+  assert.ok(lastEditComponents(session.edits).every(item => item.disabled));
 });

@@ -22,6 +22,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - When Bible's table has no CTR column, 🎯 MVP Counter names the STAG leader with `-` instead of "Không ai counter `0`".
 - Log gần đây keeps single spaces when a fight has no difficulty, and the jp player menu marks the looked-up character as 検索対象 rather than 検索中 ("searching").
 - A Discord error on a click in the `/raid-check` Manager view or the `/raid-bg view` scene browser (a click Discord had already expired, for one) is logged and the session carries on. It used to shut the whole bot down, taking every open panel with it.
+- A `/raid-check` 🔄 Refresh roster that finishes after the 5-minute session has closed shows the refreshed roster with the controls still disabled. It used to switch the expired buttons back on, and clicking one ended in "This interaction failed".
 
 ## 2026-09-27
 
