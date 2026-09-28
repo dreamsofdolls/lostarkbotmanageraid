@@ -1,6 +1,7 @@
 "use strict";
 
 const { t } = require("../../../services/i18n");
+const { createAutocompleteDispatcher } = require("../../../utils/raid/common/autocomplete");
 const {
   filterAutocompleteChoices,
 } = require("../../../utils/discord/select-options");
@@ -57,14 +58,8 @@ function createRaidAnnounceAutocompleteHandler({
   normalizeName,
   announcementTypeEntry,
 }) {
-  return async function handleRaidAnnounceAutocomplete(interaction) {
-    try {
-      const focused = interaction.options.getFocused(true);
-      if (focused?.name !== "action") {
-        await interaction.respond([]).catch(() => {});
-        return;
-      }
-
+  return createAutocompleteDispatcher("raid-announce", {
+    async action(interaction, focused) {
       // New command schemas use static action choices. This path remains as a
       // transition fallback for Discord clients still holding the old
       // autocomplete schema, so it must answer without any DB dependency.
@@ -85,11 +80,8 @@ function createRaidAnnounceAutocompleteHandler({
           normalizeName,
         })
       ).catch(() => {});
-    } catch (err) {
-      console.error("[autocomplete] raid-announce error:", err?.message || err);
-      await interaction.respond([]).catch(() => {});
-    }
-  };
+    },
+  });
 }
 
 module.exports = {

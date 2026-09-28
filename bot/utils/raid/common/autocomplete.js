@@ -206,7 +206,34 @@ function buildSharedRosterAutocompleteChoices(entries, options) {
     });
 }
 
+/**
+ * Route an autocomplete interaction to the handler for its focused option.
+ * An option without a handler, or a handler that throws, answers with no
+ * choices so Discord never waits on a missing response.
+ * @param {string} logName - command name for the error log
+ * @param {Record<string, (interaction: object, focused: object) => Promise<void>>} handlers
+ *   one handler per option name
+ * @returns {(interaction: object) => Promise<void>}
+ */
+function createAutocompleteDispatcher(logName, handlers) {
+  return async function dispatchAutocomplete(interaction) {
+    try {
+      const focused = interaction.options.getFocused(true);
+      const name = focused?.name;
+      if (!Object.hasOwn(handlers, name)) {
+        await interaction.respond([]).catch(() => {});
+        return;
+      }
+      await handlers[name](interaction, focused);
+    } catch (error) {
+      console.error(`[autocomplete] ${logName} error:`, error?.message || error);
+      await interaction.respond([]).catch(() => {});
+    }
+  };
+}
+
 module.exports = {
+  createAutocompleteDispatcher,
   getRosterMatches,
   getCharacterMatches,
   truncateChoice,

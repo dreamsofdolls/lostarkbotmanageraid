@@ -16,6 +16,7 @@ const {
   replyNotice,
 } = require("../../utils/raid/common/shared");
 const { t, getUserLanguage } = require("../../services/i18n");
+const { createAutocompleteDispatcher } = require("../../utils/raid/common/autocomplete");
 const {
   buildAutoManageAutocompleteChoices,
   getAutoManageStateGate,
@@ -158,13 +159,8 @@ function createRaidAutoManageCommand(deps) {
     });
   }
 
-  async function handleRaidAutoManageAutocomplete(interaction) {
-    try {
-      const focused = interaction.options.getFocused(true);
-      if (focused?.name !== "action") {
-        await interaction.respond([]).catch(() => {});
-        return;
-      }
+  const handleRaidAutoManageAutocomplete = createAutocompleteDispatcher("raid-auto-manage", {
+    async action(interaction, focused) {
       const lang = await getUserLanguage(interaction.user.id, { UserModel: User });
       let bibleOn = false;
       let localOn = false;
@@ -187,11 +183,8 @@ function createRaidAutoManageCommand(deps) {
         normalizeName,
       });
       await interaction.respond(choices).catch(() => {});
-    } catch (err) {
-      console.error("[autocomplete] raid-auto-manage error:", err?.message || err);
-      await interaction.respond([]).catch(() => {});
-    }
-  }
+    },
+  });
 
   return {
     handleRaidAutoManageCommand,

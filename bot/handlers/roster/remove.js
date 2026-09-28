@@ -4,6 +4,7 @@ const {
   editEmbed,
 } = require("../../utils/raid/common/shared");
 const {
+  createAutocompleteDispatcher,
   buildCharacterAutocompleteChoices,
   buildRosterAutocompleteChoices,
   getRosterMatches,
@@ -90,23 +91,10 @@ function createRemoveRosterCommand(deps) {
     const choices = buildCharacterAutocompleteChoices(entries);
     await interaction.respond(choices).catch(() => {});
   }
-  async function handleRemoveRosterAutocomplete(interaction) {
-    try {
-      const focused = interaction.options.getFocused(true);
-      if (focused?.name === "roster") {
-        await autocompleteRemoveRosterRoster(interaction, focused);
-        return;
-      }
-      if (focused?.name === "character") {
-        await autocompleteRemoveRosterCharacter(interaction, focused);
-        return;
-      }
-      await interaction.respond([]).catch(() => {});
-    } catch (error) {
-      console.error("[autocomplete] remove-roster error:", error?.message || error);
-      await interaction.respond([]).catch(() => {});
-    }
-  }
+  const handleRemoveRosterAutocomplete = createAutocompleteDispatcher("remove-roster", {
+    roster: autocompleteRemoveRosterRoster,
+    character: autocompleteRemoveRosterCharacter,
+  });
   async function handleRemoveRosterCommand(interaction) {
     const discordId = interaction.user.id;
     const rosterName = interaction.options.getString("roster", true).trim();

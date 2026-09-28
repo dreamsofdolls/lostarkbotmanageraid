@@ -12,6 +12,7 @@ const {
 const {
   createSideTaskAutocompleteHandlers,
 } = require("./autocomplete/side-task");
+const { createAutocompleteDispatcher } = require("../../../utils/raid/common/autocomplete");
 
 function createRaidTaskAutocompleteHandlers({
   User,
@@ -58,20 +59,7 @@ function createRaidTaskAutocompleteHandlers({
     task: autocompleteTask,
   };
 
-  async function handleRaidTaskAutocomplete(interaction) {
-    try {
-      const focused = interaction.options.getFocused(true);
-      const handler = dispatchByFocusedName[focused?.name];
-      if (!handler) {
-        await interaction.respond([]).catch(() => {});
-        return;
-      }
-      await handler(interaction, focused);
-    } catch (error) {
-      console.error("[autocomplete] raid-task error:", error?.message || error);
-      await interaction.respond([]).catch(() => {});
-    }
-  }
+  const handleRaidTaskAutocomplete = createAutocompleteDispatcher("raid-task", dispatchByFocusedName);
 
   return {
     handleRaidTaskAutocomplete,
