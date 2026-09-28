@@ -2,6 +2,7 @@
 
 const { t: translate, DEFAULT_LANGUAGE } = require("../../../services/i18n");
 const { formatBibleError } = require("../../../services/auto-manage/bible/error-text");
+const { foldName: defaultFoldName } = require("../../../utils/raid/common/shared");
 
 /**
  * Build the seed-and-retry Bible roster fetcher.
@@ -14,6 +15,7 @@ const { formatBibleError } = require("../../../services/auto-manage/bible/error-
  * @param {Function} deps.fetchRosterCharacters
  * @param {Function} deps.normalizeName
  * @param {Function} deps.parseCombatScore
+ * @param {Function} [deps.foldName] - accent-insensitive name key
  * @param {Function} [deps.t] - injected for tests
  * @returns {(savedChars: Array<object>, accountName: string, lang?: string) =>
  *   Promise<{bibleChars: Array<object>, bibleError: string|null}>}
@@ -23,6 +25,7 @@ function createFetchBibleRosterWithFallback({
   fetchRosterCharacters,
   normalizeName,
   parseCombatScore,
+  foldName = defaultFoldName,
   t = translate,
 }) {
   return async function fetchBibleRosterWithFallback(
@@ -59,6 +62,11 @@ function createFetchBibleRosterWithFallback({
     const savedNameSet = new Set(
       savedChars.map((character) => normalizeName(character.name)).filter(Boolean)
     );
+    // Accent-insensitive too, as the automatic roster refresh matches
+    // (services/roster/refresh.js), so both agree on which rosters overlap.
+    const savedFoldedNameSet = new Set(
+      savedChars.map((character) => foldName(character.name)).filter(Boolean)
+    );
 
     let lastError = null;
     let zeroOverlapHit = false;
@@ -71,7 +79,8 @@ function createFetchBibleRosterWithFallback({
           // Stop on the first overlap; the saved-name index avoids rebuilding or
           // rescanning the saved roster for every fetched character.
           const hasOverlap = fetched.some((character) =>
-            savedNameSet.has(normalizeName(character.charName))
+            savedNameSet.has(normalizeName(character.charName)) ||
+            savedFoldedNameSet.has(foldName(character.charName))
           );
           if (!hasOverlap) {
             zeroOverlapHit = true;

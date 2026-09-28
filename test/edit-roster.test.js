@@ -814,3 +814,22 @@ test("persistEditedRoster: stamps account.lastRefreshedAt for /raid-status lazy-
   const stamp = stored.accounts[0].lastRefreshedAt;
   assert.ok(stamp >= before && stamp <= after, `expected lastRefreshedAt in [${before},${after}], got ${stamp}`);
 });
+
+test("fetchBibleRosterWithFallback: a saved name that differs from Bible's only by accents still overlaps", async () => {
+  // The automatic roster refresh already folds accents when it checks
+  // overlap (services/roster/refresh.js); /raid-edit-roster must agree, or
+  // it reports "zero overlap" for a roster the refresh updates fine.
+  const { factory } = makeFactory({
+    fetchRosterCharacters: async () => [
+      { charName: "Élise", className: "Bard", itemLevel: 1700, combatScore: "85000" },
+    ],
+  });
+
+  const { bibleChars, bibleError } = await factory.__test.fetchBibleRosterWithFallback(
+    [{ name: "Elise", class: "Bard", itemLevel: 1700, combatScore: "85000" }],
+    "Elise"
+  );
+
+  assert.equal(bibleError, null);
+  assert.equal(bibleChars.length, 1);
+});
