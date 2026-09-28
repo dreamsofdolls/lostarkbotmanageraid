@@ -239,6 +239,8 @@ async function startBot() {
   const router = createRaidInteractionRouter({
     MessageFlags,
     instanceIdentity: runtimeInstanceIdentity,
+    // Read for the language of the generic error reply.
+    UserModel: User,
     // Pass the command facade directly so newly exported interaction
     // handlers cannot be forgotten in a second hand-maintained list.
     handlers: raidCommands,

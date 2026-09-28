@@ -28,6 +28,7 @@ module.exports = {
       blocked: "Bible blocked the request (HTTP 403)",
       notFound: "Not found on Bible",
     },
+    genericError: "Something went wrong while handling this command. Please try again.",
   },
   "local-sync-discord": {
     title: "Local Sync Console",

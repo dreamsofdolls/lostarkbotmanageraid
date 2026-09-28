@@ -36,6 +36,8 @@ module.exports = {
       blocked: "Bible chặn request (HTTP 403)",
       notFound: "Không tìm thấy trên Bible",
     },
+    // Last-resort reply when a command or button throws an unhandled error.
+    genericError: "Có lỗi xảy ra khi xử lý lệnh. Cậu thử lại giúp tớ nhé.",
   },
   "local-sync-discord": {
     title: "Local Sync Console",

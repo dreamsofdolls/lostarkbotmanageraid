@@ -22,6 +22,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - When Bible's table has no CTR column, 🎯 MVP Counter names the STAG leader with `-` instead of "Không ai counter `0`".
 - Log gần đây keeps single spaces when a fight has no difficulty, and the jp player menu marks the looked-up character as 検索対象 rather than 検索中 ("searching").
 - The `roster` option of `/raid-set` and `/raid-task` add, remove and clear, and the `action` option of `/raid-task add`, describe themselves in English to Discord clients in languages other than Vietnamese and Japanese, which used to see the Vietnamese text.
+- The generic error reply, shown when a command or button fails unexpectedly, follows the user's `/raid-language` instead of always being Vietnamese. When the language cannot be read within a second, it falls back to Vietnamese.
 
 ## 2026-09-27
 
