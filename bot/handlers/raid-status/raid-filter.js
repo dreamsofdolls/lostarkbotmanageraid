@@ -18,12 +18,11 @@ const {
 } = require("../../utils/raid/common/character");
 const { getRaidModeLabel } = require("../../utils/raid/common/labels");
 const {
+  FILTER_ALL_RAIDS,
+  FILTER_ALL_ROSTERS,
+  FILTER_NO_ROSTERS,
   selectEntriesWithPinnedActive,
 } = require("../../utils/discord/select-options");
-
-const FILTER_ALL_RAIDS = "__all_raids__";
-const FILTER_ALL_ROSTERS = "__all_rosters__";
-const FILTER_NO_ROSTERS = "__no_rosters__";
 
 function getRaidFilterKey(raid) {
   return `${raid?.raidKey}:${getRaidFilterModeKey(raid)}`;
