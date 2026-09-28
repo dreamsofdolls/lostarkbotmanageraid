@@ -1,7 +1,7 @@
 "use strict";
 
 const { DEFAULT_LANGUAGE } = require("../../../locales");
-const { lookupArray } = require("./locale-arrays");
+const { lookupArray, pickArrayVariant: pickFromPool } = require("./locale-arrays");
 
 const CLEANUP_NOTICE_BUCKETS_ORDERED = [
   { key: "empty", label: "Sạch sẵn (0 tin)" },
@@ -15,14 +15,6 @@ function cleanupCountBucket(deleted) {
   if (deleted <= 5) return "trivial";
   if (deleted <= 20) return "normal";
   return "heavy";
-}
-
-function pickFromPool(pool, vars = {}) {
-  if (pool.length === 0) return "";
-  const picked = pool[Math.floor(Math.random() * pool.length)];
-  return picked.replace(/\{(\w+)\}/g, (match, key) =>
-    Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : match
-  );
 }
 
 function pickCleanupNoticeContent(deleted, lang = DEFAULT_LANGUAGE) {

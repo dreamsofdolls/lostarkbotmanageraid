@@ -10,7 +10,7 @@
 "use strict";
 
 const { DEFAULT_LANGUAGE } = require("../../../locales");
-const { lookupArray } = require("./locale-arrays");
+const { lookupArray, pickArrayVariant } = require("./locale-arrays");
 const { toLocalClock } = require("./artist-clock");
 
 // Lost Ark VN maintenance is fixed at Wednesday 14:00 VN. Keep this as a
@@ -90,9 +90,7 @@ function getMaintenanceSlotForNow(now = new Date()) {
  * @returns {string} chosen variant text, or "" when the pool is empty
  */
 function pickMaintenanceVariant(slotKey, lang = DEFAULT_LANGUAGE) {
-  const pool = lookupMaintenanceVariants(slotKey, lang);
-  if (pool.length === 0) return "";
-  return pool[Math.floor(Math.random() * pool.length)];
+  return pickArrayVariant(lookupMaintenanceVariants(slotKey, lang));
 }
 
 function buildMaintenancePreview(group) {
