@@ -74,6 +74,7 @@ const { createRaidShareCommand } = require("./handlers/raid/share");
 const { createRaidLanguageCommand } = require("./handlers/meta/language");
 const { createRaidBgCommand } = require("./handlers/raid/bg");
 const { createRaidSetCommand } = require("./handlers/raid/set");
+const { createRaidTaskCommand } = require("./handlers/raid/task");
 const { createStuckNudgeButtonHandler } = require("./handlers/local-sync/stuck-nudge-button");
 const { createLocalSyncDiscordConsole } = require("./handlers/local-sync/discord-console");
 const {
@@ -180,7 +181,10 @@ const {
 const {
   RAID_CHECK_USER_QUERY_FIELDS,
 } = require("./utils/raid/queries/raid-check");
-const { createSchedulingHelpers } = require("./utils/raid/schedule/scheduling");
+const {
+  createAnnouncementsConfigReader,
+  createSchedulingHelpers,
+} = require("./utils/raid/schedule/scheduling");
 
 // Hard cap on characters saved per roster account. Sized to the
 // /raid-add-roster + /raid-edit-roster picker capacity: Discord caps a message
@@ -236,48 +240,10 @@ const commands = createRaidCommandDefinitions({
   announcementTypeEntry,
 });
 
-
-// Shared scan+classify pass for /raid-check. Returns the raw eligible list
-// + per-user metadata so both the initial command AND the button handlers
-// (Remind / Sync) can operate on a fresh Mongo snapshot every time - no
-// stale state map, no cache staleness bug. Initial render can optionally
-// pre-refresh source users first so it matches `/raid-status` freshness.
 // Composite key separator (Unit Separator \x1f) for maps keyed by
 // discordId + accountName. Shared between rosterBuckets, rosterStats,
 // and rosterRefreshMap so lookups line up across the three structures.
 const ROSTER_KEY_SEP = "\x1f";
-
-
-let handleAddRosterCommand;
-let handleAddRosterButton;
-let handleRaidGoldEarnerCommand;
-let handleRaidGoldEarnerAutocomplete;
-let handleRaidGoldEarnerButton;
-let handleRaidAuctionCommand;
-let handleRaidLogCommand;
-let handleRaidLogComponent;
-let handleRaidScheduleCommand;
-let handleRaidScheduleButton;
-let handleRaidScheduleSelect;
-let handleEditRosterCommand;
-let handleEditRosterAutocomplete;
-let handleEditRosterButton;
-let handleRaidCheckCommand;
-let handleRaidCheckButton;
-let handleStatusCommand;
-let commitAutoManageCollected;
-let applyAutoManageCollectedForStatus;
-let collectStaleAccountRefreshes;
-let collectAccountRefresh;
-let hasStaleAccountRefreshes;
-let applyStaleAccountRefreshes;
-let formatRosterRefreshCooldownRemaining;
-let runManualRosterRefresh;
-let buildAccountFreshnessLine;
-let buildAccountPageEmbed;
-let buildStatusFooterText;
-let loadFreshUserSnapshotForRaidViews;
-let shouldLoadFreshUserSnapshotForRaidViews;
 
 // Generic Prev/Next pagination row builder. Customize customId prefix per
 // command so the same visual/behavioral pattern works without collision:
@@ -305,156 +271,29 @@ function buildPaginationRow(currentPage, totalPages, disabled, { prevId, nextId,
   );
 }
 
-let handleRaidSetAutocomplete;
-let handleRaidSetCommand;
-let applyRaidSetForDiscordId;
-let applyRaidSetBatchForDiscordId;
-
-let handleRaidHelpCommand;
-let handleRaidShareCommand;
-let handleRaidHelpSelect;
-let handleRaidLanguageCommand;
-let handleRaidLanguageSelect;
-let handleRaidBgCommand;
-let handleLocalSyncButton;
-let handleLocalSyncRosterSelect;
-let notifyLocalSyncPreviewReady;
-
-let handleRemoveRosterAutocomplete;
-let handleRemoveRosterCommand;
-let handleRaidChannelAutocomplete;
-let handleRaidChannelCommand;
-
 const cacheDiscordIdentityForExistingUser = createDiscordIdentityCache({
   User,
   buildDiscordIdentityFields,
 });
 
-function getRaidCommandHandlerMap() {
-  return {
-    "raid-add-roster": handleAddRosterCommand,
-    "raid-edit-roster": handleEditRosterCommand,
-    "raid-check": handleRaidCheckCommand,
-    "raid-set": handleRaidSetCommand,
-    "raid-status": handleStatusCommand,
-    "raid-share": handleRaidShareCommand,
-    "raid-language": handleRaidLanguageCommand,
-    "raid-bg": handleRaidBgCommand,
-    "raid-help": handleRaidHelpCommand,
-    "raid-remove-roster": handleRemoveRosterCommand,
-    "raid-gold-earner": handleRaidGoldEarnerCommand,
-    "raid-channel": handleRaidChannelCommand,
-    "raid-auto-manage": handleRaidAutoManageCommand,
-    "raid-announce": handleRaidAnnounceCommand,
-    "raid-task": handleRaidTaskCommand,
-    "raid-auction": handleRaidAuctionCommand,
-    "raid-log": handleRaidLogCommand,
-    "raid-schedule-preview": handleRaidScheduleCommand,
-  };
-}
+// Services and command handlers below are built in dependency order, so
+// each one takes the functions it needs straight from an earlier factory.
 
-function getRaidCommandDispatchNames() {
-  return Object.keys(getRaidCommandHandlerMap());
-}
-
-async function handleRaidManagementCommand(interaction) {
-  try {
-    const handler = getRaidCommandHandlerMap()[interaction.commandName];
-    if (handler) await handler(interaction);
-  } finally {
-    await cacheDiscordIdentityForExistingUser(interaction);
-  }
-}
-
-
-let handleRaidAnnounceCommand;
-let handleRaidAnnounceAutocomplete;
-let handleRaidAutoManageCommand;
-let handleRaidAutoManageAutocomplete;
-let handleRaidTaskCommand;
-let handleRaidTaskAutocomplete;
-let handleRaidTaskButton;
-
-let AUTO_MANAGE_SYNC_COOLDOWN_MS;
-let acquireAutoManageSyncSlot;
-let releaseAutoManageSyncSlot;
-let formatAutoManageCooldownRemaining;
-let autoManageEntryKey;
-let gatherAutoManageLogsForUserDoc;
-let applyAutoManageCollected;
-let stampAutoManageAttempt;
-let isPublicLogDisabledError;
-let commitAutoManageOn;
-let buildAutoManageHiddenCharsWarningEmbed;
-let buildAutoManageSyncReportEmbed;
-let weekResetStartMs;
-
-let AUTO_CLEANUP_TICK_MS;
-let AUTO_MANAGE_DAILY_TICK_MS;
-let MAINTENANCE_TICK_MS;
-let WORLD_EVENT_REMINDER_TICK_MS;
-let postChannelAnnouncement;
-let getTargetCleanupSlotKey;
-let buildCleanupNoticePreview;
-let cleanupCountBucket;
-let buildMaintenancePreview;
-let startRaidChannelScheduler;
-let startAutoManageDailyScheduler;
-let startMaintenanceScheduler;
-let startWorldEventReminderScheduler;
-let startSideTaskResetScheduler;
-let startRaidScheduleAutoLockScheduler;
-let getAutoCleanupSchedulerStartedAtMs;
-let getAutoManageSchedulerStartedAtMs;
-let getMaintenanceSchedulerStartedAtMs;
-let getWorldEventReminderSchedulerStartedAtMs;
-let nextWorldEventReminderBoundaryMs;
-
-let loadMonitorChannelCache;
-let getMonitorCacheHealth;
-let getCachedMonitorChannelId;
-let setCachedMonitorChannelId;
-let isTextMonitorEnabled;
-let getMissingBotChannelPermissions;
-let getMissingAnnouncementChannelPermissions;
-let parseRaidMessage;
-let handleRaidChannelMessage;
-let cleanupAndRefreshRaidChannel;
-let postRaidChannelWelcome;
-let resolveRaidMonitorChannel;
-
-// Wire scheduling helpers via factory so the timing math can read the
-// scheduler's started-at timestamps and tick intervals through closure-
-// captured getters. The lazy `let` bindings above start undefined here
-// and only get assigned by the service factory calls below; the getters
-// defer the lookup until the helper functions are actually invoked at
-// interaction-handler time, by which point those bindings hold real
-// values.
 const {
-  getAnnouncementsConfig,
-  nextIntervalTickMs,
-  nextAnnouncementEligibleBoundaryMs,
-  nextAnnouncementSchedulerCheckMs,
-  buildAnnouncementWhenItFiresText,
-} = createSchedulingHelpers({
-  announcementSubdocKeys,
-  announcementSubdocDefaultEnabled,
-  resolveWeeklyResetStarted: () => getWeeklyResetSchedulerStartedAtMs(),
-  resolveWeeklyResetTickMs: () => WEEKLY_RESET_TICK_MS,
-  resolveAutoCleanupStarted: () => getAutoCleanupSchedulerStartedAtMs?.(),
-  resolveAutoCleanupTickMs: () => AUTO_CLEANUP_TICK_MS,
-  resolveAutoManageStarted: () => getAutoManageSchedulerStartedAtMs?.(),
-  resolveAutoManageDailyTickMs: () => AUTO_MANAGE_DAILY_TICK_MS,
-  resolveMaintenanceStarted: () => getMaintenanceSchedulerStartedAtMs?.(),
-  resolveMaintenanceTickMs: () => MAINTENANCE_TICK_MS,
-  resolveMaintenanceSlotConfig: () => getMaintenanceSlotConfigSnapshot?.(),
-  resolveWorldEventStarted: () => getWorldEventReminderSchedulerStartedAtMs?.(),
-  resolveWorldEventTickMs: () => WORLD_EVENT_REMINDER_TICK_MS,
-  resolveNextWorldEventReminderBoundary: (now) =>
-    nextWorldEventReminderBoundaryMs?.(now) ?? null,
-});
-
-const autoManageCoreService = createAutoManageCoreService({
+  AUTO_MANAGE_SYNC_COOLDOWN_MS,
+  acquireAutoManageSyncSlot,
+  releaseAutoManageSyncSlot,
+  formatAutoManageCooldownRemaining,
+  autoManageEntryKey,
+  gatherAutoManageLogsForUserDoc,
+  applyAutoManageCollected,
+  stampAutoManageAttempt,
+  isPublicLogDisabledError,
+  commitAutoManageOn,
+  buildAutoManageHiddenCharsWarningEmbed,
+  buildAutoManageSyncReportEmbed,
+  weekResetStartMs,
+} = createAutoManageCoreService({
   EmbedBuilder,
   UI,
   User,
@@ -474,23 +313,11 @@ const autoManageCoreService = createAutoManageCoreService({
   ensureAssignedRaids,
   bibleLimiter,
 });
-({
-  AUTO_MANAGE_SYNC_COOLDOWN_MS,
-  acquireAutoManageSyncSlot,
-  releaseAutoManageSyncSlot,
-  formatAutoManageCooldownRemaining,
-  autoManageEntryKey,
-  gatherAutoManageLogsForUserDoc,
-  applyAutoManageCollected,
-  stampAutoManageAttempt,
-  isPublicLogDisabledError,
-  commitAutoManageOn,
-  buildAutoManageHiddenCharsWarningEmbed,
-  buildAutoManageSyncReportEmbed,
-  weekResetStartMs,
-} = autoManageCoreService);
 
-const addRosterCommandHandlers = createAddRosterCommand({
+const {
+  handleAddRosterCommand,
+  handleAddRosterButton,
+} = createAddRosterCommand({
   EmbedBuilder,
   // /raid-add-roster picker = per-char toggle buttons + Confirm/Cancel,
   // no StringSelectMenu (the dropdown was visually noisy when
@@ -514,12 +341,12 @@ const addRosterCommandHandlers = createAddRosterCommand({
   isManagerId,
   getPrimaryManagerId,
 });
-({
-  handleAddRosterCommand,
-  handleAddRosterButton,
-} = addRosterCommandHandlers);
 
-const raidGoldEarnerCommandHandlers = createRaidGoldEarnerCommand({
+const {
+  handleRaidGoldEarnerCommand,
+  handleRaidGoldEarnerAutocomplete,
+  handleRaidGoldEarnerButton,
+} = createRaidGoldEarnerCommand({
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -530,28 +357,26 @@ const raidGoldEarnerCommandHandlers = createRaidGoldEarnerCommand({
   saveWithRetry,
   loadUserForAutocomplete,
 });
-({
-  handleRaidGoldEarnerCommand,
-  handleRaidGoldEarnerAutocomplete,
-  handleRaidGoldEarnerButton,
-} = raidGoldEarnerCommandHandlers);
 
-const raidAuctionCommandHandlers = createRaidAuctionCommand({
+const { handleRaidAuctionCommand } = createRaidAuctionCommand({
   EmbedBuilder,
   MessageFlags,
   UI,
   User,
 });
-({ handleRaidAuctionCommand } = raidAuctionCommandHandlers);
 
-({ handleRaidLogCommand, handleRaidLogComponent } = createRaidLogCommand({
+const { handleRaidLogCommand, handleRaidLogComponent } = createRaidLogCommand({
   EmbedBuilder, AttachmentBuilder, MessageFlags, UI, User,
   captureRaidLog: createRaidLogCapture({ bibleLimiter, idleMs: 45_000 }),
   logCatalog: createRaidLogCatalog({ bibleLimiter }),
   recentLogs: createRecentRaidLogs({ bibleLimiter }),
-}));
+});
 
-const editRosterCommandHandlers = createEditRosterCommand({
+const {
+  handleEditRosterCommand,
+  handleEditRosterAutocomplete,
+  handleEditRosterButton,
+} = createEditRosterCommand({
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -572,13 +397,14 @@ const editRosterCommandHandlers = createEditRosterCommand({
   loadUserForAutocomplete: loadCachedUserForAutocomplete,
   getPrimaryManagerId,
 });
-({
-  handleEditRosterCommand,
-  handleEditRosterAutocomplete,
-  handleEditRosterButton,
-} = editRosterCommandHandlers);
 
-const rosterRefreshService = createRosterRefreshService({
+const {
+  collectStaleAccountRefreshes,
+  collectAccountRefresh,
+  hasStaleAccountRefreshes,
+  applyStaleAccountRefreshes,
+  formatRosterRefreshCooldownRemaining,
+} = createRosterRefreshService({
   normalizeName,
   foldName,
   getCharacterName,
@@ -588,35 +414,30 @@ const rosterRefreshService = createRosterRefreshService({
   fetchRosterCharacters,
   getRosterRefreshCooldownMs,
 });
-({
-  collectStaleAccountRefreshes,
-  collectAccountRefresh,
-  hasStaleAccountRefreshes,
-  applyStaleAccountRefreshes,
-  formatRosterRefreshCooldownRemaining,
-} = rosterRefreshService);
 
-({ runManualRosterRefresh } = createManualRosterRefreshRunner({
+const { runManualRosterRefresh } = createManualRosterRefreshRunner({
   User,
   saveWithRetry,
   ensureFreshWeek,
   normalizeName,
   collectAccountRefresh,
   applyStaleAccountRefreshes,
-}));
+});
 
-const autoManageSyncService = createAutoManageSyncService({
+const {
+  commitAutoManageCollected,
+  applyAutoManageCollectedForStatus,
+} = createAutoManageSyncService({
   User,
   saveWithRetry,
   ensureFreshWeek,
   applyAutoManageCollected,
 });
-({
-  commitAutoManageCollected,
-  applyAutoManageCollectedForStatus,
-} = autoManageSyncService);
 
-const raidViewSnapshotService = createRaidViewSnapshotService({
+const {
+  loadFreshUserSnapshotForRaidViews,
+  shouldLoadFreshUserSnapshotForRaidViews,
+} = createRaidViewSnapshotService({
   User,
   saveWithRetry,
   ensureFreshWeek,
@@ -631,12 +452,46 @@ const raidViewSnapshotService = createRaidViewSnapshotService({
   stampAutoManageAttempt,
   weekResetStartMs,
 });
-({
-  loadFreshUserSnapshotForRaidViews,
-  shouldLoadFreshUserSnapshotForRaidViews,
-} = raidViewSnapshotService);
 
-const raidStatusCommand = createRaidStatusCommand({
+// /raid-set comes before everything that writes raid progress through it:
+// the /raid-status Local Sync view, the Local Sync console, /raid-schedule
+// and the raid channel monitor.
+const {
+  handleRaidSetAutocomplete,
+  handleRaidSetCommand,
+  applyRaidSetForDiscordId,
+  applyRaidSetBatchForDiscordId,
+} = createRaidSetCommand({
+  EmbedBuilder,
+  MessageFlags,
+  UI,
+  User,
+  saveWithRetry,
+  ensureFreshWeek,
+  normalizeName,
+  getCharacterName,
+  getCharacterClass,
+  createCharacterId,
+  loadUserForAutocomplete,
+  loadAccountsRegisteredBy,
+  loadCachedUserForAutocomplete,
+  loadCachedAccountsRegisteredBy,
+  loadAccessibleAccountsForAutocomplete,
+  getRaidRequirementList,
+  RAID_REQUIREMENT_MAP,
+  getGatesForRaid,
+  ensureAssignedRaids,
+  normalizeAssignedRaid,
+  getGateKeys,
+  toModeLabel,
+});
+
+const {
+  handleStatusCommand,
+  buildAccountFreshnessLine,
+  buildAccountPageEmbed,
+  buildStatusFooterText,
+} = createRaidStatusCommand({
   EmbedBuilder,
   ComponentType,
   StringSelectMenuBuilder,
@@ -677,20 +532,15 @@ const raidStatusCommand = createRaidStatusCommand({
   getAutoManageCooldownMs,
   getRosterRefreshCooldownMs,
   isManagerId,
-  // Local Sync view (`status-local:` buttons). Hoisted thunks, not the
-  // raw bindings · raid-set composes after this factory, so the plain
-  // `let`s are still undefined here.
-  applyRaidSetForDiscordId: callApplyRaidSetForDiscordId,
-  applyRaidSetBatchForDiscordId: callApplyRaidSetBatchForDiscordId,
+  // Local Sync view (`status-local:` buttons).
+  applyRaidSetForDiscordId,
+  applyRaidSetBatchForDiscordId,
 });
-({
-  handleStatusCommand,
-  buildAccountFreshnessLine,
-  buildAccountPageEmbed,
-  buildStatusFooterText,
-} = raidStatusCommand);
 
-const raidCheckCommandHandlers = createRaidCheckCommand({
+const {
+  handleRaidCheckCommand,
+  handleRaidCheckButton,
+} = createRaidCheckCommand({
   EmbedBuilder,
   StringSelectMenuBuilder,
   ActionRowBuilder,
@@ -738,43 +588,12 @@ const raidCheckCommandHandlers = createRaidCheckCommand({
   buildScheduleEmbed,
   buildTurnPlanEmbed,
 });
-({
-  handleRaidCheckCommand,
-  handleRaidCheckButton,
-} = raidCheckCommandHandlers);
 
-const raidSetCommandHandlers = createRaidSetCommand({
-  EmbedBuilder,
-  MessageFlags,
-  UI,
-  User,
-  saveWithRetry,
-  ensureFreshWeek,
-  normalizeName,
-  getCharacterName,
-  getCharacterClass,
-  createCharacterId,
-  loadUserForAutocomplete,
-  loadAccountsRegisteredBy,
-  loadCachedUserForAutocomplete,
-  loadCachedAccountsRegisteredBy,
-  loadAccessibleAccountsForAutocomplete,
-  getRaidRequirementList,
-  RAID_REQUIREMENT_MAP,
-  getGatesForRaid,
-  ensureAssignedRaids,
-  normalizeAssignedRaid,
-  getGateKeys,
-  toModeLabel,
-});
-({
-  handleRaidSetAutocomplete,
-  handleRaidSetCommand,
-  applyRaidSetForDiscordId,
-  applyRaidSetBatchForDiscordId,
-} = raidSetCommandHandlers);
-
-const localSyncDiscordConsole = createLocalSyncDiscordConsole({
+const {
+  handleLocalSyncButton,
+  handleLocalSyncRosterSelect,
+  notifyPreviewReady: notifyLocalSyncPreviewReady,
+} = createLocalSyncDiscordConsole({
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -791,11 +610,6 @@ const localSyncDiscordConsole = createLocalSyncDiscordConsole({
   releaseAutoManageSyncSlot,
   openRaidStatusSession: handleStatusCommand,
 });
-({
-  handleLocalSyncButton,
-  handleLocalSyncRosterSelect,
-  notifyPreviewReady: notifyLocalSyncPreviewReady,
-} = localSyncDiscordConsole);
 
 const raidScheduleCommandHandlers = createRaidScheduleCommand({
   EmbedBuilder,
@@ -813,15 +627,15 @@ const raidScheduleCommandHandlers = createRaidScheduleCommand({
   GuildConfig,
   RaidEvent,
   isManagerId,
-  applyRaidSetBatchForDiscordId: (args) => applyRaidSetBatchForDiscordId(args),
+  applyRaidSetBatchForDiscordId,
 });
-({
+const {
   handleRaidScheduleCommand,
   handleRaidScheduleButton,
   handleRaidScheduleSelect,
-} = raidScheduleCommandHandlers);
+} = raidScheduleCommandHandlers;
 
-const raidScheduleAutoLockService = createRaidScheduleAutoLockService({
+const { startRaidScheduleAutoLockScheduler } = createRaidScheduleAutoLockService({
   RaidEvent,
   GuildConfig,
   EmbedBuilder,
@@ -831,11 +645,28 @@ const raidScheduleAutoLockService = createRaidScheduleAutoLockService({
   UI,
   boardPayload: raidScheduleCommandHandlers.boardPayload,
 });
-({
-  startRaidScheduleAutoLockScheduler,
-} = raidScheduleAutoLockService);
 
-const raidChannelMonitorService = createRaidChannelMonitorService({
+// Normalizes a guild's announcement settings. The channel monitor, the
+// schedulers and /raid-announce and /raid-channel all read it.
+const getAnnouncementsConfig = createAnnouncementsConfigReader({
+  announcementSubdocKeys,
+  announcementSubdocDefaultEnabled,
+});
+
+const {
+  loadMonitorChannelCache,
+  getMonitorCacheHealth,
+  getCachedMonitorChannelId,
+  setCachedMonitorChannelId,
+  isTextMonitorEnabled,
+  getMissingBotChannelPermissions,
+  getMissingAnnouncementChannelPermissions,
+  parseRaidMessage,
+  handleRaidChannelMessage,
+  cleanupAndRefreshRaidChannel,
+  postRaidChannelWelcome,
+  resolveRaidMonitorChannel,
+} = createRaidChannelMonitorService({
   PermissionFlagsBits,
   EmbedBuilder,
   UI,
@@ -849,35 +680,8 @@ const raidChannelMonitorService = createRaidChannelMonitorService({
   getAnnouncementsConfig,
   normalizeName,
 });
-({
-  loadMonitorChannelCache,
-  getMonitorCacheHealth,
-  getCachedMonitorChannelId,
-  setCachedMonitorChannelId,
-  isTextMonitorEnabled,
-  getMissingBotChannelPermissions,
-  getMissingAnnouncementChannelPermissions,
-  parseRaidMessage,
-  handleRaidChannelMessage,
-  cleanupAndRefreshRaidChannel,
-  postRaidChannelWelcome,
-  resolveRaidMonitorChannel,
-} = raidChannelMonitorService);
 
-const raidSchedulerService = createRaidSchedulerService({
-  GuildConfig,
-  User,
-  saveWithRetry,
-  ensureFreshWeek,
-  getAnnouncementsConfig,
-  cleanupAndRefreshRaidChannel,
-  weekResetStartMs,
-  acquireAutoManageSyncSlot,
-  releaseAutoManageSyncSlot,
-  gatherAutoManageLogsForUserDoc,
-  applyAutoManageCollected,
-});
-({
+const {
   AUTO_CLEANUP_TICK_MS,
   AUTO_MANAGE_DAILY_TICK_MS,
   MAINTENANCE_TICK_MS,
@@ -897,12 +701,8 @@ const raidSchedulerService = createRaidSchedulerService({
   getMaintenanceSchedulerStartedAtMs,
   getWorldEventReminderSchedulerStartedAtMs,
   nextWorldEventReminderBoundaryMs,
-} = raidSchedulerService);
-
-// Expose quiet-hours helpers for __test access. Tests exercise them via
-// commands.__test so they stay behind the public boundary and aren't
-// part of the runtime contract other callers can reach for.
-const {
+  // Quiet-hours and maintenance helpers, exposed through commands.__test
+  // so tests reach them without making them part of the runtime contract.
   getTargetVNDayKey,
   getCurrentVNHour,
   isInArtistQuietHours,
@@ -917,26 +717,61 @@ const {
   MAINTENANCE_HOUR_VN,
   MAINTENANCE_MINUTE_VN,
   dailyResetStartMs,
-} = raidSchedulerService;
+} = createRaidSchedulerService({
+  GuildConfig,
+  User,
+  saveWithRetry,
+  ensureFreshWeek,
+  getAnnouncementsConfig,
+  cleanupAndRefreshRaidChannel,
+  weekResetStartMs,
+  acquireAutoManageSyncSlot,
+  releaseAutoManageSyncSlot,
+  gatherAutoManageLogsForUserDoc,
+  applyAutoManageCollected,
+});
 
-const raidHelpCommandHandlers = createRaidHelpCommand({
+// Announcement timing reads each scheduler's start time and tick length.
+// Start times are getters: a scheduler only has one once it has started.
+const {
+  nextIntervalTickMs,
+  nextAnnouncementEligibleBoundaryMs,
+  nextAnnouncementSchedulerCheckMs,
+  buildAnnouncementWhenItFiresText,
+} = createSchedulingHelpers({
+  announcementSubdocKeys,
+  announcementSubdocDefaultEnabled,
+  resolveWeeklyResetStarted: () => getWeeklyResetSchedulerStartedAtMs(),
+  resolveWeeklyResetTickMs: () => WEEKLY_RESET_TICK_MS,
+  resolveAutoCleanupStarted: () => getAutoCleanupSchedulerStartedAtMs(),
+  resolveAutoCleanupTickMs: () => AUTO_CLEANUP_TICK_MS,
+  resolveAutoManageStarted: () => getAutoManageSchedulerStartedAtMs(),
+  resolveAutoManageDailyTickMs: () => AUTO_MANAGE_DAILY_TICK_MS,
+  resolveMaintenanceStarted: () => getMaintenanceSchedulerStartedAtMs(),
+  resolveMaintenanceTickMs: () => MAINTENANCE_TICK_MS,
+  resolveMaintenanceSlotConfig: () => getMaintenanceSlotConfigSnapshot(),
+  resolveWorldEventStarted: () => getWorldEventReminderSchedulerStartedAtMs(),
+  resolveWorldEventTickMs: () => WORLD_EVENT_REMINDER_TICK_MS,
+  resolveNextWorldEventReminderBoundary: (now) =>
+    nextWorldEventReminderBoundaryMs(now) ?? null,
+});
+
+const {
+  handleRaidHelpCommand,
+  handleRaidHelpSelect,
+} = createRaidHelpCommand({
   EmbedBuilder,
   StringSelectMenuBuilder,
   ActionRowBuilder,
   MessageFlags,
   UI,
 });
-({
-  handleRaidHelpCommand,
-  handleRaidHelpSelect,
-} = raidHelpCommandHandlers);
 
-const raidShareCommandHandlers = createRaidShareCommand({
+const { handleRaidShareCommand } = createRaidShareCommand({
   EmbedBuilder,
   MessageFlags,
   UI,
 });
-({ handleRaidShareCommand } = raidShareCommandHandlers);
 
 const { handleStuckNudgeButton } = createStuckNudgeButtonHandler({
   EmbedBuilder,
@@ -948,19 +783,18 @@ const { handleStuckNudgeButton } = createStuckNudgeButtonHandler({
   User,
 });
 
-const raidLanguageCommandHandlers = createRaidLanguageCommand({
+const {
+  handleRaidLanguageCommand,
+  handleRaidLanguageSelect,
+} = createRaidLanguageCommand({
   EmbedBuilder,
   StringSelectMenuBuilder,
   ActionRowBuilder,
   MessageFlags,
   UI,
 });
-({
-  handleRaidLanguageCommand,
-  handleRaidLanguageSelect,
-} = raidLanguageCommandHandlers);
 
-const raidBgCommandHandlers = createRaidBgCommand({
+const { handleRaidBgCommand } = createRaidBgCommand({
   User,
   getAccessibleAccounts,
   saveWithRetry,
@@ -972,9 +806,11 @@ const raidBgCommandHandlers = createRaidBgCommand({
   ButtonStyle,
   StringSelectMenuBuilder,
 });
-({ handleRaidBgCommand } = raidBgCommandHandlers);
 
-const removeRosterCommandHandlers = createRemoveRosterCommand({
+const {
+  handleRemoveRosterAutocomplete,
+  handleRemoveRosterCommand,
+} = createRemoveRosterCommand({
   EmbedBuilder,
   MessageFlags,
   UI,
@@ -987,12 +823,11 @@ const removeRosterCommandHandlers = createRemoveRosterCommand({
   createCharacterId,
   loadUserForAutocomplete,
 });
-({
-  handleRemoveRosterAutocomplete,
-  handleRemoveRosterCommand,
-} = removeRosterCommandHandlers);
 
-const raidAnnounceCommandHandlers = createRaidAnnounceCommand({
+const {
+  handleRaidAnnounceCommand,
+  handleRaidAnnounceAutocomplete,
+} = createRaidAnnounceCommand({
   EmbedBuilder,
   MessageFlags,
   PermissionFlagsBits,
@@ -1009,12 +844,11 @@ const raidAnnounceCommandHandlers = createRaidAnnounceCommand({
   buildAnnouncementWhenItFiresText,
   getMissingAnnouncementChannelPermissions,
 });
-({
-  handleRaidAnnounceCommand,
-  handleRaidAnnounceAutocomplete,
-} = raidAnnounceCommandHandlers);
 
-const raidAutoManageCommandHandlers = createRaidAutoManageCommand({
+const {
+  handleRaidAutoManageCommand,
+  handleRaidAutoManageAutocomplete,
+} = createRaidAutoManageCommand({
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -1039,13 +873,12 @@ const raidAutoManageCommandHandlers = createRaidAutoManageCommand({
   buildAutoManageHiddenCharsWarningEmbed,
   stampAutoManageAttempt,
 });
-({
-  handleRaidAutoManageCommand,
-  handleRaidAutoManageAutocomplete,
-} = raidAutoManageCommandHandlers);
 
-const { createRaidTaskCommand } = require("./handlers/raid/task");
-const raidTaskCommandHandlers = createRaidTaskCommand({
+const {
+  handleRaidTaskCommand,
+  handleRaidTaskAutocomplete,
+  handleRaidTaskButton,
+} = createRaidTaskCommand({
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -1059,13 +892,11 @@ const raidTaskCommandHandlers = createRaidTaskCommand({
   dailyResetStartMs,
   weekResetStartMs,
 });
-({
-  handleRaidTaskCommand,
-  handleRaidTaskAutocomplete,
-  handleRaidTaskButton,
-} = raidTaskCommandHandlers);
 
-const raidChannelCommandHandlers = createRaidChannelCommand({
+const {
+  handleRaidChannelCommand,
+  handleRaidChannelAutocomplete,
+} = createRaidChannelCommand({
   EmbedBuilder,
   MessageFlags,
   PermissionFlagsBits,
@@ -1085,32 +916,39 @@ const raidChannelCommandHandlers = createRaidChannelCommand({
   cleanupAndRefreshRaidChannel,
   getTargetCleanupSlotKey,
 });
-({
-  handleRaidChannelCommand,
-  handleRaidChannelAutocomplete,
-} = raidChannelCommandHandlers);
 
+const RAID_COMMAND_HANDLERS = Object.freeze({
+  "raid-add-roster": handleAddRosterCommand,
+  "raid-edit-roster": handleEditRosterCommand,
+  "raid-check": handleRaidCheckCommand,
+  "raid-set": handleRaidSetCommand,
+  "raid-status": handleStatusCommand,
+  "raid-share": handleRaidShareCommand,
+  "raid-language": handleRaidLanguageCommand,
+  "raid-bg": handleRaidBgCommand,
+  "raid-help": handleRaidHelpCommand,
+  "raid-remove-roster": handleRemoveRosterCommand,
+  "raid-gold-earner": handleRaidGoldEarnerCommand,
+  "raid-channel": handleRaidChannelCommand,
+  "raid-auto-manage": handleRaidAutoManageCommand,
+  "raid-announce": handleRaidAnnounceCommand,
+  "raid-task": handleRaidTaskCommand,
+  "raid-auction": handleRaidAuctionCommand,
+  "raid-log": handleRaidLogCommand,
+  "raid-schedule-preview": handleRaidScheduleCommand,
+});
 
-// Thunk wrapper around the `applyRaidSetForDiscordId` let-binding so
-// downstream consumers (local-sync HTTP endpoint, future text parsers)
-// can take a stable function reference at require-time even though
-// the binding itself is filled in lazily during command-factory init.
-async function callApplyRaidSetForDiscordId(args) {
-  if (typeof applyRaidSetForDiscordId !== "function") {
-    throw new Error(
-      "[commands] applyRaidSetForDiscordId not initialized yet - command factory hasn't run"
-    );
-  }
-  return applyRaidSetForDiscordId(args);
+function getRaidCommandDispatchNames() {
+  return Object.keys(RAID_COMMAND_HANDLERS);
 }
 
-async function callApplyRaidSetBatchForDiscordId(args) {
-  if (typeof applyRaidSetBatchForDiscordId !== "function") {
-    throw new Error(
-      "[commands] applyRaidSetBatchForDiscordId not initialized yet - command factory hasn't run"
-    );
+async function handleRaidManagementCommand(interaction) {
+  try {
+    const handler = RAID_COMMAND_HANDLERS[interaction.commandName];
+    if (handler) await handler(interaction);
+  } finally {
+    await cacheDiscordIdentityForExistingUser(interaction);
   }
-  return applyRaidSetBatchForDiscordId(args);
 }
 
 module.exports = {
@@ -1147,8 +985,6 @@ module.exports = {
   startSideTaskResetScheduler,
   startRaidScheduleAutoLockScheduler,
   parseRaidMessage,
-  applyRaidSetForDiscordId: callApplyRaidSetForDiscordId,
-  applyRaidSetBatchForDiscordId: callApplyRaidSetBatchForDiscordId,
   handleStuckNudgeButton,
   __test: {
     STATUS_PAGINATION_SESSION_MS,
