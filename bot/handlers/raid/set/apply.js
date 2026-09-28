@@ -11,6 +11,7 @@ const {
   resolveRequiredCompanionScope,
 } = require("../../../services/local-sync/core/scope");
 const { findAccountByName } = require("../../../utils/user-doc");
+const { isCurrentWeekCompletion } = require("../../../utils/raid/schedule/reset-windows");
 
 function createRaidSetApplyService({
   canEditAccount,
@@ -80,10 +81,9 @@ function createRaidSetApplyService({
     );
 
     const progressFloorMs = Math.max(0, Number(currentWeekStartMs) || 0);
-    const hadProgress = changed && officialGateList.some((gate) => {
-      const completedAt = Number(raidData[gate]?.completedDate);
-      return completedAt > 0 && completedAt >= progressFloorMs;
-    });
+    const hadProgress = changed && officialGateList.some((gate) => (
+      isCurrentWeekCompletion(raidData[gate]?.completedDate, progressFloorMs)
+    ));
 
     return { changed, hadProgress, officialGateList };
   }
@@ -99,8 +99,7 @@ function createRaidSetApplyService({
     return gateKeys.length > 0 && gateKeys.every((gate) => {
       const entry = raidData[gate];
       if (!entry) return false;
-      const completedAt = Number(entry.completedDate);
-      if (!(completedAt > 0) || completedAt < progressFloorMs) return false;
+      if (!isCurrentWeekCompletion(entry.completedDate, progressFloorMs)) return false;
       const entryDiff = normalizeName(entry.difficulty || "");
       return !entryDiff || entryDiff === normalizedSelectedDiff;
     });
@@ -206,10 +205,9 @@ function createRaidSetApplyService({
   ) {
     if (!requireRaidUntouched) return false;
     const progressFloorMs = Math.max(0, Number(currentWeekStartMs) || 0);
-    const hasProgress = mutation.modeChange.officialGateList.some((gate) => {
-      const completedAt = Number(mutation.raidData?.[gate]?.completedDate);
-      return completedAt > 0 && completedAt >= progressFloorMs;
-    });
+    const hasProgress = mutation.modeChange.officialGateList.some((gate) => (
+      isCurrentWeekCompletion(mutation.raidData?.[gate]?.completedDate, progressFloorMs)
+    ));
     if (hasProgress) result.progressProtected = true;
     return hasProgress;
   }
