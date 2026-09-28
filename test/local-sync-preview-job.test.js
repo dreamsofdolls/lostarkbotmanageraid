@@ -59,6 +59,28 @@ function makeRes() {
   };
 }
 
+// A Full Local Sync user whose stored token is `token`, owning only Aki.
+function makeAkiUser(discordId, token) {
+  return {
+    findOne() {
+      return {
+        select: () => ({
+          lean: async () => ({
+            discordId,
+            localSyncEnabled: true,
+            lastLocalSyncToken: token,
+            lastLocalSyncTokenExpAt: 9_999_999_999,
+            accounts: [{
+              accountName: "Roster",
+              characters: [{ name: "Aki", class: "Artist", itemLevel: 1750, assignedRaids: {} }],
+            }],
+          }),
+        }),
+      };
+    },
+  };
+}
+
 test("web API exposes preview handoff but not the legacy direct-write route", () => {
   const handlers = createLocalSyncApiHandlers({ User: {} });
 
@@ -391,6 +413,71 @@ test("preview-job endpoint stores the job when Discord DMs are unavailable", asy
   assert.equal(backgroundTasks.length, 1);
   await backgroundTasks[0]();
   assert.match(warnings.join("\n"), /Cannot send messages/);
+});
+
+test("preview-job endpoint logs a storage failure and answers 500 without the driver message", async () => {
+  const token = mintToken("u3", undefined, "en");
+  const errors = [];
+  const PreviewModel = {
+    async updateMany() {
+      throw new Error("MongoServerSelectionError: connect ECONNREFUSED 10.0.0.5:27017");
+    },
+    async create() {
+      assert.fail("create must not run after the supersede write failed");
+    },
+  };
+  const handler = createPreviewJobEndpoint({
+    User: makeAkiUser("u3", token),
+    PreviewModel,
+    log: {
+      error(...args) { errors.push(args.join(" ")); },
+      warn() {},
+    },
+  });
+  const res = makeRes();
+
+  await handler(makeReq(token, { deltas: [validDelta()] }), res, { query: {} });
+
+  assert.equal(res.status, 500);
+  assert.deepEqual(res.json(), { ok: false, error: "preview job failed" });
+  assert.doesNotMatch(res.body, /ECONNREFUSED/);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /ECONNREFUSED/);
+});
+
+test("preview-job endpoint keeps a party fan-out rejection as a 400 with its message", async () => {
+  const token = mintToken("u4", undefined, "en");
+  const errors = [];
+  let wrote = false;
+  const PreviewModel = {
+    async updateMany() { wrote = true; },
+    async create() { wrote = true; },
+  };
+  const handler = createPreviewJobEndpoint({
+    User: makeAkiUser("u4", token),
+    PreviewModel,
+    log: {
+      error(...args) { errors.push(args.join(" ")); },
+      warn() {},
+    },
+  });
+  const res = makeRes();
+  const source = validDelta();
+
+  await handler(makeReq(token, {
+    deltas: [source],
+    partyDeltas: Array.from({ length: 16 }, (_, index) => ({
+      ...source,
+      charName: `Target${index}`,
+      sourceCharName: source.charName,
+    })),
+  }), res, { query: {} });
+
+  assert.equal(res.status, 400);
+  assert.equal(res.json().ok, false);
+  assert.match(res.json().error, /too many party targets for one source Gate \(max 15\)/);
+  assert.equal(wrote, false);
+  assert.deepEqual(errors, [], "a rejected request is not a server fault");
 });
 
 test("preview-summary names registered party members tied to a source clear, without their owners", async () => {
