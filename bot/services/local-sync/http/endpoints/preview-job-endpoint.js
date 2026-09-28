@@ -199,9 +199,9 @@ function createPreviewJobEndpoint({
       delivery: hasNotifier ? PENDING_DELIVERY : STORED_DELIVERY,
     });
 
-    // A durable preview is the HTTP success boundary. Discord REST, console
-    // rendering, and receipt persistence continue after res.end(), so slow or
-    // blocked DMs cannot hold the Local Reader button in a loading state.
+    // A durable preview is the HTTP success boundary. Discord REST and console
+    // rendering continue after res.end(), so slow or blocked DMs cannot hold
+    // the Local Reader button in a loading state.
     if (hasNotifier) {
       schedulePreviewDelivery({
         notifyPreviewReady,
