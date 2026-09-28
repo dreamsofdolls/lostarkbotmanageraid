@@ -30,9 +30,8 @@ function toPlainUserSnapshot(userDoc) {
  *   advance must persist)
  *   · plus ensureFreshWeek, normalizeName, getCharacterName, etc.
  *   see the destructure block.
- * @returns {object} service surface · see the return literal for the
- *   canonical method list (computeRaidStatusSnapshot,
- *   computeRaidCheckSnapshot, etc.).
+ * @returns {object} service surface: loadFreshUserSnapshotForRaidViews
+ *   and shouldLoadFreshUserSnapshotForRaidViews.
  */
 function createRaidViewSnapshotService({
   User,

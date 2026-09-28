@@ -9,11 +9,6 @@
 "use strict";
 
 module.exports = {
-  language: {
-    label: "Tiếng Việt",
-    flag: "🇻🇳",
-    code: "vi",
-  },
   // Shared UI fragments rendered everywhere (pagination buttons,
   // progress rollups in footers). Migrated together because they
   // surface in /raid-status, /raid-check, raid-check/all-mode, and any
@@ -371,7 +366,6 @@ module.exports = {
   },
   "raid-schedule": {
     board: {
-      summary: "**{raid}** · cần iLvl {ilvl}+",
       startLine: "Khởi raid {rel} · {abs}",
       leadLine: "Lead: {lead}",
       roomLine: "Phòng: `{room}`",
@@ -2752,9 +2746,7 @@ module.exports = {
         random: "Random lúc lưu",
       },
       assignmentLabel: "📌 Map roster",
-      fileLabel: "🖼️ File",
       dimsLabel: "📐 Kích thước",
-      sizeLabel: "💾 Lưu trữ",
       footer: "/raid-bg view để xem lại · /raid-bg edit để thay/xoá cảnh",
     },
     browse: {
@@ -2787,31 +2779,7 @@ module.exports = {
       noneTitle: "ℹ️ Cậu chưa có background nào hết á",
       noneDescription:
         "Cậu chưa upload background lần nào nha~ Chạy `/raid-bg set image:<file>` để cho Artist ảnh đầu tiên nhé!",
-      currentTitle: "🖼️ Background của cậu nè~",
-      currentDescription:
-        "Đây là ảnh Artist đang dùng cho raid card của cậu mỗi lần `/raid-status`.",
-      fileLabel: "📁 File",
-      dimsLabel: "📐 Đã lưu",
-      imagesLabel: "🖼️ Ảnh",
-      imagesValue: "{count} ảnh · {mode}",
-      uploadLabel: "🕐 Cậu upload",
-      uploadUnknown: "không rõ",
       slotsLabel: "🖼️ Slot đã lưu",
-      assignmentLabel: "📌 Map roster",
-      footer: "/raid-bg set để upload thêm · /raid-bg edit để thay/xoá cảnh",
-    },
-    remove: {
-      nothingTitle: "ℹ️ Không có gì để Artist xoá đâu",
-      nothingDescription: "Cậu chưa upload background lần nào nha~",
-      successTitle: "🗑️ Artist đã cất background đi rồi",
-      successDescription:
-        "Cậu quay về với text embed mặc định cho `/raid-status` rồi đó. Lúc nào muốn có background lại thì `/raid-bg set` Artist nhé~",
-      invalidImageTitle: "⚠️ Không thấy slot background đó",
-      invalidImageDescription:
-        "Slot #{requested} chưa được lưu. Chọn số từ **1** tới **{count}**, hoặc bỏ trống `image` để xoá hết.",
-      partialSuccessTitle: "🗑️ Đã xoá một slot background",
-      partialSuccessDescription:
-        "Artist đã xoá slot **#{index}** rồi. Những slot còn lại ở dưới đây để cậu kiểm tra lại nha.",
     },
   },
 };

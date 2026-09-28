@@ -6,11 +6,6 @@
 "use strict";
 
 module.exports = {
-  language: {
-    label: "English",
-    flag: "🇬🇧",
-    code: "en",
-  },
   common: {
     pagination: {
       previous: "◀ Previous",
@@ -358,7 +353,6 @@ module.exports = {
   },
   "raid-schedule": {
     board: {
-      summary: "**{raid}** · needs iLvl {ilvl}+",
       startLine: "Kicks off {rel} · {abs}",
       leadLine: "Lead: {lead}",
       roomLine: "Room: `{room}`",
@@ -2720,9 +2714,7 @@ module.exports = {
         random: "Random split",
       },
       assignmentLabel: "📌 Roster map",
-      fileLabel: "🖼️ File",
       dimsLabel: "📐 Dimensions",
-      sizeLabel: "💾 Storage",
       footer: "/raid-bg view to browse · /raid-bg edit to replace/delete",
     },
     browse: {
@@ -2755,30 +2747,7 @@ module.exports = {
       noneTitle: "ℹ️ No background yet",
       noneDescription:
         "You haven't handed Artist an image yet. Run `/raid-bg set image:<file>` to drop the first one in.",
-      currentTitle: "🖼️ Current background",
-      currentDescription: "This is what Artist's painting behind your `/raid-status` raid card.",
-      fileLabel: "📁 File",
-      dimsLabel: "📐 Stored",
-      imagesLabel: "🖼️ Images",
-      imagesValue: "{count} image(s) · {mode}",
-      uploadLabel: "🕐 Uploaded",
-      uploadUnknown: "unknown",
       slotsLabel: "🖼️ Saved slots",
-      assignmentLabel: "📌 Roster map",
-      footer: "/raid-bg set to upload · /raid-bg edit to replace/delete",
-    },
-    remove: {
-      nothingTitle: "ℹ️ Nothing to clear",
-      nothingDescription: "You haven't handed Artist an image yet.",
-      successTitle: "🗑️ Background cleared",
-      successDescription:
-        "You're back on the default text embed for `/raid-status`. Send Artist a new one with `/raid-bg set` any time.",
-      invalidImageTitle: "⚠️ Background slot not found",
-      invalidImageDescription:
-        "Slot #{requested} is not saved. Pick **1** through **{count}**, or leave `image` empty to clear everything.",
-      partialSuccessTitle: "🗑️ Background slot removed",
-      partialSuccessDescription:
-        "Artist removed slot **#{index}**. The remaining saved slots are shown below.",
     },
   },
 };

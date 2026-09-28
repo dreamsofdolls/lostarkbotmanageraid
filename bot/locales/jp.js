@@ -8,11 +8,6 @@
 "use strict";
 
 module.exports = {
-  language: {
-    label: "日本語",
-    flag: "🇯🇵",
-    code: "jp",
-  },
   common: {
     pagination: {
       previous: "◀ 前へ",
@@ -360,7 +355,6 @@ module.exports = {
   },
   "raid-schedule": {
     board: {
-      summary: "**{raid}** · iLvl {ilvl}+ 必要",
       startLine: "開始 {rel} · {abs}",
       leadLine: "Lead: {lead}",
       roomLine: "部屋: `{room}`",
@@ -2721,9 +2715,7 @@ module.exports = {
         random: "保存時にランダム",
       },
       assignmentLabel: "📌 Roster map",
-      fileLabel: "🖼️ ファイル",
       dimsLabel: "📐 サイズ",
-      sizeLabel: "💾 保存容量",
       footer: "/raid-bg view で閲覧 · /raid-bg edit で差し替え/削除",
     },
     browse: {
@@ -2756,31 +2748,7 @@ module.exports = {
       noneTitle: "ℹ️ Background はまだ無いですわよ",
       noneDescription:
         "まだ background をアップロードされてませんの～ `/raid-bg set image:<file>` で最初の一枚をアーティストに渡してくださいませ♪",
-      currentTitle: "🖼️ 今の Background ですわ",
-      currentDescription:
-        "`/raid-status` の raid card 背景として、アーティストが使っている画像ですの。",
-      fileLabel: "📁 ファイル",
-      dimsLabel: "📐 保存中",
-      imagesLabel: "🖼️ 画像",
-      imagesValue: "{count} 枚 · {mode}",
-      uploadLabel: "🕐 アップロード",
-      uploadUnknown: "不明",
       slotsLabel: "🖼️ 保存済みスロット",
-      assignmentLabel: "📌 Roster map",
-      footer: "/raid-bg set で追加 · /raid-bg edit で差し替え/削除",
-    },
-    remove: {
-      nothingTitle: "ℹ️ 取り外すものがありませんの",
-      nothingDescription: "まだ background をアップロードされてませんわ～",
-      successTitle: "🗑️ Background をしまっておきましたわ",
-      successDescription:
-        "`/raid-status` の標準テキスト embed に戻しましたの。また background が欲しくなったら `/raid-bg set` でアーティストに渡してくださいませ～♪",
-      invalidImageTitle: "⚠️ その background slot は見つかりませんわ",
-      invalidImageDescription:
-        "Slot #{requested} は保存されていませんの。**1** から **{count}** を選ぶか、`image` を空欄にすると全部削除できますわ。",
-      partialSuccessTitle: "🗑️ Background slot を削除しましたわ",
-      partialSuccessDescription:
-        "Slot **#{index}** を削除しましたの。残っている slot は下に並べておきますわ。",
     },
   },
 };
