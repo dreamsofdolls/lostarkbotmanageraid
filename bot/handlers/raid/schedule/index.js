@@ -17,6 +17,7 @@ const {
   buildScheduleComponents,
 } = require("./view/board");
 const {
+  PICKER_LIMIT,
   clip,
 } = require("./view/select-options");
 const { createScheduleNoticeHelpers } = require("./view/notices");
@@ -198,7 +199,10 @@ function createRaidScheduleCommand({
       await editNotice(interaction, lang, "warn", "pickerStaleTitle", "pickerStaleDescription");
       return;
     }
-    const turns = setTurnMembers(event.turns, turnIndex, interaction.values || []);
+    // The member picker lists only the first PICKER_LIMIT signups; members
+    // past that were never offered, so the lead's pick must not drop them.
+    const unlistedIds = (event.signups || []).slice(PICKER_LIMIT).map((s) => s.discordId);
+    const turns = setTurnMembers(event.turns, turnIndex, interaction.values || [], unlistedIds);
     markTurns(event, turns);
     await event.save();
     const payload = teamsPanelPayload(event, lang);
@@ -336,6 +340,8 @@ function createRaidScheduleCommand({
   const SELECT_PREFIX_HANDLERS = Object.freeze([
     { prefix: "addpick", create: () => handleAddPickSelect },
     { prefix: "teammembers", create: () => handleTeamMembersSelect },
+    // Overflow kick selects (signups past #25): rse:kickpick:<n>:<eventId>.
+    { prefix: "kickpick:", create: () => handleKickSelect },
   ]);
 
   // RaidEvent saves use optimistic concurrency, so when two people act on one
@@ -395,6 +401,8 @@ function createRaidScheduleCommand({
     handleRaidScheduleCommand,
     handleRaidScheduleButton,
     handleRaidScheduleSelect,
+    // Shared with the auto-lock worker so its board refresh matches ours.
+    boardPayload,
   };
 }
 

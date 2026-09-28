@@ -11,8 +11,10 @@
 
 const {
   createPreviewJob,
+  filterPartyDeltasBySourceDeltas,
   normalizePreviewDeltas,
 } = require("../..");
+const { assertPartyTargetFanout } = require("../../core/party-policy");
 const {
   bucketizeCurrentWeekDeltas,
   projectSummary,
@@ -120,6 +122,11 @@ function createPreviewJobEndpoint({
       normalizedPartyDeltas = scope === "full"
         ? normalizePreviewDeltas(body.partyDeltas || [])
         : [];
+      // The fan-out bound createPreviewJob enforces, checked here so the
+      // request's own faults stay 400s and every later failure is a 500.
+      assertPartyTargetFanout(
+        filterPartyDeltasBySourceDeltas(normalizedDeltas, normalizedPartyDeltas)
+      );
     } catch (err) {
       send(res, 400, { ok: false, error: err?.message || "preview job invalid" });
       return;
@@ -169,7 +176,8 @@ function createPreviewJobEndpoint({
         token,
       }, PreviewModel ? { PreviewModel } : {});
     } catch (err) {
-      send(res, 400, { ok: false, error: err?.message || "preview job invalid" });
+      log.error("[preview-job-endpoint] preview job failed:", err?.message || err);
+      send(res, 500, { ok: false, error: "preview job failed" });
       return;
     }
 

@@ -36,6 +36,8 @@ module.exports = {
       blocked: "Bible chặn request (HTTP 403)",
       notFound: "Không tìm thấy trên Bible",
     },
+    // Last-resort reply when a command or button throws an unhandled error.
+    genericError: "Có lỗi xảy ra khi xử lý lệnh. Cậu thử lại giúp tớ nhé.",
   },
   "local-sync-discord": {
     title: "Local Sync Console",
@@ -162,7 +164,8 @@ module.exports = {
     footer: "/raid-language để đổi lại bất cứ lúc nào",
   },
   "raid-log": {
-    waiting: "⏳ Đã nhận yêu cầu. Artist đang xử lý log và chuẩn bị ảnh; nếu có lượt đang render, yêu cầu của cậu sẽ chờ đến lượt. Bảng sẽ tự cập nhật khi xong.",
+    waiting: "⏳ **Đã nhận yêu cầu** · Artist đang xử lý…",
+    waitingHint: "Bảng sẽ tự cập nhật khi xong. Nếu có lượt khác đang render, cậu chờ một chút nhé.",
     picker: {
       title: "Raid log",
       withRoster: "Cậu muốn xem log của ai? Chọn nhân vật trong roster bên dưới, hoặc tìm bất kỳ tên nào ở NA.",

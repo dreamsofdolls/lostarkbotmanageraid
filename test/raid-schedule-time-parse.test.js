@@ -105,3 +105,15 @@ test("day-anchor without a time, impossible dates, and bad weekdays are null", (
 test("relative tolerates surrounding spaces", () => {
   assert.equal(parseStartTime(" + 2h ", "vi", NOW).getTime(), Date.UTC(2026, 4, 29, 7, 0));
 });
+
+test("date with an explicit past year, a past instant, or a 3-digit year is null", () => {
+  assert.equal(parseStartTime("5/6/25 20:00", "vi", NOW), null);      // 2025 already passed
+  assert.equal(parseStartTime("5/6/2025 20:00", "vi", NOW), null);
+  assert.equal(parseStartTime("5/6/202 20:00", "vi", NOW), null);     // typo'd year, not year 202
+  assert.equal(parseStartTime("29/5/2026 08:00", "vi", NOW), null);   // earlier today (12:00 VN now)
+  assert.equal(parseStartTime("29/5/2026 12:00", "vi", NOW), null);   // exactly now
+  // Future explicit years still work, 2-digit or 4-digit.
+  assert.equal(parseStartTime("5/6/26 20:00", "vi", NOW).getTime(), Date.UTC(2026, 5, 5, 13, 0));
+  assert.equal(parseStartTime("29/5/2026 20:00", "vi", NOW).getTime(), Date.UTC(2026, 4, 29, 13, 0));
+  assert.equal(parseStartTime("5/6/2027 20:00", "vi", NOW).getTime(), Date.UTC(2027, 5, 5, 13, 0));
+});

@@ -215,9 +215,10 @@ test("ensureSharedTasks initializes missing account-level shared task list", () 
 });
 
 test("parseSharedTaskExpiresAt accepts YYYY-MM-DD and rejects invalid dates", () => {
+  // No language falls back to vi: the typed day ends at 23:59:59.999 UTC+7.
   assert.equal(
     parseSharedTaskExpiresAt("2026-05-20"),
-    Date.UTC(2026, 4, 20, 23, 59, 59, 999)
+    Date.UTC(2026, 4, 20, 16, 59, 59, 999)
   );
   assert.ok(Number.isNaN(parseSharedTaskExpiresAt("2026-02-31")));
   assert.ok(Number.isNaN(parseSharedTaskExpiresAt("20-05-2026")));

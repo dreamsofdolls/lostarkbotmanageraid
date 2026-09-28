@@ -8,7 +8,10 @@ const {
 } = require("../bot/handlers/raid-check/views/sync-ui");
 const {
   clearUserLanguageCache,
+  t: translate,
 } = require("../bot/services/i18n");
+const { EmbedBuilder, embedLength } = require("discord.js");
+const { UI } = require("../bot/utils/raid/common/shared");
 
 class FakeEmbedBuilder {
   constructor() { this.fields = []; }
@@ -318,4 +321,40 @@ test("sync report adds a counter field only when that outcome happened", async (
   assert.match(embed.title, /^⚠️ /);
   assert.match(embed.description, /failed to sync/);
   assert.match(embed.description, /2\*\* users were skipped/);
+});
+
+// `count` characters with eight new gates each, as a large Sync reports them.
+function buildSyncDelta(count) {
+  const labels = ["Act 4 Hard", "Kazeros Hard", "Serca Nightmare", "Horizon Level 3"];
+  return Array.from({ length: count }, (_, index) => ({
+    charName: `Charactername${String(index).padStart(3, "0")}`,
+    applied: Array.from({ length: 8 }, (_, gate) => ({
+      raidLabel: labels[Math.floor(gate / 2)],
+      gate: `G${(gate % 2) + 1}`,
+    })),
+  }));
+}
+
+test("sync DM keeps its description under Discord's limit and counts the characters left out", () => {
+  const ui = createSyncUi({ EmbedBuilder, UI });
+  for (const lang of ["vi", "en", "jp"]) {
+    const json = ui.buildRaidCheckSyncDMEmbed(null, buildSyncDelta(60), lang).toJSON();
+    const shown = json.description.match(/Charactername\d{3}/g).length;
+
+    assert.ok(json.description.length <= 4096, `${lang}: ${json.description.length}`);
+    assert.ok(embedLength(json) <= 6000);
+    assert.ok(shown > 0 && shown < 60, `${lang}: ${shown} shown`);
+    assert.ok(json.description.includes(
+      translate("raid-status.embed.moreCharacters", lang, { n: 60 - shown })
+    ));
+    assert.ok(json.description.endsWith(translate("raid-check.syncDm.footer", lang)));
+  }
+});
+
+test("sync DM lists every character when they fit", () => {
+  const ui = createSyncUi({ EmbedBuilder, UI });
+  const json = ui.buildRaidCheckSyncDMEmbed(null, buildSyncDelta(3), "en").toJSON();
+
+  assert.equal(json.description.match(/Charactername\d{3}/g).length, 3);
+  assert.doesNotMatch(json.description, /more characters/);
 });

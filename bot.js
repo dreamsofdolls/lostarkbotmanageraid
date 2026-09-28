@@ -29,6 +29,7 @@ const {
   handleRaidChannelMessage,
   notifyLocalSyncPreviewReady,
   loadMonitorChannelCache,
+  getCachedMonitorChannelId,
   startRaidChannelScheduler,
   startAutoManageDailyScheduler,
   startMaintenanceScheduler,
@@ -37,6 +38,7 @@ const {
   startRaidScheduleAutoLockScheduler,
 } = raidCommands;
 const User = require("./bot/models/user");
+const GuildConfig = require("./bot/models/guildConfig");
 const { startWeeklyResetJob } = require("./bot/services/raid/schedulers/weekly-reset");
 const { bootstrapClassEmoji, bootstrapArtistEmoji } = require("./bot/services/discord/emoji-bootstrap");
 const { registerSlashCommandsOnBoot } = require("./bot/app/slash-command-registration");
@@ -54,9 +56,12 @@ const {
   createArtistPingResponder,
 } = require("./bot/services/raid/artist-ping/ping-responder");
 const {
+  isClaimedByRaidParser,
+} = require("./bot/services/raid/artist-ping/ping-classify");
+const {
   parseRaidMessage,
 } = require("./bot/services/raid/channel-monitor/channel-monitor-parser");
-const { getUserLanguage } = require("./bot/services/i18n");
+const { getUserLanguage, getGuildLanguage } = require("./bot/services/i18n");
 const {
   buildRuntimeInstanceIdentity,
 } = require("./bot/services/runtime/instance-identity");
@@ -215,16 +220,23 @@ async function startBot() {
         // as someone talking to Artist.
         if (!message.mentions?.users?.has(client.user.id)) return;
 
-        const stripped = String(message.content || "").replace(/<@!?\d+>/g, " ");
         const lang = await getUserLanguage(message.author.id, { UserModel: User });
+        // Her sleep window follows the guild's clock, like her bedtime posts.
+        const guildLang = await getGuildLanguage(message.guildId, { GuildConfigModel: GuildConfig });
         const reply = artistPing.buildPingReply({
           content: message.content,
           userId: message.author.id,
           mentionsArtist: true,
           // The parser owns raid updates; a clear that happens to tag Artist
-          // must be recorded, not chatted at.
-          parsesAsRaidCommand: Boolean(parseRaidMessage(stripped)),
+          // must be recorded, not chatted at. A parse error is only answered
+          // (with a hint) in the monitored raid channel, the same check
+          // handleRaidChannelMessage applies above.
+          parsesAsRaidCommand: isClaimedByRaidParser({
+            parsed: parseRaidMessage(message.content),
+            inRaidChannel: getCachedMonitorChannelId(message.guildId) === message.channelId,
+          }),
           lang,
+          guildLang,
         });
         if (reply) await message.reply({ content: reply });
       } catch (error) {
@@ -239,6 +251,8 @@ async function startBot() {
   const router = createRaidInteractionRouter({
     MessageFlags,
     instanceIdentity: runtimeInstanceIdentity,
+    // Read for the language of the generic error reply.
+    UserModel: User,
     // Pass the command facade directly so newly exported interaction
     // handlers cannot be forgotten in a second hand-maintained list.
     handlers: raidCommands,

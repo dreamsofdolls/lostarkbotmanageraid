@@ -2,12 +2,16 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const {
+  EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
+  UserSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags,
+} = require("discord.js");
 
 const { UI } = require("../bot/utils/raid/common/shared");
 const {
   createRaidScheduleAutoLockService,
 } = require("../bot/services/raid/schedule/lifecycle/auto-lock");
+const { createRaidScheduleCommand } = require("../bot/handlers/raid/schedule");
 
 function makeEvent(extra = {}) {
   return {
@@ -93,6 +97,63 @@ test("auto-lock tick flips due open events and refreshes the board", async () =>
     (component) => component.data.custom_id === "rse:join:abcdef123456",
   );
   assert.equal(joinButton.data.disabled, true);
+});
+
+test("auto-lock keeps the lead's board switcher when it refreshes the board", async () => {
+  const due = makeEvent();
+  const other = makeEvent({ _id: "abcdef654321", messageId: "m2", startAt: new Date(Date.UTC(2026, 4, 30, 13, 0)) });
+  const boards = [due, other];
+  let editedPayload = null;
+
+  // Serves both the tick's due-event scan (find().limit()) and the board
+  // payload's owned-board lookup (find().sort().lean()).
+  const RaidEvent = {
+    find: (query) => {
+      const hits = query.autoLockAtStart ? [due] : boards.filter((b) => query.status.$in.includes(b.status));
+      return {
+        limit: async () => hits,
+        sort() { return this; },
+        lean: async () => hits,
+      };
+    },
+    findOneAndUpdate: async () => {
+      due.status = "locked";
+      return due;
+    },
+  };
+  const GuildConfig = { findOne: () => ({ lean: async () => null }) };
+  const { boardPayload } = createRaidScheduleCommand({
+    EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
+    UserSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags,
+    UI, User: {}, GuildConfig, RaidEvent,
+    isManagerId: () => true,
+    applyRaidSetBatchForDiscordId: async () => [],
+  });
+  const client = {
+    channels: {
+      fetch: async () => ({
+        messages: { fetch: async () => ({ edit: async (payload) => { editedPayload = payload; } }) },
+      }),
+    },
+  };
+
+  const service = createRaidScheduleAutoLockService({
+    RaidEvent,
+    GuildConfig,
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    UI,
+    boardPayload,
+  });
+  await service.runRaidScheduleAutoLockTick(client, new Date(Date.UTC(2026, 4, 29, 13, 1)));
+
+  assert.ok(editedPayload);
+  const customIds = editedPayload.components.map((row) => row.components[0].data.custom_id);
+  assert.equal(editedPayload.components.length, 3);
+  assert.equal(customIds[2], "rse:showpick:abcdef123456");
+  assert.equal(editedPayload.components[0].components[0].data.disabled, true);
 });
 
 test("auto-lock scheduler skips an interval while the previous tick is running", async () => {
