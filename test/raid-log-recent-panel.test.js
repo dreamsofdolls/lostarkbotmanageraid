@@ -3,6 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { fixture, captures, control, noticeText, withClassIcons } = require("./helpers/raid-log-fixture");
+const { createRaidLogCatalog } = require("../bot/services/raid-log/catalog");
 
 const AERO = "<:aeromancer:111111111111111111>";
 const HOUR = 3_600_000;
@@ -91,6 +92,26 @@ test("a fight whose log is gone or whose character left the roster is refused wi
   await f.click(f.owner("recent", "1"));
   assert.match(noticeText(f.events.at(-1)[1]), /không còn trong roster/);
   assert.equal(captures(f).length, 0);
+});
+
+test("a Recent selection moved to Bible page 2 opens the exact log and selects its menu page", async () => {
+  const reads = [];
+  const rows = Array.from({ length: 26 }, (_, i) => ({
+    id: `log${i}`, name: "Qiylyn", boss: "Death Incarnate Kazeros", timestamp: NOW - i * HOUR, difficulty: "Hard",
+  }));
+  const logCatalog = createRaidLogCatalog({ client: {
+    fetchBibleCharacterProfileWithLimiter: async () => ({ name: "Qiylyn", className: "Aeromancer" }),
+    fetchBibleLogsWithLimiter: async ({ page }) => { reads.push(page); return rows.slice((page - 1) * 25, page * 25); },
+  } });
+  const f = fixture({ accounts, logCatalog });
+  f.recentResult = { ...RECENT, entries: [entry("log25", "Qiylyn", "Aeromancer", NOW - 25 * HOUR)] };
+  await f.open();
+  await f.click(f.owner("recent_open"));
+  await f.click(f.owner("recent", "0"));
+  assert.deepEqual(reads, [1, 2]);
+  assert.equal(captures(f).at(-1)[1], "https://lostark.bible/logs/log25");
+  assert.equal(control(f, "log").options.find(option => option.default).value, "log25");
+  assert.equal(control(f, "log").options.some(option => option.value === "__prev"), true);
 });
 
 test("when Bible fails for the whole roster the previous card comes back with a notice", async () => {

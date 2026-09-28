@@ -5,7 +5,7 @@ const { getUserLanguage } = require("../../services/i18n");
 const { parseRaidLogSource, normalizeCharacterName } = require("../../services/raid-log/source");
 const { RaidLogError, raidLogErrorCode } = require("../../services/raid-log/errors");
 const { MAX_IMAGE_BYTES } = require("../../services/raid-log/capture");
-const { buildLogComponents, buildLogEmbeds } = require("./log-view");
+const { buildLogComponents, buildLogEmbeds, PAGE_SIZE } = require("./log-view");
 const { tabsForPlayer } = require("../../services/raid-log/tabs");
 const { rosterChoices, pickerOptions, buildLogPicker, buildLogSearchModal } = require("./log-picker");
 const { buildRaidLogNotice, buildRevokedNotice } = require("./log-notices");
@@ -120,12 +120,13 @@ function createRaidLogCommand({
   // Opens the panel on the character's newest log, or on logId when given.
   async function openLog(interaction, state, name, logId) {
     const source = parseRaidLogSource({ character: name });
-    const catalog = await logCatalog.open(source.character);
+    const catalog = await logCatalog.open(source.character, { logId });
     const selected = logId ? catalog.logs.find(entry => entry.id === logId) : catalog.logs[0];
     if (!selected) throw new RaidLogError("invalid_selection");
+    const logIndex = catalog.logs.filter(entry => entry.raidKey === selected.raidKey).findIndex(entry => entry.id === selected.id);
     const next = {
       ...state, stage: "log", revision: state.revision + 1, expires: now() + sessionMs, catalog, selected,
-      tab: "damage", player: null, bracketed: true, raidPage: 0, logPage: 0, choices: [], recent: null,
+      tab: "damage", player: null, bracketed: true, raidPage: 0, logPage: Math.floor(logIndex / PAGE_SIZE), choices: [], recent: null,
     };
     await render(interaction, next);
     Object.assign(state, next);

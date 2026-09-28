@@ -53,15 +53,20 @@ function createRaidLogCatalog({ bibleLimiter, client = createBibleClient({ bible
   const read = (profile, page) => client.fetchBibleLogsWithLimiter({
     serial: profile.sn, cid: profile.cid, rid: profile.rid, className: profile.className, page,
   });
-  return {
-    async open(input) {
+  const catalog = {
+    async open(input, { logId } = {}) {
       const { character } = parseRaidLogSource({ character: input });
       const profile = await client.fetchBibleCharacterProfileWithLimiter(character);
       if (normalizeCharacterName(profile.name) !== normalizeCharacterName(character)) throw new RaidLogError("character_mismatch");
       const rows = await read(profile, 1);
       const logs = mergeLogs([], normalizeCatalogLogs(rows, profile.name));
       if (!logs.length) throw new RaidLogError("no_logs");
-      return { profile, logs, page: 1, hasMore: rows.length === 25 };
+      let result = { profile, logs, page: 1, hasMore: rows.length === 25 };
+      // A Recent selection may have moved beyond page 1 since that list was read.
+      while (logId && !result.logs.some(entry => entry.id === logId) && result.hasMore) {
+        result = await catalog.more(result);
+      }
+      return result;
     },
     // Do this before serving even a cached image. A newly private character
     // must revoke the panel instead of continuing from a stale screenshot.
@@ -87,6 +92,7 @@ function createRaidLogCatalog({ bibleLimiter, client = createBibleClient({ bible
         hasMore: rows.length === 25 && page < MAX_LOG_PAGES && logs.length < MAX_LOG_PAGES * 25 && logs.length > catalog.logs.length };
     },
   };
+  return catalog;
 }
 
 module.exports = { createRaidLogCatalog, normalizeCatalogLogs, mergeLogs, MAX_LOG_PAGES };

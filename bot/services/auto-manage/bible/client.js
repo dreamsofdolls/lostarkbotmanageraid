@@ -13,8 +13,9 @@ function defaultFetch(...args) {
   return fetch(...args);
 }
 
-function createRequestSignal() {
-  return AbortSignal.timeout(BIBLE_REQUEST_TIMEOUT_MS);
+function createRequestSignal(signal) {
+  const timeout = AbortSignal.timeout(BIBLE_REQUEST_TIMEOUT_MS);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
 /**
@@ -23,7 +24,7 @@ function createRequestSignal() {
  * data. These IDs are required to call the logs API but only need to be
  * fetched once per character - caller caches them on the character doc.
  */
-async function fetchBibleCharacterPage(charName, { fetchImpl = defaultFetch } = {}) {
+async function fetchBibleCharacterPage(charName, { fetchImpl = defaultFetch, signal } = {}) {
   const url = `https://lostark.bible/character/${BIBLE_REGION}/${encodeURIComponent(charName)}/roster`;
   const res = await fetchImpl(url, {
     headers: {
@@ -33,7 +34,7 @@ async function fetchBibleCharacterPage(charName, { fetchImpl = defaultFetch } = 
     // Timeout guards against bible hanging the connection: without it, a
     // stuck fetch holds the bible limiter slot and the caller's in-flight
     // guard indefinitely.
-    signal: createRequestSignal(),
+    signal: createRequestSignal(signal),
   });
   if (!res.ok) {
     throw createBibleHttpError(
@@ -78,7 +79,7 @@ async function fetchBibleCharacterProfile(charName, options) {
  */
 async function fetchBibleCharacterLogs(
   { serial, cid, rid, className, page = 1 },
-  { fetchImpl = defaultFetch } = {}
+  { fetchImpl = defaultFetch, signal } = {}
 ) {
   const url = "https://lostark.bible/api/character/logs";
   const res = await fetchImpl(url, {
@@ -96,7 +97,7 @@ async function fetchBibleCharacterLogs(
       page,
     }),
     // Same hang-protection rationale as fetchBibleCharacterMeta().
-    signal: createRequestSignal(),
+    signal: createRequestSignal(signal),
   });
   if (!res.ok) {
     // Read body so callers can distinguish "Logs not enabled" (private char,
@@ -137,19 +138,28 @@ function createBibleClient({ bibleLimiter, fetchImpl = defaultFetch }) {
     throw new Error("[auto-manage-bible-client] bibleLimiter with run() is required");
   }
 
-  function fetchBibleLogsWithLimiter(args) {
-    return bibleLimiter.run(() => fetchBibleCharacterLogs(args, { fetchImpl }));
+  async function runRequest(request, { signal } = {}) {
+    signal?.throwIfAborted();
+    return bibleLimiter.run(() => {
+      // A caller can expire while its request waits behind other Bible work.
+      signal?.throwIfAborted();
+      return request({ fetchImpl, signal });
+    });
+  }
+
+  function fetchBibleLogsWithLimiter(args, options) {
+    return runRequest(request => fetchBibleCharacterLogs(args, request), options);
   }
 
   // Route the meta HTML scrape through the same limiter the logs API uses so a
   // cold-cache sync (N chars, each needing both meta + logs) can't double
   // bible's effective concurrency.
-  function fetchBibleCharacterMetaWithLimiter(charName) {
-    return bibleLimiter.run(() => fetchBibleCharacterMeta(charName, { fetchImpl }));
+  function fetchBibleCharacterMetaWithLimiter(charName, options) {
+    return runRequest(request => fetchBibleCharacterMeta(charName, request), options);
   }
 
-  function fetchBibleCharacterProfileWithLimiter(charName) {
-    return bibleLimiter.run(() => fetchBibleCharacterProfile(charName, { fetchImpl }));
+  function fetchBibleCharacterProfileWithLimiter(charName, options) {
+    return runRequest(request => fetchBibleCharacterProfile(charName, request), options);
   }
 
   /**

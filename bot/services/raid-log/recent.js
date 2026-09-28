@@ -15,7 +15,7 @@ const { mapWithConcurrency } = require("../auto-manage/runtime/support/helpers")
 const { isSupportClass } = require("../../models/Class");
 const { getCharacterName, getCharacterClass } = require("../../utils/raid/common/shared");
 const { normalizeCatalogLogs } = require("./catalog");
-const { raidLogErrorCode } = require("./errors");
+const { RaidLogError, raidLogErrorCode } = require("./errors");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_RECENT_CHARACTERS = 24;
@@ -34,6 +34,7 @@ function createRecentRaidLogs({
   ttlMs = 5 * 60_000, deadlineMs = 45_000, log = console,
 }) {
   const cache = new Map();
+  const pending = new Map();
 
   function candidatesOf(accounts = []) {
     const characters = accounts.flatMap(account => (account.characters || [])
@@ -42,14 +43,24 @@ function createRecentRaidLogs({
     return { chosen: characters.slice(0, MAX_RECENT_CHARACTERS), capped: characters.length > MAX_RECENT_CHARACTERS };
   }
 
-  async function logsOf(character) {
-    const name = String(getCharacterName(character)).trim();
-    let { bibleSerial: serial, bibleCid: cid, bibleRid: rid } = character;
-    let className = getCharacterClass(character);
+  function snapshot(character) {
+    const disabledAt = new Date(character.publicLogDisabledAt || 0).getTime();
+    return {
+      name: String(getCharacterName(character)).trim(), className: getCharacterClass(character),
+      serial: character.bibleSerial, cid: character.bibleCid, rid: character.bibleRid,
+      private: Boolean(character.publicLogDisabled && now() - disabledAt < DAY_MS),
+    };
+  }
+
+  async function logsOf(character, signal) {
+    const { name } = character;
+    let { serial, cid, rid, className } = character;
+    signal.throwIfAborted();
     if (!serial || !cid || !rid) {
-      ({ sn: serial, cid, rid, className } = await client.fetchBibleCharacterProfileWithLimiter(name));
+      ({ sn: serial, cid, rid, className } = await client.fetchBibleCharacterProfileWithLimiter(name, { signal }));
     }
-    const rows = await client.fetchBibleLogsWithLimiter({ serial, cid, rid, className, page: 1 });
+    signal.throwIfAborted();
+    const rows = await client.fetchBibleLogsWithLimiter({ serial, cid, rid, className, page: 1 }, { signal });
     return normalizeCatalogLogs(rows, name).map(entry => ({ ...entry, className, support: isSupportClass(className) }));
   }
 
@@ -58,30 +69,51 @@ function createRecentRaidLogs({
    * @param {object[]} accounts the owner's saved accounts, read fresh
    * @param {{ refresh?: boolean }} [options]
    * @returns {Promise<{ entries: object[], private: string[], characters: number, logs: number, capped: boolean, timedOut: boolean }>}
-   *   rejects with Bible's error, a rate limit first, when no character could be read and some failed
+   *   rejects when no logs were found and some reads failed; incomplete results are not cached
    */
   async function load(ownerId, accounts, { refresh = false } = {}) {
-    const cached = cache.get(ownerId);
-    if (!refresh && cached && cached.expires > now()) return cached.value;
     const { chosen, capped } = candidatesOf(accounts);
+    const candidates = chosen.map(snapshot);
+    const key = JSON.stringify({ candidates, capped });
+    for (const [id, entry] of cache) if (entry.expires <= now()) cache.delete(id);
+    const current = pending.get(ownerId);
+    if (current?.key === key && (!refresh || current.refresh)) return current.promise;
+    const cached = cache.get(ownerId);
+    if (!refresh && cached?.key === key) return cached.value;
+    cache.delete(ownerId);
+    const request = { key, refresh };
+    pending.set(ownerId, request);
+    request.promise = gather(candidates, capped).then(({ value, complete }) => {
+      // Only the newest request for this roster may publish its result.
+      if (complete && pending.get(ownerId) === request) cache.set(ownerId, { key, value, expires: now() + ttlMs });
+      return value;
+    }).finally(() => {
+      if (pending.get(ownerId) === request) pending.delete(ownerId);
+    });
+    return request.promise;
+  }
+
+  async function gather(candidates, capped) {
     const privateNames = [];
     const gathered = [];
     const failures = [];
     let characters = 0;
-    let stopped = false;
-    const work = mapWithConcurrency(chosen, CONCURRENCY, async character => {
-      // Characters still waiting their turn are skipped once the card is built.
-      if (stopped) return;
-      const name = String(getCharacterName(character)).trim();
-      const disabledAt = character.publicLogDisabledAt ? new Date(character.publicLogDisabledAt).getTime() : 0;
-      if (character.publicLogDisabled && now() - disabledAt < DAY_MS) {
+    const controller = new AbortController();
+    const { signal } = controller;
+    const work = mapWithConcurrency(candidates, CONCURRENCY, async character => {
+      if (signal.aborted) return;
+      const { name } = character;
+      if (character.private) {
         privateNames.push(name);
         return;
       }
       try {
-        gathered.push(...await logsOf(character));
+        const logs = await logsOf(character, signal);
+        if (signal.aborted) return;
+        gathered.push(...logs);
         characters += 1;
       } catch (error) {
+        if (signal.aborted) return;
         if (isPublicLogDisabledError(error)) {
           privateNames.push(name);
         } else {
@@ -91,24 +123,27 @@ function createRecentRaidLogs({
       }
     });
     let timer;
-    const timedOut = await Promise.race([
-      work.then(() => false),
-      new Promise(resolve => { timer = setTimeout(() => resolve(true), deadlineMs); }),
-    ]);
-    stopped = true;
-    clearTimeout(timer);
-    // Nothing read while Bible failed says nothing about the roster; the error
-    // becomes the notice card and is not cached.
-    if (!characters && failures.length) {
+    let timedOut;
+    try {
+      timedOut = await Promise.race([
+        work.then(() => false),
+        new Promise(resolve => { timer = setTimeout(() => {
+          controller.abort(new DOMException("Recent logs deadline exceeded", "TimeoutError"));
+          resolve(true);
+        }, deadlineMs); }),
+      ]);
+    } finally { clearTimeout(timer); }
+    // An empty successful read cannot establish that the failed characters have no logs.
+    if (!gathered.length && failures.length) {
       throw failures.find(error => raidLogErrorCode(error) === "rate_limited") || failures[0];
     }
+    if (!gathered.length && timedOut) throw new RaidLogError("timeout");
     const entries = [...gathered].sort((a, b) => b.timestamp - a.timestamp);
     const value = {
       entries: entries.slice(0, MAX_ENTRIES), private: [...privateNames].sort((a, b) => a.localeCompare(b)),
       characters, logs: entries.length, capped, timedOut,
     };
-    cache.set(ownerId, { value, expires: now() + ttlMs });
-    return value;
+    return { value, complete: !timedOut && failures.length === 0 };
   }
 
   /**

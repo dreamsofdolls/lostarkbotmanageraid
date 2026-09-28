@@ -29,14 +29,15 @@ function logEntry(id, raidKey = "kazeros", timestamp = 100) {
 }
 
 function fixture({ lang = "vi", accounts = [], logs = [logEntry("new"), logEntry("old", "kazeros", 90), logEntry("serca", "serca", 80)],
-  profile = { name: "Qiylyn" }, hasMore = false, sessionMs, maxSessions, now, transformCapture = result => result } = {}) {
+  profile = { name: "Qiylyn" }, hasMore = false, sessionMs, maxSessions, now, transformCapture = result => result,
+  logCatalog: catalogOverride } = {}) {
   const events = [];
   let payload, modal, failure, verifyFailure, beforeVerify, beforeOpen, loadFailure, recentResult;
   let failEdit = false;
   let userDoc = { language: lang, accounts };
   const edits = [];
   const catalog = { profile, logs, page: 1, hasMore };
-  const logCatalog = {
+  const logCatalog = catalogOverride || {
     open: async name => { events.push(["open", name]); await beforeOpen?.(); if (verifyFailure) throw verifyFailure; return catalog; },
     verify: async () => { events.push("verify"); await beforeVerify?.(); if (verifyFailure) throw verifyFailure; },
     more: async current => { events.push("more"); return { ...current, hasMore: false, logs: [...current.logs, logEntry("extra", "horizon", 70)] }; },

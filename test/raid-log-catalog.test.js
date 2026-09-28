@@ -65,6 +65,53 @@ test("empty or mismatching catalog never becomes a selectable panel", async () =
   await assert.rejects(createRaidLogCatalog({ client }).open("Qiylyn"), { code: "no_logs" });
 });
 
+test("opening an exact Recent log searches later pages, stopping as soon as it is found", async () => {
+  const reads = [];
+  const catalog = createRaidLogCatalog({ client: {
+    fetchBibleCharacterProfileWithLimiter: async () => ({ name: "Qiylyn" }),
+    fetchBibleLogsWithLimiter: async ({ page }) => {
+      reads.push(page);
+      return page === 1 ? Array.from({ length: 25 }, (_, i) => row(`a${i}`, undefined, 100 - i)) : [row("target", undefined, 1)];
+    },
+  } });
+  const first = await catalog.open("Qiylyn", { logId: "a1" });
+  assert.equal(first.page, 1);
+  assert.deepEqual(reads, [1]);
+  reads.length = 0;
+  const found = await catalog.open("Qiylyn", { logId: "target" });
+  assert.equal(found.page, 2);
+  assert.equal(found.logs.at(-1).id, "target");
+  assert.deepEqual(reads, [1, 2]);
+});
+
+test("exact-log lookup preserves page, duplicate and privacy guards", async () => {
+  const reads = [];
+  let mode = "unique";
+  const privateError = Object.assign(new Error("Logs not enabled"), { status: 403 });
+  const catalog = createRaidLogCatalog({ client: {
+    fetchBibleCharacterProfileWithLimiter: async () => ({ name: "Qiylyn" }),
+    fetchBibleLogsWithLimiter: async ({ page }) => {
+      reads.push(page);
+      if (mode === "private" && page === 2) throw privateError;
+      if (mode === "empty" && page === 2) return [];
+      return Array.from({ length: 25 }, (_, i) => row(`p${mode === "repeat" ? 1 : page}a${i}`, undefined, 1000 - page * 25 - i));
+    },
+  } });
+  const bounded = await catalog.open("Qiylyn", { logId: "missing" });
+  assert.equal(bounded.page, 10);
+  assert.equal(bounded.logs.length, 250);
+  assert.equal(bounded.hasMore, false);
+  assert.equal(reads.length, 10);
+  for (mode of ["repeat", "empty"]) {
+    reads.length = 0;
+    const missing = await catalog.open("Qiylyn", { logId: "missing" });
+    assert.equal(missing.hasMore, false);
+    assert.deepEqual(reads, [1, 2]);
+  }
+  mode = "private";
+  await assert.rejects(catalog.open("Qiylyn", { logId: "missing" }), error => error === privateError);
+});
+
 test("repeated source pages stop loading without claiming extra history, and history stops at its page budget", async () => {
   const rows = Array.from({ length: 25 }, (_, i) => row(`a${i}`, undefined, 100 - i));
   let reads = 0;

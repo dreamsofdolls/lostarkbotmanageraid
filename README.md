@@ -137,10 +137,15 @@ day. It shows the ten newest fights with parse, DPS and nDPS, or a support's two
 badges, AP/Brand/Identity/T uptime and rCon, and lists characters whose logs are
 private. A menu opens any of the newest 25 in the log panel after checking that
 the character is still in the caller's roster. Results are kept for five minutes
-per caller; **🔄 Refresh** asks Bible again, and a gathering that passes 45 seconds
-shows what arrived in time. Characters are asked two at a time, as Auto-sync does,
-and if Bible fails for every character the previous card comes back with a notice
-instead of an empty result.
+per caller and invalidated when the candidate roster, Bible IDs or known private
+status changes. Concurrent panels share a pending read; **🔄 Refresh** starts a
+fresh read whose cache cannot be overwritten by an older load. A gathering that
+passes 45 seconds cancels its HTTP work and shows any logs that arrived in time;
+expired work still queued in the shared limiter cannot start an HTTP request.
+Characters are asked two at a time, as Auto-sync does. If no logs arrived while
+any reads failed or timed out, the previous card comes back with a notice instead
+of an empty result. Partial results are not cached. A selected Recent log that
+has moved past page 1 is looked up within the existing 250-log history limit.
 
 Every problem is answered with a notice card that only the clicker sees: what
 happened and what to do next. A capture that fails or times out links the original
