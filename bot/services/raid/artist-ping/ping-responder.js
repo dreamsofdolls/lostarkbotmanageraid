@@ -14,28 +14,12 @@
 
 const { classifyArtistPing } = require("./ping-classify");
 const { tPick } = require("../../i18n");
+const { getCurrentVNHour } = require("../../../utils/raid/schedule/artist-clock");
 
 const DEFAULT_COOLDOWN_MS = 60_000;
 // Two answers per window: the real one, then one `spam` nudge. Anything beyond
 // that is silence, otherwise the nudge itself becomes the spam.
 const MAX_REPLIES_PER_WINDOW = 2;
-
-const VIETNAM_TIME_ZONE = "Asia/Ho_Chi_Minh";
-
-/**
- * Current hour (0-23) in Vietnam. Artist's sleep window is expressed in VN
- * time to stay consistent with the bedtime and reset announcements.
- * @param {Date} [now]
- * @returns {number}
- */
-function vietnamHourNow(now = new Date()) {
-  const value = new Intl.DateTimeFormat("en-US", {
-    timeZone: VIETNAM_TIME_ZONE,
-    hour: "2-digit",
-    hourCycle: "h23",
-  }).format(now);
-  return Number(value);
-}
 
 /**
  * Build the ping responder.
@@ -43,14 +27,15 @@ function vietnamHourNow(now = new Date()) {
  * @param {Object} [deps]
  * @param {number} [deps.cooldownMs=60000] - per-user quiet window
  * @param {() => number} [deps.clock] - epoch ms source, injected for tests
- * @param {(now?: Date) => number} [deps.getVietnamHour]
+ * @param {(now?: Date) => number} [deps.getVietnamHour] - current hour (0-23)
+ *   in Vietnam; the classifier moves it onto the guild's clock
  * @param {(key: string, lang: string, vars: Object) => string} [deps.translate]
  * @returns {{buildPingReply: Function, resetCooldowns: Function}}
  */
 function createArtistPingResponder({
   cooldownMs = DEFAULT_COOLDOWN_MS,
   clock = () => Date.now(),
-  getVietnamHour = vietnamHourNow,
+  getVietnamHour = getCurrentVNHour,
   translate = tPick,
 } = {}) {
   // userId -> { windowStart, replies }
@@ -74,6 +59,8 @@ function createArtistPingResponder({
    * @param {boolean} [input.fromBot]
    * @param {boolean} [input.parsesAsRaidCommand]
    * @param {string} [input.lang='vi']
+   * @param {string} [input.guildLang='vi'] - the guild's language, whose time
+   *   zone places Artist's sleep window
    * @returns {string|null} reply text, or null when Artist should stay quiet
    */
   function buildPingReply({
@@ -83,6 +70,7 @@ function createArtistPingResponder({
     fromBot = false,
     parsesAsRaidCommand = false,
     lang = "vi",
+    guildLang = "vi",
   }) {
     if (!mentionsArtist || fromBot || parsesAsRaidCommand || !userId) return null;
 
@@ -97,6 +85,7 @@ function createArtistPingResponder({
       parsesAsRaidCommand,
       recentlyAnswered: !firstInWindow,
       vietnamHour: getVietnamHour(new Date(now)),
+      guildLang,
     });
     if (!bucket) return null;
 

@@ -115,6 +115,23 @@ test("context outranks content", () => {
   assert.equal(ping("<@1> chào", { vietnamHour: 4, recentlyAnswered: true }), "spam");
 });
 
+test("the sleep window follows the guild's language time zone", () => {
+  // Bedtime and wake-up posts fire at 03:00 and 08:00 on the guild's clock.
+  // jp runs two hours ahead of Vietnam: 03:00-07:59 JST is 01:00-05:59 VN.
+  assert.equal(ping("<@1> chào", { vietnamHour: 1, guildLang: "jp" }), "sleeping");
+  assert.equal(ping("<@1> chào", { vietnamHour: 5, guildLang: "jp" }), "sleeping");
+  assert.equal(ping("<@1> chào", { vietnamHour: 6, guildLang: "jp" }), "greeting");
+  assert.equal(ping("<@1> chào", { vietnamHour: 0, guildLang: "jp" }), "greeting");
+  // en runs on UTC: 03:00-07:59 UTC is 10:00-14:59 VN.
+  assert.equal(ping("<@1> chào", { vietnamHour: 10, guildLang: "en" }), "sleeping");
+  assert.equal(ping("<@1> chào", { vietnamHour: 14, guildLang: "en" }), "sleeping");
+  assert.equal(ping("<@1> chào", { vietnamHour: 15, guildLang: "en" }), "greeting");
+  assert.equal(ping("<@1> chào", { vietnamHour: 4, guildLang: "en" }), "greeting");
+  // A Vietnamese guild keeps 03:00-07:59 Vietnam time.
+  assert.equal(ping("<@1> chào", { vietnamHour: 3, guildLang: "vi" }), "sleeping");
+  assert.equal(ping("<@1> chào", { vietnamHour: 8, guildLang: "vi" }), "greeting");
+});
+
 test("every returned bucket is declared in PING_BUCKETS", () => {
   const samples = [
     ping("<@1>"),

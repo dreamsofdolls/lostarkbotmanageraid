@@ -13,6 +13,12 @@
 
 "use strict";
 
+const {
+  ARTIST_QUIET_START_HOUR_VN,
+  ARTIST_QUIET_END_HOUR_VN,
+  getLangTzOffsetMinutes,
+} = require("../../../utils/raid/schedule/artist-clock");
+
 /** Every bucket the responder can render, in match order. */
 const PING_BUCKETS = Object.freeze([
   "spam",
@@ -84,6 +90,21 @@ function isClaimedByRaidParser({ parsed, inRaidChannel = false } = {}) {
 }
 
 /**
+ * Whether Artist is asleep at this Vietnam hour in a guild of this language.
+ * Her bedtime and wake-up posts fire at 03:00 and 08:00 on the clock of the
+ * guild's language (artist-clock), so the hour is moved onto that clock
+ * before the quiet window is checked. Every offset there is whole hours.
+ * @param {number} vietnamHour - 0-23
+ * @param {string} guildLang
+ * @returns {boolean}
+ */
+function isArtistAsleep(vietnamHour, guildLang) {
+  const shiftHours = (getLangTzOffsetMinutes(guildLang) - getLangTzOffsetMinutes("vi")) / 60;
+  const localHour = (vietnamHour + shiftHours + 24) % 24;
+  return localHour >= ARTIST_QUIET_START_HOUR_VN && localHour < ARTIST_QUIET_END_HOUR_VN;
+}
+
+/**
  * Decide which response bucket an @Artist mention falls into.
  *
  * @param {Object} input
@@ -95,8 +116,9 @@ function isClaimedByRaidParser({ parsed, inRaidChannel = false } = {}) {
  *   already claimed this message; chatter must not steal it
  * @param {boolean} [input.recentlyAnswered=false] - this user was answered
  *   inside the cooldown window
- * @param {number} [input.vietnamHour] - 0-23 local Vietnam hour; Artist sleeps
- *   03:00-07:59 to stay consistent with the bedtime announcement lore
+ * @param {number} [input.vietnamHour] - 0-23 local Vietnam hour
+ * @param {string} [input.guildLang='vi'] - the guild's language; Artist sleeps
+ *   03:00-07:59 in its time zone, matching her bedtime and wake-up posts there
  * @returns {string|null} a bucket from PING_BUCKETS, or null to stay silent
  */
 function classifyArtistPing({
@@ -106,6 +128,7 @@ function classifyArtistPing({
   parsesAsRaidCommand = false,
   recentlyAnswered = false,
   vietnamHour,
+  guildLang = "vi",
 } = {}) {
   if (!mentionsArtist || fromBot) return null;
   // The parser owns raid updates. `@Artist Act4 HM Soulrano` is a clear post
@@ -113,7 +136,7 @@ function classifyArtistPing({
   if (parsesAsRaidCommand) return null;
 
   if (recentlyAnswered) return "spam";
-  if (Number.isInteger(vietnamHour) && vietnamHour >= 3 && vietnamHour < 8) return "sleeping";
+  if (Number.isInteger(vietnamHour) && isArtistAsleep(vietnamHour, guildLang)) return "sleeping";
 
   // Strip the mention markup, then any leftover punctuation-only noise.
   const stripped = String(content || "")

@@ -38,6 +38,7 @@ const {
   startRaidScheduleAutoLockScheduler,
 } = raidCommands;
 const User = require("./bot/models/user");
+const GuildConfig = require("./bot/models/guildConfig");
 const { startWeeklyResetJob } = require("./bot/services/raid/schedulers/weekly-reset");
 const { bootstrapClassEmoji, bootstrapArtistEmoji } = require("./bot/services/discord/emoji-bootstrap");
 const { registerSlashCommandsOnBoot } = require("./bot/app/slash-command-registration");
@@ -60,7 +61,7 @@ const {
 const {
   parseRaidMessage,
 } = require("./bot/services/raid/channel-monitor/channel-monitor-parser");
-const { getUserLanguage } = require("./bot/services/i18n");
+const { getUserLanguage, getGuildLanguage } = require("./bot/services/i18n");
 const {
   buildRuntimeInstanceIdentity,
 } = require("./bot/services/runtime/instance-identity");
@@ -220,6 +221,8 @@ async function startBot() {
         if (!message.mentions?.users?.has(client.user.id)) return;
 
         const lang = await getUserLanguage(message.author.id, { UserModel: User });
+        // Her sleep window follows the guild's clock, like her bedtime posts.
+        const guildLang = await getGuildLanguage(message.guildId, { GuildConfigModel: GuildConfig });
         const reply = artistPing.buildPingReply({
           content: message.content,
           userId: message.author.id,
@@ -233,6 +236,7 @@ async function startBot() {
             inRaidChannel: getCachedMonitorChannelId(message.guildId) === message.channelId,
           }),
           lang,
+          guildLang,
         });
         if (reply) await message.reply({ content: reply });
       } catch (error) {
