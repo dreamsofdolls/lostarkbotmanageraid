@@ -22,6 +22,7 @@ This file now favors high-signal, user-visible changes and major backend fixes. 
 - When Bible's table has no CTR column, 🎯 MVP Counter names the STAG leader with `-` instead of "Không ai counter `0`".
 - Log gần đây keeps single spaces when a fight has no difficulty, and the jp player menu marks the looked-up character as 検索対象 rather than 検索中 ("searching").
 - `/raid-schedule-preview` create and Edit time no longer accept a start date that has already passed (`5/6/25 20:00`, or an earlier hour today with the year typed) or a three-digit year (`5/6/202`): they show the invalid-time notice instead of saving a board that locked within a minute and was deleted with its signups at the next weekly-reset sweep. A date without a year still rolls to next year.
+- Unlocking a `/raid-schedule-preview` board from Manage after its start time keeps it open; before, auto-lock locked it again within a minute. Unlocking such a board also turns its auto-lock off.
 
 ## 2026-09-27
 
