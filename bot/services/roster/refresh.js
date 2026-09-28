@@ -61,8 +61,16 @@ function createRosterRefreshService(deps) {
     buildFetchedRosterIndexes,
     findFetchedRosterMatchForCharacter,
     fetchRosterCharacters,
+    // discordId -> spacing between one roster's automatic refreshes (10
+    // minutes for managers, 2 hours otherwise). Without it every roster
+    // waits the regular 2 hours.
+    getRosterRefreshCooldownMs = null,
   } = deps;
   const staleAccountRefreshInFlight = new Map();
+  const cooldownFor = (userDoc) =>
+    (typeof getRosterRefreshCooldownMs === "function" && userDoc?.discordId
+      ? getRosterRefreshCooldownMs(userDoc.discordId)
+      : ROSTER_REFRESH_COOLDOWN_MS);
 
   // One normalized count map replaces repeated cross-account scans. The apply
   // phase mutates the same representation after each accepted rename so later
@@ -113,7 +121,7 @@ function createRosterRefreshService(deps) {
     return true;
   }
 
-  function hasStaleAccountRefreshes(userDoc, now = Date.now(), cooldownMs = ROSTER_REFRESH_COOLDOWN_MS) {
+  function hasStaleAccountRefreshes(userDoc, now = Date.now(), cooldownMs = cooldownFor(userDoc)) {
     const accounts = Array.isArray(userDoc?.accounts) ? userDoc.accounts : [];
     return accounts.some((account) => isAccountRefreshStale(account, now, cooldownMs));
   }
@@ -276,7 +284,8 @@ function createRosterRefreshService(deps) {
     }
 
     const now = Date.now();
-    const staleAccounts = userDoc.accounts.filter((account) => isAccountRefreshStale(account, now));
+    const cooldownMs = cooldownFor(userDoc);
+    const staleAccounts = userDoc.accounts.filter((account) => isAccountRefreshStale(account, now, cooldownMs));
     if (staleAccounts.length === 0) return [];
 
     const accountNameCounts = buildAccountNameCounts(userDoc.accounts);

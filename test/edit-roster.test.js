@@ -738,10 +738,39 @@ test("persistEditedRoster: throws when account vanished between command and Conf
     { charName: "X", className: "Bard", itemLevel: 1700, combatScore: "85000" },
   ];
 
+  // A coded error, so the handler shows the localized not-found notice
+  // rather than a hardcoded message inside the persist-failure card.
   await assert.rejects(
     () => factory.__test.persistEditedRoster(session, selected),
-    /không còn tồn tại/
+    { code: "ROSTER_NOT_FOUND" }
   );
+});
+
+test("edit-roster Confirm on a roster removed meanwhile shows the not-found notice in the user's language", async () => {
+  const { factory, docs } = makeFactory();
+  docs.set("user-1", {
+    discordId: "user-1",
+    accounts: [{ accountName: "Bravo", characters: [] }],
+  });
+  factory.__test.sessions.set("edit-sess-gone", {
+    ...makeEditSession({ accountName: "Alpha" }),
+    sessionId: "edit-sess-gone",
+    lang: "en",
+    chars: [{ charName: "X", className: "Bard", itemLevel: 1700, combatScore: "85000" }],
+    selectedIndices: new Set([0]),
+  });
+  const edits = [];
+  await factory.handleEditRosterButton({
+    user: { id: "user-1" },
+    customId: "edit-roster:confirm:edit-sess-gone",
+    deferUpdate: async () => {},
+    reply: async () => {},
+    editReply: async (payload) => { edits.push(payload); },
+  });
+
+  const embed = edits.at(-1).embeds[0].toJSON();
+  assert.equal(embed.title.includes(t("raid-edit-roster.notice.notFoundTitle", "en")), true);
+  assert.doesNotMatch(embed.description, /không còn tồn tại/);
 });
 
 test("persistEditedRoster: throws when user doc disappeared entirely", async () => {
@@ -784,4 +813,23 @@ test("persistEditedRoster: stamps account.lastRefreshedAt for /raid-status lazy-
   const stored = docs.get("user-1");
   const stamp = stored.accounts[0].lastRefreshedAt;
   assert.ok(stamp >= before && stamp <= after, `expected lastRefreshedAt in [${before},${after}], got ${stamp}`);
+});
+
+test("fetchBibleRosterWithFallback: a saved name that differs from Bible's only by accents still overlaps", async () => {
+  // The automatic roster refresh already folds accents when it checks
+  // overlap (services/roster/refresh.js); /raid-edit-roster must agree, or
+  // it reports "zero overlap" for a roster the refresh updates fine.
+  const { factory } = makeFactory({
+    fetchRosterCharacters: async () => [
+      { charName: "Élise", className: "Bard", itemLevel: 1700, combatScore: "85000" },
+    ],
+  });
+
+  const { bibleChars, bibleError } = await factory.__test.fetchBibleRosterWithFallback(
+    [{ name: "Elise", class: "Bard", itemLevel: 1700, combatScore: "85000" }],
+    "Elise"
+  );
+
+  assert.equal(bibleError, null);
+  assert.equal(bibleChars.length, 1);
 });

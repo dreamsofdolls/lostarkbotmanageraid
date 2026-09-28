@@ -591,6 +591,7 @@ const rosterRefreshService = createRosterRefreshService({
   buildFetchedRosterIndexes,
   findFetchedRosterMatchForCharacter,
   fetchRosterCharacters,
+  getRosterRefreshCooldownMs,
 });
 ({
   collectStaleAccountRefreshes,

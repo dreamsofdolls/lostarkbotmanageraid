@@ -14,6 +14,7 @@ const {
   formatProgressTotals,
 } = require("../../../utils/raid/common/shared");
 const { t, tPick } = require("../../../services/i18n");
+const { countedGoldEarners } = require("../../../utils/raid/common/character");
 
 // pack2Columns spends 3 fields on every 2 characters, so 16 characters fill
 // 24 of Discord's 25 fields and leave one for the sync outcome line. Longer
@@ -87,9 +88,9 @@ function createRaidStatusView(deps) {
     return raid?.goldBound ? earnedGold : 0;
   }
 
-  function buildCharacterGoldLine(character, raids, lang) {
+  function buildCharacterGoldLine(earnsGold, raids, lang) {
     if (!Array.isArray(raids) || raids.length === 0) return [];
-    if (!character?.isGoldEarner) return [];
+    if (!earnsGold) return [];
     let earned = 0;
     let total = 0;
     let earnedBound = 0;
@@ -123,7 +124,8 @@ function createRaidStatusView(deps) {
   }
 
   function buildCharacterField(character, getRaidsFor, lang, options = {}) {
-    const { showGold = true } = options;
+    // earnsGold: one of the account's counted gold earners (at most 6).
+    const { showGold = true, earnsGold = character?.isGoldEarner !== false } = options;
     const name = getCharacterName(character);
     const itemLevel = Number(character.itemLevel) || 0;
     // Class emoji prepended to char name when the class is mapped in
@@ -139,7 +141,7 @@ function createRaidStatusView(deps) {
       : raids.map((raid) => formatRaidStatusLine(raid, lang));
 
     if (showGold) {
-      lines.push(...buildCharacterGoldLine(character, raids, lang));
+      lines.push(...buildCharacterGoldLine(earnsGold, raids, lang));
     }
 
     return {
@@ -324,8 +326,9 @@ function createRaidStatusView(deps) {
   }
 
   function hasEligibleNonEarner(account, getRaidsFor) {
+    const counted = countedGoldEarners(account.characters);
     return (account.characters || []).some(
-      (character) => !character?.isGoldEarner && getRaidsFor(character).length > 0
+      (character) => !counted.has(character) && getRaidsFor(character).length > 0
     );
   }
 
@@ -446,9 +449,11 @@ function createRaidStatusView(deps) {
       return embed;
     }
 
+    const goldEarners = countedGoldEarners(account.characters);
     const characterFields = visibleChars.map((c) =>
       buildCharacterField(c, getRaidsFor, lang, {
         showGold: showCharacterGold,
+        earnsGold: goldEarners.has(c),
       })
     );
     if (characterFields.length <= PAIRED_LAYOUT_CHARACTER_CAP) {

@@ -35,6 +35,7 @@ const {
 } = require("../../../../domain/raid-catalog");
 const { normalizeName, toModeLabel } = require("../../../../utils/raid/common/shared");
 const {
+  countedGoldEarners,
   getGoldOverride,
   getStatusRaidsForCharacter,
 } = require("../../../../utils/raid/common/character");
@@ -210,7 +211,7 @@ function summarizeAppliedGates({ account, char, appliedGates, finalRaidEntriesBy
   for (const { raidKey, modeKey, gate } of appliedGates.values()) {
     changedRaidKeys.add(`${normalizeName(char.name)}::${raidKey}::${modeKey}`);
     const finalRaid = finalRaidEntriesByKey.get(raidKey);
-    if (char.isGoldEarner === false || !finalRaid?.goldReceives) continue;
+    if (!countedGoldEarners(account?.characters).has(char) || !finalRaid?.goldReceives) continue;
     const bound = getBoundGoldForGate(raidKey, modeKey, gate);
     const unbound = isGoldBound(raidKey, modeKey)
       ? 0

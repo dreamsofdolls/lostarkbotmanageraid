@@ -4,16 +4,16 @@ const {
   GOLD_EARNER_CAP_PER_ACCOUNT,
   PICKER_MAX_OPTIONS,
 } = require("./constants");
+const { isGoldEarner } = require("../../../utils/raid/common/character");
 
+// Existing earners when there are any, else every character; either way the
+// 6 highest item levels, so the picker never opens above the cap (a roster
+// added before this command ran has every character flagged).
 function pickInitialSelection(chars) {
   const anyExisting = chars.some((c) => c.isGoldEarner);
-  if (anyExisting) {
-    return new Set(
-      chars.map((c, i) => (c.isGoldEarner ? i : -1)).filter((i) => i >= 0)
-    );
-  }
   const ranked = chars
-    .map((c, i) => ({ i, itemLevel: Number(c.itemLevel) || 0 }))
+    .map((c, i) => ({ i, itemLevel: Number(c.itemLevel) || 0, earner: c.isGoldEarner }))
+    .filter((entry) => !anyExisting || entry.earner)
     .sort((a, b) => b.itemLevel - a.itemLevel)
     .slice(0, GOLD_EARNER_CAP_PER_ACCOUNT);
   return new Set(ranked.map((r) => r.i));
@@ -38,7 +38,7 @@ function toPickerCharacter(character) {
     name: character.name,
     class: character.class,
     itemLevel: Number(character.itemLevel) || 0,
-    isGoldEarner: !!character.isGoldEarner,
+    isGoldEarner: isGoldEarner(character),
   };
 }
 

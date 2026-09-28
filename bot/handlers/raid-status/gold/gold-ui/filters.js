@@ -4,6 +4,7 @@ const {
   resolveCharacterNameFilter,
   sameCharacterName,
 } = require("../../state/character-filter");
+const { countedGoldEarners } = require("../../../../utils/raid/common/character");
 
 function createGoldFilterState({
   getAccounts,
@@ -15,8 +16,9 @@ function createGoldFilterState({
   function goldCharactersOnPage() {
     const account = getAccounts()[getCurrentPage()];
     const characters = Array.isArray(account?.characters) ? account.characters : [];
+    const counted = countedGoldEarners(characters);
     return characters.filter((character) => {
-      if (character?.isGoldEarner === false) return false;
+      if (!counted.has(character)) return false;
       return getRaidsFor(character).length > 0;
     });
   }

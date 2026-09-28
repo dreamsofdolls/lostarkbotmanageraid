@@ -34,6 +34,7 @@ const {
   buildPickerCharacters,
 } = require("./gold-earner/selection");
 const { createGoldEarnerRenderers } = require("./gold-earner/render");
+const { countedGoldEarners } = require("../../utils/raid/common/character");
 
 function createRaidGoldEarnerCommand({
   EmbedBuilder,
@@ -90,9 +91,7 @@ function createRaidGoldEarnerCommand({
         const charCount = Array.isArray(account.characters)
           ? account.characters.length
           : 0;
-        const earnerCount = (account.characters || []).filter(
-          (character) => character.isGoldEarner
-        ).length;
+        const earnerCount = countedGoldEarners(account.characters).size;
         const label = `\uD83D\uDCC1 ${account.accountName} \u00B7 ${earnerCount}/${charCount} earner`;
         return truncateChoice(label, account.accountName);
       });
@@ -246,13 +245,14 @@ function createRaidGoldEarnerCommand({
     );
     const pickerCharIds = new Set(session.chars.map((character) => character.id));
     let savedNames = [];
+    let rosterMissing = false;
 
     await saveWithRetry(async () => {
       const doc = await User.findOne({ discordId: session.callerId });
-      if (!doc) return;
-      const account = (doc.accounts || []).find(
-        (candidate) => candidate.accountName === session.accountName
-      );
+      // The roster can be removed, or renamed by a background refresh, while
+      // the picker is open; saving nothing must not read as a success.
+      const account = doc ? findAccountByRoster(doc.accounts, session.accountName, normalizeName) : null;
+      rosterMissing = !account;
       if (!account) return;
 
       const itemLevelByName = new Map();
@@ -269,7 +269,7 @@ function createRaidGoldEarnerCommand({
       await doc.save();
     });
 
-    return savedNames;
+    return rosterMissing ? null : savedNames;
   }
 
   async function handleConfirmAction(interaction, session, sessionId) {
@@ -284,6 +284,18 @@ function createRaidGoldEarnerCommand({
         type: "warn",
         title: t("raid-gold-earner.saveFail.title", session.lang),
         description: t("raid-gold-earner.saveFail.description", session.lang),
+      }, {
+        components: [],
+      }).catch(() => {});
+      return;
+    }
+    if (savedNames === null) {
+      await editPickerNotice(interaction, {
+        type: "warn",
+        title: t("raid-gold-earner.notice.notFoundTitle", session.lang),
+        description: t("raid-gold-earner.notice.notFoundDescription", session.lang, {
+          rosterName: session.accountName,
+        }),
       }, {
         components: [],
       }).catch(() => {});

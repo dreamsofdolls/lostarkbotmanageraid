@@ -10,6 +10,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const { t } = require("../bot/services/i18n");
 
 const {
   EmbedBuilder,
@@ -432,4 +433,58 @@ test("handleRaidGoldEarnerButton confirm: writes isGoldEarner=true on selected, 
   // Confirm embed surfaces the saved list.
   assert.ok(confirmEmbedArg);
   assert.equal(cmd.__test.sessions.size, 0, "session should be removed on confirm");
+});
+
+function confirmSession(cmd, accountName) {
+  cmd.__test.sessions.set("sess-missing", {
+    sessionId: "sess-missing",
+    callerId: "user-1",
+    accountName,
+    chars: [{ id: "c0", name: "Char0", class: "Bard", itemLevel: 1745, isGoldEarner: true }],
+    selectedIndices: new Set([0]),
+    overflowCount: 0,
+    timer: null,
+  });
+  const edits = [];
+  return {
+    edits,
+    interaction: {
+      user: { id: "user-1" },
+      customId: "gold-earner:confirm:sess-missing",
+      deferUpdate: async () => {},
+      editReply: async (arg) => { edits.push(arg); },
+    },
+  };
+}
+
+test("handleRaidGoldEarnerButton confirm: a roster renamed or removed meanwhile gets the not-found notice, not a success card", async () => {
+  const userDoc = {
+    discordId: "user-1",
+    // A background refresh renamed "Alpha" to its seed character meanwhile.
+    accounts: [{ accountName: "Char0", characters: [{ id: "c0", name: "Char0", itemLevel: 1745, isGoldEarner: false }] }],
+    save: async () => { throw new Error("nothing should be saved"); },
+  };
+  const cmd = makeCommand({ User: { findOne: async () => userDoc } });
+  const { edits, interaction } = confirmSession(cmd, "Alpha");
+
+  await cmd.handleRaidGoldEarnerButton(interaction);
+
+  const title = edits.at(-1).embeds[0].toJSON().title;
+  assert.match(title, new RegExp(t("raid-gold-earner.notice.notFoundTitle", "vi").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.equal(userDoc.accounts[0].characters[0].isGoldEarner, false);
+});
+
+test("handleRaidGoldEarnerButton confirm: saves a roster whose stored name differs only in case", async () => {
+  const character = { id: "c0", name: "Char0", itemLevel: 1745, isGoldEarner: false };
+  const userDoc = {
+    discordId: "user-1",
+    accounts: [{ accountName: "alpha", characters: [character] }],
+    save: async () => {},
+  };
+  const cmd = makeCommand({ User: { findOne: async () => userDoc } });
+  const { interaction } = confirmSession(cmd, "Alpha");
+
+  await cmd.handleRaidGoldEarnerButton(interaction);
+
+  assert.equal(character.isGoldEarner, true);
 });

@@ -1909,3 +1909,34 @@ test("raid-status gold view: an excluded UNBOUND raid stays neutral (no lock)", 
   const horizonLine = goldField.value.split("\n").find((l) => /Horizon/.test(l));
   assert.match(horizonLine, new RegExp(UI.icons.lock));
 });
+
+test("buildAccountPageEmbed: a roster with every character flagged shows gold for the 6 the game pays", () => {
+  const characters = Array.from({ length: 10 }, (_, index) =>
+    makeChar(`Alt${index}`, 1760 - index, { isGoldEarner: true })
+  );
+  const account = { accountName: "Alpha", characters, lastRefreshedAt: 0 };
+  const raid = {
+    raidName: "Kazeros Hard",
+    raidKey: "kazeros",
+    modeKey: "hard",
+    completedGateKeys: ["G1"],
+    allGateKeys: ["G1", "G2"],
+    isCompleted: false,
+    earnedGold: 17000,
+    totalGold: 52000,
+  };
+  const embed = buildAccountPageEmbed(
+    account,
+    0,
+    1,
+    { progress: { completed: 0, partial: 10, total: 10 }, characters: 10 },
+    () => [raid]
+  );
+  const json = embed.toJSON();
+  const withGold = json.fields
+    .filter((field) => /Alt\d/.test(field.value) || /Alt\d/.test(field.name))
+    .filter((field) => /💰/.test(field.value))
+    .flatMap((field) => field.value.split("\n").filter((line) => line.startsWith("💰")));
+  assert.equal(withGold.length, 6);
+  assert.match(json.description, /102,000G/);
+});

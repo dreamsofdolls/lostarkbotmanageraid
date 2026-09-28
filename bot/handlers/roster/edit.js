@@ -313,19 +313,27 @@ function createEditRosterCommand({
       summary = await persistEditedRoster(session, selectedChars);
     } catch (err) {
       console.error("[edit-roster] persist failed:", err);
+      // A roster removed while the picker was open is not a save failure.
+      const notice = err?.code === "ROSTER_NOT_FOUND"
+        ? {
+          type: "warn",
+          title: t("raid-edit-roster.notice.notFoundTitle", session.lang),
+          description: t("raid-edit-roster.notice.notFoundDescription", session.lang, {
+            rosterName: session.accountName,
+          }),
+        }
+        : {
+          type: "error",
+          title: t("raid-edit-roster.persistFail.title", session.lang),
+          description: t("raid-edit-roster.persistFail.description", session.lang, {
+            error: err?.message || err,
+            adminMention,
+          }),
+        };
       await interaction.editReply({
         content: null,
         components: [],
-        embeds: [
-          buildNoticeEmbed(EmbedBuilder, {
-            type: "error",
-            title: t("raid-edit-roster.persistFail.title", session.lang),
-            description: t("raid-edit-roster.persistFail.description", session.lang, {
-              error: err?.message || err,
-              adminMention,
-            }),
-          }),
-        ],
+        embeds: [buildNoticeEmbed(EmbedBuilder, notice)],
       });
       return;
     }

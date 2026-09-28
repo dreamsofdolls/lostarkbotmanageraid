@@ -24,7 +24,11 @@ function createPersistEditedRoster({
         (item) => normalizeName(item.accountName) === normalizeName(session.accountName)
       );
       if (!account) {
-        throw new Error(`Roster '${session.accountName}' không còn tồn tại.`);
+        // Coded, so the Confirm handler can answer with the localized
+        // not-found notice in the caller's language.
+        const error = new Error(`Roster '${session.accountName}' no longer exists.`);
+        error.code = "ROSTER_NOT_FOUND";
+        throw error;
       }
 
       const existingMap = new Map(

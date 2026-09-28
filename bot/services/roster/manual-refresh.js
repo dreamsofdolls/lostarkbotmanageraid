@@ -2,6 +2,14 @@
 
 const { toPlainUserDoc, findAccountByName } = require("../../utils/user-doc");
 
+// The refresh may rename the account to the character it resolved the roster
+// through (refresh.js). The old name is looked up first: when that name
+// survives, the rename was skipped because another roster already had it.
+function findRefreshedAccount({ entry, userDoc, accountName, normalizeName }) {
+  return findAccountByName(userDoc, accountName, normalizeName)
+    || (entry?.resolvedSeed ? findAccountByName(userDoc, entry.resolvedSeed, normalizeName) : null);
+}
+
 function resolveManualRosterRefreshStatus({
   entry,
   userDoc,
@@ -13,7 +21,7 @@ function resolveManualRosterRefreshStatus({
   if (!entry || entry.missing) return "missing-account";
   if (!entry.attempted) return "skipped";
 
-  const account = findAccountByName(userDoc, accountName, normalizeName);
+  const account = findRefreshedAccount({ entry, userDoc, accountName, normalizeName });
   if (!account) return "missing-account";
 
   const lastSuccess = Number(account?.lastRefreshedAt) || 0;
@@ -71,6 +79,9 @@ function createManualRosterRefreshRunner({
       return savedDoc;
     });
 
+    const refreshedAccount = savedDoc
+      ? findRefreshedAccount({ entry, userDoc: savedDoc, accountName: targetAccountName, normalizeName })
+      : null;
     return {
       status: resolveManualRosterRefreshStatus({
         entry,
@@ -79,7 +90,7 @@ function createManualRosterRefreshRunner({
         startedAt,
         normalizeName,
       }),
-      accountName: targetAccountName,
+      accountName: refreshedAccount?.accountName || targetAccountName,
       userDoc: savedDoc,
       entry,
     };
