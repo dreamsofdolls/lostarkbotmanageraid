@@ -245,13 +245,14 @@ function createRaidGoldEarnerCommand({
     );
     const pickerCharIds = new Set(session.chars.map((character) => character.id));
     let savedNames = [];
+    let rosterMissing = false;
 
     await saveWithRetry(async () => {
       const doc = await User.findOne({ discordId: session.callerId });
-      if (!doc) return;
-      const account = (doc.accounts || []).find(
-        (candidate) => candidate.accountName === session.accountName
-      );
+      // The roster can be removed, or renamed by a background refresh, while
+      // the picker is open; saving nothing must not read as a success.
+      const account = doc ? findAccountByRoster(doc.accounts, session.accountName, normalizeName) : null;
+      rosterMissing = !account;
       if (!account) return;
 
       const itemLevelByName = new Map();
@@ -268,7 +269,7 @@ function createRaidGoldEarnerCommand({
       await doc.save();
     });
 
-    return savedNames;
+    return rosterMissing ? null : savedNames;
   }
 
   async function handleConfirmAction(interaction, session, sessionId) {
@@ -283,6 +284,18 @@ function createRaidGoldEarnerCommand({
         type: "warn",
         title: t("raid-gold-earner.saveFail.title", session.lang),
         description: t("raid-gold-earner.saveFail.description", session.lang),
+      }, {
+        components: [],
+      }).catch(() => {});
+      return;
+    }
+    if (savedNames === null) {
+      await editPickerNotice(interaction, {
+        type: "warn",
+        title: t("raid-gold-earner.notice.notFoundTitle", session.lang),
+        description: t("raid-gold-earner.notice.notFoundDescription", session.lang, {
+          rosterName: session.accountName,
+        }),
       }, {
         components: [],
       }).catch(() => {});
