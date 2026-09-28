@@ -14,6 +14,9 @@ const {
 const {
   getTargetResetKey,
 } = require("../bot/services/raid/schedulers/weekly-reset");
+const {
+  getStatusRaidsForCharacter,
+} = require("../bot/utils/raid/common/character");
 const User = require("../bot/models/user");
 
 function makeUserModel(doc) {
@@ -196,6 +199,39 @@ test("raid-status gold mode rejects a mode above the character item level", asyn
 
   assert.equal(result.ok, false);
   assert.equal(result.outcome, "ineligible");
+});
+
+test("raid-status gold mode reads a legacy raid's current mode from its gate difficulty", async () => {
+  // Legacy entry: no modeKey, G1 cleared at Normal, and the character is
+  // high enough for Hard. The gold view shows it as Normal and offers Hard.
+  const doc = makeMongooseUserDoc({
+    itemLevel: 1735,
+    assignedRaids: {
+      kazeros: {
+        G1: { difficulty: "Normal", completedDate: 99 },
+        G2: { difficulty: "Normal" },
+      },
+    },
+  });
+  const shown = getStatusRaidsForCharacter(doc.accounts[0].characters[0])
+    .find((raid) => raid.raidKey === "kazeros");
+  assert.equal(shown.modeKey, "normal");
+
+  const result = await setParsedGoldRaidMode({
+    User: makeUserModel(doc),
+    saveWithRetry: async (op) => op(),
+    discordId: "user-1",
+    targetAccountName: "Roster",
+    targetCharName: "Aki",
+    raidKey: "kazeros",
+    modeKey: "hard",
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.outcome, "deferred");
+  const raid = doc.toObject().accounts[0].characters[0].assignedRaids.kazeros;
+  assert.equal(raid.pendingModeKey, "hard");
+  assert.equal(raid.G1.difficulty, "Normal");
 });
 
 test("raid-status gold actions cycle bound raid through include, exclude, auto", async () => {
